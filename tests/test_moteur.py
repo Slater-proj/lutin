@@ -657,7 +657,7 @@ class Assistant(unittest.TestCase):
 
     def test_commande_de_lecture_reste_dans_le_projet(self):
         self.assertTrue(A.commande_lecture_sure("git status --short"))
-        self.assertTrue(A.commande_lecture_sure("dir docs"))
+        self.assertTrue(A.commande_lecture_sure("dir docs" if os.name == "nt" else "ls docs"))          # la lecture simple du système : dir sous Windows, ls ailleurs
         for dangereuse in ("type C:\\Windows\\win.ini", "dir ..\\", "git log --output=x.txt", "type \\\\serveur\\partage\\x", "type D:/secret.txt"):
             self.assertFalse(A.commande_lecture_sure(dangereuse), dangereuse)
 

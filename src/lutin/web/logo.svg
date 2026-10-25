@@ -33,10 +33,12 @@
   <ellipse cx="64" cy="96" rx="44" ry="10" fill="url(#bord)"/>
   <ellipse cx="64" cy="94.6" rx="40" ry="7" fill="#0b0f14" opacity="0.22"/>
   <!-- deux yeux dans l'ombre du chapeau -->
-  <circle cx="52" cy="104" r="3.2" fill="#e9fff5"/>
-  <circle cx="76" cy="104" r="3.2" fill="#e9fff5"/>
-  <circle cx="53" cy="104.6" r="1.4" fill="#0b0f14"/>
-  <circle cx="77" cy="104.6" r="1.4" fill="#0b0f14"/>
+    <circle cx="49" cy="108" r="9.5" fill="#f4fff9"/>
+    <circle cx="79" cy="108" r="9.5" fill="#f4fff9"/>
+    <circle cx="51.5" cy="109.5" r="4.8" fill="#0b0f14"/>
+    <circle cx="81.5" cy="109.5" r="4.8" fill="#0b0f14"/>
+    <circle cx="53.4" cy="107.4" r="1.7" fill="#ffffff"/>
+    <circle cx="83.4" cy="107.4" r="1.7" fill="#ffffff"/>
   <!-- étincelle -->
   <path d="M100 18 L103 28 L113 31 L103 34 L100 44 L97 34 L87 31 L97 28 Z" fill="#fff1c9"/>
   <circle cx="100" cy="31" r="4" fill="#ffd98a"/>
