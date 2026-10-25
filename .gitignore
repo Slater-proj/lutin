@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+.ruff_cache/
+
+# Données propres à une machine ou à une personne : ne jamais les versionner
+*.log
+console.json
+config.json
+appareils.json
+conversations/
+donnees/
+memoire/
+cache/
+sauvegardes/
+
+# Installateur
+installateur/build/
+installateur/sortie/
+installateur/*.zip

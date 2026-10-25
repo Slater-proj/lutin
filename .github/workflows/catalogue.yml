@@ -1,0 +1,25 @@
+name: catalogue
+
+# Chaque modèle du catalogue existe-t-il encore dans le registre d'Ollama ? (hebdomadaire, et à chaque modification du catalogue)
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  pull_request:
+    paths: ["src/lutin/data/modeles.json", "tools/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  registre:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Schéma du catalogue
+        run: python -c "import sys; sys.path.insert(0, 'src'); from lutin import catalogue; catalogue.charger(); print('catalogue valide')"
+      - name: Existence dans le registre
+        run: python tools/verifier_catalogue.py

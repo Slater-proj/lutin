@@ -1,0 +1,7 @@
+# Fins de ligne : LF partout dans le dépôt, quel que soit le système de celui qui commite.
+* text=auto eol=lf
+# Les scripts PowerShell gardent leur marque d'encodage UTF-8 (BOM) : Windows PowerShell 5.1 en a besoin pour lire les accents.
+*.ps1 -text
+# Bibliothèques tierces minifiées : pas de différences lisibles.
+*.min.js -diff
+*.min.css -diff

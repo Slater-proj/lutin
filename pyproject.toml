@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lutin"
+dynamic = ["version"]
+description = "Un assistant IA local, simple à installer, qui choisit les modèles adaptés à ta machine."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = []                      # volontairement vide : bibliothèque standard seulement
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
+    "License :: OSI Approved :: MIT License",
+]
+
+[project.scripts]
+lutin = "lutin.cli:principal"
+
+[tool.setuptools.dynamic]
+version = { attr = "lutin.__version__" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+lutin = ["data/*", "web/*", "web/lib/*"]
+
+[tool.ruff]
+line-length = 200
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E9", "F"]

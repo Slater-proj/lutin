@@ -1,0 +1,83 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    name: tests (${{ matrix.os }}, Python ${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ["3.10", "3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Style et erreurs évidentes
+        run: |
+          python -m pip install ruff
+          python -m ruff check src tests tools
+      - name: Tests (un processus par fichier)
+        run: python tests/lancer_tests.py
+
+  paquet:
+    name: le paquet s'installe et la commande répond
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install build
+      - run: python -m build
+      - name: Installer la roue dans un environnement vierge
+        shell: bash
+        run: |
+          python -m venv /tmp/venv-lutin || python -m venv "$RUNNER_TEMP/venv-lutin"
+          VENV=$( [ -d /tmp/venv-lutin ] && echo /tmp/venv-lutin || echo "$RUNNER_TEMP/venv-lutin" )
+          if [ -x "$VENV/bin/python" ]; then PY="$VENV/bin/python"; else PY="$VENV/Scripts/python.exe"; fi
+          "$PY" -m pip install dist/*.whl
+          "$PY" -m lutin --version
+          "$PY" -m lutin securite
+          "$PY" -c "import lutin, pathlib; p = pathlib.Path(lutin.__file__).parent; assert (p/'web'/'index.html').is_file() and (p/'data'/'modeles.json').is_file(), 'fichiers de données absents du paquet'"
+
+  syntaxe-installateurs:
+    name: scripts d'installation (syntaxe)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: PowerShell
+        shell: pwsh
+        run: |
+          foreach ($f in Get-ChildItem installateur -Filter *.ps1) {
+            $erreurs = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile($f.FullName, [ref]$null, [ref]$erreurs)
+            if ($erreurs) { $erreurs | ForEach-Object { Write-Error "$($f.Name): $_" }; exit 1 }
+            Write-Host "OK $($f.Name)"
+          }
+      - name: Shell
+        shell: bash
+        run: for f in installateur/*.sh; do bash -n "$f" && echo "OK $f"; done
+
+  securite:
+    name: secrets et dépendances
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

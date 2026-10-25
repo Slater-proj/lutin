@@ -1,0 +1,30 @@
+name: Proposer ou corriger un modèle
+description: Ajouter un modèle au catalogue, corriger une taille, une note ou une description
+labels: [catalogue]
+body:
+  - type: input
+    id: identifiant
+    attributes:
+      label: Identifiant Ollama
+      description: Exactement comme dans `ollama pull` (ex. qwen3:8b).
+    validations:
+      required: true
+  - type: textarea
+    id: pourquoi
+    attributes:
+      label: Pourquoi et pour quel rôle
+      description: "Polyvalent, rapide, créatif, code ou images. Donne ce qui justifie la note : un test que tu as fait, un classement public, ton retour d'usage."
+    validations:
+      required: true
+  - type: textarea
+    id: machine
+    attributes:
+      label: Sur quelle machine l'as-tu essayé ?
+      description: "Carte graphique et mémoire, vitesse observée si tu l'as."
+  - type: checkboxes
+    id: verifs
+    attributes:
+      label: Vérifications
+      options:
+        - label: "`ollama show` annonce la capacité « tools » (obligatoire)"
+        - label: La licence permet de le proposer (elle est notée dans la proposition)

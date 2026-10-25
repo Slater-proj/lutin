@@ -1,0 +1,1231 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lutin</title>
+<meta name="theme-color" content="#0b0f14">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Lutin">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" type="image/svg+xml" href="/icone.svg">
+<link rel="apple-touch-icon" href="/icone-180.png">
+<link rel="stylesheet" href="lib/github-dark.min.css">
+<script src="lib/highlight.min.js"></script>
+<script src="lib/mermaid.min.js"></script>
+<script>
+if (window.mermaid) { mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'strict' }); }
+</script>
+<style>
+:root {
+  --bg:#0b0f14; --panel:#121821; --panel2:#161e29; --line:#243040; --line2:#31415a;
+  --fg:#e8eef5; --muted:#8fa0b3; --accent:#5aa9ff; --accent2:#3f8fe8;
+  --warm:#f0b060; --ok:#4fd08a; --err:#e5707c;
+  --radius:10px; --ombre:0 4px 18px rgba(0,0,0,.35);
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height:100%; }
+body { margin:0; background:radial-gradient(1200px 600px at 70% -10%, #14202e 0%, var(--bg) 55%) fixed, var(--bg); color:var(--fg); font:15px/1.55 "Segoe UI", system-ui, sans-serif; display:grid; grid-template-columns:260px 1fr; }
+/* barres de défilement fines */
+* { scrollbar-width:thin; scrollbar-color:#33445a transparent; }
+*::-webkit-scrollbar { width:9px; height:9px; } *::-webkit-scrollbar-thumb { background:#33445a; border-radius:5px; border:2px solid transparent; background-clip:content-box; } *::-webkit-scrollbar-thumb:hover { background:#43587a; background-clip:content-box; }
+/* --- colonne des conversations --- */
+aside { background:linear-gradient(180deg, var(--panel2), var(--panel)); border-right:1px solid var(--line); display:flex; flex-direction:column; min-height:0; }
+aside h1 { font-size:.95rem; font-weight:600; letter-spacing:.02em; margin:0; padding:14px 16px; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:8px; }
+aside h1::before { content:""; width:8px; height:8px; border-radius:50%; background:var(--accent); box-shadow:0 0 8px var(--accent); }
+aside .liste { overflow:auto; flex:1; padding:8px; }
+.conv { padding:8px 10px; border-radius:8px; cursor:pointer; font-size:.85rem; display:flex; gap:6px; align-items:center; border:1px solid transparent; transition:background .12s, border-color .12s; }
+.conv:hover { background:#1c2634; }
+.conv.choisie { background:#1e2c3d; border-color:var(--line2); }
+.conv span.t { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.conv button { background:none; border:0; color:var(--muted); cursor:pointer; padding:2px 4px; border-radius:4px; } .conv button:hover { color:var(--err); background:#2a1a1e; }
+.conv button.act:hover { color:var(--accent); background:#1a2634; }
+/* --- zone principale --- */
+main { display:flex; flex-direction:column; min-height:0; min-width:0; }
+.haut { display:flex; gap:10px; align-items:center; flex-wrap:wrap; padding:10px 16px; border-bottom:1px solid var(--line); background:rgba(18,24,33,.85); backdrop-filter:blur(6px); font-size:.85rem; }
+.haut select, .haut button, input, textarea, select { background:#0e141b; color:var(--fg); border:1px solid var(--line2); border-radius:8px; padding:6px 9px; font:inherit; transition:border-color .12s, box-shadow .12s; }
+input:focus, textarea:focus, select:focus { outline:none; border-color:var(--accent); box-shadow:0 0 0 3px rgba(90,169,255,.15); }
+button { cursor:pointer; transition:background .12s, border-color .12s, transform .05s; } button:hover:not(:disabled) { border-color:var(--accent); } button:active:not(:disabled) { transform:translateY(1px); } button:disabled { opacity:.5; cursor:default; }
+button.principal { background:linear-gradient(180deg, #2a6db3, #1d4d7a); border-color:var(--accent2); font-weight:600; }
+button.principal:hover:not(:disabled) { background:linear-gradient(180deg, #3379c4, #235a8f); }
+button.danger { background:linear-gradient(180deg, #a33a3a, #7a2626); border-color:#c05050; }
+button.danger:hover { background:linear-gradient(180deg, #b84545, #8f2f2f); }
+.puce { display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border:1px solid var(--line); border-radius:999px; background:#0e141b; }
+.puce i { width:8px; height:8px; border-radius:50%; background:var(--err); display:inline-block; box-shadow:0 0 6px var(--err); transition:background .2s, box-shadow .2s; }
+.puce.ok i { background:var(--ok); box-shadow:0 0 6px var(--ok); }
+.haut .onglets { display:flex; gap:4px; padding:0; border-bottom:0; flex-wrap:wrap; }
+.haut .onglets button { border-radius:8px; color:var(--muted); }
+.haut .onglets button[aria-selected=true] { background:#1e2c3d; border-color:var(--line2); color:var(--fg); box-shadow:inset 0 2px 0 var(--accent); }
+.haut .sp { margin-left:auto; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+.haut .sp .sep { width:1px; height:18px; background:var(--line2); }
+.page { flex:1; min-height:0; display:none; } .page.vue { display:flex; flex-direction:column; }
+/* --- fil de discussion --- */
+#fil { flex:1; overflow:auto; padding:14px 10px; }
+.msg { display:flex; margin:0 0 16px; animation:apparition .18s ease-out; }
+@keyframes apparition { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:none; } }
+.msg.moi { justify-content:flex-end; }
+.msg.moi .corps { max-width:min(93%, 900px); background:linear-gradient(180deg, #33261a, #2a1f15); border:1px solid #5f4a2c; border-radius:16px 16px 5px 16px; padding:10px 14px; white-space:pre-wrap; box-shadow:0 2px 10px rgba(0,0,0,.25); }
+.msg.ia { justify-content:flex-start; }
+.msg.ia .colonne { display:flex; flex-direction:column; align-items:flex-start; width:100%; }
+.msg.ia .corps { max-width:min(93%, 900px); white-space:pre-wrap; overflow-wrap:anywhere; background:linear-gradient(180deg, #182520, #131e19); border:1px solid #2f4a3b; border-radius:16px 16px 16px 5px; padding:10px 14px; box-shadow:0 2px 10px rgba(0,0,0,.25); }
+.corps code { background:#0e141b; border:1px solid var(--line); padding:1px 6px; border-radius:5px; font:13px ui-monospace, Consolas, monospace; }
+.corps pre { background:#0c1117; border:1px solid var(--line); border-radius:10px; padding:10px 12px; overflow:auto; font:13px ui-monospace, Consolas, monospace; white-space:pre; box-shadow:inset 0 1px 6px rgba(0,0,0,.4); }
+.md-h { font-weight:600; margin:10px 0 4px; line-height:1.3; } .md-h1 { font-size:1.25rem; } .md-h2 { font-size:1.12rem; } .md-h3 { font-size:1.02rem; } .md-h4 { font-size:.95rem; color:var(--muted); }
+.md-li { text-indent:-.9em; margin-left:.9em; }
+[hidden] { display:none !important; }
+/* jauge de contexte */
+.jauge { display:inline-flex; align-items:center; gap:6px; font-size:.78rem; color:var(--muted); }
+.jauge .jbarre { width:70px; height:7px; background:#1c2530; border-radius:4px; overflow:hidden; }
+.jauge .jbarre i { display:block; height:100%; width:0; background:var(--accent); transition:width .3s, background .3s; }
+.jauge.moyen .jbarre i { background:var(--warm); } .jauge.plein .jbarre i { background:var(--err); } .jauge.plein { color:var(--err); } .jauge.moyen { color:var(--warm); } #bAnnuler { border-color:var(--warm); color:var(--warm); }
+/* suivi de tâches */
+#taches { border-top:1px solid var(--line); padding:8px 14px; font-size:.84rem; background:#10161e; max-height:30vh; overflow:auto; }
+#taches .tt { display:flex; justify-content:space-between; color:var(--muted); font-size:.78rem; margin-bottom:4px; cursor:pointer; user-select:none; }
+#taches .tache { display:flex; gap:8px; padding:2px 0; } #taches .tache .sg { width:1.3em; text-align:center; }
+#taches .tache.fait { color:var(--muted); text-decoration:line-through; } #taches .tache.fait .sg { color:var(--ok); }
+#taches .tache.en_cours { color:var(--fg); font-weight:600; } #taches .tache.en_cours .sg { color:var(--warm); }
+#taches.replie .tache { display:none; }
+/* ---- points animés : l'assistant travaille ---- */
+.travail { display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--accent); box-shadow:0 0 0 0 rgba(90,169,255,.6); animation:onde 1.3s infinite; flex:0 0 auto; margin-right:7px; vertical-align:middle; }
+.haut .onglets .travail { margin:0 0 0 6px; }
+.travail.fini { background:var(--ok); box-shadow:none; animation:none; }
+@keyframes onde { 0% { box-shadow:0 0 0 0 rgba(90,169,255,.65); transform:scale(.9); } 70% { box-shadow:0 0 0 7px rgba(90,169,255,0); transform:scale(1.05); } 100% { box-shadow:0 0 0 0 rgba(90,169,255,0); transform:scale(.9); } }
+@media (prefers-reduced-motion:reduce) { .travail { animation:none; } }
+/* file d'attente des messages envoyés pendant que l'assistant répond */
+#fileAttente { display:flex; flex-wrap:wrap; gap:6px; align-items:center; padding:4px 12px; font-size:.74rem; color:var(--warm); border-top:1px solid var(--line); background:#161209; }
+#fileAttente .chip { display:inline-flex; gap:4px; align-items:center; background:#221c10; border:1px solid #5f4a2c; border-radius:999px; padding:0 4px 0 9px; color:var(--fg); max-width:60%; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+#fileAttente .chip button { border:0; background:none; color:var(--muted); padding:0 5px; cursor:pointer; }
+#fileAttente button { padding:0 9px; font-size:.74rem; border-radius:999px; }
+/* menu des commandes « / » */
+.saisie { position:relative; }
+#menuCommandes { position:absolute; left:max(12px, calc((100% - 920px) / 2)); right:max(12px, calc((100% - 920px) / 2)); bottom:100%; margin-bottom:4px; max-height:42vh; overflow:auto; background:var(--panel); border:1px solid var(--line2); border-radius:10px; box-shadow:var(--ombre); z-index:60; padding:3px; }
+#menuCommandes .cmd { display:flex; gap:10px; align-items:baseline; padding:5px 10px; border-radius:7px; cursor:pointer; white-space:nowrap; overflow:hidden; font-size:.84rem; }
+#menuCommandes .cmd b { color:var(--accent); flex:0 0 auto; } #menuCommandes .cmd .arg { color:var(--warm); font-size:.74rem; flex:0 0 auto; }
+#menuCommandes .cmd .desc { color:var(--muted); font-size:.76rem; overflow:hidden; text-overflow:ellipsis; }
+#menuCommandes .cmd.sel { background:#1e2c3d; }
+/* ---- v2 : interface compacte, discussion centrale ---- */
+body { grid-template-rows:minmax(0,1fr); }
+.haut { gap:6px; padding:4px 10px; flex-wrap:nowrap; font-size:.8rem; }
+.haut button { padding:3px 9px; }
+.haut .onglets { flex:1; min-width:0; overflow-x:auto; flex-wrap:nowrap; scrollbar-width:none; }
+.haut .onglets::-webkit-scrollbar { display:none; }
+.haut .onglets button { white-space:nowrap; flex:0 0 auto; }
+.haut .onglets .ic { margin-right:5px; }
+.puce { padding:2px 8px; font-size:.74rem; gap:5px; flex:0 0 auto; }
+.menu { position:relative; flex:0 0 auto; }
+#bPlus { font-size:1.1rem; line-height:1; padding:2px 10px; }
+#menuPlus { position:absolute; right:0; top:calc(100% + 6px); z-index:150; min-width:260px; background:var(--panel); border:1px solid var(--line2); border-radius:10px; box-shadow:var(--ombre); padding:5px; display:flex; flex-direction:column; gap:2px; }
+#menuPlus[hidden] { display:none; }
+#menuPlus button { text-align:left; border-color:transparent; background:transparent; padding:8px 10px; font-size:.85rem; }
+#menuPlus button:hover { background:#1c2634; }
+#etat { display:flex; align-items:center; gap:8px; padding:0; font-size:.68rem; line-height:1.2; color:var(--muted); overflow-x:auto; white-space:nowrap; scrollbar-width:none; }
+#etat::-webkit-scrollbar { display:none; }
+#etat .sp { flex:1; }
+#etat button { padding:0 8px; font-size:.68rem; border-radius:999px; flex:0 0 auto; }
+#etat .jauge { font-size:.68rem; flex:0 0 auto; gap:5px; }
+.jauge .jbarre { width:44px; height:5px; }
+.saisie { padding:6px 12px 8px; flex-direction:column; gap:3px; }
+.saisie-ligne { display:flex; gap:10px; }
+.saisie-ligne textarea { flex:1; }
+.saisie textarea { min-height:44px; }
+.saisie .ic { display:none; }
+#fil { padding:12px max(10px, calc((100% - 920px) / 2)); }
+#taches, #activite, #bandeauEdition, .saisie { padding-left:max(12px, calc((100% - 920px) / 2)); padding-right:max(12px, calc((100% - 920px) / 2)); }
+/* colonne de gauche compacte */
+aside h1 { padding:8px 12px; font-size:.9rem; }
+.options-lat { padding:6px 10px 4px; margin-top:0; display:grid; grid-template-columns:1fr 1fr; column-gap:8px; row-gap:2px; }
+.options-lat .opt-titre { grid-column:1 / -1; margin-bottom:2px; font-size:.74rem; }
+.options-lat .opt-ligne { margin:0; gap:5px; font-size:.78rem; }
+.options-lat .opt-ligne:has(select) { grid-column:1 / -1; }
+.options-lat .opt-ligne select { padding:2px 5px; }
+.options-lat.repliee { display:block; }
+#racine { padding:2px 10px 6px !important; font-size:.66rem; line-height:1.3; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; opacity:.8; }
+aside .liste { padding:4px 6px; }
+.conv { padding:6px 9px; }
+.sante.ok { border-color:var(--ok); } .sante.attention { border-color:var(--warm); color:var(--warm); } .sante.critique { border-color:var(--err); color:var(--err); font-weight:600; }
+#bSante::after { content:"●"; margin-left:5px; font-size:.7em; vertical-align:middle; color:var(--muted); }
+#bSante[data-niveau=ok]::after { color:var(--ok); } #bSante[data-niveau=attention]::after { color:var(--warm); } #bSante[data-niveau=critique]::after { color:var(--err); }
+/* fenêtre (revue des changements, git) */
+#modal { position:fixed; inset:0; z-index:200; display:flex; align-items:center; justify-content:center; }
+#modalFond { position:absolute; inset:0; background:rgba(0,0,0,.6); }
+#modalBoite { position:relative; width:min(960px, 96vw); max-height:90vh; display:flex; flex-direction:column; background:var(--panel); border:1px solid var(--line2); border-radius:12px; box-shadow:var(--ombre); }
+.modal-haut { display:flex; justify-content:space-between; align-items:center; padding:12px 16px; border-bottom:1px solid var(--line); }
+#modalCorps { padding:12px 16px; overflow:auto; }
+.rev-tete { display:flex; gap:10px; align-items:center; flex-wrap:wrap; width:100%; } .rev-tete b { flex:1 1 220px; overflow-wrap:anywhere; }
+.badge { padding:1px 8px; border-radius:999px; border:1px solid var(--line2); font-size:.76rem; color:var(--muted); } .badge.créé { color:var(--ok); border-color:var(--ok); } .badge.supprimé { color:var(--err); border-color:var(--err); }
+pre.diff { width:100%; max-height:340px; overflow:auto; background:#0c1117; border:1px solid var(--line); border-radius:8px; padding:8px 10px; font:12px ui-monospace, Consolas, monospace; white-space:pre-wrap; margin:6px 0 0; }
+#modalCorps .ligne { display:flex; gap:8px; margin-top:8px; flex-wrap:wrap; }
+.ligne-git { display:flex; gap:8px; align-items:center; padding:2px 0; font-size:.84rem; } .ligne-git .etat { width:5.5em; color:var(--muted); font-size:.76rem; }
+.liste-git { max-height:34vh; overflow:auto; border:1px solid var(--line); border-radius:8px; padding:6px 10px; margin:8px 0; }
+.res-recherche .extrait { color:var(--muted); font-size:.74rem; white-space:normal; }
+.conv .epingle { color:var(--warm); }
+/* actions sous les messages */
+.actions { display:flex; gap:6px; margin:3px 2px 0; opacity:.55; transition:opacity .12s; } .msg:hover .actions, .actions:focus-within { opacity:1; }
+.msg.moi { flex-direction:column; align-items:flex-end; }
+.actions button { background:none; border:1px solid transparent; color:var(--muted); border-radius:6px; padding:1px 8px; font-size:.76rem; cursor:pointer; } .actions button:hover { border-color:var(--line2); color:var(--fg); }
+#bandeauEdition { display:flex; gap:10px; align-items:center; padding:6px 16px; background:#221c10; border-top:1px solid var(--warm); color:var(--warm); font-size:.82rem; }
+.corps a { color:var(--accent); }
+.bloc-code { position:relative; }
+.bloc-code pre { margin-top:0; }
+.bloc-code .btn-copier { position:absolute; top:8px; right:8px; background:#1a2634; color:#cfe0f2; border:1px solid var(--line2); border-radius:6px; padding:3px 10px; font-size:.75rem; cursor:pointer; }
+.bloc-code .btn-copier:hover { background:#243447; border-color:var(--accent); }
+.bloc-code pre code.hljs { background:transparent; padding:0; }
+.bloc-mermaid { margin:8px 0; background:#0e141b; border:1px solid var(--line); border-radius:10px; padding:12px; overflow:auto; }
+.bloc-mermaid .mermaid { display:flex; justify-content:center; }
+.bloc-mermaid .mermaid-erreur { white-space:pre-wrap; font:13px ui-monospace, Consolas, monospace; color:#e0a0a0; }
+details.pensee { color:var(--muted); font-size:.82rem; margin:4px 0; } details.pensee summary { cursor:pointer; } details.pensee pre { white-space:pre-wrap; background:none; border:0; padding:0; font:inherit; }
+.tbl { border-collapse:collapse; margin:8px 0; font-size:.84rem; width:100%; max-width:100%; }
+.tbl th { background:#1a2533; border:1px solid var(--line2); padding:6px 10px; text-align:left; font-weight:600; }
+.tbl td { border:1px solid var(--line); padding:5px 10px; }
+.tbl tr:nth-child(even) td { background:#131b24; }
+.tbl tr:hover td { background:#1a2634; }
+.outil { border:1px solid var(--line); border-left:3px solid var(--accent); border-radius:8px; padding:6px 10px; margin:6px 0; font-size:.82rem; background:#111820; }
+.outil .res { color:var(--muted); white-space:pre-wrap; max-height:9em; overflow:auto; margin-top:4px; }
+.info { color:var(--muted); font-size:.82rem; margin:4px 0; }
+#activite { display:none; padding:7px 14px; font-size:.84rem; color:var(--muted); border-top:1px solid var(--line); }
+#activite.on { display:flex; gap:8px; align-items:center; }
+#activite .pt { width:9px; height:9px; border-radius:50%; background:var(--accent); animation:puls 1.1s infinite ease-in-out; }
+#activite.long { color:var(--warm); } #activite.long .pt { background:var(--warm); } #activite.mort { color:var(--err); } #activite.mort .pt { background:var(--err); animation:none; }
+@keyframes puls { 0%,100% { opacity:.25 } 50% { opacity:1 } }
+.erreur { color:var(--err); margin:6px 0; }
+.accord { border:1px solid var(--warm); border-radius:12px; padding:10px 14px; margin:10px 0; background:linear-gradient(180deg, #221c10, #1a150c); box-shadow:var(--ombre); }
+.accord pre { max-height:260px; overflow:auto; background:#0c1117; border:1px solid var(--line); border-radius:8px; padding:8px 10px; font:12px ui-monospace, Consolas, monospace; white-space:pre-wrap; }
+.accord .ligne { display:flex; gap:8px; margin-top:8px; }
+.add { color:#7bd88f; } .del { color:#ff8f98; }
+/* --- saisie --- */
+.saisie { border-top:1px solid var(--line); padding:12px 16px; background:rgba(18,24,33,.85); backdrop-filter:blur(6px); display:flex; gap:10px; }
+.saisie textarea { flex:1; min-height:52px; max-height:200px; resize:vertical; border-radius:12px; }
+/* --- pages Modèles / Mémoire / Réglages --- */
+.cadre { padding:20px 24px; overflow:auto; max-width:900px; }
+.cadre h2 { font-size:1.05rem; margin:18px 0 8px; font-weight:600; } .cadre h2:first-child { margin-top:0; }
+.cadre textarea { width:100%; min-height:260px; font:13px ui-monospace, Consolas, monospace; border-radius:10px; }
+.carte { border:1px solid var(--line); border-radius:10px; padding:10px 14px; margin:10px 0; display:flex; gap:10px; align-items:center; flex-wrap:wrap; background:#10161e; }
+.carte .nom { flex:1 1 320px; } .barre { height:8px; background:#1c2530; border-radius:4px; overflow:hidden; flex:1 1 200px; } .barre i { display:block; height:100%; background:linear-gradient(90deg, var(--accent2), var(--accent)); transition:width .3s; }
+.aide { color:var(--muted); font-size:.82rem; }
+.options-lat { padding:10px 12px; border-top:1px solid var(--line); margin-top:auto; }
+.opt-titre { font-weight:600; font-size:.82rem; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; margin-bottom:8px; cursor:pointer; user-select:none; }
+.opt-titre:hover { color:var(--fg); }
+.options-lat.repliee .opt-ligne { display:none; }
+.opt-ligne { display:flex; align-items:center; gap:6px; margin-bottom:6px; font-size:.84rem; }
+.opt-ligne select { flex:1; min-width:0; font-size:.82rem; padding:4px 6px; }
+.opt-ligne input[type=checkbox] { accent-color:var(--accent); }
+#burger { font-size:1.05rem; padding:4px 11px; border-radius:8px; background:#16202c; border:1px solid var(--line2); color:var(--fg); }
+#burger:hover { border-color:var(--accent); background:#1c2a3a; }
+/* Bouton ☰ : toujours visible. Sur grand écran il masque/affiche la liste des conversations ; sur mobile il ouvre l'overlay.
+   On réduit la colonne à 0 px (sans display:none) pour que « main » reste bien dans la 2e colonne de la grille. */
+body.lat-cachee { grid-template-columns:0 1fr; }
+body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hidden; }
+/* --- Mobile (≤ 860 px) --- */
+@media (max-width:860px) {
+  body { grid-template-columns:1fr; height:100vh; height:100dvh; overflow:hidden; }
+  body.lat-cachee { grid-template-columns:1fr; }
+  body.lat-cachee aside { width:auto; min-width:auto; overflow:visible; display:none; }
+  aside { display:none; position:fixed; top:0; left:0; width:100%; height:100%; z-index:100; flex-direction:column; border-right:0; box-shadow:4px 0 20px rgba(0,0,0,.5); }
+  aside.ouverte { display:flex; }
+  aside h1 { display:flex; }
+  aside .liste { display:block; flex-direction:column; flex-wrap:nowrap; gap:0; padding:4px 6px; overflow:auto; }
+  .conv { flex:0 0 auto; min-width:0; padding:9px 8px; }
+  .conv span.t { white-space:nowrap; }
+  main { height:100vh; height:100dvh; }
+  /* barre du haut : une seule ligne fine, icônes seules (le nom de l'onglet actif reste affiché) */
+  .haut { padding:3px 6px; gap:4px; }
+  .haut .onglets button { padding:4px 9px; font-size:.9rem; }
+  .haut .onglets .lb { display:none; } .haut .onglets button[aria-selected=true] .lb { display:inline; font-size:.8rem; }
+  .haut .onglets .ic { margin-right:0; } .haut .onglets button[aria-selected=true] .ic { margin-right:5px; }
+  .haut .puce { padding:0; border:0; background:none; } .haut .puce > span { display:none; }
+  /* discussion : plein écran, au centre */
+  #fil { padding:8px 6px; }
+  .msg { margin:0 0 10px; }
+  .msg.moi .corps, .msg.ia .corps { max-width:95%; padding:7px 11px; }
+  .corps pre { font-size:12px; padding:8px; }
+  #etat { gap:6px; }
+  #etat .lb { display:none; }
+  .saisie { padding:4px 6px calc(5px + env(safe-area-inset-bottom)); gap:3px; }
+  .saisie-ligne { gap:6px; }
+  .saisie textarea { min-height:40px; max-height:30vh; font-size:16px; padding:8px 10px; }
+  .saisie button { padding:0 15px; font-size:1.05rem; }
+  .saisie .lb { display:none; } .saisie .ic { display:inline; }
+  .actions { opacity:1; }
+  #modalBoite { width:100vw; height:100vh; height:100dvh; max-height:none; border-radius:0; border:0; }
+  .cadre { padding:10px; max-width:100%; }
+  .cadre h2 { font-size:15px; }
+  .carte { padding:8px 10px; }
+  #menuPlus { position:fixed; right:6px; top:40px; min-width:min(280px, 92vw); }
+}
+@media (hover:none) { .actions { opacity:1; } }
+</style>
+</head>
+<body>
+<aside>
+  <h1>Lutin</h1>
+  <div style="padding:6px 8px 4px"><button class="principal" id="bNouvelle" style="width:100%;padding:5px 9px">+ Nouvelle conversation</button></div>
+  <div style="padding:0 8px 4px"><input id="recherche" type="search" placeholder="Rechercher…" style="width:100%;padding:4px 9px"></div>
+  <div class="liste" id="conversations"></div>
+  <div class="options-lat">
+    <div class="opt-titre" id="optTitre" title="Cliquer pour replier / déplier"><span id="optChevron">▾</span> Options</div>
+    <label class="opt-ligne">Modèle <select id="selModele"></select></label>
+    <label class="opt-ligne">Mode <select id="selMode"><option value="technique">Travail</option><option value="scenario">Écriture</option></select></label>
+    <label class="opt-ligne" title="Le modèle réfléchit avant de répondre : plus juste, un peu plus lent."><input type="checkbox" id="cReflexion"> Réflexion</label>
+    <label class="opt-ligne" title="Accepte tout seul les écritures de fichiers."><input type="checkbox" id="cAuto"> Accord auto</label>
+    <label class="opt-ligne" title="Accepte tout seul le lancement de commandes (git, tests, PowerShell...). Les lectures simples (git status, dir...) ne demandaient déjà rien."><input type="checkbox" id="cAutoCmd"> Commandes auto</label>
+    <label class="opt-ligne" title="Autorise l'assistant à chercher sur internet (DuckDuckGo) et à lire des pages. Dès qu'une page est lue, l'accord automatique est suspendu pour la suite de la demande."><input type="checkbox" id="cWeb"> Web</label>
+    <label class="opt-ligne" title="Limite la longueur de la réponse en jetons. 0 = pas de limite.">Longueur max <select id="sLong"><option value="0">Illimitée</option><option value="512">512</option><option value="1024">1 024</option><option value="2048">2 048</option><option value="4096">4 096</option><option value="8192">8 192</option><option value="16384">16 384</option><option value="32768">32 768</option></select></label>
+  </div>
+  <div class="aide" id="racine"></div>
+</aside>
+<main>
+  <div class="haut">
+    <button id="burger" title="Conversations" aria-label="Ouvrir les conversations">☰</button>
+    <div class="onglets" role="tablist">
+      <button data-p="chat" aria-selected="true" title="Conversation"><span class="ic">💬</span><span class="lb">Conversation</span><i class="travail" id="ptTravail" hidden title="L'assistant travaille"></i></button><button data-p="modeles" aria-selected="false" title="Modèles"><span class="ic">🧠</span><span class="lb">Modèles</span><i class="travail fini" id="ptModeles" hidden title="Nouveautés pour ta machine"></i></button><button data-p="memoire" aria-selected="false" title="Mémoire"><span class="ic">📝</span><span class="lb">Mémoire</span></button><button data-p="reglages" aria-selected="false" title="Réglages"><span class="ic">⚙️</span><span class="lb">Réglages</span></button><button id="bSante" data-p="sante" aria-selected="false" title="Santé du PC : mémoire, carte graphique, disques ; test de bon fonctionnement"><span class="ic">⚕</span><span class="lb">Santé</span></button>
+    </div>
+    <span class="puce" id="pOllama"><i></i><span>Ollama</span></span>
+    <div class="menu">
+      <button id="bPlus" aria-label="Plus d'actions" aria-haspopup="true" title="Plus d'actions">⋯</button>
+      <div id="menuPlus" hidden>
+        <button id="bGit" title="Voir les changements git, faire écrire un message de commit et commiter">⎇ Git : changements et commit</button>
+        <button id="bExport" title="Télécharger la conversation brute en .md">⬇ Exporter la conversation</button>
+        <button id="bResume" title="Générer un résumé structuré par le modèle, prêt à coller dans un autre modèle d'IA">📋 Résumé IA</button>
+        <button id="bVram" title="Décharge tous les modèles Ollama de la VRAM (rechargés automatiquement à la prochaine question)">🧹 Libérer la VRAM</button>
+      </div>
+    </div>
+  </div>
+  <section class="page vue" id="p-chat">
+    <div id="fil"></div>
+    <div id="taches" hidden></div>
+    <div id="activite" role="status" aria-live="polite"><span class="pt"></span><span id="activiteTexte"></span></div>
+    <div id="bandeauEdition" hidden><span>Modification d'un message : l'envoi remplace ce message et tout ce qui le suit.</span> <button id="bAnnulerEdition">Annuler</button></div>
+    <div id="fileAttente" hidden></div>
+    <div class="saisie">
+      <div id="menuCommandes" hidden role="listbox"></div>
+      <div id="etat">
+        <span class="jauge" id="jauge" title="Place prise dans la fenêtre de contexte du modèle" hidden><span class="jbarre"><i></i></span><span id="jaugeTexte"></span></span>
+        <span class="jauge" id="vitesse" hidden></span>
+        <span class="sp"></span>
+        <button id="bDemarrer" hidden>Démarrer Ollama</button>
+        <button id="bRevue" hidden title="Relire les changements de la dernière demande, fichier par fichier">🔍<span class="lb"> Revue</span></button>
+        <button id="bAnnuler" hidden></button>
+      </div>
+      <div class="saisie-ligne"><textarea id="saisie" rows="1" placeholder="Message…  (Entrée : envoyer · / : commandes)"></textarea><button class="principal" id="bEnvoyer" title="Envoyer"><span class="lb">Envoyer</span><span class="ic">➤</span></button><button id="bStop" hidden title="Arrêter"><span class="lb">Arrêter</span><span class="ic">■</span></button></div>
+    </div>
+  </section>
+  <section class="page" id="p-sante"><div class="cadre" id="santeCorps"></div></section>
+  <section class="page" id="p-modeles"><div class="cadre">
+    <div class="aide">Les modèles tournent sur ta machine, avec Ollama. Plus un modèle est gros, plus il est intelligent, mais plus il demande de mémoire (idéalement celle de ta carte graphique). Un seul modèle est chargé à la fois : en changer prend quelques secondes. Tu peux aussi les gérer en ligne de commande : <code>lutin modeles</code>.</div>
+    <label class="opt-ligne" title="Montre des modèles modifiés par la communauté pour ne plus refuser de demandes. À utiliser en connaissance de cause."><input type="checkbox" id="cAvance"> Afficher les modèles avancés (sans filtre)</label>
+    <div class="carte" id="barreVerif" style="gap:8px;flex-wrap:wrap;align-items:center">
+      <button id="bMaj" title="Compare tes modèles installés avec leur dernière version">🔄 Chercher les mises à jour</button>
+      <button id="bNouveaux" title="Cherche, pour ta machine, des modèles meilleurs que ceux que tu as">✨ Chercher de nouveaux modèles</button>
+      <span id="msgVerif" class="aide"></span>
+    </div>
+    <div id="propositions"></div>
+    <div id="listeModeles"></div>
+    <h2>Un autre modèle Ollama</h2>
+    <div class="carte"><input id="autreModele" placeholder="par exemple qwen3:8b" style="flex:1"><button id="bAutre">Installer</button></div>
+    <div id="msgModeles" class="aide"></div>
+    <div style="margin:8px 0"><button id="bRestaurer" hidden>Rétablir la liste d'origine</button></div>
+  </div></section>
+  <section class="page" id="p-memoire"><div class="cadre">
+    <h2>Contexte du projet <span class="aide">(comme un CLAUDE.md : lu au début de chaque conversation, tu peux le modifier)</span></h2>
+    <textarea id="tContexte"></textarea>
+    <div style="margin:6px 0"><button id="bSCont" class="principal">Enregistrer le contexte</button> <span class="aide" id="mC"></span></div>
+    <h2>Notes de l'assistant <span class="aide">(il y ajoute ce qu'il doit retenir d'une conversation à l'autre)</span></h2>
+    <textarea id="tMemoire" style="min-height:160px"></textarea>
+    <div style="margin:6px 0"><button id="bSMem" class="principal">Enregistrer les notes</button> <span class="aide" id="mM"></span></div>
+    <h2>Skills <span class="aide">(les fiches du projet, que tu construis : l'assistant en voit la liste au début de chaque conversation et lit le contenu à la demande)</span></h2>
+    <div id="listeSkills" class="aide" style="margin:6px 0">Aucun skill.</div>
+    <textarea id="tSkill" style="min-height:240px" placeholder="Choisis un skill ci-dessus, ou crée-en un nouveau…"></textarea>
+    <div style="margin:6px 0">
+      <input id="nSkill" placeholder="nom-du-nouveau-skill.md" style="width:240px">
+      <button id="bNSkill">Créer</button>
+      <button id="bSSkill" class="principal">Enregistrer</button>
+      <button id="bDSkill">Supprimer</button>
+      <span class="aide" id="mS"></span>
+    </div>
+  </div></section>
+  <section class="page" id="p-reglages"><div class="cadre">
+    <h2>Fenêtre de contexte : <span id="vCtx"></span> jetons</h2>
+    <input type="range" id="rCtx" min="8192" max="65536" step="4096" style="width:100%">
+    <div class="aide">Plus c'est grand, plus l'assistant se souvient de la conversation, mais plus la carte graphique est sollicitée. Avec un modèle de 27 milliards de paramètres, 24 000 à 32 000 est raisonnable sur 24 Go ; au-delà, Ollama déborde sur la mémoire de l'ordinateur et ralentit.</div>
+    <h2>Créativité : <span id="vTemp"></span></h2>
+    <input type="range" id="rTemp" min="0" max="1.5" step="0.1" style="width:100%">
+    <div class="aide">0,2 à 0,6 pour le code et les faits ; 0,8 à 1,1 pour écrire une histoire.</div>
+    <h2>Étapes d'outils par demande : <span id="vTours"></span></h2>
+    <input type="range" id="rTours" min="4" max="40" step="1" style="width:100%">
+    <div class="aide">Combien de fois l'assistant peut enchaîner lecture, recherche, modification avant de devoir te répondre (14 par défaut). Plus c'est grand, plus les grosses tâches passent en une fois, mais plus c'est long.</div>
+    <h2>Garde-fous ressources</h2>
+    <div class="aide">Avant chaque demande, l'assistant vérifie la mémoire vive, la mémoire de la carte graphique et le disque. Si la demande risque de faire planter le PC, elle est suspendue avec une explication (ta question est gardée : « continue » la relance une fois le problème réglé).</div>
+    <div class="carte" style="gap:14px">
+      <label><input type="checkbox" id="cGarde"> Garde-fous activés</label>
+      <label title="Quand ComfyUI génère une image, le modèle de langage est déchargé de la carte graphique pour lui laisser la place (il se recharge à la question suivante). En contrepartie, le modèle est gardé 30 minutes en mémoire le reste du temps, au lieu de 5."><input type="checkbox" id="cComfy"> Décharger le modèle quand ComfyUI génère</label>
+      <label title="Passages de tes documents et de tes anciennes conversations ajoutés automatiquement au prompt quand ils sont liés à ta question.">Rappels automatiques <select id="sRappels"><option value="scenario">Mode écriture seulement</option><option value="toujours">Toujours</option><option value="jamais">Jamais</option></select></label>
+      <label>RAM libre minimale (Go) <input id="iSeuilRam" type="number" step="0.5" min="0.5" max="64" style="width:80px"></label>
+      <label>Disque libre minimal (Go) <input id="iSeuilDisque" type="number" step="1" min="1" max="2000" style="width:80px"></label>
+      <label>Plafond du dossier de données (Go) <input id="iPlafond" type="number" step="0.5" min="0.2" max="500" style="width:80px"></label>
+      <label title="Windows seulement. 0 = pas de limite. Une commande qui dépasse cette mémoire est arrêtée au lieu de saturer le PC. Attention : à laisser à 0 si l'assistant lance des programmes lourds (ComfyUI, tests d'images)."><span>Mémoire max par commande (Go, 0 = illimitée)</span> <input id="iLimiteCmd" type="number" step="1" min="0" max="256" style="width:80px"></label>
+    </div>
+    <h2>Échantillonnage avancé</h2>
+    <div class="aide">Laisse vide = valeurs conseillées pour la famille du modèle (Qwen, Gemma), appliquées automatiquement : moins de boucles et de dérives qu'avec la température seule. Ne change que si tu sais pourquoi.</div>
+    <div class="carte" style="gap:14px">
+      <label>top_p <input id="iTopP" type="number" step="0.05" min="0" max="1" placeholder="auto" style="width:90px"></label>
+      <label>top_k <input id="iTopK" type="number" step="1" min="0" max="200" placeholder="auto" style="width:90px"></label>
+      <label>min_p <input id="iMinP" type="number" step="0.01" min="0" max="1" placeholder="auto" style="width:90px"></label>
+      <label>pénalité de répétition <input id="iRep" type="number" step="0.05" min="0.8" max="2" placeholder="auto" style="width:90px"></label>
+    </div>
+  </div></section>
+</main>
+<div id="modal" hidden>
+  <div id="modalFond"></div>
+  <div id="modalBoite" role="dialog" aria-modal="true">
+    <div class="modal-haut"><b id="modalTitre"></b><button id="modalFermer" aria-label="Fermer">✕</button></div>
+    <div id="modalCorps"></div>
+  </div>
+</div>
+<script>
+(() => {
+  const $ = id => document.getElementById(id), TOKEN = '__TOKEN__';
+  let ETAT = null, CONV = null, EN_COURS = false, CONTROLE = null;
+  const SIG = { c: '', m: '' }, RECH = { q: '', t: null };
+  const FILE = [];                 // messages envoyés pendant qu'une réponse est en cours : ils partent un par un, dans l'ordre, quand elle est finie
+  let PAUSE_FILE = false;          // vrai après « Arrêter » : la file attend que tu décides (Reprendre / Vider)
+  const api = async (chemin, corps) => {
+    const r = await fetch(chemin, corps !== undefined ? { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Token': TOKEN }, body: JSON.stringify(corps) } : { headers: { 'X-Token': TOKEN } });
+    const d = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(d.erreur || ('Erreur ' + r.status));
+    return d;
+  };
+  const el = (tag, cls, texte) => { const e = document.createElement(tag); if (cls) e.className = cls; if (texte !== undefined) e.textContent = texte; return e; };
+  const fil = () => $('fil'), bas = () => { fil().scrollTop = fil().scrollHeight; };
+  // Copie dans le presse-papiers. Sur le téléphone la page est en http (pas « sécurisée ») : navigator.clipboard n'existe pas, on passe par une zone de texte cachée.
+  const copier = async texte => {
+    try { if (navigator.clipboard && window.isSecureContext) { await navigator.clipboard.writeText(texte); return true; } } catch (e) { /* on essaie l'autre méthode */ }
+    try { const t = document.createElement('textarea'); t.value = texte; t.style.cssText = 'position:fixed;opacity:0;top:0;left:0'; document.body.appendChild(t); t.focus(); t.select(); const ok = document.execCommand('copy'); t.remove(); return ok; } catch (e) { return false; }
+  };
+  // rendu léger : blocs de code, tableaux, code en ligne, gras
+  const rendre = (cible, texte) => {
+    cible.textContent = ''; cible._brut = texte;
+    const morceaux = texte.split(/```/);
+    morceaux.forEach((morceau, i) => {
+      if (i % 2) {
+        const m = morceau.match(/^[a-zA-Z0-9_+-]+\n/);
+        const langue = m ? m[0].trim() : '';
+        const contenu = m ? morceau.slice(m[0].length) : morceau;
+        const ferme = i < morceaux.length - 1;                 // le bloc est-il terminé ? (pendant l'écriture, le dernier ne l'est pas encore)
+        if (langue === 'mermaid' && ferme) {
+          // diagramme : on laisse Mermaid dessiner dans un conteneur dédié
+          const w = el('div', 'bloc-mermaid');
+          const zone = el('div', 'mermaid');
+          zone.textContent = contenu.trim();
+          w.appendChild(zone); cible.appendChild(w);
+          if (window.mermaid) { try { mermaid.run({ nodes: [zone] }); } catch(e) { zone.classList.add('mermaid-erreur'); zone.textContent = 'Diagramme illisible :\n\n' + contenu.trim(); } }
+        } else {
+          const w = el('div', 'bloc-code');
+          const pre = el('pre'); const code = document.createElement('code');
+          if (langue) code.className = 'language-' + langue;
+          code.textContent = contenu;
+          pre.appendChild(code);
+          if (window.hljs) { try { hljs.highlightElement(code); } catch(e) {} }
+          const b = el('button', 'btn-copier', 'Copier');
+          b.onclick = () => { copier(code.textContent).then(ok => { b.textContent = ok ? 'Copié !' : 'Échec'; setTimeout(() => b.textContent = 'Copier', 1500); }); };
+          w.appendChild(pre); w.appendChild(b); cible.appendChild(w);
+        }
+      } else {
+        const lignes = morceau.split('\n');
+        let k = 0;
+        while (k < lignes.length) {
+          // détecter un tableau : ligne contenant | suivie d'une ligne de séparateurs
+          if (lignes[k] && lignes[k].includes('|') && k + 1 < lignes.length && /^\s*\|?[\s:|-]+\|?\s*$/.test(lignes[k+1]) && lignes[k+1].includes('-')) {
+            const parser = s => s.replace(/^\s*\|/, '').replace(/\|\s*$/, '').split('|').map(c => c.trim());
+            const entetes = parser(lignes[k]); k += 2;
+            const corps = [];
+            while (k < lignes.length && lignes[k].includes('|')) { corps.push(parser(lignes[k])); k++; }
+            const tbl = document.createElement('table'); tbl.className = 'tbl';
+            const thead = document.createElement('thead'); const hr = document.createElement('tr');
+            entetes.forEach(h => { const th = document.createElement('th'); th.textContent = h; hr.appendChild(th); }); thead.appendChild(hr); tbl.appendChild(thead);
+            const tbody = document.createElement('tbody');
+            corps.forEach(lig => { const tr = document.createElement('tr'); lig.forEach(c => { const td = document.createElement('td'); td.textContent = c; tr.appendChild(td); }); tbody.appendChild(tr); });
+            tbl.appendChild(tbody); cible.appendChild(tbl);
+          } else {
+            // ligne normale : code en ligne + gras
+            const p = lignes[k];
+            if (p !== undefined) {
+              // titres (# à ######) et puces (- ou *) : rendus à la main, tout passe par textContent (jamais d'HTML venu du modèle)
+              const titre = p.match(/^(#{1,6})\s+(.*)$/), puce = p.match(/^(\s*)[-*]\s+(.*)$/);
+              let conteneur = cible, texteLigne = p;
+              if (titre) { conteneur = el('div', 'md-h md-h' + Math.min(titre[1].length, 4)); cible.appendChild(conteneur); texteLigne = titre[2]; }
+              else if (puce) { conteneur = el('div', 'md-li'); conteneur.style.paddingLeft = (12 + Math.min(puce[1].length, 12) * 5) + 'px'; conteneur.appendChild(document.createTextNode('• ')); cible.appendChild(conteneur); texteLigne = puce[2]; }
+              texteLigne.split(/(`[^`\n]+`|\*\*[^*\n]+\*\*|\[[^\]\n]+\]\(https?:\/\/[^)\s]+\)|\*[^*\s][^*\n]*\*)/).forEach(seg => {
+                let l;
+                if (/^`[^`]+`$/.test(seg)) conteneur.appendChild(el('code', '', seg.slice(1, -1)));
+                else if (/^\*\*[^*]+\*\*$/.test(seg)) conteneur.appendChild(el('strong', '', seg.slice(2, -2)));
+                else if ((l = seg.match(/^\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)$/))) { const a = el('a', '', l[1]); a.href = l[2]; a.target = '_blank'; a.rel = 'noopener noreferrer'; conteneur.appendChild(a); }
+                else if (/^\*[^*]+\*$/.test(seg)) conteneur.appendChild(el('em', '', seg.slice(1, -1)));
+                else if (seg) conteneur.appendChild(document.createTextNode(seg));
+              });
+              if (conteneur === cible) cible.appendChild(document.createTextNode('\n'));
+            }
+            k++;
+          }
+        }
+      }
+    });
+  };
+  const messageIA = parent => { const m = el('div', 'msg ia'); const col = el('div', 'colonne'); const c = el('div', 'corps'); col.appendChild(c); m.appendChild(col); (parent || fil()).appendChild(m); return { m, c, texte: '', pensee: null }; };
+  const carteAccord = (a) => {
+    const d = el('div', 'accord'); d.dataset.id = a.id;
+    d.appendChild(el('b', '', a.titre)); if (a.detail) d.appendChild(el('div', 'aide', a.detail));
+    if (a.diff) { const pre = el('pre'); a.diff.split('\n').forEach(l => { const s = el('div', l.startsWith('+') && !l.startsWith('+++') ? 'add' : l.startsWith('-') && !l.startsWith('---') ? 'del' : '', l || ' '); pre.appendChild(s); }); d.appendChild(pre); }
+    const ligne = el('div', 'ligne'), oui = el('button', 'principal', 'Accepter'), non = el('button', '', 'Refuser');
+    const repondre = async ok => { oui.disabled = non.disabled = true; document.removeEventListener('keydown', surTouche); try { await api('/api/approuver', { id: a.id, ok }); d.style.opacity = .6; d.appendChild(el('div', 'aide', ok ? 'Accepté.' : 'Refusé.')); } catch (e) { d.appendChild(el('div', 'erreur', e.message)); } };
+    // Raccourcis clavier seulement quand le focus est DANS la carte (jamais pendant que tu tapes ailleurs) : Échap = Refuser ; Entrée sur un bouton le déclenche (comportement normal).
+    const surTouche = (e) => {
+      if (!d.contains(e.target)) return;
+      if (e.key === 'Escape') { e.preventDefault(); repondre(false); }
+    };
+    document.addEventListener('keydown', surTouche);
+    oui.addEventListener('click', () => repondre(true)); non.addEventListener('click', () => repondre(false)); ligne.append(oui, non); d.appendChild(ligne);
+    // Le focus ne passe jamais sur « Accepter » depuis la zone de saisie (sinon un Entrée ou un espace accepterait à ta place).
+    if (!document.activeElement || document.activeElement === document.body) oui.focus();          // jamais si tu es en train d'écrire ailleurs (saisie, réglages...) : une touche pourrait accepter à ta place
+    return d;
+  };
+  // --- jauge de contexte, liste de tâches, actions sous les messages (copier / modifier / régénérer) ---
+  let EDIT_INDEX = null;
+  const setJauge = j => {
+    if (!j || !j.total) { $('jauge').hidden = true; return; }
+    const pct = Math.min(100, Math.round(100 * j.utilise / j.total)), k = n => (n / 1000).toFixed(n >= 10000 ? 0 : 1);
+    $('jauge').hidden = false; $('jauge').className = 'jauge' + (pct >= 90 ? ' plein' : pct >= 70 ? ' moyen' : '');
+    $('jauge').querySelector('i').style.width = pct + '%';
+    $('jaugeTexte').textContent = (j.reel ? '' : '~') + k(j.utilise) + 'k / ' + k(j.total) + 'k';
+    $('jauge').title = 'Fenêtre de contexte : ' + j.utilise + ' jetons sur ' + j.total + ' (' + pct + ' %)' + (j.reel ? ' — chiffre réel d\'Ollama.' : ' — estimation, le chiffre réel arrive après la prochaine réponse.') + (pct >= 90 ? ' Presque plein : le début sera résumé automatiquement.' : '');
+  };
+  const setVitesse = v => {
+    const z = $('vitesse');
+    if (!v) { z.hidden = true; return; }
+    z.hidden = false; z.className = 'jauge' + (v.ecriture < 15 ? ' moyen' : ''); z.textContent = v.ecriture + ' jetons/s';
+    z.title = 'Écriture : ' + v.ecriture + ' jetons/s' + (v.lecture ? ' · lecture du prompt : ' + v.lecture + ' jetons/s' : '') + ' · chargement du modèle : ' + v.chargement + ' s · réponse entière : ' + v.total + ' s.'
+      + (v.ecriture < 15 ? ' LENT : une partie du modèle tourne sans doute sur le processeur (ferme ComfyUI, clique sur « 🧹 VRAM » ou baisse la fenêtre de contexte).' : '')
+      + (v.chargement > 10 ? ' Le modèle a dû être rechargé en mémoire (' + v.chargement + ' s perdues).' : '');
+  };
+  const majAnnuler = () => {
+    const b = $('bAnnuler'), a = CONV && CONV.annulable;
+    $('bRevue').hidden = !a;
+    if (!a) { b.hidden = true; return; }
+    b.hidden = false; b.textContent = '↩ Annuler (' + a.fichiers.length + ')';
+    b.title = 'Rétablit les fichiers touchés par la dernière demande : ' + a.fichiers.join(', ') + '. Les effets des commandes ne sont pas annulés.';
+  };
+  const majJauge = async id => { try { setJauge(await api('/api/contexte?id=' + id)); } catch (e) { /* la jauge est un confort */ } };
+  // Encart des tâches. Une liste entièrement faite n'a plus d'utilité : en direct elle reste 6 s (« tout est fait ») puis disparaît ; à la réouverture d'une conversation elle n'apparaît pas.
+  let MINUT_TACHES = 0;
+  const effacerTaches = () => { clearTimeout(MINUT_TACHES); afficherTaches([]); if (CONV) api('/api/taches-effacer', { conversation: CONV.id }).catch(() => { /* le serveur les efface de lui-même à la prochaine demande */ }); if (CONV) CONV.taches = []; };
+  const afficherTaches = (liste, enDirect) => {
+    const z = $('taches'), replie = z.classList.contains('replie');
+    clearTimeout(MINUT_TACHES); z.textContent = '';
+    if (!liste || !liste.length) { z.hidden = true; return; }
+    const toutes = liste.every(t => t.etat === 'fait');
+    if (toutes && !enDirect) { z.hidden = true; return; }
+    z.hidden = false; z.classList.toggle('replie', replie);
+    const faites = liste.filter(t => t.etat === 'fait').length;
+    const t = el('div', 'tt'); t.appendChild(el('span', '', toutes ? '✔ Tâches : tout est fait (' + liste.length + ')' : 'Tâches : ' + faites + ' / ' + liste.length + ' faites'));
+    const droite = el('span', ''); const x = el('button', '', '✕'); x.title = 'Fermer cette liste'; x.style.cssText = 'background:none;border:0;color:inherit;cursor:pointer;padding:0 6px';
+    x.addEventListener('click', e => { e.stopPropagation(); effacerTaches(); }); droite.append(x, el('span', '', replie ? '▸' : '▾')); t.appendChild(droite);
+    t.addEventListener('click', () => { z.classList.toggle('replie'); afficherTaches(liste, enDirect); });
+    z.appendChild(t);
+    if (toutes) MINUT_TACHES = setTimeout(effacerTaches, 6000);
+    liste.forEach(x => { const l = el('div', 'tache ' + x.etat); l.appendChild(el('span', 'sg', x.etat === 'fait' ? '✔' : x.etat === 'en_cours' ? '▶' : '☐')); l.appendChild(el('span', '', x.texte)); z.appendChild(l); });
+  };
+  const finEdition = () => { EDIT_INDEX = null; $('bandeauEdition').hidden = true; };
+  const retirerActions = () => fil().querySelectorAll('.actions').forEach(a => a.remove());
+  const annoter = () => {
+    retirerActions();
+    if (!CONV || !CONV.messages || EN_COURS) return;
+    const indicesUser = []; CONV.messages.forEach((m, i) => { if (m.role === 'user') indicesUser.push(i); });
+    const bulles = [...fil().querySelectorAll('.msg.moi')], decal = bulles.length - indicesUser.length;      // alignées par la fin : le début a pu être résumé
+    bulles.forEach((b, k) => {
+      const idx = indicesUser[k - decal]; if (idx === undefined) return;
+      b.dataset.idx = idx;
+      const barre = el('div', 'actions'), mod = el('button', '', '✏️ Modifier');
+      mod.title = 'Modifier ce message : la conversation repart de là';
+      mod.addEventListener('click', () => { if (EN_COURS) return; EDIT_INDEX = idx; $('saisie').value = CONV.messages[idx].content; $('bandeauEdition').hidden = false; $('saisie').focus(); $('saisie').dispatchEvent(new Event('input')); });
+      barre.appendChild(mod); b.appendChild(barre);
+    });
+    const reponses = [...fil().querySelectorAll('.msg.ia')].filter(m => m.querySelector('.corps') && m.querySelector('.corps')._brut);
+    reponses.forEach((m, k) => {
+      const barre = el('div', 'actions'), cop = el('button', '', '📋 Copier');
+      cop.addEventListener('click', async () => { cop.textContent = (await copier(m.querySelector('.corps')._brut)) ? '✔ Copié' : 'Échec'; setTimeout(() => cop.textContent = '📋 Copier', 1500); });
+      barre.appendChild(cop);
+      if (k === reponses.length - 1 && indicesUser.length) {
+        const reg = el('button', '', '🔄 Régénérer'); reg.title = 'Refaire cette réponse (la réponse actuelle est remplacée)';
+        reg.addEventListener('click', () => { if (EN_COURS) return; const i = indicesUser[indicesUser.length - 1]; EDIT_INDEX = i; $('saisie').value = CONV.messages[i].content; envoyer(); });
+        barre.appendChild(reg);
+      }
+      (m.querySelector('.colonne') || m).appendChild(barre);
+    });
+  };
+  const afficherHistorique = c => {
+    fil().textContent = '';
+    (c.resume ? [{ role: 'resume', content: c.resume }] : []).concat(c.messages).forEach(m => {
+      if (m.role === 'resume') { const d = el('div', 'info', 'Résumé du début de la conversation : ' + m.content.slice(0, 400) + (m.content.length > 400 ? '...' : '')); fil().appendChild(d); }
+      else if (m.role === 'user') { const d = el('div', 'msg moi'); d.appendChild(el('div', 'corps', m.content)); fil().appendChild(d); }
+      else if (m.role === 'assistant') { if (m.content) { const x = messageIA(); rendre(x.c, m.content); } (m.tool_calls || []).forEach(t => fil().appendChild(el('div', 'outil', '⚙ ' + t.function.name + ' ' + JSON.stringify(t.function.arguments).slice(0, 160)))); }
+      else if (m.role === 'tool') { const d = el('div', 'outil'); d.appendChild(el('div', '', '↳ ' + (m.tool_name || 'résultat'))); d.appendChild(el('div', 'res', (m.content || '').slice(0, 700))); fil().appendChild(d); }
+    });
+    annoter(); afficherTaches(c.taches); majJauge(c.id); setVitesse(c.vitesse); majAnnuler();
+    bas();
+  };
+  // Barre d'activité : dit ce que fait le modèle (chargement, réflexion, écriture, outil, attente d'accord) et depuis combien de temps, pour qu'on sache s'il travaille ou s'il est bloqué.
+  let ACT = null;
+  const demarrerActivite = () => { ACT = { debut: Date.now(), dernier: Date.now(), phase: 'attente', pensee: 0, texte: 0, outil: '', hint: '', timer: null }; $('activite').classList.add('on'); majActivite(); ACT.timer = setInterval(majActivite, 500); };
+  const arreterActivite = () => { if (ACT && ACT.timer) clearInterval(ACT.timer); ACT = null; $('activite').className = ''; };
+  const noterEvenement = e => {
+    if (!ACT) return; ACT.dernier = Date.now();
+    if (e.type === 'pensee') { ACT.phase = 'pensee'; ACT.pensee += e.texte.length; }
+    else if (e.type === 'texte') { ACT.phase = 'texte'; ACT.texte += e.texte.length; }
+    else if (e.type === 'outil') { ACT.phase = 'outil'; ACT.outil = e.nom; }
+    else if (e.type === 'approbation') { ACT.phase = 'accord'; }
+    else if (e.type === 'resultat') { ACT.phase = 'attente'; ACT.hint = ''; ACT.pensee = 0; ACT.texte = 0; ACT.debut2 = Date.now(); }
+    else if (e.type === 'etat') { ACT.hint = e.texte; }
+  };
+  const majActivite = () => {
+    if (!ACT) return; const s = Math.round((Date.now() - ACT.debut) / 1000), silence = Math.round((Date.now() - ACT.dernier) / 1000);
+    const dur = n => n < 90 ? n + ' s' : Math.floor(n / 60) + ' min ' + (n % 60) + ' s';
+    let t = { attente: 'Le modèle prépare sa réponse', pensee: 'Réflexion en cours (' + ACT.pensee + ' caractères pensés)', texte: 'Rédaction de la réponse (' + ACT.texte + ' caractères)', outil: 'Outil « ' + ACT.outil + ' » en cours', accord: 'En attente de ton accord (carte ci-dessus)' }[ACT.phase];
+    t += ' · ' + dur(s) + ' depuis ton message';
+    if (ACT.phase === 'attente' && ACT.hint) t += ' · ' + ACT.hint;
+    let classe = 'on';
+    if (ACT.phase !== 'accord' && silence >= 45) { t += ' · aucun signe depuis ' + dur(silence) + ' : il travaille encore (gros contexte ou carte graphique occupée par ComfyUI). Arrêter coupe la demande.'; classe = silence >= 240 ? 'on mort' : 'on long'; }
+    $('activiteTexte').textContent = t; $('activite').className = classe;
+  };
+  // Le texte arrive par petits morceaux : on ne redessine le message qu'au plus toutes les 80 ms (sinon tout est recalculé à chaque morceau).
+  const planifier = x => { if (!x.t) x.t = setTimeout(() => { x.t = 0; rendre(x.c, x.texte); }, 80); };
+  const vider = x => { if (x.t) { clearTimeout(x.t); x.t = 0; } if (x.texte) rendre(x.c, x.texte); };
+  let ID_EN_COURS = '';
+  // Réponse en cours dans CETTE page. Si on change de conversation pendant qu'elle écrit, l'écran est mis de côté (FLUX.sauve) et la réponse
+  // continue d'y écrire ; en revenant sur la conversation on le remet tel quel. Rien n'est jamais écrit dans la conversation affichée à la place.
+  let FLUX = null;
+  const zone = () => (FLUX && FLUX.detache ? FLUX.sauve : fil());
+  const detacherFlux = () => { if (!FLUX || FLUX.detache) return; while (fil().firstChild) FLUX.sauve.appendChild(fil().firstChild); FLUX.detache = true; };
+  const rattacherFlux = () => { fil().textContent = ''; while (FLUX.sauve.firstChild) fil().appendChild(FLUX.sauve.firstChild); FLUX.detache = false; bas(); };
+  // Resynchronise l'écran avec le disque (réponse terminée ailleurs, flux coupé, autre onglet ou téléphone) en gardant la position de lecture.
+  const recharger = async () => {
+    if (!CONV || EDIT_INDEX !== null) return;
+    const id = CONV.id; let c; try { c = await api('/api/conversation?id=' + id); } catch (e) { return; }
+    if (!CONV || CONV.id !== id || (FLUX && !FLUX.detache) || EDIT_INDEX !== null) return;
+    const f = fil(), enBas = f.scrollHeight - f.scrollTop - f.clientHeight < 80, haut = f.scrollTop;
+    CONV = c; afficherHistorique(c); if (!enBas) f.scrollTop = haut;
+  };
+  const majFile = () => {
+    const z = $('fileAttente'); z.textContent = '';
+    if (!FILE.length) { z.hidden = true; PAUSE_FILE = false; $('bEnvoyer').title = EN_COURS ? 'Mettre ce message en file d\'attente' : 'Envoyer'; return; }
+    z.hidden = false;
+    z.appendChild(el('span', '', (PAUSE_FILE ? '⏸ File en pause (' : '⏳ En attente (') + FILE.length + ') :'));
+    FILE.forEach((q, i) => { const m = q.t, ici = q.conv === (CONV ? CONV.id : (FLUX && !FLUX.detache ? FLUX.id : '')), c = el('span', 'chip', m.length > 40 ? m.slice(0, 39) + '…' : m); c.title = ici ? m : 'Pour une autre conversation : ' + m; if (!ici) c.style.opacity = .6; const x = el('button', '', '✕'); x.title = 'Retirer de la file'; x.addEventListener('click', () => { FILE.splice(i, 1); majFile(); }); c.appendChild(x); z.appendChild(c); });
+    if (PAUSE_FILE && !EN_COURS) {
+      const r = el('button', 'principal', 'Reprendre'), v = el('button', '', 'Vider');
+      r.addEventListener('click', () => { PAUSE_FILE = false; const t = FILE.shift(); majFile(); envoyer(t); }); v.addEventListener('click', () => { FILE.length = 0; majFile(); });
+      z.append(r, v);
+    }
+  };
+  // Pastille : bleue qui pulse = l'assistant travaille ; verte fixe = réponse terminée que tu n'as pas encore lue (elle s'éteint quand tu ouvres la conversation).
+  const NONLUS = new Set(); try { JSON.parse(localStorage.getItem('nonlus') || '[]').forEach(i => NONLUS.add(i)); } catch (e) { /* stockage indisponible : la pastille ne survivra pas au rechargement */ }
+  const sauverNonlus = () => { try { localStorage.setItem('nonlus', JSON.stringify([...NONLUS])); } catch (e) { /* idem */ } SIG.c = ''; majTravail(); };
+  const lue = id => { if (NONLUS.delete(id)) sauverNonlus(); };
+  const termine = (id, vu) => { if (id && !vu && !NONLUS.has(id)) { NONLUS.add(id); sauverNonlus(); } };
+  let PREC_ACT = new Set();
+  const majTravail = () => {
+    const travaille = EN_COURS || (ETAT && ETAT.actives && ETAT.actives.length), p = $('ptTravail');
+    p.hidden = !(travaille || NONLUS.size); p.classList.toggle('fini', !travaille && NONLUS.size > 0); p.title = travaille ? 'L\'assistant travaille' : 'Réponse terminée, pas encore lue';
+  };
+  const envoyer = async (force) => {
+    const forcee = !!force && typeof force === 'object';                               // message sorti de la file : { t, conv }
+    const texte = (forcee ? force.t : $('saisie').value).trim(); if (!texte) return;
+    if (forcee && !EN_COURS && force.conv !== (CONV ? CONV.id : '')) {                  // il part dans la conversation où il a été écrit, pas dans celle affichée entre-temps
+      if (force.conv) { await ouvrir(force.conv); if (!CONV || CONV.id !== force.conv) { infoLocale('✘ Message en file non envoyé : sa conversation n\'existe plus (« ' + texte.slice(0, 40) + ' »).'); return; } }
+      else await nouvelle();
+    }
+    if (!forcee && texte.startsWith('/') && await commande(texte)) return;          // commande « / » : traitée sans passer par le modèle
+    if (EN_COURS) {                                                               // une réponse est en cours : le message attend son tour
+      if (EDIT_INDEX !== null) { infoLocale('Termine ou arrête la réponse en cours avant de modifier un message.'); return; }
+      FILE.push({ t: texte, conv: CONV ? CONV.id : (FLUX && !FLUX.detache ? FLUX.id : '') }); $('saisie').value = ''; ajusterSaisie(); majFile(); return;
+    }
+    ID_EN_COURS = CONV ? CONV.id : '';
+    retirerActions();
+    const depuis = EDIT_INDEX;                         // modification d'un message / régénération : on retire de l'écran ce message et la suite
+    if (depuis !== null && CONV) {
+      const b = fil().querySelector('.msg.moi[data-idx="' + depuis + '"]');
+      if (b) { while (b.nextSibling) b.nextSibling.remove(); b.remove(); }
+      CONV.messages = CONV.messages.slice(0, depuis); afficherTaches([]);
+    }
+    finEdition();
+    $('saisie').value = ''; $('saisie').style.height = ''; EN_COURS = true; $('bEnvoyer').title = 'Mettre ce message en file d\'attente'; majTravail(); $('bStop').hidden = false; $('bStop').disabled = false; CONTROLE = new AbortController();
+    const moi = el('div', 'msg moi'); moi.appendChild(el('div', 'corps', texte)); fil().appendChild(moi);
+    let ia = messageIA(), detailsPensee = null; bas();
+    const etaitNouvelle = !CONV, flux = FLUX = { id: CONV ? CONV.id : '', detache: false, sauve: document.createElement('div') }, visible = () => !flux.detache;
+    let finRecue = false;
+    demarrerActivite();
+    try {
+      const r = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Token': TOKEN }, signal: CONTROLE.signal,
+        body: JSON.stringify({ message: texte, conversation: CONV ? CONV.id : '', modele: $('selModele').value, mode: $('selMode').value, reflexion: $('cReflexion').checked, remplacer_depuis: depuis }) });
+      if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.erreur || 'Erreur ' + r.status); }
+      const lecteur = r.body.getReader(), dec = new TextDecoder(); let reste = '';
+      for (;;) {
+        const { done, value } = await lecteur.read(); if (done) break;
+        reste += dec.decode(value, { stream: true }); const lignes = reste.split('\n'); reste = lignes.pop();
+        for (const l of lignes) {
+          if (!l.trim()) continue; let e; try { e = JSON.parse(l); } catch (x) { continue; }
+          if (e.type !== 'fin') noterEvenement(e);
+          if (e.type === 'debut') { ID_EN_COURS = flux.id = e.conversation; rafraichir(); }
+          else if (e.type === 'texte') { ia.texte += e.texte; planifier(ia); }
+          else if (e.type === 'pensee') {
+            if (!detailsPensee) {
+              detailsPensee = el('details', 'pensee');
+              detailsPensee.appendChild(el('summary', '', 'Réflexion'));
+              detailsPensee.appendChild(el('pre'));
+
+              // Insérer la réflexion dans la colonne, avant le contenu du message.
+              const colonne = ia.c.parentNode;
+              if (colonne) {
+                colonne.insertBefore(detailsPensee, ia.c);
+              }
+            }
+
+            if (detailsPensee.lastElementChild) {
+              detailsPensee.lastElementChild.textContent += e.texte;
+            }
+          }
+          else if (e.type === 'outil') { const d = el('div', 'outil'); d.appendChild(el('div', '', '⚙ ' + e.nom + ' ' + JSON.stringify(e.args).slice(0, 220))); d.dataset.nom = e.nom; zone().appendChild(d); }
+          else if (e.type === 'resultat') { const cartes = [...zone().querySelectorAll('.outil')]; const d = cartes[cartes.length - 1]; if (d) d.appendChild(el('div', 'res', e.texte)); vider(ia); ia = messageIA(zone()); detailsPensee = null; }
+          else if (e.type === 'approbation') { zone().appendChild(carteAccord(e)); signaler('⏸ Accord demandé'); }
+          else if (e.type === 'etat') { /* affiché dans la barre d'activité */ }
+          else if (e.type === 'taches') { if (visible()) afficherTaches(e.liste, true); }
+          else if (e.type === 'jetons') { if (visible()) setJauge(e); }
+          else if (e.type === 'vitesse') { if (visible()) setVitesse(e); }
+          else if (e.type === 'info') zone().appendChild(el('div', 'info', e.texte));
+          else if (e.type === 'erreur') zone().appendChild(el('div', 'erreur', e.texte));
+          else if (e.type === 'fin') {
+            finRecue = true; vider(ia);
+            if (visible()) {                // si on est parti voir une autre conversation, on ne touche pas à l'écran : en y revenant elle sera relue
+              // on recharge la conversation complète (messages compris) : l'export et le résumé en ont besoin
+              try { CONV = await api('/api/conversation?id=' + e.conversation.id); } catch (x) { CONV = { id: e.conversation.id, titre: e.conversation.titre, messages: [] }; }
+              majJauge(CONV.id); afficherTaches(CONV.taches, !$('taches').hidden); setVitesse(CONV.vitesse); majAnnuler();
+            }
+            if (etaitNouvelle) titreAuto(e.conversation.id);
+          }
+          if (visible()) bas();
+        }
+      }
+      vider(ia);
+      if (!finRecue) zone().appendChild(el('div', 'info', 'La connexion avec l\'assistant s\'est interrompue. La réponse continue côté serveur : elle s\'affichera ici dès qu\'elle avance.'));
+    } catch (e) { if (e.name !== 'AbortError') { zone().appendChild(el('div', 'erreur', e.message)); if (!finRecue) zone().appendChild(el('div', 'info', 'Si l\'assistant travaillait encore, la réponse s\'affichera ici dès qu\'elle avance.')); } }
+    const etaitVisible = visible(); FLUX = null;
+    termine(flux.id, etaitVisible && !document.hidden);                              // pastille verte si tu n'étais pas en train de la lire
+    arreterActivite(); EN_COURS = false; $('bEnvoyer').disabled = false; $('bStop').hidden = true; if (etaitVisible) annoter(); signaler('✔ Terminé'); majTravail(); await rafraichir(); if (etaitVisible) bas();
+    if (FILE.length) {                                                            // message suivant de la file d'attente (sauf si tu as appuyé sur Arrêter)
+      if (PAUSE_FILE) majFile(); else { const suivant = FILE.shift(); majFile(); envoyer(suivant); }
+    }
+  };
+  const titreAuto = async id => {
+    try {
+      const rep = await api('/api/titre-ia', { id });
+      if (rep && rep.titre && rep.titre.trim()) {
+        await api('/api/renommer', { id, titre: rep.titre.trim() });
+        if (CONV && CONV.id === id) CONV.titre = rep.titre.trim();
+        rafraichir();
+      }
+    } catch (e) { /* silencieux : le titre manuel reste disponible */ }
+  };
+  const fermerLat = () => document.querySelector('aside').classList.remove('ouverte');
+  const nouvelle = async () => { detacherFlux(); CONV = null; fil().textContent = ''; finEdition(); afficherTaches([]); setJauge(null); setVitesse(null); $('bAnnuler').hidden = true; $('bRevue').hidden = true; $('saisie').focus(); [...document.querySelectorAll('.conv')].forEach(c => c.classList.remove('choisie')); fermerLat(); };
+  const ouvrir = async id => { try {
+      const c = await api('/api/conversation?id=' + id);
+      if (FLUX && !FLUX.detache && FLUX.id !== id) detacherFlux();          // on quitte une réponse en cours : son affichage est mis de côté
+      CONV = c; finEdition(); if (!document.hidden) lue(id);
+      if (FLUX && FLUX.detache && FLUX.id === id) rattacherFlux(); else afficherHistorique(CONV); [...document.querySelectorAll('.conv')].forEach(c => c.classList.toggle('choisie', c.dataset.id === id)); fermerLat(); } catch (e) { fil().appendChild(el('div', 'erreur', e.message)); } };
+  const listeConversations = () => {
+    const z = $('conversations'); z.textContent = '';
+    ETAT.conversations.forEach(c => { const d = el('div', 'conv' + (CONV && CONV.id === c.id ? ' choisie' : '')); d.dataset.id = c.id; if ((ETAT.actives || []).includes(c.id) || (EN_COURS && ID_EN_COURS === c.id)) { const pt = el('i', 'travail'); pt.title = 'L\'assistant travaille sur cette conversation'; d.appendChild(pt); } else if (NONLUS.has(c.id)) { const pt = el('i', 'travail fini'); pt.title = 'Réponse terminée, pas encore lue'; d.appendChild(pt); } d.appendChild(el('span', 't', c.titre || '(sans titre)')); const ep = el('button', c.epingle ? 'epingle' : '', c.epingle ? '★' : '☆'); ep.title = c.epingle ? 'Désépingler' : 'Épingler en haut de la liste'; ep.addEventListener('click', async e => { e.stopPropagation(); try { await api('/api/epingler', { id: c.id, epingle: !c.epingle }); rafraichir(); } catch (err) { alert(err.message); } }); d.appendChild(ep); const r = el('button', '', '✏️'); r.title = 'Renommer'; r.addEventListener('click', async e => { e.stopPropagation(); const nouveau = prompt('Nouveau titre :', c.titre || ''); if (!nouveau || !nouveau.trim()) return; try { const rep = await api('/api/renommer', { id: c.id, titre: nouveau.trim() }); if (CONV && CONV.id === c.id) CONV.titre = rep.titre; rafraichir(); } catch (err) { alert(err.message); } }); d.appendChild(r); const x = el('button', '', '✕'); x.title = 'Supprimer'; x.addEventListener('click', async e => { e.stopPropagation(); if (!confirm('Supprimer cette conversation ?')) return; await api('/api/supprimer', { id: c.id }); if (CONV && CONV.id === c.id) nouvelle(); rafraichir(); }); d.appendChild(x); d.addEventListener('click', () => ouvrir(c.id)); z.appendChild(d); });
+  };
+  // Nouveautés de modèles (vérifiées au lancement par Lutin, au plus une fois par jour) : toujours proposées, jamais installées toutes seules.
+  let PROP_T = 0;
+  const chargerPropositions = async force => {
+    if (!force && Date.now() - PROP_T < 60000) return; PROP_T = Date.now();
+    let d; try { d = await api('/api/propositions'); } catch (e) { return; }
+    const z = $('propositions'), liste = d.propositions || [];
+    z.textContent = ''; $('ptModeles').hidden = !liste.length;
+    if (!liste.length) return;
+    z.appendChild(el('h2', '', 'Nouveautés pour ta machine'));
+    liste.forEach(p => {
+      const c = el('div', 'carte');
+      c.appendChild(el('div', 'nom', p.type === 'maj' ? 'Mise à jour : ' + p.modele : (p.role ? 'Meilleur choix « ' + p.role + ' » : ' : '') + p.modele + (p.go ? ' (' + p.go + ' Go)' : '')));
+      if (p.phrase) c.appendChild(el('div', '', p.phrase));
+      c.appendChild(el('div', 'aide', p.raison + (p.ancien ? ' Remplace : ' + p.ancien + '.' : '')));
+      const i = el('button', 'principal', p.type === 'maj' ? 'Mettre à jour' : 'Installer');
+      i.addEventListener('click', async () => { try { await api('/api/installer-modele', { modele: p.modele }); await api('/api/propositions-traiter', { cle: p.cle, appliquer: true }); rafraichir(); chargerPropositions(true); } catch (e) { alert(e.message); } });
+      const x = el('button', '', 'Ne plus proposer');
+      x.addEventListener('click', async () => { try { await api('/api/propositions-traiter', { cle: p.cle, appliquer: false }); chargerPropositions(true); } catch (e) { alert(e.message); } });
+      c.append(i, x); z.appendChild(c);
+    });
+  };
+  const verifierModeles = async (portee, bouton) => {
+    const m = $('msgVerif'), boutons = [$('bMaj'), $('bNouveaux')]; boutons.forEach(b => b.disabled = true); m.textContent = 'Recherche en cours…';
+    try {
+      const d = await api('/api/modeles-verifier', { portee });
+      const n = (d.propositions || []).filter(p => portee === 'maj' ? p.type === 'maj' : portee === 'nouveaux' ? p.type === 'nouveau' : true).length;
+      let t = n ? n + ' résultat' + (n > 1 ? 's' : '') + ' ci-dessous.' : (portee === 'maj' ? 'Tous tes modèles sont à jour.' : 'Rien de mieux pour ta machine.');
+      if (portee !== 'maj' && d.catalogue === 'absent') t += ' (Aucun catalogue en ligne n\'est configuré : comparaison avec la liste livrée avec Lutin.)';
+      if ((d.erreurs || []).length) t += ' ' + d.erreurs.join(' ; ');
+      m.textContent = t; await chargerPropositions(true);
+    } catch (e) { m.textContent = '✘ ' + e.message; }
+    boutons.forEach(b => b.disabled = false);
+  };
+  const listeModeles = () => {
+    const z = $('listeModeles'); z.textContent = '';
+    ETAT.modeles.forEach(m => {
+      const inst = ETAT.installes.includes(m.id), p = ETAT.pulls[m.id], c = el('div', 'carte');
+      const actif = ETAT.reglages.modele === m.id;
+      c.appendChild(el('div', 'nom', m.nom + (m.go ? ' (' + m.go + ' Go)' : ' (taille inconnue)') + (actif ? '  ★ actif' : ''))); if (m.phrase) c.appendChild(el('div', '', m.phrase)); if (m.avertissement) c.appendChild(el('div', 'erreur', '⚠ ' + m.avertissement)); c.appendChild(el('div', 'aide', m.id + (m.origine === 'perso' ? ' · ajouté par toi' : m.origine === 'installe' ? ' · installé hors de l\'application' : '')));
+      if (inst) { c.appendChild(el('span', 'puce ok', '✔ installé'));
+        if (!actif) { const u = el('button', 'principal', 'Utiliser'); u.title = 'En faire le modèle de la conversation'; u.addEventListener('click', async () => { try { await api('/api/reglages', { modele: m.id }); $('selModele').value = m.id; rafraichir(); } catch (e) { alert(e.message); } }); c.appendChild(u); }
+        const x = el('button', 'danger', 'Supprimer'); x.title = 'Supprimer ce modèle de la machine'; x.addEventListener('click', async () => { if (!confirm('Supprimer « ' + m.nom + ' » ? Le téléchargement sera refait si tu le réinstalles.')) return; try { await api('/api/supprimer-modele', { modele: m.id }); rafraichir(); } catch (e) { alert(e.message); } }); c.appendChild(x); }
+      else if (p && p.statut === 'en cours') { const b = el('div', 'barre'); const i = el('i'); i.style.width = (p.total ? Math.round(100 * p.fait / p.total) : 3) + '%'; b.appendChild(i); c.appendChild(b); c.appendChild(el('span', 'aide', p.texte + (p.total ? ' ' + Math.round(100 * p.fait / p.total) + ' %' : ''))); }
+      else { const b = el('button', 'principal', 'Installer'); b.disabled = !ETAT.ollama; b.title = ETAT.ollama ? '' : 'Ollama doit tourner (bouton « Démarrer Ollama »)'; b.addEventListener('click', async () => { try { await api('/api/installer-modele', { modele: m.id }); rafraichir(); } catch (e) { $('msgModeles').textContent = e.message; } }); c.appendChild(b); if (p && p.statut === 'erreur') c.appendChild(el('span', 'erreur', p.texte));
+        // Retirer de la liste : seulement un modèle NON installé (un modèle installé garde son bouton « Supprimer »)
+        const o = el('button', '', 'Retirer de la liste'); o.title = actif ? 'C\'est le modèle actif : choisis-en un autre d\'abord' : 'Oublier ce modèle (rien n\'est supprimé du disque : il n\'est pas installé)'; o.disabled = actif || !ETAT.ollama;
+        o.addEventListener('click', async () => { if (!confirm('Retirer « ' + m.nom + ' » de la liste ?' + (m.origine === 'catalogue' ? '\n(Tu pourras le remettre avec « Rétablir la liste d\'origine ».)' : ''))) return; try { await api('/api/oublier-modele', { modele: m.id }); rafraichir(); } catch (e) { $('msgModeles').textContent = e.message; } });
+        c.appendChild(o); }
+      z.appendChild(c);
+    });
+  };
+  const rafraichir = async () => {
+    try { ETAT = await api('/api/etat'); } catch (e) { return; }
+    $('pOllama').classList.toggle('ok', ETAT.ollama); $('pOllama').lastChild.textContent = ETAT.ollama ? 'Ollama prêt' : (ETAT.ollama_installe ? 'Ollama arrêté' : 'Ollama non installé'); $('pOllama').title = $('pOllama').lastChild.textContent;
+    $('bDemarrer').hidden = ETAT.ollama || !ETAT.ollama_installe;
+    $('racine').textContent = 'Projet : ' + ETAT.racine;
+    // Le choix du modèle ne propose que les modèles INSTALLÉS (l'installation se fait dans l'onglet Modèles).
+    const s = $('selModele'), v = s.value || ETAT.reglages.modele; s.textContent = '';
+    ETAT.installes.forEach(id => { const m = ETAT.modeles.find(x => x.id === id), o = el('option', '', m ? m.nom : id); o.value = id; s.appendChild(o); });
+    if (!ETAT.installes.length) { const o = el('option', '', ETAT.ollama ? 'Aucun modèle installé (onglet Modèles)' : 'Ollama arrêté'); o.value = ETAT.reglages.modele; s.appendChild(o); }
+    s.value = ETAT.installes.includes(v) ? v : (ETAT.installes.includes(ETAT.reglages.modele) ? ETAT.reglages.modele : (ETAT.installes[0] || ETAT.reglages.modele));
+    if (!$('selMode').dataset.init) { $('selMode').value = ETAT.reglages.mode; $('cReflexion').checked = ETAT.reglages.reflexion; $('cAuto').checked = ETAT.reglages.auto_ecriture; $('cAvance').checked = !!ETAT.reglages.avance; $('cAutoCmd').checked = ETAT.reglages.auto_commandes; $('cWeb').checked = ETAT.reglages.web !== false; $('rCtx').value = ETAT.reglages.num_ctx; $('rTemp').value = ETAT.reglages.temperature; $('rTours').value = ETAT.reglages.tours_max; $('iTopP').value = ETAT.reglages.top_p ?? ''; $('iTopK').value = ETAT.reglages.top_k ?? ''; $('iMinP').value = ETAT.reglages.min_p ?? ''; $('iRep').value = ETAT.reglages.repeat_penalty ?? ''; $('cGarde').checked = ETAT.reglages.garde_ressources !== false; $('cComfy').checked = ETAT.reglages.liberer_si_comfy !== false; $('sRappels').value = ETAT.reglages.rappels_auto || 'scenario'; $('iSeuilRam').value = ETAT.reglages.seuil_ram_go; $('iSeuilDisque').value = ETAT.reglages.seuil_disque_go; $('iPlafond').value = ETAT.reglages.plafond_donnees_go; $('iLimiteCmd').value = ETAT.reglages.limite_ram_commande_go; $('selMode').dataset.init = '1'; }
+    $('vCtx').textContent = $('rCtx').value; $('vTemp').textContent = $('rTemp').value; $('vTours').textContent = $('rTours').value;
+    // Le modèle enregistré n'est plus installé (supprimé, ou Ollama réinstallé) : on passe sur un modèle installé plutôt que d'envoyer une demande à un modèle absent.
+    if (ETAT.installes.length && s.value !== ETAT.reglages.modele && !ETAT.installes.includes(ETAT.reglages.modele)) sauverReglages();
+    $('bRestaurer').hidden = !ETAT.modeles_masques; $('bRestaurer').textContent = 'Rétablir la liste d\'origine (' + ETAT.modeles_masques + ' retiré' + (ETAT.modeles_masques > 1 ? 's' : '') + ')';
+    // On ne reconstruit les listes que si elles ont changé (le sondage toutes les 4 s les redessinait pour rien).
+    // Une conversation qui travaillait ne travaille plus : si tu ne la regardais pas, pastille verte « terminé, pas lu ».
+    const actives = new Set(ETAT.actives || []);
+    PREC_ACT.forEach(id => { if (!actives.has(id)) termine(id, CONV && CONV.id === id && !document.hidden && !(FLUX && FLUX.detache)); });
+    PREC_ACT = actives;
+    if (CONV && !document.hidden && !(FLUX && FLUX.detache)) lue(CONV.id);
+    majTravail();
+    const sigC = JSON.stringify([ETAT.conversations, CONV ? CONV.id : '', ETAT.actives, EN_COURS ? ID_EN_COURS : '', [...NONLUS]]), sigM = JSON.stringify([ETAT.modeles, ETAT.installes, ETAT.pulls, ETAT.ollama, ETAT.reglages.modele]);
+    if (sigC !== SIG.c && !RECH.q) { SIG.c = sigC; listeConversations(); }
+    if (sigM !== SIG.m) { SIG.m = sigM; listeModeles(); }
+    chargerPropositions();
+    // Synchro : la conversation affichée a changé sur le disque sans que cette page l'ait écrit (réponse commencée ailleurs, flux coupé, page endormie).
+    if (CONV && !(FLUX && FLUX.id === CONV.id)) {
+      const i = ETAT.conversations.find(c => c.id === CONV.id);
+      if (i && (i.maj !== CONV.maj || i.messages !== (CONV.messages || []).length)) await recharger();
+    }
+    ETAT.attentes.forEach(a => { const s = '.accord[data-id="' + a.id + '"]'; if (!fil().querySelector(s) && !(FLUX && FLUX.sauve.querySelector(s))) fil().appendChild(carteAccord(a)); });
+  };
+  const nombreOuNull = id => { const v = $(id).value.trim().replace(',', '.'); return v === '' || isNaN(+v) ? null : +v; };
+  const sauverReglages = async () => { try { await api('/api/reglages', { modele: $('selModele').value, mode: $('selMode').value, reflexion: $('cReflexion').checked, auto_ecriture: $('cAuto').checked, auto_commandes: $('cAutoCmd').checked, avance: $('cAvance').checked, web: $('cWeb').checked, num_ctx: +$('rCtx').value, temperature: +$('rTemp').value, tours_max: +$('rTours').value, top_p: nombreOuNull('iTopP'), top_k: nombreOuNull('iTopK'), min_p: nombreOuNull('iMinP'), repeat_penalty: nombreOuNull('iRep'), garde_ressources: $('cGarde').checked, liberer_si_comfy: $('cComfy').checked, rappels_auto: $('sRappels').value, seuil_ram_go: nombreOuNull('iSeuilRam') ?? 3, seuil_disque_go: nombreOuNull('iSeuilDisque') ?? 10, plafond_donnees_go: nombreOuNull('iPlafond') ?? 2, limite_ram_commande_go: nombreOuNull('iLimiteCmd') ?? 0 }); } catch (e) { fil().appendChild(el('div', 'erreur', e.message)); } };
+  document.querySelectorAll('.onglets button').forEach(b => b.addEventListener('click', async () => {
+    document.querySelectorAll('.onglets button').forEach(x => x.setAttribute('aria-selected', x === b)); document.querySelectorAll('.page').forEach(p => p.classList.toggle('vue', p.id === 'p-' + b.dataset.p));
+    if (b.dataset.p === 'memoire') { const m = await api('/api/memoire'); $('tContexte').value = m['CONTEXTE.md']; $('tMemoire').value = m['MEMOIRE.md']; chargerSkills(); }
+    if (b.dataset.p === 'modeles') rafraichir();
+    if (b.dataset.p === 'sante') window.ouvrirSante();
+  }));
+  $('bEnvoyer').addEventListener('click', envoyer); 
+  // Arrêter : on prévient d'abord le serveur (modèle, outils et accords en attente s'arrêtent vraiment), puis on laisse arriver la fin du flux.
+  $('bStop').addEventListener('click', async () => {
+    const c = CONTROLE; $('bStop').disabled = true; if (FILE.length) { PAUSE_FILE = true; majFile(); }          // Arrêter met aussi la file d'attente en pause
+    try { if (ID_EN_COURS) await api('/api/arreter', { conversation: ID_EN_COURS }); else if (c) c.abort(); }
+    catch (e) { if (c) c.abort(); }
+    setTimeout(() => { $('bStop').disabled = false; if (EN_COURS && CONTROLE === c && c) c.abort(); }, 8000);      // filet : si le serveur ne répond plus, on coupe côté page au bout de 8 s
+  });
+  $('saisie').addEventListener('keydown', e => {
+    if (!$('menuCommandes').hidden) {                                              // menu des commandes ouvert : flèches, Tab, Entrée, Échap lui sont réservés
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); navCommandes(e.key === 'ArrowDown' ? 1 : -1); return; }
+      if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey)) { e.preventDefault(); validerCommande(e.key === 'Enter'); return; }
+      if (e.key === 'Escape') { e.preventDefault(); fermerCommandes(); return; }
+    }
+    if (e.key === 'Enter' && !e.shiftKey && !(window.matchMedia('(pointer:coarse)').matches)) { e.preventDefault(); envoyer(); }          // sur téléphone, Entrée = nouvelle ligne (on envoie avec ➤)
+  });
+  // la zone de saisie grandit avec le texte (jusqu'à un tiers de l'écran) et revient à une ligne après l'envoi
+  const ajusterSaisie = () => { const s = $('saisie'); s.style.height = 'auto'; s.style.height = Math.min(s.scrollHeight + 2, Math.round(window.innerHeight * 0.33)) + 'px'; };
+  $('saisie').addEventListener('input', ajusterSaisie);
+  $('saisie').addEventListener('focus', () => setTimeout(() => { bas(); }, 350));          // le clavier du téléphone réduit la zone : on garde le bas de la discussion visible
+  // --- commandes « / » : menu d'aide à la saisie (nom, argument, explication d'une ligne) ---
+  const infoLocale = (texte, brut) => { const d = el('div', 'info', texte); if (brut) d.style.whiteSpace = 'pre-wrap'; fil().appendChild(d); bas(); };          // message local : n'entre jamais dans la conversation du modèle
+  const ouvrirOnglet = p => document.querySelector('.onglets button[data-p="' + p + '"]').click();
+  const bascule = async (idCase, arg, nom) => {
+    const a = (arg || '').toLowerCase(), voulu = ['on', 'oui', '1', 'true', 'actif'].includes(a) ? true : ['off', 'non', '0', 'false'].includes(a) ? false : !$(idCase).checked;
+    $(idCase).checked = voulu; await sauverReglages(); await rafraichir(); infoLocale(nom + ' : ' + (voulu ? 'activé' : 'désactivé') + '.');
+  };
+  const sansReponseEnCours = () => { if (EN_COURS) { infoLocale('Une réponse est en cours : attends la fin, ou tape /stop.'); return false; } return true; };
+  const COMMANDES = [
+    { n: 'aide', a: ['help', '?'], d: 'Liste toutes les commandes', f: () => infoLocale(COMMANDES.map(c => '/' + c.n + (c.arg ? ' <' + c.arg + '>' : '') + '  —  ' + c.d).join('\n'), true) },
+    { n: 'compact', d: 'Résume le début de la conversation pour libérer du contexte', f: async () => {
+      if (!CONV || !sansReponseEnCours()) { if (!CONV) infoLocale('Aucune conversation à résumer.'); return; }
+      infoLocale('Résumé en cours… (le modèle lit la conversation, quelques secondes)');
+      try { const r = await api('/api/compacter', { conversation: CONV.id }); await ouvrir(CONV.id); infoLocale('✔ Résumé fait : ' + r.avant + ' messages → ' + r.apres + ' gardés en entier. Contexte : ' + r.jauge.utilise + ' / ' + r.jauge.total + ' jetons.'); } catch (e) { infoLocale('✘ ' + e.message); }
+    } },
+    { n: 'clear', a: ['nouveau', 'new'], d: 'Commence une nouvelle conversation', f: () => nouvelle() },
+    { n: 'stop', d: 'Arrête la réponse en cours', f: () => { if (!EN_COURS) infoLocale('Rien à arrêter.'); else $('bStop').click(); } },
+    { n: 'retry', a: ['regenerer'], d: 'Refait la dernière réponse', f: () => { const b = [...fil().querySelectorAll('.actions button')].find(x => x.textContent.includes('Régénérer')); if (b && sansReponseEnCours()) b.click(); else if (!b) infoLocale('Rien à régénérer pour le moment.'); } },
+    { n: 'undo', a: ['annuler'], d: 'Annule les modifications de fichiers de la dernière demande', f: () => { if ($('bAnnuler').hidden) infoLocale('Aucune modification de fichier à annuler.'); else $('bAnnuler').click(); } },
+    { n: 'revue', d: 'Relit les changements de la dernière demande, fichier par fichier', f: () => { if ($('bRevue').hidden) infoLocale('Aucune modification de fichier à relire.'); else ouvrirRevue(); } },
+    { n: 'git', d: 'Changements git, message de commit proposé, commit', f: () => ouvrirGit() },
+    { n: 'sante', a: ['health'], d: 'Ouvre la page Santé du PC (mémoire, carte graphique, disques)', f: () => ouvrirOnglet('sante') },
+    { n: 'test', d: 'Lance « Vérifier que tout marche » (autotest de l\'assistant)', f: async () => { ouvrirOnglet('sante'); await window.ouvrirSante(); const b = [...document.querySelectorAll('#santeCorps button')].find(x => x.textContent.includes('Vérifier')); if (b) b.click(); } },
+    { n: 'model', a: ['modele'], arg: 'nom', d: 'Affiche ou change le modèle (parmi les modèles installés)', f: async (arg) => {
+      if (!arg) { infoLocale('Modèle actif : ' + ETAT.reglages.modele + '\nInstallés : ' + (ETAT.installes.join(', ') || 'aucun'), true); return; }
+      const trouves = ETAT.installes.filter(m => m === arg || m.toLowerCase().includes(arg.toLowerCase()));
+      const exact = trouves.find(m => m === arg) || (trouves.length === 1 ? trouves[0] : null);
+      if (!exact) { infoLocale(trouves.length ? 'Plusieurs modèles correspondent : ' + trouves.join(', ') : 'Aucun modèle installé ne correspond. Installés : ' + (ETAT.installes.join(', ') || 'aucun')); return; }
+      $('selModele').value = exact; await sauverReglages(); await rafraichir(); infoLocale('Modèle : ' + exact);
+    } },
+    { n: 'mode', arg: 'technique|scenario', d: 'Change le mode : travail ou écriture', f: async (arg) => {
+      const a = (arg || '').toLowerCase(), v = a.startsWith('tech') ? 'technique' : a.startsWith('sc') ? 'scenario' : '';
+      if (!v) { infoLocale('Mode actuel : ' + $('selMode').value + '. Utilise /mode technique (travail) ou /mode scenario (écriture).'); return; }
+      $('selMode').value = v; await sauverReglages(); infoLocale('Mode : ' + v + '.');
+    } },
+    { n: 'reflexion', arg: 'on|off', d: 'Active ou coupe la réflexion du modèle', f: arg => bascule('cReflexion', arg, 'Réflexion') },
+    { n: 'web', arg: 'on|off', d: 'Autorise ou coupe la recherche sur internet', f: arg => bascule('cWeb', arg, 'Web') },
+    { n: 'accord', arg: 'on|off', d: 'Accord automatique des écritures de fichiers', f: arg => bascule('cAuto', arg, 'Accord auto des écritures') },
+    { n: 'commandes', arg: 'on|off', d: 'Accord automatique des commandes lancées', f: arg => bascule('cAutoCmd', arg, 'Commandes auto') },
+    { n: 'contexte', a: ['context'], d: 'Détail de la place prise dans la fenêtre de contexte', f: async () => {
+      if (!CONV) { infoLocale('Pas encore de conversation.'); return; }
+      const j = await api('/api/contexte?id=' + CONV.id), pct = Math.round(100 * j.utilise / j.total);
+      infoLocale('Contexte : ' + j.utilise + ' / ' + j.total + ' jetons (' + pct + ' %), ' + (j.reel ? 'chiffre réel d\'Ollama' : 'estimation') + (pct >= 70 ? '. Pense à /compact.' : '.'));
+    } },
+    { n: 'vram', d: 'Décharge les modèles d\'Ollama de la carte graphique', f: () => $('bVram').click() },
+    { n: 'export', d: 'Télécharge la conversation en .md', f: () => $('bExport').click() },
+    { n: 'resume', d: 'Document de reprise (résumé IA) à coller dans un autre modèle', f: () => $('bResume').click() },
+    { n: 'rappeler', arg: 'mots-clés', d: 'Cherche dans tes documents et tes anciennes conversations', f: async (arg) => {
+      if (!arg) { infoLocale('Usage : /rappeler quelques mots-clés'); return; }
+      try { infoLocale((await api('/api/rappeler', { requete: arg })).texte, true); } catch (e) { infoLocale('✘ ' + e.message); }
+    } },
+    { n: 'plan', d: 'Reconstruit le plan du projet (fichiers et fonctions)', f: async () => { await api('/api/plan', {}); infoLocale('Plan du projet en cours de reconstruction (quelques secondes).'); } },
+    { n: 'renommer', arg: 'titre', d: 'Renomme la conversation', f: async (arg) => {
+      if (!CONV || !arg) { infoLocale('Usage : /renommer nouveau titre (dans une conversation)'); return; }
+      const r = await api('/api/renommer', { id: CONV.id, titre: arg }); CONV.titre = r.titre; rafraichir(); infoLocale('Conversation renommée : ' + r.titre);
+    } },
+    { n: 'epingler', a: ['pin'], d: 'Épingle ou désépingle la conversation', f: async () => {
+      if (!CONV) { infoLocale('Pas de conversation.'); return; }
+      const c = (ETAT.conversations || []).find(x => x.id === CONV.id); const v = !(c && c.epingle);
+      await api('/api/epingler', { id: CONV.id, epingle: v }); rafraichir(); infoLocale(v ? '★ Conversation épinglée.' : 'Conversation désépinglée.');
+    } },
+    { n: 'supprimer', d: 'Supprime la conversation (confirmation demandée)', f: async () => {
+      if (!CONV || !sansReponseEnCours()) return;
+      if (!confirm('Supprimer cette conversation ?')) return;
+      await api('/api/supprimer', { id: CONV.id }); nouvelle(); rafraichir();
+    } },
+    { n: 'memoire', d: 'Ouvre la mémoire et les skills', f: () => ouvrirOnglet('memoire') },
+    { n: 'reglages', d: 'Ouvre les réglages', f: () => ouvrirOnglet('reglages') },
+    { n: 'modeles', d: 'Ouvre la page des modèles (installer, supprimer, retirer)', f: () => ouvrirOnglet('modeles') },
+  ];
+  const trouverCommande = nom => COMMANDES.find(c => c.n === nom || (c.a || []).includes(nom));
+  // Renvoie true si le texte était une commande (exécutée, ou signalée inconnue) ; false : c'est un message normal pour le modèle.
+  const commande = async texte => {
+    const m = texte.match(/^\/(\S+)\s*([\s\S]*)$/); if (!m) return false;
+    const c = trouverCommande(m[1].toLowerCase()), arg = m[2].trim();
+    if (!c) {
+      if (!/\s/.test(texte) && texte.length <= 24 && !texte.slice(1).includes('/')) { $('saisie').value = ''; ajusterSaisie(); fermerCommandes(); infoLocale('Commande inconnue : ' + texte + ' — tape /aide pour la liste.'); return true; }
+      return false;                                                                // un chemin ou une phrase qui commence par « / » : message normal
+    }
+    $('saisie').value = ''; ajusterSaisie(); fermerCommandes();
+    try { await c.f(arg); } catch (e) { infoLocale('✘ /' + c.n + ' : ' + e.message); }
+    return true;
+  };
+  let LISTE_CMD = [], SEL_CMD = 0;
+  const fermerCommandes = () => { $('menuCommandes').hidden = true; LISTE_CMD = []; SEL_CMD = 0; };
+  const dessinerCommandes = () => {
+    const menu = $('menuCommandes'); menu.textContent = '';
+    LISTE_CMD.forEach((c, i) => {
+      const l = el('div', 'cmd' + (i === SEL_CMD ? ' sel' : '')); l.setAttribute('role', 'option');
+      l.appendChild(el('b', '', '/' + c.n)); if (c.arg) l.appendChild(el('span', 'arg', '<' + c.arg + '>')); l.appendChild(el('span', 'desc', c.d));
+      l.addEventListener('pointerdown', e => { e.preventDefault(); SEL_CMD = i; validerCommande(true); });
+      menu.appendChild(l);
+    });
+    menu.hidden = false; const s = menu.querySelector('.sel'); if (s) s.scrollIntoView({ block: 'nearest' });
+  };
+  const majMenuCommandes = () => {
+    const v = $('saisie').value;
+    if (!v.startsWith('/') || /\s/.test(v)) { fermerCommandes(); return; }
+    const q = v.slice(1).toLowerCase(), avant = LISTE_CMD.map(c => c.n).join();
+    LISTE_CMD = COMMANDES.filter(c => c.n.startsWith(q) || (c.a || []).some(a => a.startsWith(q)));
+    if (!LISTE_CMD.length) { fermerCommandes(); return; }
+    if (LISTE_CMD.map(c => c.n).join() !== avant) SEL_CMD = 0;
+    dessinerCommandes();
+  };
+  const navCommandes = sens => { SEL_CMD = (SEL_CMD + sens + LISTE_CMD.length) % LISTE_CMD.length; dessinerCommandes(); };
+  // Tab : complète le nom. Entrée / toucher : lance la commande si elle n'attend pas d'argument, sinon complète pour que tu écrives l'argument.
+  const validerCommande = lancer => {
+    const c = LISTE_CMD[SEL_CMD]; if (!c) return;
+    if (lancer && !c.arg) { fermerCommandes(); $('saisie').value = '/' + c.n; envoyer(); return; }
+    $('saisie').value = '/' + c.n + (c.arg ? ' ' : ''); ajusterSaisie(); fermerCommandes(); $('saisie').focus();
+  };
+  $('saisie').addEventListener('input', majMenuCommandes);
+  $('saisie').addEventListener('blur', () => setTimeout(fermerCommandes, 200));
+  // menu « ⋯ »
+  const fermerMenu = () => { $('menuPlus').hidden = true; };
+  $('bPlus').addEventListener('click', e => { e.stopPropagation(); $('menuPlus').hidden = !$('menuPlus').hidden; });
+  $('menuPlus').addEventListener('click', () => setTimeout(fermerMenu, 0));
+  document.addEventListener('click', e => { if (!e.target.closest('.menu')) fermerMenu(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') fermerMenu(); });
+  if (window.matchMedia('(max-width:860px)').matches) { document.querySelector('.options-lat').classList.add('repliee'); $('optChevron').textContent = '▸'; }          // sur téléphone, les options de la colonne de gauche sont repliées au départ
+  $('bNouvelle').addEventListener('click', nouvelle);
+  $('bExport').addEventListener('click', () => {
+    if (!CONV || !CONV.messages || !CONV.messages.length) { alert('Aucune conversation à exporter (ouvre ou commence une conversation).'); return; }
+    const titre = (CONV.titre || 'conversation').replace(/[\\/:*?"<>|]/g, ' ');
+    const date = new Date().toISOString().slice(0, 10);
+    const lignes = [];
+    lignes.push('# Export de conversation — ' + titre);
+    lignes.push('');
+    lignes.push('Date : ' + date + '  ·  Modèle : ' + (CONV.modele || $('selModele').value || '?'));
+    if (CONV.resume) { lignes.push(''); lignes.push('## Résumé (contexte antérieur)'); lignes.push(''); lignes.push(CONV.resume); }
+    lignes.push(''); lignes.push('## Échanges');
+    CONV.messages.forEach(m => {
+      if (m.role === 'tool') {
+        lignes.push(''); lignes.push('**Outil `' + (m.tool_name || '?') + '` → résultat :**'); lignes.push(''); lignes.push('```'); lignes.push((m.content || '').slice(0, 1500)); lignes.push('```');
+      } else {
+        const qui = m.role === 'user' ? '### Utilisateur' : '### Assistant';
+        lignes.push(''); lignes.push(qui); lignes.push(''); lignes.push(m.content || '');
+      }
+    });
+    const texte = lignes.join('\n');
+    const blob = new Blob([texte], { type: 'text/markdown;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'conversation-' + titre.slice(0, 40) + '-' + date + '.md';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  });
+  $('bResume').addEventListener('click', async () => {
+    if (!CONV || !CONV.id) { alert('Aucune conversation ouverte.'); return; }
+    const b = $('bResume');
+    b.disabled = true; const ancien = b.textContent; b.textContent = '⏳ Résumé…';
+    try {
+      const r = await api('/api/resumer', { conversation: CONV.id });
+      const titre = (CONV.titre || 'conversation').replace(/[\\/:*?"<>|]/g, ' ');
+      const date = new Date().toISOString().slice(0, 10);
+      const texte = '# Document de reprise — ' + titre + '\n\nGénéré le ' + date + ' par ' + r.modele + '. À coller en contexte (system ou premier message) d\'un autre modèle d\'IA.\n\n---\n\n' + r.texte;
+      const blob = new Blob([texte], { type: 'text/markdown;charset=utf-8' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'reprise-' + titre.slice(0, 40) + '-' + date + '.md';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    } catch (e) {
+      alert('Échec du résumé : ' + (e.message || e));
+    } finally {
+      b.disabled = false; b.textContent = ancien;
+    }
+  });
+  $('burger').addEventListener('click', () => {
+    if (window.matchMedia('(max-width:860px)').matches) document.querySelector('aside').classList.toggle('ouverte');
+    else document.body.classList.toggle('lat-cachee');
+  });
+  $('optTitre').addEventListener('click', () => {
+    const zone = document.querySelector('.options-lat');
+    zone.classList.toggle('repliee');
+    $('optChevron').textContent = zone.classList.contains('repliee') ? '▸' : '▾';
+  });
+  $('bDemarrer').addEventListener('click', async () => { $('bDemarrer').disabled = true; try { await api('/api/demarrer-ollama', {}); } catch (e) { fil().appendChild(el('div', 'erreur', e.message)); } $('bDemarrer').disabled = false; rafraichir(); });
+  $('bVram').addEventListener('click', async () => { $('bVram').disabled = true; $('bVram').textContent = '⏳…'; try { const r = await api('/api/liberer-vram', {}); fil().appendChild(el('div', 'aide', r.message)); } catch (e) { fil().appendChild(el('div', 'erreur', e.message)); } $('bVram').disabled = false; $('bVram').textContent = '🧹 Libérer la VRAM'; rafraichir(); });
+  ['selModele', 'selMode', 'cReflexion', 'cAvance', 'cAuto', 'cAutoCmd', 'cWeb', 'iTopP', 'iTopK', 'iMinP', 'iRep', 'cGarde', 'cComfy', 'sRappels', 'iSeuilRam', 'iSeuilDisque', 'iPlafond', 'iLimiteCmd'].forEach(id => $(id).addEventListener('change', sauverReglages));
+  ['rCtx', 'rTemp', 'rTours'].forEach(id => $(id).addEventListener('input', () => { $('vCtx').textContent = $('rCtx').value; $('vTemp').textContent = $('rTemp').value; $('vTours').textContent = $('rTours').value; }));
+  ['rCtx', 'rTemp', 'rTours'].forEach(id => $(id).addEventListener('change', async () => { await sauverReglages(); if (CONV) majJauge(CONV.id); }));
+  // --- fenêtre : revue des changements, git ---
+  const ouvrirModal = titre => { $('modalTitre').textContent = titre; $('modalCorps').textContent = ''; $('modal').hidden = false; return $('modalCorps'); };
+  const fermerModal = () => { $('modal').hidden = true; };
+  $('modalFermer').addEventListener('click', fermerModal); $('modalFond').addEventListener('click', fermerModal);
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('modal').hidden) fermerModal(); });
+  const dessinerDiff = texte => { const pre = el('pre', 'diff'); (texte || '(aucune différence)').split('\n').forEach(l => pre.appendChild(el('div', l.startsWith('+') && !l.startsWith('+++') ? 'add' : l.startsWith('-') && !l.startsWith('---') ? 'del' : '', l || ' '))); return pre; };
+  const ouvrirRevue = async () => {
+    if (!CONV || !CONV.id) return;
+    const z = ouvrirModal('Revue : fichiers touchés par la dernière demande');
+    z.appendChild(el('div', 'aide', 'Chargement…'));
+    let r; try { r = await api('/api/revue?id=' + CONV.id); } catch (e) { z.textContent = e.message; return; }
+    z.textContent = '';
+    if (!r.fichiers.length) { z.appendChild(el('div', 'aide', 'Rien à relire : aucun fichier touché, ou tout est déjà annulé.')); return; }
+    z.appendChild(el('div', 'aide', 'Relis chaque changement. « Annuler ce fichier » le remet comme il était avant la demande. Les effets des commandes lancées ne sont pas dans cette liste.'));
+    r.fichiers.forEach(f => {
+      const c = el('div', 'carte'); const tete = el('div', 'rev-tete');
+      tete.appendChild(el('b', '', f.chemin)); tete.appendChild(el('span', 'badge ' + f.etat, f.etat));
+      tete.appendChild(el('span', 'aide', f.binaire ? 'fichier non texte' : '+' + f.plus + ' −' + f.moins));
+      if (f.modifie_depuis) tete.appendChild(el('span', 'erreur', 'modifié depuis : non annulable'));
+      const voir = el('button', '', 'Voir les différences'), ann = el('button', '', '↩ Annuler ce fichier'); ann.disabled = f.modifie_depuis;
+      let pre = null;
+      voir.addEventListener('click', () => { if (pre) { pre.remove(); pre = null; voir.textContent = 'Voir les différences'; } else { pre = dessinerDiff(f.diff); c.appendChild(pre); voir.textContent = 'Masquer'; } });
+      ann.addEventListener('click', async () => {
+        if (!confirm('Remettre « ' + f.chemin + ' » comme avant la dernière demande ?')) return;
+        try { await api('/api/annuler-fichier', { conversation: CONV.id, chemin: f.chemin }); await ouvrir(CONV.id); ouvrirRevue(); } catch (e) { alert(e.message); }
+      });
+      tete.appendChild(voir); tete.appendChild(ann); c.appendChild(tete); z.appendChild(c);
+    });
+    const pied = el('div', 'ligne'), tout = el('button', '', '↩ Tout annuler'), commit = el('button', 'principal', '⎇ Commiter ces fichiers…');
+    tout.addEventListener('click', () => { fermerModal(); $('bAnnuler').click(); });
+    commit.addEventListener('click', () => ouvrirGit(r.fichiers.map(f => f.chemin)));
+    pied.append(tout, commit); z.appendChild(pied);
+  };
+  const ouvrirGit = async presel => {
+    const z = ouvrirModal('Git : changements en attente');
+    z.appendChild(el('div', 'aide', 'Chargement…'));
+    let g; try { g = await api('/api/git'); } catch (e) { z.textContent = e.message; return; }
+    z.textContent = '';
+    if (!g.dispo) { z.appendChild(el('div', 'erreur', g.raison)); return; }
+    const choisis = new Set(presel || (CONV && CONV.annulable ? CONV.annulable.fichiers : []));
+    z.appendChild(el('div', 'aide', 'Branche : ' + g.branche + ' — ' + g.total + ' changement(s) en attente' + (g.total > g.modifies.length ? ' (' + g.modifies.length + ' affichés)' : '') + '. Coche ce qui doit entrer dans le commit ; rien n\'est envoyé en ligne (pas de push).'));
+    const liste = el('div', 'liste-git'), cases = [];
+    g.modifies.forEach(m => {
+      const l = el('label', 'ligne-git'), cb = document.createElement('input'); cb.type = 'checkbox'; cb.value = m.chemin; cb.checked = choisis.has(m.chemin) || [...choisis].some(p => m.chemin.endsWith('/') && p.startsWith(m.chemin));
+      cases.push(cb); l.appendChild(cb); l.appendChild(el('span', 'etat', m.etat)); l.appendChild(el('span', '', m.chemin)); liste.appendChild(l);
+    });
+    if (!g.modifies.length) liste.appendChild(el('div', 'aide', 'Rien à commiter : tout est à jour.'));
+    z.appendChild(liste);
+    const choix = () => cases.filter(c => c.checked).map(c => c.value);
+    const barre = el('div', 'ligne'), tous = el('button', '', 'Tout cocher'), aucun = el('button', '', 'Tout décocher');
+    tous.addEventListener('click', () => cases.forEach(c => c.checked = true)); aucun.addEventListener('click', () => cases.forEach(c => c.checked = false));
+    barre.append(tous, aucun); z.appendChild(barre);
+    const msg = document.createElement('textarea'); msg.placeholder = 'Message du commit (écris-le, ou clique sur « Proposer un message »)'; msg.style.cssText = 'width:100%;min-height:130px;margin-top:10px'; z.appendChild(msg);
+    const etat = el('div', 'aide'), actions = el('div', 'ligne'), prop = el('button', '', '✨ Proposer un message'), ok = el('button', 'principal', 'Commiter');
+    prop.addEventListener('click', async () => {
+      const f = choix(); if (!f.length) { etat.textContent = 'Coche au moins un fichier.'; return; }
+      prop.disabled = true; etat.textContent = 'Le modèle lit les changements… (il peut devoir se charger en mémoire)';
+      try { msg.value = (await api('/api/git-message', { fichiers: f })).message; etat.textContent = 'Relis et corrige le message si besoin.'; } catch (e) { etat.textContent = e.message; }
+      prop.disabled = false;
+    });
+    ok.addEventListener('click', async () => {
+      const f = choix(); if (!f.length) { etat.textContent = 'Coche au moins un fichier.'; return; } if (!msg.value.trim()) { etat.textContent = 'Écris un message (ou propose-en un).'; return; }
+      if (!confirm('Commiter ' + f.length + ' élément(s) sur la branche « ' + g.branche + ' » ?')) return;
+      ok.disabled = true;
+      try { const r = await api('/api/git-commit', { message: msg.value, fichiers: f }); await ouvrirGit([]); $('modalCorps').insertBefore(el('div', 'info', 'Commit fait. ' + r.sortie.split('\n')[0]), $('modalCorps').firstChild); } catch (e) { etat.textContent = e.message; ok.disabled = false; }
+    });
+    actions.append(prop, ok); z.appendChild(actions); z.appendChild(etat);
+  };
+  $('bRevue').addEventListener('click', ouvrirRevue); $('bGit').addEventListener('click', () => ouvrirGit());
+  // --- santé du PC : voyant, détail, test de bon fonctionnement ---
+  const POINT = { ok: '🟢', attention: '🟠', critique: '🔴' };
+  const majVoyantSante = async () => {
+    if (document.hidden) return;
+    try { const s = await api('/api/sante-systeme'); const b = $('bSante'); b.dataset.niveau = s.niveau; b.title = 'Santé du PC : ' + (s.niveau === 'ok' ? 'tout va bien' : s.items.filter(i => i.niveau !== 'ok').map(i => i.nom + ' (' + i.valeur + ')').join(' ; ')); return s; } catch (e) { /* voyant facultatif */ }
+  };
+  const ouvrirSante = async () => {
+    const z = $('santeCorps');
+    z.textContent = '';
+    z.appendChild(el('h2', '', 'Santé du PC'));
+    z.appendChild(el('div', 'aide', 'Mesure en cours…'));
+    let s; try { s = await api('/api/sante-systeme'); } catch (e) { z.textContent = e.message; return; }
+    z.textContent = '';
+    z.appendChild(el('h2', '', 'Santé du PC'));
+    $('bSante').dataset.niveau = s.niveau;
+    s.items.forEach(i => {
+      const c = el('div', 'carte'); const t = el('div', 'nom');
+      t.appendChild(el('b', '', POINT[i.niveau] + ' ' + i.nom)); t.appendChild(el('div', '', i.valeur));
+      if (i.conseil) t.appendChild(el('div', 'aide', i.conseil));
+      c.appendChild(t); z.appendChild(c);
+    });
+    z.appendChild(el('div', 'aide', 'Les seuils d\'alerte se règlent dans Réglages > « Garde-fous ressources ». Les mesures de mémoire vidéo demandent nvidia-smi (installé avec le pilote NVIDIA).'));
+    const barre = el('div', 'ligne'), maj = el('button', '', '↻ Actualiser'), vram = el('button', '', '🧹 Libérer la VRAM'), test = el('button', 'principal', '✔ Vérifier que tout marche'), complet = el('button', '', 'Test complet (fait répondre le modèle)');
+    const sortie = el('div'); sortie.style.marginTop = '10px';
+    maj.addEventListener('click', ouvrirSante); vram.addEventListener('click', async () => { vram.disabled = true; try { sortie.textContent = (await api('/api/liberer-vram', {})).message; } catch (e) { sortie.textContent = e.message; } vram.disabled = false; });
+    const lancer = async profond => {
+      test.disabled = complet.disabled = true; sortie.textContent = ''; sortie.appendChild(el('div', 'aide', profond ? 'Test complet en cours (le modèle peut devoir se charger : jusqu\'à une minute)…' : 'Vérifications en cours…'));
+      try {
+        const r = await api('/api/autotest', { profond });
+        sortie.textContent = '';
+        sortie.appendChild(el('div', r.ok ? 'info' : 'erreur', r.ok ? '✔ Tout ce qui est important fonctionne.' : '✘ Un point important ne fonctionne pas :'));
+        r.resultats.forEach(x => { const l = el('div', 'ligne-git'); l.appendChild(el('span', '', x.ok ? '🟢' : (x.important ? '🔴' : '🟠'))); const col = el('div'); col.appendChild(el('b', '', x.nom + ' ')); col.appendChild(el('span', 'aide', '(' + x.duree + ' s)')); col.appendChild(el('div', x.ok ? 'aide' : 'erreur', x.detail)); l.appendChild(col); sortie.appendChild(l); });
+      } catch (e) { sortie.textContent = e.message; }
+      test.disabled = complet.disabled = false;
+    };
+    test.addEventListener('click', () => lancer(false)); complet.addEventListener('click', () => lancer(true));
+    barre.append(maj, vram, test, complet); z.appendChild(barre); z.appendChild(sortie);
+  };
+  window.ouvrirSante = ouvrirSante;          // appelée par le clic sur l'onglet Santé
+  majVoyantSante(); setInterval(majVoyantSante, 45000);
+  // --- recherche dans les conversations ---
+  $('recherche').addEventListener('input', () => {
+    clearTimeout(RECH.t);
+    const q = $('recherche').value.trim();
+    if (q.length < 2) { RECH.q = ''; SIG.c = ''; if (ETAT) rafraichir(); return; }
+    RECH.t = setTimeout(async () => {
+      RECH.q = q;
+      try {
+        const r = await api('/api/recherche?q=' + encodeURIComponent(q)); if (RECH.q !== q) return;
+        const zone = $('conversations'); zone.textContent = '';
+        if (!r.resultats.length) zone.appendChild(el('div', 'aide', 'Aucun résultat.'));
+        r.resultats.forEach(c => { const d = el('div', 'conv res-recherche'); d.dataset.id = c.id; const col = el('div', 't'); col.appendChild(el('div', '', (c.epingle ? '★ ' : '') + (c.titre || '(sans titre)'))); col.appendChild(el('div', 'extrait', c.extrait)); d.appendChild(col); d.addEventListener('click', () => ouvrir(c.id)); zone.appendChild(d); });
+      } catch (e) { /* la recherche est un confort */ }
+    }, 300);
+  });
+  // --- signal de fin quand la page est en arrière-plan (téléphone verrouillé, autre onglet) ---
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) { document.title = 'Lutin'; rafraichir(); } });       // retour sur la page : on se resynchronise tout de suite
+  const signaler = texte => { if (document.hidden) { document.title = texte + ' — Lutin'; try { if (navigator.vibrate) navigator.vibrate([150, 80, 150]); } catch (e) { /* pas de vibreur */ } } };
+  $('bAnnuler').addEventListener('click', async () => {
+    if (!CONV || !CONV.annulable || EN_COURS) return;
+    if (!confirm('Rétablir ' + CONV.annulable.fichiers.length + ' fichier(s) tel(s) qu\'ils étaient avant la dernière demande ?\n\n' + CONV.annulable.fichiers.join('\n') + '\n\n(Les effets des commandes lancées ne sont pas annulés. Un fichier modifié depuis n\'est pas touché.)')) return;
+    try {
+      const r = await api('/api/annuler-tour', { conversation: CONV.id });
+      await ouvrir(CONV.id);
+      fil().appendChild(el('div', 'info', 'Annulé. Rétablis : ' + (r.retablis.join(', ') || 'aucun') + (r.ignores.length ? ' — non touchés : ' + r.ignores.join(', ') : '') + '.'));
+      bas();
+    } catch (e) { alert(e.message); }
+  });
+  $('bAnnulerEdition').addEventListener('click', () => { finEdition(); $('saisie').value = ''; });
+  let SKILL_ACTIF = null;
+  const chargerSkills = async () => {
+    try {
+      const r = await api('/api/skills');
+      const zone = $('listeSkills'); zone.textContent = '';
+      if (!r.skills.length) { zone.textContent = 'Aucun skill.'; return; }
+      r.skills.forEach(s => {
+        const b = el('button', '', s.titre + '  (' + s.nom + ')');
+        b.style.margin = '0 8px 4px 0';
+        b.addEventListener('click', async () => {
+          SKILL_ACTIF = s.nom;
+          const d = await api('/api/skills/' + encodeURIComponent(s.nom));
+          $('tSkill').value = d.texte; $('nSkill').value = ''; $('mS').textContent = '';
+        });
+        zone.appendChild(b);
+      });
+    } catch (e) { $('listeSkills').textContent = e.message; }
+  };
+  $('bNSkill').addEventListener('click', async () => {
+    let nom = $('nSkill').value.trim();
+    if (!nom) { $('mS').textContent = 'Donne un nom (ex. mon-skill.md).'; return; }
+    if (!nom.endsWith('.md')) nom += '.md';
+    try { await api('/api/skills', { nom, texte: '' }); SKILL_ACTIF = nom; $('tSkill').value = ''; $('nSkill').value = ''; $('mS').textContent = 'Créé : ' + nom; chargerSkills(); }
+    catch (e) { $('mS').textContent = e.message; }
+  });
+  $('bSSkill').addEventListener('click', async () => {
+    let nom = SKILL_ACTIF || $('nSkill').value.trim();
+    if (!nom) { $('mS').textContent = 'Choisis un skill ou donne un nom.'; return; }
+    if (!nom.endsWith('.md')) nom += '.md';
+    try { await api('/api/skills', { nom, texte: $('tSkill').value }); SKILL_ACTIF = nom; $('mS').textContent = 'Enregistré : ' + nom; chargerSkills(); }
+    catch (e) { $('mS').textContent = e.message; }
+  });
+  $('bDSkill').addEventListener('click', async () => {
+    const nom = SKILL_ACTIF;
+    if (!nom) { $('mS').textContent = 'Choisis d’abord un skill à supprimer.'; return; }
+    if (!confirm('Supprimer « ' + nom + ' » ?')) return;
+    try { await api('/api/skills-supprimer', { nom }); SKILL_ACTIF = null; $('tSkill').value = ''; $('mS').textContent = 'Supprimé : ' + nom; chargerSkills(); }
+    catch (e) { $('mS').textContent = e.message; }
+  });
+  $('bSCont').addEventListener('click', async () => { try { await api('/api/memoire', { fichier: 'CONTEXTE.md', texte: $('tContexte').value }); $('mC').textContent = 'Enregistré.'; } catch (e) { $('mC').textContent = e.message; } });
+  $('bSMem').addEventListener('click', async () => { try { await api('/api/memoire', { fichier: 'MEMOIRE.md', texte: $('tMemoire').value }); $('mM').textContent = 'Enregistré.'; } catch (e) { $('mM').textContent = e.message; } });
+  $('bAutre').addEventListener('click', async () => { const m = $('autreModele').value.trim(); if (!m) return; try { await api('/api/installer-modele', { modele: m }); $('autreModele').value = ''; $('msgModeles').textContent = 'Téléchargement de « ' + m + ' » lancé : il est ajouté à la liste ci-dessus, et apparaîtra dans le choix du modèle une fois installé.'; rafraichir(); } catch (e) { $('msgModeles').textContent = e.message; } });
+  $('bRestaurer').addEventListener('click', async () => { try { await api('/api/modeles-restaurer', {}); rafraichir(); } catch (e) { $('msgModeles').textContent = e.message; } });
+  $('bMaj').addEventListener('click', () => verifierModeles('maj'));
+  $('bNouveaux').addEventListener('click', () => verifierModeles('nouveaux'));
+  rafraichir(); setInterval(rafraichir, 4000);
+})();
+</script>
+</body>
+</html>
