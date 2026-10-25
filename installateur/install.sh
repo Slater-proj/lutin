@@ -1,18 +1,20 @@
 #!/usr/bin/env bash
 # Installe ou met a jour Lutin pour l'utilisateur courant (Linux, macOS) :
-#   curl -fsSL https://raw.githubusercontent.com/<proprietaire>/lutin/main/installateur/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/Slater-proj/lutin/main/installateur/install.sh | bash
 # Ce que fait ce script, et rien d'autre :
 #   1. verifie Python 3.10 ou plus (il ne l'installe pas : il dit quelle commande lancer)
 #   2. cree (ou reutilise) un environnement prive dans ~/.local/share/lutin/venv et y installe Lutin
 #      - deja installe a la meme version : il ne change rien et le dit ; version differente : mise a jour
 #   3. place la commande « lutin » dans ~/.local/bin
 #   4. lance « lutin setup » (sans effet si Lutin est deja configure) sauf avec --sans-setup
-# Variable obligatoire : LUTIN_SOURCE = ce qu'il faut passer a pip (une roue, ou « git+https://github.com/<proprietaire>/lutin »).
+# Variable facultative : LUTIN_SOURCE = ce qu'il faut passer a pip (une roue, une adresse) ; par defaut : la derniere publication GitHub de Slater-proj/lutin.
 # Facultatives : LUTIN_DOSSIER = ou installer, LUTIN_BIN = ou placer la commande ; options --sans-setup, --sans-path.
 set -euo pipefail
 
 SOURCE="${LUTIN_SOURCE:-}"
-[ -n "$SOURCE" ] || { echo "LUTIN_SOURCE n'est pas defini : donne la roue ou le depot (fichier.whl ou git+https://github.com/<proprietaire>/lutin). N'utilise pas le nom nu « lutin » tant que le paquet n'est pas publie par nous." >&2; exit 1; }
+# Sans LUTIN_SOURCE : la derniere publication de https://github.com/Slater-proj/lutin (jamais le nom nu « lutin » sur PyPI : c'est un autre projet).
+MARQUEUR=""
+[ -n "$SOURCE" ] || MARQUEUR="github:Slater-proj/lutin"
 SETUP=1
 PATH_OK=1
 for a in "$@"; do
@@ -53,12 +55,24 @@ if [ ! -x "$VENV/bin/python" ]; then
   "$PYTHON" -m venv "$VENV" || echec "Impossible de creer l'environnement (sur Debian/Ubuntu : sudo apt install python3-venv)."
 fi
 
+if [ -n "$MARQUEUR" ]; then
+  SOURCE="$("$VENV/bin/python" - <<'PYEOF'
+import json, sys, urllib.request
+try:
+    req = urllib.request.Request("https://api.github.com/repos/Slater-proj/lutin/releases/latest", headers={"User-Agent": "lutin-installation", "Accept": "application/vnd.github+json"})
+    d = json.load(urllib.request.urlopen(req, timeout=30))
+    print(next(a["browser_download_url"] for a in d["assets"] if a["name"].endswith(".whl")))
+except Exception as e:
+    sys.exit(1)
+PYEOF
+)" || echec "Impossible de lire la derniere version de Lutin sur GitHub (pas d'internet, ou pas encore de publication) : donne LUTIN_SOURCE=<fichier.whl ou adresse>."
+fi
 info "Verification de Lutin ($SOURCE)..."
 "$VENV/bin/python" -m pip install --upgrade --quiet pip
 "$VENV/bin/python" -m pip install --upgrade --quiet "$SOURCE" || echec "pip n'a pas pu installer Lutin ($SOURCE)."
 APRES="$(version_installee)"
 [ -n "$APRES" ] || echec "Lutin est installe mais ne repond pas (« python -m lutin --version »)."
-printf '%s\n' "$SOURCE" > "$DONNEES/source.txt"          # pour « lutin update »
+printf '%s\n' "${MARQUEUR:-$SOURCE}" > "$DONNEES/source.txt"          # pour « lutin update »
 if [ -z "$AVANT" ]; then info "Lutin $APRES installe."
 elif [ "$AVANT" = "$APRES" ]; then info "Lutin $APRES : deja a jour, rien a faire."
 else info "Lutin mis a jour : $AVANT -> $APRES."; fi

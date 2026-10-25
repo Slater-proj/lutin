@@ -1,14 +1,15 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=68", "setuptools-scm>=8"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "lutin"
-dynamic = ["version"]
+dynamic = ["version"]                  # calculée par setuptools-scm d'après les étiquettes git (v1.2.3) ; la CI la fixe avec SETUPTOOLS_SCM_PRETEND_VERSION
 description = "Un assistant IA local, simple à installer, qui choisit les modèles adaptés à ta machine."
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
+keywords = ["llm", "ollama", "assistant", "local", "offline", "agent"]
 dependencies = []                      # volontairement vide : bibliothèque standard seulement
 classifiers = [
     "Programming Language :: Python :: 3",
@@ -18,17 +19,21 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
 ]
 
+[project.urls]
+Depot = "https://github.com/Slater-proj/lutin"
+Signaler = "https://github.com/Slater-proj/lutin/issues"
+
 [project.scripts]
 lutin = "lutin.cli:principal"
 
-[tool.setuptools.dynamic]
-version = { attr = "lutin.__version__" }
+[tool.setuptools_scm]
+fallback_version = "0.0.0+inconnue"    # source sans historique git (archive, copie) : version factice, jamais publiée
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
-lutin = ["data/*", "web/*", "web/lib/*"]
+lutin = ["data/*", "web/*", "web/lib/*", "web/icones/*"]
 
 [tool.ruff]
 line-length = 200

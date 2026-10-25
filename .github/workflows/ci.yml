@@ -1,9 +1,9 @@
 name: ci
 
+# Appelé par release.yml (à chaque envoi de branche) et lancé sur chaque pull request.
 on:
-  push:
-    branches: [main]
   pull_request:
+  workflow_call:
 
 permissions:
   contents: read
@@ -30,11 +30,13 @@ jobs:
         run: python tests/lancer_tests.py
 
   paquet:
-    name: le paquet s'installe et la commande répond
+    name: paquet (roue, archive source) sur ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         os: [ubuntu-latest, windows-latest]
+    env:
+      SETUPTOOLS_SCM_PRETEND_VERSION: "0.0.0.dev0"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -42,16 +44,37 @@ jobs:
           python-version: "3.12"
       - run: python -m pip install build
       - run: python -m build
-      - name: Installer la roue dans un environnement vierge
+      - name: Contenu conforme (rien d'inutile, rien d'oublié)
+        run: python tools/verifier_paquet.py dist
+      - name: Installer la roue dans un environnement vierge et lancer la commande
         shell: bash
         run: |
-          python -m venv /tmp/venv-lutin || python -m venv "$RUNNER_TEMP/venv-lutin"
-          VENV=$( [ -d /tmp/venv-lutin ] && echo /tmp/venv-lutin || echo "$RUNNER_TEMP/venv-lutin" )
-          if [ -x "$VENV/bin/python" ]; then PY="$VENV/bin/python"; else PY="$VENV/Scripts/python.exe"; fi
+          python -m venv "$RUNNER_TEMP/venv"
+          if [ -x "$RUNNER_TEMP/venv/bin/python" ]; then PY="$RUNNER_TEMP/venv/bin/python"; else PY="$RUNNER_TEMP/venv/Scripts/python.exe"; fi
           "$PY" -m pip install dist/*.whl
           "$PY" -m lutin --version
           "$PY" -m lutin securite
-          "$PY" -c "import lutin, pathlib; p = pathlib.Path(lutin.__file__).parent; assert (p/'web'/'index.html').is_file() and (p/'data'/'modeles.json').is_file(), 'fichiers de données absents du paquet'"
+          "$PY" -m lutin hors-ligne
+
+  docker:
+    name: image Docker (construction et démarrage)
+    runs-on: ubuntu-latest
+    env:
+      SETUPTOOLS_SCM_PRETEND_VERSION: "0.0.0.dev0"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Construire l'image
+        run: docker build --build-arg LUTIN_VERSION=0.0.0.dev0 -t lutin:ci .
+      - name: La commande répond
+        run: docker run --rm lutin:ci --version
+      - name: Le serveur démarre, demande un code PIN et répond sur son port
+        run: |
+          docker run -d --name lutin-ci -p 127.0.0.1:8777:8777 -e LUTIN_NIVEAU=reseau lutin:ci
+          for i in $(seq 1 30); do curl -fsS http://127.0.0.1:8777/ -o page.html && break; sleep 1; done
+          grep -q "connexion" page.html
+          docker logs lutin-ci 2>&1 | grep -E "Code PIN"
+          docker exec lutin-ci lutin pin
+          docker rm -f lutin-ci
 
   syntaxe-installateurs:
     name: scripts d'installation (syntaxe)
@@ -69,10 +92,10 @@ jobs:
           }
       - name: Shell
         shell: bash
-        run: for f in installateur/*.sh; do bash -n "$f" && echo "OK $f"; done
+        run: for f in installateur/*.sh docker/*.sh; do bash -n "$f" && echo "OK $f"; done
 
   securite:
-    name: secrets et dépendances
+    name: secrets
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

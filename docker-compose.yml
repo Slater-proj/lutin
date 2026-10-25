@@ -1,0 +1,38 @@
+# Lutin + Ollama. Démarrer :  docker compose up -d      Voir docs/DOCKER.md pour les prérequis, les volumes et le GPU.
+services:
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    volumes:
+      - ollama:/root/.ollama            # les modèles (plusieurs Go) : un volume nommé, ou un dossier de ton choix (./modeles:/root/.ollama)
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  lutin:
+    image: ghcr.io/slater-proj/lutin:latest
+    # Pour construire l'image toi-même au lieu de la télécharger :  build: .
+    restart: unless-stopped
+    depends_on:
+      ollama:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8777:8777"           # seulement cette machine. Pour ton réseau local : "8777:8777" (lis d'abord docs/SECURITE.md)
+    environment:
+      OLLAMA_URL: http://ollama:11434
+      LUTIN_NIVEAU: reseau              # reseau (code PIN) ou proxy (derrière Authelia & co : ajoute LUTIN_URL_PUBLIQUE et LUTIN_PROXY_IP)
+      # LUTIN_URL_PUBLIQUE: https://lutin.exemple.fr
+      # LUTIN_PROXY_IP: 172.18.0.1,192.168.1.10
+      # LUTIN_HORS_LIGNE: "1"           # mode hors ligne strict : aucune connexion vers Internet
+      # LUTIN_TRAVAUX: /travail/projet-2,/travail/documents      # autres dossiers de travail (montés ci-dessous)
+      # LUTIN_GPU: "NVIDIA RTX 4090=24" # carte graphique déclarée à la main si elle n'est pas détectée (nom=mémoire en Go)
+    volumes:
+      - lutin-data:/data                # configuration, conversations, mémoire, journal
+      - ./travail:/travail              # le dossier de travail : le SEUL endroit que Lutin peut lire et modifier
+      # - ./projet-2:/travail/projet-2
+
+volumes:
+  lutin-data:
+  ollama:

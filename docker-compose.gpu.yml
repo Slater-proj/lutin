@@ -1,0 +1,23 @@
+# Ajoute la carte graphique NVIDIA (nécessite le NVIDIA Container Toolkit sur l'hôte, voir docs/DOCKER.md) :
+#   docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
+services:
+  ollama:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  lutin:                                # Lutin n'utilise pas la carte : il la LIT (nvidia-smi) pour choisir des modèles qui tiennent dedans
+    environment:
+      NVIDIA_DRIVER_CAPABILITIES: utility
+      NVIDIA_VISIBLE_DEVICES: all
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [utility]

@@ -1,0 +1,13 @@
+# Ce que contient l'archive source (sdist) : le code, les données et la licence. Tout le reste (tests, documentation, CI, Docker) vit dans le dépôt, pas dans le paquet.
+include LICENSE README.md CHANGELOG.md pyproject.toml
+recursive-include src/lutin/data *
+recursive-include src/lutin/web *
+prune tests
+prune docs
+prune tools
+prune assets
+prune installateur
+prune docker
+prune .github
+exclude Dockerfile docker-compose.yml docker-compose.gpu.yml .dockerignore .gitattributes .editorconfig .gitignore SECURITY.md CONTRIBUER.md
+global-exclude __pycache__ *.py[cod] *.log
