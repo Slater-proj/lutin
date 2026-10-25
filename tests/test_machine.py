@@ -73,6 +73,28 @@ def profil(vram=None, ram=32.0, fabricant="nvidia", ram_libre=20.0):
                   disques=[Disque("C:\\", 100, 500)])
 
 
+class CarteDeclaree(unittest.TestCase):
+    def test_formats(self):
+        a = machine.analyser_gpu_declare
+        self.assertEqual([(g.nom, g.fabricant, g.vram_go) for g in a("24")], [("Carte déclarée", "nvidia", 24.0)])
+        self.assertEqual([(g.nom, g.fabricant, g.vram_go) for g in a("NVIDIA RTX 4090=24")], [("NVIDIA RTX 4090", "nvidia", 24.0)])
+        self.assertEqual([(g.fabricant, g.vram_go) for g in a("Radeon RX 7900 XTX=20")], [("amd", 20.0)])
+        self.assertEqual([(g.fabricant, g.vram_go) for g in a("Ma carte=12:intel")], [("intel", 12.0)])
+        self.assertEqual([g.vram_go for g in a("Ma carte=11,5")], [11.5])
+
+    def test_valeurs_absurdes_ignorees(self):
+        for texte in ("", None, "beaucoup", "=", "0", "-4", "99999", "x=y"):
+            self.assertEqual(machine.analyser_gpu_declare(texte), [], texte)
+
+    def test_la_declaration_remplace_la_detection(self):
+        import os
+        from unittest import mock
+        with mock.patch.dict(os.environ, {"LUTIN_GPU": "NVIDIA RTX 3060=12"}):
+            p = machine.detecter(lanceur=lambda *a, **k: NVIDIA_4090 if "nvidia-smi" in str(a) else "")
+        self.assertEqual([(g.nom, g.vram_go) for g in p.gpus], [("NVIDIA RTX 3060", 12.0)])
+        self.assertEqual(p.classe(), "moyenne")
+
+
 class Budget(unittest.TestCase):
     def test_classes(self):
         attendu = {None: "sans_gpu", 2: "sans_gpu", 6: "petite", 8: "petite", 12: "moyenne", 16: "moyenne", 24: "grande", 32: "grande", 48: "tres_grande"}

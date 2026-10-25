@@ -173,6 +173,24 @@ def analyser_gpus_windows(texte):
     return gpus
 
 
+def analyser_gpu_declare(texte):
+    """Carte graphique déclarée à la main (variable LUTIN_GPU, utile en conteneur ou quand la détection échoue) : « 24 », « NVIDIA RTX 4090=24 » ou « Radeon RX 7900=20:amd »."""
+    texte = (texte or "").strip()
+    if not texte:
+        return []
+    nom, _, reste = texte.rpartition("=") if "=" in texte else ("", "", texte)
+    vram, _, fab = reste.partition(":")
+    try:
+        go = float(vram.replace(",", "."))
+    except ValueError:
+        return []
+    if not 0.5 <= go <= 1024:
+        return []
+    nom = nom.strip() or "Carte déclarée"
+    fabricant = fab.strip().lower() if fab.strip().lower() in ("nvidia", "amd", "intel", "apple") else (_fabricant_depuis_nom(nom) if nom != "Carte déclarée" else "nvidia")
+    return [Gpu(nom, "nvidia" if fabricant == "inconnu" else fabricant, round(go, 1), 0.0, "déclarée (LUTIN_GPU)")]
+
+
 def lire_gpus_linux(racine="/sys/class/drm"):
     """Cartes AMD/Intel/NVIDIA vues par le noyau (sans outil à installer). La mémoire vient de mem_info_vram_total (AMD)."""
     gpus = []
@@ -277,5 +295,8 @@ def detecter(lanceur=lancer):
     elif systeme == "macos" and p.architecture in ("arm64", "aarch64"):
         autres = [Gpu("Apple Silicon (mémoire partagée)", "apple", round(p.ram_go, 1), 0.0, "mémoire unifiée")]
     p.gpus = nvidia + autres
+    declare = analyser_gpu_declare(os.environ.get("LUTIN_GPU", ""))
+    if declare:
+        p.gpus = declare                                     # la déclaration de l'utilisateur l'emporte sur la détection
     p.disques = lister_disques(systeme)
     return p

@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 320" role="img" aria-label="Lutin : ton assistant IA, chez toi">
+  <defs>
+    <linearGradient id="fond" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0e1620"/>
+      <stop offset="1" stop-color="#0b1913"/>
+    </linearGradient>
+    <linearGradient id="chapeau" x1="0.1" y1="0" x2="0.9" y2="1">
+      <stop offset="0" stop-color="#7cf0b4"/>
+      <stop offset="0.55" stop-color="#2fc08f"/>
+      <stop offset="1" stop-color="#157a66"/>
+    </linearGradient>
+    <linearGradient id="bord" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#1a9477"/>
+      <stop offset="0.5" stop-color="#5ee0a6"/>
+      <stop offset="1" stop-color="#1a9477"/>
+    </linearGradient>
+    <linearGradient id="titre" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#e9fff5"/>
+      <stop offset="1" stop-color="#7cf0b4"/>
+    </linearGradient>
+    <radialGradient id="lueur">
+      <stop offset="0" stop-color="#ffd98a" stop-opacity="0.95"/>
+      <stop offset="0.45" stop-color="#ffb347" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#ffb347" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1200" height="320" rx="24" fill="url(#fond)"/>
+  <circle cx="1060" cy="40" r="260" fill="#2fc08f" opacity="0.05"/>
+  <circle cx="1130" cy="290" r="170" fill="#ffb347" opacity="0.04"/>
+  <!-- marque -->
+  <g transform="translate(60 40) scale(1.875)">
+    <circle cx="96" cy="30" r="24" fill="url(#lueur)"/>
+    <path d="M28 92 C32 62 46 38 70 30 C84 25 94 28 100 34 C88 36 82 46 84 62 C85 74 90 84 98 92 Z" fill="url(#chapeau)"/>
+    <path d="M84 62 C85 74 90 84 98 92 L74 92 C80 82 82 72 84 62 Z" fill="#0b3d36" opacity="0.28"/>
+    <path d="M33 80 C52 86 78 86 94 80 L97 90 C78 97 48 97 30 90 Z" fill="#0e1722" opacity="0.55"/>
+    <ellipse cx="64" cy="96" rx="44" ry="10" fill="url(#bord)"/>
+    <ellipse cx="64" cy="94.6" rx="40" ry="7" fill="#0b0f14" opacity="0.22"/>
+    <circle cx="52" cy="104" r="3.2" fill="#e9fff5"/>
+    <circle cx="76" cy="104" r="3.2" fill="#e9fff5"/>
+    <circle cx="53" cy="104.6" r="1.4" fill="#0b0f14"/>
+    <circle cx="77" cy="104.6" r="1.4" fill="#0b0f14"/>
+    <path d="M100 18 L103 28 L113 31 L103 34 L100 44 L97 34 L87 31 L97 28 Z" fill="#fff1c9"/>
+    <circle cx="100" cy="31" r="4" fill="#ffd98a"/>
+  </g>
+  <!-- texte -->
+  <text x="330" y="165" font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif" font-size="108" font-weight="700" fill="url(#titre)" letter-spacing="-2">Lutin</text>
+  <text x="334" y="208" font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif" font-size="32" fill="#dfe9f3">Ton assistant IA, chez toi.</text>
+  <text x="335" y="240" font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif" font-size="22" fill="#9db0c2">Il choisit les modèles qui tiennent sur ta machine.</text>
+  <g font-family="'Segoe UI', 'Helvetica Neue', Arial, sans-serif" font-size="19" fill="#7cf0b4" text-anchor="middle">
+    <rect x="334" y="258" width="120" height="34" rx="17" fill="none" stroke="#2fc08f" stroke-opacity="0.55"/><text x="394" y="281">Windows</text>
+    <rect x="466" y="258" width="96" height="34" rx="17" fill="none" stroke="#2fc08f" stroke-opacity="0.55"/><text x="514" y="281">Linux</text>
+    <rect x="574" y="258" width="108" height="34" rx="17" fill="none" stroke="#2fc08f" stroke-opacity="0.55"/><text x="628" y="281">Docker</text>
+    <rect x="694" y="258" width="140" height="34" rx="17" fill="none" stroke="#2fc08f" stroke-opacity="0.55"/><text x="764" y="281">Hors ligne</text>
+    <rect x="846" y="258" width="148" height="34" rx="17" fill="none" stroke="#2fc08f" stroke-opacity="0.55"/><text x="920" y="281">Sans compte</text>
+  </g>
+</svg>

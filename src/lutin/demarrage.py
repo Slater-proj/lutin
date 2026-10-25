@@ -3,18 +3,19 @@ import os
 import threading
 from pathlib import Path
 
-from . import config, machine, miseajour, ollama_client, securite
+from . import config, machine, miseajour, ollama_client, securite, travaux
 
 
 def preparer_environnement(cfg, dossiers):
     """Fixe l'environnement lu par le moteur AVANT son import (il lit ces variables au chargement)."""
     config.preparer(dossiers)
-    travail = Path(cfg["emplacements"]["travail"] or Path.home() / "Lutin")
+    actif = travaux.actif(cfg)
+    travail = Path(actif["chemin"] if actif else Path.home() / "Lutin")
     travail.mkdir(parents=True, exist_ok=True)
     cache_catalogue = Path(dossiers["cache"]) / "catalogue.json"
     polyvalent = cfg["modeles"]["choisis"].get("polyvalent") or next(iter(cfg["modeles"]["choisis"].values()), "")
     env = {"LUTIN_RACINE": str(travail), "LUTIN_DONNEES": str(dossiers["donnees"]), "LUTIN_MEMOIRE": str(dossiers["memoire"]),
-           "LUTIN_PORT": str(cfg["securite"]["port"]), "LUTIN_PROPOSITIONS": str(Path(dossiers["cache"]) / "propositions.json"),
+           "LUTIN_PORT": str(cfg["securite"]["port"]), "LUTIN_PROPOSITIONS": str(Path(dossiers["cache"]) / "propositions.json"), "LUTIN_BENCH": str(Path(dossiers["cache"]) / "bench.json"),
            "LUTIN_CONFIG": str(Path(dossiers["config"]) / "config.json")}
     if polyvalent:
         env["LUTIN_MODELE"] = polyvalent

@@ -5,15 +5,17 @@ Seules données envoyées : des requêtes GET anonymes (le catalogue, et le regi
 """
 import hashlib
 import json
+import re
 import time
 import urllib.error
 import urllib.request
 from pathlib import Path
 
 from . import catalogue as cat
-from . import selection
+from . import horsligne, selection
 
-CATALOGUE_URL_DEFAUT = ""            # adresse du catalogue publié avec le dépôt (à renseigner à la publication, ou via `catalogue_url` dans la configuration)
+CATALOGUE_URL_DEFAUT = "https://raw.githubusercontent.com/Slater-proj/lutin/main/src/lutin/data/modeles.json"          # le catalogue de la branche principale ; `catalogue_url` dans la configuration le remplace ("" = pas de catalogue en ligne)
+DEPOT = "Slater-proj/lutin"
 REGISTRE = "https://registry.ollama.ai/v2"
 INTERVALLE_S = 24 * 3600
 TAILLE_MAX = 1_000_000
@@ -24,6 +26,7 @@ def http_get(url, entetes=None, delai=10, ouvrir=urllib.request.urlopen):
     """(statut, en-têtes en minuscules, corps). Lève OSError si le réseau est absent. HTTPS obligatoire."""
     if not url.startswith("https://"):
         raise OSError("adresse non sécurisée refusée")
+    horsligne.garde(url)
     req = urllib.request.Request(url, headers=dict(entetes or {}, **{"User-Agent": "lutin"}))
     try:
         with ouvrir(req, timeout=delai) as r:
@@ -123,6 +126,30 @@ def telecharger_catalogue(url, cache, http=http_get):
     return "maj"
 
 
+def derniere_release(depot=DEPOT, http=http_get):
+    """(version sans « v », adresse de la roue) de la dernière publication GitHub ; (None, None) si le réseau ou la publication manque."""
+    try:
+        statut, _, corps = http("https://api.github.com/repos/{}/releases/latest".format(depot), {"Accept": "application/vnd.github+json"})
+        if statut != 200:
+            return None, None
+        d = json.loads(corps.decode("utf-8"))
+    except (OSError, ValueError):
+        return None, None
+    roue = next((a.get("browser_download_url") for a in d.get("assets", []) if str(a.get("name", "")).endswith(".whl")), None)
+    return str(d.get("tag_name", "")).lstrip("v") or None, roue
+
+
+def numeros(version):
+    """(1, 2, 3) pour « 1.2.3rc4+x » ; () si illisible."""
+    m = re.match(r"^(\d+)\.(\d+)\.(\d+)", str(version or ""))
+    return tuple(int(x) for x in m.groups()) if m else ()
+
+
+def plus_recente(distante, locale):
+    """Vrai si la version distante est strictement plus récente (jamais de retour en arrière, même si la version locale est une candidate ou illisible)."""
+    return bool(numeros(distante)) and numeros(distante) > (numeros(locale) or (0, 0, 0))
+
+
 PORTEES = ("maj", "nouveaux", "tout")
 
 
@@ -144,16 +171,23 @@ def verifier(profil, cfg, dossiers, ollama, http=http_get, maintenant=time.time,
             pass
     ancien = lire_propositions(dossiers)
     resultat = {"date": maintenant(), "propositions": [], "erreurs": [], "catalogue": "absent", "portee": portee}
+    hors_ligne = horsligne.actif(Path(dossiers.get("config", "")) / "config.json" if dossiers.get("config") else None)
+    if hors_ligne:
+        resultat["erreurs"].append("mode hors ligne strict : seule la liste livrée avec Lutin est comparée, les mises à jour de modèles ne sont pas cherchées")
+        portee_reseau = False
+    else:
+        portee_reseau = True
     try:
-        if portee in ("nouveaux", "tout"):
-            resultat["catalogue"] = telecharger_catalogue(cfg.get("catalogue_url") or CATALOGUE_URL_DEFAUT, cache, http)
+        if portee in ("nouveaux", "tout") and portee_reseau:
+            url = cfg.get("catalogue_url")
+            resultat["catalogue"] = telecharger_catalogue(CATALOGUE_URL_DEFAUT if url is None else url, cache, http)
             if resultat["catalogue"] == "echec":
                 resultat["erreurs"].append("catalogue en ligne indisponible : copie locale utilisée")
         catalogue = cat.charger(cache / "catalogue.json")
         installes = ollama.installes()
         ignores = set(cfg.get("modeles", {}).get("ignores", []))
         nouvelles, recalcule = [], []
-        if portee in ("maj", "tout"):
+        if portee in ("maj", "tout") and portee_reseau:
             nouvelles += mises_a_jour(installes, http)
             recalcule.append("maj")
         if portee in ("nouveaux", "tout"):

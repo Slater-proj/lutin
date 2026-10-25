@@ -19,12 +19,15 @@ SCHEMA = 1
 DEFAUT = {
     "schema": SCHEMA,
     "installe": False,
-    "securite": {"niveau": "local", "port": 8777, "url_publique": "", "proxy_ips": []},
-    "emplacements": {"modeles": "", "travail": ""},           # modeles : dossier OLLAMA_MODELS ('' = emplacement habituel d'Ollama) ; travail : le dossier que Lutin peut lire et modifier
+    "securite": {"niveau": "local", "port": 8777, "url_publique": "", "proxy_ips": [], "ecoute": ""},
+    # modeles : dossier OLLAMA_MODELS ('' = emplacement habituel d'Ollama) ; travail : le dossier principal que Lutin peut lire et modifier ;
+    # travaux : les autres dossiers de travail ({id, nom, chemin}) ; travail_actif : l'identifiant du dossier choisi dans l'interface
+    "emplacements": {"modeles": "", "travail": "", "travaux": [], "travail_actif": ""},
     "modeles": {"choisis": {}, "ignores": []},               # choisis : rôle -> identifiant installé par l'assistant ; ignores : propositions refusées
     "verifier_maj": True,
-    "catalogue_url": "",
+    "catalogue_url": None,                                   # None : le catalogue de Slater-proj/lutin ; "" : aucun catalogue en ligne ; une adresse https : le tien
     "avance": False,
+    "hors_ligne": False,                                     # mode hors ligne strict : aucune connexion vers Internet (voir lutin.horsligne)
 }
 
 

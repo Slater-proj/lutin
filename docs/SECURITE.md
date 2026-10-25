@@ -85,6 +85,27 @@ lutin.exemple.fr {
 
 Dans tous les cas, déclare à Lutin l'adresse que le proxy utilise pour lui parler : `127.0.0.1` si le proxy tourne sur la même machine, l'adresse du conteneur ou de la machine du proxy sinon.
 
+## Mode hors ligne strict
+
+`lutin hors-ligne oui` (ou la case « Hors ligne » de l'interface, ou `LUTIN_HORS_LIGNE=1`) : **plus aucune connexion vers Internet**.
+
+- Autorisés : cette machine, **Ollama** (l'adresse `OLLAMA_URL`), et les extensions que tu as déclarées (`LUTIN_OUTIL_URL`, `COMFY_URL`).
+- Bloqués : recherche et lecture web (les outils ne sont même plus proposés au modèle), catalogue en ligne, mises à jour de modèles et de Lutin, téléchargement de modèles (Ollama les télécharge lui-même : l'action est refusée).
+- Un seul endroit du code décide (`lutin/horsligne.py`) et un test surveille les **connexions réelles** (`tests/test_hors_ligne.py`) : aucune vers autre chose que cette machine.
+- Il se **coupe** seulement depuis cette machine (pas à distance, même avec une session valide).
+- Limites honnêtes : Lutin ne contrôle pas Ollama lui-même ni le reste de ton système. Pour une garantie totale, coupe aussi le réseau du conteneur ou de la machine.
+
+## Dossiers de travail
+
+Lutin ne lit et ne modifie que **le dossier de travail** de la conversation. Plusieurs dossiers sont possibles ; un seul est actif à la fois (si une réponse travaille dans un dossier, on ne peut pas en changer avant sa fin, ni en lancer une dans un autre).
+
+- Un dossier doit exister, ne pas être la racine d'un disque, ni **contenir ou être dans les dossiers de Lutin** (configuration, données, mémoire, cache).
+- **Ajouter ou retirer** un dossier ne se fait que depuis cette machine : au niveau « machine seulement », ou avec `lutin travaux`. Un appareil appairé (niveau réseau) ou une identité de proxy peut **choisir** un dossier déjà déclaré, jamais en ajouter : sinon un accès à distance pourrait déclarer `/` ou `C:\`.
+
+## Journal des actions
+
+Chaque fichier modifié, chaque commande lancée, chaque module installé est inscrit dans `journal-actions.jsonl` : **quand, quel outil, sur quelle cible, dans quel dossier, avec quel accord (manuel, automatique, aucun pour une lecture simple), pour qui** (console, local, nom donné par le proxy, appareil) et l'issue (ok, refusé, erreur, arrêté). Jamais le contenu des fichiers ni la sortie des commandes. Visible avec `lutin journal` ou le menu « ⋯ > Journal des actions ». Il tourne à 5 Mo.
+
 ## Changer de niveau
 
 `lutin setup --niveau local|reseau|proxy` (avec `--url` et `--proxy-ip` pour le niveau 3). Repasser à un niveau plus fermé est toujours possible ; pour en ouvrir un plus large, lance la commande sur la machine elle-même.

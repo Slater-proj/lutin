@@ -4,11 +4,16 @@
 
 ```bash
 python tests/lancer_tests.py            # un processus par fichier (le moteur garde des réglages globaux)
+python tools/captures.py                # régénère les captures du README après un changement d'interface
 python tests/lancer_tests.py securite   # seulement les fichiers dont le nom contient « securite »
 python -m pip install ruff && python -m ruff check src tests tools
 ```
 
 Pas de dépendance à installer pour faire tourner Lutin ou ses tests : bibliothèque standard seulement. Garde-le ainsi.
+
+## Commits et publications
+
+Chaque fusion dans `main` **publie une version** (voir [docs/PUBLICATIONS.md](docs/PUBLICATIONS.md)). Le numéro vient du titre des commits : écris des titres conventionnels (`feat: …` pour une nouveauté, `fix: …` pour une correction, `feat!: …` ou « BREAKING CHANGE » pour une rupture ; `docs:`, `chore:`, `ci:`, `test:`, `refactor:` pour le reste). Fusionne par **squash** avec un titre soigné : c'est lui qui apparaît dans les notes de version.
 
 ## Règles
 

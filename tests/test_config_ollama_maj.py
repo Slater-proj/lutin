@@ -309,6 +309,32 @@ class MisesAJour(unittest.TestCase):
             self.assertTrue(r["erreurs"])
 
 
+class PublicationsGitHub(unittest.TestCase):
+    CORPS = json.dumps({"tag_name": "v1.4.2", "assets": [{"name": "lutin-1.4.2.tar.gz", "browser_download_url": "https://x/lutin-1.4.2.tar.gz"},
+                                                         {"name": "lutin-1.4.2-py3-none-any.whl", "browser_download_url": "https://x/lutin-1.4.2-py3-none-any.whl"}]}).encode()
+
+    def test_derniere_publication(self):
+        h = faux_http({"https://api.github.com/repos/Slater-proj/lutin/releases/latest": (200, {}, self.CORPS)})
+        self.assertEqual(miseajour.derniere_release("Slater-proj/lutin", h), ("1.4.2", "https://x/lutin-1.4.2-py3-none-any.whl"))
+        self.assertIn("application/vnd.github+json", h.appels[0][1]["Accept"])
+
+    def test_pas_de_publication_reseau_absent_ou_reponse_cassee(self):
+        for rep in ((404, {}, b""), (200, {}, b"{pas du json"), (200, {}, b'{"tag_name": "v1"}'), OSError("hors ligne")):
+            r = miseajour.derniere_release("a/b", faux_http({"https://api.github.com": rep}))
+            self.assertTrue(r == (None, None) or r[1] is None, rep)
+
+    def test_comparaison_de_versions(self):
+        self.assertEqual(miseajour.numeros("1.2.3rc4+x"), (1, 2, 3))
+        self.assertEqual(miseajour.numeros("n'importe quoi"), ())
+        self.assertTrue(miseajour.plus_recente("0.10.0", "0.9.9"), "comparaison numérique, pas alphabétique")
+        self.assertTrue(miseajour.plus_recente("1.0.0", "0.0.0+source"))
+        self.assertTrue(miseajour.plus_recente("1.0.0", "illisible"))
+        self.assertFalse(miseajour.plus_recente("1.2.3", "1.2.3"))
+        self.assertFalse(miseajour.plus_recente("1.2.2", "1.2.3"), "jamais de retour en arrière")
+        self.assertFalse(miseajour.plus_recente("", "1.0.0"))
+        self.assertFalse(miseajour.plus_recente(None, "1.0.0"))
+
+
 class Portee(unittest.TestCase):
     """Boutons « chercher les mises à jour » / « chercher de nouveaux modèles » : chacun ne recalcule que sa moitié et garde l'autre."""
 

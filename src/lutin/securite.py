@@ -32,6 +32,7 @@ class Securite:
     url_publique: str = ""                     # niveau proxy : « https://lutin.exemple.fr »
     proxy_ips: list = field(default_factory=list)   # niveau proxy : adresses (ou réseaux) dont on accepte l'identité
     en_tete_identite: str = "Remote-User"
+    ecoute: str = ""                                # adresse d'écoute imposée (conteneur : « 0.0.0.0 ») ; interdit au niveau « local »
 
     def valider(self):
         """Liste des problèmes de configuration (vide = correcte)."""
@@ -40,6 +41,14 @@ class Securite:
             pb.append("niveau inconnu : " + str(self.niveau))
         if not (1 <= int(self.port) <= 65535):
             pb.append("port invalide")
+        if self.ecoute:
+            if self.niveau == LOCAL:
+                pb.append("une adresse d'écoute imposée n'est pas permise au niveau « local » (il n'écoute que sur 127.0.0.1)")
+            else:
+                try:
+                    ipaddress.ip_address(self.ecoute)
+                except ValueError:
+                    pb.append("adresse d'écoute invalide : " + str(self.ecoute))
         if self.niveau == PROXY:
             if not self.url_publique.startswith(("http://", "https://")):
                 pb.append("l'adresse publique (https://…) est obligatoire derrière un proxy")
@@ -63,6 +72,8 @@ def adresse_ecoute(sec, ip_lan=""):
     """Adresse sur laquelle le serveur se lie. `local` : jamais autre chose que 127.0.0.1 ; proxy : l'interface locale (le proxy est sur la même machine) ou le réseau si un proxy distant est déclaré."""
     if sec.niveau == LOCAL:
         return "127.0.0.1"
+    if sec.ecoute:
+        return sec.ecoute
     if sec.niveau == PROXY:
         distants = [i for i in sec.proxy_ips if not _est_boucle(i)]
         return (ip_lan or "0.0.0.0") if distants else "127.0.0.1"

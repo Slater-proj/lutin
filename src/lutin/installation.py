@@ -7,7 +7,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from . import catalogue, config, machine, ollama_client, securite, selection
+from . import bench, catalogue, config, horsligne, machine, ollama_client, securite, selection
 
 GO = 1024 ** 3
 _lancer = subprocess.run          # un seul point d'entrée pour les commandes système : les tests le remplacent (patcher subprocess.run lui-même gênerait les autres threads)
@@ -58,7 +58,7 @@ def choisir_securite(es, options):
             es.dire("  {}. {} : {}".format(num, titre, detail))
         r = es.demander("Ton choix", "1")
         niveau = next((n for n, (num, _, _) in NIVEAUX_TEXTE.items() if num == r or n == r), securite.LOCAL)
-    sec = securite.Securite(niveau=niveau, port=int(options.get("port") or 8777))
+    sec = securite.Securite(niveau=niveau, port=int(options.get("port") or 8777), ecoute=str(options.get("ecoute") or ""))
     if niveau == securite.RESEAU:
         es.dire("\n" + AVERTISSEMENT_RESEAU)
     if niveau == securite.PROXY:
@@ -200,7 +200,7 @@ def deja_installe(cfg, dossiers, es, ollama=None):
             try:
                 o.telecharger(ident, barre(es))
                 es.dire("✔ {} installé.".format(ident))
-            except ollama_client.ErreurOllama as e:
+            except (ollama_client.ErreurOllama, horsligne.HorsLigne) as e:
                 es.dire("✘ " + str(e))
     es.dire("Mises à jour : lutin update      Tout reconfigurer : lutin setup --reconfigurer")
     return cfg
@@ -223,7 +223,7 @@ def executer(cfg, dossiers, es, options=None, profil=None, ollama=None):
     cfg["securite"] = vars(choisir_securite(es, options)).copy()
     cfg["securite"]["proxy_ips"] = list(cfg["securite"]["proxy_ips"])
     besoin = sum(c.modele["go"] for c in {choix[r].id: choix[r] for r in selection.par_defaut(choix)}.values())
-    cfg["emplacements"] = choisir_emplacements(es, options, profil, besoin)
+    cfg["emplacements"].update(choisir_emplacements(es, options, profil, besoin))          # update : les autres dossiers de travail déjà ajoutés ne disparaissent pas
     roles = choisir_roles(es, options, choix, profil)
     o = ollama or ollama_client.Ollama()
     try:
@@ -271,7 +271,7 @@ def executer(cfg, dossiers, es, options=None, profil=None, ollama=None):
                     es.dire("\nTéléchargement de {} ({:g} Go)…".format(c.id, c.modele["go"]))
                     try:
                         o.telecharger(c.id, barre(es))
-                    except ollama_client.ErreurOllama as e:
+                    except (ollama_client.ErreurOllama, horsligne.HorsLigne) as e:
                         es.dire("✘ " + str(e))
                         continue
                     for r in roles:
@@ -279,6 +279,14 @@ def executer(cfg, dossiers, es, options=None, profil=None, ollama=None):
                             cfg["modeles"]["choisis"][r] = c.id
                     es.dire("✔ {} installé.".format(c.id))
 
+    principal = cfg["modeles"]["choisis"].get("polyvalent") or next(iter(cfg["modeles"]["choisis"].values()), "")
+    if principal and any(c.id == principal for c in liste) and es.confirmer("Tester la vitesse de {} maintenant ? (une vingtaine de secondes)".format(principal), False):
+        try:
+            mesure = bench.executer(ollama or ollama_client.Ollama(), principal, rapide=True, resume_machine=profil.resume())
+            bench.enregistrer(Path(dossiers["cache"]) / "bench.json", mesure)
+            es.dire("  {} : {}".format(principal, bench.resume(mesure)))
+        except (ollama_client.ErreurOllama, OSError) as e:
+            es.dire("  (test de vitesse impossible : {})".format(e))
     cfg["installe"] = True
     config.enregistrer(dossiers, cfg)
     es.dire("\nTerminé. Pour démarrer :  lutin")

@@ -30,6 +30,22 @@ Certains modèles sont modifiés par la communauté pour ne plus refuser de dema
 
 **Les notes actuelles sont éditoriales : elles n'ont pas été mesurées.** Elles servent à classer les modèles entre eux pour un même rôle, pas à comparer les rôles. Pour les corriger, ouvre une proposition « Proposer ou corriger un modèle » en expliquant ce qui la justifie. Le champ `verifie` passera à une date quand la CI hebdomadaire (`tools/verifier_catalogue.py`) aura confirmé que le modèle existe dans le registre d'Ollama.
 
+## Le banc d'essai : mesurer au lieu de croire
+
+`lutin bench [modèle]` (ou les boutons « Tester la vitesse » et « Banc complet » de l'onglet Modèles) mesure **ce modèle sur cette machine** :
+
+| Mesure | Comment |
+|---|---|
+| Vitesse | jetons écrits par seconde sur un texte de 150 mots, durée de chargement du modèle |
+| Appel d'outils | 3 demandes : ouvrir un fichier, chercher une fonction, et ne **pas** appeler d'outil pour un simple bonjour |
+| Code (lecture) | 4 petits programmes dont il faut donner le résultat |
+| Français | une réponse en une phrase, et exactement trois puces |
+| Consignes | un objet JSON valide, sans texte autour |
+
+Les réponses sont vérifiées automatiquement ; **aucun code écrit par le modèle n'est jamais exécuté**. Une seule passe à température 0 : c'est un **indicateur**, pas un classement scientifique. Résultats gardés dans le cache, affichés dans la liste des modèles, et exportables (`lutin bench --exporter`) pour proposer une correction de note au catalogue.
+
+Notes mesurées (de 0 à 10) : *code* = 60 % code + 40 % outils ; *créatif* = 60 % français + 40 % consignes ; *polyvalent* = moyenne des quatre ; *rapide* = barème sur les jetons par seconde (plafonné à 4 si le modèle n'appelle pas les outils : inutilisable pour Lutin). Les formules sont dans `lutin/bench.py` : conteste-les.
+
 ## Mises à jour
 
 Au lancement (au plus une fois par jour, jamais bloquant), puis à la demande avec les boutons de l'onglet Modèles ou `lutin update` :

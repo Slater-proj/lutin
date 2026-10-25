@@ -10,6 +10,8 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+from . import horsligne
+
 URL_PAR_DEFAUT = "http://127.0.0.1:11434"
 URL_TELECHARGEMENT_WINDOWS = "https://ollama.com/download/OllamaSetup.exe"
 COMMANDE_LINUX = "curl -fsSL https://ollama.com/install.sh | sh"
@@ -61,6 +63,7 @@ class Ollama:
 
     def telecharger(self, modele, progression=None):
         """Télécharge un modèle (reprise automatique par Ollama). progression(texte, fait, total) est appelée pendant le téléchargement."""
+        horsligne.exiger_en_ligne("télécharger un modèle")
         try:
             with self._requete("/api/pull", {"model": modele, "stream": True}, delai=3600) as r:
                 for brut in r:
@@ -125,6 +128,7 @@ def telecharger_fichier(url, destination, progression=None, ouvrir=urllib.reques
     """Télécharge `url` vers `destination` (fichier .part renommé à la fin, reprise si interrompu). HTTPS obligatoire."""
     if not url.startswith("https://"):
         raise ErreurOllama("téléchargement refusé : adresse non sécurisée")
+    horsligne.garde(url)
     destination = Path(destination)
     destination.parent.mkdir(parents=True, exist_ok=True)
     part = destination.with_suffix(destination.suffix + ".part")

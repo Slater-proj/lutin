@@ -35,7 +35,7 @@ body { margin:0; background:radial-gradient(1200px 600px at 70% -10%, #14202e 0%
 /* --- colonne des conversations --- */
 aside { background:linear-gradient(180deg, var(--panel2), var(--panel)); border-right:1px solid var(--line); display:flex; flex-direction:column; min-height:0; }
 aside h1 { font-size:.95rem; font-weight:600; letter-spacing:.02em; margin:0; padding:14px 16px; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:8px; }
-aside h1::before { content:""; width:8px; height:8px; border-radius:50%; background:var(--accent); box-shadow:0 0 8px var(--accent); }
+aside h1 img { border-radius:7px; flex:0 0 auto; }
 aside .liste { overflow:auto; flex:1; padding:8px; }
 .conv { padding:8px 10px; border-radius:8px; cursor:pointer; font-size:.85rem; display:flex; gap:6px; align-items:center; border:1px solid transparent; transition:background .12s, border-color .12s; }
 .conv:hover { background:#1c2634; }
@@ -256,11 +256,16 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
   #menuPlus { position:fixed; right:6px; top:40px; min-width:min(280px, 92vw); }
 }
 @media (hover:none) { .actions { opacity:1; } }
+/* cartes de modèles : titre, phrase, détails puis boutons, en colonne (et plus en ligne qui se replie n'importe comment) */
+#listeModeles .carte, #propositions .carte { display:block; }
+#listeModeles .carte > div, #propositions .carte > div { margin:0 0 6px; }
+#listeModeles .carte .nom, #propositions .carte .nom { font-weight:600; }
+#listeModeles .carte button, #propositions .carte button, #listeModeles .carte .puce { margin:2px 8px 2px 0; }
 </style>
 </head>
 <body>
 <aside>
-  <h1>Lutin</h1>
+  <h1><img src="/logo.svg" alt="" width="26" height="26"> Lutin</h1>
   <div style="padding:6px 8px 4px"><button class="principal" id="bNouvelle" style="width:100%;padding:5px 9px">+ Nouvelle conversation</button></div>
   <div style="padding:0 8px 4px"><input id="recherche" type="search" placeholder="Rechercher…" style="width:100%;padding:4px 9px"></div>
   <div class="liste" id="conversations"></div>
@@ -272,8 +277,10 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
     <label class="opt-ligne" title="Accepte tout seul les écritures de fichiers."><input type="checkbox" id="cAuto"> Accord auto</label>
     <label class="opt-ligne" title="Accepte tout seul le lancement de commandes (git, tests, PowerShell...). Les lectures simples (git status, dir...) ne demandaient déjà rien."><input type="checkbox" id="cAutoCmd"> Commandes auto</label>
     <label class="opt-ligne" title="Autorise l'assistant à chercher sur internet (DuckDuckGo) et à lire des pages. Dès qu'une page est lue, l'accord automatique est suspendu pour la suite de la demande."><input type="checkbox" id="cWeb"> Web</label>
+    <label class="opt-ligne" title="Mode hors ligne strict : plus aucune connexion vers Internet (ni recherche web, ni téléchargement de modèle, ni mise à jour). Seuls cette machine et Ollama sont joints."><input type="checkbox" id="cHorsLigne"> Hors ligne</label>
     <label class="opt-ligne" title="Limite la longueur de la réponse en jetons. 0 = pas de limite.">Longueur max <select id="sLong"><option value="0">Illimitée</option><option value="512">512</option><option value="1024">1 024</option><option value="2048">2 048</option><option value="4096">4 096</option><option value="8192">8 192</option><option value="16384">16 384</option><option value="32768">32 768</option></select></label>
   </div>
+  <div class="opt-ligne" id="blocTravail"><select id="selTravail" title="Dossier de travail : le seul endroit où Lutin peut lire et modifier des fichiers" aria-label="Dossier de travail"></select><button id="bTravailPlus" hidden title="Ajouter un dossier de travail">＋</button></div>
   <div class="aide" id="racine"></div>
 </aside>
 <main>
@@ -288,6 +295,8 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
       <div id="menuPlus" hidden>
         <button id="bGit" title="Voir les changements git, faire écrire un message de commit et commiter">⎇ Git : changements et commit</button>
         <button id="bExport" title="Télécharger la conversation brute en .md">⬇ Exporter la conversation</button>
+        <button id="bJournal" title="Voir ce que Lutin a modifié ou lancé, avec quel accord">📜 Journal des actions</button>
+        <button id="bSauvegarde" title="Télécharger un fichier .zip avec tes conversations, tes réglages et ta mémoire">💾 Sauvegarder mes données</button>
         <button id="bResume" title="Générer un résumé structuré par le modèle, prêt à coller dans un autre modèle d'IA">📋 Résumé IA</button>
         <button id="bVram" title="Décharge tous les modèles Ollama de la VRAM (rechargés automatiquement à la prochaine question)">🧹 Libérer la VRAM</button>
       </div>
@@ -667,7 +676,7 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
     demarrerActivite();
     try {
       const r = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Token': TOKEN }, signal: CONTROLE.signal,
-        body: JSON.stringify({ message: texte, conversation: CONV ? CONV.id : '', modele: $('selModele').value, mode: $('selMode').value, reflexion: $('cReflexion').checked, remplacer_depuis: depuis }) });
+        body: JSON.stringify({ message: texte, conversation: CONV ? CONV.id : '', travail: $('selTravail').value || '', modele: $('selModele').value, mode: $('selMode').value, reflexion: $('cReflexion').checked, remplacer_depuis: depuis }) });
       if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.erreur || 'Erreur ' + r.status); }
       const lecteur = r.body.getReader(), dec = new TextDecoder(); let reste = '';
       for (;;) {
@@ -742,6 +751,7 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
       const c = await api('/api/conversation?id=' + id);
       if (FLUX && !FLUX.detache && FLUX.id !== id) detacherFlux();          // on quitte une réponse en cours : son affichage est mis de côté
       CONV = c; finEdition(); if (!document.hidden) lue(id);
+      if (c.travail && ETAT && ETAT.travaux && ETAT.travaux.actif !== c.travail) { try { await api('/api/travaux-choisir', { id: c.travail }); rafraichir(); } catch (e) { /* une réponse travaille dans un autre dossier : on reste sur celui-ci */ } }
       if (FLUX && FLUX.detache && FLUX.id === id) rattacherFlux(); else afficherHistorique(CONV); [...document.querySelectorAll('.conv')].forEach(c => c.classList.toggle('choisie', c.dataset.id === id)); fermerLat(); } catch (e) { fil().appendChild(el('div', 'erreur', e.message)); } };
   const listeConversations = () => {
     const z = $('conversations'); z.textContent = '';
@@ -780,15 +790,29 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
     } catch (e) { m.textContent = '✘ ' + e.message; }
     boutons.forEach(b => b.disabled = false);
   };
+  const resumeMesure = mes => {
+    const r = mes.resultats || {}, t = [];
+    if (r.vitesse && r.vitesse.tok_s != null) t.push(r.vitesse.tok_s + ' jetons/s');
+    if (r.vitesse && r.vitesse.charge_s) t.push('chargement ' + r.vitesse.charge_s + ' s');
+    [['outils', 'outils'], ['code', 'code'], ['francais', 'français'], ['consignes', 'consignes']].forEach(([k, n]) => { if (r[k]) t.push(n + ' ' + r[k].points + '/' + r[k].sur); });
+    return t.join(' · ') || 'aucune mesure';
+  };
   const listeModeles = () => {
     const z = $('listeModeles'); z.textContent = '';
-    ETAT.modeles.forEach(m => {
+    [...ETAT.modeles].sort((a, b) => ETAT.installes.includes(b.id) - ETAT.installes.includes(a.id)).forEach(m => {          // les modèles installés d'abord
       const inst = ETAT.installes.includes(m.id), p = ETAT.pulls[m.id], c = el('div', 'carte');
       const actif = ETAT.reglages.modele === m.id;
       c.appendChild(el('div', 'nom', m.nom + (m.go ? ' (' + m.go + ' Go)' : ' (taille inconnue)') + (actif ? '  ★ actif' : ''))); if (m.phrase) c.appendChild(el('div', '', m.phrase)); if (m.avertissement) c.appendChild(el('div', 'erreur', '⚠ ' + m.avertissement)); c.appendChild(el('div', 'aide', m.id + (m.origine === 'perso' ? ' · ajouté par toi' : m.origine === 'installe' ? ' · installé hors de l\'application' : '')));
       if (inst) { c.appendChild(el('span', 'puce ok', '✔ installé'));
         if (!actif) { const u = el('button', 'principal', 'Utiliser'); u.title = 'En faire le modèle de la conversation'; u.addEventListener('click', async () => { try { await api('/api/reglages', { modele: m.id }); $('selModele').value = m.id; rafraichir(); } catch (e) { alert(e.message); } }); c.appendChild(u); }
-        const x = el('button', 'danger', 'Supprimer'); x.title = 'Supprimer ce modèle de la machine'; x.addEventListener('click', async () => { if (!confirm('Supprimer « ' + m.nom + ' » ? Le téléchargement sera refait si tu le réinstalles.')) return; try { await api('/api/supprimer-modele', { modele: m.id }); rafraichir(); } catch (e) { alert(e.message); } }); c.appendChild(x); }
+        const x = el('button', 'danger', 'Supprimer'); x.title = 'Supprimer ce modèle de la machine'; x.addEventListener('click', async () => { if (!confirm('Supprimer « ' + m.nom + ' » ? Le téléchargement sera refait si tu le réinstalles.')) return; try { await api('/api/supprimer-modele', { modele: m.id }); rafraichir(); } catch (e) { alert(e.message); } }); c.appendChild(x);
+        const bench = ETAT.bench || {}, mes = (bench.mesures || {})[m.id], occupe = !!bench.en_cours;
+        if (mes) c.appendChild(el('div', 'aide', 'Mesuré sur cette machine le ' + mes.date.slice(0, 10) + ' : ' + resumeMesure(mes) + (mes.complet ? '' : ' (vitesse seulement)') + '.'));
+        if (bench.en_cours === m.id) c.appendChild(el('span', 'aide', '⏳ Mesure en cours : ' + bench.etape));
+        const bv = el('button', '', '⏱ Tester la vitesse'); bv.title = 'Environ 20 secondes (plus si le modèle doit d\'abord se charger)'; bv.disabled = occupe;
+        const bc = el('button', '', '📊 Banc complet'); bc.title = 'Vitesse, appel d\'outils, code, français, consignes : onze petites questions, quelques minutes'; bc.disabled = occupe;
+        [[bv, true], [bc, false]].forEach(([b, rapide]) => b.addEventListener('click', async () => { try { await api('/api/bench', { modele: m.id, rapide }); rafraichir(); } catch (e) { $('msgModeles').textContent = e.message; } }));
+        c.append(bv, bc); }
       else if (p && p.statut === 'en cours') { const b = el('div', 'barre'); const i = el('i'); i.style.width = (p.total ? Math.round(100 * p.fait / p.total) : 3) + '%'; b.appendChild(i); c.appendChild(b); c.appendChild(el('span', 'aide', p.texte + (p.total ? ' ' + Math.round(100 * p.fait / p.total) + ' %' : ''))); }
       else { const b = el('button', 'principal', 'Installer'); b.disabled = !ETAT.ollama; b.title = ETAT.ollama ? '' : 'Ollama doit tourner (bouton « Démarrer Ollama »)'; b.addEventListener('click', async () => { try { await api('/api/installer-modele', { modele: m.id }); rafraichir(); } catch (e) { $('msgModeles').textContent = e.message; } }); c.appendChild(b); if (p && p.statut === 'erreur') c.appendChild(el('span', 'erreur', p.texte));
         // Retirer de la liste : seulement un modèle NON installé (un modèle installé garde son bouton « Supprimer »)
@@ -809,6 +833,11 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
     if (!ETAT.installes.length) { const o = el('option', '', ETAT.ollama ? 'Aucun modèle installé (onglet Modèles)' : 'Ollama arrêté'); o.value = ETAT.reglages.modele; s.appendChild(o); }
     s.value = ETAT.installes.includes(v) ? v : (ETAT.installes.includes(ETAT.reglages.modele) ? ETAT.reglages.modele : (ETAT.installes[0] || ETAT.reglages.modele));
     if (!$('selMode').dataset.init) { $('selMode').value = ETAT.reglages.mode; $('cReflexion').checked = ETAT.reglages.reflexion; $('cAuto').checked = ETAT.reglages.auto_ecriture; $('cAvance').checked = !!ETAT.reglages.avance; $('cAutoCmd').checked = ETAT.reglages.auto_commandes; $('cWeb').checked = ETAT.reglages.web !== false; $('rCtx').value = ETAT.reglages.num_ctx; $('rTemp').value = ETAT.reglages.temperature; $('rTours').value = ETAT.reglages.tours_max; $('iTopP').value = ETAT.reglages.top_p ?? ''; $('iTopK').value = ETAT.reglages.top_k ?? ''; $('iMinP').value = ETAT.reglages.min_p ?? ''; $('iRep').value = ETAT.reglages.repeat_penalty ?? ''; $('cGarde').checked = ETAT.reglages.garde_ressources !== false; $('cComfy').checked = ETAT.reglages.liberer_si_comfy !== false; $('sRappels').value = ETAT.reglages.rappels_auto || 'scenario'; $('iSeuilRam').value = ETAT.reglages.seuil_ram_go; $('iSeuilDisque').value = ETAT.reglages.seuil_disque_go; $('iPlafond').value = ETAT.reglages.plafond_donnees_go; $('iLimiteCmd').value = ETAT.reglages.limite_ram_commande_go; $('selMode').dataset.init = '1'; }
+    $('cHorsLigne').checked = !!ETAT.hors_ligne; $('cWeb').disabled = !!ETAT.hors_ligne;
+    const tr = ETAT.travaux || { liste: [], actif: '' }, st = $('selTravail'), sigT = JSON.stringify(tr);
+    if (st.dataset.sig !== sigT) { st.dataset.sig = sigT; st.textContent = ''; tr.liste.forEach(t => { const o = el('option', '', t.nom); o.value = t.id; o.title = t.chemin; st.appendChild(o); }); st.value = tr.actif; }
+    st.hidden = !tr.liste.length; $('bTravailPlus').hidden = !ETAT.configurateur;
+    if (ETAT.bench && ETAT.bench.erreur) $('msgModeles').textContent = 'Banc d\'essai : ' + ETAT.bench.erreur;
     $('vCtx').textContent = $('rCtx').value; $('vTemp').textContent = $('rTemp').value; $('vTours').textContent = $('rTours').value;
     // Le modèle enregistré n'est plus installé (supprimé, ou Ollama réinstallé) : on passe sur un modèle installé plutôt que d'envoyer une demande à un modèle absent.
     if (ETAT.installes.length && s.value !== ETAT.reglages.modele && !ETAT.installes.includes(ETAT.reglages.modele)) sauverReglages();
@@ -820,7 +849,7 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
     PREC_ACT = actives;
     if (CONV && !document.hidden && !(FLUX && FLUX.detache)) lue(CONV.id);
     majTravail();
-    const sigC = JSON.stringify([ETAT.conversations, CONV ? CONV.id : '', ETAT.actives, EN_COURS ? ID_EN_COURS : '', [...NONLUS]]), sigM = JSON.stringify([ETAT.modeles, ETAT.installes, ETAT.pulls, ETAT.ollama, ETAT.reglages.modele]);
+    const sigC = JSON.stringify([ETAT.conversations, CONV ? CONV.id : '', ETAT.actives, EN_COURS ? ID_EN_COURS : '', [...NONLUS]]), sigM = JSON.stringify([ETAT.modeles, ETAT.installes, ETAT.pulls, ETAT.ollama, ETAT.reglages.modele, ETAT.bench]);
     if (sigC !== SIG.c && !RECH.q) { SIG.c = sigC; listeConversations(); }
     if (sigM !== SIG.m) { SIG.m = sigM; listeModeles(); }
     chargerPropositions();
@@ -1074,6 +1103,29 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
     commit.addEventListener('click', () => ouvrirGit(r.fichiers.map(f => f.chemin)));
     pied.append(tout, commit); z.appendChild(pied);
   };
+  const ouvrirJournal = async () => {
+    const z = ouvrirModal('Journal des actions');
+    z.appendChild(el('div', 'aide', 'Chargement…'));
+    let r; try { r = await api('/api/journal?n=300'); } catch (e) { z.textContent = e.message; return; }
+    z.textContent = '';
+    z.appendChild(el('div', 'aide', 'Chaque fichier modifié, chaque commande lancée et chaque module installé, avec l\'accord donné et la personne concernée. Le contenu des fichiers et la sortie des commandes ne sont pas gardés. La plus récente est en haut.'));
+    if (!r.entrees.length) { z.appendChild(el('div', 'aide', 'Aucune action pour le moment.')); return; }
+    r.entrees.forEach(e => {
+      const c = el('div', 'carte'); c.style.display = 'block';
+      c.appendChild(el('b', '', e.outil + ' ' + e.cible));
+      c.appendChild(el('div', 'aide', e.ts.replace('T', ' ') + ' · ' + e.issue + ' · accord : ' + e.accord + ' · par : ' + (e.qui || '?') + ' · dossier : ' + e.dossier));
+      z.appendChild(c);
+    });
+  };
+  $('bJournal').addEventListener('click', ouvrirJournal);
+  $('bSauvegarde').addEventListener('click', async () => {
+    try {
+      const r = await fetch('/api/sauvegarde', { headers: { 'X-Token': TOKEN } });
+      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).erreur || 'Erreur ' + r.status);
+      const a = document.createElement('a'); a.href = URL.createObjectURL(await r.blob()); a.download = 'lutin-sauvegarde.zip'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+      infoLocale('Sauvegarde téléchargée : conversations, réglages et mémoire. Elle ne contient ni les appareils connectés ni les fichiers de ton dossier de travail. Pour la restaurer : lutin restaurer <fichier>.');
+    } catch (e) { infoLocale('✘ ' + e.message); }
+  });
   const ouvrirGit = async presel => {
     const z = ouvrirModal('Git : changements en attente');
     z.appendChild(el('div', 'aide', 'Chargement…'));
@@ -1222,9 +1274,29 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
   $('bSMem').addEventListener('click', async () => { try { await api('/api/memoire', { fichier: 'MEMOIRE.md', texte: $('tMemoire').value }); $('mM').textContent = 'Enregistré.'; } catch (e) { $('mM').textContent = e.message; } });
   $('bAutre').addEventListener('click', async () => { const m = $('autreModele').value.trim(); if (!m) return; try { await api('/api/installer-modele', { modele: m }); $('autreModele').value = ''; $('msgModeles').textContent = 'Téléchargement de « ' + m + ' » lancé : il est ajouté à la liste ci-dessus, et apparaîtra dans le choix du modèle une fois installé.'; rafraichir(); } catch (e) { $('msgModeles').textContent = e.message; } });
   $('bRestaurer').addEventListener('click', async () => { try { await api('/api/modeles-restaurer', {}); rafraichir(); } catch (e) { $('msgModeles').textContent = e.message; } });
+  $('selTravail').addEventListener('change', async () => {
+    try { await api('/api/travaux-choisir', { id: $('selTravail').value }); } catch (e) { alert(e.message); }
+    await rafraichir();
+  });
+  $('bTravailPlus').addEventListener('click', async () => {
+    const chemin = prompt('Chemin du dossier de travail à ajouter (Lutin pourra y lire et y modifier des fichiers) :'); if (!chemin) return;
+    const nom = prompt('Nom affiché (facultatif) :', '') || '';
+    try { const r = await api('/api/travaux-ajouter', { chemin, nom }); await api('/api/travaux-choisir', { id: r.liste[r.liste.length - 1].id }); } catch (e) { alert(e.message); }
+    rafraichir();
+  });
+  $('cHorsLigne').addEventListener('change', async () => {
+    try { await api('/api/hors-ligne', { actif: $('cHorsLigne').checked }); } catch (e) { alert(e.message); }
+    rafraichir();
+  });
   $('bMaj').addEventListener('click', () => verifierModeles('maj'));
   $('bNouveaux').addEventListener('click', () => verifierModeles('nouveaux'));
-  rafraichir(); setInterval(rafraichir, 4000);
+  // Liens directs : /#modeles, /#memoire, /#conv=<id> (utile pour un signet ou une capture d'écran)
+  rafraichir().then(() => {
+    const cible = decodeURIComponent(location.hash.slice(1));
+    if (cible.startsWith('conv=')) ouvrir(cible.slice(5));
+    else { const b = document.querySelector('.onglets button[data-p="' + cible + '"]'); if (b) b.click(); }
+  });
+  setInterval(rafraichir, 4000);
 })();
 </script>
 </body>

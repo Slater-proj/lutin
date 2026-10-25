@@ -10,7 +10,7 @@ from pathlib import Path
 from unittest import mock
 
 import context  # noqa: F401
-from lutin import catalogue, chat_terminal, cli, client, config, installation, machine, ollama_client
+from lutin import catalogue, chat_terminal, cli, client, config, installation, machine, miseajour, ollama_client
 from lutin.machine import Disque, Gpu, Profil
 
 PULLS, INSTALLES = [], {}
@@ -102,7 +102,7 @@ class Parcours(unittest.TestCase):
         self.assertTrue(cfg["installe"])
 
     def test_parcours_interactif_niveau_reseau_avec_avertissement(self):
-        e, sortie = es(["2", "", ""])           # niveau 2 ; modèles conseillés (Entrée) ; télécharger (Entrée = oui)
+        e, sortie = es(["2", "", "", ""])           # niveau 2 ; modèles conseillés (Entrée) ; télécharger (Entrée = oui) ; test de vitesse (Entrée = non)
         cfg = self.lancer(e)
         self.assertEqual(cfg["securite"]["niveau"], "reseau")
         self.assertIn("code PIN", "\n".join(map(str, sortie)))
@@ -464,6 +464,29 @@ class Update(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn("a échoué", sortie)
 
+    def test_source_github_met_a_jour_seulement_si_une_version_plus_recente_existe(self):
+        faux = mock.MagicMock()
+        faux.run.return_value = mock.Mock(returncode=0, stdout="Lutin 9.9.9\n")
+        with mock.patch.object(config, "lire_source", return_value="github:Slater-proj/lutin"), mock.patch.object(cli, "subprocess", faux), \
+                mock.patch.object(miseajour, "derniere_release", return_value=("9.9.9", "https://github.com/Slater-proj/lutin/releases/download/v9.9.9/lutin-9.9.9-py3-none-any.whl")):
+            code, sortie = self.lancer("update", "--app")
+        self.assertEqual(code, 0, sortie)
+        self.assertIn("→ 9.9.9", sortie)
+        self.assertEqual(faux.run.call_args_list[0].args[0][-1].rsplit("/", 1)[-1], "lutin-9.9.9-py3-none-any.whl", "pip reçoit la roue de la dernière publication")
+
+    def test_source_github_deja_a_jour_ou_sans_publication(self):
+        faux = mock.MagicMock()
+        faux.run.side_effect = AssertionError("pas de pip")
+        with mock.patch.object(config, "lire_source", return_value="github:Slater-proj/lutin"), mock.patch.object(cli, "subprocess", faux):
+            with mock.patch.object(miseajour, "derniere_release", return_value=("0.0.0", "https://x/y.whl")):
+                code, sortie = self.lancer("update", "--app")
+                self.assertEqual(code, 0)
+                self.assertIn("déjà à jour", sortie)
+            with mock.patch.object(miseajour, "derniere_release", return_value=(None, None)):
+                code, sortie = self.lancer("update", "--app")
+                self.assertEqual(code, 1)
+                self.assertIn("Impossible de lire", sortie)
+
     def test_source_lue_dans_l_environnement_ou_le_fichier(self):
         self.assertEqual(config.lire_source({"LUTIN_SOURCE": " abc "}), "abc")
         with tempfile.TemporaryDirectory() as t:
@@ -475,6 +498,151 @@ class Update(unittest.TestCase):
             (Path(t) / "source.txt").unlink()
             with mock.patch.object(config.sys, "prefix", str(venv)):
                 self.assertEqual(config.lire_source({}), "", "pas de fichier : source inconnue, sans erreur")
+
+
+class CommandesDuQuotidien(unittest.TestCase):
+    """travaux, journal, sauvegarde, restaurer, bench, hors-ligne, écoute imposée : les commandes de tous les jours."""
+
+    def setUp(self):
+        PULLS.clear(); INSTALLES.clear()
+        self.t = tempfile.TemporaryDirectory()
+        self.env = mock.patch.dict(os.environ, {"LUTIN_HOME": self.t.name})
+        self.env.start()
+        os.environ.pop("LUTIN_HORS_LIGNE", None)
+        self.d = config.dossiers()
+        config.preparer(self.d)
+
+    def tearDown(self):
+        self.env.stop()
+        self.t.cleanup()
+
+    def lancer(self, *argv, entree=None):
+        sortie = io.StringIO()
+        with contextlib.redirect_stdout(sortie), contextlib.redirect_stderr(sortie):
+            if entree is not None:
+                with mock.patch("builtins.input", return_value=entree):
+                    code = cli.principal(list(argv))
+            else:
+                code = cli.principal(list(argv))
+        return code, sortie.getvalue()
+
+    def dossier(self, nom):
+        p = Path(self.t.name) / nom
+        p.mkdir(exist_ok=True)
+        return str(p)
+
+    def test_travaux_ajouter_choisir_retirer(self):
+        code, sortie = self.lancer("travaux")
+        self.assertIn("Aucun dossier de travail", sortie)
+        code, sortie = self.lancer("travaux", "ajouter", self.dossier("projet-a"), "--nom", "Projet A")
+        self.assertEqual(code, 0, sortie)
+        self.assertIn("projet-a", sortie)
+        self.lancer("travaux", "ajouter", self.dossier("projet-b"))
+        self.assertEqual([t["id"] for t in travaux_liste()], ["projet-a", "projet-b"])
+        code, sortie = self.lancer("travaux", "actif", "projet-b")
+        self.assertIn("→ projet-b", sortie)
+        self.assertEqual(config.charger(self.d)["emplacements"]["travail_actif"], "projet-b")
+        code, sortie = self.lancer("travaux", "retirer", "projet-a")
+        self.assertEqual(code, 0)
+        self.assertEqual([t["id"] for t in travaux_liste()], ["projet-b"])
+        self.assertTrue(Path(self.t.name, "projet-a").is_dir(), "les fichiers ne sont pas touchés")
+
+    def test_travaux_refus(self):
+        for argv in (("ajouter", str(Path(self.t.name) / "absent")), ("ajouter", str(self.d["donnees"])), ("ajouter", str(self.d["config"])), ("retirer", "inconnu"), ("actif", "inconnu"), ("ajouter", Path(self.t.name).anchor)):
+            code, sortie = self.lancer("travaux", *argv)
+            self.assertEqual(code, 1, argv)
+            self.assertIn("✘", sortie)
+
+    def test_reconfigurer_garde_les_autres_dossiers_de_travail(self):
+        self.lancer("travaux", "ajouter", self.dossier("deux"))
+        with mock.patch.object(machine, "detecter", return_value=GROS), mock.patch.object(installation, "definir_variables_utilisateur"), mock.patch.object(installation.shutil, "disk_usage", return_value=DISQUE_LARGE):
+            code, sortie = self.lancer("setup", "--oui", "--sans-modeles", "--sans-ollama", "--travail", self.dossier("principal-neuf"))
+        self.assertEqual(code, 0, sortie)
+        cfg = config.charger(self.d)
+        self.assertEqual([t["id"] for t in travaux_liste()], ["principal", "deux"])
+        self.assertTrue(cfg["installe"])
+
+    def test_journal(self):
+        code, sortie = self.lancer("journal")
+        self.assertIn("Aucune action", sortie)
+        (self.d["donnees"] / "journal-actions.jsonl").write_text(
+            '{"ts": "2026-10-25T10:00:00", "outil": "ecrire", "cible": "a.txt", "issue": "ok", "accord": "manuel", "qui": "local"}\n{pas du json\n'
+            '{"ts": "2026-10-25T10:01:00", "outil": "executer", "cible": "pytest", "issue": "refusé", "accord": "manuel", "qui": "console"}\n', encoding="utf-8")
+        code, sortie = self.lancer("journal", "-n", "10")
+        self.assertEqual(code, 0)
+        self.assertIn("ecrire", sortie)
+        self.assertIn("refusé", sortie)
+        self.assertEqual(len([ligne for ligne in sortie.splitlines() if ligne.strip()]), 2, "la ligne abîmée est ignorée")
+
+    def test_sauvegarde_et_restauration(self):
+        (self.d["memoire"] / "MEMOIRE.md").write_text("version sauvegardée", encoding="utf-8")
+        archive = str(Path(self.t.name) / "s.zip")
+        code, sortie = self.lancer("sauvegarde", archive)
+        self.assertEqual(code, 0, sortie)
+        self.assertTrue(Path(archive).is_file())
+        (self.d["memoire"] / "MEMOIRE.md").write_text("version modifiée après", encoding="utf-8")
+        code, sortie = self.lancer("restaurer", archive, entree="n")
+        self.assertIn("Rien n'a été changé", sortie)
+        self.assertIn("modifiée après", (self.d["memoire"] / "MEMOIRE.md").read_text(encoding="utf-8"))
+        code, sortie = self.lancer("restaurer", archive, "--oui")
+        self.assertEqual(code, 0, sortie)
+        self.assertEqual((self.d["memoire"] / "MEMOIRE.md").read_text(encoding="utf-8"), "version sauvegardée")
+        self.assertTrue(list(self.d["cache"].glob("avant-restauration-*.zip")))
+
+    def test_restaurer_un_fichier_qui_n_est_pas_une_sauvegarde(self):
+        faux = Path(self.t.name) / "faux.zip"
+        faux.write_text("rien", encoding="utf-8")
+        code, sortie = self.lancer("restaurer", str(faux), "--oui")
+        self.assertEqual(code, 1)
+        self.assertIn("✘", sortie)
+
+    def test_bench_modele_absent_ou_ollama_arrete(self):
+        code, sortie = self.lancer("bench", "inconnu:1b")
+        self.assertEqual(code, 1)
+        self.assertIn("n'est pas installé", sortie)
+        with mock.patch.object(ollama_client.Ollama, "installes", side_effect=ollama_client.ErreurOllama("arrêté")):
+            self.assertEqual(self.lancer("bench")[0], 1)
+
+    def test_bench_enregistre_et_exporte(self):
+        INSTALLES["qwen3:8b"] = "d"
+        faux = {"message": {"role": "assistant", "content": "x"}, "eval_count": 100, "eval_duration": 2_000_000_000, "load_duration": 1_000_000_000}
+
+        def reponse(chemin, corps=None, delai=5, methode=None):
+            return {"models": [{"name": "qwen3:8b", "digest": "d"}]} if chemin == "/api/tags" else faux
+        with mock.patch.object(ollama_client.Ollama, "json", side_effect=reponse), mock.patch.object(machine, "detecter", return_value=GROS):
+            code, sortie = self.lancer("bench", "qwen3:8b", "--rapide", "--exporter")
+        self.assertEqual(code, 0, sortie)
+        self.assertIn("50 jetons/s", sortie)
+        self.assertIn('"modele": "qwen3:8b"', sortie)
+        from lutin import bench as _bench
+        self.assertIn("qwen3:8b", _bench.lire(self.d["cache"] / "bench.json"))
+
+    def test_hors_ligne_par_la_commande(self):
+        self.lancer("setup", "--oui", "--sans-modeles", "--sans-ollama", "--travail", self.dossier("w"))
+        self.assertIn("coupé", self.lancer("hors-ligne")[1])
+        self.assertIn("ACTIF", self.lancer("hors-ligne", "oui")[1])
+        self.assertTrue(config.charger(self.d)["hors_ligne"])
+        code, sortie = self.lancer("modeles", "installer", "qwen3:4b")
+        self.assertEqual(code, 1)
+        self.assertIn("hors ligne", sortie)
+        self.assertEqual(PULLS, [])
+        code, sortie = self.lancer("update", "--app")
+        self.assertIn("hors ligne", sortie)
+        self.assertIn("coupé", self.lancer("hors-ligne", "non")[1])
+
+    def test_ecoute_imposee_seulement_hors_niveau_local(self):
+        with mock.patch.object(machine, "detecter", return_value=GROS), mock.patch.object(installation, "definir_variables_utilisateur"):
+            code, sortie = self.lancer("setup", "--oui", "--sans-modeles", "--sans-ollama", "--travail", self.dossier("w"), "--ecoute", "0.0.0.0")
+            self.assertEqual(code, 2, "au niveau local, on n'impose pas l'adresse d'écoute")
+            self.assertIn("écoute", sortie)
+            code, sortie = self.lancer("setup", "--oui", "--sans-modeles", "--sans-ollama", "--travail", self.dossier("w"), "--niveau", "reseau", "--ecoute", "0.0.0.0")
+        self.assertEqual(code, 0, sortie)
+        self.assertEqual(config.charger(self.d)["securite"]["ecoute"], "0.0.0.0")
+
+
+def travaux_liste():
+    from lutin import travaux as _travaux
+    return _travaux.liste(config.charger(config.dossiers()))
 
 
 if __name__ == "__main__":

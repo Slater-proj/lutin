@@ -6,6 +6,7 @@ Ils prouvent la mécanique (boucle d'outils, accords, sauvegardes, bac à sable,
 qualité des réponses d'un vrai modèle.
 """
 import contextlib
+import io
 import json
 import os
 import shutil
@@ -16,10 +17,12 @@ import tempfile
 import threading
 import time
 import unittest
+import urllib.error
 import urllib.parse
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from unittest import mock
 
 ICI = Path(__file__).resolve().parent
 TEMP = Path(tempfile.mkdtemp(prefix="assistant-tests-"))
@@ -1614,6 +1617,164 @@ class Assistant(unittest.TestCase):
         self.assertTrue(post("/api/plan", {})["ok"])
         self.assertIn("docs/univers.md", post("/api/rappeler", {"requete": "univers"})["texte"])
         post("/api/rappeler", {"requete": "le la"}, attendu=400)
+
+    @contextlib.contextmanager
+    def deux_dossiers_de_travail(self):
+        """Une configuration avec un dossier principal « wa » et un second « wb » ; la racine du moteur est rétablie ensuite."""
+        wa, wb, cfg = TEMP / "wa", TEMP / "wb", TEMP / "cfg-travaux" / "config.json"
+        for d in (wa, wb):
+            d.mkdir(exist_ok=True)
+        cfg.parent.mkdir(exist_ok=True)
+        cfg.write_text(json.dumps({"emplacements": {"travail": str(wa), "travaux": [{"id": "b", "nom": "Second", "chemin": str(wb)}]}}), encoding="utf-8")
+        ancienne, ancien_env = A.RACINE, os.environ.get("LUTIN_CONFIG")
+        os.environ["LUTIN_CONFIG"] = str(cfg)
+        try:
+            yield wa, wb, cfg
+        finally:
+            if ancien_env is None:
+                os.environ.pop("LUTIN_CONFIG", None)
+            else:
+                os.environ["LUTIN_CONFIG"] = ancien_env
+            A.RACINE = ancienne
+            A.RACINE_TOURS.clear()
+            for d in (wa, wb):
+                shutil.rmtree(d, ignore_errors=True)
+
+    def test_chaque_conversation_garde_son_dossier_de_travail(self):
+        with self.deux_dossiers_de_travail() as (wa, wb, cfg):
+            ev = chat("Écris dans A", reponses=[[appel_outil("ecrire", chemin="a.txt", contenu="A\n")], [{"content": "ok"}]])
+            conv_a = next(e for e in ev if e["type"] == "fin")["conversation"]["id"]
+            self.assertTrue((wa / "a.txt").is_file() and not (wb / "a.txt").exists())
+            self.assertEqual(A.conv_lire(conv_a)["travail"], "principal")
+            ev = chat("Écris dans B", reponses=[[appel_outil("ecrire", chemin="b.txt", contenu="B\n")], [{"content": "ok"}]], travail="b")
+            conv_b = next(e for e in ev if e["type"] == "fin")["conversation"]["id"]
+            self.assertTrue((wb / "b.txt").is_file() and not (wa / "b.txt").exists())
+            self.assertEqual(A.conv_lire(conv_b)["travail"], "b")
+            chat("Suite dans A", conversation=conv_a, reponses=[[appel_outil("ecrire", chemin="a2.txt", contenu="A2\n")], [{"content": "ok"}]], travail="b")
+            self.assertTrue((wa / "a2.txt").is_file(), "la conversation A reste dans son dossier, même si on demande B")
+            self.assertFalse((wb / "a2.txt").exists())
+            self.assertEqual(str(A.RACINE), str(wa.resolve()))
+
+    def test_une_seule_racine_a_la_fois(self):
+        with self.deux_dossiers_de_travail() as (wa, wb, cfg):
+            A.RACINE_TOURS["autre-conversation"] = str(wa.resolve())
+            req = urllib.request.Request(BASE + "/api/chat", data=json.dumps({"message": "x", "conversation": "", "travail": "b"}).encode("utf-8"), headers={"Content-Type": "application/json", "X-Token": A.JETON})
+            with self.assertRaises(urllib.error.HTTPError) as e:
+                urllib.request.urlopen(req, timeout=20)
+            self.assertEqual(e.exception.code, 409)
+            self.assertIn("autre dossier de travail", json.loads(e.exception.read().decode("utf-8"))["erreur"])
+            post("/api/travaux-choisir", {"id": "b"}, attendu=400)
+            A.RACINE_TOURS.clear()
+            self.assertEqual(post("/api/travaux-choisir", {"id": "b"})["actif"], "b")
+
+    def test_api_des_dossiers_de_travail(self):
+        with self.deux_dossiers_de_travail() as (wa, wb, cfg):
+            d = lire("/api/travaux")
+            self.assertEqual([t["id"] for t in d["liste"]], ["principal", "b"])
+            self.assertTrue(d["modifiable"])
+            nouveau = TEMP / "wc"
+            nouveau.mkdir(exist_ok=True)
+            try:
+                r = post("/api/travaux-ajouter", {"chemin": str(nouveau), "nom": "Troisième"})
+                self.assertEqual([t["id"] for t in r["liste"]], ["principal", "b", "troisieme"])
+                self.assertIn("troisieme", [t["id"] for t in json.loads(cfg.read_text(encoding="utf-8"))["emplacements"]["travaux"]], "enregistré dans config.json")
+                post("/api/travaux-ajouter", {"chemin": str(TEMP / "nexiste-pas")}, attendu=400)
+                post("/api/travaux-ajouter", {"chemin": str(TEMP / "donnees")}, attendu=400)         # le dossier de données de Lutin lui-même
+                post("/api/travaux-ajouter", {"chemin": TEMP.anchor}, attendu=400)                    # la racine d'un disque
+                post("/api/travaux-retirer", {"id": "principal"}, attendu=400)
+                self.assertEqual([t["id"] for t in post("/api/travaux-retirer", {"id": "troisieme"})["liste"]], ["principal", "b"])
+                post("/api/travaux-choisir", {"id": "inconnu"}, attendu=400)
+                e = lire("/api/etat")
+                self.assertEqual(e["travaux"]["actif"], "principal")
+                self.assertTrue(e["configurateur"])
+            finally:
+                shutil.rmtree(nouveau, ignore_errors=True)
+
+    def test_sans_configuration_la_racine_ne_change_pas(self):
+        avant = A.RACINE
+        chat("Lis", reponses=[[appel_outil("lister", dossier=".")], [{"content": "ok"}]])
+        self.assertEqual(A.RACINE, avant)
+
+    def test_journal_des_actions(self):
+        f = A.chemin_journal()
+        f.unlink(missing_ok=True)
+        chat("Écris", reponses=[[appel_outil("ecrire", chemin="docs/journal.txt", contenu="x\n")], [{"content": "ok"}]])
+        chat("Refuse", reponses=[[appel_outil("ecrire", chemin="docs/journal2.txt", contenu="y\n")], [{"content": "ok"}]], decider=lambda e: False)
+        chat("Lis seulement", reponses=[[appel_outil("lire", chemin="docs/univers.md")], [{"content": "ok"}]])
+        chat("Commande", reponses=[[appel_outil("executer", commande="echo bonjour")], [{"content": "ok"}]])
+        try:
+            entrees = lire("/api/journal?n=50")["entrees"]
+            outils = [(e["outil"], e["issue"], e["accord"]) for e in entrees]
+            self.assertEqual(outils[0], ("executer", "ok", "aucun"), "la plus récente d'abord ; une lecture simple n'a pas demandé d'accord")
+            self.assertIn(("ecrire", "refusé", "manuel"), outils)
+            self.assertIn(("ecrire", "ok", "manuel"), outils)
+            self.assertNotIn("lire", [o[0] for o in outils], "les lectures ne sont pas journalisées")
+            e = next(x for x in entrees if x["cible"] == "docs/journal.txt")
+            self.assertEqual((e["qui"], e["dossier"]), ("local", str(A.RACINE)))
+            self.assertRegex(e["ts"], r"^\d{4}-\d\d-\d\dT")
+            brut = f.read_text(encoding="utf-8")
+            self.assertNotIn("bonjour", brut.replace("echo bonjour", ""), "jamais la sortie des commandes")
+            self.assertNotIn("x\\n", brut, "jamais le contenu des fichiers")
+            self.assertEqual(len(lire("/api/journal?n=2")["entrees"]), 2)
+        finally:
+            (PROJET / "docs" / "journal.txt").unlink(missing_ok=True)
+            (PROJET / "docs" / "journal2.txt").unlink(missing_ok=True)
+
+    def test_journal_accord_automatique_et_erreur(self):
+        post("/api/reglages", {"auto_ecriture": True})
+        try:
+            chat("Auto", reponses=[[appel_outil("ecrire", chemin="docs/auto.txt", contenu="z\n")], [{"content": "ok"}]])
+            chat("Hors projet", reponses=[[appel_outil("ecrire", chemin="../dehors.txt", contenu="z\n")], [{"content": "ok"}]])
+            entrees = lire("/api/journal?n=10")["entrees"]
+            self.assertEqual((entrees[0]["issue"][:7], entrees[0]["outil"]), ("erreur ", "ecrire"))
+            auto = next(e for e in entrees if e["cible"] == "docs/auto.txt")
+            self.assertEqual((auto["issue"], auto["accord"]), ("ok", "auto"))
+        finally:
+            post("/api/reglages", {"auto_ecriture": False})
+            (PROJET / "docs" / "auto.txt").unlink(missing_ok=True)
+
+    def test_journal_tourne_au_dela_de_la_limite(self):
+        f = A.chemin_journal()
+        f.write_text("x" * (A.JOURNAL_MAX + 10), encoding="utf-8")
+        A.noter_action({"conv": {"id": "c"}}, "executer", {"commande": "echo"}, "ok")
+        self.assertTrue(f.with_name(f.name + ".1").is_file())
+        self.assertLess(f.stat().st_size, 1000)
+
+    def test_export_de_sauvegarde(self):
+        req = urllib.request.Request(BASE + "/api/sauvegarde", headers={"X-Token": A.JETON})
+        with urllib.request.urlopen(req, timeout=30) as r:
+            self.assertEqual(r.headers.get("Content-Type"), "application/zip")
+            self.assertIn("attachment", r.headers.get("Content-Disposition"))
+            contenu = r.read()
+        import zipfile as _zip
+        with _zip.ZipFile(io.BytesIO(contenu)) as z:
+            noms = z.namelist()
+        self.assertIn("manifeste.json", noms)
+        self.assertTrue(any(n.startswith("donnees/conversations/") for n in noms))
+        self.assertTrue(any(n == "memoire/CONTEXTE.md" for n in noms))
+        self.assertFalse([n for n in noms if "console" in n or "appareils" in n or n.endswith(".log")])
+
+    def test_banc_d_essai_par_l_api(self):
+        mesures = TEMP / "bench-test.json"
+        os.environ["LUTIN_BENCH"] = str(mesures)
+        try:
+            self.assertEqual(lire("/api/etat")["bench"]["mesures"], {})
+            SCENARIO[:] = []
+            post("/api/bench", {"modele": "mauvais nom !"}, attendu=400)
+            from lutin import machine as _machine
+            with mock.patch.object(_machine, "detecter", return_value=_machine.Profil(cpu="processeur de test")):
+                self.assertTrue(post("/api/bench", {"modele": "qwen3.8:27b", "rapide": True})["ok"])
+                for _ in range(300):
+                    e = lire("/api/etat")["bench"]
+                    if not e["en_cours"]:
+                        break
+                    time.sleep(0.1)
+            self.assertFalse(e["en_cours"], "le banc se termine")
+            self.assertIn("qwen3.8:27b", e["mesures"])
+            self.assertIn("vitesse", e["mesures"]["qwen3.8:27b"]["resultats"])
+        finally:
+            os.environ.pop("LUTIN_BENCH", None)
+            mesures.unlink(missing_ok=True)
 
     def test_page_de_l_assistant(self):
         page = (ICI.parent / "src" / "lutin" / "web" / "index.html").read_text(encoding="utf-8")

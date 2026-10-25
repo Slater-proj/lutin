@@ -13,6 +13,7 @@ import difflib
 import fnmatch
 import hashlib
 import hmac
+import io
 import ipaddress
 import json
 import math
@@ -37,8 +38,14 @@ from pathlib import Path
 import zlib
 
 from . import __version__ as _VERSION_LUTIN
+from . import bench as _bench
 from . import catalogue as _catalogue
+from . import config as _config
+from . import horsligne as _hl
+from . import sauvegarde as _sauv
 from . import securite as _sec
+from . import travaux as _trav
+from .ollama_client import Ollama as _Ollama
 
 ICI = Path(__file__).resolve().parent
 WEB = ICI / "web"
@@ -1224,6 +1231,10 @@ def verifier_hote_web(url):
 
 def web_telecharger(url, donnees=None):
     """Télécharge une page (au plus 1,5 Mo). Renvoie (adresse finale, type, texte)."""
+    try:
+        _hl.garde(url)
+    except _hl.HorsLigne as e:
+        raise ErreurOutil(str(e))
     verifier_hote_web(url)
     req = urllib.request.Request(url, data=donnees, headers={"User-Agent": AGENT_WEB, "Accept-Language": "fr-FR,fr;q=0.9,en;q=0.7", "Accept": "text/html,text/plain,application/json,application/xml;q=0.9,*/*;q=0.5"})
     try:
@@ -1986,6 +1997,8 @@ def lancer_autotest(profond=False):
         return "branche {}, {} changement(s) en attente".format(g["branche"], g["total"])
 
     def web_ok():
+        if _hl.actif():
+            return "désactivé (mode hors ligne strict)"
         if not r.get("web", True):
             return "désactivé dans les options"
         texte = outil_web_chercher("assistant local test", 1, {"web": True})
@@ -2273,7 +2286,7 @@ def chercher_conversations(q):
     return {"resultats": trouves[:30]}
 
 
-def appeler_outil(nom, args, ctx):
+def _appeler_outil(nom, args, ctx):
     if not isinstance(args, dict):
         raise ErreurOutil("Arguments invalides.")
     if nom == "lister":
@@ -2311,6 +2324,23 @@ def appeler_outil(nom, args, ctx):
     raise ErreurOutil("Outil inconnu : " + str(nom))
 
 
+def appeler_outil(nom, args, ctx):
+    """Exécute un outil ; les actions qui modifient quelque chose (fichiers, commandes, modules) sont inscrites au journal des actions."""
+    if nom not in OUTILS_JOURNALISES or not isinstance(args, dict):
+        return _appeler_outil(nom, args, ctx)
+    ctx.pop("dernier_accord", None)
+    try:
+        resultat = _appeler_outil(nom, args, ctx)
+    except ErreurOutil as e:
+        noter_action(ctx, nom, args, "erreur : " + str(e))
+        raise
+    except Arret:
+        noter_action(ctx, nom, args, "arrêté")
+        raise
+    noter_action(ctx, nom, args, "refusé" if str(resultat).startswith("Refusé par l'utilisateur") else "ok")
+    return resultat
+
+
 # --------------------------------------------------------------------------- dialogue avec Ollama
 RE_APPEL_MAL_FORME = re.compile(r"XML|syntax|parse|parsing|tool", re.I)
 RAPPEL_APPEL = "Ton dernier appel d'outil était mal formé et a été rejeté. Recommence en appelant l'outil avec des arguments simples ; pour un long contenu, fais plusieurs petits appels."
@@ -2332,7 +2362,7 @@ def outils_du_mode(r):
     exclus = set()
     if r.get("mode") == "scenario":
         exclus |= OUTILS_ABSENTS_EN_SCENARIO
-    if not r.get("web", True):
+    if not r.get("web", True) or _hl.actif():
         exclus |= OUTILS_WEB
     if not OUTIL:
         exclus |= {"etat_outil", "installer_module"}
@@ -2562,6 +2592,7 @@ def restaurer_modeles():
 
 
 def installer_modele(modele):
+    _hl.exiger_en_ligne("télécharger un modèle")
     if modele not in [m["id"] for m in MODELES] and not RE_NOM_MODELE.match(modele):
         raise ValueError("Nom de modèle invalide.")
     if PULLS.get(modele, {}).get("statut") == "en cours":
@@ -2760,7 +2791,7 @@ def compacter_conversation(ident):
     return {"ok": True, "avant": avant, "apres": len(conv["messages"]), "jauge": jauge_contexte(conv)}
 
 
-def tour(conv, texte, emit, r=None, stop=None, remplacer_depuis=None):
+def tour(conv, texte, emit, r=None, stop=None, remplacer_depuis=None, identite=""):
     """Un tour de conversation : message de l'utilisateur, puis la boucle de l'agent (réponse, outils, réponse...). emit(evenement) envoie à la page.
     stop (threading.Event) : déclenché par le bouton Arrêter ; le tour s'arrête alors pour de bon (modèle, outils, accords). Fermer la page ne l'arrête pas.
     remplacer_depuis : indice d'un message de l'utilisateur à remplacer (modifier un message / régénérer) ; ce message et tout ce qui le suit sont retirés d'abord."""
@@ -2787,6 +2818,7 @@ def tour(conv, texte, emit, r=None, stop=None, remplacer_depuis=None):
             auto = False
         if auto:
             emit({"type": "info", "texte": "Accord automatique : " + titre})
+            ctx["dernier_accord"] = "auto"
             return True
         a = Attente(titre, detail, diff)
         emit({"type": "approbation", "id": a.id, "titre": titre, "detail": detail, "diff": diff})
@@ -2794,8 +2826,9 @@ def tour(conv, texte, emit, r=None, stop=None, remplacer_depuis=None):
         if stop.is_set():
             raise Arret()
         emit({"type": "info", "texte": ("Accepté : " if ok else "Refusé : ") + titre})
+        ctx["dernier_accord"] = "manuel"
         return ok
-    ctx = {"accord": accord, "auto_ecriture": bool(r.get("auto_ecriture")), "auto_commandes": bool(r.get("auto_commandes")), "stop": stop, "conv": conv, "emit": emit, "web": bool(r.get("web", True)), "limite_ram": int(r.get("limite_ram_commande_go", 0) * GO),
+    ctx = {"identite": identite, "accord": accord, "auto_ecriture": bool(r.get("auto_ecriture")), "auto_commandes": bool(r.get("auto_commandes")), "stop": stop, "conv": conv, "emit": emit, "web": bool(r.get("web", True)), "limite_ram": int(r.get("limite_ram_commande_go", 0) * GO),
            "tour": {"id": datetime.now().strftime("%Y%m%d-%H%M%S-") + secrets.token_hex(2), "conversation": conv["id"], "fichiers": {}}}
     dernier = conv["messages"][-1] if conv["messages"] else None
     if dernier and dernier.get("role") == "user" and dernier.get("content") == texte:
@@ -3024,15 +3057,23 @@ def boucle_agent(conv, r, emit, ctx, stop):
 
 
 # --------------------------------------------------------------------------- serveur HTTP
-ICONE_SVG = ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" fill="#0b0f14"/>'
-             '<circle cx="50" cy="50" r="38" fill="#5aa9ff" opacity=".18"/><circle cx="50" cy="50" r="27" fill="#5aa9ff"/></svg>')
+try:
+    ICONE_SVG = (WEB / "logo.svg").read_text(encoding="utf-8")
+except OSError:
+    ICONE_SVG = ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" fill="#0b0f14"/>'
+                 '<circle cx="50" cy="50" r="38" fill="#5aa9ff" opacity=".18"/><circle cx="50" cy="50" r="27" fill="#5aa9ff"/></svg>')
 ICONES = {}
 
 
 def icone_png(n):
-    """Icône carrée n x n (fond sombre, point bleu lumineux comme dans l'en-tête de la page), en PNG fabriqué à la main avec zlib. Gardée en mémoire."""
+    """Icône carrée n x n : le logo de Lutin (web/icones/icone-n.png). Sans ce fichier : un point lumineux dessiné à la main (PNG fabriqué avec zlib). Gardée en mémoire."""
     if n in ICONES:
         return ICONES[n]
+    try:
+        ICONES[n] = (WEB / "icones" / "icone-{}.png".format(n)).read_bytes()
+        return ICONES[n]
+    except OSError:
+        pass
     centre, rayon, halo = n / 2, n * 0.27, n * 0.38
     fond, bleu = (11, 15, 20), (90, 169, 255)
     lignes = bytearray()
@@ -3061,6 +3102,183 @@ def icone_png(n):
 TOURS_SIMULTANES = 2       # au plus deux réponses à la fois (une seule carte graphique : plus, ce serait lent et risqué pour la mémoire)
 TOURS_ACTIFS = {}          # id de conversation -> threading.Event « stop » du tour en cours (une conversation = un tour à la fois)
 VERROU_TOURS = threading.Lock()
+RACINE_TOURS = {}          # id de conversation -> dossier de travail utilisé par sa réponse en cours (une seule racine à la fois, voir activer_travail)
+BENCH = {"en_cours": "", "etape": "", "erreur": ""}
+
+
+# --------------------------------------------------------------------------- dossiers de travail multiples
+def chemin_config():
+    c = os.environ.get("LUTIN_CONFIG")
+    return Path(c) if c else None
+
+
+def config_lue():
+    c = chemin_config()
+    return _config.migrer(lire_json(c, {})) if c else _config.migrer({})
+
+
+def config_ecrire(cfg):
+    c = chemin_config()
+    if not c:
+        raise ValueError("Pas de fichier de configuration.")
+    _config.enregistrer({"config": c.parent}, cfg)
+
+
+def dossiers_de_lutin():
+    """Les dossiers de Lutin lui-même : un dossier de travail ne peut ni les contenir ni être dedans."""
+    c, cache = chemin_config(), os.environ.get("LUTIN_PROPOSITIONS")
+    return [p for p in (c.parent if c else None, DONNEES, MEMOIRE, Path(cache).parent if cache else None) if p]
+
+
+def definir_racine(chemin):
+    """Change le dossier de travail courant. Appelé avec VERROU_TOURS tenu."""
+    global RACINE
+    nouveau = Path(chemin).resolve()
+    if nouveau != RACINE:
+        RACINE = nouveau
+        PLAN["valide"] = False                      # le plan du projet et l'index de rappel appartiennent à l'ancien dossier
+        RAPPEL["signature"] = None
+
+
+def activer_travail(conv, demande=""):
+    """Dossier de travail de cette conversation : le sien s'il en a un, sinon celui demandé, sinon le dossier actif. Appelé avec VERROU_TOURS tenu.
+    Une seule racine à la fois : si une autre réponse travaille dans un autre dossier, celle-ci attend. Sans dossier configuré (tests, usage direct), la racine ne change pas."""
+    cfg = config_lue()
+    t = _trav.par_id(cfg, conv["travail"]) if conv.get("travail") else None
+    if conv.get("travail") and t is None:
+        raise ValueError("Le dossier de travail de cette conversation (« {} ») n'est plus dans la liste. Ajoute-le de nouveau, ou ouvre une nouvelle conversation.".format(conv["travail"]))
+    if t is None:
+        t = _trav.par_id(cfg, demande) if demande else None
+        t = t or _trav.actif(cfg)
+    if t is None:
+        return None
+    chemin = Path(t["chemin"])
+    if not chemin.is_dir():
+        raise ValueError("Le dossier de travail « {} » n'existe plus ({}).".format(t["nom"], t["chemin"]))
+    if any(r != str(chemin.resolve()) for r in RACINE_TOURS.values()):
+        raise ValueError("Une réponse est en cours dans un autre dossier de travail : attends sa fin, ou arrête-la.")
+    definir_racine(chemin)
+    conv["travail"] = t["id"]
+    return t
+
+
+def travaux_etat():
+    cfg = config_lue()
+    liste = _trav.liste(cfg)
+    courant = next((t["id"] for t in liste if _trav.cle(t["chemin"]) == _trav.cle(RACINE)), "")
+    return {"liste": liste, "actif": courant or (_trav.actif(cfg) or {}).get("id", "")}
+
+
+def choisir_travail(ident):
+    cfg = config_lue()
+    t = _trav.par_id(cfg, ident)
+    if not t:
+        raise ValueError("Dossier de travail inconnu.")
+    if not Path(t["chemin"]).is_dir():
+        raise ValueError("Ce dossier n'existe plus : " + t["chemin"])
+    with VERROU_TOURS:
+        if any(r != str(Path(t["chemin"]).resolve()) for r in RACINE_TOURS.values()):
+            raise ValueError("Une réponse est en cours dans un autre dossier de travail : attends sa fin pour changer.")
+        definir_racine(t["chemin"])
+    _trav.choisir(cfg, ident)
+    if chemin_config():
+        config_ecrire(cfg)
+    return travaux_etat()
+
+
+def ajouter_travail(chemin, nom):
+    cfg = config_lue()
+    _trav.ajouter(cfg, chemin, nom, dossiers_de_lutin())
+    config_ecrire(cfg)
+    return travaux_etat()
+
+
+def retirer_travail(ident):
+    cfg = config_lue()
+    t = _trav.par_id(cfg, ident)
+    with VERROU_TOURS:
+        if t and str(Path(t["chemin"]).resolve()) in RACINE_TOURS.values():
+            raise ValueError("Une réponse travaille dans ce dossier : attends sa fin.")
+    _trav.retirer(cfg, ident)
+    config_ecrire(cfg)
+    return travaux_etat()
+
+
+# --------------------------------------------------------------------------- journal des actions (qui a modifié quoi, lancé quelle commande, avec quel accord)
+JOURNAL_MAX = 5_000_000
+OUTILS_JOURNALISES = {"ecrire", "modifier", "modifier_plusieurs", "executer", "installer_module"}
+
+
+def chemin_journal():
+    return DONNEES / "journal-actions.jsonl"
+
+
+def noter_action(ctx, outil, args, issue):
+    """Une ligne par action qui modifie quelque chose. Jamais le contenu des fichiers ni la sortie des commandes : seulement quoi, où, avec quel accord, pour qui. Ne plante jamais."""
+    try:
+        cible = ""
+        if outil in ("ecrire", "modifier", "modifier_plusieurs"):
+            cible = str(args.get("chemin", ""))
+        elif outil == "executer":
+            cible = str(args.get("commande", ""))
+        elif outil == "installer_module":
+            cible = str(args.get("module", ""))
+        entree = {"ts": datetime.now().isoformat(timespec="seconds"), "conversation": (ctx.get("conv") or {}).get("id", ""), "dossier": str(RACINE), "outil": outil, "cible": cible[:300],
+                  "issue": issue[:200], "accord": ctx.pop("dernier_accord", "aucun"), "qui": ctx.get("identite", "")}
+        f = chemin_journal()
+        f.parent.mkdir(parents=True, exist_ok=True)
+        if f.is_file() and f.stat().st_size > JOURNAL_MAX:
+            os.replace(str(f), str(f.with_name(f.name + ".1")))
+        with open(f, "a", encoding="utf-8") as h:
+            h.write(json.dumps(entree, ensure_ascii=False) + "\n")
+    except OSError:
+        pass
+
+
+def lire_journal(n=200):
+    n = max(1, min(2000, int(n)))
+    try:
+        lignes = chemin_journal().read_text(encoding="utf-8").splitlines()[-n:]
+    except OSError:
+        return []
+    sortie = []
+    for ligne in lignes:
+        try:
+            sortie.append(json.loads(ligne))
+        except ValueError:
+            continue
+    return sortie[::-1]                                      # la plus récente d'abord
+
+
+# --------------------------------------------------------------------------- banc d'essai des modèles (vitesse et notes mesurées)
+def chemin_bench():
+    return Path(os.environ.get("LUTIN_BENCH") or DONNEES / "bench.json")
+
+
+def lancer_bench(modele, rapide):
+    if not RE_NOM_MODELE.match(modele or ""):
+        raise ValueError("Nom de modèle invalide.")
+    with VERROU_TOURS:
+        if TOURS_ACTIFS:
+            raise ValueError("Une réponse est en cours : le banc d'essai fausserait les mesures. Attends sa fin.")
+        if BENCH["en_cours"]:
+            raise ValueError("Un banc d'essai est déjà en cours ({}).".format(BENCH["en_cours"]))
+        BENCH.update(en_cours=modele, etape="démarrage", erreur="")
+
+    def travail():
+        try:
+            from .machine import detecter
+            mesure = _bench.executer(_Ollama(OLLAMA), modele, rapide, lambda nom, i, n: BENCH.update(etape="{} ({}/{})".format(nom, i + 1, n)), detecter().resume(), reglages()["num_ctx"])
+            _bench.enregistrer(chemin_bench(), mesure)
+            if mesure.get("erreur"):
+                BENCH["erreur"] = mesure["erreur"]
+        except Exception as erreur:  # noqa: BLE001
+            BENCH["erreur"] = str(erreur)[:200]
+            journaliser("Banc d'essai de {} : {!r}".format(modele, erreur))
+        finally:
+            BENCH.update(en_cours="", etape="")
+    threading.Thread(target=travail, daemon=True, name="banc-essai").start()
+    return {"ok": True}
 
 
 def arreter_conversation(ident):
@@ -3111,6 +3329,16 @@ class Gestionnaire(BaseHTTPRequestHandler):
             return True                                      # la console de cette machine (fichier réservé à l'utilisateur)
         return _sec.acces(SECURITE, APPAREILS, self.client_address[0], self.headers)[0]
 
+    def _identite(self):
+        """Qui fait cette requête, pour le journal : « console », « local », le nom donné par le proxy, ou « appareil »."""
+        if self._local() and hmac.compare_digest(self.headers.get("X-Token") or "", JETON_CONSOLE):
+            return "console"
+        return _sec.acces(SECURITE, APPAREILS, self.client_address[0], self.headers)[1]
+
+    def _configurateur(self):
+        """Peut-on changer les dossiers de travail ? Seulement depuis cette machine : au niveau « machine seulement », ou avec le jeton de la console."""
+        return SECURITE.niveau == _sec.LOCAL or (self._local() and hmac.compare_digest(self.headers.get("X-Token") or "", JETON_CONSOLE))
+
     def _controle(self, ecriture):
         """Nom d'hôte (contre le « DNS rebinding ») et origine (contre les requêtes venues d'autres sites). Répond lui-même en cas de refus."""
         if not _sec.hote_autorise(SECURITE, self.headers.get("Host"), IP_LAN):
@@ -3143,7 +3371,21 @@ class Gestionnaire(BaseHTTPRequestHandler):
             r = reglages()
             return self._envoyer(200, {"version": VERSION, "ollama": o["actif"], "ollama_installe": bool(chemin_ollama()), "installes": o["installes"], "modeles": modeles_connus(o["installes"], o.get("tailles")), "modeles_masques": len(lire_registre_modeles()["masques"]), "actives": list(TOURS_ACTIFS),
                                        "pulls": PULLS, "reglages": r, "conversations": conv_liste(), "racine": str(RACINE),
-                                       "outil": bool(self._outil_vivant()), "attentes": [{"id": a.id, "titre": a.titre, "detail": a.detail, "diff": a.diff} for a in Attente.EN_COURS.values()]})
+                                       "outil": bool(self._outil_vivant()), "hors_ligne": _hl.actif(), "niveau": SECURITE.niveau, "travaux": travaux_etat(), "configurateur": self._configurateur(),
+                                       "bench": {"en_cours": BENCH["en_cours"], "etape": BENCH["etape"], "erreur": BENCH["erreur"], "mesures": _bench.lire(chemin_bench())}, "attentes": [{"id": a.id, "titre": a.titre, "detail": a.detail, "diff": a.diff} for a in Attente.EN_COURS.values()]})
+        if chemin == "/api/travaux":
+            return self._envoyer(200, dict(travaux_etat(), modifiable=self._configurateur()))
+        if chemin == "/api/journal":
+            m = re.search(r"[?&]n=(\d+)", self.path)
+            return self._envoyer(200, {"entrees": lire_journal(int(m.group(1)) if m else 200)})
+        if chemin == "/api/sauvegarde":
+            tampon = io.BytesIO()
+            c = chemin_config()
+            try:
+                _sauv.exporter({"config": c.parent if c else None, "donnees": DONNEES, "memoire": MEMOIRE}, tampon)
+            except _sauv.ErreurSauvegarde as e:
+                return self._envoyer(400, {"erreur": str(e)})
+            return self._envoyer(200, tampon.getvalue(), "application/zip", {"Content-Disposition": 'attachment; filename="lutin-sauvegarde-{}.zip"'.format(datetime.now().strftime("%Y%m%d-%H%M%S"))})
         if chemin == "/api/propositions":
             return self._envoyer(200, lire_propositions())
         if chemin == "/api/sante-systeme":
@@ -3163,7 +3405,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 return self._envoyer(200, jauge_contexte(conv_lire(ident)))
             except ValueError as erreur:
                 return self._envoyer(404, {"erreur": str(erreur)})
-        if chemin in ("/manifest.webmanifest", "/icone.svg") or re.match(r"^/icone-(180|192|512)\.png$", chemin):
+        if chemin in ("/manifest.webmanifest", "/icone.svg", "/logo.svg") or re.match(r"^/icone-(180|192|512)\.png$", chemin):
             return self._statique_pwa(chemin)
         if chemin == "/api/memoire":
             return self._envoyer(200, {"CONTEXTE.md": lire_memoire("CONTEXTE.md"), "MEMOIRE.md": lire_memoire("MEMOIRE.md")})
@@ -3209,7 +3451,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
                          "background_color": "#0b0f14", "theme_color": "#0b0f14",
                          "icons": [{"src": "/icone-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"}, {"src": "/icone-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}]}
             return self._envoyer(200, manifeste, "application/manifest+json; charset=utf-8")
-        if chemin == "/icone.svg":
+        if chemin in ("/icone.svg", "/logo.svg"):
             return self._envoyer(200, ICONE_SVG, "image/svg+xml; charset=utf-8")
         return self._envoyer(200, icone_png(int(re.search(r"(\d+)", chemin).group(1))), "image/png")
 
@@ -3262,6 +3504,21 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 return self._envoyer(200, git_message(donnees.get("fichiers")))
             if self.path == "/api/git-commit":
                 return self._envoyer(200, git_commit(donnees.get("message"), donnees.get("fichiers")))
+            if self.path == "/api/travaux-choisir":
+                return self._envoyer(200, choisir_travail(str(donnees.get("id", ""))))
+            if self.path in ("/api/travaux-ajouter", "/api/travaux-retirer"):
+                if not self._configurateur():
+                    return self._envoyer(403, {"erreur": "Les dossiers de travail se gèrent depuis cette machine (niveau « cette machine seulement ») ou avec la commande lutin travaux."})
+                if self.path == "/api/travaux-ajouter":
+                    return self._envoyer(200, ajouter_travail(str(donnees.get("chemin", "")), str(donnees.get("nom", ""))))
+                return self._envoyer(200, retirer_travail(str(donnees.get("id", ""))))
+            if self.path == "/api/bench":
+                return self._envoyer(200, lancer_bench(str(donnees.get("modele", "")), bool(donnees.get("rapide"))))
+            if self.path == "/api/hors-ligne":
+                voulu = bool(donnees.get("actif"))
+                if not voulu and not (SECURITE.niveau == _sec.LOCAL or self._local()):
+                    return self._envoyer(403, {"erreur": "Le mode hors ligne ne se coupe que depuis cette machine."})
+                return self._envoyer(200, {"hors_ligne": _hl.definir(voulu)})
             if self.path == "/api/modeles-verifier":
                 if VERIFICATEUR is None:
                     return self._envoyer(501, {"erreur": "La vérification des modèles n'est pas disponible dans ce mode de lancement."})
@@ -3365,6 +3622,11 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 return self._envoyer(409, {"erreur": "Cette conversation est déjà en train de répondre (autre onglet ou téléphone ?). Attends la fin ou clique sur Arrêter."})
             if len(TOURS_ACTIFS) >= TOURS_SIMULTANES:
                 return self._envoyer(429, {"erreur": "Déjà {} réponses en cours : une seule carte graphique, attends la fin de l'une d'elles (ou clique sur Arrêter).".format(len(TOURS_ACTIFS))})
+            try:
+                activer_travail(conv, str(donnees.get("travail") or ""))
+            except ValueError as erreur:
+                return self._envoyer(409, {"erreur": str(erreur)})
+            RACINE_TOURS[conv["id"]] = str(RACINE)
             TOURS_ACTIFS[conv["id"]] = stop
         try:
             r = reglages()
@@ -3384,10 +3646,11 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 except (OSError, ValueError):
                     pass
             emit({"type": "debut", "conversation": conv["id"]})
-            tour(conv, texte, emit, r, stop, depuis)
+            tour(conv, texte, emit, r, stop, depuis, identite=self._identite())
         finally:
             with VERROU_TOURS:
                 TOURS_ACTIFS.pop(conv["id"], None)
+                RACINE_TOURS.pop(conv["id"], None)
 
     def _resumer(self, donnees):
         """Génère un document de reprise structuré par le modèle, pour coller dans un autre modèle d'IA."""
@@ -3538,7 +3801,7 @@ PAGE_CONNEXION = """<!doctype html><html lang="fr"><head><meta charset="utf-8"><
 <style>body{font-family:system-ui,sans-serif;background:#0b0f14;color:#e6edf3;display:grid;place-items:center;min-height:100vh;margin:0}main{max-width:340px;padding:24px}
 input,button{font:inherit;padding:10px 12px;border-radius:8px;border:1px solid #30363d;background:#161b22;color:inherit;width:100%;box-sizing:border-box;margin-top:10px}
 button{background:#238636;border-color:#238636;cursor:pointer}#m{color:#f85149;min-height:1.4em;margin-top:8px}</style></head><body><main>
-<h1>Lutin</h1><p>Entre le code à 6 chiffres affiché sur l'ordinateur qui fait tourner Lutin (commande <code>lutin pin</code> pour en obtenir un nouveau).</p>
+<img src="/logo.svg" alt="" width="72" height="72" style="display:block;margin:0 auto 6px"><h1 style="text-align:center">Lutin</h1><p>Entre le code à 6 chiffres affiché sur l'ordinateur qui fait tourner Lutin (commande <code>lutin pin</code> pour en obtenir un nouveau).</p>
 <form id="f"><input id="pin" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" autofocus><input id="nom" placeholder="Nom de cet appareil (facultatif)"><button>Se connecter</button></form><div id="m"></div>
 <script>document.getElementById('f').addEventListener('submit',async e=>{e.preventDefault();const r=await fetch('/api/appairer',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pin:document.getElementById('pin').value,nom:document.getElementById('nom').value})});
 const d=await r.json().catch(()=>({}));if(r.ok)location.reload();else document.getElementById('m').textContent=d.erreur||'Erreur '+r.status;});</script></main></body></html>"""
