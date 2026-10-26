@@ -19,7 +19,7 @@ jobs:
         python: ["3.10", "3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python }}
       - name: Style et erreurs évidentes
@@ -39,7 +39,7 @@ jobs:
       SETUPTOOLS_SCM_PRETEND_VERSION: "0.0.0.dev0"
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - run: python -m pip install build
@@ -97,7 +97,7 @@ jobs:
       SETUPTOOLS_SCM_PRETEND_VERSION: "0.0.0.dev0"
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - run: python -m pip install build
@@ -121,7 +121,7 @@ jobs:
       SETUPTOOLS_SCM_PRETEND_VERSION: "0.0.0.dev0"
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - run: python -m pip install build
