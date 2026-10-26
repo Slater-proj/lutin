@@ -139,11 +139,11 @@ jobs:
     if: github.ref == 'refs/heads/main' && needs.version.outputs.publier == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: lutin-${{ needs.version.outputs.version }}
           path: dist
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: installateur-${{ needs.version.outputs.version }}
           path: dist
