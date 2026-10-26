@@ -204,6 +204,14 @@ class Documents(Base):
 class ConseilPc(Base):
     def test_sans_mesure_puis_avec_mesure(self):
         from lutin import bench
+        # le matériel et Ollama sont simulés : le test ne dépend pas de la machine (ni de son délai)
+        from lutin import machine
+        profil = machine.Profil(systeme="windows", cpu="test", coeurs=8, ram_go=16.0, ram_libre_go=10.0, gpus=[])
+        ollama = {"actif": True, "installes": {}, "tailles": {}}
+        with mock.patch("lutin.machine.detecter", return_value=profil), mock.patch.object(A, "etat_ollama", return_value=ollama), mock.patch.object(A, "ps_modele", return_value=None):
+            self._conseil_avec_mesure(bench)
+
+    def _conseil_avec_mesure(self, bench):
         chemin = A.chemin_bench()
         existait = chemin.exists()
         avant = chemin.read_bytes() if existait else None
