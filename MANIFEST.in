@@ -10,5 +10,5 @@ prune assets
 prune installateur
 prune docker
 prune .github
-exclude Dockerfile docker-compose.yml docker-compose.gpu.yml docker-compose.slim.yml .dockerignore .gitattributes .editorconfig .gitignore SECURITY.md CONTRIBUTING.md CONTRIBUTING.fr.md
+exclude Dockerfile docker-compose.yml docker-compose.gpu.yml docker-compose.slim.yml docker-compose.amd.yml .dockerignore .gitattributes .editorconfig .gitignore SECURITY.md CONTRIBUTING.md CONTRIBUTING.fr.md
 global-exclude __pycache__ *.py[cod] *.log

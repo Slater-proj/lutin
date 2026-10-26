@@ -5,6 +5,7 @@
 # Lutin and Ollama in one container (target "complet", the default), or Lutin alone (target "leger"): docker build --target leger .
 
 ARG OLLAMA_VERSION=0.40.11
+ARG OLLAMA_VARIANT=""          # "" (NVIDIA et processeur) ou "-rocm" (cartes AMD)
 
 # --- la roue Python de Lutin (même construction pour les deux images)
 FROM python:3.12-slim AS construction
@@ -51,7 +52,7 @@ ENTRYPOINT ["tini", "--", "/usr/local/bin/entrypoint.sh"]
 CMD ["serve"]
 
 # --- image complète : Lutin + Ollama (l'image officielle d'Ollama sert de base : mêmes bibliothèques, donc la carte NVIDIA fonctionne comme avec Ollama seul)
-FROM ollama/ollama:${OLLAMA_VERSION} AS complet
+FROM ollama/ollama:${OLLAMA_VERSION}${OLLAMA_VARIANT} AS complet
 # L'image Ubuntu a déjà un utilisateur 1000 (« ubuntu ») : on le remplace par « lutin », pour que les volumes aient les mêmes droits que dans l'image légère.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends python3 python3-venv git ca-certificates tini curl \

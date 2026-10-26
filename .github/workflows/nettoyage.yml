@@ -1,0 +1,30 @@
+name: nettoyage
+
+# Une fois par mois (et à la demande) : supprime les anciennes images Docker de candidates (rc) du registre. Les images publiées (latest, X.Y.Z, slim) ne sont jamais touchées.
+# Monthly (and on demand): deletes old release-candidate Docker images from the registry. Published images are never touched.
+on:
+  schedule:
+    - cron: "17 4 1 * *"
+  workflow_dispatch:
+    inputs:
+      pour_de_bon:
+        description: "Supprimer vraiment (sinon : simulation)"
+        type: boolean
+        default: false
+
+permissions:
+  packages: write
+  contents: read
+
+jobs:
+  images:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Anciennes images de candidates
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python tools/nettoyer_images.py ${{ (github.event_name == 'schedule' || inputs.pour_de_bon) && '--oui' || '' }}

@@ -1,0 +1,15 @@
+# AMD graphics card (ROCm) / Carte graphique AMD (ROCm) :
+#   docker compose -f docker-compose.yml -f docker-compose.amd.yml up -d
+# Needs a card supported by ROCm and the amdgpu driver on the host (see docs/DOCKER.md) / Demande une carte gérée par ROCm et le pilote amdgpu sur l'hôte (voir docs/DOCKER.fr.md).
+# Never tried on a real AMD card / Jamais essayé sur une vraie carte AMD.
+services:
+  lutin:
+    image: ghcr.io/slater-proj/lutin:rocm
+    devices:
+      - /dev/kfd
+      - /dev/dri
+    group_add:
+      - video
+      - "${RENDER_GID:-109}"          # group of /dev/dri/renderD* on the host: getent group render | cut -d: -f3
+    # environment:
+    #   HSA_OVERRIDE_GFX_VERSION: "11.0.0"   # some cards need to be declared as a supported model (see Ollama's documentation)

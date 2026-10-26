@@ -1,6 +1,12 @@
+# Mises à jour des outils de la CI : une seule demande groupée par mois (et non une par outil chaque semaine).
+# One grouped pull request per month for the CI tooling (instead of one per tool every week).
 version: 2
 updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
+    groups:
+      outils-ci:
+        patterns: ["*"]
+    open-pull-requests-limit: 2

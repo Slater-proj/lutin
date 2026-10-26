@@ -566,6 +566,8 @@ def diagnostic(cfg, dossiers, profil, ollama):
     lignes = [("info", "Lutin " + __version__), ("info", _t("Machine : {}").format(profil.resume())), ("info", _t("Système : {} {}").format(profil.systeme, profil.architecture))]
     if profil.sans_gpu():
         lignes.append(("attention", _t("Pas de carte graphique utilisable : les modèles tourneront sur le processeur.")))
+        if os.environ.get("LUTIN_DOCKER"):
+            lignes.append(("attention", _t("Dans un conteneur, la carte doit être donnée au conteneur : NVIDIA avec --gpus all, AMD avec l'image :rocm et /dev/kfd + /dev/dri (docs/DOCKER.md).")))
     for g in profil.gpus:
         lignes.append(("info", _t("Carte : {} ({:g} Go, source : {})").format(g.nom, g.vram_go, g.source)))
     try:

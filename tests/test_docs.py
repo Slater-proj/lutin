@@ -49,7 +49,7 @@ class Documentation(unittest.TestCase):
         self.assertIn("banner.fr.svg", (RACINE / "README.fr.md").read_text(encoding="utf-8"))
 
     def test_le_fichier_compose_ne_depend_que_de_fichiers_qui_existent(self):
-        for nom in ("docker-compose.yml", "docker-compose.gpu.yml", "docker-compose.slim.yml", "Dockerfile", "docker/entrypoint.sh"):
+        for nom in ("docker-compose.yml", "docker-compose.gpu.yml", "docker-compose.slim.yml", "docker-compose.amd.yml", "Dockerfile", "docker/entrypoint.sh"):
             self.assertTrue((RACINE / nom).is_file(), nom)
 
 

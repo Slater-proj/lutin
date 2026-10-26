@@ -21,6 +21,12 @@ if [ "$commande" = "serve" ]; then
       echo "[Lutin] The ${OLLAMA_MODELS:-/models} volume must be writable by user 1000 / Le volume ${OLLAMA_MODELS:-/models} doit être accessible en écriture pour l'utilisateur 1000." >&2
       exit 1
     fi
+    {
+      echo "[Lutin] GPU visible from the container / carte visible depuis le conteneur :"
+      if command -v nvidia-smi > /dev/null 2>&1 && nvidia-smi -L 2> /dev/null; then :; else echo "  NVIDIA : none (docker run --gpus all / aucune)"; fi
+      [ -e /dev/kfd ] && echo "  AMD : /dev/kfd present" || echo "  AMD : /dev/kfd absent"
+      [ -d /dev/dri ] && echo "  /dev/dri : $(ls /dev/dri | tr '\n' ' ')" || echo "  /dev/dri : absent"
+    } >> "$LUTIN_HOME/ollama.log" 2>&1
     ollama serve >> "$LUTIN_HOME/ollama.log" 2>&1 &
     for _ in $(seq 1 60); do
       curl -fsS "http://127.0.0.1:11434/api/version" > /dev/null 2>&1 && break

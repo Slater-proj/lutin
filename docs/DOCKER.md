@@ -106,13 +106,28 @@ These variables are **re-applied at every start**: they are the source of truth 
 - The container is not an administrator; the commands Lutin runs execute **in the container** (with only what it contains: Python, git, sh) and only see `/travail`, `/data` and `/models`. It is one more protection, and a limit: for it to run your project's tools (compiler, tests…), install them in a derived image.
 - In the complete image, Ollama listens on the container's `127.0.0.1` only, and its port `11434` is never published. Never publish it.
 
-## NVIDIA card
+## Graphics card in the container
 
-1. Install the NVIDIA Container Toolkit on the host and restart Docker (`sudo nvidia-ctk runtime configure --runtime=docker && sudo systemctl restart docker`).
-2. Check: `docker run --rm --gpus all ubuntu nvidia-smi`.
-3. Start with `--gpus all` (`docker run`) or `-f docker-compose.gpu.yml` (Compose). Lutin **reads** the card (`nvidia-smi`) to recommend models that fit in it; Ollama uses it.
+A container does not see the graphics card unless you hand it over. Without it, everything runs on the processor (slower, but it works).
 
-If the card is not detected (AMD, special configuration): `LUTIN_GPU="My card=16"`. For AMD, use the slim image with Ollama's ROCm image.
+| Your card | What to do | Image |
+|---|---|---|
+| **NVIDIA** (Linux) | install the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) on the host, then `docker run --gpus all …` or `-f docker-compose.gpu.yml` | `:latest` |
+| **NVIDIA** (Windows) | Docker Desktop with the WSL 2 backend and a recent NVIDIA driver; then the same `--gpus all` | `:latest` |
+| **AMD** (Linux, ROCm-supported card) | amdgpu driver on the host, then `--device /dev/kfd --device /dev/dri --group-add video --group-add <render group id>` or `-f docker-compose.amd.yml` | `:rocm` |
+| **Intel / integrated graphics** | not used by Ollama in the containers: the processor does the work (budget = RAM) | `:latest` |
+| **Mac** | Docker on macOS cannot give the Apple GPU to a container: run Ollama natively on the Mac and use the `:slim` image with `OLLAMA_URL=http://host.docker.internal:11434` | `:slim` |
+
+**Check that it works** (do not trust, check):
+
+1. NVIDIA: `docker run --rm --gpus all ubuntu nvidia-smi` must list the card; then `docker exec lutin nvidia-smi` too.
+2. The first lines of `/data/ollama.log` (`docker exec lutin head -20 /data/ollama.log`) say which card the container sees (NVIDIA, `/dev/kfd`, `/dev/dri`); Ollama's own lines then say whether it found a compute device.
+3. In the page, **Health > video memory** shows the card, and once a model is loaded, « model loaded at … % on the card »: **100 %** means the card does the work; **0 %** means the processor does (the card was not given or not supported).
+4. `docker exec lutin lutin doctor` says « No usable graphics card » and what to add if the container sees none.
+
+AMD: ROCm supports a limited list of cards; for others, Ollama's documentation explains `HSA_OVERRIDE_GFX_VERSION`. The `:rocm` image and `docker-compose.amd.yml` have **never been tried on a real AMD card**: tell me what you get.
+
+If Lutin does not see the card but Ollama does, declare it by hand so that the recommended models fit: `LUTIN_GPU="My card=16"` (memory in GB).
 
 ## Update, back up, stop
 
@@ -125,7 +140,7 @@ docker compose down                                               # stop (volume
 Restore: copy the `.zip` into `/data` (`docker compose cp backup.zip lutin:/data/`), stop Lutin (`docker compose stop lutin`), then  
 `docker compose run --rm lutin restaurer /data/backup.zip --oui` and `docker compose start lutin`.
 
-Published images: `ghcr.io/slater-proj/lutin:latest` (latest version, complete), `:X.Y.Z` (a precise version), `:slim` and `:X.Y.Z-slim` (Lutin alone), `:rc-<branch>` and `:rc-<branch>-slim` (candidate of a branch, to test before merging).
+Published images: `ghcr.io/slater-proj/lutin:latest` (latest version, complete), `:X.Y.Z` (a precise version), `:slim` and `:X.Y.Z-slim` (Lutin alone), `:rocm` and `:X.Y.Z-rocm` (complete, for AMD cards), `:rc-<branch>` and its `-slim` / `-rocm` variants (candidate of a branch, to test before merging).
 
 ## Troubleshooting
 
