@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Configuration d'artefact SignPath pour l'installateur Windows de Lutin (a coller dans SignPath : projet "lutin" > Artifact configurations > "initial").
+     L'artefact soumis est le zip GitHub "installateur-non-signe" : il contient lutin-setup-<version>.exe a la racine. -->
+<artifact-configuration xmlns="http://signpath.io/artifact-configuration/v1">
+  <zip-file>
+    <pe-file path="lutin-setup-*.exe">
+      <authenticode-sign/>
+    </pe-file>
+  </zip-file>
+</artifact-configuration>

@@ -12,6 +12,29 @@
 
 The result is shown by `lutin modeles` and in the guided installation. You can always choose something else in the Models tab.
 
+## Without a graphics card, or with integrated graphics only
+
+A graphics card is **not required**, in Docker or elsewhere: without one, Ollama uses the processor and the RAM.
+
+- **Integrated graphics** (Intel UHD / Iris / Arc Graphics, AMD « Radeon Graphics », Radeon 780M…) is **ignored** when choosing models: Ollama does not use it (or badly), and its « memory » is only a share of the RAM. Such a PC is treated like a PC without a card, and `lutin doctor` says so. A card you declare yourself (`LUTIN_GPU`) is always believed.
+- The budget is then **60 % of the RAM**: about 19 GB on a PC with 32 GB. Models of that size fit, but they run on the processor: expect a few words per second with a model of 7 to 14 billion parameters, faster with a « mixture of experts » model (few active parameters per word). Those are orders of magnitude, **not measurements**: `lutin bench` measures your machine.
+- In Docker, the NVIDIA card needs `--gpus all` (see [DOCKER.md](DOCKER.md)); AMD and Intel graphics are not used in the containers. Without a card, nothing to add.
+
+## Not crushing the PC
+
+Settings > **Machine load** (and the safeguards just above it):
+
+| Setting | What it does |
+|---|---|
+| Profile | ready-made values: **Quiet** (half of the cores, model kept 2 minutes, context of 8,192 tokens at most), **Normal** (all automatic), **Maximum** (all the cores, model kept 30 minutes) |
+| CPU cores used | how many cores the model may use. Fewer cores = slower answers, but the rest of the computer stays responsive. Mostly useful when the model runs on the processor |
+| Keep the model in memory | minutes before the model is released after the last answer. `0` = released right away (the memory goes back to the PC, the next answer starts slower) |
+| Context window | the bigger, the more memory (and the slower the first words) |
+| Resource safeguards | before each request, Lutin checks free RAM, video memory and disk, and suspends the request with an explanation instead of crashing the PC |
+| « Free the VRAM » button (⋯ menu) | releases every model now, also from the RAM |
+
+Changing the cores makes the model reload once (a few seconds).
+
 ## The roles
 
 | Role | For | Ticked by default |

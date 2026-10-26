@@ -31,6 +31,7 @@
 | ⏱️ **It measures, it does not guess** | Built-in benchmark: speed, tool calls, code, French, instructions, **on your machine**. |
 | 📦 **Easy to install** | One command on Windows, one on Linux, or a Docker image **with Ollama inside**. No Python dependency. Running the installation again breaks nothing. |
 | 🔁 **Your Claude context, kept** | Take over a Claude Code repository (`CLAUDE.md`, `.claude/` skills, commands, agents): work in it or in a copy, nothing is lost when switching tools. [Details](docs/CLAUDE-PROJECTS.md). |
+| 📥 **Bring your old assistant** | `lutin reprendre`: take over conversations, memory, skills and settings of another assistant, one category at a time, nothing overwritten. [Details](docs/MIGRATION.md). |
 | 🌍 **English and French** | The whole application (page, messages, terminal) and the docs. Language: `lutin langue`, the page settings, or the system language. |
 
 ## Installation
@@ -73,6 +74,7 @@ The script installs the latest published version in a private environment, adds 
 | `lutin sauvegarde` · `lutin restaurer` | export / put back your data in a `.zip` |
 | `lutin pin` · `lutin appareils` · `lutin securite` | access from other devices |
 | `lutin importer <folder>` | take over a Claude project (`CLAUDE.md`, `.claude/`): `--ici` (in it) or `--copie` (in a copy) |
+| `lutin reprendre <folder or .zip>` | take over another assistant's data: `--conversations --memoire --skills --reglages` |
 | `lutin langue [fr\|en\|auto]` | language of the application |
 | `lutin doctor` | diagnostics to paste into a problem report (no personal content) |
 
@@ -92,7 +94,7 @@ The catalogue's ratings are editorial estimates, not measurements: the benchmark
 | 2. Local network | your paired devices | 6-digit PIN code (10 min, 5 attempts), revocable session per device |
 | 3. Proxy | what your proxy lets through | the identity is only trusted if it comes from the declared proxy address |
 
-At levels 2 and 3, **automatic approvals are turned off**. In strict offline mode, only this machine and Ollama are reached. Details, warnings and proxy examples: [docs/SECURITY.md](docs/SECURITY.md).
+At levels 2 and 3, **automatic approvals are turned off**. In strict offline mode, only this machine and Ollama are reached. Details, warnings and proxy examples: [docs/SECURITY.md](docs/SECURITY.md). What Lutin may contact on the network, and how to turn it off: [docs/PRIVACY.md](docs/PRIVACY.md). Installer signing: [docs/CODE-SIGNING.md](docs/CODE-SIGNING.md).
 
 ## Where are my files?
 

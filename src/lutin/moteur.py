@@ -43,6 +43,7 @@ from . import catalogue as _catalogue
 from . import config as _config
 from . import horsligne as _hl
 from . import projet_claude as _pc
+from . import reprise as _rep
 from . import i18n as _i18n
 from . import sauvegarde as _sauv
 from . import securite as _sec
@@ -77,8 +78,10 @@ MODELES = [{"id": m["id"], "nom": m["nom"], "phrase": m["phrase"], "go": m["go"]
 REGLAGES_DEFAUT = {"modele": os.environ.get("LUTIN_MODELE") or "qwen3:8b", "avance": False, "num_ctx": 24576, "temperature": 0.6, "reflexion": False, "auto_ecriture": False, "auto_commandes": False, "mode": "technique", "num_predict": 0, "tours_max": 14, "web": True,
                     "top_p": None, "top_k": None, "min_p": None, "repeat_penalty": None,          # None = valeur conseillée pour la famille du modèle (voir profil_echantillonnage)
                     "garde_ressources": True, "seuil_ram_go": 3.0, "seuil_disque_go": 10.0, "plafond_donnees_go": 2.0, "limite_ram_commande_go": 0.0,
-                    "liberer_si_comfy": True, "rappels_auto": "scenario"}          # rappels_auto : « scenario » (mode scénariste seulement), « toujours » ou « jamais »
+                    "liberer_si_comfy": True, "rappels_auto": "scenario",
+                    "num_thread": None, "garde_min": None}          # charge de la machine : cœurs du processeur utilisés et minutes de garde du modèle en mémoire (None = automatique)          # rappels_auto : « scenario » (mode scénariste seulement), « toujours » ou « jamais »
 CHOIX_RAPPELS = ("scenario", "toujours", "jamais")
+BORNES_CHARGE = {"num_thread": (1, 256), "garde_min": (0, 240)}
 BORNES_RESSOURCES = {"seuil_ram_go": (0.5, 64.0), "seuil_disque_go": (1.0, 2000.0), "plafond_donnees_go": (0.2, 500.0), "limite_ram_commande_go": (0.0, 256.0)}
 
 
@@ -93,6 +96,12 @@ def nettoyer_ressources(r):
             r[cle] = max(bas, min(haut, float(r.get(cle, REGLAGES_DEFAUT[cle]))))
         except (TypeError, ValueError):
             r[cle] = REGLAGES_DEFAUT[cle]
+    for cle, (bas, haut) in BORNES_CHARGE.items():          # entiers, ou None = automatique
+        v = r.get(cle)
+        try:
+            r[cle] = None if v in (None, "") else int(max(bas, min(haut, int(float(v)))))
+        except (TypeError, ValueError):
+            r[cle] = None
     return r
 BORNES_ECHANTILLONNAGE = {"top_p": (0.0, 1.0), "top_k": (0, 200), "min_p": (0.0, 1.0), "repeat_penalty": (0.8, 2.0)}
 
@@ -123,6 +132,15 @@ def profil_echantillonnage(modele, reflechit):
     if "gemma" in m:
         return {"top_p": 0.95, "top_k": 64, "min_p": 0.0}
     return {}
+
+
+def options_modele(r, temperature, **extra):
+    """Les options Ollama communes à TOUTES les requêtes au modèle : un seul jeu de valeurs, sinon Ollama recharge le modèle entre deux requêtes (lent, et risque de manquer de mémoire)."""
+    options = {"num_ctx": r["num_ctx"], "temperature": temperature}
+    if r.get("num_thread"):
+        options["num_thread"] = r["num_thread"]
+    options.update(extra)
+    return options
 
 
 def options_echantillonnage(r, reflechit):
@@ -2037,7 +2055,7 @@ def lancer_autotest(profond=False):
         return "tout est en ordre" if not mauvais else "à surveiller : " + "; ".join("{} ({})".format(i["nom"], i["valeur"]) for i in mauvais)
 
     def generation():
-        corps = {"model": r["modele"], "messages": [{"role": "user", "content": "Réponds uniquement par le mot OK."}], "stream": False, "think": False, "options": {"num_ctx": r["num_ctx"], "num_predict": 12, "temperature": 0}}
+        corps = {"model": r["modele"], "messages": [{"role": "user", "content": "Réponds uniquement par le mot OK."}], "stream": False, "think": False, "options": options_modele(r, 0, num_predict=12)}
         rep = ollama_json("/api/chat", corps, 240)
         if not (rep.get("message", {}).get("content") or "").strip():
             raise RuntimeError("Le modèle n'a rien répondu.")
@@ -2230,7 +2248,7 @@ def git_message(fichiers, r=None):
                 "Format : une première ligne de 72 caractères au plus (ce qui change, en français, au présent ou à l'infinitif), une ligne vide, puis 2 à 6 puces « - » avec les changements importants.\n"
                 "Pas de guillemets autour, pas de blabla : réponds UNIQUEMENT avec le message.\n"
                 "Style des commits récents du projet :\n" + (journal.strip() or "(aucun)") + "\n\nCHANGEMENTS :\n" + diff)
-    corps = {"model": r["modele"], "messages": [{"role": "user", "content": consigne}], "stream": False, "think": False, "options": {"num_ctx": r["num_ctx"], "temperature": 0.3}}
+    corps = {"model": r["modele"], "messages": [{"role": "user", "content": consigne}], "stream": False, "think": False, "options": options_modele(r, 0.3)}
     reponse = ollama_json("/api/chat", corps, 300)
     texte = (reponse.get("message", {}).get("content") or "").strip()
     texte = re.sub(r"^```\w*\n|\n```$", "", texte).strip().strip('"')
@@ -2444,7 +2462,10 @@ def capacites(modele):
 def duree_garde():
     """Combien de temps Ollama garde le modèle en mémoire après une réponse. Avec « Décharger le modèle quand ComfyUI génère », on peut le garder longtemps (pas de rechargement
     de 30 s à 2 min entre deux questions) : la surveillance le décharge d'elle-même dès que ComfyUI a besoin de la carte. Sinon, le réglage d'Ollama (5 minutes)."""
-    return "30m" if reglages().get("liberer_si_comfy", True) else None
+    r = reglages()
+    if r.get("garde_min") is not None:
+        return "{}m".format(r["garde_min"])          # réglé à la main : 0 = déchargé dès la fin de la réponse
+    return "30m" if r.get("liberer_si_comfy", True) else None
 
 
 def avec_garde(corps):
@@ -2775,7 +2796,7 @@ def compacter(conv, r, emit, forcer=False):
     texte = texte[-int(r["num_ctx"] * 1.8):]          # le texte à résumer doit lui aussi tenir dans le contexte
     emit({"type": "info", "texte": "Conversation longue : résumé du début..."})
     try:
-        rep = ollama_json("/api/chat", {"model": r["modele"], "stream": False, "think": False, "options": {"num_ctx": r["num_ctx"], "temperature": 0.2},
+        rep = ollama_json("/api/chat", {"model": r["modele"], "stream": False, "think": False, "options": options_modele(r, 0.2),
                                         "messages": [{"role": "system", "content": "Tu résumes une conversation pour pouvoir la continuer plus tard. Garde : les décisions, les fichiers modifiés, ce qui reste à faire, les préférences de l'utilisateur. Sois dense, en français."},
                                                      {"role": "user", "content": (conv.get("resume", "") + "\n\n" if conv.get("resume") else "") + texte}]}, 600)
         nouveau_resume = (rep.get("message", {}).get("content") or "").strip()[:6000]
@@ -2898,7 +2919,7 @@ def boucle_agent(conv, r, emit, ctx, stop):
         if dernier_tour:             # plus d'outils : le modèle doit répondre avec ce qu'il a trouvé
             msgs.append({"role": "user", "content": "Tu as assez d'informations. Réponds maintenant à ma demande avec ce que tu as vu, sans appeler d'outil. Si quelque chose manque, dis-le."})
         msgs_base = msgs
-        options = {"num_ctx": r["num_ctx"], "temperature": r["temperature"]}
+        options = options_modele(r, r["temperature"])
         if r.get("num_predict", 0) > 0:
             options["num_predict"] = r["num_predict"]
         caps = capacites(r["modele"])
@@ -3233,6 +3254,22 @@ def importer_projet_claude(chemin, mode, vers="", nom=""):
     return {"mode": mode, "chemin": str(cible), "resume": _pc.resume(d), "actif": choisi, "travaux": etat}
 
 
+def reprise_detecter(chemin, dossier_skills=""):
+    """Ce qu'on peut reprendre dans le dossier (ou l'archive .zip) d'un autre assistant : des nombres, rien n'est écrit."""
+    with _rep.ouvrir(chemin, dossier_skills or None) as d:
+        return dict(_rep.decrire(d), dossier_skills=d["dossier_skills"])
+
+
+def reprise_importer(chemin, choix, dossier_skills="", ecraser=False):
+    """Reprend les catégories choisies (conversations, memoire, skills, reglages) ; l'état actuel est gardé dans un zip avant."""
+    c = chemin_config()
+    dossiers = {"config": c.parent if c else None, "donnees": DONNEES, "memoire": MEMOIRE}
+    with _rep.ouvrir(chemin, dossier_skills or None) as d:
+        rapport = _rep.importer(d, dossiers, choix, racine_travail=RACINE, ecraser=ecraser, workspaces=[t["id"] for t in _trav.liste(config_lue())])
+    rapport["resume"] = _rep.resume(rapport)
+    return rapport
+
+
 def retirer_travail(ident):
     cfg = config_lue()
     t = _trav.par_id(cfg, ident)
@@ -3417,7 +3454,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
             r = reglages()
             return self._envoyer(200, {"version": VERSION, "ollama": o["actif"], "ollama_installe": bool(chemin_ollama()), "installes": o["installes"], "modeles": modeles_connus(o["installes"], o.get("tailles")), "modeles_masques": len(lire_registre_modeles()["masques"]), "actives": list(TOURS_ACTIFS),
                                        "pulls": PULLS, "reglages": r, "conversations": conv_liste(), "racine": str(RACINE),
-                                       "outil": bool(self._outil_vivant()), "hors_ligne": _hl.actif(), "niveau": SECURITE.niveau, "langue": _i18n.langue(), "langue_reglage": _i18n.langue_configuree(), "nouvelle_version": nouvelle_version_lutin(), "travaux": travaux_etat(), "configurateur": self._configurateur(),
+                                       "outil": bool(self._outil_vivant()), "hors_ligne": _hl.actif(), "niveau": SECURITE.niveau, "langue": _i18n.langue(), "langue_reglage": _i18n.langue_configuree(), "cpus": os.cpu_count() or 1, "nouvelle_version": nouvelle_version_lutin(), "travaux": travaux_etat(), "configurateur": self._configurateur(),
                                        "bench": {"en_cours": BENCH["en_cours"], "etape": BENCH["etape"], "erreur": BENCH["erreur"], "mesures": _bench.lire(chemin_bench())}, "attentes": [{"id": a.id, "titre": a.titre, "detail": a.detail, "diff": a.diff} for a in Attente.EN_COURS.values()]})
         if chemin == "/api/projet-claude":
             d = _pc.detecter(RACINE)
@@ -3561,6 +3598,12 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 if self.path == "/api/travaux-ajouter":
                     return self._envoyer(200, ajouter_travail(str(donnees.get("chemin", "")), str(donnees.get("nom", ""))))
                 return self._envoyer(200, retirer_travail(str(donnees.get("id", ""))))
+            if self.path in ("/api/reprise-detecter", "/api/reprise"):
+                if not self._configurateur():
+                    return self._envoyer(403, {"erreur": _t("La reprise des données d'un autre assistant se fait depuis cette machine (niveau « cette machine seulement ») ou avec la commande lutin reprendre.")})
+                if self.path == "/api/reprise-detecter":
+                    return self._envoyer(200, reprise_detecter(str(donnees.get("chemin", "")), str(donnees.get("dossier_skills", ""))))
+                return self._envoyer(200, reprise_importer(str(donnees.get("chemin", "")), [str(c) for c in (donnees.get("choix") or [])], str(donnees.get("dossier_skills", "")), bool(donnees.get("ecraser"))))
             if self.path == "/api/importer-claude":
                 if not self._configurateur():
                     return self._envoyer(403, {"erreur": _t("Un projet Claude s'importe depuis cette machine (niveau « cette machine seulement ») ou avec la commande lutin importer.")})
@@ -3758,7 +3801,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
             "model": r["modele"],
             "messages": [{"role": "user", "content": consigne}],
             "stream": False,
-            "options": {"num_ctx": r["num_ctx"], "temperature": 0.3},          # même num_ctx que le chat : un autre ferait recharger le modèle (lent, et risque de manquer de mémoire vidéo)
+            "options": options_modele(r, 0.3),          # mêmes options que le chat : un autre ferait recharger le modèle (lent, et risque de manquer de mémoire vidéo)
         }
         try:
             req = urllib.request.Request(OLLAMA + "/api/chat", data=json.dumps(avec_garde(corps)).encode("utf-8"), headers={"Content-Type": "application/json"})
@@ -3795,7 +3838,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
             "model": r["modele"],
             "messages": [{"role": "user", "content": consigne}],
             "stream": False,
-            "options": {"num_ctx": r["num_ctx"], "temperature": 0.4},          # même num_ctx que le chat (voir _resumer)
+            "options": options_modele(r, 0.4),          # mêmes options que le chat (voir _resumer)
         }
         try:
             req = urllib.request.Request(OLLAMA + "/api/chat", data=json.dumps(avec_garde(corps)).encode("utf-8"), headers={"Content-Type": "application/json"})

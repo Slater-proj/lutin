@@ -350,6 +350,8 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
     <h2>Projet Claude <span class="aide">(CLAUDE.md et dossier .claude/ : lus par l'assistant comme consignes du projet ; il peut les modifier avec ton accord)</span></h2>
     <div id="infoClaude" class="aide" style="margin:6px 0"></div>
     <div style="margin:6px 0"><button id="bImporterClaude">Importer un projet Claude…</button> <span class="aide" id="mClaude"></span></div>
+    <h2>Reprendre un autre assistant <span class="aide">(conversations, mémoire, skills, réglages d'un ancien assistant : tu choisis ce qui vient ; rien n'est écrasé)</span></h2>
+    <div style="margin:6px 0"><button id="bReprise">Reprendre les données d'un autre assistant…</button> <span class="aide" id="mReprise"></span></div>
     <h2>Skills <span class="aide">(les fiches du projet, que tu construis : l'assistant en voit la liste au début de chaque conversation et lit le contenu à la demande)</span></h2>
     <div id="listeSkills" class="aide" style="margin:6px 0">Aucun skill.</div>
     <textarea id="tSkill" style="min-height:240px" placeholder="Choisis un skill ci-dessus, ou crée-en un nouveau…"></textarea>
@@ -384,6 +386,13 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
       <label>Disque libre minimal (Go) <input id="iSeuilDisque" type="number" step="1" min="1" max="2000" style="width:80px"></label>
       <label>Plafond du dossier de données (Go) <input id="iPlafond" type="number" step="0.5" min="0.2" max="500" style="width:80px"></label>
       <label title="Windows seulement. 0 = pas de limite. Une commande qui dépasse cette mémoire est arrêtée au lieu de saturer le PC. Attention : à laisser à 0 si l'assistant lance des programmes lourds (ComfyUI, tests d'images)."><span>Mémoire max par commande (Go, 0 = illimitée)</span> <input id="iLimiteCmd" type="number" step="1" min="0" max="256" style="width:80px"></label>
+    </div>
+    <h2>Charge de la machine</h2>
+    <div class="aide">Pour que Lutin ne ralentisse pas le reste de l'ordinateur pendant que tu travailles. Laisse vide = automatique. Le modèle se recharge une fois quand tu changes les cœurs.</div>
+    <div class="carte" style="gap:14px">
+      <label title="Applique des valeurs toutes faites : Discret = la moitié des cœurs, modèle gardé 2 minutes, contexte réduit ; Normal = tout en automatique ; Maximum = tous les cœurs, modèle gardé 30 minutes.">Profil <select id="selProfil"><option value="">Choisir…</option><option value="discret">Discret</option><option value="normal">Normal</option><option value="max">Maximum</option></select></label>
+      <label title="Nombre de cœurs du processeur que le modèle peut utiliser. Moins de cœurs = plus lent, mais le reste de l'ordinateur reste réactif. Surtout utile quand le modèle tourne sur le processeur.">Cœurs du processeur utilisés <input id="iThreads" type="number" step="1" min="1" max="256" placeholder="auto" style="width:90px"> <span class="aide" id="vCpus"></span></label>
+      <label title="Combien de minutes le modèle reste en mémoire après la dernière réponse. 0 = libéré tout de suite (la mémoire revient au PC, mais la réponse suivante est plus lente à démarrer). Vide = automatique.">Garder le modèle en mémoire (minutes) <input id="iGarde" type="number" step="1" min="0" max="240" placeholder="auto" style="width:90px"></label>
     </div>
     <h2>Échantillonnage avancé</h2>
     <div class="aide">Laisse vide = valeurs conseillées pour la famille du modèle (Qwen, Gemma), appliquées automatiquement : moins de boucles et de dérives qu'avec la température seule. Ne change que si tu sais pourquoi.</div>
@@ -861,9 +870,10 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
     ETAT.installes.forEach(id => { const m = ETAT.modeles.find(x => x.id === id), o = el('option', '', m ? m.nom : id); o.value = id; s.appendChild(o); });
     if (!ETAT.installes.length) { const o = el('option', '', ETAT.ollama ? T('Aucun modèle installé (onglet Modèles)') : T('Ollama arrêté')); o.value = ETAT.reglages.modele; s.appendChild(o); }
     s.value = ETAT.installes.includes(v) ? v : (ETAT.installes.includes(ETAT.reglages.modele) ? ETAT.reglages.modele : (ETAT.installes[0] || ETAT.reglages.modele));
-    if (!$('selMode').dataset.init) { $('selMode').value = ETAT.reglages.mode; $('cReflexion').checked = ETAT.reglages.reflexion; $('cAuto').checked = ETAT.reglages.auto_ecriture; $('cAvance').checked = !!ETAT.reglages.avance; $('cAutoCmd').checked = ETAT.reglages.auto_commandes; $('cWeb').checked = ETAT.reglages.web !== false; $('rCtx').value = ETAT.reglages.num_ctx; $('rTemp').value = ETAT.reglages.temperature; $('rTours').value = ETAT.reglages.tours_max; $('iTopP').value = ETAT.reglages.top_p ?? ''; $('iTopK').value = ETAT.reglages.top_k ?? ''; $('iMinP').value = ETAT.reglages.min_p ?? ''; $('iRep').value = ETAT.reglages.repeat_penalty ?? ''; $('cGarde').checked = ETAT.reglages.garde_ressources !== false; $('cComfy').checked = ETAT.reglages.liberer_si_comfy !== false; $('sRappels').value = ETAT.reglages.rappels_auto || 'scenario'; $('iSeuilRam').value = ETAT.reglages.seuil_ram_go; $('iSeuilDisque').value = ETAT.reglages.seuil_disque_go; $('iPlafond').value = ETAT.reglages.plafond_donnees_go; $('iLimiteCmd').value = ETAT.reglages.limite_ram_commande_go; $('selMode').dataset.init = '1'; }
+    if (!$('selMode').dataset.init) { $('selMode').value = ETAT.reglages.mode; $('cReflexion').checked = ETAT.reglages.reflexion; $('cAuto').checked = ETAT.reglages.auto_ecriture; $('cAvance').checked = !!ETAT.reglages.avance; $('cAutoCmd').checked = ETAT.reglages.auto_commandes; $('cWeb').checked = ETAT.reglages.web !== false; $('rCtx').value = ETAT.reglages.num_ctx; $('rTemp').value = ETAT.reglages.temperature; $('rTours').value = ETAT.reglages.tours_max; $('iTopP').value = ETAT.reglages.top_p ?? ''; $('iTopK').value = ETAT.reglages.top_k ?? ''; $('iMinP').value = ETAT.reglages.min_p ?? ''; $('iRep').value = ETAT.reglages.repeat_penalty ?? ''; $('cGarde').checked = ETAT.reglages.garde_ressources !== false; $('cComfy').checked = ETAT.reglages.liberer_si_comfy !== false; $('sRappels').value = ETAT.reglages.rappels_auto || 'scenario'; $('iSeuilRam').value = ETAT.reglages.seuil_ram_go; $('iSeuilDisque').value = ETAT.reglages.seuil_disque_go; $('iPlafond').value = ETAT.reglages.plafond_donnees_go; $('iLimiteCmd').value = ETAT.reglages.limite_ram_commande_go; $('iThreads').value = ETAT.reglages.num_thread ?? ''; $('iGarde').value = ETAT.reglages.garde_min ?? ''; $('selMode').dataset.init = '1'; }
     if (document.activeElement !== $('selLangue')) $('selLangue').value = ETAT.langue_reglage || 'auto';
     afficherVersion();
+    $('vCpus').textContent = ETAT.cpus ? T('(cette machine : {} cœurs)').replace('{}', ETAT.cpus) : '';
     $('cHorsLigne').checked = !!ETAT.hors_ligne; $('cWeb').disabled = !!ETAT.hors_ligne;
     const tr = ETAT.travaux || { liste: [], actif: '' }, st = $('selTravail'), sigT = JSON.stringify(tr);
     if (st.dataset.sig !== sigT) { st.dataset.sig = sigT; st.textContent = ''; tr.liste.forEach(t => { const o = el('option', '', t.nom); o.value = t.id; o.title = t.chemin; st.appendChild(o); }); st.value = tr.actif; }
@@ -892,7 +902,7 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
     ETAT.attentes.forEach(a => { const s = '.accord[data-id="' + a.id + '"]'; if (!fil().querySelector(s) && !(FLUX && FLUX.sauve.querySelector(s))) fil().appendChild(carteAccord(a)); });
   };
   const nombreOuNull = id => { const v = $(id).value.trim().replace(',', '.'); return v === '' || isNaN(+v) ? null : +v; };
-  const sauverReglages = async () => { try { await api('/api/reglages', { modele: $('selModele').value, mode: $('selMode').value, reflexion: $('cReflexion').checked, auto_ecriture: $('cAuto').checked, auto_commandes: $('cAutoCmd').checked, avance: $('cAvance').checked, web: $('cWeb').checked, num_ctx: +$('rCtx').value, temperature: +$('rTemp').value, tours_max: +$('rTours').value, top_p: nombreOuNull('iTopP'), top_k: nombreOuNull('iTopK'), min_p: nombreOuNull('iMinP'), repeat_penalty: nombreOuNull('iRep'), garde_ressources: $('cGarde').checked, liberer_si_comfy: $('cComfy').checked, rappels_auto: $('sRappels').value, seuil_ram_go: nombreOuNull('iSeuilRam') ?? 3, seuil_disque_go: nombreOuNull('iSeuilDisque') ?? 10, plafond_donnees_go: nombreOuNull('iPlafond') ?? 2, limite_ram_commande_go: nombreOuNull('iLimiteCmd') ?? 0 }); } catch (e) { fil().appendChild(el('div', 'erreur', e.message)); } };
+  const sauverReglages = async () => { try { await api('/api/reglages', { modele: $('selModele').value, mode: $('selMode').value, reflexion: $('cReflexion').checked, auto_ecriture: $('cAuto').checked, auto_commandes: $('cAutoCmd').checked, avance: $('cAvance').checked, web: $('cWeb').checked, num_ctx: +$('rCtx').value, temperature: +$('rTemp').value, tours_max: +$('rTours').value, top_p: nombreOuNull('iTopP'), top_k: nombreOuNull('iTopK'), min_p: nombreOuNull('iMinP'), repeat_penalty: nombreOuNull('iRep'), garde_ressources: $('cGarde').checked, liberer_si_comfy: $('cComfy').checked, rappels_auto: $('sRappels').value, seuil_ram_go: nombreOuNull('iSeuilRam') ?? 3, seuil_disque_go: nombreOuNull('iSeuilDisque') ?? 10, plafond_donnees_go: nombreOuNull('iPlafond') ?? 2, limite_ram_commande_go: nombreOuNull('iLimiteCmd') ?? 0, num_thread: nombreOuNull('iThreads'), garde_min: nombreOuNull('iGarde') }); } catch (e) { fil().appendChild(el('div', 'erreur', e.message)); } };
   document.querySelectorAll('.onglets button').forEach(b => b.addEventListener('click', async () => {
     document.querySelectorAll('.onglets button').forEach(x => x.setAttribute('aria-selected', x === b)); document.querySelectorAll('.page').forEach(p => p.classList.toggle('vue', p.id === 'p-' + b.dataset.p));
     if (b.dataset.p === 'memoire') { const m = await api('/api/memoire'); $('tContexte').value = m['CONTEXTE.md']; $('tMemoire').value = m['MEMOIRE.md']; chargerSkills(); chargerClaude(); }
@@ -1098,7 +1108,17 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
   });
   $('bDemarrer').addEventListener('click', async () => { $('bDemarrer').disabled = true; try { await api('/api/demarrer-ollama', {}); } catch (e) { fil().appendChild(el('div', 'erreur', e.message)); } $('bDemarrer').disabled = false; rafraichir(); });
   $('bVram').addEventListener('click', async () => { $('bVram').disabled = true; $('bVram').textContent = '⏳…'; try { const r = await api('/api/liberer-vram', {}); fil().appendChild(el('div', 'aide', r.message)); } catch (e) { fil().appendChild(el('div', 'erreur', e.message)); } $('bVram').disabled = false; $('bVram').textContent = T('🧹 Libérer la VRAM'); rafraichir(); });
-  ['selModele', 'selMode', 'cReflexion', 'cAvance', 'cAuto', 'cAutoCmd', 'cWeb', 'iTopP', 'iTopK', 'iMinP', 'iRep', 'cGarde', 'cComfy', 'sRappels', 'iSeuilRam', 'iSeuilDisque', 'iPlafond', 'iLimiteCmd'].forEach(id => $(id).addEventListener('change', sauverReglages));
+  ['selModele', 'selMode', 'cReflexion', 'cAvance', 'cAuto', 'cAutoCmd', 'cWeb', 'iTopP', 'iTopK', 'iMinP', 'iRep', 'cGarde', 'cComfy', 'sRappels', 'iSeuilRam', 'iSeuilDisque', 'iPlafond', 'iLimiteCmd', 'iThreads', 'iGarde'].forEach(id => $(id).addEventListener('change', sauverReglages));
+  // Profils de charge : des valeurs toutes faites pour les deux réglages (et le contexte pour « Discret »), calculées sur le nombre de cœurs de CETTE machine.
+  $('selProfil').addEventListener('change', async () => {
+    const p = $('selProfil').value, cpus = ETAT.cpus || 4;
+    if (!p) return;
+    if (p === 'discret') { $('iThreads').value = Math.max(1, Math.floor(cpus / 2)); $('iGarde').value = 2; if (+$('rCtx').value > 8192) { $('rCtx').value = 8192; $('vCtx').textContent = 8192; } }
+    else if (p === 'max') { $('iThreads').value = cpus; $('iGarde').value = 30; }
+    else { $('iThreads').value = ''; $('iGarde').value = ''; }
+    $('selProfil').value = '';
+    await sauverReglages();
+  });
   ['rCtx', 'rTemp', 'rTours'].forEach(id => $(id).addEventListener('input', () => { $('vCtx').textContent = $('rCtx').value; $('vTemp').textContent = $('rTemp').value; $('vTours').textContent = $('rTours').value; }));
   ['rCtx', 'rTemp', 'rTours'].forEach(id => $(id).addEventListener('change', async () => { await sauverReglages(); if (CONV) majJauge(CONV.id); }));
   // --- fenêtre : revue des changements, git ---
@@ -1310,6 +1330,29 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
     const copie = el('button', '', T('Faire une copie')); copie.addEventListener('click', () => lance('copie'));
     c.appendChild(dedans); c.appendChild(document.createTextNode(' ')); c.appendChild(copie);
   };
+  // Reprendre les données d'un autre assistant : on regarde ce qu'il y a (rien n'est écrit), tu coches, puis on reprend (l'état actuel est gardé dans un zip avant).
+  const reprendre = async () => {
+    const chemin = prompt(T('Dossier de l\'ancien assistant (celui qui contient donnees/ et memoire/), ou archive .zip :')); if (!chemin) return;
+    let trouve;
+    try { trouve = await api('/api/reprise-detecter', { chemin }); } catch (e) { $('mReprise').textContent = e.message; return; }
+    const c = ouvrirModal(T('Reprendre un autre assistant'));
+    c.appendChild(el('p', '', chemin));
+    const lignes = [['conversations', T('Conversations : {}').replace('{}', trouve.conversations), trouve.conversations > 0], ['memoire', T('Mémoire : {}').replace('{}', trouve.memoire.join(', ') || '-'), trouve.memoire.length > 0],
+                    ['skills', T('Skills : {}').replace('{}', trouve.skills) + (trouve.dossier_skills ? ' (' + trouve.dossier_skills + ')' : ''), trouve.skills > 0], ['reglages', T('Réglages : {}').replace('{}', trouve.reglages ? T('oui') : T('non')), trouve.reglages]];
+    const cases = {};
+    lignes.forEach(([cle, texte, present]) => { const l = el('label'), i = document.createElement('input'); i.type = 'checkbox'; i.checked = present; i.disabled = !present; cases[cle] = i; l.appendChild(i); l.appendChild(document.createTextNode(' ' + texte)); l.style.display = 'block'; c.appendChild(l); });
+    const ecr = document.createElement('input'); ecr.type = 'checkbox'; const le = el('label'); le.style.display = 'block'; le.appendChild(ecr); le.appendChild(document.createTextNode(' ' + T('Remplacer ce qui existe déjà (sinon rien n\'est écrasé)'))); c.appendChild(le);
+    c.appendChild(el('p', 'aide', T('Le modèle et les accords automatiques ne sont jamais repris. L\'état actuel de Lutin est gardé dans un zip avant l\'import.')));
+    const go = el('button', 'principal', T('Reprendre')); c.appendChild(go);
+    go.addEventListener('click', async () => {
+      const choix = Object.keys(cases).filter(k => cases[k].checked); if (!choix.length) return;
+      go.disabled = true;
+      try {
+        const r = await api('/api/reprise', { chemin, choix, ecraser: ecr.checked });
+        $('modal').hidden = true; $('mReprise').textContent = r.resume.join(' '); await rafraichir(); chargerSkills();
+      } catch (e) { go.disabled = false; c.appendChild(el('p', 'erreur', e.message)); }
+    });
+  };
   const chargerSkills = async () => {
     try {
       const r = await api('/api/skills');
@@ -1370,6 +1413,7 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
     try { await api('/api/langue', { valeur: $('selLangue').value }); location.reload(); } catch (e) { alert(e.message); }
   });
   $('bImporterClaude').addEventListener('click', importerClaude);
+  $('bReprise').addEventListener('click', reprendre);
   $('bMaj').addEventListener('click', () => verifierModeles('maj'));
   $('bNouveaux').addEventListener('click', () => verifierModeles('nouveaux'));
   // Liens directs : /#modeles, /#memoire, /#conv=<id> (utile pour un signet ou une capture d'écran)

@@ -6,6 +6,7 @@ enregistrées de vraies machines, sans dépendre du PC qui fait tourner les test
 import json
 import os
 import platform
+import re
 import shutil
 import subprocess
 from dataclasses import asdict, dataclass, field
@@ -23,6 +24,15 @@ class Gpu:
     vram_go: float            # mémoire de la carte (mémoire unifiée pour Apple)
     libre_go: float = 0.0     # 0 = inconnu
     source: str = ""          # d'où vient le chiffre (utile pour comprendre une erreur de détection)
+
+
+# Cartes graphiques intégrées au processeur : Ollama ne s'en sert pas (ou mal), et leur « mémoire » n'est qu'une part de la RAM. On les reconnaît à leur nom et on ne s'en sert pas pour choisir
+# les modèles : une machine avec seulement une carte intégrée se choisit comme une machine sans carte (la RAM compte). Une carte déclarée à la main (LUTIN_GPU) est toujours crue.
+INTEGREE = re.compile(r"\b(UHD|Iris|HD Graphics|Intel\(R\) Graphics|Arc\(TM\) Graphics|Arc Graphics|Radeon\(TM\) Graphics|Radeon Graphics|Radeon\(TM\) \d{3}M|Radeon \d{3}M|Vega \d+ Graphics|Vega Graphics)", re.I)
+
+
+def est_integree(g):
+    return g.fabricant in ("intel", "amd", "inconnu") and not g.source.startswith("déclarée") and bool(INTEGREE.search(g.nom))
 
 
 @dataclass
@@ -45,9 +55,13 @@ class Profil:
 
     def gpu_principal(self):
         """La carte qu'Ollama utilisera le plus probablement : la plus grosse mémoire, NVIDIA d'abord à mémoire égale."""
-        if not self.gpus:
+        utilisables = [g for g in self.gpus if not est_integree(g)]
+        if not utilisables:
             return None
-        return max(self.gpus, key=lambda g: (g.vram_go, g.fabricant == "nvidia"))
+        return max(utilisables, key=lambda g: (g.vram_go, g.fabricant == "nvidia"))
+
+    def gpus_integrees(self):
+        return [g for g in self.gpus if est_integree(g)]
 
     def budget_go(self):
         """Mémoire qu'on accepte de remplir avec un modèle. 85 % de la carte (le bureau en garde un peu) ; sur Mac la mémoire est partagée ; sans carte, la RAM (60 %)."""
@@ -76,7 +90,7 @@ class Profil:
 
     def resume(self):
         g = self.gpu_principal()
-        carte = _t("{} ({:g} Go)").format(g.nom, g.vram_go) if g else _t("aucune carte graphique utilisable")
+        carte = _t("{} ({:g} Go)").format(g.nom, g.vram_go) if g else (_t("carte intégrée au processeur, non utilisée") if self.gpus_integrees() else _t("aucune carte graphique utilisable"))
         return _t("{} · {} Go de RAM · {}").format(self.cpu or _t("processeur inconnu"), round(self.ram_go), carte)
 
     def en_dict(self):

@@ -12,6 +12,29 @@
 
 Le résultat est affiché par `lutin modeles` et à l'installation guidée. Tu peux toujours choisir autre chose dans l'onglet Modèles.
 
+## Sans carte graphique, ou avec une carte intégrée seulement
+
+Une carte graphique n'est **pas obligatoire**, dans Docker comme ailleurs : sans elle, Ollama utilise le processeur et la RAM.
+
+- Une **carte intégrée** (Intel UHD / Iris / Arc Graphics, AMD « Radeon Graphics », Radeon 780M…) est **ignorée** pour choisir les modèles : Ollama ne s'en sert pas (ou mal), et sa « mémoire » n'est qu'une part de la RAM. Un tel PC est traité comme un PC sans carte, et `lutin doctor` le dit. Une carte que tu déclares toi-même (`LUTIN_GPU`) est toujours crue.
+- Le budget est alors de **60 % de la RAM** : environ 19 Go sur un PC de 32 Go. Des modèles de cette taille tiennent, mais ils tournent sur le processeur : compte quelques mots par seconde avec un modèle de 7 à 14 milliards de paramètres, plus vite avec un modèle « à experts » (peu de paramètres actifs par mot). Ce sont des ordres de grandeur, **pas des mesures** : `lutin bench` mesure ta machine.
+- Dans Docker, la carte NVIDIA demande `--gpus all` (voir [DOCKER.fr.md](DOCKER.fr.md)) ; les cartes AMD et Intel ne sont pas utilisées dans les conteneurs. Sans carte, rien à ajouter.
+
+## Ne pas écraser le PC
+
+Réglages > **Charge de la machine** (et les garde-fous juste au-dessus) :
+
+| Réglage | Ce qu'il fait |
+|---|---|
+| Profil | des valeurs toutes faites : **Discret** (la moitié des cœurs, modèle gardé 2 minutes, contexte de 8 192 jetons au plus), **Normal** (tout en automatique), **Maximum** (tous les cœurs, modèle gardé 30 minutes) |
+| Cœurs du processeur utilisés | combien de cœurs le modèle peut utiliser. Moins de cœurs = réponses plus lentes, mais le reste de l'ordinateur reste réactif. Surtout utile quand le modèle tourne sur le processeur |
+| Garder le modèle en mémoire | minutes avant que le modèle soit libéré après la dernière réponse. `0` = libéré tout de suite (la mémoire revient au PC, la réponse suivante démarre plus lentement) |
+| Fenêtre de contexte | plus elle est grande, plus il faut de mémoire (et plus les premiers mots sont lents) |
+| Garde-fous ressources | avant chaque demande, Lutin vérifie la RAM libre, la mémoire vidéo et le disque, et suspend la demande avec une explication plutôt que de planter le PC |
+| Bouton « Libérer la VRAM » (menu ⋯) | libère tous les modèles tout de suite, de la RAM aussi |
+
+Changer les cœurs fait recharger le modèle une fois (quelques secondes).
+
 ## Les rôles
 
 | Rôle | Pour | Coché au départ |

@@ -6,7 +6,7 @@ import sys
 import time
 from pathlib import Path
 
-from . import __version__, bench, catalogue, chat_terminal, client, config, horsligne, i18n, installation, machine, miseajour, ollama_client, projet_claude, sauvegarde, securite, selection, travaux
+from . import __version__, bench, catalogue, chat_terminal, client, config, horsligne, i18n, installation, machine, miseajour, ollama_client, projet_claude, reprise, sauvegarde, securite, selection, travaux
 from .i18n import t as _t
 
 AIDE_GENERALE = """Lutin : un assistant IA local qui choisit les modèles adaptés à ta machine.
@@ -22,6 +22,7 @@ AIDE_GENERALE = """Lutin : un assistant IA local qui choisit les modèles adapt�
   lutin hors-ligne    mode hors ligne strict (aucune connexion vers Internet)
   lutin travaux       dossiers de travail (lister, ajouter, retirer, actif)
   lutin importer      reprendre un projet Claude (CLAUDE.md, .claude/) : travailler dedans ou en copie
+  lutin reprendre     reprendre les données d'un autre assistant (conversations, mémoire, skills, réglages)
   lutin journal       ce que Lutin a modifié ou lancé, avec quel accord
   lutin bench         mesurer un modèle sur cette machine (vitesse, outils, code, français)
   lutin sauvegarde    exporter tes données dans un .zip ; lutin restaurer pour les remettre
@@ -104,6 +105,15 @@ def parseur():
     hl = sp.add_parser("hors-ligne", help=_t("mode hors ligne strict (aucune connexion vers Internet)"))
     hl.add_argument("etat", nargs="?", choices=("oui", "non", "etat"), default="etat")
     sp.add_parser("doctor", help=_t("diagnostic"))
+    rp = sp.add_parser("reprendre", help=_t("reprendre les données d'un autre assistant (conversations, mémoire, skills, réglages)"))
+    rp.add_argument("source", help=_t("le dossier de l'ancien assistant (avec donnees/ et memoire/), ou une archive .zip"))
+    rp.add_argument("--conversations", action="store_true", help=_t("reprendre les conversations"))
+    rp.add_argument("--memoire", action="store_true", help=_t("reprendre la mémoire (CONTEXTE.md, MEMOIRE.md)"))
+    rp.add_argument("--skills", action="store_true", help=_t("reprendre les skills (dans le dossier de travail actif)"))
+    rp.add_argument("--reglages", action="store_true", help=_t("reprendre les réglages (jamais le modèle ni les accords automatiques)"))
+    rp.add_argument("--tout", action="store_true", help=_t("tout reprendre"))
+    rp.add_argument("--dossier-skills", help=_t("où sont les skills de l'ancien assistant (défaut : skills/ à côté)"))
+    rp.add_argument("--ecraser", action="store_true", help=_t("remplacer ce qui existe déjà (sinon rien n'est écrasé)"))
     im = sp.add_parser("importer", help=_t("reprendre un projet Claude (CLAUDE.md, .claude/) comme dossier de travail"))
     im.add_argument("chemin", help=_t("le dossier du projet (celui qui contient CLAUDE.md ou .claude/)"))
     groupe = im.add_mutually_exclusive_group()
@@ -458,6 +468,38 @@ def commande_securite(args):
     return 0
 
 
+def commande_reprendre(args, entree=input):
+    """Reprend les données d'un autre assistant, au choix. Rien n'est écrasé sans --ecraser ; l'état actuel de Lutin est gardé dans un zip avant."""
+    d, cfg = contexte()
+    try:
+        with reprise.ouvrir(args.source, args.dossier_skills) as trouve:
+            nombres = reprise.decrire(trouve)
+            lignes = [("conversations", _t("Conversations : {}").format(nombres["conversations"])),
+                      ("memoire", _t("Mémoire : {}").format(", ".join(nombres["memoire"]) or "-")),
+                      ("skills", _t("Skills : {}").format(nombres["skills"]) + ((" (" + trouve["dossier_skills"] + ")") if trouve["dossier_skills"] else "")),
+                      ("reglages", _t("Réglages : {}").format(_t("oui") if nombres["reglages"] else _t("non")))]
+            print(_t("Trouvé dans {} :").format(trouve["origine"]))
+            for i, (_, texte) in enumerate(lignes, 1):
+                print("  {}. {}".format(i, texte))
+            choix = [k for k in reprise.CATEGORIES if getattr(args, k)] if not args.tout else list(reprise.CATEGORIES)
+            if not choix:
+                try:
+                    reponse = entree(_t("Que reprendre ? (numéros séparés par des virgules, Entrée = tout)") + " ").strip()
+                except EOFError:
+                    reponse = ""
+                nums = {int(x) for x in reponse.replace(" ", ",").split(",") if x.isdigit()}
+                choix = [lignes[i - 1][0] for i in sorted(nums) if 1 <= i <= len(lignes)] if nums else list(reprise.CATEGORIES)
+            actif = travaux.actif(cfg)
+            racine = actif["chemin"] if actif else cfg["emplacements"]["travail"]
+            rapport = reprise.importer(trouve, d, choix, racine_travail=racine, ecraser=args.ecraser, workspaces=[t["id"] for t in travaux.liste(cfg)])
+    except ValueError as e:
+        print("✘ " + str(e), file=sys.stderr)
+        return 2
+    for ligne in reprise.resume(rapport):
+        print(ligne)
+    return 0
+
+
 def commande_importer(args, entree=input):
     """Reprend un projet Claude : ce que Lutin y trouve, puis « travailler dedans » ou « en faire une copie » (copie par défaut : l'original reste intact)."""
     d, cfg = contexte()
@@ -562,7 +604,7 @@ def principal(argv=None):
     args = parseur().parse_args(argv)
     os.environ["LUTIN_CONFIG"] = str(Path(config.dossiers()["config"]) / "config.json")          # les gardes (mode hors ligne…) lisent la configuration de cette installation
     commandes = {"setup": commande_setup, "serve": commande_serve, "update": commande_update, "chat": commande_chat, "modeles": commande_modeles, "pin": commande_pin,
-                 "appareils": commande_appareils, "securite": commande_securite, "langue": commande_langue, "importer": commande_importer, "hors-ligne": commande_hors_ligne,
+                 "appareils": commande_appareils, "securite": commande_securite, "langue": commande_langue, "importer": commande_importer, "reprendre": commande_reprendre, "hors-ligne": commande_hors_ligne,
                  "travaux": commande_travaux, "journal": commande_journal, "bench": commande_bench, "sauvegarde": commande_sauvegarde, "restaurer": commande_restaurer, "doctor": commande_doctor}
     try:
         if args.commande is None:

@@ -31,6 +31,7 @@
 | ⏱️ **Il mesure, il ne devine pas** | Banc d'essai intégré : vitesse, appel d'outils, code, français, consignes, **sur ta machine**. |
 | 📦 **Simple à installer** | Une commande sous Windows, une sous Linux, ou une image Docker **avec Ollama dedans**. Aucune dépendance Python. Relancer l'installation ne casse rien. |
 | 🔁 **Ton contexte Claude, conservé** | Reprends un dépôt Claude Code (`CLAUDE.md`, skills, commandes, agents de `.claude/`) : travaille dedans ou dans une copie, rien ne se perd en changeant d'outil. [Détails](docs/CLAUDE-PROJECTS.fr.md). |
+| 📥 **Reprends ton ancien assistant** | `lutin reprendre` : conversations, mémoire, skills et réglages d'un autre assistant, une catégorie à la fois, rien d'écrasé. [Détails](docs/MIGRATION.fr.md). |
 | 🌍 **Français et anglais** | Toute l'application (page, messages, terminal) et les docs. Langue : `lutin langue`, les réglages de la page, ou la langue du système. |
 
 ## Installation
@@ -73,6 +74,7 @@ Le script installe la dernière version publiée dans un environnement privé, a
 | `lutin sauvegarde` · `lutin restaurer` | exporter / remettre tes données dans un `.zip` |
 | `lutin pin` · `lutin appareils` · `lutin securite` | accès depuis d'autres appareils |
 | `lutin importer <dossier>` | reprendre un projet Claude (`CLAUDE.md`, `.claude/`) : `--ici` (dedans) ou `--copie` |
+| `lutin reprendre <dossier ou .zip>` | reprendre les données d'un autre assistant : `--conversations --memoire --skills --reglages` |
 | `lutin langue [fr\|en\|auto]` | langue de l'application |
 | `lutin doctor` | diagnostic à coller dans un rapport de problème (sans contenu personnel) |
 
@@ -90,7 +92,7 @@ Les notes du catalogue sont des estimations éditoriales, pas des mesures : le b
 | 2. Réseau local | tes appareils appairés | code PIN à 6 chiffres (10 min, 5 essais), session par appareil révocable |
 | 3. Proxy | ce que ton proxy laisse passer | l'identité n'est crue que si elle vient de l'adresse du proxy déclaré |
 
-Aux niveaux 2 et 3, **les accords automatiques sont désactivés**. En mode hors ligne strict, seules cette machine et Ollama sont jointes. Détails, avertissements et exemples de proxy : [docs/SECURITY.fr.md](docs/SECURITY.fr.md).
+Aux niveaux 2 et 3, **les accords automatiques sont désactivés**. En mode hors ligne strict, seules cette machine et Ollama sont jointes. Détails, avertissements et exemples de proxy : [docs/SECURITY.fr.md](docs/SECURITY.fr.md). Ce que Lutin peut contacter sur le réseau, et comment le couper : [docs/PRIVACY.fr.md](docs/PRIVACY.fr.md). Signature de l'installateur : [docs/CODE-SIGNING.fr.md](docs/CODE-SIGNING.fr.md).
 
 ## Où sont mes fichiers ?
 

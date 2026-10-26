@@ -122,6 +122,7 @@ jobs:
           signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY || 'release-signing' }}
           github-artifact-id: ${{ steps.non-signe.outputs.artifact-id }}
           wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 3600          # l'approbation de chaque signature est manuelle (SignPath Foundation)
           output-artifact-directory: signe
       - name: Garder le fichier signé à la place du non signé
         if: vars.SIGNPATH_ORGANIZATION_ID != ''
