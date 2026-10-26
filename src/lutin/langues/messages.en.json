@@ -442,6 +442,7 @@
 "Nom de cet appareil (facultatif)": "Name of this device (optional)",
 "Se connecter": "Sign in",
 "Erreur ": "Error ",
+"Dans un conteneur, la carte doit être donnée au conteneur : NVIDIA avec --gpus all, AMD avec l'image :rocm et /dev/kfd + /dev/dri (docs/DOCKER.md).": "In a container, the card must be handed to the container: NVIDIA with --gpus all, AMD with the :rocm image and /dev/kfd + /dev/dri (docs/DOCKER.md).",
 "reprendre les données d'un autre assistant (conversations, mémoire, skills, réglages)": "take over the data of another assistant (conversations, memory, skills, settings)",
 "le dossier de l'ancien assistant (avec donnees/ et memoire/), ou une archive .zip": "the old assistant's folder (with donnees/ and memoire/), or a .zip archive",
 "reprendre les conversations": "take over the conversations",
