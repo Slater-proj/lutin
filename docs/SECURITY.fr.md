@@ -1,3 +1,5 @@
+[English](SECURITY.md) · **Français**
+
 # Sécurité
 
 Lutin peut lire des fichiers et lancer des commandes sur ta machine, à la demande d'un modèle de langage. C'est utile, et c'est exactement ce qu'il ne faut pas laisser à n'importe qui. Cette page explique ce qui protège, niveau par niveau, et ce qui reste ta responsabilité.
@@ -109,6 +111,10 @@ Chaque fichier modifié, chaque commande lancée, chaque module installé est in
 ## Changer de niveau
 
 `lutin setup --niveau local|reseau|proxy` (avec `--url` et `--proxy-ip` pour le niveau 3). Repasser à un niveau plus fermé est toujours possible ; pour en ouvrir un plus large, lance la commande sur la machine elle-même.
+
+## Docker
+
+Dans le conteneur, « cette machine seulement » n'existe pas (le port est publié par Docker) : le niveau est `reseau` (code PIN) ou `proxy`. Dans l'image complète, Ollama n'écoute que sur `127.0.0.1` du conteneur et son port n'est jamais publié. Voir [DOCKER.fr.md](DOCKER.fr.md).
 
 ## Signaler une faille
 

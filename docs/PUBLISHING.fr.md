@@ -1,3 +1,5 @@
+[English](PUBLISHING.md) · **Français**
+
 # Publications : versions, candidates, images
 
 Tout est automatique ; personne ne fixe un numéro de version à la main.
@@ -6,8 +8,8 @@ Tout est automatique ; personne ne fixe un numéro de version à la main.
 
 | Ce qui arrive | Ce qui est produit |
 |---|---|
-| **Fusion (ou envoi) dans `main`** | **Une publication** : version calculée, **étiquette** `vX.Y.Z`, **GitHub Release** (roue, archive source, `SHA256SUMS.txt`, notes générées), image Docker `:X.Y.Z` et `:latest`. |
-| **Envoi sur une autre branche** | **Une candidate (rc), sans étiquette ni Release** : roue et archive jointes à l'exécution du workflow (30 jours), image Docker `:rc-<branche>`. |
+| **Fusion (ou envoi) dans `main`** | **Une publication** : version calculée, **étiquette** `vX.Y.Z`, **GitHub Release** (roue, archive source, `SHA256SUMS.txt`, notes générées), images Docker `:X.Y.Z` et `:latest` (complète), `:X.Y.Z-slim` et `:slim` (légère). |
+| **Envoi sur une autre branche** | **Une candidate (rc), sans étiquette ni Release** : roue et archive jointes à l'exécution du workflow (30 jours), images Docker `:rc-<branche>` et `:rc-<branche>-slim`. |
 | **Pull request** | Les tests seulement (`ci.yml`). |
 
 Les tests (Windows et Linux, Python 3.10 à 3.13), le contrôle du paquet, la construction de l'image Docker et la recherche de secrets passent **avant** toute publication. Si un test échoue, rien n'est publié.

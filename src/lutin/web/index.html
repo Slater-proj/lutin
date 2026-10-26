@@ -816,8 +816,8 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
   const resumeMesure = mes => {
     const r = mes.resultats || {}, t = [];
     if (r.vitesse && r.vitesse.tok_s != null) t.push(r.vitesse.tok_s + T(' jetons/s'));
-    if (r.vitesse && r.vitesse.charge_s) t.push('chargement ' + r.vitesse.charge_s + ' s');
-    [['outils', 'outils'], ['code', 'code'], ['francais', T('français')], ['consignes', 'consignes']].forEach(([k, n]) => { if (r[k]) t.push(n + ' ' + r[k].points + '/' + r[k].sur); });
+    if (r.vitesse && r.vitesse.charge_s) t.push(T('chargement ') + r.vitesse.charge_s + ' s');
+    [['outils', T('outils')], ['code', 'code'], ['francais', T('français')], ['consignes', T('consignes')]].forEach(([k, n]) => { if (r[k]) t.push(n + ' ' + r[k].points + '/' + r[k].sur); });
     return t.join(' · ') || T('aucune mesure');
   };
   const listeModeles = () => {

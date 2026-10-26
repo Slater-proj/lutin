@@ -1,30 +1,30 @@
-name: Proposer ou corriger un modèle
-description: Ajouter un modèle au catalogue, corriger une taille, une note ou une description
+name: Suggest or correct a model / Proposer ou corriger un modèle
+description: Add a model to the catalogue, correct a size, a rating or a description / Ajouter un modèle au catalogue, corriger une taille, une note ou une description
 labels: [catalogue]
 body:
   - type: input
     id: identifiant
     attributes:
-      label: Identifiant Ollama
-      description: Exactement comme dans `ollama pull` (ex. qwen3:8b).
+      label: Ollama identifier / Identifiant Ollama
+      description: Exactly as in `ollama pull` (e.g. qwen3:8b). / Exactement comme dans `ollama pull` (ex. qwen3:8b).
     validations:
       required: true
   - type: textarea
     id: pourquoi
     attributes:
-      label: Pourquoi et pour quel rôle
-      description: "Polyvalent, rapide, créatif, code ou images. Donne ce qui justifie la note : un test que tu as fait, un classement public, ton retour d'usage."
+      label: Why, and for which role / Pourquoi et pour quel rôle
+      description: "General, fast, creative, code or images. Give what justifies the rating: a test you ran, a public ranking, your own experience. / Polyvalent, rapide, créatif, code ou images. Donne ce qui justifie la note : un test que tu as fait, un classement public, ton retour d'usage."
     validations:
       required: true
   - type: textarea
     id: machine
     attributes:
-      label: Sur quelle machine l'as-tu essayé ?
-      description: "Carte graphique et mémoire, vitesse observée si tu l'as."
+      label: On which machine did you try it? / Sur quelle machine l'as-tu essayé ?
+      description: "Graphics card and memory, observed speed if you have it. / Carte graphique et mémoire, vitesse observée si tu l'as."
   - type: checkboxes
     id: verifs
     attributes:
-      label: Vérifications
+      label: Checks / Vérifications
       options:
-        - label: "`ollama show` annonce la capacité « tools » (obligatoire)"
-        - label: La licence permet de le proposer (elle est notée dans la proposition)
+        - label: "`ollama show` reports the « tools » capability (mandatory) / annonce la capacité « tools » (obligatoire)"
+        - label: The licence allows proposing it (it is noted in the proposal) / La licence permet de le proposer (elle est notée dans la proposition)

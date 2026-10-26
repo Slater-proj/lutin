@@ -1,44 +1,48 @@
-# Décisions
+**English** · [Français](DECISIONS.fr.md)
 
-Ce que le projet a choisi, pourquoi, et ce qui reste à trancher. Une décision change quand on a une meilleure raison, pas parce que le fichier est vieux : on ajoute alors une ligne datée.
+# Decisions
 
-## Prises
+What the project chose, why, and what is still to be decided. A decision changes when there is a better reason, not because the file is old: a dated line is then added.
 
-| Date | Décision | Raison |
+## Made
+
+| Date | Decision | Reason |
 |---|---|---|
-| 2026-10-25 | **Nom : Lutin.** Commande `lutin`. | Court, français, facile à taper ; le lutin travaille chez toi, sans bruit. Le nom nu est pris sur PyPI (autre projet) : Lutin n'est **pas** publié sur PyPI, il se distribue par les Releases GitHub, les scripts d'installation et l'image Docker. |
-| 2026-10-25 | **Dépôt public** `Slater-proj/lutin` sur GitHub. | Demande du propriétaire. Tout ce qui est commité est public (voir CONTRIBUER.md, « Données personnelles »). |
-| 2026-10-25 | **Bibliothèque standard seulement**, aucune dépendance. | Installation simple, peu de surface d'attaque, rien à mettre à jour. |
-| 2026-10-25 | **Deux interfaces sur un seul moteur** : navigateur (PWA) et ligne de commande (`lutin chat`). | Le terminal parle au même serveur local avec un jeton réservé à l'utilisateur : mêmes outils, mêmes accords, même historique. |
-| 2026-10-25 | **Cinq rôles** : polyvalent, rapide, créatif, code, images. | « Images » = comprendre les images (vision), pas en générer. |
-| 2026-10-25 | **Modèles sans filtre : proposés, jamais imposés.** Option « modèles avancés », avertissement affiché, jamais choisis automatiquement. | Le choix revient à l'utilisateur ; le projet ne les met pas en avant. |
-| 2026-10-25 | **Aucune installation de modèle sans accord.** La vérification au lancement propose. | Un modèle pèse 2 à 60 Go. |
-| 2026-10-25 | **Aucune télémétrie.** Les seuls accès réseau : catalogue et registre d'Ollama (GET anonymes), publications GitHub (`lutin update`), téléchargements demandés, recherche web si la case est cochée. Tous coupés par le mode hors ligne strict. | Confiance. |
-| 2026-10-25 | **Pas d'accord automatique hors niveau « machine »** (règle dure dans le code, testée). | Exécuter des commandes à distance sans accord est le pire scénario. |
-| 2026-10-25 | **Installation par script (PowerShell / shell)** dans un environnement privé de l'utilisateur, sans droits administrateur ; par défaut la dernière publication GitHub. Idempotente. | Simple, auditable, Windows et Linux avec le même mécanisme. |
-| 2026-10-25 | **Mode hors ligne strict** centralisé (`horsligne.py`), vérifié par un test qui surveille les connexions réelles. | Une garantie qu'on peut auditer en un endroit. |
-| 2026-10-25 | **Dossiers de travail multiples, un seul actif à la fois**, ajout réservé à cette machine. | Une seule racine à la fois évite les conflits et les accès croisés ; l'ajout à distance permettrait de déclarer `/`. |
-| 2026-10-25 | **Notes mesurées = indicateur** (11 questions, aucun code du modèle exécuté), sans effet automatique sur le choix des modèles. | Un banc minuscule ne doit pas décider seul ; il sert à contester les notes éditoriales. |
-| 2026-10-25 | **Version déduite des étiquettes git** (setuptools-scm) ; chaque fusion dans `main` publie (étiquette, Release, image) ; chaque autre branche produit une candidate **sans étiquette**. | Personne ne fixe un numéro à la main ; les candidates se testent sans polluer l'historique des versions. |
-| 2026-10-25 | **Image Docker** : Lutin et Ollama séparés, accès par code PIN, port publié sur `127.0.0.1` par défaut, utilisateur non administrateur. | « Cette machine seulement » n'a pas de sens dans un conteneur : le port ne doit jamais être ouvert sans protection. |
+| 2026-10-25 | **Name: Lutin.** Command `lutin`. | Short, easy to type; the lutin (a house sprite) works at your place, quietly. The bare name is taken on PyPI (another project): Lutin is **not** published on PyPI, it is distributed through GitHub Releases, the install scripts and the Docker image. |
+| 2026-10-25 | **Public repository** `Slater-proj/lutin` on GitHub. | Owner's request. Everything committed is public (see CONTRIBUTING.md, « Personal data »). |
+| 2026-10-25 | **Standard library only**, no dependency. | Simple installation, small attack surface, nothing to keep up to date. |
+| 2026-10-25 | **Two interfaces on one engine**: browser (PWA) and command line (`lutin chat`). | The terminal talks to the same local server with a token reserved to the user: same tools, same approvals, same history. |
+| 2026-10-25 | **Five roles**: general, fast, creative, code, images. | « Images » = understanding images (vision), not generating them. |
+| 2026-10-25 | **Unfiltered models: offered, never imposed.** « Advanced models » option, warning displayed, never chosen automatically. | The choice is the user's; the project does not push them. |
+| 2026-10-25 | **No model installation without approval.** The check at launch proposes. | A model weighs 2 to 60 GB. |
+| 2026-10-25 | **No telemetry.** The only network accesses: Ollama's catalogue and registry (anonymous GETs), GitHub releases (`lutin update`), requested downloads, web search if the box is ticked. All cut by strict offline mode. | Trust. |
+| 2026-10-25 | **No automatic approval outside the « machine » level** (hard rule in the code, tested). | Running commands remotely without approval is the worst scenario. |
+| 2026-10-25 | **Installation by script (PowerShell / shell)** in a private environment of the user, without administrator rights; by default the latest GitHub release. Idempotent. | Simple, auditable, Windows and Linux with the same mechanism. |
+| 2026-10-25 | **Strict offline mode** centralised (`horsligne.py`), checked by a test that watches the real connections. | A guarantee that can be audited in one place. |
+| 2026-10-25 | **Several workspace folders, one active at a time**, adding reserved to this machine. | A single root at a time avoids conflicts and crossed accesses; remote adding would allow declaring `/`. |
+| 2026-10-25 | **Measured ratings = indicator** (11 questions, no model code executed), with no automatic effect on the choice of models. | A tiny benchmark must not decide alone; it is there to challenge the editorial ratings. |
+| 2026-10-25 | **Version deduced from git tags** (setuptools-scm); every merge into `main` publishes (tag, Release, image); every other branch produces a candidate **without a tag**. | Nobody sets a number by hand; candidates can be tested without polluting the version history. |
+| 2026-10-25 | **Docker image**: access by PIN code, port published on `127.0.0.1` by default, non-administrator user. | « This machine only » makes no sense in a container: the port must never be opened without protection. |
+| 2026-10-26 | **Two languages: French and English**, for the application (interface, messages, command line) and for the repository (README, docs). French stays the language the code is written in; every displayed text goes through a dictionary and a test fails if a translation is missing. | Lutin is written in French and used in French first; English opens it to everyone. Language: environment variable, then setting (`lutin langue`, page settings), then system. |
+| 2026-10-26 | **Docker: one complete image by default** (Lutin + Ollama in the same container, `:latest`), and a slim image (`:slim`, Lutin alone) for those who already run Ollama elsewhere. | « I run the image and it works »: nothing else to install. The price is size (several GB, Ollama's libraries). |
 
-## À trancher
+## To be decided
 
-- **Catalogue : qui note les modèles ?** Les notes sont éditoriales (1 à 10), écrites sans mesure sur du matériel réel. Le banc d'essai (`lutin bench --exporter`) permet maintenant de proposer des corrections justifiées ; il manque des résultats publiés sur quelques machines de référence.
-- **Signature des fichiers publiés.** Sans signature, Windows SmartScreen peut avertir. Options : SignPath (gratuit pour l'open source), Azure Trusted Signing (payant), ou seulement des sommes de contrôle (déjà publiées) pour la 0.x.
-- **Installateur graphique Windows** (`.exe` avec Python embarqué) : pas fait. Le script PowerShell couvre le besoin tant que la version reste 0.x.
-- **Langues.** Interface et textes en français ; extraire les chaînes avant d'ajouter l'anglais.
-- **Nouvelle version de Lutin signalée dans l'interface** : aujourd'hui seulement avec `lutin update` (les modèles, eux, sont vérifiés au lancement).
+- **Catalogue: who rates the models?** The ratings are editorial (1 to 10), written without measurement on real hardware. The benchmark (`lutin bench --exporter`) now allows proposing justified corrections; published results on a few reference machines are missing.
+- **Signing the published files.** Without a signature, Windows SmartScreen may warn. Options: SignPath (free for open source), Azure Trusted Signing (paid), or only checksums (already published) for 0.x.
+- **Graphical Windows installer** (`.exe` with embedded Python): not done. The PowerShell script covers the need while the version stays 0.x.
+- **More languages.** The mechanism is in place (`src/lutin/langues/`); adding one means a dictionary for the messages and one for the page, and a code in `i18n.LANGUES`.
+- **New Lutin version reported in the interface**: today only with `lutin update` (models, on the other hand, are checked at launch).
 
-## Connu mais pas vérifié
+## Known but not verified
 
-- **Linux, macOS, AMD, Intel** : le code est écrit pour, la détection est analysée sur des sorties d'exemple, mais **rien n'a jamais été exécuté sur ces systèmes**. La CI Ubuntu est le premier vrai essai.
-- **Image Docker** : `Dockerfile`, `docker-compose.yml` et `entrypoint.sh` sont écrits et relus ; le script de démarrage a été exécuté en local (hors conteneur) avec succès (page de connexion, code PIN, dossiers de travail). **L'image n'a jamais été construite** (pas de Docker sur la machine de développement) : la CI la construit et la démarre.
-- **Workflows GitHub** : syntaxe YAML vérifiée ; **jamais exécutés** (le dépôt n'est pas encore poussé). Le calcul des versions est testé sur un vrai dépôt git temporaire.
-- **Comparaison des empreintes de modèles** avec le registre d'Ollama : suppose que l'empreinte affichée par Ollama est celle du manifeste. À valider sur une vraie machine.
-- **Catalogue en ligne** : lu depuis `raw.githubusercontent.com/Slater-proj/lutin/main/…` ; test réel impossible tant que le dépôt n'est pas public.
-- **`install.ps1`** : exécuté pour de vrai sous Windows avec une source locale (installation, relance sans changement, montée de version). La résolution de la « dernière publication » GitHub n'a jamais tourné : il n'y a pas encore de publication. `install.sh` : syntaxe seulement.
-- **Installation d'Ollama** sous Linux et macOS : prévue (script officiel d'Ollama, avec accord), non testée.
-- **Page web** : Chrome sans écran charge la vraie page sans erreur JavaScript et les captures du README en viennent. Les scénarios (changer de conversation pendant une réponse, pastille verte, boutons de recherche) n'ont pas de test automatique dans un navigateur.
-- **Banc d'essai** : testé avec un faux Ollama ; jamais lancé sur un vrai modèle.
-- **Python** : suite verte sous Windows avec 3.10, 3.12 et 3.13.
+- **Linux**: the whole test suite runs in CI on Ubuntu (Python 3.10 to 3.13), with a fake Ollama. **Never tried with a real Ollama and a real graphics card.**
+- **macOS, AMD, Intel graphics**: the code is written for them and the detection is analysed on sample outputs, but **nothing has ever run on these systems or cards**.
+- **Docker images**: built and started by the CI (page, PIN code, Ollama inside the complete image) and published on ghcr.io. **Never run with a real NVIDIA card**, nor on a NAS.
+- **Comparison of model fingerprints** with Ollama's registry: assumes the fingerprint displayed by Ollama is that of the manifest. To validate on a real machine.
+- **Online catalogue**: read from `raw.githubusercontent.com/Slater-proj/lutin/main/…`; the weekly CI checks the catalogue, but the real fetch from an installed Lutin has not been traced.
+- **`install.ps1`**: run for real on Windows (local source: installation, relaunch without change, version upgrade) and from the published address, which revealed a BOM bug (fixed in 0.1.1, with a test). `install.sh`: syntax and CI only.
+- **Ollama installation** on Linux and macOS: planned (Ollama's official script, with approval), not tested.
+- **Web page**: headless Chrome loads the real page without a JavaScript error in French and in English (tests), and the README screenshots come from it. The scenarios (switching conversation during an answer, green dot, search buttons) have no automatic browser test.
+- **Benchmark**: tested with a fake Ollama; never run on a real model.
+- **Python**: suite green on Windows with 3.10, 3.12 and 3.13, and on Ubuntu with 3.10 to 3.13.

@@ -63,18 +63,32 @@ jobs:
       SETUPTOOLS_SCM_PRETEND_VERSION: "0.0.0.dev0"
     steps:
       - uses: actions/checkout@v4
-      - name: Construire l'image
-        run: docker build --build-arg LUTIN_VERSION=0.0.0.dev0 -t lutin:ci .
-      - name: La commande répond
-        run: docker run --rm lutin:ci --version
-      - name: Le serveur démarre, demande un code PIN et répond sur son port
+      - name: "Construire les deux images (complète = Lutin + Ollama, légère = Lutin seul)"
+        run: |
+          docker build --target leger --build-arg LUTIN_VERSION=0.0.0.dev0 -t lutin:ci-slim .
+          docker build --build-arg LUTIN_VERSION=0.0.0.dev0 -t lutin:ci .
+      - name: Les commandes répondent
+        run: |
+          docker run --rm lutin:ci-slim --version
+          docker run --rm lutin:ci --version
+          docker run --rm --entrypoint ollama lutin:ci --version
+      - name: L'image complète démarre toute seule (Ollama dedans, code PIN, page de connexion)
         run: |
           docker run -d --name lutin-ci -p 127.0.0.1:8777:8777 -e LUTIN_NIVEAU=reseau lutin:ci
-          for i in $(seq 1 30); do curl -fsS http://127.0.0.1:8777/ -o page.html && break; sleep 1; done
+          for i in $(seq 1 60); do curl -fsS http://127.0.0.1:8777/ -o page.html && break; sleep 1; done
           grep -q "lutin pin" page.html
           docker logs lutin-ci 2>&1 | grep -E "PIN"
           docker exec lutin-ci lutin pin
+          docker exec lutin-ci curl -fsS http://127.0.0.1:11434/api/version
+          docker exec lutin-ci lutin modeles lister
+          docker exec lutin-ci lutin doctor
           docker rm -f lutin-ci
+      - name: L'image légère démarre (sans Ollama, il est ailleurs)
+        run: |
+          docker run -d --name lutin-slim -p 127.0.0.1:8778:8777 -e LUTIN_NIVEAU=reseau lutin:ci-slim
+          for i in $(seq 1 60); do curl -fsS http://127.0.0.1:8778/ -o page2.html && break; sleep 1; done
+          grep -q "lutin pin" page2.html
+          docker rm -f lutin-slim
 
   syntaxe-installateurs:
     name: scripts d'installation (syntaxe)

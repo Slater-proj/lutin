@@ -31,6 +31,7 @@ jobs:
       publier: ${{ steps.v.outputs.publier }}
       image: ${{ steps.nom.outputs.image }}
       balises: ${{ steps.nom.outputs.balises }}
+      balises_leger: ${{ steps.nom.outputs.balises_leger }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -53,12 +54,15 @@ jobs:
           VERSION="${{ steps.v.outputs.version }}"
           if [ "${GITHUB_REF}" = "refs/heads/main" ]; then
             BALISES="${IMAGE}:${VERSION},${IMAGE}:latest"
+            LEGER="${IMAGE}:${VERSION}-slim,${IMAGE}:slim"
           else
             BRANCHE=$(echo "${GITHUB_REF_NAME}" | tr 'A-Z' 'a-z' | sed 's/[^a-z0-9._-]/-/g')
             BALISES="${IMAGE}:rc-${BRANCHE},${IMAGE}:${VERSION//+/-}"
+            LEGER="${IMAGE}:rc-${BRANCHE}-slim,${IMAGE}:${VERSION//+/-}-slim"
           fi
           echo "image=${IMAGE}" >> "$GITHUB_OUTPUT"
           echo "balises=${BALISES}" >> "$GITHUB_OUTPUT"
+          echo "balises_leger=${LEGER}" >> "$GITHUB_OUTPUT"
 
   construire:
     needs: version
@@ -101,12 +105,13 @@ jobs:
           generate_release_notes: true
           files: dist/*
           body: |
-            ## Installer ou mettre à jour
+            ## Install or update · Installer ou mettre à jour
 
-            **Windows (PowerShell)** : `irm https://raw.githubusercontent.com/${{ github.repository }}/main/installateur/install.ps1 | iex`
-            **Linux / macOS** : `curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/installateur/install.sh | bash`
-            **Docker** : `docker pull ${{ needs.version.outputs.image }}:${{ needs.version.outputs.version }}` (voir docs/DOCKER.md)
+            **Windows (PowerShell)**: `irm https://raw.githubusercontent.com/${{ github.repository }}/main/installateur/install.ps1 | iex`
+            **Linux / macOS**: `curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/installateur/install.sh | bash`
+            **Docker** (Lutin + Ollama): `docker pull ${{ needs.version.outputs.image }}:${{ needs.version.outputs.version }}` ([docs/DOCKER.md](https://github.com/${{ github.repository }}/blob/main/docs/DOCKER.md), [docs/DOCKER.fr.md](https://github.com/${{ github.repository }}/blob/main/docs/DOCKER.fr.md))
 
+            Running a script on an up-to-date machine changes nothing. Checksums: `SHA256SUMS.txt`.
             Relancer un script sur une machine à jour ne change rien. Sommes de contrôle : `SHA256SUMS.txt`.
 
   docker:
@@ -122,11 +127,29 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      # Image complète (Lutin + Ollama) : celle de « :latest » et de « :X.Y.Z »
       - uses: docker/build-push-action@v6
         with:
           context: .
+          target: complet
           push: true
           tags: ${{ needs.version.outputs.balises }}
+          cache-from: type=gha,scope=complet
+          cache-to: type=gha,mode=max,scope=complet
+          build-args: LUTIN_VERSION=${{ needs.version.outputs.version }}
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.version=${{ needs.version.outputs.version }}
+            org.opencontainers.image.licenses=MIT
+      # Image légère (Lutin seul, Ollama ailleurs) : « :slim » et « :X.Y.Z-slim »
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: leger
+          push: true
+          tags: ${{ needs.version.outputs.balises_leger }}
+          cache-from: type=gha,scope=leger
+          cache-to: type=gha,mode=max,scope=leger
           build-args: LUTIN_VERSION=${{ needs.version.outputs.version }}
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}

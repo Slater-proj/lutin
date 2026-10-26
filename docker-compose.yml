@@ -1,38 +1,27 @@
-# Lutin + Ollama. Démarrer :  docker compose up -d      Voir docs/DOCKER.md pour les prérequis, les volumes et le GPU.
+# Lutin + Ollama in ONE container / Lutin et Ollama dans UN seul conteneur.
+#   docker compose up -d        (NVIDIA card / carte NVIDIA : docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d)
+# See / Voir docs/DOCKER.md (EN) and docs/DOCKER.fr.md (FR).
 services:
-  ollama:
-    image: ollama/ollama:latest
-    restart: unless-stopped
-    volumes:
-      - ollama:/root/.ollama            # les modèles (plusieurs Go) : un volume nommé, ou un dossier de ton choix (./modeles:/root/.ollama)
-    healthcheck:
-      test: ["CMD", "ollama", "list"]
-      interval: 10s
-      timeout: 5s
-      retries: 12
-
   lutin:
     image: ghcr.io/slater-proj/lutin:latest
-    # Pour construire l'image toi-même au lieu de la télécharger :  build: .
+    # To build the image yourself instead of downloading it / Pour la construire toi-même : build: .
     restart: unless-stopped
-    depends_on:
-      ollama:
-        condition: service_healthy
     ports:
-      - "127.0.0.1:8777:8777"           # seulement cette machine. Pour ton réseau local : "8777:8777" (lis d'abord docs/SECURITE.md)
+      - "127.0.0.1:8777:8777"           # this machine only / seulement cette machine. For your LAN / pour ton réseau local : "8777:8777" (read docs/SECURITY.md first)
     environment:
-      OLLAMA_URL: http://ollama:11434
-      LUTIN_NIVEAU: reseau              # reseau (code PIN) ou proxy (derrière Authelia & co : ajoute LUTIN_URL_PUBLIQUE et LUTIN_PROXY_IP)
-      # LUTIN_URL_PUBLIQUE: https://lutin.exemple.fr
+      # LUTIN_LANGUE: fr                # fr or en. Optional: the language is also a setting of the page (Settings) / facultatif : la langue se règle aussi dans la page (Réglages). Default / défaut : en
+      LUTIN_NIVEAU: reseau              # reseau (PIN code / code PIN) or proxy (behind Authelia & co: add LUTIN_URL_PUBLIQUE and LUTIN_PROXY_IP)
+      # LUTIN_URL_PUBLIQUE: https://lutin.example.com
       # LUTIN_PROXY_IP: 172.18.0.1,192.168.1.10
-      # LUTIN_HORS_LIGNE: "1"           # mode hors ligne strict : aucune connexion vers Internet
-      # LUTIN_TRAVAUX: /travail/projet-2,/travail/documents      # autres dossiers de travail (montés ci-dessous)
-      # LUTIN_GPU: "NVIDIA RTX 4090=24" # carte graphique déclarée à la main si elle n'est pas détectée (nom=mémoire en Go)
+      # LUTIN_HORS_LIGNE: "1"           # strict offline mode / mode hors ligne strict : no connection to the Internet / aucune connexion vers Internet
+      # LUTIN_TRAVAUX: /travail/project-2,/travail/documents      # other workspace folders (mounted below) / autres dossiers de travail (montés ci-dessous)
+      # LUTIN_GPU: "NVIDIA RTX 4090=24" # card declared by hand if not detected / carte déclarée à la main si elle n'est pas détectée (name=memory in GB)
     volumes:
-      - lutin-data:/data                # configuration, conversations, mémoire, journal
-      - ./travail:/travail              # le dossier de travail : le SEUL endroit que Lutin peut lire et modifier
-      # - ./projet-2:/travail/projet-2
+      - lutin-data:/data                # configuration, conversations, memory, action log / mémoire, journal
+      - lutin-models:/models            # the models (several GB): a named volume, or a folder of your choice (/mnt/big-disk/models:/models) / les modèles (plusieurs Go)
+      - ./travail:/travail              # the workspace folder: the ONLY place Lutin can read and modify / le dossier de travail : le SEUL endroit que Lutin peut lire et modifier
+      # - ./project-2:/travail/project-2
 
 volumes:
   lutin-data:
-  ollama:
+  lutin-models:

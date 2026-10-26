@@ -1,3 +1,5 @@
+[English](MODELS.md) · **Français**
+
 # Les modèles
 
 ## Comment Lutin choisit

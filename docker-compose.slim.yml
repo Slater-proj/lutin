@@ -1,0 +1,43 @@
+# Lutin and Ollama in TWO containers (slim image) / Lutin et Ollama dans DEUX conteneurs (image légère) :
+#   docker compose -f docker-compose.slim.yml up -d
+# Useful if Ollama already runs elsewhere (then remove the "ollama" service and set OLLAMA_URL) / Utile si Ollama tourne déjà ailleurs (retire le service « ollama » et règle OLLAMA_URL).
+# NVIDIA: uncomment the "deploy" block of the ollama service / décommente le bloc « deploy » du service ollama.
+services:
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    volumes:
+      - ollama:/root/.ollama            # the models (several GB) / les modèles (plusieurs Go)
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  lutin:
+    image: ghcr.io/slater-proj/lutin:slim
+    restart: unless-stopped
+    depends_on:
+      ollama:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8777:8777"
+    environment:
+      OLLAMA_URL: http://ollama:11434
+      # LUTIN_LANGUE: fr                # fr or en (default / défaut : en)
+      LUTIN_NIVEAU: reseau
+      # LUTIN_GPU: "NVIDIA RTX 4090=24" # the card is not visible from this container: declare it by hand to get models that fit / la carte n'est pas visible ici : déclare-la pour avoir des modèles adaptés
+    volumes:
+      - lutin-data:/data
+      - ./travail:/travail
+
+volumes:
+  lutin-data:
+  ollama:
