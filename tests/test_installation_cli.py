@@ -640,6 +640,15 @@ class CommandesDuQuotidien(unittest.TestCase):
         self.assertEqual(config.charger(self.d)["securite"]["ecoute"], "0.0.0.0")
 
 
+class ScriptsDInstallation(unittest.TestCase):
+    def test_le_script_powershell_se_lance_par_irm_iex(self):
+        """`irm … | iex` passe le texte par une chaîne : un BOM au début (ou un accent mal décodé) casse le bloc param(). Le fichier reste donc en ASCII pur, sans BOM."""
+        brut = (Path(__file__).resolve().parent.parent / "installateur" / "install.ps1").read_bytes()
+        self.assertFalse(brut.startswith(bytes([0xEF, 0xBB, 0xBF])), "BOM au début de install.ps1")
+        self.assertEqual([b for b in brut if b > 127], [], "caractère non ASCII dans install.ps1")
+        self.assertIn(b"param(", brut)
+
+
 def travaux_liste():
     from lutin import travaux as _travaux
     return _travaux.liste(config.charger(config.dossiers()))
