@@ -18,7 +18,7 @@ jobs:
         os: [ubuntu-latest, windows-latest]
         python: ["3.10", "3.11", "3.12", "3.13"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
@@ -38,7 +38,7 @@ jobs:
     env:
       SETUPTOOLS_SCM_PRETEND_VERSION: "0.0.0.dev0"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -62,7 +62,7 @@ jobs:
     env:
       SETUPTOOLS_SCM_PRETEND_VERSION: "0.0.0.dev0"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: "Construire les deux images (complète = Lutin + Ollama, légère = Lutin seul)"
         run: |
           docker build --target leger --build-arg LUTIN_VERSION=0.0.0.dev0 -t lutin:ci-slim .
@@ -96,7 +96,7 @@ jobs:
     env:
       SETUPTOOLS_SCM_PRETEND_VERSION: "0.0.0.dev0"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -120,7 +120,7 @@ jobs:
     env:
       SETUPTOOLS_SCM_PRETEND_VERSION: "0.0.0.dev0"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -138,7 +138,7 @@ jobs:
     name: scripts d'installation (syntaxe)
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: PowerShell
         shell: pwsh
         run: |
@@ -156,7 +156,7 @@ jobs:
     name: secrets
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - uses: gitleaks/gitleaks-action@v2
