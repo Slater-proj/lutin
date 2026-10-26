@@ -80,7 +80,7 @@ jobs:
       - run: python tools/verifier_paquet.py dist
       - name: Sommes de contrôle
         run: cd dist && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: lutin-${{ needs.version.outputs.version }}
           path: dist/*
@@ -108,7 +108,7 @@ jobs:
         shell: pwsh
         run: ./installateur/windows/verifier.ps1 -Installateur (Get-ChildItem dist/lutin-setup-*.exe | Select-Object -First 1).FullName -Version "${{ needs.version.outputs.version }}"
       # Signature (SignPath Foundation, gratuite pour l'open source) : active seulement quand la variable SIGNPATH_ORGANIZATION_ID et le secret SIGNPATH_API_TOKEN existent (docs/PUBLISHING.md).
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         id: non-signe
         with:
           name: installateur-non-signe
@@ -127,7 +127,7 @@ jobs:
         if: vars.SIGNPATH_ORGANIZATION_ID != ''
         shell: pwsh
         run: Copy-Item signe/lutin-setup-*.exe dist/ -Force
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: installateur-${{ needs.version.outputs.version }}
           path: dist/lutin-setup-*.exe
