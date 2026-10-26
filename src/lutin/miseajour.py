@@ -13,6 +13,7 @@ from pathlib import Path
 
 from . import catalogue as cat
 from . import horsligne, selection
+from .i18n import t as _t
 
 CATALOGUE_URL_DEFAUT = "https://raw.githubusercontent.com/Slater-proj/lutin/main/src/lutin/data/modeles.json"          # le catalogue de la branche principale ; `catalogue_url` dans la configuration le remplace ("" = pas de catalogue en ligne)
 DEPOT = "Slater-proj/lutin"
@@ -25,7 +26,7 @@ ACCEPT_MANIFESTE = "application/vnd.docker.distribution.manifest.v2+json"
 def http_get(url, entetes=None, delai=10, ouvrir=urllib.request.urlopen):
     """(statut, en-têtes en minuscules, corps). Lève OSError si le réseau est absent. HTTPS obligatoire."""
     if not url.startswith("https://"):
-        raise OSError("adresse non sécurisée refusée")
+        raise OSError(_t("adresse non sécurisée refusée"))
     horsligne.garde(url)
     req = urllib.request.Request(url, headers=dict(entetes or {}, **{"User-Agent": "lutin"}))
     try:
@@ -63,7 +64,7 @@ def mises_a_jour(installes, http=http_get):
         local = (info.get("digest") or "").split(":", 1)[-1]
         distant = digest_registre(nom, http)
         if local and distant and local != distant:
-            sortie.append({"cle": "maj:" + nom, "type": "maj", "modele": nom, "raison": "Une version plus récente de ce modèle est disponible."})
+            sortie.append({"cle": "maj:" + nom, "type": "maj", "modele": nom, "raison": _t("Une version plus récente de ce modèle est disponible.")})
     return sortie
 
 
@@ -82,13 +83,13 @@ def nouveautes(profil, catalogue, choisis, installes, ignores=()):
         vieux = par_id.get(ancien)
         raison = ""
         if vieux is None:
-            raison = "Ton modèle n'est plus dans le catalogue ; celui-ci est recommandé pour ta machine."
+            raison = _t("Ton modèle n'est plus dans le catalogue ; celui-ci est recommandé pour ta machine.")
         elif vieux.get("remplace_par") == nouveau.id:
-            raison = "Le modèle installé est remplacé par celui-ci."
+            raison = _t("Le modèle installé est remplacé par celui-ci.")
         elif selection.meilleur_contexte(vieux, budget, profil.ram_libre_go or profil.ram_go * 0.5) is None:
-            raison = "Le modèle installé ne tient plus dans la mémoire disponible."
+            raison = _t("Le modèle installé ne tient plus dans la mémoire disponible.")
         elif nouveau.modele["notes"].get(role, 0) >= vieux["notes"].get(role, 0) + 1:
-            raison = "Mieux noté pour ce rôle ({} contre {}).".format(nouveau.modele["notes"][role], vieux["notes"].get(role, 0))
+            raison = _t("Mieux noté pour ce rôle ({} contre {}).").format(nouveau.modele["notes"][role], vieux["notes"].get(role, 0))
         if not raison:
             continue
         cle = "nouveau:{}:{}".format(role, nouveau.id)
@@ -159,7 +160,7 @@ def verifier(profil, cfg, dossiers, ollama, http=http_get, maintenant=time.time,
     portee « maj » : seulement les mises à jour des modèles installés ; « nouveaux » : le catalogue en ligne puis les meilleurs modèles pour cette machine ; « tout » : les deux.
     Une vérification partielle garde les propositions de l'autre sorte. Seule la vérification complète automatique est limitée à une fois par 24 h."""
     if portee not in PORTEES:
-        raise ValueError("portée inconnue : {}".format(portee))
+        raise ValueError(_t("portée inconnue : {}").format(portee))
     cache = Path(dossiers["cache"])
     cache.mkdir(parents=True, exist_ok=True)
     etat = cache / "derniere-verification.json"
@@ -173,7 +174,7 @@ def verifier(profil, cfg, dossiers, ollama, http=http_get, maintenant=time.time,
     resultat = {"date": maintenant(), "propositions": [], "erreurs": [], "catalogue": "absent", "portee": portee}
     hors_ligne = horsligne.actif(Path(dossiers.get("config", "")) / "config.json" if dossiers.get("config") else None)
     if hors_ligne:
-        resultat["erreurs"].append("mode hors ligne strict : seule la liste livrée avec Lutin est comparée, les mises à jour de modèles ne sont pas cherchées")
+        resultat["erreurs"].append(_t("mode hors ligne strict : seule la liste livrée avec Lutin est comparée, les mises à jour de modèles ne sont pas cherchées"))
         portee_reseau = False
     else:
         portee_reseau = True
@@ -182,7 +183,7 @@ def verifier(profil, cfg, dossiers, ollama, http=http_get, maintenant=time.time,
             url = cfg.get("catalogue_url")
             resultat["catalogue"] = telecharger_catalogue(CATALOGUE_URL_DEFAUT if url is None else url, cache, http)
             if resultat["catalogue"] == "echec":
-                resultat["erreurs"].append("catalogue en ligne indisponible : copie locale utilisée")
+                resultat["erreurs"].append(_t("catalogue en ligne indisponible : copie locale utilisée"))
         catalogue = cat.charger(cache / "catalogue.json")
         installes = ollama.installes()
         ignores = set(cfg.get("modeles", {}).get("ignores", []))
@@ -196,7 +197,7 @@ def verifier(profil, cfg, dossiers, ollama, http=http_get, maintenant=time.time,
         gardees = [p for p in ancien.get("propositions", []) if p.get("type") not in recalcule]
         resultat["propositions"] = [p for p in gardees + nouvelles if p["cle"] not in ignores]
     except Exception as e:  # noqa: BLE001 — la vérification ne doit jamais gêner le démarrage
-        resultat["erreurs"].append("vérification impossible : {}".format(e))
+        resultat["erreurs"].append(_t("vérification impossible : {}").format(e))
         resultat["propositions"] = ancien.get("propositions", [])
     try:
         (cache / "propositions.json").write_text(json.dumps(resultat, ensure_ascii=False, indent=1), encoding="utf-8")

@@ -6,6 +6,7 @@ Règles de prudence : un dossier doit exister, ne pas être la racine d'un disqu
 import re
 import unicodedata
 from pathlib import Path
+from .i18n import t as _t
 
 PRINCIPAL = "principal"
 
@@ -59,23 +60,23 @@ def verifier_chemin(chemin, interdits=()):
     """Le chemin résolu, ou ErreurTravail. `interdits` : dossiers de Lutin (configuration, données, mémoire, cache) qu'on ne peut ni contenir ni être."""
     texte = str(chemin or "").strip().strip('"')
     if not texte:
-        raise ErreurTravail("Indique un dossier.")
+        raise ErreurTravail(_t("Indique un dossier."))
     p = Path(texte).expanduser()
     try:
         p = p.resolve()
     except OSError as e:
-        raise ErreurTravail("Dossier illisible : {}".format(e))
+        raise ErreurTravail(_t("Dossier illisible : {}").format(e))
     if not p.is_dir():
-        raise ErreurTravail("Ce dossier n'existe pas : {}".format(p))
+        raise ErreurTravail(_t("Ce dossier n'existe pas : {}").format(p))
     if p == Path(p.anchor):
-        raise ErreurTravail("Un disque entier n'est pas un dossier de travail : choisis un dossier précis.")
+        raise ErreurTravail(_t("Un disque entier n'est pas un dossier de travail : choisis un dossier précis."))
     for i in interdits:
         try:
             ri = Path(i).resolve()
         except OSError:
             continue
         if p == ri or ri in p.parents or p in ri.parents:
-            raise ErreurTravail("Ce dossier contient ou est dans les dossiers de Lutin ({}) : choisis-en un autre.".format(ri))
+            raise ErreurTravail(_t("Ce dossier contient ou est dans les dossiers de Lutin ({}) : choisis-en un autre.").format(ri))
     return p
 
 
@@ -98,12 +99,12 @@ def ajouter(cfg, chemin, nom="", interdits=()):
 def retirer(cfg, ident):
     """Retire un dossier de la liste (les fichiers ne sont pas touchés). Le dossier principal ne se retire pas ici (il se change par `lutin setup --travail`)."""
     if ident == PRINCIPAL:
-        raise ErreurTravail("Le dossier principal se change avec « lutin setup --travail ».")
+        raise ErreurTravail(_t("Le dossier principal se change avec « lutin setup --travail »."))
     em = cfg.setdefault("emplacements", {})
     avant = len(em.get("travaux", []))
     em["travaux"] = [t for t in em.get("travaux", []) if t.get("id") != ident]
     if len(em["travaux"]) == avant:
-        raise ErreurTravail("Dossier inconnu : {}".format(ident))
+        raise ErreurTravail(_t("Dossier inconnu : {}").format(ident))
     if em.get("travail_actif") == ident:
         em["travail_actif"] = ""
 
@@ -111,6 +112,6 @@ def retirer(cfg, ident):
 def choisir(cfg, ident):
     t = par_id(cfg, ident)
     if not t:
-        raise ErreurTravail("Dossier inconnu : {}".format(ident))
+        raise ErreurTravail(_t("Dossier inconnu : {}").format(ident))
     cfg.setdefault("emplacements", {})["travail_actif"] = ident
     return t

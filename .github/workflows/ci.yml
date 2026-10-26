@@ -71,8 +71,8 @@ jobs:
         run: |
           docker run -d --name lutin-ci -p 127.0.0.1:8777:8777 -e LUTIN_NIVEAU=reseau lutin:ci
           for i in $(seq 1 30); do curl -fsS http://127.0.0.1:8777/ -o page.html && break; sleep 1; done
-          grep -q "connexion" page.html
-          docker logs lutin-ci 2>&1 | grep -E "Code PIN"
+          grep -q "lutin pin" page.html
+          docker logs lutin-ci 2>&1 | grep -E "PIN"
           docker exec lutin-ci lutin pin
           docker rm -f lutin-ci
 

@@ -10,6 +10,7 @@ import time
 from pathlib import Path
 
 from .ollama_client import ErreurOllama
+from .i18n import t as _t
 
 QUESTIONS_CODE = [
     ("Que valent les valeurs affichées ? Réponds seulement par la valeur.\n```python\nx = [3, 1, 2]\nx.sort()\nprint(x[0] * 10 + x[-1])\n```", "13"),
@@ -187,7 +188,7 @@ def resume(mesure):
         morceaux.append("{:g} jetons/s".format(v["tok_s"]))
     if v.get("charge_s"):
         morceaux.append("chargement {:g} s".format(v["charge_s"]))
-    for cle, nom in (("outils", "outils"), ("code", "code"), ("francais", "français"), ("consignes", "consignes")):
+    for cle, nom in (("outils", "outils"), ("code", "code"), ("francais", _t("français")), ("consignes", "consignes")):
         if cle in r:
             morceaux.append("{} {}/{}".format(nom, r[cle]["points"], r[cle]["sur"]))
     return " · ".join(morceaux) or "aucune mesure"

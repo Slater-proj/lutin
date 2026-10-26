@@ -1,11 +1,11 @@
-﻿# Installe ou met a jour Lutin pour l'utilisateur courant (sans droits administrateur) :
+# Installe ou met a jour Lutin pour l'utilisateur courant (sans droits administrateur) :
 #   irm https://raw.githubusercontent.com/Slater-proj/lutin/main/installateur/install.ps1 | iex
 # Ce que fait ce script, et rien d'autre :
 #   1. cherche Python 3.10 ou plus ; sinon l'installe pour l'utilisateur avec winget (Python.Python.3.12)
 #   2. cree (ou reutilise) un environnement prive dans %LOCALAPPDATA%\Programs\Lutin et y installe Lutin
 #      - deja installe a la meme version : il ne change rien et le dit ; version differente : mise a jour
-#   3. ajoute la commande « lutin » au PATH de l'utilisateur (une seule fois)
-#   4. lance « lutin setup » (sans effet si Lutin est deja configure) sauf avec -SansSetup
+#   3. ajoute la commande " lutin " au PATH de l'utilisateur (une seule fois)
+#   4. lance " lutin setup " (sans effet si Lutin est deja configure) sauf avec -SansSetup
 # Parametres : -Source (ou variable LUTIN_SOURCE) = ce qu'il faut passer a pip (une roue, une adresse) ; par defaut : la derniere publication GitHub de Slater-proj/lutin.
 #              -Dossier = ou installer (defaut : %LOCALAPPDATA%\Programs\Lutin) ; -SansPath = ne pas toucher au PATH ; -SansSetup.
 param([switch]$SansSetup, [switch]$SansPath, [string]$Source = $env:LUTIN_SOURCE, [string]$Dossier = "")
@@ -14,7 +14,7 @@ $ErrorActionPreference = "Stop"
 function Info($m)  { Write-Host "[Lutin] $m" -ForegroundColor Cyan }
 function Echec($m) { Write-Host "[ERREUR] $m" -ForegroundColor Red; exit 1 }
 
-# Sans -Source : la derniere publication de https://github.com/Slater-proj/lutin (jamais le nom nu « lutin » sur PyPI : c'est un autre projet).
+# Sans -Source : la derniere publication de https://github.com/Slater-proj/lutin (jamais le nom nu " lutin " sur PyPI : c'est un autre projet).
 $marqueur = ""
 if (-not $Source) { $marqueur = "github:Slater-proj/lutin" }
 $dossier = if ($Dossier) { $Dossier } else { Join-Path $env:LOCALAPPDATA "Programs\Lutin" }
@@ -75,13 +75,13 @@ Info "Verification de Lutin ($Source)..."
 & $pyvenv -m pip install --upgrade --quiet $Source
 if ($LASTEXITCODE -ne 0) { Echec "pip n'a pas pu installer Lutin ($Source)." }
 $apres = Version-Installee
-if (-not $apres) { Echec "Lutin est installe mais ne repond pas (« python -m lutin --version »)." }
-Set-Content -Path (Join-Path $dossier "source.txt") -Value $(if ($marqueur) { $marqueur } else { $Source }) -Encoding ASCII          # pour « lutin update »
+if (-not $apres) { Echec "Lutin est installe mais ne repond pas (" python -m lutin --version ")." }
+Set-Content -Path (Join-Path $dossier "source.txt") -Value $(if ($marqueur) { $marqueur } else { $Source }) -Encoding ASCII          # pour " lutin update "
 if (-not $avant) { Info "Lutin $apres installe." }
 elseif ($avant -eq $apres) { Info "Lutin $apres : deja a jour, rien a faire." }
 else { Info "Lutin mis a jour : $avant -> $apres." }
 
-# La commande « lutin » : un petit lanceur dans un dossier ajoute au PATH de l'utilisateur.
+# La commande " lutin " : un petit lanceur dans un dossier ajoute au PATH de l'utilisateur.
 $lanceur = Join-Path $bin "lutin.cmd"
 $contenu = "@echo off`r`n`"$pyvenv`" -m lutin %*`r`n"
 if (-not (Test-Path $lanceur) -or ((Get-Content -Raw $lanceur) -ne $contenu)) { Set-Content -Path $lanceur -Value $contenu -Encoding ASCII -NoNewline }
@@ -89,7 +89,7 @@ if (-not $SansPath) {
     $chemin = [Environment]::GetEnvironmentVariable("Path", "User")
     if (($chemin -split ";") -notcontains $bin) {
         [Environment]::SetEnvironmentVariable("Path", ($chemin.TrimEnd(";") + ";" + $bin), "User")
-        Info "Dossier ajoute au PATH : $bin (ouvre une nouvelle fenetre pour utiliser « lutin » partout)."
+        Info "Dossier ajoute au PATH : $bin (ouvre une nouvelle fenetre pour utiliser " lutin " partout)."
     }
 }
 $env:Path += ";$bin"

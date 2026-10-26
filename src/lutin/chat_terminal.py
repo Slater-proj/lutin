@@ -2,6 +2,7 @@
 import sys
 
 from .client import ErreurClient
+from .i18n import t as _t
 
 AIDE = """Commandes :
   /aide                 cette aide
@@ -28,7 +29,7 @@ class Terminal:
         self.sortie(texte + fin)
 
     def demander_accord(self, e):
-        self.ecrire("\n── Accord demandé : {}".format(e.get("titre", "")))
+        self.ecrire(_t("\n── Accord demandé : {}").format(e.get("titre", "")))
         if e.get("detail"):
             self.ecrire(str(e["detail"])[:1500])
         if e.get("diff"):
@@ -39,7 +40,7 @@ class Terminal:
             reponse = ""
         ok = reponse in ("o", "oui", "y", "yes")
         self.client.envoyer("/api/approuver", {"id": e["id"], "ok": ok})
-        self.ecrire("   → " + ("accepté" if ok else "refusé"))
+        self.ecrire("   → " + (_t("accepté") if ok else _t("refusé")))
 
     def repondre(self, message):
         corps = dict(self.options, message=message, conversation=self.conversation)
@@ -79,7 +80,7 @@ class Terminal:
         if mot in ("quitter", "q", "exit"):
             return False
         if mot == "aide":
-            self.ecrire(AIDE)
+            self.ecrire(_t(AIDE))
         elif mot == "nouvelle":
             self.conversation = ""
             self.ecrire("Nouvelle conversation.")
@@ -92,24 +93,24 @@ class Terminal:
                 self.conversation = self.recentes[int(arg) - 1]["id"]
                 self.ecrire("Conversation reprise : " + (self.recentes[int(arg) - 1].get("titre") or ""))
             else:
-                self.ecrire("Fais d'abord /liste, puis /reprendre <numéro>.")
+                self.ecrire(_t("Fais d'abord /liste, puis /reprendre <numéro>."))
         elif mot == "modele":
             if arg:
                 self.client.envoyer("/api/reglages", {"modele": arg})
-            self.ecrire("Modèle : " + self.client.obtenir("/api/etat")["reglages"]["modele"])
+            self.ecrire(_t("Modèle : ") + self.client.obtenir("/api/etat")["reglages"]["modele"])
         elif mot == "mode":
-            if arg in ("travail", "ecriture", "écriture"):
+            if arg in ("travail", "ecriture", _t("écriture")):
                 self.options["mode"] = "technique" if arg == "travail" else "scenario"
-            self.ecrire("Mode : " + ("travail" if self.options["mode"] == "technique" else "écriture"))
+            self.ecrire(_t("Mode : ") + ("travail" if self.options["mode"] == "technique" else _t("écriture")))
         elif mot == "reflexion":
             self.options["reflexion"] = not self.options["reflexion"]
-            self.ecrire("Réflexion : " + ("activée" if self.options["reflexion"] else "coupée"))
+            self.ecrire(_t("Réflexion : ") + (_t("activée") if self.options["reflexion"] else _t("coupée")))
         else:
-            self.ecrire("Commande inconnue. /aide pour la liste.")
+            self.ecrire(_t("Commande inconnue. /aide pour la liste."))
         return True
 
     def boucle(self):
-        self.ecrire("Lutin : écris ta demande (/aide pour les commandes, /quitter pour sortir).")
+        self.ecrire(_t("Lutin : écris ta demande (/aide pour les commandes, /quitter pour sortir)."))
         while True:
             try:
                 ligne = self.entree("› ").strip()
@@ -117,7 +118,7 @@ class Terminal:
                 self.ecrire()
                 return 0
             except KeyboardInterrupt:
-                self.ecrire("\n(Ctrl+D ou /quitter pour sortir)")
+                self.ecrire(_t("\n(Ctrl+D ou /quitter pour sortir)"))
                 continue
             if not ligne:
                 continue

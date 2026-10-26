@@ -10,6 +10,7 @@ import shutil
 import subprocess
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
+from .i18n import t as _t
 
 GO = 1024 ** 3
 FABRICANTS = {"0x10de": "nvidia", "0x1002": "amd", "0x8086": "intel"}
@@ -75,8 +76,8 @@ class Profil:
 
     def resume(self):
         g = self.gpu_principal()
-        carte = "{} ({:g} Go)".format(g.nom, g.vram_go) if g else "aucune carte graphique utilisable"
-        return "{} · {} Go de RAM · {}".format(self.cpu or "processeur inconnu", round(self.ram_go), carte)
+        carte = _t("{} ({:g} Go)").format(g.nom, g.vram_go) if g else _t("aucune carte graphique utilisable")
+        return _t("{} · {} Go de RAM · {}").format(self.cpu or _t("processeur inconnu"), round(self.ram_go), carte)
 
     def en_dict(self):
         return asdict(self)

@@ -27,6 +27,7 @@ DEFAUT = {
     "verifier_maj": True,
     "catalogue_url": None,                                   # None : le catalogue de Slater-proj/lutin ; "" : aucun catalogue en ligne ; une adresse https : le tien
     "avance": False,
+    "langue": None,                                          # None : langue du système ; "fr" ou "en" (voir lutin.i18n)
     "hors_ligne": False,                                     # mode hors ligne strict : aucune connexion vers Internet (voir lutin.horsligne)
 }
 
@@ -114,7 +115,10 @@ def preparer(d):
     """Crée les dossiers et pose les fichiers de mémoire de départ (sans jamais écraser ceux de l'utilisateur)."""
     for chemin in d.values():
         Path(chemin).mkdir(parents=True, exist_ok=True)
+    from . import i18n
     modeles = Path(__file__).resolve().parent / "data"
+    if i18n.langue() != "fr" and (modeles / i18n.langue()).is_dir():
+        modeles = modeles / i18n.langue()                 # les fichiers de départ existent dans la langue choisie ; sans traduction, le français
     for nom in ("CONTEXTE.md", "MEMOIRE.md"):
         cible = Path(d["memoire"]) / nom
         if not cible.exists():

@@ -4,6 +4,7 @@ import threading
 from pathlib import Path
 
 from . import config, machine, miseajour, ollama_client, securite, travaux
+from .i18n import t as _t
 
 
 def preparer_environnement(cfg, dossiers):
@@ -32,7 +33,7 @@ def s_assurer_qu_ollama_tourne(cfg, profil, ecrire=print):
         return True
     exe = ollama_client.trouver_executable(config.systeme())
     if not exe:
-        ecrire("Ollama n'est pas installé : lance « lutin setup ».")
+        ecrire(_t("Ollama n'est pas installé : lance « lutin setup »."))
         return False
     ollama_client.demarrer_serveur(exe, ollama_client.variables_serveur(profil, cfg["emplacements"]["modeles"]), config.systeme())
     import time
@@ -40,7 +41,7 @@ def s_assurer_qu_ollama_tourne(cfg, profil, ecrire=print):
         if o.actif():
             return True
         time.sleep(0.5)
-    ecrire("Ollama ne répond pas après son démarrage.")
+    ecrire(_t("Ollama ne répond pas après son démarrage."))
     return False
 
 
@@ -64,6 +65,6 @@ def lancer_serveur(cfg, dossiers, ouvrir_navigateur=True, ecrire=print):
             try:
                 miseajour.verifier(profil, cfg, dossiers, ollama_client.Ollama())
             except Exception as e:  # noqa: BLE001 — jamais bloquant
-                ecrire("(vérification des modèles impossible : {})".format(e))
+                ecrire(_t("(vérification des modèles impossible : {})").format(e))
         threading.Thread(target=verification, daemon=True, name="verification-modeles").start()
     moteur.principal()

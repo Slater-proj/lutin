@@ -25,6 +25,7 @@ from pathlib import Path
 from unittest import mock
 
 ICI = Path(__file__).resolve().parent
+os.environ["LUTIN_LANGUE"] = "fr"          # les messages attendus par ces tests sont en français
 TEMP = Path(tempfile.mkdtemp(prefix="assistant-tests-"))
 PROJET = TEMP / "projet"
 for d in ("docs", "illustrateur/moteur", "assistant", ".git", "sorties"):

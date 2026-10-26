@@ -15,6 +15,7 @@ import secrets
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
+from .i18n import t as _t
 
 LOCAL, RESEAU, PROXY = "local", "reseau", "proxy"
 NIVEAUX = (LOCAL, RESEAU, PROXY)
@@ -43,24 +44,24 @@ class Securite:
             pb.append("port invalide")
         if self.ecoute:
             if self.niveau == LOCAL:
-                pb.append("une adresse d'écoute imposée n'est pas permise au niveau « local » (il n'écoute que sur 127.0.0.1)")
+                pb.append(_t("une adresse d'écoute imposée n'est pas permise au niveau « local » (il n'écoute que sur 127.0.0.1)"))
             else:
                 try:
                     ipaddress.ip_address(self.ecoute)
                 except ValueError:
-                    pb.append("adresse d'écoute invalide : " + str(self.ecoute))
+                    pb.append(_t("adresse d'écoute invalide : ") + str(self.ecoute))
         if self.niveau == PROXY:
             if not self.url_publique.startswith(("http://", "https://")):
-                pb.append("l'adresse publique (https://…) est obligatoire derrière un proxy")
+                pb.append(_t("l'adresse publique (https://…) est obligatoire derrière un proxy"))
             elif self.url_publique.startswith("http://"):
-                pb.append("l'adresse publique devrait être en https:// (sinon les mots de passe circulent en clair)")
+                pb.append(_t("l'adresse publique devrait être en https:// (sinon les mots de passe circulent en clair)"))
             if not self.proxy_ips:
-                pb.append("indique l'adresse du proxy de confiance (celle qui apparaît côté Lutin)")
+                pb.append(_t("indique l'adresse du proxy de confiance (celle qui apparaît côté Lutin)"))
             for ip in self.proxy_ips:
                 try:
                     ipaddress.ip_network(ip, strict=False)
                 except ValueError:
-                    pb.append("adresse de proxy invalide : " + str(ip))
+                    pb.append(_t("adresse de proxy invalide : ") + str(ip))
         return pb
 
     @staticmethod

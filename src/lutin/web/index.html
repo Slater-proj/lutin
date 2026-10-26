@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="fr">
+<html lang="__LANGUE__">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -356,6 +356,9 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
     </div>
   </div></section>
   <section class="page" id="p-reglages"><div class="cadre">
+    <h2>Langue / Language</h2>
+    <div class="carte"><label><select id="selLangue"><option value="auto">Auto</option><option value="fr">Français</option><option value="en">English</option></select></label></div>
+    <div class="aide">Change la langue de l'interface, des messages et des modèles proposés. La page se recharge.</div>
     <h2>Fenêtre de contexte : <span id="vCtx"></span> jetons</h2>
     <input type="range" id="rCtx" min="8192" max="65536" step="4096" style="width:100%">
     <div class="aide">Plus c'est grand, plus l'assistant se souvient de la conversation, mais plus la carte graphique est sollicitée. Avec un modèle de 27 milliards de paramètres, 24 000 à 32 000 est raisonnable sur 24 Go ; au-delà, Ollama déborde sur la mémoire de l'ordinateur et ralentit.</div>
@@ -396,6 +399,26 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
 <script>
 (() => {
   const $ = id => document.getElementById(id), TOKEN = '__TOKEN__';
+  // Langue : le serveur injecte la langue courante et, en anglais, le dictionnaire {texte français: texte anglais}. Le français est la langue d'écriture : sans traduction, on garde le texte tel quel.
+  const LANGUE = '__LANGUE__', DICO = __DICO__;
+  const T = texte => (LANGUE !== 'fr' && DICO[texte]) || texte;
+  const traduirePage = () => {                          // le texte déjà écrit dans la page (le texte construit par le script passe par T)
+    document.documentElement.lang = LANGUE;
+    if (LANGUE === 'fr') return;
+    const norme = {}; Object.keys(DICO).forEach(k => { norme[k.replace(/\s+/g, ' ').trim()] = DICO[k]; });
+    const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT), noeuds = [];
+    while (w.nextNode()) noeuds.push(w.currentNode);
+    noeuds.forEach(n => {
+      if (/^(SCRIPT|STYLE)$/.test(n.parentNode.nodeName)) return;
+      const brut = n.nodeValue, t = brut.trim().replace(/\s+/g, ' ');
+      if (t && norme[t]) n.nodeValue = brut.replace(brut.trim(), () => norme[t]);
+    });
+    document.querySelectorAll('[title],[placeholder],[aria-label],[alt]').forEach(e => ['title', 'placeholder', 'aria-label', 'alt'].forEach(a => {
+      const v = e.getAttribute(a), t = v && v.trim().replace(/\s+/g, ' ');
+      if (t && norme[t]) e.setAttribute(a, norme[t]);
+    }));
+  };
+  traduirePage();
   let ETAT = null, CONV = null, EN_COURS = false, CONTROLE = null;
   const SIG = { c: '', m: '' }, RECH = { q: '', t: null };
   const FILE = [];                 // messages envoyés pendant qu'une réponse est en cours : ils partent un par un, dans l'ordre, quand elle est finie
@@ -403,7 +426,7 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
   const api = async (chemin, corps) => {
     const r = await fetch(chemin, corps !== undefined ? { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Token': TOKEN }, body: JSON.stringify(corps) } : { headers: { 'X-Token': TOKEN } });
     const d = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error(d.erreur || ('Erreur ' + r.status));
+    if (!r.ok) throw new Error(d.erreur || (T('Erreur ') + r.status));
     return d;
   };
   const el = (tag, cls, texte) => { const e = document.createElement(tag); if (cls) e.className = cls; if (texte !== undefined) e.textContent = texte; return e; };
@@ -437,8 +460,8 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
           code.textContent = contenu;
           pre.appendChild(code);
           if (window.hljs) { try { hljs.highlightElement(code); } catch(e) {} }
-          const b = el('button', 'btn-copier', 'Copier');
-          b.onclick = () => { copier(code.textContent).then(ok => { b.textContent = ok ? 'Copié !' : 'Échec'; setTimeout(() => b.textContent = 'Copier', 1500); }); };
+          const b = el('button', 'btn-copier', T('Copier'));
+          b.onclick = () => { copier(code.textContent).then(ok => { b.textContent = ok ? T('Copié !') : T('Échec'); setTimeout(() => b.textContent = T('Copier'), 1500); }); };
           w.appendChild(pre); w.appendChild(b); cible.appendChild(w);
         }
       } else {
@@ -487,8 +510,8 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
     const d = el('div', 'accord'); d.dataset.id = a.id;
     d.appendChild(el('b', '', a.titre)); if (a.detail) d.appendChild(el('div', 'aide', a.detail));
     if (a.diff) { const pre = el('pre'); a.diff.split('\n').forEach(l => { const s = el('div', l.startsWith('+') && !l.startsWith('+++') ? 'add' : l.startsWith('-') && !l.startsWith('---') ? 'del' : '', l || ' '); pre.appendChild(s); }); d.appendChild(pre); }
-    const ligne = el('div', 'ligne'), oui = el('button', 'principal', 'Accepter'), non = el('button', '', 'Refuser');
-    const repondre = async ok => { oui.disabled = non.disabled = true; document.removeEventListener('keydown', surTouche); try { await api('/api/approuver', { id: a.id, ok }); d.style.opacity = .6; d.appendChild(el('div', 'aide', ok ? 'Accepté.' : 'Refusé.')); } catch (e) { d.appendChild(el('div', 'erreur', e.message)); } };
+    const ligne = el('div', 'ligne'), oui = el('button', 'principal', T('Accepter')), non = el('button', '', T('Refuser'));
+    const repondre = async ok => { oui.disabled = non.disabled = true; document.removeEventListener('keydown', surTouche); try { await api('/api/approuver', { id: a.id, ok }); d.style.opacity = .6; d.appendChild(el('div', 'aide', ok ? T('Accepté.') : T('Refusé.'))); } catch (e) { d.appendChild(el('div', 'erreur', e.message)); } };
     // Raccourcis clavier seulement quand le focus est DANS la carte (jamais pendant que tu tapes ailleurs) : Échap = Refuser ; Entrée sur un bouton le déclenche (comportement normal).
     const surTouche = (e) => {
       if (!d.contains(e.target)) return;
@@ -508,22 +531,22 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
     $('jauge').hidden = false; $('jauge').className = 'jauge' + (pct >= 90 ? ' plein' : pct >= 70 ? ' moyen' : '');
     $('jauge').querySelector('i').style.width = pct + '%';
     $('jaugeTexte').textContent = (j.reel ? '' : '~') + k(j.utilise) + 'k / ' + k(j.total) + 'k';
-    $('jauge').title = 'Fenêtre de contexte : ' + j.utilise + ' jetons sur ' + j.total + ' (' + pct + ' %)' + (j.reel ? ' — chiffre réel d\'Ollama.' : ' — estimation, le chiffre réel arrive après la prochaine réponse.') + (pct >= 90 ? ' Presque plein : le début sera résumé automatiquement.' : '');
+    $('jauge').title = T('Fenêtre de contexte : ') + j.utilise + T(' jetons sur ') + j.total + ' (' + pct + ' %)' + (j.reel ? T(' — chiffre réel d\'Ollama.') : T(' — estimation, le chiffre réel arrive après la prochaine réponse.')) + (pct >= 90 ? T(' Presque plein : le début sera résumé automatiquement.') : '');
   };
   const setVitesse = v => {
     const z = $('vitesse');
     if (!v) { z.hidden = true; return; }
-    z.hidden = false; z.className = 'jauge' + (v.ecriture < 15 ? ' moyen' : ''); z.textContent = v.ecriture + ' jetons/s';
-    z.title = 'Écriture : ' + v.ecriture + ' jetons/s' + (v.lecture ? ' · lecture du prompt : ' + v.lecture + ' jetons/s' : '') + ' · chargement du modèle : ' + v.chargement + ' s · réponse entière : ' + v.total + ' s.'
-      + (v.ecriture < 15 ? ' LENT : une partie du modèle tourne sans doute sur le processeur (ferme ComfyUI, clique sur « 🧹 VRAM » ou baisse la fenêtre de contexte).' : '')
-      + (v.chargement > 10 ? ' Le modèle a dû être rechargé en mémoire (' + v.chargement + ' s perdues).' : '');
+    z.hidden = false; z.className = 'jauge' + (v.ecriture < 15 ? ' moyen' : ''); z.textContent = v.ecriture + T(' jetons/s');
+    z.title = T('Écriture : ') + v.ecriture + T(' jetons/s') + (v.lecture ? T(' · lecture du prompt : ') + v.lecture + T(' jetons/s') : '') + T(' · chargement du modèle : ') + v.chargement + T(' s · réponse entière : ') + v.total + ' s.'
+      + (v.ecriture < 15 ? T(' LENT : une partie du modèle tourne sans doute sur le processeur (ferme ComfyUI, clique sur « 🧹 VRAM » ou baisse la fenêtre de contexte).') : '')
+      + (v.chargement > 10 ? T(' Le modèle a dû être rechargé en mémoire (') + v.chargement + T(' s perdues).') : '');
   };
   const majAnnuler = () => {
     const b = $('bAnnuler'), a = CONV && CONV.annulable;
     $('bRevue').hidden = !a;
     if (!a) { b.hidden = true; return; }
-    b.hidden = false; b.textContent = '↩ Annuler (' + a.fichiers.length + ')';
-    b.title = 'Rétablit les fichiers touchés par la dernière demande : ' + a.fichiers.join(', ') + '. Les effets des commandes ne sont pas annulés.';
+    b.hidden = false; b.textContent = T('↩ Annuler (') + a.fichiers.length + ')';
+    b.title = T('Rétablit les fichiers touchés par la dernière demande : ') + a.fichiers.join(', ') + T('. Les effets des commandes ne sont pas annulés.');
   };
   const majJauge = async id => { try { setJauge(await api('/api/contexte?id=' + id)); } catch (e) { /* la jauge est un confort */ } };
   // Encart des tâches. Une liste entièrement faite n'a plus d'utilité : en direct elle reste 6 s (« tout est fait ») puis disparaît ; à la réouverture d'une conversation elle n'apparaît pas.
@@ -537,8 +560,8 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
     if (toutes && !enDirect) { z.hidden = true; return; }
     z.hidden = false; z.classList.toggle('replie', replie);
     const faites = liste.filter(t => t.etat === 'fait').length;
-    const t = el('div', 'tt'); t.appendChild(el('span', '', toutes ? '✔ Tâches : tout est fait (' + liste.length + ')' : 'Tâches : ' + faites + ' / ' + liste.length + ' faites'));
-    const droite = el('span', ''); const x = el('button', '', '✕'); x.title = 'Fermer cette liste'; x.style.cssText = 'background:none;border:0;color:inherit;cursor:pointer;padding:0 6px';
+    const t = el('div', 'tt'); t.appendChild(el('span', '', toutes ? T('✔ Tâches : tout est fait (') + liste.length + ')' : T('Tâches : ') + faites + ' / ' + liste.length + T(' faites')));
+    const droite = el('span', ''); const x = el('button', '', '✕'); x.title = T('Fermer cette liste'); x.style.cssText = 'background:none;border:0;color:inherit;cursor:pointer;padding:0 6px';
     x.addEventListener('click', e => { e.stopPropagation(); effacerTaches(); }); droite.append(x, el('span', '', replie ? '▸' : '▾')); t.appendChild(droite);
     t.addEventListener('click', () => { z.classList.toggle('replie'); afficherTaches(liste, enDirect); });
     z.appendChild(t);
@@ -555,18 +578,18 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
     bulles.forEach((b, k) => {
       const idx = indicesUser[k - decal]; if (idx === undefined) return;
       b.dataset.idx = idx;
-      const barre = el('div', 'actions'), mod = el('button', '', '✏️ Modifier');
-      mod.title = 'Modifier ce message : la conversation repart de là';
+      const barre = el('div', 'actions'), mod = el('button', '', T('✏️ Modifier'));
+      mod.title = T('Modifier ce message : la conversation repart de là');
       mod.addEventListener('click', () => { if (EN_COURS) return; EDIT_INDEX = idx; $('saisie').value = CONV.messages[idx].content; $('bandeauEdition').hidden = false; $('saisie').focus(); $('saisie').dispatchEvent(new Event('input')); });
       barre.appendChild(mod); b.appendChild(barre);
     });
     const reponses = [...fil().querySelectorAll('.msg.ia')].filter(m => m.querySelector('.corps') && m.querySelector('.corps')._brut);
     reponses.forEach((m, k) => {
-      const barre = el('div', 'actions'), cop = el('button', '', '📋 Copier');
-      cop.addEventListener('click', async () => { cop.textContent = (await copier(m.querySelector('.corps')._brut)) ? '✔ Copié' : 'Échec'; setTimeout(() => cop.textContent = '📋 Copier', 1500); });
+      const barre = el('div', 'actions'), cop = el('button', '', T('📋 Copier'));
+      cop.addEventListener('click', async () => { cop.textContent = (await copier(m.querySelector('.corps')._brut)) ? T('✔ Copié') : T('Échec'); setTimeout(() => cop.textContent = T('📋 Copier'), 1500); });
       barre.appendChild(cop);
       if (k === reponses.length - 1 && indicesUser.length) {
-        const reg = el('button', '', '🔄 Régénérer'); reg.title = 'Refaire cette réponse (la réponse actuelle est remplacée)';
+        const reg = el('button', '', T('🔄 Régénérer')); reg.title = T('Refaire cette réponse (la réponse actuelle est remplacée)');
         reg.addEventListener('click', () => { if (EN_COURS) return; const i = indicesUser[indicesUser.length - 1]; EDIT_INDEX = i; $('saisie').value = CONV.messages[i].content; envoyer(); });
         barre.appendChild(reg);
       }
@@ -576,10 +599,10 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
   const afficherHistorique = c => {
     fil().textContent = '';
     (c.resume ? [{ role: 'resume', content: c.resume }] : []).concat(c.messages).forEach(m => {
-      if (m.role === 'resume') { const d = el('div', 'info', 'Résumé du début de la conversation : ' + m.content.slice(0, 400) + (m.content.length > 400 ? '...' : '')); fil().appendChild(d); }
+      if (m.role === 'resume') { const d = el('div', 'info', T('Résumé du début de la conversation : ') + m.content.slice(0, 400) + (m.content.length > 400 ? '...' : '')); fil().appendChild(d); }
       else if (m.role === 'user') { const d = el('div', 'msg moi'); d.appendChild(el('div', 'corps', m.content)); fil().appendChild(d); }
       else if (m.role === 'assistant') { if (m.content) { const x = messageIA(); rendre(x.c, m.content); } (m.tool_calls || []).forEach(t => fil().appendChild(el('div', 'outil', '⚙ ' + t.function.name + ' ' + JSON.stringify(t.function.arguments).slice(0, 160)))); }
-      else if (m.role === 'tool') { const d = el('div', 'outil'); d.appendChild(el('div', '', '↳ ' + (m.tool_name || 'résultat'))); d.appendChild(el('div', 'res', (m.content || '').slice(0, 700))); fil().appendChild(d); }
+      else if (m.role === 'tool') { const d = el('div', 'outil'); d.appendChild(el('div', '', '↳ ' + (m.tool_name || T('résultat')))); d.appendChild(el('div', 'res', (m.content || '').slice(0, 700))); fil().appendChild(d); }
     });
     annoter(); afficherTaches(c.taches); majJauge(c.id); setVitesse(c.vitesse); majAnnuler();
     bas();
@@ -599,12 +622,12 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
   };
   const majActivite = () => {
     if (!ACT) return; const s = Math.round((Date.now() - ACT.debut) / 1000), silence = Math.round((Date.now() - ACT.dernier) / 1000);
-    const dur = n => n < 90 ? n + ' s' : Math.floor(n / 60) + ' min ' + (n % 60) + ' s';
-    let t = { attente: 'Le modèle prépare sa réponse', pensee: 'Réflexion en cours (' + ACT.pensee + ' caractères pensés)', texte: 'Rédaction de la réponse (' + ACT.texte + ' caractères)', outil: 'Outil « ' + ACT.outil + ' » en cours', accord: 'En attente de ton accord (carte ci-dessus)' }[ACT.phase];
-    t += ' · ' + dur(s) + ' depuis ton message';
+    const dur = n => n < 90 ? n + ' s' : Math.floor(n / 60) + T(' min ') + (n % 60) + ' s';
+    let t = { attente: T('Le modèle prépare sa réponse'), pensee: T('Réflexion en cours (') + ACT.pensee + T(' caractères pensés)'), texte: T('Rédaction de la réponse (') + ACT.texte + T(' caractères)'), outil: T('Outil « ') + ACT.outil + T(' » en cours'), accord: T('En attente de ton accord (carte ci-dessus)') }[ACT.phase];
+    t += ' · ' + dur(s) + T(' depuis ton message');
     if (ACT.phase === 'attente' && ACT.hint) t += ' · ' + ACT.hint;
     let classe = 'on';
-    if (ACT.phase !== 'accord' && silence >= 45) { t += ' · aucun signe depuis ' + dur(silence) + ' : il travaille encore (gros contexte ou carte graphique occupée par ComfyUI). Arrêter coupe la demande.'; classe = silence >= 240 ? 'on mort' : 'on long'; }
+    if (ACT.phase !== 'accord' && silence >= 45) { t += T(' · aucun signe depuis ') + dur(silence) + T(' : il travaille encore (gros contexte ou carte graphique occupée par ComfyUI). Arrêter coupe la demande.'); classe = silence >= 240 ? 'on mort' : 'on long'; }
     $('activiteTexte').textContent = t; $('activite').className = classe;
   };
   // Le texte arrive par petits morceaux : on ne redessine le message qu'au plus toutes les 80 ms (sinon tout est recalculé à chaque morceau).
@@ -627,12 +650,12 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
   };
   const majFile = () => {
     const z = $('fileAttente'); z.textContent = '';
-    if (!FILE.length) { z.hidden = true; PAUSE_FILE = false; $('bEnvoyer').title = EN_COURS ? 'Mettre ce message en file d\'attente' : 'Envoyer'; return; }
+    if (!FILE.length) { z.hidden = true; PAUSE_FILE = false; $('bEnvoyer').title = EN_COURS ? T('Mettre ce message en file d\'attente') : T('Envoyer'); return; }
     z.hidden = false;
-    z.appendChild(el('span', '', (PAUSE_FILE ? '⏸ File en pause (' : '⏳ En attente (') + FILE.length + ') :'));
-    FILE.forEach((q, i) => { const m = q.t, ici = q.conv === (CONV ? CONV.id : (FLUX && !FLUX.detache ? FLUX.id : '')), c = el('span', 'chip', m.length > 40 ? m.slice(0, 39) + '…' : m); c.title = ici ? m : 'Pour une autre conversation : ' + m; if (!ici) c.style.opacity = .6; const x = el('button', '', '✕'); x.title = 'Retirer de la file'; x.addEventListener('click', () => { FILE.splice(i, 1); majFile(); }); c.appendChild(x); z.appendChild(c); });
+    z.appendChild(el('span', '', (PAUSE_FILE ? T('⏸ File en pause (') : T('⏳ En attente (')) + FILE.length + ') :'));
+    FILE.forEach((q, i) => { const m = q.t, ici = q.conv === (CONV ? CONV.id : (FLUX && !FLUX.detache ? FLUX.id : '')), c = el('span', 'chip', m.length > 40 ? m.slice(0, 39) + '…' : m); c.title = ici ? m : T('Pour une autre conversation : ') + m; if (!ici) c.style.opacity = .6; const x = el('button', '', '✕'); x.title = T('Retirer de la file'); x.addEventListener('click', () => { FILE.splice(i, 1); majFile(); }); c.appendChild(x); z.appendChild(c); });
     if (PAUSE_FILE && !EN_COURS) {
-      const r = el('button', 'principal', 'Reprendre'), v = el('button', '', 'Vider');
+      const r = el('button', 'principal', T('Reprendre')), v = el('button', '', T('Vider'));
       r.addEventListener('click', () => { PAUSE_FILE = false; const t = FILE.shift(); majFile(); envoyer(t); }); v.addEventListener('click', () => { FILE.length = 0; majFile(); });
       z.append(r, v);
     }
@@ -645,18 +668,18 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
   let PREC_ACT = new Set();
   const majTravail = () => {
     const travaille = EN_COURS || (ETAT && ETAT.actives && ETAT.actives.length), p = $('ptTravail');
-    p.hidden = !(travaille || NONLUS.size); p.classList.toggle('fini', !travaille && NONLUS.size > 0); p.title = travaille ? 'L\'assistant travaille' : 'Réponse terminée, pas encore lue';
+    p.hidden = !(travaille || NONLUS.size); p.classList.toggle('fini', !travaille && NONLUS.size > 0); p.title = travaille ? T('L\'assistant travaille') : T('Réponse terminée, pas encore lue');
   };
   const envoyer = async (force) => {
     const forcee = !!force && typeof force === 'object';                               // message sorti de la file : { t, conv }
     const texte = (forcee ? force.t : $('saisie').value).trim(); if (!texte) return;
     if (forcee && !EN_COURS && force.conv !== (CONV ? CONV.id : '')) {                  // il part dans la conversation où il a été écrit, pas dans celle affichée entre-temps
-      if (force.conv) { await ouvrir(force.conv); if (!CONV || CONV.id !== force.conv) { infoLocale('✘ Message en file non envoyé : sa conversation n\'existe plus (« ' + texte.slice(0, 40) + ' »).'); return; } }
+      if (force.conv) { await ouvrir(force.conv); if (!CONV || CONV.id !== force.conv) { infoLocale(T('✘ Message en file non envoyé : sa conversation n\'existe plus (« ') + texte.slice(0, 40) + T(' »).')); return; } }
       else await nouvelle();
     }
     if (!forcee && texte.startsWith('/') && await commande(texte)) return;          // commande « / » : traitée sans passer par le modèle
     if (EN_COURS) {                                                               // une réponse est en cours : le message attend son tour
-      if (EDIT_INDEX !== null) { infoLocale('Termine ou arrête la réponse en cours avant de modifier un message.'); return; }
+      if (EDIT_INDEX !== null) { infoLocale(T('Termine ou arrête la réponse en cours avant de modifier un message.')); return; }
       FILE.push({ t: texte, conv: CONV ? CONV.id : (FLUX && !FLUX.detache ? FLUX.id : '') }); $('saisie').value = ''; ajusterSaisie(); majFile(); return;
     }
     ID_EN_COURS = CONV ? CONV.id : '';
@@ -668,7 +691,7 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
       CONV.messages = CONV.messages.slice(0, depuis); afficherTaches([]);
     }
     finEdition();
-    $('saisie').value = ''; $('saisie').style.height = ''; EN_COURS = true; $('bEnvoyer').title = 'Mettre ce message en file d\'attente'; majTravail(); $('bStop').hidden = false; $('bStop').disabled = false; CONTROLE = new AbortController();
+    $('saisie').value = ''; $('saisie').style.height = ''; EN_COURS = true; $('bEnvoyer').title = T('Mettre ce message en file d\'attente'); majTravail(); $('bStop').hidden = false; $('bStop').disabled = false; CONTROLE = new AbortController();
     const moi = el('div', 'msg moi'); moi.appendChild(el('div', 'corps', texte)); fil().appendChild(moi);
     let ia = messageIA(), detailsPensee = null; bas();
     const etaitNouvelle = !CONV, flux = FLUX = { id: CONV ? CONV.id : '', detache: false, sauve: document.createElement('div') }, visible = () => !flux.detache;
@@ -677,7 +700,7 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
     try {
       const r = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Token': TOKEN }, signal: CONTROLE.signal,
         body: JSON.stringify({ message: texte, conversation: CONV ? CONV.id : '', travail: $('selTravail').value || '', modele: $('selModele').value, mode: $('selMode').value, reflexion: $('cReflexion').checked, remplacer_depuis: depuis }) });
-      if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.erreur || 'Erreur ' + r.status); }
+      if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.erreur || T('Erreur ') + r.status); }
       const lecteur = r.body.getReader(), dec = new TextDecoder(); let reste = '';
       for (;;) {
         const { done, value } = await lecteur.read(); if (done) break;
@@ -690,7 +713,7 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
           else if (e.type === 'pensee') {
             if (!detailsPensee) {
               detailsPensee = el('details', 'pensee');
-              detailsPensee.appendChild(el('summary', '', 'Réflexion'));
+              detailsPensee.appendChild(el('summary', '', T('Réflexion')));
               detailsPensee.appendChild(el('pre'));
 
               // Insérer la réflexion dans la colonne, avant le contenu du message.
@@ -706,7 +729,7 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
           }
           else if (e.type === 'outil') { const d = el('div', 'outil'); d.appendChild(el('div', '', '⚙ ' + e.nom + ' ' + JSON.stringify(e.args).slice(0, 220))); d.dataset.nom = e.nom; zone().appendChild(d); }
           else if (e.type === 'resultat') { const cartes = [...zone().querySelectorAll('.outil')]; const d = cartes[cartes.length - 1]; if (d) d.appendChild(el('div', 'res', e.texte)); vider(ia); ia = messageIA(zone()); detailsPensee = null; }
-          else if (e.type === 'approbation') { zone().appendChild(carteAccord(e)); signaler('⏸ Accord demandé'); }
+          else if (e.type === 'approbation') { zone().appendChild(carteAccord(e)); signaler(T('⏸ Accord demandé')); }
           else if (e.type === 'etat') { /* affiché dans la barre d'activité */ }
           else if (e.type === 'taches') { if (visible()) afficherTaches(e.liste, true); }
           else if (e.type === 'jetons') { if (visible()) setJauge(e); }
@@ -726,11 +749,11 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
         }
       }
       vider(ia);
-      if (!finRecue) zone().appendChild(el('div', 'info', 'La connexion avec l\'assistant s\'est interrompue. La réponse continue côté serveur : elle s\'affichera ici dès qu\'elle avance.'));
-    } catch (e) { if (e.name !== 'AbortError') { zone().appendChild(el('div', 'erreur', e.message)); if (!finRecue) zone().appendChild(el('div', 'info', 'Si l\'assistant travaillait encore, la réponse s\'affichera ici dès qu\'elle avance.')); } }
+      if (!finRecue) zone().appendChild(el('div', 'info', T('La connexion avec l\'assistant s\'est interrompue. La réponse continue côté serveur : elle s\'affichera ici dès qu\'elle avance.')));
+    } catch (e) { if (e.name !== 'AbortError') { zone().appendChild(el('div', 'erreur', e.message)); if (!finRecue) zone().appendChild(el('div', 'info', T('Si l\'assistant travaillait encore, la réponse s\'affichera ici dès qu\'elle avance.'))); } }
     const etaitVisible = visible(); FLUX = null;
     termine(flux.id, etaitVisible && !document.hidden);                              // pastille verte si tu n'étais pas en train de la lire
-    arreterActivite(); EN_COURS = false; $('bEnvoyer').disabled = false; $('bStop').hidden = true; if (etaitVisible) annoter(); signaler('✔ Terminé'); majTravail(); await rafraichir(); if (etaitVisible) bas();
+    arreterActivite(); EN_COURS = false; $('bEnvoyer').disabled = false; $('bStop').hidden = true; if (etaitVisible) annoter(); signaler(T('✔ Terminé')); majTravail(); await rafraichir(); if (etaitVisible) bas();
     if (FILE.length) {                                                            // message suivant de la file d'attente (sauf si tu as appuyé sur Arrêter)
       if (PAUSE_FILE) majFile(); else { const suivant = FILE.shift(); majFile(); envoyer(suivant); }
     }
@@ -755,7 +778,7 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
       if (FLUX && FLUX.detache && FLUX.id === id) rattacherFlux(); else afficherHistorique(CONV); [...document.querySelectorAll('.conv')].forEach(c => c.classList.toggle('choisie', c.dataset.id === id)); fermerLat(); } catch (e) { fil().appendChild(el('div', 'erreur', e.message)); } };
   const listeConversations = () => {
     const z = $('conversations'); z.textContent = '';
-    ETAT.conversations.forEach(c => { const d = el('div', 'conv' + (CONV && CONV.id === c.id ? ' choisie' : '')); d.dataset.id = c.id; if ((ETAT.actives || []).includes(c.id) || (EN_COURS && ID_EN_COURS === c.id)) { const pt = el('i', 'travail'); pt.title = 'L\'assistant travaille sur cette conversation'; d.appendChild(pt); } else if (NONLUS.has(c.id)) { const pt = el('i', 'travail fini'); pt.title = 'Réponse terminée, pas encore lue'; d.appendChild(pt); } d.appendChild(el('span', 't', c.titre || '(sans titre)')); const ep = el('button', c.epingle ? 'epingle' : '', c.epingle ? '★' : '☆'); ep.title = c.epingle ? 'Désépingler' : 'Épingler en haut de la liste'; ep.addEventListener('click', async e => { e.stopPropagation(); try { await api('/api/epingler', { id: c.id, epingle: !c.epingle }); rafraichir(); } catch (err) { alert(err.message); } }); d.appendChild(ep); const r = el('button', '', '✏️'); r.title = 'Renommer'; r.addEventListener('click', async e => { e.stopPropagation(); const nouveau = prompt('Nouveau titre :', c.titre || ''); if (!nouveau || !nouveau.trim()) return; try { const rep = await api('/api/renommer', { id: c.id, titre: nouveau.trim() }); if (CONV && CONV.id === c.id) CONV.titre = rep.titre; rafraichir(); } catch (err) { alert(err.message); } }); d.appendChild(r); const x = el('button', '', '✕'); x.title = 'Supprimer'; x.addEventListener('click', async e => { e.stopPropagation(); if (!confirm('Supprimer cette conversation ?')) return; await api('/api/supprimer', { id: c.id }); if (CONV && CONV.id === c.id) nouvelle(); rafraichir(); }); d.appendChild(x); d.addEventListener('click', () => ouvrir(c.id)); z.appendChild(d); });
+    ETAT.conversations.forEach(c => { const d = el('div', 'conv' + (CONV && CONV.id === c.id ? ' choisie' : '')); d.dataset.id = c.id; if ((ETAT.actives || []).includes(c.id) || (EN_COURS && ID_EN_COURS === c.id)) { const pt = el('i', 'travail'); pt.title = T('L\'assistant travaille sur cette conversation'); d.appendChild(pt); } else if (NONLUS.has(c.id)) { const pt = el('i', 'travail fini'); pt.title = T('Réponse terminée, pas encore lue'); d.appendChild(pt); } d.appendChild(el('span', 't', c.titre || T('(sans titre)'))); const ep = el('button', c.epingle ? 'epingle' : '', c.epingle ? '★' : '☆'); ep.title = c.epingle ? T('Désépingler') : T('Épingler en haut de la liste'); ep.addEventListener('click', async e => { e.stopPropagation(); try { await api('/api/epingler', { id: c.id, epingle: !c.epingle }); rafraichir(); } catch (err) { alert(err.message); } }); d.appendChild(ep); const r = el('button', '', '✏️'); r.title = T('Renommer'); r.addEventListener('click', async e => { e.stopPropagation(); const nouveau = prompt(T('Nouveau titre :'), c.titre || ''); if (!nouveau || !nouveau.trim()) return; try { const rep = await api('/api/renommer', { id: c.id, titre: nouveau.trim() }); if (CONV && CONV.id === c.id) CONV.titre = rep.titre; rafraichir(); } catch (err) { alert(err.message); } }); d.appendChild(r); const x = el('button', '', '✕'); x.title = T('Supprimer'); x.addEventListener('click', async e => { e.stopPropagation(); if (!confirm(T('Supprimer cette conversation ?'))) return; await api('/api/supprimer', { id: c.id }); if (CONV && CONV.id === c.id) nouvelle(); rafraichir(); }); d.appendChild(x); d.addEventListener('click', () => ouvrir(c.id)); z.appendChild(d); });
   };
   // Nouveautés de modèles (vérifiées au lancement par Lutin, au plus une fois par jour) : toujours proposées, jamais installées toutes seules.
   let PROP_T = 0;
@@ -765,26 +788,26 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
     const z = $('propositions'), liste = d.propositions || [];
     z.textContent = ''; $('ptModeles').hidden = !liste.length;
     if (!liste.length) return;
-    z.appendChild(el('h2', '', 'Nouveautés pour ta machine'));
+    z.appendChild(el('h2', '', T('Nouveautés pour ta machine')));
     liste.forEach(p => {
       const c = el('div', 'carte');
-      c.appendChild(el('div', 'nom', p.type === 'maj' ? 'Mise à jour : ' + p.modele : (p.role ? 'Meilleur choix « ' + p.role + ' » : ' : '') + p.modele + (p.go ? ' (' + p.go + ' Go)' : '')));
+      c.appendChild(el('div', 'nom', p.type === 'maj' ? T('Mise à jour : ') + p.modele : (p.role ? T('Meilleur choix « ') + p.role + T(' » : ') : '') + p.modele + (p.go ? ' (' + p.go + T(' Go)') : '')));
       if (p.phrase) c.appendChild(el('div', '', p.phrase));
-      c.appendChild(el('div', 'aide', p.raison + (p.ancien ? ' Remplace : ' + p.ancien + '.' : '')));
-      const i = el('button', 'principal', p.type === 'maj' ? 'Mettre à jour' : 'Installer');
+      c.appendChild(el('div', 'aide', p.raison + (p.ancien ? T(' Remplace : ') + p.ancien + '.' : '')));
+      const i = el('button', 'principal', p.type === 'maj' ? T('Mettre à jour') : T('Installer'));
       i.addEventListener('click', async () => { try { await api('/api/installer-modele', { modele: p.modele }); await api('/api/propositions-traiter', { cle: p.cle, appliquer: true }); rafraichir(); chargerPropositions(true); } catch (e) { alert(e.message); } });
-      const x = el('button', '', 'Ne plus proposer');
+      const x = el('button', '', T('Ne plus proposer'));
       x.addEventListener('click', async () => { try { await api('/api/propositions-traiter', { cle: p.cle, appliquer: false }); chargerPropositions(true); } catch (e) { alert(e.message); } });
       c.append(i, x); z.appendChild(c);
     });
   };
   const verifierModeles = async (portee, bouton) => {
-    const m = $('msgVerif'), boutons = [$('bMaj'), $('bNouveaux')]; boutons.forEach(b => b.disabled = true); m.textContent = 'Recherche en cours…';
+    const m = $('msgVerif'), boutons = [$('bMaj'), $('bNouveaux')]; boutons.forEach(b => b.disabled = true); m.textContent = T('Recherche en cours…');
     try {
       const d = await api('/api/modeles-verifier', { portee });
       const n = (d.propositions || []).filter(p => portee === 'maj' ? p.type === 'maj' : portee === 'nouveaux' ? p.type === 'nouveau' : true).length;
-      let t = n ? n + ' résultat' + (n > 1 ? 's' : '') + ' ci-dessous.' : (portee === 'maj' ? 'Tous tes modèles sont à jour.' : 'Rien de mieux pour ta machine.');
-      if (portee !== 'maj' && d.catalogue === 'absent') t += ' (Aucun catalogue en ligne n\'est configuré : comparaison avec la liste livrée avec Lutin.)';
+      let t = n ? n + T(' résultat') + (n > 1 ? 's' : '') + T(' ci-dessous.') : (portee === 'maj' ? T('Tous tes modèles sont à jour.') : T('Rien de mieux pour ta machine.'));
+      if (portee !== 'maj' && d.catalogue === 'absent') t += T(' (Aucun catalogue en ligne n\'est configuré : comparaison avec la liste livrée avec Lutin.)');
       if ((d.erreurs || []).length) t += ' ' + d.erreurs.join(' ; ');
       m.textContent = t; await chargerPropositions(true);
     } catch (e) { m.textContent = '✘ ' + e.message; }
@@ -792,56 +815,57 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
   };
   const resumeMesure = mes => {
     const r = mes.resultats || {}, t = [];
-    if (r.vitesse && r.vitesse.tok_s != null) t.push(r.vitesse.tok_s + ' jetons/s');
+    if (r.vitesse && r.vitesse.tok_s != null) t.push(r.vitesse.tok_s + T(' jetons/s'));
     if (r.vitesse && r.vitesse.charge_s) t.push('chargement ' + r.vitesse.charge_s + ' s');
-    [['outils', 'outils'], ['code', 'code'], ['francais', 'français'], ['consignes', 'consignes']].forEach(([k, n]) => { if (r[k]) t.push(n + ' ' + r[k].points + '/' + r[k].sur); });
-    return t.join(' · ') || 'aucune mesure';
+    [['outils', 'outils'], ['code', 'code'], ['francais', T('français')], ['consignes', 'consignes']].forEach(([k, n]) => { if (r[k]) t.push(n + ' ' + r[k].points + '/' + r[k].sur); });
+    return t.join(' · ') || T('aucune mesure');
   };
   const listeModeles = () => {
     const z = $('listeModeles'); z.textContent = '';
     [...ETAT.modeles].sort((a, b) => ETAT.installes.includes(b.id) - ETAT.installes.includes(a.id)).forEach(m => {          // les modèles installés d'abord
       const inst = ETAT.installes.includes(m.id), p = ETAT.pulls[m.id], c = el('div', 'carte');
       const actif = ETAT.reglages.modele === m.id;
-      c.appendChild(el('div', 'nom', m.nom + (m.go ? ' (' + m.go + ' Go)' : ' (taille inconnue)') + (actif ? '  ★ actif' : ''))); if (m.phrase) c.appendChild(el('div', '', m.phrase)); if (m.avertissement) c.appendChild(el('div', 'erreur', '⚠ ' + m.avertissement)); c.appendChild(el('div', 'aide', m.id + (m.origine === 'perso' ? ' · ajouté par toi' : m.origine === 'installe' ? ' · installé hors de l\'application' : '')));
-      if (inst) { c.appendChild(el('span', 'puce ok', '✔ installé'));
-        if (!actif) { const u = el('button', 'principal', 'Utiliser'); u.title = 'En faire le modèle de la conversation'; u.addEventListener('click', async () => { try { await api('/api/reglages', { modele: m.id }); $('selModele').value = m.id; rafraichir(); } catch (e) { alert(e.message); } }); c.appendChild(u); }
-        const x = el('button', 'danger', 'Supprimer'); x.title = 'Supprimer ce modèle de la machine'; x.addEventListener('click', async () => { if (!confirm('Supprimer « ' + m.nom + ' » ? Le téléchargement sera refait si tu le réinstalles.')) return; try { await api('/api/supprimer-modele', { modele: m.id }); rafraichir(); } catch (e) { alert(e.message); } }); c.appendChild(x);
+      c.appendChild(el('div', 'nom', m.nom + (m.go ? ' (' + m.go + T(' Go)') : T(' (taille inconnue)')) + (actif ? T('  ★ actif') : ''))); if (m.phrase) c.appendChild(el('div', '', m.phrase)); if (m.avertissement) c.appendChild(el('div', 'erreur', '⚠ ' + m.avertissement)); c.appendChild(el('div', 'aide', m.id + (m.origine === 'perso' ? T(' · ajouté par toi') : m.origine === 'installe' ? T(' · installé hors de l\'application') : '')));
+      if (inst) { c.appendChild(el('span', 'puce ok', T('✔ installé')));
+        if (!actif) { const u = el('button', 'principal', T('Utiliser')); u.title = T('En faire le modèle de la conversation'); u.addEventListener('click', async () => { try { await api('/api/reglages', { modele: m.id }); $('selModele').value = m.id; rafraichir(); } catch (e) { alert(e.message); } }); c.appendChild(u); }
+        const x = el('button', 'danger', T('Supprimer')); x.title = T('Supprimer ce modèle de la machine'); x.addEventListener('click', async () => { if (!confirm(T('Supprimer « ') + m.nom + T(' » ? Le téléchargement sera refait si tu le réinstalles.'))) return; try { await api('/api/supprimer-modele', { modele: m.id }); rafraichir(); } catch (e) { alert(e.message); } }); c.appendChild(x);
         const bench = ETAT.bench || {}, mes = (bench.mesures || {})[m.id], occupe = !!bench.en_cours;
-        if (mes) c.appendChild(el('div', 'aide', 'Mesuré sur cette machine le ' + mes.date.slice(0, 10) + ' : ' + resumeMesure(mes) + (mes.complet ? '' : ' (vitesse seulement)') + '.'));
-        if (bench.en_cours === m.id) c.appendChild(el('span', 'aide', '⏳ Mesure en cours : ' + bench.etape));
-        const bv = el('button', '', '⏱ Tester la vitesse'); bv.title = 'Environ 20 secondes (plus si le modèle doit d\'abord se charger)'; bv.disabled = occupe;
-        const bc = el('button', '', '📊 Banc complet'); bc.title = 'Vitesse, appel d\'outils, code, français, consignes : onze petites questions, quelques minutes'; bc.disabled = occupe;
+        if (mes) c.appendChild(el('div', 'aide', T('Mesuré sur cette machine le ') + mes.date.slice(0, 10) + ' : ' + resumeMesure(mes) + (mes.complet ? '' : T(' (vitesse seulement)')) + '.'));
+        if (bench.en_cours === m.id) c.appendChild(el('span', 'aide', T('⏳ Mesure en cours : ') + bench.etape));
+        const bv = el('button', '', T('⏱ Tester la vitesse')); bv.title = T('Environ 20 secondes (plus si le modèle doit d\'abord se charger)'); bv.disabled = occupe;
+        const bc = el('button', '', T('📊 Banc complet')); bc.title = T('Vitesse, appel d\'outils, code, français, consignes : onze petites questions, quelques minutes'); bc.disabled = occupe;
         [[bv, true], [bc, false]].forEach(([b, rapide]) => b.addEventListener('click', async () => { try { await api('/api/bench', { modele: m.id, rapide }); rafraichir(); } catch (e) { $('msgModeles').textContent = e.message; } }));
         c.append(bv, bc); }
       else if (p && p.statut === 'en cours') { const b = el('div', 'barre'); const i = el('i'); i.style.width = (p.total ? Math.round(100 * p.fait / p.total) : 3) + '%'; b.appendChild(i); c.appendChild(b); c.appendChild(el('span', 'aide', p.texte + (p.total ? ' ' + Math.round(100 * p.fait / p.total) + ' %' : ''))); }
-      else { const b = el('button', 'principal', 'Installer'); b.disabled = !ETAT.ollama; b.title = ETAT.ollama ? '' : 'Ollama doit tourner (bouton « Démarrer Ollama »)'; b.addEventListener('click', async () => { try { await api('/api/installer-modele', { modele: m.id }); rafraichir(); } catch (e) { $('msgModeles').textContent = e.message; } }); c.appendChild(b); if (p && p.statut === 'erreur') c.appendChild(el('span', 'erreur', p.texte));
+      else { const b = el('button', 'principal', T('Installer')); b.disabled = !ETAT.ollama; b.title = ETAT.ollama ? '' : T('Ollama doit tourner (bouton « Démarrer Ollama »)'); b.addEventListener('click', async () => { try { await api('/api/installer-modele', { modele: m.id }); rafraichir(); } catch (e) { $('msgModeles').textContent = e.message; } }); c.appendChild(b); if (p && p.statut === 'erreur') c.appendChild(el('span', 'erreur', p.texte));
         // Retirer de la liste : seulement un modèle NON installé (un modèle installé garde son bouton « Supprimer »)
-        const o = el('button', '', 'Retirer de la liste'); o.title = actif ? 'C\'est le modèle actif : choisis-en un autre d\'abord' : 'Oublier ce modèle (rien n\'est supprimé du disque : il n\'est pas installé)'; o.disabled = actif || !ETAT.ollama;
-        o.addEventListener('click', async () => { if (!confirm('Retirer « ' + m.nom + ' » de la liste ?' + (m.origine === 'catalogue' ? '\n(Tu pourras le remettre avec « Rétablir la liste d\'origine ».)' : ''))) return; try { await api('/api/oublier-modele', { modele: m.id }); rafraichir(); } catch (e) { $('msgModeles').textContent = e.message; } });
+        const o = el('button', '', T('Retirer de la liste')); o.title = actif ? T('C\'est le modèle actif : choisis-en un autre d\'abord') : T('Oublier ce modèle (rien n\'est supprimé du disque : il n\'est pas installé)'); o.disabled = actif || !ETAT.ollama;
+        o.addEventListener('click', async () => { if (!confirm(T('Retirer « ') + m.nom + T(' » de la liste ?') + (m.origine === 'catalogue' ? T('\n(Tu pourras le remettre avec « Rétablir la liste d\'origine ».)') : ''))) return; try { await api('/api/oublier-modele', { modele: m.id }); rafraichir(); } catch (e) { $('msgModeles').textContent = e.message; } });
         c.appendChild(o); }
       z.appendChild(c);
     });
   };
   const rafraichir = async () => {
     try { ETAT = await api('/api/etat'); } catch (e) { return; }
-    $('pOllama').classList.toggle('ok', ETAT.ollama); $('pOllama').lastChild.textContent = ETAT.ollama ? 'Ollama prêt' : (ETAT.ollama_installe ? 'Ollama arrêté' : 'Ollama non installé'); $('pOllama').title = $('pOllama').lastChild.textContent;
+    $('pOllama').classList.toggle('ok', ETAT.ollama); $('pOllama').lastChild.textContent = ETAT.ollama ? T('Ollama prêt') : (ETAT.ollama_installe ? T('Ollama arrêté') : T('Ollama non installé')); $('pOllama').title = $('pOllama').lastChild.textContent;
     $('bDemarrer').hidden = ETAT.ollama || !ETAT.ollama_installe;
-    $('racine').textContent = 'Projet : ' + ETAT.racine;
+    $('racine').textContent = T('Projet : ') + ETAT.racine;
     // Le choix du modèle ne propose que les modèles INSTALLÉS (l'installation se fait dans l'onglet Modèles).
     const s = $('selModele'), v = s.value || ETAT.reglages.modele; s.textContent = '';
     ETAT.installes.forEach(id => { const m = ETAT.modeles.find(x => x.id === id), o = el('option', '', m ? m.nom : id); o.value = id; s.appendChild(o); });
-    if (!ETAT.installes.length) { const o = el('option', '', ETAT.ollama ? 'Aucun modèle installé (onglet Modèles)' : 'Ollama arrêté'); o.value = ETAT.reglages.modele; s.appendChild(o); }
+    if (!ETAT.installes.length) { const o = el('option', '', ETAT.ollama ? T('Aucun modèle installé (onglet Modèles)') : T('Ollama arrêté')); o.value = ETAT.reglages.modele; s.appendChild(o); }
     s.value = ETAT.installes.includes(v) ? v : (ETAT.installes.includes(ETAT.reglages.modele) ? ETAT.reglages.modele : (ETAT.installes[0] || ETAT.reglages.modele));
     if (!$('selMode').dataset.init) { $('selMode').value = ETAT.reglages.mode; $('cReflexion').checked = ETAT.reglages.reflexion; $('cAuto').checked = ETAT.reglages.auto_ecriture; $('cAvance').checked = !!ETAT.reglages.avance; $('cAutoCmd').checked = ETAT.reglages.auto_commandes; $('cWeb').checked = ETAT.reglages.web !== false; $('rCtx').value = ETAT.reglages.num_ctx; $('rTemp').value = ETAT.reglages.temperature; $('rTours').value = ETAT.reglages.tours_max; $('iTopP').value = ETAT.reglages.top_p ?? ''; $('iTopK').value = ETAT.reglages.top_k ?? ''; $('iMinP').value = ETAT.reglages.min_p ?? ''; $('iRep').value = ETAT.reglages.repeat_penalty ?? ''; $('cGarde').checked = ETAT.reglages.garde_ressources !== false; $('cComfy').checked = ETAT.reglages.liberer_si_comfy !== false; $('sRappels').value = ETAT.reglages.rappels_auto || 'scenario'; $('iSeuilRam').value = ETAT.reglages.seuil_ram_go; $('iSeuilDisque').value = ETAT.reglages.seuil_disque_go; $('iPlafond').value = ETAT.reglages.plafond_donnees_go; $('iLimiteCmd').value = ETAT.reglages.limite_ram_commande_go; $('selMode').dataset.init = '1'; }
+    if (document.activeElement !== $('selLangue')) $('selLangue').value = ETAT.langue_reglage || 'auto';
     $('cHorsLigne').checked = !!ETAT.hors_ligne; $('cWeb').disabled = !!ETAT.hors_ligne;
     const tr = ETAT.travaux || { liste: [], actif: '' }, st = $('selTravail'), sigT = JSON.stringify(tr);
     if (st.dataset.sig !== sigT) { st.dataset.sig = sigT; st.textContent = ''; tr.liste.forEach(t => { const o = el('option', '', t.nom); o.value = t.id; o.title = t.chemin; st.appendChild(o); }); st.value = tr.actif; }
     st.hidden = !tr.liste.length; $('bTravailPlus').hidden = !ETAT.configurateur;
-    if (ETAT.bench && ETAT.bench.erreur) $('msgModeles').textContent = 'Banc d\'essai : ' + ETAT.bench.erreur;
+    if (ETAT.bench && ETAT.bench.erreur) $('msgModeles').textContent = T('Banc d\'essai : ') + ETAT.bench.erreur;
     $('vCtx').textContent = $('rCtx').value; $('vTemp').textContent = $('rTemp').value; $('vTours').textContent = $('rTours').value;
     // Le modèle enregistré n'est plus installé (supprimé, ou Ollama réinstallé) : on passe sur un modèle installé plutôt que d'envoyer une demande à un modèle absent.
     if (ETAT.installes.length && s.value !== ETAT.reglages.modele && !ETAT.installes.includes(ETAT.reglages.modele)) sauverReglages();
-    $('bRestaurer').hidden = !ETAT.modeles_masques; $('bRestaurer').textContent = 'Rétablir la liste d\'origine (' + ETAT.modeles_masques + ' retiré' + (ETAT.modeles_masques > 1 ? 's' : '') + ')';
+    $('bRestaurer').hidden = !ETAT.modeles_masques; $('bRestaurer').textContent = T('Rétablir la liste d\'origine (') + ETAT.modeles_masques + T(' retiré') + (ETAT.modeles_masques > 1 ? 's' : '') + ')';
     // On ne reconstruit les listes que si elles ont changé (le sondage toutes les 4 s les redessinait pour rien).
     // Une conversation qui travaillait ne travaille plus : si tu ne la regardais pas, pastille verte « terminé, pas lu ».
     const actives = new Set(ETAT.actives || []);
@@ -893,70 +917,70 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
   const ouvrirOnglet = p => document.querySelector('.onglets button[data-p="' + p + '"]').click();
   const bascule = async (idCase, arg, nom) => {
     const a = (arg || '').toLowerCase(), voulu = ['on', 'oui', '1', 'true', 'actif'].includes(a) ? true : ['off', 'non', '0', 'false'].includes(a) ? false : !$(idCase).checked;
-    $(idCase).checked = voulu; await sauverReglages(); await rafraichir(); infoLocale(nom + ' : ' + (voulu ? 'activé' : 'désactivé') + '.');
+    $(idCase).checked = voulu; await sauverReglages(); await rafraichir(); infoLocale(nom + ' : ' + (voulu ? T('activé') : T('désactivé')) + '.');
   };
-  const sansReponseEnCours = () => { if (EN_COURS) { infoLocale('Une réponse est en cours : attends la fin, ou tape /stop.'); return false; } return true; };
+  const sansReponseEnCours = () => { if (EN_COURS) { infoLocale(T('Une réponse est en cours : attends la fin, ou tape /stop.')); return false; } return true; };
   const COMMANDES = [
-    { n: 'aide', a: ['help', '?'], d: 'Liste toutes les commandes', f: () => infoLocale(COMMANDES.map(c => '/' + c.n + (c.arg ? ' <' + c.arg + '>' : '') + '  —  ' + c.d).join('\n'), true) },
-    { n: 'compact', d: 'Résume le début de la conversation pour libérer du contexte', f: async () => {
-      if (!CONV || !sansReponseEnCours()) { if (!CONV) infoLocale('Aucune conversation à résumer.'); return; }
-      infoLocale('Résumé en cours… (le modèle lit la conversation, quelques secondes)');
-      try { const r = await api('/api/compacter', { conversation: CONV.id }); await ouvrir(CONV.id); infoLocale('✔ Résumé fait : ' + r.avant + ' messages → ' + r.apres + ' gardés en entier. Contexte : ' + r.jauge.utilise + ' / ' + r.jauge.total + ' jetons.'); } catch (e) { infoLocale('✘ ' + e.message); }
+    { n: 'aide', a: ['help', '?'], d: T('Liste toutes les commandes'), f: () => infoLocale(COMMANDES.map(c => '/' + c.n + (c.arg ? ' <' + c.arg + '>' : '') + '  —  ' + c.d).join('\n'), true) },
+    { n: 'compact', d: T('Résume le début de la conversation pour libérer du contexte'), f: async () => {
+      if (!CONV || !sansReponseEnCours()) { if (!CONV) infoLocale(T('Aucune conversation à résumer.')); return; }
+      infoLocale(T('Résumé en cours… (le modèle lit la conversation, quelques secondes)'));
+      try { const r = await api('/api/compacter', { conversation: CONV.id }); await ouvrir(CONV.id); infoLocale(T('✔ Résumé fait : ') + r.avant + T(' messages → ') + r.apres + T(' gardés en entier. Contexte : ') + r.jauge.utilise + ' / ' + r.jauge.total + T(' jetons.')); } catch (e) { infoLocale('✘ ' + e.message); }
     } },
-    { n: 'clear', a: ['nouveau', 'new'], d: 'Commence une nouvelle conversation', f: () => nouvelle() },
-    { n: 'stop', d: 'Arrête la réponse en cours', f: () => { if (!EN_COURS) infoLocale('Rien à arrêter.'); else $('bStop').click(); } },
-    { n: 'retry', a: ['regenerer'], d: 'Refait la dernière réponse', f: () => { const b = [...fil().querySelectorAll('.actions button')].find(x => x.textContent.includes('Régénérer')); if (b && sansReponseEnCours()) b.click(); else if (!b) infoLocale('Rien à régénérer pour le moment.'); } },
-    { n: 'undo', a: ['annuler'], d: 'Annule les modifications de fichiers de la dernière demande', f: () => { if ($('bAnnuler').hidden) infoLocale('Aucune modification de fichier à annuler.'); else $('bAnnuler').click(); } },
-    { n: 'revue', d: 'Relit les changements de la dernière demande, fichier par fichier', f: () => { if ($('bRevue').hidden) infoLocale('Aucune modification de fichier à relire.'); else ouvrirRevue(); } },
-    { n: 'git', d: 'Changements git, message de commit proposé, commit', f: () => ouvrirGit() },
-    { n: 'sante', a: ['health'], d: 'Ouvre la page Santé du PC (mémoire, carte graphique, disques)', f: () => ouvrirOnglet('sante') },
-    { n: 'test', d: 'Lance « Vérifier que tout marche » (autotest de l\'assistant)', f: async () => { ouvrirOnglet('sante'); await window.ouvrirSante(); const b = [...document.querySelectorAll('#santeCorps button')].find(x => x.textContent.includes('Vérifier')); if (b) b.click(); } },
-    { n: 'model', a: ['modele'], arg: 'nom', d: 'Affiche ou change le modèle (parmi les modèles installés)', f: async (arg) => {
-      if (!arg) { infoLocale('Modèle actif : ' + ETAT.reglages.modele + '\nInstallés : ' + (ETAT.installes.join(', ') || 'aucun'), true); return; }
+    { n: 'clear', a: ['nouveau', 'new'], d: T('Commence une nouvelle conversation'), f: () => nouvelle() },
+    { n: 'stop', d: T('Arrête la réponse en cours'), f: () => { if (!EN_COURS) infoLocale(T('Rien à arrêter.')); else $('bStop').click(); } },
+    { n: 'retry', a: ['regenerer'], d: T('Refait la dernière réponse'), f: () => { const b = [...fil().querySelectorAll('.actions button')].find(x => x.textContent.includes(T('Régénérer'))); if (b && sansReponseEnCours()) b.click(); else if (!b) infoLocale(T('Rien à régénérer pour le moment.')); } },
+    { n: 'undo', a: ['annuler'], d: T('Annule les modifications de fichiers de la dernière demande'), f: () => { if ($('bAnnuler').hidden) infoLocale(T('Aucune modification de fichier à annuler.')); else $('bAnnuler').click(); } },
+    { n: 'revue', d: T('Relit les changements de la dernière demande, fichier par fichier'), f: () => { if ($('bRevue').hidden) infoLocale(T('Aucune modification de fichier à relire.')); else ouvrirRevue(); } },
+    { n: 'git', d: T('Changements git, message de commit proposé, commit'), f: () => ouvrirGit() },
+    { n: 'sante', a: ['health'], d: T('Ouvre la page Santé du PC (mémoire, carte graphique, disques)'), f: () => ouvrirOnglet('sante') },
+    { n: 'test', d: T('Lance « Vérifier que tout marche » (autotest de l\'assistant)'), f: async () => { ouvrirOnglet('sante'); await window.ouvrirSante(); const b = [...document.querySelectorAll('#santeCorps button')].find(x => x.textContent.includes(T('Vérifier'))); if (b) b.click(); } },
+    { n: 'model', a: ['modele'], arg: 'nom', d: T('Affiche ou change le modèle (parmi les modèles installés)'), f: async (arg) => {
+      if (!arg) { infoLocale(T('Modèle actif : ') + ETAT.reglages.modele + T('\nInstallés : ') + (ETAT.installes.join(', ') || T('aucun')), true); return; }
       const trouves = ETAT.installes.filter(m => m === arg || m.toLowerCase().includes(arg.toLowerCase()));
       const exact = trouves.find(m => m === arg) || (trouves.length === 1 ? trouves[0] : null);
-      if (!exact) { infoLocale(trouves.length ? 'Plusieurs modèles correspondent : ' + trouves.join(', ') : 'Aucun modèle installé ne correspond. Installés : ' + (ETAT.installes.join(', ') || 'aucun')); return; }
-      $('selModele').value = exact; await sauverReglages(); await rafraichir(); infoLocale('Modèle : ' + exact);
+      if (!exact) { infoLocale(trouves.length ? T('Plusieurs modèles correspondent : ') + trouves.join(', ') : T('Aucun modèle installé ne correspond. Installés : ') + (ETAT.installes.join(', ') || T('aucun'))); return; }
+      $('selModele').value = exact; await sauverReglages(); await rafraichir(); infoLocale(T('Modèle : ') + exact);
     } },
-    { n: 'mode', arg: 'technique|scenario', d: 'Change le mode : travail ou écriture', f: async (arg) => {
+    { n: 'mode', arg: 'technique|scenario', d: T('Change le mode : travail ou écriture'), f: async (arg) => {
       const a = (arg || '').toLowerCase(), v = a.startsWith('tech') ? 'technique' : a.startsWith('sc') ? 'scenario' : '';
-      if (!v) { infoLocale('Mode actuel : ' + $('selMode').value + '. Utilise /mode technique (travail) ou /mode scenario (écriture).'); return; }
-      $('selMode').value = v; await sauverReglages(); infoLocale('Mode : ' + v + '.');
+      if (!v) { infoLocale(T('Mode actuel : ') + $('selMode').value + T('. Utilise /mode technique (travail) ou /mode scenario (écriture).')); return; }
+      $('selMode').value = v; await sauverReglages(); infoLocale(T('Mode : ') + v + '.');
     } },
-    { n: 'reflexion', arg: 'on|off', d: 'Active ou coupe la réflexion du modèle', f: arg => bascule('cReflexion', arg, 'Réflexion') },
-    { n: 'web', arg: 'on|off', d: 'Autorise ou coupe la recherche sur internet', f: arg => bascule('cWeb', arg, 'Web') },
-    { n: 'accord', arg: 'on|off', d: 'Accord automatique des écritures de fichiers', f: arg => bascule('cAuto', arg, 'Accord auto des écritures') },
-    { n: 'commandes', arg: 'on|off', d: 'Accord automatique des commandes lancées', f: arg => bascule('cAutoCmd', arg, 'Commandes auto') },
-    { n: 'contexte', a: ['context'], d: 'Détail de la place prise dans la fenêtre de contexte', f: async () => {
-      if (!CONV) { infoLocale('Pas encore de conversation.'); return; }
+    { n: 'reflexion', arg: 'on|off', d: T('Active ou coupe la réflexion du modèle'), f: arg => bascule('cReflexion', arg, T('Réflexion')) },
+    { n: 'web', arg: 'on|off', d: T('Autorise ou coupe la recherche sur internet'), f: arg => bascule('cWeb', arg, 'Web') },
+    { n: 'accord', arg: 'on|off', d: T('Accord automatique des écritures de fichiers'), f: arg => bascule('cAuto', arg, T('Accord auto des écritures')) },
+    { n: 'commandes', arg: 'on|off', d: T('Accord automatique des commandes lancées'), f: arg => bascule('cAutoCmd', arg, T('Commandes auto')) },
+    { n: 'contexte', a: ['context'], d: T('Détail de la place prise dans la fenêtre de contexte'), f: async () => {
+      if (!CONV) { infoLocale(T('Pas encore de conversation.')); return; }
       const j = await api('/api/contexte?id=' + CONV.id), pct = Math.round(100 * j.utilise / j.total);
-      infoLocale('Contexte : ' + j.utilise + ' / ' + j.total + ' jetons (' + pct + ' %), ' + (j.reel ? 'chiffre réel d\'Ollama' : 'estimation') + (pct >= 70 ? '. Pense à /compact.' : '.'));
+      infoLocale(T('Contexte : ') + j.utilise + ' / ' + j.total + T(' jetons (') + pct + ' %), ' + (j.reel ? T('chiffre réel d\'Ollama') : 'estimation') + (pct >= 70 ? T('. Pense à /compact.') : '.'));
     } },
-    { n: 'vram', d: 'Décharge les modèles d\'Ollama de la carte graphique', f: () => $('bVram').click() },
-    { n: 'export', d: 'Télécharge la conversation en .md', f: () => $('bExport').click() },
-    { n: 'resume', d: 'Document de reprise (résumé IA) à coller dans un autre modèle', f: () => $('bResume').click() },
-    { n: 'rappeler', arg: 'mots-clés', d: 'Cherche dans tes documents et tes anciennes conversations', f: async (arg) => {
-      if (!arg) { infoLocale('Usage : /rappeler quelques mots-clés'); return; }
+    { n: 'vram', d: T('Décharge les modèles d\'Ollama de la carte graphique'), f: () => $('bVram').click() },
+    { n: 'export', d: T('Télécharge la conversation en .md'), f: () => $('bExport').click() },
+    { n: 'resume', d: T('Document de reprise (résumé IA) à coller dans un autre modèle'), f: () => $('bResume').click() },
+    { n: 'rappeler', arg: T('mots-clés'), d: T('Cherche dans tes documents et tes anciennes conversations'), f: async (arg) => {
+      if (!arg) { infoLocale(T('Usage : /rappeler quelques mots-clés')); return; }
       try { infoLocale((await api('/api/rappeler', { requete: arg })).texte, true); } catch (e) { infoLocale('✘ ' + e.message); }
     } },
-    { n: 'plan', d: 'Reconstruit le plan du projet (fichiers et fonctions)', f: async () => { await api('/api/plan', {}); infoLocale('Plan du projet en cours de reconstruction (quelques secondes).'); } },
-    { n: 'renommer', arg: 'titre', d: 'Renomme la conversation', f: async (arg) => {
-      if (!CONV || !arg) { infoLocale('Usage : /renommer nouveau titre (dans une conversation)'); return; }
-      const r = await api('/api/renommer', { id: CONV.id, titre: arg }); CONV.titre = r.titre; rafraichir(); infoLocale('Conversation renommée : ' + r.titre);
+    { n: 'plan', d: T('Reconstruit le plan du projet (fichiers et fonctions)'), f: async () => { await api('/api/plan', {}); infoLocale(T('Plan du projet en cours de reconstruction (quelques secondes).')); } },
+    { n: 'renommer', arg: 'titre', d: T('Renomme la conversation'), f: async (arg) => {
+      if (!CONV || !arg) { infoLocale(T('Usage : /renommer nouveau titre (dans une conversation)')); return; }
+      const r = await api('/api/renommer', { id: CONV.id, titre: arg }); CONV.titre = r.titre; rafraichir(); infoLocale(T('Conversation renommée : ') + r.titre);
     } },
-    { n: 'epingler', a: ['pin'], d: 'Épingle ou désépingle la conversation', f: async () => {
-      if (!CONV) { infoLocale('Pas de conversation.'); return; }
+    { n: 'epingler', a: ['pin'], d: T('Épingle ou désépingle la conversation'), f: async () => {
+      if (!CONV) { infoLocale(T('Pas de conversation.')); return; }
       const c = (ETAT.conversations || []).find(x => x.id === CONV.id); const v = !(c && c.epingle);
-      await api('/api/epingler', { id: CONV.id, epingle: v }); rafraichir(); infoLocale(v ? '★ Conversation épinglée.' : 'Conversation désépinglée.');
+      await api('/api/epingler', { id: CONV.id, epingle: v }); rafraichir(); infoLocale(v ? T('★ Conversation épinglée.') : T('Conversation désépinglée.'));
     } },
-    { n: 'supprimer', d: 'Supprime la conversation (confirmation demandée)', f: async () => {
+    { n: 'supprimer', d: T('Supprime la conversation (confirmation demandée)'), f: async () => {
       if (!CONV || !sansReponseEnCours()) return;
-      if (!confirm('Supprimer cette conversation ?')) return;
+      if (!confirm(T('Supprimer cette conversation ?'))) return;
       await api('/api/supprimer', { id: CONV.id }); nouvelle(); rafraichir();
     } },
-    { n: 'memoire', d: 'Ouvre la mémoire et les skills', f: () => ouvrirOnglet('memoire') },
-    { n: 'reglages', d: 'Ouvre les réglages', f: () => ouvrirOnglet('reglages') },
-    { n: 'modeles', d: 'Ouvre la page des modèles (installer, supprimer, retirer)', f: () => ouvrirOnglet('modeles') },
+    { n: 'memoire', d: T('Ouvre la mémoire et les skills'), f: () => ouvrirOnglet('memoire') },
+    { n: 'reglages', d: T('Ouvre les réglages'), f: () => ouvrirOnglet('reglages') },
+    { n: 'modeles', d: T('Ouvre la page des modèles (installer, supprimer, retirer)'), f: () => ouvrirOnglet('modeles') },
   ];
   const trouverCommande = nom => COMMANDES.find(c => c.n === nom || (c.a || []).includes(nom));
   // Renvoie true si le texte était une commande (exécutée, ou signalée inconnue) ; false : c'est un message normal pour le modèle.
@@ -964,7 +988,7 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
     const m = texte.match(/^\/(\S+)\s*([\s\S]*)$/); if (!m) return false;
     const c = trouverCommande(m[1].toLowerCase()), arg = m[2].trim();
     if (!c) {
-      if (!/\s/.test(texte) && texte.length <= 24 && !texte.slice(1).includes('/')) { $('saisie').value = ''; ajusterSaisie(); fermerCommandes(); infoLocale('Commande inconnue : ' + texte + ' — tape /aide pour la liste.'); return true; }
+      if (!/\s/.test(texte) && texte.length <= 24 && !texte.slice(1).includes('/')) { $('saisie').value = ''; ajusterSaisie(); fermerCommandes(); infoLocale(T('Commande inconnue : ') + texte + T(' — tape /aide pour la liste.')); return true; }
       return false;                                                                // un chemin ou une phrase qui commence par « / » : message normal
     }
     $('saisie').value = ''; ajusterSaisie(); fermerCommandes();
@@ -1010,20 +1034,20 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
   if (window.matchMedia('(max-width:860px)').matches) { document.querySelector('.options-lat').classList.add('repliee'); $('optChevron').textContent = '▸'; }          // sur téléphone, les options de la colonne de gauche sont repliées au départ
   $('bNouvelle').addEventListener('click', nouvelle);
   $('bExport').addEventListener('click', () => {
-    if (!CONV || !CONV.messages || !CONV.messages.length) { alert('Aucune conversation à exporter (ouvre ou commence une conversation).'); return; }
+    if (!CONV || !CONV.messages || !CONV.messages.length) { alert(T('Aucune conversation à exporter (ouvre ou commence une conversation).')); return; }
     const titre = (CONV.titre || 'conversation').replace(/[\\/:*?"<>|]/g, ' ');
     const date = new Date().toISOString().slice(0, 10);
     const lignes = [];
-    lignes.push('# Export de conversation — ' + titre);
+    lignes.push(T('# Export de conversation — ') + titre);
     lignes.push('');
-    lignes.push('Date : ' + date + '  ·  Modèle : ' + (CONV.modele || $('selModele').value || '?'));
-    if (CONV.resume) { lignes.push(''); lignes.push('## Résumé (contexte antérieur)'); lignes.push(''); lignes.push(CONV.resume); }
-    lignes.push(''); lignes.push('## Échanges');
+    lignes.push(T('Date : ') + date + T('  ·  Modèle : ') + (CONV.modele || $('selModele').value || '?'));
+    if (CONV.resume) { lignes.push(''); lignes.push(T('## Résumé (contexte antérieur)')); lignes.push(''); lignes.push(CONV.resume); }
+    lignes.push(''); lignes.push(T('## Échanges'));
     CONV.messages.forEach(m => {
       if (m.role === 'tool') {
-        lignes.push(''); lignes.push('**Outil `' + (m.tool_name || '?') + '` → résultat :**'); lignes.push(''); lignes.push('```'); lignes.push((m.content || '').slice(0, 1500)); lignes.push('```');
+        lignes.push(''); lignes.push('**Outil `' + (m.tool_name || '?') + T('` → résultat :**')); lignes.push(''); lignes.push('```'); lignes.push((m.content || '').slice(0, 1500)); lignes.push('```');
       } else {
-        const qui = m.role === 'user' ? '### Utilisateur' : '### Assistant';
+        const qui = m.role === 'user' ? T('### Utilisateur') : '### Assistant';
         lignes.push(''); lignes.push(qui); lignes.push(''); lignes.push(m.content || '');
       }
     });
@@ -1036,14 +1060,14 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
     setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   });
   $('bResume').addEventListener('click', async () => {
-    if (!CONV || !CONV.id) { alert('Aucune conversation ouverte.'); return; }
+    if (!CONV || !CONV.id) { alert(T('Aucune conversation ouverte.')); return; }
     const b = $('bResume');
-    b.disabled = true; const ancien = b.textContent; b.textContent = '⏳ Résumé…';
+    b.disabled = true; const ancien = b.textContent; b.textContent = T('⏳ Résumé…');
     try {
       const r = await api('/api/resumer', { conversation: CONV.id });
       const titre = (CONV.titre || 'conversation').replace(/[\\/:*?"<>|]/g, ' ');
       const date = new Date().toISOString().slice(0, 10);
-      const texte = '# Document de reprise — ' + titre + '\n\nGénéré le ' + date + ' par ' + r.modele + '. À coller en contexte (system ou premier message) d\'un autre modèle d\'IA.\n\n---\n\n' + r.texte;
+      const texte = T('# Document de reprise — ') + titre + T('\n\nGénéré le ') + date + T(' par ') + r.modele + T('. À coller en contexte (system ou premier message) d\'un autre modèle d\'IA.\n\n---\n\n') + r.texte;
       const blob = new Blob([texte], { type: 'text/markdown;charset=utf-8' });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
@@ -1051,7 +1075,7 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
       document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => URL.revokeObjectURL(a.href), 2000);
     } catch (e) {
-      alert('Échec du résumé : ' + (e.message || e));
+      alert(T('Échec du résumé : ') + (e.message || e));
     } finally {
       b.disabled = false; b.textContent = ancien;
     }
@@ -1066,7 +1090,7 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
     $('optChevron').textContent = zone.classList.contains('repliee') ? '▸' : '▾';
   });
   $('bDemarrer').addEventListener('click', async () => { $('bDemarrer').disabled = true; try { await api('/api/demarrer-ollama', {}); } catch (e) { fil().appendChild(el('div', 'erreur', e.message)); } $('bDemarrer').disabled = false; rafraichir(); });
-  $('bVram').addEventListener('click', async () => { $('bVram').disabled = true; $('bVram').textContent = '⏳…'; try { const r = await api('/api/liberer-vram', {}); fil().appendChild(el('div', 'aide', r.message)); } catch (e) { fil().appendChild(el('div', 'erreur', e.message)); } $('bVram').disabled = false; $('bVram').textContent = '🧹 Libérer la VRAM'; rafraichir(); });
+  $('bVram').addEventListener('click', async () => { $('bVram').disabled = true; $('bVram').textContent = '⏳…'; try { const r = await api('/api/liberer-vram', {}); fil().appendChild(el('div', 'aide', r.message)); } catch (e) { fil().appendChild(el('div', 'erreur', e.message)); } $('bVram').disabled = false; $('bVram').textContent = T('🧹 Libérer la VRAM'); rafraichir(); });
   ['selModele', 'selMode', 'cReflexion', 'cAvance', 'cAuto', 'cAutoCmd', 'cWeb', 'iTopP', 'iTopK', 'iMinP', 'iRep', 'cGarde', 'cComfy', 'sRappels', 'iSeuilRam', 'iSeuilDisque', 'iPlafond', 'iLimiteCmd'].forEach(id => $(id).addEventListener('change', sauverReglages));
   ['rCtx', 'rTemp', 'rTours'].forEach(id => $(id).addEventListener('input', () => { $('vCtx').textContent = $('rCtx').value; $('vTemp').textContent = $('rTemp').value; $('vTours').textContent = $('rTours').value; }));
   ['rCtx', 'rTemp', 'rTours'].forEach(id => $(id).addEventListener('change', async () => { await sauverReglages(); if (CONV) majJauge(CONV.id); }));
@@ -1075,45 +1099,45 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
   const fermerModal = () => { $('modal').hidden = true; };
   $('modalFermer').addEventListener('click', fermerModal); $('modalFond').addEventListener('click', fermerModal);
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('modal').hidden) fermerModal(); });
-  const dessinerDiff = texte => { const pre = el('pre', 'diff'); (texte || '(aucune différence)').split('\n').forEach(l => pre.appendChild(el('div', l.startsWith('+') && !l.startsWith('+++') ? 'add' : l.startsWith('-') && !l.startsWith('---') ? 'del' : '', l || ' '))); return pre; };
+  const dessinerDiff = texte => { const pre = el('pre', 'diff'); (texte || T('(aucune différence)')).split('\n').forEach(l => pre.appendChild(el('div', l.startsWith('+') && !l.startsWith('+++') ? 'add' : l.startsWith('-') && !l.startsWith('---') ? 'del' : '', l || ' '))); return pre; };
   const ouvrirRevue = async () => {
     if (!CONV || !CONV.id) return;
-    const z = ouvrirModal('Revue : fichiers touchés par la dernière demande');
-    z.appendChild(el('div', 'aide', 'Chargement…'));
+    const z = ouvrirModal(T('Revue : fichiers touchés par la dernière demande'));
+    z.appendChild(el('div', 'aide', T('Chargement…')));
     let r; try { r = await api('/api/revue?id=' + CONV.id); } catch (e) { z.textContent = e.message; return; }
     z.textContent = '';
-    if (!r.fichiers.length) { z.appendChild(el('div', 'aide', 'Rien à relire : aucun fichier touché, ou tout est déjà annulé.')); return; }
-    z.appendChild(el('div', 'aide', 'Relis chaque changement. « Annuler ce fichier » le remet comme il était avant la demande. Les effets des commandes lancées ne sont pas dans cette liste.'));
+    if (!r.fichiers.length) { z.appendChild(el('div', 'aide', T('Rien à relire : aucun fichier touché, ou tout est déjà annulé.'))); return; }
+    z.appendChild(el('div', 'aide', T('Relis chaque changement. « Annuler ce fichier » le remet comme il était avant la demande. Les effets des commandes lancées ne sont pas dans cette liste.')));
     r.fichiers.forEach(f => {
       const c = el('div', 'carte'); const tete = el('div', 'rev-tete');
       tete.appendChild(el('b', '', f.chemin)); tete.appendChild(el('span', 'badge ' + f.etat, f.etat));
-      tete.appendChild(el('span', 'aide', f.binaire ? 'fichier non texte' : '+' + f.plus + ' −' + f.moins));
-      if (f.modifie_depuis) tete.appendChild(el('span', 'erreur', 'modifié depuis : non annulable'));
-      const voir = el('button', '', 'Voir les différences'), ann = el('button', '', '↩ Annuler ce fichier'); ann.disabled = f.modifie_depuis;
+      tete.appendChild(el('span', 'aide', f.binaire ? T('fichier non texte') : '+' + f.plus + ' −' + f.moins));
+      if (f.modifie_depuis) tete.appendChild(el('span', 'erreur', T('modifié depuis : non annulable')));
+      const voir = el('button', '', T('Voir les différences')), ann = el('button', '', T('↩ Annuler ce fichier')); ann.disabled = f.modifie_depuis;
       let pre = null;
-      voir.addEventListener('click', () => { if (pre) { pre.remove(); pre = null; voir.textContent = 'Voir les différences'; } else { pre = dessinerDiff(f.diff); c.appendChild(pre); voir.textContent = 'Masquer'; } });
+      voir.addEventListener('click', () => { if (pre) { pre.remove(); pre = null; voir.textContent = T('Voir les différences'); } else { pre = dessinerDiff(f.diff); c.appendChild(pre); voir.textContent = T('Masquer'); } });
       ann.addEventListener('click', async () => {
-        if (!confirm('Remettre « ' + f.chemin + ' » comme avant la dernière demande ?')) return;
+        if (!confirm(T('Remettre « ') + f.chemin + T(' » comme avant la dernière demande ?'))) return;
         try { await api('/api/annuler-fichier', { conversation: CONV.id, chemin: f.chemin }); await ouvrir(CONV.id); ouvrirRevue(); } catch (e) { alert(e.message); }
       });
       tete.appendChild(voir); tete.appendChild(ann); c.appendChild(tete); z.appendChild(c);
     });
-    const pied = el('div', 'ligne'), tout = el('button', '', '↩ Tout annuler'), commit = el('button', 'principal', '⎇ Commiter ces fichiers…');
+    const pied = el('div', 'ligne'), tout = el('button', '', T('↩ Tout annuler')), commit = el('button', 'principal', T('⎇ Commiter ces fichiers…'));
     tout.addEventListener('click', () => { fermerModal(); $('bAnnuler').click(); });
     commit.addEventListener('click', () => ouvrirGit(r.fichiers.map(f => f.chemin)));
     pied.append(tout, commit); z.appendChild(pied);
   };
   const ouvrirJournal = async () => {
-    const z = ouvrirModal('Journal des actions');
-    z.appendChild(el('div', 'aide', 'Chargement…'));
+    const z = ouvrirModal(T('Journal des actions'));
+    z.appendChild(el('div', 'aide', T('Chargement…')));
     let r; try { r = await api('/api/journal?n=300'); } catch (e) { z.textContent = e.message; return; }
     z.textContent = '';
-    z.appendChild(el('div', 'aide', 'Chaque fichier modifié, chaque commande lancée et chaque module installé, avec l\'accord donné et la personne concernée. Le contenu des fichiers et la sortie des commandes ne sont pas gardés. La plus récente est en haut.'));
-    if (!r.entrees.length) { z.appendChild(el('div', 'aide', 'Aucune action pour le moment.')); return; }
+    z.appendChild(el('div', 'aide', T('Chaque fichier modifié, chaque commande lancée et chaque module installé, avec l\'accord donné et la personne concernée. Le contenu des fichiers et la sortie des commandes ne sont pas gardés. La plus récente est en haut.')));
+    if (!r.entrees.length) { z.appendChild(el('div', 'aide', T('Aucune action pour le moment.'))); return; }
     r.entrees.forEach(e => {
       const c = el('div', 'carte'); c.style.display = 'block';
       c.appendChild(el('b', '', e.outil + ' ' + e.cible));
-      c.appendChild(el('div', 'aide', e.ts.replace('T', ' ') + ' · ' + e.issue + ' · accord : ' + e.accord + ' · par : ' + (e.qui || '?') + ' · dossier : ' + e.dossier));
+      c.appendChild(el('div', 'aide', e.ts.replace('T', ' ') + ' · ' + e.issue + T(' · accord : ') + e.accord + T(' · par : ') + (e.qui || '?') + T(' · dossier : ') + e.dossier));
       z.appendChild(c);
     });
   };
@@ -1121,43 +1145,43 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
   $('bSauvegarde').addEventListener('click', async () => {
     try {
       const r = await fetch('/api/sauvegarde', { headers: { 'X-Token': TOKEN } });
-      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).erreur || 'Erreur ' + r.status);
+      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).erreur || T('Erreur ') + r.status);
       const a = document.createElement('a'); a.href = URL.createObjectURL(await r.blob()); a.download = 'lutin-sauvegarde.zip'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-      infoLocale('Sauvegarde téléchargée : conversations, réglages et mémoire. Elle ne contient ni les appareils connectés ni les fichiers de ton dossier de travail. Pour la restaurer : lutin restaurer <fichier>.');
+      infoLocale(T('Sauvegarde téléchargée : conversations, réglages et mémoire. Elle ne contient ni les appareils connectés ni les fichiers de ton dossier de travail. Pour la restaurer : lutin restaurer <fichier>.'));
     } catch (e) { infoLocale('✘ ' + e.message); }
   });
   const ouvrirGit = async presel => {
-    const z = ouvrirModal('Git : changements en attente');
-    z.appendChild(el('div', 'aide', 'Chargement…'));
+    const z = ouvrirModal(T('Git : changements en attente'));
+    z.appendChild(el('div', 'aide', T('Chargement…')));
     let g; try { g = await api('/api/git'); } catch (e) { z.textContent = e.message; return; }
     z.textContent = '';
     if (!g.dispo) { z.appendChild(el('div', 'erreur', g.raison)); return; }
     const choisis = new Set(presel || (CONV && CONV.annulable ? CONV.annulable.fichiers : []));
-    z.appendChild(el('div', 'aide', 'Branche : ' + g.branche + ' — ' + g.total + ' changement(s) en attente' + (g.total > g.modifies.length ? ' (' + g.modifies.length + ' affichés)' : '') + '. Coche ce qui doit entrer dans le commit ; rien n\'est envoyé en ligne (pas de push).'));
+    z.appendChild(el('div', 'aide', T('Branche : ') + g.branche + ' — ' + g.total + T(' changement(s) en attente') + (g.total > g.modifies.length ? ' (' + g.modifies.length + T(' affichés)') : '') + T('. Coche ce qui doit entrer dans le commit ; rien n\'est envoyé en ligne (pas de push).')));
     const liste = el('div', 'liste-git'), cases = [];
     g.modifies.forEach(m => {
       const l = el('label', 'ligne-git'), cb = document.createElement('input'); cb.type = 'checkbox'; cb.value = m.chemin; cb.checked = choisis.has(m.chemin) || [...choisis].some(p => m.chemin.endsWith('/') && p.startsWith(m.chemin));
       cases.push(cb); l.appendChild(cb); l.appendChild(el('span', 'etat', m.etat)); l.appendChild(el('span', '', m.chemin)); liste.appendChild(l);
     });
-    if (!g.modifies.length) liste.appendChild(el('div', 'aide', 'Rien à commiter : tout est à jour.'));
+    if (!g.modifies.length) liste.appendChild(el('div', 'aide', T('Rien à commiter : tout est à jour.')));
     z.appendChild(liste);
     const choix = () => cases.filter(c => c.checked).map(c => c.value);
-    const barre = el('div', 'ligne'), tous = el('button', '', 'Tout cocher'), aucun = el('button', '', 'Tout décocher');
+    const barre = el('div', 'ligne'), tous = el('button', '', T('Tout cocher')), aucun = el('button', '', T('Tout décocher'));
     tous.addEventListener('click', () => cases.forEach(c => c.checked = true)); aucun.addEventListener('click', () => cases.forEach(c => c.checked = false));
     barre.append(tous, aucun); z.appendChild(barre);
-    const msg = document.createElement('textarea'); msg.placeholder = 'Message du commit (écris-le, ou clique sur « Proposer un message »)'; msg.style.cssText = 'width:100%;min-height:130px;margin-top:10px'; z.appendChild(msg);
-    const etat = el('div', 'aide'), actions = el('div', 'ligne'), prop = el('button', '', '✨ Proposer un message'), ok = el('button', 'principal', 'Commiter');
+    const msg = document.createElement('textarea'); msg.placeholder = T('Message du commit (écris-le, ou clique sur « Proposer un message »)'); msg.style.cssText = 'width:100%;min-height:130px;margin-top:10px'; z.appendChild(msg);
+    const etat = el('div', 'aide'), actions = el('div', 'ligne'), prop = el('button', '', T('✨ Proposer un message')), ok = el('button', 'principal', T('Commiter'));
     prop.addEventListener('click', async () => {
-      const f = choix(); if (!f.length) { etat.textContent = 'Coche au moins un fichier.'; return; }
-      prop.disabled = true; etat.textContent = 'Le modèle lit les changements… (il peut devoir se charger en mémoire)';
-      try { msg.value = (await api('/api/git-message', { fichiers: f })).message; etat.textContent = 'Relis et corrige le message si besoin.'; } catch (e) { etat.textContent = e.message; }
+      const f = choix(); if (!f.length) { etat.textContent = T('Coche au moins un fichier.'); return; }
+      prop.disabled = true; etat.textContent = T('Le modèle lit les changements… (il peut devoir se charger en mémoire)');
+      try { msg.value = (await api('/api/git-message', { fichiers: f })).message; etat.textContent = T('Relis et corrige le message si besoin.'); } catch (e) { etat.textContent = e.message; }
       prop.disabled = false;
     });
     ok.addEventListener('click', async () => {
-      const f = choix(); if (!f.length) { etat.textContent = 'Coche au moins un fichier.'; return; } if (!msg.value.trim()) { etat.textContent = 'Écris un message (ou propose-en un).'; return; }
-      if (!confirm('Commiter ' + f.length + ' élément(s) sur la branche « ' + g.branche + ' » ?')) return;
+      const f = choix(); if (!f.length) { etat.textContent = T('Coche au moins un fichier.'); return; } if (!msg.value.trim()) { etat.textContent = T('Écris un message (ou propose-en un).'); return; }
+      if (!confirm(T('Commiter ') + f.length + T(' élément(s) sur la branche « ') + g.branche + T(' » ?'))) return;
       ok.disabled = true;
-      try { const r = await api('/api/git-commit', { message: msg.value, fichiers: f }); await ouvrirGit([]); $('modalCorps').insertBefore(el('div', 'info', 'Commit fait. ' + r.sortie.split('\n')[0]), $('modalCorps').firstChild); } catch (e) { etat.textContent = e.message; ok.disabled = false; }
+      try { const r = await api('/api/git-commit', { message: msg.value, fichiers: f }); await ouvrirGit([]); $('modalCorps').insertBefore(el('div', 'info', T('Commit fait. ') + r.sortie.split('\n')[0]), $('modalCorps').firstChild); } catch (e) { etat.textContent = e.message; ok.disabled = false; }
     });
     actions.append(prop, ok); z.appendChild(actions); z.appendChild(etat);
   };
@@ -1166,16 +1190,16 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
   const POINT = { ok: '🟢', attention: '🟠', critique: '🔴' };
   const majVoyantSante = async () => {
     if (document.hidden) return;
-    try { const s = await api('/api/sante-systeme'); const b = $('bSante'); b.dataset.niveau = s.niveau; b.title = 'Santé du PC : ' + (s.niveau === 'ok' ? 'tout va bien' : s.items.filter(i => i.niveau !== 'ok').map(i => i.nom + ' (' + i.valeur + ')').join(' ; ')); return s; } catch (e) { /* voyant facultatif */ }
+    try { const s = await api('/api/sante-systeme'); const b = $('bSante'); b.dataset.niveau = s.niveau; b.title = T('Santé du PC : ') + (s.niveau === 'ok' ? T('tout va bien') : s.items.filter(i => i.niveau !== 'ok').map(i => i.nom + ' (' + i.valeur + ')').join(' ; ')); return s; } catch (e) { /* voyant facultatif */ }
   };
   const ouvrirSante = async () => {
     const z = $('santeCorps');
     z.textContent = '';
-    z.appendChild(el('h2', '', 'Santé du PC'));
-    z.appendChild(el('div', 'aide', 'Mesure en cours…'));
+    z.appendChild(el('h2', '', T('Santé du PC')));
+    z.appendChild(el('div', 'aide', T('Mesure en cours…')));
     let s; try { s = await api('/api/sante-systeme'); } catch (e) { z.textContent = e.message; return; }
     z.textContent = '';
-    z.appendChild(el('h2', '', 'Santé du PC'));
+    z.appendChild(el('h2', '', T('Santé du PC')));
     $('bSante').dataset.niveau = s.niveau;
     s.items.forEach(i => {
       const c = el('div', 'carte'); const t = el('div', 'nom');
@@ -1183,16 +1207,16 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
       if (i.conseil) t.appendChild(el('div', 'aide', i.conseil));
       c.appendChild(t); z.appendChild(c);
     });
-    z.appendChild(el('div', 'aide', 'Les seuils d\'alerte se règlent dans Réglages > « Garde-fous ressources ». Les mesures de mémoire vidéo demandent nvidia-smi (installé avec le pilote NVIDIA).'));
-    const barre = el('div', 'ligne'), maj = el('button', '', '↻ Actualiser'), vram = el('button', '', '🧹 Libérer la VRAM'), test = el('button', 'principal', '✔ Vérifier que tout marche'), complet = el('button', '', 'Test complet (fait répondre le modèle)');
+    z.appendChild(el('div', 'aide', T('Les seuils d\'alerte se règlent dans Réglages > « Garde-fous ressources ». Les mesures de mémoire vidéo demandent nvidia-smi (installé avec le pilote NVIDIA).')));
+    const barre = el('div', 'ligne'), maj = el('button', '', T('↻ Actualiser')), vram = el('button', '', T('🧹 Libérer la VRAM')), test = el('button', 'principal', T('✔ Vérifier que tout marche')), complet = el('button', '', T('Test complet (fait répondre le modèle)'));
     const sortie = el('div'); sortie.style.marginTop = '10px';
     maj.addEventListener('click', ouvrirSante); vram.addEventListener('click', async () => { vram.disabled = true; try { sortie.textContent = (await api('/api/liberer-vram', {})).message; } catch (e) { sortie.textContent = e.message; } vram.disabled = false; });
     const lancer = async profond => {
-      test.disabled = complet.disabled = true; sortie.textContent = ''; sortie.appendChild(el('div', 'aide', profond ? 'Test complet en cours (le modèle peut devoir se charger : jusqu\'à une minute)…' : 'Vérifications en cours…'));
+      test.disabled = complet.disabled = true; sortie.textContent = ''; sortie.appendChild(el('div', 'aide', profond ? T('Test complet en cours (le modèle peut devoir se charger : jusqu\'à une minute)…') : T('Vérifications en cours…')));
       try {
         const r = await api('/api/autotest', { profond });
         sortie.textContent = '';
-        sortie.appendChild(el('div', r.ok ? 'info' : 'erreur', r.ok ? '✔ Tout ce qui est important fonctionne.' : '✘ Un point important ne fonctionne pas :'));
+        sortie.appendChild(el('div', r.ok ? 'info' : 'erreur', r.ok ? T('✔ Tout ce qui est important fonctionne.') : T('✘ Un point important ne fonctionne pas :')));
         r.resultats.forEach(x => { const l = el('div', 'ligne-git'); l.appendChild(el('span', '', x.ok ? '🟢' : (x.important ? '🔴' : '🟠'))); const col = el('div'); col.appendChild(el('b', '', x.nom + ' ')); col.appendChild(el('span', 'aide', '(' + x.duree + ' s)')); col.appendChild(el('div', x.ok ? 'aide' : 'erreur', x.detail)); l.appendChild(col); sortie.appendChild(l); });
       } catch (e) { sortie.textContent = e.message; }
       test.disabled = complet.disabled = false;
@@ -1212,8 +1236,8 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
       try {
         const r = await api('/api/recherche?q=' + encodeURIComponent(q)); if (RECH.q !== q) return;
         const zone = $('conversations'); zone.textContent = '';
-        if (!r.resultats.length) zone.appendChild(el('div', 'aide', 'Aucun résultat.'));
-        r.resultats.forEach(c => { const d = el('div', 'conv res-recherche'); d.dataset.id = c.id; const col = el('div', 't'); col.appendChild(el('div', '', (c.epingle ? '★ ' : '') + (c.titre || '(sans titre)'))); col.appendChild(el('div', 'extrait', c.extrait)); d.appendChild(col); d.addEventListener('click', () => ouvrir(c.id)); zone.appendChild(d); });
+        if (!r.resultats.length) zone.appendChild(el('div', 'aide', T('Aucun résultat.')));
+        r.resultats.forEach(c => { const d = el('div', 'conv res-recherche'); d.dataset.id = c.id; const col = el('div', 't'); col.appendChild(el('div', '', (c.epingle ? '★ ' : '') + (c.titre || T('(sans titre)')))); col.appendChild(el('div', 'extrait', c.extrait)); d.appendChild(col); d.addEventListener('click', () => ouvrir(c.id)); zone.appendChild(d); });
       } catch (e) { /* la recherche est un confort */ }
     }, 300);
   });
@@ -1222,11 +1246,11 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
   const signaler = texte => { if (document.hidden) { document.title = texte + ' — Lutin'; try { if (navigator.vibrate) navigator.vibrate([150, 80, 150]); } catch (e) { /* pas de vibreur */ } } };
   $('bAnnuler').addEventListener('click', async () => {
     if (!CONV || !CONV.annulable || EN_COURS) return;
-    if (!confirm('Rétablir ' + CONV.annulable.fichiers.length + ' fichier(s) tel(s) qu\'ils étaient avant la dernière demande ?\n\n' + CONV.annulable.fichiers.join('\n') + '\n\n(Les effets des commandes lancées ne sont pas annulés. Un fichier modifié depuis n\'est pas touché.)')) return;
+    if (!confirm(T('Rétablir ') + CONV.annulable.fichiers.length + T(' fichier(s) tel(s) qu\'ils étaient avant la dernière demande ?\n\n') + CONV.annulable.fichiers.join('\n') + T('\n\n(Les effets des commandes lancées ne sont pas annulés. Un fichier modifié depuis n\'est pas touché.)'))) return;
     try {
       const r = await api('/api/annuler-tour', { conversation: CONV.id });
       await ouvrir(CONV.id);
-      fil().appendChild(el('div', 'info', 'Annulé. Rétablis : ' + (r.retablis.join(', ') || 'aucun') + (r.ignores.length ? ' — non touchés : ' + r.ignores.join(', ') : '') + '.'));
+      fil().appendChild(el('div', 'info', T('Annulé. Rétablis : ') + (r.retablis.join(', ') || T('aucun')) + (r.ignores.length ? T(' — non touchés : ') + r.ignores.join(', ') : '') + '.'));
       bas();
     } catch (e) { alert(e.message); }
   });
@@ -1236,7 +1260,7 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
     try {
       const r = await api('/api/skills');
       const zone = $('listeSkills'); zone.textContent = '';
-      if (!r.skills.length) { zone.textContent = 'Aucun skill.'; return; }
+      if (!r.skills.length) { zone.textContent = T('Aucun skill.'); return; }
       r.skills.forEach(s => {
         const b = el('button', '', s.titre + '  (' + s.nom + ')');
         b.style.margin = '0 8px 4px 0';
@@ -1251,42 +1275,45 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
   };
   $('bNSkill').addEventListener('click', async () => {
     let nom = $('nSkill').value.trim();
-    if (!nom) { $('mS').textContent = 'Donne un nom (ex. mon-skill.md).'; return; }
+    if (!nom) { $('mS').textContent = T('Donne un nom (ex. mon-skill.md).'); return; }
     if (!nom.endsWith('.md')) nom += '.md';
-    try { await api('/api/skills', { nom, texte: '' }); SKILL_ACTIF = nom; $('tSkill').value = ''; $('nSkill').value = ''; $('mS').textContent = 'Créé : ' + nom; chargerSkills(); }
+    try { await api('/api/skills', { nom, texte: '' }); SKILL_ACTIF = nom; $('tSkill').value = ''; $('nSkill').value = ''; $('mS').textContent = T('Créé : ') + nom; chargerSkills(); }
     catch (e) { $('mS').textContent = e.message; }
   });
   $('bSSkill').addEventListener('click', async () => {
     let nom = SKILL_ACTIF || $('nSkill').value.trim();
-    if (!nom) { $('mS').textContent = 'Choisis un skill ou donne un nom.'; return; }
+    if (!nom) { $('mS').textContent = T('Choisis un skill ou donne un nom.'); return; }
     if (!nom.endsWith('.md')) nom += '.md';
-    try { await api('/api/skills', { nom, texte: $('tSkill').value }); SKILL_ACTIF = nom; $('mS').textContent = 'Enregistré : ' + nom; chargerSkills(); }
+    try { await api('/api/skills', { nom, texte: $('tSkill').value }); SKILL_ACTIF = nom; $('mS').textContent = T('Enregistré : ') + nom; chargerSkills(); }
     catch (e) { $('mS').textContent = e.message; }
   });
   $('bDSkill').addEventListener('click', async () => {
     const nom = SKILL_ACTIF;
-    if (!nom) { $('mS').textContent = 'Choisis d’abord un skill à supprimer.'; return; }
-    if (!confirm('Supprimer « ' + nom + ' » ?')) return;
-    try { await api('/api/skills-supprimer', { nom }); SKILL_ACTIF = null; $('tSkill').value = ''; $('mS').textContent = 'Supprimé : ' + nom; chargerSkills(); }
+    if (!nom) { $('mS').textContent = T('Choisis d’abord un skill à supprimer.'); return; }
+    if (!confirm(T('Supprimer « ') + nom + T(' » ?'))) return;
+    try { await api('/api/skills-supprimer', { nom }); SKILL_ACTIF = null; $('tSkill').value = ''; $('mS').textContent = T('Supprimé : ') + nom; chargerSkills(); }
     catch (e) { $('mS').textContent = e.message; }
   });
-  $('bSCont').addEventListener('click', async () => { try { await api('/api/memoire', { fichier: 'CONTEXTE.md', texte: $('tContexte').value }); $('mC').textContent = 'Enregistré.'; } catch (e) { $('mC').textContent = e.message; } });
-  $('bSMem').addEventListener('click', async () => { try { await api('/api/memoire', { fichier: 'MEMOIRE.md', texte: $('tMemoire').value }); $('mM').textContent = 'Enregistré.'; } catch (e) { $('mM').textContent = e.message; } });
-  $('bAutre').addEventListener('click', async () => { const m = $('autreModele').value.trim(); if (!m) return; try { await api('/api/installer-modele', { modele: m }); $('autreModele').value = ''; $('msgModeles').textContent = 'Téléchargement de « ' + m + ' » lancé : il est ajouté à la liste ci-dessus, et apparaîtra dans le choix du modèle une fois installé.'; rafraichir(); } catch (e) { $('msgModeles').textContent = e.message; } });
+  $('bSCont').addEventListener('click', async () => { try { await api('/api/memoire', { fichier: 'CONTEXTE.md', texte: $('tContexte').value }); $('mC').textContent = T('Enregistré.'); } catch (e) { $('mC').textContent = e.message; } });
+  $('bSMem').addEventListener('click', async () => { try { await api('/api/memoire', { fichier: 'MEMOIRE.md', texte: $('tMemoire').value }); $('mM').textContent = T('Enregistré.'); } catch (e) { $('mM').textContent = e.message; } });
+  $('bAutre').addEventListener('click', async () => { const m = $('autreModele').value.trim(); if (!m) return; try { await api('/api/installer-modele', { modele: m }); $('autreModele').value = ''; $('msgModeles').textContent = T('Téléchargement de « ') + m + T(' » lancé : il est ajouté à la liste ci-dessus, et apparaîtra dans le choix du modèle une fois installé.'); rafraichir(); } catch (e) { $('msgModeles').textContent = e.message; } });
   $('bRestaurer').addEventListener('click', async () => { try { await api('/api/modeles-restaurer', {}); rafraichir(); } catch (e) { $('msgModeles').textContent = e.message; } });
   $('selTravail').addEventListener('change', async () => {
     try { await api('/api/travaux-choisir', { id: $('selTravail').value }); } catch (e) { alert(e.message); }
     await rafraichir();
   });
   $('bTravailPlus').addEventListener('click', async () => {
-    const chemin = prompt('Chemin du dossier de travail à ajouter (Lutin pourra y lire et y modifier des fichiers) :'); if (!chemin) return;
-    const nom = prompt('Nom affiché (facultatif) :', '') || '';
+    const chemin = prompt(T('Chemin du dossier de travail à ajouter (Lutin pourra y lire et y modifier des fichiers) :')); if (!chemin) return;
+    const nom = prompt(T('Nom affiché (facultatif) :'), '') || '';
     try { const r = await api('/api/travaux-ajouter', { chemin, nom }); await api('/api/travaux-choisir', { id: r.liste[r.liste.length - 1].id }); } catch (e) { alert(e.message); }
     rafraichir();
   });
   $('cHorsLigne').addEventListener('change', async () => {
     try { await api('/api/hors-ligne', { actif: $('cHorsLigne').checked }); } catch (e) { alert(e.message); }
     rafraichir();
+  });
+  $('selLangue').addEventListener('change', async () => {
+    try { await api('/api/langue', { valeur: $('selLangue').value }); location.reload(); } catch (e) { alert(e.message); }
   });
   $('bMaj').addEventListener('click', () => verifierModeles('maj'));
   $('bNouveaux').addEventListener('click', () => verifierModeles('nouveaux'));

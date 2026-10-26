@@ -4,6 +4,7 @@
 
 Il lance un vrai serveur Lutin dans un dossier temporaire, puis Chrome (ou Edge, Chromium) sans écran prend les captures. Rien n'est écrit en dehors de assets/ et du dossier temporaire.
 """
+import contextlib
 import json
 import os
 import shutil
@@ -62,8 +63,9 @@ def conversation_demo(ident, titre, minutes):
             {"role": "assistant", "content": "C'est fait : j'ai corrigé **une faute** dans `README.md`.\n\n- « dépendence » est devenu « dépendance » (ligne 3)\n- le reste du fichier est resté identique\n\nLa version précédente est gardée : le bouton **↩ Annuler** la remet en place. Veux-tu que je lance aussi les tests ?"}]}
 
 
-def principal(choix=None):
-    chrome = navigateur(choix)
+@contextlib.contextmanager
+def serveur_demo(variables=None):
+    """Un vrai serveur Lutin dans un dossier temporaire (faux Ollama, conversation d'exemple) ; rend (port, dossier temporaire). `variables` complète l'environnement (ex. LUTIN_LANGUE)."""
     base = Path(os.environ.get("PUBLIC") or tempfile.gettempdir())          # un chemin sans nom d'utilisateur : il apparaît en bas de la capture
     tmp = Path(tempfile.mkdtemp(prefix="demo-", dir=str(base)))
     serveur = None
@@ -74,7 +76,7 @@ def principal(choix=None):
             s.bind(("127.0.0.1", 0))
             port = s.getsockname()[1]
         home = tmp / "home"
-        env = dict(os.environ, LUTIN_HOME=str(home), OLLAMA_URL="http://127.0.0.1:%d" % ollama.server_address[1], PYTHONPATH=str(SRC), LUTIN_SANS_GARDE="1", PYTHONIOENCODING="utf-8")
+        env = dict(os.environ, LUTIN_HOME=str(home), OLLAMA_URL="http://127.0.0.1:%d" % ollama.server_address[1], PYTHONPATH=str(SRC), LUTIN_SANS_GARDE="1", PYTHONIOENCODING="utf-8", **(variables or {}))
         for d in ("config", "donnees/conversations", "memoire", "cache"):
             (home / d).mkdir(parents=True)
         (home / "donnees" / "reglages.json").write_text(json.dumps({"seuil_ram_go": 0.5, "seuil_disque_go": 1.0, "plafond_donnees_go": 50.0}), encoding="utf-8")          # la machine qui prend les captures peut être à l'étroit
@@ -100,12 +102,7 @@ def principal(choix=None):
         if not console.is_file():
             raise SystemExit("Le serveur de démonstration n'a pas démarré.")
         time.sleep(1.5)
-        ASSETS.mkdir(exist_ok=True)
-        for nom, ancre in (("capture-conversation.png", "#conv=a1b2c3d4"), ("capture-modeles.png", "#modeles")):
-            profil = tmp / ("profil-" + nom)
-            subprocess.run([chrome, "--headless=new", "--disable-gpu", "--no-sandbox", "--hide-scrollbars", "--force-device-scale-factor=1", "--user-data-dir=" + str(profil), "--window-size=1280,800",
-                            "--virtual-time-budget=8000", "--screenshot=" + str(ASSETS / nom), "http://127.0.0.1:%d/%s" % (port, ancre)], capture_output=True, timeout=120)
-            print("✔ assets/" + nom if (ASSETS / nom).is_file() else "✘ " + nom)
+        yield port, tmp
     finally:
         if serveur:
             serveur.terminate()
@@ -114,6 +111,17 @@ def principal(choix=None):
             except subprocess.TimeoutExpired:
                 serveur.kill()
         shutil.rmtree(tmp, ignore_errors=True)
+
+
+def principal(choix=None):
+    chrome = navigateur(choix)
+    with serveur_demo() as (port, tmp):
+        ASSETS.mkdir(exist_ok=True)
+        for nom, ancre in (("capture-conversation.png", "#conv=a1b2c3d4"), ("capture-modeles.png", "#modeles")):
+            profil = tmp / ("profil-" + nom)
+            subprocess.run([chrome, "--headless=new", "--disable-gpu", "--no-sandbox", "--hide-scrollbars", "--force-device-scale-factor=1", "--user-data-dir=" + str(profil), "--window-size=1280,800",
+                            "--virtual-time-budget=8000", "--screenshot=" + str(ASSETS / nom), "http://127.0.0.1:%d/%s" % (port, ancre)], capture_output=True, timeout=120)
+            print("✔ assets/" + nom if (ASSETS / nom).is_file() else "✘ " + nom)
 
 
 if __name__ == "__main__":

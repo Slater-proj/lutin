@@ -42,9 +42,12 @@ from . import bench as _bench
 from . import catalogue as _catalogue
 from . import config as _config
 from . import horsligne as _hl
+from . import i18n as _i18n
 from . import sauvegarde as _sauv
 from . import securite as _sec
 from . import travaux as _trav
+from .i18n import t as _t
+from .i18n import traduire as _tr
 from .ollama_client import Ollama as _Ollama
 
 ICI = Path(__file__).resolve().parent
@@ -256,7 +259,7 @@ def noter(note):
     f = MEMOIRE / "MEMOIRE.md"
     existant = lire_memoire("MEMOIRE.md") or "# Mémoire de l'assistant\n\nNotes durables (ajoutées par l'assistant ou à la main).\n\n"
     texte = existant.rstrip("\n") + "\n" + ligne
-    i = texte.find(MARQUE_NOTES)
+    i = position_notes(texte)
     if i >= 0:                                              # la section des notes ne grossit pas sans fin : on garde les 40 dernières lignes
         tete, notes = texte[:i], texte[i:].split("\n")
         if len(notes) > 43:
@@ -302,12 +305,19 @@ def description_skill(nom):
 
 
 MARQUE_NOTES = "\n## Notes de l'assistant"
+MARQUES_NOTES = (MARQUE_NOTES, "\n## Assistant notes")          # le modèle de mémoire anglais (data/en/MEMOIRE.md) a son propre titre
+
+
+def position_notes(texte):
+    """Où commence la section des notes de l'assistant (dans l'une ou l'autre langue), ou -1."""
+    trouvees = [i for i in (texte.find(m) for m in MARQUES_NOTES) if i >= 0]
+    return min(trouvees) if trouvees else -1
 
 
 def texte_memoire(memoire, budget=6000):
     """Ce qui est relu de MEMOIRE.md à chaque conversation : les parties fixes (décisions de l'utilisateur, limites) toujours, et seulement la fin de la section « Notes de l'assistant »
     (qui grossit). Sans cette section, les derniers caractères du fichier, comme avant."""
-    i = memoire.find(MARQUE_NOTES)
+    i = position_notes(memoire)
     if i < 0:
         return memoire[-budget:]
     fixe = memoire[:i][:budget - 1500]
@@ -1806,7 +1816,7 @@ def taille_modele(nom):
 
 
 def go(octets):
-    return "{:.1f} Go".format(octets / GO)
+    return "{:.1f} {}".format(octets / GO, "GB" if _i18n.langue() == "en" else "Go")
 
 
 def niveau_seuil(libre, seuil_attention, seuil_critique):
@@ -1849,9 +1859,9 @@ def evaluer_sante(m, r, besoin_modele=0, charge=None):
         id_ = {"Ollama (modèles)": "disque-ollama", "Projet": "disque-projet", "Données de l'assistant": "disque-donnees"}.get(nom, "disque")
         if d:
             n = niveau_seuil(d["libre"], seuil_disque, seuil_disque / 2)
-            ajouter(id_, "Disque : " + nom, n, "{} libres sur {} ({})".format(go(d["libre"]), go(d["total"]), d["racine"]), "" if n == "ok" else "Fais de la place sur ce disque.")
+            ajouter(id_, _t("Disque : {}").format(_t(nom)), n, "{} libres sur {} ({})".format(go(d["libre"]), go(d["total"]), d["racine"]), "" if n == "ok" else "Fais de la place sur ce disque.")
         else:
-            ajouter(id_, "Disque : " + nom, "attention", "injoignable", "Le disque ou le partage réseau ne répond pas.")
+            ajouter(id_, _t("Disque : {}").format(_t(nom)), "attention", _t("injoignable"), "Le disque ou le partage réseau ne répond pas.")
     plafond = r["plafond_donnees_go"] * GO
     taille = m.get("donnees_octets", 0)
     n = "critique" if taille > plafond * 1.5 else "attention" if taille > plafond else "ok"
@@ -1891,8 +1901,8 @@ def controle_avant_demande(r, emit, conv_id=""):
             if i["niveau"] == "attention":
                 emit({"type": "info", "texte": "⚠ {} : {}. {}".format(i["nom"], i["valeur"], i["conseil"]).strip()})
     if bloquants:
-        emit({"type": "erreur", "texte": "Demande suspendue pour protéger le PC :\n" + "\n".join("• {} : {}. {}".format(i["nom"], i["valeur"], i["conseil"]) for i in bloquants)
-              + "\nRègle le problème puis écris « continue » (ou décoche « Garde-fous ressources » dans Réglages pour passer outre)."})
+        emit({"type": "erreur", "texte": _t("Demande suspendue pour protéger le PC :\n{}\nRègle le problème puis écris « continue » (ou décoche « Garde-fous ressources » dans Réglages pour passer outre).").format(
+            "\n".join("• {} : {}. {}".format(_tr(i["nom"]), _tr(i["valeur"]), _tr(i["conseil"])) for i in bloquants))})
         journaliser("Demande suspendue (ressources) : " + "; ".join("{} {}".format(i["id"], i["valeur"]) for i in bloquants))
         return False
     return True
@@ -1942,7 +1952,7 @@ def lancer_autotest(profond=False):
 
     def ollama_repond():
         if not o["actif"]:
-            raise RuntimeError("Ollama ne répond pas sur " + OLLAMA + " (bouton « Démarrer Ollama »).")
+            raise RuntimeError(_t("Ollama ne répond pas sur {} (bouton « Démarrer Ollama »).").format(OLLAMA))
         return "{} modèle(s) installé(s)".format(len(o["installes"]))
 
     def modele_present():
@@ -2126,7 +2136,7 @@ def annuler_tour(ident, seulement=None):
         else:
             ignores.append("{} ({})".format(chemin, raison))
     if seulement is not None and not retablis:
-        raise ValueError("Pas rétabli : " + (ignores[0] if ignores else seulement + " ne fait pas partie de la dernière demande."))
+        raise ValueError(_t("Pas rétabli : {}").format(ignores[0] if ignores else _t("{} ne fait pas partie de la dernière demande.").format(seulement)))
     restants = [c for c, e in manifeste["fichiers"].items() if not e.get("annule")]
     manifeste["annule"] = not restants
     ecrire_atomique(dossier / "_tour.json", json.dumps(manifeste, ensure_ascii=False, indent=1))
@@ -2234,7 +2244,7 @@ def git_commit(message, fichiers):
     fichiers = chemins_git(fichiers)
     code, sortie, erreur = git(["add", "--"] + fichiers)
     if code != 0:
-        raise ValueError("git add a échoué : " + (erreur or sortie).strip()[:400])
+        raise ValueError(_t("git add a échoué : {}").format((erreur or sortie).strip()[:400]))
     fichier_message = DONNEES / ("commit-" + secrets.token_hex(3) + ".txt")
     try:
         fichier_message.parent.mkdir(parents=True, exist_ok=True)
@@ -2247,7 +2257,7 @@ def git_commit(message, fichiers):
     finally:
         fichier_message.unlink(missing_ok=True)
     if code != 0:
-        raise ValueError("git commit a échoué : " + (erreur.strip() or sortie.strip())[:500])
+        raise ValueError(_t("git commit a échoué : {}").format((erreur.strip() or sortie.strip())[:500]))
     journaliser("Commit de {} fichier(s) depuis l'assistant : {}".format(len(fichiers), message.splitlines()[0][:80]))
     return {"ok": True, "sortie": sortie.strip()[:600]}
 
@@ -2488,8 +2498,8 @@ def liberer_vram():
             urllib.request.urlopen(req, timeout=60)
             decharges.append(nom)
         except (urllib.error.URLError, OSError) as e:
-            decharges.append(nom + " (échec : " + str(e)[:60] + ")")
-    return {"ok": True, "message": "Déchargé(s) : " + ", ".join(decharges)}
+            decharges.append(_t("{} (échec : {})").format(nom, str(e)[:60]))
+    return {"ok": True, "message": _t("Déchargé(s) : {}").format(", ".join(decharges))}
 
 
 def chemin_ollama():
@@ -2639,27 +2649,27 @@ def supprimer_modele(modele):
         corps = e.read().decode("utf-8", "ignore")
         if "not found" in corps.lower() or "n'existe pas" in corps.lower():
             raise ValueError("Ce modèle n'est pas installé.")
-        raise ValueError("Ollama a refusé la suppression : " + corps[:200])
+        raise ValueError(_t("Ollama a refusé la suppression : {}").format(corps[:200]))
     CAPACITES.pop(modele, None)
     return {"ok": True, "modele": modele}
 
 
 def consignes_systeme(r):
     contexte, memoire = lire_memoire("CONTEXTE.md"), lire_memoire("MEMOIRE.md")
-    mode = ("Mode ÉCRITURE : tu aides à rédiger, à reformuler et à chercher dans les documents du dossier de travail. Tu ne lances pas de commandes. Sois inventif et précis, fidèle aux documents de l'utilisateur."
+    mode = (_t("Mode ÉCRITURE : tu aides à rédiger, à reformuler et à chercher dans les documents du dossier de travail. Tu ne lances pas de commandes. Sois inventif et précis, fidèle aux documents de l'utilisateur.")
             if r["mode"] == "scenario" else
-            "Mode TRAVAIL : tu aides à comprendre, modifier et tester les fichiers du dossier de travail. Lis avant de modifier, fais de petits changements, lance les tests après s'il y en a, et dis clairement ce qui est vérifié ou non.")
+            _t("Mode TRAVAIL : tu aides à comprendre, modifier et tester les fichiers du dossier de travail. Lis avant de modifier, fais de petits changements, lance les tests après s'il y en a, et dis clairement ce qui est vérifié ou non."))
     skills = lister_skills()
     bloc_skills = ""
     if skills:
-        lignes = "\n".join("- skills/{} : {}{}".format(nom, titre, (" — à lire quand " + d) if (d := description_skill(nom)) else "") for nom, titre in skills)
-        bloc_skills = ("\n\n# SKILLS (fiches du projet, à lire avec l'outil « lire » quand le sujet t'est demandé)\n"
-                       "Ces fiches décrivent le projet de l'utilisateur (univers, règles, outil). Lis-les au moment où tu en as besoin, pas avant.\n" + lignes + "\n")
-    return ("Tu es Lutin, l'assistant local de l'utilisateur. Tu réponds dans la langue de l'utilisateur, de façon directe et concise. Tu disposes d'outils pour lire et modifier le projet : utilise-les plutôt que de deviner. "
-            "Chaque modification de fichier garde une sauvegarde de l'ancienne version et passe par l'accord de l'utilisateur, sauf s'il a activé l'accord automatique.\n\n" + mode + "\n\n# CONTEXTE DU PROJET (memoire/CONTEXTE.md)\n" + contexte[:14000] + "\n\n# NOTES DURABLES (memoire/MEMOIRE.md)\n" + (texte_memoire(memoire) or "(aucune pour l'instant)")
+        lignes = "\n".join("- skills/{} : {}{}".format(nom, titre, (_t(" — à lire quand ") + d) if (d := description_skill(nom)) else "") for nom, titre in skills)
+        bloc_skills = (_t("\n\n# SKILLS (fiches du projet, à lire avec l'outil « lire » quand le sujet t'est demandé)\n"
+                       "Ces fiches décrivent le projet de l'utilisateur (univers, règles, outil). Lis-les au moment où tu en as besoin, pas avant.\n") + lignes + "\n")
+    return (_t("Tu es Lutin, l'assistant local de l'utilisateur. Tu réponds dans la langue de l'utilisateur, de façon directe et concise. Tu disposes d'outils pour lire et modifier le projet : utilise-les plutôt que de deviner. "
+            "Chaque modification de fichier garde une sauvegarde de l'ancienne version et passe par l'accord de l'utilisateur, sauf s'il a activé l'accord automatique.\n\n") + mode + _t("\n\n# CONTEXTE DU PROJET (memoire/CONTEXTE.md)\n") + contexte[:14000] + _t("\n\n# NOTES DURABLES (memoire/MEMOIRE.md)\n") + (texte_memoire(memoire) or _t("(aucune pour l'instant)"))
             + bloc_skills
             + bloc_plan(r)
-            + "\n\nDate : " + datetime.now().strftime("%Y-%m-%d") + ". Dossier du projet : " + str(RACINE))
+            + _t("\n\nDate : ") + datetime.now().strftime("%Y-%m-%d") + _t(". Dossier du projet : ") + str(RACINE))
 
 
 def bloc_plan(r):
@@ -2667,7 +2677,7 @@ def bloc_plan(r):
     plan = texte_plan(min(PLAN_MAX, int(r["num_ctx"] * 0.25)))
     if not plan:
         return ""
-    return "\n\n# PLAN DU PROJET (dossiers, fichiers, taille en lignes et fonctions principales ; il peut être en retard de quelques minutes : vérifie avec « lire » avant de modifier)\n" + plan + "\n"
+    return _t("\n\n# PLAN DU PROJET (dossiers, fichiers, taille en lignes et fonctions principales ; il peut être en retard de quelques minutes : vérifie avec « lire » avant de modifier)\n") + plan + "\n"
 
 
 def estimer(messages):
@@ -2825,7 +2835,7 @@ def tour(conv, texte, emit, r=None, stop=None, remplacer_depuis=None, identite="
         ok = a.attendre(stop=stop)
         if stop.is_set():
             raise Arret()
-        emit({"type": "info", "texte": ("Accepté : " if ok else "Refusé : ") + titre})
+        emit({"type": "info", "texte": (_t("Accepté : {}") if ok else _t("Refusé : {}")).format(titre)})
         ctx["dernier_accord"] = "manuel"
         return ok
     ctx = {"identite": identite, "accord": accord, "auto_ecriture": bool(r.get("auto_ecriture")), "auto_commandes": bool(r.get("auto_commandes")), "stop": stop, "conv": conv, "emit": emit, "web": bool(r.get("web", True)), "limite_ram": int(r.get("limite_ram_commande_go", 0) * GO),
@@ -2850,7 +2860,7 @@ def tour(conv, texte, emit, r=None, stop=None, remplacer_depuis=None, identite="
         emit({"type": "info", "texte": "Arrêté. Ce qui était déjà fait est gardé dans la conversation ; écris « continue » pour reprendre."})
     except Exception as erreur:  # noqa: BLE001
         journaliser("Erreur inattendue dans le tour (conversation {}) : {!r}".format(conv["id"], erreur))
-        emit({"type": "erreur", "texte": "Erreur inattendue : " + str(erreur)[:300] + " (détail dans donnees/lutin.log). Ta demande est gardée."})
+        emit({"type": "erreur", "texte": _t("Erreur inattendue : {} (détail dans donnees/lutin.log). Ta demande est gardée.").format(str(erreur)[:300])})
     if ctx["tour"]["fichiers"]:                       # cette demande a touché des fichiers : le bouton « Annuler » les rétablira
         conv["annulable"] = {"id": ctx["tour"]["id"], "fichiers": sorted(ctx["tour"]["fichiers"])}
     conv_ecrire(conv)
@@ -2873,7 +2883,7 @@ def boucle_agent(conv, r, emit, ctx, stop):
         journaliser("Rappels automatiques impossibles : {!r}".format(erreur))
         rappels_texte, rappels_sources = "", []
     if rappels_sources:
-        emit({"type": "info", "texte": "📎 Rappels ajoutés d'après tes documents : " + " ; ".join(rappels_sources[:4])})
+        emit({"type": "info", "texte": _t("📎 Rappels ajoutés d'après tes documents : {}").format(" ; ".join(rappels_sources[:4]))})
     for idx_tour in range(tours_max):
         msgs = [{"role": "system", "content": consignes_systeme(r) + texte_taches(conv) + rappels_texte}]
         if conv.get("resume"):
@@ -2964,7 +2974,7 @@ def boucle_agent(conv, r, emit, ctx, stop):
                     try:
                         demarrer_ollama()
                     except ValueError as e2:
-                        emit({"type": "erreur", "texte": "Ollama ne répond pas et je n'ai pas pu le démarrer : " + str(e2)})
+                        emit({"type": "erreur", "texte": _t("Ollama ne répond pas et je n'ai pas pu le démarrer : {}").format(e2)})
                         break
                     continue
                 if genre in ("outil", "plantage") and not ctx.get("repli_fait") and (tentative >= 2 or not genre):
@@ -2978,23 +2988,23 @@ def boucle_agent(conv, r, emit, ctx, stop):
                 if genre and tentative < 2:
                     if genre == "outil":
                         relance_outil = True
-                        emit({"type": "info", "texte": "Le modèle a mal écrit un appel d'outil (erreur d'Ollama : " + detail[:120] + "). Nouvelle tentative..."})
+                        emit({"type": "info", "texte": _t("Le modèle a mal écrit un appel d'outil (erreur d'Ollama : {}). Nouvelle tentative...").format(detail[:120])})
                     elif genre == "contexte":
-                        emit({"type": "info", "texte": "Ollama a perdu le début de la conversation (contexte trop plein : " + detail[:80] + "). Je réduis les anciens résultats et je relance, ta demande est gardée."})
+                        emit({"type": "info", "texte": _t("Ollama a perdu le début de la conversation (contexte trop plein : {}). Je réduis les anciens résultats et je relance, ta demande est gardée.").format(detail[:80])})
                     else:
-                        emit({"type": "info", "texte": "Ollama a planté ou manque de mémoire vidéo (" + detail[:100] + "). J'attends quelques secondes et je relance avec moins de contexte, ta demande est gardée."})
+                        emit({"type": "info", "texte": _t("Ollama a planté ou manque de mémoire vidéo ({}). J'attends quelques secondes et je relance avec moins de contexte, ta demande est gardée.").format(detail[:100])})
                         for _ in range(6):                  # le temps qu'Ollama relance son moteur (3 s), en restant interruptible
                             if stop.wait(0.5):
                                 raise Arret()
                     continue
                 if genre == "outil":
-                    emit({"type": "erreur", "texte": "Le modèle écrit mal ses appels d'outils (" + detail[:200] + "). Reformule en une demande plus simple, ou choisis un autre modèle dans Réglages (gemma4:26b)."})
+                    emit({"type": "erreur", "texte": _t("Le modèle écrit mal ses appels d'outils ({}). Reformule en une demande plus simple, ou choisis un autre modèle dans Réglages (gemma4:26b).").format(detail[:200])})
                 elif genre == "plantage":
-                    emit({"type": "erreur", "texte": "Ollama plante encore (" + detail[:200] + "). Ferme ComfyUI ou clique sur « 🧹 VRAM », baisse la fenêtre de contexte dans Réglages, puis écris « continue »."})
+                    emit({"type": "erreur", "texte": _t("Ollama plante encore ({}). Ferme ComfyUI ou clique sur « 🧹 VRAM », baisse la fenêtre de contexte dans Réglages, puis écris « continue ».").format(detail[:200])})
                 elif http or isinstance(erreur, RuntimeError):
-                    emit({"type": "erreur", "texte": "Ollama a répondu une erreur : " + detail + (" (le modèle est-il installé ? onglet Modèles)" if http and erreur.code == 404 else "")})
+                    emit({"type": "erreur", "texte": _t("Ollama a répondu une erreur : {}{}").format(detail, _t(" (le modèle est-il installé ? onglet Modèles)") if http and erreur.code == 404 else "")})
                 else:
-                    emit({"type": "erreur", "texte": "Ollama ne répond pas : " + detail + ". Clique sur « Démarrer Ollama »."})
+                    emit({"type": "erreur", "texte": _t("Ollama ne répond pas : {}. Clique sur « Démarrer Ollama ».").format(detail)})
                 break
         if repli_demande:
             continue                                 # on refait ce tour avec le modèle de repli (capacités, échantillonnage et contexte recalculés)
@@ -3304,6 +3314,8 @@ class Gestionnaire(BaseHTTPRequestHandler):
             pass
 
     def _envoyer(self, code, corps, type_="application/json; charset=utf-8", en_tetes=None):
+        if isinstance(corps, dict) and _i18n.langue() != "fr":
+            corps = traduire_json(corps)
         donnees = corps if isinstance(corps, (bytes, bytearray)) else (corps if isinstance(corps, str) else json.dumps(corps, ensure_ascii=False)).encode("utf-8")
         self.send_response(code)
         self.send_header("Content-Type", type_)
@@ -3350,7 +3362,12 @@ class Gestionnaire(BaseHTTPRequestHandler):
         return True
 
     def _page_connexion(self):
-        return self._envoyer(200, PAGE_CONNEXION, "text/html; charset=utf-8")
+        page = PAGE_CONNEXION
+        if _i18n.langue() != "fr":
+            for phrase in TEXTES_PAGE_CONNEXION:
+                page = page.replace(phrase, _t(phrase))
+            page = page.replace('<html lang="fr">', '<html lang="{}">'.format(_i18n.langue()))
+        return self._envoyer(200, page, "text/html; charset=utf-8")
 
     def do_GET(self):
         chemin = self.path.split("?")[0]
@@ -3364,14 +3381,13 @@ class Gestionnaire(BaseHTTPRequestHandler):
             if not self._jeton_valide():
                 return self._envoyer(403, {"erreur": "jeton invalide : recharge la page"})
         if chemin in ("/", "/index.html"):
-            page = (WEB / "index.html").read_text(encoding="utf-8").replace("__TOKEN__", JETON).replace("__VERSION__", VERSION)
-            return self._envoyer(200, page, "text/html; charset=utf-8")
+            return self._envoyer(200, page_web(), "text/html; charset=utf-8")
         if chemin == "/api/etat":
             o = etat_ollama()
             r = reglages()
             return self._envoyer(200, {"version": VERSION, "ollama": o["actif"], "ollama_installe": bool(chemin_ollama()), "installes": o["installes"], "modeles": modeles_connus(o["installes"], o.get("tailles")), "modeles_masques": len(lire_registre_modeles()["masques"]), "actives": list(TOURS_ACTIFS),
                                        "pulls": PULLS, "reglages": r, "conversations": conv_liste(), "racine": str(RACINE),
-                                       "outil": bool(self._outil_vivant()), "hors_ligne": _hl.actif(), "niveau": SECURITE.niveau, "travaux": travaux_etat(), "configurateur": self._configurateur(),
+                                       "outil": bool(self._outil_vivant()), "hors_ligne": _hl.actif(), "niveau": SECURITE.niveau, "langue": _i18n.langue(), "langue_reglage": _i18n.langue_configuree(), "travaux": travaux_etat(), "configurateur": self._configurateur(),
                                        "bench": {"en_cours": BENCH["en_cours"], "etape": BENCH["etape"], "erreur": BENCH["erreur"], "mesures": _bench.lire(chemin_bench())}, "attentes": [{"id": a.id, "titre": a.titre, "detail": a.detail, "diff": a.diff} for a in Attente.EN_COURS.values()]})
         if chemin == "/api/travaux":
             return self._envoyer(200, dict(travaux_etat(), modifiable=self._configurateur()))
@@ -3514,6 +3530,11 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 return self._envoyer(200, retirer_travail(str(donnees.get("id", ""))))
             if self.path == "/api/bench":
                 return self._envoyer(200, lancer_bench(str(donnees.get("modele", "")), bool(donnees.get("rapide"))))
+            if self.path == "/api/langue":
+                try:
+                    return self._envoyer(200, {"langue": _i18n.definir(str(donnees.get("valeur", "")).strip().lower())})
+                except ValueError:
+                    raise ValueError("Langue inconnue (fr, en ou auto).")
             if self.path == "/api/hors-ligne":
                 voulu = bool(donnees.get("actif"))
                 if not voulu and not (SECURITE.niveau == _sec.LOCAL or self._local()):
@@ -3641,7 +3662,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
             def emit(evenement):
                 # Si la page est fermée (téléphone verrouillé, rechargement), le tour continue et la conversation est enregistrée à la fin.
                 try:
-                    self.wfile.write((json.dumps(evenement, ensure_ascii=False) + "\n").encode("utf-8"))
+                    self.wfile.write((json.dumps(traduire_evenement(evenement), ensure_ascii=False) + "\n").encode("utf-8"))
                     self.wfile.flush()
                 except (OSError, ValueError):
                     pass
@@ -3758,6 +3779,36 @@ def ip_locale():
         s.close()
 
 
+CLES_TEXTE_UI = {"erreur", "raison", "message", "nom", "valeur", "conseil", "detail", "phrase", "avertissement", "etape", "ancien_nom"}          # textes écrits par Lutin (jamais le contenu des conversations ni des fichiers)
+
+
+def page_web():
+    """La page d'accueil, avec le jeton, la version, la langue et (en anglais) le dictionnaire de l'interface."""
+    langue = _i18n.langue()
+    dico = _i18n.dico("interface") if langue != "fr" else {}
+    donnees = json.dumps(dico, ensure_ascii=False).replace("</", "<\\/")          # une chaîne ne doit pas pouvoir fermer la balise <script>
+    page = (WEB / "index.html").read_text(encoding="utf-8")
+    return page.replace("__TOKEN__", JETON).replace("__VERSION__", VERSION).replace("__LANGUE__", langue).replace("__DICO__", donnees)
+
+
+def traduire_json(objet, cle=""):
+    """Traduit, dans une réponse JSON, les textes que Lutin a écrits lui-même (messages d'erreur, mesures de santé, descriptions de modèles…) quand la langue n'est pas le français."""
+    if isinstance(objet, dict):
+        return {k: traduire_json(v, k) for k, v in objet.items()}
+    if isinstance(objet, list):
+        return [traduire_json(v, cle) for v in objet]
+    if isinstance(objet, str) and cle in CLES_TEXTE_UI:
+        return _tr(objet)
+    return objet
+
+
+def traduire_evenement(e):
+    """Évènements du flux de réponse : seuls les messages de Lutin (info, erreur, accord, état) sont traduits, jamais le texte du modèle."""
+    if not isinstance(e, dict) or e.get("type") not in ("info", "erreur", "approbation", "etat") or _i18n.langue() == "fr":
+        return e
+    return dict(e, **{k: _tr(e[k]) for k in ("texte", "titre") if isinstance(e.get(k), str)})
+
+
 def lire_propositions():
     """Nouveautés de modèles trouvées par la vérification au lancement (voir lutin.miseajour) : un fichier du cache, jamais le réseau."""
     chemin = os.environ.get("LUTIN_PROPOSITIONS")
@@ -3797,6 +3848,8 @@ def ecrire_fichier_console(hote):
         pass
 
 
+TEXTES_PAGE_CONNEXION = ("Lutin : connexion", "Entre le code à 6 chiffres affiché sur l'ordinateur qui fait tourner Lutin (commande <code>lutin pin</code> pour en obtenir un nouveau).",
+                         "Nom de cet appareil (facultatif)", "Se connecter", "Erreur ")
 PAGE_CONNEXION = """<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Lutin : connexion</title>
 <style>body{font-family:system-ui,sans-serif;background:#0b0f14;color:#e6edf3;display:grid;place-items:center;min-height:100vh;margin:0}main{max-width:340px;padding:24px}
 input,button{font:inherit;padding:10px 12px;border-radius:8px;border:1px solid #30363d;background:#161b22;color:inherit;width:100%;box-sizing:border-box;margin-top:10px}
@@ -3823,19 +3876,19 @@ def principal():
     global IP_LAN
     problemes = SECURITE.valider()
     if problemes:
-        raise SystemExit("Configuration de sécurité invalide : " + " ; ".join(problemes))
+        raise SystemExit(_t("Configuration de sécurité invalide : {}").format(" ; ".join(problemes)))
     IP_LAN = ip_locale() if SECURITE.niveau != _sec.LOCAL else ""
     hote = _sec.adresse_ecoute(SECURITE, IP_LAN)
     serveur = ThreadingHTTPServer((hote, PORT), Gestionnaire)
     ecrire_fichier_console(hote)
     adresse = "http://{}:{}".format("127.0.0.1" if hote in ("0.0.0.0", "") else hote, PORT)
-    print("Lutin        : " + adresse + "   (niveau de sécurité : {})".format(SECURITE.niveau))
+    print(_t("Lutin        : {}   (niveau de sécurité : {})").format(adresse, SECURITE.niveau))
     if SECURITE.niveau == _sec.RESEAU:
-        print("Code PIN     : {}   (valable {} min ; pour appairer un appareil)".format(APPAREILS.nouveau_pin(), _sec.DUREE_PIN_S // 60))
+        print(_t("Code PIN     : {}   (valable {} min ; pour appairer un appareil)").format(APPAREILS.nouveau_pin(), _sec.DUREE_PIN_S // 60))
     if SECURITE.niveau == _sec.PROXY:
-        print("Adresse publique : " + SECURITE.url_publique + "   (proxy de confiance : " + ", ".join(SECURITE.proxy_ips) + ")")
-    print("Journal      : {}".format(DONNEES / "lutin.log"))
-    print("(dossier de travail : {})".format(RACINE))
+        print(_t("Adresse publique : {}   (proxy de confiance : {})").format(SECURITE.url_publique, ", ".join(SECURITE.proxy_ips)))
+    print(_t("Journal      : {}").format(DONNEES / "lutin.log"))
+    print(_t("(dossier de travail : {})").format(RACINE))
     if "--sans-navigateur" not in sys.argv and not os.environ.get("LUTIN_SANS_NAVIGATEUR"):
         try:
             import webbrowser

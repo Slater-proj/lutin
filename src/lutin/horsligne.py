@@ -11,6 +11,7 @@ import os
 import threading
 from pathlib import Path
 from urllib.parse import urlparse
+from .i18n import t as _t
 
 LOCAUX = {"127.0.0.1", "localhost", "::1", "[::1]"}
 _cache = {"chemin": "", "mtime": None, "valeur": False}
@@ -51,7 +52,7 @@ def definir(valeur, chemin_config=None):
     """Active ou coupe le mode (écrit dans config.json). Renvoie le nouvel état."""
     chemin = Path(str(chemin_config or os.environ.get("LUTIN_CONFIG") or ""))
     if not str(chemin) or str(chemin) == ".":
-        raise ValueError("Pas de fichier de configuration.")
+        raise ValueError(_t("Pas de fichier de configuration."))
     try:
         cfg = json.loads(chemin.read_text(encoding="utf-8"))
         if not isinstance(cfg, dict):
@@ -85,10 +86,10 @@ def garde(url, chemin_config=None):
         return
     hote = (urlparse(url).hostname or "").lower()
     if hote not in hotes_autorises():
-        raise HorsLigne("Mode hors ligne strict : la connexion vers {} est refusée. Désactive-le pour utiliser Internet (lutin hors-ligne non).".format(hote or "cette adresse"))
+        raise HorsLigne(_t("Mode hors ligne strict : la connexion vers {} est refusée. Désactive-le pour utiliser Internet (lutin hors-ligne non).").format(hote or _t("cette adresse")))
 
 
 def exiger_en_ligne(action, chemin_config=None):
     """Pour les actions qui passent par un autre programme (Ollama télécharge lui-même ses modèles) : on ne peut pas contrôler l'adresse, on refuse l'action."""
     if actif(chemin_config):
-        raise HorsLigne("Mode hors ligne strict : impossible de {}. Désactive-le pour continuer (lutin hors-ligne non).".format(action))
+        raise HorsLigne(_t("Mode hors ligne strict : impossible de {}. Désactive-le pour continuer (lutin hors-ligne non).").format(action))

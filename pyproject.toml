@@ -33,7 +33,7 @@ fallback_version = "0.0.0+inconnue"    # source sans historique git (archive, co
 where = ["src"]
 
 [tool.setuptools.package-data]
-lutin = ["data/*", "web/*", "web/lib/*", "web/icones/*"]
+lutin = ["data/*", "data/en/*", "langues/*", "web/*", "web/lib/*", "web/icones/*"]
 
 [tool.ruff]
 line-length = 200

@@ -11,6 +11,7 @@ import urllib.request
 from pathlib import Path
 
 from . import horsligne
+from .i18n import t as _t
 
 URL_PAR_DEFAUT = "http://127.0.0.1:11434"
 URL_TELECHARGEMENT_WINDOWS = "https://ollama.com/download/OllamaSetup.exe"
@@ -37,7 +38,7 @@ class Ollama:
             with self._requete(chemin, corps, delai, methode) as r:
                 return json.loads(r.read().decode("utf-8") or "{}")
         except (OSError, ValueError, urllib.error.URLError) as e:
-            raise ErreurOllama("Ollama ne répond pas ({}) : {}".format(self.url, e)) from e
+            raise ErreurOllama(_t("Ollama ne répond pas ({}) : {}").format(self.url, e)) from e
 
     def actif(self):
         try:
@@ -63,7 +64,7 @@ class Ollama:
 
     def telecharger(self, modele, progression=None):
         """Télécharge un modèle (reprise automatique par Ollama). progression(texte, fait, total) est appelée pendant le téléchargement."""
-        horsligne.exiger_en_ligne("télécharger un modèle")
+        horsligne.exiger_en_ligne(_t("télécharger un modèle"))
         try:
             with self._requete("/api/pull", {"model": modele, "stream": True}, delai=3600) as r:
                 for brut in r:
@@ -76,7 +77,7 @@ class Ollama:
                     if progression:
                         progression(e.get("status", ""), e.get("completed") or 0, e.get("total") or 0)
         except (OSError, urllib.error.URLError) as e:
-            raise ErreurOllama("Téléchargement interrompu : {}".format(e)) from e
+            raise ErreurOllama(_t("Téléchargement interrompu : {}").format(e)) from e
 
     def supprimer(self, modele):
         self.json("/api/delete", {"model": modele}, methode="DELETE")
@@ -127,7 +128,7 @@ def demarrer_serveur(exe, variables, systeme, lanceur=subprocess.Popen):
 def telecharger_fichier(url, destination, progression=None, ouvrir=urllib.request.urlopen, taille_min=50_000_000):
     """Télécharge `url` vers `destination` (fichier .part renommé à la fin, reprise si interrompu). HTTPS obligatoire."""
     if not url.startswith("https://"):
-        raise ErreurOllama("téléchargement refusé : adresse non sécurisée")
+        raise ErreurOllama(_t("téléchargement refusé : adresse non sécurisée"))
     horsligne.garde(url)
     destination = Path(destination)
     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -147,12 +148,12 @@ def telecharger_fichier(url, destination, progression=None, ouvrir=urllib.reques
                     f.write(bloc)
                     fait += len(bloc)
                     if progression:
-                        progression("téléchargement", fait, total)
+                        progression(_t("téléchargement"), fait, total)
     except (OSError, urllib.error.URLError) as e:
-        raise ErreurOllama("téléchargement interrompu (relance la commande : il reprend où il s'est arrêté) : {}".format(e)) from e
+        raise ErreurOllama(_t("téléchargement interrompu (relance la commande : il reprend où il s'est arrêté) : {}").format(e)) from e
     if part.stat().st_size < taille_min:
         part.unlink(missing_ok=True)
-        raise ErreurOllama("fichier téléchargé trop petit : abandon")
+        raise ErreurOllama(_t("fichier téléchargé trop petit : abandon"))
     part.replace(destination)
     return destination
 
@@ -173,11 +174,11 @@ def installer_windows(dossier_cache, progression=None, ouvrir=urllib.request.url
     ok, sujet = verifier_signature_windows(installateur, lanceur_sortie)
     if not ok:
         installateur.unlink(missing_ok=True)
-        raise ErreurOllama("la signature de l'installateur d'Ollama n'est pas valide ({}) : installation annulée".format(sujet or "aucune signature"))
+        raise ErreurOllama(_t("la signature de l'installateur d'Ollama n'est pas valide ({}) : installation annulée").format(sujet or "aucune signature"))
     r = executer([str(installateur), "/SILENT"], timeout=900)
     if getattr(r, "returncode", 0) != 0:
-        raise ErreurOllama("l'installation d'Ollama a échoué (code {})".format(r.returncode))
+        raise ErreurOllama(_t("l'installation d'Ollama a échoué (code {})").format(r.returncode))
     exe = trouver_executable("windows")
     if not exe:
-        raise ErreurOllama("Ollama est installé mais introuvable : relance Lutin dans une nouvelle fenêtre")
+        raise ErreurOllama(_t("Ollama est installé mais introuvable : relance Lutin dans une nouvelle fenêtre"))
     return exe

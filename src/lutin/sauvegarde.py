@@ -11,6 +11,7 @@ import zipfile
 from pathlib import Path
 
 from . import __version__
+from .i18n import t as _t
 
 TAILLE_MAX = 2 * 1024 ** 3
 MEMBRES_MAX = 100_000
@@ -53,7 +54,7 @@ def exporter(dossiers, destination):
         for nom, chemin in fichiers:
             total += chemin.stat().st_size
             if total > TAILLE_MAX:
-                raise ErreurSauvegarde("Trop de données pour une sauvegarde ({} Go au plus).".format(TAILLE_MAX // 1024 ** 3))
+                raise ErreurSauvegarde(_t("Trop de données pour une sauvegarde ({} Go au plus).").format(TAILLE_MAX // 1024 ** 3))
             z.write(chemin, nom)
         z.writestr(MANIFESTE, json.dumps({"lutin": __version__, "date": time.strftime("%Y-%m-%dT%H:%M:%S"), "fichiers": [n for n, _ in fichiers]}, ensure_ascii=False, indent=1))
     return {"fichiers": len(fichiers), "octets": total}
@@ -80,30 +81,30 @@ def verifier(archive):
     try:
         z = zipfile.ZipFile(archive)
     except (zipfile.BadZipFile, OSError) as e:
-        raise ErreurSauvegarde("Ce n'est pas une sauvegarde Lutin lisible : {}".format(e))
+        raise ErreurSauvegarde(_t("Ce n'est pas une sauvegarde Lutin lisible : {}").format(e))
     with z:
         infos = z.infolist()
         if len(infos) > MEMBRES_MAX:
-            raise ErreurSauvegarde("Archive suspecte : trop de fichiers.")
+            raise ErreurSauvegarde(_t("Archive suspecte : trop de fichiers."))
         total = 0
         for i in infos:
             if i.is_dir():
                 continue
             if not _nom_valide(i.filename):
-                raise ErreurSauvegarde("Archive refusée : « {} » n'est pas un fichier de sauvegarde Lutin.".format(i.filename))
+                raise ErreurSauvegarde(_t("Archive refusée : « {} » n'est pas un fichier de sauvegarde Lutin.").format(i.filename))
             if (i.external_attr >> 16) & 0o170000 == 0o120000:
-                raise ErreurSauvegarde("Archive refusée : lien symbolique « {} ».".format(i.filename))
+                raise ErreurSauvegarde(_t("Archive refusée : lien symbolique « {} ».").format(i.filename))
             total += i.file_size
             if total > TAILLE_MAX:
-                raise ErreurSauvegarde("Archive suspecte : trop volumineuse une fois décompressée.")
+                raise ErreurSauvegarde(_t("Archive suspecte : trop volumineuse une fois décompressée."))
         if MANIFESTE not in z.namelist():
-            raise ErreurSauvegarde("Ce n'est pas une sauvegarde Lutin (manifeste absent).")
+            raise ErreurSauvegarde(_t("Ce n'est pas une sauvegarde Lutin (manifeste absent)."))
         try:
             m = json.loads(z.read(MANIFESTE).decode("utf-8"))
         except (ValueError, KeyError):
             raise ErreurSauvegarde("Manifeste illisible.")
         if z.testzip():
-            raise ErreurSauvegarde("Archive abîmée : {}".format(z.testzip()))
+            raise ErreurSauvegarde(_t("Archive abîmée : {}").format(z.testzip()))
         m["octets"] = total
         return m
 
@@ -123,7 +124,7 @@ def restaurer(dossiers, archive, dossier_secours=None):
                 continue
             cle, _, reste = i.filename.partition("/")
             if not dossiers.get(cle):
-                raise ErreurSauvegarde("Dossier « {} » inconnu pour cette installation.".format(cle))
+                raise ErreurSauvegarde(_t("Dossier « {} » inconnu pour cette installation.").format(cle))
             cible = Path(dossiers[cle]) / reste
             cible.parent.mkdir(parents=True, exist_ok=True)
             tmp = cible.with_name(cible.name + ".restauration")
