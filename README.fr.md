@@ -92,7 +92,7 @@ Les notes du catalogue sont des estimations éditoriales, pas des mesures : le b
 | 2. Réseau local | tes appareils appairés | code PIN à 6 chiffres (10 min, 5 essais), session par appareil révocable |
 | 3. Proxy | ce que ton proxy laisse passer | l'identité n'est crue que si elle vient de l'adresse du proxy déclaré |
 
-Aux niveaux 2 et 3, **les accords automatiques sont désactivés**. En mode hors ligne strict, seules cette machine et Ollama sont jointes. Détails, avertissements et exemples de proxy : [docs/SECURITY.fr.md](docs/SECURITY.fr.md). Ce que Lutin peut contacter sur le réseau, et comment le couper : [docs/PRIVACY.fr.md](docs/PRIVACY.fr.md). Signature de l'installateur : [docs/CODE-SIGNING.fr.md](docs/CODE-SIGNING.fr.md).
+Aux niveaux 2 et 3, **les accords automatiques sont désactivés**. En mode hors ligne strict, seules cette machine et Ollama sont jointes. Détails, avertissements et exemples de proxy : [docs/SECURITY.fr.md](docs/SECURITY.fr.md). Ce que Lutin peut contacter sur le réseau, et comment le couper : [docs/PRIVACY.fr.md](docs/PRIVACY.fr.md).
 
 ## Où sont mes fichiers ?
 

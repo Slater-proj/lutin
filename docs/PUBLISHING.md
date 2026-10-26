@@ -47,15 +47,9 @@ pip install lutin-0.5.0rc17+my.branch-py3-none-any.whl
 3. **Packages**: after the first image, make the `lutin` package public (Package settings > Change visibility) so that `docker pull` works without signing in.
 4. Optional: **Security > Code security**: enable private vulnerability reporting and Dependabot.
 
-## Signing the Windows installer (SignPath)
+## The Windows installer is not signed
 
-The workflow already has the signing step; it does nothing until these exist:
-
-1. Apply at [signpath.org/foundation](https://signpath.org/foundation) (free for open source; the project must be public, with an OSI licence, and built by GitHub Actions). Approval is done by SignPath and can take a while.
-2. In SignPath: create the project `lutin` (slug `lutin`) with an artifact configuration for `lutin-setup-*.exe` and a signing policy (default slug `release-signing`), and connect the GitHub repository (trusted build system).
-3. In GitHub, **Settings > Secrets and variables > Actions**: secret `SIGNPATH_API_TOKEN`; variables `SIGNPATH_ORGANIZATION_ID` and, if the policy slug differs, `SIGNPATH_SIGNING_POLICY`.
-
-From then on, each release attaches the signed file. This step was written from SignPath's documentation and **has never run**: the first signed release is its first test. Until then the installer is unsigned and Windows SmartScreen may warn (« More info > Run anyway »); the checksum is in `SHA256SUMS.txt`.
+Signing was considered (SignPath Foundation, free for open source) and dropped for now: too much set-up for the current audience. Windows SmartScreen may warn when the `.exe` is downloaded (« More info > Run anyway »); the checksum is in `SHA256SUMS.txt`. The installer scripts (`install.ps1`) are an alternative that does not trigger the warning.
 
 ## Fixing things
 

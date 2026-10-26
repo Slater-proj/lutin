@@ -26,13 +26,12 @@ What the project chose, why, and what is still to be decided. A decision changes
 | 2026-10-26 | **Two languages: French and English**, for the application (interface, messages, command line) and for the repository (README, docs). French stays the language the code is written in; every displayed text goes through a dictionary and a test fails if a translation is missing. | Lutin is written in French and used in French first; English opens it to everyone. Language: environment variable, then setting (`lutin langue`, page settings), then system. |
 | 2026-10-26 | **Docker: one complete image by default** (Lutin + Ollama in the same container, `:latest`), and a slim image (`:slim`, Lutin alone) for those who already run Ollama elsewhere. | « I run the image and it works »: nothing else to install. The price is size (several GB, Ollama's libraries). |
 | 2026-10-26 | **Windows installer** (`lutin-setup-*.exe`, Inno Setup): per-user, no administrator rights, English and French. It uses the Python already on the computer (a private environment, like `install.ps1`) and installs nothing else; without one, it copies the Python bundled with it. Built and tested (install, re-install, bundled Python, uninstall) in CI. | The people who most need an installer are those without Python; the people who have it should not get a second one. |
-| 2026-10-26 | **Signing: SignPath Foundation** (free for open source) for the Windows installer. The workflow is ready and only activates once the account exists (docs/PUBLISHING.md). | Without a signature, Windows SmartScreen warns on download. |
+| 2026-10-26 | **No signing of the Windows installer for now.** SignPath Foundation was studied and dropped. | Too much set-up (reputation, manual approvals, two-factor everywhere) for an audience of one; checksums are published. To reconsider if the project gets real users. |
 | 2026-10-26 | **New Lutin version announced in the page** (a banner, once a day at most, silent offline, can be skipped): nothing is installed without the user. | Models were already checked at launch; Lutin itself was not. |
 | 2026-10-26 | **Claude projects** (`CLAUDE.md`, `.claude/`) can be taken over, in place or in a copy. | Context built with Claude Code must not be lost when switching tools. |
 
 ## To be decided
 
-- **SignPath application.** The Foundation must approve the project (open source, public, built by GitHub Actions): to be requested by the owner, then the variable and secret added (docs/PUBLISHING.md).
 - **Catalogue: who rates the models?** The ratings are editorial (1 to 10), written without measurement on real hardware. The benchmark (`lutin bench --exporter`) now allows proposing justified corrections; published results on a few reference machines are missing.
 - **More languages.** The mechanism is in place (`src/lutin/langues/`); adding one means a dictionary for the messages and one for the page, and a code in `i18n.LANGUES`.
 

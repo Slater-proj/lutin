@@ -107,27 +107,6 @@ jobs:
       - name: Le vérifier (installation, réinstallation, Python embarqué, désinstallation)
         shell: pwsh
         run: ./installateur/windows/verifier.ps1 -Installateur (Get-ChildItem dist/lutin-setup-*.exe | Select-Object -First 1).FullName -Version "${{ needs.version.outputs.version }}"
-      # Signature (SignPath Foundation, gratuite pour l'open source) : active seulement quand la variable SIGNPATH_ORGANIZATION_ID et le secret SIGNPATH_API_TOKEN existent (docs/PUBLISHING.md).
-      - uses: actions/upload-artifact@v4
-        id: non-signe
-        with:
-          name: installateur-non-signe
-          path: dist/lutin-setup-*.exe
-      - uses: signpath/github-action-submit-signing-request@v1
-        if: vars.SIGNPATH_ORGANIZATION_ID != ''
-        with:
-          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
-          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
-          project-slug: lutin
-          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY || 'release-signing' }}
-          github-artifact-id: ${{ steps.non-signe.outputs.artifact-id }}
-          wait-for-completion: true
-          wait-for-completion-timeout-in-seconds: 3600          # l'approbation de chaque signature est manuelle (SignPath Foundation)
-          output-artifact-directory: signe
-      - name: Garder le fichier signé à la place du non signé
-        if: vars.SIGNPATH_ORGANIZATION_ID != ''
-        shell: pwsh
-        run: Copy-Item signe/lutin-setup-*.exe dist/ -Force
       - uses: actions/upload-artifact@v4
         with:
           name: installateur-${{ needs.version.outputs.version }}

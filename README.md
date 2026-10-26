@@ -94,7 +94,7 @@ The catalogue's ratings are editorial estimates, not measurements: the benchmark
 | 2. Local network | your paired devices | 6-digit PIN code (10 min, 5 attempts), revocable session per device |
 | 3. Proxy | what your proxy lets through | the identity is only trusted if it comes from the declared proxy address |
 
-At levels 2 and 3, **automatic approvals are turned off**. In strict offline mode, only this machine and Ollama are reached. Details, warnings and proxy examples: [docs/SECURITY.md](docs/SECURITY.md). What Lutin may contact on the network, and how to turn it off: [docs/PRIVACY.md](docs/PRIVACY.md). Installer signing: [docs/CODE-SIGNING.md](docs/CODE-SIGNING.md).
+At levels 2 and 3, **automatic approvals are turned off**. In strict offline mode, only this machine and Ollama are reached. Details, warnings and proxy examples: [docs/SECURITY.md](docs/SECURITY.md). What Lutin may contact on the network, and how to turn it off: [docs/PRIVACY.md](docs/PRIVACY.md).
 
 ## Where are my files?
 
