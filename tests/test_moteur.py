@@ -5,6 +5,7 @@
 Ils prouvent la mécanique (boucle d'outils, accords, sauvegardes, bac à sable, mémoire, résumé, installation d'un modèle) ; ils ne disent rien de la
 qualité des réponses d'un vrai modèle.
 """
+import base64
 import contextlib
 import io
 import json
@@ -1793,6 +1794,79 @@ class Assistant(unittest.TestCase):
         A.noter_action({"conv": {"id": "c"}}, "executer", {"commande": "echo"}, "ok")
         self.assertTrue(f.with_name(f.name + ".1").is_file())
         self.assertLess(f.stat().st_size, 1000)
+
+    def test_images_jointes(self):
+        """Une image se joint (type reconnu au contenu), reste sur le disque sous un nom tiré du contenu, et n'arrive qu'à un modèle qui voit."""
+        from lutin import images
+        png = b"\x89PNG\r\n\x1a\n" + bytes(range(40))
+
+        def televerser(octets):
+            req = urllib.request.Request(BASE + "/api/image", data=octets, headers={"Content-Type": "application/octet-stream", "X-Token": A.JETON})
+            try:
+                with urllib.request.urlopen(req, timeout=15) as r:
+                    return r.status, json.loads(r.read().decode("utf-8"))
+            except urllib.error.HTTPError as e:
+                return e.code, json.loads(e.read().decode("utf-8"))
+        statut, r = televerser(png)
+        self.assertEqual(statut, 200)
+        ident = r["id"]
+        self.assertEqual(televerser(png)[1]["id"], ident, "la même image n'existe qu'une fois")
+        self.assertEqual(televerser(b"MZ pas une image")[0], 400)
+        self.assertEqual(televerser(b"")[0], 400)
+        req = urllib.request.Request(BASE + "/image/" + ident, headers={"X-Token": A.JETON})
+        with urllib.request.urlopen(req, timeout=15) as rep:
+            self.assertEqual((rep.headers["Content-Type"], rep.read()), ("image/png", png))
+        with self.assertRaises(urllib.error.HTTPError) as e:
+            urllib.request.urlopen(urllib.request.Request(BASE + "/image/../../etc/passwd", headers={"X-Token": A.JETON}), timeout=15)
+        self.assertEqual(e.exception.code, 404)
+        post("/api/chat", {"message": "regarde", "images": ["0" * 20 + ".png"]}, attendu=400)
+        post("/api/chat", {"message": "regarde", "images": [ident] * 5}, attendu=400)
+        # modèle qui ne voit pas, aucun modèle « images » installé : ignorées, avec un avertissement
+        A.CAPACITES.pop("qwen3.8:27b", None)
+        ev = chat("Que vois-tu ?", images=[ident], reponses=[[{"content": "Rien."}]])
+        self.assertIn("ne voit pas les images", " ".join(e["texte"] for e in ev if e["type"] == "info"))
+        self.assertFalse(RECUES[-1]["messages"][-1].get("images"), "un modèle qui ne voit pas ne reçoit pas d'image")
+        # un modèle qui voit est installé : on passe dessus pour cette demande
+        INSTALLES.append("qwen3-vl:8b")
+        CAPACITES_FAUX["qwen3-vl:8b"] = ["completion", "tools", "vision"]
+        A.CAPACITES.pop("qwen3-vl:8b", None)
+        try:
+            ev = chat("Et là ?", images=[ident], reponses=[[{"content": "Un motif."}]])
+            self.assertIn("qwen3-vl:8b", " ".join(e["texte"] for e in ev if e["type"] == "info"))
+            self.assertEqual(RECUES[-1]["model"], "qwen3-vl:8b")
+            recu = RECUES[-1]["messages"][-1]
+            self.assertEqual(recu["images"], [base64.b64encode(png).decode("ascii")], "Ollama reçoit du base64, pas un nom")
+            self.assertEqual(recu["content"], "Et là ?")
+            # le modèle courant voit : pas de bascule
+            A.enregistrer_reglages({"modele": "qwen3-vl:8b"})
+            ev = chat("Encore", images=[ident], reponses=[[{"content": "Oui."}]])
+            self.assertNotIn("je passe sur", " ".join(e.get("texte", "") for e in ev if e["type"] == "info"))
+            conv = A.conv_lire([e for e in ev if e["type"] == "debut"][0]["conversation"])
+            self.assertEqual(conv["messages"][0]["images"], [ident], "la conversation ne garde que le nom")
+            # les vieilles images ne sont plus rejouées : sept messages plus tard, l'image du début est remplacée par une mention
+            msgs = [{"role": "user", "content": "a", "images": [ident]}] + [{"role": "assistant", "content": "x"}] * 7 + [{"role": "user", "content": "b"}]
+            sortie = images.pour_le_modele(msgs)
+            self.assertNotIn("images", sortie[0])
+            self.assertIn("1 image(s) jointe(s)", sortie[0]["content"])
+        finally:
+            INSTALLES.remove("qwen3-vl:8b")
+            CAPACITES_FAUX.pop("qwen3-vl:8b", None)
+            A.CAPACITES.pop("qwen3-vl:8b", None)
+            A.enregistrer_reglages({"modele": "qwen3.8:27b"})
+
+    def test_nettoyage_des_images_orphelines(self):
+        from lutin import images
+        orpheline = images.enregistrer(b"\xff\xd8\xff" + b"orpheline-unique" * 3)
+        citee = images.enregistrer(b"\xff\xd8\xff" + b"citee-unique" * 3)
+        c = A.conv_nouvelle()
+        c["messages"].append({"role": "user", "content": "x", "images": [citee]})
+        A.conv_ecrire(c)
+        vieux = time.time() - 5 * 86400
+        for i in (orpheline, citee):
+            os.utime(images.dossier() / i, (vieux, vieux))
+        images.nettoyer()
+        self.assertFalse((images.dossier() / orpheline).exists())
+        self.assertTrue((images.dossier() / citee).exists(), "une image citée par une conversation reste")
 
     def test_export_de_sauvegarde(self):
         req = urllib.request.Request(BASE + "/api/sauvegarde", headers={"X-Token": A.JETON})

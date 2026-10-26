@@ -130,6 +130,13 @@ body { grid-template-rows:minmax(0,1fr); }
 .saisie { padding:6px 12px 8px; flex-direction:column; gap:3px; }
 .saisie-ligne { display:flex; gap:10px; }
 .saisie-ligne textarea { flex:1; }
+.pj { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:6px; }
+.pj .vignette, .msg .vignettes img { position:relative; height:64px; border-radius:6px; border:1px solid var(--bord, #30363d); }
+.pj .vignette img { height:64px; border-radius:6px; display:block; }
+.pj .vignette button { position:absolute; top:-6px; right:-6px; width:20px; height:20px; border-radius:50%; padding:0; line-height:1; }
+.msg .vignettes { display:flex; gap:6px; flex-wrap:wrap; margin-top:6px; }
+.msg .vignettes img { height:90px; cursor:zoom-in; }
+.saisie-ligne.glisse textarea { outline:2px dashed var(--accent, #58a6ff); }
 .saisie textarea { min-height:44px; }
 .saisie .ic { display:none; }
 #fil { padding:12px max(10px, calc((100% - 920px) / 2)); }
@@ -323,7 +330,8 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
         <button id="bRevue" hidden title="Relire les changements de la dernière demande, fichier par fichier">🔍<span class="lb"> Revue</span></button>
         <button id="bAnnuler" hidden></button>
       </div>
-      <div class="saisie-ligne"><textarea id="saisie" rows="1" placeholder="Message…  (Entrée : envoyer · / : commandes)"></textarea><button class="principal" id="bEnvoyer" title="Envoyer"><span class="lb">Envoyer</span><span class="ic">➤</span></button><button id="bStop" hidden title="Arrêter"><span class="lb">Arrêter</span><span class="ic">■</span></button></div>
+      <div class="pj" id="piecesJointes" hidden></div>
+      <div class="saisie-ligne" id="ligneSaisie"><button id="bJoindre" title="Joindre une image (tu peux aussi la coller ou la glisser ici). Un modèle qui voit les images est utilisé : onglet Modèles, rôle « Images ».">📎</button><input type="file" id="fImage" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden><textarea id="saisie" rows="1" placeholder="Message…  (Entrée : envoyer · / : commandes)"></textarea><button class="principal" id="bEnvoyer" title="Envoyer"><span class="lb">Envoyer</span><span class="ic">➤</span></button><button id="bStop" hidden title="Arrêter"><span class="lb">Arrêter</span><span class="ic">■</span></button></div>
     </div>
   </section>
   <section class="page" id="p-sante"><div class="cadre" id="santeCorps"></div></section>
@@ -677,7 +685,7 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
     fil().textContent = '';
     (c.resume ? [{ role: 'resume', content: c.resume }] : []).concat(c.messages).forEach(m => {
       if (m.role === 'resume') { const d = el('div', 'info', T('Résumé du début de la conversation : ') + m.content.slice(0, 400) + (m.content.length > 400 ? '...' : '')); fil().appendChild(d); }
-      else if (m.role === 'user') { const d = el('div', 'msg moi'); d.appendChild(el('div', 'corps', m.content)); fil().appendChild(d); }
+      else if (m.role === 'user') { const d = el('div', 'msg moi'); d.appendChild(el('div', 'corps', m.content)); miniatures(d, m.images); fil().appendChild(d); }
       else if (m.role === 'assistant') { if (m.content) { const x = messageIA(); rendre(x.c, m.content); } (m.tool_calls || []).forEach(t => fil().appendChild(el('div', 'outil', '⚙ ' + t.function.name + ' ' + JSON.stringify(t.function.arguments).slice(0, 160)))); }
       else if (m.role === 'tool') { const d = el('div', 'outil'); d.appendChild(el('div', '', '↳ ' + (m.tool_name || T('résultat')))); d.appendChild(el('div', 'res', (m.content || '').slice(0, 700))); fil().appendChild(d); }
     });
@@ -747,9 +755,36 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
     const travaille = EN_COURS || (ETAT && ETAT.actives && ETAT.actives.length), p = $('ptTravail');
     p.hidden = !(travaille || NONLUS.size); p.classList.toggle('fini', !travaille && NONLUS.size > 0); p.title = travaille ? T('L\'assistant travaille') : T('Réponse terminée, pas encore lue');
   };
+  // ---- Images jointes : choisies, collées ou glissées ; envoyées tout de suite (corps brut), le message ne porte que leur nom
+  const PJ = [];
+  const miniatures = (parent, ids) => { if (!ids || !ids.length) return; const z = el('div', 'vignettes'); ids.forEach(id => { const i = document.createElement('img'); i.src = '/image/' + id; i.alt = T('Image jointe'); i.addEventListener('click', () => window.open(i.src, '_blank', 'noopener')); z.appendChild(i); }); parent.appendChild(z); };
+  const dessinerPj = () => {
+    const z = $('piecesJointes'); z.textContent = ''; z.hidden = !PJ.length;
+    PJ.forEach((p, n) => { const v = el('div', 'vignette'); const i = document.createElement('img'); i.src = '/image/' + p.id; i.alt = p.nom; v.appendChild(i); const x = el('button', '', '✕'); x.title = T('Retirer cette image'); x.addEventListener('click', () => { PJ.splice(n, 1); dessinerPj(); }); v.appendChild(x); z.appendChild(v); });
+  };
+  const viderPj = () => { PJ.length = 0; dessinerPj(); };
+  const joindre = async fichiers => {
+    for (const f of fichiers) {
+      if (!f.type.startsWith('image/')) { infoLocale(T('Seules les images se joignent (PNG, JPEG, GIF, WebP).')); continue; }
+      if (PJ.length >= 4) { infoLocale(T('4 images au plus par message.')); break; }
+      try {
+        const r = await fetch('/api/image', { method: 'POST', headers: { 'Content-Type': 'application/octet-stream', 'X-Token': TOKEN }, body: f });
+        const d = await r.json().catch(() => ({})); if (!r.ok) throw new Error(d.erreur || T('Erreur ') + r.status);
+        PJ.push({ id: d.id, nom: f.name || 'image' }); dessinerPj();
+      } catch (e) { infoLocale(e.message); }
+    }
+  };
+  $('bJoindre').addEventListener('click', () => $('fImage').click());
+  $('fImage').addEventListener('change', e => { joindre([...e.target.files]); e.target.value = ''; });
+  $('saisie').addEventListener('paste', e => { const f = [...(e.clipboardData ? e.clipboardData.files : [])].filter(x => x.type.startsWith('image/')); if (f.length) { e.preventDefault(); joindre(f); } });
+  const zoneGlisse = $('ligneSaisie');
+  ['dragenter', 'dragover'].forEach(n => zoneGlisse.addEventListener(n, e => { if ([...(e.dataTransfer ? e.dataTransfer.types : [])].includes('Files')) { e.preventDefault(); zoneGlisse.classList.add('glisse'); } }));
+  ['dragleave', 'drop'].forEach(n => zoneGlisse.addEventListener(n, () => zoneGlisse.classList.remove('glisse')));
+  zoneGlisse.addEventListener('drop', e => { if (e.dataTransfer && e.dataTransfer.files.length) { e.preventDefault(); joindre([...e.dataTransfer.files]); } });
   const envoyer = async (force) => {
     const forcee = !!force && typeof force === 'object';                               // message sorti de la file : { t, conv }
-    const texte = (forcee ? force.t : $('saisie').value).trim(); if (!texte) return;
+    const images = forcee ? (force.images || []) : (PJ.length || EDIT_INDEX === null || !CONV || !CONV.messages[EDIT_INDEX] ? PJ.map(p => p.id) : (CONV.messages[EDIT_INDEX].images || []));          // modifier un message garde ses images
+    const texte = (forcee ? force.t : $('saisie').value).trim() || (images.length ? T('Décris cette image.') : ''); if (!texte) return;
     if (forcee && !EN_COURS && force.conv !== (CONV ? CONV.id : '')) {                  // il part dans la conversation où il a été écrit, pas dans celle affichée entre-temps
       if (force.conv) { await ouvrir(force.conv); if (!CONV || CONV.id !== force.conv) { infoLocale(T('✘ Message en file non envoyé : sa conversation n\'existe plus (« ') + texte.slice(0, 40) + T(' »).')); return; } }
       else await nouvelle();
@@ -757,7 +792,7 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
     if (!forcee && texte.startsWith('/') && await commande(texte)) return;          // commande « / » : traitée sans passer par le modèle
     if (EN_COURS) {                                                               // une réponse est en cours : le message attend son tour
       if (EDIT_INDEX !== null) { infoLocale(T('Termine ou arrête la réponse en cours avant de modifier un message.')); return; }
-      FILE.push({ t: texte, conv: CONV ? CONV.id : (FLUX && !FLUX.detache ? FLUX.id : '') }); $('saisie').value = ''; ajusterSaisie(); majFile(); return;
+      FILE.push({ t: texte, images, conv: CONV ? CONV.id : (FLUX && !FLUX.detache ? FLUX.id : '') }); $('saisie').value = ''; if (!forcee) viderPj(); ajusterSaisie(); majFile(); return;
     }
     ID_EN_COURS = CONV ? CONV.id : '';
     retirerActions();
@@ -769,14 +804,15 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
     }
     finEdition();
     $('saisie').value = ''; $('saisie').style.height = ''; EN_COURS = true; $('bEnvoyer').title = T('Mettre ce message en file d\'attente'); majTravail(); $('bStop').hidden = false; $('bStop').disabled = false; CONTROLE = new AbortController();
-    const moi = el('div', 'msg moi'); moi.appendChild(el('div', 'corps', texte)); fil().appendChild(moi);
+    const moi = el('div', 'msg moi'); moi.appendChild(el('div', 'corps', texte)); miniatures(moi, images); fil().appendChild(moi);
+    if (!forcee) viderPj();
     let ia = messageIA(), detailsPensee = null; bas();
     const etaitNouvelle = !CONV, flux = FLUX = { id: CONV ? CONV.id : '', detache: false, sauve: document.createElement('div') }, visible = () => !flux.detache;
     let finRecue = false;
     demarrerActivite();
     try {
       const r = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Token': TOKEN }, signal: CONTROLE.signal,
-        body: JSON.stringify({ message: texte, conversation: CONV ? CONV.id : '', travail: $('selTravail').value || '', modele: $('selModele').value, mode: $('selMode').value, reflexion: $('cReflexion').checked, remplacer_depuis: depuis }) });
+        body: JSON.stringify({ message: texte, conversation: CONV ? CONV.id : '', travail: $('selTravail').value || '', modele: $('selModele').value, mode: $('selMode').value, reflexion: $('cReflexion').checked, remplacer_depuis: depuis, images }) });
       if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.erreur || T('Erreur ') + r.status); }
       const lecteur = r.body.getReader(), dec = new TextDecoder(); let reste = '';
       for (;;) {

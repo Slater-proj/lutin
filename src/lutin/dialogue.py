@@ -1,6 +1,7 @@
 """Le dialogue avec Ollama : démarrage et état d'Ollama, requêtes au modèle, boucle de l'agent (tours d'outils), résumé des conversations, titres. L'état reste dans moteur (« _m.NOM »)."""
 from pathlib import Path
 from . import horsligne as _hl
+from . import images as _images
 from . import projet_claude as _pc
 from .i18n import t as _t
 from datetime import datetime
@@ -87,6 +88,14 @@ def extraire_appels_texte(contenu, autorises=None):
     for debut, fin in sorted(morceaux, reverse=True):
         net = net[:debut] + net[fin:]
     return appels, re.sub(r"</?tool_call>", "", net).strip()
+
+
+def modele_qui_voit(courant):
+    """Un modèle déjà installé qui comprend les images (rôle « vision » du catalogue d'abord), ou None."""
+    installes = etat_ollama()["installes"]
+    candidats = [m["id"] for m in _m.MODELES if m["id"] in installes and "vision" in (m.get("capacites") or [])]
+    candidats.sort(key=lambda i: next((0 for m in _m.MODELES if m["id"] == i and m["role"] == "vision"), 1))
+    return next((i for i in candidats if i != courant), None)
 
 
 def modele_de_repli(courant, genre):
@@ -324,7 +333,7 @@ def bloc_plan(r):
 
 
 def estimer(messages):
-    return sum(len(json.dumps(m, ensure_ascii=False)) for m in messages) // 3
+    return (sum(len(json.dumps(m, ensure_ascii=False)) for m in messages) + 2400 * sum(len(m.get("images") or ()) for m in messages)) // 3     # une image coûte environ 800 jetons
 
 
 def calculer_vitesse(e):
@@ -444,10 +453,11 @@ def compacter_conversation(ident):
     return {"ok": True, "avant": avant, "apres": len(conv["messages"]), "jauge": jauge_contexte(conv)}
 
 
-def tour(conv, texte, emit, r=None, stop=None, remplacer_depuis=None, identite="", lecture_seule=False):
+def tour(conv, texte, emit, r=None, stop=None, remplacer_depuis=None, identite="", lecture_seule=False, images=()):
     """Un tour de conversation : message de l'utilisateur, puis la boucle de l'agent (réponse, outils, réponse...). emit(evenement) envoie à la page.
     stop (threading.Event) : déclenché par le bouton Arrêter ; le tour s'arrête alors pour de bon (modèle, outils, accords). Fermer la page ne l'arrête pas.
     remplacer_depuis : indice d'un message de l'utilisateur à remplacer (modifier un message / régénérer) ; ce message et tout ce qui le suit sont retirés d'abord.
+    images : identifiants d'images jointes à ce message (voir images.py).
     lecture_seule : tâches planifiées, où personne ne peut accepter : lecture et recherche seulement, tout le reste est simulé comme dans l'essai à blanc."""
     r = dict(r or _m.reglages())
     if lecture_seule:
@@ -495,7 +505,9 @@ def tour(conv, texte, emit, r=None, stop=None, remplacer_depuis=None, identite="
     if dernier and dernier.get("role") == "user" and dernier.get("content") == texte:
         emit({"type": "info", "texte": "Cette demande est déjà dans la conversation sans réponse : je la reprends sans la dupliquer."})
     else:
-        conv["messages"].append({"role": "user", "content": texte})
+        conv["messages"].append(dict({"role": "user", "content": texte}, **({"images": list(images)} if images else {})))
+    if images and not any(m.get("images") for m in conv["messages"][-1:]):
+        conv["messages"][-1]["images"] = list(images)           # demande reprise sans doublon : on lui rend ses images
     if conv["titre"] == "Nouvelle conversation":
         conv["titre"] = " ".join(texte.split())[:60]
     _m.reparer_conversation(conv)
@@ -555,6 +567,16 @@ def boucle_agent(conv, r, emit, ctx, stop):
             if idx_tour == 0:
                 emit({"type": "info", "texte": "Ce modèle n'a pas de mode réflexion : je le désactive pour cette demande."})
         options.update(_m.options_echantillonnage(r, reflechit))
+        if idx_tour == 0 and any(m.get("images") for m in conv["messages"][-_images.RECENTS:]):
+            voit = caps is None or "vision" in caps
+            if not voit:
+                autre = modele_qui_voit(r["modele"])
+                if autre:
+                    emit({"type": "info", "texte": _t("Ce modèle ne voit pas les images : je passe sur « {} » pour cette demande.").format(autre)})
+                    r["modele"] = autre
+                    caps = capacites(autre)
+                else:
+                    emit({"type": "info", "texte": _t("Ce modèle ne voit pas les images et aucun modèle « Images » n'est installé : elles sont ignorées. Onglet Modèles pour en installer un.")})
         corps = {"model": r["modele"], "messages": ajuster_contexte(msgs, r["num_ctx"], 1.0, outils), "stream": True, "options": options, "think": reflechit}
         if not dernier_tour:
             if caps is not None and "tools" not in caps:
@@ -569,6 +591,7 @@ def boucle_agent(conv, r, emit, ctx, stop):
             contenu, pensee, appels = "", "", []
             corps_t = corps if tentative == 0 else dict(corps, messages=ajuster_contexte(msgs_base, r["num_ctx"], 0.7 ** tentative, outils) + ([{"role": "user", "content": RAPPEL_APPEL}] if relance_outil else []), options=dict(corps["options"], temperature=0.3))
             try:
+                corps_t = dict(corps_t, messages=_images.pour_le_modele(corps_t["messages"], caps is None or "vision" in caps))
                 req = urllib.request.Request(_m.OLLAMA + "/api/chat", data=json.dumps(avec_garde(corps_t)).encode("utf-8"), headers={"Content-Type": "application/json"})
                 with urllib.request.urlopen(req, timeout=900) as flux:
                     for brut in flux:

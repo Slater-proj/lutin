@@ -5,6 +5,7 @@ from . import acces as _acces
 from . import conseil as _conseil
 from . import donnees as _donnees
 from . import horsligne as _hl
+from . import images as _images
 from . import planifie as _plan
 from . import rappel as _rappel
 from . import i18n as _i18n
@@ -114,6 +115,14 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 return self._envoyer(401, {"erreur": "authentification requise"})
             if not self._jeton_valide():
                 return self._envoyer(403, {"erreur": "jeton invalide : recharge la page"})
+        if chemin.startswith("/image/"):                       # hors /api/ : la balise <img> envoie le cookie de session, pas le jeton de la page
+            if not self._authentifie():
+                return self._envoyer(401, {"erreur": "authentification requise"})
+            try:
+                octets, mime = _images.lire(chemin[len("/image/"):])
+            except ValueError:
+                return self._envoyer(404, {"erreur": _t("Image inconnue.")})
+            return self._envoyer(200, octets, mime, {"Content-Security-Policy": "default-src 'none'; sandbox"})
         if chemin in ("/", "/index.html"):
             return self._envoyer(200, _m.page_web(), "text/html; charset=utf-8")
         if chemin == "/api/etat":
@@ -263,9 +272,25 @@ class Gestionnaire(BaseHTTPRequestHandler):
         except ValueError as e:
             return self._envoyer(400, {"erreur": str(e)})
 
+    def _image(self):
+        """Une image jointe : corps brut (le type est reconnu au contenu), au plus 8 Mo."""
+        if not self._authentifie():
+            return self._envoyer(401, {"erreur": "authentification requise"})
+        if not self._jeton_valide():
+            return self._envoyer(403, {"erreur": "jeton invalide : recharge la page"})
+        taille = int(self.headers.get("Content-Length") or 0)
+        if taille > _images.TAILLE_MAX:
+            return self._envoyer(413, {"erreur": _t("Image trop grosse ({} Mo au plus).").format(_images.TAILLE_MAX // (1024 * 1024))})
+        try:
+            return self._envoyer(200, {"id": _images.enregistrer(self.rfile.read(taille))})
+        except ValueError as e:
+            return self._envoyer(400, {"erreur": str(e)})
+
     def do_POST(self):
         if not self._controle(True):
             return
+        if self.path == "/api/image":
+            return self._image()
         if self.path == "/api/restaurer":                      # une archive .zip : corps brut, plus gros qu'un message
             return self._restaurer()
         taille = int(self.headers.get("Content-Length") or 0)
@@ -456,6 +481,10 @@ class Gestionnaire(BaseHTTPRequestHandler):
         texte = str(donnees.get("message", "")).strip()
         if not texte or len(texte) > 60000:
             return self._envoyer(400, {"erreur": "Écris un message (60 000 caractères au maximum)."})
+        try:
+            images = _images.verifier_liste(donnees.get("images"))
+        except ValueError as erreur:
+            return self._envoyer(400, {"erreur": str(erreur)})
         ident = str(donnees.get("conversation") or "")
         with _m.VERROU_TOURS:                                   # trop de réponses en cours : on refuse avant de créer quoi que ce soit
             if len(_m.TOURS_ACTIFS) >= _m.TOURS_SIMULTANES and ident not in _m.TOURS_ACTIFS:
@@ -499,7 +528,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 except (OSError, ValueError):
                     pass
             emit({"type": "debut", "conversation": conv["id"]})
-            _m.tour(conv, texte, emit, r, stop, depuis, identite=self._identite())
+            _m.tour(conv, texte, emit, r, stop, depuis, identite=self._identite(), images=images)
         finally:
             with _m.VERROU_TOURS:
                 _m.TOURS_ACTIFS.pop(conv["id"], None)

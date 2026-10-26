@@ -282,6 +282,11 @@ def purger_donnees():
                     f.unlink()
             except OSError:
                 pass
+    try:
+        from . import images
+        images.nettoyer()
+    except OSError:
+        pass
     _m.CACHE_TAILLES.pop(str(_m.DONNEES), None)
     taille = _m.taille_dossier(_m.DONNEES, delai=10)
     if taille <= plafond:
