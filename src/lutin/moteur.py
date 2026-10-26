@@ -42,6 +42,7 @@ from . import bench as _bench
 from . import catalogue as _catalogue
 from . import config as _config
 from . import horsligne as _hl
+from . import projet_claude as _pc
 from . import i18n as _i18n
 from . import sauvegarde as _sauv
 from . import securite as _sec
@@ -1552,7 +1553,9 @@ def mots(texte):
 
 def sources_rappel():
     """Les documents interrogeables : docs/, skills/, mémoires de l'assistant, puis les conversations enregistrées."""
-    for dossier, motifs in ((RACINE / "docs", ("*.md", "*.txt")), (RACINE / "skills", ("*.md",)), (MEMOIRE, ("*.md",))):
+    if (RACINE / "CLAUDE.md").is_file():
+        yield RACINE / "CLAUDE.md"
+    for dossier, motifs in ((RACINE / "docs", ("*.md", "*.txt")), (RACINE / "skills", ("*.md",)), (RACINE / ".claude", ("*.md",)), (MEMOIRE, ("*.md",))):
         if dossier.is_dir():
             for racine, sous, noms in os.walk(str(dossier)):
                 sous[:] = sorted(s for s in sous if s not in DOSSIERS_IGNORES)
@@ -2668,6 +2671,7 @@ def consignes_systeme(r):
     return (_t("Tu es Lutin, l'assistant local de l'utilisateur. Tu réponds dans la langue de l'utilisateur, de façon directe et concise. Tu disposes d'outils pour lire et modifier le projet : utilise-les plutôt que de deviner. "
             "Chaque modification de fichier garde une sauvegarde de l'ancienne version et passe par l'accord de l'utilisateur, sauf s'il a activé l'accord automatique.\n\n") + mode + _t("\n\n# CONTEXTE DU PROJET (memoire/CONTEXTE.md)\n") + contexte[:14000] + _t("\n\n# NOTES DURABLES (memoire/MEMOIRE.md)\n") + (texte_memoire(memoire) or _t("(aucune pour l'instant)"))
             + bloc_skills
+            + _pc.bloc_prompt(RACINE)
             + bloc_plan(r)
             + _t("\n\nDate : ") + datetime.now().strftime("%Y-%m-%d") + _t(". Dossier du projet : ") + str(RACINE))
 
@@ -3203,6 +3207,32 @@ def ajouter_travail(chemin, nom):
     return travaux_etat()
 
 
+def importer_projet_claude(chemin, mode, vers="", nom=""):
+    """Reprend un projet « Claude » (CLAUDE.md, .claude/) : `ici` = on travaille dans le dossier lui-même, `copie` = dans une copie (l'original n'est jamais touché). Le dossier devient un dossier de travail
+    et le dossier actif."""
+    source = Path(chemin.strip()).expanduser()
+    if not source.is_dir():
+        raise ValueError(_t("Ce dossier n'existe pas : {}").format(source))
+    d = _pc.detecter(source)
+    if _pc.est_vide(d):
+        raise ValueError(_t("Ni CLAUDE.md ni dossier .claude/ dans ce dossier : ce n'est pas un projet Claude (pour l'utiliser quand même, ajoute-le comme dossier de travail)."))
+    if mode not in ("ici", "copie"):
+        raise ValueError(_t("Mode inconnu (ici ou copie)."))
+    if mode == "copie":
+        destination = Path(vers.strip()).expanduser() if vers.strip() else Path.home() / "Lutin" / source.name
+        cible = _pc.copier(source, destination)
+    else:
+        cible = source.resolve()
+    etat = ajouter_travail(str(cible), nom.strip() or source.name)
+    ident = next((t["id"] for t in etat["liste"] if _trav.cle(t["chemin"]) == _trav.cle(cible)), "")
+    choisi = True
+    try:
+        etat = choisir_travail(ident)
+    except ValueError:
+        choisi = False          # une réponse travaille ailleurs : le dossier est ajouté, on le choisira ensuite
+    return {"mode": mode, "chemin": str(cible), "resume": _pc.resume(d), "actif": choisi, "travaux": etat}
+
+
 def retirer_travail(ident):
     cfg = config_lue()
     t = _trav.par_id(cfg, ident)
@@ -3387,8 +3417,11 @@ class Gestionnaire(BaseHTTPRequestHandler):
             r = reglages()
             return self._envoyer(200, {"version": VERSION, "ollama": o["actif"], "ollama_installe": bool(chemin_ollama()), "installes": o["installes"], "modeles": modeles_connus(o["installes"], o.get("tailles")), "modeles_masques": len(lire_registre_modeles()["masques"]), "actives": list(TOURS_ACTIFS),
                                        "pulls": PULLS, "reglages": r, "conversations": conv_liste(), "racine": str(RACINE),
-                                       "outil": bool(self._outil_vivant()), "hors_ligne": _hl.actif(), "niveau": SECURITE.niveau, "langue": _i18n.langue(), "langue_reglage": _i18n.langue_configuree(), "travaux": travaux_etat(), "configurateur": self._configurateur(),
+                                       "outil": bool(self._outil_vivant()), "hors_ligne": _hl.actif(), "niveau": SECURITE.niveau, "langue": _i18n.langue(), "langue_reglage": _i18n.langue_configuree(), "nouvelle_version": nouvelle_version_lutin(), "travaux": travaux_etat(), "configurateur": self._configurateur(),
                                        "bench": {"en_cours": BENCH["en_cours"], "etape": BENCH["etape"], "erreur": BENCH["erreur"], "mesures": _bench.lire(chemin_bench())}, "attentes": [{"id": a.id, "titre": a.titre, "detail": a.detail, "diff": a.diff} for a in Attente.EN_COURS.values()]})
+        if chemin == "/api/projet-claude":
+            d = _pc.detecter(RACINE)
+            return self._envoyer(200, {"detecte": d, "resume": _pc.resume(d) if not _pc.est_vide(d) else "", "racine": str(RACINE)})
         if chemin == "/api/travaux":
             return self._envoyer(200, dict(travaux_etat(), modifiable=self._configurateur()))
         if chemin == "/api/journal":
@@ -3528,8 +3561,19 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 if self.path == "/api/travaux-ajouter":
                     return self._envoyer(200, ajouter_travail(str(donnees.get("chemin", "")), str(donnees.get("nom", ""))))
                 return self._envoyer(200, retirer_travail(str(donnees.get("id", ""))))
+            if self.path == "/api/importer-claude":
+                if not self._configurateur():
+                    return self._envoyer(403, {"erreur": _t("Un projet Claude s'importe depuis cette machine (niveau « cette machine seulement ») ou avec la commande lutin importer.")})
+                return self._envoyer(200, importer_projet_claude(str(donnees.get("chemin", "")), str(donnees.get("mode", "")), str(donnees.get("vers", "")), str(donnees.get("nom", ""))))
             if self.path == "/api/bench":
                 return self._envoyer(200, lancer_bench(str(donnees.get("modele", "")), bool(donnees.get("rapide"))))
+            if self.path == "/api/version-ignorer":
+                chemin = os.environ.get("LUTIN_VERSION_CACHE")
+                if not chemin:
+                    raise ValueError("Pas de vérification de version dans ce mode de lancement.")
+                from . import miseajour
+                miseajour.ignorer_version(chemin, str(donnees.get("version", ""))[:40])
+                return self._envoyer(200, {"ok": True})
             if self.path == "/api/langue":
                 try:
                     return self._envoyer(200, {"langue": _i18n.definir(str(donnees.get("valeur", "")).strip().lower())})
@@ -3780,6 +3824,15 @@ def ip_locale():
 
 
 CLES_TEXTE_UI = {"erreur", "raison", "message", "nom", "valeur", "conseil", "detail", "phrase", "avertissement", "etape", "ancien_nom"}          # textes écrits par Lutin (jamais le contenu des conversations ni des fichiers)
+
+
+def nouvelle_version_lutin():
+    """La version de Lutin annoncée par la vérification au lancement (un fichier du cache, jamais le réseau) ; None s'il n'y en a pas de nouvelle ou si tu l'as ignorée."""
+    chemin = os.environ.get("LUTIN_VERSION_CACHE")
+    if not chemin:
+        return None
+    from . import miseajour
+    return miseajour.nouvelle_version(chemin, VERSION)
 
 
 def page_web():

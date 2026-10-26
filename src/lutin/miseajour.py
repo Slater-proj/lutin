@@ -1,10 +1,11 @@
 """Vérification des modèles au lancement : y a-t-il une mise à jour d'un modèle installé, ou un meilleur modèle pour ta machine ?
 
-Règles : jamais bloquant (thread), au plus une fois par 24 h, silencieux hors ligne, ne télécharge JAMAIS de modèle tout seul : il PROPOSE.
+Règles : jamais bloquant (thread), au plus une fois par 24 h, silencieux hors ligne, ne télécharge JAMAIS de modèle tout seul : il PROPOSE. La nouvelle version de Lutin lui-même est annoncée de la même façon (verifier_lutin).
 Seules données envoyées : des requêtes GET anonymes (le catalogue, et le registre d'Ollama pour comparer des empreintes). Désactivable (réglage `verifier_maj`).
 """
 import hashlib
 import json
+import os
 import re
 import time
 import urllib.error
@@ -149,6 +150,58 @@ def numeros(version):
 def plus_recente(distante, locale):
     """Vrai si la version distante est strictement plus récente (jamais de retour en arrière, même si la version locale est une candidate ou illisible)."""
     return bool(numeros(distante)) and numeros(distante) > (numeros(locale) or (0, 0, 0))
+
+
+def commande_mise_a_jour():
+    """La commande à donner pour se mettre à jour : dans un conteneur, c'est l'image qu'on remplace."""
+    return "docker compose pull && docker compose up -d" if os.path.exists("/.dockerenv") or os.environ.get("LUTIN_DOCKER") else "lutin update"
+
+
+def fichier_version(dossiers):
+    return Path(dossiers["cache"]) / "lutin-version.json"
+
+
+def lire_fichier_version(chemin):
+    try:
+        d = json.loads(Path(chemin).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return d if isinstance(d, dict) else {}
+
+
+def verifier_lutin(dossiers, depot=DEPOT, http=http_get, maintenant=time.time, force=False):
+    """Y a-t-il une version de Lutin plus récente ? Au plus une fois par 24 h, jamais bloquant (une seule requête GET anonyme vers l'API de GitHub), silencieux hors ligne.
+    Le résultat est gardé dans cache/lutin-version.json ; la page l'affiche, rien n'est installé sans toi."""
+    chemin = fichier_version(dossiers)
+    d = lire_fichier_version(chemin)
+    if not force and maintenant() - float(d.get("date") or 0) < INTERVALLE_S:
+        return d
+    version, _ = derniere_release(depot, http)
+    if version:
+        d.update(date=maintenant(), version=version, depot=depot)
+        try:
+            chemin.parent.mkdir(parents=True, exist_ok=True)
+            chemin.write_text(json.dumps(d, indent=1), encoding="utf-8")
+        except OSError:
+            pass
+    return d
+
+
+def nouvelle_version(chemin, locale):
+    """{version, actuelle, page, commande} si le fichier du cache annonce une version plus récente que la locale et que tu ne l'as pas ignorée ; None sinon. Jamais de réseau."""
+    d = lire_fichier_version(chemin)
+    v = str(d.get("version") or "")
+    if not plus_recente(v, locale) or v == d.get("ignoree"):
+        return None
+    return {"version": v, "actuelle": locale, "page": "https://github.com/{}/releases/tag/v{}".format(d.get("depot") or DEPOT, v), "commande": commande_mise_a_jour()}
+
+
+def ignorer_version(chemin, version):
+    """« Ignorer cette version » : plus de rappel pour elle (la suivante sera annoncée)."""
+    d = lire_fichier_version(chemin)
+    d["ignoree"] = str(version)
+    Path(chemin).parent.mkdir(parents=True, exist_ok=True)
+    Path(chemin).write_text(json.dumps(d, indent=1), encoding="utf-8")
 
 
 PORTEES = ("maj", "nouveaux", "tout")

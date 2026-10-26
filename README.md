@@ -30,6 +30,7 @@
 | 🗂️ **Several projects** | Several workspace folders; each conversation keeps its own. |
 | ⏱️ **It measures, it does not guess** | Built-in benchmark: speed, tool calls, code, French, instructions, **on your machine**. |
 | 📦 **Easy to install** | One command on Windows, one on Linux, or a Docker image **with Ollama inside**. No Python dependency. Running the installation again breaks nothing. |
+| 🔁 **Your Claude context, kept** | Take over a Claude Code repository (`CLAUDE.md`, `.claude/` skills, commands, agents): work in it or in a copy, nothing is lost when switching tools. [Details](docs/CLAUDE-PROJECTS.md). |
 | 🌍 **English and French** | The whole application (page, messages, terminal) and the docs. Language: `lutin langue`, the page settings, or the system language. |
 
 ## Installation
@@ -71,6 +72,7 @@ The script installs the latest published version in a private environment, adds 
 | `lutin journal` | what Lutin modified or ran, with which approval and for whom |
 | `lutin sauvegarde` · `lutin restaurer` | export / put back your data in a `.zip` |
 | `lutin pin` · `lutin appareils` · `lutin securite` | access from other devices |
+| `lutin importer <folder>` | take over a Claude project (`CLAUDE.md`, `.claude/`): `--ici` (in it) or `--copie` (in a copy) |
 | `lutin langue [fr\|en\|auto]` | language of the application |
 | `lutin doctor` | diagnostics to paste into a problem report (no personal content) |
 

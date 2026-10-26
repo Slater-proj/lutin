@@ -30,6 +30,7 @@
 | 🗂️ **Plusieurs projets** | Plusieurs dossiers de travail ; chaque conversation garde le sien. |
 | ⏱️ **Il mesure, il ne devine pas** | Banc d'essai intégré : vitesse, appel d'outils, code, français, consignes, **sur ta machine**. |
 | 📦 **Simple à installer** | Une commande sous Windows, une sous Linux, ou une image Docker **avec Ollama dedans**. Aucune dépendance Python. Relancer l'installation ne casse rien. |
+| 🔁 **Ton contexte Claude, conservé** | Reprends un dépôt Claude Code (`CLAUDE.md`, skills, commandes, agents de `.claude/`) : travaille dedans ou dans une copie, rien ne se perd en changeant d'outil. [Détails](docs/CLAUDE-PROJECTS.fr.md). |
 | 🌍 **Français et anglais** | Toute l'application (page, messages, terminal) et les docs. Langue : `lutin langue`, les réglages de la page, ou la langue du système. |
 
 ## Installation
@@ -71,6 +72,7 @@ Le script installe la dernière version publiée dans un environnement privé, a
 | `lutin journal` | ce que Lutin a modifié ou lancé, avec quel accord et pour qui |
 | `lutin sauvegarde` · `lutin restaurer` | exporter / remettre tes données dans un `.zip` |
 | `lutin pin` · `lutin appareils` · `lutin securite` | accès depuis d'autres appareils |
+| `lutin importer <dossier>` | reprendre un projet Claude (`CLAUDE.md`, `.claude/`) : `--ici` (dedans) ou `--copie` |
 | `lutin langue [fr\|en\|auto]` | langue de l'application |
 | `lutin doctor` | diagnostic à coller dans un rapport de problème (sans contenu personnel) |
 

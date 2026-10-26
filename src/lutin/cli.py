@@ -6,7 +6,7 @@ import sys
 import time
 from pathlib import Path
 
-from . import __version__, bench, catalogue, chat_terminal, client, config, horsligne, i18n, installation, machine, miseajour, ollama_client, sauvegarde, securite, selection, travaux
+from . import __version__, bench, catalogue, chat_terminal, client, config, horsligne, i18n, installation, machine, miseajour, ollama_client, projet_claude, sauvegarde, securite, selection, travaux
 from .i18n import t as _t
 
 AIDE_GENERALE = """Lutin : un assistant IA local qui choisit les modèles adaptés à ta machine.
@@ -21,6 +21,7 @@ AIDE_GENERALE = """Lutin : un assistant IA local qui choisit les modèles adapt�
   lutin securite      niveau d'accès actuel
   lutin hors-ligne    mode hors ligne strict (aucune connexion vers Internet)
   lutin travaux       dossiers de travail (lister, ajouter, retirer, actif)
+  lutin importer      reprendre un projet Claude (CLAUDE.md, .claude/) : travailler dedans ou en copie
   lutin journal       ce que Lutin a modifié ou lancé, avec quel accord
   lutin bench         mesurer un modèle sur cette machine (vitesse, outils, code, français)
   lutin sauvegarde    exporter tes données dans un .zip ; lutin restaurer pour les remettre
@@ -103,6 +104,13 @@ def parseur():
     hl = sp.add_parser("hors-ligne", help=_t("mode hors ligne strict (aucune connexion vers Internet)"))
     hl.add_argument("etat", nargs="?", choices=("oui", "non", "etat"), default="etat")
     sp.add_parser("doctor", help=_t("diagnostic"))
+    im = sp.add_parser("importer", help=_t("reprendre un projet Claude (CLAUDE.md, .claude/) comme dossier de travail"))
+    im.add_argument("chemin", help=_t("le dossier du projet (celui qui contient CLAUDE.md ou .claude/)"))
+    groupe = im.add_mutually_exclusive_group()
+    groupe.add_argument("--ici", action="store_true", help=_t("travailler dans le dossier lui-même"))
+    groupe.add_argument("--copie", action="store_true", help=_t("travailler dans une copie ; l'original n'est jamais touché"))
+    im.add_argument("--vers", help=_t("dossier de la copie (défaut : ~/Lutin/<nom du projet>)"))
+    im.add_argument("--nom", default="", help=_t("nom affiché"))
     lg = sp.add_parser("langue", help=_t("langue de l'application (fr, en ou auto)"))
     lg.add_argument("valeur", nargs="?", help="fr | en | auto")
     return p
@@ -450,6 +458,45 @@ def commande_securite(args):
     return 0
 
 
+def commande_importer(args, entree=input):
+    """Reprend un projet Claude : ce que Lutin y trouve, puis « travailler dedans » ou « en faire une copie » (copie par défaut : l'original reste intact)."""
+    d, cfg = contexte()
+    source = Path(args.chemin).expanduser()
+    if not source.is_dir():
+        print("✘ " + _t("Ce dossier n'existe pas : {}").format(source), file=sys.stderr)
+        return 2
+    trouve = projet_claude.detecter(source)
+    if projet_claude.est_vide(trouve):
+        print("✘ " + _t("Ni CLAUDE.md ni dossier .claude/ dans ce dossier : ce n'est pas un projet Claude (pour l'utiliser quand même : lutin travaux ajouter <dossier>)."), file=sys.stderr)
+        return 2
+    print(_t("Trouvé dans {} : {}").format(source, projet_claude.resume(trouve)))
+    mode = "ici" if args.ici else "copie" if args.copie else None
+    if mode is None:
+        print(_t("  1. Faire une copie (l'original n'est jamais touché)  [conseillé]\n  2. Travailler dedans (les fichiers sont lus et modifiés sur place, avec ton accord)"))
+        try:
+            reponse = entree(_t("Ton choix") + " [1] ").strip()
+        except EOFError:
+            reponse = ""
+        mode = "ici" if reponse == "2" else "copie"
+    try:
+        if mode == "copie":
+            destination = Path(args.vers).expanduser() if args.vers else Path.home() / "Lutin" / source.name
+            cible = projet_claude.copier(source, destination)
+            print(_t("✔ Copie faite : {}").format(cible))
+        else:
+            cible = source.resolve()
+        interdits = [d["config"], d["donnees"], d["memoire"], d["cache"]]
+        t = travaux.ajouter(cfg, str(cible), args.nom or source.name, interdits)
+        travaux.choisir(cfg, t["id"])
+        config.enregistrer(d, cfg)
+    except ValueError as e:
+        print("✘ " + str(e), file=sys.stderr)
+        return 2
+    print(_t("✔ Dossier de travail « {} » : {}").format(t["nom"], t["chemin"]))
+    print(_t("Il est maintenant le dossier actif. Si Lutin tourne, choisis-le dans la liste des dossiers de travail."))
+    return 0
+
+
 NOMS_LANGUES = {"fr": "Français", "en": "English"}
 
 
@@ -515,7 +562,7 @@ def principal(argv=None):
     args = parseur().parse_args(argv)
     os.environ["LUTIN_CONFIG"] = str(Path(config.dossiers()["config"]) / "config.json")          # les gardes (mode hors ligne…) lisent la configuration de cette installation
     commandes = {"setup": commande_setup, "serve": commande_serve, "update": commande_update, "chat": commande_chat, "modeles": commande_modeles, "pin": commande_pin,
-                 "appareils": commande_appareils, "securite": commande_securite, "langue": commande_langue, "hors-ligne": commande_hors_ligne,
+                 "appareils": commande_appareils, "securite": commande_securite, "langue": commande_langue, "importer": commande_importer, "hors-ligne": commande_hors_ligne,
                  "travaux": commande_travaux, "journal": commande_journal, "bench": commande_bench, "sauvegarde": commande_sauvegarde, "restaurer": commande_restaurer, "doctor": commande_doctor}
     try:
         if args.commande is None:

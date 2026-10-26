@@ -1,6 +1,7 @@
 """Démarrer le serveur de Lutin : dossiers, niveau de sécurité, Ollama, vérification des modèles en arrière-plan."""
 import os
 import threading
+import time
 from pathlib import Path
 
 from . import config, machine, miseajour, ollama_client, securite, travaux
@@ -17,7 +18,7 @@ def preparer_environnement(cfg, dossiers):
     polyvalent = cfg["modeles"]["choisis"].get("polyvalent") or next(iter(cfg["modeles"]["choisis"].values()), "")
     env = {"LUTIN_RACINE": str(travail), "LUTIN_DONNEES": str(dossiers["donnees"]), "LUTIN_MEMOIRE": str(dossiers["memoire"]),
            "LUTIN_PORT": str(cfg["securite"]["port"]), "LUTIN_PROPOSITIONS": str(Path(dossiers["cache"]) / "propositions.json"), "LUTIN_BENCH": str(Path(dossiers["cache"]) / "bench.json"),
-           "LUTIN_CONFIG": str(Path(dossiers["config"]) / "config.json")}
+           "LUTIN_CONFIG": str(Path(dossiers["config"]) / "config.json"), "LUTIN_VERSION_CACHE": str(miseajour.fichier_version(dossiers))}
     if polyvalent:
         env["LUTIN_MODELE"] = polyvalent
     if cache_catalogue.is_file():
@@ -67,4 +68,13 @@ def lancer_serveur(cfg, dossiers, ouvrir_navigateur=True, ecrire=print):
             except Exception as e:  # noqa: BLE001 — jamais bloquant
                 ecrire(_t("(vérification des modèles impossible : {})").format(e))
         threading.Thread(target=verification, daemon=True, name="verification-modeles").start()
+
+        def verification_lutin():
+            while True:
+                try:
+                    miseajour.verifier_lutin(dossiers)
+                except Exception:  # noqa: BLE001 — jamais bloquant, jamais bruyant
+                    pass
+                time.sleep(6 * 3600)          # le serveur peut tourner des semaines : on recontrôle (au plus une requête par 24 h grâce au cache)
+        threading.Thread(target=verification_lutin, daemon=True, name="verification-lutin").start()
     moteur.principal()

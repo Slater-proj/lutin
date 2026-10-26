@@ -32,7 +32,8 @@ RUN chmod 0755 /usr/local/bin/entrypoint.sh
 
 # Réglages par défaut (tous modifiables, voir docs/DOCKER.md). Dans un conteneur, « cette machine seulement » n'a pas de sens : l'accès se fait par code PIN (réseau)
 # ou derrière un proxy. Le port n'est publié que sur 127.0.0.1 de l'hôte par docker-compose.yml.
-ENV LUTIN_HOME=/data \
+ENV LUTIN_DOCKER=1 \
+    LUTIN_HOME=/data \
     LUTIN_NIVEAU=reseau \
     LUTIN_ECOUTE=0.0.0.0 \
     LUTIN_PORT=8777 \
@@ -68,6 +69,7 @@ RUN chmod 0755 /usr/local/bin/entrypoint.sh
 
 # Ollama écoute à l'intérieur du conteneur seulement (127.0.0.1) : son port n'est jamais publié. Les modèles sont dans /models (volume).
 ENV PATH=/opt/lutin/bin:$PATH \
+    LUTIN_DOCKER=1 \
     LUTIN_HOME=/data \
     LUTIN_NIVEAU=reseau \
     LUTIN_ECOUTE=0.0.0.0 \

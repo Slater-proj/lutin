@@ -168,6 +168,8 @@ pre.diff { width:100%; max-height:340px; overflow:auto; background:#0c1117; bord
 .actions button { background:none; border:1px solid transparent; color:var(--muted); border-radius:6px; padding:1px 8px; font-size:.76rem; cursor:pointer; } .actions button:hover { border-color:var(--line2); color:var(--fg); }
 #bandeauEdition { display:flex; gap:10px; align-items:center; padding:6px 16px; background:#221c10; border-top:1px solid var(--warm); color:var(--warm); font-size:.82rem; }
 .corps a { color:var(--accent); }
+.bandeau-version { display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; padding:8px 14px; background:#14304a; border-bottom:1px solid var(--accent2); font-size:.9rem; }
+.bandeau-version .texte { flex:1 1 260px; } .bandeau-version a.btn { color:var(--fg); text-decoration:none; border:1px solid var(--line2); border-radius:8px; padding:4px 10px; background:#1b2a3b; }
 .bloc-code { position:relative; }
 .bloc-code pre { margin-top:0; }
 .bloc-code .btn-copier { position:absolute; top:8px; right:8px; background:#1a2634; color:#cfe0f2; border:1px solid var(--line2); border-radius:6px; padding:3px 10px; font-size:.75rem; cursor:pointer; }
@@ -284,6 +286,7 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
   <div class="aide" id="racine"></div>
 </aside>
 <main>
+  <div id="bandeauVersion" class="bandeau-version" role="status" hidden></div>
   <div class="haut">
     <button id="burger" title="Conversations" aria-label="Ouvrir les conversations">☰</button>
     <div class="onglets" role="tablist">
@@ -344,6 +347,9 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
     <h2>Notes de l'assistant <span class="aide">(il y ajoute ce qu'il doit retenir d'une conversation à l'autre)</span></h2>
     <textarea id="tMemoire" style="min-height:160px"></textarea>
     <div style="margin:6px 0"><button id="bSMem" class="principal">Enregistrer les notes</button> <span class="aide" id="mM"></span></div>
+    <h2>Projet Claude <span class="aide">(CLAUDE.md et dossier .claude/ : lus par l'assistant comme consignes du projet ; il peut les modifier avec ton accord)</span></h2>
+    <div id="infoClaude" class="aide" style="margin:6px 0"></div>
+    <div style="margin:6px 0"><button id="bImporterClaude">Importer un projet Claude…</button> <span class="aide" id="mClaude"></span></div>
     <h2>Skills <span class="aide">(les fiches du projet, que tu construis : l'assistant en voit la liste au début de chaque conversation et lit le contenu à la demande)</span></h2>
     <div id="listeSkills" class="aide" style="margin:6px 0">Aucun skill.</div>
     <textarea id="tSkill" style="min-height:240px" placeholder="Choisis un skill ci-dessus, ou crée-en un nouveau…"></textarea>
@@ -857,6 +863,7 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
     s.value = ETAT.installes.includes(v) ? v : (ETAT.installes.includes(ETAT.reglages.modele) ? ETAT.reglages.modele : (ETAT.installes[0] || ETAT.reglages.modele));
     if (!$('selMode').dataset.init) { $('selMode').value = ETAT.reglages.mode; $('cReflexion').checked = ETAT.reglages.reflexion; $('cAuto').checked = ETAT.reglages.auto_ecriture; $('cAvance').checked = !!ETAT.reglages.avance; $('cAutoCmd').checked = ETAT.reglages.auto_commandes; $('cWeb').checked = ETAT.reglages.web !== false; $('rCtx').value = ETAT.reglages.num_ctx; $('rTemp').value = ETAT.reglages.temperature; $('rTours').value = ETAT.reglages.tours_max; $('iTopP').value = ETAT.reglages.top_p ?? ''; $('iTopK').value = ETAT.reglages.top_k ?? ''; $('iMinP').value = ETAT.reglages.min_p ?? ''; $('iRep').value = ETAT.reglages.repeat_penalty ?? ''; $('cGarde').checked = ETAT.reglages.garde_ressources !== false; $('cComfy').checked = ETAT.reglages.liberer_si_comfy !== false; $('sRappels').value = ETAT.reglages.rappels_auto || 'scenario'; $('iSeuilRam').value = ETAT.reglages.seuil_ram_go; $('iSeuilDisque').value = ETAT.reglages.seuil_disque_go; $('iPlafond').value = ETAT.reglages.plafond_donnees_go; $('iLimiteCmd').value = ETAT.reglages.limite_ram_commande_go; $('selMode').dataset.init = '1'; }
     if (document.activeElement !== $('selLangue')) $('selLangue').value = ETAT.langue_reglage || 'auto';
+    afficherVersion();
     $('cHorsLigne').checked = !!ETAT.hors_ligne; $('cWeb').disabled = !!ETAT.hors_ligne;
     const tr = ETAT.travaux || { liste: [], actif: '' }, st = $('selTravail'), sigT = JSON.stringify(tr);
     if (st.dataset.sig !== sigT) { st.dataset.sig = sigT; st.textContent = ''; tr.liste.forEach(t => { const o = el('option', '', t.nom); o.value = t.id; o.title = t.chemin; st.appendChild(o); }); st.value = tr.actif; }
@@ -888,7 +895,7 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
   const sauverReglages = async () => { try { await api('/api/reglages', { modele: $('selModele').value, mode: $('selMode').value, reflexion: $('cReflexion').checked, auto_ecriture: $('cAuto').checked, auto_commandes: $('cAutoCmd').checked, avance: $('cAvance').checked, web: $('cWeb').checked, num_ctx: +$('rCtx').value, temperature: +$('rTemp').value, tours_max: +$('rTours').value, top_p: nombreOuNull('iTopP'), top_k: nombreOuNull('iTopK'), min_p: nombreOuNull('iMinP'), repeat_penalty: nombreOuNull('iRep'), garde_ressources: $('cGarde').checked, liberer_si_comfy: $('cComfy').checked, rappels_auto: $('sRappels').value, seuil_ram_go: nombreOuNull('iSeuilRam') ?? 3, seuil_disque_go: nombreOuNull('iSeuilDisque') ?? 10, plafond_donnees_go: nombreOuNull('iPlafond') ?? 2, limite_ram_commande_go: nombreOuNull('iLimiteCmd') ?? 0 }); } catch (e) { fil().appendChild(el('div', 'erreur', e.message)); } };
   document.querySelectorAll('.onglets button').forEach(b => b.addEventListener('click', async () => {
     document.querySelectorAll('.onglets button').forEach(x => x.setAttribute('aria-selected', x === b)); document.querySelectorAll('.page').forEach(p => p.classList.toggle('vue', p.id === 'p-' + b.dataset.p));
-    if (b.dataset.p === 'memoire') { const m = await api('/api/memoire'); $('tContexte').value = m['CONTEXTE.md']; $('tMemoire').value = m['MEMOIRE.md']; chargerSkills(); }
+    if (b.dataset.p === 'memoire') { const m = await api('/api/memoire'); $('tContexte').value = m['CONTEXTE.md']; $('tMemoire').value = m['MEMOIRE.md']; chargerSkills(); chargerClaude(); }
     if (b.dataset.p === 'modeles') rafraichir();
     if (b.dataset.p === 'sante') window.ouvrirSante();
   }));
@@ -1095,6 +1102,29 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
   ['rCtx', 'rTemp', 'rTours'].forEach(id => $(id).addEventListener('input', () => { $('vCtx').textContent = $('rCtx').value; $('vTemp').textContent = $('rTemp').value; $('vTours').textContent = $('rTours').value; }));
   ['rCtx', 'rTemp', 'rTours'].forEach(id => $(id).addEventListener('change', async () => { await sauverReglages(); if (CONV) majJauge(CONV.id); }));
   // --- fenêtre : revue des changements, git ---
+  // Une nouvelle version de Lutin existe : un bandeau, jamais une installation sans toi.
+  const ECARTEES = new Set();                          // « Plus tard » : jusqu'au prochain rechargement de la page
+  const afficherVersion = () => {
+    const b = $('bandeauVersion'), v = ETAT.nouvelle_version;
+    if (!v || ECARTEES.has(v.version)) { b.hidden = true; b.dataset.version = ''; return; }
+    if (b.dataset.version === v.version) return;
+    b.dataset.version = v.version; b.hidden = false; b.textContent = '';
+    b.appendChild(el('span', 'texte', T('Nouvelle version de Lutin disponible : {} (tu as la {}).').replace('{}', v.version).replace('{}', v.actuelle)));
+    const notes = el('a', 'btn', T('Voir les nouveautés')); notes.href = v.page; notes.target = '_blank'; notes.rel = 'noopener noreferrer'; b.appendChild(notes);
+    const maj = el('button', 'principal', T('Mettre à jour'));
+    maj.addEventListener('click', () => {
+      const c = ouvrirModal(T('Mettre à jour Lutin'));
+      c.appendChild(el('p', '', T('Dans un terminal, sur la machine qui fait tourner Lutin :')));
+      const code = el('pre', 'bloc-code'); code.appendChild(el('code', '', v.commande)); c.appendChild(code);
+      const copie = el('button', '', T('Copier')); copie.addEventListener('click', async () => { copie.textContent = (await copier(v.commande)) ? T('Copié !') : T('Échec'); }); c.appendChild(copie);
+      c.appendChild(el('p', 'aide', T('Tes réglages, tes conversations et tes modèles ne sont pas touchés. Relance Lutin ensuite.')));
+    });
+    b.appendChild(maj);
+    const plus = el('button', '', T('Plus tard')); plus.addEventListener('click', () => { ECARTEES.add(v.version); afficherVersion(); }); b.appendChild(plus);
+    const non = el('button', '', T('Ignorer cette version'));
+    non.addEventListener('click', async () => { try { await api('/api/version-ignorer', { version: v.version }); ECARTEES.add(v.version); afficherVersion(); } catch (e) { alert(e.message); } });
+    b.appendChild(non);
+  };
   const ouvrirModal = titre => { $('modalTitre').textContent = titre; $('modalCorps').textContent = ''; $('modal').hidden = false; return $('modalCorps'); };
   const fermerModal = () => { $('modal').hidden = true; };
   $('modalFermer').addEventListener('click', fermerModal); $('modalFond').addEventListener('click', fermerModal);
@@ -1256,6 +1286,30 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
   });
   $('bAnnulerEdition').addEventListener('click', () => { finEdition(); $('saisie').value = ''; });
   let SKILL_ACTIF = null;
+  // Un projet Claude (CLAUDE.md, .claude/) : ce qui est détecté dans le dossier de travail, et l'import d'un autre dépôt (sur place ou en copie).
+  const chargerClaude = async () => {
+    try {
+      const r = await api('/api/projet-claude');
+      $('infoClaude').textContent = r.resume ? T('Détecté dans le dossier de travail : ') + r.resume + '.' : T('Aucun CLAUDE.md ni dossier .claude/ dans le dossier de travail actuel.');
+    } catch (e) { $('infoClaude').textContent = e.message; }
+  };
+  const importerClaude = async () => {
+    const chemin = prompt(T('Chemin du projet Claude à importer (le dossier qui contient CLAUDE.md ou .claude/) :')); if (!chemin) return;
+    const c = ouvrirModal(T('Importer un projet Claude'));
+    c.appendChild(el('p', '', chemin));
+    c.appendChild(el('p', 'aide', T('Travailler dedans : les fichiers du projet sont lus et modifiés sur place (avec ton accord), les mêmes que ceux de Claude Code : rien ne se perd en passant de l\'un à l\'autre. Faire une copie : Lutin travaille dans une copie (historique git compris) et l\'original n\'est jamais touché.')));
+    const lance = async mode => {
+      $('modal').hidden = true; $('mClaude').textContent = T('Import en cours…');
+      try {
+        const r = await api('/api/importer-claude', { chemin, mode });
+        $('mClaude').textContent = T('Importé : ') + r.chemin + ' (' + r.resume + ').' + (r.actif ? '' : T(' Une réponse est en cours : choisis ce dossier ensuite.'));
+        await rafraichir(); chargerClaude();
+      } catch (e) { $('mClaude').textContent = e.message; }
+    };
+    const dedans = el('button', 'principal', T('Travailler dedans')); dedans.addEventListener('click', () => lance('ici'));
+    const copie = el('button', '', T('Faire une copie')); copie.addEventListener('click', () => lance('copie'));
+    c.appendChild(dedans); c.appendChild(document.createTextNode(' ')); c.appendChild(copie);
+  };
   const chargerSkills = async () => {
     try {
       const r = await api('/api/skills');
@@ -1315,6 +1369,7 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
   $('selLangue').addEventListener('change', async () => {
     try { await api('/api/langue', { valeur: $('selLangue').value }); location.reload(); } catch (e) { alert(e.message); }
   });
+  $('bImporterClaude').addEventListener('click', importerClaude);
   $('bMaj').addEventListener('click', () => verifierModeles('maj'));
   $('bNouveaux').addEventListener('click', () => verifierModeles('nouveaux'));
   // Liens directs : /#modeles, /#memoire, /#conv=<id> (utile pour un signet ou une capture d'écran)
