@@ -5,6 +5,7 @@ from . import acces as _acces
 from . import conseil as _conseil
 from . import donnees as _donnees
 from . import horsligne as _hl
+from . import planifie as _plan
 from . import rappel as _rappel
 from . import i18n as _i18n
 from . import projet_claude as _pc
@@ -129,6 +130,8 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 return self._envoyer(200, {"mesure": None, "conseil": []})
             from .machine import detecter
             return self._envoyer(200, {"mesure": vitesse, "conseil": _conseil.analyser(vitesse, detecter(), r, _m._CATALOGUE, _m.etat_ollama()["installes"], _m.ps_modele(r["modele"]))})
+        if chemin == "/api/planifie":
+            return self._envoyer(200, _plan.etat())
         if chemin == "/api/documents":
             return self._envoyer(200, _rappel.etat_documents())
         if chemin == "/api/documents-chercher":
@@ -336,6 +339,20 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 if not self._configurateur():
                     return self._envoyer(403, {"erreur": _t("Un projet Claude s'importe depuis cette machine (niveau « cette machine seulement ») ou avec la commande lutin importer.")})
                 return self._envoyer(200, _m.importer_projet_claude(str(donnees.get("chemin", "")), str(donnees.get("mode", "")), str(donnees.get("vers", "")), str(donnees.get("nom", ""))))
+            if self.path in ("/api/planifie-ajouter", "/api/planifie-supprimer", "/api/planifie-activer", "/api/planifie-lancer"):
+                if not self._configurateur():
+                    return self._envoyer(403, {"erreur": _t("Les tâches planifiées se gèrent depuis cette machine (niveau « cette machine seulement » ou navigateur de cette machine).")})
+                ident = str(donnees.get("id", ""))
+                if self.path == "/api/planifie-ajouter":
+                    return self._envoyer(200, _plan.ajouter(donnees.get("nom"), donnees.get("prompt"), donnees.get("heure"), donnees.get("jours"), donnees.get("travail")))
+                if self.path == "/api/planifie-supprimer":
+                    return self._envoyer(200, _plan.supprimer(ident))
+                if self.path == "/api/planifie-activer":
+                    return self._envoyer(200, _plan.modifier(ident, actif=bool(donnees.get("actif"))))
+                if len(_m.TOURS_ACTIFS) >= _m.TOURS_SIMULTANES:
+                    raise ValueError(_t("Une réponse est déjà en cours : attends sa fin."))
+                threading.Thread(target=lambda: _plan.executer(ident), daemon=True, name="planifie-lancer").start()
+                return self._envoyer(200, {"ok": True})
             if self.path == "/api/bench":
                 return self._envoyer(200, _m.lancer_bench(str(donnees.get("modele", "")), bool(donnees.get("rapide"))))
             if self.path == "/api/version-ignorer":

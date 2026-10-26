@@ -365,6 +365,15 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
     <div id="listeDocuments" class="aide" style="margin:6px 0"></div>
     <div style="margin:6px 0"><input id="qDocuments" placeholder="Chercher dans mes documents…" style="width:340px" maxlength="300"> <button id="bChercherDocuments">Chercher</button></div>
     <div id="resultatsDocuments" style="margin:6px 0"></div>
+    <h2>Tâches planifiées <span class="aide">(une demande que Lutin traite tout seul à l'heure dite, en lecture seule : il lit et cherche, mais ne modifie rien ; le résultat est une conversation « ⏰ … »)</span></h2>
+    <div id="listePlanifie" class="aide" style="margin:6px 0"></div>
+    <div class="carte" style="gap:8px;flex-wrap:wrap;align-items:center">
+      <input id="pNom" placeholder="Nom (ex. Résumé du matin)" maxlength="60" style="width:220px">
+      <input id="pHeure" type="time" value="08:00">
+      <span id="pJours"></span>
+      <textarea id="pPrompt" placeholder="La demande à traiter, par exemple : résume ce qui a changé dans le dépôt depuis hier." style="flex:1 1 100%;min-height:70px" maxlength="4000"></textarea>
+      <button id="bAjouterPlanifie" class="principal">Planifier</button> <span class="aide" id="mPlanifie"></span>
+    </div>
     <h2>Skills <span class="aide">(les fiches du projet, que tu construis : l'assistant en voit la liste au début de chaque conversation et lit le contenu à la demande)</span></h2>
     <div id="listeSkills" class="aide" style="margin:6px 0">Aucun skill.</div>
     <textarea id="tSkill" style="min-height:240px" placeholder="Choisis un skill ci-dessus, ou crée-en un nouveau…"></textarea>
@@ -962,7 +971,7 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
   const sauverReglages = async () => { try { await api('/api/reglages', { modele: $('selModele').value, mode: $('selMode').value, reflexion: $('cReflexion').checked, auto_ecriture: $('cAuto').checked, auto_commandes: $('cAutoCmd').checked, essai_a_blanc: $('cEssai').checked, avance: $('cAvance').checked, web: $('cWeb').checked, num_ctx: +$('rCtx').value, temperature: +$('rTemp').value, tours_max: +$('rTours').value, top_p: nombreOuNull('iTopP'), top_k: nombreOuNull('iTopK'), min_p: nombreOuNull('iMinP'), repeat_penalty: nombreOuNull('iRep'), garde_ressources: $('cGarde').checked, liberer_si_comfy: $('cComfy').checked, rappels_auto: $('sRappels').value, seuil_ram_go: nombreOuNull('iSeuilRam') ?? 3, seuil_disque_go: nombreOuNull('iSeuilDisque') ?? 10, plafond_donnees_go: nombreOuNull('iPlafond') ?? 2, limite_ram_commande_go: nombreOuNull('iLimiteCmd') ?? 0, num_thread: nombreOuNull('iThreads'), garde_min: nombreOuNull('iGarde') }); } catch (e) { fil().appendChild(el('div', 'erreur', e.message)); } };
   document.querySelectorAll('.onglets button').forEach(b => b.addEventListener('click', async () => {
     document.querySelectorAll('.onglets button').forEach(x => x.setAttribute('aria-selected', x === b)); document.querySelectorAll('.page').forEach(p => p.classList.toggle('vue', p.id === 'p-' + b.dataset.p));
-    if (b.dataset.p === 'memoire') { const m = await api('/api/memoire'); $('tContexte').value = m['CONTEXTE.md']; $('tMemoire').value = m['MEMOIRE.md']; chargerSkills(); chargerClaude(); chargerNotes(); chargerDocuments(); }
+    if (b.dataset.p === 'memoire') { const m = await api('/api/memoire'); $('tContexte').value = m['CONTEXTE.md']; $('tMemoire').value = m['MEMOIRE.md']; chargerSkills(); chargerClaude(); chargerNotes(); chargerDocuments(); chargerPlanifie(); }
     if (b.dataset.p === 'modeles') rafraichir();
     if (b.dataset.p === 'acces') chargerAcces();
     if (b.dataset.p === 'sante') window.ouvrirSante();
@@ -1594,6 +1603,34 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
   };
   $('bChercherDocuments').addEventListener('click', chercherDocuments);
   $('qDocuments').addEventListener('keydown', e => { if (e.key === 'Enter') chercherDocuments(); });
+  // ---- Tâches planifiées : une demande traitée toute seule à heure fixe, en lecture seule
+  const JOURS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
+  JOURS.forEach((j, i) => { const l = el('label'); const c = document.createElement('input'); c.type = 'checkbox'; c.dataset.j = i; c.checked = i < 5; l.appendChild(c); l.appendChild(document.createTextNode(' ' + T(j) + ' ')); $('pJours').appendChild(l); });
+  const etatPlan = e => e === 'en_cours' ? T('en cours') : e === 'ok' ? T('terminée') : e === 'erreur' ? T('en erreur') : e;
+  const afficherPlanifie = taches => {
+    const z = $('listePlanifie'); z.textContent = '';
+    if (!taches.length) { z.textContent = T('Aucune tâche planifiée.'); return; }
+    taches.forEach(t => {
+      const l = el('div', 'conv'); l.style.cursor = 'default';
+      const col = el('div', 't'); col.appendChild(el('div', '', t.nom + (t.actif ? '' : ' (' + T('en pause') + ')')));
+      col.appendChild(el('div', 'extrait', t.heure + ' · ' + t.jours.map(j => T(JOURS[j])).join(' ') + (t.prochaine ? ' · ' + T('prochaine') + ' : ' + t.prochaine.replace('T', ' ') : '') + (t.derniere_etat ? ' · ' + T('dernière') + ' : ' + etatPlan(t.derniere_etat) : '')));
+      l.appendChild(col);
+      const action = (texte, f) => { const b = el('button', '', T(texte)); b.addEventListener('click', async () => { try { await f(); chargerPlanifie(); } catch (e) { $('mPlanifie').textContent = e.message; } }); l.appendChild(b); };
+      if (t.derniere_conv) { const b = el('button', '', T('Voir le résultat')); b.addEventListener('click', () => { ouvrirOnglet('chat'); ouvrir(t.derniere_conv); }); l.appendChild(b); }
+      action('Lancer maintenant', () => api('/api/planifie-lancer', { id: t.id }));
+      action(t.actif ? 'Pause' : 'Reprendre', () => api('/api/planifie-activer', { id: t.id, actif: !t.actif }));
+      action('Supprimer', () => confirm(T('Supprimer cette tâche planifiée ?')) ? api('/api/planifie-supprimer', { id: t.id }) : null);
+      z.appendChild(l);
+    });
+  };
+  const chargerPlanifie = async () => { try { afficherPlanifie((await api('/api/planifie')).taches); } catch (e) { $('mPlanifie').textContent = e.message; } };
+  $('bAjouterPlanifie').addEventListener('click', async () => {
+    const jours = [...$('pJours').querySelectorAll('input:checked')].map(c => +c.dataset.j);
+    try {
+      await api('/api/planifie-ajouter', { nom: $('pNom').value, prompt: $('pPrompt').value, heure: $('pHeure').value, jours });
+      $('pNom').value = ''; $('pPrompt').value = ''; $('mPlanifie').textContent = ''; chargerPlanifie();
+    } catch (e) { $('mPlanifie').textContent = e.message; }
+  });
   // ---- Tester mon PC : mesure la vitesse du modèle actif, puis des conseils
   const afficherConseil = r => {
     const z = $('conseilTest'); z.textContent = '';

@@ -223,6 +223,81 @@ class ConseilPc(Base):
                 chemin.unlink(missing_ok=True)
 
 
+class Planification(Base):
+    def setUp(self):
+        super().setUp()
+        from lutin import planifie
+        self.p = planifie
+        planifie.chemin().unlink(missing_ok=True)
+
+    def tearDown(self):
+        self.p.chemin().unlink(missing_ok=True)
+        super().tearDown()
+
+    def test_ajout_validation_et_suppression(self):
+        for corps in ({"nom": "", "prompt": "x", "heure": "08:00", "jours": [0]}, {"nom": "a", "prompt": "x", "heure": "8h", "jours": [0]},
+                      {"nom": "a", "prompt": "x", "heure": "08:00", "jours": []}, {"nom": "a", "prompt": "x", "heure": "08:00", "jours": [9]}):
+            self.assertEqual(requete("POST", "/api/planifie-ajouter", corps=corps)[0], 400, corps)
+        statut, t = requete("POST", "/api/planifie-ajouter", corps={"nom": "Matin", "prompt": "résume le dépôt", "heure": "08:30", "jours": [0, 1, 2]})
+        self.assertEqual(statut, 200)
+        etat = requete("GET", "/api/planifie")[1]["taches"]
+        self.assertEqual([x["nom"] for x in etat], ["Matin"])
+        self.assertTrue(etat[0]["prochaine"])
+        self.assertEqual(requete("POST", "/api/planifie-activer", corps={"id": t["id"], "actif": False})[1]["actif"], False)
+        self.assertEqual(requete("GET", "/api/planifie")[1]["taches"][0]["prochaine"], "", "en pause : pas de prochaine exécution")
+        self.assertEqual(requete("POST", "/api/planifie-supprimer", corps={"id": t["id"]})[0], 200)
+        self.assertEqual(requete("POST", "/api/planifie-supprimer", corps={"id": t["id"]})[0], 400)
+
+    def test_gestion_reservee_a_cette_machine(self):
+        A.SECURITE = S.Securite(niveau=S.RESEAU, port=8777)
+        statut, r = requete("POST", "/api/planifie-ajouter", en_tetes=dict(self.session(), **{"X-Forwarded-For": "192.168.1.20"}), corps={"nom": "a", "prompt": "x", "heure": "08:00", "jours": [0]})
+        self.assertEqual(statut, 403, "un appareil appairé, ou un relais, ne planifie pas")
+        self.assertEqual(self.p.lire(), [])
+
+    def test_echeance(self):
+        from datetime import datetime
+        t = {"actif": True, "heure": "08:30", "jours": [0, 1, 2, 3, 4], "cree": "2026-10-20T07:00:00", "derniere_exec": ""}
+        lundi = lambda h, m: datetime(2026, 10, 26, h, m)  # noqa: E731
+        self.assertIsNone(self.p.echeance(t, lundi(8, 29)), "pas avant l'heure")
+        self.assertIsNotNone(self.p.echeance(t, lundi(8, 31)))
+        self.assertIsNotNone(self.p.echeance(t, lundi(23, 0)), "PC allumé en retard : rattrapé le jour même")
+        self.assertIsNone(self.p.echeance(dict(t, derniere_exec="2026-10-26T08:31:00"), lundi(9, 0)), "déjà faite aujourd'hui")
+        self.assertIsNone(self.p.echeance(dict(t, cree="2026-10-26T09:00:00"), lundi(9, 30)), "créée après l'heure : attend demain")
+        self.assertIsNone(self.p.echeance(t, datetime(2026, 10, 31, 9, 0)), "samedi : pas un jour choisi")
+        self.assertIsNone(self.p.echeance(dict(t, actif=False), lundi(9, 0)))
+
+    def test_execution_en_lecture_seule_dans_une_conversation_planifiee(self):
+        t = self.p.ajouter("Matin", "résume le dépôt", "08:30", [0, 1, 2, 3, 4, 5, 6])
+        appels = []
+        with mock.patch.object(A, "tour", side_effect=lambda conv, texte, emit, r, stop, depuis, identite="", lecture_seule=False: appels.append((conv["titre"], texte, lecture_seule, A.TOURS_ACTIFS.get(conv["id"]) is stop))):
+            ident = self.p.executer(t["id"])
+        self.assertEqual(appels, [("⏰ Matin", "résume le dépôt", True, True)])
+        self.assertEqual(A.TOURS_ACTIFS, {}, "la machine est libérée après la tâche")
+        fait = self.p.lire()[0]
+        self.assertEqual((fait["derniere_conv"], fait["derniere_etat"]), (ident, "ok"))
+
+    def test_une_erreur_est_notee_et_ne_casse_pas_la_boucle(self):
+        t = self.p.ajouter("Matin", "x", "08:30", [0, 1, 2, 3, 4, 5, 6])
+        with mock.patch.object(A, "tour", side_effect=RuntimeError("boum")):
+            self.p.executer(t["id"])
+        self.assertEqual(self.p.lire()[0]["derniere_etat"], "erreur")
+
+    def test_pas_de_demarrage_si_une_reponse_est_en_cours(self):
+        from datetime import datetime, timedelta
+        t = self.p.ajouter("Matin", "x", "00:00", [0, 1, 2, 3, 4, 5, 6])
+        self.p.modifier(t["id"], cree=(datetime.now() - timedelta(days=2)).isoformat(timespec="seconds"))
+        A.TOURS_ACTIFS["abcdef12"] = threading.Event()
+        try:
+            with mock.patch.object(self.p, "executer") as ex:
+                self.assertIsNone(self.p.un_regard())
+                ex.assert_not_called()
+        finally:
+            A.TOURS_ACTIFS.pop("abcdef12", None)
+        with mock.patch.object(self.p, "executer") as ex:
+            self.assertEqual(self.p.un_regard(), t["id"])
+            ex.assert_called_once_with(t["id"])
+
+
 class Redemarrage(Base):
     def test_refuse_sans_superviseur_ni_conteneur(self):
         statut, r = requete("POST", "/api/redemarrer", corps={})

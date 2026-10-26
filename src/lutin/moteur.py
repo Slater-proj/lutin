@@ -886,6 +886,8 @@ def principal():
         journaliser("Purge impossible : {!r}".format(erreur))
     rafraichir_plan(force=True)
     threading.Thread(target=boucle_surveillance, daemon=True).start()
+    from . import planifie
+    planifie.demarrer()
     journaliser("Démarrage de Lutin (version {}, dossier de travail {}).".format(VERSION, RACINE))
     global IP_LAN
     problemes = SECURITE.valider()
