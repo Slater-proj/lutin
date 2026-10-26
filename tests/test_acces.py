@@ -154,6 +154,22 @@ class AppairageEtAppareils(Base):
         self.assertIn("history.replaceState", page, "le code ne reste pas dans l'adresse affichée")
 
 
+class CommandesDuProjet(Base):
+    def test_route_des_commandes_claude(self):
+        c = A.RACINE / ".claude" / "commands"
+        c.mkdir(parents=True, exist_ok=True)
+        (c / "bonjour.md").write_text("---\ndescription: Salue\n---\nDis bonjour à $ARGUMENTS", encoding="utf-8")
+        try:
+            statut, r = requete("GET", "/api/commande-claude?nom=bonjour&args=le+monde")
+            self.assertEqual((statut, r), (200, {"texte": "Dis bonjour à le monde"}))
+            self.assertEqual(requete("GET", "/api/commande-claude?nom=absente")[0], 400)
+            self.assertEqual(requete("GET", "/api/commande-claude?nom=..%2F..%2Fx")[0], 400)
+            detecte = requete("GET", "/api/projet-claude")[1]["detecte"]
+            self.assertEqual([x["nom"] for x in detecte["commandes"]], ["bonjour"])
+        finally:
+            (c / "bonjour.md").unlink()
+
+
 class Redemarrage(Base):
     def test_refuse_sans_superviseur_ni_conteneur(self):
         statut, r = requete("POST", "/api/redemarrer", corps={})

@@ -95,6 +95,37 @@ class Detection(unittest.TestCase):
         self.assertNotIn("PROJET CLAUDE", en)
 
 
+class Commandes(unittest.TestCase):
+    def setUp(self):
+        self.t = tempfile.TemporaryDirectory()
+        self.depot = fabriquer(Path(self.t.name) / "homelab")
+        c = self.depot / ".claude" / "commands"
+        (c / "dire.md").write_text("---\ndescription: Dire bonjour\n---\nDis bonjour à $1 puis à $2. Tout : $ARGUMENTS. Troisième : [$3]\n", encoding="utf-8")
+        (c / "etat.md").write_text("Fais le point.\n!git status\nPuis résume.", encoding="utf-8")
+
+    def tearDown(self):
+        self.t.cleanup()
+
+    def test_les_arguments_remplacent_arguments_et_les_numeros(self):
+        self.assertEqual(projet_claude.commande(self.depot, "dire", "Alice Bob"), "Dis bonjour à Alice puis à Bob. Tout : Alice Bob. Troisième : []")
+        self.assertEqual(projet_claude.commande(self.depot, "dire"), "Dis bonjour à  puis à . Tout : . Troisième : []")
+        self.assertEqual(projet_claude.commande(self.depot, "sauvegarde", "x"), "Fais la sauvegarde de x", "l'en-tête n'est jamais envoyé")
+
+    def test_commande_dans_un_sous_dossier_et_inconnue(self):
+        self.assertEqual(projet_claude.commande(self.depot, "infra:dns"), "# Mettre à jour le DNS")
+        for mauvais in ("inconnue", "../../CLAUDE", "", "infra/dns"):
+            with self.assertRaisesRegex(ValueError, "inconnue"):
+                projet_claude.commande(self.depot, mauvais)
+
+    def test_les_lignes_de_commande_ne_sont_pas_executees_et_on_le_dit(self):
+        texte = projet_claude.commande(self.depot, "etat")
+        self.assertIn("!git status", texte)
+        self.assertIn("ne sont pas exécutées toutes seules", texte)
+        with mock.patch.dict(os.environ, {"LUTIN_LANGUE": "en"}):
+            self.assertIn("are not run on their own", projet_claude.commande(self.depot, "etat"))
+        self.assertNotIn("ne sont pas exécutées", projet_claude.commande(self.depot, "dire", "a b"))
+
+
 class Copie(unittest.TestCase):
     def setUp(self):
         self.t = tempfile.TemporaryDirectory()

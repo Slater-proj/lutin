@@ -442,6 +442,8 @@
 "Nom de cet appareil (facultatif)": "Name of this device (optional)",
 "Se connecter": "Sign in",
 "Erreur ": "Error ",
+"(Les lignes de commande « !… » de cette commande ne sont pas exécutées toutes seules : lance-les avec l'outil « executer » si besoin.)": "(The command lines « !… » of this command are not run on their own: run them with the « executer » tool if needed.)",
+"Commande du projet inconnue : {}": "Unknown project command: {}",
 "Note introuvable.": "Note not found.",
 "Note vide.": "Empty note.",
 "\n\n# ESSAI À BLANC\nTes écritures et tes commandes ne sont PAS exécutées : c'est une simulation, l'utilisateur voit ce que tu proposes. Propose ce que tu ferais (fichiers, contenu, commandes), sans insister ni réessayer. Lire et chercher fonctionnent normalement.\n": "\n\n# DRY RUN\nYour writes and your commands are NOT executed: this is a simulation, the user sees what you propose. Propose what you would do (files, content, commands), without insisting or retrying. Reading and searching work normally.\n",

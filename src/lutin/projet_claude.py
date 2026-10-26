@@ -145,6 +145,31 @@ def bloc_prompt(racine, limite=LIMITE_CONTEXTE):
     return texte + "\n"
 
 
+def corps_markdown(texte):
+    """Le texte d'un fichier Markdown sans son en-tête `---`."""
+    texte = texte.lstrip("\ufeff")
+    if texte.startswith("---"):
+        morceaux = texte.split("\n---", 1)
+        if len(morceaux) == 2:
+            return morceaux[1].split("\n", 1)[1] if "\n" in morceaux[1] else ""
+    return texte
+
+
+def commande(racine, nom, arguments=""):
+    """Le message à envoyer pour la commande `.claude/commands/<nom>.md` du projet : le fichier sans son en-tête, avec $ARGUMENTS (tout ce qui suit le nom) et $1, $2… (mot par mot) remplacés.
+    Les lignes de commande (« !… ») d'une commande Claude Code ne sont PAS exécutées : on le dit au modèle, qui peut les lancer avec l'outil « executer » (avec ton accord). ValueError si la commande n'existe pas."""
+    racine = Path(racine)
+    trouvee = next((c for c in detecter(racine)["commandes"] if c["nom"] == nom), None)
+    if not trouvee:
+        raise ValueError(_t("Commande du projet inconnue : {}").format(nom))
+    texte = corps_markdown((racine / trouvee["chemin"]).read_text(encoding="utf-8-sig", errors="ignore")[:20000]).strip()
+    mots = arguments.split()
+    texte = re.sub(r"\$(\d)", lambda m: mots[int(m.group(1)) - 1] if 1 <= int(m.group(1)) <= len(mots) else "", texte).replace("$ARGUMENTS", arguments.strip())
+    if re.search(r"^!|!`", texte, re.M):
+        texte += "\n\n" + _t("(Les lignes de commande « !… » de cette commande ne sont pas exécutées toutes seules : lance-les avec l'outil « executer » si besoin.)")
+    return texte
+
+
 def taille_a_copier(source):
     """Octets à copier (sans les dossiers lourds : node_modules, .venv…), ou la limite dès qu'elle est dépassée."""
     total = 0

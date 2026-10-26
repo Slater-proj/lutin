@@ -314,6 +314,8 @@
 "Chemin du dossier de travail à ajouter (Lutin pourra y lire et y modifier des fichiers) :": "Path of the workspace folder to add (Lutin will be able to read and modify files in it):",
 "Nom affiché (facultatif) :": "Display name (optional):",
 "Erreur ": "Error ",
+"arguments": "arguments",
+"commande du projet Claude": "Claude project command",
 "Aucune note pour le moment : Lutin en ajoute quand il apprend quelque chose de durable.": "No note yet: Lutin adds some when it learns something lasting.",
 "(il y ajoute ce qu'il doit retenir d'une conversation à l'autre : relis-les, supprime celles qui sont fausses ou dépassées)": "(it adds what it must remember from one conversation to the next: read them over, delete the ones that are wrong or out of date)",
 "Ajouter une note": "Add a note",

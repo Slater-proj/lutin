@@ -918,6 +918,7 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
     if (!$('selMode').dataset.init) { $('selMode').value = ETAT.reglages.mode; $('cReflexion').checked = ETAT.reglages.reflexion; $('cAuto').checked = ETAT.reglages.auto_ecriture; $('cAvance').checked = !!ETAT.reglages.avance; $('cAutoCmd').checked = ETAT.reglages.auto_commandes; $('cEssai').checked = !!ETAT.reglages.essai_a_blanc; $('cWeb').checked = ETAT.reglages.web !== false; $('rCtx').value = ETAT.reglages.num_ctx; $('rTemp').value = ETAT.reglages.temperature; $('rTours').value = ETAT.reglages.tours_max; $('iTopP').value = ETAT.reglages.top_p ?? ''; $('iTopK').value = ETAT.reglages.top_k ?? ''; $('iMinP').value = ETAT.reglages.min_p ?? ''; $('iRep').value = ETAT.reglages.repeat_penalty ?? ''; $('cGarde').checked = ETAT.reglages.garde_ressources !== false; $('cComfy').checked = ETAT.reglages.liberer_si_comfy !== false; $('sRappels').value = ETAT.reglages.rappels_auto || 'scenario'; $('iSeuilRam').value = ETAT.reglages.seuil_ram_go; $('iSeuilDisque').value = ETAT.reglages.seuil_disque_go; $('iPlafond').value = ETAT.reglages.plafond_donnees_go; $('iLimiteCmd').value = ETAT.reglages.limite_ram_commande_go; $('iThreads').value = ETAT.reglages.num_thread ?? ''; $('iGarde').value = ETAT.reglages.garde_min ?? ''; $('selMode').dataset.init = '1'; }
     if (document.activeElement !== $('selLangue')) $('selLangue').value = ETAT.langue_reglage || 'auto';
     afficherVersion();
+    majCommandesProjet();
     afficherRedemarrage();
     afficherTravaux();
     $('vCpus').textContent = ETAT.cpus ? T('(cette machine : {} cœurs)').replace('{}', ETAT.cpus) : '';
@@ -986,7 +987,7 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
   };
   const sansReponseEnCours = () => { if (EN_COURS) { infoLocale(T('Une réponse est en cours : attends la fin, ou tape /stop.')); return false; } return true; };
   const COMMANDES = [
-    { n: 'aide', a: ['help', '?'], d: T('Liste toutes les commandes'), f: () => infoLocale(COMMANDES.map(c => '/' + c.n + (c.arg ? ' <' + c.arg + '>' : '') + '  —  ' + c.d).join('\n'), true) },
+    { n: 'aide', a: ['help', '?'], d: T('Liste toutes les commandes'), f: () => infoLocale(toutesCommandes().map(c => '/' + c.n + (c.arg ? ' <' + c.arg + '>' : '') + '  —  ' + c.d).join('\n'), true) },
     { n: 'compact', d: T('Résume le début de la conversation pour libérer du contexte'), f: async () => {
       if (!CONV || !sansReponseEnCours()) { if (!CONV) infoLocale(T('Aucune conversation à résumer.')); return; }
       infoLocale(T('Résumé en cours… (le modèle lit la conversation, quelques secondes)'));
@@ -1047,7 +1048,20 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
     { n: 'reglages', d: T('Ouvre les réglages'), f: () => ouvrirOnglet('reglages') },
     { n: 'modeles', d: T('Ouvre la page des modèles (installer, supprimer, retirer)'), f: () => ouvrirOnglet('modeles') },
   ];
-  const trouverCommande = nom => COMMANDES.find(c => c.n === nom || (c.a || []).includes(nom));
+  // Les commandes du projet Claude (.claude/commands) : « /infra:dns arguments » envoie le fichier de la commande, arguments remplacés. Les commandes de Lutin gagnent en cas de même nom.
+  let COMMANDES_PROJET = [], RACINE_COMMANDES = null;
+  const toutesCommandes = () => COMMANDES.concat(COMMANDES_PROJET.filter(p => !COMMANDES.some(c => c.n === p.n || (c.a || []).includes(p.n))));
+  const majCommandesProjet = async () => {
+    if (RACINE_COMMANDES === ETAT.racine) return; RACINE_COMMANDES = ETAT.racine;
+    try {
+      const r = await api('/api/projet-claude');
+      COMMANDES_PROJET = (r.detecte.commandes || []).map(c => ({ n: c.nom, arg: T('arguments'), d: (c.description || T('commande du projet Claude')), f: async arg => {
+        const t = await api('/api/commande-claude?nom=' + encodeURIComponent(c.nom) + '&args=' + encodeURIComponent(arg));
+        $('saisie').value = t.texte; ajusterSaisie(); envoyer();
+      } }));
+    } catch (e) { COMMANDES_PROJET = []; }
+  };
+  const trouverCommande = nom => toutesCommandes().find(c => c.n === nom || (c.a || []).includes(nom));
   // Renvoie true si le texte était une commande (exécutée, ou signalée inconnue) ; false : c'est un message normal pour le modèle.
   const commande = async texte => {
     const m = texte.match(/^\/(\S+)\s*([\s\S]*)$/); if (!m) return false;
@@ -1076,7 +1090,7 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
     const v = $('saisie').value;
     if (!v.startsWith('/') || /\s/.test(v)) { fermerCommandes(); return; }
     const q = v.slice(1).toLowerCase(), avant = LISTE_CMD.map(c => c.n).join();
-    LISTE_CMD = COMMANDES.filter(c => c.n.startsWith(q) || (c.a || []).some(a => a.startsWith(q)));
+    LISTE_CMD = toutesCommandes().filter(c => c.n.startsWith(q) || (c.a || []).some(a => a.startsWith(q)));
     if (!LISTE_CMD.length) { fermerCommandes(); return; }
     if (LISTE_CMD.map(c => c.n).join() !== avant) SEL_CMD = 0;
     dessinerCommandes();

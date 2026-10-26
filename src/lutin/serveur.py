@@ -130,6 +130,12 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 return self._envoyer(200, _acces.qr_json(texte))
             except ValueError as e:
                 return self._envoyer(400, {"erreur": str(e)})
+        if chemin == "/api/commande-claude":
+            q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+            try:
+                return self._envoyer(200, {"texte": _pc.commande(_m.RACINE, (q.get("nom") or [""])[0], (q.get("args") or [""])[0][:2000])})
+            except ValueError as e:
+                return self._envoyer(400, {"erreur": str(e)})
         if chemin == "/api/projet-claude":
             d = _pc.detecter(_m.RACINE)
             return self._envoyer(200, {"detecte": d, "resume": _pc.resume(d) if not _pc.est_vide(d) else "", "racine": str(_m.RACINE)})
