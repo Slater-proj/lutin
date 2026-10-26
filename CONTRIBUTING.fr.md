@@ -13,6 +13,10 @@ python -m pip install ruff && python -m ruff check src tests tools
 
 Pas de dépendance à installer pour faire tourner Lutin ou ses tests : bibliothèque standard seulement. Garde-le ainsi. Les tests de l'interface utilisent un vrai navigateur (Chrome, Chromium ou Edge) et sont ignorés s'il n'y en a pas.
 
+## Organisation du code
+
+`src/lutin/moteur.py` porte l'état partagé (réglages, chemins, constantes) et ré-exporte le reste. Le travail est dans des modules qui lisent cet état au dernier moment (`from . import moteur as _m`) : `serveur` (routes HTTP), `dialogue` (un tour, la boucle de l'agent), `outils`, `donnees` (conversations, mémoire), `rappel` (rappel et recherche dans les documents), `planifie` (tâches planifiées), `images`, `acces`, `conseil`, `sante`, `revue`, `plan`. Une constante qu'un test remplace doit vivre dans `moteur`.
+
 ## Commits et publications
 
 Chaque fusion dans `main` **publie une version** (voir [docs/PUBLISHING.fr.md](docs/PUBLISHING.fr.md)). Le numéro vient du titre des commits : écris des titres conventionnels (`feat: …` pour une nouveauté, `fix: …` pour une correction, `feat!: …` ou « BREAKING CHANGE » pour une rupture ; `docs:`, `chore:`, `ci:`, `test:`, `refactor:` pour le reste). Fusionne par **squash** avec un titre soigné : c'est lui qui apparaît dans les notes de version.

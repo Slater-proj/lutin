@@ -78,6 +78,8 @@ The script installs the latest published version in a private environment, adds 
 | `lutin langue [fr\|en\|auto]` | language of the application |
 | `lutin doctor` | diagnostics to paste into a problem report (no personal content) |
 
+Beyond chatting: test your PC, dry run, search your PDF and Word documents offline, scheduled tasks, images, phone pairing with a QR code. See [docs/FEATURES.md](docs/FEATURES.md).
+
 The command names are French (the project is written in French first); `lutin --help` explains them in your language.
 
 ## The models

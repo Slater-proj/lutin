@@ -1076,6 +1076,9 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
       const j = await api('/api/contexte?id=' + CONV.id), pct = Math.round(100 * j.utilise / j.total);
       infoLocale(T('Contexte : ') + j.utilise + ' / ' + j.total + T(' jetons (') + pct + ' %), ' + (j.reel ? T('chiffre réel d\'Ollama') : 'estimation') + (pct >= 70 ? T('. Pense à /compact.') : '.'));
     } },
+    { n: 'acces', a: ['access'], d: T('Ouvre la page Accès (qui peut utiliser Lutin, appareils, QR code)'), f: () => ouvrirOnglet('acces') },
+    { n: 'essai', a: ['dryrun'], arg: 'on|off', d: T('Essai à blanc : montre ce que Lutin ferait, sans rien écrire ni lancer'), f: arg => bascule('cEssai', arg, T('Essai à blanc')) },
+    { n: 'pc', d: T('Mesure la vitesse du modèle sur ce PC et donne des conseils'), f: () => { ouvrirOnglet('modeles'); $('bTesterPc').click(); } },
     { n: 'vram', d: T('Décharge les modèles d\'Ollama de la carte graphique'), f: () => $('bVram').click() },
     { n: 'export', d: T('Télécharge la conversation en .md'), f: () => $('bExport').click() },
     { n: 'resume', d: T('Document de reprise (résumé IA) à coller dans un autre modèle'), f: () => $('bResume').click() },

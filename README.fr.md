@@ -78,6 +78,8 @@ Le script installe la dernière version publiée dans un environnement privé, a
 | `lutin langue [fr\|en\|auto]` | langue de l'application |
 | `lutin doctor` | diagnostic à coller dans un rapport de problème (sans contenu personnel) |
 
+Au-delà de la discussion : tester ton PC, essai à blanc, chercher hors ligne dans tes PDF et documents Word, tâches planifiées, images, appairage d'un téléphone par QR code. Voir [docs/FEATURES.fr.md](docs/FEATURES.fr.md).
+
 ## Les modèles
 
 Pour chaque rôle, Lutin garde **le modèle le mieux noté qui tient dans ta mémoire** (poids + contexte + marge), et te dit s'il déborde sur la RAM. Au démarrage, une vérification discrète (au plus une fois par jour, jamais bloquante, désactivable) cherche des **mises à jour** et de **meilleurs modèles** pour ta machine : elle te les *propose*, rien n'est téléchargé sans ton accord. L'onglet Modèles a deux boutons pour le faire à la demande, et un banc d'essai par modèle.

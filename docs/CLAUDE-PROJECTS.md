@@ -10,7 +10,7 @@ If you already work with Claude Code, your git repository (homelab, project…) 
 |---|---|
 | `CLAUDE.md`, `CLAUDE.local.md`, `.claude/CLAUDE.md` | put in the model's instructions at every conversation (7,000 characters at most), with the `@path` imports (one level, inside the project only) |
 | `.claude/skills/<name>/SKILL.md` | listed with their `description`; the model reads the file when the subject comes up |
-| `.claude/commands/**/*.md` | listed (`infra/dns.md` becomes `infra:dns`); name one and the model reads the file and applies it |
+| `.claude/commands/**/*.md` | listed (`infra/dns.md` becomes `infra:dns`); name one and the model reads the file and applies it; they are also available as `/commands` in the chat (type `/`), with their arguments |
 | `.claude/agents/*.md`, `.claude/rules/**/*.md` | listed, read on demand |
 | all of the above | also searchable with the « rappeler » tool, like `docs/` and `skills/` |
 

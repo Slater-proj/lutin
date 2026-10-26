@@ -104,6 +104,10 @@ Lutin only reads and modifies the **workspace folder** of the conversation. Seve
 - A folder must exist, must not be the root of a disk, nor **contain or be inside Lutin's folders** (configuration, data, memory, cache).
 - **Adding or removing** a folder can only be done from this machine: at the « this machine only » level, or with `lutin travaux`. A paired device (network level) or a proxy identity can **choose** an already declared folder, never add one: otherwise a remote access could declare `/` or `C:\`.
 
+## What only this machine can change
+
+Workspace folders, taking over another assistant's data or a Claude project, restoring a backup, **scheduled tasks** and the access level itself are managed **from this machine only**: at the « this machine only » level, or, at the local network level, from the browser **of this machine** (loopback address, no proxy header). A paired device and a proxy identity can **use** Lutin but never change these: otherwise a remote access could open the machine wider, schedule work or declare `/` as a workspace. The **Access** tab shows the same page everywhere but only offers these changes where they are allowed.
+
 ## Action log
 
 Every file modified, every command run, every module installed is recorded in `journal-actions.jsonl`: **when, which tool, on which target, in which folder, with which approval (manual, automatic, none for a simple read), for whom** (console, local, name given by the proxy, device) and the outcome (ok, refused, error, stopped). Never the contents of the files nor the output of the commands. Visible with `lutin journal` or the « ⋯ > Action log » menu. It rotates at 5 MB.

@@ -2,6 +2,21 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## 0.4.0
+
+- **Access tab**: who can use Lutin, PIN code with a **QR code** to connect a phone, connected devices, restart banner when a change needs it. Changing access, workspace folders, restoring or scheduling is only possible from this machine (see docs/SECURITY.md).
+- **Test my PC** (`/pc`): speed measurement and plain advice (lighter model, context window, load profile).
+- **Dry run** (`/essai`): Lutin shows what it would write or run, without doing it.
+- **Memory notes** list with *Delete*; **Claude project commands** available as `/commands`.
+- **Documents**: PDF, Word, LibreOffice text, PowerPoint, Excel and HTML searched offline, with the page quoted.
+- **Scheduled tasks**: a request handled by itself at a set time, read-only, result in a conversation.
+- **Images**: attach, paste or drop an image; automatic switch to a model that can see it.
+- **Docker and GPU**: NVIDIA (`--gpus all`), AMD (`:rocm`, `docker-compose.amd.yml`), diagnostics at startup; see docs/DOCKER.md.
+- Maintenance: the engine is split into modules; monthly grouped Dependabot; automatic cleanup of release-candidate images. Code signing (SignPath) abandoned for now.
+- All of it in [docs/FEATURES.md](docs/FEATURES.md).
+
+**Français.** **Onglet Accès** (qui peut utiliser Lutin, code PIN avec **QR code**, appareils, bandeau de redémarrage) ; **Tester mon PC** (`/pc`) ; **essai à blanc** (`/essai`) ; liste des **notes** supprimables ; **commandes des projets Claude** en `/commandes` ; **documents** (PDF, Word, texte LibreOffice, PowerPoint, Excel, HTML) cherchés hors ligne avec la page citée ; **tâches planifiées** en lecture seule ; **images** jointes avec bascule vers un modèle qui les voit ; **Docker et carte graphique** (NVIDIA, AMD) ; moteur découpé en modules, Dependabot mensuel groupé, nettoyage automatique des images candidates. Signature de code (SignPath) abandonnée pour l'instant. Détails : [docs/FEATURES.fr.md](docs/FEATURES.fr.md).
+
 ## 0.2.0
 
 - **English and French**: the whole application (page, messages, terminal, memory templates) and the repository docs. `lutin langue [fr|en|auto]`, a language question at the start of the guided installation, a selector in the page settings, `LUTIN_LANGUE`. Tests fail if a text has no translation.

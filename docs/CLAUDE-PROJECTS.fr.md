@@ -10,7 +10,7 @@ Si tu travailles déjà avec Claude Code, ton dépôt git (homelab, projet…) c
 |---|---|
 | `CLAUDE.md`, `CLAUDE.local.md`, `.claude/CLAUDE.md` | mis dans les consignes du modèle à chaque conversation (7 000 caractères au plus), avec les imports `@chemin` (un niveau, dans le projet seulement) |
 | `.claude/skills/<nom>/SKILL.md` | listés avec leur `description` ; le modèle lit le fichier quand le sujet se présente |
-| `.claude/commands/**/*.md` | listées (`infra/dns.md` devient `infra:dns`) ; nommes-en une et le modèle lit le fichier et l'applique |
+| `.claude/commands/**/*.md` | listées (`infra/dns.md` devient `infra:dns`) ; nommes-en une et le modèle lit le fichier et l'applique ; elles sont aussi disponibles comme `/commandes` dans la conversation (tape `/`), avec leurs arguments |
 | `.claude/agents/*.md`, `.claude/rules/**/*.md` | listés, lus à la demande |
 | tout ce qui précède | interrogeable aussi avec l'outil « rappeler », comme `docs/` et `skills/` |
 

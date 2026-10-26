@@ -13,6 +13,10 @@ python -m pip install ruff && python -m ruff check src tests tools
 
 Nothing to install to run Lutin or its tests: standard library only. Keep it that way. The interface tests use a real browser (Chrome, Chromium or Edge) and are skipped if there is none.
 
+## Code layout
+
+`src/lutin/moteur.py` holds the shared state (settings, paths, constants) and re-exports the rest. The work lives in modules that read that state late (`from . import moteur as _m`): `serveur` (HTTP routes), `dialogue` (a turn, the agent loop), `outils` (tools), `donnees` (conversations, memory), `rappel` (recall and document search), `planifie` (scheduled tasks), `images`, `acces`, `conseil`, `sante`, `revue`, `plan`. A constant that a test patches must live in `moteur`.
+
 ## Commits and releases
 
 Every merge into `main` **publishes a version** (see [docs/PUBLISHING.md](docs/PUBLISHING.md)). The number comes from the commit titles: write conventional titles (`feat: …` for something new, `fix: …` for a fix, `feat!: …` or « BREAKING CHANGE » for a breaking change; `docs:`, `chore:`, `ci:`, `test:`, `refactor:` for the rest). Merge with a **squash** and a careful title: it is the one shown in the release notes.

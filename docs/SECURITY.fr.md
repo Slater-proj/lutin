@@ -104,6 +104,10 @@ Lutin ne lit et ne modifie que **le dossier de travail** de la conversation. Plu
 - Un dossier doit exister, ne pas être la racine d'un disque, ni **contenir ou être dans les dossiers de Lutin** (configuration, données, mémoire, cache).
 - **Ajouter ou retirer** un dossier ne se fait que depuis cette machine : au niveau « machine seulement », ou avec `lutin travaux`. Un appareil appairé (niveau réseau) ou une identité de proxy peut **choisir** un dossier déjà déclaré, jamais en ajouter : sinon un accès à distance pourrait déclarer `/` ou `C:\`.
 
+## Ce que seule cette machine peut changer
+
+Les dossiers de travail, la reprise des données d'un autre assistant ou d'un projet Claude, la restauration d'une sauvegarde, les **tâches planifiées** et le niveau d'accès lui-même se gèrent **depuis cette machine seulement** : au niveau « machine seulement », ou, au niveau réseau local, depuis le navigateur **de cette machine** (adresse de boucle locale, sans en-tête de proxy). Un appareil appairé et une identité de proxy peuvent **utiliser** Lutin mais jamais changer cela : sinon un accès à distance pourrait ouvrir la machine plus largement, planifier du travail ou déclarer `/` comme dossier de travail. L'onglet **Accès** est le même partout mais ne propose ces changements que là où ils sont permis.
+
 ## Journal des actions
 
 Chaque fichier modifié, chaque commande lancée, chaque module installé est inscrit dans `journal-actions.jsonl` : **quand, quel outil, sur quelle cible, dans quel dossier, avec quel accord (manuel, automatique, aucun pour une lecture simple), pour qui** (console, local, nom donné par le proxy, appareil) et l'issue (ok, refusé, erreur, arrêté). Jamais le contenu des fichiers ni la sortie des commandes. Visible avec `lutin journal` ou le menu « ⋯ > Journal des actions ». Il tourne à 5 Mo.
