@@ -641,12 +641,21 @@ class CommandesDuQuotidien(unittest.TestCase):
 
 
 class ScriptsDInstallation(unittest.TestCase):
-    def test_le_script_powershell_se_lance_par_irm_iex(self):
-        """`irm … | iex` passe le texte par une chaîne : un BOM au début (ou un accent mal décodé) casse le bloc param(). Le fichier reste donc en ASCII pur, sans BOM."""
-        brut = (Path(__file__).resolve().parent.parent / "installateur" / "install.ps1").read_bytes()
-        self.assertFalse(brut.startswith(bytes([0xEF, 0xBB, 0xBF])), "BOM au début de install.ps1")
-        self.assertEqual([b for b in brut if b > 127], [], "caractère non ASCII dans install.ps1")
-        self.assertIn(b"param(", brut)
+    def test_les_scripts_powershell_se_lancent_par_irm_iex_et_en_ascii(self):
+        """`irm … | iex` passe le texte par une chaîne : un BOM au début (ou un accent mal décodé) casse le bloc param(). Les scripts PowerShell restent donc en ASCII pur, sans BOM."""
+        dossier = Path(__file__).resolve().parent.parent / "installateur"
+        scripts = sorted(dossier.rglob("*.ps1"))
+        self.assertGreaterEqual(len(scripts), 3)
+        for script in scripts:
+            brut = script.read_bytes()
+            self.assertFalse(brut.startswith(bytes([0xEF, 0xBB, 0xBF])), "BOM au début de " + script.name)
+            self.assertEqual([b for b in brut if b > 127], [], "caractère non ASCII dans " + script.name)
+        self.assertIn(b"param(", (dossier / "install.ps1").read_bytes())
+
+    def test_le_script_de_l_installateur_est_complet(self):
+        iss = (Path(__file__).resolve().parent.parent / "installateur" / "windows" / "lutin.iss").read_text(encoding="utf-8-sig")
+        for attendu in ("PrivilegesRequired=lowest", "Name: \"fr\"", "Name: \"en\"", "UseEmbedded", "ModifierPath", "{param:EMBEDDED|0}", "{param:EMBARQUE|0}", "UninstallDelete"):
+            self.assertIn(attendu, iss)
 
 
 def travaux_liste():

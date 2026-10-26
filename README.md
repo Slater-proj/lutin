@@ -35,9 +35,9 @@
 
 ## Installation
 
-You only need Python 3.10 or more (the Windows script can install it for you). No administrator rights.
+Nothing to install first on Windows (the installer brings Python if needed); on Linux and macOS you need Python 3.10 or more. No administrator rights.
 
-**Windows** (PowerShell)
+**Windows**: download `lutin-setup-*.exe` from the [latest release](https://github.com/Slater-proj/lutin/releases/latest) (it uses the Python you already have, otherwise it brings its own; no administrator rights), or in PowerShell:
 ```powershell
 irm https://raw.githubusercontent.com/Slater-proj/lutin/main/installateur/install.ps1 | iex
 ```

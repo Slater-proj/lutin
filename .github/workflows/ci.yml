@@ -90,6 +90,50 @@ jobs:
           grep -q "lutin pin" page2.html
           docker rm -f lutin-slim
 
+  installateur-linux:
+    name: install.sh (installation, réinstallation)
+    runs-on: ubuntu-latest
+    env:
+      SETUPTOOLS_SCM_PRETEND_VERSION: "0.0.0.dev0"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install build
+      - run: python -m build --wheel
+      - name: Installer, réinstaller (rien ne change), dans les deux langues
+        run: |
+          export LUTIN_SOURCE="$PWD/$(ls dist/*.whl)" LUTIN_DOSSIER="$RUNNER_TEMP/lutin" LUTIN_BIN="$RUNNER_TEMP/bin"
+          LUTIN_LANGUE=en bash installateur/install.sh --sans-setup | tee un.txt
+          grep -q "installed" un.txt
+          LUTIN_LANGUE=en bash installateur/install.sh --sans-setup | tee deux.txt
+          grep -q "already up to date" deux.txt
+          LUTIN_LANGUE=fr bash installateur/install.sh --sans-setup | tee trois.txt
+          grep -q "deja a jour" trois.txt
+          "$LUTIN_BIN/lutin" --version | grep -q "0.0.0.dev0"
+          LUTIN_HOME="$RUNNER_TEMP/donnees" LUTIN_LANGUE=en "$LUTIN_BIN/lutin" securite | grep -q "this machine only"
+
+  installateur-windows:
+    name: installateur Windows (construction, installation, désinstallation)
+    runs-on: windows-latest
+    env:
+      SETUPTOOLS_SCM_PRETEND_VERSION: "0.0.0.dev0"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install build
+      - run: python -m build --wheel
+      - run: choco install innosetup --yes --no-progress
+      - name: Construire l'installateur
+        shell: pwsh
+        run: ./installateur/windows/construire.ps1 -Roue (Get-ChildItem dist/*.whl | Select-Object -First 1).FullName -Version 0.0.0.dev0
+      - name: L'installer, le réinstaller, le désinstaller
+        shell: pwsh
+        run: ./installateur/windows/verifier.ps1 -Installateur (Get-ChildItem dist/lutin-setup-*.exe | Select-Object -First 1).FullName -Version 0.0.0.dev0
+
   syntaxe-installateurs:
     name: scripts d'installation (syntaxe)
     runs-on: windows-latest
@@ -98,7 +142,7 @@ jobs:
       - name: PowerShell
         shell: pwsh
         run: |
-          foreach ($f in Get-ChildItem installateur -Filter *.ps1) {
+          foreach ($f in Get-ChildItem installateur -Filter *.ps1 -Recurse) {
             $erreurs = $null
             [void][System.Management.Automation.Language.Parser]::ParseFile($f.FullName, [ref]$null, [ref]$erreurs)
             if ($erreurs) { $erreurs | ForEach-Object { Write-Error "$($f.Name): $_" }; exit 1 }

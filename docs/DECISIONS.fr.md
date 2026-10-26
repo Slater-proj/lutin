@@ -25,14 +25,16 @@ Ce que le projet a choisi, pourquoi, et ce qui reste à trancher. Une décision 
 | 2026-10-25 | **Image Docker** : accès par code PIN, port publié sur `127.0.0.1` par défaut, utilisateur non administrateur. | « Cette machine seulement » n'a pas de sens dans un conteneur : le port ne doit jamais être ouvert sans protection. |
 | 2026-10-26 | **Deux langues : français et anglais**, pour l'application (interface, messages, ligne de commande) et pour le dépôt (README, docs). Le français reste la langue d'écriture du code ; tout texte affiché passe par un dictionnaire et un test échoue si une traduction manque. | Lutin est écrit en français et d'abord utilisé en français ; l'anglais l'ouvre à tous. Langue : variable d'environnement, puis réglage (`lutin langue`, réglages de la page), puis système. |
 | 2026-10-26 | **Docker : une image complète par défaut** (Lutin + Ollama dans le même conteneur, `:latest`), et une image légère (`:slim`, Lutin seul) pour ceux qui ont déjà Ollama ailleurs. | « Je lance l'image et ça marche » : rien d'autre à installer. Le prix est la taille (plusieurs Go, les bibliothèques d'Ollama). |
+| 2026-10-26 | **Installateur Windows** (`lutin-setup-*.exe`, Inno Setup) : par utilisateur, sans droits administrateur, en français et en anglais. Il utilise le Python déjà présent sur l'ordinateur (un environnement privé, comme `install.ps1`) et n'installe rien d'autre ; sans Python, il copie celui qu'il embarque. Construit et testé (installation, réinstallation, Python embarqué, désinstallation) en CI. | Ceux qui ont le plus besoin d'un installateur n'ont pas Python ; ceux qui l'ont ne doivent pas en recevoir un second. |
+| 2026-10-26 | **Signature : SignPath Foundation** (gratuit pour l'open source) pour l'installateur Windows. Le workflow est prêt et ne s'active que quand le compte existe (docs/PUBLISHING.fr.md). | Sans signature, Windows SmartScreen avertit au téléchargement. |
+| 2026-10-26 | **Nouvelle version de Lutin annoncée dans la page** (un bandeau, une fois par jour au plus, silencieux hors ligne, ignorable) : rien n'est installé sans l'utilisateur. | Les modèles étaient déjà vérifiés au lancement ; Lutin lui-même non. |
+| 2026-10-26 | **Projets Claude** (`CLAUDE.md`, `.claude/`) repris sur place ou en copie. | Le contexte construit avec Claude Code ne doit pas se perdre en changeant d'outil. |
 
 ## À trancher
 
+- **Demande à SignPath.** La Fondation doit approuver le projet (open source, public, construit par GitHub Actions) : à demander par le propriétaire, puis ajouter la variable et le secret (docs/PUBLISHING.fr.md).
 - **Catalogue : qui note les modèles ?** Les notes sont éditoriales (1 à 10), écrites sans mesure sur du matériel réel. Le banc d'essai (`lutin bench --exporter`) permet maintenant de proposer des corrections justifiées ; il manque des résultats publiés sur quelques machines de référence.
-- **Signature des fichiers publiés.** Sans signature, Windows SmartScreen peut avertir. Options : SignPath (gratuit pour l'open source), Azure Trusted Signing (payant), ou seulement des sommes de contrôle (déjà publiées) pour la 0.x.
-- **Installateur graphique Windows** (`.exe` avec Python embarqué) : pas fait. Le script PowerShell couvre le besoin tant que la version reste 0.x.
 - **Autres langues.** Le mécanisme est en place (`src/lutin/langues/`) : en ajouter une demande un dictionnaire pour les messages et un pour la page, et un code dans `i18n.LANGUES`.
-- **Nouvelle version de Lutin signalée dans l'interface** : aujourd'hui seulement avec `lutin update` (les modèles, eux, sont vérifiés au lancement).
 
 ## Connu mais pas vérifié
 

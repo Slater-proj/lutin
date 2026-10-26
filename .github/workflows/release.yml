@@ -86,9 +86,56 @@ jobs:
           path: dist/*
           retention-days: 30
 
+  installateur:
+    name: installateur Windows
+    needs: version
+    if: needs.version.outputs.publier == 'true'
+    runs-on: windows-latest
+    env:
+      SETUPTOOLS_SCM_PRETEND_VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install build
+      - run: python -m build --wheel
+      - run: choco install innosetup --yes --no-progress
+      - name: Construire l'installateur
+        shell: pwsh
+        run: ./installateur/windows/construire.ps1 -Roue (Get-ChildItem dist/*.whl | Select-Object -First 1).FullName -Version "${{ needs.version.outputs.version }}"
+      - name: Le vérifier (installation, réinstallation, Python embarqué, désinstallation)
+        shell: pwsh
+        run: ./installateur/windows/verifier.ps1 -Installateur (Get-ChildItem dist/lutin-setup-*.exe | Select-Object -First 1).FullName -Version "${{ needs.version.outputs.version }}"
+      # Signature (SignPath Foundation, gratuite pour l'open source) : active seulement quand la variable SIGNPATH_ORGANIZATION_ID et le secret SIGNPATH_API_TOKEN existent (docs/PUBLISHING.md).
+      - uses: actions/upload-artifact@v4
+        id: non-signe
+        with:
+          name: installateur-non-signe
+          path: dist/lutin-setup-*.exe
+      - uses: signpath/github-action-submit-signing-request@v1
+        if: vars.SIGNPATH_ORGANIZATION_ID != ''
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: lutin
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY || 'release-signing' }}
+          github-artifact-id: ${{ steps.non-signe.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: signe
+      - name: Garder le fichier signé à la place du non signé
+        if: vars.SIGNPATH_ORGANIZATION_ID != ''
+        shell: pwsh
+        run: Copy-Item signe/lutin-setup-*.exe dist/ -Force
+      - uses: actions/upload-artifact@v4
+        with:
+          name: installateur-${{ needs.version.outputs.version }}
+          path: dist/lutin-setup-*.exe
+          retention-days: 30
+
   publier:
     name: publication (main)
-    needs: [version, construire]
+    needs: [version, construire, installateur]
     if: github.ref == 'refs/heads/main' && needs.version.outputs.publier == 'true'
     runs-on: ubuntu-latest
     steps:
@@ -96,6 +143,12 @@ jobs:
         with:
           name: lutin-${{ needs.version.outputs.version }}
           path: dist
+      - uses: actions/download-artifact@v4
+        with:
+          name: installateur-${{ needs.version.outputs.version }}
+          path: dist
+      - name: Somme de contrôle de l'installateur
+        run: cd dist && sha256sum lutin-setup-*.exe >> SHA256SUMS.txt && cat SHA256SUMS.txt
       - name: Créer l'étiquette et la publication
         uses: softprops/action-gh-release@v2
         with:
@@ -107,6 +160,7 @@ jobs:
           body: |
             ## Install or update · Installer ou mettre à jour
 
+            **Windows (installer · installateur)**: `lutin-setup-*.exe` below / ci-dessous (uses the Python you already have, otherwise brings its own / utilise le Python déjà présent, sinon apporte le sien)
             **Windows (PowerShell)**: `irm https://raw.githubusercontent.com/${{ github.repository }}/main/installateur/install.ps1 | iex`
             **Linux / macOS**: `curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/installateur/install.sh | bash`
             **Docker** (Lutin + Ollama): `docker pull ${{ needs.version.outputs.image }}:${{ needs.version.outputs.version }}` ([docs/DOCKER.md](https://github.com/${{ github.repository }}/blob/main/docs/DOCKER.md), [docs/DOCKER.fr.md](https://github.com/${{ github.repository }}/blob/main/docs/DOCKER.fr.md))

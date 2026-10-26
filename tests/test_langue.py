@@ -161,7 +161,7 @@ class Completude(unittest.TestCase):
             self.assertIn(detail, self.dico)
 
     def test_pas_de_traduction_orpheline_ni_identique(self):
-        identiques = [fr for fr, en in self.dico.items() if fr == en and fr not in ("Code", "Images", "{} skill(s)", "{} agent(s)", "Skills (.claude/skills)", "Agents (.claude/agents)")]          # deux mots qui s'écrivent pareil dans les deux langues
+        identiques = [fr for fr, en in self.dico.items() if fr == en and fr not in ("Code", "Images", "{} skill(s)", "{} agent(s)", "Skills (.claude/skills)", "Agents (.claude/agents)", " — « ")]          # deux mots qui s'écrivent pareil dans les deux langues
         self.assertEqual(identiques, [], "une « traduction » identique au français est un oubli")
 
 

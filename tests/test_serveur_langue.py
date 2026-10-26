@@ -101,5 +101,23 @@ class LangueDuServeur(unittest.TestCase):
             os.environ.pop("LUTIN_LANGUE", None)
 
 
+    def test_les_resultats_d_outils_sont_dans_la_langue(self):
+        """Ce que les outils renvoient (affiché dans la conversation et lu par le modèle) suit la langue : on n'a pas un modèle qui répond en anglais à des résultats en français."""
+        (_TEMP / "projet" / "a.txt").write_text("un\ndeux\n", encoding="utf-8")
+        os.environ["LUTIN_LANGUE"] = "en"
+        try:
+            with self.assertRaisesRegex(A.ErreurOutil, "Path refused: outside the project"):
+                A.chemin_sur("../x")
+            with self.assertRaisesRegex(A.ErreurOutil, "File not found: absent.txt"):
+                A.outil_lire("absent.txt")
+            self.assertIn("lines 1 to 2 of 2", A.outil_lire("a.txt"))
+            self.assertEqual(A.outil_chercher("introuvable_xyz"), "No result.")
+        finally:
+            os.environ["LUTIN_LANGUE"] = "fr"
+        with self.assertRaisesRegex(A.ErreurOutil, "Fichier introuvable : absent.txt"):
+            A.outil_lire("absent.txt")
+        self.assertEqual(A.outil_chercher("introuvable_xyz"), "Aucun résultat.")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -258,7 +258,7 @@ def noter(note):
         raise ErreurOutil("Note vide.")
     ligne = "- {} : {}\n".format(datetime.now().strftime("%Y-%m-%d"), note)
     f = MEMOIRE / "MEMOIRE.md"
-    existant = lire_memoire("MEMOIRE.md") or "# Mémoire de l'assistant\n\nNotes durables (ajoutées par l'assistant ou à la main).\n\n"
+    existant = lire_memoire("MEMOIRE.md") or _t("# Mémoire de l'assistant\n\nNotes durables (ajoutées par l'assistant ou à la main).\n\n")
     texte = existant.rstrip("\n") + "\n" + ligne
     i = position_notes(texte)
     if i >= 0:                                              # la section des notes ne grossit pas sans fin : on garde les 40 dernières lignes
@@ -267,7 +267,7 @@ def noter(note):
             notes = notes[:2] + notes[-40:]
         texte = tete + "\n".join(notes) + "\n"
     ecrire_atomique(f, texte)
-    return "Noté dans memoire/MEMOIRE.md."
+    return _t("Noté dans memoire/MEMOIRE.md.")
 
 
 def lister_skills():
@@ -464,13 +464,13 @@ def chemin_sur(rel, ecriture=False):
     rel = str(rel or ".").replace("\\", "/").strip()
     p = (RACINE / rel).resolve()
     if p != RACINE and RACINE not in p.parents:
-        raise ErreurOutil("Chemin refusé : en dehors du projet (« {} »).".format(rel))
+        raise ErreurOutil(_t("Chemin refusé : en dehors du projet (« {} »).").format(rel))
     parties = p.relative_to(RACINE).parts
     if parties and parties[0] == ".git":
-        raise ErreurOutil("Le dossier .git est protégé.")
+        raise ErreurOutil(_t("Le dossier .git est protégé."))
     if ecriture:
         if p.suffix.lower() in (".safetensors", ".png", ".jpg", ".jpeg", ".webp", ".mp4", ".zip", ".exe", ".dll", ".ckpt", ".pt", ".gguf"):
-            raise ErreurOutil("Fichier binaire refusé en écriture.")
+            raise ErreurOutil(_t("Fichier binaire refusé en écriture."))
     return p
 
 
@@ -481,27 +481,27 @@ def rel(p):
 def outil_lister(dossier="."):
     d = chemin_sur(dossier)
     if not d.is_dir():
-        raise ErreurOutil("Ce n'est pas un dossier : " + rel(d))
+        raise ErreurOutil(_t("Ce n'est pas un dossier : ") + rel(d))
     lignes = []
     for f in sorted(d.iterdir(), key=lambda x: (x.is_file(), x.name.lower())):
         if f.name in DOSSIERS_IGNORES or (f.is_dir() and ignore_chemin(f)):
-            lignes.append(f.name + "/  (volumineux ou technique : ignoré)")
+            lignes.append(f.name + _t("/  (volumineux ou technique : ignoré)"))
         elif f.is_dir():
             lignes.append(f.name + "/")
         else:
             lignes.append("{}  ({} octets)".format(f.name, f.stat().st_size))
         if len(lignes) >= 300:
-            lignes.append("... (liste coupée)")
+            lignes.append(_t("... (liste coupée)"))
             break
-    return "\n".join(lignes) or "(dossier vide)"
+    return "\n".join(lignes) or _t("(dossier vide)")
 
 
 def outil_lire(chemin, debut=1, fin=None):
     f = chemin_sur(chemin)
     if not f.is_file():
-        raise ErreurOutil("Fichier introuvable : " + rel(f))
+        raise ErreurOutil(_t("Fichier introuvable : ") + rel(f))
     if f.stat().st_size > 6_000_000:
-        raise ErreurOutil("Fichier trop gros pour être lu (plus de 6 Mo).")
+        raise ErreurOutil(_t("Fichier trop gros pour être lu (plus de 6 Mo)."))
     texte = f.read_text(encoding="utf-8", errors="replace").splitlines()
     debut = max(1, int(debut or 1))
     fin = int(fin) if fin else len(texte)
@@ -511,10 +511,10 @@ def outil_lire(chemin, debut=1, fin=None):
         ligne = "{}\t{}".format(i, l)
         n += len(ligne) + 1
         if n > LECTURE_MAX:
-            sortie.append("... (coupé : demande la suite avec debut={})".format(i))
+            sortie.append(_t("... (coupé : demande la suite avec debut={})").format(i))
             break
         sortie.append(ligne)
-    return "{} : lignes {} à {} sur {}\n".format(rel(f), debut, debut + len(sortie) - 1, len(texte)) + "\n".join(sortie)
+    return _t("{} : lignes {} à {} sur {}\n").format(rel(f), debut, debut + len(sortie) - 1, len(texte)) + "\n".join(sortie)
 
 
 EXTENSIONS_BINAIRES = (".png", ".jpg", ".jpeg", ".webp", ".gif", ".safetensors", ".zip", ".mp4", ".wav", ".mp3", ".pyc", ".gguf", ".ckpt", ".pt", ".exe", ".dll", ".pdf")
@@ -542,7 +542,7 @@ def outil_chercher(motif, dossier=".", contexte=0, fichiers=""):
     try:
         re_ = re.compile(str(motif), re.I)
     except re.error as e:
-        raise ErreurOutil("Expression régulière invalide : " + str(e))
+        raise ErreurOutil(_t("Expression régulière invalide : ") + str(e))
     try:
         contexte = max(0, min(5, int(contexte or 0)))
     except (TypeError, ValueError):
@@ -551,7 +551,7 @@ def outil_chercher(motif, dossier=".", contexte=0, fichiers=""):
     limite = time.time() + CHERCHER_DELAI
     for f in parcourir(d, fichiers):
         if time.time() > limite:
-            sortie.append("... (recherche arrêtée après {} s : précise le dossier)".format(CHERCHER_DELAI))
+            sortie.append(_t("... (recherche arrêtée après {} s : précise le dossier)").format(CHERCHER_DELAI))
             break
         try:
             if not f.is_file() or f.stat().st_size > 2_000_000:
@@ -571,8 +571,8 @@ def outil_chercher(motif, dossier=".", contexte=0, fichiers=""):
                 sortie.append("{}{}{}{} {}".format(rel(f), ":" if re_.search(lignes[j]) else "-", j + 1, ":" if re_.search(lignes[j]) else "-", lignes[j].strip()[:200]))
             affiche = min(len(lignes) - 1, i + contexte)
             if nb_resultats >= 80 or len(sortie) >= 200:
-                return "\n".join(sortie) + "\n... (résultats coupés : précise le motif, le dossier ou « fichiers »)"
-    return "\n".join(sortie) or "Aucun résultat."
+                return "\n".join(sortie) + _t("\n... (résultats coupés : précise le motif, le dossier ou « fichiers »)")
+    return "\n".join(sortie) or _t("Aucun résultat.")
 
 
 def outil_symboles(nom, dossier="."):
@@ -605,11 +605,11 @@ def outil_symboles(nom, dossier="."):
                 usages.append(ligne)
             fichiers_utilisant.add(rel(f))
     if not defs and not usages:
-        return "« {} » n'apparaît nulle part.".format(nom)
-    res = "Définitions ({}) :\n".format(len(defs)) + ("\n".join(defs[:15]) or "(aucune trouvée)")
-    res += "\n\nUtilisations ({} lignes dans {} fichier(s)) :\n".format(len(usages), len(fichiers_utilisant)) + ("\n".join(usages[:40]) or "(aucune)")
+        return _t("« {} » n'apparaît nulle part.").format(nom)
+    res = _t("Définitions ({}) :\n").format(len(defs)) + ("\n".join(defs[:15]) or _t("(aucune trouvée)"))
+    res += _t("\n\nUtilisations ({} lignes dans {} fichier(s)) :\n").format(len(usages), len(fichiers_utilisant)) + ("\n".join(usages[:40]) or "(aucune)")
     if len(usages) > 40:
-        res += "\n... ({} autres : précise le dossier)".format(len(usages) - 40)
+        res += _t("\n... ({} autres : précise le dossier)").format(len(usages) - 40)
     return res
 
 
@@ -621,7 +621,7 @@ def outil_lire_plusieurs(fichiers):
         except ValueError:
             fichiers = [p.strip() for p in re.split(r"[,\n]", fichiers) if p.strip()]
     if not isinstance(fichiers, list) or not fichiers:
-        raise ErreurOutil("« fichiers » doit être une liste de chemins ou de {\"chemin\": ..., \"debut\": ..., \"fin\": ...}.")
+        raise ErreurOutil(_t("« fichiers » doit être une liste de chemins ou de {\"chemin\": ..., \"debut\": ..., \"fin\": ...}."))
     sorties = []
     for x in fichiers[:6]:
         if isinstance(x, str):
@@ -632,8 +632,8 @@ def outil_lire_plusieurs(fichiers):
             s = outil_lire(x.get("chemin"), x.get("debut"), x.get("fin"))
         except ErreurOutil as e:
             s = "Erreur : " + str(e)
-        sorties.append(s if len(s) <= 3500 else s[:3500] + "\n[... coupé : relis ce fichier seul avec debut/fin pour la suite]")
-    return "\n\n=====\n\n".join(sorties) + ("\n\n(6 fichiers au plus par appel : les suivants ne sont pas lus)" if len(fichiers) > 6 else "")
+        sorties.append(s if len(s) <= 3500 else s[:3500] + _t("\n[... coupé : relis ce fichier seul avec debut/fin pour la suite]"))
+    return "\n\n=====\n\n".join(sorties) + (_t("\n\n(6 fichiers au plus par appel : les suivants ne sont pas lus)") if len(fichiers) > 6 else "")
 
 
 def sha_fichier(f):
@@ -775,11 +775,11 @@ def lire_exact(f):
     """Lit un fichier texte sans rien abîmer : renvoie (texte avec \\n partout, fin de ligne d'origine « \\r\\n » ou « \\n »).
     Un fichier qui n'est pas de l'UTF-8 valide est refusé (l'écrire le corromprait)."""
     if f.stat().st_size > 5_000_000:
-        raise ErreurOutil("{} est trop gros pour être modifié par l'assistant (plus de 5 Mo).".format(rel(f)))
+        raise ErreurOutil(_t("{} est trop gros pour être modifié par l'assistant (plus de 5 Mo).").format(rel(f)))
     try:
         texte = f.read_bytes().decode("utf-8")
     except UnicodeDecodeError:
-        raise ErreurOutil("{} n'est pas de l'UTF-8 valide (ancien encodage ?) : je ne le modifie pas pour ne pas le corrompre. Demande à l'utilisateur de le convertir.".format(rel(f)))
+        raise ErreurOutil(_t("{} n'est pas de l'UTF-8 valide (ancien encodage ?) : je ne le modifie pas pour ne pas le corrompre. Demande à l'utilisateur de le convertir.").format(rel(f)))
     crlf = texte.count("\r\n")
     seuls = texte.count("\n") - crlf
     return texte.replace("\r\n", "\n"), ("\r\n" if crlf and crlf >= seuls else "\n")
@@ -795,15 +795,15 @@ def ecrire_exact(f, texte, eol):
 def outil_ecrire(chemin, contenu, ctx):
     f = chemin_sur(chemin, ecriture=True)
     if len(contenu) > 400_000:
-        raise ErreurOutil("Contenu trop long (400 000 caractères au maximum).")
+        raise ErreurOutil(_t("Contenu trop long (400 000 caractères au maximum)."))
     contenu = contenu.replace("\r\n", "\n")
     if f.is_file():
         avant, eol = lire_exact(f)
     else:
         avant, eol = "", ("\r\n" if f.suffix.lower() in (".bat", ".cmd", ".ps1") else "\n")          # les scripts Windows restent en CRLF
-    if not ctx["accord"]("Écrire " + rel(f), "Remplace tout le fichier ({} caractères).".format(len(contenu)) if avant else "Crée le fichier ({} caractères).".format(len(contenu)), difference(avant, contenu, rel(f)), auto=ctx["auto_ecriture"]):
-        return "Refusé par l'utilisateur : rien n'a été écrit."
-    return ecrire_et_verifier(f, contenu, eol, ctx, "Écrit : {} ({} caractères).".format(rel(f), len(contenu)))
+    if not ctx["accord"]("Écrire " + rel(f), _t("Remplace tout le fichier ({} caractères).").format(len(contenu)) if avant else _t("Crée le fichier ({} caractères).").format(len(contenu)), difference(avant, contenu, rel(f)), auto=ctx["auto_ecriture"]):
+        return _t("Refusé par l'utilisateur : rien n'a été écrit.")
+    return ecrire_et_verifier(f, contenu, eol, ctx, _t("Écrit : {} ({} caractères).").format(rel(f), len(contenu)))
 
 
 def ecrire_et_verifier(f, texte, eol, ctx, message):
@@ -811,17 +811,17 @@ def ecrire_et_verifier(f, texte, eol, ctx, message):
     for dossier_ecrit in (f.parent, DONNEES):                      # pas d'écriture sur un disque presque plein (fichier tronqué, sauvegarde impossible)
         d = espace_disque(dossier_ecrit)
         if d and d["libre"] < 300 * 1024 ** 2:
-            raise ErreurOutil("Le disque {} est presque plein ({} libres) : je n'écris pas pour ne pas abîmer le fichier. Fais de la place d'abord.".format(d["racine"], go(d["libre"])))
+            raise ErreurOutil(_t("Le disque {} est presque plein ({} libres) : je n'écris pas pour ne pas abîmer le fichier. Fais de la place d'abord.").format(d["racine"], go(d["libre"])))
     copie = sauvegarder(f, ctx)
     f.parent.mkdir(parents=True, exist_ok=True)
     ecrire_exact(f, texte, eol)
     noter_apres(ctx, f)
     PLAN["valide"] = False                                  # le plan sera reconstruit au prochain tour
     erreur = verifier_syntaxe(f, texte.replace("\r\n", "\n"))
-    suite = " Ancienne version sauvegardée dans " + copie + "." if copie else ""
+    suite = _t(" Ancienne version sauvegardée dans ") + copie + "." if copie else ""
     if erreur:
-        return "{}{}\n⚠ ERREUR DE SYNTAXE : {}\nLe fichier est écrit tel quel : corrige-la maintenant avec « modifier » avant de continuer.".format(message, suite, erreur)
-    return "{}{}{}".format(message, suite, "\nVérification : syntaxe correcte." if f.suffix.lower() in (".py", ".json", ".js", ".html") and VERIFICATION_FAITE.get(rel(f)) else "")
+        return _t("{}{}\n⚠ ERREUR DE SYNTAXE : {}\nLe fichier est écrit tel quel : corrige-la maintenant avec « modifier » avant de continuer.").format(message, suite, erreur)
+    return "{}{}{}".format(message, suite, _t("\nVérification : syntaxe correcte.") if f.suffix.lower() in (".py", ".json", ".js", ".html") and VERIFICATION_FAITE.get(rel(f)) else "")
 
 
 VERIFICATION_FAITE = {}          # chemin -> True si un contrôle a vraiment eu lieu (node absent = pas de contrôle JS, on ne le prétend pas)
@@ -842,9 +842,9 @@ def verifier_syntaxe(f, texte):
         elif suffixe in (".js", ".html"):
             return verifier_js(f, texte, suffixe)
     except SyntaxError as e:
-        return "ligne {} : {}{}".format(e.lineno, e.msg, (" — « " + e.text.strip()[:100] + " »") if e.text else "")
+        return "ligne {} : {}{}".format(e.lineno, e.msg, (_t(" — « ") + e.text.strip()[:100] + " »") if e.text else "")
     except ValueError as e:
-        return ("JSON invalide : {}" if suffixe == ".json" else "Fichier illisible par Python : {}").format(e)
+        return ("JSON invalide : {}" if suffixe == ".json" else _t("Fichier illisible par Python : {}")).format(e)
     return ""
 
 
@@ -876,7 +876,7 @@ def verifier_js(f, texte, suffixe):
             m = re.search(r":(\d+)\s*\n", sortie)
             ligne = (int(m.group(1)) + debut - 1) if m else debut
             detail = next((l.strip() for l in sortie.splitlines() if "Error" in l), "erreur JavaScript")
-            return "JavaScript, vers la ligne {} : {}".format(ligne, detail[:160])
+            return _t("JavaScript, vers la ligne {} : {}").format(ligne, detail[:160])
     VERIFICATION_FAITE[rel(f)] = True
     return ""
 
@@ -913,9 +913,9 @@ def remplacer_une_fois(texte, ancien, nouveau):
     if n == 1:
         return texte.replace(ancien, nouveau, 1), ""
     if n > 1:
-        raise ErreurOutil("Le texte à remplacer doit apparaître exactement une fois dans le fichier (trouvé {} fois, aux lignes {}). Ajoute des lignes autour pour le rendre unique.".format(n, ", ".join(map(str, positions_ligne(texte, ancien)[:8]))))
+        raise ErreurOutil(_t("Le texte à remplacer doit apparaître exactement une fois dans le fichier (trouvé {} fois, aux lignes {}). Ajoute des lignes autour pour le rendre unique.").format(n, ", ".join(map(str, positions_ligne(texte, ancien)[:8]))))
     if not ancien.strip():
-        raise ErreurOutil("Le texte à remplacer doit apparaître exactement une fois dans le fichier (trouvé 0 fois : il est vide).")
+        raise ErreurOutil(_t("Le texte à remplacer doit apparaître exactement une fois dans le fichier (trouvé 0 fois : il est vide)."))
     lignes = texte.split("\n")
     al = ancien.strip("\n").split("\n")
     cible = [l.strip() for l in al]
@@ -929,15 +929,15 @@ def remplacer_une_fois(texte, ancien, nouveau):
         nl = nouveau.strip("\n").split("\n")
         if prefixe:
             nl = [(prefixe + l) if l.strip() else l for l in nl]
-        return "\n".join(lignes[:i] + nl + lignes[i + k:]), "Correspondance tolérante : espaces ou indentation différents, lignes {} à {}{}.".format(i + 1, i + k, " (indentation ajustée)" if prefixe else "")
+        return "\n".join(lignes[:i] + nl + lignes[i + k:]), _t("Correspondance tolérante : espaces ou indentation différents, lignes {} à {}{}.").format(i + 1, i + k, _t(" (indentation ajustée)") if prefixe else "")
     if len(fenetres) > 1:
-        raise ErreurOutil("Le texte à remplacer doit apparaître exactement une fois dans le fichier (trouvé {} fois en ignorant l'indentation, aux lignes {}). Ajoute des lignes autour.".format(len(fenetres), ", ".join(str(i + 1) for i in fenetres[:8])))
+        raise ErreurOutil(_t("Le texte à remplacer doit apparaître exactement une fois dans le fichier (trouvé {} fois en ignorant l'indentation, aux lignes {}). Ajoute des lignes autour.").format(len(fenetres), ", ".join(str(i + 1) for i in fenetres[:8])))
     proche = passage_proche(lignes, al)
     if proche:
         debut, fin, r = proche
-        raise ErreurOutil("Le texte à remplacer doit apparaître exactement une fois dans le fichier (trouvé 0 fois). Le passage le plus proche (lignes {} à {}, ressemblance {} %) est :\n{}\nRecopie-le exactement comme « ancien ».".format(
+        raise ErreurOutil(_t("Le texte à remplacer doit apparaître exactement une fois dans le fichier (trouvé 0 fois). Le passage le plus proche (lignes {} à {}, ressemblance {} %) est :\n{}\nRecopie-le exactement comme « ancien ».").format(
             debut + 1, fin, round(100 * r), "\n".join(lignes[debut:fin])[:1500]))
-    raise ErreurOutil("Le texte à remplacer doit apparaître exactement une fois dans le fichier (trouvé 0 fois, et rien de ressemblant). Relis le fichier avec « lire » avant de modifier.")
+    raise ErreurOutil(_t("Le texte à remplacer doit apparaître exactement une fois dans le fichier (trouvé 0 fois, et rien de ressemblant). Relis le fichier avec « lire » avant de modifier."))
 
 
 def outil_modifier(chemin, ancien, nouveau, ctx):
@@ -948,16 +948,16 @@ def outil_modifier_plusieurs(chemin, remplacements, ctx):
     """Applique plusieurs remplacements à un fichier, en une seule demande d'accord. Tout ou rien : si un seul échoue, rien n'est écrit."""
     f = chemin_sur(chemin, ecriture=True)
     if not f.is_file():
-        raise ErreurOutil("Fichier introuvable : " + rel(f))
+        raise ErreurOutil(_t("Fichier introuvable : ") + rel(f))
     if isinstance(remplacements, str):
         try:
             remplacements = json.loads(remplacements)
         except ValueError:
-            raise ErreurOutil("« remplacements » doit être une liste de {\"ancien\": ..., \"nouveau\": ...}.")
+            raise ErreurOutil(_t("« remplacements » doit être une liste de {\"ancien\": ..., \"nouveau\": ...}."))
     if not isinstance(remplacements, list) or not remplacements or not all(isinstance(x, dict) for x in remplacements):
-        raise ErreurOutil("« remplacements » doit être une liste non vide de {\"ancien\": ..., \"nouveau\": ...}.")
+        raise ErreurOutil(_t("« remplacements » doit être une liste non vide de {\"ancien\": ..., \"nouveau\": ...}."))
     if len(remplacements) > 20:
-        raise ErreurOutil("20 remplacements au plus par appel.")
+        raise ErreurOutil(_t("20 remplacements au plus par appel."))
     avant, eol = lire_exact(f)
     texte, remarques = avant, []
     for numero, x in enumerate(remplacements, 1):
@@ -966,12 +966,12 @@ def outil_modifier_plusieurs(chemin, remplacements, ctx):
         except ErreurOutil as e:
             if len(remplacements) == 1:
                 raise
-            raise ErreurOutil("Remplacement {} sur {} : {} Rien n'a été écrit.".format(numero, len(remplacements), e))
+            raise ErreurOutil(_t("Remplacement {} sur {} : {} Rien n'a été écrit.").format(numero, len(remplacements), e))
         if remarque:
             remarques.append(("Remplacement {} : ".format(numero) if len(remplacements) > 1 else "") + remarque)
     if not ctx["accord"]("Modifier " + rel(f), "Remplace {} passage(s).".format(len(remplacements)) + ((" " + " ".join(remarques)) if remarques else ""), difference(avant, texte, rel(f)), auto=ctx["auto_ecriture"]):
-        return "Refusé par l'utilisateur : rien n'a été modifié."
-    return ecrire_et_verifier(f, texte, eol, ctx, "Modifié : {}{}.".format(rel(f), (" (" + str(len(remplacements)) + " passages)") if len(remplacements) > 1 else "") + ((" " + " ".join(remarques)) if remarques else ""))
+        return _t("Refusé par l'utilisateur : rien n'a été modifié.")
+    return ecrire_et_verifier(f, texte, eol, ctx, _t("Modifié : {}{}.").format(rel(f), (" (" + str(len(remplacements)) + " passages)") if len(remplacements) > 1 else "") + ((" " + " ".join(remarques)) if remarques else ""))
 
 
 def construire_hors_projet(posix):
@@ -1114,20 +1114,20 @@ def outil_executer(commande, ctx, shell="cmd"):
         commande = commande.get("commande", "")
     commande = str(commande or "").strip()
     if not commande:
-        raise ErreurOutil("Commande vide (l'argument n'est pas arrivé). Réessaie avec l'outil « executer » en donnant la commande dans « commande ».")
+        raise ErreurOutil(_t("Commande vide (l'argument n'est pas arrivé). Réessaie avec l'outil « executer » en donnant la commande dans « commande »."))
     if len(commande) > 1500:
-        raise ErreurOutil("Commande trop longue (max 1500 caractères).")
+        raise ErreurOutil(_t("Commande trop longue (max 1500 caractères)."))
     shell = (shell or "cmd").strip().lower()
     if shell not in ("cmd", "powershell"):
-        raise ErreurOutil("Shell inconnu « {} ». Utilise « cmd » (défaut) ou « powershell ».".format(shell))
+        raise ErreurOutil(_t("Shell inconnu « {} ». Utilise « cmd » (défaut) ou « powershell ».").format(shell))
     lecture = commande_lecture_sure(commande) if shell == "cmd" else False
-    if not lecture and not ctx["accord"]("Lancer une commande ({})".format(shell), commande, "", auto=ctx.get("auto_commandes", False)):
-        return "Refusé par l'utilisateur : la commande n'a pas été lancée."
+    if not lecture and not ctx["accord"](_t("Lancer une commande ({})").format(shell), commande, "", auto=ctx.get("auto_commandes", False)):
+        return _t("Refusé par l'utilisateur : la commande n'a pas été lancée.")
     stop = ctx.get("stop")
     if shell == "powershell":
         exe_ps = "powershell" if os.name == "nt" else shutil.which("pwsh")
         if not exe_ps:
-            raise ErreurOutil("PowerShell n'est pas installé sur cette machine : utilise le shell par défaut.")
+            raise ErreurOutil(_t("PowerShell n'est pas installé sur cette machine : utilise le shell par défaut."))
         # PowerShell gère les chemins UNC nativement via Set-Location.
         ps_cmd = "Set-Location -LiteralPath '{}'; {}".format(str(RACINE).replace("'", "''"), commande)
         code, sortie, raison = lancer_processus([exe_ps, "-NoProfile", "-NonInteractive", "-Command", ps_cmd], False, None, stop, limite_ram=ctx.get("limite_ram", 0))
@@ -1141,14 +1141,14 @@ def outil_executer(commande, ctx, shell="cmd"):
     if raison == "stop":
         raise Arret()
     if raison == "delai":
-        return "La commande a dépassé 4 minutes et a été arrêtée (avec ses sous-processus)."
+        return _t("La commande a dépassé 4 minutes et a été arrêtée (avec ses sous-processus).")
     try:
         texte = sortie.decode("utf-8")
     except UnicodeDecodeError:
         texte = sortie.decode("cp850", "replace")
     if len(texte) > SORTIE_MAX:
-        texte = texte[:SORTIE_MAX // 2] + "\n... (sortie coupée) ...\n" + texte[-SORTIE_MAX // 2:]
-    return "Code de sortie {}.\n{}".format(code, texte)
+        texte = texte[:SORTIE_MAX // 2] + _t("\n... (sortie coupée) ...\n") + texte[-SORTIE_MAX // 2:]
+    return _t("Code de sortie {}.\n{}").format(code, texte)
 
 
 def jeton_outil():
@@ -1170,29 +1170,29 @@ def outil_etat():
         with urllib.request.urlopen(OUTIL + "/api/modules", timeout=8) as r:
             m = json.loads(r.read().decode("utf-8"))
     except (urllib.error.URLError, OSError, ValueError):
-        return "L'outil d'images ne répond pas sur {} (est-il lancé ?).".format(OUTIL)
+        return _t("L'outil d'images ne répond pas sur {} (est-il lancé ?).").format(OUTIL)
     modules = m.get("modules", []) if isinstance(m, dict) else m
-    lignes = ["Outil d'images, version {}. ComfyUI prêt : {}.".format(c.get("version"), c.get("comfy"))]
-    lignes.append("Opérations disponibles : " + ", ".join(k for k, v in sorted((c.get("operations") or {}).items()) if v and k != "t"))
+    lignes = [_t("Outil d'images, version {}. ComfyUI prêt : {}.").format(c.get("version"), c.get("comfy"))]
+    lignes.append(_t("Opérations disponibles : ") + ", ".join(k for k, v in sorted((c.get("operations") or {}).items()) if v and k != "t"))
     lignes.append("Checkpoints : " + (", ".join(c.get("checkpoints") or []) or "aucun"))
     for x in modules:
-        lignes.append("- {} [{}] : {}".format(x.get("id"), x.get("nom", "")[:70], "installé" if x.get("installe") else "non installé ({} Go)".format(x.get("taille_go"))))
+        lignes.append("- {} [{}] : {}".format(x.get("id"), x.get("nom", "")[:70], "installé" if x.get("installe") else _t("non installé ({} Go)").format(x.get("taille_go"))))
     return "\n".join(lignes)
 
 
 def outil_installer_module(module, ctx):
     if not re.match(r"^[a-z0-9_-]{1,40}$", str(module)):
-        raise ErreurOutil("Identifiant de module invalide.")
-    if not ctx["accord"]("Installer le module « {} » dans l'outil d'images".format(module), "Téléchargement de plusieurs Go : la progression s'affiche dans l'outil d'images.", ""):
-        return "Refusé par l'utilisateur."
+        raise ErreurOutil(_t("Identifiant de module invalide."))
+    if not ctx["accord"](_t("Installer le module « {} » dans l'outil d'images").format(module), _t("Téléchargement de plusieurs Go : la progression s'affiche dans l'outil d'images."), ""):
+        return _t("Refusé par l'utilisateur.")
     try:
         req = urllib.request.Request(OUTIL + "/api/installer", data=json.dumps({"module": module}).encode("utf-8"), headers={"Content-Type": "application/json", "X-Token": jeton_outil()})
         with urllib.request.urlopen(req, timeout=15) as r:
-            return "Installation demandée : " + r.read().decode("utf-8", "replace")[:500]
+            return _t("Installation demandée : ") + r.read().decode("utf-8", "replace")[:500]
     except urllib.error.HTTPError as e:
-        return "L'outil a refusé : " + e.read().decode("utf-8", "replace")[:500]
+        return _t("L'outil a refusé : ") + e.read().decode("utf-8", "replace")[:500]
     except (urllib.error.URLError, OSError) as e:
-        return "L'outil d'images ne répond pas : " + str(e)
+        return _t("L'outil d'images ne répond pas : ") + str(e)
 
 
 OUTILS = [
@@ -1227,7 +1227,7 @@ def verifier_hote_web(url):
     """Refuse les adresses locales (ta machine, ton réseau, le NAS) : une page piégée ne doit pas pouvoir faire lire tes services internes."""
     p = urllib.parse.urlparse(url)
     if p.scheme not in ("http", "https") or not p.hostname:
-        raise ErreurOutil("Adresse invalide : il faut une adresse http:// ou https://.")
+        raise ErreurOutil(_t("Adresse invalide : il faut une adresse http:// ou https://."))
     if os.environ.get("LUTIN_WEB_LOCAL") == "1":          # pour les tests seulement
         return
     try:
@@ -1237,7 +1237,7 @@ def verifier_hote_web(url):
     for info in infos:
         ip = ipaddress.ip_address(info[4][0].split("%")[0])
         if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast or ip.is_unspecified:
-            raise ErreurOutil("Adresse locale refusée ({}) : l'accès web est réservé à internet.".format(p.hostname))
+            raise ErreurOutil(_t("Adresse locale refusée ({}) : l'accès web est réservé à internet.").format(p.hostname))
 
 
 def web_telecharger(url, donnees=None):
@@ -1256,9 +1256,9 @@ def web_telecharger(url, donnees=None):
             charset = r.headers.get_content_charset() or "utf-8"
             brut = r.read(WEB_MAX_OCTETS)
     except urllib.error.HTTPError as e:
-        raise ErreurOutil("Le site a répondu HTTP {}.".format(e.code))
+        raise ErreurOutil(_t("Le site a répondu HTTP {}.").format(e.code))
     except (urllib.error.URLError, OSError) as e:
-        raise ErreurOutil("Impossible de joindre le site : {}".format(str(e)[:150]))
+        raise ErreurOutil(_t("Impossible de joindre le site : {}").format(str(e)[:150]))
     try:
         texte = brut.decode(charset, "replace")
     except LookupError:
@@ -1343,10 +1343,10 @@ def adresse_resultat(href):
 
 def outil_web_chercher(requete, nombre, ctx):
     if not ctx.get("web", True):
-        raise ErreurOutil("L'accès web est désactivé (case « Web » dans les options).")
+        raise ErreurOutil(_t("L'accès web est désactivé (case « Web » dans les options)."))
     requete = " ".join(str(requete or "").split())[:300]
     if not requete:
-        raise ErreurOutil("Requête vide.")
+        raise ErreurOutil(_t("Requête vide."))
     try:
         nombre = max(1, min(10, int(nombre or 6)))
     except (TypeError, ValueError):
@@ -1364,13 +1364,13 @@ def outil_web_chercher(requete, nombre, ctx):
         if len(lignes) >= nombre:
             break
     if not lignes:
-        return "Aucun résultat (le moteur peut limiter les requêtes : reformule ou réessaie dans une minute)."
-    return AVERTISSEMENT_WEB + "\nRésultats pour « {} » (lis une page avec web_lire) :\n\n".format(requete) + "\n\n".join(lignes)
+        return _t("Aucun résultat (le moteur peut limiter les requêtes : reformule ou réessaie dans une minute).")
+    return AVERTISSEMENT_WEB + _t("\nRésultats pour « {} » (lis une page avec web_lire) :\n\n").format(requete) + "\n\n".join(lignes)
 
 
 def outil_web_lire(url, debut, ctx):
     if not ctx.get("web", True):
-        raise ErreurOutil("L'accès web est désactivé (case « Web » dans les options).")
+        raise ErreurOutil(_t("L'accès web est désactivé (case « Web » dans les options)."))
     url = str(url or "").strip()
     try:
         debut = max(0, int(debut or 0))
@@ -1386,14 +1386,14 @@ def outil_web_lire(url, debut, ctx):
     elif type_.startswith("text/") or "json" in type_ or "xml" in type_:
         texte = brut
     else:
-        raise ErreurOutil("Ce type de contenu n'est pas lisible ({}). Seules les pages et les textes le sont.".format(type_))
+        raise ErreurOutil(_t("Ce type de contenu n'est pas lisible ({}). Seules les pages et les textes le sont.").format(type_))
     if not texte.strip():
-        return AVERTISSEMENT_WEB + "\n" + final + "\nPage vide (elle est peut-être construite par JavaScript, que je ne peux pas exécuter)."
+        return AVERTISSEMENT_WEB + "\n" + final + _t("\nPage vide (elle est peut-être construite par JavaScript, que je ne peux pas exécuter).")
     page = texte[debut:debut + WEB_PAGE]
     fin = debut + len(page)
-    entete = "{}\n{}{}\ncaractères {} à {} sur {}".format(AVERTISSEMENT_WEB, final, ("\nTitre : " + titre) if titre else "", debut, fin, len(texte))
+    entete = _t("{}\n{}{}\ncaractères {} à {} sur {}").format(AVERTISSEMENT_WEB, final, ("\nTitre : " + titre) if titre else "", debut, fin, len(texte))
     if fin < len(texte):
-        entete += " — suite : web_lire avec debut={}".format(fin)
+        entete += _t(" — suite : web_lire avec debut={}").format(fin)
     return entete + "\n\n" + page
 
 
@@ -1426,18 +1426,18 @@ def texte_taches(conv):
     """Les tâches en cours, rappelées au modèle à chaque tour (elles survivent ainsi au résumé de la conversation)."""
     if not conv.get("taches"):
         return ""
-    return "\n\n# TÂCHES EN COURS (liste que tu as créée avec l'outil « taches » ; mets-la à jour en la renvoyant en entier)\n" + "\n".join("{} {}".format(SIGNES_TACHE[t["etat"]], t["texte"]) for t in conv["taches"])
+    return _t("\n\n# TÂCHES EN COURS (liste que tu as créée avec l'outil « taches » ; mets-la à jour en la renvoyant en entier)\n") + "\n".join("{} {}".format(SIGNES_TACHE[t["etat"]], t["texte"]) for t in conv["taches"])
 
 
 def outil_taches(liste, ctx):
     conv = ctx.get("conv")
     if conv is None:
-        raise ErreurOutil("Pas de conversation active.")
+        raise ErreurOutil(_t("Pas de conversation active."))
     conv["taches"] = normaliser_taches(liste)
     if ctx.get("emit"):
         ctx["emit"]({"type": "taches", "liste": conv["taches"]})
     faites = sum(1 for t in conv["taches"] if t["etat"] == "fait")
-    return "Liste de tâches enregistrée : {} sur {} faites.".format(faites, len(conv["taches"]))
+    return _t("Liste de tâches enregistrée : {} sur {} faites.").format(faites, len(conv["taches"]))
 
 
 # --------------------------------------------------------------------------- plan du projet (donne au modèle la carte des fichiers et de leurs fonctions)
@@ -1456,7 +1456,7 @@ def resume_fichier(f, taille):
     if suffixe in (".json", ".txt", ".bat", ".ps1"):
         return "{} Ko".format(max(1, round(taille / 1024)))
     if taille > 800_000:
-        return "gros fichier, {} Ko".format(round(taille / 1024))
+        return _t("gros fichier, {} Ko").format(round(taille / 1024))
     try:
         texte = f.read_text(encoding="utf-8", errors="replace")
     except OSError:
@@ -1683,15 +1683,15 @@ def formater_passages(passages, taille=600):
 def outil_rappeler(requete, nombre=5):
     """Les passages les plus pertinents dans docs/, skills/, les mémoires et les anciennes conversations."""
     if not mots(requete):
-        raise ErreurOutil("Requête vide ou trop vague : donne quelques mots-clés.")
+        raise ErreurOutil(_t("Requête vide ou trop vague : donne quelques mots-clés."))
     try:
         nombre = max(1, min(10, int(nombre or 5)))
     except (TypeError, ValueError):
         nombre = 5
     passages = passages_rappel(requete, nombre)
     if not passages:
-        return "Aucun passage pertinent dans les documents ni dans les conversations enregistrées."
-    return formater_passages(passages) + "\n\n(lis le document complet avec « lire » si un passage t'intéresse)"
+        return _t("Aucun passage pertinent dans les documents ni dans les conversations enregistrées.")
+    return formater_passages(passages) + _t("\n\n(lis le document complet avec « lire » si un passage t'intéresse)")
 
 
 def rappels_automatiques(conv, r):
@@ -1710,8 +1710,8 @@ def rappels_automatiques(conv, r):
     for p in passages:
         if p["m"]["source"] not in sources:
             sources.append(p["m"]["source"])
-    texte = ("\n\n# RAPPELS POSSIBLEMENT PERTINENTS (extraits automatiques des documents et des anciennes conversations ; ils peuvent être hors sujet : ignore-les alors, "
-             "et ouvre le document avec « lire » si un détail compte)\n" + formater_passages(passages, 450)[:2200] + "\n")
+    texte = (_t("\n\n# RAPPELS POSSIBLEMENT PERTINENTS (extraits automatiques des documents et des anciennes conversations ; ils peuvent être hors sujet : ignore-les alors, "
+             "et ouvre le document avec « lire » si un détail compte)\n") + formater_passages(passages, 450)[:2200] + "\n")
     return texte, sources
 
 
@@ -3721,13 +3721,13 @@ class Gestionnaire(BaseHTTPRequestHandler):
         """Génère un document de reprise structuré par le modèle, pour coller dans un autre modèle d'IA."""
         ident = str(donnees.get("conversation") or "")
         if not ident:
-            return self._envoyer(400, {"erreur": "Pas de conversation."})
+            return self._envoyer(400, {"erreur": _t("Pas de conversation.")})
         conv = conv_lire(ident)
         r = reglages()
         # Construire le texte de la conversation (rôles + contenu, outils inclus)
         morceaux = []
         if conv.get("resume"):
-            morceaux.append("[RÉSUMÉ ANTÉRIEUR]\n" + conv["resume"])
+            morceaux.append(_t("[RÉSUMÉ ANTÉRIEUR]\n") + conv["resume"])
         for m in conv.get("messages", []):
             role = m.get("role", "?")
             contenu = (m.get("content") or "").strip()
@@ -3741,7 +3741,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
         if len(texte_conv) > 40000:
             texte_conv = texte_conv[:40000] + "\n[…tronqué…]"
         consigne = (
-            "Tu vas produire un document de reprise pour un AUTRE modèle d'IA qui doit continuer le travail.\n"
+            _t("Tu vas produire un document de reprise pour un AUTRE modèle d'IA qui doit continuer le travail.\n"
             "Le document doit contenir, dans cet ordre, en markdown :\n"
             "1. ## Objectif — ce que l'utilisateur voulait faire (1-3 phrases)\n"
             "2. ## Ce qui a été fait — liste des tâches terminées, fichiers modifiés, décisions prises\n"
@@ -3752,7 +3752,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
             "7. ## Notes techniques — détails utiles (versions, réglages, bugs connus)\n"
             "Sois précis, concis, sans répétition. Pas de blabla. Le document doit être directement collable comme contexte system/user message.\n"
             "Réponds UNIQUEMENT avec le document markdown, sans préambule.\n\n"
-            "CONVERSATION :\n" + texte_conv
+            "CONVERSATION :\n") + texte_conv
         )
         corps = {
             "model": r["modele"],
@@ -3766,7 +3766,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 reponse = json.loads(flux.read().decode("utf-8"))
             texte = reponse.get("message", {}).get("content", "").strip()
             if not texte:
-                return self._envoyer(500, {"erreur": "Le modèle n'a pas répondu."})
+                return self._envoyer(500, {"erreur": _t("Le modèle n'a pas répondu.")})
             return self._envoyer(200, {"texte": texte, "modele": r["modele"]})
         except (OSError, ValueError) as erreur:
             return self._envoyer(500, {"erreur": str(erreur)})
@@ -3775,7 +3775,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
         """Propose un titre court (3-6 mots) pour la conversation, sans l'appliquer."""
         ident = str(donnees.get("conversation") or donnees.get("id") or "")
         if not ident:
-            return self._envoyer(400, {"erreur": "Pas de conversation."})
+            return self._envoyer(400, {"erreur": _t("Pas de conversation.")})
         conv = conv_lire(ident)
         r = reglages()
         morceaux = []
@@ -3787,9 +3787,9 @@ class Gestionnaire(BaseHTTPRequestHandler):
         if len(texte_conv) > 6000:
             texte_conv = texte_conv[:6000]
         consigne = (
-            "Donne un TITRE de 3 à 6 mots (en français) qui résume l'objet principal de cette conversation. "
+            _t("Donne un TITRE de 3 à 6 mots (en français) qui résume l'objet principal de cette conversation. "
             "Pas de ponctuation finale, pas de guillemets, pas de préambule. Réponds UNIQUEMENT avec le titre.\n\n"
-            "CONVERSATION :\n" + texte_conv
+            "CONVERSATION :\n") + texte_conv
         )
         corps = {
             "model": r["modele"],
@@ -3804,7 +3804,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
             titre = reponse.get("message", {}).get("content", "").strip().strip('"«»').strip()
             titre = " ".join(titre.split())[:60]
             if not titre:
-                return self._envoyer(500, {"erreur": "Le modèle n'a pas répondu."})
+                return self._envoyer(500, {"erreur": _t("Le modèle n'a pas répondu.")})
             return self._envoyer(200, {"titre": titre})
         except (OSError, ValueError) as erreur:
             return self._envoyer(500, {"erreur": str(erreur)})

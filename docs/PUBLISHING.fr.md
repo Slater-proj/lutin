@@ -47,6 +47,16 @@ pip install lutin-0.5.0rc17+ma.branche-py3-none-any.whl
 3. **Packages** : après la première image, rendre le paquet `lutin` public (Package settings > Change visibility) pour que `docker pull` marche sans connexion.
 4. Facultatif : **Security > Code security** : activer le signalement privé de failles et Dependabot.
 
+## Signer l'installateur Windows (SignPath)
+
+Le workflow contient déjà l'étape de signature ; elle ne fait rien tant que ceci n'existe pas :
+
+1. Fais la demande sur [signpath.org/foundation](https://signpath.org/foundation) (gratuit pour l'open source ; le projet doit être public, avec une licence OSI, et construit par GitHub Actions). L'approbation est faite par SignPath et peut prendre du temps.
+2. Dans SignPath : crée le projet `lutin` (slug `lutin`) avec une configuration d'artefact pour `lutin-setup-*.exe` et une politique de signature (slug par défaut `release-signing`), et relie le dépôt GitHub (système de construction de confiance).
+3. Dans GitHub, **Settings > Secrets and variables > Actions** : secret `SIGNPATH_API_TOKEN` ; variables `SIGNPATH_ORGANIZATION_ID` et, si le slug de la politique diffère, `SIGNPATH_SIGNING_POLICY`.
+
+Ensuite, chaque publication joint le fichier signé. Cette étape a été écrite d'après la documentation de SignPath et **n'a jamais tourné** : la première version signée sera son premier essai. D'ici là l'installateur n'est pas signé et Windows SmartScreen peut avertir (« Informations complémentaires > Exécuter quand même ») ; la somme de contrôle est dans `SHA256SUMS.txt`.
+
 ## Réparer
 
 | Problème | Que faire |
