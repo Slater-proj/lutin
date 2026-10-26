@@ -394,10 +394,9 @@ class Gestionnaire(BaseHTTPRequestHandler):
                     return self._envoyer(400, {"erreur": _t("Pas de vérification de version dans ce mode de lancement.")})
                 from . import miseajour
                 avant = miseajour.lire_fichier_version(chemin).get("date") or 0
-                miseajour.verifier_lutin({"cache": str(Path(chemin).parent)}, force=True)
-                ok = (miseajour.lire_fichier_version(chemin).get("date") or 0) > avant
-                if not ok:
-                    return self._envoyer(503, {"erreur": _t("Impossible de joindre GitHub pour le moment (pas de connexion, ou pas de publication)."), "actuelle": _m.VERSION})
+                d = miseajour.verifier_lutin({"cache": str(Path(chemin).parent)}, force=True)
+                if (d.get("date") or 0) <= avant:
+                    return self._envoyer(503, {"erreur": _t("Impossible de joindre GitHub : {}").format(d.get("erreur") or "?"), "actuelle": _m.VERSION})
                 return self._envoyer(200, {"actuelle": _m.VERSION, "derniere": miseajour.lire_fichier_version(chemin).get("version", ""), "nouvelle": _m.nouvelle_version_lutin()})
             if self.path == "/api/langue":
                 try:

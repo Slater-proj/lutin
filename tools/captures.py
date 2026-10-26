@@ -94,8 +94,8 @@ def conversation_demo(ident, titre, minutes, langue="fr"):
 
 
 @contextlib.contextmanager
-def serveur_demo(variables=None):
-    """Un vrai serveur Lutin dans un dossier temporaire (faux Ollama, conversation d'exemple) ; rend (port, dossier temporaire). `variables` complète l'environnement (ex. LUTIN_LANGUE)."""
+def serveur_demo(variables=None, niveau="local"):
+    """Un vrai serveur Lutin dans un dossier temporaire (faux Ollama, conversation d'exemple) ; rend (port, dossier temporaire). `variables` complète l'environnement (ex. LUTIN_LANGUE) ; `niveau` : « local » ou « reseau » (le serveur écoute alors sur toutes les adresses de la machine)."""
     base = Path(os.environ.get("PUBLIC") or tempfile.gettempdir())          # un chemin sans nom d'utilisateur : il apparaît en bas de la capture
     tmp = Path(tempfile.mkdtemp(prefix="demo-", dir=str(base)))
     serveur = None
@@ -114,7 +114,7 @@ def serveur_demo(variables=None):
         (tmp / ("Project" if langue == "en" else "Projet")).mkdir()
         (tmp / "Documents").mkdir()
         (home / "config" / "config.json").write_text(json.dumps({
-            "schema": 1, "installe": True, "verifier_maj": False, "securite": {"niveau": "local", "port": port, "url_publique": "", "proxy_ips": [], "ecoute": ""},
+            "schema": 1, "installe": True, "verifier_maj": False, "securite": {"niveau": niveau, "port": port, "url_publique": "", "proxy_ips": [], "ecoute": "0.0.0.0" if niveau == "reseau" else ""},
             "emplacements": {"modeles": "", "travail": str(tmp / ("Project" if langue == "en" else "Projet")), "travaux": [{"id": "documents", "nom": "Documents", "chemin": str(tmp / "Documents")}], "travail_actif": ""},
             "modeles": {"choisis": {"polyvalent": "qwen3:8b", "code": "qwen2.5-coder:7b"}, "ignores": []}}), encoding="utf-8")
         for (ident, minutes), titre in zip((("a1b2c3d4", 2), ("b2c3d4e5", 95), ("c3d4e5f6", 1500)), DEMO[langue]["titres"]):

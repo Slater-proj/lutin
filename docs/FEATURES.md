@@ -39,11 +39,15 @@ The **Access** tab gathers who can use Lutin (level), the PIN code with a **QR c
 
 ## Workspace folders and the default folder
 
-Settings > **Workspace folders**: the folder Lutin opens at startup is marked ★ and can be changed with **Open at startup**. **Add a folder…** adds one and **Remove** takes it out of the list (the files are never deleted). Removing the folder in use switches at once to the next one; with no folder left, Lutin works in its default folder (`Lutin`, in your personal folder). The « + » beside the chat's folder selector is gone: adding is done in the settings only.
+Everything about folders is in Settings > **Workspace folders** (the sidebar has no folder selector any more, to leave room). The folder in use is marked ★ and is also the one Lutin opens at startup: **Use this folder** changes it, now and for the next starts. **Add a folder…** adds one and **Remove** takes any folder out of the list, the principal one included (the files are never deleted). Removing the folder in use switches at once to the next one; with no folder left, Lutin works in its default folder (`Lutin`, in your personal folder).
+
+## Check for updates
+
+Settings > **Lutin version** shows the installed version and a **Check for updates** button: it asks GitHub right away and says either « up to date » or which version is available (then a banner offers the update command). If GitHub cannot be reached, the real cause is shown (firewall, certificate, strict offline mode…); when the GitHub API is blocked, the public releases page is used instead. Lutin also checks by itself at startup, at most once a day. Nothing is installed without you.
 
 ## Icon in the notification area (Windows)
 
-The **Lutin** shortcut opens Lutin **without a console window**: a Lutin icon in the notification area (bottom right). Left click opens the interface; right click offers **PIN code** (to connect a phone), **Open the interface**, **Restart** and **Quit**. The server runs in the background; if it stops on an error it is restarted, and its output goes to `donnees/serveur.log`. The terminal version stays available as `lutin` (and the « Lutin (terminal) » shortcut). Only one icon runs at a time: starting it again opens the interface.
+The **Lutin** shortcut opens Lutin **without a console window**: a Lutin icon in the notification area (bottom right). Left click opens the interface; right click offers **PIN code** (to connect a phone), **Open the interface**, **Restart** and **Quit**. On the very first start, the guided setup opens in a console. The server runs in the background; if it stops on an error it is restarted, and its output goes to `donnees/serveur.log` (the icon's own errors, if any, to `donnees/zone.log`). The terminal version stays available as `lutin` (and the « Lutin (terminal) » shortcut). Only one icon runs at a time: starting it again opens the interface.
 
 ## Commands in the chat
 

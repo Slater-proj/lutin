@@ -2,11 +2,26 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
-## 0.4.3 (en cours)
+## 0.5.2
+
+- **Version affichée** : la page affichait une ancienne version (0.4.1) alors que la 0.5.1 était installée, quand une mise à jour laissait les métadonnées de l'ancienne à côté de la nouvelle. La plus haute est maintenant retenue, et l'installateur Windows nettoie les anciens fichiers de Lutin avant de copier les nouveaux.
+- **Vérifier les mises à jour** (Réglages > Version de Lutin) : montre la version installée et la dernière publiée ; si GitHub ne répond pas, la vraie cause est affichée (pare-feu, certificat, hors ligne strict…) ; si l'API de GitHub est bloquée, la page publique des publications sert de repli.
+- **Icône de zone de notification** : le menu du clic droit s'ouvre sur une vraie fenêtre cachée (pas une fenêtre « message seul »), l'icône revient si l'Explorateur redémarre, les erreurs vont dans `donnees/zone.log`. Au premier lancement, la configuration guidée s'ouvre dans une console ; l'installateur propose « Lancer Lutin maintenant » au lieu de « Configurer maintenant ».
+- **Dossier de travail** : plus de liste déroulante dans la barre latérale ; tout se règle dans Réglages > Dossiers de travail (« Utiliser ce dossier », ajouter, retirer).
+- **Réglages** : la langue n'a plus un double cadre ; « Version de Lutin », « Dossiers de travail », « Ajouter un dossier », « Nouveau code PIN », « Adresse publique », « Chercher » sont traduits en anglais (ils restaient en français : l'ancien test ne repérait que les phrases avec des accents).
+- **Tests** : des parcours réels dans Chrome (reprise d'un autre assistant, dossiers, vérification de version, PIN et QR) ; les logos, les icônes et la zone de notification ont leurs tests ; la page anglaise des Réglages est enfin vérifiée.
+
+**English.** The page showed an old version (0.4.1) with 0.5.1 installed when an update left the old version's metadata beside the new one: the highest is now used, and the Windows installer cleans Lutin's old files before copying the new ones. Settings > Lutin version has a **Check for updates** button that shows the installed and latest versions and, when GitHub does not answer, the real cause (firewall, certificate, strict offline…), with the public releases page as a fallback if the GitHub API is blocked. The notification-area menu now opens on a real hidden window, the icon comes back if Explorer restarts, errors go to `donnees/zone.log`, the guided setup opens in a console on the first start, and the installer offers « Start Lutin now ». The workspace drop-down is gone from the sidebar (Settings > Workspace folders does it all), the language selector no longer has a double frame, and several Settings texts that stayed French in English are translated. Real-browser tests now cover the take-over dialog, folders, the version check, and the PIN and QR code.
+
+## 0.5.1
+
+- **Vérifier les mises à jour** (premier bouton, Réglages) et correction du test `/api/conseil` sur Windows.
+
+## 0.5.0
 
 - **Icône dans la zone de notification (Windows)** : le raccourci Lutin tourne sans fenêtre de console ; clic droit : code PIN, ouvrir l'interface, redémarrer, quitter (`lutin zone`).
 - **Onglet Accès** : le code PIN et son QR code s'affichent tout de suite au niveau réseau.
-- **Dossiers de travail** : le dossier ouvert au démarrage se règle dans les réglages (« Ouvrir au démarrage ») ; n'importe quel dossier se retire de la liste, le principal aussi ; le « + » à côté du choix de dossier a disparu.
+- **Dossiers de travail** : n'importe quel dossier se retire de la liste, le principal aussi ; le dossier utilisé s'ouvre aussi au démarrage.
 - **Reprise d'un autre assistant** : erreurs et résultats s'affichent dans la fenêtre, qui dit où iront les skills.
 - **Logos** : mascotte sans fond (onglet du navigateur, en-tête, icônes Windows, images de l'installateur) ; les icônes d'application gardent leur tuile pour le téléphone.
 - **Images jointes** : le trombone remplit son bouton.

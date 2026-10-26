@@ -39,11 +39,15 @@ L'onglet **Accès** réunit qui peut utiliser Lutin (le niveau), le code PIN ave
 
 ## Dossiers de travail et dossier par défaut
 
-Réglages > **Dossiers de travail** : le dossier ouvert au démarrage de Lutin est marqué ★ et se change avec **Ouvrir au démarrage**. **Ajouter un dossier…** en ajoute un et **Retirer** le sort de la liste (les fichiers ne sont jamais supprimés). Retirer le dossier en cours passe tout de suite au suivant ; sans dossier restant, Lutin travaille dans son dossier par défaut (`Lutin`, dans ton dossier personnel). Le « + » à côté du choix de dossier dans la conversation a disparu : on ajoute seulement dans les réglages.
+Tout ce qui concerne les dossiers est dans Réglages > **Dossiers de travail** (la barre latérale n'a plus de liste de dossiers, pour laisser de la place). Le dossier utilisé est marqué ★ et c'est aussi celui que Lutin ouvre au démarrage : **Utiliser ce dossier** le change, maintenant et pour les prochains démarrages. **Ajouter un dossier…** en ajoute un et **Retirer** sort n'importe quel dossier de la liste, le principal compris (les fichiers ne sont jamais supprimés). Retirer le dossier en cours passe tout de suite au suivant ; sans dossier restant, Lutin travaille dans son dossier par défaut (`Lutin`, dans ton dossier personnel).
+
+## Vérifier les mises à jour
+
+Réglages > **Version de Lutin** affiche la version installée et un bouton **Vérifier les mises à jour** : il interroge GitHub tout de suite et dit « à jour » ou quelle version est disponible (une bannière propose alors la commande de mise à jour). Si GitHub ne répond pas, la vraie cause est affichée (pare-feu, certificat, mode hors ligne strict…) ; quand l'API de GitHub est bloquée, la page publique des publications sert de repli. Lutin vérifie aussi tout seul au démarrage, au plus une fois par jour. Rien n'est installé sans toi.
 
 ## Icône dans la zone de notification (Windows)
 
-Le raccourci **Lutin** ouvre Lutin **sans fenêtre de console** : une icône Lutin dans la zone de notification (en bas à droite). Clic gauche : ouvre l'interface. Clic droit : **Code PIN** (pour connecter un téléphone), **Ouvrir l'interface**, **Redémarrer**, **Quitter**. Le serveur tourne en arrière-plan ; s'il s'arrête sur une erreur, il est relancé, et sa sortie va dans `donnees/serveur.log`. La version terminal reste disponible avec `lutin` (et le raccourci « Lutin (terminal) »). Une seule icône tourne à la fois : la relancer ouvre l'interface.
+Le raccourci **Lutin** ouvre Lutin **sans fenêtre de console** : une icône Lutin dans la zone de notification (en bas à droite). Clic gauche : ouvre l'interface. Clic droit : **Code PIN** (pour connecter un téléphone), **Ouvrir l'interface**, **Redémarrer**, **Quitter**. Au tout premier lancement, la configuration guidée s'ouvre dans une console. Le serveur tourne en arrière-plan ; s'il s'arrête sur une erreur, il est relancé, et sa sortie va dans `donnees/serveur.log` (les erreurs de l'icône elle-même, s'il y en a, dans `donnees/zone.log`). La version terminal reste disponible avec `lutin` (et le raccourci « Lutin (terminal) »). Une seule icône tourne à la fois : la relancer ouvre l'interface.
 
 ## Commandes dans la conversation
 

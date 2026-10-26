@@ -82,6 +82,36 @@ class Verification(unittest.TestCase):
         miseajour.verifier_lutin(DOSSIERS, http=faux_github("1.3.0"), force=True)
         self.assertEqual(miseajour.nouvelle_version(chemin, "1.2.0")["version"], "1.3.0", "la version suivante est annoncée de nouveau")
 
+    def test_api_bloquee_la_page_publique_donne_la_version(self):
+        """Réseau d'entreprise, API de GitHub bloquée : github.com/…/releases/latest redirige vers …/tag/vX.Y.Z, c'est suffisant."""
+        def api_bloquee(url, entetes=None, delai=10):
+            if "api.github.com" in url:
+                raise OSError("API bloquée par le réseau")
+            return 200, {"x-lutin-url-finale": "https://github.com/Slater-proj/lutin/releases/tag/v0.7.0"}, b"<html></html>"
+        version, roue, erreur = miseajour.derniere_release_detail(http=api_bloquee)
+        self.assertEqual((version, erreur), ("0.7.0", ""))
+        self.assertEqual(roue, "https://github.com/Slater-proj/lutin/releases/download/v0.7.0/lutin-0.7.0-py3-none-any.whl")
+        d = miseajour.verifier_lutin(DOSSIERS, http=api_bloquee, force=True)
+        self.assertEqual(d["version"], "0.7.0")
+        self.assertNotIn("erreur", d)
+
+    def test_tout_bloque_la_cause_est_gardee_et_la_date_ne_bouge_pas(self):
+        def panne(url, entetes=None, delai=10):
+            raise OSError("SSL: CERTIFICATE_VERIFY_FAILED")
+        version, roue, erreur = miseajour.derniere_release_detail(http=panne)
+        self.assertEqual((version, roue), (None, None))
+        self.assertIn("api.github.com : SSL: CERTIFICATE_VERIFY_FAILED", erreur)
+        self.assertIn("github.com : SSL: CERTIFICATE_VERIFY_FAILED", erreur)
+        d = miseajour.verifier_lutin(DOSSIERS, http=panne, force=True)
+        self.assertIn("CERTIFICATE_VERIFY_FAILED", d["erreur"])
+        self.assertFalse(d.get("date"), "pas de date : on réessaie au prochain démarrage")
+
+    def test_hors_ligne_strict_le_dit_clairement(self):
+        with mock.patch.object(horsligne, "actif", return_value=True):
+            version, _, erreur = miseajour.derniere_release_detail()
+        self.assertIsNone(version)
+        self.assertIn("hors ligne", erreur.lower())
+
     def test_dans_un_conteneur_la_commande_est_celle_de_docker(self):
         with mock.patch.dict(os.environ, {"LUTIN_DOCKER": "1"}):
             self.assertEqual(miseajour.commande_mise_a_jour(), "docker compose pull && docker compose up -d")

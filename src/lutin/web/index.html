@@ -43,6 +43,9 @@ aside .liste { overflow:auto; flex:1; padding:8px; }
 .conv span.t { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .conv button { background:none; border:0; color:var(--muted); cursor:pointer; padding:2px 4px; border-radius:4px; } .conv button:hover { color:var(--err); background:#2a1a1e; }
 .conv button.act:hover { color:var(--accent); background:#1a2634; }
+/* dans les listes des onglets (dossiers, tâches planifiées, notes) : de vrais boutons, pas les petites icônes de la liste des conversations */
+#listeTravaux .conv button, #listePlanifie .conv button, #listeNotes .conv button { background:#0e141b; color:var(--fg); border:1px solid var(--line2); padding:4px 12px; border-radius:8px; }
+#listeTravaux .conv button:hover, #listePlanifie .conv button:hover, #listeNotes .conv button:hover { color:var(--fg); background:#1a2634; border-color:var(--accent); }
 /* --- zone principale --- */
 main { display:flex; flex-direction:column; min-height:0; min-width:0; }
 .haut { display:flex; gap:10px; align-items:center; flex-wrap:wrap; padding:10px 16px; border-bottom:1px solid var(--line); background:rgba(18,24,33,.85); backdrop-filter:blur(6px); font-size:.85rem; }
@@ -292,7 +295,6 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
     <label class="opt-ligne" title="Mode hors ligne strict : plus aucune connexion vers Internet (ni recherche web, ni téléchargement de modèle, ni mise à jour). Seuls cette machine et Ollama sont joints."><input type="checkbox" id="cHorsLigne"> Hors ligne</label>
     <label class="opt-ligne" title="Limite la longueur de la réponse en jetons. 0 = pas de limite.">Longueur max <select id="sLong"><option value="0">Illimitée</option><option value="512">512</option><option value="1024">1 024</option><option value="2048">2 048</option><option value="4096">4 096</option><option value="8192">8 192</option><option value="16384">16 384</option><option value="32768">32 768</option></select></label>
   </div>
-  <div class="opt-ligne" id="blocTravail"><select id="selTravail" title="Dossier de travail : le seul endroit où Lutin peut lire et modifier des fichiers" aria-label="Dossier de travail"></select></div>
   <div class="aide" id="racine"></div>
 </aside>
 <main>
@@ -423,7 +425,7 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
   </div></section>
   <section class="page" id="p-reglages"><div class="cadre">
     <h2>Langue / Language</h2>
-    <div class="carte"><label><select id="selLangue"><option value="auto">Auto</option><option value="fr">Français</option><option value="en">English</option></select></label></div>
+    <div style="margin:6px 0"><label><select id="selLangue"><option value="auto">Auto</option><option value="fr">Français</option><option value="en">English</option></select></label></div>
     <div class="aide">Change la langue de l'interface, des messages et des modèles proposés. La page se recharge.</div>
     <h2>Version de Lutin</h2>
     <div class="carte" style="gap:10px;flex-wrap:wrap;align-items:center">
@@ -432,7 +434,7 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
       <span class="aide" id="mVerifierLutin"></span>
     </div>
     <div class="aide">Lutin vérifie aussi tout seul au démarrage (au plus une fois par jour) : une bannière apparaît quand une version plus récente existe. Rien n'est installé sans toi.</div>
-    <h2>Dossiers de travail <span class="aide">(le seul endroit où Lutin lit et modifie des fichiers ; chaque conversation garde le sien. ★ = le dossier ouvert au démarrage de Lutin)</span></h2>
+    <h2>Dossiers de travail <span class="aide">(le seul endroit où Lutin lit et modifie des fichiers ; chaque conversation garde le sien. ★ = le dossier utilisé, celui qui s'ouvre aussi au démarrage de Lutin)</span></h2>
     <div id="listeTravaux" class="aide" style="margin:6px 0"></div>
     <div style="margin:6px 0"><button id="bAjouterTravail">Ajouter un dossier…</button> <button id="bImporterClaude">Importer un projet Claude…</button> <span class="aide" id="mTravaux"></span></div>
     <h2>Mes données</h2>
@@ -821,7 +823,7 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
     demarrerActivite();
     try {
       const r = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Token': TOKEN }, signal: CONTROLE.signal,
-        body: JSON.stringify({ message: texte, conversation: CONV ? CONV.id : '', travail: $('selTravail').value || '', modele: $('selModele').value, mode: $('selMode').value, reflexion: $('cReflexion').checked, remplacer_depuis: depuis, images }) });
+        body: JSON.stringify({ message: texte, conversation: CONV ? CONV.id : '', travail: (ETAT.travaux && ETAT.travaux.actif) || '', modele: $('selModele').value, mode: $('selMode').value, reflexion: $('cReflexion').checked, remplacer_depuis: depuis, images }) });
       if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.erreur || T('Erreur ') + r.status); }
       const lecteur = r.body.getReader(), dec = new TextDecoder(); let reste = '';
       for (;;) {
@@ -987,9 +989,6 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
     afficherTravaux();
     $('vCpus').textContent = ETAT.cpus ? T('(cette machine : {} cœurs)').replace('{}', ETAT.cpus) : '';
     $('cHorsLigne').checked = !!ETAT.hors_ligne; $('cWeb').disabled = !!ETAT.hors_ligne;
-    const tr = ETAT.travaux || { liste: [], actif: '' }, st = $('selTravail'), sigT = JSON.stringify(tr);
-    if (st.dataset.sig !== sigT) { st.dataset.sig = sigT; st.textContent = ''; tr.liste.forEach(t => { const o = el('option', '', t.nom); o.value = t.id; o.title = t.chemin; st.appendChild(o); }); st.value = tr.actif; }
-    st.hidden = !tr.liste.length; 
     if (ETAT.bench && ETAT.bench.erreur) $('msgModeles').textContent = T('Banc d\'essai : ') + ETAT.bench.erreur;
     $('vCtx').textContent = $('rCtx').value; $('vTemp').textContent = $('rTemp').value; $('vTours').textContent = $('rTours').value;
     // Le modèle enregistré n'est plus installé (supprimé, ou Ollama réinstallé) : on passe sur un modèle installé plutôt que d'envoyer une demande à un modèle absent.
@@ -1528,7 +1527,7 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
     tr.liste.forEach(t => {
       const l = el('div', 'conv'); l.style.cursor = 'default';
       const col = el('div', 't'); col.appendChild(el('div', '', (t.id === tr.actif ? '★ ' : '') + t.nom)); col.appendChild(el('div', 'extrait', t.chemin)); l.appendChild(col);
-      if (t.id !== tr.actif) { const u = el('button', '', T('Ouvrir au démarrage')); u.title = T('Lutin travaillera dans ce dossier, aussi à son prochain démarrage'); u.addEventListener('click', async () => { try { await api('/api/travaux-choisir', { id: t.id }); await rafraichir(); } catch (e) { $('mTravaux').textContent = e.message; } }); l.appendChild(u); }
+      if (t.id !== tr.actif) { const u = el('button', '', T('Utiliser ce dossier')); u.title = T('Lutin travaille dans ce dossier, maintenant et à chaque démarrage'); u.addEventListener('click', async () => { try { await api('/api/travaux-choisir', { id: t.id }); await rafraichir(); } catch (e) { $('mTravaux').textContent = e.message; } }); l.appendChild(u); }
       if (ETAT.configurateur) {
         const r = el('button', '', T('Retirer')); r.title = T('Retire le dossier de la liste (les fichiers ne sont pas supprimés)');
         r.addEventListener('click', async () => { if (!confirm(T('Retirer « ') + t.nom + T(' » de la liste ? Les fichiers ne sont pas supprimés.'))) return; try { await api('/api/travaux-retirer', { id: t.id }); await rafraichir(); } catch (e) { $('mTravaux').textContent = e.message; } });
@@ -1646,7 +1645,7 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
     try {
       const r = await fetch('/api/restaurer', { method: 'POST', headers: { 'Content-Type': 'application/zip', 'X-Token': TOKEN }, body: f });
       const d = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(d.erreur || ('Erreur ' + r.status));
+      if (!r.ok) throw new Error(d.erreur || (T('Erreur ') + r.status));
       $('mDonnees').textContent = T('Sauvegarde restaurée : {} fichiers. Redémarre Lutin pour tout prendre en compte.').replace('{}', d.fichiers);
       await rafraichir();
     } catch (e) { $('mDonnees').textContent = e.message; }
@@ -1699,11 +1698,11 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
       const col = el('div', 't'); col.appendChild(el('div', '', t.nom + (t.actif ? '' : ' (' + T('en pause') + ')')));
       col.appendChild(el('div', 'extrait', t.heure + ' · ' + t.jours.map(j => T(JOURS[j])).join(' ') + (t.prochaine ? ' · ' + T('prochaine') + ' : ' + t.prochaine.replace('T', ' ') : '') + (t.derniere_etat ? ' · ' + T('dernière') + ' : ' + etatPlan(t.derniere_etat) : '')));
       l.appendChild(col);
-      const action = (texte, f) => { const b = el('button', '', T(texte)); b.addEventListener('click', async () => { try { await f(); chargerPlanifie(); } catch (e) { $('mPlanifie').textContent = e.message; } }); l.appendChild(b); };
+      const action = (texte, f) => { const b = el('button', '', texte); b.addEventListener('click', async () => { try { await f(); chargerPlanifie(); } catch (e) { $('mPlanifie').textContent = e.message; } }); l.appendChild(b); };
       if (t.derniere_conv) { const b = el('button', '', T('Voir le résultat')); b.addEventListener('click', () => { ouvrirOnglet('chat'); ouvrir(t.derniere_conv); }); l.appendChild(b); }
-      action('Lancer maintenant', () => api('/api/planifie-lancer', { id: t.id }));
-      action(t.actif ? 'Pause' : 'Reprendre', () => api('/api/planifie-activer', { id: t.id, actif: !t.actif }));
-      action('Supprimer', () => confirm(T('Supprimer cette tâche planifiée ?')) ? api('/api/planifie-supprimer', { id: t.id }) : null);
+      action(T('Lancer maintenant'), () => api('/api/planifie-lancer', { id: t.id }));
+      action(t.actif ? T('Pause') : T('Reprendre'), () => api('/api/planifie-activer', { id: t.id, actif: !t.actif }));
+      action(T('Supprimer'), () => confirm(T('Supprimer cette tâche planifiée ?')) ? api('/api/planifie-supprimer', { id: t.id }) : null);
       z.appendChild(l);
     });
   };
@@ -1780,10 +1779,6 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
   $('bSMem').addEventListener('click', async () => { try { await api('/api/memoire', { fichier: 'MEMOIRE.md', texte: $('tMemoire').value }); $('mM').textContent = T('Enregistré.'); } catch (e) { $('mM').textContent = e.message; } });
   $('bAutre').addEventListener('click', async () => { const m = $('autreModele').value.trim(); if (!m) return; try { await api('/api/installer-modele', { modele: m }); $('autreModele').value = ''; $('msgModeles').textContent = T('Téléchargement de « ') + m + T(' » lancé : il est ajouté à la liste ci-dessus, et apparaîtra dans le choix du modèle une fois installé.'); rafraichir(); } catch (e) { $('msgModeles').textContent = e.message; } });
   $('bRestaurer').addEventListener('click', async () => { try { await api('/api/modeles-restaurer', {}); rafraichir(); } catch (e) { $('msgModeles').textContent = e.message; } });
-  $('selTravail').addEventListener('change', async () => {
-    try { await api('/api/travaux-choisir', { id: $('selTravail').value }); } catch (e) { alert(e.message); }
-    await rafraichir();
-  });
   $('bAjouterTravail').addEventListener('click', ajouterTravail);
   $('cHorsLigne').addEventListener('change', async () => {
     try { await api('/api/hors-ligne', { actif: $('cHorsLigne').checked }); } catch (e) { alert(e.message); }

@@ -46,8 +46,8 @@ Name: "fr"; MessagesFile: "compiler:Languages\French.isl"
 [CustomMessages]
 en.AddToPath=Add the "lutin" command to the PATH (recommended)
 fr.AddToPath=Ajouter la commande "lutin" au PATH (conseill{é})
-en.RunSetup=Configure Lutin now (guided installation)
-fr.RunSetup=Configurer Lutin maintenant (installation guid{é}e)
+en.RunLutin=Start Lutin now (the guided setup opens on the first start)
+fr.RunLutin=Lancer Lutin maintenant (la configuration guid{é}e s'ouvre au premier lancement)
 en.UsingPython=An existing Python is used, nothing else is installed: %1
 fr.UsingPython=Un Python d{é}j{à} install{é} est utilis{é}, rien d'autre n'est install{é} : %1
 en.UsingEmbedded=No suitable Python (3.10 or more) was found: the Python bundled with this installer is copied into the Lutin folder.
@@ -66,6 +66,9 @@ Name: "path"; Description: "{cm:AddToPath}"
 ; passer du Python embarque a un Python existant (ou l'inverse) ne laisse pas l'ancien environnement
 Type: filesandordirs; Name: "{app}\python"; Check: not UseEmbedded
 Type: filesandordirs; Name: "{app}\venv"; Check: UseEmbedded
+; mise a jour par-dessus un Python embarque deja installe : les anciens fichiers de Lutin (et leurs metadonnees de version) partent avant la copie des nouveaux
+Type: filesandordirs; Name: "{app}\python\Lib\site-packages\lutin"
+Type: filesandordirs; Name: "{app}\python\Lib\site-packages\lutin-*"
 
 [Files]
 Source: "{#AppDir}\wheel\*"; DestDir: "{app}\wheel"; Flags: ignoreversion
@@ -79,7 +82,9 @@ Name: "{autoprograms}\Lutin"; Filename: "{app}\venv\Scripts\pythonw.exe"; Parame
 Name: "{autoprograms}\{cm:ShortcutChat}"; Filename: "{app}\bin\lutin.cmd"; Parameters: "chat"; WorkingDir: "{userdocs}"; IconFilename: "{app}\lutin.ico"
 
 [Run]
-Filename: "{app}\bin\lutin.cmd"; Parameters: "setup"; Description: "{cm:RunSetup}"; Flags: postinstall skipifsilent nowait shellexec
+; Lutin sans console (icone en bas a droite) ; au premier lancement, l'installation guidee s'ouvre toute seule dans une console
+Filename: "{app}\python\pythonw.exe"; Parameters: "-m lutin zone"; WorkingDir: "{userdocs}"; Description: "{cm:RunLutin}"; Flags: postinstall skipifsilent nowait; Check: UseEmbedded
+Filename: "{app}\venv\Scripts\pythonw.exe"; Parameters: "-m lutin zone"; WorkingDir: "{userdocs}"; Description: "{cm:RunLutin}"; Flags: postinstall skipifsilent nowait; Check: not UseEmbedded
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}"

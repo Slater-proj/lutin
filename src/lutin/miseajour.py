@@ -33,7 +33,7 @@ def http_get(url, entetes=None, delai=10, ouvrir=urllib.request.urlopen):
     try:
         with ouvrir(req, timeout=delai) as r:
             corps = r.read(TAILLE_MAX + 1)
-            return r.status, {k.lower(): v for k, v in r.headers.items()}, corps
+            return r.status, dict({k.lower(): v for k, v in r.headers.items()}, **{"x-lutin-url-finale": r.geturl()}), corps          # l'adresse après redirections : la page des publications y met le numéro de version
     except urllib.error.HTTPError as e:
         return e.code, {k.lower(): v for k, v in (e.headers or {}).items()}, b""
 
@@ -128,17 +128,43 @@ def telecharger_catalogue(url, cache, http=http_get):
     return "maj"
 
 
-def derniere_release(depot=DEPOT, http=http_get):
-    """(version sans « v », adresse de la roue) de la dernière publication GitHub ; (None, None) si le réseau ou la publication manque."""
+def version_par_page(depot=DEPOT, http=http_get):
+    """La dernière version d'après la page publique des publications (github.com/…/releases/latest redirige vers …/tag/vX.Y.Z), sans passer par l'API de GitHub. Lève OSError."""
+    _, entetes, _ = http("https://github.com/{}/releases/latest".format(depot), {"Accept": "text/html"})
+    m = re.search(r"/releases/tag/v?(\d+\.\d+\.\d+[^/?#]*)$", entetes.get("x-lutin-url-finale", ""))
+    return m.group(1) if m else None
+
+
+def derniere_release_detail(depot=DEPOT, http=http_get):
+    """(version sans « v », adresse de la roue, cause de l'échec) de la dernière publication. L'API de GitHub d'abord ; si elle ne répond pas (réseau d'entreprise, API bloquée),
+    la page publique des publications. Sans réponse : (None, None, texte de l'erreur)."""
+    erreur = ""
     try:
         statut, _, corps = http("https://api.github.com/repos/{}/releases/latest".format(depot), {"Accept": "application/vnd.github+json"})
-        if statut != 200:
-            return None, None
-        d = json.loads(corps.decode("utf-8"))
-    except (OSError, ValueError):
-        return None, None
-    roue = next((a.get("browser_download_url") for a in d.get("assets", []) if str(a.get("name", "")).endswith(".whl")), None)
-    return str(d.get("tag_name", "")).lstrip("v") or None, roue
+        if statut == 200:
+            d = json.loads(corps.decode("utf-8"))
+            roue = next((a.get("browser_download_url") for a in d.get("assets", []) if str(a.get("name", "")).endswith(".whl")), None)
+            version = str(d.get("tag_name", "")).lstrip("v") or None
+            if version:
+                return version, roue, ""
+            erreur = _t("aucune publication trouvée")
+        else:
+            erreur = "api.github.com : HTTP {}".format(statut)
+    except (OSError, ValueError) as e:
+        erreur = "api.github.com : {}".format(e)
+    try:
+        version = version_par_page(depot, http)
+        if version:
+            return version, "https://github.com/{0}/releases/download/v{1}/lutin-{1}-py3-none-any.whl".format(depot, version), ""
+    except OSError as e:
+        erreur = "{} ; github.com : {}".format(erreur, e)
+    return None, None, erreur
+
+
+def derniere_release(depot=DEPOT, http=http_get):
+    """(version sans « v », adresse de la roue) de la dernière publication GitHub ; (None, None) si le réseau ou la publication manque."""
+    version, roue, _ = derniere_release_detail(depot, http)
+    return version, roue
 
 
 def numeros(version):
@@ -176,14 +202,17 @@ def verifier_lutin(dossiers, depot=DEPOT, http=http_get, maintenant=time.time, f
     d = lire_fichier_version(chemin)
     if not force and maintenant() - float(d.get("date") or 0) < INTERVALLE_S:
         return d
-    version, _ = derniere_release(depot, http)
+    version, _, erreur = derniere_release_detail(depot, http)
     if version:
         d.update(date=maintenant(), version=version, depot=depot)
-        try:
-            chemin.parent.mkdir(parents=True, exist_ok=True)
-            chemin.write_text(json.dumps(d, indent=1), encoding="utf-8")
-        except OSError:
-            pass
+        d.pop("erreur", None)
+    else:
+        d["erreur"] = erreur            # la page la montre (« Impossible de joindre GitHub : … ») ; la date ne bouge pas : on réessaiera
+    try:
+        chemin.parent.mkdir(parents=True, exist_ok=True)
+        chemin.write_text(json.dumps(d, indent=1), encoding="utf-8")
+    except OSError:
+        pass
     return d
 
 

@@ -56,6 +56,19 @@ $pip = (& (Join-Path $deux "python\python.exe") -m pip --version 2>&1) -join " "
 if ($pip -notmatch "^pip ") { Echec "pip manque dans le Python embarque ($pip) : lutin update ne marcherait pas" }
 Write-Host "Python embarque : $v3 ; $pip"
 
+# 3b. Mise a jour par-dessus un Python embarque : les anciennes metadonnees de version ne survivent pas (sinon la page afficherait l'ancienne version)
+$perime = Join-Path $deux "python\Lib\site-packages\lutin-9.9.9.dist-info"
+New-Item -ItemType Directory -Force -Path $perime | Out-Null
+Set-Content -Path (Join-Path $perime "METADATA") -Value "Metadata-Version: 2.1`nName: lutin`nVersion: 9.9.9" -Encoding ASCII
+Installer $deux @("/EMBEDDED=1") | Out-Null
+if (Test-Path $perime) { Echec "les anciennes metadonnees de version sont restees apres la mise a jour par-dessus" }
+$v3b = Version-De $deux
+if ($v3b -notmatch [regex]::Escape($Version)) { Echec "apres mise a jour par-dessus : $v3b" }
+Write-Host "Mise a jour par-dessus : $v3b"
+if (-not (Test-Path (Join-Path $deux "lutin.ico"))) { Echec "lutin.ico manque (raccourcis et desinstallation sans logo)" }
+$aide = (& cmd /c "`"$(Join-Path $deux 'bin\lutin.cmd')`" --help" 2>&1) -join " "
+if ($aide -notmatch "zone") { Echec "la commande zone (icone sans console) manque : $aide" }
+
 # 4. La commande de base fonctionne vraiment (pas seulement --version)
 $s = (& cmd /c "`"$(Join-Path $deux 'bin\lutin.cmd')`" securite" 2>&1) -join " "
 if ($s -notmatch "Level") { Echec "lutin securite : $s" }

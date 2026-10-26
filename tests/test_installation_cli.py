@@ -677,5 +677,35 @@ class ImagesDeLInstallateur(unittest.TestCase):
         self.assertEqual(iss.count('Source: "lutin.ico"'), 1, "le logo est copié dans le dossier de Lutin (désinstallation)")
 
 
+class ScriptDeLInstallateur(unittest.TestCase):
+    """Ce que l'installateur Windows promet, lu dans lutin.iss (la CI l'installe pour de vrai avec verifier.ps1)."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.iss = (Path(__file__).resolve().parent.parent / "installateur" / "windows" / "lutin.iss").read_text(encoding="utf-8-sig")
+
+    def test_le_raccourci_et_la_case_finale_lancent_lutin_sans_console(self):
+        for chemin in ("{app}@@python@@pythonw.exe", "{app}@@venv@@Scripts@@pythonw.exe"):
+            chemin = chemin.replace("@@", chr(92))
+            self.assertEqual(self.iss.count('Filename: "{}"; Parameters: "-m lutin zone"'.format(chemin)), 2, "le raccourci du menu Démarrer et la case « Lancer Lutin maintenant » : " + chemin)
+        self.assertIn("Check: UseEmbedded", self.iss)
+        self.assertIn("Check: not UseEmbedded", self.iss)
+        self.assertIn("{cm:RunLutin}", self.iss)
+        self.assertNotIn("RunSetup", self.iss, "l'ancienne case « Configurer maintenant » (lutin.cmd setup) ne fait rien de visible sur une machine déjà configurée")
+
+    def test_le_raccourci_terminal_reste(self):
+        self.assertIn('Parameters: "chat"', self.iss)
+
+    def test_une_mise_a_jour_purge_les_anciennes_metadonnees_de_version(self):
+        base = 'Name: "{app}@@python@@Lib@@site-packages@@'.replace("@@", chr(92))
+        self.assertIn(base + 'lutin-*"', self.iss)
+        self.assertIn(base + 'lutin"', self.iss)
+
+    def test_le_script_de_verification_couvre_la_mise_a_jour_par_dessus(self):
+        verifier = (Path(__file__).resolve().parent.parent / "installateur" / "windows" / "verifier.ps1").read_text(encoding="ascii")
+        self.assertIn("lutin-9.9.9.dist-info", verifier)
+        self.assertIn("lutin.ico", verifier)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -249,7 +249,7 @@ class VerifierLutin(Base):
 
     def test_version_plus_recente_annoncee(self):
         from lutin import miseajour
-        with mock.patch.object(miseajour, "derniere_release", return_value=("99.0.0", "https://example/roue.whl")):
+        with mock.patch.object(miseajour, "derniere_release_detail", return_value=("99.0.0", "https://example/roue.whl", "")):
             statut, r = requete("POST", "/api/verifier-lutin", corps={})
         self.assertEqual(statut, 200)
         self.assertEqual(r["derniere"], "99.0.0")
@@ -257,10 +257,11 @@ class VerifierLutin(Base):
 
     def test_hors_ligne_le_dit(self):
         from lutin import miseajour
-        with mock.patch.object(miseajour, "derniere_release", return_value=(None, None)):
+        with mock.patch.object(miseajour, "derniere_release_detail", return_value=(None, None, "api.github.com : timed out ; github.com : timed out")):
             statut, r = requete("POST", "/api/verifier-lutin", corps={})
         self.assertEqual(statut, 503)
         self.assertIn("GitHub", r["erreur"])
+        self.assertIn("timed out", r["erreur"], "la vraie cause est montrée, pas un message vague")
 
 
 class Planification(Base):
