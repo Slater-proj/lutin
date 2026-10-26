@@ -309,6 +309,7 @@ def consignes_systeme(r):
     return (_t("Tu es Lutin, l'assistant local de l'utilisateur. Tu réponds dans la langue de l'utilisateur, de façon directe et concise. Tu disposes d'outils pour lire et modifier le projet : utilise-les plutôt que de deviner. "
             "Chaque modification de fichier garde une sauvegarde de l'ancienne version et passe par l'accord de l'utilisateur, sauf s'il a activé l'accord automatique.\n\n") + mode + _t("\n\n# CONTEXTE DU PROJET (memoire/CONTEXTE.md)\n") + contexte[:14000] + _t("\n\n# NOTES DURABLES (memoire/MEMOIRE.md)\n") + (_m.texte_memoire(memoire) or _t("(aucune pour l'instant)"))
             + bloc_skills
+            + (_t("\n\n# ESSAI À BLANC\nTes écritures et tes commandes ne sont PAS exécutées : c'est une simulation, l'utilisateur voit ce que tu proposes. Propose ce que tu ferais (fichiers, contenu, commandes), sans insister ni réessayer. Lire et chercher fonctionnent normalement.\n") if r.get("essai_a_blanc") else "")
             + _pc.bloc_prompt(_m.RACINE)
             + bloc_plan(r)
             + _t("\n\nDate : ") + datetime.now().strftime("%Y-%m-%d") + _t(". Dossier du projet : ") + str(_m.RACINE))
@@ -443,11 +444,14 @@ def compacter_conversation(ident):
     return {"ok": True, "avant": avant, "apres": len(conv["messages"]), "jauge": jauge_contexte(conv)}
 
 
-def tour(conv, texte, emit, r=None, stop=None, remplacer_depuis=None, identite=""):
+def tour(conv, texte, emit, r=None, stop=None, remplacer_depuis=None, identite="", lecture_seule=False):
     """Un tour de conversation : message de l'utilisateur, puis la boucle de l'agent (réponse, outils, réponse...). emit(evenement) envoie à la page.
     stop (threading.Event) : déclenché par le bouton Arrêter ; le tour s'arrête alors pour de bon (modèle, outils, accords). Fermer la page ne l'arrête pas.
-    remplacer_depuis : indice d'un message de l'utilisateur à remplacer (modifier un message / régénérer) ; ce message et tout ce qui le suit sont retirés d'abord."""
-    r = r or _m.reglages()
+    remplacer_depuis : indice d'un message de l'utilisateur à remplacer (modifier un message / régénérer) ; ce message et tout ce qui le suit sont retirés d'abord.
+    lecture_seule : tâches planifiées, où personne ne peut accepter : lecture et recherche seulement, tout le reste est simulé comme dans l'essai à blanc."""
+    r = dict(r or _m.reglages())
+    if lecture_seule:
+        r["essai_a_blanc"] = True
     stop = stop if stop is not None else threading.Event()
     _m.rafraichir_plan()
     if remplacer_depuis is not None:
@@ -464,6 +468,11 @@ def tour(conv, texte, emit, r=None, stop=None, remplacer_depuis=None, identite="
     def accord(titre, detail, diff, auto=False):
         if stop.is_set():
             raise _m.Arret()
+        if ctx.get("essai"):
+            # Essai à blanc : on montre ce qui aurait été fait, rien n'est écrit ni lancé, personne n'a à répondre.
+            emit({"type": "essai", "titre": titre, "detail": detail, "diff": diff})
+            ctx["dernier_accord"] = "essai"
+            return False
         if auto and ctx.get("web_lu"):
             # Garde-fou : du texte venu d'internet a été lu pendant ce tour, il pourrait contenir une consigne piégée. Plus d'accord automatique jusqu'à la fin du tour.
             emit({"type": "info", "texte": "Du contenu web a été lu : l'accord automatique est suspendu pour la suite de cette demande, ta confirmation est demandée."})
@@ -480,7 +489,7 @@ def tour(conv, texte, emit, r=None, stop=None, remplacer_depuis=None, identite="
         emit({"type": "info", "texte": (_t("Accepté : {}") if ok else _t("Refusé : {}")).format(titre)})
         ctx["dernier_accord"] = "manuel"
         return ok
-    ctx = {"identite": identite, "accord": accord, "auto_ecriture": bool(r.get("auto_ecriture")), "auto_commandes": bool(r.get("auto_commandes")), "stop": stop, "conv": conv, "emit": emit, "web": bool(r.get("web", True)), "limite_ram": int(r.get("limite_ram_commande_go", 0) * _m.GO),
+    ctx = {"essai": bool(r.get("essai_a_blanc")), "identite": identite, "accord": accord, "auto_ecriture": bool(r.get("auto_ecriture")), "auto_commandes": bool(r.get("auto_commandes")), "stop": stop, "conv": conv, "emit": emit, "web": bool(r.get("web", True)), "limite_ram": int(r.get("limite_ram_commande_go", 0) * _m.GO),
            "tour": {"id": datetime.now().strftime("%Y%m%d-%H%M%S-") + secrets.token_hex(2), "conversation": conv["id"], "fichiers": {}}}
     dernier = conv["messages"][-1] if conv["messages"] else None
     if dernier and dernier.get("role") == "user" and dernier.get("content") == texte:

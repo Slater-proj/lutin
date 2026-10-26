@@ -46,6 +46,7 @@ def enregistrer_reglages(nouveau):
     r["num_predict"] = max(0, min(32768, int(r.get("num_predict", 0))))
     r["tours_max"] = max(4, min(40, int(r.get("tours_max", 14))))
     r["web"] = bool(r.get("web", True))
+    r["essai_a_blanc"] = bool(r.get("essai_a_blanc"))
     _m.nettoyer_echantillonnage(r)
     _m.nettoyer_ressources(r)
     ecrire_atomique(_m.DONNEES / "reglages.json", json.dumps(r, ensure_ascii=False, indent=1))

@@ -442,6 +442,8 @@
 "Nom de cet appareil (facultatif)": "Name of this device (optional)",
 "Se connecter": "Sign in",
 "Erreur ": "Error ",
+"\n\n# ESSAI À BLANC\nTes écritures et tes commandes ne sont PAS exécutées : c'est une simulation, l'utilisateur voit ce que tu proposes. Propose ce que tu ferais (fichiers, contenu, commandes), sans insister ni réessayer. Lire et chercher fonctionnent normalement.\n": "\n\n# DRY RUN\nYour writes and your commands are NOT executed: this is a simulation, the user sees what you propose. Propose what you would do (files, content, commands), without insisting or retrying. Reading and searching work normally.\n",
+"Essai à blanc : rien n'a été fait, c'est une simulation (l'utilisateur voit ce que tu proposes). Considère-le comme proposé et passe à la suite, sans le refaire.": "Dry run: nothing was done, this is a simulation (the user sees what you propose). Consider it proposed and move on, without redoing it.",
 "Dans Docker, le niveau d'accès vient de la variable LUTIN_NIVEAU du conteneur : change-la là (docs/DOCKER.md).": "In Docker, the access level comes from the container's LUTIN_NIVEAU variable: change it there (docs/DOCKER.md).",
 "Le niveau d'accès ne se change que depuis cette machine.": "The access level can only be changed from this machine.",
 "Coche « J'ai compris les risques » pour ouvrir l'accès.": "Tick « I understand the risks » to open the access.",

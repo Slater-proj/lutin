@@ -277,6 +277,7 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
     <label class="opt-ligne">Mode <select id="selMode"><option value="technique">Travail</option><option value="scenario">Écriture</option></select></label>
     <label class="opt-ligne" title="Le modèle réfléchit avant de répondre : plus juste, un peu plus lent."><input type="checkbox" id="cReflexion"> Réflexion</label>
     <label class="opt-ligne" title="Accepte tout seul les écritures de fichiers."><input type="checkbox" id="cAuto"> Accord auto</label>
+    <label class="opt-ligne" title="Simulation : Lutin montre ce qu'il écrirait et lancerait, sans rien écrire ni lancer. Pour voir ce qu'il compte faire avant de le laisser faire."><input type="checkbox" id="cEssai"> Essai à blanc</label>
     <label class="opt-ligne" title="Accepte tout seul le lancement de commandes (git, tests, PowerShell...). Les lectures simples (git status, dir...) ne demandaient déjà rien."><input type="checkbox" id="cAutoCmd"> Commandes auto</label>
     <label class="opt-ligne" title="Autorise l'assistant à chercher sur internet (DuckDuckGo) et à lire des pages. Dès qu'une page est lue, l'accord automatique est suspendu pour la suite de la demande."><input type="checkbox" id="cWeb"> Web</label>
     <label class="opt-ligne" title="Mode hors ligne strict : plus aucune connexion vers Internet (ni recherche web, ni téléchargement de modèle, ni mise à jour). Seuls cette machine et Ollama sont joints."><input type="checkbox" id="cHorsLigne"> Hors ligne</label>
@@ -552,6 +553,14 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
     });
   };
   const messageIA = parent => { const m = el('div', 'msg ia'); const col = el('div', 'colonne'); const c = el('div', 'corps'); col.appendChild(c); m.appendChild(col); (parent || fil()).appendChild(m); return { m, c, texte: '', pensee: null }; };
+  // Essai à blanc : la même carte que l'accord, sans boutons — « voici ce que j'aurais fait ».
+  const carteEssai = (a) => {
+    const d = el('div', 'accord'); d.style.borderStyle = 'dashed';
+    d.appendChild(el('b', '', T('Essai à blanc : ') + a.titre)); if (a.detail) d.appendChild(el('div', 'aide', a.detail));
+    if (a.diff) { const pre = el('pre'); a.diff.split('\n').forEach(l => { pre.appendChild(el('div', l.startsWith('+') && !l.startsWith('+++') ? 'add' : l.startsWith('-') && !l.startsWith('---') ? 'del' : '', l || ' ')); }); d.appendChild(pre); }
+    d.appendChild(el('div', 'aide', T("Rien n'a été écrit ni lancé (simulation).")));
+    return d;
+  };
   const carteAccord = (a) => {
     const d = el('div', 'accord'); d.dataset.id = a.id;
     d.appendChild(el('b', '', a.titre)); if (a.detail) d.appendChild(el('div', 'aide', a.detail));
@@ -776,6 +785,7 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
           else if (e.type === 'outil') { const d = el('div', 'outil'); d.appendChild(el('div', '', '⚙ ' + e.nom + ' ' + JSON.stringify(e.args).slice(0, 220))); d.dataset.nom = e.nom; zone().appendChild(d); }
           else if (e.type === 'resultat') { const cartes = [...zone().querySelectorAll('.outil')]; const d = cartes[cartes.length - 1]; if (d) d.appendChild(el('div', 'res', e.texte)); vider(ia); ia = messageIA(zone()); detailsPensee = null; }
           else if (e.type === 'approbation') { zone().appendChild(carteAccord(e)); signaler(T('⏸ Accord demandé')); }
+          else if (e.type === 'essai') { zone().appendChild(carteEssai(e)); }
           else if (e.type === 'etat') { /* affiché dans la barre d'activité */ }
           else if (e.type === 'taches') { if (visible()) afficherTaches(e.liste, true); }
           else if (e.type === 'jetons') { if (visible()) setJauge(e); }
@@ -901,7 +911,7 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
     ETAT.installes.forEach(id => { const m = ETAT.modeles.find(x => x.id === id), o = el('option', '', m ? m.nom : id); o.value = id; s.appendChild(o); });
     if (!ETAT.installes.length) { const o = el('option', '', ETAT.ollama ? T('Aucun modèle installé (onglet Modèles)') : T('Ollama arrêté')); o.value = ETAT.reglages.modele; s.appendChild(o); }
     s.value = ETAT.installes.includes(v) ? v : (ETAT.installes.includes(ETAT.reglages.modele) ? ETAT.reglages.modele : (ETAT.installes[0] || ETAT.reglages.modele));
-    if (!$('selMode').dataset.init) { $('selMode').value = ETAT.reglages.mode; $('cReflexion').checked = ETAT.reglages.reflexion; $('cAuto').checked = ETAT.reglages.auto_ecriture; $('cAvance').checked = !!ETAT.reglages.avance; $('cAutoCmd').checked = ETAT.reglages.auto_commandes; $('cWeb').checked = ETAT.reglages.web !== false; $('rCtx').value = ETAT.reglages.num_ctx; $('rTemp').value = ETAT.reglages.temperature; $('rTours').value = ETAT.reglages.tours_max; $('iTopP').value = ETAT.reglages.top_p ?? ''; $('iTopK').value = ETAT.reglages.top_k ?? ''; $('iMinP').value = ETAT.reglages.min_p ?? ''; $('iRep').value = ETAT.reglages.repeat_penalty ?? ''; $('cGarde').checked = ETAT.reglages.garde_ressources !== false; $('cComfy').checked = ETAT.reglages.liberer_si_comfy !== false; $('sRappels').value = ETAT.reglages.rappels_auto || 'scenario'; $('iSeuilRam').value = ETAT.reglages.seuil_ram_go; $('iSeuilDisque').value = ETAT.reglages.seuil_disque_go; $('iPlafond').value = ETAT.reglages.plafond_donnees_go; $('iLimiteCmd').value = ETAT.reglages.limite_ram_commande_go; $('iThreads').value = ETAT.reglages.num_thread ?? ''; $('iGarde').value = ETAT.reglages.garde_min ?? ''; $('selMode').dataset.init = '1'; }
+    if (!$('selMode').dataset.init) { $('selMode').value = ETAT.reglages.mode; $('cReflexion').checked = ETAT.reglages.reflexion; $('cAuto').checked = ETAT.reglages.auto_ecriture; $('cAvance').checked = !!ETAT.reglages.avance; $('cAutoCmd').checked = ETAT.reglages.auto_commandes; $('cEssai').checked = !!ETAT.reglages.essai_a_blanc; $('cWeb').checked = ETAT.reglages.web !== false; $('rCtx').value = ETAT.reglages.num_ctx; $('rTemp').value = ETAT.reglages.temperature; $('rTours').value = ETAT.reglages.tours_max; $('iTopP').value = ETAT.reglages.top_p ?? ''; $('iTopK').value = ETAT.reglages.top_k ?? ''; $('iMinP').value = ETAT.reglages.min_p ?? ''; $('iRep').value = ETAT.reglages.repeat_penalty ?? ''; $('cGarde').checked = ETAT.reglages.garde_ressources !== false; $('cComfy').checked = ETAT.reglages.liberer_si_comfy !== false; $('sRappels').value = ETAT.reglages.rappels_auto || 'scenario'; $('iSeuilRam').value = ETAT.reglages.seuil_ram_go; $('iSeuilDisque').value = ETAT.reglages.seuil_disque_go; $('iPlafond').value = ETAT.reglages.plafond_donnees_go; $('iLimiteCmd').value = ETAT.reglages.limite_ram_commande_go; $('iThreads').value = ETAT.reglages.num_thread ?? ''; $('iGarde').value = ETAT.reglages.garde_min ?? ''; $('selMode').dataset.init = '1'; }
     if (document.activeElement !== $('selLangue')) $('selLangue').value = ETAT.langue_reglage || 'auto';
     afficherVersion();
     afficherRedemarrage();
@@ -935,7 +945,7 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
     ETAT.attentes.forEach(a => { const s = '.accord[data-id="' + a.id + '"]'; if (!fil().querySelector(s) && !(FLUX && FLUX.sauve.querySelector(s))) fil().appendChild(carteAccord(a)); });
   };
   const nombreOuNull = id => { const v = $(id).value.trim().replace(',', '.'); return v === '' || isNaN(+v) ? null : +v; };
-  const sauverReglages = async () => { try { await api('/api/reglages', { modele: $('selModele').value, mode: $('selMode').value, reflexion: $('cReflexion').checked, auto_ecriture: $('cAuto').checked, auto_commandes: $('cAutoCmd').checked, avance: $('cAvance').checked, web: $('cWeb').checked, num_ctx: +$('rCtx').value, temperature: +$('rTemp').value, tours_max: +$('rTours').value, top_p: nombreOuNull('iTopP'), top_k: nombreOuNull('iTopK'), min_p: nombreOuNull('iMinP'), repeat_penalty: nombreOuNull('iRep'), garde_ressources: $('cGarde').checked, liberer_si_comfy: $('cComfy').checked, rappels_auto: $('sRappels').value, seuil_ram_go: nombreOuNull('iSeuilRam') ?? 3, seuil_disque_go: nombreOuNull('iSeuilDisque') ?? 10, plafond_donnees_go: nombreOuNull('iPlafond') ?? 2, limite_ram_commande_go: nombreOuNull('iLimiteCmd') ?? 0, num_thread: nombreOuNull('iThreads'), garde_min: nombreOuNull('iGarde') }); } catch (e) { fil().appendChild(el('div', 'erreur', e.message)); } };
+  const sauverReglages = async () => { try { await api('/api/reglages', { modele: $('selModele').value, mode: $('selMode').value, reflexion: $('cReflexion').checked, auto_ecriture: $('cAuto').checked, auto_commandes: $('cAutoCmd').checked, essai_a_blanc: $('cEssai').checked, avance: $('cAvance').checked, web: $('cWeb').checked, num_ctx: +$('rCtx').value, temperature: +$('rTemp').value, tours_max: +$('rTours').value, top_p: nombreOuNull('iTopP'), top_k: nombreOuNull('iTopK'), min_p: nombreOuNull('iMinP'), repeat_penalty: nombreOuNull('iRep'), garde_ressources: $('cGarde').checked, liberer_si_comfy: $('cComfy').checked, rappels_auto: $('sRappels').value, seuil_ram_go: nombreOuNull('iSeuilRam') ?? 3, seuil_disque_go: nombreOuNull('iSeuilDisque') ?? 10, plafond_donnees_go: nombreOuNull('iPlafond') ?? 2, limite_ram_commande_go: nombreOuNull('iLimiteCmd') ?? 0, num_thread: nombreOuNull('iThreads'), garde_min: nombreOuNull('iGarde') }); } catch (e) { fil().appendChild(el('div', 'erreur', e.message)); } };
   document.querySelectorAll('.onglets button').forEach(b => b.addEventListener('click', async () => {
     document.querySelectorAll('.onglets button').forEach(x => x.setAttribute('aria-selected', x === b)); document.querySelectorAll('.page').forEach(p => p.classList.toggle('vue', p.id === 'p-' + b.dataset.p));
     if (b.dataset.p === 'memoire') { const m = await api('/api/memoire'); $('tContexte').value = m['CONTEXTE.md']; $('tMemoire').value = m['MEMOIRE.md']; chargerSkills(); chargerClaude(); }
@@ -1142,7 +1152,7 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
   });
   $('bDemarrer').addEventListener('click', async () => { $('bDemarrer').disabled = true; try { await api('/api/demarrer-ollama', {}); } catch (e) { fil().appendChild(el('div', 'erreur', e.message)); } $('bDemarrer').disabled = false; rafraichir(); });
   $('bVram').addEventListener('click', async () => { $('bVram').disabled = true; $('bVram').textContent = '⏳…'; try { const r = await api('/api/liberer-vram', {}); fil().appendChild(el('div', 'aide', r.message)); } catch (e) { fil().appendChild(el('div', 'erreur', e.message)); } $('bVram').disabled = false; $('bVram').textContent = T('🧹 Libérer la VRAM'); rafraichir(); });
-  ['selModele', 'selMode', 'cReflexion', 'cAvance', 'cAuto', 'cAutoCmd', 'cWeb', 'iTopP', 'iTopK', 'iMinP', 'iRep', 'cGarde', 'cComfy', 'sRappels', 'iSeuilRam', 'iSeuilDisque', 'iPlafond', 'iLimiteCmd', 'iThreads', 'iGarde'].forEach(id => $(id).addEventListener('change', sauverReglages));
+  ['selModele', 'selMode', 'cReflexion', 'cAvance', 'cAuto', 'cAutoCmd', 'cEssai', 'cWeb', 'iTopP', 'iTopK', 'iMinP', 'iRep', 'cGarde', 'cComfy', 'sRappels', 'iSeuilRam', 'iSeuilDisque', 'iPlafond', 'iLimiteCmd', 'iThreads', 'iGarde'].forEach(id => $(id).addEventListener('change', sauverReglages));
   // Profils de charge : des valeurs toutes faites pour les deux réglages (et le contexte pour « Discret »), calculées sur le nombre de cœurs de CETTE machine.
   $('selProfil').addEventListener('change', async () => {
     const p = $('selProfil').value, cpus = ETAT.cpus || 4;

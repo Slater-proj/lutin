@@ -361,8 +361,15 @@ def outil_ecrire(chemin, contenu, ctx):
     else:
         avant, eol = "", ("\r\n" if f.suffix.lower() in (".bat", ".cmd", ".ps1") else "\n")          # les scripts Windows restent en CRLF
     if not ctx["accord"]("Écrire " + rel(f), _t("Remplace tout le fichier ({} caractères).").format(len(contenu)) if avant else _t("Crée le fichier ({} caractères).").format(len(contenu)), difference(avant, contenu, rel(f)), auto=ctx["auto_ecriture"]):
-        return _t("Refusé par l'utilisateur : rien n'a été écrit.")
+        return refus(ctx, _t("Refusé par l'utilisateur : rien n'a été écrit."))
     return ecrire_et_verifier(f, contenu, eol, ctx, _t("Écrit : {} ({} caractères).").format(rel(f), len(contenu)))
+
+
+def refus(ctx, texte):
+    """Ce que le modèle lit quand une action n'a pas eu lieu : un refus, ou — en essai à blanc — la simulation (pour qu'il ne réessaie pas)."""
+    if ctx.get("essai"):
+        return _t("Essai à blanc : rien n'a été fait, c'est une simulation (l'utilisateur voit ce que tu proposes). Considère-le comme proposé et passe à la suite, sans le refaire.")
+    return texte
 
 
 def ecrire_et_verifier(f, texte, eol, ctx, message):
@@ -529,7 +536,7 @@ def outil_modifier_plusieurs(chemin, remplacements, ctx):
         if remarque:
             remarques.append(("Remplacement {} : ".format(numero) if len(remplacements) > 1 else "") + remarque)
     if not ctx["accord"]("Modifier " + rel(f), "Remplace {} passage(s).".format(len(remplacements)) + ((" " + " ".join(remarques)) if remarques else ""), difference(avant, texte, rel(f)), auto=ctx["auto_ecriture"]):
-        return _t("Refusé par l'utilisateur : rien n'a été modifié.")
+        return refus(ctx, _t("Refusé par l'utilisateur : rien n'a été modifié."))
     return ecrire_et_verifier(f, texte, eol, ctx, _t("Modifié : {}{}.").format(rel(f), (" (" + str(len(remplacements)) + " passages)") if len(remplacements) > 1 else "") + ((" " + " ".join(remarques)) if remarques else ""))
 
 
@@ -681,7 +688,7 @@ def outil_executer(commande, ctx, shell="cmd"):
         raise _m.ErreurOutil(_t("Shell inconnu « {} ». Utilise « cmd » (défaut) ou « powershell ».").format(shell))
     lecture = commande_lecture_sure(commande) if shell == "cmd" else False
     if not lecture and not ctx["accord"](_t("Lancer une commande ({})").format(shell), commande, "", auto=ctx.get("auto_commandes", False)):
-        return _t("Refusé par l'utilisateur : la commande n'a pas été lancée.")
+        return refus(ctx, _t("Refusé par l'utilisateur : la commande n'a pas été lancée."))
     stop = ctx.get("stop")
     if shell == "powershell":
         exe_ps = "powershell" if os.name == "nt" else shutil.which("pwsh")
@@ -743,7 +750,7 @@ def outil_installer_module(module, ctx):
     if not re.match(r"^[a-z0-9_-]{1,40}$", str(module)):
         raise _m.ErreurOutil(_t("Identifiant de module invalide."))
     if not ctx["accord"](_t("Installer le module « {} » dans l'outil d'images").format(module), _t("Téléchargement de plusieurs Go : la progression s'affiche dans l'outil d'images."), ""):
-        return _t("Refusé par l'utilisateur.")
+        return refus(ctx, _t("Refusé par l'utilisateur."))
     try:
         req = urllib.request.Request(_m.OUTIL + "/api/installer", data=json.dumps({"module": module}).encode("utf-8"), headers={"Content-Type": "application/json", "X-Token": jeton_outil()})
         with urllib.request.urlopen(req, timeout=15) as r:

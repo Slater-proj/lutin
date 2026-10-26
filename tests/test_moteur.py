@@ -1696,6 +1696,35 @@ class Assistant(unittest.TestCase):
         chat("Lis", reponses=[[appel_outil("lister", dossier=".")], [{"content": "ok"}]])
         self.assertEqual(A.RACINE, avant)
 
+    def test_essai_a_blanc(self):
+        """Simulation : on voit ce que Lutin ferait, rien n'est écrit ni lancé, personne n'a rien à accepter, et le modèle sait qu'il ne doit pas réessayer."""
+        cible = A.RACINE / "docs" / "essai-a-blanc.txt"
+        cible.unlink(missing_ok=True)
+        A.enregistrer_reglages({"essai_a_blanc": True})
+        try:
+            ev = chat("Écris un fichier", reponses=[[appel_outil("ecrire", chemin="docs/essai-a-blanc.txt", contenu="bonjour\n")], [appel_outil("executer", commande="echo simulation > docs/essai-commande.txt")], [{"content": "Proposé."}]])
+            self.assertFalse([e for e in ev if e["type"] == "approbation"], "aucune demande d'accord en essai à blanc")
+            essais = [e for e in ev if e["type"] == "essai"]
+            self.assertEqual(len(essais), 2)
+            self.assertIn("essai-a-blanc.txt", essais[0]["titre"])
+            self.assertIn("+bonjour", essais[0]["diff"])
+            self.assertFalse(cible.exists(), "rien n'est écrit")
+            self.assertFalse((A.RACINE / "docs" / "essai-commande.txt").exists(), "rien n'est lancé")
+            resultats = [e["texte"] for e in ev if e["type"] == "resultat"]
+            self.assertTrue(all("Essai à blanc" in t for t in resultats), resultats)
+            self.assertIn("ESSAI À BLANC", RECUES[0]["messages"][0]["content"], "le modèle est prévenu")
+            self.assertEqual(texte_de(ev), "Proposé.")
+            ev = chat("Lis seulement", reponses=[[appel_outil("lire", chemin="docs/univers.md")], [{"content": "Lu."}]])
+            self.assertFalse([e for e in ev if e["type"] == "essai"], "lire fonctionne normalement")
+            entrees = lire("/api/journal?n=10")["entrees"]
+            self.assertEqual(entrees[0]["accord"], "essai")
+        finally:
+            A.enregistrer_reglages({"essai_a_blanc": False})
+        ev = chat("Écris pour de bon", reponses=[[appel_outil("ecrire", chemin="docs/essai-a-blanc.txt", contenu="bonjour\n")], [{"content": "Fait."}]])
+        self.assertTrue([e for e in ev if e["type"] == "approbation"])
+        self.assertTrue(cible.exists())
+        cible.unlink()
+
     def test_journal_des_actions(self):
         f = A.chemin_journal()
         f.unlink(missing_ok=True)
