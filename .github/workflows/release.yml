@@ -150,7 +150,7 @@ jobs:
       - name: Somme de contrôle de l'installateur
         run: cd dist && sha256sum lutin-setup-*.exe >> SHA256SUMS.txt && cat SHA256SUMS.txt
       - name: Créer l'étiquette et la publication
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ needs.version.outputs.etiquette }}
           target_commitish: ${{ github.sha }}
