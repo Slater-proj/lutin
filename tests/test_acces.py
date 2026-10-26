@@ -231,6 +231,38 @@ class ConseilPc(Base):
                 chemin.unlink(missing_ok=True)
 
 
+class VerifierLutin(Base):
+    """Le bouton « Vérifier les mises à jour » : une requête tout de suite, puis la bannière ; hors ligne, un message clair."""
+
+    def setUp(self):
+        super().setUp()
+        self.cache = Path(tempfile.mkdtemp(prefix="lutin-version-")) / "lutin-version.json"
+        self.env = os.environ.get("LUTIN_VERSION_CACHE")
+        os.environ["LUTIN_VERSION_CACHE"] = str(self.cache)
+
+    def tearDown(self):
+        if self.env is None:
+            os.environ.pop("LUTIN_VERSION_CACHE", None)
+        else:
+            os.environ["LUTIN_VERSION_CACHE"] = self.env
+        super().tearDown()
+
+    def test_version_plus_recente_annoncee(self):
+        from lutin import miseajour
+        with mock.patch.object(miseajour, "derniere_release", return_value=("99.0.0", "https://example/roue.whl")):
+            statut, r = requete("POST", "/api/verifier-lutin", corps={})
+        self.assertEqual(statut, 200)
+        self.assertEqual(r["derniere"], "99.0.0")
+        self.assertEqual(r["nouvelle"]["version"], "99.0.0")
+
+    def test_hors_ligne_le_dit(self):
+        from lutin import miseajour
+        with mock.patch.object(miseajour, "derniere_release", return_value=(None, None)):
+            statut, r = requete("POST", "/api/verifier-lutin", corps={})
+        self.assertEqual(statut, 503)
+        self.assertIn("GitHub", r["erreur"])
+
+
 class Planification(Base):
     def setUp(self):
         super().setUp()

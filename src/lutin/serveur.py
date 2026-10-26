@@ -18,6 +18,7 @@ import hmac
 import io
 import json
 import os
+from pathlib import Path
 import re
 import subprocess
 import threading
@@ -387,6 +388,17 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 from . import miseajour
                 miseajour.ignorer_version(chemin, str(donnees.get("version", ""))[:40])
                 return self._envoyer(200, {"ok": True})
+            if self.path == "/api/verifier-lutin":                    # bouton « Vérifier les mises à jour » : une requête GitHub, tout de suite
+                chemin = os.environ.get("LUTIN_VERSION_CACHE")
+                if not chemin:
+                    return self._envoyer(400, {"erreur": _t("Pas de vérification de version dans ce mode de lancement.")})
+                from . import miseajour
+                avant = miseajour.lire_fichier_version(chemin).get("date") or 0
+                miseajour.verifier_lutin({"cache": str(Path(chemin).parent)}, force=True)
+                ok = (miseajour.lire_fichier_version(chemin).get("date") or 0) > avant
+                if not ok:
+                    return self._envoyer(503, {"erreur": _t("Impossible de joindre GitHub pour le moment (pas de connexion, ou pas de publication)."), "actuelle": _m.VERSION})
+                return self._envoyer(200, {"actuelle": _m.VERSION, "derniere": miseajour.lire_fichier_version(chemin).get("version", ""), "nouvelle": _m.nouvelle_version_lutin()})
             if self.path == "/api/langue":
                 try:
                     return self._envoyer(200, {"langue": _i18n.definir(str(donnees.get("valeur", "")).strip().lower())})

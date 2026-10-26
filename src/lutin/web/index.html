@@ -425,6 +425,13 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
     <h2>Langue / Language</h2>
     <div class="carte"><label><select id="selLangue"><option value="auto">Auto</option><option value="fr">Français</option><option value="en">English</option></select></label></div>
     <div class="aide">Change la langue de l'interface, des messages et des modèles proposés. La page se recharge.</div>
+    <h2>Version de Lutin</h2>
+    <div class="carte" style="gap:10px;flex-wrap:wrap;align-items:center">
+      <span id="vVersionActuelle"></span>
+      <button id="bVerifierLutin">Vérifier les mises à jour</button>
+      <span class="aide" id="mVerifierLutin"></span>
+    </div>
+    <div class="aide">Lutin vérifie aussi tout seul au démarrage (au plus une fois par jour) : une bannière apparaît quand une version plus récente existe. Rien n'est installé sans toi.</div>
     <h2>Dossiers de travail <span class="aide">(le seul endroit où Lutin lit et modifie des fichiers ; chaque conversation garde le sien. ★ = le dossier ouvert au démarrage de Lutin)</span></h2>
     <div id="listeTravaux" class="aide" style="margin:6px 0"></div>
     <div style="margin:6px 0"><button id="bAjouterTravail">Ajouter un dossier…</button> <button id="bImporterClaude">Importer un projet Claude…</button> <span class="aide" id="mTravaux"></span></div>
@@ -974,6 +981,7 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
     if (!$('selMode').dataset.init) { $('selMode').value = ETAT.reglages.mode; $('cReflexion').checked = ETAT.reglages.reflexion; $('cAuto').checked = ETAT.reglages.auto_ecriture; $('cAvance').checked = !!ETAT.reglages.avance; $('cAutoCmd').checked = ETAT.reglages.auto_commandes; $('cEssai').checked = !!ETAT.reglages.essai_a_blanc; $('cWeb').checked = ETAT.reglages.web !== false; $('rCtx').value = ETAT.reglages.num_ctx; $('rTemp').value = ETAT.reglages.temperature; $('rTours').value = ETAT.reglages.tours_max; $('iTopP').value = ETAT.reglages.top_p ?? ''; $('iTopK').value = ETAT.reglages.top_k ?? ''; $('iMinP').value = ETAT.reglages.min_p ?? ''; $('iRep').value = ETAT.reglages.repeat_penalty ?? ''; $('cGarde').checked = ETAT.reglages.garde_ressources !== false; $('cComfy').checked = ETAT.reglages.liberer_si_comfy !== false; $('sRappels').value = ETAT.reglages.rappels_auto || 'scenario'; $('iSeuilRam').value = ETAT.reglages.seuil_ram_go; $('iSeuilDisque').value = ETAT.reglages.seuil_disque_go; $('iPlafond').value = ETAT.reglages.plafond_donnees_go; $('iLimiteCmd').value = ETAT.reglages.limite_ram_commande_go; $('iThreads').value = ETAT.reglages.num_thread ?? ''; $('iGarde').value = ETAT.reglages.garde_min ?? ''; $('selMode').dataset.init = '1'; }
     if (document.activeElement !== $('selLangue')) $('selLangue').value = ETAT.langue_reglage || 'auto';
     afficherVersion();
+    if ($('vVersionActuelle')) $('vVersionActuelle').textContent = T('Lutin ') + (ETAT.version || '');
     majCommandesProjet();
     afficherRedemarrage();
     afficherTravaux();
@@ -1501,6 +1509,17 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
       } catch (e) { go.disabled = false; msg.textContent = e.message; }
     });
   };
+  // ---- Version : vérifier tout de suite (au démarrage, Lutin le fait déjà une fois par jour)
+  $('bVerifierLutin').addEventListener('click', async () => {
+    const m = $('mVerifierLutin'), b = $('bVerifierLutin');
+    b.disabled = true; m.textContent = T('Vérification…');
+    try {
+      const r = await api('/api/verifier-lutin', {});
+      if (r.nouvelle) { m.textContent = T('Nouvelle version disponible : {} (tu as la {}).').replace('{}', r.nouvelle.version).replace('{}', r.actuelle); await rafraichir(); }
+      else m.textContent = T('Lutin est à jour ({}).').replace('{}', r.actuelle);
+    } catch (e) { m.textContent = e.message; }
+    b.disabled = false;
+  });
   // ---- Dossiers de travail : liste, choix, retrait (l'ajout et l'import d'un projet Claude demandent d'être sur cette machine)
   const afficherTravaux = () => {
     const tr = ETAT.travaux || { liste: [], actif: '' }, z = $('listeTravaux'), sig = JSON.stringify([tr, ETAT.configurateur]);
