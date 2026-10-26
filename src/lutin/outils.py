@@ -55,13 +55,25 @@ def outil_lister(dossier="."):
     return "\n".join(lignes) or _t("(dossier vide)")
 
 
+def rappel_formats():
+    """Les extensions que `lire` passe par l'extraction de texte (PDF, Word, LibreOffice, PowerPoint, Excel)."""
+    return (".pdf", ".docx", ".odt", ".pptx", ".xlsx")
+
+
 def outil_lire(chemin, debut=1, fin=None):
     f = chemin_sur(chemin)
     if not f.is_file():
         raise _m.ErreurOutil(_t("Fichier introuvable : ") + rel(f))
-    if f.stat().st_size > 6_000_000:
+    if f.suffix.lower() in rappel_formats():
+        from . import extraction, rappel
+        try:
+            texte = "\n\n".join(("## {}\n\n".format(t) if t else "") + c for t, c in rappel.parties_document(f)).splitlines()
+        except extraction.ErreurExtraction as e:
+            raise _m.ErreurOutil(str(e)) from e
+    elif f.stat().st_size > 6_000_000:
         raise _m.ErreurOutil(_t("Fichier trop gros pour être lu (plus de 6 Mo)."))
-    texte = f.read_text(encoding="utf-8", errors="replace").splitlines()
+    else:
+        texte = f.read_text(encoding="utf-8", errors="replace").splitlines()
     debut = max(1, int(debut or 1))
     fin = int(fin) if fin else len(texte)
     extrait = texte[debut - 1:fin]

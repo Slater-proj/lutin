@@ -3,10 +3,13 @@ from pathlib import Path
 from .i18n import t as _t
 import collections
 import fnmatch
+import hashlib
+import json
 import math
 import os
 import re
 import unicodedata
+from . import extraction
 from . import moteur as _m
 
 
@@ -14,7 +17,11 @@ from . import moteur as _m
 MOTS_VIDES = set("les des une dans pour par sur avec sans est sont ete etre elle ils elles nous vous leur leurs cette ces cet que qui quoi dont mais donc car aux son sa ses mon ma mes ton ta tes the and for with that this from not are was has have".split())
 
 
-RAPPEL = {"signature": None, "morceaux": [], "df": collections.Counter(), "moyenne": 1.0}
+RAPPEL = {"signature": None, "morceaux": [], "df": collections.Counter(), "moyenne": 1.0, "erreurs": []}
+DOSSIERS_DOCUMENTS = ("docs", "documents")          # où poser ses PDF, documents Word, notes… : lus pour de vrai, avec page ou diapositive dans la citation
+DOCUMENTS_MAX = 300
+FORMATS_LUS_PAR_EXTRACTION = (".pdf", ".docx", ".odt", ".pptx", ".xlsx")
+CACHE_PARTIES = {}
 
 
 def mots(texte):
@@ -27,13 +34,24 @@ def sources_rappel():
     """Les documents interrogeables : docs/, skills/, mémoires de l'assistant, puis les conversations enregistrées."""
     if (_m.RACINE / "CLAUDE.md").is_file():
         yield _m.RACINE / "CLAUDE.md"
-    for dossier, motifs in ((_m.RACINE / "docs", ("*.md", "*.txt")), (_m.RACINE / "skills", ("*.md",)), (_m.RACINE / ".claude", ("*.md",)), (_m.MEMOIRE, ("*.md",))):
+    texte = ("*.md", "*.txt")
+    sources = [(_m.RACINE / d, texte + tuple("*" + e for e in extraction.FORMATS)) for d in DOSSIERS_DOCUMENTS] + [(_m.RACINE / "skills", ("*.md",)), (_m.RACINE / ".claude", ("*.md",)), (_m.MEMOIRE, ("*.md",))]
+    vus, documents = set(), 0
+    for dossier, motifs in sources:
         if dossier.is_dir():
             for racine, sous, noms in os.walk(str(dossier)):
                 sous[:] = sorted(s for s in sous if s not in _m.DOSSIERS_IGNORES)
                 for nom in sorted(noms):
                     if any(fnmatch.fnmatch(nom.lower(), p) for p in motifs):
-                        yield Path(racine) / nom
+                        f = Path(racine) / nom
+                        if f in vus:
+                            continue
+                        vus.add(f)
+                        if f.suffix.lower() in extraction.FORMATS:
+                            documents += 1
+                            if documents > DOCUMENTS_MAX:
+                                continue
+                        yield f
     dossier = _m.DONNEES / "conversations"
     if dossier.is_dir():
         yield from sorted(dossier.glob("*.json"))
@@ -64,6 +82,27 @@ def decouper(texte, source, titre_defaut=""):
     return morceaux
 
 
+def parties_document(f):
+    """[(titre de la partie, texte)] d'un document, lu une seule fois : en mémoire, puis dans donnees/cache-documents/ (clé : chemin, date, taille). ErreurExtraction si illisible."""
+    st = Path(f).stat()
+    cle = (str(f), st.st_mtime_ns, st.st_size)
+    if cle in CACHE_PARTIES:
+        return CACHE_PARTIES[cle]
+    fichier = _m.DONNEES / "cache-documents" / (hashlib.sha1("|".join(map(str, cle)).encode("utf-8")).hexdigest() + ".json")
+    try:
+        parties = [tuple(p) for p in json.loads(fichier.read_text(encoding="utf-8"))]
+    except (OSError, ValueError, TypeError):
+        parties = extraction.parties(f)
+        try:
+            fichier.parent.mkdir(parents=True, exist_ok=True)
+            _m.ecrire_atomique(fichier, json.dumps(parties, ensure_ascii=False))
+        except OSError:
+            pass
+    CACHE_PARTIES.clear() if len(CACHE_PARTIES) > 400 else None
+    CACHE_PARTIES[cle] = parties
+    return parties
+
+
 def etiquette_rappel(f):
     """Nom affiché d'un document : chemin dans le dossier de travail, ou « memoire/… » pour les mémoires (qui vivent dans le dossier de données, hors du projet)."""
     try:
@@ -88,9 +127,16 @@ def indexer_rappel():
     signature = tuple(signature)
     if RAPPEL["signature"] == signature:
         return
-    morceaux = []
+    morceaux, erreurs = [], []
     for f in fichiers:
         try:
+            if f.suffix.lower() in extraction.FORMATS:
+                try:
+                    for titre, texte in parties_document(f):
+                        morceaux += decouper(texte, etiquette_rappel(f), titre)
+                except extraction.ErreurExtraction as e:
+                    erreurs.append({"nom": etiquette_rappel(f), "message": str(e)})
+                continue
             if f.stat().st_size > 600_000:
                 continue
             if f.suffix.lower() == ".json":
@@ -113,7 +159,7 @@ def indexer_rappel():
         m["tf"] = collections.Counter(mots(m["titre"] + " " + m["texte"]))
         m["longueur"] = sum(m["tf"].values()) or 1
         df.update(m["tf"].keys())
-    RAPPEL.update({"signature": signature, "morceaux": morceaux, "df": df, "moyenne": (sum(m["longueur"] for m in morceaux) / len(morceaux)) if morceaux else 1.0})
+    RAPPEL.update({"erreurs": erreurs, "signature": signature, "morceaux": morceaux, "df": df, "moyenne": (sum(m["longueur"] for m in morceaux) / len(morceaux)) if morceaux else 1.0})
 
 
 def passages_rappel(requete, nombre=5, exclure_conv="", min_termes=1):
@@ -150,6 +196,29 @@ def formater_passages(passages, taille=600):
         debut = max(0, pos - 150)
         lignes.append("{}. {}{}\n   {}{}{}".format(i, m["source"], (" — " + m["titre"]) if m["titre"] else "", "…" if debut else "", extrait[debut:debut + taille], "…" if debut + taille < len(extrait) else ""))
     return "\n\n".join(lignes)
+
+
+def etat_documents():
+    """Les documents lisibles posés dans docs/ ou documents/ (nom, nombre de parties), ceux qui n'ont pas pu être lus, et où les poser."""
+    indexer_rappel()
+    fichiers, lus = [], collections.Counter(m["source"] for m in RAPPEL["morceaux"])
+    for f in sources_rappel():
+        if f.suffix.lower() in extraction.FORMATS:
+            nom = etiquette_rappel(f)
+            fichiers.append({"nom": nom, "passages": lus.get(nom, 0)})
+    return {"dossiers": ["{}/".format(d) for d in DOSSIERS_DOCUMENTS], "formats": list(extraction.FORMATS), "fichiers": fichiers, "erreurs": RAPPEL["erreurs"], "max": DOCUMENTS_MAX}
+
+
+def chercher_documents(requete, nombre=8):
+    """La recherche de la page : passages {source, titre, extrait, conversation} les plus pertinents (documents, notes, skills et anciennes conversations)."""
+    sortie = []
+    for p in passages_rappel(requete, max(1, min(20, int(nombre)))):
+        m, termes = p["m"], p["termes"]
+        extrait = " ".join(m["texte"].split())
+        pos = min((extrait.lower().find(t) for t in termes if extrait.lower().find(t) >= 0), default=0)
+        debut = max(0, pos - 120)
+        sortie.append({"source": m["source"], "titre": m["titre"], "extrait": ("…" if debut else "") + extrait[debut:debut + 420] + ("…" if debut + 420 < len(extrait) else ""), "conversation": bool(m.get("conv"))})
+    return sortie
 
 
 def outil_rappeler(requete, nombre=5):

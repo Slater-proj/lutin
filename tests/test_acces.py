@@ -170,6 +170,37 @@ class CommandesDuProjet(Base):
             (c / "bonjour.md").unlink()
 
 
+class Documents(Base):
+    def test_rechercher_dans_un_pdf_un_document_word_et_lire_avec_citation(self):
+        from test_extraction import ecrire_zip, pdf_simple
+        docs = A.RACINE / "docs"
+        docs.mkdir(parents=True, exist_ok=True)
+        (docs / "panne.pdf").write_bytes(pdf_simple(True))
+        ecrire_zip(docs / "guide.docx", {"word/document.xml": "<w:document><w:p><w:r><w:t>La sauvegarde du NAS se lance chaque nuit à trois heures.</w:t></w:r></w:p></w:document>"})
+        (docs / "casse.docx").write_bytes(b"pas un zip")
+        try:
+            etat = requete("GET", "/api/documents")[1]
+            self.assertEqual(sorted(f["nom"] for f in etat["fichiers"]), ["docs/casse.docx", "docs/guide.docx", "docs/panne.pdf"])
+            self.assertEqual([e["nom"] for e in etat["erreurs"]], ["docs/casse.docx"], "un document illisible est signalé, il ne casse rien")
+            statut, r = requete("GET", "/api/documents-chercher?q=" + "sauvegarde+nuit")
+            self.assertEqual(statut, 200)
+            self.assertEqual(r["passages"][0]["source"], "docs/guide.docx")
+            statut, r = requete("GET", "/api/documents-chercher?q=" + "proc%C3%A9dure+d%C3%A9ploiement")
+            self.assertEqual((r["passages"][0]["source"], r["passages"][0]["titre"]), ("docs/panne.pdf", "Page 1"), "la citation donne la page")
+            self.assertEqual(requete("GET", "/api/documents-chercher?q=")[0], 400)
+            self.assertEqual(requete("GET", "/api/documents-chercher?q=le+la")[0], 400)
+            lu = A.outil_lire("docs/panne.pdf")
+            self.assertIn("Deuxième ligne : procédure", lu)
+            self.assertIn("## Page 1", lu)
+            self.assertIn("Page 1", A.outil_rappeler("déploiement"))
+            with self.assertRaisesRegex(A.ErreurOutil, "illisible"):
+                A.outil_lire("docs/casse.docx")
+            self.assertTrue(list((A.DONNEES / "cache-documents").glob("*.json")), "le texte extrait est gardé : pas de nouvelle lecture au prochain démarrage")
+        finally:
+            for n in ("panne.pdf", "guide.docx", "casse.docx"):
+                (docs / n).unlink(missing_ok=True)
+
+
 class Redemarrage(Base):
     def test_refuse_sans_superviseur_ni_conteneur(self):
         statut, r = requete("POST", "/api/redemarrer", corps={})

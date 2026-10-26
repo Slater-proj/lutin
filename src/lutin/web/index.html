@@ -356,6 +356,10 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
     <h2>Projet Claude <span class="aide">(CLAUDE.md et dossier .claude/ du dossier de travail : lus par l'assistant comme consignes ; l'import se fait dans Réglages &gt; Dossiers de travail)</span></h2>
     <div id="infoClaude" class="aide" style="margin:6px 0"></div>
     <div class="aide" id="mClaude" style="margin:6px 0"></div>
+    <h2>Documents <span class="aide">(PDF, Word, LibreOffice, PowerPoint, Excel, notes : dépose-les dans le dossier docs/ du dossier de travail ; Lutin les cherche hors ligne et cite la page)</span></h2>
+    <div id="listeDocuments" class="aide" style="margin:6px 0"></div>
+    <div style="margin:6px 0"><input id="qDocuments" placeholder="Chercher dans mes documents…" style="width:340px" maxlength="300"> <button id="bChercherDocuments">Chercher</button></div>
+    <div id="resultatsDocuments" style="margin:6px 0"></div>
     <h2>Skills <span class="aide">(les fiches du projet, que tu construis : l'assistant en voit la liste au début de chaque conversation et lit le contenu à la demande)</span></h2>
     <div id="listeSkills" class="aide" style="margin:6px 0">Aucun skill.</div>
     <textarea id="tSkill" style="min-height:240px" placeholder="Choisis un skill ci-dessus, ou crée-en un nouveau…"></textarea>
@@ -953,7 +957,7 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
   const sauverReglages = async () => { try { await api('/api/reglages', { modele: $('selModele').value, mode: $('selMode').value, reflexion: $('cReflexion').checked, auto_ecriture: $('cAuto').checked, auto_commandes: $('cAutoCmd').checked, essai_a_blanc: $('cEssai').checked, avance: $('cAvance').checked, web: $('cWeb').checked, num_ctx: +$('rCtx').value, temperature: +$('rTemp').value, tours_max: +$('rTours').value, top_p: nombreOuNull('iTopP'), top_k: nombreOuNull('iTopK'), min_p: nombreOuNull('iMinP'), repeat_penalty: nombreOuNull('iRep'), garde_ressources: $('cGarde').checked, liberer_si_comfy: $('cComfy').checked, rappels_auto: $('sRappels').value, seuil_ram_go: nombreOuNull('iSeuilRam') ?? 3, seuil_disque_go: nombreOuNull('iSeuilDisque') ?? 10, plafond_donnees_go: nombreOuNull('iPlafond') ?? 2, limite_ram_commande_go: nombreOuNull('iLimiteCmd') ?? 0, num_thread: nombreOuNull('iThreads'), garde_min: nombreOuNull('iGarde') }); } catch (e) { fil().appendChild(el('div', 'erreur', e.message)); } };
   document.querySelectorAll('.onglets button').forEach(b => b.addEventListener('click', async () => {
     document.querySelectorAll('.onglets button').forEach(x => x.setAttribute('aria-selected', x === b)); document.querySelectorAll('.page').forEach(p => p.classList.toggle('vue', p.id === 'p-' + b.dataset.p));
-    if (b.dataset.p === 'memoire') { const m = await api('/api/memoire'); $('tContexte').value = m['CONTEXTE.md']; $('tMemoire').value = m['MEMOIRE.md']; chargerSkills(); chargerClaude(); chargerNotes(); }
+    if (b.dataset.p === 'memoire') { const m = await api('/api/memoire'); $('tContexte').value = m['CONTEXTE.md']; $('tMemoire').value = m['MEMOIRE.md']; chargerSkills(); chargerClaude(); chargerNotes(); chargerDocuments(); }
     if (b.dataset.p === 'modeles') rafraichir();
     if (b.dataset.p === 'acces') chargerAcces();
     if (b.dataset.p === 'sante') window.ouvrirSante();
@@ -1565,6 +1569,26 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
     const t = $('nNote').value.trim(); if (!t) return;
     try { afficherNotes((await api('/api/notes-ajouter', { texte: t })).notes); $('nNote').value = ''; const m = await api('/api/memoire'); $('tMemoire').value = m['MEMOIRE.md']; } catch (e) { $('mNotes').textContent = e.message; }
   });
+  // ---- Documents : ce que Lutin sait lire (PDF, Word…) et une recherche avec citations (page, diapositive, feuille)
+  const chargerDocuments = async () => {
+    const z = $('listeDocuments'); z.textContent = T('Lecture des documents…');
+    try {
+      const d = await api('/api/documents'); z.textContent = '';
+      z.appendChild(el('div', '', d.fichiers.length ? T('{} document(s) lu(s) : ').replace('{}', d.fichiers.length) + d.fichiers.slice(0, 12).map(f => f.nom + ' (' + f.passages + ')').join(', ') + (d.fichiers.length > 12 ? '…' : '') : T('Aucun document pour le moment. Dossiers : ') + d.dossiers.join(', ')));
+      d.erreurs.forEach(e => { const l = el('div', 'erreur', '⚠ ' + e.nom + ' : ' + e.message); z.appendChild(l); });
+    } catch (e) { z.textContent = e.message; }
+  };
+  const chercherDocuments = async () => {
+    const q = $('qDocuments').value.trim(), z = $('resultatsDocuments'); if (!q) return;
+    z.textContent = T('Recherche en cours…');
+    try {
+      const r = await api('/api/documents-chercher?q=' + encodeURIComponent(q)); z.textContent = '';
+      if (!r.passages.length) { z.appendChild(el('div', 'aide', T('Aucun passage pertinent.'))); return; }
+      r.passages.forEach(p => { const c = el('div', 'carte'); c.style.display = 'block'; c.appendChild(el('b', '', p.source + (p.titre ? ' — ' + p.titre : ''))); c.appendChild(el('div', 'aide', p.extrait)); z.appendChild(c); });
+    } catch (e) { z.textContent = e.message; }
+  };
+  $('bChercherDocuments').addEventListener('click', chercherDocuments);
+  $('qDocuments').addEventListener('keydown', e => { if (e.key === 'Enter') chercherDocuments(); });
   const chargerSkills = async () => {
     try {
       const r = await api('/api/skills');
