@@ -179,6 +179,10 @@ def _importer_memoire(d, dossiers, ecraser, rapport):
     rapport["memoire"] = {"posees": posees, "a_cote": a_cote, "identiques": identiques}
 
 
+def est_projet_claude(dossier):
+    return (Path(dossier) / "CLAUDE.md").is_file() or (Path(dossier) / ".claude").is_dir()
+
+
 def _importer_skills(d, racine_travail, ecraser, rapport):
     dest = Path(racine_travail) / "skills"
     ok, ignores, refuses = [], [], []
@@ -192,7 +196,7 @@ def _importer_skills(d, racine_travail, ecraser, rapport):
         dest.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(src, dest / src.name)
         ok.append(src.name)
-    rapport["skills"] = {"importes": ok, "deja_presents": ignores, "refuses": refuses, "dossier": str(dest)}
+    rapport["skills"] = {"importes": ok, "deja_presents": ignores, "refuses": refuses, "dossier": str(dest), "projet_claude": bool(ok) and est_projet_claude(racine_travail)}
 
 
 def _importer_reglages(d, dossiers, rapport):
@@ -251,6 +255,8 @@ def resume(rapport):
     s = rapport.get("skills")
     if s:
         lignes.append(_t("Skills : {} repris dans {}, {} déjà présents, {} refusés.").format(len(s["importes"]), s["dossier"], len(s["deja_presents"]), len(s["refuses"])))
+        if s.get("projet_claude"):
+            lignes.append(_t("Attention : ce dossier est un projet Claude, les skills y ont été ajoutés (dossier skills/). Pour les en retirer, supprime-les de ce dossier."))
     r = rapport.get("reglages")
     if r:
         lignes.append(_t("Réglages : {} repris.").format(len(r["repris"])) + ((" " + _t("Non repris, à redonner toi-même : {}.").format(", ".join(r["laisses"]))) if r["laisses"] else ""))

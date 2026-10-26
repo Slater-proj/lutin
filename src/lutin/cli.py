@@ -31,6 +31,7 @@ AIDE_GENERALE = """Lutin : un assistant IA local qui choisit les modèles adapt�
 
 # Codes de sortie d'un arrêt voulu (Ctrl+C, arrêt demandé) : pas de relance automatique.
 SORTIES_VOULUES = {0, 130, -2, -15, 3221225786, -1073741510}
+CODE_REDEMARRAGE = 75          # « relance-moi » demandé depuis la page (voir lutin.acces) : relance immédiate, ce n'est pas une panne
 
 
 def superviser(lancer, attendre=time.sleep, horloge=time.time, maximum=5, fenetre=600, delai=3, ecrire=print):
@@ -42,6 +43,9 @@ def superviser(lancer, attendre=time.sleep, horloge=time.time, maximum=5, fenetr
         premiere = False
         if code in SORTIES_VOULUES:
             return 0
+        if code == CODE_REDEMARRAGE:
+            ecrire(_t("Redémarrage demandé : Lutin se relance."))
+            continue
         maintenant = horloge()
         pannes = [t for t in pannes if maintenant - t < fenetre] + [maintenant]
         if len(pannes) > maximum:
@@ -114,6 +118,7 @@ def parseur():
     rp.add_argument("--tout", action="store_true", help=_t("tout reprendre"))
     rp.add_argument("--dossier-skills", help=_t("où sont les skills de l'ancien assistant (défaut : skills/ à côté)"))
     rp.add_argument("--ecraser", action="store_true", help=_t("remplacer ce qui existe déjà (sinon rien n'est écrasé)"))
+    rp.add_argument("--cible", help=_t("identifiant du dossier de travail où poser les skills (défaut : le dossier actif ; voir lutin travaux)"))
     im = sp.add_parser("importer", help=_t("reprendre un projet Claude (CLAUDE.md, .claude/) comme dossier de travail"))
     im.add_argument("chemin", help=_t("le dossier du projet (celui qui contient CLAUDE.md ou .claude/)"))
     groupe = im.add_mutually_exclusive_group()
@@ -148,7 +153,7 @@ def commande_setup(args, es=None):
 def lancer_enfant(sans_navigateur):
     """Exécute `lutin serve --sans-superviseur` dans un processus séparé et renvoie son code ; s'il faut s'arrêter, le processus enfant s'arrête avec nous."""
     commande = [sys.executable, "-m", "lutin", "serve", "--sans-superviseur"] + (["--sans-navigateur"] if sans_navigateur else [])
-    enfant = subprocess.Popen(commande)
+    enfant = subprocess.Popen(commande, env=dict(os.environ, LUTIN_SUPERVISE="1"))
     try:
         return enfant.wait()
     except KeyboardInterrupt:
@@ -489,7 +494,9 @@ def commande_reprendre(args, entree=input):
                     reponse = ""
                 nums = {int(x) for x in reponse.replace(" ", ",").split(",") if x.isdigit()}
                 choix = [lignes[i - 1][0] for i in sorted(nums) if 1 <= i <= len(lignes)] if nums else list(reprise.CATEGORIES)
-            actif = travaux.actif(cfg)
+            actif = travaux.par_id(cfg, args.cible) if args.cible else travaux.actif(cfg)
+            if args.cible and not actif:
+                raise ValueError(_t("Dossier de travail inconnu."))
             racine = actif["chemin"] if actif else cfg["emplacements"]["travail"]
             rapport = reprise.importer(trouve, d, choix, racine_travail=racine, ecraser=args.ecraser, workspaces=[t["id"] for t in travaux.liste(cfg)])
     except ValueError as e:
@@ -536,6 +543,8 @@ def commande_importer(args, entree=input):
         return 2
     print(_t("✔ Dossier de travail « {} » : {}").format(t["nom"], t["chemin"]))
     print(_t("Il est maintenant le dossier actif. Si Lutin tourne, choisis-le dans la liste des dossiers de travail."))
+    if mode == "ici":
+        print(_t("Attention : Lutin travaille dans ton dépôt lui-même. Il peut y lire et y modifier des fichiers (chaque modification demande ton accord, avec les différences, et peut être annulée). Pour revenir à ton ancien dossier de travail : lutin travaux actif <identifiant> (liste : lutin travaux)."))
     return 0
 
 

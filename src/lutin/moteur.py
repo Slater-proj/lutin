@@ -645,17 +645,24 @@ def importer_projet_claude(chemin, mode, vers="", nom=""):
 
 
 def reprise_detecter(chemin, dossier_skills=""):
-    """Ce qu'on peut reprendre dans le dossier (ou l'archive .zip) d'un autre assistant : des nombres, rien n'est écrit."""
+    """Ce qu'on peut reprendre dans le dossier (ou l'archive .zip) d'un autre assistant : des nombres, rien n'est écrit. Avec les dossiers de travail où poser les skills."""
     with _rep.ouvrir(chemin, dossier_skills or None) as d:
-        return dict(_rep.decrire(d), dossier_skills=d["dossier_skills"])
+        liste = [dict(t, claude=_rep.est_projet_claude(t["chemin"])) for t in _trav.liste(config_lue())]
+        return dict(_rep.decrire(d), dossier_skills=d["dossier_skills"], travaux=liste, actif=travaux_etat()["actif"])
 
 
-def reprise_importer(chemin, choix, dossier_skills="", ecraser=False):
-    """Reprend les catégories choisies (conversations, memoire, skills, reglages) ; l'état actuel est gardé dans un zip avant."""
+def reprise_importer(chemin, choix, dossier_skills="", ecraser=False, cible=""):
+    """Reprend les catégories choisies (conversations, memoire, skills, reglages) ; l'état actuel est gardé dans un zip avant. `cible` : identifiant du dossier de travail où poser les skills (défaut : l'actif)."""
+    racine = RACINE
+    if cible:
+        t = _trav.par_id(config_lue(), cible)
+        if not t:
+            raise ValueError(_t("Dossier de travail inconnu."))
+        racine = Path(t["chemin"])
     c = chemin_config()
     dossiers = {"config": c.parent if c else None, "donnees": DONNEES, "memoire": MEMOIRE}
     with _rep.ouvrir(chemin, dossier_skills or None) as d:
-        rapport = _rep.importer(d, dossiers, choix, racine_travail=RACINE, ecraser=ecraser, workspaces=[t["id"] for t in _trav.liste(config_lue())])
+        rapport = _rep.importer(d, dossiers, choix, racine_travail=racine, ecraser=ecraser, workspaces=[t["id"] for t in _trav.liste(config_lue())])
     rapport["resume"] = _rep.resume(rapport)
     return rapport
 
@@ -862,7 +869,8 @@ button{background:#238636;border-color:#238636;cursor:pointer}#m{color:#f85149;m
 <img src="/logo.svg" alt="" width="72" height="72" style="display:block;margin:0 auto 6px"><h1 style="text-align:center">Lutin</h1><p>Entre le code à 6 chiffres affiché sur l'ordinateur qui fait tourner Lutin (commande <code>lutin pin</code> pour en obtenir un nouveau).</p>
 <form id="f"><input id="pin" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" autofocus><input id="nom" placeholder="Nom de cet appareil (facultatif)"><button>Se connecter</button></form><div id="m"></div>
 <script>document.getElementById('f').addEventListener('submit',async e=>{e.preventDefault();const r=await fetch('/api/appairer',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pin:document.getElementById('pin').value,nom:document.getElementById('nom').value})});
-const d=await r.json().catch(()=>({}));if(r.ok)location.reload();else document.getElementById('m').textContent=d.erreur||'Erreur '+r.status;});</script></main></body></html>"""
+const d=await r.json().catch(()=>({}));if(r.ok)location.reload();else document.getElementById('m').textContent=d.erreur||'Erreur '+r.status;});
+const q=(location.hash.match(/pin=([0-9]{6})/)||[])[1];if(q){document.getElementById('pin').value=q;document.getElementById('nom').value=document.getElementById('nom').value||'QR';history.replaceState(null,'',location.pathname);document.querySelector('#f button').click();}</script></main></body></html>"""
 
 
 def principal():

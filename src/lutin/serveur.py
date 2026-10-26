@@ -1,6 +1,7 @@
 """Le serveur HTTP de Lutin : le gestionnaire de requêtes (pages, API JSON, flux de la conversation). L'état et les fonctions métier restent dans moteur ; ce module les atteint par « _m.NOM » (lu à chaque appel)."""
 from http.server import BaseHTTPRequestHandler
 from . import bench as _bench
+from . import acces as _acces
 from . import horsligne as _hl
 from . import i18n as _i18n
 from . import projet_claude as _pc
@@ -15,6 +16,7 @@ import os
 import re
 import subprocess
 import threading
+import urllib.parse
 import urllib.request
 from . import moteur as _m
 
@@ -65,9 +67,19 @@ class Gestionnaire(BaseHTTPRequestHandler):
             return "console"
         return _sec.acces(_m.SECURITE, _m.APPAREILS, self.client_address[0], self.headers)[1]
 
+    def _sur_cette_machine(self):
+        """Le navigateur est sur cette machine : connexion de boucle locale, nom d'hôte de boucle locale, et aucun en-tête laissant croire qu'un relais (proxy, tunnel) a transmis une requête venue d'ailleurs."""
+        relais = ("X-Forwarded-For", "X-Forwarded-Host", "X-Forwarded-Proto", "Forwarded", "Via", "X-Real-IP")
+        return self._local() and not any(self.headers.get(h) for h in relais) and _sec._est_boucle(_sec._sans_port(self.headers.get("Host") or ""))
+
     def _configurateur(self):
-        """Peut-on changer les dossiers de travail ? Seulement depuis cette machine : au niveau « machine seulement », ou avec le jeton de la console."""
-        return _m.SECURITE.niveau == _sec.LOCAL or (self._local() and hmac.compare_digest(self.headers.get("X-Token") or "", _m.JETON_CONSOLE))
+        """Peut-on changer ce qui ouvre ou modifie la machine (dossiers de travail, niveau d'accès, restauration) ? Seulement depuis cette machine : au niveau « machine seulement », avec le jeton de la console,
+        ou — au niveau « réseau » — depuis le navigateur de cette machine (jamais depuis un appareil appairé). Derrière un proxy, la commande lutin seulement : le proxy est sur la machine, il ne prouve rien."""
+        if _m.SECURITE.niveau == _sec.LOCAL:
+            return True
+        if self._local() and hmac.compare_digest(self.headers.get("X-Token") or "", _m.JETON_CONSOLE):
+            return True
+        return _m.SECURITE.niveau == _sec.RESEAU and self._sur_cette_machine()
 
     def _controle(self, ecriture):
         """Nom d'hôte (contre le « DNS rebinding ») et origine (contre les requêtes venues d'autres sites). Répond lui-même en cas de refus."""
@@ -105,8 +117,16 @@ class Gestionnaire(BaseHTTPRequestHandler):
             r = _m.reglages()
             return self._envoyer(200, {"version": _m.VERSION, "ollama": o["actif"], "ollama_installe": bool(_m.chemin_ollama()), "installes": o["installes"], "modeles": _m.modeles_connus(o["installes"], o.get("tailles")), "modeles_masques": len(_m.lire_registre_modeles()["masques"]), "actives": list(_m.TOURS_ACTIFS),
                                        "pulls": _m.PULLS, "reglages": r, "conversations": _m.conv_liste(), "racine": str(_m.RACINE),
-                                       "outil": bool(self._outil_vivant()), "hors_ligne": _hl.actif(), "niveau": _m.SECURITE.niveau, "langue": _i18n.langue(), "langue_reglage": _i18n.langue_configuree(), "cpus": os.cpu_count() or 1, "nouvelle_version": _m.nouvelle_version_lutin(), "travaux": _m.travaux_etat(), "configurateur": self._configurateur(),
+                                       "outil": bool(self._outil_vivant()), "hors_ligne": _hl.actif(), "niveau": _m.SECURITE.niveau, "langue": _i18n.langue(), "langue_reglage": _i18n.langue_configuree(), "cpus": os.cpu_count() or 1, "redemarrage": {"necessaire": _acces.securite_enregistree() != _m.SECURITE, "possible": _acces.peut_redemarrer()}, "nouvelle_version": _m.nouvelle_version_lutin(), "travaux": _m.travaux_etat(), "configurateur": self._configurateur(),
                                        "bench": {"en_cours": _m.BENCH["en_cours"], "etape": _m.BENCH["etape"], "erreur": _m.BENCH["erreur"], "mesures": _bench.lire(_m.chemin_bench())}, "attentes": [{"id": a.id, "titre": a.titre, "detail": a.detail, "diff": a.diff} for a in _m.Attente.EN_COURS.values()]})
+        if chemin == "/api/acces":
+            return self._envoyer(200, _acces.etat(self._configurateur()))
+        if chemin == "/api/qr":
+            texte = urllib.parse.unquote(self.path.split("d=", 1)[1]) if "d=" in self.path else ""
+            try:
+                return self._envoyer(200, _acces.qr_json(texte))
+            except ValueError as e:
+                return self._envoyer(400, {"erreur": str(e)})
         if chemin == "/api/projet-claude":
             d = _pc.detecter(_m.RACINE)
             return self._envoyer(200, {"detecte": d, "resume": _pc.resume(d) if not _pc.est_vide(d) else "", "racine": str(_m.RACINE)})
@@ -202,9 +222,23 @@ class Gestionnaire(BaseHTTPRequestHandler):
         except (urllib.error.URLError, OSError, ValueError):
             return False
 
+    def _restaurer(self):
+        if not self._authentifie():
+            return self._envoyer(401, {"erreur": "authentification requise"})
+        if not self._jeton_valide():
+            return self._envoyer(403, {"erreur": "jeton invalide : recharge la page"})
+        if not self._configurateur():
+            return self._envoyer(403, {"erreur": _t("Une sauvegarde se restaure depuis cette machine (niveau « cette machine seulement ») ou avec la commande lutin restaurer.")})
+        try:
+            return self._envoyer(200, _acces.restaurer_flux(self.rfile, int(self.headers.get("Content-Length") or 0)))
+        except ValueError as e:
+            return self._envoyer(400, {"erreur": str(e)})
+
     def do_POST(self):
         if not self._controle(True):
             return
+        if self.path == "/api/restaurer":                      # une archive .zip : corps brut, plus gros qu'un message
+            return self._restaurer()
         taille = int(self.headers.get("Content-Length") or 0)
         if taille > 2_000_000:
             return self._envoyer(413, {"erreur": "message trop gros"})
@@ -219,6 +253,14 @@ class Gestionnaire(BaseHTTPRequestHandler):
         if not self._jeton_valide():
             return self._envoyer(403, {"erreur": "jeton invalide : recharge la page"})
         try:
+            if self.path == "/api/acces":
+                if not self._configurateur():
+                    return self._envoyer(403, {"erreur": _t("Le niveau d'accès ne se change que depuis cette machine.")})
+                return self._envoyer(200, _acces.appliquer(donnees, True))
+            if self.path == "/api/redemarrer":
+                if not self._configurateur():
+                    return self._envoyer(403, {"erreur": _t("Le redémarrage se demande depuis cette machine.")})
+                return self._envoyer(200, _acces.redemarrer())
             if self.path == "/api/nouveau-pin":
                 if not self._local():
                     return self._envoyer(403, {"erreur": "le code ne se demande que depuis cette machine"})
@@ -254,7 +296,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
                     return self._envoyer(403, {"erreur": _t("La reprise des données d'un autre assistant se fait depuis cette machine (niveau « cette machine seulement ») ou avec la commande lutin reprendre.")})
                 if self.path == "/api/reprise-detecter":
                     return self._envoyer(200, _m.reprise_detecter(str(donnees.get("chemin", "")), str(donnees.get("dossier_skills", ""))))
-                return self._envoyer(200, _m.reprise_importer(str(donnees.get("chemin", "")), [str(c) for c in (donnees.get("choix") or [])], str(donnees.get("dossier_skills", "")), bool(donnees.get("ecraser"))))
+                return self._envoyer(200, _m.reprise_importer(str(donnees.get("chemin", "")), [str(c) for c in (donnees.get("choix") or [])], str(donnees.get("dossier_skills", "")), bool(donnees.get("ecraser")), str(donnees.get("cible", ""))))
             if self.path == "/api/importer-claude":
                 if not self._configurateur():
                     return self._envoyer(403, {"erreur": _t("Un projet Claude s'importe depuis cette machine (niveau « cette machine seulement ») ou avec la commande lutin importer.")})

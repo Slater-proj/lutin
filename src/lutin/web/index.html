@@ -287,10 +287,11 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
 </aside>
 <main>
   <div id="bandeauVersion" class="bandeau-version" role="status" hidden></div>
+  <div id="bandeauRedemarrage" class="bandeau-version" role="status" hidden></div>
   <div class="haut">
     <button id="burger" title="Conversations" aria-label="Ouvrir les conversations">☰</button>
     <div class="onglets" role="tablist">
-      <button data-p="chat" aria-selected="true" title="Conversation"><span class="ic">💬</span><span class="lb">Conversation</span><i class="travail" id="ptTravail" hidden title="L'assistant travaille"></i></button><button data-p="modeles" aria-selected="false" title="Modèles"><span class="ic">🧠</span><span class="lb">Modèles</span><i class="travail fini" id="ptModeles" hidden title="Nouveautés pour ta machine"></i></button><button data-p="memoire" aria-selected="false" title="Mémoire"><span class="ic">📝</span><span class="lb">Mémoire</span></button><button data-p="reglages" aria-selected="false" title="Réglages"><span class="ic">⚙️</span><span class="lb">Réglages</span></button><button id="bSante" data-p="sante" aria-selected="false" title="Santé du PC : mémoire, carte graphique, disques ; test de bon fonctionnement"><span class="ic">⚕</span><span class="lb">Santé</span></button>
+      <button data-p="chat" aria-selected="true" title="Conversation"><span class="ic">💬</span><span class="lb">Conversation</span><i class="travail" id="ptTravail" hidden title="L'assistant travaille"></i></button><button data-p="modeles" aria-selected="false" title="Modèles"><span class="ic">🧠</span><span class="lb">Modèles</span><i class="travail fini" id="ptModeles" hidden title="Nouveautés pour ta machine"></i></button><button data-p="memoire" aria-selected="false" title="Mémoire"><span class="ic">📝</span><span class="lb">Mémoire</span></button><button data-p="reglages" aria-selected="false" title="Réglages"><span class="ic">⚙️</span><span class="lb">Réglages</span></button><button id="bSante" data-p="sante" aria-selected="false" title="Santé du PC : mémoire, carte graphique, disques ; test de bon fonctionnement"><span class="ic">⚕</span><span class="lb">Santé</span></button><button data-p="acces" aria-selected="false" title="Qui peut utiliser Lutin, appareils connectés, code PIN"><span class="ic">🔐</span><span class="lb">Accès</span></button>
     </div>
     <span class="puce" id="pOllama"><i></i><span>Ollama</span></span>
     <div class="menu">
@@ -347,11 +348,9 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
     <h2>Notes de l'assistant <span class="aide">(il y ajoute ce qu'il doit retenir d'une conversation à l'autre)</span></h2>
     <textarea id="tMemoire" style="min-height:160px"></textarea>
     <div style="margin:6px 0"><button id="bSMem" class="principal">Enregistrer les notes</button> <span class="aide" id="mM"></span></div>
-    <h2>Projet Claude <span class="aide">(CLAUDE.md et dossier .claude/ : lus par l'assistant comme consignes du projet ; il peut les modifier avec ton accord)</span></h2>
+    <h2>Projet Claude <span class="aide">(CLAUDE.md et dossier .claude/ du dossier de travail : lus par l'assistant comme consignes ; l'import se fait dans Réglages &gt; Dossiers de travail)</span></h2>
     <div id="infoClaude" class="aide" style="margin:6px 0"></div>
-    <div style="margin:6px 0"><button id="bImporterClaude">Importer un projet Claude…</button> <span class="aide" id="mClaude"></span></div>
-    <h2>Reprendre un autre assistant <span class="aide">(conversations, mémoire, skills, réglages d'un ancien assistant : tu choisis ce qui vient ; rien n'est écrasé)</span></h2>
-    <div style="margin:6px 0"><button id="bReprise">Reprendre les données d'un autre assistant…</button> <span class="aide" id="mReprise"></span></div>
+    <div class="aide" id="mClaude" style="margin:6px 0"></div>
     <h2>Skills <span class="aide">(les fiches du projet, que tu construis : l'assistant en voit la liste au début de chaque conversation et lit le contenu à la demande)</span></h2>
     <div id="listeSkills" class="aide" style="margin:6px 0">Aucun skill.</div>
     <textarea id="tSkill" style="min-height:240px" placeholder="Choisis un skill ci-dessus, ou crée-en un nouveau…"></textarea>
@@ -363,10 +362,42 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
       <span class="aide" id="mS"></span>
     </div>
   </div></section>
+  <section class="page" id="p-acces"><div class="cadre">
+    <h2>Qui peut utiliser Lutin</h2>
+    <div class="aide" id="aAcces"></div>
+    <div class="carte" style="flex-direction:column;align-items:stretch;gap:8px" id="niveauxAcces"></div>
+    <div id="champsProxy" hidden>
+      <div class="carte" style="gap:14px">
+        <label>Adresse publique <input id="iUrlPublique" placeholder="https://lutin.exemple.fr" style="width:260px"></label>
+        <label title="L'adresse que Lutin voit quand le proxy lui parle (127.0.0.1 si le proxy est sur cette machine). Séparées par des espaces ou des virgules.">Adresse du proxy de confiance <input id="iProxyIps" placeholder="127.0.0.1" style="width:200px"></label>
+      </div>
+    </div>
+    <div class="aide" id="avertAcces" style="color:var(--warm)"></div>
+    <label id="lComprend" hidden><input type="checkbox" id="cComprend"> J'ai compris les risques</label>
+    <div style="margin:8px 0"><button id="bAppliquerAcces" class="principal">Enregistrer le niveau d'accès</button> <span class="aide" id="mAcces"></span></div>
+    <h2>Connecter un téléphone ou un autre appareil</h2>
+    <div class="aide" id="aPin"></div>
+    <div style="margin:8px 0"><button id="bPin">Nouveau code PIN</button></div>
+    <div id="blocPin" hidden>
+      <div id="pinValeur" style="font-size:2.2rem;letter-spacing:.25em;font-weight:700"></div>
+      <div class="aide" id="pinValide"></div>
+      <div id="qrPin" style="margin:10px 0"></div>
+      <div class="aide" id="adressePin"></div>
+    </div>
+    <h2>Appareils connectés</h2>
+    <div id="listeAppareils" class="aide" style="margin:6px 0"></div>
+    <div style="margin:6px 0"><button id="bRevoquerTous">Déconnecter tous les appareils</button> <span class="aide" id="mAppareils"></span></div>
+  </div></section>
   <section class="page" id="p-reglages"><div class="cadre">
     <h2>Langue / Language</h2>
     <div class="carte"><label><select id="selLangue"><option value="auto">Auto</option><option value="fr">Français</option><option value="en">English</option></select></label></div>
     <div class="aide">Change la langue de l'interface, des messages et des modèles proposés. La page se recharge.</div>
+    <h2>Dossiers de travail <span class="aide">(le seul endroit où Lutin lit et modifie des fichiers ; chaque conversation garde le sien)</span></h2>
+    <div id="listeTravaux" class="aide" style="margin:6px 0"></div>
+    <div style="margin:6px 0"><button id="bAjouterTravail">Ajouter un dossier…</button> <button id="bImporterClaude">Importer un projet Claude…</button> <span class="aide" id="mTravaux"></span></div>
+    <h2>Mes données</h2>
+    <div class="aide">Conversations, mémoire et réglages dans un fichier .zip. Restaurer ne supprime rien : l'état actuel est gardé avant.</div>
+    <div style="margin:6px 0"><button id="bSauvegarde2">💾 Sauvegarder mes données</button> <button id="bRestaurer">Restaurer une sauvegarde…</button><input type="file" id="fRestaurer" accept=".zip" hidden> <button id="bReprise">Reprendre les données d'un autre assistant…</button> <span class="aide" id="mDonnees"></span></div>
     <h2>Fenêtre de contexte : <span id="vCtx"></span> jetons</h2>
     <input type="range" id="rCtx" min="8192" max="65536" step="4096" style="width:100%">
     <div class="aide">Plus c'est grand, plus l'assistant se souvient de la conversation, mais plus la carte graphique est sollicitée. Avec un modèle de 27 milliards de paramètres, 24 000 à 32 000 est raisonnable sur 24 Go ; au-delà, Ollama déborde sur la mémoire de l'ordinateur et ralentit.</div>
@@ -873,6 +904,8 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
     if (!$('selMode').dataset.init) { $('selMode').value = ETAT.reglages.mode; $('cReflexion').checked = ETAT.reglages.reflexion; $('cAuto').checked = ETAT.reglages.auto_ecriture; $('cAvance').checked = !!ETAT.reglages.avance; $('cAutoCmd').checked = ETAT.reglages.auto_commandes; $('cWeb').checked = ETAT.reglages.web !== false; $('rCtx').value = ETAT.reglages.num_ctx; $('rTemp').value = ETAT.reglages.temperature; $('rTours').value = ETAT.reglages.tours_max; $('iTopP').value = ETAT.reglages.top_p ?? ''; $('iTopK').value = ETAT.reglages.top_k ?? ''; $('iMinP').value = ETAT.reglages.min_p ?? ''; $('iRep').value = ETAT.reglages.repeat_penalty ?? ''; $('cGarde').checked = ETAT.reglages.garde_ressources !== false; $('cComfy').checked = ETAT.reglages.liberer_si_comfy !== false; $('sRappels').value = ETAT.reglages.rappels_auto || 'scenario'; $('iSeuilRam').value = ETAT.reglages.seuil_ram_go; $('iSeuilDisque').value = ETAT.reglages.seuil_disque_go; $('iPlafond').value = ETAT.reglages.plafond_donnees_go; $('iLimiteCmd').value = ETAT.reglages.limite_ram_commande_go; $('iThreads').value = ETAT.reglages.num_thread ?? ''; $('iGarde').value = ETAT.reglages.garde_min ?? ''; $('selMode').dataset.init = '1'; }
     if (document.activeElement !== $('selLangue')) $('selLangue').value = ETAT.langue_reglage || 'auto';
     afficherVersion();
+    afficherRedemarrage();
+    afficherTravaux();
     $('vCpus').textContent = ETAT.cpus ? T('(cette machine : {} cœurs)').replace('{}', ETAT.cpus) : '';
     $('cHorsLigne').checked = !!ETAT.hors_ligne; $('cWeb').disabled = !!ETAT.hors_ligne;
     const tr = ETAT.travaux || { liste: [], actif: '' }, st = $('selTravail'), sigT = JSON.stringify(tr);
@@ -907,6 +940,7 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
     document.querySelectorAll('.onglets button').forEach(x => x.setAttribute('aria-selected', x === b)); document.querySelectorAll('.page').forEach(p => p.classList.toggle('vue', p.id === 'p-' + b.dataset.p));
     if (b.dataset.p === 'memoire') { const m = await api('/api/memoire'); $('tContexte').value = m['CONTEXTE.md']; $('tMemoire').value = m['MEMOIRE.md']; chargerSkills(); chargerClaude(); }
     if (b.dataset.p === 'modeles') rafraichir();
+    if (b.dataset.p === 'acces') chargerAcces();
     if (b.dataset.p === 'sante') window.ouvrirSante();
   }));
   $('bEnvoyer').addEventListener('click', envoyer); 
@@ -1317,14 +1351,16 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
     const chemin = prompt(T('Chemin du projet Claude à importer (le dossier qui contient CLAUDE.md ou .claude/) :')); if (!chemin) return;
     const c = ouvrirModal(T('Importer un projet Claude'));
     c.appendChild(el('p', '', chemin));
-    c.appendChild(el('p', 'aide', T('Travailler dedans : les fichiers du projet sont lus et modifiés sur place (avec ton accord), les mêmes que ceux de Claude Code : rien ne se perd en passant de l\'un à l\'autre. Faire une copie : Lutin travaille dans une copie (historique git compris) et l\'original n\'est jamais touché.')));
+    c.appendChild(el('p', '', T('Travailler dedans : Lutin lit ET modifie les fichiers de ton dépôt lui-même, les mêmes que ceux de Claude Code : rien ne se perd en passant de l\'un à l\'autre. Chaque modification demande ton accord (avec les différences) et peut être annulée.')));
+    c.appendChild(el('p', '', T('Faire une copie : Lutin travaille dans une copie (historique git compris) et ton dépôt n\'est jamais touché.')));
+    c.appendChild(el('p', 'aide', T('Dans les deux cas, ce dossier devient le dossier actif et son CLAUDE.md est lu comme consignes. Pour revenir à ton ancien dossier : Réglages > Dossiers de travail > Utiliser (ou la liste à gauche).')));
     const lance = async mode => {
-      $('modal').hidden = true; $('mClaude').textContent = T('Import en cours…');
+      $('modal').hidden = true; $('mTravaux').textContent = T('Import en cours…');
       try {
         const r = await api('/api/importer-claude', { chemin, mode });
-        $('mClaude').textContent = T('Importé : ') + r.chemin + ' (' + r.resume + ').' + (r.actif ? '' : T(' Une réponse est en cours : choisis ce dossier ensuite.'));
+        $('mTravaux').textContent = T('Importé : ') + r.chemin + ' (' + r.resume + ').' + (r.actif ? '' : T(' Une réponse est en cours : choisis ce dossier ensuite.'));
         await rafraichir(); chargerClaude();
-      } catch (e) { $('mClaude').textContent = e.message; }
+      } catch (e) { $('mTravaux').textContent = e.message; }
     };
     const dedans = el('button', 'principal', T('Travailler dedans')); dedans.addEventListener('click', () => lance('ici'));
     const copie = el('button', '', T('Faire une copie')); copie.addEventListener('click', () => lance('copie'));
@@ -1334,13 +1370,19 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
   const reprendre = async () => {
     const chemin = prompt(T('Dossier de l\'ancien assistant (celui qui contient donnees/ et memoire/), ou archive .zip :')); if (!chemin) return;
     let trouve;
-    try { trouve = await api('/api/reprise-detecter', { chemin }); } catch (e) { $('mReprise').textContent = e.message; return; }
+    try { trouve = await api('/api/reprise-detecter', { chemin }); } catch (e) { $('mDonnees').textContent = e.message; return; }
     const c = ouvrirModal(T('Reprendre un autre assistant'));
     c.appendChild(el('p', '', chemin));
     const lignes = [['conversations', T('Conversations : {}').replace('{}', trouve.conversations), trouve.conversations > 0], ['memoire', T('Mémoire : {}').replace('{}', trouve.memoire.join(', ') || '-'), trouve.memoire.length > 0],
                     ['skills', T('Skills : {}').replace('{}', trouve.skills) + (trouve.dossier_skills ? ' (' + trouve.dossier_skills + ')' : ''), trouve.skills > 0], ['reglages', T('Réglages : {}').replace('{}', trouve.reglages ? T('oui') : T('non')), trouve.reglages]];
     const cases = {};
     lignes.forEach(([cle, texte, present]) => { const l = el('label'), i = document.createElement('input'); i.type = 'checkbox'; i.checked = present; i.disabled = !present; cases[cle] = i; l.appendChild(i); l.appendChild(document.createTextNode(' ' + texte)); l.style.display = 'block'; c.appendChild(l); });
+    const choixDossier = el('label'); choixDossier.style.display = 'block'; choixDossier.appendChild(document.createTextNode(T('Poser les skills dans : ')));
+    const selCible = document.createElement('select'); (trouve.travaux || []).forEach(t => { const o = el('option', '', t.nom + (t.claude ? ' (' + T('projet Claude') + ')' : '')); o.value = t.id; selCible.appendChild(o); }); selCible.value = trouve.actif; choixDossier.appendChild(selCible);
+    const alerteCible = el('div', 'aide'); alerteCible.style.color = 'var(--warm)';
+    const majCible = () => { const t = (trouve.travaux || []).find(x => x.id === selCible.value); alerteCible.textContent = t && t.claude ? T('Ce dossier est un projet Claude : les skills y seront ajoutés (dossier skills/), rien n\'est écrasé. Choisis un autre dossier si tu ne veux pas toucher à ce dépôt.') : ''; };
+    selCible.addEventListener('change', majCible); majCible();
+    if ((trouve.travaux || []).length && trouve.skills > 0) { c.appendChild(choixDossier); c.appendChild(alerteCible); }
     const ecr = document.createElement('input'); ecr.type = 'checkbox'; const le = el('label'); le.style.display = 'block'; le.appendChild(ecr); le.appendChild(document.createTextNode(' ' + T('Remplacer ce qui existe déjà (sinon rien n\'est écrasé)'))); c.appendChild(le);
     c.appendChild(el('p', 'aide', T('Le modèle et les accords automatiques ne sont jamais repris. L\'état actuel de Lutin est gardé dans un zip avant l\'import.')));
     const go = el('button', 'principal', T('Reprendre')); c.appendChild(go);
@@ -1348,11 +1390,137 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
       const choix = Object.keys(cases).filter(k => cases[k].checked); if (!choix.length) return;
       go.disabled = true;
       try {
-        const r = await api('/api/reprise', { chemin, choix, ecraser: ecr.checked });
-        $('modal').hidden = true; $('mReprise').textContent = r.resume.join(' '); await rafraichir(); chargerSkills();
+        const r = await api('/api/reprise', { chemin, choix, ecraser: ecr.checked, cible: selCible.value });
+        $('modal').hidden = true; $('mDonnees').textContent = r.resume.join(' '); await rafraichir(); chargerSkills();
       } catch (e) { go.disabled = false; c.appendChild(el('p', 'erreur', e.message)); }
     });
   };
+  // ---- Dossiers de travail : liste, choix, retrait (l'ajout et l'import d'un projet Claude demandent d'être sur cette machine)
+  const afficherTravaux = () => {
+    const tr = ETAT.travaux || { liste: [], actif: '' }, z = $('listeTravaux'), sig = JSON.stringify([tr, ETAT.configurateur]);
+    if (z.dataset.sig === sig) return;
+    z.dataset.sig = sig; z.textContent = '';
+    tr.liste.forEach(t => {
+      const l = el('div', 'conv'); l.style.cursor = 'default';
+      const col = el('div', 't'); col.appendChild(el('div', '', (t.id === tr.actif ? '★ ' : '') + t.nom)); col.appendChild(el('div', 'extrait', t.chemin)); l.appendChild(col);
+      if (t.id !== tr.actif) { const u = el('button', '', T('Utiliser')); u.addEventListener('click', async () => { try { await api('/api/travaux-choisir', { id: t.id }); await rafraichir(); } catch (e) { $('mTravaux').textContent = e.message; } }); l.appendChild(u); }
+      if (ETAT.configurateur && tr.liste.length > 1) {
+        const r = el('button', '', T('Retirer')); r.title = T('Retire le dossier de la liste (les fichiers ne sont pas touchés)');
+        r.addEventListener('click', async () => { if (!confirm(T('Retirer « ') + t.nom + T(' » de la liste ? Les fichiers ne sont pas touchés.'))) return; try { await api('/api/travaux-retirer', { id: t.id }); await rafraichir(); } catch (e) { $('mTravaux').textContent = e.message; } });
+        l.appendChild(r);
+      }
+      z.appendChild(l);
+    });
+    if (!tr.liste.length) z.textContent = T('Aucun dossier de travail.');
+    $('bAjouterTravail').hidden = $('bImporterClaude').hidden = !ETAT.configurateur;
+  };
+  const ajouterTravail = async () => {
+    const chemin = prompt(T('Chemin du dossier de travail à ajouter (Lutin pourra y lire et y modifier des fichiers) :')); if (!chemin) return;
+    const nom = prompt(T('Nom affiché (facultatif) :'), '') || '';
+    try { const r = await api('/api/travaux-ajouter', { chemin, nom }); await api('/api/travaux-choisir', { id: r.liste[r.liste.length - 1].id }); } catch (e) { alert(e.message); }
+    rafraichir();
+  };
+  // ---- Redémarrage : attendre que le serveur revienne puis recharger la page
+  const attendreRedemarrage = () => {
+    const b = $('bandeauRedemarrage'); b.hidden = false; b.textContent = T('Redémarrage en cours…');
+    const essai = async () => { try { await fetch('/api/etat', { headers: { 'X-Token': TOKEN } }); location.reload(); } catch (e) { setTimeout(essai, 1500); } };
+    setTimeout(essai, 2500);
+  };
+  const redemarrer = async () => {
+    try { await api('/api/redemarrer', {}); attendreRedemarrage(); } catch (e) { alert(e.message); }
+  };
+  const afficherRedemarrage = () => {
+    const b = $('bandeauRedemarrage'), r = ETAT.redemarrage || {};
+    if (!r.necessaire) { if (b.dataset.etat !== 'attente') b.hidden = true; return; }
+    if (b.dataset.etat === 'affiche') return;
+    b.dataset.etat = 'affiche'; b.hidden = false; b.textContent = '';
+    b.appendChild(el('span', 'texte', T('Un changement (niveau d\'accès ou sauvegarde restaurée) ne sera pris en compte qu\'après le redémarrage de Lutin.')));
+    if (r.possible && ETAT.configurateur) { const bt = el('button', 'principal', T('Redémarrer Lutin')); bt.addEventListener('click', redemarrer); b.appendChild(bt); }
+    else b.appendChild(el('span', 'texte', T('Relance Lutin toi-même (fermer puis rouvrir, ou redémarrer le conteneur).')));
+  };
+  // ---- Accès : niveau de sécurité, code PIN et QR code, appareils
+  let ACCES = null;
+  const dessinerQr = (cible, qr) => {
+    const marge = 4, n = qr.taille, ns = 'http://www.w3.org/2000/svg', s = document.createElementNS(ns, 'svg');
+    s.setAttribute('viewBox', '0 0 ' + (n + 2 * marge) + ' ' + (n + 2 * marge)); s.setAttribute('width', 220); s.setAttribute('height', 220); s.setAttribute('shape-rendering', 'crispEdges');
+    const fond = document.createElementNS(ns, 'rect'); fond.setAttribute('width', n + 2 * marge); fond.setAttribute('height', n + 2 * marge); fond.setAttribute('fill', '#fff'); s.appendChild(fond);
+    let d = ''; qr.lignes.forEach((l, r) => { for (let c = 0; c < n; c++) if (l[c] === '1') d += 'M' + (c + marge) + ' ' + (r + marge) + 'h1v1h-1z'; });
+    const p = document.createElementNS(ns, 'path'); p.setAttribute('d', d); p.setAttribute('fill', '#000'); s.appendChild(p);
+    cible.textContent = ''; cible.appendChild(s);
+  };
+  const afficherAppareils = () => {
+    const z = $('listeAppareils'); z.textContent = '';
+    if (!ACCES.appareils.length) { z.textContent = ACCES.niveau === 'local' ? T('Au niveau « cette machine seulement », aucun autre appareil ne peut se connecter.') : T('Aucun appareil connecté pour le moment.'); }
+    ACCES.appareils.forEach(a => {
+      const l = el('div', 'conv'); l.style.cursor = 'default';
+      const col = el('div', 't'); col.appendChild(el('div', '', a.nom || a.id)); col.appendChild(el('div', 'extrait', T('Connecté le ') + new Date(a.cree * 1000).toLocaleString() + (a.vu ? T(' · vu le ') + new Date(a.vu * 1000).toLocaleString() : ''))); l.appendChild(col);
+      const r = el('button', '', T('Déconnecter')); r.addEventListener('click', async () => { try { await api('/api/appareils-revoquer', { id: a.id }); chargerAcces(); } catch (e) { $('mAppareils').textContent = e.message; } }); l.appendChild(r);
+      z.appendChild(l);
+    });
+    $('bRevoquerTous').hidden = !ACCES.appareils.length;
+  };
+  const chargerAcces = async () => {
+    try { ACCES = await api('/api/acces'); } catch (e) { $('aAcces').textContent = e.message; return; }
+    const z = $('niveauxAcces'); z.textContent = '';
+    const choisi = document.querySelector('input[name=niveauAcces]:checked');
+    Object.keys(ACCES.niveaux).forEach(n => {
+      const l = el('label'); l.style.display = 'block';
+      const i = document.createElement('input'); i.type = 'radio'; i.name = 'niveauAcces'; i.value = n; i.checked = n === (choisi ? choisi.value : ACCES.enregistre.niveau); i.disabled = !ACCES.modifiable;
+      i.addEventListener('change', majChampsAcces);
+      l.appendChild(i); l.appendChild(document.createTextNode(' ')); l.appendChild(el('b', '', ACCES.niveaux[n].titre)); l.appendChild(document.createTextNode(' — ' + ACCES.niveaux[n].detail + (n === ACCES.niveau ? ' ✔ ' + T('(actif)') : '')));
+      z.appendChild(l);
+    });
+    $('aAcces').textContent = ACCES.docker ? T('Dans Docker, le niveau d\'accès vient de la variable LUTIN_NIVEAU du conteneur : il se change là, pas ici.') : (ACCES.modifiable ? T('Le changement est enregistré tout de suite et pris en compte au prochain démarrage de Lutin.') : T('Le niveau d\'accès ne se change que depuis cette machine.'));
+    if (!$('iUrlPublique').dataset.init) { $('iUrlPublique').value = ACCES.enregistre.url_publique; $('iProxyIps').value = ACCES.enregistre.proxy_ips.join(' '); $('iUrlPublique').dataset.init = '1'; }
+    $('bAppliquerAcces').hidden = !ACCES.modifiable;
+    majChampsAcces();
+    $('aPin').textContent = ACCES.niveau === 'reseau' ? T('Sur ton téléphone : ouvre l\'adresse affichée (ou vise le QR code avec l\'appareil photo), il se connecte tout seul. Le code est valable 10 minutes et ne sert qu\'une fois.') : (ACCES.niveau === 'proxy' ? T('Derrière un proxy, c\'est le proxy qui identifie : pas de code PIN.') : T('Pour connecter un téléphone, choisis d\'abord « Mon réseau local » ci-dessus, enregistre, puis redémarre Lutin.'));
+    $('bPin').hidden = ACCES.niveau !== 'reseau' || !ETAT.configurateur;
+    afficherAppareils();
+  };
+  const majChampsAcces = () => {
+    const sel = document.querySelector('input[name=niveauAcces]:checked'), n = sel ? sel.value : '';
+    $('champsProxy').hidden = n !== 'proxy';
+    $('avertAcces').textContent = ACCES && ACCES.avertissements[n] ? ACCES.avertissements[n] : '';
+    $('lComprend').hidden = !(n === 'reseau' || n === 'proxy') || !ACCES.modifiable;
+  };
+  $('bAppliquerAcces').addEventListener('click', async () => {
+    const sel = document.querySelector('input[name=niveauAcces]:checked'); if (!sel) return;
+    try {
+      const r = await api('/api/acces', { niveau: sel.value, url_publique: $('iUrlPublique').value, proxy_ips: $('iProxyIps').value.split(/[\s,]+/).filter(Boolean), comprend: $('cComprend').checked });
+      $('mAcces').textContent = r.redemarrage_necessaire ? T('Enregistré. Redémarre Lutin pour qu\'il soit pris en compte.') : T('Enregistré : rien ne change.');
+      await rafraichir(); chargerAcces();
+    } catch (e) { $('mAcces').textContent = e.message; }
+  });
+  $('bPin').addEventListener('click', async () => {
+    try {
+      const r = await api('/api/nouveau-pin', {});
+      $('blocPin').hidden = false; $('pinValeur').textContent = r.pin;
+      $('pinValide').textContent = T('Valable {} minutes, pour un seul appareil.').replace('{}', Math.round(r.valable_s / 60));
+      const url = ACCES.adresse + '#pin=' + r.pin;
+      $('adressePin').textContent = T('Adresse à ouvrir sur l\'appareil : ') + ACCES.adresse;
+      dessinerQr($('qrPin'), await api('/api/qr?d=' + encodeURIComponent(url)));
+    } catch (e) { $('mAcces').textContent = e.message; }
+  });
+  $('bRevoquerTous').addEventListener('click', async () => {
+    if (!confirm(T('Déconnecter tous les appareils ? Ils devront se reconnecter avec un nouveau code.'))) return;
+    try { await api('/api/appareils-revoquer', {}); chargerAcces(); } catch (e) { $('mAppareils').textContent = e.message; }
+  });
+  // ---- Données : sauvegarde (téléchargement) et restauration
+  $('bSauvegarde2').addEventListener('click', () => $('bSauvegarde').click());
+  $('bRestaurer').addEventListener('click', () => $('fRestaurer').click());
+  $('fRestaurer').addEventListener('change', async () => {
+    const f = $('fRestaurer').files[0]; $('fRestaurer').value = ''; if (!f) return;
+    if (!confirm(T('Restaurer la sauvegarde « ') + f.name + T(' » ? Les fichiers qu\'elle contient remplacent les tiens ; l\'état actuel est gardé dans un zip avant.'))) return;
+    $('mDonnees').textContent = T('Restauration en cours…');
+    try {
+      const r = await fetch('/api/restaurer', { method: 'POST', headers: { 'Content-Type': 'application/zip', 'X-Token': TOKEN }, body: f });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.erreur || ('Erreur ' + r.status));
+      $('mDonnees').textContent = T('Sauvegarde restaurée : {} fichiers. Redémarre Lutin pour tout prendre en compte.').replace('{}', d.fichiers);
+      await rafraichir();
+    } catch (e) { $('mDonnees').textContent = e.message; }
+  });
   const chargerSkills = async () => {
     try {
       const r = await api('/api/skills');
@@ -1399,12 +1567,8 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
     try { await api('/api/travaux-choisir', { id: $('selTravail').value }); } catch (e) { alert(e.message); }
     await rafraichir();
   });
-  $('bTravailPlus').addEventListener('click', async () => {
-    const chemin = prompt(T('Chemin du dossier de travail à ajouter (Lutin pourra y lire et y modifier des fichiers) :')); if (!chemin) return;
-    const nom = prompt(T('Nom affiché (facultatif) :'), '') || '';
-    try { const r = await api('/api/travaux-ajouter', { chemin, nom }); await api('/api/travaux-choisir', { id: r.liste[r.liste.length - 1].id }); } catch (e) { alert(e.message); }
-    rafraichir();
-  });
+  $('bTravailPlus').addEventListener('click', ajouterTravail);
+  $('bAjouterTravail').addEventListener('click', ajouterTravail);
   $('cHorsLigne').addEventListener('change', async () => {
     try { await api('/api/hors-ligne', { actif: $('cHorsLigne').checked }); } catch (e) { alert(e.message); }
     rafraichir();
