@@ -148,7 +148,8 @@ class DansLeMoteur(unittest.TestCase):
         self.assertIn("Déployer un service sur le cluster", consignes)
 
     def test_le_rappel_cherche_dans_claude_md_et_dans_le_dossier_claude(self):
-        noms = {p.relative_to(self.depot).as_posix() for p in A.sources_rappel() if self.depot in p.parents}
+        base = self.depot.resolve()          # Windows : le dossier temporaire peut s'écrire en nom court (RUNNER~1) ou long
+        noms = {p.resolve().relative_to(base).as_posix() for p in A.sources_rappel() if base in p.resolve().parents}
         self.assertTrue({"CLAUDE.md", ".claude/skills/deploy/SKILL.md", ".claude/commands/sauvegarde.md", ".claude/rules/style.md"} <= noms, noms)
 
     def test_le_modele_peut_lire_un_skill_du_projet(self):
