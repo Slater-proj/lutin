@@ -330,6 +330,11 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
   <section class="page" id="p-modeles"><div class="cadre">
     <div class="aide">Les modèles tournent sur ta machine, avec Ollama. Plus un modèle est gros, plus il est intelligent, mais plus il demande de mémoire (idéalement celle de ta carte graphique). Un seul modèle est chargé à la fois : en changer prend quelques secondes. Tu peux aussi les gérer en ligne de commande : <code>lutin modeles</code>.</div>
     <label class="opt-ligne" title="Montre des modèles modifiés par la communauté pour ne plus refuser de demandes. À utiliser en connaissance de cause."><input type="checkbox" id="cAvance"> Afficher les modèles avancés (sans filtre)</label>
+    <div class="carte" id="barreTest" style="gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+      <button id="bTesterPc" class="principal" title="Mesure la vitesse du modèle actif sur cette machine (environ 20 secondes), puis donne des conseils : modèle plus léger, contexte, charge.">⏱ Tester mon PC</button>
+      <span id="msgTest" class="aide"></span>
+      <div id="conseilTest" style="flex:1 1 100%"></div>
+    </div>
     <div class="carte" id="barreVerif" style="gap:8px;flex-wrap:wrap;align-items:center">
       <button id="bMaj" title="Compare tes modèles installés avec leur dernière version">🔄 Chercher les mises à jour</button>
       <button id="bNouveaux" title="Cherche, pour ta machine, des modèles meilleurs que ceux que tu as">✨ Chercher de nouveaux modèles</button>
@@ -1589,6 +1594,29 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
   };
   $('bChercherDocuments').addEventListener('click', chercherDocuments);
   $('qDocuments').addEventListener('keydown', e => { if (e.key === 'Enter') chercherDocuments(); });
+  // ---- Tester mon PC : mesure la vitesse du modèle actif, puis des conseils
+  const afficherConseil = r => {
+    const z = $('conseilTest'); z.textContent = '';
+    (r.conseil || []).forEach(c => { const l = el('div', c.niveau === 'attention' ? 'erreur' : 'aide', (c.niveau === 'ok' ? '✔ ' : c.niveau === 'attention' ? '⚠ ' : '• ') + c.texte); l.style.margin = '4px 0'; z.appendChild(l); });
+  };
+  const testerPc = async () => {
+    const modele = $('selModele').value;
+    if (!modele) return;
+    $('bTesterPc').disabled = true; $('msgTest').textContent = T('Mesure en cours…'); $('conseilTest').textContent = '';
+    try {
+      await api('/api/bench', { modele, rapide: true });
+      for (let i = 0; i < 180; i++) {                                       // jusqu'à 3 minutes (le modèle peut devoir se charger)
+        await new Promise(r => setTimeout(r, 1000)); await rafraichir();
+        if (ETAT.bench && !ETAT.bench.en_cours) break;
+      }
+      if (ETAT.bench && ETAT.bench.erreur) throw new Error(ETAT.bench.erreur);
+      const r = await api('/api/conseil');
+      $('msgTest').textContent = r.mesure ? '' : T('Pas de mesure : le modèle a-t-il répondu ?');
+      afficherConseil(r);
+    } catch (e) { $('msgTest').textContent = e.message; }
+    $('bTesterPc').disabled = false;
+  };
+  $('bTesterPc').addEventListener('click', testerPc);
   const chargerSkills = async () => {
     try {
       const r = await api('/api/skills');

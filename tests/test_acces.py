@@ -201,6 +201,28 @@ class Documents(Base):
                 (docs / n).unlink(missing_ok=True)
 
 
+class ConseilPc(Base):
+    def test_sans_mesure_puis_avec_mesure(self):
+        from lutin import bench
+        chemin = A.chemin_bench()
+        existait = chemin.exists()
+        avant = chemin.read_bytes() if existait else None
+        modele = A.reglages()["modele"]
+        try:
+            chemin.unlink(missing_ok=True)
+            self.assertEqual(requete("GET", "/api/conseil"), (200, {"mesure": None, "conseil": []}))
+            bench.enregistrer(chemin, {"modele": modele, "date": "2026-10-26T10:00:00", "resultats": {"vitesse": {"tok_s": 4.0, "chargement_s": 3.0}}, "notes": [], "complet": False})
+            statut, r = requete("GET", "/api/conseil")
+            self.assertEqual(statut, 200)
+            self.assertEqual(r["mesure"]["tok_s"], 4.0)
+            self.assertTrue(r["conseil"], "une vitesse très basse donne au moins un conseil")
+        finally:
+            if existait:
+                chemin.write_bytes(avant)
+            else:
+                chemin.unlink(missing_ok=True)
+
+
 class Redemarrage(Base):
     def test_refuse_sans_superviseur_ni_conteneur(self):
         statut, r = requete("POST", "/api/redemarrer", corps={})
