@@ -1642,6 +1642,24 @@ class Assistant(unittest.TestCase):
             for d in (wa, wb):
                 shutil.rmtree(d, ignore_errors=True)
 
+    def test_retirer_le_dossier_courant_puis_le_dernier(self):
+        """On peut retirer n'importe quel dossier de la liste (même le principal) : le courant bascule tout de suite ; sans dossier, Lutin travaille dans ~/Lutin."""
+        maison = TEMP / "maison"
+        maison.mkdir(exist_ok=True)
+        with self.deux_dossiers_de_travail() as (wa, wb, cfg), mock.patch("pathlib.Path.home", return_value=maison):
+            A.definir_racine(wa)                                   # le dossier principal est le courant
+            r = post("/api/travaux-retirer", {"id": "principal"})
+            self.assertEqual([t["id"] for t in r["liste"]], ["b"])
+            self.assertEqual(r["actif"], "b", "le suivant devient le dossier de démarrage")
+            self.assertEqual(A.RACINE, wb.resolve(), "Lutin ne reste pas sur un dossier retiré")
+            self.assertEqual(json.loads(cfg.read_text(encoding="utf-8"))["emplacements"]["travail"], "")
+            self.assertTrue(wa.is_dir(), "les fichiers ne sont pas supprimés")
+            r = post("/api/travaux-retirer", {"id": "b"})
+            self.assertEqual(r["liste"], [])
+            self.assertEqual(A.RACINE, (maison / "Lutin").resolve())
+            self.assertTrue((maison / "Lutin").is_dir())
+        shutil.rmtree(maison, ignore_errors=True)
+
     def test_chaque_conversation_garde_son_dossier_de_travail(self):
         with self.deux_dossiers_de_travail() as (wa, wb, cfg):
             ev = chat("Écris dans A", reponses=[[appel_outil("ecrire", chemin="a.txt", contenu="A\n")], [{"content": "ok"}]])
@@ -1683,7 +1701,6 @@ class Assistant(unittest.TestCase):
                 post("/api/travaux-ajouter", {"chemin": str(TEMP / "nexiste-pas")}, attendu=400)
                 post("/api/travaux-ajouter", {"chemin": str(TEMP / "donnees")}, attendu=400)         # le dossier de données de Lutin lui-même
                 post("/api/travaux-ajouter", {"chemin": TEMP.anchor}, attendu=400)                    # la racine d'un disque
-                post("/api/travaux-retirer", {"id": "principal"}, attendu=400)
                 self.assertEqual([t["id"] for t in post("/api/travaux-retirer", {"id": "troisieme"})["liste"]], ["principal", "b"])
                 post("/api/travaux-choisir", {"id": "inconnu"}, attendu=400)
                 e = lire("/api/etat")

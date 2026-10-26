@@ -244,7 +244,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
         if chemin == "/manifest.webmanifest":
             manifeste = {"name": "Lutin", "short_name": "Lutin", "description": "Assistant IA local", "start_url": "/", "scope": "/", "display": "standalone",
                          "background_color": "#0b0f14", "theme_color": "#0b0f14",
-                         "icons": [{"src": "/icone-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"}, {"src": "/icone-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}]}
+                         "icons": [{"src": "/icone-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"}, {"src": "/icone-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"}]}
             return self._envoyer(200, manifeste, "application/manifest+json; charset=utf-8")
         if chemin in ("/icone.svg", "/logo.svg"):
             return self._envoyer(200, _m.ICONE_SVG, "image/svg+xml; charset=utf-8")

@@ -130,6 +130,8 @@ body { grid-template-rows:minmax(0,1fr); }
 .saisie { padding:6px 12px 8px; flex-direction:column; gap:3px; }
 .saisie-ligne { display:flex; gap:10px; }
 .saisie-ligne textarea { flex:1; }
+.saisie-ligne #bJoindre { align-self:stretch; width:46px; padding:0; display:grid; place-items:center; }
+.saisie-ligne #bJoindre svg { width:26px; height:26px; }
 .pj { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:6px; }
 .pj .vignette, .msg .vignettes img { position:relative; height:64px; border-radius:6px; border:1px solid var(--bord, #30363d); }
 .pj .vignette img { height:64px; border-radius:6px; display:block; }
@@ -290,7 +292,7 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
     <label class="opt-ligne" title="Mode hors ligne strict : plus aucune connexion vers Internet (ni recherche web, ni téléchargement de modèle, ni mise à jour). Seuls cette machine et Ollama sont joints."><input type="checkbox" id="cHorsLigne"> Hors ligne</label>
     <label class="opt-ligne" title="Limite la longueur de la réponse en jetons. 0 = pas de limite.">Longueur max <select id="sLong"><option value="0">Illimitée</option><option value="512">512</option><option value="1024">1 024</option><option value="2048">2 048</option><option value="4096">4 096</option><option value="8192">8 192</option><option value="16384">16 384</option><option value="32768">32 768</option></select></label>
   </div>
-  <div class="opt-ligne" id="blocTravail"><select id="selTravail" title="Dossier de travail : le seul endroit où Lutin peut lire et modifier des fichiers" aria-label="Dossier de travail"></select><button id="bTravailPlus" hidden title="Ajouter un dossier de travail">＋</button></div>
+  <div class="opt-ligne" id="blocTravail"><select id="selTravail" title="Dossier de travail : le seul endroit où Lutin peut lire et modifier des fichiers" aria-label="Dossier de travail"></select></div>
   <div class="aide" id="racine"></div>
 </aside>
 <main>
@@ -331,7 +333,7 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
         <button id="bAnnuler" hidden></button>
       </div>
       <div class="pj" id="piecesJointes" hidden></div>
-      <div class="saisie-ligne" id="ligneSaisie"><button id="bJoindre" title="Joindre une image (tu peux aussi la coller ou la glisser ici). Un modèle qui voit les images est utilisé : onglet Modèles, rôle « Images ».">📎</button><input type="file" id="fImage" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden><textarea id="saisie" rows="1" placeholder="Message…  (Entrée : envoyer · / : commandes)"></textarea><button class="principal" id="bEnvoyer" title="Envoyer"><span class="lb">Envoyer</span><span class="ic">➤</span></button><button id="bStop" hidden title="Arrêter"><span class="lb">Arrêter</span><span class="ic">■</span></button></div>
+      <div class="saisie-ligne" id="ligneSaisie"><button id="bJoindre" title="Joindre une image (tu peux aussi la coller ou la glisser ici). Un modèle qui voit les images est utilisé : onglet Modèles, rôle « Images »."><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg></button><input type="file" id="fImage" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden><textarea id="saisie" rows="1" placeholder="Message…  (Entrée : envoyer · / : commandes)"></textarea><button class="principal" id="bEnvoyer" title="Envoyer"><span class="lb">Envoyer</span><span class="ic">➤</span></button><button id="bStop" hidden title="Arrêter"><span class="lb">Arrêter</span><span class="ic">■</span></button></div>
     </div>
   </section>
   <section class="page" id="p-sante"><div class="cadre" id="santeCorps"></div></section>
@@ -423,7 +425,7 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
     <h2>Langue / Language</h2>
     <div class="carte"><label><select id="selLangue"><option value="auto">Auto</option><option value="fr">Français</option><option value="en">English</option></select></label></div>
     <div class="aide">Change la langue de l'interface, des messages et des modèles proposés. La page se recharge.</div>
-    <h2>Dossiers de travail <span class="aide">(le seul endroit où Lutin lit et modifie des fichiers ; chaque conversation garde le sien)</span></h2>
+    <h2>Dossiers de travail <span class="aide">(le seul endroit où Lutin lit et modifie des fichiers ; chaque conversation garde le sien. ★ = le dossier ouvert au démarrage de Lutin)</span></h2>
     <div id="listeTravaux" class="aide" style="margin:6px 0"></div>
     <div style="margin:6px 0"><button id="bAjouterTravail">Ajouter un dossier…</button> <button id="bImporterClaude">Importer un projet Claude…</button> <span class="aide" id="mTravaux"></span></div>
     <h2>Mes données</h2>
@@ -979,7 +981,7 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
     $('cHorsLigne').checked = !!ETAT.hors_ligne; $('cWeb').disabled = !!ETAT.hors_ligne;
     const tr = ETAT.travaux || { liste: [], actif: '' }, st = $('selTravail'), sigT = JSON.stringify(tr);
     if (st.dataset.sig !== sigT) { st.dataset.sig = sigT; st.textContent = ''; tr.liste.forEach(t => { const o = el('option', '', t.nom); o.value = t.id; o.title = t.chemin; st.appendChild(o); }); st.value = tr.actif; }
-    st.hidden = !tr.liste.length; $('bTravailPlus').hidden = !ETAT.configurateur;
+    st.hidden = !tr.liste.length; 
     if (ETAT.bench && ETAT.bench.erreur) $('msgModeles').textContent = T('Banc d\'essai : ') + ETAT.bench.erreur;
     $('vCtx').textContent = $('rCtx').value; $('vTemp').textContent = $('rTemp').value; $('vTours').textContent = $('rTours').value;
     // Le modèle enregistré n'est plus installé (supprimé, ou Ollama réinstallé) : on passe sur un modèle installé plutôt que d'envoyer une demande à un modèle absent.
@@ -1451,33 +1453,52 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
     const copie = el('button', '', T('Faire une copie')); copie.addEventListener('click', () => lance('copie'));
     c.appendChild(dedans); c.appendChild(document.createTextNode(' ')); c.appendChild(copie);
   };
-  // Reprendre les données d'un autre assistant : on regarde ce qu'il y a (rien n'est écrit), tu coches, puis on reprend (l'état actuel est gardé dans un zip avant).
-  const reprendre = async () => {
-    const chemin = prompt(T('Dossier de l\'ancien assistant (celui qui contient donnees/ et memoire/), ou archive .zip :')); if (!chemin) return;
-    let trouve;
-    try { trouve = await api('/api/reprise-detecter', { chemin }); } catch (e) { $('mDonnees').textContent = e.message; return; }
+  // Reprendre les données d'un autre assistant : la fenêtre dit tout (erreurs comprises) ; rien n'est écrit avant « Reprendre ».
+  const reprendre = () => {
     const c = ouvrirModal(T('Reprendre un autre assistant'));
-    c.appendChild(el('p', '', chemin));
+    const entree = document.createElement('input'); entree.type = 'text'; entree.maxLength = 500; entree.style.width = '100%';
+    entree.placeholder = T('Dossier de l\'ancien assistant (celui qui contient donnees/ et memoire/), ou archive .zip');
+    const verifier = el('button', 'principal', T('Vérifier')); const msg = el('p', 'erreur'); const zone = el('div');
+    c.appendChild(entree); c.appendChild(el('p', 'aide', T('Sur cet ordinateur, utilise l\'adresse 127.0.0.1 de la page : la reprise ne se fait pas depuis un autre appareil.'))); c.appendChild(verifier); c.appendChild(msg); c.appendChild(zone);
+    const voir = async () => {
+      const chemin = entree.value.trim(); if (!chemin) return;
+      msg.textContent = ''; zone.textContent = '';
+      let trouve;
+      try { trouve = await api('/api/reprise-detecter', { chemin }); } catch (e) { msg.textContent = e.message; return; }
+      afficherReprise(chemin, trouve, zone, msg);
+    };
+    verifier.addEventListener('click', voir);
+    entree.addEventListener('keydown', e => { if (e.key === 'Enter') voir(); });
+    entree.focus();
+  };
+  const afficherReprise = (chemin, trouve, zone, msg) => {
+    zone.appendChild(el('p', '', chemin));
     const lignes = [['conversations', T('Conversations : {}').replace('{}', trouve.conversations), trouve.conversations > 0], ['memoire', T('Mémoire : {}').replace('{}', trouve.memoire.join(', ') || '-'), trouve.memoire.length > 0],
                     ['skills', T('Skills : {}').replace('{}', trouve.skills) + (trouve.dossier_skills ? ' (' + trouve.dossier_skills + ')' : ''), trouve.skills > 0], ['reglages', T('Réglages : {}').replace('{}', trouve.reglages ? T('oui') : T('non')), trouve.reglages]];
     const cases = {};
-    lignes.forEach(([cle, texte, present]) => { const l = el('label'), i = document.createElement('input'); i.type = 'checkbox'; i.checked = present; i.disabled = !present; cases[cle] = i; l.appendChild(i); l.appendChild(document.createTextNode(' ' + texte)); l.style.display = 'block'; c.appendChild(l); });
+    lignes.forEach(([cle, texte, present]) => { const l = el('label'), i = document.createElement('input'); i.type = 'checkbox'; i.checked = present; i.disabled = !present; cases[cle] = i; l.appendChild(i); l.appendChild(document.createTextNode(' ' + texte)); l.style.display = 'block'; zone.appendChild(l); });
     const choixDossier = el('label'); choixDossier.style.display = 'block'; choixDossier.appendChild(document.createTextNode(T('Poser les skills dans : ')));
     const selCible = document.createElement('select'); (trouve.travaux || []).forEach(t => { const o = el('option', '', t.nom + (t.claude ? ' (' + T('projet Claude') + ')' : '')); o.value = t.id; selCible.appendChild(o); }); selCible.value = trouve.actif; choixDossier.appendChild(selCible);
     const alerteCible = el('div', 'aide'); alerteCible.style.color = 'var(--warm)';
     const majCible = () => { const t = (trouve.travaux || []).find(x => x.id === selCible.value); alerteCible.textContent = t && t.claude ? T('Ce dossier est un projet Claude : les skills y seront ajoutés (dossier skills/), rien n\'est écrasé. Choisis un autre dossier si tu ne veux pas toucher à ce dépôt.') : ''; };
     selCible.addEventListener('change', majCible); majCible();
-    if ((trouve.travaux || []).length && trouve.skills > 0) { c.appendChild(choixDossier); c.appendChild(alerteCible); }
-    const ecr = document.createElement('input'); ecr.type = 'checkbox'; const le = el('label'); le.style.display = 'block'; le.appendChild(ecr); le.appendChild(document.createTextNode(' ' + T('Remplacer ce qui existe déjà (sinon rien n\'est écrasé)'))); c.appendChild(le);
-    c.appendChild(el('p', 'aide', T('Le modèle et les accords automatiques ne sont jamais repris. L\'état actuel de Lutin est gardé dans un zip avant l\'import.')));
-    const go = el('button', 'principal', T('Reprendre')); c.appendChild(go);
+    if (trouve.skills > 0) {
+      if ((trouve.travaux || []).length) { zone.appendChild(choixDossier); zone.appendChild(alerteCible); }
+      else zone.appendChild(el('p', 'aide', T('Aucun dossier de travail n\'est défini : les skills iront dans {}.').replace('{}', trouve.cible_skills)));
+    }
+    const ecr = document.createElement('input'); ecr.type = 'checkbox'; const le = el('label'); le.style.display = 'block'; le.appendChild(ecr); le.appendChild(document.createTextNode(' ' + T('Remplacer ce qui existe déjà (sinon rien n\'est écrasé)'))); zone.appendChild(le);
+    zone.appendChild(el('p', 'aide', T('Le modèle et les accords automatiques ne sont jamais repris. L\'état actuel de Lutin est gardé dans un zip avant l\'import.')));
+    const go = el('button', 'principal', T('Reprendre')); zone.appendChild(go);
     go.addEventListener('click', async () => {
-      const choix = Object.keys(cases).filter(k => cases[k].checked); if (!choix.length) return;
-      go.disabled = true;
+      const choix = Object.keys(cases).filter(k => cases[k].checked); if (!choix.length) { msg.textContent = T('Coche au moins une catégorie.'); return; }
+      go.disabled = true; msg.textContent = '';
       try {
         const r = await api('/api/reprise', { chemin, choix, ecraser: ecr.checked, cible: selCible.value });
-        $('modal').hidden = true; $('mDonnees').textContent = r.resume.join(' '); await rafraichir(); chargerSkills();
-      } catch (e) { go.disabled = false; c.appendChild(el('p', 'erreur', e.message)); }
+        zone.textContent = '';
+        zone.appendChild(el('p', '', r.resume.join(' ')));
+        $('mDonnees').textContent = r.resume.join(' ');
+        await rafraichir(); chargerSkills(); chargerNotes();
+      } catch (e) { go.disabled = false; msg.textContent = e.message; }
     });
   };
   // ---- Dossiers de travail : liste, choix, retrait (l'ajout et l'import d'un projet Claude demandent d'être sur cette machine)
@@ -1488,15 +1509,15 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
     tr.liste.forEach(t => {
       const l = el('div', 'conv'); l.style.cursor = 'default';
       const col = el('div', 't'); col.appendChild(el('div', '', (t.id === tr.actif ? '★ ' : '') + t.nom)); col.appendChild(el('div', 'extrait', t.chemin)); l.appendChild(col);
-      if (t.id !== tr.actif) { const u = el('button', '', T('Utiliser')); u.addEventListener('click', async () => { try { await api('/api/travaux-choisir', { id: t.id }); await rafraichir(); } catch (e) { $('mTravaux').textContent = e.message; } }); l.appendChild(u); }
-      if (ETAT.configurateur && tr.liste.length > 1) {
-        const r = el('button', '', T('Retirer')); r.title = T('Retire le dossier de la liste (les fichiers ne sont pas touchés)');
-        r.addEventListener('click', async () => { if (!confirm(T('Retirer « ') + t.nom + T(' » de la liste ? Les fichiers ne sont pas touchés.'))) return; try { await api('/api/travaux-retirer', { id: t.id }); await rafraichir(); } catch (e) { $('mTravaux').textContent = e.message; } });
+      if (t.id !== tr.actif) { const u = el('button', '', T('Ouvrir au démarrage')); u.title = T('Lutin travaillera dans ce dossier, aussi à son prochain démarrage'); u.addEventListener('click', async () => { try { await api('/api/travaux-choisir', { id: t.id }); await rafraichir(); } catch (e) { $('mTravaux').textContent = e.message; } }); l.appendChild(u); }
+      if (ETAT.configurateur) {
+        const r = el('button', '', T('Retirer')); r.title = T('Retire le dossier de la liste (les fichiers ne sont pas supprimés)');
+        r.addEventListener('click', async () => { if (!confirm(T('Retirer « ') + t.nom + T(' » de la liste ? Les fichiers ne sont pas supprimés.'))) return; try { await api('/api/travaux-retirer', { id: t.id }); await rafraichir(); } catch (e) { $('mTravaux').textContent = e.message; } });
         l.appendChild(r);
       }
       z.appendChild(l);
     });
-    if (!tr.liste.length) z.textContent = T('Aucun dossier de travail.');
+    if (!tr.liste.length) z.textContent = T('Aucun dossier de travail : Lutin travaille dans son dossier par défaut (Lutin, dans ton dossier personnel). Ajoute-en un pour choisir.');
     $('bAjouterTravail').hidden = $('bImporterClaude').hidden = !ETAT.configurateur;
   };
   const ajouterTravail = async () => {
@@ -1561,6 +1582,7 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
     majChampsAcces();
     $('aPin').textContent = ACCES.niveau === 'reseau' ? T('Sur ton téléphone : ouvre l\'adresse affichée (ou vise le QR code avec l\'appareil photo), il se connecte tout seul. Le code est valable 10 minutes et ne sert qu\'une fois.') : (ACCES.niveau === 'proxy' ? T('Derrière un proxy, c\'est le proxy qui identifie : pas de code PIN.') : T('Pour connecter un téléphone, choisis d\'abord « Mon réseau local » ci-dessus, enregistre, puis redémarre Lutin.'));
     $('bPin').hidden = ACCES.niveau !== 'reseau' || !ETAT.configurateur;
+    if (!$('bPin').hidden && Date.now() > PIN_JUSQU_A) nouveauPin();
     afficherAppareils();
   };
   const majChampsAcces = () => {
@@ -1577,16 +1599,20 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
       await rafraichir(); chargerAcces();
     } catch (e) { $('mAcces').textContent = e.message; }
   });
-  $('bPin').addEventListener('click', async () => {
+  // Le code PIN et son QR code s'affichent tout de suite au niveau réseau (un nouveau seulement quand le précédent a expiré ou sur « Nouveau code PIN »).
+  let PIN_JUSQU_A = 0;
+  const nouveauPin = async () => {
     try {
       const r = await api('/api/nouveau-pin', {});
+      PIN_JUSQU_A = Date.now() + r.valable_s * 1000;
       $('blocPin').hidden = false; $('pinValeur').textContent = r.pin;
       $('pinValide').textContent = T('Valable {} minutes, pour un seul appareil.').replace('{}', Math.round(r.valable_s / 60));
       const url = ACCES.adresse + '#pin=' + r.pin;
       $('adressePin').textContent = T('Adresse à ouvrir sur l\'appareil : ') + ACCES.adresse;
       dessinerQr($('qrPin'), await api('/api/qr?d=' + encodeURIComponent(url)));
     } catch (e) { $('mAcces').textContent = e.message; }
-  });
+  };
+  $('bPin').addEventListener('click', nouveauPin);
   $('bRevoquerTous').addEventListener('click', async () => {
     if (!confirm(T('Déconnecter tous les appareils ? Ils devront se reconnecter avec un nouveau code.'))) return;
     try { await api('/api/appareils-revoquer', {}); chargerAcces(); } catch (e) { $('mAppareils').textContent = e.message; }
@@ -1739,7 +1765,6 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
     try { await api('/api/travaux-choisir', { id: $('selTravail').value }); } catch (e) { alert(e.message); }
     await rafraichir();
   });
-  $('bTravailPlus').addEventListener('click', ajouterTravail);
   $('bAjouterTravail').addEventListener('click', ajouterTravail);
   $('cHorsLigne').addEventListener('change', async () => {
     try { await api('/api/hors-ligne', { actif: $('cHorsLigne').checked }); } catch (e) { alert(e.message); }

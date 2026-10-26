@@ -673,7 +673,7 @@ class ImagesDeLInstallateur(unittest.TestCase):
             self.assertIn(nom, iss)
         self.assertIn("SetupIconFile=lutin.ico", iss)
         self.assertIn(r"UninstallDisplayIcon={app}\lutin.ico", iss)
-        self.assertEqual(iss.count(r'IconFilename: "{app}\lutin.ico"'), 2, "les deux raccourcis ont le logo")
+        self.assertEqual(iss.count(r'IconFilename: "{app}\lutin.ico"'), 3, "les trois raccourcis ont le logo")
         self.assertEqual(iss.count('Source: "lutin.ico"'), 1, "le logo est copié dans le dossier de Lutin (désinstallation)")
 
 

@@ -648,8 +648,11 @@ def importer_projet_claude(chemin, mode, vers="", nom=""):
 def reprise_detecter(chemin, dossier_skills=""):
     """Ce qu'on peut reprendre dans le dossier (ou l'archive .zip) d'un autre assistant : des nombres, rien n'est écrit. Avec les dossiers de travail où poser les skills."""
     with _rep.ouvrir(chemin, dossier_skills or None) as d:
-        liste = [dict(t, claude=_rep.est_projet_claude(t["chemin"])) for t in _trav.liste(config_lue())]
-        return dict(_rep.decrire(d), dossier_skills=d["dossier_skills"], travaux=liste, actif=travaux_etat()["actif"])
+        cfg = config_lue()
+        liste = [dict(t, claude=_rep.est_projet_claude(t["chemin"])) for t in _trav.liste(cfg)]
+        actif = _trav.actif(cfg)
+        cible = Path(actif["chemin"]) if actif else RACINE
+        return dict(_rep.decrire(d), dossier_skills=d["dossier_skills"], travaux=liste, actif=travaux_etat()["actif"], cible_skills=str(cible / "skills"))
 
 
 def reprise_importer(chemin, choix, dossier_skills="", ecraser=False, cible=""):
@@ -676,6 +679,13 @@ def retirer_travail(ident):
             raise ValueError("Une réponse travaille dans ce dossier : attends sa fin.")
     _trav.retirer(cfg, ident)
     config_ecrire(cfg)
+    with VERROU_TOURS:
+        if t and str(Path(t["chemin"]).resolve()) == str(RACINE):          # le dossier qu'on retire était le courant : on bascule tout de suite
+            suivant = _trav.actif(cfg)
+            defaut = Path.home() / "Lutin"
+            if not suivant:
+                defaut.mkdir(parents=True, exist_ok=True)
+            definir_racine(suivant["chemin"] if suivant else defaut)
     return travaux_etat()
 
 

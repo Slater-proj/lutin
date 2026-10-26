@@ -97,14 +97,17 @@ def ajouter(cfg, chemin, nom="", interdits=()):
 
 
 def retirer(cfg, ident):
-    """Retire un dossier de la liste (les fichiers ne sont pas touchés). Le dossier principal ne se retire pas ici (il se change par `lutin setup --travail`)."""
-    if ident == PRINCIPAL:
-        raise ErreurTravail(_t("Le dossier principal se change avec « lutin setup --travail »."))
+    """Retire un dossier de la liste (les fichiers ne sont pas touchés). Le dossier principal se retire aussi. Sans dossier restant, Lutin travaille dans son dossier par défaut (~/Lutin)."""
     em = cfg.setdefault("emplacements", {})
-    avant = len(em.get("travaux", []))
-    em["travaux"] = [t for t in em.get("travaux", []) if t.get("id") != ident]
-    if len(em["travaux"]) == avant:
-        raise ErreurTravail(_t("Dossier inconnu : {}").format(ident))
+    if ident == PRINCIPAL:
+        if not (em.get("travail") or "").strip():
+            raise ErreurTravail(_t("Dossier inconnu : {}").format(ident))
+        em["travail"] = ""
+    else:
+        avant = len(em.get("travaux", []))
+        em["travaux"] = [t for t in em.get("travaux", []) if t.get("id") != ident]
+        if len(em["travaux"]) == avant:
+            raise ErreurTravail(_t("Dossier inconnu : {}").format(ident))
     if em.get("travail_actif") == ident:
         em["travail_actif"] = ""
 

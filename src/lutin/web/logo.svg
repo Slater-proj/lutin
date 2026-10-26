@@ -1,9 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Lutin">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="20 16 100 102" role="img" aria-label="Lutin">
   <defs>
-    <linearGradient id="fond" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#1b2736"/>
-      <stop offset="1" stop-color="#0b0f14"/>
-    </linearGradient>
     <linearGradient id="chapeau" x1="0.1" y1="0" x2="0.9" y2="1">
       <stop offset="0" stop-color="#7cf0b4"/>
       <stop offset="0.55" stop-color="#2fc08f"/>
@@ -14,15 +10,7 @@
       <stop offset="0.5" stop-color="#5ee0a6"/>
       <stop offset="1" stop-color="#1a9477"/>
     </linearGradient>
-    <radialGradient id="lueur">
-      <stop offset="0" stop-color="#ffd98a" stop-opacity="0.95"/>
-      <stop offset="0.45" stop-color="#ffb347" stop-opacity="0.35"/>
-      <stop offset="1" stop-color="#ffb347" stop-opacity="0"/>
-    </radialGradient>
   </defs>
-  <rect width="128" height="128" rx="28" fill="url(#fond)"/>
-  <!-- étincelle au bout du chapeau -->
-  <circle cx="96" cy="30" r="24" fill="url(#lueur)"/>
   <!-- chapeau pointu, la pointe retombe vers la droite -->
   <path d="M28 92 C32 62 46 38 70 30 C84 25 94 28 100 34 C88 36 82 46 84 62 C85 74 90 84 98 92 Z" fill="url(#chapeau)"/>
   <!-- ombre sous le pli -->

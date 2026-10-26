@@ -37,6 +37,14 @@ Click **📎** next to the message box, or paste (Ctrl+V) or drop an image: PNG,
 
 The **Access** tab gathers who can use Lutin (level), the PIN code with a **QR code** to connect a phone by scanning it, and the list of connected devices (with *Revoke*). A level change that needs a restart shows a banner with a *Restart* button when Lutin can do it itself (`lutin` command or Docker), and says what to do otherwise. Details: [SECURITY.md](SECURITY.md).
 
+## Workspace folders and the default folder
+
+Settings > **Workspace folders**: the folder Lutin opens at startup is marked ★ and can be changed with **Open at startup**. **Add a folder…** adds one and **Remove** takes it out of the list (the files are never deleted). Removing the folder in use switches at once to the next one; with no folder left, Lutin works in its default folder (`Lutin`, in your personal folder). The « + » beside the chat's folder selector is gone: adding is done in the settings only.
+
+## Icon in the notification area (Windows)
+
+The **Lutin** shortcut opens Lutin **without a console window**: a Lutin icon in the notification area (bottom right). Left click opens the interface; right click offers **PIN code** (to connect a phone), **Open the interface**, **Restart** and **Quit**. The server runs in the background; if it stops on an error it is restarted, and its output goes to `donnees/serveur.log`. The terminal version stays available as `lutin` (and the « Lutin (terminal) » shortcut). Only one icon runs at a time: starting it again opens the interface.
+
 ## Commands in the chat
 
 Type `/` for the list: `/pc`, `/essai`, `/acces`, `/sante`, `/model`, `/compact`… and the commands of a Claude project (`.claude/commands/*.md`, see [CLAUDE-PROJECTS.md](CLAUDE-PROJECTS.md)) are available too, with their arguments.

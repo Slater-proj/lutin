@@ -74,7 +74,8 @@ Source: "lutin.ico"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#AppDir}\python\*"; DestDir: "{app}\python"; Flags: ignoreversion recursesubdirs createallsubdirs; Check: UseEmbedded
 
 [Icons]
-Name: "{autoprograms}\Lutin"; Filename: "{app}\bin\lutin.cmd"; WorkingDir: "{userdocs}"; IconFilename: "{app}\lutin.ico"
+Name: "{autoprograms}\Lutin"; Filename: "{app}\python\pythonw.exe"; Parameters: "-m lutin zone"; WorkingDir: "{userdocs}"; IconFilename: "{app}\lutin.ico"; Check: UseEmbedded
+Name: "{autoprograms}\Lutin"; Filename: "{app}\venv\Scripts\pythonw.exe"; Parameters: "-m lutin zone"; WorkingDir: "{userdocs}"; IconFilename: "{app}\lutin.ico"; Check: not UseEmbedded
 Name: "{autoprograms}\{cm:ShortcutChat}"; Filename: "{app}\bin\lutin.cmd"; Parameters: "chat"; WorkingDir: "{userdocs}"; IconFilename: "{app}\lutin.ico"
 
 [Run]

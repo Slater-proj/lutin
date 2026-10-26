@@ -128,6 +128,7 @@ def parseur():
     im.add_argument("--nom", default="", help=_t("nom affiché"))
     lg = sp.add_parser("langue", help=_t("langue de l'application (fr, en ou auto)"))
     lg.add_argument("valeur", nargs="?", help="fr | en | auto")
+    sp.add_parser("zone", help=_t("Lutin dans la zone de notification de Windows, sans fenêtre de console (code PIN, redémarrer, quitter)"))
     return p
 
 
@@ -166,6 +167,12 @@ def lancer_enfant(sans_navigateur):
     finally:
         if enfant.poll() is None:
             enfant.kill()
+
+
+def commande_zone(args):
+    from . import zone
+    d, cfg = contexte()
+    return zone.commande(d, cfg)
 
 
 def commande_serve(args):
@@ -616,7 +623,7 @@ def principal(argv=None):
     os.environ["LUTIN_CONFIG"] = str(Path(config.dossiers()["config"]) / "config.json")          # les gardes (mode hors ligne…) lisent la configuration de cette installation
     commandes = {"setup": commande_setup, "serve": commande_serve, "update": commande_update, "chat": commande_chat, "modeles": commande_modeles, "pin": commande_pin,
                  "appareils": commande_appareils, "securite": commande_securite, "langue": commande_langue, "importer": commande_importer, "reprendre": commande_reprendre, "hors-ligne": commande_hors_ligne,
-                 "travaux": commande_travaux, "journal": commande_journal, "bench": commande_bench, "sauvegarde": commande_sauvegarde, "restaurer": commande_restaurer, "doctor": commande_doctor}
+                 "travaux": commande_travaux, "journal": commande_journal, "bench": commande_bench, "sauvegarde": commande_sauvegarde, "restaurer": commande_restaurer, "doctor": commande_doctor, "zone": commande_zone}
     try:
         if args.commande is None:
             return commande_serve(argparse.Namespace(sans_navigateur=False))

@@ -37,6 +37,14 @@ Clique sur **📎** à côté de la zone de message, ou colle (Ctrl+V) ou glisse
 
 L'onglet **Accès** réunit qui peut utiliser Lutin (le niveau), le code PIN avec un **QR code** pour connecter un téléphone en le scannant, et la liste des appareils connectés (avec *Révoquer*). Un changement de niveau qui demande un redémarrage affiche un bandeau avec un bouton *Redémarrer* quand Lutin peut le faire lui-même (commande `lutin` ou Docker), et dit quoi faire sinon. Détails : [SECURITY.fr.md](SECURITY.fr.md).
 
+## Dossiers de travail et dossier par défaut
+
+Réglages > **Dossiers de travail** : le dossier ouvert au démarrage de Lutin est marqué ★ et se change avec **Ouvrir au démarrage**. **Ajouter un dossier…** en ajoute un et **Retirer** le sort de la liste (les fichiers ne sont jamais supprimés). Retirer le dossier en cours passe tout de suite au suivant ; sans dossier restant, Lutin travaille dans son dossier par défaut (`Lutin`, dans ton dossier personnel). Le « + » à côté du choix de dossier dans la conversation a disparu : on ajoute seulement dans les réglages.
+
+## Icône dans la zone de notification (Windows)
+
+Le raccourci **Lutin** ouvre Lutin **sans fenêtre de console** : une icône Lutin dans la zone de notification (en bas à droite). Clic gauche : ouvre l'interface. Clic droit : **Code PIN** (pour connecter un téléphone), **Ouvrir l'interface**, **Redémarrer**, **Quitter**. Le serveur tourne en arrière-plan ; s'il s'arrête sur une erreur, il est relancé, et sa sortie va dans `donnees/serveur.log`. La version terminal reste disponible avec `lutin` (et le raccourci « Lutin (terminal) »). Une seule icône tourne à la fois : la relancer ouvre l'interface.
+
 ## Commandes dans la conversation
 
 Tape `/` pour la liste : `/pc`, `/essai`, `/acces`, `/sante`, `/model`, `/compact`… et les commandes d'un projet Claude (`.claude/commands/*.md`, voir [CLAUDE-PROJECTS.fr.md](CLAUDE-PROJECTS.fr.md)) sont disponibles aussi, avec leurs arguments.

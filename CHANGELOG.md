@@ -2,6 +2,15 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## 0.4.3 (en cours)
+
+- **Icône dans la zone de notification (Windows)** : le raccourci Lutin tourne sans fenêtre de console ; clic droit : code PIN, ouvrir l'interface, redémarrer, quitter (`lutin zone`).
+- **Onglet Accès** : le code PIN et son QR code s'affichent tout de suite au niveau réseau.
+- **Dossiers de travail** : le dossier ouvert au démarrage se règle dans les réglages (« Ouvrir au démarrage ») ; n'importe quel dossier se retire de la liste, le principal aussi ; le « + » à côté du choix de dossier a disparu.
+- **Reprise d'un autre assistant** : erreurs et résultats s'affichent dans la fenêtre, qui dit où iront les skills.
+- **Logos** : mascotte sans fond (onglet du navigateur, en-tête, icônes Windows, images de l'installateur) ; les icônes d'application gardent leur tuile pour le téléphone.
+- **Images jointes** : le trombone remplit son bouton.
+
 ## 0.4.0
 
 - **Access tab**: who can use Lutin, PIN code with a **QR code** to connect a phone, connected devices, restart banner when a change needs it. Changing access, workspace folders, restoring or scheduling is only possible from this machine (see docs/SECURITY.md).
