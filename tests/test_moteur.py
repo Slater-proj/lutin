@@ -1696,6 +1696,30 @@ class Assistant(unittest.TestCase):
         chat("Lis", reponses=[[appel_outil("lister", dossier=".")], [{"content": "ok"}]])
         self.assertEqual(A.RACINE, avant)
 
+    def test_notes_de_l_assistant_listees_et_supprimables(self):
+        """Les notes que Lutin ajoute sont visibles et la personne peut supprimer une note fausse ou dépassée, sans toucher au reste du fichier."""
+        f = A.MEMOIRE / "MEMOIRE.md"
+        sauve = f.read_text(encoding="utf-8") if f.exists() else None
+        f.write_text("# Mémoire\n\n## Décisions de l'utilisateur à respecter\n- toujours en français\n\n## Notes de l'assistant\n", encoding="utf-8")
+        try:
+            chat("Retiens", reponses=[[appel_outil("memoriser", note="Le port du serveur est 8777")], [appel_outil("memoriser", note="Le test lent est test_moteur")], [{"content": "Noté."}]])
+            notes = lire("/api/notes")["notes"]
+            self.assertEqual([n["texte"] for n in notes], ["Le port du serveur est 8777", "Le test lent est test_moteur"])
+            self.assertRegex(notes[0]["date"], r"^\d{4}-\d\d-\d\d$")
+            self.assertEqual([n["texte"] for n in post("/api/notes-supprimer", {"ligne": notes[0]["ligne"]})["notes"]], ["Le test lent est test_moteur"])
+            contenu = f.read_text(encoding="utf-8")
+            self.assertNotIn("8777", contenu)
+            self.assertIn("- toujours en français", contenu, "les décisions de la personne ne sont jamais touchées")
+            post("/api/notes-supprimer", {"ligne": notes[0]["ligne"]}, attendu=400)                    # déjà supprimée
+            post("/api/notes-supprimer", {"ligne": "- toujours en français"}, attendu=400)             # pas une note de l'assistant
+            self.assertEqual([n["texte"] for n in post("/api/notes-ajouter", {"texte": "Écrite à la main"})["notes"]], ["Le test lent est test_moteur", "Écrite à la main"])
+            post("/api/notes-ajouter", {"texte": "   "}, attendu=400)
+        finally:
+            if sauve is None:
+                f.unlink(missing_ok=True)
+            else:
+                f.write_text(sauve, encoding="utf-8")
+
     def test_essai_a_blanc(self):
         """Simulation : on voit ce que Lutin ferait, rien n'est écrit ni lancé, personne n'a rien à accepter, et le modèle sait qu'il ne doit pas réessayer."""
         cible = A.RACINE / "docs" / "essai-a-blanc.txt"

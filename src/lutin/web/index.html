@@ -346,9 +346,13 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
     <h2>Contexte du projet <span class="aide">(comme un CLAUDE.md : lu au début de chaque conversation, tu peux le modifier)</span></h2>
     <textarea id="tContexte"></textarea>
     <div style="margin:6px 0"><button id="bSCont" class="principal">Enregistrer le contexte</button> <span class="aide" id="mC"></span></div>
-    <h2>Notes de l'assistant <span class="aide">(il y ajoute ce qu'il doit retenir d'une conversation à l'autre)</span></h2>
-    <textarea id="tMemoire" style="min-height:160px"></textarea>
-    <div style="margin:6px 0"><button id="bSMem" class="principal">Enregistrer les notes</button> <span class="aide" id="mM"></span></div>
+    <h2>Notes de l'assistant <span class="aide">(il y ajoute ce qu'il doit retenir d'une conversation à l'autre : relis-les, supprime celles qui sont fausses ou dépassées)</span></h2>
+    <div id="listeNotes" class="aide" style="margin:6px 0"></div>
+    <div style="margin:6px 0"><input id="nNote" placeholder="Une chose que Lutin doit retenir…" style="width:340px" maxlength="600"> <button id="bAjouterNote">Ajouter une note</button> <span class="aide" id="mNotes"></span></div>
+    <details style="margin:6px 0"><summary>Modifier le fichier à la main</summary>
+      <textarea id="tMemoire" style="min-height:160px"></textarea>
+      <div style="margin:6px 0"><button id="bSMem" class="principal">Enregistrer les notes</button> <span class="aide" id="mM"></span></div>
+    </details>
     <h2>Projet Claude <span class="aide">(CLAUDE.md et dossier .claude/ du dossier de travail : lus par l'assistant comme consignes ; l'import se fait dans Réglages &gt; Dossiers de travail)</span></h2>
     <div id="infoClaude" class="aide" style="margin:6px 0"></div>
     <div class="aide" id="mClaude" style="margin:6px 0"></div>
@@ -948,7 +952,7 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
   const sauverReglages = async () => { try { await api('/api/reglages', { modele: $('selModele').value, mode: $('selMode').value, reflexion: $('cReflexion').checked, auto_ecriture: $('cAuto').checked, auto_commandes: $('cAutoCmd').checked, essai_a_blanc: $('cEssai').checked, avance: $('cAvance').checked, web: $('cWeb').checked, num_ctx: +$('rCtx').value, temperature: +$('rTemp').value, tours_max: +$('rTours').value, top_p: nombreOuNull('iTopP'), top_k: nombreOuNull('iTopK'), min_p: nombreOuNull('iMinP'), repeat_penalty: nombreOuNull('iRep'), garde_ressources: $('cGarde').checked, liberer_si_comfy: $('cComfy').checked, rappels_auto: $('sRappels').value, seuil_ram_go: nombreOuNull('iSeuilRam') ?? 3, seuil_disque_go: nombreOuNull('iSeuilDisque') ?? 10, plafond_donnees_go: nombreOuNull('iPlafond') ?? 2, limite_ram_commande_go: nombreOuNull('iLimiteCmd') ?? 0, num_thread: nombreOuNull('iThreads'), garde_min: nombreOuNull('iGarde') }); } catch (e) { fil().appendChild(el('div', 'erreur', e.message)); } };
   document.querySelectorAll('.onglets button').forEach(b => b.addEventListener('click', async () => {
     document.querySelectorAll('.onglets button').forEach(x => x.setAttribute('aria-selected', x === b)); document.querySelectorAll('.page').forEach(p => p.classList.toggle('vue', p.id === 'p-' + b.dataset.p));
-    if (b.dataset.p === 'memoire') { const m = await api('/api/memoire'); $('tContexte').value = m['CONTEXTE.md']; $('tMemoire').value = m['MEMOIRE.md']; chargerSkills(); chargerClaude(); }
+    if (b.dataset.p === 'memoire') { const m = await api('/api/memoire'); $('tContexte').value = m['CONTEXTE.md']; $('tMemoire').value = m['MEMOIRE.md']; chargerSkills(); chargerClaude(); chargerNotes(); }
     if (b.dataset.p === 'modeles') rafraichir();
     if (b.dataset.p === 'acces') chargerAcces();
     if (b.dataset.p === 'sante') window.ouvrirSante();
@@ -1530,6 +1534,22 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
       $('mDonnees').textContent = T('Sauvegarde restaurée : {} fichiers. Redémarre Lutin pour tout prendre en compte.').replace('{}', d.fichiers);
       await rafraichir();
     } catch (e) { $('mDonnees').textContent = e.message; }
+  });
+  // ---- Notes de l'assistant : la liste, avec de quoi supprimer une note fausse ou dépassée
+  const afficherNotes = notes => {
+    const z = $('listeNotes'); z.textContent = '';
+    if (!notes.length) { z.textContent = T('Aucune note pour le moment : Lutin en ajoute quand il apprend quelque chose de durable.'); return; }
+    notes.slice().reverse().forEach(n => {
+      const l = el('div', 'conv'); l.style.cursor = 'default';
+      const col = el('div', 't'); col.appendChild(el('div', '', n.texte)); if (n.date) col.appendChild(el('div', 'extrait', n.date)); l.appendChild(col);
+      const s = el('button', '', T('Supprimer')); s.addEventListener('click', async () => { try { afficherNotes((await api('/api/notes-supprimer', { ligne: n.ligne })).notes); const m = await api('/api/memoire'); $('tMemoire').value = m['MEMOIRE.md']; } catch (e) { $('mNotes').textContent = e.message; } });
+      l.appendChild(s); z.appendChild(l);
+    });
+  };
+  const chargerNotes = async () => { try { afficherNotes((await api('/api/notes')).notes); } catch (e) { $('mNotes').textContent = e.message; } };
+  $('bAjouterNote').addEventListener('click', async () => {
+    const t = $('nNote').value.trim(); if (!t) return;
+    try { afficherNotes((await api('/api/notes-ajouter', { texte: t })).notes); $('nNote').value = ''; const m = await api('/api/memoire'); $('tMemoire').value = m['MEMOIRE.md']; } catch (e) { $('mNotes').textContent = e.message; }
   });
   const chargerSkills = async () => {
     try {

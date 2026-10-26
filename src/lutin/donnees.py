@@ -87,6 +87,32 @@ def noter(note):
     return _t("Noté dans memoire/MEMOIRE.md.")
 
 
+def lister_notes():
+    """Les notes durables de l'assistant (les lignes « - date : texte » de la section des notes de MEMOIRE.md), dans l'ordre du fichier : la plus récente en dernier."""
+    memoire = lire_memoire("MEMOIRE.md")
+    i = position_notes(memoire)
+    notes = []
+    for ligne in (memoire[i:] if i >= 0 else "").split("\n"):
+        if ligne.startswith("- "):
+            date, sep, texte = ligne[2:].partition(" : ")
+            notes.append({"ligne": ligne, "date": date if sep and re.match(r"^\d{4}-\d\d-\d\d$", date) else "", "texte": texte if sep and re.match(r"^\d{4}-\d\d-\d\d$", date) else ligne[2:]})
+    return notes
+
+
+def supprimer_note(ligne):
+    """Retire la première ligne de notes identique à `ligne` (le texte exact reçu de lister_notes : pas d'indice qui pourrait viser une autre note si le fichier a changé entre-temps)."""
+    memoire = lire_memoire("MEMOIRE.md")
+    i = position_notes(memoire)
+    if i < 0 or not ligne.startswith("- "):
+        raise ValueError(_t("Note introuvable."))
+    lignes = memoire[i:].split("\n")
+    if ligne not in lignes:
+        raise ValueError(_t("Note introuvable."))
+    lignes.remove(ligne)
+    ecrire_atomique(_m.MEMOIRE / "MEMOIRE.md", memoire[:i] + "\n".join(lignes))
+    return {"ok": True}
+
+
 def lister_skills():
     """Les fiches de skills (skills/*.md) : le contenu du projet, construit par l'utilisateur.
     On ne lit que les titres ici (le contenu se lit à la demande avec l'outil « lire »)."""

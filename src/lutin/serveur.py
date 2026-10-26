@@ -2,6 +2,7 @@
 from http.server import BaseHTTPRequestHandler
 from . import bench as _bench
 from . import acces as _acces
+from . import donnees as _donnees
 from . import horsligne as _hl
 from . import i18n as _i18n
 from . import projet_claude as _pc
@@ -119,6 +120,8 @@ class Gestionnaire(BaseHTTPRequestHandler):
                                        "pulls": _m.PULLS, "reglages": r, "conversations": _m.conv_liste(), "racine": str(_m.RACINE),
                                        "outil": bool(self._outil_vivant()), "hors_ligne": _hl.actif(), "niveau": _m.SECURITE.niveau, "langue": _i18n.langue(), "langue_reglage": _i18n.langue_configuree(), "cpus": os.cpu_count() or 1, "redemarrage": {"necessaire": _acces.securite_enregistree() != _m.SECURITE, "possible": _acces.peut_redemarrer()}, "nouvelle_version": _m.nouvelle_version_lutin(), "travaux": _m.travaux_etat(), "configurateur": self._configurateur(),
                                        "bench": {"en_cours": _m.BENCH["en_cours"], "etape": _m.BENCH["etape"], "erreur": _m.BENCH["erreur"], "mesures": _bench.lire(_m.chemin_bench())}, "attentes": [{"id": a.id, "titre": a.titre, "detail": a.detail, "diff": a.diff} for a in _m.Attente.EN_COURS.values()]})
+        if chemin == "/api/notes":
+            return self._envoyer(200, {"notes": _donnees.lister_notes()})
         if chemin == "/api/acces":
             return self._envoyer(200, _acces.etat(self._configurateur()))
         if chemin == "/api/qr":
@@ -253,6 +256,15 @@ class Gestionnaire(BaseHTTPRequestHandler):
         if not self._jeton_valide():
             return self._envoyer(403, {"erreur": "jeton invalide : recharge la page"})
         try:
+            if self.path == "/api/notes-ajouter":
+                try:
+                    _donnees.noter(str(donnees.get("texte", "")))
+                except _m.ErreurOutil as e:
+                    raise ValueError(str(e)) from e
+                return self._envoyer(200, {"notes": _donnees.lister_notes()})
+            if self.path == "/api/notes-supprimer":
+                _donnees.supprimer_note(str(donnees.get("ligne", "")))
+                return self._envoyer(200, {"notes": _donnees.lister_notes()})
             if self.path == "/api/acces":
                 if not self._configurateur():
                     return self._envoyer(403, {"erreur": _t("Le niveau d'accès ne se change que depuis cette machine.")})
