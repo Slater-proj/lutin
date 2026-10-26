@@ -663,5 +663,19 @@ def travaux_liste():
     return _travaux.liste(config.charger(config.dossiers()))
 
 
+class ImagesDeLInstallateur(unittest.TestCase):
+    """Le logo de Lutin est sur l'installateur : icône de lutin-setup-*.exe, raccourcis, désinstallation, images de l'assistant."""
+    def test_les_images_existent_et_sont_citees(self):
+        dossier = Path(__file__).resolve().parent.parent / "installateur" / "windows"
+        iss = (dossier / "lutin.iss").read_text(encoding="utf-8-sig")
+        for nom in ("lutin.ico", "assistant-grand.bmp", "assistant-petit.bmp"):
+            self.assertTrue((dossier / nom).is_file(), nom)
+            self.assertIn(nom, iss)
+        self.assertIn("SetupIconFile=lutin.ico", iss)
+        self.assertIn(r"UninstallDisplayIcon={app}\lutin.ico", iss)
+        self.assertEqual(iss.count(r'IconFilename: "{app}\lutin.ico"'), 2, "les deux raccourcis ont le logo")
+        self.assertEqual(iss.count('Source: "lutin.ico"'), 1, "le logo est copié dans le dossier de Lutin (désinstallation)")
+
+
 if __name__ == "__main__":
     unittest.main()

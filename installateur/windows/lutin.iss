@@ -33,6 +33,10 @@ Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
 ChangesEnvironment=yes
+SetupIconFile=lutin.ico
+UninstallDisplayIcon={app}\lutin.ico
+WizardImageFile=assistant-grand.bmp
+WizardSmallImageFile=assistant-petit.bmp
 UninstallDisplayName=Lutin
 
 [Languages]
@@ -66,11 +70,12 @@ Type: filesandordirs; Name: "{app}\venv"; Check: UseEmbedded
 [Files]
 Source: "{#AppDir}\wheel\*"; DestDir: "{app}\wheel"; Flags: ignoreversion
 Source: "{#AppDir}\source.txt"; DestDir: "{app}"; Flags: ignoreversion
+Source: "lutin.ico"; DestDir: "{app}"; Flags: ignoreversion
 Source: "{#AppDir}\python\*"; DestDir: "{app}\python"; Flags: ignoreversion recursesubdirs createallsubdirs; Check: UseEmbedded
 
 [Icons]
-Name: "{autoprograms}\Lutin"; Filename: "{app}\bin\lutin.cmd"; WorkingDir: "{userdocs}"
-Name: "{autoprograms}\{cm:ShortcutChat}"; Filename: "{app}\bin\lutin.cmd"; Parameters: "chat"; WorkingDir: "{userdocs}"
+Name: "{autoprograms}\Lutin"; Filename: "{app}\bin\lutin.cmd"; WorkingDir: "{userdocs}"; IconFilename: "{app}\lutin.ico"
+Name: "{autoprograms}\{cm:ShortcutChat}"; Filename: "{app}\bin\lutin.cmd"; Parameters: "chat"; WorkingDir: "{userdocs}"; IconFilename: "{app}\lutin.ico"
 
 [Run]
 Filename: "{app}\bin\lutin.cmd"; Parameters: "setup"; Description: "{cm:RunSetup}"; Flags: postinstall skipifsilent nowait shellexec
