@@ -11,11 +11,15 @@ Règles de solidité :
 - les appels ne peuvent viser QUE les sites déclarés dans le manifeste (livré, non modifiable) : un flux corrigé, même par une page piégée lue par le modèle, ne peut pas envoyer ailleurs ;
 - une correction du flux proposée par le modèle n'est jamais appliquée seule : l'utilisateur voit la différence et accepte ; l'ancienne version est gardée et la version livrée se rétablit en un clic ;
 - les secrets (jetons) sont rangés à part, jamais renvoyés à la page ni écrits dans le journal."""
+import base64
 import copy
 import difflib
+import hashlib
+import hmac
 import json
 import os
 import re
+import secrets
 import time
 import urllib.error
 import urllib.parse
@@ -27,7 +31,7 @@ from . import moteur as _m
 from .i18n import t as _t
 
 DOSSIER_LIVRE = Path(__file__).parent / "addons_livres"      # addons livrés (les tests peuvent pointer ailleurs)
-RE_ID = re.compile(r"^[a-z][a-z0-9_-]{1,31}$")
+RE_ID = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
 RE_CLE = re.compile(r"^[a-z][a-z0-9_]{0,31}$")
 RE_VARIABLE = re.compile(r"\{([a-z][a-z0-9_]{0,31})\}")
 RE_VARIABLE_ENTIERE = re.compile(r"^\{([a-z][a-z0-9_]{0,31})\}$")
@@ -100,6 +104,29 @@ def flux(ident):
 
 def flux_modifie(ident):
     return chemin_flux(ident).is_file()
+
+
+def _pct(valeur):
+    return urllib.parse.quote(str(valeur), safe="~")
+
+
+def signature_oauth1(methode, url, params, secret_consommateur, secret_jeton):
+    """La signature OAuth 1.0a (HMAC-SHA1) d'une requête : `url` sans paramètres, `params` = tous les paramètres de la requête et de l'en-tête OAuth (hors signature). Vérifiée sur l'exemple de la documentation de X."""
+    paires = sorted((_pct(k), _pct(v)) for k, v in params)
+    base = "&".join([methode.upper(), _pct(url), _pct("&".join("%s=%s" % p for p in paires))])
+    cle = _pct(secret_consommateur) + "&" + _pct(secret_jeton)
+    return base64.b64encode(hmac.new(cle.encode("utf-8"), base.encode("utf-8"), hashlib.sha1).digest()).decode("ascii")
+
+
+def entete_oauth1(methode, url, cles, nonce=None, horodatage=None):
+    """L'en-tête « Authorization: OAuth … » d'une requête. `cles` : consumer_key, consumer_secret, token, token_secret. Les paramètres de l'adresse sont signés ; un corps JSON ne l'est pas."""
+    p = urllib.parse.urlsplit(url)
+    sans_requete = urllib.parse.urlunsplit((p.scheme, p.netloc, p.path, "", ""))
+    oauth = [("oauth_consumer_key", cles["consumer_key"]), ("oauth_nonce", nonce or secrets.token_hex(16)), ("oauth_signature_method", "HMAC-SHA1"),
+             ("oauth_timestamp", str(int(horodatage or time.time()))), ("oauth_token", cles["token"]), ("oauth_version", "1.0")]
+    requete = urllib.parse.parse_qsl(p.query, keep_blank_values=True)
+    oauth.append(("oauth_signature", signature_oauth1(methode, sans_requete, requete + oauth, cles["consumer_secret"], cles["token_secret"])))
+    return "OAuth " + ", ".join('%s="%s"' % (_pct(k), _pct(v)) for k, v in sorted(oauth))
 
 
 def hote_autorise(url, m):
@@ -298,6 +325,13 @@ def appeler(ident, nom, variables=None, delai=DELAI_APPEL):
             web.verifier_hote_web(url)                                          # même garde-fou que l'accès web : jamais une adresse du réseau local
         except _m.ErreurOutil as e:
             return {"ok": False, "donnees": None, "extrait": {}, "erreur": str(e)}
+    auth = m.get("auth") or {}
+    if auth.get("type") == "oauth1":
+        cles = {k: valeurs.get(nom, "") for k, nom in auth["cles"].items()}
+        manquantes = [nom for k, nom in auth["cles"].items() if not valeurs.get(nom)]
+        if manquantes:
+            raise ErreurAddon(_t("Il manque : {}.").format(", ".join(manquantes)))
+        en_tetes["Authorization"] = entete_oauth1(methode, url, cles)
     req = urllib.request.Request(url, data=donnees_envoi, headers=en_tetes, method=methode)
     try:
         with urllib.request.urlopen(req, timeout=delai) as r:

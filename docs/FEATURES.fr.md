@@ -42,6 +42,14 @@ Le texte des fichiers est ajouté à ton message **pour le modèle seulement** :
 
 Clique sur **📎** à côté de la zone de message, ou colle (Ctrl+V) ou glisse une image : PNG, JPEG, GIF ou WebP, 8 Mo et 4 images par message au plus. Si le modèle courant ne voit pas les images, Lutin passe pour cette demande sur un modèle installé qui les voit (rôle « Images » de l'onglet Modèles), ou te dit qu'il n'y en a pas et ignore les images. Les images restent dans le dossier de données de Lutin (`images/`), seules les plus récentes sont renvoyées au modèle, et les images orphelines sont supprimées après deux jours.
 
+## Addon X
+
+Publie sur ton compte X et réponds aux mentions, **sans jamais rien publier dans ton dos**.
+
+- **Installation** : crée une application sur le portail développeur de X avec l'autorisation *Read and write*, génère la clé d'API + son secret et le jeton d'accès + son secret, colle les quatre valeurs (rangées à part, jamais réaffichées) et vérifie : le pseudo du compte s'affiche. Les requêtes sont signées en OAuth 1.0a (vérifié sur l'exemple de la documentation de X).
+- **Publier** : *Rédiger avec Lutin* prépare un à cinq brouillons d'après un sujet (aucun outil, 280 caractères au plus) ; tu les corriges, puis **Publier maintenant** ou **Programmer** à une date et une heure. Ton clic est l'accord : un brouillon que tu n'as pas publié ni programmé ne part jamais, rien n'est jamais publié deux fois, et 25 publications par jour au plus partent.
+- **Mentions** (désactivé par défaut) : répondre aux mentions demande l'accès en lecture de X, compris dans une formule payante de l'API (la formule gratuite ne fait que publier ; l'erreur de X s'affiche s'il refuse). Règles de tri comme pour le courriel (`de:@pseudo`, `texte:*mot*`, `ton:agressif` jugé par le modèle…) : chaque réponse est un **brouillon** que tu valides, sauf règle `auto` (10 par jour au plus). Les mentions sont des données, jamais des ordres : le modèle n'a aucun outil, et les mentions déjà présentes à la première activation sont ignorées.
+
 ## Addon Courriel
 
 Lutin surveille ta boîte de réception (IMAP) et prépare des réponses (SMTP) selon **tes règles** : par défaut chaque réponse est un **brouillon que tu valides** sur la page ; rien ne part sans toi. Utilise un **mot de passe d'application** (créé dans la sécurité de ton fournisseur), rangé à part et jamais réaffiché.

@@ -2317,6 +2317,45 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     });
     zone.appendChild(msg);
   };
+  // Panneau de l'addon X : rédiger avec Lutin, publier ou programmer (ton clic = ton accord), réponses aux mentions à valider
+  PANNEAUX.x = async (a, zone) => {
+    let x;
+    try { x = await api('/api/addon-etat?id=x'); } catch (e) { zone.textContent = e.message; return; }
+    const msg = el('div', 'erreur'), agir = async (action, plus) => { try { await api('/api/addon-action', Object.assign({ id: 'x', action }, plus || {})); chargerAddons(); } catch (e) { msg.textContent = e.message; } };
+    zone.appendChild(el('div', x.erreur ? 'erreur' : 'aide', x.erreur ? T('⚠ X : ') + x.erreur : (x.pseudo ? T('✔ Compte @{} — {} publication(s) aujourd\'hui sur {}.').replace('{}', x.pseudo).replace('{}', x.publies).replace('{}', x.plafond) : T('Rien n\'est publié sans ton clic.'))));
+    const redac = el('div', 'ligne'), brief = el('input'), nb = el('select'), go = el('button', 'principal', T('Rédiger avec Lutin'));
+    brief.placeholder = T('Sujet du message…'); brief.style.width = '320px'; [1, 2, 3, 5].forEach(n => { const o = el('option', '', String(n)); o.value = n; nb.appendChild(o); });
+    go.addEventListener('click', async () => { go.disabled = true; msg.textContent = ''; try { await api('/api/addon-action', { id: 'x', action: 'rediger', brief: brief.value, nombre: nb.value }); chargerAddons(); } catch (e) { msg.textContent = e.message; go.disabled = false; } });
+    redac.append(brief, nb, go); zone.appendChild(redac);
+    x.publications.slice().reverse().forEach(p => {
+      const d = el('div', 'carte'); d.style.flexDirection = 'column'; d.style.alignItems = 'stretch'; d.style.gap = '4px';
+      const t = el('textarea'); t.rows = 3; t.maxLength = 280; t.value = p.texte; t.style.width = '100%'; d.appendChild(t);
+      const l = el('div', 'ligne');
+      if (p.etat === 'publie') l.appendChild(el('span', 'aide', T('✔ Publié')));
+      else {
+        if (p.etat === 'programme') l.appendChild(el('span', 'aide', T('⏰ Programmé pour ') + quand(p.quand) + ' '));
+        if (p.etat === 'erreur') l.appendChild(el('span', 'erreur', p.detail + ' '));
+        const pub = el('button', 'principal', T('Publier maintenant')), dt = el('input'), prog = el('button', '', T('Programmer')), sup = el('button', '', T('Supprimer'));
+        dt.type = 'datetime-local';
+        pub.addEventListener('click', () => { if (confirm(T('Publier ce message sur X maintenant ?'))) agir('publier', { publication: p.id, texte: t.value }); });
+        prog.addEventListener('click', () => { const ms = new Date(dt.value).getTime(); if (isNaN(ms)) { msg.textContent = T('Choisis une date et une heure.'); return; } agir('programmer', { publication: p.id, texte: t.value, quand: ms / 1000 }); });
+        sup.addEventListener('click', () => agir('supprimer', { publication: p.id }));
+        l.append(pub, dt, prog, sup);
+      }
+      d.appendChild(l); zone.appendChild(d);
+    });
+    if (x.mentions && !x.reponses.length) zone.appendChild(el('div', 'aide', T('Aucune réponse à valider.')));
+    x.reponses.forEach(b => {
+      const d = el('div', 'carte'); d.style.flexDirection = 'column'; d.style.alignItems = 'stretch'; d.style.gap = '4px';
+      d.appendChild(el('b', '', T('Réponse à ') + b.de));
+      d.appendChild(el('div', 'aide', T('Il a écrit : ') + b.extrait));
+      const t = el('textarea'); t.rows = 3; t.maxLength = 280; t.value = b.texte; t.style.width = '100%'; d.appendChild(t);
+      const l = el('div', 'ligne'), ok = el('button', 'principal', T('Publier la réponse')), non = el('button', '', T('Rejeter'));
+      ok.addEventListener('click', () => agir('envoyer', { brouillon: b.id, texte: t.value })); non.addEventListener('click', () => agir('rejeter', { brouillon: b.id }));
+      l.append(ok, non); d.appendChild(l); zone.appendChild(d);
+    });
+    zone.appendChild(msg);
+  };
   const configurerAddon = a => {
     const c = ouvrirModal(a.nom);
     c.appendChild(el('p', '', a.description));

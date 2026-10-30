@@ -219,6 +219,15 @@ class Courriel(unittest.TestCase):
         self.assertNotIn("mauvais-mdp-secret", mail.etat()["erreur"])
         self.assertTrue(mail.etat()["erreur"])
 
+    def test_le_mode_hors_ligne_strict_bloque_le_courrier(self):
+        from unittest import mock
+        with mock.patch.dict(os.environ, {"LUTIN_HORS_LIGNE": "1"}):
+            self.assertEqual(mail.une_lecture(), -1)
+            self.assertIn("hors ligne", mail.etat()["erreur"])
+            self.assertFalse(addons.verifier("mail")["ok"])
+        BOITE["messages"] = {1: courriel()}
+        self.assertEqual(mail.une_lecture(), 0, "en ligne, la lecture reprend")
+
     def test_le_modele_n_a_aucun_outil_pour_un_courriel(self):
         repondeur.reponse = self.vrai_reponse
         vus = []

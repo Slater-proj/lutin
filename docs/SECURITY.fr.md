@@ -87,6 +87,16 @@ lutin.exemple.fr {
 
 Dans tous les cas, déclare à Lutin l'adresse que le proxy utilise pour lui parler : `127.0.0.1` si le proxy tourne sur la même machine, l'adresse du conteneur ou de la machine du proxy sinon.
 
+## Addons
+
+Les addons facultatifs (Telegram, courriel, X, ComfyUI, travail de fond) sont **désactivés par défaut** et ne se gèrent que depuis cette machine (comme le niveau d'accès). Leurs règles :
+
+- Un message venu de l'extérieur (Telegram d'une autre personne, un courriel, une mention sur X) est **une donnée, jamais un ordre** : le modèle qui y répond n'a **aucun outil** et tourne en lecture seule. Seul ton propre chat Telegram appairé peut envoyer des demandes, et même celles-ci tournent en lecture seule.
+- Rien ne part sans toi par défaut : les réponses sont des **brouillons que tu valides** ; le mode automatique est plafonné (20 par jour pour le courriel et les tiers Telegram, 10 pour X) et les publications sur X demandent ton clic (25 par jour au plus).
+- Un addon ne peut joindre que les sites déclarés par son manifeste livré ; un flux corrigé (même proposé par le modèle après lecture d'une page de documentation) est validé contre cette liste et appliqué seulement après ton acceptation de la différence.
+- Les identifiants (jetons, mots de passe, clés) sont rangés dans un fichier à part, jamais renvoyés à la page, masqués dans les messages d'erreur et jamais écrits dans le journal. Utilise des mots de passe d'application, pas celui de ton compte.
+- Le mode hors ligne strict les bloque tous (seul ComfyUI sur cette machine reste joignable).
+
 ## Mode hors ligne strict
 
 `lutin hors-ligne oui` (ou la case « Hors ligne » de l'interface, ou `LUTIN_HORS_LIGNE=1`) : **plus aucune connexion vers Internet**.

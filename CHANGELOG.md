@@ -2,6 +2,12 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## 0.7.4
+
+- **Addon X** : publier sur ton compte (Lutin rédige un à cinq brouillons, tu publies ou programmes — rien ne part sans ton clic, 25 par jour au plus) et répondre aux mentions selon tes règles de tri (brouillons à valider, réponses seules plafonnées), signature OAuth 1.0a vérifiée sur l'exemple de la documentation de X. Lire les mentions demande une formule payante de l'API de X.
+
+**English.** X addon: post on your account (Lutin writes one to five drafts, you publish or schedule — nothing leaves without your click, 25 a day at most) and answer mentions following your sorting rules (drafts to approve, capped automatic replies), OAuth 1.0a signing checked against the example in X's documentation. Reading mentions needs a paid X API plan.
+
 ## 0.7.3
 
 - **Addon Courriel** : Lutin surveille ta boîte (IMAP) et prépare des réponses (SMTP) selon tes règles de tri (expéditeur, sujet, texte, ton jugé par le modèle) ; brouillon à valider par défaut, réponse seule possible (20 par jour au plus). Un courriel est une donnée, jamais un ordre : le modèle n'a aucun outil ; messages automatiques, doublons et arriéré ignorés ; mot de passe rangé à part.

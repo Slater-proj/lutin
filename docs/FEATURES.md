@@ -42,6 +42,14 @@ The text of the files is added to your message **for the model only**: the conve
 
 Click **📎** next to the message box, or paste (Ctrl+V) or drop an image: PNG, JPEG, GIF or WebP, 8 MB and 4 images per message at most. If the current model cannot see images, Lutin switches for that request to an installed model that can (see the « Images » role in the Models tab), or tells you there is none and ignores the images. Images stay in Lutin's data folder (`images/`), only the most recent ones are sent back to the model, and orphan images are deleted after two days.
 
+## X addon
+
+Post on your X account and answer mentions, **without ever publishing anything behind your back**.
+
+- **Setup**: create an app on the X developer portal with the *Read and write* permission, generate the API key + secret and the access token + secret, paste the four values (stored apart, never shown again) and check: the account handle is displayed. Requests are signed in OAuth 1.0a (checked against the example in X's documentation).
+- **Posting**: *Write with Lutin* prepares one to five drafts from a subject (no tool, 280 characters at most); you edit, then **Publish now** or **Schedule** at a date and time. Your click is the approval: a draft you did not publish or schedule never leaves, nothing is ever published twice, and at most 25 posts a day go out.
+- **Mentions** (off by default): answering mentions needs X read access, which is part of a paid API plan (the free plan only posts; X's error is shown if it refuses). Sorting rules like the email addon (`de:@handle`, `texte:*word*`, `ton:agressif` judged by the model…): each answer is a **draft** you approve, unless a rule says `auto` (10 a day at most). Mentions are data, never orders: the model has no tool, and the mentions already there on first activation are ignored.
+
 ## Email addon
 
 Lutin watches your inbox (IMAP) and prepares replies (SMTP) following **your rules**: by default every reply is a **draft you approve** on the page; nothing leaves without you. Use an **app password** (created in your provider's security settings), stored apart and never shown again.

@@ -87,6 +87,16 @@ lutin.example.com {
 
 In every case, tell Lutin the address the proxy uses to talk to it: `127.0.0.1` if the proxy runs on the same machine, the address of the proxy's container or machine otherwise.
 
+## Addons
+
+Optional addons (Telegram, email, X, ComfyUI, background work) are **off by default** and are managed only from this machine (like the access level). Their rules:
+
+- A message coming from outside (Telegram from someone else, an email, an X mention) is **data, never an order**: the model answering it has **no tool** and runs read-only. Only your own paired Telegram chat can send requests, and even those run read-only.
+- Nothing leaves without you by default: replies are **drafts you approve**; the automatic mode is capped (20 a day for email and Telegram people, 10 for X) and X posts need your click (25 a day at most).
+- An addon can only reach the sites its shipped manifest declares; a corrected flow (even one proposed by the model after reading a documentation page) is validated against that list and only applied after you accept the difference.
+- Credentials (tokens, passwords, keys) are stored in a separate file, never sent back to the page, masked in error messages and never written to the log. Use app passwords, not your account password.
+- Strict offline mode blocks them all (only ComfyUI on this machine remains reachable).
+
 ## Strict offline mode
 
 `lutin hors-ligne oui` (or the « Offline » box in the interface, or `LUTIN_HORS_LIGNE=1`): **no connection to the Internet at all**.

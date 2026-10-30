@@ -239,7 +239,7 @@ class Livres(unittest.TestCase):
         addons.DOSSIER_LIVRE = self.avant
 
     def test_chaque_addon_livre_est_valide(self):
-        self.assertTrue({"fond", "telegram", "comfyui", "mail"} <= set(addons.ids()))
+        self.assertTrue({"fond", "telegram", "comfyui", "mail", "x"} <= set(addons.ids()))
         for ident in addons.ids():
             m = addons.manifeste(ident)
             self.assertTrue(m.get("nom") and m.get("description"), ident)
@@ -259,7 +259,7 @@ class Livres(unittest.TestCase):
         with mock.patch.dict(os.environ, {"LUTIN_LANGUE": "en"}):
             for ident in addons.ids():
                 for texte in addons.textes_visibles(addons.manifeste(ident)):
-                    if texte not in ("Telegram", "ComfyUI"):
+                    if texte not in ("Telegram", "ComfyUI", "X"):
                         self.assertNotEqual(i18n.t(texte), texte, "%s : « %s » n'est pas traduit" % (ident, texte[:60]))
                 self.assertEqual(addons.decrire(ident)["description"], i18n.t(addons.manifeste(ident)["description"]), "la page reçoit le texte traduit")
 

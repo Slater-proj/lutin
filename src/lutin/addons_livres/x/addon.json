@@ -1,0 +1,24 @@
+{
+ "nom": "X",
+ "description": "Publie sur ton compte X et répond aux mentions selon tes règles. Lutin rédige, tu valides : rien n'est publié sans ton clic (publier maintenant ou programmer). Les messages reçus sont des données, jamais des ordres.",
+ "hotes": ["api.x.com"],
+ "doc": "https://docs.x.com/x-api/introduction",
+ "auth": {"type": "oauth1", "cles": {"consumer_key": "cle_api", "consumer_secret": "secret_api", "token": "jeton", "token_secret": "secret_jeton"}},
+ "reglages": [
+  {"cle": "cle_api", "libelle": "Clé d'API (API Key)", "secret": true, "aide": "Dans le portail développeur de X, ton application > Keys and tokens."},
+  {"cle": "secret_api", "libelle": "Secret d'API (API Key Secret)", "secret": true},
+  {"cle": "jeton", "libelle": "Jeton d'accès (Access Token)", "secret": true, "aide": "À générer avec l'autorisation « Read and write »."},
+  {"cle": "secret_jeton", "libelle": "Secret du jeton d'accès (Access Token Secret)", "secret": true},
+  {"cle": "mentions", "libelle": "Répondre aux mentions", "defaut": "non", "obligatoire": false, "choix": [["non", "Non (publier seulement)"], ["oui", "Oui (nécessite l'accès en lecture de X)"]],
+   "aide": "Lire les mentions demande une formule payante de l'API de X ; la formule gratuite permet seulement de publier. Si X refuse, la carte affiche l'erreur."},
+  {"cle": "regles", "libelle": "Règles de tri des mentions", "defaut": "# Une règle par ligne, la première qui correspond gagne.\nton:agressif -> ignorer\n* -> brouillon", "obligatoire": false, "texte": true,
+   "aide": "Critères : de:@pseudo, texte:*mot*, ton:agressif|passif|neutre|amical ; actions : ignorer, brouillon (tu valides), auto (Lutin répond seul, 10 par jour au plus). Sans règle qui correspond, la mention est ignorée."}
+ ],
+ "etapes": [
+  {"titre": "Créer une application.", "texte": "Sur le portail développeur de X, crée un projet et une application, puis donne-lui l'autorisation « Read and write » (écriture).", "lien": "https://developer.x.com/en/portal/dashboard"},
+  {"titre": "Générer les clés.", "texte": "Dans Keys and tokens : copie la clé et le secret d'API, puis génère le jeton d'accès et son secret (après avoir réglé l'autorisation d'écriture). Colle les quatre valeurs ci-dessous."},
+  {"titre": "Enregistrer et vérifier.", "texte": "Lutin demande à X qui tu es : le pseudo du compte s'affiche si les clés sont bonnes."},
+  {"titre": "Choisir ce qu'il fait.", "texte": "Publier : rédige un brouillon avec Lutin, puis publie-le ou programme-le. Répondre aux mentions : seulement si ta formule d'API permet de les lire ; chaque réponse est un brouillon à valider, sauf règle « auto »."}
+ ],
+ "verification": ["moi"]
+}

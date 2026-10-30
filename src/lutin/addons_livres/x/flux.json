@@ -1,0 +1,10 @@
+{
+ "version": 1,
+ "appels": {
+  "moi": {"methode": "GET", "url": "https://api.x.com/2/users/me", "extraire": {"id": "data.id", "pseudo": "data.username"}},
+  "mentions_derniers": {"methode": "GET", "url": "https://api.x.com/2/users/{id}/mentions", "params": {"max_results": "5"}, "extraire": {"plus_recent": "meta.newest_id"}},
+  "mentions": {"methode": "GET", "url": "https://api.x.com/2/users/{id}/mentions", "params": {"since_id": "{depuis}", "max_results": "20", "tweet.fields": "author_id,conversation_id", "expansions": "author_id", "user.fields": "username,name"}},
+  "publier": {"methode": "POST", "url": "https://api.x.com/2/tweets", "corps": {"text": "{texte}"}, "extraire": {"id": "data.id"}},
+  "repondre": {"methode": "POST", "url": "https://api.x.com/2/tweets", "corps": {"text": "{texte}", "reply": {"in_reply_to_tweet_id": "{a}"}}, "extraire": {"id": "data.id"}}
+ }
+}
