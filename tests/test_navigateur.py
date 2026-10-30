@@ -244,6 +244,12 @@ class Parcours(unittest.TestCase):
             self.assertTrue(p.evaluer("[...document.querySelectorAll('#listeAddons button')].some(b => b.textContent === 'Détecter') && [...document.querySelectorAll('#listeAddons button')].some(b => b.textContent === 'Choisir le dossier…')"),
                             "ComfyUI : « Détecter » et « Choisir le dossier… » sont visibles")
             self.assertEqual(p.evaluer("[...document.querySelectorAll('#listeAddons .erreur')].filter(e => e.textContent.trim()).length"), 0, "« pas encore configuré » n'est pas une erreur : rien en rouge")
+            # pas de clignotement : la liste ne change pas sous les yeux (les panneaux ne disparaissent jamais le temps d'un rafraîchissement) et n'est pas reconstruite si rien n'a changé
+            p.evaluer("window.__carte = document.querySelector('#listeAddons > .carte')")
+            for _ in range(36):
+                self.assertTrue(p.evaluer("document.getElementById('listeAddons').textContent.includes('Dossier de ComfyUI non défini') && document.getElementById('listeAddons').textContent.includes('Brouillon pour Bob')"), "un panneau a disparu")
+                time.sleep(0.3)
+            self.assertTrue(p.evaluer("document.body.contains(window.__carte)"), "rien n'a changé : la liste n'a pas été reconstruite")
             brouillons = p.evaluer("[...document.querySelectorAll('#listeAddons textarea')].map(t => t.value).join(' | ')")
             for attendu in ("Oui, je regarde.", "Bonjour, le devis arrive demain.", "Mon premier message", "Merci !"):
                 self.assertIn(attendu, brouillons, "les brouillons sont dans des champs modifiables")

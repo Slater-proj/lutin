@@ -2186,14 +2186,22 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
   // ---- Extensions : une carte par addon (activer, configurer, vérifier, réparer) ; un addon actif peut dessiner son propre panneau (PANNEAUX)
   const PANNEAUX = {};
   let minuteurAddons = null;
+  let SEQ_ADDONS = 0, ATTENTES_PANNEAUX = [];
+  const saisieEnCours = z => z.contains(document.activeElement) && document.activeElement.matches('input,textarea,select');
+  // La liste est construite HORS de la page (cartes ET panneaux, qui se remplissent après un appel au serveur), puis échangée d'un seul coup, et seulement si elle a changé : plus de clignotement,
+  // et ce qui est en cours de saisie n'est jamais détruit. Si un chargement plus récent a démarré entre-temps, celui-ci s'abandonne.
   const chargerAddons = async () => {
-    const z = $('listeAddons');
+    const z = $('listeAddons'), seq = ++SEQ_ADDONS;
     clearTimeout(minuteurAddons);
     let r;
-    try { r = await api('/api/addons'); } catch (e) { z.textContent = e.message; return; }
-    if (z.contains(document.activeElement) && document.activeElement.matches('input,textarea,select')) { minuteurAddons = setTimeout(chargerAddons, 4000); return; }          // on est en train d'écrire : on ne reconstruit pas la carte sous les doigts
-    z.textContent = '';
-    r.liste.forEach(a => z.appendChild(carteAddon(a)));
+    try { r = await api('/api/addons'); } catch (e) { if (seq === SEQ_ADDONS) z.textContent = e.message; return; }
+    if (seq !== SEQ_ADDONS) return;
+    const neuf = document.createElement('div');
+    ATTENTES_PANNEAUX = [];
+    r.liste.forEach(a => neuf.appendChild(carteAddon(a)));
+    await Promise.all(ATTENTES_PANNEAUX);
+    if (seq !== SEQ_ADDONS) return;
+    if (!saisieEnCours(z) && neuf.innerHTML !== z.innerHTML) z.replaceChildren(...neuf.childNodes);
     if ($('p-auto').classList.contains('vue') && r.liste.some(a => a.actif && PANNEAUX[a.id])) minuteurAddons = setTimeout(chargerAddons, 4000);          // les panneaux (travail de fond…) se rafraîchissent seuls
   };
   const quand = t => new Date(t * 1000).toLocaleString();
@@ -2224,7 +2232,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
       if (a.flux_modifie) { const rest = el('button', '', T('Revenir à la version livrée')); rest.addEventListener('click', async () => { try { await api('/api/addon-flux-restaurer', { id: a.id }); } catch (e) { msg.textContent = e.message; } chargerAddons(); }); ligne.appendChild(rest); }
       d.appendChild(ligne);
     }
-    if (a.actif && PANNEAUX[a.id]) { const p = el('div'); d.appendChild(p); PANNEAUX[a.id](a, p); }
+    if (a.actif && PANNEAUX[a.id]) { const p = el('div'); d.appendChild(p); ATTENTES_PANNEAUX.push(Promise.resolve(PANNEAUX[a.id](a, p)).catch(e => { p.textContent = e.message; })); }
     return d;
   };
   // Panneau de l'addon « travail de fond » : travaux en cours (avancement, pause, rapport) et formulaire de création

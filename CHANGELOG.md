@@ -2,6 +2,12 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## 0.7.11
+
+- **Correction : les panneaux des addons ne clignotent plus.** La liste se reconstruisait toutes les 4 secondes en vidant d'abord l'écran, puis les panneaux (dossier de ComfyUI, boutons Détecter…) réapparaissaient après un appel au serveur : ils semblaient disparaître et revenir. La liste est maintenant construite hors de la page, échangée d'un coup, et seulement si elle a changé ; un chargement plus récent annule le précédent. Un test de navigateur surveille pendant 11 secondes qu'aucun panneau ne disparaît.
+
+**English.** Fix: addon panels no longer flicker. The list was rebuilt every 4 seconds by emptying the screen first, and the panels (ComfyUI folder, Detect buttons…) came back after a server call, so they seemed to vanish and return. The list is now built off-page, swapped in one go, and only when it changed; a newer load cancels the previous one. A browser test watches for 11 seconds that no panel disappears.
+
 ## 0.7.10
 
 - **ComfyUI : Lutin le lance et le referme lui-même.** Tu demandes une image dans la conversation ; Lutin rend d'abord la mémoire au modèle de langage, lance ComfyUI avec son propre Python, génère, puis le referme (réglable ; il ne ferme jamais un ComfyUI que tu as lancé toi-même).
