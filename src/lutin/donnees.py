@@ -50,11 +50,11 @@ def enregistrer_reglages(nouveau):
     r["web"] = bool(r.get("web", True))
     r["essai_a_blanc"] = bool(r.get("essai_a_blanc"))
     r["copie_conversations"] = bool(r.get("copie_conversations"))
-    if r.get("memoire_longue") not in ("resume", "fichier"):
-        raise ValueError(_t("Mémoire des longues conversations inconnue (resume ou fichier)."))
+    if r.get("memoire_longue") not in ("resume", "fichier", "demander"):
+        raise ValueError(_t("Mémoire des longues conversations inconnue (resume, fichier ou demander)."))
     _m.nettoyer_echantillonnage(r)
     _m.nettoyer_ressources(r)
-    ecrire_atomique(_m.DONNEES / "reglages.json", json.dumps(r, ensure_ascii=False, indent=1))
+    ecrire_atomique(_m.DONNEES / "reglages.json", json.dumps(dict(r, memoire_v=2), ensure_ascii=False, indent=1))
     return _m.reglages()
 
 
@@ -369,6 +369,8 @@ def conv_supprimer(ident):
     Path(str(f) + ".bak").unlink(missing_ok=True)
     from . import suivi
     suivi.supprimer(ident)                                  # la fiche de suivi disparaît avec la conversation
+    from . import archive
+    archive.supprimer(ident)                                # et le début archivé par le résumé
 
 
 def conv_renommer(ident, titre):

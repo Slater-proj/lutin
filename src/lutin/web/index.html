@@ -493,7 +493,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     </details>
     <details class="groupe" open data-g="conversation"><summary>Conversation</summary>
     <h2>Mémoire des longues conversations <span class="aide">(comment Lutin garde le fil quand la fenêtre de contexte se remplit)</span></h2>
-    <label class="opt-ligne">Méthode <select id="selMemoire"><option value="resume">Résumé automatique</option><option value="fichier">Fiche de suivi</option></select></label>
+    <label class="opt-ligne">Méthode <select id="selMemoire"><option value="demander">Demander au premier résumé</option><option value="resume">Résumé automatique</option><option value="fichier">Fiche de suivi</option></select></label>
     <div class="aide" id="aideMemoire"></div>
     <h2>Modes <span class="aide">(à choisir dans la barre de gauche ; dans tous les modes, toute modification de fichier et toute commande te demandent ton accord)</span></h2>
     <div class="carte" style="display:block"><ul class="aide" style="line-height:1.7;margin:0;padding-left:18px">
@@ -666,6 +666,25 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     d.appendChild(el('b', '', T('Essai à blanc : ') + a.titre)); if (a.detail) d.appendChild(el('div', 'aide', a.detail));
     if (a.diff) { const pre = el('pre'); a.diff.split('\n').forEach(l => { pre.appendChild(el('div', l.startsWith('+') && !l.startsWith('+++') ? 'add' : l.startsWith('-') && !l.startsWith('---') ? 'del' : '', l || ' ')); }); d.appendChild(pre); }
     d.appendChild(el('div', 'aide', T("Rien n'a été écrit ni lancé (simulation).")));
+    return d;
+  };
+  // La conversation devient longue : fiche de suivi ou résumé ? Le tour attend la réponse (cinq minutes au plus, puis résumé automatique cette fois).
+  const carteChoixMemoire = e => {
+    const d = el('div', 'accord');
+    d.appendChild(el('b', '', T('Cette conversation devient longue : comment garder le fil ?')));
+    d.appendChild(el('div', 'aide', T('Fiche de suivi : une courte fiche (objectif, décisions, plan, étape en cours…) relue à chaque réponse, et les détails du début restent retrouvables ; elle prend un peu de contexte à chaque réponse.')));
+    d.appendChild(el('div', 'aide', T('Résumé : le modèle résume le début, sans rien à gérer, mais des détails peuvent se perdre (le début reste retrouvable avec « rappeler »).')));
+    const garder = el('input'); garder.type = 'checkbox'; garder.checked = true;
+    const lab = el('label', 'opt-ligne'); lab.appendChild(garder); lab.appendChild(document.createTextNode(' ' + T('Garder ce choix pour toute la conversation (sinon la question revient au prochain résumé)')));
+    d.appendChild(lab);
+    const ligne = el('div', 'ligne'), fiche = el('button', 'principal', T('Fiche de suivi')), resume = el('button', '', T('Résumé'));
+    const repondre = async choix => {
+      fiche.disabled = resume.disabled = true;
+      try { await api('/api/memoire-choix', { conversation: e.conversation, choix, garder: garder.checked }); d.style.opacity = .6; d.appendChild(el('div', 'aide', choix === 'fichier' ? T('✔ Fiche de suivi') : T('✔ Résumé'))); if (CONV && garder.checked) CONV.memoire_longue = choix; }
+      catch (err) { d.appendChild(el('div', 'erreur', err.message)); }
+    };
+    fiche.addEventListener('click', () => repondre('fichier')); resume.addEventListener('click', () => repondre('resume'));
+    ligne.append(fiche, resume); d.appendChild(ligne);
     return d;
   };
   const carteAccord = (a) => {
@@ -939,6 +958,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
           else if (e.type === 'taches') { if (visible()) afficherTaches(e.liste, true); }
           else if (e.type === 'jetons') { if (visible()) setJauge(e); }
           else if (e.type === 'vitesse') { if (visible()) setVitesse(e); }
+          else if (e.type === 'choix_memoire') { zone().appendChild(carteChoixMemoire(e)); signaler(T('⏸ Une question vous attend')); }
           else if (e.type === 'info') zone().appendChild(el('div', 'info', e.texte));
           else if (e.type === 'erreur') zone().appendChild(el('div', 'erreur', e.texte));
           else if (e.type === 'fin') {
@@ -1114,7 +1134,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     ETAT.installes.forEach(id => { const m = ETAT.modeles.find(x => x.id === id), o = el('option', '', m ? m.nom : id); o.value = id; s.appendChild(o); });
     if (!ETAT.installes.length) { const o = el('option', '', ETAT.ollama ? T('Aucun modèle installé (onglet Modèles)') : T('Ollama arrêté')); o.value = ETAT.reglages.modele; s.appendChild(o); }
     s.value = ETAT.installes.includes(v) ? v : (ETAT.installes.includes(ETAT.reglages.modele) ? ETAT.reglages.modele : (ETAT.installes[0] || ETAT.reglages.modele));
-    if (!$('selMode').dataset.init) { $('selMode').value = ETAT.reglages.mode; $('cReflexion').checked = ETAT.reglages.reflexion; $('cAuto').checked = ETAT.reglages.auto_ecriture; $('cAvance').checked = !!ETAT.reglages.avance; $('cAutoCmd').checked = ETAT.reglages.auto_commandes; $('cEssai').checked = !!ETAT.reglages.essai_a_blanc; $('cCopieConv').checked = !!ETAT.reglages.copie_conversations; $('selMemoire').value = ETAT.reglages.memoire_longue || 'resume'; aideMemoire(); $('cWeb').checked = ETAT.reglages.web !== false; $('rCtx').value = ETAT.reglages.num_ctx; $('rTemp').value = ETAT.reglages.temperature; $('rTours').value = ETAT.reglages.tours_max; $('iTopP').value = ETAT.reglages.top_p ?? ''; $('iTopK').value = ETAT.reglages.top_k ?? ''; $('iMinP').value = ETAT.reglages.min_p ?? ''; $('iRep').value = ETAT.reglages.repeat_penalty ?? ''; $('cGarde').checked = ETAT.reglages.garde_ressources !== false; $('cComfy').checked = ETAT.reglages.liberer_si_comfy !== false; $('sRappels').value = ETAT.reglages.rappels_auto || 'scenario'; $('iSeuilRam').value = ETAT.reglages.seuil_ram_go; $('iSeuilDisque').value = ETAT.reglages.seuil_disque_go; $('iPlafond').value = ETAT.reglages.plafond_donnees_go; $('iLimiteCmd').value = ETAT.reglages.limite_ram_commande_go; $('iThreads').value = ETAT.reglages.num_thread ?? ''; $('iGarde').value = ETAT.reglages.garde_min ?? ''; $('selMode').dataset.init = '1'; }
+    if (!$('selMode').dataset.init) { $('selMode').value = ETAT.reglages.mode; $('cReflexion').checked = ETAT.reglages.reflexion; $('cAuto').checked = ETAT.reglages.auto_ecriture; $('cAvance').checked = !!ETAT.reglages.avance; $('cAutoCmd').checked = ETAT.reglages.auto_commandes; $('cEssai').checked = !!ETAT.reglages.essai_a_blanc; $('cCopieConv').checked = !!ETAT.reglages.copie_conversations; $('selMemoire').value = ETAT.reglages.memoire_longue || 'demander'; aideMemoire(); $('cWeb').checked = ETAT.reglages.web !== false; $('rCtx').value = ETAT.reglages.num_ctx; $('rTemp').value = ETAT.reglages.temperature; $('rTours').value = ETAT.reglages.tours_max; $('iTopP').value = ETAT.reglages.top_p ?? ''; $('iTopK').value = ETAT.reglages.top_k ?? ''; $('iMinP').value = ETAT.reglages.min_p ?? ''; $('iRep').value = ETAT.reglages.repeat_penalty ?? ''; $('cGarde').checked = ETAT.reglages.garde_ressources !== false; $('cComfy').checked = ETAT.reglages.liberer_si_comfy !== false; $('sRappels').value = ETAT.reglages.rappels_auto || 'scenario'; $('iSeuilRam').value = ETAT.reglages.seuil_ram_go; $('iSeuilDisque').value = ETAT.reglages.seuil_disque_go; $('iPlafond').value = ETAT.reglages.plafond_donnees_go; $('iLimiteCmd').value = ETAT.reglages.limite_ram_commande_go; $('iThreads').value = ETAT.reglages.num_thread ?? ''; $('iGarde').value = ETAT.reglages.garde_min ?? ''; $('selMode').dataset.init = '1'; }
     if (document.activeElement !== $('selLangue')) $('selLangue').value = ETAT.langue_reglage || 'auto';
     afficherVersion();
     if ($('vVersionActuelle')) $('vVersionActuelle').textContent = T('Lutin ') + (ETAT.version || '');
@@ -1213,10 +1233,11 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
       if (!v) { infoLocale(T('Mode actuel : ') + nom($('selMode').value) + T('. Utilise /mode polyvalent, code, ecriture, recherche ou discussion (ou en anglais : general, code, writing, research, chat).')); return; }
       $('selMode').value = v; await sauverReglages(); infoLocale(T('Mode : ') + nom(v) + '.');
     } },
-    { n: 'memoire', a: ['memory'], arg: 'resume|fichier', d: T('Mémoire des longues conversations : résumé automatique ou fiche de suivi (pour cette conversation)'), f: async arg => {
-      const a = (arg || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''), v = a.startsWith('res') || a.startsWith('sum') || a.startsWith('compact') ? 'resume' : (a.startsWith('fic') || a.startsWith('suiv') || a.startsWith('file') || a.startsWith('trac') ? 'fichier' : '');
-      const nom = m => (m === 'fichier' ? T('fiche de suivi') : T('résumé automatique'));
-      if (!v) { infoLocale(T('Mémoire actuelle : ') + nom((CONV && CONV.memoire_longue) || ETAT.reglages.memoire_longue || 'resume') + T('. Utilise /memoire resume ou /memoire fichier (ou 🧾 Fiche de suivi).')); return; }
+    { n: 'memoire', a: ['memory'], arg: 'resume|fichier|demander', d: T('Mémoire des longues conversations : résumé automatique, fiche de suivi, ou demander au premier résumé (pour cette conversation)'), f: async arg => {
+      const a = (arg || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''), v = a.startsWith('dem') || a.startsWith('ask') ? 'demander' : a.startsWith('res') || a.startsWith('sum') || a.startsWith('compact') ? 'resume' : (a.startsWith('fic') || a.startsWith('suiv') || a.startsWith('file') || a.startsWith('trac') ? 'fichier' : '');
+      const nom = m => (m === 'fichier' ? T('fiche de suivi') : m === 'demander' ? T('demander au premier résumé') : T('résumé automatique'));
+      if (!v) { infoLocale(T('Mémoire actuelle : ') + nom((CONV && CONV.memoire_longue) || ETAT.reglages.memoire_longue || 'demander') + T('. Utilise /memoire resume, /memoire fichier ou /memoire demander (ou 🧾 Fiche de suivi).')); return; }
+      if (v === 'demander') { $('selMemoire').value = v; await sauverReglages(); if (CONV) { await api('/api/memoire-conversation', { conversation: CONV.id, mode: '' }); delete CONV.memoire_longue; majJauge(CONV.id); } infoLocale(T('Mémoire : ') + nom(v) + '.'); return; }
       if (!CONV) { $('selMemoire').value = v; await sauverReglages(); infoLocale(T('Mémoire par défaut : ') + nom(v) + '.'); return; }
       const x = await api('/api/memoire-conversation', { conversation: CONV.id, mode: v }); CONV.memoire_longue = v; majJauge(CONV.id);
       infoLocale(T('Mémoire de cette conversation : ') + nom(x.mode) + (x.mode === 'fichier' ? T('. Elle prend jusqu\'à 10 % du contexte à chaque réponse.') : T('. Le début sera résumé quand il le faudra.')));
@@ -1381,7 +1402,9 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
   // ---- Mémoire des longues conversations : résumé automatique ou fiche de suivi
   const aideMemoire = () => {
     const v = $('selMemoire').value;
-    $('aideMemoire').textContent = v === 'fichier'
+    $('aideMemoire').textContent = v === 'demander'
+      ? T('Demander : tant que la conversation reste courte, rien à décider. Quand elle approche de la limite (au premier résumé automatique), Lutin te laisse choisir entre la fiche de suivi (garde le fil, retrouve les détails avec « rappeler », prend un peu de contexte à chaque réponse) et le résumé (rien à gérer, mais des détails perdus). Une case permet de garder ton choix pour toute la conversation.')
+      : v === 'fichier'
       ? T('Fiche de suivi : le modèle (et Lutin, tout seul) tient une courte fiche par conversation — objectif, décisions, plan, étape en cours — relue à chaque réponse. Le fil ne se perd pas et « oui, on passe à l\'action » exécute l\'étape au lieu de replanifier. ⚠ La fiche prend jusqu\'à 10 % de la fenêtre de contexte à chaque réponse (un peu plus lent) ; un tout petit modèle la tient mal. Elle est supprimée avec la conversation.')
       : T('Résumé automatique : quand la conversation approche de la limite, le modèle résume le début. Rien à gérer. ⚠ Chaque résumé prend quelques secondes à une minute de calcul, perd des détails, et le modèle peut oublier une décision ou replanifier.');
   };

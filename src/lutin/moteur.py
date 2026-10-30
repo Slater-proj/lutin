@@ -63,7 +63,7 @@ REGLAGES_DEFAUT = {"modele": os.environ.get("LUTIN_MODELE") or "qwen3:8b", "avan
                     "top_p": None, "top_k": None, "min_p": None, "repeat_penalty": None,          # None = valeur conseillée pour la famille du modèle (voir profil_echantillonnage)
                     "garde_ressources": True, "seuil_ram_go": 3.0, "seuil_disque_go": 10.0, "plafond_donnees_go": 2.0, "limite_ram_commande_go": 0.0,
                     "liberer_si_comfy": True, "rappels_auto": "scenario",
-                    "num_thread": None, "garde_min": None, "essai_a_blanc": False, "copie_conversations": False, "memoire_longue": "resume"}          # charge de la machine : cœurs du processeur utilisés et minutes de garde du modèle en mémoire (None = automatique)          # rappels_auto : « scenario » (mode scénariste seulement), « toujours » ou « jamais »
+                    "num_thread": None, "garde_min": None, "essai_a_blanc": False, "copie_conversations": False, "memoire_longue": "demander"}          # charge de la machine : cœurs du processeur utilisés et minutes de garde du modèle en mémoire (None = automatique)          # rappels_auto : « scenario » (mode scénariste seulement), « toujours » ou « jamais »
 CHOIX_RAPPELS = ("scenario", "toujours", "jamais")
 BORNES_CHARGE = {"num_thread": (1, 256), "garde_min": (0, 240)}
 BORNES_RESSOURCES = {"seuil_ram_go": (0.5, 64.0), "seuil_disque_go": (1.0, 2000.0), "plafond_donnees_go": (0.2, 500.0), "limite_ram_commande_go": (0.0, 256.0)}
@@ -221,7 +221,10 @@ from .donnees import (  # noqa: F401  (déplacé dans donnees.py : moteur ré-ex
 
 def reglages():
     r = dict(REGLAGES_DEFAUT)
-    r.update({k: v for k, v in lire_json(DONNEES / "reglages.json", {}).items() if k in REGLAGES_DEFAUT})
+    brut = lire_json(DONNEES / "reglages.json", {})
+    r.update({k: v for k, v in brut.items() if k in REGLAGES_DEFAUT})
+    if brut.get("memoire_v") != 2 and r["memoire_longue"] == "resume":
+        r["memoire_longue"] = "demander"                                             # avant la 0.6.4, « résumé » n'était qu'une valeur par défaut : on pose maintenant la question au premier résumé
     r["num_ctx"] = max(4096, min(131072, int(r["num_ctx"])))
     r["temperature"] = max(0.0, min(2.0, float(r["temperature"])))
     r["num_predict"] = max(0, min(32768, int(r.get("num_predict", 0))))
@@ -424,9 +427,13 @@ from .dialogue import (  # noqa: F401  (déplacé dans dialogue.py : moteur ré-
     calculer_vitesse,
     capacites,
     chemin_ollama,
+    CHOIX_MEMOIRE,
+    a_compacter,
+    amorcer_fiche,
     compacter,
     compacter_conversation,
     memoire_longue,
+    repondre_choix_memoire,
     consignes_systeme,
     duree_garde,
     ecrire_registre_modeles,

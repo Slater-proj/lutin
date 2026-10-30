@@ -9,6 +9,7 @@ import math
 import os
 import re
 import unicodedata
+from . import archive as _archive
 from . import extraction
 from . import modes as _modes
 from . import moteur as _m
@@ -23,6 +24,8 @@ DOSSIERS_DOCUMENTS = ("docs", "documents")          # où poser ses PDF, documen
 DOCUMENTS_MAX = 300
 FORMATS_LUS_PAR_EXTRACTION = (".pdf", ".docx", ".odt", ".ods", ".odp", ".pptx", ".xlsx")
 CACHE_PARTIES = {}
+CACHE_INDEX = {}                       # fichier -> (signature, morceaux, erreur, fréquences des mots) : seuls les fichiers modifiés sont relus
+TAILLE_MAX_TEXTE = 600_000
 
 
 def mots(texte):
@@ -115,57 +118,88 @@ def etiquette_rappel(f):
             return Path(f).name
 
 
-def indexer_rappel():
-    """Reconstruit l'index seulement si un document a changé."""
-    fichiers = list(sources_rappel())
-    signature = []
-    for f in fichiers:
-        try:
-            st = f.stat()
-            signature.append((str(f), st.st_mtime_ns, st.st_size))
-        except OSError:
-            continue
-    signature = tuple(signature)
-    if RAPPEL["signature"] == signature:
-        return
-    morceaux, erreurs = [], []
-    for f in fichiers:
-        try:
-            if f.suffix.lower() in extraction.FORMATS:
-                try:
-                    for titre, texte in parties_document(f):
-                        morceaux += decouper(texte, etiquette_rappel(f), titre)
-                except extraction.ErreurExtraction as e:
-                    erreurs.append({"nom": etiquette_rappel(f), "message": str(e)})
-                continue
-            if f.stat().st_size > 600_000:
-                continue
-            if f.suffix.lower() == ".json":
-                c = _m.lire_json(f, None)
-                if not c:
-                    continue
+def morceaux_fichier(f):
+    """Les morceaux d'un fichier, avec leurs comptes de mots. Renvoie (morceaux, erreur ou None)."""
+    morceaux, erreur = [], None
+    try:
+        if f.suffix.lower() in extraction.FORMATS:
+            try:
+                for titre, texte in parties_document(f):
+                    morceaux += decouper(texte, etiquette_rappel(f), titre)
+            except extraction.ErreurExtraction as e:
+                erreur = {"nom": etiquette_rappel(f), "message": str(e)}
+        elif f.suffix.lower() == ".json" and f.parent.name == "conversations":
+            c = _m.lire_json(f, None)
+            if c:
                 nom = "conversation « {} »".format(c.get("titre", "")[:60])
                 texte = "\n\n".join("[{}] {}".format("moi" if m.get("role") == "user" else "assistant", m.get("content", "")) for m in c.get("messages", []) if m.get("role") in ("user", "assistant") and m.get("content"))
                 if c.get("resume"):
                     texte = "# Résumé\n" + c["resume"] + "\n\n" + texte
+                archive = _archive.texte(c.get("id"))                         # ce que le résumé automatique a retiré de la conversation
+                if archive:
+                    texte = texte + "\n\n# Début de la conversation (avant le résumé)\n" + archive
                 for m_ in decouper(texte, nom):
                     m_["conv"] = c.get("id")
                     morceaux.append(m_)
-            else:
-                morceaux += decouper(f.read_text(encoding="utf-8", errors="replace"), etiquette_rappel(f))
-        except OSError:
-            continue
-    df = collections.Counter()
+        elif f.stat().st_size <= TAILLE_MAX_TEXTE:
+            morceaux += decouper(f.read_text(encoding="utf-8", errors="replace"), etiquette_rappel(f))
+    except OSError:
+        pass
     for m in morceaux:
         m["tf"] = collections.Counter(mots(m["titre"] + " " + m["texte"]))
         m["longueur"] = sum(m["tf"].values()) or 1
-        df.update(m["tf"].keys())
+    return morceaux, erreur
+
+
+def signature_fichier(f):
+    """Ce qui dit qu'un fichier a changé : sa date, sa taille, et pour une conversation, celles de son archive."""
+    st = f.stat()
+    sig = (st.st_mtime_ns, st.st_size)
+    if f.parent.name == "conversations" and f.suffix.lower() == ".json":
+        try:
+            sa = _archive.chemin(f.stem).stat()
+            sig += (sa.st_mtime_ns, sa.st_size)
+        except (OSError, ValueError):
+            pass
+    return sig
+
+
+def indexer_rappel():
+    """Met l'index à jour : seuls les fichiers qui ont changé sont relus et redécoupés (une longue conversation qui grandit ne force pas à tout reprendre)."""
+    fichiers = list(sources_rappel())
+    signature, presents = [], {}
+    for f in fichiers:
+        try:
+            sig = signature_fichier(f)
+        except OSError:
+            continue
+        signature.append((str(f), sig))
+        presents[str(f)] = (f, sig)
+    signature = tuple(signature)
+    if RAPPEL["signature"] == signature:
+        return
+    for cle in [k for k in CACHE_INDEX if k not in presents]:
+        del CACHE_INDEX[cle]
+    for cle, (f, sig) in presents.items():
+        if cle not in CACHE_INDEX or CACHE_INDEX[cle][0] != sig:
+            morceaux_f, erreur_f = morceaux_fichier(f)
+            df_f = collections.Counter()
+            for m in morceaux_f:
+                df_f.update(m["tf"].keys())
+            CACHE_INDEX[cle] = (sig, morceaux_f, erreur_f, df_f)
+    morceaux, erreurs, df = [], [], collections.Counter()
+    for cle in presents:
+        _, morceaux_f, erreur_f, df_f = CACHE_INDEX[cle]
+        morceaux += morceaux_f
+        df.update(df_f)
+        if erreur_f:
+            erreurs.append(erreur_f)
     RAPPEL.update({"erreurs": erreurs, "signature": signature, "morceaux": morceaux, "df": df, "moyenne": (sum(m["longueur"] for m in morceaux) / len(morceaux)) if morceaux else 1.0})
 
 
-def passages_rappel(requete, nombre=5, exclure_conv="", min_termes=1):
+def passages_rappel(requete, nombre=5, exclure_conv="", min_termes=1, seulement_conv=""):
     """Les passages les plus pertinents (méthode BM25) : liste de {score, m, trouves}. exclure_conv : conversation à ignorer (celle en cours) ;
-    min_termes : nombre minimal de mots de la requête présents dans le passage (pour ne garder que des passages vraiment liés)."""
+    min_termes : nombre minimal de mots de la requête présents dans le passage (pour ne garder que des passages vraiment liés). seulement_conv : ne chercher que dans cette conversation (début archivé compris)."""
     termes = set(mots(requete))
     if not termes:
         return []
@@ -174,6 +208,8 @@ def passages_rappel(requete, nombre=5, exclure_conv="", min_termes=1):
     scores = []
     for m in RAPPEL["morceaux"]:
         if exclure_conv and m.get("conv") == exclure_conv:
+            continue
+        if seulement_conv and m.get("conv") != seulement_conv:
             continue
         score, trouves = 0.0, 0
         for t in termes:
@@ -222,7 +258,7 @@ def chercher_documents(requete, nombre=8):
     return sortie
 
 
-def outil_rappeler(requete, nombre=5):
+def outil_rappeler(requete, nombre=5, conv_id="", ici=False):
     """Les passages les plus pertinents dans docs/, skills/, les mémoires et les anciennes conversations."""
     if not mots(requete):
         raise _m.ErreurOutil(_t("Requête vide ou trop vague : donne quelques mots-clés."))
@@ -230,9 +266,9 @@ def outil_rappeler(requete, nombre=5):
         nombre = max(1, min(10, int(nombre or 5)))
     except (TypeError, ValueError):
         nombre = 5
-    passages = passages_rappel(requete, nombre)
+    passages = passages_rappel(requete, nombre, seulement_conv=(conv_id or "") if ici else "")
     if not passages:
-        return _t("Aucun passage pertinent dans les documents ni dans les conversations enregistrées.")
+        return _t("Aucun passage pertinent dans cette conversation.") if ici else _t("Aucun passage pertinent dans les documents ni dans les conversations enregistrées.")
     return formater_passages(passages) + _t("\n\n(lis le document complet avec « lire » si un passage t'intéresse)")
 
 

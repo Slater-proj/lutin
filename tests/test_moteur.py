@@ -231,8 +231,8 @@ def lire(chemin):
         return json.loads(r.read().decode("utf-8"))
 
 
-def chat(message, conversation="", reponses=None, decider=None, **options):
-    """Envoie un message et renvoie la liste des évènements. decider(evenement) -> bool répond aux demandes d'accord."""
+def chat(message, conversation="", reponses=None, decider=None, choisir=None, **options):
+    """Envoie un message et renvoie la liste des évènements. decider(evenement) -> bool répond aux demandes d'accord. choisir = (choix, garder) répond à la question « fiche de suivi ou résumé ? »."""
     SCENARIO[:] = reponses or []
     corps = dict({"message": message, "conversation": conversation}, **options)
     req = urllib.request.Request(BASE + "/api/chat", data=json.dumps(corps).encode("utf-8"), headers={"Content-Type": "application/json", "X-Token": A.JETON})
@@ -243,6 +243,8 @@ def chat(message, conversation="", reponses=None, decider=None, **options):
             evenements.append(e)
             if e["type"] == "approbation":
                 post("/api/approuver", {"id": e["id"], "ok": decider(e) if decider else True})
+            if e["type"] == "choix_memoire" and choisir:
+                post("/api/memoire-choix", {"conversation": e["conversation"], "choix": choisir[0], "garder": choisir[1]})
     return evenements
 
 
@@ -395,7 +397,7 @@ class Assistant(unittest.TestCase):
         self.assertEqual(lire("/api/etat")["reglages"]["num_predict"], 0)
 
     def test_conversation_longue_resumee(self):
-        A.enregistrer_reglages({"num_ctx": 16384})
+        A.enregistrer_reglages({"num_ctx": 16384, "memoire_longue": "resume"})
         ident = chat("Début", reponses=[[{"content": "Réponse initiale."}]])[-1]["conversation"]["id"]
         c = A.conv_lire(ident)
         for i in range(14):
@@ -1405,6 +1407,94 @@ class Assistant(unittest.TestCase):
             self.assertFalse(suivi.chemin(cid).exists(), "supprimer la conversation supprime sa fiche")
         finally:
             A.enregistrer_reglages({"memoire_longue": "resume"})
+
+    @staticmethod
+    def conversation_longue(secret="Le code du coffre est 4711-ZEBRE."):
+        """Une conversation qui dépasse 60 % de la fenêtre de contexte (le secret est dans le tout premier message)."""
+        conv = A.conv_nouvelle()
+        taille = int(A.reglages()["num_ctx"] * 0.6 * 3 * 1.4 / 12 / 4)          # 12 messages qui pèsent bien plus de 60 % de la fenêtre
+        for i in range(12):
+            conv["messages"].append({"role": "user" if i % 2 == 0 else "assistant", "content": (secret + " " if i == 0 else "") + "mot " * taille + str(i)})
+        A.conv_ecrire(conv)
+        return conv["id"]
+
+    def test_le_resume_garde_le_debut_retrouvable(self):
+        """Le résumé automatique retire le début de la conversation : il est archivé, « rappeler » (ici=true) le retrouve, et l'archive disparaît avec la conversation."""
+        from lutin import archive
+        A.enregistrer_reglages({"memoire_longue": "resume"})
+        cid = self.conversation_longue()
+        chat("Et la suite ?", conversation=cid, reponses=[[{"content": "RÉSUMÉ : un coffre."}], [{"content": "Voilà."}]])
+        conv = A.conv_lire(cid)
+        self.assertTrue(conv["resume"].startswith("RÉSUMÉ") and len(conv["messages"]) < 12, "le début est résumé")
+        self.assertIn("4711-ZEBRE", archive.texte(cid), "mais il reste sur le disque")
+        self.assertIn("DÉBUT DE LA CONVERSATION", RECUES[-1]["messages"][0]["content"], "le modèle sait qu'il peut retrouver le début")
+        trouve = A.outil_rappeler("coffre code ZEBRE", 3, cid, True)
+        self.assertIn("4711", trouve, "le détail perdu par le résumé est retrouvé")
+        self.assertIn("Aucun passage", A.outil_rappeler("coffre ZEBRE", 3, "autre-conversation", True), "ici=true ne cherche que dans cette conversation")
+        chat("Quel est le code ?", conversation=cid, reponses=[[appel_outil("rappeler", requete="coffre code ZEBRE", ici=True)], [{"content": "Le code est 4711-ZEBRE."}]])
+        self.assertTrue(any("4711-ZEBRE" in str(m.get("content", "")) for m in RECUES[-1]["messages"] if m.get("role") == "tool"), "le modèle retrouve le détail avec l'outil, depuis la conversation en cours")
+        post("/api/supprimer", {"id": cid})
+        self.assertFalse(archive.chemin(cid).exists(), "l'archive disparaît avec la conversation")
+
+    def test_question_fiche_ou_resume_au_premier_resume(self):
+        """Réglage « demander » : rien tant que la conversation est courte ; au premier résumé, la question est posée ; la case « garder » évite de la reposer."""
+        from lutin import dialogue, suivi
+        A.enregistrer_reglages({"memoire_longue": "demander"})
+        try:
+            court = [e for e in chat("Bonjour", reponses=[[{"content": "Salut."}]])]
+            self.assertFalse(any(e["type"] == "choix_memoire" for e in court), "pas de question tant que la conversation est courte")
+            cid = self.conversation_longue()
+            fiche = json.dumps({"objectif": ["Retrouver le code du coffre"], "decisions": ["Le code est 4711-ZEBRE"]})
+            ev = chat("Continue", conversation=cid, choisir=("fichier", True), reponses=[[{"content": fiche}], [{"content": "Je continue."}]])
+            self.assertTrue(any(e["type"] == "choix_memoire" for e in ev), "la question est posée au premier résumé")
+            conv = A.conv_lire(cid)
+            self.assertEqual(conv["memoire_longue"], "fichier", "« garder » retient le choix pour la conversation")
+            self.assertEqual(len(conv["messages"]), 14, "en mode fiche, rien n'est retiré de la conversation")
+            self.assertIn("Retrouver le code du coffre", suivi.lire(cid)["objectif"], "la fiche est amorcée à partir du début de la conversation")
+            ev = chat("Encore", conversation=cid, reponses=[[{"content": "Oui."}]])
+            self.assertFalse(any(e["type"] == "choix_memoire" for e in ev), "choix gardé : la question n'est plus posée")
+            # sans « garder » : la fiche sert pour cette fois, puis la question reviendra
+            cid2 = self.conversation_longue()
+            ev = chat("Continue", conversation=cid2, choisir=("fichier", False), reponses=[[{"content": fiche}], [{"content": "Ok."}]])
+            conv2 = A.conv_lire(cid2)
+            self.assertFalse(conv2.get("memoire_longue"), "pas retenu pour toute la conversation")
+            ev = chat("Suite", conversation=cid2, reponses=[[{"content": "Ok."}]])
+            self.assertFalse(any(e["type"] == "choix_memoire" for e in ev), "mais pas redemandé à chaque réponse")
+            # choix « résumé » : le début est résumé et archivé
+            cid3 = self.conversation_longue()
+            chat("Continue", conversation=cid3, choisir=("resume", True), reponses=[[{"content": "RÉSUMÉ"}], [{"content": "Ok."}]])
+            self.assertEqual(A.conv_lire(cid3)["memoire_longue"], "resume")
+            self.assertTrue(A.conv_lire(cid3)["resume"])
+            # sans réponse : résumé pour cette fois
+            vrai, dialogue.ATTENTE_CHOIX = dialogue.ATTENTE_CHOIX, 1
+            try:
+                cid4 = self.conversation_longue()
+                ev = chat("Continue", conversation=cid4, reponses=[[{"content": "RÉSUMÉ"}], [{"content": "Ok."}]])
+            finally:
+                dialogue.ATTENTE_CHOIX = vrai
+            self.assertIn("Pas de réponse", " ".join(e.get("texte", "") for e in ev if e["type"] == "info"))
+            self.assertTrue(A.conv_lire(cid4)["resume"], "le résumé automatique a eu lieu")
+            post("/api/memoire-choix", {"conversation": cid4, "choix": "fichier"}, attendu=409)
+            post("/api/memoire-choix", {"conversation": cid4, "choix": "pirate"}, attendu=400)
+            for c in (cid, cid2, cid3, cid4):
+                post("/api/supprimer", {"id": c})
+        finally:
+            A.enregistrer_reglages({"memoire_longue": "resume"})
+
+    def test_ancien_reglage_resume_devient_demander(self):
+        """Avant la 0.6.4, « résumé » n'était que la valeur par défaut : un réglage jamais choisi passe à « demander » ; un choix fait ensuite est respecté."""
+        fichier = A.DONNEES / "reglages.json"
+        ancien = fichier.read_text(encoding="utf-8") if fichier.is_file() else None
+        try:
+            fichier.write_text(json.dumps({"memoire_longue": "resume"}), encoding="utf-8")
+            self.assertEqual(A.reglages()["memoire_longue"], "demander")
+            A.enregistrer_reglages({"memoire_longue": "resume"})
+            self.assertEqual(A.reglages()["memoire_longue"], "resume", "choix explicite respecté")
+        finally:
+            if ancien is None:
+                fichier.unlink(missing_ok=True)
+            else:
+                fichier.write_text(ancien, encoding="utf-8")
 
     def test_mise_a_jour_depuis_la_page(self):
         import time

@@ -2,6 +2,14 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## 0.6.4
+
+- **Fiche de suivi ou résumé : Lutin te demande** au premier résumé automatique (réglage « Demander au premier résumé », par défaut), avec une case pour garder le choix pour toute la conversation ; passer à la fiche la remplit à partir du début de la conversation.
+- **Rien n'est vraiment perdu** : le résumé archive les messages qu'il retire, et `rappeler` (avec `ici=true`) les retrouve ; le modèle est prévenu qu'il peut le faire. L'index du rappel ne relit que les fichiers modifiés et lit désormais les très longues conversations.
+- **CI plus rapide** : trois séries de tests (Python 3.10 et 3.13 sur Linux, 3.12 sur Windows) au lieu de huit.
+
+**English.** Tracking sheet or summary: Lutin now asks at the first automatic summary (new default “Ask at the first summary”), with a box to keep the choice for the whole conversation; switching to the sheet fills it from the start of the conversation. Nothing is really lost: the summary archives the messages it removes and `rappeler` (with `ici=true`) finds them again; the recall index only re-reads changed files and now reads very long conversations. Faster CI: three test series instead of eight.
+
 ## 0.6.3
 
 - **Longues conversations** : deux méthodes au choix, par conversation, à tout moment — résumé automatique, ou **fiche de suivi** (objectif, décisions, plan, étape en cours…) tenue par le modèle et par Lutin, bornée, mesurée, supprimée avec la conversation. Un « oui » ordonne d'exécuter l'étape en cours au lieu de replanifier.

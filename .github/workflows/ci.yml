@@ -15,8 +15,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
-        python: ["3.10", "3.11", "3.12", "3.13"]
+        # Les deux extrémités de Python sur Linux (la plus ancienne gérée et la plus récente), et une version courante sur Windows : trois séries au lieu de huit.
+        include:
+          - {os: ubuntu-latest, python: "3.10"}
+          - {os: ubuntu-latest, python: "3.13"}
+          - {os: windows-latest, python: "3.12"}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7

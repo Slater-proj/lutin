@@ -1,5 +1,6 @@
 """Le dialogue avec Ollama : démarrage et état d'Ollama, requêtes au modèle, boucle de l'agent (tours d'outils), résumé des conversations, titres. L'état reste dans moteur (« _m.NOM »)."""
 from pathlib import Path
+from . import archive as _archive
 from . import horsligne as _hl
 from . import images as _images
 from . import modes as _modes
@@ -45,9 +46,96 @@ OUTILS_WEB = {"web_chercher", "web_lire"}
 
 
 def memoire_longue(conv, r):
-    """Comment cette conversation garde son fil : « resume » (le début est résumé par le modèle) ou « fichier » (fiche de suivi). Le choix de la conversation l'emporte sur le réglage général."""
-    choix = (conv or {}).get("memoire_longue") or r.get("memoire_longue") or "resume"
-    return choix if choix in ("resume", "fichier") else "resume"
+    """Comment cette conversation garde son fil : « resume » (le début est résumé par le modèle), « fichier » (fiche de suivi) ou « demander » (on pose la question au premier résumé).
+    Le choix de la conversation l'emporte sur le réglage général."""
+    choix = (conv or {}).get("memoire_longue") or r.get("memoire_longue") or "demander"
+    return choix if choix in ("resume", "fichier", "demander") else "demander"
+
+
+CHOIX_MEMOIRE = {}                  # conversation -> {"evenement", "choix", "garder"} : la question « fiche de suivi ou résumé ? » en attente de réponse
+ATTENTE_CHOIX = 300                 # secondes avant de prendre le résumé automatique (page fermée, téléphone verrouillé)
+
+
+def a_compacter(conv, r):
+    """Vrai quand la conversation approche de la taille du contexte : c'est le moment où le résumé automatique se déclencherait."""
+    msgs = conv["messages"]
+    return not (estimer(msgs) + len(conv.get("resume", "")) // 3 < int(r["num_ctx"] * 0.6) or len(msgs) < 8)
+
+
+def repondre_choix_memoire(ident, choix, garder):
+    """La réponse de la page à la question : renvoie False s'il n'y a pas de question en attente pour cette conversation."""
+    if choix not in ("resume", "fichier"):
+        raise ValueError(_t("Mémoire des longues conversations inconnue (resume ou fichier)."))
+    attente = CHOIX_MEMOIRE.get(str(ident))
+    if not attente:
+        return False
+    attente["choix"], attente["garder"] = choix, bool(garder)
+    attente["evenement"].set()
+    return True
+
+
+def demander_memoire(conv, r, emit, stop):
+    """Au premier résumé automatique, laisse choisir : fiche de suivi (garde mieux le fil, coûte un peu de contexte à chaque réponse) ou résumé (perd des détails).
+    Case « garder pour cette conversation » : sinon la question revient au résumé suivant. Sans réponse, résumé automatique pour cette fois. Renvoie « resume » ou « fichier »."""
+    ident = conv["id"]
+    attente = {"evenement": threading.Event(), "choix": None, "garder": False}
+    CHOIX_MEMOIRE[ident] = attente
+    try:
+        emit({"type": "choix_memoire", "conversation": ident})
+        fin = time.time() + ATTENTE_CHOIX
+        while time.time() < fin and not stop.is_set() and not attente["evenement"].wait(0.4):
+            pass
+    finally:
+        CHOIX_MEMOIRE.pop(ident, None)
+    if stop.is_set():
+        raise _m.Arret()
+    if attente["choix"] is None:
+        emit({"type": "info", "texte": _t("Pas de réponse : résumé automatique cette fois (la question sera reposée).")})
+        return "resume"
+    if attente["garder"]:
+        conv["memoire_longue"] = attente["choix"]
+        _m.conv_ecrire(conv)
+    return attente["choix"]
+
+
+def amorcer_fiche(conv, r, emit=None):
+    """Remplit une fiche de suivi vide à partir du début de la conversation (un appel au modèle, comme le résumé). Les détails restent retrouvables avec « rappeler ».
+    Renvoie le nombre de lignes écrites ; 0 si la fiche n'était pas vide ou si l'appel a échoué (la conversation n'en souffre pas : la fiche se remplira ensuite)."""
+    ident = conv.get("id")
+    try:
+        if any(_suivi.lire(ident).values()):
+            return 0
+    except ValueError:
+        return 0
+    msgs = conv["messages"]
+    coupe = max((i for i, m in enumerate(msgs) if m["role"] == "user"), default=0)
+    ancien = msgs[:coupe]
+    if len(ancien) < 2 and not conv.get("resume"):
+        return 0
+    texte = "\n".join("[{}] {}".format(m["role"], (m.get("content") or "")[:1200]) for m in ancien if m.get("role") in ("user", "assistant") and m.get("content"))
+    texte = (("[Résumé précédent] " + conv["resume"] + "\n") if conv.get("resume") else "") + texte[-int(r["num_ctx"] * 1.5):]
+    if emit:
+        emit({"type": "info", "texte": _t("Fiche de suivi : préparation à partir du début de la conversation…")})
+    try:
+        rep = ollama_json("/api/chat", {"model": r["modele"], "stream": False, "think": False, "format": "json", "options": _m.options_modele(r, 0.1),
+                                        "messages": [{"role": "system", "content": "Tu remplis la fiche de suivi d'une conversation pour pouvoir la continuer. Réponds en JSON avec ces clés (listes de phrases courtes, 150 caractères au plus chacune) : "
+                                                      "objectif, decisions, plan, etape (l'étape en cours), fait, ouvert (questions ouvertes), fichiers. N'invente rien : laisse une liste vide si tu ne sais pas. En français."},
+                                                     {"role": "user", "content": texte}]}, 600)
+        donnees = json.loads((rep.get("message", {}).get("content") or "{}").strip() or "{}")
+    except (urllib.error.URLError, OSError, ValueError) as erreur:
+        _m.journaliser("Fiche de suivi non amorcée (conversation {}) : {!r}".format(ident, erreur))
+        return 0
+    n = 0
+    for cle in _suivi.CLES:
+        valeur = donnees.get(cle) if isinstance(donnees, dict) else None
+        lignes = [str(x) for x in (valeur if isinstance(valeur, list) else [valeur]) if x and str(x).strip()]
+        if lignes:
+            try:
+                _suivi.modifier(ident, cle, "\n".join(lignes), "remplacer")
+                n += len(lignes)
+            except (ValueError, _m.ErreurOutil):
+                continue
+    return n
 
 
 def outils_du_mode(r):
@@ -323,6 +411,7 @@ def consignes_systeme(r):
             "Chaque modification de fichier garde une sauvegarde de l'ancienne version et passe par l'accord de l'utilisateur, sauf s'il a activé l'accord automatique.\n\n") + mode + _t("\n\n# CONTEXTE DU PROJET (memoire/CONTEXTE.md)\n") + contexte[:14000] + _t("\n\n# NOTES DURABLES (memoire/MEMOIRE.md)\n") + (_m.texte_memoire(memoire) or _t("(aucune pour l'instant)"))
             + bloc_skills
             + (_t("\n\n# ESSAI À BLANC\nTes écritures et tes commandes ne sont PAS exécutées : c'est une simulation, l'utilisateur voit ce que tu proposes. Propose ce que tu ferais (fichiers, contenu, commandes), sans insister ni réessayer. Lire et chercher fonctionnent normalement.\n") if r.get("essai_a_blanc") else "")
+            + (_t("\n\n# DÉBUT DE LA CONVERSATION\nLes premiers échanges ne sont plus tous sous tes yeux (fiche de suivi ou résumé). Pour retrouver un détail précis (une décision, un nom, un chiffre, un texte), appelle « rappeler » avec quelques mots-clés et ici=true : ne le devine pas.\n") if r.get("rappel_ici") else "")
             + _pc.bloc_prompt(_m.RACINE)
             + bloc_plan(r)
             + _t("\n\nDate : ") + datetime.now().strftime("%Y-%m-%d") + _t(". Dossier du projet : ") + str(_m.RACINE))
@@ -415,14 +504,13 @@ def ajuster_contexte(msgs, num_ctx, facteur=1.0, outils=None):
 def compacter(conv, r, emit, forcer=False):
     """Quand la conversation approche de la taille du contexte, le début est résumé par le modèle. forcer (commande /compact) : on résume tout sauf le dernier échange,
     même si la conversation est encore courte. Renvoie True si un résumé a été fait."""
-    limite = int(r["num_ctx"] * 0.6)
     msgs = conv["messages"]
     if forcer:
         coupe = max((i for i, m in enumerate(msgs) if m["role"] == "user"), default=0)
         if coupe < 2:
             return False
     else:
-        if estimer(msgs) + len(conv.get("resume", "")) // 3 < limite or len(msgs) < 8:
+        if not a_compacter(conv, r):
             return False
         coupe = max(2, len(msgs) // 2)
         while coupe < len(msgs) and msgs[coupe]["role"] != "user":             # on coupe avant un message de l'utilisateur
@@ -439,6 +527,7 @@ def compacter(conv, r, emit, forcer=False):
         if not nouveau_resume:                      # résumé vide : on garde tout plutôt que de perdre le début
             _m.journaliser("Résumé vide : conversation {} gardée entière.".format(conv.get("id")))
             return False
+        _archive.ajouter(conv["id"], ancien)                  # le résumé perd des détails : le début reste retrouvable (« rappeler »)
         conv["resume"] = nouveau_resume
         conv["messages"] = msgs[coupe:]
         conv.pop("jetons", None)                    # le chiffre de contexte d'avant le résumé n'est plus vrai
@@ -528,8 +617,22 @@ def tour(conv, texte, emit, r=None, stop=None, remplacer_depuis=None, identite="
         return
     r["memoire_longue"] = memoire_longue(conv, r)
     try:
-        if r["memoire_longue"] == "resume":
+        if r["memoire_longue"] == "demander":
+            provisoire = conv.get("memoire_provisoire") or {}
+            if lecture_seule:
+                r["memoire_longue"] = "resume"                                          # une tâche planifiée ne peut pas répondre
+            elif provisoire.get("choix") == "fichier" and len(conv["messages"]) < provisoire.get("jusqua", 0):
+                r["memoire_longue"] = "fichier"                                         # choisi « pour cette fois » : on ne repose pas la question à chaque réponse
+            elif a_compacter(conv, r):
+                r["memoire_longue"] = demander_memoire(conv, r, emit, stop)
+                conv.pop("memoire_provisoire", None)
+                if r["memoire_longue"] == "fichier":
+                    amorcer_fiche(conv, r, emit)
+                    if not conv.get("memoire_longue"):
+                        conv["memoire_provisoire"] = {"choix": "fichier", "jusqua": len(conv["messages"]) + 20}
+        if r["memoire_longue"] != "fichier":
             compacter(conv, r, emit)
+        r["rappel_ici"] = r["memoire_longue"] == "fichier" or bool(conv.get("resume"))
         boucle_agent(conv, r, emit, ctx, stop)
     except _m.Arret:
         _m.journaliser("Tour arrêté par l'utilisateur (conversation {}).".format(conv["id"]))

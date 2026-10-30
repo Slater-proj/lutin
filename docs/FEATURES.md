@@ -49,6 +49,10 @@ A small local model forgets a long conversation, or loops (\"shall we act?\" - \
 - **Automatic summary** (default): when the conversation nears the limit, the model summarizes the beginning. Nothing to manage, but each summary costs seconds to a minute of computing and loses details.
 - **Tracking sheet**: one short sheet per conversation (goal, decisions, plan, current step, done, open questions, files touched, last requests), read again at every answer. The model updates it with the `suivi` tool and Lutin fills it by itself (requests, files), so even a model that forgets the tool leaves a usable sheet. You can read and edit it. A *yes* from you means **run the current step**: no new plan, no new question.
 
+**Which one? Lutin asks you.** The default setting is **Ask at the first summary**: while the conversation is short nothing is asked; when it nears the limit, Lutin lets you choose between the two, with a box *keep this choice for the whole conversation* (without it the question comes back later). Scheduled tasks, which nobody can answer, use the summary. Switching to the sheet fills it from the start of the conversation (one model call).
+
+**Nothing is really lost.** Neither method keeps every word in the model's window, but everything stays on disk: the summary archives the messages it removes (`data/archives/<conversation>.jsonl`), and the `rappeler` tool (with `ici=true` for this conversation only) finds a decision, a name or a figure again by keywords. Lutin tells the model it can do so, and its index only re-reads the files that changed.
+
 Safeguards: the sheet is capped (lines per section, line length, at most 10 % of the context window; the page warns above 7 %) so it cannot grow or slow every answer; it is placed just before your last question so the start of the conversation stays identical and Ollama keeps it in cache; it is stored in `data/suivis/<conversation>.md`, deleted with the conversation, and orphans are cleaned.
 
 ## Updating from the page and the icon

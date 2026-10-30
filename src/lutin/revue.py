@@ -256,7 +256,7 @@ def _appeler_outil(nom, args, ctx):
     if nom == "lire_plusieurs":
         return _m.outil_lire_plusieurs(args.get("fichiers"))
     if nom == "rappeler":
-        return _m.outil_rappeler(args.get("requete", ""), args.get("nombre"))
+        return _m.outil_rappeler(args.get("requete", ""), args.get("nombre"), (ctx.get("conv") or {}).get("id", ""), bool(args.get("ici")))
     if nom == "modifier":
         return _m.outil_modifier(args.get("chemin"), str(args.get("ancien", "")), str(args.get("nouveau", "")), ctx)
     if nom == "modifier_plusieurs":

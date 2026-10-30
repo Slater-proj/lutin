@@ -420,6 +420,10 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 return self._envoyer(200, _m.git_message(donnees.get("fichiers")))
             if self.path == "/api/git-commit":
                 return self._envoyer(200, _m.git_commit(donnees.get("message"), donnees.get("fichiers")))
+            if self.path == "/api/memoire-choix":                                   # réponse à la question « fiche de suivi ou résumé ? » (le tour est en attente, donc pas de verrou)
+                if not _m.repondre_choix_memoire(str(donnees.get("conversation", "")), str(donnees.get("choix", "")), donnees.get("garder")):
+                    return self._envoyer(409, {"erreur": _t("Plus de question en attente pour cette conversation.")})
+                return self._envoyer(200, {"ok": True})
             if self.path in ("/api/suivi", "/api/suivi-vider", "/api/memoire-conversation"):
                 ident = str(donnees.get("conversation", ""))
                 with _m.VERROU_TOURS:
@@ -427,6 +431,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
                         return self._envoyer(409, {"erreur": _t("Une réponse est en cours dans cette conversation : attends la fin ou arrête-la.")})
                 conv = _m.conv_lire(ident)
                 r = _m.reglages()
+                amorce = 0
                 if self.path == "/api/suivi":
                     _suivi.ecrire(ident, _suivi.analyser(str(donnees.get("texte", ""))[:20000]))
                 elif self.path == "/api/suivi-vider":
@@ -439,8 +444,10 @@ class Gestionnaire(BaseHTTPRequestHandler):
                         conv["memoire_longue"] = choix
                     else:
                         conv.pop("memoire_longue", None)
+                    conv.pop("memoire_provisoire", None)
+                    amorce = _m.amorcer_fiche(conv, r) if choix == "fichier" else 0          # une fiche vide est remplie à partir du début de la conversation
                     _m.conv_ecrire(conv)
-                return self._envoyer(200, {"mode": _m.memoire_longue(_m.conv_lire(ident), r), "mesure": _suivi.mesure(ident, r["num_ctx"])})
+                return self._envoyer(200, {"mode": _m.memoire_longue(_m.conv_lire(ident), r), "mesure": _suivi.mesure(ident, r["num_ctx"]), "amorce": amorce})
             if self.path == "/api/travaux-apercu":
                 return self._envoyer(200, _m.apercu_travail(str(donnees.get("id", ""))))
             if self.path in ("/api/dossier-modeles-analyse", "/api/dossier-modeles-copie", "/api/redemarrer-ollama"):
