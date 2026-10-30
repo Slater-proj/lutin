@@ -30,6 +30,7 @@ MAX_TRAVAUX = 10
 DOCUMENTS_MAX = 20000               # documents suivis par travail
 ERREURS_DE_SUITE = 5                # au-delà, le travail se met en pause (le PC, le modèle ou le dossier ont un problème)
 DELAI_DOCUMENT = 900                # secondes au plus pour un document
+TAILLE_MAX = 80_000_000             # octets : un document plus gros est signalé, pas lu (une extraction ne doit pas figer le travail)
 PERIODE = 5                         # secondes entre deux regards
 TEXTES = (".txt", ".md", ".csv", ".json", ".log")
 RE_ID = re.compile(r"^[a-f0-9]{8}$")
@@ -193,6 +194,8 @@ def liste():
 # --------------------------------------------------------------------------- un document
 def texte_document(chemin):
     f = Path(chemin)
+    if f.stat().st_size > TAILLE_MAX:
+        raise extraction.ErreurExtraction(_t("Document trop gros ({} Mo au plus).").format(TAILLE_MAX // 1_000_000))
     if f.suffix.lower() in extraction.FORMATS:
         return extraction.texte(f)
     if f.suffix.lower() in TEXTES:

@@ -2,6 +2,12 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## 0.7.5
+
+- **Robustesse des addons** : les réglages, les secrets et les vérifications ne s'écrasent plus quand la page, la vérification quotidienne et les fils d'écoute écrivent en même temps ; un document de plus de 80 Mo est signalé au lieu de figer le travail de fond.
+
+**English.** Addon robustness: settings, secrets and checks no longer overwrite each other when the page, the daily check and the listening threads write at the same time; a document over 80 MB is reported instead of freezing the background work.
+
 ## 0.7.4
 
 - **Addon X** : publier sur ton compte (Lutin rédige un à cinq brouillons, tu publies ou programmes — rien ne part sans ton clic, 25 par jour au plus) et répondre aux mentions selon tes règles de tri (brouillons à valider, réponses seules plafonnées), signature OAuth 1.0a vérifiée sur l'exemple de la documentation de X. Lire les mentions demande une formule payante de l'API de X.

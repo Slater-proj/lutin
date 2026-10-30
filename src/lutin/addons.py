@@ -20,6 +20,7 @@ import json
 import os
 import re
 import secrets
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -41,6 +42,7 @@ REPONSE_MAX = 1_000_000
 DELAI_APPEL = 30
 HISTORIQUE_FLUX = 5                 # anciennes versions du flux gardées
 VERIFICATION_TOUS_LES = 24 * 3600   # secondes entre deux vérifications automatiques d'un addon actif
+VERROU_ETAT = threading.RLock()        # lire-modifier-écrire de addons.json et secrets.json : la page, la vérification quotidienne et les fils d'écoute ne s'écrasent pas
 ETAT = {}                           # identifiant -> état d'exécution en mémoire (fil d'un addon qui tourne…)
 
 
@@ -196,24 +198,25 @@ def enregistrer_reglages(ident, nouveaux):
     """Enregistre les réglages saisis. Un secret vide garde l'ancienne valeur ; une clé inconnue est refusée."""
     m = manifeste(ident)
     connus = {r["cle"]: r for r in m["reglages"]}
-    etat, sec = lire_etat(), secrets_lire()
-    courant = etat.setdefault(ident, {}).setdefault("reglages", {})
-    secret_courant = sec.setdefault(ident, {})
-    for cle, valeur in (nouveaux or {}).items():
-        if cle not in connus:
-            raise ErreurAddon(_t("Réglage inconnu : {}.").format(cle))
-        valeur = str(valeur).strip()
-        if len(valeur) > 2000:
-            raise ErreurAddon(_t("Valeur trop longue pour « {} ».").format(cle))
-        if connus[cle].get("choix") and valeur not in [c[0] for c in connus[cle]["choix"]]:
-            raise ErreurAddon(_t("Valeur inconnue pour « {} ».").format(cle))
-        if connus[cle].get("secret"):
-            if valeur:
-                secret_courant[cle] = valeur
-        else:
-            courant[cle] = valeur
-    secrets_ecrire(sec)
-    ecrire_etat(etat)
+    with VERROU_ETAT:
+        etat, sec = lire_etat(), secrets_lire()
+        courant = etat.setdefault(ident, {}).setdefault("reglages", {})
+        secret_courant = sec.setdefault(ident, {})
+        for cle, valeur in (nouveaux or {}).items():
+            if cle not in connus:
+                raise ErreurAddon(_t("Réglage inconnu : {}.").format(cle))
+            valeur = str(valeur).strip()
+            if len(valeur) > 2000:
+                raise ErreurAddon(_t("Valeur trop longue pour « {} ».").format(cle))
+            if connus[cle].get("choix") and valeur not in [c[0] for c in connus[cle]["choix"]]:
+                raise ErreurAddon(_t("Valeur inconnue pour « {} ».").format(cle))
+            if connus[cle].get("secret"):
+                if valeur:
+                    secret_courant[cle] = valeur
+            else:
+                courant[cle] = valeur
+        secrets_ecrire(sec)
+        ecrire_etat(etat)
     return decrire(ident)
 
 
@@ -378,9 +381,10 @@ def verifier(ident):
             if not etapes[-1]["ok"]:
                 break
     resultat = {"ok": all(e["ok"] for e in etapes), "date": int(time.time()), "etapes": etapes}
-    etat = lire_etat()
-    etat.setdefault(ident, {})["verification"] = resultat
-    ecrire_etat(etat)
+    with VERROU_ETAT:
+        etat = lire_etat()
+        etat.setdefault(ident, {})["verification"] = resultat
+        ecrire_etat(etat)
     return resultat
 
 
@@ -391,9 +395,10 @@ def activer(ident, actif):
         v = verifier(ident)
         if not v["ok"]:
             raise ErreurAddon(_t("Vérification échouée : {}").format(" ; ".join(e["message"] for e in v["etapes"] if not e["ok"])))
-    etat = lire_etat()
-    etat.setdefault(ident, {})["actif"] = bool(actif)
-    ecrire_etat(etat)
+    with VERROU_ETAT:
+        etat = lire_etat()
+        etat.setdefault(ident, {})["actif"] = bool(actif)
+        ecrire_etat(etat)
     module = module_code(ident)
     if module:
         try:
@@ -401,8 +406,10 @@ def activer(ident, actif):
         except Exception as e:  # noqa: BLE001  (un addon qui plante ne doit pas faire tomber Lutin)
             _m.journaliser("Addon {} : {} impossible ({!r}).".format(ident, "démarrage" if actif else "arrêt", e))
             if actif:
-                etat[ident]["actif"] = False
-                ecrire_etat(etat)
+                with VERROU_ETAT:
+                    etat = lire_etat()
+                    etat.setdefault(ident, {})["actif"] = False
+                    ecrire_etat(etat)
                 raise ErreurAddon(_t("Démarrage impossible : {}").format(e))
     return decrire(ident)
 

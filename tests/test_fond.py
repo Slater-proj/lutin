@@ -187,6 +187,18 @@ class Fond(unittest.TestCase):
         self.tout_traiter()
         self.assertEqual(fond.progression(fond.trouver(t["id"]))["faits"], 1)
 
+    def test_document_trop_gros_signale_sans_etre_lu(self):
+        (self.docs / "enorme.txt").write_text("x", encoding="utf-8")
+        t = self.travail()
+        vrai, fond.TAILLE_MAX = fond.TAILLE_MAX, 0
+        try:
+            self.tout_traiter()
+        finally:
+            fond.TAILLE_MAX = vrai
+        e = fond.lire_etat(t["id"])
+        self.assertEqual((len(e["faits"]), len(e["erreurs"]), RECUES), (0, 1, []), "signalé, et le modèle n'est pas sollicité")
+        self.assertIn("trop gros", list(e["erreurs"].values())[0])
+
     def test_document_long_tronque_pause_et_suppression(self):
         (self.docs / "long.txt").write_text("mot " * 100000, encoding="utf-8")
         t = self.travail()
