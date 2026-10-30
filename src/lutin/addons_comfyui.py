@@ -622,6 +622,7 @@ def etat():
     r["valide"], r["raison"] = diagnostic_dossier(r["dossier"])
     r["lancement"] = bool(r["valide"] and commande_lancement(r["dossier"], addons.reglages(IDENT).get("port") or "8188"))
     r["modeles"] = lister_modeles()
+    r["familles"] = {n: famille_de(n) for n in r["modeles"].get("modeles", {}).get("diffusion_models", [])}
     r["workflows"] = sorted((addons.flux(IDENT).get("workflows") or {}).keys())
     r["telechargement"] = {k: v for k, v in TELECHARGEMENT.items() if k != "arret"}
     r["genres"] = list(GENRES_TELECHARGEMENT)

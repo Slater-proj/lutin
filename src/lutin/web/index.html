@@ -188,7 +188,12 @@ pre.diff { width:100%; max-height:340px; overflow:auto; background:#0c1117; bord
 .liste-git { max-height:34vh; overflow:auto; border:1px solid var(--line); border-radius:8px; padding:6px 10px; margin:8px 0; }
 .res-recherche .extrait { color:var(--muted); font-size:.74rem; white-space:normal; }
 .conv .epingle { color:var(--warm); }
-.attention { color:var(--warm); }          /* « pas encore prêt » : de l'orange, pas du rouge (le rouge est réservé aux vraies erreurs) */
+.attention { color:var(--warm); }
+#listeAddons .ligne { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin:2px 0; }
+.liste-modeles { max-height:240px; overflow:auto; font-size:.82rem; border:1px solid var(--line); border-radius:8px; padding:2px 10px; margin:4px 0 8px; background:#0b1015; }
+.liste-modeles > div { padding:3px 0; border-bottom:1px solid #1a2330; display:flex; gap:8px; align-items:baseline; } .liste-modeles > div:last-child { border-bottom:0; }
+.liste-modeles .nom { flex:1; overflow-wrap:anywhere; } .liste-modeles small { color:var(--muted); } .liste-modeles .famille { color:var(--accent, #5aa9ff); font-size:.74rem; white-space:nowrap; }
+details.sous { margin:4px 0 4px 10px; } details.sous > summary { color:var(--muted); font-size:.85rem; }          /* « pas encore prêt » : de l'orange, pas du rouge (le rouge est réservé aux vraies erreurs) */
 .separateur-v::before { content:''; position:absolute; inset:0 -4px; } .separateur-h::before { content:''; position:absolute; inset:-4px 0; }          /* un trait fin, mais facile à attraper */
 .conv button.menu-ouvrir { font-weight:700; letter-spacing:1px; } .conv button.menu-ouvrir:hover { color:var(--accent); background:#1a2634; }
 .menu-conv { position:fixed; z-index:50; min-width:210px; background:#121a24; border:1px solid var(--line2); border-radius:10px; padding:5px; box-shadow:0 8px 24px #0009; display:flex; flex-direction:column; }
@@ -445,7 +450,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
       <textarea id="pPrompt" placeholder="La demande à traiter, par exemple : résume ce qui a changé dans le dépôt depuis hier." style="flex:1 1 100%;min-height:70px" maxlength="4000"></textarea>
       <button id="bAjouterPlanifie" class="principal">Planifier</button> <span class="aide" id="mPlanifie"></span>
     </div>
-    <h2>Extensions facultatives <span class="aide">(des fonctions facultatives livrées avec Lutin, désactivées tant que tu ne les actives pas ; chacune a son guide d'installation et se vérifie avant de s'activer)</span></h2>
+    <h2>Extensions facultatives <span class="aide">(désactivées tant que tu ne les actives pas)</span></h2>
     <div id="listeAddons" class="aide" style="margin:6px 0"></div>
   </div></section>
   <section class="page" id="p-acces"><div class="cadre">
@@ -2187,6 +2192,13 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
   const PANNEAUX = {};
   let minuteurAddons = null;
   let SEQ_ADDONS = 0, ATTENTES_PANNEAUX = [];
+  const OUVERTS = {};
+  const blocReplie = (cle, titre, parDefaut, classe) => {
+    const d = el('details', classe || ''); d.open = cle in OUVERTS ? OUVERTS[cle] : !!parDefaut;
+    d.addEventListener('toggle', () => { OUVERTS[cle] = d.open; });
+    d.appendChild(el('summary', '', titre));
+    return d;
+  };
   const saisieEnCours = z => z.contains(document.activeElement) && document.activeElement.matches('input,textarea,select');
   // La liste est construite HORS de la page (cartes ET panneaux, qui se remplissent après un appel au serveur), puis échangée d'un seul coup, et seulement si elle a changé : plus de clignotement,
   // et ce qui est en cours de saisie n'est jamais détruit. Si un chargement plus récent a démarré entre-temps, celui-ci s'abandonne.
@@ -2339,16 +2351,32 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
       }, () => { $('modal').hidden = true; });
     });
     ligne.append(det, choisir); zone.appendChild(ligne); zone.appendChild(msg);
-    // 3. Le reste est replié
+    // 3. Les modèles, lisibles : ceux qui servent à générer d'abord, les fichiers associés (styles, encodeurs, VAE) repliés
     if (genres.length) {
-      const d = el('details'); d.appendChild(el('summary', '', T('Modèles installés') + ' (' + nb + ')'));
-      genres.forEach(g => { d.appendChild(el('b', '', g)); d.appendChild(el('div', 'aide', m.modeles[g].slice(0, 60).join(' · ') + (m.modeles[g].length > 60 ? ' …' : ''))); });
+      const NOMS = { checkpoints: T('Modèles d\'images'), diffusion_models: T('Modèles de diffusion'), loras: T('Styles et personnages (LoRA)'), text_encoders: T('Encodeurs de texte'), vae: 'VAE', controlnet: 'ControlNet', upscale_models: T('Agrandissement') };
+      const FAMILLES = { image_flux: 'Flux', image_qwen: 'Qwen-Image', image_zimage: 'Z-Image' };
+      const nbGenerer = (m.modeles.checkpoints || []).length + (m.modeles.diffusion_models || []).length;
+      const d = blocReplie('comfy-modeles', T('Modèles installés') + ' (' + nb + ')', false);
+      const liste = (g) => {
+        const l = el('div', 'liste-modeles');
+        m.modeles[g].forEach(n => {
+          const ligne = el('div'), dossier = n.includes('/') ? n.slice(0, n.lastIndexOf('/') + 1) : '', fichier = n.slice(dossier.length).replace(/\.[a-z0-9]+$/i, '');
+          const nomEl = el('span', 'nom', fichier); if (dossier) nomEl.appendChild(el('small', '', '  ' + dossier));
+          ligne.appendChild(nomEl);
+          if (g === 'diffusion_models') ligne.appendChild(el('span', 'famille', (x.familles || {})[n] ? FAMILLES[(x.familles || {})[n]] : T('famille inconnue')));
+          l.appendChild(ligne);
+        });
+        return l;
+      };
+      ['checkpoints', 'diffusion_models'].filter(g => m.modeles[g]).forEach(g => { d.appendChild(el('b', '', NOMS[g] + ' (' + m.modeles[g].length + ')')); d.appendChild(liste(g)); });
+      if (!nbGenerer) d.appendChild(el('div', 'attention', T('Aucun modèle pour générer des images : installe un checkpoint ou un modèle de diffusion.')));
+      const autres = genres.filter(g => g !== 'checkpoints' && g !== 'diffusion_models');
+      autres.forEach(g => { const sous = blocReplie('comfy-modeles-' + g, (NOMS[g] || g) + ' (' + m.modeles[g].length + ')', false, 'sous'); sous.appendChild(liste(g)); d.appendChild(sous); });
       zone.appendChild(d);
     }
     if (x.valide) {
-      const t = x.telechargement || {}, bloc = el('details');
-      bloc.open = COMFY.ouvert || t.etat === 'en cours'; bloc.addEventListener('toggle', () => { COMFY.ouvert = bloc.open; });
-      bloc.appendChild(el('summary', '', T('Ajouter un modèle')));
+      const t = x.telechargement || {}, bloc = blocReplie('comfy-ajout', T('Ajouter un modèle'), false);
+      if (t.etat === 'en cours') bloc.open = true;
       bloc.appendChild(el('div', 'aide', T('Lien de téléchargement Hugging Face ou Civitai.')));
       const url = el('input'), genre = el('select'), go = el('button', 'principal', T('Télécharger'));
       url.placeholder = 'https://huggingface.co/…/modele.safetensors'; url.style.width = '420px'; url.value = COMFY.url; url.addEventListener('input', () => { COMFY.url = url.value; });

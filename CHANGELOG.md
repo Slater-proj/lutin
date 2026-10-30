@@ -2,6 +2,13 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## 0.7.13
+
+- **ComfyUI : la liste des modèles est lisible.** Au lieu de 36 noms collés bout à bout : une ligne par modèle, groupés (modèles d'images, modèles de diffusion avec leur famille Flux / Qwen-Image / Z-Image ou « famille inconnue »), une longue liste défile ; les styles, encodeurs de texte et VAE sont repliés avec leur nombre.
+- **Plus de refermeture en lisant.** L'état ouvert ou fermé de chaque bloc replié est retenu et la liste n'est plus reconstruite quand rien n'a changé. Les boutons des cartes sont espacés et le titre de la section est court.
+
+**English.** ComfyUI: the models list is readable. Instead of 36 names run together: one line per model, grouped (image models, diffusion models with their family Flux / Qwen-Image / Z-Image or “unknown family”), a long list scrolls; styles, text encoders and VAEs are folded with their count. No more closing while you read: each folded block's open or closed state is remembered and the list is no longer rebuilt when nothing changed. Card buttons are spaced and the section title is short.
+
 ## 0.7.12
 
 - **ComfyUI : les modèles de diffusion marchent.** Lutin n'envoyait toujours que le workflow « checkpoint » : avec des modèles rangés dans `diffusion_models` (Flux, Qwen-Image, Z-Image…), il tombait sur un dossier checkpoints vide. Maintenant le modèle choisi décide du workflow (nœuds UNETLoader, encodeur de texte, VAE choisis parmi ceux qui sont installés), avec un message clair si un fichier manque ou si la famille est inconnue ; le modèle voit à quelle famille appartient chaque fichier.

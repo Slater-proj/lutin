@@ -295,6 +295,42 @@ class Parcours(unittest.TestCase):
             self.assertEqual(p.evaluer("getComputedStyle(document.getElementById('jauge')).borderTopWidth"), "0px")
             self.assertEqual(p.erreurs, [])
 
+    def test_la_liste_des_modeles_de_comfyui_est_lisible_et_reste_ouverte(self):
+        """36 noms collés bout à bout étaient illisibles et la liste se refermait pendant la lecture : maintenant des lignes, groupées, avec la famille, qui restent ouvertes au rafraîchissement."""
+        with self.captures.serveur_demo() as (port, tmp):
+            comfy = tmp / "ComfyUI"
+            (comfy / "models").mkdir(parents=True)
+            (comfy / "main.py").write_text("#", encoding="utf-8")
+            fichiers = {"checkpoints": ["sdxl_base.safetensors"], "diffusion_models": ["flux1-dev-fp8.safetensors", "qwen_image_fp8.safetensors", "mystere.safetensors"],
+                        "loras": ["style_%02d.safetensors" % i for i in range(20)], "vae": ["ae.safetensors"], "text_encoders": ["t5xxl_fp16.safetensors", "clip_l.safetensors"]}
+            for genre, noms in fichiers.items():
+                (comfy / "models" / genre).mkdir()
+                for n in noms:
+                    (comfy / "models" / genre / n).write_bytes(b"x")
+            dossier = tmp / "home" / "donnees" / "addons"
+            dossier.mkdir(parents=True, exist_ok=True)
+            (dossier / "addons.json").write_text(json.dumps({"comfyui": {"actif": True, "reglages": {"dossier": str(comfy)}}}), encoding="utf-8")
+            p = self.ouvrir(tmp, "http://127.0.0.1:%d/" % port)
+            p.evaluer(onglet("auto"))
+            resume = "[...document.querySelectorAll('#listeAddons details > summary')].find(s => s.textContent.startsWith('Modèles installés'))"
+            p.attendre("!!(" + resume + ")")
+            self.assertIn("(27)", p.evaluer(resume + ".textContent"), "le nombre total est dit")
+            p.evaluer(resume + ".click()")
+            p.attendre("!!document.querySelector('#listeAddons .liste-modeles')")
+            texte = p.evaluer("document.querySelector('#listeAddons details').textContent")
+            for attendu in ("Modèles d'images (1)", "Modèles de diffusion (3)", "flux1-dev-fp8", "Flux", "Qwen-Image", "famille inconnue", "Styles et personnages (LoRA) (20)"):
+                self.assertIn(attendu, texte)
+            self.assertNotIn(" · ", p.evaluer("document.querySelector('#listeAddons .liste-modeles').textContent"), "plus de noms collés bout à bout")
+            self.assertEqual(p.evaluer("document.querySelectorAll('#listeAddons details:not(.sous) > .liste-modeles > div').length"), 4, "une ligne par modèle de génération")
+            self.assertTrue(p.evaluer("[...document.querySelectorAll('#listeAddons details.sous')].every(d => !d.open)"), "les fichiers associés sont repliés")
+            self.assertEqual(p.evaluer("getComputedStyle(document.querySelector('#listeAddons .liste-modeles')).overflowY"), "auto", "une longue liste défile au lieu d'allonger la page")
+            p.evaluer("[...document.querySelectorAll('#listeAddons details.sous > summary')].find(s => s.textContent.includes('LoRA')).click()")
+            p.attendre("document.querySelectorAll('#listeAddons details.sous[open]').length === 1")
+            time.sleep(9.5)                                                                # deux rafraîchissements automatiques plus tard
+            self.assertTrue(p.evaluer("document.querySelector('#listeAddons details').open"), "la liste ne se referme pas toute seule")
+            self.assertEqual(p.evaluer("document.querySelectorAll('#listeAddons details.sous[open]').length"), 1, "ni le bloc des styles")
+            self.assertEqual(p.erreurs, [])
+
     def test_reprise_proposee_une_fois_puis_plus(self):
         with self.captures.serveur_demo() as (port, tmp):
             ancien = tmp / "ancien-assistant"
