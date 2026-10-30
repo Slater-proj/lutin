@@ -27,6 +27,19 @@ def saisir(page, selecteur, texte):
     page.evaluer("(() => { const c = %s; c.value = %s; return true; })()" % (selecteur, json.dumps(texte)))
 
 
+LISTE_CHARGEE = "document.querySelectorAll('#modalCorps div[style*=\"max-height\"] > *').length > 0"
+
+
+def naviguer(page, chemin, attendu):
+    """Dans le navigateur de dossiers : attend que la première liste soit affichée (sinon elle effacerait le chemin tapé), tape le chemin, l'ouvre, attend `attendu`."""
+    page.attendre("!!" + CHAMP)
+    page.attendre(LISTE_CHARGEE)
+    saisir(page, CHAMP, chemin)
+    page.evaluer(bouton("Ouvrir"))
+    dernier = chemin.replace("\\", "/").rstrip("/").rsplit("/", 1)[-1]
+    page.attendre("(%s) && (%s.value.split(String.fromCharCode(92)).join('/').endsWith(%s) || !!document.querySelector('#modalCorps .erreur').textContent)" % (attendu, CHAMP, json.dumps(dernier)))
+
+
 def cliquer_dans_ligne(page, nom, bouton_texte):
     """Clique le bouton d'une ligne de la liste des dossiers de travail (celle qui contient `nom`)."""
     page.evaluer("(() => { const l = [...document.querySelectorAll('#listeTravaux .conv')].find(x => x.textContent.includes(%s)); [...l.querySelectorAll('button')].find(b => b.textContent === %s).click(); })()" % (json.dumps(nom), json.dumps(bouton_texte)))
@@ -97,19 +110,13 @@ class Parcours(unittest.TestCase):
             p.attendre("document.querySelector('#listeTravaux').textContent.includes('★ Documents')")
             # ajouter un dossier avec le navigateur de dossiers : on tape son chemin, on l'ouvre, on le choisit
             p.evaluer(bouton("Ajouter un dossier…"))
-            p.attendre("!!" + CHAMP)
-            saisir(p, CHAMP, str(autre))
-            p.evaluer(bouton("Ouvrir"))
-            p.attendre("document.querySelector('#modalCorps').textContent.includes('Aucun sous-dossier')")
+            naviguer(p, str(autre), "document.querySelector('#modalCorps').textContent.includes('Aucun sous-dossier')")
             p.evaluer(bouton("Ajouter ce dossier"))
             p.attendre("document.querySelector('#listeTravaux').textContent.includes('★ Autre')")
             # déplacer ses fichiers ailleurs : « Rangement » le contiendra
             cliquer_dans_ligne(p, "Autre", "Déplacer…")
             p.attendre(bouton("Déplacer les fichiers vers un autre endroit"))
-            p.attendre("!!" + CHAMP)
-            saisir(p, CHAMP, str(rangement))
-            p.evaluer(bouton("Ouvrir"))
-            p.attendre("document.querySelector('#modalCorps').textContent.includes('Aucun sous-dossier')")
+            naviguer(p, str(rangement), "document.querySelector('#modalCorps').textContent.includes('Aucun sous-dossier')")
             p.evaluer(bouton("Déplacer ici"))
             p.attendre("document.querySelector('#modal').hidden")
             self.assertTrue((rangement / "Autre" / "notes.txt").is_file(), "les fichiers ont vraiment été déplacés")
@@ -119,18 +126,13 @@ class Parcours(unittest.TestCase):
             (rangement / "Autre").rename(tmp / "Rendu")
             cliquer_dans_ligne(p, "Autre", "Déplacer…")
             p.attendre(bouton("Il a déjà été déplacé : indiquer où il est maintenant"))
-            p.attendre("!!" + CHAMP)
-            saisir(p, CHAMP, str(tmp / "Rendu"))
-            p.evaluer(bouton("Ouvrir"))
+            naviguer(p, str(tmp / "Rendu"), "document.querySelector('#modalCorps').textContent.includes('Aucun sous-dossier')")
             p.evaluer(bouton("C'est ici"))
             p.attendre("document.querySelector('#modal').hidden")
             p.attendre("document.querySelector('#listeTravaux').textContent.includes('Rendu')")
             # un chemin qui n'existe pas : l'erreur est dite dans la fenêtre, rien ne casse
             p.evaluer(bouton("Ajouter un dossier…"))
-            p.attendre("!!" + CHAMP)
-            saisir(p, CHAMP, str(tmp / "nexiste-pas"))
-            p.evaluer(bouton("Ouvrir"))
-            p.attendre("document.querySelector('#modalCorps .erreur').textContent.includes(\"n'existe pas\")")
+            naviguer(p, str(tmp / "nexiste-pas"), "document.querySelector('#modalCorps .erreur').textContent.includes(\"n'existe pas\")")
             p.evaluer(bouton("Annuler"))
             # retirer le dossier principal, puis tous les autres : c'est permis, Lutin retombe sur son dossier par défaut
             for nom in ("Projet", "Documents", "Autre"):
