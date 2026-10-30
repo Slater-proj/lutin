@@ -250,6 +250,26 @@ class X(unittest.TestCase):
         self.assertEqual(x.lire_mentions(), -1)
         self.assertIn("403", x.etat()["erreur"], "la formule gratuite ne lit pas les mentions : l'erreur de X est montrée")
 
+    def test_la_boucle_publie_ce_qui_est_programme_et_s_arrete(self):
+        import time
+        addons.enregistrer_reglages("x", {"mentions": "non"})
+        e = x.lire()
+        e["publications"] = [{"id": "boucle01", "texte": "Programmé et dû", "etat": "programme", "quand": time.time() - 1}]
+        x.ecrire(e)
+        x.demarrer()
+        try:
+            for _ in range(100):
+                if SERVICE["publies"]:
+                    break
+                time.sleep(0.05)
+            self.assertEqual([p["text"] for p in SERVICE["publies"]], ["Programmé et dû"])
+            self.assertTrue(x.etat()["ecoute"])
+        finally:
+            x.arreter()
+        x.VIVANT["fil"].join(5)
+        self.assertFalse(x.VIVANT["fil"].is_alive())
+        self.assertEqual(x.lire()["publications"][0]["etat"], "publie")
+
     def test_tronquer(self):
         self.assertEqual(x.tronquer("court"), "court")
         long = ("Une phrase. " * 40).strip()

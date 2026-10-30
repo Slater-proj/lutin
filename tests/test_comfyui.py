@@ -19,7 +19,10 @@ from lutin import addons, addons_comfyui as cu  # noqa: E402
 from lutin import moteur as _m  # noqa: E402
 
 COMFY = _TEMP / "ComfyUI"
-SERVICE = {"panne": False, "soumis": [], "histoire": 0, "refus": False, "interrompu": 0, "erreur_historique": False}
+SERVICE = {"panne": False, "soumis": [], "histoire": 0, "refus": False, "interrompu": 0, "erreur_historique": False, "mode": "checkpoints", "sans_clip": False}
+DIFFUSION = {"UNETLoader": ("unet_name", ["flux1-dev-fp8.safetensors", "qwen_image_fp8_e4m3fn.safetensors", "z_image_turbo_bf16.safetensors", "mystere_xl.safetensors"]),
+             "CLIPLoader": ("clip_name", ["t5xxl_fp16.safetensors", "clip_l.safetensors", "qwen_2.5_vl_7b_fp8_scaled.safetensors", "qwen_3_4b.safetensors"]),
+             "VAELoader": ("vae_name", ["ae.safetensors", "qwen_image_vae.safetensors"])}
 
 
 class FauxComfy(BaseHTTPRequestHandler):
@@ -39,6 +42,16 @@ class FauxComfy(BaseHTTPRequestHandler):
             return self._rep(503, {"error": "down"})
         if self.path.startswith("/system_stats"):
             return self._rep(200, {"system": {"comfyui_version": "0.3.9", "argv": [str(COMFY / "main.py")]}, "devices": [{"name": "GPU de test"}]})
+        if SERVICE["mode"] == "diffusion":                                          # une installation sans checkpoint : seulement des modèles de diffusion (Flux, Qwen-Image, Z-Image)
+            for noeud, (champ, noms) in DIFFUSION.items():
+                if self.path.startswith("/object_info/" + noeud):
+                    if SERVICE["sans_clip"] and noeud == "CLIPLoader":
+                        return self._rep(200, {noeud: {"input": {"required": {champ: [[], {}]}}}})
+                    if SERVICE.get("combo"):                                                # le nouveau format de ComfyUI : ["COMBO", {"options": [...]}]
+                        return self._rep(200, {noeud: {"input": {"required": {champ: ["COMBO", {"multiselect": False, "options": noms}]}}}})
+                    return self._rep(200, {noeud: {"input": {"required": {champ: [noms, {}]}}}})
+            if self.path.startswith("/object_info/CheckpointLoaderSimple"):
+                return self._rep(200, {"CheckpointLoaderSimple": {"input": {"required": {"ckpt_name": [[], {}]}}}})
         for noeud, champ, noms in (("CheckpointLoaderSimple", "ckpt_name", ["sdxl.safetensors", "sd15.safetensors"]), ("LoraLoader", "lora_name", ["style.safetensors"])):
             if self.path.startswith("/object_info/" + noeud):
                 return self._rep(200, {noeud: {"input": {"required": {champ: [noms, {}]}}}})
@@ -135,7 +148,7 @@ class ComfyUI(unittest.TestCase):
         cls.serveur.shutdown()
 
     def setUp(self):
-        SERVICE.update(panne=False, soumis=[], histoire=0, refus=False, interrompu=0, erreur_historique=False)
+        SERVICE.update(panne=False, soumis=[], histoire=0, refus=False, interrompu=0, erreur_historique=False, mode="checkpoints", sans_clip=False)
         cu.CACHE["modeles"] = (0, None)
         for f in addons.dossier_donnees().rglob("*"):
             if f.is_file():
@@ -207,8 +220,12 @@ class ComfyUI(unittest.TestCase):
         self.assertEqual(wf["4"]["inputs"]["ckpt_name"], "sdxl.safetensors", "sans modèle demandé : le premier installé")
         addons.enregistrer_reglages(cu.IDENT, {"modele": "sd15.safetensors"})
         SERVICE["histoire"] = 0
-        cu.outil_generer({"prompt": "x", "modele": "perso.safetensors"}, self.ctx())
-        self.assertEqual(SERVICE["soumis"][1]["prompt"]["4"]["inputs"]["ckpt_name"], "perso.safetensors", "ce que le modèle demande l'emporte")
+        cu.outil_generer({"prompt": "x", "modele": "SDXL"}, self.ctx())
+        self.assertEqual(SERVICE["soumis"][1]["prompt"]["4"]["inputs"]["ckpt_name"], "sdxl.safetensors", "ce que le modèle demande l'emporte (à la casse près)")
+        with self.assertRaises(_m.ErreurOutil) as e:
+            cu.outil_generer({"prompt": "x", "modele": "perso.safetensors"}, self.ctx())
+        self.assertIn("n'est pas installé", str(e.exception))
+        self.assertIn("sdxl.safetensors", str(e.exception), "le message dit quels modèles existent")
         for faux in ({"prompt": ""}, {"prompt": "x", "type": "hologramme"}, {"prompt": "x", "largeur": "beaucoup"}, {"prompt": "x", "type": "video"}):
             with self.assertRaises(_m.ErreurOutil):
                 cu.outil_generer(faux, self.ctx())
@@ -440,6 +457,74 @@ class ComfyUI(unittest.TestCase):
         with self.assertRaises(_m.ErreurOutil) as e:
             cu.outil_generer({"prompt": "x"}, self.ctx())
         self.assertIn("ne trouve pas ComfyUI", str(e.exception))
+
+    def test_modeles_de_diffusion_sans_checkpoint_flux_qwen_et_zimage(self):
+        """Une installation sans checkpoint (ses modèles sont dans diffusion_models) : le nom du modèle décide du workflow, et l'encodeur de texte et le VAE sont choisis parmi ceux qui sont installés."""
+        SERVICE["mode"] = "diffusion"
+        cu.CACHE["modeles"] = (0, None)
+        self.assertIn("flux1-dev-fp8.safetensors → image_flux", cu.texte_modeles(), "le modèle voit à quelle famille appartient chaque fichier")
+        # Flux : UNETLoader + deux encodeurs de texte + VAE, pas de CheckpointLoader
+        cu.outil_generer({"prompt": "un phare", "modele": "flux1-dev"}, self.ctx())
+        wf = SERVICE["soumis"][-1]["prompt"]
+        types = {n["class_type"] for n in wf.values()}
+        self.assertTrue({"UNETLoader", "DualCLIPLoader", "VAELoader", "FluxGuidance", "KSampler"} <= types)
+        self.assertNotIn("CheckpointLoaderSimple", types)
+        self.assertEqual((wf["10"]["inputs"]["unet_name"], wf["11"]["inputs"]["clip_name1"], wf["11"]["inputs"]["clip_name2"], wf["12"]["inputs"]["vae_name"]),
+                         ("flux1-dev-fp8.safetensors", "t5xxl_fp16.safetensors", "clip_l.safetensors", "ae.safetensors"))
+        self.assertEqual((wf["3"]["inputs"]["steps"], wf["3"]["inputs"]["cfg"], wf["13"]["inputs"]["guidance"]), (20, 1.0, 3.5), "les réglages propres à Flux")
+        # Qwen-Image
+        SERVICE["histoire"] = 0
+        cu.outil_generer({"prompt": "x", "modele": "qwen_image"}, self.ctx())
+        wf = SERVICE["soumis"][-1]["prompt"]
+        self.assertEqual((wf["11"]["inputs"]["type"], wf["11"]["inputs"]["clip_name"], wf["12"]["inputs"]["vae_name"], wf["14"]["inputs"]["shift"]),
+                         ("qwen_image", "qwen_2.5_vl_7b_fp8_scaled.safetensors", "qwen_image_vae.safetensors", 3.1))
+        self.assertEqual(wf["5"]["inputs"]["width"], 1328)
+        # Z-Image
+        SERVICE["histoire"] = 0
+        cu.outil_generer({"prompt": "x", "modele": "z_image"}, self.ctx())
+        wf = SERVICE["soumis"][-1]["prompt"]
+        self.assertEqual((wf["11"]["inputs"]["type"], wf["11"]["inputs"]["clip_name"], wf["3"]["inputs"]["steps"]), ("lumina2", "qwen_3_4b.safetensors", 9))
+        # sans modèle demandé : le premier modèle de diffusion reconnu
+        SERVICE["histoire"] = 0
+        cu.outil_generer({"prompt": "x"}, self.ctx())
+        self.assertEqual(SERVICE["soumis"][-1]["prompt"]["10"]["inputs"]["unet_name"], "flux1-dev-fp8.safetensors")
+        # famille inconnue : message clair, rien n'est envoyé
+        avant = len(SERVICE["soumis"])
+        with self.assertRaises(_m.ErreurOutil) as e:
+            cu.outil_generer({"prompt": "x", "modele": "mystere_xl"}, self.ctx())
+        self.assertIn("famille", str(e.exception))
+        # un fichier manque (aucun encodeur de texte installé) : on dit lequel et où
+        SERVICE["sans_clip"] = True
+        cu.CACHE["modeles"] = (0, None)
+        with self.assertRaises(_m.ErreurOutil) as e:
+            cu.outil_generer({"prompt": "x", "modele": "flux1-dev"}, self.ctx())
+        self.assertIn("encodeur de texte", str(e.exception))
+        self.assertIn("text_encoders", str(e.exception))
+        self.assertEqual(len(SERVICE["soumis"]), avant, "rien n'est envoyé à ComfyUI quand il manque un fichier")
+
+    def test_nouveau_format_des_listes_de_comfyui(self):
+        SERVICE["mode"], SERVICE["combo"] = "diffusion", True
+        cu.CACHE["modeles"] = (0, None)
+        try:
+            self.assertIn("flux1-dev-fp8.safetensors", cu.lister_modeles(forcer=True)["modeles"]["diffusion_models"])
+            cu.outil_generer({"prompt": "x", "modele": "flux1-dev"}, self.ctx())
+            self.assertEqual(SERVICE["soumis"][-1]["prompt"]["11"]["inputs"]["clip_name1"], "t5xxl_fp16.safetensors")
+        finally:
+            SERVICE["combo"] = False
+
+    def test_aucun_modele_d_image_installe(self):
+        SERVICE["mode"] = "diffusion"
+        for cle in DIFFUSION:
+            DIFFUSION[cle] = (DIFFUSION[cle][0], [])
+        cu.CACHE["modeles"] = (0, None)
+        try:
+            with self.assertRaises(_m.ErreurOutil) as e:
+                cu.outil_generer({"prompt": "x"}, self.ctx())
+            self.assertIn("aucun modèle d'image", str(e.exception))
+        finally:
+            DIFFUSION["UNETLoader"] = ("unet_name", ["flux1-dev-fp8.safetensors", "qwen_image_fp8_e4m3fn.safetensors", "z_image_turbo_bf16.safetensors", "mystere_xl.safetensors"])
+            DIFFUSION["CLIPLoader"] = ("clip_name", ["t5xxl_fp16.safetensors", "clip_l.safetensors", "qwen_2.5_vl_7b_fp8_scaled.safetensors", "qwen_3_4b.safetensors"])
+            DIFFUSION["VAELoader"] = ("vae_name", ["ae.safetensors", "qwen_image_vae.safetensors"])
 
     def test_les_outils_n_existent_que_si_l_addon_est_actif(self):
         from lutin import dialogue, revue

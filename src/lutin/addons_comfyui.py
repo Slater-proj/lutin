@@ -30,9 +30,11 @@ from .i18n import t as _t
 IDENT = "comfyui"
 EXTENSIONS = (".safetensors", ".ckpt", ".pt", ".pth", ".gguf", ".bin", ".sft")
 DOSSIERS_MODELES = ("checkpoints", "loras", "vae", "diffusion_models", "unet", "text_encoders", "clip", "controlnet", "upscale_models")
-NOEUDS = {"checkpoints": "objets_checkpoints", "loras": "objets_loras", "vae": "objets_vae", "diffusion_models": "objets_unet"}
-RE_MARQUE = re.compile(r"\{([a-z_]+)\}")
-RE_MARQUE_ENTIERE = re.compile(r"^\{([a-z_]+)\}$")
+NOEUDS = {"checkpoints": "objets_checkpoints", "loras": "objets_loras", "vae": "objets_vae", "diffusion_models": "objets_unet", "text_encoders": "objets_clip"}
+ALIAS = {"unet": "diffusion_models", "clip": "text_encoders"}          # anciens noms de dossiers : mêmes modèles
+FAMILLES = (("image_zimage", ("z_image", "zimage", "z-image")), ("image_qwen", ("qwen",)), ("image_flux", ("flux",)))          # le nom du fichier dit quelle famille de modèle (donc quels nœuds) il faut
+RE_MARQUE = re.compile(r"\{([a-z_][a-z_0-9]*)\}")
+RE_MARQUE_ENTIERE = re.compile(r"^\{([a-z_][a-z_0-9]*)\}$")
 TYPES = ("image", "video", "son")
 DELAI_PAR_DEFAUT = {"image": 600, "video": 3600, "son": 900}
 HOTES_TELECHARGEMENT = ("huggingface.co", "hf.co", "civitai.com")          # et leurs sous-domaines (les fichiers sont servis par des réseaux de diffusion de ces sites)
@@ -265,6 +267,16 @@ def _scan_dossier(dossier):
     return sortie
 
 
+def _options(entree):
+    """Les choix d'une entrée de liste de ComfyUI : l'ancien format est [[choix…], {…}], le nouveau ["COMBO", {"options": [choix…], …}]."""
+    if isinstance(entree, list) and entree:
+        if isinstance(entree[0], list):
+            return entree[0]
+        if entree[0] == "COMBO" and len(entree) > 1 and isinstance(entree[1], dict):
+            return entree[1].get("options") or []
+    return []
+
+
 def lister_modeles(forcer=False):
     """Les modèles installés : par l'API de ComfyUI s'il tourne (ce qu'il voit vraiment), sinon en lisant le dossier d'installation. {source, modeles: {genre: [noms]}}."""
     quand, valeur = CACHE["modeles"]
@@ -275,13 +287,16 @@ def lister_modeles(forcer=False):
         r = addons.appeler(IDENT, appel, delai=6)
         if r["ok"]:
             source = "api"
-            noms = (r["extrait"] or {}).get("liste")
-            if isinstance(noms, list) and noms:
+            noms = _options((r["extrait"] or {}).get("liste"))
+            if noms:
                 modeles[genre] = [str(n) for n in noms][:2000]
     if source == "aucune":
-        dossier = addons.reglages(IDENT).get("dossier") or ""
+        dossier = dossier_comfy()
         if dossier and dossier_valide(dossier):
             modeles, source = _scan_dossier(dossier), "dossier"
+    for ancien, nouveau in ALIAS.items():
+        if ancien in modeles:
+            modeles[nouveau] = sorted(set(modeles.get(nouveau, []) + modeles.pop(ancien)))
     valeur = {"source": source, "modeles": modeles}
     CACHE["modeles"] = (time.time(), valeur)
     return valeur
@@ -294,6 +309,8 @@ def texte_modeles():
     lignes = [_t("Modèles installés (lus {}) :").format(_t("dans ComfyUI") if r["source"] == "api" else _t("dans le dossier d'installation"))]
     for genre, noms in r["modeles"].items():
         lignes.append("- {} ({}) : {}".format(genre, len(noms), ", ".join(noms[:40]) + (" …" if len(noms) > 40 else "")))
+        if genre == "diffusion_models":
+            lignes.append("  " + _t("Famille reconnue : ") + ", ".join("{} → {}".format(n, famille_de(n) or _t("inconnue")) for n in noms[:15]))
     if len(lignes) == 1:
         lignes.append(_t("(aucun modèle trouvé)"))
     return "\n".join(lignes)
@@ -337,6 +354,69 @@ def _entier(valeur, nom, mini, maxi, defaut):
     return max(mini, min(maxi, n))
 
 
+def famille_de(nom):
+    """La famille d'un modèle de diffusion d'après son nom de fichier (« image_flux », « image_qwen », « image_zimage »), ou ''."""
+    n = str(nom).lower()
+    for cle, mots in FAMILLES:
+        if any(m in n for m in mots):
+            return cle
+    return ""
+
+
+def _installes(genre):
+    return list(lister_modeles().get("modeles", {}).get(genre, []))
+
+
+def _correspond(liste, voulu):
+    """Le fichier installé qui correspond à ce que demande le modèle : le même nom, ou à la casse près, ou un seul fichier qui contient ces mots."""
+    voulu = str(voulu).strip().lower()
+    for n in liste:
+        if n.lower() == voulu or n.lower().rsplit("/", 1)[-1] == voulu:
+            return n
+    contenant = [n for n in liste if voulu and voulu in n.lower()]
+    return contenant[0] if len(contenant) == 1 else ""
+
+
+def choisir_modele(demande=""):
+    """(clé du workflow, nom du fichier) : un checkpoint → le workflow « image » ; un modèle de diffusion (Flux, Qwen-Image, Z-Image…) → celui de sa famille. Sans demande : le réglage, puis le premier modèle utilisable."""
+    demande = str(demande or addons.reglages(IDENT).get("modele") or "").strip()
+    checkpoints, diffusion = _installes("checkpoints"), _installes("diffusion_models")
+    if not checkpoints and not diffusion:
+        raise _m.ErreurOutil(_t("Je ne vois aucun modèle d'image dans ComfyUI (ni dans checkpoints ni dans diffusion_models) : l'utilisateur doit en installer un."))
+    if demande:
+        trouve = _correspond(checkpoints, demande)
+        if trouve:
+            return "image", trouve
+        trouve = _correspond(diffusion, demande)
+        if trouve:
+            cle = famille_de(trouve)
+            if not cle:
+                raise _m.ErreurOutil(_t("Je ne connais pas la famille du modèle « {} » (Flux, Qwen-Image et Z-Image sont gérés) : l'utilisateur peut coller son propre workflow dans « Flux… ».").format(trouve))
+            return cle, trouve
+        raise _m.ErreurOutil(_t("Le modèle « {} » n'est pas installé. Disponibles : {}").format(demande, ", ".join((checkpoints + diffusion)[:25])))
+    if checkpoints:
+        return "image", checkpoints[0]
+    for n in diffusion:
+        if famille_de(n):
+            return famille_de(n), n
+    raise _m.ErreurOutil(_t("Aucun de tes modèles de diffusion n'est d'une famille que je connais (Flux, Qwen-Image, Z-Image) : {}").format(", ".join(diffusion[:15])))
+
+
+def ressources_pour(cle, flux_actuel):
+    """Les fichiers dont le workflow a besoin en plus du modèle (encodeur de texte, VAE) : choisis parmi ceux qui sont installés, d'après les mots du flux (« ressources »)."""
+    voulues = (flux_actuel.get("ressources") or {}).get(cle) or {}
+    trouvees = {}
+    for nom, (genre, mots) in {"clip": ("text_encoders", voulues.get("clip")), "clip2": ("text_encoders", voulues.get("clip2")), "vae": ("vae", voulues.get("vae"))}.items():
+        if not mots:
+            continue
+        installes = _installes(genre)
+        choix = next((n for mot in mots for n in installes if mot.lower() in n.lower().rsplit("/", 1)[-1]), "")
+        if not choix:
+            raise _m.ErreurOutil(_t("Il me manque un fichier pour ce modèle : {} (dossier {}, nom contenant {}). L'utilisateur doit l'installer.").format({"clip": _t("encodeur de texte"), "clip2": _t("second encodeur de texte"), "vae": "VAE"}[nom], genre, " / ".join(mots)))
+        trouvees[nom] = choix
+    return trouvees
+
+
 def parametres(args, flux_actuel, type_):
     """Les valeurs mises dans le workflow : défauts du flux, réglage de l'addon, puis ce que le modèle a demandé (borné)."""
     base = dict((flux_actuel.get("parametres") or {}).get(type_) or {})
@@ -351,11 +431,9 @@ def parametres(args, flux_actuel, type_):
         v["cfg"] = max(1.0, min(30.0, float(args.get("cfg") if args.get("cfg") not in (None, "") else base.get("cfg", 6.5))))
     except (TypeError, ValueError):
         raise _m.ErreurOutil(_t("« {} » doit être un nombre.").format("cfg"))
-    modele = str(args.get("modele") or addons.reglages(IDENT).get("modele") or base.get("modele") or "").strip()
-    if not modele and type_ == "image":
-        premiers = lister_modeles().get("modeles", {}).get("checkpoints") or []
-        modele = premiers[0] if premiers else ""
-    v["modele"] = modele
+    v["guidance"] = float(base.get("guidance", 3.5))
+    v["decalage"] = float(base.get("decalage", 3.0))
+    v["modele"] = str(args.get("modele") or addons.reglages(IDENT).get("modele") or base.get("modele") or "").strip()
     return v
 
 
@@ -365,10 +443,14 @@ def outil_generer(args, ctx):
     if type_ not in TYPES:
         raise _m.ErreurOutil(_t("Type inconnu : « {} » (image, video ou son).").format(type_))
     f = addons.flux(IDENT)
-    wf = (f.get("workflows") or {}).get(type_)
+    cle, modele = (choisir_modele(args.get("modele")) if type_ == "image" else (type_, ""))          # image : le modèle choisi décide du workflow (checkpoint, Flux, Qwen-Image, Z-Image)
+    wf = (f.get("workflows") or {}).get(cle)
     if not wf:
-        raise _m.ErreurOutil(_t("Aucun workflow « {} » dans le flux de l'addon ComfyUI : l'utilisateur doit en coller un (Extensions > ComfyUI > Flux…).").format(type_))
-    v = parametres(args, f, type_)
+        raise _m.ErreurOutil(_t("Aucun workflow « {} » dans le flux de l'addon ComfyUI : l'utilisateur doit en coller un, ou revenir à la version livrée (Extensions > ComfyUI > Flux…).").format(cle))
+    v = parametres(args, f, cle)
+    if modele:
+        v["modele"] = modele
+        v.update(ressources_pour(cle, f))
     complet = remplir_workflow(wf, v)
     restantes = marques_restantes(complet)
     if restantes:

@@ -219,6 +219,22 @@ class Courriel(unittest.TestCase):
         self.assertNotIn("mauvais-mdp-secret", mail.etat()["erreur"])
         self.assertTrue(mail.etat()["erreur"])
 
+    def test_la_boucle_de_lecture_tourne_et_s_arrete(self):
+        import time
+        BOITE["messages"] = {1: courriel(sujet="Vieux")}
+        mail.demarrer()
+        try:
+            for _ in range(100):
+                if mail.lire()["uid"]:
+                    break
+                time.sleep(0.05)
+            self.assertTrue(mail.lire()["uid"], "la première lecture a enregistré où en est la boîte")
+            self.assertTrue(mail.etat()["ecoute"])
+        finally:
+            mail.arreter()
+        mail.VIVANT["fil"].join(5)
+        self.assertFalse(mail.VIVANT["fil"].is_alive())
+
     def test_le_mode_hors_ligne_strict_bloque_le_courrier(self):
         from unittest import mock
         with mock.patch.dict(os.environ, {"LUTIN_HORS_LIGNE": "1"}):

@@ -2,6 +2,14 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## 0.7.12
+
+- **ComfyUI : les modèles de diffusion marchent.** Lutin n'envoyait toujours que le workflow « checkpoint » : avec des modèles rangés dans `diffusion_models` (Flux, Qwen-Image, Z-Image…), il tombait sur un dossier checkpoints vide. Maintenant le modèle choisi décide du workflow (nœuds UNETLoader, encodeur de texte, VAE choisis parmi ceux qui sont installés), avec un message clair si un fichier manque ou si la famille est inconnue ; le modèle voit à quelle famille appartient chaque fichier.
+- **Format des listes** : le nouveau format de ComfyUI (« COMBO ») est compris, en plus de l'ancien ; une marque comme `{clip2}` (avec un chiffre) n'était pas remplacée, c'est corrigé.
+- **Boucles d'écoute testées** : les fils de Telegram, courriel et X (lecture, réponse, panne, arrêt propre) ont maintenant leurs tests.
+
+**English.** ComfyUI: diffusion models work. Lutin always sent the “checkpoint” workflow: with models stored in `diffusion_models` (Flux, Qwen-Image, Z-Image…) it hit an empty checkpoints folder. Now the chosen model decides the workflow (UNETLoader nodes, text encoder and VAE picked among the installed ones), with a clear message when a file is missing or the family is unknown; the model sees each file's family. List format: ComfyUI's new “COMBO” format is understood besides the old one; a mark like `{clip2}` (with a digit) was not replaced, now fixed. Listening loops tested: the Telegram, email and X threads (read, reply, outage, clean stop) now have tests.
+
 ## 0.7.11
 
 - **Correction : les panneaux des addons ne clignotent plus.** La liste se reconstruisait toutes les 4 secondes en vidant d'abord l'écran, puis les panneaux (dossier de ComfyUI, boutons Détecter…) réapparaissaient après un appel au serveur : ils semblaient disparaître et revenir. La liste est maintenant construite hors de la page, échangée d'un coup, et seulement si elle a changé ; un chargement plus récent annule le précédent. Un test de navigateur surveille pendant 11 secondes qu'aucun panneau ne disparaît.

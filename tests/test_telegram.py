@@ -189,6 +189,31 @@ class Telegram(unittest.TestCase):
         self.assertEqual(self.lire_tout(), 0)
         self.assertEqual(tg.etat()["erreur"], "")
 
+    def test_la_boucle_d_ecoute_tourne_repond_et_s_arrete(self):
+        """Le fil d'écoute lui-même (pas seulement une lecture) : il lit, répond au propriétaire, survit à une panne, et s'arrête proprement."""
+        import time
+        e = tg.lire()
+        e["autorises"] = [{"id": 42, "nom": "Moi"}]
+        tg.ecrire(e)
+        SERVICE["updates"] = [msg(1, 42, "Salut Lutin")]
+        tg.demarrer()
+        try:
+            for _ in range(100):
+                if SERVICE["envoyes"]:
+                    break
+                time.sleep(0.05)
+            self.assertEqual(SERVICE["envoyes"][-1]["text"], "Réponse à : Salut Lutin")
+            self.assertTrue(tg.etat()["ecoute"])
+            SERVICE["panne"] = True                                                      # une panne : la boucle attend et ne plante pas
+            time.sleep(0.4)
+            self.assertTrue(tg.VIVANT["fil"].is_alive())
+        finally:
+            SERVICE["panne"] = False
+            tg.arreter()
+        tg.VIVANT["fil"].join(5)
+        self.assertFalse(tg.VIVANT["fil"].is_alive(), "le fil s'arrête quand on le demande")
+        self.assertEqual(len(SERVICE["envoyes"]), 1, "le message n'a été traité qu'une fois")
+
     def test_messages_longs_decoupes_et_oublier_un_appareil(self):
         morceaux = tg.decouper("ligne\n" * 1500)
         self.assertTrue(all(len(m) <= tg.LONGUEUR_MAX for m in morceaux) and len(morceaux) >= 2)
