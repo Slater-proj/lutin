@@ -204,24 +204,81 @@ def passages_rappel(requete, nombre=5, exclure_conv="", min_termes=1, seulement_
     if not termes:
         return []
     indexer_rappel()
-    n = len(RAPPEL["morceaux"])
+    morceaux = [m for m in RAPPEL["morceaux"] if not (exclure_conv and m.get("conv") == exclure_conv) and not (seulement_conv and m.get("conv") != seulement_conv)]
+    return noter(morceaux, RAPPEL["df"], RAPPEL["moyenne"], len(RAPPEL["morceaux"]), termes, nombre, min_termes)
+
+
+def noter(morceaux, df, moyenne, n, termes, nombre, min_termes):
+    """Classe des morceaux par pertinence (BM25) : les `nombre` meilleurs, qui contiennent au moins `min_termes` des mots cherchés."""
     scores = []
-    for m in RAPPEL["morceaux"]:
-        if exclure_conv and m.get("conv") == exclure_conv:
-            continue
-        if seulement_conv and m.get("conv") != seulement_conv:
-            continue
+    for m in morceaux:
         score, trouves = 0.0, 0
         for t in termes:
             tf = m["tf"].get(t, 0)
             if tf:
                 trouves += 1
-                idf = math.log(1 + (n - RAPPEL["df"][t] + 0.5) / (RAPPEL["df"][t] + 0.5))
-                score += idf * tf * 2.5 / (tf + 1.5 * (0.25 + 0.75 * m["longueur"] / RAPPEL["moyenne"]))
+                idf = math.log(1 + (n - df[t] + 0.5) / (df[t] + 0.5))
+                score += idf * tf * 2.5 / (tf + 1.5 * (0.25 + 0.75 * m["longueur"] / moyenne))
         if score > 0 and trouves >= min(min_termes, len(termes)):
             scores.append({"score": score, "m": m, "trouves": trouves, "termes": termes})
     scores.sort(key=lambda x: -x["score"])
     return scores[:nombre]
+
+
+RE_ROLE = re.compile(r"\[(?:moi|assistant)\] ")
+FIL = {}                       # conversation -> (signature, morceaux, df, moyenne) : l'index d'UNE conversation, refait seulement quand elle change
+
+
+def morceaux_du_fil(ident):
+    """Les morceaux de la conversation (messages gardés + début archivé par le résumé), sans parcourir les dossiers de documents : rapide à chaque réponse."""
+    f = _m.conv_chemin(ident)
+    try:
+        sig = signature_fichier(f)
+    except OSError:
+        return [], collections.Counter(), 1.0
+    en_cache = FIL.get(ident)
+    if en_cache and en_cache[0] == sig:
+        return en_cache[1], en_cache[2], en_cache[3]
+    morceaux, _ = morceaux_fichier(f)
+    df = collections.Counter()
+    for m in morceaux:
+        df.update(m["tf"].keys())
+    moyenne = (sum(m["longueur"] for m in morceaux) / len(morceaux)) if morceaux else 1.0
+    if len(FIL) > 20:
+        FIL.clear()
+    FIL[ident] = (sig, morceaux, df, moyenne)
+    return morceaux, df, moyenne
+
+
+def rappel_du_fil(conv, fiche_etape=""):
+    """Ce qui a été dit plus tôt dans CETTE conversation et qui touche à la dernière demande, retrouvé tout seul (sans que le modèle ait à le demander) : une fiche ou un résumé perd des détails,
+    mais le texte complet reste sur le disque. Renvoie (texte pour le prompt, nombre de passages). Un « oui » ou un « continue » est complété par la dernière réponse et l'étape en cours."""
+    ident = conv.get("id")
+    msgs = conv.get("messages", [])
+    demandes = [m["content"] for m in msgs if m.get("role") == "user" and m.get("content") and not str(m["content"]).startswith("[")]
+    if not ident or not demandes:
+        return "", 0
+    question = demandes[-1]
+    precise = len(mots(question)) >= 4
+    if not precise:
+        precedente = next((m["content"] for m in reversed(msgs[:-1]) if m.get("role") == "assistant" and m.get("content")), "")
+        question = " ".join([question, precedente[:300], fiche_etape])
+    termes = set(mots(question[:900]))
+    if not termes:
+        return "", 0
+    morceaux, df, moyenne = morceaux_du_fil(ident)
+    if not morceaux:
+        return "", 0
+    passages = noter(morceaux, df, moyenne, len(morceaux), termes, 8, 2 if precise else 1)
+    sous_les_yeux = " ".join(" ".join(str(m.get("content") or "").split()) for m in msgs[-6:])                       # les derniers échanges sont déjà dans la fenêtre
+    def debut(p):
+        return " ".join(RE_ROLE.sub("", p["m"]["texte"]).split())[:60]
+    gardes = [p for p in passages if debut(p) not in sous_les_yeux][:3]
+    if not gardes:
+        return "", 0
+    texte = ("[Extraits de la conversation] " + _t("Passages retrouvés plus tôt dans cette même conversation, en rapport avec la demande. Ils peuvent être hors sujet : ignore-les alors. "
+             "Si un détail compte, appelle « rappeler » avec ici=true pour en voir davantage.") + "\n" + formater_passages(gardes, 500)[:1800])
+    return texte, len(gardes)
 
 
 def formater_passages(passages, taille=600):

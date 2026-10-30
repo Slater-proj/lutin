@@ -2,6 +2,14 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## 0.7.8
+
+- **Rappel automatique du fil** : avant chaque réponse, les passages de toute la conversation (début archivé compris) qui touchent à la demande sont remis au modèle sans qu'il les demande ; un « oui » est complété par la dernière réponse et l'étape en cours.
+- **Le scribe** : toutes les trois réponses, un appel court et séparé met la fiche de suivi à jour (décisions, étape, fait, questions ouvertes), contrôlé et désactivable. La fiche ne dépend plus de la bonne volonté du modèle qui répond.
+- **Robustesse du serveur** : un corps de requête qui n'était pas un objet JSON (liste, texte, `null`, imbrication énorme) coupait la connexion sur chaque route ; il reçoit maintenant une erreur claire. Un test lance des requêtes absurdes (types inattendus, textes énormes, chemins piégés) sur toutes les routes d'un vrai serveur.
+
+**English.** Automatic thread recall: before each answer, passages from the whole conversation (archived start included) that relate to the request are put in front of the model without it asking; a bare “yes” is completed with the last answer and the current step. The scribe: every three answers a short separate call updates the tracking sheet (decisions, step, done, open questions), checked and switchable. Server robustness: a request body that was not a JSON object (list, text, `null`, huge nesting) dropped the connection on every route; it now gets a clear error. A test sends absurd requests to every route of a real server.
+
 ## 0.7.7
 
 - **Fiche de suivi : part du contexte réglable** (5 à 25 %, 10 par défaut) dans Réglages > Mémoire des longues conversations ; l'avertissement de lenteur suit le plafond choisi.

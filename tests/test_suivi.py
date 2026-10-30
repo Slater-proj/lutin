@@ -156,5 +156,115 @@ class PartDuContexte(unittest.TestCase):
         self.assertIn("25 %", m["avertissement"], "l'avertissement cite le plafond réglé")
 
 
+class Scribe(unittest.TestCase):
+    """Le scribe met la fiche à jour par un appel séparé ; ses consignes sont contrôlées."""
+
+    def setUp(self):
+        from lutin import dialogue
+        self.dialogue = dialogue
+        suivi.supprimer(ID)
+        self.addCleanup(suivi.supprimer, ID)
+        self.vrai = dialogue.ollama_json
+        self.addCleanup(setattr, dialogue, "ollama_json", self.vrai)
+        self.conv = {"id": ID, "messages": [{"role": "user" if i % 2 == 0 else "assistant", "content": "message %d sur le budget" % i} for i in range(8)]}
+
+    def avec(self, reponse):
+        appels = []
+
+        def faux(chemin, corps=None, delai=8):
+            appels.append(corps)
+            if isinstance(reponse, Exception):
+                raise reponse
+            return {"message": {"content": reponse}}
+        self.dialogue.ollama_json = faux
+        return appels
+
+    def test_remplit_remplace_ajoute_sans_doublon_et_retire_les_questions_resolues(self):
+        suivi.modifier(ID, "ouvert", "Quel budget pour la salle ?")
+        suivi.modifier(ID, "decisions", "Budget plafonné à 500 euros")
+        appels = self.avec(json_ops(objectif=["Organiser la fête"], etape=["Réserver la salle"], decisions=["budget plafonné à 500 euros", "Salle réservée au 12 mai"], fait=["Devis reçu"], resolu=["Quel budget pour la salle ?"]))
+        n = self.dialogue.scribe(self.conv, {"modele": "m", "num_ctx": 8192, "temperature": 0.2})
+        s = suivi.lire(ID)
+        self.assertEqual((s["objectif"], s["etape"], s["fait"]), (["Organiser la fête"], ["Réserver la salle"], ["Devis reçu"]))
+        self.assertEqual(s["decisions"], ["Budget plafonné à 500 euros", "Salle réservée au 12 mai"], "la décision déjà présente n'est pas dupliquée")
+        self.assertEqual(s["ouvert"], [], "la question résolue (recopiée telle quelle) est retirée")
+        self.assertGreater(n, 0)
+        self.assertEqual(self.conv["scribe_a"], 8)
+        self.assertEqual(appels[0]["format"], "json")
+        self.assertIn("FICHE ACTUELLE", appels[0]["messages"][1]["content"])
+        self.assertEqual(self.dialogue.scribe(self.conv, {"modele": "m", "num_ctx": 8192, "temperature": 0.2}), 0, "rien de nouveau depuis : aucun appel")
+        self.assertEqual(len(appels), 1)
+
+    def test_une_decision_n_est_jamais_retiree_et_les_excès_sont_bornes(self):
+        suivi.modifier(ID, "decisions", "Ne jamais toucher à la production")
+        self.avec(json_ops(decisions=["décision %d" % i for i in range(30)], resolu=["Ne jamais toucher à la production"], ouvert=["x" * 5000]))
+        self.dialogue.scribe(self.conv, {"modele": "m", "num_ctx": 8192, "temperature": 0.2})
+        s = suivi.lire(ID)
+        self.assertIn("Ne jamais toucher à la production", s["decisions"], "le scribe ne supprime jamais une décision")
+        self.assertEqual(len(s["decisions"]), 1 + self.dialogue.SCRIBE_AJOUTS_MAX, "au plus quatre lignes ajoutées par passage")
+        self.assertLessEqual(max(len(x) for x in s["ouvert"]), suivi.LIGNE_MAX)
+
+    def test_reponse_absurde_ou_panne_ne_cassent_rien(self):
+        for reponse in ("pas du json", "[1, 2]", "null", '{"decisions": 5, "etape": {"a": 1}}', ValueError("boum"), OSError("réseau")):
+            self.conv.pop("scribe_a", None)
+            self.avec(reponse)
+            self.dialogue.scribe(self.conv, {"modele": "m", "num_ctx": 8192, "temperature": 0.2})
+        self.assertEqual(suivi.lire(ID)["objectif"], [])
+        self.conv["messages"] = self.conv["messages"][:3]
+        self.conv.pop("scribe_a", None)
+        appels = self.avec("{}")
+        self.assertEqual(self.dialogue.scribe(self.conv, {"modele": "m", "num_ctx": 8192, "temperature": 0.2}), 0)
+        self.assertEqual(appels, [], "pas assez de nouveaux messages : pas d'appel")
+
+
+def json_ops(**kw):
+    import json
+    return json.dumps(kw)
+
+
+class RappelDuFil(unittest.TestCase):
+    """Les passages anciens de la conversation en cours sont retrouvés sans que le modèle les demande."""
+
+    def setUp(self):
+        self.ident = "f1e2d3c4"
+        self.addCleanup(lambda: _m.conv_chemin(self.ident).unlink(missing_ok=True))
+        self.addCleanup(lambda: __import__("lutin.rappel", fromlist=["FIL"]).FIL.clear())
+
+    def conv(self, messages):
+        c = {"id": self.ident, "titre": "t", "messages": messages}
+        _m.conv_ecrire(dict(c, date="2026-01-01T00:00:00.000", maj="2026-01-01T00:00:00.000", resume="", travail="principal", taches=[]))
+        return c
+
+    def test_retrouve_un_detail_ancien_et_ignore_ce_qui_est_deja_sous_les_yeux(self):
+        from lutin import rappel
+        anciens = [{"role": "user" if i % 2 == 0 else "assistant", "content": ("Le code du coffre est 4711-ZEBRE. " if i == 0 else "") + "blabla de remplissage numéro %d " % i * 3} for i in range(14)]
+        c = self.conv(anciens)
+        c["messages"] = anciens + [{"role": "user", "content": "Rappelle-moi le code du coffre ZEBRE s'il te plaît ?"}]
+        texte, n = rappel.rappel_du_fil(c)
+        self.assertEqual(n, 1)
+        self.assertIn("4711-ZEBRE", texte)
+        self.assertTrue(texte.startswith("[Extraits de la conversation]"))
+        # le même passage encore dans les six derniers messages : il est déjà sous les yeux du modèle
+        recents = [{"role": "user", "content": "Le code du coffre est 4711-ZEBRE, noté."}, {"role": "assistant", "content": "ok"}]
+        c2 = self.conv(recents)
+        c2["messages"] = recents + [{"role": "user", "content": "Rappelle-moi le code du coffre ZEBRE s'il te plaît ?"}]
+        self.assertEqual(rappel.rappel_du_fil(c2), ("", 0))
+
+    def test_un_oui_est_complete_par_la_derniere_reponse_et_l_etape(self):
+        from lutin import rappel
+        msgs = [{"role": "user", "content": "Le tarif du traiteur est de 35 euros par personne, c'est acté."}, {"role": "assistant", "content": "Noté."}]
+        msgs += [{"role": "user" if i % 2 == 0 else "assistant", "content": "autre sujet sans rapport %d et encore des mots" % i} for i in range(10)]
+        c = self.conv(msgs)
+        c["messages"] = msgs + [{"role": "assistant", "content": "On passe au traiteur ?"}, {"role": "user", "content": "oui"}]
+        texte, n = rappel.rappel_du_fil(c, "Contacter le traiteur")
+        self.assertEqual(n, 1)
+        self.assertIn("35 euros", texte, "« oui » seul ne dit rien : la question précédente et l'étape en cours guident la recherche")
+
+    def test_conversation_inconnue_ou_vide(self):
+        from lutin import rappel
+        self.assertEqual(rappel.rappel_du_fil({"id": "e9d8c7b6", "messages": [{"role": "user", "content": "une longue question sans historique ici"}]}), ("", 0))
+        self.assertEqual(rappel.rappel_du_fil({"id": "", "messages": []}), ("", 0))
+
+
 if __name__ == "__main__":
     unittest.main()

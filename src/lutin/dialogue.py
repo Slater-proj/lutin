@@ -74,6 +74,67 @@ def repondre_choix_memoire(ident, choix, garder):
     return True
 
 
+SCRIBE_MESSAGES = 6                  # le scribe passe toutes les trois réponses environ (six messages)
+SCRIBE_AJOUTS_MAX = 4               # lignes ajoutées au plus par section et par passage : un modèle bavard ne peut pas inonder la fiche
+
+
+def scribe(conv, r, emit=None):
+    """Met la fiche à jour d'après les derniers échanges, par un appel court et SÉPARÉ au modèle : la fiche ne dépend plus de la bonne volonté du modèle qui répond (il oublie souvent l'outil « suivi »).
+    Les consignes sont contrôlées (clés connues, lignes courtes, pas de doublon, aucune décision retirée). Renvoie le nombre de lignes écrites ; 0 si rien à faire ou si l'appel a échoué."""
+    ident = conv.get("id")
+    deja = int(conv.get("scribe_a") or 0)
+    if deja > len(conv["messages"]):
+        deja = 0
+    nouveaux = [m for m in conv["messages"][deja:] if m.get("role") in ("user", "assistant") and (m.get("content") or "").strip() and not str(m["content"]).startswith("[")]
+    if len(nouveaux) < SCRIBE_MESSAGES:
+        return 0
+    if emit:
+        emit({"type": "etat", "texte": _t("Mise à jour de la fiche de suivi…")})
+    sections = _suivi.lire(ident)
+    echange = "\n".join("[{}] {}".format("moi" if m["role"] == "user" else "assistant", " ".join(m["content"].split())[:900]) for m in nouveaux)[-7000:]
+    consigne = ("Tu tiens la fiche de suivi d'une conversation. On te donne la fiche actuelle et les derniers échanges. Réponds en JSON avec ces clés (listes de phrases courtes, 150 caractères au plus) : "
+                "objectif (seulement si le but a changé ou vient d'être dit), plan (seulement si un plan vient d'être décidé ou modifié), etape (l'étape en cours maintenant), decisions (NOUVELLES décisions prises), "
+                "fait (ce qui vient d'être terminé), ouvert (NOUVELLES questions restées sans réponse), resolu (questions de la fiche qui ont maintenant une réponse, recopiées telles quelles). "
+                "N'invente rien : ne note que ce qui est dit dans les échanges. Liste vide si rien à ajouter.")
+    try:
+        rep = ollama_json("/api/chat", {"model": r["modele"], "stream": False, "think": False, "format": "json", "options": _m.options_modele(r, 0.1),
+                                        "messages": [{"role": "system", "content": consigne}, {"role": "user", "content": "FICHE ACTUELLE :\n" + _suivi.serialiser(ident, sections) + "\n\nDERNIERS ÉCHANGES :\n" + echange}]}, 300)
+        ops = json.loads((rep.get("message", {}).get("content") or "{}").strip() or "{}")
+    except (urllib.error.URLError, OSError, ValueError) as erreur:
+        _m.journaliser("Scribe : fiche non mise à jour (conversation {}) : {!r}".format(ident, erreur))
+        return 0
+    if not isinstance(ops, dict):
+        return 0
+
+    def lignes(cle):
+        v = ops.get(cle)
+        v = v if isinstance(v, list) else ([v] if v else [])
+        return [x for x in (_suivi.nettoyer_ligne(str(i)) for i in v if i) if x]
+    n = 0
+    try:
+        for cle in ("objectif", "plan", "etape"):                                      # remplacés seulement si le modèle a quelque chose à dire
+            nouveau = lignes(cle)[:LIGNES_REMPLACEES.get(cle, 3)]
+            if nouveau and nouveau != sections[cle]:
+                _suivi.modifier(ident, cle, "\n".join(nouveau), "remplacer")
+                n += len(nouveau)
+        for cle in ("decisions", "fait", "ouvert"):                                   # ajoutés sans doublon
+            existantes = {x.lower() for x in sections[cle]}
+            neuves = [x for x in lignes(cle) if x.lower() not in existantes][:SCRIBE_AJOUTS_MAX]
+            if neuves:
+                _suivi.modifier(ident, cle, "\n".join(neuves), "ajouter")
+                n += len(neuves)
+        for question in lignes("resolu")[:SCRIBE_AJOUTS_MAX]:                         # une question ouverte n'est retirée que si le modèle la recopie vraiment (jamais une décision)
+            if len(question) >= 12 and any(question.lower() in x.lower() for x in sections["ouvert"]):
+                _suivi.modifier(ident, "ouvert", question, "retirer")
+    except (ValueError, _m.ErreurOutil) as erreur:
+        _m.journaliser("Scribe : consigne refusée (conversation {}) : {!r}".format(ident, erreur))
+    conv["scribe_a"] = len(conv["messages"])
+    return n
+
+
+LIGNES_REMPLACEES = {"objectif": 3, "plan": 12, "etape": 3}
+
+
 def demander_memoire(conv, r, emit, stop):
     """Au premier résumé automatique, laisse choisir : fiche de suivi (garde mieux le fil, coûte un peu de contexte à chaque réponse) ou résumé (perd des détails).
     Case « garder pour cette conversation » : sinon la question revient au résumé suivant. Sans réponse, résumé automatique pour cette fois. Renvoie « resume » ou « fichier »."""
@@ -495,7 +556,7 @@ def ajuster_contexte(msgs, num_ctx, facteur=1.0, outils=None):
     # 4) les anciens tours de conversation (avant la question actuelle) sont retirés s'il le faut, en gardant le système, le résumé et la question
     while taille() > budget and dernier_user > 2:
         for i in range(1, dernier_user):
-            if msgs[i]["role"] in ("user", "assistant", "tool") and not msgs[i].get("content", "").startswith(("[Résumé", "[Fiche de suivi", "Compris, je m'appuie")):
+            if msgs[i]["role"] in ("user", "assistant", "tool") and not msgs[i].get("content", "").startswith(("[Résumé", "[Fiche de suivi", "[Extraits", "Compris, je m'appuie")):
                 del msgs[i]
                 dernier_user -= 1
                 break
@@ -647,6 +708,8 @@ def tour(conv, texte, emit, r=None, stop=None, remplacer_depuis=None, identite="
         try:
             reponse = next((m.get("content") or "" for m in reversed(conv["messages"]) if m.get("role") == "assistant" and m.get("content")), "")
             _suivi.apres_tour(conv["id"], texte, reponse, sorted(ctx["tour"]["fichiers"]))
+            if r.get("fiche_scribe", True) and not stop.is_set():
+                scribe(conv, r, emit)
         except (OSError, ValueError) as erreur:
             _m.journaliser("Fiche de suivi non mise à jour (conversation {}) : {!r}".format(conv.get("id"), erreur))
     if ctx["tour"]["fichiers"]:                       # cette demande a touché des fichiers : le bouton « Annuler » les rétablira
@@ -678,6 +741,15 @@ def boucle_agent(conv, r, emit, ctx, stop):
             fiche = _suivi.texte_pour_modele(conv["id"], r["num_ctx"])            # lue UNE fois pour tout le tour : le début de la requête reste identique, Ollama le garde en cache
         except ValueError:
             fiche = ""
+    extraits = ""
+    if r.get("rappel_ici"):                       # le début de la conversation n'est plus sous les yeux du modèle : on lui remet ce qui touche à la demande
+        try:
+            etape = " ".join(_suivi.lire(conv["id"])["etape"] + _suivi.lire(conv["id"])["objectif"])
+            extraits, nb_extraits = _m.rappel_du_fil(conv, etape)
+            if nb_extraits:
+                emit({"type": "info", "texte": _t("📎 {} passage(s) retrouvé(s) plus tôt dans cette conversation.").format(nb_extraits)})
+        except Exception as erreur:  # noqa: BLE001  (la recherche ne doit jamais empêcher de répondre)
+            _m.journaliser("Rappel du fil impossible : {!r}".format(erreur))
     derniere_demande = next((m.get("content") or "" for m in reversed(conv["messages"]) if m.get("role") == "user"), "")
     try:
         consigne = _suivi.directive_execution(conv, derniere_demande, conv["id"])
@@ -695,8 +767,9 @@ def boucle_agent(conv, r, emit, ctx, stop):
         if consigne and dernier_user >= 0:
             historique = list(historique)
             historique[dernier_user] = dict(historique[dernier_user], content=(historique[dernier_user].get("content") or "") + "\n\n[" + consigne + "]")
-        if fiche and dernier_user >= 0:          # la fiche passe juste AVANT la dernière question : tout ce qui précède est identique d'une réponse à l'autre (cache d'Ollama)
-            historique = historique[:dernier_user] + [{"role": "user", "content": fiche}, {"role": "assistant", "content": "Compris, je m'appuie sur cette fiche."}] + historique[dernier_user:]
+        if (fiche or extraits) and dernier_user >= 0:          # fiche et extraits passent juste AVANT la dernière question : tout ce qui précède est identique d'une réponse à l'autre (cache d'Ollama)
+            bloc = "\n\n".join(x for x in (fiche, extraits) if x)
+            historique = historique[:dernier_user] + [{"role": "user", "content": bloc}, {"role": "assistant", "content": "Compris, je m'appuie sur " + ("cette fiche." if fiche else "ces extraits.")}] + historique[dernier_user:]
         msgs += historique
         dernier_tour = idx_tour == tours_max - 1
         if dernier_tour:             # plus d'outils : le modèle doit répondre avec ce qu'il a trouvé

@@ -1375,7 +1375,7 @@ class Assistant(unittest.TestCase):
     def test_memoire_par_fiche_de_suivi(self):
         """Mode « fichier » : la fiche est tenue (outil + automatique), donnée au modèle AVANT la dernière question, « oui » ordonne d'exécuter, et elle disparaît avec la conversation."""
         from lutin import suivi
-        A.enregistrer_reglages({"memoire_longue": "fichier"})
+        A.enregistrer_reglages({"memoire_longue": "fichier", "fiche_scribe": False})          # le scribe fait un appel de plus : testé à part
         try:
             ev = chat("On prépare la saison 2", reponses=[[appel_outil("suivi", section="objectif", texte="Écrire la saison 2")], [{"content": "Noté, objectif enregistré."}]])
             cid = [e for e in ev if e["type"] == "debut"][0]["conversation"]
@@ -1406,7 +1406,7 @@ class Assistant(unittest.TestCase):
             post("/api/supprimer", {"id": cid})
             self.assertFalse(suivi.chemin(cid).exists(), "supprimer la conversation supprime sa fiche")
         finally:
-            A.enregistrer_reglages({"memoire_longue": "resume"})
+            A.enregistrer_reglages({"memoire_longue": "resume", "fiche_scribe": True})
 
     @staticmethod
     def conversation_longue(secret="Le code du coffre est 4711-ZEBRE."):
@@ -1534,6 +1534,40 @@ class Assistant(unittest.TestCase):
         post("/api/addon-correction", {"id": "fond"}, attendu=400)                                       # rien à réparer
         post("/api/addon-flux", {"id": "fond", "flux": {"appels": {"x": {"url": "https://evil.example.com/"}}}}, attendu=400)
         addons.restaurer_flux("fond")
+
+    def test_le_fil_de_la_conversation_est_retrouve_tout_seul_et_le_scribe_tient_la_fiche(self):
+        """Mode fiche : les passages anciens qui touchent à la demande sont remis au modèle sans qu'il les demande, et un appel séparé (le scribe) met la fiche à jour."""
+        from lutin import suivi
+        A.enregistrer_reglages({"memoire_longue": "fichier", "fiche_scribe": True})
+        try:
+            cid = self.conversation_longue("Le code du coffre est 4711-ZEBRE.")
+            conv = A.conv_lire(cid)
+            conv["memoire_longue"] = "fichier"
+            A.conv_ecrire(conv)
+            ops = json.dumps({"decisions": ["Le code du coffre est 4711-ZEBRE"], "etape": ["Ouvrir le coffre"], "fait": [], "ouvert": ["Qui garde la clé ?"]})
+            chat("Quel est le code du coffre ZEBRE ?", conversation=cid, reponses=[[{"content": "Le code est 4711-ZEBRE."}], [{"content": ops}]])
+            msgs = RECUES[-2]["messages"]
+            i = next(n for n, m in enumerate(msgs) if str(m.get("content", "")).startswith("[Extraits de la conversation]") or "[Extraits de la conversation]" in str(m.get("content", "")))
+            self.assertIn("4711-ZEBRE", msgs[i]["content"], "le détail ancien est remis sous les yeux du modèle, sans qu'il l'ait demandé")
+            self.assertEqual(msgs[i + 2]["content"], "Quel est le code du coffre ZEBRE ?", "juste avant la dernière question (le début reste identique : cache d'Ollama)")
+            fiche = suivi.lire(cid)
+            self.assertIn("Le code du coffre est 4711-ZEBRE", fiche["decisions"], "le scribe a écrit la décision sans que le modèle ait appelé l'outil")
+            self.assertEqual((fiche["etape"], fiche["ouvert"]), (["Ouvrir le coffre"], ["Qui garde la clé ?"]))
+            self.assertGreater(A.conv_lire(cid).get("scribe_a", 0), 10, "le scribe retient jusqu'où il a lu")
+            avant = A.conv_lire(cid)["scribe_a"]
+            chat("Merci", conversation=cid, reponses=[[{"content": "De rien."}]])
+            self.assertEqual(A.conv_lire(cid)["scribe_a"], avant, "pas de nouveau passage du scribe avant trois échanges")
+            A.enregistrer_reglages({"fiche_scribe": False})
+            cid2 = self.conversation_longue()
+            conv2 = A.conv_lire(cid2)
+            conv2["memoire_longue"] = "fichier"
+            A.conv_ecrire(conv2)
+            chat("Continue", conversation=cid2, reponses=[[{"content": "Voilà."}]])
+            self.assertFalse(A.conv_lire(cid2).get("scribe_a"), "scribe coupé : aucun appel supplémentaire")
+            for c in (cid, cid2):
+                post("/api/supprimer", {"id": c})
+        finally:
+            A.enregistrer_reglages({"memoire_longue": "resume", "fiche_scribe": True})
 
     def test_mise_a_jour_depuis_la_page(self):
         import time

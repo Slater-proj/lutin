@@ -96,6 +96,8 @@ A small local model forgets a long conversation, or loops (\"shall we act?\" - \
 
 **Nothing is really lost.** Neither method keeps every word in the model's window, but everything stays on disk: the summary archives the messages it removes (`data/archives/<conversation>.jsonl`), and the `rappeler` tool (with `ici=true` for this conversation only) finds a decision, a name or a figure again by keywords. Lutin tells the model it can do so, and its index only re-reads the files that changed.
 
+**Two helpers so the thread is hardly ever lost.** (1) **Automatic recall of the thread**: before each answer, Lutin searches the *whole* conversation (kept messages and the start archived by the summary) for passages related to your request and puts them in front of the model, without it having to ask. A bare « yes » is completed with the last answer and the current step. (2) **The scribe**: every three answers or so, a short separate model call reads the latest exchanges and updates the sheet (new decisions, current step, what is done, open questions). It is checked (known keys, short lines, no duplicate, at most four lines added per section, a decision is never removed) and can be turned off in Settings if your machine is slow.
+
 Safeguards: the sheet is capped (lines per section, line length, at most 10 % of the context window by default, adjustable from 5 to 25 % in Settings > Long conversation memory; the page warns at seven tenths of that cap) so it cannot grow or slow every answer; it is placed just before your last question so the start of the conversation stays identical and Ollama keeps it in cache; it is stored in `data/suivis/<conversation>.md`, deleted with the conversation, and orphans are cleaned.
 
 ## Updating from the page and the icon

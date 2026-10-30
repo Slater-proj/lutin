@@ -398,8 +398,10 @@ class Gestionnaire(BaseHTTPRequestHandler):
             return self._envoyer(413, {"erreur": "message trop gros"})
         try:
             donnees = json.loads(self.rfile.read(taille) or b"{}")
-        except ValueError:
+        except (ValueError, RecursionError):
             return self._envoyer(400, {"erreur": "JSON invalide"})
+        if not isinstance(donnees, dict):
+            return self._envoyer(400, {"erreur": "JSON invalide : un objet est attendu"})
         if self.path == "/api/appairer":                      # le seul POST sans authentification : il sert justement à en obtenir une
             return self._appairer(donnees)
         if not self._authentifie():
