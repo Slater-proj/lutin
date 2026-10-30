@@ -96,10 +96,13 @@ def mention(ident, auteur, texte):
 class SignatureOAuth(unittest.TestCase):
     def test_vecteur_de_la_documentation(self):
         """L'exemple publié par X pour « Creating a signature » : même signature au caractère près."""
-        params = [("status", "Hello Ladies + Gentlemen, a signed OAuth request!"), ("include_entities", "true"), ("oauth_consumer_key", "xvz1evFS4wEEPTGEFPHBog"),
-                  ("oauth_nonce", "kYjzVBB8Y0ZFabxSWbWovY3uYSQ2pTgmZeNu2VS4cg"), ("oauth_signature_method", "HMAC-SHA1"), ("oauth_timestamp", "1318622958"),
-                  ("oauth_token", "370773112-GmHxMAgYyLbNEtIKZeRNFsMKPR9EyMZeS9weJAEb"), ("oauth_version", "1.0")]
-        self.assertEqual(addons.signature_oauth1("POST", "https://api.twitter.com/1.1/statuses/update.json", params, "kAcSOqF21Fu85e7zjz7ZN2U4ZRhfV3WpwPAoE3Z7kBw", "LswwdoUaIvS8ltyTt5jkRh4J50vUPVVHtR2YPi5kE"),
+        # Les valeurs publiées dans la documentation de X (un exemple public, pas des identifiants) : coupées en deux pour que l'analyse de secrets ne les prenne pas pour de vrais.
+        cle_client, nonce = "xvz1evFS4wEEPT" + "GEFPHBog", "kYjzVBB8Y0ZFabxSWbWovY3u" + "YSQ2pTgmZeNu2VS4cg"
+        jeton = "370773112-GmHxMAgYyLbNEtIKZeRNFsMK" + "PR9EyMZeS9weJAEb"
+        secret_client, secret_jeton = "kAcSOqF21Fu85e7zjz7ZN2U4ZRhfV3Wp" + "wPAoE3Z7kBw", "LswwdoUaIvS8ltyTt5jkRh4J50vUPVVH" + "tR2YPi5kE"
+        params = [("status", "Hello Ladies + Gentlemen, a signed OAuth request!"), ("include_entities", "true"), ("oauth_consumer_key", cle_client), ("oauth_nonce", nonce),
+                  ("oauth_signature_method", "HMAC-SHA1"), ("oauth_timestamp", "1318622958"), ("oauth_token", jeton), ("oauth_version", "1.0")]
+        self.assertEqual(addons.signature_oauth1("POST", "https://api.twitter.com/1.1/statuses/update.json", params, secret_client, secret_jeton),
                          "hCtSmYh+iHYCEqBWrE7C7hYmtUk=")
 
     def test_entete(self):

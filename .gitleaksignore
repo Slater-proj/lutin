@@ -1,0 +1,4 @@
+# Valeurs d'exemple publiées dans la documentation de X (test de la signature OAuth 1.0a), présentes dans l'historique avant d'être coupées en deux : ce ne sont pas des identifiants.
+7f633789cd28c931bd262b2aedc11ff0f0697a7e:tests/test_x.py:generic-api-key:99
+7f633789cd28c931bd262b2aedc11ff0f0697a7e:tests/test_x.py:generic-api-key:100
+7f633789cd28c931bd262b2aedc11ff0f0697a7e:tests/test_x.py:generic-api-key:101
