@@ -892,7 +892,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
   ['dragleave', 'drop'].forEach(n => zoneGlisse.addEventListener(n, () => zoneGlisse.classList.remove('glisse')));
   zoneGlisse.addEventListener('drop', e => { if (e.dataTransfer && e.dataTransfer.files.length) { e.preventDefault(); joindre([...e.dataTransfer.files]); } });
   const envoyer = async (force) => {
-    const forcee = !!force && typeof force === 'object';                               // message sorti de la file : { t, conv }
+    const forcee = !!force && typeof force === 'object' && typeof force.t === 'string';                               // message sorti de la file : { t, conv }
     const reprend = !forcee && !PJ.length && EDIT_INDEX !== null && CONV && CONV.messages[EDIT_INDEX];          // modifier un message garde ses images et ses fichiers
     const images = forcee ? (force.images || []) : (reprend ? (CONV.messages[EDIT_INDEX].images || []) : PJ.filter(p => !p.doc).map(p => p.id));
     const pieces = forcee ? (force.pieces || []) : (reprend ? (CONV.messages[EDIT_INDEX].pieces || []) : PJ.filter(p => p.doc).map(p => ({ id: p.id, nom: p.nom })));
@@ -1179,7 +1179,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     if (b.dataset.p === 'acces') chargerAcces();
     if (b.dataset.p === 'sante') window.ouvrirSante();
   }));
-  $('bEnvoyer').addEventListener('click', envoyer); 
+  $('bEnvoyer').addEventListener('click', () => envoyer());          // sans argument : l'évènement du clic n'est pas un message sorti de la file d'attente
   // Arrêter : on prévient d'abord le serveur (modèle, outils et accords en attente s'arrêtent vraiment), puis on laisse arriver la fin du flux.
   $('bStop').addEventListener('click', async () => {
     const c = CONTROLE; $('bStop').disabled = true; if (FILE.length) { PAUSE_FILE = true; majFile(); }          // Arrêter met aussi la file d'attente en pause
@@ -2278,6 +2278,11 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
       b.addEventListener('click', async () => { try { await api('/api/addon-action', { id: 'comfyui', action: 'utiliser_dossier', dossier: x.dossier }); chargerAddons(); } catch (e) { msg.textContent = e.message; } });
       l.appendChild(b); zone.appendChild(l);
     } else if (x.dossier_regle) zone.appendChild(el('div', 'aide', T('Dossier réglé : ') + x.dossier_regle));
+    else {
+      const l = el('div', 'ligne'), b = el('button', '', T('Chercher le dossier d\'installation'));
+      b.addEventListener('click', async () => { b.disabled = true; b.textContent = T('Recherche…'); try { await api('/api/addon-action', { id: 'comfyui', action: 'detecter' }); } catch (e) { msg.textContent = e.message; } chargerAddons(); });
+      l.appendChild(b); zone.appendChild(l);
+    }
     const m = x.modeles || { source: 'aucune', modeles: {} }, genres = Object.keys(m.modeles);
     const det = el('details'); det.appendChild(el('summary', '', genres.length ? T('Modèles installés') + ' (' + genres.map(g => g + ' ' + m.modeles[g].length).join(', ') + ')' : T('Aucun modèle visible (ComfyUI éteint et dossier non réglé ?)')));
     genres.forEach(g => { det.appendChild(el('b', '', g)); const u = el('div', 'aide', m.modeles[g].slice(0, 60).join(' · ') + (m.modeles[g].length > 60 ? ' …' : '')); det.appendChild(u); });

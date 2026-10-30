@@ -195,6 +195,56 @@ class Parcours(unittest.TestCase):
             self.assertTrue(p.evaluer("(" + carte + ").querySelector('input[type=checkbox]').checked"))
             self.assertEqual(p.erreurs, [])
 
+    def test_question_fiche_ou_resume_quand_la_conversation_devient_longue(self):
+        """Un message sur une conversation qui dépasse 60 % du contexte : la carte de choix apparaît, un clic répond, la conversation retient « fiche de suivi » et la réponse arrive."""
+        with self.captures.serveur_demo() as (port, tmp):
+            donnees = tmp / "home" / "donnees"
+            reglages = json.loads((donnees / "reglages.json").read_text(encoding="utf-8"))
+            reglages["num_ctx"] = 4096
+            (donnees / "reglages.json").write_text(json.dumps(reglages), encoding="utf-8")
+            conv = self.captures.conversation_demo("d4e5f6a7", "Longue discussion", 5)
+            conv["taches"] = []
+            conv["messages"] = [{"role": "user" if i % 2 == 0 else "assistant", "content": ("Le code du coffre est 4711. " if i == 0 else "") + "mot " * 220 + str(i)} for i in range(12)]
+            (donnees / "conversations" / "d4e5f6a7.json").write_text(json.dumps(conv, ensure_ascii=False), encoding="utf-8")
+            p = self.ouvrir(tmp, "http://127.0.0.1:%d/#conv=d4e5f6a7" % port)
+            p.attendre("document.body.textContent.includes('Longue discussion')")
+            p.evaluer("(() => { const s = document.getElementById('saisie'); s.value = 'Où en est-on ?'; document.getElementById('bEnvoyer').click(); return true; })()")
+            p.attendre("!!document.querySelector('.accord')")                       # la carte (le texte seul serait aussi dans le code de la page)
+            self.assertIn("Cette conversation devient longue", p.evaluer("document.querySelector('.accord').textContent"))
+            self.assertTrue(p.evaluer("[...document.querySelectorAll('.accord input[type=checkbox]')].every(c => c.checked)"), "« garder ce choix » est coché par défaut")
+            self.assertTrue(p.evaluer(bouton("Fiche de suivi")))
+            p.attendre("[...document.querySelectorAll('#fil .msg.ia')].some(m => m.textContent.includes('Réponse de démonstration.'))")
+            sauve = json.loads((donnees / "conversations" / "d4e5f6a7.json").read_text(encoding="utf-8"))
+            self.assertEqual(sauve.get("memoire_longue"), "fichier", "le choix est gardé pour cette conversation")
+            self.assertEqual(len(sauve["messages"]), 14, "en mode fiche rien n'est retiré de la conversation")
+            self.assertTrue((donnees / "suivis" / "d4e5f6a7.md").is_file(), "la fiche est créée à partir du début de la conversation")
+            self.assertIn("Tester la question", (donnees / "suivis" / "d4e5f6a7.md").read_text(encoding="utf-8"))
+            self.assertEqual(p.erreurs, [])
+
+    def test_le_panneau_de_chaque_addon_s_affiche_avec_ses_brouillons(self):
+        """Les quatre panneaux qui ne s'activent qu'avec un vrai service (Telegram, courriel, X, ComfyUI) : leur code de page tourne sans erreur et montre ses brouillons."""
+        with self.captures.serveur_demo() as (port, tmp):
+            dossier = tmp / "home" / "donnees" / "addons"
+            for ident, etat in (("telegram", {"code": "123456", "autorises": [{"id": 5, "nom": "Moi"}], "brouillons": [{"id": "t1", "chat_id": 9, "de": "Bob", "demande": "Tu es là ?", "texte": "Oui, je regarde.", "date": 1}]}),
+                                ("mail", {"brouillons": [{"id": "m1", "de": "Alice", "adresse": "a@x.fr", "sujet": "Devis", "extrait": "Peux-tu me l'envoyer ?", "texte": "Bonjour, le devis arrive demain.", "message_id": "<1@x>", "references": "<1@x>", "date": 1}]}),
+                                ("x", {"publications": [{"id": "p1", "texte": "Mon premier message", "etat": "brouillon"}, {"id": "p2", "texte": "Déjà parti", "etat": "publie"}],
+                                       "reponses": [{"id": "r1", "de": "@alice", "a": "11", "extrait": "Salut", "texte": "Merci !"}]}),
+                                ("comfyui", {})):
+                (dossier / ident).mkdir(parents=True, exist_ok=True)
+                (dossier / ident / "etat.json").write_text(json.dumps(etat), encoding="utf-8")
+            (dossier / "addons.json").write_text(json.dumps({ident: {"actif": True} for ident in ("telegram", "mail", "x", "comfyui", "fond")}), encoding="utf-8")
+            p = self.ouvrir(tmp, "http://127.0.0.1:%d/" % port)
+            p.evaluer(onglet("auto"))
+            texte = "document.getElementById('listeAddons').textContent"
+            p.attendre("%s.includes('Brouillon pour Bob') && %s.includes('Brouillon pour Alice') && %s.includes('Réponse à @alice') && %s.includes('ComfyUI ne répond pas')" % ((texte,) * 4))
+            contenu = p.evaluer(texte)
+            for attendu in ("/appairer 123456", "Devis", "✔ Publié", "Nouveau travail de fond", "Publier maintenant", "Publier la réponse"):
+                self.assertIn(attendu, contenu)
+            brouillons = p.evaluer("[...document.querySelectorAll('#listeAddons textarea')].map(t => t.value).join(' | ')")
+            for attendu in ("Oui, je regarde.", "Bonjour, le devis arrive demain.", "Mon premier message", "Merci !"):
+                self.assertIn(attendu, brouillons, "les brouillons sont dans des champs modifiables")
+            self.assertEqual(p.erreurs, [])
+
     def test_reprise_proposee_une_fois_puis_plus(self):
         with self.captures.serveur_demo() as (port, tmp):
             ancien = tmp / "ancien-assistant"

@@ -37,7 +37,17 @@ class FauxOllama(BaseHTTPRequestHandler):
         self._json({"version": "0.12.0", "models": []})
 
     def do_POST(self):
-        self.rfile.read(int(self.headers.get("Content-Length") or 0))
+        corps = self.rfile.read(int(self.headers.get("Content-Length") or 0))
+        if self.path == "/api/chat":                                  # une vraie réponse (pour les parcours qui envoient un message) : en flux, ou d'un bloc pour les résumés
+            demande = json.loads(corps.decode("utf-8") or "{}")
+            if demande.get("format") == "json":
+                return self._json({"message": {"role": "assistant", "content": json.dumps({"objectif": ["Tester la question"], "decisions": ["Le code est 4711"]})}, "done": True})
+            if demande.get("stream") is False:
+                return self._json({"message": {"role": "assistant", "content": "Résumé de démonstration."}, "done": True})
+            lignes = [{"message": {"role": "assistant", "content": "Réponse de démonstration."}, "done": False}, {"message": {"role": "assistant", "content": ""}, "done": True, "prompt_eval_count": 100, "eval_count": 5}]
+            d = (chr(10).join(json.dumps(x) for x in lignes) + chr(10)).encode("utf-8")
+            self.send_response(200); self.send_header("Content-Type", "application/x-ndjson"); self.send_header("Content-Length", str(len(d))); self.end_headers(); self.wfile.write(d)
+            return
         self._json({"capabilities": ["completion", "tools"]})
 
 

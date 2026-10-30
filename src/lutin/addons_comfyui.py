@@ -30,6 +30,7 @@ RE_MARQUE_ENTIERE = re.compile(r"^\{([a-z_]+)\}$")
 TYPES = ("image", "video", "son")
 DELAI_PAR_DEFAUT = {"image": 600, "video": 3600, "son": 900}
 CACHE = {"modeles": (0, None)}
+DETECTION = {"dossier": ""}               # le dernier dossier d'installation trouvé : le chercher dans les processus coûte (PowerShell), donc seulement à la demande
 
 
 def demarrer():
@@ -78,9 +79,9 @@ def dossier_valide(c):
     return c.is_dir() and (c / "main.py").is_file() and (c / "models").is_dir()
 
 
-def trouver_dossier(argv=""):
-    """Le dossier d'installation de ComfyUI, ou ''. Ordre : ce qu'annonce ComfyUI, la ligne de commande du processus, les emplacements usuels."""
-    for source in (argv, _depuis_processus()):
+def trouver_dossier(argv="", profond=True):
+    """Le dossier d'installation de ComfyUI, ou ''. Ordre : ce qu'annonce ComfyUI, la ligne de commande du processus (seulement si profond : lent), les emplacements usuels."""
+    for source in (argv, _depuis_processus() if profond else ""):
         if source:
             c = Path(source).parent
             if dossier_valide(c):
@@ -91,11 +92,14 @@ def trouver_dossier(argv=""):
     return ""
 
 
-def detecter():
-    """Cherche ComfyUI : tourne-t-il (réponse sur son port), quelle version, sur quelle carte, et où est-il installé ? Ne modifie rien."""
-    r = addons.appeler(IDENT, "etat", delai=4)
+def detecter(profond=True):
+    """Cherche ComfyUI : tourne-t-il (réponse sur son port), quelle version, sur quelle carte, et où est-il installé ? Ne modifie rien. profond=False : sonde légère (le panneau se rafraîchit toutes les 4 secondes)."""
+    r = addons.appeler(IDENT, "etat", delai=4 if profond else 1.5)
+    trouve = trouver_dossier(_argv_absolu(r), profond)
+    if profond or trouve:
+        DETECTION["dossier"] = trouve
     resultat = {"tourne": r["ok"], "erreur": "" if r["ok"] else r["erreur"], "version": (r["extrait"] or {}).get("version") or "", "gpu": (r["extrait"] or {}).get("gpu") or "",
-                "dossier": trouver_dossier(_argv_absolu(r)), "dossier_regle": addons.reglages(IDENT).get("dossier", "")}
+                "dossier": trouve or DETECTION["dossier"], "dossier_regle": addons.reglages(IDENT).get("dossier", "")}
     return resultat
 
 
@@ -270,7 +274,7 @@ def outil_generer(args, ctx):
 
 # --------------------------------------------------------------------------- panneau de la page
 def etat():
-    r = detecter()
+    r = detecter(profond=False)
     r["modeles"] = lister_modeles()
     r["workflows"] = sorted((addons.flux(IDENT).get("workflows") or {}).keys())
     return r

@@ -2,6 +2,13 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## 0.7.6
+
+- **Correction : le bouton « Envoyer »** de la page, quand on cliquait dessus (au lieu d'appuyer sur Entrée), déclenchait une erreur au lieu d'envoyer le message. Un test de navigateur réel clique maintenant sur le bouton.
+- Un parcours réel dans Chrome couvre la question « fiche de suivi ou résumé ? » : la carte s'affiche, un clic répond, le choix est gardé et la réponse arrive.
+
+**English.** Fix: clicking the page's “Send” button (instead of pressing Enter) raised an error instead of sending the message. A real-browser test now clicks the button. A real Chrome journey also covers the “tracking sheet or summary?” question: the card appears, one click answers, the choice is kept and the reply arrives.
+
 ## 0.7.5
 
 - **Robustesse des addons** : les réglages, les secrets et les vérifications ne s'écrasent plus quand la page, la vérification quotidienne et les fils d'écoute écrivent en même temps ; un document de plus de 80 Mo est signalé au lieu de figer le travail de fond.
