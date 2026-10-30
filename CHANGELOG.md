@@ -2,6 +2,14 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## 0.7.10
+
+- **ComfyUI : Lutin le lance et le referme lui-même.** Tu demandes une image dans la conversation ; Lutin rend d'abord la mémoire au modèle de langage, lance ComfyUI avec son propre Python, génère, puis le referme (réglable ; il ne ferme jamais un ComfyUI que tu as lancé toi-même).
+- **Configuration assistée** : activer l'addon cherche ComfyUI tout seul et retient le dossier ; le panneau dit si le dossier est bon (ou pourquoi non), avec « Détecter » et « Choisir le dossier… » toujours visibles ; le dossier parent de la version portable est accepté.
+- **Moins de texte, moins de rouge** : les descriptions et étapes de tous les addons sont réduites à l'essentiel ; « pas encore configuré » s'affiche en orange neutre, le rouge est réservé aux vraies erreurs ; une activation impossible ouvre la configuration avec la raison.
+
+**English.** ComfyUI: Lutin starts and closes it itself. You ask for an image in the conversation; Lutin first gives the memory back from the language model, starts ComfyUI with its own Python, generates, then closes it (configurable; it never closes a ComfyUI you started yourself). Assisted setup: enabling the addon finds ComfyUI by itself and remembers the folder; the panel says whether the folder is right (or why not), with “Detect” and “Choose the folder…” always visible; the portable version's parent folder is accepted. Less text, less red: every addon's description and steps are cut to the essentials; “not set up yet” is shown in neutral orange, red is kept for real errors; a failed activation opens the setup with the reason.
+
 ## 0.7.9
 
 - **Addons** : cocher un addon qui n'est pas encore configuré ouvre sa configuration (avec ce qu'il manque) au lieu d'une erreur ; après « Enregistrer et vérifier », un bouton « Activer maintenant ». Les redirections ne sont plus jamais suivies par un addon (elles pouvaient mener hors de ses sites autorisés).

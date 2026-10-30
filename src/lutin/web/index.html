@@ -188,6 +188,7 @@ pre.diff { width:100%; max-height:340px; overflow:auto; background:#0c1117; bord
 .liste-git { max-height:34vh; overflow:auto; border:1px solid var(--line); border-radius:8px; padding:6px 10px; margin:8px 0; }
 .res-recherche .extrait { color:var(--muted); font-size:.74rem; white-space:normal; }
 .conv .epingle { color:var(--warm); }
+.attention { color:var(--warm); }          /* « pas encore prêt » : de l'orange, pas du rouge (le rouge est réservé aux vraies erreurs) */
 .separateur-v::before { content:''; position:absolute; inset:0 -4px; } .separateur-h::before { content:''; position:absolute; inset:-4px 0; }          /* un trait fin, mais facile à attraper */
 .conv button.menu-ouvrir { font-weight:700; letter-spacing:1px; } .conv button.menu-ouvrir:hover { color:var(--accent); background:#1a2634; }
 .menu-conv { position:fixed; z-index:50; min-width:210px; background:#121a24; border:1px solid var(--line2); border-radius:10px; padding:5px; box-shadow:0 8px 24px #0009; display:flex; flex-direction:column; }
@@ -2204,14 +2205,14 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     tete.appendChild(cb); tete.appendChild(el('b', '', ' ' + a.nom)); d.appendChild(tete);
     d.appendChild(el('div', 'aide', a.description));
     const v = a.verification;
-    if (v) d.appendChild(el('div', v.ok ? 'aide' : 'erreur', v.ok ? T('✔ Vérifié le ') + quand(v.date) : T('⚠ À réparer : ') + v.etapes.filter(x => !x.ok).map(x => x.message).join(' ; ')));
+    if (v) d.appendChild(el('div', v.ok ? 'aide' : (a.actif ? 'attention' : 'aide'), v.ok ? T('✔ Vérifié le ') + quand(v.date) : (a.actif ? T('⚠ À réparer : ') : T('Pas encore prêt : ')) + v.etapes.filter(x => !x.ok).map(x => x.message).join(' ; ')));
     d.appendChild(msg);
     if (!a.actif && a.a_configurer.length) d.appendChild(el('div', 'aide', T('⚙ À configurer d\'abord : ') + a.a_configurer.join(', ') + '.'));
     cb.addEventListener('change', async () => {
       if (cb.checked && a.a_configurer.length) { cb.checked = false; configurerAddon(a, T('Remplis d\'abord ces champs, puis clique sur « Enregistrer et vérifier » : tu pourras ensuite activer l\'addon.')); return; }
       cb.disabled = true; msg.textContent = '';
       try { await api('/api/addon-activer', { id: a.id, actif: cb.checked }); chargerAddons(); }
-      catch (e) { msg.textContent = e.message; cb.checked = !cb.checked; cb.disabled = false; }
+      catch (e) { cb.checked = false; cb.disabled = false; configurerAddon(a, e.message); }
     });
     if (ETAT.configurateur) {
       const ligne = el('div', 'ligne'), conf = el('button', a.a_configurer.length && !a.actif ? 'principal' : '', T('Configurer…')), ver = el('button', '', T('Vérifier'));
@@ -2283,7 +2284,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     let x;
     try { x = await api('/api/addon-etat?id=telegram'); } catch (e) { zone.textContent = e.message; return; }
     const msg = el('div', 'erreur'), agir = async (action, plus) => { try { await api('/api/addon-action', Object.assign({ id: 'telegram', action }, plus || {})); chargerAddons(); } catch (e) { msg.textContent = e.message; } };
-    zone.appendChild(el('div', x.erreur ? 'erreur' : 'aide', x.erreur ? T('⚠ Telegram ne répond pas : ') + x.erreur : (x.ecoute ? T('✔ Lutin écoute ton bot.') : T('Écoute arrêtée.'))));
+    zone.appendChild(el('div', x.erreur ? 'attention' : 'aide', x.erreur ? T('⚠ Telegram ne répond pas : ') + x.erreur : (x.ecoute ? T('✔ Lutin écoute ton bot.') : T('Écoute arrêtée.'))));
     const appairage = el('div', 'carte'); appairage.style.flexDirection = 'column'; appairage.style.alignItems = 'stretch'; appairage.style.gap = '4px';
     appairage.appendChild(el('b', '', T('Appairage')));
     appairage.appendChild(el('div', 'aide', T('Dans Telegram, écris à ton bot : ') + '/appairer ' + x.code + T(' — le code change après chaque usage.')));
@@ -2312,54 +2313,49 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
   PANNEAUX.comfyui = async (a, zone) => {
     let x;
     try { x = await api('/api/addon-etat?id=comfyui'); } catch (e) { zone.textContent = e.message; return; }
-    const msg = el('div', 'erreur');
-    zone.appendChild(el('div', x.tourne ? 'aide' : 'erreur', x.tourne ? T('✔ ComfyUI répond') + (x.version ? ' (' + x.version + (x.gpu ? ', ' + x.gpu : '') + ')' : '') + '.' : T('ComfyUI ne répond pas : lance-le, puis clique sur « Vérifier ». ') + (x.erreur || '')));
-    if (x.dossier && x.dossier !== x.dossier_regle) {
-      const l = el('div', 'ligne'); l.appendChild(el('span', 'aide', T('Dossier trouvé : ') + x.dossier + ' '));
-      const b = el('button', 'principal', T('Utiliser ce dossier'));
-      b.addEventListener('click', async () => { try { await api('/api/addon-action', { id: 'comfyui', action: 'utiliser_dossier', dossier: x.dossier }); chargerAddons(); } catch (e) { msg.textContent = e.message; } });
-      l.appendChild(b); zone.appendChild(l);
-    } else if (x.dossier_regle) zone.appendChild(el('div', 'aide', T('Dossier réglé : ') + x.dossier_regle));
-    else {
-      const l = el('div', 'ligne'), b = el('button', '', T('Chercher le dossier d\'installation'));
-      b.addEventListener('click', async () => { b.disabled = true; b.textContent = T('Recherche…'); try { await api('/api/addon-action', { id: 'comfyui', action: 'detecter' }); } catch (e) { msg.textContent = e.message; } chargerAddons(); });
-      l.appendChild(b); zone.appendChild(l);
-    }
-    const m = x.modeles || { source: 'aucune', modeles: {} }, genres = Object.keys(m.modeles);
-    const det = el('details'); det.appendChild(el('summary', '', genres.length ? T('Modèles installés') + ' (' + genres.map(g => g + ' ' + m.modeles[g].length).join(', ') + ')' : T('Aucun modèle visible (ComfyUI éteint et dossier non réglé ?)')));
-    genres.forEach(g => { det.appendChild(el('b', '', g)); const u = el('div', 'aide', m.modeles[g].slice(0, 60).join(' · ') + (m.modeles[g].length > 60 ? ' …' : '')); det.appendChild(u); });
-    zone.appendChild(det);
-    const choisir = el('button', '', T('Choisir le dossier…'));
+    const msg = el('div', 'attention'), m = x.modeles || { source: 'aucune', modeles: {} }, genres = Object.keys(m.modeles), nb = genres.reduce((n, g) => n + m.modeles[g].length, 0);
+    const agir = async (action, plus) => { msg.textContent = ''; try { return await api('/api/addon-action', Object.assign({ id: 'comfyui', action }, plus || {})); } catch (e) { msg.textContent = e.message; return null; } };
+    // 1. Est-ce le bon dossier ? Une réponse claire, avec la raison s'il ne l'est pas.
+    zone.appendChild(el('div', x.valide ? 'aide' : 'attention', x.valide ? '✔ ' + T('ComfyUI : ') + x.dossier + ' · ' + nb + ' ' + T('modèle(s)') + (x.tourne ? ' · ' + T('il tourne') : '') : '⚠ ' + x.raison));
+    if (x.valide && !x.lancement && !x.tourne) zone.appendChild(el('div', 'attention', T('⚠ Je ne trouve pas son Python : lance ComfyUI toi-même avant de demander une image.')));
+    // 2. Deux boutons, toujours là
+    const ligne = el('div', 'ligne'), det = el('button', x.valide ? '' : 'principal', T('Détecter')), choisir = el('button', '', T('Choisir le dossier…'));
+    det.addEventListener('click', async () => { det.disabled = true; det.textContent = T('Recherche…'); const r = await agir('detecter'); if (r && r.introuvable) msg.textContent = T('Introuvable : choisis le dossier à la main.'); else chargerAddons(); det.disabled = false; });
     choisir.addEventListener('click', () => {
-      const c = ouvrirModal(T('Dossier d\'installation de ComfyUI'));
-      c.appendChild(el('p', 'aide', T('Choisis le dossier qui contient main.py et models.')));
+      const c = ouvrirModal(T('Dossier de ComfyUI'));
+      c.appendChild(el('p', 'aide', T('Celui qui contient main.py et models.')));
       const zoneP = el('div'); c.appendChild(zoneP);
-      parcourir(zoneP, x.dossier_regle || x.dossier || '', T('Utiliser ce dossier'), async chemin => {
-        try { await api('/api/addon-action', { id: 'comfyui', action: 'utiliser_dossier', dossier: chemin }); $('modal').hidden = true; chargerAddons(); } catch (e) { zoneP.appendChild(el('div', 'erreur', e.message)); }
+      parcourir(zoneP, x.dossier || '', T('Utiliser ce dossier'), async chemin => {
+        const r = await agir('utiliser_dossier', { dossier: chemin });
+        if (r) { $('modal').hidden = true; chargerAddons(); } else zoneP.appendChild(el('div', 'attention', msg.textContent));
       }, () => { $('modal').hidden = true; });
     });
-    zone.appendChild(choisir);
-    if (x.dossier_regle) {
+    ligne.append(det, choisir); zone.appendChild(ligne); zone.appendChild(msg);
+    // 3. Le reste est replié
+    if (genres.length) {
+      const d = el('details'); d.appendChild(el('summary', '', T('Modèles installés') + ' (' + nb + ')'));
+      genres.forEach(g => { d.appendChild(el('b', '', g)); d.appendChild(el('div', 'aide', m.modeles[g].slice(0, 60).join(' · ') + (m.modeles[g].length > 60 ? ' …' : ''))); });
+      zone.appendChild(d);
+    }
+    if (x.valide) {
       const t = x.telechargement || {}, bloc = el('details');
       bloc.open = COMFY.ouvert || t.etat === 'en cours'; bloc.addEventListener('toggle', () => { COMFY.ouvert = bloc.open; });
-      bloc.appendChild(el('summary', '', T('Ajouter un modèle (Hugging Face ou Civitai)')));
-      bloc.appendChild(el('div', 'aide', T('Colle l\'adresse du fichier du modèle (le lien de téléchargement) : Lutin le télécharge dans le bon dossier de ComfyUI, sans rien écraser. Certains modèles demandent d\'être connecté à ton compte : ils ne passent pas ici.')));
+      bloc.appendChild(el('summary', '', T('Ajouter un modèle')));
+      bloc.appendChild(el('div', 'aide', T('Lien de téléchargement Hugging Face ou Civitai.')));
       const url = el('input'), genre = el('select'), go = el('button', 'principal', T('Télécharger'));
       url.placeholder = 'https://huggingface.co/…/modele.safetensors'; url.style.width = '420px'; url.value = COMFY.url; url.addEventListener('input', () => { COMFY.url = url.value; });
       (x.genres || []).forEach(g => { const o = el('option', '', g); o.value = g; genre.appendChild(o); }); genre.value = COMFY.genre; genre.addEventListener('change', () => { COMFY.genre = genre.value; });
       go.disabled = t.etat === 'en cours';
-      go.addEventListener('click', async () => { go.disabled = true; msg.textContent = ''; try { await api('/api/addon-action', { id: 'comfyui', action: 'telecharger', url: url.value, genre: genre.value }); COMFY.url = ''; chargerAddons(); } catch (e) { msg.textContent = e.message; go.disabled = false; } });
-      const ligne = el('div', 'ligne'); ligne.append(url, genre, go); bloc.appendChild(ligne);
+      go.addEventListener('click', async () => { go.disabled = true; const r = await agir('telecharger', { url: url.value, genre: genre.value }); if (r) { COMFY.url = ''; chargerAddons(); } else go.disabled = false; });
+      const l2 = el('div', 'ligne'); l2.append(url, genre, go); bloc.appendChild(l2);
       if (t.etat === 'en cours') {
         const p = el('progress'); p.max = Math.max(1, t.total); p.value = t.fait; p.style.width = '100%'; bloc.appendChild(p);
-        const stop = el('button', '', T('Annuler')); stop.addEventListener('click', async () => { try { await api('/api/addon-action', { id: 'comfyui', action: 'annuler_telechargement' }); } catch (e) { msg.textContent = e.message; } });
+        const stop = el('button', '', T('Annuler')); stop.addEventListener('click', () => agir('annuler_telechargement'));
         bloc.appendChild(el('div', 'aide', t.nom + ' — ' + gaugeOctets(t.fait) + (t.total ? ' / ' + gaugeOctets(t.total) : ''))); bloc.appendChild(stop);
       } else if (t.etat === 'fini') bloc.appendChild(el('div', 'aide', T('✔ Téléchargé : ') + t.nom));
-      else if (t.etat === 'erreur') bloc.appendChild(el('div', 'erreur', t.erreur));
+      else if (t.etat === 'erreur') bloc.appendChild(el('div', 'attention', t.erreur));
       zone.appendChild(bloc);
     }
-    zone.appendChild(el('div', 'aide', T('Workflows disponibles : ') + (x.workflows.join(', ') || '—') + T('. Pour la vidéo ou le son, colle ton workflow dans « Flux… ».')));
-    zone.appendChild(msg);
   };
   // Éditeur de flux : le JSON des appels (et des workflows) de l'addon, validé avant d'être enregistré ; la version livrée se rétablit en un clic
   const editerFlux = async a => {
@@ -2380,7 +2376,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     let x;
     try { x = await api('/api/addon-etat?id=mail'); } catch (e) { zone.textContent = e.message; return; }
     const msg = el('div', 'erreur'), agir = async (action, plus) => { try { await api('/api/addon-action', Object.assign({ id: 'mail', action }, plus || {})); chargerAddons(); } catch (e) { msg.textContent = e.message; } };
-    zone.appendChild(el('div', x.erreur ? 'erreur' : 'aide', x.erreur ? T('⚠ Courriel : ') + x.erreur : (x.ecoute ? T('✔ Lutin surveille ta boîte ({}).').replace('{}', x.adresse) : T('Surveillance arrêtée.'))));
+    zone.appendChild(el('div', x.erreur ? 'attention' : 'aide', x.erreur ? T('⚠ Courriel : ') + x.erreur : (x.ecoute ? T('✔ Lutin surveille ta boîte ({}).').replace('{}', x.adresse) : T('Surveillance arrêtée.'))));
     if (!x.brouillons.length) zone.appendChild(el('div', 'aide', T('Aucun brouillon en attente.')));
     x.brouillons.forEach(b => {
       const d = el('div', 'carte'); d.style.flexDirection = 'column'; d.style.alignItems = 'stretch'; d.style.gap = '4px';
@@ -2398,7 +2394,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     let x;
     try { x = await api('/api/addon-etat?id=x'); } catch (e) { zone.textContent = e.message; return; }
     const msg = el('div', 'erreur'), agir = async (action, plus) => { try { await api('/api/addon-action', Object.assign({ id: 'x', action }, plus || {})); chargerAddons(); } catch (e) { msg.textContent = e.message; } };
-    zone.appendChild(el('div', x.erreur ? 'erreur' : 'aide', x.erreur ? T('⚠ X : ') + x.erreur : (x.pseudo ? T('✔ Compte @{} — {} publication(s) aujourd\'hui sur {}.').replace('{}', x.pseudo).replace('{}', x.publies).replace('{}', x.plafond) : T('Rien n\'est publié sans ton clic.'))));
+    zone.appendChild(el('div', x.erreur ? 'attention' : 'aide', x.erreur ? T('⚠ X : ') + x.erreur : (x.pseudo ? T('✔ Compte @{} — {} publication(s) aujourd\'hui sur {}.').replace('{}', x.pseudo).replace('{}', x.publies).replace('{}', x.plafond) : T('Rien n\'est publié sans ton clic.'))));
     const redac = el('div', 'ligne'), brief = el('input'), nb = el('select'), go = el('button', 'principal', T('Rédiger avec Lutin'));
     brief.placeholder = T('Sujet du message…'); brief.style.width = '320px'; [1, 2, 3, 5].forEach(n => { const o = el('option', '', String(n)); o.value = n; nb.appendChild(o); });
     go.addEventListener('click', async () => { go.disabled = true; msg.textContent = ''; try { await api('/api/addon-action', { id: 'x', action: 'rediger', brief: brief.value, nombre: nb.value }); chargerAddons(); } catch (e) { msg.textContent = e.message; go.disabled = false; } });
@@ -2435,7 +2431,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
   const configurerAddon = (a, note) => {
     const c = ouvrirModal(a.nom);
     c.appendChild(el('p', '', a.description));
-    if (note) c.appendChild(el('p', 'erreur', note));
+    if (note) c.appendChild(el('p', 'attention', note));
     if (a.etapes.length) {
       const ol = el('ol'); a.etapes.forEach(e => { const li = el('li'); li.appendChild(el('b', '', e.titre + ' ')); li.appendChild(document.createTextNode(e.texte)); if (e.lien) { const l = el('a', '', ' ' + e.lien); l.href = e.lien; l.target = '_blank'; l.rel = 'noopener'; li.appendChild(l); } ol.appendChild(li); });
       c.appendChild(ol);
@@ -2457,7 +2453,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
         const vals = {}; Object.keys(champs).forEach(k => { vals[k] = champs[k].value; });
         await api('/api/addon-reglages', { id: a.id, reglages: vals });
         const v = await api('/api/addon-verifier', { id: a.id });
-        v.etapes.forEach(e => sortie.appendChild(el('div', e.ok ? 'aide' : 'erreur', (e.ok ? '✔ ' : '✘ ') + (e.appel ? e.appel + ' : ' : '') + e.message)));
+        v.etapes.forEach(e => sortie.appendChild(el('div', e.ok ? 'aide' : 'attention', (e.ok ? '✔ ' : '⚠ ') + (e.appel ? e.appel + ' : ' : '') + e.message)));
         if (!v.etapes.length) sortie.appendChild(el('div', 'aide', T('✔ Rien à vérifier : cet addon est prêt.')));
         if (v.ok && !a.actif) {
           const act = el('button', 'principal', T('Activer maintenant'));
@@ -2482,7 +2478,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     const ok = el('button', 'principal', T('Appliquer la correction')), non = el('button', '', T('Annuler')), fin = el('div');
     ok.addEventListener('click', async () => {
       ok.disabled = true;
-      try { await api('/api/addon-flux', { id: a.id, flux: p.flux }); const v = await api('/api/addon-verifier', { id: a.id }); fin.appendChild(el('div', v.ok ? 'aide' : 'erreur', v.ok ? T('✔ Corrigé : la vérification réussit.') : T('✘ La vérification échoue encore : ') + v.etapes.filter(x => !x.ok).map(x => x.message).join(' ; '))); chargerAddons(); }
+      try { await api('/api/addon-flux', { id: a.id, flux: p.flux }); const v = await api('/api/addon-verifier', { id: a.id }); fin.appendChild(el('div', v.ok ? 'aide' : 'attention', v.ok ? T('✔ Corrigé : la vérification réussit.') : T('✘ La vérification échoue encore : ') + v.etapes.filter(x => !x.ok).map(x => x.message).join(' ; '))); chargerAddons(); }
       catch (e) { fin.appendChild(el('div', 'erreur', e.message)); }
     });
     non.addEventListener('click', () => { $('modal').hidden = true; });

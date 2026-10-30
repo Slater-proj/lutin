@@ -4,11 +4,12 @@ Lutin ne contient AUCUN workflow en dur : les « workflows » (le graphe de nœu
 on colle son propre workflow (ComfyUI : « Enregistrer (format API) »), avec des marques {prompt}, {largeur}, {hauteur}, {graine}, {pas}, {cfg}, {negatif}, {modele} là où Lutin doit mettre ses valeurs.
 
 Règles de solidité :
-- désactivé par défaut ; ComfyUI doit être déjà lancé (Lutin ne le démarre pas, il le pilote) ;
+- désactivé par défaut ; ComfyUI n'a pas besoin d'être ouvert : Lutin le lance quand tu demandes une image (après avoir rendu la mémoire au modèle de langage) et le referme ensuite s'il l'a lancé lui-même ;
 - chaque génération demande ton accord (comme une modification de fichier), sauf accord automatique ; dans une tâche planifiée ou un message Telegram (lecture seule) elle est simulée, jamais faite ;
 - la carte graphique est libérée du modèle de langage avant de générer (ils se la partagent) ;
 - les appels ne visent que ComfyUI sur cette machine (adresse déclarée par le manifeste) ;
 - l'attente d'un résultat s'arrête sur le bouton Arrêter et au bout d'un délai (réglable par type de workflow)."""
+import atexit
 import json
 import os
 import re
@@ -39,6 +40,8 @@ GENRES_TELECHARGEMENT = ("checkpoints", "loras", "vae", "diffusion_models", "tex
 TAILLE_MODELE_MAX = 60 * 1024 ** 3
 TELECHARGEMENT = {"etat": "", "nom": "", "fait": 0, "total": 0, "erreur": "", "arret": threading.Event()}
 VERROU_TELECHARGEMENT = threading.Lock()
+DELAI_DEMARRAGE = 240                    # secondes laissées à ComfyUI pour répondre après son lancement (le premier démarrage charge beaucoup de choses)
+PROCESSUS = {"popen": None}              # le ComfyUI lancé par Lutin (celui de l'utilisateur n'est jamais fermé par Lutin)
 CACHE = {"modeles": (0, None)}
 DETECTION = {"dossier": ""}               # le dernier dossier d'installation trouvé : le chercher dans les processus coûte (PowerShell), donc seulement à la demande
 
@@ -100,6 +103,137 @@ def trouver_dossier(argv="", profond=True):
         if dossier_valide(c):
             return str(c)
     return ""
+
+
+def normaliser_dossier(chemin):
+    """Le dossier qui contient main.py : celui qu'on a donné, ou ComfyUI/ dedans (la version portable range ComfyUI dans un sous-dossier)."""
+    p = Path(str(chemin or "").strip())
+    for c in (p, p / "ComfyUI", p / "ComfyUI_windows_portable" / "ComfyUI"):
+        if dossier_valide(c):
+            return str(c)
+    return str(p)
+
+
+def diagnostic_dossier(dossier):
+    """(valide, raison) : ce dossier est-il bien celui de ComfyUI, et sinon pourquoi."""
+    if not dossier:
+        return False, _t("Dossier de ComfyUI non défini.")
+    p = Path(dossier)
+    if not p.is_dir():
+        return False, _t("Ce dossier n'existe pas.")
+    if not (p / "main.py").is_file():
+        return False, _t("Il n'y a pas de main.py dans ce dossier : choisis celui de ComfyUI (il contient main.py et models).")
+    if not (p / "models").is_dir():
+        return False, _t("Il n'y a pas de dossier models ici : ce n'est pas une installation de ComfyUI.")
+    return True, ""
+
+
+def dossier_comfy():
+    """Le dossier de ComfyUI à utiliser : celui qui est réglé s'il est valide, sinon celui qu'on trouve tout seul."""
+    regle = addons.reglages(IDENT).get("dossier") or ""
+    if regle and dossier_valide(regle):
+        return regle
+    return trouver_dossier("", profond=False) or ""
+
+
+def pythons_possibles(dossier):
+    d = Path(dossier)
+    racine = d.parent
+    candidats = [racine / "python_embeded" / "python.exe", d / "python_embeded" / "python.exe"]
+    for v in (".venv", "venv"):
+        for base in (d, racine):
+            candidats += [base / v / "Scripts" / "python.exe", base / v / "bin" / "python"]
+    return candidats
+
+
+def commande_lancement(dossier, port):
+    """La commande qui démarre ComfyUI avec SON Python (celui de la version portable ou de son environnement virtuel), sans ouvrir de navigateur. [] si on ne trouve pas ce Python."""
+    for py in pythons_possibles(dossier):
+        if py.is_file():
+            commande = [str(py), "-s", "main.py", "--port", str(port), "--disable-auto-launch"]
+            if "python_embeded" in str(py):
+                commande.append("--windows-standalone-build")
+            return commande
+    return []
+
+
+def en_marche():
+    return addons.appeler(IDENT, "etat", delai=2)["ok"]
+
+
+def assurer_comfyui():
+    """Fait en sorte que ComfyUI tourne. S'il ne tourne pas, Lutin le lance : il rend d'abord la mémoire au modèle de langage (ils ne tiennent pas ensemble), démarre ComfyUI et attend qu'il réponde.
+    Renvoie True si c'est Lutin qui l'a lancé (il le refermera ensuite)."""
+    if en_marche():
+        return False
+    dossier = dossier_comfy()
+    if not dossier:
+        raise _m.ErreurOutil(_t("Je ne trouve pas ComfyUI : l'utilisateur doit choisir son dossier (Automatisation > Extensions > ComfyUI)."))
+    port = addons.reglages(IDENT).get("port") or "8188"
+    commande = commande_lancement(dossier, port)
+    if not commande:
+        raise _m.ErreurOutil(_t("ComfyUI ne tourne pas et je ne trouve pas son Python pour le lancer : l'utilisateur doit le lancer lui-même."))
+    try:
+        _m.liberer_vram()                                                       # le modèle de langage cède la carte graphique et la mémoire
+    except Exception as erreur:  # noqa: BLE001
+        _m.journaliser("ComfyUI : libération de la mémoire impossible ({!r}).".format(erreur))
+    journal = open(_m.DONNEES / "comfyui.log", "ab")
+    options = {"creationflags": 0x08000000} if os.name == "nt" else {}          # pas de fenêtre de console
+    try:
+        processus = subprocess.Popen(commande, cwd=dossier, stdout=journal, stderr=journal, stdin=subprocess.DEVNULL, **options)
+    except OSError as erreur:
+        raise _m.ErreurOutil(_t("Impossible de lancer ComfyUI : {}").format(erreur))
+    finally:
+        journal.close()
+    PROCESSUS["popen"] = processus
+    _m.journaliser("ComfyUI lancé par Lutin ({}).".format(" ".join(commande[:3])))
+    fin = time.time() + DELAI_DEMARRAGE
+    while time.time() < fin:
+        if processus.poll() is not None:
+            PROCESSUS["popen"] = None
+            raise _m.ErreurOutil(_t("ComfyUI s'est arrêté au démarrage (voir donnees/comfyui.log)."))
+        if en_marche():
+            return True
+        time.sleep(2)
+    arreter_comfyui()
+    raise _m.ErreurOutil(_t("ComfyUI n'a pas répondu après {} secondes (voir donnees/comfyui.log).").format(DELAI_DEMARRAGE))
+
+
+def arreter_comfyui():
+    """Ferme le ComfyUI lancé par Lutin (jamais celui de l'utilisateur)."""
+    processus, PROCESSUS["popen"] = PROCESSUS["popen"], None
+    if processus is None or processus.poll() is not None:
+        return
+    processus.terminate()
+    try:
+        processus.wait(15)
+    except subprocess.TimeoutExpired:
+        processus.kill()
+    _m.journaliser("ComfyUI refermé par Lutin.")
+
+
+atexit.register(arreter_comfyui)
+
+
+def verifier():
+    """La vérification de l'addon : trouve (ou valide) le dossier de ComfyUI et regarde si Lutin saura le lancer. ComfyUI n'a PAS besoin de tourner."""
+    etapes = []
+    regle = addons.reglages(IDENT).get("dossier") or ""
+    dossier = regle or trouver_dossier("", profond=True)                         # un dossier choisi est jugé tel quel ; sinon on le cherche
+    valide, raison = diagnostic_dossier(dossier)
+    if not valide:
+        return [{"appel": "dossier", "ok": False, "message": raison if regle else _t("Je ne trouve pas ComfyUI tout seul : choisis son dossier (celui qui contient main.py).")}]
+    if dossier != regle:
+        addons.enregistrer_reglages(IDENT, {"dossier": dossier})                  # trouvé tout seul : retenu
+    n = sum(len(v) for v in _scan_dossier(dossier).values())
+    etapes.append({"appel": "dossier", "ok": True, "message": _t("ComfyUI trouvé dans {} ({} modèle(s))").format(dossier, n)})
+    tourne = en_marche()
+    lanceur = commande_lancement(dossier, addons.reglages(IDENT).get("port") or "8188")
+    if lanceur or tourne:
+        etapes.append({"appel": "lancement", "ok": True, "message": _t("il tourne en ce moment") if tourne else _t("Lutin saura le lancer quand tu demanderas une image")})
+    else:
+        etapes.append({"appel": "lancement", "ok": False, "message": _t("je ne trouve pas son Python (python_embeded ou venv) : lance ComfyUI toi-même avant de demander une image")})
+    return etapes
 
 
 def detecter(profond=True):
@@ -243,6 +377,15 @@ def outil_generer(args, ctx):
     if not ctx["accord"](_t("Générer {} avec ComfyUI").format({"image": _t("une image"), "video": _t("une vidéo"), "son": _t("un son")}[type_]), detail, ""):
         from . import outils
         return outils.refus(ctx, _t("Refusé par l'utilisateur."))
+    lance = assurer_comfyui()
+    try:
+        return _soumettre_et_attendre(f, v, complet, type_, ctx)
+    finally:
+        if lance and addons.reglages(IDENT).get("fermer_apres", "oui") != "non":
+            arreter_comfyui()                                                      # ComfyUI rend la mémoire : le modèle de langage la retrouve à la prochaine question
+
+
+def _soumettre_et_attendre(f, v, complet, type_, ctx):
     try:
         if _m.reglages().get("liberer_si_comfy", True):
             _m.liberer_vram()                                                      # le modèle de langage cède la carte graphique à ComfyUI
@@ -392,6 +535,10 @@ def demarrer_telechargement(url, genre):
 # --------------------------------------------------------------------------- panneau de la page
 def etat():
     r = detecter(profond=False)
+    regle = addons.reglages(IDENT).get("dossier") or ""
+    r["dossier"] = regle or r["dossier"]
+    r["valide"], r["raison"] = diagnostic_dossier(r["dossier"])
+    r["lancement"] = bool(r["valide"] and commande_lancement(r["dossier"], addons.reglages(IDENT).get("port") or "8188"))
     r["modeles"] = lister_modeles()
     r["workflows"] = sorted((addons.flux(IDENT).get("workflows") or {}).keys())
     r["telechargement"] = {k: v for k, v in TELECHARGEMENT.items() if k != "arret"}
@@ -401,7 +548,12 @@ def etat():
 
 def action(nom, donnees):
     if nom == "detecter":
-        return detecter()
+        dossier = trouver_dossier("", profond=True)
+        if dossier:
+            addons.enregistrer_reglages(IDENT, {"dossier": dossier})
+            CACHE["modeles"] = (0, None)
+        DETECTION["dossier"] = dossier
+        return dict(etat(), introuvable=not dossier)
     if nom == "modeles":
         return lister_modeles(forcer=True)
     if nom == "telecharger":
@@ -411,10 +563,11 @@ def action(nom, donnees):
         TELECHARGEMENT["arret"].set()
         return etat()
     if nom == "utiliser_dossier":
-        dossier = str(donnees.get("dossier") or "").strip()
-        if not dossier_valide(dossier):
-            raise addons.ErreurAddon(_t("Ce dossier n'est pas une installation de ComfyUI (main.py et models attendus)."))
+        dossier = normaliser_dossier(donnees.get("dossier"))
+        valide, raison = diagnostic_dossier(dossier)
+        if not valide:
+            raise addons.ErreurAddon(raison)
         addons.enregistrer_reglages(IDENT, {"dossier": dossier})
         CACHE["modeles"] = (0, None)
-        return detecter()
+        return etat()
     raise addons.ErreurAddon(_t("Action inconnue."))

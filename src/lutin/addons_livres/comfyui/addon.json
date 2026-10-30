@@ -1,18 +1,62 @@
 {
  "nom": "ComfyUI",
- "description": "Laisse Lutin piloter ton ComfyUI : voir les modèles que tu as installés et générer des images (ou des vidéos, des sons) à partir de ta description et de tes directives. Chaque génération te demande ton accord.",
- "hotes": ["127.0.0.1"],
+ "description": "Demande une image dans la conversation : Lutin lance ComfyUI, la génère, puis le referme pour rendre la mémoire au modèle de langage.",
+ "hotes": [
+  "127.0.0.1"
+ ],
  "doc": "https://docs.comfy.org/development/comfyui-server/comms_routes",
  "reglages": [
-  {"cle": "port", "libelle": "Port de ComfyUI", "defaut": "8188", "obligatoire": false, "aide": "8188 par défaut. ComfyUI doit être lancé sur cette machine avant de demander une génération."},
-  {"cle": "dossier", "libelle": "Dossier d'installation de ComfyUI", "defaut": "", "obligatoire": false, "aide": "Le dossier qui contient main.py et models. Le bouton « Détecter » le trouve s'il le peut ; il sert à lister les modèles quand ComfyUI est éteint et à indiquer où sont les images."},
-  {"cle": "modele", "libelle": "Modèle par défaut", "defaut": "", "obligatoire": false, "aide": "Le fichier de modèle (checkpoint) à utiliser pour les images quand rien d'autre n'est demandé. Vide : le premier installé."}
+  {
+   "cle": "dossier",
+   "libelle": "Dossier de ComfyUI",
+   "defaut": "",
+   "obligatoire": false,
+   "aide": "Trouvé tout seul si possible. C'est le dossier qui contient main.py."
+  },
+  {
+   "cle": "fermer_apres",
+   "libelle": "Refermer ComfyUI après chaque image",
+   "defaut": "oui",
+   "obligatoire": false,
+   "choix": [
+    [
+     "oui",
+     "Oui (libère la mémoire)"
+    ],
+    [
+     "non",
+     "Non (le laisser ouvert)"
+    ]
+   ],
+   "aide": "Lutin ne ferme que le ComfyUI qu'il a lancé lui-même."
+  },
+  {
+   "cle": "modele",
+   "libelle": "Modèle par défaut",
+   "defaut": "",
+   "obligatoire": false,
+   "aide": "Vide : le premier modèle installé."
+  },
+  {
+   "cle": "port",
+   "libelle": "Port de ComfyUI",
+   "defaut": "8188",
+   "obligatoire": false
+  }
  ],
  "etapes": [
-  {"titre": "Lancer ComfyUI.", "texte": "Démarre ComfyUI comme d'habitude (il écoute sur le port 8188). Lutin le pilote, il ne le démarre pas."},
-  {"titre": "Détecter.", "texte": "Clique sur « Enregistrer et vérifier » : Lutin cherche ComfyUI sur ce port. Dans le panneau, « Détecter » propose le dossier d'installation à utiliser."},
-  {"titre": "Voir les modèles.", "texte": "Le panneau liste les modèles installés (lus dans ComfyUI, ou dans le dossier si ComfyUI est éteint). Choisis un modèle par défaut si tu veux."},
-  {"titre": "Vidéo et son.", "texte": "Un workflow d'image est livré. Pour la vidéo ou le son, ouvre « Flux… », colle ton workflow exporté de ComfyUI (Enregistrer au format API) dans « workflows » (clés video ou son) et mets {prompt}, {graine}… là où Lutin doit écrire."}
+  {
+   "titre": "Active l'addon.",
+   "texte": "Lutin cherche ComfyUI tout seul."
+  },
+  {
+   "titre": "S'il ne le trouve pas,",
+   "texte": "choisis son dossier (celui qui contient main.py)."
+  },
+  {
+   "titre": "Demande une image",
+   "texte": "dans une conversation : Lutin lance ComfyUI, génère, puis le referme."
+  }
  ],
- "verification": ["etat"]
+ "verification": []
 }

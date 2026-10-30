@@ -127,6 +127,8 @@ class ComfyUI(unittest.TestCase):
         (COMFY / "models" / "checkpoints" / "notes.txt").write_text("pas un modèle", encoding="utf-8")
         (COMFY / "models" / "loras" / "sous").mkdir()
         (COMFY / "models" / "loras" / "sous" / "visage.safetensors").write_bytes(b"x")
+        (_TEMP / "python_embeded").mkdir()
+        (_TEMP / "python_embeded" / "python.exe").write_bytes(b"x")                 # la disposition de la version portable : ComfyUI/ et python_embeded/ côte à côte
 
     @classmethod
     def tearDownClass(cls):
@@ -154,16 +156,22 @@ class ComfyUI(unittest.TestCase):
         return dict({"accord": lambda t, d, df: (self.accords.append((t, d)), accord)[1], "stop": threading.Event()}, **plus)
 
     def test_verification_detection_et_dossier_trouve_par_comfyui_lui_meme(self):
+        addons.enregistrer_reglages(cu.IDENT, {"dossier": str(COMFY)})
         v = addons.verifier(cu.IDENT)
         self.assertTrue(v["ok"], v)
-        self.assertIn("0.3.9", v["etapes"][0]["message"])
+        self.assertEqual([e["appel"] for e in v["etapes"]], ["dossier", "lancement"])
+        self.assertIn(str(COMFY), v["etapes"][0]["message"])
         d = cu.detecter()
         self.assertEqual((d["tourne"], d["version"], d["gpu"]), (True, "0.3.9", "GPU de test"))
         self.assertEqual(Path(d["dossier"]), COMFY, "le chemin de main.py est annoncé par ComfyUI : le dossier est prérempli")
         SERVICE["panne"] = True
         d = cu.detecter()
         self.assertFalse(d["tourne"])
-        self.assertFalse(addons.verifier(cu.IDENT)["ok"], "ComfyUI éteint : la vérification le dit")
+        self.assertTrue(addons.verifier(cu.IDENT)["ok"], "ComfyUI éteint : ce n'est pas un problème, Lutin le lancera")
+        addons.enregistrer_reglages(cu.IDENT, {"dossier": str(_TEMP / "projet")})
+        v = addons.verifier(cu.IDENT)
+        self.assertFalse(v["ok"], "un mauvais dossier est refusé avec une raison claire")
+        self.assertIn("main.py", v["etapes"][0]["message"])
 
     def test_modeles_par_l_api_puis_par_le_dossier(self):
         r = cu.lister_modeles()
@@ -175,7 +183,7 @@ class ComfyUI(unittest.TestCase):
         self.assertEqual(cu.lister_modeles()["source"], "aucune", "ComfyUI éteint et pas de dossier réglé : rien à lister")
         self.assertIn("impossible", cu.texte_modeles())
         with self.assertRaises(addons.ErreurAddon):
-            cu.action("utiliser_dossier", {"dossier": str(_TEMP)})
+            cu.action("utiliser_dossier", {"dossier": str(_TEMP / "projet")})
         cu.action("utiliser_dossier", {"dossier": str(COMFY)})
         SERVICE["panne"] = True
         r = cu.lister_modeles(forcer=True)
@@ -299,6 +307,139 @@ class ComfyUI(unittest.TestCase):
         self.assertFalse(list((COMFY / "models" / "checkpoints").glob("lent*")), "l'annulation efface le fichier partiel")
         fichier.unlink()
         addons.enregistrer_reglages(cu.IDENT, {"dossier": ""})
+
+    def test_diagnostic_du_dossier_et_choix_du_dossier_parent(self):
+        self.assertEqual(cu.diagnostic_dossier(str(COMFY)), (True, ""))
+        self.assertIn("non défini", cu.diagnostic_dossier("")[1])
+        self.assertIn("n'existe pas", cu.diagnostic_dossier(str(_TEMP / "absent"))[1])
+        self.assertIn("main.py", cu.diagnostic_dossier(str(_TEMP / "projet"))[1], "pas de main.py : on dit quoi chercher")
+        (_TEMP / "sans-models").mkdir(exist_ok=True)
+        (_TEMP / "sans-models" / "main.py").write_text("#", encoding="utf-8")
+        self.assertIn("models", cu.diagnostic_dossier(str(_TEMP / "sans-models"))[1])
+        self.assertEqual(Path(cu.normaliser_dossier(str(_TEMP))), COMFY, "le dossier parent de la version portable mène à ComfyUI/")
+        self.assertEqual(Path(cu.normaliser_dossier(str(COMFY))), COMFY)
+        r = cu.action("utiliser_dossier", {"dossier": str(_TEMP)})
+        self.assertEqual((r["valide"], Path(r["dossier"]), r["lancement"]), (True, COMFY, True))
+        self.assertEqual(Path(addons.reglages(cu.IDENT)["dossier"]), COMFY, "retenu")
+        # détecter : trouvé tout seul → retenu ; introuvable → dit
+        addons.enregistrer_reglages(cu.IDENT, {"dossier": ""})
+        vrai = cu.trouver_dossier
+        cu.trouver_dossier = lambda *a, **k: str(COMFY)
+        try:
+            r = cu.action("detecter", {})
+            self.assertEqual((Path(addons.reglages(cu.IDENT)["dossier"]), r["introuvable"], r["valide"]), (COMFY, False, True))
+            addons.enregistrer_reglages(cu.IDENT, {"dossier": ""})
+            cu.trouver_dossier = lambda *a, **k: ""
+            DETECTION_AVANT = dict(cu.DETECTION)
+            r = cu.action("detecter", {})
+            self.assertTrue(r["introuvable"])
+            self.assertFalse(r["valide"])
+            cu.DETECTION.update(DETECTION_AVANT)
+        finally:
+            cu.trouver_dossier = vrai
+
+    def test_lutin_lance_comfyui_lui_meme_le_ferme_et_ne_touche_pas_a_celui_de_l_utilisateur(self):
+        addons.enregistrer_reglages(cu.IDENT, {"dossier": str(COMFY)})
+        lancements, arrets, ordre = [], [], []
+
+        class Faux:
+            def __init__(self, commande, **kw):
+                lancements.append((commande, kw.get("cwd")))
+                ordre.append("lancement")
+                SERVICE["panne"] = False                                           # « ComfyUI démarre » : il répond maintenant
+                self.fini = False
+
+            def poll(self):
+                return 1 if self.fini else None
+
+            def terminate(self):
+                arrets.append(1)
+                self.fini = True
+
+            def wait(self, delai=None):
+                return 0
+
+            def kill(self):
+                self.terminate()
+        vrai_popen = cu.subprocess.Popen
+        cu.subprocess.Popen = Faux
+        _m.liberer_vram = lambda *a, **k: ordre.append("memoire")
+        self.addCleanup(setattr, cu.subprocess, "Popen", vrai_popen)
+        # éteint : Lutin le lance (après avoir rendu la mémoire au modèle de langage), génère, puis le referme
+        SERVICE["panne"] = True
+        res = cu.outil_generer({"prompt": "un phare"}, self.ctx())
+        self.assertIn("lutin_00001_.png", res)
+        commande, cwd = lancements[0]
+        self.assertTrue(commande[0].endswith("python.exe") and "main.py" in commande and "--disable-auto-launch" in commande and "--windows-standalone-build" in commande, commande)
+        self.assertEqual((commande[commande.index("--port") + 1], Path(cwd)), (str(self.port), COMFY))
+        self.assertEqual(ordre[:2], ["memoire", "lancement"], "la mémoire est rendue AVANT de lancer ComfyUI")
+        self.assertEqual(len(arrets), 1, "ComfyUI lancé par Lutin est refermé après l'image")
+        self.assertIsNone(cu.PROCESSUS["popen"])
+        # réglage « ne pas refermer »
+        addons.enregistrer_reglages(cu.IDENT, {"fermer_apres": "non"})
+        SERVICE.update(panne=True, histoire=0)
+        cu.outil_generer({"prompt": "x"}, self.ctx())
+        self.assertEqual((len(lancements), len(arrets)), (2, 1), "lancé, mais laissé ouvert")
+        cu.arreter_comfyui()
+        addons.enregistrer_reglages(cu.IDENT, {"fermer_apres": "oui"})
+        # déjà ouvert par l'utilisateur : ni lancé, ni refermé
+        SERVICE.update(panne=False, histoire=0)
+        cu.outil_generer({"prompt": "x"}, self.ctx())
+        self.assertEqual((len(lancements), len(arrets)), (2, 2), "le ComfyUI de l'utilisateur n'est jamais fermé par Lutin")
+
+    def test_lancement_impossible_ou_trop_long_donne_un_message_clair(self):
+        addons.enregistrer_reglages(cu.IDENT, {"dossier": str(COMFY)})
+        vrai_popen, vrai_delai = cu.subprocess.Popen, cu.DELAI_DEMARRAGE
+        self.addCleanup(setattr, cu.subprocess, "Popen", vrai_popen)
+        self.addCleanup(setattr, cu, "DELAI_DEMARRAGE", vrai_delai)
+        SERVICE["panne"] = True
+
+        def impossible(*a, **k):
+            raise OSError("introuvable")
+        cu.subprocess.Popen = impossible
+        with self.assertRaises(_m.ErreurOutil) as e:
+            cu.outil_generer({"prompt": "x"}, self.ctx())
+        self.assertIn("Impossible de lancer", str(e.exception))
+
+        class Mort:
+            def __init__(self, *a, **k):
+                pass
+
+            def poll(self):
+                return 1
+        cu.subprocess.Popen = Mort
+        with self.assertRaises(_m.ErreurOutil) as e:
+            cu.outil_generer({"prompt": "x"}, self.ctx())
+        self.assertIn("s'est arrêté au démarrage", str(e.exception))
+
+        arrets = []
+
+        class Muet:
+            def __init__(self, *a, **k):
+                pass
+
+            def poll(self):
+                return None
+
+            def terminate(self):
+                arrets.append(1)
+
+            def wait(self, d=None):
+                return 0
+        cu.subprocess.Popen = Muet
+        cu.DELAI_DEMARRAGE = 0.3
+        with self.assertRaises(_m.ErreurOutil) as e:
+            cu.outil_generer({"prompt": "x"}, self.ctx())
+        self.assertIn("n'a pas répondu", str(e.exception))
+        self.assertEqual(arrets, [1], "un ComfyUI qui ne répond pas est refermé")
+        # pas de dossier, pas de Python : on le dit
+        addons.enregistrer_reglages(cu.IDENT, {"dossier": ""})
+        vrai_trouver = cu.trouver_dossier
+        cu.trouver_dossier = lambda *a, **k: ""
+        self.addCleanup(setattr, cu, "trouver_dossier", vrai_trouver)
+        with self.assertRaises(_m.ErreurOutil) as e:
+            cu.outil_generer({"prompt": "x"}, self.ctx())
+        self.assertIn("ne trouve pas ComfyUI", str(e.exception))
 
     def test_les_outils_n_existent_que_si_l_addon_est_actif(self):
         from lutin import dialogue, revue

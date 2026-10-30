@@ -237,10 +237,13 @@ class Parcours(unittest.TestCase):
             p = self.ouvrir(tmp, "http://127.0.0.1:%d/" % port)
             p.evaluer(onglet("auto"))
             texte = "document.getElementById('listeAddons').textContent"
-            p.attendre("%s.includes('Brouillon pour Bob') && %s.includes('Brouillon pour Alice') && %s.includes('Réponse à @alice') && %s.includes('ComfyUI ne répond pas')" % ((texte,) * 4))
+            p.attendre("%s.includes('Brouillon pour Bob') && %s.includes('Brouillon pour Alice') && %s.includes('Réponse à @alice') && %s.includes('Dossier de ComfyUI non défini')" % ((texte,) * 4))
             contenu = p.evaluer(texte)
             for attendu in ("/appairer 123456", "Devis", "✔ Publié", "Nouveau travail de fond", "Publier maintenant", "Publier la réponse"):
                 self.assertIn(attendu, contenu)
+            self.assertTrue(p.evaluer("[...document.querySelectorAll('#listeAddons button')].some(b => b.textContent === 'Détecter') && [...document.querySelectorAll('#listeAddons button')].some(b => b.textContent === 'Choisir le dossier…')"),
+                            "ComfyUI : « Détecter » et « Choisir le dossier… » sont visibles")
+            self.assertEqual(p.evaluer("[...document.querySelectorAll('#listeAddons .erreur')].filter(e => e.textContent.trim()).length"), 0, "« pas encore configuré » n'est pas une erreur : rien en rouge")
             brouillons = p.evaluer("[...document.querySelectorAll('#listeAddons textarea')].map(t => t.value).join(' | ')")
             for attendu in ("Oui, je regarde.", "Bonjour, le devis arrive demain.", "Mon premier message", "Merci !"):
                 self.assertIn(attendu, brouillons, "les brouillons sont dans des champs modifiables")
