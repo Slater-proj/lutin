@@ -27,7 +27,7 @@ GO = 1024 ** 3
 CACHE_TAILLES = {}                                                             # dossier -> (date, octets) : mesurer un gros dossier coûte, on le fait au plus une fois par minute
 MEMO = {}                                                                      # mesure -> (date, valeur, fonction) : voir memo()
 RAFRAICHIS = set()                                                             # dossiers en cours de remesure en arrière-plan
-DUREE_MEMO = {"vram": 4, "comfy": 4, "disques": 30}                            # secondes : assez court pour rester juste, assez long pour qu'une rafale de demandes ne remesure pas à chaque fois
+DUREE_MEMO = {"vram": 4, "comfy": 4, "disques": 30, "jauge": 10}                            # secondes : assez court pour rester juste, assez long pour qu'une rafale de demandes ne remesure pas à chaque fois
 
 
 def memo(cle, fonction):
@@ -129,7 +129,8 @@ def taille_dossier(d, delai=4.0):
 
 
 def dossier_modeles_ollama():
-    return Path(os.environ.get("OLLAMA_MODELS") or (Path.home() / ".ollama" / "models"))
+    from . import emplacements
+    return emplacements.dossier_modeles()
 
 
 def taille_modele(nom, charge=None):

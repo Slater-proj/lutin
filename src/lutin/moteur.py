@@ -478,6 +478,9 @@ def demarrer_ollama():
     if etat_ollama()["actif"]:
         return "Ollama tourne déjà."
     env = dict(os.environ, **ENV_OLLAMA)
+    from . import emplacements
+    if emplacements.lire_config_modeles() and not os.environ.get("OLLAMA_MODELS"):
+        env["OLLAMA_MODELS"] = emplacements.lire_config_modeles()          # le dossier choisi à l'installation, même si la variable de Windows n'est pas arrivée jusqu'ici
     drapeaux = 0x00000008 | 0x00000200 if os.name == "nt" else 0                 # DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
     subprocess.Popen([exe, "serve"], env=env, creationflags=drapeaux, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     for _ in range(30):
@@ -661,6 +664,7 @@ def arreter_conversation(ident):
 from .espaces import (  # noqa: F401  (déplacé dans espaces.py : moteur ré-exporte ses noms)
     activer_travail,
     ajouter_travail,
+    apercu_travail,
     changer_chemin_travail,
     choisir_travail,
     deplacer_travail,
@@ -794,7 +798,7 @@ button{background:#238636;border-color:#238636;cursor:pointer}#m{color:#f85149;m
 <form id="f"><input id="pin" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000" autofocus><input id="nom" placeholder="Nom de cet appareil (facultatif)"><button>Se connecter</button></form><div id="m"></div>
 <script>document.getElementById('f').addEventListener('submit',async e=>{e.preventDefault();const r=await fetch('/api/appairer',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pin:document.getElementById('pin').value,nom:document.getElementById('nom').value})});
 const d=await r.json().catch(()=>({}));if(r.ok)location.reload();else document.getElementById('m').textContent=d.erreur||'Erreur '+r.status;});
-const q=(location.hash.match(/pin=([0-9]{6})/)||[])[1];if(q){document.getElementById('pin').value=q;document.getElementById('nom').value=document.getElementById('nom').value||'QR';history.replaceState(null,'',location.pathname);document.querySelector('#f button').click();}</script></main></body></html>"""
+const q=(location.hash.match(/pin=([0-9]{6})/)||[])[1];if(q){document.getElementById('pin').value=q;document.getElementById('nom').value=document.getElementById('nom').value;history.replaceState(null,'',location.pathname);document.querySelector('#f button').click();}</script></main></body></html>"""
 
 
 def principal():

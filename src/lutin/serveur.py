@@ -2,7 +2,9 @@
 from http.server import BaseHTTPRequestHandler
 from . import bench as _bench
 from . import acces as _acces
+from . import adequation as _adequation
 from . import conseil as _conseil
+from . import emplacements as _emplacements
 from . import decouverte as _decouverte
 from . import donnees as _donnees
 from . import horsligne as _hl
@@ -135,7 +137,11 @@ class Gestionnaire(BaseHTTPRequestHandler):
         if chemin == "/api/etat":
             o = _m.etat_ollama()
             r = _m.reglages()
-            return self._envoyer(200, {"version": _m.VERSION, "ollama": o["actif"], "ollama_installe": bool(_m.chemin_ollama()), "installes": o["installes"], "modeles": _m.modeles_connus(o["installes"], o.get("tailles")), "modeles_masques": len(_m.lire_registre_modeles()["masques"]), "actives": list(_m.TOURS_ACTIFS),
+            modeles = _m.modeles_connus(o["installes"], o.get("tailles"))
+            profil = _adequation.profil_pret()
+            return self._envoyer(200, {"adequation": _adequation.pour_la_liste(modeles, profil, _m._CATALOGUE["modeles"]), "machine": profil.resume() if profil else "", "budget_go": profil.budget_go() if profil else 0,
+                                       "familles": {k: _t(v) for k, v in (_m._CATALOGUE.get("familles") or {}).items()}, "disque_modeles": _emplacements.jauge_modeles(),
+                                       "version": _m.VERSION, "ollama": o["actif"], "ollama_installe": bool(_m.chemin_ollama()), "installes": o["installes"], "modeles": modeles, "modeles_masques": len(_m.lire_registre_modeles()["masques"]), "actives": list(_m.TOURS_ACTIFS),
                                        "pulls": _m.PULLS, "reglages": r, "conversations": _m.conv_liste(), "racine": str(_m.RACINE), "donnees": str(_m.DONNEES),
                                        "outil": bool(self._outil_vivant()), "hors_ligne": _hl.actif(), "niveau": _m.SECURITE.niveau, "langue": _i18n.langue(), "langue_reglage": _i18n.langue_configuree(), "cpus": os.cpu_count() or 1, "redemarrage": {"necessaire": _acces.securite_enregistree() != _m.SECURITE, "possible": _acces.peut_redemarrer()}, "nouvelle_version": _m.nouvelle_version_lutin(), "travaux": _m.travaux_etat(), "configurateur": self._configurateur(),
                                        "bench": {"en_cours": _m.BENCH["en_cours"], "etape": _m.BENCH["etape"], "erreur": _m.BENCH["erreur"], "mesures": _bench.lire(_m.chemin_bench())}, "attentes": [{"id": a.id, "titre": a.titre, "detail": a.detail, "diff": a.diff} for a in _m.Attente.EN_COURS.values()]})
@@ -193,6 +199,9 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 return self._envoyer(400, {"erreur": str(e)})
             except OSError as e:
                 return self._envoyer(503, {"erreur": str(e)})
+        if chemin == "/api/emplacements":                        # tous les dossiers que Lutin utilise, leur taille et la place libre
+            from . import emplacements
+            return self._envoyer(200, dict(emplacements.lister(), modifiable=self._configurateur()))
         if chemin == "/api/journal":
             m = re.search(r"[?&]n=(\d+)", self.path)
             return self._envoyer(200, {"entrees": _m.lire_journal(int(m.group(1)) if m else 200)})
@@ -391,6 +400,13 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 return self._envoyer(200, _m.git_message(donnees.get("fichiers")))
             if self.path == "/api/git-commit":
                 return self._envoyer(200, _m.git_commit(donnees.get("message"), donnees.get("fichiers")))
+            if self.path == "/api/travaux-apercu":
+                return self._envoyer(200, _m.apercu_travail(str(donnees.get("id", ""))))
+            if self.path == "/api/dossier-modeles":
+                if not self._configurateur():
+                    return self._envoyer(403, {"erreur": _t("Le dossier des modèles se change depuis cette machine.")})
+                from . import emplacements
+                return self._envoyer(200, {"dossier": str(emplacements.definir_dossier_modeles(str(donnees.get("chemin", "")))), "note": _t("Les modèles déjà téléchargés ne sont pas déplacés : déplace-les à la main dans le nouveau dossier, ou retélécharge-les. Redémarre Ollama (quitte-le puis relance-le) pour qu'il utilise le nouveau dossier.")})
             if self.path == "/api/travaux-choisir":
                 return self._envoyer(200, _m.choisir_travail(str(donnees.get("id", ""))))
             if self.path in ("/api/travaux-ajouter", "/api/travaux-retirer", "/api/travaux-deplacer", "/api/travaux-chemin"):
@@ -402,7 +418,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
                     return self._envoyer(200, _m.deplacer_travail(str(donnees.get("id", "")), str(donnees.get("parent", "")), str(donnees.get("nom", ""))))
                 if self.path == "/api/travaux-chemin":
                     return self._envoyer(200, _m.changer_chemin_travail(str(donnees.get("id", "")), str(donnees.get("chemin", ""))))
-                return self._envoyer(200, _m.retirer_travail(str(donnees.get("id", ""))))
+                return self._envoyer(200, _m.retirer_travail(str(donnees.get("id", "")), bool(donnees.get("nettoyer"))))
             if self.path in ("/api/reprise-detecter", "/api/reprise"):
                 if not self._configurateur():
                     return self._envoyer(403, {"erreur": _t("La reprise des données d'un autre assistant se fait depuis cette machine (niveau « cette machine seulement ») ou avec la commande lutin reprendre.")})
@@ -531,7 +547,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
             return self._envoyer(400, {"erreur": "Cet accès est réservé à cette machine : pas de code à saisir."})
         if not _m.LIMITEUR_PIN.autoriser(self.client_address[0]):
             return self._envoyer(429, {"erreur": "Trop d'essais : attends une minute."})
-        jeton = _m.APPAREILS.appairer(str(donnees.get("pin", "")), str(donnees.get("nom", "")))
+        jeton = _m.APPAREILS.appairer(str(donnees.get("pin", "")), _sec.nom_appareil(donnees.get("nom"), self.headers.get("User-Agent"), self._sur_cette_machine()))
         if not jeton:
             return self._envoyer(403, {"erreur": "Code incorrect ou expiré. Demande-en un nouveau sur l'ordinateur (lutin pin)."})
         return self._envoyer(200, {"ok": True}, en_tetes={"Set-Cookie": _sec.en_tete_set_cookie(jeton, _m.SECURITE.url_publique.startswith("https://"))})

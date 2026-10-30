@@ -138,6 +138,8 @@ class Parcours(unittest.TestCase):
             for nom in ("Projet", "Documents", "Autre"):
                 p.attendre("[...document.querySelectorAll('#listeTravaux .conv')].some(l => l.textContent.includes(@@))".replace("@@", json.dumps(nom)))
                 cliquer_dans_ligne(p, nom, "Retirer")
+                p.attendre("!!document.querySelector('#modalCorps button.danger')")          # la fenêtre d'avertissement : on confirme
+                p.evaluer("document.querySelector('#modalCorps button.danger').click()")
                 p.attendre("![...document.querySelectorAll('#listeTravaux .conv')].some(l => l.textContent.includes(@@))".replace("@@", json.dumps(nom)))
             self.assertIn("dossier par défaut", p.evaluer("document.querySelector('#listeTravaux').textContent"))
             self.assertTrue((tmp / "Rendu" / "notes.txt").is_file(), "les fichiers ne sont jamais supprimés")

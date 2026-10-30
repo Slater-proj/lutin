@@ -2,6 +2,15 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## 0.6.2
+
+- **Dossiers de travail** : après l'ajout, Lutin dit ce qu'il a trouvé et utilise (fichiers, consignes, skills) et détecte un ancien assistant avec un bouton « Reprendre ses données… » ; bouton Actualiser ; « Retirer » demande confirmation et peut nettoyer les copies de conversations.
+- **Modèles** : pastille d'adéquation à la machine, phrase d'explication par famille, jauge de place disque, avertissement si le modèle ne tiendrait pas sur le disque.
+- **Emplacements** : tous les dossiers utilisés avec leur taille et la place libre ; le dossier des modèles d'Ollama est visible et modifiable (un `null` dans la configuration est ignoré, Ollama lancé par Lutin reçoit ce dossier).
+- **Accès** : un navigateur appairé par QR code ou adresse n'est plus nommé « QR » mais d'après son navigateur (« Cet ordinateur (Chrome · Windows) »).
+
+**English.** Workspace folders now report what Lutin found and detect an old assistant (with a *Take over its data…* button), have a Refresh button, and *Remove* asks for confirmation and can clean the conversation copies. Models get a suitability badge for the machine, a one-sentence explanation per family, a disk-space gauge and a warning when a model would not fit. A Locations list shows every folder with its size and free space, and the Ollama models folder is visible and editable. A paired browser is no longer named « QR ».
+
 ## 0.6.1
 
 - **Bibliothèque d'Ollama** (onglet Modèles) : les modèles récents ou populaires d'ollama.com, avec recherche, capacités et tailles, installables en un clic. Le catalogue de Lutin ne peut pas connaître un modèle sorti hier ; cette liste, si.

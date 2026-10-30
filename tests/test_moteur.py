@@ -1370,6 +1370,20 @@ class Assistant(unittest.TestCase):
         finally:
             post("/api/reglages", {k: avant[k] for k in autres if k in avant})
 
+    def test_etat_emplacements_et_apercu_par_l_api(self):
+        e = lire("/api/etat")
+        for cle in ("adequation", "machine", "budget_go", "familles", "disque_modeles"):
+            self.assertIn(cle, e, cle)
+        self.assertTrue(e["familles"].get("Qwen 3"), "chaque famille a sa phrase")
+        r = lire("/api/emplacements")
+        self.assertTrue({"programme", "donnees", "modeles"} <= {x["cle"] for x in r["lignes"]})
+        self.assertTrue(r["modifiable"])
+        t = e["travaux"]["liste"]
+        if t:
+            ap = post("/api/travaux-apercu", {"id": t[0]["id"]})
+            self.assertIn("fichiers", ap)
+        post("/api/travaux-apercu", {"id": "inconnu"}, attendu=400)
+
     def test_bibliotheque_d_ollama_par_l_api(self):
         from lutin import decouverte
         vrai = decouverte.chercher

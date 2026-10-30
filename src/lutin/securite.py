@@ -176,6 +176,19 @@ class LimiteurDebit:
         return True
 
 
+def nom_appareil(donne, agent="", sur_la_machine=False):
+    """Le nom affiché d'un appareil appairé : celui qu'on a tapé, sinon d'après le navigateur (« Chrome · Windows »). Un appairage par QR code ou par adresse ne porte pas de nom : on ne l'appelle pas « QR »."""
+    donne = (donne or "").strip()
+    if donne and donne.lower() != "qr":
+        return donne[:60]
+    systemes = (("iPhone", "iPhone"), ("iPad", "iPad"), ("Android", "Android"), ("Windows", "Windows"), ("Macintosh", "Mac"), ("Linux", "Linux"))
+    navigateurs = (("Edg/", "Edge"), ("OPR/", "Opera"), ("Firefox/", "Firefox"), ("Chrome/", "Chrome"), ("Safari/", "Safari"))
+    agent = agent or ""
+    morceaux = [n for cle, n in navigateurs if cle in agent][:1] + [n for cle, n in systemes if cle in agent][:1]
+    base = " · ".join(morceaux) or "Appareil"
+    return ("Cet ordinateur (" + base + ")") if sur_la_machine else base
+
+
 class Appareils:
     """Code PIN d'appairage et sessions des appareils. Seules les EMPREINTES des jetons sont gardées sur disque : le fichier ne permet pas d'usurper une session."""
 

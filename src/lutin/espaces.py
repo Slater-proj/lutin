@@ -3,7 +3,9 @@
 La logique pure (vérifier un chemin, écrire la configuration) est dans travaux.py ; ici, ce qui touche à l'état du moteur (dossier courant, réponses en cours). Les variables partagées sont lues
 dans lutin.moteur au moment de l'appel (`_m.RACINE`…), comme dans les autres modules découpés."""
 import os
+import shutil
 import sys
+import time
 from pathlib import Path
 
 from . import moteur as _m
@@ -68,9 +70,13 @@ def ajouter_travail(chemin, nom):
     return travaux_etat()
 
 
-def retirer_travail(ident):
+def retirer_travail(ident, nettoyer=False):
+    """Retire le dossier de la liste. `nettoyer` : supprime aussi ce que Lutin y a créé lui-même (le sous-dossier des copies de conversations) ; jamais un autre fichier."""
     cfg = _m.config_lue()
     t = _trav.par_id(cfg, ident)
+    supprimes = 0
+    if nettoyer and t:
+        supprimes = nettoyer_copies(Path(t["chemin"]))
     with _m.VERROU_TOURS:
         if t and str(Path(t["chemin"]).resolve()) in _m.RACINE_TOURS.values():
             raise ValueError("Une réponse travaille dans ce dossier : attends sa fin.")
@@ -83,7 +89,72 @@ def retirer_travail(ident):
             if not suivant:
                 defaut.mkdir(parents=True, exist_ok=True)
             _m.definir_racine(suivant["chemin"] if suivant else defaut)
-    return travaux_etat()
+    return dict(travaux_etat(), copies_supprimees=supprimes)
+
+
+def nettoyer_copies(dossier):
+    """Supprime le sous-dossier des copies de conversations que Lutin a posé dans ce dossier de travail. Renvoie le nombre de fichiers supprimés (0 s'il n'y en a pas)."""
+    from . import donnees
+    cible = Path(dossier) / donnees.DOSSIER_COPIES
+    if not cible.is_dir() or cible.is_symlink():
+        return 0
+    n = sum(1 for f in cible.rglob("*") if f.is_file())
+    shutil.rmtree(cible, ignore_errors=True)
+    return n
+
+
+def compter_fichiers(dossier, maximum=20000, delai=3.0):
+    """(nombre de fichiers, tronqué ?) : parcours borné en nombre et en temps, sans entrer dans .git ni node_modules."""
+    n, fin = 0, time.time() + delai
+    for racine, sous, noms in os.walk(dossier):
+        sous[:] = [s for s in sous if s not in (".git", "node_modules", "__pycache__")]
+        n += len(noms)
+        if n >= maximum or time.time() > fin:
+            return n, True
+    return n, False
+
+
+def apercu_travail(ident):
+    """Ce que Lutin trouve et utilise dans un dossier de travail, pour le dire clairement après l'ajout : fichiers, consignes et skills lus, copies de conversations, et surtout un ANCIEN
+    ASSISTANT (dossiers donnees/ et memoire/ avec des conversations) qu'on peut reprendre. Rien n'est écrit."""
+    t = _trav.par_id(_m.config_lue(), ident)
+    if not t:
+        raise ValueError(_t("Dossier de travail inconnu."))
+    p = Path(t["chemin"])
+    fini, resultat = _trav.avec_delai(lambda: _apercu(p))
+    if fini is None:
+        return {"id": ident, "erreur": _t("Le dossier « {} » ne répond pas (plus de {} s) : un partage réseau éteint, un disque déconnecté ?").format(p, _trav.DELAI_DISQUE_S)}
+    if not fini:
+        return {"id": ident, "erreur": str(resultat)}
+    return dict(resultat, id=ident)
+
+
+def _apercu(p):
+    raison = _trav.diagnostic(p)
+    if raison:
+        return {"erreur": raison}
+    n, tronque = compter_fichiers(p)
+    claude = _pc.detecter(p)
+    lus = []
+    if claude["contexte"]:
+        lus.append(", ".join(claude["contexte"]))
+    skills = sorted((p / "skills").glob("*.md")) if (p / "skills").is_dir() else []
+    if skills:
+        lus.append(_t("skills/ : {} fiche(s)").format(len(skills)))
+    for cle, modele in (("skills", _t(".claude/skills : {}")), ("commandes", _t("commandes : {}")), ("agents", _t("agents : {}"))):
+        if claude[cle]:
+            lus.append(modele.format(len(claude[cle])))
+    from . import donnees
+    copies = sum(1 for f in (p / donnees.DOSSIER_COPIES).glob("*.md")) if (p / donnees.DOSSIER_COPIES).is_dir() else 0
+    ancien = None
+    try:
+        if _trav.cle(p) != _trav.cle(_m.DONNEES.parent):
+            with _rep.ouvrir(p) as d:
+                if d["conversations"] or d["memoire"]:
+                    ancien = dict(_rep.decrire(d), dossier=d["dossier_utilise"])
+    except _rep.ErreurReprise:
+        ancien = None
+    return {"fichiers": n, "tronque": tronque, "lus": lus, "copies": copies, "ancien": ancien, "git": (p / ".git").exists()}
 
 
 def deplacer_travail(ident, nouveau_parent, nom=""):

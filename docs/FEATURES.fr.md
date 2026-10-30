@@ -42,6 +42,18 @@ Le texte des fichiers est ajouté à ton message **pour le modèle seulement** :
 
 Clique sur **📎** à côté de la zone de message, ou colle (Ctrl+V) ou glisse une image : PNG, JPEG, GIF ou WebP, 8 Mo et 4 images par message au plus. Si le modèle courant ne voit pas les images, Lutin passe pour cette demande sur un modèle installé qui les voit (rôle « Images » de l'onglet Modèles), ou te dit qu'il n'y en a pas et ignore les images. Les images restent dans le dossier de données de Lutin (`images/`), seules les plus récentes sont renvoyées au modèle, et les images orphelines sont supprimées après deux jours.
 
+## Modèles : adéquation, familles, place disque
+
+Dans l'onglet Modèles chaque modèle porte une pastille pour **ta machine** : *Très adapté*, *Adapté*, *Limite* (tient à peine, conversation courte, ou en partie sur le processeur) ou *Trop gros* (survole pour la raison, avec la mémoire demandée). Chaque famille a une phrase d'explication (par exemple pourquoi Qwen 3.8 existe à côté de Qwen 3 : plus récent et meilleur, mais une seule grande taille). Une jauge montre la place libre du disque qui porte les modèles, et un modèle qui n'y tiendrait pas est signalé avant le téléchargement.
+
+## Emplacements : où est tout
+
+Réglages > **Emplacements utilisés** liste chaque dossier utilisé par Lutin (programme, configuration, données, mémoire, cache, modèles d'Ollama, dossiers de travail) avec sa taille et la place libre de son disque. Le **dossier des modèles d'Ollama** s'y change (les modèles déjà téléchargés ne sont pas déplacés).
+
+## Dossiers de travail : ce que Lutin a trouvé
+
+Après l'ajout d'un dossier, Lutin dit ce qu'il y a trouvé et utilise (fichiers, CLAUDE.md, `skills/`, `.claude/`, copies de conversations). Si le dossier est **un ancien assistant** (conversations dans `donnees/`, notes dans `memoire/`), un bouton *Reprendre ses données…* les importe : ajouter un dossier permet seulement à Lutin d'y travailler, il ne copie pas tout seul les anciennes conversations. **Retirer** demande confirmation et peut aussi supprimer les copies de conversations posées par Lutin dans ce dossier ; tes propres fichiers ne sont jamais supprimés.
+
 ## Trouver de nouveaux modèles
 
 L'onglet Modèles a trois façons de suivre ce qui sort, sans attendre une nouvelle version de Lutin :
