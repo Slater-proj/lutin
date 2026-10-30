@@ -19,6 +19,19 @@ def bouton(texte):
     return "(() => { const b = [...document.querySelectorAll('button')].find(x => x.textContent.trim() === @@ && x.offsetParent !== null); if (b) b.click(); return !!b; })()".replace("@@", json.dumps(texte))
 
 
+CHAMP = "document.querySelector('#modalCorps input[placeholder^=\"Chemin\"]')"
+
+
+def saisir(page, selecteur, texte):
+    """Écrit dans un champ (valeur donnée comme du texte JSON : aucun caractère ne casse l'expression)."""
+    page.evaluer("(() => { const c = %s; c.value = %s; return true; })()" % (selecteur, json.dumps(texte)))
+
+
+def cliquer_dans_ligne(page, nom, bouton_texte):
+    """Clique le bouton d'une ligne de la liste des dossiers de travail (celle qui contient `nom`)."""
+    page.evaluer("(() => { const l = [...document.querySelectorAll('#listeTravaux .conv')].find(x => x.textContent.includes(%s)); [...l.querySelectorAll('button')].find(b => b.textContent === %s).click(); })()" % (json.dumps(nom), json.dumps(bouton_texte)))
+
+
 def onglet(nom):
     return "document.querySelector('.onglets button[data-p=\"{}\"]').click()".format(nom)
 
@@ -69,10 +82,12 @@ class Parcours(unittest.TestCase):
             self.assertTrue((tmp / "home" / "donnees" / "conversations" / "aabbccdd.json").is_file(), "la conversation est vraiment reprise")
             self.assertEqual(p.erreurs, [], "aucune erreur JavaScript")
 
-    def test_dossiers_de_travail_choisir_ajouter_retirer(self):
+    def test_dossiers_de_travail_choisir_ajouter_deplacer_retirer(self):
         with self.captures.serveur_demo() as (port, tmp):
-            autre = tmp / "Autre"
+            autre, rangement = tmp / "Autre", tmp / "Rangement"
             autre.mkdir()
+            rangement.mkdir()
+            (autre / "notes.txt").write_text("mes notes", encoding="utf-8")
             p = self.ouvrir(tmp, "http://127.0.0.1:%d/" % port)
             self.assertFalse(p.evaluer("!!document.querySelector('#selTravail')"), "plus de sélecteur de dossier dans la barre latérale")
             p.evaluer(onglet("reglages"))
@@ -80,17 +95,85 @@ class Parcours(unittest.TestCase):
             # choisir l'autre dossier
             p.evaluer(bouton("Utiliser ce dossier"))
             p.attendre("document.querySelector('#listeTravaux').textContent.includes('★ Documents')")
-            # ajouter un dossier (la boîte « chemin » est simulée)
-            p.evaluer("window.prompt = (q, d) => (q.includes('Chemin') ? " + json.dumps(str(autre)) + " : 'Autre')")
+            # ajouter un dossier avec le navigateur de dossiers : on tape son chemin, on l'ouvre, on le choisit
             p.evaluer(bouton("Ajouter un dossier…"))
+            p.attendre("!!" + CHAMP)
+            saisir(p, CHAMP, str(autre))
+            p.evaluer(bouton("Ouvrir"))
+            p.attendre("document.querySelector('#modalCorps').textContent.includes('Aucun sous-dossier')")
+            p.evaluer(bouton("Ajouter ce dossier"))
             p.attendre("document.querySelector('#listeTravaux').textContent.includes('★ Autre')")
+            # déplacer ses fichiers ailleurs : « Rangement » le contiendra
+            cliquer_dans_ligne(p, "Autre", "Déplacer…")
+            p.attendre(bouton("Déplacer les fichiers vers un autre endroit"))
+            p.attendre("!!" + CHAMP)
+            saisir(p, CHAMP, str(rangement))
+            p.evaluer(bouton("Ouvrir"))
+            p.attendre("document.querySelector('#modalCorps').textContent.includes('Aucun sous-dossier')")
+            p.evaluer(bouton("Déplacer ici"))
+            p.attendre("document.querySelector('#modal').hidden")
+            self.assertTrue((rangement / "Autre" / "notes.txt").is_file(), "les fichiers ont vraiment été déplacés")
+            self.assertFalse(autre.exists())
+            p.attendre("document.querySelector('#listeTravaux').textContent.includes('Rangement')")
+            # il a été déplacé à la main : on corrige seulement son chemin
+            (rangement / "Autre").rename(tmp / "Rendu")
+            cliquer_dans_ligne(p, "Autre", "Déplacer…")
+            p.attendre(bouton("Il a déjà été déplacé : indiquer où il est maintenant"))
+            p.attendre("!!" + CHAMP)
+            saisir(p, CHAMP, str(tmp / "Rendu"))
+            p.evaluer(bouton("Ouvrir"))
+            p.evaluer(bouton("C'est ici"))
+            p.attendre("document.querySelector('#modal').hidden")
+            p.attendre("document.querySelector('#listeTravaux').textContent.includes('Rendu')")
+            # un chemin qui n'existe pas : l'erreur est dite dans la fenêtre, rien ne casse
+            p.evaluer(bouton("Ajouter un dossier…"))
+            p.attendre("!!" + CHAMP)
+            saisir(p, CHAMP, str(tmp / "nexiste-pas"))
+            p.evaluer(bouton("Ouvrir"))
+            p.attendre("document.querySelector('#modalCorps .erreur').textContent.includes(\"n'existe pas\")")
+            p.evaluer(bouton("Annuler"))
             # retirer le dossier principal, puis tous les autres : c'est permis, Lutin retombe sur son dossier par défaut
             for nom in ("Projet", "Documents", "Autre"):
                 p.attendre("[...document.querySelectorAll('#listeTravaux .conv')].some(l => l.textContent.includes(@@))".replace("@@", json.dumps(nom)))
-                p.evaluer("(() => { const l = [...document.querySelectorAll('#listeTravaux .conv')].find(x => x.textContent.includes(@@)); [...l.querySelectorAll('button')].find(b => b.textContent === 'Retirer').click(); })()".replace("@@", json.dumps(nom)))
+                cliquer_dans_ligne(p, nom, "Retirer")
                 p.attendre("![...document.querySelectorAll('#listeTravaux .conv')].some(l => l.textContent.includes(@@))".replace("@@", json.dumps(nom)))
             self.assertIn("dossier par défaut", p.evaluer("document.querySelector('#listeTravaux').textContent"))
-            self.assertTrue(autre.is_dir(), "les fichiers ne sont jamais supprimés")
+            self.assertTrue((tmp / "Rendu" / "notes.txt").is_file(), "les fichiers ne sont jamais supprimés")
+            self.assertEqual(p.erreurs, [])
+
+    def test_liste_des_modeles_par_familles_sur_deux_lignes_et_sans_filtre_a_part(self):
+        with self.captures.serveur_demo() as (port, tmp):
+            p = self.ouvrir(tmp, "http://127.0.0.1:%d/" % port)
+            p.evaluer(onglet("modeles"))
+            p.attendre("document.querySelectorAll('#listeModeles details.famille').length > 3")
+            self.assertFalse(p.evaluer("!!document.querySelector('#listeModeles h2')"), "pas de section sans filtre tant que l'option n'est pas cochée")
+            # la famille du modèle installé est ouverte, les autres repliées : la liste se lit d'un coup d'œil
+            ouvertes = p.evaluer("[...document.querySelectorAll('#listeModeles details.famille')].filter(d => d.open).map(d => d.querySelector('summary b').textContent)")
+            fermees = p.evaluer("[...document.querySelectorAll('#listeModeles details.famille')].filter(d => !d.open).length")
+            self.assertIn("Qwen 3", ouvertes)
+            self.assertGreater(fermees, 2)
+            # tout ouvrir : chaque variante tient sur deux lignes (nom, taille, identifiant, boutons ; puis description)
+            p.evaluer("document.querySelectorAll('#listeModeles details.famille').forEach(d => d.open = true)")
+            hauteurs = p.evaluer("[...document.querySelectorAll('#listeModeles .mod')].map(m => m.offsetHeight)")
+            self.assertTrue(hauteurs and max(hauteurs) <= 70, "une variante : deux lignes au plus ({})".format(max(hauteurs)))
+            actif = p.evaluer("(() => { const m = document.querySelector('#listeModeles .mod.actif'); return m ? m.textContent : ''; })()")
+            self.assertIn("8 milliards", actif)
+            self.assertIn("actif", actif)
+            # l'option « avancés » : une section à part, avec ses avertissements, sans attendre le prochain rafraîchissement
+            nombre = p.evaluer("document.querySelectorAll('#listeModeles .mod').length")
+            p.evaluer("document.querySelector('#cAvance').click()")
+            p.attendre("!!document.querySelector('#listeModeles h2')", 8)
+            self.assertEqual(p.evaluer("document.querySelector('#listeModeles h2').textContent"), "Modèles sans filtre")
+            self.assertTrue(p.evaluer("document.querySelectorAll('#listeModeles .erreur').length >= 1"), "les avertissements sont montrés")
+            p.evaluer("document.querySelectorAll('#listeModeles details.famille').forEach(d => d.open = true)")
+            p.attendre("document.querySelectorAll('#listeModeles .mod').length > %d" % (nombre + 5))
+            self.assertIn("Dolphin 3", p.evaluer("document.querySelector('#listeModeles').textContent"), "les modèles sans filtre du catalogue sont là")
+            # replier une famille : la liste se redessine sans la rouvrir
+            p.evaluer("document.querySelector('#listeModeles details.famille').open = false")
+            p.evaluer("new Promise(r => setTimeout(r, 300))")
+            p.evaluer("document.querySelector('#cWeb').click()")                      # un réglage qui redessine la page
+            p.evaluer("new Promise(r => setTimeout(r, 1500))")
+            self.assertFalse(p.evaluer("document.querySelector('#listeModeles details.famille').open"), "la famille reste repliée")
             self.assertEqual(p.erreurs, [])
 
     def test_bouton_verifier_les_mises_a_jour_dit_pourquoi_ca_ne_marche_pas(self):

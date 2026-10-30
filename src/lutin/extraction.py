@@ -13,7 +13,7 @@ from pathlib import Path
 
 from .i18n import t as _t
 
-FORMATS = (".pdf", ".docx", ".odt", ".pptx", ".xlsx", ".html", ".htm")
+FORMATS = (".pdf", ".docx", ".odt", ".ods", ".odp", ".pptx", ".xlsx", ".html", ".htm")
 TAILLE_MAX = 30 * 1024 * 1024
 DECOMPRESSE_MAX = 80 * 1024 * 1024
 
@@ -501,7 +501,7 @@ def pdf(chemin):
 def parties(chemin):
     """[(titre de la partie, texte)] d'un document ; ErreurExtraction s'il est illisible."""
     ext = Path(chemin).suffix.lower()
-    fonctions = {".pdf": pdf, ".docx": docx, ".odt": odt, ".pptx": pptx, ".xlsx": xlsx, ".html": page_html, ".htm": page_html}
+    fonctions = {".pdf": pdf, ".docx": docx, ".odt": odt, ".ods": odt, ".odp": odt, ".pptx": pptx, ".xlsx": xlsx, ".html": page_html, ".htm": page_html}
     if ext not in fonctions:
         raise ErreurExtraction(_t("Format non géré : {}").format(ext))
     try:

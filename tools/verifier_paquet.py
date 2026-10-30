@@ -8,7 +8,7 @@ import zipfile
 from pathlib import Path
 
 DANS_LA_ROUE = ("lutin/__init__.py", "lutin/cli.py", "lutin/moteur.py", "lutin/web/index.html", "lutin/web/logo.svg", "lutin/web/lib/mermaid.min.js", "lutin/web/icones/icone-192.png",
-                "lutin/web/icones/icone-512.png", "lutin/web/icones/icone-180.png", "lutin/web/lutin.ico", "lutin/zone.py", "lutin/images.py", "lutin/planifie.py", "lutin/conseil.py", "lutin/extraction.py", "lutin/qr.py", "lutin/data/modeles.json", "lutin/data/CONTEXTE.md", "lutin/data/MEMOIRE.md", "lutin/data/en/CONTEXTE.md", "lutin/data/en/MEMOIRE.md", "lutin/i18n.py", "lutin/langues/messages.en.json", "lutin/langues/interface.en.json")
+                "lutin/web/icones/icone-512.png", "lutin/web/icones/icone-180.png", "lutin/web/lutin.ico", "lutin/zone.py", "lutin/sansconsole.py", "lutin/espaces.py", "lutin/travaux.py", "lutin/reprise.py", "lutin/modes.py", "lutin/pieces.py", "lutin/images.py", "lutin/planifie.py", "lutin/conseil.py", "lutin/extraction.py", "lutin/qr.py", "lutin/data/modeles.json", "lutin/data/CONTEXTE.md", "lutin/data/MEMOIRE.md", "lutin/data/en/CONTEXTE.md", "lutin/data/en/MEMOIRE.md", "lutin/i18n.py", "lutin/langues/messages.en.json", "lutin/langues/interface.en.json")
 JAMAIS = ("tests/", "docs/", "tools/", "assets/", "installateur/", ".github/", "docker/", "Dockerfile", ".git/", "__pycache__", ".pyc", "console.json", "config.json", ".log")
 
 

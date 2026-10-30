@@ -2,6 +2,21 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## 0.6.0
+
+- **Plus aucune fenêtre noire** : tout programme lancé par Lutin sans console (nvidia-smi, git, commandes…) l'est sans fenêtre ; une règle unique (`sansconsole.py`), mesurée, au lieu d'un correctif par appel.
+- **Serveur joignable partout où il doit l'être** : en plus de l'adresse du réseau, il répond toujours sur `127.0.0.1` ; le navigateur de la machine s'appaire tout seul (`#pin=`), et « Code PIN » de l'icône marche (le serveur *est* la machine).
+- **Dossiers de travail** : dossiers réseau (UNC, NAS) acceptés avec la vraie raison en cas de refus, navigateur de dossiers, déplacement d'un dossier (copie vérifiée, retour arrière), changement de chemin, copie Markdown des conversations dans le dossier de travail.
+- **Reprise d'un autre assistant** : un seul chemin donne skills, données et mémoire de l'ancienne instance, y compris sur un partage réseau.
+- **Modèles** : liste regroupée par famille, deux lignes par modèle ; le catalogue « avancé » propose enfin des modèles sans restriction (dix ajoutés, vérifiés sur le registre d'Ollama).
+- **Modes** : cinq (polyvalent par défaut, travail, écriture, recherche, discussion), expliqués dans les Réglages, `/mode` dans le chat.
+- **Pièces jointes** : en plus des images, documents (PDF, Word, LibreOffice, PowerPoint, Excel, HTML) et fichiers texte ou code, lus une fois et bornés à une part du contexte.
+- **Garde-fous plus rapides** : les mesures lentes (carte graphique, ComfyUI, disques) sont faites en parallèle et gardées quelques secondes, la taille du dossier de données se refait en arrière-plan, la taille du modèle chargé n'ajoute plus de requête.
+- **Installation et désinstallation** : l'installateur et le désinstalleur arrêtent d'abord le Lutin qui tourne (c'était la cause de « des dossiers n'ont pas pu être supprimés » et d'un lancement final qui n'ouvrait rien) ; s'il reste quelque chose, la liste et la cause sont affichées ; la désinstallation propose de supprimer aussi les données (non par défaut).
+- **Robustesse** : un `Content-Length` négatif ou illisible est refusé tout de suite au lieu de bloquer le serveur.
+
+**English.** No more black windows (one rule for every program Lutin starts without a console). The server now always answers on `127.0.0.1` as well as on the network address, the local browser pairs itself, and the tray icon's PIN works. Workspace folders: network folders (UNC, NAS) with the real reason when refused, a folder browser, moving a folder, changing its path, a Markdown copy of conversations. Taking over another assistant: one path for skills, data and memory, also on a network share. Models: grouped by family on two lines each; the advanced catalogue finally offers uncensored models. Five modes with `/mode`. Attachments: documents and text or code files in addition to images. Faster safeguards (parallel, short-lived measurements). The installer and uninstaller stop the running Lutin first (the cause of « some folders could not be removed » and of a final launch that opened nothing), list what is left and why, and offer to delete your data (No by default).
+
 ## 0.5.2
 
 - **Version affichée** : la page affichait une ancienne version (0.4.1) alors que la 0.5.1 était installée, quand une mise à jour laissait les métadonnées de l'ancienne à côté de la nouvelle. La plus haute est maintenant retenue, et l'installateur Windows nettoie les anciens fichiers de Lutin avant de copier les nouveaux.

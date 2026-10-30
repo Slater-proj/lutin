@@ -17,6 +17,7 @@ import zipfile
 from pathlib import Path
 
 from . import sauvegarde
+from . import travaux
 from .i18n import t as _t
 
 CATEGORIES = ("conversations", "memoire", "skills", "reglages")
@@ -38,6 +39,47 @@ class ErreurReprise(ValueError):
 
 def _premier_dossier(*candidats):
     return next((Path(c) for c in candidats if c and Path(c).is_dir()), None)
+
+
+NOMS_PROJET = ("assistant", "lutin", "Lutin")          # où l'ancien assistant range ses dossiers donnees/ et memoire/ dans un projet
+
+
+def _contient_donnees(d):
+    d = Path(d)
+    return any((d / n).is_dir() for n in ("donnees", "memoire")) or (d / "conversations").is_dir()
+
+
+def _enfant_avec_donnees(base):
+    """Le sous-dossier de `base` qui contient donnees/ ou memoire/ (les noms habituels d'abord), ou None."""
+    try:
+        enfants = [e for e in Path(base).iterdir() if e.is_dir()]
+    except OSError:
+        return None
+    for nom in NOMS_PROJET:
+        for e in enfants:
+            if e.name == nom and _contient_donnees(e):
+                return e
+    return next((e for e in sorted(enfants) if _contient_donnees(e)), None)
+
+
+def localiser(source, dossier_skills=None):
+    """Où sont les données, d'après ce que la personne a indiqué. Elle peut avoir donné le dossier de l'assistant (donnees/ et memoire/ dedans ; skills/ dedans ou à côté), le dossier du PROJET qui le
+    contient (assistant/ dedans), ou directement donnees/, memoire/ ou skills/. Renvoie (donnees, memoire, skills, dossier de l'assistant retenu) ; les dossiers absents valent None."""
+    base = Path(source)
+    if (base / "conversations").is_dir() and not (base / "donnees").is_dir():                 # donnees/ lui-même
+        b = base.parent
+        return base, _premier_dossier(b / "memoire"), _premier_dossier(dossier_skills, b / "skills", b.parent / "skills"), b
+    if base.name.lower() == "memoire" or (any((base / n).is_file() for n in MODELE_MEMOIRE) and not _contient_donnees(base)):          # memoire/ lui-même
+        b = base.parent
+        return _premier_dossier(b / "donnees"), base, _premier_dossier(dossier_skills, b / "skills", b.parent / "skills"), b
+    if base.name.lower() == "skills" and not _contient_donnees(base):                          # skills/ lui-même : l'assistant est un voisin
+        voisin = _enfant_avec_donnees(base.parent)
+        b = voisin or base.parent
+        return (_premier_dossier(b / "donnees") if voisin else None), (_premier_dossier(b / "memoire") if voisin else None), _premier_dossier(dossier_skills, base), b
+    b = base
+    if not _contient_donnees(base):                                                               # le projet qui contient l'assistant
+        b = _enfant_avec_donnees(base) or base
+    return _premier_dossier(b / "donnees"), _premier_dossier(b / "memoire"), _premier_dossier(dossier_skills, b / "skills", b.parent / "skills"), b
 
 
 def _extraire(archive, destination):
@@ -68,8 +110,13 @@ def _extraire(archive, destination):
 def ouvrir(source, dossier_skills=None):
     """Rend la détection de ce que la source contient : {conversations, memoire, skills, reglages} (listes de chemins sur le disque, valables pendant le `with`)."""
     source = Path(str(source).strip().strip('"')).expanduser()
-    if not source.exists():
-        raise ErreurReprise(_t("Ce dossier n'existe pas : {}").format(source))
+    fini, valeur = travaux.avec_delai(lambda: source.is_file())
+    if fini is None:
+        raise ErreurReprise(_t("Le dossier « {} » ne répond pas (plus de {} s) : un partage réseau éteint, un disque déconnecté ?").format(source, travaux.DELAI_DISQUE_S))
+    if not (fini and valeur):                        # ce n'est pas une archive : un dossier, qui doit exister et se lire (message précis pour un partage réseau)
+        raison = travaux.diagnostic(source)
+        if raison:
+            raise ErreurReprise(raison)
     nettoyage = None
     try:
         if source.is_file():
@@ -81,18 +128,12 @@ def ouvrir(source, dossier_skills=None):
             donnees, memoire = base / "donnees", base / "memoire"
             skills = _premier_dossier(dossier_skills, base / "skills")
         else:
-            base = source
-            if (base / "conversations").is_dir() and not (base / "donnees").is_dir():                 # on a donné le dossier « donnees » lui-même
-                donnees, memoire = base, _premier_dossier(base.parent / "memoire")
-                skills = _premier_dossier(dossier_skills, base.parent.parent / "skills")
-            else:
-                donnees, memoire = base / "donnees", base / "memoire"
-                skills = _premier_dossier(dossier_skills, base / "skills", base.parent / "skills")          # l'ancien assistant range ses skills dans le dossier du projet, au-dessus de lui
+            donnees, memoire, skills, base = localiser(source, dossier_skills)
         conv = sorted(p for p in (donnees / "conversations").glob("*.json") if p.is_file()) if donnees and (donnees / "conversations").is_dir() else []
         mem = sorted(p for p in memoire.glob("*.md") if p.is_file()) if memoire and Path(memoire).is_dir() else []
         sk = sorted(p for p in skills.glob("*.md") if p.is_file()) if skills else []
         reg = donnees / "reglages.json" if donnees and (donnees / "reglages.json").is_file() else None
-        d = {"conversations": conv, "memoire": mem, "skills": sk, "reglages": reg, "origine": str(source), "dossier_skills": str(skills) if skills else ""}
+        d = {"conversations": conv, "memoire": mem, "skills": sk, "reglages": reg, "origine": str(source), "dossier_utilise": str(base), "dossier_skills": str(skills) if skills else ""}
         if not (conv or mem or sk or reg):
             raise ErreurReprise(_t("Rien à reprendre dans {} (il faut des dossiers donnees/ et memoire/, ou des skills).").format(source))
         yield d

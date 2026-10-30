@@ -78,7 +78,7 @@ Le script installe la dernière version publiée dans un environnement privé, a
 | `lutin langue [fr\|en\|auto]` | langue de l'application |
 | `lutin doctor` | diagnostic à coller dans un rapport de problème (sans contenu personnel) |
 
-Au-delà de la discussion : tester ton PC, essai à blanc, chercher hors ligne dans tes PDF et documents Word, tâches planifiées, images, appairage d'un téléphone par QR code. Voir [docs/FEATURES.fr.md](docs/FEATURES.fr.md).
+Au-delà de la discussion : tester ton PC, essai à blanc, chercher hors ligne dans tes PDF et documents Word, tâches planifiées, pièces jointes (images, documents, code), cinq modes, appairage d'un téléphone par QR code. Voir [docs/FEATURES.fr.md](docs/FEATURES.fr.md).
 
 ## Les modèles
 

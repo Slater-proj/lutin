@@ -16,13 +16,18 @@ AIDE = """Commandes :
 Pendant une réponse : Ctrl+C l'arrête (ce qui est déjà fait est gardé)."""
 
 
+ALIAS_MODES = {"polyvalent": "polyvalent", "travail": "technique", "code": "technique", "technique": "technique", "ecriture": "scenario", "écriture": "scenario", "scenario": "scenario",
+               "recherche": "recherche", "discussion": "discussion"}
+NOMS_MODES = {"polyvalent": "polyvalent", "technique": "travail", "scenario": "écriture", "recherche": "recherche", "discussion": "discussion"}
+
+
 class Terminal:
     def __init__(self, client, entree=input, sortie=None, erreur=None):
         self.client, self.entree = client, entree
         self.sortie = sortie or (lambda t: (sys.stdout.write(t), sys.stdout.flush()))
         self.erreur = erreur or (lambda t: print(t, file=sys.stderr))
         self.conversation = ""
-        self.options = {"mode": "technique", "reflexion": False}
+        self.options = {"mode": "polyvalent", "reflexion": False}
         self.recentes = []
 
     def ecrire(self, texte="", fin="\n"):
@@ -99,9 +104,11 @@ class Terminal:
                 self.client.envoyer("/api/reglages", {"modele": arg})
             self.ecrire(_t("Modèle : ") + self.client.obtenir("/api/etat")["reglages"]["modele"])
         elif mot == "mode":
-            if arg in ("travail", "ecriture", _t("écriture")):
-                self.options["mode"] = "technique" if arg == "travail" else "scenario"
-            self.ecrire(_t("Mode : ") + ("travail" if self.options["mode"] == "technique" else _t("écriture")))
+            if arg in ALIAS_MODES:
+                self.options["mode"] = ALIAS_MODES[arg]
+            elif arg:
+                self.ecrire(_t("Modes : polyvalent, travail, écriture, recherche, discussion."))
+            self.ecrire(_t("Mode : ") + _t(NOMS_MODES[self.options["mode"]]))
         elif mot == "reflexion":
             self.options["reflexion"] = not self.options["reflexion"]
             self.ecrire(_t("Réflexion : ") + (_t("activée") if self.options["reflexion"] else _t("coupée")))

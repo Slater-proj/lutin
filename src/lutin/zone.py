@@ -95,6 +95,23 @@ def adresse(cfg):
     return "http://127.0.0.1:{}/".format(cfg["securite"]["port"])
 
 
+def adresse_ouverture(dossiers, cfg):
+    """L'adresse à ouvrir dans le navigateur. Au niveau « réseau », même le navigateur de cette machine s'appaire par code PIN : on en demande un au serveur (par la console, qui ne sert qu'à cette
+    machine) et on le met dans l'adresse (#pin=…), la page de connexion le valide toute seule. Sans réponse du serveur, l'adresse simple."""
+    base = adresse(cfg)
+    if cfg.get("securite", {}).get("niveau") == "reseau":
+        try:
+            from . import client
+            return base + "#pin=" + client.ClientLocal(dossiers["donnees"]).envoyer("/api/nouveau-pin", {})["pin"]
+        except Exception:  # noqa: BLE001 — le serveur démarre peut-être encore : la page de connexion demandera le code
+            pass
+    return base
+
+
+def ouvrir_interface(dossiers, cfg):
+    threading.Thread(target=lambda: webbrowser.open(adresse_ouverture(dossiers, cfg)), daemon=True, name="zone-ouvrir").start()
+
+
 def journaliser(dossiers, texte):
     try:
         Path(dossiers["donnees"]).mkdir(parents=True, exist_ok=True)
@@ -238,7 +255,7 @@ class Zone:
 
     def action(self, choix):
         if choix == MENU_OUVRIR:
-            webbrowser.open(adresse(self.cfg))
+            ouvrir_interface(self.dossiers, self.cfg)
         elif choix == MENU_PIN:
             threading.Thread(target=lambda: message(_t("Lutin : code PIN"), code_pin(self.dossiers)), daemon=True, name="zone-pin").start()
         elif choix == MENU_REDEMARRER:
@@ -256,7 +273,7 @@ class Zone:
             if msg == MESSAGE_ICONE:
                 evenement = lparam & 0xFFFF
                 if evenement in (WM_LBUTTONUP, WM_LBUTTONDBLCLK):
-                    webbrowser.open(adresse(self.cfg))
+                    ouvrir_interface(self.dossiers, self.cfg)
                 elif evenement in (WM_RBUTTONUP, WM_CONTEXTMENU):
                     self.afficher_menu()
                 return 0
@@ -290,7 +307,7 @@ def commande(dossiers, cfg):
         return 1
     mutex = kernel32.CreateMutexW(None, True, "Local\\LutinZone")
     if ctypes.get_last_error() == ERROR_ALREADY_EXISTS:
-        webbrowser.open(adresse(cfg))                 # déjà lancé : on montre l'interface au lieu d'en lancer une deuxième
+        webbrowser.open(adresse_ouverture(dossiers, cfg))                 # déjà lancé : on montre l'interface au lieu d'en lancer une deuxième
         return 0
     try:
         cfg = preparer(dossiers, cfg)

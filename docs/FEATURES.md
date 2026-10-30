@@ -29,15 +29,38 @@ Memory tab > **Scheduled tasks**: a request Lutin handles by itself at a set tim
 - Created, paused and deleted from this machine only (like workspace folders). *Run now* tests a task without waiting.
 - Lutin must be running at the set time (the page does not need to be open).
 
+## Attachments: images, documents, text and code files
+
+Click **📎** next to the message box, or paste (Ctrl+V) or drop files. Up to 4 **images** (PNG, JPEG, GIF, WebP, 8 MB each) and 5 **files** (20 MB each) per message:
+
+- **Documents**: PDF, Word, LibreOffice (text, sheets, slides), PowerPoint, Excel, HTML. The text is read once, on upload (a scanned PDF with no text is refused right away, with the reason).
+- **Text and code files**: notes, Markdown, CSV, JSON, logs, subtitles, and source code in the common languages (a text file is recognized by its content too, whatever its extension).
+
+The text of the files is added to your message **for the model only**: the conversation keeps just the name. Only the most recent messages replay their files, and a long file is cut to a share of the context window (with a note saying how much was cut), so it never swamps the model. Nothing in a file is ever executed. Files stay in Lutin's data folder (`pieces/`) and orphans are deleted after two days.
+
 ## Images
 
 Click **📎** next to the message box, or paste (Ctrl+V) or drop an image: PNG, JPEG, GIF or WebP, 8 MB and 4 images per message at most. If the current model cannot see images, Lutin switches for that request to an installed model that can (see the « Images » role in the Models tab), or tells you there is none and ignores the images. Images stay in Lutin's data folder (`images/`), only the most recent ones are sent back to the model, and orphan images are deleted after two days.
+
+## Modes
+
+Settings > **Mode** (or `/mode` in the chat) changes what Lutin may do, and how it behaves. Every file change and every command still asks for your approval in every mode.
+
+| Mode | Tools | When |
+|---|---|---|
+| **General** (default) | read, search, edit, commands, web, notes | everyday questions, writing, analysis, a bit of code |
+| **Work** | everything, including code symbols | understand, modify and test the files of a folder |
+| **Writing** | no commands; your documents and past conversations are recalled automatically | write, rephrase, search your documents |
+| **Research** | read-only: read, search, web; recall on | read and cross-check files, PDFs and notes, answer with sources, change nothing |
+| **Chat** | no tools | plain conversation, fastest |
 
 ## Access and devices
 
 The **Access** tab gathers who can use Lutin (level), the PIN code with a **QR code** to connect a phone by scanning it, and the list of connected devices (with *Revoke*). A level change that needs a restart shows a banner with a *Restart* button when Lutin can do it itself (`lutin` command or Docker), and says what to do otherwise. Details: [SECURITY.md](SECURITY.md).
 
 ## Workspace folders and the default folder
+
+Network folders (`\\server\share\folder`, a mapped drive, a NAS) work like any other: if one is refused, Lutin says why (the service account has no access, the share is off…). Use **Browse…** to pick a folder, **Move…** to move a folder (with its files) somewhere else (the same dialog lets Lutin just remember the new path when you moved the folder by hand). Settings also has a switch to keep a readable Markdown copy of every conversation in the working folder (`conversations-lutin/`).
 
 Everything about folders is in Settings > **Workspace folders** (the sidebar has no folder selector any more, to leave room). The folder in use is marked ★ and is also the one Lutin opens at startup: **Use this folder** changes it, now and for the next starts. **Add a folder…** adds one and **Remove** takes any folder out of the list, the principal one included (the files are never deleted). Removing the folder in use switches at once to the next one; with no folder left, Lutin works in its default folder (`Lutin`, in your personal folder).
 

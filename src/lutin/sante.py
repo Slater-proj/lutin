@@ -9,6 +9,7 @@ import os
 import secrets
 import shutil
 import subprocess
+import threading
 import time
 import urllib.request
 from . import moteur as _m
@@ -24,6 +25,26 @@ GO = 1024 ** 3
 
 
 CACHE_TAILLES = {}                                                             # dossier -> (date, octets) : mesurer un gros dossier coûte, on le fait au plus une fois par minute
+MEMO = {}                                                                      # mesure -> (date, valeur, fonction) : voir memo()
+RAFRAICHIS = set()                                                             # dossiers en cours de remesure en arrière-plan
+DUREE_MEMO = {"vram": 4, "comfy": 4, "disques": 30}                            # secondes : assez court pour rester juste, assez long pour qu'une rafale de demandes ne remesure pas à chaque fois
+
+
+def memo(cle, fonction):
+    """Résultat de fonction() gardé quelques secondes (DUREE_MEMO). Une mesure coûte cher (nvidia-smi lance un programme, ComfyUI et les disques réseau peuvent mettre du temps à répondre) et le
+    garde-fou en demande plusieurs avant CHAQUE message. Si la fonction a été remplacée (tests), la mesure gardée est ignorée."""
+    maintenant = time.monotonic()
+    gardee = MEMO.get(cle)
+    if gardee and gardee[2] is fonction and maintenant - gardee[0] < DUREE_MEMO[cle]:
+        return gardee[1]
+    valeur = fonction()
+    MEMO[cle] = (maintenant, valeur, fonction)
+    return valeur
+
+
+def oublier_mesures(*cles):
+    for c in cles or list(MEMO):
+        MEMO.pop(c, None)
 
 
 def memoire_vive():
@@ -74,12 +95,7 @@ def espace_disque(chemin):
     return None
 
 
-def taille_dossier(d, delai=4.0):
-    """Taille d'un dossier en octets (au plus quelques secondes de parcours ; résultat gardé une minute)."""
-    cle = str(d)
-    en_cache = CACHE_TAILLES.get(cle)
-    if en_cache and time.time() - en_cache[0] < 60:
-        return en_cache[1]
+def mesurer_dossier(cle, delai):
     total, limite = 0, time.time() + delai
     for racine, _, noms in os.walk(cle):
         for n in noms:
@@ -93,12 +109,33 @@ def taille_dossier(d, delai=4.0):
     return total
 
 
+def taille_dossier(d, delai=4.0):
+    """Taille d'un dossier en octets (au plus quelques secondes de parcours). Une mesure de plus d'une minute est renvoyée telle quelle et refaite en arrière-plan : parcourir un gros dossier de
+    données (ou un partage réseau) ne retarde donc jamais une réponse. Seule la toute première mesure se fait sur place."""
+    cle = str(d)
+    en_cache = CACHE_TAILLES.get(cle)
+    if en_cache is None:
+        return mesurer_dossier(cle, delai)
+    if time.time() - en_cache[0] >= 60 and cle not in RAFRAICHIS:
+        RAFRAICHIS.add(cle)
+
+        def refaire():
+            try:
+                mesurer_dossier(cle, delai)
+            finally:
+                RAFRAICHIS.discard(cle)
+        threading.Thread(target=refaire, daemon=True).start()
+    return en_cache[1]
+
+
 def dossier_modeles_ollama():
     return Path(os.environ.get("OLLAMA_MODELS") or (Path.home() / ".ollama" / "models"))
 
 
-def taille_modele(nom):
-    """Octets de mémoire vidéo qu'il faut au modèle : sa taille d'après Ollama, sinon celle annoncée dans la liste des modèles."""
+def taille_modele(nom, charge=None):
+    """Octets de mémoire vidéo qu'il faut au modèle : sa taille d'après Ollama (celle du modèle déjà chargé si on l'a, sinon la liste des modèles installés), sinon celle annoncée dans le catalogue."""
+    if charge and charge.get("taille"):
+        return int(charge["taille"])
     t = (_m.etat_ollama().get("tailles") or {}).get(nom)
     if t:
         return int(t)
@@ -162,7 +199,8 @@ def evaluer_sante(m, r, besoin_modele=0, charge=None):
 
 def etat_sante(r=None):
     r = r or _m.reglages()
-    return evaluer_sante(_m.mesures_systeme(), r, taille_modele(r["modele"]), _m.ps_modele(r["modele"]))
+    charge = _m.ps_modele(r["modele"])
+    return evaluer_sante(_m.mesures_systeme(), r, taille_modele(r["modele"], charge), charge)
 
 
 ALERTES_VUES = {}          # (conversation, ligne de santé) -> dernier niveau annoncé : un avertissement n'est répété que s'il change
@@ -172,7 +210,8 @@ def controle_avant_demande(r, emit, conv_id=""):
     """Garde-fou : avant de lancer le modèle, vérifie qu'il y a assez de mémoire et de place. Renvoie False (et explique pourquoi) si la demande risquerait de faire planter le PC."""
     if not _m.GARDE_RESSOURCES_ACTIF or not r.get("garde_ressources"):
         return True
-    besoin, charge = taille_modele(r["modele"]), _m.ps_modele(r["modele"])
+    charge = _m.ps_modele(r["modele"])
+    besoin = taille_modele(r["modele"], charge)
     sante = evaluer_sante(_m.mesures_systeme(), r, besoin, charge)
     vram = next((i for i in sante["items"] if i["id"] == "vram"), None)
     if vram and vram["niveau"] == "critique" and not charge:
@@ -181,6 +220,7 @@ def controle_avant_demande(r, emit, conv_id=""):
                 emit({"type": "info", "texte": "La carte graphique est trop pleine : je décharge les modèles d'Ollama restés en mémoire."})
                 _m.liberer_vram()
                 time.sleep(1.5)
+                oublier_mesures("vram")
                 sante = evaluer_sante(_m.mesures_systeme(), r, besoin, charge)
         except (urllib.error.URLError, OSError, ValueError):
             pass
@@ -217,6 +257,10 @@ def surveiller_comfy_une_fois():
 
 
 def boucle_surveillance():
+    try:
+        taille_dossier(_m.DONNEES)                  # première mesure du dossier de données faite ici, pas pendant la première demande
+    except Exception as erreur:  # noqa: BLE001
+        _m.journaliser("Mesure du dossier de données : {!r}".format(erreur))
     while True:
         try:
             surveiller_comfy_une_fois()

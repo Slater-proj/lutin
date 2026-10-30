@@ -57,7 +57,7 @@ def outil_lister(dossier="."):
 
 def rappel_formats():
     """Les extensions que `lire` passe par l'extraction de texte (PDF, Word, LibreOffice, PowerPoint, Excel)."""
-    return (".pdf", ".docx", ".odt", ".pptx", ".xlsx")
+    return (".pdf", ".docx", ".odt", ".ods", ".odp", ".pptx", ".xlsx")
 
 
 def outil_lire(chemin, debut=1, fin=None):
@@ -283,8 +283,9 @@ def purger_donnees():
             except OSError:
                 pass
     try:
-        from . import images
+        from . import images, pieces
         images.nettoyer()
+        pieces.nettoyer()
     except OSError:
         pass
     _m.CACHE_TAILLES.pop(str(_m.DONNEES), None)

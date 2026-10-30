@@ -69,18 +69,30 @@ if (-not (Test-Path (Join-Path $deux "lutin.ico"))) { Echec "lutin.ico manque (r
 $aide = (& cmd /c "`"$(Join-Path $deux 'bin\lutin.cmd')`" --help" 2>&1) -join " "
 if ($aide -notmatch "zone") { Echec "la commande zone (icone sans console) manque : $aide" }
 
+# 3c. Un Lutin qui tourne (icone, serveur) tient ses fichiers : l'installateur doit l'arreter lui-meme avant de les remplacer
+$tenu = Start-Process -FilePath (Join-Path $deux "python\python.exe") -ArgumentList @("-c", "import time; time.sleep(600)") -WindowStyle Hidden -PassThru
+Installer $deux @("/EMBEDDED=1") | Out-Null
+Start-Sleep -Seconds 1
+if (-not $tenu.HasExited) { $tenu.Kill(); Echec "la mise a jour par-dessus n'a pas arrete le Lutin qui tournait" }
+Write-Host "Mise a jour avec Lutin en marche : il est arrete avant"
+
 # 4. La commande de base fonctionne vraiment (pas seulement --version)
 $s = (& cmd /c "`"$(Join-Path $deux 'bin\lutin.cmd')`" securite" 2>&1) -join " "
 if ($s -notmatch "Level") { Echec "lutin securite : $s" }
 
-# 5. Desinstallation
+# 5. Desinstallation (avec un Lutin qui tourne : le desinstalleur l'arrete, rien ne reste)
 foreach ($d in @($un, $deux)) {
+    $python = if (Test-Path (Join-Path $d "python\python.exe")) { Join-Path $d "python\python.exe" } else { Join-Path $d "venv\Scripts\python.exe" }
+    $tenu = Start-Process -FilePath $python -ArgumentList @("-c", "import time; time.sleep(600)") -WindowStyle Hidden -PassThru
     $desinstalleur = Get-ChildItem $d -Filter "unins*.exe" | Select-Object -First 1
     if (-not $desinstalleur) { Echec "pas de desinstalleur dans $d" }
     $p = Start-Process -FilePath $desinstalleur.FullName -ArgumentList @("/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART") -Wait -PassThru
     if ($p.ExitCode -ne 0) { Echec "desinstallation : code $($p.ExitCode)" }
     for ($i = 0; $i -lt 20 -and (Test-Path $d); $i++) { Start-Sleep -Milliseconds 500 }
     if (Test-Path (Join-Path $d "bin")) { Echec "il reste des fichiers dans $d apres la desinstallation" }
+    if (-not $tenu.HasExited) { $tenu.Kill(); Echec "la desinstallation n'a pas arrete le Lutin qui tournait ($d)" }
+    $restes = @(Get-ChildItem $d -Recurse -Force -ErrorAction SilentlyContinue | Where-Object { $_.Name -notlike "unins*" })
+    if ($restes.Count -gt 0) { Echec "il reste $($restes.Count) element(s) dans $d : $($restes[0].FullName)" }
 }
 Write-Host "Desinstallation : propre"
 Remove-Item -Recurse -Force $base -ErrorAction SilentlyContinue

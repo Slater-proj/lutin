@@ -5,6 +5,8 @@ from . import acces as _acces
 from . import conseil as _conseil
 from . import donnees as _donnees
 from . import horsligne as _hl
+from . import modes as _modes
+from . import pieces as _pieces
 from . import images as _images
 from . import planifie as _plan
 from . import rappel as _rappel
@@ -56,7 +58,10 @@ class Gestionnaire(BaseHTTPRequestHandler):
 
     # ---- sécurité (voir lutin.securite) ----
     def _local(self):
-        return self.client_address[0] in ("127.0.0.1", "::1", "::ffff:127.0.0.1")
+        """La requête vient de cette machine : la boucle locale, ou l'adresse de la machine sur le réseau local (un navigateur d'ici qui ouvre http://192.168.x.y:8777 arrive avec cette adresse-là).
+        Une autre machine ne peut pas se faire passer pour elle : la connexion TCP n'aboutirait pas."""
+        ip = self.client_address[0]
+        return ip in ("127.0.0.1", "::1", "::ffff:127.0.0.1") or bool(_m.IP_LAN and ip == _m.IP_LAN)
 
     def _jeton_valide(self):
         donne = self.headers.get("X-Token") or ""
@@ -76,7 +81,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
     def _sur_cette_machine(self):
         """Le navigateur est sur cette machine : connexion de boucle locale, nom d'hôte de boucle locale, et aucun en-tête laissant croire qu'un relais (proxy, tunnel) a transmis une requête venue d'ailleurs."""
         relais = ("X-Forwarded-For", "X-Forwarded-Host", "X-Forwarded-Proto", "Forwarded", "Via", "X-Real-IP")
-        return self._local() and not any(self.headers.get(h) for h in relais) and _sec._est_boucle(_sec._sans_port(self.headers.get("Host") or ""))
+        return self._local() and not any(self.headers.get(h) for h in relais) and (_sec._est_boucle(_sec._sans_port(self.headers.get("Host") or "")) or bool(_m.IP_LAN and _sec._sans_port(self.headers.get("Host") or "") == _m.IP_LAN))
 
     def _configurateur(self):
         """Peut-on changer ce qui ouvre ou modifie la machine (dossiers de travail, niveau d'accès, restauration) ? Seulement depuis cette machine : au niveau « machine seulement », avec le jeton de la console,
@@ -130,7 +135,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
             o = _m.etat_ollama()
             r = _m.reglages()
             return self._envoyer(200, {"version": _m.VERSION, "ollama": o["actif"], "ollama_installe": bool(_m.chemin_ollama()), "installes": o["installes"], "modeles": _m.modeles_connus(o["installes"], o.get("tailles")), "modeles_masques": len(_m.lire_registre_modeles()["masques"]), "actives": list(_m.TOURS_ACTIFS),
-                                       "pulls": _m.PULLS, "reglages": r, "conversations": _m.conv_liste(), "racine": str(_m.RACINE),
+                                       "pulls": _m.PULLS, "reglages": r, "conversations": _m.conv_liste(), "racine": str(_m.RACINE), "donnees": str(_m.DONNEES),
                                        "outil": bool(self._outil_vivant()), "hors_ligne": _hl.actif(), "niveau": _m.SECURITE.niveau, "langue": _i18n.langue(), "langue_reglage": _i18n.langue_configuree(), "cpus": os.cpu_count() or 1, "redemarrage": {"necessaire": _acces.securite_enregistree() != _m.SECURITE, "possible": _acces.peut_redemarrer()}, "nouvelle_version": _m.nouvelle_version_lutin(), "travaux": _m.travaux_etat(), "configurateur": self._configurateur(),
                                        "bench": {"en_cours": _m.BENCH["en_cours"], "etape": _m.BENCH["etape"], "erreur": _m.BENCH["erreur"], "mesures": _bench.lire(_m.chemin_bench())}, "attentes": [{"id": a.id, "titre": a.titre, "detail": a.detail, "diff": a.diff} for a in _m.Attente.EN_COURS.values()]})
         if chemin == "/api/conseil":
@@ -171,6 +176,14 @@ class Gestionnaire(BaseHTTPRequestHandler):
             return self._envoyer(200, {"detecte": d, "resume": _pc.resume(d) if not _pc.est_vide(d) else "", "racine": str(_m.RACINE)})
         if chemin == "/api/travaux":
             return self._envoyer(200, dict(_m.travaux_etat(), modifiable=self._configurateur()))
+        if chemin == "/api/dossiers":                          # le navigateur de dossiers de la page : seulement pour qui peut gérer les dossiers de travail (cette machine)
+            if not self._configurateur():
+                return self._envoyer(403, {"erreur": _t("Les dossiers se parcourent depuis cette machine (niveau « cette machine seulement » ou navigateur de cette machine).")})
+            q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+            try:
+                return self._envoyer(200, _m.lister_dossiers((q.get("chemin") or [""])[0]))
+            except ValueError as e:
+                return self._envoyer(400, {"erreur": str(e)})
         if chemin == "/api/journal":
             m = re.search(r"[?&]n=(\d+)", self.path)
             return self._envoyer(200, {"entrees": _m.lire_journal(int(m.group(1)) if m else 200)})
@@ -261,6 +274,11 @@ class Gestionnaire(BaseHTTPRequestHandler):
         except (urllib.error.URLError, OSError, ValueError):
             return False
 
+    def _taille_corps(self):
+        """La taille annoncée du corps de la requête : un nombre positif ou nul ; une valeur absurde (négative ou pas un nombre) vaut « trop gros », jamais une lecture sans fin."""
+        brut = str(self.headers.get("Content-Length") or "0").strip()
+        return int(brut) if brut.isascii() and brut.isdigit() else 1 << 40
+
     def _restaurer(self):
         if not self._authentifie():
             return self._envoyer(401, {"erreur": "authentification requise"})
@@ -269,7 +287,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
         if not self._configurateur():
             return self._envoyer(403, {"erreur": _t("Une sauvegarde se restaure depuis cette machine (niveau « cette machine seulement ») ou avec la commande lutin restaurer.")})
         try:
-            return self._envoyer(200, _acces.restaurer_flux(self.rfile, int(self.headers.get("Content-Length") or 0)))
+            return self._envoyer(200, _acces.restaurer_flux(self.rfile, self._taille_corps()))
         except ValueError as e:
             return self._envoyer(400, {"erreur": str(e)})
 
@@ -279,11 +297,26 @@ class Gestionnaire(BaseHTTPRequestHandler):
             return self._envoyer(401, {"erreur": "authentification requise"})
         if not self._jeton_valide():
             return self._envoyer(403, {"erreur": "jeton invalide : recharge la page"})
-        taille = int(self.headers.get("Content-Length") or 0)
+        taille = self._taille_corps()
         if taille > _images.TAILLE_MAX:
             return self._envoyer(413, {"erreur": _t("Image trop grosse ({} Mo au plus).").format(_images.TAILLE_MAX // (1024 * 1024))})
         try:
             return self._envoyer(200, {"id": _images.enregistrer(self.rfile.read(taille))})
+        except ValueError as e:
+            return self._envoyer(400, {"erreur": str(e)})
+
+    def _document(self):
+        """Un document ou fichier texte joint : corps brut, nom dans l'en-tête X-Nom (encodé en URL), au plus 20 Mo ; le texte est extrait tout de suite."""
+        if not self._authentifie():
+            return self._envoyer(401, {"erreur": "authentification requise"})
+        if not self._jeton_valide():
+            return self._envoyer(403, {"erreur": "jeton invalide : recharge la page"})
+        taille = self._taille_corps()
+        if taille > _pieces.TAILLE_MAX:
+            return self._envoyer(413, {"erreur": _t("Fichier trop gros ({} Mo au plus).").format(_pieces.TAILLE_MAX // (1024 * 1024))})
+        try:
+            ident, nom, caracteres = _pieces.enregistrer(self.rfile.read(taille), urllib.parse.unquote(self.headers.get("X-Nom") or ""))
+            return self._envoyer(200, {"id": ident, "nom": nom, "caracteres": caracteres})
         except ValueError as e:
             return self._envoyer(400, {"erreur": str(e)})
 
@@ -292,9 +325,11 @@ class Gestionnaire(BaseHTTPRequestHandler):
             return
         if self.path == "/api/image":
             return self._image()
+        if self.path == "/api/document":
+            return self._document()
         if self.path == "/api/restaurer":                      # une archive .zip : corps brut, plus gros qu'un message
             return self._restaurer()
-        taille = int(self.headers.get("Content-Length") or 0)
+        taille = self._taille_corps()
         if taille > 2_000_000:
             return self._envoyer(413, {"erreur": "message trop gros"})
         try:
@@ -349,11 +384,15 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 return self._envoyer(200, _m.git_commit(donnees.get("message"), donnees.get("fichiers")))
             if self.path == "/api/travaux-choisir":
                 return self._envoyer(200, _m.choisir_travail(str(donnees.get("id", ""))))
-            if self.path in ("/api/travaux-ajouter", "/api/travaux-retirer"):
+            if self.path in ("/api/travaux-ajouter", "/api/travaux-retirer", "/api/travaux-deplacer", "/api/travaux-chemin"):
                 if not self._configurateur():
                     return self._envoyer(403, {"erreur": "Les dossiers de travail se gèrent depuis cette machine (niveau « cette machine seulement ») ou avec la commande lutin travaux."})
                 if self.path == "/api/travaux-ajouter":
                     return self._envoyer(200, _m.ajouter_travail(str(donnees.get("chemin", "")), str(donnees.get("nom", ""))))
+                if self.path == "/api/travaux-deplacer":
+                    return self._envoyer(200, _m.deplacer_travail(str(donnees.get("id", "")), str(donnees.get("parent", "")), str(donnees.get("nom", ""))))
+                if self.path == "/api/travaux-chemin":
+                    return self._envoyer(200, _m.changer_chemin_travail(str(donnees.get("id", "")), str(donnees.get("chemin", ""))))
                 return self._envoyer(200, _m.retirer_travail(str(donnees.get("id", ""))))
             if self.path in ("/api/reprise-detecter", "/api/reprise"):
                 if not self._configurateur():
@@ -494,6 +533,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
             return self._envoyer(400, {"erreur": "Écris un message (60 000 caractères au maximum)."})
         try:
             images = _images.verifier_liste(donnees.get("images"))
+            pieces = _pieces.verifier_liste(donnees.get("pieces"))
         except ValueError as erreur:
             return self._envoyer(400, {"erreur": str(erreur)})
         ident = str(donnees.get("conversation") or "")
@@ -526,6 +566,8 @@ class Gestionnaire(BaseHTTPRequestHandler):
             for k in ("modele", "reflexion", "mode"):
                 if k in donnees:
                     r[k] = donnees[k]
+            if not _modes.valide(r["mode"]):
+                return self._envoyer(400, {"erreur": "Mode inconnu."})
             self.send_response(200)
             self.send_header("Content-Type", "application/x-ndjson; charset=utf-8")
             self.send_header("Cache-Control", "no-store")
@@ -539,7 +581,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 except (OSError, ValueError):
                     pass
             emit({"type": "debut", "conversation": conv["id"]})
-            _m.tour(conv, texte, emit, r, stop, depuis, identite=self._identite(), images=images)
+            _m.tour(conv, texte, emit, r, stop, depuis, identite=self._identite(), images=images, pieces=pieces)
         finally:
             with _m.VERROU_TOURS:
                 _m.TOURS_ACTIFS.pop(conv["id"], None)

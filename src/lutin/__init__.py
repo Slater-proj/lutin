@@ -26,3 +26,7 @@ try:
     __version__ = version_installee()           # installé : la version vient des étiquettes git (voir pyproject.toml)
 except PackageNotFoundError:
     __version__ = "0.0.0+source"             # lancé depuis les sources, sans installation (tests, développement)
+
+from . import sansconsole  # noqa: E402
+
+sansconsole.activer()          # Windows sans console (icône de la zone de notification) : aucun programme lancé n'ouvre de fenêtre noire

@@ -19,6 +19,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 import socket
 from http.server import ThreadingHTTPServer
@@ -29,11 +30,8 @@ from . import __version__ as _VERSION_LUTIN
 from . import bench as _bench
 from . import catalogue as _catalogue
 from . import config as _config
-from . import projet_claude as _pc
-from . import reprise as _rep
 from . import i18n as _i18n
 from . import securite as _sec
-from . import travaux as _trav
 from .i18n import t as _t
 from .i18n import traduire as _tr
 from .ollama_client import Ollama as _Ollama
@@ -61,11 +59,11 @@ VERIFICATEUR = None          # fonction(portee) -> propositions de modèles ; fo
 _CATALOGUE = _catalogue.charger(os.environ.get("LUTIN_CATALOGUE") or None)
 MODELES = [{"id": m["id"], "nom": m["nom"], "phrase": m["phrase"], "go": m["go"], "role": max(m["notes"], key=m["notes"].get), "avance": bool(m.get("avance")),
             "avertissement": m.get("avertissement", ""), "licence": m["licence"], "capacites": m["capacites"]} for m in _CATALOGUE["modeles"]]
-REGLAGES_DEFAUT = {"modele": os.environ.get("LUTIN_MODELE") or "qwen3:8b", "avance": False, "num_ctx": 24576, "temperature": 0.6, "reflexion": False, "auto_ecriture": False, "auto_commandes": False, "mode": "technique", "num_predict": 0, "tours_max": 14, "web": True,
+REGLAGES_DEFAUT = {"modele": os.environ.get("LUTIN_MODELE") or "qwen3:8b", "avance": False, "num_ctx": 24576, "temperature": 0.6, "reflexion": False, "auto_ecriture": False, "auto_commandes": False, "mode": "polyvalent", "num_predict": 0, "tours_max": 14, "web": True,
                     "top_p": None, "top_k": None, "min_p": None, "repeat_penalty": None,          # None = valeur conseillée pour la famille du modèle (voir profil_echantillonnage)
                     "garde_ressources": True, "seuil_ram_go": 3.0, "seuil_disque_go": 10.0, "plafond_donnees_go": 2.0, "limite_ram_commande_go": 0.0,
                     "liberer_si_comfy": True, "rappels_auto": "scenario",
-                    "num_thread": None, "garde_min": None, "essai_a_blanc": False}          # charge de la machine : cœurs du processeur utilisés et minutes de garde du modèle en mémoire (None = automatique)          # rappels_auto : « scenario » (mode scénariste seulement), « toujours » ou « jamais »
+                    "num_thread": None, "garde_min": None, "essai_a_blanc": False, "copie_conversations": False}          # charge de la machine : cœurs du processeur utilisés et minutes de garde du modèle en mémoire (None = automatique)          # rappels_auto : « scenario » (mode scénariste seulement), « toujours » ou « jamais »
 CHOIX_RAPPELS = ("scenario", "toujours", "jamais")
 BORNES_CHARGE = {"num_thread": (1, 256), "garde_min": (0, 240)}
 BORNES_RESSOURCES = {"seuil_ram_go": (0.5, 64.0), "seuil_disque_go": (1.0, 2000.0), "plafond_donnees_go": (0.2, 500.0), "limite_ram_commande_go": (0.0, 256.0)}
@@ -347,7 +345,9 @@ from .sante import (  # noqa: F401  (déplacé dans sante.py : moteur ré-export
     evaluer_sante,
     go,
     lancer_autotest,
+    memo,
     memoire_video,
+    oublier_mesures,
     memoire_vive,
     niveau_seuil,
     surveiller_comfy_une_fois,
@@ -366,11 +366,17 @@ def etat_comfy():
         return {"actif": False, "en_cours": 0, "attente": 0}
 
 
+def mesurer_disques():
+    return {"Ollama (modèles)": espace_disque(dossier_modeles_ollama()), "Projet": espace_disque(RACINE), "Données de l'assistant": espace_disque(DONNEES)}
+
+
 def mesures_systeme():
-    """Toutes les mesures brutes d'un coup (séparées de leur interprétation, pour pouvoir tester celle-ci)."""
-    return {"ram": memoire_vive(), "vram": memoire_video(), "comfy": etat_comfy(),
-            "disques": {"Ollama (modèles)": espace_disque(dossier_modeles_ollama()), "Projet": espace_disque(RACINE), "Données de l'assistant": espace_disque(DONNEES)},
-            "donnees_octets": taille_dossier(DONNEES)}
+    """Toutes les mesures brutes d'un coup (séparées de leur interprétation, pour pouvoir tester celle-ci). Les mesures lentes (carte graphique, ComfyUI, disques) se font en parallèle et
+    sont gardées quelques secondes (sante.memo) ; la taille du dossier de données se refait en arrière-plan."""
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        vram, comfy, disques = pool.submit(memo, "vram", memoire_video), pool.submit(memo, "comfy", etat_comfy), pool.submit(memo, "disques", mesurer_disques)
+        ram, octets = memoire_vive(), taille_dossier(DONNEES)
+        return {"ram": ram, "vram": vram.result(), "comfy": comfy.result(), "disques": disques.result(), "donnees_octets": octets}
 
 
 from .revue import (  # noqa: F401  (déplacé dans revue.py : moteur ré-exporte ses noms)
@@ -401,7 +407,6 @@ def git(args, delai=60):
 
 from .dialogue import (  # noqa: F401  (déplacé dans dialogue.py : moteur ré-exporte ses noms)
     CAPACITES,
-    OUTILS_ABSENTS_EN_SCENARIO,
     OUTILS_WEB,
     PULLS,
     RAPPEL_APPEL,
@@ -566,129 +571,6 @@ def definir_racine(chemin):
         RAPPEL["signature"] = None
 
 
-def activer_travail(conv, demande=""):
-    """Dossier de travail de cette conversation : le sien s'il en a un, sinon celui demandé, sinon le dossier actif. Appelé avec VERROU_TOURS tenu.
-    Une seule racine à la fois : si une autre réponse travaille dans un autre dossier, celle-ci attend. Sans dossier configuré (tests, usage direct), la racine ne change pas."""
-    cfg = config_lue()
-    t = _trav.par_id(cfg, conv["travail"]) if conv.get("travail") else None
-    if conv.get("travail") and t is None:
-        raise ValueError("Le dossier de travail de cette conversation (« {} ») n'est plus dans la liste. Ajoute-le de nouveau, ou ouvre une nouvelle conversation.".format(conv["travail"]))
-    if t is None:
-        t = _trav.par_id(cfg, demande) if demande else None
-        t = t or _trav.actif(cfg)
-    if t is None:
-        return None
-    chemin = Path(t["chemin"])
-    if not chemin.is_dir():
-        raise ValueError("Le dossier de travail « {} » n'existe plus ({}).".format(t["nom"], t["chemin"]))
-    if any(r != str(chemin.resolve()) for r in RACINE_TOURS.values()):
-        raise ValueError("Une réponse est en cours dans un autre dossier de travail : attends sa fin, ou arrête-la.")
-    definir_racine(chemin)
-    conv["travail"] = t["id"]
-    return t
-
-
-def travaux_etat():
-    cfg = config_lue()
-    liste = _trav.liste(cfg)
-    courant = next((t["id"] for t in liste if _trav.cle(t["chemin"]) == _trav.cle(RACINE)), "")
-    return {"liste": liste, "actif": courant or (_trav.actif(cfg) or {}).get("id", "")}
-
-
-def choisir_travail(ident):
-    cfg = config_lue()
-    t = _trav.par_id(cfg, ident)
-    if not t:
-        raise ValueError("Dossier de travail inconnu.")
-    if not Path(t["chemin"]).is_dir():
-        raise ValueError("Ce dossier n'existe plus : " + t["chemin"])
-    with VERROU_TOURS:
-        if any(r != str(Path(t["chemin"]).resolve()) for r in RACINE_TOURS.values()):
-            raise ValueError("Une réponse est en cours dans un autre dossier de travail : attends sa fin pour changer.")
-        definir_racine(t["chemin"])
-    _trav.choisir(cfg, ident)
-    if chemin_config():
-        config_ecrire(cfg)
-    return travaux_etat()
-
-
-def ajouter_travail(chemin, nom):
-    cfg = config_lue()
-    _trav.ajouter(cfg, chemin, nom, dossiers_de_lutin())
-    config_ecrire(cfg)
-    return travaux_etat()
-
-
-def importer_projet_claude(chemin, mode, vers="", nom=""):
-    """Reprend un projet « Claude » (CLAUDE.md, .claude/) : `ici` = on travaille dans le dossier lui-même, `copie` = dans une copie (l'original n'est jamais touché). Le dossier devient un dossier de travail
-    et le dossier actif."""
-    source = Path(chemin.strip()).expanduser()
-    if not source.is_dir():
-        raise ValueError(_t("Ce dossier n'existe pas : {}").format(source))
-    d = _pc.detecter(source)
-    if _pc.est_vide(d):
-        raise ValueError(_t("Ni CLAUDE.md ni dossier .claude/ dans ce dossier : ce n'est pas un projet Claude (pour l'utiliser quand même, ajoute-le comme dossier de travail)."))
-    if mode not in ("ici", "copie"):
-        raise ValueError(_t("Mode inconnu (ici ou copie)."))
-    if mode == "copie":
-        destination = Path(vers.strip()).expanduser() if vers.strip() else Path.home() / "Lutin" / source.name
-        cible = _pc.copier(source, destination)
-    else:
-        cible = source.resolve()
-    etat = ajouter_travail(str(cible), nom.strip() or source.name)
-    ident = next((t["id"] for t in etat["liste"] if _trav.cle(t["chemin"]) == _trav.cle(cible)), "")
-    choisi = True
-    try:
-        etat = choisir_travail(ident)
-    except ValueError:
-        choisi = False          # une réponse travaille ailleurs : le dossier est ajouté, on le choisira ensuite
-    return {"mode": mode, "chemin": str(cible), "resume": _pc.resume(d), "actif": choisi, "travaux": etat}
-
-
-def reprise_detecter(chemin, dossier_skills=""):
-    """Ce qu'on peut reprendre dans le dossier (ou l'archive .zip) d'un autre assistant : des nombres, rien n'est écrit. Avec les dossiers de travail où poser les skills."""
-    with _rep.ouvrir(chemin, dossier_skills or None) as d:
-        cfg = config_lue()
-        liste = [dict(t, claude=_rep.est_projet_claude(t["chemin"])) for t in _trav.liste(cfg)]
-        actif = _trav.actif(cfg)
-        cible = Path(actif["chemin"]) if actif else RACINE
-        return dict(_rep.decrire(d), dossier_skills=d["dossier_skills"], travaux=liste, actif=travaux_etat()["actif"], cible_skills=str(cible / "skills"))
-
-
-def reprise_importer(chemin, choix, dossier_skills="", ecraser=False, cible=""):
-    """Reprend les catégories choisies (conversations, memoire, skills, reglages) ; l'état actuel est gardé dans un zip avant. `cible` : identifiant du dossier de travail où poser les skills (défaut : l'actif)."""
-    racine = RACINE
-    if cible:
-        t = _trav.par_id(config_lue(), cible)
-        if not t:
-            raise ValueError(_t("Dossier de travail inconnu."))
-        racine = Path(t["chemin"])
-    c = chemin_config()
-    dossiers = {"config": c.parent if c else None, "donnees": DONNEES, "memoire": MEMOIRE}
-    with _rep.ouvrir(chemin, dossier_skills or None) as d:
-        rapport = _rep.importer(d, dossiers, choix, racine_travail=racine, ecraser=ecraser, workspaces=[t["id"] for t in _trav.liste(config_lue())])
-    rapport["resume"] = _rep.resume(rapport)
-    return rapport
-
-
-def retirer_travail(ident):
-    cfg = config_lue()
-    t = _trav.par_id(cfg, ident)
-    with VERROU_TOURS:
-        if t and str(Path(t["chemin"]).resolve()) in RACINE_TOURS.values():
-            raise ValueError("Une réponse travaille dans ce dossier : attends sa fin.")
-    _trav.retirer(cfg, ident)
-    config_ecrire(cfg)
-    with VERROU_TOURS:
-        if t and str(Path(t["chemin"]).resolve()) == str(RACINE):          # le dossier qu'on retire était le courant : on bascule tout de suite
-            suivant = _trav.actif(cfg)
-            defaut = Path.home() / "Lutin"
-            if not suivant:
-                defaut.mkdir(parents=True, exist_ok=True)
-            definir_racine(suivant["chemin"] if suivant else defaut)
-    return travaux_etat()
-
-
 # --------------------------------------------------------------------------- journal des actions (qui a modifié quoi, lancé quelle commande, avec quel accord)
 JOURNAL_MAX = 5_000_000
 OUTILS_JOURNALISES = {"ecrire", "modifier", "modifier_plusieurs", "executer", "installer_module"}
@@ -776,6 +658,20 @@ def arreter_conversation(ident):
     return {"ok": True, "actif": True}
 
 
+from .espaces import (  # noqa: F401  (déplacé dans espaces.py : moteur ré-exporte ses noms)
+    activer_travail,
+    ajouter_travail,
+    changer_chemin_travail,
+    choisir_travail,
+    deplacer_travail,
+    importer_projet_claude,
+    lister_dossiers,
+    reprise_detecter,
+    reprise_importer,
+    retirer_travail,
+    travaux_etat,
+)
+
 from .serveur import (  # noqa: F401  (déplacé dans serveur.py : moteur ré-exporte ses noms)
     Gestionnaire,
 )
@@ -861,6 +757,23 @@ def traiter_proposition(cle, appliquer):
     return {"ok": True}
 
 
+ADRESSES_LOCALES = ("127.0.0.1", "localhost", "::1")
+
+
+def ecouter_aussi_en_local(hote):
+    """Au niveau réseau (ou proxy distant) le serveur se lie à l'adresse du réseau local seulement : 127.0.0.1 ne répondrait plus, donc ni l'icône de la zone de notification ni
+    `lutin pin` / `lutin chat` ne pourraient joindre le serveur de leur propre machine. On ouvre alors aussi 127.0.0.1 (même port, même protection). Renvoie ce second serveur, ou None."""
+    if hote in ADRESSES_LOCALES or hote in ("0.0.0.0", "", "::"):
+        return None
+    try:
+        local = ThreadingHTTPServer(("127.0.0.1", PORT), Gestionnaire)
+    except OSError as erreur:
+        journaliser("Impossible d'écouter aussi sur 127.0.0.1:{} : {!r}".format(PORT, erreur))
+        return None
+    threading.Thread(target=local.serve_forever, daemon=True, name="ecoute-locale").start()
+    return local
+
+
 def ecrire_fichier_console(hote):
     """Adresse et jeton de la console locale (lutin chat) : un fichier que seul l'utilisateur de cette machine peut lire."""
     f = DONNEES / "console.json"
@@ -906,11 +819,15 @@ def principal():
     IP_LAN = ip_locale() if SECURITE.niveau != _sec.LOCAL else ""
     hote = _sec.adresse_ecoute(SECURITE, IP_LAN)
     serveur = ThreadingHTTPServer((hote, PORT), Gestionnaire)
-    ecrire_fichier_console(hote)
-    adresse = "http://{}:{}".format("127.0.0.1" if hote in ("0.0.0.0", "") else hote, PORT)
+    boucle_locale = ecouter_aussi_en_local(hote)
+    en_local = boucle_locale is not None or hote in ADRESSES_LOCALES
+    ecrire_fichier_console("127.0.0.1" if en_local else hote)          # la console de cette machine (lutin pin, lutin chat, l'icône) passe toujours par 127.0.0.1
+    adresse = "http://{}:{}".format("127.0.0.1" if en_local or hote in ("0.0.0.0", "") else hote, PORT)
     print(_t("Lutin        : {}   (niveau de sécurité : {})").format(adresse, SECURITE.niveau))
+    pin = ""
     if SECURITE.niveau == _sec.RESEAU:
-        print(_t("Code PIN     : {}   (valable {} min ; pour appairer un appareil)").format(APPAREILS.nouveau_pin(), _sec.DUREE_PIN_S // 60))
+        pin = APPAREILS.nouveau_pin()
+        print(_t("Code PIN     : {}   (valable {} min ; pour appairer un appareil)").format(pin, _sec.DUREE_PIN_S // 60))
     if SECURITE.niveau == _sec.PROXY:
         print(_t("Adresse publique : {}   (proxy de confiance : {})").format(SECURITE.url_publique, ", ".join(SECURITE.proxy_ips)))
     print(_t("Journal      : {}").format(DONNEES / "lutin.log"))
@@ -918,7 +835,7 @@ def principal():
     if "--sans-navigateur" not in sys.argv and not os.environ.get("LUTIN_SANS_NAVIGATEUR"):
         try:
             import webbrowser
-            threading.Timer(1.0, lambda: webbrowser.open(adresse)).start()
+            threading.Timer(1.0, lambda: webbrowser.open(adresse + ("/#pin=" + pin if pin else ""))).start()          # au niveau réseau, le navigateur de cette machine s'appaire tout seul avec ce code
         except Exception:  # noqa: BLE001
             pass
     try:

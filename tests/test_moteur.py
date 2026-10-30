@@ -208,6 +208,7 @@ os.environ.update({"LUTIN_WEB_LOCAL": "1", "LUTIN_RECHERCHE_URL": URL_WEB + "/re
                    "OLLAMA_URL": "http://127.0.0.1:%d" % S_OLLAMA.server_address[1], "LUTIN_OUTIL_URL": "http://127.0.0.1:%d" % S_OUTIL.server_address[1]})
 sys.path.insert(0, str(ICI.parent / "src"))
 from lutin import moteur as A  # noqa: E402
+from lutin.donnees import DOSSIER_COPIES  # noqa: E402
 
 S_ASSISTANT = lancer(A.Gestionnaire)
 BASE = "http://127.0.0.1:%d" % S_ASSISTANT.server_address[1]
@@ -1346,6 +1347,78 @@ class Assistant(unittest.TestCase):
                 shutil.rmtree(base / nom, ignore_errors=True)
             A.CACHE_TAILLES.clear()
 
+    def test_taille_de_corps_absurde(self):
+        """Un Content-Length négatif ou illisible ne bloque pas le serveur dans une lecture sans fin : il est refusé tout de suite."""
+        import http.client
+        hote = urllib.parse.urlparse(BASE)
+        for valeur in ("-5", "abc", "1e3", "99999999999999"):
+            for chemin in ("/api/reglages", "/api/image", "/api/document"):
+                c = http.client.HTTPConnection(hote.hostname, hote.port, timeout=10)
+                try:
+                    c.putrequest("POST", chemin)
+                    c.putheader("X-Token", A.JETON)
+                    c.putheader("Content-Length", valeur)
+                    c.endheaders()
+                    self.assertEqual(c.getresponse().status, 413, (valeur, chemin))
+                finally:
+                    c.close()
+
+    def test_mesures_du_garde_fou_gardees_et_paralleles(self):
+        """Le garde-fou passe avant chaque message : une mesure lente (nvidia-smi, ComfyUI, disque réseau) n'est pas refaite à chaque fois, et ne bloque pas les autres."""
+        from lutin import sante
+        appels = {"vram": 0, "comfy": 0}
+
+        def vram():
+            appels["vram"] += 1
+            time.sleep(0.3)
+            return {"nom": "X", "total": 8 * GO, "utilise": 0, "libre": 8 * GO}
+
+        def comfy():
+            appels["comfy"] += 1
+            time.sleep(0.3)
+            return {"actif": False, "en_cours": 0, "attente": 0}
+        vrais = A.memoire_video, A.etat_comfy
+        A.memoire_video, A.etat_comfy = vram, comfy
+        sante.oublier_mesures()
+        try:
+            debut = time.time()
+            A.mesures_systeme()
+            self.assertLess(time.time() - debut, 0.55, "carte graphique et ComfyUI sont mesurés en même temps, pas l'un après l'autre")
+            debut = time.time()
+            A.mesures_systeme()
+            self.assertLess(time.time() - debut, 0.2, "la seconde demande réutilise les mesures")
+            self.assertEqual(appels, {"vram": 1, "comfy": 1})
+            sante.oublier_mesures("vram")
+            A.mesures_systeme()
+            self.assertEqual(appels, {"vram": 2, "comfy": 1}, "on peut forcer une nouvelle mesure (après avoir déchargé un modèle)")
+        finally:
+            A.memoire_video, A.etat_comfy = vrais
+            sante.oublier_mesures()
+        # une mesure gardée ne survit pas au remplacement de sa fonction
+        sante.oublier_mesures()
+        self.assertEqual(sante.memo("vram", lambda: 1), 1)
+        self.assertEqual(sante.memo("vram", lambda: 2), 2)
+
+    def test_taille_du_dossier_de_donnees_sans_attente(self):
+        from lutin import sante
+        d = TEMP / "mesure-taille"
+        shutil.rmtree(d, ignore_errors=True)
+        d.mkdir()
+        (d / "a.bin").write_bytes(b"x" * 1000)
+        sante.CACHE_TAILLES.pop(str(d), None)
+        self.assertEqual(sante.taille_dossier(d), 1000, "la toute première mesure est faite sur place")
+        (d / "b.bin").write_bytes(b"x" * 500)
+        self.assertEqual(sante.taille_dossier(d), 1000, "une mesure récente est renvoyée telle quelle")
+        sante.CACHE_TAILLES[str(d)] = (time.time() - 120, 1000)
+        self.assertEqual(sante.taille_dossier(d), 1000, "une vieille mesure est renvoyée aussitôt, la nouvelle se fait en arrière-plan")
+        fin = time.time() + 5
+        while time.time() < fin and sante.CACHE_TAILLES[str(d)][1] != 1500:
+            time.sleep(0.05)
+        self.assertEqual(sante.taille_dossier(d), 1500)
+        shutil.rmtree(d, ignore_errors=True)
+        # la taille d'un modèle déjà chargé vient d'Ollama sans autre requête
+        self.assertEqual(sante.taille_modele("n'importe-quoi", {"taille": 123, "vram": 100}), 123)
+
     def test_sante_et_autotest(self):
         vrai = A.mesures_systeme
         A.mesures_systeme = mesures_saines
@@ -1436,6 +1509,92 @@ class Assistant(unittest.TestCase):
         for fichier in (contexte, memoire):
             for personnel in ("RTX", "illustrateur", "Aurore", "Datura", "poube"):
                 self.assertNotIn(personnel, fichier)
+
+    def test_les_cinq_modes_et_leurs_outils(self):
+        """Polyvalent (défaut), code et projet, écriture, recherche en lecture seule, discussion sans outils : chacun a son jeu d'outils et sa consigne."""
+        from lutin import modes
+        base = dict(A.reglages(), web=True)
+
+        def noms(mode):
+            return {t["function"]["name"] for t in A.outils_du_mode(dict(base, mode=mode))}
+        tous = {t["function"]["name"] for t in A.OUTILS}
+        self.assertEqual(A.REGLAGES_DEFAUT["mode"], "polyvalent", "un nouveau Lutin démarre en polyvalent")
+        self.assertEqual(modes.ids(), ("polyvalent", "technique", "scenario", "recherche", "discussion"))
+        self.assertIn("executer", noms("polyvalent"))
+        self.assertIn("ecrire", noms("polyvalent"))
+        self.assertNotIn("symboles", noms("polyvalent"), "la recherche de définitions est propre au mode code")
+        self.assertIn("symboles", noms("technique"))
+        ecritures = {"ecrire", "modifier", "modifier_plusieurs", "executer", "installer_module"}
+        self.assertFalse(ecritures & noms("recherche"), "la recherche ne peut ni écrire ni lancer de commande")
+        self.assertTrue({"lire", "chercher", "rappeler", "lire_plusieurs", "lister", "web_chercher"} <= noms("recherche"))
+        self.assertEqual(noms("discussion"), set(), "aucun outil en discussion")
+        self.assertEqual(noms("technique") | noms("scenario") | noms("polyvalent") | noms("recherche"), tous, "rien d'oublié : chaque outil existe dans au moins un mode")
+        consignes = {m: modes.consigne(m) for m in modes.ids()}
+        self.assertEqual(len(set(consignes.values())), 5, "une consigne différente par mode")
+        self.assertIn("RECHERCHE", consignes["recherche"])
+        self.assertTrue(modes.rappels_par_defaut("scenario") and modes.rappels_par_defaut("recherche"))
+        self.assertFalse(modes.rappels_par_defaut("polyvalent") or modes.rappels_par_defaut("discussion"))
+
+    def test_mode_discussion_n_envoie_aucun_outil_au_modele(self):
+        ev = chat("Salut, ça va ?", reponses=[[{"content": "Très bien."}]], mode="discussion")
+        self.assertNotIn("tools", RECUES[-1], "pas d'outils envoyés : c'est ce qui rend ce mode rapide")
+        self.assertEqual(texte_de(ev), "Très bien.")
+        self.assertNotIn("ne sait pas appeler d'outils", " ".join(e.get("texte", "") for e in ev if e["type"] == "info"), "ce n'est pas un défaut du modèle : aucun message")
+        self.assertIn("DISCUSSION", RECUES[-1]["messages"][0]["content"])
+
+    def test_mode_recherche_ne_peut_rien_ecrire_ni_lancer(self):
+        cible = PROJET / "docs" / "recherche-interdit.txt"
+        cible.unlink(missing_ok=True)
+        ev = chat("Écris un fichier", reponses=[[appel_outil("ecrire", chemin="docs/recherche-interdit.txt", contenu="x\n")], [appel_outil("executer", commande="echo x> recherche-cmd.txt")], [{"content": "Je ne peux pas."}]], mode="recherche")
+        self.assertFalse(cible.exists())
+        self.assertFalse((PROJET / "recherche-cmd.txt").exists())
+        self.assertFalse(any(e["type"] == "approbation" for e in ev), "aucune demande d'accord : l'outil n'existe pas dans ce mode")
+        self.assertIn("RECHERCHE", RECUES[0]["messages"][0]["content"])
+        ev = chat("Lis", reponses=[[appel_outil("lire", chemin="docs/univers.md")], [{"content": "Lu."}]], mode="recherche")
+        self.assertEqual(texte_de(ev), "Lu.", "lire fonctionne")
+
+    def test_mode_inconnu_refuse(self):
+        post("/api/reglages", {"mode": "pirate"}, attendu=400)
+        req = urllib.request.Request(BASE + "/api/chat", data=json.dumps({"message": "x", "mode": "pirate"}).encode("utf-8"), headers={"Content-Type": "application/json", "X-Token": A.JETON})
+        with self.assertRaises(urllib.error.HTTPError) as e:
+            urllib.request.urlopen(req, timeout=30)
+        self.assertEqual(e.exception.code, 400)
+
+    def test_copie_lisible_des_conversations_dans_le_dossier_de_travail(self):
+        """Réglage coché : un fichier .md par conversation dans conversations-lutin/, mis à jour, renommé avec le titre, sans jamais empêcher d'enregistrer."""
+        import shutil
+        from lutin import donnees
+        dossier = PROJET / DOSSIER_COPIES
+        shutil.rmtree(dossier, ignore_errors=True)
+        chat("Pas de copie par défaut", reponses=[[{"content": "ok"}]])
+        self.assertFalse(dossier.exists(), "rien n'est écrit dans ton dossier tant que la case n'est pas cochée")
+        post("/api/reglages", {"copie_conversations": True})
+        try:
+            ev = chat("Bonjour, peux-tu résumer docs/univers.md ?", reponses=[[appel_outil("lire", chemin="docs/univers.md")], [{"content": "Voici le résumé."}]])
+            ident = [e for e in ev if e["type"] == "debut"][0]["conversation"]
+            copies = list(dossier.glob("*-{}.md".format(ident)))
+            self.assertEqual(len(copies), 1, "une seule copie par conversation")
+            texte = copies[0].read_text(encoding="utf-8")
+            self.assertIn("## Moi", texte)
+            self.assertIn("Bonjour, peux-tu résumer", texte)
+            self.assertIn("## Lutin", texte)
+            self.assertIn("Voici le résumé.", texte)
+            self.assertIn("`lire`", texte, "les outils sont cités en une ligne")
+            avant = copies[0].stat().st_mtime_ns
+            c = A.conv_lire(ident)
+            donnees.copier_dans_le_dossier_de_travail(c)
+            self.assertEqual(copies[0].stat().st_mtime_ns, avant, "une copie inchangée n'est pas réécrite")
+            post("/api/renommer", {"id": ident, "titre": "Résumé de l'univers"})
+            c = A.conv_lire(ident)
+            A.conv_ecrire(c)
+            copies = list(dossier.glob("*-{}.md".format(ident)))
+            self.assertEqual([f.name for f in copies], [donnees.nom_de_copie(c)], "le titre a changé : l'ancien nom disparaît")
+            self.assertIn("resume-de-l-univers", copies[0].name)
+            with mock.patch.object(donnees, "ecrire_atomique", side_effect=[None, OSError("disque plein")]):        # la conversation s'écrit, la copie échoue : rien ne casse
+                A.conv_ecrire(A.conv_lire(ident))
+        finally:
+            post("/api/reglages", {"copie_conversations": False})
+            shutil.rmtree(dossier, ignore_errors=True)
 
     def test_outils_selon_le_mode(self):
         base = A.reglages()
@@ -1884,6 +2043,60 @@ class Assistant(unittest.TestCase):
         images.nettoyer()
         self.assertFalse((images.dossier() / orpheline).exists())
         self.assertTrue((images.dossier() / citee).exists(), "une image citée par une conversation reste")
+
+    def test_fichiers_joints(self):
+        """Documents et fichiers texte : téléversés, lus une fois, ajoutés au message pour le modèle seulement, bornés, nettoyés."""
+        from lutin import pieces
+
+        def televerser(octets, nom):
+            req = urllib.request.Request(BASE + "/api/document", data=octets, headers={"Content-Type": "application/octet-stream", "X-Token": A.JETON, "X-Nom": urllib.parse.quote(nom)})
+            try:
+                with urllib.request.urlopen(req, timeout=15) as r:
+                    return r.status, json.loads(r.read().decode("utf-8"))
+            except urllib.error.HTTPError as e:
+                return e.code, json.loads(e.read().decode("utf-8"))
+        statut, r = televerser("Bonjour, voici ma note.\nÉté 2026\n".encode("cp1252"), "dossier/note.txt")
+        self.assertEqual((statut, r["nom"], r["caracteres"]), (200, "note.txt", len("Bonjour, voici ma note.\nÉté 2026")))
+        ident = r["id"]
+        self.assertEqual(televerser(b"print('x')\n", "x.py")[0], 200)
+        self.assertEqual(televerser(b"", "vide.txt")[0], 400)
+        self.assertEqual(televerser(b"\x00\x01\x02binaire" * 50, "x.bin")[0], 400, "un binaire inconnu est refusé")
+        self.assertEqual(televerser(b"pas un pdf", "faux.pdf")[0], 400, "un PDF illisible est signalé tout de suite")
+        post("/api/chat", {"message": "lis", "pieces": [{"id": "0" * 20 + ".txt", "nom": "x"}]}, attendu=400)
+        post("/api/chat", {"message": "lis", "pieces": [{"id": ident, "nom": "n"}] * 6}, attendu=400)
+        ev = chat("Résume", pieces=[{"id": ident, "nom": "note.txt"}], reponses=[[{"content": "C'est une note."}]])
+        recu = RECUES[-1]["messages"][-1]["content"]
+        self.assertIn("Résume", recu)
+        self.assertIn("voici ma note", recu)
+        self.assertNotIn("pieces", RECUES[-1]["messages"][-1])
+        conv = A.conv_lire([e for e in ev if e["type"] == "debut"][0]["conversation"])
+        self.assertEqual(conv["messages"][0]["content"], "Résume", "la conversation enregistrée ne contient pas le texte du fichier")
+        self.assertEqual(conv["messages"][0]["pieces"], [{"id": ident, "nom": "note.txt"}])
+        # borne : un long fichier est coupé avec mention, sans toucher la conversation
+        gros, _, _ = pieces.enregistrer(b"ligne de texte\n" * 1000, "gros.txt")
+        coupe = pieces.pour_le_modele([{"role": "user", "content": "q", "pieces": [{"id": gros, "nom": "gros.txt"}]}], 0)[0]["content"]
+        self.assertIn("caractères coupés", coupe)
+        self.assertLess(len(coupe), pieces.PARTIE_MIN + 400)
+        # les vieilles pièces ne sont plus rejouées
+        msgs = [{"role": "user", "content": "a", "pieces": [{"id": ident, "nom": "note.txt"}]}] + [{"role": "assistant", "content": "x"}] * 7 + [{"role": "user", "content": "b"}]
+        self.assertIn("non rejoué", pieces.pour_le_modele(msgs, 10000)[0]["content"])
+        self.assertNotIn("voici ma note", pieces.pour_le_modele(msgs, 10000)[0]["content"])
+        # une pièce disparue ne casse pas la demande
+        (pieces.dossier() / ident).unlink()
+        (pieces.dossier() / (ident + ".texte")).unlink(missing_ok=True)
+        self.assertIn("devenu illisible", pieces.pour_le_modele(conv["messages"], 10000)[0]["content"])
+        # nettoyage : l'orpheline ancienne part, la citée reste
+        orpheline, _, _ = pieces.enregistrer(b"orpheline unique\n", "o.txt")
+        citee, _, _ = pieces.enregistrer(b"citee unique\n", "c.txt")
+        c = A.conv_nouvelle()
+        c["messages"].append({"role": "user", "content": "x", "pieces": [{"id": citee, "nom": "c.txt"}]})
+        A.conv_ecrire(c)
+        vieux = time.time() - 5 * 86400
+        for i in (orpheline, citee):
+            os.utime(pieces.dossier() / i, (vieux, vieux))
+        pieces.nettoyer()
+        self.assertFalse((pieces.dossier() / orpheline).exists())
+        self.assertTrue((pieces.dossier() / citee).exists())
 
     def test_export_de_sauvegarde(self):
         req = urllib.request.Request(BASE + "/api/sauvegarde", headers={"X-Token": A.JETON})

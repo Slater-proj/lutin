@@ -8,6 +8,8 @@ import re
 import secrets
 import shutil
 import time
+import unicodedata
+from . import modes as _modes
 from . import moteur as _m
 
 
@@ -38,7 +40,7 @@ def enregistrer_reglages(nouveau):
     for k in _m.REGLAGES_DEFAUT:
         if k in nouveau:
             r[k] = nouveau[k]
-    if r["mode"] not in ("technique", "scenario"):
+    if not _modes.valide(r["mode"]):
         raise ValueError("Mode inconnu.")
     if not re.match(r"^[A-Za-z0-9_./:-]{1,100}$", str(r["modele"])):
         raise ValueError("Nom de modèle invalide.")
@@ -47,6 +49,7 @@ def enregistrer_reglages(nouveau):
     r["tours_max"] = max(4, min(40, int(r.get("tours_max", 14))))
     r["web"] = bool(r.get("web", True))
     r["essai_a_blanc"] = bool(r.get("essai_a_blanc"))
+    r["copie_conversations"] = bool(r.get("copie_conversations"))
     _m.nettoyer_echantillonnage(r)
     _m.nettoyer_ressources(r)
     ecrire_atomique(_m.DONNEES / "reglages.json", json.dumps(r, ensure_ascii=False, indent=1))
@@ -261,6 +264,73 @@ def conv_ecrire(c):
         except OSError:
             pass
     ecrire_atomique(f, json.dumps(c, ensure_ascii=False))
+    try:
+        copier_dans_le_dossier_de_travail(c)
+    except OSError as erreur:                               # une copie impossible (dossier en lecture seule, disque réseau absent) ne doit jamais empêcher d'enregistrer la conversation
+        _m.journaliser("Copie de la conversation {} dans le dossier de travail impossible : {!r}".format(c.get("id"), erreur))
+
+
+DOSSIER_COPIES = "conversations-lutin"
+
+
+def conv_markdown(c):
+    """La conversation en Markdown lisible : tes messages, les réponses ; les outils en une ligne ; les images et fichiers joints cités par leur nom."""
+    lignes = ["# " + (c.get("titre") or _t("Conversation sans titre")), "", "*" + str(c.get("date", ""))[:16].replace("T", " ") + "*", ""]
+    if c.get("resume"):
+        lignes += ["> " + _t("Résumé du début de la conversation : ") + " ".join(str(c["resume"]).split())[:600], ""]
+    for m in c.get("messages", []):
+        role, texte = m.get("role"), (m.get("content") or "").strip()
+        if role == "user":
+            lignes += ["## " + _t("Moi"), "", texte]
+            if m.get("images"):
+                lignes += ["", "*" + _t("{} image(s) jointe(s)").format(len(m["images"])) + "*"]
+            for piece in m.get("pieces") or []:
+                lignes += ["", "*" + _t("Fichier joint : {}").format(piece.get("nom", "")) + "*"]
+            lignes.append("")
+        elif role == "assistant":
+            for appel in m.get("tool_calls") or []:
+                f = appel.get("function") or {}
+                lignes += ["> " + _t("outil") + " `" + str(f.get("name", "")) + "` " + json.dumps(f.get("arguments", {}), ensure_ascii=False)[:160], ""]
+            if texte:
+                lignes += ["## Lutin", "", texte, ""]
+        elif role == "tool":
+            lignes += ["> ↳ " + (m.get("tool_name") or _t("résultat")) + " : " + " ".join(texte.split())[:200], ""]
+    return "\n".join(lignes).rstrip() + "\n"
+
+
+def nom_de_copie(c):
+    titre = unicodedata.normalize("NFKD", c.get("titre") or "conversation").encode("ascii", "ignore").decode().lower()
+    titre = re.sub(r"[^a-z0-9]+", "-", titre).strip("-")[:50] or "conversation"
+    return "{}-{}-{}.md".format(str(c.get("date", ""))[:10] or "sans-date", titre, c["id"])
+
+
+def dossier_de_travail_de(c):
+    """Le dossier de travail de cette conversation (le sien, sinon le dossier courant)."""
+    from . import travaux as _trav
+    t = _trav.par_id(_m.config_lue(), c["travail"]) if c.get("travail") else None
+    return Path(t["chemin"]) if t else _m.RACINE
+
+
+def copier_dans_le_dossier_de_travail(c):
+    """Si le réglage est coché : une copie lisible (Markdown) de la conversation dans `conversations-lutin/` du dossier de travail. Écrite seulement si elle change. Renvoie le chemin ou None."""
+    if not _m.reglages().get("copie_conversations") or not c.get("messages"):
+        return None
+    dossier = dossier_de_travail_de(c) / DOSSIER_COPIES
+    if not dossier.parent.is_dir():
+        return None
+    texte = conv_markdown(c)
+    f = dossier / nom_de_copie(c)
+    for ancien in dossier.glob("*-" + c["id"] + ".md") if dossier.is_dir() else []:
+        if ancien != f:                                  # le titre a changé : l'ancien nom disparaît, la conversation n'a qu'une copie
+            ancien.unlink(missing_ok=True)
+    try:
+        if f.is_file() and f.read_text(encoding="utf-8") == texte:
+            return f
+    except OSError:
+        pass
+    dossier.mkdir(exist_ok=True)
+    ecrire_atomique(f, texte)
+    return f
 
 
 CACHE_CONV = {}          # chemin -> (date de modification, taille, entrée de liste) : la page demande la liste toutes les 4 s, on ne relit que ce qui a changé

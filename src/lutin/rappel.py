@@ -10,6 +10,7 @@ import os
 import re
 import unicodedata
 from . import extraction
+from . import modes as _modes
 from . import moteur as _m
 
 
@@ -20,7 +21,7 @@ MOTS_VIDES = set("les des une dans pour par sur avec sans est sont ete etre elle
 RAPPEL = {"signature": None, "morceaux": [], "df": collections.Counter(), "moyenne": 1.0, "erreurs": []}
 DOSSIERS_DOCUMENTS = ("docs", "documents")          # où poser ses PDF, documents Word, notes… : lus pour de vrai, avec page ou diapositive dans la citation
 DOCUMENTS_MAX = 300
-FORMATS_LUS_PAR_EXTRACTION = (".pdf", ".docx", ".odt", ".pptx", ".xlsx")
+FORMATS_LUS_PAR_EXTRACTION = (".pdf", ".docx", ".odt", ".ods", ".odp", ".pptx", ".xlsx")
 CACHE_PARTIES = {}
 
 
@@ -239,7 +240,7 @@ def rappels_automatiques(conv, r):
     """Passages des documents et des anciennes conversations liés à la dernière question, ajoutés au prompt sans que le modèle ait à les demander (mode scénariste par défaut).
     Renvoie (texte pour le prompt, liste des sources) ; vide si le réglage est coupé ou si rien de vraiment lié n'existe."""
     mode = r.get("rappels_auto", "scenario")
-    if mode == "jamais" or (mode == "scenario" and r.get("mode") != "scenario"):
+    if mode == "jamais" or (mode == "scenario" and not _modes.rappels_par_defaut(r.get("mode"))):
         return "", []
     question = next((m["content"] for m in reversed(conv["messages"]) if m.get("role") == "user" and m.get("content") and not m["content"].startswith("[")), "")
     if len(question) < 15:

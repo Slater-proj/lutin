@@ -263,5 +263,50 @@ class DansLeMoteurEtLaLigneDeCommande(Base):
             self.assertIn("Before the import, Lutin's state was kept in", sortie)
 
 
+class OuEstLaDonnee(Base):
+    """La personne peut donner le dossier du projet, celui de l'assistant, ou directement donnees/, memoire/ ou skills/ : on retrouve le bon endroit, et on le dit."""
+
+    # 4 fichiers .json dans l'ancien dossier : 2 conversations, un fichier cassé, un à l'identifiant interdit (l'import les écarte et le dit)
+    def compter(self, chemin):
+        with reprise.ouvrir(chemin) as d:
+            return (len(d["conversations"]), [m.name for m in d["memoire"]], len(d["skills"]), bool(d["reglages"]), Path(d["dossier_utilise"]))
+
+    def test_le_dossier_de_l_assistant(self):
+        self.assertEqual(self.compter(self.assistant)[:4], (4, ["CONTEXTE.md", "MEMOIRE.md"], 2, True))
+
+    def test_le_dossier_du_projet_qui_le_contient(self):
+        r = self.compter(self.assistant.parent)
+        self.assertEqual(r[:4], (4, ["CONTEXTE.md", "MEMOIRE.md"], 2, True), "rien n'est raté parce qu'on a donné le dossier au-dessus")
+        self.assertEqual(r[4], self.assistant, "l'écran dit quel dossier a été retenu")
+
+    def test_donnees_lui_meme(self):
+        r = self.compter(self.assistant / "donnees")
+        self.assertEqual(r[:3], (4, ["CONTEXTE.md", "MEMOIRE.md"], 2), "la mémoire et les skills voisins sont retrouvés aussi")
+
+    def test_memoire_elle_meme(self):
+        r = self.compter(self.assistant / "memoire")
+        self.assertEqual(r[:3], (4, ["CONTEXTE.md", "MEMOIRE.md"], 2))
+
+    def test_skills_eux_memes(self):
+        r = self.compter(self.assistant.parent / "skills")
+        self.assertEqual(r[:3], (4, ["CONTEXTE.md", "MEMOIRE.md"], 2), "l'assistant voisin est retrouvé")
+
+    def test_un_dossier_sans_rien_dit_qu_il_n_y_a_rien(self):
+        vide = Path(self.t.name) / "vide"
+        vide.mkdir()
+        with self.assertRaisesRegex(reprise.ErreurReprise, "Rien à reprendre"):
+            self.compter(vide)
+
+    def test_un_dossier_qui_n_existe_pas_donne_une_phrase_precise(self):
+        with self.assertRaisesRegex(reprise.ErreurReprise, "n'existe pas"):
+            self.compter(Path(self.t.name) / "absent")
+
+    def test_un_partage_reseau_introuvable_dit_quoi_verifier(self):
+        reseau = Path(chr(92) * 2 + "nas" + chr(92) + "partage")
+        with mock.patch.object(reprise.travaux, "avec_delai", side_effect=[(True, False), (True, (False, False, False))]):
+            with self.assertRaisesRegex(reprise.ErreurReprise, "réseau.*compte Windows"):
+                self.compter(reseau)
+
+
 if __name__ == "__main__":
     unittest.main()

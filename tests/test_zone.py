@@ -117,6 +117,24 @@ class Commande(unittest.TestCase):
     def test_adresse_selon_le_port(self):
         self.assertEqual(zone.adresse({"securite": {"port": 8790}}), "http://127.0.0.1:8790/")
 
+    def test_au_niveau_local_l_adresse_est_simple(self):
+        cfg = {"securite": {"niveau": "local", "port": 8790}}
+        self.assertEqual(zone.adresse_ouverture({"donnees": "x"}, cfg), "http://127.0.0.1:8790/")
+
+    def test_au_niveau_reseau_le_navigateur_de_cette_machine_s_appaire_avec_un_pin(self):
+        """Au niveau réseau, la page demande un code PIN même ici : l'icône en demande un au serveur et le glisse dans l'adresse (#pin=), la page de connexion le valide seule."""
+        from lutin import client
+        cfg = {"securite": {"niveau": "reseau", "port": 8790}}
+        with mock.patch.object(client.ClientLocal, "envoyer", return_value={"pin": "123456", "valable_s": 600}) as envoyer:
+            self.assertEqual(zone.adresse_ouverture({"donnees": "x"}, cfg), "http://127.0.0.1:8790/#pin=123456")
+        envoyer.assert_called_once_with("/api/nouveau-pin", {})
+
+    def test_serveur_pas_encore_pret_l_adresse_simple_suffit(self):
+        from lutin import client
+        cfg = {"securite": {"niveau": "reseau", "port": 8790}}
+        with mock.patch.object(client.ClientLocal, "envoyer", side_effect=client.ErreurClient("pas prêt")):
+            self.assertEqual(zone.adresse_ouverture({"donnees": "x"}, cfg), "http://127.0.0.1:8790/")
+
 
 @unittest.skipUnless(zone.disponible(), "fenêtre : Windows seulement")
 class MenuEtFenetre(unittest.TestCase):
@@ -133,11 +151,11 @@ class MenuEtFenetre(unittest.TestCase):
             z.menu()
         self.assertEqual([c.args[2] for c in ajout.call_args_list], [zone.MENU_PIN, zone.MENU_OUVRIR, zone.MENU_REDEMARRER, zone.MENU_QUITTER])
 
-    def test_ouvrir_ouvre_le_navigateur_sur_l_adresse_de_lutin(self):
+    def test_ouvrir_ouvre_l_interface(self):
         z, _ = self.zone()
-        with mock.patch.object(zone.webbrowser, "open") as ouvrir:
+        with mock.patch.object(zone, "ouvrir_interface") as ouvrir:
             z.action(zone.MENU_OUVRIR)
-        ouvrir.assert_called_once_with("http://127.0.0.1:8793/")
+        ouvrir.assert_called_once_with(z.dossiers, z.cfg)
 
     def test_redemarrer_redemarre_le_serveur(self):
         z, serveur = self.zone()
@@ -165,13 +183,13 @@ class MenuEtFenetre(unittest.TestCase):
         z, _ = self.zone()
         z.hwnd = 1
         with mock.patch.object(zone.user32, "TrackPopupMenu", return_value=zone.MENU_OUVRIR), mock.patch.object(zone.user32, "SetForegroundWindow"), \
-                mock.patch.object(zone.user32, "PostMessageW"), mock.patch.object(zone.webbrowser, "open") as ouvrir:
+                mock.patch.object(zone.user32, "PostMessageW"), mock.patch.object(zone, "ouvrir_interface") as ouvrir:
             z.traiter(1, zone.MESSAGE_ICONE, 1, zone.WM_RBUTTONUP)
         ouvrir.assert_called_once()
 
     def test_clic_gauche_ouvre_l_interface_sans_menu(self):
         z, _ = self.zone()
-        with mock.patch.object(zone.webbrowser, "open") as ouvrir, mock.patch.object(zone.user32, "TrackPopupMenu") as menu:
+        with mock.patch.object(zone, "ouvrir_interface") as ouvrir, mock.patch.object(zone.user32, "TrackPopupMenu") as menu:
             z.traiter(1, zone.MESSAGE_ICONE, 1, zone.WM_LBUTTONUP)
         ouvrir.assert_called_once()
         menu.assert_not_called()

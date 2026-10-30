@@ -29,15 +29,38 @@ Onglet Mémoire > **Tâches planifiées** : une demande que Lutin traite tout se
 - Création, pause et suppression depuis cette machine seulement (comme les dossiers de travail). *Lancer maintenant* teste une tâche sans attendre.
 - Lutin doit tourner à l'heure dite (la page n'a pas besoin d'être ouverte).
 
+## Pièces jointes : images, documents, fichiers texte et code
+
+Clique sur **📎** à côté de la zone de message, ou colle (Ctrl+V) ou glisse des fichiers. Jusqu'à 4 **images** (PNG, JPEG, GIF, WebP, 8 Mo chacune) et 5 **fichiers** (20 Mo chacun) par message :
+
+- **Documents** : PDF, Word, LibreOffice (texte, feuilles, diapositives), PowerPoint, Excel, HTML. Le texte est lu une fois, à l'envoi (un PDF scanné sans texte est refusé tout de suite, avec la raison).
+- **Fichiers texte et code** : notes, Markdown, CSV, JSON, journaux, sous-titres et code source des langages courants (un fichier texte est aussi reconnu à son contenu, quelle que soit son extension).
+
+Le texte des fichiers est ajouté à ton message **pour le modèle seulement** : la conversation ne garde que le nom. Seuls les derniers messages rejouent leurs fichiers, et un long fichier est coupé à une part de la fenêtre de contexte (avec une mention de ce qui a été coupé), pour ne jamais noyer le modèle. Rien dans un fichier n'est exécuté. Les fichiers restent dans le dossier de données de Lutin (`pieces/`) et les orphelins sont supprimés après deux jours.
+
 ## Images
 
 Clique sur **📎** à côté de la zone de message, ou colle (Ctrl+V) ou glisse une image : PNG, JPEG, GIF ou WebP, 8 Mo et 4 images par message au plus. Si le modèle courant ne voit pas les images, Lutin passe pour cette demande sur un modèle installé qui les voit (rôle « Images » de l'onglet Modèles), ou te dit qu'il n'y en a pas et ignore les images. Les images restent dans le dossier de données de Lutin (`images/`), seules les plus récentes sont renvoyées au modèle, et les images orphelines sont supprimées après deux jours.
+
+## Modes
+
+Réglages > **Mode** (ou `/mode` dans la conversation) change ce que Lutin peut faire et sa façon de faire. Toute modification de fichier et toute commande demandent ton accord dans tous les modes.
+
+| Mode | Outils | Quand |
+|---|---|---|
+| **Polyvalent** (par défaut) | lire, chercher, modifier, commandes, web, notes | questions de tous les jours, rédaction, analyse, un peu de code |
+| **Travail** | tout, y compris les symboles de code | comprendre, modifier et tester les fichiers d'un dossier |
+| **Écriture** | pas de commandes ; tes documents et anciennes conversations sont rappelés automatiquement | rédiger, reformuler, chercher dans tes documents |
+| **Recherche** | lecture seule : lire, chercher, web ; rappels activés | lire et recouper fichiers, PDF et notes, répondre avec les sources, ne rien changer |
+| **Discussion** | aucun outil | simple conversation, la plus rapide |
 
 ## Accès et appareils
 
 L'onglet **Accès** réunit qui peut utiliser Lutin (le niveau), le code PIN avec un **QR code** pour connecter un téléphone en le scannant, et la liste des appareils connectés (avec *Révoquer*). Un changement de niveau qui demande un redémarrage affiche un bandeau avec un bouton *Redémarrer* quand Lutin peut le faire lui-même (commande `lutin` ou Docker), et dit quoi faire sinon. Détails : [SECURITY.fr.md](SECURITY.fr.md).
 
 ## Dossiers de travail et dossier par défaut
+
+Les dossiers réseau (`\\serveur\partage\dossier`, un lecteur réseau, un NAS) marchent comme les autres : s'il est refusé, Lutin dit pourquoi (le compte du service n'y a pas accès, le partage est éteint…). **Parcourir…** choisit un dossier, **Déplacer…** le déplace (avec ses fichiers) ailleurs (la même fenêtre permet de retenir seulement le nouveau chemin quand tu l'as déplacé à la main). Un réglage garde aussi une copie Markdown lisible de chaque conversation dans le dossier de travail (`conversations-lutin/`).
 
 Tout ce qui concerne les dossiers est dans Réglages > **Dossiers de travail** (la barre latérale n'a plus de liste de dossiers, pour laisser de la place). Le dossier utilisé est marqué ★ et c'est aussi celui que Lutin ouvre au démarrage : **Utiliser ce dossier** le change, maintenant et pour les prochains démarrages. **Ajouter un dossier…** en ajoute un et **Retirer** sort n'importe quel dossier de la liste, le principal compris (les fichiers ne sont jamais supprimés). Retirer le dossier en cours passe tout de suite au suivant ; sans dossier restant, Lutin travaille dans son dossier par défaut (`Lutin`, dans ton dossier personnel).
 

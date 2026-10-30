@@ -2,6 +2,8 @@
 from pathlib import Path
 from . import horsligne as _hl
 from . import images as _images
+from . import modes as _modes
+from . import pieces as _pieces
 from . import projet_claude as _pc
 from .i18n import t as _t
 from datetime import datetime
@@ -38,21 +40,16 @@ RE_APPEL_XML = re.compile(r"<function=([A-Za-z_]+)>(.*?)</function>", re.S)
 RE_APPEL_JSON = re.compile(r"```(?:json)?\s*(\{.*?\})\s*```|^\s*(\{\s*\"name\".*\})\s*$", re.S)
 
 
-OUTILS_ABSENTS_EN_SCENARIO = {"executer", "etat_outil", "installer_module", "symboles"}          # le mode scénariste écrit et cherche dans les documents, il ne lance pas de commandes
-
-
 OUTILS_WEB = {"web_chercher", "web_lire"}
 
 
 def outils_du_mode(r):
-    """Les outils envoyés au modèle : tous en mode technique, sans commandes ni installation en mode scénariste, sans web si la case « Web » est décochée."""
-    exclus = set()
-    if r.get("mode") == "scenario":
-        exclus |= OUTILS_ABSENTS_EN_SCENARIO
+    """Les outils envoyés au modèle : ceux du mode (voir modes.py), sans web si la case « Web » est décochée ou en mode hors ligne, sans l'outil d'images s'il n'est pas branché."""
+    exclus = _modes.outils_exclus(r.get("mode"), [t["function"]["name"] for t in _m.OUTILS])
     if not r.get("web", True) or _hl.actif():
         exclus |= OUTILS_WEB
     if not _m.OUTIL:
-        exclus |= {"etat_outil", "installer_module"}
+        exclus |= _modes.IMAGES
     return [t for t in _m.OUTILS if t["function"]["name"] not in exclus]
 
 
@@ -306,9 +303,7 @@ def supprimer_modele(modele):
 
 def consignes_systeme(r):
     contexte, memoire = _m.lire_memoire("CONTEXTE.md"), _m.lire_memoire("MEMOIRE.md")
-    mode = (_t("Mode ÉCRITURE : tu aides à rédiger, à reformuler et à chercher dans les documents du dossier de travail. Tu ne lances pas de commandes. Sois inventif et précis, fidèle aux documents de l'utilisateur.")
-            if r["mode"] == "scenario" else
-            _t("Mode TRAVAIL : tu aides à comprendre, modifier et tester les fichiers du dossier de travail. Lis avant de modifier, fais de petits changements, lance les tests après s'il y en a, et dis clairement ce qui est vérifié ou non."))
+    mode = _modes.consigne(r["mode"])
     skills = _m.lister_skills()
     bloc_skills = ""
     if skills:
@@ -453,11 +448,11 @@ def compacter_conversation(ident):
     return {"ok": True, "avant": avant, "apres": len(conv["messages"]), "jauge": jauge_contexte(conv)}
 
 
-def tour(conv, texte, emit, r=None, stop=None, remplacer_depuis=None, identite="", lecture_seule=False, images=()):
+def tour(conv, texte, emit, r=None, stop=None, remplacer_depuis=None, identite="", lecture_seule=False, images=(), pieces=()):
     """Un tour de conversation : message de l'utilisateur, puis la boucle de l'agent (réponse, outils, réponse...). emit(evenement) envoie à la page.
     stop (threading.Event) : déclenché par le bouton Arrêter ; le tour s'arrête alors pour de bon (modèle, outils, accords). Fermer la page ne l'arrête pas.
     remplacer_depuis : indice d'un message de l'utilisateur à remplacer (modifier un message / régénérer) ; ce message et tout ce qui le suit sont retirés d'abord.
-    images : identifiants d'images jointes à ce message (voir images.py).
+    images : identifiants d'images jointes à ce message (voir images.py). pieces : documents et fichiers texte joints, [{id, nom}] (voir pieces.py).
     lecture_seule : tâches planifiées, où personne ne peut accepter : lecture et recherche seulement, tout le reste est simulé comme dans l'essai à blanc."""
     r = dict(r or _m.reglages())
     if lecture_seule:
@@ -505,9 +500,11 @@ def tour(conv, texte, emit, r=None, stop=None, remplacer_depuis=None, identite="
     if dernier and dernier.get("role") == "user" and dernier.get("content") == texte:
         emit({"type": "info", "texte": "Cette demande est déjà dans la conversation sans réponse : je la reprends sans la dupliquer."})
     else:
-        conv["messages"].append(dict({"role": "user", "content": texte}, **({"images": list(images)} if images else {})))
+        conv["messages"].append(dict({"role": "user", "content": texte}, **({"images": list(images)} if images else {}), **({"pieces": list(pieces)} if pieces else {})))
     if images and not any(m.get("images") for m in conv["messages"][-1:]):
         conv["messages"][-1]["images"] = list(images)           # demande reprise sans doublon : on lui rend ses images
+    if pieces and not conv["messages"][-1].get("pieces"):
+        conv["messages"][-1]["pieces"] = list(pieces)
     if conv["titre"] == "Nouvelle conversation":
         conv["titre"] = " ".join(texte.split())[:60]
     _m.reparer_conversation(conv)
@@ -552,7 +549,7 @@ def boucle_agent(conv, r, emit, ctx, stop):
         if conv.get("resume"):
             msgs.append({"role": "user", "content": "[Résumé de la conversation jusqu'ici]\n" + conv["resume"]})
             msgs.append({"role": "assistant", "content": "Compris, je continue."})
-        msgs += conv["messages"]
+        msgs += _pieces.pour_le_modele(conv["messages"], _pieces.budget_caracteres(r["num_ctx"]))          # le texte des fichiers joints s'ajoute ici, jamais dans la conversation enregistrée
         dernier_tour = idx_tour == tours_max - 1
         if dernier_tour:             # plus d'outils : le modèle doit répondre avec ce qu'il a trouvé
             msgs.append({"role": "user", "content": "Tu as assez d'informations. Réponds maintenant à ma demande avec ce que tu as vu, sans appeler d'outil. Si quelque chose manque, dis-le."})
@@ -578,7 +575,7 @@ def boucle_agent(conv, r, emit, ctx, stop):
                 else:
                     emit({"type": "info", "texte": _t("Ce modèle ne voit pas les images et aucun modèle « Images » n'est installé : elles sont ignorées. Onglet Modèles pour en installer un.")})
         corps = {"model": r["modele"], "messages": ajuster_contexte(msgs, r["num_ctx"], 1.0, outils), "stream": True, "options": options, "think": reflechit}
-        if not dernier_tour:
+        if not dernier_tour and outils:                      # mode « discussion » : aucun outil, donc rien à envoyer ni à signaler
             if caps is not None and "tools" not in caps:
                 if idx_tour == 0:
                     emit({"type": "info", "texte": "Ce modèle ne sait pas appeler d'outils : il répondra sans lire ni modifier les fichiers. Choisis un autre modèle (Qwen 3.8 ou Gemma 4) pour cela."})
