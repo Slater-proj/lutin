@@ -1496,6 +1496,40 @@ class Assistant(unittest.TestCase):
             else:
                 fichier.write_text(ancien, encoding="utf-8")
 
+    def test_addons_et_travail_de_fond_par_l_api(self):
+        """Les addons : liste sans secret, activation qui passe par la vérification, travail de fond créé, mis en pause, rapporté et supprimé par l'API ; rien de tout cela sans dossier de travail."""
+        from lutin import addons, fond
+        liste = lire("/api/addons")["liste"]
+        f = next(a for a in liste if a["id"] == "fond")
+        self.assertFalse(f["actif"], "désactivé par défaut")
+        self.assertIn("alertes", lire("/api/addons"))
+        self.assertIn("addons_alertes", lire("/api/etat"))
+        post("/api/addon-activer", {"id": "inconnu", "actif": True}, attendu=400)
+        post("/api/addon-reglages", {"id": "fond", "reglages": {"x": "1"}}, attendu=400)
+        self.assertTrue(post("/api/addon-activer", {"id": "fond", "actif": True})["actif"])
+        vrai = fond.dossier_autorise
+        dossier = TEMP / "fond-vide"
+        dossier.mkdir(exist_ok=True)
+        fond.dossier_autorise = lambda chemin: Path(chemin)
+        try:
+            post("/api/fond-creer", {"nom": "", "dossier": str(dossier), "consigne": "x"}, attendu=400)
+            t = post("/api/fond-creer", {"nom": "Essai", "dossier": str(dossier), "motifs": "*.pdf", "consigne": "Résume."})
+            self.assertEqual(lire("/api/fond")["liste"][0]["id"], t["id"])
+            post("/api/fond-action", {"id": t["id"], "action": "pause"})
+            self.assertTrue(lire("/api/fond")["liste"][0]["pause"])
+            post("/api/fond-action", {"id": t["id"], "action": "danse"}, attendu=400)
+            self.assertIn("Essai", lire("/api/fond-rapport?id=" + t["id"])["texte"])
+            post("/api/fond-action", {"id": t["id"], "action": "supprimer"})
+            self.assertEqual(lire("/api/fond")["liste"], [])
+        finally:
+            fond.dossier_autorise = vrai
+            post("/api/addon-activer", {"id": "fond", "actif": False})
+        self.assertFalse(next(a for a in lire("/api/addons")["liste"] if a["id"] == "fond")["actif"])
+        post("/api/fond-creer", {"nom": "x", "dossier": str(TEMP), "consigne": "x"}, attendu=400)          # pas un dossier de travail
+        post("/api/addon-correction", {"id": "fond"}, attendu=400)                                       # rien à réparer
+        post("/api/addon-flux", {"id": "fond", "flux": {"appels": {"x": {"url": "https://evil.example.com/"}}}}, attendu=400)
+        addons.restaurer_flux("fond")
+
     def test_mise_a_jour_depuis_la_page(self):
         import time
         from lutin import acces, cli

@@ -848,6 +848,8 @@ def principal():
     threading.Thread(target=boucle_surveillance, daemon=True).start()
     from . import planifie
     planifie.demarrer()
+    from . import addons
+    addons.demarrer_actifs()
     journaliser("Démarrage de Lutin (version {}, dossier de travail {}).".format(VERSION, RACINE))
     global IP_LAN
     problemes = SECURITE.valider()

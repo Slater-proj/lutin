@@ -2,6 +2,14 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## 0.7.0
+
+- **Les addons** : des fonctions facultatives livrées avec Lutin, désactivées par défaut, avec guide d'installation, vérification avant activation, revérification quotidienne, et un **flux** éditable (les appels faits à un service). Si un service change, l'addon passe en « à réparer » et Lutin propose une correction que tu valides (jamais appliquée seule, version livrée rétablissable). Un addon ne joint que les sites de son manifeste ; les secrets sont rangés à part.
+- **Premier addon : le travail de fond** — une consigne appliquée à tous les documents d'un dossier de travail (PDF, Word, notes), en lecture seule, reprenable, avec pause, rapport, mode régulier ; il cède la place aux conversations et s'arrête sur les erreurs.
+- Prochains addons prévus : Telegram, ComfyUI, puis courriel et X.
+
+**English.** Addons: optional features shipped with Lutin, off by default, with a setup guide, a check before enabling, a daily re-check and an editable **flow** (the calls made to a service). When a service changes, the addon shows “needs repair” and Lutin proposes a fix you approve (never applied on its own, shipped version restorable). An addon only reaches the sites of its manifest; secrets are stored apart. First addon: background work, one instruction applied to every document of a work folder, read-only, resumable, with pause, report and regular mode.
+
 ## 0.6.4
 
 - **Fiche de suivi ou résumé : Lutin te demande** au premier résumé automatique (réglage « Demander au premier résumé », par défaut), avec une case pour garder le choix pour toute la conversation ; passer à la fiche la remplit à partir du début de la conversation.

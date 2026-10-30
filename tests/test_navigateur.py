@@ -181,6 +181,19 @@ class Parcours(unittest.TestCase):
             p.attendre("localStorage.getItem('lutin.groupe.general') === '0'")                       # l'évènement « toggle » arrive juste après le clic
             self.assertEqual(p.erreurs, [])
 
+    def test_extensions_activer_un_addon_et_voir_son_panneau(self):
+        with self.captures.serveur_demo() as (port, tmp):
+            p = self.ouvrir(tmp, "http://127.0.0.1:%d/" % port)
+            p.evaluer(onglet("auto"))
+            p.attendre("!!document.querySelector('#listeAddons input[type=checkbox]')")
+            self.assertIn("Travail de fond", p.evaluer("document.getElementById('listeAddons').textContent"))
+            self.assertFalse(p.evaluer("document.querySelector('#listeAddons input[type=checkbox]').checked"), "désactivé par défaut")
+            self.assertNotIn("Nouveau travail de fond", p.evaluer("document.getElementById('listeAddons').textContent"))
+            p.evaluer("document.querySelector('#listeAddons input[type=checkbox]').click()")
+            p.attendre("document.getElementById('listeAddons').textContent.includes('Nouveau travail de fond')")
+            self.assertTrue(p.evaluer("document.querySelector('#listeAddons input[type=checkbox]').checked"))
+            self.assertEqual(p.erreurs, [])
+
     def test_reprise_proposee_une_fois_puis_plus(self):
         with self.captures.serveur_demo() as (port, tmp):
             ancien = tmp / "ancien-assistant"

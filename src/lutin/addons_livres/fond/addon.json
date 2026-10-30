@@ -1,0 +1,12 @@
+{
+ "nom": "Travail de fond",
+ "description": "Applique une consigne à tous les documents d'un dossier (PDF, Word, notes), l'un après l'autre, pendant des heures s'il le faut, avec reprise, pause et rapport. En lecture seule : rien n'est modifié.",
+ "hotes": [],
+ "reglages": [],
+ "etapes": [
+  {"titre": "Choisir le dossier", "texte": "Le dossier doit déjà être un de tes dossiers de travail (onglet Dossiers de travail) : ajoute d'abord ton NAS ou ton dossier de documents s'il n'y est pas."},
+  {"titre": "Écrire la consigne", "texte": "Une phrase suffit : « Résume ce document en trois lignes et donne sa catégorie (facture, contrat, courrier…). »"},
+  {"titre": "Laisser tourner", "texte": "Le travail avance quand tu n'utilises pas Lutin, reprend tout seul après un redémarrage, et s'arrête si le PC manque de mémoire. Le rapport se télécharge à tout moment."}
+ ],
+ "verification": []
+}

@@ -442,6 +442,7 @@
 "Nom de cet appareil (facultatif)": "Name of this device (optional)",
 "Se connecter": "Sign in",
 "Erreur ": "Error ",
+"Les extensions se gèrent depuis cette machine (niveau « cette machine seulement » ou navigateur de cette machine).": "Extensions are managed from this machine (“this machine only” level or this machine's browser).",
 "Addon inconnu.": "Unknown addon.",
 "Flux invalide : il faut un objet avec « appels ».": "Invalid flow: an object with “appels” is required.",
 "Adresse refusée : cet addon ne peut pas joindre ce site.": "Address refused: this addon may not reach this site.",

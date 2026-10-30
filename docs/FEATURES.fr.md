@@ -42,6 +42,15 @@ Le texte des fichiers est ajouté à ton message **pour le modèle seulement** :
 
 Clique sur **📎** à côté de la zone de message, ou colle (Ctrl+V) ou glisse une image : PNG, JPEG, GIF ou WebP, 8 Mo et 4 images par message au plus. Si le modèle courant ne voit pas les images, Lutin passe pour cette demande sur un modèle installé qui les voit (rôle « Images » de l'onglet Modèles), ou te dit qu'il n'y en a pas et ignore les images. Les images restent dans le dossier de données de Lutin (`images/`), seules les plus récentes sont renvoyées au modèle, et les images orphelines sont supprimées après deux jours.
 
+## Addons : des fonctions facultatives, une par une
+
+Les nouvelles fonctions arrivent sous forme d'**addons** : des modules facultatifs livrés avec Lutin, **désactivés tant que tu ne les actives pas** (onglet Automatisation > *Extensions facultatives*). Chacun a un guide d'installation (les étapes à suivre, les champs à remplir), une **vérification** qui doit réussir avant l'activation (les réglages sont bons, le service répond comme prévu) et un **flux** (`flux.json`) : la liste des appels que l'addon fait à un service (adresse, méthode, champs, réponse attendue). Le flux est de la donnée, pas du code : il peut changer sans toucher à Lutin.
+
+- **Revérifié chaque jour.** Si un service change (nouvelle adresse, nouveau format), la vérification échoue et l'addon passe en *à réparer* au lieu de casser en silence.
+- **Réparer avec l'aide de Lutin.** Le modèle lit la documentation du service et propose un flux corrigé ; tu vois la différence et tu acceptes (ou non). L'ancienne version est gardée et la version livrée revient en un clic. Rien n'est jamais appliqué tout seul.
+- **Cloisonné.** Un addon ne peut joindre que les sites déclarés par son manifeste livré : un flux corrigé, même inspiré d'une page piégée, ne peut rien envoyer ailleurs. Les secrets (jetons) sont rangés à part, jamais renvoyés à la page ni écrits dans le journal.
+- **Premier addon : le travail de fond.** Applique une consigne à tous les documents d'un dossier (PDF, Word, notes), l'un après l'autre, pendant des heures s'il le faut : en lecture seule, reprenable après un redémarrage, avec pause, un rapport, et un mode *régulier* qui ne traite que les nouveautés. Il cède la place aux conversations (le document en cours est refait plus tard), vérifie la mémoire et la place du PC avant chaque document et s'arrête après cinq erreurs de suite. Le dossier doit déjà être un de tes dossiers de travail.
+
 ## Longues conversations : résumé ou fiche de suivi
 
 Un petit modèle local oublie une longue conversation, ou tourne en boucle (« on passe à l'action ? » - « oui » - il replanifie tout). Réglages > **Mémoire des longues conversations** (et le bouton **🧾 Fiche de suivi**, ou `/memoire`) propose deux méthodes, changeables à tout moment, conversation par conversation :

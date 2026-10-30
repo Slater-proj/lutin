@@ -11,6 +11,8 @@ from . import horsligne as _hl
 from . import modes as _modes
 from . import pieces as _pieces
 from . import images as _images
+from . import addons as _addons
+from . import fond as _fond
 from . import planifie as _plan
 from . import rappel as _rappel
 from . import suivi as _suivi
@@ -144,7 +146,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
                                        "familles": {k: _t(v) for k, v in (_m._CATALOGUE.get("familles") or {}).items()}, "disque_modeles": _emplacements.jauge_modeles(),
                                        "version": _m.VERSION, "ollama": o["actif"], "ollama_installe": bool(_m.chemin_ollama()), "installes": o["installes"], "modeles": modeles, "modeles_masques": len(_m.lire_registre_modeles()["masques"]), "actives": list(_m.TOURS_ACTIFS),
                                        "pulls": _m.PULLS, "reglages": r, "conversations": _m.conv_liste(), "racine": str(_m.RACINE), "donnees": str(_m.DONNEES),
-                                       "outil": bool(self._outil_vivant()), "hors_ligne": _hl.actif(), "niveau": _m.SECURITE.niveau, "langue": _i18n.langue(), "langue_reglage": _i18n.langue_configuree(), "cpus": os.cpu_count() or 1, "redemarrage": {"necessaire": _acces.securite_enregistree() != _m.SECURITE, "possible": _acces.peut_redemarrer()}, "nouvelle_version": _m.nouvelle_version_lutin(), "travaux": _m.travaux_etat(), "configurateur": self._configurateur(),
+                                       "outil": bool(self._outil_vivant()), "hors_ligne": _hl.actif(), "niveau": _m.SECURITE.niveau, "langue": _i18n.langue(), "langue_reglage": _i18n.langue_configuree(), "cpus": os.cpu_count() or 1, "redemarrage": {"necessaire": _acces.securite_enregistree() != _m.SECURITE, "possible": _acces.peut_redemarrer()}, "nouvelle_version": _m.nouvelle_version_lutin(), "travaux": _m.travaux_etat(), "configurateur": self._configurateur(), "addons_alertes": _addons.alertes(),
                                        "bench": {"en_cours": _m.BENCH["en_cours"], "etape": _m.BENCH["etape"], "erreur": _m.BENCH["erreur"], "mesures": _bench.lire(_m.chemin_bench())}, "attentes": [{"id": a.id, "titre": a.titre, "detail": a.detail, "diff": a.diff} for a in _m.Attente.EN_COURS.values()]})
         if chemin == "/api/conseil":
             r = _m.reglages()
@@ -209,6 +211,16 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 sections = _suivi.lire(ident)
                 return self._envoyer(200, {"sections": sections, "texte": _suivi.serialiser(ident, sections), "mesure": _suivi.mesure(ident, r["num_ctx"]), "mode": _m.memoire_longue(conv, r),
                                            "mode_general": r["memoire_longue"], "chemin": str(_suivi.chemin(ident))})
+            except ValueError as e:
+                return self._envoyer(400, {"erreur": str(e)})
+        if chemin == "/api/addons":                              # les addons : état, réglages (jamais les secrets), dernière vérification
+            return self._envoyer(200, {"liste": _addons.liste(), "alertes": _addons.alertes()})
+        if chemin == "/api/fond":                                # le travail de fond : travaux et avancement
+            return self._envoyer(200, {"liste": _fond.liste()})
+        if chemin == "/api/fond-rapport":
+            q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+            try:
+                return self._envoyer(200, {"texte": _fond.rapport(_fond.trouver((q.get("id") or [""])[0]))})
             except ValueError as e:
                 return self._envoyer(400, {"erreur": str(e)})
         if chemin == "/api/mettre-a-jour-etat":
@@ -448,6 +460,27 @@ class Gestionnaire(BaseHTTPRequestHandler):
                     amorce = _m.amorcer_fiche(conv, r) if choix == "fichier" else 0          # une fiche vide est remplie à partir du début de la conversation
                     _m.conv_ecrire(conv)
                 return self._envoyer(200, {"mode": _m.memoire_longue(_m.conv_lire(ident), r), "mesure": _suivi.mesure(ident, r["num_ctx"]), "amorce": amorce})
+            if self.path in ("/api/addon-activer", "/api/addon-reglages", "/api/addon-verifier", "/api/addon-correction", "/api/addon-flux", "/api/addon-flux-restaurer", "/api/fond-creer", "/api/fond-action"):
+                if not self._configurateur():
+                    return self._envoyer(403, {"erreur": _t("Les extensions se gèrent depuis cette machine (niveau « cette machine seulement » ou navigateur de cette machine).")})
+                try:
+                    if self.path == "/api/addon-activer":
+                        return self._envoyer(200, _addons.activer(str(donnees.get("id", "")), bool(donnees.get("actif"))))
+                    if self.path == "/api/addon-reglages":
+                        return self._envoyer(200, _addons.enregistrer_reglages(str(donnees.get("id", "")), donnees.get("reglages") if isinstance(donnees.get("reglages"), dict) else {}))
+                    if self.path == "/api/addon-verifier":
+                        return self._envoyer(200, _addons.verifier(str(donnees.get("id", ""))))
+                    if self.path == "/api/addon-correction":
+                        return self._envoyer(200, _addons.proposer_correction(str(donnees.get("id", ""))))
+                    if self.path == "/api/addon-flux":
+                        return self._envoyer(200, _addons.appliquer_flux(str(donnees.get("id", "")), donnees.get("flux")))
+                    if self.path == "/api/addon-flux-restaurer":
+                        return self._envoyer(200, _addons.restaurer_flux(str(donnees.get("id", ""))))
+                    if self.path == "/api/fond-creer":
+                        return self._envoyer(200, _fond.creer(donnees.get("nom"), donnees.get("dossier"), donnees.get("motifs"), donnees.get("consigne"), bool(donnees.get("regulier")), donnees.get("intervalle_h", 24)))
+                    return self._envoyer(200, _fond.action(str(donnees.get("id", "")), str(donnees.get("action", ""))))
+                except (_addons.ErreurAddon, ValueError) as e:
+                    return self._envoyer(400, {"erreur": str(e)})
             if self.path == "/api/travaux-apercu":
                 return self._envoyer(200, _m.apercu_travail(str(donnees.get("id", ""))))
             if self.path in ("/api/dossier-modeles-analyse", "/api/dossier-modeles-copie", "/api/redemarrer-ollama"):
@@ -622,6 +655,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
         with _m.VERROU_TOURS:                                   # trop de réponses en cours : on refuse avant de créer quoi que ce soit
             if len(_m.TOURS_ACTIFS) >= _m.TOURS_SIMULTANES and ident not in _m.TOURS_ACTIFS:
                 return self._envoyer(429, {"erreur": "Déjà {} réponses en cours : une seule carte graphique, attends la fin de l'une d'elles (ou clique sur Arrêter).".format(len(_m.TOURS_ACTIFS))})
+        _fond.interrompre_pour_utilisateur(8)                    # le travail de fond cède la place : son document en cours sera refait plus tard
         conv = _m.conv_lire(ident) if ident else _m.conv_nouvelle()
         depuis = donnees.get("remplacer_depuis")
         if depuis is not None:

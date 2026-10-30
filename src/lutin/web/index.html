@@ -437,6 +437,8 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
       <textarea id="pPrompt" placeholder="La demande à traiter, par exemple : résume ce qui a changé dans le dépôt depuis hier." style="flex:1 1 100%;min-height:70px" maxlength="4000"></textarea>
       <button id="bAjouterPlanifie" class="principal">Planifier</button> <span class="aide" id="mPlanifie"></span>
     </div>
+    <h2>Extensions facultatives <span class="aide">(des fonctions facultatives livrées avec Lutin, désactivées tant que tu ne les actives pas ; chacune a son guide d'installation et se vérifie avant de s'activer)</span></h2>
+    <div id="listeAddons" class="aide" style="margin:6px 0"></div>
   </div></section>
   <section class="page" id="p-acces"><div class="cadre">
     <h2>Qui peut utiliser Lutin</h2>
@@ -1172,7 +1174,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
   document.querySelectorAll('.onglets button').forEach(b => b.addEventListener('click', async () => {
     document.querySelectorAll('.onglets button').forEach(x => x.setAttribute('aria-selected', x === b)); document.querySelectorAll('.page').forEach(p => p.classList.toggle('vue', p.id === 'p-' + b.dataset.p));
     if (b.dataset.p === 'memoire') { const m = await api('/api/memoire'); $('tContexte').value = m['CONTEXTE.md']; $('tMemoire').value = m['MEMOIRE.md']; chargerSkills(); chargerClaude(); chargerNotes(); chargerDocuments(); }
-    if (b.dataset.p === 'auto') chargerPlanifie();
+    if (b.dataset.p === 'auto') { chargerPlanifie(); chargerAddons(); }
     if (b.dataset.p === 'modeles') rafraichir();
     if (b.dataset.p === 'acces') chargerAcces();
     if (b.dataset.p === 'sante') window.ouvrirSante();
@@ -2140,6 +2142,145 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
       action(T('Supprimer'), () => confirm(T('Supprimer cette tâche planifiée ?')) ? api('/api/planifie-supprimer', { id: t.id }) : null);
       z.appendChild(l);
     });
+  };
+  // ---- Extensions : une carte par addon (activer, configurer, vérifier, réparer) ; un addon actif peut dessiner son propre panneau (PANNEAUX)
+  const PANNEAUX = {};
+  let minuteurAddons = null;
+  const chargerAddons = async () => {
+    const z = $('listeAddons');
+    clearTimeout(minuteurAddons);
+    let r;
+    try { r = await api('/api/addons'); } catch (e) { z.textContent = e.message; return; }
+    if (z.contains(document.activeElement) && document.activeElement.matches('input,textarea,select')) { minuteurAddons = setTimeout(chargerAddons, 4000); return; }          // on est en train d'écrire : on ne reconstruit pas la carte sous les doigts
+    z.textContent = '';
+    r.liste.forEach(a => z.appendChild(carteAddon(a)));
+    if ($('p-auto').classList.contains('vue') && r.liste.some(a => a.actif && PANNEAUX[a.id])) minuteurAddons = setTimeout(chargerAddons, 4000);          // les panneaux (travail de fond…) se rafraîchissent seuls
+  };
+  const quand = t => new Date(t * 1000).toLocaleString();
+  const diffPre = texte => { const pre = el('pre'); texte.split('\n').forEach(l => pre.appendChild(el('div', l.startsWith('+') && !l.startsWith('+++') ? 'add' : l.startsWith('-') && !l.startsWith('---') ? 'del' : '', l || ' '))); return pre; };
+  const carteAddon = a => {
+    const d = el('div', 'carte'); d.style.flexDirection = 'column'; d.style.alignItems = 'stretch'; d.style.gap = '6px';
+    const tete = el('div', 'ligne'), cb = el('input'), msg = el('div', 'erreur');
+    cb.type = 'checkbox'; cb.checked = a.actif; cb.disabled = !ETAT.configurateur;
+    tete.appendChild(cb); tete.appendChild(el('b', '', ' ' + a.nom)); d.appendChild(tete);
+    d.appendChild(el('div', 'aide', a.description));
+    const v = a.verification;
+    if (v) d.appendChild(el('div', v.ok ? 'aide' : 'erreur', v.ok ? T('✔ Vérifié le ') + quand(v.date) : T('⚠ À réparer : ') + v.etapes.filter(x => !x.ok).map(x => x.message).join(' ; ')));
+    d.appendChild(msg);
+    cb.addEventListener('change', async () => {
+      cb.disabled = true; msg.textContent = '';
+      try { await api('/api/addon-activer', { id: a.id, actif: cb.checked }); chargerAddons(); }
+      catch (e) { msg.textContent = e.message; cb.checked = !cb.checked; cb.disabled = false; }
+    });
+    if (ETAT.configurateur) {
+      const ligne = el('div', 'ligne'), conf = el('button', '', T('Configurer…')), ver = el('button', '', T('Vérifier'));
+      conf.addEventListener('click', () => configurerAddon(a));
+      ver.addEventListener('click', async () => { ver.disabled = true; msg.textContent = ''; try { await api('/api/addon-verifier', { id: a.id }); } catch (e) { msg.textContent = e.message; } chargerAddons(); });
+      ligne.append(conf, ver);
+      if (v && !v.ok && a.hotes.length) { const rep_ = el('button', 'principal', T('Réparer avec l\'aide de Lutin')); rep_.addEventListener('click', () => reparerAddon(a)); ligne.appendChild(rep_); }
+      if (a.flux_modifie) { const rest = el('button', '', T('Revenir à la version livrée')); rest.addEventListener('click', async () => { try { await api('/api/addon-flux-restaurer', { id: a.id }); } catch (e) { msg.textContent = e.message; } chargerAddons(); }); ligne.appendChild(rest); }
+      d.appendChild(ligne);
+    }
+    if (a.actif && PANNEAUX[a.id]) { const p = el('div'); d.appendChild(p); PANNEAUX[a.id](a, p); }
+    return d;
+  };
+  // Panneau de l'addon « travail de fond » : travaux en cours (avancement, pause, rapport) et formulaire de création
+  const FOND = { ouvert: false, brouillon: { nom: '', dossier: '', motifs: '*.pdf', consigne: '', regulier: false, intervalle_h: 24 } };
+  const etatsFond = () => ({ attente: T('en attente'), en_cours: T('en cours'), pause: T('en pause'), termine: T('terminé'), erreur: T('en erreur') });
+  PANNEAUX.fond = async (a, zone) => {
+    let r, tr;
+    try { [r, tr] = await Promise.all([api('/api/fond'), api('/api/travaux')]); } catch (e) { zone.textContent = e.message; return; }
+    zone.appendChild(el('b', '', T('Travaux de fond')));
+    if (!r.liste.length) zone.appendChild(el('div', 'aide', T('Aucun travail pour l\'instant.')));
+    const msg = el('div', 'erreur');
+    r.liste.forEach(t => {
+      const d = el('div', 'carte'); d.style.flexDirection = 'column'; d.style.alignItems = 'stretch'; d.style.gap = '4px';
+      d.appendChild(el('b', '', t.nom));
+      d.appendChild(el('div', 'aide', t.dossier + ' · ' + t.motifs.join(', ') + (t.regulier ? ' · ' + T('régulier, toutes les {} h').replace('{}', t.intervalle_h) : '')));
+      const p = el('progress'); p.max = Math.max(1, t.total); p.value = t.faits; p.style.width = '100%'; d.appendChild(p);
+      d.appendChild(el('div', 'aide', t.faits + ' / ' + t.total + (t.erreurs ? ' · ' + t.erreurs + ' ' + T('en erreur') : '') + ' · ' + (etatsFond()[t.etat] || t.etat) + (t.dernier_message ? ' — ' + t.dernier_message : '')));
+      const ligne = el('div', 'ligne');
+      const agir = async (action) => { try { await api('/api/fond-action', { id: t.id, action }); chargerAddons(); } catch (e) { msg.textContent = e.message; } };
+      const pause = el('button', '', t.pause ? T('Reprendre') : T('Mettre en pause')); pause.addEventListener('click', () => agir(t.pause ? 'reprendre' : 'pause'));
+      const rap = el('button', '', T('Rapport')); rap.disabled = !t.rapport && !t.faits;
+      rap.addEventListener('click', async () => {
+        try {
+          const x = await api('/api/fond-rapport?id=' + encodeURIComponent(t.id)), c = ouvrirModal(t.nom), pre = el('pre', 'bloc-code'); pre.textContent = x.texte; c.appendChild(pre);
+          const copie = el('button', '', T('Copier')); copie.addEventListener('click', async () => { copie.textContent = (await copier(x.texte)) ? T('Copié !') : T('Échec'); }); c.appendChild(copie);
+        } catch (e) { msg.textContent = e.message; }
+      });
+      const rel = el('button', '', T('Tout refaire')); rel.addEventListener('click', () => { if (confirm(T('Refaire tous les documents depuis le début ? Les résultats actuels sont effacés.'))) agir('relancer'); });
+      const sup = el('button', 'danger', T('Supprimer')); sup.addEventListener('click', () => { if (confirm(T('Supprimer ce travail et ses résultats ?'))) agir('supprimer'); });
+      ligne.append(pause, rap, rel, sup); d.appendChild(ligne); zone.appendChild(d);
+    });
+    zone.appendChild(msg);
+    const det = el('details'), b = FOND.brouillon;
+    det.open = FOND.ouvert; det.addEventListener('toggle', () => { FOND.ouvert = det.open; });
+    det.appendChild(el('summary', '', T('Nouveau travail de fond')));
+    const champ = (libelle, cle, type) => { const lab = el('label', 'opt-ligne'), inp = el(type === 'texte' ? 'textarea' : 'input'); if (type === 'nombre') { inp.type = 'number'; inp.min = 1; inp.style.width = '90px'; } else if (type === 'case') { inp.type = 'checkbox'; } if (type === 'texte') { inp.rows = 3; inp.style.width = '100%'; inp.maxLength = 4000; } else if (type !== 'case' && type !== 'nombre') { inp.style.width = '320px'; }
+      if (type === 'case') inp.checked = !!b[cle]; else inp.value = b[cle]; inp.addEventListener('input', () => { b[cle] = type === 'case' ? inp.checked : inp.value; }); lab.appendChild(document.createTextNode(libelle + ' ')); lab.appendChild(inp); det.appendChild(lab); return inp; };
+    champ(T('Nom'), 'nom');
+    const sel = el('select'); (tr.liste || []).forEach(x => { const o = el('option', '', x.nom + ' — ' + x.chemin); o.value = x.chemin; sel.appendChild(o); });
+    if (!b.dossier && tr.liste && tr.liste.length) b.dossier = tr.liste[0].chemin; sel.value = b.dossier; sel.addEventListener('change', () => { b.dossier = sel.value; });
+    const labD = el('label', 'opt-ligne'); labD.appendChild(document.createTextNode(T('Dossier') + ' ')); labD.appendChild(sel); det.appendChild(labD);
+    det.appendChild(el('div', 'aide', T('Le dossier doit être un de tes dossiers de travail (onglet Dossiers de travail) ; les sous-dossiers sont parcourus.')));
+    champ(T('Types de fichiers'), 'motifs');
+    champ(T('Consigne pour chaque document'), 'consigne', 'texte');
+    champ(T('Régulier (ne traiter que les nouveautés)'), 'regulier', 'case');
+    champ(T('toutes les (heures)'), 'intervalle_h', 'nombre');
+    const go = el('button', 'principal', T('Lancer le travail'));
+    go.addEventListener('click', async () => {
+      go.disabled = true; msg.textContent = '';
+      try { await api('/api/fond-creer', { nom: b.nom, dossier: b.dossier, motifs: b.motifs, consigne: b.consigne, regulier: b.regulier, intervalle_h: b.intervalle_h }); FOND.brouillon = { nom: '', dossier: b.dossier, motifs: '*.pdf', consigne: '', regulier: false, intervalle_h: 24 }; FOND.ouvert = false; chargerAddons(); }
+      catch (e) { msg.textContent = e.message; go.disabled = false; }
+    });
+    det.appendChild(go); zone.appendChild(det);
+  };
+  const configurerAddon = a => {
+    const c = ouvrirModal(a.nom);
+    c.appendChild(el('p', '', a.description));
+    if (a.etapes.length) {
+      const ol = el('ol'); a.etapes.forEach(e => { const li = el('li'); li.appendChild(el('b', '', e.titre + ' ')); li.appendChild(document.createTextNode(e.texte)); if (e.lien) { const l = el('a', '', ' ' + e.lien); l.href = e.lien; l.target = '_blank'; l.rel = 'noopener'; li.appendChild(l); } ol.appendChild(li); });
+      c.appendChild(ol);
+    }
+    const champs = {};
+    a.reglages.forEach(r => {
+      const lab = el('label', 'opt-ligne'), inp = el('input'); inp.style.width = '320px'; inp.type = r.secret ? 'password' : 'text';
+      inp.value = r.secret ? '' : (r.valeur ?? ''); inp.placeholder = r.secret ? (r.defini ? T('•••• (déjà défini : laisse vide pour le garder)') : T('à coller ici')) : (r.defaut || '');
+      lab.appendChild(document.createTextNode(r.libelle + ' ')); lab.appendChild(inp); c.appendChild(lab); if (r.aide) c.appendChild(el('div', 'aide', r.aide)); champs[r.cle] = inp;
+    });
+    const sortie = el('div'), go = el('button', 'principal', T('Enregistrer et vérifier'));
+    go.addEventListener('click', async () => {
+      go.disabled = true; sortie.textContent = '';
+      try {
+        const vals = {}; Object.keys(champs).forEach(k => { vals[k] = champs[k].value; });
+        await api('/api/addon-reglages', { id: a.id, reglages: vals });
+        const v = await api('/api/addon-verifier', { id: a.id });
+        v.etapes.forEach(e => sortie.appendChild(el('div', e.ok ? 'aide' : 'erreur', (e.ok ? '✔ ' : '✘ ') + (e.appel ? e.appel + ' : ' : '') + e.message)));
+        if (!v.etapes.length) sortie.appendChild(el('div', 'aide', T('✔ Rien à vérifier : cet addon est prêt.')));
+        chargerAddons();
+      } catch (e) { sortie.appendChild(el('div', 'erreur', e.message)); }
+      go.disabled = false;
+    });
+    c.appendChild(go); c.appendChild(sortie);
+  };
+  // Le service a changé : le modèle lit sa documentation et PROPOSE un flux corrigé ; rien n'est appliqué sans ton accord, et la version livrée se rétablit en un clic
+  const reparerAddon = async a => {
+    const c = ouvrirModal(T('Réparer : ') + a.nom), etat = el('p', 'aide', T('Lutin lit la documentation du service et prépare une correction… (quelques dizaines de secondes)'));
+    c.appendChild(etat);
+    let p;
+    try { p = await api('/api/addon-correction', { id: a.id }); } catch (e) { etat.textContent = ''; c.appendChild(el('p', 'erreur', e.message)); return; }
+    etat.textContent = p.explication || '';
+    c.appendChild(el('p', 'aide', T('Voici ce qui changerait dans le flux de l\'addon (les appels qu\'il fait au service). Il ne peut joindre que les sites prévus par l\'addon.')));
+    c.appendChild(diffPre(p.diff));
+    const ok = el('button', 'principal', T('Appliquer la correction')), non = el('button', '', T('Annuler')), fin = el('div');
+    ok.addEventListener('click', async () => {
+      ok.disabled = true;
+      try { await api('/api/addon-flux', { id: a.id, flux: p.flux }); const v = await api('/api/addon-verifier', { id: a.id }); fin.appendChild(el('div', v.ok ? 'aide' : 'erreur', v.ok ? T('✔ Corrigé : la vérification réussit.') : T('✘ La vérification échoue encore : ') + v.etapes.filter(x => !x.ok).map(x => x.message).join(' ; '))); chargerAddons(); }
+      catch (e) { fin.appendChild(el('div', 'erreur', e.message)); }
+    });
+    non.addEventListener('click', () => { $('modal').hidden = true; });
+    c.appendChild(ok); c.appendChild(document.createTextNode(' ')); c.appendChild(non); c.appendChild(fin);
   };
   const chargerPlanifie = async () => { try { afficherPlanifie((await api('/api/planifie')).taches); } catch (e) { $('mPlanifie').textContent = e.message; } };
   $('bAjouterPlanifie').addEventListener('click', async () => {

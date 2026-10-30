@@ -42,6 +42,15 @@ The text of the files is added to your message **for the model only**: the conve
 
 Click **📎** next to the message box, or paste (Ctrl+V) or drop an image: PNG, JPEG, GIF or WebP, 8 MB and 4 images per message at most. If the current model cannot see images, Lutin switches for that request to an installed model that can (see the « Images » role in the Models tab), or tells you there is none and ignores the images. Images stay in Lutin's data folder (`images/`), only the most recent ones are sent back to the model, and orphan images are deleted after two days.
 
+## Addons: optional features, one by one
+
+New features arrive as **addons**: optional modules shipped with Lutin, **off until you turn them on** (Automation tab > *Optional extensions*). Each one has a setup guide (the steps to follow, with the fields to fill in), a **check** that must succeed before it can be enabled (the settings are right, the service answers as expected), and a **flow** (`flux.json`): the list of calls the addon makes to a service (address, method, fields, expected answer). The flow is data, not code, so it can change without touching Lutin.
+
+- **Checked again every day.** If a service changes (new address, new format), the check fails and the addon shows *needs repair* instead of silently breaking.
+- **Repair with Lutin's help.** The model reads the service documentation and proposes a corrected flow; you see the difference and accept (or not). The previous version is kept and the shipped one comes back in one click. Nothing is ever applied on its own.
+- **Contained.** An addon can only reach the sites its shipped manifest declares: a corrected flow, even one inspired by a booby-trapped page, cannot send anything elsewhere. Secrets (tokens) are stored apart, never sent back to the page nor written in the log.
+- **First addon: background work.** Applies one instruction to every document of a folder (PDF, Word, notes), one after the other, for hours if needed: read-only, resumable after a restart, with pause, a report, and a *regular* mode that only processes what is new. It yields to conversations (the document in progress is redone later), checks the PC's memory and space before each document, and stops after five errors in a row. The folder must already be one of your work folders.
+
 ## Long conversations: summary or tracking sheet
 
 A small local model forgets a long conversation, or loops (\"shall we act?\" - \"yes\" - it plans everything again). Settings > **Long conversation memory** (and the **🧾 Tracking sheet** button, or `/memory`) offers two methods, switchable at any time, per conversation:
