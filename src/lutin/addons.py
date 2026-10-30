@@ -50,6 +50,16 @@ class ErreurAddon(Exception):
     pass
 
 
+class _SansRedirection(urllib.request.HTTPRedirectHandler):
+    """Un addon ne suit jamais une redirection : elle pourrait mener vers un site que son manifeste n'autorise pas (et lui faire envoyer ses identifiants)."""
+
+    def redirect_request(self, *args, **kwargs):
+        return None
+
+
+OUVREUR = urllib.request.build_opener(_SansRedirection)
+
+
 # --------------------------------------------------------------------------- manifestes et flux
 def dossier_donnees():
     return _m.DONNEES / "addons"
@@ -246,7 +256,8 @@ def decrire(ident):
             champ["valeur"] = valeurs.get(r["cle"], "")
         champs.append(champ)
     etapes = [dict(e, titre=_t(e.get("titre", "")), texte=_t(e.get("texte", ""))) for e in m["etapes"]]
-    return {"id": ident, "nom": _t(m.get("nom", ident)), "description": _t(m.get("description", "")), "doc": m.get("doc", ""), "etapes": etapes, "hotes": m["hotes"], "reglages": champs,
+    a_configurer = [r.get("libelle", r["cle"]) for r in m["reglages"] if r.get("obligatoire", True) and not valeurs.get(r["cle"])]
+    return {"id": ident, "nom": _t(m.get("nom", ident)), "description": _t(m.get("description", "")), "doc": m.get("doc", ""), "etapes": etapes, "hotes": m["hotes"], "reglages": champs, "a_configurer": [_t(x) for x in a_configurer],
             "actif": bool(etat.get("actif")), "verification": etat.get("verification"), "flux_modifie": flux_modifie(ident), "etat": ETAT.get(ident, {}).get("etat", "")}
 
 
@@ -337,7 +348,7 @@ def appeler(ident, nom, variables=None, delai=DELAI_APPEL):
         en_tetes["Authorization"] = entete_oauth1(methode, url, cles)
     req = urllib.request.Request(url, data=donnees_envoi, headers=en_tetes, method=methode)
     try:
-        with urllib.request.urlopen(req, timeout=delai) as r:
+        with OUVREUR.open(req, timeout=delai) as r:
             brut = r.read(REPONSE_MAX + 1)
     except urllib.error.HTTPError as e:
         corps_err = e.read(2000).decode("utf-8", "replace")

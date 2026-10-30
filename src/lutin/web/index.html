@@ -29,7 +29,7 @@ if (window.mermaid) { mermaid.initialize({ startOnLoad: false, theme: 'dark', se
 * { box-sizing: border-box; }
 html, body { height:100%; }
 :root { --lateral:260px; --options-h:auto; }
-body { margin:0; background:radial-gradient(1200px 600px at 70% -10%, #14202e 0%, var(--bg) 55%) fixed, var(--bg); color:var(--fg); font:15px/1.55 "Segoe UI", system-ui, sans-serif; display:grid; grid-template-columns:var(--lateral) 6px 1fr; }
+body { margin:0; background:radial-gradient(1200px 600px at 70% -10%, #14202e 0%, var(--bg) 55%) fixed, var(--bg); color:var(--fg); font:15px/1.55 "Segoe UI", system-ui, sans-serif; display:grid; grid-template-columns:var(--lateral) 1px 1fr; }
 /* barres de défilement fines */
 * { scrollbar-width:thin; scrollbar-color:#33445a transparent; }
 *::-webkit-scrollbar { width:9px; height:9px; } *::-webkit-scrollbar-thumb { background:#33445a; border-radius:5px; border:2px solid transparent; background-clip:content-box; } *::-webkit-scrollbar-thumb:hover { background:#43587a; background-clip:content-box; }
@@ -38,8 +38,8 @@ aside { background:linear-gradient(180deg, var(--panel2), var(--panel)); border-
 aside h1 { font-size:.95rem; font-weight:600; letter-spacing:.02em; margin:0; padding:14px 16px; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:8px; }
 aside h1 img { border-radius:7px; flex:0 0 auto; }
 aside .liste { overflow:auto; flex:1; padding:8px; min-height:60px; }
-.separateur-v { cursor:col-resize; background:var(--line); width:6px; margin:0; position:relative; touch-action:none; user-select:none; } .separateur-v:hover, .separateur-v.actif, .separateur-v:focus-visible { background:var(--accent, #5aa9ff); outline:0; }
-.separateur-h { cursor:row-resize; background:var(--line); height:6px; flex:0 0 6px; touch-action:none; user-select:none; } .separateur-h:hover, .separateur-h.actif, .separateur-h:focus-visible { background:var(--accent, #5aa9ff); outline:0; }
+.separateur-v { cursor:col-resize; background:var(--line); width:1px; margin:0; position:relative; touch-action:none; user-select:none; } .separateur-v:hover, .separateur-v.actif, .separateur-v:focus-visible { background:var(--accent, #5aa9ff); outline:0; }
+.separateur-h { cursor:row-resize; background:var(--line); height:1px; flex:0 0 1px; position:relative; touch-action:none; user-select:none; } .separateur-h:hover, .separateur-h.actif, .separateur-h:focus-visible { background:var(--accent, #5aa9ff); outline:0; }
 details.groupe { margin:10px 0; border:1px solid var(--line); border-radius:10px; background:#10161e; padding:0 14px 6px; } details.groupe > summary { cursor:pointer; padding:10px 0; font-weight:600; list-style:none; } details.groupe > summary::-webkit-details-marker { display:none; } details.groupe > summary::before { content:'▸ '; color:var(--muted); } details.groupe[open] > summary::before { content:'▾ '; }
 body.glisse { user-select:none; cursor:col-resize; } body.glisse-h { user-select:none; cursor:row-resize; }
 .options-lat.dimensionnee { flex:0 0 auto; overflow:auto; max-height:70vh; }
@@ -65,8 +65,10 @@ button.danger:hover { background:linear-gradient(180deg, #b84545, #8f2f2f); }
 .puce { display:inline-flex; align-items:center; gap:6px; padding:4px 10px; border:1px solid var(--line); border-radius:999px; background:#0e141b; }
 .puce i { width:8px; height:8px; border-radius:50%; background:var(--err); display:inline-block; box-shadow:0 0 6px var(--err); transition:background .2s, box-shadow .2s; }
 .puce.warn i { background:var(--warm); box-shadow:0 0 6px var(--warm); } .puce.bad i { background:var(--err); box-shadow:0 0 6px var(--err); }
-.jauge { height:10px; border-radius:6px; background:#0b1015; border:1px solid var(--line); overflow:hidden; display:flex; margin:6px 0; } .jauge i { display:block; height:100%; background:var(--accent, #5aa9ff); } .jauge i.libre { background:transparent; }
-.jauge.serre i { background:var(--warm); } .jauge.plein i { background:var(--err); }
+.barre-disque { display:flex; height:14px; border-radius:7px; background:#0b1015; border:1px solid var(--line); overflow:hidden; margin:8px 0 6px; }
+.barre-disque i { display:block; height:100%; transition:width .3s; } .barre-disque i.m { background:var(--accent, #5aa9ff); } .barre-disque i.a { background:#4b5b6e; }
+.legende-disque { display:flex; gap:16px; flex-wrap:wrap; font-size:.8rem; color:var(--muted); } .legende-disque span::before { content:''; display:inline-block; width:9px; height:9px; border-radius:3px; margin-right:6px; background:var(--c); }
+.legende-disque .serre { color:var(--warm); } .legende-disque .plein { color:var(--err); }
 .puce.ok i { background:var(--ok); box-shadow:0 0 6px var(--ok); }
 .haut .onglets { display:flex; gap:4px; padding:0; border-bottom:0; flex-wrap:wrap; }
 .haut .onglets button { border-radius:8px; color:var(--muted); }
@@ -186,6 +188,11 @@ pre.diff { width:100%; max-height:340px; overflow:auto; background:#0c1117; bord
 .liste-git { max-height:34vh; overflow:auto; border:1px solid var(--line); border-radius:8px; padding:6px 10px; margin:8px 0; }
 .res-recherche .extrait { color:var(--muted); font-size:.74rem; white-space:normal; }
 .conv .epingle { color:var(--warm); }
+.separateur-v::before { content:''; position:absolute; inset:0 -4px; } .separateur-h::before { content:''; position:absolute; inset:-4px 0; }          /* un trait fin, mais facile à attraper */
+.conv button.menu-ouvrir { font-weight:700; letter-spacing:1px; } .conv button.menu-ouvrir:hover { color:var(--accent); background:#1a2634; }
+.menu-conv { position:fixed; z-index:50; min-width:210px; background:#121a24; border:1px solid var(--line2); border-radius:10px; padding:5px; box-shadow:0 8px 24px #0009; display:flex; flex-direction:column; }
+.menu-conv button { background:none; border:0; color:var(--fg); text-align:left; padding:7px 10px; border-radius:6px; cursor:pointer; font:inherit; font-size:.85rem; } .menu-conv button:hover { background:#1e2c3d; }
+.menu-conv .coche { color:var(--accent, #5aa9ff); } .menu-conv .menu-titre { color:var(--muted); font-size:.72rem; padding:8px 10px 3px; text-transform:uppercase; letter-spacing:.04em; border-top:1px solid var(--line); margin-top:4px; }
 /* actions sous les messages */
 .actions { display:flex; gap:6px; margin:3px 2px 0; opacity:.55; transition:opacity .12s; } .msg:hover .actions, .actions:focus-within { opacity:1; }
 .msg.moi { flex-direction:column; align-items:flex-end; }
@@ -1005,9 +1012,31 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
       CONV = c; finEdition(); if (!document.hidden) lue(id);
       if (c.travail && ETAT && ETAT.travaux && ETAT.travaux.actif !== c.travail) { try { await api('/api/travaux-choisir', { id: c.travail }); rafraichir(); } catch (e) { /* une réponse travaille dans un autre dossier : on reste sur celui-ci */ } }
       if (FLUX && FLUX.detache && FLUX.id === id) rattacherFlux(); else afficherHistorique(CONV); [...document.querySelectorAll('.conv')].forEach(c => c.classList.toggle('choisie', c.dataset.id === id)); fermerLat(); } catch (e) { fil().appendChild(el('div', 'erreur', e.message)); } };
+  // Le menu « ⋯ » d'une conversation : épingler, renommer, et choisir comment elle garde le fil (fiche de suivi ou résumé automatique)
+  let MENU_CONV = null;
+  const fermerMenuConv = () => { if (MENU_CONV) { MENU_CONV.remove(); MENU_CONV = null; } };
+  document.addEventListener('click', fermerMenuConv); document.addEventListener('keydown', e => { if (e.key === 'Escape') fermerMenuConv(); });
+  const ouvrirMenuConv = (c, bouton) => {
+    fermerMenuConv();
+    const m = el('div', 'menu-conv'); MENU_CONV = m;
+    const item = (texte, f, coche) => { const b = el('button', coche ? 'coche' : '', (coche ? '✔ ' : '') + texte); b.addEventListener('click', async e => { e.stopPropagation(); fermerMenuConv(); try { await f(); } catch (err) { alert(err.message); } }); m.appendChild(b); };
+    item(c.epingle ? T('Désépingler') : T('Épingler en haut de la liste'), async () => { await api('/api/epingler', { id: c.id, epingle: !c.epingle }); rafraichir(); });
+    item(T('Renommer…'), async () => {
+      const nouveau = prompt(T('Nouveau titre :'), c.titre || ''); if (!nouveau || !nouveau.trim()) return;
+      const rep = await api('/api/renommer', { id: c.id, titre: nouveau.trim() }); if (CONV && CONV.id === c.id) CONV.titre = rep.titre; rafraichir();
+    });
+    m.appendChild(el('div', 'menu-titre', T('Garder le fil de la conversation')));
+    const memoire = mode => async () => { await api('/api/memoire-conversation', { conversation: c.id, mode }); if (CONV && CONV.id === c.id) { if (mode) CONV.memoire_longue = mode; else delete CONV.memoire_longue; majJauge(c.id); } rafraichir(); };
+    item(T('Fiche de suivi'), memoire('fichier'), c.memoire === 'fichier');
+    item(T('Résumé automatique'), memoire('resume'), c.memoire === 'resume');
+    item(T('Suivre le réglage général'), memoire(''), !c.memoire);
+    document.body.appendChild(m);
+    const r = bouton.getBoundingClientRect();
+    m.style.top = Math.min(r.bottom + 4, window.innerHeight - m.offsetHeight - 8) + 'px'; m.style.left = Math.max(8, Math.min(r.left, window.innerWidth - m.offsetWidth - 8)) + 'px';
+  };
   const listeConversations = () => {
     const z = $('conversations'); z.textContent = '';
-    ETAT.conversations.forEach(c => { const d = el('div', 'conv' + (CONV && CONV.id === c.id ? ' choisie' : '')); d.dataset.id = c.id; if ((ETAT.actives || []).includes(c.id) || (EN_COURS && ID_EN_COURS === c.id)) { const pt = el('i', 'travail'); pt.title = T('L\'assistant travaille sur cette conversation'); d.appendChild(pt); } else if (NONLUS.has(c.id)) { const pt = el('i', 'travail fini'); pt.title = T('Réponse terminée, pas encore lue'); d.appendChild(pt); } d.appendChild(el('span', 't', c.titre || T('(sans titre)'))); const ep = el('button', c.epingle ? 'epingle' : '', c.epingle ? '★' : '☆'); ep.title = c.epingle ? T('Désépingler') : T('Épingler en haut de la liste'); ep.addEventListener('click', async e => { e.stopPropagation(); try { await api('/api/epingler', { id: c.id, epingle: !c.epingle }); rafraichir(); } catch (err) { alert(err.message); } }); d.appendChild(ep); const r = el('button', '', '✏️'); r.title = T('Renommer'); r.addEventListener('click', async e => { e.stopPropagation(); const nouveau = prompt(T('Nouveau titre :'), c.titre || ''); if (!nouveau || !nouveau.trim()) return; try { const rep = await api('/api/renommer', { id: c.id, titre: nouveau.trim() }); if (CONV && CONV.id === c.id) CONV.titre = rep.titre; rafraichir(); } catch (err) { alert(err.message); } }); d.appendChild(r); const x = el('button', '', '✕'); x.title = T('Supprimer'); x.addEventListener('click', async e => { e.stopPropagation(); if (!confirm(T('Supprimer cette conversation ?'))) return; await api('/api/supprimer', { id: c.id }); if (CONV && CONV.id === c.id) nouvelle(); rafraichir(); }); d.appendChild(x); d.addEventListener('click', () => ouvrir(c.id)); z.appendChild(d); });
+    ETAT.conversations.forEach(c => { const d = el('div', 'conv' + (CONV && CONV.id === c.id ? ' choisie' : '')); d.dataset.id = c.id; if ((ETAT.actives || []).includes(c.id) || (EN_COURS && ID_EN_COURS === c.id)) { const pt = el('i', 'travail'); pt.title = T('L\'assistant travaille sur cette conversation'); d.appendChild(pt); } else if (NONLUS.has(c.id)) { const pt = el('i', 'travail fini'); pt.title = T('Réponse terminée, pas encore lue'); d.appendChild(pt); } d.appendChild(el('span', 't', (c.epingle ? '★ ' : '') + (c.titre || T('(sans titre)')))); const mn = el('button', 'menu-ouvrir', '⋯'); mn.title = T('Options de la conversation'); mn.addEventListener('click', e => { e.stopPropagation(); ouvrirMenuConv(c, mn); }); d.appendChild(mn); const x = el('button', '', '✕'); x.title = T('Supprimer'); x.addEventListener('click', async e => { e.stopPropagation(); if (!confirm(T('Supprimer cette conversation ?'))) return; await api('/api/supprimer', { id: c.id }); if (CONV && CONV.id === c.id) nouvelle(); rafraichir(); }); d.appendChild(x); d.addEventListener('click', () => ouvrir(c.id)); z.appendChild(d); });
   };
   // Nouveautés de modèles (vérifiées au lancement par Lutin, au plus une fois par jour) : toujours proposées, jamais installées toutes seules.
   let PROP_T = 0;
@@ -1098,9 +1127,14 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     const z = $('jaugeDisque'), j = ETAT.disque_modeles;
     if (!j) { z.hidden = true; return; }
     z.hidden = false; z.textContent = '';
-    const utilise = j.total - j.libre, part = Math.max(0, Math.min(100, Math.round(100 * utilise / j.total))), libre = j.libre / j.total;
+    const total = Math.max(1, j.total), modeles = Math.min(j.modeles, total), autres = Math.max(0, total - j.libre - modeles), libre = j.libre / total;
     z.appendChild(el('div', '', T('Disque des modèles : ') + gaugeOctets(j.libre) + T(' libres sur ') + gaugeOctets(j.total) + ' (' + j.racine + ')'));
-    const b = el('div', 'jauge' + (libre < 0.05 ? ' plein' : libre < 0.15 ? ' serre' : '')), i = document.createElement('i'); i.style.width = part + '%'; b.appendChild(i); z.appendChild(b);
+    const b = el('div', 'barre-disque'), segment = (classe, octets, titre) => { const i = document.createElement('i'); i.className = classe; i.style.width = (100 * octets / total) + '%'; i.title = titre; b.appendChild(i); };
+    segment('m', modeles, T('Modèles d\'Ollama : ') + gaugeOctets(modeles)); segment('a', autres, T('Autres fichiers : ') + gaugeOctets(autres)); z.appendChild(b);
+    const leg = el('div', 'legende-disque'), puce = (couleur, texte, classe) => { const e = el('span', classe || '', texte); e.style.setProperty('--c', couleur); leg.appendChild(e); };
+    puce('var(--accent, #5aa9ff)', T('Modèles ') + gaugeOctets(modeles)); puce('#4b5b6e', T('Autres fichiers ') + gaugeOctets(autres));
+    puce('#33414f', T('Libre ') + gaugeOctets(j.libre) + ' (' + Math.round(100 * libre) + ' %)' + (libre < 0.05 ? ' — ' + T('presque plein') : libre < 0.15 ? ' — ' + T('peu de place') : ''), libre < 0.05 ? 'plein' : libre < 0.15 ? 'serre' : '');
+    z.appendChild(leg);
     z.appendChild(el('div', 'aide', T('Tes modèles installés pèsent ') + gaugeOctets(j.modeles) + ' · ' + j.chemin + (ETAT.machine ? ' · ' + T('Ta machine : ') + ETAT.machine + ' (' + ETAT.budget_go + T(' Go utilisables pour un modèle)') : '')));
   };
   const listeModeles = () => {
@@ -2172,13 +2206,15 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     const v = a.verification;
     if (v) d.appendChild(el('div', v.ok ? 'aide' : 'erreur', v.ok ? T('✔ Vérifié le ') + quand(v.date) : T('⚠ À réparer : ') + v.etapes.filter(x => !x.ok).map(x => x.message).join(' ; ')));
     d.appendChild(msg);
+    if (!a.actif && a.a_configurer.length) d.appendChild(el('div', 'aide', T('⚙ À configurer d\'abord : ') + a.a_configurer.join(', ') + '.'));
     cb.addEventListener('change', async () => {
+      if (cb.checked && a.a_configurer.length) { cb.checked = false; configurerAddon(a, T('Remplis d\'abord ces champs, puis clique sur « Enregistrer et vérifier » : tu pourras ensuite activer l\'addon.')); return; }
       cb.disabled = true; msg.textContent = '';
       try { await api('/api/addon-activer', { id: a.id, actif: cb.checked }); chargerAddons(); }
       catch (e) { msg.textContent = e.message; cb.checked = !cb.checked; cb.disabled = false; }
     });
     if (ETAT.configurateur) {
-      const ligne = el('div', 'ligne'), conf = el('button', '', T('Configurer…')), ver = el('button', '', T('Vérifier'));
+      const ligne = el('div', 'ligne'), conf = el('button', a.a_configurer.length && !a.actif ? 'principal' : '', T('Configurer…')), ver = el('button', '', T('Vérifier'));
       conf.addEventListener('click', () => configurerAddon(a));
       ver.addEventListener('click', async () => { ver.disabled = true; msg.textContent = ''; try { await api('/api/addon-verifier', { id: a.id }); } catch (e) { msg.textContent = e.message; } chargerAddons(); });
       ligne.append(conf, ver);
@@ -2272,6 +2308,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     zone.appendChild(msg);
   };
   // Panneau de l'addon ComfyUI : détection (état, dossier d'installation prérempli), modèles installés, workflows disponibles
+  const COMFY = { ouvert: false, url: '', genre: 'checkpoints' };          // ce qui est en cours de saisie survit au rafraîchissement du panneau
   PANNEAUX.comfyui = async (a, zone) => {
     let x;
     try { x = await api('/api/addon-etat?id=comfyui'); } catch (e) { zone.textContent = e.message; return; }
@@ -2292,6 +2329,35 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     const det = el('details'); det.appendChild(el('summary', '', genres.length ? T('Modèles installés') + ' (' + genres.map(g => g + ' ' + m.modeles[g].length).join(', ') + ')' : T('Aucun modèle visible (ComfyUI éteint et dossier non réglé ?)')));
     genres.forEach(g => { det.appendChild(el('b', '', g)); const u = el('div', 'aide', m.modeles[g].slice(0, 60).join(' · ') + (m.modeles[g].length > 60 ? ' …' : '')); det.appendChild(u); });
     zone.appendChild(det);
+    const choisir = el('button', '', T('Choisir le dossier…'));
+    choisir.addEventListener('click', () => {
+      const c = ouvrirModal(T('Dossier d\'installation de ComfyUI'));
+      c.appendChild(el('p', 'aide', T('Choisis le dossier qui contient main.py et models.')));
+      const zoneP = el('div'); c.appendChild(zoneP);
+      parcourir(zoneP, x.dossier_regle || x.dossier || '', T('Utiliser ce dossier'), async chemin => {
+        try { await api('/api/addon-action', { id: 'comfyui', action: 'utiliser_dossier', dossier: chemin }); $('modal').hidden = true; chargerAddons(); } catch (e) { zoneP.appendChild(el('div', 'erreur', e.message)); }
+      }, () => { $('modal').hidden = true; });
+    });
+    zone.appendChild(choisir);
+    if (x.dossier_regle) {
+      const t = x.telechargement || {}, bloc = el('details');
+      bloc.open = COMFY.ouvert || t.etat === 'en cours'; bloc.addEventListener('toggle', () => { COMFY.ouvert = bloc.open; });
+      bloc.appendChild(el('summary', '', T('Ajouter un modèle (Hugging Face ou Civitai)')));
+      bloc.appendChild(el('div', 'aide', T('Colle l\'adresse du fichier du modèle (le lien de téléchargement) : Lutin le télécharge dans le bon dossier de ComfyUI, sans rien écraser. Certains modèles demandent d\'être connecté à ton compte : ils ne passent pas ici.')));
+      const url = el('input'), genre = el('select'), go = el('button', 'principal', T('Télécharger'));
+      url.placeholder = 'https://huggingface.co/…/modele.safetensors'; url.style.width = '420px'; url.value = COMFY.url; url.addEventListener('input', () => { COMFY.url = url.value; });
+      (x.genres || []).forEach(g => { const o = el('option', '', g); o.value = g; genre.appendChild(o); }); genre.value = COMFY.genre; genre.addEventListener('change', () => { COMFY.genre = genre.value; });
+      go.disabled = t.etat === 'en cours';
+      go.addEventListener('click', async () => { go.disabled = true; msg.textContent = ''; try { await api('/api/addon-action', { id: 'comfyui', action: 'telecharger', url: url.value, genre: genre.value }); COMFY.url = ''; chargerAddons(); } catch (e) { msg.textContent = e.message; go.disabled = false; } });
+      const ligne = el('div', 'ligne'); ligne.append(url, genre, go); bloc.appendChild(ligne);
+      if (t.etat === 'en cours') {
+        const p = el('progress'); p.max = Math.max(1, t.total); p.value = t.fait; p.style.width = '100%'; bloc.appendChild(p);
+        const stop = el('button', '', T('Annuler')); stop.addEventListener('click', async () => { try { await api('/api/addon-action', { id: 'comfyui', action: 'annuler_telechargement' }); } catch (e) { msg.textContent = e.message; } });
+        bloc.appendChild(el('div', 'aide', t.nom + ' — ' + gaugeOctets(t.fait) + (t.total ? ' / ' + gaugeOctets(t.total) : ''))); bloc.appendChild(stop);
+      } else if (t.etat === 'fini') bloc.appendChild(el('div', 'aide', T('✔ Téléchargé : ') + t.nom));
+      else if (t.etat === 'erreur') bloc.appendChild(el('div', 'erreur', t.erreur));
+      zone.appendChild(bloc);
+    }
     zone.appendChild(el('div', 'aide', T('Workflows disponibles : ') + (x.workflows.join(', ') || '—') + T('. Pour la vidéo ou le son, colle ton workflow dans « Flux… ».')));
     zone.appendChild(msg);
   };
@@ -2366,9 +2432,10 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     });
     zone.appendChild(msg);
   };
-  const configurerAddon = a => {
+  const configurerAddon = (a, note) => {
     const c = ouvrirModal(a.nom);
     c.appendChild(el('p', '', a.description));
+    if (note) c.appendChild(el('p', 'erreur', note));
     if (a.etapes.length) {
       const ol = el('ol'); a.etapes.forEach(e => { const li = el('li'); li.appendChild(el('b', '', e.titre + ' ')); li.appendChild(document.createTextNode(e.texte)); if (e.lien) { const l = el('a', '', ' ' + e.lien); l.href = e.lien; l.target = '_blank'; l.rel = 'noopener'; li.appendChild(l); } ol.appendChild(li); });
       c.appendChild(ol);
@@ -2392,6 +2459,11 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
         const v = await api('/api/addon-verifier', { id: a.id });
         v.etapes.forEach(e => sortie.appendChild(el('div', e.ok ? 'aide' : 'erreur', (e.ok ? '✔ ' : '✘ ') + (e.appel ? e.appel + ' : ' : '') + e.message)));
         if (!v.etapes.length) sortie.appendChild(el('div', 'aide', T('✔ Rien à vérifier : cet addon est prêt.')));
+        if (v.ok && !a.actif) {
+          const act = el('button', 'principal', T('Activer maintenant'));
+          act.addEventListener('click', async () => { try { await api('/api/addon-activer', { id: a.id, actif: true }); $('modal').hidden = true; chargerAddons(); } catch (e) { sortie.appendChild(el('div', 'erreur', e.message)); } });
+          sortie.appendChild(act);
+        }
         chargerAddons();
       } catch (e) { sortie.appendChild(el('div', 'erreur', e.message)); }
       go.disabled = false;

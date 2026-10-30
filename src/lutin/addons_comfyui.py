@@ -13,8 +13,13 @@ import json
 import os
 import re
 import secrets
+import shutil
 import subprocess
+import threading
 import time
+import urllib.error
+import urllib.parse
+import urllib.request
 from pathlib import Path
 
 from . import addons
@@ -29,6 +34,11 @@ RE_MARQUE = re.compile(r"\{([a-z_]+)\}")
 RE_MARQUE_ENTIERE = re.compile(r"^\{([a-z_]+)\}$")
 TYPES = ("image", "video", "son")
 DELAI_PAR_DEFAUT = {"image": 600, "video": 3600, "son": 900}
+HOTES_TELECHARGEMENT = ("huggingface.co", "hf.co", "civitai.com")          # et leurs sous-domaines (les fichiers sont servis par des réseaux de diffusion de ces sites)
+GENRES_TELECHARGEMENT = ("checkpoints", "loras", "vae", "diffusion_models", "text_encoders", "controlnet", "upscale_models")
+TAILLE_MODELE_MAX = 60 * 1024 ** 3
+TELECHARGEMENT = {"etat": "", "nom": "", "fait": 0, "total": 0, "erreur": "", "arret": threading.Event()}
+VERROU_TELECHARGEMENT = threading.Lock()
 CACHE = {"modeles": (0, None)}
 DETECTION = {"dossier": ""}               # le dernier dossier d'installation trouvé : le chercher dans les processus coûte (PowerShell), donc seulement à la demande
 
@@ -272,11 +282,120 @@ def outil_generer(args, ctx):
     return _t("ComfyUI n'a pas fini dans le délai ({} s) : le travail continue peut-être de son côté.").format(delai)
 
 
+# --------------------------------------------------------------------------- télécharger un modèle
+def hote_telechargement_permis(hote):
+    hote = (hote or "").lower()
+    if os.environ.get("LUTIN_WEB_LOCAL") == "1" and hote in ("127.0.0.1", "localhost"):          # pour les tests seulement
+        return True
+    return any(hote == h or hote.endswith("." + h) for h in HOTES_TELECHARGEMENT)
+
+
+def nom_de_fichier(url, entete=""):
+    """Le nom du fichier à créer : celui de l'en-tête de téléchargement ou de l'adresse, réduit à un simple nom (jamais un chemin), avec une extension de modèle."""
+    nom = ""
+    m = re.search(r'filename\*?=(?:UTF-8\'\')?"?([^";]+)"?', entete or "")
+    if m:
+        nom = urllib.parse.unquote(m.group(1))
+    if not nom:
+        nom = urllib.parse.unquote(urllib.parse.urlsplit(url).path.rsplit("/", 1)[-1])
+    nom = re.sub(r"[^A-Za-z0-9._ -]", "_", Path(nom.replace(chr(92), "/")).name).strip(" .")
+    if not nom.lower().endswith(EXTENSIONS):
+        raise addons.ErreurAddon(_t("Ce n'est pas un fichier de modèle ({}).").format(", ".join(EXTENSIONS[:3]) + "…"))
+    return nom[:150]
+
+
+class _RedirectionControlee(urllib.request.HTTPRedirectHandler):
+    """Une redirection n'est suivie que vers un site permis, en https : la vérification a lieu AVANT de contacter le nouveau site."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        p = urllib.parse.urlsplit(newurl)
+        local = os.environ.get("LUTIN_WEB_LOCAL") == "1" and p.hostname in ("127.0.0.1", "localhost")
+        if (p.scheme != "https" and not local) or not hote_telechargement_permis(p.hostname):
+            raise addons.ErreurAddon(_t("Le site redirige vers {} : refusé (seuls Hugging Face et Civitai sont permis).").format(p.hostname or "?"))
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+def _telecharger(url, destination_dossier):
+    t = TELECHARGEMENT
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "Lutin"})
+        with urllib.request.build_opener(_RedirectionControlee).open(req, timeout=60) as r:
+            final = urllib.parse.urlsplit(r.geturl())
+            if final.scheme != "https" and not (os.environ.get("LUTIN_WEB_LOCAL") == "1" and final.hostname in ("127.0.0.1", "localhost")):
+                raise addons.ErreurAddon(_t("Le site redirige vers une adresse non chiffrée : refusé."))
+            if not hote_telechargement_permis(final.hostname):
+                raise addons.ErreurAddon(_t("Le site redirige vers {} : refusé (seuls Hugging Face et Civitai sont permis).").format(final.hostname))
+            if os.environ.get("LUTIN_WEB_LOCAL") != "1":
+                from . import web
+                web.verifier_hote_web(r.geturl())
+            nom = nom_de_fichier(r.geturl(), r.headers.get("Content-Disposition", "")) if not t["nom"] else t["nom"]
+            if r.headers.get_content_type() == "text/html":
+                raise addons.ErreurAddon(_t("Le site a renvoyé une page web, pas un fichier (le modèle demande peut-être une connexion à ton compte)."))
+            t["total"] = int(r.headers.get("Content-Length") or 0)
+            if t["total"] > TAILLE_MODELE_MAX:
+                raise addons.ErreurAddon(_t("Fichier trop gros ({} Go au plus).").format(TAILLE_MODELE_MAX // 1024 ** 3))
+            Path(destination_dossier).mkdir(parents=True, exist_ok=True)
+            if shutil.disk_usage(str(destination_dossier)).free < t["total"] + 2 * 1024 ** 3:
+                raise addons.ErreurAddon(_t("Pas assez de place sur le disque pour ce fichier ({} Go).").format(round(t["total"] / 1e9, 1)))
+            cible = Path(destination_dossier) / nom
+            if cible.exists():
+                raise addons.ErreurAddon(_t("Un fichier « {} » existe déjà : rien n'est écrasé.").format(nom))
+            t["nom"] = nom
+            partiel = cible.with_name(nom + ".part")
+            try:
+                with open(partiel, "wb") as sortie:
+                    while True:
+                        bloc = r.read(1024 * 1024)
+                        if not bloc:
+                            break
+                        if t["arret"].is_set():
+                            raise addons.ErreurAddon(_t("Téléchargement annulé."))
+                        sortie.write(bloc)
+                        t["fait"] += len(bloc)
+                        if t["fait"] > TAILLE_MODELE_MAX:
+                            raise addons.ErreurAddon(_t("Fichier trop gros ({} Go au plus).").format(TAILLE_MODELE_MAX // 1024 ** 3))
+                if t["total"] and t["fait"] != t["total"]:
+                    raise addons.ErreurAddon(_t("Téléchargement incomplet ({} sur {} octets).").format(t["fait"], t["total"]))
+                partiel.replace(cible)
+            finally:
+                partiel.unlink(missing_ok=True)
+        t["etat"] = "fini"
+        CACHE["modeles"] = (0, None)
+    except addons.ErreurAddon as erreur:
+        t.update(etat="erreur", erreur=str(erreur))
+    except (urllib.error.URLError, OSError, ValueError) as erreur:
+        t.update(etat="erreur", erreur=_t("Téléchargement impossible : {}").format(erreur))
+
+
+def demarrer_telechargement(url, genre):
+    """Lance le téléchargement d'un modèle dans models/<genre> de ComfyUI, en arrière-plan. Seuls Hugging Face et Civitai sont permis, en https ; rien n'est écrasé."""
+    url = str(url or "").strip()
+    p = urllib.parse.urlsplit(url)
+    if p.scheme != "https" and not (os.environ.get("LUTIN_WEB_LOCAL") == "1" and p.scheme == "http"):
+        raise addons.ErreurAddon(_t("Colle l'adresse complète du fichier (https://…)."))
+    if not hote_telechargement_permis(p.hostname):
+        raise addons.ErreurAddon(_t("Seuls les téléchargements depuis Hugging Face et Civitai sont permis."))
+    if genre not in GENRES_TELECHARGEMENT:
+        raise addons.ErreurAddon(_t("Type de modèle inconnu."))
+    dossier = addons.reglages(IDENT).get("dossier") or ""
+    if not dossier or not dossier_valide(dossier):
+        raise addons.ErreurAddon(_t("Choisis d'abord le dossier d'installation de ComfyUI."))
+    nom = nom_de_fichier(url)
+    with VERROU_TELECHARGEMENT:
+        if TELECHARGEMENT["etat"] == "en cours":
+            raise addons.ErreurAddon(_t("Un téléchargement est déjà en cours."))
+        TELECHARGEMENT.update(etat="en cours", nom=nom, fait=0, total=0, erreur="")
+        TELECHARGEMENT["arret"].clear()
+    threading.Thread(target=_telecharger, args=(url, Path(dossier) / "models" / genre), daemon=True, name="comfy-telechargement").start()
+
+
 # --------------------------------------------------------------------------- panneau de la page
 def etat():
     r = detecter(profond=False)
     r["modeles"] = lister_modeles()
     r["workflows"] = sorted((addons.flux(IDENT).get("workflows") or {}).keys())
+    r["telechargement"] = {k: v for k, v in TELECHARGEMENT.items() if k != "arret"}
+    r["genres"] = list(GENRES_TELECHARGEMENT)
     return r
 
 
@@ -285,6 +404,12 @@ def action(nom, donnees):
         return detecter()
     if nom == "modeles":
         return lister_modeles(forcer=True)
+    if nom == "telecharger":
+        demarrer_telechargement(donnees.get("url"), str(donnees.get("genre") or ""))
+        return etat()
+    if nom == "annuler_telechargement":
+        TELECHARGEMENT["arret"].set()
+        return etat()
     if nom == "utiliser_dossier":
         dossier = str(donnees.get("dossier") or "").strip()
         if not dossier_valide(dossier):

@@ -11,7 +11,7 @@ from pathlib import Path
 import context  # noqa: F401
 
 _TEMP = Path(tempfile.mkdtemp(prefix="lutin-comfy-"))
-for cle, valeur in {"LUTIN_RACINE": str(_TEMP / "projet"), "LUTIN_DONNEES": str(_TEMP / "donnees"), "LUTIN_MEMOIRE": str(_TEMP / "memoire"), "LUTIN_SANS_DEMARRAGE": "1", "LUTIN_SANS_GARDE": "1"}.items():
+for cle, valeur in {"LUTIN_RACINE": str(_TEMP / "projet"), "LUTIN_DONNEES": str(_TEMP / "donnees"), "LUTIN_MEMOIRE": str(_TEMP / "memoire"), "LUTIN_SANS_DEMARRAGE": "1", "LUTIN_SANS_GARDE": "1", "LUTIN_WEB_LOCAL": "1"}.items():
     os.environ.setdefault(cle, valeur)
 (_TEMP / "projet").mkdir(exist_ok=True)
 
@@ -64,6 +64,54 @@ class FauxComfy(BaseHTTPRequestHandler):
             SERVICE["soumis"].append(corps)
             return self._rep(200, {"prompt_id": "abc", "number": 1, "node_errors": {}})
         return self._rep(404, {})
+
+
+class FauxSiteDeModeles(BaseHTTPRequestHandler):
+    """Un site qui sert des fichiers de modèles (et des pièges : page web, redirection vers un autre site, fichier tronqué, envoi lent)."""
+
+    def log_message(self, *a):
+        pass
+
+    def do_GET(self):
+        chemin = self.path.split("?")[0]
+        if chemin == "/modele.safetensors":
+            corps = b"x" * 3_000_000
+            self.send_response(200)
+            self.send_header("Content-Type", "application/octet-stream")
+            self.send_header("Content-Length", str(len(corps)))
+            self.end_headers()
+            self.wfile.write(corps)
+        elif chemin == "/page.safetensors":
+            corps = b"<html>connecte-toi</html>"
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html")
+            self.send_header("Content-Length", str(len(corps)))
+            self.end_headers()
+            self.wfile.write(corps)
+        elif chemin == "/ailleurs.safetensors":
+            self.send_response(302)
+            self.send_header("Location", "http://evil.example.com/modele.safetensors")
+            self.end_headers()
+        elif chemin == "/tronque.safetensors":
+            self.send_response(200)
+            self.send_header("Content-Type", "application/octet-stream")
+            self.send_header("Content-Length", "2000000")
+            self.end_headers()
+            self.wfile.write(b"x" * 1000)
+        elif chemin == "/lent.safetensors":
+            self.send_response(200)
+            self.send_header("Content-Type", "application/octet-stream")
+            self.send_header("Content-Length", str(50 * 1024 * 1024))
+            self.end_headers()
+            try:
+                for _ in range(50):
+                    self.wfile.write(b"x" * 1024 * 1024)
+                    time.sleep(0.2)
+            except OSError:
+                pass
+        else:
+            self.send_response(404)
+            self.end_headers()
 
 
 class ComfyUI(unittest.TestCase):
@@ -191,6 +239,66 @@ class ComfyUI(unittest.TestCase):
         self.assertIn("{rien}", str(e.exception), "le workflow demande une valeur que Lutin ne sait pas donner : message clair, rien n'est envoyé")
         self.assertEqual(SERVICE["soumis"], [])
         addons.restaurer_flux(cu.IDENT)
+
+    def attendre_fin_telechargement(self):
+        for _ in range(300):
+            if cu.TELECHARGEMENT["etat"] != "en cours":
+                return cu.TELECHARGEMENT["etat"]
+            time.sleep(0.05)
+        self.fail("téléchargement jamais terminé")
+
+    def test_telecharger_un_modele_dans_le_bon_dossier_et_refuser_le_reste(self):
+        site = ThreadingHTTPServer(("127.0.0.1", 0), FauxSiteDeModeles)
+        threading.Thread(target=site.serve_forever, daemon=True).start()
+        self.addCleanup(site.shutdown)
+        base = "http://127.0.0.1:%d" % site.server_address[1]
+        vrai_sleep = cu.time.sleep
+        cu.time.sleep = self.vrai_pause                                              # le site lent a besoin du vrai temps
+        self.addCleanup(setattr, cu.time, "sleep", vrai_sleep)
+        # les noms et les sites
+        self.assertEqual(cu.nom_de_fichier("https://x.org/a/b/mon%20modele.safetensors"), "mon modele.safetensors")
+        self.assertEqual(cu.nom_de_fichier("https://x.org/dl", 'attachment; filename="../../evil.safetensors"'), "evil.safetensors", "jamais un chemin")
+        with self.assertRaises(addons.ErreurAddon):
+            cu.nom_de_fichier("https://x.org/script.exe")
+        for hote, permis in (("huggingface.co", True), ("cdn-lfs.hf.co", True), ("civitai.com", True), ("evilhuggingface.co", False), ("huggingface.co.evil.com", False), ("example.com", False)):
+            self.assertEqual(cu.hote_telechargement_permis(hote), permis, hote)
+        # rien sans dossier d'installation
+        with self.assertRaises(addons.ErreurAddon):
+            cu.demarrer_telechargement(base + "/modele.safetensors", "checkpoints")
+        cu.action("utiliser_dossier", {"dossier": str(COMFY)})
+        for url, genre in (("ftp://huggingface.co/x.safetensors", "checkpoints"), ("https://example.com/x.safetensors", "checkpoints"), (base + "/modele.safetensors", "../etc"), ("", "checkpoints")):
+            with self.assertRaises(addons.ErreurAddon):
+                cu.demarrer_telechargement(url, genre)
+        # un vrai téléchargement
+        cu.demarrer_telechargement(base + "/modele.safetensors", "loras")
+        self.assertEqual(self.attendre_fin_telechargement(), "fini", cu.TELECHARGEMENT["erreur"])
+        fichier = COMFY / "models" / "loras" / "modele.safetensors"
+        self.assertEqual(fichier.stat().st_size, 3_000_000)
+        self.assertFalse(list((COMFY / "models" / "loras").glob("*.part")), "pas de reste de téléchargement")
+        self.assertEqual(cu.TELECHARGEMENT["fait"], 3_000_000)
+        self.assertIn("modele.safetensors", cu.lister_modeles(forcer=True)["modeles"].get("loras", []) + [n for n in cu._scan_dossier(COMFY).get("loras", [])])
+        # rien n'est écrasé
+        cu.demarrer_telechargement(base + "/modele.safetensors", "loras")
+        self.assertEqual(self.attendre_fin_telechargement(), "erreur")
+        self.assertIn("existe déjà", cu.TELECHARGEMENT["erreur"])
+        # les pièges
+        for chemin, attendu in (("/page.safetensors", "page web"), ("/ailleurs.safetensors", "refusé"), ("/tronque.safetensors", "incomplet")):
+            cu.demarrer_telechargement(base + chemin, "checkpoints")
+            self.assertEqual(self.attendre_fin_telechargement(), "erreur", chemin)
+            self.assertIn(attendu, cu.TELECHARGEMENT["erreur"], chemin)
+        self.assertEqual([p.name for p in (COMFY / "models" / "checkpoints").iterdir() if p.name != "local.safetensors" and p.name != "notes.txt"], [], "aucun fichier laissé par un téléchargement raté")
+        # annulation
+        cu.demarrer_telechargement(base + "/lent.safetensors", "checkpoints")
+        for _ in range(100):
+            if cu.TELECHARGEMENT["fait"] > 0:
+                break
+            time.sleep(0.05)
+        cu.action("annuler_telechargement", {})
+        self.assertEqual(self.attendre_fin_telechargement(), "erreur")
+        self.assertIn("annulé", cu.TELECHARGEMENT["erreur"])
+        self.assertFalse(list((COMFY / "models" / "checkpoints").glob("lent*")), "l'annulation efface le fichier partiel")
+        fichier.unlink()
+        addons.enregistrer_reglages(cu.IDENT, {"dossier": ""})
 
     def test_les_outils_n_existent_que_si_l_addon_est_actif(self):
         from lutin import dialogue, revue

@@ -2,6 +2,14 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## 0.7.9
+
+- **Addons** : cocher un addon qui n'est pas encore configuré ouvre sa configuration (avec ce qu'il manque) au lieu d'une erreur ; après « Enregistrer et vérifier », un bouton « Activer maintenant ». Les redirections ne sont plus jamais suivies par un addon (elles pouvaient mener hors de ses sites autorisés).
+- **ComfyUI plus facile** : « Choisir le dossier… » avec le navigateur de dossiers, et « Ajouter un modèle » qui télécharge depuis Hugging Face ou Civitai dans le bon dossier (rien d'écrasé, annulable).
+- **Interface** : la barre de contexte et la vitesse retrouvent leur place, sans cadre (une règle de la jauge de disque la touchait par erreur) ; les traits de séparation des colonnes redeviennent fins, tout en restant faciles à attraper ; chaque conversation n'a plus qu'un menu « ⋯ » (épingler, renommer, fiche de suivi ou résumé, avec le choix coché) et la croix ; la jauge de disque des modèles est une vraie barre en segments (modèles, autres fichiers, libre) avec sa légende.
+
+**English.** Addons: ticking an addon that is not set up yet opens its setup (with what is missing) instead of an error; after “Save and check”, an “Enable now” button. Addons never follow redirects any more. Easier ComfyUI: “Choose the folder…” with the folder browser, and “Add a model” downloading from Hugging Face or Civitai into the right folder (nothing overwritten, cancellable). Interface: the context bar and speed are back in place without a frame; column splitters are thin again yet easy to grab; each conversation has a single “⋯” menu (pin, rename, tracking sheet or summary with the choice ticked) plus the cross; the models disk gauge is a real segmented bar with a legend.
+
 ## 0.7.8
 
 - **Rappel automatique du fil** : avant chaque réponse, les passages de toute la conversation (début archivé compris) qui touchent à la demande sont remis au modèle sans qu'il les demande ; un « oui » est complété par la dernière réponse et l'étape en cours.

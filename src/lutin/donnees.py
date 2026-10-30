@@ -353,7 +353,7 @@ def conv_liste():
             entree = en_cache[2]
         else:
             c = lire_json(f, None)
-            entree = {"id": c["id"], "titre": c.get("titre", ""), "maj": c.get("maj", c.get("date", "")), "messages": len(c.get("messages", [])), "epingle": bool(c.get("epingle"))} if c and RE_CONV.match(c.get("id", "")) else None
+            entree = {"id": c["id"], "titre": c.get("titre", ""), "maj": c.get("maj", c.get("date", "")), "messages": len(c.get("messages", [])), "epingle": bool(c.get("epingle")), "memoire": c.get("memoire_longue", "")} if c and RE_CONV.match(c.get("id", "")) else None
             CACHE_CONV[cle] = (st.st_mtime_ns, st.st_size, entree)
         if entree:
             sortie.append(entree)

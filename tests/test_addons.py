@@ -37,6 +37,11 @@ class FauxService(BaseHTTPRequestHandler):
         self.wfile.write(d)
 
     def do_GET(self):
+        if self.path.startswith("/redirection"):                                     # un site autorisé qui renvoie ailleurs
+            self.send_response(302)
+            self.send_header("Location", "http://evil.example.com/vole")
+            self.end_headers()
+            return
         if SERVICE["version"] == 1:
             if self.path == "/bot%s/getMe" % SERVICE["jeton"].replace(":", "%3A"):
                 return self._rep(200, {"ok": True, "result": {"username": "lutin_bot"}})
@@ -130,6 +135,16 @@ class Addons(unittest.TestCase):
         self.assertIn("401", r["erreur"])
         self.assertNotIn("AUTRE-JETON-SECRET", r["erreur"], "le service a répété l'adresse : le jeton est masqué")
         self.assertNotIn("AUTRE-JETON-SECRET", r["erreur"].replace("%3A", ":"))
+
+    def test_une_redirection_n_est_jamais_suivie(self):
+        addons.enregistrer_reglages("essai", {"jeton": SERVICE["jeton"]})
+        f = flux_v1(self.port)
+        f["appels"]["rebond"] = {"methode": "GET", "url": "http://127.0.0.1:%d/redirection" % self.port}
+        addons.appliquer_flux("essai", f)
+        r = addons.appeler("essai", "rebond")
+        self.assertFalse(r["ok"])
+        self.assertIn("302", r["erreur"], "la redirection vers un site hors manifeste est refusée, pas suivie")
+        addons.restaurer_flux("essai")
 
     def test_un_flux_ne_peut_viser_que_les_sites_du_manifeste(self):
         m = addons.manifeste("essai")

@@ -4,6 +4,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 import unittest
 from pathlib import Path
 
@@ -243,6 +244,46 @@ class Parcours(unittest.TestCase):
             brouillons = p.evaluer("[...document.querySelectorAll('#listeAddons textarea')].map(t => t.value).join(' | ')")
             for attendu in ("Oui, je regarde.", "Bonjour, le devis arrive demain.", "Mon premier message", "Merci !"):
                 self.assertIn(attendu, brouillons, "les brouillons sont dans des champs modifiables")
+            self.assertEqual(p.erreurs, [])
+
+    def test_menu_de_la_conversation_addon_a_configurer_et_jauge_de_disque(self):
+        """Le menu « ⋯ » d'une conversation (épingler, renommer, fiche de suivi ou résumé), une case d'addon non configuré qui ouvre sa configuration au lieu d'une erreur, et la jauge de disque des modèles."""
+        with self.captures.serveur_demo() as (port, tmp):
+            p = self.ouvrir(tmp, "http://127.0.0.1:%d/" % port)
+            p.attendre("document.querySelectorAll('#conversations .conv').length >= 3")
+            self.assertEqual(p.evaluer("document.querySelectorAll('#conversations .conv:first-child button').length"), 2, "deux boutons par conversation : « ⋯ » et la croix")
+            self.assertEqual(p.evaluer("[...document.querySelectorAll('#conversations .conv:first-child button')].map(b => b.textContent).join(' ')"), "⋯ ✕")
+            p.evaluer("document.querySelector('#conversations .conv:first-child button.menu-ouvrir').click()")
+            p.attendre("!!document.querySelector('.menu-conv')")
+            menu = p.evaluer("document.querySelector('.menu-conv').textContent")
+            for attendu in ("Renommer", "Fiche de suivi", "Résumé automatique", "Suivre le réglage général"):
+                self.assertIn(attendu, menu)
+            self.assertIn("✔ Suivre le réglage général", menu, "le choix actuel est coché")
+            p.evaluer("[...document.querySelectorAll('.menu-conv button')].find(b => b.textContent.includes('Résumé automatique')).click()")
+            p.attendre("!document.querySelector('.menu-conv')")
+            time.sleep(1.5)                                                         # la liste se recharge après le choix
+            p.evaluer("document.querySelector('#conversations .conv:first-child button.menu-ouvrir').click()")
+            p.attendre("!!document.querySelector('.menu-conv')")
+            self.assertIn("✔ Résumé automatique", p.evaluer("document.querySelector('.menu-conv').textContent"), "le choix est retenu")
+            p.evaluer("document.body.click()")
+            p.attendre("!document.querySelector('.menu-conv')")
+            # une case d'addon à configurer : elle ouvre la configuration, sans erreur
+            p.evaluer(onglet("auto"))
+            carte = "[...document.querySelectorAll('#listeAddons > .carte')].find(c => c.textContent.includes('Telegram'))"
+            p.attendre("!!(" + carte + ")")
+            self.assertIn("À configurer d'abord", p.evaluer("(" + carte + ").textContent"))
+            p.evaluer("(" + carte + ").querySelector('input[type=checkbox]').click()")
+            p.attendre("document.getElementById('modalCorps').textContent.includes('Remplis d')")
+            self.assertFalse(p.evaluer("(" + carte + ").querySelector('input[type=checkbox]').checked"), "pas activé tant que ce n'est pas configuré")
+            self.assertEqual(p.evaluer("document.querySelector('#listeAddons .erreur') ? document.querySelector('#listeAddons .erreur').textContent : ''"), "", "aucun message d'erreur sur la carte")
+            # la jauge de disque des modèles : une vraie barre en segments avec sa légende
+            p.evaluer("document.getElementById('modal').hidden = true")
+            p.evaluer(onglet("modeles"))
+            p.attendre("!!document.querySelector('.barre-disque')")
+            self.assertEqual(p.evaluer("document.querySelectorAll('.barre-disque > i').length"), 2)
+            self.assertIn("Libre", p.evaluer("document.querySelector('.legende-disque').textContent"))
+            # la barre de contexte n'a plus de cadre ni de hauteur imposée
+            self.assertEqual(p.evaluer("getComputedStyle(document.getElementById('jauge')).borderTopWidth"), "0px")
             self.assertEqual(p.erreurs, [])
 
     def test_reprise_proposee_une_fois_puis_plus(self):
