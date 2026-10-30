@@ -2,6 +2,13 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## 0.6.1
+
+- **Bibliothèque d'Ollama** (onglet Modèles) : les modèles récents ou populaires d'ollama.com, avec recherche, capacités et tailles, installables en un clic. Le catalogue de Lutin ne peut pas connaître un modèle sorti hier ; cette liste, si.
+- **Tests** : chaque option des Réglages est changée et relue par l'API ; le conteneur Docker est vérifié de bout en bout dans la CI (réglages, pièce jointe, santé, dossiers de travail).
+
+**English.** Models tab: an **Ollama library** browser (newest or most popular, with search, abilities and sizes, one-click install), because Lutin's hand-written catalogue cannot know a model released yesterday. Every Settings option is now changed and read back by a test, and the Docker container is checked end to end in the CI.
+
 ## 0.6.0
 
 - **Plus aucune fenêtre noire** : tout programme lancé par Lutin sans console (nvidia-smi, git, commandes…) l'est sans fenêtre ; une règle unique (`sansconsole.py`), mesurée, au lieu d'un correctif par appel.

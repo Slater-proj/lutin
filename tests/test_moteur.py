@@ -1347,6 +1347,48 @@ class Assistant(unittest.TestCase):
                 shutil.rmtree(base / nom, ignore_errors=True)
             A.CACHE_TAILLES.clear()
 
+    def test_chaque_reglage_se_change_et_se_relit(self):
+        """Toutes les options des Réglages : une valeur différente, enregistrée par l'API, est relue à l'identique (aucune option n'est perdue ni ignorée) ; l'absurde est borné ou refusé."""
+        avant = lire("/api/etat")["reglages"]
+        autres = {"modele": "autre:1b", "avance": True, "num_ctx": 8192, "temperature": 0.9, "reflexion": True, "auto_ecriture": True, "auto_commandes": True, "mode": "recherche",
+                  "top_p": 0.8, "top_k": 40, "min_p": 0.05, "repeat_penalty": 1.1, "garde_ressources": False, "seuil_ram_go": 5.0, "seuil_disque_go": 20.0, "plafond_donnees_go": 4.0,
+                  "limite_ram_commande_go": 8.0, "liberer_si_comfy": False, "rappels_auto": "toujours", "num_thread": 4, "garde_min": 10, "essai_a_blanc": True,
+                  "copie_conversations": True, "web": False, "tours_max": 20, "num_predict": 512}
+        try:
+            for cle, valeur in autres.items():
+                relu = post("/api/reglages", {cle: valeur})
+                self.assertEqual(relu[cle], valeur, cle)
+            relu = lire("/api/etat")["reglages"]
+            for cle, valeur in autres.items():
+                self.assertEqual(relu[cle], valeur, "relu après coup : " + cle)
+            borne = post("/api/reglages", {"num_ctx": 10 ** 9, "seuil_ram_go": -3, "num_thread": 10 ** 6, "rappels_auto": "n'importe quoi", "top_p": 7})
+            self.assertEqual((borne["num_ctx"], borne["num_thread"], borne["rappels_auto"]), (131072, 256, "scenario"))
+            self.assertGreaterEqual(borne["seuil_ram_go"], 0.5)
+            self.assertLessEqual(borne["top_p"], 1.0)
+            post("/api/reglages", {"mode": "inconnu"}, attendu=400)
+            post("/api/reglages", {"modele": "mauvais nom ; rm"}, attendu=400)
+        finally:
+            post("/api/reglages", {k: avant[k] for k in autres if k in avant})
+
+    def test_bibliotheque_d_ollama_par_l_api(self):
+        from lutin import decouverte
+        vrai = decouverte.chercher
+        appels = []
+        try:
+            decouverte.chercher = lambda q, o, p: appels.append((q, o, p)) or {"modeles": [{"nom": "x", "description": "d", "capacites": ["tools"], "tailles": ["8b"], "maj": "", "telechargements": 1}], "suite": False}
+            r = lire("/api/decouvrir?q=qwen&o=popular&p=2")
+            self.assertEqual((r["modeles"][0]["nom"], appels[-1]), ("x", ("qwen", "popular", "2")))
+            decouverte.chercher = lambda q, o, p: (_ for _ in ()).throw(OSError("pas de réseau"))
+            with self.assertRaises(urllib.error.HTTPError) as e:
+                lire("/api/decouvrir")
+            self.assertEqual(e.exception.code, 503)
+            decouverte.chercher = vrai
+            with self.assertRaises(urllib.error.HTTPError) as e:
+                lire("/api/decouvrir?o=au-hasard")
+            self.assertEqual(e.exception.code, 400)
+        finally:
+            decouverte.chercher = vrai
+
     def test_taille_de_corps_absurde(self):
         """Un Content-Length négatif ou illisible ne bloque pas le serveur dans une lecture sans fin : il est refusé tout de suite."""
         import http.client

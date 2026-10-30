@@ -82,6 +82,17 @@ jobs:
           docker exec lutin-ci curl -fsS http://127.0.0.1:11434/api/version
           docker exec lutin-ci lutin modeles lister
           docker exec lutin-ci lutin doctor
+      - name: Dans le conteneur, l'API répond de bout en bout (réglages, pièce jointe, santé, dossiers de travail)
+        run: |
+          T=$(docker exec lutin-ci python3 -c "import json;print(json.load(open('/data/donnees/console.json'))['jeton'])")
+          API() { docker exec -i lutin-ci curl -fsS -H "X-Token: $T" "$@"; }
+          API http://127.0.0.1:8777/api/etat | python3 -c "import sys,json; d=json.load(sys.stdin); assert d['reglages']['mode']=='polyvalent', d['reglages']['mode']"
+          API -X POST -H "Content-Type: application/json" -d '{"mode":"recherche","copie_conversations":true}' http://127.0.0.1:8777/api/reglages | python3 -c "import sys,json; d=json.load(sys.stdin); assert d['mode']=='recherche' and d['copie_conversations'] is True"
+          API -X POST -H "X-Nom: note.txt" --data-binary 'bonjour, une note' http://127.0.0.1:8777/api/document | python3 -c "import sys,json; d=json.load(sys.stdin); assert d['nom']=='note.txt' and d['caracteres']==16, d"
+          API http://127.0.0.1:8777/api/sante-systeme | python3 -c "import sys,json; d=json.load(sys.stdin); assert d['niveau'] in ('ok','attention','critique')"
+          API http://127.0.0.1:8777/api/travaux | python3 -c "import sys,json; d=json.load(sys.stdin); assert d['liste'], d"
+          API "http://127.0.0.1:8777/api/dossiers?chemin=/travail" | python3 -c "import sys,json; d=json.load(sys.stdin); assert d['chemin'].endswith('travail'), d"
+          docker exec lutin-ci test -d /data/donnees/pieces
           docker rm -f lutin-ci
       - name: L'image légère démarre (sans Ollama, il est ailleurs)
         run: |

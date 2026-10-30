@@ -42,6 +42,14 @@ The text of the files is added to your message **for the model only**: the conve
 
 Click **📎** next to the message box, or paste (Ctrl+V) or drop an image: PNG, JPEG, GIF or WebP, 8 MB and 4 images per message at most. If the current model cannot see images, Lutin switches for that request to an installed model that can (see the « Images » role in the Models tab), or tells you there is none and ignores the images. Images stay in Lutin's data folder (`images/`), only the most recent ones are sent back to the model, and orphan images are deleted after two days.
 
+## Finding new models
+
+The Models tab has three ways to follow what comes out, none of which needs a new version of Lutin:
+
+- **Check for updates** compares your installed models with their latest version in the Ollama registry.
+- **Look for new models** reads the catalogue Lutin keeps online (checked once a day) and suggests better choices for your machine. The catalogue is a hand-written selection with a mark per role: it follows the new releases only when someone adds them (a weekly check also reports models that disappeared from the registry).
+- **Ollama library** lists what ollama.com shows (newest or most popular, with a search box): name, description, abilities (tools, vision, thinking) and the available sizes, with an **Install** button per size. Nothing is installed without your click, and if the site changes or is unreachable the list says so and you can still install a model by its name.
+
 ## Modes
 
 Settings > **Mode** (or `/mode` in the chat) changes what Lutin may do, and how it behaves. Every file change and every command still asks for your approval in every mode.

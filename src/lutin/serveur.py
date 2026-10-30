@@ -3,6 +3,7 @@ from http.server import BaseHTTPRequestHandler
 from . import bench as _bench
 from . import acces as _acces
 from . import conseil as _conseil
+from . import decouverte as _decouverte
 from . import donnees as _donnees
 from . import horsligne as _hl
 from . import modes as _modes
@@ -184,6 +185,14 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 return self._envoyer(200, _m.lister_dossiers((q.get("chemin") or [""])[0]))
             except ValueError as e:
                 return self._envoyer(400, {"erreur": str(e)})
+        if chemin == "/api/decouvrir":                           # la bibliothèque d'Ollama (nouveautés, populaires, recherche)
+            q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+            try:
+                return self._envoyer(200, _decouverte.chercher((q.get("q") or [""])[0], (q.get("o") or ["newest"])[0], (q.get("p") or ["1"])[0]))
+            except ValueError as e:
+                return self._envoyer(400, {"erreur": str(e)})
+            except OSError as e:
+                return self._envoyer(503, {"erreur": str(e)})
         if chemin == "/api/journal":
             m = re.search(r"[?&]n=(\d+)", self.path)
             return self._envoyer(200, {"entrees": _m.lire_journal(int(m.group(1)) if m else 200)})

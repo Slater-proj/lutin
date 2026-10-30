@@ -368,6 +368,16 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     </div>
     <div id="propositions"></div>
     <div id="listeModeles"></div>
+    <h2>Bibliothèque d'Ollama</h2>
+    <div class="aide">Les nouveaux modèles sortent tous les jours, bien avant d'entrer dans le catalogue de Lutin : parcours ici la liste publique d'ollama.com (récents ou populaires) et installe celui que tu veux. Les tailles sont les variantes proposées (« 8b » = 8 milliards de paramètres, environ 5 Go) ; choisis-en une qui tient dans ta mémoire.</div>
+    <div class="carte" style="gap:8px;flex-wrap:wrap;align-items:center">
+      <input id="qDecouverte" placeholder="Rechercher (facultatif)" style="flex:1;min-width:140px">
+      <select id="oDecouverte"><option value="newest">Les plus récents</option><option value="popular">Les plus populaires</option></select>
+      <button id="bDecouvrir">Parcourir</button>
+    </div>
+    <div id="msgDecouverte" class="aide"></div>
+    <div id="listeDecouverte"></div>
+    <div style="margin:6px 0"><button id="bPlusDecouverte" hidden>Voir la suite</button></div>
     <h2>Un autre modèle Ollama</h2>
     <div class="carte"><input id="autreModele" placeholder="par exemple qwen3:8b" style="flex:1"><button id="bAutre">Installer</button></div>
     <div id="msgModeles" class="aide"></div>
@@ -1920,6 +1930,40 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
   });
   $('bSCont').addEventListener('click', async () => { try { await api('/api/memoire', { fichier: 'CONTEXTE.md', texte: $('tContexte').value }); $('mC').textContent = T('Enregistré.'); } catch (e) { $('mC').textContent = e.message; } });
   $('bSMem').addEventListener('click', async () => { try { await api('/api/memoire', { fichier: 'MEMOIRE.md', texte: $('tMemoire').value }); $('mM').textContent = T('Enregistré.'); } catch (e) { $('mM').textContent = e.message; } });
+  // ---- Bibliothèque d'Ollama
+  let PAGE_DECOUVERTE = 1;
+  const carteDecouverte = m => {
+    const d = el('div', 'carte'); d.style.cssText = 'flex-direction:column;align-items:stretch;gap:4px';
+    const t = el('div'); t.appendChild(el('b', '', m.nom));
+    m.capacites.forEach(c => t.appendChild(el('span', 'aide', ' · ' + c)));
+    if (m.maj) t.appendChild(el('span', 'aide', ' · ' + m.maj));
+    d.appendChild(t);
+    if (m.description) d.appendChild(el('div', 'aide', m.description));
+    const b = el('div');
+    (m.tailles.length ? m.tailles : ['']).forEach(taille => {
+      const nom = taille ? m.nom + ':' + taille : m.nom;
+      const bt = el('button', '', taille ? T('Installer') + ' ' + taille : T('Installer')); bt.title = nom;
+      bt.addEventListener('click', async () => {
+        try { await api('/api/installer-modele', { modele: nom }); $('msgModeles').textContent = T('Téléchargement de « ') + nom + T(' » lancé : il est ajouté à la liste ci-dessus, et apparaîtra dans le choix du modèle une fois installé.'); rafraichir(); }
+        catch (e) { $('msgDecouverte').textContent = e.message; }
+      });
+      b.appendChild(bt); b.appendChild(document.createTextNode(' '));
+    });
+    d.appendChild(b);
+    return d;
+  };
+  const decouvrir = async page => {
+    $('msgDecouverte').textContent = T('Recherche…');
+    try {
+      const r = await api('/api/decouvrir?q=' + encodeURIComponent($('qDecouverte').value.trim()) + '&o=' + $('oDecouverte').value + '&p=' + page);
+      if (page === 1) $('listeDecouverte').textContent = '';
+      r.modeles.forEach(m => $('listeDecouverte').appendChild(carteDecouverte(m)));
+      PAGE_DECOUVERTE = page; $('bPlusDecouverte').hidden = !r.suite; $('msgDecouverte').textContent = r.modeles.length || page > 1 ? '' : T('Aucun résultat.');
+    } catch (e) { $('msgDecouverte').textContent = e.message; }
+  };
+  $('bDecouvrir').addEventListener('click', () => decouvrir(1));
+  $('qDecouverte').addEventListener('keydown', e => { if (e.key === 'Enter') decouvrir(1); });
+  $('bPlusDecouverte').addEventListener('click', () => decouvrir(PAGE_DECOUVERTE + 1));
   $('bAutre').addEventListener('click', async () => { const m = $('autreModele').value.trim(); if (!m) return; try { await api('/api/installer-modele', { modele: m }); $('autreModele').value = ''; $('msgModeles').textContent = T('Téléchargement de « ') + m + T(' » lancé : il est ajouté à la liste ci-dessus, et apparaîtra dans le choix du modèle une fois installé.'); rafraichir(); } catch (e) { $('msgModeles').textContent = e.message; } });
   $('bRestaurer').addEventListener('click', async () => { try { await api('/api/modeles-restaurer', {}); rafraichir(); } catch (e) { $('msgModeles').textContent = e.message; } });
   $('bAjouterTravail').addEventListener('click', ajouterTravail);

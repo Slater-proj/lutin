@@ -42,6 +42,14 @@ Le texte des fichiers est ajouté à ton message **pour le modèle seulement** :
 
 Clique sur **📎** à côté de la zone de message, ou colle (Ctrl+V) ou glisse une image : PNG, JPEG, GIF ou WebP, 8 Mo et 4 images par message au plus. Si le modèle courant ne voit pas les images, Lutin passe pour cette demande sur un modèle installé qui les voit (rôle « Images » de l'onglet Modèles), ou te dit qu'il n'y en a pas et ignore les images. Les images restent dans le dossier de données de Lutin (`images/`), seules les plus récentes sont renvoyées au modèle, et les images orphelines sont supprimées après deux jours.
 
+## Trouver de nouveaux modèles
+
+L'onglet Modèles a trois façons de suivre ce qui sort, sans attendre une nouvelle version de Lutin :
+
+- **Chercher les mises à jour** compare tes modèles installés avec leur dernière version dans le registre d'Ollama.
+- **Chercher de nouveaux modèles** lit le catalogue que Lutin garde en ligne (vérifié une fois par jour) et propose de meilleurs choix pour ta machine. Ce catalogue est une sélection écrite à la main, avec une note par rôle : il suit les nouveautés seulement quand quelqu'un les y ajoute (une vérification hebdomadaire signale aussi les modèles disparus du registre).
+- **Bibliothèque d'Ollama** liste ce que montre ollama.com (récents ou populaires, avec une recherche) : nom, description, capacités (tools, vision, thinking) et tailles disponibles, avec un bouton **Installer** par taille. Rien n'est installé sans ton clic, et si le site change ou ne répond pas, la liste le dit et tu peux toujours installer un modèle par son nom.
+
 ## Modes
 
 Réglages > **Mode** (ou `/mode` dans la conversation) change ce que Lutin peut faire et sa façon de faire. Toute modification de fichier et toute commande demandent ton accord dans tous les modes.
