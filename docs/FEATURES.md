@@ -42,6 +42,15 @@ The text of the files is added to your message **for the model only**: the conve
 
 Click **📎** next to the message box, or paste (Ctrl+V) or drop an image: PNG, JPEG, GIF or WebP, 8 MB and 4 images per message at most. If the current model cannot see images, Lutin switches for that request to an installed model that can (see the « Images » role in the Models tab), or tells you there is none and ignores the images. Images stay in Lutin's data folder (`images/`), only the most recent ones are sent back to the model, and orphan images are deleted after two days.
 
+## Email addon
+
+Lutin watches your inbox (IMAP) and prepares replies (SMTP) following **your rules**: by default every reply is a **draft you approve** on the page; nothing leaves without you. Use an **app password** (created in your provider's security settings), stored apart and never shown again.
+
+- **Rules**, one per line, the first match wins: `de:*@bank.com -> ignorer`, `sujet:*invoice* -> brouillon: Say I am looking into it.`, `ton:agressif -> ignorer`, `* -> brouillon`. Criteria: sender, subject, text, and the **tone** (aggressive, passive, neutral, friendly, judged by the model only if a rule asks); actions: ignore, draft, or **answer alone** (at most 20 a day). No matching rule: the message is ignored.
+- **An email is never an order**: anyone can write any sender name, so the model has **no tool** to answer (it can only write the reply) and the message is data. Automatic messages (noreply, mailing lists, receipts, out-of-office), your own messages and duplicates are never answered.
+- **Only new emails**: on first activation the existing ones are ignored, and the mailbox is read without marking anything as read.
+- **Limits**: some personal Outlook.com / Hotmail accounts no longer accept app passwords over IMAP and require a modern sign-in that Lutin does not handle yet. A server on your local network is refused unless you say so in the settings.
+
 ## ComfyUI addon
 
 Let Lutin drive your ComfyUI. ComfyUI must already be running on this machine (Lutin drives it, it does not start it).

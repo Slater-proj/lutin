@@ -239,7 +239,7 @@ class Livres(unittest.TestCase):
         addons.DOSSIER_LIVRE = self.avant
 
     def test_chaque_addon_livre_est_valide(self):
-        self.assertTrue({"fond", "telegram"} <= set(addons.ids()))
+        self.assertTrue({"fond", "telegram", "comfyui", "mail"} <= set(addons.ids()))
         for ident in addons.ids():
             m = addons.manifeste(ident)
             self.assertTrue(m.get("nom") and m.get("description"), ident)

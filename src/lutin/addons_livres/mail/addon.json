@@ -1,0 +1,25 @@
+{
+ "nom": "Courriel",
+ "description": "Lutin surveille ta boîte de réception et prépare des réponses selon tes règles. Par défaut chaque réponse est un brouillon que tu valides : rien ne part sans toi. Les courriels sont des données, jamais des ordres.",
+ "hotes": [],
+ "reglages": [
+  {"cle": "adresse", "libelle": "Adresse de la boîte", "defaut": "", "aide": "Ton adresse complète, qui sert aussi d'identifiant de connexion."},
+  {"cle": "motdepasse", "libelle": "Mot de passe d'application", "secret": true, "aide": "Un mot de passe d'application (pas celui de ton compte), à créer dans la sécurité de ton compte chez ton fournisseur. Il est rangé à part et jamais réaffiché."},
+  {"cle": "serveur_imap", "libelle": "Serveur de réception (IMAP)", "defaut": "", "aide": "Par exemple imap.gmail.com, imap.mail.ovh.net, imap.fastmail.com…"},
+  {"cle": "port_imap", "libelle": "Port IMAP", "defaut": "993", "obligatoire": false},
+  {"cle": "serveur_smtp", "libelle": "Serveur d'envoi (SMTP)", "defaut": "", "aide": "Par exemple smtp.gmail.com, ssl0.ovh.net, smtp.fastmail.com…"},
+  {"cle": "port_smtp", "libelle": "Port SMTP", "defaut": "465", "obligatoire": false, "aide": "465 (chiffré d'emblée) ou 587 (STARTTLS)."},
+  {"cle": "dossier", "libelle": "Dossier surveillé", "defaut": "INBOX", "obligatoire": false},
+  {"cle": "intervalle", "libelle": "Regarder toutes les (minutes)", "defaut": "5", "obligatoire": false},
+  {"cle": "reseau_local", "libelle": "Serveur sur mon réseau local", "defaut": "non", "obligatoire": false, "choix": [["non", "Non (serveur sur internet)"], ["oui", "Oui (NAS, serveur maison)"]], "aide": "Par prudence, Lutin refuse de se connecter à une adresse de ton réseau local, sauf si tu le dis ici."},
+  {"cle": "regles", "libelle": "Règles de tri", "defaut": "# Une règle par ligne, la première qui correspond gagne.\n* -> brouillon", "obligatoire": false, "texte": true,
+   "aide": "Exemples : « de:*@banque.fr -> ignorer » · « sujet:*facture* -> brouillon: Réponds que je regarde et reviens sous 48 h. » · « ton:agressif -> ignorer » · « * -> brouillon ». Actions : ignorer, brouillon (tu valides), auto (Lutin répond seul, 20 par jour au plus). Sans règle qui correspond, le message est ignoré."}
+ ],
+ "etapes": [
+  {"titre": "Créer un mot de passe d'application.", "texte": "Chez ton fournisseur (Gmail : compte Google > Sécurité > Mots de passe des applications ; autres : paramètres de sécurité de la messagerie). Active d'abord la validation en deux étapes si on te le demande.", "lien": "https://myaccount.google.com/apppasswords"},
+  {"titre": "Remplir les serveurs.", "texte": "Les adresses IMAP (réception) et SMTP (envoi) sont dans l'aide de ton fournisseur. Attention : certains comptes (Outlook.com / Hotmail personnels) n'acceptent plus les mots de passe d'application en IMAP et demandent une connexion « moderne » que Lutin ne gère pas encore."},
+  {"titre": "Écrire tes règles.", "texte": "Par défaut, chaque nouveau courriel donne un brouillon. Tu peux ignorer certains expéditeurs, donner une consigne à Lutin selon le sujet, ou lui laisser répondre seul à ce que tu choisis."},
+  {"titre": "Enregistrer et vérifier, puis activer.", "texte": "Lutin teste la réception et l'envoi. Au premier passage il ignore les courriels déjà présents : il ne traite que les nouveaux."}
+ ],
+ "verification": []
+}

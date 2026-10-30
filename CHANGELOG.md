@@ -2,6 +2,12 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## 0.7.3
+
+- **Addon Courriel** : Lutin surveille ta boîte (IMAP) et prépare des réponses (SMTP) selon tes règles de tri (expéditeur, sujet, texte, ton jugé par le modèle) ; brouillon à valider par défaut, réponse seule possible (20 par jour au plus). Un courriel est une donnée, jamais un ordre : le modèle n'a aucun outil ; messages automatiques, doublons et arriéré ignorés ; mot de passe rangé à part.
+
+**English.** Email addon: Lutin watches your inbox (IMAP) and prepares replies (SMTP) following your sorting rules (sender, subject, text, tone judged by the model); draft to approve by default, automatic reply possible (20 a day at most). An email is data, never an order: the model has no tool; automatic messages, duplicates and the existing backlog are ignored; password stored apart.
+
 ## 0.7.2
 
 - **Addon ComfyUI** : détection de ComfyUI (version, carte graphique, dossier d'installation prérempli en un clic), liste des modèles installés (par ComfyUI ou par le dossier), génération d'images à la demande du modèle avec ton accord, workflows modifiables (vidéo et son : colle le tien). Éditeur de flux « Flux… » pour tous les addons.

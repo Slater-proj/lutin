@@ -187,7 +187,7 @@ class Parcours(unittest.TestCase):
             p.evaluer(onglet("auto"))
             carte = "[...document.querySelectorAll('#listeAddons .carte')].find(c => c.textContent.includes('Travail de fond') && c.querySelector('input[type=checkbox]'))"
             p.attendre("!!(" + carte + ")")
-            self.assertEqual(p.evaluer("document.querySelectorAll('#listeAddons > .carte').length"), 3, "travail de fond, Telegram, ComfyUI")
+            self.assertEqual(p.evaluer("document.querySelectorAll('#listeAddons > .carte').length"), 4, "travail de fond, Telegram, ComfyUI, courriel")
             self.assertFalse(p.evaluer("(" + carte + ").querySelector('input[type=checkbox]').checked"), "désactivé par défaut")
             self.assertNotIn("Nouveau travail de fond", p.evaluer("document.getElementById('listeAddons').textContent"))
             p.evaluer("(" + carte + ").querySelector('input[type=checkbox]').click()")

@@ -2299,6 +2299,24 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
       try { await api('/api/addon-flux', { id: a.id, flux }); msg.className = 'aide'; msg.textContent = T('✔ Enregistré.'); chargerAddons(); } catch (e) { msg.className = 'erreur'; msg.textContent = e.message; }
     });
   };
+  // Panneau de l'addon Courriel : état de la surveillance et brouillons de réponses à valider
+  PANNEAUX.mail = async (a, zone) => {
+    let x;
+    try { x = await api('/api/addon-etat?id=mail'); } catch (e) { zone.textContent = e.message; return; }
+    const msg = el('div', 'erreur'), agir = async (action, plus) => { try { await api('/api/addon-action', Object.assign({ id: 'mail', action }, plus || {})); chargerAddons(); } catch (e) { msg.textContent = e.message; } };
+    zone.appendChild(el('div', x.erreur ? 'erreur' : 'aide', x.erreur ? T('⚠ Courriel : ') + x.erreur : (x.ecoute ? T('✔ Lutin surveille ta boîte ({}).').replace('{}', x.adresse) : T('Surveillance arrêtée.'))));
+    if (!x.brouillons.length) zone.appendChild(el('div', 'aide', T('Aucun brouillon en attente.')));
+    x.brouillons.forEach(b => {
+      const d = el('div', 'carte'); d.style.flexDirection = 'column'; d.style.alignItems = 'stretch'; d.style.gap = '4px';
+      d.appendChild(el('b', '', T('Brouillon pour ') + b.de + ' — ' + b.sujet));
+      d.appendChild(el('div', 'aide', T('Il a écrit : ') + b.extrait));
+      const t = el('textarea'); t.rows = 4; t.value = b.texte; t.style.width = '100%'; d.appendChild(t);
+      const l = el('div', 'ligne'), ok = el('button', 'principal', T('Envoyer')), non = el('button', '', T('Rejeter'));
+      ok.addEventListener('click', () => agir('envoyer', { brouillon: b.id, texte: t.value })); non.addEventListener('click', () => agir('rejeter', { brouillon: b.id }));
+      l.append(ok, non); d.appendChild(l); zone.appendChild(d);
+    });
+    zone.appendChild(msg);
+  };
   const configurerAddon = a => {
     const c = ouvrirModal(a.nom);
     c.appendChild(el('p', '', a.description));

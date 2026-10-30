@@ -42,6 +42,15 @@ Le texte des fichiers est ajouté à ton message **pour le modèle seulement** :
 
 Clique sur **📎** à côté de la zone de message, ou colle (Ctrl+V) ou glisse une image : PNG, JPEG, GIF ou WebP, 8 Mo et 4 images par message au plus. Si le modèle courant ne voit pas les images, Lutin passe pour cette demande sur un modèle installé qui les voit (rôle « Images » de l'onglet Modèles), ou te dit qu'il n'y en a pas et ignore les images. Les images restent dans le dossier de données de Lutin (`images/`), seules les plus récentes sont renvoyées au modèle, et les images orphelines sont supprimées après deux jours.
 
+## Addon Courriel
+
+Lutin surveille ta boîte de réception (IMAP) et prépare des réponses (SMTP) selon **tes règles** : par défaut chaque réponse est un **brouillon que tu valides** sur la page ; rien ne part sans toi. Utilise un **mot de passe d'application** (créé dans la sécurité de ton fournisseur), rangé à part et jamais réaffiché.
+
+- **Règles**, une par ligne, la première qui correspond gagne : `de:*@banque.fr -> ignorer`, `sujet:*facture* -> brouillon: Réponds que je regarde.`, `ton:agressif -> ignorer`, `* -> brouillon`. Critères : expéditeur, sujet, texte, et le **ton** (agressif, passif, neutre, amical, jugé par le modèle seulement si une règle le demande) ; actions : ignorer, brouillon, ou **répondre seul** (20 par jour au plus). Aucune règle ne correspond : le message est ignoré.
+- **Un courriel n'est jamais un ordre** : n'importe qui peut écrire n'importe quel nom d'expéditeur, donc le modèle n'a **aucun outil** pour répondre (il ne peut qu'écrire la réponse) et le message est une donnée. Les messages automatiques (noreply, listes de diffusion, accusés, absence), tes propres messages et les doublons ne reçoivent jamais de réponse.
+- **Seulement les nouveaux courriels** : à la première activation, ceux qui sont déjà là sont ignorés, et la boîte est lue sans rien marquer comme lu.
+- **Limites** : certains comptes Outlook.com / Hotmail personnels n'acceptent plus les mots de passe d'application en IMAP et exigent une connexion moderne que Lutin ne gère pas encore. Un serveur de ton réseau local est refusé, sauf si tu le dis dans les réglages.
+
 ## Addon ComfyUI
 
 Laisse Lutin piloter ton ComfyUI. ComfyUI doit déjà tourner sur cette machine (Lutin le pilote, il ne le démarre pas).

@@ -329,6 +329,11 @@ def verifier(ident):
     manquants = [r.get("libelle", r["cle"]) for r in m["reglages"] if r.get("obligatoire", True) and not valeurs.get(r["cle"])]
     if manquants:
         etapes.append({"appel": "", "ok": False, "message": _t("À remplir d'abord : {}.").format(", ".join(manquants))})
+    elif module_code(ident) is not None and hasattr(module_code(ident), "verifier"):
+        try:
+            etapes = module_code(ident).verifier()
+        except Exception as e:  # noqa: BLE001  (une vérification qui plante est un échec lisible, pas une erreur de Lutin)
+            etapes = [{"appel": "", "ok": False, "message": masquer(str(e), valeurs)}]
     else:
         for nom in m["verification"]:
             try:
