@@ -42,6 +42,14 @@ Le texte des fichiers est ajouté à ton message **pour le modèle seulement** :
 
 Clique sur **📎** à côté de la zone de message, ou colle (Ctrl+V) ou glisse une image : PNG, JPEG, GIF ou WebP, 8 Mo et 4 images par message au plus. Si le modèle courant ne voit pas les images, Lutin passe pour cette demande sur un modèle installé qui les voit (rôle « Images » de l'onglet Modèles), ou te dit qu'il n'y en a pas et ignore les images. Les images restent dans le dossier de données de Lutin (`images/`), seules les plus récentes sont renvoyées au modèle, et les images orphelines sont supprimées après deux jours.
 
+## Addon Telegram
+
+Parle à Lutin depuis ton téléphone. Crée un bot avec @BotFather, colle son jeton (onglet Automatisation > *Extensions facultatives* > Telegram > *Configurer…*), vérifie, active, puis écris `/appairer CODE` à ton bot (le code est affiché dans la carte) : ce chat devient **le tien**.
+
+- **Tes messages sont des demandes** : Lutin travaille en **lecture seule** (il lit et cherche, mais ne modifie rien et ne lance rien depuis Telegram) dans une conversation « ✈ Telegram » que tu peux relire sur le PC, et te répond directement.
+- **Les autres personnes** : ignorées par défaut (pas même un refus). Tu peux choisir **un brouillon que tu valides sur la page** avant tout envoi, ou **une réponse seule**. Dans les deux cas le modèle n'a **aucun outil** : il ne peut que rédiger une réponse selon ta consigne, le message reçu est traité comme une donnée, jamais comme un ordre, et une personne ne peut pas déclencher plus de 20 réponses par heure.
+- **Solide** : la position de lecture est enregistrée après chaque message (rien n'est traité deux fois après un redémarrage), le code d'appairage change après chaque usage et après cinq essais ratés, seuls les messages texte privés sont lus, et une panne du service est attendue avec un délai croissant. Le jeton n'est jamais affiché ni écrit dans le journal.
+
 ## Addons : des fonctions facultatives, une par une
 
 Les nouvelles fonctions arrivent sous forme d'**addons** : des modules facultatifs livrés avec Lutin, **désactivés tant que tu ne les actives pas** (onglet Automatisation > *Extensions facultatives*). Chacun a un guide d'installation (les étapes à suivre, les champs à remplir), une **vérification** qui doit réussir avant l'activation (les réglages sont bons, le service répond comme prévu) et un **flux** (`flux.json`) : la liste des appels que l'addon fait à un service (adresse, méthode, champs, réponse attendue). Le flux est de la donnée, pas du code : il peut changer sans toucher à Lutin.

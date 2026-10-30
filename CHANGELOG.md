@@ -2,6 +2,12 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## 0.7.1
+
+- **Addon Telegram** : parle à Lutin depuis ton téléphone. Appairage par code ; tes messages sont des demandes traitées en lecture seule ; les autres personnes sont ignorées, ou reçoivent un brouillon que tu valides, ou une réponse seule — toujours sans aucun outil. Le flux est corrigeable si Telegram change. Les addons peuvent désormais avoir des choix et des textes longs dans leurs réglages, un panneau propre et des actions.
+
+**English.** Telegram addon: talk to Lutin from your phone. Pairing by code; your messages are requests handled read-only; other people are ignored, get a draft you approve, or an automatic answer — always with no tool at all. The flow can be fixed if Telegram changes. Addons can now have choices and long texts in their settings, their own panel and actions.
+
 ## 0.7.0
 
 - **Les addons** : des fonctions facultatives livrées avec Lutin, désactivées par défaut, avec guide d'installation, vérification avant activation, revérification quotidienne, et un **flux** éditable (les appels faits à un service). Si un service change, l'addon passe en « à réparer » et Lutin propose une correction que tu valides (jamais appliquée seule, version livrée rétablissable). Un addon ne joint que les sites de son manifeste ; les secrets sont rangés à part.

@@ -42,6 +42,14 @@ The text of the files is added to your message **for the model only**: the conve
 
 Click **📎** next to the message box, or paste (Ctrl+V) or drop an image: PNG, JPEG, GIF or WebP, 8 MB and 4 images per message at most. If the current model cannot see images, Lutin switches for that request to an installed model that can (see the « Images » role in the Models tab), or tells you there is none and ignores the images. Images stay in Lutin's data folder (`images/`), only the most recent ones are sent back to the model, and orphan images are deleted after two days.
 
+## Telegram addon
+
+Talk to Lutin from your phone. Create a bot with @BotFather, paste its token (Automation tab > *Optional extensions* > Telegram > *Set up…*), check, enable, then write `/appairer CODE` to your bot (the code is shown in the card): that chat is now **yours**.
+
+- **Your messages are requests**: Lutin works **read-only** (it reads and searches, but changes nothing and runs nothing from Telegram) in a conversation "✈ Telegram" you can also read on the PC, and answers you directly.
+- **Other people**: ignored by default (not even a refusal). You can choose **a draft you approve on the page** before anything is sent, or **answering on its own**. In both cases the model has **no tool at all**: it can only write a reply following your instruction, the received message is treated as data, never as an order, and one person cannot trigger more than 20 replies an hour.
+- **Solid**: the reading position is saved after each message (nothing is processed twice after a restart), the pairing code changes after each use and after five wrong tries, only private text messages are read, and a service outage is waited out with a growing delay. The token is never shown nor logged.
+
 ## Addons: optional features, one by one
 
 New features arrive as **addons**: optional modules shipped with Lutin, **off until you turn them on** (Automation tab > *Optional extensions*). Each one has a setup guide (the steps to follow, with the fields to fill in), a **check** that must succeed before it can be enabled (the settings are right, the service answers as expected), and a **flow** (`flux.json`): the list of calls the addon makes to a service (address, method, fields, expected answer). The flow is data, not code, so it can change without touching Lutin.

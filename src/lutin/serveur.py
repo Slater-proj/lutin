@@ -215,6 +215,14 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 return self._envoyer(400, {"erreur": str(e)})
         if chemin == "/api/addons":                              # les addons : état, réglages (jamais les secrets), dernière vérification
             return self._envoyer(200, {"liste": _addons.liste(), "alertes": _addons.alertes()})
+        if chemin == "/api/addon-etat":                          # le panneau d'un addon actif (ex. Telegram : code d'appairage, brouillons) : seulement depuis cette machine
+            if not self._configurateur():
+                return self._envoyer(403, {"erreur": _t("Les extensions se gèrent depuis cette machine (niveau « cette machine seulement » ou navigateur de cette machine).")})
+            q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+            try:
+                return self._envoyer(200, _addons.etat_vivant((q.get("id") or [""])[0]))
+            except _addons.ErreurAddon as e:
+                return self._envoyer(400, {"erreur": str(e)})
         if chemin == "/api/fond":                                # le travail de fond : travaux et avancement
             return self._envoyer(200, {"liste": _fond.liste()})
         if chemin == "/api/fond-rapport":
@@ -460,7 +468,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
                     amorce = _m.amorcer_fiche(conv, r) if choix == "fichier" else 0          # une fiche vide est remplie à partir du début de la conversation
                     _m.conv_ecrire(conv)
                 return self._envoyer(200, {"mode": _m.memoire_longue(_m.conv_lire(ident), r), "mesure": _suivi.mesure(ident, r["num_ctx"]), "amorce": amorce})
-            if self.path in ("/api/addon-activer", "/api/addon-reglages", "/api/addon-verifier", "/api/addon-correction", "/api/addon-flux", "/api/addon-flux-restaurer", "/api/fond-creer", "/api/fond-action"):
+            if self.path in ("/api/addon-activer", "/api/addon-reglages", "/api/addon-verifier", "/api/addon-correction", "/api/addon-flux", "/api/addon-flux-restaurer", "/api/addon-action", "/api/fond-creer", "/api/fond-action"):
                 if not self._configurateur():
                     return self._envoyer(403, {"erreur": _t("Les extensions se gèrent depuis cette machine (niveau « cette machine seulement » ou navigateur de cette machine).")})
                 try:
@@ -476,6 +484,8 @@ class Gestionnaire(BaseHTTPRequestHandler):
                         return self._envoyer(200, _addons.appliquer_flux(str(donnees.get("id", "")), donnees.get("flux")))
                     if self.path == "/api/addon-flux-restaurer":
                         return self._envoyer(200, _addons.restaurer_flux(str(donnees.get("id", ""))))
+                    if self.path == "/api/addon-action":
+                        return self._envoyer(200, _addons.action(str(donnees.get("id", "")), donnees.get("action", ""), donnees))
                     if self.path == "/api/fond-creer":
                         return self._envoyer(200, _fond.creer(donnees.get("nom"), donnees.get("dossier"), donnees.get("motifs"), donnees.get("consigne"), bool(donnees.get("regulier")), donnees.get("intervalle_h", 24)))
                     return self._envoyer(200, _fond.action(str(donnees.get("id", "")), str(donnees.get("action", ""))))

@@ -228,5 +228,40 @@ class Addons(unittest.TestCase):
             addons.module_code = vrai
 
 
+class Livres(unittest.TestCase):
+    """Les addons livrés avec Lutin : manifestes valides, flux conformes, tout le texte affiché est traduit."""
+
+    def setUp(self):
+        self.avant = addons.DOSSIER_LIVRE
+        addons.DOSSIER_LIVRE = Path(addons.__file__).parent / "addons_livres"
+
+    def tearDown(self):
+        addons.DOSSIER_LIVRE = self.avant
+
+    def test_chaque_addon_livre_est_valide(self):
+        self.assertTrue({"fond", "telegram"} <= set(addons.ids()))
+        for ident in addons.ids():
+            m = addons.manifeste(ident)
+            self.assertTrue(m.get("nom") and m.get("description"), ident)
+            addons.valider_flux(addons.flux_livre(ident), m)
+            for nom in m["verification"]:
+                self.assertIn(nom, addons.flux_livre(ident)["appels"], "%s : la vérification appelle un appel qui existe" % ident)
+            for r in m["reglages"]:
+                self.assertRegex(r["cle"], addons.RE_CLE)
+            for appel in addons.flux_livre(ident)["appels"].values():
+                self.assertTrue(appel["url"].startswith("https://"), "%s : les services distants se joignent en https" % ident)
+            self.assertFalse(addons.decrire(ident)["actif"], "désactivé par défaut")
+
+    def test_tout_le_texte_des_manifestes_est_traduit(self):
+        from unittest import mock
+        from lutin import i18n
+        with mock.patch.dict(os.environ, {"LUTIN_LANGUE": "en"}):
+            for ident in addons.ids():
+                for texte in addons.textes_visibles(addons.manifeste(ident)):
+                    if texte != "Telegram":
+                        self.assertNotEqual(i18n.t(texte), texte, "%s : « %s » n'est pas traduit" % (ident, texte[:60]))
+                self.assertEqual(addons.decrire(ident)["description"], i18n.t(addons.manifeste(ident)["description"]), "la page reçoit le texte traduit")
+
+
 if __name__ == "__main__":
     unittest.main()

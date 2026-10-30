@@ -2236,6 +2236,35 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     });
     det.appendChild(go); zone.appendChild(det);
   };
+  // Panneau de l'addon Telegram : écoute, code d'appairage, appareils appairés, brouillons de réponses à valider
+  PANNEAUX.telegram = async (a, zone) => {
+    let x;
+    try { x = await api('/api/addon-etat?id=telegram'); } catch (e) { zone.textContent = e.message; return; }
+    const msg = el('div', 'erreur'), agir = async (action, plus) => { try { await api('/api/addon-action', Object.assign({ id: 'telegram', action }, plus || {})); chargerAddons(); } catch (e) { msg.textContent = e.message; } };
+    zone.appendChild(el('div', x.erreur ? 'erreur' : 'aide', x.erreur ? T('⚠ Telegram ne répond pas : ') + x.erreur : (x.ecoute ? T('✔ Lutin écoute ton bot.') : T('Écoute arrêtée.'))));
+    const appairage = el('div', 'carte'); appairage.style.flexDirection = 'column'; appairage.style.alignItems = 'stretch'; appairage.style.gap = '4px';
+    appairage.appendChild(el('b', '', T('Appairage')));
+    appairage.appendChild(el('div', 'aide', T('Dans Telegram, écris à ton bot : ') + '/appairer ' + x.code + T(' — le code change après chaque usage.')));
+    x.autorises.forEach(p => {
+      const l = el('div', 'ligne'); l.appendChild(el('span', '', '📱 ' + p.nom + ' '));
+      const b = el('button', '', T('Retirer')); b.addEventListener('click', () => { if (confirm(T('Retirer cet appareil ? Il ne pourra plus donner de demandes à Lutin.'))) agir('oublier', { chat_id: p.id }); });
+      l.appendChild(b); appairage.appendChild(l);
+    });
+    if (!x.autorises.length) appairage.appendChild(el('div', 'aide', T('Aucun appareil appairé : personne ne peut encore donner de demande à Lutin.')));
+    const nc = el('button', '', T('Nouveau code')); nc.addEventListener('click', () => agir('nouveau_code')); appairage.appendChild(nc);
+    zone.appendChild(appairage);
+    zone.appendChild(el('div', 'aide', { non: T('Les messages d\'autres personnes sont ignorés.'), brouillon: T('Les messages d\'autres personnes donnent un brouillon que tu valides ici.'), auto: T('⚠ Lutin répond seul aux messages d\'autres personnes.') }[x.tiers]));
+    x.brouillons.forEach(b => {
+      const d = el('div', 'carte'); d.style.flexDirection = 'column'; d.style.alignItems = 'stretch'; d.style.gap = '4px';
+      d.appendChild(el('b', '', T('Brouillon pour ') + b.de));
+      d.appendChild(el('div', 'aide', T('Il a écrit : ') + b.demande));
+      const t = el('textarea'); t.rows = 3; t.value = b.texte; t.style.width = '100%'; d.appendChild(t);
+      const l = el('div', 'ligne'), ok = el('button', 'principal', T('Envoyer')), non = el('button', '', T('Rejeter'));
+      ok.addEventListener('click', () => agir('envoyer', { brouillon: b.id, texte: t.value })); non.addEventListener('click', () => agir('rejeter', { brouillon: b.id }));
+      l.append(ok, non); d.appendChild(l); zone.appendChild(d);
+    });
+    zone.appendChild(msg);
+  };
   const configurerAddon = a => {
     const c = ouvrirModal(a.nom);
     c.appendChild(el('p', '', a.description));
@@ -2245,8 +2274,12 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     }
     const champs = {};
     a.reglages.forEach(r => {
-      const lab = el('label', 'opt-ligne'), inp = el('input'); inp.style.width = '320px'; inp.type = r.secret ? 'password' : 'text';
-      inp.value = r.secret ? '' : (r.valeur ?? ''); inp.placeholder = r.secret ? (r.defini ? T('•••• (déjà défini : laisse vide pour le garder)') : T('à coller ici')) : (r.defaut || '');
+      const lab = el('label', 'opt-ligne');
+      let inp;
+      if (r.choix) { inp = el('select'); r.choix.forEach(([v, nom]) => { const o = el('option', '', nom); o.value = v; inp.appendChild(o); }); inp.value = r.valeur || r.defaut || r.choix[0][0]; }
+      else if (r.texte) { inp = el('textarea'); inp.rows = 3; inp.style.width = '100%'; inp.maxLength = 2000; }
+      else { inp = el('input'); inp.style.width = '320px'; inp.type = r.secret ? 'password' : 'text'; }
+      if (!r.choix) { inp.value = r.secret ? '' : (r.valeur ?? ''); inp.placeholder = r.secret ? (r.defini ? T('•••• (déjà défini : laisse vide pour le garder)') : T('à coller ici')) : (r.defaut || ''); }
       lab.appendChild(document.createTextNode(r.libelle + ' ')); lab.appendChild(inp); c.appendChild(lab); if (r.aide) c.appendChild(el('div', 'aide', r.aide)); champs[r.cle] = inp;
     });
     const sortie = el('div'), go = el('button', 'principal', T('Enregistrer et vérifier'));

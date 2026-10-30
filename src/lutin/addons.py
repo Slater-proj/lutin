@@ -177,6 +177,8 @@ def enregistrer_reglages(ident, nouveaux):
         valeur = str(valeur).strip()
         if len(valeur) > 2000:
             raise ErreurAddon(_t("Valeur trop longue pour « {} ».").format(cle))
+        if connus[cle].get("choix") and valeur not in [c[0] for c in connus[cle]["choix"]]:
+            raise ErreurAddon(_t("Valeur inconnue pour « {} ».").format(cle))
         if connus[cle].get("secret"):
             if valeur:
                 secret_courant[cle] = valeur
@@ -187,20 +189,33 @@ def enregistrer_reglages(ident, nouveaux):
     return decrire(ident)
 
 
+def textes_visibles(m):
+    """Tous les textes d'un manifeste que la page montre à l'utilisateur (ils sont écrits en français et traduits à l'affichage)."""
+    textes = [m.get("nom", ""), m.get("description", "")]
+    for e in m["etapes"]:
+        textes += [e.get("titre", ""), e.get("texte", "")]
+    for r in m["reglages"]:
+        textes += [r.get("libelle", ""), r.get("aide", "")] + [c[1] for c in r.get("choix", [])]
+    return [t for t in textes if t]
+
+
 def decrire(ident):
-    """Ce que la page voit : le manifeste, l'état, les réglages (jamais la valeur d'un secret : seulement s'il est défini)."""
+    """Ce que la page voit : le manifeste (traduit), l'état, les réglages (jamais la valeur d'un secret : seulement s'il est défini)."""
     m = manifeste(ident)
     etat = lire_etat().get(ident, {})
     valeurs = reglages(ident)
     champs = []
     for r in m["reglages"]:
-        champ = {k: r.get(k) for k in ("cle", "libelle", "aide", "secret", "defaut")}
+        champ = {k: r.get(k) for k in ("cle", "secret", "defaut", "texte")}
+        champ["libelle"], champ["aide"] = _t(r.get("libelle", "")), _t(r["aide"]) if r.get("aide") else None
+        champ["choix"] = [[c[0], _t(c[1])] for c in r["choix"]] if r.get("choix") else None
         if r.get("secret"):
             champ["defini"] = bool(valeurs.get(r["cle"]))
         else:
             champ["valeur"] = valeurs.get(r["cle"], "")
         champs.append(champ)
-    return {"id": ident, "nom": m.get("nom", ident), "description": m.get("description", ""), "doc": m.get("doc", ""), "etapes": m["etapes"], "hotes": m["hotes"], "reglages": champs,
+    etapes = [dict(e, titre=_t(e.get("titre", "")), texte=_t(e.get("texte", ""))) for e in m["etapes"]]
+    return {"id": ident, "nom": _t(m.get("nom", ident)), "description": _t(m.get("description", "")), "doc": m.get("doc", ""), "etapes": etapes, "hotes": m["hotes"], "reglages": champs,
             "actif": bool(etat.get("actif")), "verification": etat.get("verification"), "flux_modifie": flux_modifie(ident), "etat": ETAT.get(ident, {}).get("etat", "")}
 
 
@@ -400,7 +415,23 @@ def verifier_si_besoin(maintenant=None):
 
 def alertes():
     """Les addons actifs dont la dernière vérification a échoué (la page affiche un avertissement)."""
-    return [{"id": i, "nom": manifeste(i).get("nom", i)} for i, e in lire_etat().items() if e.get("actif") and i in ids() and e.get("verification") and not e["verification"].get("ok")]
+    return [{"id": i, "nom": _t(manifeste(i).get("nom", i))} for i, e in lire_etat().items() if e.get("actif") and i in ids() and e.get("verification") and not e["verification"].get("ok")]
+
+
+def etat_vivant(ident):
+    """Ce que la partie vivante de l'addon montre dans son panneau (module.etat()), ou {} s'il n'en a pas."""
+    module = module_code(ident)
+    manifeste(ident)
+    return module.etat() if module and hasattr(module, "etat") else {}
+
+
+def action(ident, nom, donnees):
+    """Une action demandée par le panneau d'un addon (module.action(nom, donnees)) : envoyer un brouillon, oublier un appareil…"""
+    module = module_code(ident)
+    manifeste(ident)
+    if not module or not hasattr(module, "action"):
+        raise ErreurAddon(_t("Cet addon n'a pas d'action « {} ».").format(nom))
+    return module.action(str(nom), donnees if isinstance(donnees, dict) else {})
 
 
 # --------------------------------------------------------------------------- corriger le flux

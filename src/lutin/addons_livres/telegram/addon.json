@@ -1,0 +1,20 @@
+{
+ "nom": "Telegram",
+ "description": "Parle à Lutin depuis Telegram (sur ton téléphone, n'importe où) : il lit tes messages, travaille en lecture seule et te répond. Tu peux aussi le laisser répondre à d'autres personnes, d'abord en brouillon que tu valides.",
+ "hotes": ["api.telegram.org"],
+ "doc": "https://core.telegram.org/bots/api",
+ "reglages": [
+  {"cle": "jeton", "libelle": "Jeton du bot", "secret": true, "aide": "Donné par @BotFather quand tu crées ton bot (une ligne du genre 123456:ABC-DEF…)."},
+  {"cle": "tiers", "libelle": "Messages d'autres personnes", "defaut": "non", "obligatoire": false, "choix": [["non", "Ignorer"], ["brouillon", "Préparer un brouillon que je valide"], ["auto", "Répondre seul (à tes risques)"]],
+   "aide": "Sans appairage, personne d'autre que toi ne peut donner d'ordre à Lutin. Ici, tu choisis ce qui arrive aux messages écrits au bot par quelqu'un d'autre : jamais d'outil, jamais d'action, seulement une réponse."},
+  {"cle": "consigne", "libelle": "Consigne pour répondre aux autres", "defaut": "", "obligatoire": false, "texte": true,
+   "aide": "Le ton et les règles (ex. : « Réponds poliment et brièvement ; si on me demande un rendez-vous, dis que je reviens vers la personne. »)."}
+ ],
+ "etapes": [
+  {"titre": "Créer ton bot.", "texte": "Dans Telegram, ouvre la conversation avec @BotFather, écris /newbot, choisis un nom puis un identifiant qui finit par « bot ».", "lien": "https://t.me/BotFather"},
+  {"titre": "Copier le jeton.", "texte": "BotFather te donne une ligne « Use this token… » : copie le jeton et colle-le ci-dessous."},
+  {"titre": "Enregistrer et vérifier.", "texte": "Lutin vérifie que le jeton marche et affiche le nom de ton bot. Active ensuite l'addon avec la case."},
+  {"titre": "T'appairer.", "texte": "Ouvre ton bot dans Telegram et écris-lui « /appairer » suivi du code affiché dans la carte (ex. /appairer 123456). À partir de là, tes messages sont des demandes pour Lutin."}
+ ],
+ "verification": ["moi"]
+}

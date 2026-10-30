@@ -1,0 +1,8 @@
+{
+ "version": 1,
+ "appels": {
+  "moi": {"methode": "GET", "url": "https://api.telegram.org/bot{jeton}/getMe", "attendu": {"ok": true}, "extraire": {"bot": "result.username"}},
+  "recevoir": {"methode": "GET", "url": "https://api.telegram.org/bot{jeton}/getUpdates", "params": {"offset": "{offset}", "timeout": "{attente}", "allowed_updates": "[\"message\"]"}, "attendu": {"ok": true}},
+  "envoyer": {"methode": "POST", "url": "https://api.telegram.org/bot{jeton}/sendMessage", "corps": {"chat_id": "{chat_id}", "text": "{texte}"}, "attendu": {"ok": true}}
+ }
+}
