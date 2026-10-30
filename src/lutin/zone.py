@@ -21,7 +21,7 @@ from pathlib import Path
 from .i18n import t as _t
 
 CREATE_NO_WINDOW, CREATE_NEW_CONSOLE = 0x08000000, 0x00000010
-MENU_PIN, MENU_OUVRIR, MENU_REDEMARRER, MENU_QUITTER = 1, 2, 3, 4
+MENU_PIN, MENU_OUVRIR, MENU_REDEMARRER, MENU_QUITTER, MENU_MAJ = 1, 2, 3, 4, 5
 MESSAGE_ICONE = 0x0400 + 1          # WM_USER + 1 : message envoyé par l'icône
 WM_LBUTTONUP, WM_LBUTTONDBLCLK, WM_RBUTTONUP, WM_CONTEXTMENU = 0x0202, 0x0203, 0x0205, 0x007B
 WM_NULL, WM_CLOSE, WM_DESTROY = 0x0000, 0x0010, 0x0002
@@ -186,6 +186,12 @@ def code_pin(dossiers):
     return texte or _t("Lutin ne répond pas : relance-le depuis l'icône.")
 
 
+def relancer_icone_apres_quitter(delai=4):
+    """Lance, dans quelques secondes et sans fenêtre, une nouvelle icône Lutin (la mise à jour a remplacé le code : l'ancienne icône doit quitter et la nouvelle prendre sa place)."""
+    code = "import time, subprocess, sys; time.sleep({}); subprocess.Popen([sys.executable, '-m', 'lutin', 'zone'])".format(int(delai))
+    subprocess.Popen([sys.executable, "-c", code], creationflags=CREATE_NO_WINDOW | 0x00000008, close_fds=True)          # 0x8 = DETACHED_PROCESS
+
+
 def message(titre, texte):
     user32.MessageBoxW(None, texte, titre, MB_OK | MB_ICONINFORMATION | MB_TOPMOST)
 
@@ -238,6 +244,7 @@ class Zone:
         m = user32.CreatePopupMenu()
         user32.AppendMenuW(m, MF_STRING, MENU_PIN, _t("Code PIN (connecter un téléphone)"))
         user32.AppendMenuW(m, MF_STRING, MENU_OUVRIR, _t("Ouvrir l'interface"))
+        user32.AppendMenuW(m, MF_STRING, MENU_MAJ, _t("Mettre à jour Lutin"))
         user32.AppendMenuW(m, MF_STRING, MENU_REDEMARRER, _t("Redémarrer"))
         user32.AppendMenuW(m, MF_STRING, MENU_QUITTER, _t("Quitter"))
         return m
@@ -260,8 +267,24 @@ class Zone:
             threading.Thread(target=lambda: message(_t("Lutin : code PIN"), code_pin(self.dossiers)), daemon=True, name="zone-pin").start()
         elif choix == MENU_REDEMARRER:
             threading.Thread(target=self.serveur.redemarrer, daemon=True, name="zone-redemarrer").start()
+        elif choix == MENU_MAJ:
+            threading.Thread(target=self.mettre_a_jour, daemon=True, name="zone-maj").start()
         elif choix == MENU_QUITTER:
             threading.Thread(target=self.quitter, daemon=True, name="zone-quitter").start()
+
+    def mettre_a_jour(self):
+        """Met Lutin à jour (comme `lutin update --app`), le dit dans une fenêtre, puis relance le serveur ET l'icône pour que la nouvelle version tourne vraiment."""
+        from . import cli
+        lignes = []
+        try:
+            code, _, apres = cli.mise_a_jour_detaillee(lignes.append, lignes.append, capturer=True)
+        except Exception as erreur:  # noqa: BLE001 — pas de console : la fenêtre dit ce qui s'est passé
+            code, apres = 1, None
+            lignes.append(str(erreur)[:300])
+        message(_t("Lutin : mise à jour"), chr(10).join(lignes))
+        if code == 0 and apres:
+            relancer_icone_apres_quitter()
+            self.quitter()
 
     def quitter(self):
         self.serveur.arreter()

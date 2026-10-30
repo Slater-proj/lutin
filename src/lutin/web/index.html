@@ -28,7 +28,8 @@ if (window.mermaid) { mermaid.initialize({ startOnLoad: false, theme: 'dark', se
 }
 * { box-sizing: border-box; }
 html, body { height:100%; }
-body { margin:0; background:radial-gradient(1200px 600px at 70% -10%, #14202e 0%, var(--bg) 55%) fixed, var(--bg); color:var(--fg); font:15px/1.55 "Segoe UI", system-ui, sans-serif; display:grid; grid-template-columns:260px 1fr; }
+:root { --lateral:260px; --options-h:auto; }
+body { margin:0; background:radial-gradient(1200px 600px at 70% -10%, #14202e 0%, var(--bg) 55%) fixed, var(--bg); color:var(--fg); font:15px/1.55 "Segoe UI", system-ui, sans-serif; display:grid; grid-template-columns:var(--lateral) 6px 1fr; }
 /* barres de défilement fines */
 * { scrollbar-width:thin; scrollbar-color:#33445a transparent; }
 *::-webkit-scrollbar { width:9px; height:9px; } *::-webkit-scrollbar-thumb { background:#33445a; border-radius:5px; border:2px solid transparent; background-clip:content-box; } *::-webkit-scrollbar-thumb:hover { background:#43587a; background-clip:content-box; }
@@ -36,7 +37,12 @@ body { margin:0; background:radial-gradient(1200px 600px at 70% -10%, #14202e 0%
 aside { background:linear-gradient(180deg, var(--panel2), var(--panel)); border-right:1px solid var(--line); display:flex; flex-direction:column; min-height:0; }
 aside h1 { font-size:.95rem; font-weight:600; letter-spacing:.02em; margin:0; padding:14px 16px; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:8px; }
 aside h1 img { border-radius:7px; flex:0 0 auto; }
-aside .liste { overflow:auto; flex:1; padding:8px; }
+aside .liste { overflow:auto; flex:1; padding:8px; min-height:60px; }
+.separateur-v { cursor:col-resize; background:var(--line); width:6px; margin:0; position:relative; touch-action:none; user-select:none; } .separateur-v:hover, .separateur-v.actif, .separateur-v:focus-visible { background:var(--accent, #5aa9ff); outline:0; }
+.separateur-h { cursor:row-resize; background:var(--line); height:6px; flex:0 0 6px; touch-action:none; user-select:none; } .separateur-h:hover, .separateur-h.actif, .separateur-h:focus-visible { background:var(--accent, #5aa9ff); outline:0; }
+details.groupe { margin:10px 0; border:1px solid var(--line); border-radius:10px; background:#10161e; padding:0 14px 6px; } details.groupe > summary { cursor:pointer; padding:10px 0; font-weight:600; list-style:none; } details.groupe > summary::-webkit-details-marker { display:none; } details.groupe > summary::before { content:'▸ '; color:var(--muted); } details.groupe[open] > summary::before { content:'▾ '; }
+body.glisse { user-select:none; cursor:col-resize; } body.glisse-h { user-select:none; cursor:row-resize; }
+.options-lat.dimensionnee { flex:0 0 auto; overflow:auto; max-height:70vh; }
 .conv { padding:8px 10px; border-radius:8px; cursor:pointer; font-size:.85rem; display:flex; gap:6px; align-items:center; border:1px solid transparent; transition:background .12s, border-color .12s; }
 .conv:hover { background:#1c2634; }
 .conv.choisie { background:#1e2c3d; border-color:var(--line2); }
@@ -236,10 +242,11 @@ details.pensee { color:var(--muted); font-size:.82rem; margin:4px 0; } details.p
 #burger:hover { border-color:var(--accent); background:#1c2a3a; }
 /* Bouton ☰ : toujours visible. Sur grand écran il masque/affiche la liste des conversations ; sur mobile il ouvre l'overlay.
    On réduit la colonne à 0 px (sans display:none) pour que « main » reste bien dans la 2e colonne de la grille. */
-body.lat-cachee { grid-template-columns:0 1fr; }
+body.lat-cachee { grid-template-columns:0 0 1fr; } body.lat-cachee .separateur-v { visibility:hidden; }
 body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hidden; }
 /* --- Mobile (≤ 860 px) --- */
 @media (max-width:860px) {
+  .separateur-v, .separateur-h { display:none; }
   body { grid-template-columns:1fr; height:100vh; height:100dvh; overflow:hidden; }
   body.lat-cachee { grid-template-columns:1fr; }
   body.lat-cachee aside { width:auto; min-width:auto; overflow:visible; display:none; }
@@ -300,6 +307,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
   <div style="padding:6px 8px 4px"><button class="principal" id="bNouvelle" style="width:100%;padding:5px 9px">+ Nouvelle conversation</button></div>
   <div style="padding:0 8px 4px"><input id="recherche" type="search" placeholder="Rechercher…" style="width:100%;padding:4px 9px"></div>
   <div class="liste" id="conversations"></div>
+  <div class="separateur-h" id="sepH" role="separator" aria-orientation="horizontal" tabindex="0" title="Glisse pour agrandir la liste ou les options (double-clic : réinitialiser)"></div>
   <div class="options-lat">
     <div class="opt-titre" id="optTitre" title="Cliquer pour replier / déplier"><span id="optChevron">▾</span> Options</div>
     <label class="opt-ligne">Modèle <select id="selModele"></select></label>
@@ -314,13 +322,14 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
   </div>
   <div class="aide" id="racine"></div>
 </aside>
+<div class="separateur-v" id="sepV" role="separator" aria-orientation="vertical" tabindex="0" title="Glisse pour élargir ou réduire la colonne de gauche (double-clic : réinitialiser)"></div>
 <main>
   <div id="bandeauVersion" class="bandeau-version" role="status" hidden></div>
   <div id="bandeauRedemarrage" class="bandeau-version" role="status" hidden></div>
   <div class="haut">
     <button id="burger" title="Conversations" aria-label="Ouvrir les conversations">☰</button>
     <div class="onglets" role="tablist">
-      <button data-p="chat" aria-selected="true" title="Conversation"><span class="ic">💬</span><span class="lb">Conversation</span><i class="travail" id="ptTravail" hidden title="L'assistant travaille"></i></button><button data-p="modeles" aria-selected="false" title="Modèles"><span class="ic">🧠</span><span class="lb">Modèles</span><i class="travail fini" id="ptModeles" hidden title="Nouveautés pour ta machine"></i></button><button data-p="memoire" aria-selected="false" title="Mémoire"><span class="ic">📝</span><span class="lb">Mémoire</span></button><button data-p="reglages" aria-selected="false" title="Réglages"><span class="ic">⚙️</span><span class="lb">Réglages</span></button><button id="bSante" data-p="sante" aria-selected="false" title="Santé du PC : mémoire, carte graphique, disques ; test de bon fonctionnement"><span class="ic">⚕</span><span class="lb">Santé</span></button><button data-p="acces" aria-selected="false" title="Qui peut utiliser Lutin, appareils connectés, code PIN"><span class="ic">🔐</span><span class="lb">Accès</span></button>
+      <button data-p="chat" aria-selected="true" title="Conversation"><span class="ic">💬</span><span class="lb">Conversation</span><i class="travail" id="ptTravail" hidden title="L'assistant travaille"></i></button><button data-p="modeles" aria-selected="false" title="Modèles"><span class="ic">🧠</span><span class="lb">Modèles</span><i class="travail fini" id="ptModeles" hidden title="Nouveautés pour ta machine"></i></button><button data-p="memoire" aria-selected="false" title="Mémoire"><span class="ic">📝</span><span class="lb">Mémoire</span></button><button data-p="auto" aria-selected="false" title="Automatisation : tâches planifiées, travaux de fond"><span class="ic">⏱</span><span class="lb">Automatisation</span></button><button data-p="reglages" aria-selected="false" title="Réglages"><span class="ic">⚙️</span><span class="lb">Réglages</span></button><button id="bSante" data-p="sante" aria-selected="false" title="Santé du PC : mémoire, carte graphique, disques ; test de bon fonctionnement"><span class="ic">⚕</span><span class="lb">Santé</span></button><button data-p="acces" aria-selected="false" title="Qui peut utiliser Lutin, appareils connectés, code PIN"><span class="ic">🔐</span><span class="lb">Accès</span></button>
     </div>
     <span class="puce" id="pOllama"><i></i><span>Ollama</span></span>
     <div class="menu">
@@ -330,6 +339,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
         <button id="bExport" title="Télécharger la conversation brute en .md">⬇ Exporter la conversation</button>
         <button id="bJournal" title="Voir ce que Lutin a modifié ou lancé, avec quel accord">📜 Journal des actions</button>
         <button id="bSauvegarde" title="Télécharger un fichier .zip avec tes conversations, tes réglages et ta mémoire">💾 Sauvegarder mes données</button>
+        <button id="bFiche" title="La fiche de suivi de cette conversation : objectif, décisions, plan, étape en cours (modifiable) et mode de mémoire">🧾 Fiche de suivi</button>
         <button id="bResume" title="Générer un résumé structuré par le modèle, prêt à coller dans un autre modèle d'IA">📋 Résumé IA</button>
         <button id="bVram" title="Décharge tous les modèles Ollama de la VRAM (rechargés automatiquement à la prochaine question)">🧹 Libérer la VRAM</button>
       </div>
@@ -405,15 +415,6 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     <div id="listeDocuments" class="aide" style="margin:6px 0"></div>
     <div style="margin:6px 0"><input id="qDocuments" placeholder="Chercher dans mes documents…" style="width:340px" maxlength="300"> <button id="bChercherDocuments">Chercher</button></div>
     <div id="resultatsDocuments" style="margin:6px 0"></div>
-    <h2>Tâches planifiées <span class="aide">(une demande que Lutin traite tout seul à l'heure dite, en lecture seule : il lit et cherche, mais ne modifie rien ; le résultat est une conversation « ⏰ … »)</span></h2>
-    <div id="listePlanifie" class="aide" style="margin:6px 0"></div>
-    <div class="carte" style="gap:8px;flex-wrap:wrap;align-items:center">
-      <input id="pNom" placeholder="Nom (ex. Résumé du matin)" maxlength="60" style="width:220px">
-      <input id="pHeure" type="time" value="08:00">
-      <span id="pJours"></span>
-      <textarea id="pPrompt" placeholder="La demande à traiter, par exemple : résume ce qui a changé dans le dépôt depuis hier." style="flex:1 1 100%;min-height:70px" maxlength="4000"></textarea>
-      <button id="bAjouterPlanifie" class="principal">Planifier</button> <span class="aide" id="mPlanifie"></span>
-    </div>
     <h2>Skills <span class="aide">(les fiches du projet, que tu construis : l'assistant en voit la liste au début de chaque conversation et lit le contenu à la demande)</span></h2>
     <div id="listeSkills" class="aide" style="margin:6px 0">Aucun skill.</div>
     <textarea id="tSkill" style="min-height:240px" placeholder="Choisis un skill ci-dessus, ou crée-en un nouveau…"></textarea>
@@ -423,6 +424,18 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
       <button id="bSSkill" class="principal">Enregistrer</button>
       <button id="bDSkill">Supprimer</button>
       <span class="aide" id="mS"></span>
+    </div>
+  </div></section>
+  <section class="page" id="p-auto"><div class="cadre">
+    <div class="aide">Ce que Lutin fait tout seul, sans que tu sois devant l'écran. Lutin doit tourner (l'icône en bas à droite) ; la page n'a pas besoin d'être ouverte.</div>
+    <h2>Tâches planifiées <span class="aide">(une demande que Lutin traite tout seul à l'heure dite, en lecture seule : il lit et cherche, mais ne modifie rien ; le résultat est une conversation « ⏰ … »)</span></h2>
+    <div id="listePlanifie" class="aide" style="margin:6px 0"></div>
+    <div class="carte" style="gap:8px;flex-wrap:wrap;align-items:center">
+      <input id="pNom" placeholder="Nom (ex. Résumé du matin)" maxlength="60" style="width:220px">
+      <input id="pHeure" type="time" value="08:00">
+      <span id="pJours"></span>
+      <textarea id="pPrompt" placeholder="La demande à traiter, par exemple : résume ce qui a changé dans le dépôt depuis hier." style="flex:1 1 100%;min-height:70px" maxlength="4000"></textarea>
+      <button id="bAjouterPlanifie" class="principal">Planifier</button> <span class="aide" id="mPlanifie"></span>
     </div>
   </div></section>
   <section class="page" id="p-acces"><div class="cadre">
@@ -452,6 +465,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     <div style="margin:6px 0"><button id="bRevoquerTous">Déconnecter tous les appareils</button> <span class="aide" id="mAppareils"></span></div>
   </div></section>
   <section class="page" id="p-reglages"><div class="cadre">
+    <details class="groupe" open data-g="general"><summary>Général</summary>
     <h2>Langue / Language</h2>
     <div style="margin:6px 0"><label><select id="selLangue"><option value="auto">Auto</option><option value="fr">Français</option><option value="en">English</option></select></label></div>
     <div class="aide">Change la langue de l'interface, des messages et des modèles proposés. La page se recharge.</div>
@@ -459,9 +473,12 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     <div class="carte" style="gap:10px;flex-wrap:wrap;align-items:center">
       <span id="vVersionActuelle"></span>
       <button id="bVerifierLutin">Vérifier les mises à jour</button>
+      <button id="bMajLutin">Mettre à jour…</button>
       <span class="aide" id="mVerifierLutin"></span>
     </div>
     <div class="aide">Lutin vérifie aussi tout seul au démarrage (au plus une fois par jour) : une bannière apparaît quand une version plus récente existe. Rien n'est installé sans toi.</div>
+    </details>
+    <details class="groupe" open data-g="dossiers"><summary>Dossiers et données</summary>
     <h2>Dossiers de travail <span class="aide">(le seul endroit où Lutin lit et modifie des fichiers ; chaque conversation garde le sien. ★ = le dossier utilisé, celui qui s'ouvre aussi au démarrage de Lutin)</span></h2>
     <div id="listeTravaux" class="aide" style="margin:6px 0"></div>
     <div style="margin:6px 0"><button id="bAjouterTravail">Ajouter un dossier…</button> <button id="bImporterClaude">Importer un projet Claude…</button> <button id="bActualiserTravaux" title="Relit ce que Lutin trouve dans chaque dossier">🔄 Actualiser</button> <span class="aide" id="mTravaux"></span></div>
@@ -473,6 +490,11 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     <div style="margin:6px 0"><button id="bSauvegarde2">💾 Sauvegarder mes données</button> <button id="bRestaurer">Restaurer une sauvegarde…</button><input type="file" id="fRestaurer" accept=".zip" hidden> <button id="bReprise">Reprendre les données d'un autre assistant…</button> <span class="aide" id="mDonnees"></span></div>
     <div class="aide" style="margin:6px 0">Tes conversations sont gardées dans le dossier de données de Lutin : <code id="cheminDonnees"></code>. Le dossier de travail ne contient que tes fichiers.</div>
     <label class="opt-ligne" title="Un fichier .md par conversation, mis à jour à chaque échange, dans le sous-dossier conversations-lutin/ du dossier de travail de la conversation."><input type="checkbox" id="cCopieConv"> Garder aussi une copie lisible de chaque conversation dans le dossier de travail (conversations-lutin/)</label>
+    </details>
+    <details class="groupe" open data-g="conversation"><summary>Conversation</summary>
+    <h2>Mémoire des longues conversations <span class="aide">(comment Lutin garde le fil quand la fenêtre de contexte se remplit)</span></h2>
+    <label class="opt-ligne">Méthode <select id="selMemoire"><option value="resume">Résumé automatique</option><option value="fichier">Fiche de suivi</option></select></label>
+    <div class="aide" id="aideMemoire"></div>
     <h2>Modes <span class="aide">(à choisir dans la barre de gauche ; dans tous les modes, toute modification de fichier et toute commande te demandent ton accord)</span></h2>
     <div class="carte" style="display:block"><ul class="aide" style="line-height:1.7;margin:0;padding-left:18px">
       <li><b>Polyvalent</b> : l'assistant de tous les jours. Questions, rédaction, analyse, un peu de code ; il lit et modifie les fichiers du dossier de travail et peut lancer des commandes.</li>
@@ -490,6 +512,16 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     <h2>Étapes d'outils par demande : <span id="vTours"></span></h2>
     <input type="range" id="rTours" min="4" max="40" step="1" style="width:100%">
     <div class="aide">Combien de fois l'assistant peut enchaîner lecture, recherche, modification avant de devoir te répondre (14 par défaut). Plus c'est grand, plus les grosses tâches passent en une fois, mais plus c'est long.</div>
+    <h2>Échantillonnage avancé</h2>
+    <div class="aide">Laisse vide = valeurs conseillées pour la famille du modèle (Qwen, Gemma), appliquées automatiquement : moins de boucles et de dérives qu'avec la température seule. Ne change que si tu sais pourquoi.</div>
+    <div class="carte" style="gap:14px">
+      <label>top_p <input id="iTopP" type="number" step="0.05" min="0" max="1" placeholder="auto" style="width:90px"></label>
+      <label>top_k <input id="iTopK" type="number" step="1" min="0" max="200" placeholder="auto" style="width:90px"></label>
+      <label>min_p <input id="iMinP" type="number" step="0.01" min="0" max="1" placeholder="auto" style="width:90px"></label>
+      <label>pénalité de répétition <input id="iRep" type="number" step="0.05" min="0.8" max="2" placeholder="auto" style="width:90px"></label>
+    </div>
+    </details>
+    <details class="groupe" data-g="machine"><summary>Machine et réglages avancés</summary>
     <h2>Garde-fous ressources</h2>
     <div class="aide">Avant chaque demande, l'assistant vérifie la mémoire vive, la mémoire de la carte graphique et le disque. Si la demande risque de faire planter le PC, elle est suspendue avec une explication (ta question est gardée : « continue » la relance une fois le problème réglé).</div>
     <div class="carte" style="gap:14px">
@@ -508,14 +540,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
       <label title="Nombre de cœurs du processeur que le modèle peut utiliser. Moins de cœurs = plus lent, mais le reste de l'ordinateur reste réactif. Surtout utile quand le modèle tourne sur le processeur.">Cœurs du processeur utilisés <input id="iThreads" type="number" step="1" min="1" max="256" placeholder="auto" style="width:90px"> <span class="aide" id="vCpus"></span></label>
       <label title="Combien de minutes le modèle reste en mémoire après la dernière réponse. 0 = libéré tout de suite (la mémoire revient au PC, mais la réponse suivante est plus lente à démarrer). Vide = automatique.">Garder le modèle en mémoire (minutes) <input id="iGarde" type="number" step="1" min="0" max="240" placeholder="auto" style="width:90px"></label>
     </div>
-    <h2>Échantillonnage avancé</h2>
-    <div class="aide">Laisse vide = valeurs conseillées pour la famille du modèle (Qwen, Gemma), appliquées automatiquement : moins de boucles et de dérives qu'avec la température seule. Ne change que si tu sais pourquoi.</div>
-    <div class="carte" style="gap:14px">
-      <label>top_p <input id="iTopP" type="number" step="0.05" min="0" max="1" placeholder="auto" style="width:90px"></label>
-      <label>top_k <input id="iTopK" type="number" step="1" min="0" max="200" placeholder="auto" style="width:90px"></label>
-      <label>min_p <input id="iMinP" type="number" step="0.01" min="0" max="1" placeholder="auto" style="width:90px"></label>
-      <label>pénalité de répétition <input id="iRep" type="number" step="0.05" min="0.8" max="2" placeholder="auto" style="width:90px"></label>
-    </div>
+    </details>
   </div></section>
 </main>
 <div id="modal" hidden>
@@ -1089,7 +1114,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     ETAT.installes.forEach(id => { const m = ETAT.modeles.find(x => x.id === id), o = el('option', '', m ? m.nom : id); o.value = id; s.appendChild(o); });
     if (!ETAT.installes.length) { const o = el('option', '', ETAT.ollama ? T('Aucun modèle installé (onglet Modèles)') : T('Ollama arrêté')); o.value = ETAT.reglages.modele; s.appendChild(o); }
     s.value = ETAT.installes.includes(v) ? v : (ETAT.installes.includes(ETAT.reglages.modele) ? ETAT.reglages.modele : (ETAT.installes[0] || ETAT.reglages.modele));
-    if (!$('selMode').dataset.init) { $('selMode').value = ETAT.reglages.mode; $('cReflexion').checked = ETAT.reglages.reflexion; $('cAuto').checked = ETAT.reglages.auto_ecriture; $('cAvance').checked = !!ETAT.reglages.avance; $('cAutoCmd').checked = ETAT.reglages.auto_commandes; $('cEssai').checked = !!ETAT.reglages.essai_a_blanc; $('cCopieConv').checked = !!ETAT.reglages.copie_conversations; $('cWeb').checked = ETAT.reglages.web !== false; $('rCtx').value = ETAT.reglages.num_ctx; $('rTemp').value = ETAT.reglages.temperature; $('rTours').value = ETAT.reglages.tours_max; $('iTopP').value = ETAT.reglages.top_p ?? ''; $('iTopK').value = ETAT.reglages.top_k ?? ''; $('iMinP').value = ETAT.reglages.min_p ?? ''; $('iRep').value = ETAT.reglages.repeat_penalty ?? ''; $('cGarde').checked = ETAT.reglages.garde_ressources !== false; $('cComfy').checked = ETAT.reglages.liberer_si_comfy !== false; $('sRappels').value = ETAT.reglages.rappels_auto || 'scenario'; $('iSeuilRam').value = ETAT.reglages.seuil_ram_go; $('iSeuilDisque').value = ETAT.reglages.seuil_disque_go; $('iPlafond').value = ETAT.reglages.plafond_donnees_go; $('iLimiteCmd').value = ETAT.reglages.limite_ram_commande_go; $('iThreads').value = ETAT.reglages.num_thread ?? ''; $('iGarde').value = ETAT.reglages.garde_min ?? ''; $('selMode').dataset.init = '1'; }
+    if (!$('selMode').dataset.init) { $('selMode').value = ETAT.reglages.mode; $('cReflexion').checked = ETAT.reglages.reflexion; $('cAuto').checked = ETAT.reglages.auto_ecriture; $('cAvance').checked = !!ETAT.reglages.avance; $('cAutoCmd').checked = ETAT.reglages.auto_commandes; $('cEssai').checked = !!ETAT.reglages.essai_a_blanc; $('cCopieConv').checked = !!ETAT.reglages.copie_conversations; $('selMemoire').value = ETAT.reglages.memoire_longue || 'resume'; aideMemoire(); $('cWeb').checked = ETAT.reglages.web !== false; $('rCtx').value = ETAT.reglages.num_ctx; $('rTemp').value = ETAT.reglages.temperature; $('rTours').value = ETAT.reglages.tours_max; $('iTopP').value = ETAT.reglages.top_p ?? ''; $('iTopK').value = ETAT.reglages.top_k ?? ''; $('iMinP').value = ETAT.reglages.min_p ?? ''; $('iRep').value = ETAT.reglages.repeat_penalty ?? ''; $('cGarde').checked = ETAT.reglages.garde_ressources !== false; $('cComfy').checked = ETAT.reglages.liberer_si_comfy !== false; $('sRappels').value = ETAT.reglages.rappels_auto || 'scenario'; $('iSeuilRam').value = ETAT.reglages.seuil_ram_go; $('iSeuilDisque').value = ETAT.reglages.seuil_disque_go; $('iPlafond').value = ETAT.reglages.plafond_donnees_go; $('iLimiteCmd').value = ETAT.reglages.limite_ram_commande_go; $('iThreads').value = ETAT.reglages.num_thread ?? ''; $('iGarde').value = ETAT.reglages.garde_min ?? ''; $('selMode').dataset.init = '1'; }
     if (document.activeElement !== $('selLangue')) $('selLangue').value = ETAT.langue_reglage || 'auto';
     afficherVersion();
     if ($('vVersionActuelle')) $('vVersionActuelle').textContent = T('Lutin ') + (ETAT.version || '');
@@ -1123,10 +1148,11 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     ETAT.attentes.forEach(a => { const s = '.accord[data-id="' + a.id + '"]'; if (!fil().querySelector(s) && !(FLUX && FLUX.sauve.querySelector(s))) fil().appendChild(carteAccord(a)); });
   };
   const nombreOuNull = id => { const v = $(id).value.trim().replace(',', '.'); return v === '' || isNaN(+v) ? null : +v; };
-  const sauverReglages = async () => { try { await api('/api/reglages', { modele: $('selModele').value, mode: $('selMode').value, reflexion: $('cReflexion').checked, auto_ecriture: $('cAuto').checked, auto_commandes: $('cAutoCmd').checked, essai_a_blanc: $('cEssai').checked, copie_conversations: $('cCopieConv').checked, avance: $('cAvance').checked, web: $('cWeb').checked, num_ctx: +$('rCtx').value, temperature: +$('rTemp').value, tours_max: +$('rTours').value, top_p: nombreOuNull('iTopP'), top_k: nombreOuNull('iTopK'), min_p: nombreOuNull('iMinP'), repeat_penalty: nombreOuNull('iRep'), garde_ressources: $('cGarde').checked, liberer_si_comfy: $('cComfy').checked, rappels_auto: $('sRappels').value, seuil_ram_go: nombreOuNull('iSeuilRam') ?? 3, seuil_disque_go: nombreOuNull('iSeuilDisque') ?? 10, plafond_donnees_go: nombreOuNull('iPlafond') ?? 2, limite_ram_commande_go: nombreOuNull('iLimiteCmd') ?? 0, num_thread: nombreOuNull('iThreads'), garde_min: nombreOuNull('iGarde') }); } catch (e) { fil().appendChild(el('div', 'erreur', e.message)); } };
+  const sauverReglages = async () => { try { await api('/api/reglages', { modele: $('selModele').value, mode: $('selMode').value, reflexion: $('cReflexion').checked, auto_ecriture: $('cAuto').checked, auto_commandes: $('cAutoCmd').checked, essai_a_blanc: $('cEssai').checked, copie_conversations: $('cCopieConv').checked, memoire_longue: $('selMemoire').value, avance: $('cAvance').checked, web: $('cWeb').checked, num_ctx: +$('rCtx').value, temperature: +$('rTemp').value, tours_max: +$('rTours').value, top_p: nombreOuNull('iTopP'), top_k: nombreOuNull('iTopK'), min_p: nombreOuNull('iMinP'), repeat_penalty: nombreOuNull('iRep'), garde_ressources: $('cGarde').checked, liberer_si_comfy: $('cComfy').checked, rappels_auto: $('sRappels').value, seuil_ram_go: nombreOuNull('iSeuilRam') ?? 3, seuil_disque_go: nombreOuNull('iSeuilDisque') ?? 10, plafond_donnees_go: nombreOuNull('iPlafond') ?? 2, limite_ram_commande_go: nombreOuNull('iLimiteCmd') ?? 0, num_thread: nombreOuNull('iThreads'), garde_min: nombreOuNull('iGarde') }); } catch (e) { fil().appendChild(el('div', 'erreur', e.message)); } };
   document.querySelectorAll('.onglets button').forEach(b => b.addEventListener('click', async () => {
     document.querySelectorAll('.onglets button').forEach(x => x.setAttribute('aria-selected', x === b)); document.querySelectorAll('.page').forEach(p => p.classList.toggle('vue', p.id === 'p-' + b.dataset.p));
-    if (b.dataset.p === 'memoire') { const m = await api('/api/memoire'); $('tContexte').value = m['CONTEXTE.md']; $('tMemoire').value = m['MEMOIRE.md']; chargerSkills(); chargerClaude(); chargerNotes(); chargerDocuments(); chargerPlanifie(); }
+    if (b.dataset.p === 'memoire') { const m = await api('/api/memoire'); $('tContexte').value = m['CONTEXTE.md']; $('tMemoire').value = m['MEMOIRE.md']; chargerSkills(); chargerClaude(); chargerNotes(); chargerDocuments(); }
+    if (b.dataset.p === 'auto') chargerPlanifie();
     if (b.dataset.p === 'modeles') rafraichir();
     if (b.dataset.p === 'acces') chargerAcces();
     if (b.dataset.p === 'sante') window.ouvrirSante();
@@ -1186,6 +1212,14 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
       const nom = m => $('selMode').querySelector('option[value="' + m + '"]').textContent;
       if (!v) { infoLocale(T('Mode actuel : ') + nom($('selMode').value) + T('. Utilise /mode polyvalent, code, ecriture, recherche ou discussion (ou en anglais : general, code, writing, research, chat).')); return; }
       $('selMode').value = v; await sauverReglages(); infoLocale(T('Mode : ') + nom(v) + '.');
+    } },
+    { n: 'memoire', a: ['memory'], arg: 'resume|fichier', d: T('Mémoire des longues conversations : résumé automatique ou fiche de suivi (pour cette conversation)'), f: async arg => {
+      const a = (arg || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''), v = a.startsWith('res') || a.startsWith('sum') || a.startsWith('compact') ? 'resume' : (a.startsWith('fic') || a.startsWith('suiv') || a.startsWith('file') || a.startsWith('trac') ? 'fichier' : '');
+      const nom = m => (m === 'fichier' ? T('fiche de suivi') : T('résumé automatique'));
+      if (!v) { infoLocale(T('Mémoire actuelle : ') + nom((CONV && CONV.memoire_longue) || ETAT.reglages.memoire_longue || 'resume') + T('. Utilise /memoire resume ou /memoire fichier (ou 🧾 Fiche de suivi).')); return; }
+      if (!CONV) { $('selMemoire').value = v; await sauverReglages(); infoLocale(T('Mémoire par défaut : ') + nom(v) + '.'); return; }
+      const x = await api('/api/memoire-conversation', { conversation: CONV.id, mode: v }); CONV.memoire_longue = v; majJauge(CONV.id);
+      infoLocale(T('Mémoire de cette conversation : ') + nom(x.mode) + (x.mode === 'fichier' ? T('. Elle prend jusqu\'à 10 % du contexte à chaque réponse.') : T('. Le début sera résumé quand il le faudra.')));
     } },
     { n: 'reflexion', arg: 'on|off', d: T('Active ou coupe la réflexion du modèle'), f: arg => bascule('cReflexion', arg, T('Réflexion')) },
     { n: 'web', arg: 'on|off', d: T('Autorise ou coupe la recherche sur internet'), f: arg => bascule('cWeb', arg, 'Web') },
@@ -1315,6 +1349,66 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   });
+  // ---- Colonne de gauche redimensionnable : largeur (séparateur vertical) et partage liste / options (séparateur horizontal) ; retenu sur cet appareil, inactif sur petit écran
+  const poignees = () => {
+    const stock = (cle, valeur) => { try { if (valeur === null) localStorage.removeItem(cle); else localStorage.setItem(cle, String(valeur)); } catch (e) { /* le navigateur refuse le stockage : la taille n'est pas retenue */ } };
+    const lu = cle => { try { return localStorage.getItem(cle); } catch (e) { return null; } };
+    const largeur = px => { const l = Math.max(180, Math.min(Math.round(window.innerWidth * 0.6), px)); document.documentElement.style.setProperty('--lateral', l + 'px'); return l; };
+    const haut = px => { const o = document.querySelector('.options-lat'), max = Math.round(window.innerHeight * 0.7), h = Math.max(60, Math.min(max, px)); o.classList.add('dimensionnee'); o.style.height = h + 'px'; return h; };
+    const v0 = parseInt(lu('lutin.lateral'), 10), h0 = parseInt(lu('lutin.options'), 10);
+    if (v0) largeur(v0);
+    if (h0) haut(h0);
+    const glisser = (poignee, classeCorps, bouger) => {
+      poignee.addEventListener('pointerdown', e => {
+        e.preventDefault(); poignee.setPointerCapture(e.pointerId); poignee.classList.add('actif'); document.body.classList.add(classeCorps);
+        const suivre = ev => bouger(ev), fin = () => { poignee.classList.remove('actif'); document.body.classList.remove(classeCorps); poignee.removeEventListener('pointermove', suivre); poignee.removeEventListener('pointerup', fin); poignee.removeEventListener('pointercancel', fin); };
+        poignee.addEventListener('pointermove', suivre); poignee.addEventListener('pointerup', fin); poignee.addEventListener('pointercancel', fin);
+      });
+    };
+    glisser($('sepV'), 'glisse', ev => stock('lutin.lateral', largeur(ev.clientX)));
+    glisser($('sepH'), 'glisse-h', ev => { const o = document.querySelector('.options-lat'), bas = o.getBoundingClientRect().bottom; stock('lutin.options', haut(bas - ev.clientY)); });
+    $('sepV').addEventListener('dblclick', () => { document.documentElement.style.removeProperty('--lateral'); stock('lutin.lateral', null); });
+    $('sepH').addEventListener('dblclick', () => { const o = document.querySelector('.options-lat'); o.style.height = ''; o.classList.remove('dimensionnee'); stock('lutin.options', null); });
+    const clavier = (poignee, pas, f) => poignee.addEventListener('keydown', e => { if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { f(-pas); e.preventDefault(); } else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { f(pas); e.preventDefault(); } });
+    clavier($('sepV'), 20, d => stock('lutin.lateral', largeur(document.querySelector('aside').getBoundingClientRect().width + d)));
+    clavier($('sepH'), 20, d => stock('lutin.options', haut(document.querySelector('.options-lat').getBoundingClientRect().height - d)));
+  };
+  poignees();
+  document.querySelectorAll('details.groupe').forEach(d => {
+    try { const v = localStorage.getItem('lutin.groupe.' + d.dataset.g); if (v !== null) d.open = v === '1'; } catch (e) { /* stockage refusé : les groupes gardent leur état d'origine */ }
+    d.addEventListener('toggle', () => { try { localStorage.setItem('lutin.groupe.' + d.dataset.g, d.open ? '1' : '0'); } catch (e) { /* idem */ } });
+  });
+  // ---- Mémoire des longues conversations : résumé automatique ou fiche de suivi
+  const aideMemoire = () => {
+    const v = $('selMemoire').value;
+    $('aideMemoire').textContent = v === 'fichier'
+      ? T('Fiche de suivi : le modèle (et Lutin, tout seul) tient une courte fiche par conversation — objectif, décisions, plan, étape en cours — relue à chaque réponse. Le fil ne se perd pas et « oui, on passe à l\'action » exécute l\'étape au lieu de replanifier. ⚠ La fiche prend jusqu\'à 10 % de la fenêtre de contexte à chaque réponse (un peu plus lent) ; un tout petit modèle la tient mal. Elle est supprimée avec la conversation.')
+      : T('Résumé automatique : quand la conversation approche de la limite, le modèle résume le début. Rien à gérer. ⚠ Chaque résumé prend quelques secondes à une minute de calcul, perd des détails, et le modèle peut oublier une décision ou replanifier.');
+  };
+  $('selMemoire').addEventListener('change', aideMemoire);
+  const ouvrirFiche = async () => {
+    if (!CONV) { infoLocale(T('Pas encore de conversation.')); return; }
+    const c = ouvrirModal(T('Fiche de suivi')), msg = el('p', 'aide');
+    let r;
+    try { r = await api('/api/suivi?conversation=' + encodeURIComponent(CONV.id)); } catch (e) { c.appendChild(el('p', 'erreur', e.message)); return; }
+    const lm = el('label'); lm.appendChild(document.createTextNode(T('Mémoire de cette conversation : ')));
+    const sel = document.createElement('select');
+    [['', T('Suivre le réglage général') + ' (' + (r.mode_general === 'fichier' ? T('fiche de suivi') : T('résumé automatique')) + ')'], ['resume', T('Résumé automatique')], ['fichier', T('Fiche de suivi')]].forEach(([v, t]) => { const o = el('option', '', t); o.value = v; sel.appendChild(o); });
+    sel.value = (CONV.memoire_longue || ''); lm.appendChild(sel); c.appendChild(lm);
+    const etat = el('p', 'aide'); c.appendChild(etat);
+    const dire = x => { etat.textContent = (x.mode === 'fichier' ? T('Mode actuel : fiche de suivi. ') : T('Mode actuel : résumé automatique. ')) + (x.mesure.lignes ? T('Fiche : ') + x.mesure.lignes + T(' ligne(s), environ ') + x.mesure.jetons + T(' jetons (') + Math.round(x.mesure.part * 100) + T(' % du contexte).') : T('La fiche est vide.')) + (x.mesure.avertissement ? ' ⚠ ' + x.mesure.avertissement : ''); };
+    dire(r);
+    c.appendChild(el('p', 'aide', T('Tu peux corriger la fiche à la main : une ligne par élément, sous les titres « ## Objectif », « ## Décisions », « ## Plan », « ## Étape en cours », « ## Fait »…')));
+    const zone = document.createElement('textarea'); zone.value = r.texte; zone.style.cssText = 'width:100%;min-height:220px'; c.appendChild(zone);
+    const ok = el('button', 'principal', T('Enregistrer la fiche')), vide = el('button', '', T('Vider la fiche')); c.appendChild(ok); c.appendChild(document.createTextNode(' ')); c.appendChild(vide); c.appendChild(msg);
+    sel.addEventListener('change', async () => {
+      if (sel.value === 'fichier' && !confirm(T('Passer cette conversation en fiche de suivi ? Le début déjà résumé reste utilisé ; la fiche prendra jusqu\'à 10 % du contexte à chaque réponse.'))) { sel.value = CONV.memoire_longue || ''; return; }
+      try { const x = await api('/api/memoire-conversation', { conversation: CONV.id, mode: sel.value }); CONV.memoire_longue = sel.value || undefined; dire(x); majJauge(CONV.id); } catch (e) { msg.textContent = e.message; }
+    });
+    ok.addEventListener('click', async () => { try { const x = await api('/api/suivi', { conversation: CONV.id, texte: zone.value }); dire(x); msg.textContent = T('Fiche enregistrée.'); majJauge(CONV.id); } catch (e) { msg.textContent = e.message; } });
+    vide.addEventListener('click', async () => { if (!confirm(T('Vider la fiche de suivi de cette conversation ?'))) return; try { const x = await api('/api/suivi-vider', { conversation: CONV.id }); zone.value = ''; dire(x); msg.textContent = T('Fiche vidée.'); majJauge(CONV.id); } catch (e) { msg.textContent = e.message; } });
+  };
+  $('bFiche').addEventListener('click', ouvrirFiche);
   $('bResume').addEventListener('click', async () => {
     if (!CONV || !CONV.id) { alert(T('Aucune conversation ouverte.')); return; }
     const b = $('bResume');
@@ -1347,7 +1441,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
   });
   $('bDemarrer').addEventListener('click', async () => { $('bDemarrer').disabled = true; try { await api('/api/demarrer-ollama', {}); } catch (e) { fil().appendChild(el('div', 'erreur', e.message)); } $('bDemarrer').disabled = false; rafraichir(); });
   $('bVram').addEventListener('click', async () => { $('bVram').disabled = true; $('bVram').textContent = '⏳…'; try { const r = await api('/api/liberer-vram', {}); fil().appendChild(el('div', 'aide', r.message)); } catch (e) { fil().appendChild(el('div', 'erreur', e.message)); } $('bVram').disabled = false; $('bVram').textContent = T('🧹 Libérer la VRAM'); rafraichir(); });
-  ['selModele', 'selMode', 'cReflexion', 'cAvance', 'cAuto', 'cAutoCmd', 'cEssai', 'cCopieConv', 'cWeb', 'iTopP', 'iTopK', 'iMinP', 'iRep', 'cGarde', 'cComfy', 'sRappels', 'iSeuilRam', 'iSeuilDisque', 'iPlafond', 'iLimiteCmd', 'iThreads', 'iGarde'].forEach(id => $(id).addEventListener('change', async () => { await sauverReglages(); if (id === 'cAvance' || id === 'selMode') rafraichir(); }));          // les modèles sans filtre apparaissent tout de suite
+  ['selModele', 'selMode', 'cReflexion', 'cAvance', 'cAuto', 'cAutoCmd', 'cEssai', 'cCopieConv', 'selMemoire', 'cWeb', 'iTopP', 'iTopK', 'iMinP', 'iRep', 'cGarde', 'cComfy', 'sRappels', 'iSeuilRam', 'iSeuilDisque', 'iPlafond', 'iLimiteCmd', 'iThreads', 'iGarde'].forEach(id => $(id).addEventListener('change', async () => { await sauverReglages(); if (id === 'cAvance' || id === 'selMode') rafraichir(); }));          // les modèles sans filtre apparaissent tout de suite
   // Profils de charge : des valeurs toutes faites pour les deux réglages (et le contexte pour « Discret »), calculées sur le nombre de cœurs de CETTE machine.
   $('selProfil').addEventListener('change', async () => {
     const p = $('selProfil').value, cpus = ETAT.cpus || 4;
@@ -1363,6 +1457,35 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
   // --- fenêtre : revue des changements, git ---
   // Une nouvelle version de Lutin existe : un bandeau, jamais une installation sans toi.
   const ECARTEES = new Set();                          // « Plus tard » : jusqu'au prochain rechargement de la page
+  // Mettre à jour Lutin depuis la page : un clic lance la mise à jour, suit sa progression, redémarre Lutin et recharge la page. La ligne de commande reste disponible.
+  const ouvrirMiseAJour = v => {
+    const c = ouvrirModal(T('Mettre à jour Lutin')), docker = /docker/.test(v.commande || '');
+    c.appendChild(el('p', '', v.version ? T('Version disponible : {} (tu as la {}).').replace('{}', v.version).replace('{}', v.actuelle) : T('Lutin est à jour ou la dernière version n\'est pas encore connue.')));
+    const etat = el('p', 'aide'), msg = el('p', 'erreur');
+    if (ETAT.configurateur && !docker) {
+      const go = el('button', 'principal', T('Mettre à jour maintenant'));
+      c.appendChild(go); c.appendChild(el('p', 'aide', T('Lutin télécharge la nouvelle version, l\'installe, puis redémarre tout seul et la page se recharge. Tes réglages, tes conversations et tes modèles ne sont pas touchés. Une réponse en cours doit être terminée.'))); c.appendChild(etat); c.appendChild(msg);
+      go.addEventListener('click', async () => {
+        go.disabled = true; msg.textContent = ''; etat.textContent = T('Mise à jour en cours…');
+        try { await api('/api/mettre-a-jour', {}); } catch (e) { msg.textContent = e.message; go.disabled = false; return; }
+        const suivre = async () => {
+          let x;
+          try { x = await api('/api/mettre-a-jour-etat'); } catch (e) { attendreRedemarrage(); return; }            // le serveur redémarre : on attend qu'il revienne puis on recharge
+          etat.textContent = x.lignes.join(' ');
+          if (x.etat === 'en cours') setTimeout(suivre, 1200);
+          else if (x.etat === 'redemarrage') attendreRedemarrage();
+          else if (x.etat === 'erreur') { msg.textContent = x.lignes.join(' '); go.disabled = false; }
+          else go.disabled = false;
+        };
+        suivre();
+      });
+    }
+    c.appendChild(el('p', '', docker ? T('Avec Docker, sur la machine qui le fait tourner :') : T('Ou dans un terminal, sur la machine qui fait tourner Lutin :')));
+    if (v.commande) {
+      const code = el('pre', 'bloc-code'); code.appendChild(el('code', '', v.commande)); c.appendChild(code);
+      const copie = el('button', '', T('Copier')); copie.addEventListener('click', async () => { copie.textContent = (await copier(v.commande)) ? T('Copié !') : T('Échec'); }); c.appendChild(copie);
+    }
+  };
   const afficherVersion = () => {
     const b = $('bandeauVersion'), v = ETAT.nouvelle_version;
     if (!v || ECARTEES.has(v.version)) { b.hidden = true; b.dataset.version = ''; return; }
@@ -1371,13 +1494,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     b.appendChild(el('span', 'texte', T('Nouvelle version de Lutin disponible : {} (tu as la {}).').replace('{}', v.version).replace('{}', v.actuelle)));
     const notes = el('a', 'btn', T('Voir les nouveautés')); notes.href = v.page; notes.target = '_blank'; notes.rel = 'noopener noreferrer'; b.appendChild(notes);
     const maj = el('button', 'principal', T('Mettre à jour'));
-    maj.addEventListener('click', () => {
-      const c = ouvrirModal(T('Mettre à jour Lutin'));
-      c.appendChild(el('p', '', T('Dans un terminal, sur la machine qui fait tourner Lutin :')));
-      const code = el('pre', 'bloc-code'); code.appendChild(el('code', '', v.commande)); c.appendChild(code);
-      const copie = el('button', '', T('Copier')); copie.addEventListener('click', async () => { copie.textContent = (await copier(v.commande)) ? T('Copié !') : T('Échec'); }); c.appendChild(copie);
-      c.appendChild(el('p', 'aide', T('Tes réglages, tes conversations et tes modèles ne sont pas touchés. Relance Lutin ensuite.')));
-    });
+    maj.addEventListener('click', () => ouvrirMiseAJour(v));
     b.appendChild(maj);
     const plus = el('button', '', T('Plus tard')); plus.addEventListener('click', () => { ECARTEES.add(v.version); afficherVersion(); }); b.appendChild(plus);
     const non = el('button', '', T('Ignorer cette version'));
@@ -1618,7 +1735,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
         zone.textContent = '';
         zone.appendChild(el('p', '', r.resume.join(' ')));
         $('mDonnees').textContent = r.resume.join(' ');
-        await rafraichir(); chargerSkills(); chargerNotes();
+        APERCUS.clear(); $('listeTravaux').dataset.sig = ''; await rafraichir(); chargerSkills(); chargerNotes();
       } catch (e) { go.disabled = false; msg.textContent = e.message; }
     });
   };
@@ -1643,10 +1760,12 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
   const ligneApercu = (t, zone, force) => {
     const montrer = a => {
       zone.textContent = ''; const l = el('div', a.erreur ? 'erreur' : 'aide', texteApercu(a)); zone.appendChild(l);
-      if (a.ancien) {
-        const d = el('div'); d.style.color = 'var(--warm)';
-        d.appendChild(document.createTextNode('⚠ ' + T('Ancien assistant détecté : ') + a.ancien.conversations + T(' conversation(s), ') + a.ancien.memoire.length + T(' fichier(s) de mémoire, ') + a.ancien.skills + T(' skill(s). Ils ne sont PAS encore dans Lutin. ')));
+      if (a.ancien && a.ancien.a_reprendre) {
+        const n = a.ancien.nouvelles, d = el('div'); d.style.color = 'var(--warm)';
+        d.appendChild(document.createTextNode('⚠ ' + T('Ancien assistant détecté : ') + n.conversations + T(' conversation(s), ') + n.memoire + T(' fichier(s) de mémoire, ') + n.skills + T(' skill(s) pas encore dans Lutin. ')));
         const b = el('button', 'principal', T('Reprendre ses données…')); b.addEventListener('click', () => reprendre(t.chemin)); d.appendChild(b); zone.appendChild(d);
+      } else if (a.ancien) {
+        const d = el('div', 'aide'); d.style.color = 'var(--ok)'; d.textContent = '✔ ' + T('Les données de l\'ancien assistant sont déjà dans Lutin (') + a.ancien.conversations + T(' conversation(s)).'); zone.appendChild(d);
       }
     };
     if (!force && APERCUS.has(t.id)) { montrer(APERCUS.get(t.id)); return; }
@@ -1694,6 +1813,54 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
   };
   $('bActualiserTravaux').addEventListener('click', () => { APERCUS.clear(); $('listeTravaux').dataset.sig = ''; afficherTravaux(); });
   // ---- Emplacements : tous les dossiers utilisés, leur taille, la place libre ; le dossier des modèles se change ici
+  // Changer le dossier des modèles d'Ollama : analyse (réseau, débit, place), choix, copie des modèles déjà téléchargés, redémarrage d'Ollama
+  const changerDossierModeles = e => {
+    const c = ouvrirModal(T('Dossier des modèles d\'Ollama'));
+    c.appendChild(el('p', 'aide', T('C\'est Ollama qui lit ses modèles dans ce dossier (variable OLLAMA_MODELS) : Lutin règle la variable, mais Ollama doit être redémarré pour la prendre en compte. Les modèles déjà téléchargés ne sont pas déplacés tout seuls : tu peux les copier ici (l\'ancien dossier n\'est jamais supprimé).')));
+    c.appendChild(el('p', '', T('Dossier actuel : ') + e.chemin));
+    const zone = el('div'); c.appendChild(zone);
+    const octets = n => (n / 1e9).toFixed(1) + ' ' + T('Go');
+    const etape2 = async (a, note) => {
+      zone.textContent = '';
+      zone.appendChild(el('p', '', T('Dossier des modèles : ') + a.chemin)); zone.appendChild(el('p', 'aide', note));
+      const msg = el('p', 'aide'); let copie = null;
+      if (a.source_existe && a.source_octets) {
+        copie = el('button', 'principal', T('Copier mes modèles actuels ici') + ' (' + octets(a.source_octets) + ')'); zone.appendChild(copie); zone.appendChild(document.createTextNode(' '));
+      }
+      const redem = el('button', '', T('Redémarrer Ollama maintenant')); zone.appendChild(redem); zone.appendChild(msg);
+      if (copie) copie.addEventListener('click', async () => {
+        copie.disabled = true;
+        try {
+          await api('/api/dossier-modeles-copie', { chemin: a.chemin });
+          const suivre = async () => {
+            const x = await api('/api/dossier-modeles-etat');
+            if (x.etat === 'en cours') { msg.textContent = T('Copie en cours : ') + octets(x.fait) + ' / ' + octets(x.total) + ' (' + x.fichier + ')'; setTimeout(suivre, 1500); }
+            else if (x.etat === 'fini') { msg.textContent = T('✔ Copie terminée et vérifiée. Redémarre Ollama pour l\'utiliser ; l\'ancien dossier reste en place : supprime-le toi-même quand tout marche.'); }
+            else { msg.textContent = x.erreur; msg.className = 'erreur'; copie.disabled = false; }
+          };
+          suivre();
+        } catch (err) { msg.textContent = err.message; msg.className = 'erreur'; copie.disabled = false; }
+      });
+      redem.addEventListener('click', async () => {
+        redem.disabled = true; msg.className = 'aide'; msg.textContent = T('Redémarrage d\'Ollama…');
+        try { const x = await api('/api/redemarrer-ollama', {}); msg.textContent = '✔ ' + x.message; rafraichir(); emplacements(); } catch (err) { msg.textContent = err.message; msg.className = 'erreur'; }
+        redem.disabled = false;
+      });
+    };
+    parcourir(zone, e.chemin, T('Analyser ce dossier'), async chemin => {
+      const a = await api('/api/dossier-modeles-analyse', { chemin });
+      zone.textContent = '';
+      zone.appendChild(el('p', '', a.chemin));
+      a.avertissements.forEach(w => { const p = el('p', 'erreur', '⚠ ' + w); zone.appendChild(p); });
+      zone.appendChild(el('p', 'aide', (a.libre !== null ? T('Place libre : ') + octets(a.libre) + ' · ' : '') + (a.debit !== null ? T('Débit d\'écriture : ') + a.debit + ' ' + T('Mo/s') + ' · ' : '') + (a.modeles_ici ? T('Ce dossier contient déjà des modèles.') : T('Ce dossier ne contient pas encore de modèle.'))));
+      const ok = el('button', 'principal', T('Utiliser ce dossier')), non = el('button', '', T('Annuler'));
+      zone.appendChild(ok); zone.appendChild(document.createTextNode(' ')); zone.appendChild(non);
+      non.addEventListener('click', () => { $('modal').hidden = true; });
+      ok.addEventListener('click', async () => {
+        try { const x = await api('/api/dossier-modeles', { chemin: a.chemin }); etape2(a, x.note); rafraichir(); } catch (err) { zone.appendChild(el('p', 'erreur', err.message)); }
+      });
+    }, () => { $('modal').hidden = true; });
+  };
   const emplacements = async () => {
     const z = $('listeEmplacements'); $('mEmplacements').textContent = T('Mesure en cours…');
     try {
@@ -1704,12 +1871,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
         col.appendChild(el('div', 'extrait', e.chemin)); col.appendChild(el('div', 'aide', e.explication + (e.disque ? ' · ' + T('Disque : ') + gaugeOctets(e.disque.libre) + T(' libres sur ') + gaugeOctets(e.disque.total) : '')));
         l.appendChild(col);
         if (e.cle === 'modeles' && r.modifiable && e.modifiable) {
-          const b = el('button', '', T('Changer…')); b.addEventListener('click', () => {
-            const c = ouvrirModal(T('Dossier des modèles d\'Ollama')); c.appendChild(el('p', 'aide', T('Les modèles déjà téléchargés ne sont pas déplacés. Ollama doit être relancé pour utiliser le nouveau dossier.')));
-            const zone = el('div'); c.appendChild(zone);
-            parcourir(zone, e.chemin, T('Utiliser ce dossier'), async chemin => { const x = await api('/api/dossier-modeles', { chemin }); zone.textContent = ''; zone.appendChild(el('p', '', T('Dossier des modèles : ') + x.dossier)); zone.appendChild(el('p', 'aide', x.note)); rafraichir(); emplacements(); }, () => { $('modal').hidden = true; });
-          });
-          l.appendChild(b);
+          const b = el('button', '', T('Changer…')); b.addEventListener('click', () => changerDossierModeles(e)); l.appendChild(b);
         }
         z.appendChild(l);
       });
@@ -1717,6 +1879,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     } catch (err) { $('mEmplacements').textContent = err.message; }
   };
   $('bEmplacements').addEventListener('click', emplacements);
+  $('bMajLutin').addEventListener('click', () => ouvrirMiseAJour(ETAT.nouvelle_version || { commande: '' }));
   // ---- Navigateur de dossiers : choisir un dossier sans taper son chemin (disques, dossiers, partages réseau ; seulement depuis cette machine)
   const parcourir = (zone, depart, libelle, choisir, annuler) => {
     zone.textContent = '';
@@ -1757,7 +1920,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
       try {
         const a = await api('/api/travaux-apercu', { id: ajoute.id }); APERCUS.set(ajoute.id, a);
         $('mTravaux').textContent = T('Dossier ajouté et utilisé. ') + texteApercu(a);
-        if (a.ancien) reprendre(ajoute.chemin);
+        if (a.ancien && a.ancien.a_reprendre) reprendre(ajoute.chemin);
         $('listeTravaux').dataset.sig = ''; afficherTravaux();
       } catch (e) { $('mTravaux').textContent = e.message; }
     }, () => { $('modal').hidden = true; });

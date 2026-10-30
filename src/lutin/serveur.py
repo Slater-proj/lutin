@@ -13,6 +13,7 @@ from . import pieces as _pieces
 from . import images as _images
 from . import planifie as _plan
 from . import rappel as _rappel
+from . import suivi as _suivi
 from . import i18n as _i18n
 from . import projet_claude as _pc
 from . import sauvegarde as _sauv
@@ -199,6 +200,21 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 return self._envoyer(400, {"erreur": str(e)})
             except OSError as e:
                 return self._envoyer(503, {"erreur": str(e)})
+        if chemin == "/api/suivi":                               # la fiche de suivi d'une conversation (affichée, modifiable)
+            q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+            ident = (q.get("conversation") or [""])[0]
+            try:
+                conv = _m.conv_lire(ident)
+                r = _m.reglages()
+                sections = _suivi.lire(ident)
+                return self._envoyer(200, {"sections": sections, "texte": _suivi.serialiser(ident, sections), "mesure": _suivi.mesure(ident, r["num_ctx"]), "mode": _m.memoire_longue(conv, r),
+                                           "mode_general": r["memoire_longue"], "chemin": str(_suivi.chemin(ident))})
+            except ValueError as e:
+                return self._envoyer(400, {"erreur": str(e)})
+        if chemin == "/api/mettre-a-jour-etat":
+            return self._envoyer(200, _acces.etat_maj())
+        if chemin == "/api/dossier-modeles-etat":
+            return self._envoyer(200, _emplacements.etat_copie())
         if chemin == "/api/emplacements":                        # tous les dossiers que Lutin utilise, leur taille et la place libre
             from . import emplacements
             return self._envoyer(200, dict(emplacements.lister(), modifiable=self._configurateur()))
@@ -374,6 +390,10 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 if not self._configurateur():
                     return self._envoyer(403, {"erreur": _t("Le niveau d'accès ne se change que depuis cette machine.")})
                 return self._envoyer(200, _acces.appliquer(donnees, True))
+            if self.path == "/api/mettre-a-jour":
+                if not self._configurateur():
+                    return self._envoyer(403, {"erreur": _t("La mise à jour se lance depuis cette machine (ou avec la commande lutin update).")})
+                return self._envoyer(200, _acces.mettre_a_jour())
             if self.path == "/api/redemarrer":
                 if not self._configurateur():
                     return self._envoyer(403, {"erreur": _t("Le redémarrage se demande depuis cette machine.")})
@@ -400,8 +420,38 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 return self._envoyer(200, _m.git_message(donnees.get("fichiers")))
             if self.path == "/api/git-commit":
                 return self._envoyer(200, _m.git_commit(donnees.get("message"), donnees.get("fichiers")))
+            if self.path in ("/api/suivi", "/api/suivi-vider", "/api/memoire-conversation"):
+                ident = str(donnees.get("conversation", ""))
+                with _m.VERROU_TOURS:
+                    if ident in _m.TOURS_ACTIFS:
+                        return self._envoyer(409, {"erreur": _t("Une réponse est en cours dans cette conversation : attends la fin ou arrête-la.")})
+                conv = _m.conv_lire(ident)
+                r = _m.reglages()
+                if self.path == "/api/suivi":
+                    _suivi.ecrire(ident, _suivi.analyser(str(donnees.get("texte", ""))[:20000]))
+                elif self.path == "/api/suivi-vider":
+                    _suivi.supprimer(ident)
+                else:
+                    choix = str(donnees.get("mode", ""))
+                    if choix not in ("", "resume", "fichier"):
+                        raise ValueError(_t("Mémoire des longues conversations inconnue (resume ou fichier)."))
+                    if choix:
+                        conv["memoire_longue"] = choix
+                    else:
+                        conv.pop("memoire_longue", None)
+                    _m.conv_ecrire(conv)
+                return self._envoyer(200, {"mode": _m.memoire_longue(_m.conv_lire(ident), r), "mesure": _suivi.mesure(ident, r["num_ctx"])})
             if self.path == "/api/travaux-apercu":
                 return self._envoyer(200, _m.apercu_travail(str(donnees.get("id", ""))))
+            if self.path in ("/api/dossier-modeles-analyse", "/api/dossier-modeles-copie", "/api/redemarrer-ollama"):
+                if not self._configurateur():
+                    return self._envoyer(403, {"erreur": _t("Le dossier des modèles se change depuis cette machine.")})
+                from . import emplacements
+                if self.path == "/api/dossier-modeles-analyse":
+                    return self._envoyer(200, emplacements.analyse_dossier(str(donnees.get("chemin", ""))))
+                if self.path == "/api/dossier-modeles-copie":
+                    return self._envoyer(200, emplacements.copier_modeles(str(donnees.get("chemin", ""))))
+                return self._envoyer(200, {"message": _m.redemarrer_ollama()})
             if self.path == "/api/dossier-modeles":
                 if not self._configurateur():
                     return self._envoyer(403, {"erreur": _t("Le dossier des modèles se change depuis cette machine.")})

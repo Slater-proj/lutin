@@ -145,11 +145,11 @@ class MenuEtFenetre(unittest.TestCase):
         z = zone.Zone({"securite": {"port": 8793}}, {"donnees": tempfile.mkdtemp(prefix="zone-menu-")}, serveur)
         return z, serveur
 
-    def test_le_menu_a_les_quatre_entrees_dans_l_ordre(self):
+    def test_le_menu_a_les_cinq_entrees_dans_l_ordre(self):
         z, _ = self.zone()
         with mock.patch.object(zone.user32, "AppendMenuW") as ajout:
             z.menu()
-        self.assertEqual([c.args[2] for c in ajout.call_args_list], [zone.MENU_PIN, zone.MENU_OUVRIR, zone.MENU_REDEMARRER, zone.MENU_QUITTER])
+        self.assertEqual([c.args[2] for c in ajout.call_args_list], [zone.MENU_PIN, zone.MENU_OUVRIR, zone.MENU_MAJ, zone.MENU_REDEMARRER, zone.MENU_QUITTER])
 
     def test_ouvrir_ouvre_l_interface(self):
         z, _ = self.zone()
@@ -186,6 +186,25 @@ class MenuEtFenetre(unittest.TestCase):
                 mock.patch.object(zone.user32, "PostMessageW"), mock.patch.object(zone, "ouvrir_interface") as ouvrir:
             z.traiter(1, zone.MESSAGE_ICONE, 1, zone.WM_RBUTTONUP)
         ouvrir.assert_called_once()
+
+    def test_mise_a_jour_depuis_l_icone_relance_serveur_et_icone(self):
+        from lutin import cli
+        z, _ = self.zone()
+        z.hwnd = 1
+        with mock.patch.object(cli, "mise_a_jour_detaillee", return_value=(0, "0.6.2", "0.6.3")), mock.patch.object(zone, "message") as boite,                 mock.patch.object(zone, "relancer_icone_apres_quitter") as relance, mock.patch.object(z, "quitter") as quitte:
+            z.mettre_a_jour()
+        relance.assert_called_once()
+        quitte.assert_called_once()
+        boite.assert_called_once()
+        # rien à installer ou échec : on ne quitte pas
+        with mock.patch.object(cli, "mise_a_jour_detaillee", return_value=(0, "0.6.3", None)), mock.patch.object(zone, "message"),                 mock.patch.object(zone, "relancer_icone_apres_quitter") as relance, mock.patch.object(z, "quitter") as quitte:
+            z.mettre_a_jour()
+        relance.assert_not_called()
+        quitte.assert_not_called()
+        with mock.patch.object(cli, "mise_a_jour_detaillee", side_effect=OSError("pip absent")), mock.patch.object(zone, "message") as boite,                 mock.patch.object(zone, "relancer_icone_apres_quitter") as relance, mock.patch.object(z, "quitter"):
+            z.mettre_a_jour()
+        relance.assert_not_called()
+        self.assertIn("pip absent", boite.call_args[0][1], "l'erreur est dite dans la fenêtre")
 
     def test_clic_gauche_ouvre_l_interface_sans_menu(self):
         z, _ = self.zone()

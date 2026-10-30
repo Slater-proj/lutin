@@ -4,6 +4,7 @@ from . import horsligne as _hl
 from . import images as _images
 from . import modes as _modes
 from . import pieces as _pieces
+from . import suivi as _suivi
 from . import projet_claude as _pc
 from .i18n import t as _t
 from datetime import datetime
@@ -43,6 +44,12 @@ RE_APPEL_JSON = re.compile(r"```(?:json)?\s*(\{.*?\})\s*```|^\s*(\{\s*\"name\".*
 OUTILS_WEB = {"web_chercher", "web_lire"}
 
 
+def memoire_longue(conv, r):
+    """Comment cette conversation garde son fil : « resume » (le début est résumé par le modèle) ou « fichier » (fiche de suivi). Le choix de la conversation l'emporte sur le réglage général."""
+    choix = (conv or {}).get("memoire_longue") or r.get("memoire_longue") or "resume"
+    return choix if choix in ("resume", "fichier") else "resume"
+
+
 def outils_du_mode(r):
     """Les outils envoyés au modèle : ceux du mode (voir modes.py), sans web si la case « Web » est décochée ou en mode hors ligne, sans l'outil d'images s'il n'est pas branché."""
     exclus = _modes.outils_exclus(r.get("mode"), [t["function"]["name"] for t in _m.OUTILS])
@@ -50,6 +57,8 @@ def outils_du_mode(r):
         exclus |= OUTILS_WEB
     if not _m.OUTIL:
         exclus |= _modes.IMAGES
+    if r.get("memoire_longue") != "fichier":
+        exclus.add("suivi")                                             # sans fiche de suivi, l'outil n'a pas de sens
     return [t for t in _m.OUTILS if t["function"]["name"] not in exclus]
 
 
@@ -351,6 +360,11 @@ def jauge_contexte(conv, r=None):
     if conv.get("resume"):
         msgs.append({"role": "user", "content": conv["resume"]})
     msgs += conv.get("messages", [])
+    if memoire_longue(conv, r) == "fichier" and conv.get("id"):
+        try:
+            msgs.append({"role": "user", "content": _suivi.texte_pour_modele(conv["id"], r["num_ctx"])})          # la place de la fiche compte dans la jauge
+        except ValueError:
+            pass
     return {"utilise": estimer(msgs) + len(json.dumps(_m.OUTILS, ensure_ascii=False)) // 3, "total": r["num_ctx"], "reel": False}
 
 
@@ -389,7 +403,7 @@ def ajuster_contexte(msgs, num_ctx, facteur=1.0, outils=None):
     # 4) les anciens tours de conversation (avant la question actuelle) sont retirés s'il le faut, en gardant le système, le résumé et la question
     while taille() > budget and dernier_user > 2:
         for i in range(1, dernier_user):
-            if msgs[i]["role"] in ("user", "assistant", "tool") and not msgs[i].get("content", "").startswith("[Résumé"):
+            if msgs[i]["role"] in ("user", "assistant", "tool") and not msgs[i].get("content", "").startswith(("[Résumé", "[Fiche de suivi", "Compris, je m'appuie")):
                 del msgs[i]
                 dernier_user -= 1
                 break
@@ -512,8 +526,10 @@ def tour(conv, texte, emit, r=None, stop=None, remplacer_depuis=None, identite="
         _m.conv_ecrire(conv)                             # la demande est gardée : « continue » la relancera quand le problème sera réglé
         emit({"type": "fin", "conversation": {"id": conv["id"], "titre": conv["titre"]}})
         return
+    r["memoire_longue"] = memoire_longue(conv, r)
     try:
-        compacter(conv, r, emit)
+        if r["memoire_longue"] == "resume":
+            compacter(conv, r, emit)
         boucle_agent(conv, r, emit, ctx, stop)
     except _m.Arret:
         _m.journaliser("Tour arrêté par l'utilisateur (conversation {}).".format(conv["id"]))
@@ -521,6 +537,12 @@ def tour(conv, texte, emit, r=None, stop=None, remplacer_depuis=None, identite="
     except Exception as erreur:  # noqa: BLE001
         _m.journaliser("Erreur inattendue dans le tour (conversation {}) : {!r}".format(conv["id"], erreur))
         emit({"type": "erreur", "texte": _t("Erreur inattendue : {} (détail dans donnees/lutin.log). Ta demande est gardée.").format(str(erreur)[:300])})
+    if r["memoire_longue"] == "fichier" and not lecture_seule:
+        try:
+            reponse = next((m.get("content") or "" for m in reversed(conv["messages"]) if m.get("role") == "assistant" and m.get("content")), "")
+            _suivi.apres_tour(conv["id"], texte, reponse, sorted(ctx["tour"]["fichiers"]))
+        except (OSError, ValueError) as erreur:
+            _m.journaliser("Fiche de suivi non mise à jour (conversation {}) : {!r}".format(conv.get("id"), erreur))
     if ctx["tour"]["fichiers"]:                       # cette demande a touché des fichiers : le bouton « Annuler » les rétablira
         conv["annulable"] = {"id": ctx["tour"]["id"], "fichiers": sorted(ctx["tour"]["fichiers"])}
     _m.conv_ecrire(conv)
@@ -544,12 +566,32 @@ def boucle_agent(conv, r, emit, ctx, stop):
         rappels_texte, rappels_sources = "", []
     if rappels_sources:
         emit({"type": "info", "texte": _t("📎 Rappels ajoutés d'après tes documents : {}").format(" ; ".join(rappels_sources[:4]))})
+    fiche, consigne = "", ""
+    if r.get("memoire_longue") == "fichier":
+        try:
+            fiche = _suivi.texte_pour_modele(conv["id"], r["num_ctx"])            # lue UNE fois pour tout le tour : le début de la requête reste identique, Ollama le garde en cache
+        except ValueError:
+            fiche = ""
+    derniere_demande = next((m.get("content") or "" for m in reversed(conv["messages"]) if m.get("role") == "user"), "")
+    try:
+        consigne = _suivi.directive_execution(conv, derniere_demande, conv["id"])
+    except ValueError:
+        consigne = ""
+    if consigne:
+        emit({"type": "info", "texte": _t("▶ Validation reçue : j'exécute l'étape en cours sans replanifier.")})
     for idx_tour in range(tours_max):
         msgs = [{"role": "system", "content": consignes_systeme(r) + _m.texte_taches(conv) + rappels_texte}]
         if conv.get("resume"):
             msgs.append({"role": "user", "content": "[Résumé de la conversation jusqu'ici]\n" + conv["resume"]})
             msgs.append({"role": "assistant", "content": "Compris, je continue."})
-        msgs += _pieces.pour_le_modele(conv["messages"], _pieces.budget_caracteres(r["num_ctx"]))          # le texte des fichiers joints s'ajoute ici, jamais dans la conversation enregistrée
+        historique = _pieces.pour_le_modele(conv["messages"], _pieces.budget_caracteres(r["num_ctx"]))          # le texte des fichiers joints s'ajoute ici, jamais dans la conversation enregistrée
+        dernier_user = max((i for i, m in enumerate(historique) if m.get("role") == "user"), default=-1)
+        if consigne and dernier_user >= 0:
+            historique = list(historique)
+            historique[dernier_user] = dict(historique[dernier_user], content=(historique[dernier_user].get("content") or "") + "\n\n[" + consigne + "]")
+        if fiche and dernier_user >= 0:          # la fiche passe juste AVANT la dernière question : tout ce qui précède est identique d'une réponse à l'autre (cache d'Ollama)
+            historique = historique[:dernier_user] + [{"role": "user", "content": fiche}, {"role": "assistant", "content": "Compris, je m'appuie sur cette fiche."}] + historique[dernier_user:]
+        msgs += historique
         dernier_tour = idx_tour == tours_max - 1
         if dernier_tour:             # plus d'outils : le modèle doit répondre avec ce qu'il a trouvé
             msgs.append({"role": "user", "content": "Tu as assez d'informations. Réponds maintenant à ma demande avec ce que tu as vu, sans appeler d'outil. Si quelque chose manque, dis-le."})

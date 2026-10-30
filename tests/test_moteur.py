@@ -1370,6 +1370,92 @@ class Assistant(unittest.TestCase):
         finally:
             post("/api/reglages", {k: avant[k] for k in autres if k in avant})
 
+    def test_memoire_par_fiche_de_suivi(self):
+        """Mode « fichier » : la fiche est tenue (outil + automatique), donnée au modèle AVANT la dernière question, « oui » ordonne d'exécuter, et elle disparaît avec la conversation."""
+        from lutin import suivi
+        A.enregistrer_reglages({"memoire_longue": "fichier"})
+        try:
+            ev = chat("On prépare la saison 2", reponses=[[appel_outil("suivi", section="objectif", texte="Écrire la saison 2")], [{"content": "Noté, objectif enregistré."}]])
+            cid = [e for e in ev if e["type"] == "debut"][0]["conversation"]
+            fiche = suivi.lire(cid)
+            self.assertEqual(fiche["objectif"], ["Écrire la saison 2"], "l'outil met la fiche à jour")
+            self.assertTrue(fiche["demandes"] and "saison 2" in fiche["demandes"][0], "et elle se remplit aussi toute seule")
+            chat("Continuons", conversation=cid, reponses=[[{"content": "Voici la suite."}]])
+            msgs = RECUES[-1]["messages"]
+            i = next(n for n, m in enumerate(msgs) if str(m.get("content", "")).startswith("[Fiche de suivi]"))
+            self.assertIn("Écrire la saison 2", msgs[i]["content"])
+            self.assertEqual((msgs[i + 1]["role"], msgs[i + 2]["role"], msgs[i + 2]["content"]), ("assistant", "user", "Continuons"), "la fiche est juste avant la dernière question")
+            self.assertNotIn("Fiche de suivi", msgs[0]["content"], "pas dans le message système : le début reste identique, le cache d'Ollama sert")
+            conv = A.conv_lire(cid)
+            conv["taches"] = [{"texte": "Écrire le chapitre 1", "etat": "en_cours"}]
+            A.conv_ecrire(conv)
+            ev = chat("ok vas-y", conversation=cid, reponses=[[{"content": "Je m'y mets."}]])
+            self.assertIn("chapitre 1", RECUES[-1]["messages"][-1]["content"], "un « oui » ordonne d'exécuter la tâche en cours")
+            self.assertIn("Validation reçue", " ".join(e.get("texte", "") for e in ev if e["type"] == "info"))
+            r = lire("/api/suivi?conversation=" + cid)
+            self.assertEqual((r["mode"], r["mesure"]["niveau"]), ("fichier", "ok"))
+            self.assertEqual(post("/api/memoire-conversation", {"conversation": cid, "mode": "resume"})["mode"], "resume")
+            chat("Et maintenant", conversation=cid, reponses=[[{"content": "Voilà."}]])
+            self.assertFalse(any(str(m.get("content", "")).startswith("[Fiche de suivi]") for m in RECUES[-1]["messages"]))
+            self.assertTrue(suivi.chemin(cid).is_file(), "la fiche reste sur le disque quand on repasse au résumé")
+            post("/api/memoire-conversation", {"conversation": cid, "mode": "pirate"}, attendu=400)
+            post("/api/suivi", {"conversation": cid, "texte": "## Objectif\n- Nouvel objectif\n"})
+            self.assertEqual(suivi.lire(cid)["objectif"], ["Nouvel objectif"])
+            post("/api/supprimer", {"id": cid})
+            self.assertFalse(suivi.chemin(cid).exists(), "supprimer la conversation supprime sa fiche")
+        finally:
+            A.enregistrer_reglages({"memoire_longue": "resume"})
+
+    def test_mise_a_jour_depuis_la_page(self):
+        import time
+        from lutin import acces, cli
+        acces.MAJ.update(etat="", lignes=[], avant="", apres="")
+        vrai_peut = acces.peut_redemarrer
+        redem = []
+        try:
+            acces.peut_redemarrer = lambda: True
+            vrai_redem = acces.redemarrer
+            acces.redemarrer = lambda: redem.append(1)
+            vrai_cli = cli.mise_a_jour_detaillee
+            cli.mise_a_jour_detaillee = lambda dire, erreur, capturer=False: (dire("✔ Lutin mis à jour : 0.6.2 → 0.6.3."), (0, "0.6.2", "0.6.3"))[1]
+            post("/api/mettre-a-jour", {})
+            fin = time.time() + 10
+            while time.time() < fin and lire("/api/mettre-a-jour-etat")["etat"] in ("", "en cours"):
+                time.sleep(0.05)
+            e = lire("/api/mettre-a-jour-etat")
+            self.assertEqual((e["etat"], e["apres"]), ("redemarrage", "0.6.3"))
+            time.sleep(2.2)
+            self.assertEqual(redem, [1], "Lutin se redémarre tout seul après la mise à jour")
+            # déjà à jour
+            cli.mise_a_jour_detaillee = lambda dire, erreur, capturer=False: (dire("Lutin est déjà à jour (0.6.3)."), (0, "0.6.3", None))[1]
+            post("/api/mettre-a-jour", {})
+            fin = time.time() + 10
+            while time.time() < fin and lire("/api/mettre-a-jour-etat")["etat"] in ("", "en cours", "redemarrage"):
+                time.sleep(0.05)
+            self.assertEqual(lire("/api/mettre-a-jour-etat")["etat"], "a_jour")
+            # échec
+            cli.mise_a_jour_detaillee = lambda dire, erreur, capturer=False: (erreur("✘ La mise à jour de Lutin a échoué (pip)."), (1, "0.6.3", None))[1]
+            post("/api/mettre-a-jour", {})
+            fin = time.time() + 10
+            while time.time() < fin and lire("/api/mettre-a-jour-etat")["etat"] in ("", "en cours", "a_jour"):
+                time.sleep(0.05)
+            self.assertEqual(lire("/api/mettre-a-jour-etat")["etat"], "erreur")
+            # pas de redémarrage possible : on le dit
+            acces.peut_redemarrer = lambda: False
+            cli.mise_a_jour_detaillee = lambda dire, erreur, capturer=False: (dire("ok"), (0, "0.6.3", "0.6.4"))[1]
+            post("/api/mettre-a-jour", {})
+            fin = time.time() + 10
+            while time.time() < fin and lire("/api/mettre-a-jour-etat")["etat"] in ("", "en cours", "erreur"):
+                time.sleep(0.05)
+            e = lire("/api/mettre-a-jour-etat")
+            self.assertEqual(e["etat"], "fini")
+            self.assertTrue(any("Relance Lutin" in ligne for ligne in e["lignes"]))
+        finally:
+            acces.peut_redemarrer = vrai_peut
+            acces.redemarrer = vrai_redem
+            cli.mise_a_jour_detaillee = vrai_cli
+            acces.MAJ.update(etat="", lignes=[], avant="", apres="")
+
     def test_etat_emplacements_et_apercu_par_l_api(self):
         e = lire("/api/etat")
         for cle in ("adequation", "machine", "budget_go", "familles", "disque_modeles"):
@@ -1569,7 +1655,7 @@ class Assistant(unittest.TestCase):
     def test_les_cinq_modes_et_leurs_outils(self):
         """Polyvalent (défaut), code et projet, écriture, recherche en lecture seule, discussion sans outils : chacun a son jeu d'outils et sa consigne."""
         from lutin import modes
-        base = dict(A.reglages(), web=True)
+        base = dict(A.reglages(), web=True, memoire_longue="fichier")          # avec la fiche de suivi, son outil existe aussi
 
         def noms(mode):
             return {t["function"]["name"] for t in A.outils_du_mode(dict(base, mode=mode))}

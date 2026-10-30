@@ -42,6 +42,27 @@ The text of the files is added to your message **for the model only**: the conve
 
 Click **📎** next to the message box, or paste (Ctrl+V) or drop an image: PNG, JPEG, GIF or WebP, 8 MB and 4 images per message at most. If the current model cannot see images, Lutin switches for that request to an installed model that can (see the « Images » role in the Models tab), or tells you there is none and ignores the images. Images stay in Lutin's data folder (`images/`), only the most recent ones are sent back to the model, and orphan images are deleted after two days.
 
+## Long conversations: summary or tracking sheet
+
+A small local model forgets a long conversation, or loops (\"shall we act?\" - \"yes\" - it plans everything again). Settings > **Long conversation memory** (and the **🧾 Tracking sheet** button, or `/memory`) offers two methods, switchable at any time, per conversation:
+
+- **Automatic summary** (default): when the conversation nears the limit, the model summarizes the beginning. Nothing to manage, but each summary costs seconds to a minute of computing and loses details.
+- **Tracking sheet**: one short sheet per conversation (goal, decisions, plan, current step, done, open questions, files touched, last requests), read again at every answer. The model updates it with the `suivi` tool and Lutin fills it by itself (requests, files), so even a model that forgets the tool leaves a usable sheet. You can read and edit it. A *yes* from you means **run the current step**: no new plan, no new question.
+
+Safeguards: the sheet is capped (lines per section, line length, at most 10 % of the context window; the page warns above 7 %) so it cannot grow or slow every answer; it is placed just before your last question so the start of the conversation stays identical and Ollama keeps it in cache; it is stored in `data/suivis/<conversation>.md`, deleted with the conversation, and orphans are cleaned.
+
+## Updating from the page and the icon
+
+**Update now** (the banner, or Settings > Lutin version, or the icon's right-click menu) downloads and installs the new version, restarts Lutin and reloads the page. The command line stays available: `lutin update` (add `--app` for Lutin only). In Docker, update by pulling the image.
+
+## Where things are: resizable columns and settings groups
+
+Drag the line between the conversation list and the chat, or between the list and the options, to resize (double-click resets; arrow keys work too; remembered per device, off on small screens). Settings are grouped (General, Folders and data, Conversation, Machine and advanced settings), each group collapsible. The **Automation** tab holds scheduled tasks.
+
+## Ollama models folder
+
+Settings > Locations in use > **Change…** analyzes the chosen folder (network or local, measured write speed, free space), sets `OLLAMA_MODELS` (user variable on Windows) and Lutin's configuration, can **copy** the models already downloaded (verified; the old folder is never deleted), and **restarts Ollama** to apply it. Ollama alone decides where it reads its models: a network folder works but every load reads the model over the network (minutes for 17 GB on gigabit), and Ollama fails if the NAS is off. Prefer `\\server\share\folder` to a mapped drive letter.
+
 ## Models: suitability, families, disk space
 
 In the Models tab each model carries a badge for **your machine**: *Very suitable*, *Suitable*, *Borderline* (fits barely, short conversation, or partly on the processor) or *Too big* (hover for the reason, with the memory it needs). Each family has a one-sentence explanation (for example why Qwen 3.8 exists next to Qwen 3: newer and better, but a single large size). A gauge shows the free space of the disk that holds the models, and a model that would not fit on it is flagged before you download it.

@@ -282,6 +282,27 @@ def importer(d, dossiers, choix, racine_travail=None, ecraser=False, workspaces=
     return rapport
 
 
+def a_reprendre(d, donnees, memoire, dossiers_skills=()):
+    """Ce que la source contient et que Lutin n'a pas encore : {conversations, memoire, skills} (nombres). Sert à ne plus proposer la reprise quand elle est faite : une conversation déjà présente,
+    une mémoire identique à la sienne (ou déjà posée à côté sous un nom « .importe- »), un skill déjà dans un des dossiers donnés, ne comptent pas."""
+    presentes = {p.stem for p in (Path(donnees) / "conversations").glob("*.json")}
+    conv = sum(1 for p in d["conversations"] if p.stem not in presentes)
+    mem = 0
+    for src in d["memoire"]:
+        try:
+            texte = src.read_text(encoding="utf-8-sig", errors="replace").strip()
+            cible = Path(memoire) / src.name
+            if not cible.exists():
+                mem += 1
+            elif cible.read_text(encoding="utf-8-sig", errors="replace").strip() != texte and not any(
+                    a.read_text(encoding="utf-8-sig", errors="replace").strip() == texte for a in Path(memoire).glob(src.stem + ".importe-*.md")):
+                mem += 1
+        except OSError:
+            continue
+    sk = sum(1 for s in d["skills"] if not any((Path(dossier) / s.name).exists() for dossier in dossiers_skills))
+    return {"conversations": conv, "memoire": mem, "skills": sk}
+
+
 def resume(rapport):
     """Le rapport en lignes lisibles."""
     lignes = []

@@ -63,7 +63,7 @@ REGLAGES_DEFAUT = {"modele": os.environ.get("LUTIN_MODELE") or "qwen3:8b", "avan
                     "top_p": None, "top_k": None, "min_p": None, "repeat_penalty": None,          # None = valeur conseillée pour la famille du modèle (voir profil_echantillonnage)
                     "garde_ressources": True, "seuil_ram_go": 3.0, "seuil_disque_go": 10.0, "plafond_donnees_go": 2.0, "limite_ram_commande_go": 0.0,
                     "liberer_si_comfy": True, "rappels_auto": "scenario",
-                    "num_thread": None, "garde_min": None, "essai_a_blanc": False, "copie_conversations": False}          # charge de la machine : cœurs du processeur utilisés et minutes de garde du modèle en mémoire (None = automatique)          # rappels_auto : « scenario » (mode scénariste seulement), « toujours » ou « jamais »
+                    "num_thread": None, "garde_min": None, "essai_a_blanc": False, "copie_conversations": False, "memoire_longue": "resume"}          # charge de la machine : cœurs du processeur utilisés et minutes de garde du modèle en mémoire (None = automatique)          # rappels_auto : « scenario » (mode scénariste seulement), « toujours » ou « jamais »
 CHOIX_RAPPELS = ("scenario", "toujours", "jamais")
 BORNES_CHARGE = {"num_thread": (1, 256), "garde_min": (0, 240)}
 BORNES_RESSOURCES = {"seuil_ram_go": (0.5, 64.0), "seuil_disque_go": (1.0, 2000.0), "plafond_donnees_go": (0.2, 500.0), "limite_ram_commande_go": (0.0, 256.0)}
@@ -426,6 +426,7 @@ from .dialogue import (  # noqa: F401  (déplacé dans dialogue.py : moteur ré-
     chemin_ollama,
     compacter,
     compacter_conversation,
+    memoire_longue,
     consignes_systeme,
     duree_garde,
     ecrire_registre_modeles,
@@ -488,6 +489,31 @@ def demarrer_ollama():
         if etat_ollama()["actif"]:
             return "Ollama démarré."
     raise ValueError("Ollama ne répond pas après 15 secondes.")
+
+
+def arreter_ollama():
+    """Arrête Ollama (le service ou l'icône d'Ollama comprise), à la demande de l'utilisateur : nécessaire pour qu'il relise OLLAMA_MODELS. Renvoie True s'il ne répond plus ensuite."""
+    if os.environ.get("LUTIN_DOCKER"):
+        raise ValueError(_t("Dans Docker, Ollama se redémarre avec le conteneur."))
+    if os.name == "nt":
+        for nom in ("ollama.exe", "ollama app.exe"):
+            subprocess.run(["taskkill", "/F", "/IM", nom], capture_output=True, timeout=20)
+    else:
+        subprocess.run(["pkill", "-x", "ollama"], capture_output=True, timeout=20)
+    for _ in range(20):
+        time.sleep(0.5)
+        if not etat_ollama()["actif"]:
+            return True
+    return False
+
+
+def redemarrer_ollama():
+    """Arrête puis relance Ollama avec le dossier de modèles choisi. Les modèles chargés en mémoire sont perdus (rechargés à la prochaine question)."""
+    if TOURS_ACTIFS:
+        raise ValueError(_t("Une réponse est en cours : attends sa fin avant de redémarrer Ollama."))
+    if not arreter_ollama():
+        raise ValueError(_t("Ollama ne s'arrête pas : quitte-le toi-même (icône en bas à droite) puis clique sur « Démarrer Ollama »."))
+    return demarrer_ollama()
 
 
 # --------------------------------------------------------------------------- serveur HTTP

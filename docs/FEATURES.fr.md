@@ -42,6 +42,27 @@ Le texte des fichiers est ajouté à ton message **pour le modèle seulement** :
 
 Clique sur **📎** à côté de la zone de message, ou colle (Ctrl+V) ou glisse une image : PNG, JPEG, GIF ou WebP, 8 Mo et 4 images par message au plus. Si le modèle courant ne voit pas les images, Lutin passe pour cette demande sur un modèle installé qui les voit (rôle « Images » de l'onglet Modèles), ou te dit qu'il n'y en a pas et ignore les images. Les images restent dans le dossier de données de Lutin (`images/`), seules les plus récentes sont renvoyées au modèle, et les images orphelines sont supprimées après deux jours.
 
+## Longues conversations : résumé ou fiche de suivi
+
+Un petit modèle local oublie une longue conversation, ou tourne en boucle (« on passe à l'action ? » - « oui » - il replanifie tout). Réglages > **Mémoire des longues conversations** (et le bouton **🧾 Fiche de suivi**, ou `/memoire`) propose deux méthodes, changeables à tout moment, conversation par conversation :
+
+- **Résumé automatique** (par défaut) : quand la conversation approche de la limite, le modèle résume le début. Rien à gérer, mais chaque résumé coûte quelques secondes à une minute de calcul et perd des détails.
+- **Fiche de suivi** : une courte fiche par conversation (objectif, décisions, plan, étape en cours, fait, questions ouvertes, fichiers touchés, dernières demandes), relue à chaque réponse. Le modèle la met à jour avec l'outil `suivi` et Lutin la remplit aussi tout seul (demandes, fichiers) : même un modèle qui oublie l'outil laisse une fiche utilisable. Tu peux la lire et la corriger. Un *oui* de ta part veut dire **exécute l'étape en cours** : pas de nouveau plan, pas de nouvelle question.
+
+Garde-fous : la fiche est bornée (lignes par section, longueur des lignes, 10 % au plus de la fenêtre de contexte ; la page avertit dès 7 %) : elle ne peut ni grossir ni ralentir chaque réponse ; elle est placée juste avant ta dernière question, donc le début de la conversation reste identique et Ollama le garde en cache ; elle est rangée dans `donnees/suivis/<conversation>.md`, supprimée avec la conversation, et les fiches orphelines sont nettoyées.
+
+## Mettre à jour depuis la page et l'icône
+
+**Mettre à jour maintenant** (la bannière, Réglages > Version de Lutin, ou le menu du clic droit de l'icône) télécharge et installe la nouvelle version, redémarre Lutin et recharge la page. La ligne de commande reste disponible : `lutin update` (avec `--app` pour Lutin seul). Dans Docker, on met à jour en récupérant l'image.
+
+## Où est quoi : colonnes redimensionnables et réglages en groupes
+
+Glisse la ligne entre la liste des conversations et le chat, ou entre la liste et les options, pour redimensionner (double-clic : réinitialiser ; les flèches du clavier marchent aussi ; retenu par appareil, inactif sur petit écran). Les réglages sont rangés en groupes repliables (Général, Dossiers et données, Conversation, Machine et réglages avancés). L'onglet **Automatisation** contient les tâches planifiées.
+
+## Dossier des modèles d'Ollama
+
+Réglages > Emplacements utilisés > **Changer…** analyse le dossier choisi (réseau ou local, débit d'écriture mesuré, place libre), règle `OLLAMA_MODELS` (variable utilisateur sous Windows) et la configuration de Lutin, peut **copier** les modèles déjà téléchargés (vérifié ; l'ancien dossier n'est jamais supprimé) et **redémarre Ollama** pour appliquer. C'est Ollama seul qui décide où il lit ses modèles : un dossier réseau marche, mais chaque chargement relit le modèle par le réseau (des minutes pour 17 Go en gigabit) et Ollama échoue si le NAS est éteint. Préfère `\\serveur\partage\dossier` à une lettre de lecteur mappée.
+
 ## Modèles : adéquation, familles, place disque
 
 Dans l'onglet Modèles chaque modèle porte une pastille pour **ta machine** : *Très adapté*, *Adapté*, *Limite* (tient à peine, conversation courte, ou en partie sur le processeur) ou *Trop gros* (survole pour la raison, avec la mémoire demandée). Chaque famille a une phrase d'explication (par exemple pourquoi Qwen 3.8 existe à côté de Qwen 3 : plus récent et meilleur, mais une seule grande taille). Une jauge montre la place libre du disque qui porte les modèles, et un modèle qui n'y tiendrait pas est signalé avant le téléchargement.

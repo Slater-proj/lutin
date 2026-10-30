@@ -2,6 +2,17 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## 0.6.3
+
+- **Longues conversations** : deux méthodes au choix, par conversation, à tout moment — résumé automatique, ou **fiche de suivi** (objectif, décisions, plan, étape en cours…) tenue par le modèle et par Lutin, bornée, mesurée, supprimée avec la conversation. Un « oui » ordonne d'exécuter l'étape en cours au lieu de replanifier.
+- **Mise à jour en un clic** depuis la page, les Réglages ou l'icône : installe, redémarre Lutin et recharge la page ; la ligne de commande reste.
+- **Dossier des modèles d'Ollama** : analyse (réseau, débit, place), copie des modèles existants, redémarrage d'Ollama ; avertissements sur les dossiers réseau.
+- **Reprise d'un ancien assistant** : l'avertissement disparaît une fois les données reprises (un statut « déjà dans Lutin » le remplace).
+- **Interface** : colonne de gauche et séparation liste/options redimensionnables, réglages en groupes repliables, onglet Automatisation (tâches planifiées).
+- **Solidité** : tests de la fiche de suivi, de la copie des modèles, de la mise à jour, des séparateurs et de la reprise dans un vrai navigateur.
+
+**English.** Long conversations: choose per conversation, at any time, between automatic summary and a capped, measured **tracking sheet** that disappears with the conversation; a \"yes\" runs the current step instead of re-planning. One-click update from the page, Settings or the tray icon (command line kept). Ollama models folder: analysis (network, speed, space), copy of existing models, Ollama restart. The old-assistant warning disappears once its data is taken over. Resizable left column and list/options split, collapsible settings groups, an Automation tab.
+
 ## 0.6.2
 
 - **Dossiers de travail** : après l'ajout, Lutin dit ce qu'il a trouvé et utilise (fichiers, consignes, skills) et détecte un ancien assistant avec un bouton « Reprendre ses données… » ; bouton Actualiser ; « Retirer » demande confirmation et peut nettoyer les copies de conversations.

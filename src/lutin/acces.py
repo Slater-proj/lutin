@@ -82,6 +82,52 @@ def redemarrer():
     return {"ok": True}
 
 
+MAJ = {"etat": "", "lignes": [], "avant": "", "apres": ""}
+_verrou_maj = threading.Lock()
+
+
+def mettre_a_jour():
+    """Met Lutin à jour depuis la page (même chose que la commande `lutin update --app`), puis le redémarre tout seul s'il tourne sous la supervision de `lutin` ou de l'icône. Le suivi se lit avec etat_maj()."""
+    from . import horsligne
+    if en_docker():
+        raise ValueError(_t("Dans Docker, la mise à jour se fait en récupérant la nouvelle image : docker compose pull && docker compose up -d"))
+    if horsligne.actif():
+        raise ValueError(_t("Mode hors ligne strict : Lutin n'est pas mis à jour."))
+    if _m.TOURS_ACTIFS:
+        raise ValueError(_t("Une réponse est en cours : attends la fin avant de mettre à jour."))
+    with _verrou_maj:
+        if MAJ["etat"] == "en cours":
+            raise ValueError(_t("Une mise à jour est déjà en cours."))
+        MAJ.update(etat="en cours", lignes=[_t("Recherche de la dernière version…")], avant="", apres="")
+
+    def travail():
+        from . import cli
+        try:
+            code, avant, apres = cli.mise_a_jour_detaillee(MAJ["lignes"].append, MAJ["lignes"].append, capturer=True)
+        except Exception as erreur:  # noqa: BLE001 — la page doit toujours apprendre comment ça s'est fini
+            MAJ.update(etat="erreur")
+            MAJ["lignes"].append(str(erreur)[:300])
+            return
+        MAJ.update(avant=avant, apres=apres or "")
+        if code != 0:
+            MAJ["etat"] = "erreur"
+        elif not apres:
+            MAJ["etat"] = "a_jour"
+        elif peut_redemarrer():
+            MAJ["etat"] = "redemarrage"
+            MAJ["lignes"].append(_t("Redémarrage de Lutin pour appliquer la mise à jour…"))
+            threading.Timer(1.5, redemarrer).start()               # le temps que la page lise l'état
+        else:
+            MAJ["etat"] = "fini"
+            MAJ["lignes"].append(_t("Relance Lutin toi-même pour appliquer la mise à jour (fermer puis rouvrir)."))
+    threading.Thread(target=travail, daemon=True, name="mise-a-jour").start()
+    return dict(MAJ)
+
+
+def etat_maj():
+    return dict(MAJ)
+
+
 def qr_json(texte):
     if len(texte.encode("utf-8")) > qr.CAPACITE_MAX:
         raise ValueError(_t("Texte trop long pour le code QR."))

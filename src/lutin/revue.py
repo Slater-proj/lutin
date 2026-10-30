@@ -273,6 +273,12 @@ def _appeler_outil(nom, args, ctx):
         return _m.outil_web_lire(args.get("url", ""), args.get("debut"), ctx)
     if nom == "taches":
         return _m.outil_taches(args.get("liste", []), ctx)
+    if nom == "suivi":
+        from . import suivi
+        conv = ctx.get("conv")
+        if conv is None:
+            raise _m.ErreurOutil("Pas de conversation active.")
+        return suivi.modifier(conv["id"], args.get("section", ""), args.get("texte", ""), args.get("mode", ""))
     if nom == "etat_outil":
         return _m.outil_etat()
     if nom == "installer_module":

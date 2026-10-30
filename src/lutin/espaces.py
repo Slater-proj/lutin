@@ -151,7 +151,8 @@ def _apercu(p):
         if _trav.cle(p) != _trav.cle(_m.DONNEES.parent):
             with _rep.ouvrir(p) as d:
                 if d["conversations"] or d["memoire"]:
-                    ancien = dict(_rep.decrire(d), dossier=d["dossier_utilise"])
+                    nouvelles = _rep.a_reprendre(d, _m.DONNEES, _m.MEMOIRE, [p / "skills", _m.RACINE / "skills"])
+                    ancien = dict(_rep.decrire(d), dossier=d["dossier_utilise"], nouvelles=nouvelles, a_reprendre=any(nouvelles.values()))
     except _rep.ErreurReprise:
         ancien = None
     return {"fichiers": n, "tronque": tronque, "lus": lus, "copies": copies, "ancien": ancien, "git": (p / ".git").exists()}

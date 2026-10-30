@@ -191,29 +191,38 @@ def commande_serve(args):
     return superviser(lambda premiere: lancer_enfant(sans_navigateur or not premiere))          # le navigateur ne s'ouvre qu'au premier démarrage, pas à chaque relance
 
 
-def mettre_a_jour_lutin():
+def mise_a_jour_detaillee(dire=print, erreur=None, capturer=False):
     """Met Lutin à jour d'après la source mémorisée à l'installation : « github:propriétaire/dépôt » (dernière publication, comparée à la version installée) ou une adresse / une roue
-    donnée à pip. Ne fait rien si Lutin est déjà à jour. Renvoie un code de sortie."""
+    donnée à pip. Ne fait rien si Lutin est déjà à jour. `dire` / `erreur` : où vont les messages (la console par défaut, la page ou l'icône ailleurs) ; `capturer` : cache la sortie de pip.
+    Renvoie (code de sortie, version avant, version après) ; « après » vaut None si rien n'a été installé."""
+    erreur = erreur or (lambda texte: print(texte, file=sys.stderr))
     source = config.lire_source()
     if not source:
-        print(_t("Lutin ne sait pas d'où se mettre à jour (installé à la main ?). Relance le script d'installation, ou : python -m pip install --upgrade <source>"))
-        return 0
+        dire(_t("Lutin ne sait pas d'où se mettre à jour (installé à la main ?). Relance le script d'installation, ou : python -m pip install --upgrade <source>"))
+        return 0, __version__, None
     if source.startswith("github:"):
         version, roue = miseajour.derniere_release(source[len("github:"):])
         if not roue:
-            print(_t("✘ Impossible de lire la dernière version de Lutin sur GitHub (pas d'internet, ou aucune publication)."), file=sys.stderr)
-            return 1
+            erreur(_t("✘ Impossible de lire la dernière version de Lutin sur GitHub (pas d'internet, ou aucune publication)."))
+            return 1, __version__, None
         if not miseajour.plus_recente(version, __version__):
-            print(_t("Lutin est déjà à jour ({}).").format(__version__))
-            return 0
+            dire(_t("Lutin est déjà à jour ({}).").format(__version__))
+            return 0, __version__, None
         source = roue
     avant = __version__
-    if subprocess.run([sys.executable, "-m", "pip", "install", "--upgrade", "--quiet", source]).returncode != 0:
-        print(_t("✘ La mise à jour de Lutin a échoué (pip)."), file=sys.stderr)
-        return 1
+    if subprocess.run([sys.executable, "-m", "pip", "install", "--upgrade", "--quiet", source], capture_output=capturer).returncode != 0:
+        erreur(_t("✘ La mise à jour de Lutin a échoué (pip)."))
+        return 1, avant, None
     apres = subprocess.run([sys.executable, "-m", "lutin", "--version"], capture_output=True, text=True).stdout.strip().replace("Lutin ", "")
-    print(_t("Lutin est déjà à jour ({}).").format(avant) if apres in ("", avant) else _t("✔ Lutin mis à jour : {} → {}.").format(avant, apres))
-    return 0
+    if apres in ("", avant):
+        dire(_t("Lutin est déjà à jour ({}).").format(avant))
+        return 0, avant, None
+    dire(_t("✔ Lutin mis à jour : {} → {}.").format(avant, apres))
+    return 0, avant, apres
+
+
+def mettre_a_jour_lutin():
+    return mise_a_jour_detaillee()[0]
 
 
 def commande_update(args):

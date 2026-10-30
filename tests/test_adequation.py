@@ -174,6 +174,47 @@ class Emplacements(unittest.TestCase):
             self.assertTrue(ligne["chemin"] and ligne["explication"])
         self.assertIn("libre", (emplacements.jauge_modeles() or {"libre": 0}))
 
+    def test_analyse_d_un_dossier_local(self):
+        d = _TEMP / "analyse"
+        d.mkdir(exist_ok=True)
+        a = emplacements.analyse_dossier(str(d))
+        self.assertFalse(a["reseau"])
+        self.assertTrue(a["existe"])
+        self.assertIsNotNone(a["debit"])
+        self.assertGreater(a["debit"], 0)
+        self.assertFalse((d / ".lutin-debit").exists(), "le fichier d'essai est supprimé")
+        r = emplacements.analyse_dossier(chr(92) * 2 + "nas-qui-n-existe-pas" + chr(92) + "modeles")
+        self.assertTrue(r["reseau"])
+        self.assertTrue(any("réseau" in w for w in r["avertissements"]), "un dossier réseau est signalé")
+
+    def test_copie_des_modeles_existants(self):
+        import time
+        source, cible = _TEMP / "ollama-source", _TEMP / "ollama-cible"
+        (source / "blobs").mkdir(parents=True, exist_ok=True)
+        (source / "manifests" / "registry.ollama.ai" / "library" / "x").mkdir(parents=True, exist_ok=True)
+        (source / "blobs" / "sha256-aaa").write_bytes(b"A" * 3_000_000)
+        (source / "blobs" / "sha256-bbb").write_bytes(b"B" * 1_000_000)
+        (source / "manifests" / "registry.ollama.ai" / "library" / "x" / "1b").write_text("{}", encoding="utf-8")
+        os.environ["OLLAMA_MODELS"] = str(source)
+        with self.assertRaises(ValueError):
+            emplacements.copier_modeles(source)                                  # même dossier
+        with self.assertRaises(ValueError):
+            emplacements.copier_modeles(source / "dedans")                       # dans l'ancien
+        emplacements.copier_modeles(cible)
+        fin = time.time() + 20
+        while time.time() < fin and emplacements.etat_copie()["etat"] == "en cours":
+            time.sleep(0.05)
+        self.assertEqual(emplacements.etat_copie()["etat"], "fini", emplacements.etat_copie())
+        self.assertEqual((cible / "blobs" / "sha256-aaa").stat().st_size, 3_000_000)
+        self.assertTrue((cible / "manifests" / "registry.ollama.ai" / "library" / "x" / "1b").is_file())
+        self.assertTrue((source / "blobs" / "sha256-aaa").is_file(), "l'ancien dossier n'est jamais supprimé")
+        self.assertEqual(list(cible.rglob("*.lutin-tmp")), [], "pas de fichier temporaire laissé")
+        emplacements.copier_modeles(cible)                                      # relancer saute ce qui est déjà copié
+        fin = time.time() + 20
+        while time.time() < fin and emplacements.etat_copie()["etat"] == "en cours":
+            time.sleep(0.05)
+        self.assertEqual(emplacements.etat_copie()["etat"], "fini")
+
 
 if __name__ == "__main__":
     unittest.main()

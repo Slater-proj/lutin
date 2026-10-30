@@ -145,6 +145,69 @@ class Parcours(unittest.TestCase):
             self.assertTrue((tmp / "Rendu" / "notes.txt").is_file(), "les fichiers ne sont jamais supprimés")
             self.assertEqual(p.erreurs, [])
 
+    def test_colonne_redimensionnable_menus_groupes_et_reprise(self):
+        with self.captures.serveur_demo() as (port, tmp):
+            p = self.ouvrir(tmp, "http://127.0.0.1:%d/" % port)
+            largeur = lambda: p.evaluer("Math.round(document.querySelector('aside').getBoundingClientRect().width)")  # noqa: E731
+            avant = largeur()
+            # glisser le séparateur vertical avec une vraie souris : la colonne s'élargit, la valeur est retenue
+            x = p.evaluer("Math.round(document.getElementById('sepV').getBoundingClientRect().left + 3)")
+            p.commande("Input.dispatchMouseEvent", type="mousePressed", x=x, y=300, button="left", clickCount=1)
+            p.commande("Input.dispatchMouseEvent", type="mouseMoved", x=x + 140, y=300, button="left")
+            p.commande("Input.dispatchMouseEvent", type="mouseReleased", x=x + 140, y=300, button="left", clickCount=1)
+            p.attendre("Math.round(document.querySelector('aside').getBoundingClientRect().width) > %d" % (avant + 100))
+            self.assertEqual(p.evaluer("localStorage.getItem('lutin.lateral')"), str(largeur()))
+            p.evaluer("document.getElementById('sepV').dispatchEvent(new MouseEvent('dblclick'))")
+            p.attendre("Math.round(document.querySelector('aside').getBoundingClientRect().width) === %d" % avant)
+            # séparateur horizontal : les options changent de hauteur
+            haut_avant = p.evaluer("Math.round(document.querySelector('.options-lat').getBoundingClientRect().height)")
+            y = p.evaluer("Math.round(document.getElementById('sepH').getBoundingClientRect().top + 3)")
+            p.commande("Input.dispatchMouseEvent", type="mousePressed", x=100, y=y, button="left", clickCount=1)
+            p.commande("Input.dispatchMouseEvent", type="mouseMoved", x=100, y=y - 60, button="left")
+            p.commande("Input.dispatchMouseEvent", type="mouseReleased", x=100, y=y - 60, button="left", clickCount=1)
+            p.attendre("Math.round(document.querySelector('.options-lat').getBoundingClientRect().height) > %d" % (haut_avant + 30))
+            # les onglets : Automatisation existe et contient les tâches planifiées (plus dans Mémoire)
+            self.assertEqual([p.evaluer("document.querySelectorAll('.onglets button')[%d].dataset.p" % i) for i in range(7)], ["chat", "modeles", "memoire", "auto", "reglages", "sante", "acces"])
+            p.evaluer(onglet("auto"))
+            p.attendre("document.querySelector('#p-auto').classList.contains('vue')")
+            self.assertTrue(p.evaluer("!!document.querySelector('#p-auto #listePlanifie')"))
+            self.assertFalse(p.evaluer("!!document.querySelector('#p-memoire #listePlanifie')"))
+            # les réglages sont rangés en groupes repliables
+            p.evaluer(onglet("reglages"))
+            groupes = p.evaluer("[...document.querySelectorAll('#p-reglages details.groupe > summary')].map(s => s.textContent.trim())")
+            self.assertEqual(groupes, ["Général", "Dossiers et données", "Conversation", "Machine et réglages avancés"])
+            self.assertEqual(p.evaluer("document.querySelectorAll('#p-reglages > .cadre > h2').length"), 0, "plus de section isolée hors d'un groupe")
+            p.evaluer("document.querySelector('#p-reglages details.groupe[data-g=general] > summary').click()")
+            self.assertEqual(p.evaluer("localStorage.getItem('lutin.groupe.general')"), "0", "un groupe replié reste replié")
+            self.assertEqual(p.erreurs, [])
+
+    def test_reprise_proposee_une_fois_puis_plus(self):
+        with self.captures.serveur_demo() as (port, tmp):
+            ancien = tmp / "ancien-assistant"
+            (ancien / "donnees" / "conversations").mkdir(parents=True)
+            (ancien / "memoire").mkdir()
+            (ancien / "donnees" / "conversations" / "aabbccdd.json").write_text(json.dumps({"id": "aabbccdd", "titre": "Vieille conversation", "date": "2026-10-01T10:00:00", "messages": [{"role": "user", "content": "salut"}], "resume": ""}), encoding="utf-8")
+            (ancien / "memoire" / "MEMOIRE.md").write_text("# Mémoire\n\nUne note ancienne.\n", encoding="utf-8")
+            p = self.ouvrir(tmp, "http://127.0.0.1:%d/" % port)
+            p.evaluer(onglet("reglages"))
+            p.attendre(bouton("Ajouter un dossier…"))
+            p.evaluer(bouton("Ajouter un dossier…"))
+            naviguer(p, str(ancien), "[...document.querySelectorAll('#modalCorps .conv')].some(x => x.textContent.includes('donnees'))")
+            p.evaluer(bouton("Ajouter ce dossier"))
+            # Lutin dit ce qu'il a trouvé et ouvre tout de suite la reprise, déjà remplie
+            p.attendre("document.querySelector('#modalCorps').textContent.includes('Conversations : 1')")
+            p.evaluer(bouton("Reprendre"))
+            p.attendre("!document.querySelector('#modalCorps input[type=checkbox]')")
+            self.assertTrue((tmp / "home" / "donnees" / "conversations" / "aabbccdd.json").is_file())
+            p.evaluer("document.getElementById('modalFermer').click()")
+            # après la reprise, l'avertissement a disparu et un statut « déjà dans Lutin » le remplace
+            p.attendre("document.querySelector('#listeTravaux').textContent.includes('déjà dans Lutin')")
+            self.assertNotIn("pas encore dans Lutin", p.evaluer("document.querySelector('#listeTravaux').textContent"))
+            p.evaluer(bouton("🔄 Actualiser"))
+            p.attendre("document.querySelector('#listeTravaux').textContent.includes('déjà dans Lutin')")
+            self.assertNotIn("pas encore dans Lutin", p.evaluer("document.querySelector('#listeTravaux').textContent"))
+            self.assertEqual(p.erreurs, [])
+
     def test_liste_des_modeles_par_familles_sur_deux_lignes_et_sans_filtre_a_part(self):
         with self.captures.serveur_demo() as (port, tmp):
             p = self.ouvrir(tmp, "http://127.0.0.1:%d/" % port)
