@@ -178,7 +178,7 @@ class Parcours(unittest.TestCase):
             self.assertEqual(groupes, ["Général", "Dossiers et données", "Conversation", "Machine et réglages avancés"])
             self.assertEqual(p.evaluer("document.querySelectorAll('#p-reglages > .cadre > h2').length"), 0, "plus de section isolée hors d'un groupe")
             p.evaluer("document.querySelector('#p-reglages details.groupe[data-g=general] > summary').click()")
-            self.assertEqual(p.evaluer("localStorage.getItem('lutin.groupe.general')"), "0", "un groupe replié reste replié")
+            p.attendre("localStorage.getItem('lutin.groupe.general') === '0'")                       # l'évènement « toggle » arrive juste après le clic
             self.assertEqual(p.erreurs, [])
 
     def test_reprise_proposee_une_fois_puis_plus(self):
