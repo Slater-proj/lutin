@@ -96,7 +96,7 @@ Un petit modèle local oublie une longue conversation, ou tourne en boucle (« o
 
 **Rien n'est vraiment perdu.** Aucune des deux méthodes ne garde chaque mot dans la fenêtre du modèle, mais tout reste sur le disque : le résumé archive les messages qu'il retire (`donnees/archives/<conversation>.jsonl`), et l'outil `rappeler` (avec `ici=true` pour cette seule conversation) retrouve une décision, un nom ou un chiffre par mots-clés. Lutin dit au modèle qu'il peut le faire, et son index ne relit que les fichiers qui ont changé.
 
-Garde-fous : la fiche est bornée (lignes par section, longueur des lignes, 10 % au plus de la fenêtre de contexte ; la page avertit dès 7 %) : elle ne peut ni grossir ni ralentir chaque réponse ; elle est placée juste avant ta dernière question, donc le début de la conversation reste identique et Ollama le garde en cache ; elle est rangée dans `donnees/suivis/<conversation>.md`, supprimée avec la conversation, et les fiches orphelines sont nettoyées.
+Garde-fous : la fiche est bornée (lignes par section, longueur des lignes, 10 % au plus de la fenêtre de contexte par défaut, réglable de 5 à 25 % dans Réglages > Mémoire des longues conversations ; la page avertit aux sept dixièmes de ce plafond) : elle ne peut ni grossir ni ralentir chaque réponse ; elle est placée juste avant ta dernière question, donc le début de la conversation reste identique et Ollama le garde en cache ; elle est rangée dans `donnees/suivis/<conversation>.md`, supprimée avec la conversation, et les fiches orphelines sont nettoyées.
 
 ## Mettre à jour depuis la page et l'icône
 

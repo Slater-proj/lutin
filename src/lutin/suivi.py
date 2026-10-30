@@ -201,8 +201,16 @@ def rendre(sections, budget_caracteres):
     return texte()[:budget_caracteres]
 
 
+def part_max():
+    """La part de la fenêtre de contexte que la fiche peut prendre : le réglage « fiche_part » (5 à 25 %, 10 par défaut)."""
+    try:
+        return max(5, min(25, int(_m.reglages().get("fiche_part", 10)))) / 100
+    except (TypeError, ValueError):
+        return PART_MAX
+
+
 def budget_caracteres(num_ctx):
-    return int(num_ctx * PART_MAX * CARACTERES_PAR_JETON)
+    return int(num_ctx * part_max() * CARACTERES_PAR_JETON)
 
 
 def texte_pour_modele(ident, num_ctx):
@@ -221,8 +229,9 @@ def mesure(ident, num_ctx):
         return {"lignes": 0, "jetons": 0, "part": 0.0, "niveau": "vide", "avertissement": ""}
     jetons = len(rendre(sections, 10 ** 9)) // CARACTERES_PAR_JETON
     part = round(jetons / max(1, num_ctx), 3)
-    niveau = "attention" if part >= PART_ATTENTION else "ok"
-    avert = _t("La fiche prend {} % de la fenêtre de contexte : elle ralentit chaque réponse et laisse moins de place à la conversation. Elle est raccourcie automatiquement au-delà de {} %.").format(round(part * 100), round(PART_MAX * 100)) if niveau == "attention" else ""
+    plafond = part_max()
+    niveau = "attention" if part >= plafond * PART_ATTENTION / PART_MAX else "ok"          # l'avertissement vient aux sept dixièmes du plafond
+    avert = _t("La fiche prend {} % de la fenêtre de contexte : elle ralentit chaque réponse et laisse moins de place à la conversation. Elle est raccourcie automatiquement au-delà de {} %.").format(round(part * 100), round(plafond * 100)) if niveau == "attention" else ""
     return {"lignes": lignes, "jetons": jetons, "part": part, "niveau": niveau, "avertissement": avert}
 
 

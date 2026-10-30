@@ -124,5 +124,37 @@ class Validation(unittest.TestCase):
             suivi.supprimer(ID)
 
 
+class PartDuContexte(unittest.TestCase):
+    """La part de la fenêtre de contexte que la fiche peut prendre se règle (5 à 25 %, 10 par défaut)."""
+
+    def tearDown(self):
+        _m.enregistrer_reglages({"fiche_part": 10})
+        suivi.supprimer(ID)
+
+    def test_le_plafond_suit_le_reglage_et_reste_borne(self):
+        self.assertEqual(_m.reglages()["fiche_part"], 10)
+        self.assertEqual(suivi.budget_caracteres(16384), int(16384 * 0.10 * 3))
+        _m.enregistrer_reglages({"fiche_part": 25})
+        self.assertEqual(suivi.budget_caracteres(16384), int(16384 * 0.25 * 3), "25 % : la fiche peut garder plus de détails")
+        _m.enregistrer_reglages({"fiche_part": 400})
+        self.assertEqual(_m.reglages()["fiche_part"], 25, "borné à 25 %")
+        _m.enregistrer_reglages({"fiche_part": 1})
+        self.assertEqual(_m.reglages()["fiche_part"], 5, "borné à 5 %")
+        _m.enregistrer_reglages({"fiche_part": "n'importe quoi"})
+        self.assertEqual(_m.reglages()["fiche_part"], 10, "valeur absurde : retour à 10 %")
+
+    def test_la_fiche_garde_plus_de_lignes_avec_un_plafond_plus_haut_et_l_avertissement_suit(self):
+        for i in range(25):
+            suivi.modifier(ID, "decisions", "Décision numéro %d : " % i + "détail " * 25)
+        petit = suivi.texte_pour_modele(ID, 4096)
+        _m.enregistrer_reglages({"fiche_part": 25})
+        grand = suivi.texte_pour_modele(ID, 4096)
+        self.assertGreater(len(grand), len(petit), "plus de place : plus de la fiche passe au modèle")
+        self.assertLessEqual(len(grand), int(4096 * 0.25 * 3) + 400)
+        m = suivi.mesure(ID, 4096)
+        self.assertEqual(m["niveau"], "attention", "la fiche pèse beaucoup pour un petit contexte")
+        self.assertIn("25 %", m["avertissement"], "l'avertissement cite le plafond réglé")
+
+
 if __name__ == "__main__":
     unittest.main()

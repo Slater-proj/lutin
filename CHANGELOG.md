@@ -2,6 +2,12 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## 0.7.7
+
+- **Fiche de suivi : part du contexte réglable** (5 à 25 %, 10 par défaut) dans Réglages > Mémoire des longues conversations ; l'avertissement de lenteur suit le plafond choisi.
+
+**English.** Tracking sheet: the share of the context window it may take is now adjustable (5 to 25 %, 10 by default) in Settings > Long conversation memory; the slowness warning follows the chosen cap.
+
 ## 0.7.6
 
 - **Correction : le bouton « Envoyer »** de la page, quand on cliquait dessus (au lieu d'appuyer sur Entrée), déclenchait une erreur au lieu d'envoyer le message. Un test de navigateur réel clique maintenant sur le bouton.
