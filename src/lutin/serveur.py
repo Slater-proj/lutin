@@ -223,6 +223,16 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 return self._envoyer(200, _addons.etat_vivant((q.get("id") or [""])[0]))
             except _addons.ErreurAddon as e:
                 return self._envoyer(400, {"erreur": str(e)})
+        if chemin == "/api/addon-flux":                          # le flux en vigueur et celui qui est livré (éditeur de flux)
+            if not self._configurateur():
+                return self._envoyer(403, {"erreur": _t("Les extensions se gèrent depuis cette machine (niveau « cette machine seulement » ou navigateur de cette machine).")})
+            q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+            ident = (q.get("id") or [""])[0]
+            try:
+                _addons.manifeste(ident)
+                return self._envoyer(200, {"flux": _addons.flux(ident), "livre": _addons.flux_livre(ident), "modifie": _addons.flux_modifie(ident)})
+            except _addons.ErreurAddon as e:
+                return self._envoyer(400, {"erreur": str(e)})
         if chemin == "/api/fond":                                # le travail de fond : travaux et avancement
             return self._envoyer(200, {"liste": _fond.liste()})
         if chemin == "/api/fond-rapport":

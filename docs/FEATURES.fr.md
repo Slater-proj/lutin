@@ -42,6 +42,15 @@ Le texte des fichiers est ajouté à ton message **pour le modèle seulement** :
 
 Clique sur **📎** à côté de la zone de message, ou colle (Ctrl+V) ou glisse une image : PNG, JPEG, GIF ou WebP, 8 Mo et 4 images par message au plus. Si le modèle courant ne voit pas les images, Lutin passe pour cette demande sur un modèle installé qui les voit (rôle « Images » de l'onglet Modèles), ou te dit qu'il n'y en a pas et ignore les images. Les images restent dans le dossier de données de Lutin (`images/`), seules les plus récentes sont renvoyées au modèle, et les images orphelines sont supprimées après deux jours.
 
+## Addon ComfyUI
+
+Laisse Lutin piloter ton ComfyUI. ComfyUI doit déjà tourner sur cette machine (Lutin le pilote, il ne le démarre pas).
+
+- **Détection** : *Enregistrer et vérifier* cherche ComfyUI sur son port ; le panneau montre sa version et sa carte graphique, et **propose le dossier d'installation** (annoncé par ComfyUI lui-même, trouvé dans le processus en cours, ou dans les emplacements usuels) : un clic pour l'utiliser. Désactivé par défaut, comme tout addon.
+- **Modèles installés** : lus dans ComfyUI (ce qu'il voit vraiment : checkpoints, LoRA, VAE, modèles de diffusion), ou dans le dossier d'installation quand ComfyUI est éteint. Le modèle peut aussi les lister (`comfy_modeles`) avant de choisir.
+- **Générer** : le modèle appelle `comfy_generer` avec une description (et taille, modèle, graine…). **Chaque génération demande ton accord** (simulée, jamais faite, dans les exécutions en lecture seule comme les tâches planifiées ou Telegram), le modèle de langage cède d'abord la carte graphique, puis Lutin envoie le workflow, attend le résultat (le bouton *Arrêter* interrompt aussi ComfyUI) et dit où est le fichier.
+- **Les workflows sont des données** : un workflow d'image est livré ; pour la vidéo ou le son, colle le tien (ComfyUI : *Enregistrer (format API)*) dans l'éditeur **Flux…** de l'addon, sous `workflows`, avec `{prompt}`, `{largeur}`, `{hauteur}`, `{graine}`, `{pas}`, `{cfg}`, `{negatif}`, `{modele}` là où Lutin doit écrire. Le JSON est vérifié avant d'être enregistré, et la version livrée revient en un clic.
+
 ## Addon Telegram
 
 Parle à Lutin depuis ton téléphone. Crée un bot avec @BotFather, colle son jeton (onglet Automatisation > *Extensions facultatives* > Telegram > *Configurer…*), vérifie, active, puis écris `/appairer CODE` à ton bot (le code est affiché dans la carte) : ce chat devient **le tien**.

@@ -42,6 +42,15 @@ The text of the files is added to your message **for the model only**: the conve
 
 Click **📎** next to the message box, or paste (Ctrl+V) or drop an image: PNG, JPEG, GIF or WebP, 8 MB and 4 images per message at most. If the current model cannot see images, Lutin switches for that request to an installed model that can (see the « Images » role in the Models tab), or tells you there is none and ignores the images. Images stay in Lutin's data folder (`images/`), only the most recent ones are sent back to the model, and orphan images are deleted after two days.
 
+## ComfyUI addon
+
+Let Lutin drive your ComfyUI. ComfyUI must already be running on this machine (Lutin drives it, it does not start it).
+
+- **Detection**: *Save and check* looks for ComfyUI on its port; the panel shows its version and graphics card, and **proposes the installation folder** (announced by ComfyUI itself, found in the running process, or in the usual places): one click to use it. Off by default, like every addon.
+- **Installed models**: read from ComfyUI (what it really sees: checkpoints, LoRA, VAE, diffusion models), or from the installation folder when ComfyUI is off. The model can also list them (`comfy_modeles`) before choosing.
+- **Generating**: the model calls `comfy_generer` with a description (and size, model, seed…). **Each generation asks for your approval** (simulated, never done, in read-only runs such as scheduled tasks or Telegram), the language model gives up the graphics card first, then Lutin submits the workflow, waits for the result (the *Stop* button interrupts ComfyUI too) and tells where the file is.
+- **Workflows are data**: an image workflow is shipped; for video or sound, paste your own workflow (ComfyUI: *Save (API Format)*) in the addon's **Flow…** editor under `workflows`, with `{prompt}`, `{largeur}`, `{hauteur}`, `{graine}`, `{pas}`, `{cfg}`, `{negatif}`, `{modele}` where Lutin should write. The JSON is checked before saving, and the shipped version comes back in one click.
+
 ## Telegram addon
 
 Talk to Lutin from your phone. Create a bot with @BotFather, paste its token (Automation tab > *Optional extensions* > Telegram > *Set up…*), check, enable, then write `/appairer CODE` to your bot (the code is shown in the card): that chat is now **yours**.

@@ -2,6 +2,12 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## 0.7.2
+
+- **Addon ComfyUI** : détection de ComfyUI (version, carte graphique, dossier d'installation prérempli en un clic), liste des modèles installés (par ComfyUI ou par le dossier), génération d'images à la demande du modèle avec ton accord, workflows modifiables (vidéo et son : colle le tien). Éditeur de flux « Flux… » pour tous les addons.
+
+**English.** ComfyUI addon: detection (version, graphics card, installation folder prefilled in one click), installed models list (from ComfyUI or from the folder), image generation on the model's request with your approval, editable workflows (video and sound: paste your own). A “Flow…” editor for every addon.
+
 ## 0.7.1
 
 - **Addon Telegram** : parle à Lutin depuis ton téléphone. Appairage par code ; tes messages sont des demandes traitées en lecture seule ; les autres personnes sont ignorées, ou reçoivent un brouillon que tu valides, ou une réponse seule — toujours sans aucun outil. Le flux est corrigeable si Telegram change. Les addons peuvent désormais avoir des choix et des textes longs dans leurs réglages, un panneau propre et des actions.

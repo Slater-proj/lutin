@@ -609,7 +609,7 @@ def definir_racine(chemin):
 
 # --------------------------------------------------------------------------- journal des actions (qui a modifié quoi, lancé quelle commande, avec quel accord)
 JOURNAL_MAX = 5_000_000
-OUTILS_JOURNALISES = {"ecrire", "modifier", "modifier_plusieurs", "executer", "installer_module"}
+OUTILS_JOURNALISES = {"ecrire", "modifier", "modifier_plusieurs", "executer", "installer_module", "comfy_generer"}
 
 
 def chemin_journal():

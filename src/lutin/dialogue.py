@@ -147,6 +147,9 @@ def outils_du_mode(r):
         exclus |= _modes.IMAGES
     if r.get("memoire_longue") != "fichier":
         exclus.add("suivi")                                             # sans fiche de suivi, l'outil n'a pas de sens
+    from . import addons
+    if not addons.actif("comfyui"):
+        exclus |= {"comfy_modeles", "comfy_generer"}                    # les outils de ComfyUI n'existent que si l'addon est activé
     return [t for t in _m.OUTILS if t["function"]["name"] not in exclus]
 
 

@@ -2177,6 +2177,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
       conf.addEventListener('click', () => configurerAddon(a));
       ver.addEventListener('click', async () => { ver.disabled = true; msg.textContent = ''; try { await api('/api/addon-verifier', { id: a.id }); } catch (e) { msg.textContent = e.message; } chargerAddons(); });
       ligne.append(conf, ver);
+      if (a.hotes.length) { const fl = el('button', '', T('Flux…')); fl.addEventListener('click', () => editerFlux(a)); ligne.appendChild(fl); }
       if (v && !v.ok && a.hotes.length) { const rep_ = el('button', 'principal', T('Réparer avec l\'aide de Lutin')); rep_.addEventListener('click', () => reparerAddon(a)); ligne.appendChild(rep_); }
       if (a.flux_modifie) { const rest = el('button', '', T('Revenir à la version livrée')); rest.addEventListener('click', async () => { try { await api('/api/addon-flux-restaurer', { id: a.id }); } catch (e) { msg.textContent = e.message; } chargerAddons(); }); ligne.appendChild(rest); }
       d.appendChild(ligne);
@@ -2264,6 +2265,39 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
       l.append(ok, non); d.appendChild(l); zone.appendChild(d);
     });
     zone.appendChild(msg);
+  };
+  // Panneau de l'addon ComfyUI : détection (état, dossier d'installation prérempli), modèles installés, workflows disponibles
+  PANNEAUX.comfyui = async (a, zone) => {
+    let x;
+    try { x = await api('/api/addon-etat?id=comfyui'); } catch (e) { zone.textContent = e.message; return; }
+    const msg = el('div', 'erreur');
+    zone.appendChild(el('div', x.tourne ? 'aide' : 'erreur', x.tourne ? T('✔ ComfyUI répond') + (x.version ? ' (' + x.version + (x.gpu ? ', ' + x.gpu : '') + ')' : '') + '.' : T('ComfyUI ne répond pas : lance-le, puis clique sur « Vérifier ». ') + (x.erreur || '')));
+    if (x.dossier && x.dossier !== x.dossier_regle) {
+      const l = el('div', 'ligne'); l.appendChild(el('span', 'aide', T('Dossier trouvé : ') + x.dossier + ' '));
+      const b = el('button', 'principal', T('Utiliser ce dossier'));
+      b.addEventListener('click', async () => { try { await api('/api/addon-action', { id: 'comfyui', action: 'utiliser_dossier', dossier: x.dossier }); chargerAddons(); } catch (e) { msg.textContent = e.message; } });
+      l.appendChild(b); zone.appendChild(l);
+    } else if (x.dossier_regle) zone.appendChild(el('div', 'aide', T('Dossier réglé : ') + x.dossier_regle));
+    const m = x.modeles || { source: 'aucune', modeles: {} }, genres = Object.keys(m.modeles);
+    const det = el('details'); det.appendChild(el('summary', '', genres.length ? T('Modèles installés') + ' (' + genres.map(g => g + ' ' + m.modeles[g].length).join(', ') + ')' : T('Aucun modèle visible (ComfyUI éteint et dossier non réglé ?)')));
+    genres.forEach(g => { det.appendChild(el('b', '', g)); const u = el('div', 'aide', m.modeles[g].slice(0, 60).join(' · ') + (m.modeles[g].length > 60 ? ' …' : '')); det.appendChild(u); });
+    zone.appendChild(det);
+    zone.appendChild(el('div', 'aide', T('Workflows disponibles : ') + (x.workflows.join(', ') || '—') + T('. Pour la vidéo ou le son, colle ton workflow dans « Flux… ».')));
+    zone.appendChild(msg);
+  };
+  // Éditeur de flux : le JSON des appels (et des workflows) de l'addon, validé avant d'être enregistré ; la version livrée se rétablit en un clic
+  const editerFlux = async a => {
+    const c = ouvrirModal(T('Flux : ') + a.nom), msg = el('p', 'aide');
+    let r;
+    try { r = await api('/api/addon-flux?id=' + encodeURIComponent(a.id)); } catch (e) { c.appendChild(el('p', 'erreur', e.message)); return; }
+    c.appendChild(el('p', 'aide', T('Les appels que l\'addon fait au service. Il ne peut joindre que ses propres sites ; le JSON est vérifié avant d\'être enregistré.')));
+    const t = el('textarea'); t.value = JSON.stringify(r.flux, null, 1); t.rows = 18; t.style.width = '100%'; t.style.fontFamily = 'monospace'; c.appendChild(t);
+    const ok = el('button', 'principal', T('Enregistrer')); c.appendChild(ok); c.appendChild(msg);
+    ok.addEventListener('click', async () => {
+      let flux;
+      try { flux = JSON.parse(t.value); } catch (e) { msg.className = 'erreur'; msg.textContent = T('JSON invalide : ') + e.message; return; }
+      try { await api('/api/addon-flux', { id: a.id, flux }); msg.className = 'aide'; msg.textContent = T('✔ Enregistré.'); chargerAddons(); } catch (e) { msg.className = 'erreur'; msg.textContent = e.message; }
+    });
   };
   const configurerAddon = a => {
     const c = ouvrirModal(a.nom);

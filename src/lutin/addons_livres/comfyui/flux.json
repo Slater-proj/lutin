@@ -1,0 +1,29 @@
+{
+ "version": 1,
+ "appels": {
+  "etat": {"methode": "GET", "url": "http://127.0.0.1:{port}/system_stats", "extraire": {"version": "system.comfyui_version", "gpu": "devices.0.name"}},
+  "objets_checkpoints": {"methode": "GET", "url": "http://127.0.0.1:{port}/object_info/CheckpointLoaderSimple", "extraire": {"liste": "CheckpointLoaderSimple.input.required.ckpt_name.0"}},
+  "objets_loras": {"methode": "GET", "url": "http://127.0.0.1:{port}/object_info/LoraLoader", "extraire": {"liste": "LoraLoader.input.required.lora_name.0"}},
+  "objets_vae": {"methode": "GET", "url": "http://127.0.0.1:{port}/object_info/VAELoader", "extraire": {"liste": "VAELoader.input.required.vae_name.0"}},
+  "objets_unet": {"methode": "GET", "url": "http://127.0.0.1:{port}/object_info/UNETLoader", "extraire": {"liste": "UNETLoader.input.required.unet_name.0"}},
+  "soumettre": {"methode": "POST", "url": "http://127.0.0.1:{port}/prompt", "corps": {"prompt": "{workflow}"}, "extraire": {"id": "prompt_id"}},
+  "historique": {"methode": "GET", "url": "http://127.0.0.1:{port}/history/{id}"},
+  "interrompre": {"methode": "POST", "url": "http://127.0.0.1:{port}/interrupt", "corps": {}}
+ },
+ "parametres": {
+  "image": {"largeur": 1024, "hauteur": 1024, "pas": 25, "cfg": 6.5, "negatif": "", "delai": 600},
+  "video": {"delai": 3600},
+  "son": {"delai": 900}
+ },
+ "workflows": {
+  "image": {
+   "4": {"class_type": "CheckpointLoaderSimple", "inputs": {"ckpt_name": "{modele}"}},
+   "5": {"class_type": "EmptyLatentImage", "inputs": {"width": "{largeur}", "height": "{hauteur}", "batch_size": 1}},
+   "6": {"class_type": "CLIPTextEncode", "inputs": {"text": "{prompt}", "clip": ["4", 1]}},
+   "7": {"class_type": "CLIPTextEncode", "inputs": {"text": "{negatif}", "clip": ["4", 1]}},
+   "3": {"class_type": "KSampler", "inputs": {"seed": "{graine}", "steps": "{pas}", "cfg": "{cfg}", "sampler_name": "euler", "scheduler": "normal", "denoise": 1, "model": ["4", 0], "positive": ["6", 0], "negative": ["7", 0], "latent_image": ["5", 0]}},
+   "8": {"class_type": "VAEDecode", "inputs": {"samples": ["3", 0], "vae": ["4", 2]}},
+   "9": {"class_type": "SaveImage", "inputs": {"filename_prefix": "lutin", "images": ["8", 0]}}
+  }
+ }
+}

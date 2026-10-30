@@ -185,13 +185,14 @@ class Parcours(unittest.TestCase):
         with self.captures.serveur_demo() as (port, tmp):
             p = self.ouvrir(tmp, "http://127.0.0.1:%d/" % port)
             p.evaluer(onglet("auto"))
-            p.attendre("!!document.querySelector('#listeAddons input[type=checkbox]')")
-            self.assertIn("Travail de fond", p.evaluer("document.getElementById('listeAddons').textContent"))
-            self.assertFalse(p.evaluer("document.querySelector('#listeAddons input[type=checkbox]').checked"), "désactivé par défaut")
+            carte = "[...document.querySelectorAll('#listeAddons .carte')].find(c => c.textContent.includes('Travail de fond') && c.querySelector('input[type=checkbox]'))"
+            p.attendre("!!(" + carte + ")")
+            self.assertEqual(p.evaluer("document.querySelectorAll('#listeAddons > .carte').length"), 3, "travail de fond, Telegram, ComfyUI")
+            self.assertFalse(p.evaluer("(" + carte + ").querySelector('input[type=checkbox]').checked"), "désactivé par défaut")
             self.assertNotIn("Nouveau travail de fond", p.evaluer("document.getElementById('listeAddons').textContent"))
-            p.evaluer("document.querySelector('#listeAddons input[type=checkbox]').click()")
+            p.evaluer("(" + carte + ").querySelector('input[type=checkbox]').click()")
             p.attendre("document.getElementById('listeAddons').textContent.includes('Nouveau travail de fond')")
-            self.assertTrue(p.evaluer("document.querySelector('#listeAddons input[type=checkbox]').checked"))
+            self.assertTrue(p.evaluer("(" + carte + ").querySelector('input[type=checkbox]').checked"))
             self.assertEqual(p.erreurs, [])
 
     def test_reprise_proposee_une_fois_puis_plus(self):

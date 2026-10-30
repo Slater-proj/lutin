@@ -249,7 +249,8 @@ class Livres(unittest.TestCase):
             for r in m["reglages"]:
                 self.assertRegex(r["cle"], addons.RE_CLE)
             for appel in addons.flux_livre(ident)["appels"].values():
-                self.assertTrue(appel["url"].startswith("https://"), "%s : les services distants se joignent en https" % ident)
+                local = m["hotes"] == ["127.0.0.1"]
+                self.assertTrue(appel["url"].startswith("http://127.0.0.1:" if local else "https://"), "%s : un service distant se joint en https, la machine locale en http sur 127.0.0.1" % ident)
             self.assertFalse(addons.decrire(ident)["actif"], "désactivé par défaut")
 
     def test_tout_le_texte_des_manifestes_est_traduit(self):
@@ -258,7 +259,7 @@ class Livres(unittest.TestCase):
         with mock.patch.dict(os.environ, {"LUTIN_LANGUE": "en"}):
             for ident in addons.ids():
                 for texte in addons.textes_visibles(addons.manifeste(ident)):
-                    if texte != "Telegram":
+                    if texte not in ("Telegram", "ComfyUI"):
                         self.assertNotEqual(i18n.t(texte), texte, "%s : « %s » n'est pas traduit" % (ident, texte[:60]))
                 self.assertEqual(addons.decrire(ident)["description"], i18n.t(addons.manifeste(ident)["description"]), "la page reçoit le texte traduit")
 

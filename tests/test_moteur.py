@@ -1788,7 +1788,7 @@ class Assistant(unittest.TestCase):
 
         def noms(mode):
             return {t["function"]["name"] for t in A.outils_du_mode(dict(base, mode=mode))}
-        tous = {t["function"]["name"] for t in A.OUTILS}
+        tous = {t["function"]["name"] for t in A.OUTILS} - {"comfy_modeles", "comfy_generer"}          # ces deux outils n'existent que si l'addon ComfyUI est activé
         self.assertEqual(A.REGLAGES_DEFAUT["mode"], "polyvalent", "un nouveau Lutin démarre en polyvalent")
         self.assertEqual(modes.ids(), ("polyvalent", "technique", "scenario", "recherche", "discussion"))
         self.assertIn("executer", noms("polyvalent"))

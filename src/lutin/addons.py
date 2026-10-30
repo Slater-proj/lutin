@@ -30,6 +30,7 @@ DOSSIER_LIVRE = Path(__file__).parent / "addons_livres"      # addons livrés (l
 RE_ID = re.compile(r"^[a-z][a-z0-9_-]{1,31}$")
 RE_CLE = re.compile(r"^[a-z][a-z0-9_]{0,31}$")
 RE_VARIABLE = re.compile(r"\{([a-z][a-z0-9_]{0,31})\}")
+RE_VARIABLE_ENTIERE = re.compile(r"^\{([a-z][a-z0-9_]{0,31})\}$")
 METHODES = ("GET", "POST")
 APPELS_MAX = 20
 REPONSE_MAX = 1_000_000
@@ -248,6 +249,9 @@ def _remplir(valeur, variables, url=False):
         return [_remplir(v, variables) for v in valeur]
     if not isinstance(valeur, str):
         return valeur
+    entiere = RE_VARIABLE_ENTIERE.match(valeur)
+    if entiere and isinstance(variables.get(entiere.group(1)), (dict, list)):
+        return variables[entiere.group(1)]                                  # une marque seule garde son type : un objet (workflow) reste un objet
     manquantes = [n for n in RE_VARIABLE.findall(valeur) if n not in variables or variables[n] in (None, "")]
     if manquantes:
         raise ErreurAddon(_t("Il manque : {}.").format(", ".join(manquantes)))
@@ -416,6 +420,11 @@ def verifier_si_besoin(maintenant=None):
 def alertes():
     """Les addons actifs dont la dernière vérification a échoué (la page affiche un avertissement)."""
     return [{"id": i, "nom": _t(manifeste(i).get("nom", i))} for i, e in lire_etat().items() if e.get("actif") and i in ids() and e.get("verification") and not e["verification"].get("ok")]
+
+
+def actif(ident):
+    """L'addon est-il activé ? (sert à n'offrir ses outils au modèle que lorsqu'il l'est)"""
+    return bool(lire_etat().get(ident, {}).get("actif"))
 
 
 def etat_vivant(ident):

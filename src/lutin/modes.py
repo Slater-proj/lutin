@@ -7,7 +7,7 @@ from .i18n import t as _t
 
 DEFAUT = "polyvalent"
 
-LECTURE = {"lister", "lire", "chercher", "symboles", "lire_plusieurs", "rappeler", "web_chercher", "web_lire", "taches", "memoriser", "suivi"}
+LECTURE = {"lister", "lire", "chercher", "symboles", "lire_plusieurs", "rappeler", "web_chercher", "web_lire", "taches", "memoriser", "suivi", "comfy_modeles"}
 IMAGES = {"etat_outil", "installer_module"}          # l'extension facultative d'images
 
 # identifiant -> ce qui change : `exclus` (outils retirés), `seulement` (seuls ces outils restent), `aucun` (aucun outil), `rappels` (rappels automatiques proposés par défaut)

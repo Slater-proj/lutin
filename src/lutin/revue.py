@@ -279,6 +279,11 @@ def _appeler_outil(nom, args, ctx):
         if conv is None:
             raise _m.ErreurOutil("Pas de conversation active.")
         return suivi.modifier(conv["id"], args.get("section", ""), args.get("texte", ""), args.get("mode", ""))
+    if nom in ("comfy_modeles", "comfy_generer"):
+        from . import addons, addons_comfyui
+        if not addons.actif("comfyui"):
+            raise _m.ErreurOutil("L'addon ComfyUI n'est pas activé.")
+        return addons_comfyui.texte_modeles() if nom == "comfy_modeles" else addons_comfyui.outil_generer(args, ctx)
     if nom == "etat_outil":
         return _m.outil_etat()
     if nom == "installer_module":
