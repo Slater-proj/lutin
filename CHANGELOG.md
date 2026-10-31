@@ -2,7 +2,12 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
-## 0.10.9
+## 0.10.13
+
+- Numéros de version du CHANGELOG corrigés (0.10.9 à 0.10.11 étaient des mises à jour de documentation Intel). **English.** CHANGELOG version numbers fixed.
+
+## 0.10.12
+
 
 - **Mode fiche de suivi : la conversation ne reste plus « pleine »**. Avant, rien n'était jamais retiré : la conversation grossissait sans fin et le début était rogné à CHAQUE réponse, donc Ollama relisait tout à chaque fois (des minutes sur processeur), la jauge restait au maximum et le modèle finissait par se perdre. Maintenant, quand les messages prennent près de la moitié de la fenêtre, la moitié la plus ancienne sort **en bloc**, sans appel au modèle (la fiche garde le fil, le début reste retrouvable avec « rappeler », et rien n'est retiré avant que le scribe l'ait lu). Le début de la requête ne change qu'à ces moments : le cache d'Ollama sert.
 - **/compact en mode fiche** retire le début tout de suite au lieu d'ajouter un résumé en plus de la fiche. En mode résumé, il résume comme avant.
@@ -12,6 +17,18 @@ The following versions are published automatically (generated notes on the Relea
 - Le rang où le scribe en est (« jusqu'où il a lu ») suit désormais le retrait du début, aussi en mode résumé.
 
 **English.** Tracking-sheet mode no longer leaves the conversation “full”: the oldest half now leaves the context in one block (no model call, never before the scribe has read it, still findable with “rappeler”), so Ollama's cache is reused and the gauge goes back down. /compact in sheet mode removes the beginning right away instead of adding a summary on top of the sheet. The scribe's reading position follows the removal.
+
+## 0.10.11
+
+- Documentation Intel : résultat mesuré sur un Core Ultra 5 125H — la puce graphique intégrée fonctionne (`100% GPU`) mais est plus lente que le processeur pour générer du texte (environ 8 contre 11 jetons/s sur `qwen3:4b`). **English.** Intel documentation: measured result, the integrated chip works but is slower than the processor.
+
+## 0.10.10
+
+- Documentation Intel : `OLLAMA_IGPU_ENABLE=1` est nécessaire, sinon Ollama voit la puce intégrée et l'écarte. **English.** Intel documentation: `OLLAMA_IGPU_ENABLE=1` is required, otherwise Ollama drops the integrated chip.
+
+## 0.10.9
+
+- Documentation Intel : carte graphique intégrée par Vulkan (`docker-compose.intel.yml`), NPU non utilisé. **English.** Intel documentation: integrated graphics through Vulkan, NPU not used.
 
 ## 0.10.8
 
