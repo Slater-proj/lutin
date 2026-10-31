@@ -11,3 +11,4 @@ services:
       - "${RENDER_GID:-109}"          # group of /dev/dri/renderD* on the host: getent group render | cut -d: -f3
     environment:
       OLLAMA_VULKAN: "1"
+      OLLAMA_IGPU_ENABLE: "1"          # Ollama ignores integrated GPUs unless told otherwise / Ollama écarte les cartes intégrées sauf indication contraire
