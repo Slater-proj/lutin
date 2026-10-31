@@ -386,7 +386,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
         <button id="bAnnuler" hidden></button>
       </div>
       <div class="pj" id="piecesJointes" hidden></div>
-      <div class="saisie-ligne" id="ligneSaisie"><button id="bJoindre" title="Joindre des images, des documents (PDF, Word, LibreOffice, PowerPoint, Excel, HTML) ou des fichiers texte ou de code : choisis-les, colle-les ou glisse-les ici. Pour les images, un modèle qui voit est utilisé (onglet Modèles)."><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg></button><input type="file" id="fImage" multiple hidden><textarea id="saisie" rows="1" placeholder="Message…  (Entrée : envoyer · / : commandes)"></textarea><button class="principal" id="bEnvoyer" title="Envoyer"><span class="lb">Envoyer</span><span class="ic">➤</span></button><button id="bStop" hidden title="Arrêter"><span class="lb">Arrêter</span><span class="ic">■</span></button></div>
+      <div class="saisie-ligne" id="ligneSaisie"><button id="bJoindre" title="Joindre des images, des documents (PDF, Word, LibreOffice, PowerPoint, Excel, HTML) ou des fichiers texte ou de code : choisis-les, colle-les ou glisse-les ici. Pour les images, un modèle qui voit est utilisé (onglet Modèles)."><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg></button><input type="file" id="fImage" multiple hidden><button id="bMission" title="Confier ce que tu viens d'écrire à Lutin comme une mission longue : il le mène seul pendant des heures (onglet Automatisation)">🎯</button><textarea id="saisie" rows="1" placeholder="Message…  (Entrée : envoyer · / : commandes)"></textarea><button class="principal" id="bEnvoyer" title="Envoyer"><span class="lb">Envoyer</span><span class="ic">➤</span></button><button id="bStop" hidden title="Arrêter"><span class="lb">Arrêter</span><span class="ic">■</span></button></div>
     </div>
   </section>
   <section class="page" id="p-sante"><div class="cadre" id="santeCorps"></div></section>
@@ -461,6 +461,10 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
       <textarea id="pPrompt" placeholder="La demande à traiter, par exemple : résume ce qui a changé dans le dépôt depuis hier." style="flex:1 1 100%;min-height:70px" maxlength="4000"></textarea>
       <button id="bAjouterPlanifie" class="principal">Planifier</button> <span class="aide" id="mPlanifie"></span>
     </div>
+    <h2>Missions longues <span class="aide">(un grand travail confié à Lutin pour des heures : tu écris ce que tu veux, il code, teste et range tout seul dans un dossier de travail, puis te rend un bilan)</span></h2>
+    <div id="zoneMissions" style="margin:6px 0"></div>
+    <h2>Traitement de documents <span class="aide">(une consigne appliquée à chaque document d'un dossier, en lecture seule : résumer, classer, extraire)</span></h2>
+    <div id="zoneFond" style="margin:6px 0"></div>
     <h2>Extensions facultatives <span class="aide">(désactivées tant que tu ne les actives pas)</span></h2>
     <div id="listeAddons" class="aide" style="margin:6px 0"></div>
   </div></section>
@@ -513,9 +517,12 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     <div id="listeEmplacements"></div>
     <h2>Mes données</h2>
     <div class="aide">Conversations, mémoire et réglages dans un fichier .zip. Restaurer ne supprime rien : l'état actuel est gardé avant.</div>
-    <div style="margin:6px 0"><button id="bSauvegarde2">💾 Sauvegarder mes données</button> <button id="bRestaurer">Restaurer une sauvegarde…</button><input type="file" id="fRestaurer" accept=".zip" hidden> <button id="bReprise">Reprendre les données d'un autre assistant…</button> <span class="aide" id="mDonnees"></span></div>
+    <div style="margin:6px 0"><button id="bSauvegarde2">💾 Sauvegarder mes données</button> <button id="bRestaurerSauvegarde">Restaurer une sauvegarde…</button><input type="file" id="fRestaurer" accept=".zip" hidden> <button id="bReprise">Reprendre les données d'un autre assistant…</button> <span class="aide" id="mDonnees"></span></div>
     <div class="aide" style="margin:6px 0">Tes conversations sont gardées dans le dossier de données de Lutin : <code id="cheminDonnees"></code>. Le dossier de travail ne contient que tes fichiers.</div>
     <label class="opt-ligne" title="Un fichier .md par conversation, mis à jour à chaque échange, dans le sous-dossier conversations-lutin/ du dossier de travail de la conversation."><input type="checkbox" id="cCopieConv"> Garder aussi une copie lisible de chaque conversation dans le dossier de travail (conversations-lutin/)</label>
+    
+    <h2>Fichiers créés par Lutin <span class="aide">(documents, images, vidéos et sons produits pendant les conversations : tout est listé ici pour faire le ménage sans chercher)</span></h2>
+    <div id="listeFichiersCrees" class="aide" style="margin:6px 0"></div>
     </details>
     <details class="groupe" open data-g="conversation"><summary>Conversation</summary>
     <h2>Mémoire des longues conversations <span class="aide">(comment Lutin garde le fil quand la fenêtre de contexte se remplit)</span></h2>
@@ -827,7 +834,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
       if (m.role === 'resume') { const d = el('div', 'info', T('Résumé du début de la conversation : ') + m.content.slice(0, 400) + (m.content.length > 400 ? '...' : '')); fil().appendChild(d); }
       else if (m.role === 'user') { const d = el('div', 'msg moi'); d.appendChild(el('div', 'corps', m.content)); miniatures(d, m.images, m.pieces); fil().appendChild(d); }
       else if (m.role === 'assistant') { if (m.content) { const x = messageIA(); rendre(x.c, m.content); } (m.tool_calls || []).forEach(t => fil().appendChild(el('div', 'outil', '⚙ ' + t.function.name + ' ' + JSON.stringify(t.function.arguments).slice(0, 160)))); }
-      else if (m.role === 'tool') { const d = el('div', 'outil'); d.appendChild(el('div', '', '↳ ' + (m.tool_name || T('résultat')))); d.appendChild(el('div', 'res', (m.content || '').slice(0, 700))); afficherMedias(d, m.medias, m.medias_fichiers); afficherFichiers(d, m.fichiers_joints); fil().appendChild(d); }
+      else if (m.role === 'tool') { const d = el('div', 'outil'); d.appendChild(el('div', '', '↳ ' + (m.tool_name || T('résultat')))); d.appendChild(el('div', 'res', (m.content || '').slice(0, 700))); afficherMedias(d, m.medias, m.medias_fichiers, CONV.id); afficherFichiers(d, m.fichiers_joints, CONV.id); fil().appendChild(d); }
     });
     annoter(); afficherTaches(c.taches); majJauge(c.id); setVitesse(c.vitesse); majAnnuler();
     bas();
@@ -889,6 +896,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
   const NONLUS = new Set(); try { JSON.parse(localStorage.getItem('nonlus') || '[]').forEach(i => NONLUS.add(i)); } catch (e) { /* stockage indisponible : la pastille ne survivra pas au rechargement */ }
   const sauverNonlus = () => { try { localStorage.setItem('nonlus', JSON.stringify([...NONLUS])); } catch (e) { /* idem */ } SIG.c = ''; majTravail(); };
   const lue = id => { if (NONLUS.delete(id)) sauverNonlus(); };
+  const surChat = () => $('p-chat').classList.contains('vue');          // on lit une réponse seulement si l'onglet Conversation est ouvert (pas Mémoire, Réglages…)
   const termine = (id, vu) => { if (id && !vu && !NONLUS.has(id)) { NONLUS.add(id); sauverNonlus(); } };
   let PREC_ACT = new Set();
   const majTravail = () => {
@@ -904,14 +912,14 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     (pieces || []).forEach(p => {
       const d = el('span', 'piece', '📄 ' + p.nom); d.title = p.nom;
       const tel = el('a', 'bouton-lien', '⬇'); tel.title = T('Télécharger'); tel.href = '/piece/' + encodeURIComponent(p.id) + '?nom=' + encodeURIComponent(p.nom); tel.download = p.nom;
-      const ouv = el('button', '', '↗'); ouv.title = T('Ouvrir avec l\'application choisie dans Windows');
+      const ouv = el('button', '', '↗'); ouv.hidden = !(ETAT && ETAT.ouverture_possible); ouv.title = T('Ouvrir avec l\'application choisie dans Windows');
       ouv.addEventListener('click', async () => { try { await api('/api/piece-ouvrir', { id: p.id, nom: p.nom }); } catch (e) { alert(e.message); } });
       d.append(' ', tel, ' ', ouv); z.appendChild(d);
     });
     parent.appendChild(z);
   };
   // Images produites par un outil (ComfyUI) : affichées dans la conversation, un clic les ouvre en grand
-  const afficherMedias = (parent, ids, fichiers) => {
+  const afficherMedias = (parent, ids, fichiers, convId) => {
     if (!ids || !ids.length) return;
     const z = el('div', 'medias');
     ids.forEach(id => {
@@ -924,7 +932,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
       sup.title = T('Retire l\'image de la conversation et supprime le fichier créé');
       sup.addEventListener('click', async () => {
         if (!confirm(T('Supprimer cette image ? Le fichier créé est effacé.'))) return;
-        try { await api('/api/media-supprimer', { conversation: CONV.id, id }); f.remove(); CONV.messages.forEach(m => { if (m.medias) m.medias = m.medias.filter(x => x !== id); }); } catch (e) { alert(e.message); }
+        try { await api('/api/media-supprimer', { conversation: convId, id }); f.remove(); if (CONV && CONV.id === convId) CONV.messages.forEach(m => { if (m.medias) m.medias = m.medias.filter(x => x !== id); }); } catch (e) { alert(e.message); }
       });
       barre.append(tel, sup); f.appendChild(barre); z.appendChild(f);
     });
@@ -932,7 +940,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
   };
   // Fichiers produits (PDF, Word, vidéo…) : une carte avec Ouvrir (application choisie par Windows), Télécharger et Supprimer
   const tailleFichier = n => n >= 1048576 ? (n / 1048576).toFixed(1) + ' Mo' : Math.max(1, Math.round(n / 1024)) + ' Ko';
-  const afficherFichiers = (parent, liste) => {
+  const afficherFichiers = (parent, liste, convId) => {
     if (!liste || !liste.length) return;
     const z = el('div', 'fichiers-joints');
     liste.forEach(f => {
@@ -940,13 +948,13 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
       tete.append(el('span', 'nom-fichier', '📄 ' + f.nom), el('span', 'aide', tailleFichier(f.taille || 0)));
       c.appendChild(tete); c.appendChild(el('code', 'chemin-media', f.chemin));
       const barre = el('div', 'ligne'), msg = el('span', 'attention');
-      const ouvrir = el('button', 'principal', T('Ouvrir')); ouvrir.title = T('Ouvre le fichier avec l\'application choisie dans Windows pour ce type de fichier');
-      ouvrir.addEventListener('click', async () => { msg.textContent = ''; try { await api('/api/fichier-ouvrir', { conversation: CONV.id, id: f.id }); } catch (e) { msg.textContent = e.message; } });
-      const tel = el('a', 'bouton-lien', T('Télécharger')); tel.href = '/fichier/' + encodeURIComponent(CONV.id) + '/' + f.id; tel.download = f.nom;
+      const ouvrir = el('button', 'principal', T('Ouvrir')); ouvrir.hidden = !(ETAT && ETAT.ouverture_possible); ouvrir.title = T('Ouvre le fichier avec l\'application choisie dans Windows pour ce type de fichier');
+      ouvrir.addEventListener('click', async () => { msg.textContent = ''; try { await api('/api/fichier-ouvrir', { conversation: convId, id: f.id }); } catch (e) { msg.textContent = e.message; } });
+      const tel = el('a', 'bouton-lien', T('Télécharger')); tel.href = '/fichier/' + encodeURIComponent(convId) + '/' + f.id; tel.download = f.nom;
       const sup = el('button', 'danger', T('Supprimer')); sup.title = T('Retire la carte de la conversation et supprime le fichier');
       sup.addEventListener('click', async () => {
         if (!confirm(T('Supprimer ce fichier ? Il est effacé du disque.'))) return;
-        try { await api('/api/fichier-supprimer', { conversation: CONV.id, id: f.id }); c.remove(); CONV.messages.forEach(m => { if (m.fichiers_joints) m.fichiers_joints = m.fichiers_joints.filter(x => x.id !== f.id); }); } catch (e) { msg.textContent = e.message; }
+        try { await api('/api/fichier-supprimer', { conversation: convId, id: f.id }); c.remove(); if (CONV && CONV.id === convId) CONV.messages.forEach(m => { if (m.fichiers_joints) m.fichiers_joints = m.fichiers_joints.filter(x => x.id !== f.id); }); } catch (e) { msg.textContent = e.message; }
       });
       barre.append(ouvrir, tel, sup, msg); c.appendChild(barre); z.appendChild(c);
     });
@@ -975,6 +983,10 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     }
   };
   $('bJoindre').addEventListener('click', () => $('fImage').click());
+  $('bMission').addEventListener('click', () => {            // le message en cours devient le cahier des charges d'une nouvelle mission
+    MISSION.brouillon.cahier = $('saisie').value.trim() || MISSION.brouillon.cahier; MISSION.ouvert = true;
+    ouvrirOnglet('auto'); setTimeout(() => { const d = $('zoneMissions'); if (d) d.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 300);
+  });
   $('fImage').addEventListener('change', e => { joindre([...e.target.files]); e.target.value = ''; });
   $('saisie').addEventListener('paste', e => { const f = [...(e.clipboardData ? e.clipboardData.files : [])]; if (f.length) { e.preventDefault(); joindre(f); } });
   const zoneGlisse = $('ligneSaisie');
@@ -1043,7 +1055,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
             }
           }
           else if (e.type === 'outil') { const d = el('div', 'outil'); d.appendChild(el('div', '', '⚙ ' + e.nom + ' ' + JSON.stringify(e.args).slice(0, 220))); d.dataset.nom = e.nom; zone().appendChild(d); }
-          else if (e.type === 'resultat') { const cartes = [...zone().querySelectorAll('.outil')]; const d = cartes[cartes.length - 1]; if (d) { d.appendChild(el('div', 'res', e.texte)); afficherMedias(d, e.medias, e.medias_fichiers); afficherFichiers(d, e.fichiers_joints); } vider(ia); ia = messageIA(zone()); detailsPensee = null; }
+          else if (e.type === 'resultat') { const cartes = [...zone().querySelectorAll('.outil')]; const d = cartes[cartes.length - 1]; if (d) { d.appendChild(el('div', 'res', e.texte)); afficherMedias(d, e.medias, e.medias_fichiers, ID_EN_COURS); afficherFichiers(d, e.fichiers_joints, ID_EN_COURS); } vider(ia); ia = messageIA(zone()); detailsPensee = null; }
           else if (e.type === 'approbation') { zone().appendChild(carteAccord(e)); signaler(T('⏸ Accord demandé')); }
           else if (e.type === 'essai') { zone().appendChild(carteEssai(e)); }
           else if (e.type === 'etat') { /* affiché dans la barre d'activité */ }
@@ -1069,7 +1081,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
       if (!finRecue) zone().appendChild(el('div', 'info', T('La connexion avec l\'assistant s\'est interrompue. La réponse continue côté serveur : elle s\'affichera ici dès qu\'elle avance.')));
     } catch (e) { if (e.name !== 'AbortError') { zone().appendChild(el('div', 'erreur', e.message)); if (!finRecue) zone().appendChild(el('div', 'info', T('Si l\'assistant travaillait encore, la réponse s\'affichera ici dès qu\'elle avance.'))); } }
     const etaitVisible = visible(); FLUX = null;
-    termine(flux.id, etaitVisible && !document.hidden);                              // pastille verte si tu n'étais pas en train de la lire
+    termine(flux.id, etaitVisible && !document.hidden && surChat());                              // pastille verte si tu n'étais pas en train de la lire
     arreterActivite(); EN_COURS = false; $('bEnvoyer').disabled = false; $('bStop').hidden = true; if (etaitVisible) annoter(); signaler(T('✔ Terminé')); majTravail(); await rafraichir(); if (etaitVisible) bas();
     if (FILE.length) {                                                            // message suivant de la file d'attente (sauf si tu as appuyé sur Arrêter)
       if (PAUSE_FILE) majFile(); else { const suivant = FILE.shift(); majFile(); envoyer(suivant); }
@@ -1254,10 +1266,10 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     if (!ETAT.installes.length) { const o = el('option', '', ETAT.ollama ? T('Aucun modèle installé (onglet Modèles)') : T('Ollama arrêté')); o.value = ETAT.reglages.modele; s.appendChild(o); }
     s.value = ETAT.installes.includes(v) ? v : (ETAT.installes.includes(ETAT.reglages.modele) ? ETAT.reglages.modele : (ETAT.installes[0] || ETAT.reglages.modele));
     { // Règle de sécurité : hors du niveau « cette machine seulement », jamais d'accord automatique, quoi que disent les cases : on le dit au lieu de les laisser cochées sans effet
-      const surs = !!ETAT.niveau && ETAT.niveau !== 'local';
+      const surs = ETAT.auto_possible === false;
       $('cAuto').disabled = $('cAutoCmd').disabled = surs;
       $('noteAuto').hidden = !surs;
-      $('noteAuto').textContent = surs ? T('Accord auto et Commandes auto sont sans effet : l\'accès à Lutin n\'est pas au niveau « cette machine seulement » (règle de sécurité, onglet Accès). Une mission « Autonome » lancée depuis cette machine reste autonome.') : '';
+      $('noteAuto').textContent = surs ? T('Accord auto et Commandes auto ne s\'appliquent pas ici : pour ta sécurité (onglet Accès), ils ne valent que depuis le navigateur de la machine où tourne Lutin, et jamais au niveau d\'accès « proxy ». Une mission « Autonome » lancée depuis cette machine reste autonome.') : '';
     }
     if (!$('selMode').dataset.init) { $('selMode').value = ETAT.reglages.mode; $('cReflexion').checked = ETAT.reglages.reflexion; $('cAuto').checked = ETAT.reglages.auto_ecriture; $('cAvance').checked = !!ETAT.reglages.avance; $('cAutoCmd').checked = ETAT.reglages.auto_commandes; $('cEssai').checked = !!ETAT.reglages.essai_a_blanc; $('cCopieConv').checked = !!ETAT.reglages.copie_conversations; $('selMemoire').value = ETAT.reglages.memoire_longue || 'demander'; $('iFichePart').value = ETAT.reglages.fiche_part || 10; $('cScribe').checked = ETAT.reglages.fiche_scribe !== false; $('cSens').checked = !!ETAT.reglages.recherche_sens; aideMemoire(); majSens(); $('cWeb').checked = ETAT.reglages.web !== false; $('rCtx').value = ETAT.reglages.num_ctx; $('rTemp').value = ETAT.reglages.temperature; $('rTours').value = ETAT.reglages.tours_max; $('iTopP').value = ETAT.reglages.top_p ?? ''; $('iTopK').value = ETAT.reglages.top_k ?? ''; $('iMinP').value = ETAT.reglages.min_p ?? ''; $('iRep').value = ETAT.reglages.repeat_penalty ?? ''; $('cGarde').checked = ETAT.reglages.garde_ressources !== false; $('cComfy').checked = ETAT.reglages.liberer_si_comfy !== false; $('sRappels').value = ETAT.reglages.rappels_auto || 'scenario'; $('iSeuilRam').value = ETAT.reglages.seuil_ram_go; $('iSeuilDisque').value = ETAT.reglages.seuil_disque_go; $('iPlafond').value = ETAT.reglages.plafond_donnees_go; $('iLimiteCmd').value = ETAT.reglages.limite_ram_commande_go; $('iThreads').value = ETAT.reglages.num_thread ?? ''; $('iGarde').value = ETAT.reglages.garde_min ?? ''; $('selMode').dataset.init = '1'; }
     if (document.activeElement !== $('selLangue')) $('selLangue').value = ETAT.langue_reglage || 'auto';
@@ -1277,9 +1289,9 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     // On ne reconstruit les listes que si elles ont changé (le sondage toutes les 4 s les redessinait pour rien).
     // Une conversation qui travaillait ne travaille plus : si tu ne la regardais pas, pastille verte « terminé, pas lu ».
     const actives = new Set(ETAT.actives || []);
-    PREC_ACT.forEach(id => { if (!actives.has(id)) termine(id, CONV && CONV.id === id && !document.hidden && !(FLUX && FLUX.detache)); });
+    PREC_ACT.forEach(id => { if (!actives.has(id)) termine(id, CONV && CONV.id === id && !document.hidden && surChat() && !(FLUX && FLUX.detache)); });
     PREC_ACT = actives;
-    if (CONV && !document.hidden && !(FLUX && FLUX.detache)) lue(CONV.id);
+    if (CONV && !document.hidden && surChat() && !(FLUX && FLUX.detache)) lue(CONV.id);
     majTravail();
     const sigC = JSON.stringify([ETAT.conversations, CONV ? CONV.id : '', ETAT.actives, EN_COURS ? ID_EN_COURS : '', [...NONLUS]]), sigM = JSON.stringify([ETAT.modeles, ETAT.installes, ETAT.pulls, ETAT.ollama, ETAT.reglages.modele, ETAT.bench, ETAT.adequation, ETAT.disque_modeles, ETAT.familles]);
     if (sigC !== SIG.c && !RECH.q) { SIG.c = sigC; listeConversations(); }
@@ -1297,10 +1309,12 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
   document.querySelectorAll('.onglets button').forEach(b => b.addEventListener('click', async () => {
     document.querySelectorAll('.onglets button').forEach(x => x.setAttribute('aria-selected', x === b)); document.querySelectorAll('.page').forEach(p => p.classList.toggle('vue', p.id === 'p-' + b.dataset.p));
     if (b.dataset.p === 'memoire') { const m = await api('/api/memoire'); $('tContexte').value = m['CONTEXTE.md']; $('tMemoire').value = m['MEMOIRE.md']; chargerSkills(); chargerClaude(); chargerNotes(); chargerDocuments(); }
-    if (b.dataset.p === 'auto') { chargerPlanifie(); chargerAddons(); }
+    if (b.dataset.p === 'auto') { chargerPlanifie(); chargerAddons(); chargerAuto(); }
     if (b.dataset.p === 'modeles') rafraichir();
     if (b.dataset.p === 'acces') chargerAcces();
+    if (b.dataset.p === 'chat' && CONV && !(FLUX && FLUX.detache)) lue(CONV.id);          // on revient lire : la pastille verte s'éteint tout de suite
     if (b.dataset.p === 'sante') window.ouvrirSante();
+    if (b.dataset.p === 'reglages') chargerFichiersCrees();
   }));
   $('bEnvoyer').addEventListener('click', () => envoyer());          // sans argument : l'évènement du clic n'est pas un message sorti de la file d'attente
   // Arrêter : on prévient d'abord le serveur (modèle, outils et accords en attente s'arrêtent vraiment), puis on laisse arriver la fin du flux.
@@ -2213,7 +2227,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
   });
   // ---- Données : sauvegarde (téléchargement) et restauration
   $('bSauvegarde2').addEventListener('click', () => $('bSauvegarde').click());
-  $('bRestaurer').addEventListener('click', () => $('fRestaurer').click());
+  $('bRestaurerSauvegarde').addEventListener('click', () => $('fRestaurer').click());
   $('fRestaurer').addEventListener('change', async () => {
     const f = $('fRestaurer').files[0]; $('fRestaurer').value = ''; if (!f) return;
     if (!confirm(T('Restaurer la sauvegarde « ') + f.name + T(' » ? Les fichiers qu\'elle contient remplacent les tiens ; l\'état actuel est gardé dans un zip avant.'))) return;
@@ -2341,13 +2355,61 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     if (a.actif && PANNEAUX[a.id]) { const p = el('div'); d.appendChild(p); ATTENTES_PANNEAUX.push(Promise.resolve(PANNEAUX[a.id](a, p)).catch(e => { p.textContent = e.message; })); }
     return d;
   };
+  // ---- Fichiers créés : la liste de tout ce que Lutin a produit, avec la taille, pour supprimer d'un geste (sélection, ou tout ce qui a plus de 30 jours)
+  const FC = { coches: new Set(), liste: [] };
+  const tailleHumaine = n => n >= 1073741824 ? (n / 1073741824).toFixed(2) + ' Go' : n >= 1048576 ? (n / 1048576).toFixed(1) + ' Mo' : Math.max(1, Math.round(n / 1024)) + ' Ko';
+  const chargerFichiersCrees = async () => {
+    const z = $('listeFichiersCrees');
+    let r;
+    try { r = await api('/api/fichiers-crees'); } catch (e) { z.textContent = e.message; return; }
+    FC.liste = r.liste; FC.coches = new Set([...FC.coches].filter(id => r.liste.some(x => x.id === id)));
+    z.textContent = '';
+    if (!r.liste.length) { z.textContent = T('Rien pour l\'instant : les documents, images, vidéos et sons que Lutin crée apparaîtront ici.'); return; }
+    z.appendChild(el('div', '', T('{} fichiers, {} au total.').replace('{}', r.liste.length).replace('{}', tailleHumaine(r.total))));
+    const msg = el('div', 'attention'), barre = el('div', 'ligne');
+    const supprimer = async ids => {
+      if (!ids.length) return;
+      const taille = tailleHumaine(r.liste.filter(x => ids.includes(x.id)).reduce((s, x) => s + x.taille, 0));
+      if (!confirm(T('Supprimer {} fichier(s) ({}) ? Ils sont effacés du disque.').replace('{}', ids.length).replace('{}', taille))) return;
+      try { const x = await api('/api/fichiers-crees-supprimer', { ids }); msg.textContent = x.ignores && x.ignores.length ? T('Non supprimés : ') + x.ignores.map(i => i.nom + ' (' + i.raison + ')').join(' ; ') : ''; FC.coches.clear(); await chargerFichiersCrees(); if (x.ignores && x.ignores.length) $('listeFichiersCrees').appendChild(el('div', 'attention', T('Non supprimés : ') + x.ignores.map(i => i.nom + ' (' + i.raison + ')').join(' ; '))); } catch (e) { msg.textContent = e.message; }
+    };
+    const choisis = el('button', 'danger', T('Supprimer la sélection')); choisis.disabled = !FC.coches.size;
+    choisis.addEventListener('click', () => supprimer([...FC.coches]));
+    const vieux = el('button', '', T('Sélectionner ce qui a plus de 30 jours'));
+    vieux.addEventListener('click', () => { const limite = Date.now() / 1000 - 30 * 86400; FC.coches = new Set(r.liste.filter(x => x.date < limite).map(x => x.id)); chargerFichiersCrees(); });
+    const tout = el('button', '', T('Tout sélectionner')); tout.addEventListener('click', () => { FC.coches = new Set(r.liste.map(x => x.id)); chargerFichiersCrees(); });
+    barre.append(tout, vieux, choisis); z.append(barre, msg);
+    const liste = el('div'); liste.style.maxHeight = '320px'; liste.style.overflowY = 'auto';
+    r.liste.forEach(f => {
+      const l = el('div', 'carte'); l.style.gap = '8px'; l.style.alignItems = 'center';
+      const c = el('input'); c.type = 'checkbox'; c.checked = FC.coches.has(f.id);
+      c.addEventListener('change', () => { if (c.checked) FC.coches.add(f.id); else FC.coches.delete(f.id); choisis.disabled = !FC.coches.size; });
+      const t_ = el('div'); t_.style.flex = '1'; t_.style.minWidth = '0';
+      t_.appendChild(el('div', '', (f.genre === 'image' ? '🖼 ' : '📄 ') + f.nom + ' · ' + tailleHumaine(f.taille) + ' · ' + quand(f.date)));
+      t_.appendChild(el('code', 'chemin-media', f.chemin));
+      const dos = el('button', '', '📂'); dos.hidden = !(ETAT && ETAT.ouverture_possible); dos.title = T('Ouvrir le dossier'); dos.addEventListener('click', async () => { try { await api('/api/fichiers-crees-dossier', { id: f.id }); } catch (e) { msg.textContent = e.message; } });
+      const sup = el('button', 'danger', '🗑'); sup.title = T('Supprimer'); sup.addEventListener('click', () => supprimer([f.id]));
+      l.append(c, t_, dos, sup); liste.appendChild(l);
+    });
+    z.appendChild(liste);
+  };
+  let minuteurAuto = null, SEQ_AUTO = 0;
+  const rendreZone = async (zone, fabrique) => {
+    const neuf = document.createElement('div');
+    await fabrique(neuf);
+    if (!saisieEnCours(zone) && neuf.innerHTML !== zone.dataset.html) { zone.replaceChildren(...neuf.childNodes); zone.dataset.html = neuf.innerHTML; }
+  };
+  const chargerAuto = async () => {
+    const seq = ++SEQ_AUTO; clearTimeout(minuteurAuto);
+    await Promise.all([rendreZone($('zoneMissions'), panneauMission), rendreZone($('zoneFond'), panneauFond)]);
+    if (seq === SEQ_AUTO && $('p-auto').classList.contains('vue')) minuteurAuto = setTimeout(chargerAuto, 4000);
+  };
   // Panneau de l'addon « travail de fond » : travaux en cours (avancement, pause, rapport) et formulaire de création
   const FOND = { ouvert: false, brouillon: { nom: '', dossier: '', motifs: '*.pdf', consigne: '', regulier: false, intervalle_h: 24 } };
   const etatsFond = () => ({ attente: T('en attente'), en_cours: T('en cours'), pause: T('en pause'), termine: T('terminé'), erreur: T('en erreur') });
-  PANNEAUX.fond = async (a, zone) => {
+  const panneauFond = async (zone) => {
     let r, tr;
     try { [r, tr] = await Promise.all([api('/api/fond'), api('/api/travaux')]); } catch (e) { zone.textContent = e.message; return; }
-    zone.appendChild(el('b', '', T('Travaux de fond')));
     if (!r.liste.length) zone.appendChild(el('div', 'aide', T('Aucun travail pour l\'instant.')));
     const msg = el('div', 'erreur');
     r.liste.forEach(t => {
@@ -2357,7 +2419,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
       const p = el('progress'); p.max = Math.max(1, t.total); p.value = t.faits; p.style.width = '100%'; d.appendChild(p);
       d.appendChild(el('div', 'aide', t.faits + ' / ' + t.total + (t.erreurs ? ' · ' + t.erreurs + ' ' + T('en erreur') : '') + ' · ' + (etatsFond()[t.etat] || t.etat) + (t.dernier_message ? ' — ' + t.dernier_message : '')));
       const ligne = el('div', 'ligne');
-      const agir = async (action) => { try { await api('/api/fond-action', { id: t.id, action }); chargerAddons(); } catch (e) { msg.textContent = e.message; } };
+      const agir = async (action) => { try { await api('/api/fond-action', { id: t.id, action }); chargerAuto(); } catch (e) { msg.textContent = e.message; } };
       const pause = el('button', '', t.pause ? T('Reprendre') : T('Mettre en pause')); pause.addEventListener('click', () => agir(t.pause ? 'reprendre' : 'pause'));
       const rap = el('button', '', T('Rapport')); rap.disabled = !t.rapport && !t.faits;
       rap.addEventListener('click', async () => {
@@ -2388,7 +2450,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     const go = el('button', 'principal', T('Lancer le travail'));
     go.addEventListener('click', async () => {
       go.disabled = true; msg.textContent = '';
-      try { await api('/api/fond-creer', { nom: b.nom, dossier: b.dossier, motifs: b.motifs, consigne: b.consigne, regulier: b.regulier, intervalle_h: b.intervalle_h }); FOND.brouillon = { nom: '', dossier: b.dossier, motifs: '*.pdf', consigne: '', regulier: false, intervalle_h: 24 }; FOND.ouvert = false; chargerAddons(); }
+      try { await api('/api/fond-creer', { nom: b.nom, dossier: b.dossier, motifs: b.motifs, consigne: b.consigne, regulier: b.regulier, intervalle_h: b.intervalle_h }); FOND.brouillon = { nom: '', dossier: b.dossier, motifs: '*.pdf', consigne: '', regulier: false, intervalle_h: 24 }; FOND.ouvert = false; chargerAuto(); }
       catch (e) { msg.textContent = e.message; go.disabled = false; }
     });
     det.appendChild(go); zone.appendChild(det);
@@ -2396,12 +2458,11 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
   // Panneau de l'addon « missions longues » : une mission confiée pour des heures (état, pause, question du modèle, consigne en route) et le formulaire de création
   const MISSION = { ouvert: false, brouillon: { nom: '', cahier: '', travail: '', duree_h: 8, autonome: true }, notes: {} };
   const etatsMission = () => ({ en_cours: T('en cours'), pause: T('en pause'), bloquee: T('attend ta réponse'), terminee: T('terminée') });
-  PANNEAUX.mission = async (a, zone) => {
+  const panneauMission = async (zone) => {
     let x, tr;
-    try { [x, tr] = await Promise.all([api('/api/addon-etat?id=mission'), api('/api/travaux')]); } catch (e) { zone.textContent = e.message; return; }
+    try { [x, tr] = await Promise.all([api('/api/missions'), api('/api/travaux')]); } catch (e) { zone.textContent = e.message; return; }
     const msg = el('div', 'attention');
-    const agir = async (action, plus) => { try { await api('/api/addon-action', Object.assign({ id: 'mission', action }, plus || {})); chargerAddons(); } catch (e) { msg.textContent = e.message; } };
-    zone.appendChild(el('b', '', T('Missions')));
+    const agir = async (action, plus) => { try { await api('/api/mission-action', Object.assign({ action }, plus || {})); chargerAuto(); } catch (e) { msg.textContent = e.message; } };
     if (!x.liste.length) zone.appendChild(el('div', 'aide', T('Aucune mission pour l\'instant.')));
     x.liste.forEach(m => {
       const d = el('div', 'carte'); d.style.flexDirection = 'column'; d.style.alignItems = 'stretch'; d.style.gap = '4px';
@@ -2440,7 +2501,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     const go = el('button', 'principal', T('Lancer la mission'));
     go.addEventListener('click', async () => {
       go.disabled = true; msg.textContent = '';
-      try { await api('/api/addon-action', { id: 'mission', action: 'creer', nom: b.nom, cahier: b.cahier, travail: b.travail, duree_h: b.duree_h, autonome: b.autonome }); MISSION.brouillon = { nom: '', cahier: '', travail: b.travail, duree_h: b.duree_h, autonome: b.autonome }; MISSION.ouvert = false; chargerAddons(); }
+      try { await api('/api/mission-action', { action: 'creer', nom: b.nom, cahier: b.cahier, travail: b.travail, duree_h: b.duree_h, autonome: b.autonome }); MISSION.brouillon = { nom: '', cahier: '', travail: b.travail, duree_h: b.duree_h, autonome: b.autonome }; MISSION.ouvert = false; chargerAuto(); }
       catch (e) { msg.textContent = e.message; go.disabled = false; }
     });
     det.appendChild(go); zone.appendChild(det);

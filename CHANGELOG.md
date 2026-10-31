@@ -2,6 +2,18 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## 0.9.0
+
+- **Missions longues et Traitement de documents sortent des extensions** : sections de l'onglet Automatisation, toujours disponibles, rien à activer ; et un bouton **🎯** à côté du champ de saisie transforme ce que tu viens d'écrire en cahier des charges d'une mission.
+- **Fichiers créés par Lutin** (Réglages > Dossiers et données) : tout ce que Lutin a produit (documents, images, vidéos, sons) avec taille, date et chemin ; sélection, « plus de 30 jours », suppression d'un geste, dossier ouvrable.
+- **Accord auto / Commandes auto** : le navigateur de la machine où tourne Lutin les garde aussi au niveau d'accès « réseau » (un appareil appairé ne les a jamais) ; enregistrer un autre réglage n'efface plus ces cases ; quand elles sont cochées mais sans effet, la page et la conversation disent pourquoi.
+- **Pastille verte « réponse terminée »** : elle apparaît aussi quand tu étais sur un autre onglet (Mémoire, Réglages…) pendant la réponse, et s'éteint quand tu reviens lire.
+- **Homelab / Docker derrière un reverse proxy et Authelia** : `docker-compose.proxy.yml` prêt à l'emploi, guide complet (nginx, Traefik, Caddy), `LUTIN_ADMINS` (les identifiants Authelia qui configurent depuis la page ; les autres discutent), `mem_limit` du conteneur pris en compte pour les conseils de modèles, `LUTIN_BUDGET_GO`, nom du processeur lu sous Linux, disques des volumes, en-tête `X-Accel-Buffering: no` pour que nginx laisse passer la réponse mot à mot, « Ouvrir » masqué sur un serveur sans bureau.
+- Robustesse : une lecture de conversation qui échoue un instant (partage réseau, Windows) ne la remplace plus par sa copie de secours ; supprimer, renommer ou épingler une conversation qui répond est refusé ; une demande refusée ne laisse plus de conversation vide ; les secrets sont comparés sur des octets (un caractère non ASCII ne fait plus planter) ; « Restaurer une sauvegarde » fonctionne (deux boutons avaient le même identifiant) ; les cartes de fichier fonctionnent aussi dans une conversation toute neuve ; supprimer ou ouvrir un fichier demande d'être sur la machine (ou administrateur).
+- Nouveau test de parcours (cases auto qui tiennent au rechargement, file d'attente, icône « travail en cours », pastille verte).
+
+**English.** Long missions and Document processing leave the extensions: sections of the Automation tab, always available, nothing to turn on; a **🎯** button next to the message box turns what you just wrote into a mission specification. Files created by Lutin (Settings > Folders and data): everything Lutin produced with size, date and path; select, “older than 30 days”, delete in one gesture, openable folder. Auto approval / Auto commands: the browser of the machine where Lutin runs keeps them at the “network” access level too (a paired device never has them); saving another setting no longer erases these boxes; when ticked but ineffective, the page and the conversation say why. Green “answer finished” dot: now also appears when you were on another tab during the answer, and goes out when you come back to read. New journey test (auto boxes surviving a reload, waiting queue, “working” icon, green dot).
+
 ## 0.8.3
 
 - **Générer une image ne demande plus ton accord à chaque fois** si « Commandes automatiques » est coché (et dans une mission autonome).

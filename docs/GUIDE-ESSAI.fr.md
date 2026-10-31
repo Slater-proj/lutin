@@ -52,7 +52,7 @@ Dans le dossier d'essai, demande : *Crée une page `essai.html` avec un titre et
 
 ## 5. Une première mission, courte
 
-*Automatisation > Extensions facultatives > Missions longues* : coche l'addon, puis *Nouvelle mission*.
+*Automatisation > Missions longues* (rien à activer) : *Nouvelle mission*. Ou écris la demande dans le champ de saisie et clique sur **🎯**.
 
 - **Nom** : `Essai`
 - **Dossier** : le dossier d'essai
@@ -89,6 +89,10 @@ Pendant qu'elle tourne, essaie :
 ## 8. Telegram, courriel, X (si tu les utilises)
 
 Chaque addon a ses étapes dans sa carte et un bouton **Vérifier** : il teste réellement le service et dit ce qui manque. Active-les un par un. Ces trois addons n'ont jamais parlé aux vrais services avant ton essai : signale tout comportement inattendu.
+
+## Faire le ménage
+
+*Réglages > Dossiers et données > Fichiers créés par Lutin* liste tout ce que ces essais ont produit (PDF, Word, images…) : sélectionne, supprime.
 
 ## Remettre à zéro
 

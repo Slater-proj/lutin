@@ -35,10 +35,12 @@ def ecrire_atomique(chemin, texte):
     os.replace(str(tmp), str(chemin))
 
 
-def enregistrer_reglages(nouveau):
-    r = _m.reglages()
+def enregistrer_reglages(nouveau, de_confiance=True):
+    """Écrit les réglages. On part de ce qui est écrit dans le fichier (pas de la version « masquée » par la règle de sécurité) : enregistrer un autre réglage ne fait pas perdre les cases d'accord automatique.
+    Seul le navigateur de cette machine (de_confiance) peut les changer."""
+    r = _m.reglages(masquer=False)
     for k in _m.REGLAGES_DEFAUT:
-        if k in nouveau:
+        if k in nouveau and (de_confiance or k not in ("auto_ecriture", "auto_commandes")):
             r[k] = nouveau[k]
     if not _modes.valide(r["mode"]):
         raise ValueError("Mode inconnu.")
@@ -55,7 +57,7 @@ def enregistrer_reglages(nouveau):
     _m.nettoyer_echantillonnage(r)
     _m.nettoyer_ressources(r)
     ecrire_atomique(_m.DONNEES / "reglages.json", json.dumps(dict(r, memoire_v=2), ensure_ascii=False, indent=1))
-    return _m.reglages()
+    return _m.reglages(de_confiance=de_confiance)
 
 
 def lire_memoire(nom):
@@ -216,7 +218,19 @@ def conv_chemin(ident):
 
 def conv_lire(ident):
     f = conv_chemin(ident)
-    c = lire_json(f, None)
+    c = None
+    for essai in range(4):
+        try:
+            c = json.loads(Path(f).read_text(encoding="utf-8-sig"))
+            break
+        except FileNotFoundError:
+            break
+        except ValueError:
+            break                                                  # contenu illisible : la copie de secours peut servir
+        except OSError as erreur:                                  # lecture qui tombe pile pendant une écriture (Windows, partage réseau) : on réessaie, on ne restaure RIEN
+            if essai == 3:
+                raise ValueError("Conversation momentanément illisible ({}) : réessaie dans un instant.".format(erreur))
+            time.sleep(0.15 * (essai + 1))
     if not c:
         sauvegarde = Path(str(f) + ".bak")                       # fichier abîmé (plantage du PC pendant l'écriture ?) : on reprend la copie de la fois d'avant
         c = lire_json(sauvegarde, None)

@@ -676,6 +676,9 @@ def tour(conv, texte, emit, r=None, stop=None, remplacer_depuis=None, identite="
             emit({"type": "info", "texte": _t("Refusé (mission sans surveillance) : {}").format(titre)})
             ctx["dernier_accord"] = "refuse"
             return False
+        if ctx.get("auto_bloque") and not ctx.get("auto_bloque_dit"):
+            ctx["auto_bloque_dit"] = True
+            emit({"type": "info", "texte": _t("Tes cases d'accord automatique sont cochées mais sans effet ici (niveau d'accès « {} » : seul le navigateur de la machine où tourne Lutin les garde, et jamais au niveau proxy). Voir l'onglet Accès.").format(ctx["auto_bloque"])})
         a = _m.Attente(titre, detail, diff)
         emit({"type": "approbation", "id": a.id, "titre": titre, "detail": detail, "diff": diff})
         ok = a.attendre(stop=stop)
@@ -686,6 +689,13 @@ def tour(conv, texte, emit, r=None, stop=None, remplacer_depuis=None, identite="
         return ok
     ctx = {"essai": bool(r.get("essai_a_blanc")), "identite": identite, "accord": accord, "auto_ecriture": bool(r.get("auto_ecriture")), "auto_commandes": bool(r.get("auto_commandes")), "mission": r.get("_mission", ""), "stop": stop, "conv": conv, "emit": emit, "web": bool(r.get("web", True)), "limite_ram": int(r.get("limite_ram_commande_go", 0) * _m.GO),
            "tour": {"id": datetime.now().strftime("%Y%m%d-%H%M%S-") + secrets.token_hex(2), "conversation": conv["id"], "fichiers": {}}}
+    if not lecture_seule and not r.get("_mission"):
+        try:
+            brut = _m.reglages(masquer=False)               # ce que l'utilisateur a coché, avant la règle de sécurité
+            if (brut.get("auto_commandes") and not r.get("auto_commandes")) or (brut.get("auto_ecriture") and not r.get("auto_ecriture")):
+                ctx["auto_bloque"] = _m.SECURITE.niveau
+        except Exception:  # noqa: BLE001  (un diagnostic ne doit jamais gêner une réponse)
+            pass
     dernier = conv["messages"][-1] if conv["messages"] else None
     if dernier and dernier.get("role") == "user" and dernier.get("content") == texte:
         emit({"type": "info", "texte": "Cette demande est déjà dans la conversation sans réponse : je la reprends sans la dupliquer."})
@@ -995,6 +1005,10 @@ def boucle_agent(conv, r, emit, ctx, stop):
             joints = [_fichiers.entree(c) for c in ctx.pop("fichiers_joints", [])][:8]           # documents et médias créés : une carte (ouvrir, télécharger, supprimer) sous le message
             if joints:
                 extra["fichiers_joints"] = joints
+            try:
+                _fichiers.enregistrer([dict(e, genre="fichier") for e in joints] + [_fichiers.entree_image(i, fichiers.get(i)) for i in medias if fichiers.get(i)], conv["id"])
+            except Exception as erreur:  # noqa: BLE001  (le registre aide au ménage, il ne doit jamais gêner une réponse)
+                _m.journaliser("Registre des fichiers créés : {!r}".format(erreur))
             emit(dict({"type": "resultat", "nom": nom, "texte": resultat[:1500]}, **extra))
             conv["messages"].append(dict({"role": "tool", "tool_name": nom, "content": resultat[:_m.LECTURE_MAX + 2000]}, **extra))
             _m.conv_ecrire(conv)                        # enregistré à chaque étape : un plantage du PC en pleine demande ne perd que l'étape en cours

@@ -366,6 +366,91 @@ class Assistant(unittest.TestCase):
         self.assertTrue((PROJET / "auto-cmd.txt").exists())
         A.enregistrer_reglages({"auto_commandes": False})
 
+    def test_cases_d_accord_automatique_selon_le_niveau_d_acces_et_l_origine(self):
+        """Les cases cochées marchent au niveau « local », et au niveau « réseau » depuis le navigateur de cette machine ; un appareil appairé ou le niveau « proxy » redemandent, en le disant."""
+        from lutin import securite
+        vrai = A.SECURITE
+        A.enregistrer_reglages({"auto_commandes": True, "auto_ecriture": False})
+        cible = PROJET / "niveau.txt"
+
+        def lancer(niveau, de_confiance):
+            A.SECURITE = securite.Securite(niveau=niveau, proxy_ips=["10.0.0.1"], url_publique="https://x.example.com") if niveau == securite.PROXY else securite.Securite(niveau=niveau)
+            cible.unlink(missing_ok=True)
+            SCENARIO[:] = [[appel_outil("executer", commande="echo ok> niveau.txt")], [{"content": "."}]]
+            evenements = []
+
+            def emit(e):
+                evenements.append(e)
+                if e["type"] == "approbation":
+                    A.repondre_attente(e["id"], True)
+            conv = A.conv_nouvelle()
+            A.tour(conv, "lance la commande", emit, A.reglages(de_confiance=de_confiance), None)
+            return evenements
+        try:
+            ev = lancer(securite.LOCAL, False)
+            self.assertFalse(any(e["type"] == "approbation" for e in ev), "niveau local : pas de question")
+            ev = lancer(securite.RESEAU, True)
+            self.assertFalse(any(e["type"] == "approbation" for e in ev), "niveau réseau, navigateur de cette machine : pas de question")
+            self.assertTrue(cible.exists())
+            ev = lancer(securite.RESEAU, False)
+            self.assertTrue(any(e["type"] == "approbation" for e in ev), "niveau réseau, appareil appairé : l'accord est demandé")
+            self.assertTrue(any(e["type"] == "info" and "cochées mais sans effet" in e["texte"] for e in ev), "...et la conversation en explique la raison")
+            ev = lancer(securite.PROXY, True)
+            self.assertTrue(any(e["type"] == "approbation" for e in ev), "niveau proxy : jamais d'accord automatique")
+        finally:
+            A.SECURITE = vrai
+            A.enregistrer_reglages({"auto_commandes": False, "auto_ecriture": False})
+
+    def test_une_lecture_qui_echoue_un_instant_ne_remplace_pas_la_conversation_par_sa_copie_de_secours(self):
+        """Sur Windows ou un partage réseau, lire pile pendant une écriture peut échouer : on réessaie, on ne restaure rien. Seul un contenu illisible déclenche la copie de secours."""
+        from pathlib import Path
+        c = A.conv_nouvelle()
+        c["messages"] = [{"role": "user", "content": "version récente"}]
+        A.conv_ecrire(c)
+        f = A.conv_chemin(c["id"])
+        Path(str(f) + ".bak").write_text(json.dumps({"id": c["id"], "titre": "ancienne", "messages": [{"role": "user", "content": "version ancienne"}]}), encoding="utf-8")
+        vrai = Path.read_text
+        appels = {"n": 0}
+
+        def capricieux(self, *a, **k):
+            if self == f and appels["n"] < 2:
+                appels["n"] += 1
+                raise PermissionError("utilisé par un autre processus")
+            return vrai(self, *a, **k)
+        Path.read_text = capricieux
+        try:
+            self.assertEqual(A.conv_lire(c["id"])["messages"][0]["content"], "version récente", "deux échecs passagers puis la lecture réussit")
+            appels["n"] = -100
+            with self.assertRaises(ValueError) as e:
+                A.conv_lire(c["id"])                                                           # échec persistant : une erreur claire
+            self.assertIn("momentanément illisible", str(e.exception))
+        finally:
+            Path.read_text = vrai
+        self.assertEqual(json.loads(f.read_text(encoding="utf-8"))["messages"][0]["content"], "version récente", "le fichier n'a pas été remplacé par la copie de secours")
+        f.write_text("{pas du json", encoding="utf-8")
+        self.assertEqual(A.conv_lire(c["id"])["messages"][0]["content"], "version ancienne", "un contenu vraiment abîmé : la copie de secours sert")
+
+    def test_supprimer_renommer_epingler_refuses_pendant_une_reponse_et_une_demande_refusee_ne_laisse_rien(self):
+        import threading
+        c = A.conv_nouvelle()
+        A.conv_ecrire(c)
+        A.TOURS_ACTIFS[c["id"]] = threading.Event()
+        try:
+            post("/api/supprimer", {"id": c["id"]}, attendu=409)
+            post("/api/renommer", {"id": c["id"], "titre": "Autre"}, attendu=409)
+            post("/api/epingler", {"id": c["id"], "epingle": True}, attendu=409)
+        finally:
+            A.TOURS_ACTIFS.pop(c["id"], None)
+        self.assertTrue(A.conv_chemin(c["id"]).exists(), "la conversation est intacte")
+        post("/api/renommer", {"id": c["id"], "titre": "Autre"})
+        avant = len(lire("/api/etat")["conversations"])
+        req = urllib.request.Request(BASE + "/api/chat", data=json.dumps({"message": "x", "mode": "pirate"}).encode("utf-8"), headers={"Content-Type": "application/json", "X-Token": A.JETON})
+        with self.assertRaises(urllib.error.HTTPError) as e:
+            urllib.request.urlopen(req, timeout=30)
+        self.assertEqual(e.exception.code, 400)
+        self.assertEqual(len(lire("/api/etat")["conversations"]), avant, "une demande refusée ne laisse pas de conversation vide")
+        post("/api/supprimer", {"id": c["id"]})
+
     def test_memoire_durable(self):
         chat("Retiens ça", reponses=[[appel_outil("memoriser", note="L'utilisateur préfère les épisodes courts")], [{"content": "Noté."}]])
         self.assertIn("préfère les épisodes courts", (MEMOIRE / "MEMOIRE.md").read_text(encoding="utf-8"))
@@ -1500,18 +1585,21 @@ class Assistant(unittest.TestCase):
         """Les addons : liste sans secret, activation qui passe par la vérification, travail de fond créé, mis en pause, rapporté et supprimé par l'API ; rien de tout cela sans dossier de travail."""
         from lutin import addons, fond
         liste = lire("/api/addons")["liste"]
-        f = next(a for a in liste if a["id"] == "fond")
+        f = next(a for a in liste if a["id"] == "comfyui")
         self.assertFalse(f["actif"], "désactivé par défaut")
+        self.assertNotIn("fond", [a["id"] for a in liste])
         self.assertIn("alertes", lire("/api/addons"))
         self.assertIn("addons_alertes", lire("/api/etat"))
-        self.assertEqual(lire("/api/addon-etat?id=fond"), {}, "un addon sans panneau n'a pas d'état")
         self.assertIn("autorises", lire("/api/addon-etat?id=telegram"))
         self.assertEqual(len(post("/api/addon-action", {"id": "telegram", "action": "nouveau_code"})["code"]), 6)
         post("/api/addon-action", {"id": "telegram", "action": "inconnue"}, attendu=400)
-        post("/api/addon-action", {"id": "fond", "action": "x"}, attendu=400)
+        post("/api/addon-action", {"id": "comfyui", "action": "x"}, attendu=400)
         post("/api/addon-activer", {"id": "inconnu", "actif": True}, attendu=400)
-        post("/api/addon-reglages", {"id": "fond", "reglages": {"x": "1"}}, attendu=400)
-        self.assertTrue(post("/api/addon-activer", {"id": "fond", "actif": True})["actif"])
+        post("/api/addon-reglages", {"id": "comfyui", "reglages": {"x": "1"}}, attendu=400)
+        self.assertEqual(lire("/api/missions"), {"liste": []}, "les missions ne demandent aucune activation")
+        post("/api/mission-action", {"action": "creer", "nom": "", "cahier": "x", "travail": "principal"}, attendu=400)
+        post("/api/mission-action", {"action": "danse"}, attendu=400)
+        self.assertEqual(lire("/api/fichiers-crees")["liste"], [])
         vrai = fond.dossier_autorise
         dossier = TEMP / "fond-vide"
         dossier.mkdir(exist_ok=True)
@@ -1528,12 +1616,9 @@ class Assistant(unittest.TestCase):
             self.assertEqual(lire("/api/fond")["liste"], [])
         finally:
             fond.dossier_autorise = vrai
-            post("/api/addon-activer", {"id": "fond", "actif": False})
-        self.assertFalse(next(a for a in lire("/api/addons")["liste"] if a["id"] == "fond")["actif"])
         post("/api/fond-creer", {"nom": "x", "dossier": str(TEMP), "consigne": "x"}, attendu=400)          # pas un dossier de travail
-        post("/api/addon-correction", {"id": "fond"}, attendu=400)                                       # rien à réparer
-        post("/api/addon-flux", {"id": "fond", "flux": {"appels": {"x": {"url": "https://evil.example.com/"}}}}, attendu=400)
-        addons.restaurer_flux("fond")
+        post("/api/addon-flux", {"id": "comfyui", "flux": {"appels": {"x": {"url": "https://evil.example.com/"}}}}, attendu=400)
+        addons.restaurer_flux("comfyui")
 
     def test_le_fil_de_la_conversation_est_retrouve_tout_seul_et_le_scribe_tient_la_fiche(self):
         """Mode fiche : les passages anciens qui touchent à la demande sont remis au modèle sans qu'il les demande, et un appel séparé (le scribe) met la fiche à jour."""

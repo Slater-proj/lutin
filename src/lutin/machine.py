@@ -64,7 +64,11 @@ class Profil:
         return [g for g in self.gpus if est_integree(g)]
 
     def budget_go(self):
-        """Mémoire qu'on accepte de remplir avec un modèle. 85 % de la carte (le bureau en garde un peu) ; sur Mac la mémoire est partagée ; sans carte, la RAM (60 %)."""
+        """Mémoire qu'on accepte de remplir avec un modèle. 85 % de la carte (le bureau en garde un peu) ; sur Mac la mémoire est partagée ; sans carte, la RAM (60 %).
+        LUTIN_BUDGET_GO l'impose (serveur partagé avec d'autres services : « 8 » = au plus 8 Go pour les modèles) ; une limite de mémoire du conteneur est déjà prise en compte dans la RAM."""
+        voulu = imposer_budget(os.environ.get("LUTIN_BUDGET_GO", ""))
+        if voulu:
+            return voulu
         g = self.gpu_principal()
         if g and g.fabricant == "apple":
             return round(g.vram_go * 0.75, 1)
@@ -244,6 +248,14 @@ def _ram_windows():
     return 0.0, 0.0
 
 
+def nom_cpu_linux(texte):
+    """Le nom du processeur d'après /proc/cpuinfo (« Intel(R) Core(TM) Ultra 5 125H »), ou une chaîne vide."""
+    for ligne in (texte or "").splitlines():
+        if ligne.lower().startswith("model name") and ":" in ligne:
+            return " ".join(ligne.split(":", 1)[1].split())
+    return ""
+
+
 def analyser_meminfo(texte):
     """/proc/meminfo -> (total, disponible) en Go."""
     valeurs = {}
@@ -256,14 +268,41 @@ def analyser_meminfo(texte):
     return valeurs.get("MemTotal", 0) / GO, valeurs.get("MemAvailable", valeurs.get("MemFree", 0)) / GO
 
 
+def imposer_budget(texte):
+    """Le budget voulu par l'utilisateur (Go), ou 0 s'il n'en a pas donné ou si la valeur est absurde."""
+    try:
+        v = float(str(texte).replace(",", ".").strip())
+    except ValueError:
+        return 0.0
+    return round(v, 1) if 0.5 <= v <= 4096 else 0.0
+
+
+def limite_conteneur(racine="/sys/fs/cgroup"):
+    """(limite, utilisé) en Go de la mémoire d'un conteneur à qui on a donné une limite (mem_limit, --memory), ou (0, 0) sans limite : /proc/meminfo montre alors la RAM de la machine hôte, pas ce que le conteneur a le droit d'utiliser."""
+    base = Path(racine)
+    for limite_f, usage_f in (("memory.max", "memory.current"), ("memory/memory.limit_in_bytes", "memory/memory.usage_in_bytes")):          # cgroup v2, puis v1
+        try:
+            brut = (base / limite_f).read_text().strip()
+            if not brut.isdigit() or int(brut) >= 1 << 50:                     # « max » ou « illimité » (v1 : un nombre énorme)
+                continue
+            return int(brut) / GO, int((base / usage_f).read_text().strip()) / GO
+        except (OSError, ValueError):
+            continue
+    return 0.0, 0.0
+
+
 def lire_ram(systeme, lanceur=lancer):
     if systeme == "windows":
         return _ram_windows()
     if systeme == "linux":
         try:
-            return analyser_meminfo(Path("/proc/meminfo").read_text())
+            total, dispo = analyser_meminfo(Path("/proc/meminfo").read_text())
         except OSError:
             return 0.0, 0.0
+        limite, utilise = limite_conteneur()
+        if limite and limite < total:                                           # conteneur limité : c'est cette limite qui compte, pas la RAM de la machine
+            total, dispo = limite, min(dispo, max(0.0, limite - utilise))
+        return total, dispo
     if systeme == "macos":
         total = lanceur(["sysctl", "-n", "hw.memsize"]).strip()
         return (int(total) / GO if total.isdigit() else 0.0), 0.0
@@ -280,7 +319,7 @@ def lister_disques(systeme):
             if masque & (1 << i) and ctypes.windll.kernel32.GetDriveTypeW(lettre) == 3:          # 3 = disque fixe (pas de clé USB, lecteur réseau, CD)
                 racines.append(lettre)
     else:
-        racines = ["/", str(Path.home())]
+        racines = ["/", str(Path.home())] + [x for x in (os.environ.get("LUTIN_HOME"), os.environ.get("OLLAMA_MODELS"), os.environ.get("LUTIN_TRAVAIL")) if x and Path(x).exists()]          # conteneur : les volumes comptent
     disques, vus = [], set()
     for r in racines:
         try:
@@ -299,6 +338,11 @@ def detecter(lanceur=lancer):
     """Le profil complet de cette machine."""
     systeme = {"Windows": "windows", "Linux": "linux", "Darwin": "macos"}.get(platform.system(), platform.system().lower())
     p = Profil(systeme=systeme, architecture=platform.machine().lower(), cpu=platform.processor() or "", coeurs=os.cpu_count() or 0)
+    if systeme == "linux" and (not p.cpu or p.cpu in ("x86_64", "aarch64")):
+        try:
+            p.cpu = nom_cpu_linux(Path("/proc/cpuinfo").read_text()) or p.cpu
+        except OSError:
+            pass
     p.ram_go, p.ram_libre_go = (round(x, 1) for x in lire_ram(systeme, lanceur))
     nvidia = analyser_nvidia_smi(lanceur(["nvidia-smi", "--query-gpu=name,memory.total,memory.free", "--format=csv,noheader,nounits"])) if shutil.which("nvidia-smi") else []
     autres = []

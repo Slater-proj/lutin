@@ -129,6 +129,110 @@ AMD : ROCm gère une liste limitée de cartes ; pour les autres, la documentatio
 
 Si Lutin ne voit pas la carte mais qu'Ollama la voit, déclare-la à la main pour que les modèles conseillés tiennent : `LUTIN_GPU="Ma carte=16"` (mémoire en Go).
 
+## Homelab : un mini PC Debian derrière un reverse proxy et Authelia
+
+Le cas d'un petit serveur partagé (par exemple un mini PC Intel Core Ultra 5 avec 32 Go de RAM dont une dizaine seulement est libre), sous Debian, où Lutin est joignable en `https://lutin.exemple.fr` derrière ton reverse proxy et **Authelia**.
+
+> **Honnêteté.** Ce montage a été vérifié avec un **faux proxy** (en-têtes `Host` et `Remote-User` simulés : accès, refus sans identité, refus d'un mauvais nom d'hôte, droits d'administration) et par les tests de la CI. Il n'a **jamais tourné avec un vrai Authelia, un vrai Debian ni ce processeur** : les temps de réponse ci-dessous sont des ordres de grandeur, pas des mesures.
+
+### 1. Lancer Lutin
+
+```bash
+docker network create --subnet 172.30.0.0/24 proxy      # une fois ; ton reverse proxy doit être sur ce réseau aussi
+mkdir -p travail && sudo chown 1000:1000 travail
+curl -fsSLO https://raw.githubusercontent.com/Slater-proj/lutin/main/docker-compose.proxy.yml
+# édite : LUTIN_URL_PUBLIQUE, LUTIN_PROXY_IP (le réseau du proxy), LUTIN_ADMINS (ton identifiant Authelia)
+docker compose -f docker-compose.proxy.yml up -d
+```
+
+Le fichier [docker-compose.proxy.yml](../docker-compose.proxy.yml) ne publie **aucun port** : le reverse proxy joint `http://lutin:8777` sur le réseau partagé. Si ton proxy tourne sur l'hôte et non dans Docker, publie `127.0.0.1:8777:8777` et mets `LUTIN_PROXY_IP: 172.17.0.1`.
+
+| Variable | Rôle ici |
+|---|---|
+| `LUTIN_NIVEAU=proxy` | l'identité vient du proxy (en-tête `Remote-User` posé par Authelia) ; Lutin ne croit cet en-tête **que** s'il arrive d'une adresse de `LUTIN_PROXY_IP` |
+| `LUTIN_URL_PUBLIQUE` | l'adresse publique : tout autre nom d'hôte est refusé (le proxy doit donc **transmettre le `Host` d'origine**) |
+| `LUTIN_PROXY_IP` | l'adresse ou le réseau du proxy tel que Lutin le voit (`docker network inspect proxy`) |
+| `LUTIN_ADMINS` | les identifiants Authelia qui peuvent **configurer depuis la page** : dossiers de travail, extensions, missions, suppression des fichiers créés. Vide : tout se configure par `docker exec lutin lutin …` et la page ne sert qu'à discuter. Les autres utilisateurs d'Authelia ne font que discuter. |
+| `mem_limit` | la mémoire que le conteneur peut prendre : **Lutin s'y adapte** (sans limite, il verrait les 32 Go de la machine et conseillerait des modèles trop gros) |
+| `LUTIN_BUDGET_GO` | impose le maximum pour les modèles (Go) si tu préfères ne pas limiter le conteneur |
+| `OLLAMA_NUM_PARALLEL=1`, `OLLAMA_MAX_LOADED_MODELS=1`, `OLLAMA_KEEP_ALIVE=5m` | une demande à la fois, un modèle à la fois, la RAM rendue après 5 minutes de silence |
+
+### 2. Régler le reverse proxy
+
+Trois points comptent pour Lutin, quel que soit le proxy :
+
+1. **Authelia devant**, qui transmet l'identité dans `Remote-User` (et le proxy **écrase** tout `Remote-User` envoyé par le client).
+2. **Le `Host` d'origine est transmis** (`lutin.exemple.fr`), sinon Lutin répond « nom d'hôte non autorisé ».
+3. **Pas de tampon sur les réponses** : Lutin affiche la réponse mot à mot (un flux continu). Un proxy qui met tout en mémoire jusqu'à la fin donne l'impression que rien ne se passe. Lutin envoie `X-Accel-Buffering: no` (nginx le respecte) ; les autres proxys ne tamponnent pas par défaut. Prévois aussi de **longs délais** (une réponse sur processeur peut durer plusieurs minutes) et **30 Mo** d'envoi (pièces jointes).
+
+nginx (avec les extraits habituels d'Authelia pour `auth_request`) :
+
+```nginx
+location / {
+    include /config/nginx/authelia-location.conf;       # ou ton équivalent : auth_request + $user depuis Remote-User
+    proxy_pass http://lutin:8777;
+    proxy_set_header Host $host;
+    proxy_set_header Remote-User $user;                 # l'identité vue par Authelia, jamais celle du client
+    proxy_buffering off;
+    proxy_read_timeout 3600s;
+    client_max_body_size 30m;
+}
+```
+
+Traefik (étiquettes du service, avec ton middleware `authelia` qui expose `Remote-User` dans `authResponseHeaders`) :
+
+```yaml
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=proxy
+      - traefik.http.routers.lutin.rule=Host(`lutin.exemple.fr`)
+      - traefik.http.routers.lutin.entrypoints=websecure
+      - traefik.http.routers.lutin.tls.certresolver=letsencrypt
+      - traefik.http.routers.lutin.middlewares=authelia@docker
+      - traefik.http.services.lutin.loadbalancer.server.port=8777
+```
+
+Caddy :
+
+```caddy
+lutin.exemple.fr {
+    forward_auth authelia:9091 {
+        uri /api/authz/forward-auth
+        copy_headers Remote-User Remote-Groups Remote-Name Remote-Email
+    }
+    reverse_proxy lutin:8777 {
+        flush_interval -1
+    }
+}
+```
+
+### 3. Choisir des modèles pour ce genre de machine
+
+Sans carte graphique utilisable (la puce graphique intégrée Intel n'est pas utilisée par Ollama dans un conteneur), tout tourne sur le processeur. Avec ~8 Go pour les modèles, Lutin conseille :
+
+| Modèle | Verdict de Lutin | À quoi s'attendre (estimation) |
+|---|---|---|
+| `qwen3:4b`, `llama3.2:3b`, `qwen3:1.7b` | confortable | quelques mots par seconde ; le bon choix pour discuter et pour les missions simples |
+| `qwen3:8b`, `qwen2.5-coder:7b` | à la limite | plus lent ; faisable pour du code ou un texte soigné, pas pour une conversation vive |
+| `qwen3:14b` et plus | trop gros | ne tient pas dans le budget |
+
+`docker exec lutin lutin modeles` donne la liste pour ta machine. Baisse la **fenêtre de contexte** à 8 192–12 288 jetons dans Réglages : sur processeur, relire 24 000 jetons à chaque réponse se compte en minutes.
+
+### 4. Ce qui marche, ce qui ne marche pas dans ce montage
+
+| Fonction | Dans le conteneur |
+|---|---|
+| Conversation, outils, fichiers de `/travail`, PDF et Word, missions longues (elles tournent **dans le conteneur** : elles ne voient que `/travail`) | ✔ |
+| Telegram, courriel, X, recherche web | ✔ (connexions sortantes) |
+| Télécharger un fichier créé, la liste « Fichiers créés » et le ménage | ✔ |
+| **Ouvrir** un fichier avec une application | ✘ caché : un serveur n'a pas de bureau, utilise Télécharger |
+| Accord auto / Commandes auto dans la conversation | ✘ désactivés au niveau proxy (règle de sécurité) : chaque commande demande ton clic. Une **mission « Autonome »** tourne seule, dans le conteneur. |
+| Aperçu d'une page (`apercu_page`) | ✘ pas de navigateur dans l'image : le message le dit |
+| ComfyUI (images) | ✘ ComfyUI ne tourne pas dans le conteneur, et un processeur seul est trop lent pour générer des images |
+| Carte graphique Intel intégrée | ✘ non utilisée par Ollama dans un conteneur |
+
+**Mises à jour et sauvegarde** : voir plus bas ; sauvegarde les volumes `lutin-data` et ton dossier `travail`.
+
 ## Les addons dans le conteneur
 
 Les réglages, secrets et états des addons sont dans le volume `/data` : ils survivent à une mise à jour. **Telegram, courriel, X et travail de fond** marchent comme sur la machine (le travail de fond ne voit que les dossiers de travail montés dans le conteneur). **ComfyUI** ne peut pas être lancé par un conteneur qui ne le contient pas : lance Lutin directement sur la machine pour cet addon, ou installe ComfyUI dans ta propre image et monte son dossier.

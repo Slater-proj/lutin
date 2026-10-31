@@ -52,7 +52,7 @@ In the trial folder, ask: *Create a page `trial.html` with a title and a button 
 
 ## 5. A first, short mission
 
-*Automation > Optional extensions > Long missions*: tick the addon, then *New mission*.
+*Automation > Long missions* (nothing to turn on): *New mission*. Or write the request in the message box and click **🎯**.
 
 - **Name**: `Trial`
 - **Folder**: the trial folder
@@ -89,6 +89,10 @@ While it runs, try:
 ## 8. Telegram, mail, X (if you use them)
 
 Each addon has its steps in its card and a **Check** button: it really tests the service and says what is missing. Enable them one by one. These three addons had never talked to the real services before your trial: report anything unexpected.
+
+## Tidying up
+
+*Settings > Folders and data > Files created by Lutin* lists everything these trials produced (PDF, Word, images…): select, delete.
 
 ## Starting over
 

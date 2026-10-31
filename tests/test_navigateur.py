@@ -186,14 +186,12 @@ class Parcours(unittest.TestCase):
         with self.captures.serveur_demo() as (port, tmp):
             p = self.ouvrir(tmp, "http://127.0.0.1:%d/" % port)
             p.evaluer(onglet("auto"))
-            carte = "[...document.querySelectorAll('#listeAddons .carte')].find(c => c.textContent.includes('Traitement de documents') && c.querySelector('input[type=checkbox]'))"
-            p.attendre("!!(" + carte + ")")
-            self.assertEqual(p.evaluer("document.querySelectorAll('#listeAddons > .carte').length"), 6, "traitement de documents, missions, Telegram, ComfyUI, courriel, X")
-            self.assertFalse(p.evaluer("(" + carte + ").querySelector('input[type=checkbox]').checked"), "désactivé par défaut")
-            self.assertNotIn("Nouveau travail de fond", p.evaluer("document.getElementById('listeAddons').textContent"))
-            p.evaluer("(" + carte + ").querySelector('input[type=checkbox]').click()")
-            p.attendre("document.getElementById('listeAddons').textContent.includes('Nouveau travail de fond')")
-            self.assertTrue(p.evaluer("(" + carte + ").querySelector('input[type=checkbox]').checked"))
+            p.attendre("document.getElementById('zoneMissions').textContent.includes('Nouvelle mission') && document.getElementById('zoneFond').textContent.includes('Nouveau travail de fond')")
+            p.attendre("document.querySelectorAll('#listeAddons > .carte').length >= 4")                          # la liste des extensions se charge à part des deux sections
+            self.assertEqual(p.evaluer("document.querySelectorAll('#listeAddons > .carte').length"), 4, "Telegram, ComfyUI, courriel, X : missions et traitement de documents ne sont plus des extensions")
+            self.assertNotIn("Nouvelle mission", p.evaluer("document.getElementById('listeAddons').textContent"))
+            p.evaluer("document.getElementById('bMission').click()")                       # le bouton 🎯 du champ de saisie ouvre l'onglet Automatisation avec le formulaire ouvert
+            p.attendre("document.getElementById('p-auto').classList.contains('vue')")
             self.assertEqual(p.erreurs, [])
 
     def test_question_fiche_ou_resume_quand_la_conversation_devient_longue(self):
@@ -233,13 +231,13 @@ class Parcours(unittest.TestCase):
                                 ("comfyui", {})):
                 (dossier / ident).mkdir(parents=True, exist_ok=True)
                 (dossier / ident / "etat.json").write_text(json.dumps(etat), encoding="utf-8")
-            (dossier / "addons.json").write_text(json.dumps({ident: {"actif": True} for ident in ("telegram", "mail", "x", "comfyui", "fond")}), encoding="utf-8")
+            (dossier / "addons.json").write_text(json.dumps({ident: {"actif": True} for ident in ("telegram", "mail", "x", "comfyui")}), encoding="utf-8")
             p = self.ouvrir(tmp, "http://127.0.0.1:%d/" % port)
             p.evaluer(onglet("auto"))
             texte = "document.getElementById('listeAddons').textContent"
             p.attendre("%s.includes('Brouillon pour Bob') && %s.includes('Brouillon pour Alice') && %s.includes('Réponse à @alice') && %s.includes('Dossier de ComfyUI non défini')" % ((texte,) * 4))
             contenu = p.evaluer(texte)
-            for attendu in ("/appairer 123456", "Devis", "✔ Publié", "Nouveau travail de fond", "Publier maintenant", "Publier la réponse"):
+            for attendu in ("/appairer 123456", "Devis", "✔ Publié", "Publier maintenant", "Publier la réponse"):
                 self.assertIn(attendu, contenu)
             self.assertTrue(p.evaluer("[...document.querySelectorAll('#listeAddons button')].some(b => b.textContent === 'Détecter') && [...document.querySelectorAll('#listeAddons button')].some(b => b.textContent === 'Choisir le dossier…')"),
                             "ComfyUI : « Détecter » et « Choisir le dossier… » sont visibles")
@@ -329,6 +327,46 @@ class Parcours(unittest.TestCase):
             time.sleep(9.5)                                                                # deux rafraîchissements automatiques plus tard
             self.assertTrue(p.evaluer("document.querySelector('#listeAddons details').open"), "la liste ne se referme pas toute seule")
             self.assertEqual(p.evaluer("document.querySelectorAll('#listeAddons details.sous[open]').length"), 1, "ni le bloc des styles")
+            self.assertEqual(p.erreurs, [])
+
+    def test_cases_auto_enregistrees_file_d_attente_et_pastilles_de_travail(self):
+        """La mécanique autour des conversations : les cases d'accord automatique tiennent après rechargement, un message envoyé pendant une réponse attend dans la file, l'icône « travail en cours » s'allume,
+        puis la pastille verte « réponse terminée, pas lue » apparaît si on était ailleurs et s'éteint à la lecture."""
+        with self.captures.serveur_demo() as (port, tmp):
+            donnees = tmp / "home" / "donnees"
+            adresse = "http://127.0.0.1:%d/#conv=a1b2c3d4" % port
+            p = self.ouvrir(tmp, adresse)
+            p.attendre("!!window.ETAT_PRET || document.getElementById('cAutoCmd') !== null")
+            p.attendre("document.querySelectorAll('#fil .msg').length > 0")
+            p.evaluer("document.getElementById('cAuto').click(); document.getElementById('cAutoCmd').click(); true")
+            fichier = donnees / "reglages.json"
+            debut = time.time()
+            while time.time() - debut < 10:
+                r = json.loads(fichier.read_text(encoding="utf-8"))
+                if r.get("auto_ecriture") and r.get("auto_commandes"):
+                    break
+                time.sleep(0.3)
+            self.assertTrue(r.get("auto_ecriture") and r.get("auto_commandes"), "les deux cases sont enregistrées")
+            p.evaluer("location.reload()")
+            p.attendre("document.getElementById('cAutoCmd') !== null && document.querySelectorAll('#fil .msg').length > 0")
+            p.attendre("document.getElementById('selMode').dataset.init === '1'")
+            self.assertTrue(p.evaluer("document.getElementById('cAuto').checked && document.getElementById('cAutoCmd').checked"), "cochées après rechargement")
+            self.assertTrue(p.evaluer("!document.getElementById('cAuto').disabled && !document.getElementById('cAutoCmd').disabled && document.getElementById('noteAuto').hidden"), "niveau local : utilisables, sans note")
+            # un message lent, puis un second envoyé pendant la réponse : il attend dans la file
+            p.evaluer("(() => { const s = document.getElementById('saisie'); s.value = '[lent] premier'; document.getElementById('bEnvoyer').click(); return true; })()")
+            p.attendre("!document.getElementById('ptTravail').hidden && !document.getElementById('ptTravail').classList.contains('fini')")        # l'icône « travail en cours »
+            p.evaluer("(() => { const s = document.getElementById('saisie'); s.value = 'second'; document.getElementById('bEnvoyer').click(); return true; })()")
+            p.attendre("!document.getElementById('fileAttente').hidden && document.getElementById('fileAttente').textContent.includes('second')")
+            p.attendre("[...document.querySelectorAll('#fil .msg.ia')].filter(m => m.textContent.includes('Réponse de démonstration.')).length >= 2", delai=40)   # les deux réponses arrivent, dans l'ordre
+            p.attendre("document.getElementById('fileAttente').hidden")
+            p.attendre("document.getElementById('ptTravail').hidden")                                                                       # lu sur place : aucune pastille
+            # on s'en va ailleurs pendant la réponse : pastille verte à la fin, qui s'éteint quand on revient lire
+            p.evaluer("(() => { const s = document.getElementById('saisie'); s.value = '[lent] troisième'; document.getElementById('bEnvoyer').click(); return true; })()")
+            p.attendre("!document.getElementById('ptTravail').hidden")
+            p.evaluer(onglet("memoire"))
+            p.attendre("!document.getElementById('ptTravail').hidden && document.getElementById('ptTravail').classList.contains('fini')", delai=40)
+            p.evaluer(onglet("chat"))
+            p.attendre("document.getElementById('ptTravail').hidden")
             self.assertEqual(p.erreurs, [])
 
     def test_epingler_un_message_depuis_la_page(self):

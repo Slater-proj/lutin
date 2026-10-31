@@ -48,6 +48,50 @@ class Detection(unittest.TestCase):
         self.assertAlmostEqual(dispo, 19.07, places=1)
         self.assertEqual(machine.analyser_meminfo(""), (0.0, 0.0))
 
+    def test_limite_de_memoire_d_un_conteneur_cgroup_v2_et_v1(self):
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as d:
+            racine = Path(d)
+            self.assertEqual(machine.limite_conteneur(str(racine)), (0.0, 0.0), "pas de fichiers : pas de limite")
+            (racine / "memory.max").write_text("max\n")
+            self.assertEqual(machine.limite_conteneur(str(racine)), (0.0, 0.0), "« max » : illimité")
+            (racine / "memory.max").write_text(str(10 * 1024 ** 3) + "\n")
+            (racine / "memory.current").write_text(str(3 * 1024 ** 3) + "\n")
+            self.assertEqual(machine.limite_conteneur(str(racine)), (10.0, 3.0), "cgroup v2 : 10 Go de limite, 3 Go utilisés")
+        with tempfile.TemporaryDirectory() as d:
+            racine = Path(d)
+            (racine / "memory").mkdir()
+            (racine / "memory" / "memory.limit_in_bytes").write_text("9223372036854771712\n")
+            (racine / "memory" / "memory.usage_in_bytes").write_text("1\n")
+            self.assertEqual(machine.limite_conteneur(str(racine)), (0.0, 0.0), "cgroup v1 sans limite : un nombre énorme")
+            (racine / "memory" / "memory.limit_in_bytes").write_text(str(8 * 1024 ** 3))
+            (racine / "memory" / "memory.usage_in_bytes").write_text(str(2 * 1024 ** 3))
+            self.assertEqual(machine.limite_conteneur(str(racine)), (8.0, 2.0))
+
+    def test_le_budget_peut_etre_impose_pour_un_serveur_partage(self):
+        import os
+        p = Profil(ram_go=32.0, ram_libre_go=10.0)
+        vrai = os.environ.get("LUTIN_BUDGET_GO")
+        try:
+            os.environ.pop("LUTIN_BUDGET_GO", None)
+            self.assertEqual(p.budget_go(), 19.2, "sans consigne : 60 % de la RAM")
+            os.environ["LUTIN_BUDGET_GO"] = "7,5"
+            self.assertEqual(p.budget_go(), 7.5, "imposé (virgule française acceptée)")
+            for absurde in ("", "abc", "0", "-3", "100000"):
+                os.environ["LUTIN_BUDGET_GO"] = absurde
+                self.assertEqual(p.budget_go(), 19.2, "valeur absurde ignorée : " + absurde)
+        finally:
+            if vrai is None:
+                os.environ.pop("LUTIN_BUDGET_GO", None)
+            else:
+                os.environ["LUTIN_BUDGET_GO"] = vrai
+
+    def test_nom_du_processeur_lu_dans_cpuinfo(self):
+        texte = "processor\t: 0\nvendor_id\t: GenuineIntel\nmodel name\t: Intel(R) Core(TM) Ultra 5 125H\n\nprocessor\t: 1\nmodel name\t: autre\n"
+        self.assertEqual(machine.nom_cpu_linux(texte), "Intel(R) Core(TM) Ultra 5 125H")
+        self.assertEqual(machine.nom_cpu_linux(""), "")
+
     def test_sysfs_amd(self):
         import tempfile
         from pathlib import Path

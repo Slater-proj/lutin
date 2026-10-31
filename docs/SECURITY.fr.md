@@ -22,7 +22,7 @@ Le serveur écoute sur `127.0.0.1`. Personne d'autre ne peut ouvrir de connexion
 - **Appairage** : `lutin pin` (ou l'affichage au démarrage) donne un code à 6 chiffres valable 10 minutes, utilisable une fois. Cinq erreurs invalident le code et bloquent les essais 5 minutes. Les tentatives sont aussi limitées par adresse.
 - Chaque appareil reçoit une session (cookie `HttpOnly`, `SameSite=Strict`, 30 jours). `lutin appareils` les liste, `lutin appareils revoquer [id]` les coupe. Seules les **empreintes** des sessions sont stockées.
 - Le nom d'hôte demandé doit être une adresse privée ou un nom local.
-- **Les accords automatiques sont désactivés**, même si le fichier de réglages les active.
+- **Les accords automatiques sont désactivés** pour tous les appareils appairés, même si le fichier de réglages les active. Une seule exception : le **navigateur de la machine où tourne Lutin** garde ses cases « Accord auto » et « Commandes auto » (un appareil appairé ne peut ni les cocher ni les décocher). Au niveau « proxy », jamais. Quand les cases sont cochées mais sans effet, la page et la conversation le disent.
 - Pare-feu : à ouvrir **uniquement** pour ton réseau privé. Sous Windows, une règle limitée au profil « Privé » et à ton sous-réseau ; ne l'ouvre jamais au profil « Public ».
 - HTTP simple sur ton réseau : le PIN et la session circulent en clair sur ton Wi-Fi. Pour un réseau partagé ou peu sûr, utilise le niveau 3 avec HTTPS.
 

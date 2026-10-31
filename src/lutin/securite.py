@@ -9,6 +9,7 @@ Règle dure : hors du niveau « local », les accords automatiques (écriture, c
 """
 import hashlib
 import hmac
+import os
 import ipaddress
 import json
 import secrets
@@ -138,6 +139,17 @@ def ip_dans(ip, reseaux):
     return False
 
 
+def administrateurs():
+    """Les identités (en minuscules) qui peuvent configurer Lutin depuis la page au niveau « proxy » : variable LUTIN_ADMINS (« clement,marie »). Vide par défaut : personne, tout se configure alors par la commande lutin."""
+    return {x.strip().lower() for x in os.environ.get("LUTIN_ADMINS", "").replace(";", ",").replace(" ", ",").split(",") if x.strip()}
+
+
+def est_admin_proxy(sec, ip_client, en_tetes):
+    """La requête vient du proxy de confiance, qui a identifié un administrateur déclaré (l'en-tête n'est cru que de la part du proxy : voir identite_proxy)."""
+    nom = identite_proxy(sec, ip_client, en_tetes)
+    return bool(nom) and nom.lower() in administrateurs()
+
+
 def identite_proxy(sec, ip_client, en_tetes):
     """Nom d'utilisateur transmis par le proxy, ou None. L'en-tête n'est cru QUE si la connexion vient du proxy déclaré : n'importe qui peut écrire « Remote-User: admin »."""
     if sec.niveau != PROXY or not ip_dans(ip_client, sec.proxy_ips):
@@ -146,13 +158,19 @@ def identite_proxy(sec, ip_client, en_tetes):
     return nom[:128] or None
 
 
-def reglages_surs(sec, reglages):
-    """Règle dure : en dehors du niveau « local », jamais d'accord automatique."""
+def reglages_surs(sec, reglages, de_confiance=False):
+    """Règle dure : en dehors du niveau « local », jamais d'accord automatique. Une seule exception : au niveau « réseau », le navigateur de la machine où tourne Lutin (de_confiance) garde ses cases ;
+    un appareil appairé, lui, ne peut jamais lancer une commande ou écrire un fichier sans qu'on l'accepte."""
     r = dict(reglages)
-    if sec.niveau != LOCAL:
+    if sec.niveau != LOCAL and not (sec.niveau == RESEAU and de_confiance):
         r["auto_ecriture"] = False
         r["auto_commandes"] = False
     return r
+
+
+def egal(a, b):
+    """Comparaison de secrets à temps constant, sur des octets : un caractère hors ASCII n'est pas une exception."""
+    return hmac.compare_digest(str(a).encode("utf-8"), str(b).encode("utf-8"))
 
 
 def _empreinte(jeton):
@@ -226,7 +244,7 @@ class Appareils:
         maintenant = self.horloge()
         if maintenant < self.bloque_jusqua or not self.pin or maintenant > (self.pin_expire or 0):
             return None
-        if not hmac.compare_digest(str(pin).strip(), self.pin):
+        if not egal(str(pin).strip(), self.pin):
             self.echecs += 1
             if self.echecs >= ESSAIS_PIN:
                 self.pin, self.bloque_jusqua = None, maintenant + BLOCAGE_S

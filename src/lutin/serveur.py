@@ -14,6 +14,7 @@ from . import images as _images
 from . import addons as _addons
 from . import embeddings as _embeddings
 from . import fichiers as _fichiers
+from . import mission as _mission
 from . import fond as _fond
 from . import planifie as _plan
 from . import rappel as _rappel
@@ -24,7 +25,6 @@ from . import sauvegarde as _sauv
 from . import securite as _sec
 from .i18n import t as _t
 from datetime import datetime
-import hmac
 import io
 import json
 import os
@@ -73,16 +73,16 @@ class Gestionnaire(BaseHTTPRequestHandler):
 
     def _jeton_valide(self):
         donne = self.headers.get("X-Token") or ""
-        return any(hmac.compare_digest(donne, attendu) for attendu in (_m.JETON, _m.JETON_CONSOLE))
+        return any(_sec.egal(donne, attendu) for attendu in (_m.JETON, _m.JETON_CONSOLE))
 
     def _authentifie(self):
-        if self._local() and hmac.compare_digest(self.headers.get("X-Token") or "", _m.JETON_CONSOLE):
+        if self._local() and _sec.egal(self.headers.get("X-Token") or "", _m.JETON_CONSOLE):
             return True                                      # la console de cette machine (fichier réservé à l'utilisateur)
         return _sec.acces(_m.SECURITE, _m.APPAREILS, self.client_address[0], self.headers)[0]
 
     def _identite(self):
         """Qui fait cette requête, pour le journal : « console », « local », le nom donné par le proxy, ou « appareil »."""
-        if self._local() and hmac.compare_digest(self.headers.get("X-Token") or "", _m.JETON_CONSOLE):
+        if self._local() and _sec.egal(self.headers.get("X-Token") or "", _m.JETON_CONSOLE):
             return "console"
         return _sec.acces(_m.SECURITE, _m.APPAREILS, self.client_address[0], self.headers)[1]
 
@@ -96,8 +96,10 @@ class Gestionnaire(BaseHTTPRequestHandler):
         ou — au niveau « réseau » — depuis le navigateur de cette machine (jamais depuis un appareil appairé). Derrière un proxy, la commande lutin seulement : le proxy est sur la machine, il ne prouve rien."""
         if _m.SECURITE.niveau == _sec.LOCAL:
             return True
-        if self._local() and hmac.compare_digest(self.headers.get("X-Token") or "", _m.JETON_CONSOLE):
+        if self._local() and _sec.egal(self.headers.get("X-Token") or "", _m.JETON_CONSOLE):
             return True
+        if _sec.est_admin_proxy(_m.SECURITE, self.client_address[0], self.headers):
+            return True                                                    # niveau proxy : un administrateur déclaré (LUTIN_ADMINS) identifié par le proxy de confiance (Authelia…)
         return _m.SECURITE.niveau == _sec.RESEAU and self._sur_cette_machine()
 
     def _controle(self, ecriture):
@@ -159,14 +161,14 @@ class Gestionnaire(BaseHTTPRequestHandler):
             return self._envoyer(200, _m.page_web(), "text/html; charset=utf-8")
         if chemin == "/api/etat":
             o = _m.etat_ollama()
-            r = _m.reglages()
+            r = _m.reglages(de_confiance=self._configurateur())
             modeles = _m.modeles_connus(o["installes"], o.get("tailles"))
             profil = _adequation.profil_pret()
             return self._envoyer(200, {"adequation": _adequation.pour_la_liste(modeles, profil, _m._CATALOGUE["modeles"]), "machine": profil.resume() if profil else "", "budget_go": profil.budget_go() if profil else 0,
                                        "familles": {k: _t(v) for k, v in (_m._CATALOGUE.get("familles") or {}).items()}, "disque_modeles": _emplacements.jauge_modeles(),
                                        "version": _m.VERSION, "ollama": o["actif"], "ollama_installe": bool(_m.chemin_ollama()), "installes": o["installes"], "modeles": modeles, "modeles_masques": len(_m.lire_registre_modeles()["masques"]), "actives": list(_m.TOURS_ACTIFS),
                                        "pulls": _m.PULLS, "reglages": r, "conversations": _m.conv_liste(), "racine": str(_m.RACINE), "donnees": str(_m.DONNEES),
-                                       "outil": bool(self._outil_vivant()), "hors_ligne": _hl.actif(), "niveau": _m.SECURITE.niveau, "langue": _i18n.langue(), "langue_reglage": _i18n.langue_configuree(), "cpus": os.cpu_count() or 1, "redemarrage": {"necessaire": _acces.securite_enregistree() != _m.SECURITE, "possible": _acces.peut_redemarrer()}, "nouvelle_version": _m.nouvelle_version_lutin(), "travaux": _m.travaux_etat(), "configurateur": self._configurateur(), "addons_alertes": _addons.alertes(), "embeddings": _embeddings.etat(),
+                                       "outil": bool(self._outil_vivant()), "hors_ligne": _hl.actif(), "niveau": _m.SECURITE.niveau, "ouverture_possible": _fichiers.ouverture_possible(), "auto_possible": _m.SECURITE.niveau == _sec.LOCAL or (_m.SECURITE.niveau == _sec.RESEAU and self._configurateur()), "langue": _i18n.langue(), "langue_reglage": _i18n.langue_configuree(), "cpus": os.cpu_count() or 1, "redemarrage": {"necessaire": _acces.securite_enregistree() != _m.SECURITE, "possible": _acces.peut_redemarrer()}, "nouvelle_version": _m.nouvelle_version_lutin(), "travaux": _m.travaux_etat(), "configurateur": self._configurateur(), "addons_alertes": _addons.alertes(), "embeddings": _embeddings.etat(),
                                        "bench": {"en_cours": _m.BENCH["en_cours"], "etape": _m.BENCH["etape"], "erreur": _m.BENCH["erreur"], "mesures": _bench.lire(_m.chemin_bench())}, "attentes": [{"id": a.id, "titre": a.titre, "detail": a.detail, "diff": a.diff} for a in _m.Attente.EN_COURS.values()]})
         if chemin == "/api/conseil":
             r = _m.reglages()
@@ -253,6 +255,10 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 return self._envoyer(200, {"flux": _addons.flux(ident), "livre": _addons.flux_livre(ident), "modifie": _addons.flux_modifie(ident)})
             except _addons.ErreurAddon as e:
                 return self._envoyer(400, {"erreur": str(e)})
+        if chemin == "/api/missions":                            # les missions longues : état et avancement
+            return self._envoyer(200, _mission.etat())
+        if chemin == "/api/fichiers-crees":                      # tout ce que Lutin a créé (documents, images, vidéos, sons) : de quoi faire le ménage
+            return self._envoyer(200, _fichiers.lister())
         if chemin == "/api/fond":                                # le travail de fond : travaux et avancement
             return self._envoyer(200, {"liste": _fond.liste()})
         if chemin == "/api/fond-rapport":
@@ -451,7 +457,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
                     return self._envoyer(403, {"erreur": _t("Le redémarrage se demande depuis cette machine.")})
                 return self._envoyer(200, _acces.redemarrer())
             if self.path == "/api/nouveau-pin":
-                if not self._local():
+                if not self._configurateur():
                     return self._envoyer(403, {"erreur": "le code ne se demande que depuis cette machine"})
                 return self._envoyer(200, {"pin": _m.APPAREILS.nouveau_pin(), "valable_s": _sec.DUREE_PIN_S})
             if self.path == "/api/appareils":
@@ -466,6 +472,8 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 return self._envoyer(200, _m.annuler_tour(str(donnees.get("conversation", ""))))
             if self.path == "/api/annuler-fichier":
                 return self._envoyer(200, _m.annuler_tour(str(donnees.get("conversation", "")), str(donnees.get("chemin", ""))))
+            if self.path == "/api/epingler" and str(donnees.get("id", "")) in _m.TOURS_ACTIFS:
+                return self._envoyer(409, {"erreur": _t("Une réponse est en cours dans cette conversation : attends la fin ou arrête-la.")})
             if self.path == "/api/epingler":
                 return self._envoyer(200, _m.epingler_conversation(str(donnees.get("id", "")), donnees.get("epingle")))
             if self.path == "/api/git-message":
@@ -504,6 +512,18 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 if not self._configurateur():
                     return self._envoyer(403, {"erreur": _t("L'installation d'un modèle se lance depuis cette machine.")})
                 return self._envoyer(200, _embeddings.demarrer_installation())
+            if self.path in ("/api/mission-action", "/api/fichiers-crees-supprimer", "/api/fichiers-crees-dossier"):
+                if not self._configurateur():
+                    return self._envoyer(403, {"erreur": _t("Cela se fait depuis cette machine (niveau « cette machine seulement » ou navigateur de cette machine).")})
+                try:
+                    if self.path == "/api/mission-action":
+                        return self._envoyer(200, _mission.action(str(donnees.get("action", "")), donnees))
+                    if self.path == "/api/fichiers-crees-dossier":
+                        return self._envoyer(200, _fichiers.ouvrir_dossier(str(donnees.get("id", ""))))
+                    ids = donnees.get("ids")
+                    return self._envoyer(200, _fichiers.supprimer_selection([str(i) for i in ids][:2000] if isinstance(ids, list) else []))
+                except ValueError as e:
+                    return self._envoyer(400, {"erreur": str(e)})
             if self.path == "/api/piece-ouvrir":
                 if not self._configurateur():
                     return self._envoyer(403, {"erreur": _t("L'ouverture d'un fichier se fait depuis cette machine : télécharge-le plutôt.")})
@@ -511,9 +531,9 @@ class Gestionnaire(BaseHTTPRequestHandler):
                     return self._envoyer(200, _fichiers.piece_ouvrir(str(donnees.get("id", "")), str(donnees.get("nom", ""))))
                 except ValueError as e:
                     return self._envoyer(400, {"erreur": str(e)})
+            if self.path in ("/api/fichier-ouvrir", "/api/fichier-supprimer", "/api/media-supprimer") and not self._configurateur():
+                return self._envoyer(403, {"erreur": _t("Cela se fait depuis cette machine (niveau « cette machine seulement » ou navigateur de cette machine).")})          # un appareil appairé ne supprime ni n'ouvre rien sur la machine
             if self.path in ("/api/fichier-ouvrir", "/api/fichier-supprimer"):
-                if self.path == "/api/fichier-ouvrir" and not self._configurateur():
-                    return self._envoyer(403, {"erreur": _t("L'ouverture d'un fichier se fait depuis cette machine : télécharge-le plutôt.")})
                 try:
                     f = _fichiers.ouvrir if self.path == "/api/fichier-ouvrir" else _fichiers.supprimer
                     return self._envoyer(200, f(str(donnees.get("conversation", "")), str(donnees.get("id", ""))))
@@ -624,7 +644,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
                     raise ValueError("Langue inconnue (fr, en ou auto).")
             if self.path == "/api/hors-ligne":
                 voulu = bool(donnees.get("actif"))
-                if not voulu and not (_m.SECURITE.niveau == _sec.LOCAL or self._local()):
+                if not voulu and not self._configurateur():
                     return self._envoyer(403, {"erreur": "Le mode hors ligne ne se coupe que depuis cette machine."})
                 return self._envoyer(200, {"hors_ligne": _hl.definir(voulu)})
             if self.path == "/api/modeles-verifier":
@@ -651,7 +671,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 _m.repondre_attente(str(donnees.get("id", "")), donnees.get("ok"))
                 return self._envoyer(200, {"ok": True})
             if self.path == "/api/reglages":
-                return self._envoyer(200, _m.enregistrer_reglages(donnees))
+                return self._envoyer(200, _m.enregistrer_reglages(donnees, de_confiance=self._configurateur()))
             if self.path == "/api/memoire":
                 _m.ecrire_memoire(str(donnees.get("fichier", "")), str(donnees.get("texte", "")))
                 return self._envoyer(200, {"ok": True})
@@ -661,6 +681,8 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 return self._envoyer(200, _m.supprimer_skill(str(donnees.get("nom", ""))))
             if self.path == "/api/nouvelle":
                 return self._envoyer(200, _m.conv_nouvelle())
+            if self.path in ("/api/supprimer", "/api/renommer", "/api/epingler") and str(donnees.get("id", "")) in _m.TOURS_ACTIFS:
+                return self._envoyer(409, {"erreur": _t("Une réponse est en cours dans cette conversation : attends la fin ou arrête-la.")})          # sinon la fin de la réponse réécrirait la conversation par-dessus
             if self.path == "/api/supprimer":
                 _m.conv_supprimer(str(donnees.get("id", "")))
                 return self._envoyer(200, {"ok": True})
@@ -702,7 +724,8 @@ class Gestionnaire(BaseHTTPRequestHandler):
             return self._envoyer(400, {"erreur": "Cet accès est réservé à cette machine : pas de code à saisir."})
         if not _m.LIMITEUR_PIN.autoriser(self.client_address[0]):
             return self._envoyer(429, {"erreur": "Trop d'essais : attends une minute."})
-        jeton = _m.APPAREILS.appairer(str(donnees.get("pin", "")), _sec.nom_appareil(donnees.get("nom"), self.headers.get("User-Agent"), self._sur_cette_machine()))
+        nom = donnees.get("nom")
+        jeton = _m.APPAREILS.appairer(str(donnees.get("pin", "")), _sec.nom_appareil(nom if isinstance(nom, str) else "", self.headers.get("User-Agent"), self._sur_cette_machine()))
         if not jeton:
             return self._envoyer(403, {"erreur": "Code incorrect ou expiré. Demande-en un nouveau sur l'ordinateur (lutin pin)."})
         return self._envoyer(200, {"ok": True}, en_tetes={"Set-Cookie": _sec.en_tete_set_cookie(jeton, _m.SECURITE.url_publique.startswith("https://"))})
@@ -722,36 +745,49 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 return self._envoyer(429, {"erreur": "Déjà {} réponses en cours : une seule carte graphique, attends la fin de l'une d'elles (ou clique sur Arrêter).".format(len(_m.TOURS_ACTIFS))})
         _fond.interrompre_pour_utilisateur(8)                    # le travail de fond cède la place : son document en cours sera refait plus tard
         conv = _m.conv_lire(ident) if ident else _m.conv_nouvelle()
+
+        def abandon():                                            # une demande refusée ne laisse pas une conversation vide dans la liste
+            if not ident:
+                try:
+                    _m.conv_supprimer(conv["id"])
+                except (OSError, ValueError):
+                    pass
         depuis = donnees.get("remplacer_depuis")
         if depuis is not None:
             try:
                 depuis = int(depuis)
             except (TypeError, ValueError):
+                abandon()
                 return self._envoyer(400, {"erreur": "Indice de message invalide."})
             if not (0 <= depuis < len(conv["messages"]) and conv["messages"][depuis].get("role") == "user"):
+                abandon()
                 return self._envoyer(400, {"erreur": "Ce message n'existe plus dans la conversation : recharge-la."})
         stop = threading.Event()
         with _m.VERROU_TOURS:
             if conv["id"] in _m.TOURS_ACTIFS:
                 return self._envoyer(409, {"erreur": "Cette conversation est déjà en train de répondre (autre onglet ou téléphone ?). Attends la fin ou clique sur Arrêter."})
             if len(_m.TOURS_ACTIFS) >= _m.TOURS_SIMULTANES:
+                abandon()
                 return self._envoyer(429, {"erreur": "Déjà {} réponses en cours : une seule carte graphique, attends la fin de l'une d'elles (ou clique sur Arrêter).".format(len(_m.TOURS_ACTIFS))})
             try:
                 _m.activer_travail(conv, str(donnees.get("travail") or ""))
             except ValueError as erreur:
+                abandon()
                 return self._envoyer(409, {"erreur": str(erreur)})
             _m.RACINE_TOURS[conv["id"]] = str(_m.RACINE)
             _m.TOURS_ACTIFS[conv["id"]] = stop
         try:
-            r = _m.reglages()
+            r = _m.reglages(de_confiance=self._configurateur())
             for k in ("modele", "reflexion", "mode"):
                 if k in donnees:
                     r[k] = donnees[k]
             if not _modes.valide(r["mode"]):
+                abandon()
                 return self._envoyer(400, {"erreur": "Mode inconnu."})
             self.send_response(200)
             self.send_header("Content-Type", "application/x-ndjson; charset=utf-8")
             self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Accel-Buffering", "no")                  # nginx (reverse proxy) n'attend pas la fin de la réponse pour la transmettre
             self.end_headers()
 
             def emit(evenement):

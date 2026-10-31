@@ -44,6 +44,8 @@ class FauxOllama(BaseHTTPRequestHandler):
                 return self._json({"message": {"role": "assistant", "content": json.dumps({"objectif": ["Tester la question"], "decisions": ["Le code est 4711"]})}, "done": True})
             if demande.get("stream") is False:
                 return self._json({"message": {"role": "assistant", "content": "Résumé de démonstration."}, "done": True})
+            if b"[lent]" in corps:
+                time.sleep(2.5)                                       # une réponse qui prend son temps : le test peut voir « travail en cours » et la file d'attente
             lignes = [{"message": {"role": "assistant", "content": "Réponse de démonstration."}, "done": False}, {"message": {"role": "assistant", "content": ""}, "done": True, "prompt_eval_count": 100, "eval_count": 5}]
             d = (chr(10).join(json.dumps(x) for x in lignes) + chr(10)).encode("utf-8")
             self.send_response(200); self.send_header("Content-Type", "application/x-ndjson"); self.send_header("Content-Length", str(len(d))); self.end_headers(); self.wfile.write(d)

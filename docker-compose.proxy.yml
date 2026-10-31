@@ -1,0 +1,38 @@
+# Lutin behind a reverse proxy with Authelia, on a small shared server (CPU only, limited RAM)
+# Lutin derrière un reverse proxy avec Authelia, sur un petit serveur partagé (processeur seul, RAM limitée).
+#   docker network create --subnet 172.30.0.0/24 proxy        (once / une fois ; your reverse proxy joins this network too / ton reverse proxy la rejoint aussi)
+#   mkdir -p travail && sudo chown 1000:1000 travail
+#   docker compose -f docker-compose.proxy.yml up -d
+# See / Voir docs/DOCKER.md (EN) and docs/DOCKER.fr.md (FR), section "Homelab".
+services:
+  lutin:
+    image: ghcr.io/slater-proj/lutin:latest
+    restart: unless-stopped
+    mem_limit: 10g                      # what the container may use: Lutin sizes its model advice on it / ce que le conteneur peut utiliser : Lutin y adapte ses conseils de modèles
+    environment:
+      LUTIN_LANGUE: fr                  # fr or en
+      LUTIN_NIVEAU: proxy               # identity comes from the proxy (Authelia) / l'identité vient du proxy (Authelia)
+      LUTIN_URL_PUBLIQUE: https://lutin.czone.ovh
+      LUTIN_PROXY_IP: 172.30.0.0/24     # the network of your reverse proxy, as Lutin sees it / le réseau de ton reverse proxy, tel que Lutin le voit
+      LUTIN_ADMINS: clement             # Authelia user names allowed to configure from the page (missions, folders, add-ons…); empty = command line only / identifiants Authelia autorisés à configurer depuis la page ; vide = ligne de commande seulement
+      LUTIN_BUDGET_GO: "8"              # at most 8 GB for the models (the rest of the RAM belongs to your other services) / au plus 8 Go pour les modèles (le reste de la RAM est à tes autres services)
+      OLLAMA_NUM_PARALLEL: "1"          # one request at a time: no memory multiplied by 4 / une demande à la fois : pas de mémoire multipliée par 4
+      OLLAMA_MAX_LOADED_MODELS: "1"
+      OLLAMA_KEEP_ALIVE: 5m             # the model leaves the RAM after 5 minutes of silence / le modèle libère la RAM après 5 minutes d'inactivité
+    volumes:
+      - lutin-data:/data
+      - lutin-models:/models
+      - ./travail:/travail              # the ONLY place Lutin can read and modify / le SEUL endroit que Lutin peut lire et modifier
+    networks:
+      - proxy
+    # No "ports": the reverse proxy reaches http://lutin:8777 on the shared network. If your proxy runs on the host instead:
+    # Pas de « ports » : le reverse proxy joint http://lutin:8777 sur le réseau partagé. Si ton proxy tourne sur l'hôte :
+    #   ports: ["127.0.0.1:8777:8777"]    and / et    LUTIN_PROXY_IP: 172.17.0.1   (the gateway of the default bridge / la passerelle du réseau par défaut)
+
+volumes:
+  lutin-data:
+  lutin-models:
+
+networks:
+  proxy:
+    external: true

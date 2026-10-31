@@ -83,7 +83,7 @@ Talk to Lutin from your phone. Create a bot with @BotFather, paste its token (Au
 
 ## Long missions: a big job for hours
 
-Automation > Optional extensions > **Long missions**. (A step-by-step trial walk-through is in [GUIDE-ESSAI.md](GUIDE-ESSAI.md).) You write a **specification** (“build me a complete game from this: code, tests, git repository”), pick the working folder, the maximum duration (8 h by default, 72 h at most) and whether Lutin is **autonomous**. Then you leave: Lutin carries the mission out **turn after turn, alone**, with all its tools (read, write, run commands and tests, commit), until it declares it is done.
+Automation tab > **Long missions**: always available, nothing to turn on. Even simpler: write your request in the message box and click the **🎯** button next to it, it becomes the specification. (A step-by-step trial walk-through is in [GUIDE-ESSAI.md](GUIDE-ESSAI.md).) You write a **specification** (“build me a complete game from this: code, tests, git repository”), pick the working folder, the maximum duration (8 h by default, 72 h at most) and whether Lutin is **autonomous**. Then you leave: Lutin carries the mission out **turn after turn, alone**, with all its tools (read, write, run commands and tests, commit), until it declares it is done.
 
 - **The mission is your request.** Nothing is tailored to one kind of task: a game, a refactoring, a test suite, sorting documents… it all depends on what you write. For a long text, put it in a file of the folder and write “read this file and carry it out”.
 - **Autonomous**: Lutin writes files and runs commands without asking, **in the chosen folder only**, with the usual safeguards (every modified file is backed up, commands are bounded). Text read from the internet suspends this automatic approval (a booby-trapped page cannot run a command): whatever is not approved is refused and the model knows it. **Unticked**, it is a dry run: it shows what it would do, nothing is written.
@@ -92,7 +92,7 @@ Automation > Optional extensions > **Long missions**. (A step-by-step trial walk
 - **You stay in control**: pause, resume, stop, an instruction added on the way (taken into account on the next turn), the “🎯 name” conversation to read and continue like any other. The two answer slots are shared: you can chat during the mission.
 - **Resuming**: the state is written after every turn; if Lutin or the PC restarts, the mission picks up where it was.
 
-The former “Background work” is now called **Document processing**: it applies an instruction to every document of a folder, read-only (summarise, sort, extract). Anything that codes, tests or changes files is a mission.
+The former “Background work” is now called **Document processing**, a section of the Automation tab like missions (neither is an extension any more: nothing to turn on, they do nothing until you give them something): it applies an instruction to every document of a folder, read-only (summarise, sort, extract). Anything that codes, tests or changes files is a mission.
 
 ## Creating PDFs, Word documents, Markdown
 
@@ -101,6 +101,8 @@ The model has a `creer_document` tool: depending on the extension (`.pdf`, `.doc
 **Files you send** (attachments) also keep two small buttons, ⬇ to download them again under their real name and ↗ to open them with the application chosen in Windows (a copy under the real name is made for that).
 
 **Created files appear in the conversation**, like an attachment: a card with the name, size, path, and three buttons. **Open** asks Windows (or macOS, Linux) to open the file with the application you chose for this kind of file, like a double-click; it only exists from this machine and refuses programs and scripts. **Download** sends it to your browser (handy from a phone). **Delete** erases the file from the disk. Lutin never opens anything by itself, and only serves, opens or deletes files it registered in the conversation, located in a working folder or in ComfyUI's output folder. The same card is used for ComfyUI videos and sounds; images are shown directly (a click opens them full size).
+
+**Tidying up: Settings > Folders and data > Files created by Lutin.** Everything Lutin created (documents, images, videos, sounds) is listed there with its size, date and path, with the total. Tick what you want to erase, or *Select what is older than 30 days*, then *Delete the selection*: the files are erased from the disk and their cards disappear from the conversations. 📂 opens a file's folder. A file you already deleted by hand leaves the list by itself; even when the original conversation no longer exists the file stays listed (that is the point). Nothing outside the working folders and ComfyUI's output folder is ever touched.
 
 ## Page preview
 

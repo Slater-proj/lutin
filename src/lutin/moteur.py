@@ -219,7 +219,9 @@ from .donnees import (  # noqa: F401  (déplacé dans donnees.py : moteur ré-ex
 )
 
 
-def reglages():
+def reglages(de_confiance=False, masquer=True):
+    """Les réglages en vigueur. Hors du niveau « local » les accords automatiques sont coupés (voir securite.reglages_surs) sauf pour le navigateur de cette machine (de_confiance) ;
+    masquer=False rend ce qui est écrit dans le fichier, pour le réécrire sans rien perdre."""
     r = dict(REGLAGES_DEFAUT)
     brut = lire_json(DONNEES / "reglages.json", {})
     r.update({k: v for k, v in brut.items() if k in REGLAGES_DEFAUT})
@@ -239,7 +241,8 @@ def reglages():
         r["fiche_part"] = max(5, min(25, int(r.get("fiche_part", 10))))                      # part de la fenêtre de contexte que la fiche de suivi peut prendre (en %)
     except (TypeError, ValueError):
         r["fiche_part"] = 10
-    return _sec.reglages_surs(SECURITE, nettoyer_ressources(nettoyer_echantillonnage(r)))          # hors niveau « local » : jamais d'accord automatique, quoi que dise le fichier
+    r = nettoyer_ressources(nettoyer_echantillonnage(r))
+    return _sec.reglages_surs(SECURITE, r, de_confiance) if masquer else r          # hors niveau « local » : jamais d'accord automatique, quoi que dise le fichier
 
 
 from .outils import (  # noqa: F401  (déplacé dans outils.py : moteur ré-exporte ses noms)
@@ -860,6 +863,9 @@ def principal():
     threading.Thread(target=boucle_surveillance, daemon=True).start()
     from . import planifie
     planifie.demarrer()
+    from . import fond, mission                                   # le traitement de documents et les missions longues : toujours là, ils ne font rien tant qu'il n'y a rien à traiter
+    fond.demarrer()
+    mission.demarrer()
     from . import addons
     addons.demarrer_actifs()
     journaliser("Démarrage de Lutin (version {}, dossier de travail {}).".format(VERSION, RACINE))

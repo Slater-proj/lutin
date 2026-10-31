@@ -103,6 +103,47 @@ class RegleDure(unittest.TestCase):
             self.assertEqual(r["modele"], "x")
         self.assertTrue(base["auto_commandes"], "l'original n'est pas modifié")
 
+    def test_le_navigateur_de_cette_machine_garde_ses_cases_au_niveau_reseau_seulement(self):
+        base = {"auto_ecriture": True, "auto_commandes": True}
+        self.assertEqual(s.reglages_surs(LAN, base, de_confiance=True), base, "niveau réseau : le navigateur de la machine garde ses cases")
+        r = s.reglages_surs(LAN, base, de_confiance=False)
+        self.assertFalse(r["auto_ecriture"] or r["auto_commandes"], "un appareil appairé ne les a jamais")
+        r = s.reglages_surs(PROXY, base, de_confiance=True)
+        self.assertFalse(r["auto_ecriture"] or r["auto_commandes"], "niveau proxy : jamais, même de confiance")
+
+
+class AdministrateursProxy(unittest.TestCase):
+    def test_seul_un_administrateur_declare_identifie_par_le_proxy_de_confiance_configure(self):
+        import os
+        vrai = os.environ.get("LUTIN_ADMINS")
+        try:
+            os.environ.pop("LUTIN_ADMINS", None)
+            self.assertFalse(s.est_admin_proxy(PROXY, "192.168.1.10", {"Remote-User": "clement"}), "personne n'est administrateur par défaut")
+            os.environ["LUTIN_ADMINS"] = "Clement, marie;paul"
+            self.assertEqual(s.administrateurs(), {"clement", "marie", "paul"})
+            self.assertTrue(s.est_admin_proxy(PROXY, "192.168.1.10", {"Remote-User": "CLEMENT"}), "à la casse près")
+            self.assertFalse(s.est_admin_proxy(PROXY, "192.168.1.10", {"Remote-User": "intrus"}))
+            self.assertFalse(s.est_admin_proxy(PROXY, "192.168.1.10", {}), "sans identité")
+            self.assertFalse(s.est_admin_proxy(PROXY, "203.0.113.5", {"Remote-User": "clement"}), "l'en-tête n'est cru que du proxy déclaré : n'importe qui peut l'écrire")
+            self.assertFalse(s.est_admin_proxy(LAN, "192.168.1.10", {"Remote-User": "clement"}), "seulement au niveau proxy")
+        finally:
+            if vrai is None:
+                os.environ.pop("LUTIN_ADMINS", None)
+            else:
+                os.environ["LUTIN_ADMINS"] = vrai
+
+
+class Secrets(unittest.TestCase):
+    def test_un_caractere_non_ascii_ne_fait_pas_planter_les_comparaisons(self):
+        self.assertTrue(s.egal("abc", "abc"))
+        self.assertFalse(s.egal("abc", "abd"))
+        self.assertFalse(s.egal("é", "e"))
+        self.assertTrue(s.egal("é", "é"))
+        self.assertFalse(s.egal(None, "x"))
+        a = Appareils(Path(tempfile.mkdtemp()) / "appareils.json")
+        a.nouveau_pin()
+        self.assertIsNone(a.appairer("é\u202e12", "Test"), "un code non ASCII est simplement un mauvais code")
+
 
 class Appairage(unittest.TestCase):
     def setUp(self):

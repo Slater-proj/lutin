@@ -83,7 +83,7 @@ Parle à Lutin depuis ton téléphone. Crée un bot avec @BotFather, colle son j
 
 ## Missions longues : un grand travail pendant des heures
 
-Automatisation > Extensions facultatives > **Missions longues**. (Un parcours d'essai pas à pas est dans [GUIDE-ESSAI.fr.md](GUIDE-ESSAI.fr.md).) Tu écris un **cahier des charges** (« crée-moi un jeu complet à partir de ceci : code, tests, dépôt git »), tu choisis le dossier de travail, la durée maximale (8 h par défaut, 72 h au plus) et si Lutin est **autonome**. Puis tu t'en vas : Lutin mène la mission **tour après tour, seul**, avec tous ses outils (lire, écrire, lancer des commandes et des tests, versionner), jusqu'à ce qu'il déclare avoir fini.
+Onglet Automatisation > **Missions longues** : toujours disponible, rien à activer. Plus simple encore : écris ta demande dans le champ de saisie et clique sur le bouton **🎯** à côté, elle devient le cahier des charges. (Un parcours d'essai pas à pas est dans [GUIDE-ESSAI.fr.md](GUIDE-ESSAI.fr.md).) Tu écris un **cahier des charges** (« crée-moi un jeu complet à partir de ceci : code, tests, dépôt git »), tu choisis le dossier de travail, la durée maximale (8 h par défaut, 72 h au plus) et si Lutin est **autonome**. Puis tu t'en vas : Lutin mène la mission **tour après tour, seul**, avec tous ses outils (lire, écrire, lancer des commandes et des tests, versionner), jusqu'à ce qu'il déclare avoir fini.
 
 - **La mission, c'est ta demande.** Rien n'est prévu pour un type de tâche : un jeu, une refonte, une suite de tests, un classement de documents… tout dépend de ce que tu écris. Pour un long texte, mets-le dans un fichier du dossier et écris « lis ce fichier et réalise-le ».
 - **Autonome** : Lutin écrit des fichiers et lance des commandes sans te demander, **dans le dossier choisi seulement**, avec les garde-fous habituels (sauvegarde de chaque fichier modifié, commandes bornées). Du texte lu sur internet suspend cet accord automatique (une page piégée ne peut pas lancer de commande) : ce qui n'est pas accordé est refusé et le modèle le sait. **Décoché**, c'est l'essai à blanc : il montre ce qu'il ferait, rien n'est écrit.
@@ -92,7 +92,7 @@ Automatisation > Extensions facultatives > **Missions longues**. (Un parcours d'
 - **Tu gardes la main** : pause, reprise, arrêt, une consigne ajoutée en route (prise en compte au tour suivant), la conversation « 🎯 nom » à lire et à continuer comme les autres. Les deux places de réponse sont partagées : tu peux discuter pendant la mission.
 - **Reprise** : l'état est écrit après chaque tour ; si Lutin ou le PC redémarre, la mission reprend là où elle en était.
 
-L'ancien « Travail de fond » s'appelle désormais **Traitement de documents** : il applique une consigne à chaque document d'un dossier, en lecture seule (résumer, classer, extraire). Pour tout ce qui code, teste ou modifie, c'est une mission.
+L'ancien « Travail de fond » s'appelle désormais **Traitement de documents**, une section de l'onglet Automatisation comme les missions (ce ne sont plus des extensions : rien à activer, elles ne servent à rien tant qu'on ne leur confie rien) : il applique une consigne à chaque document d'un dossier, en lecture seule (résumer, classer, extraire). Pour tout ce qui code, teste ou modifie, c'est une mission.
 
 ## Créer des PDF, des documents Word, du Markdown
 
@@ -101,6 +101,8 @@ Le modèle a un outil `creer_document` : selon l'extension (`.pdf`, `.docx`, `.m
 **Les fichiers que tu envoies** (pièces jointes) gardent aussi deux petits boutons, ⬇ pour les retélécharger sous leur vrai nom et ↗ pour les ouvrir avec l'application choisie dans Windows (une copie sous le vrai nom est faite pour cela).
 
 **Les fichiers créés apparaissent dans la conversation**, comme une pièce jointe : une carte avec le nom, la taille, le chemin, et trois boutons. **Ouvrir** demande à Windows (ou macOS, Linux) d'ouvrir le fichier avec l'application que tu as choisie pour ce type de fichier, comme un double-clic ; il n'existe que depuis cette machine et refuse les programmes et les scripts. **Télécharger** l'envoie à ton navigateur (utile depuis un téléphone). **Supprimer** efface le fichier du disque. Lutin n'ouvre jamais rien de lui-même, et ne sert, n'ouvre ou ne supprime que les fichiers qu'il a inscrits dans la conversation, situés dans un dossier de travail ou dans le dossier de sortie de ComfyUI. Même carte pour les vidéos et les sons de ComfyUI ; les images, elles, s'affichent directement (un clic les ouvre en grand).
+
+**Faire le ménage : Réglages > Dossiers et données > Fichiers créés par Lutin.** Tout ce que Lutin a créé (documents, images, vidéos, sons) y est listé avec sa taille, sa date et son chemin, avec le total. Coche ce que tu veux effacer, ou *Sélectionner ce qui a plus de 30 jours*, puis *Supprimer la sélection* : les fichiers sont effacés du disque et leur carte disparaît des conversations. 📂 ouvre le dossier d'un fichier. Un fichier déjà supprimé à la main quitte la liste tout seul ; même quand la conversation d'origine n'existe plus, le fichier reste listé (c'est le but). Rien en dehors des dossiers de travail et du dossier de sortie de ComfyUI n'est jamais touché.
 
 ## Aperçu d'une page
 
