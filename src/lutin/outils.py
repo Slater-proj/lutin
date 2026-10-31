@@ -23,7 +23,7 @@ def chemin_sur(rel, ecriture=False):
     rel = str(rel or ".").replace("\\", "/").strip()
     p = (_m.RACINE / rel).resolve()
     if p != _m.RACINE and _m.RACINE not in p.parents:
-        raise _m.ErreurOutil(_t("Chemin refusé : en dehors du projet (« {} »).").format(rel))
+        raise _m.ErreurOutil(_t("Chemin refusé : en dehors du projet (« {} »).").format(rel) + astuce_chemin())
     parties = p.relative_to(_m.RACINE).parts
     if parties and parties[0] == ".git":
         raise _m.ErreurOutil(_t("Le dossier .git est protégé."))
@@ -33,6 +33,11 @@ def chemin_sur(rel, ecriture=False):
     return p
 
 
+def astuce_chemin():
+    """Ce qu'il faut dire au modèle quand un chemin n'existe pas : sinon il improvise avec des commandes (chacune demande un accord) pour atteindre un dossier hors du projet."""
+    return _t(" Les chemins sont relatifs au projet ({}). Un dossier situé en dehors du projet doit d'abord être ajouté comme dossier de travail (Réglages) ; demande-le à l'utilisateur plutôt que de le contourner avec des commandes.").format(_m.RACINE.name)
+
+
 def rel(p):
     return Path(p).resolve().relative_to(_m.RACINE).as_posix() or "."
 
@@ -40,7 +45,7 @@ def rel(p):
 def outil_lister(dossier="."):
     d = chemin_sur(dossier)
     if not d.is_dir():
-        raise _m.ErreurOutil(_t("Ce n'est pas un dossier : ") + rel(d))
+        raise _m.ErreurOutil(_t("Ce n'est pas un dossier : ") + rel(d) + astuce_chemin())
     lignes = []
     for f in sorted(d.iterdir(), key=lambda x: (x.is_file(), x.name.lower())):
         if f.name in _m.DOSSIERS_IGNORES or (f.is_dir() and _m.ignore_chemin(f)):
@@ -63,7 +68,7 @@ def rappel_formats():
 def outil_lire(chemin, debut=1, fin=None):
     f = chemin_sur(chemin)
     if not f.is_file():
-        raise _m.ErreurOutil(_t("Fichier introuvable : ") + rel(f))
+        raise _m.ErreurOutil(_t("Fichier introuvable : ") + rel(f) + astuce_chemin())
     if f.suffix.lower() in rappel_formats():
         from . import extraction, rappel
         try:
@@ -779,7 +784,7 @@ def outil_executer(commande, ctx, shell="cmd"):
     except UnicodeDecodeError:
         texte = sortie.decode("cp850", "replace")
     if len(texte) > _m.SORTIE_MAX:
-        texte = texte[:_m.SORTIE_MAX // 2] + _t("\n... (sortie coupée) ...\n") + texte[-_m.SORTIE_MAX // 2:]
+        texte = texte[:_m.SORTIE_MAX // 2] + _t("\n... (sortie coupée : {} caractères au milieu ; pour lire un fichier, utilise l'outil « lire » avec debut et fin, il donne les numéros de ligne et dit où reprendre) ...\n").format(len(texte) - _m.SORTIE_MAX) + texte[-_m.SORTIE_MAX // 2:]
     return _t("Code de sortie {}.\n{}").format(code, texte)
 
 

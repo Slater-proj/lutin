@@ -2,6 +2,13 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## 0.11.3
+
+- **Moins de détours quand un dossier est hors du projet** : les erreurs des outils de lecture (« fichier introuvable », « pas un dossier », « chemin refusé ») disent maintenant que les chemins sont relatifs au projet et qu'un dossier extérieur doit être ajouté comme dossier de travail, au lieu de laisser le modèle contourner par des commandes (chacune demandant ton accord). Lire un long fichier en plusieurs fois reste normal et n'est pas bloqué.
+- Une sortie de commande trop longue dit combien de caractères ont été coupés au milieu et renvoie vers l'outil « lire » (avec debut/fin) pour lire un fichier par tranches.
+
+**English.** Tool errors now say paths are relative to the project and that an outside folder must be added as a working folder. A cut command output says how much was cut and points to the “lire” tool for reading files in slices. Reading a long file in several pieces stays allowed.
+
 ## 0.11.2
 
 - **« oui » / « ok » valide ce que le modèle vient de proposer**, au lieu de rejouer une vieille étape de la fiche ou de la liste de tâches (déjà faite, d'où des « c'est déjà fait » suivis de relectures inutiles) ou de ne rien ordonner faute de fiche. L'étape de la fiche n'est plus qu'un rappel, avec la consigne de ne pas la répéter si elle est déjà faite.
