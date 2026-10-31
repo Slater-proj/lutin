@@ -289,7 +289,7 @@ class Assistant(unittest.TestCase):
         systeme = corps["messages"][0]["content"]
         self.assertIn("Contexte (lu par Lutin", systeme, "memoire/CONTEXTE.md est dans les consignes")
         self.assertIn("langue de l'utilisateur", systeme, "le contenu de CONTEXTE.md est bien injecté")
-        self.assertEqual({t["function"]["name"] for t in corps["tools"]}, {"lister", "lire", "chercher", "symboles", "lire_plusieurs", "rappeler", "modifier", "modifier_plusieurs", "ecrire", "executer", "memoriser", "taches", "web_chercher", "web_lire", "etat_outil", "installer_module", "creer_document"})
+        self.assertEqual({t["function"]["name"] for t in corps["tools"]}, {"lister", "lire", "chercher", "symboles", "lire_plusieurs", "rappeler", "modifier", "modifier_plusieurs", "ecrire", "executer", "memoriser", "taches", "web_chercher", "web_lire", "etat_outil", "installer_module", "creer_document", "apercu_page"})
         # la conversation continue avec son historique
         chat("Et ensuite ?", conversation=fin["id"], reponses=[[{"content": "Voilà."}]])
         self.assertEqual([m["role"] for m in RECUES[-1]["messages"]], ["system", "user", "assistant", "user"])

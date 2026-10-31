@@ -7,6 +7,8 @@ The following versions are published automatically (generated notes on the Relea
 - **Missions longues** (nouvel addon) : un cahier des charges confié pour des heures (un jeu complet, une refonte…), mené tour après tour sans toi, avec tous les outils, autonome ou à blanc, avec limites, pause, consigne en route, question du modèle, bilan, reprise après un redémarrage. Le « Travail de fond » devient « Traitement de documents ».
 - **PDF et Word** : l'outil `creer_document` écrit des .pdf, .docx, .md, .txt, .html, .csv (Markdown simple), sans bibliothèque, et relit le fichier.
 - **Les images créées avec ComfyUI s'affichent dans la conversation** (cliquables en grand).
+- **Sous l'image : son chemin, Télécharger, Supprimer.** Erreurs de ComfyUI détaillées (message, nœud fautif, exception). Nouvel outil **apercu_page** : capture d'une page HTML dans Chrome/Edge/Chromium sans fenêtre, avec le texte affiché et les erreurs de la console.
+- **Les fichiers créés (PDF, Word, Markdown, vidéo, son) apparaissent dans la conversation** : une carte avec Ouvrir (l'application choisie dans Windows, depuis cette machine seulement), Télécharger et Supprimer.
 - **Les addons s'ouvrent vite** : la page de ComfyUI mettait 5 à 12 s quand il est éteint (six connexions refusées, ~2 s chacune sous Windows) ; un test de port de 0,3 s suffit.
 - **Recherche par le sens (facultative)** : un petit modèle d'embeddings d'Ollama (installable d'un clic) permet au rappel du fil de retrouver un passage qui n'emploie pas les mots de la question ; fusion avec la recherche par mots, retour aux mots sans erreur si le modèle manque, vecteurs gardés sur le disque, vectorisation bornée en temps.
 

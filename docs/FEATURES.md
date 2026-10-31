@@ -68,6 +68,8 @@ Ask for an image in the conversation: **Lutin starts ComfyUI itself** when neede
 - **Installed models**: read from ComfyUI (what it really sees: checkpoints, LoRA, VAE, diffusion models), or from the installation folder when ComfyUI is off. The model can also list them (`comfy_modeles`) before choosing.
 - **Generating**: the model calls `comfy_generer` with a description (and size, model, seed…). **Each generation asks for your approval** (simulated, never done, in read-only runs such as scheduled tasks or Telegram), the language model gives up the graphics card first, then Lutin submits the workflow, waits for the result (the *Stop* button interrupts ComfyUI too) and tells where the file is.
 - **Your models decide the workflow**: a classic checkpoint uses the `image` workflow; a model in `diffusion_models` uses the one of its family, recognized by its file name (**Flux**, **Qwen-Image**, **Z-Image**), with the text encoder and the VAE picked among those installed (and a clear message naming the missing file and its folder if one is absent). Both ComfyUI list formats are understood. These workflows follow ComfyUI's standard ones; if one does not suit your files, edit it in **Flow…**.
+- **The image is shown in the conversation**, with its file **path** below, a **Download** button and a **Delete** button (erases the created file, but only inside ComfyUI's output folder).
+- **Errors are readable**: when ComfyUI refuses or fails a job, the model receives ComfyUI's message, the faulty node (“Node 4 (CheckpointLoaderSimple): Value not in list…”) and the execution exception, not just an HTTP code: it diagnoses in one pass.
 - **Workflows are data**: an image workflow is shipped; for video or sound, paste your own workflow (ComfyUI: *Save (API Format)*) in the addon's **Flow…** editor under `workflows`, with `{prompt}`, `{largeur}`, `{hauteur}`, `{graine}`, `{pas}`, `{cfg}`, `{negatif}`, `{modele}` where Lutin should write. The JSON is checked before saving, and the shipped version comes back in one click.
 
 ## Telegram addon
@@ -94,6 +96,12 @@ The former “Background work” is now called **Document processing**: it appli
 ## Creating PDFs, Word documents, Markdown
 
 The model has a `creer_document` tool: depending on the extension (`.pdf`, `.docx`, `.md`, `.txt`, `.html`, `.csv`) it writes the file in the working folder, after your approval, keeping a backup of the previous version. The content is simple Markdown (headings, paragraphs, lists, code blocks, separators, tables; bold, italic and code in Word). No library: the PDF (A4, numbered pages, standard fonts, accents kept) and the Word file are built by Lutin, then **read back** before being announced. A character outside the Latin alphabet (emoji, ideogram) becomes “?” in the PDF rather than breaking the file. No images, formatted tables or custom footers for now.
+
+**Created files appear in the conversation**, like an attachment: a card with the name, size, path, and three buttons. **Open** asks Windows (or macOS, Linux) to open the file with the application you chose for this kind of file, like a double-click; it only exists from this machine and refuses programs and scripts. **Download** sends it to your browser (handy from a phone). **Delete** erases the file from the disk. Lutin never opens anything by itself, and only serves, opens or deletes files it registered in the conversation, located in a working folder or in ComfyUI's output folder. The same card is used for ComfyUI videos and sounds; images are shown directly (a click opens them full size).
+
+## Page preview
+
+The `apercu_page` tool opens an HTML file of the working folder (or an address of this machine, `http://127.0.0.1:port/`) in an **already installed Chrome, Edge or Chromium**, windowless, and takes a screenshot (about 2 seconds). You see the **screenshot in the conversation**; the model receives the **text actually displayed**, the title and the **JavaScript console errors** (“Uncaught ReferenceError: start is not defined (page.html:12)”): it checks the rendering of a page or a script before saying “it works”. It does not see the image itself. Asks for your approval (automatic command approval in a mission); temporary browser profile thrown away afterwards; no remote page.
 
 ## Addons: optional features, one by one
 

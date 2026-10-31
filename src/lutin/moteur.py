@@ -401,6 +401,7 @@ from .revue import (  # noqa: F401  (déplacé dans revue.py : moteur ré-export
     chercher_conversations,
     epingler_conversation,
     epingler_message,
+    supprimer_media,
     git_commit,
     git_etat,
     git_message,

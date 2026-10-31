@@ -13,6 +13,7 @@ from . import pieces as _pieces
 from . import images as _images
 from . import addons as _addons
 from . import embeddings as _embeddings
+from . import fichiers as _fichiers
 from . import fond as _fond
 from . import planifie as _plan
 from . import rappel as _rappel
@@ -136,6 +137,15 @@ class Gestionnaire(BaseHTTPRequestHandler):
             except ValueError:
                 return self._envoyer(404, {"erreur": _t("Image inconnue.")})
             return self._envoyer(200, octets, mime, {"Content-Security-Policy": "default-src 'none'; sandbox"})
+        if chemin.startswith("/fichier/"):                     # télécharger un fichier produit pendant une conversation (cookie de session, comme /image/)
+            if not self._authentifie():
+                return self._envoyer(401, {"erreur": "authentification requise"})
+            try:
+                _, ident, fichier_id = chemin.split("/", 3)[1:]
+                octets, mime, nom = _fichiers.lire(ident, fichier_id)
+            except ValueError as e:
+                return self._envoyer(404, {"erreur": str(e)})
+            return self._envoyer(200, octets, mime, {"Content-Disposition": "attachment; filename*=UTF-8''" + urllib.parse.quote(nom), "Content-Security-Policy": "default-src 'none'; sandbox"})
         if chemin in ("/", "/index.html"):
             return self._envoyer(200, _m.page_web(), "text/html; charset=utf-8")
         if chemin == "/api/etat":
@@ -485,6 +495,16 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 if not self._configurateur():
                     return self._envoyer(403, {"erreur": _t("L'installation d'un modèle se lance depuis cette machine.")})
                 return self._envoyer(200, _embeddings.demarrer_installation())
+            if self.path in ("/api/fichier-ouvrir", "/api/fichier-supprimer"):
+                if self.path == "/api/fichier-ouvrir" and not self._configurateur():
+                    return self._envoyer(403, {"erreur": _t("L'ouverture d'un fichier se fait depuis cette machine : télécharge-le plutôt.")})
+                try:
+                    f = _fichiers.ouvrir if self.path == "/api/fichier-ouvrir" else _fichiers.supprimer
+                    return self._envoyer(200, f(str(donnees.get("conversation", "")), str(donnees.get("id", ""))))
+                except ValueError as e:
+                    return self._envoyer(400, {"erreur": str(e)})
+            if self.path == "/api/media-supprimer":
+                return self._envoyer(200, _m.supprimer_media(str(donnees.get("conversation", "")), str(donnees.get("id", ""))))
             if self.path == "/api/epingler-message":
                 return self._envoyer(200, _m.epingler_message(str(donnees.get("conversation", "")), donnees.get("index"), donnees.get("epingle")))
             if self.path in ("/api/addon-activer", "/api/addon-reglages", "/api/addon-verifier", "/api/addon-correction", "/api/addon-flux", "/api/addon-flux-restaurer", "/api/addon-action", "/api/fond-creer", "/api/fond-action"):

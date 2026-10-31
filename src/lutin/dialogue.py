@@ -2,6 +2,7 @@
 from pathlib import Path
 from . import archive as _archive
 from . import boucles as _boucles
+from . import fichiers as _fichiers
 from . import mission as _mission
 from . import horsligne as _hl
 from . import images as _images
@@ -577,6 +578,8 @@ def ajuster_contexte(msgs, num_ctx, facteur=1.0, outils=None):
     for m in msgs:
         m.pop("epingle", None)                                   # le marquage est à nous : Ollama ne le reçoit pas
         m.pop("medias", None)
+        m.pop("medias_fichiers", None)
+        m.pop("fichiers_joints", None)
     return msgs
 
 
@@ -987,9 +990,13 @@ def boucle_agent(conv, r, emit, ctx, stop):
             except Exception as erreur:  # noqa: BLE001
                 _m.journaliser("Outil « {} » : erreur inattendue {!r}".format(nom, erreur))
                 resultat = "Erreur inattendue : " + str(erreur)[:300]
-            medias = ctx.pop("medias", [])                  # images produites par l'outil, affichées dans la conversation
-            emit(dict({"type": "resultat", "nom": nom, "texte": resultat[:1500]}, **({"medias": medias} if medias else {})))
-            conv["messages"].append(dict({"role": "tool", "tool_name": nom, "content": resultat[:_m.LECTURE_MAX + 2000]}, **({"medias": medias} if medias else {})))
+            medias, fichiers = ctx.pop("medias", []), ctx.pop("medias_fichiers", {})          # images produites par l'outil (et où elles sont), affichées dans la conversation
+            extra = {"medias": medias, "medias_fichiers": fichiers} if medias else {}
+            joints = [_fichiers.entree(c) for c in ctx.pop("fichiers_joints", [])][:8]           # documents et médias créés : une carte (ouvrir, télécharger, supprimer) sous le message
+            if joints:
+                extra["fichiers_joints"] = joints
+            emit(dict({"type": "resultat", "nom": nom, "texte": resultat[:1500]}, **extra))
+            conv["messages"].append(dict({"role": "tool", "tool_name": nom, "content": resultat[:_m.LECTURE_MAX + 2000]}, **extra))
             _m.conv_ecrire(conv)                        # enregistré à chaque étape : un plantage du PC en pleine demande ne perd que l'étape en cours
         if garde.abandon:
             emit({"type": "info", "texte": _t("↻ Le modèle tourne en rond (le même appel {} fois) : j'arrête cette réponse. Précise ta demande ou écris « continue ».").format(_boucles.SEUIL_ABANDON)})

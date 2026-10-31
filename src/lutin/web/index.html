@@ -191,7 +191,14 @@ pre.diff { width:100%; max-height:340px; overflow:auto; background:#0c1117; bord
 .attention { color:var(--warm); }
 .msg.epingle-msg { box-shadow:inset 3px 0 0 var(--warm); }
 .medias { display:flex; flex-wrap:wrap; gap:8px; margin-top:6px; }
-.medias img { max-width:min(100%, 520px); max-height:520px; border-radius:8px; cursor:zoom-in; }
+.medias img { max-width:min(100%, 520px); max-height:520px; border-radius:8px; cursor:zoom-in; display:block; }
+.media { margin:0; display:flex; flex-direction:column; gap:4px; max-width:min(100%, 520px); }
+.fichiers-joints { display:flex; flex-direction:column; gap:8px; margin-top:6px; }
+.carte-fichier { border:1px solid var(--line, #8884); border-radius:8px; padding:8px 10px; display:flex; flex-direction:column; gap:4px; max-width:min(100%, 520px); }
+.tete-fichier { display:flex; gap:10px; align-items:baseline; justify-content:space-between; }
+.nom-fichier { font-weight:600; word-break:break-all; }
+.chemin-media { font-size:.8em; word-break:break-all; user-select:all; opacity:.8; }
+.bouton-lien { display:inline-block; padding:4px 10px; border:1px solid var(--line, #8884); border-radius:6px; text-decoration:none; color:inherit; font-size:.9em; }
 #listeAddons .ligne { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin:2px 0; }
 .liste-modeles { max-height:240px; overflow:auto; font-size:.82rem; border:1px solid var(--line); border-radius:8px; padding:2px 10px; margin:4px 0 8px; background:#0b1015; }
 .liste-modeles > div { padding:3px 0; border-bottom:1px solid #1a2330; display:flex; gap:8px; align-items:baseline; } .liste-modeles > div:last-child { border-bottom:0; }
@@ -819,7 +826,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
       if (m.role === 'resume') { const d = el('div', 'info', T('Résumé du début de la conversation : ') + m.content.slice(0, 400) + (m.content.length > 400 ? '...' : '')); fil().appendChild(d); }
       else if (m.role === 'user') { const d = el('div', 'msg moi'); d.appendChild(el('div', 'corps', m.content)); miniatures(d, m.images, m.pieces); fil().appendChild(d); }
       else if (m.role === 'assistant') { if (m.content) { const x = messageIA(); rendre(x.c, m.content); } (m.tool_calls || []).forEach(t => fil().appendChild(el('div', 'outil', '⚙ ' + t.function.name + ' ' + JSON.stringify(t.function.arguments).slice(0, 160)))); }
-      else if (m.role === 'tool') { const d = el('div', 'outil'); d.appendChild(el('div', '', '↳ ' + (m.tool_name || T('résultat')))); d.appendChild(el('div', 'res', (m.content || '').slice(0, 700))); afficherMedias(d, m.medias); fil().appendChild(d); }
+      else if (m.role === 'tool') { const d = el('div', 'outil'); d.appendChild(el('div', '', '↳ ' + (m.tool_name || T('résultat')))); d.appendChild(el('div', 'res', (m.content || '').slice(0, 700))); afficherMedias(d, m.medias, m.medias_fichiers); afficherFichiers(d, m.fichiers_joints); fil().appendChild(d); }
     });
     annoter(); afficherTaches(c.taches); majJauge(c.id); setVitesse(c.vitesse); majAnnuler();
     bas();
@@ -897,10 +904,45 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     parent.appendChild(z);
   };
   // Images produites par un outil (ComfyUI) : affichées dans la conversation, un clic les ouvre en grand
-  const afficherMedias = (parent, ids) => {
+  const afficherMedias = (parent, ids, fichiers) => {
     if (!ids || !ids.length) return;
     const z = el('div', 'medias');
-    ids.forEach(id => { const i = document.createElement('img'); i.src = '/image/' + id; i.alt = T('Image générée'); i.addEventListener('click', () => window.open(i.src, '_blank', 'noopener')); z.appendChild(i); });
+    ids.forEach(id => {
+      const f = el('figure', 'media'), i = document.createElement('img'), chemin = (fichiers || {})[id] || '';
+      i.src = '/image/' + id; i.alt = T('Image générée'); i.addEventListener('click', () => window.open(i.src, '_blank', 'noopener')); f.appendChild(i);
+      if (chemin) { const lien = el('code', 'chemin-media', chemin); lien.title = T('Où le fichier est enregistré'); f.appendChild(lien); }
+      const barre = el('div', 'ligne'), tel = el('a', 'bouton-lien', T('Télécharger'));
+      tel.href = i.src; tel.download = (chemin.split(/[\\/]/).pop()) || ('lutin-' + id);
+      const sup = el('button', 'danger', T('Supprimer'));
+      sup.title = T('Retire l\'image de la conversation et supprime le fichier créé');
+      sup.addEventListener('click', async () => {
+        if (!confirm(T('Supprimer cette image ? Le fichier créé est effacé.'))) return;
+        try { await api('/api/media-supprimer', { conversation: CONV.id, id }); f.remove(); CONV.messages.forEach(m => { if (m.medias) m.medias = m.medias.filter(x => x !== id); }); } catch (e) { alert(e.message); }
+      });
+      barre.append(tel, sup); f.appendChild(barre); z.appendChild(f);
+    });
+    parent.appendChild(z);
+  };
+  // Fichiers produits (PDF, Word, vidéo…) : une carte avec Ouvrir (application choisie par Windows), Télécharger et Supprimer
+  const tailleFichier = n => n >= 1048576 ? (n / 1048576).toFixed(1) + ' Mo' : Math.max(1, Math.round(n / 1024)) + ' Ko';
+  const afficherFichiers = (parent, liste) => {
+    if (!liste || !liste.length) return;
+    const z = el('div', 'fichiers-joints');
+    liste.forEach(f => {
+      const c = el('div', 'carte-fichier'), tete = el('div', 'tete-fichier');
+      tete.append(el('span', 'nom-fichier', '📄 ' + f.nom), el('span', 'aide', tailleFichier(f.taille || 0)));
+      c.appendChild(tete); c.appendChild(el('code', 'chemin-media', f.chemin));
+      const barre = el('div', 'ligne'), msg = el('span', 'attention');
+      const ouvrir = el('button', 'principal', T('Ouvrir')); ouvrir.title = T('Ouvre le fichier avec l\'application choisie dans Windows pour ce type de fichier');
+      ouvrir.addEventListener('click', async () => { msg.textContent = ''; try { await api('/api/fichier-ouvrir', { conversation: CONV.id, id: f.id }); } catch (e) { msg.textContent = e.message; } });
+      const tel = el('a', 'bouton-lien', T('Télécharger')); tel.href = '/fichier/' + encodeURIComponent(CONV.id) + '/' + f.id; tel.download = f.nom;
+      const sup = el('button', 'danger', T('Supprimer')); sup.title = T('Retire la carte de la conversation et supprime le fichier');
+      sup.addEventListener('click', async () => {
+        if (!confirm(T('Supprimer ce fichier ? Il est effacé du disque.'))) return;
+        try { await api('/api/fichier-supprimer', { conversation: CONV.id, id: f.id }); c.remove(); CONV.messages.forEach(m => { if (m.fichiers_joints) m.fichiers_joints = m.fichiers_joints.filter(x => x.id !== f.id); }); } catch (e) { msg.textContent = e.message; }
+      });
+      barre.append(ouvrir, tel, sup, msg); c.appendChild(barre); z.appendChild(c);
+    });
     parent.appendChild(z);
   };
   const dessinerPj = () => {
@@ -994,7 +1036,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
             }
           }
           else if (e.type === 'outil') { const d = el('div', 'outil'); d.appendChild(el('div', '', '⚙ ' + e.nom + ' ' + JSON.stringify(e.args).slice(0, 220))); d.dataset.nom = e.nom; zone().appendChild(d); }
-          else if (e.type === 'resultat') { const cartes = [...zone().querySelectorAll('.outil')]; const d = cartes[cartes.length - 1]; if (d) { d.appendChild(el('div', 'res', e.texte)); afficherMedias(d, e.medias); } vider(ia); ia = messageIA(zone()); detailsPensee = null; }
+          else if (e.type === 'resultat') { const cartes = [...zone().querySelectorAll('.outil')]; const d = cartes[cartes.length - 1]; if (d) { d.appendChild(el('div', 'res', e.texte)); afficherMedias(d, e.medias, e.medias_fichiers); afficherFichiers(d, e.fichiers_joints); } vider(ia); ia = messageIA(zone()); detailsPensee = null; }
           else if (e.type === 'approbation') { zone().appendChild(carteAccord(e)); signaler(T('⏸ Accord demandé')); }
           else if (e.type === 'essai') { zone().appendChild(carteEssai(e)); }
           else if (e.type === 'etat') { /* affiché dans la barre d'activité */ }

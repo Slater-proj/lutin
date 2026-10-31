@@ -398,7 +398,11 @@ def outil_document(chemin, contenu, titre, ctx):
     f = chemin_sur(chemin, ecriture=True)
     ext = f.suffix.lower()
     if ext in TEXTES_DOCUMENT:
-        return outil_ecrire(chemin, contenu, ctx)
+        avant = f.stat().st_mtime_ns if f.is_file() else None
+        res = outil_ecrire(chemin, contenu, ctx)
+        if f.is_file() and f.stat().st_mtime_ns != avant:                          # le fichier a vraiment été écrit (pas refusé, pas simulé)
+            ctx.setdefault("fichiers_joints", []).append(str(f))
+        return res
     fabrique = documents.FORMATS.get(ext)
     if fabrique is None:
         raise _m.ErreurOutil(_t("Format non géré : {}. Formats possibles : .md, .txt, .html, .csv, .pdf, .docx.").format(ext or _t("(sans extension)")))
@@ -417,6 +421,7 @@ def outil_document(chemin, contenu, titre, ctx):
     provisoire.write_bytes(octets)
     provisoire.replace(f)
     noter_apres(ctx, f)
+    ctx.setdefault("fichiers_joints", []).append(str(f))
     suite = _t(" Ancienne version sauvegardée dans ") + copie + "." if copie else ""
     try:
         relu = sum(len(texte) for _, texte in extraction.parties(str(f)))
@@ -838,6 +843,7 @@ OUTILS = [
     {"type": "function", "function": {"name": "suivi", "description": "Met à jour la FICHE DE SUIVI de la conversation (relue à chaque réponse, elle te fait retrouver où on en est). Sections : objectif, decisions, plan, etape (l'étape en cours), fait, ouvert (questions ouvertes), fichiers. Appelle-la quand l'objectif est clair, quand une décision est prise, quand un plan est validé, et à chaque étape terminée ; garde les lignes courtes.", "parameters": {"type": "object", "properties": {"section": {"type": "string"}, "texte": {"type": "string"}, "mode": {"type": "string", "description": "remplacer (défaut pour objectif, plan, etape), ajouter (défaut pour les autres) ou retirer."}}, "required": ["section", "texte"]}}},
     {"type": "function", "function": {"name": "taches", "description": "Affiche à l'utilisateur la liste de tes tâches et leur avancement. À utiliser dès qu'une demande a 3 étapes ou plus : crée la liste au début, puis renvoie-la en entier à chaque changement (une seule tâche « en_cours » à la fois).", "parameters": {"type": "object", "properties": {"liste": {"type": "array", "items": {"type": "object", "properties": {"texte": {"type": "string"}, "etat": {"type": "string", "description": "a_faire, en_cours ou fait"}}, "required": ["texte", "etat"]}}}, "required": ["liste"]}}},
     {"type": "function", "function": {"name": "creer_document", "description": "Crée un document : PDF (.pdf), Word (.docx), Markdown (.md), texte, HTML ou CSV, selon l'extension du chemin. Le contenu est du Markdown simple : titres (#, ##, ###), paragraphes, listes à puces (-) ou numérotées (1.), blocs de code (```), séparateurs (---), tableaux (|). Dans Word, **gras**, *italique* et `code` sont rendus. Pour un PDF ou un Word, c'est CET outil qu'il faut utiliser (pas « ecrire »). Le fichier est relu après l'écriture.", "parameters": {"type": "object", "properties": {"chemin": {"type": "string", "description": "Chemin du document avec son extension, par exemple rapports/bilan.pdf"}, "contenu": {"type": "string", "description": "Le texte du document, en Markdown simple."}, "titre": {"type": "string", "description": "Titre du document (facultatif ; placé en tête et dans les propriétés)."}}, "required": ["chemin", "contenu"]}}},
+    {"type": "function", "function": {"name": "apercu_page", "description": "Ouvre une page HTML (fichier du projet, ou http://127.0.0.1:port/…) dans un navigateur sans fenêtre et la photographie : l'utilisateur voit la capture dans la conversation, et tu reçois le texte réellement affiché, le titre et les erreurs de la console JavaScript. À utiliser après avoir modifié une page ou un script, pour vérifier le rendu avant de dire que c'est bon. Tu ne vois pas l'image elle-même.", "parameters": {"type": "object", "properties": {"chemin": {"type": "string", "description": "Fichier HTML du projet (par exemple studio.html) ou adresse locale http://127.0.0.1:8000/."}, "largeur": {"type": "integer", "description": "Largeur de la fenêtre en pixels (défaut 1200)."}, "hauteur": {"type": "integer", "description": "Hauteur en pixels (défaut 800)."}}, "required": ["chemin"]}}},
     {"type": "function", "function": {"name": "mission_terminer", "description": "MISSION LONGUE seulement : déclare la mission terminée, avec le bilan (ce qui a été fait, comment le lancer, ce qui reste imparfait). À appeler seulement quand tout est fait ET vérifié.", "parameters": {"type": "object", "properties": {"bilan": {"type": "string"}}, "required": ["bilan"]}}},
     {"type": "function", "function": {"name": "mission_bloquee", "description": "MISSION LONGUE seulement : tu ne peux pas continuer sans une décision de l'utilisateur. Pose UNE question précise ; la mission attend sa réponse.", "parameters": {"type": "object", "properties": {"question": {"type": "string"}}, "required": ["question"]}}},
     {"type": "function", "function": {"name": "etat_outil", "description": "État de l'outil d'images : version, ComfyUI, modèles et modules installés.", "parameters": {"type": "object", "properties": {}}}},

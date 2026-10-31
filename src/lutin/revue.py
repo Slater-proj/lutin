@@ -240,6 +240,42 @@ def epingler_message(ident, index, epingle):
     return {"ok": True, "epingles": sum(1 for m in msgs if m.get("epingle"))}
 
 
+def supprimer_media(ident, media_id):
+    """Retire une image créée par un outil : de la conversation, de la copie gardée par Lutin si plus rien ne la cite, et du dossier de sortie de ComfyUI (jamais un fichier hors de ce dossier)."""
+    from pathlib import Path
+    from . import addons, images
+    if ident in _m.TOURS_ACTIFS:
+        raise ValueError(_t("Une réponse est en cours dans cette conversation : attends la fin ou arrête-la."))
+    c = _m.conv_lire(ident)
+    trouve = next((m for m in c["messages"] if media_id in (m.get("medias") or [])), None)
+    if trouve is None:
+        raise ValueError(_t("Cette image n'est plus dans la conversation."))
+    chemin = (trouve.get("medias_fichiers") or {}).get(media_id, "")
+    trouve["medias"] = [x for x in trouve["medias"] if x != media_id]
+    (trouve.get("medias_fichiers") or {}).pop(media_id, None)
+    if not trouve["medias"]:
+        trouve.pop("medias", None)
+        trouve.pop("medias_fichiers", None)
+    _m.ecrire_atomique(_m.conv_chemin(ident), json.dumps(c, ensure_ascii=False))
+    supprime = False
+    dossier = addons.reglages("comfyui").get("dossier") or ""
+    if chemin and dossier:
+        sortie = (Path(dossier) / "output").resolve()
+        try:
+            p = Path(chemin).resolve()
+            if sortie in p.parents and p.is_file():
+                p.unlink()
+                supprime = True
+        except OSError:
+            pass
+    if media_id not in images.referencees():
+        try:
+            images.chemin(media_id).unlink()
+        except (OSError, ValueError):
+            pass
+    return {"ok": True, "fichier_supprime": supprime}
+
+
 def chercher_conversations(q):
     """Recherche dans le titre et le contenu des conversations enregistrées."""
     q = " ".join(str(q or "").lower().split())
@@ -298,6 +334,9 @@ def _appeler_outil(nom, args, ctx):
         return _m.outil_web_lire(args.get("url", ""), args.get("debut"), ctx)
     if nom == "taches":
         return _m.outil_taches(args.get("liste", []), ctx)
+    if nom == "apercu_page":
+        from . import apercu
+        return apercu.outil_apercu(args.get("chemin"), args.get("largeur"), args.get("hauteur"), ctx)
     if nom == "creer_document":
         return _m.outil_document(args.get("chemin"), str(args.get("contenu", "")), args.get("titre", ""), ctx)
     if nom in ("mission_terminer", "mission_bloquee"):

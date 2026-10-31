@@ -62,7 +62,7 @@ class FauxComfy(BaseHTTPRequestHandler):
             if SERVICE["histoire"] < 2:
                 return self._rep(200, {})
             if SERVICE["erreur_historique"]:
-                return self._rep(200, {"abc": {"status": {"status_str": "error", "messages": [["execution_error", {"exception_message": "out of memory"}]]}, "outputs": {}}})
+                return self._rep(200, {"abc": {"status": {"status_str": "error", "messages": [["execution_error", {"node_id": "3", "node_type": "KSampler", "exception_type": "torch.OutOfMemoryError", "exception_message": "out of memory"}]]}, "outputs": {}}})
             return self._rep(200, {"abc": {"status": {"status_str": "success"}, "outputs": {"9": {"images": [{"filename": "lutin_00001_.png", "subfolder": "", "type": "output"}]}}}})
         return self._rep(404, {})
 
@@ -73,7 +73,7 @@ class FauxComfy(BaseHTTPRequestHandler):
             return self._rep(200, {})
         if self.path.startswith("/prompt"):
             if SERVICE["refus"]:
-                return self._rep(400, {"error": {"message": "Prompt outputs failed validation"}, "node_errors": {"4": "ckpt_name inconnu"}})
+                return self._rep(400, {"error": {"type": "prompt_outputs_failed_validation", "message": "Prompt outputs failed validation", "details": ""}, "node_errors": {"4": {"class_type": "CheckpointLoaderSimple", "errors": [{"type": "value_not_in_list", "message": "Value not in list", "details": "ckpt_name: 'x.safetensors' not in ['sdxl.safetensors']"}]}}})
             SERVICE["soumis"].append(corps)
             return self._rep(200, {"prompt_id": "abc", "number": 1, "node_errors": {}})
         return self._rep(404, {})
@@ -245,6 +245,33 @@ class ComfyUI(unittest.TestCase):
         # un chemin qui sort du dossier de sortie n'est jamais copié
         self.assertEqual(cu._afficher(["../main.py", "../../secret.png"], self.ctx()), [])
 
+    def test_supprimer_une_image_creee_efface_le_fichier_et_la_copie_mais_jamais_hors_de_la_sortie(self):
+        from lutin import images, revue
+        sortie = COMFY / "output"
+        sortie.mkdir(exist_ok=True)
+        (sortie / "a_supprimer.png").write_bytes(b"\x89PNG\r\n\x1a\n" + b"un")
+        (COMFY / "main_intact.png").write_bytes(b"\x89PNG\r\n\x1a\n" + b"deux")
+        addons.enregistrer_reglages(cu.IDENT, {"dossier": str(COMFY)})
+        ctx = self.ctx()
+        cu._afficher(["a_supprimer.png"], ctx)
+        ident_image = ctx["medias"][0]
+        self.assertEqual(ctx["medias_fichiers"][ident_image], str((sortie / "a_supprimer.png").resolve()))
+        autre = images.enregistrer(b"\x89PNG\r\n\x1a\n" + b"deux")
+        c = _m.conv_nouvelle()
+        c["messages"] = [{"role": "tool", "tool_name": "comfy_generer", "content": "ok", "medias": [ident_image, autre],
+                          "medias_fichiers": {ident_image: str(sortie / "a_supprimer.png"), autre: str(COMFY / "main_intact.png")}}]
+        _m.conv_ecrire(c)
+        self.assertTrue(revue.supprimer_media(c["id"], ident_image)["fichier_supprime"])
+        self.assertFalse((sortie / "a_supprimer.png").exists())
+        self.assertEqual(_m.conv_lire(c["id"])["messages"][0]["medias"], [autre])
+        with self.assertRaises(ValueError):
+            images.chemin(ident_image)
+        self.assertFalse(revue.supprimer_media(c["id"], autre)["fichier_supprime"], "un fichier hors du dossier de sortie n'est jamais effacé")
+        self.assertTrue((COMFY / "main_intact.png").exists())
+        self.assertNotIn("medias", _m.conv_lire(c["id"])["messages"][0])
+        with self.assertRaises(ValueError):
+            revue.supprimer_media(c["id"], autre)
+
     def test_refus_essai_a_blanc_erreurs_et_arret(self):
         res = cu.outil_generer({"prompt": "x"}, self.ctx(accord=False))
         self.assertIn("Refusé", res)
@@ -253,9 +280,14 @@ class ComfyUI(unittest.TestCase):
         self.assertIn("Essai à blanc", res)
         self.assertEqual(SERVICE["soumis"], [])
         SERVICE["refus"] = True
-        self.assertIn("refusé le travail", cu.outil_generer({"prompt": "x"}, self.ctx()))
+        res = cu.outil_generer({"prompt": "x"}, self.ctx())
+        self.assertIn("refusé le travail", res)
+        self.assertIn("Nœud 4 (CheckpointLoaderSimple)", res, "le nœud fautif est nommé")
+        self.assertIn("ckpt_name: 'x.safetensors' not in ['sdxl.safetensors']", res, "avec le détail que ComfyUI donne")
         SERVICE.update(refus=False, histoire=0, erreur_historique=True)
-        self.assertIn("out of memory", cu.outil_generer({"prompt": "x"}, self.ctx()))
+        res = cu.outil_generer({"prompt": "x"}, self.ctx())
+        self.assertIn("out of memory", res)
+        self.assertIn("Nœud 3 (KSampler)", res)
         SERVICE.update(histoire=-10 ** 6, erreur_historique=False)
         ctx = self.ctx()
         fil = threading.Thread(target=lambda: ctx["stop"].set() if time.sleep(0.2) is None else None)

@@ -369,8 +369,8 @@ def appeler(ident, nom, variables=None, delai=DELAI_APPEL):
         with OUVREUR.open(req, timeout=delai) as r:
             brut = r.read(REPONSE_MAX + 1)
     except urllib.error.HTTPError as e:
-        corps_err = e.read(2000).decode("utf-8", "replace")
-        return {"ok": False, "donnees": None, "extrait": {}, "erreur": masquer("HTTP {} : {}".format(e.code, corps_err.strip()[:300]), valeurs)}
+        corps_err = e.read(4000).decode("utf-8", "replace")
+        return {"ok": False, "donnees": None, "extrait": {}, "erreur": masquer("HTTP {} : {}".format(e.code, corps_err.strip()[:300]), valeurs), "corps": masquer(corps_err, valeurs)}
     except (urllib.error.URLError, OSError, ValueError) as e:
         return {"ok": False, "donnees": None, "extrait": {}, "erreur": masquer(_t("Le service ne répond pas : {}").format(e), valeurs)}
     if len(brut) > REPONSE_MAX:

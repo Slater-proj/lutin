@@ -467,6 +467,52 @@ def outil_generer(args, ctx):
             arreter_comfyui()                                                      # ComfyUI rend la mémoire : le modèle de langage la retrouve à la prochaine question
 
 
+def _joindre(fichiers, ctx):
+    """Les fichiers qui ne sont pas des images (vidéo, son) : une carte sous le message pour les ouvrir, les télécharger ou les supprimer."""
+    dossier = addons.reglages(IDENT).get("dossier") or ""
+    if not dossier:
+        return
+    sortie = (Path(dossier) / "output").resolve()
+    for f_ in fichiers[:8]:
+        try:
+            p = (sortie / f_).resolve()
+            if sortie in p.parents and p.is_file() and p.suffix.lower() not in (".png", ".jpg", ".jpeg", ".webp", ".gif"):
+                ctx.setdefault("fichiers_joints", []).append(str(p))
+        except OSError:
+            continue
+
+
+def detail_erreur(corps):
+    """Le diagnostic d'un refus de ComfyUI (HTTP 400) : le message général, puis pour chaque nœud fautif sa classe et ses erreurs (« Value not in list: ckpt_name… »). Le texte brut si ce n'est pas du JSON de ComfyUI."""
+    try:
+        d = json.loads(corps)
+    except (TypeError, ValueError):
+        return str(corps or "")[:600]
+    if not isinstance(d, dict):
+        return str(corps)[:600]
+    lignes = []
+    e = d.get("error")
+    if isinstance(e, dict):
+        lignes.append(" — ".join(str(x) for x in (e.get("type"), e.get("message"), e.get("details")) if x))
+    elif e:
+        lignes.append(str(e))
+    for noeud, info in list((d.get("node_errors") or {}).items())[:8]:
+        if not isinstance(info, dict):
+            continue
+        erreurs = "; ".join(" ".join(str(x) for x in (x_.get("message"), x_.get("details")) if x) for x_ in (info.get("errors") or [])[:3] if isinstance(x_, dict))
+        lignes.append(_t("Nœud {} ({}) : {}").format(noeud, info.get("class_type", "?"), erreurs or "?"))
+    return "\n".join(lignes)[:1500] or str(corps)[:600]
+
+
+def detail_execution(messages):
+    """L'erreur d'exécution d'un travail raté (historique de ComfyUI) : nœud, type d'exception, message."""
+    for m in reversed(messages or []):
+        if isinstance(m, list) and len(m) == 2 and m[0] == "execution_error" and isinstance(m[1], dict):
+            x = m[1]
+            return _t("Nœud {} ({}) : {} — {}").format(x.get("node_id", "?"), x.get("node_type", "?"), x.get("exception_type", "?"), str(x.get("exception_message", "")).strip()[:600])
+    return ""
+
+
 def _afficher(fichiers, ctx):
     """Copie les images produites (PNG, JPEG, WebP, GIF animé) dans les images de Lutin et les attache au résultat de l'outil : la page les affiche dans la conversation. Renvoie les identifiants."""
     from . import images
@@ -479,7 +525,9 @@ def _afficher(fichiers, ctx):
         try:
             p = (sortie / f_).resolve()
             if sortie in p.parents and p.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp", ".gif") and p.is_file():
-                ids.append(images.enregistrer(p.read_bytes()))
+                ident = images.enregistrer(p.read_bytes())
+                ids.append(ident)
+                ctx.setdefault("medias_fichiers", {})[ident] = str(p)
         except (OSError, ValueError):
             continue                                                       # trop grosse, illisible : le chemin reste dans le résultat
     if ids:
@@ -495,7 +543,7 @@ def _soumettre_et_attendre(f, v, complet, type_, ctx):
         _m.journaliser("ComfyUI : libération de la carte impossible ({!r}).".format(erreur))
     r = addons.appeler(IDENT, "soumettre", {"workflow": complet}, delai=30)
     if not r["ok"]:
-        return _t("ComfyUI a refusé le travail : {}").format(r["erreur"])
+        return _t("ComfyUI a refusé le travail :\n{}").format(detail_erreur(r.get("corps")) if r.get("corps") else r["erreur"])
     ident = (r["extrait"] or {}).get("id")
     if not ident:
         return _t("ComfyUI n'a pas donné d'identifiant de travail.")
@@ -511,8 +559,8 @@ def _soumettre_et_attendre(f, v, complet, type_, ctx):
         if entree:
             statut = (entree.get("status") or {}).get("status_str")
             if statut == "error":
-                messages = json.dumps((entree.get("status") or {}).get("messages", [])[-2:], ensure_ascii=False)[:400]
-                return _t("ComfyUI a échoué : {}").format(messages)
+                brut = (entree.get("status") or {}).get("messages", [])
+                return _t("ComfyUI a échoué : {}").format(detail_execution(brut) or json.dumps(brut[-2:], ensure_ascii=False)[:400])
             fichiers = []
             for sortie in (entree.get("outputs") or {}).values():
                 for genre in ("images", "gifs", "videos", "audio"):
@@ -523,6 +571,7 @@ def _soumettre_et_attendre(f, v, complet, type_, ctx):
                 dossier = addons.reglages(IDENT).get("dossier") or ""
                 chemins = [str(Path(dossier) / "output" / f_) if dossier else "output/" + f_ for f_ in fichiers]
                 montrees = _afficher(fichiers, ctx)
+                _joindre(fichiers, ctx)
                 return _t("Terminé ({} fichier(s)) :\n{}\nGraine : {}.").format(len(fichiers), "\n".join(chemins) or _t("(ComfyUI n'a rien enregistré)"), v["graine"]) + (
                     _t("\nL'image est affichée à l'utilisateur dans la conversation : ne la montre pas toi-même et ne répète pas son chemin.") if montrees else "")
         time.sleep(2)
