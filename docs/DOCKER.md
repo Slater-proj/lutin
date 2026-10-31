@@ -129,6 +129,10 @@ AMD: ROCm supports a limited list of cards; for others, Ollama's documentation e
 
 If Lutin does not see the card but Ollama does, declare it by hand so that the recommended models fit: `LUTIN_GPU="My card=16"` (memory in GB).
 
+## Addons in the container
+
+The settings, secrets and state of the addons live in the `/data` volume, so they survive an update. **Telegram, email, X and background work** work as on the host (background work only sees the work folders mounted in the container). **ComfyUI** cannot be started by a container that does not hold it: run Lutin directly on the machine for that addon, or install ComfyUI in your own image and mount its folder.
+
 ## Update, back up, stop
 
 ```bash

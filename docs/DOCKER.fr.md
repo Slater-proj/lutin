@@ -129,6 +129,10 @@ AMD : ROCm gère une liste limitée de cartes ; pour les autres, la documentatio
 
 Si Lutin ne voit pas la carte mais qu'Ollama la voit, déclare-la à la main pour que les modèles conseillés tiennent : `LUTIN_GPU="Ma carte=16"` (mémoire en Go).
 
+## Les addons dans le conteneur
+
+Les réglages, secrets et états des addons sont dans le volume `/data` : ils survivent à une mise à jour. **Telegram, courriel, X et travail de fond** marchent comme sur la machine (le travail de fond ne voit que les dossiers de travail montés dans le conteneur). **ComfyUI** ne peut pas être lancé par un conteneur qui ne le contient pas : lance Lutin directement sur la machine pour cet addon, ou installe ComfyUI dans ta propre image et monte son dossier.
+
 ## Mettre à jour, sauvegarder, arrêter
 
 ```bash
