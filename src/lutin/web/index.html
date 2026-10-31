@@ -1456,7 +1456,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     { n: 'compact', d: T('Résume le début de la conversation pour libérer du contexte'), f: async () => {
       if (!CONV || !sansReponseEnCours()) { if (!CONV) infoLocale(T('Aucune conversation à résumer.')); return; }
       infoLocale(T('Résumé en cours… (le modèle lit la conversation, quelques secondes)'));
-      try { const r = await api('/api/compacter', { conversation: CONV.id }); await ouvrir(CONV.id); infoLocale(T('✔ Résumé fait : ') + r.avant + T(' messages → ') + r.apres + T(' gardés en entier. Contexte : ') + r.jauge.utilise + ' / ' + r.jauge.total + T(' jetons.')); } catch (e) { infoLocale('✘ ' + e.message); }
+      try { const r = await api('/api/compacter', { conversation: CONV.id }); await ouvrir(CONV.id); infoLocale((r.fiche ? T('✔ Début retiré du contexte (la fiche de suivi garde le fil ; « rappeler » le retrouve) : ') : T('✔ Résumé fait : ')) + r.avant + T(' messages → ') + r.apres + T(' gardés en entier. Contexte : ') + r.jauge.utilise + ' / ' + r.jauge.total + T(' jetons.')); } catch (e) { infoLocale('✘ ' + e.message); }
     } },
     { n: 'clear', a: ['nouveau', 'new'], d: T('Commence une nouvelle conversation'), f: () => nouvelle() },
     { n: 'stop', d: T('Arrête la réponse en cours'), f: () => { if (!EN_COURS) infoLocale(T('Rien à arrêter.')); else $('bStop').click(); } },

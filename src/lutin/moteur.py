@@ -141,6 +141,7 @@ def options_echantillonnage(r, reflechit):
     return options
 ENV_OLLAMA = {"OLLAMA_FLASH_ATTENTION": "1", "OLLAMA_KV_CACHE_TYPE": "q8_0", "OLLAMA_KEEP_ALIVE": "5m"}
 TOURS_MAX = 14
+AGE_TACHES_MAX = 3            # réponses de suite sans mise à jour avant que la liste de tâches soit fermée (le modèle est parti sur autre chose)
 GARDE_RESSOURCES_ACTIF = os.environ.get("LUTIN_SANS_GARDE") != "1"          # désactivé dans les tests (qui ne doivent pas dépendre de l'état réel de la machine)
 AUTO_DEMARRAGE = os.environ.get("LUTIN_SANS_DEMARRAGE") != "1"          # démarre Ollama tout seul s'il est arrêté au moment d'une demande (désactivé dans les tests)
 LECTURE_MAX = 7000
@@ -455,6 +456,7 @@ from .dialogue import (  # noqa: F401  (déplacé dans dialogue.py : moteur ré-
     amorcer_fiche,
     compacter,
     compacter_conversation,
+    elaguer,
     memoire_longue,
     repondre_choix_memoire,
     consignes_systeme,

@@ -1632,6 +1632,53 @@ class Assistant(unittest.TestCase):
         A.conv_ecrire(conv)
         return conv["id"]
 
+    def test_mode_fiche_le_debut_sort_en_bloc_sans_resume_et_le_cache_d_ollama_sert(self):
+        """Mode fiche de suivi : pas de résumé par le modèle, le début est retiré EN BLOC (archivé), puis le début de la requête ne change plus d'une réponse à l'autre
+        (sinon Ollama relit tout à chaque fois et la jauge reste pleine). /compact fait la même chose sans solliciter le modèle."""
+        from lutin import archive
+        A.enregistrer_reglages({"memoire_longue": "fichier", "fiche_scribe": False})
+        try:
+            cid = self.conversation_longue()
+            nb = len(A.conv_lire(cid)["messages"])
+            chat("Et la suite ?", conversation=cid, reponses=[[{"content": "Voilà."}]])
+            conv = A.conv_lire(cid)
+            self.assertFalse(conv.get("resume"), "pas de résumé : la fiche garde le fil")
+            self.assertNotEqual(RECUES[-1].get("stream"), False, "et aucun appel au modèle pour résumer")
+            self.assertLess(len(conv["messages"]), nb, "le début est sorti du contexte")
+            self.assertIn("4711-ZEBRE", archive.texte(cid), "mais il reste retrouvable")
+            avant = len(conv["messages"])
+            chat("Autre question", conversation=cid, reponses=[[{"content": "Réponse."}]])
+            debut1 = [m.get("content") for m in RECUES[-1]["messages"][:3]]
+            chat("Encore une", conversation=cid, reponses=[[{"content": "Ok."}]])
+            self.assertEqual(len(A.conv_lire(cid)["messages"]), avant + 4, "pas de nouveau retrait tant que ça tient : le début ne change pas")
+            self.assertEqual([m.get("content") for m in RECUES[-1]["messages"][:3]], debut1, "début de requête identique : le cache d'Ollama sert")
+            SCENARIO[:] = []
+            r = post("/api/compacter", {"conversation": cid})
+            self.assertTrue(r["fiche"])
+            conv = A.conv_lire(cid)
+            self.assertFalse(conv.get("resume"), "/compact en mode fiche ne résume pas")
+            self.assertEqual(len(conv["messages"]), 2, "tout sauf le dernier échange")
+            self.assertFalse(r["jauge"]["reel"])
+        finally:
+            A.enregistrer_reglages({"memoire_longue": "resume", "fiche_scribe": True})
+
+    def test_mode_fiche_ne_retire_jamais_ce_que_le_scribe_n_a_pas_lu(self):
+        """Le scribe retient un rang dans les messages : le retrait du début n'emporte que des messages déjà passés dans la fiche, et le rang suit."""
+        A.enregistrer_reglages({"memoire_longue": "fichier", "fiche_scribe": True})
+        try:
+            cid = self.conversation_longue()
+            conv = A.conv_lire(cid)
+            avant = len(conv["messages"])
+            A.elaguer(conv, dict(A.reglages(), memoire_longue="fichier"), lambda e: None)
+            self.assertEqual(len(conv["messages"]), avant, "scribe jamais passé : rien n'est retiré")
+            conv["scribe_a"] = 8
+            A.elaguer(conv, dict(A.reglages(), memoire_longue="fichier"), lambda e: None)
+            self.assertLess(len(conv["messages"]), avant)
+            self.assertEqual(conv["scribe_a"], 8 - (avant - len(conv["messages"])), "le rang du scribe suit le retrait")
+            self.assertGreaterEqual(conv["scribe_a"], 0)
+        finally:
+            A.enregistrer_reglages({"memoire_longue": "resume", "fiche_scribe": True})
+
     def test_le_resume_garde_le_debut_retrouvable(self):
         """Le résumé automatique retire le début de la conversation : il est archivé, « rappeler » (ici=true) le retrouve, et l'archive disparaît avec la conversation."""
         from lutin import archive
@@ -1768,9 +1815,9 @@ class Assistant(unittest.TestCase):
             self.assertIn("Le code du coffre est 4711-ZEBRE", fiche["decisions"], "le scribe a écrit la décision sans que le modèle ait appelé l'outil")
             self.assertEqual((fiche["etape"], fiche["ouvert"]), (["Ouvrir le coffre"], ["Qui garde la clé ?"]))
             self.assertGreater(A.conv_lire(cid).get("scribe_a", 0), 10, "le scribe retient jusqu'où il a lu")
-            avant = A.conv_lire(cid)["scribe_a"]
             chat("Merci", conversation=cid, reponses=[[{"content": "De rien."}]])
-            self.assertEqual(A.conv_lire(cid)["scribe_a"], avant, "pas de nouveau passage du scribe avant trois échanges")
+            c = A.conv_lire(cid)
+            self.assertEqual(c["scribe_a"], len(c["messages"]) - 2, "pas de nouveau passage du scribe avant trois échanges (son rang suit le retrait du début)")
             A.enregistrer_reglages({"fiche_scribe": False})
             cid2 = self.conversation_longue()
             conv2 = A.conv_lire(cid2)
@@ -1782,6 +1829,27 @@ class Assistant(unittest.TestCase):
                 post("/api/supprimer", {"id": c})
         finally:
             A.enregistrer_reglages({"memoire_longue": "resume", "fiche_scribe": True})
+
+    def test_apres_une_boucle_le_modele_doit_conclure_sans_outil(self):
+        """Au lieu de couper net, un dernier tour SANS outil demande au modèle de conclure avec ce qu'il a obtenu."""
+        appel = appel_outil("lister", dossier="docs")
+        ev = chat("Regarde docs", reponses=[[appel]] * 5 + [[{"content": "Voilà ce que j'ai vu dans docs."}]])
+        self.assertEqual(texte_de(ev), "Voilà ce que j'ai vu dans docs.", "la réponse finale arrive, pas un silence")
+        self.assertNotIn("tools", RECUES[-1], "dernier tour : aucun outil")
+        self.assertIn("Réponds maintenant", RECUES[-1]["messages"][-1]["content"])
+
+    def test_une_liste_de_taches_que_le_modele_ne_tient_plus_est_fermee(self):
+        """Le modèle est parti sur autre chose : la liste ne reste pas affichée pour toujours ; elle lui est rappelée comme périmée, puis fermée."""
+        ev = chat("Prépare le travail", reponses=[[appel_outil("taches", liste=[{"texte": "A", "etat": "en_cours"}, {"texte": "B", "etat": "a_faire"}])], [{"content": "Liste faite."}]])
+        cid = [e for e in ev if e["type"] == "debut"][0]["conversation"]
+        self.assertEqual(len(A.conv_lire(cid)["taches"]), 2)
+        for i in range(2):
+            ev = chat("Autre chose %d" % i, conversation=cid, reponses=[[{"content": "Voilà %d." % i}]])
+            self.assertEqual(len(A.conv_lire(cid)["taches"]), 2, "pas encore fermée")
+        self.assertIn("NON mise à jour", RECUES[-1]["messages"][0]["content"], "le modèle est prévenu que la liste est périmée")
+        ev = chat("Et encore", conversation=cid, reponses=[[{"content": "Ok."}]])
+        self.assertEqual(A.conv_lire(cid)["taches"], [])
+        self.assertTrue(any(e["type"] == "taches" and e["liste"] == [] for e in ev), "la page est prévenue : l'encart disparaît")
 
     def test_le_modele_qui_tourne_en_rond_est_arrete_ou_recoit_l_ordre_d_agir(self):
         """Le même appel d'outil refait : le troisième n'est plus exécuté, le cinquième arrête la réponse. La même réponse deux fois de suite : la demande suivante ordonne d'agir."""

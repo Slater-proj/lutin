@@ -635,12 +635,54 @@ def compacter(conv, r, emit, forcer=False):
         _archive.ajouter(conv["id"], ancien)                  # le résumé perd des détails : le début reste retrouvable (« rappeler »)
         conv["resume"] = nouveau_resume
         conv["messages"] = [m for m in ancien if m.get("epingle")] + msgs[coupe:]          # les messages épinglés restent tels quels, en plus du résumé
+        _decaler_scribe(conv, coupe, len([m for m in ancien if m.get("epingle")]))
         conv.pop("jetons", None)                    # le chiffre de contexte d'avant le résumé n'est plus vrai
         return True
     except (urllib.error.URLError, OSError, ValueError) as erreur:
         # Le résumé a échoué : on ne supprime rien (ajuster_contexte raccourcit déjà ce qui est envoyé au modèle).
         _m.journaliser("Résumé impossible ({}) : conversation {} gardée entière.".format(erreur, conv.get("id")))
         return False
+
+
+def _decaler_scribe(conv, coupe, gardes):
+    """Le scribe retient un RANG dans la liste des messages : quand le début est retiré, ce rang doit suivre, sinon il saute des messages ou croit en avoir lu qu'il n'a pas lus."""
+    if conv.get("scribe_a"):
+        conv["scribe_a"] = max(0, int(conv["scribe_a"]) - coupe) + gardes
+
+
+SEUIL_ELAGAGE = 0.45         # part de la fenêtre que les messages peuvent prendre avant le retrait : avec la fiche (jusqu'à 10 %), le système et les outils, le total reste sous les 68 % où ajuster_contexte se mettrait à rogner
+
+
+def elaguer(conv, r, emit, forcer=False):
+    """Mode « fiche de suivi » : la fiche garde le fil, donc le début de la conversation est retiré EN BLOC (la moitié, ou tout sauf le dernier échange si forcer), sans appeler le modèle, et mis à l'archive (« rappeler »).
+    Sans ce retrait, la conversation grossissait sans fin et ajuster_contexte rognait le début à CHAQUE réponse : le début de la requête changeait à chaque fois, Ollama ne pouvait plus réutiliser son cache
+    (tout relu à chaque réponse : des minutes sur processeur) et la jauge restait pleine. Là, le début ne change qu'à chaque retrait. Renvoie True si quelque chose a été retiré."""
+    msgs = conv["messages"]
+    if forcer:
+        coupe = max((i for i, m in enumerate(msgs) if m["role"] == "user"), default=0)
+    else:
+        if len(msgs) < 8 or estimer(msgs) < int(r["num_ctx"] * SEUIL_ELAGAGE):
+            return False
+        coupe = max(2, len(msgs) // 2)
+        while coupe < len(msgs) and msgs[coupe]["role"] != "user":              # on coupe avant un message de l'utilisateur
+            coupe += 1
+        if r.get("fiche_scribe", True):                                         # jamais de message que le scribe n'a pas encore lu : il ne serait plus dans la fiche
+            lu = int(conv.get("scribe_a") or 0)
+            while coupe > lu:
+                coupe -= 1
+            while coupe > 0 and coupe < len(msgs) and msgs[coupe]["role"] != "user":
+                coupe -= 1
+    if coupe < 2 or coupe >= len(msgs):
+        return False
+    if forcer and r.get("fiche_scribe", True):
+        scribe(conv, r)                                                         # la fiche se met à jour avant que le début disparaisse
+    ancien = msgs[:coupe]
+    _archive.ajouter(conv["id"], ancien)
+    conv["messages"] = [m for m in ancien if m.get("epingle")] + msgs[coupe:]
+    _decaler_scribe(conv, coupe, len([m for m in ancien if m.get("epingle")]))
+    conv.pop("jetons", None)                                                    # le chiffre de contexte d'avant le retrait n'est plus vrai
+    emit({"type": "info", "texte": _t("Conversation longue : les {} plus anciens messages sortent du contexte (la fiche de suivi garde le fil, et tu peux les retrouver avec « rappeler »).").format(len(ancien))})
+    return True
 
 
 def compacter_conversation(ident):
@@ -650,10 +692,12 @@ def compacter_conversation(ident):
     conv = _m.conv_lire(ident)
     avant = len(conv["messages"])
     info = []
-    if not compacter(conv, _m.reglages(), info.append, forcer=True):
+    r = _m.reglages()
+    fiche = memoire_longue(conv, r) == "fichier"
+    if not (elaguer(conv, r, info.append, forcer=True) if fiche else compacter(conv, r, info.append, forcer=True)):
         raise ValueError("Rien à résumer (conversation trop courte) ou le résumé a échoué : voir donnees/lutin.log.")
     _m.conv_ecrire(conv)
-    return {"ok": True, "avant": avant, "apres": len(conv["messages"]), "jauge": jauge_contexte(conv)}
+    return {"ok": True, "avant": avant, "apres": len(conv["messages"]), "jauge": jauge_contexte(conv), "fiche": fiche}
 
 
 def tour(conv, texte, emit, r=None, stop=None, remplacer_depuis=None, identite="", lecture_seule=False, images=(), pieces=()):
@@ -742,6 +786,8 @@ def tour(conv, texte, emit, r=None, stop=None, remplacer_depuis=None, identite="
                         conv["memoire_provisoire"] = {"choix": "fichier", "jusqua": len(conv["messages"]) + 20}
         if r["memoire_longue"] != "fichier":
             compacter(conv, r, emit)
+        elif not lecture_seule:
+            elaguer(conv, r, emit)
         r["rappel_ici"] = r["memoire_longue"] == "fichier" or bool(conv.get("resume"))
         boucle_agent(conv, r, emit, ctx, stop)
     except _m.Arret:
@@ -766,6 +812,12 @@ def tour(conv, texte, emit, r=None, stop=None, remplacer_depuis=None, identite="
             conv.pop("boucle", None)
     except Exception as erreur:  # noqa: BLE001
         _m.journaliser("Détection de boucle impossible : {!r}".format(erreur))
+    if conv.get("taches") and not ctx.get("taches_maj") and not lecture_seule:
+        conv["taches_age"] = int(conv.get("taches_age") or 0) + 1
+        if conv["taches_age"] >= _m.AGE_TACHES_MAX:               # le modèle est parti sur autre chose : la liste n'est plus vraie, elle ne doit pas rester là pour toujours
+            conv["taches"], conv["taches_age"] = [], 0
+            emit({"type": "taches", "liste": []})
+            emit({"type": "info", "texte": _t("La liste de tâches n'était plus mise à jour depuis {} réponses : je la ferme.").format(_m.AGE_TACHES_MAX)})
     if ctx["tour"]["fichiers"]:                       # cette demande a touché des fichiers : le bouton « Annuler » les rétablira
         conv["annulable"] = {"id": ctx["tour"]["id"], "fichiers": sorted(ctx["tour"]["fichiers"])}
     _m.conv_ecrire(conv)
@@ -790,6 +842,7 @@ def boucle_agent(conv, r, emit, ctx, stop):
     if rappels_sources:
         emit({"type": "info", "texte": _t("📎 Rappels ajoutés d'après tes documents : {}").format(" ; ".join(rappels_sources[:4]))})
     fiche, consigne = "", ""
+    forcer_fin = False                                                # le modèle tourne en rond : un dernier tour SANS outil pour qu'il conclue, au lieu de couper net
     if r.get("memoire_longue") == "fichier":
         try:
             fiche = _suivi.texte_pour_modele(conv["id"], r["num_ctx"])            # lue UNE fois pour tout le tour : le début de la requête reste identique, Ollama le garde en cache
@@ -828,7 +881,7 @@ def boucle_agent(conv, r, emit, ctx, stop):
             bloc = "\n\n".join(x for x in (fiche, extraits) if x)
             historique = historique[:dernier_user] + [{"role": "user", "content": bloc}, {"role": "assistant", "content": "Compris, je m'appuie sur " + ("cette fiche." if fiche else "ces extraits.")}] + historique[dernier_user:]
         msgs += historique
-        dernier_tour = idx_tour == tours_max - 1
+        dernier_tour = idx_tour == tours_max - 1 or forcer_fin
         if dernier_tour:             # plus d'outils : le modèle doit répondre avec ce qu'il a trouvé
             msgs.append({"role": "user", "content": "Tu as assez d'informations. Réponds maintenant à ma demande avec ce que tu as vu, sans appeler d'outil. Si quelque chose manque, dis-le."})
         msgs_base = msgs
@@ -980,6 +1033,10 @@ def boucle_agent(conv, r, emit, ctx, stop):
             if appels:
                 contenu = contenu_net
                 emit({"type": "info", "texte": "Le modèle a écrit son appel d'outil en texte au lieu d'utiliser le mécanisme prévu : je l'exécute quand même."})
+        if forcer_fin and appels:                                   # le dernier tour est sans outil : un appel quand même demandé n'est pas exécuté (ce serait recommencer la boucle)
+            appels = []
+            if not contenu.strip():
+                emit({"type": "info", "texte": _t("Le modèle n'a pas conclu. Écris « continue », ou reformule ta demande.")})
         message = {"role": "assistant", "content": contenu}
         if appels:
             message["tool_calls"] = appels
@@ -1040,7 +1097,10 @@ def boucle_agent(conv, r, emit, ctx, stop):
             conv["messages"].append(dict({"role": "tool", "tool_name": nom, "content": resultat[:_m.LECTURE_MAX + 2000]}, **extra))
             _m.conv_ecrire(conv)                        # enregistré à chaque étape : un plantage du PC en pleine demande ne perd que l'étape en cours
         if garde.abandon:
-            emit({"type": "info", "texte": _t("↻ Le modèle tourne en rond (le même appel {} fois) : j'arrête cette réponse. Précise ta demande ou écris « continue ».").format(_boucles.SEUIL_ABANDON)})
-            break
+            if forcer_fin:
+                break
+            forcer_fin = True
+            emit({"type": "info", "texte": _t("↻ Le modèle tourne en rond (le même appel {} fois) : je lui demande de conclure avec ce qu'il a déjà obtenu.").format(_boucles.SEUIL_ABANDON)})
+            continue
     else:
         emit({"type": "info", "texte": "Beaucoup d'étapes d'outils dans ce tour : écris « continue » pour que je poursuive."})

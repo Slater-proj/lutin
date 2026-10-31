@@ -2,6 +2,17 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## 0.10.9
+
+- **Mode fiche de suivi : la conversation ne reste plus « pleine »**. Avant, rien n'était jamais retiré : la conversation grossissait sans fin et le début était rogné à CHAQUE réponse, donc Ollama relisait tout à chaque fois (des minutes sur processeur), la jauge restait au maximum et le modèle finissait par se perdre. Maintenant, quand les messages prennent près de la moitié de la fenêtre, la moitié la plus ancienne sort **en bloc**, sans appel au modèle (la fiche garde le fil, le début reste retrouvable avec « rappeler », et rien n'est retiré avant que le scribe l'ait lu). Le début de la requête ne change qu'à ces moments : le cache d'Ollama sert.
+- **/compact en mode fiche** retire le début tout de suite au lieu d'ajouter un résumé en plus de la fiche. En mode résumé, il résume comme avant.
+- **Une page en arrière-plan ne fige plus la réponse** : si l'onglet est gelé ou ne lit plus (autre onglet, autre PC, téléphone verrouillé), le serveur n'attend plus indéfiniment pour écrire : après 20 secondes il renonce à cette page et la réponse continue, enregistrée dans la conversation. Un battement toutes les 15 secondes garde aussi le flux ouvert derrière un reverse proxy quand le modèle charge ou qu'une commande est longue.
+- **Quand le modèle tourne en rond** (même appel 5 fois), Lutin ne coupe plus net : il lui demande une dernière réponse **sans outil** pour conclure avec ce qu'il a obtenu.
+- **La liste de tâches ne reste plus affichée pour toujours** : si le modèle ne la met pas à jour pendant 3 réponses, il en est prévenu, puis la liste est fermée.
+- Le rang où le scribe en est (« jusqu'où il a lu ») suit désormais le retrait du début, aussi en mode résumé.
+
+**English.** Tracking-sheet mode no longer leaves the conversation “full”: the oldest half now leaves the context in one block (no model call, never before the scribe has read it, still findable with “rappeler”), so Ollama's cache is reused and the gauge goes back down. /compact in sheet mode removes the beginning right away instead of adding a summary on top of the sheet. The scribe's reading position follows the removal.
+
 ## 0.10.8
 
 - **Plus de silence sur « Réflexion »** : quand le modèle réfléchit puis ne répond rien (fréquent après un résultat d'outil, surtout si la conversation dépasse sa fenêtre de contexte), Lutin relance deux fois (réflexion coupée, avec un rappel de répondre) puis, si le modèle reste muet, dit clairement pourquoi et quoi faire. Avant, la page restait sur « Réflexion » sans aucune explication.

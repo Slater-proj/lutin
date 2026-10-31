@@ -39,6 +39,10 @@ import urllib.request
 from . import moteur as _m
 
 
+DELAI_ECRITURE_FLUX = 20      # secondes : une page qui ne lit plus (onglet gelé) ne doit pas figer la réponse
+BATTEMENT_FLUX = 15          # secondes entre deux lignes vides envoyées pour garder le flux ouvert derrière un reverse proxy
+
+
 class Gestionnaire(BaseHTTPRequestHandler):
     server_version = "Lutin/" + _m.VERSION
 
@@ -806,6 +810,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 return self._envoyer(409, {"erreur": str(erreur)})
             _m.RACINE_TOURS[conv["id"]] = str(_m.RACINE)
             _m.TOURS_ACTIFS[conv["id"]] = stop
+        fin_flux = threading.Event()
         try:
             r = _m.appliquer_options(_m.reglages(), conv["id"])
             for k in ("modele", "reflexion", "mode"):
@@ -820,16 +825,35 @@ class Gestionnaire(BaseHTTPRequestHandler):
             self.send_header("X-Accel-Buffering", "no")                  # nginx (reverse proxy) n'attend pas la fin de la réponse pour la transmettre
             self.end_headers()
 
+            page_partie, verrou_flux = [False], threading.Lock()
+            try:
+                self.connection.settimeout(DELAI_ECRITURE_FLUX)
+            except (OSError, ValueError):
+                pass
+
+            def ecrire(octets):
+                # Si la page est fermée ou gelée (onglet en arrière-plan, téléphone verrouillé, proxy qui coupe), le tour continue et la conversation est enregistrée à la fin.
+                # Une page qui ne lit plus remplit la mémoire du réseau : sans délai, l'écriture bloquerait et la réponse se figerait avec elle. Au premier échec on arrête d'écrire.
+                if page_partie[0]:
+                    return
+                with verrou_flux:
+                    try:
+                        self.wfile.write(octets)
+                        self.wfile.flush()
+                    except (OSError, ValueError):
+                        page_partie[0] = True
+
             def emit(evenement):
-                # Si la page est fermée (téléphone verrouillé, rechargement), le tour continue et la conversation est enregistrée à la fin.
-                try:
-                    self.wfile.write((json.dumps(_m.traduire_evenement(evenement), ensure_ascii=False) + "\n").encode("utf-8"))
-                    self.wfile.flush()
-                except (OSError, ValueError):
-                    pass
+                ecrire((json.dumps(_m.traduire_evenement(evenement), ensure_ascii=False) + "\n").encode("utf-8"))
+
+            def battement():
+                while not fin_flux.wait(BATTEMENT_FLUX):                  # une ligne vide (la page l'ignore) : un reverse proxy coupe un flux resté silencieux (modèle qui charge, commande longue, attente d'un accord)
+                    ecrire(b"\n")
+            threading.Thread(target=battement, daemon=True).start()
             emit({"type": "debut", "conversation": conv["id"]})
             _m.tour(conv, texte, emit, r, stop, depuis, identite=self._identite(), images=images, pieces=pieces)
         finally:
+            fin_flux.set()
             with _m.VERROU_TOURS:
                 _m.TOURS_ACTIFS.pop(conv["id"], None)
                 _m.RACINE_TOURS.pop(conv["id"], None)

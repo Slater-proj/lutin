@@ -232,7 +232,9 @@ def texte_taches(conv):
     """Les tâches en cours, rappelées au modèle à chaque tour (elles survivent ainsi au résumé de la conversation)."""
     if not conv.get("taches"):
         return ""
-    return _t("\n\n# TÂCHES EN COURS (liste que tu as créée avec l'outil « taches » ; mets-la à jour en la renvoyant en entier)\n") + "\n".join("{} {}".format(SIGNES_TACHE[t["etat"]], t["texte"]) for t in conv["taches"])
+    ancienne = int(conv.get("taches_age") or 0)
+    rappel = _t("(NON mise à jour depuis {} réponse(s) : renvoie-la à jour, ou renvoie une liste vide si ce n'est plus d'actualité)\n").format(ancienne) if ancienne else ""
+    return _t("\n\n# TÂCHES EN COURS (liste que tu as créée avec l'outil « taches » ; mets-la à jour en la renvoyant en entier)\n") + rappel + "\n".join("{} {}".format(SIGNES_TACHE[t["etat"]], t["texte"]) for t in conv["taches"])
 
 
 def outil_taches(liste, ctx):
@@ -240,6 +242,8 @@ def outil_taches(liste, ctx):
     if conv is None:
         raise _m.ErreurOutil(_t("Pas de conversation active."))
     conv["taches"] = normaliser_taches(liste)
+    conv["taches_age"] = 0
+    ctx["taches_maj"] = True
     if ctx.get("emit"):
         ctx["emit"]({"type": "taches", "liste": conv["taches"]})
     faites = sum(1 for t in conv["taches"] if t["etat"] == "fait")
