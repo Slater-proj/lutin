@@ -39,6 +39,9 @@ def evaluer(m, profil, ctx_voulu=0):
     if profil.sans_gpu():
         if m["go"] <= 3:
             return {"niveau": "bien", "texte": _t("Sans carte graphique, un petit modèle comme celui-ci répond à un rythme correct.")}
+        actif_go = m["go"] * (complet.get("actifs_b") or 0) / complet["params_b"] if complet.get("params_b") else 0          # sur processeur, la vitesse suit la part du modèle qui travaille à chaque mot
+        if 0 < actif_go <= 1.5:
+            return {"niveau": "bien", "texte": _t("Modèle à experts : seule une petite partie travaille à chaque mot, il répond à un rythme correct même sans carte graphique.")}
         return {"niveau": "limite", "texte": _t("Sans carte graphique ce modèle tourne sur le processeur : il répond lentement.")}
     if ctx < 16384:
         return {"niveau": "limite", "texte": _t("Tient à peine : la mémoire ne laisse que {} jetons de conversation.").format(ctx)}

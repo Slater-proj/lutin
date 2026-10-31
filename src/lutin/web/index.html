@@ -732,7 +732,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
   };
   const carteAccord = (a) => {
     const d = el('div', 'accord'); d.dataset.id = a.id;
-    d.appendChild(el('b', '', a.titre)); if (a.detail) d.appendChild(el('div', 'aide', a.detail));
+    d.appendChild(el('b', '', a.titre)); if (a.detail) d.appendChild(el('div', 'aide', a.detail)); if (a.raison) d.appendChild(el('div', 'aide', 'ℹ ' + a.raison));
     if (a.diff) { const pre = el('pre'); a.diff.split('\n').forEach(l => { const s = el('div', l.startsWith('+') && !l.startsWith('+++') ? 'add' : l.startsWith('-') && !l.startsWith('---') ? 'del' : '', l || ' '); pre.appendChild(s); }); d.appendChild(pre); }
     const ligne = el('div', 'ligne'), oui = el('button', 'principal', T('Accepter')), non = el('button', '', T('Refuser'));
     const repondre = async ok => { oui.disabled = non.disabled = true; document.removeEventListener('keydown', surTouche); try { await api('/api/approuver', { id: a.id, ok }); d.style.opacity = .6; d.appendChild(el('div', 'aide', ok ? T('Accepté.') : T('Refusé.'))); } catch (e) { d.appendChild(el('div', 'erreur', e.message)); } };

@@ -730,10 +730,12 @@ def tour(conv, texte, emit, r=None, stop=None, remplacer_depuis=None, identite="
             emit({"type": "essai", "titre": titre, "detail": detail, "diff": diff})
             ctx["dernier_accord"] = "essai"
             return False
+        raison = "" if auto else _t("La case d'accord automatique correspondante n'est pas cochée pour cette conversation.")          # pourquoi on te demande : jamais un mystère
         if auto and ctx.get("web_lu"):
             # Garde-fou : du texte venu d'internet a été lu pendant ce tour, il pourrait contenir une consigne piégée. Plus d'accord automatique jusqu'à la fin du tour.
             emit({"type": "info", "texte": "Du contenu web a été lu : l'accord automatique est suspendu pour la suite de cette demande, ta confirmation est demandée."})
             auto = False
+            raison = _t("Accord automatique suspendu : du contenu web a été lu pendant cette demande, il pourrait contenir une consigne piégée.")
         if auto:
             emit({"type": "info", "texte": "Accord automatique : " + titre})
             ctx["dernier_accord"] = "auto"
@@ -744,7 +746,7 @@ def tour(conv, texte, emit, r=None, stop=None, remplacer_depuis=None, identite="
             ctx["dernier_accord"] = "refuse"
             return False
         a = _m.Attente(titre, detail, diff)
-        emit({"type": "approbation", "id": a.id, "titre": titre, "detail": detail, "diff": diff})
+        emit({"type": "approbation", "id": a.id, "titre": titre, "detail": detail, "diff": diff, "raison": raison})
         ok = a.attendre(stop=stop)
         if stop.is_set():
             raise _m.Arret()

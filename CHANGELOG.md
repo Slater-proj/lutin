@@ -2,6 +2,14 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## 0.10.14
+
+- **Quatre modèles de plus au catalogue**, pensés pour les petites machines : `granite4:tiny-h` (7 milliards dont 1 seul travaille à chaque mot : fait pour aller vite sur processeur), `granite4:3b`, `phi4-mini:3.8b` et `llama3.1:8b`. Notes éditoriales, pas des mesures : lance le banc d'essai 📊 chez toi.
+- **Une demande d'accord dit pourquoi elle est posée** : « la case d'accord automatique n'est pas cochée pour cette conversation », ou « accord automatique suspendu : du contenu web a été lu pendant cette demande » (garde-fou contre les consignes piégées dans une page web). Plus de mystère quand une commande demande ton accord alors que les cases semblent cochées.
+- Les **modèles à experts** sont jugés sur la part qui travaille (« Adapté » sur processeur au lieu de « Limite » quand cette part est petite), car sur processeur la vitesse suit cette part et non la taille du fichier.
+
+**English.** Four more models in the catalogue for small machines (`granite4:tiny-h`, `granite4:3b`, `phi4-mini:3.8b`, `llama3.1:8b`; editorial notes, not measurements). Mixture-of-experts models are rated on the part that works at each word, since on a processor speed follows that part rather than the file size.
+
 ## 0.10.13
 
 - Numéros de version du CHANGELOG corrigés (0.10.9 à 0.10.11 étaient des mises à jour de documentation Intel). **English.** CHANGELOG version numbers fixed.
