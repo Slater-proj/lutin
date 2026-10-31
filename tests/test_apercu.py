@@ -56,6 +56,12 @@ class Apercu(unittest.TestCase):
         self.assertEqual(mime, "image/png")
         self.assertTrue(octets.startswith(b"\x89PNG"))
 
+    def test_le_profil_temporaire_est_supprime(self):
+        import glob
+        avant = set(glob.glob(os.path.join(tempfile.gettempdir(), "lutin-apercu-*")))
+        revue.appeler_outil("apercu_page", {"chemin": "page.html"}, self.ctx())
+        self.assertEqual(set(glob.glob(os.path.join(tempfile.gettempdir(), "lutin-apercu-*"))) - avant, set())
+
     def test_refus_et_essai_a_blanc_n_ouvrent_rien(self):
         ctx = self.ctx(accord=False)
         res = revue.appeler_outil("apercu_page", {"chemin": "page.html"}, ctx)

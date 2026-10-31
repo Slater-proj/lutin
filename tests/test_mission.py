@@ -137,6 +137,35 @@ class Mission(unittest.TestCase):
         self.assertTrue(any("Godot" in (x.get("content") or "") for x in dernier if x.get("role") == "user"))
         self.assertEqual(mission.trouver(m["id"])["note"], "")
 
+    def test_sans_place_libre_la_mission_attend_au_lieu_de_tourner_a_vide(self):
+        self.creer()
+        for i in range(_m.TOURS_SIMULTANES):
+            _m.TOURS_ACTIFS["occupe%d" % i] = __import__("threading").Event()
+        try:
+            self.assertFalse(mission.un_pas(), "aucune place : pas de tour, et un_pas() le dit pour que la boucle attende")
+            self.assertEqual(mission.lire()[0]["tours"], 0)
+        finally:
+            _m.TOURS_ACTIFS.clear()
+        self.assertTrue(mission.un_pas(), "une place se libère : le tour a lieu")
+
+    def test_une_mission_dont_le_dossier_est_occupe_ne_bloque_pas_la_suivante(self):
+        premiere, seconde = self.creer(nom="A"), self.creer(nom="B")
+        vrai = _m.activer_travail
+        appels = []
+
+        def activer(conv, demande=""):
+            appels.append(demande)
+            if len(appels) == 1:
+                raise ValueError("dossier occupé")
+            return vrai(conv, demande)
+        _m.activer_travail = activer
+        try:
+            self.assertTrue(mission.un_pas(), "la seconde mission a tourné")
+        finally:
+            _m.activer_travail = vrai
+        self.assertEqual(mission.trouver(premiere["id"])["tours"], 0)
+        self.assertEqual(mission.trouver(seconde["id"])["tours"], 1)
+
     def test_pause_reprise_arret(self):
         m = self.creer()
         mission.action("pause", {"id": m["id"]})

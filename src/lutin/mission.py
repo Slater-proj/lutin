@@ -131,11 +131,11 @@ def prompt_du_tour(m):
 
 # --------------------------------------------------------------------------- le fil
 def _tour(m):
-    """Un tour de la mission. Renvoie sans rien faire si aucune place n'est libre ou si le dossier de travail est occupé par un autre."""
+    """Un tour de la mission. Renvoie False sans rien faire si aucune place n'est libre ou si le dossier de travail est occupé par un autre, True si un tour a eu lieu."""
     stop = threading.Event()
     with _m.VERROU_TOURS:
         if len(_m.TOURS_ACTIFS) >= _m.TOURS_SIMULTANES:
-            return
+            return False
         conv = _m.conv_lire(m["conv"]) if m.get("conv") and _d.conv_chemin(m["conv"]).exists() else None
         nouvelle = conv is None
         if nouvelle:
@@ -148,7 +148,7 @@ def _tour(m):
             if nouvelle:
                 _d.conv_chemin(conv["id"]).unlink(missing_ok=True)
             modifier(m["id"], message=str(erreur)[:200])
-            return
+            return False
         _m.RACINE_TOURS[conv["id"]] = str(_m.RACINE)
         _m.TOURS_ACTIFS[conv["id"]] = stop
         VIVANT["arrets"][m["id"]] = stop
@@ -168,7 +168,7 @@ def _tour(m):
         VIVANT["arrets"].pop(m["id"], None)
     actuel = trouver(m["id"])
     if actuel is None:
-        return
+        return True
     try:
         apres = _m.conv_lire(conv["id"])
         faits = sum(1 for x in apres["messages"] if x.get("role") == "tool") - avant
@@ -189,6 +189,7 @@ def _tour(m):
             if champs["sans_action"] >= SANS_ACTION_MAX:
                 champs.update(etat="bloquee", question=_t("Je n'avance plus : {} réponses de suite sans aucune action. Que dois-je faire ?").format(SANS_ACTION_MAX), sans_action=0)
     modifier(m["id"], **champs)
+    return True
 
 
 def un_pas():
@@ -199,9 +200,11 @@ def un_pas():
         if time.time() - m["debut"] > m["duree_h"] * 3600 or m["tours"] >= TOURS_MAX:
             modifier(m["id"], etat="terminee", fin=int(time.time()), bilan=m.get("bilan") or _t("Arrêtée : la durée ou le nombre de tours maximal est atteint. Le travail déjà fait est dans le dossier ; relis la conversation « 🎯 » pour l'état exact."))
             continue
-        _tour(m)
-        return True
-    return False
+        if _tour(m):
+            return True
+        if len(_m.TOURS_ACTIFS) >= _m.TOURS_SIMULTANES:
+            return False                                                    # plus de place pour personne : la boucle attend au lieu de tourner à vide
+    return False                                                            # (un dossier occupé n'empêche pas d'essayer la mission suivante)
 
 
 def boucle():

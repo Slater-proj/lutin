@@ -2,6 +2,14 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## 0.8.3
+
+- **Générer une image ne demande plus ton accord à chaque fois** si « Commandes automatiques » est coché (et dans une mission autonome).
+- **Le modèle d'image choisi dans les réglages de ComfyUI est respecté** : il l'emportait sur lui à tort quand le modèle de langage en proposait un autre. Le réglage s'appelle maintenant « Modèle à utiliser » ; un modèle que tu nommes toi-même (même approximativement, « en SDXL »), dans ta demande ou dans le cahier d'une mission, est respecté.
+- Une mission en attente d'une place de réponse ne tourne plus à vide ; l'aperçu de page supprime son profil temporaire même si le navigateur n'a pas fini de le lâcher.
+
+**English.** Generating an image no longer asks for approval every time when “Automatic commands” is ticked (and in an autonomous mission). The image model chosen in ComfyUI's settings is now respected (the language model's suggestion used to override it by mistake); the setting is now called “Model to use”. A mission waiting for a free answer slot no longer spins; the page preview removes its temporary profile even if the browser has not released it yet.
+
 ## 0.8.0
 
 - **Missions longues** (nouvel addon) : un cahier des charges confié pour des heures (un jeu complet, une refonte…), mené tour après tour sans toi, avec tous les outils, autonome ou à blanc, avec limites, pause, consigne en route, question du modèle, bilan, reprise après un redémarrage. Le « Travail de fond » devient « Traitement de documents ».

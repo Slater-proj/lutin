@@ -166,7 +166,7 @@ class ComfyUI(unittest.TestCase):
 
     def ctx(self, accord=True, **plus):
         self.accords = []
-        return dict({"accord": lambda t, d, df: (self.accords.append((t, d)), accord)[1], "stop": threading.Event()}, **plus)
+        return dict({"accord": lambda t, d, df, auto=False: (self.accords.append((t, d, auto)), accord)[1], "stop": threading.Event()}, **plus)
 
     def test_verification_detection_et_dossier_trouve_par_comfyui_lui_meme(self):
         addons.enregistrer_reglages(cu.IDENT, {"dossier": str(COMFY)})
@@ -220,10 +220,14 @@ class ComfyUI(unittest.TestCase):
         self.assertEqual(wf["4"]["inputs"]["ckpt_name"], "sdxl.safetensors", "sans modèle demandé : le premier installé")
         addons.enregistrer_reglages(cu.IDENT, {"modele": "sd15.safetensors"})
         SERVICE["histoire"] = 0
-        cu.outil_generer({"prompt": "x", "modele": "SDXL"}, self.ctx())
-        self.assertEqual(SERVICE["soumis"][1]["prompt"]["4"]["inputs"]["ckpt_name"], "sdxl.safetensors", "ce que le modèle demande l'emporte (à la casse près)")
+        res = cu.outil_generer({"prompt": "x", "modele": "SDXL"}, self.ctx())
+        self.assertEqual(SERVICE["soumis"][1]["prompt"]["4"]["inputs"]["ckpt_name"], "sd15.safetensors", "le modèle choisi dans les réglages l'emporte sur celui que le modèle de langage propose")
+        self.assertIn("réglage de l'utilisateur", res, "et le modèle de langage est prévenu qu'on ne l'a pas suivi")
+        SERVICE["histoire"] = 0
+        cu.outil_generer({"prompt": "x", "modele": "SDXL"}, self.ctx(conv={"messages": [{"role": "user", "content": "Fais-le avec sdxl s'il te plaît"}]}))
+        self.assertEqual(SERVICE["soumis"][2]["prompt"]["4"]["inputs"]["ckpt_name"], "sdxl.safetensors", "un modèle que l'utilisateur nomme dans sa demande est respecté (à la casse près)")
         with self.assertRaises(_m.ErreurOutil) as e:
-            cu.outil_generer({"prompt": "x", "modele": "perso.safetensors"}, self.ctx())
+            cu.outil_generer({"prompt": "x", "modele": "perso.safetensors"}, self.ctx(conv={"messages": [{"role": "user", "content": "avec perso.safetensors"}]}))
         self.assertIn("n'est pas installé", str(e.exception))
         self.assertIn("sdxl.safetensors", str(e.exception), "le message dit quels modèles existent")
         for faux in ({"prompt": ""}, {"prompt": "x", "type": "hologramme"}, {"prompt": "x", "largeur": "beaucoup"}, {"prompt": "x", "type": "video"}):
@@ -271,6 +275,43 @@ class ComfyUI(unittest.TestCase):
         self.assertNotIn("medias", _m.conv_lire(c["id"])["messages"][0])
         with self.assertRaises(ValueError):
             revue.supprimer_media(c["id"], autre)
+
+    def test_les_cases_d_accord_automatique_valent_aussi_pour_generer(self):
+        cu.outil_generer({"prompt": "x"}, self.ctx())
+        self.assertFalse(self.accords[0][2], "sans case cochée : l'accord est demandé")
+        SERVICE["histoire"] = 0
+        cu.outil_generer({"prompt": "x"}, self.ctx(auto_commandes=True))
+        self.assertTrue(self.accords[0][2], "commandes automatiques cochées : pas de question")
+        SERVICE["histoire"] = 0
+        cu.outil_generer({"prompt": "x"}, self.ctx(auto_ecriture=True))
+        self.assertFalse(self.accords[0][2], "l'accord automatique des écritures ne vaut pas pour lancer ComfyUI : c'est la case des commandes")
+
+    def test_un_modele_nomme_a_peu_pres_par_l_utilisateur_est_respecte(self):
+        addons.enregistrer_reglages(cu.IDENT, {"modele": "sd15.safetensors"})
+        casse = {"messages": [{"role": "user", "content": "génère-le en SDXL"}]}                       # le modèle de langage propose le nom complet du fichier
+        self.assertEqual(cu.choisir_modele("sdxl.safetensors", "génère-le en SDXL"), ("image", "sdxl.safetensors"))
+        self.assertEqual(cu.choisir_modele("sdxl.safetensors", "dessine un phare", detail=True), ("image", "sd15.safetensors", "sdxl.safetensors"), "non nommé : le réglage l'emporte et la proposition écartée est rendue")
+        self.assertEqual(cu.choisir_modele("", "", detail=True), ("image", "sd15.safetensors", ""), "sans proposition : le réglage, rien d'écarté")
+        addons.enregistrer_reglages(cu.IDENT, {"modele": ""})
+        self.assertEqual(cu.choisir_modele("sdxl.safetensors", "", detail=True), ("image", "sdxl.safetensors", ""), "sans réglage : la proposition est suivie")
+        addons.enregistrer_reglages(cu.IDENT, {"modele": "absent.safetensors"})
+        with self.assertRaises(_m.ErreurOutil) as e:
+            cu.choisir_modele("", "")
+        self.assertIn("réglage de l'utilisateur", str(e.exception))
+        self.assertTrue(casse)
+
+    def test_dans_une_mission_la_demande_est_le_cahier_des_charges(self):
+        from lutin import mission
+        addons.enregistrer_reglages(cu.IDENT, {"modele": "sd15.safetensors"})
+        vrai_config = _m.config_lue
+        _m.config_lue = lambda: {"emplacements": {"travail": str(_TEMP)}}
+        m = mission.creer("Visuels", "Génère les illustrations avec le modèle sdxl.", "principal", 1, True)
+        try:
+            cu.outil_generer({"prompt": "x", "modele": "sdxl.safetensors"}, self.ctx(mission=m["id"], conv={"messages": [{"role": "user", "content": "Continue la mission"}]}))
+            self.assertEqual(SERVICE["soumis"][-1]["prompt"]["4"]["inputs"]["ckpt_name"], "sdxl.safetensors", "le cahier des charges nomme sdxl")
+        finally:
+            mission.action("supprimer", {"id": m["id"]})
+            _m.config_lue = vrai_config
 
     def test_refus_essai_a_blanc_erreurs_et_arret(self):
         res = cu.outil_generer({"prompt": "x"}, self.ctx(accord=False))

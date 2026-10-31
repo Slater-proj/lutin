@@ -32,10 +32,10 @@
   },
   {
    "cle": "modele",
-   "libelle": "Modèle par défaut",
+   "libelle": "Modèle à utiliser",
    "defaut": "",
    "obligatoire": false,
-   "aide": "Vide : le premier modèle installé."
+   "aide": "Vide : le premier modèle installé. Rempli : toujours celui-là, sauf si tu en nommes un autre dans ta demande."
   },
   {
    "cle": "port",

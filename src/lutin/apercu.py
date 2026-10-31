@@ -10,6 +10,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import time
 import urllib.parse
 from pathlib import Path
 
@@ -60,6 +61,15 @@ def adresse(cible):
     return f.as_uri()
 
 
+def _nettoyer(dossier):
+    """Supprime le profil temporaire ; sous Windows le navigateur met un instant à lâcher ses fichiers, on réessaie."""
+    for _ in range(8):
+        shutil.rmtree(dossier, ignore_errors=True)
+        if not os.path.exists(dossier):
+            return
+        time.sleep(0.5)
+
+
 def _lancer(commande, delai):
     return subprocess.run(commande, capture_output=True, timeout=delai, stdin=subprocess.DEVNULL)
 
@@ -70,7 +80,8 @@ def photographier(url, largeur=1200, hauteur=800, navigateur_=None):
     if not nav:
         raise _m.ErreurOutil(_t("Aucun navigateur (Chrome, Edge ou Chromium) n'est installé sur cette machine : l'aperçu est impossible."))
     largeur, hauteur = max(LARGEUR[0], min(LARGEUR[1], int(largeur))), max(HAUTEUR[0], min(HAUTEUR[1], int(hauteur)))
-    with tempfile.TemporaryDirectory(prefix="lutin-apercu-") as tmp:
+    tmp = tempfile.mkdtemp(prefix="lutin-apercu-")
+    try:
         sortie = Path(tmp) / "capture.png"
         base = nav + ["--headless=new", "--disable-gpu", "--no-first-run", "--disable-extensions", "--hide-scrollbars", "--mute-audio", "--user-data-dir=" + str(Path(tmp) / "profil"),
                       "--window-size=%d,%d" % (largeur, hauteur), "--virtual-time-budget=%d" % ATTENTE_MS]
@@ -86,6 +97,8 @@ def photographier(url, largeur=1200, hauteur=800, navigateur_=None):
         if not sortie.is_file() or sortie.stat().st_size < 100:
             raise _m.ErreurOutil(_t("Le navigateur n'a produit aucune capture : {}").format(photo.stderr.decode("utf-8", "replace").strip()[-300:] or _t("(aucun message)")))
         png = sortie.read_bytes()
+    finally:
+        _nettoyer(tmp)
     console = []
     for ligne in photo.stderr.decode("utf-8", "replace").splitlines():
         m = RE_CONSOLE.search(ligne)

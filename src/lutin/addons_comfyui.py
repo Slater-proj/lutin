@@ -377,28 +377,52 @@ def _correspond(liste, voulu):
     return contenant[0] if len(contenant) == 1 else ""
 
 
-def choisir_modele(demande=""):
+MOTS_BANALS = {"safetensors", "ckpt", "base", "fp8", "fp16", "fp32", "bf16", "dev", "pruned", "emaonly", "ema", "final", "model", "models", "checkpoint", "diffusion", "scaled", "lora", "vae"}
+
+
+def _nomme(nom, demande, message):
+    """L'utilisateur a-t-il nommé ce modèle dans ses messages ? Par le nom que propose le modèle de langage, par le nom du fichier, ou par un mot distinctif du fichier (« sdxl », « flux »…)."""
+    msg = str(message or "").lower()
+    if not msg:
+        return False
+    racine = str(nom).rsplit("/", 1)[-1].lower().rsplit(".", 1)[0]
+    mots = {str(demande).lower().strip(), racine} | {m for m in re.split(r"[^a-z0-9]+", racine) if len(m) >= 4 and m not in MOTS_BANALS and not m.isdigit()}
+    return any(m and m in msg for m in mots)
+
+
+def choisir_modele(demande="", message="", detail=False):
     """(clé du workflow, nom du fichier) : un checkpoint → le workflow « image » ; un modèle de diffusion (Flux, Qwen-Image, Z-Image…) → celui de sa famille. Sans demande : le réglage, puis le premier modèle utilisable."""
-    demande = str(demande or addons.reglages(IDENT).get("modele") or "").strip()
+    reglage = str(addons.reglages(IDENT).get("modele") or "").strip()
+    demande = str(demande or "").strip()
     checkpoints, diffusion = _installes("checkpoints"), _installes("diffusion_models")
     if not checkpoints and not diffusion:
         raise _m.ErreurOutil(_t("Je ne vois aucun modèle d'image dans ComfyUI (ni dans checkpoints ni dans diffusion_models) : l'utilisateur doit en installer un."))
+    ecarte = ""
+    if reglage and demande:
+        proposee = _correspond(checkpoints, demande) or _correspond(diffusion, demande) or demande
+        if not _nomme(proposee, demande, message):
+            ecarte, demande = demande, ""                  # le modèle de langage propose un modèle que l'utilisateur n'a pas nommé : le réglage de l'utilisateur l'emporte
+
+    def fin(r):
+        return r + ((ecarte,) if detail else ())
+    source_reglage = bool(reglage) and not demande
+    demande = demande or reglage
     if demande:
         trouve = _correspond(checkpoints, demande)
         if trouve:
-            return "image", trouve
+            return fin(("image", trouve))
         trouve = _correspond(diffusion, demande)
         if trouve:
             cle = famille_de(trouve)
             if not cle:
                 raise _m.ErreurOutil(_t("Je ne connais pas la famille du modèle « {} » (Flux, Qwen-Image et Z-Image sont gérés) : l'utilisateur peut coller son propre workflow dans « Flux… ».").format(trouve))
-            return cle, trouve
-        raise _m.ErreurOutil(_t("Le modèle « {} » n'est pas installé. Disponibles : {}").format(demande, ", ".join((checkpoints + diffusion)[:25])))
+            return fin((cle, trouve))
+        raise _m.ErreurOutil(_t("Le modèle « {} » n'est pas installé{}. Disponibles : {}").format(demande, _t(" (c'est le réglage de l'utilisateur)") if source_reglage else "", ", ".join((checkpoints + diffusion)[:25])))
     if checkpoints:
-        return "image", checkpoints[0]
+        return fin(("image", checkpoints[0]))
     for n in diffusion:
         if famille_de(n):
-            return famille_de(n), n
+            return fin((famille_de(n), n))
     raise _m.ErreurOutil(_t("Aucun de tes modèles de diffusion n'est d'une famille que je connais (Flux, Qwen-Image, Z-Image) : {}").format(", ".join(diffusion[:15])))
 
 
@@ -443,7 +467,12 @@ def outil_generer(args, ctx):
     if type_ not in TYPES:
         raise _m.ErreurOutil(_t("Type inconnu : « {} » (image, video ou son).").format(type_))
     f = addons.flux(IDENT)
-    cle, modele = (choisir_modele(args.get("modele")) if type_ == "image" else (type_, ""))          # image : le modèle choisi décide du workflow (checkpoint, Flux, Qwen-Image, Z-Image)
+    ecrit = " ".join(str(m.get("content") or "") for m in ((ctx.get("conv") or {}).get("messages") or [])[-40:] if m.get("role") == "user")          # ce que l'utilisateur a écrit : un modèle qu'il nomme lui-même est respecté
+    if ctx.get("mission"):
+        from . import mission as _mission
+        cahier = _mission.trouver(ctx["mission"]) or {}
+        ecrit += " " + str(cahier.get("cahier") or "") + " " + str(cahier.get("note") or "")             # dans une mission, la demande est le cahier des charges
+    cle, modele, ignore = choisir_modele(args.get("modele"), ecrit, detail=True) if type_ == "image" else (type_, "", "")          # image : le modèle choisi décide du workflow (checkpoint, Flux, Qwen-Image, Z-Image)
     wf = (f.get("workflows") or {}).get(cle)
     if not wf:
         raise _m.ErreurOutil(_t("Aucun workflow « {} » dans le flux de l'addon ComfyUI : l'utilisateur doit en coller un, ou revenir à la version livrée (Extensions > ComfyUI > Flux…).").format(cle))
@@ -456,12 +485,16 @@ def outil_generer(args, ctx):
     if restantes:
         raise _m.ErreurOutil(_t("Le workflow contient des marques que Lutin ne sait pas remplir : {}.").format(", ".join(sorted("{" + x + "}" for x in restantes))))
     detail = _t("Description : {}\nTaille : {}×{} · modèle : {}").format(v["prompt"][:300], v["largeur"], v["hauteur"], v["modele"] or _t("(celui du workflow)"))
-    if not ctx["accord"](_t("Générer {} avec ComfyUI").format({"image": _t("une image"), "video": _t("une vidéo"), "son": _t("un son")}[type_]), detail, ""):
+    auto = bool(ctx.get("auto_commandes"))          # générer lance ComfyUI et prend la carte graphique : la case « Commandes automatiques » vaut aussi pour cela
+    if not ctx["accord"](_t("Générer {} avec ComfyUI").format({"image": _t("une image"), "video": _t("une vidéo"), "son": _t("un son")}[type_]), detail, "", auto=auto):
         from . import outils
         return outils.refus(ctx, _t("Refusé par l'utilisateur."))
     lance = assurer_comfyui()
     try:
-        return _soumettre_et_attendre(f, v, complet, type_, ctx)
+        res = _soumettre_et_attendre(f, v, complet, type_, ctx)
+        if ignore:
+            res += _t("\nModèle utilisé : {} (réglage de l'utilisateur) ; le modèle « {} » que tu demandais n'a pas été retenu car l'utilisateur ne l'a pas nommé.").format(modele, ignore)
+        return res
     finally:
         if lance and addons.reglages(IDENT).get("fermer_apres", "oui") != "non":
             arreter_comfyui()                                                      # ComfyUI rend la mémoire : le modèle de langage la retrouve à la prochaine question
