@@ -2,7 +2,11 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
-## 0.10.15
+## 0.11.1
+
+- Numéros de version du CHANGELOG remis d'équerre : la fonction « modèles hors catalogue mieux jugés » est la **0.11.0** (un titre `feat:` fait monter le numéro du milieu, c'est la règle de publication du projet, voir docs/PUBLISHING.fr.md). **English.** CHANGELOG version numbers aligned: the “models outside the catalogue” feature is **0.11.0** (a `feat:` title bumps the middle number, per the project's publishing rule).
+
+## 0.11.0
 
 - **Les modèles hors catalogue sont mieux jugés** : pour un modèle découvert dans la bibliothèque ou installé à la main, Lutin lit ce qu'Ollama en dit (nombre de paramètres, experts, longueur de contexte, mémoire du contexte, capacités) au lieu d'une estimation. La description de la ligne le dit, y compris « n'appelle pas les outils » le cas échéant. Lecture en arrière-plan, une seule fois par modèle.
 
