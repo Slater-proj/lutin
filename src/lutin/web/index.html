@@ -110,6 +110,8 @@ button.danger:hover { background:linear-gradient(180deg, #b84545, #8f2f2f); }
 @keyframes onde { 0% { box-shadow:0 0 0 0 rgba(90,169,255,.65); transform:scale(.9); } 70% { box-shadow:0 0 0 7px rgba(90,169,255,0); transform:scale(1.05); } 100% { box-shadow:0 0 0 0 rgba(90,169,255,0); transform:scale(.9); } }
 @media (prefers-reduced-motion:reduce) { .travail { animation:none; } }
 /* file d'attente des messages envoyés pendant que l'assistant répond */
+#diagnostic { padding:8px 12px; font-size:.86rem; border-bottom:1px solid var(--line); display:flex; flex-direction:column; gap:6px; }
+#diagnostic .pb { display:flex; flex-wrap:wrap; gap:6px 10px; align-items:center; } #diagnostic .pb.erreur { color:var(--bad, #e57373); } #diagnostic .pb.attention { color:var(--warm); } #diagnostic button { padding:2px 10px; font-size:.8rem; }
 #bandeauMission { padding:6px 12px; font-size:.82rem; border-top:1px solid var(--line); background:#101a14; display:flex; flex-wrap:wrap; gap:6px 10px; align-items:center; }
 #bandeauMission .etat { font-weight:600; } #bandeauMission .detail { color:var(--muted); } #bandeauMission button { padding:2px 10px; font-size:.8rem; }
 #bandeauMission .question { flex:1 1 100%; color:var(--warm); white-space:pre-wrap; } #bandeauMission details { flex:1 1 100%; } #bandeauMission pre { white-space:pre-wrap; margin:4px 0 0; }
@@ -373,6 +375,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     </div>
   </div>
   <section class="page vue" id="p-chat">
+    <div id="diagnostic" hidden role="alert"></div>
     <div id="fil"></div>
     <div id="taches" hidden></div>
     <div id="activite" role="status" aria-live="polite"><span class="pt"></span><span id="activiteTexte"></span></div>
@@ -1259,10 +1262,34 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
       });
     });
   };
+  const afficherDiagnostic = liste => {
+    const bloc = $('diagnostic'), cle = JSON.stringify(liste);
+    if (bloc.dataset.cle === cle) return;
+    bloc.dataset.cle = cle; bloc.hidden = !liste.length; bloc.textContent = '';
+    for (const p of liste) {
+      const ligne = el('div', 'pb ' + p.niveau), a = p.action;
+      ligne.appendChild(el('span', '', (p.niveau === 'erreur' ? '⛔ ' : '⚠ ') + p.texte));
+      if (a) {
+        const b = el('button', '', a.type === 'installer_modele' ? T('Installer ce modèle') : a.type === 'demarrer_ollama' ? T('Démarrer Ollama') : T('Ouvrir les modèles'));
+        b.addEventListener('click', async () => {
+          b.disabled = true;
+          try {
+            if (a.type === 'installer_modele') { await api('/api/installer-modele', { modele: a.modele }); ouvrirOnglet('modeles'); }
+            else if (a.type === 'demarrer_ollama') await api('/api/demarrer-ollama', {});
+            else ouvrirOnglet(a.nom);
+          } catch (e) { ligne.appendChild(el('span', '', ' ' + e.message)); }
+          b.disabled = false; rafraichir();
+        });
+        ligne.appendChild(b);
+      }
+      bloc.appendChild(ligne);
+    }
+  };
   const rafraichir = async () => {
     try { ETAT = await api('/api/etat'); } catch (e) { return; }
     $('pOllama').classList.toggle('ok', ETAT.ollama); $('pOllama').lastChild.textContent = ETAT.ollama ? T('Ollama prêt') : (ETAT.ollama_installe ? T('Ollama arrêté') : T('Ollama non installé')); $('pOllama').title = $('pOllama').lastChild.textContent;
     $('bDemarrer').hidden = ETAT.ollama || !ETAT.ollama_installe;
+    afficherDiagnostic(ETAT.diagnostic || []);
     $('racine').textContent = T('Projet : ') + ETAT.racine;
     // Le choix du modèle ne propose que les modèles INSTALLÉS (l'installation se fait dans l'onglet Modèles).
     const s = $('selModele'), v = s.value || ETAT.reglages.modele; s.textContent = '';

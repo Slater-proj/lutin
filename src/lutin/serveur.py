@@ -4,6 +4,7 @@ from . import bench as _bench
 from . import acces as _acces
 from . import adequation as _adequation
 from . import conseil as _conseil
+from . import diagnostic as _diagnostic
 from . import emplacements as _emplacements
 from . import decouverte as _decouverte
 from . import donnees as _donnees
@@ -14,6 +15,7 @@ from . import images as _images
 from . import addons as _addons
 from . import embeddings as _embeddings
 from . import fichiers as _fichiers
+from . import machine as _machine
 from . import mission as _mission
 from . import fond as _fond
 from . import planifie as _plan
@@ -90,6 +92,17 @@ class Gestionnaire(BaseHTTPRequestHandler):
         """Le navigateur est sur cette machine : connexion de boucle locale, nom d'hôte de boucle locale, et aucun en-tête laissant croire qu'un relais (proxy, tunnel) a transmis une requête venue d'ailleurs."""
         relais = ("X-Forwarded-For", "X-Forwarded-Host", "X-Forwarded-Proto", "Forwarded", "Via", "X-Real-IP")
         return self._local() and not any(self.headers.get(h) for h in relais) and (_sec._est_boucle(_sec._sans_port(self.headers.get("Host") or "")) or bool(_m.IP_LAN and _sec._sans_port(self.headers.get("Host") or "") == _m.IP_LAN))
+
+    @staticmethod
+    def _diagnostic(o, r, profil, modeles):
+        """Ce qui empêche Lutin de répondre (ou le gêne), pour la bannière du haut de la page."""
+        jauge = _emplacements.jauge_modeles() or {}
+        libre = jauge.get("libre")
+        try:
+            return _diagnostic.diagnostiquer(o["actif"], bool(_m.chemin_ollama()), o["installes"], r, profil, _m._CATALOGUE, _adequation.pour_la_liste(modeles, profil, _m._CATALOGUE["modeles"]),
+                                             libre / 1e9 if libre else None)
+        except (KeyError, TypeError, ValueError, AttributeError):
+            return []
 
     def _configurateur(self):
         """Peut-on changer ce qui ouvre ou modifie la machine (dossiers de travail, niveau d'accès, restauration) ? Seulement depuis cette machine : au niveau « machine seulement », avec le jeton de la console,
@@ -168,7 +181,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
                                        "familles": {k: _t(v) for k, v in (_m._CATALOGUE.get("familles") or {}).items()}, "disque_modeles": _emplacements.jauge_modeles(),
                                        "version": _m.VERSION, "ollama": o["actif"], "ollama_installe": bool(_m.chemin_ollama()), "installes": o["installes"], "modeles": modeles, "modeles_masques": len(_m.lire_registre_modeles()["masques"]), "actives": list(_m.TOURS_ACTIFS),
                                        "pulls": _m.PULLS, "reglages": r, "conversations": _m.conv_liste(), "racine": str(_m.RACINE), "donnees": str(_m.DONNEES),
-                                       "outil": bool(self._outil_vivant()), "hors_ligne": _hl.actif(), "niveau": _m.SECURITE.niveau, "ouverture_possible": _fichiers.ouverture_possible(), "missions": _mission.par_conversation(), "langue": _i18n.langue(), "langue_reglage": _i18n.langue_configuree(), "cpus": os.cpu_count() or 1, "redemarrage": {"necessaire": _acces.securite_enregistree() != _m.SECURITE, "possible": _acces.peut_redemarrer()}, "nouvelle_version": _m.nouvelle_version_lutin(), "travaux": _m.travaux_etat(), "configurateur": self._configurateur(), "addons_alertes": _addons.alertes(), "embeddings": _embeddings.etat(),
+                                       "outil": bool(self._outil_vivant()), "hors_ligne": _hl.actif(), "niveau": _m.SECURITE.niveau, "ouverture_possible": _fichiers.ouverture_possible(), "missions": _mission.par_conversation(), "langue": _i18n.langue(), "langue_reglage": _i18n.langue_configuree(), "cpus": _machine.cpus_disponibles() or 1, "diagnostic": self._diagnostic(o, r, profil, modeles), "redemarrage": {"necessaire": _acces.securite_enregistree() != _m.SECURITE, "possible": _acces.peut_redemarrer()}, "nouvelle_version": _m.nouvelle_version_lutin(), "travaux": _m.travaux_etat(), "configurateur": self._configurateur(), "addons_alertes": _addons.alertes(), "embeddings": _embeddings.etat(),
                                        "bench": {"en_cours": _m.BENCH["en_cours"], "etape": _m.BENCH["etape"], "erreur": _m.BENCH["erreur"], "mesures": _bench.lire(_m.chemin_bench())}, "attentes": [{"id": a.id, "titre": a.titre, "detail": a.detail, "diff": a.diff} for a in _m.Attente.EN_COURS.values()]})
         if chemin == "/api/conseil":
             r = _m.reglages()

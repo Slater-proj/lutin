@@ -37,6 +37,15 @@ class Ollama:
         try:
             with self._requete(chemin, corps, delai, methode) as r:
                 return json.loads(r.read().decode("utf-8") or "{}")
+        except urllib.error.HTTPError as e:                                    # Ollama a répondu, mais par une erreur : on dit laquelle au lieu de prétendre qu'il est éteint
+            try:
+                detail = str((json.loads(e.read().decode("utf-8", "replace")) or {}).get("error") or "")[:300]
+            except (OSError, ValueError, AttributeError):
+                detail = ""
+            modele = (corps or {}).get("model") if isinstance(corps, dict) else None
+            if e.code == 404 and modele:
+                raise ErreurOllama(_t("Le modèle « {} » n'est pas installé dans Ollama. Installe-le (onglet Modèles, ou en ligne de commande : lutin modeles installer {}) ou choisis-en un déjà installé en haut à gauche.").format(modele, modele)) from e
+            raise ErreurOllama(_t("Ollama a répondu une erreur (HTTP {}) : {}").format(e.code, detail or e.reason)) from e
         except (OSError, ValueError, urllib.error.URLError) as e:
             raise ErreurOllama(_t("Ollama ne répond pas ({}) : {}").format(self.url, e)) from e
 

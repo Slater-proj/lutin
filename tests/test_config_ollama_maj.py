@@ -121,6 +121,31 @@ class ClientOllama(unittest.TestCase):
         with self.assertRaises(ErreurOllama):
             Ollama("http://127.0.0.1:9").installes()
 
+    def test_une_erreur_http_d_ollama_n_est_pas_un_ollama_eteint(self):
+        import http.server
+        import threading
+
+        class Repond404(http.server.BaseHTTPRequestHandler):
+            def do_POST(self):
+                corps = b'{"error":"model absent not found"}'
+                self.send_response(404)
+                self.send_header("Content-Length", str(len(corps)))
+                self.end_headers()
+                self.wfile.write(corps)
+
+            def log_message(self, *a):
+                pass
+        srv = http.server.HTTPServer(("127.0.0.1", 0), Repond404)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        try:
+            with self.assertRaises(ErreurOllama) as cm:
+                Ollama("http://127.0.0.1:%d" % srv.server_port).json("/api/chat", {"model": "absent", "messages": []})
+            self.assertIn("n'est pas installé", str(cm.exception))
+            self.assertNotIn("ne répond pas", str(cm.exception))
+        finally:
+            srv.shutdown()
+            srv.server_close()
+
     def test_capacites(self):
         self.assertEqual(OLLAMA.capacites("qwen3:8b"), ["completion", "tools"])
         self.assertIsNone(OLLAMA.capacites("ancien"), "ancienne version d'Ollama : on ne sait pas")

@@ -258,6 +258,7 @@ Published images: `ghcr.io/slater-proj/lutin:latest` (latest version, complete),
 |---|---|
 | Lutin stops with « volumes … must be writable » | `sudo chown 1000:1000 travail` (and `docker compose down` then `up` if the `lutin-data` volume was created by another user: `docker compose run --rm --user root lutin chown -R 1000:1000 /data /models`) |
 | « Ollama is not responding » | Complete image: look at `/data/ollama.log` (`docker compose exec lutin tail /data/ollama.log`). Slim image: `docker compose logs ollama`; with Ollama on the host: `OLLAMA_URL=http://host.docker.internal:11434`. |
+| A red banner at the top of the page, or « The model … is not installed » | Ollama runs (green dot) but **no model is installed**: a fresh container has none. Click **Install this model** in the banner (the best fit for the machine), or `docker compose exec lutin ollama pull qwen3:4b`. |
 | The page answers « host name not allowed » | You reach it by a name Lutin does not know. Use `localhost`, a private address, or (`proxy` level) the address declared in `LUTIN_URL_PUBLIQUE`. |
 | The recommended models are too small | The card is not seen by Lutin: `--gpus all` / `-f docker-compose.gpu.yml`, or `LUTIN_GPU`. |
 | Model download impossible | `LUTIN_HORS_LIGNE=1` is on, or there is no access to the Internet. |

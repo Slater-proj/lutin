@@ -258,6 +258,7 @@ Les images publiées : `ghcr.io/slater-proj/lutin:latest` (dernière version, co
 |---|---|
 | Lutin s'arrête avec « volumes … accessibles en écriture » | `sudo chown 1000:1000 travail` (et `docker compose down` puis `up` si le volume `lutin-data` a été créé par un autre utilisateur : `docker compose run --rm --user root lutin chown -R 1000:1000 /data /models`) |
 | « Ollama ne répond pas » | Image complète : regarde `/data/ollama.log` (`docker compose exec lutin tail /data/ollama.log`). Image légère : `docker compose logs ollama` ; avec Ollama sur l'hôte : `OLLAMA_URL=http://host.docker.internal:11434`. |
+| Une bannière rouge en haut de la page, ou « Le modèle … n'est pas installé » | Ollama tourne (pastille verte) mais **aucun modèle n'est installé** : un conteneur neuf n'en a pas. Clique sur **Installer ce modèle** dans la bannière (le plus adapté à la machine), ou `docker compose exec lutin ollama pull qwen3:4b`. |
 | La page répond « nom d'hôte non autorisé » | Tu accèdes par un nom que Lutin ne connaît pas. Utilise `localhost`, une adresse privée, ou (niveau `proxy`) l'adresse déclarée dans `LUTIN_URL_PUBLIQUE`. |
 | Les modèles conseillés sont trop petits | La carte n'est pas vue par Lutin : `--gpus all` / `-f docker-compose.gpu.yml`, ou `LUTIN_GPU`. |
 | Téléchargement de modèle impossible | `LUTIN_HORS_LIGNE=1` est actif, ou pas d'accès à Internet. |

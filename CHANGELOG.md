@@ -2,6 +2,14 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## 0.10.7
+
+- **Un diagnostic clair dès l'ouverture** : si Lutin ne peut pas répondre, une bannière en haut de la page dit pourquoi (Ollama arrêté ou absent, **aucun modèle installé**, modèle choisi absent ou trop gros, disque presque plein) avec le bouton qui règle le problème (*Installer ce modèle* — le plus adapté à la machine —, *Démarrer Ollama*, *Ouvrir les modèles*). Dans Docker, un conteneur neuf a Ollama mais aucun modèle : la pastille verte ne le disait pas.
+- **Les erreurs d'Ollama sont nommées** : un modèle introuvable (HTTP 404) ne s'affiche plus « Ollama ne répond pas » mais « Le modèle … n'est pas installé », avec quoi faire.
+- **Limite de processeurs d'un conteneur** (`cpus:`) : Lutin la lit et règle le nombre de fils de calcul en conséquence, au lieu de compter les cœurs de l'hôte.
+
+**English.** A clear diagnosis on opening: when Lutin cannot reply, a banner at the top of the page says why (Ollama stopped or missing, **no model installed**, chosen model missing or too big, disk nearly full) with the button that fixes it (*Install this model*, *Start Ollama*, *Open the models*). Ollama errors are named: a missing model (HTTP 404) no longer reads “Ollama is not responding”. A container CPU limit (`cpus:`) is read and sets the compute threads accordingly.
+
 ## 0.10.6
 
 - **Les fiches de suivi se gèrent depuis le menu « … » de chaque conversation** : *Voir ou modifier la fiche…* (celle de la conversation du menu, même si elle n'est pas ouverte) et *Supprimer la fiche* (avec confirmation). L'éditeur propose maintenant « Supprimer la fiche » au lieu de « Vider ».

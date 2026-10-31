@@ -123,6 +123,11 @@ def options_modele(r, temperature, **extra):
     options = {"num_ctx": r["num_ctx"], "temperature": temperature}
     if r.get("num_thread"):
         options["num_thread"] = r["num_thread"]
+    else:
+        from .machine import cpus_disponibles
+        limite = cpus_disponibles()
+        if 0 < limite < (os.cpu_count() or 0):
+            options["num_thread"] = limite                    # conteneur limité à N processeurs : Ollama ne lance pas 18 fils sur 6 processeurs (ils se gêneraient)
     options.update(extra)
     return options
 

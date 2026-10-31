@@ -268,6 +268,26 @@ def analyser_meminfo(texte):
     return valeurs.get("MemTotal", 0) / GO, valeurs.get("MemAvailable", valeurs.get("MemFree", 0)) / GO
 
 
+def cpus_disponibles(racine="/sys/fs/cgroup"):
+    """Le nombre de processeurs que ce processus peut vraiment utiliser : les cœurs de la machine, sauf si un conteneur a reçu une limite (cpus: '6' dans docker-compose)."""
+    n = os.cpu_count() or 0
+    try:
+        quota, periode = (Path(racine) / "cpu.max").read_text().split()[:2]               # cgroup v2 : « 600000 100000 » = 6 processeurs ; « max 100000 » = pas de limite
+        if quota != "max" and int(periode) > 0:
+            n = min(n, max(1, int(-(-int(quota) // int(periode)))))
+            return n
+    except (OSError, ValueError):
+        pass
+    try:
+        quota = int((Path(racine) / "cpu/cpu.cfs_quota_us").read_text().strip())          # cgroup v1
+        periode = int((Path(racine) / "cpu/cpu.cfs_period_us").read_text().strip())
+        if quota > 0 and periode > 0:
+            n = min(n, max(1, int(-(-quota // periode))))
+    except (OSError, ValueError):
+        pass
+    return n
+
+
 def imposer_budget(texte):
     """Le budget voulu par l'utilisateur (Go), ou 0 s'il n'en a pas donné ou si la valeur est absurde."""
     try:
@@ -337,7 +357,7 @@ def lister_disques(systeme):
 def detecter(lanceur=lancer):
     """Le profil complet de cette machine."""
     systeme = {"Windows": "windows", "Linux": "linux", "Darwin": "macos"}.get(platform.system(), platform.system().lower())
-    p = Profil(systeme=systeme, architecture=platform.machine().lower(), cpu=platform.processor() or "", coeurs=os.cpu_count() or 0)
+    p = Profil(systeme=systeme, architecture=platform.machine().lower(), cpu=platform.processor() or "", coeurs=cpus_disponibles())
     if systeme == "linux" and (not p.cpu or p.cpu in ("x86_64", "aarch64")):
         try:
             p.cpu = nom_cpu_linux(Path("/proc/cpuinfo").read_text()) or p.cpu

@@ -69,6 +69,29 @@ class Detection(unittest.TestCase):
             (racine / "memory" / "memory.usage_in_bytes").write_text(str(2 * 1024 ** 3))
             self.assertEqual(machine.limite_conteneur(str(racine)), (8.0, 2.0))
 
+    def test_la_limite_de_processeurs_d_un_conteneur_compte(self):
+        import os
+        import tempfile
+        from pathlib import Path
+        cpus = os.cpu_count() or 1
+        with tempfile.TemporaryDirectory() as d:
+            racine = Path(d)
+            self.assertEqual(machine.cpus_disponibles(str(racine)), cpus, "pas de fichier : tous les processeurs")
+            (racine / "cpu.max").write_text("max 100000\n")
+            self.assertEqual(machine.cpus_disponibles(str(racine)), cpus, "« max » : aucune limite")
+            (racine / "cpu.max").write_text("200000 100000\n")
+            self.assertEqual(machine.cpus_disponibles(str(racine)), min(cpus, 2), "cgroup v2 : 2 processeurs")
+            (racine / "cpu.max").write_text("150000 100000\n")
+            self.assertEqual(machine.cpus_disponibles(str(racine)), min(cpus, 2), "1,5 processeur : arrondi au-dessus")
+        with tempfile.TemporaryDirectory() as d:
+            racine = Path(d)
+            (racine / "cpu").mkdir()
+            (racine / "cpu" / "cpu.cfs_quota_us").write_text("300000\n")
+            (racine / "cpu" / "cpu.cfs_period_us").write_text("100000\n")
+            self.assertEqual(machine.cpus_disponibles(str(racine)), min(cpus, 3), "cgroup v1 : 3 processeurs")
+            (racine / "cpu" / "cpu.cfs_quota_us").write_text("-1\n")
+            self.assertEqual(machine.cpus_disponibles(str(racine)), cpus, "-1 : aucune limite")
+
     def test_le_budget_peut_etre_impose_pour_un_serveur_partage(self):
         import os
         p = Profil(ram_go=32.0, ram_libre_go=10.0)
