@@ -117,7 +117,7 @@ Un conteneur ne voit pas la carte graphique tant qu'on ne la lui donne pas. Sans
 | **NVIDIA** (Linux) | installer le [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) sur l'hôte, puis `docker run --gpus all …` ou `-f docker-compose.gpu.yml` | `:latest` |
 | **NVIDIA** (Windows) | Docker Desktop avec le moteur WSL 2 et un pilote NVIDIA récent ; puis le même `--gpus all` | `:latest` |
 | **AMD** (Linux, carte gérée par ROCm) | pilote amdgpu sur l'hôte, puis `--device /dev/kfd --device /dev/dri --group-add video --group-add <id du groupe render>` ou `-f docker-compose.amd.yml` | `:rocm` |
-| **Intel / carte intégrée** | non utilisée par Ollama dans les conteneurs : le processeur travaille (budget = RAM) | `:latest` |
+| **Intel / carte intégrée** (Arc, Xe) | support Vulkan expérimental d'Ollama (0.12.11+) : `-f docker-compose.intel.yml` (donne `/dev/dri`, le groupe `render` et `OLLAMA_VULKAN=1`). Le gain est modeste car la puce partage sa mémoire avec le processeur : **mesure** avec et sans. Le **NPU** n'est pas utilisé : sur Meteor Lake il n'est pas plus rapide que le processeur pour le texte, et le donner à un conteneur ne fait qu'élargir la surface d'attaque | `:latest` |
 | **Mac** | Docker sous macOS ne peut pas donner le GPU Apple à un conteneur : lance Ollama directement sur le Mac et prends l'image `:slim` avec `OLLAMA_URL=http://host.docker.internal:11434` | `:slim` |
 
 **Vérifier que ça marche** (ne pas croire, vérifier) :
@@ -126,6 +126,8 @@ Un conteneur ne voit pas la carte graphique tant qu'on ne la lui donne pas. Sans
 2. Les premières lignes de `/data/ollama.log` (`docker exec lutin head -20 /data/ollama.log`) disent quelle carte le conteneur voit (NVIDIA, `/dev/kfd`, `/dev/dri`) ; les lignes d'Ollama disent ensuite s'il a trouvé un périphérique de calcul.
 3. Dans la page, **Santé > mémoire vidéo** montre la carte, et une fois un modèle chargé, « modèle chargé à … % sur la carte » : **100 %** = la carte travaille ; **0 %** = c'est le processeur (carte non donnée ou non gérée).
 4. `docker exec lutin lutin doctor` dit « Pas de carte graphique utilisable » et quoi ajouter si le conteneur n'en voit aucune.
+
+Intel : le fichier `docker-compose.intel.yml` n'a **jamais été essayé sur une vraie puce Intel**. Donner `/dev/dri` et le groupe `render` laisse le conteneur utiliser tout le périphérique graphique (et le reste de ce groupe) : à faire seulement si tu l'acceptes. Lutin garde la RAM comme budget (règle `LUTIN_BUDGET_GO` à ce que tu peux prêter), et la mémoire graphique est cette même RAM.
 
 AMD : ROCm gère une liste limitée de cartes ; pour les autres, la documentation d'Ollama explique `HSA_OVERRIDE_GFX_VERSION`. L'image `:rocm` et `docker-compose.amd.yml` n'ont **jamais été essayés sur une vraie carte AMD** : dis-moi ce que tu obtiens.
 
@@ -210,7 +212,7 @@ lutin.exemple.fr {
 
 ### 3. Choisir des modèles pour ce genre de machine
 
-Sans carte graphique utilisable (la puce graphique intégrée Intel n'est pas utilisée par Ollama dans un conteneur), tout tourne sur le processeur. Avec ~8 Go pour les modèles, Lutin conseille :
+Sans carte graphique utilisable (la puce graphique intégrée Intel est facultative et expérimentale, voir plus haut), tout tourne sur le processeur. Avec ~8 Go pour les modèles, Lutin conseille :
 
 | Modèle | Verdict de Lutin | À quoi s'attendre (estimation) |
 |---|---|---|
@@ -231,7 +233,8 @@ Sans carte graphique utilisable (la puce graphique intégrée Intel n'est pas ut
 | Fichiers auto / Commandes auto | ✔ conversation par conversation (décochés par défaut), comme ailleurs ; une **mission « Autonome »** tourne seule, dans le conteneur. |
 | Aperçu d'une page (`apercu_page`) | ✘ pas de navigateur dans l'image : le message le dit |
 | ComfyUI (images) | ✘ ComfyUI ne tourne pas dans le conteneur, et un processeur seul est trop lent pour générer des images |
-| Carte graphique Intel intégrée | ✘ non utilisée par Ollama dans un conteneur |
+| Carte graphique Intel intégrée | ⚠ expérimental (Vulkan, `docker-compose.intel.yml`), gain modeste, jamais essayé |
+| NPU Intel | ✘ non utilisé (aucun gain pour le texte sur Meteor Lake) |
 
 **Mises à jour et sauvegarde** : voir plus bas ; sauvegarde les volumes `lutin-data` et ton dossier `travail`.
 

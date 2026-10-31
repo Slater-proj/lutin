@@ -1,0 +1,13 @@
+# Intel integrated graphics (Arc / Xe) through Vulkan / Carte graphique intégrée Intel (Arc / Xe) par Vulkan :
+#   docker compose -f docker-compose.yml -f docker-compose.intel.yml up -d
+# Uses Ollama's experimental Vulkan support (OLLAMA_VULKAN=1, Ollama 0.12.11 or later) / Utilise le support Vulkan expérimental d'Ollama (OLLAMA_VULKAN=1, Ollama 0.12.11 ou plus).
+# Never tried on a real Intel chip, and the gain is modest (the chip shares its memory with the processor): measure with the ⏱ button of the Models tab, with and without this file / Jamais essayé sur une vraie puce Intel, et le gain est modeste (la puce partage sa mémoire avec le processeur) : mesure avec le bouton ⏱ de l'onglet Modèles, avec et sans ce fichier.
+# The NPU is NOT used (no gain on Meteor Lake, see docs/DOCKER.md) / Le NPU n'est PAS utilisé (aucun gain sur Meteor Lake, voir docs/DOCKER.fr.md).
+services:
+  lutin:
+    devices:
+      - /dev/dri
+    group_add:
+      - "${RENDER_GID:-109}"          # group of /dev/dri/renderD* on the host: getent group render | cut -d: -f3
+    environment:
+      OLLAMA_VULKAN: "1"
