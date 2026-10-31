@@ -1,6 +1,7 @@
 """Le dialogue avec Ollama : démarrage et état d'Ollama, requêtes au modèle, boucle de l'agent (tours d'outils), résumé des conversations, titres. L'état reste dans moteur (« _m.NOM »)."""
 from pathlib import Path
 from . import archive as _archive
+from . import boucles as _boucles
 from . import horsligne as _hl
 from . import images as _images
 from . import modes as _modes
@@ -712,6 +713,14 @@ def tour(conv, texte, emit, r=None, stop=None, remplacer_depuis=None, identite="
                 scribe(conv, r, emit)
         except (OSError, ValueError) as erreur:
             _m.journaliser("Fiche de suivi non mise à jour (conversation {}) : {!r}".format(conv.get("id"), erreur))
+    try:
+        if _boucles.repete_derniere_reponse(conv):
+            conv["boucle"] = int(conv.get("boucle") or 0) + 1
+            emit({"type": "info", "texte": _t("↻ Cette réponse ressemble presque mot pour mot à la précédente : à ta prochaine demande, j'ordonnerai au modèle d'agir au lieu de répéter.")})
+        else:
+            conv.pop("boucle", None)
+    except Exception as erreur:  # noqa: BLE001
+        _m.journaliser("Détection de boucle impossible : {!r}".format(erreur))
     if ctx["tour"]["fichiers"]:                       # cette demande a touché des fichiers : le bouton « Annuler » les rétablira
         conv["annulable"] = {"id": ctx["tour"]["id"], "fichiers": sorted(ctx["tour"]["fichiers"])}
     _m.conv_ecrire(conv)
@@ -757,6 +766,9 @@ def boucle_agent(conv, r, emit, ctx, stop):
         consigne = ""
     if consigne:
         emit({"type": "info", "texte": _t("▶ Validation reçue : j'exécute l'étape en cours sans replanifier.")})
+    elif conv.get("boucle"):                                      # la dernière réponse répétait la précédente : cette fois on ordonne d'agir
+        consigne = _boucles.consigne()
+    garde = _boucles.Garde()
     for idx_tour in range(tours_max):
         msgs = [{"role": "system", "content": consignes_systeme(r) + _m.texte_taches(conv) + rappels_texte}]
         if conv.get("resume"):
@@ -937,11 +949,16 @@ def boucle_agent(conv, r, emit, ctx, stop):
                         args = {}
             if not isinstance(args, dict):
                 args = {}
+            repetitions = garde.compter(nom, args)
             emit({"type": "outil", "nom": nom, "args": {k: (v if not isinstance(v, str) or len(v) < 300 else v[:300] + "...") for k, v in args.items()}})
             try:
-                if nom not in ctx["outils_autorises"]:
+                if repetitions >= _boucles.SEUIL_APPEL:                  # le même appel pour la énième fois : on n'exécute plus, on dit de passer à autre chose
+                    emit({"type": "info", "texte": _t("↻ Le modèle refait le même appel ({} fois) : je lui dis de passer à autre chose.").format(repetitions)})
+                    resultat = _boucles.Garde.message(repetitions)
+                elif nom not in ctx["outils_autorises"]:
                     raise _m.ErreurOutil("L'outil « {} » n'est pas disponible ici (mode ou option désactivés). Outils disponibles : {}.".format(nom, ", ".join(sorted(ctx["outils_autorises"]))))
-                resultat = _m.appeler_outil(nom, args, ctx)
+                else:
+                    resultat = _m.appeler_outil(nom, args, ctx)
             except _m.Arret:
                 for b in appels[position:]:
                     conv["messages"].append({"role": "tool", "tool_name": (b.get("function") or {}).get("name", ""), "content": "Interrompu par l'utilisateur."})
@@ -954,5 +971,8 @@ def boucle_agent(conv, r, emit, ctx, stop):
             emit({"type": "resultat", "nom": nom, "texte": resultat[:1500]})
             conv["messages"].append({"role": "tool", "tool_name": nom, "content": resultat[:_m.LECTURE_MAX + 2000]})
             _m.conv_ecrire(conv)                        # enregistré à chaque étape : un plantage du PC en pleine demande ne perd que l'étape en cours
+        if garde.abandon:
+            emit({"type": "info", "texte": _t("↻ Le modèle tourne en rond (le même appel {} fois) : j'arrête cette réponse. Précise ta demande ou écris « continue ».").format(_boucles.SEUIL_ABANDON)})
+            break
     else:
         emit({"type": "info", "texte": "Beaucoup d'étapes d'outils dans ce tour : écris « continue » pour que je poursuive."})

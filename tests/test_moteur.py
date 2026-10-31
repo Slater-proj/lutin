@@ -499,7 +499,7 @@ class Assistant(unittest.TestCase):
         self.assertIn("user", [m["role"] for m in A.conv_lire(fin)["messages"]], "la demande est gardée")
 
     def test_dernier_tour_sans_outils(self):
-        ev = chat("Fais le tour", reponses=[[appel_outil("lister", dossier="docs")] for _ in range(A.TOURS_MAX - 1)] + [[{"content": "Synthèse finale."}]])
+        ev = chat("Fais le tour", reponses=[[appel_outil("lister", dossier="docs/sous%d" % i)] for i in range(A.TOURS_MAX - 1)] + [[{"content": "Synthèse finale."}]])          # des appels qui varient : ce n'est pas une boucle
         self.assertEqual(texte_de(ev), "Synthèse finale.")
         self.assertNotIn("tools", RECUES[-1], "au dernier tour, plus d'outils : le modèle doit répondre")
         self.assertIn("Réponds maintenant", RECUES[-1]["messages"][-1]["content"])
@@ -1568,6 +1568,29 @@ class Assistant(unittest.TestCase):
                 post("/api/supprimer", {"id": c})
         finally:
             A.enregistrer_reglages({"memoire_longue": "resume", "fiche_scribe": True})
+
+    def test_le_modele_qui_tourne_en_rond_est_arrete_ou_recoit_l_ordre_d_agir(self):
+        """Le même appel d'outil refait : le troisième n'est plus exécuté, le cinquième arrête la réponse. La même réponse deux fois de suite : la demande suivante ordonne d'agir."""
+        appel = appel_outil("lister", dossier="docs")
+        ev = chat("Regarde docs", reponses=[[appel]] * 7 + [[{"content": "Fini."}]])
+        textes = " ".join(e.get("texte", "") for e in ev if e["type"] == "info")
+        self.assertIn("tourne en rond", textes, "le tour est arrêté après cinq appels identiques")
+        cid = [e for e in ev if e["type"] == "debut"][0]["conversation"]
+        outils = [m["content"] for m in A.conv_lire(cid)["messages"] if m["role"] == "tool"]
+        self.assertEqual(len(outils), 5)
+        self.assertNotIn("exactement cet appel", outils[0] + outils[1])
+        self.assertTrue(all("exactement cet appel" in o for o in outils[2:]), "à partir du troisième, le résultat est remplacé par l'ordre de passer à autre chose")
+        # d'un tour à l'autre
+        plan = "Voici le plan : d'abord lire le fichier de configuration, ensuite corriger les erreurs de syntaxe, puis relancer les tests et enfin publier la nouvelle version. On commence ?"
+        cid2 = [e for e in chat("On prépare la sortie", reponses=[[{"content": plan}]]) if e["type"] == "debut"][0]["conversation"]
+        ev = chat("oui", conversation=cid2, reponses=[[{"content": plan + " Dis-moi."}]])
+        self.assertIn("presque mot pour mot", " ".join(e.get("texte", "") for e in ev if e["type"] == "info"))
+        self.assertTrue(A.conv_lire(cid2).get("boucle"))
+        chat("alors ?", conversation=cid2, reponses=[[{"content": "J'ai lu le fichier de configuration : deux erreurs de syntaxe, je les corrige tout de suite."}]])
+        self.assertIn("Tu viens de répéter", RECUES[-1]["messages"][-1]["content"], "l'ordre d'agir est donné à la demande suivante")
+        self.assertFalse(A.conv_lire(cid2).get("boucle"), "une réponse différente met fin à l'alerte")
+        for c in (cid, cid2):
+            post("/api/supprimer", {"id": c})
 
     def test_mise_a_jour_depuis_la_page(self):
         import time

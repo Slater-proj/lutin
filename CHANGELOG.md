@@ -2,6 +2,16 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## 0.7.15
+
+- **Détecteur de boucle** : le même appel d'outil refait trois fois n'est plus exécuté (le modèle reçoit l'ordre de passer à autre chose), cinq fois arrête la réponse ; une réponse qui répète la précédente presque mot pour mot est signalée, et la demande suivante ordonne d'exécuter l'étape en cours au lieu de replanifier.
+
+**English.** Loop detector: the same tool call made three times is no longer run (the model is told to move on), five times stops the answer; an answer that repeats the previous one almost word for word is flagged, and the next request orders the model to carry out the current step instead of re-planning.
+
+## 0.7.14
+
+- Documentation : les addons dans le conteneur Docker.
+
 ## 0.7.13
 
 - **ComfyUI : la liste des modèles est lisible.** Au lieu de 36 noms collés bout à bout : une ligne par modèle, groupés (modèles d'images, modèles de diffusion avec leur famille Flux / Qwen-Image / Z-Image ou « famille inconnue »), une longue liste défile ; les styles, encodeurs de texte et VAE sont repliés avec leur nombre.
