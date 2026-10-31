@@ -10,6 +10,7 @@ import os
 import re
 import unicodedata
 from . import archive as _archive
+from . import embeddings as _embeddings
 from . import extraction
 from . import modes as _modes
 from . import moteur as _m
@@ -250,6 +251,32 @@ def morceaux_du_fil(ident):
     return morceaux, df, moyenne
 
 
+def passages_du_fil(ident, question, nombre=3, min_termes=1):
+    """Les passages de CETTE conversation (début archivé compris) qui répondent à la question : par les mots (BM25) et, si la recherche par le sens est activée, par le sens ; les deux classements sont
+    fusionnés (rangs réciproques) : un passage bien classé par l'un OU par l'autre remonte. Sans la recherche par le sens (ou si elle échoue), les mots seuls."""
+    try:
+        morceaux, df, moyenne = morceaux_du_fil(ident)
+    except ValueError:                                               # conversation inconnue
+        return []
+    if not morceaux:
+        return []
+    termes = set(mots(question[:900]))
+    par_mots = noter(morceaux, df, moyenne, len(morceaux), termes, 8, min_termes) if termes else []
+    sims = _embeddings.similarites(ident, morceaux, question[:900])
+    if not sims:
+        return par_mots[:nombre]
+    par_sens = sorted(((s, i) for i, s in sims.items() if s >= _embeddings.SEUIL), reverse=True)[:8]
+    rangs = {}
+    for r, p in enumerate(par_mots):
+        rangs.setdefault(id(p["m"]), [p["m"], p, 0.0])[2] += 1.0 / (60 + r)
+    for r, (s, i) in enumerate(par_sens):
+        m = morceaux[i]
+        entree = rangs.setdefault(id(m), [m, {"score": s, "m": m, "trouves": 0, "termes": termes}, 0.0])
+        entree[2] += 1.0 / (60 + r)
+    classes = sorted(rangs.values(), key=lambda e: -e[2])
+    return [e[1] for e in classes[:nombre]]
+
+
 def rappel_du_fil(conv, fiche_etape=""):
     """Ce qui a été dit plus tôt dans CETTE conversation et qui touche à la dernière demande, retrouvé tout seul (sans que le modèle ait à le demander) : une fiche ou un résumé perd des détails,
     mais le texte complet reste sur le disque. Renvoie (texte pour le prompt, nombre de passages). Un « oui » ou un « continue » est complété par la dernière réponse et l'étape en cours."""
@@ -266,10 +293,9 @@ def rappel_du_fil(conv, fiche_etape=""):
     termes = set(mots(question[:900]))
     if not termes:
         return "", 0
-    morceaux, df, moyenne = morceaux_du_fil(ident)
-    if not morceaux:
+    passages = passages_du_fil(ident, question, 8, 2 if precise else 1)
+    if not passages:
         return "", 0
-    passages = noter(morceaux, df, moyenne, len(morceaux), termes, 8, 2 if precise else 1)
     sous_les_yeux = " ".join(" ".join(str(m.get("content") or "").split()) for m in msgs[-6:] + [m for m in msgs[:-6] if m.get("epingle")])                       # les derniers échanges sont déjà dans la fenêtre
     def debut(p):
         return " ".join(RE_ROLE.sub("", p["m"]["texte"]).split())[:60]
@@ -323,7 +349,7 @@ def outil_rappeler(requete, nombre=5, conv_id="", ici=False):
         nombre = max(1, min(10, int(nombre or 5)))
     except (TypeError, ValueError):
         nombre = 5
-    passages = passages_rappel(requete, nombre, seulement_conv=(conv_id or "") if ici else "")
+    passages = passages_du_fil(conv_id, requete, nombre) if (ici and conv_id) else passages_rappel(requete, nombre)
     if not passages:
         return _t("Aucun passage pertinent dans cette conversation.") if ici else _t("Aucun passage pertinent dans les documents ni dans les conversations enregistrées.")
     return formater_passages(passages) + _t("\n\n(lis le document complet avec « lire » si un passage t'intéresse)")

@@ -230,6 +230,21 @@ class ComfyUI(unittest.TestCase):
             with self.assertRaises(_m.ErreurOutil):
                 cu.outil_generer(faux, self.ctx())
 
+    def test_l_image_creee_est_attachee_au_resultat_pour_etre_affichee_dans_la_conversation(self):
+        from lutin import images
+        sortie = COMFY / "output"
+        sortie.mkdir(exist_ok=True)
+        (sortie / "lutin_00001_.png").write_bytes(b"\x89PNG\r\n\x1a\n" + b"pixels")
+        addons.enregistrer_reglages(cu.IDENT, {"dossier": str(COMFY)})
+        ctx = self.ctx()
+        res = cu.outil_generer({"prompt": "un phare"}, ctx)
+        self.assertEqual(len(ctx.get("medias", [])), 1, res)
+        octets, mime = images.lire(ctx["medias"][0])
+        self.assertEqual((mime, octets[8:]), ("image/png", b"pixels"))
+        self.assertIn("affichée", res)
+        # un chemin qui sort du dossier de sortie n'est jamais copié
+        self.assertEqual(cu._afficher(["../main.py", "../../secret.png"], self.ctx()), [])
+
     def test_refus_essai_a_blanc_erreurs_et_arret(self):
         res = cu.outil_generer({"prompt": "x"}, self.ctx(accord=False))
         self.assertIn("Refusé", res)

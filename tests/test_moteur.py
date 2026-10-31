@@ -289,7 +289,7 @@ class Assistant(unittest.TestCase):
         systeme = corps["messages"][0]["content"]
         self.assertIn("Contexte (lu par Lutin", systeme, "memoire/CONTEXTE.md est dans les consignes")
         self.assertIn("langue de l'utilisateur", systeme, "le contenu de CONTEXTE.md est bien injecté")
-        self.assertEqual({t["function"]["name"] for t in corps["tools"]}, {"lister", "lire", "chercher", "symboles", "lire_plusieurs", "rappeler", "modifier", "modifier_plusieurs", "ecrire", "executer", "memoriser", "taches", "web_chercher", "web_lire", "etat_outil", "installer_module"})
+        self.assertEqual({t["function"]["name"] for t in corps["tools"]}, {"lister", "lire", "chercher", "symboles", "lire_plusieurs", "rappeler", "modifier", "modifier_plusieurs", "ecrire", "executer", "memoriser", "taches", "web_chercher", "web_lire", "etat_outil", "installer_module", "creer_document"})
         # la conversation continue avec son historique
         chat("Et ensuite ?", conversation=fin["id"], reponses=[[{"content": "Voilà."}]])
         self.assertEqual([m["role"] for m in RECUES[-1]["messages"]], ["system", "user", "assistant", "user"])
@@ -1895,7 +1895,7 @@ class Assistant(unittest.TestCase):
         self.assertFalse(ecritures & noms("recherche"), "la recherche ne peut ni écrire ni lancer de commande")
         self.assertTrue({"lire", "chercher", "rappeler", "lire_plusieurs", "lister", "web_chercher"} <= noms("recherche"))
         self.assertEqual(noms("discussion"), set(), "aucun outil en discussion")
-        self.assertEqual(noms("technique") | noms("scenario") | noms("polyvalent") | noms("recherche"), tous, "rien d'oublié : chaque outil existe dans au moins un mode")
+        self.assertEqual(noms("technique") | noms("scenario") | noms("polyvalent") | noms("recherche"), tous - {"mission_terminer", "mission_bloquee"}, "rien d'oublié : chaque outil existe dans au moins un mode")
         consignes = {m: modes.consigne(m) for m in modes.ids()}
         self.assertEqual(len(set(consignes.values())), 5, "une consigne différente par mode")
         self.assertIn("RECHERCHE", consignes["recherche"])

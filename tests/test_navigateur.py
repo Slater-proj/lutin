@@ -186,9 +186,9 @@ class Parcours(unittest.TestCase):
         with self.captures.serveur_demo() as (port, tmp):
             p = self.ouvrir(tmp, "http://127.0.0.1:%d/" % port)
             p.evaluer(onglet("auto"))
-            carte = "[...document.querySelectorAll('#listeAddons .carte')].find(c => c.textContent.includes('Travail de fond') && c.querySelector('input[type=checkbox]'))"
+            carte = "[...document.querySelectorAll('#listeAddons .carte')].find(c => c.textContent.includes('Traitement de documents') && c.querySelector('input[type=checkbox]'))"
             p.attendre("!!(" + carte + ")")
-            self.assertEqual(p.evaluer("document.querySelectorAll('#listeAddons > .carte').length"), 5, "travail de fond, Telegram, ComfyUI, courriel, X")
+            self.assertEqual(p.evaluer("document.querySelectorAll('#listeAddons > .carte').length"), 6, "traitement de documents, missions, Telegram, ComfyUI, courriel, X")
             self.assertFalse(p.evaluer("(" + carte + ").querySelector('input[type=checkbox]').checked"), "désactivé par défaut")
             self.assertNotIn("Nouveau travail de fond", p.evaluer("document.getElementById('listeAddons').textContent"))
             p.evaluer("(" + carte + ").querySelector('input[type=checkbox]').click()")

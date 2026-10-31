@@ -369,8 +369,9 @@ def conv_supprimer(ident):
     Path(str(f) + ".bak").unlink(missing_ok=True)
     from . import suivi
     suivi.supprimer(ident)                                  # la fiche de suivi disparaît avec la conversation
-    from . import archive
+    from . import archive, embeddings
     archive.supprimer(ident)                                # et le début archivé par le résumé
+    embeddings.supprimer(ident)                             # et ses vecteurs de recherche par le sens
 
 
 def conv_renommer(ident, titre):

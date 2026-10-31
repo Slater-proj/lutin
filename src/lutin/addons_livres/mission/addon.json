@@ -1,0 +1,25 @@
+{
+ "nom": "Missions longues",
+ "description": "Confie à Lutin un grand travail (un jeu complet, une refonte, une suite de tests…) à partir d'un cahier des charges : il code, teste, versionne, pendant des heures, sans revenir vers toi. Pause, consigne en route, bilan à la fin.",
+ "hotes": [],
+ "reglages": [],
+ "etapes": [
+  {
+   "titre": "Dossier.",
+   "texte": "Choisis le dossier de travail où Lutin doit travailler (crée-en un vide pour un nouveau projet)."
+  },
+  {
+   "titre": "Cahier des charges.",
+   "texte": "Écris ce que tu veux, aussi précisément que possible : c'est tout ce que Lutin saura. Pour un long texte, mets-le dans un fichier du dossier."
+  },
+  {
+   "titre": "Autonomie et durée.",
+   "texte": "« Autonome » : Lutin écrit et lance des commandes sans te demander (sauvegardes gardées). Sinon il ne fait que montrer ce qu'il ferait. Choisis la durée maximale."
+  },
+  {
+   "titre": "Reviens plus tard.",
+   "texte": "Lutin s'arrête quand il a fini, s'il a besoin d'une décision de toi, ou à la fin du temps. Le déroulé est dans la conversation « 🎯 »."
+  }
+ ],
+ "verification": []
+}

@@ -298,6 +298,13 @@ def _appeler_outil(nom, args, ctx):
         return _m.outil_web_lire(args.get("url", ""), args.get("debut"), ctx)
     if nom == "taches":
         return _m.outil_taches(args.get("liste", []), ctx)
+    if nom == "creer_document":
+        return _m.outil_document(args.get("chemin"), str(args.get("contenu", "")), args.get("titre", ""), ctx)
+    if nom in ("mission_terminer", "mission_bloquee"):
+        from . import mission
+        if not ctx.get("mission"):
+            raise _m.ErreurOutil("Cet outil n'existe que pendant une mission longue.")
+        return mission.signaler(ctx["mission"], "terminee" if nom == "mission_terminer" else "bloquee", args.get("bilan") or args.get("question") or "")
     if nom == "suivi":
         from . import suivi
         conv = ctx.get("conv")

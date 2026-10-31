@@ -111,6 +111,7 @@ def referencees():
     for c in (_m.DONNEES / "conversations").glob("*.json"):
         for m in (_m.lire_json(c, {}) or {}).get("messages", []):
             vus.update(m.get("images") or [])
+            vus.update(m.get("medias") or [])
     return vus
 
 

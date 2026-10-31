@@ -1,6 +1,6 @@
 {
- "nom": "Travail de fond",
- "description": "Applique une consigne à tous les documents d'un dossier, un par un, en lecture seule. Reprend tout seul, avec pause et rapport.",
+ "nom": "Traitement de documents",
+ "description": "Applique une consigne à tous les documents d'un dossier, un par un, en lecture seule (résumer, classer, extraire). Pour un grand travail qui code, teste ou modifie des fichiers, utilise « Missions longues ».",
  "hotes": [],
  "reglages": [],
  "etapes": [

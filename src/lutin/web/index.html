@@ -190,6 +190,8 @@ pre.diff { width:100%; max-height:340px; overflow:auto; background:#0c1117; bord
 .conv .epingle { color:var(--warm); }
 .attention { color:var(--warm); }
 .msg.epingle-msg { box-shadow:inset 3px 0 0 var(--warm); }
+.medias { display:flex; flex-wrap:wrap; gap:8px; margin-top:6px; }
+.medias img { max-width:min(100%, 520px); max-height:520px; border-radius:8px; cursor:zoom-in; }
 #listeAddons .ligne { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin:2px 0; }
 .liste-modeles { max-height:240px; overflow:auto; font-size:.82rem; border:1px solid var(--line); border-radius:8px; padding:2px 10px; margin:4px 0 8px; background:#0b1015; }
 .liste-modeles > div { padding:3px 0; border-bottom:1px solid #1a2330; display:flex; gap:8px; align-items:baseline; } .liste-modeles > div:last-child { border-bottom:0; }
@@ -511,6 +513,8 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     <h2>Mémoire des longues conversations <span class="aide">(comment Lutin garde le fil quand la fenêtre de contexte se remplit)</span></h2>
     <label class="opt-ligne">Méthode <select id="selMemoire"><option value="demander">Demander au premier résumé</option><option value="resume">Résumé automatique</option><option value="fichier">Fiche de suivi</option></select></label>
     <label class="opt-ligne">Part du contexte que la fiche peut prendre (%) <input id="iFichePart" type="number" min="5" max="25" step="1" style="width:80px"></label>
+    <label class="opt-ligne"><input type="checkbox" id="cSens"> Recherche par le sens (retrouve aussi un passage qui n'emploie pas les mêmes mots)</label>
+    <div class="aide" id="aideSens"></div>
     <label class="opt-ligne"><input type="checkbox" id="cScribe"> Mise à jour automatique de la fiche par le modèle (un appel court toutes les trois réponses)</label>
     <div class="aide" id="aideMemoire"></div>
     <h2>Modes <span class="aide">(à choisir dans la barre de gauche ; dans tous les modes, toute modification de fichier et toute commande te demandent ton accord)</span></h2>
@@ -815,7 +819,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
       if (m.role === 'resume') { const d = el('div', 'info', T('Résumé du début de la conversation : ') + m.content.slice(0, 400) + (m.content.length > 400 ? '...' : '')); fil().appendChild(d); }
       else if (m.role === 'user') { const d = el('div', 'msg moi'); d.appendChild(el('div', 'corps', m.content)); miniatures(d, m.images, m.pieces); fil().appendChild(d); }
       else if (m.role === 'assistant') { if (m.content) { const x = messageIA(); rendre(x.c, m.content); } (m.tool_calls || []).forEach(t => fil().appendChild(el('div', 'outil', '⚙ ' + t.function.name + ' ' + JSON.stringify(t.function.arguments).slice(0, 160)))); }
-      else if (m.role === 'tool') { const d = el('div', 'outil'); d.appendChild(el('div', '', '↳ ' + (m.tool_name || T('résultat')))); d.appendChild(el('div', 'res', (m.content || '').slice(0, 700))); fil().appendChild(d); }
+      else if (m.role === 'tool') { const d = el('div', 'outil'); d.appendChild(el('div', '', '↳ ' + (m.tool_name || T('résultat')))); d.appendChild(el('div', 'res', (m.content || '').slice(0, 700))); afficherMedias(d, m.medias); fil().appendChild(d); }
     });
     annoter(); afficherTaches(c.taches); majJauge(c.id); setVitesse(c.vitesse); majAnnuler();
     bas();
@@ -890,6 +894,13 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     const z = el('div', 'vignettes');
     (ids || []).forEach(id => { const i = document.createElement('img'); i.src = '/image/' + id; i.alt = T('Image jointe'); i.addEventListener('click', () => window.open(i.src, '_blank', 'noopener')); z.appendChild(i); });
     (pieces || []).forEach(p => { const d = el('span', 'piece', '📄 ' + p.nom); d.title = p.nom; z.appendChild(d); });
+    parent.appendChild(z);
+  };
+  // Images produites par un outil (ComfyUI) : affichées dans la conversation, un clic les ouvre en grand
+  const afficherMedias = (parent, ids) => {
+    if (!ids || !ids.length) return;
+    const z = el('div', 'medias');
+    ids.forEach(id => { const i = document.createElement('img'); i.src = '/image/' + id; i.alt = T('Image générée'); i.addEventListener('click', () => window.open(i.src, '_blank', 'noopener')); z.appendChild(i); });
     parent.appendChild(z);
   };
   const dessinerPj = () => {
@@ -983,7 +994,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
             }
           }
           else if (e.type === 'outil') { const d = el('div', 'outil'); d.appendChild(el('div', '', '⚙ ' + e.nom + ' ' + JSON.stringify(e.args).slice(0, 220))); d.dataset.nom = e.nom; zone().appendChild(d); }
-          else if (e.type === 'resultat') { const cartes = [...zone().querySelectorAll('.outil')]; const d = cartes[cartes.length - 1]; if (d) d.appendChild(el('div', 'res', e.texte)); vider(ia); ia = messageIA(zone()); detailsPensee = null; }
+          else if (e.type === 'resultat') { const cartes = [...zone().querySelectorAll('.outil')]; const d = cartes[cartes.length - 1]; if (d) { d.appendChild(el('div', 'res', e.texte)); afficherMedias(d, e.medias); } vider(ia); ia = messageIA(zone()); detailsPensee = null; }
           else if (e.type === 'approbation') { zone().appendChild(carteAccord(e)); signaler(T('⏸ Accord demandé')); }
           else if (e.type === 'essai') { zone().appendChild(carteEssai(e)); }
           else if (e.type === 'etat') { /* affiché dans la barre d'activité */ }
@@ -1193,7 +1204,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     ETAT.installes.forEach(id => { const m = ETAT.modeles.find(x => x.id === id), o = el('option', '', m ? m.nom : id); o.value = id; s.appendChild(o); });
     if (!ETAT.installes.length) { const o = el('option', '', ETAT.ollama ? T('Aucun modèle installé (onglet Modèles)') : T('Ollama arrêté')); o.value = ETAT.reglages.modele; s.appendChild(o); }
     s.value = ETAT.installes.includes(v) ? v : (ETAT.installes.includes(ETAT.reglages.modele) ? ETAT.reglages.modele : (ETAT.installes[0] || ETAT.reglages.modele));
-    if (!$('selMode').dataset.init) { $('selMode').value = ETAT.reglages.mode; $('cReflexion').checked = ETAT.reglages.reflexion; $('cAuto').checked = ETAT.reglages.auto_ecriture; $('cAvance').checked = !!ETAT.reglages.avance; $('cAutoCmd').checked = ETAT.reglages.auto_commandes; $('cEssai').checked = !!ETAT.reglages.essai_a_blanc; $('cCopieConv').checked = !!ETAT.reglages.copie_conversations; $('selMemoire').value = ETAT.reglages.memoire_longue || 'demander'; $('iFichePart').value = ETAT.reglages.fiche_part || 10; $('cScribe').checked = ETAT.reglages.fiche_scribe !== false; aideMemoire(); $('cWeb').checked = ETAT.reglages.web !== false; $('rCtx').value = ETAT.reglages.num_ctx; $('rTemp').value = ETAT.reglages.temperature; $('rTours').value = ETAT.reglages.tours_max; $('iTopP').value = ETAT.reglages.top_p ?? ''; $('iTopK').value = ETAT.reglages.top_k ?? ''; $('iMinP').value = ETAT.reglages.min_p ?? ''; $('iRep').value = ETAT.reglages.repeat_penalty ?? ''; $('cGarde').checked = ETAT.reglages.garde_ressources !== false; $('cComfy').checked = ETAT.reglages.liberer_si_comfy !== false; $('sRappels').value = ETAT.reglages.rappels_auto || 'scenario'; $('iSeuilRam').value = ETAT.reglages.seuil_ram_go; $('iSeuilDisque').value = ETAT.reglages.seuil_disque_go; $('iPlafond').value = ETAT.reglages.plafond_donnees_go; $('iLimiteCmd').value = ETAT.reglages.limite_ram_commande_go; $('iThreads').value = ETAT.reglages.num_thread ?? ''; $('iGarde').value = ETAT.reglages.garde_min ?? ''; $('selMode').dataset.init = '1'; }
+    if (!$('selMode').dataset.init) { $('selMode').value = ETAT.reglages.mode; $('cReflexion').checked = ETAT.reglages.reflexion; $('cAuto').checked = ETAT.reglages.auto_ecriture; $('cAvance').checked = !!ETAT.reglages.avance; $('cAutoCmd').checked = ETAT.reglages.auto_commandes; $('cEssai').checked = !!ETAT.reglages.essai_a_blanc; $('cCopieConv').checked = !!ETAT.reglages.copie_conversations; $('selMemoire').value = ETAT.reglages.memoire_longue || 'demander'; $('iFichePart').value = ETAT.reglages.fiche_part || 10; $('cScribe').checked = ETAT.reglages.fiche_scribe !== false; $('cSens').checked = !!ETAT.reglages.recherche_sens; aideMemoire(); majSens(); $('cWeb').checked = ETAT.reglages.web !== false; $('rCtx').value = ETAT.reglages.num_ctx; $('rTemp').value = ETAT.reglages.temperature; $('rTours').value = ETAT.reglages.tours_max; $('iTopP').value = ETAT.reglages.top_p ?? ''; $('iTopK').value = ETAT.reglages.top_k ?? ''; $('iMinP').value = ETAT.reglages.min_p ?? ''; $('iRep').value = ETAT.reglages.repeat_penalty ?? ''; $('cGarde').checked = ETAT.reglages.garde_ressources !== false; $('cComfy').checked = ETAT.reglages.liberer_si_comfy !== false; $('sRappels').value = ETAT.reglages.rappels_auto || 'scenario'; $('iSeuilRam').value = ETAT.reglages.seuil_ram_go; $('iSeuilDisque').value = ETAT.reglages.seuil_disque_go; $('iPlafond').value = ETAT.reglages.plafond_donnees_go; $('iLimiteCmd').value = ETAT.reglages.limite_ram_commande_go; $('iThreads').value = ETAT.reglages.num_thread ?? ''; $('iGarde').value = ETAT.reglages.garde_min ?? ''; $('selMode').dataset.init = '1'; }
     if (document.activeElement !== $('selLangue')) $('selLangue').value = ETAT.langue_reglage || 'auto';
     afficherVersion();
     if ($('vVersionActuelle')) $('vVersionActuelle').textContent = T('Lutin ') + (ETAT.version || '');
@@ -1227,7 +1238,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     ETAT.attentes.forEach(a => { const s = '.accord[data-id="' + a.id + '"]'; if (!fil().querySelector(s) && !(FLUX && FLUX.sauve.querySelector(s))) fil().appendChild(carteAccord(a)); });
   };
   const nombreOuNull = id => { const v = $(id).value.trim().replace(',', '.'); return v === '' || isNaN(+v) ? null : +v; };
-  const sauverReglages = async () => { try { await api('/api/reglages', { modele: $('selModele').value, mode: $('selMode').value, reflexion: $('cReflexion').checked, auto_ecriture: $('cAuto').checked, auto_commandes: $('cAutoCmd').checked, essai_a_blanc: $('cEssai').checked, copie_conversations: $('cCopieConv').checked, memoire_longue: $('selMemoire').value, fiche_part: nombreOuNull('iFichePart') ?? 10, fiche_scribe: $('cScribe').checked, avance: $('cAvance').checked, web: $('cWeb').checked, num_ctx: +$('rCtx').value, temperature: +$('rTemp').value, tours_max: +$('rTours').value, top_p: nombreOuNull('iTopP'), top_k: nombreOuNull('iTopK'), min_p: nombreOuNull('iMinP'), repeat_penalty: nombreOuNull('iRep'), garde_ressources: $('cGarde').checked, liberer_si_comfy: $('cComfy').checked, rappels_auto: $('sRappels').value, seuil_ram_go: nombreOuNull('iSeuilRam') ?? 3, seuil_disque_go: nombreOuNull('iSeuilDisque') ?? 10, plafond_donnees_go: nombreOuNull('iPlafond') ?? 2, limite_ram_commande_go: nombreOuNull('iLimiteCmd') ?? 0, num_thread: nombreOuNull('iThreads'), garde_min: nombreOuNull('iGarde') }); } catch (e) { fil().appendChild(el('div', 'erreur', e.message)); } };
+  const sauverReglages = async () => { try { await api('/api/reglages', { modele: $('selModele').value, mode: $('selMode').value, reflexion: $('cReflexion').checked, auto_ecriture: $('cAuto').checked, auto_commandes: $('cAutoCmd').checked, essai_a_blanc: $('cEssai').checked, copie_conversations: $('cCopieConv').checked, memoire_longue: $('selMemoire').value, fiche_part: nombreOuNull('iFichePart') ?? 10, fiche_scribe: $('cScribe').checked, recherche_sens: $('cSens').checked, avance: $('cAvance').checked, web: $('cWeb').checked, num_ctx: +$('rCtx').value, temperature: +$('rTemp').value, tours_max: +$('rTours').value, top_p: nombreOuNull('iTopP'), top_k: nombreOuNull('iTopK'), min_p: nombreOuNull('iMinP'), repeat_penalty: nombreOuNull('iRep'), garde_ressources: $('cGarde').checked, liberer_si_comfy: $('cComfy').checked, rappels_auto: $('sRappels').value, seuil_ram_go: nombreOuNull('iSeuilRam') ?? 3, seuil_disque_go: nombreOuNull('iSeuilDisque') ?? 10, plafond_donnees_go: nombreOuNull('iPlafond') ?? 2, limite_ram_commande_go: nombreOuNull('iLimiteCmd') ?? 0, num_thread: nombreOuNull('iThreads'), garde_min: nombreOuNull('iGarde') }); } catch (e) { fil().appendChild(el('div', 'erreur', e.message)); } };
   document.querySelectorAll('.onglets button').forEach(b => b.addEventListener('click', async () => {
     document.querySelectorAll('.onglets button').forEach(x => x.setAttribute('aria-selected', x === b)); document.querySelectorAll('.page').forEach(p => p.classList.toggle('vue', p.id === 'p-' + b.dataset.p));
     if (b.dataset.p === 'memoire') { const m = await api('/api/memoire'); $('tContexte').value = m['CONTEXTE.md']; $('tMemoire').value = m['MEMOIRE.md']; chargerSkills(); chargerClaude(); chargerNotes(); chargerDocuments(); }
@@ -1460,6 +1471,19 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
   });
   // ---- Mémoire des longues conversations : résumé automatique ou fiche de suivi
   const fichePart = () => String(ETAT.reglages.fiche_part || 10);
+  // Recherche par le sens : il faut un petit modèle d'Ollama ; la page dit s'il est là et propose de l'installer
+  const majSens = () => {
+    const z = $('aideSens'), e = ETAT.embeddings; z.textContent = '';
+    if (!e || !$('cSens').checked) return;
+    const i = e.installation || {};
+    if (e.installe) { z.textContent = T('✔ Modèle de recherche installé : ') + e.modele + '.'; return; }
+    if (i.etat === 'en cours') { z.textContent = T('Téléchargement de ') + e.modele + ' : ' + (i.total ? Math.round(100 * i.fait / i.total) + ' %' : '…'); return; }
+    z.appendChild(document.createTextNode(T('Il faut le petit modèle ') + e.modele + T(' (environ 270 Mo). ')));
+    const b = el('button', 'principal', T('Installer')); b.addEventListener('click', async () => { b.disabled = true; try { await api('/api/embeddings-installer', {}); rafraichir(); } catch (er) { z.appendChild(el('span', 'attention', ' ' + er.message)); } });
+    z.appendChild(b);
+    if (i.etat === 'erreur') z.appendChild(el('span', 'attention', ' ' + i.erreur));
+  };
+  $('cSens').addEventListener('change', majSens);
   const aideMemoire = () => {
     const v = $('selMemoire').value;
     $('aideMemoire').textContent = v === 'demander'
@@ -1526,7 +1550,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
   });
   $('bDemarrer').addEventListener('click', async () => { $('bDemarrer').disabled = true; try { await api('/api/demarrer-ollama', {}); } catch (e) { fil().appendChild(el('div', 'erreur', e.message)); } $('bDemarrer').disabled = false; rafraichir(); });
   $('bVram').addEventListener('click', async () => { $('bVram').disabled = true; $('bVram').textContent = '⏳…'; try { const r = await api('/api/liberer-vram', {}); fil().appendChild(el('div', 'aide', r.message)); } catch (e) { fil().appendChild(el('div', 'erreur', e.message)); } $('bVram').disabled = false; $('bVram').textContent = T('🧹 Libérer la VRAM'); rafraichir(); });
-  ['selModele', 'selMode', 'cReflexion', 'cAvance', 'cAuto', 'cAutoCmd', 'cEssai', 'cCopieConv', 'selMemoire', 'iFichePart', 'cScribe', 'cWeb', 'iTopP', 'iTopK', 'iMinP', 'iRep', 'cGarde', 'cComfy', 'sRappels', 'iSeuilRam', 'iSeuilDisque', 'iPlafond', 'iLimiteCmd', 'iThreads', 'iGarde'].forEach(id => $(id).addEventListener('change', async () => { await sauverReglages(); if (id === 'cAvance' || id === 'selMode') rafraichir(); }));          // les modèles sans filtre apparaissent tout de suite
+  ['selModele', 'selMode', 'cReflexion', 'cAvance', 'cAuto', 'cAutoCmd', 'cEssai', 'cCopieConv', 'selMemoire', 'iFichePart', 'cScribe', 'cSens', 'cWeb', 'iTopP', 'iTopK', 'iMinP', 'iRep', 'cGarde', 'cComfy', 'sRappels', 'iSeuilRam', 'iSeuilDisque', 'iPlafond', 'iLimiteCmd', 'iThreads', 'iGarde'].forEach(id => $(id).addEventListener('change', async () => { await sauverReglages(); if (id === 'cAvance' || id === 'selMode') rafraichir(); }));          // les modèles sans filtre apparaissent tout de suite
   // Profils de charge : des valeurs toutes faites pour les deux réglages (et le contexte pour « Discret »), calculées sur le nombre de cœurs de CETTE machine.
   $('selProfil').addEventListener('change', async () => {
     const p = $('selProfil').value, cpus = ETAT.cpus || 4;
@@ -2310,6 +2334,58 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     go.addEventListener('click', async () => {
       go.disabled = true; msg.textContent = '';
       try { await api('/api/fond-creer', { nom: b.nom, dossier: b.dossier, motifs: b.motifs, consigne: b.consigne, regulier: b.regulier, intervalle_h: b.intervalle_h }); FOND.brouillon = { nom: '', dossier: b.dossier, motifs: '*.pdf', consigne: '', regulier: false, intervalle_h: 24 }; FOND.ouvert = false; chargerAddons(); }
+      catch (e) { msg.textContent = e.message; go.disabled = false; }
+    });
+    det.appendChild(go); zone.appendChild(det);
+  };
+  // Panneau de l'addon « missions longues » : une mission confiée pour des heures (état, pause, question du modèle, consigne en route) et le formulaire de création
+  const MISSION = { ouvert: false, brouillon: { nom: '', cahier: '', travail: '', duree_h: 8, autonome: true }, notes: {} };
+  const etatsMission = () => ({ en_cours: T('en cours'), pause: T('en pause'), bloquee: T('attend ta réponse'), terminee: T('terminée') });
+  PANNEAUX.mission = async (a, zone) => {
+    let x, tr;
+    try { [x, tr] = await Promise.all([api('/api/addon-etat?id=mission'), api('/api/travaux')]); } catch (e) { zone.textContent = e.message; return; }
+    const msg = el('div', 'attention');
+    const agir = async (action, plus) => { try { await api('/api/addon-action', Object.assign({ id: 'mission', action }, plus || {})); chargerAddons(); } catch (e) { msg.textContent = e.message; } };
+    zone.appendChild(el('b', '', T('Missions')));
+    if (!x.liste.length) zone.appendChild(el('div', 'aide', T('Aucune mission pour l\'instant.')));
+    x.liste.forEach(m => {
+      const d = el('div', 'carte'); d.style.flexDirection = 'column'; d.style.alignItems = 'stretch'; d.style.gap = '4px';
+      d.appendChild(el('b', '', m.nom));
+      const duree = Math.round(((m.fin || Date.now() / 1000) - m.debut) / 60);
+      d.appendChild(el('div', 'aide', (etatsMission()[m.etat] || m.etat) + ' · ' + m.tours + ' ' + T('tours') + ' · ' + m.actions + ' ' + T('actions') + ' · ' + (duree >= 90 ? Math.round(duree / 60) + ' h' : duree + ' min') + ' / ' + m.duree_h + ' h · ' + (m.autonome ? T('autonome') : T('à blanc')) + ' · ' + m.dossier));
+      if (m.message) d.appendChild(el('div', 'aide', m.message));
+      if (m.question) d.appendChild(el('div', 'attention', T('Lutin demande : ') + m.question));
+      if (m.bilan) { const det = el('details'); det.appendChild(el('summary', '', T('Bilan'))); const pre = el('pre', 'bloc-code'); pre.textContent = m.bilan; det.appendChild(pre); d.appendChild(det); }
+      if (m.etat !== 'terminee') {
+        const note = el('input'); note.placeholder = m.etat === 'bloquee' ? T('Ta réponse') : T('Ajouter une consigne (prise en compte au prochain tour)'); note.style.width = '100%'; note.value = MISSION.notes[m.id] || ''; note.addEventListener('input', () => { MISSION.notes[m.id] = note.value; });
+        const env = el('button', '', T('Envoyer')); env.addEventListener('click', () => { const t = note.value; delete MISSION.notes[m.id]; agir('repondre', { id: m.id, texte: t }); });
+        const l = el('div', 'ligne'); l.style.flexWrap = 'nowrap'; l.append(note, env); d.appendChild(l);
+      }
+      const ligne = el('div', 'ligne');
+      if (m.conv) { const v = el('button', '', T('Voir la conversation')); v.addEventListener('click', () => { ouvrirOnglet('chat'); ouvrir(m.conv); }); ligne.appendChild(v); }
+      if (m.etat === 'en_cours') { const p = el('button', '', T('Mettre en pause')); p.addEventListener('click', () => agir('pause', { id: m.id })); ligne.appendChild(p); }
+      if (m.etat === 'pause') { const p = el('button', 'principal', T('Reprendre')); p.addEventListener('click', () => agir('reprendre', { id: m.id })); ligne.appendChild(p); }
+      if (m.etat !== 'terminee') { const s = el('button', '', T('Arrêter')); s.addEventListener('click', () => { if (confirm(T('Arrêter cette mission ? Le travail déjà fait reste dans le dossier.'))) agir('arreter', { id: m.id }); }); ligne.appendChild(s); }
+      const sup = el('button', 'danger', T('Supprimer')); sup.addEventListener('click', () => { if (confirm(T('Supprimer cette mission ? La conversation reste dans la liste.'))) agir('supprimer', { id: m.id }); }); ligne.appendChild(sup);
+      d.appendChild(ligne); zone.appendChild(d);
+    });
+    zone.appendChild(msg);
+    const det = el('details'), b = MISSION.brouillon;
+    det.open = MISSION.ouvert; det.addEventListener('toggle', () => { MISSION.ouvert = det.open; });
+    det.appendChild(el('summary', '', T('Nouvelle mission')));
+    const labN = el('label', 'opt-ligne'), inN = el('input'); inN.value = b.nom; inN.addEventListener('input', () => { b.nom = inN.value; }); labN.append(document.createTextNode(T('Nom') + ' '), inN); det.appendChild(labN);
+    const sel = el('select'); (tr.liste || []).forEach(t => { const o = el('option', '', t.nom + ' — ' + t.chemin); o.value = t.id; sel.appendChild(o); });
+    if (!b.travail && tr.liste && tr.liste.length) b.travail = tr.liste[0].id; sel.value = b.travail; sel.addEventListener('change', () => { b.travail = sel.value; });
+    const labD = el('label', 'opt-ligne'); labD.append(document.createTextNode(T('Dossier de travail') + ' '), sel); det.appendChild(labD);
+    const cah = el('textarea'); cah.rows = 8; cah.style.width = '100%'; cah.placeholder = T('Le cahier des charges : ce que Lutin doit réaliser, avec les contraintes, la façon de tester, ce qui rend le travail « terminé »…'); cah.value = b.cahier; cah.addEventListener('input', () => { b.cahier = cah.value; });
+    det.appendChild(cah);
+    const labH = el('label', 'opt-ligne'), inH = el('input'); inH.type = 'number'; inH.min = 1; inH.max = 72; inH.style.width = '80px'; inH.value = b.duree_h; inH.addEventListener('input', () => { b.duree_h = inH.value; }); labH.append(document.createTextNode(T('Durée maximale (heures)') + ' '), inH); det.appendChild(labH);
+    const labA = el('label', 'opt-ligne'), inA = el('input'); inA.type = 'checkbox'; inA.checked = b.autonome; inA.addEventListener('change', () => { b.autonome = inA.checked; }); labA.append(inA, document.createTextNode(' ' + T('Autonome : Lutin écrit des fichiers et lance des commandes sans me demander'))); det.appendChild(labA);
+    det.appendChild(el('div', 'aide', T('Dans le dossier choisi seulement, avec les sauvegardes et les garde-fous habituels. Décoché, il ne fait que montrer ce qu\'il ferait. Les deux places de réponse sont partagées : tu peux discuter pendant la mission.')));
+    const go = el('button', 'principal', T('Lancer la mission'));
+    go.addEventListener('click', async () => {
+      go.disabled = true; msg.textContent = '';
+      try { await api('/api/addon-action', { id: 'mission', action: 'creer', nom: b.nom, cahier: b.cahier, travail: b.travail, duree_h: b.duree_h, autonome: b.autonome }); MISSION.brouillon = { nom: '', cahier: '', travail: b.travail, duree_h: b.duree_h, autonome: b.autonome }; MISSION.ouvert = false; chargerAddons(); }
       catch (e) { msg.textContent = e.message; go.disabled = false; }
     });
     det.appendChild(go); zone.appendChild(det);

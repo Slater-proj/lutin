@@ -2,6 +2,16 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## 0.8.0
+
+- **Missions longues** (nouvel addon) : un cahier des charges confié pour des heures (un jeu complet, une refonte…), mené tour après tour sans toi, avec tous les outils, autonome ou à blanc, avec limites, pause, consigne en route, question du modèle, bilan, reprise après un redémarrage. Le « Travail de fond » devient « Traitement de documents ».
+- **PDF et Word** : l'outil `creer_document` écrit des .pdf, .docx, .md, .txt, .html, .csv (Markdown simple), sans bibliothèque, et relit le fichier.
+- **Les images créées avec ComfyUI s'affichent dans la conversation** (cliquables en grand).
+- **Les addons s'ouvrent vite** : la page de ComfyUI mettait 5 à 12 s quand il est éteint (six connexions refusées, ~2 s chacune sous Windows) ; un test de port de 0,3 s suffit.
+- **Recherche par le sens (facultative)** : un petit modèle d'embeddings d'Ollama (installable d'un clic) permet au rappel du fil de retrouver un passage qui n'emploie pas les mots de la question ; fusion avec la recherche par mots, retour aux mots sans erreur si le modèle manque, vecteurs gardés sur le disque, vectorisation bornée en temps.
+
+**English.** Long missions (new addon): a specification entrusted for hours (a complete game, a refactoring…), carried out turn after turn without you, with all tools, autonomous or dry-run, with limits, pause, instructions on the way, model question, summary, resuming after a restart; “Background work” becomes “Document processing”. PDF and Word: the `creer_document` tool writes .pdf, .docx, .md, .txt, .html, .csv (simple Markdown) with no library and reads the file back. Images made with ComfyUI are shown in the conversation. Addons open fast (ComfyUI's panel took 5-12 s when it was off: six refused connections, ~2 s each on Windows; a 0.3 s port check is enough). Search by meaning (optional): a small Ollama embeddings model (one-click install) lets the conversation recall find a passage that does not use the question's words; merged with word search, falls back to words without error, vectors kept on disk, time-bounded.
+
 ## 0.7.16
 
 - **Messages épinglés** : un bouton 📌 sur chaque message le garde toujours sous les yeux du modèle (jamais retiré à la réduction du contexte, laissé tel quel par le résumé), huit au plus par conversation et dans la limite d'un quart de la fenêtre.

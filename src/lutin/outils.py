@@ -289,8 +289,9 @@ def purger_donnees():
         from . import suivi
         ids = {c.stem for c in (_m.DONNEES / "conversations").glob("*.json")}
         suivi.nettoyer_orphelins(ids)
-        from . import archive
+        from . import archive, embeddings
         archive.nettoyer_orphelins(ids)
+        embeddings.nettoyer_orphelins(ids)
     except OSError:
         pass
     _m.CACHE_TAILLES.pop(str(_m.DONNEES), None)
@@ -386,6 +387,42 @@ def outil_ecrire(chemin, contenu, ctx):
     if not ctx["accord"]("Écrire " + rel(f), _t("Remplace tout le fichier ({} caractères).").format(len(contenu)) if avant else _t("Crée le fichier ({} caractères).").format(len(contenu)), difference(avant, contenu, rel(f)), auto=ctx["auto_ecriture"]):
         return refus(ctx, _t("Refusé par l'utilisateur : rien n'a été écrit."))
     return ecrire_et_verifier(f, contenu, eol, ctx, _t("Écrit : {} ({} caractères).").format(rel(f), len(contenu)))
+
+
+TEXTES_DOCUMENT = (".md", ".txt", ".html", ".htm", ".csv")
+
+
+def outil_document(chemin, contenu, titre, ctx):
+    """Crée un document : Markdown, texte, HTML, CSV (écrits tels quels) ou PDF et Word (.docx), construits à partir d'un texte en Markdown simple (voir documents.py). Le résultat est relu avant d'être annoncé."""
+    from . import documents, extraction
+    f = chemin_sur(chemin, ecriture=True)
+    ext = f.suffix.lower()
+    if ext in TEXTES_DOCUMENT:
+        return outil_ecrire(chemin, contenu, ctx)
+    fabrique = documents.FORMATS.get(ext)
+    if fabrique is None:
+        raise _m.ErreurOutil(_t("Format non géré : {}. Formats possibles : .md, .txt, .html, .csv, .pdf, .docx.").format(ext or _t("(sans extension)")))
+    if len(contenu) > documents.TAILLE_MAX:
+        raise _m.ErreurOutil(_t("Contenu trop long ({} caractères au maximum).").format(documents.TAILLE_MAX))
+    octets = fabrique(contenu, str(titre or "").strip()[:150])
+    if not ctx["accord"](_t("Créer ") + rel(f), _t("{} ({} caractères de texte, {} Ko).").format(_t("Remplace le document") if f.is_file() else _t("Crée le document"), len(contenu), len(octets) // 1024 + 1), "", auto=ctx["auto_ecriture"]):
+        return refus(ctx, _t("Refusé par l'utilisateur : rien n'a été écrit."))
+    for dossier_ecrit in (f.parent, _m.DONNEES):
+        d = _m.espace_disque(dossier_ecrit)
+        if d and d["libre"] < 300 * 1024 ** 2:
+            raise _m.ErreurOutil(_t("Le disque {} est presque plein ({} libres) : je n'écris pas. Fais de la place d'abord.").format(d["racine"], _m.go(d["libre"])))
+    copie = sauvegarder(f, ctx)
+    f.parent.mkdir(parents=True, exist_ok=True)
+    provisoire = f.with_name(f.name + ".tmp")
+    provisoire.write_bytes(octets)
+    provisoire.replace(f)
+    noter_apres(ctx, f)
+    suite = _t(" Ancienne version sauvegardée dans ") + copie + "." if copie else ""
+    try:
+        relu = sum(len(texte) for _, texte in extraction.parties(str(f)))
+    except extraction.ErreurExtraction as erreur:
+        return _t("Écrit : {} ({} Ko).{}\n⚠ Le document n'a pas pu être relu : {}").format(rel(f), len(octets) // 1024 + 1, suite, erreur)
+    return _t("Écrit : {} ({} Ko, relu : {} caractères de texte).{}").format(rel(f), len(octets) // 1024 + 1, relu, suite)
 
 
 def refus(ctx, texte):
@@ -800,6 +837,9 @@ OUTILS = [
     {"type": "function", "function": {"name": "web_lire", "description": "Lit une page web (adresse http/https) et la rend en texte. Pour une page longue, la suite se demande avec debut (valeur indiquée à la fin du résultat). Les adresses locales sont refusées.", "parameters": {"type": "object", "properties": {"url": {"type": "string"}, "debut": {"type": "integer", "description": "Position de départ dans le texte (0 au début)."}}, "required": ["url"]}}},
     {"type": "function", "function": {"name": "suivi", "description": "Met à jour la FICHE DE SUIVI de la conversation (relue à chaque réponse, elle te fait retrouver où on en est). Sections : objectif, decisions, plan, etape (l'étape en cours), fait, ouvert (questions ouvertes), fichiers. Appelle-la quand l'objectif est clair, quand une décision est prise, quand un plan est validé, et à chaque étape terminée ; garde les lignes courtes.", "parameters": {"type": "object", "properties": {"section": {"type": "string"}, "texte": {"type": "string"}, "mode": {"type": "string", "description": "remplacer (défaut pour objectif, plan, etape), ajouter (défaut pour les autres) ou retirer."}}, "required": ["section", "texte"]}}},
     {"type": "function", "function": {"name": "taches", "description": "Affiche à l'utilisateur la liste de tes tâches et leur avancement. À utiliser dès qu'une demande a 3 étapes ou plus : crée la liste au début, puis renvoie-la en entier à chaque changement (une seule tâche « en_cours » à la fois).", "parameters": {"type": "object", "properties": {"liste": {"type": "array", "items": {"type": "object", "properties": {"texte": {"type": "string"}, "etat": {"type": "string", "description": "a_faire, en_cours ou fait"}}, "required": ["texte", "etat"]}}}, "required": ["liste"]}}},
+    {"type": "function", "function": {"name": "creer_document", "description": "Crée un document : PDF (.pdf), Word (.docx), Markdown (.md), texte, HTML ou CSV, selon l'extension du chemin. Le contenu est du Markdown simple : titres (#, ##, ###), paragraphes, listes à puces (-) ou numérotées (1.), blocs de code (```), séparateurs (---), tableaux (|). Dans Word, **gras**, *italique* et `code` sont rendus. Pour un PDF ou un Word, c'est CET outil qu'il faut utiliser (pas « ecrire »). Le fichier est relu après l'écriture.", "parameters": {"type": "object", "properties": {"chemin": {"type": "string", "description": "Chemin du document avec son extension, par exemple rapports/bilan.pdf"}, "contenu": {"type": "string", "description": "Le texte du document, en Markdown simple."}, "titre": {"type": "string", "description": "Titre du document (facultatif ; placé en tête et dans les propriétés)."}}, "required": ["chemin", "contenu"]}}},
+    {"type": "function", "function": {"name": "mission_terminer", "description": "MISSION LONGUE seulement : déclare la mission terminée, avec le bilan (ce qui a été fait, comment le lancer, ce qui reste imparfait). À appeler seulement quand tout est fait ET vérifié.", "parameters": {"type": "object", "properties": {"bilan": {"type": "string"}}, "required": ["bilan"]}}},
+    {"type": "function", "function": {"name": "mission_bloquee", "description": "MISSION LONGUE seulement : tu ne peux pas continuer sans une décision de l'utilisateur. Pose UNE question précise ; la mission attend sa réponse.", "parameters": {"type": "object", "properties": {"question": {"type": "string"}}, "required": ["question"]}}},
     {"type": "function", "function": {"name": "etat_outil", "description": "État de l'outil d'images : version, ComfyUI, modèles et modules installés.", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "comfy_modeles", "description": "Liste les modèles installés dans ComfyUI (checkpoints, LoRA, VAE…) pour choisir le bon avant de générer.", "parameters": {"type": "object", "properties": {}}}},
     {"type": "function", "function": {"name": "comfy_generer", "description": "Génère une image (ou une vidéo, un son) avec ComfyUI à partir d'une description. L'utilisateur donne son accord. Écris le prompt en anglais, détaillé (sujet, style, lumière, cadrage). Renvoie le chemin du fichier créé.", "parameters": {"type": "object", "properties": {"prompt": {"type": "string", "description": "Description de ce qu'il faut générer."}, "type": {"type": "string", "description": "image (défaut), video ou son."}, "negatif": {"type": "string", "description": "Ce qu'il faut éviter."}, "largeur": {"type": "integer"}, "hauteur": {"type": "integer"}, "modele": {"type": "string", "description": "Nom exact d'un modèle installé (voir comfy_modeles)."}, "graine": {"type": "integer"}, "pas": {"type": "integer"}, "cfg": {"type": "number"}}, "required": ["prompt"]}}},

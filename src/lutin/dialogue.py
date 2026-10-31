@@ -2,6 +2,7 @@
 from pathlib import Path
 from . import archive as _archive
 from . import boucles as _boucles
+from . import mission as _mission
 from . import horsligne as _hl
 from . import images as _images
 from . import modes as _modes
@@ -209,6 +210,8 @@ def outils_du_mode(r):
         exclus |= _modes.IMAGES
     if r.get("memoire_longue") != "fichier":
         exclus.add("suivi")                                             # sans fiche de suivi, l'outil n'a pas de sens
+    if not r.get("_mission"):
+        exclus |= {"mission_terminer", "mission_bloquee"}               # ces deux outils n'existent que pendant une mission longue
     from . import addons
     if not addons.actif("comfyui"):
         exclus |= {"comfy_modeles", "comfy_generer"}                    # les outils de ComfyUI n'existent que si l'addon est activé
@@ -475,6 +478,7 @@ def consignes_systeme(r):
     return (_t("Tu es Lutin, l'assistant local de l'utilisateur. Tu réponds dans la langue de l'utilisateur, de façon directe et concise. Tu disposes d'outils pour lire et modifier le projet : utilise-les plutôt que de deviner. "
             "Chaque modification de fichier garde une sauvegarde de l'ancienne version et passe par l'accord de l'utilisateur, sauf s'il a activé l'accord automatique.\n\n") + mode + _t("\n\n# CONTEXTE DU PROJET (memoire/CONTEXTE.md)\n") + contexte[:14000] + _t("\n\n# NOTES DURABLES (memoire/MEMOIRE.md)\n") + (_m.texte_memoire(memoire) or _t("(aucune pour l'instant)"))
             + bloc_skills
+            + (_mission.consigne_systeme() if r.get("_mission") else "")
             + (_t("\n\n# ESSAI À BLANC\nTes écritures et tes commandes ne sont PAS exécutées : c'est une simulation, l'utilisateur voit ce que tu proposes. Propose ce que tu ferais (fichiers, contenu, commandes), sans insister ni réessayer. Lire et chercher fonctionnent normalement.\n") if r.get("essai_a_blanc") else "")
             + (_t("\n\n# DÉBUT DE LA CONVERSATION\nLes premiers échanges ne sont plus tous sous tes yeux (fiche de suivi ou résumé). Pour retrouver un détail précis (une décision, un nom, un chiffre, un texte), appelle « rappeler » avec quelques mots-clés et ici=true : ne le devine pas.\n") if r.get("rappel_ici") else "")
             + _pc.bloc_prompt(_m.RACINE)
@@ -572,6 +576,7 @@ def ajuster_contexte(msgs, num_ctx, facteur=1.0, outils=None):
             break
     for m in msgs:
         m.pop("epingle", None)                                   # le marquage est à nous : Ollama ne le reçoit pas
+        m.pop("medias", None)
     return msgs
 
 
@@ -663,6 +668,11 @@ def tour(conv, texte, emit, r=None, stop=None, remplacer_depuis=None, identite="
             emit({"type": "info", "texte": "Accord automatique : " + titre})
             ctx["dernier_accord"] = "auto"
             return True
+        if ctx.get("mission"):
+            # Mission longue : personne ne peut accepter. Ce qui n'est pas accordé d'office (contenu web lu pendant le tour, accord non coché) est refusé, et le modèle le sait.
+            emit({"type": "info", "texte": _t("Refusé (mission sans surveillance) : {}").format(titre)})
+            ctx["dernier_accord"] = "refuse"
+            return False
         a = _m.Attente(titre, detail, diff)
         emit({"type": "approbation", "id": a.id, "titre": titre, "detail": detail, "diff": diff})
         ok = a.attendre(stop=stop)
@@ -671,7 +681,7 @@ def tour(conv, texte, emit, r=None, stop=None, remplacer_depuis=None, identite="
         emit({"type": "info", "texte": (_t("Accepté : {}") if ok else _t("Refusé : {}")).format(titre)})
         ctx["dernier_accord"] = "manuel"
         return ok
-    ctx = {"essai": bool(r.get("essai_a_blanc")), "identite": identite, "accord": accord, "auto_ecriture": bool(r.get("auto_ecriture")), "auto_commandes": bool(r.get("auto_commandes")), "stop": stop, "conv": conv, "emit": emit, "web": bool(r.get("web", True)), "limite_ram": int(r.get("limite_ram_commande_go", 0) * _m.GO),
+    ctx = {"essai": bool(r.get("essai_a_blanc")), "identite": identite, "accord": accord, "auto_ecriture": bool(r.get("auto_ecriture")), "auto_commandes": bool(r.get("auto_commandes")), "mission": r.get("_mission", ""), "stop": stop, "conv": conv, "emit": emit, "web": bool(r.get("web", True)), "limite_ram": int(r.get("limite_ram_commande_go", 0) * _m.GO),
            "tour": {"id": datetime.now().strftime("%Y%m%d-%H%M%S-") + secrets.token_hex(2), "conversation": conv["id"], "fichiers": {}}}
     dernier = conv["messages"][-1] if conv["messages"] else None
     if dernier and dernier.get("role") == "user" and dernier.get("content") == texte:
@@ -977,8 +987,9 @@ def boucle_agent(conv, r, emit, ctx, stop):
             except Exception as erreur:  # noqa: BLE001
                 _m.journaliser("Outil « {} » : erreur inattendue {!r}".format(nom, erreur))
                 resultat = "Erreur inattendue : " + str(erreur)[:300]
-            emit({"type": "resultat", "nom": nom, "texte": resultat[:1500]})
-            conv["messages"].append({"role": "tool", "tool_name": nom, "content": resultat[:_m.LECTURE_MAX + 2000]})
+            medias = ctx.pop("medias", [])                  # images produites par l'outil, affichées dans la conversation
+            emit(dict({"type": "resultat", "nom": nom, "texte": resultat[:1500]}, **({"medias": medias} if medias else {})))
+            conv["messages"].append(dict({"role": "tool", "tool_name": nom, "content": resultat[:_m.LECTURE_MAX + 2000]}, **({"medias": medias} if medias else {})))
             _m.conv_ecrire(conv)                        # enregistré à chaque étape : un plantage du PC en pleine demande ne perd que l'étape en cours
         if garde.abandon:
             emit({"type": "info", "texte": _t("↻ Le modèle tourne en rond (le même appel {} fois) : j'arrête cette réponse. Précise ta demande ou écris « continue ».").format(_boucles.SEUIL_ABANDON)})

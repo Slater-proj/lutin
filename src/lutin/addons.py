@@ -17,6 +17,7 @@ import difflib
 import hashlib
 import hmac
 import json
+import socket
 import os
 import re
 import secrets
@@ -307,6 +308,21 @@ def masquer(texte, variables):
     return texte
 
 
+FERMES = {}                  # (hôte, port) -> instant jusqu'auquel on le sait fermé
+
+
+def _port_ouvert(hote, port):
+    """Quelqu'un écoute-t-il sur ce port de cette machine ? Sous Windows, une connexion refusée met ~2 secondes à échouer (et la page en enchaîne plusieurs) : on vérifie d'abord, en 0,3 s, et on retient « fermé » 2 secondes."""
+    if FERMES.get((hote, port), 0) > time.time():
+        return False
+    try:
+        socket.create_connection((hote, port), timeout=0.3).close()
+        return True
+    except OSError:
+        FERMES[(hote, port)] = time.time() + 2
+        return False
+
+
 def appeler(ident, nom, variables=None, delai=DELAI_APPEL):
     """Fait un appel du flux. Renvoie {ok, donnees, extrait, erreur}. Ne lève pas pour une panne du service (ok=False + erreur lisible) ; lève ErreurAddon pour un appel inconnu ou une variable manquante."""
     m = manifeste(ident)
@@ -346,6 +362,8 @@ def appeler(ident, nom, variables=None, delai=DELAI_APPEL):
         if manquantes:
             raise ErreurAddon(_t("Il manque : {}.").format(", ".join(manquantes)))
         en_tetes["Authorization"] = entete_oauth1(methode, url, cles)
+    if hote in ("127.0.0.1", "localhost") and not _port_ouvert(hote, urllib.parse.urlparse(url).port or 80):
+        return {"ok": False, "donnees": None, "extrait": {}, "erreur": _t("Le service ne répond pas : {}").format(_t("rien n'écoute sur ce port."))}
     req = urllib.request.Request(url, data=donnees_envoi, headers=en_tetes, method=methode)
     try:
         with OUVREUR.open(req, timeout=delai) as r:

@@ -467,6 +467,26 @@ def outil_generer(args, ctx):
             arreter_comfyui()                                                      # ComfyUI rend la mémoire : le modèle de langage la retrouve à la prochaine question
 
 
+def _afficher(fichiers, ctx):
+    """Copie les images produites (PNG, JPEG, WebP, GIF animé) dans les images de Lutin et les attache au résultat de l'outil : la page les affiche dans la conversation. Renvoie les identifiants."""
+    from . import images
+    dossier = addons.reglages(IDENT).get("dossier") or ""
+    if not dossier:
+        return []
+    sortie = (Path(dossier) / "output").resolve()
+    ids = []
+    for f_ in fichiers[:4]:
+        try:
+            p = (sortie / f_).resolve()
+            if sortie in p.parents and p.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp", ".gif") and p.is_file():
+                ids.append(images.enregistrer(p.read_bytes()))
+        except (OSError, ValueError):
+            continue                                                       # trop grosse, illisible : le chemin reste dans le résultat
+    if ids:
+        ctx.setdefault("medias", []).extend(ids)
+    return ids
+
+
 def _soumettre_et_attendre(f, v, complet, type_, ctx):
     try:
         if _m.reglages().get("liberer_si_comfy", True):
@@ -502,7 +522,9 @@ def _soumettre_et_attendre(f, v, complet, type_, ctx):
             if fichiers or statut == "success":
                 dossier = addons.reglages(IDENT).get("dossier") or ""
                 chemins = [str(Path(dossier) / "output" / f_) if dossier else "output/" + f_ for f_ in fichiers]
-                return _t("Terminé ({} fichier(s)) :\n{}\nGraine : {}.").format(len(fichiers), "\n".join(chemins) or _t("(ComfyUI n'a rien enregistré)"), v["graine"])
+                montrees = _afficher(fichiers, ctx)
+                return _t("Terminé ({} fichier(s)) :\n{}\nGraine : {}.").format(len(fichiers), "\n".join(chemins) or _t("(ComfyUI n'a rien enregistré)"), v["graine"]) + (
+                    _t("\nL'image est affichée à l'utilisateur dans la conversation : ne la montre pas toi-même et ne répète pas son chemin.") if montrees else "")
         time.sleep(2)
     return _t("ComfyUI n'a pas fini dans le délai ({} s) : le travail continue peut-être de son côté.").format(delai)
 
