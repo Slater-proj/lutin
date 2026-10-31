@@ -2,6 +2,12 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## 0.10.15
+
+- **Les modèles hors catalogue sont mieux jugés** : pour un modèle découvert dans la bibliothèque ou installé à la main, Lutin lit ce qu'Ollama en dit (nombre de paramètres, experts, longueur de contexte, mémoire du contexte, capacités) au lieu d'une estimation. La description de la ligne le dit, y compris « n'appelle pas les outils » le cas échéant. Lecture en arrière-plan, une seule fois par modèle.
+
+**English.** Models outside the catalogue are better judged: Lutin reads what Ollama says about them (parameters, experts, context length, context memory, capabilities) instead of guessing.
+
 ## 0.10.14
 
 - **Quatre modèles de plus au catalogue**, pensés pour les petites machines : `granite4:tiny-h` (7 milliards dont 1 seul travaille à chaque mot : fait pour aller vite sur processeur), `granite4:3b`, `phi4-mini:3.8b` et `llama3.1:8b`. Notes éditoriales, pas des mesures : lance le banc d'essai 📊 chez toi.

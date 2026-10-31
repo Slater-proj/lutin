@@ -1,6 +1,7 @@
 """Le dialogue avec Ollama : démarrage et état d'Ollama, requêtes au modèle, boucle de l'agent (tours d'outils), résumé des conversations, titres. L'état reste dans moteur (« _m.NOM »)."""
 from pathlib import Path
 from . import archive as _archive
+from . import infos_modele as _infos
 from . import boucles as _boucles
 from . import fichiers as _fichiers
 from . import mission as _mission
@@ -392,11 +393,24 @@ def modeles_connus(installes, tailles=None):
     avance = bool(_m.reglages().get("avance"))
     liste = [dict(m, origine="catalogue") for m in _m.MODELES if (m["id"] not in reg["masques"] and (avance or not m["avance"])) or m["id"] in installes]
     vus = set(catalogue)
+    a_lire = []
     for nom in reg["perso"] + [n for n in installes if n not in reg["perso"]]:
         if nom in vus:
             continue
         vus.add(nom)
-        liste.append({"id": nom, "nom": nom, "go": round(tailles.get(nom, 0) / 1e9, 1), "role": "perso", "origine": "perso" if nom in reg["perso"] else "installe"})
+        entree = {"id": nom, "nom": nom, "go": round(tailles.get(nom, 0) / 1e9, 1), "role": "perso", "origine": "perso" if nom in reg["perso"] else "installe"}
+        if nom in installes:
+            infos = _infos.deja_connu(nom, _m.DONNEES)
+            if infos is None:
+                a_lire.append(nom)
+            elif infos:
+                entree.update({k: infos[k] for k in ("params_b", "actifs_b", "ctx_max", "kv_mo_1k") if k in infos})          # les vrais chiffres d'Ollama au lieu d'une estimation
+                if "capacites" in infos:
+                    entree["capacites"] = infos["capacites"]
+                entree["phrase"] = _infos.phrase(infos)
+        liste.append(entree)
+    if a_lire:
+        _infos.demander(a_lire, _m.DONNEES, lambda n: ollama_json("/api/show", {"model": n}, 8))          # en arrière-plan : la liste s'améliore au rafraîchissement suivant
     return liste
 
 
