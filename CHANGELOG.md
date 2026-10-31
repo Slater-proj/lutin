@@ -2,6 +2,13 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## 0.10.1
+
+- **Le modèle est collé au nom « Lutin »** en haut à gauche, et sa liste prend toute la place restante (le nom complet se lit).
+- **Le bouton Mission est à côté d'Envoyer** (« 🎯 Mission ») et son rôle est clair : tu écris ta demande, tu cliques, une fenêtre te la rappelle et te demande le dossier, la durée et l'autonomie, puis **« Lancer la mission »** la démarre vraiment ; champ vide, il ouvre la liste des missions.
+
+**English.** The model sits right next to the “Lutin” name at the top left, and its list takes all the remaining room. The Mission button is next to Send (“🎯 Mission”) and its role is clear: write your request, click, a window recalls it and asks for the folder, duration and autonomy, then “Start the mission” really starts it; with an empty box it opens the list of missions.
+
 ## 0.10.0
 
 - **Les options suivent chaque conversation** : mode, réflexion, **Fichiers auto**, **Commandes auto**, essai à blanc, web et longueur max sont propres à la conversation ouverte ; changer de conversation retrouve ses réglages, une nouvelle conversation repart avec les accords automatiques **décochés**. Seul le modèle reste commun, et il passe **en haut à gauche, à côté du nom Lutin**. Une case cochée ou décochée pendant une réponse compte dès l'outil suivant.

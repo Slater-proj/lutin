@@ -389,6 +389,37 @@ class Parcours(unittest.TestCase):
             p.attendre("document.getElementById('ptTravail').hidden")
             self.assertEqual(p.erreurs, [])
 
+    def test_le_bouton_mission_a_cote_d_envoyer_confirme_puis_lance(self):
+        """Écrire sa demande, cliquer sur « Mission » (à côté d'Envoyer) : une fenêtre demande de confirmer, puis la mission est vraiment créée ; champ vide : la liste des missions. Le modèle est juste à côté du nom."""
+        with self.captures.serveur_demo() as (port, tmp):
+            donnees = tmp / "home" / "donnees"
+            p = self.ouvrir(tmp, "http://127.0.0.1:%d/" % port)
+            p.attendre("document.getElementById('selMode').dataset.init === '1'")
+            self.assertEqual(p.evaluer("document.getElementById('bMission').nextElementSibling.id"), "bEnvoyer", "le bouton est juste avant « Envoyer »")
+            self.assertGreater(p.evaluer("document.getElementById('selModele').getBoundingClientRect().width"), 120, "la liste des modèles est assez large pour lire le nom")
+            ecart = p.evaluer("(() => { const t = document.querySelector('aside h1'), s = document.getElementById('selModele').getBoundingClientRect(); const r = document.createRange(); r.selectNodeContents([...t.childNodes].find(n => n.nodeType === 3 && n.textContent.includes('Lutin'))); return s.left - r.getBoundingClientRect().right; })()")
+            self.assertLess(ecart, 24, "le modèle est tout près du nom « Lutin » (écart %s px)" % ecart)
+            p.evaluer("(() => { const s = document.getElementById('saisie'); s.value = 'Crée un petit jeu de pierre-feuille-ciseaux avec des tests.'; return true; })()")
+            p.evaluer("document.getElementById('bMission').click(); true")
+            p.attendre("!document.getElementById('modal').hidden && document.getElementById('modalCorps').textContent.includes('pierre-feuille-ciseaux')")
+            self.assertFalse((donnees / "missions.json").exists(), "rien n'est lancé tant qu'on n'a pas confirmé")
+            p.evaluer("[...document.querySelectorAll('#modalCorps button')].find(b => b.textContent.includes('Lancer la mission')).click(); true")
+            p.attendre("document.getElementById('modal').hidden")
+            debut = time.time()
+            missions = []
+            while time.time() - debut < 10 and not missions:
+                if (donnees / "missions.json").exists():
+                    missions = json.loads((donnees / "missions.json").read_text(encoding="utf-8"))
+                time.sleep(0.3)
+            self.assertEqual(len(missions), 1, "la mission est créée")
+            self.assertIn("pierre-feuille-ciseaux", missions[0]["cahier"])
+            self.assertEqual(p.evaluer("document.getElementById('saisie').value"), "", "le champ est vidé")
+            p.attendre("document.getElementById('fil').textContent.includes('Mission lancée')")
+            # champ vide : la liste des missions
+            p.evaluer("document.getElementById('bMission').click(); true")
+            p.attendre("document.getElementById('p-auto').classList.contains('vue')")
+            self.assertEqual(p.erreurs, [])
+
     def test_epingler_un_message_depuis_la_page(self):
         with self.captures.serveur_demo() as (port, tmp):
             p = self.ouvrir(tmp, "http://127.0.0.1:%d/#conv=a1b2c3d4" % port)

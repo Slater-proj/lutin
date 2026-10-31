@@ -37,7 +37,7 @@ body { margin:0; background:radial-gradient(1200px 600px at 70% -10%, #14202e 0%
 aside { background:linear-gradient(180deg, var(--panel2), var(--panel)); border-right:1px solid var(--line); display:flex; flex-direction:column; min-height:0; }
 aside h1 { font-size:.95rem; font-weight:600; letter-spacing:.02em; margin:0; padding:14px 16px; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:8px; }
 aside h1 img { border-radius:7px; flex:0 0 auto; }
-aside h1 .modele-titre { margin-left:auto; min-width:0; max-width:62%; font-size:.76rem; font-weight:400; padding:2px 4px; text-overflow:ellipsis; letter-spacing:0; }
+aside h1 .modele-titre { flex:1 1 auto; margin-left:0; min-width:0; font-size:.8rem; font-weight:400; padding:3px 4px; text-overflow:ellipsis; letter-spacing:0; }
 aside .liste { overflow:auto; flex:1; padding:8px; min-height:60px; }
 .separateur-v { cursor:col-resize; background:var(--line); width:1px; margin:0; position:relative; touch-action:none; user-select:none; } .separateur-v:hover, .separateur-v.actif, .separateur-v:focus-visible { background:var(--accent, #5aa9ff); outline:0; }
 .separateur-h { cursor:row-resize; background:var(--line); height:1px; flex:0 0 1px; position:relative; touch-action:none; user-select:none; } .separateur-h:hover, .separateur-h.actif, .separateur-h:focus-visible { background:var(--accent, #5aa9ff); outline:0; }
@@ -385,7 +385,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
         <button id="bAnnuler" hidden></button>
       </div>
       <div class="pj" id="piecesJointes" hidden></div>
-      <div class="saisie-ligne" id="ligneSaisie"><button id="bJoindre" title="Joindre des images, des documents (PDF, Word, LibreOffice, PowerPoint, Excel, HTML) ou des fichiers texte ou de code : choisis-les, colle-les ou glisse-les ici. Pour les images, un modèle qui voit est utilisé (onglet Modèles)."><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg></button><input type="file" id="fImage" multiple hidden><button id="bMission" title="Confier ce que tu viens d'écrire à Lutin comme une mission longue : il le mène seul pendant des heures (onglet Automatisation)">🎯</button><textarea id="saisie" rows="1" placeholder="Message…  (Entrée : envoyer · / : commandes)"></textarea><button class="principal" id="bEnvoyer" title="Envoyer"><span class="lb">Envoyer</span><span class="ic">➤</span></button><button id="bStop" hidden title="Arrêter"><span class="lb">Arrêter</span><span class="ic">■</span></button></div>
+      <div class="saisie-ligne" id="ligneSaisie"><button id="bJoindre" title="Joindre des images, des documents (PDF, Word, LibreOffice, PowerPoint, Excel, HTML) ou des fichiers texte ou de code : choisis-les, colle-les ou glisse-les ici. Pour les images, un modèle qui voit est utilisé (onglet Modèles)."><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg></button><input type="file" id="fImage" multiple hidden><textarea id="saisie" rows="1" placeholder="Message…  (Entrée : envoyer · / : commandes)"></textarea><button id="bMission" title="Confier ce que tu viens d'écrire à Lutin comme une mission longue : il le mène seul pendant des heures (une fenêtre te demande de confirmer). Champ vide : ouvre la liste des missions."><span class="lb">🎯 Mission</span><span class="ic">🎯</span></button><button class="principal" id="bEnvoyer" title="Envoyer"><span class="lb">Envoyer</span><span class="ic">➤</span></button><button id="bStop" hidden title="Arrêter"><span class="lb">Arrêter</span><span class="ic">■</span></button></div>
     </div>
   </section>
   <section class="page" id="p-sante"><div class="cadre" id="santeCorps"></div></section>
@@ -982,9 +982,35 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     }
   };
   $('bJoindre').addEventListener('click', () => $('fImage').click());
-  $('bMission').addEventListener('click', () => {            // le message en cours devient le cahier des charges d'une nouvelle mission
-    MISSION.brouillon.cahier = $('saisie').value.trim() || MISSION.brouillon.cahier; MISSION.ouvert = true;
-    ouvrirOnglet('auto'); setTimeout(() => { const d = $('zoneMissions'); if (d) d.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 300);
+  $('bMission').addEventListener('click', async () => {
+    const texte = $('saisie').value.trim();
+    if (!texte) { MISSION.ouvert = true; ouvrirOnglet('auto'); setTimeout(() => { const d = $('zoneMissions'); if (d) d.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 300); return; }   // rien d'écrit : la liste des missions
+    let tr;
+    try { tr = await api('/api/travaux'); } catch (e) { infoLocale(e.message); return; }
+    const c = ouvrirModal(T('Confier ceci à Lutin comme mission'));
+    c.appendChild(el('p', 'aide', T('Lutin va le mener seul, pendant des heures, puis te rendre un bilan. Tu suis son avancement dans l\'onglet Automatisation.')));
+    const cite = el('blockquote'); cite.textContent = texte.length > 400 ? texte.slice(0, 400) + '…' : texte; cite.style.cssText = 'margin:6px 0;padding:6px 10px;border-left:3px solid var(--accent, #5aa9ff);white-space:pre-wrap;max-height:160px;overflow:auto'; c.appendChild(cite);
+    const nom = el('input'); nom.value = texte.split(/\s+/).slice(0, 6).join(' ').slice(0, 60); nom.style.width = '100%';
+    const dossier = el('select'); (tr.liste || []).forEach(x => { const o = el('option', '', x.nom + ' — ' + x.chemin); o.value = x.id; dossier.appendChild(o); });
+    dossier.value = (ETAT.travaux && ETAT.travaux.actif) || (tr.liste && tr.liste[0] && tr.liste[0].id) || '';
+    const duree = el('input'); duree.type = 'number'; duree.min = 1; duree.max = 72; duree.value = MISSION.brouillon.duree_h || 8; duree.style.width = '80px';
+    const auto = el('input'); auto.type = 'checkbox'; auto.checked = MISSION.brouillon.autonome !== false;
+    const ligne = (libelle, champ) => { const l = el('label', 'opt-ligne'); l.style.margin = '6px 0'; l.append(document.createTextNode(libelle + ' '), champ); c.appendChild(l); };
+    ligne(T('Nom'), nom); ligne(T('Dossier de travail'), dossier); ligne(T('Durée maximale (heures)'), duree);
+    const la = el('label', 'opt-ligne'); la.append(auto, document.createTextNode(' ' + T('Autonome : Lutin écrit des fichiers et lance des commandes sans me demander'))); c.appendChild(la);
+    c.appendChild(el('div', 'aide', T('Dans le dossier choisi seulement, avec les sauvegardes et les garde-fous habituels. Décoché, il ne fait que montrer ce qu\'il ferait.')));
+    const msg = el('div', 'attention'), barre = el('div', 'ligne'), go = el('button', 'principal', T('Lancer la mission')), non = el('button', '', T('Annuler'));
+    non.addEventListener('click', fermerModal);
+    go.addEventListener('click', async () => {
+      go.disabled = true; msg.textContent = '';
+      try {
+        await api('/api/mission-action', { action: 'creer', nom: nom.value, cahier: texte, travail: dossier.value, duree_h: duree.value, autonome: auto.checked });
+        MISSION.brouillon.duree_h = duree.value; MISSION.brouillon.autonome = auto.checked;
+        fermerModal(); $('saisie').value = ''; $('saisie').dispatchEvent(new Event('input'));
+        infoLocale(T('🎯 Mission lancée : ') + nom.value + T(' — suis son avancement dans l\'onglet Automatisation.'));
+      } catch (e) { msg.textContent = e.message; go.disabled = false; }
+    });
+    barre.append(go, non); c.append(msg, barre);
   });
   $('fImage').addEventListener('change', e => { joindre([...e.target.files]); e.target.value = ''; });
   $('saisie').addEventListener('paste', e => { const f = [...(e.clipboardData ? e.clipboardData.files : [])]; if (f.length) { e.preventDefault(); joindre(f); } });
