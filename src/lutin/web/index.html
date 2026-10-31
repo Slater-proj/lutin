@@ -189,6 +189,7 @@ pre.diff { width:100%; max-height:340px; overflow:auto; background:#0c1117; bord
 .res-recherche .extrait { color:var(--muted); font-size:.74rem; white-space:normal; }
 .conv .epingle { color:var(--warm); }
 .attention { color:var(--warm); }
+.msg.epingle-msg { box-shadow:inset 3px 0 0 var(--warm); }
 #listeAddons .ligne { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin:2px 0; }
 .liste-modeles { max-height:240px; overflow:auto; font-size:.82rem; border:1px solid var(--line); border-radius:8px; padding:2px 10px; margin:4px 0 8px; background:#0b1015; }
 .liste-modeles > div { padding:3px 0; border-bottom:1px solid #1a2330; display:flex; gap:8px; align-items:baseline; } .liste-modeles > div:last-child { border-bottom:0; }
@@ -768,6 +769,16 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
   };
   const finEdition = () => { EDIT_INDEX = null; $('bandeauEdition').hidden = true; };
   const retirerActions = () => fil().querySelectorAll('.actions').forEach(a => a.remove());
+  // 📌 Épingler : le message n'est jamais retiré du contexte du modèle (huit au plus par conversation)
+  const boutonEpingle = (bulle, idx) => {
+    const m = CONV.messages[idx], b = el('button', '', m.epingle ? T('📌 Épinglé') : T('📌 Épingler'));
+    bulle.classList.toggle('epingle-msg', !!m.epingle);
+    b.title = m.epingle ? T('Désépingler : il pourra être retiré du contexte quand la place manque') : T('Épingler : ce message restera toujours sous les yeux du modèle');
+    b.addEventListener('click', async () => {
+      try { await api('/api/epingler-message', { conversation: CONV.id, index: idx, epingle: !m.epingle }); if (m.epingle) delete m.epingle; else m.epingle = true; annoter(); } catch (e) { alert(e.message); }
+    });
+    return b;
+  };
   const annoter = () => {
     retirerActions();
     if (!CONV || !CONV.messages || EN_COURS) return;
@@ -777,13 +788,17 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
       const idx = indicesUser[k - decal]; if (idx === undefined) return;
       b.dataset.idx = idx;
       const barre = el('div', 'actions'), mod = el('button', '', T('✏️ Modifier'));
+      barre.appendChild(boutonEpingle(b, idx));
       mod.title = T('Modifier ce message : la conversation repart de là');
       mod.addEventListener('click', () => { if (EN_COURS) return; EDIT_INDEX = idx; $('saisie').value = CONV.messages[idx].content; $('bandeauEdition').hidden = false; $('saisie').focus(); $('saisie').dispatchEvent(new Event('input')); });
       barre.appendChild(mod); b.appendChild(barre);
     });
     const reponses = [...fil().querySelectorAll('.msg.ia')].filter(m => m.querySelector('.corps') && m.querySelector('.corps')._brut);
+    const indicesIA = []; CONV.messages.forEach((m, i) => { if (m.role === 'assistant' && (m.content || '').trim()) indicesIA.push(i); });
+    const decalIA = reponses.length - indicesIA.length;
     reponses.forEach((m, k) => {
       const barre = el('div', 'actions'), cop = el('button', '', T('📋 Copier'));
+      const idxIA = indicesIA[k - decalIA]; if (idxIA !== undefined) { m.dataset.idx = idxIA; barre.appendChild(boutonEpingle(m, idxIA)); }
       cop.addEventListener('click', async () => { cop.textContent = (await copier(m.querySelector('.corps')._brut)) ? T('✔ Copié') : T('Échec'); setTimeout(() => cop.textContent = T('📋 Copier'), 1500); });
       barre.appendChild(cop);
       if (k === reponses.length - 1 && indicesUser.length) {

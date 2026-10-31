@@ -2,6 +2,12 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## 0.7.16
+
+- **Messages épinglés** : un bouton 📌 sur chaque message le garde toujours sous les yeux du modèle (jamais retiré à la réduction du contexte, laissé tel quel par le résumé), huit au plus par conversation et dans la limite d'un quart de la fenêtre.
+
+**English.** Pinned messages: a 📌 button on every message keeps it always in front of the model (never dropped when the context is trimmed, left untouched by the summary), eight per conversation at most and within a quarter of the window.
+
 ## 0.7.15
 
 - **Détecteur de boucle** : le même appel d'outil refait trois fois n'est plus exécuté (le modèle reçoit l'ordre de passer à autre chose), cinq fois arrête la réponse ; une réponse qui répète la précédente presque mot pour mot est signalée, et la demande suivante ordonne d'exécuter l'étape en cours au lieu de replanifier.

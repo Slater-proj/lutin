@@ -480,6 +480,8 @@ class Gestionnaire(BaseHTTPRequestHandler):
                     amorce = _m.amorcer_fiche(conv, r) if choix == "fichier" else 0          # une fiche vide est remplie à partir du début de la conversation
                     _m.conv_ecrire(conv)
                 return self._envoyer(200, {"mode": _m.memoire_longue(_m.conv_lire(ident), r), "mesure": _suivi.mesure(ident, r["num_ctx"]), "amorce": amorce})
+            if self.path == "/api/epingler-message":
+                return self._envoyer(200, _m.epingler_message(str(donnees.get("conversation", "")), donnees.get("index"), donnees.get("epingle")))
             if self.path in ("/api/addon-activer", "/api/addon-reglages", "/api/addon-verifier", "/api/addon-correction", "/api/addon-flux", "/api/addon-flux-restaurer", "/api/addon-action", "/api/fond-creer", "/api/fond-action"):
                 if not self._configurateur():
                     return self._envoyer(403, {"erreur": _t("Les extensions se gèrent depuis cette machine (niveau « cette machine seulement » ou navigateur de cette machine).")})

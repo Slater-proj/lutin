@@ -1592,6 +1592,45 @@ class Assistant(unittest.TestCase):
         for c in (cid, cid2):
             post("/api/supprimer", {"id": c})
 
+    def test_messages_epingles_jamais_retires_du_contexte(self):
+        """Un message épinglé reste sous les yeux du modèle (réduction du contexte, résumé) mais n'est jamais envoyé avec son marquage ; huit au plus."""
+        cid = self.conversation_longue("Règle d'or : ne jamais toucher à la production.")
+        r = post("/api/epingler-message", {"conversation": cid, "index": 0, "epingle": True})
+        self.assertEqual(r["epingles"], 1)
+        self.assertTrue(A.conv_lire(cid)["messages"][0]["epingle"])
+        post("/api/epingler-message", {"conversation": cid, "index": 99, "epingle": True}, attendu=400)
+        post("/api/epingler-message", {"conversation": cid, "index": "x", "epingle": True}, attendu=400)
+        post("/api/epingler-message", {"conversation": "inconnu", "index": 0, "epingle": True}, attendu=400)
+        for i in range(1, 8):
+            post("/api/epingler-message", {"conversation": cid, "index": i, "epingle": True})
+        post("/api/epingler-message", {"conversation": cid, "index": 8, "epingle": True}, attendu=400)          # le neuvième est refusé
+        for i in range(1, 8):
+            post("/api/epingler-message", {"conversation": cid, "index": i, "epingle": False})
+        # la réduction du contexte garde le message épinglé, retire d'anciens messages, et le marquage ne part pas chez Ollama
+        court = {"role": "user", "content": "Règle d'or : ne jamais toucher à la production.", "epingle": True}
+        msgs = [{"role": "system", "content": "s"}, court] + [{"role": "assistant" if i % 2 else "user", "content": "bavardage %d " % i + "mot " * 400} for i in range(12)] + [{"role": "user", "content": "Et maintenant ?"}]
+        reduit = A.ajuster_contexte(msgs, 4096, 1.0, [])
+        self.assertTrue(any("Règle d'or" in (m.get("content") or "") for m in reduit), "le message épinglé est resté")
+        self.assertLess(len(reduit), len(msgs), "d'autres anciens messages ont bien été retirés")
+        self.assertFalse(any("epingle" in m for m in reduit), "le marquage ne part pas chez Ollama")
+        sans = [{k: v for k, v in m.items() if k != "epingle"} for m in msgs]
+        self.assertFalse(any("Règle d'or" in (m.get("content") or "") for m in A.ajuster_contexte(sans, 4096, 1.0, [])), "sans épingle, le même message disparaît")
+        enorme = dict(court, content="mot " * 3000)                                       # un épinglé plus gros qu'un quart du budget n'est pas protégé : il ne doit pas étouffer le reste
+        self.assertFalse(any("mot mot mot" in (m.get("content") or "") and m.get("content") == enorme["content"] for m in A.ajuster_contexte([msgs[0], enorme] + msgs[2:], 4096, 1.0, [])))
+        # le résumé garde les messages épinglés
+        A.enregistrer_reglages({"memoire_longue": "resume"})
+        chat("Et la suite ?", conversation=cid, reponses=[[{"content": "RÉSUMÉ."}], [{"content": "Ok."}]])
+        conv = A.conv_lire(cid)
+        self.assertTrue(conv["resume"] and conv["messages"][0].get("epingle") and "Règle d'or" in conv["messages"][0]["content"], "épinglé : gardé tel quel après le résumé")
+        post("/api/epingler-message", {"conversation": cid, "index": 0, "epingle": False})
+        self.assertFalse(A.conv_lire(cid)["messages"][0].get("epingle"))
+        A.TOURS_ACTIFS[cid] = threading.Event()
+        try:
+            post("/api/epingler-message", {"conversation": cid, "index": 0, "epingle": True}, attendu=400)
+        finally:
+            A.TOURS_ACTIFS.pop(cid, None)
+        post("/api/supprimer", {"id": cid})
+
     def test_mise_a_jour_depuis_la_page(self):
         import time
         from lutin import acces, cli

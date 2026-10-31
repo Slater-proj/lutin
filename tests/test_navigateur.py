@@ -331,6 +331,19 @@ class Parcours(unittest.TestCase):
             self.assertEqual(p.evaluer("document.querySelectorAll('#listeAddons details.sous[open]').length"), 1, "ni le bloc des styles")
             self.assertEqual(p.erreurs, [])
 
+    def test_epingler_un_message_depuis_la_page(self):
+        with self.captures.serveur_demo() as (port, tmp):
+            p = self.ouvrir(tmp, "http://127.0.0.1:%d/#conv=a1b2c3d4" % port)
+            p.attendre("[...document.querySelectorAll('.actions button')].some(b => b.textContent.includes('Épingler'))")
+            self.assertEqual(p.evaluer("[...document.querySelectorAll('.actions button')].filter(b => b.textContent.includes('Épingler')).length"), 2, "un bouton sur la demande et un sur la réponse")
+            p.evaluer("[...document.querySelectorAll('.actions button')].find(b => b.textContent.includes('Épingler')).click()")
+            p.attendre("!!document.querySelector('.msg.epingle-msg') && [...document.querySelectorAll('.actions button')].some(b => b.textContent.includes('Épinglé'))")
+            sauve = json.loads((tmp / "home" / "donnees" / "conversations" / "a1b2c3d4.json").read_text(encoding="utf-8"))
+            self.assertEqual([i for i, m in enumerate(sauve["messages"]) if m.get("epingle")], [0], "le premier message (la demande) est épinglé sur le disque")
+            p.evaluer("[...document.querySelectorAll('.actions button')].find(b => b.textContent.includes('Épinglé')).click()")
+            p.attendre("!document.querySelector('.msg.epingle-msg')")
+            self.assertEqual(p.erreurs, [])
+
     def test_reprise_proposee_une_fois_puis_plus(self):
         with self.captures.serveur_demo() as (port, tmp):
             ancien = tmp / "ancien-assistant"

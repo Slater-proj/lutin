@@ -270,7 +270,7 @@ def rappel_du_fil(conv, fiche_etape=""):
     if not morceaux:
         return "", 0
     passages = noter(morceaux, df, moyenne, len(morceaux), termes, 8, 2 if precise else 1)
-    sous_les_yeux = " ".join(" ".join(str(m.get("content") or "").split()) for m in msgs[-6:])                       # les derniers échanges sont déjà dans la fenêtre
+    sous_les_yeux = " ".join(" ".join(str(m.get("content") or "").split()) for m in msgs[-6:] + [m for m in msgs[:-6] if m.get("epingle")])                       # les derniers échanges sont déjà dans la fenêtre
     def debut(p):
         return " ".join(RE_ROLE.sub("", p["m"]["texte"]).split())[:60]
     gardes = [p for p in passages if debut(p) not in sous_les_yeux][:3]

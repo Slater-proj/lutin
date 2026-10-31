@@ -215,6 +215,31 @@ def epingler_conversation(ident, epingle):
     return {"ok": True, "epingle": c["epingle"]}
 
 
+EPINGLES_MAX = 8                 # messages épinglés au plus par conversation (ils prennent de la place à chaque réponse)
+
+
+def epingler_message(ident, index, epingle):
+    """Marque un message comme important : il n'est jamais retiré du contexte du modèle (ni par la réduction du contexte, ni par le résumé), dans la limite d'un quart de la fenêtre."""
+    if ident in _m.TOURS_ACTIFS:
+        raise ValueError(_t("Une réponse est en cours dans cette conversation : attends la fin ou arrête-la."))
+    c = _m.conv_lire(ident)
+    try:
+        i = int(index)
+    except (TypeError, ValueError):
+        raise ValueError(_t("Message inconnu."))
+    msgs = c["messages"]
+    if not 0 <= i < len(msgs) or msgs[i].get("role") not in ("user", "assistant") or not (msgs[i].get("content") or "").strip():
+        raise ValueError(_t("Ce message ne peut pas être épinglé."))
+    if epingle:
+        if not msgs[i].get("epingle") and sum(1 for m in msgs if m.get("epingle")) >= EPINGLES_MAX:
+            raise ValueError(_t("{} messages épinglés au plus : désépingle-en un d'abord.").format(EPINGLES_MAX))
+        msgs[i]["epingle"] = True
+    else:
+        msgs[i].pop("epingle", None)
+    _m.ecrire_atomique(_m.conv_chemin(ident), json.dumps(c, ensure_ascii=False))          # sans toucher à la date « maj »
+    return {"ok": True, "epingles": sum(1 for m in msgs if m.get("epingle"))}
+
+
 def chercher_conversations(q):
     """Recherche dans le titre et le contenu des conversations enregistrées."""
     q = " ".join(str(q or "").lower().split())

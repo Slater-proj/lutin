@@ -531,6 +531,13 @@ def ajuster_contexte(msgs, num_ctx, facteur=1.0, outils=None):
     budget = int(num_ctx * 0.68 * facteur) - len(json.dumps(_m.OUTILS if outils is None else outils, ensure_ascii=False)) // 3
     msgs = [dict(m) for m in msgs]
     dernier_user = max((i for i, m in enumerate(msgs) if m["role"] == "user"), default=-1)
+    # les messages épinglés ne sont jamais retirés, dans la limite d'un quart du budget (les plus récents d'abord : au-delà, les plus anciens redeviennent retirables)
+    protege, total = set(), 0
+    for i in reversed(range(len(msgs))):
+        if msgs[i].get("epingle"):
+            total += len(json.dumps(msgs[i], ensure_ascii=False)) // 3
+            if total <= budget // 4:
+                protege.add(id(msgs[i]))
 
     def taille():
         return estimer(msgs)
@@ -557,12 +564,14 @@ def ajuster_contexte(msgs, num_ctx, facteur=1.0, outils=None):
     # 4) les anciens tours de conversation (avant la question actuelle) sont retirés s'il le faut, en gardant le système, le résumé et la question
     while taille() > budget and dernier_user > 2:
         for i in range(1, dernier_user):
-            if msgs[i]["role"] in ("user", "assistant", "tool") and not msgs[i].get("content", "").startswith(("[Résumé", "[Fiche de suivi", "[Extraits", "Compris, je m'appuie")):
+            if msgs[i]["role"] in ("user", "assistant", "tool") and id(msgs[i]) not in protege and not msgs[i].get("content", "").startswith(("[Résumé", "[Fiche de suivi", "[Extraits", "Compris, je m'appuie")):
                 del msgs[i]
                 dernier_user -= 1
                 break
         else:
             break
+    for m in msgs:
+        m.pop("epingle", None)                                   # le marquage est à nous : Ollama ne le reçoit pas
     return msgs
 
 
@@ -594,7 +603,7 @@ def compacter(conv, r, emit, forcer=False):
             return False
         _archive.ajouter(conv["id"], ancien)                  # le résumé perd des détails : le début reste retrouvable (« rappeler »)
         conv["resume"] = nouveau_resume
-        conv["messages"] = msgs[coupe:]
+        conv["messages"] = [m for m in ancien if m.get("epingle")] + msgs[coupe:]          # les messages épinglés restent tels quels, en plus du résumé
         conv.pop("jetons", None)                    # le chiffre de contexte d'avant le résumé n'est plus vrai
         return True
     except (urllib.error.URLError, OSError, ValueError) as erreur:
