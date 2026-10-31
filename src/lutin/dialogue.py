@@ -27,6 +27,7 @@ from . import moteur as _m
 RE_APPEL_MAL_FORME = re.compile(r"XML|syntax|parse|parsing|tool", re.I)
 
 
+RAPPEL_VIDE = "Ta dernière réponse était vide. Réponds maintenant à la demande de l'utilisateur, en t'appuyant sur ce que tu viens de lire ou de faire, ou appelle l'outil nécessaire."
 RAPPEL_APPEL = "Ton dernier appel d'outil était mal formé et a été rejeté. Recommence en appelant l'outil avec des arguments simples ; pour un long contenu, fais plusieurs petits appels."
 
 
@@ -858,12 +859,12 @@ def boucle_agent(conv, r, emit, ctx, stop):
                     emit({"type": "info", "texte": "Ce modèle ne sait pas appeler d'outils : il répondra sans lire ni modifier les fichiers. Choisis un autre modèle (Qwen 3.8 ou Gemma 4) pour cela."})
             else:
                 corps["tools"] = outils
-        fini, verifie, relance_outil, repli_demande = False, False, False, False
+        fini, verifie, relance_outil, repli_demande, relance_vide = False, False, False, False, False
         if ps_modele(r["modele"]) is None:
             emit({"type": "etat", "texte": "Chargement du modèle en mémoire (30 s à 2 min la première fois, ou si ComfyUI lui a pris la carte)."})
         for tentative in range(3):
             contenu, pensee, appels = "", "", []
-            corps_t = corps if tentative == 0 else dict(corps, messages=ajuster_contexte(msgs_base, r["num_ctx"], 0.7 ** tentative, outils) + ([{"role": "user", "content": RAPPEL_APPEL}] if relance_outil else []), options=dict(corps["options"], temperature=0.3))
+            corps_t = corps if tentative == 0 else dict(corps, messages=ajuster_contexte(msgs_base, r["num_ctx"], 0.7 ** tentative, outils) + ([{"role": "user", "content": RAPPEL_APPEL}] if relance_outil else [{"role": "user", "content": RAPPEL_VIDE}] if relance_vide else []), options=dict(corps["options"], temperature=0.3), think=False if relance_vide else corps["think"])
             try:
                 corps_t = dict(corps_t, messages=_images.pour_le_modele(corps_t["messages"], caps is None or "vision" in caps))
                 req = urllib.request.Request(_m.OLLAMA + "/api/chat", data=json.dumps(avec_garde(corps_t)).encode("utf-8"), headers={"Content-Type": "application/json"})
@@ -900,6 +901,13 @@ def boucle_agent(conv, r, emit, ctx, stop):
                             contenu += m["content"]
                             emit({"type": "texte", "texte": m["content"]})
                         appels += m.get("tool_calls") or []
+                if not contenu.strip() and not appels:             # le modèle a (peut-être) réfléchi puis s'est tu : sans ceci la page restait sur « Réflexion » sans aucune réponse ni explication
+                    _m.journaliser("Réponse vide du modèle {} (pensée : {} caractères, essai {})".format(r["modele"], len(pensee), tentative + 1))
+                    if tentative < 2:
+                        relance_vide = True
+                        emit({"type": "info", "texte": _t("Le modèle a réfléchi sans rien répondre : je relance (réflexion coupée pour cet essai).")})
+                        continue
+                    emit({"type": "erreur", "texte": _t("Le modèle n'a rien répondu, même après deux relances. Cause fréquente : la conversation dépasse sa fenêtre de contexte ({} jetons) ; ouvre une nouvelle conversation, ou augmente la fenêtre dans Réglages. Tu peux aussi écrire « continue ».").format(r["num_ctx"])})
                 fini = True
                 break
             except _m.Arret:

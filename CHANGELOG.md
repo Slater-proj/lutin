@@ -2,6 +2,14 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## 0.10.8
+
+- **Plus de silence sur « Réflexion »** : quand le modèle réfléchit puis ne répond rien (fréquent après un résultat d'outil, surtout si la conversation dépasse sa fenêtre de contexte), Lutin relance deux fois (réflexion coupée, avec un rappel de répondre) puis, si le modèle reste muet, dit clairement pourquoi et quoi faire. Avant, la page restait sur « Réflexion » sans aucune explication.
+- **Résultats du banc d'essai lisibles** : pour chaque domaine (outils, code, français, consignes), un verdict ✅ réussi / 🟠 partiel / ❌ raté, ce que le domaine veut dire, et chaque question avec ✔ ou ✘. Un clic sur la ligne 📊 déplie le détail.
+- Un modèle choisi mais **pas installé** n'est plus marqué « ★ actif » : la liste dit « choisi, mais pas installé ».
+
+**English.** No more silence on “Thinking”: when the model thinks and then answers nothing, Lutin retries twice (thinking off, with a reminder to answer) and, if it stays mute, says why and what to do. Benchmark results are readable: a verdict per domain (✅ passed / 🟠 partial / ❌ failed), what it means, and each question with ✔ or ✘. A chosen but uninstalled model is no longer marked “★ active”.
+
 ## 0.10.7
 
 - **Un diagnostic clair dès l'ouverture** : si Lutin ne peut pas répondre, une bannière en haut de la page dit pourquoi (Ollama arrêté ou absent, **aucun modèle installé**, modèle choisi absent ou trop gros, disque presque plein) avec le bouton qui règle le problème (*Installer ce modèle* — le plus adapté à la machine —, *Démarrer Ollama*, *Ouvrir les modèles*). Dans Docker, un conteneur neuf a Ollama mais aucun modèle : la pastille verte ne le disait pas.

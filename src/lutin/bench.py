@@ -99,6 +99,11 @@ def notes_depuis(r):
     return notes
 
 
+def _resultat(details):
+    """Le score ET le détail question par question : « 1/3 » seul ne dit pas lesquelles ont échoué."""
+    return {"points": sum(d["ok"] for d in details), "sur": len(details), "details": details}
+
+
 class Banc:
     def __init__(self, ollama, modele, num_ctx=4096, delai=300):
         self.ollama, self.modele, self.num_ctx, self.delai = ollama, modele, num_ctx, delai
@@ -131,37 +136,38 @@ class Banc:
         return {"tok_s": round(n / duree, 1), "charge_s": round((r.get("load_duration") or 0) / 1e9, 1), "lecture_tok_s": round(lu / duree_lu) if lu >= 20 and duree_lu > 0 else None}
 
     def outils(self):
-        points = 0
+        details = []
         for question, attendu, motif in CAS_OUTILS:
             msg = self.demander([{"role": "user", "content": question}], outils=OUTILS, num_predict=100).get("message") or {}
             appels = msg.get("tool_calls") or []
+            ok = False
             if attendu is None:
-                points += 1 if not appels and nettoyer(msg.get("content")) else 0
-                continue
-            if not appels:
-                continue
-            f = appels[0].get("function") or {}
-            args = f.get("arguments")
-            if isinstance(args, str):
-                try:
-                    args = json.loads(args)
-                except ValueError:
-                    args = {}
-            if f.get("name") == attendu and motif in json.dumps(args or {}, ensure_ascii=False):
-                points += 1
-        return {"points": points, "sur": len(CAS_OUTILS)}
+                ok = not appels and bool(nettoyer(msg.get("content")))
+            elif appels:
+                f = appels[0].get("function") or {}
+                args = f.get("arguments")
+                if isinstance(args, str):
+                    try:
+                        args = json.loads(args)
+                    except ValueError:
+                        args = {}
+                ok = f.get("name") == attendu and motif in json.dumps(args or {}, ensure_ascii=False)
+            details.append({"test": _t("Ouvrir un fichier avec l'outil « lire »") if attendu == "lire" else _t("Chercher un mot avec l'outil « chercher »") if attendu == "chercher" else _t("Répondre simplement, sans outil, à une salutation"), "ok": ok})
+        return _resultat(details)
 
     def code(self):
-        return {"points": sum(reponse_exacte(self.texte(q, 80), a) for q, a in QUESTIONS_CODE), "sur": len(QUESTIONS_CODE)}
+        details = [{"test": _t("Lire un programme : {}").format(a), "ok": reponse_exacte(self.texte(q, 80), a)} for q, a in QUESTIONS_CODE]
+        return _resultat(details)
 
     def francais(self):
         a = nettoyer(self.texte("Explique en une phrase, en français, pourquoi le ciel est bleu.", 120))
         b = self.texte("Donne exactement 3 conseils pour bien dormir, chacun sur une ligne commençant par « - », sans introduction.", 120)
-        return {"points": int(est_francais(a) and 5 <= len(a.split()) <= 60) + int(trois_puces(b)), "sur": 2}
+        return _resultat([{"test": _t("Expliquer en une phrase, en français correct"), "ok": est_francais(a) and 5 <= len(a.split()) <= 60},
+                          {"test": _t("Donner exactement 3 conseils, un par ligne avec « - »"), "ok": trois_puces(b)}])
 
     def consignes(self):
         t = self.texte("Réponds uniquement avec un objet JSON valide, sans aucun texte autour, avec les clés \"ville\" et \"pays\", pour la capitale de la France.", 80)
-        return {"points": int(json_valide(t)), "sur": 1}
+        return _resultat([{"test": _t("Répondre uniquement par un objet JSON valide, sans texte autour"), "ok": json_valide(t)}])
 
 
 def executer(ollama, modele, rapide=False, progression=None, resume_machine="", num_ctx=4096, delai=300, horloge=time.time):

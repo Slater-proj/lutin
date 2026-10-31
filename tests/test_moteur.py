@@ -615,6 +615,15 @@ class Assistant(unittest.TestCase):
         fin = next(e for e in ev if e["type"] == "fin")["conversation"]["id"]
         self.assertIn("user", [m["role"] for m in A.conv_lire(fin)["messages"]], "la demande est gardée")
 
+    def test_un_modele_qui_reflechit_sans_repondre_est_relance_puis_explique(self):
+        ev = chat("Bonjour", reponses=[[{"thinking": "hum"}], [{"content": "Voilà la réponse."}]])
+        self.assertEqual(texte_de(ev), "Voilà la réponse.")
+        self.assertTrue(any(e["type"] == "info" and "sans rien répondre" in e["texte"] for e in ev))
+        self.assertIs(RECUES[-1].get("think"), False, "la relance coupe la réflexion")
+        self.assertIn("réponse était vide", RECUES[-1]["messages"][-1]["content"])
+        ev = chat("Encore", reponses=[[{"thinking": "hum"}]] * 3)
+        self.assertTrue(any(e["type"] == "erreur" and "n'a rien répondu" in e["texte"] for e in ev), "plus jamais un silence sur « Réflexion »")
+
     def test_dernier_tour_sans_outils(self):
         ev = chat("Fais le tour", reponses=[[appel_outil("lister", dossier="docs/sous%d" % i)] for i in range(A.TOURS_MAX - 1)] + [[{"content": "Synthèse finale."}]])          # des appels qui varient : ce n'est pas une boucle
         self.assertEqual(texte_de(ev), "Synthèse finale.")

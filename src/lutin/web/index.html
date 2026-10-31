@@ -320,6 +320,7 @@ details.famille > summary { cursor:pointer; padding:8px 12px; list-style:none; }
 details.famille > summary::before { content:'▸ '; color:var(--muted); } details.famille[open] > summary::before { content:'▾ '; }
 .mod { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:1px 12px; align-items:center; padding:6px 12px; border-top:1px solid var(--line); }
 .mod.actif { background:#122033; }
+.mod-mesure { grid-column:1 / -1; font-size:.82rem; } .banc-lien { color:var(--muted); text-decoration:none; } .banc-domaine { margin:6px 0 0 4px; } .banc-ligne { margin-left:16px; font-size:.8rem; }
 .mod-nom, .mod-desc { grid-column:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; } .mod-desc { font-size:.82rem; }
 .mod-nom .puce { margin-left:8px; vertical-align:middle; }
 .mod-actions { grid-column:2; grid-row:1 / span 2; display:flex; gap:6px; align-items:center; justify-content:flex-end; }
@@ -1178,23 +1179,43 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     [['outils', T('outils')], ['code', 'code'], ['francais', T('français')], ['consignes', T('consignes')]].forEach(([k, n]) => { if (r[k]) t.push(n + ' ' + r[k].points + '/' + r[k].sur); });
     return t.join(' · ') || T('aucune mesure');
   };
+  // Résultat du banc d'essai lisible : un verdict par domaine (✅ réussi, 🟠 partiel, ❌ raté), ce que ça veut dire, et les questions une par une
+  const DOMAINES_BANC = [['outils', T("Appel d'outils"), T('Le modèle sait-il utiliser les outils de Lutin (lire un fichier, chercher…) au bon moment ? Indispensable pour travailler sur un projet.')],
+    ['code', T('Lecture de code'), T('Trouve-t-il ce que fait un petit programme ?')],
+    ['francais', T('Français'), T('Répond-il en bon français et en respectant la forme demandée ?')],
+    ['consignes', T('Consignes'), T('Suit-il une consigne stricte (ici : répondre uniquement en JSON) ?')]];
+  const BANC_OUVERT = new Set();            // modèles dont le détail du banc est ouvert (gardé quand la liste se redessine)
+  const mesureDetaillee = mes => {
+    const r = mes.resultats || {}, bloc = el('div', 'mod-mesure');
+    const v = r.vitesse;
+    if (v && v.tok_s != null) bloc.appendChild(el('div', '', '⏱ ' + T('Vitesse') + ' : ' + v.tok_s + T(' jetons/s') + ' — ' + (v.tok_s >= 30 ? T('confortable') : v.tok_s >= 15 ? T('correct') : v.tok_s >= 8 ? T('lent') : T('très lent')) + (v.charge_s ? T(' · chargement du modèle : ') + v.charge_s + ' s' : '')));
+    for (const [k, nom, sens] of DOMAINES_BANC) {
+      const x = r[k]; if (!x) continue;
+      const verdict = x.points === x.sur ? ['✅', T('réussi')] : x.points === 0 ? ['❌', T('raté')] : ['🟠', T('partiel')];
+      const l = el('div', 'banc-domaine'), t = el('b', '', verdict[0] + ' ' + nom + ' : ' + x.points + ' ' + T('sur') + ' ' + x.sur + ' (' + verdict[1] + ')');
+      t.title = sens; l.appendChild(t); l.appendChild(el('div', 'aide', sens));
+      for (const d of (x.details || [])) l.appendChild(el('div', 'banc-ligne', (d.ok ? '✔ ' : '✘ ') + d.test));
+      bloc.appendChild(l);
+    }
+    if (mes.erreur) bloc.appendChild(el('div', 'erreur', '⚠ ' + mes.erreur));
+    return bloc;
+  };
   // ---- Liste des modèles : regroupés par famille (Qwen 3, Llama 3.2…) ; chaque variante tient sur deux lignes (nom, taille, identifiant, boutons ; puis la description)
   const FAMILLES_OUVERTES = new Map();             // famille -> ouverte ou fermée, comme tu l'as laissée (gardé quand la liste se redessine)
   const famille = m => (m.nom.includes(' · ') ? m.nom.split(' · ')[0] : T('Autres modèles'));
   const variante = m => (m.nom.includes(' · ') ? m.nom.split(' · ').slice(1).join(' · ') : m.nom);
   const ligneModele = m => {
     const inst = ETAT.installes.includes(m.id), p = ETAT.pulls[m.id], actif = ETAT.reglages.modele === m.id;
-    const l = el('div', 'mod' + (actif ? ' actif' : '')), nom = el('div', 'mod-nom'), desc = el('div', 'mod-desc aide'), acts = el('div', 'mod-actions');
+    const l = el('div', 'mod' + (actif && inst ? ' actif' : '')), nom = el('div', 'mod-nom'), desc = el('div', 'mod-desc aide'), acts = el('div', 'mod-actions');
     nom.appendChild(el('b', '', variante(m)));
     nom.appendChild(el('span', 'aide', ' · ' + (m.go ? m.go + T(' Go') : T('taille inconnue')) + ' · ' + m.id + (m.origine === 'perso' ? T(' · ajouté par toi') : m.origine === 'installe' ? T(' · installé hors de l\'application') : '')));
-    if (actif) nom.appendChild(el('span', 'puce ok', T('★ actif'))); else if (inst) nom.appendChild(el('span', 'puce ok', T('✔ installé')));
+    if (actif && !inst) nom.appendChild(el('span', 'puce warn', T('choisi, mais pas installé'))); else if (actif) nom.appendChild(el('span', 'puce ok', T('★ actif'))); else if (inst) nom.appendChild(el('span', 'puce ok', T('✔ installé')));
     const ad = (ETAT.adequation || {})[m.id];
     if (ad) { const classe = { ideal: 'ok', bien: 'ok', limite: 'warn', trop_gros: 'bad' }[ad.niveau], libelle = { ideal: T('Très adapté'), bien: T('Adapté'), limite: T('Limite'), trop_gros: T('Trop gros') }[ad.niveau]; const p = el('span', 'puce ' + classe); p.appendChild(document.createElement('i')); p.appendChild(document.createTextNode(libelle)); p.title = ad.texte; nom.appendChild(p); }
     const jd = ETAT.disque_modeles;
     if (!inst && jd && m.go && m.go * 1e9 > jd.libre) { const p = el('span', 'puce bad'); p.appendChild(document.createElement('i')); p.appendChild(document.createTextNode(T('Pas assez de place sur le disque'))); p.title = T('Il reste {} Go libres sur le disque des modèles.').replace('{}', (jd.libre / 1e9).toFixed(1)); nom.appendChild(p); }
     let texte = m.phrase || '';
     const bench = ETAT.bench || {}, mes = (bench.mesures || {})[m.id], occupe = !!bench.en_cours;
-    if (inst && mes) texte += ' · 📊 ' + resumeMesure(mes) + (mes.complet ? '' : T(' (vitesse seulement)'));
     if (bench.en_cours === m.id) texte = T('⏳ Mesure en cours : ') + bench.etape;
     desc.textContent = texte; desc.title = texte + (m.avertissement ? '\n⚠ ' + m.avertissement : '');
     if (inst) {
@@ -1220,6 +1241,13 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
       acts.appendChild(o);
     }
     l.append(nom, desc, acts);
+    if (inst && mes && bench.en_cours !== m.id) {              // le résumé reste sur la ligne de description ; le détail (un verdict par domaine, chaque question) s'ouvre au clic et ne prend de place que s'il est ouvert
+      const lien = el('a', 'banc-lien', ' · 📊 ' + resumeMesure(mes) + (mes.complet ? '' : T(' (vitesse seulement)')) + ' ▸'), detail = mesureDetaillee(mes);
+      lien.href = '#'; lien.title = T('Voir le détail du test, question par question');
+      detail.hidden = !BANC_OUVERT.has(m.id);
+      lien.addEventListener('click', ev => { ev.preventDefault(); detail.hidden = !detail.hidden; if (detail.hidden) BANC_OUVERT.delete(m.id); else BANC_OUVERT.add(m.id); });
+      desc.appendChild(lien); l.appendChild(detail);
+    }
     return l;
   };
   const gaugeOctets = o => (o / 1e9).toFixed(o >= 1e11 ? 0 : 1) + ' ' + T('Go');

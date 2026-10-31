@@ -173,6 +173,9 @@ class Banc(unittest.TestCase):
         m = bench.executer(Faux(False, 5.0), "petit")
         self.assertEqual(m["resultats"]["code"]["points"], 0)
         self.assertEqual(m["resultats"]["outils"]["points"], 1, "seule la question sans outil est réussie")
+        det = m["resultats"]["outils"]["details"]
+        self.assertEqual([d["ok"] for d in det], [False, False, True], "le détail dit LESQUELLES ont échoué")
+        self.assertTrue(all(d["test"] for d in m["resultats"]["code"]["details"]))
         self.assertLessEqual(m["notes"]["rapide"], 2)
         self.assertLess(m["notes"]["polyvalent"], 4)
 
