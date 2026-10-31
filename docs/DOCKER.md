@@ -127,7 +127,7 @@ A container does not see the graphics card unless you hand it over. Without it, 
 3. In the page, **Health > video memory** shows the card, and once a model is loaded, « model loaded at … % on the card »: **100 %** means the card does the work; **0 %** means the processor does (the card was not given or not supported).
 4. `docker exec lutin lutin doctor` says « No usable graphics card » and what to add if the container sees none.
 
-Intel: the compose file `docker-compose.intel.yml` has **never been tried on a real Intel chip**. Giving `/dev/dri` and the `render` group lets the container use the whole graphics device (and anything else in that group): do it only if you accept it. Lutin keeps the RAM as budget (set `LUTIN_BUDGET_GO` to what you can spare), and the graphics memory is the same RAM.
+Intel: on a Core Ultra 5 125H (Meteor Lake, 32 GB shared) the integrated chip **works** with `docker-compose.intel.yml` (`ollama ps` says `100% GPU`) but was **slower than the processor** for text generation (about 8 vs 11 tokens/s on `qwen3:4b`): it reads the same memory as the processor, so memory bandwidth, not computing power, is the limit. Keep the processor unless your own measurement says otherwise. Check with `docker exec lutin ollama ps`. Giving `/dev/dri` and the `render` group lets the container use the whole graphics device (and anything else in that group): do it only if you accept it. Lutin keeps the RAM as budget (set `LUTIN_BUDGET_GO` to what you can spare), and the graphics memory is the same RAM.
 
 AMD: ROCm supports a limited list of cards; for others, Ollama's documentation explains `HSA_OVERRIDE_GFX_VERSION`. The `:rocm` image and `docker-compose.amd.yml` have **never been tried on a real AMD card**: tell me what you get.
 
