@@ -52,24 +52,21 @@ Dans le dossier d'essai, demande : *Crée une page `essai.html` avec un titre et
 
 ## 5. Une première mission, courte
 
-*Automatisation > Missions longues* (rien à activer) : *Nouvelle mission*. Ou écris la demande dans le champ de saisie et clique sur **🎯**.
+Dans la colonne de gauche, choisis le mode **🎯 Mission longue** et règle la **durée max** sur `1 h`. **Laisse « Fichiers auto » et « Commandes auto » décochés** la première fois (essai à blanc : Lutin montre ce qu'il ferait, rien n'est écrit). Dans le champ de saisie, écris le cahier des charges :
 
-- **Nom** : `Essai`
-- **Dossier** : le dossier d'essai
-- **Durée maximale** : `1` heure
-- **Cahier des charges** : *Crée un petit jeu « pierre-feuille-ciseaux » en un seul fichier HTML, avec un fichier de tests en Python qui vérifie la règle du jeu. Lance les tests. Quand tout passe, termine la mission avec un bilan.*
-- **Autonome** : **décoché** la première fois (essai à blanc : Lutin montre ce qu'il ferait, rien n'est écrit).
+> Crée un petit jeu « pierre-feuille-ciseaux » en un seul fichier HTML, avec un fichier de tests en Python qui vérifie la règle du jeu. Lance les tests. Quand tout passe, termine la mission avec un bilan.
 
-*Tu dois voir*, au fil des tours (le panneau se met à jour seul) : l'état, le nombre de tours et d'actions, puis un **bilan**. La conversation « 🎯 Essai » raconte tout, étape par étape.
+Le bouton d'envoi s'appelle **Lancer**. *Tu dois voir* : un message « 🎯 Mission lancée », un **bandeau** au-dessus du champ de saisie (état, tours, actions, temps restant), puis la conversation qui se remplit toute seule, tour après tour, et à la fin un **bilan** dans le bandeau.
 
-Recommence ensuite avec **Autonome coché** : cette fois Lutin écrit les fichiers et lance les tests seul, dans ce dossier seulement. À la fin, regarde le dossier : le jeu et ses tests doivent y être.
+Recommence ensuite dans une nouvelle conversation avec **Fichiers auto ET Commandes auto cochés** : cette fois Lutin écrit les fichiers et lance les tests seul, dans le dossier de travail seulement. À la fin, regarde le dossier : le jeu et ses tests doivent y être.
 
 Pendant qu'elle tourne, essaie :
-- **Ajouter une consigne** (« mets le score en haut ») : prise en compte au tour suivant.
-- **Mettre en pause**, puis **Reprendre**.
-- **Arrêter Lutin** (icône de la zone de notification > Quitter), le relancer : la mission reprend là où elle était.
+- **Écrire dans la conversation** (« mets le score en haut ») : c'est une consigne, prise en compte au tour suivant.
+- **Mettre en pause**, puis **Reprendre** (boutons du bandeau).
+- **Quitter Lutin** (icône de la zone de notification > Quitter), le relancer : la mission reprend là où elle était.
+- Si l'addon Telegram est activé : tu reçois un message quand elle est finie ou bloquée.
 
-*Si la mission s'arrête avec « Je n'avance plus… »* : le modèle a répondu trois fois sans rien faire. Réponds à sa question, ou précise le cahier des charges. *Si elle se met en pause après trois erreurs* : le message dit laquelle (modèle arrêté, disque plein…).
+*Si la mission s'arrête avec « Je n'avance plus… »* : le modèle a répondu trois fois sans rien faire. Réponds à sa question dans la conversation, ou précise le cahier des charges. *Si elle se met en pause après trois erreurs* : le message dit laquelle (modèle arrêté, disque plein…).
 
 **Pour une vraie mission d'une nuit** : un cahier des charges précis (ce qui est attendu, comment le tester, ce qui rend le travail « terminé »), un dossier à toi, une durée de 8 à 12 h, un modèle qui sait utiliser les outils (voir *Modèles*), et la mise en veille du PC désactivée.
 

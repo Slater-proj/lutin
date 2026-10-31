@@ -186,12 +186,10 @@ class Parcours(unittest.TestCase):
         with self.captures.serveur_demo() as (port, tmp):
             p = self.ouvrir(tmp, "http://127.0.0.1:%d/" % port)
             p.evaluer(onglet("auto"))
-            p.attendre("document.getElementById('zoneMissions').textContent.includes('Nouvelle mission') && document.getElementById('zoneFond').textContent.includes('Nouveau travail de fond')")
+            p.attendre("document.getElementById('zoneFond').textContent.includes('Nouveau travail de fond')")
             p.attendre("document.querySelectorAll('#listeAddons > .carte').length >= 4")                          # la liste des extensions se charge à part des deux sections
-            self.assertEqual(p.evaluer("document.querySelectorAll('#listeAddons > .carte').length"), 4, "Telegram, ComfyUI, courriel, X : missions et traitement de documents ne sont plus des extensions")
-            self.assertNotIn("Nouvelle mission", p.evaluer("document.getElementById('listeAddons').textContent"))
-            p.evaluer("document.getElementById('bMission').click()")                       # le bouton 🎯 du champ de saisie ouvre l'onglet Automatisation avec le formulaire ouvert
-            p.attendre("document.getElementById('p-auto').classList.contains('vue')")
+            self.assertEqual(p.evaluer("document.querySelectorAll('#listeAddons > .carte').length"), 4, "Telegram, ComfyUI, courriel, X : le traitement de documents n'est plus une extension, et les missions sont un mode")
+            self.assertFalse(p.evaluer("!!document.getElementById('zoneMissions') || !!document.getElementById('bMission')"), "plus de section ni de bouton Mission : c'est un mode")
             self.assertEqual(p.erreurs, [])
 
     def test_question_fiche_ou_resume_quand_la_conversation_devient_longue(self):
@@ -389,35 +387,38 @@ class Parcours(unittest.TestCase):
             p.attendre("document.getElementById('ptTravail').hidden")
             self.assertEqual(p.erreurs, [])
 
-    def test_le_bouton_mission_a_cote_d_envoyer_confirme_puis_lance(self):
-        """Écrire sa demande, cliquer sur « Mission » (à côté d'Envoyer) : une fenêtre demande de confirmer, puis la mission est vraiment créée ; champ vide : la liste des missions. Le modèle est juste à côté du nom."""
+    def test_mission_longue_est_un_mode_et_la_conversation_sert_de_compte_rendu(self):
+        """Choisir le mode « Mission longue », décrire la mission dans le champ habituel : elle se lance DANS la conversation, un bandeau montre son état et la conversation se remplit toute seule. Le modèle est près du nom."""
         with self.captures.serveur_demo() as (port, tmp):
             donnees = tmp / "home" / "donnees"
             p = self.ouvrir(tmp, "http://127.0.0.1:%d/" % port)
             p.attendre("document.getElementById('selMode').dataset.init === '1'")
-            self.assertEqual(p.evaluer("document.getElementById('bMission').nextElementSibling.id"), "bEnvoyer", "le bouton est juste avant « Envoyer »")
             self.assertGreater(p.evaluer("document.getElementById('selModele').getBoundingClientRect().width"), 120, "la liste des modèles est assez large pour lire le nom")
             ecart = p.evaluer("(() => { const t = document.querySelector('aside h1'), s = document.getElementById('selModele').getBoundingClientRect(); const r = document.createRange(); r.selectNodeContents([...t.childNodes].find(n => n.nodeType === 3 && n.textContent.includes('Lutin'))); return s.left - r.getBoundingClientRect().right; })()")
             self.assertLess(ecart, 24, "le modèle est tout près du nom « Lutin » (écart %s px)" % ecart)
-            p.evaluer("(() => { const s = document.getElementById('saisie'); s.value = 'Crée un petit jeu de pierre-feuille-ciseaux avec des tests.'; return true; })()")
-            p.evaluer("document.getElementById('bMission').click(); true")
-            p.attendre("!document.getElementById('modal').hidden && document.getElementById('modalCorps').textContent.includes('pierre-feuille-ciseaux')")
-            self.assertFalse((donnees / "missions.json").exists(), "rien n'est lancé tant qu'on n'a pas confirmé")
-            p.evaluer("[...document.querySelectorAll('#modalCorps button')].find(b => b.textContent.includes('Lancer la mission')).click(); true")
-            p.attendre("document.getElementById('modal').hidden")
+            self.assertFalse(p.evaluer("!!document.getElementById('bMission')"), "pas de bouton Mission : c'est un mode de la liste")
+            self.assertTrue(p.evaluer("[...document.querySelectorAll('#selMode option')].some(o => o.value === 'mission')"), "« Mission longue » est dans la liste des modes")
+            self.assertTrue(p.evaluer("document.getElementById('ligneDuree').hidden"), "la durée n'apparaît que dans ce mode")
+            p.evaluer("(() => { const s = document.getElementById('selMode'); s.value = 'mission'; s.dispatchEvent(new Event('change')); return true; })()")
+            p.attendre("!document.getElementById('ligneDuree').hidden && document.querySelector('#bEnvoyer .lb').textContent === 'Lancer'")
+            self.assertIn("Décris la mission", p.evaluer("document.getElementById('saisie').placeholder"))
+            p.evaluer("(() => { const s = document.getElementById('saisie'); s.value = 'Crée un petit jeu de pierre-feuille-ciseaux avec des tests.'; document.getElementById('bEnvoyer').click(); return true; })()")
             debut = time.time()
             missions = []
-            while time.time() - debut < 10 and not missions:
+            while time.time() - debut < 15 and not missions:
                 if (donnees / "missions.json").exists():
                     missions = json.loads((donnees / "missions.json").read_text(encoding="utf-8"))
                 time.sleep(0.3)
             self.assertEqual(len(missions), 1, "la mission est créée")
+            self.assertTrue(missions[0]["lie"] and missions[0]["conv"], "...et menée dans une conversation")
             self.assertIn("pierre-feuille-ciseaux", missions[0]["cahier"])
             self.assertEqual(p.evaluer("document.getElementById('saisie').value"), "", "le champ est vidé")
-            p.attendre("document.getElementById('fil').textContent.includes('Mission lancée')")
-            # champ vide : la liste des missions
-            p.evaluer("document.getElementById('bMission').click(); true")
-            p.attendre("document.getElementById('p-auto').classList.contains('vue')")
+            p.attendre("!document.getElementById('bandeauMission').hidden && document.getElementById('bandeauMission').textContent.includes('Mission')", delai=30)      # le bandeau de suivi
+            # la conversation se remplit toute seule : le cahier des charges, puis les réponses de Lutin
+            p.attendre("document.getElementById('fil').textContent.includes('pierre-feuille-ciseaux') && document.getElementById('fil').textContent.includes('Réponse de démonstration.')", delai=40)
+            fichier = donnees / "conversations" / (missions[0]["conv"] + ".json")
+            self.assertTrue(fichier.is_file())
+            self.assertTrue(json.loads(fichier.read_text(encoding="utf-8"))["titre"].startswith("🎯"), "la conversation porte le nom de la mission")
             self.assertEqual(p.erreurs, [])
 
     def test_epingler_un_message_depuis_la_page(self):

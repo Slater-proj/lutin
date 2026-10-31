@@ -67,7 +67,7 @@ def modifier(ident, **champs):
     raise ValueError(_t("Cette mission n'existe plus."))
 
 
-def creer(nom, cahier, travail, duree_h=DUREE_DEFAUT_H, autonome=True):
+def creer(nom, cahier, travail, duree_h=DUREE_DEFAUT_H, autonome=True, conv_id=""):
     nom, cahier = " ".join(str(nom or "").split())[:60], str(cahier or "").strip()
     if not nom or not cahier:
         raise ValueError(_t("Donne un nom et le cahier des charges."))
@@ -85,15 +85,51 @@ def creer(nom, cahier, travail, duree_h=DUREE_DEFAUT_H, autonome=True):
         if sum(1 for m in liste if m["etat"] in ("en_cours", "pause", "bloquee")) >= MAX_MISSIONS:
             raise ValueError(_t("{} missions non terminées au plus : termine ou supprime-en une.").format(MAX_MISSIONS))
         m = {"id": secrets.token_hex(4), "nom": nom, "cahier": cahier, "travail": t["id"], "dossier": t["chemin"], "duree_h": duree_h, "autonome": bool(autonome), "etat": "en_cours",
-             "conv": "", "tours": 0, "debut": int(time.time()), "fin": 0, "bilan": "", "question": "", "note": "", "message": "", "erreurs": 0, "sans_action": 0, "actions": 0}
+             "conv": str(conv_id or ""), "lie": bool(conv_id), "tours": 0, "debut": int(time.time()), "fin": 0, "bilan": "", "question": "", "note": "", "message": "", "erreurs": 0, "sans_action": 0, "actions": 0}
         liste.append(m)
         _ecrire(liste)
     return m
 
 
+def trouver_pour_conversation(conv_id):
+    """La dernière mission menée dans cette conversation, ou None."""
+    liste = [m for m in lire() if m.get("lie") and m.get("conv") == conv_id]
+    return liste[-1] if liste else None
+
+
+def par_conversation():
+    """{conversation: résumé de sa mission} : de quoi montrer l'avancement dans la conversation elle-même."""
+    sortie = {}
+    for m in lire():
+        if m.get("lie") and m.get("conv"):
+            sortie[m["conv"]] = resume(m)
+    return sortie
+
+
+def oublier_conversation(conv_id):
+    """La conversation est supprimée : sa mission aussi."""
+    for m in lire():
+        if m.get("lie") and m.get("conv") == conv_id:
+            if m["id"] in VIVANT["arrets"]:
+                VIVANT["arrets"][m["id"]].set()
+            with VERROU:
+                _ecrire([x for x in lire() if x["id"] != m["id"]])
+
+
+def prevenir(m, texte):
+    """Le propriétaire est prévenu par Telegram (si l'addon est activé) : une mission de nuit se finit ou se bloque sans personne devant l'écran."""
+    try:
+        from . import addons
+        if addons.actif("telegram"):
+            from . import addons_telegram
+            addons_telegram.prevenir_proprietaires("🎯 " + m["nom"] + " — " + texte)
+    except Exception as erreur:  # noqa: BLE001  (une notification ratée ne doit jamais gêner la mission)
+        _m.journaliser("Mission « {} » : notification impossible ({!r}).".format(m.get("nom", "?"), erreur))
+
+
 def resume(m):
     """Ce que la page voit (sans le cahier complet)."""
-    return {k: m.get(k) for k in ("id", "nom", "dossier", "duree_h", "autonome", "etat", "conv", "tours", "debut", "fin", "bilan", "question", "message", "actions")} | {"cahier": (m.get("cahier") or "")[:300]}
+    return {k: m.get(k) for k in ("id", "nom", "dossier", "duree_h", "autonome", "etat", "conv", "lie", "tours", "debut", "fin", "bilan", "question", "message", "actions")} | {"cahier": (m.get("cahier") or "")[:300]}
 
 
 def etat():
@@ -104,9 +140,11 @@ def etat():
 def signaler(ident, nouvel_etat, texte):
     """Appelé par les outils mission_terminer / mission_bloquee."""
     if nouvel_etat == "terminee":
-        modifier(ident, etat="terminee", bilan=str(texte)[:4000], fin=int(time.time()), message="")
+        m = modifier(ident, etat="terminee", bilan=str(texte)[:4000], fin=int(time.time()), message="")
+        prevenir(m, _t("terminée. {}").format(str(texte)[:300]))
     else:
-        modifier(ident, etat="bloquee", question=str(texte)[:2000], message="")
+        m = modifier(ident, etat="bloquee", question=str(texte)[:2000], message="")
+        prevenir(m, _t("a besoin de toi : {}").format(str(texte)[:300]))
     return _t("Noté. La mission est « {} ».").format(_t("terminée") if nouvel_etat == "terminee" else _t("en attente de ta réponse"))
 
 
@@ -152,12 +190,20 @@ def _tour(m):
         _m.RACINE_TOURS[conv["id"]] = str(_m.RACINE)
         _m.TOURS_ACTIFS[conv["id"]] = stop
         VIVANT["arrets"][m["id"]] = stop
-    r = dict(_m.reglages(), mode="technique", memoire_longue="fichier", fiche_scribe=True, auto_ecriture=bool(m["autonome"]), auto_commandes=bool(m["autonome"]), _mission=m["id"])
+    autonome = bool(m["autonome"])
+    base = _m.reglages()
+    if m.get("lie"):                                                       # mission menée dans une conversation : ses options font foi (autonome = Fichiers auto ET Commandes auto cochés, relu à chaque tour)
+        o = _d.options_lire(m["conv"])
+        autonome = bool(o.get("auto_ecriture") and o.get("auto_commandes"))
+        base = _d.appliquer_options(base, m["conv"])
+        if autonome != bool(m["autonome"]):
+            modifier(m["id"], autonome=autonome)
+    r = dict(base, mode="technique", memoire_longue="fichier", fiche_scribe=True, auto_ecriture=autonome, auto_commandes=autonome, _mission=m["id"])
     avant = sum(1 for x in conv["messages"] if x.get("role") == "tool")
     modifier(m["id"], conv=conv["id"], message=_t("tour {} en cours…").format(m["tours"] + 1))
     echec = None
     try:
-        _m.tour(conv, prompt_du_tour(m), lambda evenement: None, r, stop, None, identite="mission", lecture_seule=not m["autonome"])
+        _m.tour(conv, prompt_du_tour(m), lambda evenement: None, r, stop, None, identite="mission", lecture_seule=not autonome)
     except Exception as erreur:  # noqa: BLE001
         echec = erreur
         _m.journaliser("Mission « {} » : tour en erreur : {!r}".format(m["nom"], erreur))
@@ -177,17 +223,21 @@ def _tour(m):
     champs = {"tours": actuel["tours"] + 1, "actions": actuel.get("actions", 0) + max(0, faits), "message": ""}
     if actuel.get("note") == m.get("note"):
         champs["note"] = ""                                            # la consigne a été donnée à ce tour ; une consigne arrivée pendant le tour attend le suivant
-    if actuel["etat"] == "en_cours":                                   # le modèle n'a pas conclu, l'utilisateur n'a pas mis en pause
+    if actuel["etat"] == "en_cours" and stop.is_set():                 # l'utilisateur a cliqué sur Arrêter pendant ce tour : la mission se met en pause (écrire « continue » ou cliquer sur Reprendre la relance)
+        champs.update(etat="pause", message=_t("Arrêtée par toi. Écris « continue » ou clique sur Reprendre."))
+    elif actuel["etat"] == "en_cours":                                 # le modèle n'a pas conclu, l'utilisateur n'a pas mis en pause
         if echec is not None:
             champs["erreurs"] = actuel.get("erreurs", 0) + 1
             champs["message"] = str(echec)[:200]
             if champs["erreurs"] >= ERREURS_DE_SUITE:
                 champs.update(etat="pause", message=_t("En pause après {} erreurs de suite : {}").format(ERREURS_DE_SUITE, str(echec)[:160]))
+                prevenir(actuel, _t("en pause après des erreurs : {}").format(str(echec)[:200]))
         else:
             champs["erreurs"] = 0
             champs["sans_action"] = 0 if faits > 0 else actuel.get("sans_action", 0) + 1
             if champs["sans_action"] >= SANS_ACTION_MAX:
                 champs.update(etat="bloquee", question=_t("Je n'avance plus : {} réponses de suite sans aucune action. Que dois-je faire ?").format(SANS_ACTION_MAX), sans_action=0)
+                prevenir(actuel, _t("n'avance plus et a besoin de toi."))
     modifier(m["id"], **champs)
     return True
 
@@ -198,7 +248,8 @@ def un_pas():
         if m["etat"] != "en_cours":
             continue
         if time.time() - m["debut"] > m["duree_h"] * 3600 or m["tours"] >= TOURS_MAX:
-            modifier(m["id"], etat="terminee", fin=int(time.time()), bilan=m.get("bilan") or _t("Arrêtée : la durée ou le nombre de tours maximal est atteint. Le travail déjà fait est dans le dossier ; relis la conversation « 🎯 » pour l'état exact."))
+            fini = modifier(m["id"], etat="terminee", fin=int(time.time()), bilan=m.get("bilan") or _t("Arrêtée : la durée ou le nombre de tours maximal est atteint. Le travail déjà fait est dans le dossier ; relis la conversation « 🎯 » pour l'état exact."))
+            prevenir(fini, _t("arrêtée : la durée ou le nombre de tours maximal est atteint."))
             continue
         if _tour(m):
             return True

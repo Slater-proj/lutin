@@ -110,6 +110,9 @@ button.danger:hover { background:linear-gradient(180deg, #b84545, #8f2f2f); }
 @keyframes onde { 0% { box-shadow:0 0 0 0 rgba(90,169,255,.65); transform:scale(.9); } 70% { box-shadow:0 0 0 7px rgba(90,169,255,0); transform:scale(1.05); } 100% { box-shadow:0 0 0 0 rgba(90,169,255,0); transform:scale(.9); } }
 @media (prefers-reduced-motion:reduce) { .travail { animation:none; } }
 /* file d'attente des messages envoyés pendant que l'assistant répond */
+#bandeauMission { padding:6px 12px; font-size:.82rem; border-top:1px solid var(--line); background:#101a14; display:flex; flex-wrap:wrap; gap:6px 10px; align-items:center; }
+#bandeauMission .etat { font-weight:600; } #bandeauMission .detail { color:var(--muted); } #bandeauMission button { padding:2px 10px; font-size:.8rem; }
+#bandeauMission .question { flex:1 1 100%; color:var(--warm); white-space:pre-wrap; } #bandeauMission details { flex:1 1 100%; } #bandeauMission pre { white-space:pre-wrap; margin:4px 0 0; }
 #fileAttente { display:flex; flex-wrap:wrap; gap:6px; align-items:center; padding:4px 12px; font-size:.74rem; color:var(--warm); border-top:1px solid var(--line); background:#161209; }
 #fileAttente .chip { display:inline-flex; gap:4px; align-items:center; background:#221c10; border:1px solid #5f4a2c; border-radius:999px; padding:0 4px 0 9px; color:var(--fg); max-width:60%; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 #fileAttente .chip button { border:0; background:none; color:var(--muted); padding:0 5px; cursor:pointer; }
@@ -334,7 +337,8 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
   <div class="separateur-h" id="sepH" role="separator" aria-orientation="horizontal" tabindex="0" title="Glisse pour agrandir la liste ou les options (double-clic : réinitialiser)"></div>
   <div class="options-lat">
     <div class="opt-titre" id="optTitre" title="Cliquer pour replier / déplier"><span id="optChevron">▾</span> Options de la conversation</div>
-    <label class="opt-ligne">Mode <select id="selMode" title="Ce que l'assistant peut faire : voir Réglages > Modes"><option value="polyvalent">Polyvalent</option><option value="technique">Code et projet</option><option value="scenario">Écriture</option><option value="recherche">Recherche (lecture seule)</option><option value="discussion">Discussion (sans outils)</option></select></label>
+    <label class="opt-ligne">Mode <select id="selMode" title="Ce que l'assistant peut faire : voir Réglages > Modes"><option value="polyvalent">Polyvalent</option><option value="technique">Code et projet</option><option value="scenario">Écriture</option><option value="recherche">Recherche (lecture seule)</option><option value="discussion">Discussion (sans outils)</option><option value="mission">🎯 Mission longue</option></select></label>
+    <label class="opt-ligne" id="ligneDuree" hidden title="Temps maximum que Lutin se donne pour cette mission. Il s'arrête avant s'il a fini, ou s'il a besoin de toi."><span>Durée max</span> <select id="sDuree"><option value="1">1 h</option><option value="2">2 h</option><option value="4">4 h</option><option value="8">8 h</option><option value="12">12 h</option><option value="24">24 h</option><option value="48">48 h</option><option value="72">72 h</option></select></label>
     <label class="opt-ligne" title="Le modèle réfléchit avant de répondre : plus juste, un peu plus lent."><input type="checkbox" id="cReflexion"> Réflexion</label>
     <label class="opt-ligne" title="Accepte tout seul les écritures de fichiers (créer, modifier). Valable pour CETTE conversation seulement, décoché par défaut."><input type="checkbox" id="cAuto"> Fichiers auto</label>
     <label class="opt-ligne" title="Simulation : Lutin montre ce qu'il écrirait et lancerait, sans rien écrire ni lancer. Pour voir ce qu'il compte faire avant de le laisser faire."><input type="checkbox" id="cEssai"> Essai à blanc</label>
@@ -373,6 +377,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     <div id="taches" hidden></div>
     <div id="activite" role="status" aria-live="polite"><span class="pt"></span><span id="activiteTexte"></span></div>
     <div id="bandeauEdition" hidden><span>Modification d'un message : l'envoi remplace ce message et tout ce qui le suit.</span> <button id="bAnnulerEdition">Annuler</button></div>
+    <div id="bandeauMission" hidden></div>
     <div id="fileAttente" hidden></div>
     <div class="saisie">
       <div id="menuCommandes" hidden role="listbox"></div>
@@ -385,7 +390,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
         <button id="bAnnuler" hidden></button>
       </div>
       <div class="pj" id="piecesJointes" hidden></div>
-      <div class="saisie-ligne" id="ligneSaisie"><button id="bJoindre" title="Joindre des images, des documents (PDF, Word, LibreOffice, PowerPoint, Excel, HTML) ou des fichiers texte ou de code : choisis-les, colle-les ou glisse-les ici. Pour les images, un modèle qui voit est utilisé (onglet Modèles)."><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg></button><input type="file" id="fImage" multiple hidden><textarea id="saisie" rows="1" placeholder="Message…  (Entrée : envoyer · / : commandes)"></textarea><button id="bMission" title="Confier ce que tu viens d'écrire à Lutin comme une mission longue : il le mène seul pendant des heures (une fenêtre te demande de confirmer). Champ vide : ouvre la liste des missions."><span class="lb">🎯 Mission</span><span class="ic">🎯</span></button><button class="principal" id="bEnvoyer" title="Envoyer"><span class="lb">Envoyer</span><span class="ic">➤</span></button><button id="bStop" hidden title="Arrêter"><span class="lb">Arrêter</span><span class="ic">■</span></button></div>
+      <div class="saisie-ligne" id="ligneSaisie"><button id="bJoindre" title="Joindre des images, des documents (PDF, Word, LibreOffice, PowerPoint, Excel, HTML) ou des fichiers texte ou de code : choisis-les, colle-les ou glisse-les ici. Pour les images, un modèle qui voit est utilisé (onglet Modèles)."><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg></button><input type="file" id="fImage" multiple hidden><textarea id="saisie" rows="1" placeholder="Message…  (Entrée : envoyer · / : commandes)"></textarea><button class="principal" id="bEnvoyer" title="Envoyer"><span class="lb">Envoyer</span><span class="ic">➤</span></button><button id="bStop" hidden title="Arrêter"><span class="lb">Arrêter</span><span class="ic">■</span></button></div>
     </div>
   </section>
   <section class="page" id="p-sante"><div class="cadre" id="santeCorps"></div></section>
@@ -460,8 +465,6 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
       <textarea id="pPrompt" placeholder="La demande à traiter, par exemple : résume ce qui a changé dans le dépôt depuis hier." style="flex:1 1 100%;min-height:70px" maxlength="4000"></textarea>
       <button id="bAjouterPlanifie" class="principal">Planifier</button> <span class="aide" id="mPlanifie"></span>
     </div>
-    <h2>Missions longues <span class="aide">(un grand travail confié à Lutin pour des heures : tu écris ce que tu veux, il code, teste et range tout seul dans un dossier de travail, puis te rend un bilan)</span></h2>
-    <div id="zoneMissions" style="margin:6px 0"></div>
     <h2>Traitement de documents <span class="aide">(une consigne appliquée à chaque document d'un dossier, en lecture seule : résumer, classer, extraire)</span></h2>
     <div id="zoneFond" style="margin:6px 0"></div>
     <h2>Extensions facultatives <span class="aide">(désactivées tant que tu ne les actives pas)</span></h2>
@@ -982,36 +985,6 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     }
   };
   $('bJoindre').addEventListener('click', () => $('fImage').click());
-  $('bMission').addEventListener('click', async () => {
-    const texte = $('saisie').value.trim();
-    if (!texte) { MISSION.ouvert = true; ouvrirOnglet('auto'); setTimeout(() => { const d = $('zoneMissions'); if (d) d.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 300); return; }   // rien d'écrit : la liste des missions
-    let tr;
-    try { tr = await api('/api/travaux'); } catch (e) { infoLocale(e.message); return; }
-    const c = ouvrirModal(T('Confier ceci à Lutin comme mission'));
-    c.appendChild(el('p', 'aide', T('Lutin va le mener seul, pendant des heures, puis te rendre un bilan. Tu suis son avancement dans l\'onglet Automatisation.')));
-    const cite = el('blockquote'); cite.textContent = texte.length > 400 ? texte.slice(0, 400) + '…' : texte; cite.style.cssText = 'margin:6px 0;padding:6px 10px;border-left:3px solid var(--accent, #5aa9ff);white-space:pre-wrap;max-height:160px;overflow:auto'; c.appendChild(cite);
-    const nom = el('input'); nom.value = texte.split(/\s+/).slice(0, 6).join(' ').slice(0, 60); nom.style.width = '100%';
-    const dossier = el('select'); (tr.liste || []).forEach(x => { const o = el('option', '', x.nom + ' — ' + x.chemin); o.value = x.id; dossier.appendChild(o); });
-    dossier.value = (ETAT.travaux && ETAT.travaux.actif) || (tr.liste && tr.liste[0] && tr.liste[0].id) || '';
-    const duree = el('input'); duree.type = 'number'; duree.min = 1; duree.max = 72; duree.value = MISSION.brouillon.duree_h || 8; duree.style.width = '80px';
-    const auto = el('input'); auto.type = 'checkbox'; auto.checked = MISSION.brouillon.autonome !== false;
-    const ligne = (libelle, champ) => { const l = el('label', 'opt-ligne'); l.style.margin = '6px 0'; l.append(document.createTextNode(libelle + ' '), champ); c.appendChild(l); };
-    ligne(T('Nom'), nom); ligne(T('Dossier de travail'), dossier); ligne(T('Durée maximale (heures)'), duree);
-    const la = el('label', 'opt-ligne'); la.append(auto, document.createTextNode(' ' + T('Autonome : Lutin écrit des fichiers et lance des commandes sans me demander'))); c.appendChild(la);
-    c.appendChild(el('div', 'aide', T('Dans le dossier choisi seulement, avec les sauvegardes et les garde-fous habituels. Décoché, il ne fait que montrer ce qu\'il ferait.')));
-    const msg = el('div', 'attention'), barre = el('div', 'ligne'), go = el('button', 'principal', T('Lancer la mission')), non = el('button', '', T('Annuler'));
-    non.addEventListener('click', fermerModal);
-    go.addEventListener('click', async () => {
-      go.disabled = true; msg.textContent = '';
-      try {
-        await api('/api/mission-action', { action: 'creer', nom: nom.value, cahier: texte, travail: dossier.value, duree_h: duree.value, autonome: auto.checked });
-        MISSION.brouillon.duree_h = duree.value; MISSION.brouillon.autonome = auto.checked;
-        fermerModal(); $('saisie').value = ''; $('saisie').dispatchEvent(new Event('input'));
-        infoLocale(T('🎯 Mission lancée : ') + nom.value + T(' — suis son avancement dans l\'onglet Automatisation.'));
-      } catch (e) { msg.textContent = e.message; go.disabled = false; }
-    });
-    barre.append(go, non); c.append(msg, barre);
-  });
   $('fImage').addEventListener('change', e => { joindre([...e.target.files]); e.target.value = ''; });
   $('saisie').addEventListener('paste', e => { const f = [...(e.clipboardData ? e.clipboardData.files : [])]; if (f.length) { e.preventDefault(); joindre(f); } });
   const zoneGlisse = $('ligneSaisie');
@@ -1097,7 +1070,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
               try { CONV = await api('/api/conversation?id=' + e.conversation.id); } catch (x) { CONV = { id: e.conversation.id, titre: e.conversation.titre, messages: [] }; }
               majJauge(CONV.id); afficherTaches(CONV.taches, !$('taches').hidden); setVitesse(CONV.vitesse); majAnnuler();
             }
-            if (etaitNouvelle) titreAuto(e.conversation.id);
+            if (etaitNouvelle && !String(e.conversation.titre || '').startsWith('🎯')) titreAuto(e.conversation.id);          // une conversation de mission garde le nom de sa mission
           }
           if (visible()) bas();
         }
@@ -1300,6 +1273,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     $('cheminDonnees').textContent = ETAT.donnees || '';
     $('vCpus').textContent = ETAT.cpus ? T('(cette machine : {} cœurs)').replace('{}', ETAT.cpus) : '';
     $('cHorsLigne').checked = !!ETAT.hors_ligne; $('cWeb').disabled = !!ETAT.hors_ligne;
+    majMission(); suivreMission();
     if (ETAT.bench && ETAT.bench.erreur) $('msgModeles').textContent = T('Banc d\'essai : ') + ETAT.bench.erreur;
     $('vCtx').textContent = $('rCtx').value; $('vTemp').textContent = $('rTemp').value; $('vTours').textContent = $('rTours').value;
     // Le modèle enregistré n'est plus installé (supprimé, ou Ollama réinstallé) : on passe sur un modèle installé plutôt que d'envoyer une demande à un modèle absent.
@@ -1327,9 +1301,48 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
   // Un seul enregistrement à la fois : si on coche deux cases à la suite, le second part quand le premier a fini, avec l'état le plus récent (deux requêtes en vol pouvaient se croiser et la plus ancienne gagner)
   const enSerie = fn => { let cours = null, refaire = false; return () => { if (cours) { refaire = true; return cours; } cours = (async () => { try { do { refaire = false; await fn(); } while (refaire); } finally { cours = null; } })(); return cours; }; };
   // Options de la conversation ouverte : mode, réflexion, fichiers auto, commandes auto, essai à blanc, web, longueur. Chaque conversation a les siennes (accords automatiques décochés par défaut).
-  const optionsDefaut = () => { const r = (ETAT && ETAT.reglages) || {}; return { mode: r.mode || 'polyvalent', reflexion: !!r.reflexion, auto_ecriture: false, auto_commandes: false, essai_a_blanc: !!r.essai_a_blanc, web: r.web !== false, num_predict: r.num_predict || 0 }; };
-  const lireOptions = sansAccords => { const o = { mode: $('selMode').value, reflexion: $('cReflexion').checked, essai_a_blanc: $('cEssai').checked, web: $('cWeb').checked, num_predict: +$('sLong').value || 0 }; if (!sansAccords) { o.auto_ecriture = $('cAuto').checked; o.auto_commandes = $('cAutoCmd').checked; } return o; };
-  const afficherOptions = o => { const v = Object.assign(optionsDefaut(), o || {}); $('selMode').value = v.mode; $('cReflexion').checked = !!v.reflexion; $('cAuto').checked = !!v.auto_ecriture; $('cAutoCmd').checked = !!v.auto_commandes; $('cEssai').checked = !!v.essai_a_blanc; $('cWeb').checked = v.web !== false; $('sLong').value = String(v.num_predict || 0); };
+  const optionsDefaut = () => { const r = (ETAT && ETAT.reglages) || {}; return { mode: r.mode || 'polyvalent', reflexion: !!r.reflexion, auto_ecriture: false, auto_commandes: false, essai_a_blanc: !!r.essai_a_blanc, web: r.web !== false, num_predict: r.num_predict || 0, mission_duree_h: 8 }; };
+  const lireOptions = sansAccords => { const o = { mode: $('selMode').value, reflexion: $('cReflexion').checked, essai_a_blanc: $('cEssai').checked, web: $('cWeb').checked, num_predict: +$('sLong').value || 0, mission_duree_h: +$('sDuree').value || 8 }; if (!sansAccords) { o.auto_ecriture = $('cAuto').checked; o.auto_commandes = $('cAutoCmd').checked; } return o; };
+  // Mode « Mission longue » : la durée n'apparaît que dans ce mode, et le bouton d'envoi s'appelle « Lancer » quand le message va démarrer une mission
+  const missionDe = id => (ETAT && ETAT.missions && id && ETAT.missions[id]) || null;
+  const ETATS_MISSION = () => ({ en_cours: T('en cours'), pause: T('en pause'), bloquee: T('attend ta réponse'), terminee: T('terminée') });
+  const majMission = () => {
+    const mode = $('selMode').value === 'mission', m = missionDe(CONV && CONV.id);
+    $('ligneDuree').hidden = !mode;
+    const lancer = mode && !(m && m.etat !== 'terminee');
+    const lb = $('bEnvoyer').querySelector('.lb'); if (lb) lb.textContent = lancer ? T('Lancer') : T('Envoyer');
+    $('saisie').placeholder = mode ? (m && m.etat !== 'terminee' ? T('Une consigne ou une réponse pour la mission…') : T('Décris la mission : ce que Lutin doit réaliser, les contraintes, comment tester, ce qui la rend « terminée »…')) : T('Message…  (Entrée : envoyer · / : commandes)');
+    majBandeauMission();
+  };
+  const majBandeauMission = () => {
+    const z = $('bandeauMission'), m = missionDe(CONV && CONV.id);
+    if (!m) { z.hidden = true; z.textContent = ''; z.dataset.sig = ''; return; }
+    const sig = JSON.stringify([m.etat, m.tours, m.actions, m.message, m.question, m.bilan, m.autonome, Math.floor(Date.now() / 60000)]);
+    if (z.dataset.sig === sig) return;
+    z.dataset.sig = sig; z.hidden = false; z.textContent = '';
+    const restant = Math.max(0, Math.round((m.debut + m.duree_h * 3600 - Date.now() / 1000) / 60)), h = restant >= 90 ? Math.round(restant / 60) + ' h' : restant + ' min';
+    z.appendChild(el('span', 'etat', '🎯 ' + T('Mission') + ' · ' + (ETATS_MISSION()[m.etat] || m.etat)));
+    z.appendChild(el('span', 'detail', m.tours + ' ' + T('tours') + ' · ' + m.actions + ' ' + T('actions') + (m.etat === 'terminee' ? '' : ' · ' + h + ' ' + T('restantes')) + ' · ' + (m.autonome ? T('autonome') : T('à blanc : coche Fichiers auto et Commandes auto pour qu\'elle agisse'))));
+    const agir = async action => { try { await api('/api/mission-action', { action, id: m.id }); await rafraichir(); } catch (e) { infoLocale(e.message); } };
+    if (m.etat === 'en_cours') { const b = el('button', '', T('Mettre en pause')); b.addEventListener('click', () => agir('pause')); z.appendChild(b); }
+    if (m.etat === 'pause') { const b = el('button', 'principal', T('Reprendre')); b.addEventListener('click', () => agir('reprendre')); z.appendChild(b); }
+    if (m.etat !== 'terminee') { const b = el('button', 'danger', T('Arrêter')); b.addEventListener('click', () => { if (confirm(T('Arrêter cette mission ? Le travail déjà fait reste dans le dossier.'))) agir('arreter'); }); z.appendChild(b); }
+    if (m.message && m.etat !== 'terminee') z.appendChild(el('span', 'detail', m.message));
+    if (m.question && m.etat === 'bloquee') z.appendChild(el('div', 'question', T('Lutin demande : ') + m.question + '  — ' + T('réponds dans le champ ci-dessous.')));
+    if (m.bilan) { const d = el('details'); d.open = m.etat === 'terminee'; d.appendChild(el('summary', '', T('Bilan'))); const pre = el('pre'); pre.textContent = m.bilan; d.appendChild(pre); z.appendChild(d); }
+  };
+  // La conversation d'une mission se met à jour toute seule (elle avance sans que la page y soit pour quelque chose) : on la relit quand elle a changé
+  const suivreMission = async () => {
+    const m = missionDe(CONV && CONV.id);
+    if (!m || EN_COURS || (m.etat === 'terminee' && CONV.__vue_terminee)) return;
+    try {
+      const c = await api('/api/conversation?id=' + CONV.id);
+      const avant = CONV.messages, d1 = avant[avant.length - 1], d2 = c.messages[c.messages.length - 1];
+      if (c.messages.length !== avant.length || (d1 && d2 && (d1.content || '') !== (d2.content || ''))) { const bas_ = fil().scrollHeight - fil().scrollTop - fil().clientHeight < 80; CONV = c; afficherHistorique(CONV); if (bas_) bas(); }
+      if (m.etat === 'terminee') CONV.__vue_terminee = true;
+    } catch (e) { /* la conversation sera relue au prochain passage */ }
+  };
+  const afficherOptions = o => { const v = Object.assign(optionsDefaut(), o || {}); $('selMode').value = v.mode; $('cReflexion').checked = !!v.reflexion; $('cAuto').checked = !!v.auto_ecriture; $('cAutoCmd').checked = !!v.auto_commandes; $('cEssai').checked = !!v.essai_a_blanc; $('cWeb').checked = v.web !== false; $('sLong').value = String(v.num_predict || 0); $('sDuree').value = String(v.mission_duree_h || 8); majMission(); };
   const envoyerOptions = async () => {
     try {
       if (CONV) { const r = await api('/api/conversation-options', { conversation: CONV.id, options: lireOptions() }); CONV.options = r.options; }
@@ -1652,7 +1665,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
   });
   $('bDemarrer').addEventListener('click', async () => { $('bDemarrer').disabled = true; try { await api('/api/demarrer-ollama', {}); } catch (e) { fil().appendChild(el('div', 'erreur', e.message)); } $('bDemarrer').disabled = false; rafraichir(); });
   $('bVram').addEventListener('click', async () => { $('bVram').disabled = true; $('bVram').textContent = '⏳…'; try { const r = await api('/api/liberer-vram', {}); fil().appendChild(el('div', 'aide', r.message)); } catch (e) { fil().appendChild(el('div', 'erreur', e.message)); } $('bVram').disabled = false; $('bVram').textContent = T('🧹 Libérer la VRAM'); rafraichir(); });
-  ['selMode', 'cReflexion', 'cAuto', 'cAutoCmd', 'cEssai', 'cWeb', 'sLong'].forEach(id => $(id).addEventListener('change', async () => { await sauverOptions(); if (id === 'selMode') rafraichir(); }));
+  ['selMode', 'cReflexion', 'cAuto', 'cAutoCmd', 'cEssai', 'cWeb', 'sLong', 'sDuree'].forEach(id => $(id).addEventListener('change', async () => { await sauverOptions(); majMission(); if (id === 'selMode') rafraichir(); }));
   ['selModele', 'cAvance', 'cCopieConv', 'selMemoire', 'iFichePart', 'cScribe', 'cSens', 'iTopP', 'iTopK', 'iMinP', 'iRep', 'cGarde', 'cComfy', 'sRappels', 'iSeuilRam', 'iSeuilDisque', 'iPlafond', 'iLimiteCmd', 'iThreads', 'iGarde'].forEach(id => $(id).addEventListener('change', async () => { await sauverReglages(); if (id === 'cAvance') rafraichir(); }));          // les modèles sans filtre apparaissent tout de suite
   // Profils de charge : des valeurs toutes faites pour les deux réglages (et le contexte pour « Discret »), calculées sur le nombre de cœurs de CETTE machine.
   $('selProfil').addEventListener('change', async () => {
@@ -2435,7 +2448,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
   };
   const chargerAuto = async () => {
     const seq = ++SEQ_AUTO; clearTimeout(minuteurAuto);
-    await Promise.all([rendreZone($('zoneMissions'), panneauMission), rendreZone($('zoneFond'), panneauFond)]);
+    await rendreZone($('zoneFond'), panneauFond);
     if (seq === SEQ_AUTO && $('p-auto').classList.contains('vue')) minuteurAuto = setTimeout(chargerAuto, 4000);
   };
   // Panneau de l'addon « travail de fond » : travaux en cours (avancement, pause, rapport) et formulaire de création
@@ -2485,57 +2498,6 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     go.addEventListener('click', async () => {
       go.disabled = true; msg.textContent = '';
       try { await api('/api/fond-creer', { nom: b.nom, dossier: b.dossier, motifs: b.motifs, consigne: b.consigne, regulier: b.regulier, intervalle_h: b.intervalle_h }); FOND.brouillon = { nom: '', dossier: b.dossier, motifs: '*.pdf', consigne: '', regulier: false, intervalle_h: 24 }; FOND.ouvert = false; chargerAuto(); }
-      catch (e) { msg.textContent = e.message; go.disabled = false; }
-    });
-    det.appendChild(go); zone.appendChild(det);
-  };
-  // Panneau de l'addon « missions longues » : une mission confiée pour des heures (état, pause, question du modèle, consigne en route) et le formulaire de création
-  const MISSION = { ouvert: false, brouillon: { nom: '', cahier: '', travail: '', duree_h: 8, autonome: true }, notes: {} };
-  const etatsMission = () => ({ en_cours: T('en cours'), pause: T('en pause'), bloquee: T('attend ta réponse'), terminee: T('terminée') });
-  const panneauMission = async (zone) => {
-    let x, tr;
-    try { [x, tr] = await Promise.all([api('/api/missions'), api('/api/travaux')]); } catch (e) { zone.textContent = e.message; return; }
-    const msg = el('div', 'attention');
-    const agir = async (action, plus) => { try { await api('/api/mission-action', Object.assign({ action }, plus || {})); chargerAuto(); } catch (e) { msg.textContent = e.message; } };
-    if (!x.liste.length) zone.appendChild(el('div', 'aide', T('Aucune mission pour l\'instant.')));
-    x.liste.forEach(m => {
-      const d = el('div', 'carte'); d.style.flexDirection = 'column'; d.style.alignItems = 'stretch'; d.style.gap = '4px';
-      d.appendChild(el('b', '', m.nom));
-      const duree = Math.round(((m.fin || Date.now() / 1000) - m.debut) / 60);
-      d.appendChild(el('div', 'aide', (etatsMission()[m.etat] || m.etat) + ' · ' + m.tours + ' ' + T('tours') + ' · ' + m.actions + ' ' + T('actions') + ' · ' + (duree >= 90 ? Math.round(duree / 60) + ' h' : duree + ' min') + ' / ' + m.duree_h + ' h · ' + (m.autonome ? T('autonome') : T('à blanc')) + ' · ' + m.dossier));
-      if (m.message) d.appendChild(el('div', 'aide', m.message));
-      if (m.question) d.appendChild(el('div', 'attention', T('Lutin demande : ') + m.question));
-      if (m.bilan) { const det = el('details'); det.appendChild(el('summary', '', T('Bilan'))); const pre = el('pre', 'bloc-code'); pre.textContent = m.bilan; det.appendChild(pre); d.appendChild(det); }
-      if (m.etat !== 'terminee') {
-        const note = el('input'); note.placeholder = m.etat === 'bloquee' ? T('Ta réponse') : T('Ajouter une consigne (prise en compte au prochain tour)'); note.style.width = '100%'; note.value = MISSION.notes[m.id] || ''; note.addEventListener('input', () => { MISSION.notes[m.id] = note.value; });
-        const env = el('button', '', T('Envoyer')); env.addEventListener('click', () => { const t = note.value; delete MISSION.notes[m.id]; agir('repondre', { id: m.id, texte: t }); });
-        const l = el('div', 'ligne'); l.style.flexWrap = 'nowrap'; l.append(note, env); d.appendChild(l);
-      }
-      const ligne = el('div', 'ligne');
-      if (m.conv) { const v = el('button', '', T('Voir la conversation')); v.addEventListener('click', () => { ouvrirOnglet('chat'); ouvrir(m.conv); }); ligne.appendChild(v); }
-      if (m.etat === 'en_cours') { const p = el('button', '', T('Mettre en pause')); p.addEventListener('click', () => agir('pause', { id: m.id })); ligne.appendChild(p); }
-      if (m.etat === 'pause') { const p = el('button', 'principal', T('Reprendre')); p.addEventListener('click', () => agir('reprendre', { id: m.id })); ligne.appendChild(p); }
-      if (m.etat !== 'terminee') { const s = el('button', '', T('Arrêter')); s.addEventListener('click', () => { if (confirm(T('Arrêter cette mission ? Le travail déjà fait reste dans le dossier.'))) agir('arreter', { id: m.id }); }); ligne.appendChild(s); }
-      const sup = el('button', 'danger', T('Supprimer')); sup.addEventListener('click', () => { if (confirm(T('Supprimer cette mission ? La conversation reste dans la liste.'))) agir('supprimer', { id: m.id }); }); ligne.appendChild(sup);
-      d.appendChild(ligne); zone.appendChild(d);
-    });
-    zone.appendChild(msg);
-    const det = el('details'), b = MISSION.brouillon;
-    det.open = MISSION.ouvert; det.addEventListener('toggle', () => { MISSION.ouvert = det.open; });
-    det.appendChild(el('summary', '', T('Nouvelle mission')));
-    const labN = el('label', 'opt-ligne'), inN = el('input'); inN.value = b.nom; inN.addEventListener('input', () => { b.nom = inN.value; }); labN.append(document.createTextNode(T('Nom') + ' '), inN); det.appendChild(labN);
-    const sel = el('select'); (tr.liste || []).forEach(t => { const o = el('option', '', t.nom + ' — ' + t.chemin); o.value = t.id; sel.appendChild(o); });
-    if (!b.travail && tr.liste && tr.liste.length) b.travail = tr.liste[0].id; sel.value = b.travail; sel.addEventListener('change', () => { b.travail = sel.value; });
-    const labD = el('label', 'opt-ligne'); labD.append(document.createTextNode(T('Dossier de travail') + ' '), sel); det.appendChild(labD);
-    const cah = el('textarea'); cah.rows = 8; cah.style.width = '100%'; cah.placeholder = T('Le cahier des charges : ce que Lutin doit réaliser, avec les contraintes, la façon de tester, ce qui rend le travail « terminé »…'); cah.value = b.cahier; cah.addEventListener('input', () => { b.cahier = cah.value; });
-    det.appendChild(cah);
-    const labH = el('label', 'opt-ligne'), inH = el('input'); inH.type = 'number'; inH.min = 1; inH.max = 72; inH.style.width = '80px'; inH.value = b.duree_h; inH.addEventListener('input', () => { b.duree_h = inH.value; }); labH.append(document.createTextNode(T('Durée maximale (heures)') + ' '), inH); det.appendChild(labH);
-    const labA = el('label', 'opt-ligne'), inA = el('input'); inA.type = 'checkbox'; inA.checked = b.autonome; inA.addEventListener('change', () => { b.autonome = inA.checked; }); labA.append(inA, document.createTextNode(' ' + T('Autonome : Lutin écrit des fichiers et lance des commandes sans me demander'))); det.appendChild(labA);
-    det.appendChild(el('div', 'aide', T('Dans le dossier choisi seulement, avec les sauvegardes et les garde-fous habituels. Décoché, il ne fait que montrer ce qu\'il ferait. Les deux places de réponse sont partagées : tu peux discuter pendant la mission.')));
-    const go = el('button', 'principal', T('Lancer la mission'));
-    go.addEventListener('click', async () => {
-      go.disabled = true; msg.textContent = '';
-      try { await api('/api/mission-action', { action: 'creer', nom: b.nom, cahier: b.cahier, travail: b.travail, duree_h: b.duree_h, autonome: b.autonome }); MISSION.brouillon = { nom: '', cahier: '', travail: b.travail, duree_h: b.duree_h, autonome: b.autonome }; MISSION.ouvert = false; chargerAuto(); }
       catch (e) { msg.textContent = e.message; go.disabled = false; }
     });
     det.appendChild(go); zone.appendChild(det);

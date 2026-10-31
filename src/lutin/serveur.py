@@ -168,7 +168,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
                                        "familles": {k: _t(v) for k, v in (_m._CATALOGUE.get("familles") or {}).items()}, "disque_modeles": _emplacements.jauge_modeles(),
                                        "version": _m.VERSION, "ollama": o["actif"], "ollama_installe": bool(_m.chemin_ollama()), "installes": o["installes"], "modeles": modeles, "modeles_masques": len(_m.lire_registre_modeles()["masques"]), "actives": list(_m.TOURS_ACTIFS),
                                        "pulls": _m.PULLS, "reglages": r, "conversations": _m.conv_liste(), "racine": str(_m.RACINE), "donnees": str(_m.DONNEES),
-                                       "outil": bool(self._outil_vivant()), "hors_ligne": _hl.actif(), "niveau": _m.SECURITE.niveau, "ouverture_possible": _fichiers.ouverture_possible(), "langue": _i18n.langue(), "langue_reglage": _i18n.langue_configuree(), "cpus": os.cpu_count() or 1, "redemarrage": {"necessaire": _acces.securite_enregistree() != _m.SECURITE, "possible": _acces.peut_redemarrer()}, "nouvelle_version": _m.nouvelle_version_lutin(), "travaux": _m.travaux_etat(), "configurateur": self._configurateur(), "addons_alertes": _addons.alertes(), "embeddings": _embeddings.etat(),
+                                       "outil": bool(self._outil_vivant()), "hors_ligne": _hl.actif(), "niveau": _m.SECURITE.niveau, "ouverture_possible": _fichiers.ouverture_possible(), "missions": _mission.par_conversation(), "langue": _i18n.langue(), "langue_reglage": _i18n.langue_configuree(), "cpus": os.cpu_count() or 1, "redemarrage": {"necessaire": _acces.securite_enregistree() != _m.SECURITE, "possible": _acces.peut_redemarrer()}, "nouvelle_version": _m.nouvelle_version_lutin(), "travaux": _m.travaux_etat(), "configurateur": self._configurateur(), "addons_alertes": _addons.alertes(), "embeddings": _embeddings.etat(),
                                        "bench": {"en_cours": _m.BENCH["en_cours"], "etape": _m.BENCH["etape"], "erreur": _m.BENCH["erreur"], "mesures": _bench.lire(_m.chemin_bench())}, "attentes": [{"id": a.id, "titre": a.titre, "detail": a.detail, "diff": a.diff} for a in _m.Attente.EN_COURS.values()]})
         if chemin == "/api/conseil":
             r = _m.reglages()
@@ -512,12 +512,15 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 if not self._configurateur():
                     return self._envoyer(403, {"erreur": _t("L'installation d'un modèle se lance depuis cette machine.")})
                 return self._envoyer(200, _embeddings.demarrer_installation())
-            if self.path in ("/api/mission-action", "/api/fichiers-crees-supprimer", "/api/fichiers-crees-dossier"):
+            if self.path == "/api/mission-action":                   # pause, reprise, arrêt d'une mission : comme envoyer un message, pour qui peut discuter
+                try:
+                    return self._envoyer(200, _mission.action(str(donnees.get("action", "")), donnees))
+                except ValueError as e:
+                    return self._envoyer(400, {"erreur": str(e)})
+            if self.path in ("/api/fichiers-crees-supprimer", "/api/fichiers-crees-dossier"):
                 if not self._configurateur():
                     return self._envoyer(403, {"erreur": _t("Cela se fait depuis cette machine (niveau « cette machine seulement » ou navigateur de cette machine).")})
                 try:
-                    if self.path == "/api/mission-action":
-                        return self._envoyer(200, _mission.action(str(donnees.get("action", "")), donnees))
                     if self.path == "/api/fichiers-crees-dossier":
                         return self._envoyer(200, _fichiers.ouvrir_dossier(str(donnees.get("id", ""))))
                     ids = donnees.get("ids")
@@ -689,6 +692,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
             if self.path in ("/api/supprimer", "/api/renommer", "/api/epingler") and str(donnees.get("id", "")) in _m.TOURS_ACTIFS:
                 return self._envoyer(409, {"erreur": _t("Une réponse est en cours dans cette conversation : attends la fin ou arrête-la.")})          # sinon la fin de la réponse réécrirait la conversation par-dessus
             if self.path == "/api/supprimer":
+                _mission.oublier_conversation(str(donnees.get("id", "")))                  # sa mission, s'il y en a une, s'arrête avec elle
                 _m.conv_supprimer(str(donnees.get("id", "")))
                 return self._envoyer(200, {"ok": True})
             if self.path == "/api/renommer":
@@ -767,6 +771,14 @@ class Gestionnaire(BaseHTTPRequestHandler):
             if not (0 <= depuis < len(conv["messages"]) and conv["messages"][depuis].get("role") == "user"):
                 abandon()
                 return self._envoyer(400, {"erreur": "Ce message n'existe plus dans la conversation : recharge-la."})
+        if isinstance(donnees.get("options"), dict):
+            _m.options_ecrire(conv["id"], donnees["options"])                                  # les options affichées par la page deviennent celles de cette conversation (créée au premier message)
+        mode_voulu = _m.options_lire(conv["id"]).get("mode") or (donnees.get("mode") if not isinstance(donnees.get("options"), dict) else None) or _m.reglages()["mode"]
+        if mode_voulu == "mission":                                                            # mode « Mission longue » : ce message est le cahier des charges (ou une consigne), la conversation sert de compte rendu
+            mission_en_cours = _mission.trouver_pour_conversation(conv["id"])
+            if not (mission_en_cours and mission_en_cours["etat"] != "terminee") and conv["id"] in _m.TOURS_ACTIFS:
+                return self._envoyer(409, {"erreur": "Cette conversation est déjà en train de répondre. Attends la fin ou clique sur Arrêter."})
+            return self._mission_dans_la_conversation(conv, texte, donnees, mission_en_cours, abandon, not ident)
         stop = threading.Event()
         with _m.VERROU_TOURS:
             if conv["id"] in _m.TOURS_ACTIFS:
@@ -782,8 +794,6 @@ class Gestionnaire(BaseHTTPRequestHandler):
             _m.RACINE_TOURS[conv["id"]] = str(_m.RACINE)
             _m.TOURS_ACTIFS[conv["id"]] = stop
         try:
-            if isinstance(donnees.get("options"), dict):
-                _m.options_ecrire(conv["id"], donnees["options"])                      # les options affichées par la page deviennent celles de cette conversation (créée au premier message)
             r = _m.appliquer_options(_m.reglages(), conv["id"])
             for k in ("modele", "reflexion", "mode"):
                 if k in donnees and (k == "modele" or not isinstance(donnees.get("options"), dict)):
@@ -810,6 +820,44 @@ class Gestionnaire(BaseHTTPRequestHandler):
             with _m.VERROU_TOURS:
                 _m.TOURS_ACTIFS.pop(conv["id"], None)
                 _m.RACINE_TOURS.pop(conv["id"], None)
+
+    def _mission_dans_la_conversation(self, conv, texte, donnees, mission_en_cours, abandon, nouvelle):
+        """Mode « Mission longue » : le message lance une mission menée DANS cette conversation, ou, si une mission y est déjà en cours, lui apporte une réponse ou une consigne."""
+        opts = _m.options_lire(conv["id"])
+        extrait = texte if len(texte) <= 160 else texte[:160] + "…"
+        if mission_en_cours and mission_en_cours["etat"] != "terminee":
+            try:
+                _mission.action("repondre", {"id": mission_en_cours["id"], "texte": texte})
+            except ValueError as erreur:
+                return self._envoyer(400, {"erreur": str(erreur)})
+            info = _t("✉ Noté, Lutin en tient compte à son prochain tour : {}").format(extrait)
+        else:
+            autonome = bool(opts.get("auto_ecriture") and opts.get("auto_commandes"))
+            nom = " ".join(texte.split()[:6])[:60] or _t("Mission")
+            titre_avant = conv.get("titre", "")
+            try:
+                if titre_avant in ("", "Nouvelle conversation"):
+                    conv["titre"] = "🎯 " + nom
+                    _m.conv_ecrire(conv)
+                nouvelle_mission = _mission.creer(nom, texte, str(donnees.get("travail") or conv.get("travail") or ""), opts.get("mission_duree_h", 8), autonome, conv["id"])
+            except ValueError as erreur:
+                if nouvelle:
+                    abandon()
+                elif conv.get("titre") != titre_avant:
+                    conv["titre"] = titre_avant
+                    _m.conv_ecrire(conv)
+                return self._envoyer(400, {"erreur": str(erreur)})
+            info = (_t("🎯 Mission lancée : Lutin travaille seul, jusqu'à {} h, et tu suis tout ici. Pause ou arrêt avec les boutons au-dessus du champ de saisie.") if autonome else
+                    _t("🎯 Mission lancée « à blanc » : Lutin montre ce qu'il ferait sans rien écrire ni lancer. Coche Fichiers auto et Commandes auto pour qu'il agisse vraiment (ça compte dès le tour suivant).")).format(nouvelle_mission["duree_h"])
+        self.send_response(200)
+        self.send_header("Content-Type", "application/x-ndjson; charset=utf-8")
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        for evenement in ({"type": "debut", "conversation": conv["id"]}, {"type": "info", "texte": info}, {"type": "fin", "conversation": {"id": conv["id"], "titre": conv.get("titre", "")}}):
+            try:
+                self.wfile.write((json.dumps(evenement, ensure_ascii=False) + "\n").encode("utf-8"))
+            except OSError:
+                break
 
     def _resumer(self, donnees):
         """Génère un document de reprise structuré par le modèle, pour coller dans un autre modèle d'IA."""
@@ -871,6 +919,8 @@ class Gestionnaire(BaseHTTPRequestHandler):
         if not ident:
             return self._envoyer(400, {"erreur": _t("Pas de conversation.")})
         conv = _m.conv_lire(ident)
+        if str(conv.get("titre", "")).startswith("🎯"):
+            return self._envoyer(200, {"titre": ""})                                              # une conversation de mission garde le nom de sa mission
         r = _m.reglages()
         morceaux = []
         for m in conv.get("messages", [])[:20]:

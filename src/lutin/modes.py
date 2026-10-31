@@ -17,6 +17,7 @@ MODES = {
     "scenario": {"exclus": {"executer", "symboles"} | IMAGES, "rappels": True},
     "recherche": {"seulement": LECTURE, "rappels": True},
     "discussion": {"aucun": True, "rappels": False},
+    "mission": {"exclus": set(), "rappels": False},          # le message envoyé devient le cahier des charges d'une mission menée dans cette conversation (voir mission.py) ; les tours de la mission utilisent tous les outils
 }
 
 
@@ -51,6 +52,8 @@ def consigne(mode):
         return _t("Mode ÉCRITURE : tu aides à rédiger, à reformuler et à chercher dans les documents du dossier de travail. Tu ne lances pas de commandes. Sois inventif et précis, fidèle aux documents de l'utilisateur.")
     if mode == "recherche":
         return _t("Mode RECHERCHE (lecture seule) : tu lis, cherches et recoupes les fichiers, les documents (PDF, Word…), les notes et les anciennes conversations, puis tu réponds en citant tes sources (fichier, page). Tu ne modifies aucun fichier et tu ne lances aucune commande : si une modification serait utile, propose-la sans la faire.")
+    if mode == "mission":
+        return _t("Mode MISSION LONGUE : l'utilisateur te confie un grand travail que tu mènes seul, tour après tour, avec tous tes outils, jusqu'à avoir fini et vérifié.")
     if mode == "discussion":
         return _t("Mode DISCUSSION : tu converses sans outils. Réponds directement et simplement ; si l'utilisateur veut que tu lises ou modifies des fichiers, dis-lui de passer dans un autre mode.")
     return _t("Mode POLYVALENT : tu es un assistant généraliste. Tu réponds aux questions, tu aides à rédiger, à analyser, à programmer et à organiser. Quand une question touche aux fichiers du dossier de travail, lis-les avant de répondre ; ne modifie rien sans nécessité, et dis clairement ce qui est vérifié ou non.")

@@ -1081,6 +1081,40 @@ class Assistant(unittest.TestCase):
             for i in ids:
                 A.conv_supprimer(i)
 
+    def test_le_mode_mission_lance_une_mission_dans_la_conversation_puis_lui_donne_des_consignes(self):
+        """Mode « Mission longue » : le message envoyé démarre une mission menée dans cette conversation ; le suivant (réponse, consigne) lui est transmis ; un message dans un autre mode se passe normalement."""
+        from lutin import mission
+        vrai_config = A.config_lue
+        A.config_lue = lambda: {"emplacements": {"travail": str(PROJET)}}
+        ident = None
+        try:
+            ev = chat("Crée un petit jeu", reponses=[[{"content": "inutile"}]], travail="principal", options={"mode": "mission", "mission_duree_h": 2, "auto_ecriture": True, "auto_commandes": True})
+            ident = next(e for e in ev if e["type"] == "fin")["conversation"]["id"]
+            self.assertTrue(any(e["type"] == "info" and "Mission lancée" in e["texte"] for e in ev))
+            self.assertFalse(any(e["type"] in ("texte", "outil") for e in ev), "aucune réponse du modèle : la mission travaille ensuite, dans la conversation")
+            m = mission.trouver_pour_conversation(ident)
+            self.assertEqual((m["conv"], m["lie"], m["duree_h"], m["cahier"]), (ident, True, 2, "Crée un petit jeu"))
+            self.assertTrue(m["autonome"], "Fichiers auto et Commandes auto cochés : autonome")
+            self.assertEqual(lire("/api/conversation?id=" + ident)["options"]["mode"], "mission")
+            self.assertEqual(lire("/api/etat")["missions"][ident]["etat"], "en_cours", "l'état de la mission est donné à la page")
+            ev = chat("Ajoute un score", conversation=ident, travail="principal", options={"mode": "mission"})
+            self.assertTrue(any(e["type"] == "info" and "Noté" in e["texte"] for e in ev), "le message suivant est une consigne pour la mission")
+            self.assertEqual(mission.trouver_pour_conversation(ident)["note"], "Ajoute un score")
+            self.assertEqual(len(mission.lire()), 1, "pas de seconde mission")
+            ev = chat("Bonjour", conversation=ident, reponses=[[{"content": "Salut."}]], options={"mode": "polyvalent"})
+            self.assertEqual(texte_de(ev), "Salut.", "dans un autre mode, la conversation répond normalement")
+            post("/api/supprimer", {"id": ident})
+            self.assertIsNone(mission.trouver_pour_conversation(ident), "supprimer la conversation arrête sa mission")
+            self.assertEqual(mission.lire(), [])
+        finally:
+            A.config_lue = vrai_config
+            for m in mission.lire():
+                mission.action("supprimer", {"id": m["id"]})
+            if ident:
+                A.conv_supprimer(ident)
+        post("/api/reglages", {"mode": "mission"})
+        self.assertNotEqual(lire("/api/etat")["reglages"]["mode"], "mission", "« mission » n'est jamais le mode des nouvelles conversations")
+
     def test_vitesses(self):
         ev = chat("Salut", reponses=[[{"content": "ok"}]])
         v = next(e for e in ev if e["type"] == "vitesse")
@@ -2048,7 +2082,7 @@ class Assistant(unittest.TestCase):
             for personnel in ("RTX", "illustrateur", "Aurore", "Datura", "poube"):
                 self.assertNotIn(personnel, fichier)
 
-    def test_les_cinq_modes_et_leurs_outils(self):
+    def test_les_modes_et_leurs_outils(self):
         """Polyvalent (défaut), code et projet, écriture, recherche en lecture seule, discussion sans outils : chacun a son jeu d'outils et sa consigne."""
         from lutin import modes
         base = dict(A.reglages(), web=True, memoire_longue="fichier")          # avec la fiche de suivi, son outil existe aussi
@@ -2057,7 +2091,7 @@ class Assistant(unittest.TestCase):
             return {t["function"]["name"] for t in A.outils_du_mode(dict(base, mode=mode))}
         tous = {t["function"]["name"] for t in A.OUTILS} - {"comfy_modeles", "comfy_generer"}          # ces deux outils n'existent que si l'addon ComfyUI est activé
         self.assertEqual(A.REGLAGES_DEFAUT["mode"], "polyvalent", "un nouveau Lutin démarre en polyvalent")
-        self.assertEqual(modes.ids(), ("polyvalent", "technique", "scenario", "recherche", "discussion"))
+        self.assertEqual(modes.ids(), ("polyvalent", "technique", "scenario", "recherche", "discussion", "mission"))
         self.assertIn("executer", noms("polyvalent"))
         self.assertIn("ecrire", noms("polyvalent"))
         self.assertNotIn("symboles", noms("polyvalent"), "la recherche de définitions est propre au mode code")
@@ -2068,7 +2102,7 @@ class Assistant(unittest.TestCase):
         self.assertEqual(noms("discussion"), set(), "aucun outil en discussion")
         self.assertEqual(noms("technique") | noms("scenario") | noms("polyvalent") | noms("recherche"), tous - {"mission_terminer", "mission_bloquee"}, "rien d'oublié : chaque outil existe dans au moins un mode")
         consignes = {m: modes.consigne(m) for m in modes.ids()}
-        self.assertEqual(len(set(consignes.values())), 5, "une consigne différente par mode")
+        self.assertEqual(len(set(consignes.values())), 6, "une consigne différente par mode")
         self.assertIn("RECHERCHE", consignes["recherche"])
         self.assertTrue(modes.rappels_par_defaut("scenario") and modes.rappels_par_defaut("recherche"))
         self.assertFalse(modes.rappels_par_defaut("polyvalent") or modes.rappels_par_defaut("discussion"))

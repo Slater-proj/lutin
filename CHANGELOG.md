@@ -2,6 +2,13 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## 0.10.3
+
+- **La mission longue devient un mode** (« 🎯 Mission longue », dans la liste des modes de la colonne de gauche), comme Recherche ou Écriture : tu décris la mission dans le champ habituel, la **conversation sert de compte rendu en direct** et un **bandeau** montre l'état avec Pause / Reprendre / Arrêter. Plus de bouton 🎯 ni de section dans l'onglet Automatisation. L'autonomie est celle de la conversation (Fichiers auto + Commandes auto, relus à chaque tour) ; la durée max est une option du mode ; écrire pendant la mission lui donne une consigne ou répond à sa question ; Arrêter pendant un tour met en pause.
+- **Telegram te prévient** quand une mission est finie ou bloquée (si l'addon est activé).
+
+**English.** The long mission becomes a mode (“🎯 Long mission”, in the left column's mode list), like Research or Writing: you describe the mission in the usual box, the conversation is the live report and a banner shows the state with Pause / Resume / Stop. No more 🎯 button or section in the Automation tab. Autonomy is the conversation's (Auto files + Auto commands, re-read at every turn); the max duration is an option of the mode; writing during the mission gives it an instruction or answers its question; Stop during a turn pauses. Telegram notifies you when a mission is finished or stuck (if the addon is on).
+
 ## 0.10.2
 
 - **Un faux appel d'outil caché dans un document n'est plus exécuté** : si un fichier ou une page lue contient un bloc `<tool_call>` et que le modèle le recopie dans sa réponse, c'est traité comme une citation (les appels que le modèle écrit lui-même continuent de marcher).

@@ -46,9 +46,12 @@ def enregistrer_reglages(nouveau):
 
 def _enregistrer_reglages(nouveau):
     r = _m.reglages()
+    mode_avant = r["mode"]
     for k in _m.REGLAGES_DEFAUT:
         if k in nouveau:
             r[k] = nouveau[k]
+    if r.get("mode") == "mission":
+        r["mode"] = mode_avant                               # « mission longue » se choisit conversation par conversation, jamais comme mode des nouvelles conversations
     if not _modes.valide(r["mode"]):
         raise ValueError("Mode inconnu.")
     if not re.match(r"^[A-Za-z0-9_./:-]{1,100}$", str(r["modele"])):
@@ -417,8 +420,9 @@ def conv_liste():
 # --------------------------------------------------------------------------- les options de chaque conversation
 # Mode, réflexion, écritures et commandes automatiques, essai à blanc, web, longueur : chaque conversation a les siennes, dans un petit fichier à part (donnees/options/<id>.json) pour que le changement d'une option
 # ne se croise jamais avec l'écriture de la conversation par une réponse en cours. Les accords automatiques sont FAUX par défaut ; le modèle, lui, reste un réglage commun.
-OPTIONS_CONV = ("mode", "reflexion", "auto_ecriture", "auto_commandes", "essai_a_blanc", "web", "num_predict")
+OPTIONS_CONV = ("mode", "reflexion", "auto_ecriture", "auto_commandes", "essai_a_blanc", "web", "num_predict", "mission_duree_h")
 LONGUEURS = (0, 512, 1024, 2048, 4096, 8192, 16384, 32768)
+DUREES_MISSION = (1, 2, 4, 8, 12, 24, 48, 72)
 VERROU_OPTIONS = threading.Lock()
 RE_IDENT = re.compile(r"^[0-9a-f]{8}$")
 
@@ -441,9 +445,9 @@ def nettoyer_options(brut):
         if k == "mode":
             if _modes.valide(v):
                 sortie[k] = v
-        elif k == "num_predict":
+        elif k in ("num_predict", "mission_duree_h"):
             try:
-                if int(v) in LONGUEURS:
+                if int(v) in (LONGUEURS if k == "num_predict" else DUREES_MISSION):
                     sortie[k] = int(v)
             except (TypeError, ValueError):
                 pass

@@ -52,24 +52,21 @@ In the trial folder, ask: *Create a page `trial.html` with a title and a button 
 
 ## 5. A first, short mission
 
-*Automation > Long missions* (nothing to turn on): *New mission*. Or write the request in the message box and click **🎯**.
+In the left column, pick the **🎯 Long mission** mode and set the **max duration** to `1 h`. **Leave “Auto files” and “Auto commands” unticked** the first time (dry run: Lutin shows what it would do, nothing is written). In the message box, write the specification:
 
-- **Name**: `Trial`
-- **Folder**: the trial folder
-- **Maximum duration**: `1` hour
-- **Specification**: *Build a small “rock-paper-scissors” game in a single HTML file, with a Python test file that checks the rules. Run the tests. When everything passes, finish the mission with a summary.*
-- **Autonomous**: **unticked** the first time (dry run: Lutin shows what it would do, nothing is written).
+> Build a small “rock-paper-scissors” game in a single HTML file, with a Python test file that checks the rules. Run the tests. When everything passes, finish the mission with a summary.
 
-*You should see*, turn after turn (the panel updates by itself): the state, the number of turns and actions, then a **summary**. The “🎯 Trial” conversation tells everything, step by step.
+The send button reads **Start**. *You should see*: a “🎯 Mission started” message, a **banner** above the message box (state, turns, actions, remaining time), then the conversation filling by itself, turn after turn, and at the end a **summary** in the banner.
 
-Then start again with **Autonomous ticked**: this time Lutin writes the files and runs the tests by itself, in that folder only. At the end, look at the folder: the game and its tests must be there.
+Then start again in a new conversation with **Auto files AND Auto commands ticked**: this time Lutin writes the files and runs the tests by itself, in the working folder only. At the end, look at the folder: the game and its tests must be there.
 
 While it runs, try:
-- **Add an instruction** (“put the score at the top”): taken into account on the next turn.
-- **Pause**, then **Resume**.
+- **Writing in the conversation** (“put the score at the top”): it is an instruction, taken into account on the next turn.
+- **Pause**, then **Resume** (banner buttons).
 - **Quit Lutin** (notification-area icon > Quit), start it again: the mission resumes where it was.
+- If the Telegram addon is on: you receive a message when it is finished or stuck.
 
-*If the mission stops with “I am stuck…”*: the model answered three times without doing anything. Answer its question, or make the specification more precise. *If it pauses after three errors*: the message says which (model stopped, disk full…).
+*If the mission stops with “I am stuck…”*: the model answered three times without doing anything. Answer its question in the conversation, or make the specification more precise. *If it pauses after three errors*: the message says which (model stopped, disk full…).
 
 **For a real overnight mission**: a precise specification (what is expected, how to test it, what makes the work “done”), a folder of your own, a duration of 8 to 12 h, a model that can use tools (see *Models*), and the PC's sleep mode turned off.
 

@@ -166,6 +166,73 @@ class Mission(unittest.TestCase):
         self.assertEqual(mission.trouver(premiere["id"])["tours"], 0)
         self.assertEqual(mission.trouver(seconde["id"])["tours"], 1)
 
+    def test_une_mission_menee_dans_une_conversation_suit_ses_options_et_le_dit_a_la_page(self):
+        """Mission liée à une conversation : elle travaille dans CETTE conversation, son autonomie suit les cases de la conversation (relues à chaque tour), elle est résumée par conversation et s'efface avec elle."""
+        c = _m.conv_nouvelle()
+        _m.conv_ecrire(c)
+        m = mission.creer("Jeu", "Crée un petit jeu.", "principal", 2, False, c["id"])
+        self.assertTrue(m["lie"] and m["conv"] == c["id"])
+        self.assertEqual(mission.trouver_pour_conversation(c["id"])["id"], m["id"])
+        self.assertEqual(mission.par_conversation()[c["id"]]["etat"], "en_cours")
+        self.assertTrue(mission.un_pas())                                          # sans cases cochées : à blanc, rien n'est écrit
+        self.assertFalse((self.dossier / "jeu.txt").exists())
+        self.assertFalse(mission.trouver(m["id"])["autonome"])
+        _m.options_ecrire(c["id"], {"auto_ecriture": True, "auto_commandes": True})   # l'utilisateur coche les deux cases dans la conversation
+        self.assertTrue(mission.un_pas())
+        self.assertTrue(mission.trouver(m["id"])["autonome"], "l'autonomie suit les cases, relues à chaque tour")
+        apres = _m.conv_lire(c["id"])
+        self.assertEqual(mission.trouver(m["id"])["conv"], c["id"], "toujours la même conversation")
+        self.assertTrue(any("Crée un petit jeu." in (x.get("content") or "") for x in apres["messages"] if x.get("role") == "user"), "le cahier des charges est dans la conversation")
+        mission.oublier_conversation(c["id"])
+        self.assertIsNone(mission.trouver_pour_conversation(c["id"]))
+
+    def test_arreter_la_reponse_en_cours_met_la_mission_en_pause(self):
+        c = _m.conv_nouvelle()
+        _m.conv_ecrire(c)
+        m = mission.creer("Jeu", "Crée un petit jeu.", "principal", 2, True, c["id"])
+        vrai_tour = _m.tour
+
+        def tour_arrete(conv, texte, emit, r, stop, *a, **k):
+            stop.set()                                                              # l'utilisateur clique sur Arrêter pendant le tour
+            return vrai_tour(conv, texte, emit, r, stop, *a, **k)
+        _m.tour = tour_arrete
+        try:
+            mission.un_pas()
+        finally:
+            _m.tour = vrai_tour
+        x = mission.trouver(m["id"])
+        self.assertEqual(x["etat"], "pause")
+        self.assertIn("Arrêtée par toi", x["message"])
+        self.assertFalse(mission.un_pas(), "en pause : plus de tour")
+        mission.action("reprendre", {"id": m["id"]})
+        self.assertEqual(mission.trouver(m["id"])["etat"], "en_cours")
+
+    def test_le_proprietaire_est_prevenu_par_telegram_quand_la_mission_finit_ou_se_bloque(self):
+        from lutin import addons, addons_telegram
+        envoyes = []
+        vrai_actif, vrai_prevenir = addons.actif, addons_telegram.prevenir_proprietaires
+        addons.actif = lambda ident: ident == "telegram"
+        addons_telegram.prevenir_proprietaires = lambda texte: envoyes.append(texte)
+        try:
+            self.creer()
+            mission.un_pas()
+            mission.un_pas()                                                         # le modèle déclare la fin
+            self.assertEqual(len(envoyes), 1)
+            self.assertIn("Jeu", envoyes[0])
+            self.assertIn("terminée", envoyes[0])
+            MODE["v"] = "question"
+            m2 = self.creer(nom="Autre")
+            mission.un_pas()
+            mission.un_pas()
+            self.assertEqual(mission.trouver(m2["id"])["etat"], "bloquee")
+            self.assertTrue(any("a besoin de toi" in x for x in envoyes[1:]))
+            addons.actif = lambda ident: False                                       # Telegram n'est pas activé : aucune notification, aucune erreur
+            avant = len(envoyes)
+            mission.signaler(m2["id"], "terminee", "fini")
+            self.assertEqual(len(envoyes), avant)
+        finally:
+            addons.actif, addons_telegram.prevenir_proprietaires = vrai_actif, vrai_prevenir
+
     def test_pause_reprise_arret(self):
         m = self.creer()
         mission.action("pause", {"id": m["id"]})

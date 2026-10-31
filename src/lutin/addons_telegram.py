@@ -74,6 +74,15 @@ def envoyer(chat_id, texte):
     return True, ""
 
 
+def prevenir_proprietaires(texte):
+    """Envoie ce message à chaque personne appairée (les missions longues préviennent ainsi quand elles sont finies ou bloquées). Renvoie le nombre de messages partis."""
+    n = 0
+    for a in lire().get("autorises", []):
+        ok, _ = envoyer(a["id"], texte)
+        n += 1 if ok else 0
+    return n
+
+
 def nom_affiche(expediteur):
     expediteur = expediteur or {}
     nom = " ".join(x for x in (expediteur.get("first_name"), expediteur.get("last_name")) if x) or expediteur.get("username") or str(expediteur.get("id", "?"))
