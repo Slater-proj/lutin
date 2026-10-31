@@ -2,6 +2,8 @@
 
 # Lutin avec Docker
 
+**Pas à pas depuis un Debian vierge** : [TUTO-DOCKER-DEBIAN.fr.md](TUTO-DOCKER-DEBIAN.fr.md) (et [un prompt pour que ton IA locale écrive le docker-compose](PROMPT-DOCKER-COMPOSE.fr.md)).
+
 Une image prête à l'emploi : **Lutin et Ollama dans le même conteneur**. Tu la lances, tu ouvres la page, tu installes un modèle : c'est tout. Pratique sous Linux, sur un serveur ou un NAS.
 
 > **Honnêteté.** Les images sont construites et démarrées par la CI (page de connexion, code PIN, Ollama dans l'image complète) et publiées sur `ghcr.io`. Elles n'ont **jamais été lancées avec une vraie carte NVIDIA** ni sur un NAS : si quelque chose ne marche pas, ouvre un [bug](https://github.com/Slater-proj/lutin/issues/new/choose) avec `docker compose logs`.

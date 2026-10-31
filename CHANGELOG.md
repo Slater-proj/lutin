@@ -2,6 +2,13 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## 0.10.4
+
+- **Tutoriel Docker complet pour Debian** (`docs/TUTO-DOCKER-DEBIAN.fr.md`) : installer Docker, préparer les dossiers et le réseau, le `docker-compose.yml`, démarrer, installer un modèle, brancher le reverse proxy et Authelia, mises à jour, sauvegarde, dépannage.
+- **Un prompt prêt à coller pour ton IA locale** (`docs/PROMPT-DOCKER-COMPOSE.fr.md`) : elle retrouve ta charte de docker-compose, explore ta machine en lecture seule et te rend un `docker-compose.yml` prêt à l'emploi, son `.env`, les blocs du reverse proxy et d'Authelia, les commandes et les vérifications.
+
+**English.** Complete Docker tutorial for Debian (install Docker, folders and network, the compose file, start, model, reverse proxy and Authelia, updates, backup, troubleshooting) and a ready-to-paste prompt for your local AI (it finds your docker-compose charter, explores your machine read-only and hands you a ready-to-use compose file, its `.env`, the reverse-proxy and Authelia blocks, the commands and the checks).
+
 ## 0.10.3
 
 - **La mission longue devient un mode** (« 🎯 Mission longue », dans la liste des modes de la colonne de gauche), comme Recherche ou Écriture : tu décris la mission dans le champ habituel, la **conversation sert de compte rendu en direct** et un **bandeau** montre l'état avec Pause / Reprendre / Arrêter. Plus de bouton 🎯 ni de section dans l'onglet Automatisation. L'autonomie est celle de la conversation (Fichiers auto + Commandes auto, relus à chaque tour) ; la durée max est une option du mode ; écrire pendant la mission lui donne une consigne ou répond à sa question ; Arrêter pendant un tour met en pause.
