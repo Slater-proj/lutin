@@ -338,8 +338,7 @@ class Assistant(unittest.TestCase):
         self.assertTrue(any("exactement une fois" in e["texte"] for e in ev if e["type"] == "resultat"))
         self.assertFalse(any(e["type"] == "approbation" for e in ev))
         # accord automatique : pas de question, mais sauvegarde quand même
-        A.enregistrer_reglages({"auto_ecriture": True})
-        ev = chat("Crée un doc", reponses=[[appel_outil("ecrire", chemin="docs/nouveau/note.md", contenu="# Note\n")], [{"content": "Créé."}]])
+        ev = chat("Crée un doc", reponses=[[appel_outil("ecrire", chemin="docs/nouveau/note.md", contenu="# Note\n")], [{"content": "Créé."}]], options={"auto_ecriture": True})
         self.assertFalse(any(e["type"] == "approbation" for e in ev))
         self.assertEqual((PROJET / "docs" / "nouveau" / "note.md").read_text(encoding="utf-8"), "# Note\n")
 
@@ -360,20 +359,17 @@ class Assistant(unittest.TestCase):
         ev = chat("Shell inconnu", reponses=[[appel_outil("executer", commande="echo x", shell="bash")], [{"content": "."}]])
         self.assertTrue(any("Shell inconnu" in e["texte"] for e in ev if e["type"] == "resultat"))
         # autorisation automatique des commandes : pas de question, la commande tourne quand même
-        A.enregistrer_reglages({"auto_commandes": True})
-        ev = chat("Commande auto", reponses=[[appel_outil("executer", commande="echo auto-cmd> auto-cmd.txt")], [{"content": "."}]])
+        ev = chat("Commande auto", reponses=[[appel_outil("executer", commande="echo auto-cmd> auto-cmd.txt")], [{"content": "."}]], options={"auto_commandes": True})
         self.assertFalse(any(e["type"] == "approbation" for e in ev))
         self.assertTrue((PROJET / "auto-cmd.txt").exists())
-        A.enregistrer_reglages({"auto_commandes": False})
 
-    def test_cases_d_accord_automatique_selon_le_niveau_d_acces_et_l_origine(self):
-        """Les cases cochées marchent au niveau « local », et au niveau « réseau » depuis le navigateur de cette machine ; un appareil appairé ou le niveau « proxy » redemandent, en le disant."""
+    def test_les_accords_automatiques_sont_propres_a_chaque_conversation_et_marchent_a_tous_les_niveaux_d_acces(self):
+        """Fichiers auto et Commandes auto se règlent conversation par conversation (faux par défaut) ; ils marchent quel que soit le niveau d'accès (local, réseau, proxy) : téléphone et reverse proxy compris."""
         from lutin import securite
         vrai = A.SECURITE
-        A.enregistrer_reglages({"auto_commandes": True, "auto_ecriture": False})
         cible = PROJET / "niveau.txt"
 
-        def lancer(niveau, de_confiance):
+        def lancer(niveau, options):
             A.SECURITE = securite.Securite(niveau=niveau, proxy_ips=["10.0.0.1"], url_publique="https://x.example.com") if niveau == securite.PROXY else securite.Securite(niveau=niveau)
             cible.unlink(missing_ok=True)
             SCENARIO[:] = [[appel_outil("executer", commande="echo ok> niveau.txt")], [{"content": "."}]]
@@ -384,22 +380,58 @@ class Assistant(unittest.TestCase):
                 if e["type"] == "approbation":
                     A.repondre_attente(e["id"], True)
             conv = A.conv_nouvelle()
-            A.tour(conv, "lance la commande", emit, A.reglages(de_confiance=de_confiance), None)
-            return evenements
+            if options:
+                A.options_ecrire(conv["id"], options)
+            A.tour(conv, "lance la commande", emit, A.appliquer_options(A.reglages(), conv["id"]), None)
+            return evenements, conv["id"]
         try:
-            ev = lancer(securite.LOCAL, False)
-            self.assertFalse(any(e["type"] == "approbation" for e in ev), "niveau local : pas de question")
-            ev = lancer(securite.RESEAU, True)
-            self.assertFalse(any(e["type"] == "approbation" for e in ev), "niveau réseau, navigateur de cette machine : pas de question")
-            self.assertTrue(cible.exists())
-            ev = lancer(securite.RESEAU, False)
-            self.assertTrue(any(e["type"] == "approbation" for e in ev), "niveau réseau, appareil appairé : l'accord est demandé")
-            self.assertTrue(any(e["type"] == "info" and "cochées mais sans effet" in e["texte"] for e in ev), "...et la conversation en explique la raison")
-            ev = lancer(securite.PROXY, True)
-            self.assertTrue(any(e["type"] == "approbation" for e in ev), "niveau proxy : jamais d'accord automatique")
+            for niveau in (securite.LOCAL, securite.RESEAU, securite.PROXY):
+                ev, _ = lancer(niveau, {"auto_commandes": True})
+                self.assertFalse(any(e["type"] == "approbation" for e in ev), "commandes auto cochées pour cette conversation, niveau " + niveau)
+                self.assertTrue(cible.exists())
+            ev, ident = lancer(securite.PROXY, None)
+            self.assertTrue(any(e["type"] == "approbation" for e in ev), "décoché par défaut : l'accord est demandé")
+            # chaque conversation a les siennes
+            a, b = A.conv_nouvelle(), A.conv_nouvelle()
+            A.options_ecrire(a["id"], {"auto_commandes": True, "mode": "technique"})
+            self.assertTrue(A.appliquer_options(A.reglages(), a["id"])["auto_commandes"])
+            self.assertFalse(A.appliquer_options(A.reglages(), b["id"])["auto_commandes"], "l'autre conversation n'est pas touchée")
+            self.assertEqual(A.options_lire(b["id"]), {})
+            # une valeur invalide est ignorée, et les cases cochées en réglage général n'ouvrent plus rien
+            A.options_ecrire(b["id"], {"mode": "pirate", "num_predict": 7, "inconnue": True, "web": 0})
+            self.assertEqual(A.options_lire(b["id"]), {"web": False})
+            A.enregistrer_reglages({"auto_commandes": True, "auto_ecriture": True})
+            try:
+                r = A.appliquer_options(A.reglages(), b["id"])
+                self.assertFalse(r["auto_commandes"] or r["auto_ecriture"], "l'ancien réglage général ne vaut plus : seule la conversation décide")
+            finally:
+                A.enregistrer_reglages({"auto_commandes": False, "auto_ecriture": False})
+            A.conv_supprimer(a["id"])
+            self.assertEqual(A.options_lire(a["id"]), {}, "les options partent avec la conversation")
         finally:
             A.SECURITE = vrai
-            A.enregistrer_reglages({"auto_commandes": False, "auto_ecriture": False})
+
+    def test_une_case_cochee_pendant_la_reponse_compte_des_l_outil_suivant(self):
+        """Décocher « Commandes auto » alors que la réponse continue : la commande suivante redemande l'accord."""
+        import threading
+        c = A.conv_nouvelle()
+        A.options_ecrire(c["id"], {"auto_commandes": True})
+        SCENARIO[:] = [[appel_outil("executer", commande="echo un> un.txt")], [appel_outil("executer", commande="echo deux> deux.txt")], [{"content": "."}]]
+        evenements = []
+
+        def emit(e):
+            evenements.append(e)
+            if e["type"] == "resultat" and len([x for x in evenements if x["type"] == "resultat"]) == 1:
+                A.options_ecrire(c["id"], {"auto_commandes": False})                      # l'utilisateur décoche entre les deux commandes
+            if e["type"] == "approbation":
+                A.repondre_attente(e["id"], False)
+        try:
+            A.tour(c, "deux commandes", emit, A.appliquer_options(A.reglages(), c["id"]), threading.Event())
+            self.assertEqual(len([e for e in evenements if e["type"] == "approbation"]), 1, "seule la seconde commande demande l'accord")
+            self.assertTrue((PROJET / "un.txt").exists())
+            self.assertFalse((PROJET / "deux.txt").exists(), "refusée")
+        finally:
+            (PROJET / "un.txt").unlink(missing_ok=True)
 
     def test_une_lecture_qui_echoue_un_instant_ne_remplace_pas_la_conversation_par_sa_copie_de_secours(self):
         """Sur Windows ou un partage réseau, lire pile pendant une écriture peut échouer : on réessaie, on ne restaure rien. Seul un contenu illisible déclenche la copie de secours."""
@@ -879,18 +911,16 @@ class Assistant(unittest.TestCase):
 
     def test_web_suspend_l_accord_automatique(self):
         """Garde-fou : après une lecture web, plus d'accord automatique pendant la suite de la demande (consigne piégée possible)."""
-        A.enregistrer_reglages({"auto_commandes": True})
         cible = PROJET / "apres-web.txt"
         try:
-            ev = chat("Lis puis agis", reponses=[[appel_outil("web_lire", url=URL_WEB + "/page")], [appel_outil("executer", commande="echo piege> apres-web.txt")], [{"content": "Fini."}]], decider=lambda e: False)
+            ev = chat("Lis puis agis", reponses=[[appel_outil("web_lire", url=URL_WEB + "/page")], [appel_outil("executer", commande="echo piege> apres-web.txt")], [{"content": "Fini."}]], decider=lambda e: False, options={"auto_commandes": True})
             self.assertTrue(any(e["type"] == "approbation" for e in ev), "l'accord est demandé malgré « Commandes auto »")
             self.assertTrue(any(e["type"] == "info" and "contenu web" in e["texte"] for e in ev))
             self.assertFalse(cible.exists(), "refusé : rien n'a été lancé")
-            ev = chat("Sans web", reponses=[[appel_outil("executer", commande="echo ok> apres-web.txt")], [{"content": "Fini."}]])
+            ev = chat("Sans web", reponses=[[appel_outil("executer", commande="echo ok> apres-web.txt")], [{"content": "Fini."}]], options={"auto_commandes": True})
             self.assertFalse(any(e["type"] == "approbation" for e in ev), "sans lecture web, « Commandes auto » reste automatique")
             self.assertTrue(cible.exists())
         finally:
-            A.enregistrer_reglages({"auto_commandes": False})
             cible.unlink(missing_ok=True)
 
     def test_web_case_desactivee(self):
@@ -2404,16 +2434,14 @@ class Assistant(unittest.TestCase):
             (PROJET / "docs" / "journal2.txt").unlink(missing_ok=True)
 
     def test_journal_accord_automatique_et_erreur(self):
-        post("/api/reglages", {"auto_ecriture": True})
         try:
-            chat("Auto", reponses=[[appel_outil("ecrire", chemin="docs/auto.txt", contenu="z\n")], [{"content": "ok"}]])
-            chat("Hors projet", reponses=[[appel_outil("ecrire", chemin="../dehors.txt", contenu="z\n")], [{"content": "ok"}]])
+            chat("Auto", reponses=[[appel_outil("ecrire", chemin="docs/auto.txt", contenu="z\n")], [{"content": "ok"}]], options={"auto_ecriture": True})
+            chat("Hors projet", reponses=[[appel_outil("ecrire", chemin="../dehors.txt", contenu="z\n")], [{"content": "ok"}]], options={"auto_ecriture": True})
             entrees = lire("/api/journal?n=10")["entrees"]
             self.assertEqual((entrees[0]["issue"][:7], entrees[0]["outil"]), ("erreur ", "ecrire"))
             auto = next(e for e in entrees if e["cible"] == "docs/auto.txt")
             self.assertEqual((auto["issue"], auto["accord"]), ("ok", "auto"))
         finally:
-            post("/api/reglages", {"auto_ecriture": False})
             (PROJET / "docs" / "auto.txt").unlink(missing_ok=True)
 
     def test_journal_tourne_au_dela_de_la_limite(self):

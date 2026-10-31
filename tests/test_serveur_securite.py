@@ -156,16 +156,6 @@ class NiveauReseau(Base):
         self.assertRegex(json_de(texte)["pin"], r"^\d{6}$")
         self.assertEqual(requete("GET", "/api/skills", {"X-Token": A.JETON_CONSOLE})[0], 200)
 
-    def test_jamais_d_accord_automatique_meme_si_le_fichier_le_demande(self):
-        A.SECURITE = S.Securite(niveau=S.LOCAL)
-        A.enregistrer_reglages({"auto_ecriture": True, "auto_commandes": True})
-        self.assertTrue(A.reglages()["auto_commandes"], "en local, le choix de l'utilisateur est respecté")
-        A.SECURITE = S.Securite(niveau=S.RESEAU)
-        r = A.reglages()
-        self.assertFalse(r["auto_ecriture"] or r["auto_commandes"])
-        A.SECURITE = S.Securite(niveau=S.LOCAL)
-        A.enregistrer_reglages({"auto_ecriture": False, "auto_commandes": False})
-
     def test_hote_public_refuse_en_reseau_local(self):
         self.assertEqual(requete("GET", "/", {"Host": "8.8.8.8"})[0], 403)
         self.assertEqual(requete("GET", "/", {"Host": "evil.example.com"})[0], 403)
@@ -205,12 +195,6 @@ class NiveauProxy(Base):
         self.assertEqual(statut, 200)
         self.assertIn("Secure", h["set-cookie"])
 
-    def test_pas_d_accord_automatique_derriere_un_proxy(self):
-        self.proxy(["127.0.0.1"])
-        self.assertFalse(A.reglages()["auto_commandes"])
-
-
-class BoutonsDeVerification(Base):
     def setUp(self):
         super().setUp()
         self.niveau(niveau=S.LOCAL)

@@ -102,7 +102,7 @@ Ces variables sont **réappliquées à chaque démarrage** : elles sont la sourc
 ## Sécurité
 
 - Le port est publié sur **`127.0.0.1:8777`** : seule la machine hôte y accède. Pour ton réseau local, écris `"8777:8777"` dans `ports` (le code PIN protège, mais lis [SECURITY.fr.md](SECURITY.fr.md)) ; pour Internet, passe **derrière un proxy** avec authentification forte (`LUTIN_NIVEAU=proxy`).
-- Les accords automatiques (écriture, commandes) sont **désactivés** aux niveaux `reseau` et `proxy`.
+- Les accords automatiques (« Fichiers auto », « Commandes auto ») se règlent **par conversation** et sont décochés par défaut, à tous les niveaux : quelqu'un qui a accès à Lutin peut les cocher. Les commandes tournent dans le conteneur, qui ne voit que `/travail`, `/data` et `/models`.
 - Le conteneur n'est pas administrateur ; les commandes que Lutin lance s'exécutent **dans le conteneur** (avec seulement ce qu'il contient : Python, git, sh) et ne voient que `/travail`, `/data` et `/models`. C'est une protection de plus, et une limite : pour qu'il lance les outils de ton projet (compilateur, tests…), installe-les dans une image dérivée.
 - Dans l'image complète, Ollama n'écoute que sur le `127.0.0.1` du conteneur, et son port `11434` n'est jamais publié. Ne le publie jamais.
 
@@ -226,7 +226,7 @@ Sans carte graphique utilisable (la puce graphique intégrée Intel n'est pas ut
 | Telegram, courriel, X, recherche web | ✔ (connexions sortantes) |
 | Télécharger un fichier créé, la liste « Fichiers créés » et le ménage | ✔ |
 | **Ouvrir** un fichier avec une application | ✘ caché : un serveur n'a pas de bureau, utilise Télécharger |
-| Accord auto / Commandes auto dans la conversation | ✘ désactivés au niveau proxy (règle de sécurité) : chaque commande demande ton clic. Une **mission « Autonome »** tourne seule, dans le conteneur. |
+| Fichiers auto / Commandes auto | ✔ conversation par conversation (décochés par défaut), comme ailleurs ; une **mission « Autonome »** tourne seule, dans le conteneur. |
 | Aperçu d'une page (`apercu_page`) | ✘ pas de navigateur dans l'image : le message le dit |
 | ComfyUI (images) | ✘ ComfyUI ne tourne pas dans le conteneur, et un processeur seul est trop lent pour générer des images |
 | Carte graphique Intel intégrée | ✘ non utilisée par Ollama dans un conteneur |

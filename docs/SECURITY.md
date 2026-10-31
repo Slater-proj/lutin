@@ -22,7 +22,7 @@ The server listens on `127.0.0.1`. Nobody else can open a connection. No passwor
 - **Pairing**: `lutin pin` (or the display at startup) gives a 6-digit code valid for 10 minutes, usable once. Five mistakes invalidate the code and block attempts for 5 minutes. Attempts are also limited per address.
 - Each device gets a session (`HttpOnly`, `SameSite=Strict` cookie, 30 days). `lutin appareils` lists them, `lutin appareils revoquer [id]` cuts them. Only the **fingerprints** of the sessions are stored.
 - The requested host name must be a private address or a local name.
-- **Automatic approvals are turned off** for every paired device, even if the settings file turns them on. One exception: the **browser of the machine where Lutin runs** keeps its « Auto approval » and « Auto commands » boxes (a paired device can neither tick nor untick them). At the “proxy” level, never. When the boxes are ticked but have no effect, the page and the conversation say so.
+- **Automatic approvals** (“Auto files”, “Auto commands”) are set **per conversation** and are **unticked by default**, at every access level. The choice is yours: from a paired phone or behind a reverse proxy, anyone who has access to Lutin can tick them for a conversation. So only give this access to people you would trust with these rights, and keep Authelia (or the PIN code) well protected. A web read during the current request always suspends automatic approval.
 - Firewall: open it **only** for your private network. On Windows, a rule limited to the « Private » profile and to your subnet; never open it on the « Public » profile.
 - Plain HTTP on your network: the PIN and the session travel in clear text over your Wi-Fi. For a shared or unsafe network, use level 3 with HTTPS.
 

@@ -292,6 +292,7 @@ def purger_donnees():
         from . import archive, embeddings
         archive.nettoyer_orphelins(ids)
         embeddings.nettoyer_orphelins(ids)
+        _m.options_nettoyer_orphelins(ids)
     except OSError:
         pass
     _m.CACHE_TAILLES.pop(str(_m.DONNEES), None)

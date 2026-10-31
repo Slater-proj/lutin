@@ -188,6 +188,11 @@ def ignore_chemin(p):
 
 
 from .donnees import (  # noqa: F401  (déplacé dans donnees.py : moteur ré-exporte ses noms)
+    appliquer_options,
+    options_ecrire,
+    options_lire,
+    options_nettoyer_orphelins,
+    rafraichir_accords,
     CACHE_CONV,
     MARQUES_NOTES,
     MARQUE_NOTES,
@@ -219,9 +224,8 @@ from .donnees import (  # noqa: F401  (déplacé dans donnees.py : moteur ré-ex
 )
 
 
-def reglages(de_confiance=False, masquer=True):
-    """Les réglages en vigueur. Hors du niveau « local » les accords automatiques sont coupés (voir securite.reglages_surs) sauf pour le navigateur de cette machine (de_confiance) ;
-    masquer=False rend ce qui est écrit dans le fichier, pour le réécrire sans rien perdre."""
+def reglages():
+    """Les réglages en vigueur (valeurs par défaut des nouvelles conversations, et réglages de la machine). Les options propres à chaque conversation sont à part : voir donnees.options_lire."""
     r = dict(REGLAGES_DEFAUT)
     brut = lire_json(DONNEES / "reglages.json", {})
     r.update({k: v for k, v in brut.items() if k in REGLAGES_DEFAUT})
@@ -241,8 +245,7 @@ def reglages(de_confiance=False, masquer=True):
         r["fiche_part"] = max(5, min(25, int(r.get("fiche_part", 10))))                      # part de la fenêtre de contexte que la fiche de suivi peut prendre (en %)
     except (TypeError, ValueError):
         r["fiche_part"] = 10
-    r = nettoyer_ressources(nettoyer_echantillonnage(r))
-    return _sec.reglages_surs(SECURITE, r, de_confiance) if masquer else r          # hors niveau « local » : jamais d'accord automatique, quoi que dise le fichier
+    return nettoyer_ressources(nettoyer_echantillonnage(r))
 
 
 from .outils import (  # noqa: F401  (déplacé dans outils.py : moteur ré-exporte ses noms)

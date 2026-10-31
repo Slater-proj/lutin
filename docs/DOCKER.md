@@ -226,7 +226,7 @@ With no usable graphics card (the Intel integrated graphics are not used by Olla
 | Telegram, email, X, web search | ✔ (outgoing connections) |
 | Download a created file, the “Created files” list and tidying up | ✔ |
 | **Open** a file with an application | ✘ hidden: a server has no desktop, use Download |
-| Auto approval / Auto commands in the conversation | ✘ off at the proxy level (security rule): every command asks for your click. An **“Autonomous” mission** runs by itself, inside the container. |
+| Auto files / Auto commands | ✔ per conversation (unticked by default), as everywhere; an **“Autonomous” mission** runs by itself, inside the container. |
 | Page preview (`apercu_page`) | ✘ no browser in the image: the message says so |
 | ComfyUI (images) | ✘ ComfyUI does not run in the container, and a CPU alone is too slow to generate images |
 | Intel integrated graphics | ✘ not used by Ollama in a container |

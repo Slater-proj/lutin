@@ -161,14 +161,14 @@ class Gestionnaire(BaseHTTPRequestHandler):
             return self._envoyer(200, _m.page_web(), "text/html; charset=utf-8")
         if chemin == "/api/etat":
             o = _m.etat_ollama()
-            r = _m.reglages(de_confiance=self._configurateur())
+            r = _m.reglages()
             modeles = _m.modeles_connus(o["installes"], o.get("tailles"))
             profil = _adequation.profil_pret()
             return self._envoyer(200, {"adequation": _adequation.pour_la_liste(modeles, profil, _m._CATALOGUE["modeles"]), "machine": profil.resume() if profil else "", "budget_go": profil.budget_go() if profil else 0,
                                        "familles": {k: _t(v) for k, v in (_m._CATALOGUE.get("familles") or {}).items()}, "disque_modeles": _emplacements.jauge_modeles(),
                                        "version": _m.VERSION, "ollama": o["actif"], "ollama_installe": bool(_m.chemin_ollama()), "installes": o["installes"], "modeles": modeles, "modeles_masques": len(_m.lire_registre_modeles()["masques"]), "actives": list(_m.TOURS_ACTIFS),
                                        "pulls": _m.PULLS, "reglages": r, "conversations": _m.conv_liste(), "racine": str(_m.RACINE), "donnees": str(_m.DONNEES),
-                                       "outil": bool(self._outil_vivant()), "hors_ligne": _hl.actif(), "niveau": _m.SECURITE.niveau, "ouverture_possible": _fichiers.ouverture_possible(), "auto_possible": _m.SECURITE.niveau == _sec.LOCAL or (_m.SECURITE.niveau == _sec.RESEAU and self._configurateur()), "langue": _i18n.langue(), "langue_reglage": _i18n.langue_configuree(), "cpus": os.cpu_count() or 1, "redemarrage": {"necessaire": _acces.securite_enregistree() != _m.SECURITE, "possible": _acces.peut_redemarrer()}, "nouvelle_version": _m.nouvelle_version_lutin(), "travaux": _m.travaux_etat(), "configurateur": self._configurateur(), "addons_alertes": _addons.alertes(), "embeddings": _embeddings.etat(),
+                                       "outil": bool(self._outil_vivant()), "hors_ligne": _hl.actif(), "niveau": _m.SECURITE.niveau, "ouverture_possible": _fichiers.ouverture_possible(), "langue": _i18n.langue(), "langue_reglage": _i18n.langue_configuree(), "cpus": os.cpu_count() or 1, "redemarrage": {"necessaire": _acces.securite_enregistree() != _m.SECURITE, "possible": _acces.peut_redemarrer()}, "nouvelle_version": _m.nouvelle_version_lutin(), "travaux": _m.travaux_etat(), "configurateur": self._configurateur(), "addons_alertes": _addons.alertes(), "embeddings": _embeddings.etat(),
                                        "bench": {"en_cours": _m.BENCH["en_cours"], "etape": _m.BENCH["etape"], "erreur": _m.BENCH["erreur"], "mesures": _bench.lire(_m.chemin_bench())}, "attentes": [{"id": a.id, "titre": a.titre, "detail": a.detail, "diff": a.diff} for a in _m.Attente.EN_COURS.values()]})
         if chemin == "/api/conseil":
             r = _m.reglages()
@@ -320,7 +320,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
         if chemin == "/api/conversation":
             try:
                 ident = (re.search(r"id=([0-9a-f]+)", self.path) or [None, ""])[1]
-                return self._envoyer(200, _m.conv_lire(ident))
+                return self._envoyer(200, dict(_m.conv_lire(ident), options=_m.options_lire(ident)))          # + les options de cette conversation (accords automatiques, mode…)
             except ValueError as erreur:
                 return self._envoyer(404, {"erreur": str(erreur)})
         # Fichiers statiques (lib/)
@@ -541,6 +541,11 @@ class Gestionnaire(BaseHTTPRequestHandler):
                     return self._envoyer(400, {"erreur": str(e)})
             if self.path == "/api/media-supprimer":
                 return self._envoyer(200, _m.supprimer_media(str(donnees.get("conversation", "")), str(donnees.get("id", ""))))
+            if self.path == "/api/conversation-options":
+                ident = str(donnees.get("conversation", ""))
+                if not _m.conv_chemin(ident).exists():
+                    return self._envoyer(404, {"erreur": _t("Conversation inconnue.")})
+                return self._envoyer(200, {"options": _m.options_ecrire(ident, donnees.get("options"))})
             if self.path == "/api/epingler-message":
                 return self._envoyer(200, _m.epingler_message(str(donnees.get("conversation", "")), donnees.get("index"), donnees.get("epingle")))
             if self.path in ("/api/addon-activer", "/api/addon-reglages", "/api/addon-verifier", "/api/addon-correction", "/api/addon-flux", "/api/addon-flux-restaurer", "/api/addon-action", "/api/fond-creer", "/api/fond-action"):
@@ -671,7 +676,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 _m.repondre_attente(str(donnees.get("id", "")), donnees.get("ok"))
                 return self._envoyer(200, {"ok": True})
             if self.path == "/api/reglages":
-                return self._envoyer(200, _m.enregistrer_reglages(donnees, de_confiance=self._configurateur()))
+                return self._envoyer(200, _m.enregistrer_reglages(donnees))
             if self.path == "/api/memoire":
                 _m.ecrire_memoire(str(donnees.get("fichier", "")), str(donnees.get("texte", "")))
                 return self._envoyer(200, {"ok": True})
@@ -777,9 +782,11 @@ class Gestionnaire(BaseHTTPRequestHandler):
             _m.RACINE_TOURS[conv["id"]] = str(_m.RACINE)
             _m.TOURS_ACTIFS[conv["id"]] = stop
         try:
-            r = _m.reglages(de_confiance=self._configurateur())
+            if isinstance(donnees.get("options"), dict):
+                _m.options_ecrire(conv["id"], donnees["options"])                      # les options affichées par la page deviennent celles de cette conversation (créée au premier message)
+            r = _m.appliquer_options(_m.reglages(), conv["id"])
             for k in ("modele", "reflexion", "mode"):
-                if k in donnees:
+                if k in donnees and (k == "modele" or not isinstance(donnees.get("options"), dict)):
                     r[k] = donnees[k]
             if not _modes.valide(r["mode"]):
                 abandon()

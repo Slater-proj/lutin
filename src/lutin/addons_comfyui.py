@@ -302,6 +302,53 @@ def lister_modeles(forcer=False):
     return valeur
 
 
+def modeles_utilisables():
+    """[{nom, genre, famille}] : les checkpoints (workflow « image ») et les modèles de diffusion dont la famille est connue. Les autres ne sont pas proposés : Lutin ne saurait pas les faire tourner."""
+    r = lister_modeles().get("modeles", {})
+    sortie = [{"nom": n, "genre": "checkpoint", "famille": _t("Checkpoint")} for n in r.get("checkpoints", [])]
+    for n in r.get("diffusion_models", []):
+        cle = famille_de(n)
+        if cle:
+            sortie.append({"nom": n, "genre": "diffusion", "famille": libelle_famille(cle)})
+    return sortie
+
+
+def modeles_inutilisables():
+    """Les modèles de diffusion dont la famille est inconnue (aucun workflow pour eux)."""
+    return [n for n in lister_modeles().get("modeles", {}).get("diffusion_models", []) if not famille_de(n)]
+
+
+def moteurs():
+    """Ce que Lutin peut produire : {type: [moteurs]}. L'image a toujours des moteurs livrés ; la vidéo et le son n'en ont que si l'utilisateur a collé un workflow (clés « video… » et « son… »)."""
+    ws = addons.flux(IDENT).get("workflows") or {}
+    sortie = {"image": sorted({"Checkpoint"} | {libelle_famille(c) for c, _ in familles_connues() if c in ws})}
+    for type_ in ("video", "son"):
+        sortie[type_] = sorted(k for k in ws if k == type_ or k.startswith(type_ + "_"))
+    return sortie
+
+
+def choix(cle):
+    """Les valeurs d'un réglage à liste déroulante dynamique (addons.decrire) : le modèle à utiliser = « automatique » ou l'un des modèles que Lutin sait faire tourner."""
+    if cle != "modele":
+        return None
+    return [["", _t("Automatique (le premier installé, ou celui que Lutin choisit selon ta demande)")]] + [[m["nom"], "{} — {}".format(m["nom"], m["famille"])] for m in modeles_utilisables()]
+
+
+def adapter_outil(outil):
+    """Une copie de l'outil comfy_generer qui ne propose que ce qui marche : les types qui ont un workflow, et les modèles que Lutin sait faire tourner."""
+    import copy
+    o = copy.deepcopy(outil)
+    props = o["function"]["parameters"]["properties"]
+    types = [t for t, m in moteurs().items() if m]
+    props["type"] = {"type": "string", "enum": types, "description": _t("Ce qu'il faut générer (défaut : image). Seuls les types disponibles sont proposés.")}
+    noms = [m["nom"] for m in modeles_utilisables()]
+    if noms:
+        reglage = str(addons.reglages(IDENT).get("modele") or "").strip()
+        props["modele"] = {"type": "string", "description": _t("Nom exact d'un de ces modèles (les autres ne fonctionnent pas) : {}.").format(", ".join(noms[:30]) + (" …" if len(noms) > 30 else ""))
+                           + (_t(" L'utilisateur a choisi « {} » dans ses réglages : ne propose un autre modèle que s'il l'a demandé.").format(reglage) if reglage else "")}
+    return o
+
+
 def texte_modeles():
     r = lister_modeles()
     if r["source"] == "aucune":
@@ -354,10 +401,29 @@ def _entier(valeur, nom, mini, maxi, defaut):
     return max(mini, min(maxi, n))
 
 
+LIBELLES_FAMILLE = {"image_flux": "Flux", "image_qwen": "Qwen-Image", "image_zimage": "Z-Image"}
+
+
+def familles_connues():
+    """Les familles de modèles que Lutin sait faire tourner : celles qui sont livrées (Flux, Qwen-Image, Z-Image) et celles que l'utilisateur ajoute dans le flux, SI le workflow du même nom existe :
+    {"familles": {"image_hidream": ["hidream"]}, "workflows": {"image_hidream": {…}}, "ressources": {"image_hidream": {…}}}."""
+    f = addons.flux(IDENT)
+    workflows = f.get("workflows") or {}
+    ajoutees = []
+    for cle, mots in (f.get("familles") or {}).items():
+        if isinstance(mots, list) and str(cle) in workflows:
+            ajoutees.append((str(cle), tuple(str(m).lower() for m in mots if str(m).strip())))
+    return tuple(ajoutees) + FAMILLES                  # les siennes d'abord : il peut remplacer une famille livrée
+
+
+def libelle_famille(cle):
+    return LIBELLES_FAMILLE.get(cle) or str(cle).replace("image_", "").replace("_", " ").strip().title()
+
+
 def famille_de(nom):
-    """La famille d'un modèle de diffusion d'après son nom de fichier (« image_flux », « image_qwen », « image_zimage »), ou ''."""
+    """La famille d'un modèle de diffusion d'après son nom de fichier (« image_flux », « image_qwen », « image_zimage », ou une famille ajoutée par l'utilisateur), ou ''."""
     n = str(nom).lower()
-    for cle, mots in FAMILLES:
+    for cle, mots in familles_connues():
         if any(m in n for m in mots):
             return cle
     return ""
@@ -727,7 +793,10 @@ def etat():
     r["lancement"] = bool(r["valide"] and commande_lancement(r["dossier"], addons.reglages(IDENT).get("port") or "8188"))
     r["modeles"] = lister_modeles()
     r["familles"] = {n: famille_de(n) for n in r["modeles"].get("modeles", {}).get("diffusion_models", [])}
+    r["libelles_familles"] = {c: libelle_famille(c) for c, _ in familles_connues()}
     r["workflows"] = sorted((addons.flux(IDENT).get("workflows") or {}).keys())
+    r["moteurs"] = moteurs()
+    r["inutilisables"] = modeles_inutilisables()
     r["telechargement"] = {k: v for k, v in TELECHARGEMENT.items() if k != "arret"}
     r["genres"] = list(GENRES_TELECHARGEMENT)
     return r

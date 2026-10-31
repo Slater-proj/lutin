@@ -7,6 +7,7 @@ import os
 import re
 import secrets
 import shutil
+import threading
 import time
 import unicodedata
 from . import modes as _modes
@@ -14,6 +15,9 @@ from . import moteur as _m
 
 
 # --------------------------------------------------------------------------- réglages, mémoire, conversations
+VERROU_REGLAGES = threading.Lock()
+
+
 def lire_json(chemin, defaut):
     try:
         return json.loads(Path(chemin).read_text(encoding="utf-8-sig"))
@@ -35,12 +39,15 @@ def ecrire_atomique(chemin, texte):
     os.replace(str(tmp), str(chemin))
 
 
-def enregistrer_reglages(nouveau, de_confiance=True):
-    """Écrit les réglages. On part de ce qui est écrit dans le fichier (pas de la version « masquée » par la règle de sécurité) : enregistrer un autre réglage ne fait pas perdre les cases d'accord automatique.
-    Seul le navigateur de cette machine (de_confiance) peut les changer."""
-    r = _m.reglages(masquer=False)
+def enregistrer_reglages(nouveau):
+    with VERROU_REGLAGES:                                       # deux enregistrements qui se croisent ne s'écrasent pas
+        return _enregistrer_reglages(nouveau)
+
+
+def _enregistrer_reglages(nouveau):
+    r = _m.reglages()
     for k in _m.REGLAGES_DEFAUT:
-        if k in nouveau and (de_confiance or k not in ("auto_ecriture", "auto_commandes")):
+        if k in nouveau:
             r[k] = nouveau[k]
     if not _modes.valide(r["mode"]):
         raise ValueError("Mode inconnu.")
@@ -57,7 +64,7 @@ def enregistrer_reglages(nouveau, de_confiance=True):
     _m.nettoyer_echantillonnage(r)
     _m.nettoyer_ressources(r)
     ecrire_atomique(_m.DONNEES / "reglages.json", json.dumps(dict(r, memoire_v=2), ensure_ascii=False, indent=1))
-    return _m.reglages(de_confiance=de_confiance)
+    return _m.reglages()
 
 
 def lire_memoire(nom):
@@ -376,6 +383,98 @@ def conv_liste():
     return sorted(sorted(sortie, key=lambda x: x["maj"], reverse=True), key=lambda x: not x["epingle"])          # les épinglées d'abord, puis les plus récentes
 
 
+# --------------------------------------------------------------------------- les options de chaque conversation
+# Mode, réflexion, écritures et commandes automatiques, essai à blanc, web, longueur : chaque conversation a les siennes, dans un petit fichier à part (donnees/options/<id>.json) pour que le changement d'une option
+# ne se croise jamais avec l'écriture de la conversation par une réponse en cours. Les accords automatiques sont FAUX par défaut ; le modèle, lui, reste un réglage commun.
+OPTIONS_CONV = ("mode", "reflexion", "auto_ecriture", "auto_commandes", "essai_a_blanc", "web", "num_predict")
+LONGUEURS = (0, 512, 1024, 2048, 4096, 8192, 16384, 32768)
+VERROU_OPTIONS = threading.Lock()
+RE_IDENT = re.compile(r"^[0-9a-f]{8}$")
+
+
+def options_chemin(ident):
+    if not RE_IDENT.match(str(ident or "")):
+        raise ValueError("Conversation inconnue.")
+    return _m.DONNEES / "options" / (ident + ".json")
+
+
+def nettoyer_options(brut):
+    """Ne garde que les options connues, avec des valeurs valides."""
+    sortie = {}
+    if not isinstance(brut, dict):
+        return sortie
+    for k in OPTIONS_CONV:
+        if k not in brut:
+            continue
+        v = brut[k]
+        if k == "mode":
+            if _modes.valide(v):
+                sortie[k] = v
+        elif k == "num_predict":
+            try:
+                if int(v) in LONGUEURS:
+                    sortie[k] = int(v)
+            except (TypeError, ValueError):
+                pass
+        else:
+            sortie[k] = bool(v)
+    return sortie
+
+
+def options_lire(ident):
+    try:
+        return nettoyer_options(lire_json(options_chemin(ident), {}))
+    except ValueError:
+        return {}
+
+
+def options_ecrire(ident, nouvelles):
+    """Fusionne ces options dans celles de la conversation (celles qu'on ne cite pas ne changent pas). Rend les options en vigueur."""
+    chemin = options_chemin(ident)
+    with VERROU_OPTIONS:
+        actuelles = nettoyer_options(lire_json(chemin, {}))
+        actuelles.update(nettoyer_options(nouvelles))
+        ecrire_atomique(chemin, json.dumps(actuelles, ensure_ascii=False))
+    return actuelles
+
+
+def appliquer_options(r, ident):
+    """Les réglages d'une réponse : ceux de la machine, puis les options de cette conversation. Les accords automatiques ne viennent QUE de la conversation (faux sans choix de sa part)."""
+    r = dict(r)
+    o = options_lire(ident)
+    r["auto_ecriture"] = bool(o.get("auto_ecriture", False))
+    r["auto_commandes"] = bool(o.get("auto_commandes", False))
+    for k in ("mode", "reflexion", "essai_a_blanc", "web", "num_predict"):
+        if k in o:
+            r[k] = o[k]
+    return r
+
+
+def rafraichir_accords(ctx):
+    """Une case cochée ou décochée PENDANT une réponse compte dès l'outil suivant : on relit les options de la conversation (seulement si elle en a)."""
+    if ctx.get("mission") or ctx.get("identite") == "planifié":
+        return
+    try:
+        conv_id = ctx["conv"]["id"]
+        if options_chemin(conv_id).exists():
+            o = options_lire(conv_id)
+            ctx["auto_ecriture"], ctx["auto_commandes"] = bool(o.get("auto_ecriture", False)), bool(o.get("auto_commandes", False))
+    except (KeyError, ValueError, OSError):
+        pass
+
+
+def options_nettoyer_orphelins(ids):
+    n = 0
+    try:
+        for f in (_m.DONNEES / "options").glob("*.json"):
+            if f.stem not in ids:
+                f.unlink(missing_ok=True)
+                n += 1
+    except OSError:
+        pass
+    return n
+
+
 def conv_supprimer(ident):
     f = conv_chemin(ident)
     if f.is_file():
@@ -386,6 +485,10 @@ def conv_supprimer(ident):
     from . import archive, embeddings
     archive.supprimer(ident)                                # et le début archivé par le résumé
     embeddings.supprimer(ident)                             # et ses vecteurs de recherche par le sens
+    try:
+        options_chemin(ident).unlink(missing_ok=True)       # et ses options
+    except (ValueError, OSError):
+        pass
 
 
 def conv_renommer(ident, titre):

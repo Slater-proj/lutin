@@ -35,7 +35,8 @@
    "libelle": "Modèle à utiliser",
    "defaut": "",
    "obligatoire": false,
-   "aide": "Vide : le premier modèle installé. Rempli : toujours celui-là, sauf si tu en nommes un autre dans ta demande."
+   "dynamique": true,
+   "aide": "Automatique : le premier modèle installé, ou celui que Lutin choisit selon ta demande. Un modèle précis : toujours celui-là, sauf si tu en nommes un autre dans ta demande. Seuls les modèles que Lutin sait faire tourner sont listés."
   },
   {
    "cle": "port",

@@ -590,6 +590,53 @@ class ComfyUI(unittest.TestCase):
         self.assertIn("text_encoders", str(e.exception))
         self.assertEqual(len(SERVICE["soumis"]), avant, "rien n'est envoyé à ComfyUI quand il manque un fichier")
 
+    def test_liste_deroulante_des_modeles_utilisables_et_outil_qui_ne_propose_que_ce_qui_marche(self):
+        """Le réglage « Modèle à utiliser » est une liste (jamais un champ libre) qui ne contient que ce que Lutin sait faire tourner ; le modèle de langage ne voit que ces modèles et les types qui ont un moteur."""
+        import copy
+        SERVICE["mode"] = "diffusion"
+        cu.CACHE["modeles"] = (0, None)
+        noms = [m["nom"] for m in cu.modeles_utilisables()]
+        self.assertTrue({"flux1-dev-fp8.safetensors"} <= set(noms))
+        self.assertTrue(any("qwen_image" in n for n in noms) and any("z_image" in n for n in noms))
+        self.assertTrue(any("mystere_xl" in n for n in cu.modeles_inutilisables()), "une famille inconnue n'est pas proposée")
+        self.assertFalse(any("mystere_xl" in n for n in noms))
+        choix = cu.choix("modele")
+        self.assertEqual(choix[0][0], "", "la première entrée est « Automatique »")
+        self.assertTrue(any("Z-Image" in libelle for _, libelle in choix))
+        self.assertIsNone(cu.choix("port"), "les autres réglages gardent leur forme")
+        # la fiche de l'addon porte cette liste, et garde visible un modèle enregistré qui a disparu
+        addons.enregistrer_reglages(cu.IDENT, {"modele": "ancien_modele.safetensors"})
+        champ = next(c for c in addons.decrire(cu.IDENT)["reglages"] if c["cle"] == "modele")
+        valeurs = [v for v, _ in champ["choix"]]
+        self.assertIn("flux1-dev-fp8.safetensors", valeurs)
+        self.assertIn("ancien_modele.safetensors", valeurs, "un modèle enregistré mais introuvable reste affiché")
+        self.assertIn("introuvable", dict(champ["choix"])["ancien_modele.safetensors"])
+        # l'outil montré au modèle de langage : types disponibles et modèles utilisables
+        from lutin import outils
+        outil = next(o for o in outils.OUTILS if o["function"]["name"] == "comfy_generer")
+        adapte = cu.adapter_outil(outil)
+        props = adapte["function"]["parameters"]["properties"]
+        self.assertEqual(props["type"]["enum"], ["image"], "pas de moteur vidéo ni son : ils ne sont pas proposés")
+        self.assertIn("flux1-dev-fp8.safetensors", props["modele"]["description"])
+        self.assertNotIn("mystere_xl", props["modele"]["description"])
+        self.assertIn("ancien_modele.safetensors", props["modele"]["description"], "le choix de l'utilisateur est rappelé au modèle")
+        # l'utilisateur ajoute un moteur vidéo et une famille avec son workflow : ils apparaissent
+        flux = copy.deepcopy(addons.flux(cu.IDENT))
+        flux["workflows"]["video"] = flux["workflows"]["image"]
+        flux["workflows"]["image_hidream"] = flux["workflows"]["image_zimage"]
+        flux["familles"] = {"image_hidream": ["hidream"], "image_sans_workflow": ["autre"]}
+        self.assertEqual(cu.famille_de("hidream_i1_fast.safetensors"), "", "sans le flux de l'utilisateur : famille inconnue")
+        addons.appliquer_flux(cu.IDENT, flux)
+        try:
+            self.assertEqual(cu.famille_de("hidream_i1_fast.safetensors"), "image_hidream")
+            self.assertEqual(cu.famille_de("autre_modele.safetensors"), "", "une famille déclarée sans workflow n'est pas connue")
+            self.assertEqual(cu.libelle_famille("image_hidream"), "Hidream")
+            self.assertEqual(cu.adapter_outil(outil)["function"]["parameters"]["properties"]["type"]["enum"], ["image", "video"])
+            self.assertIn("Hidream", cu.moteurs()["image"])
+            self.assertEqual(cu.moteurs()["video"], ["video"])
+        finally:
+            addons.restaurer_flux(cu.IDENT)
+
     def test_nouveau_format_des_listes_de_comfyui(self):
         SERVICE["mode"], SERVICE["combo"] = "diffusion", True
         cu.CACHE["modeles"] = (0, None)

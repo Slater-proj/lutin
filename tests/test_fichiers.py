@@ -132,22 +132,6 @@ class Fichiers(unittest.TestCase):
         self.assertEqual(res["supprimes"], 1)
         self.assertEqual(len(res["ignores"]), 1)
 
-    def test_les_cases_d_accord_automatique_survivent_a_un_autre_enregistrement_hors_local(self):
-        from lutin import securite
-        vrai = _m.SECURITE
-        _m.SECURITE = securite.Securite(niveau=securite.RESEAU)
-        try:
-            _m.enregistrer_reglages({"auto_commandes": True, "auto_ecriture": True}, de_confiance=True)
-            self.assertTrue(_m.reglages(de_confiance=True)["auto_commandes"], "le navigateur de cette machine les garde")
-            self.assertFalse(_m.reglages()["auto_commandes"], "un appareil appairé non")
-            _m.enregistrer_reglages({"web": False}, de_confiance=False)                              # un téléphone change un autre réglage
-            self.assertTrue(_m.reglages(de_confiance=True)["auto_commandes"], "...sans effacer les cases de l'utilisateur")
-            _m.enregistrer_reglages({"auto_commandes": False}, de_confiance=False)                   # ...et ne peut pas les décocher ni les cocher
-            self.assertTrue(_m.reglages(de_confiance=True)["auto_commandes"])
-        finally:
-            _m.enregistrer_reglages({"auto_commandes": False, "auto_ecriture": False, "web": True}, de_confiance=True)
-            _m.SECURITE = vrai
-
     def test_ouvrir_n_est_propose_que_sur_une_machine_avec_un_bureau(self):
         import os
         vrai = os.environ.get("LUTIN_DOCKER")

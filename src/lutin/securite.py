@@ -158,16 +158,6 @@ def identite_proxy(sec, ip_client, en_tetes):
     return nom[:128] or None
 
 
-def reglages_surs(sec, reglages, de_confiance=False):
-    """Règle dure : en dehors du niveau « local », jamais d'accord automatique. Une seule exception : au niveau « réseau », le navigateur de la machine où tourne Lutin (de_confiance) garde ses cases ;
-    un appareil appairé, lui, ne peut jamais lancer une commande ou écrire un fichier sans qu'on l'accepte."""
-    r = dict(reglages)
-    if sec.niveau != LOCAL and not (sec.niveau == RESEAU and de_confiance):
-        r["auto_ecriture"] = False
-        r["auto_commandes"] = False
-    return r
-
-
 def egal(a, b):
     """Comparaison de secrets à temps constant, sur des octets : un caractère hors ASCII n'est pas une exception."""
     return hmac.compare_digest(str(a).encode("utf-8"), str(b).encode("utf-8"))

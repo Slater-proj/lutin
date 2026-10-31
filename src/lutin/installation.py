@@ -46,9 +46,9 @@ NIVEAUX_TEXTE = {
     securite.PROXY: ("3", "Depuis Internet, derrière un proxy", "Lutin n'est pas exposé directement : un proxy (Authelia, Authentik…) s'occupe de l'identité."),
 }
 AVERTISSEMENT_RESEAU = ("Attention : toute personne qui connaît le code PIN et se trouve sur ton réseau pourra demander à Lutin de lire les fichiers du dossier de travail. "
-                        "Les accords automatiques sont désactivés dans ce mode.")
+                        "Les accords automatiques se règlent conversation par conversation (désactivés par défaut) : ne les active pas pour une conversation ouverte depuis un appareil que tu ne maîtrises pas.")
 AVERTISSEMENT_PROXY = ("Attention : exposer un assistant capable de lire des fichiers et de lancer des commandes à Internet est risqué. Ne le fais que derrière une "
-                       "authentification forte (idéalement avec second facteur) et un HTTPS valide. Les accords automatiques sont désactivés dans ce mode.")
+                       "authentification forte (idéalement avec second facteur) et un HTTPS valide. Les accords automatiques se règlent conversation par conversation (désactivés par défaut) : active-les avec prudence.")
 
 
 def choisir_langue(es, options, cfg):

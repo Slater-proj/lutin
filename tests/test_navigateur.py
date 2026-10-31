@@ -338,20 +338,40 @@ class Parcours(unittest.TestCase):
             p = self.ouvrir(tmp, adresse)
             p.attendre("!!window.ETAT_PRET || document.getElementById('cAutoCmd') !== null")
             p.attendre("document.querySelectorAll('#fil .msg').length > 0")
+            p.attendre("document.getElementById('selMode').dataset.init === '1'")
+            # le modèle est tout en haut à gauche, à côté du nom ; les accords automatiques sont décochés par défaut
+            self.assertTrue(p.evaluer("!!document.querySelector('aside h1 #selModele')"), "le modèle est dans l'en-tête, à côté de « Lutin »")
+            self.assertFalse(p.evaluer("document.getElementById('cAuto').checked || document.getElementById('cAutoCmd').checked"), "décochés par défaut")
+            self.assertEqual(p.evaluer("[...document.querySelectorAll('.options-lat label')].map(l => l.textContent.trim()).filter(x => /auto/.test(x)).join('|')"), "Fichiers auto|Commandes auto")
+            # deux cases cochées à la suite : les deux sont enregistrées, pour CETTE conversation
             p.evaluer("document.getElementById('cAuto').click(); document.getElementById('cAutoCmd').click(); true")
-            fichier = donnees / "reglages.json"
-            debut = time.time()
-            while time.time() - debut < 10:
-                r = json.loads(fichier.read_text(encoding="utf-8"))
-                if r.get("auto_ecriture") and r.get("auto_commandes"):
-                    break
+            fichier = donnees / "options" / "a1b2c3d4.json"
+            debut_attente = time.time()
+            r = {}
+            while time.time() - debut_attente < 10:
+                if fichier.is_file():
+                    r = json.loads(fichier.read_text(encoding="utf-8"))
+                    if r.get("auto_ecriture") and r.get("auto_commandes"):
+                        break
                 time.sleep(0.3)
-            self.assertTrue(r.get("auto_ecriture") and r.get("auto_commandes"), "les deux cases sont enregistrées")
+            self.assertTrue(r.get("auto_ecriture") and r.get("auto_commandes"), "les deux cases sont enregistrées avec la conversation : %r" % r)
+            reglages = json.loads((donnees / "reglages.json").read_text(encoding="utf-8"))
+            self.assertFalse(reglages.get("auto_ecriture") or reglages.get("auto_commandes"), "...et pas dans les réglages communs")
+            # une autre conversation a les siennes (décochées) ; revenir à la première retrouve ses cases
+            p.evaluer("document.querySelector('.conv[data-id=\"b2c3d4e5\"]').click(); true")
+            p.attendre("document.querySelector('.conv.choisie') && document.querySelector('.conv.choisie').dataset.id === 'b2c3d4e5' && !document.getElementById('cAuto').checked && !document.getElementById('cAutoCmd').checked")
+            p.evaluer("document.querySelector('.conv[data-id=\"a1b2c3d4\"]').click(); true")
+            p.attendre("document.getElementById('cAuto').checked && document.getElementById('cAutoCmd').checked")
+            # une nouvelle conversation repart décochée
+            p.evaluer("document.getElementById('bNouvelle').click(); true")
+            p.attendre("!document.getElementById('cAuto').checked && !document.getElementById('cAutoCmd').checked")
+            p.evaluer("document.querySelector('.conv[data-id=\"a1b2c3d4\"]').click(); true")
+            p.attendre("document.getElementById('cAuto').checked")
             p.evaluer("location.reload()")
             p.attendre("document.getElementById('cAutoCmd') !== null && document.querySelectorAll('#fil .msg').length > 0")
             p.attendre("document.getElementById('selMode').dataset.init === '1'")
-            self.assertTrue(p.evaluer("document.getElementById('cAuto').checked && document.getElementById('cAutoCmd').checked"), "cochées après rechargement")
-            self.assertTrue(p.evaluer("!document.getElementById('cAuto').disabled && !document.getElementById('cAutoCmd').disabled && document.getElementById('noteAuto').hidden"), "niveau local : utilisables, sans note")
+            self.assertTrue(p.evaluer("document.getElementById('cAuto').checked && document.getElementById('cAutoCmd').checked"), "cochées après rechargement, pour cette conversation")
+            self.assertTrue(p.evaluer("!document.getElementById('cAuto').disabled && !document.getElementById('cAutoCmd').disabled"), "toujours utilisables")
             # un message lent, puis un second envoyé pendant la réponse : il attend dans la file
             p.evaluer("(() => { const s = document.getElementById('saisie'); s.value = '[lent] premier'; document.getElementById('bEnvoyer').click(); return true; })()")
             p.attendre("!document.getElementById('ptTravail').hidden && !document.getElementById('ptTravail').classList.contains('fini')")        # l'icône « travail en cours »

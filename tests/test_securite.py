@@ -93,25 +93,6 @@ class Proxy(unittest.TestCase):
         self.assertIn("authentification", raison)
 
 
-class RegleDure(unittest.TestCase):
-    def test_pas_d_accord_automatique_hors_local(self):
-        base = {"auto_ecriture": True, "auto_commandes": True, "modele": "x"}
-        self.assertEqual(s.reglages_surs(Securite(), base), base)
-        for sec in (LAN, PROXY):
-            r = s.reglages_surs(sec, base)
-            self.assertFalse(r["auto_ecriture"] or r["auto_commandes"])
-            self.assertEqual(r["modele"], "x")
-        self.assertTrue(base["auto_commandes"], "l'original n'est pas modifié")
-
-    def test_le_navigateur_de_cette_machine_garde_ses_cases_au_niveau_reseau_seulement(self):
-        base = {"auto_ecriture": True, "auto_commandes": True}
-        self.assertEqual(s.reglages_surs(LAN, base, de_confiance=True), base, "niveau réseau : le navigateur de la machine garde ses cases")
-        r = s.reglages_surs(LAN, base, de_confiance=False)
-        self.assertFalse(r["auto_ecriture"] or r["auto_commandes"], "un appareil appairé ne les a jamais")
-        r = s.reglages_surs(PROXY, base, de_confiance=True)
-        self.assertFalse(r["auto_ecriture"] or r["auto_commandes"], "niveau proxy : jamais, même de confiance")
-
-
 class AdministrateursProxy(unittest.TestCase):
     def test_seul_un_administrateur_declare_identifie_par_le_proxy_de_confiance_configure(self):
         import os

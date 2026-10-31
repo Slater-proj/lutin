@@ -2,6 +2,17 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## 0.10.0
+
+- **Les options suivent chaque conversation** : mode, réflexion, **Fichiers auto**, **Commandes auto**, essai à blanc, web et longueur max sont propres à la conversation ouverte ; changer de conversation retrouve ses réglages, une nouvelle conversation repart avec les accords automatiques **décochés**. Seul le modèle reste commun, et il passe **en haut à gauche, à côté du nom Lutin**. Une case cochée ou décochée pendant une réponse compte dès l'outil suivant.
+- **Les accords automatiques ne dépendent plus du chemin d'accès** : ils marchent depuis un téléphone ou derrière un reverse proxy (la règle qui les coupait hors du niveau « cette machine seulement » disparaît, avec sa grosse note). Une lecture web dans la demande en cours les suspend toujours. « Accord auto » devient **« Fichiers auto »** (« Commandes auto » ne change pas) ; `/fichiers` remplace `/accord`, qui reste un alias.
+- **Correction** : deux cases cochées à la suite pouvaient s'écraser (deux enregistrements en vol, le plus ancien gagnait) ; les enregistrements partent maintenant un par un et le dernier état l'emporte.
+
+- **ComfyUI : le modèle se choisit dans une liste déroulante** (« Automatique » ou un modèle utilisable, avec sa famille), plus de champ libre. Les modèles que Lutin ne sait pas faire tourner ne sont plus proposés, ni dans la liste ni au modèle de langage, qui ne voit que les modèles et les types (image, vidéo, son) réellement disponibles ; le panneau montre les « moteurs de rendu » et dit pourquoi un modèle n'est pas proposé.
+- **On peut ajouter ses propres familles de modèles** (workflow + `familles` dans « Flux… »), sans attendre une nouvelle version.
+
+**English.** ComfyUI: the model is chosen in a drop-down list (“Automatic” or a usable model, with its family), no more free text. Models Lutin cannot run are no longer offered, neither in the list nor to the language model, which only sees the models and types (image, video, sound) that are really available; the panel shows the “rendering engines” and says why a model is not offered. You can add your own model families (workflow + `familles` in “Flow…”) without waiting for a new version.
+
 ## 0.9.0
 
 - **Missions longues et Traitement de documents sortent des extensions** : sections de l'onglet Automatisation, toujours disponibles, rien à activer ; et un bouton **🎯** à côté du champ de saisie transforme ce que tu viens d'écrire en cahier des charges d'une mission.

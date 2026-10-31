@@ -37,6 +37,7 @@ body { margin:0; background:radial-gradient(1200px 600px at 70% -10%, #14202e 0%
 aside { background:linear-gradient(180deg, var(--panel2), var(--panel)); border-right:1px solid var(--line); display:flex; flex-direction:column; min-height:0; }
 aside h1 { font-size:.95rem; font-weight:600; letter-spacing:.02em; margin:0; padding:14px 16px; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:8px; }
 aside h1 img { border-radius:7px; flex:0 0 auto; }
+aside h1 .modele-titre { margin-left:auto; min-width:0; max-width:62%; font-size:.76rem; font-weight:400; padding:2px 4px; text-overflow:ellipsis; letter-spacing:0; }
 aside .liste { overflow:auto; flex:1; padding:8px; min-height:60px; }
 .separateur-v { cursor:col-resize; background:var(--line); width:1px; margin:0; position:relative; touch-action:none; user-select:none; } .separateur-v:hover, .separateur-v.actif, .separateur-v:focus-visible { background:var(--accent, #5aa9ff); outline:0; }
 .separateur-h { cursor:row-resize; background:var(--line); height:1px; flex:0 0 1px; position:relative; touch-action:none; user-select:none; } .separateur-h:hover, .separateur-h.actif, .separateur-h:focus-visible { background:var(--accent, #5aa9ff); outline:0; }
@@ -326,20 +327,18 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
 </head>
 <body>
 <aside>
-  <h1><img src="/logo.svg" alt="" width="26" height="26"> Lutin</h1>
+  <h1><img src="/logo.svg" alt="" width="26" height="26"> Lutin <select id="selModele" class="modele-titre" title="Le modèle de langage utilisé (le même pour toutes les conversations)"></select></h1>
   <div style="padding:6px 8px 4px"><button class="principal" id="bNouvelle" style="width:100%;padding:5px 9px">+ Nouvelle conversation</button></div>
   <div style="padding:0 8px 4px"><input id="recherche" type="search" placeholder="Rechercher…" style="width:100%;padding:4px 9px"></div>
   <div class="liste" id="conversations"></div>
   <div class="separateur-h" id="sepH" role="separator" aria-orientation="horizontal" tabindex="0" title="Glisse pour agrandir la liste ou les options (double-clic : réinitialiser)"></div>
   <div class="options-lat">
-    <div class="opt-titre" id="optTitre" title="Cliquer pour replier / déplier"><span id="optChevron">▾</span> Options</div>
-    <label class="opt-ligne">Modèle <select id="selModele"></select></label>
+    <div class="opt-titre" id="optTitre" title="Cliquer pour replier / déplier"><span id="optChevron">▾</span> Options de la conversation</div>
     <label class="opt-ligne">Mode <select id="selMode" title="Ce que l'assistant peut faire : voir Réglages > Modes"><option value="polyvalent">Polyvalent</option><option value="technique">Code et projet</option><option value="scenario">Écriture</option><option value="recherche">Recherche (lecture seule)</option><option value="discussion">Discussion (sans outils)</option></select></label>
     <label class="opt-ligne" title="Le modèle réfléchit avant de répondre : plus juste, un peu plus lent."><input type="checkbox" id="cReflexion"> Réflexion</label>
-    <label class="opt-ligne" title="Accepte tout seul les écritures de fichiers."><input type="checkbox" id="cAuto"> Accord auto</label>
+    <label class="opt-ligne" title="Accepte tout seul les écritures de fichiers (créer, modifier). Valable pour CETTE conversation seulement, décoché par défaut."><input type="checkbox" id="cAuto"> Fichiers auto</label>
     <label class="opt-ligne" title="Simulation : Lutin montre ce qu'il écrirait et lancerait, sans rien écrire ni lancer. Pour voir ce qu'il compte faire avant de le laisser faire."><input type="checkbox" id="cEssai"> Essai à blanc</label>
-    <label class="opt-ligne" title="Accepte tout seul le lancement de commandes (git, tests, PowerShell...). Les lectures simples (git status, dir...) ne demandaient déjà rien."><input type="checkbox" id="cAutoCmd"> Commandes auto</label>
-    <div class="attention" id="noteAuto" hidden></div>
+    <label class="opt-ligne" title="Accepte tout seul le lancement de commandes (git, tests, PowerShell…) et la génération d'images. Valable pour CETTE conversation seulement, décoché par défaut. Les lectures simples (git status, dir…) ne demandaient déjà rien."><input type="checkbox" id="cAutoCmd"> Commandes auto</label>
     <label class="opt-ligne" title="Autorise l'assistant à chercher sur internet (DuckDuckGo) et à lire des pages. Dès qu'une page est lue, l'accord automatique est suspendu pour la suite de la demande."><input type="checkbox" id="cWeb"> Web</label>
     <label class="opt-ligne" title="Mode hors ligne strict : plus aucune connexion vers Internet (ni recherche web, ni téléchargement de modèle, ni mise à jour). Seuls cette machine et Ollama sont joints."><input type="checkbox" id="cHorsLigne"> Hors ligne</label>
     <label class="opt-ligne" title="Limite la longueur de la réponse en jetons. 0 = pas de limite.">Longueur max <select id="sLong"><option value="0">Illimitée</option><option value="512">512</option><option value="1024">1 024</option><option value="2048">2 048</option><option value="4096">4 096</option><option value="8192">8 192</option><option value="16384">16 384</option><option value="32768">32 768</option></select></label>
@@ -1026,7 +1025,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     demarrerActivite();
     try {
       const r = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Token': TOKEN }, signal: CONTROLE.signal,
-        body: JSON.stringify({ message: texte, conversation: CONV ? CONV.id : '', travail: (ETAT.travaux && ETAT.travaux.actif) || '', modele: $('selModele').value, mode: $('selMode').value, reflexion: $('cReflexion').checked, remplacer_depuis: depuis, images, pieces }) });
+        body: JSON.stringify({ message: texte, conversation: CONV ? CONV.id : '', travail: (ETAT.travaux && ETAT.travaux.actif) || '', modele: $('selModele').value, options: lireOptions(), remplacer_depuis: depuis, images, pieces }) });
       if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.erreur || T('Erreur ') + r.status); }
       const lecteur = r.body.getReader(), dec = new TextDecoder(); let reste = '';
       for (;;) {
@@ -1098,11 +1097,11 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     } catch (e) { /* silencieux : le titre manuel reste disponible */ }
   };
   const fermerLat = () => document.querySelector('aside').classList.remove('ouverte');
-  const nouvelle = async () => { detacherFlux(); CONV = null; fil().textContent = ''; finEdition(); afficherTaches([]); setJauge(null); setVitesse(null); $('bAnnuler').hidden = true; $('bRevue').hidden = true; $('saisie').focus(); [...document.querySelectorAll('.conv')].forEach(c => c.classList.remove('choisie')); fermerLat(); };
+  const nouvelle = async () => { detacherFlux(); CONV = null; afficherOptions(null); fil().textContent = ''; finEdition(); afficherTaches([]); setJauge(null); setVitesse(null); $('bAnnuler').hidden = true; $('bRevue').hidden = true; $('saisie').focus(); [...document.querySelectorAll('.conv')].forEach(c => c.classList.remove('choisie')); fermerLat(); };
   const ouvrir = async id => { try {
       const c = await api('/api/conversation?id=' + id);
       if (FLUX && !FLUX.detache && FLUX.id !== id) detacherFlux();          // on quitte une réponse en cours : son affichage est mis de côté
-      CONV = c; finEdition(); if (!document.hidden) lue(id);
+      CONV = c; afficherOptions(c.options); finEdition(); if (!document.hidden) lue(id);
       if (c.travail && ETAT && ETAT.travaux && ETAT.travaux.actif !== c.travail) { try { await api('/api/travaux-choisir', { id: c.travail }); rafraichir(); } catch (e) { /* une réponse travaille dans un autre dossier : on reste sur celui-ci */ } }
       if (FLUX && FLUX.detache && FLUX.id === id) rattacherFlux(); else afficherHistorique(CONV); [...document.querySelectorAll('.conv')].forEach(c => c.classList.toggle('choisie', c.dataset.id === id)); fermerLat(); } catch (e) { fil().appendChild(el('div', 'erreur', e.message)); } };
   // Le menu « ⋯ » d'une conversation : épingler, renommer, et choisir comment elle garde le fil (fiche de suivi ou résumé automatique)
@@ -1265,13 +1264,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     ETAT.installes.forEach(id => { const m = ETAT.modeles.find(x => x.id === id), o = el('option', '', m ? m.nom : id); o.value = id; s.appendChild(o); });
     if (!ETAT.installes.length) { const o = el('option', '', ETAT.ollama ? T('Aucun modèle installé (onglet Modèles)') : T('Ollama arrêté')); o.value = ETAT.reglages.modele; s.appendChild(o); }
     s.value = ETAT.installes.includes(v) ? v : (ETAT.installes.includes(ETAT.reglages.modele) ? ETAT.reglages.modele : (ETAT.installes[0] || ETAT.reglages.modele));
-    { // Règle de sécurité : hors du niveau « cette machine seulement », jamais d'accord automatique, quoi que disent les cases : on le dit au lieu de les laisser cochées sans effet
-      const surs = ETAT.auto_possible === false;
-      $('cAuto').disabled = $('cAutoCmd').disabled = surs;
-      $('noteAuto').hidden = !surs;
-      $('noteAuto').textContent = surs ? T('Accord auto et Commandes auto ne s\'appliquent pas ici : pour ta sécurité (onglet Accès), ils ne valent que depuis le navigateur de la machine où tourne Lutin, et jamais au niveau d\'accès « proxy ». Une mission « Autonome » lancée depuis cette machine reste autonome.') : '';
-    }
-    if (!$('selMode').dataset.init) { $('selMode').value = ETAT.reglages.mode; $('cReflexion').checked = ETAT.reglages.reflexion; $('cAuto').checked = ETAT.reglages.auto_ecriture; $('cAvance').checked = !!ETAT.reglages.avance; $('cAutoCmd').checked = ETAT.reglages.auto_commandes; $('cEssai').checked = !!ETAT.reglages.essai_a_blanc; $('cCopieConv').checked = !!ETAT.reglages.copie_conversations; $('selMemoire').value = ETAT.reglages.memoire_longue || 'demander'; $('iFichePart').value = ETAT.reglages.fiche_part || 10; $('cScribe').checked = ETAT.reglages.fiche_scribe !== false; $('cSens').checked = !!ETAT.reglages.recherche_sens; aideMemoire(); majSens(); $('cWeb').checked = ETAT.reglages.web !== false; $('rCtx').value = ETAT.reglages.num_ctx; $('rTemp').value = ETAT.reglages.temperature; $('rTours').value = ETAT.reglages.tours_max; $('iTopP').value = ETAT.reglages.top_p ?? ''; $('iTopK').value = ETAT.reglages.top_k ?? ''; $('iMinP').value = ETAT.reglages.min_p ?? ''; $('iRep').value = ETAT.reglages.repeat_penalty ?? ''; $('cGarde').checked = ETAT.reglages.garde_ressources !== false; $('cComfy').checked = ETAT.reglages.liberer_si_comfy !== false; $('sRappels').value = ETAT.reglages.rappels_auto || 'scenario'; $('iSeuilRam').value = ETAT.reglages.seuil_ram_go; $('iSeuilDisque').value = ETAT.reglages.seuil_disque_go; $('iPlafond').value = ETAT.reglages.plafond_donnees_go; $('iLimiteCmd').value = ETAT.reglages.limite_ram_commande_go; $('iThreads').value = ETAT.reglages.num_thread ?? ''; $('iGarde').value = ETAT.reglages.garde_min ?? ''; $('selMode').dataset.init = '1'; }
+    if (!$('selMode').dataset.init) { afficherOptions(CONV ? CONV.options : null); $('cAvance').checked = !!ETAT.reglages.avance; $('cCopieConv').checked = !!ETAT.reglages.copie_conversations; $('selMemoire').value = ETAT.reglages.memoire_longue || 'demander'; $('iFichePart').value = ETAT.reglages.fiche_part || 10; $('cScribe').checked = ETAT.reglages.fiche_scribe !== false; $('cSens').checked = !!ETAT.reglages.recherche_sens; aideMemoire(); majSens(); $('rCtx').value = ETAT.reglages.num_ctx; $('rTemp').value = ETAT.reglages.temperature; $('rTours').value = ETAT.reglages.tours_max; $('iTopP').value = ETAT.reglages.top_p ?? ''; $('iTopK').value = ETAT.reglages.top_k ?? ''; $('iMinP').value = ETAT.reglages.min_p ?? ''; $('iRep').value = ETAT.reglages.repeat_penalty ?? ''; $('cGarde').checked = ETAT.reglages.garde_ressources !== false; $('cComfy').checked = ETAT.reglages.liberer_si_comfy !== false; $('sRappels').value = ETAT.reglages.rappels_auto || 'scenario'; $('iSeuilRam').value = ETAT.reglages.seuil_ram_go; $('iSeuilDisque').value = ETAT.reglages.seuil_disque_go; $('iPlafond').value = ETAT.reglages.plafond_donnees_go; $('iLimiteCmd').value = ETAT.reglages.limite_ram_commande_go; $('iThreads').value = ETAT.reglages.num_thread ?? ''; $('iGarde').value = ETAT.reglages.garde_min ?? ''; $('selMode').dataset.init = '1'; }
     if (document.activeElement !== $('selLangue')) $('selLangue').value = ETAT.langue_reglage || 'auto';
     afficherVersion();
     if ($('vVersionActuelle')) $('vVersionActuelle').textContent = T('Lutin ') + (ETAT.version || '');
@@ -1305,7 +1298,21 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     ETAT.attentes.forEach(a => { const s = '.accord[data-id="' + a.id + '"]'; if (!fil().querySelector(s) && !(FLUX && FLUX.sauve.querySelector(s))) fil().appendChild(carteAccord(a)); });
   };
   const nombreOuNull = id => { const v = $(id).value.trim().replace(',', '.'); return v === '' || isNaN(+v) ? null : +v; };
-  const sauverReglages = async () => { try { await api('/api/reglages', { modele: $('selModele').value, mode: $('selMode').value, reflexion: $('cReflexion').checked, auto_ecriture: $('cAuto').checked, auto_commandes: $('cAutoCmd').checked, essai_a_blanc: $('cEssai').checked, copie_conversations: $('cCopieConv').checked, memoire_longue: $('selMemoire').value, fiche_part: nombreOuNull('iFichePart') ?? 10, fiche_scribe: $('cScribe').checked, recherche_sens: $('cSens').checked, avance: $('cAvance').checked, web: $('cWeb').checked, num_ctx: +$('rCtx').value, temperature: +$('rTemp').value, tours_max: +$('rTours').value, top_p: nombreOuNull('iTopP'), top_k: nombreOuNull('iTopK'), min_p: nombreOuNull('iMinP'), repeat_penalty: nombreOuNull('iRep'), garde_ressources: $('cGarde').checked, liberer_si_comfy: $('cComfy').checked, rappels_auto: $('sRappels').value, seuil_ram_go: nombreOuNull('iSeuilRam') ?? 3, seuil_disque_go: nombreOuNull('iSeuilDisque') ?? 10, plafond_donnees_go: nombreOuNull('iPlafond') ?? 2, limite_ram_commande_go: nombreOuNull('iLimiteCmd') ?? 0, num_thread: nombreOuNull('iThreads'), garde_min: nombreOuNull('iGarde') }); } catch (e) { fil().appendChild(el('div', 'erreur', e.message)); } };
+  // Un seul enregistrement à la fois : si on coche deux cases à la suite, le second part quand le premier a fini, avec l'état le plus récent (deux requêtes en vol pouvaient se croiser et la plus ancienne gagner)
+  const enSerie = fn => { let cours = null, refaire = false; return () => { if (cours) { refaire = true; return cours; } cours = (async () => { try { do { refaire = false; await fn(); } while (refaire); } finally { cours = null; } })(); return cours; }; };
+  // Options de la conversation ouverte : mode, réflexion, fichiers auto, commandes auto, essai à blanc, web, longueur. Chaque conversation a les siennes (accords automatiques décochés par défaut).
+  const optionsDefaut = () => { const r = (ETAT && ETAT.reglages) || {}; return { mode: r.mode || 'polyvalent', reflexion: !!r.reflexion, auto_ecriture: false, auto_commandes: false, essai_a_blanc: !!r.essai_a_blanc, web: r.web !== false, num_predict: r.num_predict || 0 }; };
+  const lireOptions = sansAccords => { const o = { mode: $('selMode').value, reflexion: $('cReflexion').checked, essai_a_blanc: $('cEssai').checked, web: $('cWeb').checked, num_predict: +$('sLong').value || 0 }; if (!sansAccords) { o.auto_ecriture = $('cAuto').checked; o.auto_commandes = $('cAutoCmd').checked; } return o; };
+  const afficherOptions = o => { const v = Object.assign(optionsDefaut(), o || {}); $('selMode').value = v.mode; $('cReflexion').checked = !!v.reflexion; $('cAuto').checked = !!v.auto_ecriture; $('cAutoCmd').checked = !!v.auto_commandes; $('cEssai').checked = !!v.essai_a_blanc; $('cWeb').checked = v.web !== false; $('sLong').value = String(v.num_predict || 0); };
+  const envoyerOptions = async () => {
+    try {
+      if (CONV) { const r = await api('/api/conversation-options', { conversation: CONV.id, options: lireOptions() }); CONV.options = r.options; }
+      else await sauverReglages();                                                         // pas encore de conversation : ces choix deviennent ceux des nouvelles conversations (sauf les accords automatiques, jamais par défaut)
+    } catch (e) { fil().appendChild(el('div', 'erreur', e.message)); }
+  };
+  const sauverOptions = enSerie(envoyerOptions);
+  const envoyerReglages = async () => { try { await api('/api/reglages', Object.assign({ modele: $('selModele').value, copie_conversations: $('cCopieConv').checked, memoire_longue: $('selMemoire').value, fiche_part: nombreOuNull('iFichePart') ?? 10, fiche_scribe: $('cScribe').checked, recherche_sens: $('cSens').checked, avance: $('cAvance').checked, num_ctx: +$('rCtx').value, temperature: +$('rTemp').value, tours_max: +$('rTours').value, top_p: nombreOuNull('iTopP'), top_k: nombreOuNull('iTopK'), min_p: nombreOuNull('iMinP'), repeat_penalty: nombreOuNull('iRep'), garde_ressources: $('cGarde').checked, liberer_si_comfy: $('cComfy').checked, rappels_auto: $('sRappels').value, seuil_ram_go: nombreOuNull('iSeuilRam') ?? 3, seuil_disque_go: nombreOuNull('iSeuilDisque') ?? 10, plafond_donnees_go: nombreOuNull('iPlafond') ?? 2, limite_ram_commande_go: nombreOuNull('iLimiteCmd') ?? 0, num_thread: nombreOuNull('iThreads'), garde_min: nombreOuNull('iGarde') }, CONV ? {} : lireOptions(true))); } catch (e) { fil().appendChild(el('div', 'erreur', e.message)); } };
+  const sauverReglages = enSerie(envoyerReglages);
   document.querySelectorAll('.onglets button').forEach(b => b.addEventListener('click', async () => {
     document.querySelectorAll('.onglets button').forEach(x => x.setAttribute('aria-selected', x === b)); document.querySelectorAll('.page').forEach(p => p.classList.toggle('vue', p.id === 'p-' + b.dataset.p));
     if (b.dataset.p === 'memoire') { const m = await api('/api/memoire'); $('tContexte').value = m['CONTEXTE.md']; $('tMemoire').value = m['MEMOIRE.md']; chargerSkills(); chargerClaude(); chargerNotes(); chargerDocuments(); }
@@ -1341,7 +1348,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
   const ouvrirOnglet = p => document.querySelector('.onglets button[data-p="' + p + '"]').click();
   const bascule = async (idCase, arg, nom) => {
     const a = (arg || '').toLowerCase(), voulu = ['on', 'oui', '1', 'true', 'actif'].includes(a) ? true : ['off', 'non', '0', 'false'].includes(a) ? false : !$(idCase).checked;
-    $(idCase).checked = voulu; await sauverReglages(); await rafraichir(); infoLocale(nom + ' : ' + (voulu ? T('activé') : T('désactivé')) + '.');
+    $(idCase).checked = voulu; await sauverOptions(); await rafraichir(); infoLocale(nom + ' : ' + (voulu ? T('activé') : T('désactivé')) + '.');
   };
   const sansReponseEnCours = () => { if (EN_COURS) { infoLocale(T('Une réponse est en cours : attends la fin, ou tape /stop.')); return false; } return true; };
   const COMMANDES = [
@@ -1370,7 +1377,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
       const a = (arg || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''), v = (a.startsWith('poly') || a.startsWith('gen')) ? 'polyvalent' : (a.startsWith('tech') || a.startsWith('code') || a.startsWith('trav') || a.startsWith('work')) ? 'technique' : (a.startsWith('sc') || a.startsWith('ecri') || a.startsWith('writ')) ? 'scenario' : (a.startsWith('rech') || a.startsWith('res')) ? 'recherche' : (a.startsWith('disc') || a.startsWith('chat')) ? 'discussion' : '';
       const nom = m => $('selMode').querySelector('option[value="' + m + '"]').textContent;
       if (!v) { infoLocale(T('Mode actuel : ') + nom($('selMode').value) + T('. Utilise /mode polyvalent, code, ecriture, recherche ou discussion (ou en anglais : general, code, writing, research, chat).')); return; }
-      $('selMode').value = v; await sauverReglages(); infoLocale(T('Mode : ') + nom(v) + '.');
+      $('selMode').value = v; await sauverOptions(); infoLocale(T('Mode : ') + nom(v) + '.');
     } },
     { n: 'memoire', a: ['memory'], arg: 'resume|fichier|demander', d: T('Mémoire des longues conversations : résumé automatique, fiche de suivi, ou demander au premier résumé (pour cette conversation)'), f: async arg => {
       const a = (arg || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''), v = a.startsWith('dem') || a.startsWith('ask') ? 'demander' : a.startsWith('res') || a.startsWith('sum') || a.startsWith('compact') ? 'resume' : (a.startsWith('fic') || a.startsWith('suiv') || a.startsWith('file') || a.startsWith('trac') ? 'fichier' : '');
@@ -1383,8 +1390,8 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     } },
     { n: 'reflexion', arg: 'on|off', d: T('Active ou coupe la réflexion du modèle'), f: arg => bascule('cReflexion', arg, T('Réflexion')) },
     { n: 'web', arg: 'on|off', d: T('Autorise ou coupe la recherche sur internet'), f: arg => bascule('cWeb', arg, 'Web') },
-    { n: 'accord', arg: 'on|off', d: T('Accord automatique des écritures de fichiers'), f: arg => bascule('cAuto', arg, T('Accord auto des écritures')) },
-    { n: 'commandes', arg: 'on|off', d: T('Accord automatique des commandes lancées'), f: arg => bascule('cAutoCmd', arg, T('Commandes auto')) },
+    { n: 'fichiers', a: ['accord'], arg: 'on|off', d: T('Écritures de fichiers automatiques, pour cette conversation'), f: arg => bascule('cAuto', arg, T('Fichiers auto')) },
+    { n: 'commandes', arg: 'on|off', d: T('Commandes lancées automatiquement, pour cette conversation'), f: arg => bascule('cAutoCmd', arg, T('Commandes auto')) },
     { n: 'contexte', a: ['context'], d: T('Détail de la place prise dans la fenêtre de contexte'), f: async () => {
       if (!CONV) { infoLocale(T('Pas encore de conversation.')); return; }
       const j = await api('/api/contexte?id=' + CONV.id), pct = Math.round(100 * j.utilise / j.total);
@@ -1619,7 +1626,8 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
   });
   $('bDemarrer').addEventListener('click', async () => { $('bDemarrer').disabled = true; try { await api('/api/demarrer-ollama', {}); } catch (e) { fil().appendChild(el('div', 'erreur', e.message)); } $('bDemarrer').disabled = false; rafraichir(); });
   $('bVram').addEventListener('click', async () => { $('bVram').disabled = true; $('bVram').textContent = '⏳…'; try { const r = await api('/api/liberer-vram', {}); fil().appendChild(el('div', 'aide', r.message)); } catch (e) { fil().appendChild(el('div', 'erreur', e.message)); } $('bVram').disabled = false; $('bVram').textContent = T('🧹 Libérer la VRAM'); rafraichir(); });
-  ['selModele', 'selMode', 'cReflexion', 'cAvance', 'cAuto', 'cAutoCmd', 'cEssai', 'cCopieConv', 'selMemoire', 'iFichePart', 'cScribe', 'cSens', 'cWeb', 'iTopP', 'iTopK', 'iMinP', 'iRep', 'cGarde', 'cComfy', 'sRappels', 'iSeuilRam', 'iSeuilDisque', 'iPlafond', 'iLimiteCmd', 'iThreads', 'iGarde'].forEach(id => $(id).addEventListener('change', async () => { await sauverReglages(); if (id === 'cAvance' || id === 'selMode') rafraichir(); }));          // les modèles sans filtre apparaissent tout de suite
+  ['selMode', 'cReflexion', 'cAuto', 'cAutoCmd', 'cEssai', 'cWeb', 'sLong'].forEach(id => $(id).addEventListener('change', async () => { await sauverOptions(); if (id === 'selMode') rafraichir(); }));
+  ['selModele', 'cAvance', 'cCopieConv', 'selMemoire', 'iFichePart', 'cScribe', 'cSens', 'iTopP', 'iTopK', 'iMinP', 'iRep', 'cGarde', 'cComfy', 'sRappels', 'iSeuilRam', 'iSeuilDisque', 'iPlafond', 'iLimiteCmd', 'iThreads', 'iGarde'].forEach(id => $(id).addEventListener('change', async () => { await sauverReglages(); if (id === 'cAvance') rafraichir(); }));          // les modèles sans filtre apparaissent tout de suite
   // Profils de charge : des valeurs toutes faites pour les deux réglages (et le contexte pour « Discret »), calculées sur le nombre de cœurs de CETTE machine.
   $('selProfil').addEventListener('change', async () => {
     const p = $('selProfil').value, cpus = ETAT.cpus || 4;
@@ -2545,6 +2553,11 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     // 1. Est-ce le bon dossier ? Une réponse claire, avec la raison s'il ne l'est pas.
     zone.appendChild(el('div', x.valide ? 'aide' : 'attention', x.valide ? '✔ ' + T('ComfyUI : ') + x.dossier + ' · ' + nb + ' ' + T('modèle(s)') + (x.tourne ? ' · ' + T('il tourne') : '') : '⚠ ' + x.raison));
     if (x.valide && !x.lancement && !x.tourne) zone.appendChild(el('div', 'attention', T('⚠ Je ne trouve pas son Python : lance ComfyUI toi-même avant de demander une image.')));
+    // Ce que Lutin sait produire : les types sans moteur ne sont pas proposés au modèle
+    const MOT = { image: T('Image'), video: T('Vidéo'), son: T('Son') }, mo = x.moteurs || {};
+    zone.appendChild(el('div', 'aide', T('Moteurs de rendu : ') + ['image', 'video', 'son'].map(t => MOT[t] + ' ' + ((mo[t] || []).length ? '✔ (' + mo[t].join(', ') + ')' : T('aucun'))).join(' · ')));
+    if (!(mo.video || []).length || !(mo.son || []).length) zone.appendChild(el('div', 'aide', T('Pour la vidéo ou le son : colle ton workflow (ComfyUI : Enregistrer au format API) dans l\'éditeur « Flux… », sous « workflows », avec la clé « video » ou « son ».')));
+    if ((x.inutilisables || []).length) zone.appendChild(el('div', 'attention', T('Non proposés à Lutin (famille de modèle inconnue) : ') + x.inutilisables.join(', ') + '. ' + T('Pour en ajouter un, colle son workflow dans « Flux… » et déclare sa famille sous « familles ».')));
     // 2. Deux boutons, toujours là
     const ligne = el('div', 'ligne'), det = el('button', x.valide ? '' : 'principal', T('Détecter')), choisir = el('button', '', T('Choisir le dossier…'));
     det.addEventListener('click', async () => { det.disabled = true; det.textContent = T('Recherche…'); const r = await agir('detecter'); if (r && r.introuvable) msg.textContent = T('Introuvable : choisis le dossier à la main.'); else chargerAddons(); det.disabled = false; });
@@ -2561,7 +2574,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     // 3. Les modèles, lisibles : ceux qui servent à générer d'abord, les fichiers associés (styles, encodeurs, VAE) repliés
     if (genres.length) {
       const NOMS = { checkpoints: T('Modèles d\'images'), diffusion_models: T('Modèles de diffusion'), loras: T('Styles et personnages (LoRA)'), text_encoders: T('Encodeurs de texte'), vae: 'VAE', controlnet: 'ControlNet', upscale_models: T('Agrandissement') };
-      const FAMILLES = { image_flux: 'Flux', image_qwen: 'Qwen-Image', image_zimage: 'Z-Image' };
+      const FAMILLES = Object.assign({ image_flux: 'Flux', image_qwen: 'Qwen-Image', image_zimage: 'Z-Image' }, x.libelles_familles || {});
       const nbGenerer = (m.modeles.checkpoints || []).length + (m.modeles.diffusion_models || []).length;
       const d = blocReplie('comfy-modeles', T('Modèles installés') + ' (' + nb + ')', false);
       const liste = (g) => {
@@ -2570,7 +2583,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
           const ligne = el('div'), dossier = n.includes('/') ? n.slice(0, n.lastIndexOf('/') + 1) : '', fichier = n.slice(dossier.length).replace(/\.[a-z0-9]+$/i, '');
           const nomEl = el('span', 'nom', fichier); if (dossier) nomEl.appendChild(el('small', '', '  ' + dossier));
           ligne.appendChild(nomEl);
-          if (g === 'diffusion_models') ligne.appendChild(el('span', 'famille', (x.familles || {})[n] ? FAMILLES[(x.familles || {})[n]] : T('famille inconnue')));
+          if (g === 'diffusion_models') ligne.appendChild(el('span', 'famille', (x.familles || {})[n] ? FAMILLES[(x.familles || {})[n]] : T('non proposé (famille inconnue)')));
           l.appendChild(ligne);
         });
         return l;

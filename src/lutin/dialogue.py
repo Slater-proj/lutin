@@ -216,7 +216,14 @@ def outils_du_mode(r):
     from . import addons
     if not addons.actif("comfyui"):
         exclus |= {"comfy_modeles", "comfy_generer"}                    # les outils de ComfyUI n'existent que si l'addon est activé
-    return [t for t in _m.OUTILS if t["function"]["name"] not in exclus]
+    outils = [t for t in _m.OUTILS if t["function"]["name"] not in exclus]
+    if any(t["function"]["name"] == "comfy_generer" for t in outils):
+        try:
+            from . import addons_comfyui
+            outils = [addons_comfyui.adapter_outil(t) if t["function"]["name"] == "comfy_generer" else t for t in outils]
+        except Exception as erreur:  # noqa: BLE001  (l'outil reste utilisable avec sa description générale)
+            _m.journaliser("Outil d'images : description adaptée impossible ({!r}).".format(erreur))
+    return outils
 
 
 def extraire_appels_texte(contenu, autorises=None):
@@ -676,9 +683,6 @@ def tour(conv, texte, emit, r=None, stop=None, remplacer_depuis=None, identite="
             emit({"type": "info", "texte": _t("Refusé (mission sans surveillance) : {}").format(titre)})
             ctx["dernier_accord"] = "refuse"
             return False
-        if ctx.get("auto_bloque") and not ctx.get("auto_bloque_dit"):
-            ctx["auto_bloque_dit"] = True
-            emit({"type": "info", "texte": _t("Tes cases d'accord automatique sont cochées mais sans effet ici (niveau d'accès « {} » : seul le navigateur de la machine où tourne Lutin les garde, et jamais au niveau proxy). Voir l'onglet Accès.").format(ctx["auto_bloque"])})
         a = _m.Attente(titre, detail, diff)
         emit({"type": "approbation", "id": a.id, "titre": titre, "detail": detail, "diff": diff})
         ok = a.attendre(stop=stop)
@@ -689,13 +693,6 @@ def tour(conv, texte, emit, r=None, stop=None, remplacer_depuis=None, identite="
         return ok
     ctx = {"essai": bool(r.get("essai_a_blanc")), "identite": identite, "accord": accord, "auto_ecriture": bool(r.get("auto_ecriture")), "auto_commandes": bool(r.get("auto_commandes")), "mission": r.get("_mission", ""), "stop": stop, "conv": conv, "emit": emit, "web": bool(r.get("web", True)), "limite_ram": int(r.get("limite_ram_commande_go", 0) * _m.GO),
            "tour": {"id": datetime.now().strftime("%Y%m%d-%H%M%S-") + secrets.token_hex(2), "conversation": conv["id"], "fichiers": {}}}
-    if not lecture_seule and not r.get("_mission"):
-        try:
-            brut = _m.reglages(masquer=False)               # ce que l'utilisateur a coché, avant la règle de sécurité
-            if (brut.get("auto_commandes") and not r.get("auto_commandes")) or (brut.get("auto_ecriture") and not r.get("auto_ecriture")):
-                ctx["auto_bloque"] = _m.SECURITE.niveau
-        except Exception:  # noqa: BLE001  (un diagnostic ne doit jamais gêner une réponse)
-            pass
     dernier = conv["messages"][-1] if conv["messages"] else None
     if dernier and dernier.get("role") == "user" and dernier.get("content") == texte:
         emit({"type": "info", "texte": "Cette demande est déjà dans la conversation sans réponse : je la reprends sans la dupliquer."})
@@ -982,6 +979,7 @@ def boucle_agent(conv, r, emit, ctx, stop):
             if not isinstance(args, dict):
                 args = {}
             repetitions = garde.compter(nom, args)
+            _m.rafraichir_accords(ctx)                                  # une case cochée ou décochée pendant la réponse compte dès cet outil
             emit({"type": "outil", "nom": nom, "args": {k: (v if not isinstance(v, str) or len(v) < 300 else v[:300] + "...") for k, v in args.items()}})
             try:
                 if repetitions >= _boucles.SEUIL_APPEL:                  # le même appel pour la énième fois : on n'exécute plus, on dit de passer à autre chose

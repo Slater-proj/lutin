@@ -16,7 +16,8 @@ What the project chose, why, and what is still to be decided. A decision changes
 | 2026-10-25 | **Unfiltered models: offered, never imposed.** « Advanced models » option, warning displayed, never chosen automatically. | The choice is the user's; the project does not push them. |
 | 2026-10-25 | **No model installation without approval.** The check at launch proposes. | A model weighs 2 to 60 GB. |
 | 2026-10-25 | **No telemetry.** The only network accesses: Ollama's catalogue and registry (anonymous GETs), GitHub releases (`lutin update`), requested downloads, web search if the box is ticked. All cut by strict offline mode. | Trust. |
-| 2026-10-25 | **No automatic approval outside the « machine » level** (hard rule in the code, tested). | Running commands remotely without approval is the worst scenario. |
+| 2026-10-25 | ~~No automatic approval outside the « machine » level (hard rule in the code, tested).~~ **Replaced on 2026-10-31.** | Running commands remotely without approval is the worst scenario. |
+| 2026-10-31 | **Automatic approvals are set per conversation, at every access level, unticked by default.** | The user's decision: not to be limited because they use their phone or their reverse proxy. The risk is documented (SECURITY.md); a web read always suspends automatic approval. |
 | 2026-10-25 | **Installation by script (PowerShell / shell)** in a private environment of the user, without administrator rights; by default the latest GitHub release. Idempotent. | Simple, auditable, Windows and Linux with the same mechanism. |
 | 2026-10-25 | **Strict offline mode** centralised (`horsligne.py`), checked by a test that watches the real connections. | A guarantee that can be audited in one place. |
 | 2026-10-25 | **Several workspace folders, one active at a time**, adding reserved to this machine. | A single root at a time avoids conflicts and crossed accesses; remote adding would allow declaring `/`. |

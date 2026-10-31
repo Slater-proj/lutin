@@ -251,6 +251,18 @@ def decrire(ident):
         champ = {k: r.get(k) for k in ("cle", "secret", "defaut", "texte")}
         champ["libelle"], champ["aide"] = _t(r.get("libelle", "")), _t(r["aide"]) if r.get("aide") else None
         champ["choix"] = [[c[0], _t(c[1])] for c in r["choix"]] if r.get("choix") else None
+        if r.get("dynamique"):                                                          # valeurs fournies par la partie vivante de l'addon (ex. les modèles installés), jamais un champ libre
+            module = module_code(ident)
+            try:
+                dyn = module.choix(r["cle"]) if module is not None and hasattr(module, "choix") else None
+            except Exception as erreur:  # noqa: BLE001  (une liste introuvable ne casse pas la page)
+                _m.journaliser("Addon {} : liste « {} » indisponible ({!r}).".format(ident, r["cle"], erreur))
+                dyn = None
+            if dyn is not None:
+                actuel = valeurs.get(r["cle"], "")
+                if actuel and actuel not in [c[0] for c in dyn]:
+                    dyn = dyn + [[actuel, actuel + _t(" (introuvable)")]]               # la valeur enregistrée reste visible plutôt que de disparaître
+                champ["choix"] = dyn
         if r.get("secret"):
             champ["defini"] = bool(valeurs.get(r["cle"]))
         else:
