@@ -1121,6 +1121,12 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     item(T('Fiche de suivi'), memoire('fichier'), c.memoire === 'fichier');
     item(T('Résumé automatique'), memoire('resume'), c.memoire === 'resume');
     item(T('Suivre le réglage général'), memoire(''), !c.memoire);
+    m.appendChild(el('div', 'menu-titre', T('Fiche de suivi')));
+    item(T('Voir ou modifier la fiche…'), () => ouvrirFiche(c.id));
+    item(T('Supprimer la fiche'), async () => {
+      if (!confirm(T('Supprimer la fiche de suivi de cette conversation ? Elle sera refaite si le mode fiche de suivi est actif.'))) return;
+      await api('/api/suivi-vider', { conversation: c.id }); if (CONV && CONV.id === c.id) majJauge(c.id); infoLocale(T('Fiche supprimée.')); rafraichir();
+    });
     document.body.appendChild(m);
     const r = bouton.getBoundingClientRect();
     m.style.top = Math.min(r.bottom + 4, window.innerHeight - m.offsetHeight - 8) + 'px'; m.style.left = Math.max(8, Math.min(r.left, window.innerWidth - m.offsetWidth - 8)) + 'px';
@@ -1610,29 +1616,32 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
   };
   $('selMemoire').addEventListener('change', aideMemoire);
   $('iFichePart').addEventListener('input', aideMemoire);
-  const ouvrirFiche = async () => {
-    if (!CONV) { infoLocale(T('Pas encore de conversation.')); return; }
-    const c = ouvrirModal(T('Fiche de suivi')), msg = el('p', 'aide');
-    let r;
-    try { r = await api('/api/suivi?conversation=' + encodeURIComponent(CONV.id)); } catch (e) { c.appendChild(el('p', 'erreur', e.message)); return; }
+  const ouvrirFiche = async idConv => {
+    const ident = idConv || (CONV && CONV.id);
+    if (!ident) { infoLocale(T('Pas encore de conversation.')); return; }
+    const meta = (ETAT.conversations || []).find(x => x.id === ident) || {};
+    const c = ouvrirModal(T('Fiche de suivi') + (meta.titre ? ' — ' + meta.titre : '')), msg = el('p', 'aide');
+    let r, courant = meta.memoire || '';
+    const touche = () => { if (CONV && CONV.id === ident) majJauge(ident); };
+    try { r = await api('/api/suivi?conversation=' + encodeURIComponent(ident)); } catch (e) { c.appendChild(el('p', 'erreur', e.message)); return; }
     const lm = el('label'); lm.appendChild(document.createTextNode(T('Mémoire de cette conversation : ')));
     const sel = document.createElement('select');
     [['', T('Suivre le réglage général') + ' (' + (r.mode_general === 'fichier' ? T('fiche de suivi') : T('résumé automatique')) + ')'], ['resume', T('Résumé automatique')], ['fichier', T('Fiche de suivi')]].forEach(([v, t]) => { const o = el('option', '', t); o.value = v; sel.appendChild(o); });
-    sel.value = (CONV.memoire_longue || ''); lm.appendChild(sel); c.appendChild(lm);
+    sel.value = courant; lm.appendChild(sel); c.appendChild(lm);
     const etat = el('p', 'aide'); c.appendChild(etat);
     const dire = x => { etat.textContent = (x.mode === 'fichier' ? T('Mode actuel : fiche de suivi. ') : T('Mode actuel : résumé automatique. ')) + (x.mesure.lignes ? T('Fiche : ') + x.mesure.lignes + T(' ligne(s), environ ') + x.mesure.jetons + T(' jetons (') + Math.round(x.mesure.part * 100) + T(' % du contexte).') : T('La fiche est vide.')) + (x.mesure.avertissement ? ' ⚠ ' + x.mesure.avertissement : ''); };
     dire(r);
     c.appendChild(el('p', 'aide', T('Tu peux corriger la fiche à la main : une ligne par élément, sous les titres « ## Objectif », « ## Décisions », « ## Plan », « ## Étape en cours », « ## Fait »…')));
     const zone = document.createElement('textarea'); zone.value = r.texte; zone.style.cssText = 'width:100%;min-height:220px'; c.appendChild(zone);
-    const ok = el('button', 'principal', T('Enregistrer la fiche')), vide = el('button', '', T('Vider la fiche')); c.appendChild(ok); c.appendChild(document.createTextNode(' ')); c.appendChild(vide); c.appendChild(msg);
+    const ok = el('button', 'principal', T('Enregistrer la fiche')), vide = el('button', 'danger', T('Supprimer la fiche')); c.appendChild(ok); c.appendChild(document.createTextNode(' ')); c.appendChild(vide); c.appendChild(msg);
     sel.addEventListener('change', async () => {
-      if (sel.value === 'fichier' && !confirm(T('Passer cette conversation en fiche de suivi ? Le début déjà résumé reste utilisé ; la fiche prendra jusqu\'à {} % du contexte à chaque réponse.').replace('{}', fichePart()))) { sel.value = CONV.memoire_longue || ''; return; }
-      try { const x = await api('/api/memoire-conversation', { conversation: CONV.id, mode: sel.value }); CONV.memoire_longue = sel.value || undefined; dire(x); majJauge(CONV.id); } catch (e) { msg.textContent = e.message; }
+      if (sel.value === 'fichier' && !confirm(T('Passer cette conversation en fiche de suivi ? Le début déjà résumé reste utilisé ; la fiche prendra jusqu\'à {} % du contexte à chaque réponse.').replace('{}', fichePart()))) { sel.value = courant; return; }
+      try { const x = await api('/api/memoire-conversation', { conversation: ident, mode: sel.value }); courant = sel.value; if (CONV && CONV.id === ident) CONV.memoire_longue = sel.value || undefined; dire(x); touche(); rafraichir(); } catch (e) { msg.textContent = e.message; }
     });
-    ok.addEventListener('click', async () => { try { const x = await api('/api/suivi', { conversation: CONV.id, texte: zone.value }); dire(x); msg.textContent = T('Fiche enregistrée.'); majJauge(CONV.id); } catch (e) { msg.textContent = e.message; } });
-    vide.addEventListener('click', async () => { if (!confirm(T('Vider la fiche de suivi de cette conversation ?'))) return; try { const x = await api('/api/suivi-vider', { conversation: CONV.id }); zone.value = ''; dire(x); msg.textContent = T('Fiche vidée.'); majJauge(CONV.id); } catch (e) { msg.textContent = e.message; } });
+    ok.addEventListener('click', async () => { try { const x = await api('/api/suivi', { conversation: ident, texte: zone.value }); dire(x); msg.textContent = T('Fiche enregistrée.'); touche(); } catch (e) { msg.textContent = e.message; } });
+    vide.addEventListener('click', async () => { if (!confirm(T('Supprimer la fiche de suivi de cette conversation ? Elle sera refaite si le mode fiche de suivi est actif.'))) return; try { const x = await api('/api/suivi-vider', { conversation: ident }); zone.value = ''; dire(x); msg.textContent = T('Fiche supprimée.'); touche(); } catch (e) { msg.textContent = e.message; } });
   };
-  $('bFiche').addEventListener('click', ouvrirFiche);
+  $('bFiche').addEventListener('click', () => ouvrirFiche());
   $('bResume').addEventListener('click', async () => {
     if (!CONV || !CONV.id) { alert(T('Aucune conversation ouverte.')); return; }
     const b = $('bResume');

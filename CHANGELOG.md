@@ -2,6 +2,12 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## 0.10.6
+
+- **Les fiches de suivi se gèrent depuis le menu « … » de chaque conversation** : *Voir ou modifier la fiche…* (celle de la conversation du menu, même si elle n'est pas ouverte) et *Supprimer la fiche* (avec confirmation). L'éditeur propose maintenant « Supprimer la fiche » au lieu de « Vider ».
+
+**English.** Tracking sheets are managed from each conversation's “…” menu: *View or edit the sheet…* (the menu conversation's, even if not open) and *Delete the sheet* (with confirmation). The editor now offers “Delete the sheet” instead of “Empty”.
+
 ## 0.10.5
 
 - **Exemples génériques partout** : le compose d'exemple, le tutoriel et le prompt n'ont plus de domaine, d'identifiant ni de matériel précis (`lutin.example.com`, `alice`), et les jeux de test n'ont plus de noms venant de projets personnels. Le prompt demande maintenant à l'IA de découvrir elle-même la machine.

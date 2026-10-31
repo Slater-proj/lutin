@@ -421,6 +421,39 @@ class Parcours(unittest.TestCase):
             self.assertTrue(json.loads(fichier.read_text(encoding="utf-8"))["titre"].startswith("🎯"), "la conversation porte le nom de la mission")
             self.assertEqual(p.erreurs, [])
 
+    def test_la_fiche_de_suivi_se_voit_se_modifie_et_se_supprime_depuis_le_menu_de_chaque_conversation(self):
+        """Menu « … » d'une conversation : Voir ou modifier la fiche (même si ce n'est pas la conversation ouverte), puis Supprimer la fiche."""
+        with self.captures.serveur_demo() as (port, tmp):
+            donnees = tmp / "home" / "donnees"
+            (donnees / "suivis").mkdir(parents=True, exist_ok=True)
+            fiche = donnees / "suivis" / "b2c3d4e5.md"
+            fiche.write_text("## Objectif\n- Tester la fiche\n\n## Décisions\n- Le code est 4711\n", encoding="utf-8")
+            p = self.ouvrir(tmp, "http://127.0.0.1:%d/" % port)               # la conversation ouverte n'est PAS b2c3d4e5
+            p.attendre("document.querySelector('#conversations .conv[data-id=\"b2c3d4e5\"] button.menu-ouvrir') !== null")
+            p.evaluer("window.confirm = () => true; document.querySelector('#conversations .conv[data-id=\"b2c3d4e5\"] button.menu-ouvrir').click(); true")
+            p.attendre("!!document.querySelector('.menu-conv')")
+            menu = p.evaluer("document.querySelector('.menu-conv').textContent")
+            self.assertIn("Voir ou modifier la fiche", menu)
+            self.assertIn("Supprimer la fiche", menu)
+            # consulter et modifier
+            p.evaluer("[...document.querySelectorAll('.menu-conv button')].find(b => b.textContent.includes('Voir ou modifier la fiche')).click(); true")
+            p.attendre("!document.getElementById('modal').hidden && !!document.querySelector('#modalCorps textarea')")
+            self.assertIn("Le code est 4711", p.evaluer("document.querySelector('#modalCorps textarea').value"), "la fiche de CETTE conversation s'affiche")
+            p.evaluer("(() => { const z = document.querySelector('#modalCorps textarea'); z.value = z.value + '\\n## Fait\\n- Première étape terminée\\n'; return true; })()")
+            p.evaluer("[...document.querySelectorAll('#modalCorps button')].find(b => b.textContent.includes('Enregistrer la fiche')).click(); true")
+            p.attendre("document.getElementById('modalCorps').textContent.includes('Fiche enregistrée')")
+            self.assertIn("Première étape terminée", fiche.read_text(encoding="utf-8"), "la modification est écrite dans la fiche")
+            p.evaluer("document.getElementById('modalFermer').click(); true")
+            # supprimer depuis le menu
+            p.evaluer("document.querySelector('#conversations .conv[data-id=\"b2c3d4e5\"] button.menu-ouvrir').click(); true")
+            p.attendre("!!document.querySelector('.menu-conv')")
+            p.evaluer("[...document.querySelectorAll('.menu-conv button')].find(b => b.textContent.includes('Supprimer la fiche')).click(); true")
+            debut = time.time()
+            while time.time() - debut < 10 and fiche.exists():
+                time.sleep(0.3)
+            self.assertFalse(fiche.exists(), "la fiche est supprimée")
+            self.assertEqual(p.erreurs, [])
+
     def test_epingler_un_message_depuis_la_page(self):
         with self.captures.serveur_demo() as (port, tmp):
             p = self.ouvrir(tmp, "http://127.0.0.1:%d/#conv=a1b2c3d4" % port)
