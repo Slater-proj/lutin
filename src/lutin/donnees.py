@@ -359,9 +359,37 @@ def copier_dans_le_dossier_de_travail(c):
 CACHE_CONV = {}          # chemin -> (date de modification, taille, entrée de liste) : la page demande la liste toutes les 4 s, on ne relit que ce qui a changé
 
 
+INDEX = {"charge": False}
+
+
+def _index_chemin():
+    return _m.DONNEES / "index-conversations.json"
+
+
+def _index_charger(dossier):
+    """Reprend l'index du disque : chaque entrée n'est crue que si la date et la taille du fichier sont les mêmes (sinon on relit le fichier)."""
+    INDEX["charge"] = True
+    brut = lire_json(_index_chemin(), {})
+    if not isinstance(brut, dict) or brut.get("dossier") != str(dossier):
+        return
+    for nom, e in (brut.get("entrees") or {}).items():
+        if isinstance(e, list) and len(e) == 3 and isinstance(e[2], dict):
+            CACHE_CONV.setdefault(str(dossier / nom), (e[0], e[1], e[2]))
+
+
+def _index_ecrire(dossier):
+    try:
+        entrees = {Path(k).name: list(v) for k, v in CACHE_CONV.items() if k.startswith(str(dossier)) and v[2]}
+        ecrire_atomique(_index_chemin(), json.dumps({"dossier": str(dossier), "entrees": entrees}, ensure_ascii=False))
+    except OSError:
+        pass                                                   # l'index n'est qu'un accélérateur
+
+
 def conv_liste():
     dossier = _m.DONNEES / "conversations"
-    sortie, vus = [], set()
+    sortie, vus, relus = [], set(), 0
+    if not INDEX["charge"]:
+        _index_charger(dossier)
     for f in (dossier.glob("*.json") if dossier.is_dir() else []):
         cle = str(f)
         try:
@@ -373,6 +401,7 @@ def conv_liste():
         if en_cache and en_cache[0] == st.st_mtime_ns and en_cache[1] == st.st_size:
             entree = en_cache[2]
         else:
+            relus += 1
             c = lire_json(f, None)
             entree = {"id": c["id"], "titre": c.get("titre", ""), "maj": c.get("maj", c.get("date", "")), "messages": len(c.get("messages", [])), "epingle": bool(c.get("epingle")), "memoire": c.get("memoire_longue", "")} if c and RE_CONV.match(c.get("id", "")) else None
             CACHE_CONV[cle] = (st.st_mtime_ns, st.st_size, entree)
@@ -380,6 +409,8 @@ def conv_liste():
             sortie.append(entree)
     for cle in [k for k in CACHE_CONV if k not in vus and k.startswith(str(dossier))]:
         del CACHE_CONV[cle]
+    if relus >= 20:
+        _index_ecrire(dossier)                                 # beaucoup de fichiers viennent d'être relus : on garde l'index pour le prochain démarrage
     return sorted(sorted(sortie, key=lambda x: x["maj"], reverse=True), key=lambda x: not x["epingle"])          # les épinglées d'abord, puis les plus récentes
 
 

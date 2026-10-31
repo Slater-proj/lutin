@@ -2,6 +2,14 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## 0.10.2
+
+- **Un faux appel d'outil caché dans un document n'est plus exécuté** : si un fichier ou une page lue contient un bloc `<tool_call>` et que le modèle le recopie dans sa réponse, c'est traité comme une citation (les appels que le modèle écrit lui-même continuent de marcher).
+- **Le premier affichage est plus rapide avec beaucoup de conversations** : l'index de la liste est gardé sur le disque et n'est cru que si la date et la taille de chaque fichier n'ont pas changé (sinon le fichier est relu). Mesuré avec 800 conversations : environ 5 s de relecture au démarrage évitées.
+- **Les tests nettoient leurs dossiers temporaires** (ils en laissaient des centaines, des Go sur le disque).
+
+**English.** A fake tool call hidden in a document is no longer run: if a file or page that was read contains a `<tool_call>` block and the model copies it into its answer, it is treated as a quotation (calls the model writes itself still work). The first display is faster with many conversations: the list index is kept on disk and only trusted when each file's date and size are unchanged (otherwise the file is re-read); measured with 800 conversations, about 5 s of re-reading at startup avoided. Tests clean up their temporary folders (they used to leave hundreds, gigabytes on the disk).
+
 ## 0.10.1
 
 - **Le modèle est collé au nom « Lutin »** en haut à gauche, et sa liste prend toute la place restante (le nom complet se lit).

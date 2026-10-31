@@ -226,17 +226,28 @@ def outils_du_mode(r):
     return outils
 
 
-def extraire_appels_texte(contenu, autorises=None):
+def _compact(texte):
+    return re.sub(r"\s+", " ", str(texte or ""))
+
+
+def extraire_appels_texte(contenu, autorises=None, sources=""):
     """Certains modèles écrivent leur appel d'outil dans la réponse (<tool_call>{...}</tool_call>, <function=nom><parameter=...>, ou un bloc JSON seul)
-    au lieu d'utiliser le mécanisme prévu : on le retrouve pour l'exécuter. Renvoie (appels, texte sans les appels)."""
+    au lieu d'utiliser le mécanisme prévu : on le retrouve pour l'exécuter. Renvoie (appels, texte sans les appels).
+    `sources` : ce que le modèle vient de lire (résultats d'outils, documents joints). Un bloc d'appel qui s'y trouve mot pour mot est une CITATION (un document piégé qui contient un faux appel d'outil) : il n'est jamais exécuté."""
     noms = set(autorises) if autorises is not None else {t["function"]["name"] for t in _m.OUTILS}
     appels, morceaux = [], []
+    lu = _compact(sources)
+
+    def cite(brut):
+        return bool(lu) and _compact(brut) in lu
 
     def ajouter(nom, args, span):
         if nom in noms:
             appels.append({"function": {"name": nom, "arguments": args}})
             morceaux.append(span)
     for m in RE_APPEL_BALISE.finditer(contenu):
+        if cite(m.group(0)) or cite(m.group(1)):
+            continue
         try:
             d = json.loads(m.group(1))
         except ValueError:
@@ -244,10 +255,14 @@ def extraire_appels_texte(contenu, autorises=None):
         if isinstance(d, dict):
             ajouter(d.get("name"), d.get("arguments", d.get("parameters", {})), m.span())
     for m in RE_APPEL_XML.finditer(contenu):
+        if cite(m.group(0)):
+            continue
         ajouter(m.group(1), dict(re.findall(r"<parameter=([A-Za-z_]+)>\s*(.*?)\s*</parameter>", m.group(2), re.S)), m.span())
     if not appels:                      # un bloc JSON n'est un appel que s'il est (presque) toute la réponse : un exemple cité dans une explication ne doit pas s'exécuter
         for m in RE_APPEL_JSON.finditer(contenu):
             brut = m.group(1) or m.group(2)
+            if cite(brut):
+                continue
             try:
                 d = json.loads(brut)
             except ValueError:
@@ -947,7 +962,13 @@ def boucle_agent(conv, r, emit, ctx, stop):
             emit({"type": "info", "texte": "Ta demande est gardée dans la conversation. Écris « continue » pour que je reprenne là où ça s'est arrêté."})
             break
         if not appels and contenu and "tools" in corps:
-            appels, contenu_net = extraire_appels_texte(contenu, ctx["outils_autorises"])
+            recu = []                                     # ce que le modèle a lu depuis la dernière demande de l'utilisateur : résultats d'outils (fichiers, pages web)
+            for x in reversed(conv["messages"]):
+                if x.get("role") == "user":
+                    break
+                if x.get("role") == "tool":
+                    recu.append(str(x.get("content") or ""))
+            appels, contenu_net = extraire_appels_texte(contenu, ctx["outils_autorises"], " ".join(recu))
             if appels:
                 contenu = contenu_net
                 emit({"type": "info", "texte": "Le modèle a écrit son appel d'outil en texte au lieu d'utiliser le mécanisme prévu : je l'exécute quand même."})
