@@ -307,6 +307,7 @@
 "Téléchargement de « ": "Downloading « ",
 " » lancé : il est ajouté à la liste ci-dessus, et apparaîtra dans le choix du modèle une fois installé.": " » started: it is added to the list above, and will appear in the model choice once installed.",
 "Erreur ": "Error ",
+"Ouvrir avec l'application choisie dans Windows": "Open with the application chosen in Windows",
 "Ouvre le fichier avec l'application choisie dans Windows pour ce type de fichier": "Opens the file with the application chosen in Windows for this kind of file",
 "Ouvrir": "Open",
 "Retire la carte de la conversation et supprime le fichier": "Removes the card from the conversation and deletes the file",

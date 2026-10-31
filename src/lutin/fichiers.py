@@ -86,6 +86,11 @@ def ouvrir(ident, fichier_id):
     p = verifier(e)
     if p.suffix.lower() not in OUVRABLES:
         raise ValueError(_t("Ce type de fichier ne s'ouvre pas d'ici (seuls les documents et les médias le permettent) : ouvre-le depuis son dossier."))
+    _lancer(p)
+    return {"ok": True}
+
+
+def _lancer(p):
     try:
         if sys.platform.startswith("win"):
             os.startfile(str(p))                                                       # noqa: S606  (le geste d'un double-clic : l'application choisie par l'utilisateur)
@@ -95,6 +100,29 @@ def ouvrir(ident, fichier_id):
             subprocess.Popen(["xdg-open", str(p)])
     except OSError as erreur:
         raise ValueError(_t("Le système n'a pas pu ouvrir ce fichier : {}").format(erreur))
+
+
+# --------------------------------------------------------------------------- fichiers envoyés par l'utilisateur (pièces jointes)
+def piece_lire(piece_id, nom):
+    """(octets, type MIME, nom) d'une pièce jointe, pour la télécharger de nouveau sous son vrai nom."""
+    from . import pieces
+    p = pieces.chemin(piece_id)
+    nom = pieces.nom_propre(nom) if nom else p.name
+    return p.read_bytes(), mimetypes.guess_type(nom)[0] or "application/octet-stream", nom
+
+
+def piece_ouvrir(piece_id, nom):
+    """Ouvre une pièce jointe avec l'application par défaut : une copie est faite sous son vrai nom (la pièce gardée porte un nom tiré de son contenu), seulement pour les documents et médias."""
+    import shutil
+    from . import pieces
+    p = pieces.chemin(piece_id)
+    nom = pieces.nom_propre(nom) if nom else p.name
+    if Path(nom).suffix.lower() not in OUVRABLES:
+        raise ValueError(_t("Ce type de fichier ne s'ouvre pas d'ici (seuls les documents et les médias le permettent) : ouvre-le depuis son dossier."))
+    cible = _m.DONNEES / "pieces-ouvertes" / piece_id.split(".")[0][:10] / nom
+    cible.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(p, cible)
+    _lancer(cible)
     return {"ok": True}
 
 

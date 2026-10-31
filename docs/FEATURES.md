@@ -82,7 +82,7 @@ Talk to Lutin from your phone. Create a bot with @BotFather, paste its token (Au
 
 ## Long missions: a big job for hours
 
-Extensions > **Long missions**. You write a **specification** (“build me a complete game from this: code, tests, git repository”), pick the working folder, the maximum duration (8 h by default, 72 h at most) and whether Lutin is **autonomous**. Then you leave: Lutin carries the mission out **turn after turn, alone**, with all its tools (read, write, run commands and tests, commit), until it declares it is done.
+Automation > Optional extensions > **Long missions**. (A step-by-step trial walk-through is in [GUIDE-ESSAI.md](GUIDE-ESSAI.md).) You write a **specification** (“build me a complete game from this: code, tests, git repository”), pick the working folder, the maximum duration (8 h by default, 72 h at most) and whether Lutin is **autonomous**. Then you leave: Lutin carries the mission out **turn after turn, alone**, with all its tools (read, write, run commands and tests, commit), until it declares it is done.
 
 - **The mission is your request.** Nothing is tailored to one kind of task: a game, a refactoring, a test suite, sorting documents… it all depends on what you write. For a long text, put it in a file of the folder and write “read this file and carry it out”.
 - **Autonomous**: Lutin writes files and runs commands without asking, **in the chosen folder only**, with the usual safeguards (every modified file is backed up, commands are bounded). Text read from the internet suspends this automatic approval (a booby-trapped page cannot run a command): whatever is not approved is refused and the model knows it. **Unticked**, it is a dry run: it shows what it would do, nothing is written.
@@ -96,6 +96,8 @@ The former “Background work” is now called **Document processing**: it appli
 ## Creating PDFs, Word documents, Markdown
 
 The model has a `creer_document` tool: depending on the extension (`.pdf`, `.docx`, `.md`, `.txt`, `.html`, `.csv`) it writes the file in the working folder, after your approval, keeping a backup of the previous version. The content is simple Markdown (headings, paragraphs, lists, code blocks, separators, tables; bold, italic and code in Word). No library: the PDF (A4, numbered pages, standard fonts, accents kept) and the Word file are built by Lutin, then **read back** before being announced. A character outside the Latin alphabet (emoji, ideogram) becomes “?” in the PDF rather than breaking the file. No images, formatted tables or custom footers for now.
+
+**Files you send** (attachments) also keep two small buttons, ⬇ to download them again under their real name and ↗ to open them with the application chosen in Windows (a copy under the real name is made for that).
 
 **Created files appear in the conversation**, like an attachment: a card with the name, size, path, and three buttons. **Open** asks Windows (or macOS, Linux) to open the file with the application you chose for this kind of file, like a double-click; it only exists from this machine and refuses programs and scripts. **Download** sends it to your browser (handy from a phone). **Delete** erases the file from the disk. Lutin never opens anything by itself, and only serves, opens or deletes files it registered in the conversation, located in a working folder or in ComfyUI's output folder. The same card is used for ComfyUI videos and sounds; images are shown directly (a click opens them full size).
 

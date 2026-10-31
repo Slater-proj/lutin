@@ -900,7 +900,13 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     if ((!ids || !ids.length) && (!pieces || !pieces.length)) return;
     const z = el('div', 'vignettes');
     (ids || []).forEach(id => { const i = document.createElement('img'); i.src = '/image/' + id; i.alt = T('Image jointe'); i.addEventListener('click', () => window.open(i.src, '_blank', 'noopener')); z.appendChild(i); });
-    (pieces || []).forEach(p => { const d = el('span', 'piece', '📄 ' + p.nom); d.title = p.nom; z.appendChild(d); });
+    (pieces || []).forEach(p => {
+      const d = el('span', 'piece', '📄 ' + p.nom); d.title = p.nom;
+      const tel = el('a', 'bouton-lien', '⬇'); tel.title = T('Télécharger'); tel.href = '/piece/' + encodeURIComponent(p.id) + '?nom=' + encodeURIComponent(p.nom); tel.download = p.nom;
+      const ouv = el('button', '', '↗'); ouv.title = T('Ouvrir avec l\'application choisie dans Windows');
+      ouv.addEventListener('click', async () => { try { await api('/api/piece-ouvrir', { id: p.id, nom: p.nom }); } catch (e) { alert(e.message); } });
+      d.append(' ', tel, ' ', ouv); z.appendChild(d);
+    });
     parent.appendChild(z);
   };
   // Images produites par un outil (ComfyUI) : affichées dans la conversation, un clic les ouvre en grand

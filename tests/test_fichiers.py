@@ -81,6 +81,21 @@ class Fichiers(unittest.TestCase):
         self.assertFalse(fichiers.supprimer(ident, fid)["fichier_supprime"])
         self.assertTrue(dehors.exists())
 
+    def test_une_piece_jointe_se_retelecharge_sous_son_vrai_nom_et_s_ouvre_par_une_copie(self):
+        from lutin import pieces
+        ident, nom, _ = pieces.enregistrer("# Notes\nbonjour".encode("utf-8"), "mes notes.md")
+        octets, mime, vrai_nom = fichiers.piece_lire(ident, "mes notes.md")
+        self.assertEqual((octets, vrai_nom), ("# Notes\nbonjour".encode("utf-8"), "mes notes.md"))
+        with mock.patch.object(fichiers.sys, "platform", "linux"), mock.patch.object(fichiers.subprocess, "Popen", lambda cmd: self.ouvertures.append(cmd)):
+            fichiers.piece_ouvrir(ident, "mes notes.md")
+            with self.assertRaises(ValueError):
+                fichiers.piece_ouvrir(ident, "script.bat")
+        copie = Path(self.ouvertures[0][1])
+        self.assertEqual(copie.name, "mes notes.md", "la copie porte le vrai nom")
+        self.assertEqual(copie.read_text(encoding="utf-8"), "# Notes\nbonjour")
+        with self.assertRaises(ValueError):
+            fichiers.piece_lire("../../etc/passwd", "x")
+
     def test_creer_document_attache_le_fichier_au_resultat(self):
         ctx = {"accord": lambda t, d, df, auto=False: True, "essai": False, "auto_ecriture": False, "stop": None, "tour": {"id": "t", "conversation": "abcdef01", "fichiers": {}}, "conv": {"id": "abcdef01"}}
         revue.appeler_outil("creer_document", {"chemin": "docs/rapport.pdf", "contenu": "# Rapport"}, ctx)

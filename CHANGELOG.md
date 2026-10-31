@@ -9,6 +9,7 @@ The following versions are published automatically (generated notes on the Relea
 - **Les images créées avec ComfyUI s'affichent dans la conversation** (cliquables en grand).
 - **Sous l'image : son chemin, Télécharger, Supprimer.** Erreurs de ComfyUI détaillées (message, nœud fautif, exception). Nouvel outil **apercu_page** : capture d'une page HTML dans Chrome/Edge/Chromium sans fenêtre, avec le texte affiché et les erreurs de la console.
 - **Les fichiers créés (PDF, Word, Markdown, vidéo, son) apparaissent dans la conversation** : une carte avec Ouvrir (l'application choisie dans Windows, depuis cette machine seulement), Télécharger et Supprimer.
+- **Guide d'essai pas à pas** (`docs/GUIDE-ESSAI.fr.md`) : 45 minutes pour vérifier chaque nouveauté sur ta machine. Les pièces jointes ont aussi ⬇ et ↗.
 - **Les addons s'ouvrent vite** : la page de ComfyUI mettait 5 à 12 s quand il est éteint (six connexions refusées, ~2 s chacune sous Windows) ; un test de port de 0,3 s suffit.
 - **Recherche par le sens (facultative)** : un petit modèle d'embeddings d'Ollama (installable d'un clic) permet au rappel du fil de retrouver un passage qui n'emploie pas les mots de la question ; fusion avec la recherche par mots, retour aux mots sans erreur si le modèle manque, vecteurs gardés sur le disque, vectorisation bornée en temps.
 

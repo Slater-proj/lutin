@@ -137,6 +137,15 @@ class Gestionnaire(BaseHTTPRequestHandler):
             except ValueError:
                 return self._envoyer(404, {"erreur": _t("Image inconnue.")})
             return self._envoyer(200, octets, mime, {"Content-Security-Policy": "default-src 'none'; sandbox"})
+        if chemin.startswith("/piece/"):                       # télécharger de nouveau un fichier envoyé par l'utilisateur, sous son vrai nom
+            if not self._authentifie():
+                return self._envoyer(401, {"erreur": "authentification requise"})
+            try:
+                q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+                octets, mime, nom = _fichiers.piece_lire(chemin[len("/piece/"):], (q.get("nom") or [""])[0])
+            except ValueError as e:
+                return self._envoyer(404, {"erreur": str(e)})
+            return self._envoyer(200, octets, mime, {"Content-Disposition": "attachment; filename*=UTF-8''" + urllib.parse.quote(nom), "Content-Security-Policy": "default-src 'none'; sandbox"})
         if chemin.startswith("/fichier/"):                     # télécharger un fichier produit pendant une conversation (cookie de session, comme /image/)
             if not self._authentifie():
                 return self._envoyer(401, {"erreur": "authentification requise"})
@@ -495,6 +504,13 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 if not self._configurateur():
                     return self._envoyer(403, {"erreur": _t("L'installation d'un modèle se lance depuis cette machine.")})
                 return self._envoyer(200, _embeddings.demarrer_installation())
+            if self.path == "/api/piece-ouvrir":
+                if not self._configurateur():
+                    return self._envoyer(403, {"erreur": _t("L'ouverture d'un fichier se fait depuis cette machine : télécharge-le plutôt.")})
+                try:
+                    return self._envoyer(200, _fichiers.piece_ouvrir(str(donnees.get("id", "")), str(donnees.get("nom", ""))))
+                except ValueError as e:
+                    return self._envoyer(400, {"erreur": str(e)})
             if self.path in ("/api/fichier-ouvrir", "/api/fichier-supprimer"):
                 if self.path == "/api/fichier-ouvrir" and not self._configurateur():
                     return self._envoyer(403, {"erreur": _t("L'ouverture d'un fichier se fait depuis cette machine : télécharge-le plutôt.")})

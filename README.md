@@ -78,7 +78,7 @@ The script installs the latest published version in a private environment, adds 
 | `lutin langue [fr\|en\|auto]` | language of the application |
 | `lutin doctor` | diagnostics to paste into a problem report (no personal content) |
 
-Beyond chatting: test your PC, dry run, search your PDF and Word documents offline, scheduled tasks, optional addons (background work on whole folders, Telegram, email, X, ComfyUI), attachments (images, documents, code), five modes, phone pairing with a QR code. See [docs/FEATURES.md](docs/FEATURES.md).
+Beyond chatting: test your PC, dry run, search your PDF and Word documents offline, scheduled tasks, optional addons (long missions carried out alone for hours, document processing, Telegram, email, X, ComfyUI), PDF and Word document creation, page preview, attachments (images, documents, code), five modes, phone pairing with a QR code. See [docs/FEATURES.md](docs/FEATURES.md); to try the new features step by step: [docs/GUIDE-ESSAI.md](docs/GUIDE-ESSAI.md).
 
 The command names are French (the project is written in French first); `lutin --help` explains them in your language.
 
