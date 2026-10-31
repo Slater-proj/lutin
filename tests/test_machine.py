@@ -88,8 +88,8 @@ class Detection(unittest.TestCase):
                 os.environ["LUTIN_BUDGET_GO"] = vrai
 
     def test_nom_du_processeur_lu_dans_cpuinfo(self):
-        texte = "processor\t: 0\nvendor_id\t: GenuineIntel\nmodel name\t: Intel(R) Core(TM) Ultra 5 125H\n\nprocessor\t: 1\nmodel name\t: autre\n"
-        self.assertEqual(machine.nom_cpu_linux(texte), "Intel(R) Core(TM) Ultra 5 125H")
+        texte = "processor\t: 0\nvendor_id\t: GenuineIntel\nmodel name\t: Intel(R) Core(TM) i7-1165G7\n\nprocessor\t: 1\nmodel name\t: autre\n"
+        self.assertEqual(machine.nom_cpu_linux(texte), "Intel(R) Core(TM) i7-1165G7")
         self.assertEqual(machine.nom_cpu_linux(""), "")
 
     def test_sysfs_amd(self):

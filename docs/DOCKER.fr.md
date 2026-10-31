@@ -133,7 +133,7 @@ Si Lutin ne voit pas la carte mais qu'Ollama la voit, déclare-la à la main pou
 
 ## Homelab : un mini PC Debian derrière un reverse proxy et Authelia
 
-Le cas d'un petit serveur partagé (par exemple un mini PC Intel Core Ultra 5 avec 32 Go de RAM dont une dizaine seulement est libre), sous Debian, où Lutin est joignable en `https://lutin.exemple.fr` derrière ton reverse proxy et **Authelia**.
+Le cas d'un petit serveur partagé (par exemple une machine avec 16 à 32 Go de RAM dont une dizaine seulement est libre), sous Debian, où Lutin est joignable en `https://lutin.exemple.fr` derrière ton reverse proxy et **Authelia**.
 
 > **Honnêteté.** Ce montage a été vérifié avec un **faux proxy** (en-têtes `Host` et `Remote-User` simulés : accès, refus sans identité, refus d'un mauvais nom d'hôte, droits d'administration) et par les tests de la CI. Il n'a **jamais tourné avec un vrai Authelia, un vrai Debian ni ce processeur** : les temps de réponse ci-dessous sont des ordres de grandeur, pas des mesures.
 

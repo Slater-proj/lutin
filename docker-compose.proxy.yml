@@ -12,9 +12,9 @@ services:
     environment:
       LUTIN_LANGUE: fr                  # fr or en
       LUTIN_NIVEAU: proxy               # identity comes from the proxy (Authelia) / l'identité vient du proxy (Authelia)
-      LUTIN_URL_PUBLIQUE: https://lutin.czone.ovh
+      LUTIN_URL_PUBLIQUE: https://lutin.example.com
       LUTIN_PROXY_IP: 172.30.0.0/24     # the network of your reverse proxy, as Lutin sees it / le réseau de ton reverse proxy, tel que Lutin le voit
-      LUTIN_ADMINS: clement             # Authelia user names allowed to configure from the page (missions, folders, add-ons…); empty = command line only / identifiants Authelia autorisés à configurer depuis la page ; vide = ligne de commande seulement
+      LUTIN_ADMINS: alice               # Authelia user names allowed to configure from the page (missions, folders, add-ons…); empty = command line only / identifiants Authelia autorisés à configurer depuis la page ; vide = ligne de commande seulement
       LUTIN_BUDGET_GO: "8"              # at most 8 GB for the models (the rest of the RAM belongs to your other services) / au plus 8 Go pour les modèles (le reste de la RAM est à tes autres services)
       OLLAMA_NUM_PARALLEL: "1"          # one request at a time: no memory multiplied by 4 / une demande à la fois : pas de mémoire multipliée par 4
       OLLAMA_MAX_LOADED_MODELS: "1"

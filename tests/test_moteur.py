@@ -29,10 +29,10 @@ ICI = Path(__file__).resolve().parent
 os.environ["LUTIN_LANGUE"] = "fr"          # les messages attendus par ces tests sont en français
 TEMP = Path(tempfile.mkdtemp(prefix="assistant-tests-"))
 PROJET = TEMP / "projet"
-for d in ("docs", "illustrateur/moteur", "assistant", ".git", "sorties"):
+for d in ("docs", "appli/moteur", "assistant", ".git", "sorties"):
     (PROJET / d).mkdir(parents=True, exist_ok=True)
-(PROJET / "docs" / "univers.md").write_text("# Univers\nAurore est une ville.\nLe Bourdon est un son grave.\n", encoding="utf-8")
-(PROJET / "illustrateur" / "moteur" / "code.py").write_text("def f():\n    return 1\n", encoding="utf-8")
+(PROJET / "docs" / "univers.md").write_text("# Univers\nMarly est une ville.\nLe Tonnerre est un son grave.\n", encoding="utf-8")
+(PROJET / "appli" / "moteur" / "code.py").write_text("def f():\n    return 1\n", encoding="utf-8")
 (PROJET / ".git" / "secret").write_text("x", encoding="utf-8")
 (PROJET / "docs" / "gros.md").write_text("\n".join("Ligne %d : " % i + "mot " * 20 for i in range(1200)), encoding="utf-8")
 (PROJET / "assistant" / "assistant.py").write_text("# ne pas toucher\n", encoding="utf-8")
@@ -298,16 +298,16 @@ class Assistant(unittest.TestCase):
         self.assertNotIn(fin["id"], [c["id"] for c in lire("/api/etat")["conversations"]])
 
     def test_boucle_d_outils_lire_chercher_lister(self):
-        ev = chat("Lis univers", reponses=[[appel_outil("lire", chemin="docs/univers.md")], [appel_outil("chercher", motif="bourdon")], [appel_outil("lister", dossier="docs")], [{"content": "Fait."}]])
+        ev = chat("Lis univers", reponses=[[appel_outil("lire", chemin="docs/univers.md")], [appel_outil("chercher", motif="tonnerre")], [appel_outil("lister", dossier="docs")], [{"content": "Fait."}]])
         resultats = [e["texte"] for e in ev if e["type"] == "resultat"]
-        self.assertIn("Aurore est une ville.", resultats[0])
+        self.assertIn("Marly est une ville.", resultats[0])
         self.assertIn("1\t# Univers", resultats[0], "numéros de ligne")
         self.assertIn("docs/univers.md:3:", resultats[1])
         self.assertIn("univers.md", resultats[2])
         self.assertEqual(texte_de(ev), "Fait.")
         outils = [m for m in RECUES[1]["messages"] if m["role"] == "tool"]
         self.assertEqual(outils[0]["tool_name"], "lire")
-        self.assertIn("Aurore est une ville.", outils[0]["content"], "le modèle reçoit le résultat de l'outil")
+        self.assertIn("Marly est une ville.", outils[0]["content"], "le modèle reçoit le résultat de l'outil")
 
     def test_bac_a_sable(self):
         ev = chat("Essaie", reponses=[[appel_outil("lire", chemin="../secret.txt")], [appel_outil("lire", chemin=".git/secret")],
@@ -320,8 +320,8 @@ class Assistant(unittest.TestCase):
         self.assertFalse(any(e["type"] == "approbation" for e in ev), "un refus de principe ne demande pas d'accord")
 
     def test_modifier_avec_accord_sauvegarde_et_refus(self):
-        cible = PROJET / "illustrateur" / "moteur" / "code.py"
-        ev = chat("Change f", reponses=[[appel_outil("modifier", chemin="illustrateur/moteur/code.py", ancien="return 1", nouveau="return 2")], [{"content": "Modifié."}]])
+        cible = PROJET / "appli" / "moteur" / "code.py"
+        ev = chat("Change f", reponses=[[appel_outil("modifier", chemin="appli/moteur/code.py", ancien="return 1", nouveau="return 2")], [{"content": "Modifié."}]])
         demande = next(e for e in ev if e["type"] == "approbation")
         self.assertIn("-    return 1", demande["diff"])
         self.assertIn("+    return 2", demande["diff"])
@@ -330,11 +330,11 @@ class Assistant(unittest.TestCase):
         self.assertEqual(len(sauvegardes), 1)
         self.assertIn("return 1", sauvegardes[0].read_text(encoding="utf-8"), "l'ancienne version est gardée")
         # refus : rien ne change
-        ev = chat("Change encore", reponses=[[appel_outil("modifier", chemin="illustrateur/moteur/code.py", ancien="return 2", nouveau="return 3")], [{"content": "Compris."}]], decider=lambda e: False)
+        ev = chat("Change encore", reponses=[[appel_outil("modifier", chemin="appli/moteur/code.py", ancien="return 2", nouveau="return 3")], [{"content": "Compris."}]], decider=lambda e: False)
         self.assertIn("return 2", cible.read_text(encoding="utf-8"))
         self.assertTrue(any("Refusé par l'utilisateur" in e["texte"] for e in ev if e["type"] == "resultat"))
         # passage introuvable ou ambigu : erreur claire, pas d'écriture
-        ev = chat("Change mal", reponses=[[appel_outil("modifier", chemin="illustrateur/moteur/code.py", ancien="n'existe pas", nouveau="x")], [{"content": "."}]])
+        ev = chat("Change mal", reponses=[[appel_outil("modifier", chemin="appli/moteur/code.py", ancien="n'existe pas", nouveau="x")], [{"content": "."}]])
         self.assertTrue(any("exactement une fois" in e["texte"] for e in ev if e["type"] == "resultat"))
         self.assertFalse(any(e["type"] == "approbation" for e in ev))
         # accord automatique : pas de question, mais sauvegarde quand même
@@ -1016,7 +1016,7 @@ class Assistant(unittest.TestCase):
         self.assertIn("univers.md", next(e for e in ev if e["type"] == "resultat")["texte"])
         self.assertEqual([m["role"] for m in RECUES[-1]["messages"]][-2:], ["assistant", "tool"], "l'appel est devenu un vrai appel d'outil")
         ev = chat("Lis", reponses=[[{"content": "<function=lire>\n<parameter=chemin>\ndocs/univers.md\n</parameter>\n</function>"}], [{"content": "Fait."}]])
-        self.assertIn("Aurore est une ville", next(e for e in ev if e["type"] == "resultat")["texte"])
+        self.assertIn("Marly est une ville", next(e for e in ev if e["type"] == "resultat")["texte"])
         ev = chat("Bloc seul", reponses=[[{"content": '```json\n{"name": "lister", "arguments": {"dossier": "docs"}}\n```'}], [{"content": "Fait."}]])
         self.assertTrue(any(e["type"] == "resultat" for e in ev))
         exemple = 'Voici un exemple de format : ```json\n{"name": "lister", "arguments": {"dossier": "docs"}}\n``` ce bloc sert uniquement à illustrer ma réponse, il ne faut surtout pas l\'exécuter vraiment.'
@@ -1135,19 +1135,19 @@ class Assistant(unittest.TestCase):
         self.assertNotIn(".git", plan.replace("gitattributes", ""), "les dossiers techniques sont absents")
         petit = A.texte_plan(300)
         self.assertIn("docs/", petit)
-        self.assertIn("illustrateur/", petit, "un budget serré répartit la place entre les dossiers au lieu de couper les derniers")
+        self.assertIn("appli/", petit, "un budget serré répartit la place entre les dossiers au lieu de couper les derniers")
         systeme = A.consignes_systeme(A.reglages())
         self.assertIn("# PLAN DU PROJET", systeme)
         self.assertIn("univers.md", systeme)
         self.assertEqual(A.texte_plan(100), "", "un budget minuscule ne met rien")
 
     def test_outils_de_recherche_ameliores(self):
-        res = A.outil_chercher("Aurore", "docs", 1)
-        self.assertIn("docs/univers.md:2: Aurore est une ville.", res)
+        res = A.outil_chercher("Marly", "docs", 1)
+        self.assertIn("docs/univers.md:2: Marly est une ville.", res)
         self.assertIn("docs/univers.md-1- # Univers", res, "ligne de contexte avant")
-        self.assertIn("docs/univers.md-3- Le Bourdon", res, "ligne de contexte après")
-        self.assertEqual(A.outil_chercher("Aurore", "docs", 0, "*.py"), "Aucun résultat.", "le filtre de noms de fichiers")
-        self.assertIn("docs/univers.md:2:", A.outil_chercher("Aurore", ".", 0, "*.md,*.py"))
+        self.assertIn("docs/univers.md-3- Le Tonnerre", res, "ligne de contexte après")
+        self.assertEqual(A.outil_chercher("Marly", "docs", 0, "*.py"), "Aucun résultat.", "le filtre de noms de fichiers")
+        self.assertIn("docs/univers.md:2:", A.outil_chercher("Marly", ".", 0, "*.md,*.py"))
         outils = PROJET / "docs" / "outils.py"
         try:
             outils.write_text("def calculer_total(a):\n    return a\n\nx = calculer_total(2)\ny = calculer_total(3)\n", encoding="utf-8")
@@ -1160,8 +1160,8 @@ class Assistant(unittest.TestCase):
                 A.outil_symboles("a b; rm")
         finally:
             outils.unlink(missing_ok=True)
-        multi = A.outil_lire_plusieurs([{"chemin": "docs/univers.md", "fin": 2}, "illustrateur/moteur/code.py", "absent.txt"])
-        self.assertIn("Aurore est une ville.", multi)
+        multi = A.outil_lire_plusieurs([{"chemin": "docs/univers.md", "fin": 2}, "appli/moteur/code.py", "absent.txt"])
+        self.assertIn("Marly est une ville.", multi)
         self.assertIn("def f", multi)
         self.assertIn("Erreur : Fichier introuvable", multi)
         self.assertEqual(multi.count("====="), 2)
@@ -1171,7 +1171,7 @@ class Assistant(unittest.TestCase):
         self.assertEqual(len([e for e in ev if e["type"] == "resultat"]), 2)
 
     def test_rappeler_dans_les_documents_et_les_conversations(self):
-        (PROJET / "docs" / "arc.md").write_text("# La Datura\nDatura est une androïde de trente ans, tatouage à la cheville gauche.\n\n# Les robots\nLes robots de Aurore sont gris mat.\n", encoding="utf-8")
+        (PROJET / "docs" / "arc.md").write_text("# La Orion\nOrion est une androïde de trente ans, tatouage à la cheville gauche.\n\n# Les robots\nLes robots de Marly sont gris mat.\n", encoding="utf-8")
         (PROJET / "docs" / "autre.md").write_text("# Cuisine\nLa soupe de légumes cuit doucement.\n", encoding="utf-8")
         c = A.conv_nouvelle()
         c["titre"] = "Décision pivot"
@@ -1179,7 +1179,7 @@ class Assistant(unittest.TestCase):
         A.conv_ecrire(c)
         try:
             res = A.outil_rappeler("tatouage cheville androide")
-            self.assertTrue(res.startswith("1. docs/arc.md — La Datura"), res)
+            self.assertTrue(res.startswith("1. docs/arc.md — La Orion"), res)
             self.assertNotIn("Cuisine", res.split("\n\n")[0])
             self.assertIn("conversation « Décision pivot »", A.outil_rappeler("pivot fin de saison fixe"))
             self.assertIn("Aucun passage", A.outil_rappeler("zzzxyzabc"))
@@ -1348,7 +1348,7 @@ class Assistant(unittest.TestCase):
         self.assertIn("safe.directory", etat["raison"])
 
     def test_epingler_et_chercher_les_conversations(self):
-        ident = next(e for e in chat("Parlons de la Datura androïde", reponses=[[{"content": "Avec plaisir, la Datura."}]]) if e["type"] == "fin")["conversation"]["id"]
+        ident = next(e for e in chat("Parlons de la Orion androïde", reponses=[[{"content": "Avec plaisir, la Orion."}]]) if e["type"] == "fin")["conversation"]["id"]
         autre = next(e for e in chat("Une conversation plus récente sur autre chose", reponses=[[{"content": "ok"}]]) if e["type"] == "fin")["conversation"]["id"]
         maj = A.conv_lire(ident)["maj"]
         try:
@@ -1357,9 +1357,9 @@ class Assistant(unittest.TestCase):
             premiere = lire("/api/etat")["conversations"][0]
             self.assertEqual((premiere["id"], premiere["epingle"]), (ident, True), "une conversation épinglée passe en haut")
             self.assertEqual(A.conv_lire(ident)["maj"], maj, "épingler ne change pas la date")
-            res = lire("/api/recherche?q=datura+androide")["resultats"] or lire("/api/recherche?q=Datura")["resultats"]
+            res = lire("/api/recherche?q=orion+androide")["resultats"] or lire("/api/recherche?q=Orion")["resultats"]
             trouve = next(r for r in res if r["id"] == ident)
-            self.assertIn("Datura", trouve["extrait"])
+            self.assertIn("Orion", trouve["extrait"])
             self.assertEqual(lire("/api/recherche?q=d"), {"resultats": []}, "une seule lettre : pas de recherche")
             self.assertEqual(lire("/api/recherche?q=zzzintrouvablezzz")["resultats"], [])
         finally:
@@ -2079,7 +2079,7 @@ class Assistant(unittest.TestCase):
         self.assertIn(A.MARQUE_NOTES.strip(), memoire, "la section des notes existe")
         self.assertIn("Décisions de l'utilisateur", memoire)
         for fichier in (contexte, memoire):
-            for personnel in ("RTX", "illustrateur", "Aurore", "Datura", "poube"):
+            for personnel in ("RTX", "C:\\Users\\", "/home/", "@gmail", "@hotmail"):
                 self.assertNotIn(personnel, fichier)
 
     def test_les_modes_et_leurs_outils(self):
@@ -2192,7 +2192,7 @@ class Assistant(unittest.TestCase):
         self.assertFalse((PROJET / "mode2.txt").exists())
 
     def test_rappels_automatiques(self):
-        (PROJET / "docs" / "arc.md").write_text("# La Datura\nDatura est une androïde de trente ans, tatouage à la cheville gauche.\n\n# Les robots\nLes robots de Aurore sont gris mat.\n", encoding="utf-8")
+        (PROJET / "docs" / "arc.md").write_text("# La Orion\nOrion est une androïde de trente ans, tatouage à la cheville gauche.\n\n# Les robots\nLes robots de Marly sont gris mat.\n", encoding="utf-8")
         question = "Parle-moi du tatouage à la cheville de l'androïde"
         try:
             ev = chat(question, reponses=[[{"content": "ok"}]], mode="scenario")

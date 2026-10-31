@@ -133,7 +133,7 @@ If Lutin does not see the card but Ollama does, declare it by hand so that the r
 
 ## Homelab: a Debian mini PC behind a reverse proxy and Authelia
 
-The case of a small shared server (for example an Intel Core Ultra 5 mini PC with 32 GB of RAM of which only about ten are free), running Debian, where Lutin is reachable at `https://lutin.example.com` behind your reverse proxy and **Authelia**.
+The case of a small shared server (for example a machine with 16 to 32 GB of RAM of which only about ten are free), running Debian, where Lutin is reachable at `https://lutin.example.com` behind your reverse proxy and **Authelia**.
 
 > **Honesty.** This setup was checked with a **fake proxy** (simulated `Host` and `Remote-User` headers: access, refusal without identity, refusal of a wrong host name, administration rights) and by the CI tests. It has **never run with a real Authelia, a real Debian or this processor**: the response times below are orders of magnitude, not measurements.
 

@@ -78,9 +78,9 @@ class HoteEtOrigine(unittest.TestCase):
 
 class Proxy(unittest.TestCase):
     def test_identite_acceptee_seulement_depuis_le_proxy(self):
-        en_tetes = {"Remote-User": "clement"}
-        self.assertEqual(s.identite_proxy(PROXY, "192.168.1.10", en_tetes), "clement")
-        self.assertEqual(s.identite_proxy(PROXY, "10.0.0.42", en_tetes), "clement", "réseau déclaré")
+        en_tetes = {"Remote-User": "alice"}
+        self.assertEqual(s.identite_proxy(PROXY, "192.168.1.10", en_tetes), "alice")
+        self.assertEqual(s.identite_proxy(PROXY, "10.0.0.42", en_tetes), "alice", "réseau déclaré")
         self.assertIsNone(s.identite_proxy(PROXY, "192.168.1.99", en_tetes), "en-tête falsifié par un autre appareil")
         self.assertIsNone(s.identite_proxy(PROXY, "8.8.8.8", en_tetes))
         self.assertIsNone(s.identite_proxy(PROXY, "pas-une-ip", en_tetes))
@@ -99,14 +99,14 @@ class AdministrateursProxy(unittest.TestCase):
         vrai = os.environ.get("LUTIN_ADMINS")
         try:
             os.environ.pop("LUTIN_ADMINS", None)
-            self.assertFalse(s.est_admin_proxy(PROXY, "192.168.1.10", {"Remote-User": "clement"}), "personne n'est administrateur par défaut")
-            os.environ["LUTIN_ADMINS"] = "Clement, marie;paul"
-            self.assertEqual(s.administrateurs(), {"clement", "marie", "paul"})
-            self.assertTrue(s.est_admin_proxy(PROXY, "192.168.1.10", {"Remote-User": "CLEMENT"}), "à la casse près")
+            self.assertFalse(s.est_admin_proxy(PROXY, "192.168.1.10", {"Remote-User": "alice"}), "personne n'est administrateur par défaut")
+            os.environ["LUTIN_ADMINS"] = "Alice, bob;carol"
+            self.assertEqual(s.administrateurs(), {"alice", "bob", "carol"})
+            self.assertTrue(s.est_admin_proxy(PROXY, "192.168.1.10", {"Remote-User": "ALICE"}), "à la casse près")
             self.assertFalse(s.est_admin_proxy(PROXY, "192.168.1.10", {"Remote-User": "intrus"}))
             self.assertFalse(s.est_admin_proxy(PROXY, "192.168.1.10", {}), "sans identité")
-            self.assertFalse(s.est_admin_proxy(PROXY, "203.0.113.5", {"Remote-User": "clement"}), "l'en-tête n'est cru que du proxy déclaré : n'importe qui peut l'écrire")
-            self.assertFalse(s.est_admin_proxy(LAN, "192.168.1.10", {"Remote-User": "clement"}), "seulement au niveau proxy")
+            self.assertFalse(s.est_admin_proxy(PROXY, "203.0.113.5", {"Remote-User": "alice"}), "l'en-tête n'est cru que du proxy déclaré : n'importe qui peut l'écrire")
+            self.assertFalse(s.est_admin_proxy(LAN, "192.168.1.10", {"Remote-User": "alice"}), "seulement au niveau proxy")
         finally:
             if vrai is None:
                 os.environ.pop("LUTIN_ADMINS", None)

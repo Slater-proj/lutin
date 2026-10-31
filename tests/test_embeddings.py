@@ -78,8 +78,8 @@ class Sens(unittest.TestCase):
         c = _m.conv_nouvelle()
         bourrage = " Voici un long développement quelconque, sans rapport avec le reste." * 12      # chaque sujet fait son propre morceau (environ 800 caractères)
         c["messages"] = [
-            {"role": "user", "content": "Parle-moi de la prison de brume et de ses cellules. La détention y dure des années, personne ne quitte les lieux avant la fin de sa peine." + bourrage},
-            {"role": "user", "content": "Et pour la guitare de Rémi ? Il joue un concert ce soir, c'est sa seule sortie." + bourrage},
+            {"role": "user", "content": "Parle-moi de la grande prison et de ses cellules. La détention y dure des années, personne ne quitte les lieux avant la fin de sa peine." + bourrage},
+            {"role": "user", "content": "Et pour la guitare de Paul ? Il joue un concert ce soir, c'est sa seule sortie." + bourrage},
             {"role": "user", "content": "Quelle recette pour le dîner ? Un plat au four avec des légumes." + bourrage},
         ]
         _m.conv_ecrire(c)

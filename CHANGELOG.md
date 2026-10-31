@@ -2,6 +2,12 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## 0.10.5
+
+- **Exemples génériques partout** : le compose d'exemple, le tutoriel et le prompt n'ont plus de domaine, d'identifiant ni de matériel précis (`lutin.example.com`, `alice`), et les jeux de test n'ont plus de noms venant de projets personnels. Le prompt demande maintenant à l'IA de découvrir elle-même la machine.
+
+**English.** Generic examples everywhere: the example compose file, the tutorial and the prompt no longer carry a specific domain, user name or hardware (`lutin.example.com`, `alice`), and test fixtures no longer use names from personal projects. The prompt now asks the AI to discover the machine itself.
+
 ## 0.10.4
 
 - **Tutoriel Docker complet pour Debian** (`docs/TUTO-DOCKER-DEBIAN.fr.md`) : installer Docker, préparer les dossiers et le réseau, le `docker-compose.yml`, démarrer, installer un modèle, brancher le reverse proxy et Authelia, mises à jour, sauvegarde, dépannage.

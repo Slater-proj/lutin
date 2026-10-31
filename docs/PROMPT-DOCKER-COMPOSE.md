@@ -4,7 +4,7 @@
 
 This prompt is written **for your local AI** (the one that knows your machine and your docker-compose charter). Copy the block below and paste it into a conversation with it. It must be able to work alone: explore your machine read-only, find **your charter**, then hand you a ready-to-use `docker-compose.yml`, a `.env` file, the commands to run and the checks, without asking needless questions.
 
-Before pasting it, re-read the lines marked **TO ADAPT** (the domain name, your Authelia user name): the rest is already filled in with what is known about your machine. The human step-by-step tutorial is in [TUTO-DOCKER-DEBIAN.md](TUTO-DOCKER-DEBIAN.md).
+Before pasting it, replace the three values marked **TO REPLACE** (your domain name, your Authelia user name, the memory budget for the models): the AI discovers the rest itself (processor, memory, reverse proxy, networks). The human step-by-step tutorial is in [TUTO-DOCKER-DEBIAN.md](TUTO-DOCKER-DEBIAN.md).
 
 ````text
 # MISSION
@@ -13,9 +13,10 @@ You are my Docker system administrator. Produce, AUTONOMOUSLY, a ready-to-use `d
 
 # WHAT I GIVE YOU
 
-My machine: a Debian mini PC, Intel Core Ultra 5 125H processor (no graphics card Ollama can use in a container), 32 GB of RAM of which only about 10 GB are free (my other services take the rest). Docker and Docker Compose v2 are (or will be) installed.
-Access: Lutin must be reachable by my reverse proxy at **https://lutin.czone.ovh**   ← TO ADAPT if needed, protected by **Authelia** (which passes the identity in the `Remote-User` header).
-My Authelia user name (Lutin administrator): **clement**   ← TO ADAPT.
+My machine: a server running Debian with Docker and Docker Compose v2 (installed, or to be installed). Describe it yourself: processor, total AND FREE memory, disk, graphics card if any (`lscpu`, `free -h`, `df -h`, `nvidia-smi` if it exists). My other services share the machine: only count on the FREE memory.
+Domain: Lutin must be reachable by my reverse proxy at **https://lutin.example.com**   ← TO REPLACE with my real domain name, protected by **Authelia** (which passes the identity in the `Remote-User` header).
+My Authelia user name (Lutin administrator): **alice**   ← TO REPLACE.
+Memory I reserve for Lutin's models: **8 GB**   ← TO REPLACE (with no value, take about 60% of the free memory, at most).
 My reverse proxy: you must discover it (nginx / Nginx Proxy Manager / SWAG / Traefik / Caddy).
 
 # MY DOCKER-COMPOSE CHARTER
@@ -40,8 +41,8 @@ Run NO command that changes anything (no `up`, `down`, `rm`, `prune`, `chown`, `
 - The container runs as user **1000:1000**: any host folder mounted writable must belong to 1000:1000 (`chown 1000:1000`), otherwise Lutin refuses to start with a clear message.
 - Volumes: `/data` (configuration, conversations, memory, devices: TO BE BACKED UP), `/models` (Ollama models: big, can be downloaded again), `/travail` (the ONLY folder Lutin can read and modify; a host folder to mount). Other working folders, if any: under `/travail/...` and listed in `LUTIN_TRAVAUX` (comma-separated).
 - Environment variables (the ONLY ones to use):
-  `LUTIN_NIVEAU=proxy` (identity provided by the reverse proxy) · `LUTIN_URL_PUBLIQUE=https://lutin.czone.ovh` (any other host name is refused) · `LUTIN_PROXY_IP=<network or address of the reverse proxy as Lutin sees it>` (e.g. `172.30.0.0/24`; the value must match the real subnet of the shared network) · `LUTIN_ADMINS=clement` (Authelia user names allowed to configure from the page; empty = command line only) · `LUTIN_LANGUE=fr` · `LUTIN_BUDGET_GO=8` (maximum GB for the models) · `LUTIN_HORS_LIGNE=1` (optional: no outgoing connection at all) · `LUTIN_TRAVAUX` · `LUTIN_GPU` (useless here) · `OLLAMA_NUM_PARALLEL=1`, `OLLAMA_MAX_LOADED_MODELS=1`, `OLLAMA_KEEP_ALIVE=5m` (memory saving).
-- Memory limit: `mem_limit` (or `deploy.resources.limits.memory`) at about **10g**: Lutin adapts its model advice to this limit. With ~8 GB for the models, the right choices are models of 3 to 4 billion parameters (`qwen3:4b`, `llama3.2:3b`); 7 to 8 billion is borderline.
+  `LUTIN_NIVEAU=proxy` (identity provided by the reverse proxy) · `LUTIN_URL_PUBLIQUE=https://lutin.example.com` (any other host name is refused) · `LUTIN_PROXY_IP=<network or address of the reverse proxy as Lutin sees it>` (e.g. `172.30.0.0/24`; the value must match the real subnet of the shared network) · `LUTIN_ADMINS=alice` (Authelia user names allowed to configure from the page; empty = command line only) · `LUTIN_LANGUE=fr` · `LUTIN_BUDGET_GO=8` (maximum GB for the models) · `LUTIN_HORS_LIGNE=1` (optional: no outgoing connection at all) · `LUTIN_TRAVAUX` · `LUTIN_GPU` (useless here) · `OLLAMA_NUM_PARALLEL=1`, `OLLAMA_MAX_LOADED_MODELS=1`, `OLLAMA_KEEP_ALIVE=5m` (memory saving).
+- Memory limit: `mem_limit` (or `deploy.resources.limits.memory`) a bit above the models' budget (for example 10g for 8 GB): Lutin adapts its model advice to this limit. With ~8 GB for the models, the right choices are models of 3 to 4 billion parameters (`qwen3:4b`, `llama3.2:3b`); 7 to 8 billion is borderline. Without an NVIDIA or AMD card given to the container, everything runs on the CPU (integrated graphics chips are not used).
 - Health: the image already has a HEALTHCHECK (`curl -fsS http://127.0.0.1:8777/`). Only redefine it if my charter requires it, with the same command and a `start_period` of at least 20 s (40 s advised: Ollama starts in the same container).
 - The reverse proxy must: (1) be behind Authelia and pass the identity in `Remote-User`, overwriting any `Remote-User` coming from the client; (2) forward the original `Host`; (3) NOT buffer responses (the answer is shown word by word: `proxy_buffering off` for nginx); (4) allow long timeouts (3600 s) and 30 MB uploads.
 - `restart: unless-stopped`. No secret is needed for Lutin itself (the identity comes from Authelia).
@@ -51,7 +52,7 @@ Run NO command that changes anything (no `up`, `down`, `rm`, `prune`, `chown`, `
 1. **Summary** (5 lines at most): what you discovered (reverse proxy, network, subnet, conventions) and where my charter comes from.
 2. A complete **`docker-compose.yml`**, commented in one line per non-obvious choice, with the reverse-proxy labels/blocks I really use (and only those).
 3. **`.env`** (concrete values, no needless secret).
-4. **Reverse proxy / Authelia files to add**: the exact block (nginx, Traefik, Caddy…) AND the Authelia `access_control` rule for `lutin.czone.ovh` (`two_factor` policy unless my charter says otherwise).
+4. **Reverse proxy / Authelia files to add**: the exact block (nginx, Traefik, Caddy…) AND the Authelia `access_control` rule for my domain (`two_factor` policy unless my charter says otherwise).
 5. **Start-up commands**, in order: creating the stack folder and the working folder, `chown 1000:1000`, creating the network if missing, `docker compose config`, `pull`, `up -d`, installing a model (`docker compose exec lutin lutin modeles installer qwen3:4b`), verification.
 6. **Checks** with the expected result for each: container `healthy`, page reachable behind Authelia, answer shown word by word, my user name recognised as administrator.
 7. **Rollback**: how to undo everything without touching my other stacks.

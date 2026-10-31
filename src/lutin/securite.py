@@ -140,7 +140,7 @@ def ip_dans(ip, reseaux):
 
 
 def administrateurs():
-    """Les identités (en minuscules) qui peuvent configurer Lutin depuis la page au niveau « proxy » : variable LUTIN_ADMINS (« clement,marie »). Vide par défaut : personne, tout se configure alors par la commande lutin."""
+    """Les identités (en minuscules) qui peuvent configurer Lutin depuis la page au niveau « proxy » : variable LUTIN_ADMINS (« alice,bob »). Vide par défaut : personne, tout se configure alors par la commande lutin."""
     return {x.strip().lower() for x in os.environ.get("LUTIN_ADMINS", "").replace(";", ",").replace(" ", ",").split(",") if x.strip()}
 
 

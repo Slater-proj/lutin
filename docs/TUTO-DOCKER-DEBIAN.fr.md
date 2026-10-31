@@ -82,7 +82,7 @@ Modifie ces lignes (le reste convient à un petit serveur partagé) :
 |---|---|
 | `LUTIN_URL_PUBLIQUE` | ton adresse, avec `https://` : `https://lutin.exemple.fr` |
 | `LUTIN_PROXY_IP` | le sous-réseau de l'étape 3 : `172.30.0.0/24` |
-| `LUTIN_ADMINS` | ton identifiant **Authelia** (celui de `Remote-User`) : `clement` |
+| `LUTIN_ADMINS` | ton identifiant **Authelia** (celui de `Remote-User`) : `alice` |
 | `LUTIN_LANGUE` | `fr` |
 | `mem_limit` et `LUTIN_BUDGET_GO` | la mémoire que tu veux réserver à Lutin : `10g` et `"8"` pour environ 10 Go libres |
 | `./travail:/travail` | `/opt/lutin/travail:/travail` |

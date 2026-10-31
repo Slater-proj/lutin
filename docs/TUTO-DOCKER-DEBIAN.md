@@ -82,7 +82,7 @@ Change these lines (the rest suits a small shared server):
 |---|---|
 | `LUTIN_URL_PUBLIQUE` | your address, with `https://`: `https://lutin.example.com` |
 | `LUTIN_PROXY_IP` | the subnet from step 3: `172.30.0.0/24` |
-| `LUTIN_ADMINS` | your **Authelia** user name (the `Remote-User` one): `clement` |
+| `LUTIN_ADMINS` | your **Authelia** user name (the `Remote-User` one): `alice` |
 | `LUTIN_LANGUE` | `fr` or `en` |
 | `mem_limit` and `LUTIN_BUDGET_GO` | the memory you want to reserve for Lutin: `10g` and `"8"` for about 10 GB free |
 | `./travail:/travail` | `/opt/lutin/travail:/travail` |

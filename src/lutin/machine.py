@@ -249,7 +249,7 @@ def _ram_windows():
 
 
 def nom_cpu_linux(texte):
-    """Le nom du processeur d'après /proc/cpuinfo (« Intel(R) Core(TM) Ultra 5 125H »), ou une chaîne vide."""
+    """Le nom du processeur d'après /proc/cpuinfo (« Intel(R) Core(TM) i7-1165G7 »), ou une chaîne vide."""
     for ligne in (texte or "").splitlines():
         if ligne.lower().startswith("model name") and ":" in ligne:
             return " ".join(ligne.split(":", 1)[1].split())
