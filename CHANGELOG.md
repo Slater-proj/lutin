@@ -2,6 +2,12 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## 0.11.2
+
+- **« oui » / « ok » valide ce que le modèle vient de proposer**, au lieu de rejouer une vieille étape de la fiche ou de la liste de tâches (déjà faite, d'où des « c'est déjà fait » suivis de relectures inutiles) ou de ne rien ordonner faute de fiche. L'étape de la fiche n'est plus qu'un rappel, avec la consigne de ne pas la répéter si elle est déjà faite.
+
+**English.** “yes” / “ok” now approves what the model just proposed, instead of replaying an old, already-done step of the sheet or task list.
+
 ## 0.11.1
 
 - Numéros de version du CHANGELOG remis d'équerre : la fonction « modèles hors catalogue mieux jugés » est la **0.11.0** (un titre `feat:` fait monter le numéro du milieu, c'est la règle de publication du projet, voir docs/PUBLISHING.fr.md). **English.** CHANGELOG version numbers aligned: the “models outside the catalogue” feature is **0.11.0** (a `feat:` title bumps the middle number, per the project's publishing rule).

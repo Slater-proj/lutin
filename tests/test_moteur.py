@@ -1851,6 +1851,22 @@ class Assistant(unittest.TestCase):
         self.assertEqual(A.conv_lire(cid)["taches"], [])
         self.assertTrue(any(e["type"] == "taches" and e["liste"] == [] for e in ev), "la page est prévenue : l'encart disparaît")
 
+    def test_un_oui_valide_la_derniere_proposition_meme_sans_fiche_ni_tache(self):
+        """« oui » après « Tu veux que je lance X ? » ordonne d'exécuter X, au lieu de rejouer une vieille étape déjà faite (ou de ne rien faire faute de fiche)."""
+        cid = [e for e in chat("Prépare les prompts", reponses=[[{"content": "C'est fait. Tu veux que je lance ComfyUI et les tests ?"}]]) if e["type"] == "debut"][0]["conversation"]
+        ev = chat("oui", conversation=cid, reponses=[[{"content": "Je lance."}]])
+        self.assertIn("Validation reçue", " ".join(e.get("texte", "") for e in ev if e["type"] == "info"))
+        dernier = RECUES[-1]["messages"][-1]["content"]
+        self.assertIn("ce que tu viens de lui proposer", dernier)
+        conv = A.conv_lire(cid)
+        conv["taches"] = [{"texte": "Réécrire les prompts", "etat": "en_cours"}]
+        A.conv_ecrire(conv)
+        chat("ok", conversation=cid, reponses=[[{"content": "Voilà ?"}]])
+        self.assertIn("peut être déjà faite", RECUES[-1]["messages"][-1]["content"], "l'étape de la fiche n'est qu'un rappel : elle peut être déjà faite")
+        cid2 = [e for e in chat("Bonjour", reponses=[[{"content": "Salut, bienvenue."}]]) if e["type"] == "debut"][0]["conversation"]
+        chat("oui", conversation=cid2, reponses=[[{"content": "?"}]])
+        self.assertNotIn("VALIDER", RECUES[-1]["messages"][-1]["content"], "rien n'a été proposé : pas d'ordre d'exécuter")
+
     def test_le_modele_qui_tourne_en_rond_est_arrete_ou_recoit_l_ordre_d_agir(self):
         """Le même appel d'outil refait : le troisième n'est plus exécuté, le cinquième arrête la réponse. La même réponse deux fois de suite : la demande suivante ordonne d'agir."""
         appel = appel_outil("lister", dossier="docs")

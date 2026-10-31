@@ -442,6 +442,8 @@
 "Nom de cet appareil (facultatif)": "Name of this device (optional)",
 "Se connecter": "Sign in",
 "Erreur ": "Error ",
+"L'utilisateur vient de VALIDER. Exécute maintenant, avec tes outils, ce que tu viens de lui proposer dans ton dernier message. Ne refais pas le plan, ne redemande pas de confirmation ; fais l'action, dis ce qui est fait.": "The user has just APPROVED. Now carry out, with your tools, what you just proposed in your last message. Do not redo the plan, do not ask for confirmation again; do the action and say what was done.",
+"L'utilisateur vient de VALIDER. Exécute maintenant, avec tes outils, ce que tu viens de lui proposer dans ton dernier message. Étape en cours de la fiche, pour mémoire (elle peut être déjà faite : dans ce cas ne le répète pas, vérifie en une action puis passe à la suite) : « {} ». Ne refais pas le plan, ne redemande pas de confirmation ; fais l'action, dis ce qui est fait.": "The user has just APPROVED. Now carry out, with your tools, what you just proposed in your last message. Current step of the sheet, for reference (it may already be done: if so, do not repeat it, check in one action and move on): “{}”. Do not redo the plan, do not ask for confirmation again; do the action and say what was done.",
 "{} milliards de paramètres": "{} billion parameters",
 " dont ~{} qui travaillent à chaque mot": " of which ~{} work on each word",
 "contexte jusqu'à {} jetons": "context up to {} tokens",

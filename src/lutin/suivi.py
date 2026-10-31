@@ -256,6 +256,10 @@ def directive_execution(conv, texte, ident):
         except ValueError:
             etape = []
         cible = etape[0] if etape else ""
-    if not cible:
+    derniere = next((str(m.get("content") or "") for m in reversed(conv.get("messages") or []) if m.get("role") == "assistant" and m.get("content")), "")
+    propose = "?" in derniere[-300:]                                       # ton dernier message se terminait par une proposition ou une question : c'est elle que « oui » valide
+    if not cible and not propose:
         return ""
-    return _t("L'utilisateur vient de VALIDER. Exécute maintenant, avec tes outils : « {} ». Ne refais pas le plan, ne redemande pas de confirmation ; fais l'étape, dis ce qui est fait, puis passe à la suivante si l'utilisateur l'a demandé.").format(cible)
+    if not cible:
+        return _t("L'utilisateur vient de VALIDER. Exécute maintenant, avec tes outils, ce que tu viens de lui proposer dans ton dernier message. Ne refais pas le plan, ne redemande pas de confirmation ; fais l'action, dis ce qui est fait.")
+    return _t("L'utilisateur vient de VALIDER. Exécute maintenant, avec tes outils, ce que tu viens de lui proposer dans ton dernier message. Étape en cours de la fiche, pour mémoire (elle peut être déjà faite : dans ce cas ne le répète pas, vérifie en une action puis passe à la suite) : « {} ». Ne refais pas le plan, ne redemande pas de confirmation ; fais l'action, dis ce qui est fait.").format(cible)
