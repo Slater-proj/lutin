@@ -512,8 +512,7 @@ def installer_modele(modele):
 def supprimer_modele(modele):
     if modele not in [m["id"] for m in _m.MODELES] and not re.match(r"^[A-Za-z0-9_./:-]{1,100}$", modele):
         raise ValueError("Nom de modèle invalide.")
-    if _m.reglages()["modele"] == modele:
-        raise ValueError("C'est le modèle actif : change de modèle actif avant de supprimer.")
+    suppression_active = _m.reglages()["modele"] == modele          # permis : sinon impossible de supprimer son seul modèle (pour déplacer le dossier, par exemple) ; on bascule sur un autre s'il y en a un
     req = urllib.request.Request(_m.OLLAMA + "/api/delete", data=json.dumps({"model": modele}).encode("utf-8"), headers={"Content-Type": "application/json"}, method="DELETE")
     try:
         with urllib.request.urlopen(req, timeout=300) as r:
@@ -524,7 +523,14 @@ def supprimer_modele(modele):
             raise ValueError("Ce modèle n'est pas installé.")
         raise ValueError(_t("Ollama a refusé la suppression : {}").format(corps[:200]))
     CAPACITES.pop(modele, None)
-    return {"ok": True, "modele": modele}
+    nouveau = ""
+    if suppression_active:
+        from . import embeddings
+        restants = [n for n in etat_ollama().get("installes", []) if n != modele and not embeddings.est_modele_de_recherche(n)]
+        if restants:
+            nouveau = restants[0]
+            _m.enregistrer_reglages({"modele": nouveau})
+    return {"ok": True, "modele": modele, "nouveau_actif": nouveau}
 
 
 def consignes_systeme(r):

@@ -3,6 +3,7 @@
 Rien n'est caché : la page « Emplacements » liste tous les dossiers utilisés avec leur taille et la place libre du disque qui les porte. Les tailles sont mesurées avec un temps limité
 (un dossier immense ou un partage réseau lent ne bloque pas la page) et gardées une minute."""
 import os
+import re
 import sys
 import threading
 import time
@@ -25,9 +26,47 @@ def lire_config_modeles():
     return v.strip() if isinstance(v, str) and v.strip() and v.strip().lower() != "null" else ""
 
 
+RE_FROM = re.compile(r"^FROM\s+(.+)$", re.M)
+RE_BLOB = re.compile(r"^(.*)[\\/]blobs[\\/][^\\/]+$")
+_REEL = {"t": 0.0, "v": "", "nom": ""}
+
+
+def depuis_modelfile(texte):
+    """Le dossier des modèles d'après le « Modelfile » d'un modèle installé : sa ligne FROM donne le chemin du fichier réel (…/models/blobs/sha256-…). '' si on n'en trouve pas."""
+    for brut in RE_FROM.findall(texte or ""):
+        m = RE_BLOB.match(brut.strip().strip('"'))
+        if m:
+            return m.group(1)
+    return ""
+
+
+def dossier_indique_par_ollama(maintenant=time.time):
+    """Le dossier des modèles tel qu'Ollama LUI-MÊME l'utilise : on le lui demande (Modelfile d'un modèle installé), sans deviner d'après des variables qui ne sont pas forcément celles
+    du serveur Ollama (le réglage de l'application Ollama, par exemple, n'est pas visible de Lutin). Gardé une minute. '' si Ollama est éteint ou n'a aucun modèle."""
+    if maintenant() - _REEL["t"] < 60:
+        return _REEL["v"]
+    trouve = ""
+    try:
+        o = _m.etat_ollama()
+        if o["actif"]:
+            from . import dialogue
+            for nom in o["installes"][:3]:
+                try:
+                    trouve = depuis_modelfile(dialogue.ollama_json("/api/show", {"model": nom}, 5).get("modelfile"))
+                except (OSError, ValueError):
+                    continue
+                if trouve:
+                    break
+    except (OSError, ValueError, KeyError):
+        trouve = ""
+    _REEL.update(t=maintenant(), v=trouve)
+    return trouve
+
+
 def dossier_modeles():
-    """Le dossier des modèles d'Ollama : la variable OLLAMA_MODELS si elle est posée, sinon celui de la configuration de Lutin, sinon l'emplacement habituel d'Ollama."""
-    return Path(os.environ.get("OLLAMA_MODELS") or lire_config_modeles() or (Path.home() / ".ollama" / "models"))
+    """Le dossier des modèles d'Ollama : celui qu'Ollama dit utiliser s'il répond, sinon la variable OLLAMA_MODELS, sinon la configuration de Lutin, sinon l'emplacement habituel."""
+    reel = dossier_indique_par_ollama()
+    return Path(reel or os.environ.get("OLLAMA_MODELS") or lire_config_modeles() or (Path.home() / ".ollama" / "models"))
 
 
 def definir_dossier_modeles(chemin):
@@ -56,6 +95,7 @@ def definir_dossier_modeles(chemin):
         from . import installation
         installation.definir_variables_utilisateur({"OLLAMA_MODELS": str(p)}, "windows")
     _s.oublier_mesures("disques")
+    _REEL["t"] = 0.0                                                      # l'avis d'Ollama sera redemandé (il ne changera qu'à son redémarrage)
     return p
 
 
@@ -85,7 +125,7 @@ def lister():
     lignes.append(ligne("cache", _t("Cache (fichiers temporaires)"), d["cache"], _t("Catalogue et numéro de version récupérés en ligne (sans risque à supprimer).")))
     o = _m.etat_ollama()
     modeles = ligne("modeles", _t("Modèles d'Ollama"), dossier_modeles(), _t("Les modèles téléchargés : c'est en général le plus gros."), mesurer=False,
-                    modifiable=not docker(), source="OLLAMA_MODELS" if os.environ.get("OLLAMA_MODELS") else ("config" if lire_config_modeles() else "defaut"))
+                    modifiable=not docker(), source="ollama" if dossier_indique_par_ollama() else ("OLLAMA_MODELS" if os.environ.get("OLLAMA_MODELS") else ("config" if lire_config_modeles() else "defaut")))
     if o["actif"] and o.get("tailles"):
         modeles["taille"] = sum(o["tailles"].values())                      # la somme annoncée par Ollama : exacte et instantanée
     else:

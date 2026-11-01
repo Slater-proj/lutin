@@ -535,15 +535,36 @@ class Parcours(unittest.TestCase):
                 const vrai = window.fetch.bind(window);
                 window.fetch = async (u, o) => { const r = await vrai(u, o); if (!String(u).includes('/api/etat')) return r; const d = await r.json(); d.pulls = window.__pulls;
                   return new Response(JSON.stringify(d), {status: 200, headers: {'Content-Type': 'application/json'}}); }; })()""")
-            p.attendre("!document.querySelector('#pTelechargements').hidden", 12)
-            self.assertIn("45 %", p.evaluer("document.querySelector('#pTelechargements').textContent"))
-            self.assertIn("45 / 100", p.evaluer("document.querySelector('#pTelechargements').title"))
+            p.attendre("!document.querySelector('#bandeauTelechargements').hidden", 12)
+            texte = p.evaluer("document.querySelector('#bandeauTelechargements').textContent")
+            self.assertIn("qwen3:4b-q8_0", texte)
+            self.assertIn("45 % (45 / 100", texte)
+            self.assertTrue(p.evaluer("!!document.querySelector('#bandeauTelechargements .barre i')"), "une barre de progression, dans le bandeau bleu : la barre du haut n'est pas encombrée")
+            self.assertTrue(p.evaluer("document.querySelector('#pOllama').parentElement.querySelectorAll('button.puce').length === 0"))
             p.evaluer("window.__pulls = {'qwen3:4b-q8_0': {statut: 'erreur', fait: 0, total: 0, texte: 'pas de réseau'}}")
-            p.attendre("document.querySelector('#pTelechargements').textContent.includes('échec')", 12)
-            self.assertIn("pas de réseau", p.evaluer("document.querySelector('#pTelechargements').title"))
-            p.evaluer("document.querySelector('#pTelechargements').click()")                       # ferme l'erreur et ouvre les modèles
-            self.assertTrue(p.evaluer("document.querySelector('#pTelechargements').hidden"))
-            self.assertTrue(p.evaluer("document.querySelector('.onglets button[data-p=\"modeles\"]').getAttribute('aria-selected') === 'true'"))
+            p.attendre("document.querySelector('#bandeauTelechargements').textContent.includes('échoué')", 12)
+            self.assertIn("pas de réseau", p.evaluer("document.querySelector('#bandeauTelechargements').textContent"))
+            self.assertTrue(p.evaluer("[...document.querySelectorAll('#bandeauTelechargements button')].some(b => b.textContent === 'Réessayer')"))
+            p.evaluer("[...document.querySelectorAll('#bandeauTelechargements button')].find(b => b.textContent === 'Fermer').click()")
+            self.assertTrue(p.evaluer("document.querySelector('#bandeauTelechargements').hidden"), "fermer l'erreur masque le bandeau")
+
+    def test_copier_un_lien_marche_meme_sans_presse_papiers_moderne(self):
+        """Page en http (adresse du réseau local) : navigator.clipboard n'existe pas, la copie passe par un champ temporaire sélectionné."""
+        with self.captures.serveur_demo() as (port, tmp):
+            donnees = tmp / "home" / "donnees"
+            conv = self.captures.conversation_demo("e5f6a7b8", "Un lien", 5)
+            conv["taches"] = []
+            conv["messages"] = [{"role": "user", "content": "Donne-moi le lien"}, {"role": "assistant", "content": "Voici le lien :" + chr(10) + "```" + chr(10) + "https://exemple.org/page?a=1&b=2" + chr(10) + "```"}]
+            (donnees / "conversations" / "e5f6a7b8.json").write_text(json.dumps(conv, ensure_ascii=False), encoding="utf-8")
+            p = self.ouvrir(tmp, "http://127.0.0.1:%d/#conv=e5f6a7b8" % port)
+            p.attendre("!!document.querySelector('#fil .btn-copier')", 12)
+            p.evaluer("""(() => { Object.defineProperty(navigator, 'clipboard', {value: undefined, configurable: true});
+                window.__copie = null; document.execCommand = c => { const a = document.activeElement; window.__copie = (c === 'copy' && a && a.tagName === 'TEXTAREA') ? a.value.slice(a.selectionStart, a.selectionEnd) : null; return true; }; })()""")
+            p.evaluer("document.querySelector('#fil .btn-copier').click()")
+            p.attendre("window.__copie !== null", 8)
+            self.assertEqual(p.evaluer("window.__copie"), "https://exemple.org/page?a=1&b=2", "le lien entier est sélectionné au moment de la copie")
+            self.assertEqual(p.evaluer("document.querySelector('#fil .btn-copier').textContent"), "Copié !")
+            self.assertFalse(p.evaluer("!!document.querySelector('body > textarea')"), "le champ temporaire est retiré")
 
     def test_precision_des_modeles_et_comparaison_cote_a_cote(self):
         with self.captures.serveur_demo() as (port, tmp):

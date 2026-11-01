@@ -223,7 +223,7 @@ details.sous { margin:4px 0 4px 10px; } details.sous > summary { color:var(--mut
 #bandeauEdition { display:flex; gap:10px; align-items:center; padding:6px 16px; background:#221c10; border-top:1px solid var(--warm); color:var(--warm); font-size:.82rem; }
 .corps a { color:var(--accent); }
 .bandeau-version { display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; padding:8px 14px; background:#14304a; border-bottom:1px solid var(--accent2); font-size:.9rem; }
-.bandeau-version .texte { flex:1 1 260px; } .bandeau-version a.btn { color:var(--fg); text-decoration:none; border:1px solid var(--line2); border-radius:8px; padding:4px 10px; background:#1b2a3b; }
+.bandeau-version .texte { flex:1 1 260px; } #bandeauTelechargements { flex-direction:column; align-items:stretch; gap:4px; } #bandeauTelechargements .ligne-dl { display:flex; flex-wrap:wrap; align-items:center; gap:6px 12px; } #bandeauTelechargements .barre { flex:0 1 220px; } #bandeauTelechargements .erreur-dl { color:var(--bad, #e57373); } .bandeau-version a.btn { color:var(--fg); text-decoration:none; border:1px solid var(--line2); border-radius:8px; padding:4px 10px; background:#1b2a3b; }
 .bloc-code { position:relative; }
 .bloc-code pre { margin-top:0; }
 .bloc-code .btn-copier { position:absolute; top:8px; right:8px; background:#1a2634; color:#cfe0f2; border:1px solid var(--line2); border-radius:6px; padding:3px 10px; font-size:.75rem; cursor:pointer; }
@@ -358,13 +358,13 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
 <main>
   <div id="bandeauVersion" class="bandeau-version" role="status" hidden></div>
   <div id="bandeauRedemarrage" class="bandeau-version" role="status" hidden></div>
+  <div id="bandeauTelechargements" class="bandeau-version" role="status" hidden></div>
   <div class="haut">
     <button id="burger" title="Conversations" aria-label="Ouvrir les conversations">☰</button>
     <div class="onglets" role="tablist">
       <button data-p="chat" aria-selected="true" title="Conversation"><span class="ic">💬</span><span class="lb">Conversation</span><i class="travail" id="ptTravail" hidden title="L'assistant travaille"></i></button><button data-p="modeles" aria-selected="false" title="Modèles"><span class="ic">🧠</span><span class="lb">Modèles</span><i class="travail fini" id="ptModeles" hidden title="Nouveautés pour ta machine"></i></button><button data-p="memoire" aria-selected="false" title="Mémoire"><span class="ic">📝</span><span class="lb">Mémoire</span></button><button data-p="auto" aria-selected="false" title="Automatisation : tâches planifiées, travaux de fond"><span class="ic">⏱</span><span class="lb">Automatisation</span></button><button data-p="reglages" aria-selected="false" title="Réglages"><span class="ic">⚙️</span><span class="lb">Réglages</span></button><button id="bSante" data-p="sante" aria-selected="false" title="Santé du PC : mémoire, carte graphique, disques ; test de bon fonctionnement"><span class="ic">⚕</span><span class="lb">Santé</span></button><button data-p="acces" aria-selected="false" title="Qui peut utiliser Lutin, appareils connectés, code PIN"><span class="ic">🔐</span><span class="lb">Accès</span></button>
     </div>
     <span class="puce" id="pOllama"><i></i><span>Ollama</span></span>
-    <button class="puce" id="pTelechargements" hidden style="cursor:pointer"></button>
     <div class="menu">
       <button id="bPlus" aria-label="Plus d'actions" aria-haspopup="true" title="Plus d'actions">⋯</button>
       <div id="menuPlus" hidden>
@@ -651,8 +651,19 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
   const fil = () => $('fil'), bas = () => { fil().scrollTop = fil().scrollHeight; };
   // Copie dans le presse-papiers. Sur le téléphone la page est en http (pas « sécurisée ») : navigator.clipboard n'existe pas, on passe par une zone de texte cachée.
   const copier = async texte => {
-    try { if (navigator.clipboard && window.isSecureContext) { await navigator.clipboard.writeText(texte); return true; } } catch (e) { /* on essaie l'autre méthode */ }
-    try { const t = document.createElement('textarea'); t.value = texte; t.style.cssText = 'position:fixed;opacity:0;top:0;left:0'; document.body.appendChild(t); t.focus(); t.select(); const ok = document.execCommand('copy'); t.remove(); return ok; } catch (e) { return false; }
+    texte = String(texte == null ? '' : texte);
+    if (!texte) return false;
+    try { if (navigator.clipboard && window.isSecureContext) { await navigator.clipboard.writeText(texte); return true; } } catch (e) { /* refus (page sans focus, droits) : on essaie l'autre méthode */ }
+    try {
+      // dans une fenêtre modale le reste de la page est inerte : le champ temporaire doit être DEDANS, sinon rien n'est sélectionné et rien n'est copié
+      const actif = document.activeElement, parent = (actif && actif.closest && actif.closest('dialog, [role=dialog], #modal')) || document.body;
+      const t = document.createElement('textarea'); t.value = texte; t.setAttribute('readonly', ''); t.style.cssText = 'position:fixed;opacity:0;top:0;left:0;width:1px;height:1px';
+      parent.appendChild(t); t.focus(); t.select(); t.setSelectionRange(0, texte.length);
+      const ok = document.execCommand('copy'); t.remove();
+      if (ok) return true;
+    } catch (e) { /* dernier recours ci-dessous */ }
+    try { window.prompt(T('Copie automatique impossible ici : le texte est sélectionné, copie-le avec Ctrl+C.'), texte); } catch (e) { /* rien de plus à faire */ }
+    return false;
   };
   // rendu léger : blocs de code, tableaux, code en ligne, gras
   const rendre = (cible, texte) => {
@@ -662,7 +673,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
       if (i % 2) {
         const m = morceau.match(/^[a-zA-Z0-9_+-]+\n/);
         const langue = m ? m[0].trim() : '';
-        const contenu = m ? morceau.slice(m[0].length) : morceau;
+        const contenu = (m ? morceau.slice(m[0].length) : morceau).replace(/^\n/, '').replace(/\n$/, '');          // pas de ligne vide autour : à l'écran, et surtout à la copie (un lien collé avec un retour à la ligne ne passe pas dans une barre d'adresse)
         const ferme = i < morceaux.length - 1;                 // le bloc est-il terminé ? (pendant l'écriture, le dernier ne l'est pas encore)
         if (langue === 'mermaid' && ferme) {
           // diagramme : on laisse Mermaid dessiner dans un conteneur dédié
@@ -679,7 +690,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
           pre.appendChild(code);
           if (window.hljs) { try { hljs.highlightElement(code); } catch(e) {} }
           const b = el('button', 'btn-copier', T('Copier'));
-          b.onclick = () => { copier(code.textContent).then(ok => { b.textContent = ok ? T('Copié !') : T('Échec'); setTimeout(() => b.textContent = T('Copier'), 1500); }); };
+          b.onclick = () => { copier(code.textContent.replace(/^(?:[ \t]*\n)+/, '').replace(/\s+$/, '')).then(ok => { b.textContent = ok ? T('Copié !') : T('Échec'); setTimeout(() => b.textContent = T('Copier'), 1500); }); };
           w.appendChild(pre); w.appendChild(b); cible.appendChild(w);
         }
       } else {
@@ -1408,24 +1419,35 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
   // Téléchargements : une pastille dans la barre du haut montre l'avancement (et les échecs) de ce qu'on installe, depuis n'importe quel onglet
   const VU_EN_COURS = new Set(), FINIS = new Map(), ERREURS_VUES = new Set();
   const majTelechargements = () => {
-    const b = $('pTelechargements'), pulls = ETAT.pulls || {}, ids = Object.keys(pulls), maintenant = Date.now();
-    const court = id => id.length > 30 ? '…' + id.slice(-29) : id;
+    const b = $('bandeauTelechargements'), pulls = ETAT.pulls || {}, ids = Object.keys(pulls), maintenant = Date.now();
     const encours = ids.filter(id => pulls[id].statut === 'en cours'), erreurs = ids.filter(id => pulls[id].statut === 'erreur' && !ERREURS_VUES.has(id + '|' + pulls[id].texte));
     encours.forEach(id => VU_EN_COURS.add(id));
     ids.filter(id => pulls[id].statut === 'termine' && VU_EN_COURS.has(id) && !FINIS.has(id)).forEach(id => FINIS.set(id, maintenant));
     const finis = [...FINIS].filter(([, t]) => maintenant - t < 12000).map(([id]) => id);
-    b.dataset.erreur = '';
-    if (erreurs.length) {
-      const id = erreurs[0]; b.hidden = false; b.className = 'puce bad'; b.textContent = '⚠ ' + court(id) + T(' : échec'); b.title = pulls[id].texte + T(' — clique pour fermer et ouvrir les modèles'); b.dataset.erreur = id + '|' + pulls[id].texte;
-    } else if (encours.length) {
-      const p = pulls[encours[0]], pct = p.total ? Math.round(100 * p.fait / p.total) : null;
-      b.hidden = false; b.className = 'puce warn'; b.textContent = '⬇ ' + court(encours[0]) + (pct !== null ? ' ' + pct + ' %' : ' …') + (encours.length > 1 ? ' (+' + (encours.length - 1) + ')' : '');
-      b.title = encours.map(id => id + ' : ' + (pulls[id].total ? Math.round(pulls[id].fait / 1e6) + ' / ' + Math.round(pulls[id].total / 1e6) + ' ' + T('Mo') : (pulls[id].texte || '…'))).join(String.fromCharCode(10)) + T(' — clique pour ouvrir les modèles');
-    } else if (finis.length) {
-      b.hidden = false; b.className = 'puce ok'; b.textContent = '✔ ' + court(finis[0]) + T(' installé'); b.title = T('Téléchargement terminé');
-    } else b.hidden = true;
+    const cle = JSON.stringify([encours.map(id => [id, pulls[id].fait, pulls[id].total, pulls[id].texte]), erreurs.map(id => [id, pulls[id].texte]), finis]);
+    if (b.dataset.cle === cle) return;
+    b.dataset.cle = cle; b.textContent = '';
+    if (!encours.length && !erreurs.length && !finis.length) { b.hidden = true; return; }
+    b.hidden = false;
+    const mo = n => Math.round(n / 1e6);
+    encours.slice(0, 3).forEach(id => {
+      const p = pulls[id], pct = p.total ? Math.round(100 * p.fait / p.total) : null, ligne = el('div', 'ligne-dl');
+      ligne.appendChild(el('span', 'texte', '⬇ ' + T('Téléchargement de ') + id + ' : ' + (pct !== null ? pct + ' % (' + mo(p.fait) + ' / ' + mo(p.total) + ' ' + T('Mo') + ')' : (p.texte || '…'))));
+      const barre = el('div', 'barre'), i = el('i'); i.style.width = (pct !== null ? pct : 3) + '%'; barre.appendChild(i); ligne.appendChild(barre);
+      const ouvrir = el('button', '', T('Ouvrir les modèles')); ouvrir.addEventListener('click', () => ouvrirOnglet('modeles')); ligne.appendChild(ouvrir);
+      b.appendChild(ligne);
+    });
+    if (encours.length > 3) b.appendChild(el('div', 'aide', '+ ' + (encours.length - 3) + T(' autres téléchargements en cours')));
+    erreurs.forEach(id => {
+      const ligne = el('div', 'ligne-dl');
+      ligne.appendChild(el('span', 'erreur', '⚠ ' + T('Téléchargement de ') + id + T(' échoué : ') + pulls[id].texte));
+      const retry = el('button', 'principal', T('Réessayer')); retry.disabled = !ETAT.ollama;
+      retry.addEventListener('click', async () => { try { await api('/api/installer-modele', { modele: id }); } catch (e) { alert(e.message); } b.dataset.cle = ''; rafraichir(); });
+      const fermer = el('button', '', T('Fermer')); fermer.addEventListener('click', () => { ERREURS_VUES.add(id + '|' + pulls[id].texte); b.dataset.cle = ''; majTelechargements(); });
+      ligne.append(retry, fermer); b.appendChild(ligne);
+    });
+    finis.forEach(id => b.appendChild(el('div', 'texte', '✔ ' + id + T(' installé'))));
   };
-  $('pTelechargements').addEventListener('click', () => { const e = $('pTelechargements').dataset.erreur; if (e) ERREURS_VUES.add(e); ouvrirOnglet('modeles'); majTelechargements(); });
   const afficherDiagnostic = liste => {
     const bloc = $('diagnostic'), cle = JSON.stringify(liste);
     if (bloc.dataset.cle === cle) return;

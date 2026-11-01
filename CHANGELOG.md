@@ -2,6 +2,15 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## 0.13.5
+
+- **Lutin demande à Ollama où sont ses modèles.** Quand tu changes le dossier des modèles dans l'application Ollama, Lutin ne le voyait pas (le réglage n'est pas visible de l'extérieur). Il lit maintenant le chemin réel dans le Modelfile d'un modèle installé (ligne `FROM …/blobs/sha256-…`), donc la jauge de disque, la page Emplacements et la copie vers un autre dossier suivent ce qu'Ollama utilise vraiment.
+- **On peut supprimer le modèle actif**, même s'il est le seul installé : Lutin bascule sur un autre modèle de discussion s'il y en a un, sinon la bannière d'ouverture dit qu'il faut en installer un. Avant, il refusait (« change de modèle actif avant de supprimer »), ce qui bloquait quand on n'en avait qu'un.
+- **Copier un lien depuis un bloc de code colle bien quelque chose** : le texte copié commençait et finissait par un retour à la ligne (celui des ``` du bloc), et un lien ainsi collé est refusé par la barre d'adresse du navigateur ou de l'explorateur. Les lignes vides autour du bloc disparaissent, à l'écran comme à la copie. La copie est aussi plus robuste (champ temporaire placé dans la fenêtre ouverte, texte sélectionné), et si le navigateur la refuse, le texte est proposé sélectionné pour un Ctrl+C manuel.
+- **Le suivi des téléchargements passe dans le bandeau bleu** (comme « Nouvelle version disponible ») au lieu d'une pastille qui encombrait la barre du haut : modèle, pourcentage, Mo, barre de progression, « Réessayer » et « Fermer » en cas d'échec.
+
+**English.** Lutin asks Ollama where its models are (read from a model's Modelfile), so a models folder changed in the Ollama app is seen. The active model can be deleted (Lutin switches to another one if any). Download tracking now uses the blue banner (like “new version available”) instead of a crowded pill in the top bar.
+
 ## 0.13.4
 
 - **Le modèle de recherche par le sens (nomic-embed-text) n'apparaît plus dans les listes de choix de modèles** : ni dans le sélecteur de la conversation, ni dans le choix du petit modèle annexe, ni dans la commande /modele, ni dans la comparaison. Il travaille en fond et ne sait pas discuter : le choisir donnait une conversation muette. Lutin le refuse aussi côté serveur, et le diagnostic d'ouverture ne le compte plus comme un modèle de discussion (s'il est le seul installé, la bannière « aucun modèle installé » apparaît bien).
