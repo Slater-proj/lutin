@@ -2,6 +2,14 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## 0.13.6
+
+- **« Impossible de télécharger : open …\.ollama\id_ed25519 »** : Ollama garde une clé d'identité (`id_ed25519`) dans son dossier `.ollama`, à côté de son historique et **séparément du dossier des modèles**. Si ce dossier est supprimé ou déplacé pendant qu'Ollama tourne, il ne la retrouve plus et refuse de télécharger. Ce n'est pas un chemin écrit en dur dans Lutin : c'est un fichier qu'Ollama recrée à son démarrage. L'erreur est maintenant expliquée en clair, et le bandeau de téléchargement propose **« Redémarrer Ollama puis réessayer »**.
+
+- L'onglet **Santé** (disques) et la jauge de l'onglet Modèles mesurent le disque du dossier que **Ollama utilise vraiment** et se remettent à jour quand il change ; un test le vérifie.
+
+**English.** When Ollama's `.ollama` folder (holding its identity key, separate from the models folder) is deleted while it runs, downloads fail with a raw `id_ed25519` error. It is now explained, with a “Restart Ollama then retry” button.
+
 ## 0.13.5
 
 - **Lutin demande à Ollama où sont ses modèles.** Quand tu changes le dossier des modèles dans l'application Ollama, Lutin ne le voyait pas (le réglage n'est pas visible de l'extérieur). Il lit maintenant le chemin réel dans le Modelfile d'un modèle installé (ligne `FROM …/blobs/sha256-…`), donc la jauge de disque, la page Emplacements et la copie vers un autre dossier suivent ce qu'Ollama utilise vraiment.

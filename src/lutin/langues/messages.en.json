@@ -442,6 +442,7 @@
 "Nom de cet appareil (facultatif)": "Name of this device (optional)",
 "Se connecter": "Sign in",
 "Erreur ": "Error ",
+"Ollama ne retrouve plus son fichier d'identité (id_ed25519, dans son dossier .ollama : il a été supprimé ou déplacé). Il le recrée à son démarrage : redémarre Ollama, puis réessaie.": "Ollama can no longer find its identity file (id_ed25519, in its .ollama folder: it was deleted or moved). It recreates it at startup: restart Ollama, then retry.",
 "« {} » est un modèle de recherche, pas de discussion : choisis un autre modèle.": "“{}” is a search model, not a chat model: pick another one.",
 "Lister un dossier avec l'outil « lister »": "List a folder with the “lister” tool",
 "Lancer une commande avec l'outil « executer »": "Run a command with the “executer” tool",

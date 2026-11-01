@@ -298,6 +298,7 @@
 "Téléchargement de « ": "Downloading « ",
 " » lancé : il est ajouté à la liste ci-dessus, et apparaîtra dans le choix du modèle une fois installé.": " » started: it is added to the list above, and will appear in the model choice once installed.",
 "Erreur ": "Error ",
+"Redémarrer Ollama puis réessayer": "Restart Ollama then retry",
 "Copie automatique impossible ici : le texte est sélectionné, copie-le avec Ctrl+C.": "Automatic copy is not possible here: the text is selected, copy it with Ctrl+C.",
 " autres téléchargements en cours": " other downloads in progress",
 " échoué : ": " failed: ",

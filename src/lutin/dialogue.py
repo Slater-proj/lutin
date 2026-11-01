@@ -504,7 +504,13 @@ def installer_modele(modele):
                     PULLS[modele].update({"texte": e.get("status", ""), "fait": e.get("completed", PULLS[modele]["fait"]), "total": e.get("total", PULLS[modele]["total"])})
             PULLS[modele]["statut"] = "termine"
         except Exception as erreur:  # noqa: BLE001
-            PULLS[modele].update({"statut": "erreur", "texte": str(erreur)[:300]})
+            texte = str(erreur)[:300]
+            if "id_ed25519" in texte:
+                # Ollama signe ses demandes au registre avec une clé gardée dans son dossier « .ollama » (à côté de son historique, PAS dans le dossier des modèles). Si ce dossier a été supprimé ou
+                # déplacé pendant qu'Ollama tournait, il ne la retrouve plus : il la recrée à son démarrage.
+                PULLS[modele].update({"statut": "erreur", "aide": "redemarrer", "texte": _t("Ollama ne retrouve plus son fichier d'identité (id_ed25519, dans son dossier .ollama : il a été supprimé ou déplacé). Il le recrée à son démarrage : redémarre Ollama, puis réessaie.")})
+            else:
+                PULLS[modele].update({"statut": "erreur", "texte": texte})
     threading.Thread(target=travail, daemon=True).start()
     return PULLS[modele]
 

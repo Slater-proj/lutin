@@ -1441,8 +1441,12 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     erreurs.forEach(id => {
       const ligne = el('div', 'ligne-dl');
       ligne.appendChild(el('span', 'erreur', '⚠ ' + T('Téléchargement de ') + id + T(' échoué : ') + pulls[id].texte));
-      const retry = el('button', 'principal', T('Réessayer')); retry.disabled = !ETAT.ollama;
-      retry.addEventListener('click', async () => { try { await api('/api/installer-modele', { modele: id }); } catch (e) { alert(e.message); } b.dataset.cle = ''; rafraichir(); });
+      const retry = el('button', 'principal', pulls[id].aide === 'redemarrer' ? T('Redémarrer Ollama puis réessayer') : T('Réessayer')); retry.disabled = !ETAT.ollama && pulls[id].aide !== 'redemarrer';
+      retry.addEventListener('click', async () => {
+        retry.disabled = true;
+        try { if (pulls[id].aide === 'redemarrer') await api('/api/redemarrer-ollama', {}); await api('/api/installer-modele', { modele: id }); } catch (e) { alert(e.message); }
+        b.dataset.cle = ''; rafraichir();
+      });
       const fermer = el('button', '', T('Fermer')); fermer.addEventListener('click', () => { ERREURS_VUES.add(id + '|' + pulls[id].texte); b.dataset.cle = ''; majTelechargements(); });
       ligne.append(retry, fermer); b.appendChild(ligne);
     });

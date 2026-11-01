@@ -85,6 +85,8 @@ class FauxOllama(BaseHTTPRequestHandler):
             return self._json(200, {"capabilities": CAPACITES_FAUX.get(corps.get("model"), ["completion", "tools", "thinking"])})
         self.send_response(200); self.send_header("Content-Type", "application/x-ndjson"); self.end_headers()
         if self.path == "/api/pull":
+            if corps.get("model") == "sans-cle:1b":                      # le dossier .ollama a été supprimé pendant qu'Ollama tournait
+                self.wfile.write(ligne(error="pull model manifest: open C:/Users/X/.ollama/id_ed25519: The system cannot find the path specified.")); return
             for t, f in (("pulling manifest", 0), ("downloading", 50), ("downloading", 100), ("success", 100)):
                 self.wfile.write(ligne(status=t, completed=f, total=100)); self.wfile.flush(); time.sleep(0.05)
             INSTALLES.append(corps["model"])
@@ -766,6 +768,29 @@ class Assistant(unittest.TestCase):
         post("/api/reglages", {"modele": "nomic-embed-text:latest"}, attendu=400)
         self.assertEqual(A.reglages()["modele"], avant)
 
+    def test_sante_et_jauges_suivent_le_dossier_des_modeles_d_ollama(self):
+        """L'onglet Santé (disques) et la jauge de l'onglet Modèles mesurent le disque du dossier qu'Ollama utilise vraiment, et se remettent à jour quand il change."""
+        from lutin import emplacements as E
+        from lutin import sante
+        vues = []
+        vrai_espace, vrai_reel = sante.espace_disque, E.dossier_indique_par_ollama
+        vrai_moteur = A.espace_disque
+        sante.espace_disque = A.espace_disque = lambda chemin: (vues.append(str(chemin)), None)[1]
+        try:
+            E.dossier_indique_par_ollama = lambda *a, **k: "Z:/NouveauxModeles"
+            sante.oublier_mesures("disques", "jauge")
+            A.mesurer_disques()
+            E.jauge_modeles()
+            self.assertTrue(any("NouveauxModeles" in v for v in vues), vues)
+            vues.clear()
+            E.dossier_indique_par_ollama = lambda *a, **k: "Y:/EncorAutre"
+            sante.oublier_mesures("disques", "jauge")
+            A.mesurer_disques()
+            self.assertTrue(any("EncorAutre" in v for v in vues) and not any("NouveauxModeles" in v for v in vues), "le nouveau dossier est pris en compte")
+        finally:
+            sante.espace_disque, A.espace_disque, E.dossier_indique_par_ollama = vrai_espace, vrai_moteur, vrai_reel
+            sante.oublier_mesures("disques", "jauge")
+
     def test_le_dossier_des_modeles_est_demande_a_ollama(self):
         """Le réglage de l'application Ollama n'est pas visible de Lutin : on lit le chemin réel dans le Modelfile d'un modèle installé (ligne FROM …/blobs/sha256-…)."""
         from lutin import emplacements as E
@@ -781,6 +806,19 @@ class Assistant(unittest.TestCase):
         finally:
             E.dossier_indique_par_ollama = vrai
         self.assertNotEqual(str(E.dossier_modeles()), "E:" + bs + "Modeles")
+
+    def test_telechargement_sans_fichier_d_identite_ollama_propose_de_redemarrer(self):
+        """Dossier .ollama supprimé pendant qu'Ollama tournait : l'erreur brute (id_ed25519…) est traduite en une explication et un bouton de redémarrage."""
+        post("/api/installer-modele", {"modele": "sans-cle:1b"})
+        for _ in range(60):
+            if lire("/api/etat")["pulls"]["sans-cle:1b"]["statut"] != "en cours":
+                break
+            time.sleep(0.05)
+        p = lire("/api/etat")["pulls"]["sans-cle:1b"]
+        self.assertEqual((p["statut"], p.get("aide")), ("erreur", "redemarrer"))
+        self.assertIn("redémarre Ollama", p["texte"])
+        self.assertNotIn("The system cannot find", p["texte"], "plus de message brut incompréhensible")
+        A.PULLS.pop("sans-cle:1b", None)
 
     def test_un_modele_qui_reflechit_sans_repondre_est_relance_puis_explique(self):
         ev = chat("Bonjour", reponses=[[{"thinking": "hum"}], [{"content": "Voilà la réponse."}]])
