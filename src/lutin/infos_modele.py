@@ -58,6 +58,8 @@ def extraire(show):
     caps = show.get("capabilities")
     if isinstance(caps, list):
         sortie["capacites"] = [CAPACITES_LUTIN[c] for c in caps if c in CAPACITES_LUTIN]
+        if "embedding" in caps:
+            sortie["embedding"] = True                       # sert à la recherche par le sens, pas à discuter
     return sortie
 
 
@@ -65,6 +67,8 @@ def phrase(infos):
     """Une phrase honnête sur un modèle découvert, tirée de ce qu'Ollama en dit (rien d'inventé : seulement ce qui est connu)."""
     if not infos:
         return ""
+    if infos.get("embedding"):
+        return _t("Modèle de recherche par le sens (Réglages > Conversation) : il retrouve des passages, il ne discute pas.")
     morceaux = []
     if infos.get("params_b"):
         morceaux.append(_t("{} milliards de paramètres").format(infos["params_b"]) + ((_t(" dont ~{} qui travaillent à chaque mot").format(infos["actifs_b"])) if infos.get("actifs_b") and infos["actifs_b"] < 0.7 * infos["params_b"] else ""))

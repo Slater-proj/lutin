@@ -496,6 +496,35 @@ class Parcours(unittest.TestCase):
             self.assertNotIn("pas encore dans Lutin", p.evaluer("document.querySelector('#listeTravaux').textContent"))
             self.assertEqual(p.erreurs, [])
 
+    def test_recherche_par_le_sens_progression_suppression_et_ligne_dans_la_liste_des_modeles(self):
+        with self.captures.serveur_demo() as (port, tmp):
+            p = self.ouvrir(tmp, "http://127.0.0.1:%d/" % port)
+            # l'état d'Ollama est fabriqué : téléchargement à 45 %, puis modèle installé
+            p.evaluer("""(() => { window.__emb = {actif: true, modele: 'nomic-embed-text', installe: false, installation: {etat: 'en cours', fait: 45000000, total: 100000000, erreur: '', texte: 'pulling'}};
+                const vrai = window.fetch.bind(window);
+                window.fetch = async (u, o) => { const r = await vrai(u, o); if (!String(u).includes('/api/etat')) return r; const d = await r.json(); d.embeddings = window.__emb;
+                  if (window.__emb.installe) { d.installes = [...d.installes, 'nomic-embed-text']; d.modeles = [...d.modeles, {id: 'nomic-embed-text', nom: 'nomic-embed-text', go: 0.3, role: 'perso', origine: 'installe', embedding: true}]; }
+                  return new Response(JSON.stringify(d), {status: 200, headers: {'Content-Type': 'application/json'}}); }; })()""")
+            p.evaluer(onglet("reglages"))
+            p.evaluer("document.querySelector('#cSens').checked = true; document.querySelector('#cSens').dispatchEvent(new Event('change'))")
+            p.attendre("document.querySelector('#aideSens').textContent.includes('45 %')", 12)
+            self.assertTrue(p.evaluer("!!document.querySelector('#aideSens .barre i')"), "une barre de progression")
+            self.assertIn("45 / 100", p.evaluer("document.querySelector('#aideSens').textContent"))
+            p.evaluer("window.__emb.installe = true; window.__emb.installation = {etat: 'fini', fait: 100000000, total: 100000000, erreur: '', texte: ''}")
+            p.attendre("[...document.querySelectorAll('#aideSens button')].some(b => b.textContent === 'Supprimer ce modèle')", 12)
+            self.assertIn("Modèle de recherche installé", p.evaluer("document.querySelector('#aideSens').textContent"))
+            # dans l'onglet Modèles : une puce explique à quoi il sert, et aucun « Utiliser » ni banc d'essai
+            p.evaluer(onglet("modeles"))
+            p.attendre("document.querySelectorAll('#listeModeles details.famille, #listeModeles .mod').length > 3")
+            p.evaluer("document.querySelectorAll('#listeModeles details.famille').forEach(d => d.open = true)")
+            ligne = "[...document.querySelectorAll('#listeModeles .mod')].find(m => m.textContent.includes('nomic-embed-text'))"
+            p.attendre("!!(" + ligne + ")", 12)
+            self.assertIn("recherche par le sens", p.evaluer(ligne + ".querySelector('.mod-nom').textContent"))
+            boutons = p.evaluer("[..." + ligne + ".querySelectorAll('button')].map(b => b.textContent)")
+            self.assertNotIn("Utiliser", boutons)
+            self.assertNotIn("⏱", boutons)
+            self.assertIn("Supprimer", boutons)
+
     def test_precision_des_modeles_et_comparaison_cote_a_cote(self):
         with self.captures.serveur_demo() as (port, tmp):
             p = self.ouvrir(tmp, "http://127.0.0.1:%d/" % port)

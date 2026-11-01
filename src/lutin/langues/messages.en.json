@@ -442,6 +442,7 @@
 "Nom de cet appareil (facultatif)": "Name of this device (optional)",
 "Se connecter": "Sign in",
 "Erreur ": "Error ",
+"Modèle de recherche par le sens (Réglages > Conversation) : il retrouve des passages, il ne discute pas.": "Meaning-based search model (Settings > Conversation): it finds passages, it does not chat.",
 "Cette machine n'a que {} cœurs : il n'y a rien à comparer.": "This machine only has {} cores: there is nothing to compare.",
 "Aucun résultat à appliquer : lance d'abord la mesure.": "No result to apply: run the measurement first.",
 "Une réponse est en cours : la mesure serait faussée. Attends sa fin.": "An answer is in progress: the measurement would be skewed. Wait for it to finish.",

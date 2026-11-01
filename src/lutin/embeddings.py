@@ -29,7 +29,6 @@ LOT = 16                       # passages vectorisés par appel
 SEUIL = 0.55                   # similarité (cosinus) minimale pour compter comme « du même sens »
 PAUSE_APRES_ECHEC = 60         # secondes sans réessayer après un échec (modèle absent, Ollama éteint)
 ECHEC = {"jusqua": 0.0, "vu": False}
-INSTALLATION = {"etat": "", "fait": 0, "total": 0, "erreur": ""}
 INSTALLE_CACHE = {"t": 0.0, "v": False, "modele": ""}
 VERROU = threading.Lock()
 
@@ -55,7 +54,7 @@ def installe(forcer=False):
 
 
 def etat():
-    return {"actif": actif(), "modele": nom_modele(), "installe": installe(), "installation": dict(INSTALLATION)}
+    return {"actif": actif(), "modele": nom_modele(), "installe": installe(forcer=True), "installation": installation()}
 
 
 # --------------------------------------------------------------------------- vecteurs
@@ -161,34 +160,16 @@ def similarites(ident, morceaux, question, budget=8.0):
 
 
 # --------------------------------------------------------------------------- installation du modèle
-def _installer(modele):
-    t = INSTALLATION
-    try:
-        req = urllib.request.Request(_m.OLLAMA + "/api/pull", data=json.dumps({"model": modele, "stream": True}).encode("utf-8"), headers={"Content-Type": "application/json"})
-        with urllib.request.urlopen(req, timeout=3600) as r:
-            for brut in r:
-                try:
-                    x = json.loads(brut.decode("utf-8"))
-                except ValueError:
-                    continue
-                if x.get("error"):
-                    raise ValueError(str(x["error"])[:300])
-                if x.get("total"):
-                    t["total"], t["fait"] = int(x["total"]), int(x.get("completed") or 0)
-        t["etat"] = "fini"
-        INSTALLE_CACHE["t"] = 0.0
-        ECHEC["jusqua"] = 0.0
-    except (urllib.error.URLError, OSError, ValueError) as erreur:
-        t.update(etat="erreur", erreur=_t("Téléchargement impossible : {}").format(erreur))
+def installation():
+    """Où en est le téléchargement du modèle de recherche : {etat: '' | 'en cours' | 'fini' | 'erreur', fait, total, erreur}. C'est le même suivi que pour tous les modèles (onglet Modèles)."""
+    p = (_m.PULLS.get(nom_modele()) or {})
+    etat_ = {"en cours": "en cours", "termine": "fini", "erreur": "erreur"}.get(p.get("statut"), "")
+    return {"etat": etat_, "fait": int(p.get("fait") or 0), "total": int(p.get("total") or 0), "erreur": str(p.get("texte") or "") if etat_ == "erreur" else "", "texte": str(p.get("texte") or "")}
 
 
 def demarrer_installation():
-    """Télécharge le modèle d'embeddings dans Ollama, en arrière-plan (la progression est dans etat())."""
-    from . import horsligne
-    horsligne.exiger_en_ligne(_t("télécharger un modèle"))
-    with VERROU:
-        if INSTALLATION["etat"] == "en cours":
-            return dict(INSTALLATION)
-        INSTALLATION.update(etat="en cours", fait=0, total=0, erreur="")
-    threading.Thread(target=_installer, args=(nom_modele(),), daemon=True, name="embeddings-installation").start()
-    return dict(INSTALLATION)
+    """Télécharge le modèle de recherche dans Ollama, en arrière-plan : il entre dans la liste de l'onglet Modèles comme les autres (progression, suppression)."""
+    _m.installer_modele(nom_modele())
+    INSTALLE_CACHE["t"] = 0.0
+    ECHEC["jusqua"] = 0.0
+    return installation()

@@ -137,16 +137,29 @@ class Sens(unittest.TestCase):
         self.assertTrue(embeddings._chemin(self.ident).exists())
         self.assertFalse(embeddings._chemin("zzzzzzzz").exists())
 
-    def test_l_installation_telecharge_en_arriere_plan_avec_sa_progression(self):
-        embeddings.INSTALLATION.update(etat="", fait=0, total=0, erreur="")
+    def test_l_installation_telecharge_en_arriere_plan_avec_sa_progression_comme_tous_les_modeles(self):
+        """Le téléchargement passe par le même suivi que les modèles de l'onglet Modèles : progression, entrée dans la liste, suppression possible."""
+        embeddings._m.PULLS.pop("nomic-embed-text", None)
+        self.assertEqual(embeddings.installation()["etat"], "")
         embeddings.demarrer_installation()
         for _ in range(100):
-            if embeddings.INSTALLATION["etat"] != "en cours":
+            if embeddings.installation()["etat"] != "en cours":
                 break
             time.sleep(0.05)
-        self.assertEqual(embeddings.INSTALLATION["etat"], "fini", embeddings.INSTALLATION)
-        self.assertEqual(embeddings.INSTALLATION["fait"], 1000)
+        i = embeddings.installation()
+        self.assertEqual(i["etat"], "fini", i)
+        self.assertEqual(i["fait"], 1000)
         self.assertEqual(PULL[0]["model"], "nomic-embed-text")
+        self.assertIn("nomic-embed-text", embeddings._m.lire_registre_modeles()["perso"], "le modèle est dans la liste de l'onglet Modèles")
+        embeddings._m.PULLS.pop("nomic-embed-text", None)
+
+    def test_une_erreur_de_telechargement_est_montree_et_on_peut_reessayer(self):
+        embeddings._m.PULLS["nomic-embed-text"] = {"statut": "erreur", "fait": 0, "total": 0, "texte": "pas de réseau"}
+        try:
+            i = embeddings.installation()
+            self.assertEqual((i["etat"], i["erreur"]), ("erreur", "pas de réseau"))
+        finally:
+            embeddings._m.PULLS.pop("nomic-embed-text", None)
 
 
 if __name__ == "__main__":

@@ -421,6 +421,8 @@ def modeles_connus(installes, tailles=None):
                 entree.update({k: infos[k] for k in ("params_b", "actifs_b", "ctx_max", "kv_mo_1k") if k in infos})          # les vrais chiffres d'Ollama au lieu d'une estimation
                 if "capacites" in infos:
                     entree["capacites"] = infos["capacites"]
+                if infos.get("embedding"):
+                    entree["embedding"] = True                                          # la page ne propose ni « Utiliser » ni banc d'essai pour un modèle de recherche
                 entree["phrase"] = _infos.phrase(infos)
         liste.append(entree)
     if a_lire:

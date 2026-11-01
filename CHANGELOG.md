@@ -2,6 +2,13 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## 0.13.1
+
+- **Recherche par le sens : l'installation du modèle se suit et se gère comme celle de tous les modèles.** Avant, le bouton « Installer » restait enfoncé sans rien afficher (la page ne se mettait pas à jour pendant le téléchargement) et le modèle n'était pas supprimable depuis les réglages. Maintenant : barre de progression avec le pourcentage et les Mo, « Réessayer » en cas d'erreur, « Supprimer ce modèle » une fois installé (avec confirmation), et le téléchargement continue si tu fermes la page.
+- Le modèle de recherche (nomic-embed-text) apparaît dans l'onglet Modèles avec la puce « 🔎 utilisé pour la recherche par le sens » (ou « option décochée »), sans bouton « Utiliser » ni banc d'essai : il ne sert pas à discuter. Son téléchargement s'y suit comme pour les autres modèles.
+
+**English.** Meaning-based search: the model install is now tracked and managed like any model: progress bar with percentage and MB, “Retry” on error, “Delete this model” once installed, and it continues if you close the page. The search model shows in the Models tab with a “🔎 used for meaning-based search” badge, without “Use” or benchmark buttons.
+
 ## 0.13.0
 
 - **« ⚡ Optimiser pour cette machine »** (Réglages > Vitesse) : Lutin mesure, avec le modèle choisi, le débit d'écriture pour plusieurs nombres de cœurs du processeur (le tiers, la moitié, les deux tiers, la totalité), deux fois chacun, et propose le plus petit nombre qui écrit à moins de 3 % du meilleur (à vitesse égale, il reste des cœurs pour le reste de la machine). Rien n'est appliqué sans ton clic. 2 à 4 minutes.

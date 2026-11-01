@@ -50,6 +50,12 @@ class Extraction(unittest.TestCase):
         self.assertEqual(im.extraire({"model_info": {"general.parameter_count": True}}), {})
         self.assertEqual(im.extraire({"capabilities": ["completion"]}), {"capacites": []}, "sans outils : on le sait, on le dit")
 
+    def test_un_modele_de_recherche_n_est_pas_presente_comme_un_modele_qui_n_appelle_pas_les_outils(self):
+        i = im.extraire({"capabilities": ["embedding"], "model_info": {"general.architecture": "bert", "general.parameter_count": 137000000}})
+        self.assertTrue(i["embedding"])
+        self.assertIn("recherche par le sens", im.phrase(i))
+        self.assertNotIn("outils", im.phrase(i))
+
     def test_phrase_honnete(self):
         p = im.phrase(im.extraire(show_experts()))
         self.assertIn("30.53 milliards", p)

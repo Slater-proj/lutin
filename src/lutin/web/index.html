@@ -415,6 +415,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
       <span id="msgVerif" class="aide"></span>
     </div>
     <div id="propositions"></div>
+    <div class="aide">Sur chaque modèle, le bouton « Précision » permet de choisir entre 4 bits (petit, rapide), 8 bits (plus fidèle, plus gros) et les autres variantes proposées par Ollama.</div>
     <div class="carte" id="barreCompare" style="gap:8px;flex-wrap:wrap;align-items:center">
       <b>⚖ Comparer des modèles</b>
       <span class="aide">Coche « ⚖ » sur des modèles installés dans la liste, puis lance le banc complet sur chacun : vitesse, outils, code, français et consignes côte à côte, sur cette machine.</span>
@@ -1232,6 +1233,8 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     const l = el('div', 'mod' + (actif && inst ? ' actif' : '')), nom = el('div', 'mod-nom'), desc = el('div', 'mod-desc aide'), acts = el('div', 'mod-actions');
     nom.appendChild(el('b', '', variante(m)));
     nom.appendChild(el('span', 'aide', ' · ' + (m.go ? m.go + T(' Go') : T('taille inconnue')) + ' · ' + m.id + (m.origine === 'perso' ? T(' · ajouté par toi') : m.origine === 'installe' ? T(' · installé hors de l\'application') : '')));
+    const emb = !!m.embedding || !!(ETAT.embeddings && m.id.split(':')[0] === String(ETAT.embeddings.modele).split(':')[0]);          // modèle de recherche par le sens : il ne discute pas
+    if (emb && inst) { const pe = el('span', 'puce ' + (ETAT.embeddings.actif ? 'ok' : 'warn'), ETAT.embeddings.actif ? T('🔎 utilisé pour la recherche par le sens') : T('🔎 modèle de recherche (option décochée)')); pe.title = T('Réglages > Conversation > Recherche par le sens'); nom.appendChild(pe); }
     if (actif && !inst) nom.appendChild(el('span', 'puce warn', T('choisi, mais pas installé'))); else if (actif) nom.appendChild(el('span', 'puce ok', T('★ actif'))); else if (inst) nom.appendChild(el('span', 'puce ok', T('✔ installé')));
     const ad = (ETAT.adequation || {})[m.id];
     if (ad) { const classe = { ideal: 'ok', bien: 'ok', limite: 'warn', trop_gros: 'bad' }[ad.niveau], libelle = { ideal: T('Très adapté'), bien: T('Adapté'), limite: T('Limite'), trop_gros: T('Trop gros') }[ad.niveau]; const p = el('span', 'puce ' + classe); p.appendChild(document.createElement('i')); p.appendChild(document.createTextNode(libelle)); p.title = ad.texte; nom.appendChild(p); }
@@ -1242,14 +1245,14 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     if (bench.en_cours === m.id) texte = T('⏳ Mesure en cours : ') + bench.etape;
     desc.textContent = texte; desc.title = texte + (m.avertissement ? '\n⚠ ' + m.avertissement : '');
     if (inst) {
-      if (!actif) { const u = el('button', 'principal', T('Utiliser')); u.title = T('En faire le modèle de la conversation'); u.addEventListener('click', async () => { try { await api('/api/reglages', { modele: m.id }); $('selModele').value = m.id; rafraichir(); } catch (e) { alert(e.message); } }); acts.appendChild(u); }
+      if (!actif && !emb) { const u = el('button', 'principal', T('Utiliser')); u.title = T('En faire le modèle de la conversation'); u.addEventListener('click', async () => { try { await api('/api/reglages', { modele: m.id }); $('selModele').value = m.id; rafraichir(); } catch (e) { alert(e.message); } }); acts.appendChild(u); }
       const bv = el('button', '', '⏱'), bc = el('button', '', '📊');
       bv.title = T('⏱ Tester la vitesse') + ' : ' + T('Environ 20 secondes (plus si le modèle doit d\'abord se charger)'); bv.disabled = occupe;
       bc.title = T('📊 Banc complet') + ' : ' + T('Vitesse, appel d\'outils, code, français, consignes : onze petites questions, quelques minutes'); bc.disabled = occupe;
       [[bv, true], [bc, false]].forEach(([b, rapide]) => b.addEventListener('click', async () => { try { await api('/api/bench', { modele: m.id, rapide }); rafraichir(); } catch (e) { $('msgModeles').textContent = e.message; } }));
       const x = el('button', 'danger', T('Supprimer')); x.title = T('Supprimer ce modèle de la machine');
       x.addEventListener('click', async () => { if (!confirm(T('Supprimer « ') + m.nom + T(' » ? Le téléchargement sera refait si tu le réinstalles.'))) return; try { await api('/api/supprimer-modele', { modele: m.id }); rafraichir(); } catch (e) { alert(e.message); } });
-      acts.append(bv, bc, x);
+      if (emb) acts.append(x); else acts.append(bv, bc, x);
     } else if (p && p.statut === 'en cours') {
       const b = el('div', 'barre'), i = el('i'); i.style.width = (p.total ? Math.round(100 * p.fait / p.total) : 3) + '%'; b.appendChild(i); acts.appendChild(b);
       desc.textContent = p.texte + (p.total ? ' ' + Math.round(100 * p.fait / p.total) + ' %' : ''); desc.title = desc.textContent;
@@ -1263,7 +1266,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
       o.addEventListener('click', async () => { if (!confirm(T('Retirer « ') + m.nom + T(' » de la liste ?') + (m.origine === 'catalogue' ? T('\n(Tu pourras le remettre avec « Rétablir la liste d\'origine ».)') : ''))) return; try { await api('/api/oublier-modele', { modele: m.id }); rafraichir(); } catch (e) { $('msgModeles').textContent = e.message; } });
       acts.appendChild(o);
     }
-    if (/^[a-z0-9._-]+:[a-z0-9._]+$/i.test(m.id)) {
+    if (!emb && /^[a-z0-9._-]+:[a-z0-9._]+$/i.test(m.id)) {
       const bp = el('button', '', T('Précision')); bp.title = T("Voir les précisions disponibles (4 bits, 8 bits…) de ce modèle");
       bp.addEventListener('click', () => {
         if (VARIANTES.has(m.id)) { VARIANTES.delete(m.id); listeModeles(); return; }
@@ -1272,7 +1275,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
       });
       acts.appendChild(bp);
     }
-    if (inst) {
+    if (inst && !emb) {
       const lc = el('label', 'aide'), cc = document.createElement('input'); cc.type = 'checkbox'; cc.checked = COMPARER.has(m.id); lc.title = T('Ajouter à la comparaison');
       cc.addEventListener('change', () => { if (cc.checked) COMPARER.add(m.id); else COMPARER.delete(m.id); afficherComparaison(); });
       lc.append(cc, document.createTextNode(' ⚖')); acts.appendChild(lc);
@@ -1454,7 +1457,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     $('pOllama').classList.toggle('ok', ETAT.ollama); $('pOllama').lastChild.textContent = ETAT.ollama ? T('Ollama prêt') : (ETAT.ollama_installe ? T('Ollama arrêté') : T('Ollama non installé')); $('pOllama').title = $('pOllama').lastChild.textContent;
     $('bDemarrer').hidden = ETAT.ollama || !ETAT.ollama_installe;
     afficherDiagnostic(ETAT.diagnostic || []);
-    afficherCalibrage(); majAnnexe();
+    afficherCalibrage(); majAnnexe(); majSens();
     $('racine').textContent = T('Projet : ') + ETAT.racine;
     // Le choix du modèle ne propose que les modèles INSTALLÉS (l'installation se fait dans l'onglet Modèles).
     const s = $('selModele'), v = s.value || ETAT.reglages.modele; s.textContent = '';
@@ -1786,14 +1789,36 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
   const fichePart = () => String(ETAT.reglages.fiche_part || 10);
   // Recherche par le sens : il faut un petit modèle d'Ollama ; la page dit s'il est là et propose de l'installer
   const majSens = () => {
-    const z = $('aideSens'), e = ETAT.embeddings; z.textContent = '';
+    const z = $('aideSens'), e = ETAT.embeddings, cle = JSON.stringify([e, $('cSens').checked]);
+    if (z.dataset.cle === cle) return;
+    z.dataset.cle = cle; z.textContent = '';
     if (!e || !$('cSens').checked) return;
     const i = e.installation || {};
-    if (e.installe) { z.textContent = T('✔ Modèle de recherche installé : ') + e.modele + '.'; return; }
-    if (i.etat === 'en cours') { z.textContent = T('Téléchargement de ') + e.modele + ' : ' + (i.total ? Math.round(100 * i.fait / i.total) + ' %' : '…'); return; }
+    const installer = libelle => {
+      const b = el('button', 'principal', libelle);
+      b.addEventListener('click', async () => { b.disabled = true; try { await api('/api/embeddings-installer', {}); z.dataset.cle = ''; rafraichir(); } catch (er) { z.appendChild(el('span', 'attention', ' ' + er.message)); b.disabled = false; } });
+      return b;
+    };
+    if (i.etat === 'en cours') {
+      const pct = i.total ? Math.round(100 * i.fait / i.total) : 0, barre = el('div', 'barre'), rempli = el('i'); rempli.style.width = (i.total ? pct : 3) + '%'; barre.appendChild(rempli);
+      z.appendChild(el('div', '', T('Téléchargement de ') + e.modele + ' : ' + (i.total ? pct + ' % (' + Math.round(i.fait / 1e6) + ' / ' + Math.round(i.total / 1e6) + ' ' + T('Mo') + ')' : (i.texte || '…'))));
+      z.appendChild(barre);
+      z.appendChild(el('div', 'aide', T('Le téléchargement continue si tu fermes cette page. Il apparaît aussi dans l\'onglet Modèles.')));
+      return;
+    }
+    if (e.installe) {
+      z.appendChild(el('span', '', T('✔ Modèle de recherche installé : ') + e.modele + '. '));
+      const s = el('button', 'danger', T('Supprimer ce modèle'));
+      s.title = T('Désinstalle ce modèle d\'Ollama (la recherche par le sens ne marchera plus tant que tu ne le réinstalles pas)');
+      s.addEventListener('click', async () => {
+        if (!confirm(T('Supprimer « ') + e.modele + T(' » ? La recherche par le sens ne marchera plus tant que tu ne l\'auras pas réinstallé.'))) return;
+        s.disabled = true; try { await api('/api/supprimer-modele', { modele: e.modele }); z.dataset.cle = ''; rafraichir(); } catch (er) { z.appendChild(el('span', 'attention', ' ' + er.message)); s.disabled = false; }
+      });
+      z.appendChild(s);
+      return;
+    }
     z.appendChild(document.createTextNode(T('Il faut le petit modèle ') + e.modele + T(' (environ 270 Mo). ')));
-    const b = el('button', 'principal', T('Installer')); b.addEventListener('click', async () => { b.disabled = true; try { await api('/api/embeddings-installer', {}); rafraichir(); } catch (er) { z.appendChild(el('span', 'attention', ' ' + er.message)); } });
-    z.appendChild(b);
+    z.appendChild(installer(i.etat === 'erreur' ? T('Réessayer') : T('Installer')));
     if (i.etat === 'erreur') z.appendChild(el('span', 'attention', ' ' + i.erreur));
   };
   $('cSens').addEventListener('change', majSens);
