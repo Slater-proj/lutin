@@ -2,6 +2,15 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## 0.13.0
+
+- **« ⚡ Optimiser pour cette machine »** (Réglages > Vitesse) : Lutin mesure, avec le modèle choisi, le débit d'écriture pour plusieurs nombres de cœurs du processeur (le tiers, la moitié, les deux tiers, la totalité), deux fois chacun, et propose le plus petit nombre qui écrit à moins de 3 % du meilleur (à vitesse égale, il reste des cœurs pour le reste de la machine). Rien n'est appliqué sans ton clic. 2 à 4 minutes.
+- **Petit modèle pour les tâches annexes** (option, désactivée par défaut) : mise à jour de la fiche de suivi, résumés et titres peuvent passer par un modèle plus petit et plus rapide. Il faut de la place en mémoire pour deux modèles, et `OLLAMA_MAX_LOADED_MODELS` ne doit pas valoir 1 (sinon Ollama recharge un modèle à chaque changement).
+- **Réflexion pendant les outils** (option, comportement actuel par défaut) : « seulement avant la première réponse » évite de refaire la réflexion à chaque retour d'outil.
+- Non fait volontairement : raccourcir les descriptions des outils (≈ 2 600 jetons). Elles guident les modèles, et comme elles sont au début de la requête, Ollama les garde en cache : le gain serait faible pour un risque de dégrader les réponses.
+
+**English.** “⚡ Optimise for this machine” (Settings > Speed): measures write speed with several core counts and suggests the smallest one within 3% of the best; nothing is applied without your click. Optional small model for side tasks (tracking-sheet update, summaries, titles) and optional “thinking only before the first answer” while using tools; both off by default.
+
 ## 0.12.0
 
 - **Choisir la précision d'un modèle (4 bits, 8 bits…)** : le bouton **Précision** de chaque modèle de l'onglet Modèles liste ses variantes (`q4_K_M`, `q8_0`, `fp16`…) lues sur ollama.com, avec leur taille, ce que cette machine en pense (« Adapté », « Limite », « Trop gros ») et ce que la précision change. Plus elle est basse, plus le modèle est petit et rapide, mais moins fin : surtout pour les petits modèles et leurs appels d'outils.

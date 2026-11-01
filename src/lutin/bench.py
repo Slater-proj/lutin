@@ -105,12 +105,13 @@ def _resultat(details):
 
 
 class Banc:
-    def __init__(self, ollama, modele, num_ctx=4096, delai=300):
+    def __init__(self, ollama, modele, num_ctx=4096, delai=300, options=None):
         self.ollama, self.modele, self.num_ctx, self.delai = ollama, modele, num_ctx, delai
+        self.options = dict(options or {})                 # options d'Ollama en plus (le calibrage y met num_thread)
         self.penser = True
 
     def demander(self, messages, outils=None, num_predict=200):
-        corps = {"model": self.modele, "messages": messages, "stream": False, "options": {"temperature": 0, "num_predict": num_predict, "num_ctx": self.num_ctx}}
+        corps = {"model": self.modele, "messages": messages, "stream": False, "options": dict({"temperature": 0, "num_predict": num_predict, "num_ctx": self.num_ctx}, **self.options)}
         if outils:
             corps["tools"] = outils
         if self.penser:

@@ -63,7 +63,7 @@ REGLAGES_DEFAUT = {"modele": os.environ.get("LUTIN_MODELE") or "qwen3:8b", "avan
                     "top_p": None, "top_k": None, "min_p": None, "repeat_penalty": None,          # None = valeur conseillée pour la famille du modèle (voir profil_echantillonnage)
                     "garde_ressources": True, "seuil_ram_go": 3.0, "seuil_disque_go": 10.0, "plafond_donnees_go": 2.0, "limite_ram_commande_go": 0.0,
                     "liberer_si_comfy": True, "rappels_auto": "scenario",
-                    "num_thread": None, "garde_min": None, "essai_a_blanc": False, "copie_conversations": False, "conseil_machine": True, "memoire_longue": "demander", "fiche_part": 10, "fiche_scribe": True, "recherche_sens": False, "modele_embeddings": "nomic-embed-text"}          # charge de la machine : cœurs du processeur utilisés et minutes de garde du modèle en mémoire (None = automatique)          # rappels_auto : « scenario » (mode scénariste seulement), « toujours » ou « jamais »
+                    "num_thread": None, "garde_min": None, "essai_a_blanc": False, "copie_conversations": False, "conseil_machine": True, "modele_annexe": "", "reflexion_tours": "toujours", "memoire_longue": "demander", "fiche_part": 10, "fiche_scribe": True, "recherche_sens": False, "modele_embeddings": "nomic-embed-text"}          # charge de la machine : cœurs du processeur utilisés et minutes de garde du modèle en mémoire (None = automatique)          # rappels_auto : « scenario » (mode scénariste seulement), « toujours » ou « jamais »
 CHOIX_RAPPELS = ("scenario", "toujours", "jamais")
 BORNES_CHARGE = {"num_thread": (1, 256), "garde_min": (0, 240)}
 BORNES_RESSOURCES = {"seuil_ram_go": (0.5, 64.0), "seuil_disque_go": (1.0, 2000.0), "plafond_donnees_go": (0.2, 500.0), "limite_ram_commande_go": (0.0, 256.0)}
@@ -458,6 +458,7 @@ from .dialogue import (  # noqa: F401  (déplacé dans dialogue.py : moteur ré-
     compacter_conversation,
     elaguer,
     memoire_longue,
+    modele_annexe,
     repondre_choix_memoire,
     consignes_systeme,
     duree_garde,

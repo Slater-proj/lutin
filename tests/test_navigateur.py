@@ -67,6 +67,8 @@ class Parcours(unittest.TestCase):
         p.aller(adresse)
         p.attendre("!!document.querySelector('#bNouvelle')")
         p.evaluer("window.confirm = () => true")                  # les fenêtres du navigateur bloqueraient le test : on répond « oui »
+        if "#conv=" in adresse:
+            p.attendre("!!document.querySelector('.conv.choisie')")          # la conversation du lien est OUVERTE (sa présence dans la liste ne suffit pas : un message envoyé trop tôt partirait dans une nouvelle conversation)
         return p
 
     def test_reprise_dit_ce_qui_ne_va_pas_puis_ce_qu_elle_a_fait(self):

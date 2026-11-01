@@ -592,6 +592,16 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
       <label title="Nombre de cœurs du processeur que le modèle peut utiliser. Moins de cœurs = plus lent, mais le reste de l'ordinateur reste réactif. Surtout utile quand le modèle tourne sur le processeur.">Cœurs du processeur utilisés <input id="iThreads" type="number" step="1" min="1" max="256" placeholder="auto" style="width:90px"> <span class="aide" id="vCpus"></span></label>
       <label title="Combien de minutes le modèle reste en mémoire après la dernière réponse. 0 = libéré tout de suite (la mémoire revient au PC, mais la réponse suivante est plus lente à démarrer). Vide = automatique.">Garder le modèle en mémoire (minutes) <input id="iGarde" type="number" step="1" min="0" max="240" placeholder="auto" style="width:90px"></label>
     </div>
+    <h2>Vitesse</h2>
+    <div class="aide">Sur processeur, ajouter des cœurs n'écrit pas toujours plus vite : la mémoire est le vrai goulot. La mesure ci-dessous essaie plusieurs nombres de cœurs avec le modèle choisi en haut à gauche et te propose le meilleur (rien n'est appliqué sans ton clic). Compte 2 à 4 minutes ; ne lance pas de réponse pendant ce temps.</div>
+    <div class="carte" id="carteCalibrage" style="display:block">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button id="bCalibrer">⚡ Optimiser pour cette machine</button><button id="bCalibrerStop" hidden>Arrêter</button><span id="msgCalibrage" class="aide"></span></div>
+      <div id="tableCalibrage"></div>
+    </div>
+    <label class="opt-ligne" title="Un petit modèle pour la mise à jour de la fiche de suivi, les résumés et les titres. Plus rapide, mais deux modèles chargés demandent de la mémoire."><span>Petit modèle pour les tâches annexes</span> <select id="selAnnexe"></select></label>
+    <div class="aide">Fiche de suivi, résumés et titres n'ont pas besoin d'un gros modèle. Un petit modèle ici les accélère, mais Ollama garde alors deux modèles en mémoire : prévois la place (et vérifie que OLLAMA_MAX_LOADED_MODELS n'est pas à 1, sinon il recharge un modèle à chaque changement et c'est plus lent). Laisse « le même » si tu hésites.</div>
+    <label class="opt-ligne" title="La réflexion ajoute de longs paragraphes avant une réponse. Pendant le travail avec des outils, elle est refaite à chaque étape."><span>Réflexion pendant le travail avec les outils</span> <select id="selReflTours"><option value="toujours">À chaque étape (comportement actuel)</option><option value="premier">Seulement avant la première réponse</option></select></label>
+    <div class="aide">Sans effet si la réflexion est coupée. « Seulement avant la première réponse » accélère les tâches à plusieurs étapes, mais le modèle réfléchit moins entre deux outils : à essayer, sans risque (tu peux revenir).</div>
     </details>
   </div></section>
 </main>
@@ -1399,11 +1409,52 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
       bloc.appendChild(ligne);
     }
   };
+  // ---- Vitesse : calibrage (nombre de cœurs), petit modèle annexe
+  const afficherCalibrage = () => {
+    const c = ETAT.calibrage || {}, cle = JSON.stringify([c, ETAT.reglages.num_thread]);
+    if ($('carteCalibrage').dataset.cle === cle) return;
+    $('carteCalibrage').dataset.cle = cle;
+    $('bCalibrer').disabled = !!c.en_cours || !!(ETAT.bench || {}).en_cours; $('bCalibrerStop').hidden = !c.en_cours;
+    $('msgCalibrage').textContent = c.en_cours ? T('⏳ Mesure en cours : ') + c.etape : (c.erreur ? '⚠ ' + c.erreur : '');
+    const z = $('tableCalibrage'); z.textContent = '';
+    if (!(c.resultats || []).length) return;
+    const table = el('table', 'comparaison'), tete = el('tr');
+    [T('Cœurs'), T('Jetons/s'), ''].forEach(h => tete.appendChild(el('th', '', h))); table.appendChild(tete);
+    const meilleur = Math.max(...c.resultats.map(r => r.tok_s || 0));
+    c.resultats.forEach(r => {
+      const tr = el('tr');
+      tr.appendChild(el('td', '', r.fils)); tr.appendChild(el('td', r.tok_s === meilleur ? 'meilleur' : '', r.tok_s || '?'));
+      tr.appendChild(el('td', '', (r.fils === c.recommande ? T('← conseillé') : '') + (r.fils === ETAT.reglages.num_thread ? T(' (réglage actuel)') : '')));
+      table.appendChild(tr);
+    });
+    z.appendChild(table);
+    if (c.recommande && !c.en_cours) {
+      const dejaFait = ETAT.reglages.num_thread === c.recommande;
+      z.appendChild(el('div', 'aide', T('Conseillé : le plus petit nombre de cœurs qui écrit à moins de 3 % du meilleur débit (à vitesse égale, il reste des cœurs pour le reste de la machine).')));
+      if (!dejaFait) {
+        const b = el('button', 'principal', T('Appliquer ') + c.recommande + T(' cœurs'));
+        b.addEventListener('click', async () => { try { await api('/api/calibrage', { action: 'apply' }); $('iThreads').value = c.recommande; rafraichir(); } catch (e) { $('msgCalibrage').textContent = e.message; } });
+        z.appendChild(b);
+      } else z.appendChild(el('div', 'aide', T('✔ Déjà appliqué.')));
+    }
+  };
+  const majAnnexe = () => {
+    const s = $('selAnnexe'), cle = JSON.stringify([ETAT.installes, ETAT.reglages.modele_annexe, ETAT.reglages.modele, ETAT.reglages.reflexion_tours]);
+    if (s.dataset.cle === cle) return;
+    s.dataset.cle = cle; s.textContent = '';
+    s.appendChild(Object.assign(el('option', '', T('Le même que la conversation')), { value: '' }));
+    ETAT.installes.filter(m => m !== ETAT.reglages.modele).forEach(m => s.appendChild(Object.assign(el('option', '', m), { value: m })));
+    s.value = ETAT.installes.includes(ETAT.reglages.modele_annexe) ? ETAT.reglages.modele_annexe : '';
+    $('selReflTours').value = ETAT.reglages.reflexion_tours || 'toujours';
+  };
+  $('bCalibrer').addEventListener('click', async () => { try { await api('/api/calibrage', { action: 'start' }); $('carteCalibrage').dataset.cle = ''; rafraichir(); } catch (e) { $('msgCalibrage').textContent = e.message; } });
+  $('bCalibrerStop').addEventListener('click', async () => { try { await api('/api/calibrage', { action: 'cancel' }); } catch (e) { $('msgCalibrage').textContent = e.message; } });
   const rafraichir = async () => {
     try { ETAT = await api('/api/etat'); } catch (e) { return; }
     $('pOllama').classList.toggle('ok', ETAT.ollama); $('pOllama').lastChild.textContent = ETAT.ollama ? T('Ollama prêt') : (ETAT.ollama_installe ? T('Ollama arrêté') : T('Ollama non installé')); $('pOllama').title = $('pOllama').lastChild.textContent;
     $('bDemarrer').hidden = ETAT.ollama || !ETAT.ollama_installe;
     afficherDiagnostic(ETAT.diagnostic || []);
+    afficherCalibrage(); majAnnexe();
     $('racine').textContent = T('Projet : ') + ETAT.racine;
     // Le choix du modèle ne propose que les modèles INSTALLÉS (l'installation se fait dans l'onglet Modèles).
     const s = $('selModele'), v = s.value || ETAT.reglages.modele; s.textContent = '';
@@ -1497,7 +1548,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     } catch (e) { fil().appendChild(el('div', 'erreur', e.message)); }
   };
   const sauverOptions = enSerie(envoyerOptions);
-  const envoyerReglages = async () => { try { await api('/api/reglages', Object.assign({ modele: $('selModele').value, copie_conversations: $('cCopieConv').checked, memoire_longue: $('selMemoire').value, fiche_part: nombreOuNull('iFichePart') ?? 10, fiche_scribe: $('cScribe').checked, recherche_sens: $('cSens').checked, avance: $('cAvance').checked, num_ctx: +$('rCtx').value, temperature: +$('rTemp').value, tours_max: +$('rTours').value, top_p: nombreOuNull('iTopP'), top_k: nombreOuNull('iTopK'), min_p: nombreOuNull('iMinP'), repeat_penalty: nombreOuNull('iRep'), garde_ressources: $('cGarde').checked, liberer_si_comfy: $('cComfy').checked, rappels_auto: $('sRappels').value, seuil_ram_go: nombreOuNull('iSeuilRam') ?? 3, seuil_disque_go: nombreOuNull('iSeuilDisque') ?? 10, plafond_donnees_go: nombreOuNull('iPlafond') ?? 2, limite_ram_commande_go: nombreOuNull('iLimiteCmd') ?? 0, num_thread: nombreOuNull('iThreads'), garde_min: nombreOuNull('iGarde') }, CONV ? {} : lireOptions(true))); } catch (e) { fil().appendChild(el('div', 'erreur', e.message)); } };
+  const envoyerReglages = async () => { try { await api('/api/reglages', Object.assign({ modele: $('selModele').value, copie_conversations: $('cCopieConv').checked, memoire_longue: $('selMemoire').value, fiche_part: nombreOuNull('iFichePart') ?? 10, fiche_scribe: $('cScribe').checked, recherche_sens: $('cSens').checked, avance: $('cAvance').checked, num_ctx: +$('rCtx').value, temperature: +$('rTemp').value, tours_max: +$('rTours').value, top_p: nombreOuNull('iTopP'), top_k: nombreOuNull('iTopK'), min_p: nombreOuNull('iMinP'), repeat_penalty: nombreOuNull('iRep'), garde_ressources: $('cGarde').checked, liberer_si_comfy: $('cComfy').checked, rappels_auto: $('sRappels').value, seuil_ram_go: nombreOuNull('iSeuilRam') ?? 3, seuil_disque_go: nombreOuNull('iSeuilDisque') ?? 10, plafond_donnees_go: nombreOuNull('iPlafond') ?? 2, limite_ram_commande_go: nombreOuNull('iLimiteCmd') ?? 0, num_thread: nombreOuNull('iThreads'), garde_min: nombreOuNull('iGarde'), modele_annexe: $('selAnnexe').value, reflexion_tours: $('selReflTours').value }, CONV ? {} : lireOptions(true))); } catch (e) { fil().appendChild(el('div', 'erreur', e.message)); } };
   const sauverReglages = enSerie(envoyerReglages);
   document.querySelectorAll('.onglets button').forEach(b => b.addEventListener('click', async () => {
     document.querySelectorAll('.onglets button').forEach(x => x.setAttribute('aria-selected', x === b)); document.querySelectorAll('.page').forEach(p => p.classList.toggle('vue', p.id === 'p-' + b.dataset.p));
@@ -1816,7 +1867,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
   $('bDemarrer').addEventListener('click', async () => { $('bDemarrer').disabled = true; try { await api('/api/demarrer-ollama', {}); } catch (e) { fil().appendChild(el('div', 'erreur', e.message)); } $('bDemarrer').disabled = false; rafraichir(); });
   $('bVram').addEventListener('click', async () => { $('bVram').disabled = true; $('bVram').textContent = '⏳…'; try { const r = await api('/api/liberer-vram', {}); fil().appendChild(el('div', 'aide', r.message)); } catch (e) { fil().appendChild(el('div', 'erreur', e.message)); } $('bVram').disabled = false; $('bVram').textContent = T('🧹 Libérer la VRAM'); rafraichir(); });
   ['selMode', 'cReflexion', 'cAuto', 'cAutoCmd', 'cEssai', 'cWeb', 'sLong', 'sDuree'].forEach(id => $(id).addEventListener('change', async () => { await sauverOptions(); majMission(); if (id === 'selMode') rafraichir(); }));
-  ['selModele', 'cAvance', 'cCopieConv', 'selMemoire', 'iFichePart', 'cScribe', 'cSens', 'iTopP', 'iTopK', 'iMinP', 'iRep', 'cGarde', 'cComfy', 'sRappels', 'iSeuilRam', 'iSeuilDisque', 'iPlafond', 'iLimiteCmd', 'iThreads', 'iGarde'].forEach(id => $(id).addEventListener('change', async () => { await sauverReglages(); if (id === 'cAvance') rafraichir(); }));          // les modèles sans filtre apparaissent tout de suite
+  ['selModele', 'selAnnexe', 'selReflTours', 'cAvance', 'cCopieConv', 'selMemoire', 'iFichePart', 'cScribe', 'cSens', 'iTopP', 'iTopK', 'iMinP', 'iRep', 'cGarde', 'cComfy', 'sRappels', 'iSeuilRam', 'iSeuilDisque', 'iPlafond', 'iLimiteCmd', 'iThreads', 'iGarde'].forEach(id => $(id).addEventListener('change', async () => { await sauverReglages(); if (id === 'cAvance') rafraichir(); }));          // les modèles sans filtre apparaissent tout de suite
   // Profils de charge : des valeurs toutes faites pour les deux réglages (et le contexte pour « Discret »), calculées sur le nombre de cœurs de CETTE machine.
   $('selProfil').addEventListener('change', async () => {
     const p = $('selProfil').value, cpus = ETAT.cpus || 4;

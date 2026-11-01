@@ -679,6 +679,76 @@ class Assistant(unittest.TestCase):
         post("/api/bench-serie", {"modeles": ["../mauvais"]}, attendu=400)
         self.assertEqual(lire("/api/etat")["bench"]["file"], [])
 
+    def test_calibrage_des_coeurs_mesure_choisit_et_applique_sur_demande(self):
+        from lutin import calibrage
+        mesures = []
+
+        def faux(ollama, modele, fils, num_ctx, repetitions=2):
+            mesures.append(fils)
+            return {2: 8.0, 3: 10.0, 4: 10.2, 6: 10.3, 7: 10.3, 8: 10.1, 12: 10.0, 18: 9.0}.get(fils, 5.0)
+        vrai, vrais_candidats = calibrage.mesurer_fils, calibrage.candidats
+        calibrage.mesurer_fils, calibrage.candidats = faux, lambda *a, **k: [2, 3, 4, 6, 12]          # la machine de test n'a que deux cœurs
+        avant = A.reglages()["num_thread"]
+        try:
+            post("/api/calibrage", {"action": "start"})
+            for _ in range(100):
+                if not lire("/api/etat")["calibrage"]["en_cours"]:
+                    break
+                time.sleep(0.05)
+            e = lire("/api/etat")["calibrage"]
+            self.assertEqual([r["fils"] for r in e["resultats"]], mesures)
+            self.assertGreaterEqual(len(mesures), 3, "plusieurs nombres de cœurs essayés")
+            self.assertEqual(e["recommande"], calibrage.choisir(e["resultats"]))
+            self.assertEqual(A.reglages()["num_thread"], avant, "rien n'est appliqué sans clic")
+            self.assertEqual(lire("/api/etat")["bench"]["en_cours"], "", "le blocage des bancs est levé")
+            r = post("/api/calibrage", {"action": "apply"})
+            self.assertEqual(A.reglages()["num_thread"], r["num_thread"])
+            post("/api/calibrage", {"action": "danse"}, attendu=400)
+        finally:
+            calibrage.mesurer_fils, calibrage.candidats = vrai, vrais_candidats
+            A.enregistrer_reglages({"num_thread": avant})
+            calibrage.CALIBRAGE.update(resultats=[], recommande=None)
+            calibrage.chemin().unlink(missing_ok=True)
+
+    def test_reflexion_seulement_avant_la_premiere_reponse_si_demande(self):
+        appel = appel_outil("lister", dossier="docs")
+        A.enregistrer_reglages({"reflexion": True, "reflexion_tours": "toujours"})
+        try:
+            chat("Regarde", reponses=[[appel], [{"content": "Fait."}]])
+            self.assertEqual((RECUES[-2].get("think"), RECUES[-1].get("think")), (True, True), "comportement actuel : à chaque étape")
+            A.enregistrer_reglages({"reflexion_tours": "premier"})
+            chat("Regarde encore", reponses=[[appel], [{"content": "Fait."}]])
+            self.assertEqual((RECUES[-2].get("think"), RECUES[-1].get("think")), (True, False), "après le retour d'outil, plus de réflexion")
+            A.enregistrer_reglages({"reflexion_tours": "n'importe quoi"})
+            self.assertEqual(A.reglages()["reflexion_tours"], "toujours", "valeur inconnue : le comportement actuel")
+        finally:
+            A.enregistrer_reglages({"reflexion": False, "reflexion_tours": "toujours"})
+
+    def test_petit_modele_annexe_pour_la_fiche_seulement_s_il_est_installe(self):
+        INSTALLES.append("petit:1b")
+        A.enregistrer_reglages({"memoire_longue": "fichier", "fiche_scribe": True, "modele_annexe": "petit:1b"})
+        try:
+            cid = self.conversation_longue()
+            conv = A.conv_lire(cid)
+            conv["memoire_longue"] = "fichier"
+            A.conv_ecrire(conv)
+            ops = json.dumps({"decisions": ["Le code est 4711"], "etape": [], "fait": [], "ouvert": []})
+            principal = A.reglages()["modele"]
+            chat("Quel est le code ?", conversation=cid, reponses=[[{"content": "4711-ZEBRE."}], [{"content": ops}]])
+            self.assertEqual(RECUES[-2]["model"], principal, "la réponse reste au modèle de la conversation")
+            self.assertEqual(RECUES[-1]["model"], "petit:1b", "la mise à jour de la fiche passe par le petit modèle")
+            INSTALLES.remove("petit:1b")
+            conv = A.conv_lire(cid)
+            conv["scribe_a"] = 0
+            A.conv_ecrire(conv)
+            chat("Et encore ?", conversation=cid, reponses=[[{"content": "Oui."}], [{"content": ops}]])
+            self.assertEqual(RECUES[-1]["model"], principal, "modèle annexe absent : on retombe sur le modèle de la conversation")
+            post("/api/supprimer", {"id": cid})
+        finally:
+            if "petit:1b" in INSTALLES:
+                INSTALLES.remove("petit:1b")
+            A.enregistrer_reglages({"memoire_longue": "resume", "fiche_scribe": True, "modele_annexe": ""})
+
     def test_un_modele_qui_reflechit_sans_repondre_est_relance_puis_explique(self):
         ev = chat("Bonjour", reponses=[[{"thinking": "hum"}], [{"content": "Voilà la réponse."}]])
         self.assertEqual(texte_de(ev), "Voilà la réponse.")

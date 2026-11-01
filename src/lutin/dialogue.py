@@ -51,6 +51,19 @@ RE_APPEL_JSON = re.compile(r"```(?:json)?\s*(\{.*?\})\s*```|^\s*(\{\s*\"name\".*
 OUTILS_WEB = {"web_chercher", "web_lire"}
 
 
+def modele_annexe(r):
+    """Le modèle des petites tâches qui ne demandent pas de réfléchir (mise à jour de la fiche, résumés, titres) : celui choisi dans Réglages s'il est installé, sinon le modèle de la conversation.
+    Un petit modèle y est plus rapide, mais deux modèles chargés demandent de la mémoire (et Ollama en recharge un à chaque changement si OLLAMA_MAX_LOADED_MODELS vaut 1) : c'est un choix, jamais un défaut."""
+    choisi = str(r.get("modele_annexe") or "").strip()
+    if choisi and choisi != r["modele"]:
+        try:
+            if choisi in _m.etat_ollama()["installes"]:
+                return choisi
+        except (KeyError, OSError, ValueError):
+            pass
+    return r["modele"]
+
+
 def memoire_longue(conv, r):
     """Comment cette conversation garde son fil : « resume » (le début est résumé par le modèle), « fichier » (fiche de suivi) ou « demander » (on pose la question au premier résumé).
     Le choix de la conversation l'emporte sur le réglage général."""
@@ -103,7 +116,7 @@ def scribe(conv, r, emit=None):
                 "fait (ce qui vient d'être terminé), ouvert (NOUVELLES questions restées sans réponse), resolu (questions de la fiche qui ont maintenant une réponse, recopiées telles quelles). "
                 "N'invente rien : ne note que ce qui est dit dans les échanges. Liste vide si rien à ajouter.")
     try:
-        rep = ollama_json("/api/chat", {"model": r["modele"], "stream": False, "think": False, "format": "json", "options": _m.options_modele(r, 0.1),
+        rep = ollama_json("/api/chat", {"model": modele_annexe(r), "stream": False, "think": False, "format": "json", "options": _m.options_modele(r, 0.1),
                                         "messages": [{"role": "system", "content": consigne}, {"role": "user", "content": "FICHE ACTUELLE :\n" + _suivi.serialiser(ident, sections) + "\n\nDERNIERS ÉCHANGES :\n" + echange}]}, 300)
         ops = json.loads((rep.get("message", {}).get("content") or "{}").strip() or "{}")
     except (urllib.error.URLError, OSError, ValueError) as erreur:
@@ -184,7 +197,7 @@ def amorcer_fiche(conv, r, emit=None):
     if emit:
         emit({"type": "info", "texte": _t("Fiche de suivi : préparation à partir du début de la conversation…")})
     try:
-        rep = ollama_json("/api/chat", {"model": r["modele"], "stream": False, "think": False, "format": "json", "options": _m.options_modele(r, 0.1),
+        rep = ollama_json("/api/chat", {"model": modele_annexe(r), "stream": False, "think": False, "format": "json", "options": _m.options_modele(r, 0.1),
                                         "messages": [{"role": "system", "content": "Tu remplis la fiche de suivi d'une conversation pour pouvoir la continuer. Réponds en JSON avec ces clés (listes de phrases courtes, 150 caractères au plus chacune) : "
                                                       "objectif, decisions, plan, etape (l'étape en cours), fait, ouvert (questions ouvertes), fichiers. N'invente rien : laisse une liste vide si tu ne sais pas. En français."},
                                                      {"role": "user", "content": texte}]}, 600)
@@ -640,7 +653,7 @@ def compacter(conv, r, emit, forcer=False):
     texte = texte[-int(r["num_ctx"] * 1.8):]          # le texte à résumer doit lui aussi tenir dans le contexte
     emit({"type": "info", "texte": "Conversation longue : résumé du début..."})
     try:
-        rep = ollama_json("/api/chat", {"model": r["modele"], "stream": False, "think": False, "options": _m.options_modele(r, 0.2),
+        rep = ollama_json("/api/chat", {"model": modele_annexe(r), "stream": False, "think": False, "options": _m.options_modele(r, 0.2),
                                         "messages": [{"role": "system", "content": "Tu résumes une conversation pour pouvoir la continuer plus tard. Garde : les décisions, les fichiers modifiés, ce qui reste à faire, les préférences de l'utilisateur. Sois dense, en français."},
                                                      {"role": "user", "content": (conv.get("resume", "") + "\n\n" if conv.get("resume") else "") + texte}]}, 600)
         nouveau_resume = (rep.get("message", {}).get("content") or "").strip()[:6000]
@@ -963,7 +976,7 @@ def boucle_agent(conv, r, emit, ctx, stop):
         if r.get("num_predict", 0) > 0:
             options["num_predict"] = r["num_predict"]
         caps = capacites(r["modele"])
-        reflechit = bool(r["reflexion"])
+        reflechit = bool(r["reflexion"]) and not (r.get("reflexion_tours") == "premier" and idx_tour > 0)          # option : la réflexion seulement avant la première réponse, pas à chaque retour d'outil
         if reflechit and caps is not None and "thinking" not in caps:
             reflechit = False
             if idx_tour == 0:

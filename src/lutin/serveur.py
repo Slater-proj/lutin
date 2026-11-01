@@ -1,6 +1,7 @@
 """Le serveur HTTP de Lutin : le gestionnaire de requêtes (pages, API JSON, flux de la conversation). L'état et les fonctions métier restent dans moteur ; ce module les atteint par « _m.NOM » (lu à chaque appel)."""
 from http.server import BaseHTTPRequestHandler
 from . import bench as _bench
+from . import calibrage as _calibrage
 from . import acces as _acces
 from . import adequation as _adequation
 from . import conseil as _conseil
@@ -201,7 +202,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
                                        "version": _m.VERSION, "ollama": o["actif"], "ollama_installe": bool(_m.chemin_ollama()), "installes": o["installes"], "modeles": modeles, "modeles_masques": len(_m.lire_registre_modeles()["masques"]), "actives": list(_m.TOURS_ACTIFS),
                                        "pulls": _m.PULLS, "reglages": r, "conversations": _m.conv_liste(), "racine": str(_m.RACINE), "donnees": str(_m.DONNEES),
                                        "outil": bool(self._outil_vivant()), "hors_ligne": _hl.actif(), "niveau": _m.SECURITE.niveau, "ouverture_possible": _fichiers.ouverture_possible(), "missions": _mission.par_conversation(), "langue": _i18n.langue(), "langue_reglage": _i18n.langue_configuree(), "cpus": _machine.cpus_disponibles() or 1, "diagnostic": self._diagnostic(o, r, profil, modeles), "redemarrage": {"necessaire": _acces.securite_enregistree() != _m.SECURITE, "possible": _acces.peut_redemarrer()}, "nouvelle_version": _m.nouvelle_version_lutin(), "travaux": _m.travaux_etat(), "configurateur": self._configurateur(), "addons_alertes": _addons.alertes(), "embeddings": _embeddings.etat(),
-                                       "bench": {"en_cours": _m.BENCH["en_cours"], "etape": _m.BENCH["etape"], "erreur": _m.BENCH["erreur"], "file": list(_m.BENCH.get("file") or []), "mesures": _bench.lire(_m.chemin_bench())}, "attentes": [{"id": a.id, "titre": a.titre, "detail": a.detail, "diff": a.diff} for a in _m.Attente.EN_COURS.values()]})
+                                       "calibrage": _calibrage.etat(), "bench": {"en_cours": _m.BENCH["en_cours"], "etape": _m.BENCH["etape"], "erreur": _m.BENCH["erreur"], "file": list(_m.BENCH.get("file") or []), "mesures": _bench.lire(_m.chemin_bench())}, "attentes": [{"id": a.id, "titre": a.titre, "detail": a.detail, "diff": a.diff} for a in _m.Attente.EN_COURS.values()]})
         if chemin == "/api/conseil":
             r = _m.reglages()
             vitesse = ((_bench.lire(_m.chemin_bench()).get(r["modele"]) or {}).get("resultats") or {}).get("vitesse")
@@ -666,6 +667,15 @@ class Gestionnaire(BaseHTTPRequestHandler):
                     raise ValueError(_t("Une réponse est déjà en cours : attends sa fin."))
                 threading.Thread(target=lambda: _plan.executer(ident), daemon=True, name="planifie-lancer").start()
                 return self._envoyer(200, {"ok": True})
+            if self.path == "/api/calibrage":
+                action = str(donnees.get("action", ""))
+                if action == "start":
+                    return self._envoyer(200, _calibrage.lancer())
+                if action == "cancel":
+                    return self._envoyer(200, _calibrage.annuler())
+                if action == "apply":
+                    return self._envoyer(200, _calibrage.appliquer())
+                return self._envoyer(400, {"erreur": _t("Action inconnue.")})
             if self.path == "/api/conseil-machine":
                 action = str(donnees.get("action", ""))
                 if action == "ignorer":
@@ -1009,7 +1019,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
             "CONVERSATION :\n") + texte_conv
         )
         corps = {
-            "model": r["modele"],
+            "model": _m.modele_annexe(r),
             "messages": [{"role": "user", "content": consigne}],
             "stream": False,
             "options": _m.options_modele(r, 0.4),          # mêmes options que le chat (voir _resumer)

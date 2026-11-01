@@ -63,6 +63,11 @@ def _enregistrer_reglages(nouveau):
     r["essai_a_blanc"] = bool(r.get("essai_a_blanc"))
     r["copie_conversations"] = bool(r.get("copie_conversations"))
     r["conseil_machine"] = bool(r.get("conseil_machine", True))
+    r["modele_annexe"] = str(r.get("modele_annexe") or "").strip()
+    if r["modele_annexe"] and not re.match(r"^[A-Za-z0-9_./:-]{1,100}$", r["modele_annexe"]):
+        raise ValueError(_t("Nom de modèle invalide."))
+    if r.get("reflexion_tours") not in ("toujours", "premier"):
+        r["reflexion_tours"] = "toujours"
     if r.get("memoire_longue") not in ("resume", "fichier", "demander"):
         raise ValueError(_t("Mémoire des longues conversations inconnue (resume, fichier ou demander)."))
     _m.nettoyer_echantillonnage(r)
