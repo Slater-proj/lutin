@@ -47,7 +47,7 @@ class Lecture(unittest.TestCase):
         self.assertEqual(len(variantes.lister("qwen3:8b", http=http)["variantes"]), 3)
         variantes.lister("qwen3:4b", http=http)
         self.assertEqual(appels, ["https://ollama.com/library/qwen3/tags"], "une seule lecture par modèle")
-        for mauvais in ("qwen3", "qwen3:8b-q8_0", "huihui_ai/qwen3-abliterated:4b", "", "qwen3:8b:q8"):
+        for mauvais in ("qwen3", "qwen3:8b-q8_0", "huihui_ai/qwen3-abliterated:4b-q8_0", "", "qwen3:8b:q8", "a/b/c:8b"):
             with self.assertRaises(ValueError, msg=mauvais):
                 variantes.lister(mauvais, http=http)
         variantes.CACHE.clear()
@@ -55,6 +55,17 @@ class Lecture(unittest.TestCase):
             variantes.lister("qwen3:8b", http=lambda u: (500, {}, b""))
         with self.assertRaises(OSError):
             variantes.lister("zzz:8b", http=lambda u: (200, {}, PAGE.encode("utf-8")))
+        variantes.CACHE.clear()
+
+    def test_modeles_sans_filtre_d_un_auteur_ont_aussi_leurs_variantes(self):
+        page = bloc("huihui_ai/qwen3-abliterated", "4b", "2.5GB") + bloc("huihui_ai/qwen3-abliterated", "4b-q8_0", "4.3GB") + bloc("huihui_ai/qwen3-abliterated", "4b-v2-q8_0", "4.3GB")
+        page = page.replace('href="/library/huihui_ai', 'href="/huihui_ai')
+        r = variantes.analyser(page, "huihui_ai/qwen3-abliterated", "4b")
+        self.assertEqual([(v["precision"], v["id"]) for v in r["variantes"]], [("q8_0", "huihui_ai/qwen3-abliterated:4b-q8_0")], "la variante « v2 » n'est pas une précision")
+        adresses = []
+        variantes.CACHE.clear()
+        variantes.lister("huihui_ai/qwen3-abliterated:4b", http=lambda u: (adresses.append(u), (200, {}, page.encode("utf-8")))[1])
+        self.assertEqual(adresses, ["https://ollama.com/huihui_ai/qwen3-abliterated/tags"])
         variantes.CACHE.clear()
 
     def test_chaque_precision_a_son_explication(self):

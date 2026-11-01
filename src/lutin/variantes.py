@@ -9,13 +9,13 @@ import time
 from . import decouverte, miseajour
 from .i18n import t as _t
 
-URL = "https://ollama.com/library/{}/tags"
+URL = "https://ollama.com/library/{}/tags"          # un modèle de la bibliothèque officielle ; ceux d'un auteur (« auteur/modele ») : https://ollama.com/auteur/modele/tags
 DUREE_CACHE = 30 * 60
 CACHE = {}
-RE_BLOC = re.compile(r'<a href="/library/([A-Za-z0-9._-]+):([A-Za-z0-9._-]+)" class="md:hidden[^"]*">(.*?)</a>', re.S)
+RE_BLOC = re.compile(r'<a href="/(?:library/)?([A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)?):([A-Za-z0-9._-]+)" class="md:hidden[^"]*">(.*?)</a>', re.S)
 RE_TAILLE = re.compile(r"([0-9]+(?:[.][0-9]+)?)\s*(GB|MB)", re.I)
 RE_PRECISION = re.compile(r"^(q[0-9](?:_[0-9A-Za-z]+)*|fp16|bf16|f16|fp32)$", re.I)
-RE_ID = re.compile(r"^([a-z0-9._-]+):([a-z0-9._]+)$", re.I)          # un modèle de la bibliothèque officielle, avec sa taille (pas d'espace de noms, pas de précision déjà choisie)
+RE_ID = re.compile(r"^([a-z0-9._-]+(?:/[a-z0-9._-]+)?):([a-z0-9._]+)$", re.I)          # un modèle d'Ollama avec sa taille (officiel, ou « auteur/modele » comme les modèles sans filtre), pas de précision déjà choisie
 
 
 def decrire(precision):
@@ -58,13 +58,13 @@ def lister(modele, http=miseajour.http_get, maintenant=time.time):
     """Les précisions disponibles pour `modele` (« qwen3:8b »). Lève ValueError si ce n'est pas un modèle de la bibliothèque officielle, OSError si le site ne répond pas."""
     m = RE_ID.match(str(modele or ""))
     if not m or RE_PRECISION.match(m.group(2)) or re.search(r"-(q[0-9]|fp16|bf16)", m.group(2), re.I):
-        raise ValueError(_t("Les variantes de précision se choisissent à partir d'un modèle de la bibliothèque d'Ollama avec sa taille (par exemple qwen3:8b)."))
+        raise ValueError(_t("Les variantes de précision se choisissent à partir d'un modèle d'Ollama avec sa taille (par exemple qwen3:8b)."))
     nom, etiquette = m.group(1), m.group(2)
     en_cache = CACHE.get(nom)
     if en_cache and maintenant() - en_cache[0] < DUREE_CACHE:
         page = en_cache[1]
     else:
-        statut, _, corps = http(URL.format(nom))
+        statut, _, corps = http(URL.format(nom) if "/" not in nom else "https://ollama.com/{}/tags".format(nom))
         if statut != 200:
             raise OSError(_t("ollama.com a répondu {}.").format(statut))
         page = corps.decode("utf-8", "replace")

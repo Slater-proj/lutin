@@ -215,7 +215,7 @@ class Parcours(unittest.TestCase):
             p.attendre("[...document.querySelectorAll('#fil .msg.ia')].some(m => m.textContent.includes('Réponse de démonstration.'))")
             sauve = json.loads((donnees / "conversations" / "d4e5f6a7.json").read_text(encoding="utf-8"))
             self.assertEqual(sauve.get("memoire_longue"), "fichier", "le choix est gardé pour cette conversation")
-            self.assertEqual(len(sauve["messages"]), 14, "en mode fiche rien n'est retiré de la conversation")
+            self.assertLess(len(sauve["messages"]), 14, "en mode fiche, la conversation presque pleine est allégée du début (archivé)")
             self.assertTrue((donnees / "suivis" / "d4e5f6a7.md").is_file(), "la fiche est créée à partir du début de la conversation")
             self.assertIn("Tester la question", (donnees / "suivis" / "d4e5f6a7.md").read_text(encoding="utf-8"))
             self.assertEqual(p.erreurs, [])

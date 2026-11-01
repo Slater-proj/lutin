@@ -442,6 +442,8 @@
 "Nom de cet appareil (facultatif)": "Name of this device (optional)",
 "Se connecter": "Sign in",
 "Erreur ": "Error ",
+"Aucune réponse n'a été écrite. Causes fréquentes : la fenêtre de contexte est pleine (jauge en haut de la page : écris /compact ou ouvre une nouvelle conversation), ou le modèle manque de mémoire (ComfyUI occupe la carte graphique). Ta demande est gardée : écris « continue » pour réessayer.": "No answer was written. Frequent causes: the context window is full (gauge at the top of the page: write /compact or open a new conversation), or the model is short of memory (ComfyUI is using the graphics card). Your request is kept: write “continue” to retry.",
+"Les variantes de précision se choisissent à partir d'un modèle d'Ollama avec sa taille (par exemple qwen3:8b).": "Precision variants are chosen from an Ollama model with its size (for example qwen3:8b).",
 "Modèle de recherche par le sens (Réglages > Conversation) : il retrouve des passages, il ne discute pas.": "Meaning-based search model (Settings > Conversation): it finds passages, it does not chat.",
 "Cette machine n'a que {} cœurs : il n'y a rien à comparer.": "This machine only has {} cores: there is nothing to compare.",
 "Aucun résultat à appliquer : lance d'abord la mesure.": "No result to apply: run the measurement first.",

@@ -777,7 +777,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     const pct = Math.min(100, Math.round(100 * j.utilise / j.total)), k = n => (n / 1000).toFixed(n >= 10000 ? 0 : 1);
     $('jauge').hidden = false; $('jauge').className = 'jauge' + (pct >= 90 ? ' plein' : pct >= 70 ? ' moyen' : '');
     $('jauge').querySelector('i').style.width = pct + '%';
-    $('jaugeTexte').textContent = (j.reel ? '' : '~') + k(j.utilise) + 'k / ' + k(j.total) + 'k';
+    $('jaugeTexte').textContent = (j.reel ? '' : '~') + k(j.utilise) + 'k / ' + k(j.total) + 'k' + (j.utilise > j.total ? ' ⚠' : '');
     $('jauge').title = T('Fenêtre de contexte : ') + j.utilise + T(' jetons sur ') + j.total + ' (' + pct + ' %)' + (j.reel ? T(' — chiffre réel d\'Ollama.') : T(' — estimation, le chiffre réel arrive après la prochaine réponse.')) + (pct >= 90 ? T(' Presque plein : le début sera résumé automatiquement.') : '');
   };
   const setVitesse = v => {
@@ -1266,7 +1266,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
       o.addEventListener('click', async () => { if (!confirm(T('Retirer « ') + m.nom + T(' » de la liste ?') + (m.origine === 'catalogue' ? T('\n(Tu pourras le remettre avec « Rétablir la liste d\'origine ».)') : ''))) return; try { await api('/api/oublier-modele', { modele: m.id }); rafraichir(); } catch (e) { $('msgModeles').textContent = e.message; } });
       acts.appendChild(o);
     }
-    if (!emb && /^[a-z0-9._-]+:[a-z0-9._]+$/i.test(m.id)) {
+    if (!emb && /^[a-z0-9._-]+(\/[a-z0-9._-]+)?:[a-z0-9._]+$/i.test(m.id)) {
       const bp = el('button', '', T('Précision')); bp.title = T("Voir les précisions disponibles (4 bits, 8 bits…) de ce modèle");
       bp.addEventListener('click', () => {
         if (VARIANTES.has(m.id)) { VARIANTES.delete(m.id); listeModeles(); return; }

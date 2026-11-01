@@ -2,6 +2,14 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## 0.13.2
+
+- **Mode fiche de suivi : la fenêtre de contexte ne reste plus saturée.** Le retrait du début attendait que le scribe ait lu les messages ; si le scribe échouait (par exemple parce que le modèle manquait de mémoire pendant une génération d'image), rien n'était jamais retiré et la conversation grossissait jusqu'à dépasser la fenêtre (47k / 37k) : le modèle ne répondait plus. Maintenant, au-delà de 60 % de la fenêtre (ou 80 % d'après le chiffre réel d'Ollama), le début sort quand même (archivé, retrouvable avec « rappeler »), même si la fiche a du retard.
+- **Plus jamais de silence** : une demande qui se termine sans aucune ligne de réponse ni d'erreur le dit maintenant (fenêtre pleine, manque de mémoire…) et rappelle quoi faire. La jauge affiche ⚠ quand le contexte dépasse la fenêtre.
+- **Le bouton « Précision » existe aussi pour les modèles sans filtre** (huihui_ai/…) : leurs variantes 8 bits, etc., sont lues sur la page de leur auteur.
+
+**English.** Tracking-sheet mode: the context window no longer stays saturated (removal of old messages no longer waits for the scribe once the window is over 60% full, or 80% by Ollama's real count). A request that ends without any written answer now says so and what to do. The “Precision” button also works for unfiltered (author-namespaced) models.
+
 ## 0.13.1
 
 - **Recherche par le sens : l'installation du modèle se suit et se gère comme celle de tous les modèles.** Avant, le bouton « Installer » restait enfoncé sans rien afficher (la page ne se mettait pas à jour pendant le téléchargement) et le modèle n'était pas supprimable depuis les réglages. Maintenant : barre de progression avec le pourcentage et les Mo, « Réessayer » en cas d'erreur, « Supprimer ce modèle » une fois installé (avec confirmation), et le téléchargement continue si tu fermes la page.

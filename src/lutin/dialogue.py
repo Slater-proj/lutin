@@ -680,6 +680,8 @@ def _decaler_scribe(conv, coupe, gardes):
         conv["scribe_a"] = max(0, int(conv["scribe_a"]) - coupe) + gardes
 
 
+SEUIL_PLEIN = 0.6              # au-delà, le retrait n'attend plus le scribe : mieux vaut une fiche en retard (le début reste retrouvable avec « rappeler ») qu'une conversation qui n'a plus de place pour répondre
+SEUIL_PLEIN_REEL = 0.8         # idem d'après le chiffre réel d'Ollama
 SEUIL_ELAGAGE = 0.45         # part de la fenêtre que les messages peuvent prendre avant le retrait : avec la fiche (jusqu'à 10 %), le système et les outils, le total reste sous les 68 % où ajuster_contexte se mettrait à rogner
 
 
@@ -691,13 +693,15 @@ def elaguer(conv, r, emit, forcer=False):
     if forcer:
         coupe = max((i for i, m in enumerate(msgs) if m["role"] == "user"), default=0)
     else:
-        if len(msgs) < 8 or estimer(msgs) < int(r["num_ctx"] * SEUIL_ELAGAGE):
+        reel = int((conv.get("jetons") or {}).get("utilise") or 0)                # le chiffre d'Ollama après la dernière réponse : l'estimation (caractères / 3) peut se tromper
+        plein = estimer(msgs) >= int(r["num_ctx"] * SEUIL_PLEIN) or reel >= int(r["num_ctx"] * SEUIL_PLEIN_REEL)
+        if len(msgs) < 8 or (estimer(msgs) < int(r["num_ctx"] * SEUIL_ELAGAGE) and reel < int(r["num_ctx"] * SEUIL_PLEIN_REEL)):
             return False
         coupe = max(2, len(msgs) // 2)
         while coupe < len(msgs) and msgs[coupe]["role"] != "user":              # on coupe avant un message de l'utilisateur
             coupe += 1
-        if r.get("fiche_scribe", True):                                         # jamais de message que le scribe n'a pas encore lu : il ne serait plus dans la fiche
-            lu = int(conv.get("scribe_a") or 0)
+        if r.get("fiche_scribe", True) and int(conv.get("scribe_a") or 0) < coupe and not plein:       # jamais de message que le scribe n'a pas encore lu : il ne serait plus dans la fiche
+            lu = int(conv.get("scribe_a") or 0)                                                      # (sauf fenêtre presque pleine : mieux vaut une fiche en retard, le début reste retrouvable avec « rappeler »)
             while coupe > lu:
                 coupe -= 1
             while coupe > 0 and coupe < len(msgs) and msgs[coupe]["role"] != "user":
@@ -740,6 +744,12 @@ def tour(conv, texte, emit, r=None, stop=None, remplacer_depuis=None, identite="
     if lecture_seule:
         r["essai_a_blanc"] = True
     stop = stop if stop is not None else threading.Event()
+    sortie_page, parle = emit, {"texte": False}
+
+    def emit(evenement):                                                  # noqa: F811  (même nom : tout le tour passe par ici, pour savoir si la page a reçu une réponse)
+        if evenement.get("type") in ("texte", "erreur"):
+            parle["texte"] = True
+        sortie_page(evenement)
     _m.rafraichir_plan()
     if remplacer_depuis is not None:
         i = int(remplacer_depuis)
@@ -853,6 +863,9 @@ def tour(conv, texte, emit, r=None, stop=None, remplacer_depuis=None, identite="
             conv["taches"], conv["taches_age"] = [], 0
             emit({"type": "taches", "liste": []})
             emit({"type": "info", "texte": _t("La liste de tâches n'était plus mise à jour depuis {} réponses : je la ferme.").format(_m.AGE_TACHES_MAX)})
+    if not parle["texte"] and not stop.is_set() and not lecture_seule and not r.get("_mission"):
+        _m.journaliser("Demande terminée sans aucune réponse écrite (conversation {}, modèle {}).".format(conv["id"], r["modele"]))
+        emit({"type": "erreur", "texte": _t("Aucune réponse n'a été écrite. Causes fréquentes : la fenêtre de contexte est pleine (jauge en haut de la page : écris /compact ou ouvre une nouvelle conversation), ou le modèle manque de mémoire (ComfyUI occupe la carte graphique). Ta demande est gardée : écris « continue » pour réessayer.")})
     if ctx["tour"]["fichiers"]:                       # cette demande a touché des fichiers : le bouton « Annuler » les rétablira
         conv["annulable"] = {"id": ctx["tour"]["id"], "fichiers": sorted(ctx["tour"]["fichiers"])}
     _m.conv_ecrire(conv)

@@ -1796,22 +1796,53 @@ class Assistant(unittest.TestCase):
         finally:
             A.enregistrer_reglages({"memoire_longue": "resume", "fiche_scribe": True})
 
-    def test_mode_fiche_ne_retire_jamais_ce_que_le_scribe_n_a_pas_lu(self):
-        """Le scribe retient un rang dans les messages : le retrait du début n'emporte que des messages déjà passés dans la fiche, et le rang suit."""
+    def test_mode_fiche_attend_le_scribe_sauf_si_la_fenetre_est_presque_pleine(self):
+        """Entre 45 et 60 % de la fenêtre, le retrait n'emporte que des messages déjà passés dans la fiche. Au-delà de 60 % (ou 80 % d'après Ollama), il ne doit PLUS attendre :
+        un scribe qui échoue (modèle sans mémoire pendant une génération d'image) laissait sinon la conversation grossir jusqu'à ne plus pouvoir répondre."""
         A.enregistrer_reglages({"memoire_longue": "fichier", "fiche_scribe": True})
         try:
-            cid = self.conversation_longue()
-            conv = A.conv_lire(cid)
-            avant = len(conv["messages"])
-            A.elaguer(conv, dict(A.reglages(), memoire_longue="fichier"), lambda e: None)
-            self.assertEqual(len(conv["messages"]), avant, "scribe jamais passé : rien n'est retiré")
-            conv["scribe_a"] = 8
-            A.elaguer(conv, dict(A.reglages(), memoire_longue="fichier"), lambda e: None)
-            self.assertLess(len(conv["messages"]), avant)
-            self.assertEqual(conv["scribe_a"], 8 - (avant - len(conv["messages"])), "le rang du scribe suit le retrait")
-            self.assertGreaterEqual(conv["scribe_a"], 0)
+            ctx = A.reglages()["num_ctx"]
+
+            def conversation(part):
+                taille = 100
+                while True:
+                    msgs = [{"role": "user" if i % 2 == 0 else "assistant", "content": "mot " * taille + str(i)} for i in range(12)]
+                    if A.estimer(msgs) >= part * ctx:
+                        return {"messages": msgs, "id": "zzzzzzzz"}
+                    taille += 20
+            r = dict(A.reglages(), memoire_longue="fichier")
+            c = conversation(0.5)
+            avant = len(c["messages"])
+            A.elaguer(c, r, lambda e: None)
+            self.assertEqual(len(c["messages"]), avant, "50 % et scribe jamais passé : rien n'est retiré")
+            c["scribe_a"] = 8
+            A.elaguer(c, r, lambda e: None)
+            self.assertLess(len(c["messages"]), avant)
+            self.assertEqual(c["scribe_a"], 8 - (avant - len(c["messages"])), "le rang du scribe suit le retrait")
+            c = conversation(0.7)
+            avant = len(c["messages"])
+            A.elaguer(c, r, lambda e: None)
+            self.assertLess(len(c["messages"]), avant, "70 % : on retire sans attendre le scribe")
+            c = conversation(0.5)
+            c["jetons"] = {"utilise": int(ctx * 0.85), "total": ctx}
+            avant = len(c["messages"])
+            A.elaguer(c, r, lambda e: None)
+            self.assertLess(len(c["messages"]), avant, "85 % d'après Ollama : on retire aussi")
         finally:
             A.enregistrer_reglages({"memoire_longue": "resume", "fiche_scribe": True})
+
+    def test_une_demande_sans_aucune_reponse_ecrite_le_dit(self):
+        from lutin import dialogue
+        vrai = dialogue.boucle_agent
+        dialogue.boucle_agent = lambda conv, r, emit, ctx, stop: None          # le modèle n'a rien écrit et rien signalé
+        try:
+            ev = chat("Bonjour ?", reponses=[])
+        finally:
+            dialogue.boucle_agent = vrai
+        erreurs = [e["texte"] for e in ev if e["type"] == "erreur"]
+        self.assertTrue(erreurs and "Aucune réponse" in erreurs[0], "plus de silence : la page dit pourquoi")
+        ev = chat("Salut", reponses=[[{"content": "Bonjour !"}]])
+        self.assertFalse([e for e in ev if e["type"] == "erreur"], "une réponse normale ne déclenche rien")
 
     def test_le_resume_garde_le_debut_retrouvable(self):
         """Le résumé automatique retire le début de la conversation : il est archivé, « rappeler » (ici=true) le retrouve, et l'archive disparaît avec la conversation."""
@@ -1844,7 +1875,7 @@ class Assistant(unittest.TestCase):
             self.assertTrue(any(e["type"] == "choix_memoire" for e in ev), "la question est posée au premier résumé")
             conv = A.conv_lire(cid)
             self.assertEqual(conv["memoire_longue"], "fichier", "« garder » retient le choix pour la conversation")
-            self.assertEqual(len(conv["messages"]), 14, "en mode fiche, rien n'est retiré de la conversation")
+            self.assertLess(len(conv["messages"]), 14, "en mode fiche, la conversation presque pleine est allégée du début (archivé, retrouvable avec « rappeler »)")
             self.assertIn("Retrouver le code du coffre", suivi.lire(cid)["objectif"], "la fiche est amorcée à partir du début de la conversation")
             ev = chat("Encore", conversation=cid, reponses=[[{"content": "Oui."}]])
             self.assertFalse(any(e["type"] == "choix_memoire" for e in ev), "choix gardé : la question n'est plus posée")
@@ -1948,7 +1979,7 @@ class Assistant(unittest.TestCase):
             fiche = suivi.lire(cid)
             self.assertIn("Le code du coffre est 4711-ZEBRE", fiche["decisions"], "le scribe a écrit la décision sans que le modèle ait appelé l'outil")
             self.assertEqual((fiche["etape"], fiche["ouvert"]), (["Ouvrir le coffre"], ["Qui garde la clé ?"]))
-            self.assertGreater(A.conv_lire(cid).get("scribe_a", 0), 10, "le scribe retient jusqu'où il a lu")
+            self.assertEqual(A.conv_lire(cid).get("scribe_a"), len(A.conv_lire(cid)["messages"]), "le scribe retient jusqu'où il a lu (et son rang suit le retrait du début)")
             chat("Merci", conversation=cid, reponses=[[{"content": "De rien."}]])
             c = A.conv_lire(cid)
             self.assertEqual(c["scribe_a"], len(c["messages"]) - 2, "pas de nouveau passage du scribe avant trois échanges (son rang suit le retrait du début)")
