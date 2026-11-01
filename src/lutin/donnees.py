@@ -62,6 +62,7 @@ def _enregistrer_reglages(nouveau):
     r["web"] = bool(r.get("web", True))
     r["essai_a_blanc"] = bool(r.get("essai_a_blanc"))
     r["copie_conversations"] = bool(r.get("copie_conversations"))
+    r["conseil_machine"] = bool(r.get("conseil_machine", True))
     if r.get("memoire_longue") not in ("resume", "fichier", "demander"):
         raise ValueError(_t("Mémoire des longues conversations inconnue (resume, fichier ou demander)."))
     _m.nettoyer_echantillonnage(r)

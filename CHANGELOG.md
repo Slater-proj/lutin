@@ -2,6 +2,14 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## 0.12.0
+
+- **Choisir la précision d'un modèle (4 bits, 8 bits…)** : le bouton **Précision** de chaque modèle de l'onglet Modèles liste ses variantes (`q4_K_M`, `q8_0`, `fp16`…) lues sur ollama.com, avec leur taille, ce que cette machine en pense (« Adapté », « Limite », « Trop gros ») et ce que la précision change. Plus elle est basse, plus le modèle est petit et rapide, mais moins fin : surtout pour les petits modèles et leurs appels d'outils.
+- **Mode « petite machine »** : sur une machine sans carte graphique ou à peu de mémoire, une bannière propose d'un clic des réglages adaptés (fenêtre de contexte 24 576 → 12 288 jetons, réflexion coupée par défaut). Jamais imposé, et « Ne plus proposer » le range.
+- **Comparer des modèles côte à côte** : coche ⚖ sur des modèles installés, **Tester et comparer la sélection** lance le banc complet sur chacun l'un après l'autre, et un tableau montre vitesse, outils, code, français et consignes (le meilleur de chaque colonne en gras).
+
+**English.** Choose a model's precision (4-bit, 8-bit…) with a **Precision** button listing the variants read on ollama.com, with sizes and how well this machine copes. A “small machine” banner offers one-click settings (smaller context window, thinking off by default) on machines without a graphics card or with little memory. Compare models side by side: tick ⚖, run the full benchmark on each, and read speed, tools, code, French and instructions in one table.
+
 ## 0.11.5
 
 - **Outil « executer » : une commande avec un « = » n'arrivait plus vide.** Quand le modèle envoyait la commande comme simple texte (`echo a=b`, `set X=1`, `git config user.name=Moi`…), Lutin la prenait pour une paire « clé=valeur » et l'outil recevait une commande vide. Désormais « clé=valeur » n'est lu comme tel que si **chaque clé est un paramètre de l'outil** ; sinon c'est du texte rattaché à l'argument principal de l'outil (d'après son schéma). Les arguments envoyés sous forme de texte JSON, de chaîne JSON, de nombre ou de liste sont aussi traités sans rien inventer.

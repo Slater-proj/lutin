@@ -26,7 +26,7 @@ def modele_conseille(profil, catalogue):
     return next(((c.id, c.modele.get("go")) for c in choix.values() if c is not None), None)
 
 
-def diagnostiquer(ollama_actif, ollama_installe, installes, reglages, profil=None, catalogue=None, adequation=None, disque_libre_go=None, docker=None):
+def diagnostiquer(ollama_actif, ollama_installe, installes, reglages, profil=None, catalogue=None, adequation=None, disque_libre_go=None, docker=None, conseils=None):
     """La liste des problèmes, du plus grave au moins grave : [{code, niveau, texte, action}]. Vide quand tout va bien."""
     docker = (os.environ.get("LUTIN_DOCKER") == "1") if docker is None else docker
     problemes = []
@@ -58,6 +58,9 @@ def diagnostiquer(ollama_actif, ollama_installe, installes, reglages, profil=Non
         elif choisi and (adequation or {}).get(choisi, {}).get("niveau") == "trop_gros":
             problemes.append({"code": "modele_trop_gros", "niveau": "attention", "texte": _t("Le modèle « {} » est trop gros pour cette machine : {}").format(choisi, (adequation[choisi] or {}).get("texte", "")),
                               "action": {"type": "onglet", "nom": "modeles"}})
+    if conseils and (reglages or {}).get("conseil_machine", True) and not any(p["niveau"] == "erreur" for p in problemes):
+        problemes.append({"code": "petite_machine", "niveau": "info", "texte": _t("Réglages conseillés pour cette machine (processeur ou peu de mémoire) : ") + " ".join(c["texte"] for c in conseils),
+                          "action": {"type": "appliquer_conseil"}, "action2": {"type": "ignorer_conseil"}})
     if disque_libre_go is not None and disque_libre_go < SEUIL_DISQUE_GO:
         problemes.append({"code": "disque", "niveau": "attention", "texte": _t("Il reste moins de {:g} Go sur le disque des données de Lutin : les modèles et les fichiers ne tiendront pas.").format(SEUIL_DISQUE_GO), "action": None})
     return problemes

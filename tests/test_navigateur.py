@@ -494,6 +494,31 @@ class Parcours(unittest.TestCase):
             self.assertNotIn("pas encore dans Lutin", p.evaluer("document.querySelector('#listeTravaux').textContent"))
             self.assertEqual(p.erreurs, [])
 
+    def test_precision_des_modeles_et_comparaison_cote_a_cote(self):
+        with self.captures.serveur_demo() as (port, tmp):
+            p = self.ouvrir(tmp, "http://127.0.0.1:%d/" % port)
+            p.evaluer(onglet("modeles"))
+            p.attendre("document.querySelectorAll('#listeModeles details.famille').length > 3")
+            p.evaluer("document.querySelectorAll('#listeModeles details.famille').forEach(d => d.open = true)")
+            # les variantes sont lues sur ollama.com : ici une réponse fabriquée
+            p.evaluer("""(() => { const vrai = window.fetch.bind(window); window.fetch = (u, o) => String(u).includes('/api/variantes') ? Promise.resolve(new Response(JSON.stringify({modele: 'qwen3:8b', defaut: {id: 'qwen3:8b', go: 5.2},
+                variantes: [{precision: 'q4_K_M', id: 'qwen3:8b-q4_K_M', go: 5.2, defaut: true, installe: false, niveau: 'bien', jugement: 'ok', explication: 'Le défaut.'},
+                            {precision: 'q8_0', id: 'qwen3:8b-q8_0', go: 8.9, defaut: false, installe: false, niveau: 'limite', jugement: 'tient à peine', explication: 'Presque sans perte.'}]}), {status: 200, headers: {'Content-Type': 'application/json'}})) : vrai(u, o); })()""")
+            p.evaluer("""(() => { const m = [...document.querySelectorAll('#listeModeles .mod')].find(m => m.querySelector('.mod-nom').textContent.includes(' qwen3:8b') || m.querySelector('.mod-nom').textContent.includes('· qwen3:8b'));
+                [...m.querySelectorAll('button')].find(b => b.textContent === 'Précision').click(); })()""")
+            p.attendre("!!document.querySelector('#listeModeles .mod-variantes .banc-ligne')", 8)
+            texte = p.evaluer("document.querySelector('#listeModeles .mod-variantes').textContent")
+            self.assertIn("q8_0", texte)
+            self.assertIn("8.9", texte)
+            self.assertIn("celle installée par défaut", texte)
+            self.assertTrue(p.evaluer("[...document.querySelectorAll('#listeModeles .mod-variantes button')].some(b => b.textContent === 'Installer')"))
+            # la comparaison : cocher un modèle installé active le bouton ; sans mesure complète, pas de tableau
+            self.assertTrue(p.evaluer("document.querySelector('#bComparer').disabled"), "rien de coché")
+            p.evaluer("document.querySelector('#listeModeles .mod input[type=checkbox]').click()")
+            self.assertFalse(p.evaluer("document.querySelector('#bComparer').disabled"))
+            # le modèle de la démonstration a une mesure complète : le tableau apparaît avec sa ligne
+            self.assertIn("jetons/s", p.evaluer("document.querySelector('#tableComparaison').textContent"))
+
     def test_liste_des_modeles_par_familles_sur_deux_lignes_et_sans_filtre_a_part(self):
         with self.captures.serveur_demo() as (port, tmp):
             p = self.ouvrir(tmp, "http://127.0.0.1:%d/" % port)

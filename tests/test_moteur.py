@@ -650,6 +650,35 @@ class Assistant(unittest.TestCase):
         self.assertEqual((A.RACINE / "egal.txt").read_text(encoding="utf-8", errors="replace").strip(), "a=b")
         (A.RACINE / "egal.txt").unlink()
 
+    def test_variantes_de_precision_conseil_machine_et_serie_de_bancs(self):
+        import time as _t
+        from lutin import variantes as V
+        page = ('<a href="/library/qwen3:8b" class="md:hidden x"><span> abc &nbsp;·&nbsp; 5.2GB &nbsp;·&nbsp; 40K</span></a>'
+                '<a href="/library/qwen3:8b-q8_0" class="md:hidden x"><span> def &nbsp;·&nbsp; 8.9GB &nbsp;·&nbsp; 40K</span></a>')
+        V.CACHE["qwen3"] = (_t.time(), page)
+        try:
+            r = lire("/api/variantes?modele=qwen3:8b")
+            self.assertEqual([(v["precision"], v["go"]) for v in r["variantes"]], [("q8_0", 8.9)])
+            self.assertIn(r["variantes"][0]["niveau"], ("ideal", "bien", "limite", "trop_gros"))
+            self.assertTrue(r["variantes"][0]["explication"])
+            with self.assertRaises(urllib.error.HTTPError) as cm:
+                lire("/api/variantes?modele=qwen3")
+            self.assertEqual(cm.exception.code, 400, "sans taille : pas de variantes à proposer")
+        finally:
+            V.CACHE.clear()
+        reglages_avant = A.reglages()
+        try:
+            self.assertIn(post("/api/conseil-machine", {"action": "appliquer"})["ok"], (True,))
+            self.assertTrue(post("/api/conseil-machine", {"action": "ignorer"})["ok"])
+            self.assertFalse(A.reglages()["conseil_machine"])
+            post("/api/conseil-machine", {"action": "danse"}, attendu=400)
+        finally:
+            A.enregistrer_reglages({"conseil_machine": True, "num_ctx": reglages_avant["num_ctx"], "reflexion": reglages_avant["reflexion"]})
+        post("/api/bench-serie", {"modeles": []}, attendu=400)
+        post("/api/bench-serie", {"modeles": ["pas-installe:1b"]}, attendu=400)
+        post("/api/bench-serie", {"modeles": ["../mauvais"]}, attendu=400)
+        self.assertEqual(lire("/api/etat")["bench"]["file"], [])
+
     def test_un_modele_qui_reflechit_sans_repondre_est_relance_puis_explique(self):
         ev = chat("Bonjour", reponses=[[{"thinking": "hum"}], [{"content": "Voilà la réponse."}]])
         self.assertEqual(texte_de(ev), "Voilà la réponse.")

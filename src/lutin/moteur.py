@@ -63,7 +63,7 @@ REGLAGES_DEFAUT = {"modele": os.environ.get("LUTIN_MODELE") or "qwen3:8b", "avan
                     "top_p": None, "top_k": None, "min_p": None, "repeat_penalty": None,          # None = valeur conseillée pour la famille du modèle (voir profil_echantillonnage)
                     "garde_ressources": True, "seuil_ram_go": 3.0, "seuil_disque_go": 10.0, "plafond_donnees_go": 2.0, "limite_ram_commande_go": 0.0,
                     "liberer_si_comfy": True, "rappels_auto": "scenario",
-                    "num_thread": None, "garde_min": None, "essai_a_blanc": False, "copie_conversations": False, "memoire_longue": "demander", "fiche_part": 10, "fiche_scribe": True, "recherche_sens": False, "modele_embeddings": "nomic-embed-text"}          # charge de la machine : cœurs du processeur utilisés et minutes de garde du modèle en mémoire (None = automatique)          # rappels_auto : « scenario » (mode scénariste seulement), « toujours » ou « jamais »
+                    "num_thread": None, "garde_min": None, "essai_a_blanc": False, "copie_conversations": False, "conseil_machine": True, "memoire_longue": "demander", "fiche_part": 10, "fiche_scribe": True, "recherche_sens": False, "modele_embeddings": "nomic-embed-text"}          # charge de la machine : cœurs du processeur utilisés et minutes de garde du modèle en mémoire (None = automatique)          # rappels_auto : « scenario » (mode scénariste seulement), « toujours » ou « jamais »
 CHOIX_RAPPELS = ("scenario", "toujours", "jamais")
 BORNES_CHARGE = {"num_thread": (1, 256), "garde_min": (0, 240)}
 BORNES_RESSOURCES = {"seuil_ram_go": (0.5, 64.0), "seuil_disque_go": (1.0, 2000.0), "plafond_donnees_go": (0.2, 500.0), "limite_ram_commande_go": (0.0, 256.0)}
@@ -597,7 +597,7 @@ TOURS_SIMULTANES = 2       # au plus deux réponses à la fois (une seule carte 
 TOURS_ACTIFS = {}          # id de conversation -> threading.Event « stop » du tour en cours (une conversation = un tour à la fois)
 VERROU_TOURS = threading.Lock()
 RACINE_TOURS = {}          # id de conversation -> dossier de travail utilisé par sa réponse en cours (une seule racine à la fois, voir activer_travail)
-BENCH = {"en_cours": "", "etape": "", "erreur": ""}
+BENCH = {"en_cours": "", "etape": "", "erreur": "", "file": []}          # file : les modèles qui attendent leur tour dans une série (comparaison)
 
 
 # --------------------------------------------------------------------------- dossiers de travail multiples
@@ -693,22 +693,59 @@ def lancer_bench(modele, rapide):
             raise ValueError("Une réponse est en cours : le banc d'essai fausserait les mesures. Attends sa fin.")
         if BENCH["en_cours"]:
             raise ValueError("Un banc d'essai est déjà en cours ({}).".format(BENCH["en_cours"]))
-        BENCH.update(en_cours=modele, etape="démarrage", erreur="")
+        BENCH.update(en_cours=modele, etape="démarrage", erreur="", file=[])
 
     def travail():
         try:
-            from .machine import detecter
-            mesure = _bench.executer(_Ollama(OLLAMA), modele, rapide, lambda nom, i, n: BENCH.update(etape="{} ({}/{})".format(nom, i + 1, n)), detecter().resume(), reglages()["num_ctx"])
-            _bench.enregistrer(chemin_bench(), mesure)
-            if mesure.get("erreur"):
-                BENCH["erreur"] = mesure["erreur"]
-        except Exception as erreur:  # noqa: BLE001
-            BENCH["erreur"] = str(erreur)[:200]
-            journaliser("Banc d'essai de {} : {!r}".format(modele, erreur))
+            _mesurer_un(modele, rapide)
         finally:
             BENCH.update(en_cours="", etape="")
     threading.Thread(target=travail, daemon=True, name="banc-essai").start()
     return {"ok": True}
+
+
+def _mesurer_un(modele, rapide):
+    """Mesure un modèle et enregistre le résultat. Ne lève jamais : une panne est notée dans BENCH['erreur']."""
+    BENCH.update(en_cours=modele, etape="démarrage")
+    try:
+        from .machine import detecter
+        mesure = _bench.executer(_Ollama(OLLAMA), modele, rapide, lambda nom, i, n: BENCH.update(etape="{} ({}/{})".format(nom, i + 1, n)), detecter().resume(), reglages()["num_ctx"])
+        _bench.enregistrer(chemin_bench(), mesure)
+        if mesure.get("erreur"):
+            BENCH["erreur"] = mesure["erreur"]
+    except Exception as erreur:  # noqa: BLE001
+        BENCH["erreur"] = str(erreur)[:200]
+        journaliser("Banc d'essai de {} : {!r}".format(modele, erreur))
+
+
+def lancer_bench_serie(modeles, rapide=False):
+    """Mesure plusieurs modèles l'un après l'autre (la comparaison côte à côte). Un seul à la fois : deux mesures en même temps se fausseraient."""
+    modeles = [m for m in dict.fromkeys(modeles) if m]
+    if len(modeles) < 1:
+        raise ValueError("Choisis au moins un modèle installé.")
+    for m in modeles:
+        if not RE_NOM_MODELE.match(m):
+            raise ValueError("Nom de modèle invalide.")
+    installes = set(etat_ollama()["installes"])
+    absents = [m for m in modeles if m not in installes]
+    if absents:
+        raise ValueError("Ces modèles ne sont pas installés : " + ", ".join(absents))
+    with VERROU_TOURS:
+        if TOURS_ACTIFS:
+            raise ValueError("Une réponse est en cours : le banc d'essai fausserait les mesures. Attends sa fin.")
+        if BENCH["en_cours"]:
+            raise ValueError("Un banc d'essai est déjà en cours ({}).".format(BENCH["en_cours"]))
+        BENCH.update(en_cours=modeles[0], etape="démarrage", erreur="", file=modeles[1:])
+
+    def travail():
+        try:
+            for i, m in enumerate(modeles):
+                BENCH["file"] = modeles[i + 1:]
+                _mesurer_un(m, rapide)
+        finally:
+            BENCH.update(en_cours="", etape="", file=[])
+    threading.Thread(target=travail, daemon=True, name="banc-serie").start()
+    return {"ok": True, "modeles": modeles}
 
 
 def arreter_conversation(ident):

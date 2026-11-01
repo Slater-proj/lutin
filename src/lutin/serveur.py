@@ -4,6 +4,8 @@ from . import bench as _bench
 from . import acces as _acces
 from . import adequation as _adequation
 from . import conseil as _conseil
+from . import conseil_machine as _conseil_machine
+from . import variantes as _variantes
 from . import diagnostic as _diagnostic
 from . import emplacements as _emplacements
 from . import decouverte as _decouverte
@@ -98,13 +100,26 @@ class Gestionnaire(BaseHTTPRequestHandler):
         return self._local() and not any(self.headers.get(h) for h in relais) and (_sec._est_boucle(_sec._sans_port(self.headers.get("Host") or "")) or bool(_m.IP_LAN and _sec._sans_port(self.headers.get("Host") or "") == _m.IP_LAN))
 
     @staticmethod
+    def _variantes_jugees(modele):
+        """Les variantes de précision de `modele` avec, pour chacune, ce que cette machine en dit (tient ou pas) et si elle est déjà installée."""
+        lues = _variantes.lister(modele)
+        profil = _adequation.profil_pret()
+        base = next((m for m in _m._CATALOGUE["modeles"] if m["id"] == modele), {})
+        installes = set(_m.etat_ollama()["installes"])
+        sortie = []
+        for v in lues["variantes"]:
+            jugement = _adequation.evaluer(dict(base, go=v["go"]), profil) if profil is not None else {"niveau": "bien", "texte": ""}
+            sortie.append(dict(v, installe=v["id"] in installes, niveau=jugement["niveau"], jugement=jugement["texte"], explication=_variantes.decrire(v["precision"])))
+        return {"modele": modele, "defaut": lues["defaut"], "variantes": sortie}
+
+    @staticmethod
     def _diagnostic(o, r, profil, modeles):
         """Ce qui empêche Lutin de répondre (ou le gêne), pour la bannière du haut de la page."""
         jauge = _emplacements.jauge_modeles() or {}
         libre = jauge.get("libre")
         try:
             return _diagnostic.diagnostiquer(o["actif"], bool(_m.chemin_ollama()), o["installes"], r, profil, _m._CATALOGUE, _adequation.pour_la_liste(modeles, profil, _m._CATALOGUE["modeles"]),
-                                             libre / 1e9 if libre else None)
+                                             libre / 1e9 if libre else None, conseils=_conseil_machine.conseils(profil, r))
         except (KeyError, TypeError, ValueError, AttributeError):
             return []
 
@@ -186,7 +201,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
                                        "version": _m.VERSION, "ollama": o["actif"], "ollama_installe": bool(_m.chemin_ollama()), "installes": o["installes"], "modeles": modeles, "modeles_masques": len(_m.lire_registre_modeles()["masques"]), "actives": list(_m.TOURS_ACTIFS),
                                        "pulls": _m.PULLS, "reglages": r, "conversations": _m.conv_liste(), "racine": str(_m.RACINE), "donnees": str(_m.DONNEES),
                                        "outil": bool(self._outil_vivant()), "hors_ligne": _hl.actif(), "niveau": _m.SECURITE.niveau, "ouverture_possible": _fichiers.ouverture_possible(), "missions": _mission.par_conversation(), "langue": _i18n.langue(), "langue_reglage": _i18n.langue_configuree(), "cpus": _machine.cpus_disponibles() or 1, "diagnostic": self._diagnostic(o, r, profil, modeles), "redemarrage": {"necessaire": _acces.securite_enregistree() != _m.SECURITE, "possible": _acces.peut_redemarrer()}, "nouvelle_version": _m.nouvelle_version_lutin(), "travaux": _m.travaux_etat(), "configurateur": self._configurateur(), "addons_alertes": _addons.alertes(), "embeddings": _embeddings.etat(),
-                                       "bench": {"en_cours": _m.BENCH["en_cours"], "etape": _m.BENCH["etape"], "erreur": _m.BENCH["erreur"], "mesures": _bench.lire(_m.chemin_bench())}, "attentes": [{"id": a.id, "titre": a.titre, "detail": a.detail, "diff": a.diff} for a in _m.Attente.EN_COURS.values()]})
+                                       "bench": {"en_cours": _m.BENCH["en_cours"], "etape": _m.BENCH["etape"], "erreur": _m.BENCH["erreur"], "file": list(_m.BENCH.get("file") or []), "mesures": _bench.lire(_m.chemin_bench())}, "attentes": [{"id": a.id, "titre": a.titre, "detail": a.detail, "diff": a.diff} for a in _m.Attente.EN_COURS.values()]})
         if chemin == "/api/conseil":
             r = _m.reglages()
             vitesse = ((_bench.lire(_m.chemin_bench()).get(r["modele"]) or {}).get("resultats") or {}).get("vitesse")
@@ -233,6 +248,14 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 return self._envoyer(200, _m.lister_dossiers((q.get("chemin") or [""])[0]))
             except ValueError as e:
                 return self._envoyer(400, {"erreur": str(e)})
+        if chemin == "/api/variantes":                           # les précisions (q4, q8, fp16…) d'un modèle de la bibliothèque, jugées pour CETTE machine
+            q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+            try:
+                return self._envoyer(200, self._variantes_jugees((q.get("modele") or [""])[0]))
+            except ValueError as e:
+                return self._envoyer(400, {"erreur": str(e)})
+            except OSError as e:
+                return self._envoyer(503, {"erreur": str(e)})
         if chemin == "/api/decouvrir":                           # la bibliothèque d'Ollama (nouveautés, populaires, recherche)
             q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
             try:
@@ -643,6 +666,19 @@ class Gestionnaire(BaseHTTPRequestHandler):
                     raise ValueError(_t("Une réponse est déjà en cours : attends sa fin."))
                 threading.Thread(target=lambda: _plan.executer(ident), daemon=True, name="planifie-lancer").start()
                 return self._envoyer(200, {"ok": True})
+            if self.path == "/api/conseil-machine":
+                action = str(donnees.get("action", ""))
+                if action == "ignorer":
+                    _m.enregistrer_reglages({"conseil_machine": False})
+                    return self._envoyer(200, {"ok": True})
+                if action == "appliquer":
+                    changements = _conseil_machine.appliquer(_adequation.profil_pret(), _m.reglages())
+                    if changements:
+                        _m.enregistrer_reglages(changements)
+                    return self._envoyer(200, {"ok": True, "appliques": changements})
+                return self._envoyer(400, {"erreur": _t("Action inconnue.")})
+            if self.path == "/api/bench-serie":
+                return self._envoyer(200, _m.lancer_bench_serie([str(x) for x in (donnees.get("modeles") or [])][:8], bool(donnees.get("rapide"))))
             if self.path == "/api/bench":
                 return self._envoyer(200, _m.lancer_bench(str(donnees.get("modele", "")), bool(donnees.get("rapide"))))
             if self.path == "/api/version-ignorer":
