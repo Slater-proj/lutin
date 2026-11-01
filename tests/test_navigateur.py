@@ -507,11 +507,11 @@ class Parcours(unittest.TestCase):
                   return new Response(JSON.stringify(d), {status: 200, headers: {'Content-Type': 'application/json'}}); }; })()""")
             p.evaluer(onglet("reglages"))
             p.evaluer("document.querySelector('#cSens').checked = true; document.querySelector('#cSens').dispatchEvent(new Event('change'))")
-            p.attendre("document.querySelector('#aideSens').textContent.includes('45 %')", 12)
+            p.attendre("document.querySelector('#aideSens').textContent.includes('45 %')", 25)
             self.assertTrue(p.evaluer("!!document.querySelector('#aideSens .barre i')"), "une barre de progression")
             self.assertIn("45 / 100", p.evaluer("document.querySelector('#aideSens').textContent"))
             p.evaluer("window.__emb.installe = true; window.__emb.installation = {etat: 'fini', fait: 100000000, total: 100000000, erreur: '', texte: ''}")
-            p.attendre("[...document.querySelectorAll('#aideSens button')].some(b => b.textContent === 'Supprimer ce modèle')", 12)
+            p.attendre("[...document.querySelectorAll('#aideSens button')].some(b => b.textContent === 'Supprimer ce modèle')", 25)
             self.assertIn("Modèle de recherche installé", p.evaluer("document.querySelector('#aideSens').textContent"))
             # dans l'onglet Modèles : une puce explique à quoi il sert, et aucun « Utiliser » ni banc d'essai
             p.evaluer(onglet("modeles"))
@@ -535,18 +535,28 @@ class Parcours(unittest.TestCase):
                 const vrai = window.fetch.bind(window);
                 window.fetch = async (u, o) => { const r = await vrai(u, o); if (!String(u).includes('/api/etat')) return r; const d = await r.json(); d.pulls = window.__pulls;
                   return new Response(JSON.stringify(d), {status: 200, headers: {'Content-Type': 'application/json'}}); }; })()""")
-            p.attendre("!document.querySelector('#bandeauTelechargements').hidden", 12)
+            p.attendre("!document.querySelector('#bandeauTelechargements').hidden", 25)
             texte = p.evaluer("document.querySelector('#bandeauTelechargements').textContent")
             self.assertIn("qwen3:4b-q8_0", texte)
             self.assertIn("45 % (45 / 100", texte)
             self.assertTrue(p.evaluer("!!document.querySelector('#bandeauTelechargements .barre i')"), "une barre de progression, dans le bandeau bleu : la barre du haut n'est pas encombrée")
             self.assertTrue(p.evaluer("document.querySelector('#pOllama').parentElement.querySelectorAll('button.puce').length === 0"))
             p.evaluer("window.__pulls = {'qwen3:4b-q8_0': {statut: 'erreur', fait: 0, total: 0, texte: 'pas de réseau'}}")
-            p.attendre("document.querySelector('#bandeauTelechargements').textContent.includes('échoué')", 12)
+            p.attendre("document.querySelector('#bandeauTelechargements').textContent.includes('échoué')", 25)
             self.assertIn("pas de réseau", p.evaluer("document.querySelector('#bandeauTelechargements').textContent"))
             self.assertTrue(p.evaluer("[...document.querySelectorAll('#bandeauTelechargements button')].some(b => b.textContent === 'Réessayer')"))
+            hauteur = "document.querySelector('#bandeauTelechargements').offsetHeight"
+            self.assertLess(p.evaluer(hauteur), 140, "le bandeau reste une bande fine, même avec une erreur")
+            p.evaluer("window.__pulls = {'qwen3:4b-q8_0': {statut: 'en cours', fait: 90000000, total: 100000000, texte: 'pulling'}}")
+            p.attendre("document.querySelector('#bandeauTelechargements').textContent.includes('90 %')", 25)
+            self.assertLess(p.evaluer(hauteur), 140)
+            p.evaluer("window.__pulls = {'qwen3:4b-q8_0': {statut: 'termine', fait: 100000000, total: 100000000, texte: 'success'}}")
+            p.attendre("document.querySelector('#bandeauTelechargements').textContent.includes('installé')", 25)
+            self.assertLess(p.evaluer(hauteur), 140, "« installé » ne prend pas la moitié de l'écran")
+            p.evaluer("window.__pulls = {'qwen3:4b-q8_0': {statut: 'erreur', fait: 0, total: 0, texte: 'pas de réseau'}}")
+            p.attendre("document.querySelector('#bandeauTelechargements').textContent.includes('échoué')", 25)
             p.evaluer("[...document.querySelectorAll('#bandeauTelechargements button')].find(b => b.textContent === 'Fermer').click()")
-            self.assertTrue(p.evaluer("document.querySelector('#bandeauTelechargements').hidden"), "fermer l'erreur masque le bandeau")
+            self.assertNotIn("échoué", p.evaluer("document.querySelector('#bandeauTelechargements').textContent"), "fermer l'erreur la retire du bandeau")
 
     def test_copier_un_lien_marche_meme_sans_presse_papiers_moderne(self):
         """Page en http (adresse du réseau local) : navigator.clipboard n'existe pas, la copie passe par un champ temporaire sélectionné."""

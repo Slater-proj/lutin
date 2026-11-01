@@ -2,6 +2,12 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## 0.13.7
+
+- **Le bandeau de téléchargement ne prend plus la moitié de l'écran.** Les lignes « ✔ modèle installé » y héritaient d'une règle du bandeau « nouvelle version » (largeur de base 260 px), qui dans un bandeau en colonne devenait 260 px de **hauteur**. Le bandeau est maintenant une bande fine (30 % de l'écran au plus, défilable), et un test mesure sa hauteur à chaque état (en cours, terminé, échec).
+
+**English.** The download banner no longer takes half the screen: “installed” lines inherited a 260 px base width that became 260 px of height in a column banner.
+
 ## 0.13.6
 
 - **« Impossible de télécharger : open …\.ollama\id_ed25519 »** : Ollama garde une clé d'identité (`id_ed25519`) dans son dossier `.ollama`, à côté de son historique et **séparément du dossier des modèles**. Si ce dossier est supprimé ou déplacé pendant qu'Ollama tourne, il ne la retrouve plus et refuse de télécharger. Ce n'est pas un chemin écrit en dur dans Lutin : c'est un fichier qu'Ollama recrée à son démarrage. L'erreur est maintenant expliquée en clair, et le bandeau de téléchargement propose **« Redémarrer Ollama puis réessayer »**.
