@@ -101,5 +101,26 @@ class EnVrai(unittest.TestCase):
         self.assertEqual(self.mesurer("avec"), [], "le témoin voit {} : la règle doit les supprimer".format(temoin))
 
 
+class Enquete(unittest.TestCase):
+    def test_la_trace_note_chaque_programme_lance_et_se_retire(self):
+        import os
+        with tempfile.TemporaryDirectory() as d:
+            fichier = os.path.join(d, "trace.log")
+            avant = subprocess.Popen.__init__
+            try:
+                self.assertEqual(sansconsole.tracer(fichier), fichier)
+                subprocess.run([sys.executable, "-c", "pass"], capture_output=True)
+                subprocess.run(sys.executable + " -c pass", shell=True, capture_output=True)
+                subprocess.Popen(args=[sys.executable, "-c", "pass"]).wait()
+            finally:
+                sansconsole.arreter_trace()
+            self.assertIs(subprocess.Popen.__init__, avant, "la trace se retire proprement")
+            lignes = open(fichier, encoding="utf-8").read().splitlines()
+            self.assertEqual(len(lignes), 3)
+            self.assertIn("fenetre_masquee=", lignes[0])
+            self.assertIn("shell=True", lignes[1])
+            self.assertIn("-c pass", lignes[2], "même appelé avec args=")
+
+
 if __name__ == "__main__":
     unittest.main()

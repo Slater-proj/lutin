@@ -48,3 +48,39 @@ def activer(force=False):
     subprocess.Popen.__init__ = envelopper(subprocess.Popen.__init__)
     _actif = True
     return True
+
+
+# ---- Enquête : « quel programme ouvre cette fenêtre qui clignote ? »
+_trace = {"fichier": None, "origine": None}
+
+
+def tracer(fichier):
+    """Note dans `fichier` chaque programme que Lutin lance (heure, commande, si la fenêtre est masquée). Si une fenêtre clignote mais que rien n'est noté ici, ce n'est pas Lutin.
+    Activé par la variable LUTIN_TRACE_PROCESSUS (« 1 » = fichier lutin-processus.log dans le dossier temporaire, ou un chemin de fichier). Renvoie le fichier utilisé."""
+    import tempfile
+    import time
+    if _trace["fichier"]:
+        return _trace["fichier"]
+    chemin = fichier if fichier not in ("1", "oui", "true") else os.path.join(tempfile.gettempdir(), "lutin-processus.log")
+    _trace["fichier"], _trace["origine"] = chemin, subprocess.Popen.__init__
+    init = subprocess.Popen.__init__
+
+    def popen_trace(self, *a, **kw):
+        try:
+            args = a[0] if a else kw.get("args", "")
+            masque = bool(int(kw.get("creationflags", 0) or 0) & CREATE_NO_WINDOW) or _actif
+            commande = args if isinstance(args, str) else " ".join(str(x) for x in args)
+            with open(chemin, "a", encoding="utf-8") as f:
+                f.write("{} pid={} fenetre_masquee={} shell={} : {}\n".format(time.strftime("%H:%M:%S"), os.getpid(), masque, bool(kw.get("shell")), commande[:400]))
+        except (OSError, ValueError, TypeError):
+            pass
+        init(self, *a, **kw)
+    popen_trace.__wrapped__ = init
+    subprocess.Popen.__init__ = popen_trace
+    return chemin
+
+
+def arreter_trace():
+    if _trace["origine"] is not None:
+        subprocess.Popen.__init__ = _trace["origine"]
+    _trace["fichier"] = _trace["origine"] = None

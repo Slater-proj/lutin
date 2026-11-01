@@ -442,6 +442,8 @@
 "Nom de cet appareil (facultatif)": "Name of this device (optional)",
 "Se connecter": "Sign in",
 "Erreur ": "Error ",
+"Le modèle répète encore les mêmes phrases : j'arrête là. Reformule en plus court, ou choisis un autre modèle.": "The model is still repeating the same sentences: I am stopping here. Rephrase more briefly, or pick another model.",
+"Le modèle répète les mêmes phrases : je l'arrête et je relance sans réflexion, avec une pénalité de répétition.": "The model is repeating the same sentences: I am stopping it and retrying without thinking, with a repetition penalty.",
 " Les chemins sont relatifs au projet ({}). Un dossier situé en dehors du projet doit d'abord être ajouté comme dossier de travail (Réglages) ; demande-le à l'utilisateur plutôt que de le contourner avec des commandes.": " Paths are relative to the project ({}). A folder outside the project must first be added as a working folder (Settings); ask the user instead of working around it with commands.",
 "\n... (sortie coupée : {} caractères au milieu ; pour lire un fichier, utilise l'outil « lire » avec debut et fin, il donne les numéros de ligne et dit où reprendre) ...\n": "\n... (output cut: {} characters in the middle; to read a file, use the “lire” tool with debut and fin, it gives line numbers and says where to resume) ...\n",
 "L'utilisateur vient de VALIDER. Exécute maintenant, avec tes outils, ce que tu viens de lui proposer dans ton dernier message. Ne refais pas le plan, ne redemande pas de confirmation ; fais l'action, dis ce qui est fait.": "The user has just APPROVED. Now carry out, with your tools, what you just proposed in your last message. Do not redo the plan, do not ask for confirmation again; do the action and say what was done.",

@@ -2,6 +2,15 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## 0.11.4
+
+- **Une réflexion qui répète les mêmes phrases est coupée** : c'est le modèle qui se met à boucler (fréquent avec un petit modèle en mode réflexion), pas un défaut de Lutin, mais il ne s'en sort pas seul. Lutin le détecte (la même fin de texte déjà écrite plusieurs fois), arrête la génération, puis relance sans réflexion avec une pénalité de répétition et un rappel de répondre directement. Si ça recommence deux fois, il le dit.
+- **L'accord automatique suspendu par du contenu web est visible** : les cases restent cochées (c'est ton choix pour la conversation) mais prennent un ⏸ avec l'explication, et la suspension ne dure que **jusqu'à la fin de la demande en cours** : à la demande suivante, tout repart comme coché.
+- **Fenêtres noires qui clignotent au chargement d'un modèle (Windows)** : quand Lutin démarrait Ollama, il le détachait de toute console ; chaque programme à console qu'Ollama lance ensuite (le moteur de chaque modèle chargé) ouvrait alors sa propre fenêtre. Ollama est maintenant démarré avec une console **cachée** que ses programmes partagent. Ne change rien si Ollama était déjà démarré par autre chose (application Ollama, `.bat`).
+- **Enquête sur les fenêtres noires qui clignotent** (Windows) : en lançant Lutin avec la variable `LUTIN_TRACE_PROCESSUS=1`, chaque programme qu'il lance est noté (heure, commande, fenêtre masquée ou non) dans `lutin-processus.log` du dossier temporaire (ou dans le fichier donné). Si une fenêtre clignote mais que rien n'est noté à ce moment-là, ce n'est pas Lutin.
+
+**English.** Investigating flashing console windows (Windows): start Lutin with `LUTIN_TRACE_PROCESSUS=1` and every program it launches is logged (time, command, window hidden or not) to `lutin-processus.log` in the temporary folder. If a window flashes and nothing is logged at that moment, it is not Lutin.
+
 ## 0.11.3
 
 - **Moins de détours quand un dossier est hors du projet** : les erreurs des outils de lecture (« fichier introuvable », « pas un dossier », « chemin refusé ») disent maintenant que les chemins sont relatifs au projet et qu'un dossier extérieur doit être ajouté comme dossier de travail, au lieu de laisser le modèle contourner par des commandes (chacune demandant ton accord). Lire un long fichier en plusieurs fois reste normal et n'est pas bloqué.

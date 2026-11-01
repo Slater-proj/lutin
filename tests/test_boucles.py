@@ -42,5 +42,18 @@ class Boucles(unittest.TestCase):
         self.assertFalse(boucles.repete_derniere_reponse({"messages": []}))
 
 
+    def test_texte_qui_tourne_en_rond_detecte_sans_faux_positif(self):
+        boucle = "Je dois vérifier le fichier de configuration puis relancer les tests. " * 40
+        self.assertTrue(boucles.texte_repete(boucle), "la même phrase 40 fois")
+        self.assertTrue(boucles.texte_repete("Hmm. " + boucle + "Je dois vérifier le fichier de configuration"), "même coupée au milieu d'une phrase")
+        self.assertFalse(boucles.texte_repete(boucle[:600]), "trop court pour juger")
+        normal = " ".join("Étape %d : lire le fichier numéro %d, noter ce qui change et passer au suivant." % (i, i * 7) for i in range(60))
+        self.assertFalse(boucles.texte_repete(normal), "une longue réflexion qui avance n'est pas une boucle")
+        deux_fois = "Il faut d'abord comprendre le problème en détail avant de décider quoi faire ensuite. " * 2 + normal
+        self.assertFalse(boucles.texte_repete(deux_fois), "une phrase redite deux fois n'est pas une boucle")
+        self.assertFalse(boucles.texte_repete(""))
+        self.assertFalse(boucles.texte_repete(None))
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -146,6 +146,18 @@ class ClientOllama(unittest.TestCase):
             srv.shutdown()
             srv.server_close()
 
+    def test_ollama_demarre_par_lutin_n_est_pas_detache_de_toute_console_sous_windows(self):
+        """Sans console du tout (DETACHED_PROCESS), chaque moteur de modèle qu'Ollama lance ouvre sa propre fenêtre noire qui clignote : il faut une console CACHÉE (CREATE_NO_WINDOW)."""
+        from lutin import ollama_client
+        appels = []
+        ollama_client.demarrer_serveur("ollama.exe", {}, "windows", lanceur=lambda cmd, **kw: appels.append(kw))
+        drapeaux = appels[0]["creationflags"]
+        self.assertTrue(drapeaux & 0x08000000, "console cachée")
+        self.assertFalse(drapeaux & 0x00000008, "pas de DETACHED_PROCESS")
+        appels.clear()
+        ollama_client.demarrer_serveur("ollama", {}, "linux", lanceur=lambda cmd, **kw: appels.append(kw))
+        self.assertTrue(appels[0]["start_new_session"])
+
     def test_capacites(self):
         self.assertEqual(OLLAMA.capacites("qwen3:8b"), ["completion", "tools"])
         self.assertIsNone(OLLAMA.capacites("ancien"), "ancienne version d'Ollama : on ne sait pas")

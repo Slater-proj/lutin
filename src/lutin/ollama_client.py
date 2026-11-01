@@ -128,7 +128,7 @@ def demarrer_serveur(exe, variables, systeme, lanceur=subprocess.Popen):
     env.update(variables)
     options = {"stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL, "stdin": subprocess.DEVNULL, "env": env}
     if systeme == "windows":
-        options["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0) | getattr(subprocess, "DETACHED_PROCESS", 0)
+        options["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0x08000000) | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)          # pas DETACHED_PROCESS : sans console, les programmes lancés par Ollama (un moteur par modèle chargé) ouvriraient chacun une fenêtre noire
     else:
         options["start_new_session"] = True
     return lanceur([exe, "serve"], **options)

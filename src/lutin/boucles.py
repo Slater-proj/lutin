@@ -18,6 +18,21 @@ LONGUEUR_MIN = 60                  # une réponse plus courte (« Oui. ») ne co
 SANS_REPETITION = {"taches", "suivi", "memoriser"}          # ces outils se rappellent légitimement avec les mêmes arguments
 
 
+FENETRE_REPETITION = 160           # caractères de la fin du texte qu'on cherche plus haut
+REPETITIONS_MAX = 3                # la même fin déjà écrite autant de fois avant : le texte tourne en rond
+LONGUEUR_REPETITION = 1200         # en dessous, on ne juge pas (une phrase répétée au début d'une réflexion n'est pas une boucle)
+
+
+def texte_repete(texte):
+    """Vrai si la fin du texte (réflexion ou réponse) a déjà été écrite plusieurs fois mot pour mot plus haut : le modèle est coincé dans une boucle de génération.
+    Ce n'est pas un défaut de Lutin : les petits modèles, surtout en réflexion, peuvent se mettre à répéter la même phrase ; il faut les arrêter, ils ne s'en sortent pas seuls."""
+    t = re.sub(r"\s+", " ", texte or "").strip()
+    if len(t) < LONGUEUR_REPETITION:
+        return False
+    fin = t[-FENETRE_REPETITION:]
+    return t[:-FENETRE_REPETITION].count(fin) >= REPETITIONS_MAX
+
+
 def mots_utiles(texte):
     return set(m for m in rappel.mots(texte) if len(m) > 3)
 

@@ -239,6 +239,8 @@ def chat(message, conversation="", reponses=None, decider=None, choisir=None, **
     evenements = []
     with urllib.request.urlopen(req, timeout=60) as r:
         for brut in r:
+            if not brut.strip():
+                continue                                                    # battement du flux (ligne vide)
             e = json.loads(brut.decode("utf-8"))
             evenements.append(e)
             if e["type"] == "approbation":
@@ -614,6 +616,29 @@ class Assistant(unittest.TestCase):
         self.assertTrue(any(e["type"] == "info" and "continue" in e["texte"] for e in ev), "on dit comment reprendre")
         fin = next(e for e in ev if e["type"] == "fin")["conversation"]["id"]
         self.assertIn("user", [m["role"] for m in A.conv_lire(fin)["messages"]], "la demande est gardée")
+
+    def test_une_reflexion_qui_tourne_en_rond_est_coupee_et_relancee_sans_reflexion(self):
+        """Un petit modèle peut répéter la même phrase pendant des minutes : Lutin l'arrête, relance sans réflexion avec une pénalité de répétition, et la réponse arrive."""
+        phrase = "Je dois vérifier le fichier de configuration puis relancer les tests. "
+        morceaux = [{"thinking": phrase} for _ in range(60)]
+        ev = chat("Corrige", reponses=[morceaux, [{"content": "Voilà, c'est corrigé."}]])
+        self.assertTrue(any(e["type"] == "info" and "répète les mêmes phrases" in e["texte"] for e in ev))
+        self.assertEqual(texte_de(ev), "Voilà, c'est corrigé.")
+        self.assertIs(RECUES[-1].get("think"), False, "relance sans réflexion")
+        self.assertEqual(RECUES[-1]["options"].get("repeat_penalty"), 1.15)
+        self.assertIn("tournait en rond", RECUES[-1]["messages"][-1]["content"])
+
+    def test_la_suspension_de_l_accord_automatique_est_signalee_et_ne_dure_que_la_demande(self):
+        """Du contenu web lu suspend les accords automatiques pour la fin de CETTE demande ; la page est prévenue, la demande suivante repart avec les cases telles que cochées."""
+        opts = {"auto_commandes": True}
+        ev = chat("Lis la page puis lance", options=opts, reponses=[[appel_outil("web_lire", url=URL_WEB + "/page")], [appel_outil("executer", commande="echo ok> suspendu.txt")], [{"content": "Fait."}]])
+        self.assertTrue(any(e["type"] == "accord_suspendu" and "contenu web" in e["raison"] for e in ev), "la page est prévenue")
+        approb = [e for e in ev if e["type"] == "approbation"]
+        self.assertEqual(len(approb), 1, "la commande a demandé l'accord")
+        self.assertIn("suspendu", approb[0]["raison"])
+        cid = [e for e in ev if e["type"] == "debut"][0]["conversation"]
+        ev = chat("Lance une autre commande", conversation=cid, options=opts, reponses=[[appel_outil("executer", commande="echo ok> suivante.txt")], [{"content": "Fait."}]])
+        self.assertFalse([e for e in ev if e["type"] in ("approbation", "accord_suspendu")], "demande suivante : plus rien de suspendu, accord automatique")
 
     def test_un_modele_qui_reflechit_sans_repondre_est_relance_puis_explique(self):
         ev = chat("Bonjour", reponses=[[{"thinking": "hum"}], [{"content": "Voilà la réponse."}]])

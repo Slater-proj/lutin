@@ -29,6 +29,7 @@ RE_APPEL_MAL_FORME = re.compile(r"XML|syntax|parse|parsing|tool", re.I)
 
 
 RAPPEL_VIDE = "Ta dernière réponse était vide. Réponds maintenant à la demande de l'utilisateur, en t'appuyant sur ce que tu viens de lire ou de faire, ou appelle l'outil nécessaire."
+RAPPEL_REPETITION = "Ta réflexion tournait en rond (les mêmes phrases revenaient). Ne réfléchis plus : réponds maintenant directement et brièvement à la demande de l'utilisateur."
 RAPPEL_APPEL = "Ton dernier appel d'outil était mal formé et a été rejeté. Recommence en appelant l'outil avec des arguments simples ; pour un long contenu, fais plusieurs petits appels."
 
 
@@ -750,6 +751,9 @@ def tour(conv, texte, emit, r=None, stop=None, remplacer_depuis=None, identite="
             emit({"type": "info", "texte": "Du contenu web a été lu : l'accord automatique est suspendu pour la suite de cette demande, ta confirmation est demandée."})
             auto = False
             raison = _t("Accord automatique suspendu : du contenu web a été lu pendant cette demande, il pourrait contenir une consigne piégée.")
+            if not ctx.get("suspension_signalee"):
+                ctx["suspension_signalee"] = True
+                emit({"type": "accord_suspendu", "raison": raison})                # la page marque les cases : cochées, mais suspendues jusqu'à la fin de CETTE demande seulement
         if auto:
             emit({"type": "info", "texte": "Accord automatique : " + titre})
             ctx["dernier_accord"] = "auto"
@@ -928,12 +932,13 @@ def boucle_agent(conv, r, emit, ctx, stop):
                     emit({"type": "info", "texte": "Ce modèle ne sait pas appeler d'outils : il répondra sans lire ni modifier les fichiers. Choisis un autre modèle (Qwen 3.8 ou Gemma 4) pour cela."})
             else:
                 corps["tools"] = outils
-        fini, verifie, relance_outil, repli_demande, relance_vide = False, False, False, False, False
+        fini, verifie, relance_outil, repli_demande, relance_vide, relance_repetition = False, False, False, False, False, False
         if ps_modele(r["modele"]) is None:
             emit({"type": "etat", "texte": "Chargement du modèle en mémoire (30 s à 2 min la première fois, ou si ComfyUI lui a pris la carte)."})
         for tentative in range(3):
             contenu, pensee, appels = "", "", []
-            corps_t = corps if tentative == 0 else dict(corps, messages=ajuster_contexte(msgs_base, r["num_ctx"], 0.7 ** tentative, outils) + ([{"role": "user", "content": RAPPEL_APPEL}] if relance_outil else [{"role": "user", "content": RAPPEL_VIDE}] if relance_vide else []), options=dict(corps["options"], temperature=0.3), think=False if relance_vide else corps["think"])
+            rond, verifie_rond = False, 0
+            corps_t = corps if tentative == 0 else dict(corps, messages=ajuster_contexte(msgs_base, r["num_ctx"], 0.7 ** tentative, outils) + ([{"role": "user", "content": RAPPEL_APPEL}] if relance_outil else [{"role": "user", "content": RAPPEL_REPETITION}] if relance_repetition else [{"role": "user", "content": RAPPEL_VIDE}] if relance_vide else []), options=dict(corps["options"], temperature=0.3, **({"repeat_penalty": 1.15} if relance_repetition else {})), think=False if (relance_vide or relance_repetition) else corps["think"])
             try:
                 corps_t = dict(corps_t, messages=_images.pour_le_modele(corps_t["messages"], caps is None or "vision" in caps))
                 req = urllib.request.Request(_m.OLLAMA + "/api/chat", data=json.dumps(avec_garde(corps_t)).encode("utf-8"), headers={"Content-Type": "application/json"})
@@ -970,6 +975,18 @@ def boucle_agent(conv, r, emit, ctx, stop):
                             contenu += m["content"]
                             emit({"type": "texte", "texte": m["content"]})
                         appels += m.get("tool_calls") or []
+                        if len(pensee) + len(contenu) - verifie_rond >= 400:                       # toutes les 400 lettres : le texte tourne-t-il en rond ? (sortir du « with » ferme la connexion, Ollama arrête de générer)
+                            verifie_rond = len(pensee) + len(contenu)
+                            if _boucles.texte_repete(pensee) or _boucles.texte_repete(contenu):
+                                rond = True
+                                break
+                if rond:
+                    _m.journaliser("Texte répété par le modèle {} (pensée : {} caractères, réponse : {}, essai {})".format(r["modele"], len(pensee), len(contenu), tentative + 1))
+                    if tentative < 2:
+                        relance_repetition = True
+                        emit({"type": "info", "texte": _t("Le modèle répète les mêmes phrases : je l'arrête et je relance sans réflexion, avec une pénalité de répétition.")})
+                        continue
+                    emit({"type": "info", "texte": _t("Le modèle répète encore les mêmes phrases : j'arrête là. Reformule en plus court, ou choisis un autre modèle.")})
                 if not contenu.strip() and not appels:             # le modèle a (peut-être) réfléchi puis s'est tu : sans ceci la page restait sur « Réflexion » sans aucune réponse ni explication
                     _m.journaliser("Réponse vide du modèle {} (pensée : {} caractères, essai {})".format(r["modele"], len(pensee), tentative + 1))
                     if tentative < 2:
