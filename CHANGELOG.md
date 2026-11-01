@@ -2,6 +2,12 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## 0.13.4
+
+- **Le modèle de recherche par le sens (nomic-embed-text) n'apparaît plus dans les listes de choix de modèles** : ni dans le sélecteur de la conversation, ni dans le choix du petit modèle annexe, ni dans la commande /modele, ni dans la comparaison. Il travaille en fond et ne sait pas discuter : le choisir donnait une conversation muette. Lutin le refuse aussi côté serveur, et le diagnostic d'ouverture ne le compte plus comme un modèle de discussion (s'il est le seul installé, la bannière « aucun modèle installé » apparaît bien).
+
+**English.** The meaning-based search model (nomic-embed-text) no longer appears in model pickers (conversation selector, side-task model, /modele command, comparison), and the server refuses it as a chat model.
+
 ## 0.13.3
 
 - **On voit quelle précision est installée** : chaque modèle installé affiche sa précision sur sa ligne (« 4 bits (Q4_K_M) », « 8 bits (Q8_0) »…), lue dans Ollama. Dans le panneau **Précision**, la variante réellement installée est marquée « ✔ installé » ou « ★ actif », y compris la variante par défaut quand tu as installé le modèle sans préciser, et le panneau dit « Installé actuellement : … ».

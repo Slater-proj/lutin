@@ -524,6 +524,9 @@ class Parcours(unittest.TestCase):
             self.assertNotIn("Utiliser", boutons)
             self.assertNotIn("⏱", boutons)
             self.assertIn("Supprimer", boutons)
+            options = p.evaluer("[...document.querySelectorAll('#selModele option')].map(o => o.value).join(',')")
+            self.assertNotIn("nomic", options, "le modèle de recherche ne se choisit pas pour discuter")
+            self.assertIn("qwen3:8b", options)
 
     def test_pastille_de_telechargement_dans_la_barre_du_haut(self):
         with self.captures.serveur_demo() as (port, tmp):

@@ -749,6 +749,12 @@ class Assistant(unittest.TestCase):
                 INSTALLES.remove("petit:1b")
             A.enregistrer_reglages({"memoire_longue": "resume", "fiche_scribe": True, "modele_annexe": ""})
 
+    def test_le_modele_de_recherche_ne_peut_pas_devenir_le_modele_de_conversation(self):
+        avant = A.reglages()["modele"]
+        post("/api/reglages", {"modele": "nomic-embed-text"}, attendu=400)
+        post("/api/reglages", {"modele": "nomic-embed-text:latest"}, attendu=400)
+        self.assertEqual(A.reglages()["modele"], avant)
+
     def test_un_modele_qui_reflechit_sans_repondre_est_relance_puis_explique(self):
         ev = chat("Bonjour", reponses=[[{"thinking": "hum"}], [{"content": "Voilà la réponse."}]])
         self.assertEqual(texte_de(ev), "Voilà la réponse.")

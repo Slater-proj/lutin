@@ -1310,6 +1310,9 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
   // ---- Précision (quantification) d'un modèle : les variantes q4/q8/fp16 lues sur ollama.com, jugées pour cette machine
   const VARIANTES = new Map();             // modèle -> { donnees, erreur } tant que le panneau est ouvert (gardé quand la liste se redessine)
   const COMPARER = new Set();              // modèles cochés pour la comparaison
+  // Un modèle de recherche (embeddings) travaille en fond : il ne se choisit jamais pour discuter, ni pour les tâches annexes, ni pour la comparaison
+  const estRecherche = id => { const m = ETAT.modeles.find(x => x.id === id); return !!(m && m.embedding) || !!(ETAT.embeddings && id.split(':')[0] === String(ETAT.embeddings.modele).split(':')[0]); };
+  const installesDiscussion = () => ETAT.installes.filter(id => !estRecherche(id));
   const etiquettePrecision = q => { const bits = (String(q).match(/^[A-Za-z]*?([0-9]+)/) || [])[1]; return bits ? bits + ' ' + T('bits') + ' (' + q + ')' : String(q); };
   const LIBELLE_ADEQ = () => ({ ideal: T('Très adapté'), bien: T('Adapté'), limite: T('Limite'), trop_gros: T('Trop gros') });
   const panneauVariantes = m => {
@@ -1484,8 +1487,8 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     if (s.dataset.cle === cle) return;
     s.dataset.cle = cle; s.textContent = '';
     s.appendChild(Object.assign(el('option', '', T('Le même que la conversation')), { value: '' }));
-    ETAT.installes.filter(m => m !== ETAT.reglages.modele).forEach(m => s.appendChild(Object.assign(el('option', '', m), { value: m })));
-    s.value = ETAT.installes.includes(ETAT.reglages.modele_annexe) ? ETAT.reglages.modele_annexe : '';
+    installesDiscussion().filter(m => m !== ETAT.reglages.modele).forEach(m => s.appendChild(Object.assign(el('option', '', m), { value: m })));
+    s.value = installesDiscussion().includes(ETAT.reglages.modele_annexe) ? ETAT.reglages.modele_annexe : '';
     $('selReflTours').value = ETAT.reglages.reflexion_tours || 'toujours';
   };
   $('bCalibrer').addEventListener('click', async () => { try { await api('/api/calibrage', { action: 'start' }); $('carteCalibrage').dataset.cle = ''; rafraichir(); } catch (e) { $('msgCalibrage').textContent = e.message; } });
@@ -1499,9 +1502,9 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     $('racine').textContent = T('Projet : ') + ETAT.racine;
     // Le choix du modèle ne propose que les modèles INSTALLÉS (l'installation se fait dans l'onglet Modèles).
     const s = $('selModele'), v = s.value || ETAT.reglages.modele; s.textContent = '';
-    ETAT.installes.forEach(id => { const m = ETAT.modeles.find(x => x.id === id), o = el('option', '', m ? m.nom : id); o.value = id; s.appendChild(o); });
-    if (!ETAT.installes.length) { const o = el('option', '', ETAT.ollama ? T('Aucun modèle installé (onglet Modèles)') : T('Ollama arrêté')); o.value = ETAT.reglages.modele; s.appendChild(o); }
-    s.value = ETAT.installes.includes(v) ? v : (ETAT.installes.includes(ETAT.reglages.modele) ? ETAT.reglages.modele : (ETAT.installes[0] || ETAT.reglages.modele));
+    installesDiscussion().forEach(id => { const m = ETAT.modeles.find(x => x.id === id), o = el('option', '', m ? m.nom : id); o.value = id; s.appendChild(o); });
+    if (!installesDiscussion().length) { const o = el('option', '', ETAT.ollama ? T('Aucun modèle installé (onglet Modèles)') : T('Ollama arrêté')); o.value = ETAT.reglages.modele; s.appendChild(o); }
+    s.value = installesDiscussion().includes(v) ? v : (installesDiscussion().includes(ETAT.reglages.modele) ? ETAT.reglages.modele : (installesDiscussion()[0] || ETAT.reglages.modele));
     if (!$('selMode').dataset.init) { afficherOptions(CONV ? CONV.options : null); $('cAvance').checked = !!ETAT.reglages.avance; $('cCopieConv').checked = !!ETAT.reglages.copie_conversations; $('selMemoire').value = ETAT.reglages.memoire_longue || 'demander'; $('iFichePart').value = ETAT.reglages.fiche_part || 10; $('cScribe').checked = ETAT.reglages.fiche_scribe !== false; $('cSens').checked = !!ETAT.reglages.recherche_sens; aideMemoire(); majSens(); $('rCtx').value = ETAT.reglages.num_ctx; $('rTemp').value = ETAT.reglages.temperature; $('rTours').value = ETAT.reglages.tours_max; $('iTopP').value = ETAT.reglages.top_p ?? ''; $('iTopK').value = ETAT.reglages.top_k ?? ''; $('iMinP').value = ETAT.reglages.min_p ?? ''; $('iRep').value = ETAT.reglages.repeat_penalty ?? ''; $('cGarde').checked = ETAT.reglages.garde_ressources !== false; $('cComfy').checked = ETAT.reglages.liberer_si_comfy !== false; $('sRappels').value = ETAT.reglages.rappels_auto || 'scenario'; $('iSeuilRam').value = ETAT.reglages.seuil_ram_go; $('iSeuilDisque').value = ETAT.reglages.seuil_disque_go; $('iPlafond').value = ETAT.reglages.plafond_donnees_go; $('iLimiteCmd').value = ETAT.reglages.limite_ram_commande_go; $('iThreads').value = ETAT.reglages.num_thread ?? ''; $('iGarde').value = ETAT.reglages.garde_min ?? ''; $('selMode').dataset.init = '1'; }
     if (document.activeElement !== $('selLangue')) $('selLangue').value = ETAT.langue_reglage || 'auto';
     afficherVersion();
@@ -1516,7 +1519,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     if (ETAT.bench && ETAT.bench.erreur) $('msgModeles').textContent = T('Banc d\'essai : ') + ETAT.bench.erreur;
     $('vCtx').textContent = $('rCtx').value; $('vTemp').textContent = $('rTemp').value; $('vTours').textContent = $('rTours').value;
     // Le modèle enregistré n'est plus installé (supprimé, ou Ollama réinstallé) : on passe sur un modèle installé plutôt que d'envoyer une demande à un modèle absent.
-    if (ETAT.installes.length && s.value !== ETAT.reglages.modele && !ETAT.installes.includes(ETAT.reglages.modele)) sauverReglages();
+    if (installesDiscussion().length && s.value !== ETAT.reglages.modele && !installesDiscussion().includes(ETAT.reglages.modele)) sauverReglages();
     $('bRestaurer').hidden = !ETAT.modeles_masques; $('bRestaurer').textContent = T('Rétablir la liste d\'origine (') + ETAT.modeles_masques + T(' retiré') + (ETAT.modeles_masques > 1 ? 's' : '') + ')';
     // On ne reconstruit les listes que si elles ont changé (le sondage toutes les 4 s les redessinait pour rien).
     // Une conversation qui travaillait ne travaille plus : si tu ne la regardais pas, pastille verte « terminé, pas lu ».
@@ -1646,7 +1649,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     { n: 'test', d: T('Lance « Vérifier que tout marche » (autotest de l\'assistant)'), f: async () => { ouvrirOnglet('sante'); await window.ouvrirSante(); const b = [...document.querySelectorAll('#santeCorps button')].find(x => x.textContent.includes(T('Vérifier'))); if (b) b.click(); } },
     { n: 'model', a: ['modele'], arg: 'nom', d: T('Affiche ou change le modèle (parmi les modèles installés)'), f: async (arg) => {
       if (!arg) { infoLocale(T('Modèle actif : ') + ETAT.reglages.modele + T('\nInstallés : ') + (ETAT.installes.join(', ') || T('aucun')), true); return; }
-      const trouves = ETAT.installes.filter(m => m === arg || m.toLowerCase().includes(arg.toLowerCase()));
+      const trouves = installesDiscussion().filter(m => m === arg || m.toLowerCase().includes(arg.toLowerCase()));
       const exact = trouves.find(m => m === arg) || (trouves.length === 1 ? trouves[0] : null);
       if (!exact) { infoLocale(trouves.length ? T('Plusieurs modèles correspondent : ') + trouves.join(', ') : T('Aucun modèle installé ne correspond. Installés : ') + (ETAT.installes.join(', ') || T('aucun'))); return; }
       $('selModele').value = exact; await sauverReglages(); await rafraichir(); infoLocale(T('Modèle : ') + exact);
@@ -3094,7 +3097,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
       PAGE_DECOUVERTE = page; $('bPlusDecouverte').hidden = !r.suite; $('msgDecouverte').textContent = r.modeles.length || page > 1 ? '' : T('Aucun résultat.');
     } catch (e) { $('msgDecouverte').textContent = e.message; }
   };
-  $('bComparer').addEventListener('click', async () => { try { await api('/api/bench-serie', { modeles: [...COMPARER].filter(id => ETAT.installes.includes(id)), rapide: false }); rafraichir(); } catch (e) { $('msgComparer').textContent = e.message; } });
+  $('bComparer').addEventListener('click', async () => { try { await api('/api/bench-serie', { modeles: [...COMPARER].filter(id => installesDiscussion().includes(id)), rapide: false }); rafraichir(); } catch (e) { $('msgComparer').textContent = e.message; } });
   $('bDecouvrir').addEventListener('click', () => decouvrir(1));
   $('qDecouverte').addEventListener('keydown', e => { if (e.key === 'Enter') decouvrir(1); });
   $('bPlusDecouverte').addEventListener('click', () => decouvrir(PAGE_DECOUVERTE + 1));

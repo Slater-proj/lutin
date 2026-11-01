@@ -119,7 +119,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
         jauge = _emplacements.jauge_modeles() or {}
         libre = jauge.get("libre")
         try:
-            return _diagnostic.diagnostiquer(o["actif"], bool(_m.chemin_ollama()), o["installes"], r, profil, _m._CATALOGUE, _adequation.pour_la_liste(modeles, profil, _m._CATALOGUE["modeles"]),
+            return _diagnostic.diagnostiquer(o["actif"], bool(_m.chemin_ollama()), [n for n in o["installes"] if not _embeddings.est_modele_de_recherche(n)], r, profil, _m._CATALOGUE, _adequation.pour_la_liste(modeles, profil, _m._CATALOGUE["modeles"]),
                                              libre / 1e9 if libre else None, conseils=_conseil_machine.conseils(profil, r))
         except (KeyError, TypeError, ValueError, AttributeError):
             return []

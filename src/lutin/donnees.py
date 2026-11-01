@@ -56,6 +56,9 @@ def _enregistrer_reglages(nouveau):
         raise ValueError("Mode inconnu.")
     if not re.match(r"^[A-Za-z0-9_./:-]{1,100}$", str(r["modele"])):
         raise ValueError("Nom de modèle invalide.")
+    from . import embeddings
+    if embeddings.est_modele_de_recherche(r["modele"]):
+        raise ValueError(_t("« {} » est un modèle de recherche, pas de discussion : choisis un autre modèle.").format(r["modele"]))
     r["num_ctx"] = max(4096, min(131072, int(r["num_ctx"])))
     r["num_predict"] = max(0, min(32768, int(r.get("num_predict", 0))))
     r["tours_max"] = max(4, min(40, int(r.get("tours_max", 14))))

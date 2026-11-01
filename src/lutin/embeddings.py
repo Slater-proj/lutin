@@ -53,6 +53,15 @@ def installe(forcer=False):
     return v
 
 
+def est_modele_de_recherche(nom):
+    """Vrai pour le modèle de recherche par le sens (il ne discute pas : jamais proposé comme modèle de conversation)."""
+    from . import infos_modele
+    base = str(nom).split(":")[0]
+    if base == nom_modele().split(":")[0]:
+        return True
+    return bool((infos_modele.deja_connu(str(nom), _m.DONNEES) or {}).get("embedding"))
+
+
 def etat():
     return {"actif": actif(), "modele": nom_modele(), "installe": installe(forcer=True), "installation": installation()}
 
