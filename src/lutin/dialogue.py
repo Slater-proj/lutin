@@ -849,6 +849,60 @@ def tour(conv, texte, emit, r=None, stop=None, remplacer_depuis=None, identite="
     emit({"type": "fin", "conversation": {"id": conv["id"], "titre": conv["titre"]}})
 
 
+PARAMETRE_UNIQUE = {"executer": "commande", "memoriser": "note"}          # outils dont l'argument principal est une chaîne : un modèle l'envoie parfois « nue », sans objet autour
+
+
+NOMS_VOISINS = {"command": "commande", "cmd": "commande", "path": "chemin", "file": "chemin", "filepath": "chemin", "filename": "chemin", "folder": "dossier", "directory": "dossier",
+                "dir": "dossier", "content": "contenu", "text": "contenu", "pattern": "motif", "query": "requete", "old": "ancien", "new": "nouveau"}
+
+
+def _noms_voisins(args, proprietes):
+    """Un modèle écrit parfois « command » ou « path » au lieu de « commande » ou « chemin » : on rattache le paramètre qu'il voulait dire, seulement s'il est déclaré par l'outil et absent des arguments."""
+    if not proprietes:
+        return args
+    corrige = dict(args)
+    for faux, vrai in NOMS_VOISINS.items():
+        if faux in corrige and faux not in proprietes and vrai in proprietes and vrai not in corrige:
+            corrige[vrai] = corrige.pop(faux)
+    return corrige
+
+
+def normaliser_arguments(nom, args, parametres=None):
+    """Les arguments d'un appel d'outil sous forme de dictionnaire, quoi que le modèle ait envoyé (objet, texte JSON, chaîne nue, « clé=valeur », liste, rien).
+    `parametres` : le schéma de l'outil (propriétés et champs obligatoires), pour savoir à quel paramètre rattacher une chaîne nue.
+    Règle : « clé=valeur » n'est lu comme tel que si CHAQUE clé est un paramètre de l'outil ; sinon c'est du texte à rattacher à l'argument principal
+    (« echo a=b » est une commande, pas {"echo a": "b"})."""
+    parametres = parametres if isinstance(parametres, dict) else {}
+    proprietes = set(parametres.get("properties") or {})
+    requis = list(parametres.get("required") or [])
+    principal = requis[0] if len(requis) == 1 else (next(iter(proprietes)) if len(proprietes) == 1 else PARAMETRE_UNIQUE.get(nom))
+    if isinstance(args, dict):
+        return _noms_voisins(args, proprietes)
+    if args is None:
+        return {}
+    if isinstance(args, str):
+        texte = args.strip()
+        try:
+            lu = json.loads(texte)
+        except ValueError:
+            lu = None
+            decode = False
+        else:
+            decode = True
+        if decode:
+            if isinstance(lu, dict):
+                return _noms_voisins(lu, proprietes)
+            return {principal: lu if isinstance(lu, str) else texte} if principal and lu is not None else {}
+        morceaux = [p for p in texte.split("&")]
+        paires = [p.split("=", 1) for p in morceaux if "=" in p]
+        if proprietes and paires and len(paires) == len(morceaux) and all(k.strip() in proprietes for k, _ in paires):
+            return {k.strip(): v for k, v in paires}                      # « commande=dir&shell=cmd »
+        return {principal: texte} if principal and texte else {}
+    if isinstance(args, (int, float)) and not isinstance(args, bool):
+        return {principal: str(args)} if principal else {}
+    return {}
+
+
 def boucle_agent(conv, r, emit, ctx, stop):
     """La boucle de l'agent : le modèle répond, appelle des outils, on lui rend les résultats, jusqu'à la réponse finale."""
     tours_max = max(4, int(r.get("tours_max", _m.TOURS_MAX)))
@@ -1082,21 +1136,8 @@ def boucle_agent(conv, r, emit, ctx, stop):
                     conv["messages"].append({"role": "tool", "tool_name": (b.get("function") or {}).get("name", ""), "content": "Interrompu par l'utilisateur."})
                 raise _m.Arret()
             f = a.get("function") or {}
-            nom, args = f.get("name", ""), f.get("arguments") or {}
-            if isinstance(args, str):
-                texte = args.strip()
-                try:
-                    args = json.loads(texte)
-                except ValueError:
-                    # certains modèles renvoient « clé=valeur » ou une chaîne nue
-                    if "=" in texte and not texte.startswith("{"):
-                        args = dict(p.split("=", 1) for p in texte.split("&") if "=" in p)
-                    elif nom in ("executer", "memoriser"):
-                        args = {"commande": texte} if nom == "executer" else {"note": texte}
-                    else:
-                        args = {}
-            if not isinstance(args, dict):
-                args = {}
+            nom = f.get("name", "")
+            args = normaliser_arguments(nom, f.get("arguments"), next((t["function"].get("parameters") for t in outils if t["function"]["name"] == nom), None))
             repetitions = garde.compter(nom, args)
             _m.rafraichir_accords(ctx)                                  # une case cochée ou décochée pendant la réponse compte dès cet outil
             emit({"type": "outil", "nom": nom, "args": {k: (v if not isinstance(v, str) or len(v) < 300 else v[:300] + "...") for k, v in args.items()}})

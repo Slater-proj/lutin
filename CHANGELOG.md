@@ -2,6 +2,13 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## 0.11.5
+
+- **Outil « executer » : une commande avec un « = » n'arrivait plus vide.** Quand le modèle envoyait la commande comme simple texte (`echo a=b`, `set X=1`, `git config user.name=Moi`…), Lutin la prenait pour une paire « clé=valeur » et l'outil recevait une commande vide. Désormais « clé=valeur » n'est lu comme tel que si **chaque clé est un paramètre de l'outil** ; sinon c'est du texte rattaché à l'argument principal de l'outil (d'après son schéma). Les arguments envoyés sous forme de texte JSON, de chaîne JSON, de nombre ou de liste sont aussi traités sans rien inventer.
+- Les noms de paramètres voisins que les modèles écrivent par erreur (`command`, `cmd`, `path`, `file`, `content`…) sont rattachés au vrai paramètre de l'outil, seulement s'il est déclaré et absent.
+
+**English.** `executer` (run a command): a command containing “=” no longer arrived empty when sent as plain text. “key=value” is only read as such when every key is a parameter of the tool; otherwise the text goes to the tool's main argument. Look-alike parameter names (`command`, `path`…) are mapped to the real one when declared and absent.
+
 ## 0.11.4
 
 - **Une réflexion qui répète les mêmes phrases est coupée** : c'est le modèle qui se met à boucler (fréquent avec un petit modèle en mode réflexion), pas un défaut de Lutin, mais il ne s'en sort pas seul. Lutin le détecte (la même fin de texte déjà écrite plusieurs fois), arrête la génération, puis relance sans réflexion avec une pénalité de répétition et un rappel de répondre directement. Si ça recommence deux fois, il le dit.

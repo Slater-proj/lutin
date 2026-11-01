@@ -640,6 +640,16 @@ class Assistant(unittest.TestCase):
         ev = chat("Lance une autre commande", conversation=cid, options=opts, reponses=[[appel_outil("executer", commande="echo ok> suivante.txt")], [{"content": "Fait."}]])
         self.assertFalse([e for e in ev if e["type"] in ("approbation", "accord_suspendu")], "demande suivante : plus rien de suspendu, accord automatique")
 
+    def test_commande_envoyee_nue_avec_un_egal_est_executee_telle_quelle(self):
+        """Régression : « echo a=b » envoyé comme simple chaîne était lu comme clé=valeur, la commande arrivait vide."""
+        appel = {"tool_calls": [{"function": {"name": "executer", "arguments": "echo a=b> egal.txt"}}]}
+        ev = chat("Écris dans un fichier", options={"auto_commandes": True}, reponses=[[appel], [{"content": "Fait."}]])
+        res = next(e for e in ev if e["type"] == "resultat")["texte"]
+        self.assertNotIn("Commande vide", res)
+        self.assertIn("Code de sortie 0", res)
+        self.assertEqual((A.RACINE / "egal.txt").read_text(encoding="utf-8", errors="replace").strip(), "a=b")
+        (A.RACINE / "egal.txt").unlink()
+
     def test_un_modele_qui_reflechit_sans_repondre_est_relance_puis_explique(self):
         ev = chat("Bonjour", reponses=[[{"thinking": "hum"}], [{"content": "Voilà la réponse."}]])
         self.assertEqual(texte_de(ev), "Voilà la réponse.")
