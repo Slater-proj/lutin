@@ -525,6 +525,23 @@ class Parcours(unittest.TestCase):
             self.assertNotIn("⏱", boutons)
             self.assertIn("Supprimer", boutons)
 
+    def test_pastille_de_telechargement_dans_la_barre_du_haut(self):
+        with self.captures.serveur_demo() as (port, tmp):
+            p = self.ouvrir(tmp, "http://127.0.0.1:%d/" % port)
+            p.evaluer("""(() => { window.__pulls = {'qwen3:4b-q8_0': {statut: 'en cours', fait: 45000000, total: 100000000, texte: 'pulling'}};
+                const vrai = window.fetch.bind(window);
+                window.fetch = async (u, o) => { const r = await vrai(u, o); if (!String(u).includes('/api/etat')) return r; const d = await r.json(); d.pulls = window.__pulls;
+                  return new Response(JSON.stringify(d), {status: 200, headers: {'Content-Type': 'application/json'}}); }; })()""")
+            p.attendre("!document.querySelector('#pTelechargements').hidden", 12)
+            self.assertIn("45 %", p.evaluer("document.querySelector('#pTelechargements').textContent"))
+            self.assertIn("45 / 100", p.evaluer("document.querySelector('#pTelechargements').title"))
+            p.evaluer("window.__pulls = {'qwen3:4b-q8_0': {statut: 'erreur', fait: 0, total: 0, texte: 'pas de réseau'}}")
+            p.attendre("document.querySelector('#pTelechargements').textContent.includes('échec')", 12)
+            self.assertIn("pas de réseau", p.evaluer("document.querySelector('#pTelechargements').title"))
+            p.evaluer("document.querySelector('#pTelechargements').click()")                       # ferme l'erreur et ouvre les modèles
+            self.assertTrue(p.evaluer("document.querySelector('#pTelechargements').hidden"))
+            self.assertTrue(p.evaluer("document.querySelector('.onglets button[data-p=\"modeles\"]').getAttribute('aria-selected') === 'true'"))
+
     def test_precision_des_modeles_et_comparaison_cote_a_cote(self):
         with self.captures.serveur_demo() as (port, tmp):
             p = self.ouvrir(tmp, "http://127.0.0.1:%d/" % port)
@@ -542,6 +559,7 @@ class Parcours(unittest.TestCase):
             self.assertIn("q8_0", texte)
             self.assertIn("8.9", texte)
             self.assertIn("celle installée par défaut", texte)
+            self.assertIn("★ actif", p.evaluer("document.querySelector('#listeModeles .mod-variantes').textContent"), "qwen3:8b est le modèle actif : sa variante par défaut (4 bits) l'est aussi")
             self.assertTrue(p.evaluer("[...document.querySelectorAll('#listeModeles .mod-variantes button')].some(b => b.textContent === 'Installer')"))
             # la comparaison : cocher un modèle installé active le bouton ; sans mesure complète, pas de tableau
             self.assertTrue(p.evaluer("document.querySelector('#bComparer').disabled"), "rien de coché")
@@ -549,6 +567,8 @@ class Parcours(unittest.TestCase):
             self.assertFalse(p.evaluer("document.querySelector('#bComparer').disabled"))
             # le modèle de la démonstration a une mesure complète : le tableau apparaît avec sa ligne
             self.assertIn("jetons/s", p.evaluer("document.querySelector('#tableComparaison').textContent"))
+            self.assertIn("Détail des questions", p.evaluer("document.querySelector('#tableComparaison details summary').textContent"))
+            self.assertIn("3/4", p.evaluer("document.querySelector('#tableComparaison').textContent"), "la légende explique ce que veut dire 3/4")
 
     def test_liste_des_modeles_par_familles_sur_deux_lignes_et_sans_filtre_a_part(self):
         with self.captures.serveur_demo() as (port, tmp):

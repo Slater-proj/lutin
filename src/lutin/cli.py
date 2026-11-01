@@ -435,7 +435,7 @@ def commande_bench(args):
         bench.enregistrer(Path(d["cache"]) / "bench.json", mesure)
         print("  → " + bench.resume(mesure))
         if mesure["notes"]:
-            print(_t("  Notes mesurées (indicatives, onze questions) : ") + ", ".join("{} {}/10".format(_t(catalogue.LIBELLES[r][0]).lower(), n) for r, n in mesure["notes"].items()))
+            print(_t("  Notes mesurées (indicatives, une vingtaine de questions) : ") + ", ".join("{} {}/10".format(_t(catalogue.LIBELLES[r][0]).lower(), n) for r, n in mesure["notes"].items()))
         if mesure.get("erreur"):
             print(_t("  ⚠ Mesure incomplète : ") + mesure["erreur"])
             code = 1

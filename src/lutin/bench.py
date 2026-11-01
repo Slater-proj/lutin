@@ -1,6 +1,6 @@
 """Banc d'essai : mesure CE qu'un modèle fait sur CETTE machine (vitesse, appel d'outils, code, français, consignes).
 
-Onze questions courtes à réponse vérifiable automatiquement, une seule fois chacune, température 0 : c'est un **indicateur**, pas un classement scientifique.
+Une vingtaine de questions courtes à réponse vérifiable automatiquement, une seule fois chacune, température 0 : c'est un **indicateur**, pas un classement scientifique.
 Aucun code écrit par le modèle n'est exécuté : les questions de code demandent le résultat d'un petit programme, vérifié par comparaison.
 Tout reste local (Ollama sur cette machine) ; le résultat est gardé dans le cache et peut être exporté pour proposer une note au catalogue.
 """
@@ -17,19 +17,35 @@ QUESTIONS_CODE = [
     ("Que valent les valeurs affichées ? Réponds seulement par la valeur.\n```python\nprint(sum(i * i for i in range(4)))\n```", "14"),
     ("Que valent les valeurs affichées ? Réponds seulement par la valeur.\n```python\nprint(\"abc\"[::-1].upper())\n```", "CBA"),
     ("Combien de valeurs différentes prend i dans `for i in range(2, 10, 3)` ? Réponds seulement par le nombre.", "3"),
+    ("Que valent les valeurs affichées ? Réponds seulement par la valeur.\n```python\nprint(len({1, 2, 2, 3}))\n```", "3"),
+    ("Que valent les valeurs affichées ? Réponds seulement par la valeur.\n```python\nprint(\"a-b-c\".split(\"-\")[1])\n```", "b"),
+    ("Que valent les valeurs affichées ? Réponds seulement par la valeur.\n```python\nprint(10 // 3 + 10 % 3)\n```", "4"),
+    ("Que valent les valeurs affichées ? Réponds seulement par la valeur.\n```python\nx = [1, 2, 3]\nprint([i * 2 for i in x if i != 2])\n```", "[2, 6]"),
 ]
 OUTILS = [
     {"type": "function", "function": {"name": "lire", "description": "Lit un fichier du projet.", "parameters": {"type": "object", "properties": {"chemin": {"type": "string"}}, "required": ["chemin"]}}},
     {"type": "function", "function": {"name": "chercher", "description": "Cherche un mot dans les fichiers du projet.", "parameters": {"type": "object", "properties": {"motif": {"type": "string"}}, "required": ["motif"]}}},
+    {"type": "function", "function": {"name": "lister", "description": "Liste le contenu d'un dossier du projet.", "parameters": {"type": "object", "properties": {"dossier": {"type": "string"}}, "required": ["dossier"]}}},
+    {"type": "function", "function": {"name": "executer", "description": "Lance une commande dans le dossier du projet.", "parameters": {"type": "object", "properties": {"commande": {"type": "string"}}, "required": ["commande"]}}},
 ]
 CAS_OUTILS = [
     ("Ouvre le fichier docs/notes.md et dis-moi ce qu'il contient.", "lire", "notes.md"),
     ("Où est définie la fonction connexion dans le projet ?", "chercher", "connexion"),
+    ("Montre-moi le contenu du dossier docs.", "lister", "docs"),
+    ("Lance les tests avec la commande pytest.", "executer", "pytest"),
+    ("Quelle est la capitale de la France ?", None, None),
     ("Bonjour, comment vas-tu ?", None, None),
 ]
 MOTS_FR = {"le", "la", "les", "de", "des", "du", "un", "une", "et", "est", "que", "qui", "dans", "pour", "pas", "sur", "au", "aux", "ce", "cette", "il", "elle", "à", "en", "par", "se"}
 MOTS_EN = {"the", "and", "is", "of", "to", "in", "that", "it", "for", "with", "this", "are"}
 SURNOMS = {"vitesse": "Vitesse", "outils": "Appel d'outils", "code": "Code (lecture)", "francais": "Français", "consignes": "Consignes"}
+
+
+def etiquette_code(question):
+    """Le petit programme de la question, sur une ligne (pour dire dans le détail LESQUELLES ont échoué)."""
+    m = re.search(r"```python\s*(.*?)```", question, re.S)
+    code = m.group(1) if m else question
+    return " ; ".join(ligne.strip() for ligne in code.strip().splitlines() if ligne.strip())[:70]
 
 
 def nettoyer(texte):
@@ -153,22 +169,34 @@ class Banc:
                     except ValueError:
                         args = {}
                 ok = f.get("name") == attendu and motif in json.dumps(args or {}, ensure_ascii=False)
-            details.append({"test": _t("Ouvrir un fichier avec l'outil « lire »") if attendu == "lire" else _t("Chercher un mot avec l'outil « chercher »") if attendu == "chercher" else _t("Répondre simplement, sans outil, à une salutation"), "ok": ok})
+            noms = {"lire": _t("Ouvrir un fichier avec l'outil « lire »"), "chercher": _t("Chercher un mot avec l'outil « chercher »"), "lister": _t("Lister un dossier avec l'outil « lister »"),
+                    "executer": _t("Lancer une commande avec l'outil « executer »")}
+            details.append({"test": noms.get(attendu) or (_t("Répondre directement, sans outil, à une question de culture générale") if "capitale" in question else _t("Répondre simplement, sans outil, à une salutation")), "ok": ok})
         return _resultat(details)
 
     def code(self):
-        details = [{"test": _t("Lire un programme : {}").format(a), "ok": reponse_exacte(self.texte(q, 80), a)} for q, a in QUESTIONS_CODE]
+        details = [{"test": _t("Lire un programme : {}").format(etiquette_code(q)), "ok": reponse_exacte(self.texte(q, 80), a)} for q, a in QUESTIONS_CODE]
         return _resultat(details)
 
     def francais(self):
         a = nettoyer(self.texte("Explique en une phrase, en français, pourquoi le ciel est bleu.", 120))
         b = self.texte("Donne exactement 3 conseils pour bien dormir, chacun sur une ligne commençant par « - », sans introduction.", 120)
+        c = nettoyer(self.texte("Traduis en français : « The cat sleeps on the sofa. » Réponds seulement par la traduction.", 60)).lower()
+        d = nettoyer(self.texte("Corrige les fautes de cette phrase et réponds seulement par la phrase corrigée : « Les enfant mange des pomme. »", 60)).lower()
         return _resultat([{"test": _t("Expliquer en une phrase, en français correct"), "ok": est_francais(a) and 5 <= len(a.split()) <= 60},
-                          {"test": _t("Donner exactement 3 conseils, un par ligne avec « - »"), "ok": trois_puces(b)}])
+                          {"test": _t("Donner exactement 3 conseils, un par ligne avec « - »"), "ok": trois_puces(b)},
+                          {"test": _t("Traduire une phrase de l'anglais vers le français"), "ok": "chat" in c and ("canapé" in c or "sofa" in c or "divan" in c) and est_francais(c)},
+                          {"test": _t("Corriger l'accord d'une phrase (enfants, mangent, pommes)"), "ok": "enfants" in d and "mangent" in d and "pommes" in d}])
 
     def consignes(self):
         t = self.texte("Réponds uniquement avec un objet JSON valide, sans aucun texte autour, avec les clés \"ville\" et \"pays\", pour la capitale de la France.", 80)
-        return _resultat([{"test": _t("Répondre uniquement par un objet JSON valide, sans texte autour"), "ok": json_valide(t)}])
+        oui = re.sub(r"[^a-zé]", "", nettoyer(self.texte("Réponds uniquement par un seul mot, oui ou non : le ciel est-il bleu par beau temps ?", 20)).lower())
+        mots = re.findall(r"[A-Za-zÀ-ÿ']+", nettoyer(self.texte("Écris exactement trois mots sur la mer, sans ponctuation et sans rien d'autre.", 30)))
+        liste = [ligne.strip() for ligne in nettoyer(self.texte("Donne exactement 4 fruits en liste numérotée (1. 2. 3. 4.), un par ligne, sans introduction ni conclusion.", 60)).splitlines() if ligne.strip()]
+        return _resultat([{"test": _t("Répondre uniquement par un objet JSON valide, sans texte autour"), "ok": json_valide(t)},
+                          {"test": _t("Répondre par un seul mot (oui ou non)"), "ok": oui in ("oui", "non")},
+                          {"test": _t("Écrire exactement trois mots"), "ok": len(mots) == 3},
+                          {"test": _t("Donner une liste numérotée d'exactement 4 éléments"), "ok": len(liste) == 4 and all(re.match(r"^[1-4][.)]", ligne) for ligne in liste)}])
 
 
 def executer(ollama, modele, rapide=False, progression=None, resume_machine="", num_ctx=4096, delai=300, horloge=time.time):

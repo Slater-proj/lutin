@@ -11,6 +11,7 @@ from .i18n import t as _t
 
 PART_FIXE_EXPERTS = 0.04          # un modèle à experts garde l'attention et les couches communes : ~4 % du total travaille toujours, en plus des experts choisis
 CAPACITES_LUTIN = {"tools": "outils", "vision": "vision", "thinking": "reflexion"}
+VERSION = 2                       # numéro du format gardé sur le disque
 _verrou = threading.Lock()
 _en_cours = set()
 _memoire = {}                      # modèle -> infos (ou {} si Ollama ne sait rien dire), pour cette session
@@ -55,6 +56,9 @@ def extraire(show):
     dim = _nombre(cle("attention.key_length")) or (taille / tete_q if tete_q else 0)
     if couches > 0 and tete_kv > 0 and dim > 0:
         sortie["kv_mo_1k"] = max(1, round(2 * couches * tete_kv * dim * 2 * 1000 / 1e6))          # clés + valeurs, en 16 bits
+    details = show.get("details") if isinstance(show.get("details"), dict) else {}
+    if isinstance(details.get("quantization_level"), str) and details["quantization_level"].strip():
+        sortie["quantification"] = details["quantization_level"].strip()          # « Q4_K_M », « Q8_0 », « F16 » : la précision réellement installée
     caps = show.get("capabilities")
     if isinstance(caps, list):
         sortie["capacites"] = [CAPACITES_LUTIN[c] for c in caps if c in CAPACITES_LUTIN]
@@ -97,7 +101,7 @@ def deja_connu(modele, donnees):
         if modele in _memoire:
             return _memoire[modele]
     d = lire_disque(donnees)
-    if isinstance(d.get(modele), dict):
+    if isinstance(d.get(modele), dict) and d[modele].get("v") == VERSION:          # une lecture faite par une version plus ancienne (sans la précision installée) est refaite
         with _verrou:
             _memoire[modele] = d[modele]
         return d[modele]
@@ -116,7 +120,7 @@ def demander(modeles, donnees, show):
     def travail():
         for m in a_lire:
             try:
-                infos = extraire(show(m))
+                infos = dict(extraire(show(m)), v=VERSION)
             except (OSError, ValueError, urllib.error.URLError):
                 infos = None                                    # Ollama ne répond pas : on réessaiera au prochain rafraîchissement
             if infos is not None:                               # le disque d'abord : dès que la mémoire le sait, le disque le sait aussi

@@ -56,6 +56,20 @@ class Extraction(unittest.TestCase):
         self.assertIn("recherche par le sens", im.phrase(i))
         self.assertNotIn("outils", im.phrase(i))
 
+    def test_la_precision_installee_est_lue_et_les_anciennes_lectures_refaites(self):
+        i = im.extraire(dict(show_dense(), details={"quantization_level": "Q8_0", "parameter_size": "3.2B"}))
+        self.assertEqual(i["quantification"], "Q8_0")
+        self.assertNotIn("quantification", im.extraire(show_dense()), "pas de précision annoncée : rien d'inventé")
+        import json as _json
+        import tempfile as _tf
+        from pathlib import Path as _P
+        with _tf.TemporaryDirectory() as d:
+            donnees = _P(d)
+            (donnees / "infos-modeles.json").write_text(_json.dumps({"ancien:3b": {"params_b": 3.2}, "recent:3b": {"params_b": 3.2, "v": im.VERSION}}), encoding="utf-8")
+            im._memoire.clear()
+            self.assertIsNone(im.deja_connu("ancien:3b", donnees), "lecture d'avant la précision installée : à refaire")
+            self.assertEqual(im.deja_connu("recent:3b", donnees)["params_b"], 3.2)
+
     def test_phrase_honnete(self):
         p = im.phrase(im.extraire(show_experts()))
         self.assertIn("30.53 milliards", p)

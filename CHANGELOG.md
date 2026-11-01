@@ -2,6 +2,14 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## 0.13.3
+
+- **On voit quelle précision est installée** : chaque modèle installé affiche sa précision sur sa ligne (« 4 bits (Q4_K_M) », « 8 bits (Q8_0) »…), lue dans Ollama. Dans le panneau **Précision**, la variante réellement installée est marquée « ✔ installé » ou « ★ actif », y compris la variante par défaut quand tu as installé le modèle sans préciser, et le panneau dit « Installé actuellement : … ».
+- **Les téléchargements se suivent depuis la barre du haut** : une pastille affiche l'avancement (« ⬇ qwen3:8b-q8_0 45 % », plusieurs à la fois en « +N »), l'échec avec sa cause (clic = fermer et ouvrir les modèles) et « ✔ installé » à la fin, quel que soit l'onglet ouvert.
+- **Banc d'essai plus fiable et plus lisible** : une vingtaine de questions au lieu de onze (outils 6 : lire, chercher, lister, lancer une commande, et deux questions qui ne doivent PAS appeler d'outil ; code 8 ; français 4 ; consignes 4 : JSON strict, un mot, trois mots, liste numérotée de 4). Dans la comparaison, la légende explique que « 3/4 » veut dire trois questions réussies sur quatre, que la vitesse n'est pas une réussite, et la case donne en infobulle la question ratée ; un détail question par question est dépliable, avec un rappel honnête de la portée de ces mesures (indicateur, pas ta vraie tâche).
+
+**English.** The installed precision (4-bit, 8-bit…) is shown on each model line and marked “installed/active” in the Precision panel. A pill in the top bar tracks downloads (progress, failures with their cause, completion). The benchmark has about twenty questions instead of eleven, and the comparison explains what “3/4” means, shows which question failed and offers a question-by-question detail.
+
 ## 0.13.2
 
 - **Mode fiche de suivi : la fenêtre de contexte ne reste plus saturée.** Le retrait du début attendait que le scribe ait lu les messages ; si le scribe échouait (par exemple parce que le modèle manquait de mémoire pendant une génération d'image), rien n'était jamais retiré et la conversation grossissait jusqu'à dépasser la fenêtre (47k / 37k) : le modèle ne répondait plus. Maintenant, au-delà de 60 % de la fenêtre (ou 80 % d'après le chiffre réel d'Ollama), le début sort quand même (archivé, retrouvable avec « rappeler »), même si la fiche a du retard.

@@ -408,6 +408,13 @@ def modeles_connus(installes, tailles=None):
     liste = [dict(m, origine="catalogue") for m in _m.MODELES if (m["id"] not in reg["masques"] and (avance or not m["avance"])) or m["id"] in installes]
     vus = set(catalogue)
     a_lire = []
+    for entree in liste:                                                                   # la précision installée (4 bits, 8 bits…) de chaque modèle du catalogue qui est installé
+        if entree["id"] in installes:
+            infos = _infos.deja_connu(entree["id"], _m.DONNEES)
+            if infos is None:
+                a_lire.append(entree["id"])
+            elif infos.get("quantification"):
+                entree["quantification"] = infos["quantification"]
     for nom in reg["perso"] + [n for n in installes if n not in reg["perso"]]:
         if nom in vus:
             continue
@@ -418,7 +425,7 @@ def modeles_connus(installes, tailles=None):
             if infos is None:
                 a_lire.append(nom)
             elif infos:
-                entree.update({k: infos[k] for k in ("params_b", "actifs_b", "ctx_max", "kv_mo_1k") if k in infos})          # les vrais chiffres d'Ollama au lieu d'une estimation
+                entree.update({k: infos[k] for k in ("params_b", "actifs_b", "ctx_max", "kv_mo_1k", "quantification") if k in infos})          # les vrais chiffres d'Ollama au lieu d'une estimation
                 if "capacites" in infos:
                     entree["capacites"] = infos["capacites"]
                 if infos.get("embedding"):

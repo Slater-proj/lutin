@@ -147,11 +147,19 @@ class Faux:
                 return r("", [{"function": {"name": "lire", "arguments": {"chemin": "docs/notes.md"}}}] if self.bons else None) if self.bons else r("Voici le fichier.")
             if "connexion" in question:
                 return r("", [{"function": {"name": "chercher", "arguments": json.dumps({"motif": "connexion"})}}]) if self.bons else r("Je ne sais pas.")
+            if "dossier docs" in question:
+                return r("", [{"function": {"name": "lister", "arguments": {"dossier": "docs"}}}]) if self.bons else r("Je ne peux pas.")
+            if "pytest" in question:
+                return r("", [{"function": {"name": "executer", "arguments": {"commande": "pytest -q"}}}]) if self.bons else r("Lance-les toi-même.")
+            if "capitale" in question:
+                return r("Paris.")
             return r("Très bien, merci !")
-        reponses = {"x[0] * 10": "13", "sum(i * i": "14", "[::-1]": "<think>je réfléchis</think>CBA", "range(2, 10, 3)": "3",
+        reponses = {"x[0] * 10": "13", "sum(i * i": "14", "[::-1]": "<think>je réfléchis</think>CBA", "range(2, 10, 3)": "3", "len({1, 2, 2, 3})": "3", 'split("-")': "b", "10 // 3": "4", "i != 2": "[2, 6]",
                     "ciel est bleu": "Le ciel est bleu parce que la lumière du soleil est diffusée par l'atmosphère de la Terre.",
                     "3 conseils": "- Couche-toi à heure fixe\n- Évite les écrans le soir\n- Garde la chambre fraîche",
-                    "objet JSON": "```json\n{\"ville\": \"Paris\", \"pays\": \"France\"}\n```"}
+                    "objet JSON": "```json\n{\"ville\": \"Paris\", \"pays\": \"France\"}\n```",
+                    "Traduis en français": "Le chat dort sur le canapé.", "Corrige les fautes": "Les enfants mangent des pommes.",
+                    "oui ou non": "Oui.", "exactement trois mots": "Mer bleue infinie", "4 fruits": "1. Pomme\n2. Poire\n3. Banane\n4. Cerise"}
         for cle, rep in reponses.items():
             if cle in question:
                 return r(rep if self.bons else "je ne sais pas, peut-être 42 ou 7 ou autre chose")
@@ -162,7 +170,7 @@ class Banc(unittest.TestCase):
     def test_modele_parfait(self):
         m = bench.executer(Faux(True, 40.0), "qwen3:8b", resume_machine="PC test")
         r = m["resultats"]
-        self.assertEqual((r["outils"]["points"], r["code"]["points"], r["francais"]["points"], r["consignes"]["points"]), (3, 4, 2, 1))
+        self.assertEqual((r["outils"]["points"], r["code"]["points"], r["francais"]["points"], r["consignes"]["points"]), (6, 8, 4, 4))
         self.assertEqual(r["vitesse"]["tok_s"], 40.0)
         self.assertEqual(r["vitesse"]["charge_s"], 2.0)
         self.assertEqual(m["notes"], {"code": 10, "creatif": 10, "polyvalent": 10, "rapide": 8})
@@ -172,9 +180,9 @@ class Banc(unittest.TestCase):
     def test_mauvais_modele(self):
         m = bench.executer(Faux(False, 5.0), "petit")
         self.assertEqual(m["resultats"]["code"]["points"], 0)
-        self.assertEqual(m["resultats"]["outils"]["points"], 1, "seule la question sans outil est réussie")
+        self.assertEqual(m["resultats"]["outils"]["points"], 2, "seules les deux questions sans outil sont réussies")
         det = m["resultats"]["outils"]["details"]
-        self.assertEqual([d["ok"] for d in det], [False, False, True], "le détail dit LESQUELLES ont échoué")
+        self.assertEqual([d["ok"] for d in det], [False, False, False, False, True, True], "le détail dit LESQUELLES ont échoué")
         self.assertTrue(all(d["test"] for d in m["resultats"]["code"]["details"]))
         self.assertLessEqual(m["notes"]["rapide"], 2)
         self.assertLess(m["notes"]["polyvalent"], 4)
@@ -195,7 +203,7 @@ class Banc(unittest.TestCase):
         faux = Faux(True, sans_think=True)
         m = bench.executer(faux, "ancien")
         self.assertNotIn("erreur", m)
-        self.assertEqual(m["resultats"]["code"]["points"], 4)
+        self.assertEqual(m["resultats"]["code"]["points"], 8)
         self.assertTrue(all("think" not in c for c in faux.appels[1:]))
 
     def test_panne_en_cours_de_route_garde_ce_qui_est_mesure(self):

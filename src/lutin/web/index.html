@@ -364,6 +364,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
       <button data-p="chat" aria-selected="true" title="Conversation"><span class="ic">💬</span><span class="lb">Conversation</span><i class="travail" id="ptTravail" hidden title="L'assistant travaille"></i></button><button data-p="modeles" aria-selected="false" title="Modèles"><span class="ic">🧠</span><span class="lb">Modèles</span><i class="travail fini" id="ptModeles" hidden title="Nouveautés pour ta machine"></i></button><button data-p="memoire" aria-selected="false" title="Mémoire"><span class="ic">📝</span><span class="lb">Mémoire</span></button><button data-p="auto" aria-selected="false" title="Automatisation : tâches planifiées, travaux de fond"><span class="ic">⏱</span><span class="lb">Automatisation</span></button><button data-p="reglages" aria-selected="false" title="Réglages"><span class="ic">⚙️</span><span class="lb">Réglages</span></button><button id="bSante" data-p="sante" aria-selected="false" title="Santé du PC : mémoire, carte graphique, disques ; test de bon fonctionnement"><span class="ic">⚕</span><span class="lb">Santé</span></button><button data-p="acces" aria-selected="false" title="Qui peut utiliser Lutin, appareils connectés, code PIN"><span class="ic">🔐</span><span class="lb">Accès</span></button>
     </div>
     <span class="puce" id="pOllama"><i></i><span>Ollama</span></span>
+    <button class="puce" id="pTelechargements" hidden style="cursor:pointer"></button>
     <div class="menu">
       <button id="bPlus" aria-label="Plus d'actions" aria-haspopup="true" title="Plus d'actions">⋯</button>
       <div id="menuPlus" hidden>
@@ -1232,7 +1233,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     const inst = ETAT.installes.includes(m.id), p = ETAT.pulls[m.id], actif = ETAT.reglages.modele === m.id;
     const l = el('div', 'mod' + (actif && inst ? ' actif' : '')), nom = el('div', 'mod-nom'), desc = el('div', 'mod-desc aide'), acts = el('div', 'mod-actions');
     nom.appendChild(el('b', '', variante(m)));
-    nom.appendChild(el('span', 'aide', ' · ' + (m.go ? m.go + T(' Go') : T('taille inconnue')) + ' · ' + m.id + (m.origine === 'perso' ? T(' · ajouté par toi') : m.origine === 'installe' ? T(' · installé hors de l\'application') : '')));
+    nom.appendChild(el('span', 'aide', ' · ' + (m.go ? m.go + T(' Go') : T('taille inconnue')) + (m.quantification ? ' · ' + etiquettePrecision(m.quantification) : '') + ' · ' + m.id + (m.origine === 'perso' ? T(' · ajouté par toi') : m.origine === 'installe' ? T(' · installé hors de l\'application') : '')));
     const emb = !!m.embedding || !!(ETAT.embeddings && m.id.split(':')[0] === String(ETAT.embeddings.modele).split(':')[0]);          // modèle de recherche par le sens : il ne discute pas
     if (emb && inst) { const pe = el('span', 'puce ' + (ETAT.embeddings.actif ? 'ok' : 'warn'), ETAT.embeddings.actif ? T('🔎 utilisé pour la recherche par le sens') : T('🔎 modèle de recherche (option décochée)')); pe.title = T('Réglages > Conversation > Recherche par le sens'); nom.appendChild(pe); }
     if (actif && !inst) nom.appendChild(el('span', 'puce warn', T('choisi, mais pas installé'))); else if (actif) nom.appendChild(el('span', 'puce ok', T('★ actif'))); else if (inst) nom.appendChild(el('span', 'puce ok', T('✔ installé')));
@@ -1248,7 +1249,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
       if (!actif && !emb) { const u = el('button', 'principal', T('Utiliser')); u.title = T('En faire le modèle de la conversation'); u.addEventListener('click', async () => { try { await api('/api/reglages', { modele: m.id }); $('selModele').value = m.id; rafraichir(); } catch (e) { alert(e.message); } }); acts.appendChild(u); }
       const bv = el('button', '', '⏱'), bc = el('button', '', '📊');
       bv.title = T('⏱ Tester la vitesse') + ' : ' + T('Environ 20 secondes (plus si le modèle doit d\'abord se charger)'); bv.disabled = occupe;
-      bc.title = T('📊 Banc complet') + ' : ' + T('Vitesse, appel d\'outils, code, français, consignes : onze petites questions, quelques minutes'); bc.disabled = occupe;
+      bc.title = T('📊 Banc complet') + ' : ' + T('Vitesse, appel d\'outils, code, français, consignes : une vingtaine de petites questions, quelques minutes'); bc.disabled = occupe;
       [[bv, true], [bc, false]].forEach(([b, rapide]) => b.addEventListener('click', async () => { try { await api('/api/bench', { modele: m.id, rapide }); rafraichir(); } catch (e) { $('msgModeles').textContent = e.message; } }));
       const x = el('button', 'danger', T('Supprimer')); x.title = T('Supprimer ce modèle de la machine');
       x.addEventListener('click', async () => { if (!confirm(T('Supprimer « ') + m.nom + T(' » ? Le téléchargement sera refait si tu le réinstalles.'))) return; try { await api('/api/supprimer-modele', { modele: m.id }); rafraichir(); } catch (e) { alert(e.message); } });
@@ -1309,6 +1310,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
   // ---- Précision (quantification) d'un modèle : les variantes q4/q8/fp16 lues sur ollama.com, jugées pour cette machine
   const VARIANTES = new Map();             // modèle -> { donnees, erreur } tant que le panneau est ouvert (gardé quand la liste se redessine)
   const COMPARER = new Set();              // modèles cochés pour la comparaison
+  const etiquettePrecision = q => { const bits = (String(q).match(/^[A-Za-z]*?([0-9]+)/) || [])[1]; return bits ? bits + ' ' + T('bits') + ' (' + q + ')' : String(q); };
   const LIBELLE_ADEQ = () => ({ ideal: T('Très adapté'), bien: T('Adapté'), limite: T('Limite'), trop_gros: T('Trop gros') });
   const panneauVariantes = m => {
     const z = el('div', 'mod-variantes'), v = VARIANTES.get(m.id);
@@ -1316,14 +1318,18 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     if (!v.donnees) { z.appendChild(el('div', 'aide', T('Recherche des variantes…'))); return z; }
     if (!v.donnees.variantes.length) { z.appendChild(el('div', 'aide', T("Ollama ne liste pas d'autre précision pour ce modèle."))); return z; }
     z.appendChild(el('div', 'aide', T("Précision du modèle : plus elle est basse, plus il est petit et rapide, mais moins fin (surtout les petits modèles et leurs appels d'outils).")));
+    const idDefaut = v.donnees.defaut && v.donnees.defaut.id, courant = ETAT.modeles.find(y => y.id === m.id) || {};
+    if (courant.quantification && ETAT.installes.includes(m.id)) z.appendChild(el('div', '', T('Installé actuellement : ') + m.id + ' — ' + etiquettePrecision(courant.quantification)));
     v.donnees.variantes.forEach(x => {
+      const installeX = x.installe || !!(x.defaut && idDefaut && ETAT.installes.includes(idDefaut)), idReel = x.defaut && idDefaut && ETAT.installes.includes(idDefaut) ? idDefaut : x.id;
+      const actifX = ETAT.reglages.modele === x.id || (x.defaut && ETAT.reglages.modele === idDefaut);
       const l = el('div', 'banc-ligne'), classe = { ideal: 'ok', bien: 'ok', limite: 'warn', trop_gros: 'bad' }[x.niveau];
       l.appendChild(el('b', '', x.precision + ' · ' + x.go + ' ' + T('Go') + (x.defaut ? T(' (celle installée par défaut)') : '') + ' '));
       const p = el('span', 'puce ' + classe, LIBELLE_ADEQ()[x.niveau]); p.title = x.jugement; l.appendChild(p);
       l.appendChild(el('span', 'aide', ' ' + x.explication + ' '));
-      if (x.installe) {
-        l.appendChild(el('span', 'puce ok', T('✔ installé')));
-        if (ETAT.reglages.modele !== x.id) { const u = el('button', 'principal', T('Utiliser')); u.addEventListener('click', async () => { try { await api('/api/reglages', { modele: x.id }); $('selModele').value = x.id; rafraichir(); } catch (e) { alert(e.message); } }); l.appendChild(u); }
+      if (installeX) {
+        l.appendChild(el('span', 'puce ok', actifX ? T('★ actif') : T('✔ installé')));
+        if (!actifX) { const u = el('button', 'principal', T('Utiliser')); u.addEventListener('click', async () => { try { await api('/api/reglages', { modele: idReel }); $('selModele').value = idReel; rafraichir(); } catch (e) { alert(e.message); } }); l.appendChild(u); }
       } else {
         const b = el('button', 'principal', T('Installer')); b.disabled = !ETAT.ollama;
         b.addEventListener('click', async () => { try { await api('/api/installer-modele', { modele: x.id }); rafraichir(); } catch (e) { $('msgModeles').textContent = e.message; } });
@@ -1352,12 +1358,23 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
       const v = vit(id); tr.appendChild(el('td', v && v === meilleurVit ? 'meilleur' : '', v ? v + ' ' + T('jetons/s') : '?'));
       domaines.forEach(([k]) => {
         const x = (mes[id].resultats || {})[k], p = part(id, k), meilleur = Math.max(...ids.map(i => part(i, k) || 0));
-        tr.appendChild(el('td', p !== null && p === meilleur && p > 0 ? 'meilleur' : '', x ? (x.points === x.sur ? '✅ ' : x.points === 0 ? '❌ ' : '🟠 ') + x.points + '/' + x.sur : '?'));
+        const ratees = x ? (x.details || []).filter(d => !d.ok).map(d => '✘ ' + d.test).join(String.fromCharCode(10)) : '';
+        const td = el('td', p !== null && p === meilleur && p > 0 ? 'meilleur' : '', x ? (x.points === x.sur ? '✅ ' : x.points === 0 ? '❌ ' : '🟠 ') + x.points + '/' + x.sur : '?');
+        if (ratees) td.title = T('Questions ratées :') + String.fromCharCode(10) + ratees;
+        tr.appendChild(td);
       });
       table.appendChild(tr);
     });
     z.appendChild(table);
-    z.appendChild(el('div', 'aide', T("En gras : le meilleur de la colonne. ✅ tout réussi · 🟠 en partie · ❌ raté. Ce sont de petites questions : un indicateur sur cette machine, pas un classement.")));
+    z.appendChild(el('div', 'aide', T("Vitesse : jetons écrits par seconde (plus haut = mieux), ce n'est pas une réussite ou un échec. Les autres colonnes : questions réussies sur le total (3/4 = trois réussies, une ratée ; passe la souris sur la case pour voir laquelle). En gras : le meilleur de la colonne. ✅ tout réussi · 🟠 en partie · ❌ raté.")));
+    const det = el('details'); det.appendChild(el('summary', '', T('Détail des questions, modèle par modèle')));
+    ids.forEach(id => {
+      const bloc = el('div', 'banc-domaine'); bloc.appendChild(el('b', '', id));
+      domaines.forEach(([k, nom]) => { const x = (mes[id].resultats || {})[k]; if (!x) return; bloc.appendChild(el('div', 'aide', nom + ' — ' + x.points + '/' + x.sur)); (x.details || []).forEach(d => bloc.appendChild(el('div', 'banc-ligne', (d.ok ? '✔ ' : '✘ ') + d.test))); });
+      det.appendChild(bloc);
+    });
+    z.appendChild(det);
+    z.appendChild(el('div', 'aide', T("Fiabilité : ces questions sont courtes et posées une fois, à température 0. C'est un bon indicateur pour départager deux modèles sur ta machine, pas une mesure de tes vraies tâches : un modèle qui rate une question peut très bien réussir ton travail, et inversement.")));
   };
   const listeModeles = () => {
     afficherComparaison();
@@ -1385,6 +1402,27 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
       });
     });
   };
+  // Téléchargements : une pastille dans la barre du haut montre l'avancement (et les échecs) de ce qu'on installe, depuis n'importe quel onglet
+  const VU_EN_COURS = new Set(), FINIS = new Map(), ERREURS_VUES = new Set();
+  const majTelechargements = () => {
+    const b = $('pTelechargements'), pulls = ETAT.pulls || {}, ids = Object.keys(pulls), maintenant = Date.now();
+    const court = id => id.length > 30 ? '…' + id.slice(-29) : id;
+    const encours = ids.filter(id => pulls[id].statut === 'en cours'), erreurs = ids.filter(id => pulls[id].statut === 'erreur' && !ERREURS_VUES.has(id + '|' + pulls[id].texte));
+    encours.forEach(id => VU_EN_COURS.add(id));
+    ids.filter(id => pulls[id].statut === 'termine' && VU_EN_COURS.has(id) && !FINIS.has(id)).forEach(id => FINIS.set(id, maintenant));
+    const finis = [...FINIS].filter(([, t]) => maintenant - t < 12000).map(([id]) => id);
+    b.dataset.erreur = '';
+    if (erreurs.length) {
+      const id = erreurs[0]; b.hidden = false; b.className = 'puce bad'; b.textContent = '⚠ ' + court(id) + T(' : échec'); b.title = pulls[id].texte + T(' — clique pour fermer et ouvrir les modèles'); b.dataset.erreur = id + '|' + pulls[id].texte;
+    } else if (encours.length) {
+      const p = pulls[encours[0]], pct = p.total ? Math.round(100 * p.fait / p.total) : null;
+      b.hidden = false; b.className = 'puce warn'; b.textContent = '⬇ ' + court(encours[0]) + (pct !== null ? ' ' + pct + ' %' : ' …') + (encours.length > 1 ? ' (+' + (encours.length - 1) + ')' : '');
+      b.title = encours.map(id => id + ' : ' + (pulls[id].total ? Math.round(pulls[id].fait / 1e6) + ' / ' + Math.round(pulls[id].total / 1e6) + ' ' + T('Mo') : (pulls[id].texte || '…'))).join(String.fromCharCode(10)) + T(' — clique pour ouvrir les modèles');
+    } else if (finis.length) {
+      b.hidden = false; b.className = 'puce ok'; b.textContent = '✔ ' + court(finis[0]) + T(' installé'); b.title = T('Téléchargement terminé');
+    } else b.hidden = true;
+  };
+  $('pTelechargements').addEventListener('click', () => { const e = $('pTelechargements').dataset.erreur; if (e) ERREURS_VUES.add(e); ouvrirOnglet('modeles'); majTelechargements(); });
   const afficherDiagnostic = liste => {
     const bloc = $('diagnostic'), cle = JSON.stringify(liste);
     if (bloc.dataset.cle === cle) return;
@@ -1457,7 +1495,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     $('pOllama').classList.toggle('ok', ETAT.ollama); $('pOllama').lastChild.textContent = ETAT.ollama ? T('Ollama prêt') : (ETAT.ollama_installe ? T('Ollama arrêté') : T('Ollama non installé')); $('pOllama').title = $('pOllama').lastChild.textContent;
     $('bDemarrer').hidden = ETAT.ollama || !ETAT.ollama_installe;
     afficherDiagnostic(ETAT.diagnostic || []);
-    afficherCalibrage(); majAnnexe(); majSens();
+    afficherCalibrage(); majAnnexe(); majSens(); majTelechargements();
     $('racine').textContent = T('Projet : ') + ETAT.racine;
     // Le choix du modèle ne propose que les modèles INSTALLÉS (l'installation se fait dans l'onglet Modèles).
     const s = $('selModele'), v = s.value || ETAT.reglages.modele; s.textContent = '';
