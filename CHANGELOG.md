@@ -2,6 +2,15 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## 0.13.8
+
+- **Plus d'avertissement « seulement 0 % du modèle tient sur la carte graphique » à chaque réponse** sur une machine sans carte graphique (tout tourne sur le processeur, c'est connu). Sur une machine avec carte, il n'apparaît plus qu'une fois par modèle et par demi-heure.
+- **Banc d'essai : une bonne réponse n'est plus comptée fausse à cause d'un point final.** « Le résultat est 14. » était refusé (le point collé au 14) ; la valeur est aussi acceptée en première ligne suivie d'une explication. Les scores de code des petits modèles étaient sous-estimés (jusqu'à 1/8 pour des réponses justes) : relance tes mesures.
+- **Mission longue : on voit ce qu'elle fait.** Pendant un tour (des minutes sur une petite machine), la bannière disait seulement « tour 1 en cours… » : on ne savait pas si quelque chose se passait. Elle indique maintenant ce que fait le modèle (« il réfléchit… 1 200 caractères », « il écrit sa réponse… », l'outil lancé) et garde un « Activité récente » avec les dernières actions et leurs résultats. Le modèle reçoit aussi la consigne de terminer chaque tour par un court point d'avancement écrit dans la conversation.
+- **Huit modèles de plus au catalogue**, avec leur version sans filtre quand elle existe : Granite 4.1 (3 et 8 milliards, + versions sans filtre), Granite 4 hybride 3 milliards, Qwen 3 4 milliards « sans réflexion » (`qwen3:4b-instruct`), Ministral 3 (3 milliards, avec images), Phi-4 mini sans filtre. `granite4:tiny-h`, mesuré le plus rapide d'un mini-PC Core Ultra (25 jetons/s, outils 6/6), devient le polyvalent conseillé sans carte graphique. Il n'existe pas de version sans filtre vérifiée de `granite4:tiny-h`, du Granite hybride ni de Ministral 3.
+
+**English.** No more “0% of the model fits on the graphics card” warning on every answer on a machine without a graphics card (once per model per half hour otherwise). A correct benchmark answer is no longer marked wrong because of a final period. Eight more models in the catalogue, with the unfiltered version when one exists; `granite4:tiny-h` becomes the recommended all-rounder without a graphics card.
+
 ## 0.13.7
 
 - **Le bandeau de téléchargement ne prend plus la moitié de l'écran.** Les lignes « ✔ modèle installé » y héritaient d'une règle du bandeau « nouvelle version » (largeur de base 260 px), qui dans un bandeau en colonne devenait 260 px de **hauteur**. Le bandeau est maintenant une bande fine (30 % de l'écran au plus, défilable), et un test mesure sa hauteur à chaque état (en cours, terminé, échec).

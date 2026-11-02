@@ -129,7 +129,7 @@ def prevenir(m, texte):
 
 def resume(m):
     """Ce que la page voit (sans le cahier complet)."""
-    return {k: m.get(k) for k in ("id", "nom", "dossier", "duree_h", "autonome", "etat", "conv", "lie", "tours", "debut", "fin", "bilan", "question", "message", "actions")} | {"cahier": (m.get("cahier") or "")[:300]}
+    return {k: m.get(k) for k in ("id", "nom", "dossier", "duree_h", "autonome", "etat", "conv", "lie", "tours", "debut", "fin", "bilan", "question", "message", "actions", "journal")} | {"cahier": (m.get("cahier") or "")[:300]}
 
 
 def etat():
@@ -161,10 +161,60 @@ def consigne_systeme():
 
 
 def prompt_du_tour(m):
+    point = "\n\n" + _t("Termine ce tour par un court point d'avancement dans ta réponse (1 à 3 phrases : ce qui est fait, ce qui reste) : l'utilisateur te suit dans cette conversation.")
     if m["tours"] == 0:
-        return _t("MISSION « {} »\n\nCahier des charges :\n{}\n\nCommence par le plan dans la fiche de suivi, puis exécute la première étape.").format(m["nom"], m["cahier"])
+        return _t("MISSION « {} »\n\nCahier des charges :\n{}\n\nCommence par le plan dans la fiche de suivi, puis exécute la première étape.").format(m["nom"], m["cahier"]) + point
     note = ("\n\n" + _t("Message de l'utilisateur (réponse à ta question ou nouvelle consigne) : {}").format(m["note"])) if m.get("note") else ""
-    return _t("Continue la mission : relis la fiche de suivi et exécute l'étape suivante avec tes outils. Si tout est fait et vérifié, appelle mission_terminer.") + note
+    return _t("Continue la mission : relis la fiche de suivi et exécute l'étape suivante avec tes outils. Si tout est fait et vérifié, appelle mission_terminer.") + note + point
+
+
+JOURNAL_MAX = 8                     # dernières actions gardées pour la page
+DELAI_MESSAGE = 3.0                 # secondes entre deux mises à jour du « le modèle réfléchit… » (le fichier des missions n'est pas réécrit à chaque jeton)
+
+
+def suivre_le_tour(ident, maintenant=time.time):
+    """La fonction d'émission d'un tour de mission : elle ne montre rien dans la page (personne n'y est connecté), mais tient à jour l'avancement de la mission — ce que fait le modèle EN CE MOMENT
+    (il réfléchit, il écrit, il lance tel outil) et les dernières actions — pour que la bannière ne reste pas sur « tour 1 en cours… » pendant des minutes, sans qu'on sache si quelque chose se passe."""
+    compte = {"pensee": 0, "texte": 0, "dernier": 0.0}
+
+    def noter(ligne):
+        try:
+            actuel = trouver(ident)
+            if actuel is None:
+                return
+            journal = (list(actuel.get("journal") or []) + [ligne])[-JOURNAL_MAX:]
+            modifier(ident, message=ligne, journal=journal)
+        except ValueError:
+            pass
+
+    def emettre(e):
+        genre = e.get("type")
+        if genre == "pensee":
+            compte["pensee"] += len(e.get("texte") or "")
+        elif genre == "texte":
+            compte["texte"] += len(e.get("texte") or "")
+        elif genre == "outil":
+            args = ", ".join("{}={}".format(k, str(v)[:60]) for k, v in list((e.get("args") or {}).items())[:2])
+            noter("⚙ {} {}".format(e.get("nom", ""), args).strip())
+            compte["pensee"] = compte["texte"] = 0
+            return
+        elif genre == "resultat":
+            noter("↳ {} : {}".format(e.get("nom", ""), " ".join(str(e.get("texte") or "").split())[:90]))
+            return
+        elif genre in ("info", "erreur", "etat"):
+            noter(" ".join(str(e.get("texte") or "").split())[:160])
+            return
+        else:
+            return
+        t = maintenant()
+        if t - compte["dernier"] >= DELAI_MESSAGE:
+            compte["dernier"] = t
+            try:
+                modifier(ident, message=(_t("le modèle réfléchit… ({} caractères)").format(compte["pensee"]) if compte["pensee"] and not compte["texte"]
+                                         else _t("le modèle écrit sa réponse… ({} caractères)").format(compte["texte"])))
+            except ValueError:
+                pass
+    return emettre
 
 
 # --------------------------------------------------------------------------- le fil
@@ -203,7 +253,7 @@ def _tour(m):
     modifier(m["id"], conv=conv["id"], message=_t("tour {} en cours…").format(m["tours"] + 1))
     echec = None
     try:
-        _m.tour(conv, prompt_du_tour(m), lambda evenement: None, r, stop, None, identite="mission", lecture_seule=not autonome)
+        _m.tour(conv, prompt_du_tour(m), suivre_le_tour(m["id"]), r, stop, None, identite="mission", lecture_seule=not autonome)
     except Exception as erreur:  # noqa: BLE001
         echec = erreur
         _m.journaliser("Mission « {} » : tour en erreur : {!r}".format(m["nom"], erreur))

@@ -106,6 +106,38 @@ class Mission(unittest.TestCase):
         self.assertTrue(fin["conv"])
         self.assertTrue(_m.conv_lire(fin["conv"])["titre"].startswith("🎯"))
 
+    def test_l_avancement_du_tour_se_voit_pendant_qu_il_tourne(self):
+        """Pendant un tour (des minutes sur une petite machine), la bannière dit ce que fait le modèle et garde les dernières actions : plus de « tour 1 en cours… » muet."""
+        m = self.creer()
+        horloge = {"t": 100.0}
+        emettre = mission.suivre_le_tour(m["id"], maintenant=lambda: horloge["t"])
+        emettre({"type": "pensee", "texte": "a" * 120})
+        self.assertIn("réfléchit", mission.trouver(m["id"])["message"])
+        self.assertIn("120", mission.trouver(m["id"])["message"])
+        horloge["t"] += 1.0
+        emettre({"type": "pensee", "texte": "b" * 50})
+        self.assertIn("120", mission.trouver(m["id"])["message"], "pas de réécriture du fichier à chaque jeton : au plus toutes les 3 secondes")
+        horloge["t"] += 5.0
+        emettre({"type": "texte", "texte": "voilà"})
+        self.assertIn("écrit sa réponse", mission.trouver(m["id"])["message"])
+        emettre({"type": "outil", "nom": "executer", "args": {"commande": "ping -n 1 google.fr"}})
+        emettre({"type": "resultat", "nom": "executer", "texte": "Code de sortie 0." + chr(10) + "Réponse de google.fr"})
+        emettre({"type": "info", "texte": "Refusé (mission sans surveillance) : Lancer une commande"})
+        j = mission.trouver(m["id"])["journal"]
+        self.assertEqual(len(j), 3)
+        self.assertTrue(j[0].startswith("⚙ executer") and "ping" in j[0])
+        self.assertIn("Code de sortie 0.", j[1])
+        for i in range(12):
+            emettre({"type": "info", "texte": "ligne %d" % i})
+        self.assertEqual(len(mission.trouver(m["id"])["journal"]), mission.JOURNAL_MAX, "les dernières actions seulement")
+        self.assertIn("journal", mission.resume(mission.trouver(m["id"])), "la page le reçoit")
+        emettre({"type": "approbation", "titre": "x"})                          # un évènement qu'on ne suit pas ne casse rien
+
+    def test_la_consigne_demande_un_point_d_avancement_a_chaque_tour(self):
+        m = self.creer()
+        self.assertIn("point d'avancement", mission.prompt_du_tour(m))
+        self.assertIn("point d'avancement", mission.prompt_du_tour(dict(m, tours=2)))
+
     def test_le_modele_recoit_les_outils_de_mission_et_la_consigne_seulement_pendant_une_mission(self):
         self.creer()
         mission.un_pas()

@@ -64,6 +64,25 @@ def modele_annexe(r):
     return r["modele"]
 
 
+AVERTIS_CARTE = {}                  # modèle -> instant du dernier avertissement « il ne tient pas sur la carte graphique »
+DELAI_AVERTISSEMENT_CARTE = 1800    # secondes : une fois par modèle et par demi-heure, pas à chaque réponse
+
+
+def a_une_carte_graphique():
+    """Faux sur une machine sans carte graphique utilisable : tout tourne sur le processeur, c'est connu, inutile de le répéter à chaque réponse. Vrai si on ne sait pas encore."""
+    from . import adequation
+    profil = adequation.profil_pret()
+    return profil is None or not profil.sans_gpu()
+
+
+def _avertir_une_fois(modele, maintenant=time.time):
+    t = maintenant()
+    if t - AVERTIS_CARTE.get(modele, 0) < DELAI_AVERTISSEMENT_CARTE:
+        return False
+    AVERTIS_CARTE[modele] = t
+    return True
+
+
 def memoire_longue(conv, r):
     """Comment cette conversation garde son fil : « resume » (le début est résumé par le modèle), « fichier » (fiche de suivi) ou « demander » (on pose la question au premier résumé).
     Le choix de la conversation l'emporte sur le réglage général."""
@@ -1067,7 +1086,7 @@ def boucle_agent(conv, r, emit, ctx, stop):
                         if not verifie:
                             verifie = True
                             ps = ps_modele(r["modele"])
-                            if ps and ps["taille"] and ps["vram"] < 0.9 * ps["taille"]:
+                            if ps and ps["taille"] and ps["vram"] < 0.9 * ps["taille"] and a_une_carte_graphique() and _avertir_une_fois(r["modele"]):
                                 emit({"type": "info", "texte": "Attention : seulement {} % du modèle tient sur la carte graphique, le reste tourne sur le processeur, donc c'est lent. Ferme ComfyUI et le navigateur d'images, ou baisse le contexte dans Réglages.".format(round(100 * ps["vram"] / ps["taille"]))})
                         if m.get("thinking"):
                             pensee += m["thinking"]

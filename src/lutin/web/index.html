@@ -1585,7 +1585,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
   const majBandeauMission = () => {
     const z = $('bandeauMission'), m = missionDe(CONV && CONV.id);
     if (!m) { z.hidden = true; z.textContent = ''; z.dataset.sig = ''; return; }
-    const sig = JSON.stringify([m.etat, m.tours, m.actions, m.message, m.question, m.bilan, m.autonome, Math.floor(Date.now() / 60000)]);
+    const sig = JSON.stringify([m.etat, m.tours, m.actions, m.message, m.journal, m.question, m.bilan, m.autonome, Math.floor(Date.now() / 60000)]);
     if (z.dataset.sig === sig) return;
     z.dataset.sig = sig; z.hidden = false; z.textContent = '';
     const restant = Math.max(0, Math.round((m.debut + m.duree_h * 3600 - Date.now() / 1000) / 60)), h = restant >= 90 ? Math.round(restant / 60) + ' h' : restant + ' min';
@@ -1596,6 +1596,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     if (m.etat === 'pause') { const b = el('button', 'principal', T('Reprendre')); b.addEventListener('click', () => agir('reprendre')); z.appendChild(b); }
     if (m.etat !== 'terminee') { const b = el('button', 'danger', T('Arrêter')); b.addEventListener('click', () => { if (confirm(T('Arrêter cette mission ? Le travail déjà fait reste dans le dossier.'))) agir('arreter'); }); z.appendChild(b); }
     if (m.message && m.etat !== 'terminee') z.appendChild(el('span', 'detail', m.message));
+    if ((m.journal || []).length && m.etat !== 'terminee') { const d = el('details'); d.open = m.etat === 'en_cours'; d.appendChild(el('summary', '', T('Activité récente'))); const pre = el('pre'); pre.textContent = m.journal.join(String.fromCharCode(10)); d.appendChild(pre); z.appendChild(d); }
     if (m.question && m.etat === 'bloquee') z.appendChild(el('div', 'question', T('Lutin demande : ') + m.question + '  — ' + T('réponds dans le champ ci-dessous.')));
     if (m.bilan) { const d = el('details'); d.open = m.etat === 'terminee'; d.appendChild(el('summary', '', T('Bilan'))); const pre = el('pre'); pre.textContent = m.bilan; d.appendChild(pre); z.appendChild(d); }
   };

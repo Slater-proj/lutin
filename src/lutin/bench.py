@@ -63,12 +63,14 @@ def est_francais(texte):
 
 
 def reponse_exacte(texte, attendu):
-    """La valeur attendue figure seule (pas collée à d'autres chiffres ou lettres) dans la dernière ligne, et la réponse reste courte."""
+    """La valeur attendue figure seule (pas collée à d'autres chiffres ou lettres) dans la dernière ou dans la première ligne, et la réponse reste courte.
+    Un point final ne compte pas (« Le résultat est 14. » est juste) ; « 14.5 » n'est pas « 14 ». Avant, un modèle qui concluait par une phrase se voyait compter faux une bonne réponse."""
     t = nettoyer(texte).replace("`", "").replace('"', "").replace("'", "")
     if not t or len(t) > 400:
         return False
-    derniere = [ligne for ligne in t.splitlines() if ligne.strip()][-1]
-    return re.search(r"(?<![\w.])" + re.escape(attendu) + r"(?![\w.])", derniere, re.I) is not None
+    lignes = [ligne for ligne in t.splitlines() if ligne.strip()]
+    motif = r"(?<![\w.])" + re.escape(attendu) + r"(?!\w)(?!\.\w)"
+    return any(re.search(motif, ligne, re.I) for ligne in (lignes[-1], lignes[0]))
 
 
 def trois_puces(texte):

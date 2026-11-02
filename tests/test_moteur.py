@@ -596,6 +596,18 @@ class Assistant(unittest.TestCase):
         self.assertTrue(any("a répondu une erreur" in e["texte"] for e in ev if e["type"] == "erreur"))
 
     def test_indicateurs_de_chargement_et_de_debordement(self):
+        from lutin import adequation, dialogue
+        from lutin.machine import Gpu, Profil
+        vrai = adequation.profil_pret
+        adequation.profil_pret = lambda *a, **k: Profil(systeme="linux", ram_go=32.0, ram_libre_go=13.0, gpus=[Gpu("RTX", "nvidia", 24)])          # l'avertissement « carte graphique » n'existe que sur une machine qui en a une
+        dialogue.AVERTIS_CARTE.clear()
+        try:
+            self._indicateurs_de_chargement_et_de_debordement()
+        finally:
+            adequation.profil_pret = vrai
+            dialogue.AVERTIS_CARTE.clear()
+
+    def _indicateurs_de_chargement_et_de_debordement(self):
         PS[:] = []
         ev = chat("Bonjour", reponses=[[{"content": "ok"}]])
         self.assertTrue(any(e["type"] == "etat" and "Chargement du modèle" in e["texte"] for e in ev), "modèle pas en mémoire : on le dit")
@@ -604,6 +616,9 @@ class Assistant(unittest.TestCase):
         self.assertFalse(any(e["type"] == "etat" for e in ev), "déjà chargé : pas de message de chargement")
         avert = [e["texte"] for e in ev if e["type"] == "info" and "carte graphique" in e["texte"]]
         self.assertTrue(avert and "50 %" in avert[0], avert)
+        PS[:] = [{"name": "qwen3.8:27b", "size": 20_000_000_000, "size_vram": 10_000_000_000}]
+        ev = chat("Bonjour", reponses=[[{"content": "ok"}]])
+        self.assertFalse(any(e["type"] == "info" and "carte graphique" in e["texte"] for e in ev), "déjà signalé à la réponse précédente : une fois par modèle, pas à chaque réponse")
         PS[:] = [{"name": "qwen3.8:27b", "size": 20_000_000_000, "size_vram": 20_000_000_000}]
         ev = chat("Bonjour", reponses=[[{"content": "ok"}]])
         self.assertFalse(any(e["type"] == "info" and "carte graphique" in e["texte"] for e in ev), "tout sur la carte : rien à signaler")
@@ -819,6 +834,27 @@ class Assistant(unittest.TestCase):
         self.assertIn("redémarre Ollama", p["texte"])
         self.assertNotIn("The system cannot find", p["texte"], "plus de message brut incompréhensible")
         A.PULLS.pop("sans-cle:1b", None)
+
+    def test_l_avertissement_carte_graphique_n_est_ni_repete_ni_donne_sans_carte(self):
+        """« Seulement 0 % du modèle tient sur la carte » à chaque réponse d'une machine SANS carte était du bruit : connu, et inutile à répéter. Avec une carte : une fois par modèle et par demi-heure."""
+        from lutin import adequation, dialogue
+        from lutin.machine import Gpu, Profil
+        vrai = adequation.profil_pret
+        try:
+            adequation.profil_pret = lambda *a, **k: Profil(systeme="linux", ram_go=32.0, ram_libre_go=13.0, gpus=[])
+            self.assertFalse(dialogue.a_une_carte_graphique())
+            adequation.profil_pret = lambda *a, **k: Profil(systeme="linux", ram_go=32.0, ram_libre_go=13.0, gpus=[Gpu("RTX", "nvidia", 24)])
+            self.assertTrue(dialogue.a_une_carte_graphique())
+            adequation.profil_pret = lambda *a, **k: None
+            self.assertTrue(dialogue.a_une_carte_graphique(), "machine pas encore détectée : on garde l'avertissement")
+        finally:
+            adequation.profil_pret = vrai
+        dialogue.AVERTIS_CARTE.clear()
+        self.assertTrue(dialogue._avertir_une_fois("x:1b", lambda: 10000.0))
+        self.assertFalse(dialogue._avertir_une_fois("x:1b", lambda: 10100.0), "pas deux fois en moins d'une demi-heure")
+        self.assertTrue(dialogue._avertir_une_fois("y:1b", lambda: 10100.0), "un autre modèle a son propre avertissement")
+        self.assertTrue(dialogue._avertir_une_fois("x:1b", lambda: 10000.0 + dialogue.DELAI_AVERTISSEMENT_CARTE + 1))
+        dialogue.AVERTIS_CARTE.clear()
 
     def test_un_modele_qui_reflechit_sans_repondre_est_relance_puis_explique(self):
         ev = chat("Bonjour", reponses=[[{"thinking": "hum"}], [{"content": "Voilà la réponse."}]])
