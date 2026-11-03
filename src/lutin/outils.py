@@ -407,7 +407,8 @@ def outil_document(chemin, contenu, titre, ctx):
         avant = f.stat().st_mtime_ns if f.is_file() else None
         res = outil_ecrire(chemin, contenu, ctx)
         if f.is_file() and f.stat().st_mtime_ns != avant:                          # le fichier a vraiment été écrit (pas refusé, pas simulé)
-            ctx.setdefault("fichiers_joints", []).append(str(f))
+            if str(f) not in ctx.setdefault("fichiers_joints", []):
+                ctx["fichiers_joints"].append(str(f))
         return res
     fabrique = documents.FORMATS.get(ext)
     if fabrique is None:
@@ -450,8 +451,12 @@ def ecrire_et_verifier(f, texte, eol, ctx, message):
         if d and d["libre"] < 300 * 1024 ** 2:
             raise _m.ErreurOutil(_t("Le disque {} est presque plein ({} libres) : je n'écris pas pour ne pas abîmer le fichier. Fais de la place d'abord.").format(d["racine"], _m.go(d["libre"])))
     copie = sauvegarder(f, ctx)
+    cree = not f.exists()
     f.parent.mkdir(parents=True, exist_ok=True)
     ecrire_exact(f, texte, eol)
+    if cree and ctx is not None and str(f) not in ctx.setdefault("fichiers_joints", []):
+        ctx["fichiers_joints"].append(str(f))                 # tout fichier créé est tracé (carte sous le message + Réglages > Fichiers créés) ; un fichier seulement modifié existait déjà
+        message += _t(" Chemin complet : {}.").format(f)
     noter_apres(ctx, f)
     _m.PLAN["valide"] = False                                  # le plan sera reconstruit au prochain tour
     erreur = verifier_syntaxe(f, texte.replace("\r\n", "\n"))

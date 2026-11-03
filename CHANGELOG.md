@@ -2,6 +2,12 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## 0.13.11
+
+- **Tout fichier créé par Lutin est tracé.** Un fichier écrit avec l'outil d'écriture (par exemple un `docker-compose.yml`) n'apparaissait nulle part : ni sous le message, ni dans Réglages > Fichiers créés par Lutin. Il y figure désormais dès sa création, et le modèle reçoit le chemin complet du fichier (il peut dire précisément où il est). Un fichier simplement modifié n'est pas compté comme créé.
+
+**English.** Every file created by Lutin is now tracked (card under the message, Settings > Files created by Lutin) and the model is given the full path.
+
 ## 0.13.10
 
 - **Modèle qui ne produit rien : dernier essai sans outils, et message honnête.** Sur le mini-PC, `granite4:tiny-h` ne répondait rien trois fois de suite alors que la conversation n'était pas pleine (4,7k sur 8,2k jetons), et Lutin accusait la fenêtre de contexte. Le troisième essai se fait maintenant **sans déclarer les outils** (certains petits modèles se taisent quand ils sont déclarés). Les messages disent la vérité : « n'a rien écrit » (et non « a réfléchi ») s'il n'y a pas eu de réflexion, et la fenêtre de contexte n'est citée comme cause que si elle est vraiment pleine (85 % ou plus) ; sinon c'est dit que ce modèle ne répond pas correctement ici. La raison de fin donnée par Ollama est notée dans le journal.

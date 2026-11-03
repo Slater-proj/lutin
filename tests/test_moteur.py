@@ -349,6 +349,20 @@ class Assistant(unittest.TestCase):
         self.assertFalse(any(e["type"] == "approbation" for e in ev))
         self.assertEqual((PROJET / "docs" / "nouveau" / "note.md").read_text(encoding="utf-8"), "# Note\n")
 
+    def test_un_fichier_cree_par_ecrire_est_trace_et_son_chemin_donne(self):
+        """Tout fichier créé par Lutin est tracé : carte sous le message, registre « Fichiers créés », chemin complet rendu au modèle (qui peut ainsi répondre « où ? »). Un fichier modifié n'est pas recréé."""
+        ev = chat("Crée un compose", reponses=[[appel_outil("ecrire", chemin="docker-compose.yml", contenu="services: {}\n")], [{"content": "Créé."}]], options={"auto_ecriture": True})
+        cible = PROJET / "docker-compose.yml"
+        res = next(e for e in ev if e["type"] == "resultat")
+        self.assertEqual([j["nom"] for j in res.get("fichiers_joints", [])], ["docker-compose.yml"], "une carte pour le fichier créé")
+        cid = [e for e in ev if e["type"] == "debut"][0]["conversation"]
+        trace = [x for x in __import__("lutin.fichiers", fromlist=["x"]).lister()["liste"] if x["conversation"] == cid]
+        self.assertEqual([x["nom"] for x in trace], ["docker-compose.yml"], "inscrit dans Réglages > Fichiers créés")
+        outil = next(m["content"] for m in A.conv_lire(cid)["messages"] if m.get("role") == "tool")
+        self.assertIn(str(cible), outil, "le modèle reçoit le chemin complet")
+        ev = chat("Change-le", reponses=[[appel_outil("ecrire", chemin="docker-compose.yml", contenu="services: {a: {}}\n")], [{"content": "Fait."}]], options={"auto_ecriture": True})
+        self.assertFalse(next(e for e in ev if e["type"] == "resultat").get("fichiers_joints"), "un fichier déjà là n'est pas présenté comme créé")
+
     def test_commandes(self):
         ev = chat("Dis bonjour", reponses=[[appel_outil("executer", commande="echo bonjour-assistant")], [{"content": "."}]])
         self.assertFalse(any(e["type"] == "approbation" for e in ev), "une lecture simple n'a pas besoin d'accord")

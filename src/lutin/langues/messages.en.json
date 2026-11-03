@@ -1328,5 +1328,6 @@
 "(résultat transmis à l'assistant, non affiché)": "(result passed to the assistant, not displayed)",
 "Le modèle n'a rien écrit : je relance{}.": "The model wrote nothing: I am retrying{}.",
 ", sans outils cette fois": ", without tools this time",
-"Le modèle n'a rien produit, même après trois essais (dont un sans outils), alors que la fenêtre de contexte n'est pas pleine ({} / {} jetons). Ce n'est pas ta conversation : ce modèle ne répond pas correctement ici. Essaie un autre modèle (Réglages), ou écris « continue ».": "The model produced nothing, even after three attempts (one of them without tools), although the context window is not full ({} / {} tokens). It is not your conversation: this model does not answer correctly here. Try another model (Settings), or write “continue”."
+"Le modèle n'a rien produit, même après trois essais (dont un sans outils), alors que la fenêtre de contexte n'est pas pleine ({} / {} jetons). Ce n'est pas ta conversation : ce modèle ne répond pas correctement ici. Essaie un autre modèle (Réglages), ou écris « continue ».": "The model produced nothing, even after three attempts (one of them without tools), although the context window is not full ({} / {} tokens). It is not your conversation: this model does not answer correctly here. Try another model (Settings), or write “continue”.",
+" Chemin complet : {}.": " Full path: {}."
 }
