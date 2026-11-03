@@ -329,7 +329,7 @@ def _appeler_outil(nom, args, ctx):
     if nom == "memoriser":
         return _m.noter(args.get("note", ""))
     if nom == "web_chercher":
-        return _m.outil_web_chercher(args.get("requete", ""), args.get("nombre"), ctx)
+        return _m.outil_web_chercher(args.get("requete", ""), args.get("nombre"), ctx, args.get("lire"))
     if nom == "web_lire":
         return _m.outil_web_lire(args.get("url", ""), args.get("debut"), ctx)
     if nom == "taches":

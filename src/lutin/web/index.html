@@ -107,8 +107,10 @@ button.danger:hover { background:linear-gradient(180deg, #b84545, #8f2f2f); }
 .travail { display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--accent); box-shadow:0 0 0 0 rgba(90,169,255,.6); animation:onde 1.3s infinite; flex:0 0 auto; margin-right:7px; vertical-align:middle; }
 .haut .onglets .travail { margin:0 0 0 6px; }
 .travail.fini { background:var(--ok); box-shadow:none; animation:none; }
+.travail.wait { background:var(--warm, #f5c542); box-shadow:0 0 0 0 rgba(245,197,66,.6); animation:onde-jaune 1.8s infinite; }
+@keyframes onde-jaune { 0% { box-shadow:0 0 0 0 rgba(245,197,66,.6); } 70% { box-shadow:0 0 0 7px rgba(245,197,66,0); } 100% { box-shadow:0 0 0 0 rgba(245,197,66,0); } }
 @keyframes onde { 0% { box-shadow:0 0 0 0 rgba(90,169,255,.65); transform:scale(.9); } 70% { box-shadow:0 0 0 7px rgba(90,169,255,0); transform:scale(1.05); } 100% { box-shadow:0 0 0 0 rgba(90,169,255,0); transform:scale(.9); } }
-@media (prefers-reduced-motion:reduce) { .travail { animation:none; } }
+@media (prefers-reduced-motion:reduce) { .travail, .travail.wait { animation:none; } }
 /* file d'attente des messages envoyés pendant que l'assistant répond */
 .suspendu { opacity:.6; } .suspendu::after { content:' ⏸'; }
 #diagnostic { padding:8px 12px; font-size:.86rem; border-bottom:1px solid var(--line); display:flex; flex-direction:column; gap:6px; }
@@ -324,10 +326,11 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
 .mod-variantes { grid-column:1 / -1; font-size:.82rem; } table.comparaison { border-collapse:collapse; margin:6px 0; font-size:.85rem; } table.comparaison th, table.comparaison td { border:1px solid var(--line); padding:3px 8px; text-align:left; } table.comparaison td.meilleur { font-weight:700; }
 .mod-mesure { grid-column:1 / -1; font-size:.82rem; } .banc-lien { color:var(--muted); text-decoration:none; } .banc-domaine { margin:6px 0 0 4px; } .banc-ligne { margin-left:16px; font-size:.8rem; }
 .mod-nom, .mod-desc { grid-column:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; } .mod-desc { font-size:.82rem; }
-.mod-nom .puce { margin-left:8px; vertical-align:middle; }
+/* la ligne du nom : le nom (et sa taille) se coupent par « … » s'il est trop long, les pastilles (Adapté, Trop gros…) restent TOUJOURS visibles à la fin */
+.mod-nom { display:flex; align-items:center; gap:8px; text-overflow:clip; } .mod-tete { flex:0 1 auto; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; } .mod-nom .puce { margin-left:0; flex:0 0 auto; vertical-align:middle; }
 .mod-actions { grid-column:2; grid-row:1 / span 2; display:flex; gap:6px; align-items:center; justify-content:flex-end; }
 .mod-actions button { padding:3px 10px; font-size:.82rem; } .mod-actions .barre { width:150px; flex:0 0 auto; }
-@media (max-width:700px) { .mod { grid-template-columns:1fr; } .mod-actions { grid-column:1; grid-row:auto; justify-content:flex-start; flex-wrap:wrap; } .mod-nom, .mod-desc { white-space:normal; } }
+@media (max-width:700px) { .mod { grid-template-columns:1fr; } .mod-actions { grid-column:1; grid-row:auto; justify-content:flex-start; flex-wrap:wrap; } .mod-nom, .mod-desc { white-space:normal; } .mod-nom { flex-wrap:wrap; } .mod-tete { white-space:normal; } }
 #listeModeles .carte > div, #propositions .carte > div { margin:0 0 6px; }
 #listeModeles .carte .nom, #propositions .carte .nom { font-weight:600; }
 #listeModeles .carte button, #propositions .carte button, #listeModeles .carte .puce { margin:2px 8px 2px 0; }
@@ -875,7 +878,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
       if (m.role === 'resume') { const d = el('div', 'info', T('Résumé du début de la conversation : ') + m.content.slice(0, 400) + (m.content.length > 400 ? '...' : '')); fil().appendChild(d); }
       else if (m.role === 'user') { const d = el('div', 'msg moi'); d.appendChild(el('div', 'corps', m.content)); miniatures(d, m.images, m.pieces); fil().appendChild(d); }
       else if (m.role === 'assistant') { if (m.content) { const x = messageIA(); rendre(x.c, m.content); } (m.tool_calls || []).forEach(t => fil().appendChild(el('div', 'outil', '⚙ ' + t.function.name + ' ' + JSON.stringify(t.function.arguments).slice(0, 160)))); }
-      else if (m.role === 'tool') { const d = el('div', 'outil'); d.appendChild(el('div', '', '↳ ' + (m.tool_name || T('résultat')))); d.appendChild(el('div', 'res', (m.content || '').slice(0, 700))); afficherMedias(d, m.medias, m.medias_fichiers, CONV.id); afficherFichiers(d, m.fichiers_joints, CONV.id); fil().appendChild(d); }
+      else if (m.role === 'tool') { const d = el('div', 'outil'); d.appendChild(el('div', '', '↳ ' + (m.tool_name || T('résultat')))); d.appendChild(el('div', 'res', ['web_chercher', 'web_lire'].includes(m.tool_name) && (m.content || '').slice(0, 60).includes('CONTENU WEB NON FIABLE') ? T("(résultat transmis à l'assistant, non affiché)") : (m.content || '').slice(0, 700))); afficherMedias(d, m.medias, m.medias_fichiers, CONV.id); afficherFichiers(d, m.fichiers_joints, CONV.id); fil().appendChild(d); }
     });
     annoter(); afficherTaches(c.taches); majJauge(c.id); setVitesse(c.vitesse); majAnnuler();
     bas();
@@ -940,9 +943,12 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
   const surChat = () => $('p-chat').classList.contains('vue');          // on lit une réponse seulement si l'onglet Conversation est ouvert (pas Mémoire, Réglages…)
   const termine = (id, vu) => { if (id && !vu && !NONLUS.has(id)) { NONLUS.add(id); sauverNonlus(); } };
   let PREC_ACT = new Set();
+  // Conversations qui attendent une action de ta part (accord à donner, question à trancher, mission bloquée) : point JAUNE, prioritaire sur le bleu (il travaille) et le vert (terminé)
+  const enAttente = () => { const s = new Set((ETAT && ETAT.en_attente) || []); Object.entries((ETAT && ETAT.missions) || {}).forEach(([id, m]) => { if (m && m.etat === 'bloquee') s.add(id); }); return s; };
   const majTravail = () => {
-    const travaille = EN_COURS || (ETAT && ETAT.actives && ETAT.actives.length), p = $('ptTravail');
-    p.hidden = !(travaille || NONLUS.size); p.classList.toggle('fini', !travaille && NONLUS.size > 0); p.title = travaille ? T('L\'assistant travaille') : T('Réponse terminée, pas encore lue');
+    const travaille = EN_COURS || (ETAT && ETAT.actives && ETAT.actives.length), p = $('ptTravail'), attend = enAttente().size > 0;
+    p.hidden = !(travaille || NONLUS.size || attend); p.classList.toggle('wait', attend); p.classList.toggle('fini', !attend && !travaille && NONLUS.size > 0);
+    p.title = attend ? T('L\'assistant attend une action de ta part') : travaille ? T('L\'assistant travaille') : T('Réponse terminée, pas encore lue');
   };
   // ---- Images jointes : choisies, collées ou glissées ; envoyées tout de suite (corps brut), le message ne porte que leur nom
   const PJ = [];
@@ -1173,7 +1179,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
   };
   const listeConversations = () => {
     const z = $('conversations'); z.textContent = '';
-    ETAT.conversations.forEach(c => { const d = el('div', 'conv' + (CONV && CONV.id === c.id ? ' choisie' : '')); d.dataset.id = c.id; if ((ETAT.actives || []).includes(c.id) || (EN_COURS && ID_EN_COURS === c.id)) { const pt = el('i', 'travail'); pt.title = T('L\'assistant travaille sur cette conversation'); d.appendChild(pt); } else if (NONLUS.has(c.id)) { const pt = el('i', 'travail fini'); pt.title = T('Réponse terminée, pas encore lue'); d.appendChild(pt); } d.appendChild(el('span', 't', (c.epingle ? '★ ' : '') + (c.titre || T('(sans titre)')))); const mn = el('button', 'menu-ouvrir', '⋯'); mn.title = T('Options de la conversation'); mn.addEventListener('click', e => { e.stopPropagation(); ouvrirMenuConv(c, mn); }); d.appendChild(mn); const x = el('button', '', '✕'); x.title = T('Supprimer'); x.addEventListener('click', async e => { e.stopPropagation(); if (!confirm(T('Supprimer cette conversation ?'))) return; await api('/api/supprimer', { id: c.id }); if (CONV && CONV.id === c.id) nouvelle(); rafraichir(); }); d.appendChild(x); d.addEventListener('click', () => ouvrir(c.id)); z.appendChild(d); });
+    ETAT.conversations.forEach(c => { const d = el('div', 'conv' + (CONV && CONV.id === c.id ? ' choisie' : '')); d.dataset.id = c.id; if (enAttente().has(c.id)) { const pt = el('i', 'travail'); pt.classList.add('wait'); pt.title = T('L\'assistant attend une action de ta part'); d.appendChild(pt); } else if ((ETAT.actives || []).includes(c.id) || (EN_COURS && ID_EN_COURS === c.id)) { const pt = el('i', 'travail'); pt.title = T('L\'assistant travaille sur cette conversation'); d.appendChild(pt); } else if (NONLUS.has(c.id)) { const pt = el('i', 'travail fini'); pt.title = T('Réponse terminée, pas encore lue'); d.appendChild(pt); } d.appendChild(el('span', 't', (c.epingle ? '★ ' : '') + (c.titre || T('(sans titre)')))); const mn = el('button', 'menu-ouvrir', '⋯'); mn.title = T('Options de la conversation'); mn.addEventListener('click', e => { e.stopPropagation(); ouvrirMenuConv(c, mn); }); d.appendChild(mn); const x = el('button', '', '✕'); x.title = T('Supprimer'); x.addEventListener('click', async e => { e.stopPropagation(); if (!confirm(T('Supprimer cette conversation ?'))) return; await api('/api/supprimer', { id: c.id }); if (CONV && CONV.id === c.id) nouvelle(); rafraichir(); }); d.appendChild(x); d.addEventListener('click', () => ouvrir(c.id)); z.appendChild(d); });
   };
   // Nouveautés de modèles (vérifiées au lancement par Lutin, au plus une fois par jour) : toujours proposées, jamais installées toutes seules.
   let PROP_T = 0;
@@ -1243,8 +1249,9 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
   const ligneModele = m => {
     const inst = ETAT.installes.includes(m.id), p = ETAT.pulls[m.id], actif = ETAT.reglages.modele === m.id;
     const l = el('div', 'mod' + (actif && inst ? ' actif' : '')), nom = el('div', 'mod-nom'), desc = el('div', 'mod-desc aide'), acts = el('div', 'mod-actions');
-    nom.appendChild(el('b', '', variante(m)));
-    nom.appendChild(el('span', 'aide', ' · ' + (m.go ? m.go + T(' Go') : T('taille inconnue')) + (m.quantification ? ' · ' + etiquettePrecision(m.quantification) : '') + ' · ' + m.id + (m.origine === 'perso' ? T(' · ajouté par toi') : m.origine === 'installe' ? T(' · installé hors de l\'application') : '')));
+    const tete = el('span', 'mod-tete'); tete.appendChild(el('b', '', variante(m)));
+    tete.appendChild(el('span', 'aide', ' · ' + (m.go ? m.go + T(' Go') : T('taille inconnue')) + (m.quantification ? ' · ' + etiquettePrecision(m.quantification) : '') + ' · ' + m.id + (m.origine === 'perso' ? T(' · ajouté par toi') : m.origine === 'installe' ? T(' · installé hors de l\'application') : '')));
+    nom.appendChild(tete); tete.title = tete.textContent;                    // nom trop long : coupé par « … » dans la ligne, lisible en entier au survol
     const emb = !!m.embedding || !!(ETAT.embeddings && m.id.split(':')[0] === String(ETAT.embeddings.modele).split(':')[0]);          // modèle de recherche par le sens : il ne discute pas
     if (emb && inst) { const pe = el('span', 'puce ' + (ETAT.embeddings.actif ? 'ok' : 'warn'), ETAT.embeddings.actif ? T('🔎 utilisé pour la recherche par le sens') : T('🔎 modèle de recherche (option décochée)')); pe.title = T('Réglages > Conversation > Recherche par le sens'); nom.appendChild(pe); }
     if (actif && !inst) nom.appendChild(el('span', 'puce warn', T('choisi, mais pas installé'))); else if (actif) nom.appendChild(el('span', 'puce ok', T('★ actif'))); else if (inst) nom.appendChild(el('span', 'puce ok', T('✔ installé')));
@@ -1554,7 +1561,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     PREC_ACT = actives;
     if (CONV && !document.hidden && surChat() && !(FLUX && FLUX.detache)) lue(CONV.id);
     majTravail();
-    const sigC = JSON.stringify([ETAT.conversations, CONV ? CONV.id : '', ETAT.actives, EN_COURS ? ID_EN_COURS : '', [...NONLUS]]), sigM = JSON.stringify([ETAT.modeles, ETAT.installes, ETAT.pulls, ETAT.ollama, ETAT.reglages.modele, ETAT.bench, ETAT.adequation, ETAT.disque_modeles, ETAT.familles]);
+    const sigC = JSON.stringify([ETAT.conversations, CONV ? CONV.id : '', ETAT.actives, ETAT.en_attente, Object.values(ETAT.missions || {}).map(m => m.etat), EN_COURS ? ID_EN_COURS : '', [...NONLUS]]), sigM = JSON.stringify([ETAT.modeles, ETAT.installes, ETAT.pulls, ETAT.ollama, ETAT.reglages.modele, ETAT.bench, ETAT.adequation, ETAT.disque_modeles, ETAT.familles]);
     if (sigC !== SIG.c && !RECH.q) { SIG.c = sigC; listeConversations(); }
     if (sigM !== SIG.m) { SIG.m = sigM; listeModeles(); }
     chargerPropositions();

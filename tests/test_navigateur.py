@@ -576,6 +576,39 @@ class Parcours(unittest.TestCase):
             self.assertEqual(p.evaluer("document.querySelector('#fil .btn-copier').textContent"), "Copié !")
             self.assertFalse(p.evaluer("!!document.querySelector('body > textarea')"), "le champ temporaire est retiré")
 
+    def test_point_jaune_quand_l_assistant_attend_une_action_humaine(self):
+        with self.captures.serveur_demo() as (port, tmp):
+            p = self.ouvrir(tmp, "http://127.0.0.1:%d/" % port)
+            p.attendre("document.querySelectorAll('#liste .conv, .conv').length > 0", 12)
+            ident = p.evaluer("document.querySelector('.conv').dataset.id")
+            p.evaluer("""(() => { window.__attente = []; const vrai = window.fetch.bind(window);
+                window.fetch = async (u, o) => { const r = await vrai(u, o); if (!String(u).includes('/api/etat')) return r; const d = await r.json(); d.en_attente = window.__attente;
+                  return new Response(JSON.stringify(d), {status: 200, headers: {'Content-Type': 'application/json'}}); }; })()""")
+            p.evaluer("window.__attente = [%r]" % ident)
+            p.attendre("!!document.querySelector('.conv .travail.wait')", 25)
+            self.assertTrue(p.evaluer("document.querySelector('#ptTravail').classList.contains('wait') && !document.querySelector('#ptTravail').hidden"), "le point de l'onglet Conversation devient jaune aussi")
+            self.assertIn("attend", p.evaluer("document.querySelector('.conv .travail.wait').title"))
+            p.evaluer(onglet("reglages"))
+            self.assertTrue(p.evaluer("document.querySelector('#ptTravail').classList.contains('wait')"), "visible depuis n'importe quel onglet")
+            p.evaluer("window.__attente = []")
+            p.attendre("!document.querySelector('.conv .travail.wait')", 25)
+            self.assertFalse(p.evaluer("document.querySelector('#ptTravail').classList.contains('wait')"))
+
+    def test_nom_de_modele_trop_long_coupe_le_nom_pas_les_pastilles(self):
+        with self.captures.serveur_demo() as (port, tmp):
+            p = self.ouvrir(tmp, "http://127.0.0.1:%d/" % port)
+            p.evaluer(onglet("modeles"))
+            p.attendre("document.querySelectorAll('#listeModeles details.famille').length > 3")
+            p.evaluer("document.querySelectorAll('#listeModeles details.famille').forEach(d => d.open = true)")
+            p.attendre("document.querySelectorAll('#listeModeles .mod-nom .puce').length > 0", 12)
+            p.evaluer("document.querySelectorAll('#listeModeles .mod-nom').forEach(n => { n.style.width = '230px'; n.style.maxWidth = '230px'; })")        # un nom qui ne tient pas dans la ligne
+            ok = p.evaluer("""(() => { const lignes = [...document.querySelectorAll('#listeModeles .mod-nom')].filter(n => n.querySelector('.puce.ok, .puce.warn, .puce.bad'));
+                if (!lignes.length) return 'aucune';
+                for (const n of lignes) { const cadre = n.getBoundingClientRect(); for (const pu of n.querySelectorAll('.puce')) { const r = pu.getBoundingClientRect(); if (r.width > 0 && r.right > cadre.right + 1) return 'puce coupée : ' + pu.textContent; } }
+                const coupe = lignes.some(n => { const t = n.querySelector('.mod-tete'); return t && t.scrollWidth > t.clientWidth; });
+                return coupe ? 'ok' : 'rien de coupé'; })()""")
+            self.assertEqual(ok, "ok", ok)
+
     def test_precision_des_modeles_et_comparaison_cote_a_cote(self):
         with self.captures.serveur_demo() as (port, tmp):
             p = self.ouvrir(tmp, "http://127.0.0.1:%d/" % port)

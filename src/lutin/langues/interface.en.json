@@ -931,5 +931,7 @@
 "Commiter ": "Commit ",
 " faites": " done",
 " jetons.": " tokens.",
-" min ": " min "
+" min ": " min ",
+"L'assistant attend une action de ta part": "The assistant is waiting for you to act",
+"(résultat transmis à l'assistant, non affiché)": "(result passed to the assistant, not displayed)"
 }

@@ -1319,5 +1319,11 @@
 "Llama 3.2 de 3 milliards sans garde-fous : minuscule, pour les petites machines.": "Llama 3.2 3B without safeguards: tiny, for small machines.",
 "Dolphin 3 · 8 milliards, sans filtre": "Dolphin 3 · 8 billion, unfiltered",
 "Un classique sans garde-fous, pour discuter et écrire librement ; sans appel d'outils (mode Discussion).": "A classic without safeguards, to chat and write freely; no tool calls (Discussion mode).",
-"Modèle réglé pour ne presque jamais refuser de demande. Il peut produire des contenus que d'autres modèles refuseraient ; tu en es responsable.": "Model tuned to almost never refuse a request. It can produce content that other models would refuse; you are responsible for it."
+"Modèle réglé pour ne presque jamais refuser de demande. Il peut produire des contenus que d'autres modèles refuseraient ; tu en es responsable.": "Model tuned to almost never refuse a request. It can produce content that other models would refuse; you are responsible for it.",
+"✔ La mémoire est revenue : je réponds.": "✔ Memory is back: I am answering.",
+"Attente annulée. Ta demande est gardée : écris « continue » quand il y aura de la place.": "Wait cancelled. Your request is kept: write “continue” when there is room.",
+"⏳ Pas assez de mémoire pour l'instant ({}). Ta demande est gardée : je réponds dès que la place revient (jusqu'à {} minutes). Clique sur Arrêter pour annuler.": "⏳ Not enough memory for now ({}). Your request is kept: I will answer as soon as there is room again (up to {} minutes). Click Stop to cancel.",
+"\nRésultats pour « {} » (extraits des premières pages inclus ; lis une page entière avec web_lire). Réponds par une synthèse de ces extraits, en citant tes sources, pas par une liste d'adresses :\n\n": "\nResults for “{}” (extracts from the first pages included; read a whole page with web_lire). Answer with a summary of these extracts, citing your sources, not with a list of addresses:\n\n",
+"Début de la page : ": "Start of the page: ",
+"(résultat transmis à l'assistant, non affiché)": "(result passed to the assistant, not displayed)"
 }

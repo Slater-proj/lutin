@@ -49,6 +49,7 @@ RE_APPEL_JSON = re.compile(r"```(?:json)?\s*(\{.*?\})\s*```|^\s*(\{\s*\"name\".*
 
 
 OUTILS_WEB = {"web_chercher", "web_lire"}
+OUTILS_INTERNES = OUTILS_WEB          # outils dont le résultat n'est lu que par le modèle (jamais recopié dans la conversation)
 
 
 def modele_annexe(r):
@@ -826,7 +827,7 @@ def tour(conv, texte, emit, r=None, stop=None, remplacer_depuis=None, identite="
             emit({"type": "info", "texte": _t("Refusé (mission sans surveillance) : {}").format(titre)})
             ctx["dernier_accord"] = "refuse"
             return False
-        a = _m.Attente(titre, detail, diff)
+        a = _m.Attente(titre, detail, diff, conv["id"])
         emit({"type": "approbation", "id": a.id, "titre": titre, "detail": detail, "diff": diff, "raison": raison})
         ok = a.attendre(stop=stop)
         if stop.is_set():
@@ -848,7 +849,7 @@ def tour(conv, texte, emit, r=None, stop=None, remplacer_depuis=None, identite="
     if conv["titre"] == "Nouvelle conversation":
         conv["titre"] = " ".join(texte.split())[:60]
     _m.reparer_conversation(conv)
-    if not _m.controle_avant_demande(r, emit, conv["id"]):
+    if not _m.controle_avant_demande(r, emit, conv["id"], stop):
         _m.conv_ecrire(conv)                             # la demande est gardée : « continue » la relancera quand le problème sera réglé
         emit({"type": "fin", "conversation": {"id": conv["id"], "titre": conv["titre"]}})
         return
@@ -1233,7 +1234,8 @@ def boucle_agent(conv, r, emit, ctx, stop):
                 _fichiers.enregistrer([dict(e, genre="fichier") for e in joints] + [_fichiers.entree_image(i, fichiers.get(i)) for i in medias if fichiers.get(i)], conv["id"])
             except Exception as erreur:  # noqa: BLE001  (le registre aide au ménage, il ne doit jamais gêner une réponse)
                 _m.journaliser("Registre des fichiers créés : {!r}".format(erreur))
-            emit(dict({"type": "resultat", "nom": nom, "texte": resultat[:1500]}, **extra))
+            affiche = _t("(résultat transmis à l'assistant, non affiché)") if nom in OUTILS_INTERNES and "CONTENU WEB NON FIABLE" in resultat[:60] else resultat[:1500]          # la recherche web sert à l'assistant, pas à remplir la conversation : c'est à lui d'en tirer la réponse
+            emit(dict({"type": "resultat", "nom": nom, "texte": affiche}, **extra))
             conv["messages"].append(dict({"role": "tool", "tool_name": nom, "content": resultat[:_m.LECTURE_MAX + 2000]}, **extra))
             _m.conv_ecrire(conv)                        # enregistré à chaque étape : un plantage du PC en pleine demande ne perd que l'étape en cours
         if garde.abandon:

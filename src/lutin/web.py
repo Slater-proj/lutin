@@ -145,7 +145,54 @@ def adresse_resultat(href):
     return "https:" + href if href.startswith("//") else href
 
 
-def outil_web_chercher(requete, nombre, ctx):
+LIRE_AUTO = 3                       # nombre de premiers résultats dont on lit un extrait tout de suite
+EXTRAIT_CARACTERES = 700
+DELAI_EXTRAITS = 12.0               # secondes pour l'ensemble des lectures
+
+
+def extrait_page(url):
+    """Le début lisible d'une page (sans menus ni lignes courtes), ou '' si elle ne se lit pas. Sert à ce que le modèle puisse RÉPONDRE d'après le contenu, pas seulement lister des adresses."""
+    try:
+        _, type_, brut = web_telecharger(url)
+    except _m.ErreurOutil:
+        return ""
+    if "html" in type_ or brut.lstrip()[:15].lower().startswith(("<!doctype", "<html")):
+        analyse = HtmlEnTexte()
+        analyse.feed(brut)
+        texte = analyse.texte()
+    elif type_.startswith("text/"):
+        texte = brut
+    else:
+        return ""
+    lignes = [ligne.strip() for ligne in texte.splitlines() if len(ligne.strip()) >= 40]
+    return " ".join(" ".join(lignes).split())[:EXTRAIT_CARACTERES]
+
+
+def extraits_en_parallele(urls, lire=None, delai=None):
+    """{indice: extrait} pour les adresses données, lues en parallèle ; celles qui ne répondent pas à temps sont ignorées."""
+    from concurrent.futures import ThreadPoolExecutor, wait
+    delai = DELAI_EXTRAITS if delai is None else delai
+    lire = lire or extrait_page
+    if not urls:
+        return {}
+    pool = ThreadPoolExecutor(max_workers=min(4, len(urls)))
+    try:
+        futurs = {pool.submit(lire, u): i for i, u in enumerate(urls)}
+        faits, _ = wait(list(futurs), timeout=delai)
+        sortie = {}
+        for f in faits:
+            try:
+                texte = f.result()
+            except Exception:  # noqa: BLE001  (une page illisible ne doit jamais faire échouer la recherche)
+                texte = ""
+            if texte:
+                sortie[futurs[f]] = texte
+        return sortie
+    finally:
+        pool.shutdown(wait=False, cancel_futures=True)
+
+
+def outil_web_chercher(requete, nombre, ctx, lire=None):
     if not ctx.get("web", True):
         raise _m.ErreurOutil(_t("L'accès web est désactivé (case « Web » dans les options)."))
     requete = " ".join(str(requete or "").split())[:300]
@@ -159,17 +206,26 @@ def outil_web_chercher(requete, nombre, ctx):
     _, _, page = web_telecharger(DDG_URL, urllib.parse.urlencode({"q": requete, "kl": "fr-fr"}).encode("utf-8"))
     analyse = ResultatsDDG()
     analyse.feed(page)
-    lignes = []
+    lignes, urls = [], []
     for x in analyse.resultats:
         url = adresse_resultat(x["url"])
         if not url.startswith("http") or "duckduckgo.com/y.js" in url:          # publicités
             continue
         lignes.append("{}. {}\n   {}\n   {}".format(len(lignes) + 1, " ".join(x["titre"].split()), url, " ".join(x["extrait"].split())[:300]))
+        urls.append(url)
         if len(lignes) >= nombre:
             break
     if not lignes:
         return _t("Aucun résultat (le moteur peut limiter les requêtes : reformule ou réessaie dans une minute).")
-    return AVERTISSEMENT_WEB + _t("\nRésultats pour « {} » (lis une page avec web_lire) :\n\n").format(requete) + "\n\n".join(lignes)
+    try:
+        a_lire = LIRE_AUTO if lire is None else max(0, min(5, int(lire)))
+    except (TypeError, ValueError):
+        a_lire = LIRE_AUTO
+    extraits = extraits_en_parallele(urls[:a_lire])
+    for i, texte in extraits.items():
+        lignes[i] += "\n   " + _t("Début de la page : ") + texte
+    consigne = _t("\nRésultats pour « {} » (extraits des premières pages inclus ; lis une page entière avec web_lire). Réponds par une synthèse de ces extraits, en citant tes sources, pas par une liste d'adresses :\n\n") if extraits else _t("\nRésultats pour « {} » (lis une page avec web_lire) :\n\n")
+    return AVERTISSEMENT_WEB + consigne.format(requete) + "\n\n".join(lignes)
 
 
 def outil_web_lire(url, debut, ctx):

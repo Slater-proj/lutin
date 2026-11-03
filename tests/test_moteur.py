@@ -210,6 +210,9 @@ os.environ.update({"LUTIN_WEB_LOCAL": "1", "LUTIN_RECHERCHE_URL": URL_WEB + "/re
                    "OLLAMA_URL": "http://127.0.0.1:%d" % S_OLLAMA.server_address[1], "LUTIN_OUTIL_URL": "http://127.0.0.1:%d" % S_OUTIL.server_address[1]})
 sys.path.insert(0, str(ICI.parent / "src"))
 from lutin import moteur as A  # noqa: E402
+from lutin import web as _web  # noqa: E402
+
+_web.LIRE_AUTO = 0          # les tests n'ouvrent aucune page du vrai internet : la lecture automatique des premiers résultats a son propre test
 from lutin.donnees import DOSSIER_COPIES  # noqa: E402
 
 S_ASSISTANT = lancer(A.Gestionnaire)
@@ -1109,7 +1112,11 @@ class Assistant(unittest.TestCase):
 
     def test_web_lire(self):
         ev = chat("Lis la page", reponses=[[appel_outil("web_lire", url=URL_WEB + "/page")], [{"content": "Lu."}]])
-        res = next(e for e in ev if e["type"] == "resultat")["texte"]
+        affiche = next(e for e in ev if e["type"] == "resultat")["texte"]
+        self.assertIn("non affiché", affiche, "la page lue sert à l'assistant : elle n'est pas recopiée dans la conversation")
+        self.assertNotIn("Bienvenue", affiche)
+        cid = [e for e in ev if e["type"] == "debut"][0]["conversation"]
+        res = next(m["content"] for m in A.conv_lire(cid)["messages"] if m.get("role") == "tool")          # ce que le MODÈLE a reçu
         for attendu in ("CONTENU WEB NON FIABLE", "Titre : Titre de test", "# Bienvenue", "Premier paragraphe écrit pour le test.", "- un", "- deux"):
             self.assertIn(attendu, res)
         self.assertNotIn("alert", res, "les scripts ne sont pas lus")
@@ -1146,7 +1153,11 @@ class Assistant(unittest.TestCase):
     def test_web_chercher(self):
         WEB_RECU.clear()
         ev = chat("Cherche", reponses=[[appel_outil("web_chercher", requete="version  récente de ComfyUI", nombre=5)], [{"content": "Voilà."}]])
-        res = next(e for e in ev if e["type"] == "resultat")["texte"]
+        affiche = next(e for e in ev if e["type"] == "resultat")["texte"]
+        self.assertIn("non affiché", affiche, "les résultats de recherche sont pour l'assistant, pas pour la conversation")
+        self.assertNotIn("exemple.org", affiche)
+        cid = [e for e in ev if e["type"] == "debut"][0]["conversation"]
+        res = next(m["content"] for m in A.conv_lire(cid)["messages"] if m.get("role") == "tool")          # ce que le MODÈLE a reçu
         self.assertIn("CONTENU WEB NON FIABLE", res)
         self.assertIn("1. Doc officielle", res)
         self.assertIn("https://exemple.org/doc", res, "l'adresse réelle est retrouvée derrière le lien de redirection")
@@ -1158,6 +1169,40 @@ class Assistant(unittest.TestCase):
         self.assertIn("Aucun résultat", A.outil_web_chercher("introuvable", 6, {"web": True}))
         with self.assertRaises(A.ErreurOutil):
             A.outil_web_chercher("   ", 6, {"web": True})
+
+    def test_web_chercher_donne_le_debut_des_premieres_pages_pour_pouvoir_repondre(self):
+        """Une recherche d'actualité ne rend plus seulement des liens : le début des premières pages est joint, pour qu'un petit modèle puisse faire une synthèse au lieu de recopier des adresses."""
+        pages = {"https://exemple.org/doc": "Le gouvernement a annoncé hier un plan de rénovation des écoles, doté de deux milliards d'euros sur trois ans.",
+                 "https://autre.example/page": ""}
+        vrai, vrai_auto = _web.extrait_page, _web.LIRE_AUTO
+        _web.extrait_page = lambda url: pages.get(url, "")
+        _web.LIRE_AUTO = 3
+        try:
+            res = A.outil_web_chercher("plan écoles", 5, {"web": True})
+            self.assertIn("Début de la page : Le gouvernement a annoncé hier", res)
+            self.assertIn("synthèse", res, "la consigne demande une synthèse sourcée, pas une liste de liens")
+            self.assertEqual(res.count("Début de la page"), 1, "une page illisible ne casse rien et n'ajoute rien")
+            res0 = A.outil_web_chercher("plan écoles", 5, {"web": True}, 0)
+            self.assertNotIn("Début de la page", res0, "lire=0 : l'ancien comportement")
+            _web.extrait_page = lambda url: (_ for _ in ()).throw(RuntimeError("panne"))
+            self.assertIn("1. Doc officielle", A.outil_web_chercher("plan écoles", 5, {"web": True}), "même si toutes les lectures échouent, les résultats sont rendus")
+        finally:
+            _web.extrait_page, _web.LIRE_AUTO = vrai, vrai_auto
+
+    def test_extrait_de_page_ignore_les_menus_et_borne_la_longueur(self):
+        vrai = _web.web_telecharger
+        page = "<html><body><nav>Accueil</nav><p>Menu</p><p>" + "Un vrai paragraphe d'information sur l'actualité du jour. " * 40 + "</p></body></html>"
+        _web.web_telecharger = lambda url, donnees=None: (url, "text/html", page)
+        try:
+            e = _web.extrait_page("https://exemple.org/x")
+            self.assertTrue(e.startswith("Un vrai paragraphe"), e[:40])
+            self.assertLessEqual(len(e), _web.EXTRAIT_CARACTERES)
+            _web.web_telecharger = lambda url, donnees=None: (url, "image/png", "x")
+            self.assertEqual(_web.extrait_page("https://exemple.org/y"), "")
+            self.assertEqual(_web.extraits_en_parallele([], lambda u: "x"), {})
+            self.assertEqual(_web.extraits_en_parallele(["a", "b"], lambda u: "texte " + u), {0: "texte a", 1: "texte b"})
+        finally:
+            _web.web_telecharger = vrai
 
     def test_web_suspend_l_accord_automatique(self):
         """Garde-fou : après une lecture web, plus d'accord automatique pendant la suite de la demande (consigne piégée possible)."""
@@ -1652,7 +1697,9 @@ class Assistant(unittest.TestCase):
         post("/api/reglages", {"seuil_ram_go": 3, "seuil_disque_go": 10, "plafond_donnees_go": 2, "limite_ram_commande_go": 0})
 
     def test_garde_fous_avant_la_demande(self):
-        vrai_mesures, vrai_liberer = A.mesures_systeme, A.liberer_vram
+        from lutin import sante
+        vrai_mesures, vrai_liberer, vraie_attente = A.mesures_systeme, A.liberer_vram, sante.ATTENTE_RESSOURCES_S
+        sante.ATTENTE_RESSOURCES_S = 0                                   # ici on teste le refus immédiat ; l'attente a son propre test
         etat = {"ram": 10 * GO, "vram": 22 * GO}
         liberations = []
 
@@ -1709,8 +1756,40 @@ class Assistant(unittest.TestCase):
             self.assertEqual(texte_de(ev), "Je passe")
         finally:
             A.GARDE_RESSOURCES_ACTIF, A.mesures_systeme, A.liberer_vram = False, vrai_mesures, vrai_liberer
+            sante.ATTENTE_RESSOURCES_S = vraie_attente
             PS[:] = []
             post("/api/reglages", {"garde_ressources": True})
+
+    def test_pas_assez_de_memoire_la_demande_est_gardee_et_reprise_quand_la_place_revient(self):
+        """Mémoire insuffisante (un autre programme gourmand) : le message envoyé n'est pas perdu, Lutin attend et répond tout seul dès que la mémoire revient."""
+        from lutin import sante
+        vrai_mesures, vraie_attente, vrai_pas = A.mesures_systeme, sante.ATTENTE_RESSOURCES_S, sante.PAS_ATTENTE_S
+        etat = {"ram": 1 * GO}
+
+        def fausses_mesures():
+            mesure = mesures_saines()
+            mesure["ram"] = dict(mesure["ram"], libre=etat["ram"])
+            return mesure
+        A.GARDE_RESSOURCES_ACTIF, A.mesures_systeme = True, fausses_mesures
+        sante.ATTENTE_RESSOURCES_S, sante.PAS_ATTENTE_S = 20, 0.05
+        try:
+            threading.Timer(0.5, lambda: etat.update(ram=10 * GO)).start()
+            ev = chat("Fais un gros travail", reponses=[[{"content": "Fait, la mémoire est revenue."}]])
+            infos = [e["texte"] for e in ev if e["type"] == "info"]
+            self.assertTrue(any(t.startswith("⏳") and "Mémoire vive" in t for t in infos), infos)
+            self.assertTrue(any("mémoire est revenue" in t for t in infos))
+            self.assertEqual(texte_de(ev), "Fait, la mémoire est revenue.", "répondu tout seul, sans réécrire le message")
+            self.assertFalse([e for e in ev if e["type"] == "erreur"])
+            # la place ne revient pas dans le temps imparti : refus expliqué, demande gardée
+            etat["ram"] = 1 * GO
+            sante.ATTENTE_RESSOURCES_S = 0.3
+            ev = chat("Encore", reponses=[[{"content": "ne doit pas arriver"}]])
+            self.assertTrue(any(e["type"] == "erreur" and "Demande suspendue" in e["texte"] for e in ev))
+            ident = next(e for e in ev if e["type"] == "fin")["conversation"]["id"]
+            self.assertEqual(A.conv_lire(ident)["messages"][-1]["content"], "Encore", "la demande est gardée")
+        finally:
+            A.GARDE_RESSOURCES_ACTIF, A.mesures_systeme = False, vrai_mesures
+            sante.ATTENTE_RESSOURCES_S, sante.PAS_ATTENTE_S = vraie_attente, vrai_pas
 
     def test_conversation_robuste(self):
         c = A.conv_nouvelle()

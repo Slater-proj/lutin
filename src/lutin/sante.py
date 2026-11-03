@@ -207,10 +207,12 @@ def etat_sante(r=None):
 ALERTES_VUES = {}          # (conversation, ligne de santé) -> dernier niveau annoncé : un avertissement n'est répété que s'il change
 
 
-def controle_avant_demande(r, emit, conv_id=""):
-    """Garde-fou : avant de lancer le modèle, vérifie qu'il y a assez de mémoire et de place. Renvoie False (et explique pourquoi) si la demande risquerait de faire planter le PC."""
-    if not _m.GARDE_RESSOURCES_ACTIF or not r.get("garde_ressources"):
-        return True
+ATTENTE_RESSOURCES_S = 900          # une demande bloquée faute de mémoire est gardée et reprise toute seule quand la place revient, au plus pendant ce temps
+PAS_ATTENTE_S = 5                   # secondes entre deux vérifications pendant l'attente
+
+
+def _bloquants(r, emit, conv_id=""):
+    """Ce qui empêche de lancer le modèle en ce moment (liste d'éléments de santé « critiques »), après avoir tenté de décharger les modèles d'Ollama qui occupent la carte. Vide : on peut y aller."""
     charge = _m.ps_modele(r["modele"])
     besoin = taille_modele(r["modele"], charge)
     sante = evaluer_sante(_m.mesures_systeme(), r, besoin, charge)
@@ -225,12 +227,35 @@ def controle_avant_demande(r, emit, conv_id=""):
                 sante = evaluer_sante(_m.mesures_systeme(), r, besoin, charge)
         except (urllib.error.URLError, OSError, ValueError):
             pass
-    bloquants = [i for i in sante["items"] if i["niveau"] == "critique" and i["id"] in ("ram", "engagement", "vram", "disque-donnees")]
     for i in sante["items"]:
         if i["id"] in ("ram", "engagement", "vram", "comfy", "disque-donnees") and ALERTES_VUES.get((conv_id, i["id"]), "ok") != i["niveau"]:
             ALERTES_VUES[(conv_id, i["id"])] = i["niveau"]
             if i["niveau"] == "attention":
                 emit({"type": "info", "texte": "⚠ {} : {}. {}".format(i["nom"], i["valeur"], i["conseil"]).strip()})
+    return [i for i in sante["items"] if i["niveau"] == "critique" and i["id"] in ("ram", "engagement", "vram", "disque-donnees")]
+
+
+def controle_avant_demande(r, emit, conv_id="", stop=None):
+    """Garde-fou : avant de lancer le modèle, vérifie qu'il y a assez de mémoire et de place. Si non : ta demande est GARDÉE et Lutin attend (au plus 15 minutes, `stop` l'interrompt) que la place
+    revienne, puis répond tout seul. Renvoie False (et explique pourquoi) si la place n'est pas revenue : la demande risquerait de faire planter le PC."""
+    if not _m.GARDE_RESSOURCES_ACTIF or not r.get("garde_ressources"):
+        return True
+    bloquants = _bloquants(r, emit, conv_id)
+    if bloquants and stop is not None and not r.get("_mission") and ATTENTE_RESSOURCES_S > 0:
+        emit({"type": "info", "texte": _t("⏳ Pas assez de mémoire pour l'instant ({}). Ta demande est gardée : je réponds dès que la place revient (jusqu'à {} minutes). Clique sur Arrêter pour annuler.").format(
+            " ; ".join("{} : {}".format(_tr(i["nom"]), _tr(i["valeur"])) for i in bloquants), max(1, round(ATTENTE_RESSOURCES_S / 60)))})
+        fin = time.time() + ATTENTE_RESSOURCES_S
+        while bloquants and not stop.is_set() and time.time() < fin:
+            stop.wait(PAS_ATTENTE_S)
+            if stop.is_set():
+                break
+            bloquants = _bloquants(r, lambda e: None, conv_id)
+        if not bloquants:
+            emit({"type": "info", "texte": _t("✔ La mémoire est revenue : je réponds.")})
+            return True
+        if stop.is_set():
+            emit({"type": "info", "texte": _t("Attente annulée. Ta demande est gardée : écris « continue » quand il y aura de la place.")})
+            return False
     if bloquants:
         emit({"type": "erreur", "texte": _t("Demande suspendue pour protéger le PC :\n{}\nRègle le problème puis écris « continue » (ou décoche « Garde-fous ressources » dans Réglages pour passer outre).").format(
             "\n".join("• {} : {}. {}".format(_tr(i["nom"]), _tr(i["valeur"]), _tr(i["conseil"])) for i in bloquants))})

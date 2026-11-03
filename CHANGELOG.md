@@ -2,6 +2,15 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## 0.13.9
+
+- **Point jaune quand l'assistant attend une action de ta part** (accord à donner, question « fiche de suivi ou résumé ? », mission bloquée sur une question) : à côté de la conversation dans la liste et sur l'onglet Conversation, quel que soit l'onglet ouvert. Il passe avant le point bleu (il travaille) et le vert (terminé).
+- **Nom de modèle trop long : les pastilles restent visibles.** Dans l'onglet Modèles, le « … » coupait la fin de la ligne et cachait la pastille « Adapté / Trop gros / ★ actif ». Maintenant c'est le nom qui est raccourci (lisible en entier au survol), les pastilles restent à la fin de la ligne.
+- **Plus de mémoire disponible : la demande est gardée et reprise toute seule.** Au lieu de « Demande suspendue… écris continue », Lutin garde ton message, indique ce qui manque, vérifie la mémoire toutes les 5 secondes (jusqu'à 15 minutes) et répond dès que la place revient. « Arrêter » annule l'attente ; au bout du délai, l'ancien message s'affiche et la demande reste gardée. Les missions gardent l'ancien comportement.
+- **Recherche web plus utile pour les petits modèles** : `web_chercher` joint maintenant le début des 3 premières pages (lues en parallèle, 12 secondes au plus) et demande une synthèse sourcée plutôt qu'une liste de liens. Option `lire` de l'outil (0 à 5) pour changer le nombre de pages lues. **Ces résultats ne sont jamais recopiés dans la conversation** : la recherche et la lecture web servent à l'assistant, qui en tire sa réponse ; la conversation n'affiche que « résultat transmis à l'assistant, non affiché » (les erreurs restent visibles).
+
+**English.** Yellow dot when the assistant waits for you; model pills no longer hidden by long names; a request blocked for lack of memory is kept and resumed automatically when memory is back; web search joins the start of the first pages so small models can summarise instead of listing links.
+
 ## 0.13.8
 
 - **Plus d'avertissement « seulement 0 % du modèle tient sur la carte graphique » à chaque réponse** sur une machine sans carte graphique (tout tourne sur le processeur, c'est connu). Sur une machine avec carte, il n'apparaît plus qu'une fois par modèle et par demi-heure.
