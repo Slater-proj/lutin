@@ -648,6 +648,18 @@ class Assistant(unittest.TestCase):
         fin = next(e for e in ev if e["type"] == "fin")["conversation"]["id"]
         self.assertIn("user", [m["role"] for m in A.conv_lire(fin)["messages"]], "la demande est gardée")
 
+    def test_un_modele_muet_avec_les_outils_repond_au_dernier_essai_sans_outils(self):
+        """Capture du mini-PC : granite4:tiny-h ne produisait RIEN trois fois de suite (conversation à 4,7k sur 8,2k, donc pas de dépassement). Dernier essai sans outils, et message honnête."""
+        ev = chat("Écris un docker-compose", reponses=[[{"content": ""}], [{"content": ""}], [{"content": "Voici le docker-compose demandé."}]])
+        self.assertEqual(texte_de(ev), "Voici le docker-compose demandé.")
+        self.assertIn("tools", RECUES[-3], "premier essai : avec les outils")
+        self.assertNotIn("tools", RECUES[-1], "dernier essai : sans outils")
+        infos = " ".join(e["texte"] for e in ev if e["type"] == "info")
+        self.assertIn("n'a rien écrit", infos, "il n'a pas réfléchi : on ne le dit pas")
+        self.assertNotIn("a réfléchi sans rien répondre", infos)
+        self.assertIn("sans outils cette fois", infos)
+        self.assertFalse([e for e in ev if e["type"] == "erreur"])
+
     def test_une_reflexion_qui_tourne_en_rond_est_coupee_et_relancee_sans_reflexion(self):
         """Un petit modèle peut répéter la même phrase pendant des minutes : Lutin l'arrête, relance sans réflexion avec une pénalité de répétition, et la réponse arrive."""
         phrase = "Je dois vérifier le fichier de configuration puis relancer les tests. "
@@ -866,7 +878,8 @@ class Assistant(unittest.TestCase):
         self.assertIs(RECUES[-1].get("think"), False, "la relance coupe la réflexion")
         self.assertIn("réponse était vide", RECUES[-1]["messages"][-1]["content"])
         ev = chat("Encore", reponses=[[{"thinking": "hum"}]] * 3)
-        self.assertTrue(any(e["type"] == "erreur" and "n'a rien répondu" in e["texte"] for e in ev), "plus jamais un silence sur « Réflexion »")
+        self.assertTrue(any(e["type"] == "erreur" and "n'a rien produit" in e["texte"] for e in ev), "plus jamais un silence sur « Réflexion »")
+        self.assertFalse(any("fenêtre de contexte (" in e.get("texte", "") and e["type"] == "erreur" for e in ev), "la fenêtre n'est pas pleine : on n'accuse pas la conversation")
 
     def test_dernier_tour_sans_outils(self):
         ev = chat("Fais le tour", reponses=[[appel_outil("lister", dossier="docs/sous%d" % i)] for i in range(A.TOURS_MAX - 1)] + [[{"content": "Synthèse finale."}]])          # des appels qui varient : ce n'est pas une boucle

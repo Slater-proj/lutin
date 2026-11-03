@@ -1058,8 +1058,10 @@ def boucle_agent(conv, r, emit, ctx, stop):
             emit({"type": "etat", "texte": "Chargement du modèle en mémoire (30 s à 2 min la première fois, ou si ComfyUI lui a pris la carte)."})
         for tentative in range(3):
             contenu, pensee, appels = "", "", []
-            rond, verifie_rond = False, 0
+            rond, verifie_rond, raison_fin = False, 0, ""
             corps_t = corps if tentative == 0 else dict(corps, messages=ajuster_contexte(msgs_base, r["num_ctx"], 0.7 ** tentative, outils) + ([{"role": "user", "content": RAPPEL_APPEL}] if relance_outil else [{"role": "user", "content": RAPPEL_REPETITION}] if relance_repetition else [{"role": "user", "content": RAPPEL_VIDE}] if relance_vide else []), options=dict(corps["options"], temperature=0.3, **({"repeat_penalty": 1.15} if relance_repetition else {})), think=False if (relance_vide or relance_repetition) else corps["think"])
+            if relance_vide and tentative >= 2 and "tools" in corps_t:
+                corps_t = {k: v for k, v in corps_t.items() if k != "tools"}          # dernier essai SANS outils : certains petits modèles ne produisent plus rien quand les outils sont déclarés ; mieux vaut une réponse en texte
             try:
                 corps_t = dict(corps_t, messages=_images.pour_le_modele(corps_t["messages"], caps is None or "vision" in caps))
                 req = urllib.request.Request(_m.OLLAMA + "/api/chat", data=json.dumps(avec_garde(corps_t)).encode("utf-8"), headers={"Content-Type": "application/json"})
@@ -1080,6 +1082,7 @@ def boucle_agent(conv, r, emit, ctx, stop):
                             conv["jetons"] = {"utilise": int(e["prompt_eval_count"]) + int(e.get("eval_count") or 0), "total": r["num_ctx"]}
                             emit(dict(conv["jetons"], type="jetons", reel=True))
                         if e.get("done"):
+                            raison_fin = str(e.get("done_reason") or "")
                             vitesse = calculer_vitesse(e)
                             if vitesse:
                                 conv["vitesse"] = vitesse
@@ -1109,12 +1112,19 @@ def boucle_agent(conv, r, emit, ctx, stop):
                         continue
                     emit({"type": "info", "texte": _t("Le modèle répète encore les mêmes phrases : j'arrête là. Reformule en plus court, ou choisis un autre modèle.")})
                 if not contenu.strip() and not appels:             # le modèle a (peut-être) réfléchi puis s'est tu : sans ceci la page restait sur « Réflexion » sans aucune réponse ni explication
-                    _m.journaliser("Réponse vide du modèle {} (pensée : {} caractères, essai {})".format(r["modele"], len(pensee), tentative + 1))
+                    _m.journaliser("Réponse vide du modèle {} (pensée : {} caractères, raison de fin : {!r}, essai {}, outils : {})".format(r["modele"], len(pensee), raison_fin, tentative + 1, "tools" in corps_t))
                     if tentative < 2:
                         relance_vide = True
-                        emit({"type": "info", "texte": _t("Le modèle a réfléchi sans rien répondre : je relance (réflexion coupée pour cet essai).")})
+                        if pensee:
+                            emit({"type": "info", "texte": _t("Le modèle a réfléchi sans rien répondre : je relance (réflexion coupée pour cet essai).")})
+                        else:
+                            emit({"type": "info", "texte": _t("Le modèle n'a rien écrit : je relance{}.").format(_t(", sans outils cette fois") if tentative == 1 and "tools" in corps else "")})
                         continue
-                    emit({"type": "erreur", "texte": _t("Le modèle n'a rien répondu, même après deux relances. Cause fréquente : la conversation dépasse sa fenêtre de contexte ({} jetons) ; ouvre une nouvelle conversation, ou augmente la fenêtre dans Réglages. Tu peux aussi écrire « continue ».").format(r["num_ctx"])})
+                    utilise = int((conv.get("jetons") or {}).get("utilise") or 0)
+                    if utilise >= int(r["num_ctx"] * 0.85):
+                        emit({"type": "erreur", "texte": _t("Le modèle n'a rien répondu, même après deux relances. Cause fréquente : la conversation dépasse sa fenêtre de contexte ({} jetons) ; ouvre une nouvelle conversation, ou augmente la fenêtre dans Réglages. Tu peux aussi écrire « continue ».").format(r["num_ctx"])})
+                    else:
+                        emit({"type": "erreur", "texte": _t("Le modèle n'a rien produit, même après trois essais (dont un sans outils), alors que la fenêtre de contexte n'est pas pleine ({} / {} jetons). Ce n'est pas ta conversation : ce modèle ne répond pas correctement ici. Essaie un autre modèle (Réglages), ou écris « continue ».").format(utilise, r["num_ctx"])})
                 fini = True
                 break
             except _m.Arret:

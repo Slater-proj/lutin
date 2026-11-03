@@ -1325,5 +1325,8 @@
 "⏳ Pas assez de mémoire pour l'instant ({}). Ta demande est gardée : je réponds dès que la place revient (jusqu'à {} minutes). Clique sur Arrêter pour annuler.": "⏳ Not enough memory for now ({}). Your request is kept: I will answer as soon as there is room again (up to {} minutes). Click Stop to cancel.",
 "\nRésultats pour « {} » (extraits des premières pages inclus ; lis une page entière avec web_lire). Réponds par une synthèse de ces extraits, en citant tes sources, pas par une liste d'adresses :\n\n": "\nResults for “{}” (extracts from the first pages included; read a whole page with web_lire). Answer with a summary of these extracts, citing your sources, not with a list of addresses:\n\n",
 "Début de la page : ": "Start of the page: ",
-"(résultat transmis à l'assistant, non affiché)": "(result passed to the assistant, not displayed)"
+"(résultat transmis à l'assistant, non affiché)": "(result passed to the assistant, not displayed)",
+"Le modèle n'a rien écrit : je relance{}.": "The model wrote nothing: I am retrying{}.",
+", sans outils cette fois": ", without tools this time",
+"Le modèle n'a rien produit, même après trois essais (dont un sans outils), alors que la fenêtre de contexte n'est pas pleine ({} / {} jetons). Ce n'est pas ta conversation : ce modèle ne répond pas correctement ici. Essaie un autre modèle (Réglages), ou écris « continue ».": "The model produced nothing, even after three attempts (one of them without tools), although the context window is not full ({} / {} tokens). It is not your conversation: this model does not answer correctly here. Try another model (Settings), or write “continue”."
 }

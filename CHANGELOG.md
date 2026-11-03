@@ -2,6 +2,12 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## 0.13.10
+
+- **Modèle qui ne produit rien : dernier essai sans outils, et message honnête.** Sur le mini-PC, `granite4:tiny-h` ne répondait rien trois fois de suite alors que la conversation n'était pas pleine (4,7k sur 8,2k jetons), et Lutin accusait la fenêtre de contexte. Le troisième essai se fait maintenant **sans déclarer les outils** (certains petits modèles se taisent quand ils sont déclarés). Les messages disent la vérité : « n'a rien écrit » (et non « a réfléchi ») s'il n'y a pas eu de réflexion, et la fenêtre de contexte n'est citée comme cause que si elle est vraiment pleine (85 % ou plus) ; sinon c'est dit que ce modèle ne répond pas correctement ici. La raison de fin donnée par Ollama est notée dans le journal.
+
+**English.** A model producing nothing now gets a last attempt without tools, and the messages no longer blame the context window unless it is really full.
+
 ## 0.13.9
 
 - **Point jaune quand l'assistant attend une action de ta part** (accord à donner, question « fiche de suivi ou résumé ? », mission bloquée sur une question) : à côté de la conversation dans la liste et sur l'onglet Conversation, quel que soit l'onglet ouvert. Il passe avant le point bleu (il travaille) et le vert (terminé).
