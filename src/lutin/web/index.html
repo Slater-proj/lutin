@@ -1929,6 +1929,7 @@ button.principal { box-shadow:0 6px 16px -8px rgba(63,143,232,.8); }
   const fichePart = () => String(ETAT.reglages.fiche_part || 10);
   // Recherche par le sens : il faut un petit modèle d'Ollama ; la page dit s'il est là et propose de l'installer
   const majSens = () => {
+    if (!ETAT) return;          // pas encore d'état du serveur : le prochain rafraîchissement l'affichera
     const z = $('aideSens'), e = ETAT.embeddings, cle = JSON.stringify([e, $('cSens').checked]);
     if (z.dataset.cle === cle) return;
     z.dataset.cle = cle; z.textContent = '';

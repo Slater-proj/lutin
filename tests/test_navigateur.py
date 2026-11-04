@@ -499,6 +499,7 @@ class Parcours(unittest.TestCase):
     def test_recherche_par_le_sens_progression_suppression_et_ligne_dans_la_liste_des_modeles(self):
         with self.captures.serveur_demo() as (port, tmp):
             p = self.ouvrir(tmp, "http://127.0.0.1:%d/" % port)
+            p.attendre("document.querySelector('#pOllama').textContent.includes('Ollama prêt')")          # le premier état du serveur est arrivé : on ne fabrique le faux qu'après
             # l'état d'Ollama est fabriqué : téléchargement à 45 %, puis modèle installé
             p.evaluer("""(() => { window.__emb = {actif: true, modele: 'nomic-embed-text', installe: false, installation: {etat: 'en cours', fait: 45000000, total: 100000000, erreur: '', texte: 'pulling'}};
                 const vrai = window.fetch.bind(window);
