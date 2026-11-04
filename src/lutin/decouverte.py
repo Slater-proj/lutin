@@ -20,6 +20,7 @@ DUREE_CACHE = 15 * 60
 CAPACITES = ("tools", "vision", "thinking", "embedding", "audio", "cloud")
 RE_BLOC = re.compile(r'<li\s[^>]*>\s*<a href="/library/([A-Za-z0-9._-]+)"(.*?)</a>\s*</li>', re.S)
 RE_TAILLE = re.compile(r"^(\d+(?:\.\d+)?[bm]|e\d+b|\d+x\d+(?:\.\d+)?b)$", re.I)
+MILLIONS_MIN = 20          # « 1m » n'est pas un modèle d'un million de paramètres (c'est une longueur de contexte) : en millions, les vrais petits modèles font 22m, 135m, 270m…
 CACHE = {}
 
 
@@ -41,7 +42,7 @@ def analyser(page):
             "nom": nom,
             "description": texte(description.group(1))[:300] if description else "",
             "capacites": [e.lower() for e in etiquettes if e.lower() in CAPACITES],
-            "tailles": [e.lower() for e in etiquettes if RE_TAILLE.match(e)],
+            "tailles": [e.lower() for e in etiquettes if RE_TAILLE.match(e) and not (e.lower().endswith("m") and 0 < milliards(e) * 1000 < MILLIONS_MIN)],
             "maj": html.unescape(maj.group(1)) if maj else "",
             "telechargements": int(telechargements.group(1).replace(",", "")) if telechargements else 0,
         })
@@ -96,7 +97,9 @@ def chercher(terme="", ordre="newest", page=1, http=miseajour.http_get, maintena
         raise OSError(_t("ollama.com a répondu {}.").format(statut))
     page_html = corps.decode("utf-8", "replace")
     trouves = analyser(page_html)
-    gardes = [m for m in trouves if (categorie == "embedding" or "embedding" not in m["capacites"]) and not ("cloud" in m["capacites"] and not m["tailles"])]
+    vus = set()
+    uniques = [m for m in trouves if not (m["nom"] in vus or vus.add(m["nom"]))]          # une même page ne répète pas un modèle
+    gardes = [m for m in uniques if (categorie == "embedding" or "embedding" not in m["capacites"]) and not ("cloud" in m["capacites"] and not m["tailles"])]
     if leger:
         gardes = [m for m in gardes if any(0 < milliards(t) <= LEGER_B for t in m["tailles"])]          # au moins une taille qui tient sur une machine modeste
     for m in gardes:

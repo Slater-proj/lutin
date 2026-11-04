@@ -87,6 +87,8 @@ class FauxOllama(BaseHTTPRequestHandler):
         if self.path == "/api/pull":
             if corps.get("model") == "sans-cle:1b":                      # le dossier .ollama a été supprimé pendant qu'Ollama tournait
                 self.wfile.write(ligne(error="pull model manifest: open C:/Users/X/.ollama/id_ed25519: The system cannot find the path specified.")); return
+            if corps.get("model") == "inexistant:1m":                    # le registre ne connaît pas cette étiquette
+                self.wfile.write(ligne(error="pull model manifest: file does not exist")); return
             for t, f in (("pulling manifest", 0), ("downloading", 50), ("downloading", 100), ("success", 100)):
                 self.wfile.write(ligne(status=t, completed=f, total=100)); self.wfile.flush(); time.sleep(0.05)
             INSTALLES.append(corps["model"])
@@ -693,7 +695,7 @@ class Assistant(unittest.TestCase):
 
     def test_un_modele_muet_avec_les_outils_repond_au_dernier_essai_sans_outils(self):
         """Capture du mini-PC : granite4:tiny-h ne produisait RIEN trois fois de suite (conversation à 4,7k sur 8,2k, donc pas de dépassement). Dernier essai sans outils, et message honnête."""
-        ev = chat("Écris un docker-compose", reponses=[[{"content": ""}], [{"content": ""}], [{"content": "Voici le docker-compose demandé."}]])
+        ev = chat("Montre-moi un exemple de docker-compose", reponses=[[{"content": ""}], [{"content": ""}], [{"content": "Voici le docker-compose demandé."}]])
         self.assertEqual(texte_de(ev), "Voici le docker-compose demandé.")
         self.assertIn("tools", RECUES[-3], "premier essai : avec les outils")
         self.assertNotIn("tools", RECUES[-1], "dernier essai : sans outils")
@@ -892,6 +894,27 @@ class Assistant(unittest.TestCase):
         self.assertIn("redémarre Ollama", p["texte"])
         self.assertNotIn("The system cannot find", p["texte"], "plus de message brut incompréhensible")
         A.PULLS.pop("sans-cle:1b", None)
+
+    def test_telechargement_d_un_modele_inexistant_est_explique_et_retire_de_la_liste(self):
+        post("/api/installer-modele", {"modele": "inexistant:1m"})
+        for _ in range(60):
+            if lire("/api/etat")["pulls"]["inexistant:1m"]["statut"] != "en cours":
+                break
+            time.sleep(0.05)
+        p = lire("/api/etat")["pulls"]["inexistant:1m"]
+        self.assertEqual(p["statut"], "erreur")
+        self.assertIn("n'existe pas dans la bibliothèque", p["texte"])
+        self.assertNotIn("inexistant:1m", A.lire_registre_modeles()["perso"], "il n'encombre pas la liste")
+        A.PULLS.pop("inexistant:1m", None)
+
+    def test_recherche_web_puis_creation_du_fichier_meme_si_le_modele_s_arrete(self):
+        """Le cas réel : le modèle cherche sur le web puis s'arrête sans écrire. Lutin le relance une fois, et le fichier existe."""
+        ev = chat("Tu peux me créer un docker-compose pour swag avec un fournisseur ovh ?",
+                  reponses=[[appel_outil("web_chercher", requete="docker-compose swag ovh")], [{"content": "Voici le contenu à copier : services: swag"}],
+                            [appel_outil("ecrire", chemin="swag/docker-compose.yml", contenu="services:\n  swag: {}\n")], [{"content": "Créé dans swag/docker-compose.yml."}]],
+                  options={"auto_ecriture": True})
+        self.assertTrue((PROJET / "swag" / "docker-compose.yml").is_file(), "le fichier a vraiment été écrit")
+        self.assertTrue(any(e["type"] == "info" and "sans appeler d'outil" in e["texte"] for e in ev))
 
     def test_l_avertissement_carte_graphique_n_est_ni_repete_ni_donne_sans_carte(self):
         """« Seulement 0 % du modèle tient sur la carte » à chaque réponse d'une machine SANS carte était du bruit : connu, et inutile à répéter. Avec une carte : une fois par modèle et par demi-heure."""

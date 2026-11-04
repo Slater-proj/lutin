@@ -38,6 +38,9 @@ CATEGORIES = (
      {"memoriser"},
      "Tu viens de dire que tu as mémorisé quelque chose, mais tu n'as pas appelé « memoriser » : rien n'est gardé. Appelle l'outil maintenant avec une note courte."),
 )
+DEMANDE_D_ECRITURE = re.compile(r"\b(?:cr[ée]{1,2}r?|[ée]cris|[ée]crire|g[ée]n[èe]re|g[ée]n[ée]rer|pr[ée]pare|r[ée]dige|fais(?:-moi)?|monte|produis)\b[^.\n]{0,80}\b(?:docker-compose|compose|dockerfile|fichier|script|config|configuration|yaml|yml|readme|document|\.[a-z]{2,5})\b", re.I)
+OUTILS_D_ECRITURE = {"ecrire", "modifier", "modifier_plusieurs", "creer_document", "executer"}
+RAPPEL_OUBLI = "L'utilisateur t'a demandé de CRÉER un fichier et tu ne l'as pas fait : rien n'existe sur le disque. Ne décris pas le contenu et ne demande pas la permission : appelle maintenant l'outil « ecrire » avec le chemin et le contenu complet (mets des valeurs d'exemple claires si une information manque), puis dis où se trouve le fichier."
 BLOCS_DE_CODE = re.compile(r"```.*?(?:```|$)", re.S)
 
 
@@ -50,6 +53,13 @@ def outils_appeles(messages):
         if x.get("role") == "tool":
             vus.add(x.get("tool_name"))
     return vus
+
+
+def oubli_d_ecrire(demande, messages, autorises):
+    """Le rappel à donner si l'utilisateur a demandé de créer un fichier et que le modèle termine sans avoir appelé un outil d'écriture (il a cherché, puis s'est arrêté, ou a seulement montré le contenu)."""
+    if not (OUTILS_D_ECRITURE & autorises) or not DEMANDE_D_ECRITURE.search(str(demande or "")[:400]):
+        return ""
+    return "" if OUTILS_D_ECRITURE & outils_appeles(messages) else RAPPEL_OUBLI
 
 
 def affirme_sans_agir(contenu, messages, autorises):

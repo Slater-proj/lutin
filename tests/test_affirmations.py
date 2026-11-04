@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
-from lutin.affirmations import affirme_sans_agir  # noqa: E402
+from lutin.affirmations import affirme_sans_agir, oubli_d_ecrire  # noqa: E402
 
 TOUS = {"ecrire", "modifier", "modifier_plusieurs", "creer_document", "executer", "web_chercher", "web_lire", "comfy_generer", "memoriser", "lire", "installer_module"}
 DEMANDE = [{"role": "user", "content": "fais-le"}]
@@ -41,6 +41,13 @@ class Affirmations(unittest.TestCase):
         for phrase in ["Je vais créer le fichier docker-compose.yml.", "Voulez-vous que je crée le fichier ?", "J'ai ajouté une précision à ma réponse.",
                        "Voici le contenu :\n```\n# j'ai créé le fichier a.yml\n```", "Tu peux lancer la commande docker compose up.", "ok"]:
             self.assertEqual(affirme_sans_agir(phrase, DEMANDE, TOUS), "", phrase)
+
+    def test_demande_de_creation_sans_ecriture_est_reperee(self):
+        for demande in ["tu peux me créer un docker-compose pour swag avec un fournisseur ovh ?", "écris un script de sauvegarde", "Crée le fichier config.yml", "génère un README"]:
+            self.assertTrue(oubli_d_ecrire(demande, appel("web_chercher"), TOUS), demande)
+        self.assertEqual(oubli_d_ecrire("crée un docker-compose", appel("ecrire"), TOUS), "", "il a écrit : rien à dire")
+        self.assertEqual(oubli_d_ecrire("explique-moi ce docker-compose", DEMANDE, TOUS), "", "une explication n'est pas une création")
+        self.assertEqual(oubli_d_ecrire("crée un docker-compose", DEMANDE, {"lire", "lister"}), "", "pas d'outil d'écriture dans ce mode")
 
     def test_un_outil_absent_n_est_pas_reclame(self):
         self.assertEqual(affirme_sans_agir("J'ai créé le fichier a.yml.", DEMANDE, {"lire", "lister"}), "", "mode lecture seule : le modèle n'a pas d'outil pour écrire")

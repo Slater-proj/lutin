@@ -87,6 +87,15 @@ class Decouverte(unittest.TestCase):
         embeddings = decouverte.chercher("", "newest", 1, http=http_fixe(PAGE.replace(">tools<", ">embedding<", 1)), categorie="embedding")["modeles"]
         self.assertTrue(any("embedding" in m["capacites"] for m in embeddings), "demandés expressément, les embeddings sont montrés")
 
+    def test_pas_de_doublon_et_pas_de_fausse_taille(self):
+        bloc = PAGE.split("<li ", 2)[1]
+        page = "<ul>" + ("<li " + bloc) * 2 + "</ul>"          # le même modèle deux fois dans une même page
+        modeles = decouverte.chercher("", "newest", 1, http=http_fixe(page))["modeles"]
+        self.assertEqual(len(modeles), 1, "un modèle n'apparaît qu'une fois")
+        avec = page.replace(">tools<", ">1m<", 1)
+        self.assertNotIn("1m", decouverte.analyser(avec)[0]["tailles"], "« 1m » (contexte) n'est pas une taille installable")
+        self.assertIn("270m", decouverte.analyser(page.replace(">tools<", ">270m<", 1))[0]["tailles"], "un vrai petit modèle en millions reste proposé")
+
     def test_tailles_et_jugement_de_la_machine(self):
         self.assertEqual(decouverte.milliards("8b"), 8)
         self.assertEqual(decouverte.milliards("8x7b"), 56)

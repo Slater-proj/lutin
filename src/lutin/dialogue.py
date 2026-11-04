@@ -539,6 +539,15 @@ def installer_modele(modele):
                 # Ollama signe ses demandes au registre avec une clé gardée dans son dossier « .ollama » (à côté de son historique, PAS dans le dossier des modèles). Si ce dossier a été supprimé ou
                 # déplacé pendant qu'Ollama tournait, il ne la retrouve plus : il la recrée à son démarrage.
                 PULLS[modele].update({"statut": "erreur", "aide": "redemarrer", "texte": _t("Ollama ne retrouve plus son fichier d'identité (id_ed25519, dans son dossier .ollama : il a été supprimé ou déplacé). Il le recrée à son démarrage : redémarre Ollama, puis réessaie.")})
+            elif "does not exist" in texte.lower() or "file does not exist" in texte.lower():
+                PULLS[modele].update({"statut": "erreur", "texte": _t("Ce modèle (ou cette taille) n'existe pas dans la bibliothèque d'Ollama : « {} ». Vérifie son nom exact sur sa page ollama.com. Il est retiré de ta liste.").format(modele)})
+                try:
+                    reg2 = lire_registre_modeles()
+                    if modele in reg2["perso"]:
+                        reg2["perso"].remove(modele)
+                        ecrire_registre_modeles(reg2)
+                except (OSError, KeyError, ValueError):
+                    pass
             else:
                 PULLS[modele].update({"statut": "erreur", "texte": texte})
     threading.Thread(target=travail, daemon=True).start()
@@ -582,6 +591,7 @@ def consignes_systeme(r):
             "Chaque modification de fichier garde une sauvegarde de l'ancienne version et passe par l'accord de l'utilisateur, sauf s'il a activé l'accord automatique.\n\n") + mode + _t("\n\n# CONTEXTE DU PROJET (memoire/CONTEXTE.md)\n") + contexte[:14000] + _t("\n\n# NOTES DURABLES (memoire/MEMOIRE.md)\n") + (_m.texte_memoire(memoire) or _t("(aucune pour l'instant)"))
             + bloc_skills
             + (_mission.consigne_systeme() if r.get("_mission") else "")
+            + ("" if r.get("mode") in ("discussion", "recherche") else _t("\n\n# CRÉER UN FICHIER\nQuand on te demande de créer ou d'écrire un fichier (docker-compose, script, configuration, document), appelle l'outil « ecrire » avec le chemin et le contenu complet, y compris après une recherche web. Ne te contente pas de montrer le contenu dans ta réponse."))
             + (_t("\n\n# ESSAI À BLANC\nTes écritures et tes commandes ne sont PAS exécutées : c'est une simulation, l'utilisateur voit ce que tu proposes. Propose ce que tu ferais (fichiers, contenu, commandes), sans insister ni réessayer. Lire et chercher fonctionnent normalement.\n") if r.get("essai_a_blanc") else "")
             + (_t("\n\n# DÉBUT DE LA CONVERSATION\nLes premiers échanges ne sont plus tous sous tes yeux (fiche de suivi ou résumé). Pour retrouver un détail précis (une décision, un nom, un chiffre, un texte), appelle « rappeler » avec quelques mots-clés et ici=true : ne le devine pas.\n") if r.get("rappel_ici") else "")
             + _pc.bloc_prompt(_m.RACINE)
@@ -1227,7 +1237,8 @@ def boucle_agent(conv, r, emit, ctx, stop):
         message = {"role": "assistant", "content": contenu}
         if appels:
             message["tool_calls"] = appels
-        rappel_faux = "" if appels or corrige_affirmation or dernier_tour else _affirmations.affirme_sans_agir(contenu, conv["messages"], ctx["outils_autorises"])
+        rappel_faux = "" if appels or corrige_affirmation or dernier_tour else (_affirmations.affirme_sans_agir(contenu, conv["messages"], ctx["outils_autorises"])
+                                                                              or ("" if r.get("_mission") or r.get("essai_a_blanc") else _affirmations.oubli_d_ecrire(derniere_demande, conv["messages"], ctx["outils_autorises"])))
         if rappel_faux:
             corrige_affirmation, faux_accompli = True, (contenu, rappel_faux)
             _m.journaliser("Le modèle {} affirme avoir agi sans appeler d'outil : je le lui fais remarquer.".format(r["modele"]))

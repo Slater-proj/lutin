@@ -2,6 +2,15 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## 0.14.1
+
+- **Bibliothèque d'Ollama : plus de doublons.** Un modèle n'apparaît qu'une fois, y compris avec « Voir la suite ». Les étiquettes qui ne sont pas des tailles (« 1m », une longueur de contexte) ne sont plus proposées à l'installation.
+- **Téléchargement d'un modèle introuvable.** « pull model manifest: file does not exist » devient une explication claire (ce modèle ou cette taille n'existe pas, vérifie le nom sur ollama.com), et le modèle n'encombre plus ta liste.
+- **Réponses de l'assistant à nouveau en vert pâle** (les tiennes restent bleues).
+- **Demander un fichier après une recherche web.** Quand tu demandes de créer un fichier (docker-compose, script, configuration…) et que le modèle termine sans avoir appelé un outil d'écriture (il a cherché sur le web puis s'est arrêté, ou il montre le contenu en te disant de le copier), Lutin le relance une fois pour qu'il écrive vraiment le fichier. Le prompt système rappelle aussi d'utiliser l'outil d'écriture, même après une recherche.
+
+**English.** Library list without duplicates or fake sizes; a clear message when a model does not exist; assistant replies back to pale green; when a file is requested and the model stops without writing it (for example after a web search), Lutin nudges it once to really write the file.
+
 ## 0.14.0
 
 - **Connecteurs MCP.** Brancher un serveur d'outils (Home Assistant, GitHub, fichiers…) depuis Automatisation > Connecteurs MCP : programme lancé par Lutin (stdio) ou adresse (HTTP). Aucun outil n'est donné au modèle sans être coché un par un ; lecture seule par défaut ; un outil qui modifie quelque chose demande ton accord à chaque appel (jamais d'accord automatique) et est inscrit au journal ; le retour des outils est traité comme du contenu web (jamais affiché brut, jamais obéi, accord automatique suspendu ensuite). Seul le configurateur peut en ajouter. Un serveur de démonstration est fourni (`python -m lutin.mcp_demo`). Les extensions existantes (Telegram, courriel, X, ComfyUI) ne changent pas.

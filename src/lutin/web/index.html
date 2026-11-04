@@ -354,7 +354,7 @@ button.principal { box-shadow:0 6px 16px -8px rgba(63,143,232,.8); }
 .conv { border-radius:10px; }
 .conv.choisie { box-shadow:inset 3px 0 0 var(--accent); }
 .msg.moi .corps { background:linear-gradient(180deg, #1f3a5c, #182e49); border-color:#2f5a8c; border-radius:18px 18px 6px 18px; }
-.msg.ia .corps { background:linear-gradient(180deg, #151d27, #121923); border-color:var(--line); border-radius:18px 18px 18px 6px; }
+.msg.ia .corps { background:linear-gradient(180deg, #182520, #131e19); border-color:#2f4a3b; border-radius:18px 18px 18px 6px; }
 .saisie { background:linear-gradient(180deg, transparent, rgba(11,15,20,.9) 40%); border-top:0; padding-top:10px; }
 .saisie textarea { background:#111821; border-color:var(--line2); border-radius:16px; padding:12px 14px; box-shadow:var(--ombre-douce); }
 .outil { border-radius:10px; box-shadow:var(--ombre-douce); }
@@ -3261,7 +3261,8 @@ button.principal { box-shadow:0 6px 16px -8px rgba(63,143,232,.8); }
       const r = await api('/api/decouvrir?q=' + encodeURIComponent(terme) + '&o=' + $('oDecouverte').value + '&p=' + page + '&c=' + categorie + '&leger=' + ($('cLegerDecouverte').checked ? 1 : 0));
       if (page === 1) $('listeDecouverte').textContent = '';
       let masques = 0;
-      r.modeles.forEach(m => { const c = carteDecouverte(m, $('cAdapteDecouverte').checked); if (c) $('listeDecouverte').appendChild(c); else masques++; });
+      const deja = new Set([...$('listeDecouverte').children].map(c => c.dataset.nom));          // « Voir la suite » ne remontre pas un modèle déjà affiché
+      r.modeles.filter(m => !deja.has(m.nom)).forEach(m => { const c = carteDecouverte(m, $('cAdapteDecouverte').checked); if (c) { c.dataset.nom = m.nom; $('listeDecouverte').appendChild(c); } else masques++; });
       PAGE_DECOUVERTE = page; $('bPlusDecouverte').hidden = !r.suite;
       $('msgDecouverte').textContent = (masques ? T('{} modèle(s) masqué(s) car trop gros pour ta machine. ').replace('{}', masques) : '') + (r.modeles.length || page > 1 ? T('🟢 tient · 🟠 limite · 🔴 trop gros (estimation d\'après la taille).') : T('Aucun résultat.'));
     } catch (e) { $('msgDecouverte').textContent = e.message; }
