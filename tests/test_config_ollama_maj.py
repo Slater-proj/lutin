@@ -298,6 +298,15 @@ class MisesAJour(unittest.TestCase):
         self.assertEqual(miseajour.nouveautes(machine, CAT, {"code": "qwen2.5-coder:7b"}, {"qwen2.5-coder:7b": {}}, ignores=[deja]), [])
         self.assertEqual(miseajour.nouveautes(machine, CAT, {"code": "qwen2.5-coder:7b"}, {}), [], "le modèle n'est plus installé : on ne propose pas de le remplacer")
 
+    def test_ancien_modele_remplace_et_deja_installe_est_propose_a_la_suppression(self):
+        cat = copy.deepcopy(CAT)
+        cat["modeles"][0]["remplace_par"] = cat["modeles"][1]["id"]
+        vieux, neuf = cat["modeles"][0]["id"], cat["modeles"][1]["id"]
+        p = miseajour.obsoletes(cat, {vieux: {}, neuf: {}})
+        self.assertEqual([(x["type"], x["modele"], x["remplace_par"]) for x in p], [("obsolete", vieux, neuf)])
+        self.assertEqual(miseajour.obsoletes(cat, {vieux: {}}), [], "le remplaçant n'est pas installé : on ne propose pas de retirer le seul modèle")
+        self.assertEqual(miseajour.obsoletes(cat, {vieux: {}, neuf: {}}, ignores=[p[0]["cle"]]), [], "« le garder » est respecté")
+
     def test_modele_qui_ne_tient_plus_est_signale(self):
         petite = Profil(ram_go=16, ram_libre_go=8, gpus=[Gpu("x", "nvidia", 8)])
         p = miseajour.nouveautes(petite, CAT, {"polyvalent": "llama3.3:70b"}, {"llama3.3:70b": {}})

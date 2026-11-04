@@ -1,6 +1,6 @@
 {
-  "version": 5,
-  "date": "2026-11-02",
+  "version": 6,
+  "date": "2026-11-04",
   "avertissement": "Notes éditoriales de départ (de 1 à 10), à revoir à chaque version : elles ne sont pas des mesures. 'verifie: null' = existence du modèle dans le registre pas encore contrôlée par la CI. 'go' = taille approximative du téléchargement ; 'kv_mo_1k' = mémoire de contexte pour 1000 jetons (approximative, sans compression).",
   "familles": {
       "Qwen 3": "La famille polyvalente d'Alibaba, de 1,7 à 32 milliards : bonne en français, en raisonnement et en code. Choisis la taille selon ta mémoire ; elle couvre toutes les machines.",
@@ -29,7 +29,7 @@
     {"id": "granite4:tiny-h", "nom": "Granite 4 · 7 milliards (experts)", "phrase": "Conçu pour aller vite sur processeur : seul 1 milliard travaille à chaque mot, et il appelle bien les outils.",
      "go": 4.2, "params_b": 6.94, "actifs_b": 1, "ctx_max": 131072, "kv_mo_1k": 20, "capacites": ["outils"], "licence": "Apache-2.0",
      "notes": {"rapide": 7, "creatif": 3, "code": 3, "polyvalent": 5}, "verifie": null},
-    {"id": "granite4:3b", "nom": "Granite 4 · 3 milliards", "phrase": "Petit et sobre, pensé pour les consignes et les appels d'outils en entreprise.",
+    {"id": "granite4:3b", "remplace_par": "granite4.1:3b", "nom": "Granite 4 · 3 milliards", "phrase": "Petit et sobre, pensé pour les consignes et les appels d'outils en entreprise.",
      "go": 2.1, "params_b": 3, "actifs_b": 3, "ctx_max": 131072, "kv_mo_1k": 110, "capacites": ["outils"], "licence": "Apache-2.0",
      "notes": {"rapide": 7, "creatif": 3, "code": 4, "polyvalent": 4}, "verifie": null},
     {"id": "granite4.1:3b", "nom": "Granite 4.1 · 3 milliards", "phrase": "Petit, sobre et soigné sur les consignes et les appels d'outils : la version plus récente de Granite 4.",

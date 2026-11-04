@@ -2,6 +2,18 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## 0.14.0
+
+- **Connecteurs MCP.** Brancher un serveur d'outils (Home Assistant, GitHub, fichiers…) depuis Automatisation > Connecteurs MCP : programme lancé par Lutin (stdio) ou adresse (HTTP). Aucun outil n'est donné au modèle sans être coché un par un ; lecture seule par défaut ; un outil qui modifie quelque chose demande ton accord à chaque appel (jamais d'accord automatique) et est inscrit au journal ; le retour des outils est traité comme du contenu web (jamais affiché brut, jamais obéi, accord automatique suspendu ensuite). Seul le configurateur peut en ajouter. Un serveur de démonstration est fourni (`python -m lutin.mcp_demo`). Les extensions existantes (Telegram, courriel, X, ComfyUI) ne changent pas.
+- **Bibliothèque d'Ollama plus facile.** Filtres par usage (agent, code, images, réflexion, recherche dans les documents), par famille, « seulement les légers » ; chaque taille indique si elle tient sur ta machine (estimation) et peut être masquée si trop grosse ; lien vers la page de chaque modèle ; les tailles déjà installées sont marquées.
+- **Anciens modèles.** Quand le catalogue dit qu'un modèle est remplacé par un autre déjà installé, Lutin propose de supprimer l'ancien (jamais sans clic). Catalogue en version 6.
+- **Actualités avec un petit modèle.** « Les news du jour » : Lutin cherche et lit lui-même quelques sources, puis le modèle (10 milliards de paramètres ou moins) ne fait que résumer, sans outil. Un grand modèle garde la main.
+- **Barre d'état unique.** Les tâches de fond (fiche de suivi, calibrage, mesures de modèles) et la mémoire prise par le modèle chargé apparaissent dans le bandeau bleu, comme les téléchargements.
+- **Extensions grisées et QR code.** Quand les réglages sont verrouillés (page ouverte depuis un autre appareil, ou derrière un proxy sans administrateur déclaré), la page dit pourquoi et comment faire (LUTIN_ADMINS) au lieu de griser sans explication. Correction d'une course : ouvrir l'onglet Accès avant la fin du premier chargement ne montrait ni PIN ni QR code. Derrière un proxy, la page explique qu'il n'y a ni PIN ni QR code à ce niveau.
+- **Finition de l'interface.** Typographie, onglets en pastilles, cartes en relief, bulles de conversation, zone de saisie, boutons homogènes.
+
+**English.** MCP connectors (tool by tool permissions, read-only by default, approval at every modifying call, results treated as untrusted); easier Ollama library (filters by use and family, fit estimate per size, page links); old-model cleanup proposals; guided news for small models; a single status bar for background tasks and memory; the locked-settings explanation and a QR code race fix; interface polish.
+
 ## 0.13.12
 
 - **Un modèle qui raconte avoir agi sans le faire est repris (fichier, commande, recherche web, image, mémoire).** Dans une conversation réelle, un petit modèle répondait « J'ai créé le fichier docker-compose.yml » sans appeler l'outil d'écriture, jusqu'à confirmer que le dossier était vide… puis à recommencer. Quand la réponse affirme une écriture alors qu'aucun outil d'écriture n'a été appelé depuis ta demande, Lutin le lui fait remarquer (une seule fois), sans garder l'affirmation fausse dans la conversation. Le contrôle est prudent : verbe au passé à la première personne, outil réellement disponible, code cité ignoré, objet de type fichier exigé pour les écritures.

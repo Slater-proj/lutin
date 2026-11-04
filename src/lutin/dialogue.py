@@ -4,6 +4,8 @@ from . import archive as _archive
 from . import infos_modele as _infos
 from . import affirmations as _affirmations
 from . import boucles as _boucles
+from . import actualites as _actualites
+from . import mcp as _mcp
 from . import fichiers as _fichiers
 from . import mission as _mission
 from . import horsligne as _hl
@@ -137,8 +139,10 @@ def scribe(conv, r, emit=None):
                 "fait (ce qui vient d'être terminé), ouvert (NOUVELLES questions restées sans réponse), resolu (questions de la fiche qui ont maintenant une réponse, recopiées telles quelles). "
                 "N'invente rien : ne note que ce qui est dit dans les échanges. Liste vide si rien à ajouter.")
     try:
-        rep = ollama_json("/api/chat", {"model": modele_annexe(r), "stream": False, "think": False, "format": "json", "options": _m.options_modele(r, 0.1),
-                                        "messages": [{"role": "system", "content": consigne}, {"role": "user", "content": "FICHE ACTUELLE :\n" + _suivi.serialiser(ident, sections) + "\n\nDERNIERS ÉCHANGES :\n" + echange}]}, 300)
+        corps_scribe = {"model": modele_annexe(r), "stream": False, "think": False, "format": "json", "options": _m.options_modele(r, 0.1),
+                        "messages": [{"role": "system", "content": consigne}, {"role": "user", "content": "FICHE ACTUELLE :\n" + _suivi.serialiser(ident, sections) + "\n\nDERNIERS ÉCHANGES :\n" + echange}]}
+        with _m.tache_de_fond("fiche:" + str(ident), _t("Mise à jour de la fiche de suivi")):          # montré dans la barre d'état de la page
+            rep = ollama_json("/api/chat", corps_scribe, 300)
         ops = json.loads((rep.get("message", {}).get("content") or "{}").strip() or "{}")
     except (urllib.error.URLError, OSError, ValueError) as erreur:
         _m.journaliser("Scribe : fiche non mise à jour (conversation {}) : {!r}".format(ident, erreur))
@@ -254,6 +258,11 @@ def outils_du_mode(r):
     if not addons.actif("comfyui"):
         exclus |= {"comfy_modeles", "comfy_generer"}                    # les outils de ComfyUI n'existent que si l'addon est activé
     outils = [t for t in _m.OUTILS if t["function"]["name"] not in exclus]
+    if not _modes.sans_outils(r.get("mode")):
+        try:
+            outils += _mcp.outils_exposes(_modes.lecture_seule(r.get("mode")))          # connecteurs MCP : seulement les outils autorisés un par un (voir mcp.py)
+        except Exception as erreur:  # noqa: BLE001  (un connecteur en panne ne doit pas empêcher de répondre)
+            _m.journaliser("Connecteurs MCP : liste impossible ({!r}).".format(erreur))
     if any(t["function"]["name"] == "comfy_generer" for t in outils):
         try:
             from . import addons_comfyui
@@ -1011,6 +1020,14 @@ def boucle_agent(conv, r, emit, ctx, stop):
     elif conv.get("boucle"):                                      # la dernière réponse répétait la précédente : cette fois on ordonne d'agir
         consigne = _boucles.consigne()
     garde = _boucles.Garde()
+    if (not consigne and not r.get("_mission") and "web_chercher" in ctx["outils_autorises"] and conv["messages"] and conv["messages"][-1].get("role") == "user"
+            and _actualites.demande_actualites(derniere_demande) and _actualites.petit_modele(r["modele"])):
+        try:                                                              # « les news du jour » avec un petit modèle : Lutin cherche et lit lui-même, le modèle ne fait que résumer
+            consigne = _actualites.preparer(conv, derniere_demande, ctx, emit) or ""
+            forcer_fin = bool(consigne)
+        except (_m.ErreurOutil, OSError) as erreur:
+            _m.journaliser("Actualités guidées impossibles : {!r}".format(erreur))
+            emit({"type": "info", "texte": _t("La recherche d'actualités n'a pas pu se faire ({}) : je continue normalement.").format(erreur)})
     for idx_tour in range(tours_max):
         msgs = [{"role": "system", "content": consignes_systeme(r) + _m.texte_taches(conv) + rappels_texte}]
         if conv.get("resume"):
@@ -1256,7 +1273,7 @@ def boucle_agent(conv, r, emit, ctx, stop):
                 _fichiers.enregistrer([dict(e, genre="fichier") for e in joints] + [_fichiers.entree_image(i, fichiers.get(i)) for i in medias if fichiers.get(i)], conv["id"])
             except Exception as erreur:  # noqa: BLE001  (le registre aide au ménage, il ne doit jamais gêner une réponse)
                 _m.journaliser("Registre des fichiers créés : {!r}".format(erreur))
-            affiche = _t("(résultat transmis à l'assistant, non affiché)") if nom in OUTILS_INTERNES and "CONTENU WEB NON FIABLE" in resultat[:60] else resultat[:1500]          # la recherche web sert à l'assistant, pas à remplir la conversation : c'est à lui d'en tirer la réponse
+            affiche = _t("(résultat transmis à l'assistant, non affiché)") if (nom in OUTILS_INTERNES or _mcp.est_outil(nom)) and ("CONTENU WEB NON FIABLE" in resultat[:60] or _mcp.MARQUEUR in resultat[:60]) else resultat[:1500]          # la recherche web sert à l'assistant, pas à remplir la conversation : c'est à lui d'en tirer la réponse
             emit(dict({"type": "resultat", "nom": nom, "texte": affiche}, **extra))
             conv["messages"].append(dict({"role": "tool", "tool_name": nom, "content": resultat[:_m.LECTURE_MAX + 2000]}, **extra))
             _m.conv_ecrire(conv)                        # enregistré à chaque étape : un plantage du PC en pleine demande ne perd que l'étape en cours

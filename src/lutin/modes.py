@@ -29,6 +29,16 @@ def valide(mode):
     return mode in MODES
 
 
+def sans_outils(mode):
+    """Ce mode ne donne aucun outil (discussion) : pas de connecteur non plus."""
+    return bool((MODES.get(mode) or MODES[DEFAUT]).get("aucun"))
+
+
+def lecture_seule(mode):
+    """Ce mode ne garde que les outils de lecture (recherche) : les outils de connecteur qui modifient quelque chose sont retirés."""
+    return "seulement" in (MODES.get(mode) or MODES[DEFAUT])
+
+
 def outils_exclus(mode, tous):
     """Les noms d'outils à retirer pour ce mode, parmi `tous` (les noms de tous les outils)."""
     m = MODES.get(mode) or MODES[DEFAUT]

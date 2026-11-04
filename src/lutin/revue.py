@@ -306,6 +306,9 @@ def chercher_conversations(q):
 def _appeler_outil(nom, args, ctx):
     if not isinstance(args, dict):
         raise _m.ErreurOutil("Arguments invalides.")
+    if nom.startswith("mcp__"):
+        from . import mcp
+        return mcp.appeler(nom, args, ctx)
     if nom == "lister":
         return _m.outil_lister(args.get("dossier", "."))
     if nom == "lire":

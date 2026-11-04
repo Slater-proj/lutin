@@ -598,6 +598,32 @@ TOURS_SIMULTANES = 2       # au plus deux réponses à la fois (une seule carte 
 TOURS_ACTIFS = {}          # id de conversation -> threading.Event « stop » du tour en cours (une conversation = un tour à la fois)
 VERROU_TOURS = threading.Lock()
 RACINE_TOURS = {}          # id de conversation -> dossier de travail utilisé par sa réponse en cours (une seule racine à la fois, voir activer_travail)
+TACHES_FOND = {}          # clé -> texte : ce que Lutin fait en arrière-plan (mise à jour d'une fiche…), montré dans la barre d'état de la page
+VERROU_TACHES = threading.Lock()
+
+
+class tache_de_fond:
+    """`with tache_de_fond(cle, texte):` signale une tâche de fond pendant qu'elle dure (plusieurs en même temps possibles). Ne gêne jamais : la tâche se retire toujours, même sur erreur."""
+
+    def __init__(self, cle, texte):
+        self.cle, self.texte = cle, texte
+
+    def __enter__(self):
+        with VERROU_TACHES:
+            TACHES_FOND[self.cle] = self.texte
+        return self
+
+    def __exit__(self, *_):
+        with VERROU_TACHES:
+            TACHES_FOND.pop(self.cle, None)
+        return False
+
+
+def taches_en_cours():
+    with VERROU_TACHES:
+        return list(TACHES_FOND.values())
+
+
 BENCH = {"en_cours": "", "etape": "", "erreur": "", "file": []}          # file : les modèles qui attendent leur tour dans une série (comparaison)
 
 
@@ -654,6 +680,8 @@ def noter_action(ctx, outil, args, issue):
             cible = str(args.get("commande", ""))
         elif outil == "installer_module":
             cible = str(args.get("module", ""))
+        elif outil.startswith("mcp__"):
+            cible = outil          # un outil d'un connecteur MCP : on garde son nom, jamais ses arguments
         entree = {"ts": datetime.now().isoformat(timespec="seconds"), "conversation": (ctx.get("conv") or {}).get("id", ""), "dossier": str(RACINE), "outil": outil, "cible": cible[:300],
                   "issue": issue[:200], "accord": ctx.pop("dernier_accord", "aucun"), "qui": ctx.get("identite", "")}
         f = chemin_journal()

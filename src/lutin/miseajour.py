@@ -69,6 +69,21 @@ def mises_a_jour(installes, http=http_get):
     return sortie
 
 
+def obsoletes(catalogue, installes, ignores=()):
+    """Modèles installés que le catalogue dit remplacés (`remplace_par`) par un autre qui est installé lui aussi : on propose de libérer la place. Rien n'est supprimé sans clic."""
+    par_id = cat.par_id(catalogue)
+    sortie = []
+    for nom in installes:
+        vieux = par_id.get(nom)
+        nouveau = (vieux or {}).get("remplace_par")
+        cle = "obsolete:" + nom
+        if not nouveau or nouveau not in installes or cle in ignores:
+            continue
+        sortie.append({"cle": cle, "type": "obsolete", "modele": nom, "remplace_par": nouveau, "go": vieux.get("go", 0),
+                       "raison": _t("{} est remplacé par {}, déjà installé : tu peux supprimer l'ancien pour libérer de la place.").format(nom, nouveau)})
+    return sortie
+
+
 def nouveautes(profil, catalogue, choisis, installes, ignores=()):
     """Meilleurs choix pour CETTE machine, comparés à ce que l'utilisateur a installé pour chaque rôle."""
     meilleurs = selection.choisir(profil, catalogue)
@@ -275,7 +290,8 @@ def verifier(profil, cfg, dossiers, ollama, http=http_get, maintenant=time.time,
             recalcule.append("maj")
         if portee in ("nouveaux", "tout"):
             nouvelles += nouveautes(profil, catalogue, cfg.get("modeles", {}).get("choisis", {}), installes, ignores)
-            recalcule.append("nouveau")
+            nouvelles += obsoletes(catalogue, installes, ignores)
+            recalcule += ["nouveau", "obsolete"]
         gardees = [p for p in ancien.get("propositions", []) if p.get("type") not in recalcule]
         resultat["propositions"] = [p for p in gardees + nouvelles if p["cle"] not in ignores]
     except Exception as e:  # noqa: BLE001 — la vérification ne doit jamais gêner le démarrage

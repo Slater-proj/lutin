@@ -1,6 +1,7 @@
 """Le serveur HTTP de Lutin : le gestionnaire de requêtes (pages, API JSON, flux de la conversation). L'état et les fonctions métier restent dans moteur ; ce module les atteint par « _m.NOM » (lu à chaque appel)."""
 from http.server import BaseHTTPRequestHandler
 from . import bench as _bench
+from . import mcp as _mcp
 from . import calibrage as _calibrage
 from . import acces as _acces
 from . import adequation as _adequation
@@ -33,6 +34,7 @@ from datetime import datetime
 import io
 import json
 import os
+import sys
 from pathlib import Path
 import re
 import subprocess
@@ -99,6 +101,14 @@ class Gestionnaire(BaseHTTPRequestHandler):
         """Le navigateur est sur cette machine : connexion de boucle locale, nom d'hôte de boucle locale, et aucun en-tête laissant croire qu'un relais (proxy, tunnel) a transmis une requête venue d'ailleurs."""
         relais = ("X-Forwarded-For", "X-Forwarded-Host", "X-Forwarded-Proto", "Forwarded", "Via", "X-Real-IP")
         return self._local() and not any(self.headers.get(h) for h in relais) and (_sec._est_boucle(_sec._sans_port(self.headers.get("Host") or "")) or bool(_m.IP_LAN and _sec._sans_port(self.headers.get("Host") or "") == _m.IP_LAN))
+
+    @staticmethod
+    def _memoire(r, o):
+        """Le modèle de conversation est-il chargé, et combien de mémoire prend-il (carte graphique / mémoire vive) ? Pour la barre d'état. None si Ollama est arrêté ou le modèle déchargé."""
+        if not o["actif"]:
+            return None
+        ps = _m.ps_modele(r["modele"])
+        return {"modele": r["modele"], "taille": ps["taille"], "vram": ps["vram"]} if ps else None
 
     @staticmethod
     def _variantes_jugees(modele):
@@ -202,7 +212,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
                                        "version": _m.VERSION, "ollama": o["actif"], "ollama_installe": bool(_m.chemin_ollama()), "installes": o["installes"], "modeles": modeles, "modeles_masques": len(_m.lire_registre_modeles()["masques"]), "actives": list(_m.TOURS_ACTIFS),
                                        "pulls": _m.PULLS, "reglages": r, "conversations": _m.conv_liste(), "racine": str(_m.RACINE), "donnees": str(_m.DONNEES),
                                        "outil": bool(self._outil_vivant()), "hors_ligne": _hl.actif(), "niveau": _m.SECURITE.niveau, "ouverture_possible": _fichiers.ouverture_possible(), "missions": _mission.par_conversation(), "langue": _i18n.langue(), "langue_reglage": _i18n.langue_configuree(), "cpus": _machine.cpus_disponibles() or 1, "diagnostic": self._diagnostic(o, r, profil, modeles), "redemarrage": {"necessaire": _acces.securite_enregistree() != _m.SECURITE, "possible": _acces.peut_redemarrer()}, "nouvelle_version": _m.nouvelle_version_lutin(), "travaux": _m.travaux_etat(), "configurateur": self._configurateur(), "addons_alertes": _addons.alertes(), "embeddings": _embeddings.etat(),
-                                       "calibrage": _calibrage.etat(), "bench": {"en_cours": _m.BENCH["en_cours"], "etape": _m.BENCH["etape"], "erreur": _m.BENCH["erreur"], "file": list(_m.BENCH.get("file") or []), "mesures": _bench.lire(_m.chemin_bench())}, "attentes": [{"id": a.id, "titre": a.titre, "detail": a.detail, "diff": a.diff, "conv": a.conv} for a in _m.Attente.EN_COURS.values()],
+                                       "taches_fond": _m.taches_en_cours(), "memoire": self._memoire(r, o), "calibrage": _calibrage.etat(), "bench": {"en_cours": _m.BENCH["en_cours"], "etape": _m.BENCH["etape"], "erreur": _m.BENCH["erreur"], "file": list(_m.BENCH.get("file") or []), "mesures": _bench.lire(_m.chemin_bench())}, "attentes": [{"id": a.id, "titre": a.titre, "detail": a.detail, "diff": a.diff, "conv": a.conv} for a in _m.Attente.EN_COURS.values()],
                                        "en_attente": sorted({a.conv for a in _m.Attente.EN_COURS.values() if a.conv} | set(_m.CHOIX_MEMOIRE))})
         if chemin == "/api/conseil":
             r = _m.reglages()
@@ -258,10 +268,19 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 return self._envoyer(400, {"erreur": str(e)})
             except OSError as e:
                 return self._envoyer(503, {"erreur": str(e)})
+        if chemin == "/api/mcp":                                 # les connecteurs MCP (sans leurs secrets)
+            return self._envoyer(200, {"connecteurs": _mcp.vue(), "modifiable": self._configurateur()})
         if chemin == "/api/decouvrir":                           # la bibliothèque d'Ollama (nouveautés, populaires, recherche)
             q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
             try:
-                return self._envoyer(200, _decouverte.chercher((q.get("q") or [""])[0], (q.get("o") or ["newest"])[0], (q.get("p") or ["1"])[0]))
+                r = _decouverte.chercher((q.get("q") or [""])[0], (q.get("o") or ["newest"])[0], (q.get("p") or ["1"])[0], categorie=(q.get("c") or [""])[0], leger=(q.get("leger") or ["0"])[0] == "1")
+                profil = _adequation.profil_pret()
+                juger = (lambda go: _adequation.evaluer({"go": go}, profil)) if profil is not None else (lambda go: {"niveau": "bien", "texte": ""})
+                installes = set(_m.etat_ollama()["installes"])
+                modeles = _decouverte.evaluer_tailles(r["modeles"], juger)
+                for m in modeles:
+                    m["installes"] = sorted(t for t in m["tailles"] if m["nom"] + ":" + t in installes) + ([""] if m["nom"] in installes or m["nom"] + ":latest" in installes else [])
+                return self._envoyer(200, dict(r, modeles=modeles))
             except ValueError as e:
                 return self._envoyer(400, {"erreur": str(e)})
             except OSError as e:
@@ -780,6 +799,25 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 return self._envoyer(200, _m.oublier_modele(str(donnees.get("modele", ""))))
             if self.path == "/api/modeles-restaurer":
                 return self._envoyer(200, _m.restaurer_modeles())
+            if self.path.startswith("/api/mcp-"):
+                if not self._configurateur():
+                    return self._envoyer(403, {"erreur": _t("Brancher un connecteur lance un programme : ça se fait depuis la machine de Lutin (ou par un administrateur déclaré).")})
+                action = self.path[len("/api/mcp-"):]
+                if action == "ajouter":
+                    ident = _mcp.ajouter(str(donnees.get("nom", "")), donnees.get("commande"), donnees.get("url", ""), donnees.get("env"), donnees.get("entetes"))
+                    return self._envoyer(200, {"id": ident})
+                if action == "demo":
+                    ident = _mcp.ajouter(_t("Démonstration"), [sys.executable, "-m", "lutin.mcp_demo"], "", {"PYTHONPATH": str(Path(__file__).resolve().parent.parent)})
+                    return self._envoyer(200, {"id": ident})
+                ident = str(donnees.get("id", ""))
+                if action == "supprimer":
+                    _mcp.supprimer(ident)
+                    return self._envoyer(200, {"ok": True})
+                if action == "actualiser":
+                    return self._envoyer(200, {"outils": _mcp.actualiser(ident)})
+                if action == "regler":
+                    _mcp.regler(ident, donnees.get("actif"), donnees.get("lecture_seule"), donnees.get("outil"), donnees.get("autorise"))
+                    return self._envoyer(200, {"ok": True})
             if self.path == "/api/supprimer-modele":
                 return self._envoyer(200, _m.supprimer_modele(str(donnees.get("modele", ""))))
             if self.path == "/api/demarrer-ollama":

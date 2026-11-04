@@ -334,6 +334,33 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
 #listeModeles .carte > div, #propositions .carte > div { margin:0 0 6px; }
 #listeModeles .carte .nom, #propositions .carte .nom { font-weight:600; }
 #listeModeles .carte button, #propositions .carte button, #listeModeles .carte .puce { margin:2px 8px 2px 0; }
+/* ---- Finition : typographie, profondeur, rythme (ajouté en dernier : n'écrase que ce qu'il veut adoucir) ---- */
+:root { --focus:0 0 0 3px rgba(90,169,255,.28); --ombre-douce:0 1px 2px rgba(0,0,0,.28), 0 10px 26px -14px rgba(0,0,0,.6); --verre:rgba(18,24,33,.72); }
+body { font-family:"Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, Inter, Roboto, sans-serif; -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility; }
+:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+input:focus, textarea:focus, select:focus { box-shadow:var(--focus); }
+button { border:1px solid var(--line2); border-radius:9px; color:var(--fg); padding:6px 13px; font:inherit; font-weight:500; }
+button:not(.principal):not(.danger):not([aria-selected]):not(.act) { background:#16202b; }
+button:not(.principal):not(.danger):hover:not(:disabled) { background:#1c2937; }
+button.principal { box-shadow:0 6px 16px -8px rgba(63,143,232,.8); }
+.haut { background:var(--verre); backdrop-filter:blur(10px) saturate(1.2); }
+.haut .onglets { gap:2px; padding:3px; background:#0e141b; border:1px solid var(--line); border-radius:999px; }
+.haut .onglets button { border:1px solid transparent; background:transparent; border-radius:999px; padding:5px 13px; transition:background .15s, color .15s, box-shadow .15s; }
+.haut .onglets button:hover:not([aria-selected=true]) { color:var(--fg); background:#16202b; border-color:transparent; }
+.haut .onglets button[aria-selected=true] { background:#1d3048; border-color:rgba(90,169,255,.35); color:#fff; box-shadow:0 6px 16px -8px rgba(90,169,255,.7); }
+.carte { background:linear-gradient(180deg, #131b25, #10161e); box-shadow:var(--ombre-douce); transition:border-color .15s; }
+.carte:hover { border-color:var(--line2); }
+.cadre h2 { padding-bottom:6px; border-bottom:1px solid var(--line); }
+.conv { border-radius:10px; }
+.conv.choisie { box-shadow:inset 3px 0 0 var(--accent); }
+.msg.moi .corps { background:linear-gradient(180deg, #1f3a5c, #182e49); border-color:#2f5a8c; border-radius:18px 18px 6px 18px; }
+.msg.ia .corps { background:linear-gradient(180deg, #151d27, #121923); border-color:var(--line); border-radius:18px 18px 18px 6px; }
+.saisie { background:linear-gradient(180deg, transparent, rgba(11,15,20,.9) 40%); border-top:0; padding-top:10px; }
+.saisie textarea { background:#111821; border-color:var(--line2); border-radius:16px; padding:12px 14px; box-shadow:var(--ombre-douce); }
+.outil { border-radius:10px; box-shadow:var(--ombre-douce); }
+.bandeau-version { border-radius:0; box-shadow:0 8px 24px -16px rgba(0,0,0,.8); }
+.puce { background:#101820; }
+@media (prefers-reduced-motion:reduce) { * { transition:none !important; animation:none !important; } }
 </style>
 </head>
 <body>
@@ -432,9 +459,18 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     <div class="aide">Les nouveaux modèles sortent tous les jours, bien avant d'entrer dans le catalogue de Lutin : parcours ici la liste publique d'ollama.com (récents ou populaires) et installe celui que tu veux. Les tailles sont les variantes proposées (« 8b » = 8 milliards de paramètres, environ 5 Go) ; choisis-en une qui tient dans ta mémoire.</div>
     <div class="carte" style="gap:8px;flex-wrap:wrap;align-items:center">
       <input id="qDecouverte" placeholder="Rechercher (facultatif)" style="flex:1;min-width:140px">
+      <select id="uDecouverte" title="Ce que tu veux en faire">
+        <option value="">Tous les usages</option><option value="tools">Agent (appelle des outils)</option><option value="code">Code</option>
+        <option value="vision">Comprend les images</option><option value="thinking">Réflexion approfondie</option><option value="embedding">Recherche dans mes documents</option>
+      </select>
       <select id="oDecouverte"><option value="newest">Les plus récents</option><option value="popular">Les plus populaires</option></select>
       <button id="bDecouvrir">Parcourir</button>
     </div>
+    <div class="carte" style="gap:14px;flex-wrap:wrap;align-items:center">
+      <label><input type="checkbox" id="cAdapteDecouverte" checked> Cacher ce qui est trop gros pour ma machine</label>
+      <label><input type="checkbox" id="cLegerDecouverte"> Seulement les légers (4 milliards ou moins)</label>
+    </div>
+    <div class="aide" id="famillesDecouverte"></div>
     <div id="msgDecouverte" class="aide"></div>
     <div id="listeDecouverte"></div>
     <div style="margin:6px 0"><button id="bPlusDecouverte" hidden>Voir la suite</button></div>
@@ -487,6 +523,16 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     <div id="zoneFond" style="margin:6px 0"></div>
     <h2>Extensions facultatives <span class="aide">(désactivées tant que tu ne les actives pas)</span></h2>
     <div id="listeAddons" class="aide" style="margin:6px 0"></div>
+    <h2>Connecteurs MCP <span class="aide">(brancher un serveur d'outils : Home Assistant, GitHub, fichiers…)</span></h2>
+    <div class="aide">Un connecteur est un programme que Lutin lance (ou une adresse qu'il appelle) pour donner de nouveaux outils à l'assistant. Aucun outil n'est donné au modèle tant que tu ne l'as pas coché. Lecture seule par défaut ; un outil qui modifie quelque chose demande ton accord à chaque appel. Ce qui revient des outils n'est jamais affiché brut ni obéi, et l'accord automatique est suspendu après un appel.</div>
+    <div id="listeMcp" style="margin:6px 0"></div>
+    <div class="carte" id="ajoutMcp" style="gap:8px;flex-wrap:wrap;align-items:center">
+      <input id="nomMcp" placeholder="Nom (par exemple Fichiers)" style="width:170px">
+      <input id="cibleMcp" placeholder="Commande à lancer (npx -y …) ou adresse https://…" style="flex:1;min-width:240px">
+      <button id="bAjouterMcp" class="principal">Ajouter</button>
+      <button id="bDemoMcp" title="Un petit serveur fourni avec Lutin, pour essayer sans rien installer">Essayer le serveur de démonstration</button>
+    </div>
+    <div class="aide" id="mMcp"></div>
   </div></section>
   <section class="page" id="p-acces"><div class="cadre">
     <h2>Qui peut utiliser Lutin</h2>
@@ -504,6 +550,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     <h2>Connecter un téléphone ou un autre appareil</h2>
     <div class="aide" id="aPin"></div>
     <div style="margin:8px 0"><button id="bPin">Nouveau code PIN</button></div>
+    <div class="aide" id="aPinAbsent" hidden>Pas de code PIN ni de QR code à ce niveau : c'est le proxy (Authelia…) qui identifie chaque personne. Ils n'existent qu'au niveau « réseau local ».</div>
     <div id="blocPin" hidden>
       <div id="pinValeur" style="font-size:2.2rem;letter-spacing:.25em;font-weight:700"></div>
       <div class="aide" id="pinValide"></div>
@@ -878,7 +925,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
       if (m.role === 'resume') { const d = el('div', 'info', T('Résumé du début de la conversation : ') + m.content.slice(0, 400) + (m.content.length > 400 ? '...' : '')); fil().appendChild(d); }
       else if (m.role === 'user') { const d = el('div', 'msg moi'); d.appendChild(el('div', 'corps', m.content)); miniatures(d, m.images, m.pieces); fil().appendChild(d); }
       else if (m.role === 'assistant') { if (m.content) { const x = messageIA(); rendre(x.c, m.content); } (m.tool_calls || []).forEach(t => fil().appendChild(el('div', 'outil', '⚙ ' + t.function.name + ' ' + JSON.stringify(t.function.arguments).slice(0, 160)))); }
-      else if (m.role === 'tool') { const d = el('div', 'outil'); d.appendChild(el('div', '', '↳ ' + (m.tool_name || T('résultat')))); d.appendChild(el('div', 'res', ['web_chercher', 'web_lire'].includes(m.tool_name) && (m.content || '').slice(0, 60).includes('CONTENU WEB NON FIABLE') ? T("(résultat transmis à l'assistant, non affiché)") : (m.content || '').slice(0, 700))); afficherMedias(d, m.medias, m.medias_fichiers, CONV.id); afficherFichiers(d, m.fichiers_joints, CONV.id); fil().appendChild(d); }
+      else if (m.role === 'tool') { const d = el('div', 'outil'); d.appendChild(el('div', '', '↳ ' + (m.tool_name || T('résultat')))); d.appendChild(el('div', 'res', (['web_chercher', 'web_lire'].includes(m.tool_name) || (m.tool_name || '').startsWith('mcp__')) && /CONTENU (WEB|EXTERNE) NON FIABLE/.test((m.content || '').slice(0, 60)) ? T("(résultat transmis à l'assistant, non affiché)") : (m.content || '').slice(0, 700))); afficherMedias(d, m.medias, m.medias_fichiers, CONV.id); afficherFichiers(d, m.fichiers_joints, CONV.id); fil().appendChild(d); }
     });
     annoter(); afficherTaches(c.taches); majJauge(c.id); setVitesse(c.vitesse); majAnnuler();
     bas();
@@ -1192,6 +1239,15 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     z.appendChild(el('h2', '', T('Nouveautés pour ta machine')));
     liste.forEach(p => {
       const c = el('div', 'carte');
+      if (p.type === 'obsolete') {
+        c.appendChild(el('div', 'nom', T('Ancien modèle : ') + p.modele + (p.go ? ' (' + p.go + T(' Go)') : '')));
+        c.appendChild(el('div', 'aide', p.raison));
+        const s = el('button', 'principal', T('Supprimer ') + p.modele);
+        s.addEventListener('click', async () => { if (!confirm(T('Supprimer « ') + p.modele + T(' » du disque ? Tu pourras le retélécharger.'))) return; try { await api('/api/supprimer-modele', { modele: p.modele }); await api('/api/propositions-traiter', { cle: p.cle, appliquer: false }); rafraichir(); chargerPropositions(true); } catch (e) { alert(e.message); } });
+        const g = el('button', '', T('Le garder'));
+        g.addEventListener('click', async () => { try { await api('/api/propositions-traiter', { cle: p.cle, appliquer: false }); chargerPropositions(true); } catch (e) { alert(e.message); } });
+        c.append(s, g); z.appendChild(c); return;
+      }
       c.appendChild(el('div', 'nom', p.type === 'maj' ? T('Mise à jour : ') + p.modele : (p.role ? T('Meilleur choix « ') + p.role + T(' » : ') : '') + p.modele + (p.go ? ' (' + p.go + T(' Go)') : '')));
       if (p.phrase) c.appendChild(el('div', '', p.phrase));
       c.appendChild(el('div', 'aide', p.raison + (p.ancien ? T(' Remplace : ') + p.ancien + '.' : '')));
@@ -1206,7 +1262,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     const m = $('msgVerif'), boutons = [$('bMaj'), $('bNouveaux')]; boutons.forEach(b => b.disabled = true); m.textContent = T('Recherche en cours…');
     try {
       const d = await api('/api/modeles-verifier', { portee });
-      const n = (d.propositions || []).filter(p => portee === 'maj' ? p.type === 'maj' : portee === 'nouveaux' ? p.type === 'nouveau' : true).length;
+      const n = (d.propositions || []).filter(p => portee === 'maj' ? p.type === 'maj' : portee === 'nouveaux' ? p.type !== 'maj' : true).length;
       let t = n ? n + T(' résultat') + (n > 1 ? 's' : '') + T(' ci-dessous.') : (portee === 'maj' ? T('Tous tes modèles sont à jour.') : T('Rien de mieux pour ta machine.'));
       if (portee !== 'maj' && d.catalogue === 'absent') t += T(' (Aucun catalogue en ligne n\'est configuré : comparaison avec la liste livrée avec Lutin.)');
       if ((d.erreurs || []).length) t += ' ' + d.erreurs.join(' ; ');
@@ -1431,12 +1487,19 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     encours.forEach(id => VU_EN_COURS.add(id));
     ids.filter(id => pulls[id].statut === 'termine' && VU_EN_COURS.has(id) && !FINIS.has(id)).forEach(id => FINIS.set(id, maintenant));
     const finis = [...FINIS].filter(([, t]) => maintenant - t < 12000).map(([id]) => id);
-    const cle = JSON.stringify([encours.map(id => [id, pulls[id].fait, pulls[id].total, pulls[id].texte]), erreurs.map(id => [id, pulls[id].texte]), finis]);
+    // Les tâches de fond (fiche de suivi, calibrage, mesures de modèles) apparaissent dans la même barre, avec la mémoire que prend le modèle chargé.
+    const fond = [...(ETAT.taches_fond || []).map(t => '📝 ' + t + '…')];
+    if (ETAT.calibrage && ETAT.calibrage.en_cours) fond.push('⏱ ' + T('Calibrage de la vitesse') + (ETAT.calibrage.etape ? ' : ' + ETAT.calibrage.etape : '…'));
+    if (ETAT.bench && ETAT.bench.en_cours) fond.push('📏 ' + T('Mesure de ') + ETAT.bench.en_cours + (ETAT.bench.etape ? ' : ' + ETAT.bench.etape : '…') + ((ETAT.bench.file || []).length ? ' (+' + ETAT.bench.file.length + ' ' + T('en attente') + ')' : ''));
+    const gigas = n => (n / 1e9).toFixed(1).replace('.', ',') + ' ' + T('Go');
+    const mem = ETAT.memoire ? '🧠 ' + ETAT.memoire.modele + ' : ' + gigas(ETAT.memoire.taille) + (ETAT.memoire.taille ? ' · ' + Math.round(100 * ETAT.memoire.vram / ETAT.memoire.taille) + ' % ' + T('sur la carte graphique') : '') : '';
+    const cle = JSON.stringify([encours.map(id => [id, pulls[id].fait, pulls[id].total, pulls[id].texte]), erreurs.map(id => [id, pulls[id].texte]), finis, fond, mem]);
     if (b.dataset.cle === cle) return;
     b.dataset.cle = cle; b.textContent = '';
-    if (!encours.length && !erreurs.length && !finis.length) { b.hidden = true; return; }
+    if (!encours.length && !erreurs.length && !finis.length && !fond.length) { b.hidden = true; return; }
     b.hidden = false;
     const mo = n => Math.round(n / 1e6);
+    fond.forEach(t => b.appendChild(el('div', 'texte', t)));
     encours.slice(0, 3).forEach(id => {
       const p = pulls[id], pct = p.total ? Math.round(100 * p.fait / p.total) : null, ligne = el('div', 'ligne-dl');
       ligne.appendChild(el('span', 'texte', '⬇ ' + T('Téléchargement de ') + id + ' : ' + (pct !== null ? pct + ' % (' + mo(p.fait) + ' / ' + mo(p.total) + ' ' + T('Mo') + ')' : (p.texte || '…'))));
@@ -1458,6 +1521,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
       ligne.append(retry, fermer); b.appendChild(ligne);
     });
     finis.forEach(id => b.appendChild(el('div', 'texte', '✔ ' + id + T(' installé'))));
+    if (mem) b.appendChild(el('div', 'aide', mem));
   };
   const afficherDiagnostic = liste => {
     const bloc = $('diagnostic'), cle = JSON.stringify(liste);
@@ -1630,8 +1694,9 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
   const sauverReglages = enSerie(envoyerReglages);
   document.querySelectorAll('.onglets button').forEach(b => b.addEventListener('click', async () => {
     document.querySelectorAll('.onglets button').forEach(x => x.setAttribute('aria-selected', x === b)); document.querySelectorAll('.page').forEach(p => p.classList.toggle('vue', p.id === 'p-' + b.dataset.p));
+    if (!ETAT) await rafraichir();          // l'état du serveur (qui peut configurer, niveau d'accès…) est connu avant d'afficher un onglet qui en dépend
     if (b.dataset.p === 'memoire') { const m = await api('/api/memoire'); $('tContexte').value = m['CONTEXTE.md']; $('tMemoire').value = m['MEMOIRE.md']; chargerSkills(); chargerClaude(); chargerNotes(); chargerDocuments(); }
-    if (b.dataset.p === 'auto') { chargerPlanifie(); chargerAddons(); chargerAuto(); }
+    if (b.dataset.p === 'auto') { chargerPlanifie(); chargerAddons(); chargerAuto(); chargerMcp(); }
     if (b.dataset.p === 'modeles') rafraichir();
     if (b.dataset.p === 'acces') chargerAcces();
     if (b.dataset.p === 'chat' && CONV && !(FLUX && FLUX.detache)) lue(CONV.id);          // on revient lire : la pastille verte s'éteint tout de suite
@@ -2538,6 +2603,8 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     majChampsAcces();
     $('aPin').textContent = ACCES.niveau === 'reseau' ? T('Sur ton téléphone : ouvre l\'adresse affichée (ou vise le QR code avec l\'appareil photo), il se connecte tout seul. Le code est valable 10 minutes et ne sert qu\'une fois.') : (ACCES.niveau === 'proxy' ? T('Derrière un proxy, c\'est le proxy qui identifie : pas de code PIN.') : T('Pour connecter un téléphone, choisis d\'abord « Mon réseau local » ci-dessus, enregistre, puis redémarre Lutin.'));
     $('bPin').hidden = ACCES.niveau !== 'reseau' || !ETAT.configurateur;
+    $('blocPin').hidden = $('blocPin').hidden || ACCES.niveau !== 'reseau';
+    $('aPinAbsent').hidden = ACCES.niveau !== 'proxy';
     if (!$('bPin').hidden && Date.now() > PIN_JUSQU_A) nouveauPin();
     afficherAppareils();
   };
@@ -2658,6 +2725,58 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
   const saisieEnCours = z => z.contains(document.activeElement) && document.activeElement.matches('input,textarea,select');
   // La liste est construite HORS de la page (cartes ET panneaux, qui se remplissent après un appel au serveur), puis échangée d'un seul coup, et seulement si elle a changé : plus de clignotement,
   // et ce qui est en cours de saisie n'est jamais détruit. Si un chargement plus récent a démarré entre-temps, celui-ci s'abandonne.
+  // ---- Connecteurs MCP
+  const chargerMcp = async () => {
+    const z = $('listeMcp'); let r;
+    try { r = await api('/api/mcp'); } catch (e) { z.textContent = e.message; return; }
+    $('ajoutMcp').hidden = !r.modifiable;
+    z.textContent = '';
+    if (!r.connecteurs.length) z.appendChild(el('div', 'aide', T('Aucun connecteur pour le moment.')));
+    const appel = async (url, corps, msg) => { $('mMcp').textContent = msg || ''; try { await api(url, corps); } catch (e) { $('mMcp').textContent = e.message; } chargerMcp(); };
+    r.connecteurs.forEach(c => {
+      const d = el('div', 'carte'); d.style.cssText = 'flex-direction:column;align-items:stretch;gap:6px';
+      const tete = el('div', 'ligne'), actif = el('input'); actif.type = 'checkbox'; actif.checked = c.actif; actif.disabled = !r.modifiable;
+      actif.addEventListener('change', () => appel('/api/mcp-regler', { id: c.id, actif: actif.checked }));
+      tete.append(actif, el('b', '', ' ' + c.nom), el('span', 'aide', ' · ' + (c.type === 'http' ? c.url : (c.commande || []).join(' ')) + (c.connecte ? ' · ' + T('en marche') : '')));
+      d.appendChild(tete);
+      if (c.erreur) d.appendChild(el('div', 'erreur', c.erreur));
+      const bar = el('div', 'ligne');
+      const ro = el('input'); ro.type = 'checkbox'; ro.checked = c.lecture_seule; ro.disabled = !r.modifiable;
+      ro.addEventListener('change', () => appel('/api/mcp-regler', { id: c.id, lecture_seule: ro.checked }));
+      const lab = el('label'); lab.append(ro, document.createTextNode(' ' + T('Lecture seule (n\'offre que les outils qui ne modifient rien)')));
+      bar.appendChild(lab);
+      if (r.modifiable) {
+        const ac = el('button', '', T('Actualiser la liste des outils')); ac.addEventListener('click', () => appel('/api/mcp-actualiser', { id: c.id }, T('Connexion…')));
+        const su = el('button', '', T('Retirer')); su.addEventListener('click', () => { if (confirm(T('Retirer ce connecteur ?'))) appel('/api/mcp-supprimer', { id: c.id }); });
+        bar.append(ac, su);
+      }
+      d.appendChild(bar);
+      if (!c.outils.length) d.appendChild(el('div', 'aide', T('Aucun outil connu : clique sur « Actualiser la liste des outils ».')));
+      c.outils.forEach(o => {
+        const l = el('label'); l.style.display = 'block';
+        const cb = el('input'); cb.type = 'checkbox'; cb.checked = o.autorise; cb.disabled = !r.modifiable;
+        cb.addEventListener('change', () => appel('/api/mcp-regler', { id: c.id, outil: o.nom, autorise: cb.checked }));
+        l.append(cb, document.createTextNode(' '), el('b', '', o.nom), document.createTextNode(' ' + (o.lecture ? '🔍 ' + T('lecture') : '✏️ ' + T('modifie quelque chose')) + (o.description ? ' — ' + o.description : '')));
+        if (!o.lecture && c.lecture_seule) l.style.opacity = '.6';
+        d.appendChild(l);
+      });
+      z.appendChild(d);
+    });
+  };
+  $('bAjouterMcp').addEventListener('click', async () => {
+    const cible = $('cibleMcp').value.trim(), nom = $('nomMcp').value.trim(); if (!nom || !cible) { $('mMcp').textContent = T('Donne un nom et une commande (ou une adresse).'); return; }
+    try { const r = await api('/api/mcp-ajouter', /^https?:\/\//i.test(cible) ? { nom, url: cible } : { nom, commande: cible }); $('nomMcp').value = $('cibleMcp').value = ''; await api('/api/mcp-actualiser', { id: r.id }); $('mMcp').textContent = T('Connecté. Coche les outils que le modèle peut utiliser.'); }
+    catch (e) { $('mMcp').textContent = e.message; }
+    chargerMcp();
+  });
+  $('bDemoMcp').addEventListener('click', async () => {
+    try { const r = await api('/api/mcp-demo', {}); await api('/api/mcp-actualiser', { id: r.id }); $('mMcp').textContent = T('Connecté. Coche les outils que le modèle peut utiliser.'); }
+    catch (e) { $('mMcp').textContent = e.message; }
+    chargerMcp();
+  });
+  const explicationVerrou = () => ETAT.niveau === 'proxy'
+    ? T('🔒 Réglages verrouillés : le proxy t\'identifie, mais tu n\'es pas déclaré administrateur. Ajoute ton identifiant dans LUTIN_ADMINS (voir docs/DOCKER.md), ou configure depuis la machine avec « docker exec ».')
+    : T('🔒 Réglages verrouillés : ils ne se changent que depuis la machine où Lutin tourne (ouvre cette page là-bas).');
   const chargerAddons = async () => {
     const z = $('listeAddons'), seq = ++SEQ_ADDONS;
     clearTimeout(minuteurAddons);
@@ -2669,6 +2788,7 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
     r.liste.forEach(a => neuf.appendChild(carteAddon(a)));
     await Promise.all(ATTENTES_PANNEAUX);
     if (seq !== SEQ_ADDONS) return;
+    if (!ETAT.configurateur) neuf.insertBefore(el('div', 'attention', explicationVerrou()), neuf.firstChild);
     if (!saisieEnCours(z) && neuf.innerHTML !== z.innerHTML) z.replaceChildren(...neuf.childNodes);
     if ($('p-auto').classList.contains('vue') && r.liste.some(a => a.actif && PANNEAUX[a.id])) minuteurAddons = setTimeout(chargerAddons, 4000);          // les panneaux (travail de fond…) se rafraîchissent seuls
   };
@@ -3102,19 +3222,29 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
   $('bSMem').addEventListener('click', async () => { try { await api('/api/memoire', { fichier: 'MEMOIRE.md', texte: $('tMemoire').value }); $('mM').textContent = T('Enregistré.'); } catch (e) { $('mM').textContent = e.message; } });
   // ---- Bibliothèque d'Ollama
   let PAGE_DECOUVERTE = 1;
-  const carteDecouverte = m => {
+  const NIVEAU_PASTILLE = { ideal: '🟢', bien: '🟢', limite: '🟠', trop_gros: '🔴' };
+  const FAMILLES = ['qwen', 'llama', 'gemma', 'mistral', 'phi', 'granite', 'deepseek', 'smollm'];
+  const nombreCourt = n => n >= 1e6 ? (n / 1e6).toFixed(1) + ' M' : n >= 1e3 ? Math.round(n / 1e3) + ' k' : String(n);
+  const carteDecouverte = (m, cacherTropGros) => {
+    const evals = m.evaluations || {};
+    const tailles = (m.tailles.length ? m.tailles : ['']).filter(t => !(cacherTropGros && t && evals[t] && evals[t].niveau === 'trop_gros'));
+    if (!tailles.length) return null;
     const d = el('div', 'carte'); d.style.cssText = 'flex-direction:column;align-items:stretch;gap:4px';
     const t = el('div'); t.appendChild(el('b', '', m.nom));
     m.capacites.forEach(c => t.appendChild(el('span', 'aide', ' · ' + c)));
     if (m.maj) t.appendChild(el('span', 'aide', ' · ' + m.maj));
+    if (m.telechargements) t.appendChild(el('span', 'aide', ' · ' + nombreCourt(m.telechargements) + ' ↓'));
+    if (m.lien) { const a = el('a', '', ' ↗ ' + T('page du modèle')); a.href = m.lien; a.target = '_blank'; a.rel = 'noopener noreferrer'; t.appendChild(a); }
     d.appendChild(t);
     if (m.description) d.appendChild(el('div', 'aide', m.description));
     const b = el('div');
-    (m.tailles.length ? m.tailles : ['']).forEach(taille => {
-      const nom = taille ? m.nom + ':' + taille : m.nom;
-      const bt = el('button', '', taille ? T('Installer') + ' ' + taille : T('Installer')); bt.title = nom;
+    tailles.forEach(taille => {
+      const nom = taille ? m.nom + ':' + taille : m.nom, ev = evals[taille], deja = (m.installes || []).includes(taille);
+      const bt = el('button', '', (ev ? NIVEAU_PASTILLE[ev.niveau] + ' ' : '') + (deja ? '✔ ' + (taille || T('installé')) : (taille ? T('Installer') + ' ' + taille : T('Installer'))));
+      bt.title = nom + (ev ? ' — ' + T('≈ {} Go (estimation)').replace('{}', ev.go) + (ev.texte ? ' — ' + ev.texte : '') : '');
+      bt.disabled = deja; if (ev && ev.niveau === 'trop_gros') bt.style.opacity = '.55';
       bt.addEventListener('click', async () => {
-        try { await api('/api/installer-modele', { modele: nom }); $('msgModeles').textContent = T('Téléchargement de « ') + nom + T(' » lancé : il est ajouté à la liste ci-dessus, et apparaîtra dans le choix du modèle une fois installé.'); rafraichir(); }
+        try { await api('/api/installer-modele', { modele: nom }); $('msgModeles').textContent = T('Téléchargement de « ') + nom + T(' » lancé : il est ajouté à la liste ci-dessus, et apparaîtra dans le choix du modèle une fois installé.'); }
         catch (e) { $('msgDecouverte').textContent = e.message; }
       });
       b.appendChild(bt); b.appendChild(document.createTextNode(' '));
@@ -3124,15 +3254,21 @@ details.famille > summary::before { content:'▸ '; color:var(--muted); } detail
   };
   const decouvrir = async page => {
     $('msgDecouverte').textContent = T('Recherche…');
+    const usage = $('uDecouverte').value, categorie = ['tools', 'vision', 'thinking', 'embedding'].includes(usage) ? usage : '';
+    const terme = ($('qDecouverte').value.trim() + (usage === 'code' ? ' coder' : '')).trim();
     try {
-      const r = await api('/api/decouvrir?q=' + encodeURIComponent($('qDecouverte').value.trim()) + '&o=' + $('oDecouverte').value + '&p=' + page);
+      const r = await api('/api/decouvrir?q=' + encodeURIComponent(terme) + '&o=' + $('oDecouverte').value + '&p=' + page + '&c=' + categorie + '&leger=' + ($('cLegerDecouverte').checked ? 1 : 0));
       if (page === 1) $('listeDecouverte').textContent = '';
-      r.modeles.forEach(m => $('listeDecouverte').appendChild(carteDecouverte(m)));
-      PAGE_DECOUVERTE = page; $('bPlusDecouverte').hidden = !r.suite; $('msgDecouverte').textContent = r.modeles.length || page > 1 ? '' : T('Aucun résultat.');
+      let masques = 0;
+      r.modeles.forEach(m => { const c = carteDecouverte(m, $('cAdapteDecouverte').checked); if (c) $('listeDecouverte').appendChild(c); else masques++; });
+      PAGE_DECOUVERTE = page; $('bPlusDecouverte').hidden = !r.suite;
+      $('msgDecouverte').textContent = (masques ? T('{} modèle(s) masqué(s) car trop gros pour ta machine. ').replace('{}', masques) : '') + (r.modeles.length || page > 1 ? T('🟢 tient · 🟠 limite · 🔴 trop gros (estimation d\'après la taille).') : T('Aucun résultat.'));
     } catch (e) { $('msgDecouverte').textContent = e.message; }
   };
+  FAMILLES.forEach(f => { const c = el('button', '', f); c.addEventListener('click', () => { $('qDecouverte').value = f; decouvrir(1); }); $('famillesDecouverte').appendChild(c); $('famillesDecouverte').appendChild(document.createTextNode(' ')); });
   $('bComparer').addEventListener('click', async () => { try { await api('/api/bench-serie', { modeles: [...COMPARER].filter(id => installesDiscussion().includes(id)), rapide: false }); rafraichir(); } catch (e) { $('msgComparer').textContent = e.message; } });
   $('bDecouvrir').addEventListener('click', () => decouvrir(1));
+  ['uDecouverte', 'oDecouverte', 'cAdapteDecouverte', 'cLegerDecouverte'].forEach(id => $(id).addEventListener('change', () => decouvrir(1)));
   $('qDecouverte').addEventListener('keydown', e => { if (e.key === 'Enter') decouvrir(1); });
   $('bPlusDecouverte').addEventListener('click', () => decouvrir(PAGE_DECOUVERTE + 1));
   $('bAutre').addEventListener('click', async () => { const m = $('autreModele').value.trim(); if (!m) return; try { await api('/api/installer-modele', { modele: m }); $('autreModele').value = ''; $('msgModeles').textContent = T('Téléchargement de « ') + m + T(' » lancé : il est ajouté à la liste ci-dessus, et apparaîtra dans le choix du modèle une fois installé.'); rafraichir(); } catch (e) { $('msgModeles').textContent = e.message; } });

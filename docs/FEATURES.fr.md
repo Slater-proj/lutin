@@ -181,7 +181,17 @@ L'onglet Modèles a trois façons de suivre ce qui sort, sans attendre une nouve
 
 - **Chercher les mises à jour** compare tes modèles installés avec leur dernière version dans le registre d'Ollama.
 - **Chercher de nouveaux modèles** lit le catalogue que Lutin garde en ligne (vérifié une fois par jour) et propose de meilleurs choix pour ta machine. Ce catalogue est une sélection écrite à la main, avec une note par rôle : il suit les nouveautés seulement quand quelqu'un les y ajoute (une vérification hebdomadaire signale aussi les modèles disparus du registre).
-- **Bibliothèque d'Ollama** liste ce que montre ollama.com (récents ou populaires, avec une recherche) : nom, description, capacités (tools, vision, thinking) et tailles disponibles, avec un bouton **Installer** par taille. Rien n'est installé sans ton clic, et si le site change ou ne répond pas, la liste le dit et tu peux toujours installer un modèle par son nom.
+- **Bibliothèque d'Ollama** liste ce que montre ollama.com (récents ou populaires, avec une recherche) : nom, description, capacités (tools, vision, thinking) et tailles disponibles, avec un bouton **Installer** par taille. Rien n'est installé sans ton clic, et si le site change ou ne répond pas, la liste le dit et tu peux toujours installer un modèle par son nom. Tu peux filtrer par usage (agent qui appelle des outils, code, vision, réflexion, recherche dans tes documents), par famille (qwen, llama, gemma…) ou ne garder que les légers (4 milliards ou moins). Chaque taille dit si elle tient sur **ta** machine (🟢 tient · 🟠 limite · 🔴 trop gros : une estimation d'après la taille, en Q4), ce qui est trop gros peut être masqué, et chaque modèle a un lien vers sa page sur ollama.com.
+- **Anciens modèles** : quand le catalogue dit qu'un modèle est remplacé par un autre que tu as installé, l'onglet Modèles propose de supprimer l'ancien pour libérer la place (jamais sans ton clic).
+
+## Connecteurs MCP
+
+Un connecteur branche un serveur d'outils (Home Assistant, GitHub, fichiers…) sur l'assistant, depuis **Automatisation > Connecteurs MCP**. C'est un programme que Lutin lance (commande) ou une adresse qu'il appelle (https). Seule la machine elle-même, ou un administrateur déclaré, peut en ajouter : c'est lancer un programme.
+
+- **Aucun outil n'est donné au modèle tant que tu ne l'as pas coché**, outil par outil.
+- **Lecture seule par défaut** : un outil qui peut modifier quelque chose n'est pas proposé tant que « lecture seule » est cochée, et même alors il demande ton accord à **chaque** appel (jamais automatique) et s'inscrit au journal des actions.
+- Ce qui revient des outils est traité comme du contenu web : jamais affiché brut, jamais obéi, et l'accord automatique est suspendu pour la suite de la demande.
+- « Essayer le serveur de démonstration » ajoute un petit serveur fourni avec Lutin (l'heure, une addition, et un outil qui écrit une note), pour voir comment ça marche sans rien installer.
 
 ## Options de la conversation et modèle
 

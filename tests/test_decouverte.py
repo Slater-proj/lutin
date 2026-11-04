@@ -75,6 +75,32 @@ class Decouverte(unittest.TestCase):
         self.assertIn("nom", str(e.exception))
         self.assertFalse([k for k in decouverte.CACHE if k[0] == "x"], "une page illisible n'est pas gardée")
 
+    def test_categorie_leger_lien_et_estimation(self):
+        http = http_fixe(PAGE)
+        r = decouverte.chercher("", "newest", 1, http=http, categorie="tools")
+        self.assertIn("c=tools", http.appels[0], "le filtre de capacité d'ollama.com est transmis")
+        self.assertTrue(all(m["lien"] == "https://ollama.com/library/" + m["nom"] for m in r["modeles"]), "un lien vers la page de chaque modèle")
+        with self.assertRaises(ValueError):
+            decouverte.chercher("", "newest", 1, http=http, categorie="n-importe-quoi")
+        legers = decouverte.chercher("", "newest", 1, http=http_fixe(PAGE), leger=True)["modeles"]
+        self.assertTrue(all(any(0 < decouverte.milliards(t) <= decouverte.LEGER_B for t in m["tailles"]) for m in legers))
+        embeddings = decouverte.chercher("", "newest", 1, http=http_fixe(PAGE.replace(">tools<", ">embedding<", 1)), categorie="embedding")["modeles"]
+        self.assertTrue(any("embedding" in m["capacites"] for m in embeddings), "demandés expressément, les embeddings sont montrés")
+
+    def test_tailles_et_jugement_de_la_machine(self):
+        self.assertEqual(decouverte.milliards("8b"), 8)
+        self.assertEqual(decouverte.milliards("8x7b"), 56)
+        self.assertEqual(decouverte.milliards("e4b"), 4)
+        self.assertAlmostEqual(decouverte.milliards("270m"), 0.27)
+        self.assertEqual(decouverte.milliards("latest"), 0)
+        self.assertAlmostEqual(decouverte.go_estime("8b"), 5.0, delta=0.1)
+        liste = [{"nom": "x", "tailles": ["1b", "70b", "latest"], "capacites": []}]
+        evals = decouverte.evaluer_tailles(liste, lambda go: {"niveau": "trop_gros" if go > 20 else "bien", "texte": "t"})[0]["evaluations"]
+        self.assertEqual(evals["70b"]["niveau"], "trop_gros")
+        self.assertEqual(evals["1b"]["niveau"], "bien")
+        self.assertNotIn("latest", evals, "une étiquette sans taille n'est pas jugée")
+        self.assertNotIn("evaluations", liste[0], "la liste en cache n'est pas modifiée")
+
 
 if __name__ == "__main__":
     unittest.main()

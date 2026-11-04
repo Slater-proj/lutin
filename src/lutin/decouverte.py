@@ -13,6 +13,9 @@ from .i18n import t as _t
 
 URL = "https://ollama.com/search"
 ORDRES = ("newest", "popular")
+CATEGORIES = ("", "tools", "vision", "thinking", "embedding")          # le filtre « capacité » d'ollama.com (paramètre c)
+GO_PAR_MILLIARD = 0.62          # ordre de grandeur d'un modèle en Q4_K_M, contexte et marge compris : « 8b » ≈ 5 Go
+LEGER_B = 4          # « léger » : au plus 4 milliards de paramètres
 DUREE_CACHE = 15 * 60
 CAPACITES = ("tools", "vision", "thinking", "embedding", "audio", "cloud")
 RE_BLOC = re.compile(r'<li\s[^>]*>\s*<a href="/library/([A-Za-z0-9._-]+)"(.*?)</a>\s*</li>', re.S)
@@ -45,23 +48,60 @@ def analyser(page):
     return sortie
 
 
-def chercher(terme="", ordre="newest", page=1, http=miseajour.http_get, maintenant=time.time):
+def milliards(taille):
+    """Le nombre de milliards de paramètres d'une taille affichée (« 8b » → 8, « 8x7b » → 56, « e4b » → 4, « 270m » → 0.27), ou 0 si on ne sait pas."""
+    t = str(taille or "").lower()
+    m = re.match(r"^(\d+)x(\d+(?:\.\d+)?)b$", t)
+    if m:
+        return int(m.group(1)) * float(m.group(2))
+    m = re.match(r"^e?(\d+(?:\.\d+)?)([bm])$", t)
+    if not m:
+        return 0
+    return float(m.group(1)) * (1 if m.group(2) == "b" else 0.001)
+
+
+def go_estime(taille):
+    """Place estimée en Go d'une taille (Q4, la précision par défaut d'Ollama). Une estimation, pas une mesure : l'étiquette le dit."""
+    return round(max(milliards(taille) * GO_PAR_MILLIARD, 0.3), 1) if milliards(taille) else 0
+
+
+def evaluer_tailles(modeles, juger):
+    """Ajoute à chaque modèle `evaluations` : {taille: {go, niveau, texte}} d'après `juger(go) -> {niveau, texte}` (le jugement de cette machine). Ne modifie pas la liste d'origine (elle est en cache)."""
+    sortie = []
+    for m in modeles:
+        evals = {}
+        for t in m["tailles"]:
+            go = go_estime(t)
+            if go:
+                evals[t] = dict(juger(go), go=go)
+        sortie.append(dict(m, evaluations=evals))
+    return sortie
+
+
+def chercher(terme="", ordre="newest", page=1, http=miseajour.http_get, maintenant=time.time, categorie="", leger=False):
     """{modeles, suite} pour une recherche (vide = tout). Lève OSError si le site ne répond pas (ou en mode hors ligne)."""
     if ordre not in ORDRES:
         raise ValueError(_t("Tri inconnu."))
+    if categorie not in CATEGORIES:
+        raise ValueError(_t("Catégorie inconnue."))
     terme = re.sub(r"[^\w.:/ -]", "", str(terme or ""))[:60].strip()
     page = max(1, min(int(page or 1), 20))
-    cle = (terme, ordre, page)
+    cle = (terme, ordre, page, categorie, bool(leger))
     en_cache = CACHE.get(cle)
     if en_cache and maintenant() - en_cache[0] < DUREE_CACHE:
         return en_cache[1]
-    adresse = URL + "?" + urllib.parse.urlencode({"q": terme, "o": ordre, "p": page})
+    adresse = URL + "?" + urllib.parse.urlencode(dict({"q": terme, "o": ordre, "p": page}, **({"c": categorie} if categorie else {})))
     statut, _, corps = http(adresse)
     if statut != 200:
         raise OSError(_t("ollama.com a répondu {}.").format(statut))
     page_html = corps.decode("utf-8", "replace")
     trouves = analyser(page_html)
-    resultat = {"modeles": [m for m in trouves if "embedding" not in m["capacites"] and not ("cloud" in m["capacites"] and not m["tailles"])], "suite": 'data-has-more="true"' in page_html}          # ni modèles d'embeddings (pas de conversation), ni modèles seulement dans le nuage
+    gardes = [m for m in trouves if (categorie == "embedding" or "embedding" not in m["capacites"]) and not ("cloud" in m["capacites"] and not m["tailles"])]
+    if leger:
+        gardes = [m for m in gardes if any(0 < milliards(t) <= LEGER_B for t in m["tailles"])]          # au moins une taille qui tient sur une machine modeste
+    for m in gardes:
+        m["lien"] = "https://ollama.com/library/" + m["nom"]
+    resultat = {"modeles": gardes, "suite": 'data-has-more="true"' in page_html}          # ni modèles d'embeddings (pas de conversation), ni modèles seulement dans le nuage
     if not trouves:
         raise OSError(_t("La liste d'ollama.com n'a pas pu être lue (le site a peut-être changé). Tu peux toujours installer un modèle par son nom."))
     CACHE[cle] = (maintenant(), resultat)

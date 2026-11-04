@@ -181,7 +181,17 @@ The Models tab has three ways to follow what comes out, none of which needs a ne
 
 - **Check for updates** compares your installed models with their latest version in the Ollama registry.
 - **Look for new models** reads the catalogue Lutin keeps online (checked once a day) and suggests better choices for your machine. The catalogue is a hand-written selection with a mark per role: it follows the new releases only when someone adds them (a weekly check also reports models that disappeared from the registry).
-- **Ollama library** lists what ollama.com shows (newest or most popular, with a search box): name, description, abilities (tools, vision, thinking) and the available sizes, with an **Install** button per size. Nothing is installed without your click, and if the site changes or is unreachable the list says so and you can still install a model by its name.
+- **Ollama library** lists what ollama.com shows (newest or most popular, with a search box): name, description, abilities (tools, vision, thinking) and the available sizes, with an **Install** button per size. Nothing is installed without your click, and if the site changes or is unreachable the list says so and you can still install a model by its name. You can filter by use (agent that calls tools, code, vision, reasoning, document search), by family (qwen, llama, gemma…) or keep only the light ones (4 billion or fewer). Each size shows whether it fits **your** machine (🟢 fits · 🟠 borderline · 🔴 too big: an estimate from the size, in Q4), what is too big can be hidden, and each model links to its page on ollama.com.
+- **Old models**: when the catalogue says a model is replaced by another one that you have installed, the Models tab offers to delete the old one to free the space (never without your click).
+
+## MCP connectors
+
+A connector plugs a tool server (Home Assistant, GitHub, files…) into the assistant, from **Automation > MCP connectors**. It is a program Lutin launches (command) or an address it calls (https). Only the machine itself, or a declared administrator, can add one: it launches a program.
+
+- **No tool is given to the model until you tick it**, tool by tool.
+- **Read-only by default**: a tool that can change something is not offered while "read-only" is ticked, and even then it asks for your approval at **every** call (never automatic) and is written in the action journal.
+- What comes back from the tools is treated like web content: never shown raw, never obeyed, and automatic approval is suspended for the rest of the request.
+- "Try the demo server" adds a small server shipped with Lutin (the time, an addition, and a tool that writes a note), to see how it works without installing anything.
 
 ## Conversation options and model
 

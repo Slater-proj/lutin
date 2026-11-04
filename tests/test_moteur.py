@@ -359,7 +359,7 @@ class Assistant(unittest.TestCase):
         trace = [x for x in __import__("lutin.fichiers", fromlist=["x"]).lister()["liste"] if x["conversation"] == cid]
         self.assertEqual([x["nom"] for x in trace], ["docker-compose.yml"], "inscrit dans Réglages > Fichiers créés")
         outil = next(m["content"] for m in A.conv_lire(cid)["messages"] if m.get("role") == "tool")
-        self.assertIn(str(cible), outil, "le modèle reçoit le chemin complet")
+        self.assertIn(str(cible.resolve()), outil, "le modèle reçoit le chemin complet")
         ev = chat("Change-le", reponses=[[appel_outil("ecrire", chemin="docker-compose.yml", contenu="services: {a: {}}\n")], [{"content": "Fait."}]], options={"auto_ecriture": True})
         self.assertFalse(next(e for e in ev if e["type"] == "resultat").get("fichiers_joints"), "un fichier déjà là n'est pas présenté comme créé")
 
@@ -373,6 +373,24 @@ class Assistant(unittest.TestCase):
         self.assertNotIn("J'ai créé le fichier", " ".join(m.get("content") or "" for m in A.conv_lire(cid)["messages"] if m.get("role") == "assistant"), "le mensonge n'est pas gardé dans la conversation")
         ev = chat("Crée-en un autre", reponses=[[appel_outil("ecrire", chemin="swag/autre.yml", contenu="a: 1\n")], [{"content": "J'ai créé swag/autre.yml."}]], options={"auto_ecriture": True})
         self.assertFalse(any(e["type"] == "info" and "sans appeler d'outil" in e["texte"] for e in ev), "il a vraiment écrit : pas de remarque")
+
+    def test_connecteur_mcp_de_bout_en_bout(self):
+        """Un connecteur autorisé outil par outil est utilisable par le modèle ; son retour n'est jamais recopié dans la conversation."""
+        from lutin import mcp
+        mcp.ecrire({"serveurs": {}})
+        self.addCleanup(lambda: (mcp.fermer(), mcp.ecrire({"serveurs": {}})))
+        ident = mcp.ajouter("Demo", [sys.executable, "-m", "lutin.mcp_demo"], env={"PYTHONPATH": str(Path(__file__).resolve().parent.parent / "src")})
+        mcp.actualiser(ident)
+        mcp.regler(ident, outil="heure", autorise=True)
+        ev = chat("Quelle heure est-il ?", reponses=[[appel_outil("mcp__demo__heure")], [{"content": "Voilà l'heure."}]])
+        affiche = next(e for e in ev if e["type"] == "resultat")["texte"]
+        self.assertIn("non affiché", affiche)
+        cid = [e for e in ev if e["type"] == "debut"][0]["conversation"]
+        recu = next(m["content"] for m in A.conv_lire(cid)["messages"] if m.get("role") == "tool")
+        self.assertIn("CONTENU EXTERNE NON FIABLE", recu)
+        self.assertRegex(recu, r"\d{4}-\d\d-\d\d \d\d:\d\d:\d\d")
+        ev = chat("Note-le", reponses=[[appel_outil("mcp__demo__noter", texte="x")], [{"content": "Fait."}]])
+        self.assertTrue(any("pas disponible" in e["texte"] for e in ev if e["type"] == "resultat"), "un outil non autorisé n'est pas appelable")
 
     def test_commandes(self):
         ev = chat("Dis bonjour", reponses=[[appel_outil("executer", commande="echo bonjour-assistant")], [{"content": "."}]])
@@ -1207,6 +1225,21 @@ class Assistant(unittest.TestCase):
         self.assertIn("Aucun résultat", A.outil_web_chercher("introuvable", 6, {"web": True}))
         with self.assertRaises(A.ErreurOutil):
             A.outil_web_chercher("   ", 6, {"web": True})
+
+    def test_actualites_guidees_pour_un_petit_modele(self):
+        """« Les news du jour » : Lutin cherche et lit lui-même, le modèle ne fait que résumer (une seule réponse, sans outil), et le résultat brut n'est pas recopié dans la conversation."""
+        WEB_RECU.clear()
+        ev = chat("Quelles sont les news du jour ?", reponses=[[{"content": "Voici la synthèse du jour."}]], modele="petit:3b")
+        self.assertTrue(any(e["type"] == "outil" and e["nom"] == "web_chercher" for e in ev), "la recherche est lancée par Lutin")
+        self.assertIn("non affiché", next(e for e in ev if e["type"] == "resultat")["texte"])
+        cid = [e for e in ev if e["type"] == "debut"][0]["conversation"]
+        messages = A.conv_lire(cid)["messages"]
+        self.assertEqual([m["role"] for m in messages], ["user", "assistant", "tool", "assistant"])
+        self.assertIn("CONTENU WEB NON FIABLE", messages[2]["content"])
+        self.assertEqual(messages[3]["content"], "Voici la synthèse du jour.")
+        self.assertTrue(WEB_RECU, "le serveur de recherche a bien été interrogé")
+        ev = chat("Quelles sont les news du jour ?", reponses=[[{"content": "Je me débrouille seul."}]], modele="grand:70b")
+        self.assertFalse(any(e["type"] == "outil" for e in ev), "un grand modèle garde la main : Lutin ne cherche pas à sa place")
 
     def test_web_chercher_donne_le_debut_des_premieres_pages_pour_pouvoir_repondre(self):
         """Une recherche d'actualité ne rend plus seulement des liens : le début des premières pages est joint, pour qu'un petit modèle puisse faire une synthèse au lieu de recopier des adresses."""
@@ -2387,10 +2420,13 @@ class Assistant(unittest.TestCase):
         vrai = decouverte.chercher
         appels = []
         try:
-            decouverte.chercher = lambda q, o, p: appels.append((q, o, p)) or {"modeles": [{"nom": "x", "description": "d", "capacites": ["tools"], "tailles": ["8b"], "maj": "", "telechargements": 1}], "suite": False}
+            decouverte.chercher = lambda q, o, p, categorie="", leger=False: appels.append((q, o, p, categorie, leger)) or {"modeles": [{"nom": "x", "description": "d", "capacites": ["tools"], "tailles": ["8b"], "maj": "", "telechargements": 1}], "suite": False}
             r = lire("/api/decouvrir?q=qwen&o=popular&p=2")
-            self.assertEqual((r["modeles"][0]["nom"], appels[-1]), ("x", ("qwen", "popular", "2")))
-            decouverte.chercher = lambda q, o, p: (_ for _ in ()).throw(OSError("pas de réseau"))
+            self.assertEqual((r["modeles"][0]["nom"], appels[-1]), ("x", ("qwen", "popular", "2", "", False)))
+            self.assertIn("8b", r["modeles"][0]["evaluations"], "chaque taille est jugée pour cette machine")
+            lire("/api/decouvrir?q=qwen&c=tools&leger=1")
+            self.assertEqual(appels[-1][3:], ("tools", True))
+            decouverte.chercher = lambda q, o, p, categorie="", leger=False: (_ for _ in ()).throw(OSError("pas de réseau"))
             with self.assertRaises(urllib.error.HTTPError) as e:
                 lire("/api/decouvrir")
             self.assertEqual(e.exception.code, 503)
