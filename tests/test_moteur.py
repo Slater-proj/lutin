@@ -368,11 +368,11 @@ class Assistant(unittest.TestCase):
         ev = chat("Crée un compose swag", reponses=[[{"content": "J'ai créé le fichier docker-compose.yml dans le dossier de travail."}],
                                                     [appel_outil("ecrire", chemin="swag/docker-compose.yml", contenu="services: {}\n")], [{"content": "Voilà, c'est fait."}]], options={"auto_ecriture": True})
         self.assertTrue((PROJET / "swag" / "docker-compose.yml").is_file(), "le fichier existe vraiment après la remarque")
-        self.assertTrue(any(e["type"] == "info" and "sans l'avoir fait" in e["texte"] for e in ev))
+        self.assertTrue(any(e["type"] == "info" and "sans appeler d'outil" in e["texte"] for e in ev))
         cid = [e for e in ev if e["type"] == "debut"][0]["conversation"]
         self.assertNotIn("J'ai créé le fichier", " ".join(m.get("content") or "" for m in A.conv_lire(cid)["messages"] if m.get("role") == "assistant"), "le mensonge n'est pas gardé dans la conversation")
         ev = chat("Crée-en un autre", reponses=[[appel_outil("ecrire", chemin="swag/autre.yml", contenu="a: 1\n")], [{"content": "J'ai créé swag/autre.yml."}]], options={"auto_ecriture": True})
-        self.assertFalse(any(e["type"] == "info" and "sans l'avoir fait" in e["texte"] for e in ev), "il a vraiment écrit : pas de remarque")
+        self.assertFalse(any(e["type"] == "info" and "sans appeler d'outil" in e["texte"] for e in ev), "il a vraiment écrit : pas de remarque")
 
     def test_commandes(self):
         ev = chat("Dis bonjour", reponses=[[appel_outil("executer", commande="echo bonjour-assistant")], [{"content": "."}]])

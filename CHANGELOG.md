@@ -4,7 +4,7 @@ The following versions are published automatically (generated notes on the Relea
 
 ## 0.13.12
 
-- **Un modèle qui raconte avoir créé un fichier sans le faire est repris.** Dans une conversation réelle, un petit modèle répondait « J'ai créé le fichier docker-compose.yml » sans appeler l'outil d'écriture, jusqu'à confirmer que le dossier était vide… puis à recommencer. Quand la réponse affirme une écriture alors qu'aucun outil d'écriture n'a été appelé depuis ta demande, Lutin le lui fait remarquer (une seule fois), sans garder l'affirmation fausse dans la conversation.
+- **Un modèle qui raconte avoir agi sans le faire est repris (fichier, commande, recherche web, image, mémoire).** Dans une conversation réelle, un petit modèle répondait « J'ai créé le fichier docker-compose.yml » sans appeler l'outil d'écriture, jusqu'à confirmer que le dossier était vide… puis à recommencer. Quand la réponse affirme une écriture alors qu'aucun outil d'écriture n'a été appelé depuis ta demande, Lutin le lui fait remarquer (une seule fois), sans garder l'affirmation fausse dans la conversation. Le contrôle est prudent : verbe au passé à la première personne, outil réellement disponible, code cité ignoré, objet de type fichier exigé pour les écritures.
 
 **English.** When a model claims to have created a file without calling any write tool, Lutin points it out once and asks it to really do it.
 
