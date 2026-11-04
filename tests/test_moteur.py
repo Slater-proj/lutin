@@ -363,6 +363,17 @@ class Assistant(unittest.TestCase):
         ev = chat("Change-le", reponses=[[appel_outil("ecrire", chemin="docker-compose.yml", contenu="services: {a: {}}\n")], [{"content": "Fait."}]], options={"auto_ecriture": True})
         self.assertFalse(next(e for e in ev if e["type"] == "resultat").get("fichiers_joints"), "un fichier déjà là n'est pas présenté comme créé")
 
+    def test_un_modele_qui_raconte_avoir_cree_un_fichier_doit_le_faire(self):
+        """Petits modèles : « j'ai créé le fichier » sans aucun appel d'outil. Lutin le lui fait remarquer une fois ; s'il a réellement écrit, on le croit."""
+        ev = chat("Crée un compose swag", reponses=[[{"content": "J'ai créé le fichier docker-compose.yml dans le dossier de travail."}],
+                                                    [appel_outil("ecrire", chemin="swag/docker-compose.yml", contenu="services: {}\n")], [{"content": "Voilà, c'est fait."}]], options={"auto_ecriture": True})
+        self.assertTrue((PROJET / "swag" / "docker-compose.yml").is_file(), "le fichier existe vraiment après la remarque")
+        self.assertTrue(any(e["type"] == "info" and "sans l'avoir fait" in e["texte"] for e in ev))
+        cid = [e for e in ev if e["type"] == "debut"][0]["conversation"]
+        self.assertNotIn("J'ai créé le fichier", " ".join(m.get("content") or "" for m in A.conv_lire(cid)["messages"] if m.get("role") == "assistant"), "le mensonge n'est pas gardé dans la conversation")
+        ev = chat("Crée-en un autre", reponses=[[appel_outil("ecrire", chemin="swag/autre.yml", contenu="a: 1\n")], [{"content": "J'ai créé swag/autre.yml."}]], options={"auto_ecriture": True})
+        self.assertFalse(any(e["type"] == "info" and "sans l'avoir fait" in e["texte"] for e in ev), "il a vraiment écrit : pas de remarque")
+
     def test_commandes(self):
         ev = chat("Dis bonjour", reponses=[[appel_outil("executer", commande="echo bonjour-assistant")], [{"content": "."}]])
         self.assertFalse(any(e["type"] == "approbation" for e in ev), "une lecture simple n'a pas besoin d'accord")

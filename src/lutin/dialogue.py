@@ -29,6 +29,23 @@ RE_APPEL_MAL_FORME = re.compile(r"XML|syntax|parse|parsing|tool", re.I)
 
 
 RAPPEL_VIDE = "Ta dernière réponse était vide. Réponds maintenant à la demande de l'utilisateur, en t'appuyant sur ce que tu viens de lire ou de faire, ou appelle l'outil nécessaire."
+RAPPEL_FAUX_ACCOMPLI = "Tu viens de dire que tu as créé ou modifié un fichier, mais tu n'as appelé AUCUN outil d'écriture : rien n'existe sur le disque. Fais-le maintenant en appelant l'outil « ecrire » (chemin et contenu complet), puis seulement dis ce que tu as fait."
+AFFIRME_UNE_ECRITURE = re.compile(r"\b(?:j'ai|ai|viens de)\s+(?:cr[ée]{1,2}|[ée]crit|g[ée]n[ée]r[ée]|enregistr[ée]|modifi[ée]|ajout[ée])\b|\b(?:a|ont)\s+[ée]t[ée]\s+(?:cr[ée]{1,2}|[ée]crit|g[ée]n[ée]r[ée]|enregistr[ée]|modifi[ée])s?\b", re.I)
+OUTILS_QUI_ECRIVENT = {"ecrire", "modifier", "modifier_plusieurs", "creer_document", "executer"}
+
+
+def affirme_sans_agir(contenu, messages):
+    """Le modèle dit avoir créé ou modifié un fichier alors qu'il n'a appelé aucun outil d'écriture depuis la dernière demande de l'utilisateur (petits modèles : ils racontent au lieu de faire)."""
+    if not AFFIRME_UNE_ECRITURE.search(contenu or ""):
+        return False
+    for x in reversed(messages):
+        if x.get("role") == "user":
+            break
+        if x.get("role") == "tool" and x.get("tool_name") in OUTILS_QUI_ECRIVENT:
+            return False
+    return True
+
+
 RAPPEL_REPETITION = "Ta réflexion tournait en rond (les mêmes phrases revenaient). Ne réfléchis plus : réponds maintenant directement et brièvement à la demande de l'utilisateur."
 RAPPEL_APPEL = "Ton dernier appel d'outil était mal formé et a été rejeté. Recommence en appelant l'outil avec des arguments simples ; pour un long contenu, fais plusieurs petits appels."
 
@@ -983,6 +1000,8 @@ def boucle_agent(conv, r, emit, ctx, stop):
     if rappels_sources:
         emit({"type": "info", "texte": _t("📎 Rappels ajoutés d'après tes documents : {}").format(" ; ".join(rappels_sources[:4]))})
     fiche, consigne = "", ""
+    faux_accompli = ""                                                # texte d'un modèle qui prétend avoir écrit un fichier sans l'avoir fait (corrigé une seule fois par demande)
+    corrige_affirmation = False
     forcer_fin = False                                                # le modèle tourne en rond : un dernier tour SANS outil pour qu'il conclue, au lieu de couper net
     if r.get("memoire_longue") == "fichier":
         try:
@@ -1025,6 +1044,9 @@ def boucle_agent(conv, r, emit, ctx, stop):
         dernier_tour = idx_tour == tours_max - 1 or forcer_fin
         if dernier_tour:             # plus d'outils : le modèle doit répondre avec ce qu'il a trouvé
             msgs.append({"role": "user", "content": "Tu as assez d'informations. Réponds maintenant à ma demande avec ce que tu as vu, sans appeler d'outil. Si quelque chose manque, dis-le."})
+        if faux_accompli:
+            msgs += [{"role": "assistant", "content": faux_accompli}, {"role": "user", "content": RAPPEL_FAUX_ACCOMPLI}]
+            faux_accompli = ""
         msgs_base = msgs
         options = _m.options_modele(r, r["temperature"])
         if r.get("num_predict", 0) > 0:
@@ -1204,6 +1226,11 @@ def boucle_agent(conv, r, emit, ctx, stop):
         message = {"role": "assistant", "content": contenu}
         if appels:
             message["tool_calls"] = appels
+        if not appels and not corrige_affirmation and not dernier_tour and "ecrire" in ctx["outils_autorises"] and affirme_sans_agir(contenu, conv["messages"]):
+            corrige_affirmation, faux_accompli = True, contenu
+            _m.journaliser("Le modèle {} affirme avoir écrit un fichier sans appeler d'outil : je le lui fais remarquer.".format(r["modele"]))
+            emit({"type": "info", "texte": _t("Le modèle dit avoir créé un fichier sans l'avoir fait : je lui demande de le faire pour de vrai.")})
+            continue
         conv["messages"].append(message)
         if not appels:
             break

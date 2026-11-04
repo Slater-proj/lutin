@@ -2,6 +2,12 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## 0.13.12
+
+- **Un modèle qui raconte avoir créé un fichier sans le faire est repris.** Dans une conversation réelle, un petit modèle répondait « J'ai créé le fichier docker-compose.yml » sans appeler l'outil d'écriture, jusqu'à confirmer que le dossier était vide… puis à recommencer. Quand la réponse affirme une écriture alors qu'aucun outil d'écriture n'a été appelé depuis ta demande, Lutin le lui fait remarquer (une seule fois), sans garder l'affirmation fausse dans la conversation.
+
+**English.** When a model claims to have created a file without calling any write tool, Lutin points it out once and asks it to really do it.
+
 ## 0.13.11
 
 - **Tout fichier créé par Lutin est tracé.** Un fichier écrit avec l'outil d'écriture (par exemple un `docker-compose.yml`) n'apparaissait nulle part : ni sous le message, ni dans Réglages > Fichiers créés par Lutin. Il y figure désormais dès sa création, et le modèle reçoit le chemin complet du fichier (il peut dire précisément où il est). Un fichier simplement modifié n'est pas compté comme créé.
