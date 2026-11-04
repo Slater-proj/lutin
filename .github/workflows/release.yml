@@ -159,14 +159,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       # Image complète (Lutin + Ollama) : celle de « :latest » et de « :X.Y.Z »
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@v7
         with:
           context: .
           target: complet
@@ -180,7 +180,7 @@ jobs:
             org.opencontainers.image.version=${{ needs.version.outputs.version }}
             org.opencontainers.image.licenses=MIT
       # Image légère (Lutin seul, Ollama ailleurs) : « :slim » et « :X.Y.Z-slim »
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@v7
         with:
           context: .
           target: leger
@@ -194,7 +194,7 @@ jobs:
             org.opencontainers.image.version=${{ needs.version.outputs.version }}
             org.opencontainers.image.licenses=MIT
       # Image complète pour cartes AMD (base ollama/ollama:*-rocm) : « :rocm » et « :X.Y.Z-rocm ». Jamais vérifiée sur une vraie carte AMD ; un échec de construction ne bloque pas le reste.
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@v7
         continue-on-error: true
         with:
           context: .
