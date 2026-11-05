@@ -87,6 +87,8 @@ class FauxOllama(BaseHTTPRequestHandler):
         if self.path == "/api/pull":
             if corps.get("model") == "sans-cle:1b":                      # le dossier .ollama a été supprimé pendant qu'Ollama tournait
                 self.wfile.write(ligne(error="pull model manifest: open C:/Users/X/.ollama/id_ed25519: The system cannot find the path specified.")); return
+            if corps.get("model") == "mac-seulement:4b":                  # modèle MLX (puce Apple) sur une machine sans MLX
+                self.wfile.write(ligne(error="this model requires MLX support, but the MLX runtime is not available")); return
             if corps.get("model") == "inexistant:1m":                    # le registre ne connaît pas cette étiquette
                 self.wfile.write(ligne(error="pull model manifest: file does not exist")); return
             for t, f in (("pulling manifest", 0), ("downloading", 50), ("downloading", 100), ("success", 100)):
@@ -906,6 +908,19 @@ class Assistant(unittest.TestCase):
         self.assertIn("n'existe pas dans la bibliothèque", p["texte"])
         self.assertNotIn("inexistant:1m", A.lire_registre_modeles()["perso"], "il n'encombre pas la liste")
         A.PULLS.pop("inexistant:1m", None)
+
+    def test_modele_mlx_sur_une_machine_sans_mlx_est_explique(self):
+        post("/api/installer-modele", {"modele": "mac-seulement:4b"})
+        for _ in range(60):
+            if lire("/api/etat")["pulls"]["mac-seulement:4b"]["statut"] != "en cours":
+                break
+            time.sleep(0.05)
+        p = lire("/api/etat")["pulls"]["mac-seulement:4b"]
+        self.assertEqual(p["statut"], "erreur")
+        self.assertIn("fait pour les Mac", p["texte"])
+        self.assertNotIn("MLX runtime", p["texte"], "plus de message brut")
+        self.assertNotIn("mac-seulement:4b", A.lire_registre_modeles()["perso"])
+        A.PULLS.pop("mac-seulement:4b", None)
 
     def test_recherche_web_puis_creation_du_fichier_meme_si_le_modele_s_arrete(self):
         """Le cas réel : le modèle cherche sur le web puis s'arrête sans écrire. Lutin le relance une fois, et le fichier existe."""

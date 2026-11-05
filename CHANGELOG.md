@@ -2,6 +2,14 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## 0.14.2
+
+- **Réglages verrouillés sous Docker : la page dit quoi faire.** Dans Docker, le navigateur n'est jamais « sur la machine » de Lutin : sans administrateur déclaré, les extensions, les dossiers de travail et les connecteurs MCP sont verrouillés. Le message explique maintenant les deux solutions (niveau proxy + `LUTIN_ADMINS`, ou `docker exec lutin lutin …`), et la documentation Docker les détaille.
+- **Connecteurs MCP : comment en ajouter.** La section affiche des exemples (programme ou adresse), explique ce qui se passe ensuite (liste des outils à cocher) et, quand la page est verrouillée, pourquoi et comment faire autrement. Nouvelle commande `lutin mcp` (lister, ajouter, retirer, actualiser, autoriser, interdire, ecriture) pour tout faire en ligne de commande, notamment dans Docker.
+- **Modèle réservé aux Mac (MLX).** « this model requires MLX support » devient une explication claire (ce modèle est fait pour la puce Apple, choisis-en un autre) et le modèle est retiré de ta liste.
+
+**English.** Locked settings under Docker now explain what to do; MCP connectors: examples, explanations and a new `lutin mcp` command; a clear message for Mac-only (MLX) models.
+
 ## 0.14.1
 
 - **Bibliothèque d'Ollama : plus de doublons.** Un modèle n'apparaît qu'une fois, y compris avec « Voir la suite ». Les étiquettes qui ne sont pas des tailles (« 1m », une longueur de contexte) ne sont plus proposées à l'installation.

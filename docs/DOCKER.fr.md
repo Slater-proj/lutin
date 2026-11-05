@@ -161,6 +161,8 @@ Le fichier [docker-compose.proxy.yml](../docker-compose.proxy.yml) ne publie **a
 | `LUTIN_BUDGET_GO` | impose le maximum pour les modèles (Go) si tu préfères ne pas limiter le conteneur |
 | `OLLAMA_NUM_PARALLEL=1`, `OLLAMA_MAX_LOADED_MODELS=1`, `OLLAMA_KEEP_ALIVE=5m` | une demande à la fois, un modèle à la fois, la RAM rendue après 5 minutes de silence |
 
+**Régler depuis la page, ou en ligne de commande.** Dans Docker, le navigateur n'est jamais « sur la machine » du conteneur : sans `LUTIN_ADMINS`, la page dit que les réglages (extensions, dossiers de travail, connecteurs MCP) sont verrouillés. Deux solutions : déclarer ton identifiant Authelia dans `LUTIN_ADMINS` (puis `docker compose up -d`), ou tout faire en ligne de commande : `docker exec lutin lutin travaux ajouter /travail`, `docker exec lutin lutin mcp ajouter mon-serveur https://…/mcp` puis `lutin mcp actualiser mon-serveur` et `lutin mcp autoriser mon-serveur <outil>`. Un connecteur MCP « programme » (npx…) tourne **dans le conteneur** : préfère un connecteur par adresse.
+
 ### 2. Régler le reverse proxy
 
 Trois points comptent pour Lutin, quel que soit le proxy :

@@ -532,6 +532,7 @@ button.principal { box-shadow:0 6px 16px -8px rgba(63,143,232,.8); }
       <button id="bAjouterMcp" class="principal">Ajouter</button>
       <button id="bDemoMcp" title="Un petit serveur fourni avec Lutin, pour essayer sans rien installer">Essayer le serveur de démonstration</button>
     </div>
+    <div class="aide" id="aideAjoutMcp"></div>
     <div class="aide" id="mMcp"></div>
   </div></section>
   <section class="page" id="p-acces"><div class="cadre">
@@ -2731,6 +2732,7 @@ button.principal { box-shadow:0 6px 16px -8px rgba(63,143,232,.8); }
     const z = $('listeMcp'); let r;
     try { r = await api('/api/mcp'); } catch (e) { z.textContent = e.message; return; }
     $('ajoutMcp').hidden = !r.modifiable;
+    $('aideAjoutMcp').textContent = r.modifiable ? T('Exemples : « npx -y @modelcontextprotocol/server-filesystem C:/mes-documents » (un programme que Lutin lance), ou « https://mon-serveur/mcp » (une adresse). Après l\'ajout, Lutin liste les outils du connecteur : coche ceux que le modèle peut utiliser. Dans Docker, le programme tourne dans le conteneur : préfère une adresse.') : explicationVerrou() + ' ' + T('Les connecteurs s\'ajoutent aussi en ligne de commande : lutin mcp ajouter <nom> <commande ou adresse>, puis lutin mcp actualiser <nom> et lutin mcp autoriser <nom> <outil>.');
     z.textContent = '';
     if (!r.connecteurs.length) z.appendChild(el('div', 'aide', T('Aucun connecteur pour le moment.')));
     const appel = async (url, corps, msg) => { $('mMcp').textContent = msg || ''; try { await api(url, corps); } catch (e) { $('mMcp').textContent = e.message; } chargerMcp(); };
@@ -2776,8 +2778,10 @@ button.principal { box-shadow:0 6px 16px -8px rgba(63,143,232,.8); }
     chargerMcp();
   });
   const explicationVerrou = () => ETAT.niveau === 'proxy'
-    ? T('🔒 Réglages verrouillés : le proxy t\'identifie, mais tu n\'es pas déclaré administrateur. Ajoute ton identifiant dans LUTIN_ADMINS (voir docs/DOCKER.md), ou configure depuis la machine avec « docker exec ».')
-    : T('🔒 Réglages verrouillés : ils ne se changent que depuis la machine où Lutin tourne (ouvre cette page là-bas).');
+    ? T('🔒 Réglages verrouillés : le proxy t\'identifie, mais tu n\'es pas déclaré administrateur. Ajoute ton identifiant dans la variable LUTIN_ADMINS du docker-compose (voir docs/DOCKER.md), puis redémarre le conteneur.')
+    : (ETAT.docker
+      ? T('🔒 Réglages verrouillés : dans Docker, le navigateur n\'est jamais « sur la machine » de Lutin, donc la page ne peut pas les modifier à ce niveau d\'accès. Passe au niveau proxy (LUTIN_NIVEAU=proxy derrière Authelia) et déclare ton identifiant dans LUTIN_ADMINS (voir docs/DOCKER.md). Sans cela : docker exec lutin lutin travaux … ou lutin mcp …')
+      : T('🔒 Réglages verrouillés : ils ne se changent que depuis la machine où Lutin tourne (ouvre cette page là-bas).'));
   const chargerAddons = async () => {
     const z = $('listeAddons'), seq = ++SEQ_ADDONS;
     clearTimeout(minuteurAddons);

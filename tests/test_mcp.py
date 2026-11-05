@@ -118,6 +118,34 @@ class Mcp(unittest.TestCase):
         with self.assertRaises(ValueError):
             mcp.ajouter("Démonstration", ["a"])
 
+    def test_la_ligne_de_commande_ajoute_actualise_autorise_et_retire(self):
+        """Dans Docker la page ne peut pas modifier les connecteurs : `lutin mcp …` le fait."""
+        import contextlib
+        import io
+        from lutin import cli
+        ancienne = mcp.lire()
+        self.addCleanup(lambda: mcp.ecrire(ancienne))
+        def commande(action, nom=None, cible=None, env=()):
+            with contextlib.redirect_stdout(io.StringIO()) as sortie:
+                code = cli.commande_mcp(type("A", (), {"action": action, "nom": nom, "cible": cible, "env": list(env)})())
+            return code, sortie.getvalue()
+        code, texte = commande("lister")
+        self.assertEqual(code, 0)
+        self.assertIn("demonstration", texte)
+        code, texte = commande("ajouter", "Autre", "https://exemple.org/mcp")
+        self.assertEqual(code, 0)
+        self.assertIn("autre", texte)
+        self.assertEqual(mcp.lire()["serveurs"]["autre"]["type"], "http")
+        code, texte = commande("ajouter", "Autre", "https://exemple.org/mcp")
+        self.assertEqual(code, 1, "un nom déjà pris est refusé")
+        code, texte = commande("retirer", "Autre")
+        self.assertEqual(code, 0)
+        self.assertNotIn("autre", mcp.lire()["serveurs"])
+        code, texte = commande("autoriser", "Démonstration", "heure")
+        self.assertEqual(code, 0)
+        self.assertTrue(mcp.lire()["serveurs"]["demonstration"]["outils"]["heure"]["autorise"])
+        commande("interdire", "Démonstration", "heure")
+
     def test_modes(self):
         self.assertTrue(modes.sans_outils("discussion"))
         self.assertTrue(modes.lecture_seule("recherche"))

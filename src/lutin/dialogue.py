@@ -539,8 +539,12 @@ def installer_modele(modele):
                 # Ollama signe ses demandes au registre avec une clé gardée dans son dossier « .ollama » (à côté de son historique, PAS dans le dossier des modèles). Si ce dossier a été supprimé ou
                 # déplacé pendant qu'Ollama tournait, il ne la retrouve plus : il la recrée à son démarrage.
                 PULLS[modele].update({"statut": "erreur", "aide": "redemarrer", "texte": _t("Ollama ne retrouve plus son fichier d'identité (id_ed25519, dans son dossier .ollama : il a été supprimé ou déplacé). Il le recrée à son démarrage : redémarre Ollama, puis réessaie.")})
-            elif "does not exist" in texte.lower() or "file does not exist" in texte.lower():
-                PULLS[modele].update({"statut": "erreur", "texte": _t("Ce modèle (ou cette taille) n'existe pas dans la bibliothèque d'Ollama : « {} ». Vérifie son nom exact sur sa page ollama.com. Il est retiré de ta liste.").format(modele)})
+            elif "does not exist" in texte.lower() or "requires mlx" in texte.lower() or "mlx runtime" in texte.lower():
+                if "mlx" in texte.lower():
+                    message = _t("« {} » est fait pour les Mac (MLX, la puce Apple) : il ne tourne pas sur cette machine. Choisis un autre modèle, ou une autre taille sans « mlx » dans son nom. Il est retiré de ta liste.").format(modele)
+                else:
+                    message = _t("Ce modèle (ou cette taille) n'existe pas dans la bibliothèque d'Ollama : « {} ». Vérifie son nom exact sur sa page ollama.com. Il est retiré de ta liste.").format(modele)
+                PULLS[modele].update({"statut": "erreur", "texte": message})
                 try:
                     reg2 = lire_registre_modeles()
                     if modele in reg2["perso"]:

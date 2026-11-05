@@ -128,6 +128,11 @@ def parseur():
     im.add_argument("--nom", default="", help=_t("nom affiché"))
     lg = sp.add_parser("langue", help=_t("langue de l'application (fr, en ou auto)"))
     lg.add_argument("valeur", nargs="?", help="fr | en | auto")
+    mc = sp.add_parser("mcp", help=_t("connecteurs MCP (serveurs d'outils)"))
+    mc.add_argument("action", nargs="?", choices=("lister", "ajouter", "retirer", "actualiser", "autoriser", "interdire", "ecriture"), default="lister")
+    mc.add_argument("nom", nargs="?", help=_t("nom du connecteur"))
+    mc.add_argument("cible", nargs="?", help=_t("commande à lancer ou adresse http (ajouter) ; nom de l'outil (autoriser, interdire)"))
+    mc.add_argument("--env", action="append", default=[], help=_t("variable d'environnement CLE=VALEUR (ajouter), répétable"))
     sp.add_parser("zone", help=_t("Lutin dans la zone de notification de Windows, sans fenêtre de console (code PIN, redémarrer, quitter)"))
     return p
 
@@ -393,6 +398,46 @@ def commande_travaux(args):
     return 0
 
 
+def commande_mcp(args):
+    """Les connecteurs MCP en ligne de commande (utile dans Docker, où la page ne peut pas les modifier)."""
+    d, cfg = contexte()
+    actif = travaux.actif(cfg)          # le moteur lit ces dossiers à l'import : on les fixe sans rien créer (ni dossier de travail, ni réglage)
+    os.environ.setdefault("LUTIN_RACINE", str(actif["chemin"] if actif else Path.home() / "Lutin"))
+    os.environ.setdefault("LUTIN_DONNEES", str(d["donnees"]))
+    os.environ.setdefault("LUTIN_MEMOIRE", str(d["memoire"]))
+    from . import mcp
+    try:
+        if args.action == "ajouter":
+            if not args.nom or not args.cible:
+                raise ValueError(_t("lutin mcp ajouter <nom> <commande ou adresse>"))
+            env = dict(x.split("=", 1) for x in args.env if "=" in x)
+            ident = mcp.ajouter(args.nom, None if args.cible.lower().startswith(("http://", "https://")) else args.cible, args.cible if args.cible.lower().startswith(("http://", "https://")) else "", env)
+            print(_t("✔ Connecteur « {} » ajouté. Étape suivante : lutin mcp actualiser {}").format(ident, ident))
+        elif args.action == "retirer":
+            mcp.supprimer(mcp.identifiant(args.nom))
+            print(_t("✔ Connecteur retiré."))
+        elif args.action == "actualiser":
+            n = mcp.actualiser(mcp.identifiant(args.nom))
+            mcp.fermer()
+            print(_t("✔ {} outil(s) trouvé(s). Autorise ceux que le modèle peut utiliser : lutin mcp autoriser {} <outil>").format(n, args.nom))
+        elif args.action in ("autoriser", "interdire"):
+            mcp.regler(mcp.identifiant(args.nom), outil=args.cible, autorise=args.action == "autoriser")
+            print(_t("✔ Fait."))
+        elif args.action == "ecriture":
+            mcp.regler(mcp.identifiant(args.nom), lecture_seule=False)
+            print(_t("✔ Ce connecteur n'est plus en lecture seule : ses outils qui modifient quelque chose restent soumis à ton accord, à chaque appel."))
+    except ValueError as e:
+        print("✘ " + str(e), file=sys.stderr)
+        return 1
+    for c in mcp.vue():
+        print("{:<16} {:<8} {}".format(c["id"], _t("lecture seule") if c["lecture_seule"] else _t("écriture"), (c["url"] or " ".join(c["commande"] or []))[:60]))
+        for o in c["outils"]:
+            print("    {} {:<28} {}".format("☑" if o["autorise"] else "☐", o["nom"], _t("lecture") if o["lecture"] else _t("modifie quelque chose")))
+    if not mcp.vue():
+        print(_t("Aucun connecteur : lutin mcp ajouter <nom> <commande ou adresse>"))
+    return 0
+
+
 def commande_journal(args):
     d, _ = contexte()
     f = Path(d["donnees"]) / "journal-actions.jsonl"
@@ -632,7 +677,7 @@ def principal(argv=None):
     os.environ["LUTIN_CONFIG"] = str(Path(config.dossiers()["config"]) / "config.json")          # les gardes (mode hors ligne…) lisent la configuration de cette installation
     commandes = {"setup": commande_setup, "serve": commande_serve, "update": commande_update, "chat": commande_chat, "modeles": commande_modeles, "pin": commande_pin,
                  "appareils": commande_appareils, "securite": commande_securite, "langue": commande_langue, "importer": commande_importer, "reprendre": commande_reprendre, "hors-ligne": commande_hors_ligne,
-                 "travaux": commande_travaux, "journal": commande_journal, "bench": commande_bench, "sauvegarde": commande_sauvegarde, "restaurer": commande_restaurer, "doctor": commande_doctor, "zone": commande_zone}
+                 "travaux": commande_travaux, "journal": commande_journal, "bench": commande_bench, "sauvegarde": commande_sauvegarde, "restaurer": commande_restaurer, "doctor": commande_doctor, "zone": commande_zone, "mcp": commande_mcp}
     try:
         if args.commande is None:
             return commande_serve(argparse.Namespace(sans_navigateur=False))
