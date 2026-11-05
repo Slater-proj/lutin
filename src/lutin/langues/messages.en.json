@@ -1382,5 +1382,6 @@
 "✔ Ce connecteur n'est plus en lecture seule : ses outils qui modifient quelque chose restent soumis à ton accord, à chaque appel.": "✔ This connector is no longer read-only: its tools that change something still need your approval at every call.",
 "« {} » est fait pour les Mac (MLX, la puce Apple) : il ne tourne pas sur cette machine. Choisis un autre modèle, ou une autre taille sans « mlx » dans son nom. Il est retiré de ta liste.": "“{}” is made for Macs (MLX, Apple silicon): it does not run on this machine. Pick another model, or another size without “mlx” in its name. It is removed from your list.",
 "Le moteur installé et géré par Lutin : modèles téléchargés depuis la bibliothèque d'Ollama, réglages de vitesse et de mémoire.": "The engine installed and managed by Lutin: models downloaded from the Ollama library, speed and memory settings.",
-"Moteur inconnu.": "Unknown engine."
+"Moteur inconnu.": "Unknown engine.",
+" Dans Docker : ajoute LUTIN_ADMIN_TOUS=1 aux variables du conteneur (ou, derrière un proxy, ton identifiant dans LUTIN_ADMINS), puis redémarre-le.": " In Docker: add LUTIN_ADMIN_TOUS=1 to the container variables (or, behind a proxy, your user name in LUTIN_ADMINS), then restart it."
 }

@@ -161,6 +161,8 @@ The [docker-compose.proxy.yml](../docker-compose.proxy.yml) file publishes **no 
 | `LUTIN_BUDGET_GO` | sets the maximum for the models (GB) if you prefer not to limit the container |
 | `OLLAMA_NUM_PARALLEL=1`, `OLLAMA_MAX_LOADED_MODELS=1`, `OLLAMA_KEEP_ALIVE=5m` | one request at a time, one model at a time, RAM given back after 5 minutes of silence |
 
+**`LUTIN_ADMIN_TOUS=1`: configuration from the page, for everybody who is connected.** In Docker the browser is never "on the machine": without this variable (or `LUTIN_ADMINS` behind a proxy), deleting a created file or adding a working folder, an extension or a connector is refused from the page. With `LUTIN_ADMIN_TOUS=1`, anybody **already admitted** (device paired with a PIN, or proxy user) can do it. Keep it for personal use or a small circle of trust: these settings can read and write the folders mounted in the container and launch programs **inside** the container. The access level itself is still only changed through the container variables.
+
 **Configuring from the page or the command line.** In Docker the browser is never "on the machine" of the container: without `LUTIN_ADMINS`, the page says settings (extensions, working folders, MCP connectors) are locked. Two ways out: declare your Authelia user name in `LUTIN_ADMINS` (then `docker compose up -d`), or do everything on the command line: `docker exec lutin lutin travaux ajouter /travail`, `docker exec lutin lutin mcp ajouter my-server https://…/mcp`, then `lutin mcp actualiser my-server` and `lutin mcp autoriser my-server <tool>`. An MCP "program" connector (npx…) runs **inside the container**: prefer a connector by address.
 
 ### 2. Set up the reverse proxy

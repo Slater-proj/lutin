@@ -11,6 +11,7 @@ services:
     environment:
       # LUTIN_LANGUE: fr                # fr or en. Optional: the language is also a setting of the page (Settings) / facultatif : la langue se règle aussi dans la page (Réglages). Default / défaut : en
       LUTIN_NIVEAU: reseau              # reseau (PIN code / code PIN) or proxy (behind Authelia & co: add LUTIN_URL_PUBLIQUE and LUTIN_PROXY_IP)
+      # LUTIN_ADMIN_TOUS: "1"          # lets everybody who is connected configure from the page (delete created files, folders, extensions) / toute personne connectée peut configurer depuis la page (docs/DOCKER.md)
       # LUTIN_URL_PUBLIQUE: https://lutin.example.com
       # LUTIN_PROXY_IP: 172.18.0.1,192.168.1.10
       # LUTIN_HORS_LIGNE: "1"           # strict offline mode / mode hors ligne strict : no connection to the Internet / aucune connexion vers Internet

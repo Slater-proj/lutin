@@ -2796,9 +2796,9 @@ button.principal { box-shadow:0 6px 16px -8px rgba(63,143,232,.8); }
   };
   $('selMoteur').addEventListener('change', async () => { try { await api('/api/reglages', { moteur: $('selMoteur').value }); } catch (e) { $('aideMoteur').textContent = e.message; } rafraichir(); chargerMoteurs(); });
   const explicationVerrou = () => ETAT.niveau === 'proxy'
-    ? T('🔒 Réglages verrouillés : le proxy t\'identifie, mais tu n\'es pas déclaré administrateur. Ajoute ton identifiant dans la variable LUTIN_ADMINS du docker-compose (voir docs/DOCKER.md), puis redémarre le conteneur.')
+    ? T('🔒 Réglages verrouillés : le proxy t\'identifie, mais tu n\'es pas déclaré administrateur. Ajoute ton identifiant dans la variable LUTIN_ADMINS du docker-compose (ou LUTIN_ADMIN_TOUS=1 pour ouvrir à tous les utilisateurs connectés ; voir docs/DOCKER.md), puis redémarre le conteneur.')
     : (ETAT.docker
-      ? T('🔒 Réglages verrouillés : dans Docker, le navigateur n\'est jamais « sur la machine » de Lutin, donc la page ne peut pas les modifier à ce niveau d\'accès. Passe au niveau proxy (LUTIN_NIVEAU=proxy derrière Authelia) et déclare ton identifiant dans LUTIN_ADMINS (voir docs/DOCKER.md). Sans cela : docker exec lutin lutin travaux … ou lutin mcp …')
+      ? T('🔒 Réglages verrouillés : dans Docker, le navigateur n\'est jamais « sur la machine » de Lutin, donc la page ne peut pas les modifier à ce niveau d\'accès. Ajoute LUTIN_ADMIN_TOUS=1 aux variables du conteneur (toute personne connectée pourra alors configurer), ou passe au niveau proxy derrière Authelia avec ton identifiant dans LUTIN_ADMINS (voir docs/DOCKER.md). Sans cela : docker exec lutin lutin travaux … ou lutin mcp …')
       : T('🔒 Réglages verrouillés : ils ne se changent que depuis la machine où Lutin tourne (ouvre cette page là-bas).'));
   const chargerAddons = async () => {
     const z = $('listeAddons'), seq = ++SEQ_ADDONS;

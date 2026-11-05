@@ -161,6 +161,37 @@ class NiveauReseau(Base):
         self.assertEqual(requete("GET", "/", {"Host": "evil.example.com"})[0], 403)
 
 
+class ConfigurationSousDocker(Base):
+    """Dans Docker, le navigateur n'est jamais « sur la machine » : LUTIN_ADMIN_TOUS=1 ouvre la configuration (supprimer un fichier créé…) aux personnes déjà admises."""
+
+    def setUp(self):
+        super().setUp()
+        self.niveau(niveau=S.RESEAU)
+        pin = A.APPAREILS.nouveau_pin()
+        _, _, h = requete("POST", "/api/appairer", corps={"pin": pin, "nom": "Téléphone"})
+        self.cookie = h["set-cookie"].split(";")[0]
+
+    def supprimer(self):
+        return requete("POST", "/api/fichier-supprimer", {"Cookie": self.cookie, "X-Token": A.JETON, "X-Forwarded-For": "10.0.0.5"}, {"conversation": "absente", "id": "x"})
+
+    def test_sans_la_variable_un_appareil_appaire_ne_configure_pas_et_la_page_dit_quoi_faire(self):
+        from unittest import mock
+        self.assertEqual(self.supprimer()[0], 403)
+        with mock.patch.dict(os.environ, {"LUTIN_DOCKER": "1"}):
+            statut, texte, _ = self.supprimer()
+        self.assertEqual(statut, 403)
+        self.assertIn("LUTIN_ADMIN_TOUS", texte, "dans Docker, le refus dit comment ouvrir le droit")
+
+    def test_avec_la_variable_dans_docker_la_configuration_est_ouverte_aux_admis(self):
+        from unittest import mock
+        with mock.patch.dict(os.environ, {"LUTIN_DOCKER": "1", "LUTIN_ADMIN_TOUS": "1"}):
+            statut, _, _ = self.supprimer()
+            self.assertNotEqual(statut, 403, "la demande est traitée (ici : fichier introuvable)")
+            self.assertEqual(requete("POST", "/api/fichier-supprimer", {"X-Forwarded-For": "10.0.0.5"}, {})[0], 401, "sans être admis (ni appareil appairé), rien n'est ouvert")
+        with mock.patch.dict(os.environ, {"LUTIN_ADMIN_TOUS": "1"}):
+            self.assertEqual(self.supprimer()[0], 403, "hors Docker, la variable ne fait rien")
+
+
 class NiveauProxy(Base):
     def proxy(self, ips):
         self.niveau(niveau=S.PROXY, url_publique="https://lutin.exemple.fr", proxy_ips=ips)

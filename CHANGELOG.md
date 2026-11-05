@@ -2,6 +2,12 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## 0.15.1
+
+- **Docker : configurer depuis la page.** Supprimer un fichier créé, ajouter un dossier de travail, une extension ou un connecteur est refusé depuis un navigateur qui n'est pas « sur la machine » ; or, sous Docker, il ne l'est jamais. Nouvelle variable `LUTIN_ADMIN_TOUS=1` (dans le docker-compose) : toute personne déjà admise (appareil appairé par PIN, ou utilisateur du proxy) peut alors configurer depuis la page. Elle n'a d'effet que dans Docker, et ne change pas le niveau d'accès lui-même. Les refus disent maintenant comment faire, et la documentation Docker détaille le risque (lecture et écriture des dossiers montés, programmes lancés dans le conteneur).
+
+**English.** `LUTIN_ADMIN_TOUS=1` (Docker only) lets everybody already admitted configure from the page (delete created files, folders, extensions, connectors); refusals now say how to enable it.
+
 ## 0.15.0
 
 - **Couche « moteur » : Lutin n'est plus lié à Ollama.** Tout ce que Lutin demande à un moteur de modèles (discuter en flux ou d'un coup, dire s'il répond, ses capacités, la mémoire prise) passe par une interface commune (`moteurs.py`). Ollama reste le moteur par défaut et fonctionne exactement comme avant ; un autre moteur (llama.cpp server, LM Studio, vLLM, Strata… par leur interface compatible OpenAI) pourra prendre sa place sans toucher au reste : conversation, outils, mémoire, missions, connecteurs MCP. La prochaine étape ajoutera ce moteur compatible OpenAI. Un test fait déjà tenir toute une conversation par un faux second moteur.

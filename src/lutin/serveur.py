@@ -62,6 +62,8 @@ class Gestionnaire(BaseHTTPRequestHandler):
             pass
 
     def _envoyer(self, code, corps, type_="application/json; charset=utf-8", en_tetes=None):
+        if code == 403 and isinstance(corps, dict) and "cette machine" in str(corps.get("erreur", "")) and _acces.en_docker():
+            corps = dict(corps, erreur=str(corps["erreur"]) + _t(" Dans Docker : ajoute LUTIN_ADMIN_TOUS=1 aux variables du conteneur (ou, derrière un proxy, ton identifiant dans LUTIN_ADMINS), puis redémarre-le."))
         if isinstance(corps, dict) and _i18n.langue() != "fr":
             corps = _m.traduire_json(corps)
         donnees = corps if isinstance(corps, (bytes, bytearray)) else (corps if isinstance(corps, str) else json.dumps(corps, ensure_ascii=False)).encode("utf-8")
@@ -135,9 +137,17 @@ class Gestionnaire(BaseHTTPRequestHandler):
         except (KeyError, TypeError, ValueError, AttributeError):
             return []
 
+    @staticmethod
+    def _admin_tous():
+        """Dans Docker, le navigateur n'est jamais « sur la machine » : le propriétaire peut ouvrir la configuration à toute personne déjà admise par le niveau d'accès (LUTIN_ADMIN_TOUS=1 dans le docker-compose)."""
+        return _acces.en_docker() and os.environ.get("LUTIN_ADMIN_TOUS", "").strip().lower() in ("1", "true", "oui", "yes", "on")
+
     def _configurateur(self):
         """Peut-on changer ce qui ouvre ou modifie la machine (dossiers de travail, niveau d'accès, restauration) ? Seulement depuis cette machine : au niveau « machine seulement », avec le jeton de la console,
-        ou — au niveau « réseau » — depuis le navigateur de cette machine (jamais depuis un appareil appairé). Derrière un proxy, la commande lutin seulement : le proxy est sur la machine, il ne prouve rien."""
+        ou — au niveau « réseau » — depuis le navigateur de cette machine (jamais depuis un appareil appairé). Derrière un proxy, la commande lutin seulement : le proxy est sur la machine, il ne prouve rien.
+        Exception voulue, dans Docker seulement : LUTIN_ADMIN_TOUS=1 ouvre la configuration à toute personne authentifiée (appareil appairé, utilisateur du proxy)."""
+        if self._admin_tous():
+            return self._authentifie()
         if _m.SECURITE.niveau == _sec.LOCAL:
             return True
         if self._local() and _sec.egal(self.headers.get("X-Token") or "", _m.JETON_CONSOLE):
