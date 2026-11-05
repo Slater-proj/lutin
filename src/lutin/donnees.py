@@ -66,6 +66,10 @@ def _enregistrer_reglages(nouveau):
     r["essai_a_blanc"] = bool(r.get("essai_a_blanc"))
     r["copie_conversations"] = bool(r.get("copie_conversations"))
     r["conseil_machine"] = bool(r.get("conseil_machine", True))
+    from . import moteurs
+    r["moteur"] = str(r.get("moteur") or moteurs.OLLAMA)
+    if not moteurs.valide(r["moteur"]):
+        raise ValueError(_t("Moteur inconnu."))
     r["modele_annexe"] = str(r.get("modele_annexe") or "").strip()
     if r["modele_annexe"] and not re.match(r"^[A-Za-z0-9_./:-]{1,100}$", r["modele_annexe"]):
         raise ValueError(_t("Nom de modèle invalide."))

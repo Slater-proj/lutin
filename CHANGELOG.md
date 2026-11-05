@@ -2,6 +2,14 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## 0.15.0
+
+- **Couche « moteur » : Lutin n'est plus lié à Ollama.** Tout ce que Lutin demande à un moteur de modèles (discuter en flux ou d'un coup, dire s'il répond, ses capacités, la mémoire prise) passe par une interface commune (`moteurs.py`). Ollama reste le moteur par défaut et fonctionne exactement comme avant ; un autre moteur (llama.cpp server, LM Studio, vLLM, Strata… par leur interface compatible OpenAI) pourra prendre sa place sans toucher au reste : conversation, outils, mémoire, missions, connecteurs MCP. La prochaine étape ajoutera ce moteur compatible OpenAI. Un test fait déjà tenir toute une conversation par un faux second moteur.
+- **Réglages > Moteur.** Un choix du moteur (Ollama pour l'instant) avec son explication ; il se dégrisera quand un second moteur sera disponible. Nouveau réglage `moteur` (Ollama par défaut ; un réglage inconnu retombe sur Ollama).
+- **La mémoire des longues conversations passe dans l'onglet Mémoire** (méthode résumé/fiche, part du contexte, recherche par le sens, mise à jour de la fiche) : c'est ce que Lutin retient, donc sa place logique. Les dossiers et les données restent dans Réglages.
+
+**English.** Engine layer: everything Lutin asks a model engine goes through a common interface; Ollama stays the default and works as before; an OpenAI-compatible engine (llama.cpp, LM Studio, vLLM, Strata…) comes next. New Settings > Engine; long-conversation memory moved to the Memory tab.
+
 ## 0.14.2
 
 - **Réglages verrouillés sous Docker : la page dit quoi faire.** Dans Docker, le navigateur n'est jamais « sur la machine » de Lutin : sans administrateur déclaré, les extensions, les dossiers de travail et les connecteurs MCP sont verrouillés. Le message explique maintenant les deux solutions (niveau proxy + `LUTIN_ADMINS`, ou `docker exec lutin lutin …`), et la documentation Docker les détaille.

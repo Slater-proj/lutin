@@ -178,7 +178,7 @@ class Parcours(unittest.TestCase):
             # les réglages sont rangés en groupes repliables
             p.evaluer(onglet("reglages"))
             groupes = p.evaluer("[...document.querySelectorAll('#p-reglages details.groupe > summary')].map(s => s.textContent.trim())")
-            self.assertEqual(groupes, ["Général", "Dossiers et données", "Conversation", "Machine et réglages avancés"])
+            self.assertEqual(groupes, ["Général", "Dossiers et données", "Moteur", "Conversation", "Machine et réglages avancés"])
             self.assertEqual(p.evaluer("document.querySelectorAll('#p-reglages > .cadre > h2').length"), 0, "plus de section isolée hors d'un groupe")
             p.evaluer("document.querySelector('#p-reglages details.groupe[data-g=general] > summary').click()")
             p.attendre("localStorage.getItem('lutin.groupe.general') === '0'")                       # l'évènement « toggle » arrive juste après le clic
@@ -684,6 +684,18 @@ class Parcours(unittest.TestCase):
             self.assertIn("hors ligne", message.lower(), "la cause réelle est montrée")
             self.assertRegex(p.evaluer("document.querySelector('#vVersionActuelle').textContent"), r"^Lutin \S+")
             self.assertFalse(p.evaluer("document.querySelector('#bVerifierLutin').disabled"), "le bouton redevient utilisable")
+
+    def test_reglages_moteur_et_memoire_des_longues_conversations_dans_l_onglet_memoire(self):
+        with self.captures.serveur_demo() as (port, tmp):
+            p = self.ouvrir(tmp, "http://127.0.0.1:%d/" % port)
+            p.attendre("document.querySelector('#pOllama').textContent.includes('Ollama prêt')")
+            p.evaluer(onglet("reglages"))
+            p.attendre("document.querySelector('#selMoteur').value === 'ollama'")
+            self.assertTrue(p.evaluer("document.querySelector('#selMoteur').disabled"), "un seul moteur pour le moment : le choix est grisé, avec son explication")
+            self.assertIn("Ollama", p.evaluer("document.querySelector('#aideMoteur').textContent"))
+            self.assertTrue(p.evaluer("!!document.querySelector('#p-memoire #selMemoire')"), "la mémoire des longues conversations est dans l'onglet Mémoire")
+            self.assertFalse(p.evaluer("!!document.querySelector('#p-reglages #selMemoire')"))
+            self.assertEqual(p.erreurs, [])
 
     def test_pin_et_qr_au_niveau_reseau(self):
         """Au niveau « réseau », le navigateur de cette machine s'appaire comme un téléphone (le PIN de la console), puis l'onglet Accès montre PIN et QR tout de suite."""

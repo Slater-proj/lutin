@@ -1380,5 +1380,7 @@
 "✔ Fait.": "✔ Done.",
 "✔ {} outil(s) trouvé(s). Autorise ceux que le modèle peut utiliser : lutin mcp autoriser {} <outil>": "✔ {} tool(s) found. Allow the ones the model may use: lutin mcp autoriser {} <tool>",
 "✔ Ce connecteur n'est plus en lecture seule : ses outils qui modifient quelque chose restent soumis à ton accord, à chaque appel.": "✔ This connector is no longer read-only: its tools that change something still need your approval at every call.",
-"« {} » est fait pour les Mac (MLX, la puce Apple) : il ne tourne pas sur cette machine. Choisis un autre modèle, ou une autre taille sans « mlx » dans son nom. Il est retiré de ta liste.": "“{}” is made for Macs (MLX, Apple silicon): it does not run on this machine. Pick another model, or another size without “mlx” in its name. It is removed from your list."
+"« {} » est fait pour les Mac (MLX, la puce Apple) : il ne tourne pas sur cette machine. Choisis un autre modèle, ou une autre taille sans « mlx » dans son nom. Il est retiré de ta liste.": "“{}” is made for Macs (MLX, Apple silicon): it does not run on this machine. Pick another model, or another size without “mlx” in its name. It is removed from your list.",
+"Le moteur installé et géré par Lutin : modèles téléchargés depuis la bibliothèque d'Ollama, réglages de vitesse et de mémoire.": "The engine installed and managed by Lutin: models downloaded from the Ollama library, speed and memory settings.",
+"Moteur inconnu.": "Unknown engine."
 }

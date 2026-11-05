@@ -6,6 +6,7 @@ from . import affirmations as _affirmations
 from . import boucles as _boucles
 from . import actualites as _actualites
 from . import mcp as _mcp
+from . import moteurs as _moteurs
 from . import fichiers as _fichiers
 from . import mission as _mission
 from . import horsligne as _hl
@@ -142,7 +143,7 @@ def scribe(conv, r, emit=None):
         corps_scribe = {"model": modele_annexe(r), "stream": False, "think": False, "format": "json", "options": _m.options_modele(r, 0.1),
                         "messages": [{"role": "system", "content": consigne}, {"role": "user", "content": "FICHE ACTUELLE :\n" + _suivi.serialiser(ident, sections) + "\n\nDERNIERS ÉCHANGES :\n" + echange}]}
         with _m.tache_de_fond("fiche:" + str(ident), _t("Mise à jour de la fiche de suivi")):          # montré dans la barre d'état de la page
-            rep = ollama_json("/api/chat", corps_scribe, 300)
+            rep = moteur_actuel(r).chat(corps_scribe, 300)
         ops = json.loads((rep.get("message", {}).get("content") or "{}").strip() or "{}")
     except (urllib.error.URLError, OSError, ValueError) as erreur:
         _m.journaliser("Scribe : fiche non mise à jour (conversation {}) : {!r}".format(ident, erreur))
@@ -222,7 +223,7 @@ def amorcer_fiche(conv, r, emit=None):
     if emit:
         emit({"type": "info", "texte": _t("Fiche de suivi : préparation à partir du début de la conversation…")})
     try:
-        rep = ollama_json("/api/chat", {"model": modele_annexe(r), "stream": False, "think": False, "format": "json", "options": _m.options_modele(r, 0.1),
+        rep = moteur_actuel(r).chat({"model": modele_annexe(r), "stream": False, "think": False, "format": "json", "options": _m.options_modele(r, 0.1),
                                         "messages": [{"role": "system", "content": "Tu remplis la fiche de suivi d'une conversation pour pouvoir la continuer. Réponds en JSON avec ces clés (listes de phrases courtes, 150 caractères au plus chacune) : "
                                                       "objectif, decisions, plan, etape (l'étape en cours), fait, ouvert (questions ouvertes), fichiers. N'invente rien : laisse une liste vide si tu ne sais pas. En français."},
                                                      {"role": "user", "content": texte}]}, 600)
@@ -387,6 +388,66 @@ def ps_modele(nom):
     except (urllib.error.URLError, OSError, ValueError):
         pass
     return None
+
+
+class _FluxOllama:
+    """Les évènements d'une réponse en flux d'Ollama (une ligne JSON par évènement). Fermer le gestionnaire ferme la connexion : Ollama arrête de générer."""
+
+    def __init__(self, reponse):
+        self.reponse = reponse
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_):
+        self.reponse.close()
+        return False
+
+    def __iter__(self):
+        for brut in self.reponse:
+            try:
+                yield json.loads(brut.decode("utf-8"))
+            except ValueError:
+                continue
+
+
+class MoteurOllama(_moteurs.Moteur):
+    """Ollama : le moteur d'origine de Lutin. Il enveloppe les fonctions de ce module (ollama_json, etat_ollama, capacites, ps_modele) : rien de ce qui marchait ne change."""
+    id = _moteurs.OLLAMA
+    nom = "Ollama"
+    genre = "ollama"
+    gere_modeles = True
+
+    @property
+    def description(self):
+        return _t("Le moteur installé et géré par Lutin : modèles téléchargés depuis la bibliothèque d'Ollama, réglages de vitesse et de mémoire.")
+
+    def actif(self):
+        return etat_ollama()["actif"]
+
+    def modeles(self):
+        return etat_ollama()
+
+    def capacites(self, modele):
+        return capacites(modele)
+
+    def en_memoire(self, modele):
+        return ps_modele(modele)
+
+    def chat(self, corps, delai=60):
+        return ollama_json("/api/chat", corps, delai)
+
+    def chat_flux(self, corps, delai=900):
+        req = urllib.request.Request(_m.OLLAMA + "/api/chat", data=json.dumps(avec_garde(corps)).encode("utf-8"), headers={"Content-Type": "application/json"})
+        return _FluxOllama(urllib.request.urlopen(req, timeout=delai))          # l'erreur de connexion ou HTTP est levée ici, chez l'appelant
+
+
+_moteurs.enregistrer(MoteurOllama())
+
+
+def moteur_actuel(r=None):
+    """Le moteur choisi dans les réglages (Ollama par défaut, et si le réglage est inconnu)."""
+    return _moteurs.par_id((r if r is not None else _m.reglages()).get("moteur") or _moteurs.OLLAMA)
 
 
 def etat_ollama():
@@ -718,7 +779,7 @@ def compacter(conv, r, emit, forcer=False):
     texte = texte[-int(r["num_ctx"] * 1.8):]          # le texte à résumer doit lui aussi tenir dans le contexte
     emit({"type": "info", "texte": "Conversation longue : résumé du début..."})
     try:
-        rep = ollama_json("/api/chat", {"model": modele_annexe(r), "stream": False, "think": False, "options": _m.options_modele(r, 0.2),
+        rep = moteur_actuel(r).chat({"model": modele_annexe(r), "stream": False, "think": False, "options": _m.options_modele(r, 0.2),
                                         "messages": [{"role": "system", "content": "Tu résumes une conversation pour pouvoir la continuer plus tard. Garde : les décisions, les fichiers modifiés, ce qui reste à faire, les préférences de l'utilisateur. Sois dense, en français."},
                                                      {"role": "user", "content": (conv.get("resume", "") + "\n\n" if conv.get("resume") else "") + texte}]}, 600)
         nouveau_resume = (rep.get("message", {}).get("content") or "").strip()[:6000]
@@ -1066,7 +1127,7 @@ def boucle_agent(conv, r, emit, ctx, stop):
         options = _m.options_modele(r, r["temperature"])
         if r.get("num_predict", 0) > 0:
             options["num_predict"] = r["num_predict"]
-        caps = capacites(r["modele"])
+        caps = moteur_actuel(r).capacites(r["modele"])
         reflechit = bool(r["reflexion"]) and not (r.get("reflexion_tours") == "premier" and idx_tour > 0)          # option : la réflexion seulement avant la première réponse, pas à chaque retour d'outil
         if reflechit and caps is not None and "thinking" not in caps:
             reflechit = False
@@ -1080,7 +1141,7 @@ def boucle_agent(conv, r, emit, ctx, stop):
                 if autre:
                     emit({"type": "info", "texte": _t("Ce modèle ne voit pas les images : je passe sur « {} » pour cette demande.").format(autre)})
                     r["modele"] = autre
-                    caps = capacites(autre)
+                    caps = moteur_actuel(r).capacites(autre)
                 else:
                     emit({"type": "info", "texte": _t("Ce modèle ne voit pas les images et aucun modèle « Images » n'est installé : elles sont ignorées. Onglet Modèles pour en installer un.")})
         corps = {"model": r["modele"], "messages": ajuster_contexte(msgs, r["num_ctx"], 1.0, outils), "stream": True, "options": options, "think": reflechit}
@@ -1091,7 +1152,7 @@ def boucle_agent(conv, r, emit, ctx, stop):
             else:
                 corps["tools"] = outils
         fini, verifie, relance_outil, repli_demande, relance_vide, relance_repetition = False, False, False, False, False, False
-        if ps_modele(r["modele"]) is None:
+        if moteur_actuel(r).en_memoire(r["modele"]) is None:
             emit({"type": "etat", "texte": "Chargement du modèle en mémoire (30 s à 2 min la première fois, ou si ComfyUI lui a pris la carte)."})
         for tentative in range(3):
             contenu, pensee, appels = "", "", []
@@ -1101,17 +1162,12 @@ def boucle_agent(conv, r, emit, ctx, stop):
                 corps_t = {k: v for k, v in corps_t.items() if k != "tools"}          # dernier essai SANS outils : certains petits modèles ne produisent plus rien quand les outils sont déclarés ; mieux vaut une réponse en texte
             try:
                 corps_t = dict(corps_t, messages=_images.pour_le_modele(corps_t["messages"], caps is None or "vision" in caps))
-                req = urllib.request.Request(_m.OLLAMA + "/api/chat", data=json.dumps(avec_garde(corps_t)).encode("utf-8"), headers={"Content-Type": "application/json"})
-                with urllib.request.urlopen(req, timeout=900) as flux:
-                    for brut in flux:
-                        if stop.is_set():                    # la sortie du « with » ferme la connexion : Ollama arrête de générer
+                with moteur_actuel(r).chat_flux(corps_t, 900) as flux:          # le moteur choisi (voir moteurs.py) ; fermer le « with » coupe la génération
+                    for e in flux:
+                        if stop.is_set():
                             if contenu.strip():
                                 conv["messages"].append({"role": "assistant", "content": contenu})
                             raise _m.Arret()
-                        try:
-                            e = json.loads(brut.decode("utf-8"))
-                        except ValueError:
-                            continue
                         if e.get("error"):
                             raise RuntimeError(e["error"])
                         m = e.get("message") or {}
@@ -1126,7 +1182,7 @@ def boucle_agent(conv, r, emit, ctx, stop):
                                 emit(dict(vitesse, type="vitesse"))
                         if not verifie:
                             verifie = True
-                            ps = ps_modele(r["modele"])
+                            ps = moteur_actuel(r).en_memoire(r["modele"])
                             if ps and ps["taille"] and ps["vram"] < 0.9 * ps["taille"] and a_une_carte_graphique() and _avertir_une_fois(r["modele"]):
                                 emit({"type": "info", "texte": "Attention : seulement {} % du modèle tient sur la carte graphique, le reste tourne sur le processeur, donc c'est lent. Ferme ComfyUI et le navigateur d'images, ou baisse le contexte dans Réglages.".format(round(100 * ps["vram"] / ps["taille"]))})
                         if m.get("thinking"):

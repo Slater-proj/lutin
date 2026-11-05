@@ -493,6 +493,13 @@ button.principal { box-shadow:0 6px 16px -8px rgba(63,143,232,.8); }
     <h2>Projet Claude <span class="aide">(CLAUDE.md et dossier .claude/ du dossier de travail : lus par l'assistant comme consignes ; l'import se fait dans Réglages &gt; Dossiers de travail)</span></h2>
     <div id="infoClaude" class="aide" style="margin:6px 0"></div>
     <div class="aide" id="mClaude" style="margin:6px 0"></div>
+    <h2>Mémoire des longues conversations <span class="aide">(comment Lutin garde le fil quand la fenêtre de contexte se remplit)</span></h2>
+    <label class="opt-ligne">Méthode <select id="selMemoire"><option value="demander">Demander au premier résumé</option><option value="resume">Résumé automatique</option><option value="fichier">Fiche de suivi</option></select></label>
+    <label class="opt-ligne">Part du contexte que la fiche peut prendre (%) <input id="iFichePart" type="number" min="5" max="25" step="1" style="width:80px"></label>
+    <label class="opt-ligne"><input type="checkbox" id="cSens"> Recherche par le sens (retrouve aussi un passage qui n'emploie pas les mêmes mots)</label>
+    <div class="aide" id="aideSens"></div>
+    <label class="opt-ligne"><input type="checkbox" id="cScribe"> Mise à jour automatique de la fiche par le modèle (un appel court toutes les trois réponses)</label>
+    <div class="aide" id="aideMemoire"></div>
     <h2>Documents <span class="aide">(PDF, Word, LibreOffice, PowerPoint, Excel, notes : dépose-les dans le dossier docs/ du dossier de travail ; Lutin les cherche hors ligne et cite la page)</span></h2>
     <div id="listeDocuments" class="aide" style="margin:6px 0"></div>
     <div style="margin:6px 0"><input id="qDocuments" placeholder="Chercher dans mes documents…" style="width:340px" maxlength="300"> <button id="bChercherDocuments">Chercher</button></div>
@@ -592,14 +599,15 @@ button.principal { box-shadow:0 6px 16px -8px rgba(63,143,232,.8); }
     <h2>Fichiers créés par Lutin <span class="aide">(documents, images, vidéos et sons produits pendant les conversations : tout est listé ici pour faire le ménage sans chercher)</span></h2>
     <div id="listeFichiersCrees" class="aide" style="margin:6px 0"></div>
     </details>
+    <details class="groupe" open data-g="moteur"><summary>Moteur</summary>
+    <h2>Moteur de modèles <span class="aide">(ce qui fait tourner le modèle de langage)</span></h2>
+    <div class="aide">Lutin discute avec un moteur : Ollama aujourd'hui. D'autres moteurs (llama.cpp, LM Studio, vLLM… par leur interface compatible OpenAI) pourront être branchés ici sans rien changer au reste : conversation, outils, mémoire, connecteurs.</div>
+    <div class="carte" style="gap:10px;flex-wrap:wrap;align-items:center">
+      <label>Moteur <select id="selMoteur"></select></label>
+      <span class="aide" id="aideMoteur"></span>
+    </div>
+    </details>
     <details class="groupe" open data-g="conversation"><summary>Conversation</summary>
-    <h2>Mémoire des longues conversations <span class="aide">(comment Lutin garde le fil quand la fenêtre de contexte se remplit)</span></h2>
-    <label class="opt-ligne">Méthode <select id="selMemoire"><option value="demander">Demander au premier résumé</option><option value="resume">Résumé automatique</option><option value="fichier">Fiche de suivi</option></select></label>
-    <label class="opt-ligne">Part du contexte que la fiche peut prendre (%) <input id="iFichePart" type="number" min="5" max="25" step="1" style="width:80px"></label>
-    <label class="opt-ligne"><input type="checkbox" id="cSens"> Recherche par le sens (retrouve aussi un passage qui n'emploie pas les mêmes mots)</label>
-    <div class="aide" id="aideSens"></div>
-    <label class="opt-ligne"><input type="checkbox" id="cScribe"> Mise à jour automatique de la fiche par le modèle (un appel court toutes les trois réponses)</label>
-    <div class="aide" id="aideMemoire"></div>
     <h2>Modes <span class="aide">(à choisir dans la barre de gauche ; dans tous les modes, toute modification de fichier et toute commande te demandent ton accord)</span></h2>
     <div class="carte" style="display:block"><ul class="aide" style="line-height:1.7;margin:0;padding-left:18px">
       <li><b>Polyvalent</b> : l'assistant de tous les jours. Questions, rédaction, analyse, un peu de code ; il lit et modifie les fichiers du dossier de travail et peut lancer des commandes.</li>
@@ -1702,7 +1710,7 @@ button.principal { box-shadow:0 6px 16px -8px rgba(63,143,232,.8); }
     if (b.dataset.p === 'acces') chargerAcces();
     if (b.dataset.p === 'chat' && CONV && !(FLUX && FLUX.detache)) lue(CONV.id);          // on revient lire : la pastille verte s'éteint tout de suite
     if (b.dataset.p === 'sante') window.ouvrirSante();
-    if (b.dataset.p === 'reglages') chargerFichiersCrees();
+    if (b.dataset.p === 'reglages') { chargerFichiersCrees(); chargerMoteurs(); }
   }));
   $('bEnvoyer').addEventListener('click', () => envoyer());          // sans argument : l'évènement du clic n'est pas un message sorti de la file d'attente
   // Arrêter : on prévient d'abord le serveur (modèle, outils et accords en attente s'arrêtent vraiment), puis on laisse arriver la fin du flux.
@@ -2777,6 +2785,16 @@ button.principal { box-shadow:0 6px 16px -8px rgba(63,143,232,.8); }
     catch (e) { $('mMcp').textContent = e.message; }
     chargerMcp();
   });
+  // ---- Moteur de modèles
+  const chargerMoteurs = async () => {
+    let r; try { r = await api('/api/moteurs'); } catch (e) { $('aideMoteur').textContent = e.message; return; }
+    const sel = $('selMoteur'); sel.textContent = '';
+    r.moteurs.forEach(m => { const o = el('option', '', m.nom + (m.actif ? '' : ' (' + T('ne répond pas') + ')')); o.value = m.id; sel.appendChild(o); });
+    sel.value = r.courant; sel.disabled = r.moteurs.length < 2;
+    const m = r.moteurs.find(x => x.id === r.courant);
+    $('aideMoteur').textContent = (m ? m.description : '') + (r.moteurs.length < 2 ? ' ' + T('(Un seul moteur disponible pour le moment.)') : '');
+  };
+  $('selMoteur').addEventListener('change', async () => { try { await api('/api/reglages', { moteur: $('selMoteur').value }); } catch (e) { $('aideMoteur').textContent = e.message; } rafraichir(); chargerMoteurs(); });
   const explicationVerrou = () => ETAT.niveau === 'proxy'
     ? T('🔒 Réglages verrouillés : le proxy t\'identifie, mais tu n\'es pas déclaré administrateur. Ajoute ton identifiant dans la variable LUTIN_ADMINS du docker-compose (voir docs/DOCKER.md), puis redémarre le conteneur.')
     : (ETAT.docker

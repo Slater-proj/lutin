@@ -396,6 +396,49 @@ class Assistant(unittest.TestCase):
         ev = chat("Note-le", reponses=[[appel_outil("mcp__demo__noter", texte="x")], [{"content": "Fait."}]])
         self.assertTrue(any("pas disponible" in e["texte"] for e in ev if e["type"] == "resultat"), "un outil non autorisé n'est pas appelable")
 
+    def test_les_moteurs_ollama_par_defaut_inconnu_refuse_et_un_autre_moteur_prend_la_place(self):
+        """Couche moteur : Ollama est le moteur par défaut, un moteur inconnu est refusé, et tout autre moteur enregistré fait la conversation à la place d'Ollama."""
+        from lutin import moteurs
+        r = lire("/api/moteurs")
+        self.assertEqual((r["courant"], [m["id"] for m in r["moteurs"]]), ("ollama", ["ollama"]))
+        self.assertTrue(r["moteurs"][0]["gere_modeles"] and r["moteurs"][0]["actif"])
+        self.assertEqual(lire("/api/etat")["moteur"], "ollama")
+        post("/api/reglages", {"moteur": "inconnu"}, attendu=400)
+        self.assertEqual(moteurs.par_id("inconnu").id, "ollama", "un réglage ancien ou inconnu retombe sur Ollama")
+
+        class Faux(moteurs.Moteur):
+            id, nom, genre = "faux", "Faux moteur", "openai"
+
+            def actif(self):
+                return True
+
+            def modeles(self):
+                return {"actif": True, "installes": [], "tailles": {}}
+
+            def chat_flux(self, corps, delai=900):
+                evenements = [{"message": {"role": "assistant", "content": "Salut depuis le faux moteur."}, "done": False}, {"done": True, "prompt_eval_count": 12, "eval_count": 5}]
+
+                class Flux:
+                    def __enter__(self_):
+                        return self_
+
+                    def __exit__(self_, *_):
+                        return False
+
+                    def __iter__(self_):
+                        return iter(evenements)
+                return Flux()
+        moteurs.enregistrer(Faux())
+        avant = lire("/api/etat")["reglages"]["moteur"]
+        try:
+            post("/api/reglages", {"moteur": "faux"})
+            ev = chat("Bonjour", reponses=[[{"content": "NE DOIT PAS ÊTRE LU"}]])
+            self.assertEqual(texte_de(ev), "Salut depuis le faux moteur.")
+            self.assertEqual([m["id"] for m in lire("/api/moteurs")["moteurs"]], ["ollama", "faux"])
+        finally:
+            post("/api/reglages", {"moteur": avant})
+            moteurs.MOTEURS.pop("faux", None)
+
     def test_commandes(self):
         ev = chat("Dis bonjour", reponses=[[appel_outil("executer", commande="echo bonjour-assistant")], [{"content": "."}]])
         self.assertFalse(any(e["type"] == "approbation" for e in ev), "une lecture simple n'a pas besoin d'accord")

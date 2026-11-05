@@ -175,6 +175,10 @@ Réglages > **Emplacements utilisés** liste chaque dossier utilisé par Lutin (
 
 Après l'ajout d'un dossier, Lutin dit ce qu'il y a trouvé et utilise (fichiers, CLAUDE.md, `skills/`, `.claude/`, copies de conversations). Si le dossier est **un ancien assistant** (conversations dans `donnees/`, notes dans `memoire/`), un bouton *Reprendre ses données…* les importe : ajouter un dossier permet seulement à Lutin d'y travailler, il ne copie pas tout seul les anciennes conversations. **Retirer** demande confirmation et peut aussi supprimer les copies de conversations posées par Lutin dans ce dossier ; tes propres fichiers ne sont jamais supprimés.
 
+## Moteurs de modèles
+
+Lutin discute avec un moteur de modèles : **Ollama** aujourd'hui (installé et géré par Lutin). Tout ce que Lutin demande à un moteur (discuter en flux avec les outils, répond-il, ce qu'un modèle sait faire, mémoire prise) passe par une interface commune : un autre moteur (llama.cpp server, LM Studio, vLLM… par leur interface compatible OpenAI) peut donc prendre la place d'Ollama sans toucher aux conversations, aux outils, à la mémoire, aux missions ni aux connecteurs MCP. Le choix est dans **Réglages > Moteur**. Les réglages de la mémoire des longues conversations sont dans l'onglet **Mémoire**.
+
 ## Trouver de nouveaux modèles
 
 L'onglet Modèles a trois façons de suivre ce qui sort, sans attendre une nouvelle version de Lutin :

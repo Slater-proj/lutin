@@ -175,6 +175,10 @@ Settings > **Locations in use** lists every folder Lutin uses (program, configur
 
 After you add a folder, Lutin says what it found and uses (files, CLAUDE.md, `skills/`, `.claude/`, copies of conversations). If the folder is **an old assistant** (conversations in `donnees/`, notes in `memoire/`), a *Take over its data…* button imports them: adding a folder only lets Lutin work in it, it does not copy the old conversations by itself. **Remove** asks for confirmation and can also delete the conversation copies Lutin put in that folder; your own files are never deleted.
 
+## Model engines
+
+Lutin talks to a model engine: **Ollama** today (installed and managed by Lutin). Everything Lutin asks an engine (chat with streaming and tools, is it answering, what a model can do, memory used) goes through a common interface, so another engine (llama.cpp server, LM Studio, vLLM… through their OpenAI-compatible interface) can replace Ollama without touching conversations, tools, memory, missions or MCP connectors. The choice is in **Settings > Engine**. The long-conversation memory settings are in the **Memory** tab.
+
 ## Finding new models
 
 The Models tab has three ways to follow what comes out, none of which needs a new version of Lutin:
