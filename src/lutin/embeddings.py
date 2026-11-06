@@ -21,7 +21,6 @@ import urllib.error
 import urllib.request
 
 from . import moteur as _m
-from .i18n import t as _t
 
 MODELE_DEFAUT = "nomic-embed-text"
 RE_MODELE = re.compile(r"^[A-Za-z0-9_./:-]{1,100}$")
