@@ -146,6 +146,24 @@ class Installation(Base):
         with self.assertRaises(ml.ErreurMoteur):
             self.m.desinstaller()
 
+    def test_les_bibliotheques_cuda_rejoignent_le_programme_dans_son_sous_dossier(self):
+        """L'archive CUDA donne llama-server dans un sous-dossier, l'archive des bibliothèques les met à la racine : elles doivent se retrouver côte à côte."""
+        def telecharge(url, destination, progression=None, taille_min=0):
+            destination = Path(destination)
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            with zipfile.ZipFile(destination, "w") as z:
+                if destination.name.startswith("cudart"):
+                    z.writestr("cudart64_12.dll", "dll")
+                else:
+                    z.writestr("build/bin/llama-server.exe" if os.name == "nt" else "build/bin/llama-server", "binaire")
+            return destination
+        releases = [{"tag_name": "b1", "assets": [asset(n) for n in ("llama-b1-bin-win-cuda-12.4-x64.zip", "cudart-llama-bin-win-cuda-12.4-x64.zip")]}]
+        ml.regler("llamacpp", variante="cuda")
+        with mock.patch.object(ml, "_systeme", lambda: "windows"), mock.patch("platform.machine", lambda: "AMD64"):
+            self.m.installer(lambda *x: None, http_json=lambda url: releases, telecharger=telecharge)
+        exe = self.m.serveur_installe()
+        self.assertTrue((exe.parent / "cudart64_12.dll").is_file(), "la bibliothèque CUDA est à côté du programme")
+
     def test_empreinte_incorrecte_refusee(self):
         f = self.tmp / "x.zip"
         f.write_bytes(b"contenu")

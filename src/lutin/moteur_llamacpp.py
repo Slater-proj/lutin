@@ -323,11 +323,22 @@ class MoteurLlamaCpp(MoteurOpenAI):
         while time.time() < fin:
             if SERVEUR["proc"].poll() is not None:
                 raise ErreurMoteur(_t("llama-server s'est arrêté au démarrage : {}").format(self._fin_du_journal()))
-            if MoteurOpenAI.actif(self):
+            if self._pret():
                 return
             time.sleep(0.5)
         self.arreter()
         raise ErreurMoteur(_t("llama-server ne répond pas après {} s : {}").format(attente, self._fin_du_journal()))
+
+    def _pret(self):
+        """Le serveur a fini de charger le modèle ? `/health` répond « ok » (503 pendant le chargement) ; une ancienne version sans /health : on se contente de /models."""
+        try:
+            return str(self._json("/health", None, 3).get("status", "ok")) == "ok"
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                return MoteurOpenAI.actif(self)
+            return False          # 503 : il charge encore
+        except (urllib.error.URLError, OSError, ValueError):
+            return False
 
     def _fin_du_journal(self):
         try:
@@ -449,6 +460,10 @@ class MoteurLlamaCpp(MoteurOpenAI):
         if exe is None:
             shutil.rmtree(neuf, ignore_errors=True)
             raise ErreurMoteur(_t("llama-server est introuvable dans l'archive téléchargée."))
+        if exe.parent != neuf:          # le programme est dans un sous-dossier : les bibliothèques de l'autre archive (CUDA) arrivées à la racine doivent l'y rejoindre
+            for f in list(neuf.glob("*.dll")) + list(neuf.glob("*.so*")):
+                if not (exe.parent / f.name).exists():
+                    shutil.copy2(f, exe.parent / f.name)
         if os.name != "nt":
             for f in neuf.rglob("llama-*"):
                 try:

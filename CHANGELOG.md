@@ -2,6 +2,15 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## 0.16.2
+
+- **`lutin essai-moteur llamacpp` : un essai réel de llama.cpp, avec un rapport.** Les tests de Lutin utilisent de faux serveurs ; cette commande fait pour de vrai, sur la machine où elle tourne, ce que Lutin fait avec un moteur : installer le programme adapté à la carte graphique, télécharger un modèle (avec ton accord et sa taille annoncée), démarrer le serveur, vérifier qu'il répond, tenir une conversation en flux (premier jeton, jetons par seconde), faire un appel d'outil, puis arrêter proprement. Chaque étape dit ce qui marche ou non ; sous Linux, un serveur qui ne démarre pas est expliqué (bibliothèques manquantes, glibc). Le rapport est écrit dans le dossier de données de Lutin (`essais/`). Options : `--modele auteur/dépôt/fichier.gguf`, `--modele-test` (1 Mo : prouve seulement que le serveur démarre et répond), `--variante cuda|vulkan|cpu`, `--sans-outils`, `--oui`. Guide : `docs/TRIALS.fr.md`.
+- **llama.cpp : le serveur est « prêt » quand `/health` répond « ok »** (il répond 503 pendant le chargement du modèle) au lieu de la simple présence de `/v1/models`.
+- **Installation CUDA sous Windows : les bibliothèques de l'archive séparée rejoignent le programme** si celui-ci se trouve dans un sous-dossier de son archive.
+- **Essai automatique sur Linux** (`.github/workflows/moteurs.yml`, à part de la CI principale, jamais bloquant) : llama.cpp installé et lancé avec un modèle minuscule dans `python:3.12-slim`, l'image de Lutin « légère ». Il dit si le programme publié pour Ubuntu démarre avec la glibc de Debian.
+
+**English.** `lutin essai-moteur llamacpp`: a real trial of llama.cpp with a report (install, model download with your consent, startup, streaming chat, tool call, shutdown); readiness through `/health`; CUDA libraries placed next to the program; a non-blocking Linux CI trial in `python:3.12-slim`.
+
 ## 0.16.1
 
 - **« Arrêter » rend toujours la main.** Un modèle qui ne renvoyait plus rien (chargement bloqué, carte graphique prise par une génération d'image qui s'éternise) ne voyait jamais le bouton : « Réflexion en cours » restait en rouge et il fallait redémarrer Lutin. La réponse du modèle est maintenant lue de façon interruptible, ouverture de la connexion comprise : Arrêter la coupe tout de suite et le serveur de modèle cesse de générer. Filet : si un tour (un outil figé, par exemple) ne s'arrête pas 20 s après Arrêter, il est abandonné, la conversation est libérée et le tour abandonné n'écrira plus rien dedans. Le démarrage de ComfyUI écoute aussi Arrêter.

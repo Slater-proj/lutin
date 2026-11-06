@@ -129,6 +129,15 @@ def parseur():
     im.add_argument("--nom", default="", help=_t("nom affiché"))
     lg = sp.add_parser("langue", help=_t("langue de l'application (fr, en ou auto)"))
     lg.add_argument("valeur", nargs="?", help="fr | en | auto")
+    em = sp.add_parser("essai-moteur", help=_t("essai réel d'un moteur (installation, démarrage, conversation, appel d'outil) avec un rapport"))
+    em.add_argument("moteur", nargs="?", default="llamacpp", choices=("llamacpp",), help=_t("le moteur à essayer"))
+    em.add_argument("--modele", help=_t("modèle à télécharger : auteur/dépôt/fichier.gguf"))
+    em.add_argument("--modele-local", help=_t("nom d'un modèle déjà téléchargé"))
+    em.add_argument("--modele-test", action="store_true", help=_t("un modèle minuscule (1 Mo) : prouve que le serveur démarre et répond, rien de plus"))
+    em.add_argument("--oui", action="store_true", help=_t("répond « oui » aux demandes de téléchargement"))
+    em.add_argument("--sans-outils", action="store_true", help=_t("n'essaie pas l'appel d'outil"))
+    em.add_argument("--ctx", type=int, default=8192, help=_t("taille de la fenêtre de contexte"))
+    em.add_argument("--variante", choices=("auto", "cuda", "vulkan", "cpu"), help=_t("version du programme à installer (auto : d'après la carte graphique)"))
     mc = sp.add_parser("mcp", help=_t("connecteurs MCP (serveurs d'outils)"))
     mc.add_argument("action", nargs="?", choices=("lister", "ajouter", "retirer", "actualiser", "autoriser", "interdire", "ecriture"), default="lister")
     mc.add_argument("nom", nargs="?", help=_t("nom du connecteur"))
@@ -397,6 +406,23 @@ def commande_travaux(args):
     if not travaux.liste(cfg):
         print(_t("Aucun dossier de travail : lutin travaux ajouter <chemin>"))
     return 0
+
+
+def commande_essai_moteur(args):
+    """Fait pour de vrai, sur cette machine, ce que Lutin fait avec un moteur (voir essai_moteur.py) et écrit un rapport."""
+    d, cfg = contexte()
+    actif = travaux.actif(cfg)
+    os.environ.setdefault("LUTIN_RACINE", str(actif["chemin"] if actif else Path.home() / "Lutin"))
+    os.environ.setdefault("LUTIN_DONNEES", str(d["donnees"]))
+    os.environ.setdefault("LUTIN_MEMOIRE", str(d["memoire"]))
+    from . import essai_moteur, moteur as _moteur, moteur_llamacpp, moteurs  # noqa: F401  (importer le moteur enregistre les moteurs)
+    mo = moteurs.par_id(args.moteur)
+    if args.variante:
+        moteur_llamacpp.regler(mo.id, variante=args.variante)
+    horodatage = time.strftime("%Y%m%d-%H%M%S")
+    rapport = Path(d["donnees"]) / "essais" / "essai-{}-{}.json".format(mo.id, horodatage)
+    resultat = essai_moteur.executer({"modele": args.modele, "modele_local": args.modele_local, "modele_test": args.modele_test, "oui": args.oui, "sans_outils": args.sans_outils, "ctx": args.ctx}, mo, chemin_rapport=rapport)
+    return 0 if resultat["reussi"] else 1
 
 
 def commande_mcp(args):
@@ -683,7 +709,7 @@ def principal(argv=None):
     os.environ["LUTIN_CONFIG"] = str(Path(config.dossiers()["config"]) / "config.json")          # les gardes (mode hors ligne…) lisent la configuration de cette installation
     commandes = {"setup": commande_setup, "serve": commande_serve, "update": commande_update, "chat": commande_chat, "modeles": commande_modeles, "pin": commande_pin,
                  "appareils": commande_appareils, "securite": commande_securite, "langue": commande_langue, "importer": commande_importer, "reprendre": commande_reprendre, "hors-ligne": commande_hors_ligne,
-                 "travaux": commande_travaux, "journal": commande_journal, "bench": commande_bench, "sauvegarde": commande_sauvegarde, "restaurer": commande_restaurer, "doctor": commande_doctor, "zone": commande_zone, "mcp": commande_mcp}
+                 "travaux": commande_travaux, "journal": commande_journal, "bench": commande_bench, "sauvegarde": commande_sauvegarde, "restaurer": commande_restaurer, "doctor": commande_doctor, "zone": commande_zone, "mcp": commande_mcp, "essai-moteur": commande_essai_moteur}
     try:
         if args.commande is None:
             return commande_serve(argparse.Namespace(sans_navigateur=False))
