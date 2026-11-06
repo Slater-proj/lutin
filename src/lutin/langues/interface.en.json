@@ -1026,12 +1026,9 @@
 "llama.cpp sera installé dans le dossier de Lutin : ": "llama.cpp will be installed in Lutin's folder: ",
 "Pour l'installer à côté d'Ollama (": "To install it next to Ollama (",
 "), annule puis clique sur « Utiliser le dossier proposé ». Continuer ici ?": "), cancel then click “Use the proposed folder”. Continue here?",
-"Dossier d'installation et de modèles : ": "Installation and models folder: ",
 "Go libres": "GB free",
 "Changer de dossier": "Change folder",
-"Un chemin complet, par exemple D:/IA/llama.cpp ; vide : le dossier de Lutin": "A full path, for example D:/AI/llama.cpp; empty: Lutin's folder",
 "Utiliser le dossier proposé, à côté d'Ollama : ": "Use the proposed folder, next to Ollama: ",
-"llama.cpp est installé ici : pour changer de dossier, désinstalle-le d'abord (tes modèles restent où ils sont).": "llama.cpp is installed here: to change folder, uninstall it first (your models stay where they are).",
 "Accepter et réactiver l'accord automatique": "Accept and re-enable automatic approval",
 "Du contenu web a été lu : il pourrait contenir une consigne piégée. En réactivant, tu acceptes ce risque pour la suite de cette demande seulement.": "Web content was read: it could contain a booby-trapped instruction. By re-enabling, you accept this risk for the rest of this request only.",
 "Dossiers de la conversation": "Conversation folders",
@@ -1049,5 +1046,13 @@
 "Suggestions pour ta machine": "Suggestions for your machine",
 "Déjà téléchargé": "Already downloaded",
 "Ce modèle est trop gros pour ta machine. Le télécharger quand même ?": "This model is too big for your machine. Download it anyway?",
-"Téléchargement lancé…": "Download started…"
+"Téléchargement lancé…": "Download started…",
+"Dossier d'installation : ": "Installation folder: ",
+"Un chemin complet, par exemple D:/IA/Moteur ; vide : le dossier par défaut": "A full path, for example D:/AI/Engine; empty: the default folder",
+"est installé ici : pour changer de dossier, désinstalle-le d'abord (tes modèles restent où ils sont).": "is installed here: to change folder, uninstall it first (your models stay where they are).",
+"Un chemin complet ; vide : le sous-dossier « modeles » du dossier d'installation. Les modèles déjà téléchargés ne sont pas déplacés.": "A full path; empty: the “modeles” subfolder of the installation folder. Models already downloaded are not moved.",
+"Changer dans l'onglet Modèles": "Change in the Models tab",
+"d'Ollama (pas de copie)": "from Ollama (no copy)",
+"Le même fichier que dans Ollama : rien n'est dupliqué, et sa suppression se fait depuis Ollama.": "The same file as in Ollama: nothing is duplicated, and it is deleted from Ollama.",
+"Redémarrer Ollama": "Restart Ollama"
 }

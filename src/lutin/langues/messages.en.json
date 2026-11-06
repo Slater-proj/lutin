@@ -1546,5 +1546,11 @@
 "La fiche de suivi n'a pas pu être mise à jour (le modèle ne répond pas ?) : rien n'est retiré, pour ne rien perdre. Réessaie dans un moment.": "The tracking sheet could not be updated (is the model not answering?): nothing was removed, so nothing is lost. Try again in a moment.",
 "Du contenu web a été lu : l'accord automatique est suspendu pour la suite de cette demande (il revient tout seul à la demande suivante), ta confirmation est demandée.": "Web content was read: automatic approval is suspended for the rest of this request (it comes back by itself on the next request), your confirmation is requested.",
 "L'ouverture d'un dossier ne marche que depuis cette machine (pas sous Docker ni sur un serveur sans écran) : copie le chemin, ou télécharge les fichiers depuis la conversation.": "Opening a folder only works from this machine (not under Docker or on a server without a screen): copy the path, or download the files from the conversation.",
-"Ce dossier n'est pas un dossier de cette conversation.": "This folder is not one of this conversation's folders."
+"Ce dossier n'est pas un dossier de cette conversation.": "This folder is not one of this conversation's folders.",
+"« {} » appartient à Ollama : supprime-le depuis Ollama (llama.cpp ne fait que le lire).": "“{}” belongs to Ollama: delete it from Ollama (llama.cpp only reads it).",
+"Les modèles de ce moteur se règlent dans l'onglet Modèles.": "This engine's models are set in the Models tab.",
+"{} est déjà installé : désinstalle-le d'abord (tes modèles restent où ils sont), puis change de dossier.": "{} is already installed: uninstall it first (your models stay where they are), then change folder.",
+"Ollama tourne mais ne voit aucun modèle, alors que {} en contient {} : il a été relancé sans ton dossier de modèles habituel. Tes modèles ne sont pas perdus ; redémarre Ollama pour qu'il retrouve ce dossier.": "Ollama is running but sees no model, while {} contains {}: it was restarted without your usual models folder. Your models are not lost; restart Ollama so it finds that folder again.",
+"Installe la dernière version par-dessus l'actuelle (sans désinstaller) ; tes modèles, leur dossier et tes réglages sont gardés.": "Installs the latest version over the current one (without uninstalling); your models, their folder and your settings are kept.",
+"Télécharge la dernière version et remplace l'actuelle ; tes modèles et ton dossier sont gardés.": "Downloads the latest version and replaces the current one; your models and folder are kept."
 }

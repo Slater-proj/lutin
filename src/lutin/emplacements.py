@@ -2,6 +2,7 @@
 
 Rien n'est caché : la page « Emplacements » liste tous les dossiers utilisés avec leur taille et la place libre du disque qui les porte. Les tailles sont mesurées avec un temps limité
 (un dossier immense ou un partage réseau lent ne bloque pas la page) et gardées une minute."""
+import json
 import os
 import re
 import sys
@@ -24,6 +25,43 @@ def lire_config_modeles():
     """Le dossier des modèles inscrit dans la configuration de Lutin ('' s'il n'y en a pas ; `null` ou une valeur absurde comptent comme absent)."""
     v = ((_m.config_lue().get("emplacements") or {}).get("modeles"))
     return v.strip() if isinstance(v, str) and v.strip() and v.strip().lower() != "null" else ""
+
+
+def _fichier_vu():
+    return _m.DONNEES / "dossier_modeles_vu.json"
+
+
+def retenir_dossier_vu(dossier):
+    """Garde le dossier de modèles qu'Ollama utilisait quand il répondait (et contenait des modèles). Si Ollama est un jour relancé SANS son réglage habituel (par exemple démarré par Lutin avant l'application
+    d'Ollama, ou après un redémarrage), il retomberait sur le dossier par défaut, vide : tous les modèles sembleraient perdus. Avec cette mémoire, Lutin sait où ils sont."""
+    dossier = str(dossier or "").strip()
+    if not dossier or not (Path(dossier) / "manifests").is_dir():
+        return
+    try:
+        _m.ecrire_atomique(_fichier_vu(), json.dumps({"dossier": dossier}))
+    except OSError:
+        pass
+
+
+def dossier_vu():
+    """Le dernier dossier de modèles vu par Ollama, s'il existe encore et contient des modèles ; '' sinon."""
+    try:
+        d = str(json.loads(_fichier_vu().read_text(encoding="utf-8")).get("dossier") or "")
+    except (OSError, ValueError, AttributeError):
+        return ""
+    return d if d and (Path(d) / "manifests").is_dir() else ""
+
+
+def modeles_ailleurs(installes):
+    """Si Ollama ne voit aucun modèle alors que le dernier dossier connu en contient : (dossier, nombre de modèles) ; None sinon."""
+    if installes:
+        return None
+    d = dossier_vu()
+    if not d:
+        return None
+    from . import ollama_partage
+    n = len(ollama_partage.lire(d))
+    return (d, n) if n else None
 
 
 RE_FROM = re.compile(r"^FROM\s+(.+)$", re.M)
@@ -60,6 +98,8 @@ def dossier_indique_par_ollama(maintenant=time.time):
     except (OSError, ValueError, KeyError):
         trouve = ""
     _REEL.update(t=maintenant(), v=trouve)
+    if trouve:
+        retenir_dossier_vu(trouve)
     return trouve
 
 

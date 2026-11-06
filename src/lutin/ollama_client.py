@@ -195,7 +195,7 @@ def desinstaller_windows(executer=subprocess.run, env=None):
         raise ErreurOllama(_t("la désinstallation d'Ollama a échoué (code {})").format(r.returncode))
 
 
-def installer_windows(dossier_cache, progression=None, ouvrir=urllib.request.urlopen, lanceur_sortie=None, executer=subprocess.run, taille_min=50_000_000):
+def installer_windows(dossier_cache, progression=None, ouvrir=urllib.request.urlopen, lanceur_sortie=None, executer=subprocess.run, taille_min=50_000_000, dossier=None):
     """Télécharge, VÉRIFIE LA SIGNATURE, puis installe Ollama en silence (pour l'utilisateur courant, sans droits administrateur)."""
     from .machine import lancer
     lanceur_sortie = lanceur_sortie or lancer
@@ -204,7 +204,7 @@ def installer_windows(dossier_cache, progression=None, ouvrir=urllib.request.url
     if not ok:
         installateur.unlink(missing_ok=True)
         raise ErreurOllama(_t("la signature de l'installateur d'Ollama n'est pas valide ({}) : installation annulée").format(sujet or "aucune signature"))
-    r = executer([str(installateur), "/SILENT"], timeout=900)
+    r = executer([str(installateur), "/SILENT"] + (["/DIR=" + str(dossier)] if dossier else []), timeout=900)          # /DIR : l'option d'installation du programme d'installation (Inno Setup) d'Ollama
     if getattr(r, "returncode", 0) != 0:
         raise ErreurOllama(_t("l'installation d'Ollama a échoué (code {})").format(r.returncode))
     exe = trouver_executable("windows")

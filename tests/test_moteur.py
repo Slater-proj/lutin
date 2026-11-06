@@ -407,7 +407,7 @@ class Assistant(unittest.TestCase):
         ollama = r["moteurs"][0]
         self.assertTrue(ollama["gere_modeles"] and ollama["actif"])
         self.assertTrue(ollama["points_forts"] and ollama["points_faibles"], "chaque moteur se décrit : forces et faiblesses")
-        self.assertEqual(set(ollama["actions"]), {"installer", "desinstaller", "reinstaller", "demarrer", "arreter"})
+        self.assertEqual(set(ollama["actions"]), {"installer", "desinstaller", "reinstaller", "demarrer", "arreter", "mettre_a_jour"})
         self.assertTrue(all("raison" in a for a in ollama["actions"].values()), "chaque action dit pourquoi elle est possible ou non")
         autre = next(m for m in r["moteurs"] if m["id"] == "openai")
         self.assertTrue(autre["adresse_modifiable"] and not autre["gere_modeles"])
@@ -467,7 +467,7 @@ class Assistant(unittest.TestCase):
         self.assertTrue(all(not x["possible"] and "Docker" in x["raison"] for x in a.values()))
         appels = []
         possibles = {k: {"possible": True, "raison": "ok"} for k in moteurs.ACTIONS}
-        with mock.patch.object(mo, "actions", lambda: possibles), mock.patch.object(A, "arreter_ollama", lambda: appels.append("arreter")), mock.patch.object(A, "demarrer_ollama", lambda: appels.append("demarrer")),                 mock.patch.object(ollama_client, "desinstaller_windows", lambda: appels.append("desinstaller")), mock.patch.object(ollama_client, "installer_windows", lambda cache, progression: appels.append("installer")):
+        with mock.patch.object(mo, "actions", lambda: possibles), mock.patch.object(A, "arreter_ollama", lambda: appels.append("arreter")), mock.patch.object(A, "demarrer_ollama", lambda: appels.append("demarrer")),                 mock.patch.object(ollama_client, "desinstaller_windows", lambda: appels.append("desinstaller")), mock.patch.object(ollama_client, "installer_windows", lambda cache, progression, **k: appels.append("installer")):
             mo.faire("reinstaller", lambda *x: None)
             self.assertEqual(appels, ["arreter", "desinstaller", "installer", "demarrer"])
             appels.clear()

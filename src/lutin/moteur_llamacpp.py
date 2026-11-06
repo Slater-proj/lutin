@@ -26,6 +26,7 @@ from .i18n import t as _t
 from .moteur_openai import MoteurOpenAI
 
 API_RELEASES = "https://api.github.com/repos/ggml-org/llama.cpp/releases?per_page=8"
+CACHE_PARTAGE = {}
 API_HF = "https://huggingface.co/api/models"
 # Quelques modèles sûrs à proposer d'un clic (dépôt et fichier vérifiés sur Hugging Face, quantification Q4_K_M). La taille est celle du fichier, arrondie.
 SUGGESTIONS = (
@@ -116,12 +117,37 @@ def regler(moteur, adresse=None, cle=None, **autres):
     ecrire_config(config)
 
 
-def regler_dossier(moteur, chemin):
-    """Change le dossier d'installation de llama.cpp (voir valider_dossier)."""
+def espace_libre(p):
+    """Go libres sur le disque qui porte ce dossier (même s'il n'existe pas encore : on remonte au premier dossier existant) ; None si inconnu."""
+    while p is not None and not Path(p).exists() and Path(p) != Path(p).parent:
+        p = Path(p).parent
+    try:
+        return round(shutil.disk_usage(str(p)).free / 1e9, 1) if p is not None else None
+    except OSError:
+        return None
+
+
+def regler_dossier_modeles(moteur, chemin):
+    """Change le dossier où llama.cpp range ses modèles (vide : le sous-dossier « modeles » de son dossier). Les modèles déjà téléchargés ne sont pas déplacés."""
     mo = moteurs.MOTEURS.get(moteur)
-    if not hasattr(mo, "info_dossier"):
+    if not isinstance(mo, MoteurLlamaCpp):
+        raise ErreurMoteur(_t("Les modèles de ce moteur se règlent dans l'onglet Modèles."))
+    valeur = valider_dossier(chemin, False)
+    config = lire_config()
+    c = config.setdefault(moteur, {})
+    if valeur:
+        c["dossier_modeles"] = valeur
+    else:
+        c.pop("dossier_modeles", None)
+    ecrire_config(config)
+
+
+def regler_dossier(moteur, chemin):
+    """Change le dossier d'installation d'un moteur géré par Lutin (voir valider_dossier)."""
+    mo = moteurs.MOTEURS.get(moteur)
+    if not hasattr(mo, "info_dossier") or not mo.info_dossier().get("modifiable"):
         raise ErreurMoteur(_t("Ce moteur n'a pas de dossier d'installation."))
-    valeur = valider_dossier(chemin, mo.serveur_installe() is not None)
+    valeur = valider_dossier(chemin, mo.serveur_installe() is not None, mo.nom)
     config = lire_config()
     c = config.setdefault(moteur, {})
     if valeur:
@@ -140,11 +166,11 @@ def vue_reglages(moteur):
     return vue
 
 
-def valider_dossier(chemin, installe):
-    """Le dossier choisi pour llama.cpp : absolu, utilisable en écriture. Chaîne vide = revenir au dossier de Lutin. Refusé tant que llama.cpp est installé ailleurs (rien n'est déplacé en douce)."""
+def valider_dossier(chemin, installe, nom="llama.cpp"):
+    """Le dossier choisi pour un moteur : absolu, utilisable en écriture. Chaîne vide = revenir au dossier par défaut. Refusé tant que le moteur est installé ailleurs (rien n'est déplacé en douce)."""
     chemin = str(chemin or "").strip()
     if installe:
-        raise ErreurMoteur(_t("llama.cpp est déjà installé : désinstalle-le d'abord (tes modèles restent où ils sont), puis change de dossier."))
+        raise ErreurMoteur(_t("{} est déjà installé : désinstalle-le d'abord (tes modèles restent où ils sont), puis change de dossier.").format(nom))
     if not chemin:
         return ""
     p = Path(chemin).expanduser()
@@ -158,6 +184,41 @@ def valider_dossier(chemin, installe):
     except OSError as e:
         raise ErreurMoteur(_t("Ce dossier n'est pas utilisable en écriture : {}").format(e))
     return str(p)
+
+
+# --------------------------------------------------------------------------- réglages adaptés à la machine
+
+AIDE_CACHE = {}
+
+
+def aide_serveur(exe):
+    """Le texte d'aide de ce llama-server (en minuscules), pour ne passer que les options qu'il connaît : elles changent d'une version à l'autre, et une option inconnue l'empêcherait de démarrer. Gardé en mémoire."""
+    cle = str(exe)
+    if cle not in AIDE_CACHE:
+        try:
+            r = subprocess.run([cle, "--help"], capture_output=True, timeout=20, cwd=str(Path(cle).parent))
+            AIDE_CACHE[cle] = (r.stdout + r.stderr).decode("utf-8", "replace").lower()
+        except (OSError, subprocess.SubprocessError):
+            AIDE_CACHE[cle] = ""
+    return AIDE_CACHE[cle]
+
+
+def reglages_machine(aide, variante, taille_go, profil):
+    """Ce que llama.cpp sait régler et que Lutin règle d'après la machine : (arguments, ajuste).
+    - le nombre de fils de calcul = les cœurs physiques (llama.cpp en prend parfois trop, ce qui ralentit) ;
+    - sur une carte graphique, un modèle qui ne tient pas entièrement (jugement de Lutin, comme pour Ollama) : `--fit` laisse llama.cpp répartir les couches entre la carte et le processeur, au lieu de tout y forcer.
+    `ajuste` vaut True dans ce second cas : l'appelant ne force alors pas toutes les couches sur la carte. Sans profil de machine ou sans l'option dans l'aide, rien n'est ajouté."""
+    arguments, ajuste = [], False
+    if profil is None:
+        return arguments, ajuste
+    if getattr(profil, "coeurs", 0) and "--threads" in aide:
+        arguments += ["--threads", str(int(profil.coeurs))]
+    if variante in ("cuda", "vulkan", "metal") and taille_go and "--fit" in aide:
+        from . import adequation
+        if adequation.evaluer({"go": taille_go}, profil).get("niveau") in ("limite", "trop_gros"):
+            arguments += ["--fit", "on"]
+            ajuste = True
+    return arguments, ajuste
 
 
 # --------------------------------------------------------------------------- choix du programme à télécharger
@@ -306,17 +367,12 @@ class MoteurLlamaCpp(MoteurOpenAI):
         return ollama.parent / "llama.cpp"
 
     def info_dossier(self):
-        """Ce que la page montre : le dossier utilisé, celui qui est proposé, celui par défaut, et la place libre sur chacun."""
-        def libre(p):
-            while p is not None and not Path(p).exists() and Path(p) != Path(p).parent:
-                p = Path(p).parent
-            try:
-                return round(shutil.disk_usage(str(p)).free / 1e9, 1) if p is not None else None
-            except OSError:
-                return None
+        """Ce que la page montre : le dossier utilisé, celui qui est proposé, celui par défaut, et la place libre sur chacun ; puis le dossier des modèles."""
+        libre = espace_libre
         actuel, propose, defaut = self.dossier(), self.dossier_propose(), self.dossier_defaut()
         return {"actuel": str(actuel or ""), "propose": str(propose or ""), "defaut": str(defaut or ""), "personnalise": bool(self.config().get("dossier")),
-                "libre_go": {"actuel": libre(actuel), "propose": libre(propose) if propose else None, "defaut": libre(defaut)}, "installe": self.serveur_installe() is not None}
+                "libre_go": {"actuel": libre(actuel), "propose": libre(propose) if propose else None, "defaut": libre(defaut)}, "installe": self.serveur_installe() is not None, "modifiable": True,
+                "modeles": {"actuel": str(self.dossier_modeles()), "libre_go": libre(self.dossier_modeles()), "modifiable": True, "personnalise": bool(self.config().get("dossier_modeles"))}}
 
     def dossier_modeles(self):
         personnalise = self.config().get("dossier_modeles")
@@ -344,6 +400,22 @@ class MoteurLlamaCpp(MoteurOpenAI):
             return super().actif()
         return self.serveur_pret() is not None          # géré : le serveur démarre à la demande
 
+    def partages(self):
+        """Les modèles déjà téléchargés par Ollama, lisibles tels quels par llama.cpp (voir ollama_partage.py) : {nom: {fichier, taille, projecteur}}. Vide sous Docker (Ollama est un autre conteneur),
+        avec un serveur externe, ou si l'utilisateur a coupé le partage (réglage `partager_ollama`). Relu au plus toutes les 10 secondes (la page interroge souvent)."""
+        if self.externe() or moteurs.CONTEXTE["en_docker"]() or self.config().get("partager_ollama") is False:
+            return {}
+        dossier = moteurs.CONTEXTE["dossier_ollama"]()
+        if not dossier:
+            return {}
+        cache = CACHE_PARTAGE
+        if cache.get("dossier") == str(dossier) and time.time() - cache.get("quand", 0) < 10:
+            return cache["modeles"]
+        from . import ollama_partage
+        lus = ollama_partage.lire(dossier)
+        cache.update(dossier=str(dossier), quand=time.time(), modeles=lus)
+        return lus
+
     def modeles(self):
         if self.externe():
             return super().modeles()
@@ -356,7 +428,11 @@ class MoteurLlamaCpp(MoteurOpenAI):
                 nom = f.relative_to(dossier).with_suffix("").as_posix()
                 noms.append(nom)
                 tailles[nom] = f.stat().st_size
-        return {"actif": self.serveur_pret() is not None, "installes": noms, "tailles": tailles}
+        partages = [n for n in sorted(self.partages()) if n not in tailles]          # ceux d'Ollama, sous leurs noms d'Ollama : la même liste de modèles d'un moteur à l'autre
+        for n in partages:
+            noms.append(n)
+            tailles[n] = self.partages()[n]["taille"]
+        return {"actif": self.serveur_pret() is not None, "installes": noms, "tailles": tailles, "partages": partages}
 
     def en_memoire(self, modele):
         if self.externe():
@@ -397,8 +473,17 @@ class MoteurLlamaCpp(MoteurOpenAI):
             port = int(self.config().get("port") or PORT_DEFAUT)
             variante = (self.config().get("variante_installee") or "cpu")
             commande = [str(exe), "-m", str(fichier), "--host", "127.0.0.1", "--port", str(port), "-c", str(ctx), "--jinja"]
-            if variante in ("cuda", "vulkan", "metal"):
-                commande += ["-ngl", "99"]          # tout le modèle sur la carte (le reste va sur le processeur s'il ne tient pas : llama.cpp l'ajuste)
+            commun = self.partages().get(str(modele))
+            if commun is not None and commun.get("projecteur") and Path(fichier) == commun["fichier"]:
+                commande += ["--mmproj", str(commun["projecteur"])]          # un modèle d'Ollama qui voit les images : son projecteur est dans le même dossier
+            try:
+                taille_go = Path(fichier).stat().st_size / 1e9
+                machine, ajuste = reglages_machine(aide_serveur(exe), variante, taille_go, (moteurs.CONTEXTE.get("profil_attendu") or moteurs.CONTEXTE["profil"])())
+            except Exception:  # noqa: BLE001  (les réglages adaptés ne doivent jamais empêcher de démarrer)
+                machine, ajuste = [], False
+            commande += machine
+            if variante in ("cuda", "vulkan", "metal") and not ajuste:
+                commande += ["-ngl", "99"]          # tout le modèle sur la carte ; s'il est trop gros pour elle, `--fit` (ci-dessus) répartit les couches avec le processeur
             journal = self.dossier() / "serveur.log"
             journal.parent.mkdir(parents=True, exist_ok=True)
             sortie = open(journal, "wb")
@@ -452,6 +537,9 @@ class MoteurLlamaCpp(MoteurOpenAI):
                     pass
 
     def _fichier_modele(self, modele):
+        commun = self.partages().get(str(modele))
+        if commun is not None and not (self.dossier_modeles() / (str(modele) + ".gguf")).is_file():
+            return commun["fichier"]          # un modèle d'Ollama : son fichier GGUF, lu sur place
         dossier = self.dossier_modeles()
         f = (dossier / (str(modele) + ".gguf")).resolve()
         if dossier.resolve() not in f.parents or not f.is_file():
@@ -492,14 +580,15 @@ class MoteurLlamaCpp(MoteurOpenAI):
         with SERVEUR["verrou"]:
             tourne = SERVEUR["proc"] is not None and SERVEUR["proc"].poll() is None
         return {"installer": installer,
+                "mettre_a_jour": {"possible": par_lutin and not moteurs.CONTEXTE["hors_ligne"](), "raison": _t("Télécharge la dernière version et remplace l'actuelle ; tes modèles et ton dossier sont gardés.") if par_lutin else sans},
                 "desinstaller": {"possible": par_lutin, "raison": _t("Supprime le programme (tes modèles restent).") if par_lutin else sans},
                 "reinstaller": {"possible": par_lutin and not moteurs.CONTEXTE["hors_ligne"](), "raison": _t("Télécharge de nouveau la dernière version, en gardant tes modèles.") if par_lutin else sans},
                 "demarrer": {"possible": False, "raison": _t("Il démarre tout seul quand tu discutes avec un modèle.")},
                 "arreter": {"possible": tourne, "raison": _t("Arrête le serveur et libère la mémoire.") if tourne else _t("Il n'est pas démarré.")}}
 
     def faire(self, action, progression):
-        if action in ("installer", "reinstaller"):
-            return self.installer(progression, reinstaller=action == "reinstaller")
+        if action in ("installer", "reinstaller", "mettre_a_jour"):
+            return self.installer(progression, reinstaller=action != "installer")
         if action == "desinstaller":
             return self.desinstaller()
         if action == "arreter":
@@ -655,6 +744,8 @@ class MoteurLlamaCpp(MoteurOpenAI):
         return destination.with_suffix("").name
 
     def supprimer_modele(self, nom):
+        if str(nom) in self.partages() and not (self.dossier_modeles() / (str(nom) + ".gguf")).is_file():
+            raise ErreurMoteur(_t("« {} » appartient à Ollama : supprime-le depuis Ollama (llama.cpp ne fait que le lire).").format(nom))
         f = self._fichier_modele(nom)
         with SERVEUR["verrou"]:
             if SERVEUR["modele"] == nom:

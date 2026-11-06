@@ -487,6 +487,49 @@ class MoteurOllama(_moteurs.Moteur):
                 _t("Reçoit les nouveaux modèles et les optimisations avec un peu de retard."),
                 _t("Un service de plus qui tourne en arrière-plan."))
 
+    def config(self):
+        return _llamacpp.lire_config().get(self.id, {})
+
+    def serveur_installe(self):
+        return chemin_ollama()
+
+    def dossier_defaut(self):
+        base = os.environ.get("LOCALAPPDATA")
+        return Path(base) / "Programs" / "Ollama" if base and os.name == "nt" else None
+
+    def info_dossier(self):
+        """Comme pour llama.cpp : où il s'installe (choisi avant l'installation, sous Windows seulement : l'installateur d'Ollama accepte un dossier) et où sont ses modèles (réglés dans l'onglet Modèles)."""
+        exe = chemin_ollama()
+        defaut = self.dossier_defaut()
+        choisi = self.config().get("dossier")
+        actuel = Path(exe).parent if exe else (Path(choisi) if choisi else defaut)
+        modeles = __import__("lutin.emplacements", fromlist=["x"]).dossier_modeles()
+        return {"actuel": str(actuel or ""), "propose": "", "defaut": str(defaut or ""), "personnalise": bool(choisi), "libre_go": {"actuel": _llamacpp.espace_libre(actuel), "propose": None, "defaut": _llamacpp.espace_libre(defaut)},
+                "installe": exe is not None, "modifiable": os.name == "nt",
+                "modeles": {"actuel": str(modeles), "libre_go": _llamacpp.espace_libre(modeles), "modifiable": False}}
+
+    def _retenir_dossier_modeles(self):
+        """Le dossier où Ollama range ses modèles AVANT une installation, s'il contient des modèles : une installation (ou une réinstallation) peut le faire retomber sur le dossier par défaut, vide."""
+        try:
+            from . import emplacements
+            dossier = emplacements.dossier_modeles()
+            if (Path(dossier) / "manifests").is_dir():
+                emplacements.retenir_dossier_vu(dossier)
+                return str(dossier)
+        except (OSError, ValueError):
+            pass
+        return ""
+
+    def _rendre_dossier_modeles(self, dossier):
+        """Après l'installation : le même dossier de modèles est remis (configuration de Lutin + variable de l'utilisateur), si ce n'était pas le dossier par défaut d'Ollama."""
+        if not dossier or Path(dossier) == Path.home() / ".ollama" / "models":
+            return
+        try:
+            from . import emplacements
+            emplacements.definir_dossier_modeles(dossier)
+        except (OSError, ValueError) as erreur:
+            _m.journaliser("Dossier des modèles d'Ollama non rétabli après l'installation ({!r}).".format(erreur))
+
     def statut(self):
         actif = etat_ollama()["actif"]
         installe = bool(chemin_ollama()) or actif
@@ -505,7 +548,10 @@ class MoteurOllama(_moteurs.Moteur):
         if os.name == "nt":
             unins = ollama_client.desinstalleur_windows()
             gardes = _t("Tes modèles téléchargés sont gardés.")
-            return {"installer": {"possible": not st["installe"] and not hors, "raison": (_t("Hors ligne : aucun téléchargement.") if hors else _t("Télécharge l'installateur officiel, vérifie sa signature et l'installe pour toi (sans droits administrateur).")) if not st["installe"] else deja},
+            maj = {"possible": st["installe"] and not hors, "raison": _t("Installe la dernière version par-dessus l'actuelle (sans désinstaller) ; tes modèles, leur dossier et tes réglages sont gardés.") if st["installe"] else pas_installe}
+            if hors:
+                maj["raison"] = _t("Hors ligne : aucun téléchargement.")
+            return {"mettre_a_jour": maj, "installer": {"possible": not st["installe"] and not hors, "raison": (_t("Hors ligne : aucun téléchargement.") if hors else _t("Télécharge l'installateur officiel, vérifie sa signature et l'installe pour toi (sans droits administrateur).")) if not st["installe"] else deja},
                     "desinstaller": {"possible": st["installe"] and unins is not None, "raison": _t("Désinstalle Ollama. ") + gardes if unins else (pas_installe if not st["installe"] else _t("Désinstalleur introuvable : utilise « Applications installées » de Windows."))},
                     "reinstaller": {"possible": st["installe"] and unins is not None and not hors, "raison": _t("Désinstalle puis réinstalle la dernière version. ") + gardes if st["installe"] else pas_installe},
                     "demarrer": demarrer, "arreter": arreter}
@@ -515,7 +561,8 @@ class MoteurOllama(_moteurs.Moteur):
         else:
             installer = _t("Sous Linux, l'installation demande les droits administrateur : lance dans un terminal « {} ».").format(ollama_client.COMMANDE_LINUX)
             retirer = _t("Sous Linux, la désinstallation demande les droits administrateur : suis la procédure de https://docs.ollama.com/linux#uninstall.")
-        return {"installer": {"possible": False, "raison": deja if st["installe"] else installer}, "desinstaller": {"possible": False, "raison": retirer if st["installe"] else pas_installe},
+        return {"mettre_a_jour": {"possible": False, "raison": _t("Relance la commande d'installation dans un terminal.") if st["installe"] else pas_installe},
+                "installer": {"possible": False, "raison": deja if st["installe"] else installer}, "desinstaller": {"possible": False, "raison": retirer if st["installe"] else pas_installe},
                 "reinstaller": {"possible": False, "raison": _t("Relance la commande d'installation dans un terminal.") if st["installe"] else pas_installe}, "demarrer": demarrer, "arreter": arreter}
 
     def faire(self, action, progression):
@@ -523,22 +570,31 @@ class MoteurOllama(_moteurs.Moteur):
         if not a.get("possible"):
             raise ValueError(a.get("raison") or _t("Action impossible avec ce moteur."))
         cache = Path(tempfile.gettempdir()) / "lutin-ollama"
+        dossier_modeles = self._retenir_dossier_modeles() if action in ("mettre_a_jour", "reinstaller", "installer") else ""
         try:
             if action == "demarrer":
                 progression(_t("Démarrage d'Ollama…"), 0, 0)
                 _m.demarrer_ollama()
             elif action == "arreter":
                 _m.arreter_ollama()
+            elif action == "mettre_a_jour":
+                progression(_t("Arrêt d'Ollama…"), 0, 0)
+                _m.arreter_ollama()
+                ollama_client.installer_windows(cache, progression)          # par-dessus l'existant : le même dossier, rien n'est désinstallé
+                self._rendre_dossier_modeles(dossier_modeles)
+                _m.demarrer_ollama()
             elif action in ("desinstaller", "reinstaller"):
                 progression(_t("Arrêt d'Ollama…"), 0, 0)
                 _m.arreter_ollama()
                 progression(_t("Désinstallation…"), 0, 0)
                 ollama_client.desinstaller_windows()
                 if action == "reinstaller":
-                    ollama_client.installer_windows(cache, progression)
+                    ollama_client.installer_windows(cache, progression, dossier=self.config().get("dossier"))
+                    self._rendre_dossier_modeles(dossier_modeles)
                     _m.demarrer_ollama()
             elif action == "installer":
-                ollama_client.installer_windows(cache, progression)
+                ollama_client.installer_windows(cache, progression, dossier=self.config().get("dossier"))
+                self._rendre_dossier_modeles(dossier_modeles)
                 _m.demarrer_ollama()
         except ollama_client.ErreurOllama as e:
             raise ValueError(str(e))

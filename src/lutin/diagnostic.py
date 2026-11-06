@@ -26,7 +26,7 @@ def modele_conseille(profil, catalogue):
     return next(((c.id, c.modele.get("go")) for c in choix.values() if c is not None), None)
 
 
-def diagnostiquer(ollama_actif, ollama_installe, installes, reglages, profil=None, catalogue=None, adequation=None, disque_libre_go=None, docker=None, conseils=None):
+def diagnostiquer(ollama_actif, ollama_installe, installes, reglages, profil=None, catalogue=None, adequation=None, disque_libre_go=None, docker=None, conseils=None, modeles_ailleurs=None):
     """La liste des problèmes, du plus grave au moins grave : [{code, niveau, texte, action}]. Vide quand tout va bien."""
     docker = (os.environ.get("LUTIN_DOCKER") == "1") if docker is None else docker
     problemes = []
@@ -41,6 +41,9 @@ def diagnostiquer(ollama_actif, ollama_installe, installes, reglages, profil=Non
             texte = _t("Ollama n'est pas installé : Lutin en a besoin pour faire tourner les modèles (ollama.com).")
             action = {"type": "onglet", "nom": "modeles"}
         problemes.append({"code": "ollama_arret", "niveau": "erreur", "texte": texte, "action": action})
+    elif not installes and modeles_ailleurs:
+        problemes.append({"code": "modeles_ailleurs", "niveau": "erreur", "action": {"type": "redemarrer_ollama"},
+                          "texte": _t("Ollama tourne mais ne voit aucun modèle, alors que {} en contient {} : il a été relancé sans ton dossier de modèles habituel. Tes modèles ne sont pas perdus ; redémarre Ollama pour qu'il retrouve ce dossier.").format(modeles_ailleurs[0], modeles_ailleurs[1])})
     elif not installes:
         conseil = modele_conseille(profil, catalogue) if profil is not None and catalogue else None
         if conseil:

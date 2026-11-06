@@ -84,6 +84,7 @@ Chaque jalon : étude → porte de validation → code ciblé → tests → docu
 - **Critère** : redémarrer ou recréer le conteneur ne réinstalle rien ni ne perd moteurs et modèles (test de CI sur les volumes).
 
 ### 0.21.0 — Modèles et rôles multi-moteurs
+- **Déjà fait en 0.16.8** : les modèles d'Ollama (« sans filtre » compris) sont lus tels quels par llama.cpp, sous les mêmes noms ; mêmes lignes de dossiers sur chaque carte de moteur.
 - Catalogue de modèles filtré par moteur (format, quantification, mémoire estimée, compatibilité) ; rôles par moteur ; banc rapide et approfondi indépendants d'Ollama.
 - **Critère** : jamais un modèle proposé qui n'est pas compatible avec le moteur choisi.
 

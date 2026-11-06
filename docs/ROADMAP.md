@@ -84,6 +84,7 @@ Each milestone: study → validation gate → targeted code → tests → FR/EN 
 - **Criterion**: restarting or recreating the container reinstalls nothing and loses no engine or model (CI volume test).
 
 ### 0.21.0 — Models and roles across engines
+- **Already done in 0.16.8**: Ollama's models (uncensored ones included) are read in place by llama.cpp under the same names; same folder lines on every engine card.
 - Model catalogue filtered by engine (format, quantisation, estimated memory, compatibility); roles per engine; quick and thorough bench independent of Ollama.
 - **Criterion**: never a model offered that is not compatible with the chosen engine.
 

@@ -517,6 +517,8 @@ def demarrer_ollama():
     from . import emplacements
     if emplacements.lire_config_modeles() and not os.environ.get("OLLAMA_MODELS"):
         env["OLLAMA_MODELS"] = emplacements.lire_config_modeles()          # le dossier choisi à l'installation, même si la variable de Windows n'est pas arrivée jusqu'ici
+    elif not os.environ.get("OLLAMA_MODELS") and emplacements.dossier_vu():
+        env["OLLAMA_MODELS"] = emplacements.dossier_vu()          # aucun réglage connu : le dernier dossier où Ollama avait des modèles (sinon il repart d'un dossier vide et tout semble perdu)
     # CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP, surtout PAS DETACHED_PROCESS : sans console du tout, chaque programme à console qu'Ollama lance (le moteur de chaque modèle chargé)
     # ouvre sa propre fenêtre noire qui clignote. Avec une console cachée, ils la partagent et rien ne s'affiche.
     drapeaux = 0x08000000 | 0x00000200 if os.name == "nt" else 0

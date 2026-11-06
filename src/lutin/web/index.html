@@ -1571,7 +1571,7 @@ body[data-moteur="ollama"] .moteur-autre { display:none !important; }
     const bloc = $('diagnostic'), cle = JSON.stringify(liste);
     if (bloc.dataset.cle === cle) return;
     bloc.dataset.cle = cle; bloc.hidden = !liste.length; bloc.textContent = '';
-    const libelle = a => ({ installer_modele: T('Installer ce modèle'), demarrer_ollama: T('Démarrer Ollama'), appliquer_conseil: T('Appliquer ces réglages'), ignorer_conseil: T('Ne plus proposer') }[a.type] || T('Ouvrir les modèles'));
+    const libelle = a => ({ installer_modele: T('Installer ce modèle'), demarrer_ollama: T('Démarrer Ollama'), redemarrer_ollama: T('Redémarrer Ollama'), appliquer_conseil: T('Appliquer ces réglages'), ignorer_conseil: T('Ne plus proposer') }[a.type] || T('Ouvrir les modèles'));
     for (const p of liste) {
       const ligne = el('div', 'pb ' + p.niveau);
       ligne.appendChild(el('span', '', (p.niveau === 'erreur' ? '⛔ ' : p.niveau === 'info' ? 'ℹ ' : '⚠ ') + p.texte));
@@ -1583,6 +1583,7 @@ body[data-moteur="ollama"] .moteur-autre { display:none !important; }
           try {
             if (a.type === 'installer_modele') { await api('/api/installer-modele', { modele: a.modele }); ouvrirOnglet('modeles'); }
             else if (a.type === 'demarrer_ollama') await api('/api/demarrer-ollama', {});
+            else if (a.type === 'redemarrer_ollama') await api('/api/redemarrer-ollama', {});
             else if (a.type === 'appliquer_conseil') await api('/api/conseil-machine', { action: 'appliquer' });
             else if (a.type === 'ignorer_conseil') await api('/api/conseil-machine', { action: 'ignorer' });
             else ouvrirOnglet(a.nom);
@@ -2842,10 +2843,10 @@ body[data-moteur="ollama"] .moteur-autre { display:none !important; }
     if (m.maj && m.maj.disponible) {          // une version plus récente que celle installée : proposée ici, sans notification en haut de la page
       const avis = el('div', 'carte'); avis.style.cssText = 'flex-direction:column;align-items:stretch;gap:6px;border-color:var(--accent,#5aa9ff)';
       avis.appendChild(el('div', '', '⬆ ' + T('Une version plus récente existe : ') + m.maj.derniere + ' (' + T('installée : ') + (m.maj.actuelle || T('inconnue')) + ').'));
-      const ra = m.actions.reinstaller, enCours = m.tache && m.tache.statut === 'en cours';
+      const ra = m.actions.mettre_a_jour, enCours = m.tache && m.tache.statut === 'en cours';
       if (ra && ra.possible) {
         const bm = el('button', 'principal', T('Mettre à jour')); bm.title = ra.raison; bm.disabled = !modifiable || enCours;
-        bm.addEventListener('click', async () => { if (!confirm(ra.raison + ' ' + T('Continuer ?'))) return; try { await api('/api/moteur-action', { moteur: m.id, action: 'reinstaller' }); } catch (e) { $('aideMoteur').textContent = e.message; } chargerMoteurs(); });
+        bm.addEventListener('click', async () => { if (!confirm(ra.raison + ' ' + T('Continuer ?'))) return; try { await api('/api/moteur-action', { moteur: m.id, action: 'mettre_a_jour' }); } catch (e) { $('aideMoteur').textContent = e.message; } chargerMoteurs(); });
         avis.appendChild(bm);
       } else if (ra && ra.raison) avis.appendChild(el('div', 'aide', 'ℹ ' + ra.raison));
       d.appendChild(avis);
@@ -2872,20 +2873,38 @@ body[data-moteur="ollama"] .moteur-autre { display:none !important; }
     // ce qui n'est pas possible, et pourquoi : seulement quand rien ne l'est (Docker, serveur externe, système), ou quand le moteur manque et ne peut pas être installé
     const raisons = !possibles ? [...new Set(Object.keys(LIBELLE_ACTION).map(a => m.actions[a]).filter(x => x && x.raison).map(x => x.raison))] : (!m.statut.installe && m.actions.installer && m.actions.installer.raison ? [m.actions.installer.raison] : []);
     raisons.slice(0, 2).forEach(r => d.appendChild(el('div', 'aide', 'ℹ ' + r)));
-    const dd = m.reglages && m.reglages.dossier;          // llama.cpp : où il vit (programme + modèles), à côté d'Ollama si celui-ci a été déplacé
+    const dd = m.reglages && m.reglages.dossier;          // les mêmes lignes pour tous les moteurs gérés par Lutin : où il s'installe, où sont ses modèles
     if (dd) {
-      d.appendChild(el('div', 'aide', T('Dossier d\'installation et de modèles : ') + dd.actuel + (dd.libre_go.actuel != null ? ' · ' + dd.libre_go.actuel + ' ' + T('Go libres') : '')));
-      const l = el('div', 'ligne'), champ = el('input'), ok = el('button', '', T('Changer de dossier')), msgD = el('span', 'aide');
-      champ.value = dd.actuel; champ.style.minWidth = '320px'; champ.dataset.dossier = '1'; champ.disabled = ok.disabled = !modifiable || dd.installe;
-      champ.title = T('Un chemin complet, par exemple D:/IA/llama.cpp ; vide : le dossier de Lutin');
-      const changer = async valeur => { try { await api('/api/moteur-regler', { moteur: m.id, dossier: valeur }); await rafraichir(); chargerMoteurs(); } catch (e) { msgD.textContent = e.message; } };
-      ok.addEventListener('click', () => changer(champ.value.trim()));
-      l.append(champ, ok, msgD); d.appendChild(l);
-      if (dd.propose && !dd.personnalise && dd.propose !== dd.actuel) {
-        const p = el('button', modifiable && !dd.installe ? 'principal' : '', T('Utiliser le dossier proposé, à côté d\'Ollama : ') + dd.propose + (dd.libre_go.propose != null ? ' (' + dd.libre_go.propose + ' ' + T('Go libres') + ')' : ''));
-        p.disabled = !modifiable || dd.installe; p.addEventListener('click', () => changer(dd.propose)); d.appendChild(p);
+      const libre = g => (g != null ? ' · ' + g + ' ' + T('Go libres') : '');
+      d.appendChild(el('div', 'aide', T('Dossier d\'installation : ') + dd.actuel + libre(dd.libre_go.actuel)));
+      if (dd.modifiable) {
+        const l = el('div', 'ligne'), champ = el('input'), ok = el('button', '', T('Changer de dossier')), msgD = el('span', 'aide');
+        champ.value = dd.actuel; champ.style.minWidth = '320px'; champ.dataset.dossier = '1'; champ.disabled = ok.disabled = !modifiable || dd.installe;
+        champ.title = T('Un chemin complet, par exemple D:/IA/Moteur ; vide : le dossier par défaut');
+        const changer = async valeur => { try { await api('/api/moteur-regler', { moteur: m.id, dossier: valeur }); await rafraichir(); chargerMoteurs(); } catch (e) { msgD.textContent = e.message; } };
+        ok.addEventListener('click', () => changer(champ.value.trim()));
+        l.append(champ, ok, msgD); d.appendChild(l);
+        if (dd.propose && !dd.personnalise && dd.propose !== dd.actuel) {
+          const p = el('button', modifiable && !dd.installe ? 'principal' : '', T('Utiliser le dossier proposé, à côté d\'Ollama : ') + dd.propose + (dd.libre_go.propose != null ? ' (' + dd.libre_go.propose + ' ' + T('Go libres') + ')' : ''));
+          p.disabled = !modifiable || dd.installe; p.addEventListener('click', () => changer(dd.propose)); d.appendChild(p);
+        }
+        if (dd.installe) d.appendChild(el('div', 'aide', m.nom + ' ' + T('est installé ici : pour changer de dossier, désinstalle-le d\'abord (tes modèles restent où ils sont).')));
       }
-      if (dd.installe) d.appendChild(el('div', 'aide', T('llama.cpp est installé ici : pour changer de dossier, désinstalle-le d\'abord (tes modèles restent où ils sont).')));
+      const dm = dd.modeles;          // le dossier des modèles : modifiable ici pour llama.cpp, dans l'onglet Modèles pour Ollama (qui sait copier les modèles déjà téléchargés)
+      if (dm) {
+        d.appendChild(el('div', 'aide', T('Dossier des modèles : ') + dm.actuel + libre(dm.libre_go)));
+        const l2 = el('div', 'ligne');
+        if (dm.modifiable) {
+          const champ2 = el('input'), ok2 = el('button', '', T('Changer de dossier')), msg2 = el('span', 'aide');
+          champ2.value = dm.actuel; champ2.style.minWidth = '320px'; champ2.disabled = ok2.disabled = !modifiable;
+          champ2.title = T('Un chemin complet ; vide : le sous-dossier « modeles » du dossier d\'installation. Les modèles déjà téléchargés ne sont pas déplacés.');
+          ok2.addEventListener('click', async () => { try { await api('/api/moteur-regler', { moteur: m.id, dossier_modeles: champ2.value.trim() }); await rafraichir(); chargerMoteurs(); } catch (e) { msg2.textContent = e.message; } });
+          l2.append(champ2, ok2, msg2);
+        } else {
+          const aller = el('button', '', T('Changer dans l\'onglet Modèles')); aller.addEventListener('click', () => ouvrirOnglet('modeles')); l2.appendChild(aller);
+        }
+        d.appendChild(l2);
+      }
     }
     if (m.adresse_modifiable) {
       const f = el('div', 'ligne'), url = el('input'), cle = el('input'), msg = el('span', 'aide');
@@ -2934,6 +2953,7 @@ body[data-moteur="ollama"] .moteur-autre { display:none !important; }
     installes.forEach(nom => {
       const c = el('div', 'carte'), info = ETAT.modeles.find(x => x.id === nom);
       c.appendChild(el('b', '', nom)); if (info && info.go) c.appendChild(el('span', 'aide', ' · ' + info.go + ' ' + T('Go')));
+      if ((ETAT.partages || []).includes(nom)) { const p = el('span', 'aide', ' · ' + T('d\'Ollama (pas de copie)')); p.title = T('Le même fichier que dans Ollama : rien n\'est dupliqué, et sa suppression se fait depuis Ollama.'); c.appendChild(p); }
       if (nom === ETAT.reglages.modele) c.appendChild(el('span', 'aide', ' · ' + T('utilisé')));
       else { const u = el('button', 'principal', T('Utiliser')); u.addEventListener('click', async () => { try { await api('/api/reglages', { modele: nom }); await rafraichir(); chargerModelesMoteur(); } catch (e) { alert(e.message); } }); c.appendChild(u); }
       if (m.gere_modeles && r.modifiable) { const s = el('button', '', T('Supprimer')); s.addEventListener('click', async () => { if (!confirm(T('Supprimer « ') + nom + T(' » du disque ? Tu pourras le retélécharger.'))) return; try { await api('/api/moteur-supprimer', { moteur: m.id, nom }); await rafraichir(); chargerModelesMoteur(); } catch (e) { alert(e.message); } }); c.appendChild(s); }

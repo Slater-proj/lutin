@@ -115,7 +115,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
         modeles = mo.modeles()
         statut = mo.statut()
         return dict(v, statut=statut, actif=bool(modeles["actif"]), nb_modeles=len(modeles["installes"]), actions=mo.actions(), tache=_moteurs.tache(mo.id), telechargeable=mo.telechargeable(), maj=_moteurs_maj.etat().get(mo.id),
-                    reglages=_llamacpp.vue_reglages(mo.id) if mo.adresse_modifiable else {})
+                    reglages=_llamacpp.vue_reglages(mo.id) if (mo.adresse_modifiable or hasattr(mo, "info_dossier")) else {})
 
     @staticmethod
     def _diagnostic_moteur(mo, o, r):
@@ -160,7 +160,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
         libre = jauge.get("libre")
         try:
             return _diagnostic.diagnostiquer(o["actif"], bool(_m.chemin_ollama()), [n for n in o["installes"] if not _embeddings.est_modele_de_recherche(n)], r, profil, _m._CATALOGUE, _adequation.pour_la_liste(modeles, profil, _m._CATALOGUE["modeles"]),
-                                             libre / 1e9 if libre else None, conseils=_conseil_machine.conseils(profil, r))
+                                             libre / 1e9 if libre else None, conseils=_conseil_machine.conseils(profil, r), modeles_ailleurs=_emplacements.modeles_ailleurs(o["installes"]) if o["actif"] else None)
         except (KeyError, TypeError, ValueError, AttributeError):
             return []
 
@@ -257,7 +257,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
             profil = _adequation.profil_pret()
             return self._envoyer(200, {"adequation": _adequation.pour_la_liste(modeles, profil, _m._CATALOGUE["modeles"]), "machine": profil.resume() if profil else "", "budget_go": profil.budget_go() if profil else 0,
                                        "familles": {k: _t(v) for k, v in (_m._CATALOGUE.get("familles") or {}).items()}, "disque_modeles": _emplacements.jauge_modeles(),
-                                       "version": _m.VERSION, "ollama": o["actif"], "ollama_installe": bool(_m.chemin_ollama()) or _m.moteur_actuel().id != "ollama", "moteur_nom": _m.moteur_actuel().nom, "installes": o["installes"], "modeles": modeles, "modeles_masques": len(_m.lire_registre_modeles()["masques"]), "actives": list(_m.TOURS_ACTIFS),
+                                       "version": _m.VERSION, "partages": o.get("partages", []), "ollama": o["actif"], "ollama_installe": bool(_m.chemin_ollama()) or _m.moteur_actuel().id != "ollama", "moteur_nom": _m.moteur_actuel().nom, "installes": o["installes"], "modeles": modeles, "modeles_masques": len(_m.lire_registre_modeles()["masques"]), "actives": list(_m.TOURS_ACTIFS),
                                        "pulls": _m.PULLS, "reglages": r, "conversations": _m.conv_liste(), "racine": str(_m.RACINE), "donnees": str(_m.DONNEES),
                                        "outil": bool(self._outil_vivant()), "hors_ligne": _hl.actif(), "moteur": _m.moteur_actuel().id, "niveau": _m.SECURITE.niveau, "docker": _acces.en_docker(), "ouverture_possible": _fichiers.ouverture_possible(), "missions": _mission.par_conversation(), "langue": _i18n.langue(), "langue_reglage": _i18n.langue_configuree(), "cpus": _machine.cpus_disponibles() or 1, "diagnostic": self._diagnostic(o, r, profil, modeles), "redemarrage": {"necessaire": _acces.securite_enregistree() != _m.SECURITE, "possible": _acces.peut_redemarrer()}, "nouvelle_version": _m.nouvelle_version_lutin(), "travaux": _m.travaux_etat(), "configurateur": self._configurateur(), "addons_alertes": _addons.alertes(), "embeddings": _embeddings.etat(),
                                        "taches_fond": _m.taches_en_cours(), "taches_moteur": [dict(v, nom=_moteurs.MOTEURS[k].nom) for k, v in _moteurs.toutes_les_taches().items() if v.get("statut") == "en cours" and k in _moteurs.MOTEURS], "memoire": self._memoire(r, o), "calibrage": _calibrage.etat(), "bench": {"en_cours": _m.BENCH["en_cours"], "etape": _m.BENCH["etape"], "erreur": _m.BENCH["erreur"], "file": list(_m.BENCH.get("file") or []), "mesures": _bench.lire(_m.chemin_bench())}, "attentes": [{"id": a.id, "titre": a.titre, "detail": a.detail, "diff": a.diff, "conv": a.conv} for a in _m.Attente.EN_COURS.values()],
@@ -897,10 +897,14 @@ class Gestionnaire(BaseHTTPRequestHandler):
                             return self._envoyer(400, {"erreur": possible.get("raison") or _t("Cette action n'est pas possible avec ce moteur.")})
                         return self._envoyer(200, {"tache": _moteurs.lancer_tache(mo, voulue)})
                     if action == "regler":
-                        if not mo.adresse_modifiable:
-                            return self._envoyer(400, {"erreur": _t("Ce moteur n'a pas d'adresse à régler.")})
                         if "dossier" in donnees:
                             _llamacpp.regler_dossier(mo.id, donnees.get("dossier"))
+                        if "dossier_modeles" in donnees:
+                            _llamacpp.regler_dossier_modeles(mo.id, donnees.get("dossier_modeles"))
+                        if not mo.adresse_modifiable:
+                            if "dossier" in donnees or "dossier_modeles" in donnees:
+                                return self._envoyer(200, {"ok": True})
+                            return self._envoyer(400, {"erreur": _t("Ce moteur n'a pas d'adresse à régler.")})
                         _llamacpp.regler(mo.id, donnees.get("url"), donnees.get("cle"), variante=donnees.get("variante") if donnees.get("variante") in ("auto", "cuda", "vulkan", "cpu", "metal") else None)
                         return self._envoyer(200, {"ok": True})
                     if action == "telecharger":
