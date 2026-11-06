@@ -18,6 +18,18 @@ def http_fixe(page, statut=200):
     return http
 
 
+class ModelesMac(unittest.TestCase):
+    def test_les_modeles_pour_mac_ne_sont_pas_proposes_ailleurs(self):
+        from unittest import mock
+        self.assertTrue(decouverte.pour_mac("qwen3-mlx") and decouverte.pour_mac("auteur/modele-mlx-bf16") and decouverte.pour_mac("mlx"))
+        self.assertFalse(decouverte.pour_mac("mixtral") or decouverte.pour_mac("qwen3") or decouverte.pour_mac("xmlx2"))
+        with mock.patch("platform.system", return_value="Windows"):
+            self.assertFalse(decouverte.compatible("qwen3-mlx"))
+            self.assertTrue(decouverte.compatible("qwen3"))
+        with mock.patch("platform.system", return_value="Darwin"):
+            self.assertTrue(decouverte.compatible("qwen3-mlx"), "sur un Mac ils servent")
+
+
 class Decouverte(unittest.TestCase):
     def setUp(self):
         decouverte.CACHE.clear()

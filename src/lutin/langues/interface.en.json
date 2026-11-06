@@ -1031,5 +1031,16 @@
 "Changer de dossier": "Change folder",
 "Un chemin complet, par exemple D:/IA/llama.cpp ; vide : le dossier de Lutin": "A full path, for example D:/AI/llama.cpp; empty: Lutin's folder",
 "Utiliser le dossier proposé, à côté d'Ollama : ": "Use the proposed folder, next to Ollama: ",
-"llama.cpp est installé ici : pour changer de dossier, désinstalle-le d'abord (tes modèles restent où ils sont).": "llama.cpp is installed here: to change folder, uninstall it first (your models stay where they are)."
+"llama.cpp est installé ici : pour changer de dossier, désinstalle-le d'abord (tes modèles restent où ils sont).": "llama.cpp is installed here: to change folder, uninstall it first (your models stay where they are).",
+"Accepter et réactiver l'accord automatique": "Accept and re-enable automatic approval",
+"Du contenu web a été lu : il pourrait contenir une consigne piégée. En réactivant, tu acceptes ce risque pour la suite de cette demande seulement.": "Web content was read: it could contain a booby-trapped instruction. By re-enabling, you accept this risk for the rest of this request only.",
+"Dossiers de la conversation": "Conversation folders",
+"Recherche des dossiers…": "Looking for folders…",
+"Aucun dossier pour le moment.": "No folder yet.",
+"Dossier de travail : ": "Work folder: ",
+"Fichiers créés : ": "Created files: ",
+"Sous Docker, le dossier ne peut pas s'ouvrir depuis la page : clique pour copier son chemin.": "Under Docker, the folder cannot be opened from the page: click to copy its path.",
+"Chemin copié : ": "Path copied: ",
+"Chemin du dossier :": "Folder path:",
+"Disponible depuis cette machine seulement.": "Available from this machine only."
 }

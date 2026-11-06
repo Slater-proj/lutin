@@ -216,6 +216,35 @@ class Scribe(unittest.TestCase):
         self.assertEqual(self.dialogue.scribe(self.conv, {"modele": "m", "num_ctx": 8192, "temperature": 0.2}), 0)
         self.assertEqual(appels, [], "pas assez de nouveaux messages : pas d'appel")
 
+    def test_retrait_demande_lit_meme_peu_de_messages_et_les_garde_si_la_fiche_echoue(self):
+        """/compact en mode fiche : la fiche lit TOUT ce qui va sortir, même moins de six messages ; si elle n'y arrive pas, rien n'est retiré."""
+        r = {"modele": "m", "num_ctx": 8192, "temperature": 0.2, "fiche_scribe": True}
+        self.conv["messages"] = self.conv["messages"][:5]          # cinq messages jamais lus : sous le seuil du passage normal
+        appels = self.avec(json_ops(decisions=["Budget fixé"]))
+        self.assertEqual(self.dialogue.scribe(self.conv, r), 0, "passage normal : trop peu de messages")
+        self.assertEqual(appels, [])
+        self.conv["messages"] += [{"role": "user", "content": "dernière question"}, {"role": "assistant", "content": "dernière réponse"}]
+        self.avec(OSError("modèle absent"))
+        avant = list(self.conv["messages"])
+        with self.assertRaises(ValueError):
+            self.dialogue.elaguer(self.conv, r, lambda e: None, forcer=True)
+        self.assertEqual(self.conv["messages"], avant, "la fiche n'a rien lu : rien n'est retiré")
+        appels = self.avec(json_ops(decisions=["Budget fixé"]))
+        self.assertTrue(self.dialogue.elaguer(self.conv, r, lambda e: None, forcer=True))
+        self.assertIn("Budget fixé", suivi.lire(ID)["decisions"], "ce qui sort est passé dans la fiche")
+        self.assertEqual(self.conv["messages"][-1]["content"], "dernière réponse")
+
+    def test_beaucoup_de_messages_sont_lus_par_lots_sans_rien_sauter(self):
+        self.conv["messages"] = [{"role": "user" if i % 2 == 0 else "assistant", "content": ("mot%d " % i) * 150} for i in range(30)]
+        appels = self.avec(json_ops(fait=["x"]))
+        self.dialogue.scribe(self.conv, {"modele": "m", "num_ctx": 8192, "temperature": 0.2}, forcer=True)
+        lus = " ".join(a["messages"][1]["content"] for a in appels)
+        self.assertGreater(len(appels), 1, "plusieurs lots")
+        self.assertIn("mot0 ", lus)
+        self.assertIn("mot29 ", lus, "le début ET la fin sont lus")
+        reste = self.dialogue.messages_non_lus(self.conv)
+        self.assertEqual(len(reste), 30 - self.conv["scribe_a"] if self.conv["scribe_a"] < 30 else 0)
+
 
 def json_ops(**kw):
     import json

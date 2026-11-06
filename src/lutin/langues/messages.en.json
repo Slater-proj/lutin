@@ -1542,5 +1542,9 @@
 "Ce moteur n'a pas de dossier d'installation.": "This engine has no installation folder.",
 "llama.cpp est déjà installé : désinstalle-le d'abord (tes modèles restent où ils sont), puis change de dossier.": "llama.cpp is already installed: uninstall it first (your models stay where they are), then change folder.",
 "Donne un chemin complet (par exemple D:/IA/llama.cpp).": "Give a full path (for example D:/AI/llama.cpp).",
-"Ce dossier n'est pas utilisable en écriture : {}": "This folder is not writable: {}"
+"Ce dossier n'est pas utilisable en écriture : {}": "This folder is not writable: {}",
+"La fiche de suivi n'a pas pu être mise à jour (le modèle ne répond pas ?) : rien n'est retiré, pour ne rien perdre. Réessaie dans un moment.": "The tracking sheet could not be updated (is the model not answering?): nothing was removed, so nothing is lost. Try again in a moment.",
+"Du contenu web a été lu : l'accord automatique est suspendu pour la suite de cette demande (il revient tout seul à la demande suivante), ta confirmation est demandée.": "Web content was read: automatic approval is suspended for the rest of this request (it comes back by itself on the next request), your confirmation is requested.",
+"L'ouverture d'un dossier ne marche que depuis cette machine (pas sous Docker ni sur un serveur sans écran) : copie le chemin, ou télécharge les fichiers depuis la conversation.": "Opening a folder only works from this machine (not under Docker or on a server without a screen): copy the path, or download the files from the conversation.",
+"Ce dossier n'est pas un dossier de cette conversation.": "This folder is not one of this conversation's folders."
 }

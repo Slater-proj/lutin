@@ -112,7 +112,7 @@ button.danger:hover { background:linear-gradient(180deg, #b84545, #8f2f2f); }
 @keyframes onde { 0% { box-shadow:0 0 0 0 rgba(90,169,255,.65); transform:scale(.9); } 70% { box-shadow:0 0 0 7px rgba(90,169,255,0); transform:scale(1.05); } 100% { box-shadow:0 0 0 0 rgba(90,169,255,0); transform:scale(.9); } }
 @media (prefers-reduced-motion:reduce) { .travail, .travail.wait { animation:none; } }
 /* file d'attente des messages envoyés pendant que l'assistant répond */
-.suspendu { opacity:.6; } .suspendu::after { content:' ⏸'; }
+.suspendu { opacity:.75; text-decoration:line-through; } .suspendu input { opacity:.35; } .suspendu::after { content:' ⏸ suspendu'; color:var(--warn,#e0a030); font-size:.75rem; text-decoration:none; display:inline-block; }
 #diagnostic { padding:8px 12px; font-size:.86rem; border-bottom:1px solid var(--line); display:flex; flex-direction:column; gap:6px; }
 #diagnostic .pb { display:flex; flex-wrap:wrap; gap:6px 10px; align-items:center; } #diagnostic .pb.erreur { color:var(--bad, #e57373); } #diagnostic .pb.attention { color:var(--warm); } #diagnostic .pb.info { color:var(--muted); } #diagnostic button { padding:2px 10px; font-size:.8rem; }
 #bandeauMission { padding:6px 12px; font-size:.82rem; border-top:1px solid var(--line); background:#101a14; display:flex; flex-wrap:wrap; gap:6px 10px; align-items:center; }
@@ -215,8 +215,9 @@ pre.diff { width:100%; max-height:340px; overflow:auto; background:#0c1117; bord
 details.sous { margin:4px 0 4px 10px; } details.sous > summary { color:var(--muted); font-size:.85rem; }          /* « pas encore prêt » : de l'orange, pas du rouge (le rouge est réservé aux vraies erreurs) */
 .separateur-v::before { content:''; position:absolute; inset:0 -4px; } .separateur-h::before { content:''; position:absolute; inset:-4px 0; }          /* un trait fin, mais facile à attraper */
 .conv button.menu-ouvrir { font-weight:700; letter-spacing:1px; } .conv button.menu-ouvrir:hover { color:var(--accent); background:#1a2634; }
-.menu-conv { position:fixed; z-index:50; min-width:210px; background:#121a24; border:1px solid var(--line2); border-radius:10px; padding:5px; box-shadow:0 8px 24px #0009; display:flex; flex-direction:column; }
+.menu-conv { max-height:calc(100vh - 16px); overflow-y:auto; position:fixed; z-index:50; min-width:210px; background:#121a24; border:1px solid var(--line2); border-radius:10px; padding:5px; box-shadow:0 8px 24px #0009; display:flex; flex-direction:column; }
 .menu-conv button { background:none; border:0; color:var(--fg); text-align:left; padding:7px 10px; border-radius:6px; cursor:pointer; font:inherit; font-size:.85rem; } .menu-conv button:hover { background:#1e2c3d; }
+.menu-conv .menu-folders { display:flex; flex-direction:column; color:var(--muted); font-size:.8rem; } .menu-conv .menu-folders:not(:has(button)) { padding:4px 10px; }
 .menu-conv .coche { color:var(--accent, #5aa9ff); } .menu-conv .menu-titre { color:var(--muted); font-size:.72rem; padding:8px 10px 3px; text-transform:uppercase; letter-spacing:.04em; border-top:1px solid var(--line); margin-top:4px; }
 /* actions sous les messages */
 .actions { display:flex; gap:6px; margin:3px 2px 0; opacity:.55; transition:opacity .12s; } .msg:hover .actions, .actions:focus-within { opacity:1; }
@@ -848,15 +849,16 @@ body[data-moteur="ollama"] .moteur-autre { display:none !important; }
     const d = el('div', 'accord'); d.dataset.id = a.id;
     d.appendChild(el('b', '', a.titre)); if (a.detail) d.appendChild(el('div', 'aide', a.detail)); if (a.raison) d.appendChild(el('div', 'aide', 'ℹ ' + a.raison));
     if (a.diff) { const pre = el('pre'); a.diff.split('\n').forEach(l => { const s = el('div', l.startsWith('+') && !l.startsWith('+++') ? 'add' : l.startsWith('-') && !l.startsWith('---') ? 'del' : '', l || ' '); pre.appendChild(s); }); d.appendChild(pre); }
-    const ligne = el('div', 'ligne'), oui = el('button', 'principal', T('Accepter')), non = el('button', '', T('Refuser'));
-    const repondre = async ok => { oui.disabled = non.disabled = true; document.removeEventListener('keydown', surTouche); try { await api('/api/approuver', { id: a.id, ok }); d.style.opacity = .6; d.appendChild(el('div', 'aide', ok ? T('Accepté.') : T('Refusé.'))); } catch (e) { d.appendChild(el('div', 'erreur', e.message)); } };
+    const ligne = el('div', 'ligne'), oui = el('button', 'principal', T('Accepter')), non = el('button', '', T('Refuser')), reactiver_ = el('button', '', T('Accepter et réactiver l\'accord automatique'));
+    reactiver_.title = T('Du contenu web a été lu : il pourrait contenir une consigne piégée. En réactivant, tu acceptes ce risque pour la suite de cette demande seulement.'); reactiver_.hidden = !a.suspendu;
+    const repondre = async (ok, reactiver) => { oui.disabled = non.disabled = true; if (reactiver) reactiver_.disabled = true; document.removeEventListener('keydown', surTouche); try { await api('/api/approuver', { id: a.id, ok, reactiver: !!reactiver }); d.style.opacity = .6; d.appendChild(el('div', 'aide', ok ? T('Accepté.') : T('Refusé.'))); } catch (e) { d.appendChild(el('div', 'erreur', e.message)); } };
     // Raccourcis clavier seulement quand le focus est DANS la carte (jamais pendant que tu tapes ailleurs) : Échap = Refuser ; Entrée sur un bouton le déclenche (comportement normal).
     const surTouche = (e) => {
       if (!d.contains(e.target)) return;
       if (e.key === 'Escape') { e.preventDefault(); repondre(false); }
     };
     document.addEventListener('keydown', surTouche);
-    oui.addEventListener('click', () => repondre(true)); non.addEventListener('click', () => repondre(false)); ligne.append(oui, non); d.appendChild(ligne);
+    oui.addEventListener('click', () => repondre(true)); non.addEventListener('click', () => repondre(false)); reactiver_.addEventListener('click', () => repondre(true, true)); ligne.append(oui, reactiver_, non); d.appendChild(ligne);
     // Le focus ne passe jamais sur « Accepter » depuis la zone de saisie (sinon un Entrée ou un espace accepterait à ta place).
     if (!document.activeElement || document.activeElement === document.body) oui.focus();          // jamais si tu es en train d'écrire ailleurs (saisie, réglages...) : une touche pourrait accepter à ta place
     return d;
@@ -1176,7 +1178,7 @@ body[data-moteur="ollama"] .moteur-autre { display:none !important; }
           else if (e.type === 'outil') { const d = el('div', 'outil'); d.appendChild(el('div', '', '⚙ ' + e.nom + ' ' + JSON.stringify(e.args).slice(0, 220))); d.dataset.nom = e.nom; zone().appendChild(d); }
           else if (e.type === 'resultat') { const cartes = [...zone().querySelectorAll('.outil')]; const d = cartes[cartes.length - 1]; if (d) { d.appendChild(el('div', 'res', e.texte)); afficherMedias(d, e.medias, e.medias_fichiers, ID_EN_COURS); afficherFichiers(d, e.fichiers_joints, ID_EN_COURS); } vider(ia); ia = messageIA(zone()); detailsPensee = null; }
           else if (e.type === 'approbation') { zone().appendChild(carteAccord(e)); signaler(T('⏸ Accord demandé')); }
-          else if (e.type === 'accord_suspendu') marquerSuspendu(e.raison);
+          else if (e.type === 'accord_suspendu') marquerSuspendu(e.raison); else if (e.type === 'accord_retabli') finSuspension();
           else if (e.type === 'essai') { zone().appendChild(carteEssai(e)); }
           else if (e.type === 'etat') { /* affiché dans la barre d'activité */ }
           else if (e.type === 'taches') { if (visible()) afficherTaches(e.liste, true); }
@@ -1238,6 +1240,19 @@ body[data-moteur="ollama"] .moteur-autre { display:none !important; }
       const nouveau = prompt(T('Nouveau titre :'), c.titre || ''); if (!nouveau || !nouveau.trim()) return;
       const rep = await api('/api/renommer', { id: c.id, titre: nouveau.trim() }); if (CONV && CONV.id === c.id) CONV.titre = rep.titre; rafraichir();
     });
+    m.appendChild(el('div', 'menu-titre', T('Dossiers de la conversation')));
+    const zoneDos = el('div', 'menu-folders', T('Recherche des dossiers…')); m.appendChild(zoneDos);
+    api('/api/conversation-dossiers', { id: c.id }).then(d => {
+      zoneDos.textContent = ''; if (!d.dossiers.length) { zoneDos.textContent = T('Aucun dossier pour le moment.'); return; }
+      d.dossiers.forEach(x => {
+        const nom = x.chemin.split(/[\\/]/).filter(Boolean).pop() || x.chemin;
+        const libelle = (x.role === 'travail' ? T('Dossier de travail : ') : T('Fichiers créés : ')) + nom;
+        const b = el('button', '', (d.ouverture_possible ? '📂 ' : '📋 ') + libelle); b.title = x.chemin + (d.ouverture_possible ? '' : ' — ' + T('Sous Docker, le dossier ne peut pas s\'ouvrir depuis la page : clique pour copier son chemin.'));
+        b.addEventListener('click', async e => { e.stopPropagation(); fermerMenuConv();
+          try { if (d.ouverture_possible) await api('/api/conversation-dossier-ouvrir', { id: c.id, chemin: x.chemin }); else { try { await navigator.clipboard.writeText(x.chemin); infoLocale(T('Chemin copié : ') + x.chemin); } catch (err) { prompt(T('Chemin du dossier :'), x.chemin); } } } catch (err) { alert(err.message); } });
+        zoneDos.appendChild(b);
+      });
+    }).catch(() => { zoneDos.textContent = T('Disponible depuis cette machine seulement.'); });
     m.appendChild(el('div', 'menu-titre', T('Garder le fil de la conversation')));
     const memoire = mode => async () => { await api('/api/memoire-conversation', { conversation: c.id, mode }); if (CONV && CONV.id === c.id) { if (mode) CONV.memoire_longue = mode; else delete CONV.memoire_longue; majJauge(c.id); } rafraichir(); };
     item(T('Fiche de suivi'), memoire('fichier'), c.memoire === 'fichier');

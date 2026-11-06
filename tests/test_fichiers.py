@@ -31,6 +31,27 @@ class Fichiers(unittest.TestCase):
         _m.conv_ecrire(c)
         return c["id"], [fichiers.entree(p)["id"] for p in chemins]
 
+    def test_les_dossiers_d_une_conversation_s_ouvrent_sans_jamais_sortir_des_dossiers_permis(self):
+        f = _m.RACINE / "rapports" / "bilan.pdf"
+        f.parent.mkdir(exist_ok=True)
+        f.write_bytes(b"x")
+        dehors = _TEMP / "ailleurs" / "secret.pdf"
+        dehors.parent.mkdir(exist_ok=True)
+        dehors.write_bytes(b"x")
+        ident, _ = self.conversation(f, dehors)
+        fichiers.enregistrer([fichiers.entree(f), fichiers.entree(dehors)], ident)
+        dossiers = fichiers.dossiers_conversation(ident)
+        self.assertEqual([d["chemin"] for d in dossiers], [str(f.parent.resolve())], "le dossier où elle a créé des fichiers ; pas celui hors des dossiers de travail")
+        with mock.patch.object(fichiers, "_lancer", lambda p: self.ouvertures.append(str(p))), mock.patch.object(fichiers, "ouverture_possible", lambda: True):
+            fichiers.ouvrir_dossier_conversation(ident, str(f.parent.resolve()))
+            with self.assertRaises(ValueError):
+                fichiers.ouvrir_dossier_conversation(ident, str(dehors.parent))
+        self.assertEqual(self.ouvertures, [str(f.parent.resolve())])
+        with mock.patch.object(fichiers, "ouverture_possible", lambda: False):
+            with self.assertRaises(ValueError) as e:
+                fichiers.ouvrir_dossier_conversation(ident, str(f.parent.resolve()))
+        self.assertIn("Docker", str(e.exception), "sous Docker : explication, pas d'échec muet")
+
     def test_telechargement_d_un_fichier_inscrit(self):
         f = _m.RACINE / "docs" / "bilan.pdf"
         f.parent.mkdir(exist_ok=True)

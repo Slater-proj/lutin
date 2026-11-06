@@ -291,6 +291,46 @@ def supprimer_selection(ids):
     return {"supprimes": len(faits), "libere": libere, "ignores": ignores}
 
 
+def dossiers_conversation(ident):
+    """Les dossiers propres à une conversation : son dossier de travail, puis ceux où elle a créé des fichiers (cinq au plus). [{chemin, role}] ; seulement des dossiers qui existent et sont permis.
+    Sert au menu « ⋯ » de la conversation : ouvrir l'endroit où elle travaille, sans chercher."""
+    from . import travaux
+    cfg = _m.config_lue()
+    conv = _m.conv_lire(ident)
+    t = travaux.par_id(cfg, conv["travail"]) if conv.get("travail") else None
+    t = t or travaux.actif(cfg)
+    permises = racines_permises()
+    vus, sortie = set(), []
+
+    def ajouter(p, role):
+        try:
+            r = Path(p).resolve()
+        except OSError:
+            return
+        if r in vus or not r.is_dir() or not any(racine == r or racine in r.parents for racine in permises):
+            return
+        vus.add(r)
+        sortie.append({"chemin": str(r), "role": role})
+    if t:
+        ajouter(t["chemin"], "travail")
+    for e in reversed([x for x in (_registre().get("liste") or []) if x.get("conversation") == ident]):
+        if len(sortie) >= 6:
+            break
+        ajouter(Path(e.get("chemin", "")).parent, "fichiers")
+    return sortie
+
+
+def ouvrir_dossier_conversation(ident, chemin):
+    """Ouvre dans l'explorateur un des dossiers de la conversation (jamais un autre chemin que ceux de dossiers_conversation)."""
+    if not ouverture_possible():
+        raise ValueError(_t("L'ouverture d'un dossier ne marche que depuis cette machine (pas sous Docker ni sur un serveur sans écran) : copie le chemin, ou télécharge les fichiers depuis la conversation."))
+    permis = {d["chemin"] for d in dossiers_conversation(ident)}
+    if str(chemin) not in permis:
+        raise ValueError(_t("Ce dossier n'est pas un dossier de cette conversation."))
+    _lancer(Path(chemin))
+    return {"ok": True}
+
+
 def ouvrir_dossier(fichier_id):
     """Ouvre le dossier qui contient un fichier créé (l'explorateur de fichiers)."""
     e = next((x for x in (_registre().get("liste") or []) if x.get("id") == fichier_id), None)

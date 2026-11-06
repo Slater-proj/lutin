@@ -639,6 +639,16 @@ class Gestionnaire(BaseHTTPRequestHandler):
                     return self._envoyer(200, _mission.action(str(donnees.get("action", "")), donnees))
                 except ValueError as e:
                     return self._envoyer(400, {"erreur": str(e)})
+            if self.path in ("/api/conversation-dossiers", "/api/conversation-dossier-ouvrir"):
+                if not self._configurateur():
+                    return self._envoyer(403, {"erreur": _t("Cela se fait depuis cette machine (niveau « cette machine seulement » ou navigateur de cette machine).")})
+                try:
+                    ident = str(donnees.get("id", ""))
+                    if self.path == "/api/conversation-dossiers":
+                        return self._envoyer(200, {"dossiers": _fichiers.dossiers_conversation(ident), "ouverture_possible": _fichiers.ouverture_possible()})
+                    return self._envoyer(200, _fichiers.ouvrir_dossier_conversation(ident, str(donnees.get("chemin", ""))))
+                except (ValueError, OSError) as e:
+                    return self._envoyer(400, {"erreur": str(e)})
             if self.path in ("/api/fichiers-crees-supprimer", "/api/fichiers-crees-dossier"):
                 if not self._configurateur():
                     return self._envoyer(403, {"erreur": _t("Cela se fait depuis cette machine (niveau « cette machine seulement » ou navigateur de cette machine).")})
@@ -820,7 +830,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
             if self.path == "/api/arreter":
                 return self._envoyer(200, _m.arreter_conversation(str(donnees.get("conversation", ""))))
             if self.path == "/api/approuver":
-                _m.repondre_attente(str(donnees.get("id", "")), donnees.get("ok"))
+                _m.repondre_attente(str(donnees.get("id", "")), donnees.get("ok"), bool(donnees.get("reactiver")))
                 return self._envoyer(200, {"ok": True})
             if self.path == "/api/reglages":
                 return self._envoyer(200, _m.enregistrer_reglages(donnees))

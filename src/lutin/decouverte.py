@@ -4,6 +4,7 @@ Le catalogue de Lutin est une sélection commentée (notes, mémoire demandée) 
 capacités, tailles) et laisse installer n'importe quel modèle en un clic. Elle n'a pas d'interface officielle à interroger : la lecture est donc tolérante, et si le site change, la liste est
 simplement vide (avec un message), jamais une erreur qui casse la page. Rien n'est installé sans ton clic."""
 import html
+import platform
 import re
 import time
 import urllib.parse
@@ -22,6 +23,16 @@ RE_BLOC = re.compile(r'<li\s[^>]*>\s*<a href="/library/([A-Za-z0-9._-]+)"(.*?)</
 RE_TAILLE = re.compile(r"^(\d+(?:\.\d+)?[bm]|e\d+b|\d+x\d+(?:\.\d+)?b)$", re.I)
 MILLIONS_MIN = 20          # « 1m » n'est pas un modèle d'un million de paramètres (c'est une longueur de contexte) : en millions, les vrais petits modèles font 22m, 135m, 270m…
 CACHE = {}
+
+
+def pour_mac(nom):
+    """Vrai pour un modèle ou une variante faits pour les Mac (MLX, la puce Apple) : « -mlx » dans le nom. Hors d'un Mac, Ollama refuse de les lancer."""
+    return bool(re.search(r"(^|[-_.:/])mlx([-_.:]|$)", str(nom or ""), re.I))
+
+
+def compatible(nom):
+    """Faux pour un modèle qui ne tournera pas sur cette machine (les modèles MLX hors d'un Mac) : il n'est pas proposé."""
+    return platform.system() == "Darwin" or not pour_mac(nom)
 
 
 def texte(fragment):
@@ -99,7 +110,7 @@ def chercher(terme="", ordre="newest", page=1, http=miseajour.http_get, maintena
     trouves = analyser(page_html)
     vus = set()
     uniques = [m for m in trouves if not (m["nom"] in vus or vus.add(m["nom"]))]          # une même page ne répète pas un modèle
-    gardes = [m for m in uniques if (categorie == "embedding" or "embedding" not in m["capacites"]) and not ("cloud" in m["capacites"] and not m["tailles"])]
+    gardes = [m for m in uniques if compatible(m["nom"]) and (categorie == "embedding" or "embedding" not in m["capacites"]) and not ("cloud" in m["capacites"] and not m["tailles"])]
     if leger:
         gardes = [m for m in gardes if any(0 < milliards(t) <= LEGER_B for t in m["tailles"])]          # au moins une taille qui tient sur une machine modeste
     for m in gardes:

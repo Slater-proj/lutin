@@ -341,6 +341,7 @@ class Attente:
         self.titre, self.detail, self.diff, self.conv = titre, detail, diff, conv          # conv : la conversation qui attend (pour le point jaune de la liste)
         self.evenement = threading.Event()
         self.ok = None
+        self.reactiver = False          # « Accepter et réactiver l'accord automatique » : l'utilisateur accepte aussi le risque du contenu web pour la suite de la demande
         Attente.EN_COURS[self.id] = self
 
     def attendre(self, delai=900, stop=None):
@@ -352,11 +353,12 @@ class Attente:
         return bool(self.ok) and not (stop and stop.is_set())
 
 
-def repondre_attente(ident, ok):
+def repondre_attente(ident, ok, reactiver=False):
     a = Attente.EN_COURS.get(ident)
     if not a:
         raise ValueError("Demande inconnue ou déjà traitée.")
     a.ok = bool(ok)
+    a.reactiver = bool(ok and reactiver)
     a.evenement.set()
 
 

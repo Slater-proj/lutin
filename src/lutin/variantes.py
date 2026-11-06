@@ -38,7 +38,7 @@ def analyser(page, nom, etiquette):
     """{defaut: {go}, variantes: [{precision, id, go}]} lues dans la page des étiquettes d'un modèle. `etiquette` : la taille (« 8b »). Une page méconnaissable donne une liste vide."""
     defaut, variantes = None, []
     for modele, tag, corps in RE_BLOC.findall(page or ""):
-        if modele != nom:
+        if modele != nom or not decouverte.compatible(tag):          # les variantes pour Mac (MLX) ne sont pas proposées ailleurs : Ollama refuse de les lancer
             continue
         m = RE_TAILLE.search(decouverte.texte(corps))
         if not m:

@@ -125,20 +125,59 @@ SCRIBE_MESSAGES = 6                  # le scribe passe toutes les trois réponse
 SCRIBE_AJOUTS_MAX = 4               # lignes ajoutées au plus par section et par passage : un modèle bavard ne peut pas inonder la fiche
 
 
-def scribe(conv, r, emit=None):
-    """Met la fiche à jour d'après les derniers échanges, par un appel court et SÉPARÉ au modèle : la fiche ne dépend plus de la bonne volonté du modèle qui répond (il oublie souvent l'outil « suivi »).
-    Les consignes sont contrôlées (clés connues, lignes courtes, pas de doublon, aucune décision retirée). Renvoie le nombre de lignes écrites ; 0 si rien à faire ou si l'appel a échoué."""
-    ident = conv.get("id")
+SCRIBE_LOT = 7000                    # caractères d'échanges donnés au scribe en un appel
+SCRIBE_LOTS_MAX = 3                  # appels au plus par passage (tour normal) ; un retrait demandé (/compact) en fait davantage : rien ne doit disparaître sans être passé dans la fiche
+SCRIBE_LOTS_MAX_FORCE = 8
+
+
+def messages_non_lus(conv, fin=None):
+    """Les messages (rang, message) que le scribe n'a pas encore lus, avant le rang « fin » : du texte seulement (ni outils, ni blocs système comme « [Résumé »)."""
+    msgs = conv["messages"]
     deja = int(conv.get("scribe_a") or 0)
-    if deja > len(conv["messages"]):
+    if deja > len(msgs):
         deja = 0
-    nouveaux = [m for m in conv["messages"][deja:] if m.get("role") in ("user", "assistant") and (m.get("content") or "").strip() and not str(m["content"]).startswith("[")]
-    if len(nouveaux) < SCRIBE_MESSAGES:
+    fin = len(msgs) if fin is None else min(fin, len(msgs))
+    return [(i, m) for i, m in enumerate(msgs[:fin]) if i >= deja and m.get("role") in ("user", "assistant") and (m.get("content") or "").strip() and not str(m["content"]).startswith("[")]
+
+
+def scribe(conv, r, emit=None, jusqua=None, forcer=False):
+    """Met la fiche à jour d'après les derniers échanges, par des appels courts et SÉPARÉS au modèle : la fiche ne dépend plus de la bonne volonté du modèle qui répond (il oublie souvent l'outil « suivi »).
+    Les consignes sont contrôlées (clés connues, lignes courtes, pas de doublon, aucune décision retirée). Renvoie le nombre de lignes écrites ; 0 si rien à faire ou si l'appel a échoué.
+    Les échanges sont lus par lots : rien n'est sauté quand il y en a beaucoup (le rang lu n'avance que de ce qui l'a vraiment été).
+    jusqua : ne lit pas au-delà de ce rang ; forcer : même un seul message est lu (avant un retrait demandé, où tout ce qui sort doit être passé dans la fiche)."""
+    ident = conv.get("id")
+    nouveaux = messages_non_lus(conv, jusqua)
+    if len(nouveaux) < (1 if forcer else SCRIBE_MESSAGES):
         return 0
     if emit:
         emit({"type": "etat", "texte": _t("Mise à jour de la fiche de suivi…")})
+    lots, courant, taille = [], [], 0
+    for i, m in nouveaux:
+        ligne = "[{}] {}".format("moi" if m["role"] == "user" else "assistant", " ".join(m["content"].split())[:900])
+        if courant and taille + len(ligne) > SCRIBE_LOT:
+            lots.append(courant)
+            courant, taille = [], 0
+        courant.append((i, ligne))
+        taille += len(ligne) + 1
+    lots.append(courant)
+    total, tous = 0, True
+    for lot in lots[:SCRIBE_LOTS_MAX_FORCE if forcer else SCRIBE_LOTS_MAX]:
+        n = _scribe_lot(conv, r, ident, "\n".join(ligne for _, ligne in lot))
+        if n is None:
+            tous = False
+            break
+        total += n
+        conv["scribe_a"] = lot[-1][0] + 1
+    else:
+        tous = len(lots) <= (SCRIBE_LOTS_MAX_FORCE if forcer else SCRIBE_LOTS_MAX)
+    if tous:                                                                    # tout ce qui était à lire l'a été : les messages sans texte qui suivent (outils) n'ont rien à apporter
+        conv["scribe_a"] = len(conv["messages"]) if jusqua is None else max(int(conv.get("scribe_a") or 0), min(jusqua, len(conv["messages"])))
+    return total
+
+
+def _scribe_lot(conv, r, ident, echange):
+    """Un appel au modèle pour un lot d'échanges ; renvoie le nombre de lignes écrites, ou None si l'appel a échoué (le lot sera relu au prochain passage)."""
     sections = _suivi.lire(ident)
-    echange = "\n".join("[{}] {}".format("moi" if m["role"] == "user" else "assistant", " ".join(m["content"].split())[:900]) for m in nouveaux)[-7000:]
     consigne = ("Tu tiens la fiche de suivi d'une conversation. On te donne la fiche actuelle et les derniers échanges. Réponds en JSON avec ces clés (listes de phrases courtes, 150 caractères au plus) : "
                 "objectif (seulement si le but a changé ou vient d'être dit), plan (seulement si un plan vient d'être décidé ou modifié), etape (l'étape en cours maintenant), decisions (NOUVELLES décisions prises), "
                 "fait (ce qui vient d'être terminé), ouvert (NOUVELLES questions restées sans réponse), resolu (questions de la fiche qui ont maintenant une réponse, recopiées telles quelles). "
@@ -151,7 +190,7 @@ def scribe(conv, r, emit=None):
         ops = json.loads((rep.get("message", {}).get("content") or "{}").strip() or "{}")
     except (urllib.error.URLError, OSError, ValueError) as erreur:
         _m.journaliser("Scribe : fiche non mise à jour (conversation {}) : {!r}".format(ident, erreur))
-        return 0
+        return None
     if not isinstance(ops, dict):
         return 0
 
@@ -177,7 +216,6 @@ def scribe(conv, r, emit=None):
                 _suivi.modifier(ident, "ouvert", question, "retirer")
     except (ValueError, _m.ErreurOutil) as erreur:
         _m.journaliser("Scribe : consigne refusée (conversation {}) : {!r}".format(ident, erreur))
-    conv["scribe_a"] = len(conv["messages"])
     return n
 
 
@@ -908,6 +946,7 @@ def _decaler_scribe(conv, coupe, gardes):
 
 SEUIL_PLEIN = 0.6              # au-delà, le retrait n'attend plus le scribe : mieux vaut une fiche en retard (le début reste retrouvable avec « rappeler ») qu'une conversation qui n'a plus de place pour répondre
 SEUIL_PLEIN_REEL = 0.8         # idem d'après le chiffre réel d'Ollama
+PART_GARDEE = 0.25            # /compact en mode fiche : les messages récents gardés tels quels tiennent dans ce quart de la fenêtre
 SEUIL_ELAGAGE = 0.45         # part de la fenêtre que les messages peuvent prendre avant le retrait : avec la fiche (jusqu'à 10 %), le système et les outils, le total reste sous les 68 % où ajuster_contexte se mettrait à rogner
 
 
@@ -917,7 +956,15 @@ def elaguer(conv, r, emit, forcer=False):
     (tout relu à chaque réponse : des minutes sur processeur) et la jauge restait pleine. Là, le début ne change qu'à chaque retrait. Renvoie True si quelque chose a été retiré."""
     msgs = conv["messages"]
     if forcer:
-        coupe = max((i for i, m in enumerate(msgs) if m["role"] == "user"), default=0)
+        derniere = max((i for i, m in enumerate(msgs) if m["role"] == "user"), default=0)
+        coupe = max(2, len(msgs) // 2)                                          # au moins la moitié sort…
+        while coupe < derniere and msgs[coupe]["role"] != "user":
+            coupe += 1
+        while coupe < derniere and estimer(msgs[coupe:]) > int(r["num_ctx"] * PART_GARDEE):          # …et plus encore jusqu'à ce que le reste tienne dans le quart de la fenêtre : les VRAIS messages récents restent, la fiche garde le fil
+            coupe += 1
+            while coupe < derniere and msgs[coupe]["role"] != "user":
+                coupe += 1
+        coupe = min(coupe, derniere)
     else:
         reel = int((conv.get("jetons") or {}).get("utilise") or 0)                # le chiffre d'Ollama après la dernière réponse : l'estimation (caractères / 3) peut se tromper
         plein = estimer(msgs) >= int(r["num_ctx"] * SEUIL_PLEIN) or reel >= int(r["num_ctx"] * SEUIL_PLEIN_REEL)
@@ -935,7 +982,9 @@ def elaguer(conv, r, emit, forcer=False):
     if coupe < 2 or coupe >= len(msgs):
         return False
     if forcer and r.get("fiche_scribe", True):
-        scribe(conv, r)                                                         # la fiche se met à jour avant que le début disparaisse
+        scribe(conv, r, jusqua=coupe, forcer=True)                              # la fiche se met à jour avant que le début disparaisse : tout ce qui sort doit y être passé
+        if messages_non_lus(conv, coupe):
+            raise ValueError(_t("La fiche de suivi n'a pas pu être mise à jour (le modèle ne répond pas ?) : rien n'est retiré, pour ne rien perdre. Réessaie dans un moment."))
     ancien = msgs[:coupe]
     _archive.ajouter(conv["id"], ancien)
     conv["messages"] = [m for m in ancien if m.get("epingle")] + msgs[coupe:]
@@ -997,9 +1046,9 @@ def tour(conv, texte, emit, r=None, stop=None, remplacer_depuis=None, identite="
             ctx["dernier_accord"] = "essai"
             return False
         raison = "" if auto else _t("La case d'accord automatique correspondante n'est pas cochée pour cette conversation.")          # pourquoi on te demande : jamais un mystère
-        if auto and ctx.get("web_lu"):
+        if auto and ctx.get("web_lu") and not ctx.get("web_confiance"):
             # Garde-fou : du texte venu d'internet a été lu pendant ce tour, il pourrait contenir une consigne piégée. Plus d'accord automatique jusqu'à la fin du tour.
-            emit({"type": "info", "texte": "Du contenu web a été lu : l'accord automatique est suspendu pour la suite de cette demande, ta confirmation est demandée."})
+            emit({"type": "info", "texte": _t("Du contenu web a été lu : l'accord automatique est suspendu pour la suite de cette demande (il revient tout seul à la demande suivante), ta confirmation est demandée.")})
             auto = False
             raison = _t("Accord automatique suspendu : du contenu web a été lu pendant cette demande, il pourrait contenir une consigne piégée.")
             if not ctx.get("suspension_signalee"):
@@ -1015,10 +1064,14 @@ def tour(conv, texte, emit, r=None, stop=None, remplacer_depuis=None, identite="
             ctx["dernier_accord"] = "refuse"
             return False
         a = _m.Attente(titre, detail, diff, conv["id"])
-        emit({"type": "approbation", "id": a.id, "titre": titre, "detail": detail, "diff": diff, "raison": raison})
+        suspendu = bool(ctx.get("suspension_signalee"))
+        emit({"type": "approbation", "id": a.id, "titre": titre, "detail": detail, "diff": diff, "raison": raison, "suspendu": suspendu})
         ok = a.attendre(stop=stop)
         if stop.is_set():
             raise _m.Arret()
+        if ok and a.reactiver and suspendu:
+            ctx["web_confiance"] = True                                          # choisi sur la carte : l'accord automatique reprend pour la suite de CETTE demande
+            emit({"type": "accord_retabli"})
         emit({"type": "info", "texte": (_t("Accepté : {}") if ok else _t("Refusé : {}")).format(titre)})
         ctx["dernier_accord"] = "manuel"
         return ok

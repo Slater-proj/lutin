@@ -255,7 +255,8 @@ def chat(message, conversation="", reponses=None, decider=None, choisir=None, **
             e = json.loads(brut.decode("utf-8"))
             evenements.append(e)
             if e["type"] == "approbation":
-                post("/api/approuver", {"id": e["id"], "ok": decider(e) if decider else True})
+                reponse = decider(e) if decider else True
+                post("/api/approuver", {"id": e["id"], "ok": bool(reponse), "reactiver": reponse == "reactiver"})
             if e["type"] == "choix_memoire" and choisir:
                 post("/api/memoire-choix", {"conversation": e["conversation"], "choix": choisir[0], "garder": choisir[1]})
     return evenements
@@ -809,6 +810,18 @@ class Assistant(unittest.TestCase):
         cid = [e for e in ev if e["type"] == "debut"][0]["conversation"]
         ev = chat("Lance une autre commande", conversation=cid, options=opts, reponses=[[appel_outil("executer", commande="echo ok> suivante.txt")], [{"content": "Fait."}]])
         self.assertFalse([e for e in ev if e["type"] in ("approbation", "accord_suspendu")], "demande suivante : plus rien de suspendu, accord automatique")
+
+    def test_accepter_et_reactiver_l_accord_automatique_pour_la_suite_de_la_demande(self):
+        """Sur la carte d'accord « suspendu », un bouton accepte ET rétablit l'accord automatique pour la fin de cette demande (le risque du contenu web est alors accepté en connaissance de cause)."""
+        opts = {"auto_commandes": True}
+        suite = [[appel_outil("web_lire", url=URL_WEB + "/page")], [appel_outil("executer", commande="echo ok> r1.txt")], [appel_outil("executer", commande="echo ok> r2.txt")], [{"content": "Fait."}]]
+        ev = chat("Lis la page puis lance deux commandes", options=opts, reponses=suite, decider=lambda e: "reactiver")
+        approb = [e for e in ev if e["type"] == "approbation"]
+        self.assertEqual(len(approb), 1, "une seule carte : la deuxième commande repart en accord automatique")
+        self.assertTrue(approb[0]["suspendu"], "la page sait proposer le bouton")
+        self.assertTrue(any(e["type"] == "accord_retabli" for e in ev), "la page enlève la marque « suspendu »")
+        ev = chat("Pareil mais sans réactiver", options=opts, reponses=[list(s) for s in suite], decider=lambda e: True)
+        self.assertEqual(len([e for e in ev if e["type"] == "approbation"]), 2, "sans le bouton, chaque commande demande son accord")
 
     def test_commande_envoyee_nue_avec_un_egal_est_executee_telle_quelle(self):
         """Régression : « echo a=b » envoyé comme simple chaîne était lu comme clé=valeur, la commande arrivait vide."""
@@ -2209,7 +2222,9 @@ class Assistant(unittest.TestCase):
             self.assertTrue(r["fiche"])
             conv = A.conv_lire(cid)
             self.assertFalse(conv.get("resume"), "/compact en mode fiche ne résume pas")
-            self.assertEqual(len(conv["messages"]), 2, "tout sauf le dernier échange")
+            self.assertLessEqual(len(conv["messages"]), (avant + 4) // 2 + 2, "au moins la moitié est sortie")
+            self.assertGreaterEqual(len(conv["messages"]), 2)
+            self.assertEqual(conv["messages"][-1]["content"], "Ok.", "les vrais messages récents restent, ils ne sont pas résumés")
             self.assertFalse(r["jauge"]["reel"])
         finally:
             A.enregistrer_reglages({"memoire_longue": "resume", "fiche_scribe": True})
