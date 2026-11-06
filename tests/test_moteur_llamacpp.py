@@ -97,6 +97,17 @@ class Archives(Base):
         self.assertIsNotNone(ml.trouver_serveur_dans(self.tmp / "d1"))
 
 
+class Bibliotheques(unittest.TestCase):
+    def test_une_bibliotheque_manquante_nomme_le_paquet(self):
+        """Constat réel (essai S2 en CI) : llama-server ne démarre pas dans python:3.12-slim faute de libgomp.so.1."""
+        log = "/tmp/x/llama-server: error while loading shared libraries: libgomp.so.1: cannot open shared object file: No such file or directory"
+        aide = ml.aide_bibliotheque(log)
+        self.assertIn("libgomp.so.1", aide)
+        self.assertIn("apt install libgomp1", aide)
+        self.assertEqual(ml.aide_bibliotheque("error while loading shared libraries: libinconnue.so.9: nope"), " Bibliothèque manquante : libinconnue.so.9.")
+        self.assertEqual(ml.aide_bibliotheque("tout va bien"), "")
+
+
 class Reglages(Base):
     def test_adresse_normalisee_et_cle_non_exposee(self):
         self.assertEqual(ml.normaliser_adresse("http://h:8080"), "http://h:8080/v1")

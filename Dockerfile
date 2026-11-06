@@ -21,7 +21,7 @@ RUN pip install --no-cache-dir build && python -m build --wheel --outdir /dist
 FROM python:3.12-slim AS leger
 # git : pour le bouton Git de l'interface ; tini : arrêt propre ; ca-certificates : recherche web et catalogue (inutiles en mode hors ligne)
 RUN apt-get update \
- && apt-get install -y --no-install-recommends git ca-certificates tini curl \
+ && apt-get install -y --no-install-recommends git ca-certificates tini curl libgomp1 \
  && rm -rf /var/lib/apt/lists/* \
  && useradd --create-home --uid 1000 lutin \
  && mkdir -p /data /travail \
@@ -55,7 +55,7 @@ CMD ["serve"]
 FROM ollama/ollama:${OLLAMA_VERSION}${OLLAMA_VARIANT} AS complet
 # L'image Ubuntu a déjà un utilisateur 1000 (« ubuntu ») : on le remplace par « lutin », pour que les volumes aient les mêmes droits que dans l'image légère.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends python3 python3-venv git ca-certificates tini curl \
+ && apt-get install -y --no-install-recommends python3 python3-venv git ca-certificates tini curl libgomp1 \
  && rm -rf /var/lib/apt/lists/* \
  && (userdel -r ubuntu 2>/dev/null || true) \
  && useradd --create-home --uid 1000 lutin \

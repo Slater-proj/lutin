@@ -1533,5 +1533,7 @@
 "✔ L'essentiel fonctionne ; à regarder : {}.": "✔ The essentials work; to look at: {}.",
 "Télécharger {} / {} ({} Mo) ?": "Download {} / {} ({} MB)?",
 "[o/N] ": "[y/N] ",
-"version du programme à installer (auto : d'après la carte graphique)": "version of the program to install (auto: from the graphics card)"
+"version du programme à installer (auto : d'après la carte graphique)": "version of the program to install (auto: from the graphics card)",
+" Bibliothèque manquante : {}.": " Missing library: {}.",
+" Sous Debian ou Ubuntu : apt install {} (dans Docker : à ajouter à l'image).": " On Debian or Ubuntu: apt install {} (in Docker: add it to the image)."
 }

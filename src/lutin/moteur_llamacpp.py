@@ -40,6 +40,18 @@ class ErreurMoteur(ValueError):
     pass
 
 
+PAQUETS_DEBIAN = {"libgomp.so.1": "libgomp1", "libstdc++.so.6": "libstdc++6", "libcurl.so.4": "libcurl4", "libvulkan.so.1": "libvulkan1", "libgcc_s.so.1": "libgcc-s1"}
+
+
+def aide_bibliotheque(texte):
+    """Le serveur a répondu « error while loading shared libraries: X » : le paquet Debian/Ubuntu qui la fournit, quand on le connaît."""
+    m = re.search(r"error while loading shared libraries: (\S+?):", str(texte))
+    if not m:
+        return ""
+    paquet = PAQUETS_DEBIAN.get(m.group(1))
+    return _t(" Bibliothèque manquante : {}.").format(m.group(1)) + (_t(" Sous Debian ou Ubuntu : apt install {} (dans Docker : à ajouter à l'image).").format(paquet) if paquet else "")
+
+
 # --------------------------------------------------------------------------- réglages des moteurs (donnees/moteurs.json)
 
 def _chemin_config():
@@ -322,7 +334,8 @@ class MoteurLlamaCpp(MoteurOpenAI):
         fin = time.time() + attente
         while time.time() < fin:
             if SERVEUR["proc"].poll() is not None:
-                raise ErreurMoteur(_t("llama-server s'est arrêté au démarrage : {}").format(self._fin_du_journal()))
+                fin = self._fin_du_journal()
+                raise ErreurMoteur(_t("llama-server s'est arrêté au démarrage : {}").format(fin) + aide_bibliotheque(fin))
             if self._pret():
                 return
             time.sleep(0.5)
