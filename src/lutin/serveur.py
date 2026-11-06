@@ -1,6 +1,7 @@
 """Le serveur HTTP de Lutin : le gestionnaire de requêtes (pages, API JSON, flux de la conversation). L'état et les fonctions métier restent dans moteur ; ce module les atteint par « _m.NOM » (lu à chaque appel)."""
 from http.server import BaseHTTPRequestHandler
 from . import bench as _bench
+from . import catalogue_moteurs as _catalogue_moteurs
 from . import moteur_llamacpp as _llamacpp
 from . import moteurs as _moteurs
 from . import moteurs_maj as _moteurs_maj
@@ -116,6 +117,14 @@ class Gestionnaire(BaseHTTPRequestHandler):
         statut = mo.statut()
         return dict(v, statut=statut, actif=bool(modeles["actif"]), nb_modeles=len(modeles["installes"]), actions=mo.actions(), tache=_moteurs.tache(mo.id), telechargeable=mo.telechargeable(), maj=_moteurs_maj.etat().get(mo.id),
                     reglages=_llamacpp.vue_reglages(mo.id) if (mo.adresse_modifiable or hasattr(mo, "info_dossier")) else {})
+
+    @staticmethod
+    def _prereglages():
+        """Les serveurs compatibles OpenAI du catalogue signé (adresse habituelle, forces, faiblesses), pour les proposer d'un clic. Un catalogue illisible n'empêche jamais la page."""
+        try:
+            return [dict(v) for v in (_catalogue_moteurs.vue(m) for m in _catalogue_moteurs.en_cours()["moteurs"])]
+        except Exception:  # noqa: BLE001
+            return []
 
     @staticmethod
     def _diagnostic_moteur(mo, o, r):
@@ -319,7 +328,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
         if chemin == "/api/moteurs":                             # les moteurs de modèles : leur état, ce qui est possible avec chacun, et celui qui est choisi
             courant = _m.moteur_actuel().id
             _moteurs_maj.en_arriere_plan(bool(_m.reglages().get("verifier_maj", True)) and not _hl.actif())          # au plus un contrôle par 24 h, en arrière-plan : la carte du moteur l'affichera au prochain rafraîchissement
-            return self._envoyer(200, {"courant": courant, "modifiable": self._configurateur(), "moteurs": [self._vue_moteur(mo, courant) for mo in _moteurs.liste()]})
+            return self._envoyer(200, {"courant": courant, "modifiable": self._configurateur(), "moteurs": [self._vue_moteur(mo, courant) for mo in _moteurs.liste()], "prereglages": self._prereglages()})
         if chemin in ("/api/moteur-recherche", "/api/moteur-fichiers"):          # chercher un modèle (Hugging Face pour llama.cpp), puis voir les fichiers d'un dépôt
             q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
             mo = _moteurs.par_id((q.get("moteur") or [""])[0])

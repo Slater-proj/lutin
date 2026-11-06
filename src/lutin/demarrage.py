@@ -85,6 +85,8 @@ def lancer_serveur(cfg, dossiers, ouvrir_navigateur=True, ecrire=print):
                 try:
                     from . import moteurs_maj
                     moteurs_maj.en_arriere_plan()
+                    from . import catalogue_moteurs
+                    catalogue_moteurs.en_arriere_plan(config.charger(dossiers).get("catalogue_moteurs_url"))
                 except Exception:  # noqa: BLE001 — jamais bloquant, jamais bruyant
                     pass
                 time.sleep(6 * 3600)

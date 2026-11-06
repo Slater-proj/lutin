@@ -1,0 +1,91 @@
+{
+  "version": 1,
+  "date": "2026-11-06",
+  "moteurs": [
+    {
+      "id": "lmstudio",
+      "nom": "LM Studio",
+      "genre": "openai",
+      "adresse_defaut": "http://127.0.0.1:1234/v1",
+      "site": "https://lmstudio.ai",
+      "plateformes": ["windows", "linux", "macos"],
+      "description": {
+        "fr": "Application de bureau avec son propre catalogue de modèles et un serveur local compatible OpenAI. Il faut démarrer le serveur local depuis LM Studio.",
+        "en": "Desktop app with its own model catalogue and a local OpenAI-compatible server. You have to start the local server from LM Studio."
+      },
+      "points_forts": [
+        {"fr": "Interface graphique pour choisir et régler les modèles.", "en": "Graphical interface to pick and tune models."},
+        {"fr": "Simple à installer sur Windows, macOS et Linux.", "en": "Easy to install on Windows, macOS and Linux."}
+      ],
+      "points_faibles": [
+        {"fr": "Lutin ne le démarre pas : lance le serveur local dans LM Studio.", "en": "Lutin does not start it: start the local server in LM Studio."}
+      ]
+    },
+    {
+      "id": "vllm",
+      "nom": "vLLM",
+      "genre": "openai",
+      "adresse_defaut": "http://127.0.0.1:8000/v1",
+      "site": "https://docs.vllm.ai",
+      "plateformes": ["linux"],
+      "description": {
+        "fr": "Serveur de production pour cartes graphiques NVIDIA ou AMD, très rapide quand plusieurs demandes arrivent en même temps.",
+        "en": "Production server for NVIDIA or AMD graphics cards, very fast when several requests arrive at once."
+      },
+      "points_forts": [
+        {"fr": "Très bon débit sur une carte graphique puissante.", "en": "Very high throughput on a powerful graphics card."}
+      ],
+      "points_faibles": [
+        {"fr": "Pensé pour des serveurs Linux ; plus lourd à installer qu'Ollama.", "en": "Meant for Linux servers; heavier to install than Ollama."}
+      ]
+    },
+    {
+      "id": "sglang",
+      "nom": "SGLang",
+      "genre": "openai",
+      "adresse_defaut": "http://127.0.0.1:30000/v1",
+      "site": "https://docs.sglang.ai",
+      "plateformes": ["linux"],
+      "description": {
+        "fr": "Serveur rapide pour cartes graphiques, proche de vLLM, avec une bonne gestion des conversations longues.",
+        "en": "Fast server for graphics cards, close to vLLM, good at long conversations."
+      },
+      "points_faibles": [
+        {"fr": "Pensé pour des serveurs Linux avec une carte graphique.", "en": "Meant for Linux servers with a graphics card."}
+      ]
+    },
+    {
+      "id": "localai",
+      "nom": "LocalAI",
+      "genre": "openai",
+      "adresse_defaut": "http://127.0.0.1:8080/v1",
+      "site": "https://localai.io",
+      "plateformes": ["linux", "windows", "macos"],
+      "description": {
+        "fr": "Serveur local compatible OpenAI qui sait aussi générer des images et transcrire de la voix ; se déploie facilement avec Docker.",
+        "en": "Local OpenAI-compatible server that can also generate images and transcribe speech; easy to deploy with Docker."
+      },
+      "points_forts": [
+        {"fr": "Plusieurs types de modèles dans un seul serveur.", "en": "Several kinds of models in one server."}
+      ]
+    },
+    {
+      "id": "llama-swap",
+      "nom": "llama-swap",
+      "genre": "openai",
+      "adresse_defaut": "http://127.0.0.1:8080/v1",
+      "site": "https://github.com/mostlygeek/llama-swap",
+      "plateformes": ["linux", "windows", "macos"],
+      "description": {
+        "fr": "Petit routeur qui démarre et change de serveur (llama.cpp, vLLM…) selon le modèle demandé, derrière une seule adresse.",
+        "en": "Small router that starts and swaps servers (llama.cpp, vLLM…) according to the requested model, behind one address."
+      },
+      "points_forts": [
+        {"fr": "Plusieurs modèles et plusieurs moteurs derrière une seule adresse.", "en": "Several models and engines behind one address."}
+      ],
+      "points_faibles": [
+        {"fr": "Se configure à la main avec un fichier.", "en": "Configured by hand with a file."}
+      ]
+    }
+  ]
+}

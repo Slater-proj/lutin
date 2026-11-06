@@ -2852,7 +2852,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
   const LIBELLE_ACTION = { installer: T('Installer'), desinstaller: T('Désinstaller'), reinstaller: T('Réinstaller'), demarrer: T('Démarrer'), arreter: T('Arrêter') };
   const etatMoteur = m => !m.statut.installe ? T('Pas installé') : m.statut.actif ? T('Prêt') : (m.statut.mode === 'externe' ? T('Ne répond pas') : T('Arrêté'));
   const barreTache = t => { const l = el('div'); l.appendChild(el('div', 'aide', t.texte || T('En cours…'))); if (t.total) { const b = el('div', 'barre'), i = el('i'); i.style.width = Math.min(100, Math.round(100 * t.fait / t.total)) + '%'; b.appendChild(i); l.appendChild(b); } return l; };
-  const carteMoteur = (m, modifiable) => {
+  const carteMoteur = (m, modifiable, prereglages) => {
     const d = el('div', 'carte moteur-liste' + (m.courant ? ' moteur-choisi' : '')); d.style.cssText = 'flex-direction:column;align-items:stretch;gap:6px';
     const tete = el('div', 'ligne'), radio = el('input'); radio.type = 'radio'; radio.name = 'moteurChoisi'; radio.checked = m.courant; radio.title = T('Utiliser ce moteur');
     radio.addEventListener('change', async () => { try { await api('/api/reglages', { moteur: m.id }); } catch (e) { $('aideMoteur').textContent = e.message; } await rafraichir(); chargerMoteurs(); });
@@ -2931,6 +2931,21 @@ body[data-moteur="openai"] .biblio { display:none !important; }
       url.value = m.reglages.url || ''; url.style.minWidth = '260px'; url.disabled = cle.disabled = !modifiable;
       url.placeholder = m.id === 'llamacpp' ? T('Adresse d\'un llama-server déjà lancé (vide : Lutin le gère lui-même)') : T('Adresse du serveur, par exemple http://127.0.0.1:1234');
       cle.type = 'password'; cle.placeholder = m.reglages.cle_definie ? T('Clé enregistrée (vide : on la garde)') : T('Clé d\'accès (facultative)');
+      if (m.id === 'openai' && prereglages.length) {          // les serveurs connus du catalogue signé : un choix remplit l'adresse et explique le serveur
+        const choix = el('select'), fiche = el('div', 'aide'); choix.disabled = !modifiable;
+        const vide = el('option', '', T('Choisir un serveur connu…')); vide.value = ''; choix.appendChild(vide);
+        prereglages.forEach(pr => { const o = el('option', '', pr.nom); o.value = pr.id; choix.appendChild(o); });
+        choix.addEventListener('change', () => {
+          const pr = prereglages.find(x => x.id === choix.value); fiche.textContent = '';
+          if (!pr) return;
+          if (pr.adresse) url.value = pr.adresse;
+          fiche.appendChild(el('div', '', pr.description));
+          if (pr.points_forts.length) fiche.appendChild(el('div', '', '+ ' + pr.points_forts.join(' · ')));
+          if (pr.points_faibles.length) fiche.appendChild(el('div', '', '− ' + pr.points_faibles.join(' · ')));
+          if (pr.site) { const a = el('a', '', T('Site officiel')); a.href = pr.site; a.target = '_blank'; a.rel = 'noopener noreferrer'; fiche.appendChild(a); }
+        });
+        d.appendChild(choix); d.appendChild(fiche);
+      }
       f.append(url, cle);
       let variante = null;
       if (m.id === 'llamacpp') {
@@ -2952,7 +2967,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     let r; try { r = await api('/api/moteurs'); } catch (e) { $('aideMoteur').textContent = e.message; return; }
     const z = $('listeMoteurs'), neuf = document.createElement('div');
     if (!r.modifiable && ETAT) neuf.appendChild(el('div', 'attention', explicationVerrou()));
-    r.moteurs.forEach(m => neuf.appendChild(carteMoteur(m, r.modifiable)));
+    r.moteurs.forEach(m => neuf.appendChild(carteMoteur(m, r.modifiable, r.prereglages || [])));
     if (!saisieEnCours(z)) z.replaceChildren(...neuf.childNodes);
     if (r.moteurs.some(m => m.tache && m.tache.statut === 'en cours') && $('p-reglages').classList.contains('vue')) MINUTEUR_MOTEURS = setTimeout(() => { rafraichir(); chargerMoteurs(); }, 1500);
   };

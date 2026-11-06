@@ -1,0 +1,17 @@
+# Ajouter un moteur
+
+Deux cas, du plus simple au plus complet. (English version: [ENGINE_DEVELOPMENT.md](ENGINE_DEVELOPMENT.md).)
+
+## 1. Le serveur parle déjà l'interface OpenAI (`/v1/chat/completions`)
+
+Aucun code. Ajoute une entrée à `tools/moteurs.source.json` (identifiant, nom, `"genre": "openai"`, adresse habituelle, description en français et en anglais, forces/limites facultatives, site), augmente `version` et `date`, puis lance `python tools/signer_catalogue_moteurs.py` (voir [ENGINE_CATALOG.fr.md](ENGINE_CATALOG.fr.md)). Le moteur apparaît alors dans la liste « Choisir un serveur connu… » de la carte du serveur externe. Lutin ne l'installe ni ne le démarre : tu donnes son adresse, il gère ses modèles lui-même.
+
+## 2. Lutin doit installer, démarrer ou mettre à jour le moteur lui-même
+
+Écris une sous-classe de `MoteurOpenAI` (`src/lutin/moteur_openai.py`) pour un serveur de type OpenAI, ou de `Moteur` (`src/lutin/moteurs.py`) sinon, et enregistre-la à côté des autres dans `dialogue.py`. Le modèle à suivre est `MoteurLlamaCpp` dans `moteur_llamacpp.py`. Ce qu'elle doit fournir :
+
+- `actif`, `modeles`, `chat`, `chat_flux` : discuter, au format de messages d'Ollama (la traduction se fait aux frontières du moteur).
+- `statut`, `actions` (installer, désinstaller, démarrer, arrêter, mettre à jour, chacune avec `possible` et une `raison` si ce n'est pas possible), `faire` : la carte des Réglages en est construite.
+- `telechargeable`, `supprimer_modele` quand Lutin peut gérer les modèles.
+- Des tests avec un faux serveur (ni réseau, ni vrai programme) ; ceux de llama.cpp montrent le principe.
+- Textes en français dans le code, en anglais dans `src/lutin/langues/messages.en.json` (des tests vérifient que rien ne manque).
