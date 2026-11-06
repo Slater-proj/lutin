@@ -30,11 +30,14 @@ What the project chose, why, and what is still to be decided. A decision changes
 | 2026-10-26 | **No signing of the Windows installer for now.** SignPath Foundation was studied and dropped. | Too much set-up (reputation, manual approvals, two-factor everywhere) for an audience of one; checksums are published. To reconsider if the project gets real users. |
 | 2026-10-26 | **New Lutin version announced in the page** (a banner, once a day at most, silent offline, can be skipped): nothing is installed without the user. | Models were already checked at launch; Lutin itself was not. |
 | 2026-10-26 | **Claude projects** (`CLAUDE.md`, `.claude/`) can be taken over, in place or in a copy. | Context built with Claude Code must not be lost when switching tools. |
+| 2026-11-06 | **Roadmap 0.17 → 1.0** ([ROADMAP.md](ROADMAP.md)), numbering that replaces the master plan's, based on the [engine study](ENGINE_STUDY.md). | The plan started at 0.15.1; several of its steps were already done in 0.16. The study corrected three judgements (signed catalogue feasible in pure Python, Colibri and Strata real but experimental, llama.cpp has a native router mode). |
+| 2026-11-06 | **Extra engines are data (signed catalogue), not code**: two adapter families (Ollama, OpenAI); dedicated code only for an engine whose lifecycle Lutin manages. | Adding an OpenAI-compatible engine must not need a new Lutin release, nor run remote code. |
 
 ## To be decided
 
 - **Catalogue: who rates the models?** The ratings are editorial (1 to 10), written without measurement on real hardware. The benchmark (`lutin bench --exporter`) now allows proposing justified corrections; published results on a few reference machines are missing.
 - **More languages.** The mechanism is in place (`src/lutin/langues/`); adding one means a dictionary for the messages and one for the page, and a code in `i18n.LANGUES`.
+- **Default Docker image.** Stays "full" (Lutin + Ollama) until an engine comparison bench on real hardware (milestone 0.19.0, roadmap trials S2, S4, S5) shows better. Extra engines will be companion containers linked by address.
 
 ## Known but not verified
 

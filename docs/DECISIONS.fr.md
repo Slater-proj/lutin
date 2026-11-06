@@ -30,11 +30,14 @@ Ce que le projet a choisi, pourquoi, et ce qui reste à trancher. Une décision 
 | 2026-10-26 | **Pas de signature de l'installateur Windows pour l'instant.** SignPath Foundation a été étudiée puis abandonnée. | Trop de mise en place (réputation, approbations manuelles, double authentification partout) pour un public d'une personne ; les sommes de contrôle sont publiées. À reconsidérer si le projet a de vrais utilisateurs. |
 | 2026-10-26 | **Nouvelle version de Lutin annoncée dans la page** (un bandeau, une fois par jour au plus, silencieux hors ligne, ignorable) : rien n'est installé sans l'utilisateur. | Les modèles étaient déjà vérifiés au lancement ; Lutin lui-même non. |
 | 2026-10-26 | **Projets Claude** (`CLAUDE.md`, `.claude/`) repris sur place ou en copie. | Le contexte construit avec Claude Code ne doit pas se perdre en changeant d'outil. |
+| 2026-11-06 | **Feuille de route 0.17 → 1.0** ([ROADMAP.fr.md](ROADMAP.fr.md)), numérotation qui remplace celle du plan directeur, appuyée sur l'[étude des moteurs](ENGINE_STUDY.fr.md). | Le plan partait de la 0.15.1 ; plusieurs de ses étapes étaient déjà faites en 0.16. L'étude a corrigé trois jugements (catalogue signé réalisable en Python pur, Colibri et Strata réels mais expérimentaux, llama.cpp a un mode routeur natif). |
+| 2026-11-06 | **Les moteurs supplémentaires sont de la donnée (catalogue signé), pas du code** : deux familles d'adaptateurs (Ollama, OpenAI) ; du code propre seulement pour un moteur dont Lutin gère le cycle de vie. | Ajouter un moteur compatible OpenAI ne doit pas demander une nouvelle version de Lutin, ni exécuter de code distant. |
 
 ## À trancher
 
 - **Catalogue : qui note les modèles ?** Les notes sont éditoriales (1 à 10), écrites sans mesure sur du matériel réel. Le banc d'essai (`lutin bench --exporter`) permet maintenant de proposer des corrections justifiées ; il manque des résultats publiés sur quelques machines de référence.
 - **Autres langues.** Le mécanisme est en place (`src/lutin/langues/`) : en ajouter une demande un dictionnaire pour les messages et un pour la page, et un code dans `i18n.LANGUES`.
+- **Image Docker par défaut.** Reste « complète » (Lutin + Ollama) jusqu'à ce qu'un banc comparatif de moteurs sur du matériel réel (jalon 0.19.0, essais S2, S4, S5 de la feuille de route) montre mieux. Les moteurs supplémentaires seront des conteneurs compagnons reliés par adresse.
 
 ## Connu mais pas vérifié
 
