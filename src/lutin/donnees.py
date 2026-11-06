@@ -308,6 +308,8 @@ def conv_nouvelle():
 
 
 def conv_ecrire(c):
+    if getattr(getattr(_m.LOCAL_TOUR, "stop", None), "abandonne", False):
+        return          # ce fil exécute un tour abandonné après « Arrêter » : la conversation a continué sans lui, il ne doit rien écraser
     c["maj"] = datetime.now().isoformat(timespec="milliseconds")          # à la milliseconde : deux conversations écrites dans la même seconde restent dans l'ordre
     f = conv_chemin(c["id"])
     if f.is_file():

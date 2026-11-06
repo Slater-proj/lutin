@@ -2,11 +2,16 @@
 from html.parser import HTMLParser
 from . import horsligne as _hl
 from .i18n import t as _t
+import base64
+import html
 import ipaddress
 import json
 import os
 import re
 import socket
+import threading
+import time
+import urllib.parse
 import urllib.request
 from . import moteur as _m
 
@@ -192,6 +197,100 @@ def extraits_en_parallele(urls, lire=None, delai=None):
         pool.shutdown(wait=False, cancel_futures=True)
 
 
+# --------------------------------------------------------------------------- les moteurs de recherche : jamais un seul
+BING_URL = "https://www.bing.com/search?q={}&setlang=fr&cc=FR"
+PAUSE_BLOQUE_S = 600          # un moteur qui ne répond rien (limitation, vérification anti-robot) est laissé tranquille 10 minutes, les autres prennent le relais
+DUREE_CACHE_RECHERCHE_S = 600          # la même recherche, peu après : pas de nouvelle requête (on n'insiste pas auprès d'un moteur qui limite)
+BLOQUES = {}          # moteur -> instant jusqu'auquel on l'évite
+CACHE_RECHERCHE = {}          # (requête, nombre) -> (instant, résultats)
+VERROU_RECHERCHE = threading.Lock()
+RE_BING_BLOC = re.compile(r'<li class="b_algo"[^>]*>(.*?)</li>', re.S)
+RE_BING_TITRE = re.compile(r'<h2[^>]*>\s*<a[^>]*href="([^"]+)"[^>]*>(.*?)</a>', re.S)
+RE_PARAGRAPHE = re.compile(r"<p[^>]*>(.*?)</p>", re.S)
+
+
+def sans_balises(fragment):
+    return " ".join(html.unescape(re.sub(r"<[^>]+>", " ", fragment or "")).split())
+
+
+def adresse_bing(href):
+    """Bing passe par un lien de suivi (…/ck/a?…&u=a1<adresse en base 64>) : on retrouve l'adresse réelle."""
+    href = html.unescape(href or "")
+    p = urllib.parse.urlsplit(href)
+    if (p.hostname or "").endswith("bing.com") and p.path.startswith("/ck/a"):
+        u = (urllib.parse.parse_qs(p.query).get("u") or [""])[0]
+        if u.startswith("a1"):
+            try:
+                brut = u[2:] + "=" * (-len(u[2:]) % 4)
+                return base64.urlsafe_b64decode(brut).decode("utf-8", "replace")
+            except (ValueError, UnicodeError):
+                return ""
+        return ""
+    return href
+
+
+def resultats_duckduckgo(requete):
+    _, _, page = web_telecharger(DDG_URL, urllib.parse.urlencode({"q": requete, "kl": "fr-fr"}).encode("utf-8"))
+    analyse = ResultatsDDG()
+    analyse.feed(page)
+    sortie = []
+    for x in analyse.resultats:
+        url = adresse_resultat(x["url"])
+        if url.startswith("http") and "duckduckgo.com/y.js" not in url:          # pas les publicités
+            sortie.append({"titre": " ".join(x["titre"].split()), "url": url, "extrait": " ".join(x["extrait"].split())[:300]})
+    return sortie
+
+
+def resultats_bing(requete):
+    _, _, page = web_telecharger(BING_URL.format(urllib.parse.quote(requete)))
+    sortie = []
+    for bloc in RE_BING_BLOC.findall(page):
+        t = RE_BING_TITRE.search(bloc)
+        if not t:
+            continue
+        url = adresse_bing(t.group(1))
+        if not url.startswith("http"):
+            continue
+        p = RE_PARAGRAPHE.search(bloc)
+        sortie.append({"titre": sans_balises(t.group(2)), "url": url, "extrait": sans_balises(p.group(1))[:300] if p else ""})
+    return sortie
+
+
+def moteurs_de_recherche():
+    """Les moteurs essayés, dans l'ordre. Une adresse de recherche imposée (tests, installation particulière) remplace tout."""
+    if os.environ.get("LUTIN_RECHERCHE_URL"):
+        return [("duckduckgo", resultats_duckduckgo)]
+    return [("duckduckgo", resultats_duckduckgo), ("bing", resultats_bing)]
+
+
+def chercher_resultats(requete, nombre, maintenant=time.time):
+    """([résultats], [raisons des échecs]) : le premier moteur qui répond. Un moteur qui n'a rien rendu est mis de côté (PAUSE_BLOQUE_S) et les autres sont essayés ; la même recherche, peu après, vient du cache."""
+    cle = (requete.lower(), nombre)
+    with VERROU_RECHERCHE:
+        en_cache = CACHE_RECHERCHE.get(cle)
+    if en_cache and maintenant() - en_cache[0] < DUREE_CACHE_RECHERCHE_S:
+        return en_cache[1], []
+    moteurs = moteurs_de_recherche()
+    libres = [m for m in moteurs if BLOQUES.get(m[0], 0) <= maintenant()]
+    ordre = libres + sorted((m for m in moteurs if m not in libres), key=lambda m: BLOQUES.get(m[0], 0))
+    raisons = []
+    for nom, fonction in ordre:
+        try:
+            trouves = fonction(requete)[:nombre]
+        except _m.ErreurOutil as e:
+            trouves, raison = [], str(e)
+        else:
+            raison = _t("aucun résultat")
+        if trouves:
+            with VERROU_RECHERCHE:
+                BLOQUES.pop(nom, None)
+                CACHE_RECHERCHE[cle] = (maintenant(), trouves)
+            return trouves, raisons
+        BLOQUES[nom] = maintenant() + PAUSE_BLOQUE_S
+        raisons.append("{} : {}".format(nom, raison))
+    return [], raisons
+
+
 def outil_web_chercher(requete, nombre, ctx, lire=None):
     if not ctx.get("web", True):
         raise _m.ErreurOutil(_t("L'accès web est désactivé (case « Web » dans les options)."))
@@ -203,20 +302,14 @@ def outil_web_chercher(requete, nombre, ctx, lire=None):
     except (TypeError, ValueError):
         nombre = 6
     ctx["web_lu"] = True
-    _, _, page = web_telecharger(DDG_URL, urllib.parse.urlencode({"q": requete, "kl": "fr-fr"}).encode("utf-8"))
-    analyse = ResultatsDDG()
-    analyse.feed(page)
+    trouves, raisons = chercher_resultats(requete, nombre)
     lignes, urls = [], []
-    for x in analyse.resultats:
-        url = adresse_resultat(x["url"])
-        if not url.startswith("http") or "duckduckgo.com/y.js" in url:          # publicités
-            continue
-        lignes.append("{}. {}\n   {}\n   {}".format(len(lignes) + 1, " ".join(x["titre"].split()), url, " ".join(x["extrait"].split())[:300]))
-        urls.append(url)
-        if len(lignes) >= nombre:
-            break
+    for x in trouves:
+        lignes.append("{}. {}\n   {}\n   {}".format(len(lignes) + 1, x["titre"], x["url"], x["extrait"]))
+        urls.append(x["url"])
     if not lignes:
-        return _t("Aucun résultat (le moteur peut limiter les requêtes : reformule ou réessaie dans une minute).")
+        return _t("La recherche web ne répond pas pour le moment ({}). Les moteurs de recherche limitent les requêtes automatiques. NE RÉESSAIE PAS tout de suite : dis simplement à l'utilisateur que la recherche est momentanément indisponible, "
+                  "réponds avec ce que tu sais en le précisant, ou lis directement une page dont tu connais l'adresse avec web_lire.").format(" ; ".join(raisons) or _t("aucun résultat"))
     try:
         a_lire = LIRE_AUTO if lire is None else max(0, min(5, int(lire)))
     except (TypeError, ValueError):

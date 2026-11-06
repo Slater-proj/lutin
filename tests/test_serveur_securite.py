@@ -192,6 +192,35 @@ class ConfigurationSousDocker(Base):
             self.assertEqual(self.supprimer()[0], 403, "hors Docker, la variable ne fait rien")
 
 
+class AdministrationADistance(Base):
+    """Hors Docker : le réglage Accès > Administration à distance ouvre la configuration aux appareils déjà admis ; seule la machine elle-même peut le changer."""
+
+    def setUp(self):
+        super().setUp()
+        self.niveau(niveau=S.RESEAU)
+        _, _, h = requete("POST", "/api/appairer", corps={"pin": A.APPAREILS.nouveau_pin(), "nom": "Autre PC"})
+        self.cookie = h["set-cookie"].split(";")[0]
+        self.config = _TEMP / "config.json"
+        self.config.unlink(missing_ok=True)
+
+    def distant(self, chemin, corps):
+        return requete("POST", chemin, {"Cookie": self.cookie, "X-Token": A.JETON, "X-Forwarded-For": "10.0.0.5"}, corps)
+
+    def test_ferme_par_defaut_ouvert_depuis_la_machine_puis_ferme_de_nouveau(self):
+        from unittest import mock
+        with mock.patch.dict(os.environ, {"LUTIN_CONFIG": str(self.config)}):
+            statut, texte, _ = self.distant("/api/fichier-supprimer", {"conversation": "absente", "id": "x"})
+            self.assertEqual(statut, 403)
+            self.assertIn("Administration à distance", texte, "le refus dit où l'ouvrir")
+            self.assertEqual(self.distant("/api/admin-distance", {"actif": True})[0], 403, "un appareil distant ne peut pas s'ouvrir lui-même la porte")
+            self.assertEqual(requete("POST", "/api/admin-distance", {"X-Token": A.JETON_CONSOLE}, {"actif": True})[0], 200, "depuis la machine : possible")
+            self.assertNotEqual(self.distant("/api/fichier-supprimer", {"conversation": "absente", "id": "x"})[0], 403, "ouvert : la demande est traitée")
+            self.assertEqual(requete("POST", "/api/fichier-supprimer", {"X-Forwarded-For": "10.0.0.5"}, {})[0], 401, "sans être admis, rien n'est ouvert")
+            self.assertTrue(json_de(requete("GET", "/api/acces", {"Cookie": self.cookie, "X-Token": A.JETON, "X-Forwarded-For": "10.0.0.5"})[1])["admin_distance"]["actif"])
+            requete("POST", "/api/admin-distance", {"X-Token": A.JETON_CONSOLE}, {"actif": False})
+            self.assertEqual(self.distant("/api/fichier-supprimer", {"conversation": "absente", "id": "x"})[0], 403, "refermé")
+
+
 class NiveauProxy(Base):
     def proxy(self, ips):
         self.niveau(niveau=S.PROXY, url_publique="https://lutin.exemple.fr", proxy_ips=ips)

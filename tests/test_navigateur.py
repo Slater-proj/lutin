@@ -721,6 +721,27 @@ class Parcours(unittest.TestCase):
             p.attendre("document.body.dataset.moteur === 'ollama'")
             self.assertEqual(p.erreurs, [])
 
+    def test_la_mise_en_page_suit_la_largeur_de_l_ecran_du_telephone_au_grand_ecran(self):
+        """Sur un grand écran (2K) les pages de réglages et les bulles de conversation ne s'arrêtent plus à 900 px ; sur un téléphone rien ne déborde."""
+        with self.captures.serveur_demo() as (port, tmp):
+            largeurs = {}
+            for nom, taille in (("grand", "2560,1300"), ("telephone", "390,800")):
+                p = cdp.Page(self.chrome, tmp / ("profil-" + nom), taille=taille)
+                self.addCleanup(p.fermer)
+                p.aller("http://127.0.0.1:%d/#conv=a1b2c3d4" % port)
+                p.attendre("!!document.querySelector('.conv.choisie') || !!document.querySelector('#bNouvelle')")
+                p.attendre("document.querySelectorAll('.msg .corps').length > 0")
+                bulle = p.evaluer("Math.max(...[...document.querySelectorAll('.msg .corps')].map(e => e.getBoundingClientRect().width))")
+                p.evaluer("document.querySelector('.onglets button[data-p=reglages]').click()")
+                p.attendre("document.querySelector('#p-reglages').classList.contains('vue')")
+                cadre = p.evaluer("document.querySelector('#p-reglages .cadre').getBoundingClientRect().width")
+                deborde = p.evaluer("document.documentElement.scrollWidth > window.innerWidth + 1")
+                largeurs[nom] = (bulle, cadre, deborde, p.evaluer("window.innerWidth"))
+            self.assertGreater(largeurs["grand"][1], 1400, "les réglages utilisent la largeur d'un grand écran")
+            self.assertGreater(largeurs["grand"][0], 600, "les bulles ne sont pas écrasées")
+            self.assertFalse(largeurs["telephone"][2], "sur un téléphone, la page ne déborde pas sur le côté")
+            self.assertLessEqual(largeurs["telephone"][1], largeurs["telephone"][3], "les réglages tiennent dans la largeur du téléphone (Chrome ne descend pas sous ~500 px en test)")
+
     def test_pin_et_qr_au_niveau_reseau(self):
         """Au niveau « réseau », le navigateur de cette machine s'appaire comme un téléphone (le PIN de la console), puis l'onglet Accès montre PIN et QR tout de suite."""
         with self.captures.serveur_demo(niveau="reseau") as (port, tmp):

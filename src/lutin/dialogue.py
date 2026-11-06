@@ -1263,7 +1263,8 @@ def boucle_agent(conv, r, emit, ctx, stop):
                 corps_t = {k: v for k, v in corps_t.items() if k != "tools"}          # dernier essai SANS outils : certains petits modèles ne produisent plus rien quand les outils sont déclarés ; mieux vaut une réponse en texte
             try:
                 corps_t = dict(corps_t, messages=_images.pour_le_modele(corps_t["messages"], caps is None or "vision" in caps))
-                with moteur_actuel(r).chat_flux(corps_t, 900) as flux:          # le moteur choisi (voir moteurs.py) ; fermer le « with » coupe la génération
+                moteur_choisi = moteur_actuel(r)
+                with _moteurs.FluxInterruptible(lambda: moteur_choisi.chat_flux(corps_t, 900), stop) as flux:          # le moteur choisi (moteurs.py) ; Arrêter coupe même un modèle qui charge ou qui se fige
                     for e in flux:
                         if stop.is_set():
                             if contenu.strip():

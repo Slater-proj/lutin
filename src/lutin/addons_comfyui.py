@@ -163,7 +163,7 @@ def en_marche():
     return addons.appeler(IDENT, "etat", delai=2)["ok"]
 
 
-def assurer_comfyui():
+def assurer_comfyui(stop=None):
     """Fait en sorte que ComfyUI tourne. S'il ne tourne pas, Lutin le lance : il rend d'abord la mémoire au modèle de langage (ils ne tiennent pas ensemble), démarre ComfyUI et attend qu'il réponde.
     Renvoie True si c'est Lutin qui l'a lancé (il le refermera ensuite)."""
     if en_marche():
@@ -191,6 +191,9 @@ def assurer_comfyui():
     _m.journaliser("ComfyUI lancé par Lutin ({}).".format(" ".join(commande[:3])))
     fin = time.time() + DELAI_DEMARRAGE
     while time.time() < fin:
+        if stop is not None and stop.is_set():          # « Arrêter » pendant le démarrage de ComfyUI : on le referme et on rend la main
+            arreter_comfyui()
+            raise _m.Arret()
         if processus.poll() is not None:
             PROCESSUS["popen"] = None
             raise _m.ErreurOutil(_t("ComfyUI s'est arrêté au démarrage (voir donnees/comfyui.log)."))
@@ -555,7 +558,7 @@ def outil_generer(args, ctx):
     if not ctx["accord"](_t("Générer {} avec ComfyUI").format({"image": _t("une image"), "video": _t("une vidéo"), "son": _t("un son")}[type_]), detail, "", auto=auto):
         from . import outils
         return outils.refus(ctx, _t("Refusé par l'utilisateur."))
-    lance = assurer_comfyui()
+    lance = assurer_comfyui(ctx.get("stop"))
     try:
         res = _soumettre_et_attendre(f, v, complet, type_, ctx)
         if ignore:

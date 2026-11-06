@@ -1476,5 +1476,19 @@
 "llama.cpp n'a pas été installé par Lutin : il n'y a rien à supprimer ici.": "llama.cpp was not installed by Lutin: there is nothing to remove here.",
 "llama.cpp n'est pas installé : Réglages > Moteur > Installer.": "llama.cpp is not installed: Settings > Engine > Install.",
 "mode hors ligne : ce moteur distant n'est pas joint": "offline mode: this remote engine is not reached",
-"Écris le nom d'un modèle à chercher (par exemple qwen3 ou gemma).": "Write the name of a model to search for (for example qwen3 or gemma)."
+"Écris le nom d'un modèle à chercher (par exemple qwen3 ou gemma).": "Write the name of a model to search for (for example qwen3 or gemma).",
+"Pour changer : lutin setup --niveau local|reseau|proxy ; lutin securite --admin-distance on|off": "To change: lutin setup --niveau local|reseau|proxy ; lutin securite --admin-distance on|off",
+"niveau d'accès et administration à distance": "access level and remote administration",
+"ouvre (on) ou ferme (off) la configuration depuis la page aux appareils déjà connectés": "opens (on) or closes (off) configuration from the page for devices that are already connected",
+"Administration à distance : {}": "Remote administration: {}",
+"ouverte (tout appareil connecté peut configurer)": "open (any connected device can configure)",
+"fermée (seule cette machine configure)": "closed (only this machine configures)",
+"✔ Administration à distance {}.": "✔ Remote administration {}.",
+"ouverte": "open",
+"fermée": "closed",
+" Pour le faire depuis un autre appareil : Accès > Administration à distance (à activer depuis cette machine).": " To do it from another device: Access > Remote administration (to be enabled from this machine).",
+"L'administration à distance s'active ou se retire depuis cette machine seulement (ou avec la commande lutin securite).": "Remote administration is enabled or removed from this machine only (or with the lutin securite command).",
+"Dans Docker, l'administration à distance se règle avec la variable LUTIN_ADMIN_TOUS du conteneur (docs/DOCKER.md).": "In Docker, remote administration is set with the container's LUTIN_ADMIN_TOUS variable (docs/DOCKER.md).",
+"aucun résultat": "no result",
+"La recherche web ne répond pas pour le moment ({}). Les moteurs de recherche limitent les requêtes automatiques. NE RÉESSAIE PAS tout de suite : dis simplement à l'utilisateur que la recherche est momentanément indisponible, réponds avec ce que tu sais en le précisant, ou lis directement une page dont tu connais l'adresse avec web_lire.": "Web search is not answering right now ({}). Search engines limit automated requests. DO NOT RETRY right away: simply tell the user that search is temporarily unavailable, answer with what you know and say so, or read a page whose address you know directly with web_lire."
 }

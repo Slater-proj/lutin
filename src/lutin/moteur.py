@@ -786,7 +786,28 @@ def arreter_conversation(ident):
     if stop is None:
         return {"ok": True, "actif": False}
     stop.set()
+    threading.Thread(target=_rendre_la_main, args=(ident, stop), daemon=True, name="arret-" + str(ident)).start()
     return {"ok": True, "actif": True}
+
+
+DELAI_ABANDON_S = 20          # un tour qui ne s'arrête pas 20 s après « Arrêter » est abandonné : l'utilisateur peut écrire de nouveau
+LOCAL_TOUR = threading.local()          # le « stop » du tour que ce fil exécute (pour ne rien enregistrer d'un tour abandonné)
+
+
+def _rendre_la_main(ident, stop):
+    """Après « Arrêter », le tour s'arrête normalement en quelques secondes. S'il est figé (un outil qui ne répond plus, un modèle bloqué), on le retire de la liste des tours actifs : la page
+    redevient utilisable sans redémarrer Lutin. Le tour abandonné n'écrira plus dans la conversation s'il finit un jour."""
+    for _ in range(DELAI_ABANDON_S * 2):
+        time.sleep(0.5)
+        with VERROU_TOURS:
+            if TOURS_ACTIFS.get(ident) is not stop:
+                return
+    with VERROU_TOURS:
+        if TOURS_ACTIFS.get(ident) is stop:
+            stop.abandonne = True
+            TOURS_ACTIFS.pop(ident, None)
+            RACINE_TOURS.pop(ident, None)
+            journaliser("Tour abandonné {} s après « Arrêter » (conversation {}) : la page est de nouveau utilisable.".format(DELAI_ABANDON_S, ident))
 
 
 from .espaces import (  # noqa: F401  (déplacé dans espaces.py : moteur ré-exporte ses noms)

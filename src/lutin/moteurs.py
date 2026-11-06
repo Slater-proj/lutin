@@ -11,6 +11,8 @@ Ce qu'un moteur sait faire (`Moteur`) :
     un modèle. La page ne montre que ce qui est possible, avec la raison de ce qui ne l'est pas (Docker, système, droits) ;
   - faire ces actions en tâche de fond (`lancer_tache`), dont l'avancement est montré dans la barre d'état.
 Aucune dépendance, et aucun import de moteur.py (pas de cycle) : le moteur Ollama est défini dans dialogue.py, à côté des fonctions qu'il enveloppe."""
+import queue
+import socket
 import threading
 import time
 
@@ -91,6 +93,69 @@ class Moteur:
         """Ce que la page affiche."""
         return {"id": self.id, "nom": self.nom, "genre": self.genre, "gere_modeles": self.gere_modeles, "description": self.description, "courant": bool(courant),
                 "points_forts": list(self.points_forts), "points_faibles": list(self.points_faibles), "adresse_modifiable": self.adresse_modifiable}
+
+
+def abandonner(reponse):
+    """Coupe net une connexion HTTP en cours de lecture, même si un autre fil est bloqué dessus : le serveur de modèle voit la connexion se fermer et arrête de générer."""
+    try:
+        reponse.fp.raw._sock.shutdown(socket.SHUT_RDWR)
+    except (AttributeError, OSError, ValueError):
+        pass
+
+
+class FluxInterruptible:
+    """Les évènements d'une réponse en flux, lus dans un fil à part pour que le bouton Arrêter marche TOUJOURS : l'ouverture de la connexion (un modèle qui charge peut mettre des minutes à répondre)
+    comme la lecture (un modèle qui se fige). `ouvrir()` rend le gestionnaire de flux du moteur ; `stop` est l'évènement du bouton Arrêter. Quand il est levé, la connexion est coupée et un évènement
+    {"__stop__": True} est rendu : l'appelant le voit comme n'importe quel autre arrêt. Les erreurs du moteur (HTTP, réseau) sont relevées chez l'appelant, comme avant."""
+
+    def __init__(self, ouvrir, stop, sondage=0.4):
+        self.ouvrir, self.stop, self.sondage = ouvrir, stop, sondage
+        self.file, self.flux, self.fini = queue.Queue(), None, False
+
+    def _lire(self):
+        try:
+            self.flux = self.ouvrir()
+            if self.fini:
+                self.abandonner()
+                return
+            with self.flux:
+                for e in self.flux:
+                    self.file.put(("e", e))
+            self.file.put(("fin", None))
+        except BaseException as erreur:  # noqa: BLE001  (relevée chez l'appelant)
+            self.file.put(("err", erreur))
+
+    def __enter__(self):
+        threading.Thread(target=self._lire, daemon=True, name="flux-moteur").start()
+        return self
+
+    def __exit__(self, *_):
+        self.fini = True
+        self.abandonner()
+        return False
+
+    def abandonner(self):
+        reponse = getattr(self.flux, "reponse", None)
+        if reponse is not None:
+            abandonner(reponse)
+
+    def __iter__(self):
+        while True:
+            try:
+                genre, valeur = self.file.get(timeout=self.sondage)
+            except queue.Empty:
+                if self.stop is not None and self.stop.is_set():
+                    self.fini = True
+                    self.abandonner()
+                    yield {"__stop__": True}
+                    return
+                continue
+            if genre == "e":
+                yield valeur
+            elif genre == "fin":
+                return
+            else:
+                raise valeur
 
 
 def enregistrer(moteur):

@@ -232,6 +232,8 @@ Réglages > **Mode** (ou `/mode` dans la conversation) change ce que Lutin peut 
 
 L'onglet **Accès** réunit qui peut utiliser Lutin (le niveau), le code PIN avec un **QR code** pour connecter un téléphone en le scannant, et la liste des appareils connectés (avec *Révoquer*). Un changement de niveau qui demande un redémarrage affiche un bandeau avec un bouton *Redémarrer* quand Lutin peut le faire lui-même (commande `lutin` ou Docker), et dit quoi faire sinon. Détails : [SECURITY.fr.md](SECURITY.fr.md).
 
+**Administration à distance.** Par défaut, supprimer un fichier créé ou ajouter un dossier de travail, une extension, un connecteur MCP ou un moteur ne se fait que depuis la machine où Lutin tourne. Si tu te connectes depuis un autre ordinateur ou un téléphone, active **Accès > Administration à distance** (depuis la machine elle-même, ou avec `lutin securite --admin-distance on`) : tout appareil déjà admis (appairé avec un code, ou utilisateur du proxy) peut alors configurer depuis la page. Le niveau d'accès lui-même ne se change toujours que depuis la machine. Sous Docker, l'équivalent est la variable `LUTIN_ADMIN_TOUS=1`.
+
 ## Dossiers de travail et dossier par défaut
 
 Les dossiers réseau (`\\serveur\partage\dossier`, un lecteur réseau, un NAS) marchent comme les autres : s'il est refusé, Lutin dit pourquoi (le compte du service n'y a pas accès, le partage est éteint…). **Parcourir…** choisit un dossier, **Déplacer…** le déplace (avec ses fichiers) ailleurs (la même fenêtre permet de retenir seulement le nouveau chemin quand tu l'as déplacé à la main). Un réglage garde aussi une copie Markdown lisible de chaque conversation dans le dossier de travail (`conversations-lutin/`).

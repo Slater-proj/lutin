@@ -361,6 +361,16 @@ button.principal { box-shadow:0 6px 16px -8px rgba(63,143,232,.8); }
 .bandeau-version { border-radius:0; box-shadow:0 8px 24px -16px rgba(0,0,0,.8); }
 .puce { background:#101820; }
 @media (prefers-reduced-motion:reduce) { * { transition:none !important; animation:none !important; } }
+/* Grands écrans (2K, 4K) : l'interface occupe la place disponible au lieu de s'arrêter à 900 px — colonnes de lecture plus larges, plusieurs cartes côte à côte. Téléphone et petites fenêtres : rien ne change. */
+:root { --lecture:clamp(900px, 58vw, 1500px); --page:clamp(900px, 78vw, 1800px); }
+.cadre { max-width:min(100%, var(--page)); }
+@media (min-width:861px) { .msg.moi .corps, .msg.ia .corps { max-width:min(93%, var(--lecture)); } }
+@media (min-width:1500px) {
+  .cadre { padding:24px 36px; }
+  #listeMoteurs, #listeAddons, #listeMcp { display:grid; grid-template-columns:repeat(auto-fit, minmax(460px, 1fr)); gap:12px; align-items:start; }
+  #listeMoteurs > .carte, #listeAddons > .carte, #listeMcp > .carte { margin:0; }
+  #listeMoteurs > .attention, #listeAddons > .attention, #listeMcp > .aide { grid-column:1 / -1; }
+}
 body:not([data-moteur="ollama"]) .ollama-seulement { display:none !important; }
 body[data-moteur="ollama"] .moteur-autre { display:none !important; }
 .carte.moteur-choisi { border-color:var(--accent); box-shadow:0 0 0 1px rgba(90,169,255,.35), var(--ombre-douce); }
@@ -572,6 +582,9 @@ body[data-moteur="ollama"] .moteur-autre { display:none !important; }
       <div id="qrPin" style="margin:10px 0"></div>
       <div class="aide" id="adressePin"></div>
     </div>
+    <h2>Administration à distance <span class="aide">(configurer depuis un autre appareil)</span></h2>
+    <div class="aide">Par prudence, supprimer un fichier créé, ajouter un dossier de travail, une extension ou un connecteur MCP ne se fait que depuis cette machine. Si tu te connectes souvent depuis un autre ordinateur ou un téléphone, tu peux ouvrir ces réglages à tous les appareils déjà connectés (ceux que tu as appairés avec un code, ou les utilisateurs de ton proxy). À réserver à un usage personnel : ces réglages permettent de lire et d'écrire dans tes dossiers de travail et de lancer des programmes.</div>
+    <div class="carte"><label><input type="checkbox" id="cAdminDistance"> Autoriser la configuration depuis les appareils connectés</label> <span class="aide" id="mAdminDistance"></span></div>
     <h2>Appareils connectés</h2>
     <div id="listeAppareils" class="aide" style="margin:6px 0"></div>
     <div style="margin:6px 0"><button id="bRevoquerTous">Déconnecter tous les appareils</button> <span class="aide" id="mAppareils"></span></div>
@@ -2620,6 +2633,8 @@ body[data-moteur="ollama"] .moteur-autre { display:none !important; }
     majChampsAcces();
     $('aPin').textContent = ACCES.niveau === 'reseau' ? T('Sur ton téléphone : ouvre l\'adresse affichée (ou vise le QR code avec l\'appareil photo), il se connecte tout seul. Le code est valable 10 minutes et ne sert qu\'une fois.') : (ACCES.niveau === 'proxy' ? T('Derrière un proxy, c\'est le proxy qui identifie : pas de code PIN.') : T('Pour connecter un téléphone, choisis d\'abord « Mon réseau local » ci-dessus, enregistre, puis redémarre Lutin.'));
     $('bPin').hidden = ACCES.niveau !== 'reseau' || !ETAT.configurateur;
+    const ad = ACCES.admin_distance || {}; $('cAdminDistance').checked = !!ad.actif; $('cAdminDistance').disabled = !ad.modifiable;
+    $('mAdminDistance').textContent = ad.docker ? T('Dans Docker : variable LUTIN_ADMIN_TOUS=1 du conteneur.') : (ad.modifiable ? '' : T('Se change depuis cette machine seulement.'));
     $('blocPin').hidden = $('blocPin').hidden || ACCES.niveau !== 'reseau';
     $('aPinAbsent').hidden = ACCES.niveau !== 'proxy';
     if (!$('bPin').hidden && Date.now() > PIN_JUSQU_A) nouveauPin();
@@ -2653,6 +2668,10 @@ body[data-moteur="ollama"] .moteur-autre { display:none !important; }
     } catch (e) { $('mAcces').textContent = e.message; }
   };
   $('bPin').addEventListener('click', nouveauPin);
+  $('cAdminDistance').addEventListener('change', async () => {
+    try { await api('/api/admin-distance', { actif: $('cAdminDistance').checked }); $('mAdminDistance').textContent = T('Enregistré.'); await rafraichir(); }
+    catch (e) { $('mAdminDistance').textContent = e.message; $('cAdminDistance').checked = !$('cAdminDistance').checked; }
+  });
   $('bRevoquerTous').addEventListener('click', async () => {
     if (!confirm(T('Déconnecter tous les appareils ? Ils devront se reconnecter avec un nouveau code.'))) return;
     try { await api('/api/appareils-revoquer', {}); chargerAcces(); } catch (e) { $('mAppareils').textContent = e.message; }
@@ -2918,7 +2937,7 @@ body[data-moteur="ollama"] .moteur-autre { display:none !important; }
     ? T('🔒 Réglages verrouillés : le proxy t\'identifie, mais tu n\'es pas déclaré administrateur. Ajoute ton identifiant dans la variable LUTIN_ADMINS du docker-compose (ou LUTIN_ADMIN_TOUS=1 pour ouvrir à tous les utilisateurs connectés ; voir docs/DOCKER.md), puis redémarre le conteneur.')
     : (ETAT.docker
       ? T('🔒 Réglages verrouillés : dans Docker, le navigateur n\'est jamais « sur la machine » de Lutin, donc la page ne peut pas les modifier à ce niveau d\'accès. Ajoute LUTIN_ADMIN_TOUS=1 aux variables du conteneur (toute personne connectée pourra alors configurer), ou passe au niveau proxy derrière Authelia avec ton identifiant dans LUTIN_ADMINS (voir docs/DOCKER.md). Sans cela : docker exec lutin lutin travaux … ou lutin mcp …')
-      : T('🔒 Réglages verrouillés : ils ne se changent que depuis la machine où Lutin tourne (ouvre cette page là-bas).'));
+      : T('🔒 Réglages verrouillés : ils ne se changent que depuis la machine où Lutin tourne (ouvre cette page là-bas), sauf si tu ouvres l\'administration à distance dans Accès (depuis cette machine).'));
   const chargerAddons = async () => {
     const z = $('listeAddons'), seq = ++SEQ_ADDONS;
     clearTimeout(minuteurAddons);

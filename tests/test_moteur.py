@@ -104,6 +104,8 @@ class FauxOllama(BaseHTTPRequestHandler):
             texte = "".join(m.get("content", "") for m in reponse)
             self.wfile.write(json.dumps({"message": {"role": "assistant", "content": texte}, "done": True}).encode("utf-8")); return
         for m in reponse:
+            if "attendre" in m:                                          # le modèle se fige (il charge, la carte graphique est prise…) : aucune donnée pendant ce temps
+                time.sleep(m["attendre"]); continue
             if "error" in m:
                 self.wfile.write(ligne(error=m["error"])); return
             self.wfile.write(ligne(message=dict({"role": "assistant"}, **m), done=False)); self.wfile.flush()
@@ -1125,6 +1127,49 @@ class Assistant(unittest.TestCase):
         self.assertEqual(A.TOURS_ACTIFS, {}, "le tour est libéré")
         self.assertFalse(post("/api/arreter", {"conversation": fin})["actif"])
 
+    def test_arreter_rend_la_main_meme_si_le_modele_est_fige(self):
+        """Régression : un modèle qui ne renvoie plus rien (chargement bloqué, carte graphique prise par une génération d'image) ne voyait jamais le bouton Arrêter : « réflexion en cours » restait jusqu'au redémarrage."""
+        def arreter_dans_une_seconde():
+            time.sleep(1.0)
+            for _ in range(50):
+                if A.TOURS_ACTIFS:
+                    post("/api/arreter", {"conversation": next(iter(A.TOURS_ACTIFS))})
+                    return
+                time.sleep(0.1)
+        fil = threading.Thread(target=arreter_dans_une_seconde, daemon=True)
+        fil.start()
+        debut = time.time()
+        ev = chat("Fais-moi une image", reponses=[[{"attendre": 12}, {"content": "trop tard"}]])
+        self.assertLess(time.time() - debut, 8, "le tour s'est arrêté bien avant la fin du blocage du modèle (12 s)")
+        self.assertTrue(any(e["type"] == "info" and e["texte"].startswith("Arrêté") for e in ev))
+        self.assertNotIn("trop tard", texte_de(ev))
+        self.assertEqual(A.TOURS_ACTIFS, {}, "la conversation est libre : on peut écrire de nouveau")
+
+    def test_un_tour_fige_est_abandonne_apres_arreter_et_n_ecrase_rien(self):
+        """Filet : même un outil qui ne regarde jamais « stop » ne bloque plus la conversation plus de quelques secondes après « Arrêter »."""
+        from lutin import donnees
+        stop = threading.Event()
+        A.TOURS_ACTIFS["conv-figee"] = stop
+        avant = A.DELAI_ABANDON_S
+        A.DELAI_ABANDON_S = 1
+        try:
+            self.assertTrue(A.arreter_conversation("conv-figee")["actif"])
+            for _ in range(40):
+                if "conv-figee" not in A.TOURS_ACTIFS:
+                    break
+                time.sleep(0.1)
+            self.assertNotIn("conv-figee", A.TOURS_ACTIFS, "la conversation est rendue")
+            self.assertTrue(getattr(stop, "abandonne", False))
+            A.LOCAL_TOUR.stop = stop          # ce fil joue le rôle du tour abandonné : son enregistrement est ignoré
+            c = A.conv_nouvelle()
+            donnees.conv_ecrire(dict(c, titre="NE DOIT PAS ÊTRE ÉCRIT"))
+            with self.assertRaises(ValueError):
+                A.conv_lire(c["id"])          # rien n'a été écrit
+        finally:
+            A.LOCAL_TOUR.stop = None
+            A.DELAI_ABANDON_S = avant
+            A.TOURS_ACTIFS.pop("conv-figee", None)
+
     def test_fins_de_ligne_et_encodage_conserves(self):
         dossier = PROJET / "scripts"
         dossier.mkdir(exist_ok=True)
@@ -1338,7 +1383,7 @@ class Assistant(unittest.TestCase):
         self.assertIn("Second extrait.", res)
         self.assertNotIn("Publicité", res, "les publicités sont écartées")
         self.assertIn("q=version+r%C3%A9cente+de+ComfyUI", WEB_RECU[0][1])
-        self.assertIn("Aucun résultat", A.outil_web_chercher("introuvable", 6, {"web": True}))
+        self.assertIn("ne répond pas pour le moment", A.outil_web_chercher("introuvable", 6, {"web": True}))
         with self.assertRaises(A.ErreurOutil):
             A.outil_web_chercher("   ", 6, {"web": True})
 

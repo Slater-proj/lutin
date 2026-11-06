@@ -89,7 +89,8 @@ def parseur():
     a = sp.add_parser("appareils", help=_t("appareils connectés"))
     a.add_argument("action", nargs="?", choices=("lister", "revoquer"), default="lister")
     a.add_argument("id", nargs="?")
-    sp.add_parser("securite", help=_t("niveau d'accès"))
+    se = sp.add_parser("securite", help=_t("niveau d'accès et administration à distance"))
+    se.add_argument("--admin-distance", choices=("on", "off"), help=_t("ouvre (on) ou ferme (off) la configuration depuis la page aux appareils déjà connectés"))
     tr = sp.add_parser("travaux", help=_t("dossiers de travail"))
     tr.add_argument("action", nargs="?", choices=("lister", "ajouter", "retirer", "actif"), default="lister")
     tr.add_argument("valeur", nargs="?", help=_t("chemin (ajouter) ou identifiant (retirer, actif)"))
@@ -523,6 +524,10 @@ def commande_restaurer(args):
 
 def commande_securite(args):
     d, cfg = contexte()
+    if getattr(args, "admin_distance", None):
+        cfg["admin_a_distance"] = args.admin_distance == "on"
+        config.enregistrer(d, cfg)
+        print(_t("✔ Administration à distance {}.").format(_t("ouverte") if cfg["admin_a_distance"] else _t("fermée")))
     s = securite.Securite.depuis_dict(cfg["securite"])
     texte = {securite.LOCAL: _t("cette machine seulement"), securite.RESEAU: _t("réseau local (code PIN)"), securite.PROXY: _t("derrière un proxy")}[s.niveau]
     print(_t("Niveau : {} — {}").format(s.niveau, texte))
@@ -530,7 +535,8 @@ def commande_securite(args):
         print(_t("Adresse publique : {}   Proxy de confiance : {}").format(s.url_publique, ", ".join(s.proxy_ips)))
     for p in s.valider():
         print("⚠ " + p)
-    print(_t("Pour changer : lutin setup --niveau local|reseau|proxy"))
+    print(_t("Administration à distance : {}").format(_t("ouverte (tout appareil connecté peut configurer)") if cfg.get("admin_a_distance") else _t("fermée (seule cette machine configure)")))
+    print(_t("Pour changer : lutin setup --niveau local|reseau|proxy ; lutin securite --admin-distance on|off"))
     return 0
 
 

@@ -28,6 +28,7 @@ DEFAUT = {
     "catalogue_url": None,                                   # None : le catalogue de Slater-proj/lutin ; "" : aucun catalogue en ligne ; une adresse https : le tien
     "avance": False,
     "langue": None,                                          # None : langue du système ; "fr" ou "en" (voir lutin.i18n)
+    "admin_a_distance": False,                               # vrai : toute personne déjà admise (appareil appairé, utilisateur du proxy) peut configurer depuis la page (modifiable depuis la machine seulement)
     "hors_ligne": False,                                     # mode hors ligne strict : aucune connexion vers Internet (voir lutin.horsligne)
 }
 

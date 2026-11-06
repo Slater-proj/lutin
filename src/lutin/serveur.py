@@ -65,6 +65,8 @@ class Gestionnaire(BaseHTTPRequestHandler):
     def _envoyer(self, code, corps, type_="application/json; charset=utf-8", en_tetes=None):
         if code == 403 and isinstance(corps, dict) and "cette machine" in str(corps.get("erreur", "")) and _acces.en_docker():
             corps = dict(corps, erreur=str(corps["erreur"]) + _t(" Dans Docker : ajoute LUTIN_ADMIN_TOUS=1 aux variables du conteneur (ou, derrière un proxy, ton identifiant dans LUTIN_ADMINS), puis redémarre-le."))
+        elif code == 403 and isinstance(corps, dict) and "cette machine" in str(corps.get("erreur", "")):
+            corps = dict(corps, erreur=str(corps["erreur"]) + _t(" Pour le faire depuis un autre appareil : Accès > Administration à distance (à activer depuis cette machine)."))
         if isinstance(corps, dict) and _i18n.langue() != "fr":
             corps = _m.traduire_json(corps)
         donnees = corps if isinstance(corps, (bytes, bytearray)) else (corps if isinstance(corps, str) else json.dumps(corps, ensure_ascii=False)).encode("utf-8")
@@ -163,15 +165,25 @@ class Gestionnaire(BaseHTTPRequestHandler):
 
     @staticmethod
     def _admin_tous():
-        """Dans Docker, le navigateur n'est jamais « sur la machine » : le propriétaire peut ouvrir la configuration à toute personne déjà admise par le niveau d'accès (LUTIN_ADMIN_TOUS=1 dans le docker-compose)."""
-        return _acces.en_docker() and os.environ.get("LUTIN_ADMIN_TOUS", "").strip().lower() in ("1", "true", "oui", "yes", "on")
+        """Le propriétaire a ouvert la configuration à toute personne déjà admise par le niveau d'accès : Docker (LUTIN_ADMIN_TOUS=1 dans le docker-compose, car le navigateur n'y est jamais « sur la machine »)
+        ou, partout, le réglage Accès > Administration à distance (qui ne se change que depuis la machine elle-même)."""
+        if _acces.en_docker() and os.environ.get("LUTIN_ADMIN_TOUS", "").strip().lower() in ("1", "true", "oui", "yes", "on"):
+            return True
+        try:
+            return bool(_m.config_lue().get("admin_a_distance"))
+        except (OSError, ValueError):
+            return False
 
     def _configurateur(self):
-        """Peut-on changer ce qui ouvre ou modifie la machine (dossiers de travail, niveau d'accès, restauration) ? Seulement depuis cette machine : au niveau « machine seulement », avec le jeton de la console,
-        ou — au niveau « réseau » — depuis le navigateur de cette machine (jamais depuis un appareil appairé). Derrière un proxy, la commande lutin seulement : le proxy est sur la machine, il ne prouve rien.
-        Exception voulue, dans Docker seulement : LUTIN_ADMIN_TOUS=1 ouvre la configuration à toute personne authentifiée (appareil appairé, utilisateur du proxy)."""
+        """Peut-on configurer depuis cette page ? Oui depuis la machine elle-même, ou depuis n'importe quel appareil admis si le propriétaire a ouvert l'administration à distance."""
         if self._admin_tous():
             return self._authentifie()
+        return self._configurateur_strict()
+
+    def _configurateur_strict(self):
+        """Peut-on changer ce qui ouvre ou modifie la machine (dossiers de travail, niveau d'accès, restauration) ? Seulement depuis cette machine : au niveau « machine seulement », avec le jeton de la console,
+        ou — au niveau « réseau » — depuis le navigateur de cette machine (jamais depuis un appareil appairé). Derrière un proxy, la commande lutin seulement : le proxy est sur la machine, il ne prouve rien.
+        C'est la règle d'origine, sans l'ouverture à distance (voir _configurateur) : elle seule peut activer ou retirer l'administration à distance."""
         if _m.SECURITE.niveau == _sec.LOCAL:
             return True
         if self._local() and _sec.egal(self.headers.get("X-Token") or "", _m.JETON_CONSOLE):
@@ -269,7 +281,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
         if chemin == "/api/notes":
             return self._envoyer(200, {"notes": _donnees.lister_notes()})
         if chemin == "/api/acces":
-            return self._envoyer(200, _acces.etat(self._configurateur()))
+            return self._envoyer(200, _acces.etat(self._configurateur(), self._configurateur_strict(), self._admin_tous()))
         if chemin == "/api/qr":
             texte = urllib.parse.unquote(self.path.split("d=", 1)[1]) if "d=" in self.path else ""
             try:
@@ -848,6 +860,16 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 return self._envoyer(200, _m.oublier_modele(str(donnees.get("modele", ""))))
             if self.path == "/api/modeles-restaurer":
                 return self._envoyer(200, _m.restaurer_modeles())
+            if self.path == "/api/admin-distance":
+                if not self._configurateur_strict():
+                    return self._envoyer(403, {"erreur": _t("L'administration à distance s'active ou se retire depuis cette machine seulement (ou avec la commande lutin securite).")})
+                if _acces.en_docker():
+                    return self._envoyer(400, {"erreur": _t("Dans Docker, l'administration à distance se règle avec la variable LUTIN_ADMIN_TOUS du conteneur (docs/DOCKER.md).")})
+                cfg = _m.config_lue()
+                cfg["admin_a_distance"] = bool(donnees.get("actif"))
+                _m.config_ecrire(cfg)
+                _m.journaliser("Administration à distance {}.".format("ouverte" if cfg["admin_a_distance"] else "fermée"))
+                return self._envoyer(200, {"actif": cfg["admin_a_distance"]})
             if self.path.startswith("/api/moteur-"):
                 if not self._configurateur():
                     return self._envoyer(403, {"erreur": _t("Installer, démarrer ou régler un moteur se fait depuis cette machine (niveau « cette machine seulement » ou navigateur de cette machine).")})
@@ -1014,12 +1036,14 @@ class Gestionnaire(BaseHTTPRequestHandler):
                     ecrire(b"\n")
             threading.Thread(target=battement, daemon=True).start()
             emit({"type": "debut", "conversation": conv["id"]})
+            _m.LOCAL_TOUR.stop = stop
             _m.tour(conv, texte, emit, r, stop, depuis, identite=self._identite(), images=images, pieces=pieces)
         finally:
             fin_flux.set()
             with _m.VERROU_TOURS:
-                _m.TOURS_ACTIFS.pop(conv["id"], None)
-                _m.RACINE_TOURS.pop(conv["id"], None)
+                if _m.TOURS_ACTIFS.get(conv["id"]) is stop:          # un tour abandonné (voir arreter_conversation) ne retire pas celui d'une réponse plus récente
+                    _m.TOURS_ACTIFS.pop(conv["id"], None)
+                    _m.RACINE_TOURS.pop(conv["id"], None)
 
     def _mission_dans_la_conversation(self, conv, texte, donnees, mission_en_cours, abandon, nouvelle):
         """Mode « Mission longue » : le message lance une mission menée DANS cette conversation, ou, si une mission y est déjà en cours, lui apporte une réponse ou une consigne."""

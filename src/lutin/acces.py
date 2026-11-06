@@ -30,7 +30,7 @@ def securite_enregistree():
     return _sec.Securite.depuis_dict(_m.config_lue().get("securite"))
 
 
-def etat(configurateur):
+def etat(configurateur, strict=None, admin_distance=False):
     """Tout ce que la page Accès affiche."""
     s = _m.SECURITE
     sur_disque = securite_enregistree()
@@ -38,7 +38,8 @@ def etat(configurateur):
         "niveau": s.niveau, "port": s.port, "url_publique": s.url_publique, "proxy_ips": list(s.proxy_ips), "ecoute": s.ecoute,
         "enregistre": {"niveau": sur_disque.niveau, "url_publique": sur_disque.url_publique, "proxy_ips": list(sur_disque.proxy_ips)},
         "redemarrage_necessaire": sur_disque != s,
-        "modifiable": bool(configurateur) and not en_docker(), "docker": en_docker(), "peut_redemarrer": peut_redemarrer(),
+        "modifiable": bool(configurateur) and not en_docker(), "docker": en_docker(),
+        "admin_distance": {"actif": bool(admin_distance), "docker": en_docker(), "modifiable": bool(configurateur if strict is None else strict) and not en_docker()}, "peut_redemarrer": peut_redemarrer(),
         "adresse": "http://{}:{}/".format(_m.IP_LAN or _m.ip_locale(), s.port),
         "appareils": _m.APPAREILS.liste(),
         "avertissements": {"reseau": _t(installation.AVERTISSEMENT_RESEAU), "proxy": _t(installation.AVERTISSEMENT_PROXY)},

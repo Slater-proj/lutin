@@ -947,7 +947,6 @@
 "Supprimer ": "Delete ",
 " » du disque ? Tu pourras le retélécharger.": " » from the disk? You can download it again.",
 "Le garder": "Keep it",
-"🔒 Réglages verrouillés : ils ne se changent que depuis la machine où Lutin tourne (ouvre cette page là-bas).": "🔒 Settings locked: they can only be changed from the machine where Lutin runs (open this page there).",
 "page du modèle": "model page",
 "installé": "installed",
 "≈ {} Go (estimation)": "≈ {} GB (estimate)",
@@ -1016,5 +1015,12 @@
 "Nom d'un modèle (par exemple qwen3 ou gemma)": "Name of a model (for example qwen3 or gemma)",
 "Voir les fichiers": "See the files",
 "Aucun fichier GGUF utilisable dans ce dépôt.": "No usable GGUF file in this repository.",
-"Téléchargement lancé : l'avancement est dans la barre bleue du haut.": "Download started: progress is in the blue bar at the top."
+"Téléchargement lancé : l'avancement est dans la barre bleue du haut.": "Download started: progress is in the blue bar at the top.",
+"(configurer depuis un autre appareil)": "(configure from another device)",
+"Administration à distance": "Remote administration",
+"Autoriser la configuration depuis les appareils connectés": "Allow configuration from connected devices",
+"Par prudence, supprimer un fichier créé, ajouter un dossier de travail, une extension ou un connecteur MCP ne se fait que depuis cette machine. Si tu te connectes souvent depuis un autre ordinateur ou un téléphone, tu peux ouvrir ces réglages à tous les appareils déjà connectés (ceux que tu as appairés avec un code, ou les utilisateurs de ton proxy). À réserver à un usage personnel : ces réglages permettent de lire et d'écrire dans tes dossiers de travail et de lancer des programmes.": "As a precaution, deleting a created file or adding a working folder, an extension or an MCP connector can only be done from this machine. If you often connect from another computer or a phone, you can open these settings to all devices that are already connected (the ones you paired with a code, or your proxy's users). Keep it for personal use: these settings can read and write your working folders and launch programs.",
+"Dans Docker : variable LUTIN_ADMIN_TOUS=1 du conteneur.": "In Docker: the container's LUTIN_ADMIN_TOUS=1 variable.",
+"Se change depuis cette machine seulement.": "Can only be changed from this machine.",
+"🔒 Réglages verrouillés : ils ne se changent que depuis la machine où Lutin tourne (ouvre cette page là-bas), sauf si tu ouvres l'administration à distance dans Accès (depuis cette machine).": "🔒 Settings locked: they can only be changed from the machine where Lutin runs (open this page there), unless you open remote administration in Access (from this machine)."
 }
