@@ -103,6 +103,17 @@ CHOIX_MEMOIRE = {}                  # conversation -> {"evenement", "choix", "ga
 ATTENTE_CHOIX = 300                 # secondes avant de prendre le résumé automatique (page fermée, téléphone verrouillé)
 
 
+def reformuler_recherche(texte, r):
+    """La demande de l'utilisateur transformée en requête de recherche web (3 à 8 mots-clés, fautes corrigées) par un appel court au modèle des petites tâches. '' si le modèle ne répond pas : l'appelant nettoie alors la demande lui-même."""
+    try:
+        rep = moteur_actuel(r).chat({"model": modele_annexe(r), "stream": False, "think": False, "options": _m.options_modele(r, 0.1),
+                                     "messages": [{"role": "system", "content": "Tu transformes une demande en requête pour un moteur de recherche web. Réponds par la requête seulement : 3 à 8 mots-clés, sans phrase, sans ponctuation, sans date, fautes corrigées, dans la langue de la demande. Garde le sujet précis demandé."},
+                                                  {"role": "user", "content": str(texte)[:300]}]}, 30)
+        return (rep.get("message", {}).get("content") or "").strip()
+    except (urllib.error.URLError, OSError, ValueError):
+        return ""
+
+
 def a_compacter(conv, r):
     """Vrai quand la conversation approche de la taille du contexte : c'est le moment où le résumé automatique se déclencherait."""
     msgs = conv["messages"]
@@ -1254,7 +1265,7 @@ def boucle_agent(conv, r, emit, ctx, stop):
     if (not consigne and not r.get("_mission") and "web_chercher" in ctx["outils_autorises"] and conv["messages"] and conv["messages"][-1].get("role") == "user"
             and _actualites.demande_actualites(derniere_demande) and _actualites.petit_modele(r["modele"])):
         try:                                                              # « les news du jour » avec un petit modèle : Lutin cherche et lit lui-même, le modèle ne fait que résumer
-            consigne = _actualites.preparer(conv, derniere_demande, ctx, emit) or ""
+            consigne = _actualites.preparer(conv, derniere_demande, ctx, emit, reformuler=lambda t: reformuler_recherche(t, r)) or ""
             forcer_fin = bool(consigne)
         except (_m.ErreurOutil, OSError) as erreur:
             _m.journaliser("Actualités guidées impossibles : {!r}".format(erreur))
@@ -1455,7 +1466,8 @@ def boucle_agent(conv, r, emit, ctx, stop):
         if appels:
             message["tool_calls"] = appels
         rappel_faux = "" if appels or corrige_affirmation or dernier_tour else (_affirmations.affirme_sans_agir(contenu, conv["messages"], ctx["outils_autorises"])
-                                                                              or ("" if r.get("_mission") or r.get("essai_a_blanc") else _affirmations.oubli_d_ecrire(derniere_demande, conv["messages"], ctx["outils_autorises"])))
+                                                                              or ("" if r.get("_mission") or r.get("essai_a_blanc") else _affirmations.oubli_d_ecrire(derniere_demande, conv["messages"], ctx["outils_autorises"]))
+                                                                              or ("" if r.get("essai_a_blanc") else _affirmations.refus_a_tort(derniere_demande, contenu, conv["messages"], ctx["outils_autorises"])))
         if rappel_faux:
             corrige_affirmation, faux_accompli = True, (contenu, rappel_faux)
             _m.journaliser("Le modèle {} affirme avoir agi sans appeler d'outil : je le lui fais remarquer.".format(r["modele"]))

@@ -1042,5 +1042,12 @@
 "Sous Docker, le dossier ne peut pas s'ouvrir depuis la page : clique pour copier son chemin.": "Under Docker, the folder cannot be opened from the page: click to copy its path.",
 "Chemin copié : ": "Path copied: ",
 "Chemin du dossier :": "Folder path:",
-"Disponible depuis cette machine seulement.": "Available from this machine only."
+"Disponible depuis cette machine seulement.": "Available from this machine only.",
+"Une version plus récente existe : ": "A newer version exists: ",
+"installée : ": "installed: ",
+"inconnue": "unknown",
+"Suggestions pour ta machine": "Suggestions for your machine",
+"Déjà téléchargé": "Already downloaded",
+"Ce modèle est trop gros pour ta machine. Le télécharger quand même ?": "This model is too big for your machine. Download it anyway?",
+"Téléchargement lancé…": "Download started…"
 }

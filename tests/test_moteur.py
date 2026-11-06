@@ -1403,7 +1403,7 @@ class Assistant(unittest.TestCase):
     def test_actualites_guidees_pour_un_petit_modele(self):
         """« Les news du jour » : Lutin cherche et lit lui-même, le modèle ne fait que résumer (une seule réponse, sans outil), et le résultat brut n'est pas recopié dans la conversation."""
         WEB_RECU.clear()
-        ev = chat("Quelles sont les news du jour ?", reponses=[[{"content": "Voici la synthèse du jour."}]], modele="petit:3b")
+        ev = chat("Quelles sont les news du jour ?", reponses=[[{"content": "news jour"}], [{"content": "Voici la synthèse du jour."}]], modele="petit:3b")          # la première réponse sert à reformuler la demande en requête de recherche
         self.assertTrue(any(e["type"] == "outil" and e["nom"] == "web_chercher" for e in ev), "la recherche est lancée par Lutin")
         self.assertIn("non affiché", next(e for e in ev if e["type"] == "resultat")["texte"])
         cid = [e for e in ev if e["type"] == "debut"][0]["conversation"]

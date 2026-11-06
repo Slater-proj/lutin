@@ -752,11 +752,25 @@ def lancer_processus(cmd, shell, cwd, stop=None, delai=240, limite_ram=0):
     return (p.returncode if raison is None else None), sortie.octets() + erreur.octets(), raison
 
 
+RE_UNC = re.compile(r"\\\\[^\s\\/\"'<>|:*?]+(?:\\[^\s\"'<>|:*?]+)+")
+
+
+def reparer_unc(commande, demande):
+    """Un chemin réseau écrit par l'utilisateur (deux antislashs, le nom du serveur, le partage, le dossier) perd souvent un antislash en passant par le JSON d'un petit modèle : la commande arrive avec un seul antislash de tête et « le chemin est introuvable ».
+    Si la demande de l'utilisateur contient ce chemin avec ses deux antislashs de tête, on les rend à la commande."""
+    for unc in RE_UNC.findall(str(demande or "")):
+        simple = unc[1:]
+        commande = re.sub(r"(?<![\\\w:.])" + re.escape(simple), lambda _m_: unc, commande)
+    return commande
+
+
 def outil_executer(commande, ctx, shell="cmd"):
     # Tolère les arguments arrivés sous forme de chaîne brute (certains modèles)
     if isinstance(commande, dict):
         commande = commande.get("commande", "")
     commande = str(commande or "").strip()
+    demande = next((str(m.get("content") or "") for m in reversed((ctx.get("conv") or {}).get("messages") or []) if m.get("role") == "user"), "")
+    commande = reparer_unc(commande, demande)
     if not commande:
         raise _m.ErreurOutil(_t("Commande vide (l'argument n'est pas arrivé). Réessaie avec l'outil « executer » en donnant la commande dans « commande »."))
     if len(commande) > 1500:

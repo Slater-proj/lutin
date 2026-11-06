@@ -21,10 +21,22 @@ class Actualites(unittest.TestCase):
 
     def test_requete_propre_et_datee(self):
         q = actualites.requete("Peux-tu me donner les news du jour ?", date(2026, 11, 4))
-        self.assertTrue(q.endswith("04/11/2026"))
-        self.assertNotIn("?", q)
-        self.assertIn("news du jour", q)
-        self.assertEqual(actualites.requete("", date(2026, 11, 4)), "actualités 04/11/2026")
+        self.assertEqual(q, "news jour novembre 2026", "politesse et mots vides retirés, mois et année plutôt qu'une date jj/mm/aaaa")
+        self.assertEqual(actualites.requete("", date(2026, 11, 4)), "actualités novembre 2026")
+        sale = actualites.requete("chercher les news iunternet du jour ? sur les modele local d'ia il s sortent quand", date(2026, 11, 6))
+        self.assertNotIn("?", sale)
+        self.assertNotIn(" il ", " " + sale + " ")
+        self.assertIn("modele", sale)
+
+    def test_requete_reformulee_par_le_modele_sinon_nettoyee(self):
+        self.assertEqual(actualites.requete("blabla", date(2026, 11, 6), reformuler=lambda t: "sortie modèles IA locaux\nautre ligne ignorée"), "sortie modèles IA locaux novembre 2026")
+        self.assertEqual(actualites.requete("les news du jour", date(2026, 11, 6), reformuler=lambda t: ""), "news jour novembre 2026", "le modèle ne répond pas : demande nettoyée")
+
+        def en_panne(t):
+            raise OSError("Ollama ne répond pas")
+        self.assertEqual(actualites.requete("les news du jour", date(2026, 11, 6), reformuler=en_panne), "news jour novembre 2026")
+        phrase = " ".join(["mot"] * 20)
+        self.assertEqual(actualites.requete("les news", date(2026, 11, 6), reformuler=lambda t: phrase), "news novembre 2026", "une phrase n'est pas une requête : on nettoie la demande")
 
     def test_preparer_ajoute_l_appel_et_le_resultat(self):
         conv, evenements = {"messages": [{"role": "user", "content": "les news"}]}, []

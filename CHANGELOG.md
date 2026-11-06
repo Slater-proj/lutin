@@ -2,6 +2,17 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## 0.16.7
+
+- **Un modèle qui dit « je ne peux pas créer de fichier » est repris.** Avec llama.cpp, un modèle pouvait répondre qu'il ne peut pas créer de fichier directement, alors que l'outil d'écriture existe. Le détecteur « fichier demandé mais pas créé » ne reconnaissait pas non plus « fais-moi un démineur en html » (il attendait « fichier », « script »…). Maintenant les demandes de réalisation (jeu, page, site, programme, html, python…) sont reconnues, et un refus à tort (« je ne peux pas créer de fichier ») déclenche, une fois, un rappel : l'outil existe, appelle-le.
+- **Chemins réseau (`\NAS\partage\dossier`) : l'antislash perdu est rendu.** Un petit modèle perd un des deux antislashs de tête en écrivant la commande ; elle échouait avec « chemin introuvable ». Si le chemin figure dans ta demande, la commande reprend la forme exacte.
+- **Actualités : une vraie requête de recherche.** La phrase brute (fautes, politesse, date jj/mm/aaaa) partait telle quelle au moteur de recherche. Le modèle la transforme maintenant en 3 à 8 mots-clés (sinon elle est nettoyée), avec le mois et l'année plutôt qu'une date.
+- **llama.cpp : des suggestions dans l'onglet Modèles.** Sept modèles vérifiés (Qwen3 1,7B à 14B, Gemma 3 4B, Llama 3.1 8B, Qwen2.5 Coder 7B), jugés pour ta machine comme la liste d'Ollama, téléchargeables d'un clic ; la recherche Hugging Face reste dessous.
+- **Mises à jour des moteurs.** Lutin vérifie au plus une fois par 24 h (en arrière-plan, rien n'est installé tout seul) si llama.cpp (installé par Lutin) et Ollama (local) ont une version plus récente. L'avis apparaît sur la carte du moteur dans Réglages > Moteurs, avec un bouton « Mettre à jour » ; pas de notification en haut de la page.
+- **« Nouvelle conversation » revient sur l'onglet Conversation.**
+
+**English.** A model that wrongly says it cannot create files is told once that the write tool exists (and “make me a minesweeper in html” is recognised as a creation request); network (UNC) paths that lose a leading backslash are repaired from your request; news searches use real keywords instead of the raw sentence; llama.cpp gets machine-rated model suggestions; engines (llama.cpp, Ollama) check for updates at most every 24 h and show it on their card in Settings > Engines with an Update button; “New conversation” returns to the Conversation tab.
+
 ## 0.16.6
 
 - **Choix du programme de llama.cpp : la détection du matériel est attendue.** L'essai réel sur un poste à carte NVIDIA a réussi (CUDA installé, ~247 jetons/s avec un modèle de 4 milliards, appel d'outil compris) mais a montré un défaut : la détection du matériel démarre en arrière-plan et un premier appel immédiat (l'essai en ligne de commande, ou un clic sur « Installer » juste après le lancement) pouvait la croire absente et choisir la version « processeur ». Le choix attend maintenant la fin de la détection (25 secondes au plus).

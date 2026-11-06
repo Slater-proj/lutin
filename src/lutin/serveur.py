@@ -3,6 +3,7 @@ from http.server import BaseHTTPRequestHandler
 from . import bench as _bench
 from . import moteur_llamacpp as _llamacpp
 from . import moteurs as _moteurs
+from . import moteurs_maj as _moteurs_maj
 from . import mcp as _mcp
 from . import calibrage as _calibrage
 from . import acces as _acces
@@ -113,7 +114,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
         v = mo.vue(mo.id == courant)
         modeles = mo.modeles()
         statut = mo.statut()
-        return dict(v, statut=statut, actif=bool(modeles["actif"]), nb_modeles=len(modeles["installes"]), actions=mo.actions(), tache=_moteurs.tache(mo.id), telechargeable=mo.telechargeable(),
+        return dict(v, statut=statut, actif=bool(modeles["actif"]), nb_modeles=len(modeles["installes"]), actions=mo.actions(), tache=_moteurs.tache(mo.id), telechargeable=mo.telechargeable(), maj=_moteurs_maj.etat().get(mo.id),
                     reglages=_llamacpp.vue_reglages(mo.id) if mo.adresse_modifiable else {})
 
     @staticmethod
@@ -317,6 +318,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 return self._envoyer(503, {"erreur": str(e)})
         if chemin == "/api/moteurs":                             # les moteurs de modèles : leur état, ce qui est possible avec chacun, et celui qui est choisi
             courant = _m.moteur_actuel().id
+            _moteurs_maj.en_arriere_plan(bool(_m.reglages().get("verifier_maj", True)) and not _hl.actif())          # au plus un contrôle par 24 h, en arrière-plan : la carte du moteur l'affichera au prochain rafraîchissement
             return self._envoyer(200, {"courant": courant, "modifiable": self._configurateur(), "moteurs": [self._vue_moteur(mo, courant) for mo in _moteurs.liste()]})
         if chemin in ("/api/moteur-recherche", "/api/moteur-fichiers"):          # chercher un modèle (Hugging Face pour llama.cpp), puis voir les fichiers d'un dépôt
             q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)

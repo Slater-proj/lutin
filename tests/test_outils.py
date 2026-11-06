@@ -101,5 +101,21 @@ class ProchaineVersion(unittest.TestCase):
             self.assertNotIn("v0.2.0", git("tag", "--list"), "le calcul ne crée aucune étiquette")
 
 
+class CheminReseau(unittest.TestCase):
+    """Un chemin réseau perd un antislash de tête en passant par le JSON d'un petit modèle : Lutin le rend à la commande."""
+
+    def test_le_chemin_reseau_de_la_demande_est_retabli_dans_la_commande(self):
+        from lutin import moteur  # noqa: F401  (avant outils : import circulaire sinon)
+        from lutin import outils as o
+        B = chr(92)
+        unc = B * 2 + "NAS" + B + "Partage" + B + "Dossier" + B + "sorties"
+        demande = "dis-moi ce qu'il y a ici " + unc
+        self.assertEqual(o.reparer_unc("dir " + unc[1:], demande), "dir " + unc, "un antislash perdu est rendu")
+        self.assertEqual(o.reparer_unc("dir " + unc, demande), "dir " + unc, "déjà correct : inchangé")
+        lecteur = "dir C:" + B + "NAS" + B + "Partage" + B + "Dossier" + B + "sorties"
+        self.assertEqual(o.reparer_unc(lecteur, demande), lecteur, "un chemin de lecteur n'est jamais touché")
+        self.assertEqual(o.reparer_unc("dir " + unc[1:], "bonjour"), "dir " + unc[1:], "la demande ne parle d'aucun chemin réseau : rien n'est deviné")
+
+
 if __name__ == "__main__":
     unittest.main()

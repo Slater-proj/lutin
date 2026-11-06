@@ -77,4 +77,15 @@ def lancer_serveur(cfg, dossiers, ouvrir_navigateur=True, ecrire=print):
                     pass
                 time.sleep(6 * 3600)          # le serveur peut tourner des semaines : on recontrôle (au plus une requête par 24 h grâce au cache)
         threading.Thread(target=verification_lutin, daemon=True, name="verification-lutin").start()
+
+        def verification_moteurs():
+            time.sleep(20)          # après le démarrage : ni la page ni Ollama n'attendent ce contrôle
+            while True:
+                try:
+                    from . import moteurs_maj
+                    moteurs_maj.en_arriere_plan()
+                except Exception:  # noqa: BLE001 — jamais bloquant, jamais bruyant
+                    pass
+                time.sleep(6 * 3600)
+        threading.Thread(target=verification_moteurs, daemon=True, name="verification-moteurs-boucle").start()
     moteur.principal()

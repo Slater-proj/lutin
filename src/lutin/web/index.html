@@ -1220,7 +1220,7 @@ body[data-moteur="ollama"] .moteur-autre { display:none !important; }
     } catch (e) { /* silencieux : le titre manuel reste disponible */ }
   };
   const fermerLat = () => document.querySelector('aside').classList.remove('ouverte');
-  const nouvelle = async () => { detacherFlux(); CONV = null; afficherOptions(null); fil().textContent = ''; finEdition(); afficherTaches([]); setJauge(null); setVitesse(null); $('bAnnuler').hidden = true; $('bRevue').hidden = true; $('saisie').focus(); [...document.querySelectorAll('.conv')].forEach(c => c.classList.remove('choisie')); fermerLat(); };
+  const nouvelle = async () => { detacherFlux(); CONV = null; afficherOptions(null); fil().textContent = ''; finEdition(); afficherTaches([]); setJauge(null); setVitesse(null); $('bAnnuler').hidden = true; $('bRevue').hidden = true; if (!$('p-chat').classList.contains('vue')) ouvrirOnglet('chat'); $('saisie').focus(); [...document.querySelectorAll('.conv')].forEach(c => c.classList.remove('choisie')); fermerLat(); };
   const ouvrir = async id => { try {
       const c = await api('/api/conversation?id=' + id);
       if (FLUX && !FLUX.detache && FLUX.id !== id) detacherFlux();          // on quitte une réponse en cours : son affichage est mis de côté
@@ -2839,6 +2839,17 @@ body[data-moteur="ollama"] .moteur-autre { display:none !important; }
     d.appendChild(tete);
     d.appendChild(el('div', '', m.description));
     if (m.statut.detail) d.appendChild(el('div', 'aide', m.statut.detail));
+    if (m.maj && m.maj.disponible) {          // une version plus récente que celle installée : proposée ici, sans notification en haut de la page
+      const avis = el('div', 'carte'); avis.style.cssText = 'flex-direction:column;align-items:stretch;gap:6px;border-color:var(--accent,#5aa9ff)';
+      avis.appendChild(el('div', '', '⬆ ' + T('Une version plus récente existe : ') + m.maj.derniere + ' (' + T('installée : ') + (m.maj.actuelle || T('inconnue')) + ').'));
+      const ra = m.actions.reinstaller, enCours = m.tache && m.tache.statut === 'en cours';
+      if (ra && ra.possible) {
+        const bm = el('button', 'principal', T('Mettre à jour')); bm.title = ra.raison; bm.disabled = !modifiable || enCours;
+        bm.addEventListener('click', async () => { if (!confirm(ra.raison + ' ' + T('Continuer ?'))) return; try { await api('/api/moteur-action', { moteur: m.id, action: 'reinstaller' }); } catch (e) { $('aideMoteur').textContent = e.message; } chargerMoteurs(); });
+        avis.appendChild(bm);
+      } else if (ra && ra.raison) avis.appendChild(el('div', 'aide', 'ℹ ' + ra.raison));
+      d.appendChild(avis);
+    }
     const det = el('details'); det.appendChild(el('summary', '', T('Forces et faiblesses')));
     m.points_forts.forEach(t => det.appendChild(el('div', 'point', '✅ ' + t))); m.points_faibles.forEach(t => det.appendChild(el('div', 'point', '⚠ ' + t)));
     d.appendChild(det);
@@ -2932,6 +2943,20 @@ body[data-moteur="ollama"] .moteur-autre { display:none !important; }
     if (dl.genre === 'huggingface') {
       neuf.appendChild(el('h2', '', T('Télécharger un modèle')));
       neuf.appendChild(el('div', 'aide', dl.raison + ' ' + T('Choisis une quantification : Q4_K_M est un bon équilibre (petit et rapide), Q8_0 est plus fidèle mais plus gros.')));
+      if (dl.possible && (dl.suggestions || []).length) {
+        neuf.appendChild(el('h2', '', T('Suggestions pour ta machine')));
+        const faits = new Set((ETAT.installes || []).map(n => n.toLowerCase())), classe = { ideal: 'ok', bien: 'ok', limite: 'warn', trop_gros: 'bad' }, libelle = { ideal: T('Très adapté'), bien: T('Adapté'), limite: T('Limite'), trop_gros: T('Trop gros') };
+        const ordre = { ideal: 0, bien: 1, limite: 2, trop_gros: 3 };
+        [...dl.suggestions].sort((a, b) => ordre[a.evaluation.niveau] - ordre[b.evaluation.niveau]).forEach(s => {
+          const c = el('div', 'carte'), deja = faits.has(s.fichier.replace(/\.gguf$/i, '').toLowerCase());
+          c.appendChild(el('b', '', s.nom)); c.appendChild(el('span', 'aide', ' · ' + String(s.go).replace('.', ',') + ' ' + T('Go')));
+          const pastille = el('span', 'badge ' + classe[s.evaluation.niveau], libelle[s.evaluation.niveau]); if (s.evaluation.texte) pastille.title = s.evaluation.texte; c.appendChild(pastille);
+          c.appendChild(el('div', 'aide', s.note + (s.evaluation.texte ? ' ' + s.evaluation.texte : '')));
+          const t = el('button', deja ? '' : 'principal', deja ? T('Déjà téléchargé') : T('Télécharger')); t.disabled = deja; if (s.evaluation.niveau === 'trop_gros') t.style.opacity = '.55';
+          t.addEventListener('click', async () => { if (s.evaluation.niveau === 'trop_gros' && !confirm(T('Ce modèle est trop gros pour ta machine. Le télécharger quand même ?'))) return; try { await api('/api/moteur-telecharger', { moteur: m.id, repo: s.repo, fichier: s.fichier }); t.disabled = true; t.textContent = T('Téléchargement lancé…'); rafraichir(); } catch (e) { alert(e.message); } });
+          c.appendChild(t); neuf.appendChild(c);
+        });
+      }
       if (dl.possible) {
         const c = el('div', 'carte'), q = el('input'), b = el('button', '', T('Chercher sur Hugging Face')), res = el('div'), msg = el('div', 'aide');
         q.placeholder = T('Nom d\'un modèle (par exemple qwen3 ou gemma)'); q.style.flex = '1';

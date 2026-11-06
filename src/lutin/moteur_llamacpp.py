@@ -27,6 +27,16 @@ from .moteur_openai import MoteurOpenAI
 
 API_RELEASES = "https://api.github.com/repos/ggml-org/llama.cpp/releases?per_page=8"
 API_HF = "https://huggingface.co/api/models"
+# Quelques modèles sûrs à proposer d'un clic (dépôt et fichier vérifiés sur Hugging Face, quantification Q4_K_M). La taille est celle du fichier, arrondie.
+SUGGESTIONS = (
+    {"repo": "unsloth/Qwen3-1.7B-GGUF", "fichier": "Qwen3-1.7B-Q4_K_M.gguf", "nom": "Qwen3 1.7B", "go": 1.3, "note": "Très léger : pour une petite machine sans carte graphique. Appels d'outils limités."},
+    {"repo": "unsloth/Qwen3-4B-Instruct-2507-GGUF", "fichier": "Qwen3-4B-Instruct-2507-Q4_K_M.gguf", "nom": "Qwen3 4B Instruct", "go": 2.5, "note": "Le modèle de l'essai de Lutin : rapide, appelle bien les outils."},
+    {"repo": "unsloth/gemma-3-4b-it-GGUF", "fichier": "gemma-3-4b-it-Q4_K_M.gguf", "nom": "Gemma 3 4B", "go": 2.5, "note": "Bon en français et en rédaction."},
+    {"repo": "unsloth/Qwen3-8B-GGUF", "fichier": "Qwen3-8B-Q4_K_M.gguf", "nom": "Qwen3 8B", "go": 5.0, "note": "Bon équilibre pour le travail et les outils si la carte a 8 Go ou plus."},
+    {"repo": "bartowski/Meta-Llama-3.1-8B-Instruct-GGUF", "fichier": "Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf", "nom": "Llama 3.1 8B", "go": 4.9, "note": "Généraliste très répandu."},
+    {"repo": "unsloth/Qwen2.5-Coder-7B-Instruct-GGUF", "fichier": "Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf", "nom": "Qwen2.5 Coder 7B", "go": 4.7, "note": "Spécialisé dans le code."},
+    {"repo": "unsloth/Qwen3-14B-GGUF", "fichier": "Qwen3-14B-Q4_K_M.gguf", "nom": "Qwen3 14B", "go": 9.0, "note": "Plus fin ; demande une carte de 12 à 16 Go."},
+)
 PORT_DEFAUT = 8089
 CTX_DEFAUT = 8192
 DEMARRAGE_MAX_S = 180
@@ -590,7 +600,17 @@ class MoteurLlamaCpp(MoteurOpenAI):
             return {"possible": False, "raison": _t("Un serveur externe gère ses modèles lui-même."), "genre": "aucun"}
         if moteurs.CONTEXTE["hors_ligne"]():
             return {"possible": False, "raison": _t("Mode hors ligne : aucun téléchargement."), "genre": "huggingface"}
-        return {"possible": True, "raison": _t("Les modèles se trouvent sur Hugging Face, au format GGUF."), "genre": "huggingface"}
+        return {"possible": True, "raison": _t("Les modèles se trouvent sur Hugging Face, au format GGUF."), "genre": "huggingface", "suggestions": self.suggestions()}
+
+    def suggestions(self):
+        """Les modèles proposés d'un clic, chacun jugé pour cette machine (comme la liste d'Ollama) : [{repo, fichier, nom, go, note, evaluation}]. Les trop gros sont gardés (la page les grise)."""
+        from . import adequation
+        profil = moteurs.CONTEXTE["profil"]()
+        sortie = []
+        for s in SUGGESTIONS:
+            ev = adequation.evaluer({"go": s["go"]}, profil) if profil is not None else {"niveau": "bien", "texte": ""}
+            sortie.append(dict(s, nom=_t(s["nom"]), note=_t(s["note"]), evaluation=ev))
+        return sortie
 
     def chercher_modeles(self, terme, http_json=None):
         """Les dépôts GGUF de Hugging Face qui correspondent (les plus téléchargés d'abord)."""

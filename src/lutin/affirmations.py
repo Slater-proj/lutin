@@ -39,6 +39,9 @@ CATEGORIES = (
      "Tu viens de dire que tu as mémorisé quelque chose, mais tu n'as pas appelé « memoriser » : rien n'est gardé. Appelle l'outil maintenant avec une note courte."),
 )
 DEMANDE_D_ECRITURE = re.compile(r"\b(?:cr[ée]{1,2}r?|[ée]cris|[ée]crire|g[ée]n[èe]re|g[ée]n[ée]rer|pr[ée]pare|r[ée]dige|fais(?:-moi)?|monte|produis)\b[^.\n]{0,80}\b(?:docker-compose|compose|dockerfile|fichier|script|config|configuration|yaml|yml|readme|document|\.[a-z]{2,5})\b", re.I)
+DEMANDE_DE_REALISATION = re.compile(r"\b(?:fais(?:-moi)?|faire|cr[ée]{1,2}r?|code|coder|programme|programmer|d[ée]veloppe|d[ée]velopper|r[ée]alise|r[ée]aliser|construis|construire|[ée]cris|[ée]crire|g[ée]n[èe]re|g[ée]n[ée]rer)\b[^.\n]{0,60}\b(?:jeu|d[ée]mineur|morpion|snake|tetris|page|site|application|appli|programme|outil|calculatrice|interface|formulaire|html|css|javascript|python|bash|batch|powershell|api|serveur|bot|extension)\b", re.I)
+REFUS = re.compile(r"(?:\bne\s+(?:peux|puis|sais|suis|dispose|poss[èe]de)\s+pas\b|\bimpossible\s+de\b|\bpas\s+(?:la\s+)?possibilit[ée]\b|\bpas\s+(?:en\s+)?mesure\b|\bincapable\b|\bn'ai\s+pas\s+(?:acc[èe]s|la\s+capacit[ée])\b|\bcan(?:'|no)t\s+(?:directly\s+)?(?:create|write|save)\b|\bunable\s+to\s+(?:create|write|save)\b)[^.\n]{0,90}(?:cr[ée]er|[ée]crire|g[ée]n[ée]rer|enregistrer|sauvegarder|fichiers?|disque|syst[èe]me|directement|files?|disk)", re.I)
+RAPPEL_REFUS = "Tu viens de dire que tu ne peux pas créer de fichier : c'est FAUX, tu as l'outil « ecrire » (et « executer »). Ne t'excuse pas, ne décris pas le contenu et ne demande pas la permission : appelle maintenant l'outil « ecrire » avec le chemin du fichier et son contenu complet, puis dis en une phrase ce qui a été créé."
 OUTILS_D_ECRITURE = {"ecrire", "modifier", "modifier_plusieurs", "creer_document", "executer"}
 RAPPEL_OUBLI = "L'utilisateur t'a demandé de CRÉER un fichier et tu ne l'as pas fait : rien n'existe sur le disque. Ne décris pas le contenu et ne demande pas la permission : appelle maintenant l'outil « ecrire » avec le chemin et le contenu complet (mets des valeurs d'exemple claires si une information manque), puis dis où se trouve le fichier."
 BLOCS_DE_CODE = re.compile(r"```.*?(?:```|$)", re.S)
@@ -57,9 +60,22 @@ def outils_appeles(messages):
 
 def oubli_d_ecrire(demande, messages, autorises):
     """Le rappel à donner si l'utilisateur a demandé de créer un fichier et que le modèle termine sans avoir appelé un outil d'écriture (il a cherché, puis s'est arrêté, ou a seulement montré le contenu)."""
-    if not (OUTILS_D_ECRITURE & autorises) or not DEMANDE_D_ECRITURE.search(str(demande or "")[:400]):
+    d = str(demande or "")[:400]
+    if not (OUTILS_D_ECRITURE & autorises) or not (DEMANDE_D_ECRITURE.search(d) or DEMANDE_DE_REALISATION.search(d)):
         return ""
     return "" if OUTILS_D_ECRITURE & outils_appeles(messages) else RAPPEL_OUBLI
+
+
+def refus_a_tort(demande, contenu, messages, autorises):
+    """Le rappel à donner si l'utilisateur a demandé de créer quelque chose (un fichier, une page, un petit programme) et que le modèle répond qu'il ne PEUT PAS créer de fichier alors que l'outil d'écriture existe.
+    Certains modèles, surtout via llama.cpp, refusent ainsi au lieu d'appeler l'outil. Une fois seulement par demande (l'appelant s'en assure)."""
+    if not ({"ecrire", "creer_document"} & autorises) or OUTILS_D_ECRITURE & outils_appeles(messages):
+        return ""
+    texte = BLOCS_DE_CODE.sub(" ", contenu or "")
+    if not REFUS.search(texte):
+        return ""
+    d = str(demande or "")[:400]
+    return RAPPEL_REFUS if (DEMANDE_D_ECRITURE.search(d) or DEMANDE_DE_REALISATION.search(d)) else ""
 
 
 def affirme_sans_agir(contenu, messages, autorises):
