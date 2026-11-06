@@ -71,6 +71,26 @@ class Parcours(unittest.TestCase):
             p.attendre("!!document.querySelector('.conv.choisie')")          # la conversation du lien est OUVERTE (sa présence dans la liste ne suffit pas : un message envoyé trop tôt partirait dans une nouvelle conversation)
         return p
 
+    def test_cliquer_une_conversation_ramene_sur_l_onglet_conversation(self):
+        """Comme « Nouvelle conversation » : depuis un autre onglet, ouvrir une conversation existante de la liste revient sur l'onglet Conversation."""
+        with self.captures.serveur_demo() as (port, tmp):
+            p = self.ouvrir(tmp, "http://127.0.0.1:%d/#conv=a1b2c3d4" % port)
+            p.evaluer("document.querySelector('.onglets button[data-p=reglages]').click(); true")
+            p.attendre("document.getElementById('p-reglages').classList.contains('vue')")
+            self.assertFalse(p.evaluer("document.getElementById('p-chat').classList.contains('vue')"))
+            p.evaluer("document.querySelector('.conv').click(); true")
+            p.attendre("document.getElementById('p-chat').classList.contains('vue')")
+            self.assertFalse(p.evaluer("document.getElementById('p-reglages').classList.contains('vue')"))
+
+    def test_la_page_sante_montre_ce_qui_est_charge_en_memoire(self):
+        """La page Santé liste la mémoire utilisée, ce qui est chargé (avec un bouton Décharger quand Lutin sait le faire) et les programmes les plus gourmands, sans erreur même sans Ollama."""
+        with self.captures.serveur_demo() as (port, tmp):
+            p = self.ouvrir(tmp, "http://127.0.0.1:%d/" % port)
+            p.evaluer("document.querySelector('.onglets button[data-p=sante]').click(); true")
+            p.attendre("[...document.querySelectorAll('#santeCorps h2')].some(h => h.textContent.includes('chargé en mémoire'))")
+            p.attendre("document.querySelectorAll('#santeCorps progress').length > 0 || document.querySelector('#santeCorps details summary')")
+            self.assertEqual(p.evaluer("document.querySelectorAll('#santeCorps .erreur').length"), 0)
+
     def test_reprise_dit_ce_qui_ne_va_pas_puis_ce_qu_elle_a_fait(self):
         """Le bug d'origine : la reprise ne disait rien. La fenêtre montre l'erreur d'un mauvais dossier, puis le contenu trouvé, puis le résultat."""
         with self.captures.serveur_demo() as (port, tmp):
@@ -690,7 +710,7 @@ class Parcours(unittest.TestCase):
             p = self.ouvrir(tmp, "http://127.0.0.1:%d/" % port)
             p.attendre("document.querySelector('#pOllama').textContent.includes('Ollama prêt')")
             p.evaluer(onglet("reglages"))
-            p.attendre("document.querySelectorAll('#listeMoteurs > .carte').length === 3")
+            p.attendre("document.querySelectorAll('#listeMoteurs > .moteur-liste').length === 3")
             self.assertTrue(p.evaluer("document.querySelector('#listeMoteurs > .carte input[type=radio]').checked"), "Ollama est le moteur utilisé")
             noms = p.evaluer("[...document.querySelectorAll('#listeMoteurs > .carte > .ligne:first-child b')].map(b => b.textContent.trim()).join('|')")
             self.assertEqual(noms, "Ollama|llama.cpp|Serveur compatible OpenAI")
@@ -708,7 +728,7 @@ class Parcours(unittest.TestCase):
             p.evaluer(onglet("modeles"))
             self.assertTrue(p.evaluer("getComputedStyle(document.querySelector('#p-modeles .ollama-seulement')).display !== 'none'"), "avec Ollama, l'onglet Modèles est celui d'Ollama")
             p.evaluer(onglet("reglages"))
-            p.attendre("document.querySelectorAll('#listeMoteurs > .carte').length === 3")
+            p.attendre("document.querySelectorAll('#listeMoteurs > .moteur-liste').length === 3")
             p.evaluer("document.querySelectorAll('#listeMoteurs > .carte input[type=radio]')[1].click()")
             p.attendre("document.body.dataset.moteur === 'llamacpp'")
             p.attendre("document.querySelector('#pOllama').textContent.includes('llama.cpp')")

@@ -75,6 +75,7 @@ Chaque jalon : étude → porte de validation → code ciblé → tests → docu
 
 ### 0.19.0 — Banc comparatif et recommandation
 - D5 et D6 ; page Diagnostic ; résultats conservés.
+- **Fait (versions 0.19.x)** : `lutin bench-moteurs`, carte « Quel moteur pour ma machine ? », recommandation avec sa raison, résultats conservés et à refaire si le matériel ou une version change (`BENCH_MOTEURS.fr.md`). **Reste à faire** : l'essai sur matériel réel et les décisions Docker / petit PC à carte intégrée, qui exigent des chiffres de plusieurs machines.
 - **Critère** : sur une machine réelle, le banc compare au moins deux moteurs sur le même GGUF et produit un fichier lisible ; la recommandation affiche sa raison. **Les décisions Docker (image par défaut) et petit PC à GPU intégré sont prises ici, sur des chiffres.**
 
 ### 0.20.0 — Installation avancée et premier lancement

@@ -1,6 +1,8 @@
 """Le serveur HTTP de Lutin : le gestionnaire de requêtes (pages, API JSON, flux de la conversation). L'état et les fonctions métier restent dans moteur ; ce module les atteint par « _m.NOM » (lu à chaque appel)."""
 from http.server import BaseHTTPRequestHandler
 from . import bench as _bench
+from . import bench_moteurs as _bench_moteurs
+from . import ressources_chargees as _ressources
 from . import catalogue_moteurs as _catalogue_moteurs
 from . import moteur_llamacpp as _llamacpp
 from . import moteurs as _moteurs
@@ -424,6 +426,10 @@ class Gestionnaire(BaseHTTPRequestHandler):
             return self._envoyer(200, tampon.getvalue(), "application/zip", {"Content-Disposition": 'attachment; filename="lutin-sauvegarde-{}.zip"'.format(datetime.now().strftime("%Y%m%d-%H%M%S"))})
         if chemin == "/api/propositions":
             return self._envoyer(200, _m.lire_propositions())
+        if chemin == "/api/bench-moteurs":                        # comparaison des moteurs : dernier résultat, recommandation et sa raison, avancement
+            return self._envoyer(200, _bench_moteurs.vue(_m.DONNEES, _m.reglages()["modele"], _moteurs.CONTEXTE["profil"](), _moteurs.CONTEXTE["en_docker"]()))
+        if chemin == "/api/ressources":                           # ce qui est chargé en mémoire en ce moment (page Santé)
+            return self._envoyer(200, _ressources.etat())
         if chemin == "/api/sante-systeme":
             return self._envoyer(200, _m.etat_sante())
         if chemin == "/api/git":
@@ -956,6 +962,13 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 return self._envoyer(200, _m.supprimer_modele(str(donnees.get("modele", ""))))
             if self.path == "/api/demarrer-ollama":
                 return self._envoyer(200, {"message": _m.demarrer_ollama()})
+            if self.path == "/api/bench-moteurs":
+                if not self._configurateur():
+                    return self._envoyer(403, {"erreur": _t("Cela se fait depuis cette machine (niveau « cette machine seulement » ou navigateur de cette machine).")})
+                _bench_moteurs.lancer(_m.reglages()["modele"], str(donnees.get("mode", "rapide")), _m.DONNEES, _moteurs.CONTEXTE["profil"]())
+                return self._envoyer(200, {"ok": True})
+            if self.path == "/api/decharger":                          # décharger une chose de la liste des ressources (modèle d'Ollama, serveur llama.cpp, ComfyUI)
+                return self._envoyer(200, _ressources.decharger(donnees.get("id")))
             if self.path == "/api/liberer-vram":
                 return self._envoyer(200, _m.liberer_vram())
             if self.path == "/api/resumer":

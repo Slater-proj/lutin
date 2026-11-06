@@ -1227,7 +1227,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
       if (FLUX && !FLUX.detache && FLUX.id !== id) detacherFlux();          // on quitte une réponse en cours : son affichage est mis de côté
       CONV = c; afficherOptions(c.options); finEdition(); if (!document.hidden) lue(id);
       if (c.travail && ETAT && ETAT.travaux && ETAT.travaux.actif !== c.travail) { try { await api('/api/travaux-choisir', { id: c.travail }); rafraichir(); } catch (e) { /* une réponse travaille dans un autre dossier : on reste sur celui-ci */ } }
-      if (FLUX && FLUX.detache && FLUX.id === id) rattacherFlux(); else afficherHistorique(CONV); [...document.querySelectorAll('.conv')].forEach(c => c.classList.toggle('choisie', c.dataset.id === id)); fermerLat(); } catch (e) { fil().appendChild(el('div', 'erreur', e.message)); } };
+      if (FLUX && FLUX.detache && FLUX.id === id) rattacherFlux(); else afficherHistorique(CONV); [...document.querySelectorAll('.conv')].forEach(c => c.classList.toggle('choisie', c.dataset.id === id)); if (!$('p-chat').classList.contains('vue')) ouvrirOnglet('chat'); fermerLat(); } catch (e) { fil().appendChild(el('div', 'erreur', e.message)); } };
   // Le menu « ⋯ » d'une conversation : épingler, renommer, et choisir comment elle garde le fil (fiche de suivi ou résumé automatique)
   let MENU_CONV = null;
   const fermerMenuConv = () => { if (MENU_CONV) { MENU_CONV.remove(); MENU_CONV = null; } };
@@ -2254,6 +2254,43 @@ body[data-moteur="openai"] .biblio { display:none !important; }
       c.appendChild(t); z.appendChild(c);
     });
     z.appendChild(el('div', 'aide', T('Les seuils d\'alerte se règlent dans Réglages > « Garde-fous ressources ». Les mesures de mémoire vidéo demandent nvidia-smi (installé avec le pilote NVIDIA).')));
+    // Ce qui est chargé en mémoire en ce moment : mis à jour toutes les 4 secondes tant que la page Santé est ouverte, avec un bouton pour décharger ce que Lutin sait décharger
+    const ressources = el('div'); ressources.style.marginTop = '14px'; z.appendChild(ressources);
+    const fmt = o => (o == null ? '?' : (o / 1073741824).toFixed(1).replace('.', ',') + ' ' + T('Go'));
+    const jauge = (nom, utilise, total) => { const l = el('div', 'ligne'); const pr = el('progress'); pr.max = total; pr.value = utilise; pr.style.cssText = 'flex:1;min-width:120px'; l.append(el('span', '', nom + ' : '), pr, el('span', 'aide', ' ' + fmt(utilise) + ' / ' + fmt(total))); return l; };
+    let enCoursDeChargement = false;
+    const majRessources = async () => {
+      if (enCoursDeChargement || document.hidden || !$('p-sante').classList.contains('vue')) return;
+      enCoursDeChargement = true;
+      try {
+        const r = await api('/api/ressources'); const neuf = document.createElement('div');
+        neuf.appendChild(el('h2', '', T('Ce qui est chargé en mémoire')));
+        if (r.ram) neuf.appendChild(jauge(T('Mémoire vive'), r.ram.total - r.ram.libre, r.ram.total));
+        if (r.vram) neuf.appendChild(jauge(T('Mémoire vidéo') + ' (' + r.vram.nom + ')', r.vram.utilise, r.vram.total));
+        if (!r.charges.length) neuf.appendChild(el('div', 'aide', T('Aucun modèle ni outil de Lutin n\'est chargé en ce moment.')));
+        r.charges.forEach(c => {
+          const carte = el('div', 'carte'), col = el('div', 'nom');
+          col.appendChild(el('b', '', c.moteur + ' · ' + c.nom));
+          const mem = [c.vram != null ? T('mémoire vidéo ') + fmt(c.vram) : '', c.ram != null ? T('mémoire vive ') + fmt(c.ram) : ''].filter(Boolean).join(' · ');
+          if (mem) col.appendChild(el('div', '', mem));
+          if (c.detail) col.appendChild(el('div', 'aide', c.detail));
+          carte.appendChild(col);
+          const bd = el('button', '', T('Décharger')); bd.disabled = !c.dechargeable;
+          bd.addEventListener('click', async () => { bd.disabled = true; try { const x = await api('/api/decharger', { id: c.id }); sortie.textContent = x.message; } catch (e) { sortie.textContent = e.message; } enCoursDeChargement = false; majRessources(); });
+          carte.appendChild(bd); neuf.appendChild(carte);
+        });
+        if (r.programmes.length) {
+          const det = el('details'); det.open = !!ressources.querySelector('details[open]'); det.appendChild(el('summary', '', T('Programmes qui prennent le plus de mémoire vive')));
+          r.programmes.forEach(g => det.appendChild(el('div', 'point', (g.ia ? '🧠 ' : '') + g.libelle + (g.nombre > 1 ? ' ×' + g.nombre : '') + ' · ' + fmt(g.octets))));
+          det.appendChild(el('div', 'aide', T('Lutin ne ferme pas les programmes des autres : ferme-les toi-même si besoin.')));
+          neuf.appendChild(det);
+        }
+        ressources.replaceChildren(...neuf.childNodes);
+      } catch (e) { ressources.textContent = e.message; }
+      enCoursDeChargement = false;
+    };
+    majRessources();
+    clearInterval(window.MINUTEUR_RESSOURCES); window.MINUTEUR_RESSOURCES = setInterval(majRessources, 4000);
     const barre = el('div', 'ligne'), maj = el('button', '', T('↻ Actualiser')), vram = el('button', '', T('🧹 Libérer la VRAM')), test = el('button', 'principal', T('✔ Vérifier que tout marche')), complet = el('button', '', T('Test complet (fait répondre le modèle)'));
     const sortie = el('div'); sortie.style.marginTop = '10px';
     maj.addEventListener('click', ouvrirSante); vram.addEventListener('click', async () => { vram.disabled = true; try { sortie.textContent = (await api('/api/liberer-vram', {})).message; } catch (e) { sortie.textContent = e.message; } vram.disabled = false; });
@@ -2997,12 +3034,41 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     }
     return d;
   };
+  // La recommandation de moteur (avec sa raison) et le banc comparatif : même modèle sur chaque moteur, vitesse, premier jeton, mémoire, stabilité ; le résultat est conservé
+  const carteBancMoteurs = (b, modifiable) => {
+    const c = el('div', 'carte'); c.style.cssText = 'flex-direction:column;align-items:stretch;gap:6px;margin-top:10px';
+    c.appendChild(el('b', '', T('Quel moteur pour ma machine ?')));
+    const rec = b.recommandation;
+    c.appendChild(el('div', '', '➜ ' + rec.nom + ' — ' + rec.raison));
+    (rec.limites || []).forEach(t => c.appendChild(el('div', 'aide', 'ℹ ' + t)));
+    if (rec.source === 'regles') c.appendChild(el('div', 'aide', T('Cette recommandation n\'est pas mesurée : le banc ci-dessous la confirme ou la corrige sur ta machine.')));
+    if (b.resultat) {
+      c.appendChild(el('div', 'aide', T('Dernière comparaison : ') + b.resultat.date.slice(0, 16).replace('T', ' ') + ' · ' + b.resultat.modele + (b.a_refaire ? ' · ⚠ ' + T('à refaire : le matériel ou la version d\'un moteur a changé') : '')));
+      b.resultat.moteurs.forEach(m => c.appendChild(el('div', 'point', (m.ok ? '✅ ' : '⚠ ') + m.nom + ' : ' + (m.ok ? m.tok_s + ' ' + T('jetons/s') + ' · ' + T('premier jeton') + ' ' + m.premier_jeton_s + ' s · ' + T('chargement') + ' ' + m.charge_s + ' s' + (m.vram ? ' · ' + T('mémoire vidéo') + ' ' + (m.vram / 1073741824).toFixed(1) + ' ' + T('Go') : '') : (m.erreurs[0] || '?')))));
+      (b.resultat.ignores || []).forEach(i => c.appendChild(el('div', 'point', '— ' + i.nom + ' : ' + T('non mesuré') + ' (' + i.raison + ')')));
+    }
+    if (b.erreur) c.appendChild(el('div', 'erreur', '⚠ ' + b.erreur));
+    const l = el('div', 'ligne');
+    if (b.en_cours) l.appendChild(el('span', 'aide', '⏳ ' + b.etape));
+    else {
+      [['rapide', T('Comparer les moteurs (environ 1 minute)')], ['approfondi', T('Comparaison approfondie (environ 5 minutes)')]].forEach(([mode, nom]) => {
+        const bt = el('button', mode === 'rapide' ? 'principal' : '', nom); bt.disabled = !modifiable || !b.modele;
+        bt.title = T('Fait tourner le modèle choisi sur chaque moteur qui l\'a, l\'un après l\'autre : la mémoire est libérée entre les deux. Jamais lancé tout seul.');
+        bt.addEventListener('click', async () => { bt.disabled = true; try { await api('/api/bench-moteurs', { mode }); } catch (e) { alert(e.message); } chargerMoteurs(); });
+        l.appendChild(bt);
+      });
+    }
+    c.appendChild(l);
+    return c;
+  };
   const chargerMoteurs = async () => {
     clearTimeout(MINUTEUR_MOTEURS);
     let r; try { r = await api('/api/moteurs'); } catch (e) { $('aideMoteur').textContent = e.message; return; }
     const z = $('listeMoteurs'), neuf = document.createElement('div');
     if (!r.modifiable && ETAT) neuf.appendChild(el('div', 'attention', explicationVerrou()));
     r.moteurs.forEach(m => neuf.appendChild(carteMoteur(m, r.modifiable, r.prereglages || [])));
+    let banc = null; try { banc = await api('/api/bench-moteurs'); neuf.appendChild(carteBancMoteurs(banc, r.modifiable)); } catch (e) { /* la recommandation est un confort */ }
+    if (banc && banc.en_cours && $('p-reglages').classList.contains('vue')) { clearTimeout(MINUTEUR_MOTEURS); MINUTEUR_MOTEURS = setTimeout(chargerMoteurs, 2000); }
     if (!saisieEnCours(z)) z.replaceChildren(...neuf.childNodes);
     if (r.moteurs.some(m => m.tache && m.tache.statut === 'en cours') && $('p-reglages').classList.contains('vue')) MINUTEUR_MOTEURS = setTimeout(() => { rafraichir(); chargerMoteurs(); }, 1500);
   };

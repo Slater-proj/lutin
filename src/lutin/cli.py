@@ -25,6 +25,7 @@ AIDE_GENERALE = """Lutin : un assistant IA local qui choisit les modèles adapt�
   lutin reprendre     reprendre les données d'un autre assistant (conversations, mémoire, skills, réglages)
   lutin journal       ce que Lutin a modifié ou lancé, avec quel accord
   lutin bench         mesurer un modèle sur cette machine (vitesse, outils, code, français)
+  lutin bench-moteurs comparer les moteurs (Ollama, llama.cpp) sur le même modèle
   lutin sauvegarde    exporter tes données dans un .zip ; lutin restaurer pour les remettre
   lutin doctor        diagnostic (à joindre à un rapport de problème)
 """
@@ -97,6 +98,10 @@ def parseur():
     tr.add_argument("--nom", default="", help=_t("nom affiché (ajouter)"))
     jo = sp.add_parser("journal", help=_t("journal des actions"))
     jo.add_argument("-n", type=int, default=30, help=_t("nombre d'actions affichées (30)"))
+    bm = sp.add_parser("bench-moteurs", help=_t("compare les moteurs (Ollama, llama.cpp) sur le même modèle"))
+    bm.add_argument("modele", nargs="?", help=_t("modèle à mesurer (défaut : le modèle principal) ; il doit exister sur chaque moteur comparé"))
+    bm.add_argument("--mode", choices=("rapide", "approfondi"), default="rapide", help=_t("rapide (environ 1 minute) ou approfondi (environ 5 minutes)"))
+    bm.add_argument("--sortie", help=_t("écrit le résultat en JSON dans ce fichier, à partager"))
     be = sp.add_parser("bench", help=_t("banc d'essai d'un modèle"))
     be.add_argument("modeles", nargs="*", help=_t("modèles à mesurer (défaut : le modèle principal)"))
     be.add_argument("--rapide", action="store_true", help=_t("vitesse seulement (environ 20 secondes)"))
@@ -409,6 +414,29 @@ def commande_travaux(args):
     return 0
 
 
+def commande_bench_moteurs(args):
+    """Compare les moteurs disponibles (Ollama, llama.cpp) sur le même modèle et conserve un résultat lisible et partageable (voir bench_moteurs.py)."""
+    d, cfg = contexte()
+    os.environ.setdefault("LUTIN_RACINE", str(Path.home() / "Lutin"))
+    os.environ.setdefault("LUTIN_DONNEES", str(d["donnees"]))
+    os.environ.setdefault("LUTIN_MEMOIRE", str(d["memoire"]))
+    from . import bench_moteurs, moteur as _moteur  # noqa: F401  (importer le moteur enregistre les moteurs)
+    profil = machine.detecter()
+    modele = args.modele or cfg["modeles"]["choisis"].get("polyvalent") or ""
+    if not modele:
+        print(_t("Aucun modèle à mesurer : indique-le (lutin bench-moteurs <modèle>)."), file=sys.stderr)
+        return 1
+    print(_t("Comparaison des moteurs avec {} ({}, environ {})…").format(modele, args.mode, "1 minute" if args.mode == "rapide" else "5 minutes"))
+    r = bench_moteurs.comparer(modele, args.mode, profil, progression=lambda texte, i, n: print("  {} ({}/{})".format(texte, i + 1, n)))
+    print(bench_moteurs.lisible(r))
+    if r["moteurs"]:
+        bench_moteurs.enregistrer(d["donnees"], r)
+    if args.sortie:
+        Path(args.sortie).write_text(bench_moteurs.exporter(r), encoding="utf-8")
+        print(_t("Résultat écrit dans {} (rien de personnel : à partager tel quel).").format(args.sortie))
+    return 0 if r["moteurs"] and all(m["ok"] for m in r["moteurs"]) else 1
+
+
 def commande_essai_moteur(args):
     """Fait pour de vrai, sur cette machine, ce que Lutin fait avec un moteur (voir essai_moteur.py) et écrit un rapport."""
     d, cfg = contexte()
@@ -716,7 +744,7 @@ def principal(argv=None):
     os.environ["LUTIN_CONFIG"] = str(Path(config.dossiers()["config"]) / "config.json")          # les gardes (mode hors ligne…) lisent la configuration de cette installation
     commandes = {"setup": commande_setup, "serve": commande_serve, "update": commande_update, "chat": commande_chat, "modeles": commande_modeles, "pin": commande_pin,
                  "appareils": commande_appareils, "securite": commande_securite, "langue": commande_langue, "importer": commande_importer, "reprendre": commande_reprendre, "hors-ligne": commande_hors_ligne,
-                 "travaux": commande_travaux, "journal": commande_journal, "bench": commande_bench, "sauvegarde": commande_sauvegarde, "restaurer": commande_restaurer, "doctor": commande_doctor, "zone": commande_zone, "mcp": commande_mcp, "essai-moteur": commande_essai_moteur}
+                 "travaux": commande_travaux, "journal": commande_journal, "bench": commande_bench, "sauvegarde": commande_sauvegarde, "restaurer": commande_restaurer, "doctor": commande_doctor, "zone": commande_zone, "mcp": commande_mcp, "essai-moteur": commande_essai_moteur, "bench-moteurs": commande_bench_moteurs}
     try:
         if args.commande is None:
             return commande_serve(argparse.Namespace(sans_navigateur=False))
