@@ -1078,5 +1078,6 @@
 "Pour les modèles « à experts » (MoE) trop gros pour la carte : 0 = automatique. Plus le nombre est grand, moins de mémoire de carte est utilisée, mais plus c'est lent.": "For \"mixture of experts\" (MoE) models too big for the card: 0 = automatic. The higher the number, the less card memory is used, but the slower it runs.",
 "par exemple b6500 (vide : toujours la dernière)": "for example b6500 (empty: always the latest)",
 "Version épinglée : ": "Pinned version: ",
-"Une version épinglée est celle qu'installe « Installer » ; plus aucune mise à jour n'est proposée. Utile quand une version fonctionne bien sur ta machine.": "A pinned version is the one \"Install\" fetches; no update is offered any more. Useful when a version works well on your machine."
+"Une version épinglée est celle qu'installe « Installer » ; plus aucune mise à jour n'est proposée. Utile quand une version fonctionne bien sur ta machine.": "A pinned version is the one \"Install\" fetches; no update is offered any more. Useful when a version works well on your machine.",
+"Version essayée avec Lutin : ": "Version tried with Lutin: "
 }

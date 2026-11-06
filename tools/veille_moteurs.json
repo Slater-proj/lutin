@@ -1,0 +1,26 @@
+{
+ "llama-swap": {
+  "depot": "mostlygeek/llama-swap",
+  "vue": "v270"
+ },
+ "llamacpp": {
+  "depot": "ggml-org/llama.cpp",
+  "vue": "b12179"
+ },
+ "localai": {
+  "depot": "mudler/LocalAI",
+  "vue": "v4.12.1"
+ },
+ "ollama": {
+  "depot": "ollama/ollama",
+  "vue": "v0.40.15"
+ },
+ "sglang": {
+  "depot": "sgl-project/sglang",
+  "vue": "v0.5.23"
+ },
+ "vllm": {
+  "depot": "vllm-project/vllm",
+  "vue": "v0.32.0"
+ }
+}

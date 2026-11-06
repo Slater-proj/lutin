@@ -2859,6 +2859,12 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     tete.append(radio, el('b', '', ' ' + m.nom), el('span', 'aide', ' · ' + etatMoteur(m) + (m.courant ? ' · ' + T('utilisé') : '') + (m.statut.version ? ' · ' + m.statut.version : '')));
     d.appendChild(tete);
     d.appendChild(el('div', '', m.description));
+    if (m.site || m.version_testee) {          // ce que dit le catalogue signé : le site du moteur et la version que Lutin a essayée
+      const ligneInfo = el('div', 'aide');
+      if (m.version_testee) ligneInfo.appendChild(document.createTextNode(T('Version essayée avec Lutin : ') + m.version_testee + (m.site ? ' · ' : '')));
+      if (m.site) { const a = el('a', '', T('Site officiel')); a.href = m.site; a.target = '_blank'; a.rel = 'noopener noreferrer'; ligneInfo.appendChild(a); }
+      d.appendChild(ligneInfo);
+    }
     if (m.statut.detail) d.appendChild(el('div', 'aide', m.statut.detail));
     if (m.maj && m.maj.disponible) {          // une version plus récente que celle installée : proposée ici, sans notification en haut de la page
       const avis = el('div', 'carte'); avis.style.cssText = 'flex-direction:column;align-items:stretch;gap:6px;border-color:var(--accent,#5aa9ff)';

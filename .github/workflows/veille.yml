@@ -1,0 +1,35 @@
+name: veille
+
+# Chaque semaine : y a-t-il une nouvelle version d'un moteur du catalogue ? Si oui, une DEMANDE DE FUSION est ouverte pour qu'une personne la relise.
+# Rien n'est jamais testé, signé, fusionné ni publié tout seul : la signature du catalogue se fait avec une clé qui n'est pas sur GitHub.
+on:
+  schedule:
+    - cron: "0 7 * * 2"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  veille:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - name: Comparer avec les dernières versions vues
+        run: python tools/veille_moteurs.py
+      - name: Ouvrir une demande de fusion s'il y a du neuf
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ ! -f veille-rapport.md ]; then echo "Rien de neuf."; exit 0; fi
+          git config user.name "lutin-veille"
+          git config user.email "veille@users.noreply.github.com"
+          git checkout -B veille-moteurs
+          git add tools/veille_moteurs.json
+          git commit -m "docs: nouvelles versions de moteurs a examiner (veille)"
+          git push --force origin veille-moteurs
+          gh pr create --base main --head veille-moteurs --title "Veille : nouvelles versions de moteurs" --body-file veille-rapport.md || gh pr edit veille-moteurs --body-file veille-rapport.md

@@ -10,6 +10,7 @@ Ordre de lecture : copie récupérée en ligne (cache) si elle est valide, sign�
 Format du fichier : {"catalogue": {...}, "cle": "<identifiant de clé>", "signature": "<base 64>"} ; la signature porte sur `canonique(catalogue)`."""
 import base64
 import json
+import re
 import threading
 import time
 from pathlib import Path
@@ -25,8 +26,11 @@ CLES_PUBLIQUES = {
 FICHIER_LIVRE = Path(__file__).resolve().parent / "data" / "moteurs.json"
 URL_DEFAUT = "https://raw.githubusercontent.com/Slater-proj/lutin/main/src/lutin/data/moteurs.json"          # `catalogue_moteurs_url` dans la configuration le remplace ("" = pas de lecture en ligne)
 TAILLE_MAX = 256 * 1024
-GENRES = ("openai",)
+GENRES = ("openai", "ollama")          # « ollama » : seulement pour le moteur Ollama géré par Lutin
 SYSTEMES = ("windows", "linux", "macos")
+TYPES = ("externe", "gere")          # « gere » : un moteur que Lutin installe et pilote lui-même (sa fiche vient du catalogue, son code reste dans Lutin)
+GERES = ("ollama", "llamacpp")
+RE_DEPOT = re.compile(r"^[A-Za-z0-9][\w.-]{0,38}/[A-Za-z0-9][\w.-]{0,99}$")
 OBLIGATOIRES = ("id", "nom", "genre", "description")
 
 
@@ -67,7 +71,7 @@ def valider(catalogue):
     inconnus = set(catalogue) - {"version", "date", "moteurs"}
     if inconnus:
         raise ErreurCatalogue("champ inconnu : {}".format(sorted(inconnus)[0]))
-    autorises = set(OBLIGATOIRES) | {"adresse_defaut", "cle_requise", "points_forts", "points_faibles", "plateformes", "site", "remarque"}
+    autorises = set(OBLIGATOIRES) | {"adresse_defaut", "cle_requise", "points_forts", "points_faibles", "plateformes", "site", "remarque", "type", "depot", "version_testee", "etiquette"}
     vus = set()
     for m in catalogue["moteurs"]:
         if not isinstance(m, dict):
@@ -76,13 +80,28 @@ def valider(catalogue):
             if cle not in m:
                 raise ErreurCatalogue("{} : champ « {} » manquant".format(m.get("id", "?"), cle))
         ident = m["id"]
-        if not isinstance(ident, str) or not ident.replace("-", "").replace("_", "").isalnum() or not ident.islower() or ident in vus or ident in ("ollama", "llamacpp", "openai"):
+        if m.get("type", "externe") not in TYPES:
+            raise ErreurCatalogue("{} : type inconnu".format(ident))
+        gere = m.get("type") == "gere"
+        if (not isinstance(ident, str) or not ident.replace("-", "").replace("_", "").isalnum() or not ident.islower() or ident in vus or ident == "openai"
+                or (ident in GERES) != gere):
             raise ErreurCatalogue("identifiant invalide, réservé ou en double : {!r}".format(ident))
         vus.add(ident)
         if set(m) - autorises:
             raise ErreurCatalogue("{} : champ inconnu « {} »".format(ident, sorted(set(m) - autorises)[0]))
-        if m["genre"] not in GENRES:
-            raise ErreurCatalogue("{} : genre inconnu (seul « openai » est géré)".format(ident))
+        if "depot" in m and not (isinstance(m["depot"], str) and RE_DEPOT.match(m["depot"])):
+            raise ErreurCatalogue("{} : dépôt invalide (« propriétaire/nom »)".format(ident))
+        if "etiquette" in m:
+            try:
+                if not isinstance(m["etiquette"], str) or len(m["etiquette"]) > 60:
+                    raise ValueError
+                re.compile(m["etiquette"])
+            except (ValueError, re.error):
+                raise ErreurCatalogue("{} : motif d'étiquette invalide".format(ident))
+        if "version_testee" in m and not (isinstance(m["version_testee"], str) and 0 < len(m["version_testee"]) <= 40):
+            raise ErreurCatalogue("{} : version testée invalide".format(ident))
+        if m["genre"] not in GENRES or (m["genre"] == "ollama" and ident != "ollama"):
+            raise ErreurCatalogue("{} : genre inconnu".format(ident))
         if not isinstance(m["nom"], str) or not m["nom"].strip() or len(m["nom"]) > 60:
             raise ErreurCatalogue("{} : nom invalide".format(ident))
         _texte(m["description"], ident + " (description)")
@@ -166,6 +185,20 @@ def texte(valeur):
     return valeur
 
 
+def fiche(ident, catalogue=None):
+    """La fiche d'un moteur que Lutin gère lui-même (« ollama », « llamacpp ») telle que le catalogue la décrit : {description, points_forts, points_faibles, site, remarque, version_testee} dans la langue
+    courante, ou None si le catalogue ne la contient pas (la page garde alors les textes écrits dans le code)."""
+    try:
+        for m in (catalogue or en_cours())["moteurs"]:
+            if m["id"] == ident and m.get("type") == "gere":
+                v = vue(m)
+                v["version_testee"] = m.get("version_testee", "")
+                return v
+    except (OSError, ValueError):
+        pass
+    return None
+
+
 def vue(moteur):
     """Une entrée du catalogue prête pour la page : textes dans la langue courante."""
     return {"id": moteur["id"], "nom": moteur["nom"], "adresse": moteur.get("adresse_defaut", ""), "cle_requise": bool(moteur.get("cle_requise")), "site": moteur.get("site", ""),
@@ -174,7 +207,8 @@ def vue(moteur):
 
 
 def prereglages(cache=None):
-    return [vue(m) for m in charger(cache)["moteurs"]]
+    """Les serveurs externes proposés d'un clic (pas les moteurs que Lutin gère lui-même)."""
+    return [vue(m) for m in charger(cache)["moteurs"] if m.get("type", "externe") == "externe"]
 
 
 # --------------------------------------------------------------------------- lecture en ligne (au plus une par semaine, en arrière-plan)
@@ -188,9 +222,21 @@ def fichier_cache():
     return Path(donnees) / "moteurs_catalogue.json" if donnees else None
 
 
+MEMOIRE = {"cle": None, "catalogue": None}
+
+
 def en_cours():
-    """Le catalogue à utiliser maintenant (copie livrée, ou copie en ligne plus récente et bien signée)."""
-    return charger(fichier_cache())
+    """Le catalogue à utiliser maintenant (copie livrée, ou copie en ligne plus récente et bien signée). Gardé en mémoire tant que les fichiers ne changent pas (la page le demande souvent)."""
+    cache = fichier_cache()
+    try:
+        cle = (str(cache), cache.stat().st_mtime_ns if cache and cache.is_file() else 0, FICHIER_LIVRE.stat().st_mtime_ns, tuple(sorted(CLES_PUBLIQUES.items())))
+    except OSError:
+        cle = None
+    if cle is not None and MEMOIRE["cle"] == cle:
+        return MEMOIRE["catalogue"]
+    c = charger(cache)
+    MEMOIRE.update(cle=cle, catalogue=c)
+    return c
 
 
 def en_arriere_plan(url=None, http=None):

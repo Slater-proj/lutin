@@ -1,8 +1,103 @@
 {
  "catalogue": {
-  "version": 1,
-  "date": "2026-11-06",
+  "version": 2,
+  "date": "2026-11-07",
   "moteurs": [
+   {
+    "id": "ollama",
+    "nom": "Ollama",
+    "genre": "ollama",
+    "type": "gere",
+    "depot": "ollama/ollama",
+    "site": "https://ollama.com",
+    "plateformes": [
+     "windows",
+     "linux",
+     "macos"
+    ],
+    "description": {
+     "fr": "Le moteur installé et géré par Lutin : modèles téléchargés depuis la bibliothèque d'Ollama, réglages de vitesse et de mémoire.",
+     "en": "The engine installed and managed by Lutin: models downloaded from Ollama's library, speed and memory settings."
+    },
+    "points_forts": [
+     {
+      "fr": "Le plus simple : un clic pour télécharger un modèle de sa bibliothèque, qui garde plusieurs modèles prêts.",
+      "en": "The simplest: one click to download a model from its library, which keeps several models ready."
+     },
+     {
+      "fr": "Décharge tout seul un modèle inutilisé et en recharge un autre à la demande.",
+      "en": "Unloads an unused model by itself and reloads another on demand."
+     },
+     {
+      "fr": "Lutin sait le régler (cœurs, mémoire, contexte) et en mesurer la vitesse.",
+      "en": "Lutin can tune it (cores, memory, context) and measure its speed."
+     }
+    ],
+    "points_faibles": [
+     {
+      "fr": "Un peu moins rapide que llama.cpp utilisé directement, surtout avec les modèles à experts.",
+      "en": "A little slower than llama.cpp used directly, especially with mixture-of-experts models."
+     },
+     {
+      "fr": "Reçoit les nouveaux modèles et les optimisations avec un peu de retard.",
+      "en": "Gets new models and optimisations a little late."
+     },
+     {
+      "fr": "Un service de plus qui tourne en arrière-plan.",
+      "en": "One more service running in the background."
+     }
+    ]
+   },
+   {
+    "id": "llamacpp",
+    "nom": "llama.cpp",
+    "genre": "openai",
+    "type": "gere",
+    "depot": "ggml-org/llama.cpp",
+    "site": "https://github.com/ggml-org/llama.cpp",
+    "plateformes": [
+     "windows",
+     "linux",
+     "macos"
+    ],
+    "description": {
+     "fr": "Le moteur de référence sur lequel Ollama est construit, utilisé directement : llama-server, avec son interface compatible OpenAI. Lutin peut l'installer, le démarrer et télécharger ses modèles (fichiers GGUF), ou se connecter à un llama-server déjà lancé.",
+     "en": "The reference engine Ollama is built on, used directly: llama-server, with its OpenAI-compatible interface. Lutin can install it, start it and download its models (GGUF files), or connect to a llama-server that is already running."
+    },
+    "points_forts": [
+     {
+      "fr": "Un peu plus rapide qu'Ollama à l'écriture, surtout avec les modèles à experts (quelques % à une vingtaine de %, d'après des mesures publiques, à vérifier sur ta machine).",
+      "en": "A little faster than Ollama when writing, especially with mixture-of-experts models (a few % to about 20 %, from public measurements, to check on your machine)."
+     },
+     {
+      "fr": "Reçoit les nouveaux modèles et les nouvelles optimisations avant Ollama.",
+      "en": "Gets new models and new optimisations before Ollama."
+     },
+     {
+      "fr": "Tous les réglages sont accessibles (mémoire, répartition carte graphique / processeur, couches d'experts).",
+      "en": "Every setting is reachable (memory, graphics card / processor split, expert layers)."
+     },
+     {
+      "fr": "Léger : un seul programme, sans service en arrière-plan.",
+      "en": "Light: one program, no background service."
+     }
+    ],
+    "points_faibles": [
+     {
+      "fr": "Un seul modèle à la fois, rechargé quand tu en changes (plusieurs avec le mode routeur, expérimental).",
+      "en": "One model at a time, reloaded when you switch (several with router mode, experimental)."
+     },
+     {
+      "fr": "Les modèles sont des fichiers GGUF à choisir (quantification) : moins guidé que la bibliothèque d'Ollama.",
+      "en": "Models are GGUF files to pick (quantisation): less guided than Ollama's library."
+     },
+     {
+      "fr": "Le premier chargement d'un modèle est plus long qu'avec le cache d'Ollama.",
+      "en": "The first load of a model is slower than with Ollama's cache."
+     }
+    ],
+    "etiquette": "^b[0-9]+$"
+   },
    {
     "id": "lmstudio",
     "nom": "LM Studio",
@@ -33,7 +128,8 @@
       "fr": "Lutin ne le démarre pas : lance le serveur local dans LM Studio.",
       "en": "Lutin does not start it: start the local server in LM Studio."
      }
-    ]
+    ],
+    "type": "externe"
    },
    {
     "id": "vllm",
@@ -59,7 +155,9 @@
       "fr": "Pensé pour des serveurs Linux ; plus lourd à installer qu'Ollama.",
       "en": "Meant for Linux servers; heavier to install than Ollama."
      }
-    ]
+    ],
+    "type": "externe",
+    "depot": "vllm-project/vllm"
    },
    {
     "id": "sglang",
@@ -79,7 +177,9 @@
       "fr": "Pensé pour des serveurs Linux avec une carte graphique.",
       "en": "Meant for Linux servers with a graphics card."
      }
-    ]
+    ],
+    "type": "externe",
+    "depot": "sgl-project/sglang"
    },
    {
     "id": "localai",
@@ -101,7 +201,9 @@
       "fr": "Plusieurs types de modèles dans un seul serveur.",
       "en": "Several kinds of models in one server."
      }
-    ]
+    ],
+    "type": "externe",
+    "depot": "mudler/LocalAI"
    },
    {
     "id": "llama-swap",
@@ -129,10 +231,12 @@
       "fr": "Se configure à la main avec un fichier.",
       "en": "Configured by hand with a file."
      }
-    ]
+    ],
+    "type": "externe",
+    "depot": "mostlygeek/llama-swap"
    }
   ]
  },
  "cle": "2026a",
- "signature": "i2mv2INfApxa1igWxSKlY/Nb1ncU3x3A3Sr5421mjGp9b7aq4t9KrVkShDqNrYTilmVHN8S38RI7Y4szQ0igCA=="
+ "signature": "DigTGhspGM1kbkaonixB+WJIwtRlqnhf9u7LzV9O86e0Jjl2SYDUdCv1rIsA82pOS7u8FyO27ozUm02pggY2AQ=="
 }

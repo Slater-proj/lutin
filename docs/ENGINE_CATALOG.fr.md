@@ -48,6 +48,10 @@ Un test échoue si la source et le fichier livré ne correspondent pas : on ne p
 
 **Perte ou fuite de la clé privée** : retirer la clé concernée de `CLES_PUBLIQUES` dans une nouvelle version de Lutin (les installations à jour refusent alors ses signatures) et signer avec l'autre.
 
-## Ce que le catalogue ne fait pas encore
+## Moteurs gérés par Lutin et veille des versions
 
-Les cartes d'Ollama et de llama.cpp (que Lutin installe et pilote) viennent encore du code ; elles passeront au catalogue avec les versions testées et les fichiers à télécharger (0.18.0 et suivantes). La veille automatique des nouvelles versions de moteurs (une demande de fusion à relire, jamais publiée toute seule) viendra aussi plus tard.
+Les cartes d'**Ollama** et de **llama.cpp** (que Lutin installe et pilote) viennent aussi du catalogue : description, forces, faiblesses, site et `version_testee` (la version essayée avec Lutin, quand elle est connue). Leur entrée a `"type": "gere"` ; le code qui les installe et les démarre reste dans Lutin. Si le catalogue est illisible ou ne contient pas le moteur, la page garde les textes écrits dans le code.
+
+Champs en plus pour les moteurs : `depot` (propriétaire/nom sur GitHub, pour la veille), `etiquette` (expression régulière des étiquettes de version, par exemple `^b[0-9]+$` pour llama.cpp), `version_testee`.
+
+**Veille hebdomadaire** : `.github/workflows/veille.yml` lance `tools/veille_moteurs.py`, qui compare la dernière version publiée de chaque moteur à `tools/veille_moteurs.json`. S'il y a du neuf, le workflow ouvre une **demande de fusion** à relire. Il ne teste rien, ne signe rien (la clé n'est pas sur GitHub), ne fusionne rien et ne publie rien : une personne lit les notes de publication, met à jour `tools/moteurs.source.json` (`version_testee`, notes), relance `tools/signer_catalogue_moteurs.py`, puis fusionne. Une panne réseau n'est jamais prise pour une nouvelle version.

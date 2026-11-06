@@ -122,7 +122,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
     def _prereglages():
         """Les serveurs compatibles OpenAI du catalogue signé (adresse habituelle, forces, faiblesses), pour les proposer d'un clic. Un catalogue illisible n'empêche jamais la page."""
         try:
-            return [dict(v) for v in (_catalogue_moteurs.vue(m) for m in _catalogue_moteurs.en_cours()["moteurs"])]
+            return [dict(v) for v in (_catalogue_moteurs.vue(m) for m in _catalogue_moteurs.en_cours()["moteurs"] if m.get("type", "externe") == "externe")]
         except Exception:  # noqa: BLE001
             return []
 

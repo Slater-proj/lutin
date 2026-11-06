@@ -48,6 +48,10 @@ A test fails if the source and the shipped file differ: re-signing cannot be for
 
 **Lost or leaked private key**: remove that key from `CLES_PUBLIQUES` in a new Lutin release (up-to-date installs then refuse its signatures) and sign with the other one.
 
-## What the catalogue does not do yet
+## Engines managed by Lutin and version watch
 
-The Ollama and llama.cpp cards (which Lutin installs and drives) still come from code; they will move to the catalogue with tested versions and files to download (0.18.0 onwards). The automatic watch for new engine versions (a pull request to review, never published on its own) will come later too.
+The **Ollama** and **llama.cpp** cards (which Lutin installs and drives) also come from the catalogue: description, strengths, limits, website and `version_testee` (the version tried with Lutin, when known). Their entry has `"type": "gere"` (managed); the code that installs and starts them stays in Lutin. If the catalogue is unreadable or lacks the engine, the page keeps the texts written in the code.
+
+Extra engine fields: `depot` (owner/name on GitHub, for the watch), `etiquette` (regular expression for version tags, for example `^b[0-9]+$` for llama.cpp), `version_testee`.
+
+**Weekly watch**: `.github/workflows/veille.yml` runs `tools/veille_moteurs.py`, which compares each engine's latest published version with `tools/veille_moteurs.json`. If something is new, the workflow opens a **pull request** to review. It tests nothing, signs nothing (the key is not on GitHub), merges nothing and publishes nothing: a person reads the release notes, updates `tools/moteurs.source.json` (`version_testee`, notes), reruns `tools/signer_catalogue_moteurs.py`, then merges. A network failure is never taken for a new version.

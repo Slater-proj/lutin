@@ -101,10 +101,20 @@ class Moteur:
     def supprimer_modele(self, nom):
         raise ValueError("Ce moteur ne supprime pas ses modèles depuis Lutin.")
 
+    def fiche(self):
+        """La fiche du moteur d'après le catalogue signé (description, forces, faiblesses, site, version testée), ou None : alors les textes écrits dans le code servent."""
+        try:
+            from . import catalogue_moteurs
+            return catalogue_moteurs.fiche(self.id)
+        except Exception:  # noqa: BLE001  (la page ne dépend jamais du catalogue pour s'afficher)
+            return None
+
     def vue(self, courant=False):
         """Ce que la page affiche."""
-        return {"id": self.id, "nom": self.nom, "genre": self.genre, "gere_modeles": self.gere_modeles, "description": self.description, "courant": bool(courant),
-                "points_forts": list(self.points_forts), "points_faibles": list(self.points_faibles), "adresse_modifiable": self.adresse_modifiable,
+        f = self.fiche() or {}
+        return {"id": self.id, "nom": self.nom, "genre": self.genre, "gere_modeles": self.gere_modeles, "description": f.get("description") or self.description, "courant": bool(courant),
+                "points_forts": f.get("points_forts") or list(self.points_forts), "points_faibles": f.get("points_faibles") or list(self.points_faibles), "adresse_modifiable": self.adresse_modifiable,
+                "site": f.get("site", ""), "version_testee": f.get("version_testee", ""), "remarque": f.get("remarque", ""), "source_fiche": "catalogue" if f else "code",
                 "grille": [{"fonction": f, "etat": e, "note": n} for f, (e, n) in ((f, self.grille().get(f, ("non_teste", ""))) for f in FONCTIONS)]}
 
 
