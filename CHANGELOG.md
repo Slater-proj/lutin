@@ -2,6 +2,13 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## 0.16.9
+
+- **La même page « Modèles » pour Ollama et pour llama.cpp.** Catalogue de Lutin, modèles « sans filtre », bibliothèque d'ollama.com (récents, populaires, filtres par usage, « seulement les légers », « cacher ce qui est trop gros »), précisions, installation d'un modèle par son nom : tout est identique d'un moteur à l'autre. Avec llama.cpp, un clic télécharge le même modèle **directement depuis la bibliothèque d'Ollama, sans Ollama** (adresse publique du registre, empreinte SHA-256 vérifiée, reprise si interrompu) et le range comme Ollama le fait, sous le même nom. La recherche Hugging Face reste dessous comme source supplémentaire. Ne restent propres à Ollama que le banc d'essai, la comparaison et la recherche de mises à jour des modèles.
+- **Retrouver ses modèles et changer leur dossier.** Le bouton de la carte d'Ollama ouvre maintenant directement la fenêtre « Dossier des modèles d'Ollama » (il renvoyait vers l'onglet Modèles, où rien ne permettait de le faire). Un nouveau bouton « Retrouver mes modèles déjà téléchargés » cherche dans les emplacements usuels de tous les disques (`E:\IA\Ollama`, `D:\Models`…) les dossiers qui contiennent déjà des modèles et propose de les utiliser ; le diagnostic fait la même recherche, en arrière-plan, quand Ollama ne voit aucun modèle.
+
+**English.** Same Models page for Ollama and llama.cpp (catalogue, uncensored models, ollama.com library, precisions, install by name); with llama.cpp a click downloads the same model straight from Ollama's registry without Ollama (SHA-256 verified, resumable) under the same name. The Ollama models-folder button now opens the folder window directly, with a “Find my already downloaded models” search across the usual places of every drive.
+
 ## 0.16.8
 
 - **Les mêmes modèles sous Ollama et sous llama.cpp, sans rien retélécharger.** Les modèles déjà téléchargés par Ollama (y compris les modèles « sans filtre ») apparaissent dans la liste de llama.cpp **sous les mêmes noms** (`qwen3:8b`, `huihui_ai/qwen3-abliterated:4b`) : le fichier d'un modèle d'Ollama est un GGUF, llama.cpp le lit sur place. Aucune copie, aucune suppression possible depuis llama.cpp (lecture seule), le projecteur d'images est transmis pour les modèles qui voient. Sous Docker, ou si tu coupes le partage (`partager_ollama` dans `moteurs.json`), rien n'est partagé. Changer de moteur garde donc le même modèle choisi.

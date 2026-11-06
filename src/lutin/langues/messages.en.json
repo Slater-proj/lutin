@@ -1552,5 +1552,12 @@
 "{} est déjà installé : désinstalle-le d'abord (tes modèles restent où ils sont), puis change de dossier.": "{} is already installed: uninstall it first (your models stay where they are), then change folder.",
 "Ollama tourne mais ne voit aucun modèle, alors que {} en contient {} : il a été relancé sans ton dossier de modèles habituel. Tes modèles ne sont pas perdus ; redémarre Ollama pour qu'il retrouve ce dossier.": "Ollama is running but sees no model, while {} contains {}: it was restarted without your usual models folder. Your models are not lost; restart Ollama so it finds that folder again.",
 "Installe la dernière version par-dessus l'actuelle (sans désinstaller) ; tes modèles, leur dossier et tes réglages sont gardés.": "Installs the latest version over the current one (without uninstalling); your models, their folder and your settings are kept.",
-"Télécharge la dernière version et remplace l'actuelle ; tes modèles et ton dossier sont gardés.": "Downloads the latest version and replaces the current one; your models and folder are kept."
+"Télécharge la dernière version et remplace l'actuelle ; tes modèles et ton dossier sont gardés.": "Downloads the latest version and replaces the current one; your models and folder are kept.",
+"Ce moteur gère ses modèles lui-même : installe-les depuis le moteur.": "This engine manages its models itself: install them from the engine.",
+"Réponse inattendue du registre d'Ollama.": "Unexpected answer from Ollama's registry.",
+"Ce modèle n'a pas de fichier de modèle utilisable par un autre moteur.": "This model has no model file another engine can use.",
+"Réponse illisible du registre d'Ollama.": "Unreadable answer from Ollama's registry.",
+"Un morceau du modèle est corrompu (empreinte différente) : il a été supprimé, relance le téléchargement.": "A piece of the model is corrupted (different fingerprint): it was deleted, restart the download.",
+"Le registre d'Ollama a répondu {}.": "Ollama's registry answered {}.",
+"Le registre d'Ollama ne répond pas : {}": "Ollama's registry is not answering: {}"
 }

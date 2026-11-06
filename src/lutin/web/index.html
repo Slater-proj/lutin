@@ -374,6 +374,7 @@ button.principal { box-shadow:0 6px 16px -8px rgba(63,143,232,.8); }
 }
 body:not([data-moteur="ollama"]) .ollama-seulement { display:none !important; }
 body[data-moteur="ollama"] .moteur-autre { display:none !important; }
+body[data-moteur="openai"] .biblio { display:none !important; }
 .carte.moteur-choisi { border-color:var(--accent); box-shadow:0 0 0 1px rgba(90,169,255,.35), var(--ombre-douce); }
 .moteur-liste div.point { margin:2px 0; }
 </style>
@@ -447,30 +448,29 @@ body[data-moteur="ollama"] .moteur-autre { display:none !important; }
   </section>
   <section class="page" id="p-sante"><div class="cadre" id="santeCorps"></div></section>
   <section class="page" id="p-modeles"><div class="cadre">
-    <div class="moteur-autre" id="modelesMoteur"></div>
-    <div class="ollama-seulement">
-    <div class="aide">Les modèles tournent sur ta machine, avec Ollama. Plus un modèle est gros, plus il est intelligent, mais plus il demande de mémoire (idéalement celle de ta carte graphique). Un seul modèle est chargé à la fois : en changer prend quelques secondes. Tu peux aussi les gérer en ligne de commande : <code>lutin modeles</code>.</div>
+    <div class="biblio">
+    <div class="aide">Les modèles tournent sur ta machine, avec le moteur choisi (Ollama ou llama.cpp : la même bibliothèque, les mêmes modèles). Plus un modèle est gros, plus il est intelligent, mais plus il demande de mémoire (idéalement celle de ta carte graphique). Un seul modèle est chargé à la fois : en changer prend quelques secondes. Tu peux aussi les gérer en ligne de commande : <code>lutin modeles</code>.</div>
     <label class="opt-ligne" title="Montre des modèles modifiés par la communauté pour ne plus refuser de demandes. À utiliser en connaissance de cause."><input type="checkbox" id="cAvance"> Afficher les modèles avancés (sans filtre)</label>
     <div class="carte" id="jaugeDisque" hidden style="display:block"></div>
-    <div class="carte" id="barreTest" style="gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+    <div class="carte ollama-seulement" id="barreTest" style="gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
       <button id="bTesterPc" class="principal" title="Mesure la vitesse du modèle actif sur cette machine (environ 20 secondes), puis donne des conseils : modèle plus léger, contexte, charge.">⏱ Tester mon PC</button>
       <span id="msgTest" class="aide"></span>
       <div id="conseilTest" style="flex:1 1 100%"></div>
     </div>
-    <div class="carte" id="barreVerif" style="gap:8px;flex-wrap:wrap;align-items:center">
+    <div class="carte ollama-seulement" id="barreVerif" style="gap:8px;flex-wrap:wrap;align-items:center">
       <button id="bMaj" title="Compare tes modèles installés avec leur dernière version">🔄 Chercher les mises à jour</button>
       <button id="bNouveaux" title="Cherche, pour ta machine, des modèles meilleurs que ceux que tu as">✨ Chercher de nouveaux modèles</button>
       <span id="msgVerif" class="aide"></span>
     </div>
     <div id="propositions"></div>
     <div class="aide">Sur chaque modèle, le bouton « Précision » permet de choisir entre 4 bits (petit, rapide), 8 bits (plus fidèle, plus gros) et les autres variantes proposées par Ollama.</div>
-    <div class="carte" id="barreCompare" style="gap:8px;flex-wrap:wrap;align-items:center">
+    <div class="carte ollama-seulement" id="barreCompare" style="gap:8px;flex-wrap:wrap;align-items:center">
       <b>⚖ Comparer des modèles</b>
       <span class="aide">Coche « ⚖ » sur des modèles installés dans la liste, puis lance le banc complet sur chacun : vitesse, outils, code, français et consignes côte à côte, sur cette machine.</span>
       <button id="bComparer" disabled>Tester et comparer la sélection</button>
       <span id="msgComparer" class="aide"></span>
     </div>
-    <div id="tableComparaison"></div>
+    <div id="tableComparaison" class="ollama-seulement"></div>
     <div id="listeModeles"></div>
     <h2>Bibliothèque d'Ollama</h2>
     <div class="aide">Les nouveaux modèles sortent tous les jours, bien avant d'entrer dans le catalogue de Lutin : parcours ici la liste publique d'ollama.com (récents ou populaires) et installe celui que tu veux. Les tailles sont les variantes proposées (« 8b » = 8 milliards de paramètres, environ 5 Go) ; choisis-en une qui tient dans ta mémoire.</div>
@@ -496,6 +496,7 @@ body[data-moteur="ollama"] .moteur-autre { display:none !important; }
     <div id="msgModeles" class="aide"></div>
     <div style="margin:8px 0"><button id="bRestaurer" hidden>Rétablir la liste d'origine</button></div>
     </div>
+    <div class="moteur-autre" id="modelesMoteur"></div>
   </div></section>
   <section class="page" id="p-memoire"><div class="cadre">
     <h2>Contexte du projet <span class="aide">(comme un CLAUDE.md : lu au début de chaque conversation, tu peux le modifier)</span></h2>
@@ -1362,10 +1363,12 @@ body[data-moteur="ollama"] .moteur-autre { display:none !important; }
     let texte = m.phrase || '';
     const bench = ETAT.bench || {}, mes = (bench.mesures || {})[m.id], occupe = !!bench.en_cours;
     if (bench.en_cours === m.id) texte = T('⏳ Mesure en cours : ') + bench.etape;
+    if (inst && (ETAT.partages || []).includes(m.id)) texte += (texte ? ' · ' : '') + T('d\'Ollama (pas de copie)');          // llama.cpp lit le fichier d'Ollama sur place
     desc.textContent = texte; desc.title = texte + (m.avertissement ? '\n⚠ ' + m.avertissement : '');
     if (inst) {
       if (!actif && !emb) { const u = el('button', 'principal', T('Utiliser')); u.title = T('En faire le modèle de la conversation'); u.addEventListener('click', async () => { try { await api('/api/reglages', { modele: m.id }); $('selModele').value = m.id; rafraichir(); } catch (e) { alert(e.message); } }); acts.appendChild(u); }
       const bv = el('button', '', '⏱'), bc = el('button', '', '📊');
+      bv.classList.add('ollama-seulement'); bc.classList.add('ollama-seulement');          // le banc d'essai est propre à Ollama
       bv.title = T('⏱ Tester la vitesse') + ' : ' + T('Environ 20 secondes (plus si le modèle doit d\'abord se charger)'); bv.disabled = occupe;
       bc.title = T('📊 Banc complet') + ' : ' + T('Vitesse, appel d\'outils, code, français, consignes : une vingtaine de petites questions, quelques minutes'); bc.disabled = occupe;
       [[bv, true], [bc, false]].forEach(([b, rapide]) => b.addEventListener('click', async () => { try { await api('/api/bench', { modele: m.id, rapide }); rafraichir(); } catch (e) { $('msgModeles').textContent = e.message; } }));
@@ -2455,6 +2458,7 @@ body[data-moteur="ollama"] .moteur-autre { display:none !important; }
     const c = ouvrirModal(T('Dossier des modèles d\'Ollama'));
     c.appendChild(el('p', 'aide', T('C\'est Ollama qui lit ses modèles dans ce dossier (variable OLLAMA_MODELS) : Lutin règle la variable, mais Ollama doit être redémarré pour la prendre en compte. Les modèles déjà téléchargés ne sont pas déplacés tout seuls : tu peux les copier ici (l\'ancien dossier n\'est jamais supprimé).')));
     c.appendChild(el('p', '', T('Dossier actuel : ') + e.chemin));
+    const trouves = el('div'); c.appendChild(trouves);
     const zone = el('div'); c.appendChild(zone);
     const octets = n => (n / 1e9).toFixed(1) + ' ' + T('Go');
     const etape2 = async (a, note) => {
@@ -2484,6 +2488,22 @@ body[data-moteur="ollama"] .moteur-autre { display:none !important; }
         redem.disabled = false;
       });
     };
+    const chercherModeles = el('button', 'principal', T('Retrouver mes modèles déjà téléchargés')); trouves.appendChild(chercherModeles);
+    chercherModeles.addEventListener('click', async () => {          // les emplacements usuels de tous les disques : un ancien dossier, un autre disque
+      chercherModeles.disabled = true; chercherModeles.textContent = T('Recherche…');
+      try {
+        const x = await api('/api/dossier-modeles-chercher'); trouves.textContent = '';
+        const autres = x.dossiers.filter(d => d.chemin.toLowerCase() !== x.actuel.toLowerCase());
+        if (!autres.length) { trouves.appendChild(el('p', 'aide', T('Aucun autre dossier de modèles trouvé dans les emplacements usuels. Choisis-le à la main ci-dessous.'))); return; }
+        trouves.appendChild(el('p', 'aide', T('Dossiers qui contiennent déjà des modèles :')));
+        autres.forEach(d => {
+          const l = el('div', 'ligne'); l.appendChild(el('span', '', d.chemin + ' · ' + d.modeles + ' ' + T('modèle(s)') + ' · ' + octets(d.octets)));
+          const u = el('button', 'principal', T('Utiliser ce dossier'));
+          u.addEventListener('click', async () => { try { const r = await api('/api/dossier-modeles', { chemin: d.chemin }); trouves.textContent = ''; etape2({ chemin: d.chemin, source_existe: false, source_octets: 0 }, r.note); rafraichir(); } catch (err) { l.appendChild(el('span', 'erreur', ' ' + err.message)); } });
+          l.appendChild(u); trouves.appendChild(l);
+        });
+      } catch (err) { trouves.textContent = ''; trouves.appendChild(el('p', 'erreur', err.message)); }
+    });
     parcourir(zone, e.chemin, T('Analyser ce dossier'), async chemin => {
       const a = await api('/api/dossier-modeles-analyse', { chemin });
       zone.textContent = '';
@@ -2901,7 +2921,7 @@ body[data-moteur="ollama"] .moteur-autre { display:none !important; }
           ok2.addEventListener('click', async () => { try { await api('/api/moteur-regler', { moteur: m.id, dossier_modeles: champ2.value.trim() }); await rafraichir(); chargerMoteurs(); } catch (e) { msg2.textContent = e.message; } });
           l2.append(champ2, ok2, msg2);
         } else {
-          const aller = el('button', '', T('Changer dans l\'onglet Modèles')); aller.addEventListener('click', () => ouvrirOnglet('modeles')); l2.appendChild(aller);
+          const aller = el('button', '', T('Changer de dossier ou retrouver mes modèles…')); aller.addEventListener('click', () => changerDossierModeles({ chemin: dm.actuel })); l2.appendChild(aller);
         }
         d.appendChild(l2);
       }
@@ -2937,46 +2957,32 @@ body[data-moteur="ollama"] .moteur-autre { display:none !important; }
     if (r.moteurs.some(m => m.tache && m.tache.statut === 'en cours') && $('p-reglages').classList.contains('vue')) MINUTEUR_MOTEURS = setTimeout(() => { rafraichir(); chargerMoteurs(); }, 1500);
   };
   // L'onglet Modèles d'un moteur autre qu'Ollama : ses modèles (utiliser, supprimer) et, selon lui, de quoi en télécharger
+  // Sous le moteur choisi, la page des modèles est celle d'Ollama (catalogue, bibliothèque, sans filtre…) : mêmes modèles, mêmes noms. Ici, ce qui est propre au moteur :
+  // pour llama.cpp, des fichiers GGUF d'autres sources (Hugging Face) ; pour un serveur externe, la liste de ses modèles.
   const chargerModelesMoteur = async () => {
     const z = $('modelesMoteur'); if (!ETAT || ETAT.moteur === 'ollama') return;
     let r; try { r = await api('/api/moteurs'); } catch (e) { z.textContent = e.message; return; }
     const m = r.moteurs.find(x => x.id === r.courant); if (!m) return;
     const neuf = document.createElement('div');
-    neuf.appendChild(el('h2', '', T('Modèles de ') + m.nom));
-    neuf.appendChild(el('div', 'aide', T('Les modèles d\'Ollama (bibliothèque, précisions, comparaison) ne concernent pas ce moteur : cet onglet montre ceux de ') + m.nom + '.'));
     if (!m.statut.installe || (!m.statut.actif && m.statut.mode === 'externe')) {
       const c = el('div', 'carte'); c.appendChild(el('span', '', m.statut.detail || T('Ce moteur n\'est pas prêt.')));
       const b = el('button', 'principal', T('Ouvrir les réglages du moteur')); b.addEventListener('click', () => ouvrirOnglet('reglages')); c.appendChild(b); neuf.appendChild(c);
     }
-    const installes = ETAT.installes || [];
-    if (!installes.length) neuf.appendChild(el('div', 'aide', T('Aucun modèle pour le moment.')));
-    installes.forEach(nom => {
-      const c = el('div', 'carte'), info = ETAT.modeles.find(x => x.id === nom);
-      c.appendChild(el('b', '', nom)); if (info && info.go) c.appendChild(el('span', 'aide', ' · ' + info.go + ' ' + T('Go')));
-      if ((ETAT.partages || []).includes(nom)) { const p = el('span', 'aide', ' · ' + T('d\'Ollama (pas de copie)')); p.title = T('Le même fichier que dans Ollama : rien n\'est dupliqué, et sa suppression se fait depuis Ollama.'); c.appendChild(p); }
-      if (nom === ETAT.reglages.modele) c.appendChild(el('span', 'aide', ' · ' + T('utilisé')));
-      else { const u = el('button', 'principal', T('Utiliser')); u.addEventListener('click', async () => { try { await api('/api/reglages', { modele: nom }); await rafraichir(); chargerModelesMoteur(); } catch (e) { alert(e.message); } }); c.appendChild(u); }
-      if (m.gere_modeles && r.modifiable) { const s = el('button', '', T('Supprimer')); s.addEventListener('click', async () => { if (!confirm(T('Supprimer « ') + nom + T(' » du disque ? Tu pourras le retélécharger.'))) return; try { await api('/api/moteur-supprimer', { moteur: m.id, nom }); await rafraichir(); chargerModelesMoteur(); } catch (e) { alert(e.message); } }); c.appendChild(s); }
-      neuf.appendChild(c);
-    });
+    if (m.id === 'openai') {          // serveur externe : la page commune est masquée, voici ses modèles
+      neuf.appendChild(el('h2', '', T('Modèles de ') + m.nom));
+      const installes = ETAT.installes || [];
+      if (!installes.length) neuf.appendChild(el('div', 'aide', T('Aucun modèle pour le moment.')));
+      installes.forEach(nom => {
+        const c = el('div', 'carte'); c.appendChild(el('b', '', nom));
+        if (nom === ETAT.reglages.modele) c.appendChild(el('span', 'aide', ' · ' + T('utilisé')));
+        else { const u = el('button', 'principal', T('Utiliser')); u.addEventListener('click', async () => { try { await api('/api/reglages', { modele: nom }); await rafraichir(); chargerModelesMoteur(); } catch (e) { alert(e.message); } }); c.appendChild(u); }
+        neuf.appendChild(c);
+      });
+    }
     const dl = m.telechargeable;
     if (dl.genre === 'huggingface') {
-      neuf.appendChild(el('h2', '', T('Télécharger un modèle')));
+      neuf.appendChild(el('h2', '', T('Autres sources : Hugging Face')));
       neuf.appendChild(el('div', 'aide', dl.raison + ' ' + T('Choisis une quantification : Q4_K_M est un bon équilibre (petit et rapide), Q8_0 est plus fidèle mais plus gros.')));
-      if (dl.possible && (dl.suggestions || []).length) {
-        neuf.appendChild(el('h2', '', T('Suggestions pour ta machine')));
-        const faits = new Set((ETAT.installes || []).map(n => n.toLowerCase())), classe = { ideal: 'ok', bien: 'ok', limite: 'warn', trop_gros: 'bad' }, libelle = { ideal: T('Très adapté'), bien: T('Adapté'), limite: T('Limite'), trop_gros: T('Trop gros') };
-        const ordre = { ideal: 0, bien: 1, limite: 2, trop_gros: 3 };
-        [...dl.suggestions].sort((a, b) => ordre[a.evaluation.niveau] - ordre[b.evaluation.niveau]).forEach(s => {
-          const c = el('div', 'carte'), deja = faits.has(s.fichier.replace(/\.gguf$/i, '').toLowerCase());
-          c.appendChild(el('b', '', s.nom)); c.appendChild(el('span', 'aide', ' · ' + String(s.go).replace('.', ',') + ' ' + T('Go')));
-          const pastille = el('span', 'badge ' + classe[s.evaluation.niveau], libelle[s.evaluation.niveau]); if (s.evaluation.texte) pastille.title = s.evaluation.texte; c.appendChild(pastille);
-          c.appendChild(el('div', 'aide', s.note + (s.evaluation.texte ? ' ' + s.evaluation.texte : '')));
-          const t = el('button', deja ? '' : 'principal', deja ? T('Déjà téléchargé') : T('Télécharger')); t.disabled = deja; if (s.evaluation.niveau === 'trop_gros') t.style.opacity = '.55';
-          t.addEventListener('click', async () => { if (s.evaluation.niveau === 'trop_gros' && !confirm(T('Ce modèle est trop gros pour ta machine. Le télécharger quand même ?'))) return; try { await api('/api/moteur-telecharger', { moteur: m.id, repo: s.repo, fichier: s.fichier }); t.disabled = true; t.textContent = T('Téléchargement lancé…'); rafraichir(); } catch (e) { alert(e.message); } });
-          c.appendChild(t); neuf.appendChild(c);
-        });
-      }
       if (dl.possible) {
         const c = el('div', 'carte'), q = el('input'), b = el('button', '', T('Chercher sur Hugging Face')), res = el('div'), msg = el('div', 'aide');
         q.placeholder = T('Nom d\'un modèle (par exemple qwen3 ou gemma)'); q.style.flex = '1';
@@ -3007,7 +3013,7 @@ body[data-moteur="ollama"] .moteur-autre { display:none !important; }
         b.addEventListener('click', chercher); q.addEventListener('keydown', e => { if (e.key === 'Enter') chercher(); });
         c.append(q, b); neuf.append(c, msg, res);
       }
-    } else if (dl.raison) neuf.appendChild(el('div', 'aide', dl.raison));
+    } else if (dl.raison && m.id === 'openai') neuf.appendChild(el('div', 'aide', dl.raison));
     z.replaceChildren(...neuf.childNodes);
   };
   const explicationVerrou = () => ETAT.niveau === 'proxy'

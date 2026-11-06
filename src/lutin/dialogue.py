@@ -775,6 +775,8 @@ def restaurer_modeles():
 
 def installer_modele(modele):
     _hl.exiger_en_ligne("télécharger un modèle")
+    if moteur_actuel().id != _moteurs.OLLAMA and not hasattr(moteur_actuel(), "telecharger_ollama"):
+        raise ValueError(_t("Ce moteur gère ses modèles lui-même : installe-les depuis le moteur."))
     if modele not in [m["id"] for m in _m.MODELES] and not RE_NOM_MODELE.match(modele):
         raise ValueError("Nom de modèle invalide.")
     if PULLS.get(modele, {}).get("statut") == "en cours":
@@ -791,6 +793,12 @@ def installer_modele(modele):
 
     def travail():
         try:
+            if moteur_actuel().id != _moteurs.OLLAMA:          # un autre moteur : le même modèle, téléchargé depuis la bibliothèque d'Ollama sans Ollama
+                def progression(texte="", fait=0, total=0):
+                    PULLS[modele].update({"texte": _t("téléchargement"), "fait": fait, "total": total})
+                moteur_actuel().telecharger_ollama(modele, progression)
+                PULLS[modele]["statut"] = "termine"
+                return
             req = urllib.request.Request(_m.OLLAMA + "/api/pull", data=json.dumps({"model": modele, "stream": True}).encode("utf-8"), headers={"Content-Type": "application/json"})
             with urllib.request.urlopen(req, timeout=3600) as r:
                 for brut in r:
@@ -830,6 +838,20 @@ def installer_modele(modele):
 def supprimer_modele(modele):
     if modele not in [m["id"] for m in _m.MODELES] and not re.match(r"^[A-Za-z0-9_./:-]{1,100}$", modele):
         raise ValueError("Nom de modèle invalide.")
+    if moteur_actuel().id != _moteurs.OLLAMA:
+        mo = moteur_actuel()
+        actif = _m.reglages()["modele"] == modele
+        try:
+            mo.supprimer_modele(modele)
+        except Exception as erreur:  # noqa: BLE001  (le message du moteur est montré tel quel)
+            raise ValueError(str(erreur))
+        nouveau = ""
+        if actif:
+            restants = [n for n in mo.modeles().get("installes", []) if n != modele]
+            if restants:
+                nouveau = restants[0]
+                _m.enregistrer_reglages({"modele": nouveau})
+        return {"ok": True, "modele": modele, "nouveau_actif": nouveau}
     suppression_active = _m.reglages()["modele"] == modele          # permis : sinon impossible de supprimer son seul modèle (pour déplacer le dossier, par exemple) ; on bascule sur un autre s'il y en a un
     req = urllib.request.Request(_m.OLLAMA + "/api/delete", data=json.dumps({"model": modele}).encode("utf-8"), headers={"Content-Type": "application/json"}, method="DELETE")
     try:

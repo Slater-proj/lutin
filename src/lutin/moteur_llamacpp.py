@@ -28,16 +28,6 @@ from .moteur_openai import MoteurOpenAI
 API_RELEASES = "https://api.github.com/repos/ggml-org/llama.cpp/releases?per_page=8"
 CACHE_PARTAGE = {}
 API_HF = "https://huggingface.co/api/models"
-# Quelques modèles sûrs à proposer d'un clic (dépôt et fichier vérifiés sur Hugging Face, quantification Q4_K_M). La taille est celle du fichier, arrondie.
-SUGGESTIONS = (
-    {"repo": "unsloth/Qwen3-1.7B-GGUF", "fichier": "Qwen3-1.7B-Q4_K_M.gguf", "nom": "Qwen3 1.7B", "go": 1.3, "note": "Très léger : pour une petite machine sans carte graphique. Appels d'outils limités."},
-    {"repo": "unsloth/Qwen3-4B-Instruct-2507-GGUF", "fichier": "Qwen3-4B-Instruct-2507-Q4_K_M.gguf", "nom": "Qwen3 4B Instruct", "go": 2.5, "note": "Le modèle de l'essai de Lutin : rapide, appelle bien les outils."},
-    {"repo": "unsloth/gemma-3-4b-it-GGUF", "fichier": "gemma-3-4b-it-Q4_K_M.gguf", "nom": "Gemma 3 4B", "go": 2.5, "note": "Bon en français et en rédaction."},
-    {"repo": "unsloth/Qwen3-8B-GGUF", "fichier": "Qwen3-8B-Q4_K_M.gguf", "nom": "Qwen3 8B", "go": 5.0, "note": "Bon équilibre pour le travail et les outils si la carte a 8 Go ou plus."},
-    {"repo": "bartowski/Meta-Llama-3.1-8B-Instruct-GGUF", "fichier": "Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf", "nom": "Llama 3.1 8B", "go": 4.9, "note": "Généraliste très répandu."},
-    {"repo": "unsloth/Qwen2.5-Coder-7B-Instruct-GGUF", "fichier": "Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf", "nom": "Qwen2.5 Coder 7B", "go": 4.7, "note": "Spécialisé dans le code."},
-    {"repo": "unsloth/Qwen3-14B-GGUF", "fichier": "Qwen3-14B-Q4_K_M.gguf", "nom": "Qwen3 14B", "go": 9.0, "note": "Plus fin ; demande une carte de 12 à 16 Go."},
-)
 PORT_DEFAUT = 8089
 CTX_DEFAUT = 8192
 DEMARRAGE_MAX_S = 180
@@ -400,21 +390,36 @@ class MoteurLlamaCpp(MoteurOpenAI):
             return super().actif()
         return self.serveur_pret() is not None          # géré : le serveur démarre à la demande
 
+    def bibliotheque(self):
+        """Les modèles que Lutin télécharge pour llama.cpp depuis la bibliothèque d'Ollama, rangés comme Ollama le fait (voir registre_ollama.py) : mêmes noms que dans Ollama."""
+        return self.dossier_modeles() / "ollama"
+
     def partages(self):
-        """Les modèles déjà téléchargés par Ollama, lisibles tels quels par llama.cpp (voir ollama_partage.py) : {nom: {fichier, taille, projecteur}}. Vide sous Docker (Ollama est un autre conteneur),
-        avec un serveur externe, ou si l'utilisateur a coupé le partage (réglage `partager_ollama`). Relu au plus toutes les 10 secondes (la page interroge souvent)."""
-        if self.externe() or moteurs.CONTEXTE["en_docker"]() or self.config().get("partager_ollama") is False:
+        """Les modèles utilisables par leur nom d'Ollama (`qwen3:8b`) : ceux qu'Ollama a déjà téléchargés (lus sur place, `origine` « ollama ») et ceux que Lutin a téléchargés pour llama.cpp depuis la même
+        bibliothèque (`origine` « lutin »). {nom: {fichier, taille, projecteur, origine}}. Pas de modèle d'Ollama sous Docker (autre conteneur), avec un serveur externe, ou si l'utilisateur a coupé le partage
+        (réglage `partager_ollama`). Relu au plus toutes les 10 secondes (la page interroge souvent)."""
+        if self.externe() or moteurs.CONTEXTE["en_docker"]():
             return {}
-        dossier = moteurs.CONTEXTE["dossier_ollama"]()
-        if not dossier:
-            return {}
+        dossier = moteurs.CONTEXTE["dossier_ollama"]() if self.config().get("partager_ollama") is not False else None
+        cle = (str(dossier or ""), str(self.bibliotheque()))
         cache = CACHE_PARTAGE
-        if cache.get("dossier") == str(dossier) and time.time() - cache.get("quand", 0) < 10:
+        if cache.get("cle") == cle and time.time() - cache.get("quand", 0) < 10:
             return cache["modeles"]
         from . import ollama_partage
-        lus = ollama_partage.lire(dossier)
-        cache.update(dossier=str(dossier), quand=time.time(), modeles=lus)
+        lus = {n: dict(v, origine="ollama") for n, v in ollama_partage.lire(dossier).items()} if dossier else {}
+        lus.update({n: dict(v, origine="lutin") for n, v in ollama_partage.lire(self.bibliotheque()).items()})
+        cache.update(cle=cle, quand=time.time(), modeles=lus)
         return lus
+
+    def telecharger_ollama(self, modele, progression):
+        """Télécharge un modèle de la bibliothèque d'Ollama (n'importe lequel : officiel ou de la communauté) pour llama.cpp, sans Ollama."""
+        if self.externe():
+            raise ErreurMoteur(_t("Un serveur externe gère ses modèles lui-même."))
+        if moteurs.CONTEXTE["hors_ligne"]():
+            raise ErreurMoteur(_t("Mode hors ligne : aucun téléchargement."))
+        from . import registre_ollama
+        registre_ollama.telecharger(modele, self.bibliotheque(), progression)
+        CACHE_PARTAGE.clear()
 
     def modeles(self):
         if self.externe():
@@ -428,11 +433,12 @@ class MoteurLlamaCpp(MoteurOpenAI):
                 nom = f.relative_to(dossier).with_suffix("").as_posix()
                 noms.append(nom)
                 tailles[nom] = f.stat().st_size
-        partages = [n for n in sorted(self.partages()) if n not in tailles]          # ceux d'Ollama, sous leurs noms d'Ollama : la même liste de modèles d'un moteur à l'autre
-        for n in partages:
-            noms.append(n)
-            tailles[n] = self.partages()[n]["taille"]
-        return {"actif": self.serveur_pret() is not None, "installes": noms, "tailles": tailles, "partages": partages}
+        communs = self.partages()
+        for n in sorted(communs):          # sous leurs noms d'Ollama : la même liste de modèles d'un moteur à l'autre
+            if n not in tailles:
+                noms.append(n)
+                tailles[n] = communs[n]["taille"]
+        return {"actif": self.serveur_pret() is not None, "installes": noms, "tailles": tailles, "partages": [n for n in sorted(communs) if communs[n].get("origine") == "ollama"]}
 
     def en_memoire(self, modele):
         if self.externe():
@@ -689,17 +695,7 @@ class MoteurLlamaCpp(MoteurOpenAI):
             return {"possible": False, "raison": _t("Un serveur externe gère ses modèles lui-même."), "genre": "aucun"}
         if moteurs.CONTEXTE["hors_ligne"]():
             return {"possible": False, "raison": _t("Mode hors ligne : aucun téléchargement."), "genre": "huggingface"}
-        return {"possible": True, "raison": _t("Les modèles se trouvent sur Hugging Face, au format GGUF."), "genre": "huggingface", "suggestions": self.suggestions()}
-
-    def suggestions(self):
-        """Les modèles proposés d'un clic, chacun jugé pour cette machine (comme la liste d'Ollama) : [{repo, fichier, nom, go, note, evaluation}]. Les trop gros sont gardés (la page les grise)."""
-        from . import adequation
-        profil = moteurs.CONTEXTE["profil"]()
-        sortie = []
-        for s in SUGGESTIONS:
-            ev = adequation.evaluer({"go": s["go"]}, profil) if profil is not None else {"niveau": "bien", "texte": ""}
-            sortie.append(dict(s, nom=_t(s["nom"]), note=_t(s["note"]), evaluation=ev))
-        return sortie
+        return {"possible": True, "raison": _t("Les modèles se trouvent sur Hugging Face, au format GGUF."), "genre": "huggingface"}
 
     def chercher_modeles(self, terme, http_json=None):
         """Les dépôts GGUF de Hugging Face qui correspondent (les plus téléchargés d'abord)."""
@@ -744,8 +740,17 @@ class MoteurLlamaCpp(MoteurOpenAI):
         return destination.with_suffix("").name
 
     def supprimer_modele(self, nom):
-        if str(nom) in self.partages() and not (self.dossier_modeles() / (str(nom) + ".gguf")).is_file():
-            raise ErreurMoteur(_t("« {} » appartient à Ollama : supprime-le depuis Ollama (llama.cpp ne fait que le lire).").format(nom))
+        commun = self.partages().get(str(nom))
+        if commun is not None and not (self.dossier_modeles() / (str(nom) + ".gguf")).is_file():
+            if commun.get("origine") == "ollama":
+                raise ErreurMoteur(_t("« {} » appartient à Ollama : supprime-le depuis Ollama (llama.cpp ne fait que le lire).").format(nom))
+            from . import registre_ollama
+            with SERVEUR["verrou"]:
+                if SERVEUR["modele"] == nom:
+                    self.arreter()
+            registre_ollama.supprimer(str(nom), self.bibliotheque())
+            CACHE_PARTAGE.clear()
+            return
         f = self._fichier_modele(nom)
         with SERVEUR["verrou"]:
             if SERVEUR["modele"] == nom:

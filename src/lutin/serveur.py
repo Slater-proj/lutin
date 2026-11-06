@@ -339,7 +339,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 r = _decouverte.chercher((q.get("q") or [""])[0], (q.get("o") or ["newest"])[0], (q.get("p") or ["1"])[0], categorie=(q.get("c") or [""])[0], leger=(q.get("leger") or ["0"])[0] == "1")
                 profil = _adequation.profil_pret()
                 juger = (lambda go: _adequation.evaluer({"go": go}, profil)) if profil is not None else (lambda go: {"niveau": "bien", "texte": ""})
-                installes = set(_m.etat_ollama()["installes"])
+                installes = set(_m.etat_moteur()["installes"])
                 modeles = _decouverte.evaluer_tailles(r["modeles"], juger)
                 for m in modeles:
                     m["installes"] = sorted(t for t in m["tailles"] if m["nom"] + ":" + t in installes) + ([""] if m["nom"] in installes or m["nom"] + ":latest" in installes else [])
@@ -393,6 +393,10 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 return self._envoyer(400, {"erreur": str(e)})
         if chemin == "/api/mettre-a-jour-etat":
             return self._envoyer(200, _acces.etat_maj())
+        if chemin == "/api/dossier-modeles-chercher":            # retrouver des modèles déjà téléchargés (autre disque, ancien dossier)
+            if not self._configurateur():
+                return self._envoyer(403, {"erreur": _t("Cela se fait depuis cette machine (niveau « cette machine seulement » ou navigateur de cette machine).")})
+            return self._envoyer(200, {"dossiers": _emplacements.chercher_dossiers_modeles(connus=[_emplacements.dossier_vu(), os.environ.get("OLLAMA_MODELS", ""), _emplacements.lire_config_modeles()]), "actuel": str(_emplacements.dossier_modeles())})
         if chemin == "/api/dossier-modeles-etat":
             return self._envoyer(200, _emplacements.etat_copie())
         if chemin == "/api/emplacements":                        # tous les dossiers que Lutin utilise, leur taille et la place libre
