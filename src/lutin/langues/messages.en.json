@@ -1535,5 +1535,12 @@
 "[o/N] ": "[y/N] ",
 "version du programme à installer (auto : d'après la carte graphique)": "version of the program to install (auto: from the graphics card)",
 " Bibliothèque manquante : {}.": " Missing library: {}.",
-" Sous Debian ou Ubuntu : apt install {} (dans Docker : à ajouter à l'image).": " On Debian or Ubuntu: apt install {} (in Docker: add it to the image)."
+" Sous Debian ou Ubuntu : apt install {} (dans Docker : à ajouter à l'image).": " On Debian or Ubuntu: apt install {} (in Docker: add it to the image).",
+"dossier d'installation et de modèles (par défaut : à côté de celui d'Ollama s'il a été déplacé, sinon le dossier de Lutin)": "installation and models folder (default: next to Ollama's if it was moved, otherwise Lutin's folder)",
+"   Dossier d'installation : {} ({} Go libres)": "   Installation folder: {} ({} GB free)",
+"Installer dans {} (à côté des modèles d'Ollama, {} Go libres) plutôt que dans le dossier de Lutin ({}) ?": "Install in {} (next to Ollama's models, {} GB free) rather than in Lutin's folder ({})?",
+"Ce moteur n'a pas de dossier d'installation.": "This engine has no installation folder.",
+"llama.cpp est déjà installé : désinstalle-le d'abord (tes modèles restent où ils sont), puis change de dossier.": "llama.cpp is already installed: uninstall it first (your models stay where they are), then change folder.",
+"Donne un chemin complet (par exemple D:/IA/llama.cpp).": "Give a full path (for example D:/AI/llama.cpp).",
+"Ce dossier n'est pas utilisable en écriture : {}": "This folder is not writable: {}"
 }

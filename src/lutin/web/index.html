@@ -2835,6 +2835,8 @@ body[data-moteur="ollama"] .moteur-autre { display:none !important; }
       const b = el('button', a === 'installer' ? 'principal' : '', LIBELLE_ACTION[a]); b.title = x.raison; b.disabled = !modifiable || t.statut === 'en cours'; possibles++;
       b.addEventListener('click', async () => {
         if ((a === 'desinstaller' || a === 'reinstaller') && !confirm(x.raison + ' ' + T('Continuer ?'))) return;
+        const prop = m.reglages && m.reglages.dossier;
+        if (a === 'installer' && prop && prop.propose && !prop.personnalise && prop.propose !== prop.actuel && !confirm(T('llama.cpp sera installé dans le dossier de Lutin : ') + prop.actuel + '. ' + T('Pour l\'installer à côté d\'Ollama (') + prop.propose + T('), annule puis clique sur « Utiliser le dossier proposé ». Continuer ici ?'))) return;
         try { await api('/api/moteur-action', { moteur: m.id, action: a }); } catch (e) { $('aideMoteur').textContent = e.message; }
         chargerMoteurs();
       });
@@ -2844,6 +2846,21 @@ body[data-moteur="ollama"] .moteur-autre { display:none !important; }
     // ce qui n'est pas possible, et pourquoi : seulement quand rien ne l'est (Docker, serveur externe, système), ou quand le moteur manque et ne peut pas être installé
     const raisons = !possibles ? [...new Set(Object.keys(LIBELLE_ACTION).map(a => m.actions[a]).filter(x => x && x.raison).map(x => x.raison))] : (!m.statut.installe && m.actions.installer && m.actions.installer.raison ? [m.actions.installer.raison] : []);
     raisons.slice(0, 2).forEach(r => d.appendChild(el('div', 'aide', 'ℹ ' + r)));
+    const dd = m.reglages && m.reglages.dossier;          // llama.cpp : où il vit (programme + modèles), à côté d'Ollama si celui-ci a été déplacé
+    if (dd) {
+      d.appendChild(el('div', 'aide', T('Dossier d\'installation et de modèles : ') + dd.actuel + (dd.libre_go.actuel != null ? ' · ' + dd.libre_go.actuel + ' ' + T('Go libres') : '')));
+      const l = el('div', 'ligne'), champ = el('input'), ok = el('button', '', T('Changer de dossier')), msgD = el('span', 'aide');
+      champ.value = dd.actuel; champ.style.minWidth = '320px'; champ.dataset.dossier = '1'; champ.disabled = ok.disabled = !modifiable || dd.installe;
+      champ.title = T('Un chemin complet, par exemple D:/IA/llama.cpp ; vide : le dossier de Lutin');
+      const changer = async valeur => { try { await api('/api/moteur-regler', { moteur: m.id, dossier: valeur }); await rafraichir(); chargerMoteurs(); } catch (e) { msgD.textContent = e.message; } };
+      ok.addEventListener('click', () => changer(champ.value.trim()));
+      l.append(champ, ok, msgD); d.appendChild(l);
+      if (dd.propose && !dd.personnalise && dd.propose !== dd.actuel) {
+        const p = el('button', modifiable && !dd.installe ? 'principal' : '', T('Utiliser le dossier proposé, à côté d\'Ollama : ') + dd.propose + (dd.libre_go.propose != null ? ' (' + dd.libre_go.propose + ' ' + T('Go libres') + ')' : ''));
+        p.disabled = !modifiable || dd.installe; p.addEventListener('click', () => changer(dd.propose)); d.appendChild(p);
+      }
+      if (dd.installe) d.appendChild(el('div', 'aide', T('llama.cpp est installé ici : pour changer de dossier, désinstalle-le d\'abord (tes modèles restent où ils sont).')));
+    }
     if (m.adresse_modifiable) {
       const f = el('div', 'ligne'), url = el('input'), cle = el('input'), msg = el('span', 'aide');
       url.value = m.reglages.url || ''; url.style.minWidth = '260px'; url.disabled = cle.disabled = !modifiable;

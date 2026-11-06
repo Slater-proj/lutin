@@ -108,6 +108,54 @@ class Bibliotheques(unittest.TestCase):
         self.assertEqual(ml.aide_bibliotheque("tout va bien"), "")
 
 
+class Dossier(Base):
+    """Où llama.cpp s'installe : à côté d'Ollama (même disque) si celui-ci a été déplacé, sinon dans le dossier de Lutin ; l'utilisateur peut choisir ailleurs."""
+
+    def test_dossier_equivalent_a_celui_d_ollama(self):
+        moteurs.CONTEXTE["dossier_ollama"] = lambda: self.tmp / "IA" / "ollama" / "models"
+        self.assertEqual(self.m.dossier_propose(), self.tmp / "IA" / "ollama" / "llama.cpp")
+        moteurs.CONTEXTE["dossier_ollama"] = lambda: Path.home() / ".ollama" / "models"
+        self.assertIsNone(self.m.dossier_propose(), "Ollama est à son emplacement habituel : rien d'équivalent à proposer")
+        moteurs.CONTEXTE["dossier_ollama"] = lambda: None
+        self.assertIsNone(self.m.dossier_propose(), "dossier d'Ollama inconnu (Docker, Ollama absent)")
+
+    def test_le_dossier_choisi_remplace_celui_de_lutin_et_se_retire(self):
+        moteurs.CONTEXTE["dossier_ollama"] = lambda: self.tmp / "IA" / "ollama" / "models"
+        moteurs.MOTEURS[self.m.id] = self.m
+        self.addCleanup(moteurs.MOTEURS.pop, self.m.id, None)
+        info = self.m.info_dossier()
+        self.assertEqual((info["actuel"], info["defaut"]), (str(self.tmp / "moteurs" / "llamacpp"), str(self.tmp / "moteurs" / "llamacpp")))
+        self.assertTrue(info["propose"].endswith("llama.cpp") and not info["personnalise"])
+        ml.regler_dossier(self.m.id, info["propose"])
+        self.assertEqual(self.m.dossier(), self.tmp / "IA" / "ollama" / "llama.cpp")
+        self.assertEqual(self.m.dossier_modeles(), self.tmp / "IA" / "ollama" / "llama.cpp" / "modeles", "les modèles suivent")
+        self.assertTrue(self.m.info_dossier()["personnalise"])
+        ml.regler_dossier(self.m.id, "")
+        self.assertEqual(self.m.dossier(), self.tmp / "moteurs" / "llamacpp", "vide : retour au dossier de Lutin")
+
+    def test_dossier_invalide_ou_deja_installe(self):
+        moteurs.MOTEURS[self.m.id] = self.m
+        self.addCleanup(moteurs.MOTEURS.pop, self.m.id, None)
+        with self.assertRaises(ml.ErreurMoteur):
+            ml.regler_dossier(self.m.id, "dossier/relatif")
+        fichier = self.tmp / "un-fichier"
+        fichier.write_text("x")
+        with self.assertRaises(ml.ErreurMoteur):
+            ml.regler_dossier(self.m.id, str(fichier / "sous"))
+        (self.m.dossier_defaut() / "bin").mkdir(parents=True)
+        (self.m.dossier_defaut() / "bin" / ("llama-server.exe" if os.name == "nt" else "llama-server")).write_text("x")
+        with self.assertRaises(ml.ErreurMoteur) as e:
+            ml.regler_dossier(self.m.id, str(self.tmp / "ailleurs"))
+        self.assertIn("désinstalle-le d'abord", str(e.exception), "rien n'est déplacé en douce")
+
+    def test_la_page_recoit_les_infos_du_dossier_sauf_sous_docker(self):
+        moteurs.MOTEURS[self.m.id] = self.m
+        self.addCleanup(moteurs.MOTEURS.pop, self.m.id, None)
+        self.assertIn("dossier", ml.vue_reglages(self.m.id))
+        moteurs.CONTEXTE["en_docker"] = lambda: True
+        self.assertNotIn("dossier", ml.vue_reglages(self.m.id))
+
+
 class Reglages(Base):
     def test_adresse_normalisee_et_cle_non_exposee(self):
         self.assertEqual(ml.normaliser_adresse("http://h:8080"), "http://h:8080/v1")

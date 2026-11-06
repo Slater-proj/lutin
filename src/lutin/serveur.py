@@ -887,6 +887,8 @@ class Gestionnaire(BaseHTTPRequestHandler):
                     if action == "regler":
                         if not mo.adresse_modifiable:
                             return self._envoyer(400, {"erreur": _t("Ce moteur n'a pas d'adresse à régler.")})
+                        if "dossier" in donnees:
+                            _llamacpp.regler_dossier(mo.id, donnees.get("dossier"))
                         _llamacpp.regler(mo.id, donnees.get("url"), donnees.get("cle"), variante=donnees.get("variante") if donnees.get("variante") in ("auto", "cuda", "vulkan", "cpu", "metal") else None)
                         return self._envoyer(200, {"ok": True})
                     if action == "telecharger":

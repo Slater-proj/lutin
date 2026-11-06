@@ -696,6 +696,7 @@ class Parcours(unittest.TestCase):
             self.assertEqual(noms, "Ollama|llama.cpp|Serveur compatible OpenAI")
             self.assertIn("Forces et faiblesses", p.evaluer("document.querySelector('#listeMoteurs > .carte').textContent"))
             self.assertTrue(p.evaluer("[...document.querySelectorAll('#listeMoteurs > .carte')[1].querySelectorAll('button')].some(b => b.textContent === 'Installer')"), "llama.cpp peut être installé par Lutin : le bouton est là")
+            self.assertTrue(p.evaluer("!!document.querySelectorAll('#listeMoteurs > .carte')[1].querySelector('input[data-dossier]')"), "llama.cpp montre son dossier d'installation, modifiable")
             self.assertTrue(p.evaluer("!!document.querySelector('#p-memoire #selMemoire')"), "la mémoire des longues conversations est dans l'onglet Mémoire")
             self.assertFalse(p.evaluer("!!document.querySelector('#p-reglages #selMemoire')"))
             self.assertEqual(p.erreurs, [])

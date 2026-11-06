@@ -138,6 +138,7 @@ def parseur():
     em.add_argument("--sans-outils", action="store_true", help=_t("n'essaie pas l'appel d'outil"))
     em.add_argument("--ctx", type=int, default=8192, help=_t("taille de la fenêtre de contexte"))
     em.add_argument("--variante", choices=("auto", "cuda", "vulkan", "cpu"), help=_t("version du programme à installer (auto : d'après la carte graphique)"))
+    em.add_argument("--dossier", help=_t("dossier d'installation et de modèles (par défaut : à côté de celui d'Ollama s'il a été déplacé, sinon le dossier de Lutin)"))
     mc = sp.add_parser("mcp", help=_t("connecteurs MCP (serveurs d'outils)"))
     mc.add_argument("action", nargs="?", choices=("lister", "ajouter", "retirer", "actualiser", "autoriser", "interdire", "ecriture"), default="lister")
     mc.add_argument("nom", nargs="?", help=_t("nom du connecteur"))
@@ -419,6 +420,12 @@ def commande_essai_moteur(args):
     mo = moteurs.par_id(args.moteur)
     if args.variante:
         moteur_llamacpp.regler(mo.id, variante=args.variante)
+    if args.dossier:
+        try:
+            moteur_llamacpp.regler_dossier(mo.id, args.dossier)
+        except ValueError as e:
+            print("✘ " + str(e), file=sys.stderr)
+            return 1
     horodatage = time.strftime("%Y%m%d-%H%M%S")
     rapport = Path(d["donnees"]) / "essais" / "essai-{}-{}.json".format(mo.id, horodatage)
     resultat = essai_moteur.executer({"modele": args.modele, "modele_local": args.modele_local, "modele_test": args.modele_test, "oui": args.oui, "sans_outils": args.sans_outils, "ctx": args.ctx}, mo, chemin_rapport=rapport)

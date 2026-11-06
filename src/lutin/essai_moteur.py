@@ -114,6 +114,13 @@ def executer(options, moteur, ecrire=print, entree=input, chemin_rapport=None, m
 
     # 2. le programme
     if moteur.serveur_pret() is None:
+        if hasattr(moteur, "info_dossier"):
+            info = moteur.info_dossier()
+            if info["propose"] and not info["personnalise"] and demande(_t("Installer dans {} (à côté des modèles d'Ollama, {} Go libres) plutôt que dans le dossier de Lutin ({}) ?").format(info["propose"], info["libre_go"]["propose"], info["defaut"])):
+                from . import moteur_llamacpp as _m2
+                _m2.regler_dossier(moteur.id, info["propose"])
+                info = moteur.info_dossier()
+            ecrire(_t("   Dossier d'installation : {} ({} Go libres)").format(info["actuel"], info["libre_go"]["actuel"]))
         if not demande(_t("Télécharger llama.cpp ({}), environ 25 à 700 Mo selon la carte graphique ?").format(choisie)):
             rapport.etape(_t("Installation de llama.cpp"), False, _t("refusée : rien n'a été téléchargé"))
             return fin(False)

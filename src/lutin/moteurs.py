@@ -24,7 +24,7 @@ MOTEURS = {}          # identifiant -> instance (voir enregistrer)
 TACHES = {}          # identifiant du moteur -> {action, statut, texte, fait, total, erreur, debut}
 ACTIONS = ("installer", "desinstaller", "reinstaller", "demarrer", "arreter")
 # Ce que les moteurs ont besoin de savoir de Lutin sans l'importer (rempli par dialogue.py) : le dossier des données, Docker, le mode hors ligne, le profil de la machine.
-CONTEXTE = {"donnees": lambda: None, "en_docker": lambda: False, "hors_ligne": lambda: False, "profil": lambda: None}
+CONTEXTE = {"donnees": lambda: None, "en_docker": lambda: False, "hors_ligne": lambda: False, "profil": lambda: None, "dossier_ollama": lambda: None}
 
 
 def est_local(adresse):

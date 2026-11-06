@@ -2,6 +2,13 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## 0.16.4
+
+- **Où s'installe llama.cpp : le dossier équivalent à celui d'Ollama est proposé, et tu peux choisir ailleurs.** Si tu as déplacé le dossier des modèles d'Ollama (par exemple `D:/IA/ollama/models`), la page propose `D:/IA/llama.cpp` (même disque, place libre affichée) ; sinon le dossier de Lutin sert, comme avant. Dans Réglages > Moteur, la fiche de llama.cpp montre le dossier utilisé (programme + modèles + journal), un bouton « Utiliser le dossier proposé », et un champ pour n'importe quel autre chemin ; une confirmation prévient avant d'installer dans le dossier de Lutin si un dossier à côté d'Ollama était proposé. `lutin essai-moteur` pose la même question et accepte `--dossier`. Changer de dossier est refusé tant que llama.cpp est installé (rien n'est déplacé en douce : désinstalle d'abord, tes modèles restent).
+- **Essai Linux en CI corrigé** : il installe `libgomp1` comme le fait déjà l'image de Lutin.
+
+**English.** llama.cpp's install folder: the one equivalent to Ollama's is proposed (same disk, free space shown) and you can pick another; `lutin essai-moteur --dossier`; the Linux CI trial now installs `libgomp1`.
+
 ## 0.16.3
 
 - **`lutin essai-moteur llamacpp` : un essai réel de llama.cpp, avec un rapport.** Les tests de Lutin utilisent de faux serveurs ; cette commande fait pour de vrai, sur la machine où elle tourne, ce que Lutin fait avec un moteur : installer le programme adapté à la carte graphique, télécharger un modèle (avec ton accord et sa taille annoncée), démarrer le serveur, vérifier qu'il répond, tenir une conversation en flux (premier jeton, jetons par seconde), faire un appel d'outil, puis arrêter proprement. Chaque étape dit ce qui marche ou non ; sous Linux, un serveur qui ne démarre pas est expliqué (bibliothèques manquantes, glibc). Le rapport est écrit dans le dossier de données de Lutin (`essais/`). Options : `--modele auteur/dépôt/fichier.gguf`, `--modele-test` (1 Mo : prouve seulement que le serveur démarre et répond), `--variante cuda|vulkan|cpu`, `--sans-outils`, `--oui`. Guide : `docs/TRIALS.fr.md`.

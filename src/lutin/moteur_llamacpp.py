@@ -106,9 +106,48 @@ def regler(moteur, adresse=None, cle=None, **autres):
     ecrire_config(config)
 
 
+def regler_dossier(moteur, chemin):
+    """Change le dossier d'installation de llama.cpp (voir valider_dossier)."""
+    mo = moteurs.MOTEURS.get(moteur)
+    if not hasattr(mo, "info_dossier"):
+        raise ErreurMoteur(_t("Ce moteur n'a pas de dossier d'installation."))
+    valeur = valider_dossier(chemin, mo.serveur_installe() is not None)
+    config = lire_config()
+    c = config.setdefault(moteur, {})
+    if valeur:
+        c["dossier"] = valeur
+    else:
+        c.pop("dossier", None)
+    ecrire_config(config)
+
+
 def vue_reglages(moteur):
     c = lire_config().get(moteur, {})
-    return {"url": c.get("url", ""), "cle_definie": bool(c.get("cle")), "variante": c.get("variante", "auto")}
+    vue = {"url": c.get("url", ""), "cle_definie": bool(c.get("cle")), "variante": c.get("variante", "auto")}
+    mo = moteurs.MOTEURS.get(moteur)
+    if hasattr(mo, "info_dossier") and not moteurs.CONTEXTE["en_docker"]():
+        vue["dossier"] = mo.info_dossier()
+    return vue
+
+
+def valider_dossier(chemin, installe):
+    """Le dossier choisi pour llama.cpp : absolu, utilisable en écriture. Chaîne vide = revenir au dossier de Lutin. Refusé tant que llama.cpp est installé ailleurs (rien n'est déplacé en douce)."""
+    chemin = str(chemin or "").strip()
+    if installe:
+        raise ErreurMoteur(_t("llama.cpp est déjà installé : désinstalle-le d'abord (tes modèles restent où ils sont), puis change de dossier."))
+    if not chemin:
+        return ""
+    p = Path(chemin).expanduser()
+    if not p.is_absolute():
+        raise ErreurMoteur(_t("Donne un chemin complet (par exemple D:/IA/llama.cpp)."))
+    try:
+        p.mkdir(parents=True, exist_ok=True)
+        essai = p / ".lutin-ecriture"
+        essai.write_text("ok", encoding="utf-8")
+        essai.unlink()
+    except OSError as e:
+        raise ErreurMoteur(_t("Ce dossier n'est pas utilisable en écriture : {}").format(e))
+    return str(p)
 
 
 # --------------------------------------------------------------------------- choix du programme à télécharger
@@ -236,9 +275,38 @@ class MoteurLlamaCpp(MoteurOpenAI):
     def cle(self):
         return self.config().get("cle", "")
 
-    def dossier(self):
+    def dossier_defaut(self):
         d = moteurs.CONTEXTE["donnees"]()
         return (Path(d) / "moteurs" / "llamacpp") if d else None
+
+    def dossier(self):
+        """Où llama.cpp vit (programme, modèles, journal) : le dossier choisi par l'utilisateur, sinon celui de Lutin."""
+        choisi = self.config().get("dossier")
+        return Path(choisi) if choisi else self.dossier_defaut()
+
+    def dossier_propose(self):
+        """Le dossier équivalent à celui d'Ollama, sur le même disque : à côté du dossier des modèles d'Ollama quand l'utilisateur lui en a choisi un (« D:/IA/ollama/models » -> « D:/IA/llama.cpp »).
+        None quand Ollama est à son emplacement habituel (dans le profil de l'utilisateur) : rien d'équivalent à proposer, le dossier de Lutin convient."""
+        ollama = moteurs.CONTEXTE["dossier_ollama"]()
+        if not ollama:
+            return None
+        ollama = Path(ollama)
+        if ollama == Path.home() / ".ollama" / "models" or Path.home() in ollama.parents and ".ollama" in ollama.parts:
+            return None
+        return ollama.parent / "llama.cpp"
+
+    def info_dossier(self):
+        """Ce que la page montre : le dossier utilisé, celui qui est proposé, celui par défaut, et la place libre sur chacun."""
+        def libre(p):
+            while p is not None and not Path(p).exists() and Path(p) != Path(p).parent:
+                p = Path(p).parent
+            try:
+                return round(shutil.disk_usage(str(p)).free / 1e9, 1) if p is not None else None
+            except OSError:
+                return None
+        actuel, propose, defaut = self.dossier(), self.dossier_propose(), self.dossier_defaut()
+        return {"actuel": str(actuel or ""), "propose": str(propose or ""), "defaut": str(defaut or ""), "personnalise": bool(self.config().get("dossier")),
+                "libre_go": {"actuel": libre(actuel), "propose": libre(propose) if propose else None, "defaut": libre(defaut)}, "installe": self.serveur_installe() is not None}
 
     def dossier_modeles(self):
         personnalise = self.config().get("dossier_modeles")

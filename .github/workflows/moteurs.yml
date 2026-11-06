@@ -25,11 +25,12 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Essai réel (installation, démarrage, conversation avec un modèle minuscule)
-        # L'image de Lutin « légère » est celle-ci : le programme de llama.cpp publié pour Ubuntu démarre-t-il avec la glibc de Debian ?
+        # Même base que l'image « légère » de Lutin (qui, elle, a déjà libgomp1) : le programme de llama.cpp publié pour Ubuntu démarre-t-il avec la glibc de Debian, une fois libgomp1 installé ?
+        # (L'image de Lutin elle-même ne l'essaie pas : sous Docker, Lutin ne gère pas llama.cpp, il s'y connecte par adresse.)
         run: |
           set +e
           docker run --rm -v "$PWD:/app" -w /app -e PYTHONPATH=/app/src -e LUTIN_HOME=/tmp/lutin python:3.12-slim \
-            python -m lutin essai-moteur llamacpp --modele-test --oui 2>&1 | tee /tmp/essai.txt
+            sh -c 'apt-get update -qq >/dev/null && apt-get install -y -qq --no-install-recommends libgomp1 >/dev/null && python -m lutin essai-moteur llamacpp --modele-test --oui' 2>&1 | tee /tmp/essai.txt
           code=${PIPESTATUS[0]}
           # La fin de la sortie devient une annotation de la tâche : lisible sans ouvrir les journaux.
           if [ "$code" != "0" ]; then echo "::error title=essai-moteur::$(tail -c 1500 /tmp/essai.txt | tr -d '\r' | sed ':a;N;$!ba;s/\n/ | /g')"; fi
