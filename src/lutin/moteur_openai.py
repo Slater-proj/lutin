@@ -209,6 +209,14 @@ class MoteurOpenAI(moteurs.Moteur):
         """Un serveur de ce genre tient son modèle chargé : s'il répond, il est prêt (aucun « chargement » à annoncer)."""
         return {"taille": 0, "vram": 0} if self.actif() else None
 
+    def vecteurs(self, modele, textes, delai=60):
+        """Les vecteurs de ces textes par `/v1/embeddings` (le serveur doit avoir été lancé avec un modèle d'embeddings)."""
+        rep = self._json("/embeddings", {"model": modele, "input": list(textes)}, delai)
+        donnees = sorted((d for d in (rep.get("data") or []) if isinstance(d, dict)), key=lambda d: d.get("index", 0))
+        if len(donnees) != len(textes) or not all(isinstance(d.get("embedding"), list) and d["embedding"] for d in donnees):
+            raise ValueError(_t("Réponse d'embeddings inattendue."))
+        return [d["embedding"] for d in donnees]
+
     def chat(self, corps, delai=60):
         return depuis_openai_complet(self._json("/chat/completions", vers_openai(dict(corps, stream=False)), delai))
 

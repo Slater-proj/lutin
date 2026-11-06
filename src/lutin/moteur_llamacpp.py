@@ -34,7 +34,13 @@ DEMARRAGE_MAX_S = 180
 RE_REPO = re.compile(r"^[A-Za-z0-9][\w.-]*/[A-Za-z0-9][\w.-]*$")
 RE_FICHIER = re.compile(r"^[\w][\w./+-]*\.gguf$", re.I)
 RE_MORCEAU = re.compile(r"-\d{5}-of-\d{5}\.gguf$", re.I)          # modèle coupé en plusieurs fichiers : pas géré
-SERVEUR = {"proc": None, "modele": "", "ctx": 0, "verrou": threading.RLock()}
+SERVEUR = {"proc": None, "modele": "", "ctx": 0, "noms": (), "verrou": threading.RLock()}
+API_VERSION = "https://api.github.com/repos/ggml-org/llama.cpp/releases/tags/"
+RE_VERSION = re.compile(r"^b\d{1,7}$")
+RE_NOM_PRESET = re.compile(r"^[^\[\]\r\n=#;]{1,200}$")
+MOTS_EMBEDDING = ("embed", "bge-", "bge:", "e5-", "gte-", "minilm", "arctic-embed")          # les modèles qui vectorisent au lieu de discuter (sans eux, un routeur les chargerait comme des modèles de conversation)
+MODELES_MAX_DEFAUT = 2
+ROUTEUR = "(routeur)"
 
 
 class ErreurMoteur(ValueError):
@@ -107,6 +113,77 @@ def regler(moteur, adresse=None, cle=None, **autres):
     ecrire_config(config)
 
 
+def regler_avance(moteur, donnees):
+    """Les réglages propres à llama.cpp géré par Lutin : mode routeur (plusieurs modèles sans redémarrer le serveur), nombre de modèles gardés en mémoire, couches d'experts laissées au processeur
+    (modèles « à experts »), version épinglée. Chaque valeur est contrôlée ; une valeur vide remet le réglage par défaut. Le serveur est arrêté pour que le changement compte au prochain message."""
+    mo = moteurs.MOTEURS.get(moteur)
+    if not isinstance(mo, MoteurLlamaCpp):
+        return False
+    config = lire_config()
+    c = config.setdefault(moteur, {})
+    if "routeur" in donnees:
+        if donnees["routeur"] and not mo.routeur_possible():
+            raise ErreurMoteur(_t("Ce llama-server ne sait pas faire le mode routeur : mets-le à jour (Réglages > Moteur > Mettre à jour)."))
+        c["routeur"] = bool(donnees["routeur"])
+    if "modeles_max" in donnees:
+        try:
+            n = int(donnees["modeles_max"] or MODELES_MAX_DEFAUT)
+        except (TypeError, ValueError):
+            raise ErreurMoteur(_t("Nombre de modèles invalide."))
+        if not 1 <= n <= 8:
+            raise ErreurMoteur(_t("Entre 1 et 8 modèles en mémoire."))
+        c["modeles_max"] = n
+    if "n_cpu_moe" in donnees:
+        try:
+            n = int(donnees["n_cpu_moe"] or 0)
+        except (TypeError, ValueError):
+            raise ErreurMoteur(_t("Nombre de couches invalide."))
+        if not 0 <= n <= 512:
+            raise ErreurMoteur(_t("Entre 0 et 512 couches."))
+        if n:
+            c["n_cpu_moe"] = n
+        else:
+            c.pop("n_cpu_moe", None)
+    if "version_epinglee" in donnees:
+        v = str(donnees["version_epinglee"] or "").strip().lower()
+        if v and not RE_VERSION.match(v):
+            raise ErreurMoteur(_t("Une version de llama.cpp s'écrit « b » suivi de son numéro, par exemple b6500."))
+        if v:
+            c["version_epinglee"] = v
+        else:
+            c.pop("version_epinglee", None)
+    ecrire_config(config)
+    mo.arreter()
+    return True
+
+
+def est_embedding(nom):
+    """Ce modèle vectorise-t-il (recherche par le sens) au lieu de discuter ? D'après son nom."""
+    n = str(nom).lower()
+    return any(m in n for m in MOTS_EMBEDDING)
+
+
+def texte_preset(modeles, ctx, reglages):
+    """Le fichier de préréglages du mode routeur (format INI de llama-server) : une section par modèle, avec son fichier, son éventuel projecteur d'images et ses réglages.
+    `modeles` : [(nom, fichier, projecteur ou None)] ; `reglages` : {fils, n_cpu_moe, ngl}."""
+    lignes = ["version = 1", "", "[*]", "c = {}".format(int(ctx))]
+    if reglages.get("fils"):
+        lignes.append("threads = {}".format(int(reglages["fils"])))
+    if reglages.get("n_cpu_moe"):
+        lignes.append("n-cpu-moe = {}".format(int(reglages["n_cpu_moe"])))
+    if reglages.get("ngl"):
+        lignes.append("n-gpu-layers = {}".format(int(reglages["ngl"])))
+    for nom, fichier, projecteur in modeles:
+        if not RE_NOM_PRESET.match(str(nom)):
+            continue
+        lignes += ["", "[{}]".format(nom), "model = {}".format(str(fichier).replace("\\", "/"))]
+        if projecteur:
+            lignes.append("mmproj = {}".format(str(projecteur).replace("\\", "/")))
+        if est_embedding(nom):
+            lignes.append("embeddings = true")
+    return "\n".join(lignes) + "\n"
+
+
 def espace_libre(p):
     """Go libres sur le disque qui porte ce dossier (même s'il n'existe pas encore : on remonte au premier dossier existant) ; None si inconnu."""
     while p is not None and not Path(p).exists() and Path(p) != Path(p).parent:
@@ -151,6 +228,9 @@ def vue_reglages(moteur):
     c = lire_config().get(moteur, {})
     vue = {"url": c.get("url", ""), "cle_definie": bool(c.get("cle")), "variante": c.get("variante", "auto")}
     mo = moteurs.MOTEURS.get(moteur)
+    if isinstance(mo, MoteurLlamaCpp):
+        vue["avance"] = {"routeur": bool(c.get("routeur")), "routeur_possible": mo.routeur_possible(), "modeles_max": int(c.get("modeles_max") or MODELES_MAX_DEFAUT), "n_cpu_moe": int(c.get("n_cpu_moe") or 0),
+                         "n_cpu_moe_possible": mo.option_possible("--n-cpu-moe"), "version_epinglee": c.get("version_epinglee", "")}
     if hasattr(mo, "info_dossier") and not moteurs.CONTEXTE["en_docker"]():
         vue["dossier"] = mo.info_dossier()
     return vue
@@ -247,12 +327,14 @@ def noms_attendus(systeme, arch, variante):
     return []
 
 
-def choisir_fichiers(releases, systeme, arch, variante):
-    """(étiquette, [assets]) : la plus récente version qui a tous les fichiers voulus, ou None."""
+def choisir_fichiers(releases, systeme, arch, variante, epinglee=""):
+    """(étiquette, [assets]) : la plus récente version qui a tous les fichiers voulus (ou, si une version est épinglée, seulement celle-là), ou None."""
     motifs = noms_attendus(systeme, arch, variante)
     if not motifs:
         return None
     for r in releases or []:
+        if epinglee and r.get("tag_name", "") != epinglee:
+            continue
         assets = r.get("assets") or []
         choisis = []
         for m in motifs:
@@ -334,7 +416,33 @@ class MoteurLlamaCpp(MoteurOpenAI):
         return "http://127.0.0.1:%d/v1" % int(self.config().get("port") or PORT_DEFAUT)
 
     def cle(self):
-        return self.config().get("cle", "")
+        if self.externe():
+            return self.config().get("cle", "")
+        return self._cle_serveur()
+
+    def _cle_serveur(self):
+        """La clé d'accès du serveur que Lutin lance (générée une fois, gardée dans moteurs.json, lisible par l'utilisateur seul) : personne d'autre sur la machine ou le réseau local ne peut lui parler."""
+        config = lire_config()
+        c = config.setdefault(self.id, {})
+        if not c.get("cle_serveur"):
+            import secrets
+            c["cle_serveur"] = secrets.token_urlsafe(24)
+            try:
+                ecrire_config(config)
+            except (OSError, ErreurMoteur):
+                return c["cle_serveur"]
+        return c["cle_serveur"]
+
+    def option_possible(self, option):
+        """Le llama-server installé connaît-il cette option ? (d'après son aide ; faux si on ne peut pas la lire)"""
+        exe = self.serveur_pret()
+        return exe is not None and option in aide_serveur(exe)
+
+    def routeur_possible(self):
+        return self.option_possible("--models-preset")
+
+    def routeur_actif(self):
+        return not self.externe() and bool(self.config().get("routeur")) and self.routeur_possible()
 
     def dossier_defaut(self):
         d = moteurs.CONTEXTE["donnees"]()
@@ -445,9 +553,27 @@ class MoteurLlamaCpp(MoteurOpenAI):
             return super().en_memoire(modele)
         with SERVEUR["verrou"]:
             p = SERVEUR["proc"]
-            if p is not None and p.poll() is None and SERVEUR["modele"] == modele:
+            if p is not None and p.poll() is None and (SERVEUR["modele"] == modele or (SERVEUR["modele"] == ROUTEUR and modele in SERVEUR["noms"])):
                 return {"taille": 0, "vram": 0}
         return None
+
+    def vecteurs(self, modele, textes, delai=60):
+        """Les vecteurs de ces textes. Avec un llama-server géré, seul le mode routeur peut servir un modèle d'embeddings à côté du modèle de conversation sans le décharger."""
+        if not self.externe():
+            if not self.routeur_actif():
+                raise ErreurMoteur(_t("Avec llama.cpp, la recherche par le sens demande le mode routeur (Réglages > Moteur > Mode routeur)."))
+            self.demarrer(modele, CTX_DEFAUT)
+        return super().vecteurs(modele, textes, delai)
+
+    def grille(self):
+        return {"discuter": ("natif", ""), "flux": ("natif", ""), "arret": ("natif", _t("La connexion est coupée : le serveur arrête de générer.")),
+                "outils": ("adapte", _t("Lutin lance le serveur avec --jinja et traduit les appels d'outils.")),
+                "reflexion": ("adapte", _t("Le raisonnement du modèle est lu dans le flux du serveur.")),
+                "vision": ("adapte", _t("Les images partent en data-URL ; le projecteur (--mmproj) est ajouté tout seul pour les modèles d'Ollama.")),
+                "embeddings": ("adapte", _t("Demande le mode routeur : le modèle de recherche reste chargé à côté de celui de conversation.")),
+                "plusieurs_modeles": ("adapte", _t("En mode routeur ; sinon un seul modèle à la fois (le serveur redémarre quand on change).")),
+                "telechargement": ("adapte", _t("Depuis la bibliothèque d'Ollama (sans Ollama) ou depuis Hugging Face.")),
+                "installation": ("adapte", _t("Lutin télécharge le programme officiel adapté à la machine."))}
 
     def _assurer(self, corps):
         """Géré : le serveur tourne avec le modèle voulu et la fenêtre de contexte voulue (il est démarré ou redémarré au besoin)."""
@@ -471,25 +597,45 @@ class MoteurLlamaCpp(MoteurOpenAI):
         if exe is None:
             raise ErreurMoteur(_t("llama.cpp n'est pas installé : Réglages > Moteur > Installer."))
         fichier = self._fichier_modele(modele)
+        routeur = self.routeur_actif()
         with SERVEUR["verrou"]:
             p = SERVEUR["proc"]
-            if p is not None and p.poll() is None and SERVEUR["modele"] == modele and abs(SERVEUR["ctx"] - ctx) < 1024:
-                return
+            if p is not None and p.poll() is None:
+                if routeur and SERVEUR["modele"] == ROUTEUR and modele in SERVEUR["noms"] and ctx - SERVEUR["ctx"] < 1024:
+                    return          # le routeur connaît déjà ce modèle : il le charge (et décharge un autre) tout seul, sans redémarrer
+                if not routeur and SERVEUR["modele"] == modele and abs(SERVEUR["ctx"] - ctx) < 1024:
+                    return
             self.arreter()
             port = int(self.config().get("port") or PORT_DEFAUT)
             variante = (self.config().get("variante_installee") or "cpu")
-            commande = [str(exe), "-m", str(fichier), "--host", "127.0.0.1", "--port", str(port), "-c", str(ctx), "--jinja"]
+            aide = aide_serveur(exe)
+            commande = [str(exe), "--host", "127.0.0.1", "--port", str(port), "--jinja"]
+            if "--api-key" in aide:
+                commande += ["--api-key", self._cle_serveur()]
             commun = self.partages().get(str(modele))
-            if commun is not None and commun.get("projecteur") and Path(fichier) == commun["fichier"]:
-                commande += ["--mmproj", str(commun["projecteur"])]          # un modèle d'Ollama qui voit les images : son projecteur est dans le même dossier
             try:
                 taille_go = Path(fichier).stat().st_size / 1e9
-                machine, ajuste = reglages_machine(aide_serveur(exe), variante, taille_go, (moteurs.CONTEXTE.get("profil_attendu") or moteurs.CONTEXTE["profil"])())
+                machine, ajuste = reglages_machine(aide, variante, taille_go, (moteurs.CONTEXTE.get("profil_attendu") or moteurs.CONTEXTE["profil"])())
             except Exception:  # noqa: BLE001  (les réglages adaptés ne doivent jamais empêcher de démarrer)
                 machine, ajuste = [], False
-            commande += machine
-            if variante in ("cuda", "vulkan", "metal") and not ajuste:
-                commande += ["-ngl", "99"]          # tout le modèle sur la carte ; s'il est trop gros pour elle, `--fit` (ci-dessus) répartit les couches avec le processeur
+            moe = int(self.config().get("n_cpu_moe") or 0)
+            if routeur:
+                ctx = max(ctx, CTX_DEFAUT)
+                noms, texte = self._preset(ctx, variante, ajuste, machine, moe)
+                preset = self.dossier() / "modeles.ini"
+                preset.parent.mkdir(parents=True, exist_ok=True)
+                preset.write_text(texte, encoding="utf-8")
+                commande += ["--models-preset", str(preset), "--models-max", str(int(self.config().get("modeles_max") or MODELES_MAX_DEFAUT))]
+                SERVEUR["noms"] = noms
+            else:
+                commande += ["-m", str(fichier), "-c", str(ctx)]
+                if commun is not None and commun.get("projecteur") and Path(fichier) == commun["fichier"]:
+                    commande += ["--mmproj", str(commun["projecteur"])]          # un modèle d'Ollama qui voit les images : son projecteur est dans le même dossier
+                commande += machine
+                if moe and "--n-cpu-moe" in aide:
+                    commande += ["--n-cpu-moe", str(moe)]          # modèle « à experts » : ses experts restent sur le processeur, le reste va sur la carte
+                if variante in ("cuda", "vulkan", "metal") and not ajuste:
+                    commande += ["-ngl", "99"]          # tout le modèle sur la carte ; s'il est trop gros pour elle, `--fit` (ci-dessus) répartit les couches avec le processeur
             journal = self.dossier() / "serveur.log"
             journal.parent.mkdir(parents=True, exist_ok=True)
             sortie = open(journal, "wb")
@@ -499,7 +645,7 @@ class MoteurLlamaCpp(MoteurOpenAI):
                 raise ErreurMoteur(_t("Impossible de lancer llama-server : {}").format(e))
             finally:
                 sortie.close()          # le processus garde sa propre copie du fichier journal
-            SERVEUR.update({"modele": modele, "ctx": ctx})
+            SERVEUR.update({"modele": ROUTEUR if routeur else modele, "ctx": ctx})
         fin = time.time() + attente
         while time.time() < fin:
             if SERVEUR["proc"].poll() is not None:
@@ -510,6 +656,21 @@ class MoteurLlamaCpp(MoteurOpenAI):
             time.sleep(0.5)
         self.arreter()
         raise ErreurMoteur(_t("llama-server ne répond pas après {} s : {}").format(attente, self._fin_du_journal()))
+
+    def _preset(self, ctx, variante, ajuste, machine, moe):
+        """(noms des modèles, texte du fichier de préréglages) pour tous les modèles de conversation et d'embeddings installés."""
+        modeles = []
+        for nom in self.modeles()["installes"]:
+            try:
+                f = self._fichier_modele(nom)
+            except ErreurMoteur:
+                continue
+            commun = self.partages().get(str(nom))
+            projecteur = commun.get("projecteur") if commun is not None and Path(f) == commun["fichier"] else None
+            modeles.append((nom, f, projecteur))
+        fils = int(machine[machine.index("--threads") + 1]) if "--threads" in machine else 0
+        reglages = {"fils": fils, "n_cpu_moe": moe if moe and self.option_possible("--n-cpu-moe") else 0, "ngl": 99 if variante in ("cuda", "vulkan", "metal") and not ajuste else 0}
+        return tuple(n for n, _, _ in modeles), texte_preset(modeles, ctx, reglages)
 
     def _pret(self):
         """Le serveur a fini de charger le modèle ? `/health` répond « ok » (503 pendant le chargement) ; une ancienne version sans /health : on se contente de /models."""
@@ -531,7 +692,7 @@ class MoteurLlamaCpp(MoteurOpenAI):
     def arreter(self):
         with SERVEUR["verrou"]:
             p = SERVEUR["proc"]
-            SERVEUR.update({"proc": None, "modele": "", "ctx": 0})
+            SERVEUR.update({"proc": None, "modele": "", "ctx": 0, "noms": ()})
         if p is not None and p.poll() is None:
             try:
                 p.terminate()
@@ -562,7 +723,7 @@ class MoteurLlamaCpp(MoteurOpenAI):
             p = SERVEUR["proc"]
             tourne = p is not None and p.poll() is None
             modele = SERVEUR["modele"] if tourne else ""
-        detail = _t("Serveur démarré avec « {} ».").format(modele) if tourne else (_t("Installé : il démarre à la demande.") if exe or self.serveur_pret() else _t("Pas installé."))
+        detail = (_t("Routeur démarré : {} modèle(s) disponibles, chargés à la demande.").format(len(SERVEUR["noms"])) if modele == ROUTEUR else _t("Serveur démarré avec « {} ».").format(modele)) if tourne else (_t("Installé : il démarre à la demande.") if exe or self.serveur_pret() else _t("Pas installé."))
         return {"installe": self.serveur_pret() is not None, "actif": tourne, "version": self.version(), "detail": detail, "mode": "gere", "installe_par_lutin": exe is not None}
 
     def actions(self):
@@ -611,15 +772,16 @@ class MoteurLlamaCpp(MoteurOpenAI):
         config = lire_config()
         voulue = config.get(self.id, {}).get("variante", "auto")
         variante = voulue if voulue in ("cuda", "vulkan", "cpu", "metal") else variante_auto((moteurs.CONTEXTE.get("profil_attendu") or moteurs.CONTEXTE["profil"])(), systeme)
-        progression(_t("Recherche de la dernière version…"), 0, 0)
+        epinglee = str(config.get(self.id, {}).get("version_epinglee") or "")
+        progression(_t("Recherche de la version {}…").format(epinglee) if epinglee else _t("Recherche de la dernière version…"), 0, 0)
         try:
-            releases = (http_json or _http_json)(API_RELEASES)
+            releases = [(http_json or _http_json)(API_VERSION + epinglee)] if epinglee else (http_json or _http_json)(API_RELEASES)
         except (urllib.error.URLError, OSError, ValueError) as e:
             raise ErreurMoteur(_t("GitHub ne répond pas : {}").format(e))
-        choix = choisir_fichiers(releases, systeme, arch, variante)
+        choix = choisir_fichiers(releases, systeme, arch, variante, epinglee)
         if choix is None and variante != "cpu":
             variante = "cpu"
-            choix = choisir_fichiers(releases, systeme, arch, variante)
+            choix = choisir_fichiers(releases, systeme, arch, variante, epinglee)
         if choix is None:
             raise ErreurMoteur(_t("Aucun programme llama.cpp publié pour ce système ({} {}). Installe-le à la main : https://github.com/ggml-org/llama.cpp/releases").format(systeme, arch))
         etiquette, assets = choix
@@ -799,6 +961,12 @@ class MoteurExterne(MoteurOpenAI):
 
     def telechargeable(self):
         return {"possible": False, "raison": _t("Un serveur externe gère ses modèles lui-même."), "genre": "aucun"}
+
+    def grille(self):
+        return {"discuter": ("natif", ""), "flux": ("natif", ""), "arret": ("natif", _t("La connexion est coupée : le serveur arrête de générer.")),
+                "outils": ("non_teste", _t("Dépend du serveur.")), "reflexion": ("non_teste", _t("Dépend du serveur.")), "vision": ("non_teste", _t("Dépend du serveur et du modèle.")),
+                "embeddings": ("non_teste", _t("Dépend du serveur.")), "plusieurs_modeles": ("non_teste", _t("Dépend du serveur.")),
+                "telechargement": ("non", _t("Le serveur gère ses modèles lui-même.")), "installation": ("non", _t("Lutin n'installe pas ce serveur."))}
 
 
 def _systeme():

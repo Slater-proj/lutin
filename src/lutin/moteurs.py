@@ -20,6 +20,10 @@ OLLAMA = "ollama"
 LLAMACPP = "llamacpp"
 OPENAI = "openai"
 VERROU = threading.Lock()
+# La grille de capacités : pour chaque fonction, ce que le moteur fait « natif » (il le fait lui-même), « adapte » (Lutin traduit ou complète), « non » (impossible) ou « non_teste » (pas vérifié).
+# La suite de conformité (tests/test_conformite_moteurs.py) vérifie chaque case « natif » ou « adapte » contre un faux serveur : la grille ne ment pas.
+FONCTIONS = ("discuter", "flux", "arret", "outils", "reflexion", "vision", "embeddings", "plusieurs_modeles", "telechargement", "installation")
+ETATS = ("natif", "adapte", "non", "non_teste")
 MOTEURS = {}          # identifiant -> instance (voir enregistrer)
 TACHES = {}          # identifiant du moteur -> {action, statut, texte, fait, total, erreur, debut}
 ACTIONS = ("installer", "desinstaller", "reinstaller", "demarrer", "arreter", "mettre_a_jour")
@@ -82,6 +86,14 @@ class Moteur:
         """Fait une action de `actions()` ; `progression(texte, fait, total)` montre l'avancement. Lève ValueError avec un message clair en cas d'échec."""
         raise ValueError("Action impossible avec ce moteur.")
 
+    def grille(self):
+        """{fonction: (état, note)} pour chaque fonction de FONCTIONS : ce que ce moteur fait, et comment (voir ETATS). Par défaut, rien n'est vérifié."""
+        return {f: ("non_teste", "") for f in FONCTIONS}
+
+    def vecteurs(self, modele, textes, delai=60):
+        """Les vecteurs (listes de nombres) de ces textes, pour la recherche par le sens. Lève ValueError si le moteur ne sait pas."""
+        raise ValueError("Ce moteur ne fournit pas d'embeddings.")
+
     def telechargeable(self):
         """Décrit comment obtenir des modèles avec ce moteur : {possible, raison, genre} (genre : « bibliotheque », « huggingface », « aucun »)."""
         return {"possible": False, "raison": "", "genre": "aucun"}
@@ -92,7 +104,8 @@ class Moteur:
     def vue(self, courant=False):
         """Ce que la page affiche."""
         return {"id": self.id, "nom": self.nom, "genre": self.genre, "gere_modeles": self.gere_modeles, "description": self.description, "courant": bool(courant),
-                "points_forts": list(self.points_forts), "points_faibles": list(self.points_faibles), "adresse_modifiable": self.adresse_modifiable}
+                "points_forts": list(self.points_forts), "points_faibles": list(self.points_faibles), "adresse_modifiable": self.adresse_modifiable,
+                "grille": [{"fonction": f, "etat": e, "note": n} for f, (e, n) in ((f, self.grille().get(f, ("non_teste", ""))) for f in FONCTIONS)]}
 
 
 def abandonner(reponse):

@@ -620,6 +620,21 @@ class MoteurOllama(_moteurs.Moteur):
     def en_memoire(self, modele):
         return ps_ollama(modele)
 
+    def grille(self):
+        natif = ("natif", "")
+        return {"discuter": natif, "flux": natif, "arret": natif, "outils": natif, "reflexion": natif, "vision": natif, "embeddings": natif,
+                "plusieurs_modeles": ("natif", _t("Ollama garde plusieurs modèles en mémoire et décharge les plus anciens.")), "telechargement": natif, "installation": natif}
+
+    def vecteurs(self, modele, textes, delai=60):
+        corps = json.dumps({"model": modele, "input": [str(t) for t in textes]}).encode("utf-8")
+        req = urllib.request.Request(_m.OLLAMA + "/api/embed", data=corps, headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=delai) as r:
+            donnees = json.loads(r.read().decode("utf-8"))
+        liste = donnees.get("embeddings")
+        if not isinstance(liste, list) or len(liste) != len(textes) or not all(isinstance(v, list) and v for v in liste):
+            raise ValueError(_t("Réponse d'embeddings inattendue."))
+        return liste
+
     def chat(self, corps, delai=60):
         return ollama_json("/api/chat", corps, delai)
 

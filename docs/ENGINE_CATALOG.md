@@ -1,5 +1,7 @@
 # The engine catalogue
 
+(Version française : [ENGINE_CATALOG.fr.md](ENGINE_CATALOG.fr.md).)
+
 Lutin knows model servers (LM Studio, vLLM, SGLang, LocalAI, llama-swap…) through a **catalogue**: a data file, never code. In Settings > Engines, the "OpenAI-compatible server" card offers these servers in one click: the usual address is filled in, with a short description, strengths, limits and a link to the website.
 
 ## Why it is signed

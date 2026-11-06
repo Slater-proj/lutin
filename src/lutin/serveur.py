@@ -914,10 +914,13 @@ class Gestionnaire(BaseHTTPRequestHandler):
                             _llamacpp.regler_dossier(mo.id, donnees.get("dossier"))
                         if "dossier_modeles" in donnees:
                             _llamacpp.regler_dossier_modeles(mo.id, donnees.get("dossier_modeles"))
+                        avance = _llamacpp.regler_avance(mo.id, {k: donnees[k] for k in ("routeur", "modeles_max", "n_cpu_moe", "version_epinglee") if k in donnees})
                         if not mo.adresse_modifiable:
-                            if "dossier" in donnees or "dossier_modeles" in donnees:
+                            if avance or "dossier" in donnees or "dossier_modeles" in donnees:
                                 return self._envoyer(200, {"ok": True})
                             return self._envoyer(400, {"erreur": _t("Ce moteur n'a pas d'adresse à régler.")})
+                        if mo.id == "llamacpp" and "url" not in donnees and "variante" not in donnees and avance:
+                            return self._envoyer(200, {"ok": True})
                         _llamacpp.regler(mo.id, donnees.get("url"), donnees.get("cle"), variante=donnees.get("variante") if donnees.get("variante") in ("auto", "cuda", "vulkan", "cpu", "metal") else None)
                         return self._envoyer(200, {"ok": True})
                     if action == "telecharger":

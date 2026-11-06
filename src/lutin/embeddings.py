@@ -43,12 +43,12 @@ def nom_modele():
 
 
 def installe(forcer=False):
-    """Le modèle est-il installé dans Ollama ? (résultat gardé 20 secondes : la page interroge souvent)"""
+    """Le modèle est-il installé sur le moteur choisi ? (résultat gardé 20 secondes : la page interroge souvent)"""
     modele = nom_modele()
     if not forcer and INSTALLE_CACHE["modele"] == modele and time.time() - INSTALLE_CACHE["t"] < 20:
         return INSTALLE_CACHE["v"]
     base = modele.split(":")[0]
-    v = any(n.split(":")[0] == base for n in _m.etat_ollama().get("installes", []))
+    v = any(n.split(":")[0] == base for n in (_m.etat_moteur() if _m.moteur_actuel().id != "ollama" else _m.etat_ollama()).get("installes", []))
     INSTALLE_CACHE.update(t=time.time(), v=v, modele=modele)
     return v
 
@@ -74,13 +74,7 @@ def _normaliser(v):
 
 def vecteurs(textes, modele=None, delai=60):
     """Les vecteurs (normalisés) d'une liste de textes, par Ollama. Lève ValueError/URLError si Ollama ne répond pas ou si le modèle est absent."""
-    corps = json.dumps({"model": modele or nom_modele(), "input": [str(t)[:1500] or " " for t in textes]}).encode("utf-8")
-    req = urllib.request.Request(_m.OLLAMA + "/api/embed", data=corps, headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=delai) as r:
-        donnees = json.loads(r.read().decode("utf-8"))
-    liste = donnees.get("embeddings")
-    if not isinstance(liste, list) or len(liste) != len(textes) or not all(isinstance(v, list) and v for v in liste):
-        raise ValueError(_t("Réponse d'embeddings inattendue."))
+    liste = _m.moteur_actuel().vecteurs(modele or nom_modele(), [str(t)[:1500] or " " for t in textes], delai)          # Ollama, ou le moteur choisi (llama.cpp en mode routeur, serveur externe)
     return [_normaliser(v) for v in liste]
 
 

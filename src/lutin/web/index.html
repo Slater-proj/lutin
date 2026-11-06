@@ -2874,6 +2874,11 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     const det = el('details'); det.appendChild(el('summary', '', T('Forces et faiblesses')));
     m.points_forts.forEach(t => det.appendChild(el('div', 'point', '✅ ' + t))); m.points_faibles.forEach(t => det.appendChild(el('div', 'point', '⚠ ' + t)));
     d.appendChild(det);
+    const gr = el('details'); gr.appendChild(el('summary', '', T('Ce que ce moteur sait faire')));          // la grille de capacités : natif / adapté / non / non testé
+    const FONCTIONS = { discuter: T('Discuter'), flux: T('Réponse au fil de l\'eau'), arret: T('Bouton Arrêter'), outils: T('Appels d\'outils'), reflexion: T('Raisonnement'), vision: T('Images'), embeddings: T('Recherche par le sens'), plusieurs_modeles: T('Plusieurs modèles'), telechargement: T('Téléchargement de modèles'), installation: T('Installation par Lutin') };
+    const ETATS = { natif: ['✅', T('natif')], adapte: ['🔧', T('adapté par Lutin')], non: ['⛔', T('non supporté')], non_teste: ['❔', T('non testé')] };
+    (m.grille || []).forEach(g => { const e = ETATS[g.etat] || ETATS.non_teste; gr.appendChild(el('div', 'point', e[0] + ' ' + (FONCTIONS[g.fonction] || g.fonction) + ' · ' + e[1] + (g.note ? ' — ' + g.note : ''))); });
+    d.appendChild(gr);
     const t = m.tache || {};
     if (t.statut === 'en cours') d.appendChild(barreTache(t)); else if (t.statut === 'erreur') d.appendChild(el('div', 'erreur', '⚠ ' + t.erreur));
     const ligne = el('div', 'ligne'); let possibles = 0;
@@ -2959,6 +2964,30 @@ body[data-moteur="openai"] .biblio { display:none !important; }
         catch (e) { msg.textContent = e.message; }
       });
       f.append(ok, msg); d.appendChild(f);
+    }
+    const av = m.reglages && m.reglages.avance;          // réglages propres à llama.cpp géré par Lutin
+    if (av) {
+      const bloc = el('details'); bloc.appendChild(el('summary', '', T('Réglages avancés de llama.cpp')));
+      const enregistrer = async corps => { try { await api('/api/moteur-regler', Object.assign({ moteur: m.id }, corps)); await rafraichir(); chargerMoteurs(); } catch (e) { alert(e.message); chargerMoteurs(); } };
+      const lr = el('label', 'ligne'), cr = el('input'); cr.type = 'checkbox'; cr.checked = av.routeur; cr.disabled = !modifiable || (!av.routeur_possible && !av.routeur);
+      cr.addEventListener('change', () => enregistrer({ routeur: cr.checked }));
+      lr.append(cr, el('span', '', ' ' + T('Mode routeur : plusieurs modèles servis sans redémarrer le serveur (expérimental)')));
+      bloc.appendChild(lr);
+      bloc.appendChild(el('div', 'aide', av.routeur_possible ? T('Un modèle de conversation et un modèle de recherche par le sens peuvent rester chargés ensemble. Non vérifié sur toutes les machines : si le serveur ne démarre plus, décoche.') : T('Ce llama-server ne sait pas faire le mode routeur : mets-le à jour.')));
+      const lm = el('div', 'ligne'), nm = el('input'); nm.type = 'number'; nm.min = 1; nm.max = 8; nm.value = av.modeles_max; nm.style.width = '70px'; nm.disabled = !modifiable;
+      const bm = el('button', '', T('Enregistrer')); bm.disabled = !modifiable; bm.addEventListener('click', () => enregistrer({ modeles_max: nm.value }));
+      lm.append(el('span', '', T('Modèles gardés en mémoire (routeur) : ')), nm, bm); bloc.appendChild(lm);
+      if (av.n_cpu_moe_possible || av.n_cpu_moe) {
+        const le = el('div', 'ligne'), ne = el('input'); ne.type = 'number'; ne.min = 0; ne.max = 512; ne.value = av.n_cpu_moe; ne.style.width = '70px'; ne.disabled = !modifiable;
+        const be = el('button', '', T('Enregistrer')); be.disabled = !modifiable; be.addEventListener('click', () => enregistrer({ n_cpu_moe: ne.value }));
+        le.append(el('span', '', T('Couches d\'experts laissées au processeur : ')), ne, be); bloc.appendChild(le);
+        bloc.appendChild(el('div', 'aide', T('Pour les modèles « à experts » (MoE) trop gros pour la carte : 0 = automatique. Plus le nombre est grand, moins de mémoire de carte est utilisée, mais plus c\'est lent.')));
+      }
+      const lv = el('div', 'ligne'), nv = el('input'); nv.value = av.version_epinglee; nv.placeholder = T('par exemple b6500 (vide : toujours la dernière)'); nv.style.width = '240px'; nv.disabled = !modifiable;
+      const bv = el('button', '', T('Enregistrer')); bv.disabled = !modifiable; bv.addEventListener('click', () => enregistrer({ version_epinglee: nv.value }));
+      lv.append(el('span', '', T('Version épinglée : ')), nv, bv); bloc.appendChild(lv);
+      bloc.appendChild(el('div', 'aide', T('Une version épinglée est celle qu\'installe « Installer » ; plus aucune mise à jour n\'est proposée. Utile quand une version fonctionne bien sur ta machine.')));
+      d.appendChild(bloc);
     }
     return d;
   };

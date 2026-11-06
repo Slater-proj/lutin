@@ -15,3 +15,9 @@ Write a subclass of `MoteurOpenAI` (`src/lutin/moteur_openai.py`) for OpenAI-sty
 - `telechargeable`, `supprimer_modele` when Lutin can manage models for it.
 - Tests with a fake server (no network, no real binary); the existing tests for llama.cpp show the pattern.
 - Texts in French in the code, English in `src/lutin/langues/messages.en.json` (tests check completeness).
+
+## Capabilities grid and conformance suite
+
+Every engine declares a grid (`grille()` in `src/lutin/moteurs.py`): for each function (chat, streaming, stop button, tool calls, reasoning, images, embeddings, several models, model download, installation) one of **native** (the engine does it itself), **adapted** (Lutin translates or completes), **not supported** or **not tested**, with a one-line note. The grid is shown in the engine card (Settings > Engines > "What this engine can do").
+
+`tests/test_conformite_moteurs.py` plays the **same checks on each adapter** (Ollama, llama.cpp, external server) against a fake server, and verifies every "native" or "adapted" cell: the grid cannot promise what the adapter cannot do. A new engine class gets its grid checked by adding it to that file. Functions that a fake server alone cannot check (several models, download, installation) are listed in `VERIFIE_AILLEURS` with the test that covers them.

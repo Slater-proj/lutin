@@ -59,8 +59,8 @@ def _ecrire(d):
 def _derniere_llamacpp(mo, http_json):
     """(version installée, dernière version publiée avec les fichiers de CETTE machine) pour llama.cpp installé par Lutin ; None sinon."""
     from . import moteur_llamacpp as ml
-    if mo.externe() or mo.serveur_installe() is None:
-        return None
+    if mo.externe() or mo.serveur_installe() is None or mo.config().get("version_epinglee"):
+        return None          # une version épinglée est voulue : jamais de « mise à jour » proposée
     import platform
     actuelle = mo.version()
     variante = str(mo.config().get("variante_installee") or "cpu")

@@ -15,3 +15,9 @@ Aucun code. Ajoute une entrée à `tools/moteurs.source.json` (identifiant, nom,
 - `telechargeable`, `supprimer_modele` quand Lutin peut gérer les modèles.
 - Des tests avec un faux serveur (ni réseau, ni vrai programme) ; ceux de llama.cpp montrent le principe.
 - Textes en français dans le code, en anglais dans `src/lutin/langues/messages.en.json` (des tests vérifient que rien ne manque).
+
+## Grille de capacités et suite de conformité
+
+Chaque moteur déclare une grille (`grille()` dans `src/lutin/moteurs.py`) : pour chaque fonction (discuter, flux, bouton Arrêter, appels d'outils, raisonnement, images, embeddings, plusieurs modèles, téléchargement, installation), **natif** (le moteur le fait lui-même), **adapté** (Lutin traduit ou complète), **non supporté** ou **non testé**, avec une note d'une ligne. La grille s'affiche sur la carte du moteur (Réglages > Moteurs > « Ce que ce moteur sait faire »).
+
+`tests/test_conformite_moteurs.py` joue les **mêmes vérifications sur chaque adaptateur** (Ollama, llama.cpp, serveur externe) contre un faux serveur, et vérifie chaque case « natif » ou « adapté » : la grille ne peut pas promettre ce que l'adaptateur ne sait pas faire. Une nouvelle classe de moteur voit sa grille vérifiée en l'ajoutant à ce fichier. Les fonctions qu'un faux serveur seul ne peut pas vérifier (plusieurs modèles, téléchargement, installation) sont listées dans `VERIFIE_AILLEURS` avec le test qui s'en charge.

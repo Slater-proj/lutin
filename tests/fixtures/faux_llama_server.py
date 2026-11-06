@@ -5,7 +5,15 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 
 args = sys.argv[1:]
 port = int(args[args.index("--port") + 1])
-modele = args[args.index("-m") + 1].replace("\\", "/").rsplit("/", 1)[-1].rsplit(".", 1)[0]
+import os
+if os.environ.get("LUTIN_FAUX_ARGS"):
+    open(os.environ["LUTIN_FAUX_ARGS"], "a", encoding="utf-8").write(json.dumps(args) + chr(10))
+ROUTEUR = "--models-preset" in args
+if ROUTEUR:
+    NOMS = [l.strip()[1:-1] for l in open(args[args.index("--models-preset") + 1], encoding="utf-8") if l.strip().startswith("[") and l.strip() != "[*]"]
+    modele = "?"
+else:
+    modele = args[args.index("-m") + 1].replace("\\", "/").rsplit("/", 1)[-1].rsplit(".", 1)[0]
 ctx = args[args.index("-c") + 1] if "-c" in args else "?"
 
 
@@ -20,10 +28,20 @@ class H(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path.endswith("/health"):
             return self._json({"status": "ok"})
-        self._json({"data": [{"id": modele}]})
+        self._json({"data": [{"id": n} for n in NOMS] if ROUTEUR else [{"id": modele}]})
 
     def do_POST(self):
         corps = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)))
+        global modele
+        if ROUTEUR:
+            if corps.get("model") not in NOMS:
+                d = json.dumps({"error": {"message": "model not found"}}).encode()
+                self.send_response(404); self.send_header("Content-Length", str(len(d))); self.end_headers(); self.wfile.write(d)
+                return
+            modele = corps["model"]
+        if self.path.endswith("/embeddings"):
+            entrees = corps.get("input") or []
+            return self._json({"data": [{"index": i, "embedding": [float(len(t)), 1.0, 0.5]} for i, t in enumerate(entrees)]})
         messages = corps.get("messages") or []
         dernier = (messages[-1] if messages else {}).get("role")
         appel = bool(corps.get("tools")) and dernier == "user"

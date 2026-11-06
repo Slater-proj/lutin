@@ -1,5 +1,7 @@
 # Le catalogue des moteurs
 
+(English version: [ENGINE_CATALOG.md](ENGINE_CATALOG.md).)
+
 Lutin connaît des serveurs de modèles (LM Studio, vLLM, SGLang, LocalAI, llama-swap…) grâce à un **catalogue** : un fichier de données, jamais du code. Dans Réglages > Moteurs, la carte « Serveur compatible OpenAI » propose ces serveurs d'un clic : l'adresse habituelle se remplit, avec une courte description, les forces, les limites et un lien vers le site.
 
 ## Pourquoi c'est signé
