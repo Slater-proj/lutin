@@ -2,6 +2,12 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## 0.16.6
+
+- **Choix du programme de llama.cpp : la détection du matériel est attendue.** L'essai réel sur un poste à carte NVIDIA a réussi (CUDA installé, ~247 jetons/s avec un modèle de 4 milliards, appel d'outil compris) mais a montré un défaut : la détection du matériel démarre en arrière-plan et un premier appel immédiat (l'essai en ligne de commande, ou un clic sur « Installer » juste après le lancement) pouvait la croire absente et choisir la version « processeur ». Le choix attend maintenant la fin de la détection (25 secondes au plus).
+
+**English.** Choosing llama.cpp's build (CUDA, Vulkan, CPU) now waits for the background hardware detection (up to 25 s) instead of falling back to CPU. The first real trial on an NVIDIA PC passed.
+
 ## 0.16.5
 
 - **`/compact` en mode fiche de suivi : plus rien ne disparaît sans être passé dans la fiche.** Avant, la fiche ne lisait pas les derniers messages s'ils étaient moins de six, puis tout sauf le dernier échange était retiré : la fiche était en retard et tu perdais le fil. Maintenant la fiche lit **tout** ce qui va sortir (par lots, sans en sauter quand il y en a beaucoup) ; si elle n'y arrive pas (modèle absent), **rien n'est retiré** et un message le dit. Et la commande n'est plus un simple « résumé déguisé » : au moins la moitié des messages sort, mais les **vrais messages récents restent tels quels** (jusqu'au quart de la fenêtre), la fiche gardant le fil du reste. Le passage normal de la fiche lit aussi par lots au lieu de couper les échanges trop longs.

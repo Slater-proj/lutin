@@ -505,7 +505,7 @@ class MoteurLlamaCpp(MoteurOpenAI):
         systeme, arch = _systeme(), platform.machine().lower()
         config = lire_config()
         voulue = config.get(self.id, {}).get("variante", "auto")
-        variante = voulue if voulue in ("cuda", "vulkan", "cpu", "metal") else variante_auto(moteurs.CONTEXTE["profil"](), systeme)
+        variante = voulue if voulue in ("cuda", "vulkan", "cpu", "metal") else variante_auto((moteurs.CONTEXTE.get("profil_attendu") or moteurs.CONTEXTE["profil"])(), systeme)
         progression(_t("Recherche de la dernière version…"), 0, 0)
         try:
             releases = (http_json or _http_json)(API_RELEASES)

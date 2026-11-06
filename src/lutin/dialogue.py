@@ -564,6 +564,7 @@ class MoteurOllama(_moteurs.Moteur):
 _moteurs.enregistrer(MoteurOllama())
 _moteurs.CONTEXTE.update(donnees=lambda: _m.DONNEES, en_docker=lambda: bool(os.environ.get("LUTIN_DOCKER")), hors_ligne=lambda: _hl.actif(),
                          profil=lambda: __import__("lutin.adequation", fromlist=["x"]).profil_pret(),
+                         profil_attendu=lambda: __import__("lutin.adequation", fromlist=["x"]).profil_attendu(),
                          dossier_ollama=lambda: (None if os.environ.get("LUTIN_DOCKER") else __import__("lutin.emplacements", fromlist=["x"]).dossier_modeles()))
 _moteurs.enregistrer(_llamacpp.MoteurLlamaCpp())
 _moteurs.enregistrer(_llamacpp.MoteurExterne())

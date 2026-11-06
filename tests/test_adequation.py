@@ -57,6 +57,26 @@ class Appreciation(unittest.TestCase):
             self.assertLess(len(phrase), 260)
 
 
+class ProfilAttendu(unittest.TestCase):
+    """Le choix du programme de llama.cpp (CUDA, Vulkan, processeur) dépend du matériel : il attend la détection au lieu de prendre « processeur » parce qu'elle n'avait pas fini."""
+
+    def test_attend_la_fin_de_la_detection_au_lieu_de_renvoyer_rien(self):
+        import time as _t
+        etat = dict(adequation._etat)
+        adequation._etat.update(profil=None, quand=0.0, en_cours=False)
+        self.addCleanup(adequation._etat.update, etat)
+        profil = Profil(cpu="x", coeurs=8, ram_go=32, gpus=[Gpu("RTX", "nvidia", 24, 0, "")])
+
+        def lente():
+            _t.sleep(0.6)
+            return profil
+        self.assertIsNone(adequation.profil_pret(lente), "le premier appel ne bloque pas : rien encore")
+        adequation._etat.update(profil=None, quand=0.0)
+        self.assertIs(adequation.profil_attendu(5, lente), profil)
+        adequation._etat.update(profil=None, quand=0.0, en_cours=False)
+        self.assertIsNone(adequation.profil_attendu(0.3, lambda: (_t.sleep(2), profil)[1]), "délai dépassé : None, jamais un blocage")
+
+
 class NomAppareil(unittest.TestCase):
     CHROME = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36"
     IPHONE = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1"

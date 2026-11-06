@@ -32,6 +32,8 @@ What you should see: `✔` lines for the machine, the installation, the model, t
 
 **To measure speed properly**: run step 2 a second time (the first load is slower: the file is not cached yet) and give me the second run's figures.
 
+**Result (6 November 2026, version 0.16.5): passed.** CUDA 12.4 build (b12167) installed in 13 s in a folder next to Ollama's, test model served at ~2900 tokens/s, then Qwen3-4B Q4_K_M (2.5 GB): **~247 tokens/s, first token in 0.04 s, full tool call**, clean stop. Finding: the “Hardware detected” line said “not detected · cpu” while the right build (CUDA) was installed just after, because hardware detection runs in the background and the first call did not wait for it. Fixed in 0.16.6: choosing the build now waits for detection (25 s at most).
+
 ## S2 — llama.cpp in Docker's light image (automatic)
 
 Not run by you: the `moteurs` GitHub Actions workflow installs llama.cpp in `python:3.12-slim` (Lutin's "light" image), starts a 1 MB model and tells whether the program published for Ubuntu starts with Debian's system library. It runs on every change to the engine code, every week, or by hand (Actions tab, "moteurs" workflow). It **never blocks** a release. Its output contains the same report as above.

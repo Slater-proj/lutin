@@ -76,6 +76,17 @@ def profil_pret(detecter=None):
     return _etat["profil"]
 
 
+def profil_attendu(delai=25, detecter=None):
+    """Comme profil_pret, mais attend la fin de la détection (au plus `delai` secondes) : pour un choix qui en dépend et ne peut pas être refait (quel programme télécharger : CUDA, Vulkan ou processeur).
+    Renvoie None si la détection échoue ou dépasse le délai."""
+    fin = time.time() + delai
+    profil = profil_pret(detecter)
+    while profil is None and time.time() < fin:
+        time.sleep(0.2)
+        profil = profil_pret(detecter)
+    return profil
+
+
 def pour_la_liste(modeles, profil, catalogue):
     """{identifiant: {niveau, texte}} pour la liste de l'onglet Modèles (vide tant que la machine n'est pas détectée). `catalogue` : les modèles complets (mémoire de contexte, taille maximale…)."""
     if profil is None:

@@ -32,6 +32,8 @@ Ce que tu dois voir : des lignes `✔` pour la machine, l'installation, le modè
 
 **Pour mesurer la vitesse proprement** : relance l'étape 2 une deuxième fois (le premier chargement est plus long : le fichier n'est pas encore en cache) et donne-moi les chiffres de la deuxième.
 
+**Résultat (6 novembre 2026, version 0.16.5) : réussi.** Programme CUDA 12.4 (b12167) installé en 13 s dans un dossier à côté de celui d'Ollama, modèle de test servi à ~2900 jetons/s, puis Qwen3-4B Q4_K_M (2,5 Go) : **~247 jetons/s, premier jeton en 0,04 s, appel d'outil complet**, arrêt propre. Constat : la ligne « Matériel détecté » affichait « non détecté · cpu » alors que le bon programme (CUDA) était installé juste après, car la détection du matériel tourne en arrière-plan et le premier appel ne l'attendait pas. Corrigé en 0.16.6 : le choix du programme attend la détection (25 s au plus).
+
 ## S2 — llama.cpp dans l'image légère de Docker (automatique)
 
 Ce n'est pas toi qui le fais : le workflow `moteurs` de GitHub Actions installe llama.cpp dans `python:3.12-slim` (l'image « légère » de Lutin), lance un modèle de 1 Mo et dit si le programme publié pour Ubuntu démarre avec la bibliothèque système de Debian. Il se déclenche à chaque changement du code des moteurs, chaque semaine, ou à la main (onglet Actions, workflow « moteurs »). Il **ne bloque jamais** une publication. Sa sortie contient le même rapport que ci-dessus.

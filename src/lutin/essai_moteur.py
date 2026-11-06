@@ -105,7 +105,7 @@ def executer(options, moteur, ecrire=print, entree=input, chemin_rapport=None, m
 
     # 1. la machine
     debut = maintenant()
-    profil = moteurs.CONTEXTE["profil"]()
+    profil = (moteurs.CONTEXTE.get("profil_attendu") or moteurs.CONTEXTE["profil"])()          # la détection du matériel démarre en arrière-plan : on l'attend, le choix du programme en dépend
     from . import moteur_llamacpp as _ml
     systeme = _ml._systeme()
     variante = (moteur.config().get("variante") if hasattr(moteur, "config") else None) or "auto"
