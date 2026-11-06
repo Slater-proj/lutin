@@ -707,14 +707,14 @@ def installer_modele(modele):
                     message = _t("« {} » est fait pour les Mac (MLX, la puce Apple) : il ne tourne pas sur cette machine. Choisis un autre modèle, ou une autre taille sans « mlx » dans son nom. Il est retiré de ta liste.").format(modele)
                 else:
                     message = _t("Ce modèle (ou cette taille) n'existe pas dans la bibliothèque d'Ollama : « {} ». Vérifie son nom exact sur sa page ollama.com. Il est retiré de ta liste.").format(modele)
-                PULLS[modele].update({"statut": "erreur", "texte": message})
-                try:
+                try:          # retiré de la liste AVANT d'annoncer l'échec : la page (et les tests) qui voient « erreur » trouvent déjà la liste à jour
                     reg2 = lire_registre_modeles()
                     if modele in reg2["perso"]:
                         reg2["perso"].remove(modele)
                         ecrire_registre_modeles(reg2)
                 except (OSError, KeyError, ValueError):
                     pass
+                PULLS[modele].update({"statut": "erreur", "texte": message})
             else:
                 PULLS[modele].update({"statut": "erreur", "texte": texte})
     threading.Thread(target=travail, daemon=True).start()
