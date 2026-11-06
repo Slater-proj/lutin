@@ -96,12 +96,12 @@ class Essai(unittest.TestCase):
         self.modele()
 
         def casse(commande, **kw):
-            return VRAI_POPEN([sys.executable, "-c", "import sys; print('erreur de bibliothèque'); sys.exit(3)"], **kw)
+            return VRAI_POPEN([sys.executable, "-c", "import sys; print('erreur de bibliotheque'); sys.exit(3)"], **kw)
         with mock.patch.object(self.m, "serveur_pret", lambda: Path("llama-server")), mock.patch.object(ml.subprocess, "Popen", casse):
             r = essai_moteur.executer({"modele_local": "un"}, self.m, ecrire=self.sortie.append, chemin_rapport=self.tmp / "r.json")
         self.assertFalse(r["reussi"])
         self.assertEqual(r["etapes"][-1]["etape"], "Démarrage du serveur")
-        self.assertIn("erreur de bibliothèque", r["etapes"][-1]["detail"])
+        self.assertIn("erreur de bibliotheque", r["etapes"][-1]["detail"])
 
 
 if __name__ == "__main__":

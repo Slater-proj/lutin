@@ -2,7 +2,7 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
-## 0.16.2
+## 0.16.3
 
 - **`lutin essai-moteur llamacpp` : un essai réel de llama.cpp, avec un rapport.** Les tests de Lutin utilisent de faux serveurs ; cette commande fait pour de vrai, sur la machine où elle tourne, ce que Lutin fait avec un moteur : installer le programme adapté à la carte graphique, télécharger un modèle (avec ton accord et sa taille annoncée), démarrer le serveur, vérifier qu'il répond, tenir une conversation en flux (premier jeton, jetons par seconde), faire un appel d'outil, puis arrêter proprement. Chaque étape dit ce qui marche ou non ; sous Linux, un serveur qui ne démarre pas est expliqué (bibliothèques manquantes, glibc). Le rapport est écrit dans le dossier de données de Lutin (`essais/`). Options : `--modele auteur/dépôt/fichier.gguf`, `--modele-test` (1 Mo : prouve seulement que le serveur démarre et répond), `--variante cuda|vulkan|cpu`, `--sans-outils`, `--oui`. Guide : `docs/TRIALS.fr.md`.
 - **llama.cpp : le serveur est « prêt » quand `/health` répond « ok »** (il répond 503 pendant le chargement du modèle) au lieu de la simple présence de `/v1/models`.

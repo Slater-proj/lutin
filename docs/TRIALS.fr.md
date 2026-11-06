@@ -6,7 +6,7 @@ Les tests automatiques de Lutin utilisent de faux serveurs. Les essais ci-dessou
 
 ## S1 — llama.cpp sur un poste Windows à carte NVIDIA
 
-**Avant** : une version de Lutin d'au moins la **0.16.2** (`lutin update`, ou le bouton de mise à jour de la page). Facultatif mais utile : `nvidia-smi` dans un terminal affiche ta carte et la version du pilote.
+**Avant** : une version de Lutin d'au moins la **0.16.3** (`lutin update`, ou le bouton de mise à jour de la page). Facultatif mais utile : `nvidia-smi` dans un terminal affiche ta carte et la version du pilote.
 
 **Étape 1 — le plus petit essai (environ 30 secondes, 1 Mo de modèle).** Il vérifie que le programme s'installe, démarre et répond. Dans un terminal :
 

@@ -6,7 +6,7 @@ Lutin's automatic tests use fake servers. The trials below run **on real hardwar
 
 ## S1 — llama.cpp on a Windows PC with an NVIDIA card
 
-**Before**: Lutin **0.16.2** or later (`lutin update`, or the update button in the page). Optional but useful: `nvidia-smi` in a terminal shows your card and driver version.
+**Before**: Lutin **0.16.3** or later (`lutin update`, or the update button in the page). Optional but useful: `nvidia-smi` in a terminal shows your card and driver version.
 
 **Step 1 — the smallest trial (about 30 seconds, a 1 MB model).** It checks that the program installs, starts and answers. In a terminal:
 
