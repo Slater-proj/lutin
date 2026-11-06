@@ -2,6 +2,16 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## 0.16.0
+
+- **Deux nouveaux moteurs : llama.cpp et tout serveur compatible OpenAI.** Réglages > Moteur montre chaque moteur avec sa description, ses forces et ses faiblesses, son état et **seulement ce qui est possible avec lui** (avec la raison du reste : Docker, système, mode hors ligne). Lutin traduit à la frontière : messages, appels d'outils (reconstitués morceau par morceau), images, réflexion, comptes de jetons et vitesse ; conversation, outils, mémoire, missions, connecteurs MCP et actualités fonctionnent avec le moteur choisi.
+- **llama.cpp géré par Lutin.** Installation du programme officiel adapté à la machine (CUDA / Vulkan / processeur / Metal, empreinte vérifiée, sans droits administrateur), démarrage à la demande avec le modèle et le contexte choisis, arrêt, désinstallation (les modèles sont gardés), ou connexion à un `llama-server` déjà lancé (adresse). Modèles GGUF : recherche sur Hugging Face, choix de la quantification, téléchargement, suppression.
+- **Ollama : installer, désinstaller, réinstaller, démarrer, arrêter** depuis Réglages > Moteur sous Windows (installateur officiel, signature vérifiée, modèles gardés) ; sous Linux et Mac la page donne la commande ; sous Docker elle explique que c'est un autre conteneur.
+- **L'interface suit le moteur.** Avec un autre moteur, ce qui n'existe qu'avec Ollama (bibliothèque, précisions, comparaison, calibrage des cœurs, charge de la machine) disparaît et l'onglet Modèles montre les modèles de ce moteur avec ce qu'il permet (télécharger, utiliser, supprimer). Le modèle utilisé avec chaque moteur est retenu quand on change. Un diagnostic propre à chaque moteur remplace celui d'Ollama. Les opérations en cours (installation, téléchargement) apparaissent dans la barre bleue.
+- **Serveur compatible OpenAI** (LM Studio, vLLM, Strata…) : adresse et clé facultative dans Réglages > Moteur ; la clé n'est jamais renvoyée à la page.
+
+**English.** Two new engines: llama.cpp (installed, started and fed with GGUF models by Lutin, or connected by address) and any OpenAI-compatible server; Settings > Engine shows each engine's strengths, weaknesses and only what is possible with it; Ollama can be installed, uninstalled and reinstalled from the page on Windows; the interface follows the engine.
+
 ## 0.15.1
 
 - **Docker : configurer depuis la page.** Supprimer un fichier créé, ajouter un dossier de travail, une extension ou un connecteur est refusé depuis un navigateur qui n'est pas « sur la machine » ; or, sous Docker, il ne l'est jamais. Nouvelle variable `LUTIN_ADMIN_TOUS=1` (dans le docker-compose) : toute personne déjà admise (appareil appairé par PIN, ou utilisateur du proxy) peut alors configurer depuis la page. Elle n'a d'effet que dans Docker, et ne change pas le niveau d'accès lui-même. Les refus disent maintenant comment faire, et la documentation Docker détaille le risque (lecture et écriture des dossiers montés, programmes lancés dans le conteneur).

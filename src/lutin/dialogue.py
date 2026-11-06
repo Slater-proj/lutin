@@ -6,7 +6,9 @@ from . import affirmations as _affirmations
 from . import boucles as _boucles
 from . import actualites as _actualites
 from . import mcp as _mcp
+from . import moteur_llamacpp as _llamacpp
 from . import moteurs as _moteurs
+from . import ollama_client
 from . import fichiers as _fichiers
 from . import mission as _mission
 from . import horsligne as _hl
@@ -22,6 +24,8 @@ import os
 import re
 import secrets
 import shutil
+import sys
+import tempfile
 import threading
 import time
 import urllib.request
@@ -62,7 +66,7 @@ def modele_annexe(r):
     choisi = str(r.get("modele_annexe") or "").strip()
     if choisi and choisi != r["modele"]:
         try:
-            if choisi in _m.etat_ollama()["installes"]:
+            if choisi in etat_moteur()["installes"]:
                 return choisi
         except (KeyError, OSError, ValueError):
             pass
@@ -324,7 +328,7 @@ def extraire_appels_texte(contenu, autorises=None, sources=""):
 
 def modele_qui_voit(courant):
     """Un modèle déjà installé qui comprend les images (rôle « vision » du catalogue d'abord), ou None."""
-    installes = etat_ollama()["installes"]
+    installes = etat_moteur()["installes"]
     candidats = [m["id"] for m in _m.MODELES if m["id"] in installes and "vision" in (m.get("capacites") or [])]
     candidats.sort(key=lambda i: next((0 for m in _m.MODELES if m["id"] == i and m["role"] == "vision"), 1))
     return next((i for i in candidats if i != courant), None)
@@ -332,7 +336,7 @@ def modele_qui_voit(courant):
 
 def modele_de_repli(courant, genre):
     """Un autre modèle déjà installé, pour dépanner quand le modèle courant échoue : un modèle rapide pour les appels d'outils ratés, un plus léger pour les plantages."""
-    installes = etat_ollama()["installes"]
+    installes = etat_moteur()["installes"]
     ordre = ("rapide", "leger") if genre == "outil" else ("leger", "rapide")
     for role in ordre:
         for m in _m.MODELES:
@@ -341,7 +345,7 @@ def modele_de_repli(courant, genre):
     return None
 
 
-def capacites(modele):
+def capacites_ollama(modele):
     """Ce que le modèle sait faire d'après Ollama (/api/show). None si Ollama ne le dit pas (ancienne version) ou ne répond pas."""
     if modele in CAPACITES:
         return CAPACITES[modele]
@@ -379,7 +383,7 @@ def ollama_json(chemin, corps=None, delai=8):
         return json.loads(r.read().decode("utf-8"))
 
 
-def ps_modele(nom):
+def ps_ollama(nom):
     """Le modèle est-il en mémoire, et quelle part est sur la carte graphique ? (None = pas chargé ou Ollama muet)"""
     try:
         for m in ollama_json("/api/ps", None, 3).get("models", []):
@@ -422,6 +426,83 @@ class MoteurOllama(_moteurs.Moteur):
     def description(self):
         return _t("Le moteur installé et géré par Lutin : modèles téléchargés depuis la bibliothèque d'Ollama, réglages de vitesse et de mémoire.")
 
+    @property
+    def points_forts(self):
+        return (_t("Le plus simple : un clic pour télécharger un modèle de sa bibliothèque, qui garde plusieurs modèles prêts."),
+                _t("Décharge tout seul un modèle inutilisé et en recharge un autre à la demande."),
+                _t("Lutin sait le régler (cœurs, mémoire, contexte) et en mesurer la vitesse."))
+
+    @property
+    def points_faibles(self):
+        return (_t("Un peu moins rapide que llama.cpp utilisé directement, surtout avec les modèles à experts."),
+                _t("Reçoit les nouveaux modèles et les optimisations avec un peu de retard."),
+                _t("Un service de plus qui tourne en arrière-plan."))
+
+    def statut(self):
+        actif = etat_ollama()["actif"]
+        installe = bool(chemin_ollama()) or actif
+        return {"installe": installe, "actif": actif, "version": "", "mode": "gere",
+                "detail": _t("Ollama répond.") if actif else (_t("Installé, mais arrêté.") if installe else _t("Pas installé."))}
+
+    def actions(self):
+        if os.environ.get("LUTIN_DOCKER"):
+            raison = _t("Dans Docker, Ollama est un conteneur à part : il s'installe, se met à jour et s'arrête avec docker compose.")
+            return {a: {"possible": False, "raison": raison} for a in _moteurs.ACTIONS}
+        st = self.statut()
+        hors = _hl.actif()
+        pas_installe, deja = _t("Pas installé."), _t("Déjà installé.")
+        demarrer = {"possible": st["installe"] and not st["actif"], "raison": _t("Démarre Ollama.") if st["installe"] else pas_installe}
+        arreter = {"possible": st["actif"], "raison": _t("Arrête Ollama et libère la mémoire.") if st["actif"] else _t("Il n'est pas démarré.")}
+        if os.name == "nt":
+            unins = ollama_client.desinstalleur_windows()
+            gardes = _t("Tes modèles téléchargés sont gardés.")
+            return {"installer": {"possible": not st["installe"] and not hors, "raison": (_t("Hors ligne : aucun téléchargement.") if hors else _t("Télécharge l'installateur officiel, vérifie sa signature et l'installe pour toi (sans droits administrateur).")) if not st["installe"] else deja},
+                    "desinstaller": {"possible": st["installe"] and unins is not None, "raison": _t("Désinstalle Ollama. ") + gardes if unins else (pas_installe if not st["installe"] else _t("Désinstalleur introuvable : utilise « Applications installées » de Windows."))},
+                    "reinstaller": {"possible": st["installe"] and unins is not None and not hors, "raison": _t("Désinstalle puis réinstalle la dernière version. ") + gardes if st["installe"] else pas_installe},
+                    "demarrer": demarrer, "arreter": arreter}
+        if sys.platform == "darwin":
+            installer = _t("Télécharge Ollama sur https://ollama.com/download, puis ouvre-le.")
+            retirer = _t("Glisse l'application Ollama dans la corbeille.")
+        else:
+            installer = _t("Sous Linux, l'installation demande les droits administrateur : lance dans un terminal « {} ».").format(ollama_client.COMMANDE_LINUX)
+            retirer = _t("Sous Linux, la désinstallation demande les droits administrateur : suis la procédure de https://docs.ollama.com/linux#uninstall.")
+        return {"installer": {"possible": False, "raison": deja if st["installe"] else installer}, "desinstaller": {"possible": False, "raison": retirer if st["installe"] else pas_installe},
+                "reinstaller": {"possible": False, "raison": _t("Relance la commande d'installation dans un terminal.") if st["installe"] else pas_installe}, "demarrer": demarrer, "arreter": arreter}
+
+    def faire(self, action, progression):
+        a = self.actions().get(action) or {}
+        if not a.get("possible"):
+            raise ValueError(a.get("raison") or _t("Action impossible avec ce moteur."))
+        cache = Path(tempfile.gettempdir()) / "lutin-ollama"
+        try:
+            if action == "demarrer":
+                progression(_t("Démarrage d'Ollama…"), 0, 0)
+                _m.demarrer_ollama()
+            elif action == "arreter":
+                _m.arreter_ollama()
+            elif action in ("desinstaller", "reinstaller"):
+                progression(_t("Arrêt d'Ollama…"), 0, 0)
+                _m.arreter_ollama()
+                progression(_t("Désinstallation…"), 0, 0)
+                ollama_client.desinstaller_windows()
+                if action == "reinstaller":
+                    ollama_client.installer_windows(cache, progression)
+                    _m.demarrer_ollama()
+            elif action == "installer":
+                ollama_client.installer_windows(cache, progression)
+                _m.demarrer_ollama()
+        except ollama_client.ErreurOllama as e:
+            raise ValueError(str(e))
+        CAPACITES.clear()
+
+    def telechargeable(self):
+        if _hl.actif():
+            return {"possible": False, "raison": _t("Hors ligne : aucun téléchargement."), "genre": "bibliotheque"}
+        return {"possible": True, "raison": _t("La bibliothèque d'Ollama : un clic par modèle."), "genre": "bibliotheque"}
+
+    def supprimer_modele(self, nom):
+        return supprimer_modele(nom)
+
     def actif(self):
         return etat_ollama()["actif"]
 
@@ -429,10 +510,10 @@ class MoteurOllama(_moteurs.Moteur):
         return etat_ollama()
 
     def capacites(self, modele):
-        return capacites(modele)
+        return capacites_ollama(modele)
 
     def en_memoire(self, modele):
-        return ps_modele(modele)
+        return ps_ollama(modele)
 
     def chat(self, corps, delai=60):
         return ollama_json("/api/chat", corps, delai)
@@ -443,6 +524,25 @@ class MoteurOllama(_moteurs.Moteur):
 
 
 _moteurs.enregistrer(MoteurOllama())
+_moteurs.CONTEXTE.update(donnees=lambda: _m.DONNEES, en_docker=lambda: bool(os.environ.get("LUTIN_DOCKER")), hors_ligne=lambda: _hl.actif(),
+                         profil=lambda: __import__("lutin.adequation", fromlist=["x"]).profil_pret())
+_moteurs.enregistrer(_llamacpp.MoteurLlamaCpp())
+_moteurs.enregistrer(_llamacpp.MoteurExterne())
+
+
+def capacites(modele):
+    """Ce que le modèle sait faire d'après le moteur choisi."""
+    return moteur_actuel().capacites(modele)
+
+
+def ps_modele(nom):
+    """Le modèle est-il chargé (et sa taille), d'après le moteur choisi ?"""
+    return moteur_actuel().en_memoire(nom)
+
+
+def etat_moteur():
+    """{actif, installes, tailles} du moteur choisi : ses modèles, et s'il est prêt."""
+    return moteur_actuel().modeles()
 
 
 def moteur_actuel(r=None):
@@ -451,6 +551,7 @@ def moteur_actuel(r=None):
 
 
 def etat_ollama():
+    """Ollama lui-même : ses modèles installés et s'il répond (voir etat_moteur pour le moteur choisi)."""
     try:
         tags = ollama_json("/api/tags", None, 3)
         return {"actif": True, "installes": [m["name"] for m in tags.get("models", [])], "tailles": {m["name"]: int(m.get("size") or 0) for m in tags.get("models", [])}}

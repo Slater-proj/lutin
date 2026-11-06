@@ -1,6 +1,7 @@
 """Le serveur HTTP de Lutin : le gestionnaire de requêtes (pages, API JSON, flux de la conversation). L'état et les fonctions métier restent dans moteur ; ce module les atteint par « _m.NOM » (lu à chaque appel)."""
 from http.server import BaseHTTPRequestHandler
 from . import bench as _bench
+from . import moteur_llamacpp as _llamacpp
 from . import moteurs as _moteurs
 from . import mcp as _mcp
 from . import calibrage as _calibrage
@@ -105,6 +106,26 @@ class Gestionnaire(BaseHTTPRequestHandler):
         relais = ("X-Forwarded-For", "X-Forwarded-Host", "X-Forwarded-Proto", "Forwarded", "Via", "X-Real-IP")
         return self._local() and not any(self.headers.get(h) for h in relais) and (_sec._est_boucle(_sec._sans_port(self.headers.get("Host") or "")) or bool(_m.IP_LAN and _sec._sans_port(self.headers.get("Host") or "") == _m.IP_LAN))
 
+    def _vue_moteur(self, mo, courant):
+        """Un moteur pour la page : description, forces et faiblesses, état, ce qui est possible (ou pourquoi non), tâche en cours, réglages d'adresse sans la clé."""
+        v = mo.vue(mo.id == courant)
+        modeles = mo.modeles()
+        statut = mo.statut()
+        return dict(v, statut=statut, actif=bool(modeles["actif"]), nb_modeles=len(modeles["installes"]), actions=mo.actions(), tache=_moteurs.tache(mo.id), telechargeable=mo.telechargeable(),
+                    reglages=_llamacpp.vue_reglages(mo.id) if mo.adresse_modifiable else {})
+
+    @staticmethod
+    def _diagnostic_moteur(mo, o, r):
+        """Pour un moteur autre qu'Ollama : ce qui empêche de discuter (moteur absent ou muet, aucun modèle, modèle choisi absent)."""
+        ouvrir = {"type": "onglet", "nom": "reglages"}
+        if not o["actif"]:
+            return [{"niveau": "erreur", "texte": _t("Le moteur « {} » n'est pas prêt : installe-le ou vérifie son adresse.").format(mo.nom), "action": ouvrir}]
+        if not o["installes"]:
+            return [{"niveau": "attention", "texte": _t("Aucun modèle sur le moteur « {} » : télécharges-en un dans l'onglet Modèles.").format(mo.nom), "action": {"type": "onglet", "nom": "modeles"}}]
+        if r["modele"] not in o["installes"]:
+            return [{"niveau": "attention", "texte": _t("Le modèle « {} » n'existe pas sur le moteur « {} » : choisis-en un autre.").format(r["modele"], mo.nom), "action": {"type": "onglet", "nom": "modeles"}}]
+        return []
+
     @staticmethod
     def _memoire(r, o):
         """Le modèle de conversation est-il chargé, et combien de mémoire prend-il (carte graphique / mémoire vive) ? Pour la barre d'état. None si Ollama est arrêté ou le modèle déchargé."""
@@ -119,7 +140,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
         lues = _variantes.lister(modele)
         profil = _adequation.profil_pret()
         base = next((m for m in _m._CATALOGUE["modeles"] if m["id"] == modele), {})
-        installes = set(_m.etat_ollama()["installes"])
+        installes = set(_m.etat_moteur()["installes"])
         sortie = []
         for v in lues["variantes"]:
             jugement = _adequation.evaluer(dict(base, go=v["go"]), profil) if profil is not None else {"niveau": "bien", "texte": ""}
@@ -129,6 +150,9 @@ class Gestionnaire(BaseHTTPRequestHandler):
     @staticmethod
     def _diagnostic(o, r, profil, modeles):
         """Ce qui empêche Lutin de répondre (ou le gêne), pour la bannière du haut de la page."""
+        mo = _m.moteur_actuel(r)
+        if mo.id != "ollama":
+            return Gestionnaire._diagnostic_moteur(mo, o, r)
         jauge = _emplacements.jauge_modeles() or {}
         libre = jauge.get("libre")
         try:
@@ -214,16 +238,16 @@ class Gestionnaire(BaseHTTPRequestHandler):
         if chemin in ("/", "/index.html"):
             return self._envoyer(200, _m.page_web(), "text/html; charset=utf-8")
         if chemin == "/api/etat":
-            o = _m.etat_ollama()
+            o = _m.etat_moteur()
             r = _m.reglages()
             modeles = _m.modeles_connus(o["installes"], o.get("tailles"))
             profil = _adequation.profil_pret()
             return self._envoyer(200, {"adequation": _adequation.pour_la_liste(modeles, profil, _m._CATALOGUE["modeles"]), "machine": profil.resume() if profil else "", "budget_go": profil.budget_go() if profil else 0,
                                        "familles": {k: _t(v) for k, v in (_m._CATALOGUE.get("familles") or {}).items()}, "disque_modeles": _emplacements.jauge_modeles(),
-                                       "version": _m.VERSION, "ollama": o["actif"], "ollama_installe": bool(_m.chemin_ollama()), "installes": o["installes"], "modeles": modeles, "modeles_masques": len(_m.lire_registre_modeles()["masques"]), "actives": list(_m.TOURS_ACTIFS),
+                                       "version": _m.VERSION, "ollama": o["actif"], "ollama_installe": bool(_m.chemin_ollama()) or _m.moteur_actuel().id != "ollama", "moteur_nom": _m.moteur_actuel().nom, "installes": o["installes"], "modeles": modeles, "modeles_masques": len(_m.lire_registre_modeles()["masques"]), "actives": list(_m.TOURS_ACTIFS),
                                        "pulls": _m.PULLS, "reglages": r, "conversations": _m.conv_liste(), "racine": str(_m.RACINE), "donnees": str(_m.DONNEES),
                                        "outil": bool(self._outil_vivant()), "hors_ligne": _hl.actif(), "moteur": _m.moteur_actuel().id, "niveau": _m.SECURITE.niveau, "docker": _acces.en_docker(), "ouverture_possible": _fichiers.ouverture_possible(), "missions": _mission.par_conversation(), "langue": _i18n.langue(), "langue_reglage": _i18n.langue_configuree(), "cpus": _machine.cpus_disponibles() or 1, "diagnostic": self._diagnostic(o, r, profil, modeles), "redemarrage": {"necessaire": _acces.securite_enregistree() != _m.SECURITE, "possible": _acces.peut_redemarrer()}, "nouvelle_version": _m.nouvelle_version_lutin(), "travaux": _m.travaux_etat(), "configurateur": self._configurateur(), "addons_alertes": _addons.alertes(), "embeddings": _embeddings.etat(),
-                                       "taches_fond": _m.taches_en_cours(), "memoire": self._memoire(r, o), "calibrage": _calibrage.etat(), "bench": {"en_cours": _m.BENCH["en_cours"], "etape": _m.BENCH["etape"], "erreur": _m.BENCH["erreur"], "file": list(_m.BENCH.get("file") or []), "mesures": _bench.lire(_m.chemin_bench())}, "attentes": [{"id": a.id, "titre": a.titre, "detail": a.detail, "diff": a.diff, "conv": a.conv} for a in _m.Attente.EN_COURS.values()],
+                                       "taches_fond": _m.taches_en_cours(), "taches_moteur": [dict(v, nom=_moteurs.MOTEURS[k].nom) for k, v in _moteurs.toutes_les_taches().items() if v.get("statut") == "en cours" and k in _moteurs.MOTEURS], "memoire": self._memoire(r, o), "calibrage": _calibrage.etat(), "bench": {"en_cours": _m.BENCH["en_cours"], "etape": _m.BENCH["etape"], "erreur": _m.BENCH["erreur"], "file": list(_m.BENCH.get("file") or []), "mesures": _bench.lire(_m.chemin_bench())}, "attentes": [{"id": a.id, "titre": a.titre, "detail": a.detail, "diff": a.diff, "conv": a.conv} for a in _m.Attente.EN_COURS.values()],
                                        "en_attente": sorted({a.conv for a in _m.Attente.EN_COURS.values() if a.conv} | set(_m.CHOIX_MEMOIRE))})
         if chemin == "/api/conseil":
             r = _m.reglages()
@@ -231,7 +255,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
             if not vitesse or not vitesse.get("tok_s"):
                 return self._envoyer(200, {"mesure": None, "conseil": []})
             from .machine import detecter
-            return self._envoyer(200, {"mesure": vitesse, "conseil": _conseil.analyser(vitesse, detecter(), r, _m._CATALOGUE, _m.etat_ollama()["installes"], _m.ps_modele(r["modele"]))})
+            return self._envoyer(200, {"mesure": vitesse, "conseil": _conseil.analyser(vitesse, detecter(), r, _m._CATALOGUE, _m.etat_moteur()["installes"], _m.ps_modele(r["modele"]))})
         if chemin == "/api/planifie":
             return self._envoyer(200, _plan.etat())
         if chemin == "/api/documents":
@@ -279,9 +303,20 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 return self._envoyer(400, {"erreur": str(e)})
             except OSError as e:
                 return self._envoyer(503, {"erreur": str(e)})
-        if chemin == "/api/moteurs":                             # les moteurs de modèles (Ollama aujourd'hui) et celui qui est choisi
+        if chemin == "/api/moteurs":                             # les moteurs de modèles : leur état, ce qui est possible avec chacun, et celui qui est choisi
             courant = _m.moteur_actuel().id
-            return self._envoyer(200, {"courant": courant, "moteurs": [dict(mo.vue(mo.id == courant), actif=bool(mo.actif())) for mo in _moteurs.liste()]})
+            return self._envoyer(200, {"courant": courant, "modifiable": self._configurateur(), "moteurs": [self._vue_moteur(mo, courant) for mo in _moteurs.liste()]})
+        if chemin in ("/api/moteur-recherche", "/api/moteur-fichiers"):          # chercher un modèle (Hugging Face pour llama.cpp), puis voir les fichiers d'un dépôt
+            q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+            mo = _moteurs.par_id((q.get("moteur") or [""])[0])
+            try:
+                if chemin == "/api/moteur-recherche":
+                    return self._envoyer(200, {"resultats": mo.chercher_modeles((q.get("q") or [""])[0])})
+                return self._envoyer(200, {"fichiers": mo.fichiers_du_depot((q.get("repo") or [""])[0])})
+            except AttributeError:
+                return self._envoyer(400, {"erreur": _t("Ce moteur n'a pas de bibliothèque de modèles à parcourir.")})
+            except ValueError as e:
+                return self._envoyer(400, {"erreur": str(e)})
         if chemin == "/api/mcp":                                 # les connecteurs MCP (sans leurs secrets)
             return self._envoyer(200, {"connecteurs": _mcp.vue(), "modifiable": self._configurateur()})
         if chemin == "/api/decouvrir":                           # la bibliothèque d'Ollama (nouveautés, populaires, recherche)
@@ -813,6 +848,35 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 return self._envoyer(200, _m.oublier_modele(str(donnees.get("modele", ""))))
             if self.path == "/api/modeles-restaurer":
                 return self._envoyer(200, _m.restaurer_modeles())
+            if self.path.startswith("/api/moteur-"):
+                if not self._configurateur():
+                    return self._envoyer(403, {"erreur": _t("Installer, démarrer ou régler un moteur se fait depuis cette machine (niveau « cette machine seulement » ou navigateur de cette machine).")})
+                mo = _moteurs.MOTEURS.get(str(donnees.get("moteur", "")))
+                if mo is None:
+                    return self._envoyer(400, {"erreur": _t("Moteur inconnu.")})
+                action = self.path[len("/api/moteur-"):]
+                try:
+                    if action == "action":
+                        voulue = str(donnees.get("action", ""))
+                        possible = (mo.actions().get(voulue) or {})
+                        if voulue not in _moteurs.ACTIONS or not possible.get("possible"):
+                            return self._envoyer(400, {"erreur": possible.get("raison") or _t("Cette action n'est pas possible avec ce moteur.")})
+                        return self._envoyer(200, {"tache": _moteurs.lancer_tache(mo, voulue)})
+                    if action == "regler":
+                        if not mo.adresse_modifiable:
+                            return self._envoyer(400, {"erreur": _t("Ce moteur n'a pas d'adresse à régler.")})
+                        _llamacpp.regler(mo.id, donnees.get("url"), donnees.get("cle"), variante=donnees.get("variante") if donnees.get("variante") in ("auto", "cuda", "vulkan", "cpu", "metal") else None)
+                        return self._envoyer(200, {"ok": True})
+                    if action == "telecharger":
+                        repo, fichier = str(donnees.get("repo", "")), str(donnees.get("fichier", ""))
+                        if not mo.telechargeable()["possible"]:
+                            return self._envoyer(400, {"erreur": mo.telechargeable()["raison"]})
+                        return self._envoyer(200, {"tache": _moteurs.lancer_tache(mo, "telecharger", lambda a, progression: mo.telecharger_modele(repo, fichier, progression))})
+                    if action == "supprimer":
+                        mo.supprimer_modele(str(donnees.get("nom", "")))
+                        return self._envoyer(200, {"ok": True})
+                except (ValueError, OSError) as e:
+                    return self._envoyer(400, {"erreur": str(e)})
             if self.path.startswith("/api/mcp-"):
                 if not self._configurateur():
                     return self._envoyer(403, {"erreur": _t("Brancher un connecteur lance un programme : ça se fait depuis la machine de Lutin (ou par un administrateur déclaré).")})

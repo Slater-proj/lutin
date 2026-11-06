@@ -400,8 +400,17 @@ class Assistant(unittest.TestCase):
         """Couche moteur : Ollama est le moteur par défaut, un moteur inconnu est refusé, et tout autre moteur enregistré fait la conversation à la place d'Ollama."""
         from lutin import moteurs
         r = lire("/api/moteurs")
-        self.assertEqual((r["courant"], [m["id"] for m in r["moteurs"]]), ("ollama", ["ollama"]))
-        self.assertTrue(r["moteurs"][0]["gere_modeles"] and r["moteurs"][0]["actif"])
+        self.assertEqual((r["courant"], [m["id"] for m in r["moteurs"]]), ("ollama", ["ollama", "llamacpp", "openai"]))
+        ollama = r["moteurs"][0]
+        self.assertTrue(ollama["gere_modeles"] and ollama["actif"])
+        self.assertTrue(ollama["points_forts"] and ollama["points_faibles"], "chaque moteur se décrit : forces et faiblesses")
+        self.assertEqual(set(ollama["actions"]), {"installer", "desinstaller", "reinstaller", "demarrer", "arreter"})
+        self.assertTrue(all("raison" in a for a in ollama["actions"].values()), "chaque action dit pourquoi elle est possible ou non")
+        autre = next(m for m in r["moteurs"] if m["id"] == "openai")
+        self.assertTrue(autre["adresse_modifiable"] and not autre["gere_modeles"])
+        post("/api/moteur-action", {"moteur": "inconnu", "action": "installer"}, attendu=400)
+        post("/api/moteur-action", {"moteur": "ollama", "action": "installer"}, attendu=400)          # déjà installé : refusé avec la raison
+        post("/api/moteur-regler", {"moteur": "ollama", "url": "http://x"}, attendu=400)          # pas d'adresse à régler pour Ollama
         self.assertEqual(lire("/api/etat")["moteur"], "ollama")
         post("/api/reglages", {"moteur": "inconnu"}, attendu=400)
         self.assertEqual(moteurs.par_id("inconnu").id, "ollama", "un réglage ancien ou inconnu retombe sur Ollama")
@@ -413,7 +422,7 @@ class Assistant(unittest.TestCase):
                 return True
 
             def modeles(self):
-                return {"actif": True, "installes": [], "tailles": {}}
+                return {"actif": True, "installes": ["faux-1"], "tailles": {}}
 
             def chat_flux(self, corps, delai=900):
                 evenements = [{"message": {"role": "assistant", "content": "Salut depuis le faux moteur."}, "done": False}, {"done": True, "prompt_eval_count": 12, "eval_count": 5}]
@@ -430,14 +439,40 @@ class Assistant(unittest.TestCase):
                 return Flux()
         moteurs.enregistrer(Faux())
         avant = lire("/api/etat")["reglages"]["moteur"]
+        modele_avant = lire("/api/etat")["reglages"]["modele"]
         try:
             post("/api/reglages", {"moteur": "faux"})
             ev = chat("Bonjour", reponses=[[{"content": "NE DOIT PAS ÊTRE LU"}]])
             self.assertEqual(texte_de(ev), "Salut depuis le faux moteur.")
-            self.assertEqual([m["id"] for m in lire("/api/moteurs")["moteurs"]], ["ollama", "faux"])
+            self.assertIn("faux", [m["id"] for m in lire("/api/moteurs")["moteurs"]])
+            self.assertEqual(lire("/api/etat")["reglages"]["modele"], "faux-1", "le modèle suit le moteur : le premier du moteur choisi")
+            self.assertEqual(lire("/api/etat")["moteur"], "faux")
+            self.assertEqual(lire("/api/etat")["diagnostic"], [], "un moteur prêt avec son modèle : rien à signaler")
+            post("/api/reglages", {"moteur": avant})
+            self.assertEqual(lire("/api/etat")["reglages"]["modele"], modele_avant, "retour à Ollama : on retrouve le modèle qu'on y utilisait")
         finally:
             post("/api/reglages", {"moteur": avant})
             moteurs.MOTEURS.pop("faux", None)
+
+    def test_ollama_sous_docker_ne_s_installe_pas_et_dit_pourquoi_et_le_cycle_reinstaller_est_ordonne(self):
+        """Sous Docker rien n'est possible (Ollama est un autre conteneur) ; ailleurs, réinstaller = arrêter, désinstaller, installer, démarrer, en gardant les modèles."""
+        from unittest import mock
+        from lutin import moteurs, ollama_client
+        mo = A.moteur_actuel()
+        with mock.patch.dict(os.environ, {"LUTIN_DOCKER": "1"}):
+            a = mo.actions()
+        self.assertTrue(all(not x["possible"] and "Docker" in x["raison"] for x in a.values()))
+        appels = []
+        possibles = {k: {"possible": True, "raison": "ok"} for k in moteurs.ACTIONS}
+        with mock.patch.object(mo, "actions", lambda: possibles), mock.patch.object(A, "arreter_ollama", lambda: appels.append("arreter")), mock.patch.object(A, "demarrer_ollama", lambda: appels.append("demarrer")),                 mock.patch.object(ollama_client, "desinstaller_windows", lambda: appels.append("desinstaller")), mock.patch.object(ollama_client, "installer_windows", lambda cache, progression: appels.append("installer")):
+            mo.faire("reinstaller", lambda *x: None)
+            self.assertEqual(appels, ["arreter", "desinstaller", "installer", "demarrer"])
+            appels.clear()
+            mo.faire("desinstaller", lambda *x: None)
+            self.assertEqual(appels, ["arreter", "desinstaller"], "désinstaller ne réinstalle pas")
+        with mock.patch.object(mo, "actions", lambda: {"installer": {"possible": False, "raison": "Déjà installé."}}):
+            with self.assertRaises(ValueError):
+                mo.faire("installer", lambda *x: None)
 
     def test_commandes(self):
         ev = chat("Dis bonjour", reponses=[[appel_outil("executer", commande="echo bonjour-assistant")], [{"content": "."}]])

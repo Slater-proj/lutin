@@ -361,9 +361,13 @@ button.principal { box-shadow:0 6px 16px -8px rgba(63,143,232,.8); }
 .bandeau-version { border-radius:0; box-shadow:0 8px 24px -16px rgba(0,0,0,.8); }
 .puce { background:#101820; }
 @media (prefers-reduced-motion:reduce) { * { transition:none !important; animation:none !important; } }
+body:not([data-moteur="ollama"]) .ollama-seulement { display:none !important; }
+body[data-moteur="ollama"] .moteur-autre { display:none !important; }
+.carte.moteur-choisi { border-color:var(--accent); box-shadow:0 0 0 1px rgba(90,169,255,.35), var(--ombre-douce); }
+.moteur-liste div.point { margin:2px 0; }
 </style>
 </head>
-<body>
+<body data-moteur="ollama">
 <aside>
   <h1><img src="/logo.svg" alt="" width="26" height="26"> Lutin <select id="selModele" class="modele-titre" title="Le modèle de langage utilisé (le même pour toutes les conversations)"></select></h1>
   <div style="padding:6px 8px 4px"><button class="principal" id="bNouvelle" style="width:100%;padding:5px 9px">+ Nouvelle conversation</button></div>
@@ -432,6 +436,8 @@ button.principal { box-shadow:0 6px 16px -8px rgba(63,143,232,.8); }
   </section>
   <section class="page" id="p-sante"><div class="cadre" id="santeCorps"></div></section>
   <section class="page" id="p-modeles"><div class="cadre">
+    <div class="moteur-autre" id="modelesMoteur"></div>
+    <div class="ollama-seulement">
     <div class="aide">Les modèles tournent sur ta machine, avec Ollama. Plus un modèle est gros, plus il est intelligent, mais plus il demande de mémoire (idéalement celle de ta carte graphique). Un seul modèle est chargé à la fois : en changer prend quelques secondes. Tu peux aussi les gérer en ligne de commande : <code>lutin modeles</code>.</div>
     <label class="opt-ligne" title="Montre des modèles modifiés par la communauté pour ne plus refuser de demandes. À utiliser en connaissance de cause."><input type="checkbox" id="cAvance"> Afficher les modèles avancés (sans filtre)</label>
     <div class="carte" id="jaugeDisque" hidden style="display:block"></div>
@@ -478,6 +484,7 @@ button.principal { box-shadow:0 6px 16px -8px rgba(63,143,232,.8); }
     <div class="carte"><input id="autreModele" placeholder="par exemple qwen3:8b" style="flex:1"><button id="bAutre">Installer</button></div>
     <div id="msgModeles" class="aide"></div>
     <div style="margin:8px 0"><button id="bRestaurer" hidden>Rétablir la liste d'origine</button></div>
+    </div>
   </div></section>
   <section class="page" id="p-memoire"><div class="cadre">
     <h2>Contexte du projet <span class="aide">(comme un CLAUDE.md : lu au début de chaque conversation, tu peux le modifier)</span></h2>
@@ -601,11 +608,9 @@ button.principal { box-shadow:0 6px 16px -8px rgba(63,143,232,.8); }
     </details>
     <details class="groupe" open data-g="moteur"><summary>Moteur</summary>
     <h2>Moteur de modèles <span class="aide">(ce qui fait tourner le modèle de langage)</span></h2>
-    <div class="aide">Lutin discute avec un moteur : Ollama aujourd'hui. D'autres moteurs (llama.cpp, LM Studio, vLLM… par leur interface compatible OpenAI) pourront être branchés ici sans rien changer au reste : conversation, outils, mémoire, connecteurs.</div>
-    <div class="carte" style="gap:10px;flex-wrap:wrap;align-items:center">
-      <label>Moteur <select id="selMoteur"></select></label>
-      <span class="aide" id="aideMoteur"></span>
-    </div>
+    <div class="aide">Lutin discute avec un moteur. Chaque moteur a ses forces et ses limites, et ce que tu peux faire avec lui (l'installer, le démarrer, télécharger ses modèles) dépend de lui et de ton installation : seul ce qui est possible est proposé, avec la raison du reste. Changer de moteur change aussi la liste des modèles et l'onglet Modèles.</div>
+    <div id="listeMoteurs"></div>
+    <div class="aide" id="aideMoteur"></div>
     </details>
     <details class="groupe" open data-g="conversation"><summary>Conversation</summary>
     <h2>Modes <span class="aide">(à choisir dans la barre de gauche ; dans tous les modes, toute modification de fichier et toute commande te demandent ton accord)</span></h2>
@@ -646,6 +651,7 @@ button.principal { box-shadow:0 6px 16px -8px rgba(63,143,232,.8); }
       <label>Plafond du dossier de données (Go) <input id="iPlafond" type="number" step="0.5" min="0.2" max="500" style="width:80px"></label>
       <label title="Windows seulement. 0 = pas de limite. Une commande qui dépasse cette mémoire est arrêtée au lieu de saturer le PC. Attention : à laisser à 0 si l'assistant lance des programmes lourds (ComfyUI, tests d'images)."><span>Mémoire max par commande (Go, 0 = illimitée)</span> <input id="iLimiteCmd" type="number" step="1" min="0" max="256" style="width:80px"></label>
     </div>
+    <div class="ollama-seulement">
     <h2>Charge de la machine</h2>
     <div class="aide">Pour que Lutin ne ralentisse pas le reste de l'ordinateur pendant que tu travailles. Laisse vide = automatique. Le modèle se recharge une fois quand tu changes les cœurs.</div>
     <div class="carte" style="gap:14px">
@@ -658,6 +664,7 @@ button.principal { box-shadow:0 6px 16px -8px rgba(63,143,232,.8); }
     <div class="carte" id="carteCalibrage" style="display:block">
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button id="bCalibrer">⚡ Optimiser pour cette machine</button><button id="bCalibrerStop" hidden>Arrêter</button><span id="msgCalibrage" class="aide"></span></div>
       <div id="tableCalibrage"></div>
+    </div>
     </div>
     <label class="opt-ligne" title="Un petit modèle pour la mise à jour de la fiche de suivi, les résumés et les titres. Plus rapide, mais deux modèles chargés demandent de la mémoire."><span>Petit modèle pour les tâches annexes</span> <select id="selAnnexe"></select></label>
     <div class="aide">Fiche de suivi, résumés et titres n'ont pas besoin d'un gros modèle. Un petit modèle ici les accélère, mais Ollama garde alors deux modèles en mémoire : prévois la place (et vérifie que OLLAMA_MAX_LOADED_MODELS n'est pas à 1, sinon il recharge un modèle à chaque changement et c'est plus lent). Laisse « le même » si tu hésites.</div>
@@ -1497,7 +1504,7 @@ button.principal { box-shadow:0 6px 16px -8px rgba(63,143,232,.8); }
     ids.filter(id => pulls[id].statut === 'termine' && VU_EN_COURS.has(id) && !FINIS.has(id)).forEach(id => FINIS.set(id, maintenant));
     const finis = [...FINIS].filter(([, t]) => maintenant - t < 12000).map(([id]) => id);
     // Les tâches de fond (fiche de suivi, calibrage, mesures de modèles) apparaissent dans la même barre, avec la mémoire que prend le modèle chargé.
-    const fond = [...(ETAT.taches_fond || []).map(t => '📝 ' + t + '…')];
+    const fond = [...(ETAT.taches_fond || []).map(t => '📝 ' + t + '…'), ...(ETAT.taches_moteur || []).map(t => '⚙ ' + t.nom + ' : ' + (t.texte || T('en cours')) + (t.total ? ' (' + Math.round(100 * t.fait / t.total) + ' %)' : '') + '…')];
     if (ETAT.calibrage && ETAT.calibrage.en_cours) fond.push('⏱ ' + T('Calibrage de la vitesse') + (ETAT.calibrage.etape ? ' : ' + ETAT.calibrage.etape : '…'));
     if (ETAT.bench && ETAT.bench.en_cours) fond.push('📏 ' + T('Mesure de ') + ETAT.bench.en_cours + (ETAT.bench.etape ? ' : ' + ETAT.bench.etape : '…') + ((ETAT.bench.file || []).length ? ' (+' + ETAT.bench.file.length + ' ' + T('en attente') + ')' : ''));
     const gigas = n => (n / 1e9).toFixed(1).replace('.', ',') + ' ' + T('Go');
@@ -1601,7 +1608,7 @@ button.principal { box-shadow:0 6px 16px -8px rgba(63,143,232,.8); }
   $('bCalibrerStop').addEventListener('click', async () => { try { await api('/api/calibrage', { action: 'cancel' }); } catch (e) { $('msgCalibrage').textContent = e.message; } });
   const rafraichir = async () => {
     try { ETAT = await api('/api/etat'); } catch (e) { return; }
-    $('pOllama').classList.toggle('ok', ETAT.ollama); $('pOllama').lastChild.textContent = ETAT.ollama ? T('Ollama prêt') : (ETAT.ollama_installe ? T('Ollama arrêté') : T('Ollama non installé')); $('pOllama').title = $('pOllama').lastChild.textContent;
+    $('pOllama').classList.toggle('ok', ETAT.ollama); document.body.dataset.moteur = ETAT.moteur || 'ollama'; $('pOllama').lastChild.textContent = ETAT.moteur && ETAT.moteur !== 'ollama' ? ETAT.moteur_nom + ' ' + (ETAT.ollama ? T('prêt') : T('ne répond pas')) : (ETAT.ollama ? T('Ollama prêt') : (ETAT.ollama_installe ? T('Ollama arrêté') : T('Ollama non installé'))); $('pOllama').title = $('pOllama').lastChild.textContent;
     $('bDemarrer').hidden = ETAT.ollama || !ETAT.ollama_installe;
     afficherDiagnostic(ETAT.diagnostic || []);
     afficherCalibrage(); majAnnexe(); majSens(); majTelechargements();
@@ -1706,7 +1713,7 @@ button.principal { box-shadow:0 6px 16px -8px rgba(63,143,232,.8); }
     if (!ETAT) await rafraichir();          // l'état du serveur (qui peut configurer, niveau d'accès…) est connu avant d'afficher un onglet qui en dépend
     if (b.dataset.p === 'memoire') { const m = await api('/api/memoire'); $('tContexte').value = m['CONTEXTE.md']; $('tMemoire').value = m['MEMOIRE.md']; chargerSkills(); chargerClaude(); chargerNotes(); chargerDocuments(); }
     if (b.dataset.p === 'auto') { chargerPlanifie(); chargerAddons(); chargerAuto(); chargerMcp(); }
-    if (b.dataset.p === 'modeles') rafraichir();
+    if (b.dataset.p === 'modeles') { await rafraichir(); chargerModelesMoteur(); }
     if (b.dataset.p === 'acces') chargerAcces();
     if (b.dataset.p === 'chat' && CONV && !(FLUX && FLUX.detache)) lue(CONV.id);          // on revient lire : la pastille verte s'éteint tout de suite
     if (b.dataset.p === 'sante') window.ouvrirSante();
@@ -2785,16 +2792,128 @@ button.principal { box-shadow:0 6px 16px -8px rgba(63,143,232,.8); }
     catch (e) { $('mMcp').textContent = e.message; }
     chargerMcp();
   });
-  // ---- Moteur de modèles
-  const chargerMoteurs = async () => {
-    let r; try { r = await api('/api/moteurs'); } catch (e) { $('aideMoteur').textContent = e.message; return; }
-    const sel = $('selMoteur'); sel.textContent = '';
-    r.moteurs.forEach(m => { const o = el('option', '', m.nom + (m.actif ? '' : ' (' + T('ne répond pas') + ')')); o.value = m.id; sel.appendChild(o); });
-    sel.value = r.courant; sel.disabled = r.moteurs.length < 2;
-    const m = r.moteurs.find(x => x.id === r.courant);
-    $('aideMoteur').textContent = (m ? m.description : '') + (r.moteurs.length < 2 ? ' ' + T('(Un seul moteur disponible pour le moment.)') : '');
+  // ---- Moteurs de modèles : un panneau par moteur (état, forces et faiblesses, actions possibles, adresse), et le choix du moteur
+  let MINUTEUR_MOTEURS = 0;
+  const LIBELLE_ACTION = { installer: T('Installer'), desinstaller: T('Désinstaller'), reinstaller: T('Réinstaller'), demarrer: T('Démarrer'), arreter: T('Arrêter') };
+  const etatMoteur = m => !m.statut.installe ? T('Pas installé') : m.statut.actif ? T('Prêt') : (m.statut.mode === 'externe' ? T('Ne répond pas') : T('Arrêté'));
+  const barreTache = t => { const l = el('div'); l.appendChild(el('div', 'aide', t.texte || T('En cours…'))); if (t.total) { const b = el('div', 'barre'), i = el('i'); i.style.width = Math.min(100, Math.round(100 * t.fait / t.total)) + '%'; b.appendChild(i); l.appendChild(b); } return l; };
+  const carteMoteur = (m, modifiable) => {
+    const d = el('div', 'carte moteur-liste' + (m.courant ? ' moteur-choisi' : '')); d.style.cssText = 'flex-direction:column;align-items:stretch;gap:6px';
+    const tete = el('div', 'ligne'), radio = el('input'); radio.type = 'radio'; radio.name = 'moteurChoisi'; radio.checked = m.courant; radio.title = T('Utiliser ce moteur');
+    radio.addEventListener('change', async () => { try { await api('/api/reglages', { moteur: m.id }); } catch (e) { $('aideMoteur').textContent = e.message; } await rafraichir(); chargerMoteurs(); });
+    tete.append(radio, el('b', '', ' ' + m.nom), el('span', 'aide', ' · ' + etatMoteur(m) + (m.courant ? ' · ' + T('utilisé') : '') + (m.statut.version ? ' · ' + m.statut.version : '')));
+    d.appendChild(tete);
+    d.appendChild(el('div', '', m.description));
+    if (m.statut.detail) d.appendChild(el('div', 'aide', m.statut.detail));
+    const det = el('details'); det.appendChild(el('summary', '', T('Forces et faiblesses')));
+    m.points_forts.forEach(t => det.appendChild(el('div', 'point', '✅ ' + t))); m.points_faibles.forEach(t => det.appendChild(el('div', 'point', '⚠ ' + t)));
+    d.appendChild(det);
+    const t = m.tache || {};
+    if (t.statut === 'en cours') d.appendChild(barreTache(t)); else if (t.statut === 'erreur') d.appendChild(el('div', 'erreur', '⚠ ' + t.erreur));
+    const ligne = el('div', 'ligne'); let possibles = 0;
+    Object.keys(LIBELLE_ACTION).forEach(a => {
+      const x = m.actions[a]; if (!x || !x.possible) return;
+      const b = el('button', a === 'installer' ? 'principal' : '', LIBELLE_ACTION[a]); b.title = x.raison; b.disabled = !modifiable || t.statut === 'en cours'; possibles++;
+      b.addEventListener('click', async () => {
+        if ((a === 'desinstaller' || a === 'reinstaller') && !confirm(x.raison + ' ' + T('Continuer ?'))) return;
+        try { await api('/api/moteur-action', { moteur: m.id, action: a }); } catch (e) { $('aideMoteur').textContent = e.message; }
+        chargerMoteurs();
+      });
+      ligne.appendChild(b);
+    });
+    if (possibles) d.appendChild(ligne);
+    // ce qui n'est pas possible, et pourquoi : seulement quand rien ne l'est (Docker, serveur externe, système), ou quand le moteur manque et ne peut pas être installé
+    const raisons = !possibles ? [...new Set(Object.keys(LIBELLE_ACTION).map(a => m.actions[a]).filter(x => x && x.raison).map(x => x.raison))] : (!m.statut.installe && m.actions.installer && m.actions.installer.raison ? [m.actions.installer.raison] : []);
+    raisons.slice(0, 2).forEach(r => d.appendChild(el('div', 'aide', 'ℹ ' + r)));
+    if (m.adresse_modifiable) {
+      const f = el('div', 'ligne'), url = el('input'), cle = el('input'), msg = el('span', 'aide');
+      url.value = m.reglages.url || ''; url.style.minWidth = '260px'; url.disabled = cle.disabled = !modifiable;
+      url.placeholder = m.id === 'llamacpp' ? T('Adresse d\'un llama-server déjà lancé (vide : Lutin le gère lui-même)') : T('Adresse du serveur, par exemple http://127.0.0.1:1234');
+      cle.type = 'password'; cle.placeholder = m.reglages.cle_definie ? T('Clé enregistrée (vide : on la garde)') : T('Clé d\'accès (facultative)');
+      f.append(url, cle);
+      let variante = null;
+      if (m.id === 'llamacpp') {
+        variante = el('select'); variante.title = T('Version du programme à installer'); variante.disabled = !modifiable;
+        [['auto', T('Version : automatique')], ['cuda', 'NVIDIA (CUDA)'], ['vulkan', T('Autres cartes (Vulkan)')], ['cpu', T('Processeur seul')]].forEach(([v, n]) => { const o = el('option', '', n); o.value = v; variante.appendChild(o); });
+        variante.value = m.reglages.variante || 'auto'; f.appendChild(variante);
+      }
+      const ok = el('button', '', T('Enregistrer')); ok.disabled = !modifiable;
+      ok.addEventListener('click', async () => {
+        try { await api('/api/moteur-regler', { moteur: m.id, url: url.value, cle: cle.value || undefined, variante: variante ? variante.value : undefined }); msg.textContent = T('Enregistré.'); await rafraichir(); chargerMoteurs(); }
+        catch (e) { msg.textContent = e.message; }
+      });
+      f.append(ok, msg); d.appendChild(f);
+    }
+    return d;
   };
-  $('selMoteur').addEventListener('change', async () => { try { await api('/api/reglages', { moteur: $('selMoteur').value }); } catch (e) { $('aideMoteur').textContent = e.message; } rafraichir(); chargerMoteurs(); });
+  const chargerMoteurs = async () => {
+    clearTimeout(MINUTEUR_MOTEURS);
+    let r; try { r = await api('/api/moteurs'); } catch (e) { $('aideMoteur').textContent = e.message; return; }
+    const z = $('listeMoteurs'), neuf = document.createElement('div');
+    if (!r.modifiable && ETAT) neuf.appendChild(el('div', 'attention', explicationVerrou()));
+    r.moteurs.forEach(m => neuf.appendChild(carteMoteur(m, r.modifiable)));
+    if (!saisieEnCours(z)) z.replaceChildren(...neuf.childNodes);
+    if (r.moteurs.some(m => m.tache && m.tache.statut === 'en cours') && $('p-reglages').classList.contains('vue')) MINUTEUR_MOTEURS = setTimeout(() => { rafraichir(); chargerMoteurs(); }, 1500);
+  };
+  // L'onglet Modèles d'un moteur autre qu'Ollama : ses modèles (utiliser, supprimer) et, selon lui, de quoi en télécharger
+  const chargerModelesMoteur = async () => {
+    const z = $('modelesMoteur'); if (!ETAT || ETAT.moteur === 'ollama') return;
+    let r; try { r = await api('/api/moteurs'); } catch (e) { z.textContent = e.message; return; }
+    const m = r.moteurs.find(x => x.id === r.courant); if (!m) return;
+    const neuf = document.createElement('div');
+    neuf.appendChild(el('h2', '', T('Modèles de ') + m.nom));
+    neuf.appendChild(el('div', 'aide', T('Les modèles d\'Ollama (bibliothèque, précisions, comparaison) ne concernent pas ce moteur : cet onglet montre ceux de ') + m.nom + '.'));
+    if (!m.statut.installe || (!m.statut.actif && m.statut.mode === 'externe')) {
+      const c = el('div', 'carte'); c.appendChild(el('span', '', m.statut.detail || T('Ce moteur n\'est pas prêt.')));
+      const b = el('button', 'principal', T('Ouvrir les réglages du moteur')); b.addEventListener('click', () => ouvrirOnglet('reglages')); c.appendChild(b); neuf.appendChild(c);
+    }
+    const installes = ETAT.installes || [];
+    if (!installes.length) neuf.appendChild(el('div', 'aide', T('Aucun modèle pour le moment.')));
+    installes.forEach(nom => {
+      const c = el('div', 'carte'), info = ETAT.modeles.find(x => x.id === nom);
+      c.appendChild(el('b', '', nom)); if (info && info.go) c.appendChild(el('span', 'aide', ' · ' + info.go + ' ' + T('Go')));
+      if (nom === ETAT.reglages.modele) c.appendChild(el('span', 'aide', ' · ' + T('utilisé')));
+      else { const u = el('button', 'principal', T('Utiliser')); u.addEventListener('click', async () => { try { await api('/api/reglages', { modele: nom }); await rafraichir(); chargerModelesMoteur(); } catch (e) { alert(e.message); } }); c.appendChild(u); }
+      if (m.gere_modeles && r.modifiable) { const s = el('button', '', T('Supprimer')); s.addEventListener('click', async () => { if (!confirm(T('Supprimer « ') + nom + T(' » du disque ? Tu pourras le retélécharger.'))) return; try { await api('/api/moteur-supprimer', { moteur: m.id, nom }); await rafraichir(); chargerModelesMoteur(); } catch (e) { alert(e.message); } }); c.appendChild(s); }
+      neuf.appendChild(c);
+    });
+    const dl = m.telechargeable;
+    if (dl.genre === 'huggingface') {
+      neuf.appendChild(el('h2', '', T('Télécharger un modèle')));
+      neuf.appendChild(el('div', 'aide', dl.raison + ' ' + T('Choisis une quantification : Q4_K_M est un bon équilibre (petit et rapide), Q8_0 est plus fidèle mais plus gros.')));
+      if (dl.possible) {
+        const c = el('div', 'carte'), q = el('input'), b = el('button', '', T('Chercher sur Hugging Face')), res = el('div'), msg = el('div', 'aide');
+        q.placeholder = T('Nom d\'un modèle (par exemple qwen3 ou gemma)'); q.style.flex = '1';
+        const chercher = async () => {
+          res.textContent = ''; msg.textContent = T('Recherche…');
+          try {
+            const rr = await api('/api/moteur-recherche?moteur=' + m.id + '&q=' + encodeURIComponent(q.value.trim())); msg.textContent = rr.resultats.length ? '' : T('Aucun résultat.');
+            rr.resultats.forEach(dep => {
+              const ligne = el('div', 'carte'); ligne.appendChild(el('b', '', dep.id)); ligne.appendChild(el('span', 'aide', ' · ' + dep.telechargements + ' ↓'));
+              const a = el('a', '', ' ↗'); a.href = 'https://huggingface.co/' + dep.id; a.target = '_blank'; a.rel = 'noopener noreferrer'; ligne.appendChild(a);
+              const v = el('button', '', T('Voir les fichiers')), fichiers = el('div', 'carte'); fichiers.hidden = true; fichiers.style.cssText = 'flex-direction:column;align-items:stretch';
+              v.addEventListener('click', async () => {
+                fichiers.hidden = false; fichiers.textContent = T('Recherche…');
+                try {
+                  const ff = await api('/api/moteur-fichiers?moteur=' + m.id + '&repo=' + encodeURIComponent(dep.id)); fichiers.textContent = ff.fichiers.length ? '' : T('Aucun fichier GGUF utilisable dans ce dépôt.');
+                  ff.fichiers.forEach(f => {
+                    const l = el('div', 'ligne'); l.appendChild(el('span', '', f.fichier + ' · ' + (f.taille / 1e9).toFixed(1).replace('.', ',') + ' ' + T('Go')));
+                    const t = el('button', 'principal', T('Télécharger'));
+                    t.addEventListener('click', async () => { try { await api('/api/moteur-telecharger', { moteur: m.id, repo: dep.id, fichier: f.fichier }); msg.textContent = T('Téléchargement lancé : l\'avancement est dans la barre bleue du haut.'); rafraichir(); } catch (e) { msg.textContent = e.message; } });
+                    l.appendChild(t); fichiers.appendChild(l);
+                  });
+                } catch (e) { fichiers.textContent = e.message; }
+              });
+              ligne.appendChild(v); res.appendChild(ligne); res.appendChild(fichiers);
+            });
+          } catch (e) { msg.textContent = e.message; }
+        };
+        b.addEventListener('click', chercher); q.addEventListener('keydown', e => { if (e.key === 'Enter') chercher(); });
+        c.append(q, b); neuf.append(c, msg, res);
+      }
+    } else if (dl.raison) neuf.appendChild(el('div', 'aide', dl.raison));
+    z.replaceChildren(...neuf.childNodes);
+  };
   const explicationVerrou = () => ETAT.niveau === 'proxy'
     ? T('🔒 Réglages verrouillés : le proxy t\'identifie, mais tu n\'es pas déclaré administrateur. Ajoute ton identifiant dans la variable LUTIN_ADMINS du docker-compose (ou LUTIN_ADMIN_TOUS=1 pour ouvrir à tous les utilisateurs connectés ; voir docs/DOCKER.md), puis redémarre le conteneur.')
     : (ETAT.docker

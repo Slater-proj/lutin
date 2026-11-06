@@ -47,9 +47,26 @@ def enregistrer_reglages(nouveau):
 def _enregistrer_reglages(nouveau):
     r = _m.reglages()
     mode_avant = r["mode"]
+    moteur_avant, modele_avant = r.get("moteur") or "ollama", r["modele"]
     for k in _m.REGLAGES_DEFAUT:
         if k in nouveau:
             r[k] = nouveau[k]
+    from . import moteurs
+    r["moteur"] = str(r.get("moteur") or moteurs.OLLAMA)
+    if not moteurs.valide(r["moteur"]):
+        raise ValueError(_t("Moteur inconnu."))
+    par = dict(r.get("modeles_par_moteur") or {})
+    if r["moteur"] != moteur_avant:          # un autre moteur a d'autres modèles : on retrouve celui qu'on y utilisait, ou le premier qu'il propose
+        par[moteur_avant] = modele_avant
+        r["modele_annexe"] = ""
+        if "modele" not in nouveau:
+            try:
+                installes = moteurs.par_id(r["moteur"]).modeles()["installes"]
+            except Exception:  # noqa: BLE001  (un moteur qui ne répond pas ne doit pas empêcher de le choisir)
+                installes = []
+            voulu = par.get(r["moteur"])
+            r["modele"] = voulu if voulu in installes else (installes[0] if installes else (voulu or r["modele"]))
+    r["modeles_par_moteur"] = {k: v for k, v in par.items() if isinstance(k, str) and isinstance(v, str)}
     if r.get("mode") == "mission":
         r["mode"] = mode_avant                               # « mission longue » se choisit conversation par conversation, jamais comme mode des nouvelles conversations
     if not _modes.valide(r["mode"]):
@@ -66,10 +83,6 @@ def _enregistrer_reglages(nouveau):
     r["essai_a_blanc"] = bool(r.get("essai_a_blanc"))
     r["copie_conversations"] = bool(r.get("copie_conversations"))
     r["conseil_machine"] = bool(r.get("conseil_machine", True))
-    from . import moteurs
-    r["moteur"] = str(r.get("moteur") or moteurs.OLLAMA)
-    if not moteurs.valide(r["moteur"]):
-        raise ValueError(_t("Moteur inconnu."))
     r["modele_annexe"] = str(r.get("modele_annexe") or "").strip()
     if r["modele_annexe"] and not re.match(r"^[A-Za-z0-9_./:-]{1,100}$", r["modele_annexe"]):
         raise ValueError(_t("Nom de modèle invalide."))

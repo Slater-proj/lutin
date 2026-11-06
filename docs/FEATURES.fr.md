@@ -177,7 +177,20 @@ Après l'ajout d'un dossier, Lutin dit ce qu'il y a trouvé et utilise (fichiers
 
 ## Moteurs de modèles
 
-Lutin discute avec un moteur de modèles : **Ollama** aujourd'hui (installé et géré par Lutin). Tout ce que Lutin demande à un moteur (discuter en flux avec les outils, répond-il, ce qu'un modèle sait faire, mémoire prise) passe par une interface commune : un autre moteur (llama.cpp server, LM Studio, vLLM… par leur interface compatible OpenAI) peut donc prendre la place d'Ollama sans toucher aux conversations, aux outils, à la mémoire, aux missions ni aux connecteurs MCP. Le choix est dans **Réglages > Moteur**. Les réglages de la mémoire des longues conversations sont dans l'onglet **Mémoire**.
+Lutin discute avec un moteur de modèles. Trois sont proposés dans **Réglages > Moteur** : **Ollama** (par défaut), **llama.cpp** et **n'importe quel serveur compatible OpenAI**. Tout ce que Lutin demande à un moteur (discuter en flux avec les outils, répond-il, ce qu'un modèle sait faire, mémoire prise) passe par une interface commune : un autre moteur (llama.cpp server, LM Studio, vLLM… par leur interface compatible OpenAI) peut donc prendre la place d'Ollama sans toucher aux conversations, aux outils, à la mémoire, aux missions ni aux connecteurs MCP. Le choix est dans **Réglages > Moteur** ; les réglages de la mémoire des longues conversations sont dans l'onglet **Mémoire**.
+
+| Moteur | Forces | Faiblesses |
+|---|---|---|
+| **Ollama** | Le plus simple : un clic par modèle depuis sa bibliothèque, plusieurs modèles gardés prêts, se décharge tout seul ; Lutin sait le régler et le mesurer. | Un peu moins rapide que llama.cpp (surtout avec les modèles à experts), les nouveaux modèles et optimisations arrivent plus tard, un service de plus en arrière-plan. |
+| **llama.cpp** (`llama-server`) | Le moteur sur lequel Ollama est construit, utilisé directement : de quelques % à une vingtaine de % plus rapide à l'écriture d'après des mesures publiques (à vérifier sur ta machine), les nouveaux modèles en premier, tous les réglages accessibles, un seul programme léger. | Un seul modèle à la fois (rechargé quand tu changes), les modèles sont des fichiers GGUF à choisir (quantification), un premier chargement plus long. |
+| **Serveur compatible OpenAI** (LM Studio, vLLM, Strata…) | Universel : n'importe quel serveur de ce genre, sur cette machine ou sur le réseau. | Lutin n'installe, ne démarre ni ne met à jour rien ; selon le serveur, les appels d'outils ou les images peuvent ne pas fonctionner. |
+
+**Ce que la page propose dépend du moteur et de ton installation** : seul ce qui est possible est montré, avec la raison du reste (Docker, système, mode hors ligne…).
+- *Installer / désinstaller / réinstaller* : Ollama sous Windows (installateur officiel, signature vérifiée, sans droits administrateur ; tes modèles sont gardés) ; llama.cpp partout sauf sous Docker (Lutin télécharge le programme officiel adapté à la machine : CUDA pour une carte NVIDIA, Vulkan pour les autres cartes, processeur sinon, Metal sur Mac ; il est rangé dans le dossier de données de Lutin, sans droits administrateur, empreinte vérifiée). Sous Linux et Mac, l'installation d'Ollama demande les droits administrateur : la page donne la commande à lancer.
+- *Modèles* : Ollama garde sa bibliothèque (l'onglet Modèles comme avant). Avec llama.cpp, l'onglet Modèles liste les modèles GGUF, permet de chercher sur Hugging Face, de choisir un fichier (quantification : Q4_K_M est un bon équilibre) et de le télécharger, de l'utiliser ou de le supprimer. Avec un serveur externe, le serveur gère ses modèles et ils apparaissent simplement dans la liste.
+- *Démarrage* : llama.cpp démarre tout seul, avec le modèle et la taille de contexte choisis, quand tu discutes (et redémarre si tu changes de modèle). Donne-lui une adresse pour te connecter à un `llama-server` déjà lancé (par exemple dans un autre conteneur).
+- Changer de moteur retient le modèle que tu utilisais avec chacun.
+
 
 ## Trouver de nouveaux modèles
 

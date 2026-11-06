@@ -175,6 +175,26 @@ def verifier_signature_windows(chemin, lanceur):
     return statut == "Valid" and EDITEUR_ATTENDU in sujet.lower(), sujet
 
 
+def desinstalleur_windows(env=None):
+    """Le programme de désinstallation d'Ollama (installé pour l'utilisateur courant), ou None."""
+    env = os.environ if env is None else env
+    base = env.get("LOCALAPPDATA") or ""
+    for c in (Path(base) / "Programs" / "Ollama" / "unins000.exe",) if base else ():
+        if c.is_file():
+            return c
+    return None
+
+
+def desinstaller_windows(executer=subprocess.run, env=None):
+    """Désinstalle Ollama en silence ; les modèles téléchargés (dans le dossier .ollama de l'utilisateur) ne sont pas touchés."""
+    exe = desinstalleur_windows(env)
+    if exe is None:
+        raise ErreurOllama(_t("Le désinstalleur d'Ollama est introuvable (il n'a pas été installé pour cet utilisateur) : utilise « Applications installées » de Windows."))
+    r = executer([str(exe), "/VERYSILENT", "/NORESTART"], timeout=600)
+    if getattr(r, "returncode", 0) != 0:
+        raise ErreurOllama(_t("la désinstallation d'Ollama a échoué (code {})").format(r.returncode))
+
+
 def installer_windows(dossier_cache, progression=None, ouvrir=urllib.request.urlopen, lanceur_sortie=None, executer=subprocess.run, taille_min=50_000_000):
     """Télécharge, VÉRIFIE LA SIGNATURE, puis installe Ollama en silence (pour l'utilisateur courant, sans droits administrateur)."""
     from .machine import lancer

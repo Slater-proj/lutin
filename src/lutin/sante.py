@@ -137,7 +137,7 @@ def taille_modele(nom, charge=None):
     """Octets de mémoire vidéo qu'il faut au modèle : sa taille d'après Ollama (celle du modèle déjà chargé si on l'a, sinon la liste des modèles installés), sinon celle annoncée dans le catalogue."""
     if charge and charge.get("taille"):
         return int(charge["taille"])
-    t = (_m.etat_ollama().get("tailles") or {}).get(nom)
+    t = (_m.etat_moteur().get("tailles") or {}).get(nom)
     if t:
         return int(t)
     return int(next((m["go"] for m in _m.MODELES if m["id"] == nom), 0) * GO)
@@ -308,10 +308,12 @@ def lancer_autotest(profond=False):
         except Exception as e:  # noqa: BLE001
             ok, detail = False, str(e)[:300] or type(e).__name__
         resultats.append({"nom": nom, "ok": ok, "important": important, "detail": detail if isinstance(detail, str) else "", "duree": round(time.time() - debut, 1)})
-    o = _m.etat_ollama()
+    o = _m.etat_moteur()
 
     def ollama_repond():
         if not o["actif"]:
+            if _m.moteur_actuel(r).id != "ollama":
+                raise RuntimeError(_t("Le moteur « {} » ne répond pas (Réglages > Moteur).").format(_m.moteur_actuel(r).nom))
             raise RuntimeError(_t("Ollama ne répond pas sur {} (bouton « Démarrer Ollama »).").format(_m.OLLAMA))
         return "{} modèle(s) installé(s)".format(len(o["installes"]))
 

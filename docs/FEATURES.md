@@ -177,7 +177,20 @@ After you add a folder, Lutin says what it found and uses (files, CLAUDE.md, `sk
 
 ## Model engines
 
-Lutin talks to a model engine: **Ollama** today (installed and managed by Lutin). Everything Lutin asks an engine (chat with streaming and tools, is it answering, what a model can do, memory used) goes through a common interface, so another engine (llama.cpp server, LM Studio, vLLM… through their OpenAI-compatible interface) can replace Ollama without touching conversations, tools, memory, missions or MCP connectors. The choice is in **Settings > Engine**. The long-conversation memory settings are in the **Memory** tab.
+Lutin talks to a model engine. Three are available in **Settings > Engine**: **Ollama** (the default), **llama.cpp** and **any OpenAI-compatible server**. Everything Lutin asks an engine (chat with streaming and tools, is it answering, what a model can do, memory used) goes through a common interface, so another engine (llama.cpp server, LM Studio, vLLM… through their OpenAI-compatible interface) can replace Ollama without touching conversations, tools, memory, missions or MCP connectors. The choice is in **Settings > Engine**; the long-conversation memory settings are in the **Memory** tab.
+
+| Engine | Strengths | Weaknesses |
+|---|---|---|
+| **Ollama** | The simplest: one click per model from its library, several models kept ready, unloads by itself; Lutin tunes and measures it. | A little slower than llama.cpp (especially with mixture-of-experts models), new models and optimisations arrive later, one more background service. |
+| **llama.cpp** (`llama-server`) | The engine Ollama is built on, used directly: a few % to about twenty % faster writing according to public measurements (to check on your machine), new models first, every setting reachable, a single light program. | One model at a time (reloaded when you switch), models are GGUF files to choose (quantisation), a longer first load. |
+| **OpenAI-compatible server** (LM Studio, vLLM, Strata…) | Universal: any server of this kind, on this machine or on the network. | Lutin installs, starts and updates nothing; tool calls or images may not work depending on the server. |
+
+**What the page offers depends on the engine and on your installation**: only what is possible is shown, with the reason for the rest (Docker, system, offline mode…).
+- *Install / uninstall / reinstall*: Ollama on Windows (official installer, signature checked, no administrator rights; your models are kept); llama.cpp everywhere except Docker (Lutin downloads the official program suited to the machine: CUDA for an NVIDIA card, Vulkan for other cards, processor otherwise, Metal on Mac; it is stored in Lutin's data folder, no administrator rights, fingerprint checked). On Linux and Mac, Ollama's installation needs administrator rights: the page gives the command to run.
+- *Models*: Ollama keeps its library (the Models tab as before). With llama.cpp, the Models tab lists the GGUF models, lets you search Hugging Face, pick a file (quantisation: Q4_K_M is a good balance) and download it, use it or delete it. With an external server, the server manages its models and they simply appear in the list.
+- *Starting*: llama.cpp starts by itself, with the chosen model and context size, when you chat (and restarts if you change model). Give it an address to connect to a `llama-server` that is already running (for example in another container).
+- Changing engine remembers the model you used with each one.
+
 
 ## Finding new models
 
