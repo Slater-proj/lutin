@@ -195,6 +195,9 @@ class FauxWeb(BaseHTTPRequestHandler):
             return self._rep("image/png", b"\x89PNG")
         if self.path == "/vide":
             return self._rep("text/html", "<html><body><script>x()</script></body></html>")
+        if self.path == "/js":          # une page construite par JavaScript : le corps est vide, mais le serveur annonce un titre, une description et des données structurées
+            return self._rep("text/html; charset=utf-8", "<html><head><title>Fil</title><meta property='og:title' content='Un fil de discussion'><meta property='og:description' content='Résumé annoncé par le serveur'>"
+                             "<script type='application/ld+json'>{\"@type\": \"DiscussionForumPosting\", \"headline\": \"Un fil de discussion\"}</script></head><body><div id='app'></div><script>charger()</script></body></html>")
         self.send_response(404); self.send_header("Content-Length", "0"); self.end_headers()
 
     def do_POST(self):
@@ -1364,7 +1367,14 @@ class Assistant(unittest.TestCase):
             with self.assertRaises(A.ErreurOutil, msg=mauvais) as cm:
                 A.outil_web_lire(mauvais, 0, {"web": True})
             self.assertIn(message, str(cm.exception))
-        self.assertIn("vide", A.outil_web_lire(URL_WEB + "/vide", 0, {"web": True}))
+        vide = A.outil_web_lire(URL_WEB + "/vide", 0, {"web": True})
+        self.assertIn("JavaScript", vide)
+        self.assertIn("copier-coller", vide, "on dit à l'utilisateur quoi faire plutôt que de s'arrêter là")
+        js = A.outil_web_lire(URL_WEB + "/js", 0, {"web": True})
+        for attendu in ("CONTENU WEB NON FIABLE", "Un fil de discussion", "Résumé annoncé par le serveur", "DiscussionForumPosting", "JavaScript", "trombone"):
+            self.assertIn(attendu, js)
+        self.assertNotIn("charger()", js, "le script n'est pas lu")
+        self.assertNotIn("Reddit", js, "le conseil propre à Reddit n'apparaît que sur Reddit")
         with self.assertRaises(A.ErreurOutil) as cm:
             A.outil_web_lire(URL_WEB + "/page", 0, {"web": False})
         self.assertIn("désactivé", str(cm.exception))

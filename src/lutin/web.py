@@ -115,6 +115,51 @@ class HtmlEnTexte(HTMLParser):
         return re.sub(r"\n{3,}", "\n\n", "\n".join(lignes)).strip()
 
 
+class MetaPage(HTMLParser):
+    """Ce qu'une page annonce SANS JavaScript : description (balises meta), données structurées (JSON-LD). Sert quand le corps de la page est construit par JavaScript et paraît vide."""
+    CLES = ("og:title", "og:description", "description", "twitter:title", "twitter:description")
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.meta, self.ld, self._dans_ld, self._tampon = {}, [], False, []
+
+    def handle_starttag(self, tag, attrs):
+        a = dict(attrs)
+        if tag == "meta":
+            cle = (a.get("property") or a.get("name") or "").lower()
+            if cle in self.CLES and a.get("content") and cle not in self.meta:
+                self.meta[cle] = " ".join(a["content"].split())
+        elif tag == "script" and (a.get("type") or "").lower() == "application/ld+json":
+            self._dans_ld, self._tampon = True, []
+
+    def handle_endtag(self, tag):
+        if tag == "script" and self._dans_ld:
+            self._dans_ld = False
+            if len(self.ld) < 3:
+                self.ld.append(" ".join("".join(self._tampon).split())[:1500])
+
+    def handle_data(self, data):
+        if self._dans_ld:
+            self._tampon.append(data)
+
+    def texte(self):
+        lignes = ["{} : {}".format(k, v[:600]) for k, v in self.meta.items()] + ["données structurées : " + t for t in self.ld if t]
+        return "\n".join(lignes)
+
+
+SEUIL_PAGE_VIDE = 200          # en dessous, une page « HTML » n'a presque pas de texte lisible : elle est probablement construite par JavaScript
+
+
+def conseil_page_javascript(adresse):
+    """Quoi dire (et quoi proposer à l'utilisateur) quand la page n'a pas de contenu sans JavaScript. Le modèle le répète tel quel : rien d'inventé, rien de contourné."""
+    hote = (urllib.parse.urlparse(adresse).hostname or "").lower()
+    texte = _t("\nCette page est construite par JavaScript, que je ne peux pas exécuter : je n'ai que ce que le serveur envoie au départ.")
+    if hote == "reddit.com" or hote.endswith(".reddit.com") or hote == "redd.it":
+        texte += _t("\nReddit refuse en plus les lectures automatiques de ses pages, et je n'essaie pas de passer outre.")
+    texte += _t("\nPropose à l'utilisateur de copier-coller le texte du fil, ou d'enregistrer la page (Ctrl+S, ou imprimer en PDF) et de la joindre avec le trombone : une pièce jointe se lit en entier.")
+    return texte
+
+
 class ResultatsDDG(HTMLParser):
     """Lit la page de résultats de DuckDuckGo (version HTML simple)."""
 
@@ -340,14 +385,28 @@ def outil_web_lire(url, debut, ctx):
         texte = brut
     else:
         raise _m.ErreurOutil(_t("Ce type de contenu n'est pas lisible ({}). Seules les pages et les textes le sont.").format(type_))
-    if not texte.strip():
+    note = ""
+    if "html" in type_ or brut.lstrip()[:15].lower().startswith(("<!doctype", "<html")):
+        if len(texte.strip()) < SEUIL_PAGE_VIDE:
+            meta = MetaPage()
+            try:
+                meta.feed(brut)
+            except Exception:  # noqa: BLE001  (un HTML cassé ne doit pas empêcher de répondre)
+                pass
+            annonce = meta.texte()
+            note = conseil_page_javascript(final)
+            if not texte.strip() and not annonce:
+                return AVERTISSEMENT_WEB + "\n" + final + note
+            if annonce:
+                texte = (texte.strip() + "\n\n" if texte.strip() else "") + _t("Ce que la page annonce sans JavaScript :") + "\n" + annonce
+    elif not texte.strip():
         return AVERTISSEMENT_WEB + "\n" + final + _t("\nPage vide (elle est peut-être construite par JavaScript, que je ne peux pas exécuter).")
     page = texte[debut:debut + WEB_PAGE]
     fin = debut + len(page)
     entete = _t("{}\n{}{}\ncaractères {} à {} sur {}").format(AVERTISSEMENT_WEB, final, ("\nTitre : " + titre) if titre else "", debut, fin, len(texte))
     if fin < len(texte):
         entete += _t(" — suite : web_lire avec debut={}").format(fin)
-    return entete + "\n\n" + page
+    return entete + note + "\n\n" + page
 
 
 ETATS_TACHE = ("a_faire", "en_cours", "fait")

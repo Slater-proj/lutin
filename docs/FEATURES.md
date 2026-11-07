@@ -113,6 +113,10 @@ The model has a `creer_document` tool: depending on the extension (`.pdf`, `.doc
 
 **Tidying up: Settings > Folders and data > Files created by Lutin.** Everything Lutin created (documents, images, videos, sounds) is listed there with its size, date and path, with the total. Tick what you want to erase, or *Select what is older than 30 days*, then *Delete the selection*: the files are erased from the disk and their cards disappear from the conversations. 📂 opens a file's folder. A file you already deleted by hand leaves the list by itself; even when the original conversation no longer exists the file stays listed (that is the point). Nothing outside the working folders and ComfyUI's output folder is ever touched.
 
+## Reading web pages, and pages Lutin cannot read
+
+With the **Web** option ticked, the model can search and read web pages. Lutin reads the HTML the server sends; it **cannot run JavaScript**, so a page built in the browser (Reddit, many web apps) looks empty. In that case Lutin now reads what the server announces without JavaScript (title, description, structured data), tells the model plainly what is missing, and suggests that you **copy-paste the text** or **save the page (Ctrl+S, or print to PDF) and attach it with the paperclip**: an attachment is read in full. Sites that refuse automated reads (Reddit does) are not worked around.
+
 ## Page preview
 
 The `apercu_page` tool opens an HTML file of the working folder (or an address of this machine, `http://127.0.0.1:port/`) in an **already installed Chrome, Edge or Chromium**, windowless, and takes a screenshot (about 2 seconds). You see the **screenshot in the conversation**; the model receives the **text actually displayed**, the title and the **JavaScript console errors** (“Uncaught ReferenceError: start is not defined (page.html:12)”): it checks the rendering of a page or a script before saying “it works”. It does not see the image itself. Asks for your approval (automatic command approval in a mission); temporary browser profile thrown away afterwards; no remote page.

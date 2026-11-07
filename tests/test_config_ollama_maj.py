@@ -127,6 +127,7 @@ class ClientOllama(unittest.TestCase):
 
         class Repond404(http.server.BaseHTTPRequestHandler):
             def do_POST(self):
+                self.rfile.read(int(self.headers.get("Content-Length") or 0))          # lire la demande AVANT de répondre : sous Windows, fermer avec des données non lues réinitialise la connexion et le client ne voit plus la réponse
                 corps = b'{"error":"model absent not found"}'
                 self.send_response(404)
                 self.send_header("Content-Length", str(len(corps)))
