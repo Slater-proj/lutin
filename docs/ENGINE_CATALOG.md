@@ -4,6 +4,8 @@
 
 Lutin knows model servers (LM Studio, vLLM, SGLang, LocalAI, llama-swap…) through a **catalogue**: a data file, never code. In Settings > Engines, the "OpenAI-compatible server" card offers these servers in one click: the usual address is filled in, with a short description, strengths, limits and a link to the website.
 
+An engine can carry `"experimental": true`: the page labels it "experimental", lists it last and never preselects or recommends it (see [EXPERIMENTAL_ENGINES.md](EXPERIMENTAL_ENGINES.md)).
+
 ## Why it is signed
 
 The catalogue can be updated online without a new Lutin release. So that nobody can slip in a booby-trapped address, it is **signed** (Ed25519, RFC 8032):

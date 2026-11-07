@@ -1,6 +1,6 @@
 {
  "catalogue": {
-  "version": 2,
+  "version": 3,
   "date": "2026-11-07",
   "moteurs": [
    {
@@ -234,9 +234,99 @@
     ],
     "type": "externe",
     "depot": "mostlygeek/llama-swap"
+   },
+   {
+    "id": "colibri",
+    "nom": "Colibri",
+    "genre": "openai",
+    "adresse_defaut": "http://127.0.0.1:8000/v1",
+    "site": "https://github.com/JustVugg/colibri",
+    "plateformes": [
+     "windows",
+     "linux",
+     "macos"
+    ],
+    "experimental": true,
+    "type": "externe",
+    "depot": "JustVugg/colibri",
+    "description": {
+     "fr": "Moteur pour très gros modèles à experts : experts « chauds » sur la carte graphique, « tièdes » en mémoire vive, « froids » lus sur le disque. API compatible OpenAI. Lit les fichiers GGUF.",
+     "en": "Engine for very large mixture-of-experts models: \"hot\" experts on the graphics card, \"warm\" in RAM, \"cold\" read from disk. OpenAI-compatible API. Reads GGUF files."
+    },
+    "points_forts": [
+     {
+      "fr": "Pensé pour les gros modèles à experts qui dépassent la carte graphique.",
+      "en": "Built for big mixture-of-experts models that exceed the graphics card."
+     },
+     {
+      "fr": "Archives précompilées pour Windows, Linux et macOS.",
+      "en": "Prebuilt archives for Windows, Linux and macOS."
+     }
+    ],
+    "points_faibles": [
+     {
+      "fr": "Projet de recherche : les chiffres publiés viennent de ses auteurs, pas vérifiés ici.",
+      "en": "Research project: published figures come from its authors, not checked here."
+     },
+     {
+      "fr": "Lutin ne l'installe ni ne le démarre : lance son serveur toi-même.",
+      "en": "Lutin does not install or start it: start its server yourself."
+     },
+     {
+      "fr": "Sur 32 Go de RAM, les très gros modèles vont sur le disque et deviennent lents.",
+      "en": "With 32 GB of RAM, very large models go to disk and get slow."
+     }
+    ],
+    "remarque": {
+     "fr": "Essai de comparaison avec Ollama et llama.cpp pas encore fait sur du vrai matériel : aucune recommandation.",
+     "en": "Comparison trial with Ollama and llama.cpp not done on real hardware yet: no recommendation."
+    }
+   },
+   {
+    "id": "strata",
+    "nom": "Strata",
+    "genre": "openai",
+    "adresse_defaut": "",
+    "site": "https://github.com/Niko1221/Strata",
+    "plateformes": [
+     "windows",
+     "linux",
+     "macos"
+    ],
+    "experimental": true,
+    "type": "externe",
+    "depot": "Niko1221/Strata",
+    "description": {
+     "fr": "Application de bureau et ligne de commande avec une API locale compatible OpenAI. Cartes NVIDIA RTX 20 à 50 (Windows, Linux), AMD et Intel Arc sur Linux.",
+     "en": "Desktop app and command line with a local OpenAI-compatible API. NVIDIA RTX 20 to 50 cards (Windows, Linux), AMD and Intel Arc on Linux."
+    },
+    "points_forts": [
+     {
+      "fr": "Installeurs pour Windows, Linux et macOS.",
+      "en": "Installers for Windows, Linux and macOS."
+     }
+    ],
+    "points_faibles": [
+     {
+      "fr": "Le port de son API n'est pas vérifié : copie l'adresse affichée par Strata.",
+      "en": "The port of its API is not checked: copy the address Strata shows."
+     },
+     {
+      "fr": "Chiffres de performances auto-mesurés, sur d'autres modèles que ceux de Lutin.",
+      "en": "Self-measured performance figures, on other models than Lutin's."
+     },
+     {
+      "fr": "Demande beaucoup de mémoire (12 Go de carte et 32 Go de RAM au minimum, selon ses auteurs).",
+      "en": "Needs a lot of memory (12 GB card and 32 GB of RAM at least, according to its authors)."
+     }
+    ],
+    "remarque": {
+     "fr": "Lutin ne l'installe ni ne le démarre. Aucune recommandation.",
+     "en": "Lutin does not install or start it. No recommendation."
+    }
    }
   ]
  },
  "cle": "2026a",
- "signature": "DigTGhspGM1kbkaonixB+WJIwtRlqnhf9u7LzV9O86e0Jjl2SYDUdCv1rIsA82pOS7u8FyO27ozUm02pggY2AQ=="
+ "signature": "HrSlHz4q4qDv5mF1Pq+JPVkxDLxz4H7l4Ng0TPfSBkw1UnRLI+1fFLqsbDpEHvtjTuvUHAOgJP7zb8wifUCYCQ=="
 }

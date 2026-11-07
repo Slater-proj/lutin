@@ -197,7 +197,7 @@ class Page(unittest.TestCase):
         from lutin import serveur
         liste = serveur.Gestionnaire._prereglages()
         self.assertIn("lmstudio", [p["id"] for p in liste])
-        self.assertTrue(all(p["adresse"].startswith("http") for p in liste))
+        self.assertTrue(all(p["adresse"].startswith("http") or p["experimental"] for p in liste), "seuls les expérimentaux peuvent ne pas avoir d'adresse habituelle vérifiée")
 
 
 if __name__ == "__main__":

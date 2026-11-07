@@ -113,6 +113,8 @@ Chaque jalon : étude → porte de validation → code ciblé → tests → docu
 - Colibri : intégration **gérée** (archives précompilées + empreinte) **seulement si l'essai S3 la justifie** ; Strata et autres : préréglages externes. Étiquette « expérimental », jamais proposés par défaut.
 - **Critère** : chaque moteur ajouté est indépendant, testé avec un faux serveur, documenté avec ses limites.
 
+- **Fait (0.25.0)** : Colibri et Strata en préréglages externes expérimentaux (`EXPERIMENTAL_ENGINES.fr.md`). **Non fait volontairement** : l'intégration gérée de Colibri, tant que l'essai S3 n'a pas eu lieu.
+
 ### 0.26.0 — Stabilisation → 1.0.0
 - Tests de bout en bout sur les deux machines, avec et sans carte graphique, Windows, Debian, Docker, panne réseau, mise à jour, migration ; audit de sécurité ; documentation complète ; procédure de retour arrière.
 - **1.0.0** seulement si les critères de stabilité, de sécurité, de portabilité et de tests sont atteints ; les moteurs expérimentaux **ne sont pas** requis.

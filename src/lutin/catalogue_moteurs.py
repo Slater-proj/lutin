@@ -71,7 +71,7 @@ def valider(catalogue):
     inconnus = set(catalogue) - {"version", "date", "moteurs"}
     if inconnus:
         raise ErreurCatalogue("champ inconnu : {}".format(sorted(inconnus)[0]))
-    autorises = set(OBLIGATOIRES) | {"adresse_defaut", "cle_requise", "points_forts", "points_faibles", "plateformes", "site", "remarque", "type", "depot", "version_testee", "etiquette"}
+    autorises = set(OBLIGATOIRES) | {"adresse_defaut", "cle_requise", "points_forts", "points_faibles", "plateformes", "site", "remarque", "type", "depot", "version_testee", "etiquette", "experimental"}
     vus = set()
     for m in catalogue["moteurs"]:
         if not isinstance(m, dict):
@@ -98,6 +98,8 @@ def valider(catalogue):
                 re.compile(m["etiquette"])
             except (ValueError, re.error):
                 raise ErreurCatalogue("{} : motif d'étiquette invalide".format(ident))
+        if "experimental" in m and not isinstance(m["experimental"], bool):
+            raise ErreurCatalogue("{} : « experimental » doit être vrai ou faux".format(ident))
         if "version_testee" in m and not (isinstance(m["version_testee"], str) and 0 < len(m["version_testee"]) <= 40):
             raise ErreurCatalogue("{} : version testée invalide".format(ident))
         if m["genre"] not in GENRES or (m["genre"] == "ollama" and ident != "ollama"):
@@ -203,7 +205,7 @@ def vue(moteur):
     """Une entrée du catalogue prête pour la page : textes dans la langue courante."""
     return {"id": moteur["id"], "nom": moteur["nom"], "adresse": moteur.get("adresse_defaut", ""), "cle_requise": bool(moteur.get("cle_requise")), "site": moteur.get("site", ""),
             "description": texte(moteur["description"]), "points_forts": [texte(t) for t in moteur.get("points_forts", [])], "points_faibles": [texte(t) for t in moteur.get("points_faibles", [])],
-            "remarque": texte(moteur["remarque"]) if moteur.get("remarque") else "", "plateformes": list(moteur.get("plateformes", SYSTEMES))}
+            "remarque": texte(moteur["remarque"]) if moteur.get("remarque") else "", "plateformes": list(moteur.get("plateformes", SYSTEMES)), "experimental": bool(moteur.get("experimental"))}
 
 
 def prereglages(cache=None):

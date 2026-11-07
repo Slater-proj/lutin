@@ -2,6 +2,12 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## 0.25.0
+
+- **Moteurs expérimentaux : Colibri et Strata**, en préréglages externes du catalogue signé (version 3), étiquetés « expérimental », rangés en dernier, jamais préselectionnés ni recommandés. Nouveau champ `experimental` dans le schéma du catalogue ; la veille hebdomadaire les suit. Pas d'intégration gérée de Colibri : l'essai S3 qui devait la justifier n'a pas été fait. `docs/EXPERIMENTAL_ENGINES.fr.md` dit leurs limites. **Aucun des deux n'a été essayé pour de vrai** (testés avec un faux serveur).
+
+**English.** Colibri and Strata as external presets in the signed catalogue (version 3), labelled "experimental", listed last, never preselected nor recommended; new `experimental` schema field; weekly watch follows them. No managed Colibri integration (trial S3 not done). Tested with a fake server only.
+
 ## 0.24.0
 
 - **Réveiller une machine (Wake-on-LAN).** Bouton « Réveiller » (adresse MAC à renseigner) : état « réveil envoyé » puis « nœud joignable » puis « moteur opérationnel » ; après trois minutes sans réponse, la page liste ce qui bloque d'habitude (BIOS, carte réseau, câble, démarrage rapide, auto-connexion).

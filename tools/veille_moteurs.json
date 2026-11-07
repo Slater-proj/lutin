@@ -1,4 +1,8 @@
 {
+ "colibri": {
+  "depot": "JustVugg/colibri",
+  "vue": "v2.1.0"
+ },
  "llama-swap": {
   "depot": "mostlygeek/llama-swap",
   "vue": "v270"
@@ -18,6 +22,10 @@
  "sglang": {
   "depot": "sgl-project/sglang",
   "vue": "v0.5.23"
+ },
+ "strata": {
+  "depot": "Niko1221/Strata",
+  "vue": "v0.2.11"
  },
  "vllm": {
   "depot": "vllm-project/vllm",

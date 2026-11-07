@@ -1,238 +1,328 @@
 {
-  "version": 2,
-  "date": "2026-11-07",
-  "moteurs": [
+ "version": 3,
+ "date": "2026-11-07",
+ "moteurs": [
+  {
+   "id": "ollama",
+   "nom": "Ollama",
+   "genre": "ollama",
+   "type": "gere",
+   "depot": "ollama/ollama",
+   "site": "https://ollama.com",
+   "plateformes": [
+    "windows",
+    "linux",
+    "macos"
+   ],
+   "description": {
+    "fr": "Le moteur installé et géré par Lutin : modèles téléchargés depuis la bibliothèque d'Ollama, réglages de vitesse et de mémoire.",
+    "en": "The engine installed and managed by Lutin: models downloaded from Ollama's library, speed and memory settings."
+   },
+   "points_forts": [
     {
-      "id": "ollama",
-      "nom": "Ollama",
-      "genre": "ollama",
-      "type": "gere",
-      "depot": "ollama/ollama",
-      "site": "https://ollama.com",
-      "plateformes": [
-        "windows",
-        "linux",
-        "macos"
-      ],
-      "description": {
-        "fr": "Le moteur installé et géré par Lutin : modèles téléchargés depuis la bibliothèque d'Ollama, réglages de vitesse et de mémoire.",
-        "en": "The engine installed and managed by Lutin: models downloaded from Ollama's library, speed and memory settings."
-      },
-      "points_forts": [
-        {
-          "fr": "Le plus simple : un clic pour télécharger un modèle de sa bibliothèque, qui garde plusieurs modèles prêts.",
-          "en": "The simplest: one click to download a model from its library, which keeps several models ready."
-        },
-        {
-          "fr": "Décharge tout seul un modèle inutilisé et en recharge un autre à la demande.",
-          "en": "Unloads an unused model by itself and reloads another on demand."
-        },
-        {
-          "fr": "Lutin sait le régler (cœurs, mémoire, contexte) et en mesurer la vitesse.",
-          "en": "Lutin can tune it (cores, memory, context) and measure its speed."
-        }
-      ],
-      "points_faibles": [
-        {
-          "fr": "Un peu moins rapide que llama.cpp utilisé directement, surtout avec les modèles à experts.",
-          "en": "A little slower than llama.cpp used directly, especially with mixture-of-experts models."
-        },
-        {
-          "fr": "Reçoit les nouveaux modèles et les optimisations avec un peu de retard.",
-          "en": "Gets new models and optimisations a little late."
-        },
-        {
-          "fr": "Un service de plus qui tourne en arrière-plan.",
-          "en": "One more service running in the background."
-        }
-      ]
+     "fr": "Le plus simple : un clic pour télécharger un modèle de sa bibliothèque, qui garde plusieurs modèles prêts.",
+     "en": "The simplest: one click to download a model from its library, which keeps several models ready."
     },
     {
-      "id": "llamacpp",
-      "nom": "llama.cpp",
-      "genre": "openai",
-      "type": "gere",
-      "depot": "ggml-org/llama.cpp",
-      "site": "https://github.com/ggml-org/llama.cpp",
-      "plateformes": [
-        "windows",
-        "linux",
-        "macos"
-      ],
-      "description": {
-        "fr": "Le moteur de référence sur lequel Ollama est construit, utilisé directement : llama-server, avec son interface compatible OpenAI. Lutin peut l'installer, le démarrer et télécharger ses modèles (fichiers GGUF), ou se connecter à un llama-server déjà lancé.",
-        "en": "The reference engine Ollama is built on, used directly: llama-server, with its OpenAI-compatible interface. Lutin can install it, start it and download its models (GGUF files), or connect to a llama-server that is already running."
-      },
-      "points_forts": [
-        {
-          "fr": "Un peu plus rapide qu'Ollama à l'écriture, surtout avec les modèles à experts (quelques % à une vingtaine de %, d'après des mesures publiques, à vérifier sur ta machine).",
-          "en": "A little faster than Ollama when writing, especially with mixture-of-experts models (a few % to about 20 %, from public measurements, to check on your machine)."
-        },
-        {
-          "fr": "Reçoit les nouveaux modèles et les nouvelles optimisations avant Ollama.",
-          "en": "Gets new models and new optimisations before Ollama."
-        },
-        {
-          "fr": "Tous les réglages sont accessibles (mémoire, répartition carte graphique / processeur, couches d'experts).",
-          "en": "Every setting is reachable (memory, graphics card / processor split, expert layers)."
-        },
-        {
-          "fr": "Léger : un seul programme, sans service en arrière-plan.",
-          "en": "Light: one program, no background service."
-        }
-      ],
-      "points_faibles": [
-        {
-          "fr": "Un seul modèle à la fois, rechargé quand tu en changes (plusieurs avec le mode routeur, expérimental).",
-          "en": "One model at a time, reloaded when you switch (several with router mode, experimental)."
-        },
-        {
-          "fr": "Les modèles sont des fichiers GGUF à choisir (quantification) : moins guidé que la bibliothèque d'Ollama.",
-          "en": "Models are GGUF files to pick (quantisation): less guided than Ollama's library."
-        },
-        {
-          "fr": "Le premier chargement d'un modèle est plus long qu'avec le cache d'Ollama.",
-          "en": "The first load of a model is slower than with Ollama's cache."
-        }
-      ],
-      "etiquette": "^b[0-9]+$"
+     "fr": "Décharge tout seul un modèle inutilisé et en recharge un autre à la demande.",
+     "en": "Unloads an unused model by itself and reloads another on demand."
     },
     {
-      "id": "lmstudio",
-      "nom": "LM Studio",
-      "genre": "openai",
-      "adresse_defaut": "http://127.0.0.1:1234/v1",
-      "site": "https://lmstudio.ai",
-      "plateformes": [
-        "windows",
-        "linux",
-        "macos"
-      ],
-      "description": {
-        "fr": "Application de bureau avec son propre catalogue de modèles et un serveur local compatible OpenAI. Il faut démarrer le serveur local depuis LM Studio.",
-        "en": "Desktop app with its own model catalogue and a local OpenAI-compatible server. You have to start the local server from LM Studio."
-      },
-      "points_forts": [
-        {
-          "fr": "Interface graphique pour choisir et régler les modèles.",
-          "en": "Graphical interface to pick and tune models."
-        },
-        {
-          "fr": "Simple à installer sur Windows, macOS et Linux.",
-          "en": "Easy to install on Windows, macOS and Linux."
-        }
-      ],
-      "points_faibles": [
-        {
-          "fr": "Lutin ne le démarre pas : lance le serveur local dans LM Studio.",
-          "en": "Lutin does not start it: start the local server in LM Studio."
-        }
-      ],
-      "type": "externe"
-    },
-    {
-      "id": "vllm",
-      "nom": "vLLM",
-      "genre": "openai",
-      "adresse_defaut": "http://127.0.0.1:8000/v1",
-      "site": "https://docs.vllm.ai",
-      "plateformes": [
-        "linux"
-      ],
-      "description": {
-        "fr": "Serveur de production pour cartes graphiques NVIDIA ou AMD, très rapide quand plusieurs demandes arrivent en même temps.",
-        "en": "Production server for NVIDIA or AMD graphics cards, very fast when several requests arrive at once."
-      },
-      "points_forts": [
-        {
-          "fr": "Très bon débit sur une carte graphique puissante.",
-          "en": "Very high throughput on a powerful graphics card."
-        }
-      ],
-      "points_faibles": [
-        {
-          "fr": "Pensé pour des serveurs Linux ; plus lourd à installer qu'Ollama.",
-          "en": "Meant for Linux servers; heavier to install than Ollama."
-        }
-      ],
-      "type": "externe",
-      "depot": "vllm-project/vllm"
-    },
-    {
-      "id": "sglang",
-      "nom": "SGLang",
-      "genre": "openai",
-      "adresse_defaut": "http://127.0.0.1:30000/v1",
-      "site": "https://docs.sglang.ai",
-      "plateformes": [
-        "linux"
-      ],
-      "description": {
-        "fr": "Serveur rapide pour cartes graphiques, proche de vLLM, avec une bonne gestion des conversations longues.",
-        "en": "Fast server for graphics cards, close to vLLM, good at long conversations."
-      },
-      "points_faibles": [
-        {
-          "fr": "Pensé pour des serveurs Linux avec une carte graphique.",
-          "en": "Meant for Linux servers with a graphics card."
-        }
-      ],
-      "type": "externe",
-      "depot": "sgl-project/sglang"
-    },
-    {
-      "id": "localai",
-      "nom": "LocalAI",
-      "genre": "openai",
-      "adresse_defaut": "http://127.0.0.1:8080/v1",
-      "site": "https://localai.io",
-      "plateformes": [
-        "linux",
-        "windows",
-        "macos"
-      ],
-      "description": {
-        "fr": "Serveur local compatible OpenAI qui sait aussi générer des images et transcrire de la voix ; se déploie facilement avec Docker.",
-        "en": "Local OpenAI-compatible server that can also generate images and transcribe speech; easy to deploy with Docker."
-      },
-      "points_forts": [
-        {
-          "fr": "Plusieurs types de modèles dans un seul serveur.",
-          "en": "Several kinds of models in one server."
-        }
-      ],
-      "type": "externe",
-      "depot": "mudler/LocalAI"
-    },
-    {
-      "id": "llama-swap",
-      "nom": "llama-swap",
-      "genre": "openai",
-      "adresse_defaut": "http://127.0.0.1:8080/v1",
-      "site": "https://github.com/mostlygeek/llama-swap",
-      "plateformes": [
-        "linux",
-        "windows",
-        "macos"
-      ],
-      "description": {
-        "fr": "Petit routeur qui démarre et change de serveur (llama.cpp, vLLM…) selon le modèle demandé, derrière une seule adresse.",
-        "en": "Small router that starts and swaps servers (llama.cpp, vLLM…) according to the requested model, behind one address."
-      },
-      "points_forts": [
-        {
-          "fr": "Plusieurs modèles et plusieurs moteurs derrière une seule adresse.",
-          "en": "Several models and engines behind one address."
-        }
-      ],
-      "points_faibles": [
-        {
-          "fr": "Se configure à la main avec un fichier.",
-          "en": "Configured by hand with a file."
-        }
-      ],
-      "type": "externe",
-      "depot": "mostlygeek/llama-swap"
+     "fr": "Lutin sait le régler (cœurs, mémoire, contexte) et en mesurer la vitesse.",
+     "en": "Lutin can tune it (cores, memory, context) and measure its speed."
     }
-  ]
+   ],
+   "points_faibles": [
+    {
+     "fr": "Un peu moins rapide que llama.cpp utilisé directement, surtout avec les modèles à experts.",
+     "en": "A little slower than llama.cpp used directly, especially with mixture-of-experts models."
+    },
+    {
+     "fr": "Reçoit les nouveaux modèles et les optimisations avec un peu de retard.",
+     "en": "Gets new models and optimisations a little late."
+    },
+    {
+     "fr": "Un service de plus qui tourne en arrière-plan.",
+     "en": "One more service running in the background."
+    }
+   ]
+  },
+  {
+   "id": "llamacpp",
+   "nom": "llama.cpp",
+   "genre": "openai",
+   "type": "gere",
+   "depot": "ggml-org/llama.cpp",
+   "site": "https://github.com/ggml-org/llama.cpp",
+   "plateformes": [
+    "windows",
+    "linux",
+    "macos"
+   ],
+   "description": {
+    "fr": "Le moteur de référence sur lequel Ollama est construit, utilisé directement : llama-server, avec son interface compatible OpenAI. Lutin peut l'installer, le démarrer et télécharger ses modèles (fichiers GGUF), ou se connecter à un llama-server déjà lancé.",
+    "en": "The reference engine Ollama is built on, used directly: llama-server, with its OpenAI-compatible interface. Lutin can install it, start it and download its models (GGUF files), or connect to a llama-server that is already running."
+   },
+   "points_forts": [
+    {
+     "fr": "Un peu plus rapide qu'Ollama à l'écriture, surtout avec les modèles à experts (quelques % à une vingtaine de %, d'après des mesures publiques, à vérifier sur ta machine).",
+     "en": "A little faster than Ollama when writing, especially with mixture-of-experts models (a few % to about 20 %, from public measurements, to check on your machine)."
+    },
+    {
+     "fr": "Reçoit les nouveaux modèles et les nouvelles optimisations avant Ollama.",
+     "en": "Gets new models and new optimisations before Ollama."
+    },
+    {
+     "fr": "Tous les réglages sont accessibles (mémoire, répartition carte graphique / processeur, couches d'experts).",
+     "en": "Every setting is reachable (memory, graphics card / processor split, expert layers)."
+    },
+    {
+     "fr": "Léger : un seul programme, sans service en arrière-plan.",
+     "en": "Light: one program, no background service."
+    }
+   ],
+   "points_faibles": [
+    {
+     "fr": "Un seul modèle à la fois, rechargé quand tu en changes (plusieurs avec le mode routeur, expérimental).",
+     "en": "One model at a time, reloaded when you switch (several with router mode, experimental)."
+    },
+    {
+     "fr": "Les modèles sont des fichiers GGUF à choisir (quantification) : moins guidé que la bibliothèque d'Ollama.",
+     "en": "Models are GGUF files to pick (quantisation): less guided than Ollama's library."
+    },
+    {
+     "fr": "Le premier chargement d'un modèle est plus long qu'avec le cache d'Ollama.",
+     "en": "The first load of a model is slower than with Ollama's cache."
+    }
+   ],
+   "etiquette": "^b[0-9]+$"
+  },
+  {
+   "id": "lmstudio",
+   "nom": "LM Studio",
+   "genre": "openai",
+   "adresse_defaut": "http://127.0.0.1:1234/v1",
+   "site": "https://lmstudio.ai",
+   "plateformes": [
+    "windows",
+    "linux",
+    "macos"
+   ],
+   "description": {
+    "fr": "Application de bureau avec son propre catalogue de modèles et un serveur local compatible OpenAI. Il faut démarrer le serveur local depuis LM Studio.",
+    "en": "Desktop app with its own model catalogue and a local OpenAI-compatible server. You have to start the local server from LM Studio."
+   },
+   "points_forts": [
+    {
+     "fr": "Interface graphique pour choisir et régler les modèles.",
+     "en": "Graphical interface to pick and tune models."
+    },
+    {
+     "fr": "Simple à installer sur Windows, macOS et Linux.",
+     "en": "Easy to install on Windows, macOS and Linux."
+    }
+   ],
+   "points_faibles": [
+    {
+     "fr": "Lutin ne le démarre pas : lance le serveur local dans LM Studio.",
+     "en": "Lutin does not start it: start the local server in LM Studio."
+    }
+   ],
+   "type": "externe"
+  },
+  {
+   "id": "vllm",
+   "nom": "vLLM",
+   "genre": "openai",
+   "adresse_defaut": "http://127.0.0.1:8000/v1",
+   "site": "https://docs.vllm.ai",
+   "plateformes": [
+    "linux"
+   ],
+   "description": {
+    "fr": "Serveur de production pour cartes graphiques NVIDIA ou AMD, très rapide quand plusieurs demandes arrivent en même temps.",
+    "en": "Production server for NVIDIA or AMD graphics cards, very fast when several requests arrive at once."
+   },
+   "points_forts": [
+    {
+     "fr": "Très bon débit sur une carte graphique puissante.",
+     "en": "Very high throughput on a powerful graphics card."
+    }
+   ],
+   "points_faibles": [
+    {
+     "fr": "Pensé pour des serveurs Linux ; plus lourd à installer qu'Ollama.",
+     "en": "Meant for Linux servers; heavier to install than Ollama."
+    }
+   ],
+   "type": "externe",
+   "depot": "vllm-project/vllm"
+  },
+  {
+   "id": "sglang",
+   "nom": "SGLang",
+   "genre": "openai",
+   "adresse_defaut": "http://127.0.0.1:30000/v1",
+   "site": "https://docs.sglang.ai",
+   "plateformes": [
+    "linux"
+   ],
+   "description": {
+    "fr": "Serveur rapide pour cartes graphiques, proche de vLLM, avec une bonne gestion des conversations longues.",
+    "en": "Fast server for graphics cards, close to vLLM, good at long conversations."
+   },
+   "points_faibles": [
+    {
+     "fr": "Pensé pour des serveurs Linux avec une carte graphique.",
+     "en": "Meant for Linux servers with a graphics card."
+    }
+   ],
+   "type": "externe",
+   "depot": "sgl-project/sglang"
+  },
+  {
+   "id": "localai",
+   "nom": "LocalAI",
+   "genre": "openai",
+   "adresse_defaut": "http://127.0.0.1:8080/v1",
+   "site": "https://localai.io",
+   "plateformes": [
+    "linux",
+    "windows",
+    "macos"
+   ],
+   "description": {
+    "fr": "Serveur local compatible OpenAI qui sait aussi générer des images et transcrire de la voix ; se déploie facilement avec Docker.",
+    "en": "Local OpenAI-compatible server that can also generate images and transcribe speech; easy to deploy with Docker."
+   },
+   "points_forts": [
+    {
+     "fr": "Plusieurs types de modèles dans un seul serveur.",
+     "en": "Several kinds of models in one server."
+    }
+   ],
+   "type": "externe",
+   "depot": "mudler/LocalAI"
+  },
+  {
+   "id": "llama-swap",
+   "nom": "llama-swap",
+   "genre": "openai",
+   "adresse_defaut": "http://127.0.0.1:8080/v1",
+   "site": "https://github.com/mostlygeek/llama-swap",
+   "plateformes": [
+    "linux",
+    "windows",
+    "macos"
+   ],
+   "description": {
+    "fr": "Petit routeur qui démarre et change de serveur (llama.cpp, vLLM…) selon le modèle demandé, derrière une seule adresse.",
+    "en": "Small router that starts and swaps servers (llama.cpp, vLLM…) according to the requested model, behind one address."
+   },
+   "points_forts": [
+    {
+     "fr": "Plusieurs modèles et plusieurs moteurs derrière une seule adresse.",
+     "en": "Several models and engines behind one address."
+    }
+   ],
+   "points_faibles": [
+    {
+     "fr": "Se configure à la main avec un fichier.",
+     "en": "Configured by hand with a file."
+    }
+   ],
+   "type": "externe",
+   "depot": "mostlygeek/llama-swap"
+  },
+  {
+   "id": "colibri",
+   "nom": "Colibri",
+   "genre": "openai",
+   "adresse_defaut": "http://127.0.0.1:8000/v1",
+   "site": "https://github.com/JustVugg/colibri",
+   "plateformes": [
+    "windows",
+    "linux",
+    "macos"
+   ],
+   "experimental": true,
+   "type": "externe",
+   "depot": "JustVugg/colibri",
+   "description": {
+    "fr": "Moteur pour très gros modèles à experts : experts « chauds » sur la carte graphique, « tièdes » en mémoire vive, « froids » lus sur le disque. API compatible OpenAI. Lit les fichiers GGUF.",
+    "en": "Engine for very large mixture-of-experts models: \"hot\" experts on the graphics card, \"warm\" in RAM, \"cold\" read from disk. OpenAI-compatible API. Reads GGUF files."
+   },
+   "points_forts": [
+    {
+     "fr": "Pensé pour les gros modèles à experts qui dépassent la carte graphique.",
+     "en": "Built for big mixture-of-experts models that exceed the graphics card."
+    },
+    {
+     "fr": "Archives précompilées pour Windows, Linux et macOS.",
+     "en": "Prebuilt archives for Windows, Linux and macOS."
+    }
+   ],
+   "points_faibles": [
+    {
+     "fr": "Projet de recherche : les chiffres publiés viennent de ses auteurs, pas vérifiés ici.",
+     "en": "Research project: published figures come from its authors, not checked here."
+    },
+    {
+     "fr": "Lutin ne l'installe ni ne le démarre : lance son serveur toi-même.",
+     "en": "Lutin does not install or start it: start its server yourself."
+    },
+    {
+     "fr": "Sur 32 Go de RAM, les très gros modèles vont sur le disque et deviennent lents.",
+     "en": "With 32 GB of RAM, very large models go to disk and get slow."
+    }
+   ],
+   "remarque": {
+    "fr": "Essai de comparaison avec Ollama et llama.cpp pas encore fait sur du vrai matériel : aucune recommandation.",
+    "en": "Comparison trial with Ollama and llama.cpp not done on real hardware yet: no recommendation."
+   }
+  },
+  {
+   "id": "strata",
+   "nom": "Strata",
+   "genre": "openai",
+   "adresse_defaut": "",
+   "site": "https://github.com/Niko1221/Strata",
+   "plateformes": [
+    "windows",
+    "linux",
+    "macos"
+   ],
+   "experimental": true,
+   "type": "externe",
+   "depot": "Niko1221/Strata",
+   "description": {
+    "fr": "Application de bureau et ligne de commande avec une API locale compatible OpenAI. Cartes NVIDIA RTX 20 à 50 (Windows, Linux), AMD et Intel Arc sur Linux.",
+    "en": "Desktop app and command line with a local OpenAI-compatible API. NVIDIA RTX 20 to 50 cards (Windows, Linux), AMD and Intel Arc on Linux."
+   },
+   "points_forts": [
+    {
+     "fr": "Installeurs pour Windows, Linux et macOS.",
+     "en": "Installers for Windows, Linux and macOS."
+    }
+   ],
+   "points_faibles": [
+    {
+     "fr": "Le port de son API n'est pas vérifié : copie l'adresse affichée par Strata.",
+     "en": "The port of its API is not checked: copy the address Strata shows."
+    },
+    {
+     "fr": "Chiffres de performances auto-mesurés, sur d'autres modèles que ceux de Lutin.",
+     "en": "Self-measured performance figures, on other models than Lutin's."
+    },
+    {
+     "fr": "Demande beaucoup de mémoire (12 Go de carte et 32 Go de RAM au minimum, selon ses auteurs).",
+     "en": "Needs a lot of memory (12 GB card and 32 GB of RAM at least, according to its authors)."
+    }
+   ],
+   "remarque": {
+    "fr": "Lutin ne l'installe ni ne le démarre. Aucune recommandation.",
+    "en": "Lutin does not install or start it. No recommendation."
+   }
+  }
+ ]
 }

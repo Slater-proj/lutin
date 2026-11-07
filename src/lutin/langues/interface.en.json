@@ -1150,5 +1150,7 @@
 "Envoie un paquet de réveil (Wake-on-LAN) : il faut son adresse MAC.": "Sends a wake-up packet (Wake-on-LAN): its MAC address is needed.",
 "Éteindre la machine « ": "Switch off the machine \" ",
 " » ? Elle s'éteindra dans 30 secondes (annulable).": " \"? It will switch off in 30 seconds (can be cancelled).",
-"Extinction demandée : 30 secondes.": "Shutdown requested: 30 seconds."
+"Extinction demandée : 30 secondes.": "Shutdown requested: 30 seconds.",
+"expérimental": "experimental",
+"Moteur expérimental : jeune, peu éprouvé avec Lutin. À essayer, pas à choisir pour travailler.": "Experimental engine: young, little proven with Lutin. To try, not to rely on for work."
 }

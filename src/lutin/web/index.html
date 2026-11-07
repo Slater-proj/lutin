@@ -3056,11 +3056,12 @@ body[data-moteur="openai"] .biblio { display:none !important; }
       if (m.id === 'openai' && prereglages.length) {          // les serveurs connus du catalogue signé : un choix remplit l'adresse et explique le serveur
         const choix = el('select'), fiche = el('div', 'aide'); choix.disabled = !modifiable;
         const vide = el('option', '', T('Choisir un serveur connu…')); vide.value = ''; choix.appendChild(vide);
-        prereglages.forEach(pr => { const o = el('option', '', pr.nom); o.value = pr.id; choix.appendChild(o); });
+        [...prereglages].sort((a, b) => Number(a.experimental) - Number(b.experimental)).forEach(pr => { const o = el('option', '', pr.nom + (pr.experimental ? ' · ' + T('expérimental') : '')); o.value = pr.id; choix.appendChild(o); });          // les expérimentaux en dernier, jamais préselectionnés
         choix.addEventListener('change', () => {
           const pr = prereglages.find(x => x.id === choix.value); fiche.textContent = '';
           if (!pr) return;
           if (pr.adresse) url.value = pr.adresse;
+          if (pr.experimental) fiche.appendChild(el('div', 'erreur', '⚗ ' + T('Moteur expérimental : jeune, peu éprouvé avec Lutin. À essayer, pas à choisir pour travailler.')));
           fiche.appendChild(el('div', '', pr.description));
           if (pr.points_forts.length) fiche.appendChild(el('div', '', '+ ' + pr.points_forts.join(' · ')));
           if (pr.points_faibles.length) fiche.appendChild(el('div', '', '− ' + pr.points_faibles.join(' · ')));
