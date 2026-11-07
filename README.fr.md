@@ -24,6 +24,7 @@
 
 | | |
 |---|---|
+| ⌨️ **Tout à portée de clavier** | **Ctrl+K** ouvre une recherche dans tes conversations, onglets, modèles installés, réglages et actions. Une nouvelle conversation propose des départs concrets ; les appels d'outils se lisent comme des phrases (« Lit README.md »), pas du JSON brut. |
 | 🧠 **Il choisit pour toi** | Cinq rôles (polyvalent, rapide, créatif, code, images) : pour chacun, le meilleur modèle qui tient dans ta mémoire. Une phrase d'explication par modèle. |
 | 🔒 **Chez toi, vraiment** | Trois niveaux d'accès (cette machine, réseau local avec code PIN, derrière un proxy), **mode hors ligne strict**, aucune télémétrie. |
 | 🛡️ **Tu gardes la main** | Chaque modification de fichier ou commande demande ton accord, avec les différences. Bouton **Annuler**, **journal des actions**, sauvegarde de tes données en un clic. |
@@ -59,6 +60,8 @@ Le script installe la dernière version publiée dans un environnement privé, a
 
 <p align="center">
   <img src="assets/capture-modeles.fr.png" alt="L'onglet Modèles : nouveautés, mesures, boutons de recherche de mises à jour" width="92%">
+  <br><br>
+  <img src="assets/capture-palette.fr.png" alt="La recherche Ctrl+K : conversations, onglets, modèles, réglages et actions" width="92%">
 </p>
 
 | Commande | Rôle |

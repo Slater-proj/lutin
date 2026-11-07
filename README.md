@@ -24,6 +24,7 @@
 
 | | |
 |---|---|
+| ⌨️ **Everything one keystroke away** | **Ctrl+K** opens a search over your conversations, tabs, installed models, settings and actions. A new conversation offers concrete starting points; tool calls read as sentences ("Reads README.md"), not raw JSON. |
 | 🧠 **It chooses for you** | Five roles (general, fast, creative, code, images): for each one, the best model that fits in your memory. One sentence of explanation per model. |
 | 🔒 **At home, really** | Three access levels (this machine, local network with a PIN code, behind a proxy), **strict offline mode**, no telemetry. |
 | 🛡️ **You stay in control** | Every file change or command asks for your approval, with the differences. **Undo** button, **action log**, one-click backup of your data. |
@@ -59,6 +60,8 @@ The script installs the latest published version in a private environment, adds 
 
 <p align="center">
   <img src="assets/capture-modeles.png" alt="The Models tab: news, measurements, buttons to look for updates" width="92%">
+  <br><br>
+  <img src="assets/capture-palette.png" alt="The Ctrl+K search: conversations, tabs, models, settings and actions" width="92%">
 </p>
 
 | Command | Role |

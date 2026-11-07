@@ -10,6 +10,7 @@ Règle de fond : à performances proches (moins de 10 % d'écart), on garde le m
 import hashlib
 import json
 import statistics
+import threading
 import time
 from pathlib import Path
 
@@ -197,15 +198,19 @@ def comparer(modele, mode="rapide", profil=None, ctx=4096, progression=None, hor
 ETAT = {"en_cours": False, "etape": "", "erreur": ""}
 
 
+VERROU_LANCEMENT = threading.Lock()
+
+
 def lancer(modele, mode, dossier, profil, **options):
     """Lance la comparaison dans un fil (une seule à la fois). Le résultat est conservé dans `dossier`. Lève ValueError si une comparaison tourne déjà ou si le modèle n'est pas choisi."""
-    if ETAT["en_cours"]:
-        raise ValueError(_t("Une comparaison est déjà en cours."))
     if not modele:
         raise ValueError(_t("Aucun modèle à mesurer."))
     if mode not in PASSES:
         raise ValueError(_t("Mode inconnu."))
-    ETAT.update(en_cours=True, etape=_t("démarrage…"), erreur="")
+    with VERROU_LANCEMENT:          # vérifier puis réserver d'un seul geste : deux demandes simultanées ne lancent pas deux comparaisons
+        if ETAT["en_cours"]:
+            raise ValueError(_t("Une comparaison est déjà en cours."))
+        ETAT.update(en_cours=True, etape=_t("démarrage…"), erreur="")
 
     def travail():
         try:
@@ -218,7 +223,6 @@ def lancer(modele, mode, dossier, profil, **options):
             ETAT["erreur"] = str(e)[:300]
         finally:
             ETAT.update(en_cours=False, etape="")
-    import threading
     threading.Thread(target=travail, daemon=True, name="bench-moteurs").start()
 
 

@@ -2,6 +2,18 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## Ergonomie (jalon 0.27)
+
+- **Ctrl+K : tout trouver.** Une recherche sur les onglets, les conversations, les modèles installés, les groupes de réglages et les actions ; sans accents ni majuscules, au clavier (↑ ↓ Entrée Échap), accessible (rôles ARIA, focus rendu). Lien `/#palette`.
+- **Accueil d'une conversation vide** : cinq départs concrets qui remplissent la zone de saisie sans rien envoyer ; il s'efface seul dès qu'un message arrive.
+- **Appels d'outils lisibles** : « Lit README.md » au lieu de JSON brut, l'appel exact en infobulle.
+- **Onglet Modèles plus court** (l'essentiel visible, le reste dans « En savoir plus ») ; **les boutons du banc d'essai de la page mesurent le moteur choisi** (llama.cpp, serveur compatible OpenAI), plus seulement Ollama.
+- **Page compressée (gzip)** quand le navigateur le demande : 371 Ko deviennent environ 100 Ko.
+- **Fiabilité** : une seule comparaison de moteurs à la fois même avec deux demandes simultanées (verrou), test devenu indépendant de la vitesse de la machine.
+- **Visuels** : captures du README refaites avec une machine et un disque fictifs (`LUTIN_DEMO`), plus une capture de la palette. **Colibri** : faits vérifiés sur sa page publique consignés (conversion GGUF préalable) ; l'intégration gérée reste non faite, faute d'essai réel.
+
+**English.** Ctrl+K search over tabs, conversations, installed models, settings groups and actions (keyboard-driven, accessible). Empty conversations show five starting points that fill the box without sending anything. Tool calls read as sentences with the exact call on hover. Shorter Models tab; the page's benchmark buttons now measure the chosen engine, not only Ollama. gzip for the page (371 KB to about 100 KB). One engine comparison at a time even with simultaneous requests. README screenshots redone with a fictitious machine and disk, plus a palette screenshot. Colibri facts checked against its public page; managed integration still not done (no real trial).
+
 ## 0.26.0
 
 - **Stabilisation.** Aucun écran nouveau : on ferme des trous.

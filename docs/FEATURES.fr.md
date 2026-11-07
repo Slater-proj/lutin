@@ -4,6 +4,12 @@
 
 Ce que Lutin fait en plus de discuter. Tout se passe sur ta machine ; rien ici n'envoie quoi que ce soit sur Internet.
 
+## Tout trouver : Ctrl+K
+
+**Ctrl+K** (ou **⌘K** sur Mac, ou le bouton 🔎 en haut) ouvre une recherche sur tout : onglets, **conversations** (par titre), **modèles installés** (pour changer), groupes de réglages et actions courantes (nouvelle conversation, libérer la mémoire vidéo, fiche de suivi, tester mon PC, vérifier que tout marche…). Tape quelques lettres (accents et majuscules inutiles), **↑ ↓** pour choisir, **Entrée** pour y aller, **Échap** pour fermer. Le lien `/#palette` l'ouvre directement.
+
+Une **conversation vide** propose des départs (résumer un fichier, corriger du code, chercher sur le web, programmer une tâche, changer de modèle) : un clic remplit la zone de message, **rien n'est envoyé** tant que tu n'as pas appuyé sur Entrée. Dans une conversation, un appel d'outil se lit comme une phrase (« Lit README.md », « Lance … ») ; survole-le pour voir l'appel exact.
+
 ## Tester mon PC
 
 Onglet Modèles > **⏱ Tester mon PC** (ou `/pc` dans la conversation). Lutin mesure la vitesse du modèle actif sur cette machine (environ 20 secondes), puis explique simplement ce que ça veut dire : combien de mots par seconde, combien de temps prend une réponse de 300 mots, si le modèle tient sur la carte graphique, et quoi changer si c'est lent (un modèle plus léger déjà installé ou conseillé pour ta machine, une fenêtre de contexte plus petite, le profil de charge « Discret »). Rien n'est modifié à ta place.

@@ -354,8 +354,16 @@ def lister_disques(systeme):
     return disques
 
 
+def profil_demo():
+    """Une machine fictive (variable LUTIN_DEMO) : les captures d'écran de la documentation ne montrent jamais le matériel ni les chemins de celui qui les prend."""
+    return Profil(systeme="windows", architecture="amd64", cpu="AMD Ryzen 7 7700 8-Core Processor", coeurs=16, ram_go=32.0, ram_libre_go=21.4,
+                  gpus=[Gpu("NVIDIA GeForce RTX 4070", "nvidia", 12.0, 10.6, "démonstration")], disques=[Disque("C:\\", 412.0, 931.0)])
+
+
 def detecter(lanceur=lancer):
     """Le profil complet de cette machine."""
+    if os.environ.get("LUTIN_DEMO"):
+        return profil_demo()
     systeme = {"Windows": "windows", "Linux": "linux", "Darwin": "macos"}.get(platform.system(), platform.system().lower())
     p = Profil(systeme=systeme, architecture=platform.machine().lower(), cpu=platform.processor() or "", coeurs=cpus_disponibles())
     if systeme == "linux" and (not p.cpu or p.cpu in ("x86_64", "aarch64")):

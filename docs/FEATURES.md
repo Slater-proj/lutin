@@ -4,6 +4,12 @@
 
 What Lutin does besides chatting. Everything runs on your machine; nothing here sends anything to the Internet.
 
+## Finding anything: Ctrl+K
+
+**Ctrl+K** (or **⌘K** on a Mac, or the 🔎 button at the top) opens a search box over everything: tabs, **conversations** (by title), **installed models** (to switch), settings groups and common actions (new conversation, free the video memory, tracking sheet, test my PC, check that everything works…). Type a few letters (no need for accents or capitals), **↑ ↓** to choose, **Enter** to go, **Esc** to close. The link `/#palette` opens it directly.
+
+An **empty conversation** shows starting points (summarise a file, fix some code, search the web, schedule a task, change model): clicking one fills the message box, **nothing is sent** until you press Enter. In a conversation, a tool call reads as a sentence (“Reads README.md”, “Runs …”); hover it to see the exact call.
+
 ## Test my PC
 
 Models tab > **⏱ Test my PC** (or `/pc` in the chat). Lutin measures the active model's speed on this machine (about 20 seconds), then explains in plain words what it means: how many words per second, how long a 300-word answer takes, whether the model fits on the graphics card, and what to change if it is slow (a lighter model already installed or recommended for your machine, a smaller context window, the « Quiet » load profile). Nothing is changed for you.

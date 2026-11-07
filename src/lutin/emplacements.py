@@ -230,6 +230,9 @@ def lister():
 
 
 def _jauge():
+    if os.environ.get("LUTIN_DEMO"):          # captures de la documentation : un disque et un chemin fictifs
+        o = _m.etat_ollama()
+        return {"chemin": r"C:\Users\demo\.ollama\models", "libre": 412 * 10 ** 9, "total": 931 * 10 ** 9, "modeles": sum((o.get("tailles") or {}).values()), "racine": "C:\\"}
     dossier = dossier_modeles()
     disque = _s.espace_disque(dossier)
     if not disque:

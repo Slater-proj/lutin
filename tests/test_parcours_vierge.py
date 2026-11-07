@@ -1,5 +1,6 @@
 """Parcours d'une installation vierge (aucune donnée, aucun moteur qui répond) : aucune page ne plante, aucune route de lecture ne renvoie d'erreur 5xx,
 et la page principale se charge. C'est le filet de la stabilisation : une régression qui casse un écran au premier lancement se voit ici."""
+import gzip
 import http.client
 import json
 import os
@@ -89,6 +90,40 @@ class DonneesAbimees(unittest.TestCase):
                     with self.subTest(fichier=fichier, contenu=contenu, chemin=chemin):
                         statut, corps = lire(chemin)
                         self.assertLess(statut, 500, corps[:300])
+
+
+class Compression(unittest.TestCase):
+    def demander(self, chemin, encodage=None):
+        c = http.client.HTTPConnection("127.0.0.1", PORT, timeout=30)
+        en_tetes = {"Host": "127.0.0.1:%d" % PORT, "X-Token": A.JETON}
+        if encodage:
+            en_tetes["Accept-Encoding"] = encodage
+        c.request("GET", chemin, headers=en_tetes)
+        r = c.getresponse()
+        corps = r.read()
+        c.close()
+        return r, corps
+
+    def test_la_page_est_compressee_seulement_si_le_navigateur_le_demande(self):
+        r_brut, brut = self.demander("/")
+        self.assertIsNone(r_brut.getheader("Content-Encoding"))
+        r_gz, comprime = self.demander("/", "gzip, deflate, br")
+        self.assertEqual(r_gz.getheader("Content-Encoding"), "gzip")
+        self.assertEqual(r_gz.getheader("Vary"), "Accept-Encoding")
+        self.assertEqual(int(r_gz.getheader("Content-Length")), len(comprime))
+        self.assertEqual(gzip.decompress(comprime), brut, "le contenu est identique")
+        self.assertLess(len(comprime), len(brut) / 2)
+
+    def test_une_petite_reponse_n_est_pas_compressee(self):
+        r, corps = self.demander("/api/journal", "gzip")          # vide sur une installation vierge : quelques octets
+        self.assertLess(len(corps), 1400)
+        self.assertIsNone(r.getheader("Content-Encoding"), "trop petite : la compression ne gagnerait rien")
+        json.loads(corps)
+
+    def test_l_etat_compresse_reste_du_json_valide(self):
+        r, corps = self.demander("/api/etat", "gzip")
+        donnees = gzip.decompress(corps) if r.getheader("Content-Encoding") == "gzip" else corps
+        self.assertIn("version", json.loads(donnees))
 
 
 if __name__ == "__main__":

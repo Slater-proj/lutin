@@ -119,7 +119,7 @@ def serveur_demo(variables=None, niveau="local"):
             port = s.getsockname()[1]
         home = tmp / "home"
         langue = (variables or {}).get("LUTIN_LANGUE", "fr")
-        env = dict(os.environ, LUTIN_HOME=str(home), OLLAMA_URL="http://127.0.0.1:%d" % ollama.server_address[1], PYTHONPATH=str(SRC), LUTIN_SANS_GARDE="1", PYTHONIOENCODING="utf-8", **(variables or {}))
+        env = dict(os.environ, LUTIN_HOME=str(home), OLLAMA_URL="http://127.0.0.1:%d" % ollama.server_address[1], PYTHONPATH=str(SRC), LUTIN_SANS_GARDE="1", LUTIN_DEMO="1", PYTHONIOENCODING="utf-8", **(variables or {}))
         for d in ("config", "donnees/conversations", "memoire", "cache"):
             (home / d).mkdir(parents=True)
         (home / "donnees" / "reglages.json").write_text(json.dumps({"seuil_ram_go": 0.5, "seuil_disque_go": 1.0, "plafond_donnees_go": 50.0}), encoding="utf-8")          # la machine qui prend les captures peut être à l'étroit
@@ -162,7 +162,7 @@ def principal(choix=None):
     ASSETS.mkdir(exist_ok=True)
     for langue, suffixe in (("en", ""), ("fr", ".fr")):
         with serveur_demo({"LUTIN_LANGUE": langue}) as (port, tmp):
-            for base, ancre in (("capture-conversation", "#conv=a1b2c3d4"), ("capture-modeles", "#modeles")):
+            for base, ancre in (("capture-conversation", "#conv=a1b2c3d4"), ("capture-modeles", "#modeles"), ("capture-palette", "#palette")):
                 nom = base + suffixe + ".png"
                 profil = tmp / ("profil-" + nom)
                 subprocess.run([chrome, "--headless=new", "--disable-gpu", "--no-sandbox", "--hide-scrollbars", "--force-device-scale-factor=1", "--user-data-dir=" + str(profil), "--window-size=1280,800",

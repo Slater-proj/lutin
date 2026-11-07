@@ -4,6 +4,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
 from pathlib import Path
@@ -243,9 +244,16 @@ class Lancement(Base):
             bm.lancer("", "rapide", d, Profil())
         with self.assertRaises(ValueError):
             bm.lancer("m", "bizarre", d, Profil())
-        bm.lancer("m", "rapide", d, Profil(), liberer_autres=lambda a, m: None, memoire=lambda i, m: None)
+        ouvert, entre = threading.Event(), threading.Event()
+
+        def retenir(autres, modele):          # la première comparaison reste « en cours » jusqu'à ce qu'on la libère : le test ne dépend plus de la vitesse de la machine
+            entre.set()
+            ouvert.wait(10)
+        bm.lancer("m", "rapide", d, Profil(), liberer_autres=retenir, memoire=lambda i, m: None)
+        self.assertTrue(entre.wait(10))
         with self.assertRaises(ValueError):
             bm.lancer("m", "rapide", d, Profil())
+        ouvert.set()
         fin = time.time() + 20
         while bm.ETAT["en_cours"] and time.time() < fin:
             time.sleep(0.05)

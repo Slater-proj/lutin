@@ -1,4 +1,5 @@
 """Le serveur HTTP de Lutin : le gestionnaire de requêtes (pages, API JSON, flux de la conversation). L'état et les fonctions métier restent dans moteur ; ce module les atteint par « _m.NOM » (lu à chaque appel)."""
+import gzip
 from http.server import BaseHTTPRequestHandler
 from . import bench as _bench
 from . import bench_moteurs as _bench_moteurs
@@ -55,6 +56,7 @@ from . import moteur as _m
 
 
 DELAI_ECRITURE_FLUX = 20      # secondes : une page qui ne lit plus (onglet gelé) ne doit pas figer la réponse
+TYPES_COMPRESSIBLES = ("text/html", "application/json", "text/javascript", "application/javascript", "text/css", "image/svg+xml")          # jamais les images ni les archives (déjà compressées)
 BATTEMENT_FLUX = 15          # secondes entre deux lignes vides envoyées pour garder le flux ouvert derrière un reverse proxy
 
 
@@ -78,8 +80,14 @@ class Gestionnaire(BaseHTTPRequestHandler):
         if isinstance(corps, dict) and _i18n.langue() != "fr":
             corps = _m.traduire_json(corps)
         donnees = corps if isinstance(corps, (bytes, bytearray)) else (corps if isinstance(corps, str) else json.dumps(corps, ensure_ascii=False)).encode("utf-8")
+        compressible = len(donnees) > 1400 and type_.split(";")[0].strip() in TYPES_COMPRESSIBLES and "gzip" in (self.headers.get("Accept-Encoding") or "").lower()
+        if compressible:          # la page (370 Ko) et l'état se compressent à environ le quart : sensible sur un téléphone ou le Wi-Fi
+            donnees = gzip.compress(bytes(donnees), 5, mtime=0)
         self.send_response(code)
         self.send_header("Content-Type", type_)
+        if compressible:
+            self.send_header("Content-Encoding", "gzip")
+        self.send_header("Vary", "Accept-Encoding")
         self.send_header("Content-Length", str(len(donnees)))
         self.send_header("Cache-Control", "no-store")
         self.send_header("X-Content-Type-Options", "nosniff")

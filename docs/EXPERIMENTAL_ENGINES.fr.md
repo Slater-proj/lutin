@@ -16,8 +16,10 @@ Chaque moteur est **indépendant** : en régler un ne touche ni à Ollama, ni à
 
 ## Colibri (JustVugg/colibri)
 
-- **Pour quoi faire** : très gros modèles « à experts » : experts chauds sur la carte, tièdes en mémoire vive, froids lus sur le disque. API compatible OpenAI, adresse habituelle `http://127.0.0.1:8000/v1`. Lit les GGUF.
+- **Pour quoi faire** : très gros modèles « à experts » : experts chauds sur la carte, tièdes en mémoire vive, froids lus sur le disque. API compatible OpenAI, adresse habituelle `http://127.0.0.1:8000/v1`. Lit les GGUF après conversion.
 - **Limites** : projet de recherche ; les chiffres publiés viennent de ses auteurs et n'ont pas été refaits ici ; avec 32 Go de RAM, les très gros modèles vont sur le disque et deviennent lents ; incohérences relevées dans ses chiffres (voir [ENGINE_STUDY.fr.md](ENGINE_STUDY.fr.md)).
+- **Vérifié sur sa page publique (2026-11-07, sans l'exécuter)** : licence Apache-2.0 ; archives pour Windows, Linux (x86-64) et macOS (Apple Silicon) avec un `SHA256SUMS.txt` ; démarré par son propre script (`start-here.sh` / `START-HERE.bat`), qui affiche les adresses du navigateur et « OpenAI base URL » ; **un fichier GGUF doit d'abord être converti** (`coli import model.gguf`), il n'est pas lu tel quel ; aucune option `--version` documentée.
+- **Pourquoi Lutin ne l'installe et ne le démarre toujours pas** : cette étape de conversion et ce démarrage diffèrent de tous les autres moteurs ici, et personne ne l'a lancé avec Lutin. Une intégration gérée reposerait sur des suppositions. Elle attend l'essai S3 (voir [TRIALS.fr.md](TRIALS.fr.md)).
 
 ## Strata (Niko1221/Strata)
 

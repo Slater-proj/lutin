@@ -377,6 +377,34 @@ body[data-moteur="ollama"] .moteur-autre { display:none !important; }
 body[data-moteur="openai"] .biblio { display:none !important; }
 .carte.moteur-choisi { border-color:var(--accent); box-shadow:0 0 0 1px rgba(90,169,255,.35), var(--ombre-douce); }
 .moteur-liste div.point { margin:2px 0; }
+.aide-plus { display:inline; } .aide-plus summary { display:inline; cursor:pointer; color:var(--accent); } .aide-plus[open] summary { display:block; margin-top:4px; }
+/* écran d'accueil d'une conversation vide : il s'efface tout seul dès qu'un message arrive */
+#fil:empty { flex:0 0 0; padding:0; }
+#accueil { flex:1; min-height:0; overflow:auto; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px; padding:20px 14px; text-align:center; }
+#fil:not(:empty) + #accueil { display:none; }
+#accueil h2 { margin:0; font-size:1.35rem; }
+#accueil .acc-astuce { color:var(--muted); font-size:.85rem; }
+.acc-cartes { display:grid; grid-template-columns:repeat(auto-fit, minmax(230px, 1fr)); gap:10px; width:min(780px, 100%); }
+.acc-carte { text-align:left; display:flex; flex-direction:column; gap:4px; padding:12px 14px; border-radius:12px; background:var(--panel); border:1px solid var(--line); cursor:pointer; color:var(--fg); font:inherit; }
+.acc-carte:hover, .acc-carte:focus-visible { border-color:var(--accent2); background:var(--panel2); }
+.acc-carte b { font-weight:600; }
+.acc-carte span { color:var(--muted); font-size:.84rem; }
+/* palette de commandes (Ctrl+K) */
+#palette { position:fixed; inset:0; z-index:300; display:flex; align-items:flex-start; justify-content:center; padding-top:12vh; }
+#palette[hidden] { display:none; }
+#palFond { position:absolute; inset:0; background:rgba(0,0,0,.55); }
+#palBoite { position:relative; width:min(640px, 94vw); max-height:70vh; display:flex; flex-direction:column; background:var(--panel); border:1px solid var(--line2); border-radius:14px; box-shadow:var(--ombre); overflow:hidden; }
+#palSaisie { width:100%; box-sizing:border-box; border:0; border-bottom:1px solid var(--line); border-radius:0; background:transparent; color:var(--fg); font-size:1.05rem; padding:14px 16px; outline:none; }
+#palListe { list-style:none; margin:0; padding:6px; overflow-y:auto; }
+#palListe li { display:flex; align-items:center; gap:10px; padding:8px 10px; border-radius:8px; cursor:pointer; }
+#palListe li .pic { width:1.4em; text-align:center; flex:none; }
+#palListe li .pt { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#palListe li .pg { flex:none; font-size:.75rem; color:var(--muted); }
+#palListe li[aria-selected="true"] { background:var(--panel2); box-shadow:inset 0 0 0 1px var(--accent2); }
+#palListe .vide { color:var(--muted); padding:14px; cursor:default; }
+.pal-pied { display:flex; gap:14px; flex-wrap:wrap; padding:8px 14px; border-top:1px solid var(--line); font-size:.78rem; color:var(--muted); }
+.pal-pied kbd { border:1px solid var(--line2); border-radius:4px; padding:0 5px; font-family:inherit; }
+#bPalette { font-size:.95rem; line-height:1; padding:4px 9px; }
 </style>
 </head>
 <body data-moteur="ollama">
@@ -411,6 +439,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
       <button data-p="chat" aria-selected="true" title="Conversation"><span class="ic">💬</span><span class="lb">Conversation</span><i class="travail" id="ptTravail" hidden title="L'assistant travaille"></i></button><button data-p="modeles" aria-selected="false" title="Modèles"><span class="ic">🧠</span><span class="lb">Modèles</span><i class="travail fini" id="ptModeles" hidden title="Nouveautés pour ta machine"></i></button><button data-p="memoire" aria-selected="false" title="Mémoire"><span class="ic">📝</span><span class="lb">Mémoire</span></button><button data-p="auto" aria-selected="false" title="Automatisation : tâches planifiées, travaux de fond"><span class="ic">⏱</span><span class="lb">Automatisation</span></button><button data-p="reglages" aria-selected="false" title="Réglages"><span class="ic">⚙️</span><span class="lb">Réglages</span></button><button id="bSante" data-p="sante" aria-selected="false" title="Santé du PC : mémoire, carte graphique, disques ; test de bon fonctionnement"><span class="ic">⚕</span><span class="lb">Santé</span></button><button data-p="acces" aria-selected="false" title="Qui peut utiliser Lutin, appareils connectés, code PIN"><span class="ic">🔐</span><span class="lb">Accès</span></button>
     </div>
     <span class="puce" id="pOllama"><i></i><span>Ollama</span></span>
+    <button id="bPalette" aria-label="Tout trouver (Ctrl+K)" title="Tout trouver : conversations, onglets, modèles, actions (Ctrl+K)">🔎</button>
     <div class="menu">
       <button id="bPlus" aria-label="Plus d'actions" aria-haspopup="true" title="Plus d'actions">⋯</button>
       <div id="menuPlus" hidden>
@@ -428,6 +457,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     <div id="premierLancement" hidden></div>
     <div id="diagnostic" hidden role="alert"></div>
     <div id="fil"></div>
+    <div id="accueil"></div>
     <div id="taches" hidden></div>
     <div id="activite" role="status" aria-live="polite"><span class="pt"></span><span id="activiteTexte"></span></div>
     <div id="bandeauEdition" hidden><span>Modification d'un message : l'envoi remplace ce message et tout ce qui le suit.</span> <button id="bAnnulerEdition">Annuler</button></div>
@@ -450,10 +480,11 @@ body[data-moteur="openai"] .biblio { display:none !important; }
   <section class="page" id="p-sante"><div class="cadre" id="santeCorps"></div></section>
   <section class="page" id="p-modeles"><div class="cadre">
     <div class="biblio">
-    <div class="aide">Les modèles tournent sur ta machine, avec le moteur choisi (Ollama ou llama.cpp : la même bibliothèque, les mêmes modèles). Plus un modèle est gros, plus il est intelligent, mais plus il demande de mémoire (idéalement celle de ta carte graphique). Un seul modèle est chargé à la fois : en changer prend quelques secondes. Tu peux aussi les gérer en ligne de commande : <code>lutin modeles</code>.</div>
+    <div class="aide">Plus un modèle est gros, plus il est intelligent, mais plus il demande de mémoire (idéalement celle de ta carte graphique).
+      <details class="aide-plus"><summary>En savoir plus</summary>Les modèles tournent sur ta machine, avec le moteur choisi (Ollama ou llama.cpp : la même bibliothèque, les mêmes modèles). Un seul modèle est chargé à la fois : en changer prend quelques secondes. Tu peux aussi les gérer en ligne de commande : <code>lutin modeles</code>.</details></div>
     <label class="opt-ligne" title="Montre des modèles modifiés par la communauté pour ne plus refuser de demandes. À utiliser en connaissance de cause."><input type="checkbox" id="cAvance"> Afficher les modèles avancés (sans filtre)</label>
     <div class="carte" id="jaugeDisque" hidden style="display:block"></div>
-    <div class="carte ollama-seulement" id="barreTest" style="gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+    <div class="carte" id="barreTest" style="gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
       <button id="bTesterPc" class="principal" title="Mesure la vitesse du modèle actif sur cette machine (environ 20 secondes), puis donne des conseils : modèle plus léger, contexte, charge.">⏱ Tester mon PC</button>
       <span id="msgTest" class="aide"></span>
       <div id="conseilTest" style="flex:1 1 100%"></div>
@@ -465,13 +496,13 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     </div>
     <div id="propositions"></div>
     <div class="aide">Sur chaque modèle, le bouton « Précision » permet de choisir entre 4 bits (petit, rapide), 8 bits (plus fidèle, plus gros) et les autres variantes proposées par Ollama.</div>
-    <div class="carte ollama-seulement" id="barreCompare" style="gap:8px;flex-wrap:wrap;align-items:center">
+    <div class="carte" id="barreCompare" style="gap:8px;flex-wrap:wrap;align-items:center">
       <b>⚖ Comparer des modèles</b>
       <span class="aide">Coche « ⚖ » sur des modèles installés dans la liste, puis lance le banc complet sur chacun : vitesse, outils, code, français et consignes côte à côte, sur cette machine.</span>
       <button id="bComparer" disabled>Tester et comparer la sélection</button>
       <span id="msgComparer" class="aide"></span>
     </div>
-    <div id="tableComparaison" class="ollama-seulement"></div>
+    <div id="tableComparaison"></div>
     <div id="listeModeles"></div>
     <h2>Bibliothèque d'Ollama</h2>
     <div class="aide">Les nouveaux modèles sortent tous les jours, bien avant d'entrer dans le catalogue de Lutin : parcours ici la liste publique d'ollama.com (récents ou populaires) et installe celui que tu veux. Les tailles sont les variantes proposées (« 8b » = 8 milliards de paramètres, environ 5 Go) ; choisis-en une qui tient dans ta mémoire.</div>
@@ -692,6 +723,14 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     </details>
   </div></section>
 </main>
+<div id="palette" hidden role="dialog" aria-modal="true" aria-label="Aller à…">
+  <div id="palFond"></div>
+  <div id="palBoite">
+    <input id="palSaisie" type="text" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="true" aria-controls="palListe" aria-autocomplete="list" placeholder="Aller à… (une conversation, un onglet, un modèle, une action)">
+    <ul id="palListe" role="listbox"></ul>
+    <div class="pal-pied"><span><kbd>↑</kbd> <kbd>↓</kbd> choisir</span><span><kbd>Entrée</kbd> ouvrir</span><span><kbd>Échap</kbd> fermer</span></div>
+  </div>
+</div>
 <div id="modal" hidden>
   <div id="modalFond"></div>
   <div id="modalBoite" role="dialog" aria-modal="true">
@@ -733,6 +772,21 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     return d;
   };
   const el = (tag, cls, texte) => { const e = document.createElement(tag); if (cls) e.className = cls; if (texte !== undefined) e.textContent = texte; return e; };
+  // Un appel d'outil en une phrase lisible (« Lit README.md »), l'appel exact reste en infobulle ; un outil inconnu garde l'affichage technique
+  const libelleOutil = (nom, args) => {
+    const a = (args && typeof args === 'object') ? args : {};
+    const val = (...cles) => { for (const c of cles) if (typeof a[c] === 'string' && a[c]) return a[c].length > 90 ? a[c].slice(0, 87) + '…' : a[c]; const premier = Object.values(a).find(v => typeof v === 'string' && v); return premier ? (premier.length > 90 ? premier.slice(0, 87) + '…' : premier) : ''; };
+    const phrases = {
+      lister: ['📂', T('Liste le dossier'), val('dossier', 'chemin') || '.'], lire: ['📄', T('Lit'), val('chemin')], lire_plusieurs: ['📄', T('Lit plusieurs fichiers'), ''],
+      chercher: ['🔎', T('Cherche dans le projet'), val('motif', 'expression', 'recherche', 'texte')], symboles: ['🔎', T('Cherche où est défini'), val('nom')],
+      modifier: ['✏️', T('Modifie'), val('chemin')], modifier_plusieurs: ['✏️', T('Modifie plusieurs fichiers'), ''], ecrire: ['✏️', T('Écrit'), val('chemin')],
+      executer: ['▶', T('Lance'), val('commande')], web_chercher: ['🌐', T('Cherche sur le web'), val('requete', 'recherche', 'texte')], web_lire: ['🌐', T('Lit la page'), val('url', 'adresse')],
+      memoriser: ['🧠', T('Retient une note'), ''], rappeler: ['🧠', T('Retrouve dans la mémoire'), val('requete', 'recherche', 'texte')], creer_document: ['📝', T('Crée un document'), val('chemin', 'nom', 'titre')],
+    };
+    const f = phrases[nom];
+    return f ? f[0] + ' ' + f[1] + (f[2] ? ' ' + f[2] : '') : '⚙ ' + nom + ' ' + JSON.stringify(args).slice(0, 160);
+  };
+  const ligneOutil = (nom, args) => { const d = el('div', 'outil'); const l = el('div', '', libelleOutil(nom, args)); l.title = nom + ' ' + JSON.stringify(args).slice(0, 600); d.appendChild(l); return d; };
   const fil = () => $('fil'), bas = () => { fil().scrollTop = fil().scrollHeight; };
   // Copie dans le presse-papiers. Sur le téléphone la page est en http (pas « sécurisée ») : navigator.clipboard n'existe pas, on passe par une zone de texte cachée.
   const copier = async texte => {
@@ -960,7 +1014,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     (c.resume ? [{ role: 'resume', content: c.resume }] : []).concat(c.messages).forEach(m => {
       if (m.role === 'resume') { const d = el('div', 'info', T('Résumé du début de la conversation : ') + m.content.slice(0, 400) + (m.content.length > 400 ? '...' : '')); fil().appendChild(d); }
       else if (m.role === 'user') { const d = el('div', 'msg moi'); d.appendChild(el('div', 'corps', m.content)); miniatures(d, m.images, m.pieces); fil().appendChild(d); }
-      else if (m.role === 'assistant') { if (m.content) { const x = messageIA(); rendre(x.c, m.content); } (m.tool_calls || []).forEach(t => fil().appendChild(el('div', 'outil', '⚙ ' + t.function.name + ' ' + JSON.stringify(t.function.arguments).slice(0, 160)))); }
+      else if (m.role === 'assistant') { if (m.content) { const x = messageIA(); rendre(x.c, m.content); } (m.tool_calls || []).forEach(t => fil().appendChild(ligneOutil(t.function.name, t.function.arguments))); }
       else if (m.role === 'tool') { const d = el('div', 'outil'); d.appendChild(el('div', '', '↳ ' + (m.tool_name || T('résultat')))); d.appendChild(el('div', 'res', (['web_chercher', 'web_lire'].includes(m.tool_name) || (m.tool_name || '').startsWith('mcp__')) && /CONTENU (WEB|EXTERNE) NON FIABLE/.test((m.content || '').slice(0, 60)) ? T("(résultat transmis à l'assistant, non affiché)") : (m.content || '').slice(0, 700))); afficherMedias(d, m.medias, m.medias_fichiers, CONV.id); afficherFichiers(d, m.fichiers_joints, CONV.id); fil().appendChild(d); }
     });
     annoter(); afficherTaches(c.taches); majJauge(c.id); setVitesse(c.vitesse); majAnnuler();
@@ -1180,7 +1234,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
               detailsPensee.lastElementChild.textContent += e.texte;
             }
           }
-          else if (e.type === 'outil') { const d = el('div', 'outil'); d.appendChild(el('div', '', '⚙ ' + e.nom + ' ' + JSON.stringify(e.args).slice(0, 220))); d.dataset.nom = e.nom; zone().appendChild(d); }
+          else if (e.type === 'outil') { const d = ligneOutil(e.nom, e.args); d.dataset.nom = e.nom; zone().appendChild(d); }
           else if (e.type === 'resultat') { const cartes = [...zone().querySelectorAll('.outil')]; const d = cartes[cartes.length - 1]; if (d) { d.appendChild(el('div', 'res', e.texte)); afficherMedias(d, e.medias, e.medias_fichiers, ID_EN_COURS); afficherFichiers(d, e.fichiers_joints, ID_EN_COURS); } vider(ia); ia = messageIA(zone()); detailsPensee = null; }
           else if (e.type === 'approbation') { zone().appendChild(carteAccord(e)); signaler(T('⏸ Accord demandé')); }
           else if (e.type === 'accord_suspendu') marquerSuspendu(e.raison); else if (e.type === 'accord_retabli') finSuspension();
@@ -1374,7 +1428,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     if (inst) {
       if (!actif && !emb) { const u = el('button', 'principal', T('Utiliser')); u.title = T('En faire le modèle de la conversation'); u.addEventListener('click', async () => { try { await api('/api/reglages', { modele: m.id }); $('selModele').value = m.id; rafraichir(); } catch (e) { alert(e.message); } }); acts.appendChild(u); }
       const bv = el('button', '', '⏱'), bc = el('button', '', '📊');
-      bv.classList.add('ollama-seulement'); bc.classList.add('ollama-seulement');          // le banc d'essai est propre à Ollama
+      // le banc d'essai mesure le moteur choisi (Ollama, llama.cpp, serveur compatible OpenAI)
       bv.title = T('⏱ Tester la vitesse') + ' : ' + T('Environ 20 secondes (plus si le modèle doit d\'abord se charger)'); bv.disabled = occupe;
       bc.title = T('📊 Banc complet') + ' : ' + T('Vitesse, appel d\'outils, code, français, consignes : une vingtaine de petites questions, quelques minutes'); bc.disabled = occupe;
       [[bv, true], [bc, false]].forEach(([b, rapide]) => b.addEventListener('click', async () => { try { await api('/api/bench', { modele: m.id, rapide }); rafraichir(); } catch (e) { $('msgModeles').textContent = e.message; } }));
@@ -3794,10 +3848,100 @@ body[data-moteur="openai"] .biblio { display:none !important; }
   $('bReprise').addEventListener('click', reprendre);
   $('bMaj').addEventListener('click', () => verifierModeles('maj'));
   $('bNouveaux').addEventListener('click', () => verifierModeles('nouveaux'));
-  // Liens directs : /#modeles, /#memoire, /#conv=<id> (utile pour un signet ou une capture d'écran)
+  // ---- Écran d'accueil d'une conversation vide : des départs concrets, qui remplissent la zone de saisie (rien n'est envoyé sans toi)
+  const construireAccueil = () => {
+    const z = $('accueil'); z.textContent = '';
+    z.appendChild(el('h2', '', T('Que veux-tu faire ?')));
+    const cartes = el('div', 'acc-cartes');
+    const depart = (ic, titre, texte, remplissage, onglet) => {
+      const b = el('button', 'acc-carte'); b.type = 'button';
+      b.appendChild(el('b', '', ic + ' ' + titre)); b.appendChild(el('span', '', texte));
+      b.addEventListener('click', () => {
+        if (onglet) { ouvrirOnglet(onglet); return; }
+        const s = $('saisie'); s.value = remplissage; s.dispatchEvent(new Event('input', { bubbles: true })); s.focus(); s.setSelectionRange(s.value.length, s.value.length);
+      });
+      cartes.appendChild(b);
+    };
+    depart('📄', T('Résumer un fichier'), T('Lutin lit le fichier de ton dossier de travail.'), T('Lis le fichier README.md et résume-le en cinq points.'));
+    depart('🛠', T('Corriger du code'), T('Il propose la modification, tu acceptes ou tu annules.'), T('Trouve et corrige les erreurs dans le fichier '));
+    depart('🔎', T('Chercher sur le web'), T('Avec l\'option « Web » cochée à gauche.'), T('Cherche sur le web les nouveautés de '));
+    depart('⏱', T('Programmer une tâche'), T('Un résumé chaque matin, sans ouvrir la page.'), '', 'auto');
+    depart('🧠', T('Changer de modèle'), T('Voir ce qui tient sur ton PC, installer, comparer.'), '', 'modeles');
+    z.appendChild(cartes);
+    z.appendChild(el('div', 'acc-astuce', T('Astuce : Ctrl+K pour tout trouver, / pour les commandes.')));
+  };
+  construireAccueil();
+  // ---- Palette de commandes (Ctrl+K) : un seul endroit pour aller partout, au clavier
+  const PAL = { ouverte: false, items: [], visibles: [], choix: 0, retour: null };
+  const sansAccent = t => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  const itemsPalette = () => {
+    const g = { onglet: T('Onglets'), action: T('Commandes'), conv: T('Conversations'), modele: T('Modèles'), reglage: T('Réglages') };
+    const liste = [];
+    document.querySelectorAll('.onglets button[data-p]').forEach(b => { const lb = b.querySelector('.lb'), ic = b.querySelector('.ic'); const nom = lb ? lb.textContent : b.title; liste.push({ ic: ic ? ic.textContent : '▸', t: nom, g: g.onglet, k: b.dataset.p, f: () => b.click() }); });
+    liste.push({ ic: '＋', t: T('Nouvelle conversation'), g: g.action, k: 'nouveau new clear', f: () => nouvelle() });
+    [['bVram', '🧹'], ['bFiche', '🧾'], ['bResume', '📋'], ['bJournal', '📜'], ['bSauvegarde', '💾'], ['bGit', '⎇'], ['bExport', '⬇']].forEach(([id, ic]) => {
+      const b = $(id); if (!b) return; liste.push({ ic, t: b.textContent.replace(/^[^\p{L}\p{N}]+/u, '').trim() || b.title, g: g.action, k: b.title, f: () => b.click() });
+    });
+    if ($('bTesterPc')) liste.push({ ic: '⏱', t: T('Tester mon PC'), g: g.action, k: 'vitesse benchmark mesure', f: () => { ouvrirOnglet('modeles'); $('bTesterPc').click(); } });
+    liste.push({ ic: '✔', t: T('Vérifier que tout marche'), g: g.action, k: 'sante test diagnostic', f: async () => { ouvrirOnglet('sante'); await window.ouvrirSante(); const b = [...document.querySelectorAll('#santeCorps button')].find(x => x.textContent.includes(T('Vérifier que tout marche'))); if (b) b.click(); } });
+    ((ETAT && ETAT.conversations) || []).forEach(c => liste.push({ ic: c.epingle ? '★' : '💬', t: c.titre || T('(sans titre)'), g: g.conv, k: '', f: () => { ouvrirOnglet('chat'); ouvrir(c.id); } }));
+    if (ETAT && ETAT.installes) installesDiscussion().forEach(m => liste.push({ ic: '🧠', t: m, g: g.modele, k: 'modele model changer', f: () => { const s = $('selModele'); s.value = m; s.dispatchEvent(new Event('change')); } }));
+    document.querySelectorAll('#p-reglages details.groupe > summary').forEach(sm => liste.push({ ic: '⚙', t: sm.textContent.trim(), g: g.reglage, k: 'reglages parametres options', f: () => { ouvrirOnglet('reglages'); const d = sm.parentElement; d.open = true; setTimeout(() => d.scrollIntoView({ block: 'start' }), 30); } }));
+    return liste;
+  };
+  const notePalette = (it, mots) => {
+    const t = sansAccent(it.t), tout = t + ' ' + sansAccent(it.g) + ' ' + sansAccent(it.k);
+    if (!mots.length) return 1;
+    let score = 0;
+    for (const m of mots) { if (!tout.includes(m)) return 0; score += t.startsWith(m) ? 3 : t.includes(' ' + m) ? 2 : t.includes(m) ? 1.5 : 1; }
+    return score;
+  };
+  const surligner = () => {
+    const ul = $('palListe'); [...ul.children].forEach((li, i) => li.setAttribute('aria-selected', i === PAL.choix ? 'true' : 'false'));
+    const cur = ul.children[PAL.choix]; if (cur && cur.id) { cur.scrollIntoView({ block: 'nearest' }); $('palSaisie').setAttribute('aria-activedescendant', cur.id); }
+  };
+  const lancerPalette = i => { const it = PAL.visibles[i]; if (!it) return; fermerPalette(false); try { const r = it.f(); if (r && r.catch) r.catch(() => {}); } catch (e) { /* une action indisponible ne doit pas casser la page */ } };
+  const dessinerPalette = () => {
+    const ul = $('palListe'); ul.textContent = '';
+    if (!PAL.visibles.length) { ul.appendChild(el('li', 'vide', T('Rien ne correspond.'))); $('palSaisie').removeAttribute('aria-activedescendant'); return; }
+    PAL.visibles.forEach((it, i) => {
+      const li = el('li'); li.id = 'pal' + i; li.setAttribute('role', 'option'); li.setAttribute('aria-selected', i === PAL.choix ? 'true' : 'false');
+      li.appendChild(el('span', 'pic', it.ic)); li.appendChild(el('span', 'pt', it.t)); li.appendChild(el('span', 'pg', it.g));
+      li.addEventListener('mousemove', () => { if (PAL.choix !== i) { PAL.choix = i; surligner(); } });
+      li.addEventListener('click', () => lancerPalette(i));
+      ul.appendChild(li);
+    });
+    surligner();
+  };
+  const filtrerPalette = () => {
+    const mots = sansAccent($('palSaisie').value).split(/\s+/).filter(Boolean);
+    PAL.visibles = PAL.items.map(it => [notePalette(it, mots), it]).filter(x => x[0] > 0).sort((a, b) => b[0] - a[0]).slice(0, 40).map(x => x[1]);
+    PAL.choix = 0; dessinerPalette();
+  };
+  const fermerPalette = (rendreFocus = true) => { if (!PAL.ouverte) return; PAL.ouverte = false; $('palette').hidden = true; if (rendreFocus && PAL.retour && PAL.retour.focus) PAL.retour.focus(); };
+  const ouvrirPalette = () => {
+    if (PAL.ouverte) return;
+    PAL.retour = document.activeElement; PAL.items = itemsPalette(); PAL.ouverte = true;
+    $('palette').hidden = false; $('palSaisie').value = ''; filtrerPalette(); $('palSaisie').focus();
+  };
+  $('bPalette').addEventListener('click', ouvrirPalette);
+  $('palFond').addEventListener('click', () => fermerPalette());
+  $('palSaisie').addEventListener('input', filtrerPalette);
+  $('palSaisie').addEventListener('keydown', e => {
+    if (e.key === 'ArrowDown') { PAL.choix = Math.min(PAL.visibles.length - 1, PAL.choix + 1); surligner(); e.preventDefault(); }
+    else if (e.key === 'ArrowUp') { PAL.choix = Math.max(0, PAL.choix - 1); surligner(); e.preventDefault(); }
+    else if (e.key === 'Enter') { lancerPalette(PAL.choix); e.preventDefault(); }
+    else if (e.key === 'Escape') { fermerPalette(); e.preventDefault(); e.stopPropagation(); }
+    else if (e.key === 'Tab') e.preventDefault();          // le focus reste dans la palette
+  });
+  document.addEventListener('keydown', e => {
+    if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'k') { e.preventDefault(); if (PAL.ouverte) fermerPalette(); else ouvrirPalette(); }
+  });
+  // Liens directs : /#modeles, /#memoire, /#palette, /#conv=<id> (utile pour un signet ou une capture d'écran)
   rafraichir().then(() => {
     const cible = decodeURIComponent(location.hash.slice(1));
     if (cible.startsWith('conv=')) ouvrir(cible.slice(5));
+    else if (cible === 'palette') ouvrirPalette();
     else { const b = document.querySelector('.onglets button[data-p="' + cible + '"]'); if (b) b.click(); }
   });
   setInterval(rafraichir, 4000);

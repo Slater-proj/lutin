@@ -34,7 +34,7 @@ from . import i18n as _i18n
 from . import securite as _sec
 from .i18n import t as _t
 from .i18n import traduire as _tr
-from .ollama_client import Ollama as _Ollama
+from .ollama_client import Ollama as _Ollama  # noqa: F401  (client_banc et les tests s’en servent par ce module)
 
 ICI = Path(__file__).resolve().parent
 WEB = ICI / "web"
@@ -437,6 +437,8 @@ from .dialogue import (  # noqa: F401  (déplacé dans dialogue.py : moteur ré-
     CAPACITES,
     OUTILS_WEB,
     PULLS,
+    client_banc,
+    moteur_local,
     RAPPEL_APPEL,
     RE_APPEL_BALISE,
     RE_APPEL_JSON,
@@ -743,7 +745,7 @@ def _mesurer_un(modele, rapide):
     BENCH.update(en_cours=modele, etape="démarrage")
     try:
         from .machine import detecter
-        mesure = _bench.executer(_Ollama(OLLAMA), modele, rapide, lambda nom, i, n: BENCH.update(etape="{} ({}/{})".format(nom, i + 1, n)), detecter().resume(), reglages()["num_ctx"])
+        mesure = _bench.executer(client_banc(), modele, rapide, lambda nom, i, n: BENCH.update(etape="{} ({}/{})".format(nom, i + 1, n)), detecter().resume(), reglages()["num_ctx"])
         _bench.enregistrer(chemin_bench(), mesure)
         if mesure.get("erreur"):
             BENCH["erreur"] = mesure["erreur"]
@@ -760,7 +762,7 @@ def lancer_bench_serie(modeles, rapide=False):
     for m in modeles:
         if not RE_NOM_MODELE.match(m):
             raise ValueError("Nom de modèle invalide.")
-    installes = set(etat_moteur()["installes"])
+    installes = set(moteur_local().modeles()["installes"])          # ceux du moteur de cette machine, que le banc va mesurer
     absents = [m for m in modeles if m not in installes]
     if absents:
         raise ValueError("Ces modèles ne sont pas installés : " + ", ".join(absents))

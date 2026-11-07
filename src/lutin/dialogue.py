@@ -682,6 +682,19 @@ def etat_moteur():
     return moteur_actuel().modeles()
 
 
+def moteur_local(r=None):
+    """Le moteur de CETTE machine (celui des réglages), jamais une machine prêtée : c'est lui qu'on mesure, qu'on décharge, dont on lit la mémoire."""
+    r = r if r is not None else _m.reglages()
+    return _moteurs.par_id(r.get("moteur") or _moteurs.OLLAMA)
+
+
+def client_banc(r=None):
+    """Ce que le banc d'essai interroge : Ollama directement, ou le moteur choisi (llama.cpp, serveur compatible OpenAI) derrière l'adaptateur du banc."""
+    from . import bench
+    local = moteur_local(r)
+    return _m._Ollama(_m.OLLAMA) if local.id == _moteurs.OLLAMA else bench.AdaptateurMoteur(local)
+
+
 def moteur_actuel(r=None):
     """Le moteur choisi dans les réglages (Ollama par défaut, et si le réglage est inconnu)."""
     r = r if r is not None else _m.reglages()

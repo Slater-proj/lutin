@@ -16,8 +16,10 @@ Each engine is **independent**: setting one up touches neither Ollama, nor llama
 
 ## Colibri (JustVugg/colibri)
 
-- **What for**: very large mixture-of-experts models: hot experts on the card, warm in RAM, cold read from disk. OpenAI-compatible API, usual address `http://127.0.0.1:8000/v1`. Reads GGUF.
+- **What for**: very large mixture-of-experts models: hot experts on the card, warm in RAM, cold read from disk. OpenAI-compatible API, usual address `http://127.0.0.1:8000/v1`. Reads GGUF after conversion.
 - **Limits**: research project; published figures come from its authors and were not redone here; with 32 GB of RAM, very large models go to disk and get slow; inconsistencies spotted in its figures (see [ENGINE_STUDY.md](ENGINE_STUDY.md)).
+- **Checked against its public page (2026-11-07, not by running it)**: Apache-2.0 licence; archives for Windows, Linux (x86-64) and macOS (Apple Silicon) with a `SHA256SUMS.txt`; started by its own script (`start-here.sh` / `START-HERE.bat`), which prints the browser and `OpenAI base URL` addresses; **a GGUF file must first be converted** (`coli import model.gguf`), it is not read as is; no `--version` option is documented.
+- **Why Lutin still does not install or start it**: that conversion step and the server start-up differ from every other engine here, and nobody has run it with Lutin. A managed integration would rest on guesses. It waits for trial S3 (see [TRIALS.md](TRIALS.md)).
 
 ## Strata (Niko1221/Strata)
 
