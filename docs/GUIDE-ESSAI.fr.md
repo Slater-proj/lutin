@@ -1,6 +1,6 @@
 [English](GUIDE-ESSAI.md) · **Français**
 
-# Essayer Lutin 0.8 pas à pas
+# Essayer Lutin pas à pas
 
 Un parcours de 45 minutes environ pour vérifier, sur ta machine, ce qui est nouveau. Chaque étape dit **quoi faire**, **ce que tu dois voir**, et **quoi faire si ce n'est pas le cas**. Tout est annulable : rien n'écrit en dehors du dossier d'essai que tu choisis à l'étape 0.
 

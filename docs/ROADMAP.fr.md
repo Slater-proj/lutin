@@ -162,3 +162,25 @@ Voir le détail et les sources dans l'[étude](ENGINE_STUDY.fr.md) : adaptateur 
 1. Valider cette feuille de route et sa numérotation.
 2. L'**image Docker par défaut** reste « complète » jusqu'à la 0.19.0, où les chiffres décideront (essais S2, S4, S5).
 3. L'auto-connexion Windows pour le réveil à distance (0.24.0) : choix de sécurité de l'utilisateur, à expliquer le moment venu.
+
+## 10. Bilan (2026-11-07)
+
+Lecture honnête : **le code et les tests automatiques du plan sont faits ; la validation sur du vrai matériel ne l'est pas.** Tout ce qui est « fait » ci-dessous a été testé avec de faux serveurs, des tests de navigateur et la CI (Windows, Linux, Docker), jamais sur les deux machines visées.
+
+| Jalon | Code et tests | Reste à confirmer sur du matériel |
+|---|---|---|
+| 0.16.x llama.cpp | Fait | S1 : installation par Lutin sur le poste à carte NVIDIA, conversation avec outils |
+| 0.17 Catalogue signé | Fait (Ed25519, veille hebdomadaire) | Sauvegarder les clés de signature (hors dépôt) |
+| 0.18 Routeur, capacités | Fait | Mode routeur contre le vrai `llama-server` (format des réponses non vérifié) |
+| 0.19 Banc et recommandation | Fait (`lutin bench-moteurs`, carte « Quel moteur… ») | Chiffres réels ; ils décident l'image Docker par défaut et le petit PC à carte intégrée |
+| 0.20 Installation, premier lancement | Fait, test de CI des volumes | Profils llama.cpp avec carte (CUDA, Vulkan, Intel) |
+| 0.21 Modèles et rôles par moteur | Fait en ligne de commande et dans les listes | Les boutons du banc dans la page restent propres à Ollama |
+| 0.22 Estimation | Fait | Écart estimation / mesure sur du vrai matériel |
+| 0.23 Machines | Fait (deux vrais serveurs dans un test) | Deux vrais ordinateurs |
+| 0.24 Alimentation | Fait | Réveil, extinction, démarrage automatique sur de vrais PC (S6) |
+| 0.25 Moteurs expérimentaux | Préréglages externes faits | S3 ; l'intégration gérée de Colibri n'est pas faite, volontairement |
+| 0.26 Stabilisation | Fait côté logiciel (voir ci-dessus) | Essai du retour arrière sur une vraie publication ; vérification de la roue contre `SHA256SUMS.txt` (décision ouverte) |
+
+**Pour la 1.0** : les essais S1 à S7 (§6), les décisions Docker et petit PC d'après le banc, l'essai du retour arrière, la décision sur la vérification des mises à jour. Les moteurs expérimentaux ne sont pas requis.
+
+**Numérotation** : les publications portent les numéros calculés par le dépôt (dernière : v0.23.x) ; les numéros 0.24 à 0.26 de cette feuille sont des jalons de travail, regroupés dans ces publications.

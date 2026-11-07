@@ -78,7 +78,7 @@ Le script installe la dernière version publiée dans un environnement privé, a
 | `lutin langue [fr\|en\|auto]` | langue de l'application |
 | `lutin doctor` | diagnostic à coller dans un rapport de problème (sans contenu personnel) |
 
-Au-delà de la discussion : tester ton PC, essai à blanc, chercher hors ligne dans tes PDF et documents Word, tâches planifiées, addons facultatifs (missions longues menées seul pendant des heures, traitement de documents, Telegram, courriel, X, ComfyUI), création de PDF et de documents Word, aperçu d'une page, pièces jointes (images, documents, code), cinq modes, appairage d'un téléphone par QR code. Voir [docs/FEATURES.fr.md](docs/FEATURES.fr.md) ; pour essayer les nouveautés pas à pas : [docs/GUIDE-ESSAI.fr.md](docs/GUIDE-ESSAI.fr.md) ; pour l'installer sur un serveur Debian avec Docker : [docs/TUTO-DOCKER-DEBIAN.fr.md](docs/TUTO-DOCKER-DEBIAN.fr.md).
+Au-delà de la discussion : tester ton PC, essai à blanc, chercher hors ligne dans tes PDF et documents Word, tâches planifiées, addons facultatifs (missions longues menées seul pendant des heures, traitement de documents, Telegram, courriel, X, ComfyUI), création de PDF et de documents Word, aperçu d'une page, pièces jointes (images, documents, code), cinq modes, appairage d'un téléphone par QR code. Toute la documentation, par sujet : [docs/README.fr.md](docs/README.fr.md). Voir [docs/FEATURES.fr.md](docs/FEATURES.fr.md) ; pour essayer les nouveautés pas à pas : [docs/GUIDE-ESSAI.fr.md](docs/GUIDE-ESSAI.fr.md) ; pour l'installer sur un serveur Debian avec Docker : [docs/TUTO-DOCKER-DEBIAN.fr.md](docs/TUTO-DOCKER-DEBIAN.fr.md).
 
 ## Les modèles
 

@@ -1,6 +1,6 @@
 **English** · [Français](GUIDE-ESSAI.fr.md)
 
-# Trying Lutin 0.8 step by step
+# Trying Lutin step by step
 
 A walk-through of about 45 minutes to check, on your machine, what is new. Each step says **what to do**, **what you should see**, and **what to do if you do not**. Everything can be undone: nothing is written outside the trial folder you pick in step 0.
 

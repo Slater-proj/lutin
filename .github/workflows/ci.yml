@@ -10,6 +10,7 @@ permissions:
 
 jobs:
   tests:
+    timeout-minutes: 25
     name: tests (${{ matrix.os }}, Python ${{ matrix.python }})
     runs-on: ${{ matrix.os }}
     strategy:
@@ -33,6 +34,7 @@ jobs:
         run: python tests/lancer_tests.py
 
   paquet:
+    timeout-minutes: 15
     name: paquet (roue, archive source) sur ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
@@ -60,6 +62,7 @@ jobs:
           "$PY" -m lutin hors-ligne
 
   docker:
+    timeout-minutes: 25
     name: image Docker (construction et démarrage)
     runs-on: ubuntu-latest
     env:
@@ -120,6 +123,7 @@ jobs:
           docker rm -f lutin-vol2
 
   installateur-linux:
+    timeout-minutes: 10
     name: install.sh (installation, réinstallation)
     runs-on: ubuntu-latest
     env:

@@ -152,3 +152,25 @@ See the detail and sources in the [study](ENGINE_STUDY.md): dedicated adapter pe
 1. Validate this roadmap and its numbering.
 2. The **default Docker image** stays "full" until 0.19.0, when figures will decide (trials S2, S4, S5).
 3. Windows auto-logon for remote wake-up (0.24.0): the user's security choice, to explain when the time comes.
+
+## 10. Status review (2026-11-07)
+
+Plain reading: **the code and automatic tests of the plan are done; validation on real hardware is not.** Everything marked "done" below was tested with fake servers, browser tests and the CI (Windows, Linux, Docker), never on the two target machines.
+
+| Milestone | Code and tests | Still to confirm on hardware |
+|---|---|---|
+| 0.16.x llama.cpp | Done | S1: install by Lutin on the NVIDIA PC, conversation with tools |
+| 0.17 Signed catalogue | Done (Ed25519, weekly watch) | Back up the signing keys (outside the repository) |
+| 0.18 Router, capabilities | Done | Router mode against the real `llama-server` (response format unchecked) |
+| 0.19 Bench and recommendation | Done (`lutin bench-moteurs`, "Which engine…" card) | Real figures; they decide the default Docker image and the small integrated-GPU PC |
+| 0.20 Install, first launch | Done, CI volume test | llama.cpp profiles with a card (CUDA, Vulkan, Intel) |
+| 0.21 Models and roles per engine | Done on the command line and in lists | The page's bench buttons are still Ollama-only |
+| 0.22 Estimate | Done | Estimate-vs-measure gap on real hardware |
+| 0.23 Machines | Done (two real servers in one test) | Two real computers |
+| 0.24 Power | Done | Wake, shutdown, autostart on real PCs (S6) |
+| 0.25 Experimental engines | External presets done | S3; managed Colibri integration not done, on purpose |
+| 0.26 Stabilisation | Software side done (see above) | Rollback trial on a real release; wheel check against `SHA256SUMS.txt` (open decision) |
+
+**For 1.0**: trials S1 to S7 (§6), the Docker and small-PC decisions from the bench, the rollback trial, the decision on update verification. Experimental engines are not required.
+
+**Numbering**: published versions carry the numbers the repository computes (latest: v0.23.x); the 0.24 to 0.26 numbers in this roadmap are working milestones, bundled into those releases.
