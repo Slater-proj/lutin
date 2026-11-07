@@ -315,6 +315,12 @@ def _appeler_outil(nom, args, ctx):
         return _m.outil_lire(args.get("chemin"), args.get("debut"), args.get("fin"))
     if nom == "chercher":
         return _m.outil_chercher(args.get("motif", ""), args.get("dossier", "."), args.get("contexte", 0), args.get("fichiers", ""))
+    if nom == "trouver":
+        from . import outils_utiles
+        return outils_utiles.outil_trouver(args.get("motif", ""), args.get("dossier", "."))
+    if nom == "calculer":
+        from . import outils_utiles
+        return outils_utiles.outil_calculer(args.get("expression", ""))
     if nom == "symboles":
         return _m.outil_symboles(args.get("nom", ""), args.get("dossier", "."))
     if nom == "lire_plusieurs":

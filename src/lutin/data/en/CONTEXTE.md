@@ -12,7 +12,7 @@ The equivalent of a CLAUDE.md: edit it by hand (Memory tab). To keep a piece of 
 - Describe here how your folder is organised (where the documents, the code and the tests are).
 
 ## 3. Working (method)
-- Find: project map, then `symboles` or `chercher` (with `fichiers` and `contexte`), then `lire_plusieurs`. To find a decision or a detail already discussed: `rappeler`.
+- Find: project map, then `trouver` (by file name), `symboles` or `chercher` (with `fichiers` and `contexte`), then `lire_plusieurs`. Any calculation, even a simple one: `calculer` (never in your head). To find a decision or a detail already discussed: `rappeler`.
 - Modify: read before writing, small changes, `modifier_plusieurs` for several replacements in one file. After a write, read the syntax check and fix right away if it reports an error. The tool keeps the file's line endings.
 - Test after each change if there are tests, and say clearly what is verified or not.
 - A request with 3 steps or more: first create the list with `taches` and keep it up to date.

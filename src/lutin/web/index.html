@@ -792,7 +792,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     const val = (...cles) => { for (const c of cles) if (typeof a[c] === 'string' && a[c]) return a[c].length > 90 ? a[c].slice(0, 87) + '…' : a[c]; const premier = Object.values(a).find(v => typeof v === 'string' && v); return premier ? (premier.length > 90 ? premier.slice(0, 87) + '…' : premier) : ''; };
     const phrases = {
       lister: ['📂', T('Liste le dossier'), val('dossier', 'chemin') || '.'], lire: ['📄', T('Lit'), val('chemin')], lire_plusieurs: ['📄', T('Lit plusieurs fichiers'), ''],
-      chercher: ['🔎', T('Cherche dans le projet'), val('motif', 'expression', 'recherche', 'texte')], symboles: ['🔎', T('Cherche où est défini'), val('nom')],
+      chercher: ['🔎', T('Cherche dans le projet'), val('motif', 'expression', 'recherche', 'texte')], symboles: ['🔎', T('Cherche où est défini'), val('nom')], trouver: ['🔎', T('Cherche les fichiers'), val('motif')], calculer: ['🧮', T('Calcule'), val('expression')],
       modifier: ['✏️', T('Modifie'), val('chemin')], modifier_plusieurs: ['✏️', T('Modifie plusieurs fichiers'), ''], ecrire: ['✏️', T('Écrit'), val('chemin')],
       executer: ['▶', T('Lance'), val('commande')], web_chercher: ['🌐', T('Cherche sur le web'), val('requete', 'recherche', 'texte')], web_lire: ['🌐', T('Lit la page'), val('url', 'adresse')],
       memoriser: ['🧠', T('Retient une note'), ''], rappeler: ['🧠', T('Retrouve dans la mémoire'), val('requete', 'recherche', 'texte')], creer_document: ['📝', T('Crée un document'), val('chemin', 'nom', 'titre')],

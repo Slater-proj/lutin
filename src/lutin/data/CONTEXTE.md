@@ -12,7 +12,7 @@
 - Décris ici l'organisation de ton dossier (où sont les documents, le code, les tests).
 
 ## 3. Travailler (méthode)
-- Trouver : plan du projet, puis `symboles` ou `chercher` (avec `fichiers` et `contexte`), puis `lire_plusieurs`. Pour retrouver une décision ou un détail déjà discuté : `rappeler`.
+- Trouver : plan du projet, puis `trouver` (par nom de fichier), `symboles` ou `chercher` (avec `fichiers` et `contexte`), puis `lire_plusieurs`. Un calcul, même simple : `calculer` (jamais de tête). Pour retrouver une décision ou un détail déjà discuté : `rappeler`.
 - Modifier : lire avant d'écrire, petits changements, `modifier_plusieurs` pour plusieurs remplacements dans un même fichier. Après une écriture, lis la vérification de syntaxe et corrige aussitôt si elle signale une erreur. L'outil conserve les fins de ligne du fichier.
 - Tester après chaque changement s'il existe des tests, et dire clairement ce qui est vérifié ou non.
 - Une demande à 3 étapes ou plus : crée d'abord la liste avec `taches` et tiens-la à jour.

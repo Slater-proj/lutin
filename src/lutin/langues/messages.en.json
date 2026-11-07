@@ -1777,5 +1777,16 @@
 "🔗 Sources trouvées :": "🔗 Sources found:",
 "Aucune des sources trouvées ne parle de « {} ». Dis-le simplement à l'utilisateur, sans rien inventer sur ce sujet (aucune biographie, aucune affaire, aucune œuvre), et propose de vérifier l'orthographe du nom ou de préciser (métier, pays, titre d'un livre).": "None of the sources found talk about \"{}\". Simply tell the user so, inventing nothing on this subject (no biography, no case, no work), and suggest checking the spelling of the name or giving more detail (job, country, title of a book).",
 "⚠ Aucun résultat ne mentionne « {} » : vérifie l'orthographe du nom ou précise le sujet.": "⚠ No result mentions \"{}\": check the spelling of the name or give more detail.",
-"Aucun résultat ne mentionne « {} ».": "No result mentions \"{}\"."
+"Aucun résultat ne mentionne « {} ».": "No result mentions \"{}\".",
+"Motif vide : donne un nom ou un motif comme « *.py » ou « test_*.json ».": "Empty pattern: give a name or a pattern such as \"*.py\" or \"test_*.json\".",
+"Aucun fichier ne correspond à « {} » dans {}. Essaie un motif plus large (par exemple « *.md ») ou un autre dossier.": "No file matches \"{}\" in {}. Try a wider pattern (for example \"*.md\") or another folder.",
+"... (liste coupée : {} fichiers ou plus, précise le motif ou le dossier)": "... (list cut: {} files or more, narrow the pattern or the folder)",
+"expression trop imbriquée": "expression nested too deeply",
+"puissance trop grande": "power too large",
+"factorielle trop grande": "factorial too large",
+"élément non autorisé (seuls les nombres, + - * / // % **, les parenthèses et les fonctions mathématiques courantes sont permis)": "element not allowed (only numbers, + - * / // % **, parentheses and common math functions are permitted)",
+"Expression vide ou trop longue (300 caractères au plus).": "Empty or too long expression (300 characters at most).",
+"Division par zéro.": "Division by zero.",
+"Calcul impossible : {}.": "Cannot calculate: {}.",
+"expression invalide": "invalid expression"
 }
