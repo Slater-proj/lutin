@@ -39,6 +39,14 @@ The state is checked (kept 10 s) before anything is sent, and **the node's ident
 
 No error, no warning: the local engine answers. The state is visible in Settings > Machines, and the machines log only notes **one line per state change** (never per probe, never conversation content). A failure in the middle of an answer already started cannot be rescued by the local engine: it looks like any interrupted answer.
 
+## Power: wake, switch off, start by itself (0.24.0)
+
+- **Waking**: the "Wake up" button sends a magic packet (Wake-on-LAN, UDP, standard library) to the machine's MAC address (to be entered). The state goes to **wake-up sent**, then follows the machine: **node reachable**, **engine operational**. If nothing answers after three minutes, the page lists what to check: Wake-on-LAN in the BIOS, network card allowed to wake, an Ethernet cable (Wi-Fi rarely wakes), Windows "fast startup" off, the exact MAC address, and automatic session opening.
+- **Switching off**: an **explicit** action. The machine to switch off must have ticked "Allow paired machines to switch it off" (off by default, set from that machine only). The shutdown has a **30-second delay**, can be **cancelled** (from the other machine or from the machine itself), and is **noted in the log on both sides**.
+- **Starting Lutin by itself**: "Start Lutin when my session opens" (or `lutin demarrage-auto installer`). Windows: a **scheduled task at session logon** (not a service: a service runs in session 0, with no graphics card or desktop). Linux: a **systemd user unit** (`sudo loginctl enable-linger $USER` to start without a session). macOS: not supported.
+- **Limits to know**: for a PC to start with nobody there, it also needs **Windows auto-login** and, in the BIOS, "restart after a power cut"; a PC in **hibernation or fully off** does not always accept the magic packet (depending on the BIOS); the wake-up does not cross a router (same local network only).
+- **Not verified on real hardware**: the wake-up packet is tested with a real local UDP send and the logic with tests, not by waking a real PC (trial S6 still to do).
+
 ## Known limits
 
 - The chosen model must have **the same name** on the node (otherwise the machine stays "reachable" and the local engine answers).

@@ -1692,5 +1692,20 @@
 "Cette machine a répondu une erreur ({}).": "This machine answered an error ({}).",
 "La machine répond, mais le modèle « {} » n'y est pas installé.": "The machine answers, but the model \"{}\" is not installed there.",
 "Moteur opérationnel : {}.": "Engine operational: {}.",
-"Ajouter une machine, ou prêter le moteur de celle-ci, se fait depuis cette machine (ou par un administrateur déclaré).": "Adding a machine, or lending this one's engine, is done from this machine (or by a declared administrator)."
+"Ajouter une machine, ou prêter le moteur de celle-ci, se fait depuis cette machine (ou par un administrateur déclaré).": "Adding a machine, or lending this one's engine, is done from this machine (or by a declared administrator).",
+"Elle ne répond toujours pas. Vérifie : le Wake-on-LAN activé dans le BIOS de la machine ; la carte réseau autorisée à la réveiller ; un câble Ethernet (le Wi-Fi réveille rarement) ; sous Windows, le « démarrage rapide » désactivé ; l'adresse MAC exacte ; et qu'elle ouvre sa session toute seule (auto-connexion) pour que Lutin démarre.": "It still does not answer. Check: Wake-on-LAN enabled in the machine's BIOS; the network card allowed to wake it; an Ethernet cable (Wi-Fi rarely wakes a machine); on Windows, \"fast startup\" turned off; the exact MAC address; and that it opens its session by itself (auto-login) so Lutin starts.",
+"Le démarrage automatique n'est pas pris en charge sur ce système.": "Automatic start is not supported on this system.",
+"Lutin démarre à l'ouverture de ta session Windows (pas comme service : un service n'a ni la carte graphique ni le bureau). Pour un PC qui doit démarrer sans personne, active l'auto-connexion Windows et, dans le BIOS, « redémarrer après une coupure de courant ».": "Lutin starts when your Windows session opens (not as a service: a service has neither the graphics card nor the desktop). For a PC that must start with nobody there, turn on Windows auto-login and, in the BIOS, \"restart after a power cut\".",
+"Lutin démarre à l'ouverture de ta session. Pour qu'il démarre au démarrage de la machine sans ouvrir de session, lance une fois « sudo loginctl enable-linger $USER ».": "Lutin starts when your session opens. For it to start at boot without opening a session, run \"sudo loginctl enable-linger $USER\" once.",
+"Le paquet de réveil n'a pu partir sur aucun réseau : cette machine est-elle connectée au réseau local ?": "The wake-up packet could not leave on any network: is this machine connected to the local network?",
+"Windows a refusé de créer la tâche planifiée : {}": "Windows refused to create the scheduled task: {}",
+"systemd n'a pas répondu : {}": "systemd did not answer: {}",
+"Réveil envoyé il y a {} s : une machine met de 30 secondes à quelques minutes à démarrer.": "Wake-up sent {} s ago: a machine takes from 30 seconds to a few minutes to start.",
+"Pour réveiller cette machine, renseigne son adresse MAC (la liste des cartes réseau : « ipconfig /all » sous Windows, « ip link » sous Linux).": "To wake this machine, enter its MAC address (list network cards with \"ipconfig /all\" on Windows, \"ip link\" on Linux).",
+"Cette machine n'accepte pas d'être éteinte à distance : son propriétaire doit cocher « Autoriser les machines appairées à l'éteindre » dans Réglages > Machines.": "This machine does not accept being switched off remotely: its owner must tick \"Allow paired machines to switch it off\" in Settings > Machines.",
+"démarrer Lutin à l'ouverture de ta session (Windows : tâche planifiée, Linux : systemd)": "start Lutin when your session opens (Windows: scheduled task, Linux: systemd)",
+"Démarrage automatique : ": "Automatic start: ",
+"activé": "on",
+"désactivé": "off",
+"Cela se règle depuis cette machine elle-même.": "This is set from this machine itself."
 }

@@ -3170,6 +3170,25 @@ body[data-moteur="openai"] .biblio { display:none !important; }
       prete.append(el('div', 'aide', T('Seules les machines que tu autorises ici peuvent utiliser ce moteur. Elles n\'ont accès à rien d\'autre (ni conversations, ni fichiers).')), bc, code);
       r.noeud.autorisees.forEach(a => { const l = el('div', 'ligne'), rv = el('button', '', T('Révoquer')); rv.addEventListener('click', async () => { if (!confirm(T('Révoquer l\'accès de « ') + a.nom + T(' » ?'))) return; await act('noeud-revoquer', { nom: a.nom }); chargerMachines(true); }); l.append(el('span', '', '🔑 ' + a.nom + ' · ' + a.date), rv); prete.appendChild(l); });
     }
+    if (r.noeud.actif) {
+      const lx = el('label'), cx = el('input'); cx.type = 'checkbox'; cx.checked = r.noeud.extinction;
+      lx.append(cx, document.createTextNode(' ' + T('Autoriser les machines appairées à l\'éteindre')));
+      cx.addEventListener('change', async () => { await act('node-shutdown', { actif: cx.checked }); chargerMachines(true); });
+      prete.append(lx, el('div', 'aide', T('Décoché par défaut. Une extinction demandée à distance a 30 secondes de délai, se laisse annuler et est notée dans le journal.')));
+    }
+    if (r.noeud.extinction_en_attente) {
+      const ea = el('div', 'erreur'), an = el('button', '', T('Annuler l\'extinction'));
+      ea.textContent = T('Cette machine va s\'éteindre dans ') + r.noeud.extinction_en_attente.dans_s + ' s (' + T('demandée par ') + r.noeud.extinction_en_attente.par + '). ';
+      an.addEventListener('click', async () => { await act('cancel-local-shutdown'); chargerMachines(true); });
+      ea.appendChild(an); prete.appendChild(ea);
+    }
+    // démarrage automatique de Lutin sur cette machine
+    if (r.demarrage && r.demarrage.possible) {
+      const ld = el('label'), cd = el('input'); cd.type = 'checkbox'; cd.checked = r.demarrage.installe;
+      ld.append(cd, document.createTextNode(' ' + T('Démarrer Lutin à l\'ouverture de ma session')));
+      cd.addEventListener('change', async () => { await act('autostart', { actif: cd.checked }); chargerMachines(true); });
+      prete.append(ld, el('div', 'aide', r.demarrage.limites));
+    }
     neuf.appendChild(prete);
     // 2. les machines appairées
     r.machines.forEach(m => {
@@ -3182,7 +3201,12 @@ body[data-moteur="openai"] .biblio { display:none !important; }
       const mac = el('input'); mac.placeholder = T('Adresse MAC (facultative, pour la réveiller)'); mac.value = m.mac || ''; mac.style.flex = '1';
       mac.addEventListener('change', async () => { await act('mac', { id: m.id, mac: mac.value.trim() }); });
       const br = el('button', '', T('Retirer')); br.addEventListener('click', async () => { if (!confirm(T('Retirer la machine « ') + m.nom + T(' » ?'))) return; await act('remove', { id: m.id }); await rafraichir(); chargerMachines(true); });
-      l.append(bu, mac, br); c.appendChild(l); neuf.appendChild(c);
+      l.append(bu, mac, br); c.appendChild(l);
+      const l2 = el('div', 'ligne'), bw = el('button', '', T('Réveiller')), be = el('button', '', T('Éteindre…'));
+      bw.title = T('Envoie un paquet de réveil (Wake-on-LAN) : il faut son adresse MAC.');
+      bw.addEventListener('click', async () => { await act('wake', { id: m.id }); chargerMachines(true); });
+      be.addEventListener('click', async () => { if (!confirm(T('Éteindre la machine « ') + m.nom + T(' » ? Elle s\'éteindra dans 30 secondes (annulable).'))) return; const x = await act('shutdown', { id: m.id }); if (x) { alert(T('Extinction demandée : 30 secondes.')); chargerMachines(true); } });
+      l2.append(bw, be); c.appendChild(l2); neuf.appendChild(c);
     });
     // 3. ajouter
     const aj = el('div', 'carte'); aj.style.display = 'block';

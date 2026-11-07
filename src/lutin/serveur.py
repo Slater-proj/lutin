@@ -3,6 +3,7 @@ from http.server import BaseHTTPRequestHandler
 from . import bench as _bench
 from . import bench_moteurs as _bench_moteurs
 from . import compat_modeles as _compat
+from . import alimentation as _alimentation
 from . import machines as _machines
 from . import estimation as _estimation
 from . import ressources_chargees as _ressources
@@ -639,6 +640,8 @@ class Gestionnaire(BaseHTTPRequestHandler):
             return self._noeud_appairer(donnees)
         if self.path == "/api/noeud/chat":                     # ... et l'utilise pour faire tourner le moteur de cette machine
             return self._noeud_chat(donnees)
+        if self.path == "/api/noeud/eteindre":                 # ... ou, si le propriétaire l'a autorisé, pour l'éteindre (30 s, annulable, journalisé)
+            return self._noeud_eteindre(donnees)
         if not self._authentifie():
             return self._envoyer(401, {"erreur": "authentification requise"})
         if not self._jeton_valide():
@@ -1067,6 +1070,19 @@ class Gestionnaire(BaseHTTPRequestHandler):
         except ValueError as e:
             return self._envoyer(403, {"erreur": str(e)})
 
+    def _noeud_eteindre(self, donnees):
+        nom = _machines.noeud_jeton_valide(self.headers.get("X-Noeud"))
+        if not nom:
+            return self._envoyer(401, {"erreur": "machine non autorisée"})
+        if not _machines.noeud().get("extinction"):
+            return self._envoyer(403, {"erreur": "l'extinction à distance n'est pas autorisée sur cette machine"})
+        if donnees.get("annuler"):
+            return self._envoyer(200, {"annulee": _alimentation.annuler_extinction(_machines.journaliser)})
+        try:
+            return self._envoyer(200, {"dans_s": _alimentation.programmer_extinction(nom, journaliser=_machines.journaliser)})
+        except ValueError as e:
+            return self._envoyer(400, {"erreur": str(e)})
+
     NOEUD_PLACES = threading.BoundedSemaphore(2)          # deux demandes de machines à la fois au plus : une seule carte graphique
 
     def _noeud_chat(self, donnees):
@@ -1120,6 +1136,21 @@ class Gestionnaire(BaseHTTPRequestHandler):
             _machines.definir_mac(str(donnees.get("id", "")), donnees.get("mac"))
         elif action == "noeud-activer":
             _machines.noeud_activer(bool(donnees.get("actif")), niveau_local=_m.SECURITE.niveau == _sec.LOCAL)
+        elif action == "wake":
+            return _machines.reveiller(str(donnees.get("id", "")))
+        elif action == "shutdown":
+            return _machines.eteindre(str(donnees.get("id", "")), bool(donnees.get("annuler")))
+        elif action in ("node-shutdown", "autostart", "cancel-local-shutdown"):          # ce qui touche l'extinction ou le démarrage de CETTE machine : depuis cette machine seulement
+            if not self._configurateur_strict():
+                raise ValueError(_t("Cela se règle depuis cette machine elle-même."))
+            if action == "node-shutdown":
+                _machines.noeud_autoriser_extinction(bool(donnees.get("actif")))
+            elif action == "cancel-local-shutdown":
+                return {"annulee": _alimentation.annuler_extinction(_machines.journaliser)}
+            elif donnees.get("actif"):
+                _alimentation.installer_demarrage()
+            else:
+                _alimentation.retirer_demarrage()
         elif action == "noeud-code":
             return _machines.noeud_nouveau_code()
         elif action == "noeud-revoquer":
@@ -1131,7 +1162,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
     @staticmethod
     def _vue_machines():
         r = _m.reglages()
-        return {"noeud": _machines.noeud_vue(), "machines": _machines.etats(r["modele"]), "choisie": r.get("machine", ""), "niveau_local": _m.SECURITE.niveau == _sec.LOCAL, "journal": _machines.journal()}
+        return {"noeud": _machines.noeud_vue(), "machines": _machines.etats(r["modele"]), "choisie": r.get("machine", ""), "niveau_local": _m.SECURITE.niveau == _sec.LOCAL, "demarrage": _alimentation.etat_demarrage_memo(), "journal": _machines.journal()}
 
     def _appairer(self, donnees):
         if _m.SECURITE.niveau == _sec.LOCAL:

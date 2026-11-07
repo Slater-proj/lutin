@@ -39,6 +39,14 @@ L'état est vérifié (gardé 10 s) avant d'envoyer quoi que ce soit, et **l'ide
 
 Pas d'erreur, pas d'avertissement : le moteur local répond. L'état est visible dans Réglages > Machines, et le journal des machines ne note qu'**un trait à chaque changement d'état** (jamais à chaque sonde, jamais le contenu d'une conversation). Une panne en plein milieu d'une réponse déjà commencée ne peut pas être rattrapée par le moteur local : elle se voit comme n'importe quelle réponse interrompue.
 
+## Alimentation : réveiller, éteindre, démarrer tout seul (0.24.0)
+
+- **Réveiller** : le bouton « Réveiller » envoie un paquet magique (Wake-on-LAN, UDP, bibliothèque standard) à l'adresse MAC de la machine (à renseigner). L'état passe à **réveil envoyé**, puis suit la machine : **nœud joignable**, **moteur opérationnel**. Si rien ne répond au bout de trois minutes, la page liste ce qu'il faut vérifier : Wake-on-LAN dans le BIOS, carte réseau autorisée à réveiller, câble Ethernet (le Wi-Fi réveille rarement), « démarrage rapide » de Windows désactivé, adresse MAC exacte, et ouverture de session automatique.
+- **Éteindre** : action **explicite**. La machine à éteindre doit avoir coché « Autoriser les machines appairées à l'éteindre » (décoché par défaut, réglable depuis cette machine seulement). L'extinction a **30 secondes de délai**, se laisse **annuler** (depuis l'autre machine ou depuis la machine elle-même), et est **notée dans le journal des deux côtés**.
+- **Démarrer Lutin tout seul** : « Démarrer Lutin à l'ouverture de ma session » (ou `lutin demarrage-auto installer`). Windows : une **tâche planifiée à l'ouverture de session** (pas un service : un service tourne dans la session 0, sans carte graphique ni bureau). Linux : une **unité systemd utilisateur** (`sudo loginctl enable-linger $USER` pour démarrer sans session). macOS : non pris en charge.
+- **Limites à connaître** : pour qu'un PC démarre sans personne devant, il faut aussi l'**auto-connexion Windows** et, dans le BIOS, « redémarrer après une coupure de courant » ; un PC en **veille prolongée ou en arrêt complet** n'accepte pas toujours le paquet magique (selon le BIOS) ; le réveil ne traverse pas un routeur (même réseau local seulement).
+- **Non vérifié sur du vrai matériel** : le paquet de réveil est testé par un vrai envoi UDP local et la logique par des tests, pas par le réveil d'un vrai PC (essai S6 à faire).
+
 ## Limites connues
 
 - Le modèle choisi doit porter **le même nom** sur le nœud (sinon la machine reste « joignable » et le local répond).

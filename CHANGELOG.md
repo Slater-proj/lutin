@@ -2,6 +2,14 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## 0.24.0
+
+- **Réveiller une machine (Wake-on-LAN).** Bouton « Réveiller » (adresse MAC à renseigner) : état « réveil envoyé » puis « nœud joignable » puis « moteur opérationnel » ; après trois minutes sans réponse, la page liste ce qui bloque d'habitude (BIOS, carte réseau, câble, démarrage rapide, auto-connexion).
+- **Éteindre une machine, avec accord.** Décoché par défaut côté machine à éteindre ; 30 secondes de délai, annulable, journalisé des deux côtés.
+- **Démarrer Lutin tout seul** : tâche planifiée à l'ouverture de session (Windows), unité systemd utilisateur (Linux) ; `lutin demarrage-auto`. Les limites (auto-connexion Windows, BIOS) sont dites dans la page. **Non vérifié sur du vrai matériel.**
+
+**English.** Wake-on-LAN button with the wake-up → reachable → operational states and a checklist when nothing answers, remote shutdown only if the machine allowed it (30 s, cancellable, logged on both sides), start Lutin at session logon (Windows scheduled task / Linux systemd user unit, `lutin demarrage-auto`). Not verified on real hardware.
+
 ## 0.23.0
 
 - **Machines : un Lutin répond avec le moteur d'un autre (D7).** Réglages > Machines : « Prêter le moteur de cette machine » (éteint par défaut), code d'appairage à 8 chiffres (5 minutes, une fois), jeton de nœud par machine (gardé haché, révocable), ajout par validation explicite. Le jeton n'ouvre que `/api/noeud/*` : ni conversations, ni fichiers, ni réglages.

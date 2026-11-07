@@ -117,6 +117,8 @@ def parseur():
     hl = sp.add_parser("hors-ligne", help=_t("mode hors ligne strict (aucune connexion vers Internet)"))
     hl.add_argument("etat", nargs="?", choices=("oui", "non", "etat"), default="etat")
     sp.add_parser("doctor", help=_t("diagnostic"))
+    da = sp.add_parser("demarrage-auto", help=_t("démarrer Lutin à l'ouverture de ta session (Windows : tâche planifiée, Linux : systemd)"))
+    da.add_argument("action", nargs="?", choices=("etat", "installer", "retirer"), default="etat")
     rp = sp.add_parser("reprendre", help=_t("reprendre les données d'un autre assistant (conversations, mémoire, skills, réglages)"))
     rp.add_argument("source", help=_t("le dossier de l'ancien assistant (avec donnees/ et memoire/), ou une archive .zip"))
     rp.add_argument("--conversations", action="store_true", help=_t("reprendre les conversations"))
@@ -750,6 +752,18 @@ def diagnostic(cfg, dossiers, profil, ollama):
     return lignes
 
 
+def commande_demarrage_auto(args):
+    from . import alimentation
+    try:
+        e = alimentation.installer_demarrage() if args.action == "installer" else alimentation.retirer_demarrage() if args.action == "retirer" else alimentation.etat_demarrage()
+    except ValueError as err:
+        print("✘ " + str(err), file=sys.stderr)
+        return 1
+    print(_t("Démarrage automatique : ") + (_t("activé") if e["installe"] else _t("désactivé")))
+    print(e["limites"])
+    return 0
+
+
 def commande_doctor(args):
     d, cfg = contexte()
     from . import docker_aide
@@ -773,7 +787,7 @@ def principal(argv=None):
     os.environ["LUTIN_CONFIG"] = str(Path(config.dossiers()["config"]) / "config.json")          # les gardes (mode hors ligne…) lisent la configuration de cette installation
     commandes = {"setup": commande_setup, "serve": commande_serve, "update": commande_update, "chat": commande_chat, "modeles": commande_modeles, "pin": commande_pin,
                  "appareils": commande_appareils, "securite": commande_securite, "langue": commande_langue, "importer": commande_importer, "reprendre": commande_reprendre, "hors-ligne": commande_hors_ligne,
-                 "travaux": commande_travaux, "journal": commande_journal, "bench": commande_bench, "sauvegarde": commande_sauvegarde, "restaurer": commande_restaurer, "doctor": commande_doctor, "zone": commande_zone, "mcp": commande_mcp, "essai-moteur": commande_essai_moteur, "bench-moteurs": commande_bench_moteurs}
+                 "travaux": commande_travaux, "journal": commande_journal, "bench": commande_bench, "sauvegarde": commande_sauvegarde, "restaurer": commande_restaurer, "doctor": commande_doctor, "demarrage-auto": commande_demarrage_auto, "zone": commande_zone, "mcp": commande_mcp, "essai-moteur": commande_essai_moteur, "bench-moteurs": commande_bench_moteurs}
     try:
         if args.commande is None:
             return commande_serve(argparse.Namespace(sans_navigateur=False))

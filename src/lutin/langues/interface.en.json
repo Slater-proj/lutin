@@ -1138,5 +1138,17 @@
 "Code à 8 chiffres": "8-digit code",
 "Nom (facultatif)": "Name (optional)",
 "Journal des machines": "Machines log",
-"Machines": "Machines"
+"Machines": "Machines",
+"Autoriser les machines appairées à l'éteindre": "Allow paired machines to switch it off",
+"Décoché par défaut. Une extinction demandée à distance a 30 secondes de délai, se laisse annuler et est notée dans le journal.": "Off by default. A remote shutdown has a 30-second delay, can be cancelled and is noted in the log.",
+"Annuler l'extinction": "Cancel the shutdown",
+"Cette machine va s'éteindre dans ": "This machine will switch off in ",
+"demandée par ": "requested by ",
+"Démarrer Lutin à l'ouverture de ma session": "Start Lutin when my session opens",
+"Réveiller": "Wake up",
+"Éteindre…": "Switch off…",
+"Envoie un paquet de réveil (Wake-on-LAN) : il faut son adresse MAC.": "Sends a wake-up packet (Wake-on-LAN): its MAC address is needed.",
+"Éteindre la machine « ": "Switch off the machine \" ",
+" » ? Elle s'éteindra dans 30 secondes (annulable).": " \"? It will switch off in 30 seconds (can be cancelled).",
+"Extinction demandée : 30 secondes.": "Shutdown requested: 30 seconds."
 }

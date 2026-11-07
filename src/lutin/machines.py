@@ -27,6 +27,7 @@ import urllib.request
 import uuid
 from pathlib import Path
 
+from . import alimentation
 from .i18n import t as _t
 
 ETATS = ("injoignable", "reveil_envoye", "joignable", "operationnel")
@@ -43,6 +44,7 @@ VERROU = threading.RLock()
 CODES = {}          # code (chiffres) -> instant d'expiration
 SONDES = {}          # id de machine -> (instant, résultat)
 DERNIER_ETAT = {}          # id de machine -> dernier état journalisé
+REVEIL = {}          # id de machine -> instant du dernier paquet de réveil envoyé
 
 
 def dossier():
@@ -171,9 +173,20 @@ def noeud_revoquer(nom):
     return noeud_vue()
 
 
+def noeud_autoriser_extinction(autoriser):
+    """Les machines appairées peuvent-elles éteindre celle-ci ? Décoché par défaut : c'est le propriétaire de CETTE machine qui le décide."""
+    with VERROU:
+        n = noeud()
+        n["extinction"] = bool(autoriser)
+        _ecrire("noeud.json", n)
+    journaliser("extinction par une machine appairée : {}".format("autorisée" if autoriser else "interdite"))
+    return noeud_vue()
+
+
 def noeud_vue():
     n = noeud()
-    return {"actif": n["actif"], "id": n["id"], "autorisees": [{"nom": j["nom"], "date": j["date"]} for j in n["jetons"]]}
+    return {"actif": n["actif"], "id": n["id"], "extinction": bool(n.get("extinction")), "extinction_en_attente": alimentation.extinction_en_attente(),
+            "autorisees": [{"nom": j["nom"], "date": j["date"]} for j in n["jetons"]]}
 
 
 def noeud_etat(moteur, modeles):
@@ -325,8 +338,56 @@ def sonder(m, modele="", ouvrir=None, maintenant=time.monotonic, force=False):
         r = {"etat": "injoignable", "detail": _t("La machine refuse ce Lutin (erreur {}) : l'autorisation a peut-être été retirée.").format(e.code), "modeles": []}
     except (urllib.error.URLError, OSError, ValueError):
         r = {"etat": "injoignable", "detail": _t("Pas de réponse (éteinte, hors réseau ou Lutin arrêté)."), "modeles": []}
+    r = _avec_reveil(m, r, maintenant)
     _noter(m, r["etat"], maintenant, r, modele)
     return r
+
+
+def _avec_reveil(m, r, maintenant=time.monotonic):
+    """Un réveil a été envoyé et la machine ne répond pas encore : état « réveil envoyé » (avec ce qu'il faut vérifier si ça dure). Dès qu'elle répond, la marque du réveil est effacée."""
+    with VERROU:
+        envoye = REVEIL.get(m["id"])
+        if r["etat"] != "injoignable":
+            REVEIL.pop(m["id"], None)
+            return r
+        if envoye is None or maintenant() - envoye > alimentation.ATTENTE_REVEIL_S:
+            return r
+        depuis = maintenant() - envoye
+    detail = _t("Réveil envoyé il y a {} s : une machine met de 30 secondes à quelques minutes à démarrer.").format(round(depuis))
+    suite = alimentation.raison_echec(depuis)
+    return {"etat": "reveil_envoye", "detail": detail + (" " + suite if suite else ""), "modeles": []}
+
+
+def reveiller(ident, envoyer=alimentation.envoyer_reveil):
+    """Envoie le paquet de réveil à cette machine (il faut son adresse MAC). L'état passe à « réveil envoyé » puis suit la machine : nœud joignable, moteur opérationnel."""
+    m = trouver(ident)
+    if m is None:
+        raise ValueError(_t("Machine inconnue."))
+    if not m.get("mac"):
+        raise ValueError(_t("Pour réveiller cette machine, renseigne son adresse MAC (la liste des cartes réseau : « ipconfig /all » sous Windows, « ip link » sous Linux)."))
+    hote = urllib.parse.urlparse(m["adresse"]).hostname or ""
+    envoyer(m["mac"], hote)
+    with VERROU:
+        REVEIL[ident] = time.monotonic()
+        SONDES.pop(ident, None)
+    journaliser("réveil envoyé à {}".format(m["nom"]))
+    return {"ok": True}
+
+
+def eteindre(ident, annuler=False, ouvrir=None):
+    """Demande à cette machine de s'éteindre (dans 30 s, annulable) ou annule la demande. Action EXPLICITE : la machine doit l'avoir autorisée, sinon elle refuse."""
+    m = trouver(ident)
+    if m is None:
+        raise ValueError(_t("Machine inconnue."))
+    try:
+        rep = _json(m, "/api/noeud/eteindre", {"annuler": bool(annuler)}, delai=8, ouvrir=ouvrir)
+    except urllib.error.HTTPError as e:
+        raise ValueError(_t("Cette machine n'accepte pas d'être éteinte à distance : son propriétaire doit cocher « Autoriser les machines appairées à l'éteindre » dans Réglages > Machines.") if e.code == 403 else _t("Cette machine a répondu une erreur ({}).").format(e.code)) from None
+    except (urllib.error.URLError, OSError, ValueError):
+        raise ValueError(_t("Impossible de joindre cette machine : vérifie l'adresse et qu'elle est allumée.")) from None
+    journaliser("{} demandée à {}".format("annulation de l'extinction" if annuler else "extinction", m["nom"]))
+    SONDES.pop(ident, None)
+    return rep
 
 
 def _noter(m, etat, maintenant, resultat, modele):

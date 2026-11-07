@@ -107,6 +107,8 @@ Chaque jalon : étude → porte de validation → code ciblé → tests → docu
 - D8 : réveil, extinction, démarrage automatique ; états « réveil envoyé → nœud joignable → moteur opérationnel » ; raison claire quand ça ne marche pas.
 - **Critère** : essais S5 et S6 réussis ou limites documentées (auto-connexion Windows, BIOS).
 
+- **Fait (0.24.0)** : `alimentation.py` (paquet magique, extinction autorisée/annulable/journalisée, démarrage à l'ouverture de session). **Reste** : essais S5 et S6 sur du vrai matériel (réveil depuis le petit PC Debian, auto-connexion Windows, BIOS).
+
 ### 0.25.0 — Moteurs expérimentaux
 - Colibri : intégration **gérée** (archives précompilées + empreinte) **seulement si l'essai S3 la justifie** ; Strata et autres : préréglages externes. Étiquette « expérimental », jamais proposés par défaut.
 - **Critère** : chaque moteur ajouté est indépendant, testé avec un faux serveur, documenté avec ses limites.
