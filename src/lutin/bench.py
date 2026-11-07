@@ -122,6 +122,22 @@ def _resultat(details):
     return {"points": sum(d["ok"] for d in details), "sur": len(details), "details": details}
 
 
+class AdaptateurMoteur:
+    """Fait parler le banc à N'IMPORTE QUEL moteur (llama.cpp, serveur compatible OpenAI…) comme à Ollama : le banc envoie des demandes au format d'Ollama, le moteur les traduit.
+    Une panne du moteur devient une `ErreurOllama`, que le banc sait noter."""
+
+    def __init__(self, moteur):
+        self.moteur = moteur
+
+    def json(self, chemin, corps=None, delai=60, **_):
+        if chemin != "/api/chat":
+            raise ErreurOllama(_t("Le banc ne demande que /api/chat."))
+        try:
+            return self.moteur.chat(dict(corps, stream=False), delai)
+        except (ValueError, OSError) as e:          # ErreurMoteur est une ValueError
+            raise ErreurOllama(str(e)) from e
+
+
 class Banc:
     def __init__(self, ollama, modele, num_ctx=4096, delai=300, options=None):
         self.ollama, self.modele, self.num_ctx, self.delai = ollama, modele, num_ctx, delai

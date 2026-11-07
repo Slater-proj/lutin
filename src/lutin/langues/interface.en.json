@@ -1104,5 +1104,12 @@
 "rien sur la carte graphique : tout est sur le processeur": "nothing on the graphics card: everything is on the processor",
 "Autres programmes (affichage, navigateur, jeux…)": "Other programs (display, browser, games…)",
 "Mémoire vive (RAM)": "Memory (RAM)",
-"Lutin ne ferme pas les programmes des autres : ferme-les toi-même si besoin. La liste se met à jour toute seule.": "Lutin does not close other people's programs: close them yourself if needed. The list updates by itself."
+"Lutin ne ferme pas les programmes des autres : ferme-les toi-même si besoin. La liste se met à jour toute seule.": "Lutin does not close other people's programs: close them yourself if needed. The list updates by itself.",
+"Premier lancement : il manque un moteur": "First launch: an engine is missing",
+"Conseillé pour cette machine : ": "Recommended for this machine: ",
+"Installer ": "Install ",
+"Choisir un moteur": "Choose an engine",
+"Choisir un autre moteur": "Choose another engine",
+"Arrête l'opération ; ce qui est déjà téléchargé est gardé, relancer reprend où ça s'était arrêté.": "Stops the operation; what is already downloaded is kept, starting again resumes where it stopped.",
+"Opération annulée. Relance-la : le téléchargement reprend où il s'était arrêté.": "Operation cancelled. Start it again: the download resumes where it stopped."
 }

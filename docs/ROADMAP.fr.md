@@ -79,6 +79,7 @@ Chaque jalon : étude → porte de validation → code ciblé → tests → docu
 - **Critère** : sur une machine réelle, le banc compare au moins deux moteurs sur le même GGUF et produit un fichier lisible ; la recommandation affiche sa raison. **Les décisions Docker (image par défaut) et petit PC à GPU intégré sont prises ici, sur des chiffres.**
 
 ### 0.20.0 — Installation avancée et premier lancement
+- **Fait (0.20.0)** : profils Compose compagnons (`docker-compose.moteurs.yml`), `lutin doctor` Docker, premier lancement (onglet Modèles grisé avec la raison), annulation d'une installation de moteur (la reprise des téléchargements existait), `DOCKER_INSTALLATION.fr.md`, test de CI des volumes. Ollama guidé Linux/Mac : la commande à lancer était déjà affichée. **Non vérifié sur du vrai matériel** : les profils llama.cpp avec carte.
 - Mises à jour proposées, annulation et reprise, **profils Compose compagnons** (Ollama, llama.cpp CPU / CUDA / Vulkan / Intel) avec préréglages d'adresse, Ollama guidé sous Linux/Mac, `lutin doctor` Docker (mémoire WSL, dossier de modèles).
 - Premier lancement : diagnostic rapide, recommandation, installer / choisir autre / plus tard ; **tant qu'aucun moteur n'est prêt, l'onglet Modèles est désactivé proprement avec la raison**.
 - `DOCKER_INSTALLATION.md` (Docker Linux et Docker Desktop/WSL2).

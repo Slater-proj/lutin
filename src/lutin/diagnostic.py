@@ -26,6 +26,15 @@ def modele_conseille(profil, catalogue):
     return next(((c.id, c.modele.get("go")) for c in choix.values() if c is not None), None)
 
 
+def premier_lancement(moteur_nom, actif, detail, recommande=None):
+    """Le premier lancement : tant qu'AUCUN moteur n'est prêt, la page n'envoie pas l'utilisateur dans l'onglet Modèles (où rien ne marcherait) : elle dit pourquoi et propose d'installer le moteur conseillé,
+    d'en choisir un autre ou de remettre à plus tard. {pret, raison, recommande}. `recommande` : la recommandation de bench_moteurs (moteur, nom, raison)."""
+    if actif:
+        return {"pret": True, "raison": "", "recommande": None}
+    raison = _t("Aucun moteur n'est prêt : « {} » ne répond pas ({}). Les modèles se gèrent dans le moteur, donc cet onglet attend qu'un moteur soit prêt.").format(moteur_nom, detail or _t("pas installé ou arrêté"))
+    return {"pret": False, "raison": raison, "recommande": recommande}
+
+
 def diagnostiquer(ollama_actif, ollama_installe, installes, reglages, profil=None, catalogue=None, adequation=None, disque_libre_go=None, docker=None, conseils=None, modeles_ailleurs=None):
     """La liste des problèmes, du plus grave au moins grave : [{code, niveau, texte, action}]. Vide quand tout va bien."""
     docker = (os.environ.get("LUTIN_DOCKER") == "1") if docker is None else docker
@@ -39,7 +48,7 @@ def diagnostiquer(ollama_actif, ollama_installe, installes, reglages, profil=Non
             action = {"type": "demarrer_ollama"}
         else:
             texte = _t("Ollama n'est pas installé : Lutin en a besoin pour faire tourner les modèles (ollama.com).")
-            action = {"type": "onglet", "nom": "modeles"}
+            action = {"type": "onglet", "nom": "reglages"}          # c'est dans Réglages > Moteurs qu'on l'installe : l'onglet Modèles n'a rien à montrer sans moteur
         problemes.append({"code": "ollama_arret", "niveau": "erreur", "texte": texte, "action": action})
     elif not installes and modeles_ailleurs:
         problemes.append({"code": "modeles_ailleurs", "niveau": "erreur", "action": {"type": "redemarrer_ollama"},

@@ -1,0 +1,92 @@
+# Lutin (light image) + ONE engine container of your choice, chosen with a Compose "profile" /
+# Lutin (image légère) + UN conteneur de moteur au choix, choisi par un « profil » Compose.
+#
+#   docker compose -f docker-compose.moteurs.yml --profile ollama up -d             # Ollama (the simplest / le plus simple)
+#   docker compose -f docker-compose.moteurs.yml --profile llamacpp-cpu up -d       # llama.cpp on the processor / sur le processeur
+#   docker compose -f docker-compose.moteurs.yml --profile llamacpp-cuda up -d      # llama.cpp, NVIDIA card (NVIDIA Container Toolkit)
+#   docker compose -f docker-compose.moteurs.yml --profile llamacpp-vulkan up -d    # llama.cpp, AMD / Intel card (Vulkan, /dev/dri)
+#   docker compose -f docker-compose.moteurs.yml --profile llamacpp-intel up -d     # llama.cpp, Intel (SYCL, /dev/dri)
+#
+# llama.cpp serves ONE model file: put a .gguf in the "lutin-models" volume and name it with LUTIN_GGUF (e.g. LUTIN_GGUF=qwen3-8b-q4_k_m.gguf docker compose ... up -d).
+# In Lutin, the engine card is already pointed at the right address (LUTIN_LLAMACPP_URL / OLLAMA_URL below): nothing to type.
+# NOT verified on real hardware for the llama.cpp profiles: see docs/DOCKER_INSTALLATION.md / Profils llama.cpp NON vérifiés sur du vrai matériel : voir docs/DOCKER_INSTALLATION.fr.md.
+x-llamacpp: &llamacpp
+  restart: unless-stopped
+  networks:
+    default:
+      aliases: [llamacpp]               # the address Lutin uses, whichever profile you pick / l'adresse que Lutin utilise, quel que soit le profil
+  volumes:
+    - lutin-models:/models
+  command: ["-m", "/models/${LUTIN_GGUF:-model.gguf}", "--host", "0.0.0.0", "--port", "8080", "--jinja"]
+  healthcheck:
+    test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/health || exit 1"]
+    interval: 15s
+    timeout: 5s
+    retries: 20
+
+services:
+  ollama:
+    profiles: ["ollama"]
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    volumes:
+      - lutin-models:/root/.ollama      # the models (several GB) / les modèles (plusieurs Go)
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  llamacpp-cpu:
+    <<: *llamacpp
+    profiles: ["llamacpp-cpu"]
+    image: ghcr.io/ggml-org/llama.cpp:server
+
+  llamacpp-cuda:
+    <<: *llamacpp
+    profiles: ["llamacpp-cuda"]
+    image: ghcr.io/ggml-org/llama.cpp:server-cuda
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  llamacpp-vulkan:
+    <<: *llamacpp
+    profiles: ["llamacpp-vulkan"]
+    image: ghcr.io/ggml-org/llama.cpp:server-vulkan
+    devices:
+      - /dev/dri
+    group_add:
+      - "${RENDER_GID:-109}"            # group of /dev/dri/renderD* on the host: getent group render | cut -d: -f3
+
+  llamacpp-intel:
+    <<: *llamacpp
+    profiles: ["llamacpp-intel"]
+    image: ghcr.io/ggml-org/llama.cpp:server-intel
+    devices:
+      - /dev/dri
+    group_add:
+      - "${RENDER_GID:-109}"
+
+  lutin:
+    image: ghcr.io/slater-proj/lutin:slim
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8777:8777"
+    environment:
+      LUTIN_NIVEAU: reseau
+      # Address presets: the engine card in Lutin already points here / Préréglages d'adresse : la carte du moteur pointe déjà ici.
+      OLLAMA_URL: http://ollama:11434
+      LUTIN_LLAMACPP_URL: http://llamacpp:8080/v1
+      # LUTIN_LANGUE: fr
+    volumes:
+      - lutin-data:/data
+      - ./travail:/travail
+
+volumes:
+  lutin-data:
+  lutin-models:

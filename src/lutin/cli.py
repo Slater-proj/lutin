@@ -105,6 +105,7 @@ def parseur():
     be = sp.add_parser("bench", help=_t("banc d'essai d'un modèle"))
     be.add_argument("modeles", nargs="*", help=_t("modèles à mesurer (défaut : le modèle principal)"))
     be.add_argument("--rapide", action="store_true", help=_t("vitesse seulement (environ 20 secondes)"))
+    be.add_argument("--moteur", default="ollama", help=_t("moteur à mesurer : ollama (défaut), llamacpp ou openai"))
     be.add_argument("--exporter", action="store_true", help=_t("affiche le résultat en JSON, à coller dans une proposition de note au catalogue"))
     sa = sp.add_parser("sauvegarde", help=_t("exporter tes données dans un .zip"))
     sa.add_argument("fichier", nargs="?", help=_t("fichier de destination (défaut : lutin-sauvegarde-<date>.zip)"))
@@ -520,12 +521,27 @@ def commande_journal(args):
 
 def commande_bench(args):
     d, cfg = contexte()
-    o = ollama_client.Ollama()
-    try:
-        installes = o.installes()
-    except ollama_client.ErreurOllama as e:
-        print("✘ " + str(e), file=sys.stderr)
-        return 1
+    if getattr(args, "moteur", "ollama") != "ollama":          # le banc ne dépend pas d'Ollama : n'importe quel moteur de Lutin se mesure de la même façon
+        os.environ.setdefault("LUTIN_RACINE", str(Path.home() / "Lutin"))
+        os.environ.setdefault("LUTIN_DONNEES", str(d["donnees"]))
+        os.environ.setdefault("LUTIN_MEMOIRE", str(d["memoire"]))
+        from . import moteur as _moteur, moteurs  # noqa: F401  (importer le moteur enregistre les moteurs)
+        mo = moteurs.MOTEURS.get(args.moteur)
+        if mo is None:
+            print(_t("Moteur inconnu : {}.").format(args.moteur), file=sys.stderr)
+            return 1
+        try:
+            o, installes = bench.AdaptateurMoteur(mo), set(mo.modeles()["installes"])
+        except (ValueError, OSError) as e:
+            print("✘ " + str(e), file=sys.stderr)
+            return 1
+    else:
+        o = ollama_client.Ollama()
+        try:
+            installes = o.installes()
+        except ollama_client.ErreurOllama as e:
+            print("✘ " + str(e), file=sys.stderr)
+            return 1
     cibles = args.modeles or [cfg["modeles"]["choisis"].get("polyvalent") or next(iter(installes), "")]
     if not cibles or not cibles[0]:
         print(_t("Aucun modèle installé à mesurer."), file=sys.stderr)
@@ -724,7 +740,8 @@ def diagnostic(cfg, dossiers, profil, ollama):
 
 def commande_doctor(args):
     d, cfg = contexte()
-    for niveau, texte in diagnostic(cfg, d, machine.detecter(), ollama_client.Ollama()):
+    from . import docker_aide
+    for niveau, texte in diagnostic(cfg, d, machine.detecter(), ollama_client.Ollama()) + docker_aide.diagnostiquer():
         print("{} {}".format({"ok": "✔", "info": " ", "attention": "⚠", "erreur": "✘"}[niveau], texte))
     return 0
 

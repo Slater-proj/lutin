@@ -219,6 +219,20 @@ def toutes_les_taches():
         return {k: dict(v) for k, v in TACHES.items()}
 
 
+class ErreurAnnule(ValueError):
+    """L'utilisateur a annulé l'opération en cours (installation, mise à jour, téléchargement). Ce qui était déjà téléchargé est gardé : relancer reprend où ça s'était arrêté."""
+
+
+def annuler_tache(ident):
+    """Demande l'arrêt de l'opération en cours de ce moteur. True si une opération tournait."""
+    with VERROU:
+        t = TACHES.get(ident)
+        if t and t.get("statut") == "en cours":
+            t["annule"] = True
+            return True
+    return False
+
+
 def lancer_tache(moteur, action, executer=None, synchrone=False):
     """Lance `moteur.faire(action, progression)` dans un fil (ou tout de suite si `synchrone`, pour les tests). Une seule tâche à la fois par moteur."""
     with VERROU:
@@ -229,6 +243,8 @@ def lancer_tache(moteur, action, executer=None, synchrone=False):
 
     def progression(texte="", fait=0, total=0):
         with VERROU:
+            if TACHES[moteur.id].get("annule"):
+                raise ErreurAnnule("Opération annulée : ce qui est déjà téléchargé est gardé, relance pour reprendre.")
             TACHES[moteur.id].update({"texte": str(texte), "fait": int(fait or 0), "total": int(total or 0)})
 
     def travail():
@@ -243,7 +259,13 @@ def lancer_tache(moteur, action, executer=None, synchrone=False):
                 pass
         except Exception as erreur:  # noqa: BLE001  (l'échec est montré dans la page, jamais une trace)
             with VERROU:
-                TACHES[moteur.id].update({"statut": "erreur", "erreur": str(erreur)[:500]})
+                cause = erreur
+                while cause is not None and not isinstance(cause, ErreurAnnule):
+                    cause = cause.__cause__ or cause.__context__
+                if cause is not None:
+                    TACHES[moteur.id].update({"statut": "annule", "erreur": "", "texte": "", "fait": 0, "total": 0})
+                else:
+                    TACHES[moteur.id].update({"statut": "erreur", "erreur": str(erreur)[:500]})
     if synchrone:
         travail()
     else:

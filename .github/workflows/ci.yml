@@ -103,6 +103,21 @@ jobs:
           for i in $(seq 1 60); do curl -fsS http://127.0.0.1:8778/ -o page2.html && break; sleep 1; done
           grep -q "lutin pin" page2.html
           docker rm -f lutin-slim
+      - name: Recréer le conteneur ne perd rien (volumes nommés /data et /models)
+        run: |
+          docker volume create ci-data
+          docker volume create ci-models
+          docker run -d --name lutin-vol -p 127.0.0.1:8779:8777 -v ci-data:/data -v ci-models:/models -e LUTIN_NIVEAU=reseau lutin:ci
+          for i in $(seq 1 60); do curl -fsS http://127.0.0.1:8779/ -o page3.html && break; sleep 1; done
+          docker exec lutin-vol sh -c 'echo marque-donnees > /data/MARQUE && echo marque-modeles > /models/MARQUE'
+          docker exec lutin-vol lutin doctor | tee doctor.txt
+          ! grep -q "n'est pas un volume\|is not a volume" doctor.txt
+          docker rm -f lutin-vol
+          docker run -d --name lutin-vol2 -p 127.0.0.1:8779:8777 -v ci-data:/data -v ci-models:/models -e LUTIN_NIVEAU=reseau lutin:ci
+          for i in $(seq 1 60); do curl -fsS http://127.0.0.1:8779/ -o page4.html && break; sleep 1; done
+          test "$(docker exec lutin-vol2 cat /data/MARQUE)" = "marque-donnees"
+          test "$(docker exec lutin-vol2 cat /models/MARQUE)" = "marque-modeles"
+          docker rm -f lutin-vol2
 
   installateur-linux:
     name: install.sh (installation, réinstallation)

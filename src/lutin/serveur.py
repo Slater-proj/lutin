@@ -162,6 +162,22 @@ class Gestionnaire(BaseHTTPRequestHandler):
         return {"modele": modele, "defaut": lues["defaut"], "variantes": sortie}
 
     @staticmethod
+    def _premier_lancement(o, r, profil):
+        """Aucun moteur prêt ? La page désactive l'onglet Modèles avec la raison et propose le moteur conseillé (installer / choisir autre / plus tard)."""
+        try:
+            mo = _m.moteur_actuel(r)
+            if o["actif"]:
+                return _diagnostic.premier_lancement(mo.nom, True, "")
+            reco = None          # pas de mo.statut() ici : il sonde le moteur (2 s) et /api/etat doit rester immédiat
+            try:
+                reco = _bench_moteurs.recommander(profil, banc=None, docker=_moteurs.CONTEXTE["en_docker"](), modele_installe=False)
+            except Exception:  # noqa: BLE001  (la recommandation est un plus)
+                reco = None
+            return _diagnostic.premier_lancement(mo.nom, False, (_t("Installé, mais arrêté.") if _m.chemin_ollama() else _t("Pas installé.")) if mo.id == "ollama" else "", {k: reco[k] for k in ("moteur", "nom", "raison")} if reco else None)
+        except Exception:  # noqa: BLE001  (jamais une page cassée pour un constat de plus)
+            return {"pret": True, "raison": "", "recommande": None}
+
+    @staticmethod
     def _diagnostic(o, r, profil, modeles):
         """Ce qui empêche Lutin de répondre (ou le gêne), pour la bannière du haut de la page."""
         mo = _m.moteur_actuel(r)
@@ -270,7 +286,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
                                        "familles": {k: _t(v) for k, v in (_m._CATALOGUE.get("familles") or {}).items()}, "disque_modeles": _emplacements.jauge_modeles(),
                                        "version": _m.VERSION, "partages": o.get("partages", []), "ollama": o["actif"], "ollama_installe": bool(_m.chemin_ollama()) or _m.moteur_actuel().id != "ollama", "moteur_nom": _m.moteur_actuel().nom, "installes": o["installes"], "modeles": modeles, "modeles_masques": len(_m.lire_registre_modeles()["masques"]), "actives": list(_m.TOURS_ACTIFS),
                                        "pulls": _m.PULLS, "reglages": r, "conversations": _m.conv_liste(), "racine": str(_m.RACINE), "donnees": str(_m.DONNEES),
-                                       "outil": bool(self._outil_vivant()), "hors_ligne": _hl.actif(), "moteur": _m.moteur_actuel().id, "niveau": _m.SECURITE.niveau, "docker": _acces.en_docker(), "ouverture_possible": _fichiers.ouverture_possible(), "missions": _mission.par_conversation(), "langue": _i18n.langue(), "langue_reglage": _i18n.langue_configuree(), "cpus": _machine.cpus_disponibles() or 1, "diagnostic": self._diagnostic(o, r, profil, modeles), "redemarrage": {"necessaire": _acces.securite_enregistree() != _m.SECURITE, "possible": _acces.peut_redemarrer()}, "nouvelle_version": _m.nouvelle_version_lutin(), "travaux": _m.travaux_etat(), "configurateur": self._configurateur(), "addons_alertes": _addons.alertes(), "embeddings": _embeddings.etat(),
+                                       "outil": bool(self._outil_vivant()), "hors_ligne": _hl.actif(), "moteur": _m.moteur_actuel().id, "niveau": _m.SECURITE.niveau, "docker": _acces.en_docker(), "ouverture_possible": _fichiers.ouverture_possible(), "missions": _mission.par_conversation(), "langue": _i18n.langue(), "langue_reglage": _i18n.langue_configuree(), "cpus": _machine.cpus_disponibles() or 1, "diagnostic": self._diagnostic(o, r, profil, modeles), "premier_lancement": self._premier_lancement(o, r, profil), "redemarrage": {"necessaire": _acces.securite_enregistree() != _m.SECURITE, "possible": _acces.peut_redemarrer()}, "nouvelle_version": _m.nouvelle_version_lutin(), "travaux": _m.travaux_etat(), "configurateur": self._configurateur(), "addons_alertes": _addons.alertes(), "embeddings": _embeddings.etat(),
                                        "taches_fond": _m.taches_en_cours(), "taches_moteur": [dict(v, nom=_moteurs.MOTEURS[k].nom) for k, v in _moteurs.toutes_les_taches().items() if v.get("statut") == "en cours" and k in _moteurs.MOTEURS], "memoire": self._memoire(r, o), "calibrage": _calibrage.etat(), "bench": {"en_cours": _m.BENCH["en_cours"], "etape": _m.BENCH["etape"], "erreur": _m.BENCH["erreur"], "file": list(_m.BENCH.get("file") or []), "mesures": _bench.lire(_m.chemin_bench())}, "attentes": [{"id": a.id, "titre": a.titre, "detail": a.detail, "diff": a.diff, "conv": a.conv} for a in _m.Attente.EN_COURS.values()],
                                        "en_attente": sorted({a.conv for a in _m.Attente.EN_COURS.values() if a.conv} | set(_m.CHOIX_MEMOIRE))})
         if chemin == "/api/conseil":
@@ -915,6 +931,8 @@ class Gestionnaire(BaseHTTPRequestHandler):
                         if voulue not in _moteurs.ACTIONS or not possible.get("possible"):
                             return self._envoyer(400, {"erreur": possible.get("raison") or _t("Cette action n'est pas possible avec ce moteur.")})
                         return self._envoyer(200, {"tache": _moteurs.lancer_tache(mo, voulue)})
+                    if action == "annuler":
+                        return self._envoyer(200, {"annule": _moteurs.annuler_tache(mo.id)})
                     if action == "regler":
                         if "dossier" in donnees:
                             _llamacpp.regler_dossier(mo.id, donnees.get("dossier"))

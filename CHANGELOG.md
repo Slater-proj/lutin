@@ -2,6 +2,16 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## 0.20.0
+
+- **Docker : un conteneur par moteur, au choix, avec des profils Compose.** `docker-compose.moteurs.yml` : `--profile ollama`, `llamacpp-cpu`, `llamacpp-cuda`, `llamacpp-vulkan`, `llamacpp-intel`. Lutin y est déjà pointé sur le bon moteur (`OLLAMA_URL`, nouvelle variable `LUTIN_LLAMACPP_URL`) : rien à saisir. Nouvelle page `docs/DOCKER_INSTALLATION.fr.md` (Docker Linux, Docker Desktop et WSL2, cartes graphiques). **Profils llama.cpp non vérifiés sur du vrai matériel.**
+- **`lutin doctor` connaît Docker.** Dans le conteneur : `/data` et `/models` sont-ils de vrais volumes (sinon tout disparaît à la recréation), accessibles en écriture, mémoire vue, moteurs à côté joignables. Sur l'hôte : version de Docker, Compose v2, mémoire donnée à Docker (WSL2).
+- **Premier lancement.** Tant qu'aucun moteur n'est prêt, l'onglet Modèles est grisé avec la raison et une carte propose : installer le moteur conseillé, en choisir un autre, ou plus tard.
+- **Annuler une installation ou un téléchargement de moteur** (bouton « Annuler ») ; ce qui est téléchargé est gardé, relancer reprend où ça s'était arrêté.
+- **Test de CI des volumes** : un conteneur est recréé avec les mêmes volumes et retrouve ses données et ses modèles.
+
+**English.** Docker: one container per engine through Compose profiles (`docker-compose.moteurs.yml`, `LUTIN_LLAMACPP_URL`), `lutin doctor` understands Docker (volumes, memory, reachable engines), first-launch card with the Models tab greyed out until an engine is ready, cancellable engine installs (downloads resume), CI test that recreating a container keeps data and models. llama.cpp profiles are unverified on real hardware.
+
 ## 0.19.1
 
 - **llama.cpp ne coupe plus une réponse en cours.** Avec llama.cpp (un seul modèle à la fois), la mise à jour de la fiche de suivi ou une autre demande avec une fenêtre de contexte différente redémarrait le serveur en pleine réponse : la conversation restait « en attente » et le banc affichait « 'NoneType' object has no attribute 'poll' ». Le serveur n'est plus jamais redémarré sous une réponse en cours (la demande suivante attend la fin), un contexte plus petit ne provoque plus de redémarrage, et le démarrage dit clairement si le serveur a été remplacé.

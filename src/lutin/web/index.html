@@ -425,6 +425,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     </div>
   </div>
   <section class="page vue" id="p-chat">
+    <div id="premierLancement" hidden></div>
     <div id="diagnostic" hidden role="alert"></div>
     <div id="fil"></div>
     <div id="taches" hidden></div>
@@ -1570,6 +1571,26 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     finis.forEach(id => b.appendChild(el('div', 'texte', '✔ ' + id + T(' installé'))));
     if (mem) b.appendChild(el('div', 'aide', mem));
   };
+  // Premier lancement : tant qu'aucun moteur n'est prêt, l'onglet Modèles est désactivé (avec la raison) et une carte propose : installer le moteur conseillé / en choisir un autre / plus tard
+  const afficherPremierLancement = pl => {
+    const bModeles = document.querySelector('.onglets button[data-p="modeles"]'), bloc = $('premierLancement');
+    if (bModeles) { bModeles.disabled = !pl.pret; bModeles.title = pl.pret ? '' : pl.raison; bModeles.style.opacity = pl.pret ? '' : '.45'; }
+    let plusTard = false; try { plusTard = sessionStorage.getItem('lutinPlusTard') === '1'; } catch (e) { /* facultatif */ }
+    const cle = JSON.stringify([pl, plusTard]);
+    if (bloc.dataset.cle === cle) return;
+    bloc.dataset.cle = cle; bloc.textContent = ''; bloc.hidden = pl.pret || plusTard;
+    if (bloc.hidden) return;
+    bloc.className = 'carte'; bloc.style.cssText = 'display:block;margin:8px 0';
+    bloc.appendChild(el('b', '', T('Premier lancement : il manque un moteur')));
+    bloc.appendChild(el('div', 'aide', pl.raison));
+    if (pl.recommande) bloc.appendChild(el('div', '', T('Conseillé pour cette machine : ') + pl.recommande.nom + ' — ' + pl.recommande.raison));
+    const l = el('div', 'ligne');
+    const ouvrirReglages = () => { ouvrirOnglet('reglages'); };
+    const oui = el('button', 'principal', pl.recommande ? T('Installer ') + pl.recommande.nom : T('Choisir un moteur')); oui.addEventListener('click', ouvrirReglages);
+    const autre = el('button', '', T('Choisir un autre moteur')); autre.addEventListener('click', ouvrirReglages);
+    const tard = el('button', '', T('Plus tard')); tard.addEventListener('click', () => { try { sessionStorage.setItem('lutinPlusTard', '1'); } catch (e) { /* facultatif */ } afficherPremierLancement(pl); });
+    l.append(oui, autre, tard); bloc.appendChild(l);
+  };
   const afficherDiagnostic = liste => {
     const bloc = $('diagnostic'), cle = JSON.stringify(liste);
     if (bloc.dataset.cle === cle) return;
@@ -1643,6 +1664,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     $('pOllama').classList.toggle('ok', ETAT.ollama); document.body.dataset.moteur = ETAT.moteur || 'ollama'; $('pOllama').lastChild.textContent = ETAT.moteur && ETAT.moteur !== 'ollama' ? ETAT.moteur_nom + ' ' + (ETAT.ollama ? T('prêt') : T('ne répond pas')) : (ETAT.ollama ? T('Ollama prêt') : (ETAT.ollama_installe ? T('Ollama arrêté') : T('Ollama non installé'))); $('pOllama').title = $('pOllama').lastChild.textContent;
     $('bDemarrer').hidden = ETAT.ollama || !ETAT.ollama_installe;
     afficherDiagnostic(ETAT.diagnostic || []);
+    afficherPremierLancement(ETAT.premier_lancement || { pret: true });
     afficherCalibrage(); majAnnexe(); majSens(); majTelechargements();
     $('racine').textContent = T('Projet : ') + ETAT.racine;
     // Le choix du modèle ne propose que les modèles INSTALLÉS (l'installation se fait dans l'onglet Modèles).
@@ -2958,7 +2980,13 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     (m.grille || []).forEach(g => { const e = ETATS[g.etat] || ETATS.non_teste; gr.appendChild(el('div', 'point', e[0] + ' ' + (FONCTIONS[g.fonction] || g.fonction) + ' · ' + e[1] + (g.note ? ' — ' + g.note : ''))); });
     d.appendChild(gr);
     const t = m.tache || {};
-    if (t.statut === 'en cours') d.appendChild(barreTache(t)); else if (t.statut === 'erreur') d.appendChild(el('div', 'erreur', '⚠ ' + t.erreur));
+    if (t.statut === 'en cours') {
+      d.appendChild(barreTache(t));
+      const stop = el('button', '', T('Annuler')); stop.title = T('Arrête l\'opération ; ce qui est déjà téléchargé est gardé, relancer reprend où ça s\'était arrêté.');
+      stop.addEventListener('click', async () => { stop.disabled = true; try { await api('/api/moteur-annuler', { moteur: m.id }); } catch (e) { $('aideMoteur').textContent = e.message; } chargerMoteurs(); });
+      d.appendChild(stop);
+    } else if (t.statut === 'annule') d.appendChild(el('div', 'aide', T('Opération annulée. Relance-la : le téléchargement reprend où il s\'était arrêté.')));
+    else if (t.statut === 'erreur') d.appendChild(el('div', 'erreur', '⚠ ' + t.erreur));
     const ligne = el('div', 'ligne'); let possibles = 0;
     Object.keys(LIBELLE_ACTION).forEach(a => {
       const x = m.actions[a]; if (!x || !x.possible) return;

@@ -430,7 +430,11 @@ class MoteurLlamaCpp(MoteurOpenAI):
 
     # -- où est le serveur
     def config(self):
-        return lire_config().get(self.id, {})
+        c = lire_config().get(self.id, {})
+        envie = os.environ.get("LUTIN_LLAMACPP_URL", "").strip()          # Docker : le conteneur llama.cpp à côté de Lutin (docker-compose.moteurs.yml) ; une adresse réglée dans la page l'emporte
+        if envie and not c.get("url"):
+            c = dict(c, url=normaliser_adresse(envie), cle=c.get("cle") or os.environ.get("LUTIN_LLAMACPP_CLE", ""))
+        return c
 
     def externe(self):
         return bool(self.config().get("url"))

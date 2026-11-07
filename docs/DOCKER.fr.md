@@ -2,6 +2,8 @@
 
 # Lutin avec Docker
 
+**Un conteneur par moteur (Ollama ou llama.cpp), profils Compose, Docker Desktop et WSL2** : [DOCKER_INSTALLATION.fr.md](DOCKER_INSTALLATION.fr.md).
+
 **Pas à pas depuis un Debian vierge** : [TUTO-DOCKER-DEBIAN.fr.md](TUTO-DOCKER-DEBIAN.fr.md) (et [un prompt pour que ton IA locale écrive le docker-compose](PROMPT-DOCKER-COMPOSE.fr.md)).
 
 Une image prête à l'emploi : **Lutin et Ollama dans le même conteneur**. Tu la lances, tu ouvres la page, tu installes un modèle : c'est tout. Pratique sous Linux, sur un serveur ou un NAS.
