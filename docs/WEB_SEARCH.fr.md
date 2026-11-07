@@ -19,11 +19,21 @@ Les moteurs sont essayés **dans cet ordre** ; le premier qui rend des résultat
 
 Un moteur qui ne rend rien est laissé tranquille 10 minutes ; la même recherche est servie par un cache de 10 minutes. Les résultats sont **nettoyés** : paramètres de suivi (`utm_…`, `fbclid`…) et ancres retirés, doublons supprimés, deux résultats au plus par site (sauf si tu demandes un site).
 
+## Lutin cherche à la place du modèle
+
+Un petit modèle local n'appelle souvent pas l'outil de recherche : il répond de mémoire qu'il « n'a pas d'outils ». Lutin ne dépend donc pas de lui. Avec la case **Web** cochée :
+
+- **Tu demandes de chercher** (« cherche… », « trouve des liens… », « sur internet… ») : Lutin cherche lui-même, lit les premières pages, t'affiche les **sources trouvées** (titre et adresse), et le modèle n'a plus qu'à répondre d'après elles en les citant [1], [2]. Valable pour tous les modèles.
+- **Une question qui suppose le web** (« qui est… », « le dernier… », « prix de… », « météo… ») : pareil, pour les petits modèles seulement (10 milliards de paramètres ou moins, ou taille inconnue). Un modèle plus grand décide seul.
+- **Tu colles une adresse** : Lutin lit la page et le modèle répond à son sujet.
+- **Les actualités** : inchangé (petits modèles).
+- Pas déclenché pour les messages qui parlent de code, de fichiers ou d'erreurs, ni pour les messages longs. Si rien n'est trouvé, la boucle habituelle reprend la main.
+
 ## Ce que ça coûte (léger exprès)
 
 - **Un seul moteur par recherche** : les moteurs ci-dessus forment un *ordre de repli*, pas quatre recherches à la fois. Si le premier répond, rien d'autre n'est demandé ; s'il est muet, le suivant est essayé **après** lui, jamais en même temps.
-- En plus de la réponse du moteur, Lutin lit le **début** des premières pages (3 par défaut, `lire=0` pour s'en passer) : 250 Ko au plus chacune, en parallèle, dans un budget de 12 secondes.
-- **La mémoire est bornée** : le cache de pages garde 8 pages et 6 Mo au plus (la plus ancienne part d'abord) ; une page énorme n'y entre pas.
+- En plus de la réponse du moteur, Lutin lit le **début** des premières pages (3 par défaut, `lire=0` pour s'en passer) : 500 Ko au plus chacune, en parallèle, dans un budget de 12 secondes.
+- **La mémoire est bornée** : le cache de pages garde 24 pages et 32 Mo au plus (la plus ancienne part d'abord) ; une page énorme n'y entre pas.
 - **Aucun processus de fond, aucune dépendance nouvelle, aucune interrogation périodique** : rien ne tourne entre deux recherches. Seul le bouton **Tester la recherche** interroge tous les moteurs d'un coup, et seulement quand tu cliques.
 - Le nettoyage des résultats prend bien moins d'une milliseconde.
 

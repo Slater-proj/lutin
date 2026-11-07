@@ -19,11 +19,21 @@ Engines are tried **in this order**; the first one that returns results wins, th
 
 An engine that returns nothing is left alone for 10 minutes; the same search is answered from a 10-minute cache. Results are **cleaned**: tracking parameters (`utm_…`, `fbclid`…) and anchors removed, duplicates dropped, at most two results per site (unless you ask for one site).
 
+## Lutin searches for the model
+
+A small local model often does not call the search tool: it answers from memory that it "has no tools". So Lutin does not depend on it. With the **Web** option ticked:
+
+- **You ask to search** ("search…", "find links…", "on the internet…"): Lutin searches itself, reads the first pages, shows you the **sources found** (title and address) and the model only has to answer from them, citing [1], [2]. This applies to every model.
+- **A question that implies the web** ("who is…", "the latest…", "price of…", "weather…"): same thing, for small models only (10 billion parameters or fewer, or unknown). A larger model decides on its own.
+- **You paste an address**: Lutin reads the page and the model answers about it.
+- **The news**: unchanged (small models).
+- Not triggered for messages that talk about code, files or errors, nor for long messages. If nothing is found, the usual loop takes over.
+
 ## What it costs (light on purpose)
 
 - **One engine per search**: the engines above are a *fallback order*, not four searches at once. If the first answers, nothing else is asked; if it is silent, the next one is tried **after** it, never alongside.
-- Besides the engine's answer, Lutin reads the **start** of the first pages (3 by default, `lire=0` to skip): at most **250 KB** each, in parallel, with a 12-second budget.
-- **Memory is bounded**: the page cache keeps at most 8 pages and 6 MB (oldest out first); a huge page is not cached.
+- Besides the engine's answer, Lutin reads the **start** of the first pages (3 by default, `lire=0` to skip): at most **500 KB** each, in parallel, with a 12-second budget.
+- **Memory is bounded**: the page cache keeps at most 24 pages and 32 MB (oldest out first); a huge page is not cached.
 - **No background process, no new dependency, no polling**: nothing runs between two searches. Only the **Test the search** button queries every engine at once, and only when you click it.
 - Cleaning the results takes well under a millisecond.
 

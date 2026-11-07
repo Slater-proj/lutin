@@ -1395,10 +1395,12 @@ def boucle_agent(conv, r, emit, ctx, stop):
     elif conv.get("boucle"):                                      # la dernière réponse répétait la précédente : cette fois on ordonne d'agir
         consigne = _boucles.consigne()
     garde = _boucles.Garde()
-    if (not consigne and not r.get("_mission") and "web_chercher" in ctx["outils_autorises"] and conv["messages"] and conv["messages"][-1].get("role") == "user"
-            and _actualites.demande_actualites(derniere_demande) and _actualites.petit_modele(r["modele"])):
-        try:                                                              # « les news du jour » avec un petit modèle : Lutin cherche et lit lui-même, le modèle ne fait que résumer
-            consigne = _actualites.preparer(conv, derniere_demande, ctx, emit, reformuler=lambda t: reformuler_recherche(t, r)) or ""
+    guide = ""
+    if not consigne and not r.get("_mission") and "web_chercher" in ctx["outils_autorises"] and conv["messages"] and conv["messages"][-1].get("role") == "user":
+        guide = _actualites.mode_guide(derniere_demande, r["modele"])
+    if guide:
+        try:                                                              # actualités, recherche demandée, adresse collée : Lutin cherche et lit lui-même, le modèle ne fait que répondre d'après ce qu'on lui montre
+            consigne = _actualites.preparer(conv, derniere_demande, ctx, emit, reformuler=lambda t: reformuler_recherche(t, r), mode=guide) or ""
             forcer_fin = bool(consigne)
         except (_m.ErreurOutil, OSError) as erreur:
             _m.journaliser("Actualités guidées impossibles : {!r}".format(erreur))

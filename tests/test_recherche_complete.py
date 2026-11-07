@@ -387,15 +387,15 @@ class Legerete(Base):
         vrai = web.web_telecharger
         web.web_telecharger = lambda url, donnees=None, **_: (url, "text/plain", "x" * 1_400_000)
         try:
-            for i in range(20):
+            for i in range(40):
                 web.page_en_cache("https://exemple.org/%d" % i, maintenant=lambda i=i: 1000 + i)
             poids = sum(len(v[1][2]) for v in web.CACHE_PAGES.values())
             self.assertLessEqual(len(web.CACHE_PAGES), web.CACHE_PAGES_MAX)
             self.assertLessEqual(poids, web.CACHE_PAGES_OCTETS)
-            self.assertIn("https://exemple.org/19", web.CACHE_PAGES, "le plus récent est gardé")
+            self.assertIn("https://exemple.org/39", web.CACHE_PAGES, "le plus récent est gardé")
             self.assertNotIn("https://exemple.org/0", web.CACHE_PAGES, "le plus ancien est parti")
             web.CACHE_PAGES.clear()
-            web.web_telecharger = lambda url, donnees=None, **_: (url, "text/plain", "x" * 3_000_000)
+            web.web_telecharger = lambda url, donnees=None, **_: (url, "text/plain", "x" * 12_000_000)
             web.page_en_cache("https://exemple.org/enorme")
             self.assertEqual(len(web.CACHE_PAGES), 0, "une page énorme n'entre pas dans le cache")
         finally:
@@ -410,7 +410,7 @@ class Legerete(Base):
         finally:
             web.web_telecharger = vrai
         self.assertEqual(vues, [{"max_octets": web.EXTRAIT_OCTETS}])
-        self.assertLessEqual(web.EXTRAIT_OCTETS, 300_000)
+        self.assertLessEqual(web.EXTRAIT_OCTETS, 600_000)
 
     def test_aucun_fil_de_fond_n_est_ajoute(self):
         avant = threading.active_count()

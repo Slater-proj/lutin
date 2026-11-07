@@ -1769,5 +1769,10 @@
 "Date : ": "Date: ",
 "Ce PDF est trop gros pour être lu ({} Mo au plus).": "This PDF is too big to read ({} MB at most).",
 "Ce PDF n'a pas pu être lu : {}": "This PDF could not be read: {}",
-"Ce type de contenu n'est pas lisible ({}). Seules les pages, les textes et les PDF le sont.": "This content type cannot be read ({}). Only pages, texts and PDFs can."
+"Ce type de contenu n'est pas lisible ({}). Seules les pages, les textes et les PDF le sont.": "This content type cannot be read ({}). Only pages, texts and PDFs can.",
+"Nous sommes le {}. Les résultats de recherche et le début des pages lues sont au-dessus. Réponds à la demande d'après ces sources : cite-les par leur numéro [1], [2]… N'invente rien : si elles ne contiennent pas la réponse, dis-le et propose une autre recherche. Les adresses des sources sont déjà affichées à l'utilisateur ; ne les recopie que s'il demande les liens. Réponds dans la langue de la demande.": "Today is {}. The search results and the start of the pages read are above. Answer the request from these sources, citing them by number [1], [2]… Invent nothing: if they do not contain the answer, say so and suggest another search. The sources' addresses are already shown to the user; only copy them if they ask for the links. Answer in the language of the request.",
+"Le contenu de la page demandée est au-dessus. Réponds à la demande d'après cette page, sans rien inventer ; si la page n'a pas pu être lue ou ne contient pas la réponse, dis-le simplement.": "The content of the requested page is above. Answer the request from this page, inventing nothing; if the page could not be read or does not contain the answer, simply say so.",
+"📄 Je lis la page, puis je réponds.": "📄 I read the page, then I answer.",
+"🔎 Je cherche « {} » et je lis les premières pages.": "🔎 I search \"{}\" and read the first pages.",
+"🔗 Sources trouvées :": "🔗 Sources found:"
 }

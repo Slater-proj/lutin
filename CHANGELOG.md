@@ -2,6 +2,12 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## Lutin cherche à la place du petit modèle
+
+- Un modèle qui répondait « mes outils sont limités » au lieu de chercher n'est plus un problème : quand le message demande de chercher, ou colle une adresse, Lutin fait la recherche (ou lit la page) lui-même, affiche les **sources trouvées** et ne laisse au modèle que la réponse, avec renvois [1], [2]. Questions implicites (« qui est… », « le dernier… ») : pour les petits modèles. Requête nettoyée sans appeler le modèle quand la demande est courte. Voir `docs/WEB_SEARCH.fr.md`.
+
+**English.** Lutin now searches (or reads a pasted address) itself when the message asks for it, shows the sources found and leaves the model only the answer.
+
 ## Recherche web complète
 
 - **Plusieurs moteurs, dans l'ordre** : **SearXNG** (chez soi), **Brave Search** (clé personnelle), puis DuckDuckGo et Bing sans rien configurer ; le premier qui répond l'emporte, un moteur muet est laissé tranquille 10 minutes. Réglages > Recherche web : moteurs dans l'ordre, adresse de SearXNG, clé Brave (jamais renvoyée à la page), bouton **Tester la recherche** qui interroge chaque moteur séparément. `docker-compose.searxng.yml` + `docs/WEB_SEARCH.fr.md`.

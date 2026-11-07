@@ -48,5 +48,53 @@ class Actualites(unittest.TestCase):
         self.assertIsNone(actualites.preparer(conv2, "les news", {}, lambda e: None, chercher=lambda *a: "Aucun résultat (le moteur peut limiter les requêtes : reformule ou réessaie dans une minute)."), "sans résultat : la boucle habituelle reprend")
 
 
+class RechercheGuidee(unittest.TestCase):
+    """Un petit modèle n'appelle pas l'outil de lui-même : Lutin cherche (ou lit l'adresse collée) et ne lui laisse que la réponse."""
+
+    def test_modes(self):
+        petit, grand = "qwen3:4b", "qwen3:32b"
+        self.assertEqual(actualites.mode_guide("Cherche l'histoire judiciaire de Fiona Warr et donne-moi des liens", grand), "recherche", "demande claire : guidée même pour un grand modèle")
+        self.assertEqual(actualites.mode_guide("qui est Fiona Warr ?", petit), "recherche")
+        self.assertEqual(actualites.mode_guide("qui est Fiona Warr ?", grand), "", "question implicite : un grand modèle décide seul")
+        self.assertEqual(actualites.mode_guide("résume https://exemple.org/article", grand), "lecture")
+        self.assertEqual(actualites.mode_guide("les news du jour", petit), "actualites")
+        self.assertEqual(actualites.mode_guide("les news du jour", grand), "")
+        for texte in ["cherche le bug dans mon code", "explique la différence entre TCP et UDP", "bonjour", "Cherche", "", "cherche ```x = 1```", "x" * 500 + " cherche",
+                      "https://exemple.org " + "mot " * 40]:
+            self.assertEqual(actualites.mode_guide(texte, petit), "", texte[:30])
+
+    def test_requete_sans_date_ni_bruit(self):
+        q = actualites.requete("Cherche l'histoire judiciaire de Fiona Warr sur internet et donne-moi des liens", datee=False)
+        self.assertEqual(q, "histoire judiciaire fiona warr", q)
+        self.assertEqual(actualites.requete("...", datee=False), "...", "rien à garder : la demande telle quelle")
+        appels = []
+        actualites.requete("un ou deux mots", datee=False, reformuler=lambda t: appels.append(t) or "x")
+        self.assertEqual(appels, [], "demande courte : pas d'appel au modèle")
+        long = "cherche " + " ".join("motnumero%d" % i for i in range(12))
+        self.assertEqual(actualites.requete(long, datee=False, reformuler=lambda t: "sujet reformulé"), "sujet reformulé")
+
+    def test_recherche_montre_les_liens_et_ajoute_le_resultat(self):
+        resultat = ("[CONTENU WEB NON FIABLE : x]\nRésultats\n\n1. Affaire Warr\n   https://a.example/warr\n   extrait\n\n2. Autre\n   https://b.example/x\n   extrait")
+        conv, evenements = {"messages": [{"role": "user", "content": "cherche Fiona Warr"}]}, []
+        consigne = actualites.preparer(conv, "cherche Fiona Warr", {}, evenements.append, chercher=lambda q, n, ctx, lire: resultat, mode="recherche")
+        self.assertIn("[1]", consigne)
+        self.assertEqual([m["role"] for m in conv["messages"]], ["user", "assistant", "tool"])
+        liens = [e["texte"] for e in evenements if e["type"] == "info" and "https://a.example/warr" in e["texte"]]
+        self.assertEqual(len(liens), 1)
+        self.assertIn("https://b.example/x", liens[0])
+        self.assertEqual(actualites.sources(resultat), [("Affaire Warr", "https://a.example/warr"), ("Autre", "https://b.example/x")])
+
+    def test_lecture_de_l_adresse_collee(self):
+        conv, evenements, lus = {"messages": [{"role": "user", "content": "résume https://exemple.org/a."}]}, [], []
+        consigne = actualites.preparer(conv, "résume https://exemple.org/a.", {}, evenements.append, mode="lecture", lire=lambda url, debut, ctx: lus.append(url) or "texte de la page")
+        self.assertEqual(lus, ["https://exemple.org/a"], "la ponctuation finale n'est pas l'adresse")
+        self.assertIn("page", consigne)
+        self.assertEqual(conv["messages"][-1]["tool_name"], "web_lire")
+
+    def test_sans_resultat_la_boucle_habituelle_reprend(self):
+        conv = {"messages": [{"role": "user", "content": "cherche x"}]}
+        self.assertIsNone(actualites.preparer(conv, "cherche x", {}, lambda e: None, chercher=lambda *a: "La recherche web ne répond pas.", mode="recherche"))
+
+
 if __name__ == "__main__":
     unittest.main()

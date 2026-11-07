@@ -240,7 +240,7 @@ def adresse_resultat(href):
 
 LIRE_AUTO = 3                       # nombre de premiers résultats dont on lit un extrait tout de suite
 EXTRAIT_CARACTERES = 700
-EXTRAIT_OCTETS = 250_000            # un aperçu n'a besoin que du début de la page : on ne télécharge ni ne décortique le reste (plus rapide, moins de mémoire)
+EXTRAIT_OCTETS = 500_000            # un aperçu n'a besoin que du début de la page : on ne télécharge ni ne décortique le reste (plus rapide, moins de mémoire)
 DELAI_EXTRAITS = 12.0               # secondes pour l'ensemble des lectures
 
 
@@ -469,8 +469,8 @@ def _i18n_langue():
 
 CACHE_PAGES = {}          # adresse -> (instant, (adresse finale, type, contenu)) : lire la suite d'une page longue ne la télécharge pas de nouveau
 DUREE_CACHE_PAGES_S = 600
-CACHE_PAGES_MAX = 8
-CACHE_PAGES_OCTETS = 6_000_000          # le cache entier reste sous ce poids (le plus ancien part d'abord) ; une page plus grosse que le tiers n'y entre pas
+CACHE_PAGES_MAX = 24
+CACHE_PAGES_OCTETS = 32_000_000         # le cache entier reste sous ce poids (le plus ancien part d'abord) ; une page plus grosse que le tiers n'y entre pas
 VERROU_PAGES = threading.Lock()
 
 

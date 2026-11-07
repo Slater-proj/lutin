@@ -20,6 +20,31 @@ def demande_actualites(texte):
     return bool(texte) and len(texte) <= 300 and bool(DEMANDE.search(texte))
 
 
+URL = re.compile(r"https?://[^\s<>\"')\]]+", re.I)
+EXPLICITE = re.compile(r"\b(cherch\w*|recherch\w*|liens?|sur\s+(?:internet|le\s+(?:web|net))|en\s+ligne|google|search(?:\s+for)?|look\s*up|links?)\b", re.I)
+IMPLICITE = re.compile(r"\b(qui\s+est|c'?est\s+qui|histoire\s+de|derni[eè]res?|r[ée]cents?|prix\s+d\w*|m[ée]t[ée]o|cours\s+d\w*|quand\s+sort|date\s+de\s+sortie|who\s+is|latest|price\s+of|weather)\b", re.I)
+PAS_LE_WEB = re.compile(r"```|\b(code|fichier|script|bug|erreur|fonction|dossier|d[ée]p[ôo]t|repo|projet|variable|classe|commande)\b", re.I)
+SUJET_VIDE = frozenset("internet web net ligne lien liens link links google recherche recherches recherché cherché sources source article articles info infos information informations sujet propos".split())
+
+
+def mode_guide(texte, modele):
+    """Comment Lutin aide ce message : « lecture » (une adresse collée : il lit la page), « actualites », « recherche » (le message demande de chercher), ou '' (le modèle décide seul).
+    Une demande claire de chercher est guidée pour tous les modèles (la recherche est demandée de toute façon) ; une question qui suppose le web sans le dire (« qui est… », « le dernier… »)
+    seulement pour un petit modèle, qui n'appelle pas l'outil de lui-même."""
+    texte = str(texte or "").strip()
+    if not texte or len(texte) > 400 or "```" in texte:
+        return ""
+    if URL.search(texte) and len(URL.sub("", texte).split()) <= 25:
+        return "lecture"
+    if DEMANDE.search(texte):
+        return "actualites" if petit_modele(modele) else ""
+    if PAS_LE_WEB.search(texte) or not _mots(texte):          # code, fichiers... ; ou rien à chercher (« Cherche » tout seul)
+        return ""
+    if EXPLICITE.search(texte):
+        return "recherche"
+    return "recherche" if IMPLICITE.search(texte) and petit_modele(modele) else ""
+
+
 def milliards_du_modele(nom):
     """Taille d'un modèle en milliards de paramètres d'après le catalogue ou son nom (« qwen3:8b ») ; 0 si on ne sait pas."""
     nom = str(nom or "")
@@ -42,11 +67,20 @@ le la les un une des du de mon ma mes ton ta tes son sa ses leur leurs chercher 
 bonjour salut hello alors aussi encore plutot plutôt vraiment""".split())
 
 
-def requete(texte, aujourdhui=None, reformuler=None):
+def _mots(texte):
+    brut = NETTOYAGE.sub("", " ".join(URL.sub(" ", str(texte or "")).split()))
+    brut = re.sub(r"\b\w+-(?:moi|toi|nous|vous|lui|leur|le|la|les|y|en)\b", " ", brut, flags=re.I)          # « donne-moi », « dis-le » : des formules, pas le sujet
+    brut = re.sub(r"\b(?:l|d|j|m|t|s|n|c|qu)['’]", " ", brut, flags=re.I)                                    # « l'histoire » -> « histoire »
+    return [m for m in re.findall(r"[\w'’-]+", brut.lower()) if m not in MOTS_VIDES and m not in SUJET_VIDE and len(m) > 1]
+
+
+def requete(texte, aujourdhui=None, reformuler=None, datee=True):
     """La requête de recherche. Si `reformuler` est donné (un appel court au modèle : il corrige les fautes et ne garde que le sujet), on l'essaie d'abord ; sinon, ou s'il échoue, la demande est nettoyée
     (formules de politesse, mots vides, ponctuation). Le mois et l'année attirent des résultats récents (une date jj/mm/aaaa, elle, fait chuter la pertinence d'un moteur de recherche)."""
     aujourdhui = aujourdhui or date.today()
     sujet = ""
+    if not datee and len(_mots(texte)) <= 8:          # une demande courte se nettoie sans appeler le modèle (plus rapide, aucun autre modèle à charger)
+        reformuler = None
     if reformuler is not None:
         try:
             propose = str(reformuler(texte) or "").strip().splitlines()
@@ -54,9 +88,9 @@ def requete(texte, aujourdhui=None, reformuler=None):
         except (OSError, ValueError, IndexError):
             sujet = ""
     if not sujet or len(sujet.split()) > 14:
-        brut = NETTOYAGE.sub("", " ".join(str(texte or "").split()))
-        mots = [m for m in re.findall(r"[\w'’-]+", brut.lower()) if m not in MOTS_VIDES and len(m) > 1]
-        sujet = " ".join(mots[:12])
+        sujet = " ".join(_mots(texte)[:12])
+    if not datee:
+        return (sujet or " ".join(str(texte or "").split()))[:200]
     return "{} {} {}".format(sujet or "actualités", MOIS[aujourdhui.month - 1], aujourdhui.year)[:200]
 
 
@@ -66,22 +100,54 @@ def consigne(aujourdhui=None):
               "en citant le média ou le site de chaque information. N'invente rien : si les sources ne couvrent pas la question, dis-le simplement. Réponds dans la langue de la demande.").format(aujourdhui.strftime("%d/%m/%Y"))
 
 
-def preparer(conv, texte, ctx, emit, chercher=None, reformuler=None):
-    """Fait la recherche et la lecture à la place du modèle ; ajoute l'appel et son résultat à la conversation (comme s'il les avait demandés). Renvoie la consigne de synthèse, ou None si la recherche
-    n'a rien donné (la boucle habituelle prend alors le relais). Lève ErreurOutil si le web est coupé."""
+def consigne_recherche(aujourdhui=None):
+    aujourdhui = aujourdhui or date.today()
+    return _t("Nous sommes le {}. Les résultats de recherche et le début des pages lues sont au-dessus. Réponds à la demande d'après ces sources : cite-les par leur numéro [1], [2]… N'invente rien : "
+              "si elles ne contiennent pas la réponse, dis-le et propose une autre recherche. Les adresses des sources sont déjà affichées à l'utilisateur ; ne les recopie que s'il demande les liens. Réponds dans la langue de la demande.").format(aujourdhui.strftime("%d/%m/%Y"))
+
+
+def consigne_lecture():
+    return _t("Le contenu de la page demandée est au-dessus. Réponds à la demande d'après cette page, sans rien inventer ; si la page n'a pas pu être lue ou ne contient pas la réponse, dis-le simplement.")
+
+
+def sources(resultat, maximum=6):
+    """[(titre, adresse)] d'un résultat de web_chercher, pour les montrer à l'utilisateur."""
+    return re.findall(r"^\d+\. (.+)\n\s+(https?://\S+)", str(resultat), re.M)[:maximum]
+
+
+def _ajouter(conv, nom, args, resultat):
+    conv["messages"].append({"role": "assistant", "content": "", "tool_calls": [{"function": {"name": nom, "arguments": args}}]})
+    conv["messages"].append({"role": "tool", "tool_name": nom, "content": str(resultat)})
+
+
+def preparer(conv, texte, ctx, emit, chercher=None, reformuler=None, mode="actualites", lire=None):
+    """Fait la recherche (ou la lecture de la page collée) à la place du modèle ; ajoute l'appel et son résultat à la conversation (comme s'il les avait demandés). Renvoie la consigne
+    de réponse, ou None si rien n'a été trouvé (la boucle habituelle prend alors le relais). Lève ErreurOutil si le web est coupé."""
     from . import web
+    if mode == "lecture":
+        lire = lire or web.outil_web_lire
+        adresse = URL.search(texte).group(0).rstrip(".,;:!?")
+        args = {"url": adresse}
+        emit({"type": "info", "texte": _t("📄 Je lis la page, puis je réponds.")})
+        emit({"type": "outil", "nom": "web_lire", "args": args})
+        page = lire(adresse, 0, ctx)
+        emit({"type": "resultat", "nom": "web_lire", "texte": _t("(résultat transmis à l'assistant, non affiché)")})
+        _ajouter(conv, "web_lire", args, page)
+        return consigne_lecture()
     chercher = chercher or web.outil_web_chercher
-    q = requete(texte, reformuler=reformuler)
+    news = mode == "actualites"
+    q = requete(texte, reformuler=reformuler, datee=news)
     args = {"requete": q, "nombre": 6, "lire": 3}
-    emit({"type": "info", "texte": _t("🔎 Actualités : je cherche et je lis quelques sources, puis je les résume.")})
+    emit({"type": "info", "texte": _t("🔎 Actualités : je cherche et je lis quelques sources, puis je les résume.") if news else _t("🔎 Je cherche « {} » et je lis les premières pages.").format(q)})
     emit({"type": "outil", "nom": "web_chercher", "args": args})
     resultat = chercher(q, 6, ctx, 3)
     if not resultat or "CONTENU WEB NON FIABLE" not in str(resultat)[:80]:          # pas de résultat (ou une réponse sans l'avertissement des pages web)
         emit({"type": "resultat", "nom": "web_chercher", "texte": str(resultat)[:300]})
-        conv["messages"].append({"role": "assistant", "content": "", "tool_calls": [{"function": {"name": "web_chercher", "arguments": args}}]})
-        conv["messages"].append({"role": "tool", "tool_name": "web_chercher", "content": str(resultat)})
+        _ajouter(conv, "web_chercher", args, resultat)
         return None
     emit({"type": "resultat", "nom": "web_chercher", "texte": _t("(résultat transmis à l'assistant, non affiché)")})
-    conv["messages"].append({"role": "assistant", "content": "", "tool_calls": [{"function": {"name": "web_chercher", "arguments": args}}]})
-    conv["messages"].append({"role": "tool", "tool_name": "web_chercher", "content": resultat})
-    return consigne()
+    liens = sources(resultat)
+    if liens and not news:
+        emit({"type": "info", "texte": _t("🔗 Sources trouvées :") + "\n" + "\n".join("{}. {} — {}".format(i + 1, t, u) for i, (t, u) in enumerate(liens))})
+    _ajouter(conv, "web_chercher", args, resultat)
+    return consigne() if news else consigne_recherche()
