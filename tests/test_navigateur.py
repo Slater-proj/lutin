@@ -220,7 +220,7 @@ class Parcours(unittest.TestCase):
             p.evaluer(onglet("auto"))
             p.attendre("document.getElementById('zoneFond').textContent.includes('Nouveau travail de fond')")
             p.attendre("document.querySelectorAll('#listeAddons > .carte').length >= 4")                          # la liste des extensions se charge à part des deux sections
-            self.assertEqual(p.evaluer("document.querySelectorAll('#listeAddons > .carte').length"), 4, "Telegram, ComfyUI, courriel, X : le traitement de documents n'est plus une extension, et les missions sont un mode")
+            self.assertEqual(p.evaluer("document.querySelectorAll('#listeAddons > .carte').length"), 5, "Telegram, ComfyUI, courriel, VoiceStudio, X : le traitement de documents n'est plus une extension, et les missions sont un mode")
             self.assertFalse(p.evaluer("!!document.getElementById('zoneMissions') || !!document.getElementById('bMission')"), "plus de section ni de bouton Mission : c'est un mode")
             self.assertEqual(p.erreurs, [])
 

@@ -2,6 +2,14 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## Addon VoiceStudio et deux outils de plus
+
+- **Addon VoiceStudio** (désactivé par défaut) : le modèle peut lister les voix, **lire un texte à voix haute** (accord à chaque fois, fichier audio joint sous le message), **transcrire** un enregistrement et **cloner une voix**, ce dernier avec un accord explicite *toujours demandé* (« c'est ma voix » ou « la personne a donné sa permission »), jamais automatique, et la déclaration est transmise à VoiceStudio. Seule la machine locale est jointe ; la clé d'API éventuelle ne s'affiche jamais. `docs/VOICESTUDIO.fr.md`.
+- **Outils `trouver` (fichiers par nom) et `calculer` (calcul exact, sans exécuter de code)**, en lecture seule.
+- **À savoir** : testé avec un faux VoiceStudio ; l'application réelle n'a pas été lancée.
+
+**English.** VoiceStudio addon (off by default): list voices, read aloud, transcribe, clone a voice (explicit agreement always asked, never automatic); local machine only. New read-only tools `trouver` and `calculer`. Tested against a fake VoiceStudio; the real application was not run.
+
 ## Lutin cherche à la place du petit modèle
 
 - Un modèle qui répondait « mes outils sont limités » au lieu de chercher n'est plus un problème : quand le message demande de chercher, ou colle une adresse, Lutin fait la recherche (ou lit la page) lui-même, affiche les **sources trouvées** et ne laisse au modèle que la réponse, avec renvois [1], [2]. Questions implicites (« qui est… », « le dernier… ») : pour les petits modèles. Requête nettoyée sans appeler le modèle quand la demande est courte. Voir `docs/WEB_SEARCH.fr.md`.

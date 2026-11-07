@@ -1219,5 +1219,9 @@
 "résultats": "results",
 "Aucun moteur ne répond : vérifie ta connexion.": "No engine answers: check your connection.",
 "Cherche les fichiers": "Searches for files",
-"Calcule": "Calculates"
+"Calcule": "Calculates",
+"Liste les voix": "Lists the voices",
+"Lit à voix haute": "Reads aloud",
+"Transcrit": "Transcribes",
+"Clone la voix": "Clones the voice"
 }

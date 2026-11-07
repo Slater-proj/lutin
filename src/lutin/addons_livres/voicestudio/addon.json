@@ -1,0 +1,64 @@
+{
+ "nom": "VoiceStudio",
+ "description": "Donne une voix à Lutin : lire un texte à voix haute avec une voix de VoiceStudio (y compris une voix clonée), transcrire un enregistrement, cloner une voix avec l'autorisation de son propriétaire. VoiceStudio tourne sur ta machine ; rien ne part sur internet.",
+ "hotes": [
+  "127.0.0.1"
+ ],
+ "doc": "https://github.com/debpalash/voicestudio",
+ "reglages": [
+  {
+   "cle": "port",
+   "libelle": "Port de VoiceStudio",
+   "defaut": "3900",
+   "obligatoire": false,
+   "aide": "3900 par défaut. Lutin ne joint que cette machine (127.0.0.1)."
+  },
+  {
+   "cle": "cle",
+   "libelle": "Clé API (seulement si VoiceStudio en exige une)",
+   "secret": true,
+   "obligatoire": false,
+   "aide": "La valeur de OMNIVOICE_API_KEY. Inutile pour une installation de bureau ; utile avec l'image Docker, qui demande la clé même depuis cette machine."
+  },
+  {
+   "cle": "format",
+   "libelle": "Format des fichiers audio",
+   "defaut": "wav",
+   "obligatoire": false,
+   "choix": [
+    [
+     "wav",
+     "WAV (sans perte)"
+    ],
+    [
+     "mp3",
+     "MP3 (demande ffmpeg dans VoiceStudio)"
+    ],
+    [
+     "flac",
+     "FLAC (sans perte, plus léger)"
+    ]
+   ],
+   "aide": "Le format des voix générées. Le modèle peut en demander un autre dans sa demande."
+  }
+ ],
+ "etapes": [
+  {
+   "titre": "Lance VoiceStudio",
+   "texte": "Application de bureau (bun run dev) ou image Docker ghcr.io/debpalash/voicestudio:stable sur le port 3900. Sans carte graphique, il fonctionne sur le processeur, en plus lent."
+  },
+  {
+   "titre": "Active l'addon.",
+   "texte": "Lutin vérifie que VoiceStudio répond et compte les voix disponibles."
+  },
+  {
+   "titre": "Demande une voix",
+   "texte": "dans une conversation (« lis ce texte avec la voix de … », « transcris cet enregistrement »). Chaque génération demande ton accord."
+  },
+  {
+   "titre": "Cloner une voix",
+   "texte": "n'est possible qu'avec la permission de la personne (ou la tienne). Lutin te la demande à chaque fois et ne la présume jamais."
+  }
+ ],
+ "verification": []
+}

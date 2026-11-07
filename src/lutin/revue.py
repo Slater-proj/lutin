@@ -364,6 +364,9 @@ def _appeler_outil(nom, args, ctx):
         if not addons.actif("comfyui"):
             raise _m.ErreurOutil("L'addon ComfyUI n'est pas activé.")
         return addons_comfyui.texte_modeles() if nom == "comfy_modeles" else addons_comfyui.outil_generer(args, ctx)
+    if nom.startswith("voix_"):
+        from . import addons_voicestudio
+        return addons_voicestudio.outil_voix(nom, args, ctx)
     if nom == "etat_outil":
         return _m.outil_etat()
     if nom == "installer_module":
