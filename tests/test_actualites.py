@@ -75,8 +75,8 @@ class RechercheGuidee(unittest.TestCase):
 
     def test_recherche_montre_les_liens_et_ajoute_le_resultat(self):
         resultat = ("[CONTENU WEB NON FIABLE : x]\nRésultats\n\n1. Affaire Warr\n   https://a.example/warr\n   extrait\n\n2. Autre\n   https://b.example/x\n   extrait")
-        conv, evenements = {"messages": [{"role": "user", "content": "cherche Fiona Warr"}]}, []
-        consigne = actualites.preparer(conv, "cherche Fiona Warr", {}, evenements.append, chercher=lambda q, n, ctx, lire: resultat, mode="recherche")
+        conv, evenements = {"messages": [{"role": "user", "content": "cherche docker compose"}]}, []
+        consigne = actualites.preparer(conv, "cherche docker compose", {}, evenements.append, chercher=lambda q, n, ctx, lire: resultat, mode="recherche")
         self.assertIn("[1]", consigne)
         self.assertEqual([m["role"] for m in conv["messages"]], ["user", "assistant", "tool"])
         liens = [e["texte"] for e in evenements if e["type"] == "info" and "https://a.example/warr" in e["texte"]]
@@ -90,6 +90,41 @@ class RechercheGuidee(unittest.TestCase):
         self.assertEqual(lus, ["https://exemple.org/a"], "la ponctuation finale n'est pas l'adresse")
         self.assertIn("page", consigne)
         self.assertEqual(conv["messages"][-1]["tool_name"], "web_lire")
+
+    def test_reproches_et_noms_communs_ne_declenchent_rien(self):
+        for texte in ["C'est la même réponse là tu ne m'as pas donné tes sources de tes résultats de recherche", "tu n'as pas cherché", "tu as déjà cherché non ?"]:
+            self.assertEqual(actualites.mode_guide(texte, "qwen3:4b"), "", texte)
+        self.assertEqual(actualites.mode_guide("Tu peux faire une recherche sur Fiona Watt ?", "qwen3:32b"), "recherche")
+
+    def test_la_periode_se_dit_comme_on_veut(self):
+        from lutin import recherche
+        for dit, attendu in [("année", "an"), ("year", "an"), ("semaine", "semaine"), ("Week", "semaine"), ("aujourd'hui", "jour"), ("", None)]:
+            self.assertEqual(recherche.definir_options(dit)["periode"], attendu, dit)
+        with self.assertRaises(ValueError):
+            recherche.definir_options("siècle")
+
+    def test_noms_propres(self):
+        self.assertEqual(actualites.noms_propres("Cherche l'histoire judiciaire de Fiona Warr et donne-moi des liens"), ["Fiona Warr"])
+        self.assertEqual(actualites.noms_propres("Cherche des liens. Merci"), [])
+        self.assertEqual(actualites.noms_propres("qui est Marie Curie ?"), ["Marie Curie"])
+
+    def test_le_nom_est_entre_guillemets_et_verifie(self):
+        pertinent = "[CONTENU WEB NON FIABLE : x]\n\n1. Fiona Watt\n   https://a.example/fw\n   Fiona Watt est une autrice."
+        vus, conv = [], {"messages": [{"role": "user", "content": "x"}]}
+        consigne = actualites.preparer(conv, "Cherche des infos sur Fiona Watt", {}, lambda e: None, chercher=lambda q, n, c, l: vus.append(q) or pertinent, mode="recherche")
+        self.assertIn('"Fiona Watt"', vus[0])
+        self.assertIn("[1]", consigne)
+
+    def test_resultats_hors_sujet_le_modele_n_invente_rien(self):
+        hors_sujet = "[CONTENU WEB NON FIABLE : x]\n\n1. Histoire — Wikipédia\n   https://fr.wikipedia.org/wiki/Histoire\n   L'histoire est une science."
+        vus, evenements, conv = [], [], {"messages": [{"role": "user", "content": "x"}]}
+        consigne = actualites.preparer(conv, "Cherche l'histoire judiciaire de Fiona Warr", {}, evenements.append, chercher=lambda q, n, c, l: vus.append(q) or hors_sujet, mode="recherche")
+        self.assertEqual(len(vus), 2, "une seconde chance avec le nom seul")
+        self.assertEqual(vus[1], '"Fiona Warr"')
+        self.assertIn("Fiona Warr", consigne)
+        self.assertIn("sans rien inventer", consigne)
+        self.assertNotIn("Wikipédia", conv["messages"][-1]["content"], "les pages hors sujet ne sont pas données au modèle")
+        self.assertTrue([e for e in evenements if e["type"] == "info" and "⚠" in e["texte"]])
 
     def test_sans_resultat_la_boucle_habituelle_reprend(self):
         conv = {"messages": [{"role": "user", "content": "cherche x"}]}

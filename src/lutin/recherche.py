@@ -89,9 +89,14 @@ def options():
     return dict(getattr(ACTUELLES, "v", None) or {})
 
 
+SYNONYMES_PERIODE = {"année": "an", "annee": "an", "ans": "an", "year": "an", "années": "an", "annees": "an", "annuel": "an", "day": "jour", "jours": "jour", "journée": "jour", "aujourd'hui": "jour", "today": "jour", "24h": "jour",
+                     "week": "semaine", "semaines": "semaine", "hebdomadaire": "semaine", "month": "mois", "mensuel": "mois"}
+
+
 def definir_options(periode=None, site=None, actualites=False, langue=None):
     """Valide et pose les options de la recherche en cours (ce fil seulement). Renvoie le dictionnaire posé."""
     periode = str(periode or "").strip().lower() or None
+    periode = SYNONYMES_PERIODE.get(periode, periode)          # « année », « year »… : le modèle écrit ce qui lui vient, on le comprend
     if periode and periode not in PERIODES:
         raise ValueError(_t("Période inconnue : {} (jour, semaine, mois ou an).").format(periode[:20]))
     site = re.sub(r"^https?://", "", str(site or "").strip().lower()).split("/")[0].removeprefix("www.") or None

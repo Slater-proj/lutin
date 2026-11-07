@@ -1774,5 +1774,8 @@
 "Le contenu de la page demandée est au-dessus. Réponds à la demande d'après cette page, sans rien inventer ; si la page n'a pas pu être lue ou ne contient pas la réponse, dis-le simplement.": "The content of the requested page is above. Answer the request from this page, inventing nothing; if the page could not be read or does not contain the answer, simply say so.",
 "📄 Je lis la page, puis je réponds.": "📄 I read the page, then I answer.",
 "🔎 Je cherche « {} » et je lis les premières pages.": "🔎 I search \"{}\" and read the first pages.",
-"🔗 Sources trouvées :": "🔗 Sources found:"
+"🔗 Sources trouvées :": "🔗 Sources found:",
+"Aucune des sources trouvées ne parle de « {} ». Dis-le simplement à l'utilisateur, sans rien inventer sur ce sujet (aucune biographie, aucune affaire, aucune œuvre), et propose de vérifier l'orthographe du nom ou de préciser (métier, pays, titre d'un livre).": "None of the sources found talk about \"{}\". Simply tell the user so, inventing nothing on this subject (no biography, no case, no work), and suggest checking the spelling of the name or giving more detail (job, country, title of a book).",
+"⚠ Aucun résultat ne mentionne « {} » : vérifie l'orthographe du nom ou précise le sujet.": "⚠ No result mentions \"{}\": check the spelling of the name or give more detail.",
+"Aucun résultat ne mentionne « {} ».": "No result mentions \"{}\"."
 }
