@@ -11,6 +11,7 @@ Un sujet, une page. Si deux pages semblent dire la même chose, l'une ne fait qu
 | Voir ce que Lutin fait au quotidien | [FEATURES.fr.md](FEATURES.fr.md) |
 | Parcourir les fonctions pas à pas | [GUIDE-ESSAI.fr.md](GUIDE-ESSAI.fr.md) |
 | Choisir ou comprendre les modèles | [MODELS.fr.md](MODELS.fr.md) |
+| Régler ou comprendre la recherche web (SearXNG, Brave) | [WEB_SEARCH.fr.md](WEB_SEARCH.fr.md) |
 | Comparer les moteurs (Ollama, llama.cpp) sur mon PC | [BENCH_MOTEURS.fr.md](BENCH_MOTEURS.fr.md) |
 | Utiliser le moteur d'une autre machine, la réveiller, l'éteindre | [CLUSTER_ARCHITECTURE.fr.md](CLUSTER_ARCHITECTURE.fr.md) |
 | Reprendre un autre assistant ou un projet Claude | [MIGRATION.fr.md](MIGRATION.fr.md) · [CLAUDE-PROJECTS.fr.md](CLAUDE-PROJECTS.fr.md) |

@@ -639,6 +639,18 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     </div>
     <div class="aide">Lutin vérifie aussi tout seul au démarrage (au plus une fois par jour) : une bannière apparaît quand une version plus récente existe. Rien n'est installé sans toi.</div>
     </details>
+    <details class="groupe" data-g="recherche"><summary>Recherche web</summary>
+    <div class="aide">Lutin cherche sur DuckDuckGo et Bing sans rien configurer. Pour des résultats plus complets et plus stables, ajoute SearXNG (un moteur qui tourne chez toi, gratuit) ou Brave (une clé gratuite à ton nom) : ils sont essayés en premier, les autres prennent le relais s'ils ne répondent pas.</div>
+    <div id="rechMoteurs" class="carte" style="display:block"></div>
+    <h2>SearXNG</h2>
+    <div class="aide">L'adresse de ton SearXNG, par exemple http://127.0.0.1:8080 (le format « json » doit y être activé : voir docs/WEB_SEARCH.md). C'est la seule adresse locale que la recherche a le droit de joindre.</div>
+    <div class="carte" style="gap:8px;flex-wrap:wrap;align-items:center"><input id="rechSearxng" type="text" placeholder="http://127.0.0.1:8080" autocomplete="off" style="flex:1 1 280px"><button id="bRechSearxng">Enregistrer</button></div>
+    <h2>Brave Search</h2>
+    <div class="aide">Une clé d'API personnelle (offre gratuite, créée sur brave.com/search/api). Elle reste sur cette machine et n'est jamais renvoyée à la page.</div>
+    <div class="carte" style="gap:8px;flex-wrap:wrap;align-items:center"><input id="rechBrave" type="password" placeholder="Clé d'API" autocomplete="off" style="flex:1 1 280px"><button id="bRechBrave">Enregistrer</button><button id="bRechBraveRetirer" hidden>Retirer la clé</button><span class="aide" id="rechBraveEtat"></span></div>
+    <div class="carte" style="gap:8px;flex-wrap:wrap;align-items:center"><button id="bRechTest" class="principal">Tester la recherche</button><span class="aide" id="rechMsg" role="status"></span></div>
+    <div id="rechResultats"></div>
+    </details>
     <details class="groupe" open data-g="dossiers"><summary>Dossiers et données</summary>
     <h2>Dossiers de travail <span class="aide">(le seul endroit où Lutin lit et modifie des fichiers ; chaque conversation garde le sien. ★ = le dossier utilisé, celui qui s'ouvre aussi au démarrage de Lutin)</span></h2>
     <div id="listeTravaux" class="aide" style="margin:6px 0"></div>
@@ -1838,7 +1850,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     if (b.dataset.p === 'acces') chargerAcces();
     if (b.dataset.p === 'chat' && CONV && !(FLUX && FLUX.detache)) lue(CONV.id);          // on revient lire : la pastille verte s'éteint tout de suite
     if (b.dataset.p === 'sante') window.ouvrirSante();
-    if (b.dataset.p === 'reglages') { chargerFichiersCrees(); chargerMoteurs(); chargerMachines(); }
+    if (b.dataset.p === 'reglages') { chargerFichiersCrees(); chargerMoteurs(); chargerMachines(); chargerRecherche(); }
   }));
   $('bEnvoyer').addEventListener('click', () => envoyer());          // sans argument : l'évènement du clic n'est pas un message sorti de la file d'attente
   // Arrêter : on prévient d'abord le serveur (modèle, outils et accords en attente s'arrêtent vraiment), puis on laisse arriver la fin du flux.
@@ -3873,6 +3885,43 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     z.appendChild(el('div', 'acc-astuce', T('Astuce : Ctrl+K pour tout trouver, / pour les commandes.')));
   };
   construireAccueil();
+  // ---- Réglages > Recherche web : moteurs dans l'ordre, SearXNG, clé Brave, test de chaque moteur
+  const chargerRecherche = async () => {
+    let r; try { r = await api('/api/web-recherche'); } catch (e) { return; }
+    const z = $('rechMoteurs'); z.textContent = '';
+    r.moteurs.forEach((m, i) => {
+      const l = el('div', 'ligne');
+      l.appendChild(el('span', '', (i + 1) + '. ' + m.nom + (m.configure ? ' ★' : '')));
+      if (m.en_pause_s > 0) l.appendChild(el('span', 'aide', ' · ' + T('en pause (il n\'a rien rendu)') + ' ' + Math.ceil(m.en_pause_s / 60) + ' min'));
+      z.appendChild(l);
+    });
+    if (document.activeElement !== $('rechSearxng')) $('rechSearxng').value = r.searxng || '';
+    $('rechBraveEtat').textContent = r.brave ? T('Clé enregistrée') + ' (…' + r.brave_fin + ')' : T('Pas de clé');
+    $('bRechBraveRetirer').hidden = !r.brave || !r.modifiable;
+    [$('rechSearxng'), $('rechBrave'), $('bRechSearxng'), $('bRechBrave'), $('bRechBraveRetirer')].forEach(x => { x.disabled = !r.modifiable; });
+    $('rechMsg').textContent = r.modifiable ? '' : T('À régler depuis cette machine.');
+  };
+  const enregistrerRecherche = async corps => {
+    $('rechMsg').textContent = '';
+    try { await api('/api/web-recherche-config', corps); $('rechBrave').value = ''; await chargerRecherche(); $('rechMsg').textContent = T('Enregistré.'); } catch (e) { $('rechMsg').textContent = e.message; }
+  };
+  $('bRechSearxng').addEventListener('click', () => enregistrerRecherche({ searxng: $('rechSearxng').value.trim() }));
+  $('bRechBrave').addEventListener('click', () => { if ($('rechBrave').value.trim()) enregistrerRecherche({ brave_cle: $('rechBrave').value.trim() }); });
+  $('bRechBraveRetirer').addEventListener('click', () => enregistrerRecherche({ brave_cle: '' }));
+  $('bRechTest').addEventListener('click', async () => {
+    const b = $('bRechTest'), z = $('rechResultats'); b.disabled = true; z.textContent = ''; $('rechMsg').textContent = T('Test en cours…');
+    try {
+      const r = await api('/api/web-recherche-test', {});
+      r.resultats.forEach(x => {
+        const l = el('div', 'ligne'); if (!x.ok) l.classList.add('erreur');
+        l.appendChild(el('span', '', (x.ok ? '✔ ' : '✘ ') + x.nom + ' · ' + (x.ok ? x.nombre + ' ' + T('résultats') : x.erreur) + ' · ' + x.ms + ' ms'));
+        if (x.exemple) l.appendChild(el('span', 'aide', ' — ' + x.exemple));
+        z.appendChild(l);
+      });
+      $('rechMsg').textContent = r.resultats.some(x => x.ok) ? '' : T('Aucun moteur ne répond : vérifie ta connexion.');
+    } catch (e) { $('rechMsg').textContent = e.message; }
+    b.disabled = false; chargerRecherche();
+  });
   // ---- Recherche dans les Réglages : on ne garde que les groupes qui parlent de ce qu'on cherche, et on les ouvre
   const filtrerReglages = () => {
     const mots = sansAccent($('rechReglages').value).split(/\s+/).filter(Boolean);

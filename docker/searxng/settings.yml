@@ -1,0 +1,10 @@
+# Réglages de SearXNG pour Lutin / SearXNG settings for Lutin.
+# "json" doit être activé : c'est le format que Lutin lit. / "json" must be enabled: it is the format Lutin reads.
+use_default_settings: true
+server:
+  limiter: false          # chez soi, pour soi : pas de limiteur anti-robots / at home, for yourself: no bot limiter
+  image_proxy: false
+search:
+  formats:
+    - html
+    - json

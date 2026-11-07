@@ -11,6 +11,7 @@ One topic, one page. If two pages seem to say the same thing, one of them only l
 | See what Lutin does every day | [FEATURES.md](FEATURES.md) |
 | Walk through the features step by step | [GUIDE-ESSAI.md](GUIDE-ESSAI.md) |
 | Choose or understand the models | [MODELS.md](MODELS.md) |
+| Set up or understand the web search (SearXNG, Brave) | [WEB_SEARCH.md](WEB_SEARCH.md) |
 | Compare engines (Ollama, llama.cpp) on my PC | [BENCH_MOTEURS.md](BENCH_MOTEURS.md) |
 | Use another machine's engine, wake it, switch it off | [CLUSTER_ARCHITECTURE.md](CLUSTER_ARCHITECTURE.md) |
 | Take over another assistant or a Claude project | [MIGRATION.md](MIGRATION.md) · [CLAUDE-PROJECTS.md](CLAUDE-PROJECTS.md) |

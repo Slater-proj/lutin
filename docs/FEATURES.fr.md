@@ -115,7 +115,7 @@ Le modèle a un outil `creer_document` : selon l'extension (`.pdf`, `.docx`, `.m
 
 ## Lire des pages web, et les pages que Lutin ne sait pas lire
 
-Avec l'option **Web** cochée, le modèle peut chercher et lire des pages web. Lutin lit le HTML envoyé par le serveur ; il **ne sait pas exécuter JavaScript**, donc une page construite dans le navigateur (Reddit, beaucoup d'applications web) paraît vide. Dans ce cas, Lutin lit maintenant ce que le serveur annonce sans JavaScript (titre, description, données structurées), dit franchement au modèle ce qui manque, et lui fait proposer de **copier-coller le texte** ou d'**enregistrer la page (Ctrl+S, ou imprimer en PDF) et de la joindre avec le trombone** : une pièce jointe se lit en entier. Les sites qui refusent les lectures automatiques (Reddit en fait partie) ne sont pas contournés.
+Avec l'option **Web** cochée, le modèle peut chercher (SearXNG, Brave, DuckDuckGo, Bing : voir [WEB_SEARCH.fr.md](WEB_SEARCH.fr.md), avec des filtres de période, de site et d'actualités) et lire des pages web et des PDF. Lutin lit le HTML envoyé par le serveur ; il **ne sait pas exécuter JavaScript**, donc une page construite dans le navigateur (Reddit, beaucoup d'applications web) paraît vide. Dans ce cas, Lutin lit maintenant ce que le serveur annonce sans JavaScript (titre, description, données structurées), dit franchement au modèle ce qui manque, et lui fait proposer de **copier-coller le texte** ou d'**enregistrer la page (Ctrl+S, ou imprimer en PDF) et de la joindre avec le trombone** : une pièce jointe se lit en entier. Les sites qui refusent les lectures automatiques (Reddit en fait partie) ne sont pas contournés.
 
 ## Aperçu d'une page
 

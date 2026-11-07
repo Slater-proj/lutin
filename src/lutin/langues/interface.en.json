@@ -1203,5 +1203,19 @@
 "Chercher un réglage": "Search settings",
 "groupes correspondent": "groups match",
 "groupe correspond": "group matches",
-"Aucun réglage ne correspond.": "No setting matches."
+"Aucun réglage ne correspond.": "No setting matches.",
+"Clé d'API": "API key",
+"L'adresse de ton SearXNG, par exemple http://127.0.0.1:8080 (le format « json » doit y être activé : voir docs/WEB_SEARCH.md). C'est la seule adresse locale que la recherche a le droit de joindre.": "The address of your SearXNG, for example http://127.0.0.1:8080 (the \"json\" format must be enabled there: see docs/WEB_SEARCH.md). It is the only local address the search is allowed to reach.",
+"Lutin cherche sur DuckDuckGo et Bing sans rien configurer. Pour des résultats plus complets et plus stables, ajoute SearXNG (un moteur qui tourne chez toi, gratuit) ou Brave (une clé gratuite à ton nom) : ils sont essayés en premier, les autres prennent le relais s'ils ne répondent pas.": "Lutin searches DuckDuckGo and Bing with nothing to set up. For fuller and steadier results, add SearXNG (an engine running at your place, free) or Brave (a free key in your name): they are tried first, the others take over if they do not answer.",
+"Recherche web": "Web search",
+"Retirer la clé": "Remove the key",
+"Tester la recherche": "Test the search",
+"Une clé d'API personnelle (offre gratuite, créée sur brave.com/search/api). Elle reste sur cette machine et n'est jamais renvoyée à la page.": "A personal API key (free tier, created at brave.com/search/api). It stays on this machine and is never sent back to the page.",
+"en pause (il n'a rien rendu)": "paused (it returned nothing)",
+"Clé enregistrée": "Key saved",
+"Pas de clé": "No key",
+"À régler depuis cette machine.": "To be set from this machine.",
+"Test en cours…": "Testing…",
+"résultats": "results",
+"Aucun moteur ne répond : vérifie ta connexion.": "No engine answers: check your connection."
 }

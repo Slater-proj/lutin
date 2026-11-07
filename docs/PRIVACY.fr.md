@@ -12,7 +12,7 @@ Les contacts réseau que Lutin peut faire, et quand :
 | `raw.githubusercontent.com` (catalogue de modèles) | au démarrage, une fois par jour au plus, et quand tu cliques sur « Chercher de nouveaux modèles » | une requête anonyme | pareil |
 | `registry.ollama.ai` (empreintes des modèles) | avec la vérification des mises à jour de modèles | une requête anonyme qui nomme les modèles installés | pareil |
 | `ollama.com` (téléchargement d'un modèle) | seulement quand **toi** tu installes un modèle (c'est Ollama qui le fait) | ce qu'envoie Ollama | le mode hors ligne strict le refuse |
-| DuckDuckGo et les pages web demandées | seulement si la case « Web » est cochée, quand le modèle cherche ou lit une page | les mots recherchés, ou l'adresse de la page | décocher « Web », ou le mode hors ligne strict |
+| Ton SearXNG (si tu en as installé un ; il interroge d'autres moteurs pour toi), Brave Search (seulement si tu as donné une clé), DuckDuckGo, Bing, et les pages web demandées (voir [WEB_SEARCH.fr.md](WEB_SEARCH.fr.md)) | seulement si la case « Web » est cochée, quand le modèle cherche ou lit une page | les mots recherchés, ou l'adresse de la page | décocher « Web », ou le mode hors ligne strict |
 | Telegram, ton serveur de courrier, X (seulement si **tu** actives l'addon correspondant) | tant que l'addon est actif | ce que l'addon envoie : les réponses rédigées pour les messages reçus ou les publications que tu valides, et les identifiants de connexion (rangés à part, jamais écrits dans le journal) | laisse l'addon désactivé (ils le sont tous par défaut), ou mode hors ligne strict |
 | GitHub et PyPI | seulement pendant les scripts d'installation ou `lutin update` | une requête anonyme | ne pas les lancer |
 

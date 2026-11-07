@@ -11,6 +11,7 @@ from . import ressources_chargees as _ressources
 from . import catalogue_moteurs as _catalogue_moteurs
 from . import moteur_llamacpp as _llamacpp
 from . import moteurs as _moteurs
+from . import recherche as _recherche
 from . import moteurs_maj as _moteurs_maj
 from . import mcp as _mcp
 from . import calibrage as _calibrage
@@ -497,6 +498,8 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 return self._envoyer(400, {"erreur": _t("Fenêtre de conversation invalide.")})
             e = self._estimation(modele, max(512, min(ctx, 1048576)), _adequation.profil_pret())
             return self._envoyer(200 if e else 404, e or {"erreur": _t("Ce modèle n'est pas au catalogue : pas d'estimation possible.")})
+        if chemin == "/api/web-recherche":                        # Réglages > Recherche web : ce qui est réglé (jamais la clé) et l'ordre des moteurs
+            return self._envoyer(200, dict(_recherche.vue(), moteurs=_m.etat_moteurs_recherche(), modifiable=self._configurateur_strict()))
         if chemin == "/api/machines":                             # Réglages > Machines : le nœud de cette machine, les machines appairées et leur état
             return self._envoyer(200, self._vue_machines())
         if chemin == "/api/ressources":                           # ce qui est chargé en mémoire en ce moment (page Santé)
@@ -978,6 +981,16 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 _m.config_ecrire(cfg)
                 _m.journaliser("Administration à distance {}.".format("ouverte" if cfg["admin_a_distance"] else "fermée"))
                 return self._envoyer(200, {"actif": cfg["admin_a_distance"]})
+            if self.path == "/api/web-recherche-config":               # l'adresse de SearXNG (seul hôte local que la recherche peut joindre) et la clé de Brave : depuis cette machine seulement
+                if not self._configurateur_strict():
+                    return self._envoyer(403, {"erreur": _t("Régler la recherche web (adresse de SearXNG, clé de Brave) se fait depuis cette machine, pas depuis un autre appareil.")})
+                try:
+                    vue = _recherche.enregistrer(donnees.get("searxng") if "searxng" in donnees else None, donnees.get("brave_cle") if "brave_cle" in donnees else None)
+                except ValueError as e:
+                    return self._envoyer(400, {"erreur": str(e)})
+                return self._envoyer(200, dict(vue, moteurs=_m.etat_moteurs_recherche(), modifiable=True))
+            if self.path == "/api/web-recherche-test":                 # interroge chaque moteur séparément et dit lequel marche
+                return self._envoyer(200, {"resultats": _m.tester_moteurs_recherche()})
             if self.path.startswith("/api/machines-"):
                 if not self._configurateur():
                     return self._envoyer(403, {"erreur": _t("Ajouter une machine, ou prêter le moteur de celle-ci, se fait depuis cette machine (ou par un administrateur déclaré).")})

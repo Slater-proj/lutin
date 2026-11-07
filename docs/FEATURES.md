@@ -115,7 +115,7 @@ The model has a `creer_document` tool: depending on the extension (`.pdf`, `.doc
 
 ## Reading web pages, and pages Lutin cannot read
 
-With the **Web** option ticked, the model can search and read web pages. Lutin reads the HTML the server sends; it **cannot run JavaScript**, so a page built in the browser (Reddit, many web apps) looks empty. In that case Lutin now reads what the server announces without JavaScript (title, description, structured data), tells the model plainly what is missing, and suggests that you **copy-paste the text** or **save the page (Ctrl+S, or print to PDF) and attach it with the paperclip**: an attachment is read in full. Sites that refuse automated reads (Reddit does) are not worked around.
+With the **Web** option ticked, the model can search (SearXNG, Brave, DuckDuckGo, Bing: see [WEB_SEARCH.md](WEB_SEARCH.md), with period, site and news filters) and read web pages and PDFs. Lutin reads the HTML the server sends; it **cannot run JavaScript**, so a page built in the browser (Reddit, many web apps) looks empty. In that case Lutin now reads what the server announces without JavaScript (title, description, structured data), tells the model plainly what is missing, and suggests that you **copy-paste the text** or **save the page (Ctrl+S, or print to PDF) and attach it with the paperclip**: an attachment is read in full. Sites that refuse automated reads (Reddit does) are not worked around.
 
 ## Page preview
 

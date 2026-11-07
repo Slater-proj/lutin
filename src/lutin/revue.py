@@ -332,9 +332,9 @@ def _appeler_outil(nom, args, ctx):
     if nom == "memoriser":
         return _m.noter(args.get("note", ""))
     if nom == "web_chercher":
-        return _m.outil_web_chercher(args.get("requete", ""), args.get("nombre"), ctx, args.get("lire"))
+        return _m.outil_web_chercher(args.get("requete", ""), args.get("nombre"), ctx, args.get("lire"), args.get("periode"), args.get("site"), bool(args.get("actualites")))
     if nom == "web_lire":
-        return _m.outil_web_lire(args.get("url", ""), args.get("debut"), ctx)
+        return _m.outil_web_lire(args.get("url", ""), args.get("debut"), ctx, bool(args.get("liens")))
     if nom == "taches":
         return _m.outil_taches(args.get("liste", []), ctx)
     if nom == "apercu_page":

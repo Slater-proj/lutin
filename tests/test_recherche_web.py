@@ -68,10 +68,11 @@ class Relais(unittest.TestCase):
         res = [{"titre": "T", "url": "https://exemple.org/", "extrait": "E"}]
         self.moteurs(duckduckgo=lambda q: [], bing=lambda q: res)
         r, raisons = web.chercher_resultats("une requête", 5, maintenant=lambda: 1000)
-        self.assertEqual((r, self.appels), (res, ["duckduckgo", "bing"]))
+        self.assertEqual(([{k: x[k] for k in ("titre", "url", "extrait")} for x in r], self.appels), (res, ["duckduckgo", "bing"]))
+        self.assertEqual([x["source"] for x in r], ["bing"], "chaque résultat dit quel moteur l'a donné")
         self.appels.clear()
         r, _ = web.chercher_resultats("une autre requête", 5, maintenant=lambda: 1100)
-        self.assertEqual((r, self.appels), (res, ["bing"]), "DuckDuckGo est en pause : on ne l'interroge plus")
+        self.assertEqual((len(r), self.appels), (1, ["bing"]), "DuckDuckGo est en pause : on ne l'interroge plus")
         self.appels.clear()
         web.chercher_resultats("une autre requête", 5, maintenant=lambda: 1200)
         self.assertEqual(self.appels, [], "la même recherche vient du cache")

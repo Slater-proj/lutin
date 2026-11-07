@@ -1,0 +1,18 @@
+# SearXNG, a search engine you run at home, for Lutin's web search / un moteur de recherche chez soi pour la recherche web de Lutin.
+#
+#   SEARXNG_SECRET=$(openssl rand -hex 32) docker compose -f docker-compose.searxng.yml up -d
+#
+# Then in Lutin: Settings > Web search > SearXNG address: http://127.0.0.1:8080 (or http://searxng:8080 if Lutin runs in the same Docker network).
+# Puis dans Lutin : Réglages > Recherche web > adresse de SearXNG : http://127.0.0.1:8080 (ou http://searxng:8080 si Lutin est dans le même réseau Docker).
+# Only reachable from this machine (127.0.0.1) / Joignable seulement depuis cette machine (127.0.0.1).
+# NOT run against the real image by the project: see docs/WEB_SEARCH.md / L'image réelle n'a pas été essayée par le projet : voir docs/WEB_SEARCH.fr.md.
+services:
+  searxng:
+    image: searxng/searxng:latest
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      SEARXNG_SECRET: ${SEARXNG_SECRET:?Set SEARXNG_SECRET (openssl rand -hex 32) / Définis SEARXNG_SECRET (openssl rand -hex 32)}
+    volumes:
+      - ./docker/searxng:/etc/searxng

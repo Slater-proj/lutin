@@ -225,5 +225,48 @@ class RechercheReglages(unittest.TestCase):
             self.assertEqual(p.erreurs, [])
 
 
+class RechercheWebReglages(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        sys.path.insert(0, str(RACINE / "tools"))
+        import captures
+        cls.captures = captures
+        try:
+            cls.chrome = captures.navigateur()
+        except SystemExit:
+            raise unittest.SkipTest("aucun navigateur (Chrome, Chromium ou Edge) trouvé")
+
+    def test_moteurs_searxng_cle_brave_sans_fuite(self):
+        with self.captures.serveur_demo() as (port, tmp):
+            p = cdp.Page(self.chrome, tmp / "profil-rechweb")
+            self.addCleanup(p.fermer)
+            p.aller("http://127.0.0.1:%d/#reglages" % port)
+            p.attendre("document.getElementById('p-reglages').classList.contains('vue') && document.querySelectorAll('#rechMoteurs .ligne').length >= 2")
+            moteurs = "[...document.querySelectorAll('#rechMoteurs .ligne')].map(l => l.textContent)"
+            self.assertEqual([m.split('. ')[1] for m in p.evaluer(moteurs)], ["duckduckgo", "bing"])
+            saisir = lambda ident, v: p.evaluer("(() => { document.getElementById(%s).value = %s; return true; })()" % (json.dumps(ident), json.dumps(v)))  # noqa: E731
+            # une adresse invalide est refusée avec une phrase
+            saisir("rechSearxng", "ftp://x")
+            p.evaluer("document.getElementById('bRechSearxng').click(); true")
+            p.attendre("document.getElementById('rechMsg').textContent.includes('invalide')")
+            # une adresse valide passe en tête, avec son étoile
+            saisir("rechSearxng", "127.0.0.1:8080/")
+            p.evaluer("document.getElementById('bRechSearxng').click(); true")
+            p.attendre("document.querySelectorAll('#rechMoteurs .ligne').length === 3")
+            self.assertEqual(p.evaluer(moteurs)[0], "1. searxng ★")
+            self.assertEqual(p.evaluer("document.getElementById('rechSearxng').value"), "http://127.0.0.1:8080", "l'adresse est normalisée")
+            # la clé Brave : enregistrée, champ vidé, seule la fin est montrée, retirable
+            saisir("rechBrave", "cle-ui-123456789")
+            p.evaluer("document.getElementById('bRechBrave').click(); true")
+            p.attendre("document.getElementById('rechBraveEtat').textContent.includes('6789')")
+            self.assertEqual(p.evaluer("document.getElementById('rechBrave').value"), "", "le champ est vidé après l'envoi")
+            self.assertNotIn("cle-ui-123456789", p.evaluer("document.getElementById('p-reglages').innerText"))
+            self.assertNotIn("cle-ui-123456789", p.evaluer("document.documentElement.outerHTML"), "la clé n'est nulle part dans la page")
+            self.assertEqual(p.evaluer(moteurs)[1], "2. brave ★")
+            p.evaluer("document.getElementById('bRechBraveRetirer').click(); true")
+            p.attendre("document.getElementById('rechBraveEtat').textContent.includes('Pas de clé')")
+            self.assertEqual(p.erreurs, [])
+
+
 if __name__ == "__main__":
     unittest.main()

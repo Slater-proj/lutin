@@ -12,7 +12,7 @@ The network contacts Lutin can make, and when:
 | `raw.githubusercontent.com` (model catalogue) | at start, once a day at most, and when you click « Look for new models » | an anonymous request | same |
 | `registry.ollama.ai` (model fingerprints) | with the model update check | an anonymous request naming the models you have installed | same |
 | `ollama.com` (model download) | only when **you** install a model (done by Ollama) | what Ollama sends | strict offline mode refuses it |
-| DuckDuckGo and the web pages you ask for | only if the « Web » box is ticked, when the model searches or reads a page | the search words, or the page address | untick « Web », or strict offline mode |
+| Your SearXNG (if you set one up; it queries other engines for you), Brave Search (only if you gave a key), DuckDuckGo, Bing, and the web pages you ask for (see [WEB_SEARCH.md](WEB_SEARCH.md)) | only if the « Web » box is ticked, when the model searches or reads a page | the search words, or the page address | untick « Web », or strict offline mode |
 | Telegram, your mail server, X (only if **you** enable the matching addon) | while the addon is on | what the addon sends: the replies written for the messages you receive or the posts you approve, and the credentials needed to sign in (stored apart, never logged) | leave the addon off (they all are by default), or strict offline mode |
 | GitHub and PyPI | only while running the install scripts or `lutin update` | an anonymous request | do not run them |
 

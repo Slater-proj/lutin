@@ -2,6 +2,16 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## Recherche web complète
+
+- **Plusieurs moteurs, dans l'ordre** : **SearXNG** (chez soi), **Brave Search** (clé personnelle), puis DuckDuckGo et Bing sans rien configurer ; le premier qui répond l'emporte, un moteur muet est laissé tranquille 10 minutes. Réglages > Recherche web : moteurs dans l'ordre, adresse de SearXNG, clé Brave (jamais renvoyée à la page), bouton **Tester la recherche** qui interroge chaque moteur séparément. `docker-compose.searxng.yml` + `docs/WEB_SEARCH.fr.md`.
+- **Options pour le modèle** : `periode` (jour, semaine, mois, an), `site`, `actualites` ; résultats **nettoyés** (suivi et ancres retirés, doublons supprimés, deux résultats au plus par site) avec leur **date** et le moteur utilisé ; consigne de requête courte, de reformulation et de recoupement.
+- **Lecture de pages** : **PDF** (jusqu'à 15 Mo), liste des **liens** d'une page (`liens`), menus et pieds de page ignorés quand il y a un vrai contenu, **cache de 10 minutes** (la suite d'une page longue ne la retélécharge pas), une reprise après une erreur passagère (502/503/504, délai), jeu de caractères annoncé par la page.
+- **Sécurité** : l'adresse de SearXNG est la **seule adresse locale** que la recherche peut joindre (jamais pour lire une page), et ne se règle que depuis cette machine ; la clé Brave est dans un fichier privé. Deux défauts trouvés par les tests et corrigés (adresse `ftp://` et adresses avec espaces acceptées).
+- **À savoir** : testé avec de faux SearXNG et Brave ; **l'image réelle de SearXNG et l'API réelle de Brave n'ont pas été lancées**.
+
+**English.** Several engines in order: SearXNG (at home), Brave Search (personal key), then DuckDuckGo and Bing; Settings > Web search with a per-engine test button; `docker-compose.searxng.yml`; model options period/site/news; cleaned results with dates and engine; PDF reading, page links, 10-minute page cache, retry, charset; SearXNG's address is the only local address search may reach, settable from this machine only. Tested with fake SearXNG/Brave; the real image and API were not run.
+
 ## Compléments (après la 0.24.0)
 
 - **Mises à jour vérifiées** : `lutin update` télécharge la roue, calcule son SHA-256 et la compare au `SHA256SUMS.txt` de la publication avant d'installer ; somme fausse, fichier absent de la liste ou roue énorme = refus, et pip installe le fichier vérifié lui-même. **Essayé pour de vrai** sur les publications v0.24.0 et v0.21.0. Limite : les sommes sont sur le même hébergeur que la roue (corruption, fichier échangé : oui ; publication compromise : non).

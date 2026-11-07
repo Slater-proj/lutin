@@ -208,7 +208,7 @@ class Parcours(unittest.TestCase):
             # les réglages sont rangés en groupes repliables
             p.evaluer(onglet("reglages"))
             groupes = p.evaluer("[...document.querySelectorAll('#p-reglages details.groupe > summary')].map(s => s.textContent.trim())")
-            self.assertEqual(groupes, ["Général", "Dossiers et données", "Moteur", "Conversation", "Machine et réglages avancés"])
+            self.assertEqual(groupes, ["Général", "Recherche web", "Dossiers et données", "Moteur", "Conversation", "Machine et réglages avancés"])
             self.assertEqual(p.evaluer("document.querySelectorAll('#p-reglages > .cadre > h2').length"), 0, "plus de section isolée hors d'un groupe")
             p.evaluer("document.querySelector('#p-reglages details.groupe[data-g=general] > summary').click()")
             p.attendre("localStorage.getItem('lutin.groupe.general') === '0'")                       # l'évènement « toggle » arrive juste après le clic
