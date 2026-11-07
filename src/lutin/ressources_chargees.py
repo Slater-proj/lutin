@@ -23,7 +23,7 @@ from .i18n import t as _t
 RE_MODELE = re.compile(r"^[A-Za-z0-9_./:@+-]{1,200}$")
 CONNUS = {"ollama": "Ollama", "ollama app": "Ollama", "ollama_llama_server": "Ollama (modèle)", "llama-server": "llama.cpp", "llama-swap": "llama-swap", "vllm": "vLLM", "lm studio": "LM Studio",
           "lmstudio": "LM Studio", "python": "Python (ComfyUI, scripts…)", "pythonw": "Python (ComfyUI, scripts…)", "python3": "Python (ComfyUI, scripts…)", "comfyui": "ComfyUI"}
-MEMO = {"t": 0.0, "v": []}
+MEMO = {"t": 0.0, "v": [], "gpu_t": 0.0, "gpu": {}}
 GO = 1024 ** 3
 
 
@@ -150,6 +150,74 @@ def programmes_gourmands(nombre=8):
     return MEMO["v"]
 
 
+# --------------------------------------------------------------------------- où est le modèle : carte graphique ou mémoire vive
+
+def analyser_gpu_processus(texte):
+    """Sortie de `nvidia-smi --query-compute-apps=pid,process_name,used_memory --format=csv,noheader,nounits` -> {pid: (nom, octets ou None)}. Sous Windows le pilote répond souvent « [N/A] » : octets = None."""
+    sortie = {}
+    for ligne in texte.splitlines():
+        champs = [c.strip() for c in ligne.split(",")]
+        if len(champs) < 3 or not champs[0].isdigit():
+            continue
+        try:
+            octets = int(float(champs[-1])) * 1024 ** 2
+        except ValueError:
+            octets = None
+        sortie[int(champs[0])] = (Path(",".join(champs[1:-1])).name, octets)
+    return sortie
+
+
+def gpu_par_processus(lanceur=subprocess.run):
+    """{pid: (nom, octets de mémoire vidéo ou None)} d'après nvidia-smi (gardé 4 s). {} sans carte NVIDIA."""
+    if time.monotonic() - MEMO["gpu_t"] < 4:
+        return MEMO["gpu"]
+    import shutil
+    exe = shutil.which("nvidia-smi")
+    valeur = {}
+    if exe:
+        try:
+            r = lanceur([exe, "--query-compute-apps=pid,process_name,used_memory", "--format=csv,noheader,nounits"], capture_output=True, timeout=6)
+            valeur = analyser_gpu_processus(r.stdout.decode("utf-8", "replace"))
+        except (OSError, subprocess.SubprocessError):
+            valeur = {}
+    MEMO.update(gpu_t=time.monotonic(), gpu=valeur)
+    return valeur
+
+
+def analyser_journal_llamacpp(texte):
+    """Ce que llama-server a écrit au chargement -> {couches_gpu, couches, gpu, cpu} (octets) ; None si le journal ne dit rien. Exemple : « offloaded 33/33 layers to GPU », « CUDA0 model buffer size = 4403.49 MiB »."""
+    couches = re.findall(r"offloaded (\d+)/(\d+) layers to GPU", texte)
+    tampons = re.findall(r"([A-Za-z_]+\d*) model buffer size\s*=\s*([\d.]+) MiB", texte)
+    if not couches and not tampons:
+        return None
+    gpu = sum(float(v) for n, v in tampons if not n.upper().startswith("CPU"))
+    cpu = sum(float(v) for n, v in tampons if n.upper().startswith("CPU"))
+    return {"couches_gpu": int(couches[-1][0]) if couches else None, "couches": int(couches[-1][1]) if couches else None, "gpu": int(gpu * 1024 ** 2), "cpu": int(cpu * 1024 ** 2)}
+
+
+def placement_llamacpp(mo):
+    """Où le modèle de llama.cpp est réellement : sur la carte ou sur le processeur, d'après le journal du serveur. Et la variante du programme installé (cuda, vulkan, cpu)."""
+    try:
+        journal = (mo.dossier() / "serveur.log").read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        journal = ""
+    return analyser_journal_llamacpp(journal), (mo.config().get("variante_installee") or "")
+
+
+def conseil_variante(mo, variante):
+    """Si le programme installé n'utilise pas une carte graphique alors que la machine en a une : le dire (la cause la plus fréquente d'un modèle « en RAM »)."""
+    try:
+        from . import config
+        from . import moteur_llamacpp as ml
+        profil = (moteurs.CONTEXTE.get("profil_attendu") or moteurs.CONTEXTE["profil"])()
+        voulue = ml.variante_auto(profil, config.systeme())
+    except Exception:  # noqa: BLE001
+        return ""
+    if variante in ("", "cpu") and voulue in ("cuda", "vulkan"):
+        return _t("Ce llama.cpp est la version processeur : le modèle tourne sur la mémoire vive, plus lentement. Réglages > Moteurs > llama.cpp > Réinstaller prend la version pour ta carte graphique.")
+    return ""
+
+
 # --------------------------------------------------------------------------- ce qui est chargé
 
 def charges_ollama():
@@ -180,8 +248,24 @@ def charges_llamacpp():
         return []
     ram = memoire_processus(p.pid)
     routeur = nom == ml.ROUTEUR
-    return [{"id": "llamacpp", "genre": "llamacpp", "moteur": "llama.cpp", "nom": _t("routeur ({} modèles disponibles)").format(len(noms)) if routeur else nom, "vram": None, "ram": ram, "taille": ram or 0,
-             "detail": _t("le serveur garde les modèles demandés ; arrêté, il redémarre tout seul au prochain message") if routeur else _t("redémarre tout seul au prochain message"), "dechargeable": True}]
+    place, variante = placement_llamacpp(mo)
+    vram = (gpu_par_processus().get(p.pid) or (None, None))[1]          # mesure du pilote quand il la donne, sinon ce que le serveur a annoncé en chargeant
+    if vram is None and place and place["gpu"]:
+        vram = place["gpu"]
+    detail = _t("le serveur garde les modèles demandés ; arrêté, il redémarre tout seul au prochain message") if routeur else _t("redémarre tout seul au prochain message")
+    if place and place["couches"]:
+        detail = _t("{} couches sur {} sont sur la carte graphique").format(place["couches_gpu"], place["couches"]) + " · " + detail
+    return [{"id": "llamacpp", "genre": "llamacpp", "moteur": "llama.cpp", "nom": _t("routeur ({} modèles disponibles)").format(len(noms)) if routeur else nom, "vram": vram, "ram": ram, "taille": (ram or 0) + (vram or 0),
+             "detail": detail, "avertissement": conseil_variante(mo, variante), "dechargeable": True}]
+
+
+def _comfy_lance_par_lutin():
+    try:
+        from . import addons_comfyui
+        p = addons_comfyui.PROCESSUS.get("popen")
+        return p is not None and p.poll() is None
+    except Exception:  # noqa: BLE001
+        return False
 
 
 def charges_comfy():
@@ -199,7 +283,7 @@ def charges_comfy():
     except (urllib.error.URLError, OSError, ValueError):
         travail = 0
     return [{"id": "comfyui", "genre": "comfyui", "moteur": "ComfyUI", "nom": "ComfyUI", "vram": reserve, "ram": None, "taille": reserve or 0,
-             "detail": _t("génère {} image(s) : attends la fin avant de décharger").format(travail) if travail else _t("modèles d'images gardés en mémoire vidéo (cache)"), "dechargeable": not travail}]
+             "detail": _t("génère {} image(s) : attends la fin avant de décharger").format(travail) if travail else _t("modèles d'images gardés en mémoire vidéo (cache)"), "dechargeable": not travail, "fermable": _comfy_lance_par_lutin() and not travail}]
 
 
 def etat():
@@ -230,6 +314,12 @@ def decharger(ident):
             raise ValueError(_t("llama.cpp n'est pas disponible."))
         mo.arreter()
         return {"ok": True, "message": _t("Le serveur llama.cpp est arrêté : la mémoire est libre (il redémarre tout seul au prochain message).")}
+    if ident == "comfyui:close":
+        if not _comfy_lance_par_lutin():
+            raise ValueError(_t("Ce ComfyUI n'a pas été lancé par Lutin : ferme-le toi-même."))
+        from . import addons_comfyui
+        addons_comfyui.arreter_comfyui()
+        return {"ok": True, "message": _t("ComfyUI est fermé : sa mémoire est libre (Lutin le relance quand il en a besoin).")}
     if ident == "comfyui":
         try:
             _json(adresse_comfy() + "/free", {"unload_models": True, "free_memory": True}, 10)

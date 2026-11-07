@@ -398,10 +398,11 @@ def mesurer_disques():
 def mesures_systeme():
     """Toutes les mesures brutes d'un coup (séparées de leur interprétation, pour pouvoir tester celle-ci). Les mesures lentes (carte graphique, ComfyUI, disques) se font en parallèle et
     sont gardées quelques secondes (sante.memo) ; la taille du dossier de données se refait en arrière-plan."""
-    with ThreadPoolExecutor(max_workers=3) as pool:
+    with ThreadPoolExecutor(max_workers=4) as pool:
         vram, comfy, disques = pool.submit(memo, "vram", memoire_video), pool.submit(memo, "comfy", etat_comfy), pool.submit(memo, "disques", mesurer_disques)
-        ram, octets = memoire_vive(), taille_dossier(DONNEES)
-        return {"ram": ram, "vram": vram.result(), "comfy": comfy.result(), "disques": disques.result(), "donnees_octets": octets}
+        taille = pool.submit(taille_dossier, DONNEES)          # la toute première mesure d'un gros dossier (ou d'un partage réseau) peut prendre des secondes : en parallèle des autres
+        ram = memoire_vive()
+        return {"ram": ram, "vram": vram.result(), "comfy": comfy.result(), "disques": disques.result(), "donnees_octets": taille.result()}
 
 
 from .revue import (  # noqa: F401  (déplacé dans revue.py : moteur ré-exporte ses noms)

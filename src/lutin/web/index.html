@@ -2242,57 +2242,14 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     const z = $('santeCorps');
     z.textContent = '';
     z.appendChild(el('h2', '', T('Santé du PC')));
-    z.appendChild(el('div', 'aide', T('Mesure en cours…')));
-    let s; try { s = await api('/api/sante-systeme'); } catch (e) { z.textContent = e.message; return; }
-    z.textContent = '';
-    z.appendChild(el('h2', '', T('Santé du PC')));
-    $('bSante').dataset.niveau = s.niveau;
-    s.items.forEach(i => {
-      const c = el('div', 'carte'); const t = el('div', 'nom');
-      t.appendChild(el('b', '', POINT[i.niveau] + ' ' + i.nom)); t.appendChild(el('div', '', i.valeur));
-      if (i.conseil) t.appendChild(el('div', 'aide', i.conseil));
-      c.appendChild(t); z.appendChild(c);
-    });
-    z.appendChild(el('div', 'aide', T('Les seuils d\'alerte se règlent dans Réglages > « Garde-fous ressources ». Les mesures de mémoire vidéo demandent nvidia-smi (installé avec le pilote NVIDIA).')));
-    // Ce qui est chargé en mémoire en ce moment : mis à jour toutes les 4 secondes tant que la page Santé est ouverte, avec un bouton pour décharger ce que Lutin sait décharger
-    const ressources = el('div'); ressources.style.marginTop = '14px'; z.appendChild(ressources);
+    // La page s'affiche tout de suite avec la mémoire (mesure rapide) ; les disques, ComfyUI et le reste arrivent ensuite, sans rien bloquer
+    const cartes = el('div'), autres = el('div');
+    autres.appendChild(el('div', 'aide', T('Mesure des disques et du reste…')));
+    z.append(cartes, autres);
     const fmt = o => (o == null ? '?' : (o / 1073741824).toFixed(1).replace('.', ',') + ' ' + T('Go'));
-    const jauge = (nom, utilise, total) => { const l = el('div', 'ligne'); const pr = el('progress'); pr.max = total; pr.value = utilise; pr.style.cssText = 'flex:1;min-width:120px'; l.append(el('span', '', nom + ' : '), pr, el('span', 'aide', ' ' + fmt(utilise) + ' / ' + fmt(total))); return l; };
-    let enCoursDeChargement = false;
-    const majRessources = async () => {
-      if (enCoursDeChargement || document.hidden || !$('p-sante').classList.contains('vue')) return;
-      enCoursDeChargement = true;
-      try {
-        const r = await api('/api/ressources'); const neuf = document.createElement('div');
-        neuf.appendChild(el('h2', '', T('Ce qui est chargé en mémoire')));
-        if (r.ram) neuf.appendChild(jauge(T('Mémoire vive'), r.ram.total - r.ram.libre, r.ram.total));
-        if (r.vram) neuf.appendChild(jauge(T('Mémoire vidéo') + ' (' + r.vram.nom + ')', r.vram.utilise, r.vram.total));
-        if (!r.charges.length) neuf.appendChild(el('div', 'aide', T('Aucun modèle ni outil de Lutin n\'est chargé en ce moment.')));
-        r.charges.forEach(c => {
-          const carte = el('div', 'carte'), col = el('div', 'nom');
-          col.appendChild(el('b', '', c.moteur + ' · ' + c.nom));
-          const mem = [c.vram != null ? T('mémoire vidéo ') + fmt(c.vram) : '', c.ram != null ? T('mémoire vive ') + fmt(c.ram) : ''].filter(Boolean).join(' · ');
-          if (mem) col.appendChild(el('div', '', mem));
-          if (c.detail) col.appendChild(el('div', 'aide', c.detail));
-          carte.appendChild(col);
-          const bd = el('button', '', T('Décharger')); bd.disabled = !c.dechargeable;
-          bd.addEventListener('click', async () => { bd.disabled = true; try { const x = await api('/api/decharger', { id: c.id }); sortie.textContent = x.message; } catch (e) { sortie.textContent = e.message; } enCoursDeChargement = false; majRessources(); });
-          carte.appendChild(bd); neuf.appendChild(carte);
-        });
-        if (r.programmes.length) {
-          const det = el('details'); det.open = !!ressources.querySelector('details[open]'); det.appendChild(el('summary', '', T('Programmes qui prennent le plus de mémoire vive')));
-          r.programmes.forEach(g => det.appendChild(el('div', 'point', (g.ia ? '🧠 ' : '') + g.libelle + (g.nombre > 1 ? ' ×' + g.nombre : '') + ' · ' + fmt(g.octets))));
-          det.appendChild(el('div', 'aide', T('Lutin ne ferme pas les programmes des autres : ferme-les toi-même si besoin.')));
-          neuf.appendChild(det);
-        }
-        ressources.replaceChildren(...neuf.childNodes);
-      } catch (e) { ressources.textContent = e.message; }
-      enCoursDeChargement = false;
-    };
-    majRessources();
-    clearInterval(window.MINUTEUR_RESSOURCES); window.MINUTEUR_RESSOURCES = setInterval(majRessources, 4000);
-    const barre = el('div', 'ligne'), maj = el('button', '', T('↻ Actualiser')), vram = el('button', '', T('🧹 Libérer la VRAM')), test = el('button', 'principal', T('✔ Vérifier que tout marche')), complet = el('button', '', T('Test complet (fait répondre le modèle)'));
     const sortie = el('div'); sortie.style.marginTop = '10px';
+    const niveaux = {}; let derniere = null, enCours = false;
+    const barre = el('div', 'ligne'), maj = el('button', '', T('↻ Actualiser')), vram = el('button', '', T('🧹 Libérer la VRAM')), test = el('button', 'principal', T('✔ Vérifier que tout marche')), complet = el('button', '', T('Test complet (fait répondre le modèle)'));
     maj.addEventListener('click', ouvrirSante); vram.addEventListener('click', async () => { vram.disabled = true; try { sortie.textContent = (await api('/api/liberer-vram', {})).message; } catch (e) { sortie.textContent = e.message; } vram.disabled = false; });
     const lancer = async profond => {
       test.disabled = complet.disabled = true; sortie.textContent = ''; sortie.appendChild(el('div', 'aide', profond ? T('Test complet en cours (le modèle peut devoir se charger : jusqu\'à une minute)…') : T('Vérifications en cours…')));
@@ -2305,7 +2262,85 @@ body[data-moteur="openai"] .biblio { display:none !important; }
       test.disabled = complet.disabled = false;
     };
     test.addEventListener('click', () => lancer(false)); complet.addEventListener('click', () => lancer(true));
-    barre.append(maj, vram, test, complet); z.appendChild(barre); z.appendChild(sortie);
+    barre.append(maj, vram, test, complet); cartes.after(barre, sortie);
+    const ligneMemoire = (titre, detail, octets, boutons, alerte) => {
+      const c = el('div', 'carte'), col = el('div', 'nom');
+      col.appendChild(el('b', '', titre));
+      if (detail) col.appendChild(el('div', 'aide', detail));
+      if (alerte) { const a = el('div', 'aide', '⚠ ' + alerte); a.style.color = '#c77700'; col.appendChild(a); }
+      c.appendChild(col); c.appendChild(el('span', '', fmt(octets)));
+      (boutons || []).forEach(b => c.appendChild(b));
+      c.style.marginLeft = '14px'; return c;
+    };
+    const boutonDecharger = (c, libelle, ident) => {
+      const b = el('button', '', libelle || T('Décharger')); b.disabled = !c.dechargeable && !ident;
+      b.addEventListener('click', async () => {
+        b.disabled = true;
+        try { const x = await api('/api/decharger', { id: ident || c.id }); sortie.textContent = x.message; } catch (e) { sortie.textContent = e.message; }
+        enCours = false; majRessources();
+      });
+      return b;
+    };
+    const emplacement = c => {
+      if (c.genre !== 'ollama') return c.detail || '';
+      const total = (c.vram || 0) + (c.ram || 0), pc = total ? Math.round(100 * (c.vram || 0) / total) : 0;
+      return pc >= 99 ? '🟩 ' + T('entièrement sur la carte graphique') : pc <= 1 ? '🟧 ' + T('entièrement sur le processeur (mémoire vive) : lent') : '🟨 ' + pc + ' % ' + T('sur la carte graphique, le reste sur le processeur');
+    };
+    const carteMemoire = (id, titre, utilise, total, lignes) => {
+      const c = el('div', 'carte'); c.style.display = 'block';
+      const n = niveaux[id];
+      c.appendChild(el('b', '', (n ? POINT[n.niveau] + ' ' : '') + titre));
+      const l = el('div', 'ligne'), pr = el('progress'); pr.max = total || 1; pr.value = utilise || 0; pr.style.cssText = 'flex:1;min-width:140px;height:16px';
+      l.append(pr, el('span', '', ' ' + fmt(utilise) + ' / ' + fmt(total) + ' ' + T('utilisés')));
+      c.appendChild(l);
+      if (n && n.conseil) c.appendChild(el('div', 'aide', n.conseil));
+      if (!lignes.length) c.appendChild(el('div', 'aide', T('Aucun modèle ni outil de Lutin n\'occupe cette mémoire en ce moment.')));
+      lignes.forEach(x => c.appendChild(x));
+      return c;
+    };
+    const dessiner = r => {
+      const neuf = document.createElement('div');
+      const lignesRam = [], lignesVram = [];
+      let connuVram = 0;
+      r.charges.forEach(c => {
+        const nom = c.moteur + ' · ' + c.nom, texte = c.genre === 'comfyui' ? c.detail : emplacement(c);
+        if (c.ram > 52428800) lignesRam.push(ligneMemoire(nom, texte, c.ram, [boutonDecharger(c)], c.avertissement));
+        if (c.vram > 52428800) {
+          connuVram += c.vram;
+          const bs = [boutonDecharger(c)]; if (c.fermable) bs.push(boutonDecharger(c, T('Fermer ComfyUI'), 'comfyui:close'));
+          lignesVram.push(ligneMemoire(nom, texte, c.vram, bs, c.avertissement));
+        } else if (c.genre === 'llamacpp') {
+          lignesVram.push(ligneMemoire(nom, T('rien sur la carte graphique : tout est sur le processeur'), 0, [], c.avertissement));
+        }
+      });
+      const connus = new Set(['ollama', 'ollama app', 'ollama_llama_server', 'llama-server']);
+      r.programmes.filter(g => !connus.has(g.nom.toLowerCase())).slice(0, 5).forEach(g => lignesRam.push(ligneMemoire((g.ia ? '🧠 ' : '') + g.libelle + (g.nombre > 1 ? ' ×' + g.nombre : ''), '', g.octets)));
+      if (r.vram && r.vram.utilise - connuVram > 314572800) lignesVram.push(ligneMemoire(T('Autres programmes (affichage, navigateur, jeux…)'), '', r.vram.utilise - connuVram));
+      if (r.ram) neuf.appendChild(carteMemoire('ram', T('Mémoire vive (RAM)'), r.ram.total - r.ram.libre, r.ram.total, lignesRam));
+      if (r.vram) neuf.appendChild(carteMemoire('vram', T('Mémoire vidéo') + ' (' + r.vram.nom + ')', r.vram.utilise, r.vram.total, lignesVram));
+      neuf.appendChild(el('div', 'aide', T('Lutin ne ferme pas les programmes des autres : ferme-les toi-même si besoin. La liste se met à jour toute seule.')));
+      cartes.replaceChildren(...neuf.childNodes);
+    };
+    const majRessources = async () => {
+      if (enCours || document.hidden || !$('p-sante').classList.contains('vue')) return;
+      enCours = true;
+      try { derniere = await api('/api/ressources'); dessiner(derniere); } catch (e) { cartes.textContent = e.message; }
+      enCours = false;
+    };
+    majRessources();
+    clearInterval(window.MINUTEUR_RESSOURCES); window.MINUTEUR_RESSOURCES = setInterval(majRessources, 4000);
+    let s; try { s = await api('/api/sante-systeme'); } catch (e) { autres.textContent = e.message; return; }
+    $('bSante').dataset.niveau = s.niveau;
+    s.items.forEach(i => { if (i.id === 'ram' || i.id === 'vram') niveaux[i.id] = i; });
+    if (derniere) dessiner(derniere);
+    autres.textContent = '';
+    s.items.filter(i => i.id !== 'ram' && i.id !== 'vram').forEach(i => {
+      const c = el('div', 'carte'); const t = el('div', 'nom');
+      t.appendChild(el('b', '', POINT[i.niveau] + ' ' + i.nom)); t.appendChild(el('div', '', i.valeur));
+      if (i.conseil) t.appendChild(el('div', 'aide', i.conseil));
+      c.appendChild(t); autres.appendChild(c);
+    });
+    autres.appendChild(el('div', 'aide', T('Les seuils d\'alerte se règlent dans Réglages > « Garde-fous ressources ». Les mesures de mémoire vidéo demandent nvidia-smi (installé avec le pilote NVIDIA).')));
   };
   window.ouvrirSante = ouvrirSante;          // appelée par le clic sur l'onglet Santé
   majVoyantSante(); setInterval(majVoyantSante, 45000);

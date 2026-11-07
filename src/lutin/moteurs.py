@@ -140,6 +140,10 @@ class FluxInterruptible:
             self.flux = self.ouvrir()
             if self.fini:
                 self.abandonner()
+                try:
+                    self.flux.__exit__(None, None, None)          # libère ce que le moteur compte (réponses en cours)
+                except Exception:  # noqa: BLE001
+                    pass
                 return
             with self.flux:
                 for e in self.flux:

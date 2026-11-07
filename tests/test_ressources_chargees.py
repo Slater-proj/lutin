@@ -206,3 +206,27 @@ class Page(Base):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestOuEstLeModele(unittest.TestCase):
+    """Carte graphique ou mémoire vive ? Le journal de llama-server et nvidia-smi le disent."""
+
+    def test_journal_llamacpp_sur_la_carte(self):
+        j = "load_tensors: offloaded 33/33 layers to GPU\nload_tensors:        CUDA0 model buffer size =  4403.49 MiB\nload_tensors:   CPU_Mapped model buffer size =   281.81 MiB\n"
+        r = rc.analyser_journal_llamacpp(j)
+        self.assertEqual((r["couches_gpu"], r["couches"]), (33, 33))
+        self.assertEqual(r["gpu"], int(4403.49 * 1024 ** 2))
+        self.assertEqual(r["cpu"], int(281.81 * 1024 ** 2))
+
+    def test_journal_llamacpp_sur_le_processeur(self):
+        r = rc.analyser_journal_llamacpp("load_tensors: offloaded 0/33 layers to GPU\nload_tensors:   CPU_Mapped model buffer size =  4685.30 MiB\n")
+        self.assertEqual(r["couches_gpu"], 0)
+        self.assertEqual(r["gpu"], 0)
+
+    def test_journal_vide(self):
+        self.assertIsNone(rc.analyser_journal_llamacpp("rien d'utile"))
+
+    def test_nvidia_smi_par_processus(self):
+        r = rc.analyser_gpu_processus("1234, C:\llama\llama-server.exe, 4500\n99, python.exe, [N/A]\n")
+        self.assertEqual(r[1234], ("llama-server.exe", 4500 * 1024 ** 2))
+        self.assertEqual(r[99], ("python.exe", None))

@@ -2,6 +2,13 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## 0.19.1
+
+- **llama.cpp ne coupe plus une réponse en cours.** Avec llama.cpp (un seul modèle à la fois), la mise à jour de la fiche de suivi ou une autre demande avec une fenêtre de contexte différente redémarrait le serveur en pleine réponse : la conversation restait « en attente » et le banc affichait « 'NoneType' object has no attribute 'poll' ». Le serveur n'est plus jamais redémarré sous une réponse en cours (la demande suivante attend la fin), un contexte plus petit ne provoque plus de redémarrage, et le démarrage dit clairement si le serveur a été remplacé.
+- **Page Santé plus claire et immédiate.** Elle s'affiche tout de suite avec les cartes « Mémoire vive » et « Mémoire vidéo » (jauge, ce qui les occupe, bouton Décharger) ; les disques arrivent ensuite sans bloquer. Chaque modèle dit s'il est sur la carte graphique ou sur le processeur (pour llama.cpp : les couches sur la carte lues dans son journal, et la mesure de nvidia-smi quand elle existe). Si le llama.cpp installé est la version processeur alors que la machine a une carte, la page le dit et indique quoi faire. ComfyUI peut être déchargé, ou fermé quand c'est Lutin qui l'a lancé.
+
+**English.** llama.cpp no longer cuts a running answer (the server is never restarted under one; a smaller context does not restart it). Health page shows at once, with RAM and video-memory cards listing what uses them, where each model sits (graphics card or processor), and unload buttons (ComfyUI can also be closed when Lutin started it).
+
 ## 0.19.0
 
 - **Santé : ce qui est chargé en mémoire, avec un bouton pour le décharger.** La page Santé montre la mémoire vive et la mémoire vidéo utilisées (mises à jour toutes les 4 secondes tant que la page est ouverte), puis chaque chose chargée : les modèles d'Ollama (taille, part sur la carte graphique, heure d'expiration), le serveur llama.cpp de Lutin (ou le routeur), le cache de ComfyUI. **Décharger** libère le modèle d'Ollama, arrête le serveur llama.cpp (il redémarre tout seul au prochain message) ou demande à ComfyUI de libérer ses modèles (désactivé pendant qu'il génère). En dessous, les programmes qui prennent le plus de mémoire vive, à titre d'information : Lutin ne ferme pas les programmes des autres.

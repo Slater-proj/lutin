@@ -34,7 +34,7 @@ DEMARRAGE_MAX_S = 180
 RE_REPO = re.compile(r"^[A-Za-z0-9][\w.-]*/[A-Za-z0-9][\w.-]*$")
 RE_FICHIER = re.compile(r"^[\w][\w./+-]*\.gguf$", re.I)
 RE_MORCEAU = re.compile(r"-\d{5}-of-\d{5}\.gguf$", re.I)          # modèle coupé en plusieurs fichiers : pas géré
-SERVEUR = {"proc": None, "modele": "", "ctx": 0, "noms": (), "verrou": threading.RLock()}
+SERVEUR = {"proc": None, "modele": "", "ctx": 0, "noms": (), "verrou": threading.RLock(), "actifs": 0}          # actifs : réponses en cours (on ne redémarre jamais le serveur sous elles)
 API_VERSION = "https://api.github.com/repos/ggml-org/llama.cpp/releases/tags/"
 RE_VERSION = re.compile(r"^b\d{1,7}$")
 RE_NOM_PRESET = re.compile(r"^[^\[\]\r\n=#;]{1,200}$")
@@ -380,6 +380,31 @@ def trouver_serveur_dans(dossier):
 
 # --------------------------------------------------------------------------- le moteur
 
+class _FluxCompte:
+    """Le flux d'une réponse, qui prévient quand il est fini (fermé) : tant qu'une réponse est en cours, le serveur n'est pas redémarré."""
+
+    def __init__(self, flux, fini):
+        self.flux, self.fini_cb, self.compte = flux, fini, True
+
+    def __enter__(self):
+        self.flux.__enter__()
+        return self
+
+    def __iter__(self):
+        return iter(self.flux)
+
+    def __exit__(self, *a):
+        try:
+            return self.flux.__exit__(*a)
+        finally:
+            if self.compte:
+                self.compte = False
+                self.fini_cb()
+
+    def __getattr__(self, nom):
+        return getattr(self.flux, nom)
+
+
 class MoteurLlamaCpp(MoteurOpenAI):
     id = moteurs.LLAMACPP
     nom = "llama.cpp"
@@ -576,35 +601,74 @@ class MoteurLlamaCpp(MoteurOpenAI):
                 "installation": ("adapte", _t("Lutin télécharge le programme officiel adapté à la machine."))}
 
     def _assurer(self, corps):
-        """Géré : le serveur tourne avec le modèle voulu et la fenêtre de contexte voulue (il est démarré ou redémarré au besoin)."""
+        """Géré : le serveur tourne avec le modèle voulu et la fenêtre de contexte voulue (il est démarré ou redémarré au besoin, jamais sous une réponse en cours).
+        Compte cette demande comme active ; l'appelant DOIT appeler `_fini()` ensuite. Rend False pour un moteur externe (rien à compter)."""
         if self.externe():
-            return
+            return False
         modele = corps.get("model", "")
         ctx = int((corps.get("options") or {}).get("num_ctx") or CTX_DEFAUT)
-        self.demarrer(modele, ctx)
+        with SERVEUR["verrou"]:
+            SERVEUR["actifs"] += 1
+        try:
+            self.demarrer(modele, ctx, propres=1)
+        except BaseException:
+            self._fini()
+            raise
+        return True
+
+    @staticmethod
+    def _fini():
+        with SERVEUR["verrou"]:
+            SERVEUR["actifs"] = max(0, SERVEUR["actifs"] - 1)
 
     def chat(self, corps, delai=60):
-        self._assurer(corps)
-        return super().chat(corps, delai)
+        compte = self._assurer(corps)
+        try:
+            return super().chat(corps, delai)
+        finally:
+            if compte:
+                self._fini()
 
     def chat_flux(self, corps, delai=900):
-        self._assurer(corps)
-        return super().chat_flux(corps, delai)
+        compte = self._assurer(corps)
+        try:
+            flux = super().chat_flux(corps, delai)
+        except BaseException:
+            if compte:
+                self._fini()
+            raise
+        return _FluxCompte(flux, self._fini) if compte else flux
 
     # -- le serveur géré
-    def demarrer(self, modele, ctx=CTX_DEFAUT, attente=DEMARRAGE_MAX_S):
+    def _besoin_redemarrage(self, modele, ctx, routeur):
+        """Vrai si le serveur qui tourne ne convient pas à cette demande. Un contexte plus PETIT que l'actuel convient : on ne redémarre jamais pour rétrécir."""
+        p = SERVEUR["proc"]
+        if p is None or p.poll() is not None:
+            return False          # rien à interrompre
+        if routeur:
+            return not (SERVEUR["modele"] == ROUTEUR and modele in SERVEUR["noms"] and ctx - SERVEUR["ctx"] < 1024)
+        return not (SERVEUR["modele"] == modele and ctx - SERVEUR["ctx"] < 1024)
+
+    def _attendre_reponses(self, modele, ctx, routeur, propres, maxi=900):
+        """Un autre modèle ou un contexte plus grand demande un redémarrage : on attend que les réponses en cours finissent (sinon elles seraient coupées en plein milieu)."""
+        fin = time.time() + maxi
+        while time.time() < fin:
+            with SERVEUR["verrou"]:
+                if SERVEUR["actifs"] - propres <= 0 or not self._besoin_redemarrage(modele, ctx, routeur):
+                    return
+            time.sleep(0.3)
+
+    def demarrer(self, modele, ctx=CTX_DEFAUT, attente=DEMARRAGE_MAX_S, propres=0):
         exe = self.serveur_pret()
         if exe is None:
             raise ErreurMoteur(_t("llama.cpp n'est pas installé : Réglages > Moteur > Installer."))
         fichier = self._fichier_modele(modele)
         routeur = self.routeur_actif()
+        self._attendre_reponses(modele, ctx, routeur, propres)
         with SERVEUR["verrou"]:
             p = SERVEUR["proc"]
-            if p is not None and p.poll() is None:
-                if routeur and SERVEUR["modele"] == ROUTEUR and modele in SERVEUR["noms"] and ctx - SERVEUR["ctx"] < 1024:
-                    return          # le routeur connaît déjà ce modèle : il le charge (et décharge un autre) tout seul, sans redémarrer
-                if not routeur and SERVEUR["modele"] == modele and abs(SERVEUR["ctx"] - ctx) < 1024:
-                    return
+            if p is not None and p.poll() is None and not self._besoin_redemarrage(modele, ctx, routeur):
+                return          # le serveur (ou le routeur, qui charge et décharge tout seul) convient déjà
             self.arreter()
             port = int(self.config().get("port") or PORT_DEFAUT)
             variante = (self.config().get("variante_installee") or "cpu")
@@ -646,9 +710,12 @@ class MoteurLlamaCpp(MoteurOpenAI):
             finally:
                 sortie.close()          # le processus garde sa propre copie du fichier journal
             SERVEUR.update({"modele": ROUTEUR if routeur else modele, "ctx": ctx})
+        lance = SERVEUR["proc"]
         fin = time.time() + attente
         while time.time() < fin:
-            if SERVEUR["proc"].poll() is not None:
+            if lance is None or SERVEUR["proc"] is not lance:
+                raise ErreurMoteur(_t("Le serveur llama.cpp a été arrêté ou remplacé pendant son démarrage : relance la demande."))
+            if lance.poll() is not None:
                 fin = self._fin_du_journal()
                 raise ErreurMoteur(_t("llama-server s'est arrêté au démarrage : {}").format(fin) + aide_bibliotheque(fin))
             if self._pret():

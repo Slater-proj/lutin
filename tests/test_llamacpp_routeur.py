@@ -195,3 +195,34 @@ class VersionEpinglee(Base):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SansCouperUneReponse(Base):
+    """Le serveur n'est JAMAIS redémarré sous une réponse en cours (la mise à jour de la fiche de suivi, avec un autre contexte, coupait la conversation)."""
+
+    def corps(self, ctx):
+        return {"model": "un", "messages": MESSAGE, "options": {"num_ctx": ctx}}
+
+    def test_un_contexte_plus_petit_ne_redemarre_pas(self):
+        self.m._assurer(self.corps(8192)); self.m._fini()
+        self.m._assurer(self.corps(2048)); self.m._fini()
+        self.assertEqual(len(self.lancements()), 1, "un contexte plus petit que celui du serveur convient : pas de redémarrage")
+
+    def test_un_contexte_plus_grand_attend_la_fin_de_la_reponse_en_cours(self):
+        import threading
+        import time
+        self.m._assurer(self.corps(4096))          # une réponse est en cours (jamais finie ici)
+        fini = []
+
+        def autre():
+            self.m._assurer(self.corps(16384))
+            fini.append(time.time())
+            self.m._fini()
+        t = threading.Thread(target=autre, daemon=True)
+        t.start()
+        time.sleep(1.5)
+        self.assertEqual(len(self.lancements()), 1, "le serveur n'est pas redémarré sous la réponse en cours")
+        self.assertFalse(fini)
+        self.m._fini()          # la première réponse se termine
+        t.join(30)
+        self.assertEqual(len(self.lancements()), 2, "puis il redémarre avec le grand contexte")

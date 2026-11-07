@@ -82,13 +82,13 @@ class Parcours(unittest.TestCase):
             p.attendre("document.getElementById('p-chat').classList.contains('vue')")
             self.assertFalse(p.evaluer("document.getElementById('p-reglages').classList.contains('vue')"))
 
-    def test_la_page_sante_montre_ce_qui_est_charge_en_memoire(self):
-        """La page Santé liste la mémoire utilisée, ce qui est chargé (avec un bouton Décharger quand Lutin sait le faire) et les programmes les plus gourmands, sans erreur même sans Ollama."""
+    def test_la_page_sante_montre_la_memoire_et_ce_qui_l_occupe(self):
+        """La page Santé affiche tout de suite les cartes « Mémoire vive » et « Mémoire vidéo » avec leur jauge (puis ce qui les occupe, avec un bouton Décharger), sans erreur même sans Ollama ; les disques arrivent ensuite."""
         with self.captures.serveur_demo() as (port, tmp):
             p = self.ouvrir(tmp, "http://127.0.0.1:%d/" % port)
             p.evaluer("document.querySelector('.onglets button[data-p=sante]').click(); true")
-            p.attendre("[...document.querySelectorAll('#santeCorps h2')].some(h => h.textContent.includes('chargé en mémoire'))")
-            p.attendre("document.querySelectorAll('#santeCorps progress').length > 0 || document.querySelector('#santeCorps details summary')")
+            p.attendre("document.querySelectorAll('#santeCorps progress').length > 0")
+            p.attendre("[...document.querySelectorAll('#santeCorps b')].some(b => b.textContent.includes('Disque') || b.textContent.includes('Dossier de données'))")
             self.assertEqual(p.evaluer("document.querySelectorAll('#santeCorps .erreur').length"), 0)
 
     def test_reprise_dit_ce_qui_ne_va_pas_puis_ce_qu_elle_a_fait(self):
