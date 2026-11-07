@@ -6,6 +6,7 @@ import os
 import stat
 import tempfile
 import threading
+import time
 import unittest
 import urllib.parse
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -365,6 +366,60 @@ class LecturePages(Base):
                 A.outil_web_lire(URL_PG + "/long", 0, {"web": True})
         finally:
             horsligne.garde = vrai
+
+
+class Legerete(Base):
+    """Fluide et léger : un seul moteur par recherche, mémoire bornée, aperçus qui ne téléchargent que le début des pages."""
+
+    def test_un_seul_moteur_est_interroge_quand_le_premier_repond(self):
+        appels = []
+        ok = [{"titre": "T", "url": "https://exemple.org/%d" % i, "extrait": ""} for i in range(3)]
+        vrai = web.moteurs_de_recherche
+        web.moteurs_de_recherche = lambda: [(n, (lambda q, n=n: appels.append(n) or ok)) for n in ("searxng", "brave", "duckduckgo", "bing")]
+        try:
+            web.chercher_resultats("une requête", 5, options={})
+            web.chercher_resultats("une requête", 5, options={})          # la même : le cache répond
+        finally:
+            web.moteurs_de_recherche = vrai
+        self.assertEqual(appels, ["searxng"], "un moteur, une fois : pas quatre en même temps")
+
+    def test_le_cache_de_pages_reste_borne_en_nombre_et_en_poids(self):
+        vrai = web.web_telecharger
+        web.web_telecharger = lambda url, donnees=None, **_: (url, "text/plain", "x" * 1_400_000)
+        try:
+            for i in range(20):
+                web.page_en_cache("https://exemple.org/%d" % i, maintenant=lambda i=i: 1000 + i)
+            poids = sum(len(v[1][2]) for v in web.CACHE_PAGES.values())
+            self.assertLessEqual(len(web.CACHE_PAGES), web.CACHE_PAGES_MAX)
+            self.assertLessEqual(poids, web.CACHE_PAGES_OCTETS)
+            self.assertIn("https://exemple.org/19", web.CACHE_PAGES, "le plus récent est gardé")
+            self.assertNotIn("https://exemple.org/0", web.CACHE_PAGES, "le plus ancien est parti")
+            web.CACHE_PAGES.clear()
+            web.web_telecharger = lambda url, donnees=None, **_: (url, "text/plain", "x" * 3_000_000)
+            web.page_en_cache("https://exemple.org/enorme")
+            self.assertEqual(len(web.CACHE_PAGES), 0, "une page énorme n'entre pas dans le cache")
+        finally:
+            web.web_telecharger = vrai
+
+    def test_un_apercu_ne_telecharge_que_le_debut_de_la_page(self):
+        vues = []
+        vrai = web.web_telecharger
+        web.web_telecharger = lambda url, donnees=None, **kw: (vues.append(kw), (url, "text/html", "<p>" + "un texte assez long pour faire un extrait lisible " * 5 + "</p>"))[1]
+        try:
+            self.assertTrue(web.extrait_page("https://exemple.org/x"))
+        finally:
+            web.web_telecharger = vrai
+        self.assertEqual(vues, [{"max_octets": web.EXTRAIT_OCTETS}])
+        self.assertLessEqual(web.EXTRAIT_OCTETS, 300_000)
+
+    def test_aucun_fil_de_fond_n_est_ajoute(self):
+        avant = threading.active_count()
+        recherche.enregistrer(URL_SX)
+        for _ in range(3):
+            recherche.resultats_searxng("x")
+        recherche.enregistrer("", "")
+        time.sleep(0.2)
+        self.assertLessEqual(threading.active_count(), avant, "la recherche ne laisse aucun fil derrière elle")
 
 
 class Test(Base):

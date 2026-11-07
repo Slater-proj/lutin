@@ -19,6 +19,14 @@ Engines are tried **in this order**; the first one that returns results wins, th
 
 An engine that returns nothing is left alone for 10 minutes; the same search is answered from a 10-minute cache. Results are **cleaned**: tracking parameters (`utm_…`, `fbclid`…) and anchors removed, duplicates dropped, at most two results per site (unless you ask for one site).
 
+## What it costs (light on purpose)
+
+- **One engine per search**: the engines above are a *fallback order*, not four searches at once. If the first answers, nothing else is asked; if it is silent, the next one is tried **after** it, never alongside.
+- Besides the engine's answer, Lutin reads the **start** of the first pages (3 by default, `lire=0` to skip): at most **250 KB** each, in parallel, with a 12-second budget.
+- **Memory is bounded**: the page cache keeps at most 8 pages and 6 MB (oldest out first); a huge page is not cached.
+- **No background process, no new dependency, no polling**: nothing runs between two searches. Only the **Test the search** button queries every engine at once, and only when you click it.
+- Cleaning the results takes well under a millisecond.
+
 ## What the model can ask
 
 `web_chercher`: `requete` (short keywords), `nombre` (up to 10), `lire` (how many first pages to read at once), **`periode`** (`jour`, `semaine`, `mois`, `an`), **`site`** (e.g. `docs.python.org`), **`actualites`** (news). The language follows the interface. Each answer ends with the engine used, and results carry their **date** when the engine gives one, so the model can cite its sources.

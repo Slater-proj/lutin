@@ -240,13 +240,14 @@ def adresse_resultat(href):
 
 LIRE_AUTO = 3                       # nombre de premiers résultats dont on lit un extrait tout de suite
 EXTRAIT_CARACTERES = 700
+EXTRAIT_OCTETS = 250_000            # un aperçu n'a besoin que du début de la page : on ne télécharge ni ne décortique le reste (plus rapide, moins de mémoire)
 DELAI_EXTRAITS = 12.0               # secondes pour l'ensemble des lectures
 
 
 def extrait_page(url):
     """Le début lisible d'une page (sans menus ni lignes courtes), ou '' si elle ne se lit pas. Sert à ce que le modèle puisse RÉPONDRE d'après le contenu, pas seulement lister des adresses."""
     try:
-        _, type_, brut = web_telecharger(url)
+        _, type_, brut = web_telecharger(url, max_octets=EXTRAIT_OCTETS)
     except _m.ErreurOutil:
         return ""
     if "html" in type_ or brut.lstrip()[:15].lower().startswith(("<!doctype", "<html")):
@@ -468,7 +469,8 @@ def _i18n_langue():
 
 CACHE_PAGES = {}          # adresse -> (instant, (adresse finale, type, contenu)) : lire la suite d'une page longue ne la télécharge pas de nouveau
 DUREE_CACHE_PAGES_S = 600
-CACHE_PAGES_MAX = 16
+CACHE_PAGES_MAX = 8
+CACHE_PAGES_OCTETS = 6_000_000          # le cache entier reste sous ce poids (le plus ancien part d'abord) ; une page plus grosse que le tiers n'y entre pas
 VERROU_PAGES = threading.Lock()
 
 
@@ -510,10 +512,13 @@ def page_en_cache(url, maintenant=time.time):
         res = web_telecharger(url)
         if res[1] == "application/pdf":          # un PDF sans « .pdf » dans l'adresse : on le sait à son type, on le relit en octets
             res = lire_pdf(url)
-    with VERROU_PAGES:
-        if len(CACHE_PAGES) >= CACHE_PAGES_MAX:
-            CACHE_PAGES.pop(min(CACHE_PAGES, key=lambda k: CACHE_PAGES[k][0]), None)
-        CACHE_PAGES[url] = (maintenant(), res)
+    poids = len(res[2])
+    if poids <= CACHE_PAGES_OCTETS // 3:
+        with VERROU_PAGES:
+            CACHE_PAGES.pop(url, None)
+            while CACHE_PAGES and (len(CACHE_PAGES) >= CACHE_PAGES_MAX or sum(len(v[1][2]) for v in CACHE_PAGES.values()) + poids > CACHE_PAGES_OCTETS):
+                CACHE_PAGES.pop(min(CACHE_PAGES, key=lambda k: CACHE_PAGES[k][0]))
+            CACHE_PAGES[url] = (maintenant(), res)
     return res
 
 

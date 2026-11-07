@@ -1447,12 +1447,12 @@ class Assistant(unittest.TestCase):
     def test_extrait_de_page_ignore_les_menus_et_borne_la_longueur(self):
         vrai = _web.web_telecharger
         page = "<html><body><nav>Accueil</nav><p>Menu</p><p>" + "Un vrai paragraphe d'information sur l'actualité du jour. " * 40 + "</p></body></html>"
-        _web.web_telecharger = lambda url, donnees=None: (url, "text/html", page)
+        _web.web_telecharger = lambda url, donnees=None, **_: (url, "text/html", page)
         try:
             e = _web.extrait_page("https://exemple.org/x")
             self.assertTrue(e.startswith("Un vrai paragraphe"), e[:40])
             self.assertLessEqual(len(e), _web.EXTRAIT_CARACTERES)
-            _web.web_telecharger = lambda url, donnees=None: (url, "image/png", "x")
+            _web.web_telecharger = lambda url, donnees=None, **_: (url, "image/png", "x")
             self.assertEqual(_web.extrait_page("https://exemple.org/y"), "")
             self.assertEqual(_web.extraits_en_parallele([], lambda u: "x"), {})
             self.assertEqual(_web.extraits_en_parallele(["a", "b"], lambda u: "texte " + u), {0: "texte a", 1: "texte b"})
