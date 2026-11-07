@@ -13,7 +13,7 @@ import statistics
 import time
 from pathlib import Path
 
-from . import moteurs
+from . import estimation, moteurs
 from .i18n import t as _t
 
 VERSION = 1
@@ -54,7 +54,7 @@ def une_passe(moteur, modele, ctx, horloge=time.monotonic):
         return _compter(flux, horloge)
 
 
-def mesurer(moteur, modele, mode="rapide", ctx=4096, horloge=time.monotonic, memoire=None):
+def mesurer(moteur, modele, mode="rapide", ctx=4096, horloge=time.monotonic, memoire=None, estime_go=None):
     """Mesure UN moteur avec UN modèle. Ne lève jamais : une panne est notée dans `erreurs` et `ok` vaut faux. `memoire()` rend {ram, vram} (octets) après les passes, ou None."""
     r = {"id": moteur.id, "nom": moteur.nom, "version": str(moteur.statut().get("version") or ""), "ok": False, "passes": 0, "erreurs": [], "charge_s": None, "premier_jeton_s": None,
          "tok_s": None, "lecture_tok_s": None, "ram": None, "vram": None}
@@ -91,6 +91,9 @@ def mesurer(moteur, modele, mode="rapide", ctx=4096, horloge=time.monotonic, mem
         m = None
     if m:
         r["ram"], r["vram"] = m.get("ram"), m.get("vram")
+        if estime_go and (m.get("ram") or m.get("vram")):
+            mesure = ((m.get("ram") or 0) + (m.get("vram") or 0)) / 1024 ** 3
+            r["estimation"] = {"estime_go": estime_go, "mesure_go": round(mesure, 1), "ecart_pct": estimation.ecart(estime_go, mesure)}          # l'estimation d'avant chargement, comparée à ce qui est réellement pris
     r["ok"] = bool(vitesses) and not r["erreurs"]
     return r
 
@@ -172,12 +175,20 @@ def comparer(modele, mode="rapide", profil=None, ctx=4096, progression=None, hor
     pret = [mo for mo, raison in dispo if not raison]
     r = {"version": VERSION, "date": date or time.strftime("%Y-%m-%dT%H:%M:%S"), "modele": modele, "mode": mode, "machine": profil.resume() if profil else "", "ctx": ctx,
          "ignores": [{"id": mo.id, "nom": mo.nom, "raison": raison} for mo, raison in dispo if raison], "moteurs": []}
+    estime_go = None
+    try:          # ce que l'estimation d'avant chargement annonçait pour ce modèle (comparé ensuite à la mesure)
+        from . import moteur as _mo
+        fiche = next((x for x in _mo._CATALOGUE["modeles"] if x["id"] == modele), None)
+        if fiche and profil:
+            estime_go = estimation.estimer(fiche, ctx, profil)["total_go"]
+    except Exception:  # noqa: BLE001  (un plus)
+        estime_go = None
     for i, mo in enumerate(pret):
         if progression:
             progression(_t("Mesure de {}").format(mo.nom), i, len(pret))
         if len(pret) > 1:
             liberer_autres([x.id for x in pret if x.id != mo.id], modele)
-        r["moteurs"].append(mesurer(mo, modele, mode, ctx, horloge, lambda mo=mo: memoire(mo.id, modele)))
+        r["moteurs"].append(mesurer(mo, modele, mode, ctx, horloge, lambda mo=mo: memoire(mo.id, modele), estime_go=estime_go))
     r["empreinte"] = empreinte(profil, {m["id"]: m["version"] for m in r["moteurs"]}) if profil else ""
     r["recommandation"] = recommander(profil, banc=r)
     return r

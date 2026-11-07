@@ -12,6 +12,23 @@ Chaque moteur n'accepte pas tout. Lutin **ne propose jamais** un modèle que le 
 
 Chaque ligne indique le **format** (GGUF), la **quantification** (celle du nom, sinon celle par défaut de la bibliothèque) et la **mémoire estimée** (poids + conversation de 8 192 jetons + marge). `lutin bench --moteur llamacpp` mesure un modèle avec un autre moteur qu'Ollama.
 
+## Estimer avant de charger
+
+Avant de charger un modèle, Lutin **estime** la mémoire qu'il prendra : le fichier du modèle, plus la mémoire de la conversation (selon la fenêtre choisie et le type de cache), plus une marge. Il dit **où** ça ira (carte graphique, mémoire vive) et classe le résultat :
+
+| Niveau | Sens |
+|---|---|
+| tient | tout tient sur la carte (ou, sans carte, dans la mémoire vive avec de la marge) |
+| partiel | une partie sur la carte, le reste en mémoire vive : utilisable, plus lent |
+| tient à peine | presque rien ne reste de libre : le PC peut ralentir |
+| ne tient pas | à ne pas charger |
+
+Un modèle qui ne tient pas, ou à peine, est signalé **avant** le chargement : dans la bannière du haut de la page, et dans la conversation (une fois par modèle et par demi-heure). L'estimation est aussi disponible à la demande (`/api/estimation?modele=…&ctx=…`). Elle propose ce qui ferait tenir le modèle : une conversation plus courte, un cache plus léger (q4_0), et pour un modèle **à experts** un préréglage processeur.
+
+- **Modèles à experts** (peu de paramètres actifs par mot), par exemple une carte de 24 Go et 32 Go de RAM : les experts restent en mémoire vive (`--n-cpu-moe` de llama.cpp, réglable dans Réglages > Moteurs > llama.cpp > Réglages avancés) et le reste tient sur la carte. Le nombre de couches est **estimé** (48 par défaut), pas lu dans le fichier : ajuste d'après la mémoire vidéo réellement prise.
+- **Mode prudent** : sur une machine modeste (moins de 8 Go utilisables, ou sans carte et moins de 16 Go de RAM), la page propose une conversation de 8 192 jetons et un seul modèle chargé à la fois. Jamais appliqué sans ton accord.
+- **Estimation contre mesure** : le banc des moteurs (`lutin bench-moteurs`) compare l'estimation à la mémoire réellement prise (`estimation.ecart_pct` dans le résultat : positif = surestimé). **Aucun écart n'est encore mesuré sur du vrai matériel** : tant que des résultats réels manquent, lis l'estimation comme un ordre de grandeur, pas une garantie.
+
 ## Comment Lutin choisit
 
 1. Il lit ta machine : carte graphique et sa mémoire, RAM, disques.

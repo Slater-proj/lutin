@@ -3,6 +3,7 @@ from http.server import BaseHTTPRequestHandler
 from . import bench as _bench
 from . import bench_moteurs as _bench_moteurs
 from . import compat_modeles as _compat
+from . import estimation as _estimation
 from . import ressources_chargees as _ressources
 from . import catalogue_moteurs as _catalogue_moteurs
 from . import moteur_llamacpp as _llamacpp
@@ -171,6 +172,28 @@ class Gestionnaire(BaseHTTPRequestHandler):
             return {}
 
     @staticmethod
+    def _estimation(modele, ctx, profil):
+        """L'estimation AVANT chargement pour un modèle du catalogue (mémoire prise, où, saturation, conseils), ou None si le modèle n'est pas au catalogue."""
+        m = next((x for x in _m._CATALOGUE["modeles"] if x["id"] == modele), None)
+        if m is None:
+            return None
+        e = _estimation.estimer(m, int(ctx), profil)
+        e["modele"] = modele
+        e["preset_experts"] = _estimation.preset_experts(m, profil, int(ctx))
+        return e
+
+    @staticmethod
+    def _avec_estimation(diagnostic, r, profil):
+        """Le modèle choisi ne tient pas (ou à peine) : le dire dans la bannière, AVANT qu'on le charge."""
+        try:
+            e = Gestionnaire._estimation(r["modele"], r["num_ctx"], profil)
+            if e and e["niveau"] in ("trop_gros", "sature") and not any(p.get("code") == "modele_trop_gros" for p in diagnostic):
+                diagnostic = list(diagnostic) + [{"code": "estimation", "niveau": "attention" if e["niveau"] == "sature" else "erreur", "texte": e["texte"] + (" " + e["conseils"][0] if e["conseils"] else ""), "action": {"type": "onglet", "nom": "modeles"}}]
+        except Exception:  # noqa: BLE001  (un plus : jamais une page cassée)
+            pass
+        return diagnostic
+
+    @staticmethod
     def _premier_lancement(o, r, profil):
         """Aucun moteur prêt ? La page désactive l'onglet Modèles avec la raison et propose le moteur conseillé (installer / choisir autre / plus tard)."""
         try:
@@ -295,7 +318,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
                                        "familles": {k: _t(v) for k, v in (_m._CATALOGUE.get("familles") or {}).items()}, "disque_modeles": _emplacements.jauge_modeles(),
                                        "version": _m.VERSION, "partages": o.get("partages", []), "ollama": o["actif"], "ollama_installe": bool(_m.chemin_ollama()) or _m.moteur_actuel().id != "ollama", "moteur_nom": _m.moteur_actuel().nom, "installes": o["installes"], "modeles": modeles, "modeles_masques": len(_m.lire_registre_modeles()["masques"]), "actives": list(_m.TOURS_ACTIFS),
                                        "pulls": _m.PULLS, "reglages": r, "conversations": _m.conv_liste(), "racine": str(_m.RACINE), "donnees": str(_m.DONNEES),
-                                       "outil": bool(self._outil_vivant()), "hors_ligne": _hl.actif(), "moteur": _m.moteur_actuel().id, "niveau": _m.SECURITE.niveau, "docker": _acces.en_docker(), "ouverture_possible": _fichiers.ouverture_possible(), "missions": _mission.par_conversation(), "langue": _i18n.langue(), "langue_reglage": _i18n.langue_configuree(), "cpus": _machine.cpus_disponibles() or 1, "diagnostic": self._diagnostic(o, r, profil, modeles), "premier_lancement": self._premier_lancement(o, r, profil), "redemarrage": {"necessaire": _acces.securite_enregistree() != _m.SECURITE, "possible": _acces.peut_redemarrer()}, "nouvelle_version": _m.nouvelle_version_lutin(), "travaux": _m.travaux_etat(), "configurateur": self._configurateur(), "addons_alertes": _addons.alertes(), "embeddings": _embeddings.etat(),
+                                       "outil": bool(self._outil_vivant()), "hors_ligne": _hl.actif(), "moteur": _m.moteur_actuel().id, "niveau": _m.SECURITE.niveau, "docker": _acces.en_docker(), "ouverture_possible": _fichiers.ouverture_possible(), "missions": _mission.par_conversation(), "langue": _i18n.langue(), "langue_reglage": _i18n.langue_configuree(), "cpus": _machine.cpus_disponibles() or 1, "diagnostic": self._avec_estimation(self._diagnostic(o, r, profil, modeles), r, profil), "prudent": _estimation.mode_prudent(profil), "premier_lancement": self._premier_lancement(o, r, profil), "redemarrage": {"necessaire": _acces.securite_enregistree() != _m.SECURITE, "possible": _acces.peut_redemarrer()}, "nouvelle_version": _m.nouvelle_version_lutin(), "travaux": _m.travaux_etat(), "configurateur": self._configurateur(), "addons_alertes": _addons.alertes(), "embeddings": _embeddings.etat(),
                                        "taches_fond": _m.taches_en_cours(), "taches_moteur": [dict(v, nom=_moteurs.MOTEURS[k].nom) for k, v in _moteurs.toutes_les_taches().items() if v.get("statut") == "en cours" and k in _moteurs.MOTEURS], "memoire": self._memoire(r, o), "calibrage": _calibrage.etat(), "bench": {"en_cours": _m.BENCH["en_cours"], "etape": _m.BENCH["etape"], "erreur": _m.BENCH["erreur"], "file": list(_m.BENCH.get("file") or []), "mesures": _bench.lire(_m.chemin_bench())}, "attentes": [{"id": a.id, "titre": a.titre, "detail": a.detail, "diff": a.diff, "conv": a.conv} for a in _m.Attente.EN_COURS.values()],
                                        "en_attente": sorted({a.conv for a in _m.Attente.EN_COURS.values() if a.conv} | set(_m.CHOIX_MEMOIRE))})
         if chemin == "/api/conseil":
@@ -453,6 +476,15 @@ class Gestionnaire(BaseHTTPRequestHandler):
             return self._envoyer(200, _m.lire_propositions())
         if chemin == "/api/bench-moteurs":                        # comparaison des moteurs : dernier résultat, recommandation et sa raison, avancement
             return self._envoyer(200, _bench_moteurs.vue(_m.DONNEES, _m.reglages()["modele"], _moteurs.CONTEXTE["profil"](), _moteurs.CONTEXTE["en_docker"]()))
+        if chemin == "/api/estimation":                          # estimer AVANT de charger : mémoire prise, où, saturation, conseils, préréglage des modèles à experts
+            q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            modele = (q.get("modele") or [""])[0] or _m.reglages()["modele"]
+            try:
+                ctx = int((q.get("ctx") or [_m.reglages()["num_ctx"]])[0])
+            except ValueError:
+                return self._envoyer(400, {"erreur": _t("Fenêtre de conversation invalide.")})
+            e = self._estimation(modele, max(512, min(ctx, 1048576)), _adequation.profil_pret())
+            return self._envoyer(200 if e else 404, e or {"erreur": _t("Ce modèle n'est pas au catalogue : pas d'estimation possible.")})
         if chemin == "/api/ressources":                           # ce qui est chargé en mémoire en ce moment (page Santé)
             return self._envoyer(200, _ressources.etat())
         if chemin == "/api/sante-systeme":

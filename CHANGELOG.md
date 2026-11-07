@@ -2,6 +2,15 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## 0.22.0
+
+- **Estimer avant de charger.** La mémoire qu'un modèle prendra (fichier + conversation + marge), où (carte, mémoire vive) et un niveau (tient / partiel / tient à peine / ne tient pas) sont annoncés AVANT le chargement : dans la bannière, dans la conversation (une fois par demi-heure) et à la demande (`/api/estimation`), avec ce qui ferait tenir le modèle (conversation plus courte, cache plus léger).
+- **Modèles à experts** : préréglage « experts sur le processeur » (`--n-cpu-moe`) calculé pour que le reste tienne sur la carte (24 Go + 32 Go de RAM). Nombre de couches estimé.
+- **Mode prudent** proposé aux machines modestes (jamais appliqué sans accord).
+- **Estimation contre mesure** : le banc des moteurs enregistre l'écart entre l'estimation et la mémoire réellement prise. Aucun écart réel mesuré pour l'instant.
+
+**English.** Estimate before loading (memory, where, level, advice), mixture-of-experts processor preset, cautious mode for modest machines, estimate-versus-measurement gap recorded by the engine bench (no real gap measured yet).
+
 ## 0.21.0
 
 - **Jamais un modèle incompatible avec le moteur choisi.** L'onglet Modèles masque ce que le moteur ne sait pas faire tourner (repli « N modèles masqués » avec la raison), l'installation d'un modèle incompatible est refusée, et chaque ligne dit le format (GGUF), la quantification et la mémoire estimée. La compatibilité vient de la grille de capacités du moteur (outils, raisonnement, images) ; un serveur externe ne montre que ses propres modèles.

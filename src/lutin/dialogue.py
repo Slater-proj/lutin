@@ -84,6 +84,21 @@ def a_une_carte_graphique():
     return profil is None or not profil.sans_gpu()
 
 
+def _estimer_avant_charge(r, emit):
+    """Avant de charger le modèle : s'il ne tient pas (ou à peine), le dire et proposer quoi faire, une fois par modèle et par demi-heure. Ne bloque rien (le garde-fou des ressources s'en charge)."""
+    try:
+        from . import adequation, estimation
+        m = next((x for x in _m._CATALOGUE["modeles"] if x["id"] == r["modele"]), None)
+        profil = adequation.profil_pret()
+        if m is None or profil is None or moteur_actuel(r).en_memoire(r["modele"]):
+            return
+        e = estimation.estimer(m, int(r["num_ctx"]), profil)
+        if e["niveau"] in ("trop_gros", "sature") and _avertir_une_fois("estimation:" + r["modele"]):
+            emit({"type": "info", "texte": "⚠ " + e["texte"] + (" " + " ".join(e["conseils"]) if e["conseils"] else "")})
+    except Exception:  # noqa: BLE001  (une estimation ratée ne doit jamais empêcher de répondre)
+        pass
+
+
 def _avertir_une_fois(modele, maintenant=time.time):
     t = maintenant()
     if t - AVERTIS_CARTE.get(modele, 0) < DELAI_AVERTISSEMENT_CARTE:
@@ -1204,6 +1219,7 @@ def tour(conv, texte, emit, r=None, stop=None, remplacer_depuis=None, identite="
         _m.conv_ecrire(conv)                             # la demande est gardée : « continue » la relancera quand le problème sera réglé
         emit({"type": "fin", "conversation": {"id": conv["id"], "titre": conv["titre"]}})
         return
+    _estimer_avant_charge(r, emit)
     r["memoire_longue"] = memoire_longue(conv, r)
     try:
         if r["memoire_longue"] == "demander":

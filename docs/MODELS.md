@@ -12,6 +12,23 @@ Not every engine accepts everything. Lutin **never offers** a model the chosen e
 
 Each line shows the **format** (GGUF), the **quantization** (from the name, otherwise the library default) and the **estimated memory** (weights + 8,192-token conversation + margin). `lutin bench --moteur llamacpp` measures a model with an engine other than Ollama.
 
+## Estimating before loading
+
+Before loading a model, Lutin **estimates** the memory it will take: the model file, plus the conversation memory (depending on the chosen window and cache type), plus a margin. It says **where** it will go (graphics card, RAM) and grades the result:
+
+| Level | Meaning |
+|---|---|
+| fits | everything fits on the card (or, without a card, in RAM with room to spare) |
+| partial | part on the card, the rest in RAM: usable, slower |
+| barely fits | almost nothing stays free: the PC may slow down |
+| does not fit | do not load |
+
+A model that does not fit, or barely, is flagged **before** loading: in the banner at the top of the page, and in the conversation (once per model per half hour). The estimate is also available on demand (`/api/estimation?modele=…&ctx=…`). It suggests what would make the model fit: a shorter conversation, a lighter cache (q4_0), and for a **mixture-of-experts** model a processor preset.
+
+- **Mixture-of-experts models** (few active parameters per word), for example a 24 GB card and 32 GB of RAM: the experts stay in RAM (llama.cpp's `--n-cpu-moe`, set in Settings > Engines > llama.cpp > Advanced settings) and the rest fits on the card. The number of layers is **estimated** (48 by default), not read from the file: adjust from the video memory actually used.
+- **Cautious mode**: on a modest machine (under 8 GB usable, or no card and under 16 GB of RAM), the page suggests an 8,192-token conversation and a single model loaded at a time. Never applied without your agreement.
+- **Estimate against measurement**: the engine bench (`lutin bench-moteurs`) compares the estimate to the memory actually used (`estimation.ecart_pct` in the result: positive = overestimated). **No gap has been measured on real hardware yet**: until real results exist, read the estimate as an order of magnitude, not a guarantee.
+
 ## How Lutin chooses
 
 1. It reads your machine: graphics card and its memory, RAM, disks.

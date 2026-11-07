@@ -95,6 +95,7 @@ Chaque jalon : étude → porte de validation → code ciblé → tests → docu
 - Estimation avant chargement et avertissement de saturation, mode prudent pour machines modestes, préréglages pour modèles à experts (carte de 24 Go + 32 Go de RAM : experts en RAM, reste sur la carte), recommandations de contexte et de cache KV.
 - **Critère** : un modèle trop gros est signalé **avant** le chargement ; l'estimation est comparée aux mesures du banc et son écart documenté.
 
+- **Fait (0.22.0)** : `estimation.py` (niveaux, où, conseils, préréglage experts, mode prudent), avertissement avant chargement, `/api/estimation`, écart estimation / mesure dans le banc. **Reste** : mesurer l'écart sur du vrai matériel et documenter les chiffres.
 ### 0.23.0 — Machines (cluster, niveau 1)
 - D7 : registre, appairage, jeton de nœud, état visible (quatre états), routage, repli local silencieux, journal ; **une machine injoignable ne produit ni erreur ni avertissement dans la conversation**, seulement un état visible dans la page Machines.
 - `CLUSTER_ARCHITECTURE.md`.

@@ -1664,5 +1664,16 @@
 "moteur à mesurer : ollama (défaut), llamacpp ou openai": "engine to measure: ollama (default), llamacpp or openai",
 "Moteur inconnu : {}.": "Unknown engine: {}.",
 "Le banc ne demande que /api/chat.": "The bench only asks for /api/chat.",
-"recommander pour ce moteur (ollama, llamacpp…) : seuls les modèles qu'il sait faire tourner sont proposés": "recommend for this engine (ollama, llamacpp…): only models it can run are offered"
+"recommander pour ce moteur (ollama, llamacpp…) : seuls les modèles qu'il sait faire tourner sont proposés": "recommend for this engine (ollama, llamacpp…): only models it can run are offered",
+"Machine pas encore détectée : je ne peux pas estimer.": "Machine not detected yet: I cannot estimate.",
+"Ne tient pas : il demande environ {} Go ({} sur la carte, {} en mémoire vive) et la mémoire vive libre est de {} Go.": "Does not fit: it needs about {} GB ({} on the card, {} in RAM) and free RAM is {} GB.",
+"Modèle à experts : laisse les experts de {} couches sur le processeur (--n-cpu-moe {}, estimation sur {} couches), le reste tient sur la carte. Réglages > Moteurs > llama.cpp > Réglages avancés.": "Mixture-of-experts model: leave the experts of {} layers on the processor (--n-cpu-moe {}, estimated over {} layers), the rest fits on the card. Settings > Engines > llama.cpp > Advanced settings.",
+"Machine modeste ({} Go utilisables) : conversation limitée à {} jetons et un seul modèle chargé à la fois ménagent la mémoire.": "Modest machine ({} GB usable): a conversation limited to {} tokens and a single model loaded at a time spare the memory.",
+"Tient à peine : il demande environ {} Go et ne laisse presque rien de libre en mémoire vive ({} Go). Le PC peut ralentir.": "Barely fits: it needs about {} GB and leaves almost no free RAM ({} GB). The PC may slow down.",
+"Baisse la fenêtre de conversation à {} jetons : le modèle tiendra mieux.": "Lower the conversation window to {} tokens: the model will fit better.",
+"Un cache de conversation plus léger (q4_0) économise environ {} Go, au prix d'une légère perte de précision.": "A lighter conversation cache (q4_0) saves about {} GB, at the price of a slight loss of precision.",
+"Tient en partie sur la carte ({} Go) ; {} Go passent en mémoire vive : utilisable mais plus lent.": "Partly fits on the card ({} GB); {} GB go to RAM: usable but slower.",
+"Tient : environ {} Go ({} Go de modèle + {} Go de conversation).": "Fits: about {} GB ({} GB of model + {} GB of conversation).",
+"Ce modèle n'est pas au catalogue : pas d'estimation possible.": "This model is not in the catalogue: no estimate possible.",
+"Fenêtre de conversation invalide.": "Invalid conversation window."
 }
