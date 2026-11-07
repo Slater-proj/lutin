@@ -4,7 +4,7 @@
 
 Deux moteurs récents sont proposés comme **préréglages externes** : Réglages > Moteurs > carte « Serveur compatible OpenAI » > « Choisir un serveur connu… ». Ils sont marqués **expérimental**, rangés en dernier dans la liste, **jamais préselectionnés, jamais recommandés** (ni par les règles de la recommandation, ni par le banc).
 
-> **Pourquoi pas une intégration gérée ?** La feuille de route ne prévoit d'installer et de démarrer Colibri depuis Lutin que si l'essai S3 (Ollama, llama.cpp et Colibri sur le même GGUF, sur une machine réelle) le justifie. **Cet essai n'a pas été fait.** Colibri reste donc un serveur que tu lances toi-même ; Lutin sait seulement lui parler.
+> **Colibri a une aide en ligne de commande, pas un bouton.** `lutin colibri installer` télécharge l'archive officielle de Colibri et **vérifie sa somme SHA-256** (le `SHA256SUMS.txt` de la publication est obligatoire), `lutin colibri demarrer --modele <dossier>` le lance sur `127.0.0.1` seulement, `lutin colibri arreter` l'arrête. **L'installation a été essayée pour de vrai** (v2.1.0 téléchargée, vérifiée, décompressée) ; **le démarrage ne l'a pas été** : il exige un modèle de plusieurs dizaines de Go préparé par Colibri, et personne ne l'a lancé avec Lutin. L'essai S3 (Ollama, llama.cpp et Colibri sur le même modèle) reste à faire, et un bouton dans la page l'attend.
 
 ## Comment s'en servir
 
@@ -19,7 +19,7 @@ Chaque moteur est **indépendant** : en régler un ne touche ni à Ollama, ni à
 - **Pour quoi faire** : très gros modèles « à experts » : experts chauds sur la carte, tièdes en mémoire vive, froids lus sur le disque. API compatible OpenAI, adresse habituelle `http://127.0.0.1:8000/v1`. Lit les GGUF après conversion.
 - **Limites** : projet de recherche ; les chiffres publiés viennent de ses auteurs et n'ont pas été refaits ici ; avec 32 Go de RAM, les très gros modèles vont sur le disque et deviennent lents ; incohérences relevées dans ses chiffres (voir [ENGINE_STUDY.fr.md](ENGINE_STUDY.fr.md)).
 - **Vérifié sur sa page publique (2026-11-07, sans l'exécuter)** : licence Apache-2.0 ; archives pour Windows, Linux (x86-64) et macOS (Apple Silicon) avec un `SHA256SUMS.txt` ; démarré par son propre script (`start-here.sh` / `START-HERE.bat`), qui affiche les adresses du navigateur et « OpenAI base URL » ; **un fichier GGUF doit d'abord être converti** (`coli import model.gguf`), il n'est pas lu tel quel ; aucune option `--version` documentée.
-- **Pourquoi Lutin ne l'installe et ne le démarre toujours pas** : cette étape de conversion et ce démarrage diffèrent de tous les autres moteurs ici, et personne ne l'a lancé avec Lutin. Une intégration gérée reposerait sur des suppositions. Elle attend l'essai S3 (voir [TRIALS.fr.md](TRIALS.fr.md)).
+- **Ce que Lutin fait pour lui** (`lutin colibri`) : installer avec une somme vérifiée, lancer `coli serve --host 127.0.0.1 --port 8000 --model <dossier>`, arrêter avec `coli stop`. Il ne prépare ni ne télécharge **aucun modèle** (utilise `coli setup` ou `coli import` de Colibri ; le dossier qu'il crée est celui qu'on donne à `--modele`), et ne l'expose jamais sur le réseau. Ces commandes viennent de la lecture du script `coli` de Colibri (v2.1.0), **pas de son exécution** ; il demande Python, que Lutin a. Ensuite, choisis-le dans la page comme décrit plus haut. Essai : [TRIALS.fr.md](TRIALS.fr.md), S3.
 
 ## Strata (Niko1221/Strata)
 

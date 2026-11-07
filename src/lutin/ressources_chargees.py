@@ -145,6 +145,8 @@ def regrouper(processus, nombre=8):
 
 def programmes_gourmands(nombre=8):
     """Gardé 5 secondes : lister les processus lance un programme sous Windows."""
+    if os.environ.get("LUTIN_DEMO"):          # captures de la documentation : des programmes fictifs
+        return [{"nom": n, "libelle": n, "nombre": k, "octets": int(go * 1024 ** 3), "ia": False} for n, k, go in (("Navigateur", 24, 3.1), ("Éditeur de code", 9, 1.8), ("Messagerie", 3, 0.9), ("Lecteur de musique", 2, 0.5))]
     if time.monotonic() - MEMO["t"] > 5:
         MEMO.update(t=time.monotonic(), v=regrouper(lister_processus(), nombre))
     return MEMO["v"]

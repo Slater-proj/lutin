@@ -62,6 +62,8 @@ Le script installe la dernière version publiée dans un environnement privé, a
   <img src="assets/capture-modeles.fr.png" alt="L'onglet Modèles : nouveautés, mesures, boutons de recherche de mises à jour" width="92%">
   <br><br>
   <img src="assets/capture-palette.fr.png" alt="La recherche Ctrl+K : conversations, onglets, modèles, réglages et actions" width="92%">
+  <br><br>
+  <img src="assets/capture-sante.fr.png" alt="L'onglet Santé : la mémoire, ce qui l'occupe, et si le modèle est sur la carte graphique ou en RAM" width="92%">
 </p>
 
 | Commande | Rôle |

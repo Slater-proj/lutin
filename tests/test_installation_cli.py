@@ -468,11 +468,14 @@ class Update(unittest.TestCase):
         faux = mock.MagicMock()
         faux.run.return_value = mock.Mock(returncode=0, stdout="Lutin 9.9.9\n")
         with mock.patch.object(config, "lire_source", return_value="github:Slater-proj/lutin"), mock.patch.object(cli, "subprocess", faux), \
-                mock.patch.object(miseajour, "derniere_release", return_value=("9.9.9", "https://github.com/Slater-proj/lutin/releases/download/v9.9.9/lutin-9.9.9-py3-none-any.whl")):
+                mock.patch.object(miseajour, "derniere_release", return_value=("9.9.9", "https://github.com/Slater-proj/lutin/releases/download/v9.9.9/lutin-9.9.9-py3-none-any.whl")),                 mock.patch.object(miseajour, "telecharger_roue_verifiee", lambda url, dossier, **k: (Path(dossier) / url.rsplit("/", 1)[-1], True)):          # jamais de vrai téléchargement dans un test
             code, sortie = self.lancer("update", "--app")
         self.assertEqual(code, 0, sortie)
         self.assertIn("→ 9.9.9", sortie)
-        self.assertEqual(faux.run.call_args_list[0].args[0][-1].rsplit("/", 1)[-1], "lutin-9.9.9-py3-none-any.whl", "pip reçoit la roue de la dernière publication")
+        self.assertIn("SHA-256", sortie)
+        recu = faux.run.call_args_list[0].args[0][-1]
+        self.assertEqual(Path(recu).name, "lutin-9.9.9-py3-none-any.whl", "pip reçoit la roue de la dernière publication")
+        self.assertFalse(recu.startswith("https://"), "pip installe le fichier vérifié, pas l'adresse")
 
     def test_source_github_deja_a_jour_ou_sans_publication(self):
         faux = mock.MagicMock()

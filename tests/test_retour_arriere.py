@@ -40,9 +40,17 @@ class Base(unittest.TestCase):
             p.start()
             self.addCleanup(p.stop)
 
+    def telecharger(self, url, dossier, **_):
+        """Aucun test ne touche au réseau : la « roue » est un petit fichier local, déclaré vérifié."""
+        self.telechargees.append(url)
+        chemin = Path(dossier) / url.rsplit("/", 1)[-1]
+        chemin.write_bytes(b"roue")
+        return chemin, True
+
     def lancer(self, source="github:Slater-proj/lutin", faux=None, **kw):
         faux = faux or Faux()
-        with mock.patch.object(cli.config, "lire_source", lambda: source), mock.patch.object(cli.subprocess, "run", faux):
+        self.telechargees = []
+        with mock.patch.object(cli.config, "lire_source", lambda: source), mock.patch.object(cli.subprocess, "run", faux),                 mock.patch.object(cli.miseajour, "telecharger_roue_verifiee", self.telecharger):
             res = cli.mise_a_jour_detaillee(dire=self.sorties.append, erreur=self.erreurs.append, **kw)
         return res, faux
 
@@ -94,7 +102,8 @@ class RetourArriere(Base):
         (code, avant, apres), faux = self.lancer(revenir_a="0.21.0", faux=Faux(version_apres="0.21.0"))
         self.assertEqual((code, avant, apres), (0, "0.22.0", "0.21.0"))
         pip = faux.commandes[0]
-        self.assertIn("https://github.com/Slater-proj/lutin/releases/download/v0.21.0/lutin-0.21.0-py3-none-any.whl", pip)
+        self.assertEqual(self.telechargees, ["https://github.com/Slater-proj/lutin/releases/download/v0.21.0/lutin-0.21.0-py3-none-any.whl"])
+        self.assertTrue(pip[-1].endswith("lutin-0.21.0-py3-none-any.whl") and not pip[-1].startswith("https://"), "pip installe le fichier vérifié, pas l'adresse")
         self.assertTrue(list((self.dossiers["cache"] / "avant-mise-a-jour").glob("*.zip")), "les données sont sauvegardées avant le retour arrière")
 
     def test_numero_invalide_refuse_sans_toucher_a_rien(self):

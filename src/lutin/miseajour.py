@@ -182,6 +182,58 @@ def derniere_release(depot=DEPOT, http=http_get):
     return version, roue
 
 
+class ErreurVerification(ValueError):
+    """La roue téléchargée n'est pas celle que la publication annonce : on ne l'installe pas."""
+
+
+TAILLE_ROUE_MAX = 60_000_000
+RE_NOM_ROUE = re.compile(r"^lutin-[0-9A-Za-z.+_-]+-py3-none-any\.whl$")
+
+
+def somme_attendue(texte, nom_fichier):
+    """La somme SHA-256 de `nom_fichier` dans un SHA256SUMS.txt (« <64 chiffres hexa>  nom », comme `sha256sum`), ou None si le fichier n'y figure pas."""
+    for ligne in str(texte).splitlines():
+        m = re.match(r"^([0-9a-fA-F]{64})\s+\*?(.+?)\s*$", ligne)
+        if m and m.group(2) == nom_fichier:
+            return m.group(1).lower()
+    return None
+
+
+def telecharger_roue_verifiee(url_roue, dossier, http=http_get, ouvrir=urllib.request.urlopen, nom_valide=RE_NOM_ROUE, exiger_sommes=False, prefixe="https://"):
+    """Télécharge la roue dans `dossier`, calcule sa somme SHA-256 pendant la lecture et la compare au SHA256SUMS.txt publié à côté. Renvoie (chemin, verifie).
+    `verifie` est faux seulement quand la publication n'a pas de SHA256SUMS.txt (anciennes versions) : l'appelant le dit. Une somme qui ne correspond pas, un fichier absent de la liste ou une roue trop grosse lèvent ErreurVerification ;
+    le réseau absent lève OSError. L'installation se fait ensuite depuis CE fichier : aucun octet non vérifié n'est installé."""
+    nom = str(url_roue).rsplit("/", 1)[-1]
+    if not str(url_roue).startswith(prefixe) or not nom_valide.match(nom):
+        raise ErreurVerification(_t("Adresse de roue inattendue : {}").format(str(url_roue)[:120]))
+    statut, _, corps = http(str(url_roue).rsplit("/", 1)[0] + "/SHA256SUMS.txt", delai=20)
+    attendue = None
+    if statut == 200:
+        attendue = somme_attendue(corps.decode("utf-8", "replace"), nom)
+        if attendue is None:
+            raise ErreurVerification(_t("{} ne figure pas dans SHA256SUMS.txt : mise à jour refusée.").format(nom))
+    elif statut != 404 or exiger_sommes:          # `exiger_sommes` : pour un programme d'un tiers, pas de somme publiée = pas de téléchargement
+        raise ErreurVerification(_t("SHA256SUMS.txt illisible (HTTP {}) : mise à jour refusée.").format(statut))
+    horsligne.garde(url_roue)
+    requete = urllib.request.Request(url_roue, headers={"User-Agent": "lutin"})
+    chemin = Path(dossier) / nom
+    h, total = hashlib.sha256(), 0
+    with ouvrir(requete, timeout=60) as r, open(chemin, "wb") as sortie:
+        while True:
+            bloc = r.read(1 << 16)
+            if not bloc:
+                break
+            total += len(bloc)
+            if total > TAILLE_ROUE_MAX:
+                raise ErreurVerification(_t("Roue anormalement grosse : mise à jour refusée."))
+            h.update(bloc)
+            sortie.write(bloc)
+    if attendue and h.hexdigest() != attendue:
+        chemin.unlink(missing_ok=True)
+        raise ErreurVerification(_t("La somme SHA-256 de {} ne correspond pas à celle de la publication : mise à jour refusée.").format(nom))
+    return chemin, bool(attendue)
+
+
 def roue_de_version(version, depot=DEPOT):
     """L'adresse de la roue d'une version publiée (retour arrière), ou ValueError si le numéro n'a pas la forme X.Y.Z (rien d'autre n'est jamais passé à pip)."""
     v = str(version or "").strip().lstrip("v")

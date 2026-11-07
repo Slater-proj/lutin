@@ -32,6 +32,8 @@ class FauxOllama(BaseHTTPRequestHandler):
         self.send_response(200); self.send_header("Content-Length", str(len(d))); self.end_headers(); self.wfile.write(d)
 
     def do_GET(self):
+        if self.path == "/api/ps":                                    # un modèle chargé en mémoire vidéo (page Santé)
+            return self._json({"models": [{"name": "qwen3:8b", "size": 5_200_000_000, "size_vram": 5_200_000_000, "expires_at": "2099-01-01T12:34:00Z"}]})
         if self.path == "/api/tags":
             return self._json({"models": [{"name": n, "digest": d, "size": 5_000_000_000} for n, d in MODELES.items()]})
         self._json({"version": "0.12.0", "models": []})
@@ -162,7 +164,7 @@ def principal(choix=None):
     ASSETS.mkdir(exist_ok=True)
     for langue, suffixe in (("en", ""), ("fr", ".fr")):
         with serveur_demo({"LUTIN_LANGUE": langue}) as (port, tmp):
-            for base, ancre in (("capture-conversation", "#conv=a1b2c3d4"), ("capture-modeles", "#modeles"), ("capture-palette", "#palette")):
+            for base, ancre in (("capture-conversation", "#conv=a1b2c3d4"), ("capture-modeles", "#modeles"), ("capture-palette", "#palette"), ("capture-sante", "#sante")):
                 nom = base + suffixe + ".png"
                 profil = tmp / ("profil-" + nom)
                 subprocess.run([chrome, "--headless=new", "--disable-gpu", "--no-sandbox", "--hide-scrollbars", "--force-device-scale-factor=1", "--user-data-dir=" + str(profil), "--window-size=1280,800",

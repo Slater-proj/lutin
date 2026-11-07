@@ -3,6 +3,7 @@ import argparse
 import os
 import subprocess
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -28,6 +29,7 @@ AIDE_GENERALE = """Lutin : un assistant IA local qui choisit les modèles adapt�
   lutin bench-moteurs comparer les moteurs (Ollama, llama.cpp) sur le même modèle
   lutin sauvegarde    exporter tes données dans un .zip ; lutin restaurer pour les remettre
   lutin doctor        diagnostic (à joindre à un rapport de problème)
+  lutin colibri       Colibri (expérimental) : installer (somme vérifiée), démarrer, arrêter
 """
 
 # Codes de sortie d'un arrêt voulu (Ctrl+C, arrêt demandé) : pas de relance automatique.
@@ -118,6 +120,11 @@ def parseur():
     hl = sp.add_parser("hors-ligne", help=_t("mode hors ligne strict (aucune connexion vers Internet)"))
     hl.add_argument("etat", nargs="?", choices=("oui", "non", "etat"), default="etat")
     sp.add_parser("doctor", help=_t("diagnostic"))
+    co = sp.add_parser("colibri", help=_t("Colibri (moteur expérimental) : installer avec somme vérifiée, démarrer, arrêter"))
+    co.add_argument("action", nargs="?", choices=("etat", "installer", "demarrer", "arreter"), default="etat")
+    co.add_argument("--modele", help=_t("dossier de modèle préparé par Colibri (pour « demarrer »)"))
+    co.add_argument("--port", type=int, default=8000, help=_t("port local (8000 par défaut)"))
+    co.add_argument("--version", dest="version_colibri", help=_t("version à installer (la dernière par défaut)"))
     da = sp.add_parser("demarrage-auto", help=_t("démarrer Lutin à l'ouverture de ta session (Windows : tâche planifiée, Linux : systemd)"))
     da.add_argument("action", nargs="?", choices=("etat", "installer", "retirer"), default="etat")
     rp = sp.add_parser("reprendre", help=_t("reprendre les données d'un autre assistant (conversations, mémoire, skills, réglages)"))
@@ -269,8 +276,22 @@ def mise_a_jour_detaillee(dire=print, erreur=None, capturer=False, revenir_a=Non
             return 0, __version__, None
         source = roue
     avant = __version__
+    verifier = source.startswith("https://github.com/") and source.endswith(".whl")          # une publication de GitHub : sa somme est vérifiée ; une source choisie à la main (chemin, autre adresse) l'est par son auteur
     sauvegarde_avant_mise_a_jour(dire)
-    if subprocess.run([sys.executable, "-m", "pip", "install", "--upgrade", "--quiet", source], capture_output=capturer).returncode != 0:
+    with tempfile.TemporaryDirectory(prefix="lutin-maj-") as dossier:
+        if verifier:
+            try:
+                chemin, verifie = miseajour.telecharger_roue_verifiee(source, dossier)
+            except miseajour.ErreurVerification as e:
+                erreur("✘ " + str(e))
+                return 1, avant, None
+            except OSError as e:
+                erreur(_t("✘ Téléchargement impossible : {}").format(e))
+                return 1, avant, None
+            source = str(chemin)
+            dire(_t("✔ Somme SHA-256 vérifiée.") if verifie else _t("⚠ Cette publication n'a pas de SHA256SUMS.txt : la roue n'a pas pu être vérifiée."))
+        code = subprocess.run([sys.executable, "-m", "pip", "install", "--upgrade", "--quiet", source], capture_output=capturer).returncode
+    if code != 0:
         erreur(_t("✘ La mise à jour de Lutin a échoué (pip). Ta version actuelle reste en place."))
         return 1, avant, None
     apres = subprocess.run([sys.executable, "-m", "lutin", "--version"], capture_output=True, text=True).stdout.strip().replace("Lutin ", "")
@@ -801,6 +822,32 @@ def commande_demarrage_auto(args):
     return 0
 
 
+def commande_colibri(args):
+    """Aide à Colibri, expérimentale : rien ne tourne sans cette commande, et le serveur n'écoute que sur 127.0.0.1."""
+    from . import colibri
+    try:
+        if args.action == "installer":
+            version, racine = colibri.installer(args.version_colibri)
+            print(_t("✔ Colibri {} installé dans {}").format(version, racine))
+            print(_t("Étape suivante : prépare un modèle avec « coli setup » ou « coli import » (voir la documentation de Colibri), puis : lutin colibri demarrer --modele <dossier>"))
+        elif args.action == "demarrer":
+            if not args.modele:
+                print("✘ " + _t("Indique le dossier de modèle : lutin colibri demarrer --modele <dossier>"), file=sys.stderr)
+                return 1
+            colibri.demarrer(args.modele, args.port)
+            print(_t("✔ Colibri répond sur http://127.0.0.1:{}/v1 : dans les réglages, choisis « Serveur compatible OpenAI » puis Colibri dans les serveurs connus.").format(args.port))
+        elif args.action == "arreter":
+            print(_t("✔ Colibri arrêté.") if colibri.arreter(args.port) else _t("Colibri n'a pas confirmé l'arrêt (déjà arrêté ?)."))
+        else:
+            trouve = colibri.installee()
+            print(_t("Colibri {} installé dans {}").format(*trouve) if trouve else _t("Colibri n'est pas installé."))
+            print(_t("Répond sur le port {} : {}").format(args.port, _t("oui") if colibri.repond(args.port) else _t("non")))
+    except (ValueError, OSError) as e:
+        print("✘ " + str(e), file=sys.stderr)
+        return 1
+    return 0
+
+
 def commande_doctor(args):
     d, cfg = contexte()
     from . import docker_aide
@@ -824,7 +871,7 @@ def principal(argv=None):
     os.environ["LUTIN_CONFIG"] = str(Path(config.dossiers()["config"]) / "config.json")          # les gardes (mode hors ligne…) lisent la configuration de cette installation
     commandes = {"setup": commande_setup, "serve": commande_serve, "update": commande_update, "chat": commande_chat, "modeles": commande_modeles, "pin": commande_pin,
                  "appareils": commande_appareils, "securite": commande_securite, "langue": commande_langue, "importer": commande_importer, "reprendre": commande_reprendre, "hors-ligne": commande_hors_ligne,
-                 "travaux": commande_travaux, "journal": commande_journal, "bench": commande_bench, "sauvegarde": commande_sauvegarde, "restaurer": commande_restaurer, "doctor": commande_doctor, "demarrage-auto": commande_demarrage_auto, "zone": commande_zone, "mcp": commande_mcp, "essai-moteur": commande_essai_moteur, "bench-moteurs": commande_bench_moteurs}
+                 "travaux": commande_travaux, "journal": commande_journal, "bench": commande_bench, "sauvegarde": commande_sauvegarde, "restaurer": commande_restaurer, "doctor": commande_doctor, "demarrage-auto": commande_demarrage_auto, "zone": commande_zone, "mcp": commande_mcp, "essai-moteur": commande_essai_moteur, "bench-moteurs": commande_bench_moteurs, "colibri": commande_colibri}
     try:
         if args.commande is None:
             return commande_serve(argparse.Namespace(sans_navigateur=False))

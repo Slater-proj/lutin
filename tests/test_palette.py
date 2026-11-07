@@ -187,5 +187,43 @@ class OutilsLisibles(unittest.TestCase):
         self.assertEqual(lignes[0][0], "📄 Reads README.md")
 
 
+class RechercheReglages(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        sys.path.insert(0, str(RACINE / "tools"))
+        import captures
+        cls.captures = captures
+        try:
+            cls.chrome = captures.navigateur()
+        except SystemExit:
+            raise unittest.SkipTest("aucun navigateur (Chrome, Chromium ou Edge) trouvé")
+
+    def test_le_filtre_garde_les_groupes_qui_correspondent_et_restaure_ensuite(self):
+        with self.captures.serveur_demo() as (port, tmp):
+            p = cdp.Page(self.chrome, tmp / "profil-rech")
+            self.addCleanup(p.fermer)
+            p.aller("http://127.0.0.1:%d/#reglages" % port)
+            p.attendre("document.getElementById('p-reglages').classList.contains('vue') && document.querySelectorAll('#p-reglages details.groupe').length >= 3")
+            etat = "[...document.querySelectorAll('#p-reglages details.groupe')].map(d => [d.hidden, d.open])"
+            total = p.evaluer("document.querySelectorAll('#p-reglages details.groupe').length")
+            # on referme tout, puis on cherche : les groupes qui correspondent sont ouverts, les autres cachés
+            p.evaluer("document.querySelectorAll('#p-reglages details.groupe').forEach(d => d.open = false); true")
+            p.evaluer("(() => { const c = document.getElementById('rechReglages'); c.value = 'LANGUE'; c.dispatchEvent(new Event('input', {bubbles: true})); return true; })()")
+            etats = p.evaluer(etat)
+            visibles = [e for e in etats if not e[0]]
+            self.assertTrue(0 < len(visibles) < total, "la recherche « langue » ne garde pas tout")
+            self.assertTrue(all(e[1] for e in visibles), "les groupes gardés sont ouverts")
+            self.assertIn("groupe", p.evaluer("document.getElementById('rechReglagesInfo').textContent"))
+            # sans résultat : tout est caché et on le dit
+            p.evaluer("(() => { const c = document.getElementById('rechReglages'); c.value = 'zzzqqq'; c.dispatchEvent(new Event('input', {bubbles: true})); return true; })()")
+            self.assertTrue(all(e[0] for e in p.evaluer(etat)))
+            self.assertIn("Aucun réglage", p.evaluer("document.getElementById('rechReglagesInfo').textContent"))
+            # champ vidé : tout est de retour, chaque groupe comme avant la recherche (tous refermés ici)
+            p.evaluer("(() => { const c = document.getElementById('rechReglages'); c.value = ''; c.dispatchEvent(new Event('input', {bubbles: true})); return true; })()")
+            self.assertEqual(p.evaluer(etat), [[False, False]] * total)
+            self.assertEqual(p.evaluer("document.getElementById('rechReglagesInfo').textContent"), "")
+            self.assertEqual(p.erreurs, [])
+
+
 if __name__ == "__main__":
     unittest.main()

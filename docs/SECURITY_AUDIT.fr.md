@@ -17,11 +17,12 @@ Une revue faite par les mainteneurs et leur assistant, des surfaces ajoutées de
 | Corps de requêtes | Plafonds (2 Mo de JSON, 8 Mo d'images, 20 Mo de documents) ; un `Content-Length` non numérique vaut « trop gros » ; le JSON doit être un objet | OK |
 | Sites tiers et « rebinding » | `Host` / `Origin` vérifiés, jeton de page exigé en lecture au niveau 1 | OK (`test_serveur_securite.py`) |
 | Fichiers de données | Un JSON abîmé ou du mauvais type retombe sur les valeurs par défaut (avant la 0.26.0, un `reglages.json` qui n'était pas un objet faisait planter chaque requête) | **Corrigé en 0.26.0** |
+| `lutin colibri` (programme d'un tiers) | Ne tourne que sur ta commande explicite ; archive téléchargée uniquement depuis les publications GitHub du projet, **SHA-256 obligatoire** (pas de sommes publiées = refus), la décompression ne peut pas sortir de son dossier (noms avec `..`, liens et fichiers spéciaux refusés), serveur lié à `127.0.0.1` | OK en test ; il **télécharge un script Python d'un tiers et l'exécute quand tu le démarres** : c'est sa nature, lis sa licence et son code si cela compte pour toi |
 | Catalogue de moteurs signé | Ed25519, deux clés, altération et champs inconnus refusés | OK |
 
 ## Limites connues (non corrigées, dites franchement)
 
-1. **Les mises à jour ne sont pas vérifiées au-delà de TLS.** `lutin update` installe la roue publiée sur GitHub ; il ne la compare pas au `SHA256SUMS.txt` publié à côté. Prévu : vérifier avant la 1.0 si cela peut être essayé sur une vraie publication.
+1. **Les mises à jour sont vérifiées (corrigé après la première version de cette page).** `lutin update` télécharge la roue, calcule sa somme SHA-256 et la compare au `SHA256SUMS.txt` publié à côté ; une somme fausse, un fichier absent de la liste ou une roue énorme refusent la mise à jour, et pip installe ensuite ce fichier vérifié. Limite : le fichier des sommes est sur le même hébergeur que la roue, donc cela attrape une corruption ou un fichier échangé, **pas une publication compromise**. Une publication sans `SHA256SUMS.txt` (les anciennes) est acceptée avec un avertissement visible. Essayé pour de vrai sur les publications v0.24.0 et v0.21.0.
 2. **HTTP en clair sur le réseau local** (niveaux 2 et 3 sans certificat de proxy, et trafic entre machines) : qui peut lire le réseau lit ce qui y passe. Hors réseau de confiance, utilise le niveau 3 derrière un proxy TLS.
 3. **Jeton de nœud et appairage** : une machine appairée peut faire tourner le moteur de celle qui le prête, dans la limite de deux demandes, jusqu'à ce que tu la révoques. Elle ne peut lire ni conversations, ni fichiers, ni réglages.
 4. **Pas d'audit indépendant**, pas de campagne de fuzzing, pas de test d'intrusion.

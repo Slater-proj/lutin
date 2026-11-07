@@ -49,6 +49,8 @@ def oublier_mesures(*cles):
 
 def memoire_vive():
     """Mémoire du PC : RAM totale et libre, et « engagement » libre (RAM + fichier d'échange : quand il est épuisé, Windows ferme des programmes). None si inconnu."""
+    if os.environ.get("LUTIN_DEMO"):          # captures de la documentation : une machine fictive
+        return {"total": 32 * 1024 ** 3, "libre": 17 * 1024 ** 3, "engagement_libre": 40 * 1024 ** 3}
     try:
         if os.name == "nt":
             class EtatMemoire(ctypes.Structure):
@@ -70,6 +72,8 @@ def memoire_vive():
 
 def memoire_video():
     """Mémoire de la carte graphique NVIDIA (via nvidia-smi). None si absente ou muette."""
+    if os.environ.get("LUTIN_DEMO"):
+        return {"nom": "NVIDIA GeForce RTX 4070", "total": 12 * 1024 ** 3, "utilise": 5600 * 1024 ** 2, "libre": 12 * 1024 ** 3 - 5600 * 1024 ** 2}
     exe = shutil.which("nvidia-smi")
     if not exe:
         return None

@@ -110,7 +110,7 @@ Each milestone: study → validation gate → targeted code → tests → FR/EN 
 - **1.0.0** only if the stability, security, portability and testing criteria are met; experimental engines are **not** required.
 
 - **Done (milestone 0.26.0, software part)**: a damaged data file no longer crashes Lutin (a real bug, found and fixed), backup before update + `lutin update --revenir-a` + `ROLLBACK.md`, security review (`SECURITY_AUDIT.md`), fresh-install walk-through test, one engine probe fewer per refresh.
-- **Left for 1.0 (cannot be done without you)**: the real-hardware trials S1–S7, a rollback trial on a real release, verifying the update wheel against `SHA256SUMS.txt` (limit 1 of `SECURITY_AUDIT.md`, to decide once it can be tried on a real release), and the default Docker image decision from the bench figures.
+- **Left for 1.0 (cannot be done without you)**: the real-hardware trials S1–S7, a rollback trial on a real release, (update wheel verification against `SHA256SUMS.txt` is now done and was checked on real releases), and the default Docker image decision from the bench figures.
 
 **Ongoing (not a version)**: measured coverage without a blocking threshold; Docker volume CI test; **optional** self-hosted GPU runner, started by hand, never on external pull requests.
 
@@ -168,7 +168,7 @@ Plain reading: **the code and automatic tests of the plan are done; validation o
 | 0.22 Estimate | Done | Estimate-vs-measure gap on real hardware |
 | 0.23 Machines | Done (two real servers in one test) | Two real computers |
 | 0.24 Power | Done | Wake, shutdown, autostart on real PCs (S6) |
-| 0.25 Experimental engines | External presets done | S3; managed Colibri integration not done, on purpose |
+| 0.25 Experimental engines | External presets done; `lutin colibri` (verified install) | S3; Colibri start-up with a real model; no page button |
 | 0.26 Stabilisation | Software side done (see above) | Rollback trial on a real release; wheel check against `SHA256SUMS.txt` (open decision) |
 
 **For 1.0**: trials S1 to S7 (§6), the Docker and small-PC decisions from the bench, the rollback trial, the decision on update verification. Experimental engines are not required.

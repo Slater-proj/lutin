@@ -62,6 +62,8 @@ The script installs the latest published version in a private environment, adds 
   <img src="assets/capture-modeles.png" alt="The Models tab: news, measurements, buttons to look for updates" width="92%">
   <br><br>
   <img src="assets/capture-palette.png" alt="The Ctrl+K search: conversations, tabs, models, settings and actions" width="92%">
+  <br><br>
+  <img src="assets/capture-sante.png" alt="The Health tab: memory, what occupies it, and whether the model sits on the graphics card or in RAM" width="92%">
 </p>
 
 | Command | Role |

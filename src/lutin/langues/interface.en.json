@@ -1198,5 +1198,10 @@
 "Lit la page": "Reads the page",
 "Retient une note": "Keeps a note",
 "Retrouve dans la mémoire": "Looks in memory for",
-"Crée un document": "Creates a document"
+"Crée un document": "Creates a document",
+"Chercher un réglage (langue, PIN, moteur, dossier, mémoire…)": "Search settings (language, PIN, engine, folder, memory…)",
+"Chercher un réglage": "Search settings",
+"groupes correspondent": "groups match",
+"groupe correspond": "group matches",
+"Aucun réglage ne correspond.": "No setting matches."
 }

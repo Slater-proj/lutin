@@ -389,6 +389,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
 .acc-carte:hover, .acc-carte:focus-visible { border-color:var(--accent2); background:var(--panel2); }
 .acc-carte b { font-weight:600; }
 .acc-carte span { color:var(--muted); font-size:.84rem; }
+.rech-reglages { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin:4px 0 10px; } .rech-reglages input { flex:1 1 280px; min-width:0; }
 /* palette de commandes (Ctrl+K) */
 #palette { position:fixed; inset:0; z-index:300; display:flex; align-items:flex-start; justify-content:center; padding-top:12vh; }
 #palette[hidden] { display:none; }
@@ -624,6 +625,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     <div style="margin:6px 0"><button id="bRevoquerTous">Déconnecter tous les appareils</button> <span class="aide" id="mAppareils"></span></div>
   </div></section>
   <section class="page" id="p-reglages"><div class="cadre">
+    <div class="rech-reglages"><input id="rechReglages" type="search" autocomplete="off" placeholder="Chercher un réglage (langue, PIN, moteur, dossier, mémoire…)" aria-label="Chercher un réglage"><span class="aide" id="rechReglagesInfo" role="status"></span></div>
     <details class="groupe" open data-g="general"><summary>Général</summary>
     <h2>Langue / Language</h2>
     <div style="margin:6px 0"><label><select id="selLangue"><option value="auto">Auto</option><option value="fr">Français</option><option value="en">English</option></select></label></div>
@@ -3871,6 +3873,25 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     z.appendChild(el('div', 'acc-astuce', T('Astuce : Ctrl+K pour tout trouver, / pour les commandes.')));
   };
   construireAccueil();
+  // ---- Recherche dans les Réglages : on ne garde que les groupes qui parlent de ce qu'on cherche, et on les ouvre
+  const filtrerReglages = () => {
+    const mots = sansAccent($('rechReglages').value).split(/\s+/).filter(Boolean);
+    const groupes = [...document.querySelectorAll('#p-reglages details.groupe')];
+    let gardes = 0, premier = null;
+    groupes.forEach(d => {
+      if (mots.length && d.dataset.ouvertAvant === undefined) d.dataset.ouvertAvant = d.open ? '1' : '0';          // on se souvient de l'état d'avant la recherche
+      const texte = sansAccent(d.textContent);
+      const ok = !mots.length || mots.every(m => texte.includes(m));
+      d.hidden = !ok;
+      if (ok) { gardes++; if (!premier) premier = d; }
+      if (mots.length) { if (ok) d.open = true; }
+      else if (d.dataset.ouvertAvant !== undefined) { d.open = d.dataset.ouvertAvant === '1'; delete d.dataset.ouvertAvant; }
+    });
+    $('rechReglagesInfo').textContent = mots.length ? (gardes ? gardes + ' ' + (gardes > 1 ? T('groupes correspondent') : T('groupe correspond')) : T('Aucun réglage ne correspond.')) : '';
+    if (mots.length && premier) premier.scrollIntoView({ block: 'nearest' });
+  };
+  $('rechReglages').addEventListener('input', filtrerReglages);
+  $('rechReglages').addEventListener('keydown', e => { if (e.key === 'Escape' && $('rechReglages').value) { $('rechReglages').value = ''; filtrerReglages(); e.stopPropagation(); } });
   // ---- Palette de commandes (Ctrl+K) : un seul endroit pour aller partout, au clavier
   const PAL = { ouverte: false, items: [], visibles: [], choix: 0, retour: null };
   const sansAccent = t => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();

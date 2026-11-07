@@ -17,11 +17,12 @@ A self-review of the surfaces added since 0.20 and of the long-standing ones. **
 | Request bodies | Size limits (2 MB JSON, 8 MB images, 20 MB documents); a non-numeric `Content-Length` counts as "too big"; JSON must be an object | OK |
 | Cross-site and rebinding | `Host` / `Origin` checked, page token required for reads at level 1 | OK (`test_serveur_securite.py`) |
 | Data files | A damaged or wrong-type JSON file falls back to defaults (before 0.26.0 a `reglages.json` that was not an object made every request crash) | **Fixed in 0.26.0** |
+| `lutin colibri` (third-party program) | Runs only on your explicit command; archive downloaded from the project's own GitHub releases only, **SHA-256 mandatory** (no sums published = refused), unpacking cannot leave its folder (names with `..`, links and special files refused), server bound to `127.0.0.1` | OK in tests; it **downloads a third party's Python script and runs it when you start it**: that is its nature, read its licence and code if you care |
 | Signed engine catalogue | Ed25519, two keys, tampering and unknown fields refused | OK |
 
 ## Known limits (not fixed, said plainly)
 
-1. **Updates are not verified beyond TLS.** `lutin update` installs the wheel published on GitHub; it does not compare it with the `SHA256SUMS.txt` published next to it. Planned: verify before 1.0 if it can be tested on a real release.
+1. **Updates are verified (fixed after the first version of this page).** `lutin update` downloads the wheel, computes its SHA-256 and compares it with the `SHA256SUMS.txt` published next to it; a wrong sum, a file missing from the list or an oversized wheel refuses the update, and pip then installs the verified file itself. Limit: the sums file sits on the same host as the wheel, so this catches corruption and a swapped file, **not a compromised release**. A release without `SHA256SUMS.txt` (old ones) is accepted with a visible warning. Checked for real against the v0.24.0 and v0.21.0 releases.
 2. **Plain HTTP on the local network** (levels 2 and 3 without a proxy certificate, and machine-to-machine traffic): anyone who can read the network can read what passes. Use level 3 behind a TLS reverse proxy outside a trusted network.
 3. **Node token and pairing**: a machine you paired can run the engine of the machine that lent it, within the two-requests limit, until you revoke it. It cannot read conversations, files or settings.
 4. **No independent audit**, no fuzzing campaign, no penetration test.

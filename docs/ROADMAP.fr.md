@@ -113,14 +113,14 @@ Chaque jalon : étude → porte de validation → code ciblé → tests → docu
 - Colibri : intégration **gérée** (archives précompilées + empreinte) **seulement si l'essai S3 la justifie** ; Strata et autres : préréglages externes. Étiquette « expérimental », jamais proposés par défaut.
 - **Critère** : chaque moteur ajouté est indépendant, testé avec un faux serveur, documenté avec ses limites.
 
-- **Fait (0.25.0)** : Colibri et Strata en préréglages externes expérimentaux (`EXPERIMENTAL_ENGINES.fr.md`). **Non fait volontairement** : l'intégration gérée de Colibri, tant que l'essai S3 n'a pas eu lieu.
+- **Fait (0.25.0)** : Colibri et Strata en préréglages externes expérimentaux (`EXPERIMENTAL_ENGINES.fr.md`). **Complété après coup** : `lutin colibri installer / demarrer / arreter` (installation vérifiée par SHA-256, essayée pour de vrai ; démarrage jamais essayé, sans modèle) ; **pas de bouton dans la page** tant que l'essai S3 n'a pas eu lieu.
 
 ### 0.26.0 — Stabilisation → 1.0.0
 - Tests de bout en bout sur les deux machines, avec et sans carte graphique, Windows, Debian, Docker, panne réseau, mise à jour, migration ; audit de sécurité ; documentation complète ; procédure de retour arrière.
 - **1.0.0** seulement si les critères de stabilité, de sécurité, de portabilité et de tests sont atteints ; les moteurs expérimentaux **ne sont pas** requis.
 
 - **Fait (jalon 0.26.0, partie logicielle)** : un fichier de données abîmé ne fait plus planter (bogue réel trouvé et corrigé), sauvegarde avant mise à jour + `lutin update --revenir-a` + `ROLLBACK.fr.md`, revue de sécurité (`SECURITY_AUDIT.fr.md`), parcours d'une installation vierge en test, une sonde de moteur en moins par rafraîchissement.
-- **Reste pour la 1.0 (ne se fait pas sans toi)** : les essais réels S1–S7 sur du matériel, un essai du retour arrière sur une vraie publication, la vérification de la roue de mise à jour contre `SHA256SUMS.txt` (limite 1 de `SECURITY_AUDIT.fr.md`, à décider quand on peut l'essayer sur une vraie publication), et la décision de l'image Docker par défaut d'après les chiffres du banc.
+- **Reste pour la 1.0 (ne se fait pas sans toi)** : les essais réels S1–S7 sur du matériel, un essai du retour arrière sur une vraie publication, (la vérification de la roue de mise à jour contre `SHA256SUMS.txt` est faite et a été essayée sur de vraies publications), et la décision de l'image Docker par défaut d'après les chiffres du banc.
 
 **En continu (pas une version)** : couverture mesurée sans seuil bloquant ; test de CI des volumes Docker ; exécuteur GPU auto-hébergé **facultatif, déclenché à la main, jamais sur les demandes de fusion externes**.
 
@@ -178,7 +178,7 @@ Lecture honnête : **le code et les tests automatiques du plan sont faits ; la v
 | 0.22 Estimation | Fait | Écart estimation / mesure sur du vrai matériel |
 | 0.23 Machines | Fait (deux vrais serveurs dans un test) | Deux vrais ordinateurs |
 | 0.24 Alimentation | Fait | Réveil, extinction, démarrage automatique sur de vrais PC (S6) |
-| 0.25 Moteurs expérimentaux | Préréglages externes faits | S3 ; l'intégration gérée de Colibri n'est pas faite, volontairement |
+| 0.25 Moteurs expérimentaux | Préréglages externes faits ; `lutin colibri` (installation vérifiée) | S3 ; démarrage de Colibri avec un vrai modèle ; pas de bouton dans la page |
 | 0.26 Stabilisation | Fait côté logiciel (voir ci-dessus) | Essai du retour arrière sur une vraie publication ; vérification de la roue contre `SHA256SUMS.txt` (décision ouverte) |
 
 **Pour la 1.0** : les essais S1 à S7 (§6), les décisions Docker et petit PC d'après le banc, l'essai du retour arrière, la décision sur la vérification des mises à jour. Les moteurs expérimentaux ne sont pas requis.

@@ -2,6 +2,14 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## Compléments (après la 0.24.0)
+
+- **Mises à jour vérifiées** : `lutin update` télécharge la roue, calcule son SHA-256 et la compare au `SHA256SUMS.txt` de la publication avant d'installer ; somme fausse, fichier absent de la liste ou roue énorme = refus, et pip installe le fichier vérifié lui-même. **Essayé pour de vrai** sur les publications v0.24.0 et v0.21.0. Limite : les sommes sont sur le même hébergeur que la roue (corruption, fichier échangé : oui ; publication compromise : non).
+- **`lutin colibri installer / demarrer / arreter`** (expérimental) : téléchargement de l'archive officielle avec SHA-256 obligatoire, décompression qui ne peut pas sortir de son dossier, serveur sur 127.0.0.1. **Installation essayée pour de vrai** (v2.1.0) ; **démarrage jamais essayé** (modèle de dizaines de Go, code d'un tiers).
+- **Recherche dans les Réglages** (filtre les groupes et ouvre ceux qui correspondent) ; **captures du README** : ajout de la page Santé (machine fictive).
+
+**English.** Verified updates (SHA-256 against the release's `SHA256SUMS.txt`, tried on real releases). `lutin colibri installer / demarrer / arreter` (experimental; install tried for real, start-up never). Settings search. Health-page screenshot with a fictitious machine.
+
 ## Ergonomie (jalon 0.27)
 
 - **Ctrl+K : tout trouver.** Une recherche sur les onglets, les conversations, les modèles installés, les groupes de réglages et les actions ; sans accents ni majuscules, au clavier (↑ ↓ Entrée Échap), accessible (rôles ARIA, focus rendu). Lien `/#palette`.

@@ -392,6 +392,9 @@ def etat_comfy():
 
 
 def mesurer_disques():
+    if os.environ.get("LUTIN_DEMO"):
+        disque = {"total": 931 * 10 ** 9, "libre": 412 * 10 ** 9, "racine": "C:\\"}
+        return {"Ollama (modèles)": disque, "Projet": disque, "Données de l'assistant": disque}
     return {"Ollama (modèles)": espace_disque(dossier_modeles_ollama()), "Projet": espace_disque(RACINE), "Données de l'assistant": espace_disque(DONNEES)}
 
 
