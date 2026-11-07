@@ -143,6 +143,7 @@ class Accueil(unittest.TestCase):
             p.evaluer("[...document.querySelectorAll('#accueil .acc-carte')].find(b => b.textContent.includes('modèle') || b.textContent.includes('model')).click(); true")
             p.attendre("document.getElementById('p-modeles').classList.contains('vue')")
             # ouvrir une conversation efface l'accueil
+            p.attendre("!!document.querySelector('.conv')")          # la liste des conversations se remplit après le chargement de la page
             p.evaluer("document.querySelector('.conv').click(); true")
             p.attendre("document.getElementById('p-chat').classList.contains('vue') && document.querySelectorAll('#fil > *').length > 0")
             self.assertFalse(p.evaluer(visible))
