@@ -794,6 +794,12 @@ def installer_modele(modele):
         raise ValueError(_t("Ce moteur gère ses modèles lui-même : installe-les depuis le moteur."))
     if modele not in [m["id"] for m in _m.MODELES] and not RE_NOM_MODELE.match(modele):
         raise ValueError("Nom de modèle invalide.")
+    catalogue_m = next((m for m in _m._CATALOGUE["modeles"] if m["id"] == modele), None)
+    if catalogue_m is not None:          # un modèle du catalogue que ce moteur ne sait pas faire tourner n'est jamais installé
+        from . import compat_modeles
+        verdict = compat_modeles.evaluer(catalogue_m, moteur_actuel(), etat_moteur()["installes"])
+        if not verdict["compatible"]:
+            raise ValueError(" ".join(verdict["raisons"]))
     if PULLS.get(modele, {}).get("statut") == "en cours":
         return PULLS[modele]
     reg = lire_registre_modeles()                       # le modèle entre dans la liste dès le début du téléchargement (et y reste, pour pouvoir le suivre, le supprimer ou le retirer)

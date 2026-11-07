@@ -2,6 +2,14 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## 0.21.0
+
+- **Jamais un modèle incompatible avec le moteur choisi.** L'onglet Modèles masque ce que le moteur ne sait pas faire tourner (repli « N modèles masqués » avec la raison), l'installation d'un modèle incompatible est refusée, et chaque ligne dit le format (GGUF), la quantification et la mémoire estimée. La compatibilité vient de la grille de capacités du moteur (outils, raisonnement, images) ; un serveur externe ne montre que ses propres modèles.
+- **Rôles par moteur** : `lutin modeles recommander --moteur llamacpp` choisit polyvalent / rapide / code… parmi les seuls modèles compatibles.
+- **Le banc d'essai ne dépend plus d'Ollama** : `lutin bench --moteur llamacpp` (ou `openai`) mesure vitesse, outils, code, français avec le moteur choisi.
+
+**English.** Models incompatible with the chosen engine are never offered (hidden with the reason, install refused, format/quantization/estimated memory shown); roles are computed per engine (`lutin modeles recommander --moteur`); the bench runs on any engine (`lutin bench --moteur`).
+
 ## 0.20.0
 
 - **Docker : un conteneur par moteur, au choix, avec des profils Compose.** `docker-compose.moteurs.yml` : `--profile ollama`, `llamacpp-cpu`, `llamacpp-cuda`, `llamacpp-vulkan`, `llamacpp-intel`. Lutin y est déjà pointé sur le bon moteur (`OLLAMA_URL`, nouvelle variable `LUTIN_LLAMACPP_URL`) : rien à saisir. Nouvelle page `docs/DOCKER_INSTALLATION.fr.md` (Docker Linux, Docker Desktop et WSL2, cartes graphiques). **Profils llama.cpp non vérifiés sur du vrai matériel.**

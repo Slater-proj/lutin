@@ -1362,6 +1362,8 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     const jd = ETAT.disque_modeles;
     if (!inst && jd && m.go && m.go * 1e9 > jd.libre) { const p = el('span', 'puce bad'); p.appendChild(document.createElement('i')); p.appendChild(document.createTextNode(T('Pas assez de place sur le disque'))); p.title = T('Il reste {} Go libres sur le disque des modèles.').replace('{}', (jd.libre / 1e9).toFixed(1)); nom.appendChild(p); }
     let texte = m.phrase || '';
+    const cp = (ETAT.compat || {})[m.id];
+    if (cp) texte += (texte ? ' · ' : '') + cp.format + ' · ' + cp.quant + (cp.memoire_go ? ' · ' + T('mémoire estimée ') + String(cp.memoire_go).replace('.', ',') + ' ' + T('Go') : '') + (cp.avertissements.length ? ' · ⚠ ' + cp.avertissements.join(' ') : '');
     const bench = ETAT.bench || {}, mes = (bench.mesures || {})[m.id], occupe = !!bench.en_cours;
     if (bench.en_cours === m.id) texte = T('⏳ Mesure en cours : ') + bench.etape;
     if (inst && (ETAT.partages || []).includes(m.id)) texte += (texte ? ' · ' : '') + T('d\'Ollama (pas de copie)');          // llama.cpp lit le fichier d'Ollama sur place
@@ -1505,7 +1507,13 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     afficherComparaison();
     jaugeDisque();
     const z = $('listeModeles'); z.textContent = '';
-    const tous = [...ETAT.modeles];
+    const compat = ETAT.compat || {}, incompatible = m => !!compat[m.id] && compat[m.id].compatible === false && !ETAT.installes.includes(m.id);
+    const tous = ETAT.modeles.filter(m => !incompatible(m)), masques = ETAT.modeles.filter(incompatible);          // jamais proposé : un modèle que le moteur choisi ne sait pas faire tourner
+    if (masques.length) {
+      const dm = el('details', 'aide'); dm.appendChild(el('summary', '', masques.length + (masques.length > 1 ? T(' modèles masqués : pas compatibles avec ') : T(' modèle masqué : pas compatible avec ')) + (ETAT.moteur_nom || '')));
+      masques.forEach(m => dm.appendChild(el('div', 'point', m.nom + ' — ' + compat[m.id].raisons.join(' '))));
+      z.appendChild(dm);
+    }
     [[null, tous.filter(m => !m.avance)], [T('Modèles sans filtre'), tous.filter(m => m.avance)]].forEach(([titre, liste]) => {
       if (!liste.length) return;
       if (titre) { z.appendChild(el('h2', '', titre)); [...new Set(liste.map(m => m.avertissement).filter(Boolean))].forEach(a => z.appendChild(el('div', 'erreur', '⚠ ' + a))); }

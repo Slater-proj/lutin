@@ -1663,5 +1663,6 @@
 "« {} » n'a pas été testé avec {}.": "\"{}\" has not been tested with {}.",
 "moteur à mesurer : ollama (défaut), llamacpp ou openai": "engine to measure: ollama (default), llamacpp or openai",
 "Moteur inconnu : {}.": "Unknown engine: {}.",
-"Le banc ne demande que /api/chat.": "The bench only asks for /api/chat."
+"Le banc ne demande que /api/chat.": "The bench only asks for /api/chat.",
+"recommander pour ce moteur (ollama, llamacpp…) : seuls les modèles qu'il sait faire tourner sont proposés": "recommend for this engine (ollama, llamacpp…): only models it can run are offered"
 }

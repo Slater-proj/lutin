@@ -2,6 +2,16 @@
 
 # The models
 
+## Which models for which engine
+
+Not every engine accepts everything. Lutin **never offers** a model the chosen engine cannot run: the Models tab hides the others (with a "N models hidden" fold-out saying why), installing an incompatible model is refused, and the roles (all-round, fast…) are recomputed **on compatible models only** (`lutin modeles recommander --moteur llamacpp`).
+
+- **Ollama**: the whole library.
+- **llama.cpp managed by Lutin**: the same GGUF files (downloaded from Ollama's library, without Ollama), unless a capability the model needs (tools, reasoning, images) is "not supported" by that engine in its capability grid.
+- **External server (LM Studio, vLLM…)**: it has its own models; only the ones it offers are shown.
+
+Each line shows the **format** (GGUF), the **quantization** (from the name, otherwise the library default) and the **estimated memory** (weights + 8,192-token conversation + margin). `lutin bench --moteur llamacpp` measures a model with an engine other than Ollama.
+
 ## How Lutin chooses
 
 1. It reads your machine: graphics card and its memory, RAM, disks.

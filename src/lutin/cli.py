@@ -86,6 +86,7 @@ def parseur():
     m.add_argument("action", nargs="?", choices=("recommander", "lister", "installer", "supprimer", "maj"), default="recommander")
     m.add_argument("modele", nargs="?")
     m.add_argument("--avance", action="store_true", help=_t("inclure les modèles avancés (sans filtre)"))
+    m.add_argument("--moteur", default="", help=_t("recommander pour ce moteur (ollama, llamacpp…) : seuls les modèles qu'il sait faire tourner sont proposés"))
     sp.add_parser("pin", help=_t("nouveau code PIN"))
     a = sp.add_parser("appareils", help=_t("appareils connectés"))
     a.add_argument("action", nargs="?", choices=("lister", "revoquer"), default="lister")
@@ -292,7 +293,18 @@ def commande_modeles(args):
     profil = machine.detecter()
     o = ollama_client.Ollama()
     if args.action == "recommander":
-        choix = selection.choisir(profil, cat)
+        if getattr(args, "moteur", ""):          # les rôles sont propres à chaque moteur : jamais un modèle que ce moteur ne sait pas faire tourner
+            os.environ.setdefault("LUTIN_RACINE", str(Path.home() / "Lutin"))
+            os.environ.setdefault("LUTIN_DONNEES", str(d["donnees"]))
+            os.environ.setdefault("LUTIN_MEMOIRE", str(d["memoire"]))
+            from . import compat_modeles, moteur as _moteur, moteurs  # noqa: F401  (importer le moteur enregistre les moteurs)
+            mo = moteurs.MOTEURS.get(args.moteur)
+            if mo is None:
+                print(_t("Moteur inconnu : {}.").format(args.moteur), file=sys.stderr)
+                return 1
+            choix = compat_modeles.roles_pour(profil, cat, mo)
+        else:
+            choix = selection.choisir(profil, cat)
         print(_t("Ta machine : ") + profil.resume() + "\n")
         for role in catalogue.ROLES:
             c = choix.get(role)

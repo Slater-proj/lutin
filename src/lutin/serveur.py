@@ -2,6 +2,7 @@
 from http.server import BaseHTTPRequestHandler
 from . import bench as _bench
 from . import bench_moteurs as _bench_moteurs
+from . import compat_modeles as _compat
 from . import ressources_chargees as _ressources
 from . import catalogue_moteurs as _catalogue_moteurs
 from . import moteur_llamacpp as _llamacpp
@@ -162,6 +163,14 @@ class Gestionnaire(BaseHTTPRequestHandler):
         return {"modele": modele, "defaut": lues["defaut"], "variantes": sortie}
 
     @staticmethod
+    def _compat(o):
+        """Pour chaque modèle du catalogue : compatible avec le moteur choisi ? (format, quantification, mémoire estimée, raisons). La page ne propose que les compatibles."""
+        try:
+            return _compat.pour_la_liste(_m._CATALOGUE["modeles"], _m.moteur_actuel(), o["installes"])
+        except Exception:  # noqa: BLE001  (jamais une page cassée : sans cette liste, rien n'est masqué)
+            return {}
+
+    @staticmethod
     def _premier_lancement(o, r, profil):
         """Aucun moteur prêt ? La page désactive l'onglet Modèles avec la raison et propose le moteur conseillé (installer / choisir autre / plus tard)."""
         try:
@@ -282,7 +291,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
             r = _m.reglages()
             modeles = _m.modeles_connus(o["installes"], o.get("tailles"))
             profil = _adequation.profil_pret()
-            return self._envoyer(200, {"adequation": _adequation.pour_la_liste(modeles, profil, _m._CATALOGUE["modeles"]), "machine": profil.resume() if profil else "", "budget_go": profil.budget_go() if profil else 0,
+            return self._envoyer(200, {"compat": self._compat(o), "adequation": _adequation.pour_la_liste(modeles, profil, _m._CATALOGUE["modeles"]), "machine": profil.resume() if profil else "", "budget_go": profil.budget_go() if profil else 0,
                                        "familles": {k: _t(v) for k, v in (_m._CATALOGUE.get("familles") or {}).items()}, "disque_modeles": _emplacements.jauge_modeles(),
                                        "version": _m.VERSION, "partages": o.get("partages", []), "ollama": o["actif"], "ollama_installe": bool(_m.chemin_ollama()) or _m.moteur_actuel().id != "ollama", "moteur_nom": _m.moteur_actuel().nom, "installes": o["installes"], "modeles": modeles, "modeles_masques": len(_m.lire_registre_modeles()["masques"]), "actives": list(_m.TOURS_ACTIFS),
                                        "pulls": _m.PULLS, "reglages": r, "conversations": _m.conv_liste(), "racine": str(_m.RACINE), "donnees": str(_m.DONNEES),

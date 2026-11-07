@@ -71,6 +71,19 @@ class Compatibilite(unittest.TestCase):
             self.assertTrue(any("outils" in m["capacites"] for m in f["modeles"]), ident)
 
 
+class Installation(unittest.TestCase):
+    def test_un_modele_incompatible_n_est_jamais_installe(self):
+        from unittest import mock
+        from lutin import dialogue
+        vision = next(m for m in _m._CATALOGUE["modeles"] if "vision" in m["capacites"])
+        mo = FauxMoteur("ollama", "Moteur X", dict(TOUT, vision=("non", "pas d'images")))
+        with mock.patch.object(dialogue, "moteur_actuel", lambda *a, **k: mo), mock.patch.object(dialogue, "etat_moteur", lambda: {"installes": []}):
+            with self.assertRaises(ValueError) as e:
+                dialogue.installer_modele(vision["id"])
+        self.assertIn("vision", str(e.exception))
+        self.assertNotIn(vision["id"], dialogue.PULLS, "aucun téléchargement n'a commencé")
+
+
 class BancIndependant(unittest.TestCase):
     def test_le_banc_parle_au_moteur_choisi(self):
         class Moteur:

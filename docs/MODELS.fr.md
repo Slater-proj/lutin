@@ -2,6 +2,16 @@
 
 # Les modèles
 
+## Quels modèles pour quel moteur
+
+Chaque moteur n'accepte pas tout. Lutin **ne propose jamais** un modèle que le moteur choisi ne sait pas faire tourner : l'onglet Modèles masque les autres (avec un repli « N modèles masqués » qui dit pourquoi), l'installation d'un modèle incompatible est refusée, et les rôles (polyvalent, rapide…) sont recalculés **sur les seuls modèles compatibles** (`lutin modeles recommander --moteur llamacpp`).
+
+- **Ollama** : toute la bibliothèque.
+- **llama.cpp géré par Lutin** : les mêmes fichiers GGUF (téléchargés depuis la bibliothèque d'Ollama, sans Ollama), sauf si une capacité dont le modèle a besoin (outils, raisonnement, images) est « non supportée » par ce moteur dans sa grille de capacités.
+- **Serveur externe (LM Studio, vLLM…)** : il a ses propres modèles ; seuls ceux qu'il propose sont montrés.
+
+Chaque ligne indique le **format** (GGUF), la **quantification** (celle du nom, sinon celle par défaut de la bibliothèque) et la **mémoire estimée** (poids + conversation de 8 192 jetons + marge). `lutin bench --moteur llamacpp` mesure un modèle avec un autre moteur qu'Ollama.
+
 ## Comment Lutin choisit
 
 1. Il lit ta machine : carte graphique et sa mémoire, RAM, disques.

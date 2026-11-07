@@ -1111,5 +1111,8 @@
 "Choisir un moteur": "Choose an engine",
 "Choisir un autre moteur": "Choose another engine",
 "Arrête l'opération ; ce qui est déjà téléchargé est gardé, relancer reprend où ça s'était arrêté.": "Stops the operation; what is already downloaded is kept, starting again resumes where it stopped.",
-"Opération annulée. Relance-la : le téléchargement reprend où il s'était arrêté.": "Operation cancelled. Start it again: the download resumes where it stopped."
+"Opération annulée. Relance-la : le téléchargement reprend où il s'était arrêté.": "Operation cancelled. Start it again: the download resumes where it stopped.",
+"mémoire estimée ": "estimated memory ",
+" modèles masqués : pas compatibles avec ": " models hidden: not compatible with ",
+" modèle masqué : pas compatible avec ": " model hidden: not compatible with "
 }
