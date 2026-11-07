@@ -2,6 +2,17 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## 0.26.0
+
+- **Stabilisation.** Aucun écran nouveau : on ferme des trous.
+- **Un fichier de données abîmé ne fait plus planter Lutin.** Un `reglages.json` coupé ou qui n'était pas un objet faisait échouer chaque requête sans réponse ; la lecture de tous les fichiers de données rend maintenant la valeur par défaut quand le type lu n'est pas celui attendu.
+- **Mise à jour sûre** : sauvegarde des données avant toute mise à jour (les trois dernières gardées, jamais bloquante), message clair si pip échoue. **Retour arrière** : `lutin update --revenir-a X.Y.Z` réinstalle une version publiée (numéro strictement contrôlé). Une mise à jour normale ne recule jamais.
+- **Page plus rapide quand le moteur est arrêté** : l'état de la recherche par le sens ne sonde plus le moteur une seconde fois à chaque rafraîchissement.
+- **Tests** : parcours d'une installation vierge (toutes les routes de lecture, chemins hors dossier refusés) et de fichiers de données abîmés ; mise à jour et retour arrière.
+- **Docs** : `docs/ROLLBACK.fr.md` (retour arrière), `docs/SECURITY_AUDIT.fr.md` (revue de sécurité : ce qui est vérifié, ce qui reste ouvert, dont la vérification des mises à jour). Revue par les mainteneurs, **pas un audit indépendant**. **Rien de ceci n'est la 1.0** : les essais sur du vrai matériel restent à faire.
+
+**English.** Stabilisation, no new screen. A damaged or wrong-type data file no longer crashes Lutin (it used to fail every request with no answer). Safe update: data backup before any update (last three kept, never blocking) and `lutin update --revenir-a X.Y.Z` to reinstall a published version; a normal update never goes back. The page no longer probes a stopped engine twice per refresh. New tests: fresh-install walk-through, damaged data files, update and rollback. New docs: rollback procedure and security review (maintainers' own review, not an independent audit; update integrity beyond TLS listed as an open limit). This is not 1.0: real-hardware trials are still to do.
+
 ## 0.25.0
 
 - **Moteurs expérimentaux : Colibri et Strata**, en préréglages externes du catalogue signé (version 3), étiquetés « expérimental », rangés en dernier, jamais préselectionnés ni recommandés. Nouveau champ `experimental` dans le schéma du catalogue ; la veille hebdomadaire les suit. Pas d'intégration gérée de Colibri : l'essai S3 qui devait la justifier n'a pas été fait. `docs/EXPERIMENTAL_ENGINES.fr.md` dit leurs limites. **Aucun des deux n'a été essayé pour de vrai** (testés avec un faux serveur).

@@ -1707,5 +1707,12 @@
 "Démarrage automatique : ": "Automatic start: ",
 "activé": "on",
 "désactivé": "off",
-"Cela se règle depuis cette machine elle-même.": "This is set from this machine itself."
+"Cela se règle depuis cette machine elle-même.": "This is set from this machine itself.",
+"Sauvegarde de tes données avant la mise à jour : {}": "Backup of your data before the update: {}",
+"Sauvegarde avant mise à jour impossible ({}) : la mise à jour continue.": "Backup before the update failed ({}): the update goes on.",
+"Lutin est déjà en version {}.": "Lutin is already at version {}.",
+"Numéro de version invalide (exemple : 0.22.0).": "Invalid version number (example: 0.22.0).",
+"✘ Le retour à une version précise n'est possible que pour une installation faite depuis GitHub.": "✘ Going back to a specific version only works for an installation made from GitHub.",
+"✘ La mise à jour de Lutin a échoué (pip). Ta version actuelle reste en place.": "✘ Updating Lutin failed (pip). Your current version stays in place.",
+"réinstaller une version publiée (retour arrière), après une sauvegarde de tes données": "reinstall a published version (rollback), after a backup of your data"
 }

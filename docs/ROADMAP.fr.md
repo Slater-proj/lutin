@@ -119,6 +119,9 @@ Chaque jalon : étude → porte de validation → code ciblé → tests → docu
 - Tests de bout en bout sur les deux machines, avec et sans carte graphique, Windows, Debian, Docker, panne réseau, mise à jour, migration ; audit de sécurité ; documentation complète ; procédure de retour arrière.
 - **1.0.0** seulement si les critères de stabilité, de sécurité, de portabilité et de tests sont atteints ; les moteurs expérimentaux **ne sont pas** requis.
 
+- **Fait (jalon 0.26.0, partie logicielle)** : un fichier de données abîmé ne fait plus planter (bogue réel trouvé et corrigé), sauvegarde avant mise à jour + `lutin update --revenir-a` + `ROLLBACK.fr.md`, revue de sécurité (`SECURITY_AUDIT.fr.md`), parcours d'une installation vierge en test, une sonde de moteur en moins par rafraîchissement.
+- **Reste pour la 1.0 (ne se fait pas sans toi)** : les essais réels S1–S7 sur du matériel, un essai du retour arrière sur une vraie publication, la vérification de la roue de mise à jour contre `SHA256SUMS.txt` (limite 1 de `SECURITY_AUDIT.fr.md`, à décider quand on peut l'essayer sur une vraie publication), et la décision de l'image Docker par défaut d'après les chiffres du banc.
+
 **En continu (pas une version)** : couverture mesurée sans seuil bloquant ; test de CI des volumes Docker ; exécuteur GPU auto-hébergé **facultatif, déclenché à la main, jamais sur les demandes de fusion externes**.
 
 ## 5. Méthode et portes de validation

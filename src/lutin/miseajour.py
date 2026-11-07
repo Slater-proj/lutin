@@ -182,6 +182,14 @@ def derniere_release(depot=DEPOT, http=http_get):
     return version, roue
 
 
+def roue_de_version(version, depot=DEPOT):
+    """L'adresse de la roue d'une version publiée (retour arrière), ou ValueError si le numéro n'a pas la forme X.Y.Z (rien d'autre n'est jamais passé à pip)."""
+    v = str(version or "").strip().lstrip("v")
+    if not re.fullmatch(r"\d{1,3}\.\d{1,3}\.\d{1,3}", v):
+        raise ValueError(_t("Numéro de version invalide (exemple : 0.22.0)."))
+    return v, "https://github.com/{0}/releases/download/v{1}/lutin-{1}-py3-none-any.whl".format(depot, v)
+
+
 def numeros(version):
     """(1, 2, 3) pour « 1.2.3rc4+x » ; () si illisible."""
     m = re.match(r"^(\d+)\.(\d+)\.(\d+)", str(version or ""))

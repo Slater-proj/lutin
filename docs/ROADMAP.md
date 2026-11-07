@@ -109,6 +109,9 @@ Each milestone: study → validation gate → targeted code → tests → FR/EN 
 - End-to-end tests on both machines, with and without a graphics card, Windows, Debian, Docker, network failure, update, migration; security audit; full documentation; rollback procedure.
 - **1.0.0** only if the stability, security, portability and testing criteria are met; experimental engines are **not** required.
 
+- **Done (milestone 0.26.0, software part)**: a damaged data file no longer crashes Lutin (a real bug, found and fixed), backup before update + `lutin update --revenir-a` + `ROLLBACK.md`, security review (`SECURITY_AUDIT.md`), fresh-install walk-through test, one engine probe fewer per refresh.
+- **Left for 1.0 (cannot be done without you)**: the real-hardware trials S1–S7, a rollback trial on a real release, verifying the update wheel against `SHA256SUMS.txt` (limit 1 of `SECURITY_AUDIT.md`, to decide once it can be tried on a real release), and the default Docker image decision from the bench figures.
+
 **Ongoing (not a version)**: measured coverage without a blocking threshold; Docker volume CI test; **optional** self-hosted GPU runner, started by hand, never on external pull requests.
 
 ## 5. Method and validation gates

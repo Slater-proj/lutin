@@ -19,10 +19,14 @@ VERROU_REGLAGES = threading.Lock()
 
 
 def lire_json(chemin, defaut):
+    """Le JSON du fichier, ou `defaut` s'il manque, est abîmé (coupure de courant) ou n'a pas le type attendu (objet, liste) : un fichier de données douteux ne doit jamais faire planter l'application."""
     try:
-        return json.loads(Path(chemin).read_text(encoding="utf-8-sig"))
+        valeur = json.loads(Path(chemin).read_text(encoding="utf-8-sig"))
     except (OSError, ValueError):
         return defaut
+    if isinstance(defaut, (dict, list)) and not isinstance(valeur, type(defaut)):
+        return defaut
+    return valeur
 
 
 def ecrire_atomique(chemin, texte):

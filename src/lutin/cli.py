@@ -80,6 +80,7 @@ def parseur():
     u = sp.add_parser("update", help=_t("mettre à jour Lutin et les modèles"))
     u.add_argument("--app", action="store_true", help=_t("seulement Lutin"))
     u.add_argument("--modeles", action="store_true", help=_t("seulement la recherche de mises à jour de modèles"))
+    u.add_argument("--revenir-a", metavar="X.Y.Z", help=_t("réinstaller une version publiée (retour arrière), après une sauvegarde de tes données"))
     c = sp.add_parser("chat", help=_t("discuter dans le terminal"))
     c.add_argument("message", nargs="*", help=_t("un message à envoyer tout de suite (sinon, mode interactif)"))
     m = sp.add_parser("modeles", help=_t("modèles"))
@@ -216,16 +217,49 @@ def commande_serve(args):
     return superviser(lambda premiere: lancer_enfant(sans_navigateur or not premiere))          # le navigateur ne s'ouvre qu'au premier démarrage, pas à chaque relance
 
 
-def mise_a_jour_detaillee(dire=print, erreur=None, capturer=False):
+AVANT_MAJ_GARDEES = 3
+
+
+def sauvegarde_avant_mise_a_jour(dire=print):
+    """Une sauvegarde des données avant de changer de version : on ne perd rien si la nouvelle version se comporte mal (voir « lutin restaurer »). Les trois dernières sont gardées.
+    Ne bloque jamais la mise à jour : si la sauvegarde échoue, on le dit et on continue. Renvoie le chemin du fichier, ou None."""
+    try:
+        dossier = Path(config.dossiers()["cache"]) / "avant-mise-a-jour"
+        dossier.mkdir(parents=True, exist_ok=True)
+        fichier = dossier / "lutin-{}-{}.zip".format(__version__, time.strftime("%Y%m%d-%H%M%S"))
+        sauvegarde.exporter(config.dossiers(), fichier)
+        for ancien in sorted(dossier.glob("lutin-*.zip"), key=lambda p: p.stat().st_mtime)[:-AVANT_MAJ_GARDEES]:
+            ancien.unlink(missing_ok=True)
+        dire(_t("Sauvegarde de tes données avant la mise à jour : {}").format(fichier))
+        return fichier
+    except (OSError, ValueError) as e:
+        dire(_t("Sauvegarde avant mise à jour impossible ({}) : la mise à jour continue.").format(e))
+        return None
+
+
+def mise_a_jour_detaillee(dire=print, erreur=None, capturer=False, revenir_a=None):
     """Met Lutin à jour d'après la source mémorisée à l'installation : « github:propriétaire/dépôt » (dernière publication, comparée à la version installée) ou une adresse / une roue
     donnée à pip. Ne fait rien si Lutin est déjà à jour. `dire` / `erreur` : où vont les messages (la console par défaut, la page ou l'icône ailleurs) ; `capturer` : cache la sortie de pip.
+    `revenir_a` : un numéro de version publiée (« 0.22.0 ») à réinstaller à la place de la dernière (retour arrière).
     Renvoie (code de sortie, version avant, version après) ; « après » vaut None si rien n'a été installé."""
     erreur = erreur or (lambda texte: print(texte, file=sys.stderr))
     source = config.lire_source()
     if not source:
         dire(_t("Lutin ne sait pas d'où se mettre à jour (installé à la main ?). Relance le script d'installation, ou : python -m pip install --upgrade <source>"))
         return 0, __version__, None
-    if source.startswith("github:"):
+    if revenir_a:
+        if not source.startswith("github:"):
+            erreur(_t("✘ Le retour à une version précise n'est possible que pour une installation faite depuis GitHub."))
+            return 1, __version__, None
+        try:
+            version, source = miseajour.roue_de_version(revenir_a, source[len("github:"):])
+        except ValueError as e:
+            erreur("✘ " + str(e))
+            return 1, __version__, None
+        if version == __version__:
+            dire(_t("Lutin est déjà en version {}.").format(version))
+            return 0, __version__, None
+    elif source.startswith("github:"):
         version, roue = miseajour.derniere_release(source[len("github:"):])
         if not roue:
             erreur(_t("✘ Impossible de lire la dernière version de Lutin sur GitHub (pas d'internet, ou aucune publication)."))
@@ -235,8 +269,9 @@ def mise_a_jour_detaillee(dire=print, erreur=None, capturer=False):
             return 0, __version__, None
         source = roue
     avant = __version__
+    sauvegarde_avant_mise_a_jour(dire)
     if subprocess.run([sys.executable, "-m", "pip", "install", "--upgrade", "--quiet", source], capture_output=capturer).returncode != 0:
-        erreur(_t("✘ La mise à jour de Lutin a échoué (pip)."))
+        erreur(_t("✘ La mise à jour de Lutin a échoué (pip). Ta version actuelle reste en place."))
         return 1, avant, None
     apres = subprocess.run([sys.executable, "-m", "lutin", "--version"], capture_output=True, text=True).stdout.strip().replace("Lutin ", "")
     if apres in ("", avant):
@@ -246,8 +281,8 @@ def mise_a_jour_detaillee(dire=print, erreur=None, capturer=False):
     return 0, avant, apres
 
 
-def mettre_a_jour_lutin():
-    return mise_a_jour_detaillee()[0]
+def mettre_a_jour_lutin(revenir_a=None):
+    return mise_a_jour_detaillee(revenir_a=revenir_a)[0]
 
 
 def commande_update(args):
@@ -256,6 +291,8 @@ def commande_update(args):
     code = 0
     if (args.app or tout) and horsligne.actif(Path(config.dossiers()["config"]) / "config.json"):
         print(_t("Mode hors ligne strict : Lutin n'est pas mis à jour (lutin hors-ligne non pour le permettre)."))
+    elif getattr(args, "revenir_a", None):
+        code = mettre_a_jour_lutin(args.revenir_a)
     elif args.app or tout:
         code = mettre_a_jour_lutin()
     if args.modeles or tout:

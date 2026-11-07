@@ -62,7 +62,7 @@ def est_modele_de_recherche(nom):
 
 
 def etat():
-    return {"actif": actif(), "modele": nom_modele(), "installe": installe(forcer=True), "installation": installation()}
+    return {"actif": actif(), "modele": nom_modele(), "installe": installe(), "installation": installation()}
 
 
 # --------------------------------------------------------------------------- vecteurs
