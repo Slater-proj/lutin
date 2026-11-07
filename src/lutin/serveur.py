@@ -3,6 +3,7 @@ from http.server import BaseHTTPRequestHandler
 from . import bench as _bench
 from . import bench_moteurs as _bench_moteurs
 from . import compat_modeles as _compat
+from . import machines as _machines
 from . import estimation as _estimation
 from . import ressources_chargees as _ressources
 from . import catalogue_moteurs as _catalogue_moteurs
@@ -274,6 +275,8 @@ class Gestionnaire(BaseHTTPRequestHandler):
         chemin = self.path.split("?")[0]
         if not self._controle(False):
             return
+        if chemin == "/api/noeud/etat":                        # une autre machine demande si ce Lutin peut faire tourner un modèle : jeton de nœud, rien d'autre n'est ouvert
+            return self._noeud_etat()
         if chemin in ("/", "/index.html") and not self._authentifie():
             return self._page_connexion()
         if chemin.startswith("/api/"):
@@ -485,6 +488,8 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 return self._envoyer(400, {"erreur": _t("Fenêtre de conversation invalide.")})
             e = self._estimation(modele, max(512, min(ctx, 1048576)), _adequation.profil_pret())
             return self._envoyer(200 if e else 404, e or {"erreur": _t("Ce modèle n'est pas au catalogue : pas d'estimation possible.")})
+        if chemin == "/api/machines":                             # Réglages > Machines : le nœud de cette machine, les machines appairées et leur état
+            return self._envoyer(200, self._vue_machines())
         if chemin == "/api/ressources":                           # ce qui est chargé en mémoire en ce moment (page Santé)
             return self._envoyer(200, _ressources.etat())
         if chemin == "/api/sante-systeme":
@@ -630,6 +635,10 @@ class Gestionnaire(BaseHTTPRequestHandler):
             return self._envoyer(400, {"erreur": "JSON invalide : un objet est attendu"})
         if self.path == "/api/appairer":                      # le seul POST sans authentification : il sert justement à en obtenir une
             return self._appairer(donnees)
+        if self.path == "/api/noeud/appairer":                 # une autre machine échange le code affiché ici contre un jeton de nœud
+            return self._noeud_appairer(donnees)
+        if self.path == "/api/noeud/chat":                     # ... et l'utilise pour faire tourner le moteur de cette machine
+            return self._noeud_chat(donnees)
         if not self._authentifie():
             return self._envoyer(401, {"erreur": "authentification requise"})
         if not self._jeton_valide():
@@ -958,6 +967,13 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 _m.config_ecrire(cfg)
                 _m.journaliser("Administration à distance {}.".format("ouverte" if cfg["admin_a_distance"] else "fermée"))
                 return self._envoyer(200, {"actif": cfg["admin_a_distance"]})
+            if self.path.startswith("/api/machines-"):
+                if not self._configurateur():
+                    return self._envoyer(403, {"erreur": _t("Ajouter une machine, ou prêter le moteur de celle-ci, se fait depuis cette machine (ou par un administrateur déclaré).")})
+                try:
+                    return self._envoyer(200, self._machines(self.path[len("/api/machines-"):], donnees))
+                except ValueError as e:
+                    return self._envoyer(400, {"erreur": str(e)})
             if self.path.startswith("/api/moteur-"):
                 if not self._configurateur():
                     return self._envoyer(403, {"erreur": _t("Installer, démarrer ou régler un moteur se fait depuis cette machine (niveau « cette machine seulement » ou navigateur de cette machine).")})
@@ -1035,6 +1051,87 @@ class Gestionnaire(BaseHTTPRequestHandler):
         except (ValueError, OSError, TypeError, subprocess.SubprocessError) as erreur:
             return self._envoyer(400, {"erreur": str(erreur)})
         return self._envoyer(404, {"erreur": "introuvable"})
+
+    # ---- ce Lutin prête son moteur à une autre machine (voir lutin.machines) ----
+    def _noeud_etat(self):
+        if not _machines.noeud_jeton_valide(self.headers.get("X-Noeud")):
+            return self._envoyer(401, {"erreur": "machine non autorisée"})
+        mo = _moteurs.par_id(_m.reglages().get("moteur") or _moteurs.OLLAMA)
+        return self._envoyer(200, _machines.noeud_etat(mo, mo.modeles()))
+
+    def _noeud_appairer(self, donnees):
+        if not _m.LIMITEUR_PIN.autoriser(self.client_address[0]):
+            return self._envoyer(429, {"erreur": "Trop d'essais : attends une minute."})
+        try:
+            return self._envoyer(200, _machines.noeud_echanger(donnees.get("code"), donnees.get("nom")))
+        except ValueError as e:
+            return self._envoyer(403, {"erreur": str(e)})
+
+    NOEUD_PLACES = threading.BoundedSemaphore(2)          # deux demandes de machines à la fois au plus : une seule carte graphique
+
+    def _noeud_chat(self, donnees):
+        if not _machines.noeud_jeton_valide(self.headers.get("X-Noeud")):
+            return self._envoyer(401, {"erreur": "machine non autorisée"})
+        try:
+            corps = _machines.corps_autorise(donnees.get("corps"))
+        except ValueError as e:
+            return self._envoyer(400, {"erreur": str(e)})
+        mo = _moteurs.par_id(_m.reglages().get("moteur") or _moteurs.OLLAMA)          # le moteur de CETTE machine : jamais une autre machine (pas de chaîne)
+        if corps["model"] not in mo.modeles()["installes"]:
+            return self._envoyer(404, {"erreur": "modèle absent de cette machine"})
+        if not self.NOEUD_PLACES.acquire(blocking=False):
+            return self._envoyer(429, {"erreur": "cette machine répond déjà à d'autres demandes"})
+        try:
+            if not corps.get("stream"):
+                return self._envoyer(200, mo.chat(corps, 900))
+            self.send_response(200)
+            self.send_header("Content-Type", "application/x-ndjson")
+            self.send_header("Connection", "close")
+            self.end_headers()
+            self.close_connection = True
+            try:
+                with mo.chat_flux(corps, 900) as flux:
+                    for e in flux:
+                        self.wfile.write(json.dumps(e, ensure_ascii=False).encode("utf-8") + b"\n")
+                        self.wfile.flush()
+            except (BrokenPipeError, ConnectionError, OSError):
+                pass          # l'autre machine a coupé (Arrêter) : sortir du « with » ferme le moteur, qui arrête de générer
+            except ValueError as e:
+                try:
+                    self.wfile.write(json.dumps({"error": str(e)}, ensure_ascii=False).encode("utf-8") + b"\n")
+                except OSError:
+                    pass
+        finally:
+            self.NOEUD_PLACES.release()
+
+    def _machines(self, action, donnees):
+        """Réglages > Machines (configurateur seulement) : ajouter, retirer, choisir celle qui répond, prêter le moteur de cette machine."""
+        r = _m.reglages()
+        if action == "add":
+            _machines.ajouter(donnees.get("adresse"), donnees.get("code"), donnees.get("nom", ""), donnees.get("mac", ""))
+        elif action == "remove":
+            ident = str(donnees.get("id", ""))
+            _machines.retirer(ident)
+            if r.get("machine") == ident:
+                _m.enregistrer_reglages({"machine": ""})
+        elif action == "use":
+            _m.enregistrer_reglages({"machine": str(donnees.get("id") or "")})
+        elif action == "mac":
+            _machines.definir_mac(str(donnees.get("id", "")), donnees.get("mac"))
+        elif action == "noeud-activer":
+            _machines.noeud_activer(bool(donnees.get("actif")), niveau_local=_m.SECURITE.niveau == _sec.LOCAL)
+        elif action == "noeud-code":
+            return _machines.noeud_nouveau_code()
+        elif action == "noeud-revoquer":
+            _machines.noeud_revoquer(str(donnees.get("nom", "")))
+        else:
+            raise ValueError(_t("Action inconnue."))
+        return {"ok": True}
+
+    @staticmethod
+    def _vue_machines():
+        r = _m.reglages()
+        return {"noeud": _machines.noeud_vue(), "machines": _machines.etats(r["modele"]), "choisie": r.get("machine", ""), "niveau_local": _m.SECURITE.niveau == _sec.LOCAL, "journal": _machines.journal()}
 
     def _appairer(self, donnees):
         if _m.SECURITE.niveau == _sec.LOCAL:

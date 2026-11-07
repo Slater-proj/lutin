@@ -2,6 +2,14 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## 0.23.0
+
+- **Machines : un Lutin répond avec le moteur d'un autre (D7).** Réglages > Machines : « Prêter le moteur de cette machine » (éteint par défaut), code d'appairage à 8 chiffres (5 minutes, une fois), jeton de nœud par machine (gardé haché, révocable), ajout par validation explicite. Le jeton n'ouvre que `/api/noeud/*` : ni conversations, ni fichiers, ni réglages.
+- **Quatre états visibles** (injoignable · réveil envoyé · nœud joignable · moteur opérationnel), routage vers le nœud quand il peut faire tourner le modèle, **repli silencieux sur le moteur local** sinon : aucune erreur ni avertissement dans la conversation. L'identité du nœud est vérifiée avant d'envoyer quoi que ce soit ; journal des machines (un trait par changement d'état).
+- `docs/CLUSTER_ARCHITECTURE.fr.md`. **Testé avec deux vrais serveurs Lutin dans un même test, pas sur deux ordinateurs.**
+
+**English.** Machines (D7): lend this machine's engine (off by default), 8-digit pairing code, per-machine hashed revocable node token that only opens `/api/noeud/*`, four visible states, routing to the node with silent local fallback, node identity checked before sending anything, machines log. Tested with two real servers in one test, not on two computers.
+
 ## 0.22.0
 
 - **Estimer avant de charger.** La mémoire qu'un modèle prendra (fichier + conversation + marge), où (carte, mémoire vive) et un niveau (tient / partiel / tient à peine / ne tient pas) sont annoncés AVANT le chargement : dans la bannière, dans la conversation (une fois par demi-heure) et à la demande (`/api/estimation`), avec ce qui ferait tenir le modèle (conversation plus courte, cache plus léger).

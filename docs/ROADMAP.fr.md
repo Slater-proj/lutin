@@ -101,6 +101,8 @@ Chaque jalon : étude → porte de validation → code ciblé → tests → docu
 - `CLUSTER_ARCHITECTURE.md`.
 - **Critère** : le Lutin d'un petit PC Debian répond avec le moteur du poste à carte NVIDIA, bascule en local si elle s'éteint, sans interruption visible hors de la page Machines ; aucune donnée n'est envoyée à un nœud non autorisé.
 
+- **Fait (0.23.0)** : `machines.py`, `CLUSTER_ARCHITECTURE.fr.md`, Réglages > Machines, jeton de nœud, quatre états, repli local silencieux, journal. **Reste** : l'essai sur deux vrais ordinateurs (petit PC Debian + poste à carte NVIDIA).
+
 ### 0.24.0 — Alimentation
 - D8 : réveil, extinction, démarrage automatique ; états « réveil envoyé → nœud joignable → moteur opérationnel » ; raison claire quand ça ne marche pas.
 - **Critère** : essais S5 et S6 réussis ou limites documentées (auto-connexion Windows, BIOS).

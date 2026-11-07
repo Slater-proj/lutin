@@ -91,6 +91,16 @@ class Parcours(unittest.TestCase):
             p.attendre("[...document.querySelectorAll('#santeCorps b')].some(b => b.textContent.includes('Disque') || b.textContent.includes('Dossier de données'))")
             self.assertEqual(p.evaluer("document.querySelectorAll('#santeCorps .erreur').length"), 0)
 
+    def test_reglages_montre_les_machines_sans_erreur(self):
+        """Réglages > Machines : la case « prêter le moteur » et le formulaire d'ajout s'affichent, sans erreur, même sans aucune machine."""
+        with self.captures.serveur_demo() as (port, tmp):
+            p = self.ouvrir(tmp, "http://127.0.0.1:%d/" % port)
+            p.evaluer(onglet("reglages"))
+            p.attendre("document.getElementById('machinesZone').textContent.includes('Ajouter une machine')")
+            self.assertIn("Prêter le moteur", p.evaluer("document.getElementById('machinesZone').textContent"))
+            self.assertEqual(p.evaluer("document.querySelectorAll('#machinesZone .erreur:not(:empty)').length"), 0)
+            self.assertEqual(p.erreurs, [])
+
     def test_reprise_dit_ce_qui_ne_va_pas_puis_ce_qu_elle_a_fait(self):
         """Le bug d'origine : la reprise ne disait rien. La fenêtre montre l'erreur d'un mauvais dossier, puis le contenu trouvé, puis le résultat."""
         with self.captures.serveur_demo() as (port, tmp):

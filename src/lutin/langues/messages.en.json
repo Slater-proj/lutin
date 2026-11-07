@@ -1675,5 +1675,22 @@
 "Tient en partie sur la carte ({} Go) ; {} Go passent en mémoire vive : utilisable mais plus lent.": "Partly fits on the card ({} GB); {} GB go to RAM: usable but slower.",
 "Tient : environ {} Go ({} Go de modèle + {} Go de conversation).": "Fits: about {} GB ({} GB of model + {} GB of conversation).",
 "Ce modèle n'est pas au catalogue : pas d'estimation possible.": "This model is not in the catalogue: no estimate possible.",
-"Fenêtre de conversation invalide.": "Invalid conversation window."
+"Fenêtre de conversation invalide.": "Invalid conversation window.",
+"Machine inconnue.": "Unknown machine.",
+"Le niveau d'accès « cette machine seulement » n'accepte aucune autre machine : passe au niveau « réseau » (Accès) pour prêter le moteur.": "The \"this machine only\" access level accepts no other machine: switch to the \"network\" level (Access) to lend the engine.",
+"Demande invalide.": "Invalid request.",
+"Adresse de machine invalide (exemple : 192.168.1.20 ou http://poste:8777).": "Invalid machine address (example: 192.168.1.20 or http://pc:8777).",
+"Adresse MAC invalide (exemple : 00:1A:2B:3C:4D:5E).": "Invalid MAC address (example: 00:1A:2B:3C:4D:5E).",
+"Réponse inattendue : ce n'est pas un Lutin qui prête son moteur.": "Unexpected answer: this is not a Lutin lending its engine.",
+"Pas de réponse (éteinte, hors réseau ou Lutin arrêté).": "No answer (off, off the network or Lutin stopped).",
+"Code incorrect ou expiré, ou ce Lutin ne prête pas son moteur.": "Wrong or expired code, or this Lutin does not lend its engine.",
+"Impossible de joindre cette machine : vérifie l'adresse et qu'elle est allumée.": "Cannot reach this machine: check the address and that it is on.",
+"Ce n'est plus la même machine à cette adresse : rien ne lui est envoyé.": "This is no longer the same machine at this address: nothing is sent to it.",
+"Cette machine a refusé le code (incorrect, expiré, ou elle ne prête pas son moteur).": "This machine refused the code (wrong, expired, or it does not lend its engine).",
+"La machine répond, mais son moteur est arrêté.": "The machine answers, but its engine is stopped.",
+"La machine refuse ce Lutin (erreur {}) : l'autorisation a peut-être été retirée.": "The machine refuses this Lutin (error {}): the authorization may have been revoked.",
+"Cette machine a répondu une erreur ({}).": "This machine answered an error ({}).",
+"La machine répond, mais le modèle « {} » n'y est pas installé.": "The machine answers, but the model \"{}\" is not installed there.",
+"Moteur opérationnel : {}.": "Engine operational: {}.",
+"Ajouter une machine, ou prêter le moteur de celle-ci, se fait depuis cette machine (ou par un administrateur déclaré).": "Adding a machine, or lending this one's engine, is done from this machine (or by a declared administrator)."
 }

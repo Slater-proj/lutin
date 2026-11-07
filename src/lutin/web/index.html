@@ -626,6 +626,9 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     <h2>Moteur de modèles <span class="aide">(ce qui fait tourner le modèle de langage)</span></h2>
     <div class="aide">Lutin discute avec un moteur. Chaque moteur a ses forces et ses limites, et ce que tu peux faire avec lui (l'installer, le démarrer, télécharger ses modèles) dépend de lui et de ton installation : seul ce qui est possible est proposé, avec la raison du reste. Changer de moteur change aussi la liste des modèles et l'onglet Modèles.</div>
     <div id="listeMoteurs"></div>
+    <h2>Machines</h2>
+    <div class="aide">Fais répondre Lutin avec le moteur d'une autre machine (un poste à carte graphique, par exemple). Si elle est éteinte ou injoignable, ton moteur local répond, sans erreur dans la conversation : son état se voit ici.</div>
+    <div id="machinesZone"></div>
     <div class="aide" id="aideMoteur"></div>
     </details>
     <details class="groupe" open data-g="conversation"><summary>Conversation</summary>
@@ -1779,7 +1782,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     if (b.dataset.p === 'acces') chargerAcces();
     if (b.dataset.p === 'chat' && CONV && !(FLUX && FLUX.detache)) lue(CONV.id);          // on revient lire : la pastille verte s'éteint tout de suite
     if (b.dataset.p === 'sante') window.ouvrirSante();
-    if (b.dataset.p === 'reglages') { chargerFichiersCrees(); chargerMoteurs(); }
+    if (b.dataset.p === 'reglages') { chargerFichiersCrees(); chargerMoteurs(); chargerMachines(); }
   }));
   $('bEnvoyer').addEventListener('click', () => envoyer());          // sans argument : l'évènement du clic n'est pas un message sorti de la file d'attente
   // Arrêter : on prévient d'abord le serveur (modèle, outils et accords en attente s'arrêtent vraiment), puis on laisse arriver la fin du flux.
@@ -3146,6 +3149,55 @@ body[data-moteur="openai"] .biblio { display:none !important; }
   // L'onglet Modèles d'un moteur autre qu'Ollama : ses modèles (utiliser, supprimer) et, selon lui, de quoi en télécharger
   // Sous le moteur choisi, la page des modèles est celle d'Ollama (catalogue, bibliothèque, sans filtre…) : mêmes modèles, mêmes noms. Ici, ce qui est propre au moteur :
   // pour llama.cpp, des fichiers GGUF d'autres sources (Hugging Face) ; pour un serveur externe, la liste de ses modèles.
+  // Machines (D7) : prêter le moteur de cette machine, ajouter celles des autres, voir leur état (quatre états observables), choisir laquelle répond
+  const ETATS_MACHINE = { injoignable: ['⚪', T('injoignable')], reveil_envoye: ['🟡', T('réveil envoyé')], joignable: ['🟠', T('nœud joignable')], operationnel: ['🟢', T('moteur opérationnel')] };
+  let MINUTEUR_MACHINES = null;
+  const chargerMachines = async (forcer) => {
+    const z = $('machinesZone'); if (!z) return;
+    clearTimeout(MINUTEUR_MACHINES);
+    let r; try { r = await api('/api/machines'); } catch (e) { z.textContent = e.message; return; }
+    const neuf = document.createElement('div'), act = async (action, corps, msg) => { try { const x = await api('/api/machines-' + action, corps || {}); if (msg) msg.textContent = ''; return x; } catch (e) { if (msg) msg.textContent = e.message; else alert(e.message); return null; } };
+    // 1. cette machine prête son moteur
+    const prete = el('div', 'carte'); prete.style.display = 'block';
+    const lab = el('label'), ca = el('input'); ca.type = 'checkbox'; ca.checked = r.noeud.actif; ca.disabled = r.niveau_local && !r.noeud.actif;
+    lab.append(ca, document.createTextNode(' ' + T('Prêter le moteur de cette machine aux autres Lutin')));
+    ca.addEventListener('change', async () => { await act('noeud-activer', { actif: ca.checked }); chargerMachines(true); });
+    prete.appendChild(lab);
+    if (r.niveau_local && !r.noeud.actif) prete.appendChild(el('div', 'aide', T('Impossible au niveau « cette machine seulement » : passe au niveau « réseau » (onglet Accès).')));
+    if (r.noeud.actif) {
+      const code = el('div', 'aide'), bc = el('button', '', T('Autoriser une machine…'));
+      bc.addEventListener('click', async () => { const x = await act('noeud-code'); if (x) code.textContent = T('Sur l\'autre Lutin, saisis ce code (valable 5 minutes, une seule fois) : ') + x.code; });
+      prete.append(el('div', 'aide', T('Seules les machines que tu autorises ici peuvent utiliser ce moteur. Elles n\'ont accès à rien d\'autre (ni conversations, ni fichiers).')), bc, code);
+      r.noeud.autorisees.forEach(a => { const l = el('div', 'ligne'), rv = el('button', '', T('Révoquer')); rv.addEventListener('click', async () => { if (!confirm(T('Révoquer l\'accès de « ') + a.nom + T(' » ?'))) return; await act('noeud-revoquer', { nom: a.nom }); chargerMachines(true); }); l.append(el('span', '', '🔑 ' + a.nom + ' · ' + a.date), rv); prete.appendChild(l); });
+    }
+    neuf.appendChild(prete);
+    // 2. les machines appairées
+    r.machines.forEach(m => {
+      const c = el('div', 'carte'); c.style.display = 'block';
+      const e = ETATS_MACHINE[m.etat] || ETATS_MACHINE.injoignable, choisie = r.choisie === m.id;
+      c.appendChild(el('b', '', e[0] + ' ' + m.nom + (choisie ? ' · ' + T('répond à tes messages') : '')));
+      c.appendChild(el('div', 'aide', m.adresse + ' · ' + e[1] + ' — ' + m.detail));
+      const l = el('div', 'ligne'), bu = el('button', choisie ? '' : 'principal', choisie ? T('Revenir au moteur local') : T('Répondre avec cette machine'));
+      bu.addEventListener('click', async () => { await act('use', { id: choisie ? '' : m.id }); await rafraichir(); chargerMachines(true); });
+      const mac = el('input'); mac.placeholder = T('Adresse MAC (facultative, pour la réveiller)'); mac.value = m.mac || ''; mac.style.flex = '1';
+      mac.addEventListener('change', async () => { await act('mac', { id: m.id, mac: mac.value.trim() }); });
+      const br = el('button', '', T('Retirer')); br.addEventListener('click', async () => { if (!confirm(T('Retirer la machine « ') + m.nom + T(' » ?'))) return; await act('remove', { id: m.id }); await rafraichir(); chargerMachines(true); });
+      l.append(bu, mac, br); c.appendChild(l); neuf.appendChild(c);
+    });
+    // 3. ajouter
+    const aj = el('div', 'carte'); aj.style.display = 'block';
+    aj.appendChild(el('b', '', T('Ajouter une machine')));
+    aj.appendChild(el('div', 'aide', T('Sur l\'autre machine : Réglages > Machines > « Prêter le moteur », puis « Autoriser une machine » affiche un code. Saisis ici son adresse et ce code.')));
+    const ia = el('input'), ic = el('input'), inom = el('input'), msg = el('div', 'erreur'), ligne = el('div', 'ligne'), ok = el('button', 'principal', T('Ajouter'));
+    ia.placeholder = T('Adresse (192.168.1.20 ou http://poste:8777)'); ic.placeholder = T('Code à 8 chiffres'); inom.placeholder = T('Nom (facultatif)');
+    ia.style.flex = ic.style.flex = inom.style.flex = '1';
+    ok.addEventListener('click', async () => { ok.disabled = true; const x = await act('add', { adresse: ia.value.trim(), code: ic.value.trim(), nom: inom.value.trim() }, msg); ok.disabled = false; if (x) chargerMachines(true); });
+    ligne.append(ia, ic, inom, ok); aj.append(ligne, msg); neuf.appendChild(aj);
+    if (r.journal.length) { const d = el('details', 'aide'); d.appendChild(el('summary', '', T('Journal des machines'))); r.journal.slice().reverse().forEach(t => d.appendChild(el('div', 'point', t))); neuf.appendChild(d); }
+    // une saisie en cours n'est pas écrasée par le rafraîchissement : on ne redessine que si rien n'est en train d'être tapé
+    if (forcer || !z.contains(document.activeElement) || document.activeElement === document.body) z.replaceChildren(...neuf.childNodes);
+    if ($('p-reglages').classList.contains('vue')) MINUTEUR_MACHINES = setTimeout(() => chargerMachines(), 8000);
+  };
   const chargerModelesMoteur = async () => {
     const z = $('modelesMoteur'); if (!ETAT || ETAT.moteur === 'ollama') return;
     let r; try { r = await api('/api/moteurs'); } catch (e) { z.textContent = e.message; return; }

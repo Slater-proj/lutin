@@ -684,7 +684,12 @@ def etat_moteur():
 
 def moteur_actuel(r=None):
     """Le moteur choisi dans les réglages (Ollama par défaut, et si le réglage est inconnu)."""
-    return _moteurs.par_id((r if r is not None else _m.reglages()).get("moteur") or _moteurs.OLLAMA)
+    r = r if r is not None else _m.reglages()
+    local = _moteurs.par_id(r.get("moteur") or _moteurs.OLLAMA)
+    if r.get("machine"):          # une machine est choisie : ses demandes de conversation partent chez elle quand elle est opérationnelle, sinon ce moteur répond (en silence)
+        from . import machines
+        return machines.acheminer(local, r)
+    return local
 
 
 def etat_ollama():
