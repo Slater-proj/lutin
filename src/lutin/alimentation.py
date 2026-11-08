@@ -75,7 +75,7 @@ def emission_limitee():
     locales = adresses_locales()
     if locales and not all(re.match(r"^172\.(1[6-9]|2\d|3[01])\.", a) for a in locales):
         return ""
-    return _t("Lutin tourne dans Docker en réseau « bridge » : un paquet de réveil ne sort pas sur ton réseau local. Dans docker-compose.yml, ajoute « network_mode: host » (et retire « ports: ») pour pouvoir réveiller des machines, ou, sans changer le réseau, depuis l'hôte : « docker run --rm --network host ghcr.io/slater-proj/lutin lutin wake <MAC> ».")
+    return _t("Lutin tourne dans Docker en réseau « bridge » : un paquet de réveil ne sort pas sur ton réseau local. Un envoi direct à la machine est tenté (il marche si l'hôte la connaît encore, par exemple juste après son extinction). Pour un réveil fiable, dans docker-compose.yml, ajoute « network_mode: host » (et retire « ports: ») pour pouvoir réveiller des machines, ou, sans changer le réseau, depuis l'hôte : « docker run --rm --network host ghcr.io/slater-proj/lutin lutin wake <MAC> ».")
 
 
 def envoyer_reveil(mac, adresse_machine="", ports=(9, 7), socket_factory=socket.socket, locales=None):
@@ -85,6 +85,8 @@ def envoyer_reveil(mac, adresse_machine="", ports=(9, 7), socket_factory=socket.
     sources = [""] + list(adresses_locales() if locales is None else locales)
     for source in sources:
         cibles = diffusions(adresse_machine)
+        if re.match(r"^\d{1,3}(\.\d{1,3}){3}$", str(adresse_machine or "")):
+            cibles.append(adresse_machine)          # envoi direct : seul chemin d'un conteneur « bridge » (marche si l'hôte connaît encore la machine : ARP récent ou statique)
         m = re.match(r"^(\d{1,3}\.\d{1,3}\.\d{1,3})\.\d{1,3}$", source)
         if m and m.group(1) + ".255" not in cibles:
             cibles.append(m.group(1) + ".255")

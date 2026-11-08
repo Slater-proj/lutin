@@ -58,7 +58,8 @@ class Reveil(unittest.TestCase):
             def close(self):
                 pass
         r = alimentation.envoyer_reveil("00:1A:2B:3C:4D:5E", "192.168.1.20", socket_factory=Faux, locales=[])
-        self.assertEqual(len(r), 4)
+        self.assertEqual(len(r), 6)
+        self.assertIn((102, ("192.168.1.20", 9)), envoyes)
         self.assertIn((102, ("192.168.1.255", 9)), envoyes)
         self.assertIn((102, ("255.255.255.255", 7)), envoyes)
 
