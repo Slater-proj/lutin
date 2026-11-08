@@ -1046,7 +1046,17 @@ def _systeme():
     return "windows" if os.name == "nt" else ("macos" if sys.platform == "darwin" else "linux")
 
 
-def _http_json(url, delai=20):
+def _http_json(url, delai=20, pauses=(2, 5)):
+    """Un JSON de GitHub / Hugging Face. Une panne passagère (502, 503, 504, 429, coupure) est patientée : trois essais avant de renoncer."""
     req = urllib.request.Request(url, headers={"Accept": "application/json", "User-Agent": "Lutin"})
-    with urllib.request.urlopen(req, timeout=delai) as r:
-        return json.loads(r.read().decode("utf-8"))
+    for pause in (*pauses, None):
+        try:
+            with urllib.request.urlopen(req, timeout=delai) as r:
+                return json.loads(r.read().decode("utf-8"))
+        except urllib.error.HTTPError as e:
+            if pause is None or not (e.code >= 500 or e.code == 429):
+                raise
+        except urllib.error.URLError:
+            if pause is None:
+                raise
+        time.sleep(pause)

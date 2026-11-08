@@ -82,9 +82,8 @@ def ollama_externe(env=None):
 # --------------------------------------------------------------------------- installation d'Ollama
 
 def _http_json(url, delai=20):
-    req = urllib.request.Request(url, headers={"Accept": "application/vnd.github+json", "User-Agent": "lutin"})
-    with urllib.request.urlopen(req, timeout=delai) as r:  # noqa: S310  (https fixe)
-        return json.loads(r.read().decode("utf-8"))
+    from .moteur_llamacpp import _http_json as lire          # même patience que pour llama.cpp : trois essais si GitHub a une panne passagère
+    return lire(url, delai)
 
 
 def fichiers_ollama(release, arch, rocm=False):

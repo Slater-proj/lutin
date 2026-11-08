@@ -187,6 +187,26 @@ class ErreurVerification(ValueError):
 
 
 TAILLE_ROUE_MAX = 60_000_000
+PAUSES = (2, 5, 12)          # secondes entre les essais quand GitHub est momentanément indisponible (504, 502, 503, 429, coupure) : 4 essais en tout
+
+
+def _panne_passagere(statut):
+    return statut >= 500 or statut == 429
+
+
+def _avec_reprises(action, pauses=PAUSES, dormir=None):
+    """`action()` -> (statut, en-têtes, corps) ; recommence quand GitHub répond par une panne passagère (5xx, 429) ou que le réseau coupe un instant. Le dernier résultat est rendu tel quel : jamais de contournement,
+    seulement de la patience (la vérification de la somme reste obligatoire)."""
+    for pause in (*pauses, None):
+        try:
+            statut, entetes, corps = action()
+        except OSError:
+            if pause is None:
+                raise
+        else:
+            if not _panne_passagere(statut) or pause is None:
+                return statut, entetes, corps
+        (dormir or time.sleep)(pause)
 RE_NOM_ROUE = re.compile(r"^lutin-[0-9A-Za-z.+_-]+-py3-none-any\.whl$")
 
 
@@ -199,35 +219,50 @@ def somme_attendue(texte, nom_fichier):
     return None
 
 
-def telecharger_roue_verifiee(url_roue, dossier, http=http_get, ouvrir=urllib.request.urlopen, nom_valide=RE_NOM_ROUE, exiger_sommes=False, prefixe="https://"):
+def telecharger_roue_verifiee(url_roue, dossier, http=http_get, ouvrir=urllib.request.urlopen, nom_valide=RE_NOM_ROUE, exiger_sommes=False, prefixe="https://", pauses=PAUSES):
     """Télécharge la roue dans `dossier`, calcule sa somme SHA-256 pendant la lecture et la compare au SHA256SUMS.txt publié à côté. Renvoie (chemin, verifie).
     `verifie` est faux seulement quand la publication n'a pas de SHA256SUMS.txt (anciennes versions) : l'appelant le dit. Une somme qui ne correspond pas, un fichier absent de la liste ou une roue trop grosse lèvent ErreurVerification ;
     le réseau absent lève OSError. L'installation se fait ensuite depuis CE fichier : aucun octet non vérifié n'est installé."""
     nom = str(url_roue).rsplit("/", 1)[-1]
     if not str(url_roue).startswith(prefixe) or not nom_valide.match(nom):
         raise ErreurVerification(_t("Adresse de roue inattendue : {}").format(str(url_roue)[:120]))
-    statut, _, corps = http(str(url_roue).rsplit("/", 1)[0] + "/SHA256SUMS.txt", delai=20)
+    adresse_sommes = str(url_roue).rsplit("/", 1)[0] + "/SHA256SUMS.txt"
+    statut, _, corps = _avec_reprises(lambda: http(adresse_sommes, delai=20), pauses)          # GitHub a parfois un 504 d'une minute : on patiente avant de renoncer
     attendue = None
     if statut == 200:
         attendue = somme_attendue(corps.decode("utf-8", "replace"), nom)
         if attendue is None:
             raise ErreurVerification(_t("{} ne figure pas dans SHA256SUMS.txt : mise à jour refusée.").format(nom))
     elif statut != 404 or exiger_sommes:          # `exiger_sommes` : pour un programme d'un tiers, pas de somme publiée = pas de téléchargement
+        if _panne_passagere(statut):
+            raise ErreurVerification(_t("GitHub est momentanément indisponible (HTTP {}) : la somme de contrôle de la mise à jour n'a pas pu être lue après plusieurs essais. Rien n'a été installé ; réessaie dans quelques minutes.").format(statut))
         raise ErreurVerification(_t("SHA256SUMS.txt illisible (HTTP {}) : mise à jour refusée.").format(statut))
     horsligne.garde(url_roue)
     requete = urllib.request.Request(url_roue, headers={"User-Agent": "lutin"})
     chemin = Path(dossier) / nom
-    h, total = hashlib.sha256(), 0
-    with ouvrir(requete, timeout=60) as r, open(chemin, "wb") as sortie:
-        while True:
-            bloc = r.read(1 << 16)
-            if not bloc:
-                break
-            total += len(bloc)
-            if total > TAILLE_ROUE_MAX:
-                raise ErreurVerification(_t("Roue anormalement grosse : mise à jour refusée."))
-            h.update(bloc)
-            sortie.write(bloc)
+
+    def lire():
+        h, total = hashlib.sha256(), 0
+        with ouvrir(requete, timeout=60) as r, open(chemin, "wb") as sortie:
+            while True:
+                bloc = r.read(1 << 16)
+                if not bloc:
+                    break
+                total += len(bloc)
+                if total > TAILLE_ROUE_MAX:
+                    raise ErreurVerification(_t("Roue anormalement grosse : mise à jour refusée."))
+                h.update(bloc)
+                sortie.write(bloc)
+        return h
+
+    for pause in (*pauses, None):          # une coupure en cours de téléchargement : on recommence au début (le fichier est vérifié en entier)
+        try:
+            h = lire()
+            break
+        except OSError:
+            if pause is None:
+                raise
+            time.sleep(pause)
     if attendue and h.hexdigest() != attendue:
         chemin.unlink(missing_ok=True)
         raise ErreurVerification(_t("La somme SHA-256 de {} ne correspond pas à celle de la publication : mise à jour refusée.").format(nom))

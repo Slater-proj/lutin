@@ -2,6 +2,10 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## Mise à jour : patience face à une panne passagère de GitHub
+
+- **« SHA256SUMS.txt illisible (HTTP 504) : mise à jour refusée »** : GitHub répond parfois 504 pendant quelques minutes. Lutin refusait aussitôt (c'est voulu : jamais d'installation sans somme vérifiée), mais sans insister. Il réessaie maintenant quatre fois (2, 5 puis 12 secondes) avant de renoncer, avec un message clair (« GitHub est momentanément indisponible… rien n'a été installé »), et recommence un téléchargement coupé en route. La vérification de la somme reste obligatoire. Même patience pour l'installation d'Ollama et de llama.cpp. **Si tu es bloqué sur cette erreur** : relance la mise à jour dans quelques minutes, ou `lutin update` dans un terminal.
+
 ## Docker : image légère, moteurs installés depuis la page
 
 - **L'image Docker ne contient plus Ollama** (1,5 Go de moins à retélécharger à chaque mise à jour). Au premier lancement, la page propose d'installer le moteur conseillé : **le bouton « Installer Ollama » installe vraiment** (avant, il ouvrait seulement les réglages). Réglages > Moteurs installe, met à jour, démarre, arrête et désinstalle **Ollama et llama.cpp** dans Docker, comme sur ta machine.
