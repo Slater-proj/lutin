@@ -53,5 +53,5 @@ Your data lives in the `lutin-data` volume (and models in `lutin-models`): they 
 ## What this does not cover
 
 - Models and engines (Ollama, llama.cpp) are updated and rolled back with their own tools; Lutin does not touch them when it rolls itself back.
-- The machines' pairing tokens (Settings > Machines) are **not** in backups: they are secrets. After restoring on a new computer, pair the machines again.
+- The machines' pairing tokens (Machines tab) are **not** in backups: they are secrets. After restoring on a new computer, pair the machines again.
 - The rollback command has been tested with a simulated installer, not with a real release on a real installation. Try it once on your side before you need it.

@@ -3,7 +3,7 @@
 Le POSTE à carte graphique (le nœud) prête le moteur de sa machine ; le PETIT PC (le principal) route ses demandes vers lui et, s'il est injoignable, répond avec son moteur local, EN SILENCE.
 
 Ce que le nœud accepte, et rien d'autre :
-- il est éteint par défaut ; le propriétaire l'active (Réglages > Machines) et seulement si le niveau d'accès n'est pas « cette machine seulement » ;
+- il est éteint par défaut ; le propriétaire l'active (onglet Machines) et seulement si le niveau d'accès n'est pas « cette machine seulement » ;
 - une machine s'ajoute par **validation explicite** : le nœud affiche un code à 8 chiffres (valable 5 minutes, à usage unique) que le propriétaire saisit sur l'autre Lutin. Jamais d'acceptation automatique, jamais de découverte du réseau ;
 - le code s'échange contre un **jeton de nœud** (propre à chaque machine, gardé haché sur le nœud). Ce jeton ouvre `/api/noeud/*` et RIEN d'autre : ni conversations, ni fichiers, ni réglages. Il se révoque d'un clic ;
 - le nœud ne garde rien des demandes : il fait tourner son moteur et renvoie la réponse.
@@ -487,7 +487,7 @@ def avertissements(m):
     if d.get("docker"):
         sortie.append(_t("Cette machine fait tourner Lutin dans Docker : pour qu'il soit là après un réveil, le conteneur doit avoir « restart: unless-stopped » et Docker doit démarrer avec la machine."))
     elif d and d.get("possible") and not d.get("installe"):
-        sortie.append(_t("Lutin ne démarre pas tout seul sur cette machine : une fois réveillée, personne ne le lance et elle restera injoignable. Sur cette machine : Réglages > Machines > « Démarrer Lutin à l'ouverture de ma session » (et auto-connexion Windows pour un PC qui démarre sans personne)."))
+        sortie.append(_t("Lutin ne démarre pas tout seul sur cette machine : une fois réveillée, personne ne le lance et elle restera injoignable. Sur cette machine : onglet Machines > « Démarrer Lutin à l'ouverture de ma session » (et auto-connexion Windows pour un PC qui démarre sans personne)."))
     return sortie
 
 
@@ -570,7 +570,7 @@ def eteindre(ident, annuler=False, ouvrir=None):
     try:
         rep = _json(m, "/api/noeud/eteindre", {"annuler": bool(annuler)}, delai=8, ouvrir=ouvrir)
     except urllib.error.HTTPError as e:
-        raise ValueError(_t("Cette machine n'accepte pas d'être éteinte à distance : son propriétaire doit cocher « Autoriser les machines appairées à l'éteindre » dans Réglages > Machines.") if e.code == 403 else _t("Cette machine a répondu une erreur ({}).").format(e.code)) from None
+        raise ValueError(_t("Cette machine n'accepte pas d'être éteinte à distance : son propriétaire doit cocher « Autoriser les machines appairées à l'éteindre » dans l'onglet Machines.") if e.code == 403 else _t("Cette machine a répondu une erreur ({}).").format(e.code)) from None
     except (urllib.error.URLError, OSError, ValueError):
         raise ValueError(_t("Impossible de joindre cette machine : vérifie l'adresse et qu'elle est allumée.")) from None
     journaliser("{} demandée à {}".format("annulation de l'extinction" if annuler else "extinction", m["nom"]))
@@ -591,6 +591,13 @@ def signaler_panne(m, modele=""):
     _noter(m, "injoignable", time.monotonic, {"etat": "injoignable", "detail": _t("Pas de réponse (éteinte, hors réseau ou Lutin arrêté)."), "modeles": []}, modele)
 
 
+def cluster_actif(reglage):
+    """L'onglet Machines est-il visible ? Le réglage explicite l'emporte ; sans réglage (None), dès qu'une machine est appairée ou que celle-ci en prête le moteur."""
+    if reglage is not None:
+        return bool(reglage)
+    return bool(lire()) or bool(noeud_vue().get("actif"))
+
+
 def etats(modele="", ouvrir=None, choisie=""):
     """Pour la page Machines : chaque machine avec son état. Le modèle choisi ici n'est cherché que sur la machine CHOISIE pour répondre : les autres ont leurs propres modèles, ce n'est pas un défaut."""
     return [dict(vue(m), **sonder(m, modele if m["id"] == choisie else "", ouvrir)) for m in lire()]
@@ -607,7 +614,7 @@ def demander_partage(m, genre, **corps):
         return _json(m, "/api/noeud/partage", dict(corps, genre=genre), delai=20)
     except urllib.error.HTTPError as e:
         if e.code == 403:
-            raise ValueError(_t("La machine « {} » ne partage pas cela : sur elle, Réglages > Machines > « Partager avec les machines appairées », puis coche la case voulue.").format(m.get("nom", "?"))) from None
+            raise ValueError(_t("La machine « {} » ne partage pas cela : sur elle, onglet Machines > « Partager avec les machines appairées », puis coche la case voulue.").format(m.get("nom", "?"))) from None
         raise ValueError(_t("Cette machine a répondu une erreur ({}).").format(e.code)) from None
     except (urllib.error.URLError, OSError, ValueError):
         raise ValueError(_t("Impossible de joindre cette machine : vérifie l'adresse et qu'elle est allumée.")) from None
@@ -891,7 +898,7 @@ class Routage:
         modele = corps.get("model", "")
         connu_la_bas = next((d for d in DISTANTS["v"] if d["id"] == self.machine["id"] and modele in d["modeles"]), None)
         if connu_la_bas is not None and not self._modele_local(modele):
-            raise ValueError(_t("Le modèle « {} » n'existe que sur la machine « {} », qui ne répond pas pour l'instant (éteinte, hors réseau ou Lutin arrêté). Réveille-la dans Réglages > Machines, ou choisis un modèle de cette machine-ci.").format(modele, self.machine.get("nom", "?")))
+            raise ValueError(_t("Le modèle « {} » n'existe que sur la machine « {} », qui ne répond pas pour l'instant (éteinte, hors réseau ou Lutin arrêté). Réveille-la dans l'onglet Machines, ou choisis un modèle de cette machine-ci.").format(modele, self.machine.get("nom", "?")))
 
     def _occupee(self, corps):
         """La machine est occupée (trop de demandes à la fois) : le moteur d'ici répond si le modèle y est, sinon on dit de réessayer — jamais « injoignable »."""

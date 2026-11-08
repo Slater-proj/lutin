@@ -8,14 +8,14 @@ A small PC (a Debian box without a graphics card, say) can answer with the engin
 
 ## The principle
 
-- The **node** (the PC with the card) lends its machine's engine. It is **off by default**; you turn it on in Settings > Machines ("Lend this machine's engine to other Lutin"), which needs the "network" access level (at "this machine only", nobody else could reach it).
+- The **node** (the PC with the card) lends its machine's engine. It is **off by default**; you turn it on in the Machines tab ("Lend this machine's engine to other Lutin"), which needs the "network" access level (at "this machine only", nobody else could reach it).
 - The **main** Lutin (the small PC) routes the conversation request to it **if** the node is operational for that model. Otherwise, or if the machine goes down, **the local engine answers, silently**.
 - Routing first, spreading later. **A single model is never split between machines** (out of scope for 1.0).
 
 ## Adding a machine: explicit validation
 
-1. On the node: Settings > Machines > "Allow a machine…" shows an **8-digit code**, valid 5 minutes, single use.
-2. On the main one: Settings > Machines > "Add a machine": the node's address (`192.168.1.20` or `http://pc:8777`) and that code.
+1. On the node: Machines tab > "Allow a machine…" shows an **8-digit code**, valid 5 minutes, single use.
+2. On the main one: Machines tab > "Add a machine": the node's address (`192.168.1.20` or `http://pc:8777`) and that code.
 3. The node exchanges the code for a **node token**, specific to that machine. It keeps only its fingerprint (SHA-256). The main Lutin keeps the token, **never showing it**.
 
 Never automatic acceptance, never network discovery. Too many code attempts from one address are blocked (as with the PIN code). **Revoking** a machine (on the node) cuts its access at once.
@@ -37,7 +37,7 @@ The state is checked (kept 10 s) before anything is sent, and **the node's ident
 
 ## An unreachable machine says nothing in the conversation
 
-No error, no warning: the local engine answers. The state is visible in Settings > Machines, and the machines log only notes **one line per state change** (never per probe, never conversation content). A failure in the middle of an answer already started cannot be rescued by the local engine: it looks like any interrupted answer.
+No error, no warning: the local engine answers. The state is visible in the Machines tab, and the machines log only notes **one line per state change** (never per probe, never conversation content). A failure in the middle of an answer already started cannot be rescued by the local engine: it looks like any interrupted answer.
 
 ## Power: wake, switch off, start by itself (0.24.0)
 

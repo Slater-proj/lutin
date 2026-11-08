@@ -8,14 +8,14 @@ Un petit PC (une Debian sans carte graphique, par exemple) peut répondre avec l
 
 ## Le principe
 
-- Le **nœud** (le poste à carte) prête le moteur de sa machine. Il est **éteint par défaut** ; tu l'actives dans Réglages > Machines (« Prêter le moteur de cette machine aux autres Lutin »), ce qui demande le niveau d'accès « réseau » (au niveau « cette machine seulement », personne d'autre ne pourrait l'atteindre).
+- Le **nœud** (le poste à carte) prête le moteur de sa machine. Il est **éteint par défaut** ; tu l'actives dans l'onglet Machines (« Prêter le moteur de cette machine aux autres Lutin »), ce qui demande le niveau d'accès « réseau » (au niveau « cette machine seulement », personne d'autre ne pourrait l'atteindre).
 - Le **principal** (le petit PC) route la demande de conversation vers lui, **si** le nœud est opérationnel pour ce modèle. Sinon, ou si la machine tombe, **le moteur local répond, en silence**.
 - Routage d'abord, répartition ensuite. **Un même modèle n'est jamais réparti entre plusieurs machines** (hors programme de la 1.0).
 
 ## Ajouter une machine : validation explicite
 
-1. Sur le nœud : Réglages > Machines > « Autoriser une machine… » affiche un **code à 8 chiffres**, valable 5 minutes, à usage unique.
-2. Sur le principal : Réglages > Machines > « Ajouter une machine » : l'adresse du nœud (`192.168.1.20` ou `http://poste:8777`) et ce code.
+1. Sur le nœud : onglet Machines > « Autoriser une machine… » affiche un **code à 8 chiffres**, valable 5 minutes, à usage unique.
+2. Sur le principal : onglet Machines > « Ajouter une machine » : l'adresse du nœud (`192.168.1.20` ou `http://poste:8777`) et ce code.
 3. Le nœud échange le code contre un **jeton de nœud**, propre à cette machine. Il ne garde que son empreinte (SHA-256). Le principal garde le jeton, **sans jamais l'afficher**.
 
 Jamais d'acceptation automatique, jamais de découverte du réseau. Trop d'essais de code depuis une même adresse sont bloqués (comme pour le code PIN). **Révoquer** une machine (côté nœud) coupe son accès tout de suite.
@@ -37,7 +37,7 @@ L'état est vérifié (gardé 10 s) avant d'envoyer quoi que ce soit, et **l'ide
 
 ## Une machine injoignable ne dit rien dans la conversation
 
-Pas d'erreur, pas d'avertissement : le moteur local répond. L'état est visible dans Réglages > Machines, et le journal des machines ne note qu'**un trait à chaque changement d'état** (jamais à chaque sonde, jamais le contenu d'une conversation). Une panne en plein milieu d'une réponse déjà commencée ne peut pas être rattrapée par le moteur local : elle se voit comme n'importe quelle réponse interrompue.
+Pas d'erreur, pas d'avertissement : le moteur local répond. L'état est visible dans l'onglet Machines, et le journal des machines ne note qu'**un trait à chaque changement d'état** (jamais à chaque sonde, jamais le contenu d'une conversation). Une panne en plein milieu d'une réponse déjà commencée ne peut pas être rattrapée par le moteur local : elle se voit comme n'importe quelle réponse interrompue.
 
 ## Alimentation : réveiller, éteindre, démarrer tout seul (0.24.0)
 

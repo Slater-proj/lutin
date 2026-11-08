@@ -2,6 +2,13 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## Un onglet Machines, réveil et état des machines
+
+- **Un onglet Machines** (réglage « Utiliser plusieurs machines » dans Réglages > Moteur) : les machines appairées, celle-ci quand tu la prêtes, le réveil, l'extinction et les imports y sont rassemblés ; les Réglages sont plus courts. L'onglet apparaît tout seul dès qu'une machine est appairée ou prêtée, et se cache sinon.
+- **Le réveil (Wake-on-LAN) part par chaque carte réseau** (un VPN, Hyper-V, WSL ou Docker faisaient partir le paquet par la mauvaise) ; le bouton Réveiller dit toujours quelle adresse MAC et quelles cartes ont servi. Sous Docker, un conteneur en réseau « bridge » ne peut pas diffuser sur le réseau local : Lutin le dit et propose `network_mode: host` (docs/DOCKER.md).
+- **Une machine distante n'est plus orange** parce qu'elle n'a pas le modèle choisi ici : ce modèle n'est cherché que sur la machine choisie pour répondre.
+- **À savoir** : le réveil est essayé en vrai chez l'utilisateur (conteneur en mode host) ; l'onglet est testé par un vrai navigateur, mais sans machine distante réelle.
+
 ## Conversations, skills et mémoire partagés entre machines ; modèles llama.cpp sous Docker
 
 - **Les conversations des machines appairées apparaissent dans ta liste, en jaune** (comme leurs modèles) : un clic en fait une **copie** ici, que tu continues avec les skills, la mémoire et les modèles de CETTE machine ; la copie garde son origine (🖥) et se met à jour si l'original a avancé et que tu ne l'as pas continuée ici (sinon elle est gardée telle quelle, jamais écrasée). Les images et fichiers joints restent sur l'autre machine.

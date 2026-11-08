@@ -53,5 +53,5 @@ Tes données vivent dans le volume `lutin-data` (et les modèles dans `lutin-mod
 ## Ce que ça ne couvre pas
 
 - Les modèles et les moteurs (Ollama, llama.cpp) se mettent à jour et se rétablissent avec leurs propres outils ; Lutin n'y touche pas quand il revient en arrière.
-- Les jetons d'appairage des machines (Réglages > Machines) ne sont **pas** dans les sauvegardes : ce sont des secrets. Après une restauration sur un autre ordinateur, appaire de nouveau les machines.
+- Les jetons d'appairage des machines (onglet Machines) ne sont **pas** dans les sauvegardes : ce sont des secrets. Après une restauration sur un autre ordinateur, appaire de nouveau les machines.
 - La commande de retour arrière a été testée avec un installateur simulé, pas avec une vraie publication sur une vraie installation. Essaie-la une fois de ton côté avant d'en avoir besoin.

@@ -2,7 +2,7 @@
 
 - **Réveil** : un « paquet magique » (6 octets 0xFF puis 16 fois l'adresse MAC) envoyé en UDP à tout le réseau local. Bibliothèque standard seulement. Il ne marche que si la machine l'accepte : BIOS (Wake-on-LAN),
   carte réseau, câble Ethernet (le Wi-Fi réveille rarement), et sous Windows « démarrage rapide » désactivé. `raison_echec()` dit lesquelles de ces limites vérifier quand rien ne répond.
-- **Extinction** : une action EXPLICITE. Le propriétaire de la machine à éteindre doit l'avoir autorisée (case décochée par défaut, dans Réglages > Machines) ; la demande vient d'une machine appairée, avec son jeton ;
+- **Extinction** : une action EXPLICITE. Le propriétaire de la machine à éteindre doit l'avoir autorisée (case décochée par défaut, dans l'onglet Machines) ; la demande vient d'une machine appairée, avec son jeton ;
   l'extinction a 30 secondes de délai et se laisse annuler ; tout est journalisé des deux côtés.
 - **Démarrage automatique** : la clé « Run » de la session de l'utilisateur sous Windows (une tâche planifiée « à l'ouverture de session » exige les droits d'administrateur) (pas un service : un service tourne dans la session 0, sans accès à la carte graphique ni au bureau), une unité systemd
   utilisateur sous Linux. Une machine qui doit démarrer SANS personne devant doit ouvrir sa session toute seule (auto-connexion Windows) : c'est une limite, dite à l'utilisateur."""

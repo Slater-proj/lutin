@@ -218,6 +218,13 @@ class Etats(Base):
         machines.SONDES.clear()
         self.assertEqual(etat(choisie=m["id"]), "joignable")
 
+    def test_l_onglet_machines_suit_le_reglage_ou_les_machines_appairees(self):
+        self.assertFalse(machines.cluster_actif(None))          # rien d'appairé, rien de prêté : caché
+        self.assertTrue(machines.cluster_actif(True))
+        self.jumeler()
+        self.assertTrue(machines.cluster_actif(None))          # une machine appairée : visible tout seul
+        self.assertFalse(machines.cluster_actif(False))          # le réglage explicite l'emporte
+
     def test_joignable_si_le_moteur_est_arrete(self):
         m = self.jumeler()
         self.noeud.actif = False

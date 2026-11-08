@@ -92,10 +92,14 @@ class Parcours(unittest.TestCase):
             self.assertEqual(p.evaluer("document.querySelectorAll('#santeCorps .erreur').length"), 0)
 
     def test_reglages_montre_les_machines_sans_erreur(self):
-        """Réglages > Machines : la case « prêter le moteur » et le formulaire d'ajout s'affichent, sans erreur, même sans aucune machine."""
+        """L'onglet Machines est caché par défaut ; la case des Réglages l'ajoute ; il montre alors la case « prêter le moteur » et le formulaire d'ajout, sans erreur, même sans aucune machine."""
         with self.captures.serveur_demo() as (port, tmp):
             p = self.ouvrir(tmp, "http://127.0.0.1:%d/" % port)
+            self.assertTrue(p.evaluer("document.querySelector('.onglets button[data-p=machines]').hidden"))
             p.evaluer(onglet("reglages"))
+            p.evaluer("(() => { const c = document.getElementById('cCluster'); c.checked = true; c.dispatchEvent(new Event('change')); })()")
+            p.attendre("!document.querySelector('.onglets button[data-p=machines]').hidden")
+            p.evaluer(onglet("machines"))
             p.attendre("document.getElementById('machinesZone').textContent.includes('Ajouter une machine')")
             self.assertIn("Prêter le moteur", p.evaluer("document.getElementById('machinesZone').textContent"))
             self.assertEqual(p.evaluer("document.querySelectorAll('#machinesZone .erreur:not(:empty)').length"), 0)
