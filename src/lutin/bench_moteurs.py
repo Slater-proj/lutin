@@ -207,6 +207,9 @@ def lancer(modele, mode, dossier, profil, **options):
         raise ValueError(_t("Aucun modèle à mesurer."))
     if mode not in PASSES:
         raise ValueError(_t("Mode inconnu."))
+    dispo = disponibles(modele)
+    if sum(1 for _, raison in dispo if not raison) < 2:          # comparer, c'est être au moins deux : avec un seul moteur il n'y a rien à comparer
+        raise ValueError(_t("Pour comparer, il faut au moins deux moteurs installés qui ont ce modèle. Pour l'instant : {}").format(" ; ".join("{} : {}".format(mo.nom, raison or _t("prêt")) for mo, raison in dispo) or "?"))
     with VERROU_LANCEMENT:          # vérifier puis réserver d'un seul geste : deux demandes simultanées ne lancent pas deux comparaisons
         if ETAT["en_cours"]:
             raise ValueError(_t("Une comparaison est déjà en cours."))
@@ -231,7 +234,12 @@ def vue(dossier, modele, profil, docker=False):
     resultat = lire(dossier).get(modele)
     caduc = a_refaire(resultat, profil, versions_actuelles()) if resultat else False
     banc = resultat if resultat and not caduc else None
+    try:
+        dispo = disponibles(modele) if modele else []
+    except Exception:  # noqa: BLE001  (un plus pour la page)
+        dispo = []
     return {"modele": modele, "resultat": resultat, "a_refaire": caduc, "recommandation": recommander(profil, banc=banc, docker=docker, modele_installe=bool(modele)),
+            "comparables": sum(1 for _, raison in dispo if not raison), "disponibilite": [{"nom": mo.nom, "raison": raison} for mo, raison in dispo],
             "en_cours": ETAT["en_cours"], "etape": ETAT["etape"], "erreur": ETAT["erreur"]}
 
 
@@ -323,9 +331,6 @@ def recommander(profil, banc=None, docker=False, modele_installe=True):
     theorique = not modele_installe
     prefixe = _t("règle générale (pas encore mesuré ici) : ")
     gpu = profil.gpu_principal() if profil else None
-    if docker:
-        return {"moteur": SIMPLE, "nom": _nom(SIMPLE), "source": "regles", "theorique": theorique, "espace_go": 4, "limites": [_t("dans Docker, l'image complète de Lutin contient Ollama")],
-                "raison": prefixe + _t("l'image Docker complète de Lutin contient déjà Ollama, sans rien à relier")}
     if gpu and gpu.fabricant == "nvidia" and gpu.vram_go >= 6:
         return {"moteur": SIMPLE, "nom": _nom(SIMPLE), "source": "regles", "theorique": theorique, "espace_go": 4,
                 "limites": [_t("llama.cpp (CUDA) peut être un peu plus rapide, surtout avec les modèles à experts : lance le banc pour le savoir sur ta machine")],

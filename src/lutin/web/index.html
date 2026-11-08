@@ -1187,6 +1187,18 @@ body[data-moteur="openai"] .biblio { display:none !important; }
   ['dragenter', 'dragover'].forEach(n => zoneGlisse.addEventListener(n, e => { if ([...(e.dataTransfer ? e.dataTransfer.types : [])].includes('Files')) { e.preventDefault(); zoneGlisse.classList.add('glisse'); } }));
   ['dragleave', 'drop'].forEach(n => zoneGlisse.addEventListener(n, () => zoneGlisse.classList.remove('glisse')));
   zoneGlisse.addEventListener('drop', e => { if (e.dataTransfer && e.dataTransfer.files.length) { e.preventDefault(); joindre([...e.dataTransfer.files]); } });
+  // Flèche du haut : rappelle le dernier message envoyé (puis les précédents) dans la zone de saisie, pour le reformuler sans passer par « modifier »
+  const HIST_SAISIE = { liste: [], pos: -1, brouillon: '' };
+  const memoriserSaisie = t => { const h = HIST_SAISIE; if (h.liste[h.liste.length - 1] !== t) h.liste.push(t); if (h.liste.length > 50) h.liste.shift(); h.pos = -1; };
+  const rappelSaisie = (sens, champ) => {
+    const h = HIST_SAISIE, deConv = ((CONV && CONV.messages) || []).filter(m => m.role === 'user' && typeof m.content === 'string' && m.content.trim()).map(m => m.content.trim()).slice(-20);
+    const liste = h.liste.length ? h.liste : deConv;          // rien envoyé depuis l'ouverture de la page : les messages de la conversation affichée
+    if (!liste.length) return false;
+    if (sens < 0) { if (h.pos === -1) { h.brouillon = champ.value; h.pos = liste.length; } if (h.pos <= 0) return true; h.pos--; }
+    else { if (h.pos === -1) return false; h.pos++; }
+    champ.value = h.pos >= liste.length ? (h.pos = -1, h.brouillon) : liste[h.pos];
+    champ.setSelectionRange(champ.value.length, champ.value.length); ajusterSaisie(); return true;
+  };
   const envoyer = async (force) => {
     const forcee = !!force && typeof force === 'object' && typeof force.t === 'string';                               // message sorti de la file : { t, conv }
     const reprend = !forcee && !PJ.length && EDIT_INDEX !== null && CONV && CONV.messages[EDIT_INDEX];          // modifier un message garde ses images et ses fichiers
@@ -1197,6 +1209,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
       if (force.conv) { await ouvrir(force.conv); if (!CONV || CONV.id !== force.conv) { infoLocale(T('✘ Message en file non envoyé : sa conversation n\'existe plus (« ') + texte.slice(0, 40) + T(' »).')); return; } }
       else await nouvelle();
     }
+    if (!forcee) memoriserSaisie(texte);
     if (!forcee && texte.startsWith('/') && await commande(texte)) return;          // commande « / » : traitée sans passer par le modèle
     if (EN_COURS) {                                                               // une réponse est en cours : le message attend son tour
       if (EDIT_INDEX !== null) { infoLocale(T('Termine ou arrête la réponse en cours avant de modifier un message.')); return; }
@@ -1665,10 +1678,23 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     if (pl.recommande) bloc.appendChild(el('div', '', T('Conseillé pour cette machine : ') + pl.recommande.nom + ' — ' + pl.recommande.raison));
     const l = el('div', 'ligne');
     const ouvrirReglages = () => { ouvrirOnglet('reglages'); };
-    const oui = el('button', 'principal', pl.recommande ? T('Installer ') + pl.recommande.nom : T('Choisir un moteur')); oui.addEventListener('click', ouvrirReglages);
+    const msg = el('div', 'aide');
+    // « Installer X » installe vraiment le moteur conseillé (le choisit, puis l'installe ou le démarre s'il est déjà là) ; l'avancement est dans la barre bleue du haut
+    const installerConseille = async () => {
+      const id = pl.recommande.moteur; oui.disabled = true; msg.textContent = '';
+      try {
+        const r = await api('/api/moteurs'), m = r.moteurs.find(x => x.id === id), a = (m && m.actions) || {};
+        await api('/api/reglages', { moteur: id });
+        const action = a.installer && a.installer.possible ? 'installer' : (a.demarrer && a.demarrer.possible ? 'demarrer' : '');
+        if (!action) { msg.textContent = (a.installer && a.installer.raison) || T('Ce moteur ne peut pas être installé d\'ici : ouvre les réglages du moteur.'); ouvrirReglages(); }
+        else { await api('/api/moteur-action', { moteur: id, action }); msg.textContent = T('Installation lancée : l\'avancement est dans la barre bleue du haut.'); }
+      } catch (e) { msg.textContent = e.message; }
+      oui.disabled = false; rafraichir();
+    };
+    const oui = el('button', 'principal', pl.recommande ? T('Installer ') + pl.recommande.nom : T('Choisir un moteur')); oui.addEventListener('click', pl.recommande ? installerConseille : ouvrirReglages);
     const autre = el('button', '', T('Choisir un autre moteur')); autre.addEventListener('click', ouvrirReglages);
     const tard = el('button', '', T('Plus tard')); tard.addEventListener('click', () => { try { sessionStorage.setItem('lutinPlusTard', '1'); } catch (e) { /* facultatif */ } afficherPremierLancement(pl); });
-    l.append(oui, autre, tard); bloc.appendChild(l);
+    l.append(oui, autre, tard); bloc.append(l, msg);
   };
   const afficherDiagnostic = liste => {
     const bloc = $('diagnostic'), cle = JSON.stringify(liste);
@@ -1866,6 +1892,9 @@ body[data-moteur="openai"] .biblio { display:none !important; }
       if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey)) { e.preventDefault(); validerCommande(e.key === 'Enter'); return; }
       if (e.key === 'Escape') { e.preventDefault(); fermerCommandes(); return; }
     }
+    const c = e.target;          // flèche du haut au tout début du texte (ou zone vide) : rappel du dernier message ; flèche du bas : on redescend
+    if (e.key === 'ArrowUp' && !e.shiftKey && !e.altKey && c.selectionStart === 0 && c.selectionEnd === 0 && rappelSaisie(-1, c)) { e.preventDefault(); return; }
+    if (e.key === 'ArrowDown' && !e.shiftKey && !e.altKey && HIST_SAISIE.pos !== -1 && c.selectionStart === c.value.length && rappelSaisie(1, c)) { e.preventDefault(); return; }
     if (e.key === 'Enter' && !e.shiftKey && !(window.matchMedia('(pointer:coarse)').matches)) { e.preventDefault(); envoyer(); }          // sur téléphone, Entrée = nouvelle ligne (on envoie avec ➤)
   });
   // la zone de saisie grandit avec le texte (jusqu'à un tiers de l'écran) et revient à une ligne après l'envoi
@@ -2411,7 +2440,8 @@ body[data-moteur="openai"] .biblio { display:none !important; }
           const bs = [boutonDecharger(c)]; if (c.fermable) bs.push(boutonDecharger(c, T('Fermer ComfyUI'), 'comfyui:close'));
           lignesVram.push(ligneMemoire(nom, texte, c.vram, bs, c.avertissement));
         } else if (c.genre === 'llamacpp') {
-          lignesVram.push(ligneMemoire(nom, T('rien sur la carte graphique : tout est sur le processeur'), 0, [], c.avertissement));
+          // « inconnu » n'est pas « zéro » : sans mesure, on ne prétend pas que tout est sur le processeur
+          lignesVram.push(ligneMemoire(nom, c.vram === null || c.vram === undefined ? T('mémoire vidéo non mesurable pour ce programme (le pilote ne la donne pas) : le total de la carte est plus bas') : T('rien sur la carte graphique : tout est sur le processeur'), 0, [], c.avertissement));
         }
       });
       const connus = new Set(['ollama', 'ollama app', 'ollama_llama_server', 'llama-server']);
@@ -3179,6 +3209,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
   };
   // La recommandation de moteur (avec sa raison) et le banc comparatif : même modèle sur chaque moteur, vitesse, premier jeton, mémoire, stabilité ; le résultat est conservé
   const carteBancMoteurs = (b, modifiable) => {
+    const deuxMoteurs = (b.comparables || 0) >= 2;          // comparer, c'est être au moins deux : avec un seul moteur il n'y a rien à comparer
     const c = el('div', 'carte'); c.style.cssText = 'flex-direction:column;align-items:stretch;gap:6px;margin-top:10px';
     c.appendChild(el('b', '', T('Quel moteur pour ma machine ?')));
     const rec = b.recommandation;
@@ -3191,11 +3222,12 @@ body[data-moteur="openai"] .biblio { display:none !important; }
       (b.resultat.ignores || []).forEach(i => c.appendChild(el('div', 'point', '— ' + i.nom + ' : ' + T('non mesuré') + ' (' + i.raison + ')')));
     }
     if (b.erreur) c.appendChild(el('div', 'erreur', '⚠ ' + b.erreur));
+    if (!deuxMoteurs && b.modele) c.appendChild(el('div', 'aide', 'ℹ ' + T('Pour comparer, il faut au moins deux moteurs installés qui ont ce modèle. Pour l\'instant : ') + (b.disponibilite || []).map(d => d.nom + ' (' + (d.raison || T('prêt')) + ')').join(' · ')));
     const l = el('div', 'ligne');
     if (b.en_cours) l.appendChild(el('span', 'aide', '⏳ ' + b.etape));
     else {
       [['rapide', T('Comparer les moteurs (environ 1 minute)')], ['approfondi', T('Comparaison approfondie (environ 5 minutes)')]].forEach(([mode, nom]) => {
-        const bt = el('button', mode === 'rapide' ? 'principal' : '', nom); bt.disabled = !modifiable || !b.modele;
+        const bt = el('button', mode === 'rapide' ? 'principal' : '', nom); bt.disabled = !modifiable || !b.modele || !deuxMoteurs;
         bt.title = T('Fait tourner le modèle choisi sur chaque moteur qui l\'a, l\'un après l\'autre : la mémoire est libérée entre les deux. Jamais lancé tout seul.');
         bt.addEventListener('click', async () => { bt.disabled = true; try { await api('/api/bench-moteurs', { mode }); } catch (e) { alert(e.message); } chargerMoteurs(); });
         l.appendChild(bt);

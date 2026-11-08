@@ -2,6 +2,17 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## Docker : image légère, moteurs installés depuis la page
+
+- **L'image Docker ne contient plus Ollama** (1,5 Go de moins à retélécharger à chaque mise à jour). Au premier lancement, la page propose d'installer le moteur conseillé : **le bouton « Installer Ollama » installe vraiment** (avant, il ouvrait seulement les réglages). Réglages > Moteurs installe, met à jour, démarre, arrête et désinstalle **Ollama et llama.cpp** dans Docker, comme sur ta machine.
+- **Un volume pour les moteurs** : `/engines` (volume ou dossier de l'hôte ; sinon `/data/moteurs`). Une mise à jour de l'image ne l'efface pas. Les modèles restent dans `/models` (Ollama) et `/models/gguf` (llama.cpp). **À ajouter à ton compose** : `- /ton/dossier/engines:/engines` (accessible en écriture pour l'utilisateur 1000) ; sans cela, tout va dans `/data/moteurs`, qui survit aussi. **Ollama de l'ancienne image : à réinstaller une fois depuis la page** ; tes modèles ne bougent pas.
+- **« Comparer les moteurs »** est grisé tant qu'il n'y a pas au moins deux moteurs installés qui ont le modèle, avec la raison.
+- **Santé : llama.cpp sur la carte** : « 0 Go, tout est sur le processeur » s'affichait quand Windows ne donnait pas la mémoire vidéo par programme. Lutin la lit maintenant dans les compteurs de Windows, et dit « non mesurable » plutôt qu'un faux zéro.
+- **Flèche du haut** dans la zone de message : rappelle le dernier message envoyé (puis les précédents) pour le reformuler.
+- **À savoir** : installation d'Ollama et de llama.cpp en Docker testée avec de faux serveurs ; pas encore sur du vrai matériel (carte NVIDIA, iGPU Intel).
+
+**English.** Docker image no longer contains Ollama (1.5 GB lighter); the page installs and manages Ollama and llama.cpp into a `/engines` volume (or `/data/moteurs`) that image updates never erase; the first-launch "Install" button now really installs; engine comparison is disabled with fewer than two engines; Health no longer shows a false "0 GB, all on CPU" for llama.cpp on Windows; Up arrow recalls your last message. Not yet run on real hardware.
+
 ## Addon VoiceStudio et deux outils de plus
 
 - **Addon VoiceStudio** (désactivé par défaut) : le modèle peut lister les voix, **lire un texte à voix haute** (accord à chaque fois, fichier audio joint sous le message), **transcrire** un enregistrement et **cloner une voix**, ce dernier avec un accord explicite *toujours demandé* (« c'est ma voix » ou « la personne a donné sa permission »), jamais automatique, et la déclaration est transmise à VoiceStudio. Seule la machine locale est jointe ; la clé d'API éventuelle ne s'affiche jamais. `docs/VOICESTUDIO.fr.md`.

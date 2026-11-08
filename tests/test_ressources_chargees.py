@@ -226,6 +226,24 @@ class TestOuEstLeModele(unittest.TestCase):
     def test_journal_vide(self):
         self.assertIsNone(rc.analyser_journal_llamacpp("rien d'utile"))
 
+    def test_memoire_video_par_processus_sous_windows_via_les_compteurs(self):
+        class Sortie:
+            returncode, stdout = 0, b"19327352832"
+        appels = []
+        with mock.patch.object(rc.os, "name", "nt"):
+            octets = rc.vram_windows_processus(4242, lanceur=lambda cmd, **kw: appels.append(cmd) or Sortie())
+        self.assertEqual(octets, 19327352832)
+        self.assertIn("pid_4242_", appels[0][-1])
+        self.assertIn("Dedicated Usage", appels[0][-1])
+
+    def test_compteur_absent_ou_hors_windows_c_est_inconnu_pas_zero(self):
+        class Echec:
+            returncode, stdout = 1, b""
+        with mock.patch.object(rc.os, "name", "nt"):
+            self.assertIsNone(rc.vram_windows_processus(1, lanceur=lambda cmd, **kw: Echec()))
+        with mock.patch.object(rc.os, "name", "posix"):
+            self.assertIsNone(rc.vram_windows_processus(1, lanceur=lambda cmd, **kw: self.fail("ne doit rien lancer")))
+
     def test_nvidia_smi_par_processus(self):
         r = rc.analyser_gpu_processus("1234, C:\llama\llama-server.exe, 4500\n99, python.exe, [N/A]\n")
         self.assertEqual(r[1234], ("llama-server.exe", 4500 * 1024 ** 2))

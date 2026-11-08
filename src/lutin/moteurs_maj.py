@@ -71,7 +71,15 @@ def _derniere_llamacpp(mo, http_json):
 def _derniere_ollama(http_json):
     """(version installée, dernière version publiée) pour Ollama local et démarré ; None sinon (Docker : l'image se met à jour avec docker compose)."""
     if moteurs.CONTEXTE["en_docker"]():
-        return None
+        from . import moteurs_docker
+        if not moteurs_docker.ollama_installe_par_lutin():
+            return None          # Ollama de l'image ou d'un autre conteneur : il se met à jour avec docker compose
+        try:
+            derniere = ((http_json or moteurs_docker._http_json)(moteurs_docker.API_OLLAMA) or {}).get("tag_name", "")
+            actuelle = (moteurs_docker.ollama_dossier() / "version.txt").read_text(encoding="utf-8").strip()
+        except (OSError, ValueError, urllib.error.URLError):
+            return None
+        return (actuelle, derniere) if actuelle and derniere else None
     from . import ollama_client
     try:
         actuelle = ollama_client.Ollama().version()

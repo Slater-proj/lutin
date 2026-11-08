@@ -15,24 +15,10 @@ if [ "$commande" = "serve" ]; then
     echo "[Lutin] Les volumes /data et ${TRAVAIL} doivent être accessibles en écriture pour l'utilisateur 1000 (voir docs/DOCKER.fr.md, « Droits sur les dossiers »)." >&2
     exit 1
   fi
-  # Image complète : Ollama tourne dans ce conteneur (LUTIN_OLLAMA_INTERNE=1, posé par le Dockerfile). Il écoute sur 127.0.0.1 seulement ; ses modèles sont dans /models.
-  if [ "${LUTIN_OLLAMA_INTERNE:-}" = "1" ]; then
-    if [ ! -w "${OLLAMA_MODELS:-/models}" ]; then
-      echo "[Lutin] The ${OLLAMA_MODELS:-/models} volume must be writable by user 1000 / Le volume ${OLLAMA_MODELS:-/models} doit être accessible en écriture pour l'utilisateur 1000." >&2
-      exit 1
-    fi
-    {
-      echo "[Lutin] GPU visible from the container / carte visible depuis le conteneur :"
-      if command -v nvidia-smi > /dev/null 2>&1 && nvidia-smi -L 2> /dev/null; then :; else echo "  NVIDIA : none (docker run --gpus all / aucune)"; fi
-      [ -e /dev/kfd ] && echo "  AMD : /dev/kfd present" || echo "  AMD : /dev/kfd absent"
-      [ -d /dev/dri ] && echo "  /dev/dri : $(ls /dev/dri | tr '\n' ' ')" || echo "  /dev/dri : absent"
-    } >> "$LUTIN_HOME/ollama.log" 2>&1
-    ollama serve >> "$LUTIN_HOME/ollama.log" 2>&1 &
-    for _ in $(seq 1 60); do
-      curl -fsS "http://127.0.0.1:11434/api/version" > /dev/null 2>&1 && break
-      sleep 1
-    done
-  fi
+  # Les moteurs (Ollama, llama.cpp) ne sont plus dans l'image : Lutin les installe et les lance lui-même depuis la page (dossier /engines, sinon /data/moteurs).
+  # Les modèles sont dans /models.
+  [ -d "${OLLAMA_MODELS:-/models}" ] && [ ! -w "${OLLAMA_MODELS:-/models}" ] && echo "[Lutin] The ${OLLAMA_MODELS:-/models} volume should be writable by user 1000 / Le volume ${OLLAMA_MODELS:-/models} devrait être accessible en écriture pour l'utilisateur 1000." >&2
+  [ -d /engines ] && [ ! -w /engines ] && echo "[Lutin] /engines is not writable by user 1000: engines go to /data/moteurs instead / /engines n'est pas accessible en écriture pour l'utilisateur 1000 : les moteurs iront dans /data/moteurs." >&2
   set -- setup --oui --sans-modeles --sans-ollama --niveau "${LUTIN_NIVEAU:-reseau}" --port "${LUTIN_PORT:-8777}" --travail "$TRAVAIL" --reconfigurer
   [ -n "${LUTIN_ECOUTE:-}" ] && set -- "$@" --ecoute "$LUTIN_ECOUTE"
   [ -n "${LUTIN_URL_PUBLIQUE:-}" ] && set -- "$@" --url "$LUTIN_URL_PUBLIQUE"

@@ -26,6 +26,12 @@ def modele_conseille(profil, catalogue):
     return next(((c.id, c.modele.get("go")) for c in choix.values() if c is not None), None)
 
 
+def _ollama_autre_conteneur():
+    """OLLAMA_URL désigne-t-il un autre conteneur ? Sinon Lutin installe et lance Ollama lui-même (ollama.log dans le volume /data)."""
+    from . import moteurs_docker
+    return moteurs_docker.ollama_externe()
+
+
 def premier_lancement(moteur_nom, actif, detail, recommande=None):
     """Le premier lancement : tant qu'AUCUN moteur n'est prêt, la page n'envoie pas l'utilisateur dans l'onglet Modèles (où rien ne marcherait) : elle dit pourquoi et propose d'installer le moteur conseillé,
     d'en choisir un autre ou de remettre à plus tard. {pret, raison, recommande}. `recommande` : la recommandation de bench_moteurs (moteur, nom, raison)."""
@@ -40,8 +46,8 @@ def diagnostiquer(ollama_actif, ollama_installe, installes, reglages, profil=Non
     docker = (os.environ.get("LUTIN_DOCKER") == "1") if docker is None else docker
     problemes = []
     if not ollama_actif:
-        if docker:
-            texte = _t("Ollama ne répond pas dans le conteneur : Lutin ne peut pas répondre. Regarde pourquoi avec « docker logs lutin », ou dans le fichier ollama.log du volume /data.")
+        if docker and _ollama_autre_conteneur():
+            texte = _t("Ollama ne répond pas dans son conteneur : Lutin ne peut pas répondre. Regarde pourquoi avec « docker logs » sur le conteneur d'Ollama (OLLAMA_URL).")
             action = None
         elif ollama_installe:
             texte = _t("Ollama est arrêté : Lutin ne peut pas répondre tant qu'il ne tourne pas.")

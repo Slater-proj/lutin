@@ -520,9 +520,13 @@ class MoteurOllama(_moteurs.Moteur):
         defaut = self.dossier_defaut()
         choisi = self.config().get("dossier")
         actuel = Path(exe).parent if exe else (Path(choisi) if choisi else defaut)
+        if os.environ.get("LUTIN_DOCKER"):
+            from . import moteurs_docker
+            defaut = moteurs_docker.ollama_dossier()
+            actuel = Path(exe).parent.parent if exe and defaut and str(defaut) in exe else (defaut or actuel)
         modeles = __import__("lutin.emplacements", fromlist=["x"]).dossier_modeles()
         return {"actuel": str(actuel or ""), "propose": "", "defaut": str(defaut or ""), "personnalise": bool(choisi), "libre_go": {"actuel": _llamacpp.espace_libre(actuel), "propose": None, "defaut": _llamacpp.espace_libre(defaut)},
-                "installe": exe is not None, "modifiable": os.name == "nt",
+                "installe": exe is not None, "modifiable": os.name == "nt" and not os.environ.get("LUTIN_DOCKER"),
                 "modeles": {"actuel": str(modeles), "libre_go": _llamacpp.espace_libre(modeles), "modifiable": False}}
 
     def _retenir_dossier_modeles(self):
@@ -555,8 +559,9 @@ class MoteurOllama(_moteurs.Moteur):
 
     def actions(self):
         if os.environ.get("LUTIN_DOCKER"):
-            raison = _t("Dans Docker, Ollama est un conteneur à part : il s'installe, se met à jour et s'arrête avec docker compose.")
-            return {a: {"possible": False, "raison": raison} for a in _moteurs.ACTIONS}
+            from . import moteurs_docker
+            st = self.statut()
+            return moteurs_docker.actions_ollama(st["installe"], st["actif"], _hl.actif())
         st = self.statut()
         hors = _hl.actif()
         pas_installe, deja = _t("Pas installé."), _t("Déjà installé.")
@@ -586,6 +591,14 @@ class MoteurOllama(_moteurs.Moteur):
         a = self.actions().get(action) or {}
         if not a.get("possible"):
             raise ValueError(a.get("raison") or _t("Action impossible avec ce moteur."))
+        if os.environ.get("LUTIN_DOCKER"):
+            from . import moteurs_docker
+            try:
+                gpus = getattr(_moteurs.CONTEXTE["profil"](), "gpus", None) or []
+                moteurs_docker.faire_ollama(action, progression, lambda: etat_ollama()["actif"], rocm=any(getattr(g, "fabricant", "") == "amd" for g in gpus))
+            finally:
+                CAPACITES.clear()
+            return
         cache = Path(tempfile.gettempdir()) / "lutin-ollama"
         dossier_modeles = self._retenir_dossier_modeles() if action in ("mettre_a_jour", "reinstaller", "installer") else ""
         try:
@@ -717,6 +730,9 @@ def etat_ollama():
 
 
 def chemin_ollama():
+    if os.environ.get("LUTIN_DOCKER"):
+        from . import moteurs_docker
+        return moteurs_docker.chemin_ollama()          # celui que Lutin a installé dans le dossier des moteurs (volume)
     exe = shutil.which("ollama")
     if exe:
         return exe

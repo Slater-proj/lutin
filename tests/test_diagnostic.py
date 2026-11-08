@@ -1,4 +1,6 @@
+import os
 import unittest
+import unittest.mock
 
 import context  # noqa: F401
 from lutin import catalogue, diagnostic
@@ -33,8 +35,11 @@ class Diagnostic(unittest.TestCase):
         self.assertEqual((p["code"], p["action"]["type"]), ("ollama_arret", "demarrer_ollama"))
         p, = diag(ollama_actif=False, ollama_installe=False)
         self.assertEqual(p["action"]["type"], "onglet")
-        p, = diag(ollama_actif=False, docker=True)
+        with unittest.mock.patch.dict(os.environ, {"OLLAMA_URL": "http://ollama:11434"}):
+            p, = diag(ollama_actif=False, docker=True)
         self.assertIn("docker logs", p["texte"])
+        p, = diag(ollama_actif=False, docker=True)          # Ollama installé par Lutin dans le volume : on propose de le démarrer
+        self.assertEqual(p["action"]["type"], "demarrer_ollama")
 
     def test_modele_choisi_absent_ou_trop_gros_et_disque_plein(self):
         p, = diag(reglages={"modele": "autre:7b"})

@@ -34,7 +34,8 @@ def s_assurer_qu_ollama_tourne(cfg, profil, ecrire=print):
         return True
     exe = ollama_client.trouver_executable(config.systeme())
     if not exe:
-        ecrire(_t("Ollama n'est pas installé : lance « lutin setup »."))
+        if not os.environ.get("LUTIN_DOCKER"):          # Docker : normal au premier lancement, la page propose d'installer un moteur
+            ecrire(_t("Ollama n'est pas installé : lance « lutin setup »."))
         return False
     from . import emplacements
     ollama_client.demarrer_serveur(exe, ollama_client.variables_serveur(profil, cfg["emplacements"]["modeles"] or os.environ.get("OLLAMA_MODELS") or emplacements.dossier_vu()), config.systeme())

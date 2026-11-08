@@ -231,7 +231,7 @@ def vue_reglages(moteur):
     if isinstance(mo, MoteurLlamaCpp):
         vue["avance"] = {"routeur": bool(c.get("routeur")), "routeur_possible": mo.routeur_possible(), "modeles_max": int(c.get("modeles_max") or MODELES_MAX_DEFAUT), "n_cpu_moe": int(c.get("n_cpu_moe") or 0),
                          "n_cpu_moe_possible": mo.option_possible("--n-cpu-moe"), "version_epinglee": c.get("version_epinglee", "")}
-    if hasattr(mo, "info_dossier") and not moteurs.CONTEXTE["en_docker"]():
+    if hasattr(mo, "info_dossier"):
         vue["dossier"] = mo.info_dossier()
     return vue
 
@@ -474,6 +474,10 @@ class MoteurLlamaCpp(MoteurOpenAI):
         return not self.externe() and bool(self.config().get("routeur")) and self.routeur_possible()
 
     def dossier_defaut(self):
+        from . import moteurs_docker
+        docker = moteurs_docker.dossier_moteurs()          # Docker : le dossier des moteurs (volume), qu'une mise à jour de l'image n'efface pas
+        if docker is not None:
+            return docker / "llamacpp"
         d = moteurs.CONTEXTE["donnees"]()
         return (Path(d) / "moteurs" / "llamacpp") if d else None
 
@@ -498,11 +502,13 @@ class MoteurLlamaCpp(MoteurOpenAI):
         libre = espace_libre
         actuel, propose, defaut = self.dossier(), self.dossier_propose(), self.dossier_defaut()
         return {"actuel": str(actuel or ""), "propose": str(propose or ""), "defaut": str(defaut or ""), "personnalise": bool(self.config().get("dossier")),
-                "libre_go": {"actuel": libre(actuel), "propose": libre(propose) if propose else None, "defaut": libre(defaut)}, "installe": self.serveur_installe() is not None, "modifiable": True,
-                "modeles": {"actuel": str(self.dossier_modeles()), "libre_go": libre(self.dossier_modeles()), "modifiable": True, "personnalise": bool(self.config().get("dossier_modeles"))}}
+                "libre_go": {"actuel": libre(actuel), "propose": libre(propose) if propose else None, "defaut": libre(defaut)}, "installe": self.serveur_installe() is not None, "modifiable": not moteurs.CONTEXTE["en_docker"](),
+                "modeles": {"actuel": str(self.dossier_modeles()), "libre_go": libre(self.dossier_modeles()), "modifiable": not moteurs.CONTEXTE["en_docker"](), "personnalise": bool(self.config().get("dossier_modeles"))}}
 
     def dossier_modeles(self):
         personnalise = self.config().get("dossier_modeles")
+        if not personnalise and moteurs.CONTEXTE["en_docker"]():
+            return Path(os.environ.get("OLLAMA_MODELS") or "/models") / "gguf"          # Docker : à côté des modèles d'Ollama, dans le volume des modèles
         return Path(personnalise) if personnalise else (self.dossier() / "modeles")
 
     def serveur_installe(self):
@@ -802,9 +808,6 @@ class MoteurLlamaCpp(MoteurOpenAI):
         vide = _t("Sans objet avec un serveur externe : l'adresse est réglée ci-dessous.")
         if self.externe():
             return {a: {"possible": False, "raison": vide} for a in moteurs.ACTIONS}
-        if moteurs.CONTEXTE["en_docker"]():
-            raison = _t("Dans Docker, llama-server se lance à côté de Lutin (par exemple l'image ghcr.io/ggml-org/llama.cpp:server) : indique son adresse ci-dessous.")
-            return {a: {"possible": False, "raison": raison} for a in moteurs.ACTIONS}
         exe = self.serveur_installe()
         par_lutin = exe is not None
         installer = {"possible": not par_lutin and systeme in ("windows", "linux", "macos") and not moteurs.CONTEXTE["hors_ligne"](),
@@ -834,8 +837,6 @@ class MoteurLlamaCpp(MoteurOpenAI):
         raise ErreurMoteur(_t("Action impossible avec ce moteur."))
 
     def installer(self, progression, reinstaller=False, http_json=None, telecharger=None):
-        if moteurs.CONTEXTE["en_docker"]():
-            raise ErreurMoteur(_t("Dans Docker, llama-server se lance à côté de Lutin : indique son adresse."))
         if moteurs.CONTEXTE["hors_ligne"]():
             raise ErreurMoteur(_t("Mode hors ligne : aucun téléchargement."))
         import platform

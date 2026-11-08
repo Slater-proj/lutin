@@ -8,7 +8,7 @@
 
 Une image prête à l'emploi : **Lutin et Ollama dans le même conteneur**. Tu la lances, tu ouvres la page, tu installes un modèle : c'est tout. Pratique sous Linux, sur un serveur ou un NAS.
 
-> **Honnêteté.** Les images sont construites et démarrées par la CI (page de connexion, code PIN, Ollama dans l'image complète) et publiées sur `ghcr.io`. Elles n'ont **jamais été lancées avec une vraie carte NVIDIA** ni sur un NAS : si quelque chose ne marche pas, ouvre un [bug](https://github.com/Slater-proj/lutin/issues/new/choose) avec `docker compose logs`.
+> **Honnêteté.** Les images sont construites et démarrées par la CI (page de connexion, code PIN) et publiées sur `ghcr.io`. Elles n'ont **jamais été lancées avec une vraie carte NVIDIA** ni sur un NAS : si quelque chose ne marche pas, ouvre un [bug](https://github.com/Slater-proj/lutin/issues/new/choose) avec `docker compose logs`.
 
 ## Deux images
 
@@ -59,7 +59,7 @@ docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
 2. Ouvre **http://localhost:8777**, entre le PIN : ton navigateur est appairé.
 3. **Installe un modèle** : `docker exec lutin lutin modeles` montre les modèles conseillés pour ta machine, puis  
    `docker exec lutin lutin modeles installer qwen3:8b`  
-   (ou l'onglet Modèles de l'interface). Le téléchargement passe par l'Ollama du conteneur et reste dans le volume `lutin-models`.
+   (ou l'onglet Modèles de l'interface). Le téléchargement passe par le moteur installé et reste dans le volume `lutin-models`.
 
 Dans le terminal : `docker exec -it lutin lutin chat`.
 
@@ -71,7 +71,10 @@ Dans le terminal : `docker exec -it lutin lutin chat`.
 |---|---|---|---|
 | `lutin-data` | `/data` | configuration, conversations, mémoire, journal des actions, appareils appairés, journal d'Ollama (`ollama.log`) | **oui** |
 | `./travail` | `/travail` | **ton dossier de travail** : le seul endroit que Lutin peut lire et modifier | c'est ton projet : déjà chez toi |
-| `lutin-models` | `/models` | les modèles (image complète) | non (retéléchargeables), mais lourd |
+| `lutin-models` | `/models` | les modèles | non (retéléchargeables), mais lourd |
+| `lutin-engines` (facultatif) | `/engines` | **les moteurs** (Ollama, llama.cpp) que Lutin installe depuis la page | non (réinstallables en un clic), mais ça évite de tout retélécharger |
+
+**Les moteurs ne sont plus dans l'image.** L'image de Lutin est légère (Lutin seul) : au premier lancement, la page propose d'installer le moteur conseillé pour ta machine (Ollama, llama.cpp…), ou celui que tu choisis dans Réglages > Moteurs. Il est téléchargé une fois, dans `/engines` si tu montes ce dossier (`- /srv/docker/volumes/lutin/engines:/engines`, accessible en écriture pour l'utilisateur 1000), sinon dans `/data/moteurs` : dans les deux cas, **une mise à jour de l'image ne l'efface pas**. Les modèles d'Ollama restent dans `/models`, ceux de llama.cpp (fichiers GGUF) dans `/models/gguf`. Pour un serveur déjà lancé ailleurs (un autre conteneur), donne son adresse (`OLLAMA_URL`, `LUTIN_LLAMACPP_URL`) : Lutin ne l'installe ni ne l'arrête alors. **Non vérifié sur ta carte** : l'installation d'Ollama et de llama.cpp dans l'image légère a été testée avec de faux serveurs, pas encore sur du vrai matériel.
 
 Pour mettre les modèles sur un autre disque, remplace `lutin-models:/models` par un chemin (`/mnt/gros-disque/modeles:/models`).
 
@@ -99,7 +102,7 @@ Pour mettre les modèles sur un autre disque, remplace `lutin-models:/models` pa
 | `LUTIN_HORS_LIGNE` | – | `1` : mode hors ligne strict (aucune connexion vers Internet ; il faudra avoir téléchargé les modèles avant). |
 | `LUTIN_GPU` | – | carte déclarée à la main si elle n'est pas détectée : `24` ou `NVIDIA RTX 4090=24` (mémoire en Go). |
 | `LUTIN_PORT` | `8777` | port dans le conteneur. |
-| `OLLAMA_URL` | `http://127.0.0.1:11434` (complète) · `http://ollama:11434` (légère) | où est Ollama. Pour un Ollama sur la machine hôte (image légère) : `http://host.docker.internal:11434` (ajoute `extra_hosts: ["host.docker.internal:host-gateway"]` sous Linux). |
+| `OLLAMA_URL` | `http://127.0.0.1:11434` (celui que Lutin installe dans le conteneur) · `http://ollama:11434` (autre conteneur) | où est Ollama. Pour un Ollama sur la machine hôte (image légère) : `http://host.docker.internal:11434` (ajoute `extra_hosts: ["host.docker.internal:host-gateway"]` sous Linux). |
 
 Ces variables sont **réappliquées à chaque démarrage** : elles sont la source de vérité pour l'accès et les dossiers de travail.
 
@@ -108,7 +111,7 @@ Ces variables sont **réappliquées à chaque démarrage** : elles sont la sourc
 - Le port est publié sur **`127.0.0.1:8777`** : seule la machine hôte y accède. Pour ton réseau local, écris `"8777:8777"` dans `ports` (le code PIN protège, mais lis [SECURITY.fr.md](SECURITY.fr.md)) ; pour Internet, passe **derrière un proxy** avec authentification forte (`LUTIN_NIVEAU=proxy`).
 - Les accords automatiques (« Fichiers auto », « Commandes auto ») se règlent **par conversation** et sont décochés par défaut, à tous les niveaux : quelqu'un qui a accès à Lutin peut les cocher. Les commandes tournent dans le conteneur, qui ne voit que `/travail`, `/data` et `/models`.
 - Le conteneur n'est pas administrateur ; les commandes que Lutin lance s'exécutent **dans le conteneur** (avec seulement ce qu'il contient : Python, git, sh) et ne voient que `/travail`, `/data` et `/models`. C'est une protection de plus, et une limite : pour qu'il lance les outils de ton projet (compilateur, tests…), installe-les dans une image dérivée.
-- Dans l'image complète, Ollama n'écoute que sur le `127.0.0.1` du conteneur, et son port `11434` n'est jamais publié. Ne le publie jamais.
+- L'Ollama que Lutin installe dans le conteneur n'écoute que sur le `127.0.0.1` du conteneur, et son port `11434` n'est jamais publié. Ne le publie jamais.
 
 ## Carte graphique dans le conteneur
 
@@ -266,7 +269,7 @@ Les images publiées : `ghcr.io/slater-proj/lutin:latest` (dernière version, co
 | Symptôme | Piste |
 |---|---|
 | Lutin s'arrête avec « volumes … accessibles en écriture » | `sudo chown 1000:1000 travail` (et `docker compose down` puis `up` si le volume `lutin-data` a été créé par un autre utilisateur : `docker compose run --rm --user root lutin chown -R 1000:1000 /data /models`) |
-| « Ollama ne répond pas » | Image complète : regarde `/data/ollama.log` (`docker compose exec lutin tail /data/ollama.log`). Image légère : `docker compose logs ollama` ; avec Ollama sur l'hôte : `OLLAMA_URL=http://host.docker.internal:11434`. |
+| « Ollama ne répond pas » | Ollama installé par Lutin : regarde `/data/ollama.log` (`docker compose exec lutin tail /data/ollama.log`). Autre conteneur : `docker compose logs ollama` ; avec Ollama sur l'hôte : `OLLAMA_URL=http://host.docker.internal:11434`. |
 | Une bannière rouge en haut de la page, ou « Le modèle … n'est pas installé » | Ollama tourne (pastille verte) mais **aucun modèle n'est installé** : un conteneur neuf n'en a pas. Clique sur **Installer ce modèle** dans la bannière (le plus adapté à la machine), ou `docker compose exec lutin ollama pull qwen3:4b`. |
 | La page répond « nom d'hôte non autorisé » | Tu accèdes par un nom que Lutin ne connaît pas. Utilise `localhost`, une adresse privée, ou (niveau `proxy`) l'adresse déclarée dans `LUTIN_URL_PUBLIQUE`. |
 | Les modèles conseillés sont trop petits | La carte n'est pas vue par Lutin : `--gpus all` / `-f docker-compose.gpu.yml`, ou `LUTIN_GPU`. |

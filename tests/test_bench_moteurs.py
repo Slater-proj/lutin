@@ -176,10 +176,11 @@ class Recommandation(unittest.TestCase):
             self.assertIn("pas encore mesuré", r["raison"])
             self.assertTrue(r["limites"])
 
-    def test_docker_garde_l_image_complete(self):
+    def test_docker_suit_les_memes_regles_car_les_moteurs_s_installent_depuis_la_page(self):
         r = bm.recommander(Profil(carte("nvidia", 24)), docker=True)
         self.assertEqual(r["moteur"], "ollama")
-        self.assertIn("Docker", r["raison"])
+        self.assertNotIn("image", r["raison"])          # plus d'Ollama dans l'image : la page l'installe
+
 
     def test_sans_modele_installe_la_recommandation_est_theorique(self):
         self.assertTrue(bm.recommander(Profil(), modele_installe=False)["theorique"])
@@ -237,6 +238,15 @@ class Conservation(Base):
 
 
 class Lancement(Base):
+    def test_comparer_demande_deux_moteurs(self):
+        self.installer(Faux("ollama", "Ollama", 100), Faux("llamacpp", "llama.cpp", installe=False))
+        d = Path(tempfile.mkdtemp(dir=_TEMP))
+        with self.assertRaises(ValueError) as e:
+            bm.lancer("m", "rapide", d, Profil())
+        self.assertIn("au moins deux", str(e.exception))
+        v = bm.vue(d, "m", Profil())
+        self.assertEqual(v["comparables"], 1)
+        self.assertTrue(any(x["raison"] for x in v["disponibilite"]))
     def test_une_seule_comparaison_a_la_fois_et_resultat_conserve(self):
         self.installer(Faux("ollama", "Ollama", 100), Faux("llamacpp", "llama.cpp", 100))
         d = Path(tempfile.mkdtemp(dir=_TEMP))
@@ -264,11 +274,10 @@ class Lancement(Base):
     def test_aucun_moteur_pret_donne_une_erreur_claire(self):
         self.installer(Faux("ollama", "Ollama", installe=False), Faux("llamacpp", "llama.cpp", installe=False))
         d = Path(tempfile.mkdtemp(dir=_TEMP))
-        bm.lancer("m", "rapide", d, Profil())
-        fin = time.time() + 20
-        while bm.ETAT["en_cours"] and time.time() < fin:
-            time.sleep(0.05)
-        self.assertIn("Aucun moteur", bm.ETAT["erreur"])
+        with self.assertRaises(ValueError) as e:          # refusé tout de suite, avec la raison de chaque moteur (avant : lancé pour rien)
+            bm.lancer("m", "rapide", d, Profil())
+        self.assertIn("pas installé", str(e.exception))
+        self.assertFalse(bm.ETAT["en_cours"])
         self.assertEqual(bm.lire(d), {})
 
 

@@ -148,12 +148,14 @@ class Dossier(Base):
             ml.regler_dossier(self.m.id, str(self.tmp / "ailleurs"))
         self.assertIn("désinstalle-le d'abord", str(e.exception), "rien n'est déplacé en douce")
 
-    def test_la_page_recoit_les_infos_du_dossier_sauf_sous_docker(self):
+    def test_la_page_recoit_les_infos_du_dossier_modifiables_sauf_sous_docker(self):
         moteurs.MOTEURS[self.m.id] = self.m
         self.addCleanup(moteurs.MOTEURS.pop, self.m.id, None)
-        self.assertIn("dossier", ml.vue_reglages(self.m.id))
+        self.assertTrue(ml.vue_reglages(self.m.id)["dossier"]["modifiable"])
         moteurs.CONTEXTE["en_docker"] = lambda: True
-        self.assertNotIn("dossier", ml.vue_reglages(self.m.id))
+        v = ml.vue_reglages(self.m.id)["dossier"]
+        self.assertIn("actuel", v)          # le dossier est montré (le volume des moteurs)...
+        self.assertFalse(v["modifiable"])          # ...mais se choisit dans le docker-compose, pas dans la page
 
 
 class Reglages(Base):
@@ -172,12 +174,14 @@ class Reglages(Base):
         ml.regler("llamacpp", adresse="")
         self.assertFalse(self.m.externe())
 
-    def test_sous_docker_rien_n_est_installable_et_la_raison_est_donnee(self):
+    def test_sous_docker_llamacpp_s_installe_comme_ailleurs(self):
         moteurs.CONTEXTE["en_docker"] = lambda: True
         a = self.m.actions()
-        self.assertTrue(all(not x["possible"] and "Docker" in x["raison"] for x in a.values()))
+        self.assertTrue(a["installer"]["possible"])          # plus de « indique son adresse » : l'image est légère, le moteur s'installe dans le volume
+        self.assertNotIn("Docker", a["installer"]["raison"])
+        moteurs.CONTEXTE["hors_ligne"] = lambda: True
         with self.assertRaises(ml.ErreurMoteur):
-            self.m.installer(lambda *x: None)
+            self.m.installer(lambda *x: None)          # hors ligne : aucun téléchargement
 
 
 class Installation(Base):

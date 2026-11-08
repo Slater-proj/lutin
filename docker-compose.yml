@@ -1,4 +1,4 @@
-# Lutin + Ollama in ONE container / Lutin et Ollama dans UN seul conteneur.
+# Lutin alone, light / Lutin seul, léger. The page installs the engine you pick (Ollama, llama.cpp) into /engines / la page installe le moteur choisi (Ollama, llama.cpp) dans /engines.
 #   docker compose up -d        (NVIDIA card / carte NVIDIA : docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d)
 # See / Voir docs/DOCKER.md (EN) and docs/DOCKER.fr.md (FR).
 services:
@@ -19,10 +19,12 @@ services:
       # LUTIN_GPU: "NVIDIA RTX 4090=24" # card declared by hand if not detected / carte déclarée à la main si elle n'est pas détectée (name=memory in GB)
     volumes:
       - lutin-data:/data                # configuration, conversations, memory, action log / mémoire, journal
+      - lutin-engines:/engines          # the engines (Ollama, llama.cpp) that the page installs: an image update never erases them / les moteurs que la page installe : une mise à jour de l'image ne les efface pas
       - lutin-models:/models            # the models (several GB): a named volume, or a folder of your choice (/mnt/big-disk/models:/models) / les modèles (plusieurs Go)
       - ./travail:/travail              # the workspace folder: the ONLY place Lutin can read and modify / le dossier de travail : le SEUL endroit que Lutin peut lire et modifier
       # - ./project-2:/travail/project-2
 
 volumes:
   lutin-data:
+  lutin-engines:
   lutin-models:

@@ -1,11 +1,7 @@
 # syntax=docker/dockerfile:1
-# Lutin dans un conteneur. Deux images, une seule construction :
-#   complet (par défaut, c'est la dernière étape) : Lutin ET Ollama dans le même conteneur. On lance l'image, ça fonctionne.
-#   leger                                          : Lutin seul ; Ollama est ailleurs (autre conteneur, machine hôte) : docker-compose.slim.yml
-# Lutin and Ollama in one container (target "complet", the default), or Lutin alone (target "leger"): docker build --target leger .
-
-ARG OLLAMA_VERSION=0.40.11
-ARG OLLAMA_VARIANT=""          # "" (NVIDIA et processeur) ou "-rocm" (cartes AMD)
+# Lutin dans un conteneur : Lutin seul, léger. Au premier lancement, la page propose d'installer un moteur (Ollama, llama.cpp) ; il vit dans le volume /engines
+# (sinon /data/moteurs) et survit aux mises à jour de l'image. Les modèles sont dans /models. Les cibles « complet » et « leger » donnent la même image.
+# Lutin alone and light: the page installs the engine you pick (Ollama, llama.cpp) into the /engines volume, so image updates never erase it. docker build .
 
 # --- la roue Python de Lutin (même construction pour les deux images)
 FROM python:3.12-slim AS construction
@@ -19,13 +15,13 @@ RUN pip install --no-cache-dir build && python -m build --wheel --outdir /dist
 
 # --- image légère : Lutin seul
 FROM python:3.12-slim AS leger
-# git : pour le bouton Git de l'interface ; tini : arrêt propre ; ca-certificates : recherche web et catalogue (inutiles en mode hors ligne)
+# git : bouton Git ; tini : arrêt propre ; ca-certificates : recherche web et catalogue ; zstd : décompresser Ollama ; libvulkan1 + mesa : cartes AMD / Intel (Vulkan) pour llama.cpp et Ollama
 RUN apt-get update \
- && apt-get install -y --no-install-recommends git ca-certificates tini curl libgomp1 \
+ && apt-get install -y --no-install-recommends git ca-certificates tini curl libgomp1 zstd libvulkan1 mesa-vulkan-drivers \
  && rm -rf /var/lib/apt/lists/* \
  && useradd --create-home --uid 1000 lutin \
- && mkdir -p /data /travail \
- && chown lutin:lutin /data /travail
+ && mkdir -p /data /travail /models /engines \
+ && chown lutin:lutin /data /travail /models /engines
 COPY --from=construction /dist/*.whl /tmp/
 RUN pip install --no-cache-dir /tmp/*.whl && rm -f /tmp/*.whl
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
@@ -39,44 +35,6 @@ ENV LUTIN_DOCKER=1 \
     LUTIN_ECOUTE=0.0.0.0 \
     LUTIN_PORT=8777 \
     LUTIN_TRAVAIL=/travail \
-    OLLAMA_URL=http://ollama:11434 \
-    PYTHONUNBUFFERED=1
-
-USER lutin
-WORKDIR /travail
-VOLUME ["/data", "/travail"]
-EXPOSE 8777
-HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-  CMD curl -fsS "http://127.0.0.1:${LUTIN_PORT}/" -o /dev/null || exit 1
-ENTRYPOINT ["tini", "--", "/usr/local/bin/entrypoint.sh"]
-CMD ["serve"]
-
-# --- image complète : Lutin + Ollama (l'image officielle d'Ollama sert de base : mêmes bibliothèques, donc la carte NVIDIA fonctionne comme avec Ollama seul)
-FROM ollama/ollama:${OLLAMA_VERSION}${OLLAMA_VARIANT} AS complet
-# L'image Ubuntu a déjà un utilisateur 1000 (« ubuntu ») : on le remplace par « lutin », pour que les volumes aient les mêmes droits que dans l'image légère.
-RUN apt-get update \
- && apt-get install -y --no-install-recommends python3 python3-venv git ca-certificates tini curl libgomp1 \
- && rm -rf /var/lib/apt/lists/* \
- && (userdel -r ubuntu 2>/dev/null || true) \
- && useradd --create-home --uid 1000 lutin \
- && mkdir -p /data /travail /models \
- && chown lutin:lutin /data /travail /models
-COPY --from=construction /dist/*.whl /tmp/
-RUN python3 -m venv /opt/lutin \
- && /opt/lutin/bin/pip install --no-cache-dir /tmp/*.whl \
- && rm -f /tmp/*.whl
-COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
-RUN chmod 0755 /usr/local/bin/entrypoint.sh
-
-# Ollama écoute à l'intérieur du conteneur seulement (127.0.0.1) : son port n'est jamais publié. Les modèles sont dans /models (volume).
-ENV PATH=/opt/lutin/bin:$PATH \
-    LUTIN_DOCKER=1 \
-    LUTIN_HOME=/data \
-    LUTIN_NIVEAU=reseau \
-    LUTIN_ECOUTE=0.0.0.0 \
-    LUTIN_PORT=8777 \
-    LUTIN_TRAVAIL=/travail \
-    LUTIN_OLLAMA_INTERNE=1 \
     OLLAMA_HOST=127.0.0.1:11434 \
     OLLAMA_URL=http://127.0.0.1:11434 \
     OLLAMA_MODELS=/models \
@@ -86,9 +44,14 @@ ENV PATH=/opt/lutin/bin:$PATH \
 
 USER lutin
 WORKDIR /travail
+# /engines n'est PAS déclaré en VOLUME : sans montage explicite, les moteurs vont dans /data/moteurs (qui est un volume)
 VOLUME ["/data", "/travail", "/models"]
 EXPOSE 8777
-HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD curl -fsS "http://127.0.0.1:${LUTIN_PORT}/" -o /dev/null || exit 1
 ENTRYPOINT ["tini", "--", "/usr/local/bin/entrypoint.sh"]
 CMD ["serve"]
+
+# --- image complète (balise « latest ») : la MÊME image que la légère. Elle ne contient plus Ollama (plus d'1,5 Go re-téléchargés à chaque mise à jour) :
+# le moteur se choisit et s'installe depuis la page de Lutin, dans le dossier /engines (ou moteurs/ dans /data) ; les modèles restent dans /models.
+FROM leger AS complet

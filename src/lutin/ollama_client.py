@@ -106,6 +106,11 @@ def trouver_executable(systeme, env=None, quelle=shutil.which):
         candidats = [Path("/Applications/Ollama.app/Contents/Resources/ollama"), Path("/usr/local/bin/ollama"), Path("/opt/homebrew/bin/ollama")]
     else:
         candidats = [Path("/usr/local/bin/ollama"), Path("/usr/bin/ollama")]
+        if env.get("LUTIN_DOCKER") == "1":
+            from . import moteurs_docker
+            installe = moteurs_docker.ollama_installe_par_lutin()          # Docker : celui que Lutin a installé dans le volume des moteurs
+            if installe:
+                candidats.insert(0, Path(installe))
     for c in candidats:
         if c.is_file():
             return str(c)

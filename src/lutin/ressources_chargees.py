@@ -186,6 +186,20 @@ def gpu_par_processus(lanceur=subprocess.run):
     return valeur
 
 
+def vram_windows_processus(pid, lanceur=subprocess.run):
+    """Mémoire vidéo dédiée d'UN processus sous Windows, d'après les compteurs de performance (« GPU Process Memory ») : le pilote NVIDIA répond « [N/A] » par processus avec WDDM, ces compteurs, eux, répondent.
+    Octets, ou None si Windows ne le dit pas (compteur absent, ancienne version)."""
+    if os.name != "nt":
+        return None
+    commande = r"$s=(Get-Counter '\GPU Process Memory(pid_{}_*)\Dedicated Usage' -ErrorAction Stop).CounterSamples; ($s | Measure-Object CookedValue -Sum).Sum".format(int(pid))
+    try:
+        r = lanceur(["powershell", "-NoProfile", "-NonInteractive", "-Command", commande], capture_output=True, timeout=8, creationflags=0x08000000)
+        valeur = r.stdout.decode("utf-8", "replace").strip().replace(",", ".")
+        return int(float(valeur)) if r.returncode == 0 and valeur else None
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return None
+
+
 def analyser_journal_llamacpp(texte):
     """Ce que llama-server a écrit au chargement -> {couches_gpu, couches, gpu, cpu} (octets) ; None si le journal ne dit rien. Exemple : « offloaded 33/33 layers to GPU », « CUDA0 model buffer size = 4403.49 MiB »."""
     couches = re.findall(r"offloaded (\d+)/(\d+) layers to GPU", texte)
@@ -254,6 +268,8 @@ def charges_llamacpp():
     vram = (gpu_par_processus().get(p.pid) or (None, None))[1]          # mesure du pilote quand il la donne, sinon ce que le serveur a annoncé en chargeant
     if vram is None and place and place["gpu"]:
         vram = place["gpu"]
+    if vram is None:
+        vram = vram_windows_processus(p.pid)          # Windows : le pilote ne donne pas la mémoire par programme, les compteurs de performance oui
     detail = _t("le serveur garde les modèles demandés ; arrêté, il redémarre tout seul au prochain message") if routeur else _t("redémarre tout seul au prochain message")
     if place and place["couches"]:
         detail = _t("{} couches sur {} sont sur la carte graphique").format(place["couches_gpu"], place["couches"]) + " · " + detail

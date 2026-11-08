@@ -1223,5 +1223,9 @@
 "Liste les voix": "Lists the voices",
 "Lit à voix haute": "Reads aloud",
 "Transcrit": "Transcribes",
-"Clone la voix": "Clones the voice"
+"Clone la voix": "Clones the voice",
+"Ce moteur ne peut pas être installé d'ici : ouvre les réglages du moteur.": "This engine cannot be installed from here: open the engine settings.",
+"Installation lancée : l'avancement est dans la barre bleue du haut.": "Installation started: progress is in the blue bar at the top.",
+"mémoire vidéo non mesurable pour ce programme (le pilote ne la donne pas) : le total de la carte est plus bas": "video memory cannot be measured for this program (the driver does not give it): the card's total is lower down",
+"Pour comparer, il faut au moins deux moteurs installés qui ont ce modèle. Pour l'instant : ": "To compare, you need at least two installed engines that have this model. For now: "
 }

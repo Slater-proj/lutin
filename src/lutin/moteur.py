@@ -521,6 +521,10 @@ def demarrer_ollama():
         raise ValueError("Ollama n'est pas installé : lance installer-assistant.bat.")
     if etat_ollama()["actif"]:
         return "Ollama tourne déjà."
+    if os.environ.get("LUTIN_DOCKER"):
+        from . import moteurs_docker
+        moteurs_docker.demarrer_ollama(lambda: etat_ollama()["actif"])
+        return "Ollama démarré."
     env = dict(os.environ, **ENV_OLLAMA)
     from . import emplacements
     if emplacements.lire_config_modeles() and not os.environ.get("OLLAMA_MODELS"):
@@ -541,7 +545,9 @@ def demarrer_ollama():
 def arreter_ollama():
     """Arrête Ollama (le service ou l'icône d'Ollama comprise), à la demande de l'utilisateur : nécessaire pour qu'il relise OLLAMA_MODELS. Renvoie True s'il ne répond plus ensuite."""
     if os.environ.get("LUTIN_DOCKER"):
-        raise ValueError(_t("Dans Docker, Ollama se redémarre avec le conteneur."))
+        from . import moteurs_docker
+        moteurs_docker.arreter_ollama()
+        return not etat_ollama()["actif"]
     if os.name == "nt":
         for nom in ("ollama.exe", "ollama app.exe"):
             subprocess.run(["taskkill", "/F", "/IM", nom], capture_output=True, timeout=20)

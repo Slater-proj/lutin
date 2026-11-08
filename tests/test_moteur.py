@@ -465,9 +465,9 @@ class Assistant(unittest.TestCase):
         from unittest import mock
         from lutin import moteurs, ollama_client
         mo = A.moteur_actuel()
-        with mock.patch.dict(os.environ, {"LUTIN_DOCKER": "1"}):
+        with mock.patch.dict(os.environ, {"LUTIN_DOCKER": "1", "OLLAMA_URL": "http://ollama:11434"}):
             a = mo.actions()
-        self.assertTrue(all(not x["possible"] and "Docker" in x["raison"] for x in a.values()))
+        self.assertTrue(all(not x["possible"] and "docker compose" in x["raison"] for x in a.values()))          # un autre conteneur : Lutin n'y touche pas
         appels = []
         possibles = {k: {"possible": True, "raison": "ok"} for k in moteurs.ACTIONS}
         with mock.patch.object(mo, "actions", lambda: possibles), mock.patch.object(A, "arreter_ollama", lambda: appels.append("arreter")), mock.patch.object(A, "demarrer_ollama", lambda: appels.append("demarrer")),                 mock.patch.object(ollama_client, "desinstaller_windows", lambda: appels.append("desinstaller")), mock.patch.object(ollama_client, "installer_windows", lambda cache, progression, **k: appels.append("installer")):
