@@ -1,0 +1,22 @@
+# Wake machines from Lutin while it stays in the default "bridge" network / Réveiller des machines depuis Lutin sans quitter le réseau « bridge ».
+# A tiny relay runs on the HOST network and sends the Wake-on-LAN packet for Lutin (a bridge container cannot broadcast to your LAN).
+# Un petit relais tourne sur le réseau de l'HÔTE et envoie le paquet de réveil à la place de Lutin.
+#   echo "LUTIN_WAKE_TOKEN=$(openssl rand -hex 24)" > .env
+#   docker compose -f docker-compose.yml -f docker-compose.wake.yml up -d
+# The relay only answers "wake this MAC" and only with the token / il ne répond qu'à « réveille cette MAC », et seulement avec le secret. Firewall port 8778 from the Internet / ne l'expose pas à Internet.
+services:
+  lutin:
+    environment:
+      LUTIN_WAKE_RELAY: http://host.docker.internal:8778
+      LUTIN_WAKE_TOKEN: ${LUTIN_WAKE_TOKEN:?set LUTIN_WAKE_TOKEN in .env (16+ characters)}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+  wake-relay:
+    image: ghcr.io/slater-proj/lutin:latest
+    command: ["wake-relay"]
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      LUTIN_WAKE_TOKEN: ${LUTIN_WAKE_TOKEN:?set LUTIN_WAKE_TOKEN in .env (16+ characters)}
+    healthcheck:
+      disable: true

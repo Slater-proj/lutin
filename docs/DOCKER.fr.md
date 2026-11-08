@@ -274,3 +274,14 @@ Les images publiées : `ghcr.io/slater-proj/lutin:latest` (dernière version, co
 | La page répond « nom d'hôte non autorisé » | Tu accèdes par un nom que Lutin ne connaît pas. Utilise `localhost`, une adresse privée, ou (niveau `proxy`) l'adresse déclarée dans `LUTIN_URL_PUBLIQUE`. |
 | Les modèles conseillés sont trop petits | La carte n'est pas vue par Lutin : `--gpus all` / `-f docker-compose.gpu.yml`, ou `LUTIN_GPU`. |
 | Téléchargement de modèle impossible | `LUTIN_HORS_LIGNE=1` est actif, ou pas d'accès à Internet. |
+
+## Réveiller des machines depuis Lutin dans un conteneur « bridge »
+
+Un conteneur du réseau Docker par défaut (`bridge`) ne peut pas diffuser sur ton réseau local : le paquet de réveil ne sort jamais. Garde le bridge et ajoute un petit relais, sur le réseau de l'hôte, qui envoie le paquet pour Lutin :
+
+```
+echo "LUTIN_WAKE_TOKEN=$(openssl rand -hex 24)" > .env
+docker compose -f docker-compose.yml -f docker-compose.wake.yml up -d
+```
+
+Le relais ne répond qu'à « réveille cette MAC », et seulement avec le secret. N'expose pas son port (8778) à Internet. Autre solution : `docker run --rm --network host ghcr.io/slater-proj/lutin lutin wake <MAC>` depuis l'hôte.
