@@ -263,6 +263,67 @@ def enregistrer(chemin, mesure):
     tmp = chemin.with_suffix(".tmp")
     tmp.write_text(json.dumps(tout, ensure_ascii=False, indent=1), encoding="utf-8")
     tmp.replace(chemin)
+    noter_historique(chemin, mesure)
+
+
+# --------------------------------------------------------------------------- l'historique : chaque mesure est gardée, pour voir l'évolution et repérer une régression
+EPREUVES = ("outils", "code", "francais", "consignes")
+HISTORIQUE_MAX = 600
+
+
+def chemin_historique(chemin):
+    return Path(chemin).with_name("bench_historique.jsonl")
+
+
+def noter_historique(chemin, mesure):
+    """Une ligne par mesure (modèle, date, moteur et sa version, vitesse, réussite de chaque épreuve en fraction de 0 à 1). Ne lève jamais : l'historique est un plus."""
+    try:
+        r = mesure.get("resultats") or {}
+        ligne = {"modele": mesure["modele"], "date": str(mesure.get("date", ""))[:19], "moteur": mesure.get("moteur") or {}, "tok_s": (r.get("vitesse") or {}).get("tok_s"),
+                 "epreuves": {cle: round(r[cle]["points"] / r[cle]["sur"], 2) for cle in EPREUVES if cle in r and r[cle].get("sur")}}
+        f = chemin_historique(chemin)
+        with open(f, "a", encoding="utf-8") as fichier:
+            fichier.write(json.dumps(ligne, ensure_ascii=False) + "\n")
+        if f.stat().st_size > HISTORIQUE_MAX * 500:
+            lignes = f.read_text(encoding="utf-8", errors="replace").splitlines()[-HISTORIQUE_MAX:]
+            f.write_text("\n".join(lignes) + "\n", encoding="utf-8")
+    except (OSError, KeyError, TypeError, ValueError, ZeroDivisionError):
+        pass
+
+
+def lire_historique(chemin):
+    """{modèle: [mesures, de la plus ancienne à la plus récente]}."""
+    sortie = {}
+    try:
+        lignes = chemin_historique(chemin).read_text(encoding="utf-8", errors="replace").splitlines()
+    except OSError:
+        return sortie
+    for ligne in lignes:
+        try:
+            x = json.loads(ligne)
+        except ValueError:
+            continue
+        if isinstance(x, dict) and x.get("modele"):
+            sortie.setdefault(x["modele"], []).append(x)
+    return sortie
+
+
+def regressions(chemin, seuil=0.25):
+    """Les modèles dont la DERNIÈRE mesure est nettement moins bonne que la précédente : vitesse en baisse de plus de `seuil` (25 %) ou une épreuve en baisse de plus de `seuil` (en part des points).
+    [{modele, genre (vitesse, outils, code…), avant, apres, moteur_change}] ; `moteur_change` : le moteur ou sa version n'est plus le même (la cause probable)."""
+    trouvees = []
+    for modele, mesures in lire_historique(chemin).items():
+        if len(mesures) < 2:
+            continue
+        avant, apres = mesures[-2], mesures[-1]
+        change = (avant.get("moteur") or {}) != (apres.get("moteur") or {})
+        if avant.get("tok_s") and apres.get("tok_s") and apres["tok_s"] < avant["tok_s"] * (1 - seuil):
+            trouvees.append({"modele": modele, "genre": "vitesse", "avant": avant["tok_s"], "apres": apres["tok_s"], "moteur_change": change})
+        for cle in EPREUVES:
+            a, b = (avant.get("epreuves") or {}).get(cle), (apres.get("epreuves") or {}).get(cle)
+            if a is not None and b is not None and b <= a - seuil:
+                trouvees.append({"modele": modele, "genre": cle, "avant": a, "apres": b, "moteur_change": change})
+    return trouvees
 
 
 def exporter(mesure):

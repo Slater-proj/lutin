@@ -4,6 +4,8 @@ from . import archive as _archive
 from . import infos_modele as _infos
 from . import affirmations as _affirmations
 from . import boucles as _boucles
+from . import observatoire as _observatoire
+from . import routeur as _routeur
 from . import actualites as _actualites
 from . import mcp as _mcp
 from . import moteur_llamacpp as _llamacpp
@@ -1386,6 +1388,64 @@ def normaliser_arguments(nom, args, parametres=None):
     return {}
 
 
+def contexte_routage():
+    """(modèles installés pour discuter, ceux qui sont trop gros pour la machine, modèles des machines appairées) : ce dont le routeur a besoin. Jamais d'attente réseau (les machines sont lues en cache)."""
+    from . import embeddings, machines
+    installes = [n for n in etat_moteur().get("installes", []) if not embeddings.est_modele_de_recherche(n)]
+    try:
+        vram, ram = _m.memoire_video(), _m.memoire_vive()
+        budget = (vram["total"] / 1024 ** 3) if vram else ((ram["total"] / 1024 ** 3) * 0.6 if ram else 0)
+    except Exception:  # noqa: BLE001  (une mesure qui échoue ne doit pas empêcher de répondre)
+        budget = 0
+    trop_gros = {n for n in installes if budget and (_routeur.taille_go(n, _m.MODELES) or 0) > budget * 0.95}
+    try:
+        distants = machines.modeles_distants()
+    except Exception:  # noqa: BLE001
+        distants = []
+    return installes, trop_gros, distants
+
+
+def appliquer_choix(r, choix, emit, conv_id, motif_court):
+    """Prend le modèle choisi pour CETTE demande (jamais le réglage), le dit et le note dans l'observatoire."""
+    r["modele"], r["machine"] = choix["modele"], choix.get("machine", "")
+    chez = _t(" (sur la machine « {} »)").format(choix["machine_nom"]) if choix.get("machine") else ""
+    emit({"type": "info", "texte": "🧭 " + _t("Modèle choisi pour cette demande : {}{} — {}.").format(choix["modele"], chez, motif_court)})
+    _observatoire.noter("routage", conv_id, profil=choix.get("profil", "reprise"), modele=choix["modele"], machine=choix.get("machine", ""), raison=motif_court)
+
+
+def router_la_demande(r, demande, images, emit, conv_id):
+    """Choix automatique du modèle (réglage « routage »), une fois par demande, jamais pendant une mission. Ne lève jamais : au pire, le modèle choisi reste le même."""
+    try:
+        if not r.get("routage") or r.get("_mission") or r.get("essai_a_blanc"):
+            return False
+        installes, trop_gros, distants = contexte_routage()
+        choix = _routeur.choisir(demande, installes, r["modele"], _m.MODELES, images, trop_gros, distants)
+        if choix:
+            appliquer_choix(r, choix, emit, conv_id, choix["raison"])
+            return True
+    except Exception as erreur:  # noqa: BLE001
+        _m.journaliser("Routeur de modèles : {!r}".format(erreur))
+    return False
+
+
+def monter_en_gamme(r, corps, emit, conv_id, motif):
+    """Reprise : le modèle vient d'échouer (réponse vide, texte qui tourne en rond). Avec le routeur actif, UN essai avec un modèle plus gros. True si on a changé de modèle."""
+    try:
+        if not r.get("routage") or r.get("_mission") or r.get("_monte"):
+            return False
+        installes, trop_gros, distants = contexte_routage()
+        choix = _routeur.plus_gros(r["modele"], installes, _m.MODELES, trop_gros, distants, exiger_reflexion=False)
+        if not choix:
+            return False
+        r["_monte"] = True
+        appliquer_choix(r, dict(choix, profil="reprise"), emit, conv_id, motif)
+        corps["model"] = r["modele"]
+        return True
+    except Exception as erreur:  # noqa: BLE001
+        _m.journaliser("Routeur de modèles (reprise) : {!r}".format(erreur))
+        return False
+
+
 def boucle_agent(conv, r, emit, ctx, stop):
     """La boucle de l'agent : le modèle répond, appelle des outils, on lui rend les résultats, jusqu'à la réponse finale."""
     tours_max = max(4, int(r.get("tours_max", _m.TOURS_MAX)))
@@ -1477,6 +1537,9 @@ def boucle_agent(conv, r, emit, ctx, stop):
                     caps = moteur_actuel(r).capacites(autre)
                 else:
                     emit({"type": "info", "texte": _t("Ce modèle ne voit pas les images et aucun modèle « Images » n'est installé : elles sont ignorées. Onglet Modèles pour en installer un.")})
+        if idx_tour == 0 and router_la_demande(r, derniere_demande, any(m.get("images") for m in conv["messages"][-_images.RECENTS:]), emit, conv["id"]):
+            caps = moteur_actuel(r).capacites(r["modele"])
+            reflechit = reflechit and (caps is None or "thinking" in caps)
         corps = {"model": r["modele"], "messages": ajuster_contexte(msgs, r["num_ctx"], 1.0, outils), "stream": True, "options": options, "think": reflechit}
         if not dernier_tour and outils:                      # mode « discussion » : aucun outil, donc rien à envoyer ni à signaler
             if caps is not None and "tools" not in caps:
@@ -1511,6 +1574,8 @@ def boucle_agent(conv, r, emit, ctx, stop):
                         if e.get("done"):
                             raison_fin = str(e.get("done_reason") or "")
                             vitesse = calculer_vitesse(e)
+                            _observatoire.noter("tour", conv["id"], modele=r["modele"], machine=r.get("machine", ""), jetons=int(e.get("eval_count") or 0), tok_s=vitesse["ecriture"] if vitesse else None,
+                                                duree_s=vitesse["total"] if vitesse else None)
                             if vitesse:
                                 conv["vitesse"] = vitesse
                                 emit(dict(vitesse, type="vitesse"))
@@ -1533,15 +1598,21 @@ def boucle_agent(conv, r, emit, ctx, stop):
                                 break
                 if rond:
                     _m.journaliser("Texte répété par le modèle {} (pensée : {} caractères, réponse : {}, essai {})".format(r["modele"], len(pensee), len(contenu), tentative + 1))
+                    _observatoire.noter("relance", conv["id"], motif="texte répété", modele=r["modele"])
                     if tentative < 2:
                         relance_repetition = True
                         emit({"type": "info", "texte": _t("Le modèle répète les mêmes phrases : je l'arrête et je relance sans réflexion, avec une pénalité de répétition.")})
+                        if tentative >= 1:
+                            monter_en_gamme(r, corps, emit, conv["id"], _t("le modèle répète les mêmes phrases"))
                         continue
                     emit({"type": "info", "texte": _t("Le modèle répète encore les mêmes phrases : j'arrête là. Reformule en plus court, ou choisis un autre modèle.")})
                 if not contenu.strip() and not appels:             # le modèle a (peut-être) réfléchi puis s'est tu : sans ceci la page restait sur « Réflexion » sans aucune réponse ni explication
                     _m.journaliser("Réponse vide du modèle {} (pensée : {} caractères, raison de fin : {!r}, essai {}, outils : {})".format(r["modele"], len(pensee), raison_fin, tentative + 1, "tools" in corps_t))
+                    _observatoire.noter("relance", conv["id"], motif="réponse vide", modele=r["modele"])
                     if tentative < 2:
                         relance_vide = True
+                        if tentative >= 1:
+                            monter_en_gamme(r, corps, emit, conv["id"], _t("le modèle n'a rien écrit"))
                         if pensee:
                             emit({"type": "info", "texte": _t("Le modèle a réfléchi sans rien répondre : je relance (réflexion coupée pour cet essai).")})
                         else:
@@ -1638,6 +1709,7 @@ def boucle_agent(conv, r, emit, ctx, stop):
         if rappel_faux:
             corrige_affirmation, faux_accompli = True, (contenu, rappel_faux)
             _m.journaliser("Le modèle {} affirme avoir agi sans appeler d'outil : je le lui fais remarquer.".format(r["modele"]))
+            _observatoire.noter("relance", conv["id"], motif="affirme sans agir", modele=r["modele"])
             emit({"type": "info", "texte": _t("Le modèle dit avoir agi (fichier, commande, recherche…) sans appeler d'outil : je lui demande de le faire pour de vrai.")})
             continue
         conv["messages"].append(message)
@@ -1652,6 +1724,7 @@ def boucle_agent(conv, r, emit, ctx, stop):
             nom = f.get("name", "")
             args = normaliser_arguments(nom, f.get("arguments"), next((t["function"].get("parameters") for t in outils if t["function"]["name"] == nom), None))
             repetitions = garde.compter(nom, args)
+            debut_outil = time.monotonic()
             _m.rafraichir_accords(ctx)                                  # une case cochée ou décochée pendant la réponse compte dès cet outil
             emit({"type": "outil", "nom": nom, "args": {k: (v if not isinstance(v, str) or len(v) < 300 else v[:300] + "...") for k, v in args.items()}})
             try:
@@ -1671,6 +1744,8 @@ def boucle_agent(conv, r, emit, ctx, stop):
             except Exception as erreur:  # noqa: BLE001
                 _m.journaliser("Outil « {} » : erreur inattendue {!r}".format(nom, erreur))
                 resultat = "Erreur inattendue : " + str(erreur)[:300]
+            _observatoire.noter("outil", conv["id"], outil=nom, duree_ms=int((time.monotonic() - debut_outil) * 1000), ok=not str(resultat).startswith(("Erreur", "Interrompu")), modele=r["modele"],
+                                detail=str(resultat)[:100] if str(resultat).startswith("Erreur") else "")
             medias, fichiers = ctx.pop("medias", []), ctx.pop("medias_fichiers", {})          # images produites par l'outil (et où elles sont), affichées dans la conversation
             extra = {"medias": medias, "medias_fichiers": fichiers} if medias else {}
             joints = [_fichiers.entree(c) for c in ctx.pop("fichiers_joints", [])][:8]           # documents et médias créés : une carte (ouvrir, télécharger, supprimer) sous le message

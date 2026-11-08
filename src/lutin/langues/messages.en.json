@@ -1936,5 +1936,13 @@
 "modèle {}": "model {}",
 "sur le port {}": "on port {}",
 "démarrer Lutin à l'ouverture de ta session (Windows : clé « Run » de ta session, Linux : systemd)": "start Lutin when you sign in (Windows: your session's \"Run\" key, Linux: systemd)",
-"valeur inconnue « {} » (choix : {})": "unknown value \"{}\" (choices: {})"
+"valeur inconnue « {} » (choix : {})": "unknown value \"{}\" (choices: {})",
+" (sur la machine « {} »)": " (on the machine \"{}\")",
+"Modèle choisi pour cette demande : {}{} — {}.": "Model chosen for this request: {}{} — {}.",
+"le modèle répète les mêmes phrases": "the model repeats the same sentences",
+"le modèle n'a rien écrit": "the model wrote nothing",
+"une image est jointe": "an image is attached",
+"du code ou une tâche de programmation": "code or a programming task",
+"une demande qui demande de réfléchir (analyser, comparer, une longue explication)": "a request that needs thinking (analysing, comparing, a long explanation)",
+"une question courte, sans fichier ni outil": "a short question, no file or tool"
 }

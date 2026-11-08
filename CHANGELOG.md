@@ -2,6 +2,15 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## Routeur de modèles, observatoire, laboratoire
+
+- **Choix automatique du modèle** (Réglages > Conversation, désactivé par défaut) : Lutin range la demande d'après des signaux objectifs, sans appeler de modèle donc sans délai : code → un modèle « code » installé ; question qui demande de réfléchir → le plus gros modèle qui sait réfléchir et qui tient sur la machine (ou sur une machine appairée qui répond) ; question courte → un petit modèle plus vif. Il ne change de modèle que pour CETTE demande, le dit dans la conversation, ne propose jamais un modèle « trop gros » ni un changement sans gain net, et n'agit jamais pendant une mission. **Reprise** : si le modèle n'écrit rien ou tourne en rond, un essai avec un modèle plus gros.
+- **Observatoire** (Santé > « Activité des modèles et des outils ») : par modèle, le nombre de réponses et la vitesse moyenne ; par outil, les appels, les échecs et la durée moyenne ; les reprises et les choix automatiques ; les derniers évènements. Seulement des noms, des durées et des compteurs, jamais le texte de tes messages ; 2000 évènements au plus.
+- **Laboratoire** (Santé > « Mesures dans le temps ») : chaque test de vitesse est gardé (avec le moteur et sa version). Une baisse nette de la dernière mesure (vitesse ou épreuve en baisse de plus de 25 %) est signalée, avec « le moteur ou sa version a changé depuis » quand c'est la cause probable.
+- **À savoir** : le routage juge la demande avec des règles (mots, longueur, code), pas avec une IA : il peut se tromper, d'où le réglage désactivé par défaut et l'annonce de chaque choix.
+
+**English.** Optional automatic model choice per request (code, thinking, short question; announced, never for missions, retry with a bigger model on failure), an activity view (per-model speed, tool calls and failures; names and counters only) and a measurements history with regression flags, all in Health.
+
 ## Commandes en anglais
 
 - **Toutes les commandes, options et valeurs de `lutin` ont un nom anglais officiel** : `lutin workspaces add`, `lutin models install`, `lutin offline on`, `lutin backup`, `lutin restore`, `lutin autostart install`, `lutin migrate`, `lutin import-project`, `lutin language`, `lutin log`, `lutin security`, `lutin devices`, `lutin bench-engines`, `lutin engine-trial` ; options `--yes`, `--level network`, `--workspace`, `--no-models`, `--no-ollama`, `--listen`, `--language`, `--reconfigure`, `--no-browser`, `--no-supervisor`, `--rollback-to`, `--models`, `--engine`, `--fast`, `--output`, `--force`, etc.

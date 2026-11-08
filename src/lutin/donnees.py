@@ -87,6 +87,7 @@ def _enregistrer_reglages(nouveau):
     r["essai_a_blanc"] = bool(r.get("essai_a_blanc"))
     r["copie_conversations"] = bool(r.get("copie_conversations"))
     r["conseil_machine"] = bool(r.get("conseil_machine", True))
+    r["routage"] = bool(r.get("routage"))
     r["machine"] = str(r.get("machine") or "")
     if r["machine"]:
         from . import machines

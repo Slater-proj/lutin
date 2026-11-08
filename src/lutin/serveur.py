@@ -13,6 +13,7 @@ from . import moteur_llamacpp as _llamacpp
 from . import moteurs as _moteurs
 from . import recherche as _recherche
 from . import sorties as _sorties
+from . import observatoire as _observatoire
 from . import web as _web
 from . import moteurs_maj as _moteurs_maj
 from . import mcp as _mcp
@@ -543,6 +544,12 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 return self._envoyer(400, {"erreur": _t("Fenêtre de conversation invalide.")})
             e = self._estimation(modele, max(512, min(ctx, 1048576)), _adequation.profil_pret())
             return self._envoyer(200 if e else 404, e or {"erreur": _t("Ce modèle n'est pas au catalogue : pas d'estimation possible.")})
+        if chemin == "/api/observatoire":                         # Santé : ce que les modèles et les outils ont fait (noms, durées, compteurs ; jamais le texte des messages)
+            evenements = _observatoire.lire(400)
+            return self._envoyer(200, {"resume": _observatoire.resume(evenements), "recents": [e for e in evenements if e["type"] != "tour"][:25], "modifiable": self._configurateur()})
+        if chemin == "/api/bench-historique":                     # Santé : l'évolution des mesures de chaque modèle et les régressions
+            historique = _bench.lire_historique(_m.chemin_bench())
+            return self._envoyer(200, {"regressions": _bench.regressions(_m.chemin_bench()), "modeles": [{"modele": m, "mesures": v[-6:]} for m, v in historique.items() if len(v) >= 1]})
         if chemin == "/api/sorties":                              # Santé : ce qui est sorti de la machine (recherches envoyées à un service extérieur)
             return self._envoyer(200, {"entrees": _sorties.lire(60), "modifiable": self._configurateur()})
         if chemin == "/api/web-recherche":                        # Réglages > Recherche web : ce qui est réglé (jamais la clé) et l'ordre des moteurs
@@ -1050,6 +1057,11 @@ class Gestionnaire(BaseHTTPRequestHandler):
                     return self._envoyer(200, self._machines(self.path[len("/api/machines-"):], donnees))
                 except ValueError as e:
                     return self._envoyer(400, {"erreur": str(e)})
+            if self.path == "/api/observatoire-vider":
+                if not self._configurateur():
+                    return self._envoyer(403, {"erreur": _t("Cela se règle depuis cette machine elle-même.")})
+                _observatoire.vider()
+                return self._envoyer(200, {"ok": True})
             if self.path == "/api/sorties-vider":
                 if not self._configurateur():
                     return self._envoyer(403, {"erreur": _t("Cela se règle depuis cette machine elle-même.")})
