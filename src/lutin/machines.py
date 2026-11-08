@@ -49,6 +49,11 @@ REVEIL = {}          # id de machine -> instant du dernier paquet de réveil env
 INFOS_NOEUD = {}          # adresse locale -> (instant, infos du nœud)
 INFOS_EN_COURS = {}          # adresse locale -> évènement : un calcul d'infos est en cours
 DISTANTS = {"t": 0.0, "v": [], "en_cours": False}          # modèles des autres machines, pour la liste de choix (voir modeles_distants)
+ARRET = {}          # id de machine -> instant où on lui a demandé de s'éteindre (le suivi « extinction » de la page)
+MAJ_DISTANTE = {}          # id de machine -> (instant, version d'avant) : une mise à jour lui a été demandée
+SYNCHRO = {}          # id de machine -> {"modeles": bool, "conv": bool} : ce qui a été relu depuis qu'elle répond
+DELAI_ARRET_S = 150
+DELAI_MAJ_S = 400
 CAPACITES_DISTANTES = {}          # (id de machine, modèle) -> (instant, capacités)
 
 
@@ -248,6 +253,16 @@ def noeud_autoriser_extinction(autoriser):
     return noeud_vue()
 
 
+def noeud_autoriser_maj(autoriser):
+    """Les machines appairées peuvent-elles mettre Lutin à jour sur CETTE machine ? Décoché par défaut : c'est le propriétaire de cette machine qui le décide."""
+    with VERROU:
+        n = noeud()
+        n["maj"] = bool(autoriser)
+        _ecrire("noeud.json", n)
+    journaliser("mise à jour par une machine appairée : {}".format("autorisée" if autoriser else "interdite"))
+    return noeud_vue()
+
+
 DROITS = ("conversations", "skills", "memoire")          # ce qu'une machine appairée peut LIRE si le propriétaire de celle-ci l'a coché (jamais écrire)
 PARTAGE_MAX_OCTETS = 4_000_000
 
@@ -305,7 +320,7 @@ def noeud_partager(genre, corps):
 
 def noeud_vue():
     n = noeud()
-    return {"actif": n["actif"], "id": n["id"], "droits": noeud_droits(), "extinction": bool(n.get("extinction")), "extinction_en_attente": alimentation.extinction_en_attente(),
+    return {"actif": n["actif"], "id": n["id"], "droits": noeud_droits(), "extinction": bool(n.get("extinction")), "maj": bool(n.get("maj")), "extinction_en_attente": alimentation.extinction_en_attente(),
             "autorisees": [{"nom": j["nom"], "date": j["date"]} for j in n["jetons"]]}
 
 
@@ -319,7 +334,10 @@ def noeud_charge(locale_occupee, distantes):
 
 def noeud_etat(moteur, modeles, ip_locale="", charge=None):
     """Ce que le nœud répond à `GET /api/noeud/etat` : de quoi savoir s'il est joignable et si son moteur peut faire tourner le modèle voulu, plus son adresse MAC, son aptitude au réveil et son démarrage automatique."""
-    return dict(noeud_infos(ip_locale), id=noeud()["id"], moteur=moteur.id, moteur_nom=moteur.nom, actif=bool(modeles.get("actif")), modeles=sorted(modeles.get("installes", []))[:500], charge=charge, droits=noeud_droits())
+    from . import moteur as _m
+    n = noeud()
+    return dict(noeud_infos(ip_locale), id=n["id"], moteur=moteur.id, moteur_nom=moteur.nom, actif=bool(modeles.get("actif")), modeles=sorted(modeles.get("installes", []))[:500], charge=charge, droits=noeud_droits(),
+                version=str(_m.VERSION), agir={"extinction": bool(n.get("extinction")), "maj": bool(n.get("maj"))})
 
 
 def noeud_capacites(moteur, modele):
@@ -507,13 +525,15 @@ def sonder(m, modele="", ouvrir=None, maintenant=time.monotonic, force=False):
         gardee = SONDES.get(m["id"])
         if gardee and not force and maintenant() - gardee[0] < VALIDITE_SONDE_S and gardee[2] == modele:
             return gardee[1]
-    charge, droits = None, {}
+    charge, droits, version, agir, allumee = None, {}, "", {}, False
     try:
         rep = _json(m, "/api/noeud/etat", ouvrir=ouvrir)
         if rep.get("id") == m["id"]:
             retenir_infos(m, rep)
             charge = rep.get("charge") if isinstance(rep.get("charge"), dict) else None
             droits = {k: bool((rep.get("droits") or {}).get(k)) for k in DROITS}
+            version = str(rep.get("version") or "")[:30]
+            agir = {k: bool((rep.get("agir") or {}).get(k)) for k in ("extinction", "maj")}
         if rep.get("id") != m["id"]:
             r = {"etat": "injoignable", "detail": _t("Ce n'est plus la même machine à cette adresse : rien ne lui est envoyé."), "modeles": []}
         elif not rep.get("actif"):
@@ -524,11 +544,56 @@ def sonder(m, modele="", ouvrir=None, maintenant=time.monotonic, force=False):
             r = {"etat": "operationnel", "detail": _t("Moteur opérationnel : {}.").format(rep.get("moteur_nom") or rep.get("moteur") or "?"), "modeles": rep.get("modeles", [])}
     except urllib.error.HTTPError as e:
         r = {"etat": "injoignable", "detail": _t("La machine refuse ce Lutin (erreur {}) : l'autorisation a peut-être été retirée.").format(e.code), "modeles": []}
-    except (urllib.error.URLError, OSError, ValueError):
+    except (urllib.error.URLError, OSError, ValueError) as e:
+        allumee = _hote_allume(e)
         r = {"etat": "injoignable", "detail": _t("Pas de réponse (éteinte, hors réseau ou Lutin arrêté)."), "modeles": []}
-    r = _avec_reveil(m, dict(r, charge=charge, droits=droits), maintenant)
+    r = _avec_reveil(m, dict(r, charge=charge, droits=droits, version=version, agir=agir, maj_disponible=_maj_disponible(version)), maintenant)
+    r = dict(r, **_etape(m, r, allumee))
     _noter(m, r["etat"], maintenant, r, modele)
     return r
+
+
+def _hote_allume(erreur):
+    """Une connexion REFUSÉE prouve que la machine est allumée (son système répond) alors que Lutin n'y tourne pas : une absence de réponse, elle, veut dire éteinte ou hors réseau."""
+    cause = getattr(erreur, "reason", erreur)
+    return isinstance(cause, ConnectionRefusedError) or getattr(cause, "errno", None) in (111, 10061)
+
+
+def _maj_disponible(version_distante):
+    """Vrai si la version de CETTE machine est plus récente que celle de la machine distante : Lutin n'y est pas à jour."""
+    if not version_distante:
+        return False
+    from . import miseajour, moteur as _m
+    return miseajour.plus_recente(str(_m.VERSION), version_distante)
+
+
+def _etape(m, r, allumee):
+    """Où en est la machine, pour la page : eteinte · reveil (paquet envoyé) · allumee (le système répond, pas Lutin) · lutin (Lutin répond, moteur pas prêt) · synchro (relecture de ses modèles et conversations) · pret ·
+    extinction (demandée, en cours) · maj (mise à jour demandée, Lutin redémarre). `dans_s` : secondes restantes avant l'extinction."""
+    maintenant = time.monotonic()
+    with VERROU:
+        arret = ARRET.get(m["id"])
+        if arret is not None and maintenant - arret > DELAI_ARRET_S:
+            ARRET.pop(m["id"], None)
+            arret = None
+        majd = MAJ_DISTANTE.get(m["id"])
+        if majd is not None and (maintenant - majd[0] > DELAI_MAJ_S or (r.get("version") and r["version"] != majd[1])):
+            MAJ_DISTANTE.pop(m["id"], None)
+            majd = None
+        if r["etat"] == "injoignable" or r["etat"] == "reveil_envoye":
+            if arret is not None:
+                ARRET.pop(m["id"], None)          # elle ne répond plus : c'est fait
+            if majd is not None:
+                return {"etape": "maj", "dans_s": 0}
+            return {"etape": "allumee" if allumee else ("reveil" if r["etat"] == "reveil_envoye" else "eteinte"), "dans_s": 0}
+        if arret is not None:
+            return {"etape": "extinction", "dans_s": max(0, round(30 - (maintenant - arret)))}
+        if majd is not None:
+            return {"etape": "maj", "dans_s": 0}
+        if r["etat"] == "joignable":
+            return {"etape": "lutin", "dans_s": 0}
+        s = SYNCHRO.get(m["id"]) or {}
+        return {"etape": "pret" if s.get("modeles") and s.get("conv") else "synchro", "dans_s": 0}
 
 
 def _avec_reveil(m, r, maintenant=time.monotonic):
@@ -574,8 +639,39 @@ def eteindre(ident, annuler=False, ouvrir=None):
     except (urllib.error.URLError, OSError, ValueError):
         raise ValueError(_t("Impossible de joindre cette machine : vérifie l'adresse et qu'elle est allumée.")) from None
     journaliser("{} demandée à {}".format("annulation de l'extinction" if annuler else "extinction", m["nom"]))
+    with VERROU:
+        if annuler:
+            ARRET.pop(ident, None)
+        else:
+            ARRET[ident] = time.monotonic()
+            oublier_machine(ident)          # elle va s'éteindre : on ne propose déjà plus ses modèles ni ses conversations
     SONDES.pop(ident, None)
     return rep
+
+
+def mettre_a_jour_distante(ident, ouvrir=None):
+    """Demande à la machine distante de mettre Lutin à jour (elle doit l'avoir autorisé) ; elle redémarre ensuite toute seule si Lutin y tourne sous supervision. Le suivi se lit dans son étape « maj »."""
+    m = trouver(ident)
+    if m is None:
+        raise ValueError(_t("Machine inconnue."))
+    ancienne = (SONDES.get(ident) or (0, {}, ""))[1].get("version", "")
+    try:
+        _json(m, "/api/noeud/maj", {}, delai=15, ouvrir=ouvrir)
+    except urllib.error.HTTPError as e:
+        if e.code == 403:
+            raise ValueError(_t("Cette machine n'accepte pas d'être mise à jour à distance : son propriétaire doit cocher « Autoriser les machines appairées à mettre Lutin à jour » dans l'onglet Machines.")) from None
+        try:
+            detail = json.loads(e.read().decode("utf-8", "replace")).get("erreur", "")
+        except (ValueError, OSError, AttributeError):
+            detail = ""
+        raise ValueError(detail or _t("Cette machine a répondu une erreur ({}).").format(e.code)) from None
+    except (urllib.error.URLError, OSError, ValueError):
+        raise ValueError(_t("Impossible de joindre cette machine : vérifie l'adresse et qu'elle est allumée.")) from None
+    with VERROU:
+        MAJ_DISTANTE[ident] = (time.monotonic(), ancienne)
+    SONDES.pop(ident, None)
+    journaliser("mise à jour demandée à {}".format(m["nom"]))
+    return {"ok": True}
 
 
 def _noter(m, etat, maintenant, resultat, modele):
@@ -584,6 +680,26 @@ def _noter(m, etat, maintenant, resultat, modele):
         if DERNIER_ETAT.get(m["id"]) != etat:
             DERNIER_ETAT[m["id"]] = etat
             journaliser("{} : {}".format(m["nom"], etat))          # un trait à chaque CHANGEMENT d'état, jamais à chaque sonde
+            if etat in ("operationnel", "joignable"):
+                DISTANTS["t"] = CONVERSATIONS["t"] = 0.0          # elle vient de répondre : ses modèles et ses conversations sont relus tout de suite
+                SYNCHRO[m["id"]] = {"modeles": False, "conv": False}
+            else:
+                oublier_machine(m["id"])          # elle ne répond plus : ses modèles et ses conversations ne sont plus proposés
+
+
+def oublier_machine(ident):
+    """Plus rien de cette machine dans les listes (modèles à choisir, conversations en jaune) : on ne peut plus lui parler."""
+    with VERROU:
+        DISTANTS["v"] = [d for d in DISTANTS["v"] if d["id"] != ident]
+        CONVERSATIONS["v"] = [c for c in CONVERSATIONS["v"] if c["machine"] != ident]
+        SYNCHRO.pop(ident, None)
+
+
+def _synchro_fait(cle, ids):
+    with VERROU:
+        for i in ids:
+            if i in SYNCHRO:
+                SYNCHRO[i][cle] = True
 
 
 def signaler_panne(m, modele=""):
@@ -633,6 +749,7 @@ def _rafraichir_conversations():
             continue
     with VERROU:
         CONVERSATIONS.update(t=time.monotonic(), v=liste, en_cours=False)
+    _synchro_fait("conv", [m["id"] for m in lire()])
 
 
 RE_IDENT_CONV = re.compile(r"^[0-9a-f]{8}$")
@@ -658,7 +775,7 @@ def conversations_distantes(attente=False):
                     with VERROU:
                         CONVERSATIONS["en_cours"] = False
             threading.Thread(target=travail, daemon=True, name="machines-conversations").start()
-    ids = {m["id"] for m in lire()}
+    ids = {m["id"] for m in lire() if DERNIER_ETAT.get(m["id"]) in ("joignable", "operationnel")}          # une machine qui ne répond pas n'a plus de conversations proposées
     importees = _registre_import("conversations_importees.json")
     sortie = []
     for c in CONVERSATIONS["v"]:
@@ -793,6 +910,7 @@ def _rafraichir_distants():
             liste.append({"id": m["id"], "nom": m["nom"], "etat": r["etat"], "modeles": modeles})
     with VERROU:
         DISTANTS.update(t=time.monotonic(), v=liste, en_cours=False)
+    _synchro_fait("modeles", [m["id"] for m in lire()])
 
 
 def modeles_distants(attente=False):
@@ -816,7 +934,7 @@ def modeles_distants(attente=False):
                     with VERROU:
                         DISTANTS["en_cours"] = False
             threading.Thread(target=travail, daemon=True, name="machines-modeles").start()
-    ids = {m["id"] for m in lire()}
+    ids = {m["id"] for m in lire() if DERNIER_ETAT.get(m["id"]) == "operationnel"}          # une machine qui ne répond pas n'est plus proposée
     return [dict(d) for d in DISTANTS["v"] if d["id"] in ids]
 
 

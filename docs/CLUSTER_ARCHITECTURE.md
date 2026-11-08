@@ -53,3 +53,15 @@ No error, no warning: the local engine answers. The state is visible in the Mach
 - The network is plain HTTP on the local network: the token and the conversations travel unencrypted. To go beyond your home, use an HTTPS proxy (see SECURITY.md). Never publish a node's port on the Internet.
 - Only the engine chosen on the node is lent.
 - Embeddings, images and background functions stay local.
+
+## The Machines page (Settings ▾ menu)
+
+The **Machines** page lives in the **Settings ▾** menu at the top, next to Automation, Health and Access. It is off by default: it explains what multi-machine mode is and offers one button to turn it on. Then, for each machine:
+
+- **the step it is at, live**: *wake-up sent → machine powered on → Lutin started → syncing → ready* (a refused connection tells "powered on, Lutin not started" apart from "off or unreachable"), and *shutting down in N s* with a Cancel button. The page checks every 2 seconds while a machine is changing step, every 8 seconds otherwise;
+- **its Lutin version**, and an **Update Lutin** button when it runs an older version than this machine. The owner of the remote machine must have ticked "Allow paired machines to update Lutin" (off by default, set from that machine only, noted in its log). It then restarts by itself if Lutin was started by the `lutin` command, and the page follows it (*update in progress*). In Docker the image is replaced instead (`docker compose pull && docker compose up -d`);
+- **details, folded away**: MAC address, memory load, import of its skills and memory.
+
+When a machine stops answering, or is switched off from here, **its models and its conversations disappear from the lists at once**: nobody can talk to it any more. When it answers again they are read again (the *syncing* step).
+
+Not verified on two real computers yet: the steps, the cleanup and the remote update are tested with fake nodes and a real browser.

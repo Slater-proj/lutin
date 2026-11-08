@@ -378,7 +378,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
                                        "version": _m.VERSION, "partages": o.get("partages", []), "ollama": o["actif"], "ollama_installe": bool(_m.chemin_ollama()) or _m.moteur_actuel().id != "ollama", "moteur_nom": _m.moteur_actuel().nom, "installes": o["installes"], "modeles": modeles, "modeles_masques": len(_m.lire_registre_modeles()["masques"]), "actives": list(_m.TOURS_ACTIFS),
                                        "pulls": _m.PULLS, "reglages": r, "conversations": _m.conv_liste(), "racine": str(_m.RACINE), "donnees": str(_m.DONNEES),
                                        "outil": bool(self._outil_vivant()), "hors_ligne": _hl.actif(), "moteur": _m.moteur_actuel().id, "niveau": _m.SECURITE.niveau, "docker": _acces.en_docker(), "ouverture_possible": _fichiers.ouverture_possible(), "missions": _mission.par_conversation(), "langue": _i18n.langue(), "langue_reglage": _i18n.langue_configuree(), "cpus": _machine.cpus_disponibles() or 1, "diagnostic": self._avec_estimation(self._diagnostic(o, r, profil, modeles), r, profil), "prudent": _estimation.mode_prudent(profil), "premier_lancement": self._premier_lancement(o, r, profil), "redemarrage": {"necessaire": _acces.securite_enregistree() != _m.SECURITE, "possible": _acces.peut_redemarrer()}, "nouvelle_version": _m.nouvelle_version_lutin(), "travaux": _m.travaux_etat(), "configurateur": self._configurateur(), "addons_alertes": _addons.alertes(), "embeddings": _embeddings.etat(),
-                                       "reflexion_possible": self._reflexion_possible(r, o["actif"]), "cluster_actif": _machines.cluster_actif(r.get("cluster")), "modeles_distants": _machines.modeles_distants(), "conversations_distantes": _machines.conversations_distantes(), "taches_fond": _m.taches_en_cours(), "taches_moteur": [dict(v, nom=_moteurs.MOTEURS[k].nom) for k, v in _moteurs.toutes_les_taches().items() if v.get("statut") == "en cours" and k in _moteurs.MOTEURS], "memoire": self._memoire(r, o), "calibrage": _calibrage.etat(), "bench": {"en_cours": _m.BENCH["en_cours"], "etape": _m.BENCH["etape"], "erreur": _m.BENCH["erreur"], "file": list(_m.BENCH.get("file") or []), "mesures": _bench.lire(_m.chemin_bench())}, "attentes": [{"id": a.id, "titre": a.titre, "detail": a.detail, "diff": a.diff, "conv": a.conv} for a in _m.Attente.EN_COURS.values()],
+                                       "reflexion_possible": self._reflexion_possible(r, o["actif"]), "cluster_actif": _machines.cluster_actif(r.get("cluster")), "modeles_distants": _machines.modeles_distants() if _machines.cluster_actif(r.get("cluster")) else [], "conversations_distantes": _machines.conversations_distantes() if _machines.cluster_actif(r.get("cluster")) else [], "taches_fond": _m.taches_en_cours(), "taches_moteur": [dict(v, nom=_moteurs.MOTEURS[k].nom) for k, v in _moteurs.toutes_les_taches().items() if v.get("statut") == "en cours" and k in _moteurs.MOTEURS], "memoire": self._memoire(r, o), "calibrage": _calibrage.etat(), "bench": {"en_cours": _m.BENCH["en_cours"], "etape": _m.BENCH["etape"], "erreur": _m.BENCH["erreur"], "file": list(_m.BENCH.get("file") or []), "mesures": _bench.lire(_m.chemin_bench())}, "attentes": [{"id": a.id, "titre": a.titre, "detail": a.detail, "diff": a.diff, "conv": a.conv} for a in _m.Attente.EN_COURS.values()],
                                        "en_attente": sorted({a.conv for a in _m.Attente.EN_COURS.values() if a.conv} | set(_m.CHOIX_MEMOIRE))})
         if chemin == "/api/conseil":
             r = _m.reglages()
@@ -721,6 +721,8 @@ class Gestionnaire(BaseHTTPRequestHandler):
             return self._envoyer(200, {"capacites": _machines.noeud_capacites(mo, donnees.get("modele"))})
         if self.path == "/api/noeud/eteindre":                 # ... ou, si le propriétaire l'a autorisé, pour l'éteindre (30 s, annulable, journalisé)
             return self._noeud_eteindre(donnees)
+        if self.path == "/api/noeud/maj":                      # ... ou, si le propriétaire l'a autorisé, pour mettre Lutin à jour ici (puis redémarrage si Lutin est supervisé)
+            return self._noeud_maj()
         if not self._authentifie():
             return self._envoyer(401, {"erreur": "authentification requise"})
         if not self._jeton_valide():
@@ -1202,6 +1204,17 @@ class Gestionnaire(BaseHTTPRequestHandler):
         except ValueError as e:
             return self._envoyer(400, {"erreur": str(e)})
 
+    def _noeud_maj(self):
+        if not _machines.noeud_jeton_valide(self.headers.get("X-Noeud")):
+            return self._envoyer(401, {"erreur": "machine non autorisée"})
+        if not _machines.noeud().get("maj"):
+            return self._envoyer(403, {"erreur": "la mise à jour à distance n'est pas autorisée sur cette machine"})
+        try:
+            _machines.journaliser("mise à jour demandée par une machine appairée")
+            return self._envoyer(200, {"ok": True, "maj": _acces.mettre_a_jour()})
+        except ValueError as e:
+            return self._envoyer(400, {"erreur": str(e)})
+
     NOEUD_PLACES = threading.BoundedSemaphore(2)          # deux demandes de machines à la fois au plus : une seule carte graphique
     NOEUD_ACTIFS = {"n": 0}          # demandes d'autres machines en cours ici (montré dans l'état du nœud)
     ATTENTE_LOCAL_S = 120          # une demande d'une autre machine laisse passer l'utilisateur de CETTE machine : au plus ce temps d'attente avant de passer quand même
@@ -1271,11 +1284,15 @@ class Gestionnaire(BaseHTTPRequestHandler):
             return _machines.reveiller(str(donnees.get("id", "")))
         elif action == "shutdown":
             return _machines.eteindre(str(donnees.get("id", "")), bool(donnees.get("annuler")))
-        elif action in ("node-shutdown", "autostart", "cancel-local-shutdown"):          # ce qui touche l'extinction ou le démarrage de CETTE machine : depuis cette machine seulement
+        elif action == "update":
+            return _machines.mettre_a_jour_distante(str(donnees.get("id", "")))
+        elif action in ("node-shutdown", "node-update", "autostart", "cancel-local-shutdown"):          # ce qui touche l'extinction ou le démarrage de CETTE machine : depuis cette machine seulement
             if not self._configurateur_strict():
                 raise ValueError(_t("Cela se règle depuis cette machine elle-même."))
             if action == "node-shutdown":
                 _machines.noeud_autoriser_extinction(bool(donnees.get("actif")))
+            elif action == "node-update":
+                _machines.noeud_autoriser_maj(bool(donnees.get("actif")))
             elif action == "cancel-local-shutdown":
                 return {"annulee": _alimentation.annuler_extinction(_machines.journaliser)}
             elif donnees.get("actif"):

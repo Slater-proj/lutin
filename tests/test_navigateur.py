@@ -92,14 +92,14 @@ class Parcours(unittest.TestCase):
             self.assertEqual(p.evaluer("document.querySelectorAll('#santeCorps .erreur').length"), 0)
 
     def test_reglages_montre_les_machines_sans_erreur(self):
-        """L'onglet Machines est caché par défaut ; la case des Réglages l'ajoute ; il montre alors la case « prêter le moteur » et le formulaire d'ajout, sans erreur, même sans aucune machine."""
+        """L'onglet Machines (menu Réglages) propose d'abord d'activer le mode multi-machines ; une fois activé, il montre la case « prêter le moteur » et le formulaire d'ajout, sans erreur, même sans aucune machine."""
         with self.captures.serveur_demo() as (port, tmp):
             p = self.ouvrir(tmp, "http://127.0.0.1:%d/" % port)
-            self.assertTrue(p.evaluer("document.querySelector('.onglets button[data-p=machines]').hidden"))
-            p.evaluer(onglet("reglages"))
-            p.evaluer("(() => { const c = document.getElementById('cCluster'); c.checked = true; c.dispatchEvent(new Event('change')); })()")
-            p.attendre("!document.querySelector('.onglets button[data-p=machines]').hidden")
+            self.assertTrue(p.evaluer("document.getElementById('menuReglages').hidden"))
             p.evaluer(onglet("machines"))
+            p.attendre("document.getElementById('machinesZone').textContent.includes('Activer le mode multi-machines')")
+            self.assertEqual(p.evaluer("document.getElementById('bReglages').textContent.includes('Machines')"), True)          # le bouton du menu dit où on est
+            p.evaluer("document.querySelector('#machinesZone button.principal').click()")
             p.attendre("document.getElementById('machinesZone').textContent.includes('Ajouter une machine')")
             self.assertIn("Prêter le moteur", p.evaluer("document.getElementById('machinesZone').textContent"))
             self.assertEqual(p.evaluer("document.querySelectorAll('#machinesZone .erreur:not(:empty)').length"), 0)
@@ -204,7 +204,8 @@ class Parcours(unittest.TestCase):
             p.commande("Input.dispatchMouseEvent", type="mouseReleased", x=100, y=y - 60, button="left", clickCount=1)
             p.attendre("Math.round(document.querySelector('.options-lat').getBoundingClientRect().height) > %d" % (haut_avant + 30))
             # les onglets : Automatisation existe et contient les tâches planifiées (plus dans Mémoire)
-            self.assertEqual([p.evaluer("document.querySelectorAll('.onglets button')[%d].dataset.p" % i) for i in range(7)], ["chat", "modeles", "memoire", "auto", "reglages", "sante", "acces"])
+            self.assertEqual([p.evaluer("document.querySelectorAll('.onglets button[data-p]')[%d].dataset.p" % i) for i in range(8)], ["chat", "modeles", "memoire", "reglages", "auto", "machines", "sante", "acces"])
+            self.assertEqual(p.evaluer("document.querySelectorAll('.haut .onglets > button, .haut .onglets > .sous > button').length"), 4)          # la barre ne montre que quatre boutons : le reste est dans le menu Réglages
             p.evaluer(onglet("auto"))
             p.attendre("document.querySelector('#p-auto').classList.contains('vue')")
             self.assertTrue(p.evaluer("!!document.querySelector('#p-auto #listePlanifie')"))

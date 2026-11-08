@@ -225,6 +225,50 @@ class Etats(Base):
         self.assertTrue(machines.cluster_actif(None))          # une machine appairée : visible tout seul
         self.assertFalse(machines.cluster_actif(False))          # le réglage explicite l'emporte
 
+    def test_une_machine_qui_ne_repond_plus_disparait_des_listes(self):
+        m = self.jumeler()
+        machines.DISTANTS.update(t=machines.time.monotonic(), v=[{"id": m["id"], "nom": "x", "etat": "operationnel", "modeles": ["m1"]}])
+        machines.CONVERSATIONS.update(t=machines.time.monotonic(), v=[{"machine": m["id"], "machine_nom": "x", "id": "a" * 8, "titre": "T", "maj": "", "messages": 1}])
+        machines.DERNIER_ETAT[m["id"]] = "operationnel"
+        self.assertEqual(len(machines.modeles_distants()), 1)
+        self.noeud.actif = False
+        machines.signaler_panne(machines.trouver(m["id"]))
+        self.assertEqual(machines.modeles_distants(), [])
+        self.assertEqual(machines.conversations_distantes(), [])
+
+    def test_les_etapes_d_une_machine(self):
+        m = self.jumeler()
+        h = machines.trouver(m["id"])
+        machines.SONDES.clear()
+        r = machines.sonder(h, "", force=True)
+        self.assertEqual(r["etape"], "synchro")          # elle répond, mais ses modèles et conversations ne sont pas encore relus
+        machines._synchro_fait("modeles", [m["id"]])
+        machines._synchro_fait("conv", [m["id"]])
+        self.assertEqual(machines.sonder(h, "", force=True)["etape"], "pret")
+        self.noeud.actif = False
+        self.assertEqual(machines.sonder(h, "", force=True)["etape"], "lutin")          # Lutin répond, le moteur est arrêté
+
+    def test_l_extinction_se_suit_puis_la_machine_est_eteinte(self):
+        m = self.jumeler()
+        h = machines.trouver(m["id"])
+        machines.ARRET[m["id"]] = machines.time.monotonic()
+        machines.SYNCHRO[m["id"]] = {"modeles": True, "conv": True}
+        r = machines.sonder(h, "", force=True)
+        self.assertEqual((r["etape"], 0 < r["dans_s"] <= 30), ("extinction", True))
+        self.noeud.actif = False
+        machines.signaler_panne(h)
+
+    def test_la_version_du_nœud_dit_si_lutin_n_y_est_pas_a_jour(self):
+        with mock.patch("lutin.moteur.VERSION", "0.38.0"):
+            self.assertTrue(machines._maj_disponible("0.36.1"))
+            self.assertFalse(machines._maj_disponible("0.38.0"))
+            self.assertFalse(machines._maj_disponible("0.40.0"))
+            self.assertFalse(machines._maj_disponible(""))
+
+    def test_une_connexion_refusee_prouve_que_la_machine_est_allumee(self):
+        self.assertTrue(machines._hote_allume(machines.urllib.error.URLError(ConnectionRefusedError())))
+        self.assertFalse(machines._hote_allume(machines.urllib.error.URLError(TimeoutError())))
+
     def test_joignable_si_le_moteur_est_arrete(self):
         m = self.jumeler()
         self.noeud.actif = False

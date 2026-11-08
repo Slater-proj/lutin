@@ -136,8 +136,7 @@ button.danger:hover { background:linear-gradient(180deg, #b84545, #8f2f2f); }
 body { grid-template-rows:minmax(0,1fr); }
 .haut { gap:6px; padding:4px 10px; flex-wrap:nowrap; font-size:.8rem; }
 .haut button { padding:3px 9px; }
-.haut .onglets { flex:1; min-width:0; overflow-x:auto; flex-wrap:nowrap; scrollbar-width:none; }
-.haut .onglets::-webkit-scrollbar { display:none; }
+.haut .onglets { flex:0 1 auto; min-width:0; flex-wrap:nowrap; }
 .haut .onglets button { white-space:nowrap; flex:0 0 auto; }
 .haut .onglets .ic { margin-right:5px; }
 .puce { padding:2px 8px; font-size:.74rem; gap:5px; flex:0 0 auto; }
@@ -184,8 +183,20 @@ aside h1 { padding:8px 12px; font-size:.9rem; }
 aside .liste { padding:4px 6px; }
 .conv { padding:6px 9px; }
 .sante.ok { border-color:var(--ok); } .sante.attention { border-color:var(--warm); color:var(--warm); } .sante.critique { border-color:var(--err); color:var(--err); font-weight:600; }
-#bSante::after { content:"●"; margin-left:5px; font-size:.7em; vertical-align:middle; color:var(--muted); }
-#bSante[data-niveau=ok]::after { color:var(--ok); } #bSante[data-niveau=attention]::after { color:var(--warm); } #bSante[data-niveau=critique]::after { color:var(--err); }
+#bSante .tx b::after, #bReglages[data-niveau]::before { content:"●"; margin-left:6px; font-size:.7em; vertical-align:middle; color:var(--muted); }
+#bSante[data-niveau=ok] .tx b::after { color:var(--ok); } #bSante[data-niveau=attention] .tx b::after { color:var(--warm); } #bSante[data-niveau=critique] .tx b::after { color:var(--err); }
+#bReglages[data-niveau]::before { content:"●"; position:absolute; top:2px; right:5px; margin:0; font-size:.6em; }
+#bReglages[data-niveau=attention]::before { color:var(--warm); } #bReglages[data-niveau=critique]::before { color:var(--err); }
+.sous { position:relative; flex:0 0 auto; }
+#bReglages { position:relative; } #bReglages .fl { margin-left:5px; font-size:.75em; opacity:.7; transition:transform .15s; } #bReglages[aria-expanded=true] .fl { transform:rotate(180deg); }
+#menuReglages { position:absolute; left:0; top:calc(100% + 8px); z-index:160; min-width:290px; background:var(--panel); border:1px solid var(--line2); border-radius:12px; box-shadow:var(--ombre); padding:6px; display:flex; flex-direction:column; gap:2px; }
+#menuReglages[hidden] { display:none; }
+.haut #menuReglages button { display:flex; align-items:center; gap:12px; text-align:left; border-radius:9px; padding:8px 10px; white-space:normal; width:100%; background:transparent; border:1px solid transparent; box-shadow:none; color:var(--fg); }
+.haut #menuReglages button:hover:not([aria-selected=true]), .haut #menuReglages button:focus-visible { background:#1c2634; }
+.haut #menuReglages button[aria-selected=true] { background:#1d3048; border-color:rgba(90,169,255,.35); box-shadow:none; }
+#menuReglages .ic { font-size:1.15rem; width:1.6rem; text-align:center; margin:0 !important; }
+#menuReglages .tx { display:flex; flex-direction:column; gap:1px; } #menuReglages .tx b { font-weight:600; font-size:.88rem; } #menuReglages .tx small { color:var(--muted); font-size:.74rem; }
+#menuReglages .lb { display:inline !important; }
 /* fenêtre (revue des changements, git) */
 #modal { position:fixed; inset:0; z-index:200; display:flex; align-items:center; justify-content:center; }
 #modalFond { position:absolute; inset:0; background:rgba(0,0,0,.6); }
@@ -317,6 +328,8 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
   .cadre h2 { font-size:15px; }
   .carte { padding:8px 10px; }
   #menuPlus { position:fixed; right:6px; top:40px; min-width:min(280px, 92vw); }
+  .sous { position:static; }
+  #menuReglages { position:fixed; left:6px; right:6px; top:42px; min-width:0; max-height:calc(100dvh - 56px); overflow-y:auto; }
 }
 @media (hover:none) { .actions { opacity:1; } }
 /* cartes de modèles : titre, phrase, détails puis boutons, en colonne (et plus en ligne qui se replie n'importe comment) */
@@ -354,6 +367,17 @@ button.principal { box-shadow:0 6px 16px -8px rgba(63,143,232,.8); }
 .haut .onglets button[aria-selected=true] { background:#1d3048; border-color:rgba(90,169,255,.35); color:#fff; box-shadow:0 6px 16px -8px rgba(90,169,255,.7); }
 .carte { background:linear-gradient(180deg, #131b25, #10161e); box-shadow:var(--ombre-douce); transition:border-color .15s; }
 .carte:hover { border-color:var(--line2); }
+.machine .tete-machine { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:4px; }
+.puce-version { font-size:.72rem; padding:1px 8px; border-radius:999px; border:1px solid var(--line2); color:var(--muted); }
+.puce-version.vieille { color:var(--warm); border-color:var(--warm); } .puce-version.choisie { color:#e0a84a; border-color:#e0a84a; }
+.etapes { display:flex; flex-wrap:wrap; gap:6px 14px; margin:8px 0; }
+.etape { display:flex; align-items:center; gap:6px; font-size:.8rem; color:var(--muted); }
+.etape i { width:20px; height:20px; border-radius:50%; border:1px solid var(--line2); display:inline-flex; align-items:center; justify-content:center; font-style:normal; font-size:.7rem; }
+.etape.fait { color:var(--ok); } .etape.fait i { border-color:var(--ok); }
+.etape.courante { color:var(--fg); font-weight:600; } .etape.courante i { border-color:var(--accent); animation:pouls 1.2s ease-in-out infinite; }
+@keyframes pouls { 50% { box-shadow:0 0 0 4px rgba(90,169,255,.25); } }
+.machine details.plus { margin-top:8px; } .machine details.plus > summary { cursor:pointer; color:var(--muted); font-size:.82rem; }
+.machine .ligne { margin:6px 0; }
 .cadre h2 { padding-bottom:6px; border-bottom:1px solid var(--line); }
 .conv { border-radius:10px; }
 .conv.choisie { box-shadow:inset 3px 0 0 var(--accent); }
@@ -440,7 +464,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
   <div class="haut">
     <button id="burger" title="Conversations" aria-label="Ouvrir les conversations">☰</button>
     <div class="onglets" role="tablist">
-      <button data-p="chat" aria-selected="true" title="Conversation"><span class="ic">💬</span><span class="lb">Conversation</span><i class="travail" id="ptTravail" hidden title="L'assistant travaille"></i></button><button data-p="modeles" aria-selected="false" title="Modèles"><span class="ic">🧠</span><span class="lb">Modèles</span><i class="travail fini" id="ptModeles" hidden title="Nouveautés pour ta machine"></i></button><button data-p="memoire" aria-selected="false" title="Mémoire"><span class="ic">📝</span><span class="lb">Mémoire</span></button><button data-p="auto" aria-selected="false" title="Automatisation : tâches planifiées, travaux de fond"><span class="ic">⏱</span><span class="lb">Automatisation</span></button><button data-p="reglages" aria-selected="false" title="Réglages"><span class="ic">⚙️</span><span class="lb">Réglages</span></button><button id="bSante" data-p="sante" aria-selected="false" title="Santé du PC : mémoire, carte graphique, disques ; test de bon fonctionnement"><span class="ic">⚕</span><span class="lb">Santé</span></button><button data-p="acces" aria-selected="false" title="Qui peut utiliser Lutin, appareils connectés, code PIN"><span class="ic">🔐</span><span class="lb">Accès</span></button><button data-p="machines" aria-selected="false" hidden title="Machines : celles dont tu utilises le moteur, et celle-ci quand tu la prêtes"><span class="ic">🖧</span><span class="lb">Machines</span></button>
+      <button data-p="chat" aria-selected="true" title="Conversation"><span class="ic">💬</span><span class="lb">Conversation</span><i class="travail" id="ptTravail" hidden title="L'assistant travaille"></i></button><button data-p="modeles" aria-selected="false" title="Modèles"><span class="ic">🧠</span><span class="lb">Modèles</span><i class="travail fini" id="ptModeles" hidden title="Nouveautés pour ta machine"></i></button><button data-p="memoire" aria-selected="false" title="Mémoire"><span class="ic">📝</span><span class="lb">Mémoire</span></button><div class="sous"><button id="bReglages" aria-haspopup="true" aria-expanded="false" aria-selected="false" title="Réglages et outils : automatisation, machines, santé, accès"><span class="ic">⚙️</span><span class="lb">Réglages</span><span class="fl">▾</span></button><div id="menuReglages" role="menu" hidden><button data-p="reglages" role="menuitem" aria-selected="false"><span class="ic">⚙️</span><span class="tx"><b>Général</b><small>Langue, dossiers, moteur, conversation</small></span></button><button data-p="auto" role="menuitem" aria-selected="false"><span class="ic">⏱</span><span class="tx"><b>Automatisation</b><small>Tâches planifiées, travaux de fond</small></span></button><button data-p="machines" role="menuitem" aria-selected="false"><span class="ic">🖧</span><span class="tx"><b>Machines</b><small>Utiliser le moteur d'un autre ordinateur</small></span></button><button id="bSante" data-p="sante" role="menuitem" aria-selected="false"><span class="ic">⚕</span><span class="tx"><b>Santé</b><small>Mémoire, carte graphique, disques</small></span></button><button data-p="acces" role="menuitem" aria-selected="false"><span class="ic">🔐</span><span class="tx"><b>Accès</b><small>Code PIN, appareils connectés</small></span></button></div></div>
     </div>
     <span class="puce" id="pOllama"><i></i><span>Ollama</span></span>
     <button id="bPalette" aria-label="Tout trouver (Ctrl+K)" title="Tout trouver : conversations, onglets, modèles, actions (Ctrl+K)">🔎</button>
@@ -680,7 +704,6 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     <h2>Moteur de modèles <span class="aide">(ce qui fait tourner le modèle de langage)</span></h2>
     <div class="aide">Lutin discute avec un moteur. Chaque moteur a ses forces et ses limites, et ce que tu peux faire avec lui (l'installer, le démarrer, télécharger ses modèles) dépend de lui et de ton installation : seul ce qui est possible est proposé, avec la raison du reste. Changer de moteur change aussi la liste des modèles et l'onglet Modèles.</div>
     <div id="listeMoteurs"></div>
-    <label class="opt-ligne" title="Ajoute l'onglet Machines : utiliser le moteur d'un autre ordinateur (une carte graphique puissante, par exemple), le réveiller, voir ses conversations. Sans lui, l'onglet reste caché."><input type="checkbox" id="cCluster"> Utiliser plusieurs machines (ajoute l'onglet Machines)</label>
     <div class="aide" id="aideMoteur"></div>
     </details>
     <details class="groupe" data-g="conversation"><summary>Conversation</summary>
@@ -1806,7 +1829,6 @@ body[data-moteur="openai"] .biblio { display:none !important; }
   $('bCalibrerStop').addEventListener('click', async () => { try { await api('/api/calibrage', { action: 'cancel' }); } catch (e) { $('msgCalibrage').textContent = e.message; } });
   const rafraichir = async () => {
     try { ETAT = await api('/api/etat'); } catch (e) { return; }
-    { const bm = document.querySelector('.onglets button[data-p="machines"]'); bm.hidden = !ETAT.cluster_actif; if (bm.hidden && $('p-machines').classList.contains('vue')) document.querySelector('.onglets button[data-p="chat"]').click(); }          // l'onglet Machines n'existe que si on utilise plusieurs machines
     $('pOllama').classList.toggle('ok', ETAT.ollama); document.body.dataset.moteur = ETAT.moteur || 'ollama'; $('pOllama').lastChild.textContent = ETAT.moteur && ETAT.moteur !== 'ollama' ? ETAT.moteur_nom + ' ' + (ETAT.ollama ? T('prêt') : T('ne répond pas')) : (ETAT.ollama ? T('Ollama prêt') : (ETAT.ollama_installe ? T('Ollama arrêté') : T('Ollama non installé'))); $('pOllama').title = $('pOllama').lastChild.textContent;
     $('bDemarrer').hidden = ETAT.ollama || !ETAT.ollama_installe;
     afficherDiagnostic(ETAT.diagnostic || []);
@@ -1832,7 +1854,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     const voulue = valeurModele(ETAT.reglages.modele, ETAT.reglages.machine);
     s.value = existe(v) && (installesDiscussion().includes(v) || v.includes(SEP_M)) ? v : (existe(voulue) ? voulue : (installesDiscussion().includes(ETAT.reglages.modele) ? ETAT.reglages.modele : (installesDiscussion()[0] || ETAT.reglages.modele)));
     s.classList.toggle('distant', s.value.includes(SEP_M));
-    if (!$('selMode').dataset.init) { afficherOptions(CONV ? CONV.options : null); $('cRoutage').checked = !!ETAT.reglages.routage; $('cCluster').checked = !!ETAT.cluster_actif; $('cAvance').checked = !!ETAT.reglages.avance; $('cCopieConv').checked = !!ETAT.reglages.copie_conversations; $('selMemoire').value = ETAT.reglages.memoire_longue || 'demander'; $('iFichePart').value = ETAT.reglages.fiche_part || 10; $('cScribe').checked = ETAT.reglages.fiche_scribe !== false; $('cSens').checked = !!ETAT.reglages.recherche_sens; aideMemoire(); majSens(); $('rCtx').value = ETAT.reglages.num_ctx; $('rTemp').value = ETAT.reglages.temperature; $('rTours').value = ETAT.reglages.tours_max; $('iTopP').value = ETAT.reglages.top_p ?? ''; $('iTopK').value = ETAT.reglages.top_k ?? ''; $('iMinP').value = ETAT.reglages.min_p ?? ''; $('iRep').value = ETAT.reglages.repeat_penalty ?? ''; $('cGarde').checked = ETAT.reglages.garde_ressources !== false; $('cComfy').checked = ETAT.reglages.liberer_si_comfy !== false; $('sRappels').value = ETAT.reglages.rappels_auto || 'scenario'; $('iSeuilRam').value = ETAT.reglages.seuil_ram_go; $('iSeuilDisque').value = ETAT.reglages.seuil_disque_go; $('iPlafond').value = ETAT.reglages.plafond_donnees_go; $('iLimiteCmd').value = ETAT.reglages.limite_ram_commande_go; $('iThreads').value = ETAT.reglages.num_thread ?? ''; $('iGarde').value = ETAT.reglages.garde_min ?? ''; $('selMode').dataset.init = '1'; }
+    if (!$('selMode').dataset.init) { afficherOptions(CONV ? CONV.options : null); $('cRoutage').checked = !!ETAT.reglages.routage; $('cAvance').checked = !!ETAT.reglages.avance; $('cCopieConv').checked = !!ETAT.reglages.copie_conversations; $('selMemoire').value = ETAT.reglages.memoire_longue || 'demander'; $('iFichePart').value = ETAT.reglages.fiche_part || 10; $('cScribe').checked = ETAT.reglages.fiche_scribe !== false; $('cSens').checked = !!ETAT.reglages.recherche_sens; aideMemoire(); majSens(); $('rCtx').value = ETAT.reglages.num_ctx; $('rTemp').value = ETAT.reglages.temperature; $('rTours').value = ETAT.reglages.tours_max; $('iTopP').value = ETAT.reglages.top_p ?? ''; $('iTopK').value = ETAT.reglages.top_k ?? ''; $('iMinP').value = ETAT.reglages.min_p ?? ''; $('iRep').value = ETAT.reglages.repeat_penalty ?? ''; $('cGarde').checked = ETAT.reglages.garde_ressources !== false; $('cComfy').checked = ETAT.reglages.liberer_si_comfy !== false; $('sRappels').value = ETAT.reglages.rappels_auto || 'scenario'; $('iSeuilRam').value = ETAT.reglages.seuil_ram_go; $('iSeuilDisque').value = ETAT.reglages.seuil_disque_go; $('iPlafond').value = ETAT.reglages.plafond_donnees_go; $('iLimiteCmd').value = ETAT.reglages.limite_ram_commande_go; $('iThreads').value = ETAT.reglages.num_thread ?? ''; $('iGarde').value = ETAT.reglages.garde_min ?? ''; $('selMode').dataset.init = '1'; }
     if (document.activeElement !== $('selLangue')) $('selLangue').value = ETAT.langue_reglage || 'auto';
     afficherVersion();
     if ($('vVersionActuelle')) $('vVersionActuelle').textContent = T('Lutin ') + (ETAT.version || '');
@@ -1927,10 +1949,21 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     } catch (e) { fil().appendChild(el('div', 'erreur', e.message)); }
   };
   const sauverOptions = enSerie(envoyerOptions);
-  const envoyerReglages = async () => { try { await api('/api/reglages', Object.assign({ modele: modeleChoisi(), machine: machineChoisie(), routage: $('cRoutage').checked, cluster: $('cCluster').checked, copie_conversations: $('cCopieConv').checked, memoire_longue: $('selMemoire').value, fiche_part: nombreOuNull('iFichePart') ?? 10, fiche_scribe: $('cScribe').checked, recherche_sens: $('cSens').checked, avance: $('cAvance').checked, num_ctx: +$('rCtx').value, temperature: +$('rTemp').value, tours_max: +$('rTours').value, top_p: nombreOuNull('iTopP'), top_k: nombreOuNull('iTopK'), min_p: nombreOuNull('iMinP'), repeat_penalty: nombreOuNull('iRep'), garde_ressources: $('cGarde').checked, liberer_si_comfy: $('cComfy').checked, rappels_auto: $('sRappels').value, seuil_ram_go: nombreOuNull('iSeuilRam') ?? 3, seuil_disque_go: nombreOuNull('iSeuilDisque') ?? 10, plafond_donnees_go: nombreOuNull('iPlafond') ?? 2, limite_ram_commande_go: nombreOuNull('iLimiteCmd') ?? 0, num_thread: nombreOuNull('iThreads'), garde_min: nombreOuNull('iGarde'), modele_annexe: $('selAnnexe').value, reflexion_tours: $('selReflTours').value }, CONV ? {} : lireOptions(true))); } catch (e) { fil().appendChild(el('div', 'erreur', e.message)); } };
+  const envoyerReglages = async () => { try { await api('/api/reglages', Object.assign({ modele: modeleChoisi(), machine: machineChoisie(), routage: $('cRoutage').checked, copie_conversations: $('cCopieConv').checked, memoire_longue: $('selMemoire').value, fiche_part: nombreOuNull('iFichePart') ?? 10, fiche_scribe: $('cScribe').checked, recherche_sens: $('cSens').checked, avance: $('cAvance').checked, num_ctx: +$('rCtx').value, temperature: +$('rTemp').value, tours_max: +$('rTours').value, top_p: nombreOuNull('iTopP'), top_k: nombreOuNull('iTopK'), min_p: nombreOuNull('iMinP'), repeat_penalty: nombreOuNull('iRep'), garde_ressources: $('cGarde').checked, liberer_si_comfy: $('cComfy').checked, rappels_auto: $('sRappels').value, seuil_ram_go: nombreOuNull('iSeuilRam') ?? 3, seuil_disque_go: nombreOuNull('iSeuilDisque') ?? 10, plafond_donnees_go: nombreOuNull('iPlafond') ?? 2, limite_ram_commande_go: nombreOuNull('iLimiteCmd') ?? 0, num_thread: nombreOuNull('iThreads'), garde_min: nombreOuNull('iGarde'), modele_annexe: $('selAnnexe').value, reflexion_tours: $('selReflTours').value }, CONV ? {} : lireOptions(true))); } catch (e) { fil().appendChild(el('div', 'erreur', e.message)); } };
   const sauverReglages = enSerie(envoyerReglages);
-  document.querySelectorAll('.onglets button').forEach(b => b.addEventListener('click', async () => {
-    document.querySelectorAll('.onglets button').forEach(x => x.setAttribute('aria-selected', x === b)); document.querySelectorAll('.page').forEach(p => p.classList.toggle('vue', p.id === 'p-' + b.dataset.p));
+  const fermerReglages = () => { $('menuReglages').hidden = true; $('bReglages').setAttribute('aria-expanded', 'false'); };
+  $('bReglages').addEventListener('click', e => { e.stopPropagation(); const ouvre = $('menuReglages').hidden; $('menuReglages').hidden = !ouvre; $('bReglages').setAttribute('aria-expanded', String(ouvre)); if (ouvre) { const c = $('menuReglages').querySelector('[aria-selected=true]') || $('menuReglages').querySelector('button'); c.focus(); } });
+  document.addEventListener('click', e => { if (!e.target.closest('.sous')) fermerReglages(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('menuReglages').hidden) { fermerReglages(); $('bReglages').focus(); } });
+  new MutationObserver(() => { const n = $('bSante').dataset.niveau; if (n === 'attention' || n === 'critique') $('bReglages').dataset.niveau = n; else delete $('bReglages').dataset.niveau; }).observe($('bSante'), { attributes: true, attributeFilter: ['data-niveau'] });          // un problème de santé se voit sur le bouton Réglages, même menu fermé
+  $('menuReglages').addEventListener('keydown', e => {
+    if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+    e.preventDefault(); const l = [...$('menuReglages').querySelectorAll('button')], i = l.indexOf(document.activeElement); l[(i + (e.key === 'ArrowDown' ? 1 : l.length - 1)) % l.length].focus();
+  });
+  document.querySelectorAll('.onglets button[data-p]').forEach(b => b.addEventListener('click', async () => {
+    document.querySelectorAll('.onglets button[data-p]').forEach(x => x.setAttribute('aria-selected', x === b));
+    { const dedans = !!b.closest('#menuReglages'), t = $('bReglages'); t.setAttribute('aria-selected', String(dedans)); t.querySelector('.ic').textContent = dedans && b.dataset.p !== 'reglages' ? b.querySelector('.ic').textContent : '⚙️'; t.querySelector('.lb').textContent = dedans && b.dataset.p !== 'reglages' ? b.querySelector('b').textContent : T('Réglages'); fermerReglages(); }          // le bouton affiche la page ouverte dans le menu
+    document.querySelectorAll('.page').forEach(p => p.classList.toggle('vue', p.id === 'p-' + b.dataset.p));
     if (!ETAT) await rafraichir();          // l'état du serveur (qui peut configurer, niveau d'accès…) est connu avant d'afficher un onglet qui en dépend
     if (b.dataset.p === 'memoire') { const m = await api('/api/memoire'); $('tContexte').value = m['CONTEXTE.md']; $('tMemoire').value = m['MEMOIRE.md']; chargerSkills(); chargerClaude(); chargerNotes(); chargerDocuments(); }
     if (b.dataset.p === 'auto') { chargerPlanifie(); chargerAddons(); chargerAuto(); chargerMcp(); }
@@ -2306,7 +2339,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
   $('bDemarrer').addEventListener('click', async () => { $('bDemarrer').disabled = true; try { await api('/api/demarrer-ollama', {}); } catch (e) { fil().appendChild(el('div', 'erreur', e.message)); } $('bDemarrer').disabled = false; rafraichir(); });
   $('bVram').addEventListener('click', async () => { $('bVram').disabled = true; $('bVram').textContent = '⏳…'; try { const r = await api('/api/liberer-vram', {}); fil().appendChild(el('div', 'aide', r.message)); } catch (e) { fil().appendChild(el('div', 'erreur', e.message)); } $('bVram').disabled = false; $('bVram').textContent = T('🧹 Libérer la VRAM'); rafraichir(); });
   ['selMode', 'cReflexion', 'cAuto', 'cAutoCmd', 'cEssai', 'cWeb', 'sLong', 'sDuree'].forEach(id => $(id).addEventListener('change', async () => { await sauverOptions(); majMission(); if (id === 'selMode') rafraichir(); }));
-  ['selModele', 'cRoutage', 'cCluster', 'selAnnexe', 'selReflTours', 'cAvance', 'cCopieConv', 'selMemoire', 'iFichePart', 'cScribe', 'cSens', 'iTopP', 'iTopK', 'iMinP', 'iRep', 'cGarde', 'cComfy', 'sRappels', 'iSeuilRam', 'iSeuilDisque', 'iPlafond', 'iLimiteCmd', 'iThreads', 'iGarde'].forEach(id => $(id).addEventListener('change', async () => { await sauverReglages(); if (id === 'cAvance') rafraichir(); }));          // les modèles sans filtre apparaissent tout de suite
+  ['selModele', 'cRoutage', 'selAnnexe', 'selReflTours', 'cAvance', 'cCopieConv', 'selMemoire', 'iFichePart', 'cScribe', 'cSens', 'iTopP', 'iTopK', 'iMinP', 'iRep', 'cGarde', 'cComfy', 'sRappels', 'iSeuilRam', 'iSeuilDisque', 'iPlafond', 'iLimiteCmd', 'iThreads', 'iGarde'].forEach(id => $(id).addEventListener('change', async () => { await sauverReglages(); if (id === 'cAvance') rafraichir(); }));          // les modèles sans filtre apparaissent tout de suite
   // Profils de charge : des valeurs toutes faites pour les deux réglages (et le contexte pour « Discret »), calculées sur le nombre de cœurs de CETTE machine.
   $('selProfil').addEventListener('change', async () => {
     const p = $('selProfil').value, cpus = ETAT.cpus || 4;
@@ -3442,13 +3475,20 @@ body[data-moteur="openai"] .biblio { display:none !important; }
   // Sous le moteur choisi, la page des modèles est celle d'Ollama (catalogue, bibliothèque, sans filtre…) : mêmes modèles, mêmes noms. Ici, ce qui est propre au moteur :
   // pour llama.cpp, des fichiers GGUF d'autres sources (Hugging Face) ; pour un serveur externe, la liste de ses modèles.
   // Machines (D7) : prêter le moteur de cette machine, ajouter celles des autres, voir leur état (quatre états observables), choisir laquelle répond
-  const ETATS_MACHINE = { injoignable: ['⚪', T('injoignable')], reveil_envoye: ['🟡', T('réveil envoyé')], joignable: ['🟠', T('nœud joignable')], operationnel: ['🟢', T('moteur opérationnel')] };
   let MINUTEUR_MACHINES = null;
+  const SUIVI_MACHINES = {};          // dernière étape vue de chaque machine (pour montrer la séquence de démarrage et relire ses listes au changement)
   const chargerMachines = async (forcer) => {
     const z = $('machinesZone'); if (!z) return;
     clearTimeout(MINUTEUR_MACHINES);
     let r; try { r = await api('/api/machines'); } catch (e) { z.textContent = e.message; return; }
     const neuf = document.createElement('div'), act = async (action, corps, msg) => { try { const x = await api('/api/machines-' + action, corps || {}); if (msg) msg.textContent = ''; return x; } catch (e) { if (msg) msg.textContent = e.message; else alert(e.message); return null; } };
+    if (ETAT && !ETAT.cluster_actif) {          // mode multi-machines éteint : une courte explication et un bouton, rien d'autre
+      const intro = el('div', 'carte'); intro.style.display = 'block';
+      intro.append(el('div', '', T('Le mode multi-machines permet d\'utiliser le moteur d\'un autre ordinateur (une carte graphique puissante, par exemple), de le réveiller à distance et de retrouver ses conversations. Il reste désactivé tant que tu n\'en as pas besoin.')));
+      const ba = el('button', 'principal', T('Activer le mode multi-machines')); ba.style.marginTop = '10px';
+      ba.addEventListener('click', async () => { ba.disabled = true; try { await api('/api/reglages', { cluster: true }); await rafraichir(); } catch (e) { alert(e.message); } chargerMachines(true); });
+      intro.appendChild(ba); z.replaceChildren(intro); return;
+    }
     // 1. cette machine prête son moteur
     const prete = el('div', 'carte'); prete.style.display = 'block';
     const lab = el('label'), ca = el('input'); ca.type = 'checkbox'; ca.checked = r.noeud.actif; ca.disabled = r.niveau_local && !r.noeud.actif;
@@ -3482,6 +3522,10 @@ body[data-moteur="openai"] .biblio { display:none !important; }
       lx.append(cx, document.createTextNode(' ' + T('Autoriser les machines appairées à l\'éteindre')));
       cx.addEventListener('change', async () => { await act('node-shutdown', { actif: cx.checked }); chargerMachines(true); });
       prete.append(lx, el('div', 'aide', T('Décoché par défaut. Une extinction demandée à distance a 30 secondes de délai, se laisse annuler et est notée dans le journal.')));
+      const lm = el('label'), cm = el('input'); cm.type = 'checkbox'; cm.checked = !!r.noeud.maj;
+      lm.append(cm, document.createTextNode(' ' + T('Autoriser les machines appairées à mettre Lutin à jour')));
+      cm.addEventListener('change', async () => { await act('node-update', { actif: cm.checked }); chargerMachines(true); });
+      prete.append(lm, el('div', 'aide', T('Décoché par défaut. Une machine appairée peut alors lancer la mise à jour de Lutin ici (jamais autre chose) ; elle est notée dans le journal.')));
     }
     if (r.noeud.extinction_en_attente) {
       const ea = el('div', 'erreur'), an = el('button', '', T('Annuler l\'extinction'));
@@ -3497,13 +3541,63 @@ body[data-moteur="openai"] .biblio { display:none !important; }
       ld.append(etatD, bd, msgD);
       prete.append(ld, el('div', 'aide', r.demarrage.limites));
     }
-    neuf.appendChild(prete);
     // 2. les machines appairées
+    const ETAPES = ['reveil', 'allumee', 'lutin', 'synchro', 'pret'];
+    const LIBELLE_ETAPE = { reveil: T('Réveil envoyé'), allumee: T('Machine allumée'), lutin: T('Lutin démarré'), synchro: T('Synchronisation'), pret: T('Prête') };
+    let enCours = false, changement = false;
     r.machines.forEach(m => {
-      const c = el('div', 'carte'); c.style.display = 'block';
-      const e = ETATS_MACHINE[m.etat] || ETATS_MACHINE.injoignable, choisie = r.choisie === m.id;
-      c.appendChild(el('b', '', e[0] + ' ' + m.nom + (choisie ? ' · ' + T('répond à tes messages') : '')));
-      c.appendChild(el('div', 'aide', m.adresse + ' · ' + e[1] + ' — ' + m.detail));
+      const c = el('div', 'carte machine'); c.style.display = 'block';
+      const choisie = r.choisie === m.id, etape = m.etape || 'eteinte', avant = SUIVI_MACHINES[m.id];
+      if (avant !== etape) { changement = true; SUIVI_MACHINES[m.id] = etape; }
+      const sequence = ['reveil', 'allumee', 'synchro'].includes(etape) || (etape === 'lutin' && ['reveil', 'allumee', 'lutin'].includes(avant));          // la séquence de démarrage se montre tant qu'elle se déroule
+      if (sequence || etape === 'extinction' || etape === 'maj') enCours = true;
+      const tete = el('div', 'tete-machine');
+      tete.append(el('b', '', '🖥 ' + m.nom), el('span', 'aide', m.adresse));
+      if (m.version) { const v = el('span', 'puce-version' + (m.maj_disponible ? ' vieille' : ''), 'Lutin ' + m.version); if (m.maj_disponible) v.title = T('Cette machine a une version plus ancienne de Lutin que celle-ci.'); tete.appendChild(v); }
+      if (choisie) tete.appendChild(el('span', 'puce-version choisie', T('répond à tes messages')));
+      c.appendChild(tete);
+      // où en est la machine
+      if (etape === 'extinction') c.appendChild(el('div', 'attention', '⏻ ' + T('Extinction en cours : dans {} s.').replace('{}', m.dans_s)));
+      else if (etape === 'maj') c.appendChild(el('div', 'attention', '⬆ ' + T('Mise à jour en cours : Lutin redémarre, cela prend une à deux minutes.')));
+      else if (sequence) {
+        const idx = ETAPES.indexOf(etape), ligneE = el('div', 'etapes');
+        ETAPES.forEach((k, i) => { const x = el('div', 'etape' + (i < idx ? ' fait' : '') + (i === idx ? ' courante' : '')); x.append(el('i', '', i < idx ? '✔' : String(i + 1)), el('span', '', LIBELLE_ETAPE[k])); ligneE.appendChild(x); });
+        c.appendChild(ligneE);
+      } else {
+        const ST = { eteinte: '⚪', allumee: '🟡', lutin: '🟠', pret: '🟢' };
+        c.appendChild(el('div', 'aide', (ST[etape] || '⚪') + ' ' + m.detail));
+      }
+      (m.avertissements || []).slice(0, 1).forEach(a => c.appendChild(el('div', 'attention', '⚠ ' + a)));
+      // les actions
+      const msg = el('div', 'aide'), l = el('div', 'ligne');
+      const bu = el('button', choisie ? '' : 'principal', choisie ? T('Revenir au moteur local') : T('Répondre avec cette machine'));
+      bu.addEventListener('click', async () => { await act('use', { id: choisie ? '' : m.id }); await rafraichir(); chargerMachines(true); });
+      l.appendChild(bu);
+      if (['eteinte', 'reveil', 'allumee'].includes(etape)) {
+        const bw = el('button', '', T('Réveiller')); bw.title = T('Envoie un paquet de réveil (Wake-on-LAN) : il faut son adresse MAC.');
+        bw.addEventListener('click', async () => {
+          const x = await act('wake', { id: m.id }); if (!x) return;
+          SUIVI_MACHINES[m.id] = 'reveil';
+          msg.textContent = T('Paquet de réveil envoyé à l\'adresse MAC') + ' ' + x.mac + ' (' + x.envois + ' ' + T('envois') + ', ' + T('depuis') + ' ' + ((x.cartes || []).join(', ') || '?') + ')' + (x.avertissements && x.avertissements.length ? ' — ' + x.avertissements.join(' ') : '');
+          chargerMachines(true);
+        });
+        l.appendChild(bw);
+      }
+      if (etape === 'extinction') {
+        const ba = el('button', '', T('Annuler l\'extinction')); ba.addEventListener('click', async () => { await act('shutdown', { id: m.id, annuler: true }); chargerMachines(true); }); l.appendChild(ba);
+      } else if (['lutin', 'synchro', 'pret'].includes(etape)) {
+        const be = el('button', '', T('Éteindre…')); be.addEventListener('click', async () => { if (!confirm(T('Éteindre la machine « ') + m.nom + T(' » ? Elle s\'éteindra dans 30 secondes (annulable).'))) return; if (await act('shutdown', { id: m.id })) { await rafraichir(); chargerMachines(true); } });
+        l.appendChild(be);
+      }
+      if (m.maj_disponible && etape !== 'maj') {
+        const bm = el('button', 'principal', '⬆ ' + T('Mettre à jour Lutin')), ok = !!(m.agir || {}).maj;
+        bm.disabled = !ok; bm.title = ok ? T('Lance la mise à jour de Lutin sur cette machine ; il redémarre ensuite tout seul s\'il est lancé par la commande « lutin ».') : T('Son propriétaire doit l\'autoriser : sur elle, onglet Machines > « Autoriser les machines appairées à mettre Lutin à jour ».');
+        bm.addEventListener('click', async () => { if (!confirm(T('Mettre à jour Lutin sur « {} » ?').replace('{}', m.nom))) return; bm.disabled = true; if (await act('update', { id: m.id }, msg)) chargerMachines(true); else bm.disabled = !ok; });
+        l.appendChild(bm);
+      }
+      c.append(l, msg);
+      // les détails : adresse MAC, charge, imports
+      const d = el('details', 'plus'); d.appendChild(el('summary', '', T('Détails et réglages')));
       if (m.charge) {          // ce que la machine dit d'elle-même : mémoire, et qui utilise son moteur
         const g = o => (o / 1073741824).toFixed(1).replace('.', ',');
         const morceaux = [];
@@ -3511,20 +3605,13 @@ body[data-moteur="openai"] .biblio { display:none !important; }
         if (m.charge.vram) morceaux.push(T('VRAM') + ' ' + g(m.charge.vram.total - m.charge.vram.libre) + '/' + g(m.charge.vram.total) + ' ' + T('Go'));
         if (m.charge.locale_occupee) morceaux.push('⏳ ' + T('son utilisateur l\'utilise : tes demandes attendent la fin de son tour (2 min au plus)'));
         if (m.charge.distantes) morceaux.push(m.charge.distantes + ' ' + T('demande(s) d\'autres machines en cours'));
-        if (morceaux.length) c.appendChild(el('div', 'aide', '🖥 ' + morceaux.join(' · ')));
+        if (morceaux.length) d.appendChild(el('div', 'aide', '🖥 ' + morceaux.join(' · ')));
       }
-      (m.avertissements || []).forEach(a => c.appendChild(el('div', 'attention', '⚠ ' + a)));
-      const l = el('div', 'ligne'), bu = el('button', choisie ? '' : 'principal', choisie ? T('Revenir au moteur local') : T('Répondre avec cette machine'));
-      bu.addEventListener('click', async () => { await act('use', { id: choisie ? '' : m.id }); await rafraichir(); chargerMachines(true); });
-      const mac = el('input'); mac.placeholder = T('Adresse MAC (reçue de la machine dès qu\'elle répond)'); mac.value = m.mac || ''; mac.style.flex = '1'; mac.title = m.mac_auto ? T('Reçue automatiquement de la machine') : T('Saisie à la main');
+      (m.avertissements || []).slice(1).forEach(a => d.appendChild(el('div', 'attention', '⚠ ' + a)));
+      const lm = el('div', 'ligne'), mac = el('input'); mac.placeholder = T('Adresse MAC (reçue de la machine dès qu\'elle répond)'); mac.value = m.mac || ''; mac.style.flex = '1'; mac.title = m.mac_auto ? T('Reçue automatiquement de la machine') : T('Saisie à la main');
       mac.addEventListener('change', async () => { await act('mac', { id: m.id, mac: mac.value.trim() }); });
       const br = el('button', '', T('Retirer')); br.addEventListener('click', async () => { if (!confirm(T('Retirer la machine « ') + m.nom + T(' » ?'))) return; await act('remove', { id: m.id }); await rafraichir(); chargerMachines(true); });
-      l.append(bu, mac, br); c.appendChild(l);
-      const l2 = el('div', 'ligne'), bw = el('button', '', T('Réveiller')), be = el('button', '', T('Éteindre…'));
-      bw.title = T('Envoie un paquet de réveil (Wake-on-LAN) : il faut son adresse MAC.');
-      bw.addEventListener('click', async () => { const x = await act('wake', { id: m.id }); if (x) alert(T('Paquet de réveil envoyé à l\'adresse MAC') + ' ' + x.mac + ' (' + x.envois + ' ' + T('envois') + ', ' + T('depuis') + ' ' + ((x.cartes || []).join(', ') || '?') + ')' + (x.avertissements && x.avertissements.length ? '\n\n' + T('Mais :') + '\n\n' + x.avertissements.join('\n\n') : '') + '\n\n' + T('Si la machine ne démarre pas : vérifie que cette adresse MAC est bien celle de sa carte Ethernet, et que les adresses « depuis » sont celles de ton réseau local (pas 172.x : ce serait le réseau interne de Docker).')); chargerMachines(true); });
-      be.addEventListener('click', async () => { if (!confirm(T('Éteindre la machine « ') + m.nom + T(' » ? Elle s\'éteindra dans 30 secondes (annulable).'))) return; const x = await act('shutdown', { id: m.id }); if (x) { alert(T('Extinction demandée : 30 secondes.')); chargerMachines(true); } });
-      l2.append(bw, be); c.appendChild(l2);
+      lm.append(mac, br); d.appendChild(lm);
       const l3 = el('div', 'ligne'), res3 = el('span', 'aide'), droits = m.droits || {};
       const importer = (action, libelle, ok) => {
         const b = el('button', '', libelle); b.disabled = !droits[ok];
@@ -3537,10 +3624,12 @@ body[data-moteur="openai"] .biblio { display:none !important; }
         });
         return b;
       };
-      l3.append(importer('import-skills', T('Importer ses skills'), 'skills'), importer('import-memoire', T('Importer sa mémoire'), 'memoire'), res3); c.appendChild(l3);
-      if (!droits.conversations && m.etat !== 'injoignable') c.appendChild(el('div', 'aide', 'ℹ ' + T('Pour voir ses conversations dans ta liste, coche « mes conversations » sur cette machine (onglet Machines).')));
+      l3.append(importer('import-skills', T('Importer ses skills'), 'skills'), importer('import-memoire', T('Importer sa mémoire'), 'memoire'), res3); d.appendChild(l3);
+      if (!droits.conversations && m.etat !== 'injoignable') d.appendChild(el('div', 'aide', 'ℹ ' + T('Pour voir ses conversations dans ta liste, coche « mes conversations » sur cette machine (onglet Machines).')));
+      c.appendChild(d);
       neuf.appendChild(c);
     });
+    if (!r.machines.length) neuf.appendChild(el('div', 'aide', T('Aucune machine pour l\'instant : ajoute-en une ci-dessous.')));
     // 3. ajouter
     const aj = el('div', 'carte'); aj.style.display = 'block';
     aj.appendChild(el('b', '', T('Ajouter une machine')));
@@ -3550,10 +3639,14 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     ia.style.flex = ic.style.flex = inom.style.flex = '1';
     ok.addEventListener('click', async () => { ok.disabled = true; const x = await act('add', { adresse: ia.value.trim(), code: ic.value.trim(), nom: inom.value.trim() }, msg); ok.disabled = false; if (x) chargerMachines(true); });
     ligne.append(ia, ic, inom, ok); aj.append(ligne, msg); neuf.appendChild(aj);
-    if (r.journal.length) { const d = el('details', 'aide'); d.appendChild(el('summary', '', T('Journal des machines'))); r.journal.slice().reverse().forEach(t => d.appendChild(el('div', 'point', t))); neuf.appendChild(d); }
-    // une saisie en cours n'est pas écrasée par le rafraîchissement : on ne redessine que si rien n'est en train d'être tapé
+    { const dp = el('details', 'carte plus-prete'); dp.style.display = 'block'; dp.open = !!r.noeud.actif || !!r.noeud.extinction_en_attente; dp.appendChild(el('summary', '', T('Cette machine : la prêter aux autres'))); dp.appendChild(prete); prete.style.border = '0'; prete.style.padding = '8px 0 0'; neuf.appendChild(dp); }
+        if (r.journal.length) { const d = el('details', 'aide'); d.appendChild(el('summary', '', T('Journal des machines'))); r.journal.slice().reverse().forEach(t => d.appendChild(el('div', 'point', t))); neuf.appendChild(d); }
+    { const bd = el('button', '', T('Désactiver le mode multi-machines')); bd.style.marginTop = '14px'; bd.title = T('Les machines ajoutées sont conservées ; elles ne sont plus proposées tant que le mode est désactivé.');
+      bd.addEventListener('click', async () => { await api('/api/reglages', { cluster: false }); await rafraichir(); chargerMachines(true); }); neuf.appendChild(bd); }
+    if (changement) rafraichir();          // une machine vient de changer d'étape : ses modèles et conversations sont relus ou retirés tout de suite
+        // une saisie en cours n'est pas écrasée par le rafraîchissement : on ne redessine que si rien n'est en train d'être tapé
     if (forcer || !z.contains(document.activeElement) || document.activeElement === document.body) z.replaceChildren(...neuf.childNodes);
-    if ($('p-machines').classList.contains('vue')) MINUTEUR_MACHINES = setTimeout(() => chargerMachines(), 8000);
+    if ($('p-machines').classList.contains('vue')) MINUTEUR_MACHINES = setTimeout(() => chargerMachines(), enCours ? 2000 : 8000);          // 2 s pendant un démarrage, une extinction ou une mise à jour
   };
   const chargerModelesMoteur = async () => {
     const z = $('modelesMoteur'); if (!ETAT || ETAT.moteur === 'ollama') return;
