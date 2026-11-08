@@ -47,6 +47,23 @@ RAPPEL_OUBLI = "L'utilisateur t'a demandé de CRÉER un fichier et tu ne l'as pa
 BLOCS_DE_CODE = re.compile(r"```.*?(?:```|$)", re.S)
 
 
+# « Je vais vérifier… » puis rien : le modèle annonce une action, ne l'accomplit pas et rend la main sans répondre à la question.
+ANNONCE = re.compile(r"\b(?:je\s+vais|je\s+m'en\s+occupe|laisse-moi|laissez-moi|un\s+instant|je\s+regarde|je\s+v[ée]rifie\s+(?:cela|ça|tout de suite))\b[^.!?\n]{0,80}", re.I)
+RAPPEL_ANNONCE = ("Tu viens d'annoncer que tu allais agir (vérifier, chercher, regarder…) mais tu n'as appelé AUCUN outil et tu n'as pas répondu à la question. "
+                  "Ne dis plus « je vais » : appelle MAINTENANT l'outil adapté (par exemple celui qui liste ou lit ce que l'utilisateur demande), puis réponds clairement et directement à sa question (oui, non, ou ce que tu as trouvé).")
+
+
+def annonce_sans_agir(contenu, appels, autorises):
+    """Le rappel à donner si la réponse n'est qu'une annonce (« Je vais vérifier si le profil est disponible. ») sans appel d'outil alors que des outils existent. Une réponse longue ou qui contient autre chose qu'une annonce n'est pas touchée."""
+    if appels or not autorises:
+        return ""
+    texte = BLOCS_DE_CODE.sub(" ", contenu or "").strip()
+    if not 8 <= len(texte) <= 260 or not ANNONCE.search(texte):
+        return ""
+    reste = ANNONCE.sub(" ", texte)
+    return RAPPEL_ANNONCE if len(re.sub(r"[\W_]+", " ", reste).split()) <= 14 else ""
+
+
 def outils_appeles(messages):
     """Les noms des outils appelés depuis la dernière demande de l'utilisateur."""
     vus = set()

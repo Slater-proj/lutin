@@ -1128,7 +1128,6 @@
 "répond à tes messages": "answers your messages",
 "Revenir au moteur local": "Back to the local engine",
 "Répondre avec cette machine": "Answer with this machine",
-"Adresse MAC (facultative, pour la réveiller)": "MAC address (optional, to wake it up)",
 "Retirer la machine « ": "Remove the machine \" ",
 "Ajouter une machine": "Add a machine",
 "Sur l'autre machine : Réglages > Machines > « Prêter le moteur », puis « Autoriser une machine » affiche un code. Saisis ici son adresse et ce code.": "On the other machine: Settings > Machines > \"Lend the engine\", then \"Allow a machine\" shows a code. Enter its address and that code here.",
@@ -1255,5 +1254,19 @@
 "Installé ici : ": "Installed here: ",
 "pour changer de dossier, désinstalle-les d'abord (tes modèles restent où ils sont).": "to change the folder, uninstall them first (your models stay where they are).",
 "Dossier par défaut": "Default folder",
-"Un chemin complet (sous Docker : un chemin du conteneur) ; un sous-dossier par moteur y est créé": "A full path (under Docker: a container path); one sub-folder per engine is created in it"
+"Un chemin complet (sous Docker : un chemin du conteneur) ; un sous-dossier par moteur y est créé": "A full path (under Docker: a container path); one sub-folder per engine is created in it",
+"Ce modèle tourne sur une autre machine appairée (Réglages > Machines).": "This model runs on another paired machine (Settings > Machines).",
+"(éteinte)": "(off)",
+"modèle de la machine « ": "model of the machine \" ",
+" » (il tourne là-bas, pas ici)": " \" (it runs there, not here)",
+"Ce modèle n'a pas de mode réflexion.": "This model has no thinking mode.",
+"Pour que cette machine puisse être réveillée à distance puis utilisée, Lutin doit démarrer tout seul à l'ouverture de ta session. L'activer maintenant ?": "For this machine to be woken remotely and then used, Lutin must start by itself when you sign in. Turn it on now?",
+"Lutin démarre à l'ouverture de ta session.": "Lutin starts when you sign in.",
+"Lutin ne démarre pas tout seul.": "Lutin does not start by itself.",
+"Retirer le démarrage automatique": "Remove automatic start",
+"Adresse MAC (reçue de la machine dès qu'elle répond)": "MAC address (received from the machine as soon as it answers)",
+"Reçue automatiquement de la machine": "Received automatically from the machine",
+"Saisie à la main": "Entered by hand",
+"Réveil envoyé, mais :": "Wake-up sent, but:",
+"Ce modèle tourne sur une autre machine : le test de vitesse mesure celle-ci. Choisis un modèle de cette machine.": "This model runs on another machine: the speed test measures this one. Pick a model from this machine."
 }

@@ -219,10 +219,20 @@ def _repartit_seul(r):
     return (r or {}).get("moteur") == "llamacpp"
 
 
+def _modele_d_une_autre_machine(r):
+    """Le modèle choisi n'existe que sur une autre machine (liste de choix) : ni la carte ni la mémoire d'ici n'ont à le contenir."""
+    try:
+        from . import machines
+        return machines.modele_distant(r, _m.etat_moteur().get("installes", [])) is not None
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def etat_sante(r=None):
     r = r or _m.reglages()
     charge = _m.ps_modele(r["modele"])
-    return evaluer_sante(_m.mesures_systeme(), r, taille_modele(r["modele"], charge), charge, _repartit_seul(r))
+    besoin = 0 if _modele_d_une_autre_machine(r) else taille_modele(r["modele"], charge)
+    return evaluer_sante(_m.mesures_systeme(), r, besoin, charge, _repartit_seul(r))
 
 
 ALERTES_VUES = {}          # (conversation, ligne de santé) -> dernier niveau annoncé : un avertissement n'est répété que s'il change
@@ -234,6 +244,8 @@ PAS_ATTENTE_S = 5                   # secondes entre deux vérifications pendant
 
 def _bloquants(r, emit, conv_id=""):
     """Ce qui empêche de lancer le modèle en ce moment (liste d'éléments de santé « critiques »), après avoir tenté de décharger les modèles d'Ollama qui occupent la carte. Vide : on peut y aller."""
+    if _modele_d_une_autre_machine(r):
+        return []          # le modèle tourne sur une autre machine : rien ne manque ici
     charge = _m.ps_modele(r["modele"])
     besoin = taille_modele(r["modele"], charge)
     sante = evaluer_sante(_m.mesures_systeme(), r, besoin, charge, _repartit_seul(r))

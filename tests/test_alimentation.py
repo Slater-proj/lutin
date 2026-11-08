@@ -135,17 +135,33 @@ class DemarrageAuto(unittest.TestCase):
         e = alimentation.retirer_demarrage(lanceur, "linux", maison)
         self.assertFalse(e["installe"])
 
-    def test_windows_cree_une_tache_a_l_ouverture_de_session(self):
-        lanceur = self.Lanceur()
-        alimentation.installer_demarrage(lanceur, "windows", commande=["C:\\Python\\python.exe", "-m", "lutin", "serve"])
-        cmd = lanceur.appels[0]
-        self.assertEqual(cmd[:2], ["schtasks", "/Create"])
-        self.assertIn("ONLOGON", cmd)
-        self.assertNotIn("ONSTART", cmd, "pas de service : la session 0 n'a ni carte graphique ni bureau")
+    class Registre:
+        """La clé « Run » de l'utilisateur : pas de droits d'administrateur, contrairement à une tâche planifiée à l'ouverture de session."""
+
+        def __init__(self, refuse=False):
+            self.valeurs, self.refuse = {}, refuse
+
+        def lire(self, nom):
+            return self.valeurs.get(nom, "")
+
+        def ecrire(self, nom, valeur):
+            if self.refuse:
+                raise PermissionError(5, "Accès refusé")
+            self.valeurs[nom] = valeur
+
+        def supprimer(self, nom):
+            self.valeurs.pop(nom, None)
+
+    def test_windows_s_inscrit_a_l_ouverture_de_session_sans_tache_planifiee(self):
+        lanceur, registre = self.Lanceur(code=1), self.Registre()
+        e = alimentation.installer_demarrage(lanceur, "windows", commande=["C:\\Python\\python.exe", "-m", "lutin", "serve"], registre=registre)
+        self.assertIn("-m lutin serve", registre.valeurs["Lutin"])
+        self.assertTrue(e["installe"])
+        self.assertFalse(any(c[:2] == ["schtasks", "/Create"] for c in lanceur.appels), "une tâche planifiée à l'ouverture de session demande les droits d'administrateur : Windows la refuse")
 
     def test_windows_refus_dit_pourquoi(self):
         with self.assertRaises(ValueError):
-            alimentation.installer_demarrage(self.Lanceur(code=1), "windows", commande=["x"])
+            alimentation.installer_demarrage(self.Lanceur(code=1), "windows", commande=["x"], registre=self.Registre(refuse=True))
 
     def test_les_limites_sont_dites(self):
         self.assertIn("auto-connexion", alimentation.limites("windows"))
@@ -189,6 +205,7 @@ class AvecDeuxServeurs(tm.Base):
 
     def test_reveiller_sans_adresse_mac_dit_quoi_faire(self):
         m = self.jumeler()
+        machines.definir_mac(m["id"], "")          # l'adresse reçue du nœud a été effacée à la main
         with self.assertRaises(ValueError) as e:
             machines.reveiller(m["id"])
         self.assertIn("adresse MAC", str(e.exception))

@@ -16,6 +16,7 @@ Routage d'abord, répartition ensuite ; un même modèle n'est jamais réparti e
 import hashlib
 import hmac
 import json
+import os
 import re
 import secrets
 import socket
@@ -45,6 +46,9 @@ CODES = {}          # code (chiffres) -> instant d'expiration
 SONDES = {}          # id de machine -> (instant, résultat)
 DERNIER_ETAT = {}          # id de machine -> dernier état journalisé
 REVEIL = {}          # id de machine -> instant du dernier paquet de réveil envoyé
+INFOS_NOEUD = {}          # adresse locale -> (instant, infos du nœud)
+DISTANTS = {"t": 0.0, "v": [], "en_cours": False}          # modèles des autres machines, pour la liste de choix (voir modeles_distants)
+CAPACITES_DISTANTES = {}          # (id de machine, modèle) -> (instant, capacités)
 
 
 def dossier():
@@ -135,7 +139,28 @@ def _empreinte(jeton):
     return hashlib.sha256(jeton.encode("utf-8")).hexdigest()
 
 
-def noeud_echanger(code, nom_demandeur):
+def noeud_infos(ip_locale=""):
+    """Ce que ce nœud transmet à la machine qui l'appaire, pour qu'elle n'ait rien à saisir : son adresse MAC, s'il peut être réveillé à distance, si Lutin démarre tout seul chez lui. Gardé 60 s (sous Windows, ça lance PowerShell)."""
+    maintenant = time.monotonic()
+    gardee = INFOS_NOEUD.get(ip_locale)
+    if gardee and maintenant - gardee[0] < 60:
+        return gardee[1]
+    docker = os.environ.get("LUTIN_DOCKER") == "1"
+    try:
+        reveil = alimentation.etat_reveil(ip_locale, en_docker=docker)
+    except Exception:  # noqa: BLE001  (un renseignement de plus : jamais un appairage qui échoue)
+        reveil = {"mac": "", "carte": "", "pret": None, "avertissements": []}
+    try:
+        demarrage = alimentation.etat_demarrage()
+    except Exception:  # noqa: BLE001
+        demarrage = {"installe": False, "possible": False}
+    infos = {"mac": reveil.get("mac", ""), "reveil": {k: reveil.get(k) for k in ("pret", "carte", "avertissements")},
+             "demarrage": {"installe": bool(demarrage.get("installe")), "possible": bool(demarrage.get("possible")), "docker": docker}}
+    INFOS_NOEUD[ip_locale] = (maintenant, infos)
+    return infos
+
+
+def noeud_echanger(code, nom_demandeur, ip_locale=""):
     """Échange un code valide contre un jeton de nœud. Lève ValueError sinon (même message pour un code faux ou périmé)."""
     brut = re.sub(r"\D", "", str(code or ""))
     nom = re.sub(r"[^\w .-]", "", str(nom_demandeur or "")).strip()[:40] or "machine"
@@ -148,7 +173,7 @@ def noeud_echanger(code, nom_demandeur):
         n["jetons"].append({"empreinte": _empreinte(jeton), "nom": nom, "date": time.strftime("%Y-%m-%d %H:%M")})
         _ecrire("noeud.json", n)
     journaliser("machine autorisée : {}".format(nom))
-    return {"jeton": jeton, "id": n["id"], "nom": socket.gethostname()[:40]}
+    return dict(noeud_infos(ip_locale), jeton=jeton, id=n["id"], nom=socket.gethostname()[:40])
 
 
 def noeud_jeton_valide(jeton):
@@ -189,9 +214,15 @@ def noeud_vue():
             "autorisees": [{"nom": j["nom"], "date": j["date"]} for j in n["jetons"]]}
 
 
-def noeud_etat(moteur, modeles):
-    """Ce que le nœud répond à `GET /api/noeud/etat` : de quoi savoir s'il est joignable et si son moteur peut faire tourner le modèle voulu."""
-    return {"id": noeud()["id"], "moteur": moteur.id, "moteur_nom": moteur.nom, "actif": bool(modeles.get("actif")), "modeles": sorted(modeles.get("installes", []))[:500]}
+def noeud_etat(moteur, modeles, ip_locale=""):
+    """Ce que le nœud répond à `GET /api/noeud/etat` : de quoi savoir s'il est joignable et si son moteur peut faire tourner le modèle voulu, plus son adresse MAC, son aptitude au réveil et son démarrage automatique."""
+    return dict(noeud_infos(ip_locale), id=noeud()["id"], moteur=moteur.id, moteur_nom=moteur.nom, actif=bool(modeles.get("actif")), modeles=sorted(modeles.get("installes", []))[:500])
+
+
+def noeud_capacites(moteur, modele):
+    """Les capacités (outils, vision, réflexion…) d'un modèle de CE nœud, ou None quand son moteur ne le dit pas."""
+    caps = moteur.capacites(str(modele or ""))
+    return None if caps is None else sorted(caps)
 
 
 def corps_autorise(corps):
@@ -277,13 +308,45 @@ def ajouter(adresse, code, nom="", mac="", ouvrir=None):
         raise ValueError(_t("Impossible de joindre cette machine : vérifie l'adresse et qu'elle est allumée.")) from None
     if not RE_ID.match(str(rep.get("id", ""))) or not rep.get("jeton"):
         raise ValueError(_t("Réponse inattendue : ce n'est pas un Lutin qui prête son moteur."))
+    mac_auto = alimentation_mac(rep.get("mac"))
     with VERROU:
         liste = [m for m in lire() if m["id"] != rep["id"]]
-        m = {"id": rep["id"], "nom": (str(nom).strip() or str(rep.get("nom") or "machine"))[:40], "adresse": adresse, "jeton": rep["jeton"], "mac": mac, "ajoutee": time.strftime("%Y-%m-%d %H:%M")}
+        m = {"id": rep["id"], "nom": (str(nom).strip() or str(rep.get("nom") or "machine"))[:40], "adresse": adresse, "jeton": rep["jeton"], "mac": mac or mac_auto, "ajoutee": time.strftime("%Y-%m-%d %H:%M"),
+             "mac_auto": bool(not mac and mac_auto), "reveil": rep.get("reveil") if isinstance(rep.get("reveil"), dict) else {}, "demarrage": rep.get("demarrage") if isinstance(rep.get("demarrage"), dict) else {}}
         liste.append(m)
         _ecrire_registre(liste)
-    journaliser("machine ajoutée : {} ({})".format(m["nom"], adresse))
+    journaliser("machine ajoutée : {} ({}){}".format(m["nom"], adresse, ", adresse MAC reçue de la machine" if m["mac_auto"] else ""))
     return vue(m)
+
+
+def alimentation_mac(mac):
+    return alimentation.normaliser_mac(mac)
+
+
+def retenir_infos(m, rep):
+    """Garde ce que le nœud dit de lui (MAC, réveil, démarrage) : la page peut ainsi avertir même quand la machine est éteinte. L'adresse MAC reçue complète une adresse manquante, sans jamais écraser celle que tu as saisie."""
+    reveil = rep.get("reveil") if isinstance(rep.get("reveil"), dict) else None
+    demarrage = rep.get("demarrage") if isinstance(rep.get("demarrage"), dict) else None
+    mac = alimentation_mac(rep.get("mac"))
+    if reveil is None and demarrage is None and not mac:
+        return
+    with VERROU:
+        liste = lire()
+        for x in liste:
+            if x["id"] != m["id"]:
+                continue
+            avant = (x.get("mac"), x.get("reveil"), x.get("demarrage"))
+            if mac and not x.get("mac"):
+                x["mac"], x["mac_auto"] = mac, True
+                journaliser("{} : adresse MAC reçue de la machine ({})".format(x["nom"], mac))
+            if reveil is not None:
+                x["reveil"] = reveil
+            if demarrage is not None:
+                x["demarrage"] = demarrage
+            if avant != (x.get("mac"), x.get("reveil"), x.get("demarrage")):
+                _ecrire_registre(liste)
+            m.update({k: x.get(k) for k in ("mac", "reveil", "demarrage", "mac_auto")})
+            return
 
 
 def retirer(ident):
@@ -311,9 +374,26 @@ def definir_mac(ident, mac):
     raise ValueError(_t("Machine inconnue."))
 
 
+def avertissements(m):
+    """Ce qui empêche (ou risque d'empêcher) de réveiller cette machine puis de s'en servir, d'après ce qu'elle a elle-même dit : adresse MAC, Wake-on-LAN, démarrage de Lutin."""
+    sortie = []
+    if not m.get("mac"):
+        sortie.append(_t("Adresse MAC inconnue : elle sera reçue de la machine dès qu'elle aura répondu une fois. Sans elle, impossible de la réveiller."))
+    sortie += [str(x) for x in ((m.get("reveil") or {}).get("avertissements") or [])][:4]
+    d = m.get("demarrage") or {}
+    if d.get("docker"):
+        sortie.append(_t("Cette machine fait tourner Lutin dans Docker : pour qu'il soit là après un réveil, le conteneur doit avoir « restart: unless-stopped » et Docker doit démarrer avec la machine."))
+    elif d and d.get("possible") and not d.get("installe"):
+        sortie.append(_t("Lutin ne démarre pas tout seul sur cette machine : une fois réveillée, personne ne le lance et elle restera injoignable. Sur cette machine : Réglages > Machines > « Démarrer Lutin à l'ouverture de ma session » (et auto-connexion Windows pour un PC qui démarre sans personne)."))
+    return sortie
+
+
 def vue(m):
     """Une machine pour la page : jamais son jeton."""
-    return {k: m.get(k, "") for k in ("id", "nom", "adresse", "mac", "ajoutee")}
+    v = {k: m.get(k, "") for k in ("id", "nom", "adresse", "mac", "ajoutee")}
+    v["mac_auto"] = bool(m.get("mac_auto"))
+    v["avertissements"] = avertissements(m)
+    return v
 
 
 # --------------------------------------------------------------------------- l'état d'une machine (quatre états)
@@ -326,6 +406,8 @@ def sonder(m, modele="", ouvrir=None, maintenant=time.monotonic, force=False):
             return gardee[1]
     try:
         rep = _json(m, "/api/noeud/etat", ouvrir=ouvrir)
+        if rep.get("id") == m["id"]:
+            retenir_infos(m, rep)
         if rep.get("id") != m["id"]:
             r = {"etat": "injoignable", "detail": _t("Ce n'est plus la même machine à cette adresse : rien ne lui est envoyé."), "modeles": []}
         elif not rep.get("actif"):
@@ -371,7 +453,7 @@ def reveiller(ident, envoyer=alimentation.envoyer_reveil):
         REVEIL[ident] = time.monotonic()
         SONDES.pop(ident, None)
     journaliser("réveil envoyé à {}".format(m["nom"]))
-    return {"ok": True}
+    return {"ok": True, "avertissements": [a for a in avertissements(m) if a][:4]}          # le paquet est parti, mais on dit ce qui risque de l'empêcher de marcher
 
 
 def eteindre(ident, annuler=False, ouvrir=None):
@@ -406,6 +488,58 @@ def signaler_panne(m, modele=""):
 def etats(modele="", ouvrir=None):
     """Pour la page Machines : chaque machine avec son état."""
     return [dict(vue(m), **sonder(m, modele, ouvrir)) for m in lire()]
+
+
+# --------------------------------------------------------------------------- les modèles des autres machines (pour les choisir comme les siens)
+
+def _rafraichir_distants():
+    liste = []
+    avant = {d["id"]: d for d in DISTANTS["v"]}
+    for m in lire():
+        r = sonder(m, "")
+        modeles = list(r.get("modeles") or []) or list((avant.get(m["id"]) or {}).get("modeles") or [])          # une machine éteinte garde sa dernière liste (grisée dans le choix)
+        if modeles:
+            liste.append({"id": m["id"], "nom": m["nom"], "etat": r["etat"], "modeles": modeles})
+    with VERROU:
+        DISTANTS.update(t=time.monotonic(), v=liste, en_cours=False)
+
+
+def modeles_distants(attente=False):
+    """Les modèles des machines appairées qui répondent : [{id, nom, etat, modeles}]. Ce qui est gardé en mémoire est rendu tout de suite (la page ne doit jamais attendre une machine éteinte) ;
+    une mise à jour part en arrière-plan quand la dernière date de plus de 15 s. `attente=True` (tests) la fait sur place."""
+    if not lire():
+        return []
+    with VERROU:
+        vieux = time.monotonic() - DISTANTS["t"] > 15
+        lancer = vieux and not DISTANTS["en_cours"]
+        if lancer:
+            DISTANTS["en_cours"] = True
+    if lancer:
+        if attente:
+            _rafraichir_distants()
+        else:
+            def travail():
+                try:
+                    _rafraichir_distants()
+                except Exception:  # noqa: BLE001
+                    with VERROU:
+                        DISTANTS["en_cours"] = False
+            threading.Thread(target=travail, daemon=True, name="machines-modeles").start()
+    ids = {m["id"] for m in lire()}
+    return [dict(d) for d in DISTANTS["v"] if d["id"] in ids]
+
+
+def modele_distant(reglages, installes_locaux):
+    """La machine qui porte le modèle choisi quand celui-ci n'existe QUE là-bas (réglages `machine` + `modele`), sinon None."""
+    ident = str((reglages or {}).get("machine") or "")
+    modele = str((reglages or {}).get("modele") or "")
+    if not ident or not modele or modele in (installes_locaux or []):
+        return None
+    m = trouver(ident)
+    if m is None:
+        return None
+    gardee = next((d for d in DISTANTS["v"] if d["id"] == ident), None)
+    return m if gardee is None or modele in gardee["modeles"] else None
 
 
 # --------------------------------------------------------------------------- le routage
@@ -446,13 +580,44 @@ class Routage:
     def __getattr__(self, nom):
         return getattr(self.local, nom)
 
+    def _modele_local(self, modele):
+        try:
+            return modele in self.local.modeles().get("installes", [])
+        except Exception:  # noqa: BLE001
+            return True
+
+    def capacites(self, modele):
+        """Les capacités du modèle : celles du moteur local s'il l'a, sinon celles que la machine distante déclare (gardées 5 minutes)."""
+        if self._modele_local(modele):
+            return self.local.capacites(modele)
+        cle = (self.machine["id"], modele)
+        gardee = CAPACITES_DISTANTES.get(cle)
+        if gardee and time.monotonic() - gardee[0] < 300:
+            return gardee[1]
+        try:
+            rep = _json(self.machine, "/api/noeud/capacites", {"modele": modele}, ouvrir=self.ouvrir)
+            caps = set(rep["capacites"]) if isinstance(rep.get("capacites"), list) else None
+        except (urllib.error.URLError, OSError, ValueError, KeyError):
+            return None
+        CAPACITES_DISTANTES[cle] = (time.monotonic(), caps)
+        return caps
+
+    def _repli(self, corps):
+        """Le moteur local répond à la place de la machine, en silence — sauf si le modèle n'existe que sur la machine : une erreur claire vaut mieux qu'un « modèle introuvable » du moteur local."""
+        modele = corps.get("model", "")
+        connu_la_bas = next((d for d in DISTANTS["v"] if d["id"] == self.machine["id"] and modele in d["modeles"]), None)
+        if connu_la_bas is not None and not self._modele_local(modele):
+            raise ValueError(_t("Le modèle « {} » n'existe que sur la machine « {} », qui ne répond pas pour l'instant (éteinte, hors réseau ou Lutin arrêté). Réveille-la dans Réglages > Machines, ou choisis un modèle de cette machine-ci.").format(modele, self.machine.get("nom", "?")))
+
     def _ouvrir_noeud(self, corps, delai):
         if sonder(self.machine, corps.get("model", ""), self.ouvrir)["etat"] != "operationnel":
+            self._repli(corps)
             return None
         try:
             return requete(self.machine, "/api/noeud/chat", {"corps": corps_autorise(corps)}, delai=min(delai, 30), ouvrir=self.ouvrir)
         except (urllib.error.URLError, OSError, ValueError):
             signaler_panne(self.machine, corps.get("model", ""))
+            self._repli(corps)
             return None          # repli silencieux
 
     def chat(self, corps, delai=60):

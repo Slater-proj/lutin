@@ -1619,6 +1619,7 @@ def boucle_agent(conv, r, emit, ctx, stop):
         if appels:
             message["tool_calls"] = appels
         rappel_faux = "" if appels or corrige_affirmation or dernier_tour else (_affirmations.affirme_sans_agir(contenu, conv["messages"], ctx["outils_autorises"])
+                                                                              or _affirmations.annonce_sans_agir(contenu, appels, ctx["outils_autorises"])
                                                                               or ("" if r.get("_mission") or r.get("essai_a_blanc") else _affirmations.oubli_d_ecrire(derniere_demande, conv["messages"], ctx["outils_autorises"]))
                                                                               or ("" if r.get("essai_a_blanc") else _affirmations.refus_a_tort(derniere_demande, contenu, conv["messages"], ctx["outils_autorises"])))
         if rappel_faux:

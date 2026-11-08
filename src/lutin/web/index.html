@@ -37,6 +37,8 @@ body { margin:0; background:radial-gradient(1200px 600px at 70% -10%, #14202e 0%
 aside { background:linear-gradient(180deg, var(--panel2), var(--panel)); border-right:1px solid var(--line); display:flex; flex-direction:column; min-height:0; }
 aside h1 { font-size:.95rem; font-weight:600; letter-spacing:.02em; margin:0; padding:14px 16px; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:8px; }
 aside h1 img { border-radius:7px; flex:0 0 auto; }
+select.modele-titre.distant, select.modele-titre option.distant { color:#e0a84a; }
+select.modele-titre option.distant.horsligne { color:#8a7a5a; }
 aside h1 .modele-titre { flex:1 1 auto; margin-left:0; min-width:0; font-size:.8rem; font-weight:400; padding:3px 4px; text-overflow:ellipsis; letter-spacing:0; }
 aside .liste { overflow:auto; flex:1; padding:8px; min-height:60px; }
 .separateur-v { cursor:col-resize; background:var(--line); width:1px; margin:0; position:relative; touch-action:none; user-select:none; } .separateur-v:hover, .separateur-v.actif, .separateur-v:focus-visible { background:var(--accent, #5aa9ff); outline:0; }
@@ -1233,7 +1235,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     demarrerActivite();
     try {
       const r = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Token': TOKEN }, signal: CONTROLE.signal,
-        body: JSON.stringify({ message: texte, conversation: CONV ? CONV.id : '', travail: (ETAT.travaux && ETAT.travaux.actif) || '', modele: $('selModele').value, options: lireOptions(), remplacer_depuis: depuis, images, pieces }) });
+        body: JSON.stringify({ message: texte, conversation: CONV ? CONV.id : '', travail: (ETAT.travaux && ETAT.travaux.actif) || '', modele: modeleChoisi(), machine: machineChoisie(), options: lireOptions(), remplacer_depuis: depuis, images, pieces }) });
       if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.erreur || T('Erreur ') + r.status); }
       const lecteur = r.body.getReader(), dec = new TextDecoder(); let reste = '';
       for (;;) {
@@ -1520,6 +1522,12 @@ body[data-moteur="openai"] .biblio { display:none !important; }
   const COMPARER = new Set();              // modèles cochés pour la comparaison
   // Un modèle de recherche (embeddings) travaille en fond : il ne se choisit jamais pour discuter, ni pour les tâches annexes, ni pour la comparaison
   const estRecherche = id => { const m = ETAT.modeles.find(x => x.id === id); return !!(m && m.embedding) || !!(ETAT.embeddings && id.split(':')[0] === String(ETAT.embeddings.modele).split(':')[0]); };
+  // Un modèle d'une autre machine est repéré par « modèle » + séparateur + identifiant de la machine : la valeur de la liste reste un simple texte, et tout le reste de la page lit le modèle seul (modeleChoisi)
+  const SEP_M = '\u0001';
+  const valeurModele = (modele, machine) => (machine && (ETAT.modeles_distants || []).some(d => d.id === machine && d.modeles.includes(modele))) ? modele + SEP_M + machine : modele;
+  const modeleChoisi = () => $('selModele').value.split(SEP_M)[0];
+  const machineChoisie = () => $('selModele').value.split(SEP_M)[1] || '';
+  const courtNom = n => n.length > 12 ? n.slice(0, 11) + '…' : n;
   const installesDiscussion = () => ETAT.installes.filter(id => !estRecherche(id));
   const etiquettePrecision = q => { const bits = (String(q).match(/^[A-Za-z]*?([0-9]+)/) || [])[1]; return bits ? bits + ' ' + T('bits') + ' (' + q + ')' : String(q); };
   const LIBELLE_ADEQ = () => ({ ideal: T('Très adapté'), bien: T('Adapté'), limite: T('Limite'), trop_gros: T('Trop gros') });
@@ -1776,13 +1784,27 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     $('bDemarrer').hidden = ETAT.ollama || !ETAT.ollama_installe;
     afficherDiagnostic(ETAT.diagnostic || []);
     afficherPremierLancement(ETAT.premier_lancement || { pret: true });
-    afficherCalibrage(); majAnnexe(); majSens(); majTelechargements();
+    afficherCalibrage(); majAnnexe(); majSens(); majTelechargements(); majReflexion();
+    $('selModele').title = machineChoisie() ? T('Ce modèle tourne sur une autre machine appairée (Réglages > Machines).') : T('Le modèle de langage utilisé (le même pour toutes les conversations)');
     $('racine').textContent = T('Projet : ') + ETAT.racine;
     // Le choix du modèle ne propose que les modèles INSTALLÉS (l'installation se fait dans l'onglet Modèles).
-    const s = $('selModele'), v = s.value || ETAT.reglages.modele; s.textContent = '';
+    const s = $('selModele'), v = s.value || valeurModele(ETAT.reglages.modele, ETAT.reglages.machine); s.textContent = '';
     installesDiscussion().forEach(id => { const m = ETAT.modeles.find(x => x.id === id), o = el('option', '', m ? m.nom : id); o.value = id; s.appendChild(o); });
+    // Les modèles des autres machines appairées, dans la même liste : « modèle · 🖥 Machine » en couleur ; une machine éteinte reste listée mais grisée
+    (ETAT.modeles_distants || []).forEach(d => {
+      const g = el('optgroup'); g.label = '🖥 ' + d.nom;
+      d.modeles.filter(n => !estRecherche(n)).forEach(n => {
+        const hors = d.etat === 'injoignable', o = el('option', 'distant' + (hors ? ' horsligne' : ''), n + ' · 🖥 ' + courtNom(d.nom) + (hors ? ' ' + T('(éteinte)') : ''));
+        o.value = valeurModele(n, d.id); o.title = n + ' — ' + T('modèle de la machine « ') + d.nom + T(' » (il tourne là-bas, pas ici)');
+        o.disabled = hors && o.value !== v; g.appendChild(o);
+      });
+      if (g.children.length) s.appendChild(g);
+    });
     if (!installesDiscussion().length) { const o = el('option', '', ETAT.ollama ? T('Aucun modèle installé (onglet Modèles)') : T('Ollama arrêté')); o.value = ETAT.reglages.modele; s.appendChild(o); }
-    s.value = installesDiscussion().includes(v) ? v : (installesDiscussion().includes(ETAT.reglages.modele) ? ETAT.reglages.modele : (installesDiscussion()[0] || ETAT.reglages.modele));
+    const existe = x => [...s.options].some(o => o.value === x);
+    const voulue = valeurModele(ETAT.reglages.modele, ETAT.reglages.machine);
+    s.value = existe(v) && (installesDiscussion().includes(v) || v.includes(SEP_M)) ? v : (existe(voulue) ? voulue : (installesDiscussion().includes(ETAT.reglages.modele) ? ETAT.reglages.modele : (installesDiscussion()[0] || ETAT.reglages.modele)));
+    s.classList.toggle('distant', s.value.includes(SEP_M));
     if (!$('selMode').dataset.init) { afficherOptions(CONV ? CONV.options : null); $('cAvance').checked = !!ETAT.reglages.avance; $('cCopieConv').checked = !!ETAT.reglages.copie_conversations; $('selMemoire').value = ETAT.reglages.memoire_longue || 'demander'; $('iFichePart').value = ETAT.reglages.fiche_part || 10; $('cScribe').checked = ETAT.reglages.fiche_scribe !== false; $('cSens').checked = !!ETAT.reglages.recherche_sens; aideMemoire(); majSens(); $('rCtx').value = ETAT.reglages.num_ctx; $('rTemp').value = ETAT.reglages.temperature; $('rTours').value = ETAT.reglages.tours_max; $('iTopP').value = ETAT.reglages.top_p ?? ''; $('iTopK').value = ETAT.reglages.top_k ?? ''; $('iMinP').value = ETAT.reglages.min_p ?? ''; $('iRep').value = ETAT.reglages.repeat_penalty ?? ''; $('cGarde').checked = ETAT.reglages.garde_ressources !== false; $('cComfy').checked = ETAT.reglages.liberer_si_comfy !== false; $('sRappels').value = ETAT.reglages.rappels_auto || 'scenario'; $('iSeuilRam').value = ETAT.reglages.seuil_ram_go; $('iSeuilDisque').value = ETAT.reglages.seuil_disque_go; $('iPlafond').value = ETAT.reglages.plafond_donnees_go; $('iLimiteCmd').value = ETAT.reglages.limite_ram_commande_go; $('iThreads').value = ETAT.reglages.num_thread ?? ''; $('iGarde').value = ETAT.reglages.garde_min ?? ''; $('selMode').dataset.init = '1'; }
     if (document.activeElement !== $('selLangue')) $('selLangue').value = ETAT.langue_reglage || 'auto';
     afficherVersion();
@@ -1797,7 +1819,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     if (ETAT.bench && ETAT.bench.erreur) $('msgModeles').textContent = T('Banc d\'essai : ') + ETAT.bench.erreur;
     $('vCtx').textContent = $('rCtx').value; $('vTemp').textContent = $('rTemp').value; $('vTours').textContent = $('rTours').value;
     // Le modèle enregistré n'est plus installé (supprimé, ou Ollama réinstallé) : on passe sur un modèle installé plutôt que d'envoyer une demande à un modèle absent.
-    if (installesDiscussion().length && s.value !== ETAT.reglages.modele && !installesDiscussion().includes(ETAT.reglages.modele)) sauverReglages();
+    if (installesDiscussion().length && modeleChoisi() !== ETAT.reglages.modele && !installesDiscussion().includes(ETAT.reglages.modele) && !machineChoisie() && !ETAT.reglages.machine) sauverReglages();
     $('bRestaurer').hidden = !ETAT.modeles_masques; $('bRestaurer').textContent = T('Rétablir la liste d\'origine (') + ETAT.modeles_masques + T(' retiré') + (ETAT.modeles_masques > 1 ? 's' : '') + ')';
     // On ne reconstruit les listes que si elles ont changé (le sondage toutes les 4 s les redessinait pour rien).
     // Une conversation qui travaillait ne travaille plus : si tu ne la regardais pas, pastille verte « terminé, pas lu ».
@@ -1863,7 +1885,14 @@ body[data-moteur="openai"] .biblio { display:none !important; }
       if (m.etat === 'terminee') CONV.__vue_terminee = true;
     } catch (e) { /* la conversation sera relue au prochain passage */ }
   };
-  const afficherOptions = o => { const v = Object.assign(optionsDefaut(), o || {}); $('selMode').value = v.mode; $('cReflexion').checked = !!v.reflexion; $('cAuto').checked = !!v.auto_ecriture; $('cAutoCmd').checked = !!v.auto_commandes; $('cEssai').checked = !!v.essai_a_blanc; $('cWeb').checked = v.web !== false; $('sLong').value = String(v.num_predict || 0); $('sDuree').value = String(v.mission_duree_h || 8); majMission(); };
+  // Le modèle choisi n'a pas de mode réflexion : la case est décochée et grisée (avec la raison), au lieu de rester cochée sans effet
+  const majReflexion = () => {
+    const c = $('cReflexion'), sans = ETAT && ETAT.reflexion_possible === false, l = c.closest('label');
+    if (sans && c.checked) { c.checked = false; if (CONV && CONV.options && CONV.options.reflexion) { CONV.options.reflexion = false; sauverOptions(); } }
+    c.disabled = !!sans;
+    if (l) { l.style.opacity = sans ? '.5' : ''; l.title = sans ? T('Ce modèle n\'a pas de mode réflexion.') : T('Le modèle réfléchit avant de répondre : plus juste, un peu plus lent.'); }
+  };
+  const afficherOptions = o => { const v = Object.assign(optionsDefaut(), o || {}); $('selMode').value = v.mode; $('cReflexion').checked = !!v.reflexion && !(ETAT && ETAT.reflexion_possible === false); $('cAuto').checked = !!v.auto_ecriture; $('cAutoCmd').checked = !!v.auto_commandes; $('cEssai').checked = !!v.essai_a_blanc; $('cWeb').checked = v.web !== false; $('sLong').value = String(v.num_predict || 0); $('sDuree').value = String(v.mission_duree_h || 8); majMission(); };
   const envoyerOptions = async () => {
     try {
       if (CONV) { const r = await api('/api/conversation-options', { conversation: CONV.id, options: lireOptions() }); CONV.options = r.options; }
@@ -1871,7 +1900,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     } catch (e) { fil().appendChild(el('div', 'erreur', e.message)); }
   };
   const sauverOptions = enSerie(envoyerOptions);
-  const envoyerReglages = async () => { try { await api('/api/reglages', Object.assign({ modele: $('selModele').value, copie_conversations: $('cCopieConv').checked, memoire_longue: $('selMemoire').value, fiche_part: nombreOuNull('iFichePart') ?? 10, fiche_scribe: $('cScribe').checked, recherche_sens: $('cSens').checked, avance: $('cAvance').checked, num_ctx: +$('rCtx').value, temperature: +$('rTemp').value, tours_max: +$('rTours').value, top_p: nombreOuNull('iTopP'), top_k: nombreOuNull('iTopK'), min_p: nombreOuNull('iMinP'), repeat_penalty: nombreOuNull('iRep'), garde_ressources: $('cGarde').checked, liberer_si_comfy: $('cComfy').checked, rappels_auto: $('sRappels').value, seuil_ram_go: nombreOuNull('iSeuilRam') ?? 3, seuil_disque_go: nombreOuNull('iSeuilDisque') ?? 10, plafond_donnees_go: nombreOuNull('iPlafond') ?? 2, limite_ram_commande_go: nombreOuNull('iLimiteCmd') ?? 0, num_thread: nombreOuNull('iThreads'), garde_min: nombreOuNull('iGarde'), modele_annexe: $('selAnnexe').value, reflexion_tours: $('selReflTours').value }, CONV ? {} : lireOptions(true))); } catch (e) { fil().appendChild(el('div', 'erreur', e.message)); } };
+  const envoyerReglages = async () => { try { await api('/api/reglages', Object.assign({ modele: modeleChoisi(), machine: machineChoisie(), copie_conversations: $('cCopieConv').checked, memoire_longue: $('selMemoire').value, fiche_part: nombreOuNull('iFichePart') ?? 10, fiche_scribe: $('cScribe').checked, recherche_sens: $('cSens').checked, avance: $('cAvance').checked, num_ctx: +$('rCtx').value, temperature: +$('rTemp').value, tours_max: +$('rTours').value, top_p: nombreOuNull('iTopP'), top_k: nombreOuNull('iTopK'), min_p: nombreOuNull('iMinP'), repeat_penalty: nombreOuNull('iRep'), garde_ressources: $('cGarde').checked, liberer_si_comfy: $('cComfy').checked, rappels_auto: $('sRappels').value, seuil_ram_go: nombreOuNull('iSeuilRam') ?? 3, seuil_disque_go: nombreOuNull('iSeuilDisque') ?? 10, plafond_donnees_go: nombreOuNull('iPlafond') ?? 2, limite_ram_commande_go: nombreOuNull('iLimiteCmd') ?? 0, num_thread: nombreOuNull('iThreads'), garde_min: nombreOuNull('iGarde'), modele_annexe: $('selAnnexe').value, reflexion_tours: $('selReflTours').value }, CONV ? {} : lireOptions(true))); } catch (e) { fil().appendChild(el('div', 'erreur', e.message)); } };
   const sauverReglages = enSerie(envoyerReglages);
   document.querySelectorAll('.onglets button').forEach(b => b.addEventListener('click', async () => {
     document.querySelectorAll('.onglets button').forEach(x => x.setAttribute('aria-selected', x === b)); document.querySelectorAll('.page').forEach(p => p.classList.toggle('vue', p.id === 'p-' + b.dataset.p));
@@ -3283,7 +3312,8 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     let r; try { r = await api('/api/moteurs'); } catch (e) { $('aideMoteur').textContent = e.message; return; }
     const z = $('listeMoteurs'), neuf = document.createElement('div');
     if (!r.modifiable && ETAT) neuf.appendChild(el('div', 'attention', explicationVerrou()));
-    if (r.dossier_moteurs) neuf.appendChild(carteDossierMoteurs(r.dossier_moteurs, r.modifiable));
+    let zd = $('dossierMoteurs'); if (!zd) { zd = el('div'); zd.id = 'dossierMoteurs'; z.before(zd); }          // hors de la liste des moteurs : celle-ci ne contient que des cartes de moteurs
+    if (r.dossier_moteurs && !saisieEnCours(zd)) zd.replaceChildren(carteDossierMoteurs(r.dossier_moteurs, r.modifiable));
     r.moteurs.forEach(m => neuf.appendChild(carteMoteur(m, r.modifiable, r.prereglages || [])));
     let banc = null; try { banc = await api('/api/bench-moteurs'); neuf.appendChild(carteBancMoteurs(banc, r.modifiable)); } catch (e) { /* la recommandation est un confort */ }
     if (banc && banc.en_cours && $('p-reglages').classList.contains('vue')) { clearTimeout(MINUTEUR_MOTEURS); MINUTEUR_MOTEURS = setTimeout(chargerMoteurs, 2000); }
@@ -3305,7 +3335,13 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     const prete = el('div', 'carte'); prete.style.display = 'block';
     const lab = el('label'), ca = el('input'); ca.type = 'checkbox'; ca.checked = r.noeud.actif; ca.disabled = r.niveau_local && !r.noeud.actif;
     lab.append(ca, document.createTextNode(' ' + T('Prêter le moteur de cette machine aux autres Lutin')));
-    ca.addEventListener('change', async () => { await act('noeud-activer', { actif: ca.checked }); chargerMachines(true); });
+    ca.addEventListener('change', async () => {
+      const veut = ca.checked;
+      await act('noeud-activer', { actif: veut });
+      // Une machine prêtée qu'on réveille à distance doit pouvoir lancer Lutin toute seule : on le propose (jamais sans ton accord)
+      if (veut && r.demarrage && r.demarrage.possible && !r.demarrage.installe && confirm(T('Pour que cette machine puisse être réveillée à distance puis utilisée, Lutin doit démarrer tout seul à l\'ouverture de ta session. L\'activer maintenant ?'))) await act('autostart', { actif: true });
+      chargerMachines(true);
+    });
     prete.appendChild(lab);
     if (r.niveau_local && !r.noeud.actif) prete.appendChild(el('div', 'aide', T('Impossible au niveau « cette machine seulement » : passe au niveau « réseau » (onglet Accès).')));
     if (r.noeud.actif) {
@@ -3328,9 +3364,10 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     }
     // démarrage automatique de Lutin sur cette machine
     if (r.demarrage && r.demarrage.possible) {
-      const ld = el('label'), cd = el('input'); cd.type = 'checkbox'; cd.checked = r.demarrage.installe;
-      ld.append(cd, document.createTextNode(' ' + T('Démarrer Lutin à l\'ouverture de ma session')));
-      cd.addEventListener('change', async () => { await act('autostart', { actif: cd.checked }); chargerMachines(true); });
+      const ld = el('div', 'ligne'), etatD = el('span', '', r.demarrage.installe ? '✅ ' + T('Lutin démarre à l\'ouverture de ta session.') : '⚪ ' + T('Lutin ne démarre pas tout seul.')), msgD = el('span', 'erreur');
+      const bd = el('button', r.demarrage.installe ? '' : 'principal', r.demarrage.installe ? T('Retirer le démarrage automatique') : T('Démarrer Lutin à l\'ouverture de ma session'));
+      bd.addEventListener('click', async () => { bd.disabled = true; const x = await act('autostart', { actif: !r.demarrage.installe }, msgD); if (x) chargerMachines(true); else bd.disabled = false; });
+      ld.append(etatD, bd, msgD);
       prete.append(ld, el('div', 'aide', r.demarrage.limites));
     }
     neuf.appendChild(prete);
@@ -3340,15 +3377,16 @@ body[data-moteur="openai"] .biblio { display:none !important; }
       const e = ETATS_MACHINE[m.etat] || ETATS_MACHINE.injoignable, choisie = r.choisie === m.id;
       c.appendChild(el('b', '', e[0] + ' ' + m.nom + (choisie ? ' · ' + T('répond à tes messages') : '')));
       c.appendChild(el('div', 'aide', m.adresse + ' · ' + e[1] + ' — ' + m.detail));
+      (m.avertissements || []).forEach(a => c.appendChild(el('div', 'attention', '⚠ ' + a)));
       const l = el('div', 'ligne'), bu = el('button', choisie ? '' : 'principal', choisie ? T('Revenir au moteur local') : T('Répondre avec cette machine'));
       bu.addEventListener('click', async () => { await act('use', { id: choisie ? '' : m.id }); await rafraichir(); chargerMachines(true); });
-      const mac = el('input'); mac.placeholder = T('Adresse MAC (facultative, pour la réveiller)'); mac.value = m.mac || ''; mac.style.flex = '1';
+      const mac = el('input'); mac.placeholder = T('Adresse MAC (reçue de la machine dès qu\'elle répond)'); mac.value = m.mac || ''; mac.style.flex = '1'; mac.title = m.mac_auto ? T('Reçue automatiquement de la machine') : T('Saisie à la main');
       mac.addEventListener('change', async () => { await act('mac', { id: m.id, mac: mac.value.trim() }); });
       const br = el('button', '', T('Retirer')); br.addEventListener('click', async () => { if (!confirm(T('Retirer la machine « ') + m.nom + T(' » ?'))) return; await act('remove', { id: m.id }); await rafraichir(); chargerMachines(true); });
       l.append(bu, mac, br); c.appendChild(l);
       const l2 = el('div', 'ligne'), bw = el('button', '', T('Réveiller')), be = el('button', '', T('Éteindre…'));
       bw.title = T('Envoie un paquet de réveil (Wake-on-LAN) : il faut son adresse MAC.');
-      bw.addEventListener('click', async () => { await act('wake', { id: m.id }); chargerMachines(true); });
+      bw.addEventListener('click', async () => { const x = await act('wake', { id: m.id }); if (x && x.avertissements && x.avertissements.length) alert(T('Réveil envoyé, mais :') + '\n\n' + x.avertissements.join('\n\n')); chargerMachines(true); });
       be.addEventListener('click', async () => { if (!confirm(T('Éteindre la machine « ') + m.nom + T(' » ? Elle s\'éteindra dans 30 secondes (annulable).'))) return; const x = await act('shutdown', { id: m.id }); if (x) { alert(T('Extinction demandée : 30 secondes.')); chargerMachines(true); } });
       l2.append(bw, be); c.appendChild(l2); neuf.appendChild(c);
     });
@@ -3814,8 +3852,9 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     (r.conseil || []).forEach(c => { const l = el('div', c.niveau === 'attention' ? 'erreur' : 'aide', (c.niveau === 'ok' ? '✔ ' : c.niveau === 'attention' ? '⚠ ' : '• ') + c.texte); l.style.margin = '4px 0'; z.appendChild(l); });
   };
   const testerPc = async () => {
-    const modele = $('selModele').value;
+    const modele = modeleChoisi();
     if (!modele) return;
+    if (machineChoisie()) { $('msgTest').textContent = T('Ce modèle tourne sur une autre machine : le test de vitesse mesure celle-ci. Choisis un modèle de cette machine.'); return; }
     $('bTesterPc').disabled = true; $('msgTest').textContent = T('Mesure en cours…'); $('conseilTest').textContent = '';
     try {
       await api('/api/bench', { modele, rapide: true });
