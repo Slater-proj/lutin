@@ -77,17 +77,16 @@ jobs:
         run: |
           docker run --rm lutin:ci-slim --version
           docker run --rm lutin:ci --version
-          docker run --rm --entrypoint ollama lutin:ci --version
-      - name: L'image complète démarre toute seule (Ollama dedans, code PIN, page de connexion)
+          docker run --rm --entrypoint zstd lutin:ci --version          # de quoi décompresser Ollama, que la page installe
+      - name: L'image démarre toute seule (sans moteur dedans, code PIN, page de connexion)
         run: |
           docker run -d --name lutin-ci -p 127.0.0.1:8777:8777 -e LUTIN_NIVEAU=reseau lutin:ci
           for i in $(seq 1 60); do curl -fsS http://127.0.0.1:8777/ -o page.html && break; sleep 1; done
           grep -q "lutin pin" page.html
           docker logs lutin-ci 2>&1 | grep -E "PIN"
           docker exec lutin-ci lutin pin
-          docker exec lutin-ci curl -fsS http://127.0.0.1:11434/api/version
-          docker exec lutin-ci lutin modeles lister
-          docker exec lutin-ci lutin doctor
+          docker exec lutin-ci lutin doctor > doctor0.txt || true          # sans moteur installé, le bilan peut signaler un problème : ce qui compte, c'est qu'il s'exécute et reconnaisse Docker
+          grep -qi "docker" doctor0.txt
       - name: Dans le conteneur, l'API répond de bout en bout (réglages, pièce jointe, santé, dossiers de travail)
         run: |
           T=$(docker exec lutin-ci python3 -c "import json;print(json.load(open('/data/donnees/console.json'))['jeton'])")
@@ -99,8 +98,10 @@ jobs:
           API http://127.0.0.1:8777/api/travaux | python3 -c "import sys,json; d=json.load(sys.stdin); assert d['liste'], d"
           API "http://127.0.0.1:8777/api/dossiers?chemin=/travail" | python3 -c "import sys,json; d=json.load(sys.stdin); assert d['chemin'].endswith('travail'), d"
           docker exec lutin-ci test -d /data/donnees/pieces
+          API http://127.0.0.1:8777/api/moteurs | python3 -c "import sys,json; d=json.load(sys.stdin); m={x['id']:x for x in d['moteurs']}; assert m['ollama']['actions']['installer']['possible'] and m['llamacpp']['actions']['installer']['possible'], 'les moteurs doivent pouvoir s installer depuis la page'"
+          API http://127.0.0.1:8777/api/etat | python3 -c "import sys,json; d=json.load(sys.stdin); assert d['premier_lancement']['pret'] is False and d['premier_lancement']['recommande'], d['premier_lancement']"
           docker rm -f lutin-ci
-      - name: L'image légère démarre (sans Ollama, il est ailleurs)
+      - name: L'image légère (même image) démarre
         run: |
           docker run -d --name lutin-slim -p 127.0.0.1:8778:8777 -e LUTIN_NIVEAU=reseau lutin:ci-slim
           for i in $(seq 1 60); do curl -fsS http://127.0.0.1:8778/ -o page2.html && break; sleep 1; done

@@ -147,7 +147,7 @@ jobs:
             **Windows (installer · installateur)**: `lutin-setup-*.exe` below / ci-dessous (uses the Python you already have, otherwise brings its own / utilise le Python déjà présent, sinon apporte le sien)
             **Windows (PowerShell)**: `irm https://raw.githubusercontent.com/${{ github.repository }}/main/installateur/install.ps1 | iex`
             **Linux / macOS**: `curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/installateur/install.sh | bash`
-            **Docker** (Lutin + Ollama): `docker pull ${{ needs.version.outputs.image }}:${{ needs.version.outputs.version }}` ([docs/DOCKER.md](https://github.com/${{ github.repository }}/blob/main/docs/DOCKER.md), [docs/DOCKER.fr.md](https://github.com/${{ github.repository }}/blob/main/docs/DOCKER.fr.md))
+            **Docker** (Lutin seul ; le moteur s'installe depuis la page): `docker pull ${{ needs.version.outputs.image }}:${{ needs.version.outputs.version }}` ([docs/DOCKER.md](https://github.com/${{ github.repository }}/blob/main/docs/DOCKER.md), [docs/DOCKER.fr.md](https://github.com/${{ github.repository }}/blob/main/docs/DOCKER.fr.md))
 
             Running a script on an up-to-date machine changes nothing. Checksums: `SHA256SUMS.txt`.
             Relancer un script sur une machine à jour ne change rien. Sommes de contrôle : `SHA256SUMS.txt`.
@@ -165,7 +165,7 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      # Image complète (Lutin + Ollama) : celle de « :latest » et de « :X.Y.Z »
+      # Image « :latest » et « :X.Y.Z » : Lutin seul, léger ; les moteurs s'installent depuis la page, dans le volume /engines
       - uses: docker/build-push-action@v7
         with:
           context: .
@@ -179,7 +179,7 @@ jobs:
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.version=${{ needs.version.outputs.version }}
             org.opencontainers.image.licenses=MIT
-      # Image légère (Lutin seul, Ollama ailleurs) : « :slim » et « :X.Y.Z-slim »
+      # « :slim » et « :X.Y.Z-slim » : la même image (nom gardé pour les compose existants ; Ollama peut être un autre conteneur)
       - uses: docker/build-push-action@v7
         with:
           context: .
@@ -193,7 +193,7 @@ jobs:
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.version=${{ needs.version.outputs.version }}
             org.opencontainers.image.licenses=MIT
-      # Image complète pour cartes AMD (base ollama/ollama:*-rocm) : « :rocm » et « :X.Y.Z-rocm ». Jamais vérifiée sur une vraie carte AMD ; un échec de construction ne bloque pas le reste.
+      # « :rocm » et « :X.Y.Z-rocm » : conservées pour les compose existants, elles sont maintenant identiques (la version ROCm d'Ollama se choisit à l'installation, d'après la carte détectée). Jamais vérifiée sur une vraie carte AMD.
       - uses: docker/build-push-action@v7
         continue-on-error: true
         with:
