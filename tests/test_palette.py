@@ -218,9 +218,9 @@ class RechercheReglages(unittest.TestCase):
             p.evaluer("(() => { const c = document.getElementById('rechReglages'); c.value = 'zzzqqq'; c.dispatchEvent(new Event('input', {bubbles: true})); return true; })()")
             self.assertTrue(all(e[0] for e in p.evaluer(etat)))
             self.assertIn("Aucun réglage", p.evaluer("document.getElementById('rechReglagesInfo').textContent"))
-            # champ vidé : tout est de retour, chaque groupe comme avant la recherche (tous refermés ici)
+            # champ vidé : tout est de retour (les groupes sont toujours ouverts : une rubrique à la fois les masque)
             p.evaluer("(() => { const c = document.getElementById('rechReglages'); c.value = ''; c.dispatchEvent(new Event('input', {bubbles: true})); return true; })()")
-            self.assertEqual(p.evaluer(etat), [[False, False]] * total)
+            self.assertEqual(p.evaluer(etat), [[False, True]] * total)
             self.assertEqual(p.evaluer("document.getElementById('rechReglagesInfo').textContent"), "")
             self.assertEqual(p.erreurs, [])
 

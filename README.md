@@ -58,6 +58,8 @@ The script installs the latest published version in a private environment, adds 
 
 ## Usage
 
+The top bar keeps four buttons: **Conversation**, **Models**, **Memory** and **Settings ▾**. The Settings menu opens **Settings** (language, engine, conversation, web search, folders, advanced), **Automation**, **Machines** (use another computer's engine; off until you turn it on), **Health** and **Access** (PIN code, connected devices). Long pages have a sub-menu at the top, one section at a time. **Ctrl+K** finds anything.
+
 <p align="center">
   <img src="assets/capture-modeles.png" alt="The Models tab: news, measurements, buttons to look for updates" width="92%">
   <br><br>

@@ -2,6 +2,15 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## Navigation repensée, page Machines complète
+
+- **Une barre du haut qui tient partout** : Conversation, Modèles, Mémoire et un menu **Réglages ▾** (Réglages, Automatisation, Machines, Santé, Accès). Le bouton affiche la page ouverte dans le menu, un point de couleur y signale un problème de santé, et sur téléphone le menu prend la largeur de l'écran. Le clavier marche (flèches, Échap).
+- **Des pages moins chargées** : Réglages devient un sous-menu (Général, Moteur, Conversation, Recherche web, Dossiers, Avancé), une rubrique à la fois ; Mémoire, Automatisation et Accès ont le même sous-menu, bâti sur leurs titres. La dernière rubrique ouverte est retenue ; la recherche des Réglages cherche partout.
+- **La page Machines** s'active depuis elle-même (la case des Réglages disparaît) ; chaque machine montre où elle en est, en direct : *réveil envoyé → allumée → Lutin démarré → synchronisation → prête*, et *extinction dans N s* avec Annuler. Une connexion refusée distingue « allumée, Lutin pas lancé » de « éteinte ».
+- **Des listes propres** : quand une machine ne répond plus ou qu'on l'éteint d'ici, ses modèles et ses conversations disparaissent tout de suite ; à son retour, ils sont relus.
+- **Mettre à jour Lutin à distance** : la machine affiche sa version, et un bouton apparaît si elle a une version plus ancienne. Le propriétaire doit avoir coché « Autoriser les machines appairées à mettre Lutin à jour » (décoché par défaut, noté dans son journal).
+- **À savoir** : testé avec de faux nœuds et un vrai navigateur ; pas encore essayé entre deux vrais ordinateurs. Aucune mesure ne montre de ralentissement dû à l'application : les appels de la page au repos sont rares (3 toutes les 12 s), les plus lents sont la page Santé (~2 s à froid) et Automatisation (~0,5 s).
+
 ## Un onglet Machines, réveil et état des machines
 
 - **Un onglet Machines** (réglage « Utiliser plusieurs machines » dans Réglages > Moteur) : les machines appairées, celle-ci quand tu la prêtes, le réveil, l'extinction et les imports y sont rassemblés ; les Réglages sont plus courts. L'onglet apparaît tout seul dès qu'une machine est appairée ou prêtée, et se cache sinon.

@@ -367,6 +367,13 @@ button.principal { box-shadow:0 6px 16px -8px rgba(63,143,232,.8); }
 .haut .onglets button[aria-selected=true] { background:#1d3048; border-color:rgba(90,169,255,.35); color:#fff; box-shadow:0 6px 16px -8px rgba(90,169,255,.7); }
 .carte { background:linear-gradient(180deg, #131b25, #10161e); box-shadow:var(--ombre-douce); transition:border-color .15s; }
 .carte:hover { border-color:var(--line2); }
+.rubrique.masque { display:none; }
+.sous-nav { display:flex; gap:6px; flex-wrap:wrap; margin:4px 0 14px; }
+.sous-nav button { border-radius:999px; padding:5px 14px; font-size:.84rem; color:#c3ccd8; background:#16202b; }
+.sous-nav button:hover:not([aria-selected=true]) { background:#1c2937; }
+.sous-nav button[aria-selected=true] { background:#1d3048; border-color:rgba(90,169,255,.35); color:#fff; }
+#p-reglages:not(.cherche) details.groupe { border:0; background:transparent; padding:0; margin:0; } #p-reglages:not(.cherche) details.groupe > summary { display:none; } #p-reglages:not(.cherche) details.groupe.masque { display:none; }
+#p-reglages.cherche .sous-nav { display:none; }
 .machine .tete-machine { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:4px; }
 .puce-version { font-size:.72rem; padding:1px 8px; border-radius:999px; border:1px solid var(--line2); color:var(--muted); }
 .puce-version.vieille { color:var(--warm); border-color:var(--warm); } .puce-version.choisie { color:#e0a84a; border-color:#e0a84a; }
@@ -657,6 +664,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     <div id="machinesZone"></div>
   </div></section>
   <section class="page" id="p-reglages"><div class="cadre">
+    <div id="sousReglages" class="sous-nav" role="tablist" aria-label="Rubriques des réglages"><button data-g="general" role="tab">Général</button><button data-g="moteur" role="tab">Moteur</button><button data-g="conversation" role="tab">Conversation</button><button data-g="recherche" role="tab">Recherche web</button><button data-g="dossiers" role="tab">Dossiers</button><button data-g="machine" role="tab">Avancé</button></div>
     <div class="rech-reglages"><input id="rechReglages" type="search" autocomplete="off" placeholder="Chercher un réglage (langue, PIN, moteur, dossier, mémoire…)" aria-label="Chercher un réglage"><span class="aide" id="rechReglagesInfo" role="status"></span></div>
     <details class="groupe" open data-g="general"><summary>Général</summary>
     <h2>Langue / Language</h2>
@@ -1738,7 +1746,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
       ? '📁 ' + T('Le moteur sera installé dans ') + pl.emplacement.dossier + T(' (volume dédié : une mise à jour de l\'image ne l\'efface pas).')
       : '📁 ' + T('Le moteur sera installé dans ') + pl.emplacement.dossier + T(', dans le volume des données (aucun volume /engines monté). Il survit aux mises à jour de l\'image ; pour le ranger ailleurs, ajoute « - /ton/dossier:/engines » dans les volumes du docker-compose.')));
     const l = el('div', 'ligne');
-    const ouvrirReglages = () => { ouvrirOnglet('reglages'); };
+    const ouvrirReglages = () => { ouvrirOnglet('reglages'); montrerRubrique('moteur'); };
     const msg = el('div', 'aide');
     // « Installer X » installe vraiment le moteur conseillé (le choisit, puis l'installe ou le démarre s'il est déjà là) ; l'avancement est dans la barre bleue du haut
     const installerConseille = async () => {
@@ -2227,10 +2235,27 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     clavier($('sepH'), 20, d => stock('lutin.options', haut(document.querySelector('.options-lat').getBoundingClientRect().height - d)));
   };
   poignees();
-  document.querySelectorAll('details.groupe').forEach(d => {
-    try { const v = localStorage.getItem('lutin.groupe.' + d.dataset.g); if (v !== null) d.open = v === '1'; } catch (e) { /* stockage refusé : les groupes gardent leur état d'origine */ }
-    d.addEventListener('toggle', () => { try { localStorage.setItem('lutin.groupe.' + d.dataset.g, d.open ? '1' : '0'); } catch (e) { /* idem */ } });
-  });
+  // ---- Réglages : une rubrique à la fois (sous-menu en haut de la page) ; la dernière ouverte est retenue
+  const montrerRubrique = g => {
+    document.querySelectorAll('#p-reglages details.groupe').forEach(d => { d.open = true; d.classList.toggle('masque', d.dataset.g !== g); });
+    document.querySelectorAll('#sousReglages button').forEach(b => b.setAttribute('aria-selected', String(b.dataset.g === g)));
+    try { localStorage.setItem('lutin.reglages.rubrique', g); } catch (e) { /* stockage refusé : la rubrique n'est pas retenue */ }
+  };
+  // Les pages longues (Mémoire, Automatisation, Accès) : un sous-menu bâti à partir de leurs titres, une rubrique à la fois, la dernière retenue
+  const rubriquer = id => {
+    const cadre = document.querySelector('#' + id + ' > .cadre'); if (!cadre) return;
+    const titres = [...cadre.querySelectorAll(':scope > h2')]; if (titres.length < 3) return;
+    const nav = el('div', 'sous-nav'); nav.setAttribute('role', 'tablist');
+    const sections = titres.map(h => { const sec = el('div', 'rubrique'); h.before(sec); let n = h; while (n && (n === h || n.tagName !== 'H2')) { const suivant = n.nextSibling; sec.appendChild(n); n = suivant; } return sec; });
+    const montrer = i => { sections.forEach((s, k) => s.classList.toggle('masque', k !== i)); [...nav.children].forEach((b, k) => b.setAttribute('aria-selected', String(k === i))); try { localStorage.setItem('lutin.rubrique.' + id, String(i)); } catch (e) { /* stockage refusé */ } };
+    titres.forEach((h, i) => { const b = el('button', '', (h.firstChild ? h.firstChild.textContent : h.textContent).trim()); b.setAttribute('role', 'tab'); b.addEventListener('click', () => montrer(i)); nav.appendChild(b); });
+    sections[0].before(nav);
+    let v = 0; try { v = +(localStorage.getItem('lutin.rubrique.' + id) || 0); } catch (e) { /* idem */ }
+    montrer(v >= 0 && v < sections.length ? v : 0);
+  };
+  ['p-memoire', 'p-auto', 'p-acces'].forEach(rubriquer);
+  document.querySelectorAll('#sousReglages button').forEach(b => b.addEventListener('click', () => montrerRubrique(b.dataset.g)));
+  { let g = 'general'; try { g = localStorage.getItem('lutin.reglages.rubrique') || g; } catch (e) { /* idem */ } if (!document.querySelector('#sousReglages button[data-g="' + g + '"]')) g = 'general'; montrerRubrique(g); }
   // ---- Mémoire des longues conversations : résumé automatique ou fiche de suivi
   const fichePart = () => String(ETAT.reglages.fiche_part || 10);
   // Recherche par le sens : il faut un petit modèle d'Ollama ; la page dit s'il est là et propose de l'installer
@@ -3655,7 +3680,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     const neuf = document.createElement('div');
     if (!m.statut.installe || (!m.statut.actif && m.statut.mode === 'externe')) {
       const c = el('div', 'carte'); c.appendChild(el('span', '', m.statut.detail || T('Ce moteur n\'est pas prêt.')));
-      const b = el('button', 'principal', T('Ouvrir les réglages du moteur')); b.addEventListener('click', () => ouvrirOnglet('reglages')); c.appendChild(b); neuf.appendChild(c);
+      const b = el('button', 'principal', T('Ouvrir les réglages du moteur')); b.addEventListener('click', () => { ouvrirOnglet('reglages'); montrerRubrique('moteur'); }); c.appendChild(b); neuf.appendChild(c);
     }
     if (m.id === 'openai') {          // serveur externe : la page commune est masquée, voici ses modèles
       neuf.appendChild(el('h2', '', T('Modèles de ') + m.nom));
@@ -4310,8 +4335,9 @@ body[data-moteur="openai"] .biblio { display:none !important; }
       d.hidden = !ok;
       if (ok) { gardes++; if (!premier) premier = d; }
       if (mots.length) { if (ok) d.open = true; }
-      else if (d.dataset.ouvertAvant !== undefined) { d.open = d.dataset.ouvertAvant === '1'; delete d.dataset.ouvertAvant; }
+      else if (d.dataset.ouvertAvant !== undefined) { d.open = true; delete d.dataset.ouvertAvant; }
     });
+    $('p-reglages').classList.toggle('cherche', mots.length > 0);
     $('rechReglagesInfo').textContent = mots.length ? (gardes ? gardes + ' ' + (gardes > 1 ? T('groupes correspondent') : T('groupe correspond')) : T('Aucun réglage ne correspond.')) : '';
     if (mots.length && premier) premier.scrollIntoView({ block: 'nearest' });
   };
@@ -4323,7 +4349,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
   const itemsPalette = () => {
     const g = { onglet: T('Onglets'), action: T('Commandes'), conv: T('Conversations'), modele: T('Modèles'), reglage: T('Réglages') };
     const liste = [];
-    document.querySelectorAll('.onglets button[data-p]').forEach(b => { const lb = b.querySelector('.lb'), ic = b.querySelector('.ic'); const nom = lb ? lb.textContent : b.title; liste.push({ ic: ic ? ic.textContent : '▸', t: nom, g: g.onglet, k: b.dataset.p, f: () => b.click() }); });
+    document.querySelectorAll('.onglets button[data-p]').forEach(b => { const lb = b.querySelector('.lb') || b.querySelector('b'), ic = b.querySelector('.ic'); const nom = b.dataset.p === 'reglages' ? T('Réglages') : (lb ? lb.textContent : b.title); liste.push({ ic: ic ? ic.textContent : '▸', t: nom, g: g.onglet, k: b.dataset.p, f: () => b.click() }); });
     liste.push({ ic: '＋', t: T('Nouvelle conversation'), g: g.action, k: 'nouveau new clear', f: () => nouvelle() });
     [['bVram', '🧹'], ['bFiche', '🧾'], ['bResume', '📋'], ['bJournal', '📜'], ['bSauvegarde', '💾'], ['bGit', '⎇'], ['bExport', '⬇']].forEach(([id, ic]) => {
       const b = $(id); if (!b) return; liste.push({ ic, t: b.textContent.replace(/^[^\p{L}\p{N}]+/u, '').trim() || b.title, g: g.action, k: b.title, f: () => b.click() });
@@ -4332,7 +4358,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     liste.push({ ic: '✔', t: T('Vérifier que tout marche'), g: g.action, k: 'sante test diagnostic', f: async () => { ouvrirOnglet('sante'); await window.ouvrirSante(); const b = [...document.querySelectorAll('#santeCorps button')].find(x => x.textContent.includes(T('Vérifier que tout marche'))); if (b) b.click(); } });
     ((ETAT && ETAT.conversations) || []).forEach(c => liste.push({ ic: c.epingle ? '★' : '💬', t: c.titre || T('(sans titre)'), g: g.conv, k: '', f: () => { ouvrirOnglet('chat'); ouvrir(c.id); } }));
     if (ETAT && ETAT.installes) installesDiscussion().forEach(m => liste.push({ ic: '🧠', t: m, g: g.modele, k: 'modele model changer', f: () => { const s = $('selModele'); s.value = m; s.dispatchEvent(new Event('change')); } }));
-    document.querySelectorAll('#p-reglages details.groupe > summary').forEach(sm => liste.push({ ic: '⚙', t: sm.textContent.trim(), g: g.reglage, k: 'reglages parametres options', f: () => { ouvrirOnglet('reglages'); const d = sm.parentElement; d.open = true; setTimeout(() => d.scrollIntoView({ block: 'start' }), 30); } }));
+    document.querySelectorAll('#p-reglages details.groupe > summary').forEach(sm => liste.push({ ic: '⚙', t: sm.textContent.trim(), g: g.reglage, k: 'reglages parametres options', f: () => { ouvrirOnglet('reglages'); const d = sm.parentElement; montrerRubrique(d.dataset.g); setTimeout(() => d.scrollIntoView({ block: 'start' }), 30); } }));
     return liste;
   };
   const notePalette = (it, mots) => {

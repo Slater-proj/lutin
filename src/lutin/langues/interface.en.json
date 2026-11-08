@@ -1358,5 +1358,8 @@
 "Détails et réglages": "Details and settings",
 "Autoriser les machines appairées à mettre Lutin à jour": "Allow paired machines to update Lutin",
 "Décoché par défaut. Une machine appairée peut alors lancer la mise à jour de Lutin ici (jamais autre chose) ; elle est notée dans le journal.": "Off by default. A paired machine can then start the Lutin update here (nothing else); it is noted in the log.",
-"Aucune machine pour l'instant : ajoute-en une ci-dessous.": "No machine yet: add one below."
+"Aucune machine pour l'instant : ajoute-en une ci-dessous.": "No machine yet: add one below.",
+"Rubriques des réglages": "Settings sections",
+"Dossiers": "Folders",
+"Avancé": "Advanced"
 }

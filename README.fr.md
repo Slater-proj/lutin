@@ -58,6 +58,8 @@ Le script installe la dernière version publiée dans un environnement privé, a
 
 ## Utilisation
 
+La barre du haut garde quatre boutons : **Conversation**, **Modèles**, **Mémoire** et **Réglages ▾**. Le menu Réglages ouvre **Réglages** (langue, moteur, conversation, recherche web, dossiers, avancé), **Automatisation**, **Machines** (utiliser le moteur d'un autre ordinateur ; désactivé tant que tu ne l'actives pas), **Santé** et **Accès** (code PIN, appareils connectés). Les pages longues ont un sous-menu en haut, une rubrique à la fois. **Ctrl+K** trouve tout.
+
 <p align="center">
   <img src="assets/capture-modeles.fr.png" alt="L'onglet Modèles : nouveautés, mesures, boutons de recherche de mises à jour" width="92%">
   <br><br>

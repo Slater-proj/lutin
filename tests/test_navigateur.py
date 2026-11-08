@@ -46,6 +46,11 @@ def cliquer_dans_ligne(page, nom, bouton_texte):
     page.evaluer("(() => { const l = [...document.querySelectorAll('#listeTravaux .conv')].find(x => x.textContent.includes(%s)); [...l.querySelectorAll('button')].find(b => b.textContent === %s).click(); })()" % (json.dumps(nom), json.dumps(bouton_texte)))
 
 
+def rubrique(nom):
+    """Une rubrique de la page Réglages (sous-menu du haut)."""
+    return "document.querySelector('#sousReglages button[data-g=\"{}\"]').click()".format(nom)
+
+
 def onglet(nom):
     return "document.querySelector('.onglets button[data-p=\"{}\"]').click()".format(nom)
 
@@ -115,6 +120,7 @@ class Parcours(unittest.TestCase):
             (ancien / "memoire" / "MEMOIRE.md").write_text("# Mémoire\n\nUne note ancienne.\n", encoding="utf-8")
             p = self.ouvrir(tmp, "http://127.0.0.1:%d/" % port)
             p.evaluer(onglet("reglages"))
+            p.evaluer(rubrique("dossiers"))
             p.attendre(bouton("Reprendre les données d'un autre assistant…"))
             p.attendre("!!document.querySelector('#modalCorps input')")
             saisie = "(texte) => { const i = document.querySelector('#modalCorps input'); i.value = texte; return true; }"
@@ -141,6 +147,7 @@ class Parcours(unittest.TestCase):
             p = self.ouvrir(tmp, "http://127.0.0.1:%d/" % port)
             self.assertFalse(p.evaluer("!!document.querySelector('#selTravail')"), "plus de sélecteur de dossier dans la barre latérale")
             p.evaluer(onglet("reglages"))
+            p.evaluer(rubrique("dossiers"))
             p.attendre("document.querySelector('#listeTravaux').textContent.includes('★ Projet')")
             # choisir l'autre dossier
             p.evaluer(bouton("Utiliser ce dossier"))
@@ -210,13 +217,15 @@ class Parcours(unittest.TestCase):
             p.attendre("document.querySelector('#p-auto').classList.contains('vue')")
             self.assertTrue(p.evaluer("!!document.querySelector('#p-auto #listePlanifie')"))
             self.assertFalse(p.evaluer("!!document.querySelector('#p-memoire #listePlanifie')"))
-            # les réglages sont rangés en groupes repliables
+            # les réglages sont rangés en rubriques : un sous-menu, une rubrique à la fois
             p.evaluer(onglet("reglages"))
             groupes = p.evaluer("[...document.querySelectorAll('#p-reglages details.groupe > summary')].map(s => s.textContent.trim())")
             self.assertEqual(groupes, ["Général", "Recherche web", "Dossiers et données", "Moteur", "Conversation", "Machine et réglages avancés"])
             self.assertEqual(p.evaluer("document.querySelectorAll('#p-reglages > .cadre > h2').length"), 0, "plus de section isolée hors d'un groupe")
-            p.evaluer("document.querySelector('#p-reglages details.groupe[data-g=general] > summary').click()")
-            p.attendre("localStorage.getItem('lutin.groupe.general') === '0'")                       # l'évènement « toggle » arrive juste après le clic
+            self.assertEqual(p.evaluer("[...document.querySelectorAll('#p-reglages details.groupe')].filter(d => getComputedStyle(d).display !== 'none').map(d => d.dataset.g)"), ["general"])
+            p.evaluer("document.querySelector('#sousReglages button[data-g=moteur]').click()")
+            self.assertEqual(p.evaluer("[...document.querySelectorAll('#p-reglages details.groupe')].filter(d => getComputedStyle(d).display !== 'none').map(d => d.dataset.g)"), ["moteur"])
+            p.attendre("localStorage.getItem('lutin.reglages.rubrique') === 'moteur'")                       # la rubrique ouverte est retenue
             self.assertEqual(p.erreurs, [])
 
     def test_extensions_activer_un_addon_et_voir_son_panneau(self):
@@ -513,6 +522,7 @@ class Parcours(unittest.TestCase):
             (ancien / "memoire" / "MEMOIRE.md").write_text("# Mémoire\n\nUne note ancienne.\n", encoding="utf-8")
             p = self.ouvrir(tmp, "http://127.0.0.1:%d/" % port)
             p.evaluer(onglet("reglages"))
+            p.evaluer(rubrique("dossiers"))
             p.attendre(bouton("Ajouter un dossier…"))
             p.evaluer(bouton("Ajouter un dossier…"))
             naviguer(p, str(ancien), "[...document.querySelectorAll('#modalCorps .conv')].some(x => x.textContent.includes('donnees'))")
