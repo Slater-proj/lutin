@@ -397,7 +397,7 @@ def etat_moteurs(maintenant=time.time):
     c = _recherche.config()
     sortie = []
     for nom, _ in moteurs_de_recherche():
-        sortie.append({"nom": nom, "configure": (nom == "searxng" and bool(c["searxng"])) or (nom == "brave" and bool(c["brave_cle"])), "en_pause_s": max(0, int(BLOQUES.get(nom, 0) - maintenant()))})
+        sortie.append({"nom": nom, "configure": bool(c["searxng"]) if nom == "searxng" else bool(c.get(nom + "_cle")), "en_pause_s": max(0, int(BLOQUES.get(nom, 0) - maintenant()))})
     return sortie
 
 

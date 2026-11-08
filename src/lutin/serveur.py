@@ -1033,7 +1033,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 if not self._configurateur_strict():
                     return self._envoyer(403, {"erreur": _t("Régler la recherche web (adresse de SearXNG, clé de Brave) se fait depuis cette machine, pas depuis un autre appareil.")})
                 try:
-                    vue = _recherche.enregistrer(donnees.get("searxng") if "searxng" in donnees else None, donnees.get("brave_cle") if "brave_cle" in donnees else None)
+                    vue = _recherche.enregistrer(**{k: donnees[k] for k in ("searxng", "brave_cle", "tavily_cle", "exa_cle", "perplexity_cle") if k in donnees})
                 except ValueError as e:
                     return self._envoyer(400, {"erreur": str(e)})
                 return self._envoyer(200, dict(vue, moteurs=_m.etat_moteurs_recherche(), modifiable=True))

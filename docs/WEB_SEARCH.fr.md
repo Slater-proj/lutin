@@ -14,8 +14,11 @@ Les moteurs sont essayés **dans cet ordre** ; le premier qui rend des résultat
 |---|---|---|---|
 | 1 | **SearXNG** | une instance chez toi (quelques minutes avec Docker, gratuit) | agrège plusieurs moteurs, pas de HTML à décortiquer, **tes requêtes restent sous ton contrôle** |
 | 2 | **Brave Search** | une clé d'API personnelle (offre gratuite, brave.com/search/api) | index indépendant, API officielle |
-| 3 | DuckDuckGo | rien | marche tout de suite, mais son HTML peut changer ou limiter les robots |
-| 4 | Bing | rien | secours |
+| 3 | **Tavily** | une clé d'API personnelle (offre gratuite, tavily.com) | conçu pour les agents, extraits propres |
+| 4 | **Exa** | une clé d'API personnelle (exa.ai) | recherche par le sens, bon pour les questions précises |
+| 5 | **Perplexity** (API de recherche) | une clé d'API personnelle (payante à l'usage, perplexity.ai) | résultats classés d'un grand index |
+| 6 | DuckDuckGo | rien | marche tout de suite, mais son HTML peut changer ou limiter les robots |
+| 7 | Bing | rien | secours |
 
 Un moteur qui ne rend rien est laissé tranquille 10 minutes ; la même recherche est servie par un cache de 10 minutes. Les résultats sont **nettoyés** : paramètres de suivi (`utm_…`, `fbclid`…) et ancres retirés, doublons supprimés, deux résultats au plus par site (sauf si tu demandes un site).
 
@@ -56,6 +59,10 @@ Le fichier [docker-compose.searxng.yml](../docker-compose.searxng.yml) n'écoute
 ## Brave Search
 
 Crée une clé (offre gratuite) sur brave.com/search/api et colle-la dans Réglages > Recherche web > Brave Search. Elle est rangée dans `recherche.json` à côté de tes données, lisible par toi seul (là où le système le permet), et **jamais renvoyée à la page** (seuls ses quatre derniers caractères le sont). Réglable depuis cette machine seulement.
+
+## Tavily, Exa, Perplexity (clés)
+
+Colle une clé dans Réglages > Recherche web ; chacune est gardée dans `recherche.json` comme celle de Brave, jamais renvoyée à la page. **Seuls les résultats (titre, adresse, extrait) servent : la réponse que ces services peuvent rédiger eux-mêmes est ignorée**, donc tout repasse par le modèle de Lutin, qui lit, compare et cite. **Chaque recherche part chez ce service** (elle n'est plus privée, contrairement à un SearXNG chez toi) et le mode hors ligne les coupe. Perplexity est utilisé par son API de *recherche* (résultats classés), pas par ses modèles qui répondent. Les formats de requête sont écrits d'après la documentation de chacun et **testés avec de faux serveurs seulement**, pas avec une vraie clé : si l'un change, le bouton « Tester la recherche » montre quel moteur échoue.
 
 ## Ce qu'elle ne sait pas faire
 

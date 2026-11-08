@@ -1,4 +1,4 @@
-"""Recherche web complète : fournisseurs au choix (SearXNG chez soi, Brave avec sa clé, puis DuckDuckGo et Bing sans rien configurer), options de recherche (période, site, actualités, langue),
+"""Recherche web complète : fournisseurs au choix (SearXNG chez soi, Brave, Tavily, Exa ou Perplexity avec sa clé, puis DuckDuckGo et Bing sans rien configurer), options de recherche (période, site, actualités, langue),
 résultats nettoyés (adresses sans suivi, doublons retirés, variété des sites) et configuration rangée à part, avec la clé jamais renvoyée à la page.
 
 Les fournisseurs « maison » (SearXNG) sont à une adresse que l'utilisateur choisit, souvent sur son réseau : c'est la seule exception à l'interdiction des adresses locales de l'accès web, et elle ne vaut que pour CETTE
@@ -15,6 +15,13 @@ from .i18n import t as _t
 BRAVE_URL = os.environ.get("LUTIN_BRAVE_URL", "https://api.search.brave.com/res/v1/")
 PERIODES = {"jour": ("day", "pd", "d"), "semaine": ("week", "pw", "w"), "mois": ("month", "pm", "m"), "an": ("year", "py", "y")}          # SearXNG, Brave, DuckDuckGo
 RE_CLE_BRAVE = re.compile(r"^[A-Za-z0-9_\-]{10,200}$")
+RE_CLE = re.compile(r"^[A-Za-z0-9_\-.]{10,300}$")
+# Les fournisseurs « à clé » en plus de Brave : seuls RÉSULTATS (titre, adresse, extrait) sont repris, jamais une réponse déjà rédigée par un autre modèle. Les résultats repassent donc par le modèle de Lutin,
+# qui lit, compare et cite. Chaque requête part chez ce service (c'est dit dans les réglages) ; le mode hors ligne les coupe.
+TAVILY_URL = os.environ.get("LUTIN_TAVILY_URL", "https://api.tavily.com/")
+EXA_URL = os.environ.get("LUTIN_EXA_URL", "https://api.exa.ai/")
+PERPLEXITY_URL = os.environ.get("LUTIN_PERPLEXITY_URL", "https://api.perplexity.ai/")
+FOURNISSEURS_A_CLE = ("tavily", "exa", "perplexity")
 RE_DOMAINE = re.compile(r"^(?=.{4,253}$)([a-z0-9]([a-z0-9\-]{0,61}[a-z0-9])?\.)+[a-z]{2,24}$")
 PARAMETRES_SUIVI = ("utm_", "fbclid", "gclid", "dclid", "msclkid", "mc_cid", "mc_eid", "igshid", "yclid", "_hsenc", "_hsmi", "ref_src", "ref_url")
 PAR_SITE_MAX = 2          # au plus deux résultats du même site : la variété vaut mieux que dix pages d'un seul endroit (sauf si on a demandé un site)
@@ -30,7 +37,10 @@ def _chemin():
 
 def config():
     c = _donnees.lire_json(_chemin(), {})
-    return {"searxng": str(c.get("searxng") or ""), "brave_cle": str(c.get("brave_cle") or "")}
+    sortie = {"searxng": str(c.get("searxng") or ""), "brave_cle": str(c.get("brave_cle") or "")}
+    for nom in FOURNISSEURS_A_CLE:
+        sortie[nom + "_cle"] = str(c.get(nom + "_cle") or "")
+    return sortie
 
 
 def normaliser_adresse(adresse):
@@ -53,8 +63,8 @@ def normaliser_adresse(adresse):
     return "{}://{}{}{}".format(p.scheme, hote, ":%d" % port if port else "", p.path.rstrip("/"))
 
 
-def enregistrer(searxng=None, brave_cle=None):
-    """Change l'adresse de SearXNG et/ou la clé de Brave (None = ne pas toucher ; « » = retirer). Renvoie la vue sans secret."""
+def enregistrer(searxng=None, brave_cle=None, tavily_cle=None, exa_cle=None, perplexity_cle=None):
+    """Change l'adresse de SearXNG et/ou la clé d'un fournisseur (None = ne pas toucher ; « » = retirer). Renvoie la vue sans secret."""
     with VERROU:
         c = config()
         if searxng is not None:
@@ -64,6 +74,12 @@ def enregistrer(searxng=None, brave_cle=None):
             if cle and not RE_CLE_BRAVE.match(cle):
                 raise ValueError(_t("Clé Brave invalide (des lettres, des chiffres, - et _ seulement)."))
             c["brave_cle"] = cle
+        for nom, valeur in (("tavily", tavily_cle), ("exa", exa_cle), ("perplexity", perplexity_cle)):
+            if valeur is not None:
+                cle = str(valeur).strip()
+                if cle and not RE_CLE.match(cle):
+                    raise ValueError(_t("Clé {} invalide (des lettres, des chiffres, - _ et . seulement).").format(nom.capitalize()))
+                c[nom + "_cle"] = cle
         chemin = _chemin()
         _donnees.ecrire_atomique(chemin, json.dumps(c, ensure_ascii=False, indent=1))
         try:
@@ -75,7 +91,12 @@ def enregistrer(searxng=None, brave_cle=None):
 
 def vue():
     c = config()
-    return {"searxng": c["searxng"], "brave": bool(c["brave_cle"]), "brave_fin": c["brave_cle"][-4:] if c["brave_cle"] else ""}
+    sortie = {"searxng": c["searxng"], "brave": bool(c["brave_cle"]), "brave_fin": c["brave_cle"][-4:] if c["brave_cle"] else ""}
+    for nom in FOURNISSEURS_A_CLE:
+        cle = c[nom + "_cle"]
+        sortie[nom] = bool(cle)
+        sortie[nom + "_fin"] = cle[-4:] if cle else ""
+    return sortie
 
 
 def hote_autorise():
@@ -207,6 +228,65 @@ def resultats_brave(requete):
     return sortie
 
 
+def _poster(nom, base, chemin, corps, entetes):
+    """POST JSON vers un fournisseur à clé ; renvoie le JSON de la réponse. Une adresse imposée par variable d'environnement (tests) peut être locale ; la vraie est publique."""
+    from . import web
+    from . import moteur as _m
+    adresse = base.rstrip("/") + "/" + chemin
+    autorise = (urllib.parse.urlparse(adresse).hostname or "").lower() if os.environ.get("LUTIN_" + nom.upper() + "_URL") else None
+    _, _, texte = web.web_telecharger(adresse, json.dumps(corps).encode("utf-8"), hote_autorise=autorise, entetes=dict(entetes, **{"Content-Type": "application/json", "Accept": "application/json"}))
+    try:
+        donnees = json.loads(texte)
+    except ValueError:
+        raise _m.ErreurOutil(_t("{} n'a pas répondu en JSON.").format(nom.capitalize())) from None
+    return donnees if isinstance(donnees, dict) else {}
+
+
+def _cle(nom):
+    from . import moteur as _m
+    cle = config()[nom + "_cle"]
+    if not cle:
+        raise _m.ErreurOutil(_t("La clé {} n'est pas configurée.").format(nom.capitalize()))
+    return cle
+
+
+def resultats_tavily(requete):
+    """Tavily (https://tavily.com) : une recherche conçue pour les agents, des extraits propres. Clé personnelle (offre gratuite limitée). Seuls les résultats sont repris : la « réponse » éventuelle est ignorée."""
+    o = options()
+    corps = {"query": requete_avec_site(requete, o), "max_results": 15, "search_depth": "basic", "include_answer": False, "topic": "news" if o.get("actualites") else "general"}
+    if o.get("periode"):
+        corps["time_range"] = PERIODES[o["periode"]][0]
+    donnees = _poster("tavily", TAVILY_URL, "search", corps, {"Authorization": "Bearer " + _cle("tavily")})
+    return [{"titre": x.get("title") or "", "url": x.get("url"), "extrait": x.get("content") or "", "date": str(x.get("published_date") or "")[:10]}
+            for x in donnees.get("results") or [] if isinstance(x, dict) and x.get("url")]
+
+
+def resultats_exa(requete):
+    """Exa (https://exa.ai) : une recherche « par le sens » sur son propre index, bonne pour les questions de recherche précises. Clé personnelle. Seuls les extraits des résultats sont repris."""
+    import datetime
+    o = options()
+    corps = {"query": requete_avec_site(requete, o), "numResults": 15, "type": "auto", "contents": {"text": {"maxCharacters": 600}}}
+    if o.get("actualites"):
+        corps["category"] = "news"
+    jours = {"jour": 1, "semaine": 7, "mois": 31, "an": 366}.get(o.get("periode") or "")
+    if jours:
+        corps["startPublishedDate"] = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=jours)).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+    donnees = _poster("exa", EXA_URL, "search", corps, {"x-api-key": _cle("exa")})
+    return [{"titre": x.get("title") or "", "url": x.get("url"), "extrait": re.sub(r"\s+", " ", x.get("text") or " ".join(x.get("highlights") or [])).strip(), "date": str(x.get("publishedDate") or "")[:10]}
+            for x in donnees.get("results") or [] if isinstance(x, dict) and x.get("url")]
+
+
+def resultats_perplexity(requete):
+    """Perplexity, API de RECHERCHE (https://docs.perplexity.ai) : des résultats classés avec extraits, pas une réponse rédigée par leur modèle. Le modèle de Lutin les lit et répond lui-même. Clé personnelle (payante à l'usage)."""
+    o = options()
+    corps = {"query": requete_avec_site(requete, o), "max_results": 15}
+    if o.get("periode"):
+        corps["search_recency_filter"] = PERIODES[o["periode"]][0]
+    donnees = _poster("perplexity", PERPLEXITY_URL, "search", corps, {"Authorization": "Bearer " + _cle("perplexity")})
+    return [{"titre": x.get("title") or "", "url": x.get("url"), "extrait": re.sub(r"\s+", " ", x.get("snippet") or "").strip(), "date": str(x.get("date") or x.get("last_updated") or "")[:10]}
+            for x in donnees.get("results") or [] if isinstance(x, dict) and x.get("url")]
+
+
 def fournisseurs_configures():
     """[(nom, fonction)] des fournisseurs que l'utilisateur a réglés, dans l'ordre où on les essaie (avant DuckDuckGo et Bing)."""
     c = config()
@@ -215,4 +295,7 @@ def fournisseurs_configures():
         sortie.append(("searxng", resultats_searxng))
     if c["brave_cle"]:
         sortie.append(("brave", resultats_brave))
+    for nom, fonction in (("tavily", resultats_tavily), ("exa", resultats_exa), ("perplexity", resultats_perplexity)):
+        if c[nom + "_cle"]:
+            sortie.append((nom, fonction))
     return sortie

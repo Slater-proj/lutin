@@ -1268,5 +1268,9 @@
 "Reçue automatiquement de la machine": "Received automatically from the machine",
 "Saisie à la main": "Entered by hand",
 "Réveil envoyé, mais :": "Wake-up sent, but:",
-"Ce modèle tourne sur une autre machine : le test de vitesse mesure celle-ci. Choisis un modèle de cette machine.": "This model runs on another machine: the speed test measures this one. Pick a model from this machine."
+"Ce modèle tourne sur une autre machine : le test de vitesse mesure celle-ci. Choisis un modèle de cette machine.": "This model runs on another machine: the speed test measures this one. Pick a model from this machine.",
+"Recherche conçue pour les agents (tavily.com, offre gratuite limitée).": "Search built for agents (tavily.com, limited free tier).",
+"Recherche par le sens, très bonne pour les questions précises (exa.ai).": "Search by meaning, very good for precise questions (exa.ai).",
+"API de recherche de Perplexity (perplexity.ai, payante à l'usage) : seuls ses résultats sont repris, pas sa réponse.": "Perplexity's search API (perplexity.ai, pay per use): only its results are used, not its answer.",
+"Chaque recherche part chez ce service (elle n'est plus privée) ; le mode hors ligne le coupe. La clé reste sur cette machine.": "Every search goes to this service (it is no longer private); offline mode cuts it. The key stays on this machine."
 }

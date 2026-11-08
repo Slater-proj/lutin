@@ -2,6 +2,15 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## Recherche web : Tavily, Exa et Perplexity
+
+- **Trois moteurs de recherche de plus**, chacun avec sa clé personnelle (Réglages > Recherche web) : **Tavily**, **Exa** et **Perplexity** (son API de *recherche*). Ils s'ajoutent à SearXNG et Brave, essayés avant DuckDuckGo et Bing.
+- **Seuls les résultats servent, jamais une réponse déjà rédigée** : tout repasse par le modèle de Lutin, qui lit les extraits, compare et cite ses sources.
+- **Confidentialité dite clairement** : chaque recherche part chez ce service ; le mode hors ligne les coupe ; les clés ne sont jamais renvoyées à la page.
+- **À savoir** : les formats de requête viennent de la documentation de chaque service et sont testés avec de faux serveurs, pas avec une vraie clé.
+
+**English.** Tavily, Exa and Perplexity (search API) join SearXNG and Brave, each with a personal key. Only results are used, never a ready-made answer, so Lutin's own model still reads and cites. Searches go to that service; offline mode cuts them. Tested against fake servers only.
+
 ## Machines distantes utilisables, démarrage automatique réparé, modèle qui annonce sans agir
 
 - **Les modèles de l'autre machine sont dans la liste de choix.** Plus besoin d'avoir le même modèle sur les deux machines : la liste du haut ajoute les modèles des machines appairées (« qwen3:32b · 🖥 Gros PC », en couleur, groupés par machine ; une machine éteinte reste listée mais grisée). Choisir l'un d'eux envoie la conversation là-bas ; ses capacités (outils, images, réflexion) sont celles que la machine déclare ; la vérification de mémoire d'ici ne bloque plus un modèle qui tourne ailleurs. Si la machine ne répond pas, un message clair remplace le « modèle introuvable » du moteur local.

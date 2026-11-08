@@ -14,8 +14,11 @@ Engines are tried **in this order**; the first one that returns results wins, th
 |---|---|---|---|
 | 1 | **SearXNG** | an instance at your place (a few minutes with Docker, free) | aggregates several engines, no HTML to scrape, **your queries stay under your control** |
 | 2 | **Brave Search** | a personal API key (free tier, brave.com/search/api) | independent index, official API |
-| 3 | DuckDuckGo | nothing | works out of the box, but its HTML can change or limit robots |
-| 4 | Bing | nothing | back-up |
+| 3 | **Tavily** | a personal API key (free tier, tavily.com) | built for agents, clean excerpts |
+| 4 | **Exa** | a personal API key (exa.ai) | search by meaning, good for precise questions |
+| 5 | **Perplexity** (search API) | a personal API key (pay per use, perplexity.ai) | ranked results from a large index |
+| 6 | DuckDuckGo | nothing | works out of the box, but its HTML can change or limit robots |
+| 7 | Bing | nothing | back-up |
 
 An engine that returns nothing is left alone for 10 minutes; the same search is answered from a 10-minute cache. Results are **cleaned**: tracking parameters (`utm_…`, `fbclid`…) and anchors removed, duplicates dropped, at most two results per site (unless you ask for one site).
 
@@ -56,6 +59,10 @@ The file [docker-compose.searxng.yml](../docker-compose.searxng.yml) listens on 
 ## Brave Search
 
 Create a key (free tier) at brave.com/search/api, paste it in Settings > Web search > Brave Search. It is stored in `recherche.json` next to your data, readable by you only (where the system allows), and **never sent back to the page** (only its last four characters). Also settable from this machine only.
+
+## Tavily, Exa, Perplexity (keys)
+
+Paste a key in Settings > Web search; each is stored in `recherche.json` like Brave's, never sent back to the page. **Only the results (title, address, excerpt) are used: the answer a service may write itself is ignored**, so everything goes back through Lutin's own model, which reads, compares and cites. **Every search goes to that service** (it is no longer private, unlike SearXNG at home), and offline mode cuts them. Perplexity uses its *search* API (ranked results), not its answering models. Request formats were written from each service's documentation and are **tested against fake servers only**, not with a real key: if one changes, the "Test the search" button shows which engine fails.
 
 ## What it cannot do
 

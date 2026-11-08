@@ -650,6 +650,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     <h2>Brave Search</h2>
     <div class="aide">Une clé d'API personnelle (offre gratuite, créée sur brave.com/search/api). Elle reste sur cette machine et n'est jamais renvoyée à la page.</div>
     <div class="carte" style="gap:8px;flex-wrap:wrap;align-items:center"><input id="rechBrave" type="password" placeholder="Clé d'API" autocomplete="off" style="flex:1 1 280px"><button id="bRechBrave">Enregistrer</button><button id="bRechBraveRetirer" hidden>Retirer la clé</button><span class="aide" id="rechBraveEtat"></span></div>
+    <div id="rechCles"></div>
     <div class="carte" style="gap:8px;flex-wrap:wrap;align-items:center"><button id="bRechTest" class="principal">Tester la recherche</button><span class="aide" id="rechMsg" role="status"></span></div>
     <div id="rechResultats"></div>
     </details>
@@ -4012,12 +4013,30 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     if (document.activeElement !== $('rechSearxng')) $('rechSearxng').value = r.searxng || '';
     $('rechBraveEtat').textContent = r.brave ? T('Clé enregistrée') + ' (…' + r.brave_fin + ')' : T('Pas de clé');
     $('bRechBraveRetirer').hidden = !r.brave || !r.modifiable;
+    FOURNISSEURS_CLE.forEach(([id]) => {
+      $('etat_' + id).textContent = r[id] ? T('Clé enregistrée') + ' (…' + r[id + '_fin'] + ')' : T('Pas de clé');
+      $('bRetirer_' + id).hidden = !r[id] || !r.modifiable; $('rech_' + id).disabled = $('bOk_' + id).disabled = !r.modifiable;
+    });
     [$('rechSearxng'), $('rechBrave'), $('bRechSearxng'), $('bRechBrave'), $('bRechBraveRetirer')].forEach(x => { x.disabled = !r.modifiable; });
     $('rechMsg').textContent = r.modifiable ? '' : T('À régler depuis cette machine.');
   };
+  // Tavily, Exa, Perplexity : une clé personnelle chacun. Seuls les résultats servent : le modèle de Lutin les lit et répond lui-même (jamais une réponse toute faite d'un autre modèle).
+  const FOURNISSEURS_CLE = [
+    ['tavily', 'Tavily', T('Recherche conçue pour les agents (tavily.com, offre gratuite limitée).')],
+    ['exa', 'Exa', T('Recherche par le sens, très bonne pour les questions précises (exa.ai).')],
+    ['perplexity', 'Perplexity', T('API de recherche de Perplexity (perplexity.ai, payante à l\'usage) : seuls ses résultats sont repris, pas sa réponse.')]];
+  FOURNISSEURS_CLE.forEach(([id, nom, aide]) => {
+    const z = $('rechCles'), h = el('h2', '', nom), a = el('div', 'aide', aide + ' ' + T('Chaque recherche part chez ce service (elle n\'est plus privée) ; le mode hors ligne le coupe. La clé reste sur cette machine.'));
+    const c = el('div', 'carte'); c.style.cssText = 'gap:8px;flex-wrap:wrap;align-items:center';
+    const champ = el('input'), ok = el('button', '', T('Enregistrer')), retirer = el('button', '', T('Retirer la clé')), etat = el('span', 'aide');
+    champ.type = 'password'; champ.placeholder = T('Clé d\'API'); champ.autocomplete = 'off'; champ.style.cssText = 'flex:1 1 280px'; champ.id = 'rech_' + id; retirer.id = 'bRetirer_' + id; etat.id = 'etat_' + id; ok.id = 'bOk_' + id;
+    ok.addEventListener('click', () => { if (champ.value.trim()) enregistrerRecherche({ [id + '_cle']: champ.value.trim() }); });
+    retirer.addEventListener('click', () => enregistrerRecherche({ [id + '_cle']: '' }));
+    c.append(champ, ok, retirer, etat); z.append(h, a, c);
+  });
   const enregistrerRecherche = async corps => {
     $('rechMsg').textContent = '';
-    try { await api('/api/web-recherche-config', corps); $('rechBrave').value = ''; await chargerRecherche(); $('rechMsg').textContent = T('Enregistré.'); } catch (e) { $('rechMsg').textContent = e.message; }
+    try { await api('/api/web-recherche-config', corps); $('rechBrave').value = ''; FOURNISSEURS_CLE.forEach(([id]) => { $('rech_' + id).value = ''; }); await chargerRecherche(); $('rechMsg').textContent = T('Enregistré.'); } catch (e) { $('rechMsg').textContent = e.message; }
   };
   $('bRechSearxng').addEventListener('click', () => enregistrerRecherche({ searxng: $('rechSearxng').value.trim() }));
   $('bRechBrave').addEventListener('click', () => { if ($('rechBrave').value.trim()) enregistrerRecherche({ brave_cle: $('rechBrave').value.trim() }); });

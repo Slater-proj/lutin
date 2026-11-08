@@ -175,7 +175,7 @@ class Configuration(Base):
 
     def test_un_fichier_de_configuration_abime_ne_plante_pas(self):
         recherche._chemin().write_text("[1, 2", encoding="utf-8")
-        self.assertEqual(recherche.config(), {"searxng": "", "brave_cle": ""})
+        self.assertEqual(recherche.config(), {"searxng": "", "brave_cle": "", "tavily_cle": "", "exa_cle": "", "perplexity_cle": ""})
         recherche._chemin().write_text('"texte"', encoding="utf-8")
         self.assertEqual(recherche.config()["searxng"], "")
 
