@@ -274,14 +274,3 @@ Published images: `ghcr.io/slater-proj/lutin:latest` (latest version, complete),
 | The page answers « host name not allowed » | You reach it by a name Lutin does not know. Use `localhost`, a private address, or (`proxy` level) the address declared in `LUTIN_URL_PUBLIQUE`. |
 | The recommended models are too small | The card is not seen by Lutin: `--gpus all` / `-f docker-compose.gpu.yml`, or `LUTIN_GPU`. |
 | Model download impossible | `LUTIN_HORS_LIGNE=1` is on, or there is no access to the Internet. |
-
-## Waking machines from Lutin in a bridge container
-
-A container in Docker's default `bridge` network cannot broadcast on your LAN, so the Wake-on-LAN packet never leaves. Keep the bridge and add a tiny relay that runs on the host network and sends the packet for Lutin:
-
-```
-echo "LUTIN_WAKE_TOKEN=$(openssl rand -hex 24)" > .env
-docker compose -f docker-compose.yml -f docker-compose.wake.yml up -d
-```
-
-The relay only answers "wake this MAC" and only with the token. Do not expose its port (8778) to the Internet. Alternatively, run `docker run --rm --network host ghcr.io/slater-proj/lutin lutin wake <MAC>` from the host.

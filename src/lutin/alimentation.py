@@ -75,7 +75,7 @@ def emission_limitee():
     locales = adresses_locales()
     if locales and not all(re.match(r"^172\.(1[6-9]|2\d|3[01])\.", a) for a in locales):
         return ""
-    return _t("Lutin tourne dans Docker en réseau « bridge » : un paquet de réveil ne sort pas sur ton réseau local. Un envoi direct à la machine est tenté (il marche si l'hôte la connaît encore, par exemple juste après son extinction). Pour un réveil fiable, le plus simple : « docker compose -f docker-compose.yml -f docker-compose.wake.yml up -d » (un petit relais envoie le paquet depuis l'hôte, voir docs/DOCKER.md). Autre solution : dans docker-compose.yml, ajoute « network_mode: host » (et retire « ports: ») pour pouvoir réveiller des machines, ou, sans changer le réseau, depuis l'hôte : « docker run --rm --network host ghcr.io/slater-proj/lutin lutin wake <MAC> ».")
+    return _t("Lutin tourne dans Docker en réseau « bridge » : un paquet de réveil ne sort pas sur ton réseau local. Un envoi direct à la machine est tenté (il marche si l'hôte la connaît encore, par exemple juste après son extinction). Pour un réveil fiable, dans docker-compose.yml, ajoute « network_mode: host » (et retire « ports: ») pour pouvoir réveiller des machines, ou, sans changer le réseau, depuis l'hôte : « docker run --rm --network host ghcr.io/slater-proj/lutin lutin wake <MAC> ».")
 
 
 def envoyer_reveil(mac, adresse_machine="", ports=(9, 7), socket_factory=socket.socket, locales=None):

@@ -106,7 +106,6 @@ def parseur():
     w = commande("wake", help=_t("réveiller une machine par le réseau (Wake-on-LAN)"))
     w.add_argument("mac", help=_t("adresse MAC de la machine à réveiller"))
     w.add_argument("--host", default="", help=_t("adresse IP de la machine (pour viser aussi son réseau)"))
-    commande("wake-relay", help=_t("relais de réveil pour Docker en réseau bridge (voir docker-compose.wake.yml)"))
     sv = commande("serve", help=_t("démarrer le serveur"))
     sv.add_argument("--no-browser", "--sans-navigateur", dest="sans_navigateur", action="store_true")
     sv.add_argument("--no-supervisor", "--sans-superviseur", dest="sans_superviseur", action="store_true", help=_t("ne pas relancer automatiquement le serveur s'il s'arrête sur une erreur"))
@@ -899,17 +898,6 @@ def commande_wake(args):
     return 0
 
 
-def commande_wake_relay(args):
-    from . import relais_reveil
-    try:
-        print(_t("Relais de réveil à l'écoute sur le port {}.").format(relais_reveil.PORT), flush=True)
-        relais_reveil.servir()
-    except ValueError as e:
-        print("✘ " + str(e), file=sys.stderr)
-        return 1
-    return 0
-
-
 def commande_doctor(args):
     d, cfg = contexte()
     from . import docker_aide
@@ -933,7 +921,7 @@ def principal(argv=None):
     os.environ["LUTIN_CONFIG"] = str(Path(config.dossiers()["config"]) / "config.json")          # les gardes (mode hors ligne…) lisent la configuration de cette installation
     commandes = {"setup": commande_setup, "serve": commande_serve, "update": commande_update, "chat": commande_chat, "modeles": commande_modeles, "pin": commande_pin,
                  "appareils": commande_appareils, "securite": commande_securite, "langue": commande_langue, "importer": commande_importer, "reprendre": commande_reprendre, "hors-ligne": commande_hors_ligne,
-                 "travaux": commande_travaux, "journal": commande_journal, "bench": commande_bench, "sauvegarde": commande_sauvegarde, "restaurer": commande_restaurer, "doctor": commande_doctor, "demarrage-auto": commande_demarrage_auto, "zone": commande_zone, "mcp": commande_mcp, "essai-moteur": commande_essai_moteur, "bench-moteurs": commande_bench_moteurs, "colibri": commande_colibri, "wake": commande_wake, "wake-relay": commande_wake_relay}
+                 "travaux": commande_travaux, "journal": commande_journal, "bench": commande_bench, "sauvegarde": commande_sauvegarde, "restaurer": commande_restaurer, "doctor": commande_doctor, "demarrage-auto": commande_demarrage_auto, "zone": commande_zone, "mcp": commande_mcp, "essai-moteur": commande_essai_moteur, "bench-moteurs": commande_bench_moteurs, "colibri": commande_colibri, "wake": commande_wake}
     try:
         if args.commande is None:
             return commande_serve(argparse.Namespace(sans_navigateur=False))
