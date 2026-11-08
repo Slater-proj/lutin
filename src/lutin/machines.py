@@ -254,9 +254,17 @@ def noeud_vue():
             "autorisees": [{"nom": j["nom"], "date": j["date"]} for j in n["jetons"]]}
 
 
-def noeud_etat(moteur, modeles, ip_locale=""):
+def noeud_charge(locale_occupee, distantes):
+    """Ce que le nœud dit de sa charge : mémoire, et qui utilise son moteur en ce moment (son utilisateur, des machines appairées). Lecture seule, rien de plus."""
+    from . import moteur as _m
+    ram, vram = _m.memoire_vive(), _m.memoire_video()
+    return {"locale_occupee": bool(locale_occupee), "distantes": int(distantes),
+            "ram": {"total": ram["total"], "libre": ram["libre"]} if ram else None, "vram": {"total": vram["total"], "libre": vram["libre"], "nom": vram["nom"]} if vram else None}
+
+
+def noeud_etat(moteur, modeles, ip_locale="", charge=None):
     """Ce que le nœud répond à `GET /api/noeud/etat` : de quoi savoir s'il est joignable et si son moteur peut faire tourner le modèle voulu, plus son adresse MAC, son aptitude au réveil et son démarrage automatique."""
-    return dict(noeud_infos(ip_locale), id=noeud()["id"], moteur=moteur.id, moteur_nom=moteur.nom, actif=bool(modeles.get("actif")), modeles=sorted(modeles.get("installes", []))[:500])
+    return dict(noeud_infos(ip_locale), id=noeud()["id"], moteur=moteur.id, moteur_nom=moteur.nom, actif=bool(modeles.get("actif")), modeles=sorted(modeles.get("installes", []))[:500], charge=charge)
 
 
 def noeud_capacites(moteur, modele):
@@ -444,10 +452,12 @@ def sonder(m, modele="", ouvrir=None, maintenant=time.monotonic, force=False):
         gardee = SONDES.get(m["id"])
         if gardee and not force and maintenant() - gardee[0] < VALIDITE_SONDE_S and gardee[2] == modele:
             return gardee[1]
+    charge = None
     try:
         rep = _json(m, "/api/noeud/etat", ouvrir=ouvrir)
         if rep.get("id") == m["id"]:
             retenir_infos(m, rep)
+            charge = rep.get("charge") if isinstance(rep.get("charge"), dict) else None
         if rep.get("id") != m["id"]:
             r = {"etat": "injoignable", "detail": _t("Ce n'est plus la même machine à cette adresse : rien ne lui est envoyé."), "modeles": []}
         elif not rep.get("actif"):
@@ -460,7 +470,7 @@ def sonder(m, modele="", ouvrir=None, maintenant=time.monotonic, force=False):
         r = {"etat": "injoignable", "detail": _t("La machine refuse ce Lutin (erreur {}) : l'autorisation a peut-être été retirée.").format(e.code), "modeles": []}
     except (urllib.error.URLError, OSError, ValueError):
         r = {"etat": "injoignable", "detail": _t("Pas de réponse (éteinte, hors réseau ou Lutin arrêté)."), "modeles": []}
-    r = _avec_reveil(m, r, maintenant)
+    r = _avec_reveil(m, dict(r, charge=charge), maintenant)
     _noter(m, r["etat"], maintenant, r, modele)
     return r
 
@@ -649,12 +659,26 @@ class Routage:
         if connu_la_bas is not None and not self._modele_local(modele):
             raise ValueError(_t("Le modèle « {} » n'existe que sur la machine « {} », qui ne répond pas pour l'instant (éteinte, hors réseau ou Lutin arrêté). Réveille-la dans Réglages > Machines, ou choisis un modèle de cette machine-ci.").format(modele, self.machine.get("nom", "?")))
 
+    def _occupee(self, corps):
+        """La machine est occupée (trop de demandes à la fois) : le moteur d'ici répond si le modèle y est, sinon on dit de réessayer — jamais « injoignable »."""
+        modele = corps.get("model", "")
+        if not self._modele_local(modele):
+            raise ValueError(_t("La machine « {} » répond déjà à d'autres demandes : réessaie dans un instant.").format(self.machine.get("nom", "?")))
+
     def _ouvrir_noeud(self, corps, delai):
         if sonder(self.machine, corps.get("model", ""), self.ouvrir)["etat"] != "operationnel":
             self._repli(corps)
             return None
         try:
-            return requete(self.machine, "/api/noeud/chat", {"corps": corps_autorise(corps)}, delai=min(delai, 30), ouvrir=self.ouvrir)
+            # Le nœud répond tout de suite (état vérifié juste avant) mais peut attendre son moteur : son propre utilisateur, un modèle à charger. Le délai est donc celui de la demande, pas 30 s.
+            return requete(self.machine, "/api/noeud/chat", {"corps": corps_autorise(corps)}, delai=delai, ouvrir=self.ouvrir)
+        except urllib.error.HTTPError as e:
+            if e.code == 429:          # la machine répond déjà à d'autres demandes : elle n'est pas en panne
+                self._occupee(corps)
+                return None
+            signaler_panne(self.machine, corps.get("model", ""))
+            self._repli(corps)
+            return None
         except (urllib.error.URLError, OSError, ValueError):
             signaler_panne(self.machine, corps.get("model", ""))
             self._repli(corps)

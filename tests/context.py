@@ -26,3 +26,4 @@ SRC = Path(__file__).resolve().parent.parent / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 os.environ["LUTIN_LANGUE"] = "fr"
+os.environ["LUTIN_TESTS"] = "1"          # garde-fou : pendant les tests, rien n'écrit dans le vrai registre Windows ni n'installe un vrai programme (voir alimentation.RegistreWindows, ollama_client.installer_windows)

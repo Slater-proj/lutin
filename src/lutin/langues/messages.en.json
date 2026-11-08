@@ -1930,5 +1930,10 @@
 "chemin contenant un nom d'utilisateur": "path containing a user name",
 "numéro de carte bancaire": "bank card number",
 "numéro de téléphone": "phone number",
-"adresse du réseau local": "local network address"
+"adresse du réseau local": "local network address",
+"La machine « {} » répond déjà à d'autres demandes : réessaie dans un instant.": "The machine \"{}\" is already answering other requests: try again in a moment.",
+"Le port {} est déjà pris, sans doute par un autre Lutin déjà lancé sur cette machine : celui-ci s'arrête. ({})": "Port {} is already in use, probably by another Lutin already running on this machine: this one stops. ({})",
+"pas piloté par ce Lutin (lancé à la main, par un autre programme, ou par un autre Lutin déjà lancé sur cette machine) : ferme-le toi-même": "not driven by this Lutin (started by hand, by another program, or by another Lutin already running on this machine): close it yourself",
+"modèle {}": "model {}",
+"sur le port {}": "on port {}"
 }

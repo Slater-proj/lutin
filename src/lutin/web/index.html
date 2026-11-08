@@ -3426,6 +3426,15 @@ body[data-moteur="openai"] .biblio { display:none !important; }
       const e = ETATS_MACHINE[m.etat] || ETATS_MACHINE.injoignable, choisie = r.choisie === m.id;
       c.appendChild(el('b', '', e[0] + ' ' + m.nom + (choisie ? ' · ' + T('répond à tes messages') : '')));
       c.appendChild(el('div', 'aide', m.adresse + ' · ' + e[1] + ' — ' + m.detail));
+      if (m.charge) {          // ce que la machine dit d'elle-même : mémoire, et qui utilise son moteur
+        const g = o => (o / 1073741824).toFixed(1).replace('.', ',');
+        const morceaux = [];
+        if (m.charge.ram) morceaux.push(T('RAM') + ' ' + g(m.charge.ram.total - m.charge.ram.libre) + '/' + g(m.charge.ram.total) + ' ' + T('Go'));
+        if (m.charge.vram) morceaux.push(T('VRAM') + ' ' + g(m.charge.vram.total - m.charge.vram.libre) + '/' + g(m.charge.vram.total) + ' ' + T('Go'));
+        if (m.charge.locale_occupee) morceaux.push('⏳ ' + T('son utilisateur l\'utilise : tes demandes attendent la fin de son tour (2 min au plus)'));
+        if (m.charge.distantes) morceaux.push(m.charge.distantes + ' ' + T('demande(s) d\'autres machines en cours'));
+        if (morceaux.length) c.appendChild(el('div', 'aide', '🖥 ' + morceaux.join(' · ')));
+      }
       (m.avertissements || []).forEach(a => c.appendChild(el('div', 'attention', '⚠ ' + a)));
       const l = el('div', 'ligne'), bu = el('button', choisie ? '' : 'principal', choisie ? T('Revenir au moteur local') : T('Répondre avec cette machine'));
       bu.addEventListener('click', async () => { await act('use', { id: choisie ? '' : m.id }); await rafraichir(); chargerMachines(true); });

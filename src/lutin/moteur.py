@@ -929,13 +929,30 @@ def traiter_proposition(cle, appliquer):
 ADRESSES_LOCALES = ("127.0.0.1", "localhost", "::1")
 
 
+class ServeurLutin(ThreadingHTTPServer):
+    """Le serveur de Lutin. Sous Windows, l'option « réutiliser l'adresse » (activée par défaut par Python) autorise DEUX serveurs sur le même port : un second Lutin démarrait sans erreur et les connexions
+    allaient à l'un ou à l'autre. Elle n'y sert à rien (Windows ne bloque pas un port à cause des connexions fermées) : on la coupe. Ailleurs, on la garde pour pouvoir redémarrer tout de suite."""
+    allow_reuse_address = os.name != "nt"
+
+
+def lier_le_port(hote, essais=6, pause=0.5, dormir=time.sleep):
+    """Ouvre le port ; quelques essais rapprochés absorbent un redémarrage (l'ancien Lutin finit de s'arrêter). OSError si le port reste pris : c'est qu'un autre Lutin tourne."""
+    for rang in range(essais):
+        try:
+            return ServeurLutin((hote, PORT), Gestionnaire)
+        except OSError:
+            if rang == essais - 1:
+                raise
+            dormir(pause)
+
+
 def ecouter_aussi_en_local(hote):
     """Au niveau réseau (ou proxy distant) le serveur se lie à l'adresse du réseau local seulement : 127.0.0.1 ne répondrait plus, donc ni l'icône de la zone de notification ni
     `lutin pin` / `lutin chat` ne pourraient joindre le serveur de leur propre machine. On ouvre alors aussi 127.0.0.1 (même port, même protection). Renvoie ce second serveur, ou None."""
     if hote in ADRESSES_LOCALES or hote in ("0.0.0.0", "", "::"):
         return None
     try:
-        local = ThreadingHTTPServer(("127.0.0.1", PORT), Gestionnaire)
+        local = ServeurLutin(("127.0.0.1", PORT), Gestionnaire)
     except OSError as erreur:
         journaliser("Impossible d'écouter aussi sur 127.0.0.1:{} : {!r}".format(PORT, erreur))
         return None
@@ -971,6 +988,19 @@ def principal():
         d.mkdir(parents=True, exist_ok=True)
     sys.excepthook = lambda genre, valeur, trace: (journaliser("Exception non gérée : {!r}".format(valeur)), sys.__excepthook__(genre, valeur, trace))
     threading.excepthook = lambda a: journaliser("Exception dans un thread ({}) : {!r}".format(a.thread.name if a.thread else "?", a.exc_value))
+    # Le port est pris AVANT de lancer la surveillance, les missions, les tâches planifiées et les addons : un second Lutin (la tâche de démarrage ET un lancement à la main, par exemple) s'arrête ici,
+    # au lieu de faire tourner un deuxième jeu de travaux de fond et un deuxième serveur de modèle.
+    global IP_LAN
+    problemes = SECURITE.valider()
+    if problemes:
+        raise SystemExit(_t("Configuration de sécurité invalide : {}").format(" ; ".join(problemes)))
+    IP_LAN = ip_locale() if SECURITE.niveau != _sec.LOCAL else ""
+    hote = _sec.adresse_ecoute(SECURITE, IP_LAN)
+    try:
+        serveur = lier_le_port(hote)
+    except OSError as erreur:
+        journaliser("Impossible d'écouter sur {}:{} : {!r}".format(hote, PORT, erreur))
+        raise SystemExit(_t("Le port {} est déjà pris, sans doute par un autre Lutin déjà lancé sur cette machine : celui-ci s'arrête. ({})").format(PORT, erreur))
     purger_sauvegardes()
     try:
         purger_donnees()
@@ -986,13 +1016,6 @@ def principal():
     from . import addons
     addons.demarrer_actifs()
     journaliser("Démarrage de Lutin (version {}, dossier de travail {}).".format(VERSION, RACINE))
-    global IP_LAN
-    problemes = SECURITE.valider()
-    if problemes:
-        raise SystemExit(_t("Configuration de sécurité invalide : {}").format(" ; ".join(problemes)))
-    IP_LAN = ip_locale() if SECURITE.niveau != _sec.LOCAL else ""
-    hote = _sec.adresse_ecoute(SECURITE, IP_LAN)
-    serveur = ThreadingHTTPServer((hote, PORT), Gestionnaire)
     boucle_locale = ecouter_aussi_en_local(hote)
     en_local = boucle_locale is not None or hote in ADRESSES_LOCALES
     ecrire_fichier_console("127.0.0.1" if en_local else hote)          # la console de cette machine (lutin pin, lutin chat, l'icône) passe toujours par 127.0.0.1

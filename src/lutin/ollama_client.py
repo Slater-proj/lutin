@@ -211,6 +211,8 @@ def desinstaller_windows(executer=subprocess.run, env=None):
 def installer_windows(dossier_cache, progression=None, ouvrir=urllib.request.urlopen, lanceur_sortie=None, executer=subprocess.run, taille_min=50_000_000, dossier=None):
     """Télécharge, VÉRIFIE LA SIGNATURE, puis installe Ollama en silence (pour l'utilisateur courant, sans droits administrateur)."""
     from .machine import lancer
+    if os.environ.get("LUTIN_TESTS") == "1" and executer is subprocess.run:
+        raise ErreurOllama("installation réelle d'Ollama interdite pendant les tests : donne un faux `executer`")          # garde-fou : un test ne doit jamais installer un vrai programme sur la machine
     lanceur_sortie = lanceur_sortie or lancer
     installateur = telecharger_fichier(URL_TELECHARGEMENT_WINDOWS, Path(dossier_cache) / "OllamaSetup.exe", progression, ouvrir, taille_min)
     ok, sujet = verifier_signature_windows(installateur, lanceur_sortie)

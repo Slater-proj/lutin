@@ -1158,7 +1158,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
         if not _machines.noeud_jeton_valide(self.headers.get("X-Noeud")):
             return self._envoyer(401, {"erreur": "machine non autorisée"})
         mo = _moteurs.par_id(_m.reglages().get("moteur") or _moteurs.OLLAMA)
-        return self._envoyer(200, _machines.noeud_etat(mo, mo.modeles(), self.request.getsockname()[0]))
+        return self._envoyer(200, _machines.noeud_etat(mo, mo.modeles(), self.request.getsockname()[0], _machines.noeud_charge(bool(_m.TOURS_ACTIFS), self.NOEUD_ACTIFS["n"])))
 
     def _noeud_appairer(self, donnees):
         if not _m.LIMITEUR_PIN.autoriser(self.client_address[0]):
@@ -1182,6 +1182,14 @@ class Gestionnaire(BaseHTTPRequestHandler):
             return self._envoyer(400, {"erreur": str(e)})
 
     NOEUD_PLACES = threading.BoundedSemaphore(2)          # deux demandes de machines à la fois au plus : une seule carte graphique
+    NOEUD_ACTIFS = {"n": 0}          # demandes d'autres machines en cours ici (montré dans l'état du nœud)
+    ATTENTE_LOCAL_S = 120          # une demande d'une autre machine laisse passer l'utilisateur de CETTE machine : au plus ce temps d'attente avant de passer quand même
+
+    def _laisser_passer_l_utilisateur_local(self):
+        """Le moteur est partagé : si quelqu'un utilise Lutin sur cette machine, la demande de l'autre machine attend la fin de son tour (au plus ATTENTE_LOCAL_S), puis passe. Le propriétaire de la carte graphique passe en premier."""
+        fin = time.monotonic() + self.ATTENTE_LOCAL_S
+        while _m.TOURS_ACTIFS and time.monotonic() < fin:
+            time.sleep(0.5)
 
     def _noeud_chat(self, donnees):
         if not _machines.noeud_jeton_valide(self.headers.get("X-Noeud")):
@@ -1195,8 +1203,10 @@ class Gestionnaire(BaseHTTPRequestHandler):
             return self._envoyer(404, {"erreur": "modèle absent de cette machine"})
         if not self.NOEUD_PLACES.acquire(blocking=False):
             return self._envoyer(429, {"erreur": "cette machine répond déjà à d'autres demandes"})
+        self.NOEUD_ACTIFS["n"] += 1
         try:
             if not corps.get("stream"):
+                self._laisser_passer_l_utilisateur_local()
                 return self._envoyer(200, mo.chat(corps, 900))
             self.send_response(200)
             self.send_header("Content-Type", "application/x-ndjson")
@@ -1204,6 +1214,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
             self.end_headers()
             self.close_connection = True
             try:
+                self._laisser_passer_l_utilisateur_local()
                 with mo.chat_flux(corps, 900) as flux:
                     for e in flux:
                         self.wfile.write(json.dumps(e, ensure_ascii=False).encode("utf-8") + b"\n")
@@ -1216,6 +1227,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 except OSError:
                     pass
         finally:
+            self.NOEUD_ACTIFS["n"] = max(0, self.NOEUD_ACTIFS["n"] - 1)
             self.NOEUD_PLACES.release()
 
     def _machines(self, action, donnees):

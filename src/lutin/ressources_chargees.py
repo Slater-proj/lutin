@@ -207,7 +207,7 @@ SCRIPT_PROCESSUS = (
     "[Console]::OutputEncoding=[Text.Encoding]::UTF8; $v=@{}; "
     "try { foreach($s in (Get-Counter '\\GPU Process Memory(*)\\Dedicated Usage' -ErrorAction Stop).CounterSamples) { if($s.InstanceName -match '^pid_(\\d+)_') { $k=[int]$Matches[1]; if($v.ContainsKey($k)){$v[$k]+=[long]$s.CookedValue}else{$v[$k]=[long]$s.CookedValue} } } } catch {}; "
     "$r=@(Get-CimInstance Win32_Process | Where-Object { $_.Name -match '^(llama|ollama|lm[ _-]?studio|vllm|coli)' } | ForEach-Object { "
-    "[pscustomobject]@{pid=[int]$_.ProcessId; ppid=[int]$_.ParentProcessId; nom=$_.Name; exe=$_.ExecutablePath; ram=[long]$_.WorkingSetSize; vram=$(if($v.Count -gt 0){[long]$v[[int]$_.ProcessId]}else{$null})} }); "
+    "[pscustomobject]@{pid=[int]$_.ProcessId; ppid=[int]$_.ParentProcessId; nom=$_.Name; exe=$_.ExecutablePath; cmd=$_.CommandLine; ram=[long]$_.WorkingSetSize; vram=$(if($v.Count -gt 0){[long]$v[[int]$_.ProcessId]}else{$null})} }); "
     "ConvertTo-Json -Compress -InputObject $r")
 
 
@@ -222,7 +222,7 @@ def analyser_instantane(texte):
     sortie = []
     for x in brut if isinstance(brut, list) else []:
         try:
-            sortie.append({"pid": int(x["pid"]), "ppid": int(x.get("ppid") or 0), "nom": re.sub(r"\.exe$", "", str(x.get("nom") or ""), flags=re.I), "exe": str(x.get("exe") or ""),
+            sortie.append({"pid": int(x["pid"]), "ppid": int(x.get("ppid") or 0), "nom": re.sub(r"\.exe$", "", str(x.get("nom") or ""), flags=re.I), "exe": str(x.get("exe") or ""), "cmd": str(x.get("cmd") or "")[:1500],
                            "ram": int(x.get("ram") or 0), "vram": None if x.get("vram") is None else int(x["vram"])})
         except (KeyError, TypeError, ValueError):
             continue
@@ -254,7 +254,11 @@ def _instantane_proc(racine="/proc", gpu=None):
             except OSError:
                 exe = ""
             pid = int(d.name)
-            sortie.append({"pid": pid, "ppid": ppid, "nom": nom, "exe": exe, "ram": rss, "vram": (gpu.get(pid) or (None, None))[1] if gpu else None})
+            try:
+                cmd = (d / "cmdline").read_bytes().replace(b"\0", b" ").decode("utf-8", "replace").strip()[:1500]
+            except OSError:
+                cmd = ""
+            sortie.append({"pid": pid, "ppid": ppid, "nom": nom, "exe": exe, "cmd": cmd, "ram": rss, "vram": (gpu.get(pid) or (None, None))[1] if gpu else None})
         except (OSError, ValueError, IndexError):
             continue
     return sortie
@@ -417,14 +421,31 @@ def dossiers_lutin():
     return sortie
 
 
-def _chez_lutin(exe):
-    if not exe:
-        return False
-    try:
-        chemin = Path(exe).resolve()
-    except OSError:
-        return False
-    return any(d.resolve() in chemin.parents for d in dossiers_lutin() if d)
+def _chez_lutin(exe, cmd=""):
+    """Ce programme vient-il du dossier d'installation de Lutin ? D'après son fichier, ou à défaut (Windows ne donne pas toujours le chemin d'un programme lancé par un autre compte) d'après sa ligne de commande."""
+    dossiers = [d.resolve() for d in dossiers_lutin() if d]
+    if exe:
+        try:
+            chemin = Path(exe).resolve()
+            if any(d in chemin.parents for d in dossiers):
+                return True
+        except OSError:
+            pass
+    texte = str(cmd or "").replace("\\", "/").lower()
+    return bool(texte) and any(str(d).replace("\\", "/").lower() in texte for d in dossiers)
+
+
+def decrire_commande(cmd):
+    """« port 8081, modèle qwen3.gguf » d'après la ligne de commande d'un llama-server : de quoi reconnaître d'où il vient. « » si on ne sait pas."""
+    texte = str(cmd or "")
+    port = re.search(r"--port[ =](\d{2,5})", texte)
+    modele = re.search(r"(?:-m|--model)[ =]\"?([^\s\"]+)", texte) or re.search(r"--models-preset[ =]\"?([^\s\"]+)", texte)
+    morceaux = []
+    if port:
+        morceaux.append(_t("sur le port {}").format(port.group(1)))
+    if modele:
+        morceaux.append(_t("modèle {}").format(re.split(r"[\\/]", modele.group(1))[-1]))
+    return ", ".join(morceaux)
 
 
 def charges_orphelines(suivis):
@@ -443,8 +464,11 @@ def charges_orphelines(suivis):
         vrams = [x["vram"] for x in groupe if x["vram"] is not None]
         vram = sum(vrams) if vrams else None
         ram = sum(x["ram"] for x in groupe)
-        chez_nous = _chez_lutin(racine["exe"])
-        detail = _t("resté en vie après un ancien lancement de Lutin : tu peux l'arrêter ici") if chez_nous else _t("lancé hors de Lutin : ferme-le toi-même (Lutin ne ferme pas les programmes des autres)")
+        chez_nous = _chez_lutin(racine["exe"], racine.get("cmd"))
+        detail = _t("resté en vie après un ancien lancement de Lutin : tu peux l'arrêter ici") if chez_nous else _t("pas piloté par ce Lutin (lancé à la main, par un autre programme, ou par un autre Lutin déjà lancé sur cette machine) : ferme-le toi-même")
+        quoi = decrire_commande(racine.get("cmd"))
+        if quoi:
+            detail = quoi + " · " + detail
         sortie.append({"id": "processus:{}".format(pid), "genre": "processus", "moteur": racine["nom"], "nom": "pid {}".format(pid), "vram": vram, "ram": ram, "taille": ram + (vram or 0),
                        "detail": detail, "dechargeable": chez_nous, "libelle_bouton": _t("Arrêter"), "pids": sorted(x["pid"] for x in groupe)})
     return sorted(sortie, key=lambda c: -c["taille"])
@@ -528,7 +552,7 @@ def decharger(ident):
         cible = next((x for x in instantane if x["pid"] == pid and MOTIF_ORPHELIN.match(x["nom"])), None)
         if cible is None:
             raise ValueError(_t("Ce programme n'est plus là."))
-        if not _chez_lutin(cible["exe"]):
+        if not _chez_lutin(cible["exe"], cible.get("cmd")):
             raise ValueError(_t("Ce programme n'a pas été installé par Lutin : ferme-le toi-même."))
         arreter_processus(pid, descendants(instantane, pid))
         MEMO["inst_t"] = -99

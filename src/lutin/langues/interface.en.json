@@ -1287,5 +1287,9 @@
 "Les recherches web envoyées à un service extérieur (jamais le contenu de tes conversations ni de tes fichiers). Les données personnelles sont retirées avant l'envoi.": "Web searches sent to an outside service (never the content of your conversations or files). Personal data is removed before sending.",
 "Rien pour l'instant.": "Nothing yet.",
 "retiré : ": "removed: ",
-"Vider le journal": "Clear the log"
+"Vider le journal": "Clear the log",
+"RAM": "RAM",
+"VRAM": "VRAM",
+"son utilisateur l'utilise : tes demandes attendent la fin de son tour (2 min au plus)": "its user is using it: your requests wait for the end of their turn (2 min at most)",
+"demande(s) d'autres machines en cours": "request(s) from other machines in progress"
 }

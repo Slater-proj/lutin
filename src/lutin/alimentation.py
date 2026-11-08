@@ -283,6 +283,12 @@ def limites(systeme_actuel=None):
 CLE_RUN = r"Software\Microsoft\Windows\CurrentVersion\Run"
 
 
+def interdit_pendant_les_tests():
+    """Les tests (LUTIN_TESTS=1, posé par tests/context.py) n'ont pas le droit de modifier le vrai registre : ils doivent donner un faux registre. Évite qu'une valeur factice reste sur la machine de développement."""
+    if os.environ.get("LUTIN_TESTS") == "1":
+        raise OSError("écriture du registre interdite pendant les tests : utilise un faux registre")
+
+
 class RegistreWindows:
     """La clé « Run » de l'utilisateur (HKCU) : les programmes lancés à l'ouverture de SA session. Aucun droit d'administrateur n'est nécessaire, contrairement à une tâche planifiée « à l'ouverture de session »
     que Windows refuse (« Accès refusé ») à un utilisateur ordinaire. Remplaçable par un faux dans les tests."""
@@ -296,11 +302,13 @@ class RegistreWindows:
             return ""
 
     def ecrire(self, nom, valeur):
+        interdit_pendant_les_tests()
         import winreg
         with winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER, CLE_RUN, 0, winreg.KEY_SET_VALUE) as cle:
             winreg.SetValueEx(cle, nom, 0, winreg.REG_SZ, valeur)
 
     def supprimer(self, nom):
+        interdit_pendant_les_tests()
         import winreg
         try:
             with winreg.OpenKey(winreg.HKEY_CURRENT_USER, CLE_RUN, 0, winreg.KEY_SET_VALUE) as cle:
@@ -353,6 +361,10 @@ def installer_demarrage(lanceur=subprocess.run, systeme_actuel=None, maison=None
             (registre or RegistreWindows()).ecrire(NOM_TACHE, commande_windows(commande))
         except OSError as e:
             raise ValueError(_t("Windows a refusé d'inscrire Lutin au démarrage de ta session : {}").format(e)) from e
+        try:
+            lanceur(["schtasks", "/Delete", "/TN", NOM_TACHE, "/F"], capture_output=True, timeout=15)          # une ancienne tâche planifiée « Lutin » lancerait un SECOND Lutin à chaque ouverture de session
+        except (OSError, subprocess.SubprocessError):
+            pass
     elif s == "linux":
         d = dossier_unite(maison)
         d.mkdir(parents=True, exist_ok=True)

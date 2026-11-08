@@ -2,6 +2,16 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## Machine prêtée plus robuste, un seul Lutin par port
+
+- **Deux Lutin sur le même port sous Windows** : Python ouvre le port avec l'option « réutiliser l'adresse », qui autorise sous Windows plusieurs serveurs sur le même port. Un second Lutin (la tâche de démarrage ET un lancement à la main) démarrait donc sans erreur, avec son propre serveur de modèle : d'où deux `llama-server` en mémoire. Le port est maintenant exclusif, pris **avant** de lancer les travaux de fond, et un second Lutin s'arrête avec un message clair. Installer le démarrage automatique retire aussi l'ancienne tâche planifiée.
+- **Le moteur d'une machine prêtée est partagé** : la personne qui l'utilise sur place passe en premier (une demande venue d'ailleurs attend la fin de son tour, 2 minutes au plus), puis les demandes se suivent. L'autre machine attend le moteur au lieu d'abandonner après 30 s, et « occupée » (trop de demandes à la fois) n'est plus pris pour une panne.
+- **La machine distante montre sa charge** (RAM, VRAM, qui utilise son moteur) sur sa carte.
+- **Un `llama-server` pas piloté par ce Lutin** est décrit (port, modèle) pour savoir d'où il vient ; Lutin le reconnaît aussi d'après sa ligne de commande quand Windows ne donne pas son chemin.
+- **Pas encore possible** : régler Lutin à distance depuis l'autre machine (seule l'extinction, autorisée par le propriétaire, l'est) ; c'est volontaire, un jeton de nœud n'ouvre que le moteur.
+
+**English.** On Windows two Lutin could listen on the same port (address reuse), each starting its own model server; the port is now exclusive and taken before any background work, and installing auto-start removes the old scheduled task. A lent machine's engine is shared fairly (its own user first, 2 minutes at most), the other machine waits instead of giving up after 30 s, "busy" is no longer taken for "down", and the remote machine shows its load.
+
 ## Fiabilité des informations : recherches nettoyées, journal de sortie, /web, Vérifier
 
 - **Les recherches web sont nettoyées avant de partir chez un service extérieur** : adresses e-mail, téléphones, cartes bancaires (clé de Luhn), IBAN, clés et jetons, adresses du réseau local, chemins avec un nom d'utilisateur sont retirés, sans appeler de modèle (aucun délai) ; Lutin dit quelles catégories ont été retirées. Une requête faite uniquement de données personnelles n'est envoyée nulle part. Un SearXNG chez toi reçoit la requête telle quelle.
