@@ -1233,7 +1233,6 @@
 "Aucun moteur prêt : le moteur choisi ne répond pas": "No engine ready: the chosen engine does not answer",
 "Utiliser ": "Use ",
 "Autre serveur (j'indique son adresse)": "Another server (I give its address)",
-"installable par Lutin": "installable by Lutin",
 "Moteur expérimental : Lutin l'installe et le lance, mais son démarrage avec un vrai modèle n'a pas été vérifié.": "Experimental engine: Lutin installs and starts it, but starting it with a real model has not been verified.",
 "Colibri écoute seulement sur cette machine (127.0.0.1). Son modèle se prépare avec Colibri lui-même (« coli setup » ou « coli import », plusieurs dizaines de Go) ; indique ici le dossier obtenu. Pour joindre un Colibri qui tourne ailleurs, choisis « Autre serveur » et donne son adresse.": "Colibri only listens on this machine (127.0.0.1). Its model is prepared with Colibri itself (\"coli setup\" or \"coli import\", tens of GB); enter the resulting folder here. To reach a Colibri running elsewhere, choose \"Another server\" and give its address.",
 "Dossier du modèle préparé par Colibri (chemin complet)": "Folder of the model prepared by Colibri (full path)",
@@ -1291,5 +1290,11 @@
 "RAM": "RAM",
 "VRAM": "VRAM",
 "son utilisateur l'utilise : tes demandes attendent la fin de son tour (2 min au plus)": "its user is using it: your requests wait for the end of their turn (2 min at most)",
-"demande(s) d'autres machines en cours": "request(s) from other machines in progress"
+"demande(s) d'autres machines en cours": "request(s) from other machines in progress",
+"Lutin peut l'installer": "Lutin can install it",
+"à installer toi-même": "to install yourself",
+"Lutin sait installer ce serveur : utilise les boutons ci-dessous. Il n'est installé que si tu cliques sur « Installer » ; l'état (Pas installé, Arrêté, Prêt) est affiché en haut de la carte.": "Lutin knows how to install this server: use the buttons below. It is only installed if you click \"Install\"; its state (Not installed, Stopped, Ready) is shown at the top of the card.",
+"Lutin n'installe pas ce serveur : ": "Lutin does not install this server: ",
+"Lutin n'installe pas ce genre de serveur : ": "Lutin does not install this kind of server: ",
+"installe-le toi-même depuis son site, lance-le, puis indique son adresse ci-dessous. Lutin s'y connecte seulement ; il ne le démarre ni ne le met à jour.": "install it yourself from its website, start it, then give its address below. Lutin only connects to it; it neither starts nor updates it."
 }

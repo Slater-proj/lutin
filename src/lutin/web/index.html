@@ -3239,21 +3239,29 @@ body[data-moteur="openai"] .biblio { display:none !important; }
       if (m.id === 'openai' && prereglages.length) {          // les serveurs connus du catalogue signé : un choix remplit l'adresse et explique le serveur
         const choix = el('select'), fiche = el('div', 'aide'); choix.disabled = !modifiable; choixServeur = choix;
         const vide = el('option', '', T('Autre serveur (j\'indique son adresse)')); vide.value = ''; choix.appendChild(vide);
-        [...prereglages].sort((a, b) => Number(a.experimental) - Number(b.experimental)).forEach(pr => { const o = el('option', '', pr.nom + (pr.experimental ? ' · ' + T('expérimental') : '') + (pr.id === 'colibri' ? ' · ' + T('installable par Lutin') : '')); o.value = pr.id; choix.appendChild(o); });          // les expérimentaux en dernier, jamais préselectionnés
+        [...prereglages].sort((a, b) => Number(a.experimental) - Number(b.experimental)).forEach(pr => { const o = el('option', '', pr.nom + (pr.experimental ? ' · ' + T('expérimental') : '') + (pr.id === 'colibri' ? ' · ' + T('Lutin peut l\'installer') : ' · ' + T('à installer toi-même'))); o.value = pr.id; choix.appendChild(o); });          // les expérimentaux en dernier, jamais préselectionnés
         choix.value = m.reglages.serveur || '';
+        // Ce que Lutin fait ou ne fait pas pour le serveur choisi, dit en clair : seul Colibri s'installe depuis Lutin, et jamais sans clic sur « Installer »
+        const montrerFiche = pr => {
+          fiche.textContent = '';
+          if (pr && pr.id === 'colibri') fiche.appendChild(el('div', 'aide', 'ℹ ' + T('Lutin sait installer ce serveur : utilise les boutons ci-dessous. Il n\'est installé que si tu cliques sur « Installer » ; l\'état (Pas installé, Arrêté, Prêt) est affiché en haut de la carte.')));
+          else fiche.appendChild(el('div', 'aide', 'ℹ ' + (pr ? T('Lutin n\'installe pas ce serveur : ') + pr.nom + ' ' : T('Lutin n\'installe pas ce genre de serveur : ')) + T('installe-le toi-même depuis son site, lance-le, puis indique son adresse ci-dessous. Lutin s\'y connecte seulement ; il ne le démarre ni ne le met à jour.')));
+          if (!pr) return;
+          if (pr.experimental) fiche.appendChild(el('div', 'erreur', '⚗ ' + T('Moteur expérimental : jeune, peu éprouvé avec Lutin. À essayer, pas à choisir pour travailler.')));
+          fiche.appendChild(el('div', '', pr.description));
+          if (pr.points_forts.length) fiche.appendChild(el('div', '', '+ ' + pr.points_forts.join(' · ')));
+          if (pr.points_faibles.length) fiche.appendChild(el('div', '', '− ' + pr.points_faibles.join(' · ')));
+          if (pr.site) { const a = el('a', '', T('Site officiel')); a.href = pr.site; a.target = '_blank'; a.rel = 'noopener noreferrer'; fiche.appendChild(a); }
+        };
+        montrerFiche(prereglages.find(x => x.id === choix.value));
         choix.addEventListener('change', async () => {
           const pr = prereglages.find(x => x.id === choix.value); fiche.textContent = '';
           if (choix.value === 'colibri' || colibri) {          // Colibri apparaît ou disparaît avec ses boutons : le choix est enregistré tout de suite
             try { await api('/api/moteur-regler', { moteur: m.id, serveur: choix.value }); await rafraichir(); } catch (e) { alert(e.message); }
             chargerMoteurs(); return;
           }
-          if (!pr) return;
-          if (pr.adresse) url.value = pr.adresse;
-          if (pr.experimental) fiche.appendChild(el('div', 'erreur', '⚗ ' + T('Moteur expérimental : jeune, peu éprouvé avec Lutin. À essayer, pas à choisir pour travailler.')));
-          fiche.appendChild(el('div', '', pr.description));
-          if (pr.points_forts.length) fiche.appendChild(el('div', '', '+ ' + pr.points_forts.join(' · ')));
-          if (pr.points_faibles.length) fiche.appendChild(el('div', '', '− ' + pr.points_faibles.join(' · ')));
-          if (pr.site) { const a = el('a', '', T('Site officiel')); a.href = pr.site; a.target = '_blank'; a.rel = 'noopener noreferrer'; fiche.appendChild(a); }
+          montrerFiche(pr);
+          if (pr && pr.adresse) url.value = pr.adresse;
         });
         d.appendChild(choix); d.appendChild(fiche);
       }
