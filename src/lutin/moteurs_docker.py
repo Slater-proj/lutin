@@ -2,10 +2,11 @@
 
 Avant, l'image contenait Ollama (plus d'1,5 Go) : chaque mise à jour de l'image le re-téléchargeait, et llama.cpp ou un serveur compatible OpenAI ne pouvaient rien installer. Maintenant :
   - Lutin installe le moteur choisi (Ollama, llama.cpp) dans le dossier des moteurs, comme il le fait hors Docker ;
-  - ce dossier est `/engines` quand le compose le monte (volume ou dossier de l'hôte), sinon `moteurs/` dans le volume des données `/data` : dans les deux cas, une mise à jour de l'image ne l'efface pas ;
+  - ce dossier est `/engines` quand le compose le monte (volume ou dossier de l'hôte), sinon `engines/` dans le volume des données `/data` : dans les deux cas, une mise à jour de l'image ne l'efface pas ;
   - les modèles restent dans `/models`.
 Ce module ne contient que ce qui est propre à Docker pour Ollama (llama.cpp se gère dans moteur_llamacpp.py, avec le même dossier). Aucune dépendance."""
 import hashlib
+import json
 import os
 import platform
 import shutil
@@ -41,18 +42,71 @@ def est_monte(dossier, mountinfo="/proc/self/mountinfo"):
     return False
 
 
+def reglage_dossier_moteurs():
+    """Le dossier des moteurs choisi dans la page (Réglages > Moteurs), ou « »."""
+    donnees = moteurs.CONTEXTE["donnees"]()
+    if not donnees:
+        return ""
+    try:
+        valeur = json.loads((Path(donnees) / "moteurs.json").read_text(encoding="utf-8")).get("dossier_moteurs", "")
+    except (OSError, ValueError, AttributeError):
+        return ""
+    return valeur.strip() if isinstance(valeur, str) else ""
+
+
+def dossier_par_defaut(donnees):
+    """Le dossier des moteurs dans les données de Lutin : `engines/`. L'ancien nom français `moteurs/` est renommé au passage (rien n'est perdu) ; si le renommage échoue (programme en cours), il reste utilisé."""
+    neuf, ancien = Path(donnees) / "engines", Path(donnees) / "moteurs"
+    if neuf.exists() or not ancien.is_dir():
+        return neuf
+    try:
+        ancien.rename(neuf)
+        return neuf
+    except OSError:
+        return ancien
+
+
+def detail_dossier_moteurs(env=None, monte=est_monte, ecriture=None):
+    """{dossier, source, probleme} : où les moteurs s'installent et pourquoi là. Hors Docker : le dossier choisi dans la page, sinon `engines/` dans les données.
+    Dans Docker : `LUTIN_ENGINES` (ou l'ancien `LUTIN_MOTEURS`), sinon le dossier choisi dans la page, sinon `/engines` s'il est monté ET modifiable, sinon `engines/` dans le volume des données.
+    source : env, reglage, montage, donnees. probleme (Docker, source « donnees » seulement) : non_monte (aucun volume sur /engines) ou non_modifiable (monté, mais l'utilisateur 1000 ne peut pas y écrire)."""
+    env = os.environ if env is None else env
+    ecriture = ecriture or (lambda d: os.access(d, os.W_OK))
+    choisi = (env.get("LUTIN_ENGINES") or env.get("LUTIN_MOTEURS") or "").strip() if en_docker(env) else ""
+    if choisi:
+        return {"dossier": Path(choisi), "source": "env", "probleme": ""}
+    reglage = reglage_dossier_moteurs()
+    if reglage:
+        return {"dossier": Path(reglage), "source": "reglage", "probleme": ""}
+    docker = en_docker(env)
+    probleme = ""
+    if docker:
+        if monte(MONTAGE):
+            if ecriture(MONTAGE):
+                return {"dossier": Path(MONTAGE), "source": "montage", "probleme": ""}
+            probleme = "non_modifiable"
+        else:
+            probleme = "non_monte"
+    donnees = moteurs.CONTEXTE["donnees"]() or (env.get("LUTIN_HOME") if docker else None)
+    if not donnees:
+        return {"dossier": None, "source": "donnees", "probleme": probleme}
+    return {"dossier": dossier_par_defaut(donnees), "source": "donnees", "probleme": probleme}
+
+
 def dossier_moteurs(env=None, monte=est_monte):
-    """Où les moteurs s'installent dans Docker : `LUTIN_MOTEURS` si donné, sinon `/engines` s'il est monté, sinon `moteurs/` dans les données. None hors Docker."""
+    """Où les moteurs s'installent dans Docker (voir detail_dossier_moteurs). None hors Docker."""
     env = os.environ if env is None else env
     if not en_docker(env):
         return None
-    choisi = (env.get("LUTIN_MOTEURS") or "").strip()
-    if choisi:
-        return Path(choisi)
-    if monte(MONTAGE) and os.access(MONTAGE, os.W_OK):
-        return Path(MONTAGE)
-    donnees = moteurs.CONTEXTE["donnees"]() or env.get("LUTIN_HOME")
-    return Path(donnees) / "moteurs" if donnees else None
+    return detail_dossier_moteurs(env, monte)["dossier"]
+
+
+def base_moteurs(donnees=None):
+    """Le dossier qui contient un sous-dossier par moteur (`ollama`, `llamacpp`, `colibri`), partout : Docker ou non. `donnees` : pour un autre dossier de données que celui de Lutin (tests, colibri en ligne de commande)."""
+    if donnees is not None and not en_docker():
+        reglage = reglage_dossier_moteurs()
+        return Path(reglage) if reglage else dossier_par_defaut(donnees)
+    return detail_dossier_moteurs()["dossier"]
 
 
 def ollama_dossier():

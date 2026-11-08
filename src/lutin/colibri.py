@@ -59,7 +59,8 @@ def derniere_version(http=miseajour.http_get):
 
 
 def dossier_colibri(dossiers=None):
-    return Path((dossiers or config.dossiers())["donnees"]) / "moteurs" / "colibri"
+    from . import moteurs_docker
+    return moteurs_docker.base_moteurs((dossiers or config.dossiers())["donnees"]) / "colibri"
 
 
 def extraire(archive, cible):

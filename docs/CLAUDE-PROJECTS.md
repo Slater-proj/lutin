@@ -30,5 +30,5 @@ Good to know:
 
 - Adding a folder is only possible from this machine (`this machine only` level, or the command line), like every workspace folder.
 - A folder with neither `CLAUDE.md` nor `.claude/` is refused (use `lutin travaux ajouter` for an ordinary folder).
-- In Docker, mount the repository under `/travail` and declare it with `LUTIN_TRAVAUX` (see [DOCKER.md](DOCKER.md)).
+- In Docker, mount the repository under `/workspace` and declare it with `LUTIN_WORKSPACES` (see [DOCKER.md](DOCKER.md)).
 - Lutin uses local models: very long `CLAUDE.md` files and many skills cost context. Keep them short, and let the model read the details on demand.

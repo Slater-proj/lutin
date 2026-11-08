@@ -29,14 +29,14 @@ A ready-to-use image: **Lutin and Ollama in the same container**. You start it, 
 
 ## Quick start
 
-**One command** (no card, models kept in a Docker volume, your files in `./travail`):
+**One command** (no card, models kept in a Docker volume, your files in `./workspace`):
 
 ```bash
-mkdir -p lutin/travail && cd lutin
-sudo chown 1000:1000 travail          # Linux: the container runs as user 1000
+mkdir -p lutin/workspace && cd lutin
+sudo chown 1000:1000 workspace          # Linux: the container runs as user 1000
 docker run -d --name lutin --restart unless-stopped \
   -p 127.0.0.1:8777:8777 \
-  -v lutin-data:/data -v lutin-models:/models -v "$PWD/travail":/travail \
+  -v lutin-data:/data -v lutin-models:/models -v "$PWD/workspace":/workspace \
   ghcr.io/slater-proj/lutin:latest
 ```
 
@@ -48,7 +48,7 @@ With an NVIDIA card, add `--gpus all`.
 mkdir lutin && cd lutin
 curl -fsSLO https://raw.githubusercontent.com/Slater-proj/lutin/main/docker-compose.yml
 curl -fsSLO https://raw.githubusercontent.com/Slater-proj/lutin/main/docker-compose.gpu.yml   # only with an NVIDIA card
-mkdir travail && sudo chown 1000:1000 travail
+mkdir workspace && sudo chown 1000:1000 workspace
 
 docker compose up -d                                              # no graphics card
 # or with an NVIDIA card:
@@ -70,25 +70,25 @@ In the terminal: `docker exec -it lutin lutin chat`.
 | Volume | In the container | Content | Back it up? |
 |---|---|---|---|
 | `lutin-data` | `/data` | configuration, conversations, memory, action log, paired devices, Ollama log (`ollama.log`) | **yes** |
-| `./travail` | `/travail` | **your workspace folder**: the only place Lutin can read and modify | it is your project: already at your place |
+| `./workspace` | `/workspace` | **your workspace folder**: the only place Lutin can read and modify | it is your project: already at your place |
 | `lutin-models` | `/models` | the models | no (can be downloaded again), but heavy |
 | `lutin-engines` (optional) | `/engines` | **the engines** (Ollama, llama.cpp) that Lutin installs from the page | no (reinstallable in one click), but saves downloading everything again |
 
-**Engines are no longer in the image.** Lutin's image is light (Lutin alone): on first launch the page offers to install the engine recommended for your machine (Ollama, llama.cpp…), or the one you pick in Settings > Engines. It is downloaded once, into `/engines` if you mount that folder (`- /srv/docker/volumes/lutin/engines:/engines`, writable by user 1000), otherwise into `/data/moteurs`: either way, **updating the image does not erase it**. Ollama's models stay in `/models`, llama.cpp's (GGUF files) in `/models/gguf`. For a server already running elsewhere (another container), give its address (`OLLAMA_URL`, `LUTIN_LLAMACPP_URL`): Lutin then neither installs nor stops it. **Not verified on your card**: installing Ollama and llama.cpp in the light image was tested with fake servers, not yet on real hardware.
+**Engines are no longer in the image.** Lutin's image is light (Lutin alone): on first launch the page offers to install the engine recommended for your machine (Ollama, llama.cpp…), or the one you pick in Settings > Engines. It is downloaded once, into `/engines` if you mount that folder (`- /srv/docker/volumes/lutin/engines:/engines`, writable by user 1000), otherwise into `/data/engines`: either way, **updating the image does not erase it**. Ollama's models stay in `/models`, llama.cpp's (GGUF files) in `/models/gguf`. For a server already running elsewhere (another container), give its address (`OLLAMA_URL`, `LUTIN_LLAMACPP_URL`): Lutin then neither installs nor stops it. **Not verified on your card**: installing Ollama and llama.cpp in the light image was tested with fake servers, not yet on real hardware.
 
 To put the models on another disk, replace `lutin-models:/models` with a path (`/mnt/big-disk/models:/models`).
 
-**Folder permissions.** The container is not an administrator: it runs as user **1000**. A folder mounted from the host (`./travail`, and a models folder) must be writable by it: `sudo chown 1000:1000 travail`. Without that, Lutin refuses to start with a clear message.
+**Folder permissions.** The container is not an administrator: it runs as user **1000**. A folder mounted from the host (`./workspace`, and a models folder) must be writable by it: `sudo chown 1000:1000 workspace`. Without that, Lutin refuses to start with a clear message.
 
-**Several workspace folders.** Mount them under `/travail` and declare them:
+**Several workspace folders.** Mount them under `/workspace` and declare them:
 
 ```yaml
     environment:
-      LUTIN_TRAVAUX: /travail/project-2,/travail/documents
+      LUTIN_WORKSPACES: /workspace/project-2,/workspace/documents
     volumes:
-      - ./travail:/travail
-      - ./project-2:/travail/project-2
-      - ./documents:/travail/documents
+      - ./workspace:/workspace
+      - ./project-2:/workspace/project-2
+      - ./documents:/workspace/documents
 ```
 
 ## The variables
@@ -98,7 +98,7 @@ To put the models on another disk, replace `lutin-models:/models` with a path (`
 | `LUTIN_LANGUE` | – (English) | `fr` or `en`. Forces the language (otherwise, the setting of the page applies). |
 | `LUTIN_NIVEAU` | `reseau` | `reseau` (PIN code) or `proxy`. « this machine only » does not exist in a container: the port must not be open without protection. |
 | `LUTIN_URL_PUBLIQUE`, `LUTIN_PROXY_IP` | – | `proxy` level: public address (`https://…`) and address(es) of the proxy as Lutin sees them (comma-separated). |
-| `LUTIN_TRAVAUX` | – | other workspace folders (commas). |
+| `LUTIN_WORKSPACES` | – | other workspace folders (commas). |
 | `LUTIN_HORS_LIGNE` | – | `1`: strict offline mode (no connection to the Internet; the models must have been downloaded beforehand). |
 | `LUTIN_GPU` | – | card declared by hand if it is not detected: `24` or `NVIDIA RTX 4090=24` (memory in GB). |
 | `LUTIN_PORT` | `8777` | port inside the container. |
@@ -110,7 +110,7 @@ These variables are **re-applied at every start**: they are the source of truth 
 
 - The port is published on **`127.0.0.1:8777`**: only the host machine can reach it. For your local network, write `"8777:8777"` in `ports` (the PIN code protects, but read [SECURITY.md](SECURITY.md)); for the Internet, go **behind a proxy** with strong authentication (`LUTIN_NIVEAU=proxy`).
 - Automatic approvals (writes, commands) are **turned off** at the `reseau` and `proxy` levels.
-- The container is not an administrator; the commands Lutin runs execute **in the container** (with only what it contains: Python, git, sh) and only see `/travail`, `/data` and `/models`. It is one more protection, and a limit: for it to run your project's tools (compiler, tests…), install them in a derived image.
+- The container is not an administrator; the commands Lutin runs execute **in the container** (with only what it contains: Python, git, sh) and only see `/workspace`, `/data` and `/models`. It is one more protection, and a limit: for it to run your project's tools (compiler, tests…), install them in a derived image.
 - The Ollama that Lutin installs in the container listens on the container's `127.0.0.1` only, and its port `11434` is never published. Never publish it.
 
 ## Graphics card in the container
@@ -148,7 +148,7 @@ The case of a small shared server (for example a machine with 16 to 32 GB of RAM
 
 ```bash
 docker network create --subnet 172.30.0.0/24 proxy      # once; your reverse proxy must be on this network too
-mkdir -p travail && sudo chown 1000:1000 travail
+mkdir -p workspace && sudo chown 1000:1000 workspace
 curl -fsSLO https://raw.githubusercontent.com/Slater-proj/lutin/main/docker-compose.proxy.yml
 # edit: LUTIN_URL_PUBLIQUE, LUTIN_PROXY_IP (the proxy's network), LUTIN_ADMINS (your Authelia user name)
 docker compose -f docker-compose.proxy.yml up -d
@@ -168,7 +168,7 @@ The [docker-compose.proxy.yml](../docker-compose.proxy.yml) file publishes **no 
 
 **`LUTIN_ADMIN_TOUS=1`: configuration from the page, for everybody who is connected.** In Docker the browser is never "on the machine": without this variable (or `LUTIN_ADMINS` behind a proxy), deleting a created file or adding a working folder, an extension or a connector is refused from the page. With `LUTIN_ADMIN_TOUS=1`, anybody **already admitted** (device paired with a PIN, or proxy user) can do it. Keep it for personal use or a small circle of trust: these settings can read and write the folders mounted in the container and launch programs **inside** the container. The access level itself is still only changed through the container variables.
 
-**Configuring from the page or the command line.** In Docker the browser is never "on the machine" of the container: without `LUTIN_ADMINS`, the page says settings (extensions, working folders, MCP connectors) are locked. Two ways out: declare your Authelia user name in `LUTIN_ADMINS` (then `docker compose up -d`), or do everything on the command line: `docker exec lutin lutin travaux ajouter /travail`, `docker exec lutin lutin mcp ajouter my-server https://…/mcp`, then `lutin mcp actualiser my-server` and `lutin mcp autoriser my-server <tool>`. An MCP "program" connector (npx…) runs **inside the container**: prefer a connector by address.
+**Configuring from the page or the command line.** In Docker the browser is never "on the machine" of the container: without `LUTIN_ADMINS`, the page says settings (extensions, working folders, MCP connectors) are locked. Two ways out: declare your Authelia user name in `LUTIN_ADMINS` (then `docker compose up -d`), or do everything on the command line: `docker exec lutin lutin travaux ajouter /workspace`, `docker exec lutin lutin mcp ajouter my-server https://…/mcp`, then `lutin mcp actualiser my-server` and `lutin mcp autoriser my-server <tool>`. An MCP "program" connector (npx…) runs **inside the container**: prefer a connector by address.
 
 ### 2. Set up the reverse proxy
 
@@ -235,7 +235,7 @@ With no usable graphics card (the Intel integrated graphics are optional and exp
 
 | Feature | In the container |
 |---|---|
-| Conversation, tools, files in `/travail`, PDF and Word, long missions (they run **inside the container**: they only see `/travail`) | ✔ |
+| Conversation, tools, files in `/workspace`, PDF and Word, long missions (they run **inside the container**: they only see `/workspace`) | ✔ |
 | Telegram, email, X, web search | ✔ (outgoing connections) |
 | Download a created file, the “Created files” list and tidying up | ✔ |
 | **Open** a file with an application | ✘ hidden: a server has no desktop, use Download |
@@ -245,7 +245,7 @@ With no usable graphics card (the Intel integrated graphics are optional and exp
 | Intel integrated graphics | ⚠ experimental (Vulkan, `docker-compose.intel.yml`), modest gain, never tried |
 | Intel NPU | ✘ not used (no gain for text on Meteor Lake) |
 
-**Updates and backup**: see below; back up the `lutin-data` volume and your `travail` folder.
+**Updates and backup**: see below; back up the `lutin-data` volume and your `workspace` folder.
 
 ## Addons in the container
 
@@ -268,7 +268,7 @@ Published images: `ghcr.io/slater-proj/lutin:latest` (latest version, complete),
 
 | Symptom | Lead |
 |---|---|
-| Lutin stops with « volumes … must be writable » | `sudo chown 1000:1000 travail` (and `docker compose down` then `up` if the `lutin-data` volume was created by another user: `docker compose run --rm --user root lutin chown -R 1000:1000 /data /models`) |
+| Lutin stops with « volumes … must be writable » | `sudo chown 1000:1000 workspace` (and `docker compose down` then `up` if the `lutin-data` volume was created by another user: `docker compose run --rm --user root lutin chown -R 1000:1000 /data /models`) |
 | « Ollama is not responding » | Ollama installed by Lutin: look at `/data/ollama.log` (`docker compose exec lutin tail /data/ollama.log`). Another container: `docker compose logs ollama`; with Ollama on the host: `OLLAMA_URL=http://host.docker.internal:11434`. |
 | A red banner at the top of the page, or « The model … is not installed » | Ollama runs (green dot) but **no model is installed**: a fresh container has none. Click **Install this model** in the banner (the best fit for the machine), or `docker compose exec lutin ollama pull qwen3:4b`. |
 | The page answers « host name not allowed » | You reach it by a name Lutin does not know. Use `localhost`, a private address, or (`proxy` level) the address declared in `LUTIN_URL_PUBLIQUE`. |

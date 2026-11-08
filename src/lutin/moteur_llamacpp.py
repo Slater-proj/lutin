@@ -252,6 +252,52 @@ def regler_dossier_modeles(moteur, chemin):
     ecrire_config(config)
 
 
+def moteurs_installes_par_lutin():
+    """Les moteurs que Lutin a installés dans le dossier des moteurs (ceux qu'un changement de dossier laisserait derrière)."""
+    from . import moteurs_docker
+    trouves = []
+    llama = moteurs.MOTEURS.get("llamacpp")
+    if isinstance(llama, MoteurLlamaCpp) and not llama.config().get("dossier") and llama.serveur_installe() is not None:
+        trouves.append("llama.cpp")
+    if moteurs.CONTEXTE["en_docker"]() and moteurs_docker.ollama_installe_par_lutin():
+        trouves.append("Ollama")
+    autre = moteurs.MOTEURS.get(moteurs.OPENAI)
+    if isinstance(autre, MoteurExterne) and autre._colibri() is not None:
+        trouves.append("Colibri")
+    return trouves
+
+
+def vue_dossier_moteurs():
+    """Ce que la page montre pour le dossier des moteurs : où, pourquoi là, la place libre, ce qui y est installé, et pourquoi /engines n'est pas utilisé quand c'est le cas."""
+    from . import moteurs_docker
+    detail = moteurs_docker.detail_dossier_moteurs()
+    actuel = detail["dossier"]
+    donnees = moteurs.CONTEXTE["donnees"]()
+    defaut = moteurs_docker.dossier_par_defaut(donnees) if donnees else None
+    docker = moteurs.CONTEXTE["en_docker"]()
+    if docker and moteurs_docker.est_monte(moteurs_docker.MONTAGE) and os.access(moteurs_docker.MONTAGE, os.W_OK):
+        defaut = Path(moteurs_docker.MONTAGE)          # sans choix de ta part, c'est lui qui serait pris
+    return {"actuel": str(actuel or ""), "defaut": str(defaut or ""), "source": detail["source"], "probleme": detail["probleme"], "docker": docker, "montage": moteurs_docker.MONTAGE,
+            "modifiable": detail["source"] != "env", "personnalise": detail["source"] == "reglage", "libre_go": espace_libre(actuel), "installes": moteurs_installes_par_lutin()}
+
+
+def regler_dossier_moteurs(chemin):
+    """Choisit le dossier des moteurs (un sous-dossier par moteur y est créé). Chaîne vide : revenir au dossier par défaut. Rien n'est déplacé en douce : refusé tant qu'un moteur installé par Lutin est dans l'ancien dossier."""
+    from . import moteurs_docker
+    if moteurs_docker.detail_dossier_moteurs()["source"] == "env":
+        raise ErreurMoteur(_t("Le dossier des moteurs est fixé par la variable LUTIN_ENGINES du docker-compose : change-la là."))
+    installes = moteurs_installes_par_lutin()
+    if installes:
+        raise ErreurMoteur(_t("{} est déjà installé dans le dossier actuel : désinstalle-le d'abord (tes modèles restent où ils sont), puis change de dossier.").format(", ".join(installes)))
+    valeur = valider_dossier(chemin, False, _t("Le dossier des moteurs"))
+    config = lire_config()
+    if valeur:
+        config["dossier_moteurs"] = valeur
+    else:
+        config.pop("dossier_moteurs", None)
+    ecrire_config(config)
+
+
 def regler_dossier(moteur, chemin):
     """Change le dossier d'installation d'un moteur géré par Lutin (voir valider_dossier)."""
     mo = moteurs.MOTEURS.get(moteur)
@@ -523,11 +569,8 @@ class MoteurLlamaCpp(MoteurOpenAI):
 
     def dossier_defaut(self):
         from . import moteurs_docker
-        docker = moteurs_docker.dossier_moteurs()          # Docker : le dossier des moteurs (volume), qu'une mise à jour de l'image n'efface pas
-        if docker is not None:
-            return docker / "llamacpp"
-        d = moteurs.CONTEXTE["donnees"]()
-        return (Path(d) / "moteurs" / "llamacpp") if d else None
+        base = moteurs_docker.base_moteurs()          # le dossier des moteurs : choisi dans la page, ou /engines (Docker), ou engines/ dans les données de Lutin
+        return base / "llamacpp" if base else None
 
     def dossier(self):
         """Où llama.cpp vit (programme, modèles, journal) : le dossier choisi par l'utilisateur, sinon celui de Lutin."""
@@ -550,8 +593,8 @@ class MoteurLlamaCpp(MoteurOpenAI):
         libre = espace_libre
         actuel, propose, defaut = self.dossier(), self.dossier_propose(), self.dossier_defaut()
         return {"actuel": str(actuel or ""), "propose": str(propose or ""), "defaut": str(defaut or ""), "personnalise": bool(self.config().get("dossier")),
-                "libre_go": {"actuel": libre(actuel), "propose": libre(propose) if propose else None, "defaut": libre(defaut)}, "installe": self.serveur_installe() is not None, "modifiable": not moteurs.CONTEXTE["en_docker"](),
-                "modeles": {"actuel": str(self.dossier_modeles()), "libre_go": libre(self.dossier_modeles()), "modifiable": not moteurs.CONTEXTE["en_docker"](), "personnalise": bool(self.config().get("dossier_modeles"))}}
+                "libre_go": {"actuel": libre(actuel), "propose": libre(propose) if propose else None, "defaut": libre(defaut)}, "installe": self.serveur_installe() is not None, "modifiable": True,
+                "modeles": {"actuel": str(self.dossier_modeles()), "libre_go": libre(self.dossier_modeles()), "modifiable": True, "personnalise": bool(self.config().get("dossier_modeles"))}}
 
     def dossier_modeles(self):
         personnalise = self.config().get("dossier_modeles")

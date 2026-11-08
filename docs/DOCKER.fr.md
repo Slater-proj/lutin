@@ -29,14 +29,14 @@ Une image prête à l'emploi : **Lutin et Ollama dans le même conteneur**. Tu l
 
 ## Démarrage rapide
 
-**Une commande** (sans carte, modèles gardés dans un volume Docker, tes fichiers dans `./travail`) :
+**Une commande** (sans carte, modèles gardés dans un volume Docker, tes fichiers dans `./workspace`) :
 
 ```bash
-mkdir -p lutin/travail && cd lutin
-sudo chown 1000:1000 travail          # Linux : le conteneur tourne sous l'utilisateur 1000
+mkdir -p lutin/workspace && cd lutin
+sudo chown 1000:1000 workspace          # Linux : le conteneur tourne sous l'utilisateur 1000
 docker run -d --name lutin --restart unless-stopped \
   -p 127.0.0.1:8777:8777 \
-  -v lutin-data:/data -v lutin-models:/models -v "$PWD/travail":/travail \
+  -v lutin-data:/data -v lutin-models:/models -v "$PWD/workspace":/workspace \
   ghcr.io/slater-proj/lutin:latest
 ```
 
@@ -48,7 +48,7 @@ Avec une carte NVIDIA, ajoute `--gpus all`.
 mkdir lutin && cd lutin
 curl -fsSLO https://raw.githubusercontent.com/Slater-proj/lutin/main/docker-compose.yml
 curl -fsSLO https://raw.githubusercontent.com/Slater-proj/lutin/main/docker-compose.gpu.yml   # seulement avec une carte NVIDIA
-mkdir travail && sudo chown 1000:1000 travail
+mkdir workspace && sudo chown 1000:1000 workspace
 
 docker compose up -d                                              # sans carte graphique
 # ou avec une carte NVIDIA :
@@ -70,25 +70,25 @@ Dans le terminal : `docker exec -it lutin lutin chat`.
 | Volume | Dans le conteneur | Contenu | À sauvegarder ? |
 |---|---|---|---|
 | `lutin-data` | `/data` | configuration, conversations, mémoire, journal des actions, appareils appairés, journal d'Ollama (`ollama.log`) | **oui** |
-| `./travail` | `/travail` | **ton dossier de travail** : le seul endroit que Lutin peut lire et modifier | c'est ton projet : déjà chez toi |
+| `./workspace` | `/workspace` | **ton dossier de travail** : le seul endroit que Lutin peut lire et modifier | c'est ton projet : déjà chez toi |
 | `lutin-models` | `/models` | les modèles | non (retéléchargeables), mais lourd |
 | `lutin-engines` (facultatif) | `/engines` | **les moteurs** (Ollama, llama.cpp) que Lutin installe depuis la page | non (réinstallables en un clic), mais ça évite de tout retélécharger |
 
-**Les moteurs ne sont plus dans l'image.** L'image de Lutin est légère (Lutin seul) : au premier lancement, la page propose d'installer le moteur conseillé pour ta machine (Ollama, llama.cpp…), ou celui que tu choisis dans Réglages > Moteurs. Il est téléchargé une fois, dans `/engines` si tu montes ce dossier (`- /srv/docker/volumes/lutin/engines:/engines`, accessible en écriture pour l'utilisateur 1000), sinon dans `/data/moteurs` : dans les deux cas, **une mise à jour de l'image ne l'efface pas**. Les modèles d'Ollama restent dans `/models`, ceux de llama.cpp (fichiers GGUF) dans `/models/gguf`. Pour un serveur déjà lancé ailleurs (un autre conteneur), donne son adresse (`OLLAMA_URL`, `LUTIN_LLAMACPP_URL`) : Lutin ne l'installe ni ne l'arrête alors. **Non vérifié sur ta carte** : l'installation d'Ollama et de llama.cpp dans l'image légère a été testée avec de faux serveurs, pas encore sur du vrai matériel.
+**Les moteurs ne sont plus dans l'image.** L'image de Lutin est légère (Lutin seul) : au premier lancement, la page propose d'installer le moteur conseillé pour ta machine (Ollama, llama.cpp…), ou celui que tu choisis dans Réglages > Moteurs. Il est téléchargé une fois, dans `/engines` si tu montes ce dossier (`- /srv/docker/volumes/lutin/engines:/engines`, accessible en écriture pour l'utilisateur 1000), sinon dans `/data/engines` : dans les deux cas, **une mise à jour de l'image ne l'efface pas**. Les modèles d'Ollama restent dans `/models`, ceux de llama.cpp (fichiers GGUF) dans `/models/gguf`. Pour un serveur déjà lancé ailleurs (un autre conteneur), donne son adresse (`OLLAMA_URL`, `LUTIN_LLAMACPP_URL`) : Lutin ne l'installe ni ne l'arrête alors. **Non vérifié sur ta carte** : l'installation d'Ollama et de llama.cpp dans l'image légère a été testée avec de faux serveurs, pas encore sur du vrai matériel.
 
 Pour mettre les modèles sur un autre disque, remplace `lutin-models:/models` par un chemin (`/mnt/gros-disque/modeles:/models`).
 
-**Droits sur les dossiers.** Le conteneur n'est pas administrateur : il tourne sous l'utilisateur **1000**. Un dossier monté depuis l'hôte (`./travail`, et un dossier de modèles) doit lui être accessible en écriture : `sudo chown 1000:1000 travail`. Sans cela, Lutin refuse de démarrer avec un message clair.
+**Droits sur les dossiers.** Le conteneur n'est pas administrateur : il tourne sous l'utilisateur **1000**. Un dossier monté depuis l'hôte (`./workspace`, et un dossier de modèles) doit lui être accessible en écriture : `sudo chown 1000:1000 workspace`. Sans cela, Lutin refuse de démarrer avec un message clair.
 
-**Plusieurs dossiers de travail.** Monte-les sous `/travail` et déclare-les :
+**Plusieurs dossiers de travail.** Monte-les sous `/workspace` et déclare-les :
 
 ```yaml
     environment:
-      LUTIN_TRAVAUX: /travail/projet-2,/travail/documents
+      LUTIN_WORKSPACES: /workspace/projet-2,/workspace/documents
     volumes:
-      - ./travail:/travail
-      - ./projet-2:/travail/projet-2
-      - ./documents:/travail/documents
+      - ./workspace:/workspace
+      - ./projet-2:/workspace/projet-2
+      - ./documents:/workspace/documents
 ```
 
 ## Les variables
@@ -98,7 +98,7 @@ Pour mettre les modèles sur un autre disque, remplace `lutin-models:/models` pa
 | `LUTIN_LANGUE` | – (anglais) | `fr` ou `en`. Impose la langue (sinon, le réglage de la page s'applique). |
 | `LUTIN_NIVEAU` | `reseau` | `reseau` (code PIN) ou `proxy`. « machine seulement » n'existe pas dans un conteneur : le port ne doit pas être ouvert sans protection. |
 | `LUTIN_URL_PUBLIQUE`, `LUTIN_PROXY_IP` | – | niveau `proxy` : adresse publique (`https://…`) et adresse(s) du proxy telles que Lutin les voit (séparées par des virgules). |
-| `LUTIN_TRAVAUX` | – | autres dossiers de travail (virgules). |
+| `LUTIN_WORKSPACES` | – | autres dossiers de travail (virgules). |
 | `LUTIN_HORS_LIGNE` | – | `1` : mode hors ligne strict (aucune connexion vers Internet ; il faudra avoir téléchargé les modèles avant). |
 | `LUTIN_GPU` | – | carte déclarée à la main si elle n'est pas détectée : `24` ou `NVIDIA RTX 4090=24` (mémoire en Go). |
 | `LUTIN_PORT` | `8777` | port dans le conteneur. |
@@ -109,8 +109,8 @@ Ces variables sont **réappliquées à chaque démarrage** : elles sont la sourc
 ## Sécurité
 
 - Le port est publié sur **`127.0.0.1:8777`** : seule la machine hôte y accède. Pour ton réseau local, écris `"8777:8777"` dans `ports` (le code PIN protège, mais lis [SECURITY.fr.md](SECURITY.fr.md)) ; pour Internet, passe **derrière un proxy** avec authentification forte (`LUTIN_NIVEAU=proxy`).
-- Les accords automatiques (« Fichiers auto », « Commandes auto ») se règlent **par conversation** et sont décochés par défaut, à tous les niveaux : quelqu'un qui a accès à Lutin peut les cocher. Les commandes tournent dans le conteneur, qui ne voit que `/travail`, `/data` et `/models`.
-- Le conteneur n'est pas administrateur ; les commandes que Lutin lance s'exécutent **dans le conteneur** (avec seulement ce qu'il contient : Python, git, sh) et ne voient que `/travail`, `/data` et `/models`. C'est une protection de plus, et une limite : pour qu'il lance les outils de ton projet (compilateur, tests…), installe-les dans une image dérivée.
+- Les accords automatiques (« Fichiers auto », « Commandes auto ») se règlent **par conversation** et sont décochés par défaut, à tous les niveaux : quelqu'un qui a accès à Lutin peut les cocher. Les commandes tournent dans le conteneur, qui ne voit que `/workspace`, `/data` et `/models`.
+- Le conteneur n'est pas administrateur ; les commandes que Lutin lance s'exécutent **dans le conteneur** (avec seulement ce qu'il contient : Python, git, sh) et ne voient que `/workspace`, `/data` et `/models`. C'est une protection de plus, et une limite : pour qu'il lance les outils de ton projet (compilateur, tests…), installe-les dans une image dérivée.
 - L'Ollama que Lutin installe dans le conteneur n'écoute que sur le `127.0.0.1` du conteneur, et son port `11434` n'est jamais publié. Ne le publie jamais.
 
 ## Carte graphique dans le conteneur
@@ -148,7 +148,7 @@ Le cas d'un petit serveur partagé (par exemple une machine avec 16 à 32 Go de 
 
 ```bash
 docker network create --subnet 172.30.0.0/24 proxy      # une fois ; ton reverse proxy doit être sur ce réseau aussi
-mkdir -p travail && sudo chown 1000:1000 travail
+mkdir -p workspace && sudo chown 1000:1000 workspace
 curl -fsSLO https://raw.githubusercontent.com/Slater-proj/lutin/main/docker-compose.proxy.yml
 # édite : LUTIN_URL_PUBLIQUE, LUTIN_PROXY_IP (le réseau du proxy), LUTIN_ADMINS (ton identifiant Authelia)
 docker compose -f docker-compose.proxy.yml up -d
@@ -168,7 +168,7 @@ Le fichier [docker-compose.proxy.yml](../docker-compose.proxy.yml) ne publie **a
 
 **`LUTIN_ADMIN_TOUS=1` : la configuration depuis la page, pour tous ceux qui sont connectés.** Dans Docker le navigateur n'est jamais « sur la machine » : sans cette variable (ou `LUTIN_ADMINS` derrière un proxy), supprimer un fichier créé, ajouter un dossier de travail, une extension ou un connecteur est refusé depuis la page. Avec `LUTIN_ADMIN_TOUS=1`, toute personne **déjà admise** (appareil appairé par PIN, ou utilisateur du proxy) peut le faire. À réserver à un usage personnel ou à un petit cercle de confiance : ces réglages permettent de lire et d'écrire dans les dossiers montés dans le conteneur et de lancer des programmes **dans** le conteneur. Le niveau d'accès lui-même ne se change toujours que par les variables du conteneur.
 
-**Régler depuis la page, ou en ligne de commande.** Dans Docker, le navigateur n'est jamais « sur la machine » du conteneur : sans `LUTIN_ADMINS`, la page dit que les réglages (extensions, dossiers de travail, connecteurs MCP) sont verrouillés. Deux solutions : déclarer ton identifiant Authelia dans `LUTIN_ADMINS` (puis `docker compose up -d`), ou tout faire en ligne de commande : `docker exec lutin lutin travaux ajouter /travail`, `docker exec lutin lutin mcp ajouter mon-serveur https://…/mcp` puis `lutin mcp actualiser mon-serveur` et `lutin mcp autoriser mon-serveur <outil>`. Un connecteur MCP « programme » (npx…) tourne **dans le conteneur** : préfère un connecteur par adresse.
+**Régler depuis la page, ou en ligne de commande.** Dans Docker, le navigateur n'est jamais « sur la machine » du conteneur : sans `LUTIN_ADMINS`, la page dit que les réglages (extensions, dossiers de travail, connecteurs MCP) sont verrouillés. Deux solutions : déclarer ton identifiant Authelia dans `LUTIN_ADMINS` (puis `docker compose up -d`), ou tout faire en ligne de commande : `docker exec lutin lutin travaux ajouter /workspace`, `docker exec lutin lutin mcp ajouter mon-serveur https://…/mcp` puis `lutin mcp actualiser mon-serveur` et `lutin mcp autoriser mon-serveur <outil>`. Un connecteur MCP « programme » (npx…) tourne **dans le conteneur** : préfère un connecteur par adresse.
 
 ### 2. Régler le reverse proxy
 
@@ -235,7 +235,7 @@ Sans carte graphique utilisable (la puce graphique intégrée Intel est facultat
 
 | Fonction | Dans le conteneur |
 |---|---|
-| Conversation, outils, fichiers de `/travail`, PDF et Word, missions longues (elles tournent **dans le conteneur** : elles ne voient que `/travail`) | ✔ |
+| Conversation, outils, fichiers de `/workspace`, PDF et Word, missions longues (elles tournent **dans le conteneur** : elles ne voient que `/workspace`) | ✔ |
 | Telegram, courriel, X, recherche web | ✔ (connexions sortantes) |
 | Télécharger un fichier créé, la liste « Fichiers créés » et le ménage | ✔ |
 | **Ouvrir** un fichier avec une application | ✘ caché : un serveur n'a pas de bureau, utilise Télécharger |
@@ -268,7 +268,7 @@ Les images publiées : `ghcr.io/slater-proj/lutin:latest` (dernière version, co
 
 | Symptôme | Piste |
 |---|---|
-| Lutin s'arrête avec « volumes … accessibles en écriture » | `sudo chown 1000:1000 travail` (et `docker compose down` puis `up` si le volume `lutin-data` a été créé par un autre utilisateur : `docker compose run --rm --user root lutin chown -R 1000:1000 /data /models`) |
+| Lutin s'arrête avec « volumes … accessibles en écriture » | `sudo chown 1000:1000 workspace` (et `docker compose down` puis `up` si le volume `lutin-data` a été créé par un autre utilisateur : `docker compose run --rm --user root lutin chown -R 1000:1000 /data /models`) |
 | « Ollama ne répond pas » | Ollama installé par Lutin : regarde `/data/ollama.log` (`docker compose exec lutin tail /data/ollama.log`). Autre conteneur : `docker compose logs ollama` ; avec Ollama sur l'hôte : `OLLAMA_URL=http://host.docker.internal:11434`. |
 | Une bannière rouge en haut de la page, ou « Le modèle … n'est pas installé » | Ollama tourne (pastille verte) mais **aucun modèle n'est installé** : un conteneur neuf n'en a pas. Clique sur **Installer ce modèle** dans la bannière (le plus adapté à la machine), ou `docker compose exec lutin ollama pull qwen3:4b`. |
 | La page répond « nom d'hôte non autorisé » | Tu accèdes par un nom que Lutin ne connaît pas. Utilise `localhost`, une adresse privée, ou (niveau `proxy`) l'adresse déclarée dans `LUTIN_URL_PUBLIQUE`. |

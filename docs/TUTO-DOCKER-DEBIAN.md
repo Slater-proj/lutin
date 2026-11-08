@@ -51,12 +51,12 @@ sudo usermod -aG docker $USER      # then log out and back in
 Lutin runs in the container as user **1000**. The server folders it must be able to write therefore belong to that user:
 
 ```bash
-sudo mkdir -p /opt/lutin/travail
-sudo chown -R 1000:1000 /opt/lutin/travail
+sudo mkdir -p /opt/lutin/workspace
+sudo chown -R 1000:1000 /opt/lutin/workspace
 cd /opt/lutin
 ```
 
-`/opt/lutin/travail` is the **only place Lutin can read and modify** (its missions, the documents it creates…). Put in it what you want to entrust to it. Conversations, memory and settings live in a Docker volume (`lutin-data`); the models in another one (`lutin-models`).
+`/opt/lutin/workspace` is the **only place Lutin can read and modify** (its missions, the documents it creates…). Put in it what you want to entrust to it. Conversations, memory and settings live in a Docker volume (`lutin-data`); the models in another one (`lutin-models`).
 
 ## 3. The network shared with your reverse proxy
 
@@ -85,7 +85,7 @@ Change these lines (the rest suits a small shared server):
 | `LUTIN_ADMINS` | your **Authelia** user name (the `Remote-User` one): `alice` |
 | `LUTIN_LANGUE` | `fr` or `en` |
 | `mem_limit` and `LUTIN_BUDGET_GO` | the memory you want to reserve for Lutin: `10g` and `"8"` for about 10 GB free |
-| `./travail:/travail` | `/opt/lutin/travail:/travail` |
+| `./workspace:/workspace` | `/opt/lutin/workspace:/workspace` |
 
 Check the file without starting anything:
 
@@ -153,7 +153,7 @@ Then reload Authelia and your reverse proxy.
 | Diagnosis to paste in a report | `docker compose exec lutin lutin doctor` |
 | See what Lutin modified | `docker compose exec lutin lutin journal` |
 
-Back up the `lutin-data` volume (conversations, memory, settings) and your `/opt/lutin/travail` folder. Models can be downloaded again.
+Back up the `lutin-data` volume (conversations, memory, settings) and your `/opt/lutin/workspace` folder. Models can be downloaded again.
 
 ## 10. Quick troubleshooting
 

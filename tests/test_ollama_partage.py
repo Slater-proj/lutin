@@ -154,13 +154,13 @@ class DossiersCommuns(unittest.TestCase):
         moteurs.MOTEURS[mo.id] = mo
         self.addCleanup(moteurs.MOTEURS.pop, mo.id, None)
         info = mo.info_dossier()
-        self.assertEqual(info["modeles"]["actuel"], str(self.tmp / "moteurs" / "llamacpp" / "modeles"))
+        self.assertEqual(info["modeles"]["actuel"], str(self.tmp / "engines" / "llamacpp" / "modeles"))
         ailleurs = self.tmp / "gros-disque" / "modeles"
         ml.regler_dossier_modeles(mo.id, str(ailleurs))
         self.assertEqual(mo.dossier_modeles(), ailleurs)
         self.assertTrue(mo.info_dossier()["modeles"]["personnalise"])
         ml.regler_dossier_modeles(mo.id, "")
-        self.assertEqual(mo.dossier_modeles(), self.tmp / "moteurs" / "llamacpp" / "modeles", "vide : retour au dossier par défaut")
+        self.assertEqual(mo.dossier_modeles(), self.tmp / "engines" / "llamacpp" / "modeles", "vide : retour au dossier par défaut")
         with self.assertRaises(ml.ErreurMoteur):
             ml.regler_dossier_modeles(mo.id, "relatif/dossier")
 

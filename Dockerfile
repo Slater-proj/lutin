@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 # Lutin dans un conteneur : Lutin seul, léger. Au premier lancement, la page propose d'installer un moteur (Ollama, llama.cpp) ; il vit dans le volume /engines
-# (sinon /data/moteurs) et survit aux mises à jour de l'image. Les modèles sont dans /models. Les cibles « complet » et « leger » donnent la même image.
+# (sinon /data/engines) et survit aux mises à jour de l'image. Les modèles sont dans /models. Les cibles « complet » et « leger » donnent la même image.
 # Lutin alone and light: the page installs the engine you pick (Ollama, llama.cpp) into the /engines volume, so image updates never erase it. docker build .
 
 # --- la roue Python de Lutin (même construction pour les deux images)
@@ -20,8 +20,8 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends git ca-certificates tini curl libgomp1 zstd libvulkan1 mesa-vulkan-drivers \
  && rm -rf /var/lib/apt/lists/* \
  && useradd --create-home --uid 1000 lutin \
- && mkdir -p /data /travail /models /engines \
- && chown lutin:lutin /data /travail /models /engines
+ && mkdir -p /data /workspace /models /engines \
+ && chown lutin:lutin /data /workspace /models /engines
 COPY --from=construction /dist/*.whl /tmp/
 RUN pip install --no-cache-dir /tmp/*.whl && rm -f /tmp/*.whl
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
@@ -34,7 +34,6 @@ ENV LUTIN_DOCKER=1 \
     LUTIN_NIVEAU=reseau \
     LUTIN_ECOUTE=0.0.0.0 \
     LUTIN_PORT=8777 \
-    LUTIN_TRAVAIL=/travail \
     OLLAMA_HOST=127.0.0.1:11434 \
     OLLAMA_URL=http://127.0.0.1:11434 \
     OLLAMA_MODELS=/models \
@@ -43,9 +42,9 @@ ENV LUTIN_DOCKER=1 \
     PYTHONUNBUFFERED=1
 
 USER lutin
-WORKDIR /travail
-# /engines n'est PAS déclaré en VOLUME : sans montage explicite, les moteurs vont dans /data/moteurs (qui est un volume)
-VOLUME ["/data", "/travail", "/models"]
+WORKDIR /workspace
+# /engines n'est PAS déclaré en VOLUME : All container paths are English (/data /workspace /models /engines). Sans montage explicite, les moteurs vont dans /data/engines (qui est un volume)
+VOLUME ["/data", "/workspace", "/models"]
 EXPOSE 8777
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD curl -fsS "http://127.0.0.1:${LUTIN_PORT}/" -o /dev/null || exit 1
@@ -53,5 +52,5 @@ ENTRYPOINT ["tini", "--", "/usr/local/bin/entrypoint.sh"]
 CMD ["serve"]
 
 # --- image complète (balise « latest ») : la MÊME image que la légère. Elle ne contient plus Ollama (plus d'1,5 Go re-téléchargés à chaque mise à jour) :
-# le moteur se choisit et s'installe depuis la page de Lutin, dans le dossier /engines (ou moteurs/ dans /data) ; les modèles restent dans /models.
+# le moteur se choisit et s'installe depuis la page de Lutin, dans le dossier /engines (ou engines/ dans /data) ; les modèles restent dans /models.
 FROM leger AS complet

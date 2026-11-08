@@ -1239,5 +1239,21 @@
 "Colibri écoute seulement sur cette machine (127.0.0.1). Son modèle se prépare avec Colibri lui-même (« coli setup » ou « coli import », plusieurs dizaines de Go) ; indique ici le dossier obtenu. Pour joindre un Colibri qui tourne ailleurs, choisis « Autre serveur » et donne son adresse.": "Colibri only listens on this machine (127.0.0.1). Its model is prepared with Colibri itself (\"coli setup\" or \"coli import\", tens of GB); enter the resulting folder here. To reach a Colibri running elsewhere, choose \"Another server\" and give its address.",
 "Dossier du modèle préparé par Colibri (chemin complet)": "Folder of the model prepared by Colibri (full path)",
 "Port local de Colibri": "Colibri local port",
-"port": "port"
+"port": "port",
+"est monté mais l'utilisateur 1000 du conteneur ne peut pas y écrire : sur l'hôte, « sudo chown -R 1000:1000 » sur ce dossier, puis redémarre le conteneur. En attendant, le moteur ira dans ": "is mounted but the container's user 1000 cannot write to it: on the host, run \"sudo chown -R 1000:1000\" on that folder, then restart the container. Meanwhile the engine goes to ",
+"Dossier des moteurs": "Engines folder",
+"imposé par la variable LUTIN_ENGINES du docker-compose": "set by the LUTIN_ENGINES variable of the docker-compose",
+"choisi ici": "chosen here",
+"volume ": "volume ",
+" du docker-compose": " of the docker-compose",
+"dossier par défaut, dans les données de Lutin": "default folder, in Lutin's data",
+"survit aux mises à jour de l'image (volume des données)": "survives image updates (data volume)",
+"est monté mais l'utilisateur 1000 du conteneur ne peut pas y écrire : sur l'hôte, « sudo chown -R 1000:1000 » sur ce dossier, puis redémarre le conteneur.": "is mounted but the container's user 1000 cannot write to it: on the host, run \"sudo chown -R 1000:1000\" on that folder, then restart the container.",
+"Aucun volume n'est monté sur ": "No volume is mounted on ",
+" : pour ranger les moteurs ailleurs que dans les données, ajoute « - /ton/dossier:": " : to keep the engines somewhere other than the data, add \"- /your/folder:",
+" » aux volumes du docker-compose, ou choisis un dossier ci-dessous.": " \" to the docker-compose volumes, or pick a folder below.",
+"Installé ici : ": "Installed here: ",
+"pour changer de dossier, désinstalle-les d'abord (tes modèles restent où ils sont).": "to change the folder, uninstall them first (your models stay where they are).",
+"Dossier par défaut": "Default folder",
+"Un chemin complet (sous Docker : un chemin du conteneur) ; un sous-dossier par moteur y est créé": "A full path (under Docker: a container path); one sub-folder per engine is created in it"
 }

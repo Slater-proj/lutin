@@ -124,14 +124,14 @@ class Dossier(Base):
         moteurs.MOTEURS[self.m.id] = self.m
         self.addCleanup(moteurs.MOTEURS.pop, self.m.id, None)
         info = self.m.info_dossier()
-        self.assertEqual((info["actuel"], info["defaut"]), (str(self.tmp / "moteurs" / "llamacpp"), str(self.tmp / "moteurs" / "llamacpp")))
+        self.assertEqual((info["actuel"], info["defaut"]), (str(self.tmp / "engines" / "llamacpp"), str(self.tmp / "engines" / "llamacpp")))
         self.assertTrue(info["propose"].endswith("llama.cpp") and not info["personnalise"])
         ml.regler_dossier(self.m.id, info["propose"])
         self.assertEqual(self.m.dossier(), self.tmp / "IA" / "ollama" / "llama.cpp")
         self.assertEqual(self.m.dossier_modeles(), self.tmp / "IA" / "ollama" / "llama.cpp" / "modeles", "les modèles suivent")
         self.assertTrue(self.m.info_dossier()["personnalise"])
         ml.regler_dossier(self.m.id, "")
-        self.assertEqual(self.m.dossier(), self.tmp / "moteurs" / "llamacpp", "vide : retour au dossier de Lutin")
+        self.assertEqual(self.m.dossier(), self.tmp / "engines" / "llamacpp", "vide : retour au dossier de Lutin")
 
     def test_dossier_invalide_ou_deja_installe(self):
         moteurs.MOTEURS[self.m.id] = self.m
@@ -148,14 +148,14 @@ class Dossier(Base):
             ml.regler_dossier(self.m.id, str(self.tmp / "ailleurs"))
         self.assertIn("désinstalle-le d'abord", str(e.exception), "rien n'est déplacé en douce")
 
-    def test_la_page_recoit_les_infos_du_dossier_modifiables_sauf_sous_docker(self):
+    def test_la_page_recoit_les_infos_du_dossier_modifiables_aussi_sous_docker(self):
         moteurs.MOTEURS[self.m.id] = self.m
         self.addCleanup(moteurs.MOTEURS.pop, self.m.id, None)
         self.assertTrue(ml.vue_reglages(self.m.id)["dossier"]["modifiable"])
         moteurs.CONTEXTE["en_docker"] = lambda: True
         v = ml.vue_reglages(self.m.id)["dossier"]
         self.assertIn("actuel", v)          # le dossier est montré (le volume des moteurs)...
-        self.assertFalse(v["modifiable"])          # ...mais se choisit dans le docker-compose, pas dans la page
+        self.assertTrue(v["modifiable"])          # ...et se choisit aussi dans la page (un chemin du conteneur)
 
 
 class Reglages(Base):
@@ -199,7 +199,7 @@ class Installation(Base):
         self.assertTrue(self.m.statut()["installe"])
         self.assertEqual(self.m.statut()["version"], "b200 (cpu)")
         self.assertIn("b200", self.m.version())
-        self.assertFalse((self.tmp / "moteurs" / "llamacpp" / "telechargement").exists(), "les archives téléchargées sont nettoyées")
+        self.assertFalse((self.tmp / "engines" / "llamacpp" / "telechargement").exists(), "les archives téléchargées sont nettoyées")
         modele = self.m.dossier_modeles() / "perso.gguf"
         modele.parent.mkdir(parents=True, exist_ok=True)
         modele.write_bytes(b"GGUF")

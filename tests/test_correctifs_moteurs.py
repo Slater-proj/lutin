@@ -277,5 +277,86 @@ class SanteVideo(unittest.TestCase):
         self.assertNotIn("0 %", i["valeur"])
 
 
+class DossierDesMoteurs(unittest.TestCase):
+    """Un seul dossier pour tous les moteurs, choisi dans la page ; noms de dossiers en anglais (engines), l'ancien « moteurs » est repris."""
+
+    def setUp(self):
+        from lutin import moteurs_docker as md
+        self.md = md
+        self.tmp = Path(tempfile.mkdtemp(prefix="lutin-dossier-moteurs-"))
+        self.ancien = dict(moteurs.CONTEXTE)
+        moteurs.CONTEXTE.update(donnees=lambda: self.tmp, en_docker=lambda: False, hors_ligne=lambda: False)
+        for k in ("LUTIN_ENGINES", "LUTIN_MOTEURS", "LUTIN_DOCKER"):
+            patcher = mock.patch.dict(os.environ)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+            os.environ.pop(k, None)
+
+    def tearDown(self):
+        moteurs.CONTEXTE.clear()
+        moteurs.CONTEXTE.update(self.ancien)
+
+    def test_par_defaut_engines_en_anglais(self):
+        self.assertEqual(self.md.base_moteurs(), self.tmp / "engines")
+
+    def test_l_ancien_dossier_moteurs_est_renomme_sans_rien_perdre(self):
+        (self.tmp / "moteurs" / "llamacpp").mkdir(parents=True)
+        (self.tmp / "moteurs" / "llamacpp" / "version.txt").write_text("b1", encoding="utf-8")
+        self.assertEqual(self.md.base_moteurs(), self.tmp / "engines")
+        self.assertEqual((self.tmp / "engines" / "llamacpp" / "version.txt").read_text(encoding="utf-8"), "b1")
+        self.assertFalse((self.tmp / "moteurs").exists())
+
+    def test_renommage_impossible_l_ancien_reste_utilise(self):
+        (self.tmp / "moteurs").mkdir()
+        with mock.patch.object(Path, "rename", side_effect=PermissionError(5, "Accès refusé")):
+            self.assertEqual(self.md.base_moteurs(), self.tmp / "moteurs")
+
+    def test_choix_dans_la_page_et_retour_au_defaut(self):
+        choisi = self.tmp / "ailleurs"
+        ml.regler_dossier_moteurs(str(choisi))
+        self.assertEqual(self.md.base_moteurs(), choisi)
+        self.assertEqual(moteurs.MOTEURS["llamacpp"].dossier(), choisi / "llamacpp")
+        v = ml.vue_dossier_moteurs()
+        self.assertEqual((v["source"], v["personnalise"], v["actuel"]), ("reglage", True, str(choisi)))
+        ml.regler_dossier_moteurs("")
+        self.assertEqual(self.md.base_moteurs(), self.tmp / "engines")
+
+    def test_refuse_un_chemin_relatif_et_tant_qu_un_moteur_y_est_installe(self):
+        with self.assertRaises(ml.ErreurMoteur):
+            ml.regler_dossier_moteurs("relatif/dossier")
+        installe = moteurs.MOTEURS["llamacpp"]
+        exe = installe.dossier_defaut() / "bin" / ("llama-server.exe" if os.name == "nt" else "llama-server")
+        exe.parent.mkdir(parents=True)
+        exe.write_text("x")
+        with self.assertRaises(ml.ErreurMoteur) as e:
+            ml.regler_dossier_moteurs(str(self.tmp / "autre"))
+        self.assertIn("llama.cpp", str(e.exception))
+        self.assertIn("désinstalle", str(e.exception))
+
+    def test_docker_priorites_et_cause_quand_engines_n_est_pas_utilise(self):
+        env = {"LUTIN_DOCKER": "1"}
+        moteurs.CONTEXTE["en_docker"] = lambda: True
+        d = self.md.detail_dossier_moteurs(env, monte=lambda p: True, ecriture=lambda p: False)
+        self.assertEqual((d["source"], d["probleme"], d["dossier"]), ("donnees", "non_modifiable", self.tmp / "engines"))
+        d = self.md.detail_dossier_moteurs(env, monte=lambda p: False)
+        self.assertEqual((d["source"], d["probleme"]), ("donnees", "non_monte"))
+        d = self.md.detail_dossier_moteurs(env, monte=lambda p: True, ecriture=lambda p: True)
+        self.assertEqual((d["source"], d["dossier"]), ("montage", Path("/engines")))
+        ml.regler_dossier_moteurs(str(self.tmp / "choisi"))
+        d = self.md.detail_dossier_moteurs(env, monte=lambda p: True, ecriture=lambda p: True)
+        self.assertEqual((d["source"], d["dossier"]), ("reglage", self.tmp / "choisi"), "le choix de la page passe avant /engines")
+        d = self.md.detail_dossier_moteurs(dict(env, LUTIN_ENGINES="/vol"), monte=lambda p: True)
+        self.assertEqual((d["source"], d["dossier"]), ("env", Path("/vol")), "la variable passe avant tout")
+        d = self.md.detail_dossier_moteurs(dict(env, LUTIN_MOTEURS="/ancien"), monte=lambda p: True)
+        self.assertEqual(d["dossier"], Path("/ancien"), "l'ancienne variable française est encore lue")
+
+    def test_docker_le_dossier_est_choisissable_dans_la_page_sauf_si_impose_par_la_variable(self):
+        moteurs.CONTEXTE["en_docker"] = lambda: True
+        with mock.patch.dict(os.environ, {"LUTIN_DOCKER": "1", "LUTIN_ENGINES": "/vol"}):
+            self.assertFalse(ml.vue_dossier_moteurs()["modifiable"])
+            with self.assertRaises(ml.ErreurMoteur):
+                ml.regler_dossier_moteurs(str(self.tmp / "x"))
+
+
 if __name__ == "__main__":
     unittest.main()

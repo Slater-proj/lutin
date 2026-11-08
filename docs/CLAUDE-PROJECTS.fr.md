@@ -30,5 +30,5 @@ Sans `--ici` ni `--copie`, la commande demande (copie par défaut). Dans la page
 
 - Ajouter un dossier n'est possible que depuis cette machine (niveau « cette machine seulement », ou ligne de commande), comme tout dossier de travail.
 - Un dossier sans `CLAUDE.md` ni `.claude/` est refusé (utilise `lutin travaux ajouter` pour un dossier ordinaire).
-- Avec Docker, monte le dépôt sous `/travail` et déclare-le avec `LUTIN_TRAVAUX` (voir [DOCKER.fr.md](DOCKER.fr.md)).
+- Avec Docker, monte le dépôt sous `/workspace` et déclare-le avec `LUTIN_WORKSPACES` (voir [DOCKER.fr.md](DOCKER.fr.md)).
 - Lutin utilise des modèles locaux : un `CLAUDE.md` très long et beaucoup de skills coûtent du contexte. Garde-les courts et laisse le modèle lire le détail à la demande.

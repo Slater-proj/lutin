@@ -51,7 +51,7 @@ curl -fsSL https://raw.githubusercontent.com/Slater-proj/lutin/main/installateur
 
 **Docker** (Linux, serveur, NAS) : [docs/DOCKER.fr.md](docs/DOCKER.fr.md) — **une image, Lutin et Ollama dedans**
 ```bash
-docker run -d --name lutin -p 127.0.0.1:8777:8777 -v lutin-data:/data -v lutin-models:/models -v "$PWD/travail":/travail ghcr.io/slater-proj/lutin:latest
+docker run -d --name lutin -p 127.0.0.1:8777:8777 -v lutin-data:/data -v lutin-models:/models -v "$PWD/workspace":/workspace ghcr.io/slater-proj/lutin:latest
 ```
 
 Le script installe la dernière version publiée dans un environnement privé, ajoute la commande `lutin`, puis lance l'**installation guidée** : langue, analyse de ta machine, qui peut utiliser Lutin, où ranger les dossiers et les modèles, modèles conseillés, installation d'Ollama si besoin. **Relancer le script est sans risque** : déjà à jour, il ne change rien ; une version plus récente, il met à jour sans toucher à tes réglages, conversations ni modèles.

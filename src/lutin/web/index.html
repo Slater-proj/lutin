@@ -1676,6 +1676,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     bloc.appendChild(el('b', '', (pl.installes || []).length ? T('Aucun moteur prêt : le moteur choisi ne répond pas') : T('Premier lancement : il manque un moteur')));
     bloc.appendChild(el('div', 'aide', pl.raison));
     if (pl.recommande) bloc.appendChild(el('div', '', T('Conseillé pour cette machine : ') + pl.recommande.nom + ' — ' + pl.recommande.raison));
+    if (pl.emplacement && pl.emplacement.probleme === 'non_modifiable') bloc.appendChild(el('div', 'erreur', '⚠ ' + pl.emplacement.montage + ' ' + T('est monté mais l\'utilisateur 1000 du conteneur ne peut pas y écrire : sur l\'hôte, « sudo chown -R 1000:1000 » sur ce dossier, puis redémarre le conteneur. En attendant, le moteur ira dans ') + pl.emplacement.dossier + '.'));
     if (pl.emplacement) bloc.appendChild(el('div', 'aide', pl.emplacement.dedie
       ? '📁 ' + T('Le moteur sera installé dans ') + pl.emplacement.dossier + T(' (volume dédié : une mise à jour de l\'image ne l\'efface pas).')
       : '📁 ' + T('Le moteur sera installé dans ') + pl.emplacement.dossier + T(', dans le volume des données (aucun volume /engines monté). Il survit aux mises à jour de l\'image ; pour le ranger ailleurs, ajoute « - /ton/dossier:/engines » dans les volumes du docker-compose.')));
@@ -3258,11 +3259,31 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     c.appendChild(l);
     return c;
   };
+  // Le dossier où TOUS les moteurs s'installent (un sous-dossier par moteur), choisi ici comme le dossier des modèles ; sous Docker : un chemin du conteneur (par exemple /engines, monté dans le docker-compose)
+  const carteDossierMoteurs = (d, modifiable) => {
+    const c = el('div', 'carte'); c.style.cssText = 'flex-direction:column;align-items:stretch;gap:6px;margin-bottom:10px';
+    c.appendChild(el('b', '', T('Dossier des moteurs')));
+    c.appendChild(el('div', '', d.actuel + (d.libre_go != null ? ' · ' + d.libre_go + ' ' + T('Go libres') : '')));
+    const origine = { env: T('imposé par la variable LUTIN_ENGINES du docker-compose'), reglage: T('choisi ici'), montage: T('volume ') + d.montage + T(' du docker-compose'), donnees: T('dossier par défaut, dans les données de Lutin') }[d.source] || '';
+    c.appendChild(el('div', 'aide', origine + (d.docker && d.source === 'donnees' ? ' · ' + T('survit aux mises à jour de l\'image (volume des données)') : '')));
+    if (d.probleme === 'non_modifiable') c.appendChild(el('div', 'erreur', '⚠ ' + d.montage + ' ' + T('est monté mais l\'utilisateur 1000 du conteneur ne peut pas y écrire : sur l\'hôte, « sudo chown -R 1000:1000 » sur ce dossier, puis redémarre le conteneur.')));
+    if (d.probleme === 'non_monte') c.appendChild(el('div', 'aide', 'ℹ ' + T('Aucun volume n\'est monté sur ') + d.montage + T(' : pour ranger les moteurs ailleurs que dans les données, ajoute « - /ton/dossier:') + d.montage + T(' » aux volumes du docker-compose, ou choisis un dossier ci-dessous.')));
+    if (d.installes && d.installes.length) c.appendChild(el('div', 'aide', T('Installé ici : ') + d.installes.join(', ') + ' — ' + T('pour changer de dossier, désinstalle-les d\'abord (tes modèles restent où ils sont).')));
+    const l = el('div', 'ligne'), champ = el('input'), ok = el('button', '', T('Changer de dossier')), defaut = el('button', '', T('Dossier par défaut')), msg = el('span', 'aide');
+    champ.value = d.actuel; champ.style.minWidth = '320px'; champ.title = T('Un chemin complet (sous Docker : un chemin du conteneur) ; un sous-dossier par moteur y est créé');
+    const bloque = !modifiable || !d.modifiable || (d.installes && d.installes.length > 0);
+    champ.disabled = ok.disabled = bloque; defaut.disabled = bloque || !d.personnalise;
+    const changer = async valeur => { try { await api('/api/moteurs-dossier', { dossier: valeur }); await rafraichir(); chargerMoteurs(); } catch (e) { msg.textContent = e.message; } };
+    ok.addEventListener('click', () => changer(champ.value.trim())); defaut.addEventListener('click', () => changer(''));
+    l.append(champ, ok, defaut, msg); c.appendChild(l);
+    return c;
+  };
   const chargerMoteurs = async () => {
     clearTimeout(MINUTEUR_MOTEURS);
     let r; try { r = await api('/api/moteurs'); } catch (e) { $('aideMoteur').textContent = e.message; return; }
     const z = $('listeMoteurs'), neuf = document.createElement('div');
     if (!r.modifiable && ETAT) neuf.appendChild(el('div', 'attention', explicationVerrou()));
+    if (r.dossier_moteurs) neuf.appendChild(carteDossierMoteurs(r.dossier_moteurs, r.modifiable));
     r.moteurs.forEach(m => neuf.appendChild(carteMoteur(m, r.modifiable, r.prereglages || [])));
     let banc = null; try { banc = await api('/api/bench-moteurs'); neuf.appendChild(carteBancMoteurs(banc, r.modifiable)); } catch (e) { /* la recommandation est un confort */ }
     if (banc && banc.en_cours && $('p-reglages').classList.contains('vue')) { clearTimeout(MINUTEUR_MOTEURS); MINUTEUR_MOTEURS = setTimeout(chargerMoteurs, 2000); }

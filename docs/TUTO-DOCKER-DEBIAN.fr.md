@@ -51,12 +51,12 @@ sudo usermod -aG docker $USER      # puis déconnecte-toi et reconnecte-toi
 Lutin tourne dans le conteneur sous l'utilisateur **1000**. Les dossiers de ton serveur qu'il doit pouvoir écrire lui appartiennent donc :
 
 ```bash
-sudo mkdir -p /opt/lutin/travail
-sudo chown -R 1000:1000 /opt/lutin/travail
+sudo mkdir -p /opt/lutin/workspace
+sudo chown -R 1000:1000 /opt/lutin/workspace
 cd /opt/lutin
 ```
 
-`/opt/lutin/travail` est le **seul endroit que Lutin peut lire et modifier** (ses missions, les documents qu'il crée…). Mets-y ce que tu veux lui confier. Les conversations, la mémoire et les réglages sont dans un volume Docker (`lutin-data`) ; les modèles dans un autre (`lutin-models`).
+`/opt/lutin/workspace` est le **seul endroit que Lutin peut lire et modifier** (ses missions, les documents qu'il crée…). Mets-y ce que tu veux lui confier. Les conversations, la mémoire et les réglages sont dans un volume Docker (`lutin-data`) ; les modèles dans un autre (`lutin-models`).
 
 ## 3. Le réseau partagé avec ton reverse proxy
 
@@ -85,7 +85,7 @@ Modifie ces lignes (le reste convient à un petit serveur partagé) :
 | `LUTIN_ADMINS` | ton identifiant **Authelia** (celui de `Remote-User`) : `alice` |
 | `LUTIN_LANGUE` | `fr` |
 | `mem_limit` et `LUTIN_BUDGET_GO` | la mémoire que tu veux réserver à Lutin : `10g` et `"8"` pour environ 10 Go libres |
-| `./travail:/travail` | `/opt/lutin/travail:/travail` |
+| `./workspace:/workspace` | `/opt/lutin/workspace:/workspace` |
 
 Vérifie le fichier sans rien lancer :
 
@@ -153,7 +153,7 @@ Puis recharge Authelia et ton reverse proxy.
 | Diagnostic à coller dans un rapport | `docker compose exec lutin lutin doctor` |
 | Voir ce que Lutin a modifié | `docker compose exec lutin lutin journal` |
 
-Sauvegarde le volume `lutin-data` (conversations, mémoire, réglages) et ton dossier `/opt/lutin/travail`. Les modèles se retéléchargent.
+Sauvegarde le volume `lutin-data` (conversations, mémoire, réglages) et ton dossier `/opt/lutin/workspace`. Les modèles se retéléchargent.
 
 ## 10. Dépannage rapide
 

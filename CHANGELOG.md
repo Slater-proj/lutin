@@ -2,6 +2,14 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## Dossier des moteurs choisissable, noms de dossiers en anglais
+
+- **Réglages > Moteurs > « Dossier des moteurs »** : un seul dossier pour tous les moteurs (un sous-dossier par moteur), choisi dans la page comme celui des modèles, **y compris sous Docker** (un chemin du conteneur). Ordre : variable `LUTIN_ENGINES`, puis ce choix, puis `/engines` s'il est monté **et modifiable**, puis `/data/engines`. Rien n'est déplacé en douce : le changement est refusé tant qu'un moteur installé par Lutin est dans l'ancien dossier. Le dossier d'installation propre à llama.cpp redevient modifiable sous Docker.
+- **« /engines monté mais ignoré »** : si le dossier de l'hôte appartient à root, l'utilisateur 1000 du conteneur ne peut pas y écrire et Lutin se rabattait en silence sur les données. La carte de premier lancement et la carte du dossier disent maintenant pourquoi, et la commande à lancer (`sudo chown -R 1000:1000` sur le dossier de l'hôte).
+- **Noms en anglais** pour tout ce qui est chemin de conteneur : `/workspace` (au lieu de `/travail`), `/engines`, `/data/engines` (au lieu de `/data/moteurs`), variables `LUTIN_WORKSPACE`, `LUTIN_WORKSPACES`, `LUTIN_ENGINES`. **Rien ne casse** : un volume `/travail` encore monté est reconnu, les anciennes variables sont lues, et l'ancien dossier `moteurs/` des données est renommé en `engines/` (ou gardé tel quel si un programme l'utilise). Les dossiers internes des données (`donnees`, `memoire`…) ne sont pas renommés dans cette version : cela demande une migration à part.
+
+**English.** One "Engines folder" setting for all engines (also under Docker); the page now says why a mounted `/engines` is ignored (not writable by user 1000) and what command fixes it. Container paths are English (`/workspace`, `/engines`, `/data/engines`, `LUTIN_WORKSPACE(S)`, `LUTIN_ENGINES`); the old French names still work and `moteurs/` is renamed to `engines/`.
+
 ## Retours d'essai : mise à jour de llama.cpp, Colibri, premier lancement, mémoire vidéo
 
 - **Mise à jour de llama.cpp sous Windows : « [WinError 5] Accès refusé »** (`bin.neuf` -> `bin`). Un antivirus qui analyse les fichiers tout juste écrits, ou un `llama-server` resté en vie, bloque le renommage quelques secondes. Lutin réessaie maintenant avec des pauses, arrête les `llama-server` restés dans son dossier, puis copie au lieu de renommer en dernier recours ; si rien n'y fait, il dit pourquoi.

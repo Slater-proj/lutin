@@ -339,7 +339,7 @@ def lister_disques(systeme):
             if masque & (1 << i) and ctypes.windll.kernel32.GetDriveTypeW(lettre) == 3:          # 3 = disque fixe (pas de clé USB, lecteur réseau, CD)
                 racines.append(lettre)
     else:
-        racines = ["/", str(Path.home())] + [x for x in (os.environ.get("LUTIN_HOME"), os.environ.get("OLLAMA_MODELS"), os.environ.get("LUTIN_TRAVAIL")) if x and Path(x).exists()]          # conteneur : les volumes comptent
+        racines = ["/", str(Path.home())] + [x for x in (os.environ.get("LUTIN_HOME"), os.environ.get("OLLAMA_MODELS"), os.environ.get("LUTIN_WORKSPACE") or os.environ.get("LUTIN_TRAVAIL")) if x and Path(x).exists()]          # conteneur : les volumes comptent
     disques, vus = [], set()
     for r in racines:
         try:

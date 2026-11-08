@@ -1904,5 +1904,8 @@
 "Programme inconnu.": "Unknown program.",
 "Le programme (pid {}) est arrêté : sa mémoire est libre.": "The program (pid {}) is stopped: its memory is free.",
 "Impossible d'arrêter le programme (pid {}) : {}": "Cannot stop the program (pid {}): {}",
-"Installé, il démarre à la demande.": "Installed: it starts on demand."
+"Installé, il démarre à la demande.": "Installed: it starts on demand.",
+"Le dossier des moteurs": "The engines folder",
+"Le dossier des moteurs est fixé par la variable LUTIN_ENGINES du docker-compose : change-la là.": "The engines folder is set by the LUTIN_ENGINES variable of the docker-compose: change it there.",
+"{} est déjà installé dans le dossier actuel : désinstalle-le d'abord (tes modèles restent où ils sont), puis change de dossier.": "{} is already installed in the current folder: uninstall it first (your models stay where they are), then change the folder."
 }

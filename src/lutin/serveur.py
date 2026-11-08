@@ -218,7 +218,8 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 reco = None
             from . import moteurs_docker as _md
             dossier = _md.dossier_moteurs()          # Docker : où le moteur sera installé, et si c'est un volume dédié (/engines) ou le volume des données
-            emplacement = {"dossier": str(dossier), "dedie": bool(os.environ.get("LUTIN_MOTEURS")) or str(dossier) == _md.MONTAGE} if dossier else None
+            detail_dossier = _md.detail_dossier_moteurs() if dossier else {}
+            emplacement = {"dossier": str(dossier), "dedie": detail_dossier.get("source") in ("env", "reglage", "montage"), "probleme": detail_dossier.get("probleme", ""), "montage": _md.MONTAGE} if dossier else None
             autres = []          # les autres moteurs déjà sur la machine (simple regard sur les fichiers, aucune sonde réseau)
             for autre in _moteurs.MOTEURS.values():
                 try:
@@ -409,7 +410,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
         if chemin == "/api/moteurs":                             # les moteurs de modèles : leur état, ce qui est possible avec chacun, et celui qui est choisi
             courant = _m.moteur_actuel().id
             _moteurs_maj.en_arriere_plan(bool(_m.reglages().get("verifier_maj", True)) and not _hl.actif())          # au plus un contrôle par 24 h, en arrière-plan : la carte du moteur l'affichera au prochain rafraîchissement
-            return self._envoyer(200, {"courant": courant, "modifiable": self._configurateur(), "moteurs": [self._vue_moteur(mo, courant) for mo in _moteurs.liste()], "prereglages": self._prereglages()})
+            return self._envoyer(200, {"courant": courant, "modifiable": self._configurateur(), "moteurs": [self._vue_moteur(mo, courant) for mo in _moteurs.liste()], "prereglages": self._prereglages(), "dossier_moteurs": _llamacpp.vue_dossier_moteurs()})
         if chemin in ("/api/moteur-recherche", "/api/moteur-fichiers"):          # chercher un modèle (Hugging Face pour llama.cpp), puis voir les fichiers d'un dépôt
             q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
             mo = _moteurs.par_id((q.get("moteur") or [""])[0])
@@ -1016,6 +1017,14 @@ class Gestionnaire(BaseHTTPRequestHandler):
                     return self._envoyer(200, self._machines(self.path[len("/api/machines-"):], donnees))
                 except ValueError as e:
                     return self._envoyer(400, {"erreur": str(e)})
+            if self.path == "/api/moteurs-dossier":                    # le dossier où tous les moteurs s'installent (comme le dossier des modèles)
+                if not self._configurateur():
+                    return self._envoyer(403, {"erreur": _t("Installer, démarrer ou régler un moteur se fait depuis cette machine (niveau « cette machine seulement » ou navigateur de cette machine).")})
+                try:
+                    _llamacpp.regler_dossier_moteurs(donnees.get("dossier"))
+                except _llamacpp.ErreurMoteur as e:
+                    return self._envoyer(400, {"erreur": str(e)})
+                return self._envoyer(200, {"ok": True, "dossier_moteurs": _llamacpp.vue_dossier_moteurs()})
             if self.path.startswith("/api/moteur-"):
                 if not self._configurateur():
                     return self._envoyer(403, {"erreur": _t("Installer, démarrer ou régler un moteur se fait depuis cette machine (niveau « cette machine seulement » ou navigateur de cette machine).")})

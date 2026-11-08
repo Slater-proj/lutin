@@ -77,7 +77,7 @@ class Installation(Base):
         self.assertTrue((racine / "coli").is_file())
         self.assertIn("https://github.com/JustVugg/colibri/releases/download/v2.1.0/colibri-v2.1.0-windows-x86_64.zip", reseau.demandes)
         self.assertEqual(C.installee(self.dossiers)[0], "2.1.0")
-        self.assertEqual(list((self.dossiers["donnees"] / "moteurs" / "colibri").glob("*.partiel")), [], "pas de dossier provisoire oublié")
+        self.assertEqual(list((self.dossiers["donnees"] / "engines" / "colibri").glob("*.partiel")), [], "pas de dossier provisoire oublié")
 
     def test_somme_fausse_n_installe_rien(self):
         with self.assertRaises(ValueError):
@@ -94,7 +94,7 @@ class Installation(Base):
         with self.assertRaises(ValueError) as e:
             self.installer(Reseau(archive))
         self.assertIn("sortirait", str(e.exception))
-        self.assertFalse((self.dossiers["donnees"] / "moteurs" / "evade.txt").exists())
+        self.assertFalse((self.dossiers["donnees"] / "engines" / "evade.txt").exists())
         self.assertFalse((self.tmp / "evade.txt").exists())
         self.assertIsNone(C.installee(self.dossiers))
 

@@ -45,7 +45,7 @@ class Dossier(unittest.TestCase):
         self.assertIsNone(md.dossier_moteurs({}))
 
     def test_sans_montage_les_moteurs_vont_dans_le_volume_des_donnees(self):
-        self.assertEqual(md.dossier_moteurs(monte=lambda d: False), self.tmp / "moteurs")
+        self.assertEqual(md.dossier_moteurs(monte=lambda d: False), self.tmp / "engines")
 
     def test_dossier_choisi_par_variable(self):
         with unittest.mock.patch.dict(os.environ, {"LUTIN_MOTEURS": "/autre"}):
@@ -103,10 +103,10 @@ class Installation(Dossier):
         with unittest.mock.patch("platform.machine", return_value="x86_64"):
             self.installer(archive({"bin/ollama": b"prog", "lib/ollama/a.so": b"lib"}))
         exe = md.ollama_installe_par_lutin()
-        self.assertEqual(Path(exe), self.tmp / "moteurs" / "ollama" / "bin" / "ollama")
-        self.assertEqual((self.tmp / "moteurs" / "ollama" / "version.txt").read_text(encoding="utf-8"), "v9.9.9")
+        self.assertEqual(Path(exe), self.tmp / "engines" / "ollama" / "bin" / "ollama")
+        self.assertEqual((self.tmp / "engines" / "ollama" / "version.txt").read_text(encoding="utf-8"), "v9.9.9")
         self.assertEqual(md.chemin_ollama(), exe)
-        self.assertFalse((self.tmp / "moteurs" / "ollama" / "telechargement").exists())          # l'archive de 1,5 Go ne reste pas sur le disque
+        self.assertFalse((self.tmp / "engines" / "ollama" / "telechargement").exists())          # l'archive de 1,5 Go ne reste pas sur le disque
 
     def test_une_archive_corrompue_est_refusee(self):
         with unittest.mock.patch("platform.machine", return_value="x86_64"):
@@ -162,7 +162,7 @@ class Actions(Dossier):
     def test_llamacpp_s_installe_aussi_dans_docker(self):
         from lutin import moteur_llamacpp as ml
         mo = ml.MoteurLlamaCpp()
-        self.assertEqual(mo.dossier_defaut(), self.tmp / "moteurs" / "llamacpp")
+        self.assertEqual(mo.dossier_defaut(), self.tmp / "engines" / "llamacpp")
         a = mo.actions()
         self.assertIn("installer", a)
         self.assertNotIn("indique son adresse", a["installer"]["raison"])
