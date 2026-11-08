@@ -47,6 +47,7 @@ SONDES = {}          # id de machine -> (instant, résultat)
 DERNIER_ETAT = {}          # id de machine -> dernier état journalisé
 REVEIL = {}          # id de machine -> instant du dernier paquet de réveil envoyé
 INFOS_NOEUD = {}          # adresse locale -> (instant, infos du nœud)
+INFOS_EN_COURS = {}          # adresse locale -> évènement : un calcul d'infos est en cours
 DISTANTS = {"t": 0.0, "v": [], "en_cours": False}          # modèles des autres machines, pour la liste de choix (voir modeles_distants)
 CAPACITES_DISTANTES = {}          # (id de machine, modèle) -> (instant, capacités)
 
@@ -119,6 +120,8 @@ def noeud_activer(actif, niveau_local=False):
         n["actif"] = bool(actif)
         _ecrire("noeud.json", n)
     journaliser("nœud {}".format("activé" if actif else "désactivé"))
+    if actif:
+        threading.Thread(target=cartes_en_cache, daemon=True, name="noeud-cartes-chaud").start()          # la première fois est la plus lente : autant la faire avant l'appairage
     return noeud_vue()
 
 
@@ -139,15 +142,53 @@ def _empreinte(jeton):
     return hashlib.sha256(jeton.encode("utf-8")).hexdigest()
 
 
-def noeud_infos(ip_locale=""):
-    """Ce que ce nœud transmet à la machine qui l'appaire, pour qu'elle n'ait rien à saisir : son adresse MAC, s'il peut être réveillé à distance, si Lutin démarre tout seul chez lui. Gardé 60 s (sous Windows, ça lance PowerShell)."""
+VIDE_INFOS = {"mac": "", "reveil": {"pret": None, "carte": "", "avertissements": []}, "demarrage": {"installe": False, "possible": False, "docker": False}}
+
+
+def noeud_infos(ip_locale="", attente=1.5):
+    """Ce que ce nœud transmet à la machine qui l'appaire, pour qu'elle n'ait rien à saisir : son adresse MAC, s'il peut être réveillé à distance, si Lutin démarre tout seul chez lui.
+    Le calcul lance des programmes (PowerShell sous Windows : plusieurs secondes à froid) : il se fait en arrière-plan et gardé 60 s. L'appairage et les sondes n'attendent jamais plus de `attente` secondes ;
+    sans réponse à temps, des informations vides sont rendues et l'autre machine les recevra à sa prochaine sonde (retenir_infos)."""
     maintenant = time.monotonic()
     gardee = INFOS_NOEUD.get(ip_locale)
-    if gardee and maintenant - gardee[0] < 60:
-        return gardee[1]
+    perimee = not gardee or maintenant - gardee[0] >= 60
+    evenement = None
+    if perimee:
+        with VERROU:
+            evenement = INFOS_EN_COURS.get(ip_locale)
+            if evenement is None:
+                evenement = INFOS_EN_COURS[ip_locale] = threading.Event()
+
+                def travail(ev=evenement):
+                    try:
+                        INFOS_NOEUD[ip_locale] = (time.monotonic(), _calculer_infos(ip_locale))
+                    except Exception:  # noqa: BLE001  (un renseignement de plus : jamais un appairage qui échoue)
+                        pass
+                    finally:
+                        with VERROU:
+                            INFOS_EN_COURS.pop(ip_locale, None)
+                        ev.set()
+                threading.Thread(target=travail, daemon=True, name="noeud-infos").start()
+        if not gardee:
+            evenement.wait(attente)
+            gardee = INFOS_NOEUD.get(ip_locale)
+    return gardee[1] if gardee else VIDE_INFOS
+
+
+CARTES = {"t": -999.0, "v": None}
+
+
+def cartes_en_cache():
+    """Les cartes réseau de cette machine (le plus lent à lire : PowerShell sous Windows), gardées 60 s."""
+    if CARTES["v"] is None or time.monotonic() - CARTES["t"] > 60:
+        CARTES.update(t=time.monotonic(), v=alimentation.cartes_reseau())
+    return CARTES["v"]
+
+
+def _calculer_infos(ip_locale):
     docker = os.environ.get("LUTIN_DOCKER") == "1"
     try:
-        reveil = alimentation.etat_reveil(ip_locale, en_docker=docker)
+        reveil = alimentation.etat_reveil(ip_locale, cartes=None if docker else cartes_en_cache(), en_docker=docker)
     except Exception:  # noqa: BLE001  (un renseignement de plus : jamais un appairage qui échoue)
         reveil = {"mac": "", "carte": "", "pret": None, "avertissements": []}
     try:
@@ -156,7 +197,6 @@ def noeud_infos(ip_locale=""):
         demarrage = {"installe": False, "possible": False}
     infos = {"mac": reveil.get("mac", ""), "reveil": {k: reveil.get(k) for k in ("pret", "carte", "avertissements")},
              "demarrage": {"installe": bool(demarrage.get("installe")), "possible": bool(demarrage.get("possible")), "docker": docker}}
-    INFOS_NOEUD[ip_locale] = (maintenant, infos)
     return infos
 
 

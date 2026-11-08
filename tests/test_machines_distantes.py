@@ -182,8 +182,9 @@ class MachinesInfos(unittest.TestCase):
         class Moteur:
             id, nom = "ollama", "Ollama"
         with mock.patch.object(alimentation, "etat_reveil", lambda ip, **kw: {"mac": "00:1A:2B:3C:4D:5E", "carte": "eth", "pret": True, "avertissements": []}), \
-                mock.patch.object(alimentation, "etat_demarrage", lambda: {"installe": True, "possible": True}):
+                mock.patch.object(alimentation, "etat_demarrage", lambda: {"installe": True, "possible": True}),                 mock.patch.object(alimentation, "cartes_reseau", lambda **kw: []):
             machines.INFOS_NOEUD.clear()
+            machines.CARTES.update(t=-999.0, v=None)
             e = machines.noeud_etat(Moteur(), {"actif": True, "installes": ["gros:70b"]}, "192.168.1.20")
         self.assertEqual((e["mac"], e["reveil"]["pret"], e["demarrage"]["installe"], e["modeles"]), ("00:1A:2B:3C:4D:5E", True, True, ["gros:70b"]))
 
@@ -233,6 +234,33 @@ class MachinesInfos(unittest.TestCase):
         with mock.patch.object(machines, "_json", lambda m, chemin, corps=None, **kw: {"capacites": ["tools", "thinking"]}):
             self.assertEqual(r.capacites("gros:70b"), {"tools", "thinking"})
         self.assertEqual(r.capacites("petit:8b"), {"tools"}, "un modèle d'ici garde les capacités d'ici")
+
+
+class InfosEnArrierePlan(unittest.TestCase):
+    """L'appairage n'attend jamais PowerShell : il rend des informations vides si la lecture des cartes est lente, l'autre machine les recevra à sa prochaine sonde."""
+
+    def test_une_lecture_lente_ne_bloque_pas_l_appairage_puis_les_infos_arrivent(self):
+        import threading
+        import time
+        machines.INFOS_NOEUD.clear()
+        machines.INFOS_EN_COURS.clear()
+        libere = threading.Event()
+
+        def lent(ip, **kw):
+            libere.wait(5)
+            return {"mac": "00:1A:2B:3C:4D:5E", "carte": "eth", "pret": True, "avertissements": []}
+        with mock.patch.object(alimentation, "etat_reveil", lent), mock.patch.object(alimentation, "etat_demarrage", lambda: {"installe": True, "possible": True}),                 mock.patch.object(alimentation, "cartes_reseau", lambda **kw: []):
+            machines.CARTES.update(t=-999.0, v=None)
+            debut = time.monotonic()
+            infos = machines.noeud_infos("10.0.0.1", attente=0.2)
+            self.assertLess(time.monotonic() - debut, 1.5)
+            self.assertEqual(infos["mac"], "", "pas encore prêt : informations vides, pas d'erreur")
+            libere.set()
+            for _ in range(50):
+                if "10.0.0.1" in machines.INFOS_NOEUD:
+                    break
+                time.sleep(0.05)
+            self.assertEqual(machines.noeud_infos("10.0.0.1", attente=0.2)["mac"], "00:1A:2B:3C:4D:5E")
 
 
 class AnnonceSansAction(unittest.TestCase):
