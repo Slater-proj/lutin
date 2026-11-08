@@ -215,8 +215,9 @@ def evaluer_sante(m, r, besoin_modele=0, charge=None, partiel_possible=False):
 
 
 def _repartit_seul(r):
-    """Le moteur choisi répartit-il tout seul le modèle entre la carte et le processeur (llama.cpp géré par Lutin : `--fit`) ?"""
-    return (r or {}).get("moteur") == "llamacpp"
+    """Le moteur choisi répartit-il tout seul le modèle entre la carte et le processeur ? Oui pour Ollama et llama.cpp (`--fit`) : un modèle un peu trop gros tourne alors plus lentement mais tourne.
+    Un serveur « compatible OpenAI » est un inconnu : on ne promet rien."""
+    return ((r or {}).get("moteur") or "ollama") in ("ollama", "llamacpp")
 
 
 def _modele_d_une_autre_machine(r):
@@ -226,6 +227,11 @@ def _modele_d_une_autre_machine(r):
         return machines.modele_distant(r, _m.etat_moteur().get("installes", [])) is not None
     except Exception:  # noqa: BLE001
         return False
+
+
+def _decharge_avant_de_charger(r):
+    """Le déchargement automatique des modèles restés en mémoire (et l'attente) se déclenche sur l'état « critique », donc seulement pour un moteur qui sait décharger : Ollama. Avec llama.cpp, le serveur gère lui-même la place."""
+    return ((r or {}).get("moteur") or "ollama") == "ollama"
 
 
 def etat_sante(r=None):
@@ -248,7 +254,7 @@ def _bloquants(r, emit, conv_id=""):
         return []          # le modèle tourne sur une autre machine : rien ne manque ici
     charge = _m.ps_modele(r["modele"])
     besoin = taille_modele(r["modele"], charge)
-    sante = evaluer_sante(_m.mesures_systeme(), r, besoin, charge, _repartit_seul(r))
+    sante = evaluer_sante(_m.mesures_systeme(), r, besoin, charge, _repartit_seul(r) and not _decharge_avant_de_charger(r))
     vram = next((i for i in sante["items"] if i["id"] == "vram"), None)
     if vram and vram["niveau"] == "critique" and not charge:
         try:                                                    # un autre modèle d'Ollama occupe peut-être la carte : on le décharge d'abord
@@ -257,7 +263,7 @@ def _bloquants(r, emit, conv_id=""):
                 _m.liberer_vram()
                 time.sleep(1.5)
                 oublier_mesures("vram")
-                sante = evaluer_sante(_m.mesures_systeme(), r, besoin, charge, _repartit_seul(r))
+                sante = evaluer_sante(_m.mesures_systeme(), r, besoin, charge, _repartit_seul(r) and not _decharge_avant_de_charger(r))
         except (urllib.error.URLError, OSError, ValueError):
             pass
     for i in sante["items"]:

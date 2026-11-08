@@ -2,6 +2,13 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## Cohérence entre les moteurs
+
+- **Un seul remplacement de dossier robuste pour tous** : le correctif « Accès refusé » (réessais, arrêt des programmes restés ouverts, copie en dernier recours) n'était que dans llama.cpp ; il vit maintenant dans un module commun et **Colibri** s'en sert aussi.
+- **Texte de la VRAM identique pour Ollama et llama.cpp** : « il manque environ X Go, le reste ira sur le processeur (plus lent) », au lieu d'un message différent selon le moteur. Pour Ollama, l'état reste « critique » en coulisses : c'est lui qui déclenche le déchargement automatique des modèles restés en mémoire avant d'en charger un autre.
+- **Ollama sous Windows suit le dossier des moteurs** que tu as choisi (sous-dossier `ollama`), comme llama.cpp et Colibri.
+- **Limites dites** : seuls llama.cpp, Colibri et Ollama s'installent depuis la page ; la vue des processus de la page Santé ne connaît pas encore Colibri.
+
 ## Recherche web : Tavily, Exa et Perplexity
 
 - **Trois moteurs de recherche de plus**, chacun avec sa clé personnelle (Réglages > Recherche web) : **Tavily**, **Exa** et **Perplexity** (son API de *recherche*). Ils s'ajoutent à SearXNG et Brave, essayés avant DuckDuckGo et Bing.

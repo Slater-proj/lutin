@@ -16,7 +16,7 @@ for cle, valeur in {"LUTIN_RACINE": str(_TEMP / "projet"), "LUTIN_DONNEES": str(
 from lutin import moteur as _m  # noqa: E402  (avant les autres : import circulaire sinon)
 from lutin import diagnostic, moteurs, sante  # noqa: E402
 from lutin import moteur_llamacpp as ml  # noqa: E402
-from lutin import ressources_chargees as rc  # noqa: E402
+from lutin import remplacement, ressources_chargees as rc  # noqa: E402
 
 
 def dossier_avec(racine, fichiers):
@@ -61,14 +61,14 @@ class RemplacerDossier(unittest.TestCase):
 
     def test_fichier_verrouille_arrete_les_processus_puis_dit_pourquoi(self):
         appels = []
-        with mock.patch.object(ml, "_supprimer_arbre", lambda d: None), mock.patch.object(ml.shutil, "copytree", side_effect=PermissionError(5, "Accès refusé")):
-            with self.assertRaises(ml.ErreurMoteur) as e:
+        with mock.patch.object(remplacement, "supprimer_arbre", lambda d: None), mock.patch.object(ml.shutil, "copytree", side_effect=PermissionError(5, "Accès refusé")):
+            with self.assertRaises(remplacement.ErreurRemplacement) as e:
                 ml.remplacer_dossier(self.neuf, self.cible, dormir=lambda s: None, liberer=lambda: appels.append(1))
         self.assertIn("Ferme tout ce qui utilise llama.cpp", str(e.exception))
         self.assertGreaterEqual(len(appels), 1, "les programmes restés dans le dossier sont arrêtés")
 
     def test_pas_de_powershell_hors_windows(self):
-        with mock.patch.object(ml.os, "name", "posix"), mock.patch.object(ml.subprocess, "run", side_effect=AssertionError("ne doit rien lancer")):
+        with mock.patch.object(remplacement.os, "name", "posix"), mock.patch.object(remplacement.subprocess, "run", side_effect=AssertionError("ne doit rien lancer")):
             self.assertEqual(ml.liberer_processus(self.tmp), 0)
 
 
@@ -154,6 +154,32 @@ class Colibri(unittest.TestCase):
         self.assertEqual(v["colibri"]["port"], 8000)
         self.regler(serveur="")
         self.assertNotIn("colibri", ml.vue_reglages("openai"))
+
+
+class ColibriRemplacement(unittest.TestCase):
+    """Colibri passe par le même remplacement robuste que llama.cpp : « Accès refusé » passager sous Windows, on réessaie."""
+
+    def test_l_installation_de_colibri_survit_a_un_acces_refuse_passager(self):
+        from lutin import colibri
+        tmp = Path(tempfile.mkdtemp(prefix="lutin-colibri-rempl-"))
+        partiel, cible = dossier_avec(tmp / "v2.1.0.partiel", {"coli": "x"}), dossier_avec(tmp / "v2.1.0", {"coli": "ancien"})
+        vrai, essais = os.replace, []
+
+        def capricieux(a, b):
+            essais.append(1)
+            if len(essais) < 3:
+                raise PermissionError(5, "Accès refusé")
+            return vrai(a, b)
+        with mock.patch.object(remplacement.os, "replace", capricieux), mock.patch.object(remplacement.time, "sleep", lambda s: None):
+            remplacement.remplacer_dossier(partiel, cible)
+        self.assertEqual((cible / "coli").read_text(encoding="utf-8"), "x")
+        self.assertTrue(hasattr(colibri, "remplacer_dossier"), "colibri utilise le remplacement commun")
+
+
+class SeuilVideoPourTousLesMoteurs(unittest.TestCase):
+    def test_ollama_et_llamacpp_repartissent_tout_seuls_pas_un_serveur_externe(self):
+        for moteur, attendu in (("ollama", True), ("llamacpp", True), ("openai", False), (None, True)):
+            self.assertEqual(sante._repartit_seul({"moteur": moteur}), attendu, str(moteur))
 
 
 class PremierLancement(unittest.TestCase):

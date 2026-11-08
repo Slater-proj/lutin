@@ -7,7 +7,6 @@ Ce que ce module fait, et seulement sur commande explicite de l'utilisateur (`lu
 Ce qu'il ne fait PAS : choisir ou télécharger un modèle (plusieurs dizaines de Go : `coli setup` / `coli import` de Colibri), ni l'exposer sur le réseau.
 Les commandes viennent de la lecture du script `coli` de la v2.1.0 ; **Colibri n'a pas été lancé avec un modèle** : le démarrage est à essayer (voir docs/TRIALS.md, S3)."""
 import json
-import os
 import re
 import shutil
 import subprocess
@@ -21,6 +20,7 @@ import zipfile
 from pathlib import Path
 
 from . import config, miseajour
+from .remplacement import remplacer_dossier
 from .i18n import t as _t
 
 DEPOT = "JustVugg/colibri"
@@ -123,8 +123,7 @@ def installer(version=None, dossiers=None, http=miseajour.http_get, ouvrir=urlli
             except (ValueError, OSError, zipfile.BadZipFile, tarfile.TarError):
                 shutil.rmtree(partiel, ignore_errors=True)
                 raise
-            shutil.rmtree(cible, ignore_errors=True)
-            os.replace(partiel, cible)
+            remplacer_dossier(partiel, cible)          # même remplacement robuste que llama.cpp (antivirus, fichiers ouverts sous Windows)
     (base / "actuelle.txt").write_text(version, encoding="utf-8")
     return version, racine_archive(cible)
 

@@ -511,8 +511,21 @@ class MoteurOllama(_moteurs.Moteur):
         return chemin_ollama()
 
     def dossier_defaut(self):
+        if os.name == "nt":
+            from . import moteurs_docker
+            choisi = moteurs_docker.reglage_dossier_moteurs()          # tu as choisi un dossier pour tous les moteurs : Ollama s'y installe aussi (sous-dossier ollama)
+            if choisi:
+                return Path(choisi) / "ollama"
         base = os.environ.get("LOCALAPPDATA")
         return Path(base) / "Programs" / "Ollama" if base and os.name == "nt" else None
+
+    def dossier_installation(self):
+        """Le dossier passé à l'installateur d'Ollama (Windows) : celui choisi pour Ollama seul, sinon le dossier des moteurs si tu en as choisi un, sinon l'emplacement habituel d'Ollama (None)."""
+        propre = self.config().get("dossier")
+        if propre:
+            return propre
+        from . import moteurs_docker
+        return str(self.dossier_defaut()) if os.name == "nt" and moteurs_docker.reglage_dossier_moteurs() else None
 
     def info_dossier(self):
         """Comme pour llama.cpp : où il s'installe (choisi avant l'installation, sous Windows seulement : l'installateur d'Ollama accepte un dossier) et où sont ses modèles (réglés dans l'onglet Modèles)."""
@@ -619,11 +632,11 @@ class MoteurOllama(_moteurs.Moteur):
                 progression(_t("Désinstallation…"), 0, 0)
                 ollama_client.desinstaller_windows()
                 if action == "reinstaller":
-                    ollama_client.installer_windows(cache, progression, dossier=self.config().get("dossier"))
+                    ollama_client.installer_windows(cache, progression, dossier=self.dossier_installation())
                     self._rendre_dossier_modeles(dossier_modeles)
                     _m.demarrer_ollama()
             elif action == "installer":
-                ollama_client.installer_windows(cache, progression, dossier=self.config().get("dossier"))
+                ollama_client.installer_windows(cache, progression, dossier=self.dossier_installation())
                 self._rendre_dossier_modeles(dossier_modeles)
                 _m.demarrer_ollama()
         except ollama_client.ErreurOllama as e:
