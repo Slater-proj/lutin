@@ -68,6 +68,14 @@ def _derniere_llamacpp(mo, http_json):
     return (actuelle, choix[0]) if choix else None
 
 
+def _derniere_colibri(mo):
+    """(version installée, dernière version publiée) pour Colibri installé par Lutin ; None sinon."""
+    if not hasattr(mo, "colibri_choisi") or not mo.colibri_choisi() or not mo.version():
+        return None
+    from . import colibri
+    return mo.version(), colibri.derniere_version()
+
+
 def _derniere_ollama(http_json):
     """(version installée, dernière version publiée) pour Ollama local et démarré ; None sinon (Docker : l'image se met à jour avec docker compose)."""
     if moteurs.CONTEXTE["en_docker"]():
@@ -105,6 +113,8 @@ def verifier(force=False, http_json=None, maintenant=time.time):
                     r = _derniere_llamacpp(mo, http_json)
                 elif mo.id == "ollama":
                     r = _derniere_ollama(http_json)
+                elif mo.id == "openai":
+                    r = _derniere_colibri(mo)
                 else:
                     r = None
             except (urllib.error.URLError, OSError, ValueError, KeyError):
@@ -121,7 +131,7 @@ def etat():
         if not isinstance(e, dict) or not e.get("derniere"):
             continue
         mo = moteurs.MOTEURS.get(ident)
-        actuelle = (mo.version() if mo is not None and ident == "llamacpp" else "") or e.get("actuelle", "")
+        actuelle = (mo.version() if mo is not None and ident in ("llamacpp", "openai") else "") or e.get("actuelle", "")
         sortie[ident] = {"actuelle": actuelle, "derniere": e["derniere"], "disponible": plus_recente(e["derniere"], actuelle), "verifie": e.get("verifie", 0)}
     return sortie
 

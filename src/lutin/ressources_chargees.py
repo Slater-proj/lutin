@@ -200,15 +200,127 @@ def vram_windows_processus(pid, lanceur=subprocess.run):
         return None
 
 
+MOTIF_MOTEUR = re.compile(r"^(llama|ollama|lm[ _-]?studio|vllm|coli)", re.I)
+MOTIF_ORPHELIN = re.compile(r"^(llama|lm[ _-]?studio|vllm|coli)", re.I)          # Ollama est vu par son interface : seuls les autres serveurs peuvent rester « invisibles »
+
+SCRIPT_PROCESSUS = (
+    "[Console]::OutputEncoding=[Text.Encoding]::UTF8; $v=@{}; "
+    "try { foreach($s in (Get-Counter '\\GPU Process Memory(*)\\Dedicated Usage' -ErrorAction Stop).CounterSamples) { if($s.InstanceName -match '^pid_(\\d+)_') { $k=[int]$Matches[1]; if($v.ContainsKey($k)){$v[$k]+=[long]$s.CookedValue}else{$v[$k]=[long]$s.CookedValue} } } } catch {}; "
+    "$r=@(Get-CimInstance Win32_Process | Where-Object { $_.Name -match '^(llama|ollama|lm[ _-]?studio|vllm|coli)' } | ForEach-Object { "
+    "[pscustomobject]@{pid=[int]$_.ProcessId; ppid=[int]$_.ParentProcessId; nom=$_.Name; exe=$_.ExecutablePath; ram=[long]$_.WorkingSetSize; vram=$(if($v.Count -gt 0){[long]$v[[int]$_.ProcessId]}else{$null})} }); "
+    "ConvertTo-Json -Compress -InputObject $r")
+
+
+def analyser_instantane(texte):
+    """Sortie JSON du script Windows -> [{pid, ppid, nom, exe, ram, vram}] (vram None : Windows ne la donne pas)."""
+    try:
+        brut = json.loads(texte) if texte.strip() else []
+    except ValueError:
+        return []
+    if isinstance(brut, dict):
+        brut = [brut]
+    sortie = []
+    for x in brut if isinstance(brut, list) else []:
+        try:
+            sortie.append({"pid": int(x["pid"]), "ppid": int(x.get("ppid") or 0), "nom": re.sub(r"\.exe$", "", str(x.get("nom") or ""), flags=re.I), "exe": str(x.get("exe") or ""),
+                           "ram": int(x.get("ram") or 0), "vram": None if x.get("vram") is None else int(x["vram"])})
+        except (KeyError, TypeError, ValueError):
+            continue
+    return sortie
+
+
+def _instantane_proc(racine="/proc", gpu=None):
+    """Linux : les processus-moteurs lus dans /proc, avec la mémoire vidéo de nvidia-smi quand il la donne."""
+    gpu = gpu if gpu is not None else gpu_par_processus()
+    sortie = []
+    try:
+        dossiers = [d for d in Path(racine).iterdir() if d.name.isdigit()]
+    except OSError:
+        return sortie
+    for d in dossiers:
+        try:
+            nom, ppid, rss = "", 0, 0
+            for ligne in (d / "status").read_text(errors="replace").splitlines():
+                if ligne.startswith("Name:"):
+                    nom = ligne.split(None, 1)[1].strip()
+                elif ligne.startswith("PPid:"):
+                    ppid = int(ligne.split()[1])
+                elif ligne.startswith("VmRSS:"):
+                    rss = int(ligne.split()[1]) * 1024
+            if not nom or not MOTIF_MOTEUR.match(nom):
+                continue
+            try:
+                exe = os.readlink(str(d / "exe"))
+            except OSError:
+                exe = ""
+            pid = int(d.name)
+            sortie.append({"pid": pid, "ppid": ppid, "nom": nom, "exe": exe, "ram": rss, "vram": (gpu.get(pid) or (None, None))[1] if gpu else None})
+        except (OSError, ValueError, IndexError):
+            continue
+    return sortie
+
+
+def instantane_processus(lanceur=subprocess.run, force=False):
+    """Les processus-moteurs de la machine (llama-server, Ollama, LM Studio, vLLM…) avec leur parent et ce qu'ils occupent : [{pid, ppid, nom, exe, ram, vram}]. Gardé 6 s : l'obtenir lance un programme sous Windows."""
+    if not force and time.monotonic() - MEMO.get("inst_t", -99) < 6:
+        return MEMO.get("inst", [])
+    valeur = []
+    try:
+        if os.name == "nt":
+            if not any(MOTIF_MOTEUR.match(nom) for nom, _ in lister_processus()):          # `tasklist` est rapide : PowerShell (1 à 3 s) ne se lance que s'il y a un moteur à regarder
+                valeur = []
+            else:
+                r = lanceur(["powershell", "-NoProfile", "-NonInteractive", "-Command", SCRIPT_PROCESSUS], capture_output=True, timeout=15, creationflags=0x08000000)
+                valeur = analyser_instantane(r.stdout.decode("utf-8", "replace"))
+        elif sys.platform == "darwin":
+            r = lanceur(["ps", "-axo", "pid=,ppid=,rss=,comm="], capture_output=True, timeout=10)
+            for ligne in r.stdout.decode("utf-8", "replace").splitlines():
+                m = re.match(r"^\s*(\d+)\s+(\d+)\s+(\d+)\s+(.+?)\s*$", ligne)
+                if m and MOTIF_MOTEUR.match(Path(m.group(4)).name):
+                    valeur.append({"pid": int(m.group(1)), "ppid": int(m.group(2)), "nom": Path(m.group(4)).name, "exe": m.group(4), "ram": int(m.group(3)) * 1024, "vram": None})
+        else:
+            valeur = _instantane_proc()
+    except (OSError, subprocess.SubprocessError):
+        valeur = []
+    MEMO.update(inst_t=time.monotonic(), inst=valeur)
+    return valeur
+
+
+def descendants(processus, racine):
+    """Les identifiants de `racine` et de tous ses descendants (le routeur de llama.cpp lance un processus par modèle : c'est lui qui tient la mémoire vidéo)."""
+    fils = {}
+    for x in processus:
+        fils.setdefault(x["ppid"], []).append(x["pid"])
+    vus, pile = {int(racine)}, [int(racine)]
+    while pile:
+        for f in fils.get(pile.pop(), []):
+            if f not in vus:
+                vus.add(f)
+                pile.append(f)
+    return vus
+
+
 def analyser_journal_llamacpp(texte):
     """Ce que llama-server a écrit au chargement -> {couches_gpu, couches, gpu, cpu} (octets) ; None si le journal ne dit rien. Exemple : « offloaded 33/33 layers to GPU », « CUDA0 model buffer size = 4403.49 MiB »."""
+    debut = texte.rfind("load_tensors: offloading")          # plusieurs chargements dans le même journal (routeur) : on ne garde que le dernier
+    if debut > 0:
+        texte = texte[debut:]
     couches = re.findall(r"offloaded (\d+)/(\d+) layers to GPU", texte)
     tampons = re.findall(r"([A-Za-z_]+\d*) model buffer size\s*=\s*([\d.]+) MiB", texte)
     if not couches and not tampons:
         return None
-    gpu = sum(float(v) for n, v in tampons if not n.upper().startswith("CPU"))
-    cpu = sum(float(v) for n, v in tampons if n.upper().startswith("CPU"))
-    return {"couches_gpu": int(couches[-1][0]) if couches else None, "couches": int(couches[-1][1]) if couches else None, "gpu": int(gpu * 1024 ** 2), "cpu": int(cpu * 1024 ** 2)}
+
+    def sur_processeur(nom):
+        n = nom.upper()
+        return n.startswith("CPU") or "HOST" in n          # « CUDA_Host » : mémoire de l'ordinateur réservée pour la carte, donc de la RAM
+    gpu = sum(float(v) for n, v in tampons if not sur_processeur(n))
+    cpu = sum(float(v) for n, v in tampons if sur_processeur(n))
+    # avec le cache de contexte (KV) et les tampons de calcul : tout ce que le serveur a réellement réservé de chaque côté
+    autres = re.findall(r"([A-Za-z_]+\d*) (?:KV|RS|compute) buffer size\s*=\s*([\d.]+) MiB", texte)
+    gpu_total = gpu + sum(float(v) for n, v in autres if not sur_processeur(n))
+    cpu_total = cpu + sum(float(v) for n, v in autres if sur_processeur(n))
+    return {"couches_gpu": int(couches[-1][0]) if couches else None, "couches": int(couches[-1][1]) if couches else None, "gpu": int(gpu * 1024 ** 2), "cpu": int(cpu * 1024 ** 2),
+            "gpu_total": int(gpu_total * 1024 ** 2), "cpu_total": int(cpu_total * 1024 ** 2)}
 
 
 def placement_llamacpp(mo):
@@ -262,19 +374,80 @@ def charges_llamacpp():
         nom, noms = ml.SERVEUR["modele"], ml.SERVEUR["noms"]
     if not tourne:
         return []
-    ram = memoire_processus(p.pid)
     routeur = nom == ml.ROUTEUR
     place, variante = placement_llamacpp(mo)
-    vram = (gpu_par_processus().get(p.pid) or (None, None))[1]          # mesure du pilote quand il la donne, sinon ce que le serveur a annoncé en chargeant
-    if vram is None and place and place["gpu"]:
-        vram = place["gpu"]
+    instantane = instantane_processus()
+    arbre = descendants(instantane, p.pid)          # le serveur et ses processus fils (routeur : un par modèle)
+    suivis = [x for x in instantane if x["pid"] in arbre]
+    mesures = [x["vram"] for x in suivis if x["vram"] is not None]
+    vram = sum(mesures) if mesures else None          # compteurs de Windows, par processus
     if vram is None:
-        vram = vram_windows_processus(p.pid)          # Windows : le pilote ne donne pas la mémoire par programme, les compteurs de performance oui
+        g = gpu_par_processus()
+        valeurs = [g[pid][1] for pid in arbre if pid in g and g[pid][1] is not None]
+        vram = sum(valeurs) if valeurs else None          # nvidia-smi quand il la donne
+    if vram is None and place and place["gpu"]:
+        vram = place.get("gpu_total") or place["gpu"]          # sinon ce que le serveur a annoncé en chargeant
+    ram_processus = sum(x["ram"] for x in suivis) if suivis else memoire_processus(p.pid)
+    ram, cache = ram_processus, 0
+    if place and place["gpu"] and ram_processus:
+        # Le fichier du modèle est « mappé » en mémoire pour être copié sur la carte : Windows le compte dans la mémoire du programme tant qu'il n'a pas besoin de la place, alors que le modèle est sur la carte.
+        reel = place.get("cpu_total") or place["cpu"]
+        if ram_processus > reel:
+            ram, cache = reel, ram_processus - reel
     detail = _t("le serveur garde les modèles demandés ; arrêté, il redémarre tout seul au prochain message") if routeur else _t("redémarre tout seul au prochain message")
     if place and place["couches"]:
         detail = _t("{} couches sur {} sont sur la carte graphique").format(place["couches_gpu"], place["couches"]) + " · " + detail
+    if cache > 524288000:
+        detail += " · " + _t("Windows compte aussi {} Go du fichier du modèle lu en mémoire (cache libérable) : ce n'est pas du modèle chargé en RAM").format(round(cache / GO, 1))
     return [{"id": "llamacpp", "genre": "llamacpp", "moteur": "llama.cpp", "nom": _t("routeur ({} modèles disponibles)").format(len(noms)) if routeur else nom, "vram": vram, "ram": ram, "taille": (ram or 0) + (vram or 0),
-             "detail": detail, "avertissement": conseil_variante(mo, variante), "dechargeable": True}]
+             "detail": detail, "avertissement": conseil_variante(mo, variante), "dechargeable": True, "pids": sorted(arbre)}]
+
+
+def dossiers_lutin():
+    """Les dossiers où Lutin a installé des programmes : Lutin peut en arrêter les processus restés en vie ; il ne ferme jamais ceux des autres."""
+    sortie = []
+    for ident in ("llamacpp",):
+        mo = moteurs.MOTEURS.get(ident)
+        try:
+            d = mo.dossier() if mo is not None and hasattr(mo, "dossier") else None
+        except Exception:  # noqa: BLE001
+            d = None
+        if d:
+            sortie.append(Path(d))
+    return sortie
+
+
+def _chez_lutin(exe):
+    if not exe:
+        return False
+    try:
+        chemin = Path(exe).resolve()
+    except OSError:
+        return False
+    return any(d.resolve() in chemin.parents for d in dossiers_lutin() if d)
+
+
+def charges_orphelines(suivis):
+    """Les serveurs de modèles qui occupent la machine SANS être pilotés par Lutin en ce moment : un llama-server resté en vie après un arrêt brutal, un LM Studio, un vLLM… Sans cette liste, leur mémoire vidéo
+    apparaissait comme « autres programmes » et il n'y avait rien à décharger. Lutin n'arrête que ceux qui sortent de son propre dossier d'installation."""
+    candidats = {x["pid"]: x for x in instantane_processus() if MOTIF_ORPHELIN.match(x["nom"]) and x["pid"] not in suivis}
+    racines = {}
+    for pid, x in candidats.items():
+        r = x
+        while r["ppid"] in candidats and r["ppid"] != r["pid"]:
+            r = candidats[r["ppid"]]
+        racines.setdefault(r["pid"], []).append(x)
+    sortie = []
+    for pid, groupe in racines.items():
+        racine = candidats[pid]
+        vrams = [x["vram"] for x in groupe if x["vram"] is not None]
+        vram = sum(vrams) if vrams else None
+        ram = sum(x["ram"] for x in groupe)
+        chez_nous = _chez_lutin(racine["exe"])
+        detail = _t("resté en vie après un ancien lancement de Lutin : tu peux l'arrêter ici") if chez_nous else _t("lancé hors de Lutin : ferme-le toi-même (Lutin ne ferme pas les programmes des autres)")
+        sortie.append({"id": "processus:{}".format(pid), "genre": "processus", "moteur": racine["nom"], "nom": "pid {}".format(pid), "vram": vram, "ram": ram, "taille": ram + (vram or 0),
+                       "detail": detail, "dechargeable": chez_nous, "libelle_bouton": _t("Arrêter"), "pids": sorted(x["pid"] for x in groupe)})
+    return sorted(sortie, key=lambda c: -c["taille"])
 
 
 def _comfy_lance_par_lutin():
@@ -308,11 +481,31 @@ def etat():
     """Tout ce qu'il faut à la page : mémoire de la machine, ce qui est chargé (avec de quoi le décharger), programmes les plus gourmands."""
     from . import moteur as _m
     ram, vram = _m.memoire_vive(), _m.memoire_video()
-    charges = charges_ollama() + charges_llamacpp() + charges_comfy()
+    suivies = charges_llamacpp()
+    suivis = set()
+    for c in suivies:
+        suivis.update(c.get("pids") or [])
+    charges = charges_ollama() + suivies + charges_orphelines(suivis) + charges_comfy()
     return {"ram": ram, "vram": vram, "charges": charges, "programmes": programmes_gourmands(), "quand": time.time()}
 
 
 # --------------------------------------------------------------------------- décharger
+
+def arreter_processus(pid, tous, lanceur=subprocess.run):
+    """Arrête un programme et ses fils. Windows : taskkill /T ; ailleurs : SIGTERM aux fils puis au père."""
+    if os.name == "nt":
+        r = lanceur(["taskkill", "/PID", str(int(pid)), "/T", "/F"], capture_output=True, timeout=20, creationflags=0x08000000)
+        if r.returncode not in (0, 128):
+            raise ValueError(_t("Impossible d'arrêter le programme (pid {}) : {}").format(pid, (r.stderr or r.stdout).decode("oem", "replace").strip()[:200]))
+        return
+    import signal
+    for p in sorted(tous, key=lambda x: x == pid):          # le père en dernier
+        try:
+            os.kill(int(p), signal.SIGTERM)
+        except OSError as e:
+            if p == pid:
+                raise ValueError(_t("Impossible d'arrêter le programme (pid {}) : {}").format(pid, e))
+
 
 def decharger(ident):
     """Décharge une chose de la liste (par son identifiant) : {ok, message}. Lève ValueError pour une demande invalide."""
@@ -326,6 +519,20 @@ def decharger(ident):
         except (urllib.error.URLError, OSError, ValueError) as e:
             raise ValueError(_t("Ollama n'a pas déchargé « {} » : {}").format(nom, e))
         return {"ok": True, "message": _t("« {} » est déchargé : la mémoire est libre.").format(nom)}
+    if ident.startswith("processus:"):
+        try:
+            pid = int(ident[10:])
+        except ValueError:
+            raise ValueError(_t("Programme inconnu."))
+        instantane = instantane_processus(force=True)
+        cible = next((x for x in instantane if x["pid"] == pid and MOTIF_ORPHELIN.match(x["nom"])), None)
+        if cible is None:
+            raise ValueError(_t("Ce programme n'est plus là."))
+        if not _chez_lutin(cible["exe"]):
+            raise ValueError(_t("Ce programme n'a pas été installé par Lutin : ferme-le toi-même."))
+        arreter_processus(pid, descendants(instantane, pid))
+        MEMO["inst_t"] = -99
+        return {"ok": True, "message": _t("Le programme (pid {}) est arrêté : sa mémoire est libre.").format(pid)}
     if ident == "llamacpp":
         mo = moteurs.MOTEURS.get("llamacpp")
         if mo is None or not hasattr(mo, "arreter"):

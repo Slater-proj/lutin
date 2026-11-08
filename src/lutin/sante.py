@@ -155,8 +155,8 @@ def niveau_seuil(libre, seuil_attention, seuil_critique):
     return "critique" if libre < seuil_critique else "attention" if libre < seuil_attention else "ok"
 
 
-def evaluer_sante(m, r, besoin_modele=0, charge=None):
-    """Interprète les mesures. Chaque ligne : id, nom, niveau (ok / attention / critique), valeur, conseil. charge : l'état du modèle dans Ollama (ps_modele) ou None."""
+def evaluer_sante(m, r, besoin_modele=0, charge=None, partiel_possible=False):
+    """Interprète les mesures. Chaque ligne : id, nom, niveau (ok / attention / critique), valeur, conseil. charge : l'état du modèle dans Ollama (ps_modele) ou None. partiel_possible : le moteur répartit tout seul les couches entre la carte et le processeur (llama.cpp), donc un modèle un peu trop gros n'est pas un blocage."""
     items = []
 
     def ajouter(id_, nom, niveau, valeur, conseil=""):
@@ -174,14 +174,26 @@ def evaluer_sante(m, r, besoin_modele=0, charge=None):
     v = m.get("vram")
     if v:
         besoin = besoin_modele
-        if charge:
+        if charge and not charge.get("taille"):
+            ajouter("vram", "Mémoire vidéo ({})".format(v["nom"]), "ok", "{} libres sur {} ({} déjà pris) ; modèle chargé (sa part sur la carte est dans la liste ci-dessous)".format(go(v["libre"]), go(v["total"]), go(v["utilise"])))
+        elif charge:
             partiel = charge["taille"] and charge["vram"] < 0.9 * charge["taille"]
             ajouter("vram", "Mémoire vidéo ({})".format(v["nom"]), "attention" if partiel else "ok", "{} libres sur {} ; modèle chargé à {} % sur la carte".format(go(v["libre"]), go(v["total"]), round(100 * charge["vram"] / charge["taille"]) if charge["taille"] else 0),
                     "Une partie du modèle tourne sur le processeur (lent) : ferme ComfyUI ou baisse la fenêtre de contexte." if partiel else "")
         else:
             n = "critique" if besoin and v["libre"] < 0.9 * besoin else "attention" if besoin and v["libre"] < besoin + MARGE_VRAM else "ok"
-            ajouter("vram", "Mémoire vidéo ({})".format(v["nom"]), n, "{} libres sur {} ; le modèle demande environ {}".format(go(v["libre"]), go(v["total"]), go(besoin)),
-                    "" if n == "ok" else "Le modèle ne tiendra pas (ou juste) sur la carte : ferme ComfyUI et les programmes qui l'utilisent, ou clique sur « 🧹 VRAM ».")
+            if n == "critique" and partiel_possible:
+                n = "attention"          # llama.cpp met le reste sur le processeur : plus lent, pas bloqué
+            # Le niveau ne vient PAS de l'occupation de la carte : il compare la place libre à ce que demande le modèle CHOISI (pas encore chargé).
+            manque = max(0, besoin - v["libre"])
+            texte = "{} libres sur {} ({} déjà pris) ; le modèle choisi demande environ {}".format(go(v["libre"]), go(v["total"]), go(v["utilise"]), go(besoin))
+            if n == "ok":
+                conseil = ""
+            elif partiel_possible:
+                conseil = "Il manque environ {} pour tout mettre sur la carte : llama.cpp en laissera une partie sur le processeur (plus lent). Libère de la place (liste ci-dessous : « Autres programmes ») ou choisis un modèle plus petit.".format(go(manque))
+            else:
+                conseil = "Le modèle ne tiendra pas (ou juste) sur la carte, il manque environ {} : ferme les programmes qui l'utilisent (liste ci-dessous), ou clique sur « 🧹 VRAM ».".format(go(manque))
+            ajouter("vram", "Mémoire vidéo ({})".format(v["nom"]), n, texte, conseil)
     c = m.get("comfy") or {}
     if c.get("actif"):
         occupe = c.get("en_cours", 0) > 0
@@ -202,10 +214,15 @@ def evaluer_sante(m, r, besoin_modele=0, charge=None):
     return {"niveau": max((i["niveau"] for i in items), key=lambda x: ordre[x], default="ok"), "items": items}
 
 
+def _repartit_seul(r):
+    """Le moteur choisi répartit-il tout seul le modèle entre la carte et le processeur (llama.cpp géré par Lutin : `--fit`) ?"""
+    return (r or {}).get("moteur") == "llamacpp"
+
+
 def etat_sante(r=None):
     r = r or _m.reglages()
     charge = _m.ps_modele(r["modele"])
-    return evaluer_sante(_m.mesures_systeme(), r, taille_modele(r["modele"], charge), charge)
+    return evaluer_sante(_m.mesures_systeme(), r, taille_modele(r["modele"], charge), charge, _repartit_seul(r))
 
 
 ALERTES_VUES = {}          # (conversation, ligne de santé) -> dernier niveau annoncé : un avertissement n'est répété que s'il change
@@ -219,7 +236,7 @@ def _bloquants(r, emit, conv_id=""):
     """Ce qui empêche de lancer le modèle en ce moment (liste d'éléments de santé « critiques »), après avoir tenté de décharger les modèles d'Ollama qui occupent la carte. Vide : on peut y aller."""
     charge = _m.ps_modele(r["modele"])
     besoin = taille_modele(r["modele"], charge)
-    sante = evaluer_sante(_m.mesures_systeme(), r, besoin, charge)
+    sante = evaluer_sante(_m.mesures_systeme(), r, besoin, charge, _repartit_seul(r))
     vram = next((i for i in sante["items"] if i["id"] == "vram"), None)
     if vram and vram["niveau"] == "critique" and not charge:
         try:                                                    # un autre modèle d'Ollama occupe peut-être la carte : on le décharge d'abord
@@ -228,7 +245,7 @@ def _bloquants(r, emit, conv_id=""):
                 _m.liberer_vram()
                 time.sleep(1.5)
                 oublier_mesures("vram")
-                sante = evaluer_sante(_m.mesures_systeme(), r, besoin, charge)
+                sante = evaluer_sante(_m.mesures_systeme(), r, besoin, charge, _repartit_seul(r))
         except (urllib.error.URLError, OSError, ValueError):
             pass
     for i in sante["items"]:

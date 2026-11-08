@@ -157,6 +157,49 @@ def regler_avance(moteur, donnees):
     return True
 
 
+def regler_serveur(moteur, donnees):
+    """Le serveur compatible OpenAI choisi dans la liste (« serveur ») et, pour Colibri, le dossier de son modèle et son port. Renvoie vrai si un de ces réglages était dans la demande."""
+    mo = moteurs.MOTEURS.get(moteur)
+    if not isinstance(mo, MoteurExterne) or not any(k in donnees for k in ("serveur", "modele_colibri", "port_colibri")):
+        return False
+    config = lire_config()
+    c = config.setdefault(moteur, {})
+    if "serveur" in donnees:
+        s = str(donnees["serveur"] or "").strip().lower()
+        if not re.match(r"^[a-z0-9-]{0,30}$", s):
+            raise ErreurMoteur(_t("Serveur inconnu."))
+        if s != "colibri" and mo.colibri_choisi() and MoteurOpenAI.actif(mo):
+            raise ErreurMoteur(_t("Colibri tourne encore : arrête-le avant de choisir un autre serveur."))
+        if s:
+            c["serveur"] = s
+        else:
+            c.pop("serveur", None)
+    if "modele_colibri" in donnees:
+        m = str(donnees["modele_colibri"] or "").strip()
+        if m:
+            p = Path(m).expanduser()
+            if not p.is_absolute():
+                raise ErreurMoteur(_t("Donne un chemin complet (par exemple D:/IA/colibri-modele)."))
+            if not p.is_dir():
+                raise ErreurMoteur(_t("Ce dossier n'existe pas : {}").format(p))
+            c["modele_colibri"] = str(p)
+        else:
+            c.pop("modele_colibri", None)
+    if "port_colibri" in donnees:
+        try:
+            n = int(donnees["port_colibri"] or 0)
+        except (TypeError, ValueError):
+            raise ErreurMoteur(_t("Port invalide (un nombre entre 1024 et 65535)."))
+        if n and not 1024 <= n <= 65535:
+            raise ErreurMoteur(_t("Port invalide (un nombre entre 1024 et 65535)."))
+        if n:
+            c["port_colibri"] = n
+        else:
+            c.pop("port_colibri", None)
+    ecrire_config(config)
+    return True
+
+
 def est_embedding(nom):
     """Ce modèle vectorise-t-il (recherche par le sens) au lieu de discuter ? D'après son nom."""
     n = str(nom).lower()
@@ -233,6 +276,11 @@ def vue_reglages(moteur):
                          "n_cpu_moe_possible": mo.option_possible("--n-cpu-moe"), "version_epinglee": c.get("version_epinglee", "")}
     if hasattr(mo, "info_dossier"):
         vue["dossier"] = mo.info_dossier()
+    if isinstance(mo, MoteurExterne):
+        vue["serveur"] = str(c.get("serveur") or "")
+        if mo.colibri_choisi():
+            modele = mo.modele_colibri()
+            vue["colibri"] = {"modele": modele, "modele_ok": bool(modele) and Path(modele).is_dir(), "port": mo.port_colibri(), "installe": mo._colibri() is not None}
     return vue
 
 
@@ -891,8 +939,8 @@ class MoteurLlamaCpp(MoteurOpenAI):
                 except OSError:
                     pass
         self.arreter()
-        shutil.rmtree(base / "bin", ignore_errors=True)
-        neuf.replace(base / "bin")
+        progression(_t("Remplacement de l'ancienne version…"), deja, total_octets)
+        remplacer_dossier(neuf, base / "bin", liberer=lambda: liberer_processus(base))
         shutil.rmtree(telechargement, ignore_errors=True)
         (base / "version.txt").write_text("{} ({})".format(etiquette, variante), encoding="utf-8")
         config = lire_config()
@@ -1000,36 +1048,143 @@ class MoteurExterne(MoteurOpenAI):
 
     @property
     def description(self):
-        return _t("Tout serveur qui parle l'interface OpenAI : LM Studio, vLLM, Strata, un llama-server sur un autre ordinateur… Tu donnes son adresse ; il gère ses modèles lui-même.")
+        if self.colibri_choisi():
+            return _t("Colibri, installé et lancé par Lutin sur cette machine (expérimental). Les modèles se préparent avec Colibri lui-même (« coli setup » ou « coli import »).")
+        return _t("Tout serveur qui parle l'interface OpenAI : LM Studio, vLLM, Strata, un llama-server sur un autre ordinateur… Tu donnes son adresse ; il gère ses modèles lui-même. Colibri, lui, Lutin sait l'installer (choisis-le dans la liste).")
 
     @property
     def points_forts(self):
+        if self.colibri_choisi():
+            return (_t("Installation, mise à jour, suppression, démarrage et arrêt depuis Lutin, avec somme SHA-256 vérifiée."),
+                    _t("Il n'écoute que sur cette machine (127.0.0.1)."))
         return (_t("Universel : s'adapte à n'importe quel serveur de ce genre, sur cette machine ou sur le réseau."),
-                _t("Lutin n'installe ni ne démarre rien : le serveur reste maître de ses réglages."))
+                _t("Lutin n'installe ni ne démarre rien (sauf Colibri) : le serveur reste maître de ses réglages."))
 
     @property
     def points_faibles(self):
-        return (_t("Lutin ne peut ni installer, ni démarrer, ni mettre à jour ce serveur, ni lui télécharger de modèle."),
+        if self.colibri_choisi():
+            return (_t("Moteur jeune : le démarrage avec un vrai modèle n'a pas été vérifié avec Lutin."),
+                    _t("Il demande un modèle préparé par Colibri (plusieurs dizaines de Go) : Lutin ne le télécharge pas."))
+        return (_t("Lutin ne peut ni installer, ni démarrer, ni mettre à jour ce serveur (sauf Colibri), ni lui télécharger de modèle."),
                 _t("Selon le serveur, les appels d'outils ou les images peuvent ne pas fonctionner."))
 
     def config(self):
         return lire_config().get(self.id, {})
 
+    # -- Colibri : le seul serveur du catalogue que Lutin sait installer et lancer (sur cette machine, 127.0.0.1)
+    def colibri_choisi(self):
+        return self.config().get("serveur") == "colibri"
+
+    def port_colibri(self):
+        from . import colibri
+        try:
+            p = int(self.config().get("port_colibri") or 0)
+        except (TypeError, ValueError):
+            p = 0
+        return p if 1024 <= p <= 65535 else colibri.PORT_DEFAUT
+
+    def modele_colibri(self):
+        return str(self.config().get("modele_colibri") or "")
+
+    def _dossiers(self):
+        return {"donnees": moteurs.CONTEXTE["donnees"]()}
+
+    def _colibri(self):
+        """(version, dossier de coli) si Colibri est installé par Lutin, sinon None."""
+        from . import colibri
+        return colibri.installee(self._dossiers()) if moteurs.CONTEXTE["donnees"]() else None
+
+    def version(self):
+        t = self._colibri() if self.colibri_choisi() else None
+        return t[0] if t else ""
+
     def adresse(self):
+        if self.colibri_choisi():
+            return "http://127.0.0.1:{}/v1".format(self.port_colibri())
         return self.config().get("url", "")
 
     def cle(self):
         return self.config().get("cle", "")
 
     def statut(self):
+        if self.colibri_choisi():
+            trouve = self._colibri()
+            actif = MoteurOpenAI.actif(self)
+            if actif:
+                detail = _t("Colibri répond sur {}").format(self.adresse())
+            elif trouve:
+                detail = _t("Colibri est installé mais arrêté : indique le dossier de son modèle puis démarre-le.")
+            else:
+                detail = _t("Colibri n'est pas installé.")
+            return {"installe": bool(trouve) or actif, "actif": actif, "version": trouve[0] if trouve else "", "detail": detail, "mode": "gere", "installe_par_lutin": bool(trouve)}
         if not self.adresse():
             return {"installe": True, "actif": False, "version": "", "detail": _t("Aucune adresse : indique celle du serveur ci-dessous."), "mode": "externe"}
         actif = MoteurOpenAI.actif(self)
         return {"installe": True, "actif": actif, "version": "", "detail": _t("Connecté à {}").format(self.adresse()) if actif else _t("Le serveur {} ne répond pas.").format(self.adresse()), "mode": "externe"}
 
     def actions(self):
-        raison = _t("Sans objet : ce serveur n'est pas géré par Lutin.")
-        return {a: {"possible": False, "raison": raison} for a in moteurs.ACTIONS}
+        if not self.colibri_choisi():
+            raison = _t("Sans objet : ce serveur n'est pas géré par Lutin (seul Colibri peut l'être : choisis-le dans la liste des serveurs connus).")
+            return {a: {"possible": False, "raison": raison} for a in moteurs.ACTIONS}
+        trouve = self._colibri() is not None
+        hl = moteurs.CONTEXTE["hors_ligne"]()
+        actif = MoteurOpenAI.actif(self)
+        modele = self.modele_colibri()
+        modele_ok = bool(modele) and Path(modele).is_dir()
+        sans = _t("Colibri n'est pas installé.")
+        reseau = _t("Mode hors ligne : aucun téléchargement.") if hl else ""
+        if not trouve:
+            demarrer = sans
+        elif actif:
+            demarrer = _t("Il tourne déjà.")
+        elif not modele:
+            demarrer = _t("Indique d'abord le dossier du modèle préparé par Colibri (« coli setup » ou « coli import »).")
+        elif not modele_ok:
+            demarrer = _t("Le dossier du modèle n'existe pas : {}").format(modele)
+        else:
+            demarrer = _t("Lance Colibri sur cette machine seulement (127.0.0.1), avec le modèle réglé ci-dessous.")
+        return {"installer": {"possible": not trouve and not hl, "raison": reseau or (_t("Déjà installé.") if trouve else _t("Télécharge l'archive officielle de Colibri et vérifie sa somme SHA-256."))},
+                "mettre_a_jour": {"possible": trouve and not hl, "raison": reseau or (_t("Installe la dernière version de Colibri ; ton dossier de modèle est gardé.") if trouve else sans)},
+                "desinstaller": {"possible": trouve, "raison": _t("Arrête et supprime le programme Colibri (ton modèle reste où il est).") if trouve else sans},
+                "reinstaller": {"possible": trouve and not hl, "raison": reseau or (_t("Télécharge de nouveau la dernière version de Colibri.") if trouve else sans)},
+                "demarrer": {"possible": trouve and not actif and modele_ok, "raison": demarrer},
+                "arreter": {"possible": actif, "raison": _t("Arrête Colibri et libère la mémoire.") if actif else _t("Il n'est pas démarré.")}}
+
+    def faire(self, action, progression):
+        if not self.colibri_choisi():
+            raise ErreurMoteur(_t("Action impossible avec ce serveur : Lutin ne gère que Colibri."))
+        from . import colibri
+        dossiers = self._dossiers()
+        try:
+            if action in ("installer", "mettre_a_jour", "reinstaller"):
+                if moteurs.CONTEXTE["hors_ligne"]():
+                    raise ErreurMoteur(_t("Mode hors ligne : aucun téléchargement."))
+                progression(_t("Recherche de la dernière version de Colibri…"), 0, 0)
+                actuelle = self._colibri()
+                if action == "reinstaller" and actuelle:
+                    shutil.rmtree(colibri.dossier_colibri(dossiers) / ("v" + actuelle[0]), ignore_errors=True)
+                version, _ = colibri.installer(dossiers=dossiers, dire=lambda texte: progression(texte, 0, 0))
+                progression(_t("Installé : Colibri {}.").format(version), 1, 1)
+            elif action == "desinstaller":
+                if MoteurOpenAI.actif(self):
+                    self._arreter_colibri()
+                shutil.rmtree(colibri.dossier_colibri(dossiers), ignore_errors=True)
+            elif action == "demarrer":
+                progression(_t("Démarrage de Colibri (le chargement du modèle peut être long)…"), 0, 0)
+                colibri.demarrer(self.modele_colibri(), self.port_colibri(), dossiers=dossiers)
+            elif action == "arreter":
+                self._arreter_colibri()
+            else:
+                raise ErreurMoteur(_t("Action impossible avec ce serveur."))
+        except ErreurMoteur:
+            raise
+        except (ValueError, OSError, subprocess.SubprocessError, tarfile.TarError, zipfile.BadZipFile) as e:
+            raise ErreurMoteur(str(e))
+
+    def _arreter_colibri(self):
+        from . import colibri
+        if not colibri.arreter(self.port_colibri(), dossiers=self._dossiers()):
+            raise ErreurMoteur(_t("Colibri n'a pas confirmé son arrêt : regarde son journal."))
 
     def telechargeable(self):
         return {"possible": False, "raison": _t("Un serveur externe gère ses modèles lui-même."), "genre": "aucun"}
@@ -1038,7 +1193,65 @@ class MoteurExterne(MoteurOpenAI):
         return {"discuter": ("natif", ""), "flux": ("natif", ""), "arret": ("natif", _t("La connexion est coupée : le serveur arrête de générer.")),
                 "outils": ("non_teste", _t("Dépend du serveur.")), "reflexion": ("non_teste", _t("Dépend du serveur.")), "vision": ("non_teste", _t("Dépend du serveur et du modèle.")),
                 "embeddings": ("non_teste", _t("Dépend du serveur.")), "plusieurs_modeles": ("non_teste", _t("Dépend du serveur.")),
-                "telechargement": ("non", _t("Le serveur gère ses modèles lui-même.")), "installation": ("non", _t("Lutin n'installe pas ce serveur."))}
+                "telechargement": ("non", _t("Le serveur gère ses modèles lui-même.")),
+                "installation": ("non_teste", _t("Lutin installe et lance Colibri ; le démarrage avec un vrai modèle n'est pas vérifié.")) if self.colibri_choisi() else ("non", _t("Lutin n'installe pas ce serveur (sauf Colibri)."))}
+
+
+def liberer_processus(dossier):
+    """Windows : arrête les programmes qui tournent encore depuis ce dossier (un llama-server resté en vie, ou un processus fils du mode routeur) ; ils empêchent de remplacer ou supprimer les fichiers.
+    Ailleurs, un fichier utilisé se supprime sans gêne : rien à faire. Renvoie le nombre de processus arrêtés."""
+    if os.name != "nt":
+        return 0
+    chemin = str(Path(dossier).resolve()).replace("'", "''")
+    script = ("$d='{}'; $n=0; Get-CimInstance Win32_Process | Where-Object {{ $_.ExecutablePath -and $_.ExecutablePath.StartsWith($d, [StringComparison]::OrdinalIgnoreCase) -and $_.ProcessId -ne $PID }} | "
+              "ForEach-Object {{ try {{ Stop-Process -Id $_.ProcessId -Force -ErrorAction Stop; $n++ }} catch {{}} }}; $n").format(chemin)
+    try:
+        r = subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", script], capture_output=True, text=True, timeout=30, creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0))
+        return int((r.stdout or "0").strip().splitlines()[-1])
+    except (OSError, subprocess.SubprocessError, ValueError, IndexError):
+        return 0
+
+
+def _supprimer_arbre(dossier):
+    """Supprime un dossier ; un fichier en lecture seule est d'abord rendu modifiable (Windows). Ce qui reste (fichier verrouillé) fait échouer le test d'existence de l'appelant."""
+    def _force(fonction, chemin, _info):
+        try:
+            os.chmod(chemin, 0o700)
+            fonction(chemin)
+        except OSError:
+            pass
+    shutil.rmtree(dossier, onerror=_force)
+
+
+def remplacer_dossier(neuf, cible, dormir=None, liberer=None, pauses=(0, 1, 2, 4, 8)):
+    """Met `neuf` à la place de `cible`. Sous Windows, un antivirus qui analyse les fichiers tout juste écrits, ou un programme encore ouvert, fait échouer le renommage (« Accès refusé ») pendant quelques secondes :
+    on réessaie avec des pauses, on arrête les processus restés dans le dossier, et en dernier recours on copie au lieu de renommer. ErreurMoteur avec la cause si rien n'y fait."""
+    dormir = dormir or time.sleep
+    neuf, cible = Path(neuf), Path(cible)
+    derniere = None
+    for rang, pause in enumerate(pauses):
+        if pause:
+            dormir(pause)
+        try:
+            if cible.exists():
+                _supprimer_arbre(cible)
+            if cible.exists():
+                if liberer is not None and rang >= 1:
+                    liberer()
+                raise PermissionError(_t("un fichier de l'ancienne version est encore utilisé ({})").format(cible))
+            os.replace(neuf, cible)
+            return
+        except OSError as e:
+            derniere = e
+    try:
+        if cible.exists():
+            _supprimer_arbre(cible)
+        shutil.copytree(neuf, cible, dirs_exist_ok=True)          # dernier recours : copier au lieu de renommer
+        shutil.rmtree(neuf, ignore_errors=True)
+        return
+    except OSError as e:
+        derniere = e
+    raise ErreurMoteur(_t("Impossible de remplacer l'ancienne version ({}). Ferme tout ce qui utilise llama.cpp (un llama-server encore ouvert, un antivirus qui analyse le dossier) puis relance la mise à jour.").format(derniere))
 
 
 def _systeme():

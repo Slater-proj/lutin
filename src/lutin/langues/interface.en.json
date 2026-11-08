@@ -1051,7 +1051,6 @@
 "Aucun autre dossier de modèles trouvé dans les emplacements usuels. Choisis-le à la main ci-dessous.": "No other models folder found in the usual places. Pick it by hand below.",
 "Dossiers qui contiennent déjà des modèles :": "Folders that already contain models:",
 "Autres sources : Hugging Face": "Other sources: Hugging Face",
-"Choisir un serveur connu…": "Pick a known server…",
 "Site officiel": "Official website",
 "Ce que ce moteur sait faire": "What this engine can do",
 "Discuter": "Chat",
@@ -1231,5 +1230,14 @@
 "Le moteur sera installé dans ": "The engine will be installed in ",
 " (volume dédié : une mise à jour de l'image ne l'efface pas).": " (dedicated volume: an image update does not erase it).",
 ", dans le volume des données (aucun volume /engines monté). Il survit aux mises à jour de l'image ; pour le ranger ailleurs, ajoute « - /ton/dossier:/engines » dans les volumes du docker-compose.": ", in the data volume (no /engines volume mounted). It survives image updates; to put it elsewhere, add \"- /your/folder:/engines\" to the docker-compose volumes.",
-"Dossier de la conversation : ": "Conversation folder: "
+"Dossier de la conversation : ": "Conversation folder: ",
+"Aucun moteur prêt : le moteur choisi ne répond pas": "No engine ready: the chosen engine does not answer",
+"Utiliser ": "Use ",
+"Autre serveur (j'indique son adresse)": "Another server (I give its address)",
+"installable par Lutin": "installable by Lutin",
+"Moteur expérimental : Lutin l'installe et le lance, mais son démarrage avec un vrai modèle n'a pas été vérifié.": "Experimental engine: Lutin installs and starts it, but starting it with a real model has not been verified.",
+"Colibri écoute seulement sur cette machine (127.0.0.1). Son modèle se prépare avec Colibri lui-même (« coli setup » ou « coli import », plusieurs dizaines de Go) ; indique ici le dossier obtenu. Pour joindre un Colibri qui tourne ailleurs, choisis « Autre serveur » et donne son adresse.": "Colibri only listens on this machine (127.0.0.1). Its model is prepared with Colibri itself (\"coli setup\" or \"coli import\", tens of GB); enter the resulting folder here. To reach a Colibri running elsewhere, choose \"Another server\" and give its address.",
+"Dossier du modèle préparé par Colibri (chemin complet)": "Folder of the model prepared by Colibri (full path)",
+"Port local de Colibri": "Colibri local port",
+"port": "port"
 }

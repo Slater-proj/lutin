@@ -1673,7 +1673,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     bloc.dataset.cle = cle; bloc.textContent = ''; bloc.hidden = pl.pret || plusTard;
     if (bloc.hidden) return;
     bloc.className = 'carte'; bloc.style.cssText = 'display:block;margin:8px 0';
-    bloc.appendChild(el('b', '', T('Premier lancement : il manque un moteur')));
+    bloc.appendChild(el('b', '', (pl.installes || []).length ? T('Aucun moteur prêt : le moteur choisi ne répond pas') : T('Premier lancement : il manque un moteur')));
     bloc.appendChild(el('div', 'aide', pl.raison));
     if (pl.recommande) bloc.appendChild(el('div', '', T('Conseillé pour cette machine : ') + pl.recommande.nom + ' — ' + pl.recommande.raison));
     if (pl.emplacement) bloc.appendChild(el('div', 'aide', pl.emplacement.dedie
@@ -1694,7 +1694,9 @@ body[data-moteur="openai"] .biblio { display:none !important; }
       } catch (e) { msg.textContent = e.message; }
       oui.disabled = false; rafraichir();
     };
-    const oui = el('button', 'principal', pl.recommande ? T('Installer ') + pl.recommande.nom : T('Choisir un moteur')); oui.addEventListener('click', pl.recommande ? installerConseille : ouvrirReglages);
+    const dejaLa = (pl.installes || [])[0];          // un autre moteur est déjà installé : le premier choix est de s'en servir, pas d'en installer un de plus
+    const utiliser = async () => { oui.disabled = true; msg.textContent = ''; try { await api('/api/reglages', { moteur: dejaLa.moteur }); } catch (e) { msg.textContent = e.message; } oui.disabled = false; rafraichir(); };
+    const oui = el('button', 'principal', dejaLa ? T('Utiliser ') + dejaLa.nom : (pl.recommande ? T('Installer ') + pl.recommande.nom : T('Choisir un moteur'))); oui.addEventListener('click', dejaLa ? utiliser : (pl.recommande ? installerConseille : ouvrirReglages));
     const autre = el('button', '', T('Choisir un autre moteur')); autre.addEventListener('click', ouvrirReglages);
     const tard = el('button', '', T('Plus tard')); tard.addEventListener('click', () => { try { sessionStorage.setItem('lutinPlusTard', '1'); } catch (e) { /* facultatif */ } afficherPremierLancement(pl); });
     l.append(oui, autre, tard); bloc.append(l, msg);
@@ -2437,17 +2439,17 @@ body[data-moteur="openai"] .biblio { display:none !important; }
       let connuVram = 0;
       r.charges.forEach(c => {
         const nom = c.moteur + ' · ' + c.nom, texte = c.genre === 'comfyui' ? c.detail : emplacement(c);
-        if (c.ram > 52428800) lignesRam.push(ligneMemoire(nom, texte, c.ram, [boutonDecharger(c)], c.avertissement));
+        if (c.ram > 52428800) lignesRam.push(ligneMemoire(nom, texte, c.ram, [boutonDecharger(c, c.libelle_bouton)], c.avertissement));
         if (c.vram > 52428800) {
           connuVram += c.vram;
-          const bs = [boutonDecharger(c)]; if (c.fermable) bs.push(boutonDecharger(c, T('Fermer ComfyUI'), 'comfyui:close'));
+          const bs = [boutonDecharger(c, c.libelle_bouton)]; if (c.fermable) bs.push(boutonDecharger(c, T('Fermer ComfyUI'), 'comfyui:close'));
           lignesVram.push(ligneMemoire(nom, texte, c.vram, bs, c.avertissement));
-        } else if (c.genre === 'llamacpp') {
+        } else if (c.genre === 'llamacpp' || c.genre === 'processus') {
           // « inconnu » n'est pas « zéro » : sans mesure, on ne prétend pas que tout est sur le processeur
           lignesVram.push(ligneMemoire(nom, c.vram === null || c.vram === undefined ? T('mémoire vidéo non mesurable pour ce programme (le pilote ne la donne pas) : le total de la carte est plus bas') : T('rien sur la carte graphique : tout est sur le processeur'), 0, [], c.avertissement));
         }
       });
-      const connus = new Set(['ollama', 'ollama app', 'ollama_llama_server', 'llama-server']);
+      const connus = new Set(['ollama', 'ollama app', 'ollama_llama_server', 'llama-server', 'llama-swap', 'vllm', 'lm studio', 'lmstudio', 'coli']);
       r.programmes.filter(g => !connus.has(g.nom.toLowerCase())).slice(0, 5).forEach(g => lignesRam.push(ligneMemoire((g.ia ? '🧠 ' : '') + g.libelle + (g.nombre > 1 ? ' ×' + g.nombre : ''), '', g.octets)));
       if (r.vram && r.vram.utilise - connuVram > 314572800) lignesVram.push(ligneMemoire(T('Autres programmes (affichage, navigateur, jeux…)'), '', r.vram.utilise - connuVram));
       if (r.ram) neuf.appendChild(carteMemoire('ram', T('Mémoire vive (RAM)'), r.ram.total - r.ram.libre, r.ram.total, lignesRam));
@@ -3150,16 +3152,22 @@ body[data-moteur="openai"] .biblio { display:none !important; }
       }
     }
     if (m.adresse_modifiable) {
-      const f = el('div', 'ligne'), url = el('input'), cle = el('input'), msg = el('span', 'aide');
+      const f = el('div', 'ligne'), url = el('input'), cle = el('input'), msg = el('span', 'aide'); let choixServeur = null;
       url.value = m.reglages.url || ''; url.style.minWidth = '260px'; url.disabled = cle.disabled = !modifiable;
       url.placeholder = m.id === 'llamacpp' ? T('Adresse d\'un llama-server déjà lancé (vide : Lutin le gère lui-même)') : T('Adresse du serveur, par exemple http://127.0.0.1:1234');
       cle.type = 'password'; cle.placeholder = m.reglages.cle_definie ? T('Clé enregistrée (vide : on la garde)') : T('Clé d\'accès (facultative)');
+      const colibri = m.id === 'openai' && m.reglages.serveur === 'colibri';          // Colibri : le seul serveur de la liste que Lutin installe et lance lui-même
       if (m.id === 'openai' && prereglages.length) {          // les serveurs connus du catalogue signé : un choix remplit l'adresse et explique le serveur
-        const choix = el('select'), fiche = el('div', 'aide'); choix.disabled = !modifiable;
-        const vide = el('option', '', T('Choisir un serveur connu…')); vide.value = ''; choix.appendChild(vide);
-        [...prereglages].sort((a, b) => Number(a.experimental) - Number(b.experimental)).forEach(pr => { const o = el('option', '', pr.nom + (pr.experimental ? ' · ' + T('expérimental') : '')); o.value = pr.id; choix.appendChild(o); });          // les expérimentaux en dernier, jamais préselectionnés
-        choix.addEventListener('change', () => {
+        const choix = el('select'), fiche = el('div', 'aide'); choix.disabled = !modifiable; choixServeur = choix;
+        const vide = el('option', '', T('Autre serveur (j\'indique son adresse)')); vide.value = ''; choix.appendChild(vide);
+        [...prereglages].sort((a, b) => Number(a.experimental) - Number(b.experimental)).forEach(pr => { const o = el('option', '', pr.nom + (pr.experimental ? ' · ' + T('expérimental') : '') + (pr.id === 'colibri' ? ' · ' + T('installable par Lutin') : '')); o.value = pr.id; choix.appendChild(o); });          // les expérimentaux en dernier, jamais préselectionnés
+        choix.value = m.reglages.serveur || '';
+        choix.addEventListener('change', async () => {
           const pr = prereglages.find(x => x.id === choix.value); fiche.textContent = '';
+          if (choix.value === 'colibri' || colibri) {          // Colibri apparaît ou disparaît avec ses boutons : le choix est enregistré tout de suite
+            try { await api('/api/moteur-regler', { moteur: m.id, serveur: choix.value }); await rafraichir(); } catch (e) { alert(e.message); }
+            chargerMoteurs(); return;
+          }
           if (!pr) return;
           if (pr.adresse) url.value = pr.adresse;
           if (pr.experimental) fiche.appendChild(el('div', 'erreur', '⚗ ' + T('Moteur expérimental : jeune, peu éprouvé avec Lutin. À essayer, pas à choisir pour travailler.')));
@@ -3170,7 +3178,17 @@ body[data-moteur="openai"] .biblio { display:none !important; }
         });
         d.appendChild(choix); d.appendChild(fiche);
       }
-      f.append(url, cle);
+      if (colibri) {
+        const c = m.reglages.colibri || {}, lc = el('div', 'ligne'), dossier = el('input'), port = el('input'), okc = el('button', '', T('Enregistrer')), msgc = el('span', 'aide');
+        d.appendChild(el('div', 'erreur', '⚗ ' + T('Moteur expérimental : Lutin l\'installe et le lance, mais son démarrage avec un vrai modèle n\'a pas été vérifié.')));
+        d.appendChild(el('div', 'aide', T('Colibri écoute seulement sur cette machine (127.0.0.1). Son modèle se prépare avec Colibri lui-même (« coli setup » ou « coli import », plusieurs dizaines de Go) ; indique ici le dossier obtenu. Pour joindre un Colibri qui tourne ailleurs, choisis « Autre serveur » et donne son adresse.')));
+        dossier.value = c.modele || ''; dossier.placeholder = T('Dossier du modèle préparé par Colibri (chemin complet)'); dossier.style.minWidth = '320px';
+        port.type = 'number'; port.min = 1024; port.max = 65535; port.value = c.port || 8000; port.style.width = '90px'; port.title = T('Port local de Colibri');
+        dossier.disabled = port.disabled = okc.disabled = !modifiable;
+        okc.addEventListener('click', async () => { try { await api('/api/moteur-regler', { moteur: m.id, modele_colibri: dossier.value.trim(), port_colibri: port.value }); msgc.textContent = T('Enregistré.'); await rafraichir(); chargerMoteurs(); } catch (e) { msgc.textContent = e.message; } });
+        lc.append(dossier, el('span', '', T('port')), port, okc, msgc); d.appendChild(lc);
+      }
+      if (!colibri) f.append(url, cle);
       let variante = null;
       if (m.id === 'llamacpp') {
         variante = el('select'); variante.title = T('Version du programme à installer'); variante.disabled = !modifiable;
@@ -3179,10 +3197,11 @@ body[data-moteur="openai"] .biblio { display:none !important; }
       }
       const ok = el('button', '', T('Enregistrer')); ok.disabled = !modifiable;
       ok.addEventListener('click', async () => {
-        try { await api('/api/moteur-regler', { moteur: m.id, url: url.value, cle: cle.value || undefined, variante: variante ? variante.value : undefined }); msg.textContent = T('Enregistré.'); await rafraichir(); chargerMoteurs(); }
+        try { await api('/api/moteur-regler', { moteur: m.id, url: url.value, cle: cle.value || undefined, variante: variante ? variante.value : undefined, serveur: choixServeur ? choixServeur.value : undefined }); msg.textContent = T('Enregistré.'); await rafraichir(); chargerMoteurs(); }
         catch (e) { msg.textContent = e.message; }
       });
-      f.append(ok, msg); d.appendChild(f);
+      if (!colibri) f.append(ok, msg);
+      if (!colibri) d.appendChild(f);
     }
     const av = m.reglages && m.reglages.avance;          // réglages propres à llama.cpp géré par Lutin
     if (av) {

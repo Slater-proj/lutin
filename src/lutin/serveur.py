@@ -219,7 +219,22 @@ class Gestionnaire(BaseHTTPRequestHandler):
             from . import moteurs_docker as _md
             dossier = _md.dossier_moteurs()          # Docker : où le moteur sera installé, et si c'est un volume dédié (/engines) ou le volume des données
             emplacement = {"dossier": str(dossier), "dedie": bool(os.environ.get("LUTIN_MOTEURS")) or str(dossier) == _md.MONTAGE} if dossier else None
-            return _diagnostic.premier_lancement(mo.nom, False, (_t("Installé, mais arrêté.") if _m.chemin_ollama() else _t("Pas installé.")) if mo.id == "ollama" else "", {k: reco[k] for k in ("moteur", "nom", "raison")} if reco else None, emplacement)
+            autres = []          # les autres moteurs déjà sur la machine (simple regard sur les fichiers, aucune sonde réseau)
+            for autre in _moteurs.MOTEURS.values():
+                try:
+                    if autre.id == mo.id:
+                        continue
+                    if (autre.id == "ollama" and _m.chemin_ollama()) or (autre.id == "llamacpp" and autre.serveur_pret() is not None):
+                        autres.append({"moteur": autre.id, "nom": autre.nom})
+                except Exception:  # noqa: BLE001
+                    continue
+            if mo.id == "ollama":
+                detail = _t("Installé, mais arrêté.") if _m.chemin_ollama() else _t("Pas installé.")
+            elif mo.id == "llamacpp":
+                detail = _t("Installé, il démarre à la demande.") if mo.serveur_pret() is not None else _t("Pas installé.")
+            else:
+                detail = ""
+            return _diagnostic.premier_lancement(mo.nom, False, detail, {k: reco[k] for k in ("moteur", "nom", "raison")} if reco else None, emplacement, autres, mo.id)
         except Exception:  # noqa: BLE001  (jamais une page cassée pour un constat de plus)
             return {"pret": True, "raison": "", "recommande": None}
 
@@ -1022,12 +1037,15 @@ class Gestionnaire(BaseHTTPRequestHandler):
                             _llamacpp.regler_dossier(mo.id, donnees.get("dossier"))
                         if "dossier_modeles" in donnees:
                             _llamacpp.regler_dossier_modeles(mo.id, donnees.get("dossier_modeles"))
+                        serveur_regle = _llamacpp.regler_serveur(mo.id, donnees)          # Colibri : choix du serveur, dossier du modèle, port
                         avance = _llamacpp.regler_avance(mo.id, {k: donnees[k] for k in ("routeur", "modeles_max", "n_cpu_moe", "version_epinglee") if k in donnees})
                         if not mo.adresse_modifiable:
                             if avance or "dossier" in donnees or "dossier_modeles" in donnees:
                                 return self._envoyer(200, {"ok": True})
                             return self._envoyer(400, {"erreur": _t("Ce moteur n'a pas d'adresse à régler.")})
                         if mo.id == "llamacpp" and "url" not in donnees and "variante" not in donnees and avance:
+                            return self._envoyer(200, {"ok": True})
+                        if serveur_regle and "url" not in donnees and "cle" not in donnees:
                             return self._envoyer(200, {"ok": True})
                         _llamacpp.regler(mo.id, donnees.get("url"), donnees.get("cle"), variante=donnees.get("variante") if donnees.get("variante") in ("auto", "cuda", "vulkan", "cpu", "metal") else None)
                         return self._envoyer(200, {"ok": True})
