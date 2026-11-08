@@ -46,22 +46,69 @@ def diffusions(adresse_machine=""):
     return cibles
 
 
-def envoyer_reveil(mac, adresse_machine="", ports=(9, 7), socket_factory=socket.socket):
-    """Envoie le paquet magique ; renvoie la liste des (adresse, port) atteints. Lève ValueError si rien n'a pu partir."""
+def adresses_locales():
+    """Les adresses IPv4 de cette machine (une par carte réseau, hors boucle locale et adresses auto-attribuées). Un paquet de diffusion ne part que par UNE carte si on ne dit pas laquelle :
+    avec un VPN, Hyper-V, WSL ou Docker, c'est souvent la mauvaise, et le réveil n'atteint jamais le réseau."""
+    trouvees = []
+    try:
+        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+            trouvees.append(info[4][0])
+    except OSError:
+        pass
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:        # l'adresse de la route par défaut (rien n'est envoyé)
+            s.connect(("192.0.2.1", 9))
+            trouvees.append(s.getsockname()[0])
+    except OSError:
+        pass
+    sortie = []
+    for a in trouvees:
+        if re.match(r"^\d{1,3}(\.\d{1,3}){3}$", a) and not a.startswith(("127.", "169.254.", "0.")) and a not in sortie:
+            sortie.append(a)
+    return sortie
+
+
+def emission_limitee():
+    """Un message si cette machine ne PEUT PAS atteindre le réseau local par diffusion (conteneur Docker en réseau « bridge » : le paquet reste dans le réseau interne de Docker), sinon « »."""
+    if not (os.environ.get("LUTIN_DOCKER") or os.path.exists("/.dockerenv")):
+        return ""
+    locales = adresses_locales()
+    if locales and not all(re.match(r"^172\.(1[6-9]|2\d|3[01])\.", a) for a in locales):
+        return ""
+    return _t("Lutin tourne dans Docker en réseau « bridge » : un paquet de réveil ne sort pas sur ton réseau local. Dans docker-compose.yml, ajoute « network_mode: host » (et retire « ports: ») pour pouvoir réveiller des machines, ou lance le réveil depuis une autre machine Lutin.")
+
+
+def envoyer_reveil(mac, adresse_machine="", ports=(9, 7), socket_factory=socket.socket, locales=None):
+    """Envoie le paquet magique PAR CHAQUE CARTE RÉSEAU de cette machine ; renvoie la liste des (adresse, port) atteints. Lève ValueError si rien n'a pu partir."""
     paquet = paquet_magique(mac)
     envoyes = []
-    s = socket_factory(socket.AF_INET, socket.SOCK_DGRAM)
-    try:
-        s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-        for cible in diffusions(adresse_machine):
-            for port in ports:
+    sources = [""] + list(adresses_locales() if locales is None else locales)
+    for source in sources:
+        cibles = diffusions(adresse_machine)
+        m = re.match(r"^(\d{1,3}\.\d{1,3}\.\d{1,3})\.\d{1,3}$", source)
+        if m and m.group(1) + ".255" not in cibles:
+            cibles.append(m.group(1) + ".255")
+        try:
+            s = socket_factory(socket.AF_INET, socket.SOCK_DGRAM)
+        except OSError:
+            continue
+        try:
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+            if source:
                 try:
-                    s.sendto(paquet, (cible, port))
-                    envoyes.append((cible, port))
+                    s.bind((source, 0))
                 except OSError:
                     continue
-    finally:
-        s.close()
+            for cible in cibles:
+                for port in ports:
+                    try:
+                        s.sendto(paquet, (cible, port))
+                        if (cible, port) not in envoyes:
+                            envoyes.append((cible, port))
+                    except OSError:
+                        continue
+        finally:
+            s.close()
     if not envoyes:
         raise ValueError(_t("Le paquet de réveil n'a pu partir sur aucun réseau : cette machine est-elle connectée au réseau local ?"))
     return envoyes

@@ -57,10 +57,34 @@ class Reveil(unittest.TestCase):
 
             def close(self):
                 pass
-        r = alimentation.envoyer_reveil("00:1A:2B:3C:4D:5E", "192.168.1.20", socket_factory=Faux)
+        r = alimentation.envoyer_reveil("00:1A:2B:3C:4D:5E", "192.168.1.20", socket_factory=Faux, locales=[])
         self.assertEqual(len(r), 4)
         self.assertIn((102, ("192.168.1.255", 9)), envoyes)
         self.assertIn((102, ("255.255.255.255", 7)), envoyes)
+
+    def test_le_paquet_part_par_chaque_carte(self):
+        liees, envoyes = [], []
+
+        class Faux:
+            def __init__(self, *a):
+                self.source = ""
+
+            def setsockopt(self, *a):
+                pass
+
+            def bind(self, adresse):
+                self.source = adresse[0]
+                liees.append(adresse[0])
+
+            def sendto(self, donnees, cible):
+                envoyes.append((self.source, cible))
+
+            def close(self):
+                pass
+        alimentation.envoyer_reveil("00:1A:2B:3C:4D:5E", "192.168.1.20", socket_factory=Faux, locales=["10.8.0.2", "192.168.1.59"])
+        self.assertEqual(liees, ["10.8.0.2", "192.168.1.59"])
+        self.assertIn(("10.8.0.2", ("10.8.0.255", 9)), envoyes)
+        self.assertIn(("192.168.1.59", ("192.168.1.255", 7)), envoyes)
 
     def test_un_vrai_paquet_arrive_par_udp(self):
         recepteur = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)

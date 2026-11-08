@@ -559,7 +559,7 @@ def reveiller(ident, envoyer=alimentation.envoyer_reveil):
         REVEIL[ident] = time.monotonic()
         SONDES.pop(ident, None)
     journaliser("réveil envoyé à {}".format(m["nom"]))
-    return {"ok": True, "avertissements": [a for a in avertissements(m) if a][:4]}          # le paquet est parti, mais on dit ce qui risque de l'empêcher de marcher
+    return {"ok": True, "avertissements": [a for a in [alimentation.emission_limitee()] + avertissements(m) if a][:4]}          # le paquet est parti, mais on dit ce qui risque de l'empêcher de marcher
 
 
 def eteindre(ident, annuler=False, ouvrir=None):
