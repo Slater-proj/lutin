@@ -75,7 +75,7 @@ def emission_limitee():
     locales = adresses_locales()
     if locales and not all(re.match(r"^172\.(1[6-9]|2\d|3[01])\.", a) for a in locales):
         return ""
-    return _t("Lutin tourne dans Docker en réseau « bridge » : un paquet de réveil ne sort pas sur ton réseau local. Dans docker-compose.yml, ajoute « network_mode: host » (et retire « ports: ») pour pouvoir réveiller des machines, ou, sans changer le réseau, depuis l'hôte : « docker run --rm --network host ghcr.io/slater-proj/lutin lutin wake <MAC> ».")
+    return _t("Lutin tourne dans Docker en réseau « bridge » : un paquet de réveil ne sort pas sur ton réseau local. Dans docker-compose.yml, ajoute « network_mode: host » (et retire « ports: ») pour pouvoir réveiller des machines, ou lance le réveil depuis une autre machine Lutin.")
 
 
 def envoyer_reveil(mac, adresse_machine="", ports=(9, 7), socket_factory=socket.socket, locales=None):

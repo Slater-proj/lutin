@@ -103,9 +103,6 @@ def parseur():
     s.add_argument("--listen", "--ecoute", dest="ecoute", help=_t("adresse d'écoute imposée (conteneur : 0.0.0.0) ; interdite au niveau « local »"))
     s.add_argument("--language", "--langue", dest="langue", choices=i18n.LANGUES + ("auto",), help=_t("langue de l'application (fr, en ou auto)"))
     s.add_argument("--reconfigure", "--reconfigurer", dest="reconfigurer", action="store_true", help=_t("refaire l'installation guidée même si Lutin est déjà installé (les modèles déjà là ne sont pas retéléchargés)"))
-    w = commande("wake", help=_t("réveiller une machine par le réseau (Wake-on-LAN)"))
-    w.add_argument("mac", help=_t("adresse MAC de la machine à réveiller"))
-    w.add_argument("--host", default="", help=_t("adresse IP de la machine (pour viser aussi son réseau)"))
     sv = commande("serve", help=_t("démarrer le serveur"))
     sv.add_argument("--no-browser", "--sans-navigateur", dest="sans_navigateur", action="store_true")
     sv.add_argument("--no-supervisor", "--sans-superviseur", dest="sans_superviseur", action="store_true", help=_t("ne pas relancer automatiquement le serveur s'il s'arrête sur une erreur"))
@@ -886,18 +883,6 @@ def commande_colibri(args):
     return 0
 
 
-def commande_wake(args):
-    """Envoie le paquet de réveil. Utile depuis l'hôte d'un conteneur Docker en réseau « bridge » (qui ne peut pas diffuser sur le réseau local) : docker run --rm --network host <image> lutin wake <MAC>."""
-    from . import alimentation
-    try:
-        envoyes = alimentation.envoyer_reveil(args.mac, args.host)
-    except ValueError as e:
-        print("✘ " + str(e), file=sys.stderr)
-        return 1
-    print(_t("✔ Paquet de réveil envoyé ({} envois).").format(len(envoyes)))
-    return 0
-
-
 def commande_doctor(args):
     d, cfg = contexte()
     from . import docker_aide
@@ -921,7 +906,7 @@ def principal(argv=None):
     os.environ["LUTIN_CONFIG"] = str(Path(config.dossiers()["config"]) / "config.json")          # les gardes (mode hors ligne…) lisent la configuration de cette installation
     commandes = {"setup": commande_setup, "serve": commande_serve, "update": commande_update, "chat": commande_chat, "modeles": commande_modeles, "pin": commande_pin,
                  "appareils": commande_appareils, "securite": commande_securite, "langue": commande_langue, "importer": commande_importer, "reprendre": commande_reprendre, "hors-ligne": commande_hors_ligne,
-                 "travaux": commande_travaux, "journal": commande_journal, "bench": commande_bench, "sauvegarde": commande_sauvegarde, "restaurer": commande_restaurer, "doctor": commande_doctor, "demarrage-auto": commande_demarrage_auto, "zone": commande_zone, "mcp": commande_mcp, "essai-moteur": commande_essai_moteur, "bench-moteurs": commande_bench_moteurs, "colibri": commande_colibri, "wake": commande_wake}
+                 "travaux": commande_travaux, "journal": commande_journal, "bench": commande_bench, "sauvegarde": commande_sauvegarde, "restaurer": commande_restaurer, "doctor": commande_doctor, "demarrage-auto": commande_demarrage_auto, "zone": commande_zone, "mcp": commande_mcp, "essai-moteur": commande_essai_moteur, "bench-moteurs": commande_bench_moteurs, "colibri": commande_colibri}
     try:
         if args.commande is None:
             return commande_serve(argparse.Namespace(sans_navigateur=False))
