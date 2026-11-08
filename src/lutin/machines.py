@@ -591,9 +591,9 @@ def signaler_panne(m, modele=""):
     _noter(m, "injoignable", time.monotonic, {"etat": "injoignable", "detail": _t("Pas de réponse (éteinte, hors réseau ou Lutin arrêté)."), "modeles": []}, modele)
 
 
-def etats(modele="", ouvrir=None):
-    """Pour la page Machines : chaque machine avec son état."""
-    return [dict(vue(m), **sonder(m, modele, ouvrir)) for m in lire()]
+def etats(modele="", ouvrir=None, choisie=""):
+    """Pour la page Machines : chaque machine avec son état. Le modèle choisi ici n'est cherché que sur la machine CHOISIE pour répondre : les autres ont leurs propres modèles, ce n'est pas un défaut."""
+    return [dict(vue(m), **sonder(m, modele if m["id"] == choisie else "", ouvrir)) for m in lire()]
 
 
 # --------------------------------------------------------------------------- ce que les autres machines partagent : conversations, skills, mémoire (copies locales, à ta demande)

@@ -1303,7 +1303,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
     @staticmethod
     def _vue_machines():
         r = _m.reglages()
-        return {"noeud": _machines.noeud_vue(), "machines": _machines.etats(r["modele"]), "choisie": r.get("machine", ""), "niveau_local": _m.SECURITE.niveau == _sec.LOCAL, "demarrage": _alimentation.etat_demarrage_memo(), "journal": _machines.journal()}
+        return {"noeud": _machines.noeud_vue(), "machines": _machines.etats(r["modele"], choisie=r.get("machine", "")), "choisie": r.get("machine", ""), "niveau_local": _m.SECURITE.niveau == _sec.LOCAL, "demarrage": _alimentation.etat_demarrage_memo(), "journal": _machines.journal()}
 
     def _appairer(self, donnees):
         if _m.SECURITE.niveau == _sec.LOCAL:

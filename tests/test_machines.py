@@ -210,6 +210,14 @@ class Etats(Base):
         self.assertEqual(r["etat"], "joignable")
         self.assertIn("inconnu", r["detail"])
 
+    def test_le_modele_local_n_est_cherche_que_sur_la_machine_choisie(self):
+        m = self.jumeler()
+        etat = lambda **kw: machines.etats("inconnu", **kw)[0]["etat"]          # noqa: E731
+        machines.SONDES.clear()
+        self.assertEqual(etat(), "operationnel")
+        machines.SONDES.clear()
+        self.assertEqual(etat(choisie=m["id"]), "joignable")
+
     def test_joignable_si_le_moteur_est_arrete(self):
         m = self.jumeler()
         self.noeud.actif = False
