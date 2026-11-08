@@ -3517,7 +3517,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
       l.append(bu, mac, br); c.appendChild(l);
       const l2 = el('div', 'ligne'), bw = el('button', '', T('Réveiller')), be = el('button', '', T('Éteindre…'));
       bw.title = T('Envoie un paquet de réveil (Wake-on-LAN) : il faut son adresse MAC.');
-      bw.addEventListener('click', async () => { const x = await act('wake', { id: m.id }); if (x && x.avertissements && x.avertissements.length) alert(T('Réveil envoyé, mais :') + '\n\n' + x.avertissements.join('\n\n')); chargerMachines(true); });
+      bw.addEventListener('click', async () => { const x = await act('wake', { id: m.id }); if (x) alert(T('Paquet de réveil envoyé à l\'adresse MAC') + ' ' + x.mac + ' (' + x.envois + ' ' + T('envois') + ', ' + T('depuis') + ' ' + ((x.cartes || []).join(', ') || '?') + ')' + (x.avertissements && x.avertissements.length ? '\n\n' + T('Mais :') + '\n\n' + x.avertissements.join('\n\n') : '') + '\n\n' + T('Si la machine ne démarre pas : vérifie que cette adresse MAC est bien celle de sa carte Ethernet, et que les adresses « depuis » sont celles de ton réseau local (pas 172.x : ce serait le réseau interne de Docker).')); chargerMachines(true); });
       be.addEventListener('click', async () => { if (!confirm(T('Éteindre la machine « ') + m.nom + T(' » ? Elle s\'éteindra dans 30 secondes (annulable).'))) return; const x = await act('shutdown', { id: m.id }); if (x) { alert(T('Extinction demandée : 30 secondes.')); chargerMachines(true); } });
       l2.append(bw, be); c.appendChild(l2);
       const l3 = el('div', 'ligne'), res3 = el('span', 'aide'), droits = m.droits || {};

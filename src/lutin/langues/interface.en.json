@@ -1266,7 +1266,6 @@
 "Adresse MAC (reçue de la machine dès qu'elle répond)": "MAC address (received from the machine as soon as it answers)",
 "Reçue automatiquement de la machine": "Received automatically from the machine",
 "Saisie à la main": "Entered by hand",
-"Réveil envoyé, mais :": "Wake-up sent, but:",
 "Ce modèle tourne sur une autre machine : le test de vitesse mesure celle-ci. Choisis un modèle de cette machine.": "This model runs on another machine: the speed test measures this one. Pick a model from this machine.",
 "Recherche conçue pour les agents (tavily.com, offre gratuite limitée).": "Search built for agents (tavily.com, limited free tier).",
 "Recherche par le sens, très bonne pour les questions précises (exa.ai).": "Search by meaning, very good for precise questions (exa.ai).",
@@ -1337,5 +1336,10 @@
 "Importer ses skills": "Import its skills",
 "Importer sa mémoire": "Import its memory",
 "Pour voir ses conversations dans ta liste, coche « mes conversations » sur cette machine (Réglages > Machines).": "To see its conversations in your list, tick \"my conversations\" on that machine (Settings > Machines).",
-"Disque": "Disk"
+"Disque": "Disk",
+"Paquet de réveil envoyé à l'adresse MAC": "Wake-up packet sent to MAC address",
+"envois": "sends",
+"depuis": "from",
+"Mais :": "But:",
+"Si la machine ne démarre pas : vérifie que cette adresse MAC est bien celle de sa carte Ethernet, et que les adresses « depuis » sont celles de ton réseau local (pas 172.x : ce serait le réseau interne de Docker).": "If the machine does not start: check that this MAC address is the one of its Ethernet card, and that the \"from\" addresses are those of your local network (not 172.x: that would be Docker's internal network)."
 }

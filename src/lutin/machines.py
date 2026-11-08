@@ -554,12 +554,12 @@ def reveiller(ident, envoyer=alimentation.envoyer_reveil):
     if not m.get("mac"):
         raise ValueError(_t("Pour réveiller cette machine, renseigne son adresse MAC (la liste des cartes réseau : « ipconfig /all » sous Windows, « ip link » sous Linux)."))
     hote = urllib.parse.urlparse(m["adresse"]).hostname or ""
-    envoyer(m["mac"], hote)
+    envoyes = envoyer(m["mac"], hote)
     with VERROU:
         REVEIL[ident] = time.monotonic()
         SONDES.pop(ident, None)
     journaliser("réveil envoyé à {}".format(m["nom"]))
-    return {"ok": True, "avertissements": [a for a in [alimentation.emission_limitee()] + avertissements(m) if a][:4]}          # le paquet est parti, mais on dit ce qui risque de l'empêcher de marcher
+    return {"ok": True, "mac": m["mac"], "envois": len(envoyes or []), "cartes": alimentation.adresses_locales(), "avertissements": [a for a in [alimentation.emission_limitee()] + avertissements(m) if a][:4]}          # le paquet est parti, mais on dit ce qui risque de l'empêcher de marcher
 
 
 def eteindre(ident, annuler=False, ouvrir=None):
