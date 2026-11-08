@@ -994,7 +994,7 @@ def jauge_contexte(conv, r=None):
     r = r or _m.reglages()
     if conv.get("jetons"):
         return {"utilise": int(conv["jetons"]["utilise"]), "total": r["num_ctx"], "reel": True}
-    msgs = [{"role": "system", "content": consignes_systeme(r) + _m.texte_taches(conv)}]
+    msgs = [{"role": "system", "content": consignes_systeme(r) + _fichiers.consigne_dossier(conv) + _m.texte_taches(conv)}]
     if conv.get("resume"):
         msgs.append({"role": "user", "content": conv["resume"]})
     msgs += conv.get("messages", [])
@@ -1424,7 +1424,7 @@ def boucle_agent(conv, r, emit, ctx, stop):
             _m.journaliser("Actualités guidées impossibles : {!r}".format(erreur))
             emit({"type": "info", "texte": _t("La recherche d'actualités n'a pas pu se faire ({}) : je continue normalement.").format(erreur)})
     for idx_tour in range(tours_max):
-        msgs = [{"role": "system", "content": consignes_systeme(r) + _m.texte_taches(conv) + rappels_texte}]
+        msgs = [{"role": "system", "content": consignes_systeme(r) + _fichiers.consigne_dossier(conv) + _m.texte_taches(conv) + rappels_texte}]
         if conv.get("resume"):
             msgs.append({"role": "user", "content": "[Résumé de la conversation jusqu'ici]\n" + conv["resume"]})
             msgs.append({"role": "assistant", "content": "Compris, je continue."})

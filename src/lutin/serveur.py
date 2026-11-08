@@ -216,7 +216,10 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 reco = _bench_moteurs.recommander(profil, banc=None, docker=_moteurs.CONTEXTE["en_docker"](), modele_installe=False)
             except Exception:  # noqa: BLE001  (la recommandation est un plus)
                 reco = None
-            return _diagnostic.premier_lancement(mo.nom, False, (_t("Installé, mais arrêté.") if _m.chemin_ollama() else _t("Pas installé.")) if mo.id == "ollama" else "", {k: reco[k] for k in ("moteur", "nom", "raison")} if reco else None)
+            from . import moteurs_docker as _md
+            dossier = _md.dossier_moteurs()          # Docker : où le moteur sera installé, et si c'est un volume dédié (/engines) ou le volume des données
+            emplacement = {"dossier": str(dossier), "dedie": bool(os.environ.get("LUTIN_MOTEURS")) or str(dossier) == _md.MONTAGE} if dossier else None
+            return _diagnostic.premier_lancement(mo.nom, False, (_t("Installé, mais arrêté.") if _m.chemin_ollama() else _t("Pas installé.")) if mo.id == "ollama" else "", {k: reco[k] for k in ("moteur", "nom", "raison")} if reco else None, emplacement)
         except Exception:  # noqa: BLE001  (jamais une page cassée pour un constat de plus)
             return {"pret": True, "raison": "", "recommande": None}
 

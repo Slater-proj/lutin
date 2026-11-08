@@ -158,6 +158,18 @@ def dossier_sortie():
     return d
 
 
+def _dossier_audio(ctx):
+    """Où ranger l'audio créé : le dossier de la conversation (dans le dossier de travail) quand on la connaît, sinon le dossier de l'addon."""
+    conv = (ctx or {}).get("conv") or {}
+    if conv.get("id"):
+        try:
+            from . import fichiers
+            return fichiers.dossier_de_conversation(conv["id"], conv.get("titre", ""), creer=True)
+        except OSError:
+            pass
+    return dossier_sortie()
+
+
 def _fichier_audio(chemin, maximum):
     """Un fichier audio du projet, ou produit plus tôt par l'addon. Lève ErreurOutil sinon (type, taille, chemin hors zone)."""
     from .outils import chemin_sur
@@ -218,7 +230,7 @@ def outil_parler(args, ctx):
     _, type_, audio = _requete("POST", "/v1/audio/speech", json_corps=corps)
     if "json" in type_.lower() or audio[:1] == b"{" or len(audio) < 100:          # une erreur déguisée en réponse : on la montre, on n'enregistre pas un faux fichier audio
         raise _m.ErreurOutil(_t("VoiceStudio n'a pas rendu d'audio : {}").format(_resume_erreur(audio.decode("utf-8", "replace"))))
-    chemin = dossier_sortie() / _nom_fichier(texte, format_)
+    chemin = _dossier_audio(ctx) / _nom_fichier(texte, format_)
     chemin.write_bytes(audio)
     ctx.setdefault("fichiers_joints", []).append(str(chemin))
     return _t("Audio créé : {} ({} Ko, voix « {} », {}). L'utilisateur peut l'écouter et le télécharger depuis la carte sous ton message.").format(chemin, max(1, len(audio) // 1024), voix, format_)

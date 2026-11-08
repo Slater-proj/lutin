@@ -30,6 +30,12 @@ class Diagnostic(unittest.TestCase):
         p, = diag(installes=[])
         self.assertEqual(p["action"], {"type": "onglet", "nom": "modeles"})
 
+    def test_premier_lancement_dit_ou_le_moteur_sera_installe_sous_docker(self):
+        emp = {"dossier": "/data/moteurs", "dedie": False}
+        r = diagnostic.premier_lancement("Ollama", False, "", None, emp)
+        self.assertEqual(r["emplacement"], emp)
+        self.assertIsNone(diagnostic.premier_lancement("Ollama", False, "")["emplacement"])          # hors Docker : rien à dire
+
     def test_ollama_arrete(self):
         p, = diag(ollama_actif=False)
         self.assertEqual((p["code"], p["action"]["type"]), ("ollama_arret", "demarrer_ollama"))

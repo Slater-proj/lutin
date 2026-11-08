@@ -291,6 +291,46 @@ def supprimer_selection(ids):
     return {"supprimes": len(faits), "libere": libere, "ignores": ignores}
 
 
+def _nom_dossier_conversation(titre, ident):
+    """« conversations/<titre court>-<fin de l'identifiant> » : lisible, et stable même si le titre change (on retrouve le dossier par la fin de l'identifiant)."""
+    import re
+    import unicodedata
+    brut = unicodedata.normalize("NFKD", str(titre or "")).encode("ascii", "ignore").decode("ascii").lower()
+    slug = "-".join(re.findall(r"[a-z0-9]+", brut))[:40].strip("-") or "conversation"
+    return "{}-{}".format(slug, re.sub(r"\W", "", str(ident))[-6:] or "conv")
+
+
+def dossier_de_conversation(ident, titre="", creer=False):
+    """Le dossier où ranger ce que cette conversation produit (documents, exports, images, audio…), dans le dossier de travail, à côté des autres conversations mais jamais mélangé avec elles.
+    Retrouvé par la fin de l'identifiant s'il existe déjà. Créé seulement si `creer`."""
+    base = _m.RACINE / "conversations"
+    fin = "-" + _nom_dossier_conversation("", ident).rsplit("-", 1)[-1]
+    try:
+        for d in base.iterdir() if base.is_dir() else ():
+            if d.is_dir() and d.name.endswith(fin):
+                return d
+    except OSError:
+        pass
+    d = base / _nom_dossier_conversation(titre, ident)
+    if creer:
+        d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def consigne_dossier(conv):
+    """Ce que le modèle doit savoir : où ranger ce qu'il produit POUR cette conversation. Vide sans conversation (ligne de commande, tests)."""
+    ident = (conv or {}).get("id", "")
+    if not ident:
+        return ""
+    d = dossier_de_conversation(ident, (conv or {}).get("titre", ""))
+    try:
+        rel = d.relative_to(_m.RACINE).as_posix()
+    except ValueError:
+        return ""
+    return _t("\n\n# DOSSIER DE CETTE CONVERSATION\nRange dans « {} » ce que tu produis POUR cette conversation (documents, exports, images, audio, résultats de recherche, brouillons) : il se crée tout seul à la première écriture et évite de mélanger les conversations. "
+            "Le code et les fichiers du projet restent là où le projet les attend.").format(rel)
+
+
 def dossiers_conversation(ident):
     """Les dossiers propres à une conversation : son dossier de travail, puis ceux où elle a créé des fichiers (cinq au plus). [{chemin, role}] ; seulement des dossiers qui existent et sont permis.
     Sert au menu « ⋯ » de la conversation : ouvrir l'endroit où elle travaille, sans chercher."""
@@ -311,6 +351,12 @@ def dossiers_conversation(ident):
             return
         vus.add(r)
         sortie.append({"chemin": str(r), "role": role})
+    try:
+        d = dossier_de_conversation(ident, conv.get("titre", ""))
+        if d.is_dir():
+            ajouter(d, "conversation")          # le dossier propre à cette conversation, s'il existe (il se crée à la première écriture)
+    except OSError:
+        pass
     if t:
         ajouter(t["chemin"], "travail")
     for e in reversed([x for x in (_registre().get("liste") or []) if x.get("conversation") == ident]):

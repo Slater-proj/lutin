@@ -32,13 +32,13 @@ def _ollama_autre_conteneur():
     return moteurs_docker.ollama_externe()
 
 
-def premier_lancement(moteur_nom, actif, detail, recommande=None):
+def premier_lancement(moteur_nom, actif, detail, recommande=None, emplacement=None):
     """Le premier lancement : tant qu'AUCUN moteur n'est prêt, la page n'envoie pas l'utilisateur dans l'onglet Modèles (où rien ne marcherait) : elle dit pourquoi et propose d'installer le moteur conseillé,
     d'en choisir un autre ou de remettre à plus tard. {pret, raison, recommande}. `recommande` : la recommandation de bench_moteurs (moteur, nom, raison)."""
     if actif:
         return {"pret": True, "raison": "", "recommande": None}
     raison = _t("Aucun moteur n'est prêt : « {} » ne répond pas ({}). Les modèles se gèrent dans le moteur, donc cet onglet attend qu'un moteur soit prêt.").format(moteur_nom, detail or _t("pas installé ou arrêté"))
-    return {"pret": False, "raison": raison, "recommande": recommande}
+    return {"pret": False, "raison": raison, "recommande": recommande, "emplacement": emplacement}
 
 
 def diagnostiquer(ollama_actif, ollama_installe, installes, reglages, profil=None, catalogue=None, adequation=None, disque_libre_go=None, docker=None, conseils=None, modeles_ailleurs=None):

@@ -1227,5 +1227,9 @@
 "Ce moteur ne peut pas être installé d'ici : ouvre les réglages du moteur.": "This engine cannot be installed from here: open the engine settings.",
 "Installation lancée : l'avancement est dans la barre bleue du haut.": "Installation started: progress is in the blue bar at the top.",
 "mémoire vidéo non mesurable pour ce programme (le pilote ne la donne pas) : le total de la carte est plus bas": "video memory cannot be measured for this program (the driver does not give it): the card's total is lower down",
-"Pour comparer, il faut au moins deux moteurs installés qui ont ce modèle. Pour l'instant : ": "To compare, you need at least two installed engines that have this model. For now: "
+"Pour comparer, il faut au moins deux moteurs installés qui ont ce modèle. Pour l'instant : ": "To compare, you need at least two installed engines that have this model. For now: ",
+"Le moteur sera installé dans ": "The engine will be installed in ",
+" (volume dédié : une mise à jour de l'image ne l'efface pas).": " (dedicated volume: an image update does not erase it).",
+", dans le volume des données (aucun volume /engines monté). Il survit aux mises à jour de l'image ; pour le ranger ailleurs, ajoute « - /ton/dossier:/engines » dans les volumes du docker-compose.": ", in the data volume (no /engines volume mounted). It survives image updates; to put it elsewhere, add \"- /your/folder:/engines\" to the docker-compose volumes.",
+"Dossier de la conversation : ": "Conversation folder: "
 }

@@ -1332,7 +1332,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
       zoneDos.textContent = ''; if (!d.dossiers.length) { zoneDos.textContent = T('Aucun dossier pour le moment.'); return; }
       d.dossiers.forEach(x => {
         const nom = x.chemin.split(/[\\/]/).filter(Boolean).pop() || x.chemin;
-        const libelle = (x.role === 'travail' ? T('Dossier de travail : ') : T('Fichiers créés : ')) + nom;
+        const libelle = (x.role === 'conversation' ? T('Dossier de la conversation : ') : x.role === 'travail' ? T('Dossier de travail : ') : T('Fichiers créés : ')) + nom;
         const b = el('button', '', (d.ouverture_possible ? '📂 ' : '📋 ') + libelle); b.title = x.chemin + (d.ouverture_possible ? '' : ' — ' + T('Sous Docker, le dossier ne peut pas s\'ouvrir depuis la page : clique pour copier son chemin.'));
         b.addEventListener('click', async e => { e.stopPropagation(); fermerMenuConv();
           try { if (d.ouverture_possible) await api('/api/conversation-dossier-ouvrir', { id: c.id, chemin: x.chemin }); else { try { await navigator.clipboard.writeText(x.chemin); infoLocale(T('Chemin copié : ') + x.chemin); } catch (err) { prompt(T('Chemin du dossier :'), x.chemin); } } } catch (err) { alert(err.message); } });
@@ -1676,6 +1676,9 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     bloc.appendChild(el('b', '', T('Premier lancement : il manque un moteur')));
     bloc.appendChild(el('div', 'aide', pl.raison));
     if (pl.recommande) bloc.appendChild(el('div', '', T('Conseillé pour cette machine : ') + pl.recommande.nom + ' — ' + pl.recommande.raison));
+    if (pl.emplacement) bloc.appendChild(el('div', 'aide', pl.emplacement.dedie
+      ? '📁 ' + T('Le moteur sera installé dans ') + pl.emplacement.dossier + T(' (volume dédié : une mise à jour de l\'image ne l\'efface pas).')
+      : '📁 ' + T('Le moteur sera installé dans ') + pl.emplacement.dossier + T(', dans le volume des données (aucun volume /engines monté). Il survit aux mises à jour de l\'image ; pour le ranger ailleurs, ajoute « - /ton/dossier:/engines » dans les volumes du docker-compose.')));
     const l = el('div', 'ligne');
     const ouvrirReglages = () => { ouvrirOnglet('reglages'); };
     const msg = el('div', 'aide');
