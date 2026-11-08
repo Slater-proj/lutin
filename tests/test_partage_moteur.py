@@ -162,6 +162,32 @@ class GardeFousDesTests(unittest.TestCase):
             ollama_client.installer_windows(tempfile.mkdtemp(prefix="lutin-garde-"))
 
 
+class JetonGitHub(unittest.TestCase):
+    """Un jeton GITHUB_TOKEN (la CI) n'est envoyé qu'à l'API de GitHub, jamais ailleurs."""
+
+    def test_le_jeton_ne_part_qu_vers_api_github(self):
+        from lutin import moteur_llamacpp as ml
+        vus = []
+
+        class Reponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+            def read(self):
+                return b"{}"
+        with mock.patch.dict(os.environ, {"GITHUB_TOKEN": "jeton-secret"}), mock.patch.object(ml.urllib.request, "urlopen", lambda req, timeout=0: vus.append(req) or Reponse()):
+            ml._http_json("https://api.github.com/repos/ggml-org/llama.cpp/releases")
+            ml._http_json("https://huggingface.co/api/models")
+        self.assertEqual(vus[0].get_header("Authorization"), "Bearer jeton-secret")
+        self.assertIsNone(vus[1].get_header("Authorization"), "pas de jeton envoyé à un autre site")
+        with mock.patch.dict(os.environ, {"GITHUB_TOKEN": ""}), mock.patch.object(ml.urllib.request, "urlopen", lambda req, timeout=0: vus.append(req) or Reponse()):
+            ml._http_json("https://api.github.com/x")
+        self.assertIsNone(vus[2].get_header("Authorization"))
+
+
 class ReconnaitreUnLlamaServer(unittest.TestCase):
     def test_port_et_modele_viennent_de_la_ligne_de_commande(self):
         self.assertEqual(rc.decrire_commande('"E:/IA/llama.cpp/bin/llama-server.exe" -m "E:/IA/modeles/qwen3-27b.gguf" -c 8192 --port 8081'), "sur le port 8081, modèle qwen3-27b.gguf")
