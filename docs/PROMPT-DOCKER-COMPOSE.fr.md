@@ -53,7 +53,7 @@ Ne lance AUCUNE commande qui modifie quelque chose (pas de `up`, `down`, `rm`, `
 2. **`docker-compose.yml`** complet, commenté en une ligne par choix non évident, avec les étiquettes/blocs du reverse proxy que j'utilise réellement (et uniquement celui-là).
 3. **`.env`** (valeurs concrètes, sans secret superflu).
 4. **Fichiers du reverse proxy / d'Authelia à ajouter** : le bloc exact (nginx, Traefik, Caddy…) ET la règle `access_control` d'Authelia pour mon domaine (politique `two_factor` sauf si ma charte dit autre chose).
-5. **Commandes de mise en route**, dans l'ordre : création du dossier de pile et du dossier de travail, `chown 1000:1000`, création du réseau s'il manque, `docker compose config`, `pull`, `up -d`, installation d'un modèle (`docker compose exec lutin lutin modeles installer qwen3:4b`), vérification.
+5. **Commandes de mise en route**, dans l'ordre : création du dossier de pile et du dossier de travail, `chown 1000:1000`, création du réseau s'il manque, `docker compose config`, `pull`, `up -d`, installation d'un modèle (`docker compose exec lutin lutin models install qwen3:4b`), vérification.
 6. **Vérifications** avec le résultat attendu pour chacune : conteneur `healthy`, page joignable derrière Authelia, réponse affichée mot à mot, mon identifiant reconnu comme administrateur.
 7. **Retour arrière** : comment tout défaire sans toucher à mes autres piles.
 8. **Écarts** entre ma charte et les contraintes de Lutin, un par ligne.

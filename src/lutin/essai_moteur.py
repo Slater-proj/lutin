@@ -1,8 +1,8 @@
-"""Essai réel d'un moteur : `lutin essai-moteur llamacpp`.
+"""Essai réel d'un moteur : `lutin engine-trial llamacpp`.
 
 Les tests de Lutin utilisent de faux serveurs. Cet essai-ci fait **pour de vrai**, sur la machine où il est lancé, ce que Lutin fait avec un moteur : installer le programme, démarrer le serveur avec un
 modèle, vérifier qu'il répond, tenir une conversation en flux (premier jeton, vitesse), faire un appel d'outil, puis arrêter proprement. Chaque étape dit ce qui marche ou non, et le rapport est
-écrit dans un fichier JSON à joindre à un compte rendu. Rien n'est téléchargé sans une réponse « oui » (ou --oui).
+écrit dans un fichier JSON à joindre à un compte rendu. Rien n'est téléchargé sans une réponse « oui » (ou --yes).
 
 L'essai ne modifie rien d'autre que le dossier de Lutin (le moteur installé, les modèles téléchargés, le rapport)."""
 import json
@@ -141,7 +141,7 @@ def executer(options, moteur, ecrire=print, entree=input, chemin_rapport=None, m
         if choix is None:
             installes = moteur.modeles()["installes"]
             if not installes:
-                rapport.etape(_t("Modèle"), False, _t("aucun modèle : relance avec --modele {}/{} (2,5 Go, pense aux appels d'outils) ou --modele-test (1 Mo, pour vérifier seulement)").format(*SUGGESTION))
+                rapport.etape(_t("Modèle"), False, _t("aucun modèle : relance avec --model {}/{} (2,5 Go, pense aux appels d'outils) ou --test-model (1 Mo, pour vérifier seulement)").format(*SUGGESTION))
                 return fin(False)
             modele = installes[0]
         else:

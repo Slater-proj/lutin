@@ -156,7 +156,7 @@ def demarrer(modele, port=PORT_DEFAUT, dossiers=None, attente_s=90, lancer=subpr
     """Lance `coli serve` sur un dossier de modèle déjà préparé par Colibri (`coli setup` ou `coli import`), puis attend qu'il réponde. ValueError avec la fin du journal s'il s'arrête."""
     trouve = installee(dossiers)
     if not trouve:
-        raise ValueError(_t("Colibri n'est pas installé : lance d'abord « lutin colibri installer »."))
+        raise ValueError(_t("Colibri n'est pas installé : lance d'abord « lutin colibri install »."))
     if not Path(modele).is_dir():
         raise ValueError(_t("Le dossier de modèle n'existe pas : {} (prépare-le avec « coli setup » ou « coli import » de Colibri).").format(modele))
     _, racine = trouve
@@ -180,6 +180,6 @@ def arreter(port=PORT_DEFAUT, dossiers=None, lancer=subprocess.run):
     """`coli stop --port N` : Colibri arrête son serveur et son moteur."""
     trouve = installee(dossiers)
     if not trouve:
-        raise ValueError(_t("Colibri n'est pas installé : lance d'abord « lutin colibri installer »."))
+        raise ValueError(_t("Colibri n'est pas installé : lance d'abord « lutin colibri install »."))
     r = lancer([sys.executable, str(Path(trouve[1]) / "coli"), "stop", "--port", str(int(port))], cwd=str(trouve[1]), capture_output=True, text=True, timeout=60)
     return r.returncode == 0

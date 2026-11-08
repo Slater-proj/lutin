@@ -18,7 +18,7 @@ The network contacts Lutin can make, and when:
 
 **Web searches are cleaned before they leave.** For every outside search service (Brave, Tavily, Exa, Perplexity, DuckDuckGo, Bing) Lutin first removes from the query what should never leave: e-mail addresses, phone numbers, bank card numbers (checked with the Luhn key), IBANs, keys and tokens, local network addresses, paths that contain a user name. It tells you which categories were removed (never the values), without calling any model, so there is no delay. A SearXNG at your place receives the query as typed. **Settings > Health > « What left this machine »** lists the last searches sent (time, service, the query as it left) and can be cleared; the file (`sorties.jsonl`) keeps 300 entries at most.
 
-**Strict offline mode** (`lutin hors-ligne oui`, the « Offline » box, or `LUTIN_HORS_LIGNE=1`) blocks every contact above; only this machine and Ollama are reached. A test watches the real connections.
+**Strict offline mode** (`lutin offline on`, the « Offline » box, or `LUTIN_HORS_LIGNE=1`) blocks every contact above; only this machine and Ollama are reached. A test watches the real connections.
 
 What stays on your disk: configuration, conversations, memory, action log (never the file contents nor the command output), backups of modified files. See [SECURITY.md](SECURITY.md) for who can reach the page.
 

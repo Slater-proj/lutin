@@ -2,6 +2,15 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## Commandes en anglais
+
+- **Toutes les commandes, options et valeurs de `lutin` ont un nom anglais officiel** : `lutin workspaces add`, `lutin models install`, `lutin offline on`, `lutin backup`, `lutin restore`, `lutin autostart install`, `lutin migrate`, `lutin import-project`, `lutin language`, `lutin log`, `lutin security`, `lutin devices`, `lutin bench-engines`, `lutin engine-trial` ; options `--yes`, `--level network`, `--workspace`, `--no-models`, `--no-ollama`, `--listen`, `--language`, `--reconfigure`, `--no-browser`, `--no-supervisor`, `--rollback-to`, `--models`, `--engine`, `--fast`, `--output`, `--force`, etc.
+- **Les anciens noms français marchent toujours** (alias) : un script ou une habitude d'avant ne casse pas. L'aide (`lutin --help`) montre le nom anglais puis l'ancien nom entre parenthèses.
+- **Partout où Lutin cite une commande** (messages, page, documentation, image Docker, scripts d'installation, intégration continue), c'est le nom anglais.
+- **À savoir** : le texte d'aide reste dans la langue de l'application (réglage `lutin language`) ; seuls les NOMS des commandes sont en anglais par défaut.
+
+**English.** Every `lutin` command, option and value now has an official English name (`lutin workspaces add`, `lutin offline on`, `--no-models`, `--level network`…); the old French names still work as aliases, and everything that quotes a command (messages, page, docs, Docker image, install scripts, CI) uses the English one.
+
 ## Machine prêtée plus robuste, un seul Lutin par port
 
 - **Deux Lutin sur le même port sous Windows** : Python ouvre le port avec l'option « réutiliser l'adresse », qui autorise sous Windows plusieurs serveurs sur le même port. Un second Lutin (la tâche de démarrage ET un lancement à la main) démarrait donc sans erreur, avec son propre serveur de modèle : d'où deux `llama-server` en mémoire. Le port est maintenant exclusif, pris **avant** de lancer les travaux de fond, et un second Lutin s'arrête avec un message clair. Installer le démarrage automatique retire aussi l'ancienne tâche planifiée.

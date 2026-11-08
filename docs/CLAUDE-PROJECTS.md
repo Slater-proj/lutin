@@ -20,15 +20,15 @@ Nothing is executed on its own: these files are **instructions and notes** for t
 
 | | Work in the repository | Work in a copy |
 |---|---|---|
-| Command | `lutin importer <folder> --ici` | `lutin importer <folder> --copie [--vers <folder>]` |
+| Command | `lutin import-project <folder> --here` | `lutin import-project <folder> --copy [--to <folder>]` |
 | Files | **the same** as Claude Code's: both tools see each other's changes | a copy (git history included, without `node_modules`, `.venv`…); the original is never touched |
 | When | you want continuity, nothing to merge | you want to try, or keep the original safe; compare or merge with git afterwards |
 
-Without `--ici` or `--copie`, the command asks (copy by default). In the page: **Memory > Claude project > Import a Claude project…**. The folder becomes a workspace folder and the active one.
+Without `--here` or `--copy`, the command asks (copy by default). In the page: **Memory > Claude project > Import a Claude project…**. The folder becomes a workspace folder and the active one.
 
 Good to know:
 
 - Adding a folder is only possible from this machine (`this machine only` level, or the command line), like every workspace folder.
-- A folder with neither `CLAUDE.md` nor `.claude/` is refused (use `lutin travaux ajouter` for an ordinary folder).
+- A folder with neither `CLAUDE.md` nor `.claude/` is refused (use `lutin workspaces add` for an ordinary folder).
 - In Docker, mount the repository under `/workspace` and declare it with `LUTIN_WORKSPACES` (see [DOCKER.md](DOCKER.md)).
 - Lutin uses local models: very long `CLAUDE.md` files and many skills cost context. Keep them short, and let the model read the details on demand.

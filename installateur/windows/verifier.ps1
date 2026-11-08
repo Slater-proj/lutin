@@ -78,7 +78,7 @@ Write-Host "Mise a jour avec Lutin en marche : il est arrete avant"
 
 # 4. La commande de base fonctionne vraiment (pas seulement --version)
 $s = (& cmd /c "`"$(Join-Path $deux 'bin\lutin.cmd')`" securite" 2>&1) -join " "
-if ($s -notmatch "Level") { Echec "lutin securite : $s" }
+if ($s -notmatch "Level") { Echec "lutin security : $s" }
 
 # 5. Desinstallation (avec un Lutin qui tourne : le desinstalleur l'arrete, rien ne reste)
 foreach ($d in @($un, $deux)) {

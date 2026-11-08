@@ -4,13 +4,13 @@
 
 ## Quels modèles pour quel moteur
 
-Chaque moteur n'accepte pas tout. Lutin **ne propose jamais** un modèle que le moteur choisi ne sait pas faire tourner : l'onglet Modèles masque les autres (avec un repli « N modèles masqués » qui dit pourquoi), l'installation d'un modèle incompatible est refusée, et les rôles (polyvalent, rapide…) sont recalculés **sur les seuls modèles compatibles** (`lutin modeles recommander --moteur llamacpp`).
+Chaque moteur n'accepte pas tout. Lutin **ne propose jamais** un modèle que le moteur choisi ne sait pas faire tourner : l'onglet Modèles masque les autres (avec un repli « N modèles masqués » qui dit pourquoi), l'installation d'un modèle incompatible est refusée, et les rôles (polyvalent, rapide…) sont recalculés **sur les seuls modèles compatibles** (`lutin models recommend --engine llamacpp`).
 
 - **Ollama** : toute la bibliothèque.
 - **llama.cpp géré par Lutin** : les mêmes fichiers GGUF (téléchargés depuis la bibliothèque d'Ollama, sans Ollama), sauf si une capacité dont le modèle a besoin (outils, raisonnement, images) est « non supportée » par ce moteur dans sa grille de capacités.
 - **Serveur externe (LM Studio, vLLM…)** : il a ses propres modèles ; seuls ceux qu'il propose sont montrés.
 
-Chaque ligne indique le **format** (GGUF), la **quantification** (celle du nom, sinon celle par défaut de la bibliothèque) et la **mémoire estimée** (poids + conversation de 8 192 jetons + marge). `lutin bench --moteur llamacpp` mesure un modèle avec un autre moteur qu'Ollama.
+Chaque ligne indique le **format** (GGUF), la **quantification** (celle du nom, sinon celle par défaut de la bibliothèque) et la **mémoire estimée** (poids + conversation de 8 192 jetons + marge). `lutin bench --engine llamacpp` mesure un modèle avec un autre moteur qu'Ollama.
 
 ## Estimer avant de charger
 
@@ -27,7 +27,7 @@ Un modèle qui ne tient pas, ou à peine, est signalé **avant** le chargement :
 
 - **Modèles à experts** (peu de paramètres actifs par mot), par exemple une carte de 24 Go et 32 Go de RAM : les experts restent en mémoire vive (`--n-cpu-moe` de llama.cpp, réglable dans Réglages > Moteurs > llama.cpp > Réglages avancés) et le reste tient sur la carte. Le nombre de couches est **estimé** (48 par défaut), pas lu dans le fichier : ajuste d'après la mémoire vidéo réellement prise.
 - **Mode prudent** : sur une machine modeste (moins de 8 Go utilisables, ou sans carte et moins de 16 Go de RAM), la page propose une conversation de 8 192 jetons et un seul modèle chargé à la fois. Jamais appliqué sans ton accord.
-- **Estimation contre mesure** : le banc des moteurs (`lutin bench-moteurs`) compare l'estimation à la mémoire réellement prise (`estimation.ecart_pct` dans le résultat : positif = surestimé). **Aucun écart n'est encore mesuré sur du vrai matériel** : tant que des résultats réels manquent, lis l'estimation comme un ordre de grandeur, pas une garantie.
+- **Estimation contre mesure** : le banc des moteurs (`lutin bench-engines`) compare l'estimation à la mémoire réellement prise (`estimation.ecart_pct` dans le résultat : positif = surestimé). **Aucun écart n'est encore mesuré sur du vrai matériel** : tant que des résultats réels manquent, lis l'estimation comme un ordre de grandeur, pas une garantie.
 
 ## Comment Lutin choisit
 
@@ -37,7 +37,7 @@ Un modèle qui ne tient pas, ou à peine, est signalé **avant** le chargement :
 4. Un modèle « à experts » (peu de paramètres actifs par mot) peut déborder en RAM : il est proposé avec la mention « plus lent ».
 5. Seuls les modèles qui savent **appeler des outils** sont proposés : sans cela, Lutin ne peut ni lire ni modifier tes fichiers.
 
-Le résultat est affiché par `lutin modeles` et à l'installation guidée. Tu peux toujours choisir autre chose dans l'onglet Modèles.
+Le résultat est affiché par `lutin models` et à l'installation guidée. Tu peux toujours choisir autre chose dans l'onglet Modèles.
 
 ## Sans carte graphique, ou avec une carte intégrée seulement
 
@@ -94,7 +94,7 @@ Certains modèles sont modifiés par la communauté pour ne plus refuser de dema
 | Français | une réponse en une phrase, et exactement trois puces |
 | Consignes | un objet JSON valide, sans texte autour |
 
-Les réponses sont vérifiées automatiquement ; **aucun code écrit par le modèle n'est jamais exécuté**. Une seule passe à température 0 : c'est un **indicateur**, pas un classement scientifique. Résultats gardés dans le cache, affichés dans la liste des modèles, et exportables (`lutin bench --exporter`) pour proposer une correction de note au catalogue.
+Les réponses sont vérifiées automatiquement ; **aucun code écrit par le modèle n'est jamais exécuté**. Une seule passe à température 0 : c'est un **indicateur**, pas un classement scientifique. Résultats gardés dans le cache, affichés dans la liste des modèles, et exportables (`lutin bench --export`) pour proposer une correction de note au catalogue.
 
 Notes mesurées (de 0 à 10) : *code* = 60 % code + 40 % outils ; *créatif* = 60 % français + 40 % consignes ; *polyvalent* = moyenne des quatre ; *rapide* = barème sur les jetons par seconde (plafonné à 4 si le modèle n'appelle pas les outils : inutilisable pour Lutin). Les formules sont dans `lutin/bench.py` : conteste-les.
 

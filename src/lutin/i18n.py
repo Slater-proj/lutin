@@ -1,6 +1,6 @@
 """Langue de Lutin : français ou anglais, pour l'interface, la ligne de commande et les messages du serveur.
 
-La langue se choisit (par ordre de priorité) : variable LUTIN_LANGUE, réglage `langue` de config.json (« lutin langue en »), puis la langue du système (français si elle commence par « fr »,
+La langue se choisit (par ordre de priorité) : variable LUTIN_LANGUE, réglage `langue` de config.json (« lutin language en »), puis la langue du système (français si elle commence par « fr »,
 anglais sinon). Le **français est la langue d'écriture du code** : `t("texte français")` renvoie le texte tel quel en français, sa traduction en anglais sinon (dictionnaire
 `langues/messages.en.json`). Un texte sans traduction reste en français : jamais d'erreur, mais un test (`tests/test_langue.py`) garantit que chaque `t("…")` du code est traduit.
 """

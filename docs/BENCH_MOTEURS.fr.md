@@ -7,7 +7,7 @@ Lutin sait faire tourner un même modèle avec Ollama ou avec llama.cpp (les mod
 ## Utiliser
 
 - **Dans la page** : Réglages > Moteurs, carte « Quel moteur pour ma machine ? » : la recommandation et sa raison, puis « Comparer les moteurs » (environ 1 minute) ou « Comparaison approfondie » (environ 5 minutes).
-- **En ligne de commande** : `lutin bench-moteurs [modèle] [--mode rapide|approfondi] [--sortie resultat.json]`.
+- **En ligne de commande** : `lutin bench-engines [modèle] [--mode rapide|approfondi] [--output resultat.json]`.
 
 Il faut que le modèle existe sur chaque moteur comparé (un modèle d'Ollama apparaît tel quel dans llama.cpp). Le banc ne tourne **jamais tout seul**, jamais au premier lancement, et ne télécharge rien. Avant de mesurer un moteur, il décharge le modèle de l'autre pour que la mémoire et la carte graphique soient à lui seul.
 
@@ -23,4 +23,4 @@ Pour chaque moteur : le chargement à froid, le premier jeton, la vitesse d'écr
 
 ## Partager un résultat
 
-Le fichier produit par `--sortie` ne contient ni chemin ni nom d'utilisateur : seulement le matériel (processeur, mémoire, cartes), les versions des moteurs et les chiffres. C'est ce qui permettra de trancher les questions encore ouvertes sur des mesures réelles : l'image Docker par défaut, le petit PC à carte graphique intégrée (processeur, Vulkan ou Ollama), et llama.cpp contre Ollama sur une carte NVIDIA avec des modèles à experts. **Ces décisions ne sont pas prises tant qu'il n'y a pas de chiffres de plusieurs machines réelles.**
+Le fichier produit par `--output` ne contient ni chemin ni nom d'utilisateur : seulement le matériel (processeur, mémoire, cartes), les versions des moteurs et les chiffres. C'est ce qui permettra de trancher les questions encore ouvertes sur des mesures réelles : l'image Docker par défaut, le petit PC à carte graphique intégrée (processeur, Vulkan ou Ollama), et llama.cpp contre Ollama sur une carte NVIDIA avec des modèles à experts. **Ces décisions ne sont pas prises tant qu'il n'y a pas de chiffres de plusieurs machines réelles.**

@@ -1,6 +1,6 @@
 """Le banc comparatif de moteurs et la recommandation de moteur.
 
-Le banc (`lutin bench-moteurs`, bouton de la page) fait tourner le MÊME modèle (les modèles d'Ollama sont des fichiers GGUF que llama.cpp lit tels quels, sous les mêmes noms) sur chaque moteur
+Le banc (`lutin bench-engines`, bouton de la page) fait tourner le MÊME modèle (les modèles d'Ollama sont des fichiers GGUF que llama.cpp lit tels quels, sous les mêmes noms) sur chaque moteur
 disponible, et mesure : le chargement à froid, le premier jeton, la vitesse d'écriture (jetons/s), la vitesse de lecture du texte envoyé, la mémoire prise (RAM, mémoire vidéo) et la stabilité
 (réponses réussies sur plusieurs passes). Le résultat est un JSON lisible et partageable, sans chemin ni donnée personnelle. Il ne tourne jamais tout seul ; il est conservé et « à refaire » seulement
 quand le matériel ou la version d'un moteur change.

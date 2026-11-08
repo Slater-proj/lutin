@@ -11,7 +11,7 @@ Lutin's automatic tests use fake servers. The trials below run **on real hardwar
 **Step 1 — the smallest trial (about 30 seconds, a 1 MB model).** It checks that the program installs, starts and answers. In a terminal:
 
 ```
-lutin essai-moteur llamacpp --modele-test
+lutin engine-trial llamacpp --test-model
 ```
 
 Answer `y` to the download question (the program is 25 MB to about 700 MB depending on your card: the "CUDA" version with its libraries is the biggest).
@@ -19,13 +19,13 @@ Answer `y` to the download question (the program is 25 MB to about 700 MB depend
 **Step 2 — the real trial with a model that can call tools (2.5 GB).**
 
 ```
-lutin essai-moteur llamacpp --modele unsloth/Qwen3-4B-Instruct-2507-GGUF/Qwen3-4B-Instruct-2507-Q4_K_M.gguf
+lutin engine-trial llamacpp --model unsloth/Qwen3-4B-Instruct-2507-GGUF/Qwen3-4B-Instruct-2507-Q4_K_M.gguf
 ```
 
 What you should see: `✔` lines for the machine, the installation, the model, the startup, `/v1/models`, the conversation (with the **tokens per second** and the **time to first token**), the tool call, the shutdown. A `⚠` on the tool call means the model did not call the tool: not a failure, but tell me.
 
 **If it does not work**: the message names the failing step. Useful cases:
-- the installation picks "CUDA" but the server does not start → retry with `--variante vulkan` then `--variante cpu`, and tell me which one works (and your NVIDIA driver version);
+- the installation picks "CUDA" but the server does not start → retry with `--variant vulkan` then `--variant cpu`, and tell me which one works (and your NVIDIA driver version);
 - "llama-server is not answering after 180 s" → look at the end of the log shown in the message (`moteurs/llamacpp/serveur.log` in Lutin's data folder).
 
 **What you send back**: everything the command printed (copy-paste), or the `essai-llamacpp-….json` file from the `essais/` folder of your data folder (its path is printed at the end of the command). The report contains neither your conversations nor your keys; it contains your system version, the detected hardware and the measurements.

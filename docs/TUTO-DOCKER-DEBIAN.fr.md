@@ -112,8 +112,8 @@ docker compose logs --tail 30 lutin
 ## 6. Installer un modèle
 
 ```bash
-docker compose exec lutin lutin modeles                    # les modèles conseillés pour cette machine
-docker compose exec lutin lutin modeles installer qwen3:4b
+docker compose exec lutin lutin models                    # les modèles conseillés pour cette machine
+docker compose exec lutin lutin models install qwen3:4b
 ```
 
 Avec un budget de 8 Go et un processeur seul, Lutin conseille `qwen3:4b` ou `llama3.2:3b` (confortables) ; `qwen3:8b` est « à la limite » (lent). Le téléchargement est dans le volume `lutin-models`. Tu peux aussi le faire depuis la page (onglet Modèles).
@@ -148,10 +148,10 @@ Puis recharge Authelia et ton reverse proxy.
 |---|---|
 | Mettre à jour | `docker compose pull && docker compose up -d` (les volumes sont gardés) |
 | Voir les journaux | `docker compose logs -f lutin` |
-| Sauvegarder | `docker compose exec lutin lutin sauvegarde /data/sauvegarde.zip && docker compose cp lutin:/data/sauvegarde.zip .` |
+| Sauvegarder | `docker compose exec lutin lutin backup /data/sauvegarde.zip && docker compose cp lutin:/data/sauvegarde.zip .` |
 | Arrêter | `docker compose down` (les volumes restent ; `down -v` les **efface**) |
 | Diagnostic à coller dans un rapport | `docker compose exec lutin lutin doctor` |
-| Voir ce que Lutin a modifié | `docker compose exec lutin lutin journal` |
+| Voir ce que Lutin a modifié | `docker compose exec lutin lutin log` |
 
 Sauvegarde le volume `lutin-data` (conversations, mémoire, réglages) et ton dossier `/opt/lutin/workspace`. Les modèles se retéléchargent.
 

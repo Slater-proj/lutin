@@ -11,7 +11,7 @@ Les tests automatiques de Lutin utilisent de faux serveurs. Les essais ci-dessou
 **Étape 1 — le plus petit essai (environ 30 secondes, 1 Mo de modèle).** Il vérifie que le programme s'installe, démarre et répond. Dans un terminal :
 
 ```
-lutin essai-moteur llamacpp --modele-test
+lutin engine-trial llamacpp --test-model
 ```
 
 Réponds `o` à la question de téléchargement (le programme fait de 25 Mo à environ 700 Mo selon ta carte : la version « CUDA » avec ses bibliothèques est la plus grosse).
@@ -19,13 +19,13 @@ Réponds `o` à la question de téléchargement (le programme fait de 25 Mo à e
 **Étape 2 — le vrai essai avec un modèle qui sait appeler des outils (2,5 Go).**
 
 ```
-lutin essai-moteur llamacpp --modele unsloth/Qwen3-4B-Instruct-2507-GGUF/Qwen3-4B-Instruct-2507-Q4_K_M.gguf
+lutin engine-trial llamacpp --model unsloth/Qwen3-4B-Instruct-2507-GGUF/Qwen3-4B-Instruct-2507-Q4_K_M.gguf
 ```
 
 Ce que tu dois voir : des lignes `✔` pour la machine, l'installation, le modèle, le démarrage, `/v1/models`, la conversation (avec les **jetons par seconde** et le **temps du premier jeton**), l'appel d'outil, l'arrêt. Une ligne `⚠` sur l'appel d'outil veut dire que le modèle n'a pas appelé l'outil : ce n'est pas une panne, mais c'est à me dire.
 
 **Si ça ne marche pas** : le message dit l'étape qui échoue. Cas utiles à connaître :
-- l'installation choisit « CUDA » mais le serveur ne démarre pas → réessaie avec `--variante vulkan` puis `--variante cpu`, et dis-moi lequel passe (et la version de ton pilote NVIDIA) ;
+- l'installation choisit « CUDA » mais le serveur ne démarre pas → réessaie avec `--variant vulkan` puis `--variant cpu`, et dis-moi lequel passe (et la version de ton pilote NVIDIA) ;
 - « llama-server ne répond pas après 180 s » → regarde la fin du journal affichée dans le message (`moteurs/llamacpp/serveur.log` dans le dossier de données de Lutin).
 
 **Ce que tu me renvoies** : tout ce que la commande a affiché (copie-colle), ou le fichier `essai-llamacpp-….json` du dossier `essais/` de ton dossier de données (son chemin est affiché à la fin de la commande). Le rapport ne contient ni tes conversations ni tes clés ; il contient la version de ton système, le matériel détecté et les mesures.

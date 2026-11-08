@@ -58,8 +58,8 @@ jobs:
           if [ -x "$RUNNER_TEMP/venv/bin/python" ]; then PY="$RUNNER_TEMP/venv/bin/python"; else PY="$RUNNER_TEMP/venv/Scripts/python.exe"; fi
           "$PY" -m pip install dist/*.whl
           "$PY" -m lutin --version
-          "$PY" -m lutin securite
-          "$PY" -m lutin hors-ligne
+          "$PY" -m lutin security
+          "$PY" -m lutin offline
 
   docker:
     timeout-minutes: 25

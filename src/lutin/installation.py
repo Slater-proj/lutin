@@ -1,7 +1,7 @@
 """L'assistant de première configuration (`lutin setup`) : machine, sécurité, emplacements, modèles, Ollama, téléchargements.
 
-Le même parcours sert en interactif et en mode automatique (`--oui` : toutes les questions prennent leur valeur conseillée ou celle des options),
-ce qui permet de le tester sans clavier. Rien n'est installé ni téléchargé sans que l'utilisateur ait vu la taille et confirmé (sauf avec `--oui`).
+Le même parcours sert en interactif et en mode automatique (`--yes` : toutes les questions prennent leur valeur conseillée ou celle des options),
+ce qui permet de le tester sans clavier. Rien n'est installé ni téléchargé sans que l'utilisateur ait vu la taille et confirmé (sauf avec `--yes`).
 """
 import os
 import shutil
@@ -52,7 +52,7 @@ AVERTISSEMENT_PROXY = ("Attention : exposer un assistant capable de lire des fic
 
 
 def choisir_langue(es, options, cfg):
-    """Première question de l'installation : la langue (français ou anglais). Posée seulement si rien ne l'a déjà fixée (option, variable LUTIN_LANGUE, réglage existant) et jamais avec --oui."""
+    """Première question de l'installation : la langue (français ou anglais). Posée seulement si rien ne l'a déjà fixée (option, variable LUTIN_LANGUE, réglage existant) et jamais avec --yes."""
     voulue = options.get("langue")
     if not voulue:
         if es.oui or cfg.get("langue") in i18n.LANGUES or os.environ.get("LUTIN_LANGUE", "").strip().lower() in i18n.LANGUES:
@@ -217,7 +217,7 @@ def deja_installe(cfg, dossiers, es, ollama=None):
                 es.dire(_t("✔ {} installé.").format(ident))
             except (ollama_client.ErreurOllama, horsligne.HorsLigne) as e:
                 es.dire("✘ " + str(e))
-    es.dire(_t("Mises à jour : lutin update      Tout reconfigurer : lutin setup --reconfigurer"))
+    es.dire(_t("Mises à jour : lutin update      Tout reconfigurer : lutin setup --reconfigure"))
     return cfg
 
 

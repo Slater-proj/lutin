@@ -37,10 +37,10 @@ class Serveur(unittest.TestCase):
             self.assertEqual(s.lancer(True), 0)
             commande = popen.call_args[0][0]
             self.assertIn("serve", commande)
-            self.assertNotIn("--sans-navigateur", commande, "la première fois, le navigateur s'ouvre")
+            self.assertNotIn("--no-browser", commande, "la première fois, le navigateur s'ouvre")
             self.assertEqual(popen.call_args[1]["creationflags"], zone.CREATE_NO_WINDOW, "aucune console")
             s.lancer(False)
-            self.assertIn("--sans-navigateur", popen.call_args[0][0], "les relances n'ouvrent pas le navigateur une deuxième fois")
+            self.assertIn("--no-browser", popen.call_args[0][0], "les relances n'ouvrent pas le navigateur une deuxième fois")
 
     def test_redemarrer_rend_le_code_de_redemarrage_du_superviseur(self):
         from lutin.cli import CODE_REDEMARRAGE

@@ -44,7 +44,7 @@ Ceux du plan du mainteneur et de [DECISIONS.fr.md](DECISIONS.fr.md) :
 
 **D4. Docker : moteurs compagnons, pas de moteur dans l'image Lutin.** L'image **complète** (Lutin + Ollama) **reste par défaut** (décision du 2026-10-26) **tant que le banc comparatif (D5) ne montre pas mieux sur du matériel réel**. En plus : des **profils Compose** ajoutant un conteneur compagnon (images officielles `ollama/ollama` ou `ghcr.io/ggml-org/llama.cpp:server[-cuda|-vulkan|-intel|-openvino]`), reliés à Lutin par **adresse** (le mode « externe » existe déjà) avec des préréglages dans le catalogue. Pas de socket Docker monté dans Lutin (risque), le GPU reste géré par Docker. Un moteur natif sur l'hôte depuis un conteneur reste **impossible sans agent hôte** : on ne le promet pas. Sous Windows, **natif recommandé pour un poste à carte NVIDIA** (WSL2 ne reçoit que la moitié de la RAM par défaut) ; Docker pour Debian. `lutin doctor` détecte et explique.
 
-**D5. Un banc comparatif de moteurs** (`lutin bench-moteurs`, et bouton dans la page) : **même fichier GGUF** (les blobs d'Ollama sont des GGUF : llama.cpp lit les mêmes octets), mesures de chargement, premier jeton, jetons/s, RAM, VRAM, stabilité ; résultat en JSON partageable. Il **tranche** les questions ouvertes (petit PC à GPU intégré : CPU / Vulkan / OpenVINO / Ollama ; carte NVIDIA : Ollama / llama.cpp / Colibri sur modèles à experts). Il ne tourne jamais au premier lancement ; rapide (environ 1 minute avec un modèle déjà installé) ou approfondi, facultatif ; résultats conservés et refaits seulement si le matériel, un pilote ou une version change.
+**D5. Un banc comparatif de moteurs** (`lutin bench-engines`, et bouton dans la page) : **même fichier GGUF** (les blobs d'Ollama sont des GGUF : llama.cpp lit les mêmes octets), mesures de chargement, premier jeton, jetons/s, RAM, VRAM, stabilité ; résultat en JSON partageable. Il **tranche** les questions ouvertes (petit PC à GPU intégré : CPU / Vulkan / OpenVINO / Ollama ; carte NVIDIA : Ollama / llama.cpp / Colibri sur modèles à experts). Il ne tourne jamais au premier lancement ; rapide (environ 1 minute avec un modèle déjà installé) ou approfondi, facultatif ; résultats conservés et refaits seulement si le matériel, un pilote ou une version change.
 
 **D6. Recommandation de moteur explicable** : table de règles (matériel → moteur recommandé, avec la raison, l'espace disque, les dépendances, les limites) alimentée par le catalogue et par les résultats du banc quand ils existent. Diagnostic matériel en quelques secondes, **sans télécharger de modèle**. Si aucun modèle n'est installé : recommandation théorique, on ne télécharge rien.
 
@@ -75,7 +75,7 @@ Chaque jalon : étude → porte de validation → code ciblé → tests → docu
 
 ### 0.19.0 — Banc comparatif et recommandation
 - D5 et D6 ; page Diagnostic ; résultats conservés.
-- **Fait (versions 0.19.x)** : `lutin bench-moteurs`, carte « Quel moteur pour ma machine ? », recommandation avec sa raison, résultats conservés et à refaire si le matériel ou une version change (`BENCH_MOTEURS.fr.md`). **Reste à faire** : l'essai sur matériel réel et les décisions Docker / petit PC à carte intégrée, qui exigent des chiffres de plusieurs machines.
+- **Fait (versions 0.19.x)** : `lutin bench-engines`, carte « Quel moteur pour ma machine ? », recommandation avec sa raison, résultats conservés et à refaire si le matériel ou une version change (`BENCH_MOTEURS.fr.md`). **Reste à faire** : l'essai sur matériel réel et les décisions Docker / petit PC à carte intégrée, qui exigent des chiffres de plusieurs machines.
 - **Critère** : sur une machine réelle, le banc compare au moins deux moteurs sur le même GGUF et produit un fichier lisible ; la recommandation affiche sa raison. **Les décisions Docker (image par défaut) et petit PC à GPU intégré sont prises ici, sur des chiffres.**
 
 ### 0.20.0 — Installation avancée et premier lancement
@@ -86,7 +86,7 @@ Chaque jalon : étude → porte de validation → code ciblé → tests → docu
 - **Critère** : redémarrer ou recréer le conteneur ne réinstalle rien ni ne perd moteurs et modèles (test de CI sur les volumes).
 
 ### 0.21.0 — Modèles et rôles multi-moteurs
-- **Fait (0.21.0)** : catalogue filtré par moteur (`compat_modeles.py`, format / quantification / mémoire estimée / raisons), installation incompatible refusée, rôles par moteur en ligne de commande, banc indépendant d'Ollama en ligne de commande (`lutin bench --moteur`). **Pas encore** : les boutons du banc dans la page restent propres à Ollama.
+- **Fait (0.21.0)** : catalogue filtré par moteur (`compat_modeles.py`, format / quantification / mémoire estimée / raisons), installation incompatible refusée, rôles par moteur en ligne de commande, banc indépendant d'Ollama en ligne de commande (`lutin bench --engine`). **Pas encore** : les boutons du banc dans la page restent propres à Ollama.
 - **Déjà fait en 0.16.8** : les modèles d'Ollama (« sans filtre » compris) sont lus tels quels par llama.cpp, sous les mêmes noms ; mêmes lignes de dossiers sur chaque carte de moteur.
 - Catalogue de modèles filtré par moteur (format, quantification, mémoire estimée, compatibilité) ; rôles par moteur ; banc rapide et approfondi indépendants d'Ollama.
 - **Critère** : jamais un modèle proposé qui n'est pas compatible avec le moteur choisi.
@@ -113,13 +113,13 @@ Chaque jalon : étude → porte de validation → code ciblé → tests → docu
 - Colibri : intégration **gérée** (archives précompilées + empreinte) **seulement si l'essai S3 la justifie** ; Strata et autres : préréglages externes. Étiquette « expérimental », jamais proposés par défaut.
 - **Critère** : chaque moteur ajouté est indépendant, testé avec un faux serveur, documenté avec ses limites.
 
-- **Fait (0.25.0)** : Colibri et Strata en préréglages externes expérimentaux (`EXPERIMENTAL_ENGINES.fr.md`). **Complété après coup** : `lutin colibri installer / demarrer / arreter` (installation vérifiée par SHA-256, essayée pour de vrai ; démarrage jamais essayé, sans modèle) ; **pas de bouton dans la page** tant que l'essai S3 n'a pas eu lieu.
+- **Fait (0.25.0)** : Colibri et Strata en préréglages externes expérimentaux (`EXPERIMENTAL_ENGINES.fr.md`). **Complété après coup** : `lutin colibri install / demarrer / arreter` (installation vérifiée par SHA-256, essayée pour de vrai ; démarrage jamais essayé, sans modèle) ; **pas de bouton dans la page** tant que l'essai S3 n'a pas eu lieu.
 
 ### 0.26.0 — Stabilisation → 1.0.0
 - Tests de bout en bout sur les deux machines, avec et sans carte graphique, Windows, Debian, Docker, panne réseau, mise à jour, migration ; audit de sécurité ; documentation complète ; procédure de retour arrière.
 - **1.0.0** seulement si les critères de stabilité, de sécurité, de portabilité et de tests sont atteints ; les moteurs expérimentaux **ne sont pas** requis.
 
-- **Fait (jalon 0.26.0, partie logicielle)** : un fichier de données abîmé ne fait plus planter (bogue réel trouvé et corrigé), sauvegarde avant mise à jour + `lutin update --revenir-a` + `ROLLBACK.fr.md`, revue de sécurité (`SECURITY_AUDIT.fr.md`), parcours d'une installation vierge en test, une sonde de moteur en moins par rafraîchissement.
+- **Fait (jalon 0.26.0, partie logicielle)** : un fichier de données abîmé ne fait plus planter (bogue réel trouvé et corrigé), sauvegarde avant mise à jour + `lutin update --rollback-to` + `ROLLBACK.fr.md`, revue de sécurité (`SECURITY_AUDIT.fr.md`), parcours d'une installation vierge en test, une sonde de moteur en moins par rafraîchissement.
 - **Reste pour la 1.0 (ne se fait pas sans toi)** : les essais réels S1–S7 sur du matériel, un essai du retour arrière sur une vraie publication, (la vérification de la roue de mise à jour contre `SHA256SUMS.txt` est faite et a été essayée sur de vraies publications), et la décision de l'image Docker par défaut d'après les chiffres du banc.
 
 **En continu (pas une version)** : couverture mesurée sans seuil bloquant ; test de CI des volumes Docker ; exécuteur GPU auto-hébergé **facultatif, déclenché à la main, jamais sur les demandes de fusion externes**.
@@ -172,7 +172,7 @@ Lecture honnête : **le code et les tests automatiques du plan sont faits ; la v
 | 0.16.x llama.cpp | Fait | S1 : installation par Lutin sur le poste à carte NVIDIA, conversation avec outils |
 | 0.17 Catalogue signé | Fait (Ed25519, veille hebdomadaire) | Sauvegarder les clés de signature (hors dépôt) |
 | 0.18 Routeur, capacités | Fait | Mode routeur contre le vrai `llama-server` (format des réponses non vérifié) |
-| 0.19 Banc et recommandation | Fait (`lutin bench-moteurs`, carte « Quel moteur… ») | Chiffres réels ; ils décident l'image Docker par défaut et le petit PC à carte intégrée |
+| 0.19 Banc et recommandation | Fait (`lutin bench-engines`, carte « Quel moteur… ») | Chiffres réels ; ils décident l'image Docker par défaut et le petit PC à carte intégrée |
 | 0.20 Installation, premier lancement | Fait, test de CI des volumes | Profils llama.cpp avec carte (CUDA, Vulkan, Intel) |
 | 0.21 Modèles et rôles par moteur | Fait en ligne de commande et dans les listes | Les boutons du banc dans la page restent propres à Ollama |
 | 0.22 Estimation | Fait | Écart estimation / mesure sur du vrai matériel |

@@ -24,14 +24,14 @@ The file name tells which version it was made from: `lutin-0.22.0-20261107-10150
 2. Install the earlier published version:
 
    ```
-   lutin update --revenir-a 0.22.0
+   lutin update --rollback-to 0.22.0
    ```
 
    This reinstalls that release from GitHub (only a plain `X.Y.Z` number is accepted), after saving your data again. It works for an installation made with the installer script (source on GitHub); for a manual `pip install` of a file, install the wheel you want yourself with `python -m pip install <file>.whl`.
 3. If the earlier version no longer understands your data (rare: data files only gain fields), put your data back:
 
    ```
-   lutin restaurer <backup>.zip
+   lutin restore <backup>.zip
    ```
 
    Lutin first saves the current state in an "avant-restauration" archive.

@@ -44,13 +44,13 @@ Those of the maintainer's plan and of [DECISIONS.md](DECISIONS.md):
 
 **D4. Docker: companion engines, no engine inside the Lutin image.** The **full** image (Lutin + Ollama) **stays the default** (decision of 2026-10-26) **until the comparison bench (D5) shows better on real hardware**. In addition: **Compose profiles** adding a companion container (official images `ollama/ollama` or `ghcr.io/ggml-org/llama.cpp:server[-cuda|-vulkan|-intel|-openvino]`), linked to Lutin by **address** (the "external" mode already exists) with presets in the catalogue. No Docker socket mounted in Lutin (risk), the GPU stays managed by Docker. A native engine on the host from a container remains **impossible without a host agent**: we do not promise it. On Windows, **native recommended for a PC with an NVIDIA card** (WSL2 only gets half the RAM by default); Docker for Debian. `lutin doctor` detects and explains.
 
-**D5. An engine comparison bench** (`lutin bench-moteurs`, and a button in the page): **same GGUF file** (Ollama blobs are GGUF: llama.cpp reads the same bytes), measuring load time, first token, tokens/s, RAM, VRAM, stability; shareable JSON output. It **settles** the open questions (small PC with integrated GPU: CPU / Vulkan / OpenVINO / Ollama; NVIDIA card: Ollama / llama.cpp / Colibri on expert models). It never runs at first launch; quick (about 1 minute with an installed model) or thorough, optional; results kept and redone only if hardware, a driver or a version changes.
+**D5. An engine comparison bench** (`lutin bench-engines`, and a button in the page): **same GGUF file** (Ollama blobs are GGUF: llama.cpp reads the same bytes), measuring load time, first token, tokens/s, RAM, VRAM, stability; shareable JSON output. It **settles** the open questions (small PC with integrated GPU: CPU / Vulkan / OpenVINO / Ollama; NVIDIA card: Ollama / llama.cpp / Colibri on expert models). It never runs at first launch; quick (about 1 minute with an installed model) or thorough, optional; results kept and redone only if hardware, a driver or a version changes.
 
 **D6. Explainable engine recommendation**: a rule table (hardware → recommended engine, with the reason, disk space, dependencies, limits) fed by the catalogue and by bench results when they exist. Hardware diagnosis in seconds, **without downloading any model**. If no model is installed: theoretical recommendation, nothing is downloaded.
 
 **D7. Machines, without a separate agent: every Lutin is a node.** A machine = name, address, own token, optional MAC address. **Added by explicit validation** (the existing pairing code, never automatic acceptance, no network discovery). The node exposes its machine's engine on an authenticated interface; the main Lutin routes a request to it and **silently falls back to the local engine** if unreachable. **Only four observable states**: unreachable · wake sent · node reachable · engine operational. Routing first, request spreading later; **splitting one model across machines is not in the 1.0 scope**. First step **already possible today**: an "external" engine pointing to the other machine's `llama-server --api-key`.
 
-**D8. Power**: wake by magic packet (UDP, standard library), shutdown by the node (**explicit action, with approval and journal**), autostart by **scheduled task at logon** on Windows (no service: session 0), systemd unit on Linux. Each limit is told to the user (BIOS, cable, Windows auto-logon).
+**D8. Power**: wake by magic packet (UDP, standard library), shutdown by the node (**explicit action, with approval and journal**), autostart by **per-user "Run" key (no administrator rights; a scheduled task at logon needs them)** on Windows (no service: session 0), systemd unit on Linux. Each limit is told to the user (BIOS, cable, Windows auto-logon).
 
 **D9. Roles per engine**: the five current roles keep their meaning; each may name engine, model, context and fallback.
 
@@ -109,7 +109,7 @@ Each milestone: study → validation gate → targeted code → tests → FR/EN 
 - End-to-end tests on both machines, with and without a graphics card, Windows, Debian, Docker, network failure, update, migration; security audit; full documentation; rollback procedure.
 - **1.0.0** only if the stability, security, portability and testing criteria are met; experimental engines are **not** required.
 
-- **Done (milestone 0.26.0, software part)**: a damaged data file no longer crashes Lutin (a real bug, found and fixed), backup before update + `lutin update --revenir-a` + `ROLLBACK.md`, security review (`SECURITY_AUDIT.md`), fresh-install walk-through test, one engine probe fewer per refresh.
+- **Done (milestone 0.26.0, software part)**: a damaged data file no longer crashes Lutin (a real bug, found and fixed), backup before update + `lutin update --rollback-to` + `ROLLBACK.md`, security review (`SECURITY_AUDIT.md`), fresh-install walk-through test, one engine probe fewer per refresh.
 - **Left for 1.0 (cannot be done without you)**: the real-hardware trials S1–S7, a rollback trial on a real release, (update wheel verification against `SHA256SUMS.txt` is now done and was checked on real releases), and the default Docker image decision from the bench figures.
 
 **Ongoing (not a version)**: measured coverage without a blocking threshold; Docker volume CI test; **optional** self-hosted GPU runner, started by hand, never on external pull requests.
@@ -162,7 +162,7 @@ Plain reading: **the code and automatic tests of the plan are done; validation o
 | 0.16.x llama.cpp | Done | S1: install by Lutin on the NVIDIA PC, conversation with tools |
 | 0.17 Signed catalogue | Done (Ed25519, weekly watch) | Back up the signing keys (outside the repository) |
 | 0.18 Router, capabilities | Done | Router mode against the real `llama-server` (response format unchecked) |
-| 0.19 Bench and recommendation | Done (`lutin bench-moteurs`, "Which engine…" card) | Real figures; they decide the default Docker image and the small integrated-GPU PC |
+| 0.19 Bench and recommendation | Done (`lutin bench-engines`, "Which engine…" card) | Real figures; they decide the default Docker image and the small integrated-GPU PC |
 | 0.20 Install, first launch | Done, CI volume test | llama.cpp profiles with a card (CUDA, Vulkan, Intel) |
 | 0.21 Models and roles per engine | Done on the command line and in lists | The page's bench buttons are still Ollama-only |
 | 0.22 Estimate | Done | Estimate-vs-measure gap on real hardware |

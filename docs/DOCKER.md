@@ -57,13 +57,13 @@ docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
 
 1. **The PIN code**: `docker logs lutin 2>&1 | grep PIN` (`docker compose logs lutin | grep PIN` with Compose), or `docker exec lutin lutin pin` for a new one.
 2. Open **http://localhost:8777**, enter the PIN: your browser is paired.
-3. **Install a model**: `docker exec lutin lutin modeles` shows the models recommended for your machine, then  
-   `docker exec lutin lutin modeles installer qwen3:8b`  
+3. **Install a model**: `docker exec lutin lutin models` shows the models recommended for your machine, then  
+   `docker exec lutin lutin models install qwen3:8b`  
    (or the Models tab of the interface). The download goes through the installed engine and stays in the `lutin-models` volume.
 
 In the terminal: `docker exec -it lutin lutin chat`.
 
-**Language**: English by default. Change it in the page (Settings > Language), with `docker exec lutin lutin langue fr`, or with `-e LUTIN_LANGUE=fr`.
+**Language**: English by default. Change it in the page (Settings > Language), with `docker exec lutin lutin language fr`, or with `-e LUTIN_LANGUE=fr`.
 
 ## The volumes
 
@@ -168,7 +168,7 @@ The [docker-compose.proxy.yml](../docker-compose.proxy.yml) file publishes **no 
 
 **`LUTIN_ADMIN_TOUS=1`: configuration from the page, for everybody who is connected.** In Docker the browser is never "on the machine": without this variable (or `LUTIN_ADMINS` behind a proxy), deleting a created file or adding a working folder, an extension or a connector is refused from the page. With `LUTIN_ADMIN_TOUS=1`, anybody **already admitted** (device paired with a PIN, or proxy user) can do it. Keep it for personal use or a small circle of trust: these settings can read and write the folders mounted in the container and launch programs **inside** the container. The access level itself is still only changed through the container variables.
 
-**Configuring from the page or the command line.** In Docker the browser is never "on the machine" of the container: without `LUTIN_ADMINS`, the page says settings (extensions, working folders, MCP connectors) are locked. Two ways out: declare your Authelia user name in `LUTIN_ADMINS` (then `docker compose up -d`), or do everything on the command line: `docker exec lutin lutin travaux ajouter /workspace`, `docker exec lutin lutin mcp ajouter my-server https://…/mcp`, then `lutin mcp actualiser my-server` and `lutin mcp autoriser my-server <tool>`. An MCP "program" connector (npx…) runs **inside the container**: prefer a connector by address.
+**Configuring from the page or the command line.** In Docker the browser is never "on the machine" of the container: without `LUTIN_ADMINS`, the page says settings (extensions, working folders, MCP connectors) are locked. Two ways out: declare your Authelia user name in `LUTIN_ADMINS` (then `docker compose up -d`), or do everything on the command line: `docker exec lutin lutin workspaces add /workspace`, `docker exec lutin lutin mcp add my-server https://…/mcp`, then `lutin mcp refresh my-server` and `lutin mcp allow my-server <tool>`. An MCP "program" connector (npx…) runs **inside the container**: prefer a connector by address.
 
 ### 2. Set up the reverse proxy
 
@@ -229,7 +229,7 @@ With no usable graphics card (the Intel integrated graphics are optional and exp
 | `qwen3:8b`, `qwen2.5-coder:7b` | borderline | slower; workable for code or careful writing, not for a lively conversation |
 | `qwen3:14b` and up | too big | does not fit the budget |
 
-`docker exec lutin lutin modeles` gives the list for your machine. Lower the **context window** to 8,192–12,288 tokens in Settings: on a CPU, re-reading 24,000 tokens at every answer takes minutes.
+`docker exec lutin lutin models` gives the list for your machine. Lower the **context window** to 8,192–12,288 tokens in Settings: on a CPU, re-reading 24,000 tokens at every answer takes minutes.
 
 ### 4. What works and what does not in this setup
 
@@ -255,12 +255,12 @@ The settings, secrets and state of the addons live in the `/data` volume, so the
 
 ```bash
 docker compose pull && docker compose up -d                       # update (volumes are not touched)
-docker compose exec lutin lutin sauvegarde /data/backup.zip       # then: docker compose cp lutin:/data/backup.zip .
+docker compose exec lutin lutin backup /data/backup.zip       # then: docker compose cp lutin:/data/backup.zip .
 docker compose down                                               # stop (volumes stay); « down -v » ERASES them
 ```
 
 Restore: copy the `.zip` into `/data` (`docker compose cp backup.zip lutin:/data/`), stop Lutin (`docker compose stop lutin`), then  
-`docker compose run --rm lutin restaurer /data/backup.zip --oui` and `docker compose start lutin`.
+`docker compose run --rm lutin restore /data/backup.zip --yes` and `docker compose start lutin`.
 
 Published images: `ghcr.io/slater-proj/lutin:latest` (latest version, complete), `:X.Y.Z` (a precise version), `:slim` and `:X.Y.Z-slim` (Lutin alone), `:rocm` and `:X.Y.Z-rocm` (complete, for AMD cards), `:rc-<branch>` and its `-slim` / `-rocm` variants (candidate of a branch, to test before merging).
 

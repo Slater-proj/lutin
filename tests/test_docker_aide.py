@@ -117,9 +117,9 @@ class ComposeEtVolumes(unittest.TestCase):
     def test_le_demarrage_ne_reinstalle_ni_n_efface_rien(self):
         e = self.lire("docker/entrypoint.sh")
         self.assertNotRegex(e, r"\brm\s+-rf?\b")
-        self.assertIn("--reconfigurer", e, "la configuration est réappliquée, pas recréée")
-        self.assertIn("--sans-modeles", e)
-        self.assertIn("--sans-ollama", e)
+        self.assertIn("--reconfigure", e, "la configuration est réappliquée, pas recréée")
+        self.assertIn("--no-models", e)
+        self.assertIn("--no-ollama", e)
 
 
 class Reglages(unittest.TestCase):

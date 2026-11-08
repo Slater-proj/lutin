@@ -20,7 +20,7 @@ The server listens on `127.0.0.1`. Nobody else can open a connection. No passwor
 
 - The server listens on the local network address.
 - **Pairing**: `lutin pin` (or the display at startup) gives a 6-digit code valid for 10 minutes, usable once. Five mistakes invalidate the code and block attempts for 5 minutes. Attempts are also limited per address.
-- Each device gets a session (`HttpOnly`, `SameSite=Strict` cookie, 30 days). `lutin appareils` lists them, `lutin appareils revoquer [id]` cuts them. Only the **fingerprints** of the sessions are stored.
+- Each device gets a session (`HttpOnly`, `SameSite=Strict` cookie, 30 days). `lutin devices` lists them, `lutin devices revoke [id]` cuts them. Only the **fingerprints** of the sessions are stored.
 - The requested host name must be a private address or a local name.
 - **Automatic approvals** (“Auto files”, “Auto commands”) are set **per conversation** and are **unticked by default**, at every access level. The choice is yours: from a paired phone or behind a reverse proxy, anyone who has access to Lutin can tick them for a conversation. So only give this access to people you would trust with these rights, and keep Authelia (or the PIN code) well protected. A web read during the current request always suspends automatic approval.
 - Firewall: open it **only** for your private network. On Windows, a rule limited to the « Private » profile and to your subnet; never open it on the « Public » profile.
@@ -99,7 +99,7 @@ Optional addons (Telegram, email, X, ComfyUI, background work) are **off by defa
 
 ## Strict offline mode
 
-`lutin hors-ligne oui` (or the « Offline » box in the interface, or `LUTIN_HORS_LIGNE=1`): **no connection to the Internet at all**.
+`lutin offline on` (or the « Offline » box in the interface, or `LUTIN_HORS_LIGNE=1`): **no connection to the Internet at all**.
 
 - Allowed: this machine, **Ollama** (the `OLLAMA_URL` address), and the extensions you declared (`LUTIN_OUTIL_URL`, `COMFY_URL`).
 - Blocked: web search and reading (the tools are not even offered to the model any more), online catalogue, model and Lutin updates, model downloads (Ollama downloads them itself: the action is refused).
@@ -112,7 +112,7 @@ Optional addons (Telegram, email, X, ComfyUI, background work) are **off by defa
 Lutin only reads and modifies the **workspace folder** of the conversation. Several folders are possible; only one is active at a time (if an answer is working in a folder, you cannot switch before it ends, nor start one in another).
 
 - A folder must exist, must not be the root of a disk, nor **contain or be inside Lutin's folders** (configuration, data, memory, cache).
-- **Adding or removing** a folder can only be done from this machine: at the « this machine only » level, or with `lutin travaux`. A paired device (network level) or a proxy identity can **choose** an already declared folder, never add one: otherwise a remote access could declare `/` or `C:\`.
+- **Adding or removing** a folder can only be done from this machine: at the « this machine only » level, or with `lutin workspaces`. A paired device (network level) or a proxy identity can **choose** an already declared folder, never add one: otherwise a remote access could declare `/` or `C:\`.
 
 ## What only this machine can change
 
@@ -120,11 +120,11 @@ Workspace folders, taking over another assistant's data or a Claude project, res
 
 ## Action log
 
-Every file modified, every command run, every module installed is recorded in `journal-actions.jsonl`: **when, which tool, on which target, in which folder, with which approval (manual, automatic, none for a simple read), for whom** (console, local, name given by the proxy, device) and the outcome (ok, refused, error, stopped). Never the contents of the files nor the output of the commands. Visible with `lutin journal` or the « ⋯ > Action log » menu. It rotates at 5 MB.
+Every file modified, every command run, every module installed is recorded in `journal-actions.jsonl`: **when, which tool, on which target, in which folder, with which approval (manual, automatic, none for a simple read), for whom** (console, local, name given by the proxy, device) and the outcome (ok, refused, error, stopped). Never the contents of the files nor the output of the commands. Visible with `lutin log` or the « ⋯ > Action log » menu. It rotates at 5 MB.
 
 ## Changing level
 
-`lutin setup --niveau local|reseau|proxy` (with `--url` and `--proxy-ip` for level 3). Going back to a more closed level is always possible; to open a wider one, run the command on the machine itself.
+`lutin setup --level local|reseau|proxy` (with `--url` and `--proxy-ip` for level 3). Going back to a more closed level is always possible; to open a wider one, run the command on the machine itself.
 
 ## Docker
 

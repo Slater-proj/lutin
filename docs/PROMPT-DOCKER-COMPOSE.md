@@ -53,7 +53,7 @@ Run NO command that changes anything (no `up`, `down`, `rm`, `prune`, `chown`, `
 2. A complete **`docker-compose.yml`**, commented in one line per non-obvious choice, with the reverse-proxy labels/blocks I really use (and only those).
 3. **`.env`** (concrete values, no needless secret).
 4. **Reverse proxy / Authelia files to add**: the exact block (nginx, Traefik, Caddy…) AND the Authelia `access_control` rule for my domain (`two_factor` policy unless my charter says otherwise).
-5. **Start-up commands**, in order: creating the stack folder and the working folder, `chown 1000:1000`, creating the network if missing, `docker compose config`, `pull`, `up -d`, installing a model (`docker compose exec lutin lutin modeles installer qwen3:4b`), verification.
+5. **Start-up commands**, in order: creating the stack folder and the working folder, `chown 1000:1000`, creating the network if missing, `docker compose config`, `pull`, `up -d`, installing a model (`docker compose exec lutin lutin models install qwen3:4b`), verification.
 6. **Checks** with the expected result for each: container `healthy`, page reachable behind Authelia, answer shown word by word, my user name recognised as administrator.
 7. **Rollback**: how to undo everything without touching my other stacks.
 8. **Deviations** between my charter and Lutin's constraints, one per line.

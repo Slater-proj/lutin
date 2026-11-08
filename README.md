@@ -32,8 +32,8 @@
 | ⏱️ **It measures, it does not guess** | Built-in benchmark: speed, tool calls, code, French, instructions, **on your machine**. |
 | 📦 **Easy to install** | One command on Windows, one on Linux, or a Docker image **with Ollama inside**. No Python dependency. Running the installation again breaks nothing. |
 | 🔁 **Your Claude context, kept** | Take over a Claude Code repository (`CLAUDE.md`, `.claude/` skills, commands, agents): work in it or in a copy, nothing is lost when switching tools. [Details](docs/CLAUDE-PROJECTS.md). |
-| 📥 **Bring your old assistant** | `lutin reprendre`: take over conversations, memory, skills and settings of another assistant, one category at a time, nothing overwritten. [Details](docs/MIGRATION.md). |
-| 🌍 **English and French** | The whole application (page, messages, terminal) and the docs. Language: `lutin langue`, the page settings, or the system language. |
+| 📥 **Bring your old assistant** | `lutin migrate`: take over conversations, memory, skills and settings of another assistant, one category at a time, nothing overwritten. [Details](docs/MIGRATION.md). |
+| 🌍 **English and French** | The whole application (page, messages, terminal) and the docs. Language: `lutin language`, the page settings, or the system language. |
 
 ## Installation
 
@@ -70,17 +70,17 @@ The script installs the latest published version in a private environment, adds 
 |---|---|
 | `lutin` | starts and opens the interface; restarts the server if it stops on an error |
 | `lutin chat` | chat in the terminal (`/aide` for the commands); `lutin chat "question"` for a direct answer |
-| `lutin modeles` | models recommended for your machine; `lister`, `installer <id>`, `supprimer <id>`, `maj` |
-| `lutin bench [model]` | measure a model here: speed, tools, code, French, instructions (`--rapide`: speed only) |
+| `lutin models` | models recommended for your machine; `lister`, `installer <id>`, `supprimer <id>`, `maj` |
+| `lutin bench [model]` | measure a model here: speed, tools, code, French, instructions (`--fast`: speed only) |
 | `lutin update` | updates Lutin and looks for model updates; changes nothing if everything is up to date |
-| `lutin travaux` | workspace folders: `ajouter`, `retirer`, `actif` |
-| `lutin hors-ligne oui\|non` | strict offline mode |
-| `lutin journal` | what Lutin modified or ran, with which approval and for whom |
-| `lutin sauvegarde` · `lutin restaurer` | export / put back your data in a `.zip` |
-| `lutin pin` · `lutin appareils` · `lutin securite` | access from other devices |
-| `lutin importer <folder>` | take over a Claude project (`CLAUDE.md`, `.claude/`): `--ici` (in it) or `--copie` (in a copy) |
-| `lutin reprendre <folder or .zip>` | take over another assistant's data: `--conversations --memoire --skills --reglages` |
-| `lutin langue [fr\|en\|auto]` | language of the application |
+| `lutin workspaces` | workspace folders: `ajouter`, `retirer`, `actif` |
+| `lutin offline on\|non` | strict offline mode |
+| `lutin log` | what Lutin modified or ran, with which approval and for whom |
+| `lutin backup` · `lutin restore` | export / put back your data in a `.zip` |
+| `lutin pin` · `lutin devices` · `lutin security` | access from other devices |
+| `lutin import-project <folder>` | take over a Claude project (`CLAUDE.md`, `.claude/`): `--here` (in it) or `--copy` (in a copy) |
+| `lutin migrate <folder or .zip>` | take over another assistant's data: `--conversations --memory --skills --settings` |
+| `lutin language [fr\|en\|auto]` | language of the application |
 | `lutin doctor` | diagnostics to paste into a problem report (no personal content) |
 
 Beyond chatting: test your PC, dry run, search your PDF and Word documents offline, scheduled tasks, optional addons (long missions carried out alone for hours, document processing, Telegram, email, X, ComfyUI), PDF and Word document creation, page preview, attachments (images, documents, code), five modes, phone pairing with a QR code. All the documentation, by topic: [docs/README.md](docs/README.md). See [docs/FEATURES.md](docs/FEATURES.md); to try the new features step by step: [docs/GUIDE-ESSAI.md](docs/GUIDE-ESSAI.md); to install it on a Debian server with Docker: [docs/TUTO-DOCKER-DEBIAN.md](docs/TUTO-DOCKER-DEBIAN.md).

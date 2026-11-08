@@ -639,7 +639,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
         if not self._jeton_valide():
             return self._envoyer(403, {"erreur": "jeton invalide : recharge la page"})
         if not self._configurateur():
-            return self._envoyer(403, {"erreur": _t("Une sauvegarde se restaure depuis cette machine (niveau « cette machine seulement ») ou avec la commande lutin restaurer.")})
+            return self._envoyer(403, {"erreur": _t("Une sauvegarde se restaure depuis cette machine (niveau « cette machine seulement ») ou avec la commande lutin restore.")})
         try:
             return self._envoyer(200, _acces.restaurer_flux(self.rfile, self._taille_corps()))
         except ValueError as e:
@@ -879,7 +879,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 return self._envoyer(200, _m.choisir_travail(str(donnees.get("id", ""))))
             if self.path in ("/api/travaux-ajouter", "/api/travaux-retirer", "/api/travaux-deplacer", "/api/travaux-chemin"):
                 if not self._configurateur():
-                    return self._envoyer(403, {"erreur": "Les dossiers de travail se gèrent depuis cette machine (niveau « cette machine seulement ») ou avec la commande lutin travaux."})
+                    return self._envoyer(403, {"erreur": "Les dossiers de travail se gèrent depuis cette machine (niveau « cette machine seulement ») ou avec la commande lutin workspaces."})
                 if self.path == "/api/travaux-ajouter":
                     return self._envoyer(200, _m.ajouter_travail(str(donnees.get("chemin", "")), str(donnees.get("nom", ""))))
                 if self.path == "/api/travaux-deplacer":
@@ -889,13 +889,13 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 return self._envoyer(200, _m.retirer_travail(str(donnees.get("id", "")), bool(donnees.get("nettoyer"))))
             if self.path in ("/api/reprise-detecter", "/api/reprise"):
                 if not self._configurateur():
-                    return self._envoyer(403, {"erreur": _t("La reprise des données d'un autre assistant se fait depuis cette machine (niveau « cette machine seulement ») ou avec la commande lutin reprendre.")})
+                    return self._envoyer(403, {"erreur": _t("La reprise des données d'un autre assistant se fait depuis cette machine (niveau « cette machine seulement ») ou avec la commande lutin migrate.")})
                 if self.path == "/api/reprise-detecter":
                     return self._envoyer(200, _m.reprise_detecter(str(donnees.get("chemin", "")), str(donnees.get("dossier_skills", ""))))
                 return self._envoyer(200, _m.reprise_importer(str(donnees.get("chemin", "")), [str(c) for c in (donnees.get("choix") or [])], str(donnees.get("dossier_skills", "")), bool(donnees.get("ecraser")), str(donnees.get("cible", ""))))
             if self.path == "/api/importer-claude":
                 if not self._configurateur():
-                    return self._envoyer(403, {"erreur": _t("Un projet Claude s'importe depuis cette machine (niveau « cette machine seulement ») ou avec la commande lutin importer.")})
+                    return self._envoyer(403, {"erreur": _t("Un projet Claude s'importe depuis cette machine (niveau « cette machine seulement ») ou avec la commande lutin import-project.")})
                 return self._envoyer(200, _m.importer_projet_claude(str(donnees.get("chemin", "")), str(donnees.get("mode", "")), str(donnees.get("vers", "")), str(donnees.get("nom", ""))))
             if self.path in ("/api/planifie-ajouter", "/api/planifie-supprimer", "/api/planifie-activer", "/api/planifie-lancer"):
                 if not self._configurateur():
@@ -1025,7 +1025,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 return self._envoyer(200, _m.restaurer_modeles())
             if self.path == "/api/admin-distance":
                 if not self._configurateur_strict():
-                    return self._envoyer(403, {"erreur": _t("L'administration à distance s'active ou se retire depuis cette machine seulement (ou avec la commande lutin securite).")})
+                    return self._envoyer(403, {"erreur": _t("L'administration à distance s'active ou se retire depuis cette machine seulement (ou avec la commande lutin security).")})
                 if _acces.en_docker():
                     return self._envoyer(400, {"erreur": _t("Dans Docker, l'administration à distance se règle avec la variable LUTIN_ADMIN_TOUS du conteneur (docs/DOCKER.md).")})
                 cfg = _m.config_lue()

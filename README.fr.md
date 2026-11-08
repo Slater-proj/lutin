@@ -32,8 +32,8 @@
 | ⏱️ **Il mesure, il ne devine pas** | Banc d'essai intégré : vitesse, appel d'outils, code, français, consignes, **sur ta machine**. |
 | 📦 **Simple à installer** | Une commande sous Windows, une sous Linux, ou une image Docker **avec Ollama dedans**. Aucune dépendance Python. Relancer l'installation ne casse rien. |
 | 🔁 **Ton contexte Claude, conservé** | Reprends un dépôt Claude Code (`CLAUDE.md`, skills, commandes, agents de `.claude/`) : travaille dedans ou dans une copie, rien ne se perd en changeant d'outil. [Détails](docs/CLAUDE-PROJECTS.fr.md). |
-| 📥 **Reprends ton ancien assistant** | `lutin reprendre` : conversations, mémoire, skills et réglages d'un autre assistant, une catégorie à la fois, rien d'écrasé. [Détails](docs/MIGRATION.fr.md). |
-| 🌍 **Français et anglais** | Toute l'application (page, messages, terminal) et les docs. Langue : `lutin langue`, les réglages de la page, ou la langue du système. |
+| 📥 **Reprends ton ancien assistant** | `lutin migrate` : conversations, mémoire, skills et réglages d'un autre assistant, une catégorie à la fois, rien d'écrasé. [Détails](docs/MIGRATION.fr.md). |
+| 🌍 **Français et anglais** | Toute l'application (page, messages, terminal) et les docs. Langue : `lutin language`, les réglages de la page, ou la langue du système. |
 
 ## Installation
 
@@ -70,17 +70,17 @@ Le script installe la dernière version publiée dans un environnement privé, a
 |---|---|
 | `lutin` | démarre et ouvre l'interface ; relance le serveur s'il s'arrête sur une erreur |
 | `lutin chat` | discuter dans le terminal (`/aide` pour les commandes) ; `lutin chat "question"` pour une réponse directe |
-| `lutin modeles` | modèles conseillés pour ta machine ; `lister`, `installer <id>`, `supprimer <id>`, `maj` |
-| `lutin bench [modèle]` | mesurer un modèle ici : vitesse, outils, code, français, consignes (`--rapide` : vitesse seule) |
+| `lutin models` | modèles conseillés pour ta machine ; `lister`, `installer <id>`, `supprimer <id>`, `maj` |
+| `lutin bench [modèle]` | mesurer un modèle ici : vitesse, outils, code, français, consignes (`--fast` : vitesse seule) |
 | `lutin update` | met à jour Lutin et cherche des mises à jour de modèles ; ne change rien si tout est à jour |
-| `lutin travaux` | dossiers de travail : `ajouter`, `retirer`, `actif` |
-| `lutin hors-ligne oui\|non` | mode hors ligne strict |
-| `lutin journal` | ce que Lutin a modifié ou lancé, avec quel accord et pour qui |
-| `lutin sauvegarde` · `lutin restaurer` | exporter / remettre tes données dans un `.zip` |
-| `lutin pin` · `lutin appareils` · `lutin securite` | accès depuis d'autres appareils |
-| `lutin importer <dossier>` | reprendre un projet Claude (`CLAUDE.md`, `.claude/`) : `--ici` (dedans) ou `--copie` |
-| `lutin reprendre <dossier ou .zip>` | reprendre les données d'un autre assistant : `--conversations --memoire --skills --reglages` |
-| `lutin langue [fr\|en\|auto]` | langue de l'application |
+| `lutin workspaces` | dossiers de travail : `ajouter`, `retirer`, `actif` |
+| `lutin offline on\|non` | mode hors ligne strict |
+| `lutin log` | ce que Lutin a modifié ou lancé, avec quel accord et pour qui |
+| `lutin backup` · `lutin restore` | exporter / remettre tes données dans un `.zip` |
+| `lutin pin` · `lutin devices` · `lutin security` | accès depuis d'autres appareils |
+| `lutin import-project <dossier>` | reprendre un projet Claude (`CLAUDE.md`, `.claude/`) : `--here` (dedans) ou `--copy` |
+| `lutin migrate <dossier ou .zip>` | reprendre les données d'un autre assistant : `--conversations --memory --skills --settings` |
+| `lutin language [fr\|en\|auto]` | langue de l'application |
 | `lutin doctor` | diagnostic à coller dans un rapport de problème (sans contenu personnel) |
 
 Au-delà de la discussion : tester ton PC, essai à blanc, chercher hors ligne dans tes PDF et documents Word, tâches planifiées, addons facultatifs (missions longues menées seul pendant des heures, traitement de documents, Telegram, courriel, X, ComfyUI), création de PDF et de documents Word, aperçu d'une page, pièces jointes (images, documents, code), cinq modes, appairage d'un téléphone par QR code. Toute la documentation, par sujet : [docs/README.fr.md](docs/README.fr.md). Voir [docs/FEATURES.fr.md](docs/FEATURES.fr.md) ; pour essayer les nouveautés pas à pas : [docs/GUIDE-ESSAI.fr.md](docs/GUIDE-ESSAI.fr.md) ; pour l'installer sur un serveur Debian avec Docker : [docs/TUTO-DOCKER-DEBIAN.fr.md](docs/TUTO-DOCKER-DEBIAN.fr.md).

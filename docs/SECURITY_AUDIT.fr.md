@@ -11,7 +11,7 @@ Une revue faite par les mainteneurs et leur assistant, des surfaces ajoutées de
 | Routes des machines (`/api/noeud/*`) | Jeton obligatoire (haché en SHA-256 au repos, comparaison à temps constant), un nœud éteint ne reconnaît personne, le jeton n'ouvre rien d'autre que ces routes, corps de demande réduit à une liste de clés permises, deux demandes simultanées au plus | OK, couvert par `test_machines.py` |
 | Appairage | Code à 8 chiffres, usage unique, 5 minutes, 3 en attente au plus, limiteur partagé, même message pour un code faux ou périmé | OK |
 | Extinction à distance | Éteinte par défaut sur la machine à éteindre, jeton de nœud valide requis, 30 s de délai, annulable, journalisée des deux côtés | OK |
-| Commandes système | Pas de `shell=True`, d'`os.system`, d'`eval/exec/pickle` dans `src/` ; commandes en listes d'arguments ; la version donnée à `--revenir-a` doit avoir la forme `X.Y.Z` | OK |
+| Commandes système | Pas de `shell=True`, d'`os.system`, d'`eval/exec/pickle` dans `src/` ; commandes en listes d'arguments ; la version donnée à `--rollback-to` doit avoir la forme `X.Y.Z` | OK |
 | Actions « décharger / fermer » de la page Santé | Liste fermée d'actions ; ComfyUI n'est fermé que si Lutin l'a lancé | OK |
 | Fichiers servis (`/fichier/`, `/lib/`, `/image/`, `/piece/`) | `..` et variantes encodées refusés | OK, `test_parcours_vierge.py` |
 | Corps de requêtes | Plafonds (2 Mo de JSON, 8 Mo d'images, 20 Mo de documents) ; un `Content-Length` non numérique vaut « trop gros » ; le JSON doit être un objet | OK |

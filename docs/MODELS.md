@@ -4,13 +4,13 @@
 
 ## Which models for which engine
 
-Not every engine accepts everything. Lutin **never offers** a model the chosen engine cannot run: the Models tab hides the others (with a "N models hidden" fold-out saying why), installing an incompatible model is refused, and the roles (all-round, fast…) are recomputed **on compatible models only** (`lutin modeles recommander --moteur llamacpp`).
+Not every engine accepts everything. Lutin **never offers** a model the chosen engine cannot run: the Models tab hides the others (with a "N models hidden" fold-out saying why), installing an incompatible model is refused, and the roles (all-round, fast…) are recomputed **on compatible models only** (`lutin models recommend --engine llamacpp`).
 
 - **Ollama**: the whole library.
 - **llama.cpp managed by Lutin**: the same GGUF files (downloaded from Ollama's library, without Ollama), unless a capability the model needs (tools, reasoning, images) is "not supported" by that engine in its capability grid.
 - **External server (LM Studio, vLLM…)**: it has its own models; only the ones it offers are shown.
 
-Each line shows the **format** (GGUF), the **quantization** (from the name, otherwise the library default) and the **estimated memory** (weights + 8,192-token conversation + margin). `lutin bench --moteur llamacpp` measures a model with an engine other than Ollama.
+Each line shows the **format** (GGUF), the **quantization** (from the name, otherwise the library default) and the **estimated memory** (weights + 8,192-token conversation + margin). `lutin bench --engine llamacpp` measures a model with an engine other than Ollama.
 
 ## Estimating before loading
 
@@ -27,7 +27,7 @@ A model that does not fit, or barely, is flagged **before** loading: in the bann
 
 - **Mixture-of-experts models** (few active parameters per word), for example a 24 GB card and 32 GB of RAM: the experts stay in RAM (llama.cpp's `--n-cpu-moe`, set in Settings > Engines > llama.cpp > Advanced settings) and the rest fits on the card. The number of layers is **estimated** (48 by default), not read from the file: adjust from the video memory actually used.
 - **Cautious mode**: on a modest machine (under 8 GB usable, or no card and under 16 GB of RAM), the page suggests an 8,192-token conversation and a single model loaded at a time. Never applied without your agreement.
-- **Estimate against measurement**: the engine bench (`lutin bench-moteurs`) compares the estimate to the memory actually used (`estimation.ecart_pct` in the result: positive = overestimated). **No gap has been measured on real hardware yet**: until real results exist, read the estimate as an order of magnitude, not a guarantee.
+- **Estimate against measurement**: the engine bench (`lutin bench-engines`) compares the estimate to the memory actually used (`estimation.ecart_pct` in the result: positive = overestimated). **No gap has been measured on real hardware yet**: until real results exist, read the estimate as an order of magnitude, not a guarantee.
 
 ## How Lutin chooses
 
@@ -37,7 +37,7 @@ A model that does not fit, or barely, is flagged **before** loading: in the bann
 4. A « mixture of experts » model (few active parameters per word) may spill over into RAM: it is offered with the mention « slower ».
 5. Only models able to **call tools** are offered: without that, Lutin can neither read nor modify your files.
 
-The result is shown by `lutin modeles` and in the guided installation. You can always choose something else in the Models tab.
+The result is shown by `lutin models` and in the guided installation. You can always choose something else in the Models tab.
 
 ## Without a graphics card, or with integrated graphics only
 
@@ -94,7 +94,7 @@ Some models are modified by the community so that they no longer refuse requests
 | French | an answer in one sentence, and exactly three bullet points |
 | Instructions | a valid JSON object, with no text around it |
 
-The answers are checked automatically; **no code written by the model is ever executed**. A single pass at temperature 0: it is an **indicator**, not a scientific ranking. Results are kept in the cache, shown in the model list, and exportable (`lutin bench --exporter`) to propose a rating correction to the catalogue.
+The answers are checked automatically; **no code written by the model is ever executed**. A single pass at temperature 0: it is an **indicator**, not a scientific ranking. Results are kept in the cache, shown in the model list, and exportable (`lutin bench --export`) to propose a rating correction to the catalogue.
 
 Measured ratings (0 to 10): *code* = 60 % code + 40 % tools; *creative* = 60 % French + 40 % instructions; *general* = average of the four; *fast* = scale on tokens per second (capped at 4 if the model does not call tools: unusable for Lutin). The formulas are in `lutin/bench.py`: challenge them.
 

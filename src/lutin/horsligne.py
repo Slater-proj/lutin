@@ -86,10 +86,10 @@ def garde(url, chemin_config=None):
         return
     hote = (urlparse(url).hostname or "").lower()
     if hote not in hotes_autorises():
-        raise HorsLigne(_t("Mode hors ligne strict : la connexion vers {} est refusée. Désactive-le pour utiliser Internet (lutin hors-ligne non).").format(hote or _t("cette adresse")))
+        raise HorsLigne(_t("Mode hors ligne strict : la connexion vers {} est refusée. Désactive-le pour utiliser Internet (lutin offline off).").format(hote or _t("cette adresse")))
 
 
 def exiger_en_ligne(action, chemin_config=None):
     """Pour les actions qui passent par un autre programme (Ollama télécharge lui-même ses modèles) : on ne peut pas contrôler l'adresse, on refuse l'action."""
     if actif(chemin_config):
-        raise HorsLigne(_t("Mode hors ligne strict : impossible de {}. Désactive-le pour continuer (lutin hors-ligne non).").format(action))
+        raise HorsLigne(_t("Mode hors ligne strict : impossible de {}. Désactive-le pour continuer (lutin offline off).").format(action))

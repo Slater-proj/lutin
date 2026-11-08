@@ -24,14 +24,14 @@ Le nom du fichier dit de quelle version il vient : `lutin-0.22.0-20261107-101500
 2. Réinstalle la version publiée voulue :
 
    ```
-   lutin update --revenir-a 0.22.0
+   lutin update --rollback-to 0.22.0
    ```
 
    Cela réinstalle cette publication depuis GitHub (seul un numéro `X.Y.Z` simple est accepté), après avoir de nouveau sauvegardé tes données. Cela marche pour une installation faite par le script d'installation (source GitHub) ; pour un `pip install` manuel d'un fichier, installe toi-même la roue voulue avec `python -m pip install <fichier>.whl`.
 3. Si la version précédente ne comprend plus tes données (rare : les fichiers ne font que gagner des champs), remets tes données :
 
    ```
-   lutin restaurer <sauvegarde>.zip
+   lutin restore <sauvegarde>.zip
    ```
 
    Lutin garde d'abord l'état actuel dans une archive « avant-restauration ».

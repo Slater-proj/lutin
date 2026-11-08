@@ -151,7 +151,7 @@ class Serveur:
         from .cli import CODE_REDEMARRAGE
         if self.arret:
             return 0
-        commande = [sys.executable, "-m", "lutin", "serve", "--sans-superviseur"] + ([] if premiere else ["--sans-navigateur"])
+        commande = [sys.executable, "-m", "lutin", "serve", "--no-supervisor"] + ([] if premiere else ["--no-browser"])
         Path(self.dossiers["donnees"]).mkdir(parents=True, exist_ok=True)
         with open(Path(self.dossiers["donnees"]) / "serveur.log", "a", encoding="utf-8") as sortie:
             self.enfant = subprocess.Popen(commande, env=dict(os.environ, LUTIN_SUPERVISE="1"), stdout=sortie, stderr=subprocess.STDOUT,

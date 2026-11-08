@@ -57,13 +57,13 @@ docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
 
 1. **Le code PIN** : `docker logs lutin 2>&1 | grep PIN` (`docker compose logs lutin | grep PIN` avec Compose), ou `docker exec lutin lutin pin` pour en obtenir un nouveau.
 2. Ouvre **http://localhost:8777**, entre le PIN : ton navigateur est appairé.
-3. **Installe un modèle** : `docker exec lutin lutin modeles` montre les modèles conseillés pour ta machine, puis  
-   `docker exec lutin lutin modeles installer qwen3:8b`  
+3. **Installe un modèle** : `docker exec lutin lutin models` montre les modèles conseillés pour ta machine, puis  
+   `docker exec lutin lutin models install qwen3:8b`  
    (ou l'onglet Modèles de l'interface). Le téléchargement passe par le moteur installé et reste dans le volume `lutin-models`.
 
 Dans le terminal : `docker exec -it lutin lutin chat`.
 
-**Langue** : anglais par défaut. Pour le français : dans la page (Réglages > Langue), avec `docker exec lutin lutin langue fr`, ou avec `-e LUTIN_LANGUE=fr`.
+**Langue** : anglais par défaut. Pour le français : dans la page (Réglages > Langue), avec `docker exec lutin lutin language fr`, ou avec `-e LUTIN_LANGUE=fr`.
 
 ## Les volumes
 
@@ -168,7 +168,7 @@ Le fichier [docker-compose.proxy.yml](../docker-compose.proxy.yml) ne publie **a
 
 **`LUTIN_ADMIN_TOUS=1` : la configuration depuis la page, pour tous ceux qui sont connectés.** Dans Docker le navigateur n'est jamais « sur la machine » : sans cette variable (ou `LUTIN_ADMINS` derrière un proxy), supprimer un fichier créé, ajouter un dossier de travail, une extension ou un connecteur est refusé depuis la page. Avec `LUTIN_ADMIN_TOUS=1`, toute personne **déjà admise** (appareil appairé par PIN, ou utilisateur du proxy) peut le faire. À réserver à un usage personnel ou à un petit cercle de confiance : ces réglages permettent de lire et d'écrire dans les dossiers montés dans le conteneur et de lancer des programmes **dans** le conteneur. Le niveau d'accès lui-même ne se change toujours que par les variables du conteneur.
 
-**Régler depuis la page, ou en ligne de commande.** Dans Docker, le navigateur n'est jamais « sur la machine » du conteneur : sans `LUTIN_ADMINS`, la page dit que les réglages (extensions, dossiers de travail, connecteurs MCP) sont verrouillés. Deux solutions : déclarer ton identifiant Authelia dans `LUTIN_ADMINS` (puis `docker compose up -d`), ou tout faire en ligne de commande : `docker exec lutin lutin travaux ajouter /workspace`, `docker exec lutin lutin mcp ajouter mon-serveur https://…/mcp` puis `lutin mcp actualiser mon-serveur` et `lutin mcp autoriser mon-serveur <outil>`. Un connecteur MCP « programme » (npx…) tourne **dans le conteneur** : préfère un connecteur par adresse.
+**Régler depuis la page, ou en ligne de commande.** Dans Docker, le navigateur n'est jamais « sur la machine » du conteneur : sans `LUTIN_ADMINS`, la page dit que les réglages (extensions, dossiers de travail, connecteurs MCP) sont verrouillés. Deux solutions : déclarer ton identifiant Authelia dans `LUTIN_ADMINS` (puis `docker compose up -d`), ou tout faire en ligne de commande : `docker exec lutin lutin workspaces add /workspace`, `docker exec lutin lutin mcp add mon-serveur https://…/mcp` puis `lutin mcp refresh mon-serveur` et `lutin mcp allow mon-serveur <outil>`. Un connecteur MCP « programme » (npx…) tourne **dans le conteneur** : préfère un connecteur par adresse.
 
 ### 2. Régler le reverse proxy
 
@@ -229,7 +229,7 @@ Sans carte graphique utilisable (la puce graphique intégrée Intel est facultat
 | `qwen3:8b`, `qwen2.5-coder:7b` | à la limite | plus lent ; faisable pour du code ou un texte soigné, pas pour une conversation vive |
 | `qwen3:14b` et plus | trop gros | ne tient pas dans le budget |
 
-`docker exec lutin lutin modeles` donne la liste pour ta machine. Baisse la **fenêtre de contexte** à 8 192–12 288 jetons dans Réglages : sur processeur, relire 24 000 jetons à chaque réponse se compte en minutes.
+`docker exec lutin lutin models` donne la liste pour ta machine. Baisse la **fenêtre de contexte** à 8 192–12 288 jetons dans Réglages : sur processeur, relire 24 000 jetons à chaque réponse se compte en minutes.
 
 ### 4. Ce qui marche, ce qui ne marche pas dans ce montage
 
@@ -255,12 +255,12 @@ Les réglages, secrets et états des addons sont dans le volume `/data` : ils su
 
 ```bash
 docker compose pull && docker compose up -d                       # mise à jour (les volumes ne sont pas touchés)
-docker compose exec lutin lutin sauvegarde /data/sauvegarde.zip   # puis : docker compose cp lutin:/data/sauvegarde.zip .
+docker compose exec lutin lutin backup /data/sauvegarde.zip   # puis : docker compose cp lutin:/data/sauvegarde.zip .
 docker compose down                                               # arrêt (les volumes restent) ; « down -v » les EFFACE
 ```
 
 Restaurer : copie le `.zip` dans `/data` (`docker compose cp sauvegarde.zip lutin:/data/`), arrête Lutin (`docker compose stop lutin`), puis  
-`docker compose run --rm lutin restaurer /data/sauvegarde.zip --oui` et `docker compose start lutin`.
+`docker compose run --rm lutin restore /data/sauvegarde.zip --yes` et `docker compose start lutin`.
 
 Les images publiées : `ghcr.io/slater-proj/lutin:latest` (dernière version, complète), `:X.Y.Z` (une version précise), `:slim` et `:X.Y.Z-slim` (Lutin seul), `:rocm` et `:X.Y.Z-rocm` (complète, pour les cartes AMD), `:rc-<branche>` et ses variantes `-slim` / `-rocm` (candidate d'une branche, pour tester avant fusion).
 

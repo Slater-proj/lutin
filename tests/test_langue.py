@@ -88,8 +88,8 @@ class Traduction(unittest.TestCase):
     def test_gabarit_reconnu_dans_un_message_deja_formate(self):
         with self.en():
             self.assertEqual(i18n.traduire("Lutin est déjà à jour (1.2.3)."), "Lutin is already up to date (1.2.3).")
-            self.assertEqual(i18n.traduire("Mode hors ligne strict : impossible de télécharger un modèle. Désactive-le pour continuer (lutin hors-ligne non)."),
-                             "Strict offline mode: unable to download a model. Turn it off to continue (lutin hors-ligne non).")
+            self.assertEqual(i18n.traduire("Mode hors ligne strict : impossible de télécharger un modèle. Désactive-le pour continuer (lutin offline off)."),
+                             "Strict offline mode: unable to download a model. Turn it off to continue (lutin offline off).")
             self.assertEqual(i18n.traduire("Une phrase que personne n'a prévue (3)."), "Une phrase que personne n'a prévue (3).", "sans gabarit : inchangé")
 
     def test_formats_numeriques_du_gabarit_ne_cassent_pas(self):

@@ -1,4 +1,4 @@
-"""L'essai réel d'un moteur : ses étapes, ses refus (rien n'est téléchargé sans « oui »), son rapport. Ici avec un faux llama-server : l'essai vrai se lance avec `lutin essai-moteur`."""
+"""L'essai réel d'un moteur : ses étapes, ses refus (rien n'est téléchargé sans « oui »), son rapport. Ici avec un faux llama-server : l'essai vrai se lance avec `lutin engine-trial`."""
 import json
 import socket
 import subprocess
@@ -73,7 +73,7 @@ class Essai(unittest.TestCase):
         self.assertFalse(r["reussi"])
         derniere = r["etapes"][-1]
         self.assertEqual(derniere["etape"], "Modèle")
-        self.assertIn("--modele unsloth/Qwen3-4B-Instruct-2507-GGUF/Qwen3-4B-Instruct-2507-Q4_K_M.gguf", derniere["detail"])
+        self.assertIn("--model unsloth/Qwen3-4B-Instruct-2507-GGUF/Qwen3-4B-Instruct-2507-Q4_K_M.gguf", derniere["detail"])
 
     def test_le_telechargement_d_un_modele_demande_l_accord_avec_sa_taille(self):
         questions = []

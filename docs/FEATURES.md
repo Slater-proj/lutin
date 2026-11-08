@@ -242,7 +242,7 @@ Settings > **Mode** (or `/mode` in the chat) changes what Lutin may do, and how 
 
 The **Access** tab gathers who can use Lutin (level), the PIN code with a **QR code** to connect a phone by scanning it, and the list of connected devices (with *Revoke*). A level change that needs a restart shows a banner with a *Restart* button when Lutin can do it itself (`lutin` command or Docker), and says what to do otherwise. Details: [SECURITY.md](SECURITY.md).
 
-**Remote administration.** By default, deleting a created file or adding a working folder, an extension, an MCP connector or an engine is only possible from the machine Lutin runs on. If you connect from another computer or a phone, enable **Access > Remote administration** (from the machine itself, or with `lutin securite --admin-distance on`): every device that is already admitted (paired with a code, or a proxy user) can then configure from the page. The access level itself can still only be changed from the machine. In Docker the equivalent is the `LUTIN_ADMIN_TOUS=1` variable.
+**Remote administration.** By default, deleting a created file or adding a working folder, an extension, an MCP connector or an engine is only possible from the machine Lutin runs on. If you connect from another computer or a phone, enable **Access > Remote administration** (from the machine itself, or with `lutin security --remote-admin on`): every device that is already admitted (paired with a code, or a proxy user) can then configure from the page. The access level itself can still only be changed from the machine. In Docker the equivalent is the `LUTIN_ADMIN_TOUS=1` variable.
 
 ## Workspace folders and the default folder
 

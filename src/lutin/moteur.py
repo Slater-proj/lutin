@@ -1029,7 +1029,7 @@ def principal():
         print(_t("Adresse publique : {}   (proxy de confiance : {})").format(SECURITE.url_publique, ", ".join(SECURITE.proxy_ips)))
     print(_t("Journal      : {}").format(DONNEES / "lutin.log"))
     print(_t("(dossier de travail : {})").format(RACINE))
-    if "--sans-navigateur" not in sys.argv and not os.environ.get("LUTIN_SANS_NAVIGATEUR"):
+    if "--no-browser" not in sys.argv and not os.environ.get("LUTIN_SANS_NAVIGATEUR"):
         try:
             import webbrowser
             threading.Timer(1.0, lambda: webbrowser.open(adresse + ("/#pin=" + pin if pin else ""))).start()          # au niveau réseau, le navigateur de cette machine s'appaire tout seul avec ce code

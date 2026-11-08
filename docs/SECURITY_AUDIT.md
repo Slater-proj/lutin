@@ -11,7 +11,7 @@ A self-review of the surfaces added since 0.20 and of the long-standing ones. **
 | Machine routes (`/api/noeud/*`) | Token required (SHA-256 hashed at rest, constant-time comparison), node switched off recognises nobody, token opens nothing outside these routes, request body reduced to a whitelist of keys, two simultaneous requests at most | OK, covered by `test_machines.py` |
 | Pairing | 8-digit code, single use, 5 minutes, at most 3 pending, shared rate limiter, same message for a wrong or expired code | OK |
 | Remote shutdown | Off by default on the machine to switch off, needs a valid node token, 30 s delay, cancellable, logged on both sides | OK |
-| System commands | No `shell=True`, no `os.system`, no `eval/exec/pickle` in `src/`; commands are lists of arguments; the version given to `--revenir-a` must match `X.Y.Z` | OK |
+| System commands | No `shell=True`, no `os.system`, no `eval/exec/pickle` in `src/`; commands are lists of arguments; the version given to `--rollback-to` must match `X.Y.Z` | OK |
 | "Unload / close" actions of the Health page | Fixed list of actions; ComfyUI is closed only if Lutin started it | OK |
 | Files served (`/fichier/`, `/lib/`, `/image/`, `/piece/`) | `..` and encoded variants refused | OK, `test_parcours_vierge.py` |
 | Request bodies | Size limits (2 MB JSON, 8 MB images, 20 MB documents); a non-numeric `Content-Length` counts as "too big"; JSON must be an object | OK |

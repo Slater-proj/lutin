@@ -20,15 +20,15 @@ Rien ne s'exécute tout seul : ces fichiers sont des **consignes et des notes** 
 
 | | Travailler dans le dépôt | Travailler dans une copie |
 |---|---|---|
-| Commande | `lutin importer <dossier> --ici` | `lutin importer <dossier> --copie [--vers <dossier>]` |
+| Commande | `lutin import-project <dossier> --here` | `lutin import-project <dossier> --copy [--to <dossier>]` |
 | Fichiers | **les mêmes** que ceux de Claude Code : chaque outil voit les changements de l'autre | une copie (historique git compris, sans `node_modules`, `.venv`…) ; l'original n'est jamais touché |
 | Quand | tu veux de la continuité, rien à fusionner | tu veux essayer, ou garder l'original à l'abri ; compare ou fusionne ensuite avec git |
 
-Sans `--ici` ni `--copie`, la commande demande (copie par défaut). Dans la page : **Mémoire > Projet Claude > Importer un projet Claude…**. Le dossier devient un dossier de travail et le dossier actif.
+Sans `--here` ni `--copy`, la commande demande (copie par défaut). Dans la page : **Mémoire > Projet Claude > Importer un projet Claude…**. Le dossier devient un dossier de travail et le dossier actif.
 
 À savoir :
 
 - Ajouter un dossier n'est possible que depuis cette machine (niveau « cette machine seulement », ou ligne de commande), comme tout dossier de travail.
-- Un dossier sans `CLAUDE.md` ni `.claude/` est refusé (utilise `lutin travaux ajouter` pour un dossier ordinaire).
+- Un dossier sans `CLAUDE.md` ni `.claude/` est refusé (utilise `lutin workspaces add` pour un dossier ordinaire).
 - Avec Docker, monte le dépôt sous `/workspace` et déclare-le avec `LUTIN_WORKSPACES` (voir [DOCKER.fr.md](DOCKER.fr.md)).
 - Lutin utilise des modèles locaux : un `CLAUDE.md` très long et beaucoup de skills coûtent du contexte. Garde-les courts et laisse le modèle lire le détail à la demande.

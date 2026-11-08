@@ -7,7 +7,7 @@ Lutin can run the same model with Ollama or with llama.cpp (Ollama's models are 
 ## Using it
 
 - **In the page**: Settings > Engines, "Which engine for my machine?" card: the recommendation and its reason, then "Compare the engines" (about 1 minute) or "Thorough comparison" (about 5 minutes).
-- **On the command line**: `lutin bench-moteurs [model] [--mode rapide|approfondi] [--sortie result.json]`.
+- **On the command line**: `lutin bench-engines [model] [--mode rapide|approfondi] [--output result.json]`.
 
 The model has to exist on each engine compared (an Ollama model shows up as is in llama.cpp). The bench **never runs by itself**, never at first launch, and downloads nothing. Before measuring an engine, it unloads the other one's model so memory and the graphics card are all its own.
 
@@ -23,4 +23,4 @@ For each engine: cold loading, first token, writing speed (tokens per second, me
 
 ## Sharing a result
 
-The file written by `--sortie` holds no path and no user name: only the hardware (processor, memory, cards), engine versions and figures. This is what will settle the questions still open on real measurements: the default Docker image, the small PC with an integrated graphics card (processor, Vulkan or Ollama), and llama.cpp against Ollama on an NVIDIA card with mixture-of-experts models. **These decisions are not made until figures from several real machines exist.**
+The file written by `--output` holds no path and no user name: only the hardware (processor, memory, cards), engine versions and figures. This is what will settle the questions still open on real measurements: the default Docker image, the small PC with an integrated graphics card (processor, Vulkan or Ollama), and llama.cpp against Ollama on an NVIDIA card with mixture-of-experts models. **These decisions are not made until figures from several real machines exist.**

@@ -18,7 +18,7 @@ Les contacts réseau que Lutin peut faire, et quand :
 
 **Les recherches web sont nettoyées avant de partir.** Pour chaque service de recherche extérieur (Brave, Tavily, Exa, Perplexity, DuckDuckGo, Bing), Lutin retire d'abord de la requête ce qui ne doit jamais partir : adresses e-mail, numéros de téléphone, numéros de carte bancaire (vérifiés par la clé de Luhn), IBAN, clés et jetons, adresses du réseau local, chemins qui contiennent un nom d'utilisateur. Il te dit quelles catégories ont été retirées (jamais les valeurs), sans appeler de modèle, donc sans délai. Un SearXNG chez toi reçoit la requête telle quelle. **Réglages > Santé > « Ce qui est sorti de cette machine »** liste les dernières recherches envoyées (heure, service, requête telle qu'elle est partie) et se vide ; le fichier (`sorties.jsonl`) garde 300 entrées au plus.
 
-Le **mode hors ligne strict** (`lutin hors-ligne oui`, la case « Hors ligne », ou `LUTIN_HORS_LIGNE=1`) bloque tous ces contacts ; seules cette machine et Ollama sont jointes. Un test surveille les connexions réelles.
+Le **mode hors ligne strict** (`lutin offline on`, la case « Hors ligne », ou `LUTIN_HORS_LIGNE=1`) bloque tous ces contacts ; seules cette machine et Ollama sont jointes. Un test surveille les connexions réelles.
 
 Ce qui reste sur ton disque : configuration, conversations, mémoire, journal des actions (jamais le contenu des fichiers ni la sortie des commandes), sauvegardes des fichiers modifiés. Voir [SECURITY.fr.md](SECURITY.fr.md) pour savoir qui peut atteindre la page.
 

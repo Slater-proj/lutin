@@ -484,7 +484,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
   <section class="page" id="p-modeles"><div class="cadre">
     <div class="biblio">
     <div class="aide">Plus un modèle est gros, plus il est intelligent, mais plus il demande de mémoire (idéalement celle de ta carte graphique).
-      <details class="aide-plus"><summary>En savoir plus</summary>Les modèles tournent sur ta machine, avec le moteur choisi (Ollama ou llama.cpp : la même bibliothèque, les mêmes modèles). Un seul modèle est chargé à la fois : en changer prend quelques secondes. Tu peux aussi les gérer en ligne de commande : <code>lutin modeles</code>.</details></div>
+      <details class="aide-plus"><summary>En savoir plus</summary>Les modèles tournent sur ta machine, avec le moteur choisi (Ollama ou llama.cpp : la même bibliothèque, les mêmes modèles). Un seul modèle est chargé à la fois : en changer prend quelques secondes. Tu peux aussi les gérer en ligne de commande : <code>lutin models</code>.</details></div>
     <label class="opt-ligne" title="Montre des modèles modifiés par la communauté pour ne plus refuser de demandes. À utiliser en connaissance de cause."><input type="checkbox" id="cAvance"> Afficher les modèles avancés (sans filtre)</label>
     <div class="carte" id="jaugeDisque" hidden style="display:block"></div>
     <div class="carte" id="barreTest" style="gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
@@ -2396,7 +2396,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
       const r = await fetch('/api/sauvegarde', { headers: { 'X-Token': TOKEN } });
       if (!r.ok) throw new Error((await r.json().catch(() => ({}))).erreur || T('Erreur ') + r.status);
       const a = document.createElement('a'); a.href = URL.createObjectURL(await r.blob()); a.download = 'lutin-sauvegarde.zip'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-      infoLocale(T('Sauvegarde téléchargée : conversations, réglages et mémoire. Elle ne contient ni les appareils connectés ni les fichiers de ton dossier de travail. Pour la restaurer : lutin restaurer <fichier>.'));
+      infoLocale(T('Sauvegarde téléchargée : conversations, réglages et mémoire. Elle ne contient ni les appareils connectés ni les fichiers de ton dossier de travail. Pour la restaurer : lutin restore <fichier>.'));
     } catch (e) { infoLocale('✘ ' + e.message); }
   });
   const ouvrirGit = async presel => {
@@ -3089,7 +3089,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     const z = $('listeMcp'); let r;
     try { r = await api('/api/mcp'); } catch (e) { z.textContent = e.message; return; }
     $('ajoutMcp').hidden = !r.modifiable;
-    $('aideAjoutMcp').textContent = r.modifiable ? T('Exemples : « npx -y @modelcontextprotocol/server-filesystem C:/mes-documents » (un programme que Lutin lance), ou « https://mon-serveur/mcp » (une adresse). Après l\'ajout, Lutin liste les outils du connecteur : coche ceux que le modèle peut utiliser. Dans Docker, le programme tourne dans le conteneur : préfère une adresse.') : explicationVerrou() + ' ' + T('Les connecteurs s\'ajoutent aussi en ligne de commande : lutin mcp ajouter <nom> <commande ou adresse>, puis lutin mcp actualiser <nom> et lutin mcp autoriser <nom> <outil>.');
+    $('aideAjoutMcp').textContent = r.modifiable ? T('Exemples : « npx -y @modelcontextprotocol/server-filesystem C:/mes-documents » (un programme que Lutin lance), ou « https://mon-serveur/mcp » (une adresse). Après l\'ajout, Lutin liste les outils du connecteur : coche ceux que le modèle peut utiliser. Dans Docker, le programme tourne dans le conteneur : préfère une adresse.') : explicationVerrou() + ' ' + T('Les connecteurs s\'ajoutent aussi en ligne de commande : lutin mcp add <nom> <commande ou adresse>, puis lutin mcp refresh <nom> et lutin mcp allow <nom> <outil>.');
     z.textContent = '';
     if (!r.connecteurs.length) z.appendChild(el('div', 'aide', T('Aucun connecteur pour le moment.')));
     const appel = async (url, corps, msg) => { $('mMcp').textContent = msg || ''; try { await api(url, corps); } catch (e) { $('mMcp').textContent = e.message; } chargerMcp(); };
@@ -3530,7 +3530,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
   const explicationVerrou = () => ETAT.niveau === 'proxy'
     ? T('🔒 Réglages verrouillés : le proxy t\'identifie, mais tu n\'es pas déclaré administrateur. Ajoute ton identifiant dans la variable LUTIN_ADMINS du docker-compose (ou LUTIN_ADMIN_TOUS=1 pour ouvrir à tous les utilisateurs connectés ; voir docs/DOCKER.md), puis redémarre le conteneur.')
     : (ETAT.docker
-      ? T('🔒 Réglages verrouillés : dans Docker, le navigateur n\'est jamais « sur la machine » de Lutin, donc la page ne peut pas les modifier à ce niveau d\'accès. Ajoute LUTIN_ADMIN_TOUS=1 aux variables du conteneur (toute personne connectée pourra alors configurer), ou passe au niveau proxy derrière Authelia avec ton identifiant dans LUTIN_ADMINS (voir docs/DOCKER.md). Sans cela : docker exec lutin lutin travaux … ou lutin mcp …')
+      ? T('🔒 Réglages verrouillés : dans Docker, le navigateur n\'est jamais « sur la machine » de Lutin, donc la page ne peut pas les modifier à ce niveau d\'accès. Ajoute LUTIN_ADMIN_TOUS=1 aux variables du conteneur (toute personne connectée pourra alors configurer), ou passe au niveau proxy derrière Authelia avec ton identifiant dans LUTIN_ADMINS (voir docs/DOCKER.md). Sans cela : docker exec lutin lutin workspaces … ou lutin mcp …')
       : T('🔒 Réglages verrouillés : ils ne se changent que depuis la machine où Lutin tourne (ouvre cette page là-bas), sauf si tu ouvres l\'administration à distance dans Accès (depuis cette machine).'));
   const chargerAddons = async () => {
     const z = $('listeAddons'), seq = ++SEQ_ADDONS;
