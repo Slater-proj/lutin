@@ -1944,5 +1944,12 @@
 "une image est jointe": "an image is attached",
 "du code ou une tâche de programmation": "code or a programming task",
 "une demande qui demande de réfléchir (analyser, comparer, une longue explication)": "a request that needs thinking (analysing, comparing, a long explanation)",
-"une question courte, sans fichier ni outil": "a short question, no file or tool"
+"une question courte, sans fichier ni outil": "a short question, no file or tool",
+"Droit inconnu.": "Unknown permission.",
+"Cette conversation est trop volumineuse pour être copiée.": "This conversation is too large to be copied.",
+"Demande inconnue.": "Unknown request.",
+"Réponse inattendue de la machine.": "Unexpected answer from the machine.",
+"Conversation importée": "Imported conversation",
+"Depuis {} ({})": "From {} ({})",
+"La machine « {} » ne partage pas cela : sur elle, Réglages > Machines > « Partager avec les machines appairées », puis coche la case voulue.": "The machine \"{}\" does not share this: on it, Settings > Machines > \"Share with paired machines\", then tick the right box."
 }

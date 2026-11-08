@@ -38,6 +38,7 @@ aside { background:linear-gradient(180deg, var(--panel2), var(--panel)); border-
 aside h1 { font-size:.95rem; font-weight:600; letter-spacing:.02em; margin:0; padding:14px 16px; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:8px; }
 aside h1 img { border-radius:7px; flex:0 0 auto; }
 select.modele-titre.distant, select.modele-titre option.distant { color:#e0a84a; }
+.conv.distante .t, .conv.importee .t { color:#e0a84a; }
 select.modele-titre option.distant.horsligne { color:#8a7a5a; }
 aside h1 .modele-titre { flex:1 1 auto; margin-left:0; min-width:0; font-size:.8rem; font-weight:400; padding:3px 4px; text-overflow:ellipsis; letter-spacing:0; }
 aside .liste { overflow:auto; flex:1; padding:8px; min-height:60px; }
@@ -654,7 +655,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     <div class="carte" style="gap:8px;flex-wrap:wrap;align-items:center"><button id="bRechTest" class="principal">Tester la recherche</button><span class="aide" id="rechMsg" role="status"></span></div>
     <div id="rechResultats"></div>
     </details>
-    <details class="groupe" open data-g="dossiers"><summary>Dossiers et données</summary>
+    <details class="groupe" data-g="dossiers"><summary>Dossiers et données</summary>
     <h2>Dossiers de travail <span class="aide">(le seul endroit où Lutin lit et modifie des fichiers ; chaque conversation garde le sien. ★ = le dossier utilisé, celui qui s'ouvre aussi au démarrage de Lutin)</span></h2>
     <div id="listeTravaux" class="aide" style="margin:6px 0"></div>
     <div style="margin:6px 0"><button id="bAjouterTravail">Ajouter un dossier…</button> <button id="bImporterClaude">Importer un projet Claude…</button> <button id="bActualiserTravaux" title="Relit ce que Lutin trouve dans chaque dossier">🔄 Actualiser</button> <span class="aide" id="mTravaux"></span></div>
@@ -679,7 +680,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     <div id="machinesZone"></div>
     <div class="aide" id="aideMoteur"></div>
     </details>
-    <details class="groupe" open data-g="conversation"><summary>Conversation</summary>
+    <details class="groupe" data-g="conversation"><summary>Conversation</summary>
     <h2>Modes <span class="aide">(à choisir dans la barre de gauche ; dans tous les modes, toute modification de fichier et toute commande te demandent ton accord)</span></h2>
     <div class="carte" style="display:block"><ul class="aide" style="line-height:1.7;margin:0;padding-left:18px">
       <li><b>Polyvalent</b> : l'assistant de tous les jours. Questions, rédaction, analyse, un peu de code ; il lit et modifie les fichiers du dossier de travail et peut lancer des commandes.</li>
@@ -1366,7 +1367,21 @@ body[data-moteur="openai"] .biblio { display:none !important; }
   };
   const listeConversations = () => {
     const z = $('conversations'); z.textContent = '';
-    ETAT.conversations.forEach(c => { const d = el('div', 'conv' + (CONV && CONV.id === c.id ? ' choisie' : '')); d.dataset.id = c.id; if (enAttente().has(c.id)) { const pt = el('i', 'travail'); pt.classList.add('wait'); pt.title = T('L\'assistant attend une action de ta part'); d.appendChild(pt); } else if ((ETAT.actives || []).includes(c.id) || (EN_COURS && ID_EN_COURS === c.id)) { const pt = el('i', 'travail'); pt.title = T('L\'assistant travaille sur cette conversation'); d.appendChild(pt); } else if (NONLUS.has(c.id)) { const pt = el('i', 'travail fini'); pt.title = T('Réponse terminée, pas encore lue'); d.appendChild(pt); } d.appendChild(el('span', 't', (c.epingle ? '★ ' : '') + (c.titre || T('(sans titre)')))); const mn = el('button', 'menu-ouvrir', '⋯'); mn.title = T('Options de la conversation'); mn.addEventListener('click', e => { e.stopPropagation(); ouvrirMenuConv(c, mn); }); d.appendChild(mn); const x = el('button', '', '✕'); x.title = T('Supprimer'); x.addEventListener('click', async e => { e.stopPropagation(); if (!confirm(T('Supprimer cette conversation ?'))) return; await api('/api/supprimer', { id: c.id }); if (CONV && CONV.id === c.id) nouvelle(); rafraichir(); }); d.appendChild(x); d.addEventListener('click', () => ouvrir(c.id)); z.appendChild(d); });
+    ETAT.conversations.forEach(c => { const d = el('div', 'conv' + (CONV && CONV.id === c.id ? ' choisie' : '') + (c.origine ? ' importee' : '')); d.dataset.id = c.id; if (c.origine) d.title = T('Copie d\'une conversation de la machine « ') + c.origine + T(' » : tu continues ici, l\'original n\'est pas touché'); if (enAttente().has(c.id)) { const pt = el('i', 'travail'); pt.classList.add('wait'); pt.title = T('L\'assistant attend une action de ta part'); d.appendChild(pt); } else if ((ETAT.actives || []).includes(c.id) || (EN_COURS && ID_EN_COURS === c.id)) { const pt = el('i', 'travail'); pt.title = T('L\'assistant travaille sur cette conversation'); d.appendChild(pt); } else if (NONLUS.has(c.id)) { const pt = el('i', 'travail fini'); pt.title = T('Réponse terminée, pas encore lue'); d.appendChild(pt); } d.appendChild(el('span', 't', (c.epingle ? '★ ' : '') + (c.origine ? '🖥 ' : '') + (c.titre || T('(sans titre)')))); const mn = el('button', 'menu-ouvrir', '⋯'); mn.title = T('Options de la conversation'); mn.addEventListener('click', e => { e.stopPropagation(); ouvrirMenuConv(c, mn); }); d.appendChild(mn); const x = el('button', '', '✕'); x.title = T('Supprimer'); x.addEventListener('click', async e => { e.stopPropagation(); if (!confirm(T('Supprimer cette conversation ?'))) return; await api('/api/supprimer', { id: c.id }); if (CONV && CONV.id === c.id) nouvelle(); rafraichir(); }); d.appendChild(x); d.addEventListener('click', () => ouvrir(c.id)); z.appendChild(d); });
+    // Les conversations des machines appairées (si leur propriétaire les partage) : en jaune, comme leurs modèles. Un clic en fait une copie ici, qu'on continue avec les skills, la mémoire et les modèles de CETTE machine.
+    (ETAT.conversations_distantes || []).filter(c => !c.locale || c.plus_recente).forEach(c => {
+      const d = el('div', 'conv distante'); d.dataset.id = 'distante-' + c.machine + '-' + c.id;
+      d.title = (c.plus_recente ? T('Mise à jour disponible. ') : '') + T('Conversation de la machine « ') + c.machine_nom + T(' » : un clic en fait une copie ici pour la continuer');
+      d.appendChild(el('span', 't', '🖥 ' + (c.plus_recente ? '↻ ' : '') + (c.titre || T('(sans titre)')) + ' · ' + c.machine_nom));
+      d.addEventListener('click', async () => {
+        try {
+          const r = await api('/api/machines-import-conversation', { id: c.machine, conversation: c.id });
+          await rafraichir(); await ouvrir(r.id);
+          if (r.etat === 'divergente') infoLocale(T('Cette copie a continué ici depuis son import : je l\'ai gardée telle quelle (la version de l\'autre machine n\'a pas été reprise).'));
+        } catch (e) { alert(e.message); }
+      });
+      z.appendChild(d);
+    });
   };
   // Nouveautés de modèles (vérifiées au lancement par Lutin, au plus une fois par jour) : toujours proposées, jamais installées toutes seules.
   let PROP_T = 0;
@@ -1836,7 +1851,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     PREC_ACT = actives;
     if (CONV && !document.hidden && surChat() && !(FLUX && FLUX.detache)) lue(CONV.id);
     majTravail();
-    const sigC = JSON.stringify([ETAT.conversations, CONV ? CONV.id : '', ETAT.actives, ETAT.en_attente, Object.values(ETAT.missions || {}).map(m => m.etat), EN_COURS ? ID_EN_COURS : '', [...NONLUS]]), sigM = JSON.stringify([ETAT.modeles, ETAT.installes, ETAT.pulls, ETAT.ollama, ETAT.reglages.modele, ETAT.bench, ETAT.adequation, ETAT.disque_modeles, ETAT.familles]);
+    const sigC = JSON.stringify([ETAT.conversations, ETAT.conversations_distantes, CONV ? CONV.id : '', ETAT.actives, ETAT.en_attente, Object.values(ETAT.missions || {}).map(m => m.etat), EN_COURS ? ID_EN_COURS : '', [...NONLUS]]), sigM = JSON.stringify([ETAT.modeles, ETAT.installes, ETAT.pulls, ETAT.ollama, ETAT.reglages.modele, ETAT.bench, ETAT.adequation, ETAT.disque_modeles, ETAT.familles]);
     if (sigC !== SIG.c && !RECH.q) { SIG.c = sigC; listeConversations(); }
     if (sigM !== SIG.m) { SIG.m = sigM; listeModeles(); }
     chargerPropositions();
@@ -2451,7 +2466,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     const cartes = el('div'), autres = el('div');
     autres.appendChild(el('div', 'aide', T('Mesure des disques et du reste…')));
     z.append(cartes, autres);
-    const sorties = el('div'); z.appendChild(sorties);
+    const sorties = el('div'); sorties.style.marginTop = '22px'; z.appendChild(sorties);
     const chargerSorties = async () => {
       let r; try { r = await api('/api/sorties'); } catch (e) { return; }
       sorties.textContent = '';
@@ -2462,7 +2477,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
       if (r.entrees.length && r.modifiable) { const v = el('button', '', T('Vider le journal')); v.addEventListener('click', async () => { await api('/api/sorties-vider', {}); chargerSorties(); }); sorties.appendChild(v); }
     };
     chargerSorties();
-    const activite = el('div'); z.appendChild(activite);
+    const activite = el('div'); activite.style.marginTop = '22px'; z.appendChild(activite);
     const chargerActivite = async () => {
       let r; try { r = await api('/api/observatoire'); } catch (e) { return; }
       activite.textContent = '';
@@ -2478,7 +2493,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
       if (r.modifiable) { const v = el('button', '', T('Vider l\'activité')); v.addEventListener('click', async () => { await api('/api/observatoire-vider', {}); chargerActivite(); }); activite.appendChild(v); }
     };
     chargerActivite();
-    const mesures = el('div'); z.appendChild(mesures);
+    const mesures = el('div'); mesures.style.marginTop = '22px'; z.appendChild(mesures);
     const chargerMesures = async () => {
       let r; try { r = await api('/api/bench-historique'); } catch (e) { return; }
       mesures.textContent = '';
@@ -2579,9 +2594,20 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     s.items.forEach(i => { if (i.id === 'ram' || i.id === 'vram') niveaux[i.id] = i; });
     if (derniere) dessiner(derniere);
     autres.textContent = '';
+    // Les disques qui sont en fait le MÊME disque (même place libre) forment une seule carte : « Disque : Ollama (modèles) · Projet · Données », au lieu de trois cartes identiques.
+    const ORDRE = { ok: 0, attention: 1, critique: 2 }, disques = new Map(), lignes = [];
     s.items.filter(i => i.id !== 'ram' && i.id !== 'vram').forEach(i => {
+      if (/^disque/.test(i.id) && i.valeur) {
+        const g = disques.get(i.valeur);
+        if (g) { g.noms.push(i.nom.replace(/^[^:]+:\s*/, '')); if (ORDRE[i.niveau] > ORDRE[g.niveau]) g.niveau = i.niveau; if (!g.conseil && i.conseil) g.conseil = i.conseil; return; }
+        const nouveau = { id: i.id, niveau: i.niveau, valeur: i.valeur, conseil: i.conseil, noms: [i.nom.replace(/^[^:]+:\s*/, '')], disque: true };
+        disques.set(i.valeur, nouveau); lignes.push(nouveau); return;
+      }
+      lignes.push(i);
+    });
+    lignes.forEach(i => {
       const c = el('div', 'carte'); const t = el('div', 'nom');
-      t.appendChild(el('b', '', POINT[i.niveau] + ' ' + i.nom)); t.appendChild(el('div', '', i.valeur));
+      t.appendChild(el('b', '', POINT[i.niveau] + ' ' + (i.disque ? T('Disque') + ' : ' + i.noms.join(' · ') : i.nom))); t.appendChild(el('div', '', i.valeur));
       if (i.conseil) t.appendChild(el('div', 'aide', i.conseil));
       c.appendChild(t); autres.appendChild(c);
     });
@@ -3438,6 +3464,15 @@ body[data-moteur="openai"] .biblio { display:none !important; }
       r.noeud.autorisees.forEach(a => { const l = el('div', 'ligne'), rv = el('button', '', T('Révoquer')); rv.addEventListener('click', async () => { if (!confirm(T('Révoquer l\'accès de « ') + a.nom + T(' » ?'))) return; await act('noeud-revoquer', { nom: a.nom }); chargerMachines(true); }); l.append(el('span', '', '🔑 ' + a.nom + ' · ' + a.date), rv); prete.appendChild(l); });
     }
     if (r.noeud.actif) {
+      const partage = el('div'); partage.appendChild(el('div', 'aide', T('Partager avec les machines appairées (lecture seule, décoché par défaut) :')));
+      [['conversations', T('mes conversations')], ['skills', T('mes skills')], ['memoire', T('ma mémoire')]].forEach(([droit, nom]) => {
+        const lp = el('label'), cp = el('input'); cp.type = 'checkbox'; cp.checked = !!(r.noeud.droits || {})[droit];
+        lp.append(cp, document.createTextNode(' ' + nom)); lp.style.marginRight = '14px';
+        cp.addEventListener('change', async () => { await act('droit', { droit, actif: cp.checked }); chargerMachines(true); });
+        partage.appendChild(lp);
+      });
+      partage.appendChild(el('div', 'aide', T('Elles peuvent en faire une COPIE chez elles ; rien de ce qui est ici n\'est modifié, et les images et fichiers joints restent ici.')));
+      prete.appendChild(partage);
       const lx = el('label'), cx = el('input'); cx.type = 'checkbox'; cx.checked = r.noeud.extinction;
       lx.append(cx, document.createTextNode(' ' + T('Autoriser les machines appairées à l\'éteindre')));
       cx.addEventListener('change', async () => { await act('node-shutdown', { actif: cx.checked }); chargerMachines(true); });
@@ -3484,7 +3519,22 @@ body[data-moteur="openai"] .biblio { display:none !important; }
       bw.title = T('Envoie un paquet de réveil (Wake-on-LAN) : il faut son adresse MAC.');
       bw.addEventListener('click', async () => { const x = await act('wake', { id: m.id }); if (x && x.avertissements && x.avertissements.length) alert(T('Réveil envoyé, mais :') + '\n\n' + x.avertissements.join('\n\n')); chargerMachines(true); });
       be.addEventListener('click', async () => { if (!confirm(T('Éteindre la machine « ') + m.nom + T(' » ? Elle s\'éteindra dans 30 secondes (annulable).'))) return; const x = await act('shutdown', { id: m.id }); if (x) { alert(T('Extinction demandée : 30 secondes.')); chargerMachines(true); } });
-      l2.append(bw, be); c.appendChild(l2); neuf.appendChild(c);
+      l2.append(bw, be); c.appendChild(l2);
+      const l3 = el('div', 'ligne'), res3 = el('span', 'aide'), droits = m.droits || {};
+      const importer = (action, libelle, ok) => {
+        const b = el('button', '', libelle); b.disabled = !droits[ok];
+        b.title = droits[ok] ? T('Copie ici ce qui manque ; rien n\'est écrasé et rien n\'est modifié sur l\'autre machine') : T('Sur cette machine, il faut cocher « Partager avec les machines appairées » (Réglages > Machines).');
+        b.addEventListener('click', async () => {
+          b.disabled = true; res3.textContent = '';
+          const x = await act(action, { id: m.id }, res3);
+          if (x) res3.textContent = action === 'import-skills' ? '✔ ' + x.ajoutes + ' ' + T('ajouté(s)') + ', ' + x.mis_a_jour + ' ' + T('mis à jour') + ', ' + x.deja_la + ' ' + T('déjà là') : '✔ ' + x.notes_ajoutees + ' ' + T('note(s) ajoutée(s)') + (x.profil_copie ? ' · ' + T('profil copié') : '');
+          b.disabled = !droits[ok];
+        });
+        return b;
+      };
+      l3.append(importer('import-skills', T('Importer ses skills'), 'skills'), importer('import-memoire', T('Importer sa mémoire'), 'memoire'), res3); c.appendChild(l3);
+      if (!droits.conversations && m.etat !== 'injoignable') c.appendChild(el('div', 'aide', 'ℹ ' + T('Pour voir ses conversations dans ta liste, coche « mes conversations » sur cette machine (Réglages > Machines).')));
+      neuf.appendChild(c);
     });
     // 3. ajouter
     const aj = el('div', 'carte'); aj.style.display = 'block';

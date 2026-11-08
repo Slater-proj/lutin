@@ -631,11 +631,13 @@ class MoteurLlamaCpp(MoteurOpenAI):
 
     def partages(self):
         """Les modèles utilisables par leur nom d'Ollama (`qwen3:8b`) : ceux qu'Ollama a déjà téléchargés (lus sur place, `origine` « ollama ») et ceux que Lutin a téléchargés pour llama.cpp depuis la même
-        bibliothèque (`origine` « lutin »). {nom: {fichier, taille, projecteur, origine}}. Pas de modèle d'Ollama sous Docker (autre conteneur), avec un serveur externe, ou si l'utilisateur a coupé le partage
-        (réglage `partager_ollama`). Relu au plus toutes les 10 secondes (la page interroge souvent)."""
-        if self.externe() or moteurs.CONTEXTE["en_docker"]():
+        bibliothèque (`origine` « lutin »). {nom: {fichier, taille, projecteur, origine}}. Les modèles d'OLLAMA ne sont pas lus sous Docker (autre conteneur), ni avec un serveur externe, ni si l'utilisateur a
+        coupé le partage (réglage `partager_ollama`) ; ceux que LUTIN télécharge pour llama.cpp sont toujours listés, Docker compris (sinon un modèle téléchargé n'apparaissait jamais). Relu au plus toutes les
+        10 secondes (la page interroge souvent)."""
+        if self.externe():
             return {}
-        dossier = moteurs.CONTEXTE["dossier_ollama"]() if self.config().get("partager_ollama") is not False else None
+        docker = moteurs.CONTEXTE["en_docker"]()
+        dossier = None if docker else (moteurs.CONTEXTE["dossier_ollama"]() if self.config().get("partager_ollama") is not False else None)
         cle = (str(dossier or ""), str(self.bibliotheque()))
         cache = CACHE_PARTAGE
         if cache.get("cle") == cle and time.time() - cache.get("quand", 0) < 10:

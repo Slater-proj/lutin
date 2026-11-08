@@ -378,7 +378,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
                                        "version": _m.VERSION, "partages": o.get("partages", []), "ollama": o["actif"], "ollama_installe": bool(_m.chemin_ollama()) or _m.moteur_actuel().id != "ollama", "moteur_nom": _m.moteur_actuel().nom, "installes": o["installes"], "modeles": modeles, "modeles_masques": len(_m.lire_registre_modeles()["masques"]), "actives": list(_m.TOURS_ACTIFS),
                                        "pulls": _m.PULLS, "reglages": r, "conversations": _m.conv_liste(), "racine": str(_m.RACINE), "donnees": str(_m.DONNEES),
                                        "outil": bool(self._outil_vivant()), "hors_ligne": _hl.actif(), "moteur": _m.moteur_actuel().id, "niveau": _m.SECURITE.niveau, "docker": _acces.en_docker(), "ouverture_possible": _fichiers.ouverture_possible(), "missions": _mission.par_conversation(), "langue": _i18n.langue(), "langue_reglage": _i18n.langue_configuree(), "cpus": _machine.cpus_disponibles() or 1, "diagnostic": self._avec_estimation(self._diagnostic(o, r, profil, modeles), r, profil), "prudent": _estimation.mode_prudent(profil), "premier_lancement": self._premier_lancement(o, r, profil), "redemarrage": {"necessaire": _acces.securite_enregistree() != _m.SECURITE, "possible": _acces.peut_redemarrer()}, "nouvelle_version": _m.nouvelle_version_lutin(), "travaux": _m.travaux_etat(), "configurateur": self._configurateur(), "addons_alertes": _addons.alertes(), "embeddings": _embeddings.etat(),
-                                       "reflexion_possible": self._reflexion_possible(r, o["actif"]), "modeles_distants": _machines.modeles_distants(), "taches_fond": _m.taches_en_cours(), "taches_moteur": [dict(v, nom=_moteurs.MOTEURS[k].nom) for k, v in _moteurs.toutes_les_taches().items() if v.get("statut") == "en cours" and k in _moteurs.MOTEURS], "memoire": self._memoire(r, o), "calibrage": _calibrage.etat(), "bench": {"en_cours": _m.BENCH["en_cours"], "etape": _m.BENCH["etape"], "erreur": _m.BENCH["erreur"], "file": list(_m.BENCH.get("file") or []), "mesures": _bench.lire(_m.chemin_bench())}, "attentes": [{"id": a.id, "titre": a.titre, "detail": a.detail, "diff": a.diff, "conv": a.conv} for a in _m.Attente.EN_COURS.values()],
+                                       "reflexion_possible": self._reflexion_possible(r, o["actif"]), "modeles_distants": _machines.modeles_distants(), "conversations_distantes": _machines.conversations_distantes(), "taches_fond": _m.taches_en_cours(), "taches_moteur": [dict(v, nom=_moteurs.MOTEURS[k].nom) for k, v in _moteurs.toutes_les_taches().items() if v.get("statut") == "en cours" and k in _moteurs.MOTEURS], "memoire": self._memoire(r, o), "calibrage": _calibrage.etat(), "bench": {"en_cours": _m.BENCH["en_cours"], "etape": _m.BENCH["etape"], "erreur": _m.BENCH["erreur"], "file": list(_m.BENCH.get("file") or []), "mesures": _bench.lire(_m.chemin_bench())}, "attentes": [{"id": a.id, "titre": a.titre, "detail": a.detail, "diff": a.diff, "conv": a.conv} for a in _m.Attente.EN_COURS.values()],
                                        "en_attente": sorted({a.conv for a in _m.Attente.EN_COURS.values() if a.conv} | set(_m.CHOIX_MEMOIRE))})
         if chemin == "/api/conseil":
             r = _m.reglages()
@@ -705,6 +705,15 @@ class Gestionnaire(BaseHTTPRequestHandler):
             return self._noeud_appairer(donnees)
         if self.path == "/api/noeud/chat":                     # ... et l'utilise pour faire tourner le moteur de cette machine
             return self._noeud_chat(donnees)
+        if self.path == "/api/noeud/partage":                  # ... ou pour LIRE ce que son propriétaire a accepté de partager (conversations, skills, mémoire) ; jamais écrire
+            if not _machines.noeud_jeton_valide(self.headers.get("X-Noeud")):
+                return self._envoyer(401, {"erreur": "machine non autorisée"})
+            try:
+                return self._envoyer(200, _machines.noeud_partager(str(donnees.get("genre", "")), donnees))
+            except PermissionError:
+                return self._envoyer(403, {"erreur": "ce nœud ne partage pas cela"})
+            except (ValueError, OSError) as e:
+                return self._envoyer(400, {"erreur": str(e)})
         if self.path == "/api/noeud/capacites":                # ... ou pour savoir ce qu'un de ses modèles sait faire (outils, images, réflexion)
             if not _machines.noeud_jeton_valide(self.headers.get("X-Noeud")):
                 return self._envoyer(401, {"erreur": "machine non autorisée"})
@@ -1273,6 +1282,16 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 _alimentation.installer_demarrage()
             else:
                 _alimentation.retirer_demarrage()
+        elif action == "droit":                                    # ce que CETTE machine partage avec les autres : depuis cette machine seulement
+            if not self._configurateur_strict():
+                raise ValueError(_t("Cela se règle depuis cette machine elle-même."))
+            _machines.noeud_droit(str(donnees.get("droit", "")), bool(donnees.get("actif")))
+        elif action == "import-conversation":
+            return _machines.importer_conversation(str(donnees.get("id", "")), str(donnees.get("conversation", "")))
+        elif action == "import-skills":
+            return _machines.importer_skills(str(donnees.get("id", "")))
+        elif action == "import-memoire":
+            return _machines.importer_memoire(str(donnees.get("id", "")))
         elif action == "noeud-code":
             return _machines.noeud_nouveau_code()
         elif action == "noeud-revoquer":

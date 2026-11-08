@@ -2,6 +2,17 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## Conversations, skills et mémoire partagés entre machines ; modèles llama.cpp sous Docker
+
+- **Les conversations des machines appairées apparaissent dans ta liste, en jaune** (comme leurs modèles) : un clic en fait une **copie** ici, que tu continues avec les skills, la mémoire et les modèles de CETTE machine ; la copie garde son origine (🖥) et se met à jour si l'original a avancé et que tu ne l'as pas continuée ici (sinon elle est gardée telle quelle, jamais écrasée). Les images et fichiers joints restent sur l'autre machine.
+- **Les skills et la mémoire se cumulent** : « Importer ses skills » ajoute ceux qui te manquent (jamais d'écrasement d'un skill qui existe ici) ; « Importer sa mémoire » ajoute les notes que tu n'as pas sous un titre « Depuis <machine> » (le profil n'est copié que s'il est vide ici).
+- **Rien n'est partagé sans l'accord du propriétaire de la machine prêtée** : sur elle, Réglages > Machines > « Partager avec les machines appairées » (mes conversations, mes skills, ma mémoire), décoché par défaut, lecture seule, journalisé. Le jeton d'appairage ne permet toujours pas d'écrire chez elle.
+- **Sous Docker, un modèle téléchargé pour llama.cpp n'apparaissait jamais** dans la liste (la lecture de la bibliothèque de Lutin était coupée avec celle d'Ollama) : il est maintenant listé, et peut être supprimé.
+- **Interface** : Santé rassemble en une carte les disques qui sont le même disque et laisse de l'air entre ses sections ; Réglages s'ouvre plus court (« Dossiers et données » et « Conversation » repliés, l'état choisi ensuite est mémorisé).
+- **À savoir** : le partage a été testé avec de faux nœuds ; essayé en vrai entre deux machines, il ne l'a pas encore été.
+
+**English.** Conversations of paired machines appear in your list in yellow (one click makes a local copy to continue, never overwriting a copy you continued); skills and memory can be imported and accumulate without overwriting; nothing is shared unless the lent machine's owner ticks it (read-only, off by default); under Docker a model downloaded for llama.cpp now shows up in the list.
+
 ## Routeur de modèles, observatoire, laboratoire
 
 - **Choix automatique du modèle** (Réglages > Conversation, désactivé par défaut) : Lutin range la demande d'après des signaux objectifs, sans appeler de modèle donc sans délai : code → un modèle « code » installé ; question qui demande de réfléchir → le plus gros modèle qui sait réfléchir et qui tient sur la machine (ou sur une machine appairée qui répond) ; question courte → un petit modèle plus vif. Il ne change de modèle que pour CETTE demande, le dit dans la conversation, ne propose jamais un modèle « trop gros » ni un changement sans gain net, et n'agit jamais pendant une mission. **Reprise** : si le modèle n'écrit rien ou tourne en rond, un essai avec un modèle plus gros.

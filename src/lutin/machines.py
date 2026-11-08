@@ -248,9 +248,64 @@ def noeud_autoriser_extinction(autoriser):
     return noeud_vue()
 
 
+DROITS = ("conversations", "skills", "memoire")          # ce qu'une machine appairée peut LIRE si le propriétaire de celle-ci l'a coché (jamais écrire)
+PARTAGE_MAX_OCTETS = 4_000_000
+
+
+def noeud_droit(droit, actif):
+    """Le propriétaire de CE nœud autorise (ou non) les machines appairées à lire ses conversations, ses skills ou sa mémoire. Décoché par défaut ; journalisé."""
+    if droit not in DROITS:
+        raise ValueError(_t("Droit inconnu."))
+    with VERROU:
+        n = noeud()
+        n.setdefault("droits", {})[droit] = bool(actif)
+        _ecrire("noeud.json", n)
+    journaliser("partage de {} avec les machines appairées : {}".format(droit, "autorisé" if actif else "interdit"))
+    return noeud_vue()
+
+
+def noeud_droits():
+    d = noeud().get("droits") or {}
+    return {k: bool(d.get(k)) for k in DROITS}
+
+
+def _conversation_partageable(ident):
+    """Une conversation de ce nœud prête à être copiée ailleurs : sans images ni fichiers joints (ils restent ici), taille bornée."""
+    from . import moteur as _m
+    c = _m.conv_lire(ident)
+    messages = []
+    for m in c.get("messages", []):
+        if isinstance(m, dict):
+            messages.append({k: v for k, v in m.items() if k not in ("images", "medias", "medias_fichiers", "fichiers_joints", "pieces")})
+    sortie = {"id": c["id"], "titre": c.get("titre", ""), "date": c.get("date", ""), "maj": c.get("maj", c.get("date", "")), "resume": c.get("resume", ""), "messages": messages}
+    if len(json.dumps(sortie, ensure_ascii=False)) > PARTAGE_MAX_OCTETS:
+        raise ValueError(_t("Cette conversation est trop volumineuse pour être copiée."))
+    return sortie
+
+
+def noeud_partager(genre, corps):
+    """Ce que ce nœud donne à lire à une machine appairée. PermissionError si le propriétaire ne l'a pas autorisé. genre : conversations, conversation, skills, skill, memoire."""
+    from . import moteur as _m
+    droit = {"conversations": "conversations", "conversation": "conversations", "skills": "skills", "skill": "skills", "memoire": "memoire"}.get(genre)
+    if droit is None:
+        raise ValueError(_t("Demande inconnue."))
+    if not noeud_droits()[droit]:
+        raise PermissionError(droit)
+    if genre == "conversations":
+        return {"conversations": [{"id": c["id"], "titre": c.get("titre", ""), "maj": c.get("maj", ""), "messages": c.get("messages", 0)} for c in _m.conv_liste() if not c.get("origine")][:300]}
+    if genre == "conversation":
+        return {"conversation": _conversation_partageable(str(corps.get("id", "")))}
+    if genre == "skills":
+        return {"skills": [{"nom": nom, "titre": titre} for nom, titre in _m.lister_skills()][:300]}
+    if genre == "skill":
+        nom = str(corps.get("nom", ""))
+        return {"nom": nom, "texte": _m.lire_skill(nom)}
+    return {"memoire": {nom: _m.lire_memoire(nom) for nom in ("CONTEXTE.md", "MEMOIRE.md")}}
+
+
 def noeud_vue():
     n = noeud()
-    return {"actif": n["actif"], "id": n["id"], "extinction": bool(n.get("extinction")), "extinction_en_attente": alimentation.extinction_en_attente(),
+    return {"actif": n["actif"], "id": n["id"], "droits": noeud_droits(), "extinction": bool(n.get("extinction")), "extinction_en_attente": alimentation.extinction_en_attente(),
             "autorisees": [{"nom": j["nom"], "date": j["date"]} for j in n["jetons"]]}
 
 
@@ -264,7 +319,7 @@ def noeud_charge(locale_occupee, distantes):
 
 def noeud_etat(moteur, modeles, ip_locale="", charge=None):
     """Ce que le nœud répond à `GET /api/noeud/etat` : de quoi savoir s'il est joignable et si son moteur peut faire tourner le modèle voulu, plus son adresse MAC, son aptitude au réveil et son démarrage automatique."""
-    return dict(noeud_infos(ip_locale), id=noeud()["id"], moteur=moteur.id, moteur_nom=moteur.nom, actif=bool(modeles.get("actif")), modeles=sorted(modeles.get("installes", []))[:500], charge=charge)
+    return dict(noeud_infos(ip_locale), id=noeud()["id"], moteur=moteur.id, moteur_nom=moteur.nom, actif=bool(modeles.get("actif")), modeles=sorted(modeles.get("installes", []))[:500], charge=charge, droits=noeud_droits())
 
 
 def noeud_capacites(moteur, modele):
@@ -452,12 +507,13 @@ def sonder(m, modele="", ouvrir=None, maintenant=time.monotonic, force=False):
         gardee = SONDES.get(m["id"])
         if gardee and not force and maintenant() - gardee[0] < VALIDITE_SONDE_S and gardee[2] == modele:
             return gardee[1]
-    charge = None
+    charge, droits = None, {}
     try:
         rep = _json(m, "/api/noeud/etat", ouvrir=ouvrir)
         if rep.get("id") == m["id"]:
             retenir_infos(m, rep)
             charge = rep.get("charge") if isinstance(rep.get("charge"), dict) else None
+            droits = {k: bool((rep.get("droits") or {}).get(k)) for k in DROITS}
         if rep.get("id") != m["id"]:
             r = {"etat": "injoignable", "detail": _t("Ce n'est plus la même machine à cette adresse : rien ne lui est envoyé."), "modeles": []}
         elif not rep.get("actif"):
@@ -470,7 +526,7 @@ def sonder(m, modele="", ouvrir=None, maintenant=time.monotonic, force=False):
         r = {"etat": "injoignable", "detail": _t("La machine refuse ce Lutin (erreur {}) : l'autorisation a peut-être été retirée.").format(e.code), "modeles": []}
     except (urllib.error.URLError, OSError, ValueError):
         r = {"etat": "injoignable", "detail": _t("Pas de réponse (éteinte, hors réseau ou Lutin arrêté)."), "modeles": []}
-    r = _avec_reveil(m, dict(r, charge=charge), maintenant)
+    r = _avec_reveil(m, dict(r, charge=charge, droits=droits), maintenant)
     _noter(m, r["etat"], maintenant, r, modele)
     return r
 
@@ -538,6 +594,184 @@ def signaler_panne(m, modele=""):
 def etats(modele="", ouvrir=None):
     """Pour la page Machines : chaque machine avec son état."""
     return [dict(vue(m), **sonder(m, modele, ouvrir)) for m in lire()]
+
+
+# --------------------------------------------------------------------------- ce que les autres machines partagent : conversations, skills, mémoire (copies locales, à ta demande)
+
+CONVERSATIONS = {"t": 0.0, "v": [], "en_cours": False}
+
+
+def demander_partage(m, genre, **corps):
+    """Lit chez l'autre machine ce qu'elle partage. ValueError avec la marche à suivre si son propriétaire ne l'a pas autorisé."""
+    try:
+        return _json(m, "/api/noeud/partage", dict(corps, genre=genre), delai=20)
+    except urllib.error.HTTPError as e:
+        if e.code == 403:
+            raise ValueError(_t("La machine « {} » ne partage pas cela : sur elle, Réglages > Machines > « Partager avec les machines appairées », puis coche la case voulue.").format(m.get("nom", "?"))) from None
+        raise ValueError(_t("Cette machine a répondu une erreur ({}).").format(e.code)) from None
+    except (urllib.error.URLError, OSError, ValueError):
+        raise ValueError(_t("Impossible de joindre cette machine : vérifie l'adresse et qu'elle est allumée.")) from None
+
+
+def _rafraichir_conversations():
+    liste = []
+    for m in lire():
+        try:
+            if not sonder(m, "").get("droits", {}).get("conversations"):
+                continue
+            for c in demander_partage(m, "conversations").get("conversations", []):
+                if isinstance(c, dict) and RE_IDENT_CONV.match(str(c.get("id", ""))):
+                    liste.append({"machine": m["id"], "machine_nom": m["nom"], "id": c["id"], "titre": str(c.get("titre", ""))[:120], "maj": str(c.get("maj", ""))[:30], "messages": int(c.get("messages") or 0)})
+        except (ValueError, TypeError):
+            continue
+    with VERROU:
+        CONVERSATIONS.update(t=time.monotonic(), v=liste, en_cours=False)
+
+
+RE_IDENT_CONV = re.compile(r"^[0-9a-f]{8}$")
+
+
+def conversations_distantes(attente=False):
+    """Les conversations des machines appairées qui les partagent. Rendues tout de suite depuis la mémoire (la liste ne doit jamais attendre une machine éteinte) ; mise à jour en arrière-plan toutes les 30 s."""
+    if not lire():
+        return []
+    with VERROU:
+        vieux = time.monotonic() - CONVERSATIONS["t"] > 30
+        lancer = vieux and not CONVERSATIONS["en_cours"]
+        if lancer:
+            CONVERSATIONS["en_cours"] = True
+    if lancer:
+        if attente:
+            _rafraichir_conversations()
+        else:
+            def travail():
+                try:
+                    _rafraichir_conversations()
+                except Exception:  # noqa: BLE001
+                    with VERROU:
+                        CONVERSATIONS["en_cours"] = False
+            threading.Thread(target=travail, daemon=True, name="machines-conversations").start()
+    ids = {m["id"] for m in lire()}
+    importees = _registre_import("conversations_importees.json")
+    sortie = []
+    for c in CONVERSATIONS["v"]:
+        if c["machine"] not in ids:
+            continue
+        deja = importees.get("{}:{}".format(c["machine"], c["id"]))
+        deja = deja if isinstance(deja, dict) else {"id": deja} if deja else None
+        sortie.append(dict(c, locale=deja["id"] if deja else "", plus_recente=bool(deja and str(c.get("maj", "")) > str(deja.get("maj", "")))))
+    return sortie
+
+
+def _registre_import(nom):
+    return _lire(nom, {})
+
+
+def importer_conversation(ident, id_distant):
+    """Copie une conversation d'une machine appairée dans CELLE-CI, pour la continuer ici (avec ses skills, sa mémoire et ses modèles). La copie garde son origine ; l'original n'est jamais touché.
+    Déjà importée : mise à jour si l'original a avancé et que la copie n'a pas bougé ; sinon la copie locale est gardée. {id, etat : nouvelle | a_jour | mise_a_jour | divergente}."""
+    from . import moteur as _m
+    m = trouver(ident)
+    if m is None:
+        raise ValueError(_t("Machine inconnue."))
+    if not RE_IDENT_CONV.match(str(id_distant)):
+        raise ValueError(_t("Conversation inconnue."))
+    distante = demander_partage(m, "conversation", id=id_distant).get("conversation")
+    if not isinstance(distante, dict) or not isinstance(distante.get("messages"), list):
+        raise ValueError(_t("Réponse inattendue de la machine."))
+    cle = "{}:{}".format(ident, id_distant)
+    registre = _registre_import("conversations_importees.json")
+    entree = registre.get(cle)
+    local_id = entree.get("id") if isinstance(entree, dict) else entree
+    if local_id:
+        try:
+            locale = _m.conv_lire(local_id)
+        except ValueError:
+            locale, local_id = None, None
+        if locale is not None:
+            origine = locale.get("origine") or {}
+            if str(distante.get("maj", "")) <= str(origine.get("maj_distante", "")):
+                return {"id": local_id, "etat": "a_jour"}
+            if len(locale.get("messages", [])) != int(origine.get("messages_importes") or -1):
+                return {"id": local_id, "etat": "divergente"}          # elle a continué ici depuis la copie : on ne l'écrase pas
+            locale["messages"], locale["resume"] = distante["messages"], distante.get("resume", "")
+            locale["origine"] = dict(origine, maj_distante=str(distante.get("maj", "")), messages_importes=len(distante["messages"]))
+            _m.conv_ecrire(locale)
+            registre[cle] = {"id": local_id, "maj": str(distante.get("maj", "")), "n": len(distante["messages"])}
+            _ecrire("conversations_importees.json", registre)
+            return {"id": local_id, "etat": "mise_a_jour"}
+    nouvelle = _m.conv_nouvelle()
+    nouvelle.update(titre=str(distante.get("titre", ""))[:120] or _t("Conversation importée"), date=str(distante.get("date", "")) or nouvelle["date"], messages=distante["messages"], resume=distante.get("resume", ""),
+                    origine={"machine": m["nom"], "machine_id": ident, "id": id_distant, "maj_distante": str(distante.get("maj", "")), "messages_importes": len(distante["messages"])})
+    _m.conv_ecrire(nouvelle)
+    registre[cle] = {"id": nouvelle["id"], "maj": str(distante.get("maj", "")), "n": len(distante["messages"])}
+    _ecrire("conversations_importees.json", registre)
+    journaliser("conversation importée de {} : {}".format(m["nom"], nouvelle["titre"]))
+    return {"id": nouvelle["id"], "etat": "nouvelle"}
+
+
+def importer_skills(ident):
+    """Ajoute à CETTE machine les skills de l'autre qui n'y sont pas (les deux jeux se cumulent). Un skill qui existe déjà ici n'est jamais écrasé, sauf s'il vient de cette machine et n'a pas été modifié depuis.
+    {ajoutes, mis_a_jour, deja_la}."""
+    import hashlib
+    from . import moteur as _m
+    m = trouver(ident)
+    if m is None:
+        raise ValueError(_t("Machine inconnue."))
+    origines = _registre_import("skills_origine.json")
+    ajoutes = mis = deja = 0
+    for s in demander_partage(m, "skills").get("skills", []):
+        nom = str((s or {}).get("nom", ""))
+        try:
+            texte = str(demander_partage(m, "skill", nom=nom).get("texte", ""))
+            empreinte = hashlib.sha256(texte.encode("utf-8")).hexdigest()
+            existe = True
+            try:
+                local = _m.lire_skill(nom)
+            except OSError:
+                existe, local = False, ""
+            if not existe:
+                _m.ecrire_skill(nom, texte)
+                origines[nom] = {"machine": m["nom"], "empreinte": empreinte}
+                ajoutes += 1
+            elif (origines.get(nom) or {}).get("machine") == m["nom"] and hashlib.sha256(local.encode("utf-8")).hexdigest() == origines[nom].get("empreinte") and empreinte != origines[nom].get("empreinte"):
+                _m.ecrire_skill(nom, texte)
+                origines[nom]["empreinte"] = empreinte
+                mis += 1
+            else:
+                deja += 1
+        except (ValueError, OSError):
+            deja += 1
+    _ecrire("skills_origine.json", origines)
+    journaliser("skills importés de {} : {} ajoutés, {} mis à jour, {} déjà là".format(m["nom"], ajoutes, mis, deja))
+    return {"ajoutes": ajoutes, "mis_a_jour": mis, "deja_la": deja}
+
+
+def importer_memoire(ident):
+    """Ajoute à la mémoire de CETTE machine les notes de l'autre qu'elle n'a pas (sous un titre « Depuis <machine> »). Le profil (CONTEXTE.md) n'est copié que s'il est vide ici. {notes_ajoutees, profil_copie}."""
+    from . import moteur as _m
+    m = trouver(ident)
+    if m is None:
+        raise ValueError(_t("Machine inconnue."))
+    distante = demander_partage(m, "memoire").get("memoire") or {}
+    local = _m.lire_memoire("MEMOIRE.md")
+    connues = {re.sub(r"\W+", " ", ligne).strip().lower() for ligne in local.splitlines()}
+    neuves = []
+    for ligne in str(distante.get("MEMOIRE.md", "")).splitlines():
+        brut = ligne.strip()
+        cle = re.sub(r"\W+", " ", brut).strip().lower()
+        if brut and not brut.startswith("#") and cle and cle not in connues:
+            neuves.append(brut)
+            connues.add(cle)
+    if neuves:
+        bloc = "\n\n## {}\n{}\n".format(_t("Depuis {} ({})").format(m["nom"], time.strftime("%Y-%m-%d")), "\n".join(neuves))
+        _m.ecrire_memoire("MEMOIRE.md", (local.rstrip() + bloc)[-59000:])
+    profil = False
+    if str(distante.get("CONTEXTE.md", "")).strip() and not _m.lire_memoire("CONTEXTE.md").strip():
+        _m.ecrire_memoire("CONTEXTE.md", str(distante["CONTEXTE.md"])[:59000])
+        profil = True
+    journaliser("mémoire importée de {} : {} note(s)".format(m["nom"], len(neuves)))
+    return {"notes_ajoutees": len(neuves), "profil_copie": profil}
 
 
 # --------------------------------------------------------------------------- les modèles des autres machines (pour les choisir comme les siens)
