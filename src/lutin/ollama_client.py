@@ -6,6 +6,7 @@ import json
 import os
 import shutil
 import subprocess
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -139,7 +140,7 @@ def demarrer_serveur(exe, variables, systeme, lanceur=subprocess.Popen):
     return lanceur([exe, "serve"], **options)
 
 
-def telecharger_fichier(url, destination, progression=None, ouvrir=urllib.request.urlopen, taille_min=50_000_000):
+def telecharger_fichier(url, destination, progression=None, ouvrir=urllib.request.urlopen, taille_min=50_000_000, pauses=(3, 8)):
     """Télécharge `url` vers `destination` (fichier .part renommé à la fin, reprise si interrompu). HTTPS obligatoire."""
     if not url.startswith("https://"):
         raise ErreurOllama(_t("téléchargement refusé : adresse non sécurisée"))
@@ -147,9 +148,10 @@ def telecharger_fichier(url, destination, progression=None, ouvrir=urllib.reques
     destination = Path(destination)
     destination.parent.mkdir(parents=True, exist_ok=True)
     part = destination.with_suffix(destination.suffix + ".part")
-    deja = part.stat().st_size if part.is_file() else 0
-    req = urllib.request.Request(url, headers={"Range": "bytes={}-".format(deja)} if deja else {})
-    try:
+
+    def une_fois():
+        deja = part.stat().st_size if part.is_file() else 0          # chaque essai reprend là où le précédent s'est arrêté
+        req = urllib.request.Request(url, headers={"Range": "bytes={}-".format(deja)} if deja else {})
         with ouvrir(req, timeout=60) as r:
             reprise = deja and getattr(r, "status", 200) == 206
             total = int(r.headers.get("Content-Length") or 0) + (deja if reprise else 0)
@@ -163,8 +165,14 @@ def telecharger_fichier(url, destination, progression=None, ouvrir=urllib.reques
                     fait += len(bloc)
                     if progression:
                         progression(_t("téléchargement"), fait, total)
-    except (OSError, urllib.error.URLError) as e:
-        raise ErreurOllama(_t("téléchargement interrompu (relance la commande : il reprend où il s'est arrêté) : {}").format(e)) from e
+    for pause in (*pauses, None):          # GitHub coupe ou tarde parfois : trois essais (3 s, 8 s) avant de demander à l'utilisateur de relancer
+        try:
+            une_fois()
+            break
+        except (OSError, urllib.error.URLError) as e:
+            if pause is None:
+                raise ErreurOllama(_t("téléchargement interrompu (relance la commande : il reprend où il s'est arrêté) : {}").format(e)) from e
+            time.sleep(pause)
     if part.stat().st_size < taille_min:
         part.unlink(missing_ok=True)
         raise ErreurOllama(_t("fichier téléchargé trop petit : abandon"))

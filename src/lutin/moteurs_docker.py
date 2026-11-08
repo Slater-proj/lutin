@@ -6,7 +6,6 @@ Avant, l'image contenait Ollama (plus d'1,5 Go) : chaque mise à jour de l'image
   - les modèles restent dans `/models`.
 Ce module ne contient que ce qui est propre à Docker pour Ollama (llama.cpp se gère dans moteur_llamacpp.py, avec le même dossier). Aucune dépendance."""
 import hashlib
-import json
 import os
 import platform
 import shutil

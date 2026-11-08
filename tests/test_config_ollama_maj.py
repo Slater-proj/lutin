@@ -233,6 +233,25 @@ class InstallationOllama(unittest.TestCase):
             self.assertEqual(requetes, ["bytes=40-"])
             self.assertEqual(dest2.read_bytes(), b"a" * 40 + b"b" * 60)
 
+    def test_une_coupure_est_reprise_toute_seule_puis_abandonnee_apres_trois_essais(self):
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as t:
+            dest = Path(t) / "z.exe"
+            essais = []
+
+            def coupe_puis_marche(req, timeout):
+                essais.append(req.headers.get("Range"))
+                if len(essais) < 3:
+                    raise OSError("coupure")
+                return Reponse(b"c" * 60, 200)
+            with mock.patch.object(ollama_client.time, "sleep") as dormir:
+                ollama_client.telecharger_fichier("https://exemple.org/z.exe", dest, ouvrir=coupe_puis_marche, taille_min=10)
+            self.assertEqual(len(essais), 3)
+            self.assertEqual([c.args[0] for c in dormir.call_args_list], [3, 8])
+            self.assertEqual(dest.read_bytes(), b"c" * 60)
+            with mock.patch.object(ollama_client.time, "sleep"), self.assertRaises(ollama_client.ErreurOllama):
+                ollama_client.telecharger_fichier("https://exemple.org/w.exe", Path(t) / "w.exe", ouvrir=lambda req, timeout: (_ for _ in ()).throw(OSError("hors ligne")), taille_min=10)
+
     def test_signature(self):
         ok, _ = ollama_client.verifier_signature_windows("x.exe", lambda cmd, delai=0: "Valid|CN=Ollama Inc, O=Ollama")
         self.assertTrue(ok)
