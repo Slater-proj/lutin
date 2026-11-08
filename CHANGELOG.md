@@ -2,6 +2,16 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## Fiabilité des informations : recherches nettoyées, journal de sortie, /web, Vérifier
+
+- **Les recherches web sont nettoyées avant de partir chez un service extérieur** : adresses e-mail, téléphones, cartes bancaires (clé de Luhn), IBAN, clés et jetons, adresses du réseau local, chemins avec un nom d'utilisateur sont retirés, sans appeler de modèle (aucun délai) ; Lutin dit quelles catégories ont été retirées. Une requête faite uniquement de données personnelles n'est envoyée nulle part. Un SearXNG chez toi reçoit la requête telle quelle.
+- **Santé > « Ce qui est sorti de cette machine »** : les dernières recherches envoyées à un service extérieur (heure, service, requête telle qu'elle est partie), avec un bouton pour vider.
+- **`/web question`** : les résultats bruts d'une recherche (titre, site, date, extrait), à cocher ; « Demander au modèle de les lire » prépare le message. Rien n'entre dans la conversation tant que tu n'envoies pas.
+- **Bouton « 🔎 Vérifier »** sous chaque réponse : cherche la question posée et montre les sources et leurs dates, pour juger la réponse.
+- **Audit** : documentation Docker mise à jour (l'image ne contient plus Ollama ; `:slim` et `:rocm` sont la même image).
+
+**English.** Web searches are cleaned of personal data before reaching an outside service (no model call, no delay) and listed in Health > "What left this machine"; `/web question` shows raw results to tick before the model reads them; a "Check" button under each answer shows the sources for the question asked; Docker docs updated.
+
 ## Cohérence entre les moteurs
 
 - **Un seul remplacement de dossier robuste pour tous** : le correctif « Accès refusé » (réessais, arrêt des programmes restés ouverts, copie en dernier recours) n'était que dans llama.cpp ; il vit maintenant dans un module commun et **Colibri** s'en sert aussi.

@@ -35,7 +35,7 @@ Ne lance AUCUNE commande qui modifie quelque chose (pas de `up`, `down`, `rm`, `
 
 # CE QU'IL FAUT SAVOIR SUR LUTIN (tout est exact ; n'invente rien d'autre)
 
-- Image : `ghcr.io/slater-proj/lutin:latest` = Lutin + Ollama dans UN conteneur (c'est celle qu'il faut). Une version précise : `ghcr.io/slater-proj/lutin:X.Y.Z`. L'étiquette `:slim` = Lutin sans Ollama (inutile ici).
+- Image : `ghcr.io/slater-proj/lutin:latest` = Lutin seul, léger (c'est celle qu'il faut ; le moteur, par exemple Ollama, s'installe depuis la page dans le volume `/engines`). Une version précise : `ghcr.io/slater-proj/lutin:X.Y.Z`. Les étiquettes `:slim` et `:rocm` sont la même image.
 - Port dans le conteneur : **8777** (HTTP). Ne pas le publier si le reverse proxy est dans Docker : il joint `http://lutin:8777` par un réseau Docker commun. Si le reverse proxy tourne sur l'hôte : publier `127.0.0.1:8777:8777` seulement.
 - Ollama écoute à l'intérieur du conteneur (127.0.0.1:11434) : **ne jamais publier le port 11434**.
 - Le conteneur tourne sous l'utilisateur **1000:1000** : tout dossier de l'hôte monté en écriture doit appartenir à 1000:1000 (`chown 1000:1000`), sinon Lutin refuse de démarrer avec un message clair.

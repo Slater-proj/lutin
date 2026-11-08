@@ -10,12 +10,12 @@ Une image prête à l'emploi : **Lutin et Ollama dans le même conteneur**. Tu l
 
 > **Honnêteté.** Les images sont construites et démarrées par la CI (page de connexion, code PIN) et publiées sur `ghcr.io`. Elles n'ont **jamais été lancées avec une vraie carte NVIDIA** ni sur un NAS : si quelque chose ne marche pas, ouvre un [bug](https://github.com/Slater-proj/lutin/issues/new/choose) avec `docker compose logs`.
 
-## Deux images
+## Une seule image, légère
 
 | Étiquette | Contenu | Taille | Pour |
 |---|---|---|---|
-| `ghcr.io/slater-proj/lutin:latest` (ou `:X.Y.Z`) | **Lutin + Ollama** | plusieurs Go (les bibliothèques d'Ollama) + les modèles | **la plupart des gens** : rien d'autre à installer |
-| `ghcr.io/slater-proj/lutin:slim` (ou `:X.Y.Z-slim`) | Lutin seul | quelques centaines de Mo | si Ollama tourne déjà ailleurs (machine hôte, autre conteneur) : [docker-compose.slim.yml](../docker-compose.slim.yml) |
+| `ghcr.io/slater-proj/lutin:latest` (ou `:X.Y.Z`) | **Lutin seul** | quelques centaines de Mo | tout le monde : au premier lancement, la page installe le moteur que tu choisis (Ollama, llama.cpp…) dans le volume `/engines`, qu'une mise à jour de l'image n'efface pas et ne retélécharge pas |
+| `:slim`, `:X.Y.Z-slim`, `:rocm`, `:X.Y.Z-rocm` | **la même image** | idem | noms gardés pour que les compose existants continuent de marcher (avec une carte AMD, Lutin choisit tout seul la version ROCm d'Ollama en l'installant) |
 
 ## Prérequis
 

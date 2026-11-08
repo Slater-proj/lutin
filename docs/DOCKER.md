@@ -10,12 +10,12 @@ A ready-to-use image: **Lutin and Ollama in the same container**. You start it, 
 
 > **Honesty.** The images are built and started by the CI (login page, PIN code) and published on `ghcr.io`. They have **never been run with a real NVIDIA card** nor on a NAS: if something does not work, open a [bug](https://github.com/Slater-proj/lutin/issues/new/choose) with `docker compose logs`.
 
-## Two images
+## One light image
 
 | Tag | Content | Size | For |
 |---|---|---|---|
-| `ghcr.io/slater-proj/lutin:latest` (or `:X.Y.Z`) | **Lutin + Ollama** | several GB (Ollama's libraries) + the models | **most people**: nothing else to install |
-| `ghcr.io/slater-proj/lutin:slim` (or `:X.Y.Z-slim`) | Lutin alone | a few hundred MB | if Ollama already runs elsewhere (host, another container): [docker-compose.slim.yml](../docker-compose.slim.yml) |
+| `ghcr.io/slater-proj/lutin:latest` (or `:X.Y.Z`) | **Lutin alone** | a few hundred MB | everyone: on first launch the page installs the engine you pick (Ollama, llama.cpp…) into the `/engines` volume, so image updates never erase it and never download it again |
+| `:slim`, `:X.Y.Z-slim`, `:rocm`, `:X.Y.Z-rocm` | **the same image** | same | names kept so existing compose files keep working (for an AMD card, Lutin picks the ROCm build of Ollama by itself when it installs it) |
 
 ## Requirements
 

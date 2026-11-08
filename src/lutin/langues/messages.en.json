@@ -1922,5 +1922,13 @@
 "Le modèle « {} » n'existe que sur la machine « {} », qui ne répond pas pour l'instant (éteinte, hors réseau ou Lutin arrêté). Réveille-la dans Réglages > Machines, ou choisis un modèle de cette machine-ci.": "The model \"{}\" only exists on the machine \"{}\", which is not answering right now (off, offline or Lutin stopped). Wake it in Settings > Machines, or pick a model from this machine.",
 "La clé {} n'est pas configurée.": "The {} key is not set.",
 "{} n'a pas répondu en JSON.": "{} did not answer in JSON.",
-"Clé {} invalide (des lettres, des chiffres, - _ et . seulement).": "Invalid {} key (letters, digits, - _ and . only)."
+"Clé {} invalide (des lettres, des chiffres, - _ et . seulement).": "Invalid {} key (letters, digits, - _ and . only).",
+"Écris quelques mots à chercher, par exemple /web prix du kWh en France.": "Write a few words to search for, for example /web price of a kWh in France.",
+"requête vide une fois les données personnelles retirées": "empty query once personal data is removed",
+"adresse e-mail": "e-mail address",
+"clé ou jeton secret": "secret key or token",
+"chemin contenant un nom d'utilisateur": "path containing a user name",
+"numéro de carte bancaire": "bank card number",
+"numéro de téléphone": "phone number",
+"adresse du réseau local": "local network address"
 }

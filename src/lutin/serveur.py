@@ -12,6 +12,8 @@ from . import catalogue_moteurs as _catalogue_moteurs
 from . import moteur_llamacpp as _llamacpp
 from . import moteurs as _moteurs
 from . import recherche as _recherche
+from . import sorties as _sorties
+from . import web as _web
 from . import moteurs_maj as _moteurs_maj
 from . import mcp as _mcp
 from . import calibrage as _calibrage
@@ -541,6 +543,8 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 return self._envoyer(400, {"erreur": _t("Fenêtre de conversation invalide.")})
             e = self._estimation(modele, max(512, min(ctx, 1048576)), _adequation.profil_pret())
             return self._envoyer(200 if e else 404, e or {"erreur": _t("Ce modèle n'est pas au catalogue : pas d'estimation possible.")})
+        if chemin == "/api/sorties":                              # Santé : ce qui est sorti de la machine (recherches envoyées à un service extérieur)
+            return self._envoyer(200, {"entrees": _sorties.lire(60), "modifiable": self._configurateur()})
         if chemin == "/api/web-recherche":                        # Réglages > Recherche web : ce qui est réglé (jamais la clé) et l'ordre des moteurs
             return self._envoyer(200, dict(_recherche.vue(), moteurs=_m.etat_moteurs_recherche(), modifiable=self._configurateur_strict()))
         if chemin == "/api/machines":                             # Réglages > Machines : le nœud de cette machine, les machines appairées et leur état
@@ -1046,6 +1050,20 @@ class Gestionnaire(BaseHTTPRequestHandler):
                     return self._envoyer(200, self._machines(self.path[len("/api/machines-"):], donnees))
                 except ValueError as e:
                     return self._envoyer(400, {"erreur": str(e)})
+            if self.path == "/api/sorties-vider":
+                if not self._configurateur():
+                    return self._envoyer(403, {"erreur": _t("Cela se règle depuis cette machine elle-même.")})
+                _sorties.vider()
+                return self._envoyer(200, {"ok": True})
+            if self.path == "/api/web-apercu":                          # /web : les résultats BRUTS d'une recherche, sans modèle ; la requête est nettoyée comme pour le modèle
+                requete = str(donnees.get("q") or "").strip()[:300]
+                if len(requete) < 2:
+                    return self._envoyer(400, {"erreur": _t("Écris quelques mots à chercher, par exemple /web prix du kWh en France.")})
+                propre, retire = _sorties.nettoyer_requete(requete)
+                trouves, raisons = _web.chercher_resultats(propre or requete, 8) if propre else ([], [_t("requête vide une fois les données personnelles retirées")])
+                return self._envoyer(200, {"requete": propre, "retire": retire, "raisons": raisons,
+                                           "resultats": [{"titre": x.get("titre", ""), "url": x.get("url", ""), "extrait": str(x.get("extrait", ""))[:300], "date": x.get("date", ""), "source": x.get("source", ""),
+                                                          "domaine": _recherche.domaine(x.get("url", ""))} for x in trouves]})
             if self.path == "/api/moteurs-dossier":                    # le dossier où tous les moteurs s'installent (comme le dossier des modèles)
                 if not self._configurateur():
                     return self._envoyer(403, {"erreur": _t("Installer, démarrer ou régler un moteur se fait depuis cette machine (niveau « cette machine seulement » ou navigateur de cette machine).")})

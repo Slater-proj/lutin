@@ -1018,6 +1018,11 @@ body[data-moteur="openai"] .biblio { display:none !important; }
       const idxIA = indicesIA[k - decalIA]; if (idxIA !== undefined) { m.dataset.idx = idxIA; barre.appendChild(boutonEpingle(m, idxIA)); }
       cop.addEventListener('click', async () => { cop.textContent = (await copier(m.querySelector('.corps')._brut)) ? T('✔ Copié') : T('Échec'); setTimeout(() => cop.textContent = T('📋 Copier'), 1500); });
       barre.appendChild(cop);
+      if (idxIA !== undefined) {
+        const ver = el('button', '', T('🔎 Vérifier')); ver.title = T('Cherche sur le web la question posée et montre les sources, pour juger la réponse (rien n\'est envoyé au modèle)');
+        ver.addEventListener('click', () => { let i = idxIA; while (i > 0 && CONV.messages[i].role !== 'user') i--; const q = CONV.messages[i] && CONV.messages[i].role === 'user' ? String(CONV.messages[i].content || '') : ''; apercuWeb(q.slice(0, 200)); });
+        barre.appendChild(ver);
+      }
       if (k === reponses.length - 1 && indicesUser.length) {
         const reg = el('button', '', T('🔄 Régénérer')); reg.title = T('Refaire cette réponse (la réponse actuelle est remplacée)');
         reg.addEventListener('click', () => { if (EN_COURS) return; const i = indicesUser[indicesUser.length - 1]; EDIT_INDEX = i; $('saisie').value = CONV.messages[i].content; envoyer(); });
@@ -1939,6 +1944,37 @@ body[data-moteur="openai"] .biblio { display:none !important; }
   $('saisie').addEventListener('focus', () => setTimeout(() => { bas(); }, 350));          // le clavier du téléphone réduit la zone : on garde le bas de la discussion visible
   // --- commandes « / » : menu d'aide à la saisie (nom, argument, explication d'une ligne) ---
   const infoLocale = (texte, brut) => { const d = el('div', 'info', texte); if (brut) d.style.whiteSpace = 'pre-wrap'; fil().appendChild(d); bas(); };          // message local : n'entre jamais dans la conversation du modèle
+  // /web question : les résultats BRUTS d'une recherche, sans modèle (rien n'est écrit dans la conversation). Tu coches ceux qui comptent, puis « Demander au modèle de les lire » prépare le message.
+  const apercuWeb = async question => {
+    const q = (question || '').trim();
+    if (q.length < 2) { infoLocale(T('Écris quelques mots à chercher, par exemple /web prix du kWh en France.')); return; }
+    const attente = el('div', 'info', '🔎 ' + T('Recherche en cours…')); fil().appendChild(attente); bas();
+    let r; try { r = await api('/api/web-apercu', { q }); } catch (e) { attente.textContent = '⚠ ' + e.message; return; }
+    attente.remove();
+    const carte = el('div', 'info'); carte.style.cssText = 'display:block;white-space:normal';
+    carte.appendChild(el('b', '', '🔎 ' + T('Résultats pour « ') + r.requete + ' »'));
+    carte.appendChild(el('div', 'aide', T('Résultats bruts, rien n\'est envoyé au modèle. Vérifie les sources et les dates, coche ce qui compte.')));
+    if (r.retire && r.retire.length) carte.appendChild(el('div', 'aide', '🛡 ' + T('Pour ta vie privée, j\'ai retiré de la requête : ') + r.retire.join(', ') + '.'));
+    const cases = [];
+    r.resultats.forEach(x => {
+      const l = el('div'); l.style.margin = '6px 0';
+      const c = el('input'); c.type = 'checkbox'; c.checked = true; c.dataset.url = x.url; cases.push(c);
+      const a = el('a', '', x.titre || x.url); a.href = x.url; a.target = '_blank'; a.rel = 'noopener noreferrer';
+      l.append(c, document.createTextNode(' '), a, el('span', 'aide', ' · ' + x.domaine + (x.date ? ' · ' + x.date : '') + (x.source ? ' · ' + x.source : '')));
+      if (x.extrait) l.appendChild(el('div', 'aide', x.extrait));
+      carte.appendChild(l);
+    });
+    if (!r.resultats.length) carte.appendChild(el('div', 'erreur', T('Aucun résultat.') + ' ' + (r.raisons || []).join(' · ')));
+    else {
+      const b = el('button', 'principal', T('Demander au modèle de les lire'));
+      b.addEventListener('click', () => {
+        const urls = cases.filter(c => c.checked).map(c => c.dataset.url); if (!urls.length) return;
+        $('saisie').value = T('Lis ces pages puis réponds à : ') + r.requete + '\n' + urls.map(u => '- ' + u).join('\n'); $('saisie').focus();
+      });
+      carte.appendChild(b);
+    }
+    fil().appendChild(carte); bas();
+  };
   const ouvrirOnglet = p => document.querySelector('.onglets button[data-p="' + p + '"]').click();
   const bascule = async (idCase, arg, nom) => {
     const a = (arg || '').toLowerCase(), voulu = ['on', 'oui', '1', 'true', 'actif'].includes(a) ? true : ['off', 'non', '0', 'false'].includes(a) ? false : !$(idCase).checked;
@@ -1982,6 +2018,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
       const x = await api('/api/memoire-conversation', { conversation: CONV.id, mode: v }); CONV.memoire_longue = v; majJauge(CONV.id);
       infoLocale(T('Mémoire de cette conversation : ') + nom(x.mode) + (x.mode === 'fichier' ? T('. Elle prend jusqu\'à {} % du contexte à chaque réponse.').replace('{}', fichePart()) : T('. Le début sera résumé quand il le faudra.')));
     } },
+    { n: 'web', arg: T('question'), d: T('Montre les résultats bruts d\'une recherche web, à cocher avant de les donner au modèle'), f: arg => apercuWeb(arg) },
     { n: 'reflexion', arg: 'on|off', d: T('Active ou coupe la réflexion du modèle'), f: arg => bascule('cReflexion', arg, T('Réflexion')) },
     { n: 'web', arg: 'on|off', d: T('Autorise ou coupe la recherche sur internet'), f: arg => bascule('cWeb', arg, 'Web') },
     { n: 'fichiers', a: ['accord'], arg: 'on|off', d: T('Écritures de fichiers automatiques, pour cette conversation'), f: arg => bascule('cAuto', arg, T('Fichiers auto')) },
@@ -2412,6 +2449,17 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     const cartes = el('div'), autres = el('div');
     autres.appendChild(el('div', 'aide', T('Mesure des disques et du reste…')));
     z.append(cartes, autres);
+    const sorties = el('div'); z.appendChild(sorties);
+    const chargerSorties = async () => {
+      let r; try { r = await api('/api/sorties'); } catch (e) { return; }
+      sorties.textContent = '';
+      sorties.appendChild(el('h2', '', T('Ce qui est sorti de cette machine')));
+      sorties.appendChild(el('div', 'aide', T('Les recherches web envoyées à un service extérieur (jamais le contenu de tes conversations ni de tes fichiers). Les données personnelles sont retirées avant l\'envoi.')));
+      if (!r.entrees.length) sorties.appendChild(el('div', 'aide', T('Rien pour l\'instant.')));
+      r.entrees.slice(0, 15).forEach(e => sorties.appendChild(el('div', 'point', e.quand.slice(5, 16) + ' · ' + e.service + ' · « ' + e.requete + ' »' + (e.retire && e.retire.length ? ' · 🛡 ' + T('retiré : ') + e.retire.join(', ') : '') + (e.ok ? '' : ' · ⚠'))));
+      if (r.entrees.length && r.modifiable) { const v = el('button', '', T('Vider le journal')); v.addEventListener('click', async () => { await api('/api/sorties-vider', {}); chargerSorties(); }); sorties.appendChild(v); }
+    };
+    chargerSorties();
     const fmt = o => (o == null ? '?' : (o / 1073741824).toFixed(1).replace('.', ',') + ' ' + T('Go'));
     const sortie = el('div'); sortie.style.marginTop = '10px';
     const niveaux = {}; let derniere = null, enCours = false;

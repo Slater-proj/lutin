@@ -35,9 +35,9 @@ Run NO command that changes anything (no `up`, `down`, `rm`, `prune`, `chown`, `
 
 # WHAT YOU MUST KNOW ABOUT LUTIN (everything is exact; invent nothing else)
 
-- Image: `ghcr.io/slater-proj/lutin:latest` = Lutin + Ollama in ONE container (this is the one to use). A precise version: `ghcr.io/slater-proj/lutin:X.Y.Z`. The `:slim` tag = Lutin without Ollama (useless here).
+- Image: `ghcr.io/slater-proj/lutin:latest` = Lutin alone, light (this is the one to use; the engine, e.g. Ollama, is installed from the page into the `/engines` volume). A precise version: `ghcr.io/slater-proj/lutin:X.Y.Z`. The `:slim` and `:rocm` tags are the same image.
 - Port inside the container: **8777** (HTTP). Do not publish it if the reverse proxy is in Docker: it reaches `http://lutin:8777` through a common Docker network. If the reverse proxy runs on the host: publish `127.0.0.1:8777:8777` only.
-- Ollama listens inside the container (127.0.0.1:11434): **never publish port 11434**.
+- Ollama (once installed from the page) listens inside the container (127.0.0.1:11434): **never publish port 11434**. Mount a volume on `/engines` (engines) in addition to `/data`, `/models` and `/workspace`.
 - The container runs as user **1000:1000**: any host folder mounted writable must belong to 1000:1000 (`chown 1000:1000`), otherwise Lutin refuses to start with a clear message.
 - Volumes: `/data` (configuration, conversations, memory, devices: TO BE BACKED UP), `/models` (Ollama models: big, can be downloaded again), `/workspace` (the ONLY folder Lutin can read and modify; a host folder to mount). Other working folders, if any: under `/workspace/...` and listed in `LUTIN_WORKSPACES` (comma-separated).
 - Environment variables (the ONLY ones to use):

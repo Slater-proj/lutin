@@ -1272,5 +1272,20 @@
 "Recherche conçue pour les agents (tavily.com, offre gratuite limitée).": "Search built for agents (tavily.com, limited free tier).",
 "Recherche par le sens, très bonne pour les questions précises (exa.ai).": "Search by meaning, very good for precise questions (exa.ai).",
 "API de recherche de Perplexity (perplexity.ai, payante à l'usage) : seuls ses résultats sont repris, pas sa réponse.": "Perplexity's search API (perplexity.ai, pay per use): only its results are used, not its answer.",
-"Chaque recherche part chez ce service (elle n'est plus privée) ; le mode hors ligne le coupe. La clé reste sur cette machine.": "Every search goes to this service (it is no longer private); offline mode cuts it. The key stays on this machine."
+"Chaque recherche part chez ce service (elle n'est plus privée) ; le mode hors ligne le coupe. La clé reste sur cette machine.": "Every search goes to this service (it is no longer private); offline mode cuts it. The key stays on this machine.",
+"🔎 Vérifier": "🔎 Check",
+"Cherche sur le web la question posée et montre les sources, pour juger la réponse (rien n'est envoyé au modèle)": "Searches the web for the question asked and shows the sources, to judge the answer (nothing is sent to the model)",
+"Écris quelques mots à chercher, par exemple /web prix du kWh en France.": "Write a few words to search for, for example /web price of a kWh in France.",
+"Résultats pour « ": "Results for « ",
+"Résultats bruts, rien n'est envoyé au modèle. Vérifie les sources et les dates, coche ce qui compte.": "Raw results, nothing is sent to the model. Check the sources and dates, tick what matters.",
+"Pour ta vie privée, j'ai retiré de la requête : ": "For your privacy, I removed from the query: ",
+"Demander au modèle de les lire": "Ask the model to read them",
+"Lis ces pages puis réponds à : ": "Read these pages then answer: ",
+"question": "question",
+"Montre les résultats bruts d'une recherche web, à cocher avant de les donner au modèle": "Shows the raw results of a web search, to tick before giving them to the model",
+"Ce qui est sorti de cette machine": "What left this machine",
+"Les recherches web envoyées à un service extérieur (jamais le contenu de tes conversations ni de tes fichiers). Les données personnelles sont retirées avant l'envoi.": "Web searches sent to an outside service (never the content of your conversations or files). Personal data is removed before sending.",
+"Rien pour l'instant.": "Nothing yet.",
+"retiré : ": "removed: ",
+"Vider le journal": "Clear the log"
 }

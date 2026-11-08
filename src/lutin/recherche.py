@@ -99,6 +99,23 @@ def vue():
     return sortie
 
 
+def est_chez_soi(nom):
+    """Ce moteur est-il chez toi ? Seule une instance SearXNG à une adresse du réseau local ou de cette machine l'est : tout le reste reçoit la requête sur internet."""
+    if nom != "searxng":
+        return False
+    import ipaddress
+    hote = hote_autorise()
+    if not hote:
+        return False
+    if hote == "localhost" or "." not in hote or hote.endswith((".local", ".lan", ".home", ".internal")):
+        return True
+    try:
+        ip = ipaddress.ip_address(hote.strip("[]"))
+        return ip.is_private or ip.is_loopback or ip.is_link_local
+    except ValueError:
+        return False
+
+
 def hote_autorise():
     """L'hôte de SearXNG, seul hôte local que la recherche a le droit de joindre."""
     adresse = config()["searxng"]

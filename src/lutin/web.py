@@ -15,6 +15,7 @@ import urllib.parse
 import urllib.request
 from . import moteur as _m
 from . import recherche as _recherche
+from . import sorties as _sorties
 
 
 # --------------------------------------------------------------------------- accès au web (sans clé, sans compte, sans installation)
@@ -374,14 +375,22 @@ def chercher_resultats(requete, nombre, maintenant=time.time, options=None):
     ordre = libres + sorted((m for m in moteurs if m not in libres), key=lambda m: BLOQUES.get(m[0], 0))
     raisons = []
     for nom, fonction in ordre:
+        envoyee, retire = requete, []
+        if not _recherche.est_chez_soi(nom):
+            envoyee, retire = _sorties.nettoyer_requete(requete)          # rien de personnel ne part chez un service extérieur
+            if not envoyee:
+                raisons.append("{} : {}".format(nom, _t("requête vide une fois les données personnelles retirées")))
+                continue
         try:
-            trouves = _recherche.nettoyer(fonction(requete), nombre, 0 if o.get("site") else _recherche.PAR_SITE_MAX)
+            trouves = _recherche.nettoyer(fonction(envoyee), nombre, 0 if o.get("site") else _recherche.PAR_SITE_MAX)
             for x in trouves:
                 x["source"] = nom
         except _m.ErreurOutil as e:
             trouves, raison = [], str(e)
         else:
             raison = _t("aucun résultat")
+        if not _recherche.est_chez_soi(nom):
+            _sorties.noter(nom, envoyee, retire, bool(trouves))
         if trouves:
             with VERROU_RECHERCHE:
                 BLOQUES.pop(nom, None)
