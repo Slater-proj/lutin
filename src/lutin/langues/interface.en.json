@@ -1260,9 +1260,6 @@
 "Reçue automatiquement de la machine": "Received automatically from the machine",
 "Saisie à la main": "Entered by hand",
 "Ce modèle tourne sur une autre machine : le test de vitesse mesure celle-ci. Choisis un modèle de cette machine.": "This model runs on another machine: the speed test measures this one. Pick a model from this machine.",
-"Recherche conçue pour les agents (tavily.com, offre gratuite limitée).": "Search built for agents (tavily.com, limited free tier).",
-"Recherche par le sens, très bonne pour les questions précises (exa.ai).": "Search by meaning, very good for precise questions (exa.ai).",
-"API de recherche de Perplexity (perplexity.ai, payante à l'usage) : seuls ses résultats sont repris, pas sa réponse.": "Perplexity's search API (perplexity.ai, pay per use): only its results are used, not its answer.",
 "Chaque recherche part chez ce service (elle n'est plus privée) ; le mode hors ligne le coupe. La clé reste sur cette machine.": "Every search goes to this service (it is no longer private); offline mode cuts it. The key stays on this machine.",
 "🔎 Vérifier": "🔎 Check",
 "Cherche sur le web la question posée et montre les sources, pour juger la réponse (rien n'est envoyé au modèle)": "Searches the web for the question asked and shows the sources, to judge the answer (nothing is sent to the model)",
@@ -1361,5 +1358,10 @@
 "Aucune machine pour l'instant : ajoute-en une ci-dessous.": "No machine yet: add one below.",
 "Rubriques des réglages": "Settings sections",
 "Dossiers": "Folders",
-"Avancé": "Advanced"
+"Avancé": "Advanced",
+" — cette machine ne répond pas : la copie ne se met plus à jour avant son retour": " — this machine is not responding: the copy won't update until it is back",
+"Recherche conçue pour les agents (tavily.com). Offre gratuite mensuelle, sans carte bancaire.": "Search built for agents (tavily.com). Free monthly plan, no credit card.",
+"Recherche par le sens, très bonne pour les questions précises (exa.ai). Crédit gratuit au départ : vérifie ses conditions actuelles.": "Search by meaning, very good for precise questions (exa.ai). Free starting credit: check its current terms.",
+"API de recherche de Perplexity (perplexity.ai) : PAYANTE à l'usage, sans offre gratuite connue. À laisser vide si tu ne veux rien payer.": "Perplexity's search API (perplexity.ai): PAY-PER-USE, no known free plan. Leave empty if you don't want to pay anything.",
+"Rien à payer pour chercher : DuckDuckGo et Bing marchent sans clé, et SearXNG chez toi aussi. Les clés ci-dessous sont facultatives (Tavily et Brave ont une offre gratuite limitée, Perplexity est payant).": "Nothing to pay to search: DuckDuckGo and Bing work without a key, and so does SearXNG at your place. The keys below are optional (Tavily and Brave have a limited free plan, Perplexity is paid)."
 }

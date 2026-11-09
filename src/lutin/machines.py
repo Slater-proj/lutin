@@ -687,6 +687,55 @@ def _noter(m, etat, maintenant, resultat, modele):
                 oublier_machine(m["id"])          # elle ne répond plus : ses modèles et ses conversations ne sont plus proposés
 
 
+FRAICHEUR_S = 40          # une machine n'est proposée (modèles, conversations) que si elle a répondu depuis moins que ça
+VEILLE = {"en_cours": False}
+
+
+def _recente(ident):
+    """Vrai si la machine a répondu à une sonde récente : sans cela, une machine éteinte resterait « opérationnelle » dans les listes tant que personne ne la sonde."""
+    g = SONDES.get(ident)
+    return bool(g) and time.monotonic() - g[0] < FRAICHEUR_S
+
+
+def veiller(attente=False):
+    """Garde l'état des machines à jour sans que la page Machines soit ouverte : une sonde en arrière-plan quand la dernière date de plus de la moitié de la fraîcheur.
+    Une machine qui ne répond plus disparaît des listes en quelques secondes ; quand elle répond de nouveau, ses modèles et conversations reviennent (voir _noter)."""
+    machines = lire()
+    with VERROU:
+        a_faire = [m for m in machines if not SONDES.get(m["id"]) or time.monotonic() - SONDES[m["id"]][0] > FRAICHEUR_S / 2]
+        if not a_faire or VEILLE["en_cours"]:
+            return
+        VEILLE["en_cours"] = True
+
+    def travail():
+        try:
+            for m in a_faire:
+                try:
+                    sonder(m, "")
+                except Exception:  # noqa: BLE001
+                    pass
+        finally:
+            with VERROU:
+                VEILLE["en_cours"] = False
+    if attente:
+        travail()
+    else:
+        threading.Thread(target=travail, daemon=True, name="machines-veille").start()
+
+
+def vider_listes():
+    """Mode multi-machines désactivé : plus aucune liste distante gardée en mémoire (elles se reconstruisent à la réactivation)."""
+    with VERROU:
+        DISTANTS.update(t=0.0, v=[])
+        CONVERSATIONS.update(t=0.0, v=[])
+        SYNCHRO.clear()
+
+
+def hors_ligne():
+    """Noms des machines appairées qui ne répondent pas : leurs conversations importées restent utilisables ici mais ne se synchronisent plus."""
+    return [m["nom"] for m in lire() if DERNIER_ETAT.get(m["id"]) not in ("joignable", "operationnel") or not _recente(m["id"])]
+
+
 def oublier_machine(ident):
     """Plus rien de cette machine dans les listes (modèles à choisir, conversations en jaune) : on ne peut plus lui parler."""
     with VERROU:
@@ -759,6 +808,7 @@ def conversations_distantes(attente=False):
     """Les conversations des machines appairées qui les partagent. Rendues tout de suite depuis la mémoire (la liste ne doit jamais attendre une machine éteinte) ; mise à jour en arrière-plan toutes les 30 s."""
     if not lire():
         return []
+    veiller(attente)
     with VERROU:
         vieux = time.monotonic() - CONVERSATIONS["t"] > 30
         lancer = vieux and not CONVERSATIONS["en_cours"]
@@ -775,7 +825,7 @@ def conversations_distantes(attente=False):
                     with VERROU:
                         CONVERSATIONS["en_cours"] = False
             threading.Thread(target=travail, daemon=True, name="machines-conversations").start()
-    ids = {m["id"] for m in lire() if DERNIER_ETAT.get(m["id"]) in ("joignable", "operationnel")}          # une machine qui ne répond pas n'a plus de conversations proposées
+    ids = {m["id"] for m in lire() if DERNIER_ETAT.get(m["id"]) in ("joignable", "operationnel") and _recente(m["id"])}          # une machine qui ne répond pas n'a plus de conversations proposées
     importees = _registre_import("conversations_importees.json")
     sortie = []
     for c in CONVERSATIONS["v"]:
@@ -918,6 +968,7 @@ def modeles_distants(attente=False):
     une mise à jour part en arrière-plan quand la dernière date de plus de 15 s. `attente=True` (tests) la fait sur place."""
     if not lire():
         return []
+    veiller(attente)
     with VERROU:
         vieux = time.monotonic() - DISTANTS["t"] > 15
         lancer = vieux and not DISTANTS["en_cours"]
@@ -934,7 +985,7 @@ def modeles_distants(attente=False):
                     with VERROU:
                         DISTANTS["en_cours"] = False
             threading.Thread(target=travail, daemon=True, name="machines-modeles").start()
-    ids = {m["id"] for m in lire() if DERNIER_ETAT.get(m["id"]) == "operationnel"}          # une machine qui ne répond pas n'est plus proposée
+    ids = {m["id"] for m in lire() if DERNIER_ETAT.get(m["id"]) == "operationnel" and _recente(m["id"])}          # une machine qui ne répond pas n'est plus proposée
     return [dict(d) for d in DISTANTS["v"] if d["id"] in ids]
 
 

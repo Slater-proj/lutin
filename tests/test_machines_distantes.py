@@ -190,6 +190,7 @@ class MachinesInfos(unittest.TestCase):
 
     def test_modeles_distants_et_choix_d_un_modele_qui_n_existe_que_la_bas(self):
         machines.DERNIER_ETAT[self.m["id"]] = "operationnel"          # la machine répond : ses listes sont proposées
+        machines.SONDES[self.m["id"]] = (machines.time.monotonic(), {}, "")          # ... et vient de répondre
         reponses = {"etat": "operationnel", "detail": "", "modeles": ["gros:70b", "autre:32b"]}
         with mock.patch.object(machines, "sonder", lambda m, modele="", *a, **kw: reponses):
             liste = machines.modeles_distants(attente=True)

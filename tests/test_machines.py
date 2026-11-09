@@ -230,11 +230,43 @@ class Etats(Base):
         machines.DISTANTS.update(t=machines.time.monotonic(), v=[{"id": m["id"], "nom": "x", "etat": "operationnel", "modeles": ["m1"]}])
         machines.CONVERSATIONS.update(t=machines.time.monotonic(), v=[{"machine": m["id"], "machine_nom": "x", "id": "a" * 8, "titre": "T", "maj": "", "messages": 1}])
         machines.DERNIER_ETAT[m["id"]] = "operationnel"
+        machines.SONDES[m["id"]] = (machines.time.monotonic(), {}, "")
         self.assertEqual(len(machines.modeles_distants()), 1)
         self.noeud.actif = False
         machines.signaler_panne(machines.trouver(m["id"]))
         self.assertEqual(machines.modeles_distants(), [])
         self.assertEqual(machines.conversations_distantes(), [])
+
+    def test_une_machine_eteinte_sans_personne_pour_la_sonder_disparait_quand_meme(self):
+        m = self.jumeler()
+        machines.DISTANTS.update(t=machines.time.monotonic(), v=[{"id": m["id"], "nom": "x", "etat": "operationnel", "modeles": ["m1"]}])
+        machines.CONVERSATIONS.update(t=machines.time.monotonic(), v=[{"machine": m["id"], "machine_nom": "x", "id": "a" * 8, "titre": "T", "maj": "", "messages": 1}])
+        machines.DERNIER_ETAT[m["id"]] = "operationnel"
+        machines.SONDES[m["id"]] = (machines.time.monotonic() - machines.FRAICHEUR_S - 1, {}, "")          # dernière réponse trop ancienne
+        self.assertEqual(machines.modeles_distants(), [])
+        self.assertEqual(machines.conversations_distantes(), [])
+        self.assertEqual(machines.hors_ligne(), [machines.trouver(m["id"])["nom"]])
+        machines.SONDES[m["id"]] = (machines.time.monotonic(), {}, "")          # elle répond de nouveau
+        self.assertEqual(len(machines.modeles_distants()), 1)
+        self.assertEqual(machines.hors_ligne(), [])
+
+    def test_la_veille_sonde_les_machines_sans_la_page_machines(self):
+        m = self.jumeler()
+        machines.SONDES.clear()
+        machines.veiller(attente=True)
+        self.assertIn(m["id"], machines.SONDES)
+        self.assertEqual(machines.DERNIER_ETAT[m["id"]], "operationnel")
+        self.noeud.actif = False
+        machines.SONDES[m["id"]] = (machines.time.monotonic() - machines.FRAICHEUR_S, {}, "")
+        machines.veiller(attente=True)
+        self.assertEqual(machines.DERNIER_ETAT[m["id"]], "joignable")
+
+    def test_desactiver_le_mode_vide_les_listes_distantes(self):
+        m = self.jumeler()
+        machines.DISTANTS.update(t=1.0, v=[{"id": m["id"], "nom": "x", "etat": "operationnel", "modeles": ["m1"]}])
+        machines.CONVERSATIONS.update(t=1.0, v=[{"machine": m["id"]}])
+        machines.vider_listes()
+        self.assertEqual((machines.DISTANTS["v"], machines.CONVERSATIONS["v"]), ([], []))
 
     def test_les_etapes_d_une_machine(self):
         m = self.jumeler()

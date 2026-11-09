@@ -368,6 +368,7 @@ button.principal { box-shadow:0 6px 16px -8px rgba(63,143,232,.8); }
 .carte { background:linear-gradient(180deg, #131b25, #10161e); box-shadow:var(--ombre-douce); transition:border-color .15s; }
 .carte:hover { border-color:var(--line2); }
 .rubrique.masque { display:none; }
+.conv.hors { opacity:.6; }
 .sous-nav { display:flex; gap:6px; flex-wrap:wrap; margin:4px 0 14px; }
 .sous-nav button { border-radius:999px; padding:5px 14px; font-size:.84rem; color:#c3ccd8; background:#16202b; }
 .sous-nav button:hover:not([aria-selected=true]) { background:#1c2937; }
@@ -1401,7 +1402,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
   };
   const listeConversations = () => {
     const z = $('conversations'); z.textContent = '';
-    ETAT.conversations.forEach(c => { const d = el('div', 'conv' + (CONV && CONV.id === c.id ? ' choisie' : '') + (c.origine ? ' importee' : '')); d.dataset.id = c.id; if (c.origine) d.title = T('Copie d\'une conversation de la machine « ') + c.origine + T(' » : tu continues ici, l\'original n\'est pas touché'); if (enAttente().has(c.id)) { const pt = el('i', 'travail'); pt.classList.add('wait'); pt.title = T('L\'assistant attend une action de ta part'); d.appendChild(pt); } else if ((ETAT.actives || []).includes(c.id) || (EN_COURS && ID_EN_COURS === c.id)) { const pt = el('i', 'travail'); pt.title = T('L\'assistant travaille sur cette conversation'); d.appendChild(pt); } else if (NONLUS.has(c.id)) { const pt = el('i', 'travail fini'); pt.title = T('Réponse terminée, pas encore lue'); d.appendChild(pt); } d.appendChild(el('span', 't', (c.epingle ? '★ ' : '') + (c.origine ? '🖥 ' : '') + (c.titre || T('(sans titre)')))); const mn = el('button', 'menu-ouvrir', '⋯'); mn.title = T('Options de la conversation'); mn.addEventListener('click', e => { e.stopPropagation(); ouvrirMenuConv(c, mn); }); d.appendChild(mn); const x = el('button', '', '✕'); x.title = T('Supprimer'); x.addEventListener('click', async e => { e.stopPropagation(); if (!confirm(T('Supprimer cette conversation ?'))) return; await api('/api/supprimer', { id: c.id }); if (CONV && CONV.id === c.id) nouvelle(); rafraichir(); }); d.appendChild(x); d.addEventListener('click', () => ouvrir(c.id)); z.appendChild(d); });
+    ETAT.conversations.forEach(c => { const d = el('div', 'conv' + (CONV && CONV.id === c.id ? ' choisie' : '') + (c.origine ? ' importee' : '') + (c.origine && (ETAT.machines_hors_ligne || []).includes(c.origine) ? ' hors' : '')); d.dataset.id = c.id; if (c.origine) d.title = T('Copie d\'une conversation de la machine « ') + c.origine + T(' » : tu continues ici, l\'original n\'est pas touché') + ((ETAT.machines_hors_ligne || []).includes(c.origine) ? T(' — cette machine ne répond pas : la copie ne se met plus à jour avant son retour') : ''); if (enAttente().has(c.id)) { const pt = el('i', 'travail'); pt.classList.add('wait'); pt.title = T('L\'assistant attend une action de ta part'); d.appendChild(pt); } else if ((ETAT.actives || []).includes(c.id) || (EN_COURS && ID_EN_COURS === c.id)) { const pt = el('i', 'travail'); pt.title = T('L\'assistant travaille sur cette conversation'); d.appendChild(pt); } else if (NONLUS.has(c.id)) { const pt = el('i', 'travail fini'); pt.title = T('Réponse terminée, pas encore lue'); d.appendChild(pt); } d.appendChild(el('span', 't', (c.epingle ? '★ ' : '') + (c.origine ? '🖥 ' : '') + (c.titre || T('(sans titre)')))); const mn = el('button', 'menu-ouvrir', '⋯'); mn.title = T('Options de la conversation'); mn.addEventListener('click', e => { e.stopPropagation(); ouvrirMenuConv(c, mn); }); d.appendChild(mn); const x = el('button', '', '✕'); x.title = T('Supprimer'); x.addEventListener('click', async e => { e.stopPropagation(); if (!confirm(T('Supprimer cette conversation ?'))) return; await api('/api/supprimer', { id: c.id }); if (CONV && CONV.id === c.id) nouvelle(); rafraichir(); }); d.appendChild(x); d.addEventListener('click', () => ouvrir(c.id)); z.appendChild(d); });
     // Les conversations des machines appairées (si leur propriétaire les partage) : en jaune, comme leurs modèles. Un clic en fait une copie ici, qu'on continue avec les skills, la mémoire et les modèles de CETTE machine.
     (ETAT.conversations_distantes || []).filter(c => !c.locale || c.plus_recente).forEach(c => {
       const d = el('div', 'conv distante'); d.dataset.id = 'distante-' + c.machine + '-' + c.id;
@@ -1885,7 +1886,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     PREC_ACT = actives;
     if (CONV && !document.hidden && surChat() && !(FLUX && FLUX.detache)) lue(CONV.id);
     majTravail();
-    const sigC = JSON.stringify([ETAT.conversations, ETAT.conversations_distantes, CONV ? CONV.id : '', ETAT.actives, ETAT.en_attente, Object.values(ETAT.missions || {}).map(m => m.etat), EN_COURS ? ID_EN_COURS : '', [...NONLUS]]), sigM = JSON.stringify([ETAT.modeles, ETAT.installes, ETAT.pulls, ETAT.ollama, ETAT.reglages.modele, ETAT.bench, ETAT.adequation, ETAT.disque_modeles, ETAT.familles]);
+    const sigC = JSON.stringify([ETAT.conversations, ETAT.conversations_distantes, ETAT.machines_hors_ligne, CONV ? CONV.id : '', ETAT.actives, ETAT.en_attente, Object.values(ETAT.missions || {}).map(m => m.etat), EN_COURS ? ID_EN_COURS : '', [...NONLUS]]), sigM = JSON.stringify([ETAT.modeles, ETAT.installes, ETAT.pulls, ETAT.ollama, ETAT.reglages.modele, ETAT.bench, ETAT.adequation, ETAT.disque_modeles, ETAT.familles]);
     if (sigC !== SIG.c && !RECH.q) { SIG.c = sigC; listeConversations(); }
     if (sigM !== SIG.m) { SIG.m = sigM; listeModeles(); }
     chargerPropositions();
@@ -4290,9 +4291,10 @@ body[data-moteur="openai"] .biblio { display:none !important; }
   };
   // Tavily, Exa, Perplexity : une clé personnelle chacun. Seuls les résultats servent : le modèle de Lutin les lit et répond lui-même (jamais une réponse toute faite d'un autre modèle).
   const FOURNISSEURS_CLE = [
-    ['tavily', 'Tavily', T('Recherche conçue pour les agents (tavily.com, offre gratuite limitée).')],
-    ['exa', 'Exa', T('Recherche par le sens, très bonne pour les questions précises (exa.ai).')],
-    ['perplexity', 'Perplexity', T('API de recherche de Perplexity (perplexity.ai, payante à l\'usage) : seuls ses résultats sont repris, pas sa réponse.')]];
+    ['tavily', 'Tavily', T('Recherche conçue pour les agents (tavily.com). Offre gratuite mensuelle, sans carte bancaire.')],
+    ['exa', 'Exa', T('Recherche par le sens, très bonne pour les questions précises (exa.ai). Crédit gratuit au départ : vérifie ses conditions actuelles.')],
+    ['perplexity', 'Perplexity', T('API de recherche de Perplexity (perplexity.ai) : PAYANTE à l\'usage, sans offre gratuite connue. À laisser vide si tu ne veux rien payer.')]];
+  $('rechCles').appendChild(el('div', 'aide', T('Rien à payer pour chercher : DuckDuckGo et Bing marchent sans clé, et SearXNG chez toi aussi. Les clés ci-dessous sont facultatives (Tavily et Brave ont une offre gratuite limitée, Perplexity est payant).')));
   FOURNISSEURS_CLE.forEach(([id, nom, aide]) => {
     const z = $('rechCles'), h = el('h2', '', nom), a = el('div', 'aide', aide + ' ' + T('Chaque recherche part chez ce service (elle n\'est plus privée) ; le mode hors ligne le coupe. La clé reste sur cette machine.'));
     const c = el('div', 'carte'); c.style.cssText = 'gap:8px;flex-wrap:wrap;align-items:center';

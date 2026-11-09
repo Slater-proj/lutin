@@ -2,6 +2,12 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## Machines réactives, recherche gratuite expliquée
+
+- **Une machine éteinte disparaît vraiment** : Lutin la surveille en arrière-plan, même page Machines fermée. Si elle n'a pas répondu depuis ~40 s, ses modèles et ses conversations ne sont plus proposés ; à son retour ils reviennent. Les copies déjà importées restent utilisables ici, grisées avec une explication tant que leur machine ne répond pas.
+- **Désactiver le mode multi-machines** vide aussitôt les listes distantes gardées en mémoire.
+- **Recherche web** : la page dit clairement ce qui est gratuit (DuckDuckGo, Bing et SearXNG sans clé ; Tavily et Brave avec une offre gratuite limitée) et que Perplexity est payant.
+
 ## Navigation repensée, page Machines complète
 
 - **Une barre du haut qui tient partout** : Conversation, Modèles, Mémoire et un menu **Réglages ▾** (Réglages, Automatisation, Machines, Santé, Accès). Le bouton affiche la page ouverte dans le menu, un point de couleur y signale un problème de santé, et sur téléphone le menu prend la largeur de l'écran. Le clavier marche (flèches, Échap).

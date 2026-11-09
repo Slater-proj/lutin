@@ -15,8 +15,8 @@ Engines are tried **in this order**; the first one that returns results wins, th
 | 1 | **SearXNG** | an instance at your place (a few minutes with Docker, free) | aggregates several engines, no HTML to scrape, **your queries stay under your control** |
 | 2 | **Brave Search** | a personal API key (free tier, brave.com/search/api) | independent index, official API |
 | 3 | **Tavily** | a personal API key (free tier, tavily.com) | built for agents, clean excerpts |
-| 4 | **Exa** | a personal API key (exa.ai) | search by meaning, good for precise questions |
-| 5 | **Perplexity** (search API) | a personal API key (pay per use, perplexity.ai) | ranked results from a large index |
+| 4 | **Exa** | a personal API key (exa.ai, free starting credit: check its current terms) | search by meaning, good for precise questions |
+| 5 | **Perplexity** (search API) | a personal API key (**paid** per use, no known free plan: skip it if you want to pay nothing) | ranked results from a large index |
 | 6 | DuckDuckGo | nothing | works out of the box, but its HTML can change or limit robots |
 | 7 | Bing | nothing | back-up |
 

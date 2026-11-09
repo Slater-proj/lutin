@@ -15,8 +15,8 @@ Les moteurs sont essayés **dans cet ordre** ; le premier qui rend des résultat
 | 1 | **SearXNG** | une instance chez toi (quelques minutes avec Docker, gratuit) | agrège plusieurs moteurs, pas de HTML à décortiquer, **tes requêtes restent sous ton contrôle** |
 | 2 | **Brave Search** | une clé d'API personnelle (offre gratuite, brave.com/search/api) | index indépendant, API officielle |
 | 3 | **Tavily** | une clé d'API personnelle (offre gratuite, tavily.com) | conçu pour les agents, extraits propres |
-| 4 | **Exa** | une clé d'API personnelle (exa.ai) | recherche par le sens, bon pour les questions précises |
-| 5 | **Perplexity** (API de recherche) | une clé d'API personnelle (payante à l'usage, perplexity.ai) | résultats classés d'un grand index |
+| 4 | **Exa** | une clé d'API personnelle (exa.ai, crédit gratuit au départ : vérifie ses conditions) | recherche par le sens, bon pour les questions précises |
+| 5 | **Perplexity** (API de recherche) | une clé d'API personnelle (**payante** à l'usage, pas d'offre gratuite connue : inutile si tu ne veux rien payer) | résultats classés d'un grand index |
 | 6 | DuckDuckGo | rien | marche tout de suite, mais son HTML peut changer ou limiter les robots |
 | 7 | Bing | rien | secours |
 

@@ -172,6 +172,7 @@ class ImporterDepuisLAutreMachine(Base):
 
     def test_la_liste_distante_indique_ce_qui_est_deja_copie_et_ce_qui_a_avance(self):
         machines.DERNIER_ETAT[self.m["id"]] = "operationnel"          # la machine répond : ses listes sont proposées
+        machines.SONDES[self.m["id"]] = (machines.time.monotonic(), {}, "")          # ... et vient de répondre
         machines.CONVERSATIONS.update(t=machines.time.monotonic(), v=[{"machine": self.m["id"], "machine_nom": "Gaming PC", "id": "a" * 8, "titre": "Sujet", "maj": "2026-11-02T10:00:00", "messages": 2},
                                                                     {"machine": self.m["id"], "machine_nom": "Gaming PC", "id": "d" * 8, "titre": "Autre", "maj": "2026-11-03T10:00:00", "messages": 1}])
         with self.faux_partage({"conversation": self.distante()}):
@@ -184,6 +185,7 @@ class ImporterDepuisLAutreMachine(Base):
 
     def test_la_liste_distante_ne_montre_que_les_machines_qui_partagent(self):
         machines.DERNIER_ETAT[self.m["id"]] = "operationnel"          # la machine répond : ses listes sont proposées
+        machines.SONDES[self.m["id"]] = (machines.time.monotonic(), {}, "")          # ... et vient de répondre
         reponses = {"conversations": {"conversations": [{"id": "e" * 8, "titre": "T", "maj": "m", "messages": 3}]}}
         with self.faux_partage(reponses), mock.patch.object(machines, "sonder", lambda m, modele="", *a, **kw: {"etat": "operationnel", "detail": "", "modeles": [], "droits": {"conversations": True}}):
             l = machines.conversations_distantes(attente=True)
