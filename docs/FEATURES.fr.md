@@ -30,6 +30,8 @@ Dépose tes documents dans le dossier `docs/` du dossier de travail (ou `documen
 
 Onglet Mémoire > **Tâches planifiées** : une demande que Lutin traite tout seul à l'heure dite, les jours choisis (« chaque matin, résume ce qui a changé dans le dépôt »). Le résultat est une conversation « ⏰ nom » dans la liste, avec un bouton *Voir le résultat*.
 
+Une tâche garde **une seule conversation** (chaque exécution y ajoute sa demande, datée, et sa réponse) ; un problème y est écrit au lieu d'un « rien fait » silencieux. Dans *Automatisation > Notifications*, ajoute un canal (Gotify, ntfy, Telegram, ou un webhook pour Discord, Slack, Mattermost ou un pont WhatsApp que tu héberges) et associe-le à une tâche : son résultat t'est envoyé quand elle a fini. Les jetons restent sur la machine et ne sont jamais réaffichés.
+
 - **Lecture seule** : personne n'est là pour accepter, la tâche tourne donc comme un essai à blanc : elle lit et cherche pour de vrai, chaque écriture ou commande est seulement montrée.
 - Ne démarre que si aucune réponse n'est en cours (une seule carte graphique) ; une tâche manquée parce que le PC était éteint se fait au démarrage de Lutin, le jour même seulement.
 - Création, pause et suppression depuis cette machine seulement (comme les dossiers de travail). *Lancer maintenant* teste une tâche sans attendre.

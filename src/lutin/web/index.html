@@ -618,7 +618,18 @@ body[data-moteur="openai"] .biblio { display:none !important; }
       <input id="pHeure" type="time" value="08:00">
       <span id="pJours"></span>
       <textarea id="pPrompt" placeholder="La demande à traiter, par exemple : résume ce qui a changé dans le dépôt depuis hier." style="flex:1 1 100%;min-height:70px" maxlength="4000"></textarea>
+      <select id="pNotifier" title="Prévenir par ce canal quand la tâche a fini" hidden></select>
+      <span class="aide" id="pNotifierAide">Pour être prévenu à la fin : ajoute un canal dans l'onglet Notifications.</span>
       <button id="bAjouterPlanifie" class="principal">Planifier</button> <span class="aide" id="mPlanifie"></span>
+    </div>
+    <h2>Notifications <span class="aide">(être prévenu sur ton téléphone ou ta messagerie quand une tâche planifiée a fini : Gotify, ntfy, Telegram ou un webhook Discord, Slack, Mattermost…)</span></h2>
+    <div id="listeCanaux" class="aide" style="margin:6px 0"></div>
+    <div class="carte" style="gap:8px;flex-wrap:wrap;align-items:center">
+      <input id="cNom" placeholder="Nom du canal (ex. Mon téléphone)" maxlength="40" style="width:220px">
+      <select id="cType"></select>
+      <span id="champsCanal" style="display:flex;gap:8px;flex-wrap:wrap;flex:1 1 100%"></span>
+      <button id="bAjouterCanal" class="principal">Ajouter le canal</button> <span class="aide" id="mCanal"></span>
+      <div class="aide" style="flex:1 1 100%">Les jetons restent sur cette machine et ne sont jamais réaffichés. WhatsApp n'a pas d'API gratuite officielle : utilise un webhook vers un pont que tu héberges.</div>
     </div>
     <h2>Traitement de documents <span class="aide">(une consigne appliquée à chaque document d'un dossier, en lecture seule : résumer, classer, extraire)</span></h2>
     <div id="zoneFond" style="margin:6px 0"></div>
@@ -678,7 +689,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     <div id="machinesZone"></div>
   </div></section>
   <section class="page" id="p-reglages"><div class="cadre">
-    <div id="sousReglages" class="sous-nav" role="tablist" aria-label="Rubriques des réglages"><button data-g="general" role="tab">Général</button><button data-g="moteur" role="tab">Moteur</button><button data-g="conversation" role="tab">Conversation</button><button data-g="outils" role="tab">Outils</button><button data-g="recherche" role="tab">Recherche web</button><button data-g="dossiers" role="tab">Dossiers</button><button data-g="machine" role="tab">Avancé</button></div>
+    <div id="sousReglages" class="sous-nav" role="tablist" aria-label="Rubriques des réglages"><button data-g="general" role="tab">Général</button><button data-g="moteur" role="tab">Moteur</button><button data-g="conversation" role="tab">Conversation</button><button data-g="outils" role="tab">Outils</button><button data-g="dossiers" role="tab">Dossiers</button><button data-g="machine" role="tab">Avancé</button></div>
     <details class="groupe" open data-g="general"><summary>Général</summary>
     <h2>Langue / Language</h2>
     <div style="margin:6px 0"><label><select id="selLangue"><option value="auto">Auto</option><option value="fr">Français</option><option value="en">English</option></select></label></div>
@@ -691,19 +702,6 @@ body[data-moteur="openai"] .biblio { display:none !important; }
       <span class="aide" id="mVerifierLutin"></span>
     </div>
     <div class="aide">Lutin vérifie aussi tout seul au démarrage (au plus une fois par jour) : une bannière apparaît quand une version plus récente existe. Rien n'est installé sans toi.</div>
-    </details>
-    <details class="groupe" data-g="recherche"><summary>Recherche web</summary>
-    <div class="aide">Lutin cherche sur DuckDuckGo et Bing sans rien configurer. Pour des résultats plus complets et plus stables, ajoute SearXNG (un moteur qui tourne chez toi, gratuit) ou Brave (une clé gratuite à ton nom) : ils sont essayés en premier, les autres prennent le relais s'ils ne répondent pas.</div>
-    <div id="rechMoteurs" class="carte" style="display:block"></div>
-    <h2>SearXNG</h2>
-    <div class="aide">L'adresse de ton SearXNG, par exemple http://127.0.0.1:8080 (le format « json » doit y être activé : voir docs/WEB_SEARCH.md). C'est la seule adresse locale que la recherche a le droit de joindre.</div>
-    <div class="carte" style="gap:8px;flex-wrap:wrap;align-items:center"><input id="rechSearxng" type="text" placeholder="http://127.0.0.1:8080" autocomplete="off" style="flex:1 1 280px"><button id="bRechSearxng">Enregistrer</button></div>
-    <h2>Brave Search</h2>
-    <div class="aide">Une clé d'API personnelle (offre gratuite, créée sur brave.com/search/api). Elle reste sur cette machine et n'est jamais renvoyée à la page.</div>
-    <div class="carte" style="gap:8px;flex-wrap:wrap;align-items:center"><input id="rechBrave" type="password" placeholder="Clé d'API" autocomplete="off" style="flex:1 1 280px"><button id="bRechBrave">Enregistrer</button><button id="bRechBraveRetirer" hidden>Retirer la clé</button><span class="aide" id="rechBraveEtat"></span></div>
-    <div id="rechCles"></div>
-    <div class="carte" style="gap:8px;flex-wrap:wrap;align-items:center"><button id="bRechTest" class="principal">Tester la recherche</button><span class="aide" id="rechMsg" role="status"></span></div>
-    <div id="rechResultats"></div>
     </details>
     <details class="groupe" data-g="dossiers"><summary>Dossiers et données</summary>
     <h2>Dossiers de travail <span class="aide">(le seul endroit où Lutin lit et modifie des fichiers ; chaque conversation garde le sien. ★ = le dossier utilisé, celui qui s'ouvre aussi au démarrage de Lutin)</span></h2>
@@ -758,6 +756,21 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     </details>
     <details class="groupe" data-g="outils"><summary>Outils</summary>
     <div id="outilsZone"></div>
+    <div id="rechercheBloc">
+    <h2>Recherche web <span class="aide">(chercher sur internet et lire des pages)</span></h2>
+    <div id="rechAutoriser" style="margin:6px 0"></div>
+    <div class="aide">Lutin cherche sur DuckDuckGo et Bing sans rien configurer. Pour des résultats plus complets et plus stables, ajoute SearXNG (un moteur qui tourne chez toi, gratuit) ou Brave (une clé gratuite à ton nom) : ils sont essayés en premier, les autres prennent le relais s'ils ne répondent pas.</div>
+    <div id="rechMoteurs" class="carte" style="display:block"></div>
+    <h3>SearXNG</h3>
+    <div class="aide">L'adresse de ton SearXNG, par exemple http://127.0.0.1:8080 (le format « json » doit y être activé : voir docs/WEB_SEARCH.md). C'est la seule adresse locale que la recherche a le droit de joindre.</div>
+    <div class="carte" style="gap:8px;flex-wrap:wrap;align-items:center"><input id="rechSearxng" type="text" placeholder="http://127.0.0.1:8080" autocomplete="off" style="flex:1 1 280px"><button id="bRechSearxng">Enregistrer</button></div>
+    <h3>Brave Search</h3>
+    <div class="aide">Une clé d'API personnelle (offre gratuite, créée sur brave.com/search/api). Elle reste sur cette machine et n'est jamais renvoyée à la page.</div>
+    <div class="carte" style="gap:8px;flex-wrap:wrap;align-items:center"><input id="rechBrave" type="password" placeholder="Clé d'API" autocomplete="off" style="flex:1 1 280px"><button id="bRechBrave">Enregistrer</button><button id="bRechBraveRetirer" hidden>Retirer la clé</button><span class="aide" id="rechBraveEtat"></span></div>
+    <div id="rechCles"></div>
+    <div class="carte" style="gap:8px;flex-wrap:wrap;align-items:center"><button id="bRechTest" class="principal">Tester la recherche</button><span class="aide" id="rechMsg" role="status"></span></div>
+    <div id="rechResultats"></div>
+    </div>
     </details>
     <details class="groupe" data-g="machine"><summary>Machine et réglages avancés</summary>
     <h2>Garde-fous ressources</h2>
@@ -1875,6 +1888,9 @@ body[data-moteur="openai"] .biblio { display:none !important; }
   $('bCalibrerStop').addEventListener('click', async () => { try { await api('/api/calibrage', { action: 'cancel' }); } catch (e) { $('msgCalibrage').textContent = e.message; } });
   const rafraichir = async () => {
     try { ETAT = await api('/api/etat'); } catch (e) { return; }
+    { const n = ETAT.demandes_machines || 0, ic = document.querySelector('#bReglages .ic'), it = document.querySelector('#menuReglages [data-p="machines"] .tx b');          // une autre machine demande une autorisation : une cloche sur Réglages > Machines
+      if (ic) ic.textContent = n ? '🔔' : '⚙️';
+      let bd = document.getElementById('badgeMachines'); if (!bd && it) { bd = document.createElement('span'); bd.id = 'badgeMachines'; it.appendChild(bd); } if (bd) bd.textContent = n ? ' 🔔 ' + n : ''; }
     $('pOllama').classList.toggle('ok', ETAT.ollama); document.body.dataset.moteur = ETAT.moteur || 'ollama'; $('pOllama').lastChild.textContent = ETAT.moteur && ETAT.moteur !== 'ollama' ? ETAT.moteur_nom + ' ' + (ETAT.ollama ? T('prêt') : T('ne répond pas')) : (ETAT.ollama ? T('Ollama prêt') : (ETAT.ollama_installe ? T('Ollama arrêté') : T('Ollama non installé'))); $('pOllama').title = $('pOllama').lastChild.textContent;
     $('bDemarrer').hidden = ETAT.ollama || !ETAT.ollama_installe;
     afficherDiagnostic(ETAT.diagnostic || []);
@@ -2279,6 +2295,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
   poignees();
   // ---- Réglages : une rubrique à la fois (sous-menu en haut de la page) ; la dernière ouverte est retenue
   const montrerRubrique = g => {
+    if (g === 'recherche') g = 'outils';          // l'ancienne rubrique « Recherche web » est devenue une section d'Outils
     document.querySelectorAll('#p-reglages details.groupe').forEach(d => { d.open = true; d.classList.toggle('masque', d.dataset.g !== g); });
     document.querySelectorAll('#sousReglages button').forEach(b => b.setAttribute('aria-selected', String(b.dataset.g === g)));
     try { localStorage.setItem('lutin.reglages.rubrique', g); } catch (e) { /* stockage refusé : la rubrique n'est pas retenue */ }
@@ -3216,6 +3233,28 @@ body[data-moteur="openai"] .biblio { display:none !important; }
   const JOURS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
   JOURS.forEach((j, i) => { const l = el('label'); const c = document.createElement('input'); c.type = 'checkbox'; c.dataset.j = i; c.checked = i < 5; l.appendChild(c); l.appendChild(document.createTextNode(' ' + T(j) + ' ')); $('pJours').appendChild(l); });
   const etatPlan = e => e === 'en_cours' ? T('en cours') : e === 'ok' ? T('terminée') : e === 'erreur' ? T('en erreur') : e;
+  let CANAUX = [], TYPES_NOTIF = [];
+  const lireCanaux = async () => { try { const r = await api('/api/notifications'); CANAUX = r.canaux; TYPES_NOTIF = r.types; } catch (e) { CANAUX = []; } };
+  const formulaireCanal = () => {
+    const z = $('champsCanal'); z.textContent = ''; const t = TYPES_NOTIF.find(x => x.id === $('cType').value); if (!t) return;
+    t.champs.forEach(ch => { const i = el('input'); i.dataset.cle = ch.cle; i.placeholder = ch.libelle + (ch.obligatoire ? '' : ' (' + T('facultatif') + ')'); i.style.flex = '1 1 220px'; i.autocomplete = 'off'; if (ch.secret) i.type = 'password'; z.appendChild(i); });
+  };
+  const afficherCanaux = () => {
+    const z = $('listeCanaux'); z.textContent = '';
+    const choisi = $('cType').value; $('cType').textContent = '';
+    TYPES_NOTIF.forEach(t => { const o = el('option', '', t.nom); o.value = t.id; $('cType').appendChild(o); }); if (choisi) $('cType').value = choisi; formulaireCanal();
+    const sel = $('pNotifier'), garde = sel.value; sel.textContent = '';
+    const o0 = el('option', '', T('Sans notification')); o0.value = ''; sel.appendChild(o0);
+    CANAUX.forEach(c => { const o = el('option', '', '🔔 ' + c.nom); o.value = c.id; sel.appendChild(o); }); sel.value = garde; sel.hidden = !CANAUX.length; $('pNotifierAide').hidden = CANAUX.length > 0;
+    if (!CANAUX.length) { z.textContent = T('Aucun canal : ajoute-en un pour être prévenu quand une tâche planifiée a fini.'); return; }
+    CANAUX.forEach(c => {
+      const l = el('div', 'conv'); l.style.cursor = 'default';
+      const col = el('div', 't'); col.appendChild(el('div', '', '🔔 ' + c.nom + ' · ' + c.type_nom)); l.appendChild(col);
+      const bt = el('button', '', T('Envoyer un test')); bt.addEventListener('click', async () => { bt.disabled = true; $('mCanal').textContent = ''; try { await api('/api/notifications-tester', { id: c.id }); $('mCanal').textContent = '✔ ' + T('Message de test envoyé.'); } catch (e) { $('mCanal').textContent = e.message; } bt.disabled = false; });
+      const bs = el('button', '', T('Supprimer')); bs.addEventListener('click', async () => { if (!confirm(T('Supprimer ce canal ?'))) return; try { await api('/api/notifications-supprimer', { id: c.id }); chargerPlanifie(); } catch (e) { $('mCanal').textContent = e.message; } });
+      l.append(bt, bs); z.appendChild(l);
+    });
+  };
   const afficherPlanifie = taches => {
     const z = $('listePlanifie'); z.textContent = '';
     if (!taches.length) { z.textContent = T('Aucune tâche planifiée.'); return; }
@@ -3223,8 +3262,16 @@ body[data-moteur="openai"] .biblio { display:none !important; }
       const l = el('div', 'conv'); l.style.cursor = 'default';
       const col = el('div', 't'); col.appendChild(el('div', '', t.nom + (t.actif ? '' : ' (' + T('en pause') + ')')));
       col.appendChild(el('div', 'extrait', t.heure + ' · ' + t.jours.map(j => T(JOURS[j])).join(' ') + (t.prochaine ? ' · ' + T('prochaine') + ' : ' + t.prochaine.replace('T', ' ') : '') + (t.derniere_etat ? ' · ' + T('dernière') + ' : ' + etatPlan(t.derniere_etat) : '')));
+      if (t.notifier && t.derniere_notif) col.appendChild(el('div', t.derniere_notif === 'ok' ? 'extrait' : 'erreur', t.derniere_notif === 'ok' ? '🔔 ' + T('Notification envoyée.') : '🔔 ' + t.derniere_notif));
       l.appendChild(col);
       const action = (texte, f) => { const b = el('button', '', texte); b.addEventListener('click', async () => { try { await f(); chargerPlanifie(); } catch (e) { $('mPlanifie').textContent = e.message; } }); l.appendChild(b); };
+      if (CANAUX.length) {
+        const sel = el('select'); sel.title = T('Prévenir par ce canal quand la tâche a fini');
+        const o0 = el('option', '', T('Sans notification')); o0.value = ''; sel.appendChild(o0);
+        CANAUX.forEach(c => { const o = el('option', '', '🔔 ' + c.nom); o.value = c.id; sel.appendChild(o); }); sel.value = t.notifier || '';
+        sel.addEventListener('change', async () => { try { await api('/api/planifie-notifier', { id: t.id, canal: sel.value }); chargerPlanifie(); } catch (e) { $('mPlanifie').textContent = e.message; } });
+        l.appendChild(sel);
+      }
       if (t.derniere_conv) { const b = el('button', '', T('Voir le résultat')); b.addEventListener('click', () => { ouvrirOnglet('chat'); ouvrir(t.derniere_conv); }); l.appendChild(b); }
       action(T('Lancer maintenant'), () => api('/api/planifie-lancer', { id: t.id }));
       action(t.actif ? T('Pause') : T('Reprendre'), () => api('/api/planifie-activer', { id: t.id, actif: !t.actif }));
@@ -3459,7 +3506,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
       if (colibri) {
         const c = m.reglages.colibri || {}, lc = el('div', 'ligne'), dossier = el('input'), port = el('input'), okc = el('button', '', T('Enregistrer')), msgc = el('span', 'aide');
         d.appendChild(el('div', 'erreur', '⚗ ' + T('Moteur expérimental : Lutin l\'installe et le lance, mais son démarrage avec un vrai modèle n\'a pas été vérifié.')));
-        d.appendChild(el('div', 'aide', T('Colibri écoute seulement sur cette machine (127.0.0.1). Son modèle (plusieurs dizaines de Go) se télécharge depuis l'onglet Modèles : Lutin lance la préparation de Colibri pour toi. Le dossier ci-dessous ne sert que si tu as déjà préparé un modèle toi-même. Pour joindre un Colibri qui tourne ailleurs, choisis « Autre serveur » et donne son adresse.')));
+        d.appendChild(el('div', 'aide', T('Colibri écoute seulement sur cette machine (127.0.0.1). Son modèle (plusieurs dizaines de Go) se télécharge depuis l\'onglet Modèles : Lutin lance la préparation de Colibri pour toi. Le dossier ci-dessous ne sert que si tu as déjà préparé un modèle toi-même. Pour joindre un Colibri qui tourne ailleurs, choisis « Autre serveur » et donne son adresse.')));
         dossier.value = c.modele || ''; dossier.placeholder = T('Dossier du modèle préparé par Colibri (chemin complet)'); dossier.style.minWidth = '320px';
         port.type = 'number'; port.min = 1024; port.max = 65535; port.value = c.port || 8000; port.style.width = '90px'; port.title = T('Port local de Colibri');
         dossier.disabled = port.disabled = okc.disabled = !modifiable;
@@ -3666,6 +3713,31 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     const ETAPES = ['reveil', 'allumee', 'lutin', 'synchro', 'pret'];
     const LIBELLE_ETAPE = { reveil: T('Réveil envoyé'), allumee: T('Machine allumée'), lutin: T('Lutin démarré'), synchro: T('Synchronisation'), pret: T('Prête') };
     let enCours = false, changement = false;
+    const DROIT_LIBELLE = { piloter: T('mener des conversations ici'), maj: T('mettre Lutin à jour ici'), extinction: T('éteindre cette machine') };
+    if ((r.noeud.demandes || []).length) {          // une autre machine demande un droit : toi seul décides, ici
+      const dq = el('div', 'carte'); dq.style.display = 'block';
+      dq.appendChild(el('b', '', '🔔 ' + T('Demandes d\'autorisation')));
+      r.noeud.demandes.forEach(d => {
+        const l = el('div', 'ligne'), oui = el('button', 'principal', T('Autoriser')), non = el('button', '', T('Refuser'));
+        const rep = accepter => async () => { oui.disabled = non.disabled = true; await act('demande-repondre', { machine: d.machine, droit: d.droit, accepter }); await rafraichir(); chargerMachines(true); };
+        oui.addEventListener('click', rep(true)); non.addEventListener('click', rep(false));
+        l.append(el('span', '', '« ' + d.machine + ' » ' + T('demande à pouvoir') + ' ' + (DROIT_LIBELLE[d.droit] || d.droit) + ' (' + d.date + ')'), oui, non); dq.appendChild(l);
+      });
+      dq.appendChild(el('div', 'aide', T('Tu peux retirer cette autorisation à tout moment dans « Cette machine : la prêter aux autres ».')));
+      neuf.appendChild(dq);
+    }
+    if (r.machines.length) {          // un seul choix, clair : qui traite tes messages
+      const qui = el('div', 'carte'); qui.style.display = 'block';
+      qui.appendChild(el('b', '', T('Qui répond à tes messages ?')));
+      const COURT = { eteinte: '⚪ ' + T('éteinte'), reveil: '🟡 ' + T('réveil envoyé'), allumee: '🟡 ' + T('allumée, Lutin démarre'), lutin: '🟠 ' + T('Lutin démarré, moteur arrêté'), synchro: '🟡 ' + T('synchronisation'), pret: '🟢 ' + T('prête'), extinction: '⏻ ' + T('s\'éteint'), maj: '⬆ ' + T('mise à jour en cours') };
+      [{ id: '', nom: T('Cette machine'), court: T('son propre moteur') }, ...r.machines.map(m => ({ id: m.id, nom: m.nom, court: COURT[m.etape] || '' }))].forEach(o => {
+        const lb = el('label'), rd = el('input'); rd.type = 'radio'; rd.name = 'machine_choisie'; rd.checked = (r.choisie || '') === o.id; lb.style.display = 'block';
+        rd.addEventListener('change', async () => { await act('use', { id: o.id }); await rafraichir(); chargerMachines(true); });
+        lb.append(rd, document.createTextNode(' ' + o.nom + (o.court ? ' — ' + o.court : ''))); qui.appendChild(lb);
+      });
+      qui.appendChild(el('div', 'aide', T('Tes messages sont traités par la machine choisie, avec son moteur et ses modèles. Une conversation qui appartient à une autre machine s\'exécute toujours sur celle-ci.')));
+      neuf.appendChild(qui);
+    }
     r.machines.forEach(m => {
       const c = el('div', 'carte machine'); c.style.display = 'block';
       const choisie = r.choisie === m.id, etape = m.etape || 'eteinte', avant = SUIVI_MACHINES[m.id];
@@ -3691,9 +3763,6 @@ body[data-moteur="openai"] .biblio { display:none !important; }
       (m.avertissements || []).slice(0, 1).forEach(a => c.appendChild(el('div', 'attention', '⚠ ' + a)));
       // les actions
       const msg = el('div', 'aide'), l = el('div', 'ligne');
-      const bu = el('button', choisie ? '' : 'principal', choisie ? T('Revenir au moteur local') : T('Répondre avec cette machine'));
-      bu.addEventListener('click', async () => { await act('use', { id: choisie ? '' : m.id }); await rafraichir(); chargerMachines(true); });
-      l.appendChild(bu);
       if (['eteinte', 'reveil', 'allumee'].includes(etape)) {
         const bw = el('button', '', T('Réveiller')); bw.title = T('Envoie un paquet de réveil (Wake-on-LAN) : il faut son adresse MAC.');
         bw.addEventListener('click', async () => {
@@ -3711,13 +3780,29 @@ body[data-moteur="openai"] .biblio { display:none !important; }
         l.appendChild(be);
       }
       if (m.maj_disponible && etape !== 'maj') {
-        const bm = el('button', 'principal', '⬆ ' + T('Mettre à jour Lutin')), ok = !!(m.agir || {}).maj;
-        bm.disabled = !ok; bm.title = ok ? T('Lance la mise à jour de Lutin sur cette machine ; il redémarre ensuite tout seul s\'il est lancé par la commande « lutin ».') : T('Son propriétaire doit l\'autoriser : sur elle, onglet Machines > « Autoriser les machines appairées à mettre Lutin à jour ».');
-        bm.addEventListener('click', async () => { if (!confirm(T('Mettre à jour Lutin sur « {} » ?').replace('{}', m.nom))) return; bm.disabled = true; if (await act('update', { id: m.id }, msg)) chargerMachines(true); else bm.disabled = !ok; });
+        const ok = !!(m.agir || {}).maj, attente = (m.demandes || []).includes('maj');
+        const bm = el('button', 'principal', ok ? '⬆ ' + T('Mettre à jour Lutin') : (attente ? '⏳ ' + T('Demande envoyée') : '⬆ ' + T('Demander à la mettre à jour')));
+        bm.disabled = !ok && attente; bm.title = ok ? T('Lance la mise à jour de Lutin sur cette machine ; il redémarre ensuite tout seul s\'il est lancé par la commande « lutin ».') : T('Envoie une demande : son propriétaire l\'accepte ou la refuse sur cette machine.');
+        bm.addEventListener('click', async () => {
+          if (!ok) { bm.disabled = true; if (await act('demander', { id: m.id, droit: 'maj' }, msg)) chargerMachines(true); else bm.disabled = false; return; }
+          if (!confirm(T('Mettre à jour Lutin sur « {} » ?').replace('{}', m.nom))) return; bm.disabled = true; if (await act('update', { id: m.id }, msg)) chargerMachines(true); else bm.disabled = false;
+        });
         l.appendChild(bm);
       }
       c.append(l, msg);
-      if (['lutin', 'synchro', 'pret'].includes(etape) && !(m.agir || {}).piloter) c.appendChild(el('div', 'aide', 'ℹ ' + T('Ses conversations ne sont pas proposées ici : sur cette machine, onglet Machines, coche « Laisser les machines appairées mener des conversations ici ».')));
+      if (['lutin', 'synchro', 'pret'].includes(etape)) {
+        if (!m.version) c.appendChild(el('div', 'attention', '⚠ ' + T('Sa version de Lutin est trop ancienne pour être lue d\'ici : mets-la à jour une première fois sur elle-même (relance l\'installeur ou la commande « lutin update »). Ensuite, tout se fera depuis cette page.')));
+        const aut = el('div', 'autorisations'); aut.style.margin = '6px 0';
+        aut.appendChild(el('div', 'aide', T('Ce que cette machine t\'autorise (elle seule décide, sur elle-même) :')));
+        [['piloter', T('mener ses conversations depuis ici')], ['maj', T('la mettre à jour depuis ici')], ['extinction', T('l\'éteindre depuis ici')]].forEach(([droit, libelle]) => {
+          const permis = !!(m.agir || {})[droit], attente = (m.demandes || []).includes(droit), lg = el('div', 'ligne');
+          lg.appendChild(el('span', '', (permis ? '✅ ' : '⬜ ') + libelle));
+          if (!permis && attente) lg.appendChild(el('span', 'aide', '⏳ ' + T('demande envoyée : à accepter sur cette machine')));
+          else if (!permis) { const bd = el('button', '', T('Demander')); bd.addEventListener('click', async () => { bd.disabled = true; if (await act('demander', { id: m.id, droit }, msg)) chargerMachines(true); else bd.disabled = false; }); lg.appendChild(bd); }
+          aut.appendChild(lg);
+        });
+        c.appendChild(aut);
+      }
       // les détails : adresse MAC, charge, imports
       const d = el('details', 'plus'); d.appendChild(el('summary', '', T('Détails et réglages')));
       if (m.charge) {          // ce que la machine dit d'elle-même : mémoire, et qui utilise son moteur
@@ -3747,7 +3832,6 @@ body[data-moteur="openai"] .biblio { display:none !important; }
         return b;
       };
       l3.append(importer('import-skills', T('Importer ses skills'), 'skills'), importer('import-memoire', T('Importer sa mémoire'), 'memoire'), res3); d.appendChild(l3);
-      if (!droits.conversations && m.etat !== 'injoignable') d.appendChild(el('div', 'aide', 'ℹ ' + T('Pour voir ses conversations dans ta liste, coche « mes conversations » sur cette machine (onglet Machines).')));
       c.appendChild(d);
       neuf.appendChild(c);
     });
@@ -3767,8 +3851,13 @@ body[data-moteur="openai"] .biblio { display:none !important; }
       bd.addEventListener('click', async () => { await api('/api/reglages', { cluster: false }); await rafraichir(); chargerMachines(true); }); neuf.appendChild(bd); }
     if (changement) rafraichir();          // une machine vient de changer d'étape : ses modèles et conversations sont relus ou retirés tout de suite
         // une saisie en cours n'est pas écrasée par le rafraîchissement : on ne redessine que si rien n'est en train d'être tapé
-    if (forcer || !z.contains(document.activeElement) || document.activeElement === document.body) z.replaceChildren(...neuf.childNodes);
-    if ($('p-machines').classList.contains('vue')) MINUTEUR_MACHINES = setTimeout(() => chargerMachines(), enCours ? 2000 : 8000);          // 2 s pendant un démarrage, une extinction ou une mise à jour
+    const champ = document.activeElement, saisie = champ && z.contains(champ) && (/^(TEXTAREA|SELECT)$/.test(champ.tagName) || (champ.tagName === 'INPUT' && !['checkbox', 'radio', 'button'].includes(champ.type)));          // un bouton qui vient d'être cliqué garde le focus : il ne doit pas figer la page
+    if (forcer || !saisie) {
+      const ouverts = [...z.querySelectorAll('details')].map(x => x.open), nouveaux = [...neuf.querySelectorAll('details')];
+      if (ouverts.length === nouveaux.length) nouveaux.forEach((x, i) => { x.open = ouverts[i]; });          // un volet ouvert le reste
+      z.replaceChildren(...neuf.childNodes);
+    }
+    if ($('p-machines').classList.contains('vue')) MINUTEUR_MACHINES = setTimeout(() => chargerMachines(), enCours ? 2000 : 4000);          // 2 s pendant un démarrage, une extinction ou une mise à jour
   };
   const chargerModelesMoteur = async () => {
     const z = $('modelesMoteur'); if (!ETAT || ETAT.moteur === 'ollama') return;
@@ -4204,11 +4293,17 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     non.addEventListener('click', () => { $('modal').hidden = true; });
     c.appendChild(ok); c.appendChild(document.createTextNode(' ')); c.appendChild(non); c.appendChild(fin);
   };
-  const chargerPlanifie = async () => { try { afficherPlanifie((await api('/api/planifie')).taches); } catch (e) { $('mPlanifie').textContent = e.message; } };
+  const chargerPlanifie = async () => { try { await lireCanaux(); afficherCanaux(); afficherPlanifie((await api('/api/planifie')).taches); } catch (e) { $('mPlanifie').textContent = e.message; } };
+  $('cType').addEventListener('change', formulaireCanal);
+  $('bAjouterCanal').addEventListener('click', async () => {
+    const params = {}; $('champsCanal').querySelectorAll('input').forEach(i => { params[i.dataset.cle] = i.value; });
+    try { await api('/api/notifications-ajouter', { nom: $('cNom').value, type: $('cType').value, params }); $('cNom').value = ''; $('champsCanal').querySelectorAll('input').forEach(i => { i.value = ''; }); $('mCanal').textContent = ''; chargerPlanifie(); }
+    catch (e) { $('mCanal').textContent = e.message; }
+  });
   $('bAjouterPlanifie').addEventListener('click', async () => {
     const jours = [...$('pJours').querySelectorAll('input:checked')].map(c => +c.dataset.j);
     try {
-      await api('/api/planifie-ajouter', { nom: $('pNom').value, prompt: $('pPrompt').value, heure: $('pHeure').value, jours });
+      await api('/api/planifie-ajouter', { nom: $('pNom').value, prompt: $('pPrompt').value, heure: $('pHeure').value, jours, notifier: $('pNotifier').value });
       $('pNom').value = ''; $('pPrompt').value = ''; $('mPlanifie').textContent = ''; chargerPlanifie();
     } catch (e) { $('mPlanifie').textContent = e.message; }
   });
@@ -4427,10 +4522,10 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     ['ecrire', T('Écrire un fichier'), T('Crée ou remplace un fichier du dossier de travail (accord demandé).')],
     ['modifier', T('Modifier un passage'), T('Remplace un passage précis d\'un fichier (accord demandé).')], ['modifier_plusieurs', T('Modifier plusieurs passages'), T('Plusieurs remplacements d\'un coup, tout ou rien.')],
     ['creer_document', T('Créer un document'), T('PDF, Word, tableur, présentation.')], ['apercu_page', T('Aperçu d\'une page'), T('Ouvre une page HTML locale pour la montrer.')],
-    ['web_chercher', T('Chercher sur le web'), T('S\'ajoute à la case « Web » et au mode hors ligne, qui le coupent aussi.')], ['web_lire', T('Lire une page web'), T('Idem : lit le contenu d\'une adresse.')],
     ['calculer', T('Calculer'), T('Une expression arithmétique, sans exécuter de code.')], ['symboles', T('Trouver une fonction ou une classe'), T('Où est définie une fonction, une classe, une variable.')],
     ['lire_plusieurs', T('Lire plusieurs fichiers'), T('Jusqu\'à 6 fichiers d\'un coup.')], ['rappeler', T('Chercher dans mes documents'), T('Les documents que tu as ajoutés à Lutin.')],
     ['trouver', T('Trouver un fichier par son nom'), T('Cherche dans le dossier de travail.')], ['\u0063hercher', T('Chercher dans les fichiers'), T('Une expression dans le contenu des fichiers du dossier de travail.')]];
+  const RECHERCHE_BLOC = $('rechercheBloc');          // gardé à part : la rubrique Outils se refait, cette section (réglée par chargerRecherche) est replacée dedans
   const chargerOutils = () => {
     if (!ETAT || !ETAT.reglages) return;
     const z = $('outilsZone'), r = ETAT.reglages, coupes = new Set(r.outils_desactives || []);
@@ -4448,6 +4543,11 @@ body[data-moteur="openai"] .biblio { display:none !important; }
       l.append(c, document.createTextNode(' ' + nom)); l.appendChild(el('div', 'aide', aideOutil)); grille.appendChild(l);
     });
     z.appendChild(grille);
+    const autoriser = $('rechAutoriser'); autoriser.textContent = '';          // une seule case pour le web : chercher ET lire des pages
+    { const l = el('label'), c = el('input'); c.type = 'checkbox'; c.checked = !coupes.has('web_chercher'); cases.web_chercher = cases.web_lire = c;
+      l.append(c, document.createTextNode(' ' + T('Autoriser l\'assistant à chercher sur internet et à lire des pages')));
+      autoriser.append(l, el('div', 'aide', T('Coupée ici, la recherche web disparaît pour toutes les conversations. La case « Web » des options d\'une conversation et le mode hors ligne la coupent aussi, au cas par cas.')));
+      c.addEventListener('change', () => { const corps = { outils_desactives: OUTILS_REGLABLES.map(x => x[0]).concat(['web_chercher', 'web_lire']).filter((id, i, t) => t.indexOf(id) === i && cases[id] && !cases[id].checked) }; api('/api/reglages', corps).then(() => rafraichir()).catch(e => alert(e.message)); }); }
     z.appendChild(el('h2', '', T('Exécuteur de commandes')));
     const champ = (id, libelle, valeur, mini, maxi, pas, unite, aideChamp) => {
       const l = el('div', 'ligne'), c = el('input'); c.type = 'number'; c.min = mini; c.max = maxi; c.step = pas; c.value = valeur; c.style.width = '110px'; c.id = id;
@@ -4466,10 +4566,11 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     const ligne = el('div', 'ligne'), ok = el('button', 'principal', T('Enregistrer')), defaut = el('button', '', T('Valeurs par défaut')), msg = el('span', 'aide');
     const lignes = t => t.value.split('\n').map(x => x.trim()).filter(Boolean);
     const envoyer = async corps => { msg.textContent = ''; try { await api('/api/reglages', corps); await rafraichir(); msg.textContent = T('Enregistré.'); } catch (e) { msg.textContent = e.message; msg.className = 'erreur'; return; } msg.className = 'aide'; };
-    ok.addEventListener('click', () => envoyer({ outils_desactives: OUTILS_REGLABLES.map(x => x[0]).filter(id => !cases[id].checked), outil_delai_commande_s: +delai.value, outil_sortie_max: +sortie.value, outil_lecture_max: +lecture.value,
+    ok.addEventListener('click', () => envoyer({ outils_desactives: OUTILS_REGLABLES.map(x => x[0]).concat(['web_chercher', 'web_lire']).filter((id, i, t) => t.indexOf(id) === i && cases[id] && !cases[id].checked), outil_delai_commande_s: +delai.value, outil_sortie_max: +sortie.value, outil_lecture_max: +lecture.value,
       outil_chercher_delai_s: +cherche.value, commandes_sans_accord: lignes(cmds), dossiers_ignores_en_plus: lignes(ign) }));
     defaut.addEventListener('click', () => { if (confirm(T('Remettre tous les réglages d\'outils à leur valeur par défaut ?'))) envoyer({ outils_desactives: [], outil_delai_commande_s: 240, outil_sortie_max: 9000, outil_lecture_max: 7000, outil_chercher_delai_s: 25, commandes_sans_accord: [], dossiers_ignores_en_plus: [] }); });
     ligne.append(ok, defaut, msg); z.appendChild(ligne);
+    z.appendChild(RECHERCHE_BLOC);          // la recherche web vient après les réglages de l'exécuteur et des fichiers
   };
   // ---- Onglet Modèles avec Colibri : ses modèles (de très gros modèles lus depuis le disque), jugés pour cette machine par Colibri ; « Préparer » lui confie le téléchargement
   const chargerColibriModeles = async () => {
@@ -4579,8 +4680,8 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     ((ETAT && ETAT.conversations) || []).forEach(c => liste.push({ ic: c.epingle ? '★' : '💬', t: c.titre || T('(sans titre)'), g: g.conv, k: '', f: () => { ouvrirOnglet('chat'); ouvrir(c.id); } }));
     if (ETAT && ETAT.installes) installesDiscussion().forEach(m => liste.push({ ic: '🧠', t: m, g: g.modele, k: 'modele model changer', f: () => { const s = $('selModele'); s.value = m; s.dispatchEvent(new Event('change')); } }));
     // Les réglages : chaque rubrique, puis chaque titre, case, liste et carte qu'elle contient ; un seul résultat par titre. Les mots-clés de la rubrique couvrent ce que ses cartes ne montrent qu'une fois chargées.
-    const MOTS_RUBRIQUES = { moteur: 'ollama llama.cpp openai compatible serveur colibri lm studio lmstudio exllamav3 exllama tabbyapi vllm moteur modeles vitesse mesure', recherche: 'web internet duckduckgo brave tavily exa perplexity searxng cle api',
-      outils: T('executeur commandes ecrire fichier delai sortie lecture outils mcp'), dossiers: T('dossier travail donnees emplacement'), conversation: 'mode contexte creativite temperature echantillonnage', machine: 'ressources memoire disque garde-fous securite sauvegarde' };
+    const MOTS_RUBRIQUES = { moteur: 'ollama llama.cpp openai compatible serveur colibri lm studio lmstudio exllamav3 exllama tabbyapi vllm moteur modeles vitesse mesure', 
+      outils: T('executeur commandes ecrire fichier delai sortie lecture outils mcp web internet recherche duckduckgo brave tavily exa perplexity searxng cle api'), dossiers: T('dossier travail donnees emplacement'), conversation: 'mode contexte creativite temperature echantillonnage', machine: 'ressources memoire disque garde-fous securite sauvegarde' };
     const SELECTEUR_REGLAGES = 'h2, h3, label, .carte, details > summary';
     const texteDirect = n => [...n.childNodes].filter(x => x.nodeType === 3).map(x => x.textContent).join(' ').replace(/\s+/g, ' ').trim();
     const titreReglage = n => {

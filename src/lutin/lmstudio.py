@@ -6,6 +6,7 @@ Ce que ce module fait, et seulement sur clic explicite de l'utilisateur :
   - télécharger un modèle (`lms get`) et lister ceux qui sont là (`lms ls --json`).
 Ce qu'il ne fait PAS : désinstaller (les modèles sont dans le dossier de LM Studio), ni exposer le serveur sur le réseau (adresse 127.0.0.1 imposée).
 Les commandes viennent de la documentation de LM Studio (lmstudio.ai/docs/cli) ; **elles n'ont pas été lancées par Lutin sur une vraie installation de LM Studio**."""
+import glob
 import json
 import os
 import re
@@ -80,8 +81,57 @@ def _suivre(proc, dire, annule=lambda: False):
     return code, fin
 
 
-def installer(dire=print, ouvrir=urllib.request.urlopen, lancer=subprocess.Popen, annule=lambda: False):
+# Sous Linux, llmster a besoin de libatomic (son installeur l'exige). Le paquet dépend du gestionnaire de la distribution.
+PAQUETS_LIBATOMIC = (("apt-get", "libatomic1"), ("dnf", "libatomic"), ("yum", "libatomic"), ("zypper", "libatomic1"), ("apk", "libatomic"))
+
+
+def libatomic_presente():
+    """Vrai si libatomic est là (ou sans objet : seul Linux en a besoin)."""
+    if os.name != "posix" or os.uname().sysname != "Linux":
+        return True
+    return any(glob.glob(motif) for motif in ("/usr/lib*/libatomic.so*", "/usr/lib/*/libatomic.so*", "/lib*/libatomic.so*", "/lib/*/libatomic.so*", "/usr/local/lib*/libatomic.so*"))
+
+
+def commandes_libatomic(trouver=shutil.which):
+    """Les commandes (mise à jour de l'index puis installation) pour CETTE distribution, ou [] si on ne la reconnaît pas."""
+    for gestionnaire, paquet in PAQUETS_LIBATOMIC:
+        if trouver(gestionnaire):
+            if gestionnaire == "apt-get":
+                return [["apt-get", "update"], ["apt-get", "install", "-y", paquet]]
+            if gestionnaire == "apk":
+                return [["apk", "add", paquet]]
+            if gestionnaire == "zypper":
+                return [["zypper", "--non-interactive", "install", paquet]]
+            return [[gestionnaire, "install", "-y", paquet]]
+    return []
+
+
+def preparer_dependances(dire=print, lancer=subprocess.run, present=None, trouver=shutil.which, root=None):
+    """Installe libatomic si elle manque (en root, ou avec sudo sans mot de passe) ; sinon dit la commande exacte à lancer. Rien n'est tenté ailleurs que sous Linux."""
+    if (present or libatomic_presente)():
+        return
+    commandes = commandes_libatomic(trouver)
+    texte = " && ".join(" ".join(c) for c in commandes) or "apt-get install -y libatomic1"
+    est_root = (os.geteuid() == 0) if root is None and hasattr(os, "geteuid") else bool(root)
+    prefixe = []
+    if not est_root:
+        sudo = trouver("sudo")
+        if sudo and lancer([sudo, "-n", "true"], capture_output=True, timeout=10).returncode == 0:
+            prefixe = [sudo, "-n"]
+        else:
+            commandes = []
+    if not commandes:
+        raise ValueError(_t("LM Studio a besoin de la bibliothèque libatomic, absente de cette machine, et Lutin ne peut pas l'installer lui-même (pas de droits administrateur). Lance cette commande, puis recommence : sudo {}").format(texte))
+    dire(_t("Installation de la bibliothèque libatomic, demandée par LM Studio…"))
+    for commande in commandes:
+        r = lancer(prefixe + commande, capture_output=True, text=True, timeout=600, encoding="utf-8", errors="replace", stdin=subprocess.DEVNULL)
+        if r.returncode != 0:
+            raise ValueError(_t("L'installation de libatomic a échoué ({}). Lance toi-même : sudo {}").format(((r.stdout or "") + (r.stderr or ""))[-200:].strip(), texte))
+
+
+def installer(dire=print, ouvrir=urllib.request.urlopen, lancer=subprocess.Popen, annule=lambda: False, dependances=None):
     """Télécharge puis lance l'installeur officiel de llmster (le démon de LM Studio, sans interface). Renvoie le chemin de `lms`."""
+    (dependances or preparer_dependances)(dire)
     dire(_t("Téléchargement de l'installeur officiel de LM Studio…"))
     corps = _script(URL_PS1 if os.name == "nt" else URL_SH, ouvrir)
     with tempfile.TemporaryDirectory(prefix="lutin-lmstudio-") as tmp:
@@ -91,6 +141,8 @@ def installer(dire=print, ouvrir=urllib.request.urlopen, lancer=subprocess.Popen
         proc = lancer(commande_installeur(script), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, text=True, encoding="utf-8", errors="replace")
         code, fin = _suivre(proc, dire, annule)
     if code != 0 and not annule():
+        if any("libatomic" in ligne for ligne in fin):
+            raise ValueError(_t("LM Studio a besoin de la bibliothèque libatomic : installe-la (Debian/Ubuntu : sudo apt-get install -y libatomic1 ; Fedora : sudo dnf install -y libatomic), puis recommence."))
         raise ValueError(_t("L'installeur de LM Studio s'est arrêté (code {}). Fin de son message :\n{}").format(code, "\n".join(fin[-6:])))
     lms = chemin_lms()
     if not lms:

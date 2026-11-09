@@ -406,6 +406,88 @@ class Reglage(Base):
         self.assertTrue(moteurs is not None)
 
 
+class Demandes(Base):
+    """Une machine appairée DEMANDE un droit ; rien n'est accordé tant que le propriétaire de l'hôte n'a pas répondu."""
+
+    def preparer(self):
+        m = self.jumeler()
+        self.jeton = machines.trouver(m["id"])["jeton"]
+        self.nom = machines.noeud()["jetons"][0]["nom"]
+        return m
+
+    def demander(self, droit, jeton=None):
+        return self.http("POST", "/api/noeud/demande", {"droit": droit}, {"X-Noeud": self.jeton if jeton is None else jeton})
+
+    def test_une_demande_n_accorde_rien_et_attend_la_reponse(self):
+        self.preparer()
+        self.assertEqual(self.demander("piloter")[0], 200)
+        v = machines.noeud_vue()
+        self.assertFalse(v["piloter"])
+        self.assertEqual([d["droit"] for d in v["demandes"]], ["piloter"])
+
+    def test_sans_jeton_ou_pour_un_droit_inconnu_c_est_refuse(self):
+        self.preparer()
+        self.assertEqual(self.demander("piloter", jeton="")[0], 401)
+        self.assertEqual(self.demander("piloter", jeton="x" * 40)[0], 401)
+        for droit in ("skills", "tout", ""):
+            self.assertEqual(self.demander(droit)[0], 400, droit)
+        self.assertEqual(machines.noeud_vue()["demandes"], [])
+
+    def test_redemander_ne_fait_pas_de_doublon(self):
+        self.preparer()
+        for _ in range(3):
+            self.demander("maj")
+        self.assertEqual(len(machines.noeud_vue()["demandes"]), 1)
+
+    def test_accepter_active_le_droit_refuser_n_active_rien(self):
+        self.preparer()
+        self.demander("maj")
+        self.demander("extinction")
+        machines.noeud_repondre_demande(self.nom, "maj", True)
+        machines.noeud_repondre_demande(self.nom, "extinction", False)
+        v = machines.noeud_vue()
+        self.assertTrue(v["maj"])
+        self.assertFalse(v["extinction"])
+        self.assertEqual(v["demandes"], [])
+        with self.assertRaises(ValueError):
+            machines.noeud_repondre_demande(self.nom, "maj", True)
+
+    def test_un_droit_deja_accorde_ne_laisse_pas_de_demande(self):
+        self.preparer()
+        machines.noeud_autoriser_piloter(True)
+        self.demander("piloter")
+        self.assertEqual(machines.noeud_vue()["demandes"], [])
+
+    def test_l_etat_ne_montre_que_les_demandes_de_celui_qui_interroge(self):
+        m = self.preparer()
+        self.demander("piloter")
+        _, corps = self.http("GET", "/api/noeud/etat", None, {"X-Noeud": self.jeton})
+        self.assertEqual(json.loads(corps)["demandes"], ["piloter"])
+        with machines.VERROU:
+            n = machines.noeud()
+            n["demandes"].append({"machine": "Autre", "droit": "extinction", "date": "x"})
+            machines._ecrire("noeud.json", n)
+        _, corps = self.http("GET", "/api/noeud/etat", None, {"X-Noeud": self.jeton})
+        self.assertEqual(json.loads(corps)["demandes"], ["piloter"])
+        self.assertEqual(machines.sonder(machines.trouver(m["id"]), "", force=True)["demandes"], ["piloter"])
+
+    def test_la_machine_principale_envoie_la_demande(self):
+        m = self.preparer()
+        self.assertEqual(machines.demander_droit(m["id"], "maj"), {"ok": True})
+        self.assertEqual([d["droit"] for d in machines.noeud_vue()["demandes"]], ["maj"])
+        with self.assertRaises(ValueError):
+            machines.demander_droit(m["id"], "skills")
+        with self.assertRaises(ValueError):
+            machines.demander_droit("0" * 32, "maj")
+
+    def test_une_sonde_d_une_machine_qui_s_allume_est_refaite_vite(self):
+        m = self.preparer()
+        machines.SONDES[m["id"]] = (time.monotonic() - 3, {"etat": "injoignable"}, "")
+        with mock.patch.object(machines, "_json", side_effect=OSError("x")) as j:
+            machines.sonder(machines.trouver(m["id"]), "")
+        self.assertTrue(j.called, "un état « pas encore opérationnel » vieux de 3 s est resondé")
+
+
 class Relais(Base):
     """Une conversation menée SUR l'hôte : le tour s'exécute là-bas, la machine appairée ne fait que passer les octets. Droit « piloter », décoché par défaut."""
 

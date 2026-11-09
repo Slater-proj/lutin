@@ -2,6 +2,18 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## Machines plus claires et plus vives, tâches planifiées fiables, notifications, Outils réunis, LM Studio sous Linux
+
+- **Machines : un seul choix, « Qui répond à tes messages ? »** (cette machine ou une machine appairée), à la place du bouton « Répondre avec cette machine / Revenir au moteur local ».
+- **Autorisations demandées en un clic** : sous chaque machine, ce qu'elle t'autorise (mener ses conversations, la mettre à jour, l'éteindre) et un bouton *Demander*. La demande arrive chez son propriétaire (cloche sur Réglages > Machines, carte « Demandes d'autorisation ») : **rien n'est accordé sans sa réponse**, et un droit se retire à tout moment. Le bouton de mise à jour sans autorisation devient « Demander à la mettre à jour ». Une machine trop ancienne pour dire sa version est signalée avec la marche à suivre (une première mise à jour sur elle-même, ensuite tout se fait d'ici).
+- **La page se rafraîchit enfin sans second clic** : le bouton qu'on vient de cliquer gardait le focus et figeait la page jusqu'au clic suivant. Une machine qui s'allume est resondée toutes les 2 s (au lieu de 10 s), la page se met à jour toutes les 4 s au repos, et les volets ouverts le restent.
+- **Tâches planifiées** : une tâche garde **une seule conversation** (chaque exécution y ajoute sa demande, datée, et sa réponse) au lieu d'en ouvrir une nouvelle à chaque fois ; un problème (moteur absent, mémoire pleine…) est **écrit dans la conversation** au lieu d'un « rien fait » silencieux.
+- **Notifications** (Automatisation > Notifications) : Gotify, ntfy, Telegram ou un webhook (Discord, Slack, Mattermost, pont WhatsApp que tu héberges). Associe un canal à une tâche planifiée : son résultat t'est envoyé quand elle a fini. Les jetons restent sur la machine et ne sont jamais réaffichés ; bouton d'essai.
+- **Outils** : la recherche web est maintenant une section de la rubrique Outils, avec une seule case pour l'autoriser (chercher et lire des pages), au lieu d'une rubrique séparée et de deux cases d'outils.
+- **LM Studio sous Linux** : l'installeur officiel exige libatomic ; Lutin la vérifie, l'installe lui-même s'il en a le droit (root ou sudo sans mot de passe) et sinon donne la commande exacte à lancer.
+- **Colibri** : le texte des Réglages renvoie vers l'onglet Modèles (Lutin lance lui-même la préparation) au lieu de « coli setup / coli import ».
+- La carte de ExLlamaV3 n'apparaît que sur une machine où il peut tourner (NVIDIA, hors Docker) : les autres serveurs sont repliés avec la raison dans « serveur(s) masqué(s) ».
+
 ## ExLlamaV3, serveurs filtrés selon la machine, comparaison de moteurs qui marche partout
 
 - **ExLlamaV3 géré par Lutin** (à travers TabbyAPI, son serveur officiel, plus moderne que ExLlamaV2 : formats « EXL3 » plus fins) : installation dans un environnement Python dédié, démarrage, arrêt, mise à jour, téléchargement de modèles EXL3 depuis Hugging Face. Carte NVIDIA obligatoire, Windows ou Linux, pas dans Docker. Il n'écoute que sur 127.0.0.1. **Non essayé sur une vraie carte NVIDIA** : les commandes viennent de la documentation de TabbyAPI.

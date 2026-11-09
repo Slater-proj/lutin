@@ -30,6 +30,8 @@ Drop your documents in the `docs/` folder of the workspace (or `documents/`). Lu
 
 Memory tab > **Scheduled tasks**: a request Lutin handles by itself at a set time, on the days you choose (« every morning, sum up what changed in the repository »). The result is a conversation named « ⏰ name » in the list, with a *See the result* button.
 
+A task keeps **one conversation** (each run adds its dated request and its answer); a problem is written into it instead of silently doing nothing. Under *Automation > Notifications* you can add a channel (Gotify, ntfy, Telegram, or a webhook for Discord, Slack, Mattermost or a WhatsApp bridge you host) and attach it to a task: its result is sent when it has finished. Tokens stay on the machine and are never shown again.
+
 - **Read-only**: nobody is there to approve anything, so the task runs like a dry run: it reads and searches for real, every write or command is only shown.
 - Starts only when no answer is in progress (one graphics card); a task missed because the PC was off runs when Lutin starts, the same day only.
 - Created, paused and deleted from this machine only (like workspace folders). *Run now* tests a task without waiting.

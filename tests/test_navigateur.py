@@ -220,7 +220,7 @@ class Parcours(unittest.TestCase):
             # les réglages sont rangés en rubriques : un sous-menu, une rubrique à la fois
             p.evaluer(onglet("reglages"))
             groupes = p.evaluer("[...document.querySelectorAll('#p-reglages details.groupe > summary')].map(s => s.textContent.trim())")
-            self.assertEqual(groupes, ["Général", "Recherche web", "Dossiers et données", "Moteur", "Conversation", "Outils", "Machine et réglages avancés"])
+            self.assertEqual(groupes, ["Général", "Dossiers et données", "Moteur", "Conversation", "Outils", "Machine et réglages avancés"])
             self.assertEqual(p.evaluer("document.querySelectorAll('#p-reglages > .cadre > h2').length"), 0, "plus de section isolée hors d'un groupe")
             self.assertEqual(p.evaluer("[...document.querySelectorAll('#p-reglages details.groupe')].filter(d => getComputedStyle(d).display !== 'none').map(d => d.dataset.g)"), ["general"])
             p.evaluer("document.querySelector('#sousReglages button[data-g=moteur]').click()")

@@ -35,6 +35,7 @@ ETATS = ("injoignable", "reveil_envoye", "joignable", "operationnel")
 DUREE_CODE_S = 300
 CODES_MAX = 3
 VALIDITE_SONDE_S = 10          # un constat d'état est gardé ce temps : pas de sonde à chaque message
+VALIDITE_SONDE_ATTENTE_S = 2          # une machine pas encore opérationnelle (éteinte, qui démarre) est resondée vite : on la voit s'allumer sans attendre
 DELAI_SONDE_S = 1.5
 RE_MAC = re.compile(r"^([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}$")
 RE_ID = re.compile(r"^[0-9a-f]{32}$")
@@ -274,6 +275,43 @@ def noeud_autoriser_maj(autoriser):
     return noeud_vue()
 
 
+DROITS_DEMANDABLES = ("piloter", "maj", "extinction")          # ce qu'une machine appairée peut DEMANDER (le propriétaire de celle-ci accepte ou refuse, jamais automatiquement)
+MAX_DEMANDES = 20
+
+
+def noeud_demander(machine, droit):
+    """Une machine appairée demande un droit (mener des conversations ici, mettre Lutin à jour, éteindre). Rien n'est accordé : la demande attend la réponse du propriétaire de CETTE machine."""
+    if droit not in DROITS_DEMANDABLES:
+        raise ValueError(_t("Droit inconnu."))
+    with VERROU:
+        n = noeud()
+        if n.get(droit):
+            return {"deja": True}
+        demandes = [d for d in n.get("demandes", []) if not (d.get("machine") == machine and d.get("droit") == droit)]
+        demandes.append({"machine": str(machine)[:40], "droit": droit, "date": time.strftime("%Y-%m-%d %H:%M")})
+        n["demandes"] = demandes[-MAX_DEMANDES:]
+        _ecrire("noeud.json", n)
+    journaliser("{} demande l'autorisation « {} » (en attente de ta réponse)".format(machine, droit))
+    return {"deja": False}
+
+
+def noeud_repondre_demande(machine, droit, accepter):
+    """Le propriétaire de CETTE machine accepte ou refuse une demande. Accepter active le droit (décochable à tout moment) ; refuser l'efface."""
+    if droit not in DROITS_DEMANDABLES:
+        raise ValueError(_t("Droit inconnu."))
+    with VERROU:
+        n = noeud()
+        restantes = [d for d in n.get("demandes", []) if not (d.get("machine") == machine and d.get("droit") == droit)]
+        if len(restantes) == len(n.get("demandes", [])):
+            raise ValueError(_t("Cette demande n'existe plus."))
+        n["demandes"] = restantes
+        if accepter:
+            n[droit] = True
+        _ecrire("noeud.json", n)
+    journaliser("demande « {} » de {} : {}".format(droit, machine, "acceptée" if accepter else "refusée"))
+    return noeud_vue()
+
+
 DROITS = ("skills", "memoire")          # ce qu'une machine appairée peut LIRE si le propriétaire de celle-ci l'a coché (jamais écrire) ; les conversations, elles, se pilotent (voir noeud_autoriser_piloter)
 
 
@@ -315,7 +353,7 @@ def noeud_partager(genre, corps):
 def noeud_vue():
     n = noeud()
     return {"actif": n["actif"], "id": n["id"], "droits": noeud_droits(), "extinction": bool(n.get("extinction")), "maj": bool(n.get("maj")), "piloter": bool(n.get("piloter")), "extinction_en_attente": alimentation.extinction_en_attente(),
-            "autorisees": [{"nom": j["nom"], "date": j["date"]} for j in n["jetons"]]}
+            "demandes": [dict(d) for d in n.get("demandes", [])], "autorisees": [{"nom": j["nom"], "date": j["date"]} for j in n["jetons"]]}
 
 
 def noeud_charge(locale_occupee, distantes):
@@ -326,12 +364,13 @@ def noeud_charge(locale_occupee, distantes):
             "ram": {"total": ram["total"], "libre": ram["libre"]} if ram else None, "vram": {"total": vram["total"], "libre": vram["libre"], "nom": vram["nom"]} if vram else None}
 
 
-def noeud_etat(moteur, modeles, ip_locale="", charge=None):
+def noeud_etat(moteur, modeles, ip_locale="", charge=None, demandeur=""):
     """Ce que le nœud répond à `GET /api/noeud/etat` : de quoi savoir s'il est joignable et si son moteur peut faire tourner le modèle voulu, plus son adresse MAC, son aptitude au réveil et son démarrage automatique."""
     from . import moteur as _m
     n = noeud()
     return dict(noeud_infos(ip_locale), id=n["id"], moteur=moteur.id, moteur_nom=moteur.nom, actif=bool(modeles.get("actif")), modeles=sorted(modeles.get("installes", []))[:500], charge=charge, droits=noeud_droits(),
-                version=str(_m.VERSION), agir={"extinction": bool(n.get("extinction")), "maj": bool(n.get("maj")), "piloter": bool(n.get("piloter"))})
+                version=str(_m.VERSION), agir={"extinction": bool(n.get("extinction")), "maj": bool(n.get("maj")), "piloter": bool(n.get("piloter"))},
+                demandes=sorted({d["droit"] for d in n.get("demandes", []) if demandeur and d.get("machine") == demandeur}))          # seulement les demandes DE celui qui interroge
 
 
 def noeud_capacites(moteur, modele):
@@ -517,9 +556,9 @@ def sonder(m, modele="", ouvrir=None, maintenant=time.monotonic, force=False):
     """{etat, detail, modeles} : injoignable · joignable (le nœud répond mais n'a pas ce modèle ou son moteur est arrêté) · operationnel. Gardé 10 s. Vérifie que c'est bien la machine appairée."""
     with VERROU:
         gardee = SONDES.get(m["id"])
-        if gardee and not force and maintenant() - gardee[0] < VALIDITE_SONDE_S and gardee[2] == modele:
+        if gardee and not force and maintenant() - gardee[0] < (VALIDITE_SONDE_S if gardee[1].get("etat") == "operationnel" else VALIDITE_SONDE_ATTENTE_S) and gardee[2] == modele:
             return gardee[1]
-    charge, droits, version, agir, allumee = None, {}, "", {}, False
+    charge, droits, version, agir, allumee, demandes = None, {}, "", {}, False, []
     try:
         rep = _json(m, "/api/noeud/etat", ouvrir=ouvrir)
         if rep.get("id") == m["id"]:
@@ -528,6 +567,7 @@ def sonder(m, modele="", ouvrir=None, maintenant=time.monotonic, force=False):
             droits = {k: bool((rep.get("droits") or {}).get(k)) for k in DROITS}
             version = str(rep.get("version") or "")[:30]
             agir = {k: bool((rep.get("agir") or {}).get(k)) for k in ("extinction", "maj", "piloter")}
+            demandes = [d for d in (rep.get("demandes") or []) if d in DROITS_DEMANDABLES]
         if rep.get("id") != m["id"]:
             r = {"etat": "injoignable", "detail": _t("Ce n'est plus la même machine à cette adresse : rien ne lui est envoyé."), "modeles": []}
         elif not rep.get("actif"):
@@ -541,7 +581,7 @@ def sonder(m, modele="", ouvrir=None, maintenant=time.monotonic, force=False):
     except (urllib.error.URLError, OSError, ValueError) as e:
         allumee = _hote_allume(e)
         r = {"etat": "injoignable", "detail": _t("Pas de réponse (éteinte, hors réseau ou Lutin arrêté)."), "modeles": []}
-    r = _avec_reveil(m, dict(r, charge=charge, droits=droits, version=version, agir=agir, maj_disponible=_maj_disponible(version)), maintenant)
+    r = _avec_reveil(m, dict(r, charge=charge, droits=droits, version=version, agir=agir, demandes=demandes, maj_disponible=_maj_disponible(version)), maintenant)
     r = dict(r, **_etape(m, r, allumee))
     _noter(m, r["etat"], maintenant, r, modele)
     return r
@@ -641,6 +681,26 @@ def eteindre(ident, annuler=False, ouvrir=None):
             oublier_machine(ident)          # elle va s'éteindre : on ne propose déjà plus ses modèles ni ses conversations
     SONDES.pop(ident, None)
     return rep
+
+
+def demander_droit(ident, droit, ouvrir=None):
+    """Demande à l'autre machine de t'accorder un droit (conversations, mise à jour, extinction) : son propriétaire répond sur elle. Rien n'est accordé d'office."""
+    m = trouver(ident)
+    if m is None:
+        raise ValueError(_t("Machine inconnue."))
+    if droit not in DROITS_DEMANDABLES:
+        raise ValueError(_t("Droit inconnu."))
+    try:
+        _json(m, "/api/noeud/demande", {"droit": droit}, delai=8, ouvrir=ouvrir)
+    except urllib.error.HTTPError as e:
+        if e.code in (401, 404, 405):
+            raise ValueError(_t("Cette machine ne reconnaît pas la demande : soit son autorisation a été retirée, soit sa version de Lutin est trop ancienne. Mets-la à jour une première fois sur elle-même (relance l'installeur ou la commande « lutin update »).")) from None
+        raise ValueError(_t("Cette machine a répondu une erreur ({}).").format(e.code)) from None
+    except (urllib.error.URLError, OSError, ValueError):
+        raise ValueError(_t("Impossible de joindre cette machine : vérifie l'adresse et qu'elle est allumée.")) from None
+    SONDES.pop(ident, None)
+    journaliser("autorisation « {} » demandée à {}".format(droit, m["nom"]))
+    return {"ok": True}
 
 
 def mettre_a_jour_distante(ident, ouvrir=None):

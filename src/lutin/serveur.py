@@ -38,6 +38,7 @@ from . import fichiers as _fichiers
 from . import machine as _machine
 from . import mission as _mission
 from . import fond as _fond
+from . import notifications as _notif
 from . import planifie as _plan
 from . import rappel as _rappel
 from . import suivi as _suivi
@@ -413,7 +414,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
                                        "version": _m.VERSION, "partages": o.get("partages", []), "ollama": o["actif"], "ollama_installe": bool(_m.chemin_ollama()) or _m.moteur_actuel().id != "ollama", "moteur_nom": _m.moteur_actuel().nom, "installes": o["installes"], "modeles": modeles, "modeles_masques": len(_m.lire_registre_modeles()["masques"]), "actives": list(_m.TOURS_ACTIFS),
                                        "pulls": _m.PULLS, "reglages": r, "conversations": _m.conv_liste(), "racine": str(_m.RACINE), "donnees": str(_m.DONNEES),
                                        "colibri_choisi": bool(getattr(_m.moteur_actuel(r), "colibri_choisi", lambda: False)()), "lmstudio_choisi": bool(getattr(_m.moteur_actuel(r), "lmstudio_choisi", lambda: False)()), "exllamav3_choisi": bool(getattr(_m.moteur_actuel(r), "exllamav3_choisi", lambda: False)()), "outil": bool(self._outil_vivant()), "hors_ligne": _hl.actif(), "moteur": _m.moteur_actuel().id, "niveau": _m.SECURITE.niveau, "docker": _acces.en_docker(), "ouverture_possible": _fichiers.ouverture_possible(), "missions": _mission.par_conversation(), "langue": _i18n.langue(), "langue_reglage": _i18n.langue_configuree(), "cpus": _machine.cpus_disponibles() or 1, "diagnostic": self._avec_estimation(self._diagnostic(o, r, profil, modeles), r, profil), "prudent": _estimation.mode_prudent(profil), "premier_lancement": self._premier_lancement(o, r, profil), "redemarrage": {"necessaire": _acces.securite_enregistree() != _m.SECURITE, "possible": _acces.peut_redemarrer()}, "nouvelle_version": _m.nouvelle_version_lutin(), "travaux": _m.travaux_etat(), "configurateur": self._configurateur(), "addons_alertes": _addons.alertes(), "embeddings": _embeddings.etat(),
-                                       "reflexion_possible": self._reflexion_possible(r, o["actif"]), "cluster_actif": _machines.cluster_actif(r.get("cluster")), "modeles_distants": _machines.modeles_distants() if _machines.cluster_actif(r.get("cluster")) else [], "conversations_distantes": _machines.conversations_distantes() if _machines.cluster_actif(r.get("cluster")) else [], "machines_hors_ligne": _machines.hors_ligne() if _machines.cluster_actif(r.get("cluster")) else [], "taches_fond": _m.taches_en_cours(), "taches_moteur": [dict(v, nom=_moteurs.MOTEURS[k].nom) for k, v in _moteurs.toutes_les_taches().items() if v.get("statut") == "en cours" and k in _moteurs.MOTEURS], "fins_moteur": _moteurs.fins_recentes(), "memoire": self._memoire(r, o), "calibrage": _calibrage.etat(), "bench": {"en_cours": _m.BENCH["en_cours"], "etape": _m.BENCH["etape"], "erreur": _m.BENCH["erreur"], "file": list(_m.BENCH.get("file") or []), "mesures": _bench.lire(_m.chemin_bench())}, "attentes": [{"id": a.id, "titre": a.titre, "detail": a.detail, "diff": a.diff, "conv": a.conv} for a in _m.Attente.EN_COURS.values()],
+                                       "reflexion_possible": self._reflexion_possible(r, o["actif"]), "cluster_actif": _machines.cluster_actif(r.get("cluster")), "demandes_machines": len(_machines.noeud().get("demandes", [])), "modeles_distants": _machines.modeles_distants() if _machines.cluster_actif(r.get("cluster")) else [], "conversations_distantes": _machines.conversations_distantes() if _machines.cluster_actif(r.get("cluster")) else [], "machines_hors_ligne": _machines.hors_ligne() if _machines.cluster_actif(r.get("cluster")) else [], "taches_fond": _m.taches_en_cours(), "taches_moteur": [dict(v, nom=_moteurs.MOTEURS[k].nom) for k, v in _moteurs.toutes_les_taches().items() if v.get("statut") == "en cours" and k in _moteurs.MOTEURS], "fins_moteur": _moteurs.fins_recentes(), "memoire": self._memoire(r, o), "calibrage": _calibrage.etat(), "bench": {"en_cours": _m.BENCH["en_cours"], "etape": _m.BENCH["etape"], "erreur": _m.BENCH["erreur"], "file": list(_m.BENCH.get("file") or []), "mesures": _bench.lire(_m.chemin_bench())}, "attentes": [{"id": a.id, "titre": a.titre, "detail": a.detail, "diff": a.diff, "conv": a.conv} for a in _m.Attente.EN_COURS.values()],
                                        "en_attente": sorted({a.conv for a in _m.Attente.EN_COURS.values() if a.conv} | set(_m.CHOIX_MEMOIRE))})
         if chemin == "/api/conseil":
             r = _m.reglages()
@@ -422,6 +423,8 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 return self._envoyer(200, {"mesure": None, "conseil": []})
             from .machine import detecter
             return self._envoyer(200, {"mesure": vitesse, "conseil": _conseil.analyser(vitesse, detecter(), r, _m._CATALOGUE, _m.etat_moteur()["installes"], _m.ps_modele(r["modele"]))})
+        if chemin == "/api/notifications":
+            return self._envoyer(200, {"canaux": _notif.lister(), "types": _notif.types()})
         if chemin == "/api/planifie":
             return self._envoyer(200, _plan.etat())
         if chemin == "/api/documents":
@@ -788,6 +791,14 @@ class Gestionnaire(BaseHTTPRequestHandler):
             return self._noeud_eteindre(donnees)
         if self.path == "/api/noeud/maj":                      # ... ou, si le propriétaire l'a autorisé, pour mettre Lutin à jour ici (puis redémarrage si Lutin est supervisé)
             return self._noeud_maj()
+        if self.path == "/api/noeud/demande":                  # ... ou pour DEMANDER un droit (rien n'est accordé : le propriétaire de cette machine répond)
+            nom = _machines.noeud_jeton_valide(self.headers.get("X-Noeud"))
+            if not nom:
+                return self._envoyer(401, {"erreur": "machine non autorisée"})
+            try:
+                return self._envoyer(200, dict(_machines.noeud_demander(nom, str(donnees.get("droit", ""))), ok=True))
+            except ValueError as e:
+                return self._envoyer(400, {"erreur": str(e)})
         if not self._authentifie():
             return self._envoyer(401, {"erreur": "authentification requise"})
         if not self._jeton_valide():
@@ -980,12 +991,22 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 if not self._configurateur():
                     return self._envoyer(403, {"erreur": _t("Un projet Claude s'importe depuis cette machine (niveau « cette machine seulement ») ou avec la commande lutin import-project.")})
                 return self._envoyer(200, _m.importer_projet_claude(str(donnees.get("chemin", "")), str(donnees.get("mode", "")), str(donnees.get("vers", "")), str(donnees.get("nom", ""))))
-            if self.path in ("/api/planifie-ajouter", "/api/planifie-supprimer", "/api/planifie-activer", "/api/planifie-lancer"):
+            if self.path in ("/api/notifications-ajouter", "/api/notifications-supprimer", "/api/notifications-tester"):
+                if not self._configurateur():
+                    return self._envoyer(403, {"erreur": _t("Les notifications se règlent depuis cette machine (niveau « cette machine seulement » ou navigateur de cette machine).")})
+                if self.path == "/api/notifications-ajouter":
+                    return self._envoyer(200, {"canaux": _notif.ajouter(donnees.get("nom"), str(donnees.get("type", "")), donnees.get("params"))})
+                if self.path == "/api/notifications-supprimer":
+                    return self._envoyer(200, {"canaux": _notif.supprimer(str(donnees.get("id", "")))})
+                return self._envoyer(200, _notif.tester(str(donnees.get("id", ""))))
+            if self.path in ("/api/planifie-ajouter", "/api/planifie-supprimer", "/api/planifie-activer", "/api/planifie-lancer", "/api/planifie-notifier"):
                 if not self._configurateur():
                     return self._envoyer(403, {"erreur": _t("Les tâches planifiées se gèrent depuis cette machine (niveau « cette machine seulement » ou navigateur de cette machine).")})
                 ident = str(donnees.get("id", ""))
                 if self.path == "/api/planifie-ajouter":
-                    return self._envoyer(200, _plan.ajouter(donnees.get("nom"), donnees.get("prompt"), donnees.get("heure"), donnees.get("jours"), donnees.get("travail")))
+                    return self._envoyer(200, _plan.ajouter(donnees.get("nom"), donnees.get("prompt"), donnees.get("heure"), donnees.get("jours"), donnees.get("travail"), donnees.get("notifier")))
+                if self.path == "/api/planifie-notifier":
+                    return self._envoyer(200, _plan.definir_notification(ident, donnees.get("canal")))
                 if self.path == "/api/planifie-supprimer":
                     return self._envoyer(200, _plan.supprimer(ident))
                 if self.path == "/api/planifie-activer":
@@ -1281,7 +1302,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
         if not _machines.noeud_jeton_valide(self.headers.get("X-Noeud")):
             return self._envoyer(401, {"erreur": "machine non autorisée"})
         mo = _moteurs.par_id(_m.reglages().get("moteur") or _moteurs.OLLAMA)
-        return self._envoyer(200, _machines.noeud_etat(mo, mo.modeles(), self.request.getsockname()[0], _machines.noeud_charge(bool(_m.TOURS_ACTIFS), self.NOEUD_ACTIFS["n"])))
+        return self._envoyer(200, _machines.noeud_etat(mo, mo.modeles(), self.request.getsockname()[0], _machines.noeud_charge(bool(_m.TOURS_ACTIFS), self.NOEUD_ACTIFS["n"]), _machines.noeud_jeton_valide(self.headers.get("X-Noeud")) or ""))
 
     def _noeud_appairer(self, donnees):
         if not _m.LIMITEUR_PIN.autoriser(self.client_address[0]):
@@ -1462,6 +1483,12 @@ class Gestionnaire(BaseHTTPRequestHandler):
             return _machines.eteindre(str(donnees.get("id", "")), bool(donnees.get("annuler")))
         elif action == "update":
             return _machines.mettre_a_jour_distante(str(donnees.get("id", "")))
+        elif action == "demander":
+            return _machines.demander_droit(str(donnees.get("id", "")), str(donnees.get("droit", "")))
+        elif action == "demande-repondre":          # le propriétaire de CETTE machine accepte ou refuse : depuis cette machine seulement
+            if not self._configurateur_strict():
+                raise ValueError(_t("Cela se règle depuis cette machine elle-même."))
+            _machines.noeud_repondre_demande(str(donnees.get("machine", "")), str(donnees.get("droit", "")), bool(donnees.get("accepter")))
         elif action in ("node-shutdown", "node-update", "node-pilot", "autostart", "cancel-local-shutdown"):          # ce qui touche l'extinction ou le démarrage de CETTE machine : depuis cette machine seulement
             if not self._configurateur_strict():
                 raise ValueError(_t("Cela se règle depuis cette machine elle-même."))

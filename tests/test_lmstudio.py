@@ -57,7 +57,37 @@ def rien(*a, **k):
     raise AssertionError("rien ne doit être lancé")
 
 
+REEL_DEPENDANCES = L.preparer_dependances
+
+
 class Module(unittest.TestCase):
+    def setUp(self):
+        p = mock.patch.object(L, "preparer_dependances", lambda dire=print, **kw: None)
+        p.start()
+        self.addCleanup(p.stop)
+
+    def test_libatomic_manquante_est_installee_en_root_puis_l_installeur_continue(self):
+        lances, vus = [], []
+        faux = lambda cmd, **kw: (lances.append(cmd), mock.Mock(returncode=0, stdout="", stderr=""))[1]  # noqa: E731
+        REEL_DEPENDANCES(vus.append, lancer=faux, present=lambda: False, trouver=lambda n: "/usr/bin/" + n if n == "apt-get" else None, root=True)
+        self.assertEqual(lances, [["apt-get", "update"], ["apt-get", "install", "-y", "libatomic1"]])
+        self.assertTrue(any("libatomic" in t for t in vus))
+
+    def test_deja_presente_rien_n_est_lance(self):
+        REEL_DEPENDANCES(lambda t: None, lancer=rien, present=lambda: True)
+
+    def test_sans_droits_la_commande_exacte_est_donnee(self):
+        with self.assertRaises(ValueError) as e:
+            REEL_DEPENDANCES(lambda t: None, lancer=rien, present=lambda: False, trouver=lambda n: "/usr/bin/dnf" if n == "dnf" else None, root=False)
+        self.assertIn("dnf install -y libatomic", str(e.exception))
+
+    def test_l_installeur_qui_se_plaint_de_libatomic_est_explique(self):
+        with mock.patch.object(L, "chemin_lms", lambda: None):
+            with self.assertRaises(ValueError) as e:
+                L.installer(lambda t: None, ouvrir=lambda req, timeout: Reponse(b"x"), lancer=lambda cmd, **kw: Faux(['ERROR: Missing required dependency: "libatomic" is not installed\n'], 1))
+        self.assertIn("apt-get install -y libatomic1", str(e.exception))
+        self.assertNotIn("code 1", str(e.exception))
+
     def test_l_installeur_vient_de_lmstudio_ai_seulement_et_est_lance_sans_shell(self):
         lances, vus = [], []
         with mock.patch.object(L, "chemin_lms", lambda: "/x/lms"):
