@@ -1517,5 +1517,12 @@
 "installé par Lutin": "installed by Lutin",
 "installé sur cette machine": "installed on this machine",
 "pas installé": "not installed",
-"Retirer ce programme ? Les connecteurs qui en dépendent ne marcheront plus.": "Remove this program? The connectors that depend on it will stop working."
+"Retirer ce programme ? Les connecteurs qui en dépendent ne marcheront plus.": "Remove this program? The connectors that depend on it will stop working.",
+"Revenir au dernier message": "Back to the latest message",
+"note(s) ignorée(s) : la mémoire de cette machine est pleine": "note(s) skipped: this machine's memory is full",
+"profil coupé : trop long": "profile cut: too long",
+"à valider": "to validate",
+"Valider et traiter le reste": "Validate and process the rest",
+"M'arrêter après les 3 premiers documents pour que je vérifie les résultats": "Stop after the first 3 documents so I can check the results",
+"{} outils sont autorisés mais le modèle n'en reçoit que {} (un petit modèle se perd au-delà) : les {} derniers sont écartés. Décoche ceux dont tu n'as pas besoin.": "{} tools are allowed but the model only receives {} (a small model gets lost beyond that): the last {} are left out. Untick those you do not need."
 }

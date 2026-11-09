@@ -494,7 +494,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
         if chemin == "/api/mcp-catalogue":                       # les connecteurs du catalogue (sans rien lancer)
             return self._envoyer(200, {"serveurs": _mcp_catalogue.liste(), "modifiable": self._configurateur()})
         if chemin == "/api/mcp":                                 # les connecteurs MCP (sans leurs secrets)
-            return self._envoyer(200, {"connecteurs": _mcp.vue(), "modifiable": self._configurateur()})
+            return self._envoyer(200, {"connecteurs": _mcp.vue(), "modifiable": self._configurateur(), "limite": _mcp.limite_outils()})
         if chemin == "/api/decouvrir":                           # la bibliothèque d'Ollama (nouveautés, populaires, recherche)
             q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
             try:
@@ -957,7 +957,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
                     if self.path == "/api/addon-action":
                         return self._envoyer(200, _addons.action(str(donnees.get("id", "")), donnees.get("action", ""), donnees))
                     if self.path == "/api/fond-creer":
-                        return self._envoyer(200, _fond.creer(donnees.get("nom"), donnees.get("dossier"), donnees.get("motifs"), donnees.get("consigne"), bool(donnees.get("regulier")), donnees.get("intervalle_h", 24)))
+                        return self._envoyer(200, _fond.creer(donnees.get("nom"), donnees.get("dossier"), donnees.get("motifs"), donnees.get("consigne"), bool(donnees.get("regulier")), donnees.get("intervalle_h", 24), bool(donnees.get("essai"))))
                     return self._envoyer(200, _fond.action(str(donnees.get("id", "")), str(donnees.get("action", ""))))
                 except (_addons.ErreurAddon, ValueError) as e:
                     return self._envoyer(400, {"erreur": str(e)})

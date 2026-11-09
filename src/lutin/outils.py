@@ -332,8 +332,15 @@ def purger_donnees():
     return supprimes
 
 
+LIMITE_DIFFERENCE = 12000
+
+
 def difference(avant, apres, nom):
-    return "".join(difflib.unified_diff(avant.splitlines(True), apres.splitlines(True), "avant/" + nom, "après/" + nom, n=2))[:12000]
+    """Les différences montrées à l'utilisateur avant qu'il accepte : si elles sont coupées, un marqueur le dit (il ne donne pas son accord à ce qu'il ne voit pas sans le savoir)."""
+    complet = "".join(difflib.unified_diff(avant.splitlines(True), apres.splitlines(True), "avant/" + nom, "après/" + nom, n=2))
+    if len(complet) <= LIMITE_DIFFERENCE:
+        return complet
+    return complet[:LIMITE_DIFFERENCE] + _t("\n[... différences coupées : {} caractères de plus ne sont pas affichés ; le fichier sera tout de même modifié en entier]").format(len(complet) - LIMITE_DIFFERENCE)
 
 
 class Attente:
@@ -446,7 +453,7 @@ def outil_document(chemin, contenu, titre, ctx):
 def refus(ctx, texte):
     """Ce que le modèle lit quand une action n'a pas eu lieu : un refus, ou — en essai à blanc — la simulation (pour qu'il ne réessaie pas)."""
     if ctx.get("essai"):
-        return _t("Essai à blanc : rien n'a été fait, c'est une simulation (l'utilisateur voit ce que tu proposes). Considère-le comme proposé et passe à la suite, sans le refaire.")
+        return _t("Essai à blanc : « {} » n'a PAS été fait, rien n'existe ni n'a changé (simulation : l'utilisateur voit ce que tu proposes). N'écris jamais que c'est fait ou créé : dis « je ferais » ou « voici ce que je ferais ». Ne le refais pas : passe à la suite.").format(ctx.get("essai_titre") or _t("cette action"))
     return texte
 
 

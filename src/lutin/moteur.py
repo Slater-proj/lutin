@@ -234,6 +234,9 @@ from .donnees import (  # noqa: F401  (déplacé dans donnees.py : moteur ré-ex
     reparer_conversation,
     supprimer_skill,
     texte_memoire,
+    borner_contexte,
+    COUPURES,
+    LIMITE_CONTEXTE,
 )
 
 

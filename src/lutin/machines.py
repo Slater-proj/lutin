@@ -276,6 +276,7 @@ def noeud_autoriser_maj(autoriser):
 
 
 DROITS_DEMANDABLES = ("piloter", "maj", "extinction")          # ce qu'une machine appairée peut DEMANDER (le propriétaire de celle-ci accepte ou refuse, jamais automatiquement)
+LIMITE_MEMOIRE = 59000          # caractères : la limite de ecrire_memoire (60 000) moins une marge
 MAX_DEMANDES = 20
 
 
@@ -991,15 +992,28 @@ def importer_memoire(ident):
         if brut and not brut.startswith("#") and cle and cle not in connues:
             neuves.append(brut)
             connues.add(cle)
+    ignorees = 0
     if neuves:
-        bloc = "\n\n## {}\n{}\n".format(_t("Depuis {} ({})").format(m["nom"], time.strftime("%Y-%m-%d")), "\n".join(neuves))
-        _m.ecrire_memoire("MEMOIRE.md", (local.rstrip() + bloc)[-59000:])
-    profil = False
+        entete = "\n\n## {}\n".format(_t("Depuis {} ({})").format(m["nom"], time.strftime("%Y-%m-%d")))
+        place = LIMITE_MEMOIRE - len(local.rstrip()) - len(entete) - 1
+        gardees, taille = [], 0
+        for ligne in neuves:
+            if taille + len(ligne) + 1 > place:
+                break
+            gardees.append(ligne)
+            taille += len(ligne) + 1
+        ignorees = len(neuves) - len(gardees)          # ce qui ne tient pas n'est PAS écrit (et le début du fichier local, ses décisions, n'est jamais rogné) : on le dit
+        if gardees:
+            _m.ecrire_memoire("MEMOIRE.md", local.rstrip() + entete + "\n".join(gardees) + "\n")
+        neuves = gardees
+    profil, profil_coupe = False, False
     if str(distante.get("CONTEXTE.md", "")).strip() and not _m.lire_memoire("CONTEXTE.md").strip():
-        _m.ecrire_memoire("CONTEXTE.md", str(distante["CONTEXTE.md"])[:59000])
+        contexte = str(distante["CONTEXTE.md"])
+        profil_coupe = len(contexte) > LIMITE_MEMOIRE
+        _m.ecrire_memoire("CONTEXTE.md", contexte[:LIMITE_MEMOIRE])
         profil = True
-    journaliser("mémoire importée de {} : {} note(s)".format(m["nom"], len(neuves)))
-    return {"notes_ajoutees": len(neuves), "profil_copie": profil}
+    journaliser("mémoire importée de {} : {} note(s), {} ignorée(s) faute de place{}".format(m["nom"], len(neuves), ignorees, ", profil coupé" if profil_coupe else ""))
+    return {"notes_ajoutees": len(neuves), "notes_ignorees": ignorees, "profil_copie": profil, "profil_coupe": profil_coupe}
 
 
 # --------------------------------------------------------------------------- les modèles des autres machines (pour les choisir comme les siens)

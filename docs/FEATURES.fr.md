@@ -278,6 +278,20 @@ Réglages > **Version de Lutin** affiche la version installée et un bouton **V�
 
 Le raccourci **Lutin** ouvre Lutin **sans fenêtre de console** : une icône Lutin dans la zone de notification (en bas à droite). Clic gauche : ouvre l'interface. Clic droit : **Code PIN** (pour connecter un téléphone), **Ouvrir l'interface**, **Redémarrer**, **Quitter**. Au tout premier lancement, la configuration guidée s'ouvre dans une console. Le serveur tourne en arrière-plan ; s'il s'arrête sur une erreur, il est relancé, et sa sortie va dans `donnees/serveur.log` (les erreurs de l'icône elle-même, s'il y en a, dans `donnees/zone.log`). La version terminal reste disponible avec `lutin` (et le raccourci « Lutin (terminal) »). Une seule icône tourne à la fois : la relancer ouvre l'interface.
 
+## Rien n'est coupé en silence
+
+Lutin ne raccourcit jamais ce que le modèle lit sans te le dire, dans la conversation et avec des chiffres :
+
+- **CONTEXTE.md** au-delà de 14 000 caractères, ou **MEMOIRE.md** dont les anciennes notes ne tiennent plus : un marqueur dit au modèle ce qui manque, et un avertissement te le dit.
+- **Anciens résultats d'outils** raccourcis pour tenir dans la fenêtre de contexte (et échanges retirés, si cela ne suffit pas) : « Pour tenir dans la fenêtre de contexte (N jetons) : … ». Ce qui a été raccourci se relit avec l'outil « lire » ; une fenêtre plus grande (Réglages > Conversation) l'évite.
+- **Différences montrées avant ton accord** quand elles sont longues : un marqueur dit ce qui n'est pas affiché.
+- **Outils MCP** au-delà de 40 : la page dit combien sont écartés.
+- **Mémoire importée d'une autre machine** : seul ce qui tient est ajouté, ta mémoire n'est jamais rognée, et le nombre de notes ignorées est affiché.
+
+**Détecteur de boucle.** Un appel d'outil répété n'est une boucle que si son **résultat** est aussi identique (relire un fichier après l'avoir modifié est normal). Un texte qui se répète n'est arrêté que s'il tourne vraiment en rond : au moins 2 500 caractères, la même fin quatre fois, à deux contrôles de suite.
+
+**Essai à blanc.** Le modèle sait qu'une action simulée **n'a pas été faite** et ne doit jamais l'écrire comme faite. Un **travail de fond** peut s'arrêter après ses 3 premiers documents et attendre que tu vérifies les résultats avant de traiter tout le dossier.
+
 ## Commandes dans la conversation
 
 Tape `/` pour la liste : `/pc`, `/essai`, `/acces`, `/sante`, `/model`, `/compact`… et les commandes d'un projet Claude (`.claude/commands/*.md`, voir [CLAUDE-PROJECTS.fr.md](CLAUDE-PROJECTS.fr.md)) sont disponibles aussi, avec leurs arguments.

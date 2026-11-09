@@ -278,6 +278,20 @@ Settings > **Lutin version** shows the installed version and a **Check for updat
 
 The **Lutin** shortcut opens Lutin **without a console window**: a Lutin icon in the notification area (bottom right). Left click opens the interface; right click offers **PIN code** (to connect a phone), **Open the interface**, **Restart** and **Quit**. On the very first start, the guided setup opens in a console. The server runs in the background; if it stops on an error it is restarted, and its output goes to `donnees/serveur.log` (the icon's own errors, if any, to `donnees/zone.log`). The terminal version stays available as `lutin` (and the « Lutin (terminal) » shortcut). Only one icon runs at a time: starting it again opens the interface.
 
+## Nothing is cut silently
+
+Lutin never shortens what the model reads without telling you, in the conversation and with figures:
+
+- **CONTEXTE.md** longer than 14,000 characters, or **MEMOIRE.md** whose old notes no longer fit: a marker tells the model what is missing, and a warning tells you.
+- **Old tool results** shortened to fit the context window (and exchanges removed, if it is not enough): "To fit in the context window (N tokens): …". What was shortened can be read again with the read tool; a larger window (Settings > Conversation) avoids it.
+- **Differences shown before you approve** when they are long: a marker says how much is not displayed.
+- **MCP tools** beyond 40: the page says how many are left out.
+- **Memory imported from another machine**: only what fits is added, your own memory is never trimmed, and the number of skipped notes is shown.
+
+**Loop detector.** A repeated tool call counts as a loop only when its **result** is the same too (re-reading a file after changing it is fine). A text that repeats itself is stopped only if it really goes round in circles: at least 2,500 characters, the same ending four times, at two checks in a row.
+
+**Dry run.** The model is told that a simulated action was **not done** and must never be written as done. A **background job** can stop after its first 3 documents and wait for you to check the results before it processes the whole folder.
+
 ## Commands in the chat
 
 Type `/` for the list: `/pc`, `/essai`, `/acces`, `/sante`, `/model`, `/compact`… and the commands of a Claude project (`.claude/commands/*.md`, see [CLAUDE-PROJECTS.md](CLAUDE-PROJECTS.md)) are available too, with their arguments.

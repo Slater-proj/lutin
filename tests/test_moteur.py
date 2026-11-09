@@ -1270,6 +1270,26 @@ class Assistant(unittest.TestCase):
         self.assertIn("résultat B", plat["messages"][3]["content"])
         self.assertIn("web_chercher", plat["messages"][2]["content"], "l'appel d'outil devient une phrase")
 
+    def test_un_contexte_trop_long_est_dit_une_fois_par_conversation(self):
+        """CONTEXTE.md au-delà de 14 000 caractères : le modèle lit un marqueur, l'utilisateur lit un avertissement (une fois par conversation, pas à chaque message)."""
+        f = MEMOIRE / "CONTEXTE.md"
+        ancien = f.read_text(encoding="utf-8") if f.exists() else None
+        f.write_text("# Projet\n" + "mot " * 5000, encoding="utf-8")
+        try:
+            ev = chat("Bonjour", reponses=[[{"content": "Salut."}]])
+            avertissements = [e["texte"] for e in ev if e["type"] == "info" and "CONTEXTE.md" in e["texte"] and "relit que" in e["texte"]]
+            self.assertEqual(len(avertissements), 1, avertissements)
+            self.assertIn("CONTEXTE.md coupé", RECUES[-1]["messages"][0]["content"], "le modèle voit le marqueur")
+            ident = next(e for e in ev if e["type"] == "fin")["conversation"]["id"]
+            ev = chat("Encore", conversation=ident, reponses=[[{"content": "Oui."}]])
+            self.assertFalse([e for e in ev if e["type"] == "info" and "relit que" in e["texte"]], "pas répété au message suivant")
+        finally:
+            if ancien is None:
+                f.unlink(missing_ok=True)
+            else:
+                f.write_text(ancien, encoding="utf-8")
+            A.COUPURES.clear()
+
     def test_resume_vide_ne_fait_rien_perdre(self):
         A.enregistrer_reglages({"num_ctx": 16384})
         ident = chat("Début", reponses=[[{"content": "Réponse initiale."}]])[-1]["conversation"]["id"]
@@ -3222,6 +3242,9 @@ class Assistant(unittest.TestCase):
             self.assertFalse((A.RACINE / "docs" / "essai-commande.txt").exists(), "rien n'est lancé")
             resultats = [e["texte"] for e in ev if e["type"] == "resultat"]
             self.assertTrue(all("Essai à blanc" in t for t in resultats), resultats)
+            self.assertTrue(all("PAS été fait" in t and "n'écris jamais" in t.lower() for t in resultats), "le modèle apprend que rien n'existe et qu'il ne doit pas l'affirmer : " + str(resultats))
+            self.assertIn("essai-a-blanc.txt", resultats[0], "il sait DE QUOI il s'agit")
+            self.assertIn("n'existe PAS ensuite", RECUES[0]["messages"][0]["content"])
             self.assertIn("ESSAI À BLANC", RECUES[0]["messages"][0]["content"], "le modèle est prévenu")
             self.assertEqual(texte_de(ev), "Proposé.")
             ev = chat("Lis seulement", reponses=[[appel_outil("lire", chemin="docs/univers.md")], [{"content": "Lu."}]])

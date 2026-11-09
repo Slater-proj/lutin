@@ -169,6 +169,20 @@ class ImporterSkillsEtMemoire(Base):
         self.assertEqual(ecrits["MEMOIRE.md"].count("café"), 1, "une note déjà là n'est pas dupliquée")
         self.assertEqual(ecrits["CONTEXTE.md"], "Profil de là-bas")
 
+    def test_une_memoire_pleine_n_est_pas_rognee_et_ce_qui_est_ignore_est_dit(self):
+        """Avant : (local + notes)[-59000:] jetait le DÉBUT du fichier local (ses décisions) en silence. Maintenant : on n'ajoute que ce qui tient, le local reste intact, et on dit combien de notes sont ignorées."""
+        local = "# Décisions\n- DECISION-FIXE\n" + "".join("- ancienne note %04d %s\n" % (i, "x" * 50) for i in range(700))
+        distantes = "\n".join("- note venue de là-bas numéro %04d %s" % (i, "y" * 60) for i in range(300))
+        stock, ecrits = {"MEMOIRE.md": local, "CONTEXTE.md": ""}, {}
+        with self.faux_partage({"memoire": {"memoire": {"MEMOIRE.md": distantes, "CONTEXTE.md": "c" * 70000}}}), mock.patch.object(A, "lire_memoire", lambda n: stock[n]), mock.patch.object(A, "ecrire_memoire", lambda n, t: ecrits.update({n: t})):
+            r = machines.importer_memoire(self.m["id"])
+        self.assertLessEqual(len(ecrits["MEMOIRE.md"]), machines.LIMITE_MEMOIRE)
+        self.assertTrue(ecrits["MEMOIRE.md"].startswith("# Décisions\n- DECISION-FIXE"), "le début du fichier local est intact")
+        self.assertGreater(r["notes_ignorees"], 0)
+        self.assertEqual(r["notes_ajoutees"] + r["notes_ignorees"], 300)
+        self.assertTrue(r["profil_coupe"])
+        self.assertEqual(len(ecrits["CONTEXTE.md"]), machines.LIMITE_MEMOIRE)
+
     def test_le_profil_existant_n_est_pas_ecrase(self):
         stock = {"MEMOIRE.md": "", "CONTEXTE.md": "Mon profil"}
         ecrits = {}

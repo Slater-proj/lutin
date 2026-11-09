@@ -120,6 +120,42 @@ class Fond(unittest.TestCase):
         self.assertIn("2 document(s) traité(s)", texte)
         self.assertFalse(fond.un_pas(), "rien de plus à faire")
 
+    def test_un_travail_a_valider_s_arrete_apres_les_premiers_documents(self):
+        """Une consigne mal comprise ne doit pas gâcher tout le dossier : après les premiers documents, le travail attend que tu aies lu leurs résultats."""
+        for i in range(8):
+            (self.docs / ("d%d.txt" % i)).write_text("Document numéro %d." % i, encoding="utf-8")
+        t = self.travail()
+        fond.creer("Essai à valider", str(self.docs), "*.txt", "Résume.", False, 24, essai=True)
+        avec_essai = next(x for x in fond.lire_travaux() if x.get("essai"))
+        fond.action(t["id"], "supprimer")
+        RECUES.clear()
+        self.tout_traiter(50)
+        self.assertEqual(len(RECUES), fond.ESSAI_DOCUMENTS, "trois documents seulement, pas les huit")
+        p = fond.progression(fond.trouver(avec_essai["id"]))
+        self.assertEqual((p["etat"], p["faits"], p["valide"]), ("a_valider", fond.ESSAI_DOCUMENTS, False))
+        self.assertIn("premiers résultats", p["dernier_message"])
+        self.assertFalse(fond.un_pas(), "rien ne se fait tant que tu n'as pas validé")
+        self.assertEqual(len(RECUES), fond.ESSAI_DOCUMENTS)
+        self.assertTrue(fond.rapport(fond.trouver(avec_essai["id"])), "le rapport des premiers résultats se lit")
+        fond.action(avec_essai["id"], "valider")
+        self.tout_traiter(50)
+        p = fond.progression(fond.trouver(avec_essai["id"]))
+        self.assertEqual((p["etat"], p["faits"], p["valide"]), ("termine", 8, True))
+
+    def test_un_travail_court_ou_sans_essai_ne_demande_rien(self):
+        for i in range(2):
+            (self.docs / ("c%d.txt" % i)).write_text("Court %d." % i, encoding="utf-8")
+        fond.creer("Court", str(self.docs), "*.txt", "Résume.", False, 24, essai=True)
+        self.tout_traiter()
+        self.assertEqual(fond.liste()[0]["etat"], "termine", "moins de documents que l'essai : rien à valider")
+        for t in fond.lire_travaux():
+            fond.action(t["id"], "supprimer")
+        for i in range(6):
+            (self.docs / ("l%d.txt" % i)).write_text("Long %d." % i, encoding="utf-8")
+        t = self.travail()
+        self.tout_traiter(50)
+        self.assertEqual(fond.progression(fond.trouver(t["id"]))["etat"], "termine", "sans essai demandé, comme avant")
+
     def test_reprise_et_travail_regulier_ne_refont_que_le_nouveau(self):
         a, b = self.docs / "a.txt", self.docs / "b.txt"
         a.write_text("premier", encoding="utf-8")

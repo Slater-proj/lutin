@@ -9,7 +9,8 @@ Règles de solidité :
 - il cède la place : un document n'est traité que si aucune conversation n'est en cours ; une conversation qui démarre interrompt le document en cours (il sera refait) ;
 - garde-fous : mémoire et place du PC vérifiées avant chaque document (comme pour une conversation), arrêt après des erreurs de suite, temps maximum par document ;
 - seuls les dossiers qui sont déjà des dossiers de travail de Lutin peuvent être traités (rien de plus large que ce que tu as déjà autorisé) ;
-- pause, reprise, suppression à tout moment ; un rapport (rapport.md) se génère à partir des résultats."""
+- pause, reprise, suppression à tout moment ; un rapport (rapport.md) se génère à partir des résultats ;
+- un travail « à valider » s'arrête après ses premiers documents (ESSAI_DOCUMENTS) : tu lis leurs résultats, et seulement si la consigne est bien comprise tu valides le reste du dossier."""
 import fnmatch
 import json
 import os
@@ -29,6 +30,7 @@ from .i18n import t as _t
 MAX_TRAVAUX = 10
 DOCUMENTS_MAX = 20000               # documents suivis par travail
 ERREURS_DE_SUITE = 5                # au-delà, le travail se met en pause (le PC, le modèle ou le dossier ont un problème)
+ESSAI_DOCUMENTS = 3                 # un travail « à valider » s'arrête après ces premiers documents : tu lis leurs résultats avant qu'il traite tout le dossier
 DELAI_DOCUMENT = 900                # secondes au plus pour un document
 TAILLE_MAX = 80_000_000             # octets : un document plus gros est signalé, pas lu (une extraction ne doit pas figer le travail)
 PERIODE = 5                         # secondes entre deux regards
@@ -87,7 +89,8 @@ def dossier_autorise(chemin):
 
 
 # --------------------------------------------------------------------------- gestion des travaux
-def creer(nom, chemin, motifs, consigne, regulier=False, intervalle_h=24):
+def creer(nom, chemin, motifs, consigne, regulier=False, intervalle_h=24, essai=False):
+    """essai : le travail s'arrête après les premiers documents (ESSAI_DOCUMENTS) et attend que tu valides leurs résultats avant de traiter le reste (une consigne mal comprise ne gâche pas tout le dossier)."""
     nom, consigne = " ".join(str(nom or "").split())[:80], str(consigne or "").strip()
     if not nom or not consigne:
         raise ValueError(_t("Donne un nom et une consigne."))
@@ -106,7 +109,7 @@ def creer(nom, chemin, motifs, consigne, regulier=False, intervalle_h=24):
         if len(liste) >= MAX_TRAVAUX:
             raise ValueError(_t("{} travaux de fond au plus : supprime-en un.").format(MAX_TRAVAUX))
         t = {"id": secrets.token_hex(4), "nom": nom, "dossier": str(p), "motifs": liste_motifs, "consigne": consigne, "regulier": bool(regulier), "intervalle_h": intervalle_h,
-             "cree": int(time.time()), "pause": False}
+             "cree": int(time.time()), "pause": False, "essai": bool(essai), "valide": not essai}
         liste.append(t)
         _ecrire_travaux(liste)
     ecrire_etat(t["id"], {"faits": {}, "erreurs": {}, "etat": "attente", "total": 0, "debut": 0, "fin": 0})
@@ -143,6 +146,16 @@ def action(ident, quoi):
                 ecrire_etat(t["id"], e)
             if quoi == "pause" and VIVANT["document"] and VIVANT["document"][0] == t["id"]:
                 VIVANT["interrompre"].set()
+            return {"ok": True}
+        if quoi == "valider":                                                 # les premiers résultats sont bons : le travail traite le reste
+            for x in liste:
+                if x["id"] == t["id"]:
+                    x["valide"] = True
+            _ecrire_travaux(liste)
+            e = lire_etat(t["id"])
+            if e.get("etat") == "a_valider":
+                e.update(etat="attente", message="")
+                ecrire_etat(t["id"], e)
             return {"ok": True}
         if quoi == "relancer":
             e = lire_etat(t["id"])
@@ -183,7 +196,7 @@ def a_faire(t, e, trouves):
 def progression(t):
     e = lire_etat(t["id"])
     return {"id": t["id"], "nom": t["nom"], "dossier": t["dossier"], "motifs": t["motifs"], "consigne": t["consigne"], "regulier": t["regulier"], "intervalle_h": t["intervalle_h"],
-            "pause": t.get("pause", False), "etat": "pause" if t.get("pause") else e["etat"], "total": e.get("total", 0), "faits": len(e["faits"]), "erreurs": len(e["erreurs"]),
+            "pause": t.get("pause", False), "valide": t.get("valide", True), "etat": "pause" if t.get("pause") else e["etat"], "total": e.get("total", 0), "faits": len(e["faits"]), "erreurs": len(e["erreurs"]),
             "dernier_message": e.get("message", ""), "debut": e.get("debut", 0), "fin": e.get("fin", 0), "rapport": (dossier_travail(t["id"]) / "rapport.md").is_file()}
 
 
@@ -314,6 +327,11 @@ def un_pas(modele_pret=None):
                 rapport(t)
             else:
                 ecrire_etat(t["id"], e)
+            continue
+        if not t.get("valide", True) and len(e["faits"]) >= ESSAI_DOCUMENTS:          # les premiers résultats sont prêts : on attend que tu les aies lus
+            if e["etat"] != "a_valider":
+                e.update(etat="a_valider", message=_t("Les {} premiers résultats sont prêts (bouton « Rapport »). Si la consigne est bien comprise, valide pour traiter les {} autres documents ; sinon supprime le travail et reformule.").format(len(e["faits"]), len(restants)))
+            ecrire_etat(t["id"], e)
             continue
         if e["etat"] != "en_cours":
             e.update(etat="en_cours", debut=e.get("debut") or int(maintenant), message="")

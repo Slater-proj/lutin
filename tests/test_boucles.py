@@ -18,17 +18,41 @@ PLAN = "Voici le plan : d'abord lire le fichier de configuration, ensuite corrig
 
 
 class Boucles(unittest.TestCase):
-    def test_garde_compte_les_appels_identiques_seulement(self):
+    @staticmethod
+    def appeler(g, nom, args, resultat):
+        """Ce que fait dialogue.py pour un appel : compter, refuser au-delà du seuil, sinon noter le résultat obtenu."""
+        n = g.compter(nom, args)
+        if n >= boucles.SEUIL_APPEL:
+            g.refuser(nom, args)
+        else:
+            g.noter_resultat(nom, args, resultat)
+        return n
+
+    def test_garde_compte_les_appels_identiques_au_meme_resultat(self):
         g = boucles.Garde()
-        self.assertEqual([g.compter("lire", {"chemin": "a.txt"}) for _ in range(3)], [1, 2, 3])
-        self.assertEqual(g.compter("lire", {"chemin": "b.txt"}), 1, "d'autres arguments : un autre appel")
-        self.assertEqual(g.compter("lire", {"chemin": "a.txt"}), 4)
+        self.assertEqual([self.appeler(g, "lire", {"chemin": "a.txt"}, "contenu") for _ in range(3)], [1, 2, 3])
+        self.assertEqual(self.appeler(g, "lire", {"chemin": "b.txt"}, "autre"), 1, "d'autres arguments : un autre appel")
+        self.assertEqual(self.appeler(g, "lire", {"chemin": "a.txt"}, "contenu"), 4)
         self.assertFalse(g.abandon)
-        self.assertEqual(g.compter("lire", {"chemin": "a.txt"}), 5)
-        self.assertTrue(g.abandon, "cinq fois : on abandonne")
+        self.assertEqual(self.appeler(g, "lire", {"chemin": "a.txt"}, "contenu"), 5)
+        self.assertTrue(g.abandon, "cinq fois le même résultat : on abandonne")
         for _ in range(8):
-            self.assertEqual(g.compter("taches", {"liste": ["x"]}), 1, "taches, suivi et memoriser se rappellent légitimement")
+            self.assertEqual(self.appeler(g, "taches", {"liste": ["x"]}, "ok"), 1, "taches, suivi et memoriser se rappellent légitimement")
         self.assertIn("exactement cet appel", boucles.Garde.message(3))
+
+    def test_relire_un_fichier_qui_change_n_est_pas_une_boucle(self):
+        """Relire après avoir modifié, relancer les tests après une correction : même appel, résultat différent. Le détecteur de boucle ne coupe pas un travail qui avance."""
+        g = boucles.Garde()
+        for i in range(12):
+            self.assertLess(self.appeler(g, "lire", {"chemin": "a.py"}, "version %d" % i), boucles.SEUIL_APPEL)
+        self.assertFalse(g.abandon)
+        for i in range(12):
+            self.assertLess(self.appeler(g, "commande", {"commande": "pytest"}, "%d échecs" % (12 - i)), boucles.SEUIL_APPEL)
+        self.assertFalse(g.abandon)
+
+    def test_le_texte_doit_tourner_en_rond_deux_controles_de_suite(self):
+        self.assertEqual(boucles.VERIFICATIONS_DE_SUITE, 2)
+        self.assertGreaterEqual(boucles.LONGUEUR_REPETITION, 2500)
 
     def test_similitude_et_reponse_repetee(self):
         self.assertGreater(boucles.similitude(PLAN, PLAN.replace("On commence ?", "On y va ?")), 0.8)

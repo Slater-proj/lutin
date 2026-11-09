@@ -2,6 +2,16 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## Défilement libre, détecteur de boucle patient, plus aucune coupure silencieuse, audit des écrans
+
+- **Tu peux remonter lire pendant que l'assistant réfléchit ou écrit** : le fil ne te ramène en bas que si tu y étais. Un bouton ↓ apparaît pour redescendre ; envoyer un message te ramène en bas.
+- **Le détecteur de boucle est devenu patient.** Un même appel d'outil n'est une boucle que si son **résultat** est aussi identique (relire un fichier après l'avoir modifié, relancer des tests après une correction, n'est plus coupé). Un texte qui se répète n'est arrêté que s'il tourne vraiment en rond : 2 500 caractères au moins, la même fin 4 fois, et **à deux contrôles de suite**.
+- **Rien n'est plus coupé sans le dire** : CONTEXTE.md au-delà de 14 000 caractères (marqueur pour le modèle **et** avertissement pour toi, avec les chiffres), la mémoire MEMOIRE.md dont la partie ancienne n'est pas relue (marqueur), les anciens résultats d'outils raccourcis pour tenir dans la fenêtre (« ↧ Pour tenir dans la fenêtre de contexte… » avec ce qui a été raccourci), les différences montrées avant ton accord quand elles sont longues (marqueur « coupées »), l'import de mémoire d'une autre machine (on n'ajoute que ce qui tient, le début de ta mémoire n'est plus jamais rogné, et on dit combien de notes sont ignorées).
+- **Erreurs de contexte mieux reconnues** : le mot « prompt » ou « context » seul ne suffit plus à croire qu'une conversation est trop longue (faux positifs).
+- **Essai à blanc sans ambiguïté** : le modèle apprend que l'action simulée « n'a PAS été faite » (avec son nom) et ne doit jamais l'écrire comme faite ; il sait aussi qu'un fichier « créé » en simulation ne se relira pas.
+- **Travail de fond « à valider »** : un nouveau travail s'arrête après ses 3 premiers documents, tu lis le rapport, et seulement si la consigne est bien comprise tu valides le reste du dossier (case cochée par défaut à la création).
+- **Audit des écrans** (tests/test_audit_ecrans.py) : chaque page et chaque rubrique ouvertes dans un vrai Chrome, en français, en anglais et à largeur de téléphone, avec chaque moteur : aucune page vide, aucune erreur JavaScript, aucun débordement, aucun français dans l'interface anglaise.
+
 ## Colibri, ExLlamaV3 et connecteurs : installation en un clic, sans bidouille
 
 - **ExLlamaV3 s'installe enfin avec l'installateur Windows** : son Python n'a pas le module « venv » (« No module named venv »). Lutin installe alors **uv** tout seul et lui fait créer l'environnement (testé pour de vrai : 3 s).

@@ -217,14 +217,48 @@ def position_notes(texte):
     return min(trouvees) if trouvees else -1
 
 
+LIMITE_CONTEXTE = 14000          # caractères de CONTEXTE.md relus à chaque conversation
+COUPURES = {}                   # ce que le modèle ne lit PAS en entier : nom -> (taille réelle, ce qui est relu) ; la page et la conversation le disent, rien n'est coupé en silence
+
+
+def _signaler_coupure(nom, taille, relu):
+    """Garde (et journalise une fois) ce qui est coupé ; efface la mention quand le texte tient de nouveau."""
+    if taille <= relu:
+        COUPURES.pop(nom, None)
+        return
+    if COUPURES.get(nom) != (taille, relu):
+        COUPURES[nom] = (taille, relu)
+        _m.journaliser("{} : {} caractères, {} relus par le modèle à chaque conversation (le reste est coupé)".format(nom, taille, relu))
+
+
+def borner_contexte(texte, limite=LIMITE_CONTEXTE):
+    """CONTEXTE.md tel que le modèle le lit : les `limite` premiers caractères, et un marqueur qui dit ce qui manque (le modèle sait alors qu'il lui manque quelque chose, et le dit)."""
+    _signaler_coupure("CONTEXTE.md", len(texte), limite)
+    if len(texte) <= limite:
+        return texte
+    return texte[:limite] + _t("\n[... CONTEXTE.md coupé : {} caractères non relus (limite : {}). Si une information du projet te manque, dis-le à l'utilisateur.]").format(len(texte) - limite, limite)
+
+
+def _garder_la_fin(texte, place):
+    """Les derniers caractères qui tiennent dans `place` (marqueur compris), précédés d'un marqueur qui dit combien de caractères plus anciens ne sont pas relus."""
+    if len(texte) <= place:
+        return texte
+    marque = _t("[... {} caractères plus anciens non relus]\n")
+    utile = max(0, place - len(marque.format(len(texte))))
+    return marque.format(len(texte) - utile) + (texte[-utile:] if utile else "")
+
+
 def texte_memoire(memoire, budget=6000):
     """Ce qui est relu de MEMOIRE.md à chaque conversation : les parties fixes (décisions de l'utilisateur, limites) toujours, et seulement la fin de la section « Notes de l'assistant »
-    (qui grossit). Sans cette section, les derniers caractères du fichier, comme avant."""
+    (qui grossit). Sans cette section, les derniers caractères du fichier. Ce qui n'est pas relu est dit par un marqueur (jamais coupé en silence)."""
     i = position_notes(memoire)
     if i < 0:
-        return memoire[-budget:]
+        _signaler_coupure("MEMOIRE.md", len(memoire), budget)
+        return _garder_la_fin(memoire, budget)
     fixe = memoire[:i][:budget - 1500]
-    return fixe + memoire[i:][-(budget - len(fixe)):]
+    reste = memoire[i:]
+    _signaler_coupure("MEMOIRE.md", len(memoire), len(fixe) + min(len(reste), budget - len(fixe)))
+    return fixe + _garder_la_fin(reste, budget - len(fixe))
 
 
 RE_SKILL = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_\- ]{0,98}\.md$")

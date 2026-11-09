@@ -176,5 +176,19 @@ class Mcp(unittest.TestCase):
         self.assertEqual(mcp.analyser_nom("lire"), (None, None))
 
 
+class Limite(unittest.TestCase):
+    def test_les_outils_au_dela_de_la_limite_sont_comptes_pas_ecartes_en_silence(self):
+        """Au-delà de OUTILS_MAX outils autorisés, le modèle n'en reçoit que les premiers : la page dit combien sont écartés."""
+        avant = mcp.lire()
+        outils = {"outil%02d" % i: {"description": "x", "schema": {}, "lecture": True, "autorise": True} for i in range(mcp.OUTILS_MAX + 7)}
+        try:
+            mcp.ecrire({"serveurs": {"gros": {"nom": "Gros", "type": "stdio", "commande": ["x"], "actif": True, "lecture_seule": True, "outils": outils}}})
+            self.assertEqual(len(mcp.outils_exposes()), mcp.OUTILS_MAX)
+            self.assertEqual(mcp.limite_outils(), {"max": mcp.OUTILS_MAX, "exposables": mcp.OUTILS_MAX + 7, "ecartes": 7})
+        finally:
+            mcp.ecrire(avant)
+        self.assertEqual(mcp.limite_outils()["ecartes"], 0)
+
+
 if __name__ == "__main__":
     unittest.main()

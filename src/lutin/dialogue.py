@@ -1014,11 +1014,11 @@ def consignes_systeme(r):
         bloc_skills = (_t("\n\n# SKILLS (fiches du projet, à lire avec l'outil « lire » quand le sujet t'est demandé)\n"
                        "Ces fiches décrivent le projet de l'utilisateur (univers, règles, outil). Lis-les au moment où tu en as besoin, pas avant.\n") + lignes + "\n")
     return (_t("Tu es Lutin, l'assistant local de l'utilisateur. Tu réponds dans la langue de l'utilisateur, de façon directe et concise. Tu disposes d'outils pour lire et modifier le projet : utilise-les plutôt que de deviner. "
-            "Chaque modification de fichier garde une sauvegarde de l'ancienne version et passe par l'accord de l'utilisateur, sauf s'il a activé l'accord automatique.\n\n") + mode + _t("\n\n# CONTEXTE DU PROJET (memoire/CONTEXTE.md)\n") + contexte[:14000] + _t("\n\n# NOTES DURABLES (memoire/MEMOIRE.md)\n") + (_m.texte_memoire(memoire) or _t("(aucune pour l'instant)"))
+            "Chaque modification de fichier garde une sauvegarde de l'ancienne version et passe par l'accord de l'utilisateur, sauf s'il a activé l'accord automatique.\n\n") + mode + _t("\n\n# CONTEXTE DU PROJET (memoire/CONTEXTE.md)\n") + _m.borner_contexte(contexte) + _t("\n\n# NOTES DURABLES (memoire/MEMOIRE.md)\n") + (_m.texte_memoire(memoire) or _t("(aucune pour l'instant)"))
             + bloc_skills
             + (_mission.consigne_systeme() if r.get("_mission") else "")
             + ("" if r.get("mode") in ("discussion", "recherche") else _t("\n\n# CRÉER UN FICHIER\nQuand on te demande de créer ou d'écrire un fichier (docker-compose, script, configuration, document), appelle l'outil « ecrire » avec le chemin et le contenu complet, y compris après une recherche web. Ne te contente pas de montrer le contenu dans ta réponse."))
-            + (_t("\n\n# ESSAI À BLANC\nTes écritures et tes commandes ne sont PAS exécutées : c'est une simulation, l'utilisateur voit ce que tu proposes. Propose ce que tu ferais (fichiers, contenu, commandes), sans insister ni réessayer. Lire et chercher fonctionnent normalement.\n") if r.get("essai_a_blanc") else "")
+            + (_t("\n\n# ESSAI À BLANC\nTes écritures et tes commandes ne sont PAS exécutées : c'est une simulation, l'utilisateur voit ce que tu proposes. Propose ce que tu ferais (fichiers, contenu, commandes), sans insister ni réessayer. Ce que tu simules n'existe PAS ensuite : un fichier « créé » ici ne se relira pas, une commande « lancée » n'a rien produit. Ne dis jamais que c'est fait : conclus par « voici ce que je ferais ». Lire et chercher fonctionnent normalement.\n") if r.get("essai_a_blanc") else "")
             + (_t("\n\n# DÉBUT DE LA CONVERSATION\nLes premiers échanges ne sont plus tous sous tes yeux (fiche de suivi ou résumé). Pour retrouver un détail précis (une décision, un nom, un chiffre, un texte), appelle « rappeler » avec quelques mots-clés et ici=true : ne le devine pas.\n") if r.get("rappel_ici") else "")
             + _pc.bloc_prompt(_m.RACINE)
             + bloc_plan(r)
@@ -1065,12 +1065,35 @@ def jauge_contexte(conv, r=None):
     return {"utilise": estimer(msgs) + len(json.dumps(_m.OUTILS, ensure_ascii=False)) // 3, "total": r["num_ctx"], "reel": False}
 
 
-RE_CONTEXTE = re.compile(r"no query found|context|too long|exceed|truncat|prompt", re.I)
+# Une erreur d'Ollama qui parle d'une conversation trop longue pour la fenêtre : des expressions précises. Le mot « prompt » ou « context » seul se retrouve dans des erreurs sans rapport (gabarit, option inconnue…).
+RE_CONTEXTE = re.compile(r"no query found|context (length|window|size|limit)|(exceeds?|exceeded) .{0,40}(context|maximum|limit)|maximum context|n_ctx|too long|truncat(ed|ing) (the )?(prompt|input)|prompt .{0,30}(too long|exceed)|input .{0,30}too (long|large)", re.I)
 
 
-def ajuster_contexte(msgs, num_ctx, facteur=1.0, outils=None):
+COUPURES_DITES = set()          # (conversation, fichier, taille) : l'avertissement « fichier de mémoire trop long » n'est donné qu'une fois
+
+
+def annoncer_reduction(rapport, emit, ctx, num_ctx):
+    """Dit à l'utilisateur, avec des chiffres, ce qui a été raccourci ou retiré pour tenir dans la fenêtre de contexte (au lieu de le faire sans rien dire) ; seulement quand cela augmente."""
+    total = sum(rapport.values()) if rapport else 0
+    if not total or total <= ctx.get("reduction_dite", 0):
+        return
+    ctx["reduction_dite"] = total
+    parties = []
+    if rapport["raccourcis"] or rapport["tronques"]:
+        parties.append(_t("{} ancien(s) résultat(s) d'outil raccourci(s)").format(rapport["raccourcis"] + rapport["tronques"]))
+    if rapport["retires"]:
+        parties.append(_t("{} échange(s) d'outils retiré(s)").format(rapport["retires"]))
+    if rapport["tours"]:
+        parties.append(_t("{} ancien(s) message(s) retiré(s)").format(rapport["tours"]))
+    emit({"type": "info", "texte": _t("↧ Pour tenir dans la fenêtre de contexte ({} jetons) : {}. Ce qui a été raccourci peut se relire (outil « lire »). Une fenêtre plus grande (Réglages > Conversation) évite cela.").format(num_ctx, ", ".join(parties))})
+
+
+def ajuster_contexte(msgs, num_ctx, facteur=1.0, outils=None, rapport=None):
     """Garde la requête de l'utilisateur et le plus récent ; rétrécit les anciens résultats d'outils, puis retire les anciens échanges d'outils,
-    pour que le total tienne dans num_ctx (avec de la place pour la réponse). outils : les outils réellement envoyés (leur place est déduite)."""
+    pour que le total tienne dans num_ctx (avec de la place pour la réponse). outils : les outils réellement envoyés (leur place est déduite).
+    rapport (un dictionnaire) : reçoit ce qui a été raccourci ou retiré (« raccourcis », « retires », « tronques », « tours »), pour le dire à l'utilisateur."""
+    rapport = rapport if rapport is not None else {}
+    rapport.update(raccourcis=0, retires=0, tronques=0, tours=0)
     budget = int(num_ctx * 0.68 * facteur) - len(json.dumps(_m.OUTILS if outils is None else outils, ensure_ascii=False)) // 3
     msgs = [dict(m) for m in msgs]
     dernier_user = max((i for i, m in enumerate(msgs) if m["role"] == "user"), default=-1)
@@ -1091,11 +1114,13 @@ def ajuster_contexte(msgs, num_ctx, facteur=1.0, outils=None):
             break
         if len(msgs[i].get("content", "")) > 500:
             msgs[i]["content"] = msgs[i]["content"][:400] + "\n[... résultat ancien raccourci pour économiser le contexte ; relis le fichier si besoin]"
+            rapport["raccourcis"] += 1
     # 2) puis les échanges d'outils les plus anciens sont retirés (jamais la question de l'utilisateur ni ce qui la précède immédiatement)
     i = 1
     while taille() > budget and i < len(msgs) - 2:
         if i != dernier_user and msgs[i]["role"] in ("assistant", "tool") and i > 0 and (dernier_user < 0 or i > dernier_user):
             del msgs[i]
+            rapport["retires"] += 1
             continue
         i += 1
     # 3) en dernier recours, les derniers résultats sont tronqués
@@ -1104,11 +1129,13 @@ def ajuster_contexte(msgs, num_ctx, facteur=1.0, outils=None):
             break
         if msgs[i]["role"] == "tool" and len(msgs[i].get("content", "")) > 1500:
             msgs[i]["content"] = msgs[i]["content"][:1500] + "\n[... tronqué]"
+            rapport["tronques"] += 1
     # 4) les anciens tours de conversation (avant la question actuelle) sont retirés s'il le faut, en gardant le système, le résumé et la question
     while taille() > budget and dernier_user > 2:
         for i in range(1, dernier_user):
             if msgs[i]["role"] in ("user", "assistant", "tool") and id(msgs[i]) not in protege and not msgs[i].get("content", "").startswith(("[Résumé", "[Fiche de suivi", "[Extraits", "Compris, je m'appuie")):
                 del msgs[i]
+                rapport["tours"] += 1
                 dernier_user -= 1
                 break
         else:
@@ -1265,6 +1292,7 @@ def tour(conv, texte, emit, r=None, stop=None, remplacer_depuis=None, identite="
             # Essai à blanc : on montre ce qui aurait été fait, rien n'est écrit ni lancé, personne n'a à répondre.
             emit({"type": "essai", "titre": titre, "detail": detail, "diff": diff})
             ctx["dernier_accord"] = "essai"
+            ctx["essai_titre"] = str(titre)[:120]          # le modèle le relit dans le résultat : de QUOI il s'agit, et que cela n'existe pas
             return False
         raison = "" if auto else _t("La case d'accord automatique correspondante n'est pas cochée pour cette conversation.")          # pourquoi on te demande : jamais un mystère
         if auto and ctx.get("web_lu") and not ctx.get("web_confiance"):
@@ -1542,6 +1570,12 @@ def boucle_agent(conv, r, emit, ctx, stop):
             emit({"type": "info", "texte": _t("La recherche d'actualités n'a pas pu se faire ({}) : je continue normalement.").format(erreur)})
     for idx_tour in range(tours_max):
         msgs = [{"role": "system", "content": consignes_systeme(r) + _fichiers.consigne_dossier(conv) + _m.texte_taches(conv) + rappels_texte}]
+        if idx_tour == 0:
+            for nom_coupe, (taille_coupe, relu_coupe) in sorted(_m.COUPURES.items()):          # un fichier de mémoire plus long que ce que le modèle relit : tu le sais, au lieu de le découvrir plus tard
+                if (conv.get("id"), nom_coupe, taille_coupe) in COUPURES_DITES:          # une fois par conversation et par taille, pas à chaque message
+                    continue
+                COUPURES_DITES.add((conv.get("id"), nom_coupe, taille_coupe))
+                emit({"type": "info", "texte": _t("⚠ {} fait {} caractères et l'assistant n'en relit que {} à chaque conversation : le reste est ignoré. Raccourcis-le (onglet Mémoire) si des informations manquent.").format(nom_coupe, taille_coupe, relu_coupe)})
         if conv.get("resume"):
             msgs.append({"role": "user", "content": "[Résumé de la conversation jusqu'ici]\n" + conv["resume"]})
             msgs.append({"role": "assistant", "content": "Compris, je continue."})
@@ -1584,13 +1618,15 @@ def boucle_agent(conv, r, emit, ctx, stop):
         if idx_tour == 0 and router_la_demande(r, derniere_demande, any(m.get("images") for m in conv["messages"][-_images.RECENTS:]), emit, conv["id"]):
             caps = moteur_actuel(r).capacites(r["modele"])
             reflechit = reflechit and (caps is None or "thinking" in caps)
-        corps = {"model": r["modele"], "messages": ajuster_contexte(msgs, r["num_ctx"], 1.0, outils), "stream": True, "options": options, "think": reflechit}
+        rapport_contexte = {}
+        corps = {"model": r["modele"], "messages": ajuster_contexte(msgs, r["num_ctx"], 1.0, outils, rapport_contexte), "stream": True, "options": options, "think": reflechit}
         if not dernier_tour and outils:                      # mode « discussion » : aucun outil, donc rien à envoyer ni à signaler
             if caps is not None and "tools" not in caps:
                 if idx_tour == 0:
                     emit({"type": "info", "texte": "Ce modèle ne sait pas appeler d'outils : il répondra sans lire ni modifier les fichiers. Choisis un autre modèle (Qwen 3.8 ou Gemma 4) pour cela."})
             else:
                 corps["tools"] = outils
+        annoncer_reduction(rapport_contexte, emit, ctx, r["num_ctx"])
         fini, verifie, relance_outil, repli_demande, relance_vide, relance_repetition = False, False, False, False, False, False
         plat = r["modele"] in gabarits_connus()
         if plat:
@@ -1601,7 +1637,7 @@ def boucle_agent(conv, r, emit, ctx, stop):
             emit({"type": "etat", "texte": "Chargement du modèle en mémoire (30 s à 2 min la première fois, ou si ComfyUI lui a pris la carte)."})
         for tentative in range(3):
             contenu, pensee, appels = "", "", []
-            rond, verifie_rond, raison_fin = False, 0, ""
+            rond, verifie_rond, raison_fin, rond_de_suite = False, 0, "", 0
             corps_t = corps if tentative == 0 else dict(corps, messages=ajuster_contexte(msgs_base, r["num_ctx"], 0.7 ** tentative, outils) + ([{"role": "user", "content": RAPPEL_APPEL}] if relance_outil else [{"role": "user", "content": RAPPEL_REPETITION}] if relance_repetition else [{"role": "user", "content": RAPPEL_VIDE}] if relance_vide else []), options=dict(corps["options"], temperature=0.3, **({"repeat_penalty": 1.15} if relance_repetition else {})), think=False if (relance_vide or relance_repetition) else corps["think"])
             if plat:
                 corps_t = aplatir_sans_outils(corps_t)
@@ -1645,8 +1681,12 @@ def boucle_agent(conv, r, emit, ctx, stop):
                         if len(pensee) + len(contenu) - verifie_rond >= 400:                       # toutes les 400 lettres : le texte tourne-t-il en rond ? (sortir du « with » ferme la connexion, Ollama arrête de générer)
                             verifie_rond = len(pensee) + len(contenu)
                             if _boucles.texte_repete(pensee) or _boucles.texte_repete(contenu):
-                                rond = True
-                                break
+                                rond_de_suite += 1
+                                if rond_de_suite >= _boucles.VERIFICATIONS_DE_SUITE:          # il TOURNE en rond : un seul contrôle positif ne coupe pas une analyse qui se répète un instant
+                                    rond = True
+                                    break
+                            else:
+                                rond_de_suite = 0
                 if rond:
                     _m.journaliser("Texte répété par le modèle {} (pensée : {} caractères, réponse : {}, essai {})".format(r["modele"], len(pensee), len(contenu), tentative + 1))
                     _observatoire.noter("relance", conv["id"], motif="texte répété", modele=r["modele"])
@@ -1802,6 +1842,10 @@ def boucle_agent(conv, r, emit, ctx, stop):
             except Exception as erreur:  # noqa: BLE001
                 _m.journaliser("Outil « {} » : erreur inattendue {!r}".format(nom, erreur))
                 resultat = "Erreur inattendue : " + str(erreur)[:300]
+            if repetitions >= _boucles.SEUIL_APPEL:
+                garde.refuser(nom, args)
+            else:
+                garde.noter_resultat(nom, args, resultat)          # un résultat qui change n'est pas une boucle
             _observatoire.noter("outil", conv["id"], outil=nom, duree_ms=int((time.monotonic() - debut_outil) * 1000), ok=not str(resultat).startswith(("Erreur", "Interrompu")), modele=r["modele"],
                                 detail=str(resultat)[:100] if str(resultat).startswith("Erreur") else "")
             medias, fichiers = ctx.pop("medias", []), ctx.pop("medias_fichiers", {})          # images produites par l'outil (et où elles sont), affichées dans la conversation

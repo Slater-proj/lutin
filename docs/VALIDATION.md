@@ -71,6 +71,16 @@ Do this with two real PCs (A = where you work, B = the other one).
 | Channels | Reload the Notifications page | No token shown again |
 | Access | Open Lutin from another device on the network | The PIN code is asked |
 
+## 7. Conversation
+
+| Step | Do | See |
+|---|---|---|
+| Scrolling | While a model thinks for a long time, scroll up in the conversation | The conversation stays where you left it; a ↓ button takes you back down; sending a message takes you to the bottom |
+| Loop | Ask it to read, change then re-read a file several times | No cut while the result changes; if the model really repeats itself, it is stopped and says so |
+| Full window | With a small window (8k), chain several web searches | A "To fit in the context window…" message says what was shortened |
+| Dry run | Turn it on, ask for a file to be created | The model says "here is what I would do", never "it is created"; the file does not exist |
+| Background job | Create a job on a folder with more than 3 documents, "Stop after the first 3" ticked | It stops at "to validate"; the report can be read; "Validate" processes the rest |
+
 ## When everything is ticked
 
 Put the date, the version (`lutin --version`), the system and the graphics card in your report, with the lines that failed. A version is ready for 1.0 when every line passes on at least one Windows and one Linux machine.

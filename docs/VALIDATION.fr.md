@@ -71,6 +71,16 @@ Pour **chaque** moteur : la liste des modèles installés s'affiche, un modèle 
 | Canaux | Recharger la page Notifications | Aucun jeton réaffiché |
 | Accès | Ouvrir Lutin depuis un autre appareil du réseau | Le code PIN est demandé |
 
+## 7. Conversation
+
+| Étape | Fais | Vois |
+|---|---|---|
+| Défilement | Pendant qu'un modèle réfléchit longtemps, remonte dans la conversation | Le fil reste où tu l'as mis ; un bouton ↓ permet de redescendre ; envoyer un message te ramène en bas |
+| Boucle | Demande de lire, modifier puis relire un fichier plusieurs fois | Aucune coupure tant que le résultat change ; si le modèle redit vraiment la même chose, il est arrêté et le dit |
+| Fenêtre pleine | Avec une petite fenêtre (8 k), enchaîne plusieurs recherches web | Un message « Pour tenir dans la fenêtre de contexte… » dit ce qui a été raccourci |
+| Essai à blanc | Active-le, demande de créer un fichier | Le modèle dit « voici ce que je ferais », jamais « c'est créé » ; le fichier n'existe pas |
+| Travail de fond | Crée un travail sur un dossier de plus de 3 documents, case « M'arrêter après les 3 premiers » cochée | Il s'arrête à « à valider » ; le rapport se lit ; « Valider » traite le reste |
+
 ## Quand tout est coché
 
 Reporte la date, la version (`lutin --version`), le système et la carte graphique dans ton rapport, avec les lignes qui ont échoué. Une version est prête pour une 1.0 quand chaque ligne passe sur au moins un Windows et un Linux.

@@ -82,6 +82,7 @@ button.danger:hover { background:linear-gradient(180deg, #b84545, #8f2f2f); }
 .page { flex:1; min-height:0; display:none; } .page.vue { display:flex; flex-direction:column; }
 /* --- fil de discussion --- */
 #fil { flex:1; overflow:auto; padding:14px 10px; }
+#zoneBas { position:relative; height:0; z-index:4; } #bBas { position:absolute; right:18px; bottom:10px; width:38px; height:38px; border-radius:50%; padding:0; font-size:1.2rem; background:var(--panel); border:1px solid var(--line2); box-shadow:var(--ombre); }
 .msg { display:flex; margin:0 0 16px; animation:apparition .18s ease-out; }
 @keyframes apparition { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:none; } }
 .msg.moi { justify-content:flex-end; }
@@ -498,6 +499,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     <div id="bandeauHote" class="bandeau-hote" role="status" hidden></div>
     <div id="fil"></div>
     <div id="accueil"></div>
+    <div id="zoneBas"><button id="bBas" type="button" hidden title="Revenir au dernier message" aria-label="Revenir au dernier message">↓</button></div>
     <div id="taches" hidden></div>
     <div id="activite" role="status" aria-live="polite"><span class="pt"></span><span id="activiteTexte"></span></div>
     <div id="bandeauEdition" hidden><span>Modification d'un message : l'envoi remplace ce message et tout ce qui le suit.</span> <button id="bAnnulerEdition">Annuler</button></div>
@@ -880,7 +882,11 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     return f ? f[0] + ' ' + f[1] + (f[2] ? ' ' + f[2] : '') : '⚙ ' + nom + ' ' + JSON.stringify(args).slice(0, 160);
   };
   const ligneOutil = (nom, args) => { const d = el('div', 'outil'); const l = el('div', '', libelleOutil(nom, args)); l.title = nom + ' ' + JSON.stringify(args).slice(0, 600); d.appendChild(l); return d; };
-  const fil = () => $('fil'), bas = () => { fil().scrollTop = fil().scrollHeight; };
+  // Le fil ne te ramène en bas que si tu y étais : si tu remontes lire pendant que l'assistant écrit ou réfléchit, il te laisse là où tu es et un bouton « ↓ » propose de redescendre.
+  let SUIT = true;
+  const fil = () => $('fil'), majBas = () => { const b = $('bBas'); if (b) b.hidden = SUIT || !EN_COURS; };
+  const bas = forcer => { if (forcer === true) SUIT = true; if (SUIT) fil().scrollTop = fil().scrollHeight; majBas(); };
+  fil().addEventListener('scroll', () => { SUIT = fil().scrollHeight - fil().scrollTop - fil().clientHeight < 80; majBas(); }, { passive: true });
   // Copie dans le presse-papiers. Sur le téléphone la page est en http (pas « sécurisée ») : navigator.clipboard n'existe pas, on passe par une zone de texte cachée.
   const copier = async texte => {
     texte = String(texte == null ? '' : texte);
@@ -1117,7 +1123,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
       else if (m.role === 'tool') { const d = el('div', 'outil'); d.appendChild(el('div', '', '↳ ' + (m.tool_name || T('résultat')))); d.appendChild(el('div', 'res', (['web_chercher', 'web_lire'].includes(m.tool_name) || (m.tool_name || '').startsWith('mcp__')) && /CONTENU (WEB|EXTERNE) NON FIABLE/.test((m.content || '').slice(0, 60)) ? T("(résultat transmis à l'assistant, non affiché)") : (m.content || '').slice(0, 700))); afficherMedias(d, m.medias, m.medias_fichiers, CONV.id); afficherFichiers(d, m.fichiers_joints, CONV.id); fil().appendChild(d); }
     });
     annoter(); afficherTaches(c.taches); majJauge(c.id); setVitesse(c.vitesse); majAnnuler();
-    bas();
+    bas(true);
   };
   // Barre d'activité : dit ce que fait le modèle (chargement, réflexion, écriture, outil, attente d'accord) et depuis combien de temps, pour qu'on sache s'il travaille ou s'il est bloqué.
   let ACT = null;
@@ -1151,7 +1157,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
   let FLUX = null;
   const zone = () => (FLUX && FLUX.detache ? FLUX.sauve : fil());
   const detacherFlux = () => { if (!FLUX || FLUX.detache) return; while (fil().firstChild) FLUX.sauve.appendChild(fil().firstChild); FLUX.detache = true; };
-  const rattacherFlux = () => { fil().textContent = ''; while (FLUX.sauve.firstChild) fil().appendChild(FLUX.sauve.firstChild); FLUX.detache = false; bas(); };
+  const rattacherFlux = () => { fil().textContent = ''; while (FLUX.sauve.firstChild) fil().appendChild(FLUX.sauve.firstChild); FLUX.detache = false; bas(true); };
   // Resynchronise l'écran avec le disque (réponse terminée ailleurs, flux coupé, autre onglet ou téléphone) en gardant la position de lecture.
   const recharger = async () => {
     if (!CONV || EDIT_INDEX !== null) return;
@@ -1312,7 +1318,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     $('saisie').value = ''; $('saisie').style.height = ''; EN_COURS = true; $('bEnvoyer').title = T('Mettre ce message en file d\'attente'); majTravail(); $('bStop').hidden = false; $('bStop').disabled = false; CONTROLE = new AbortController();
     const moi = el('div', 'msg moi'); moi.appendChild(el('div', 'corps', texte)); miniatures(moi, images, pieces); fil().appendChild(moi);
     if (!forcee) viderPj();
-    let ia = messageIA(), detailsPensee = null; bas();
+    let ia = messageIA(), detailsPensee = null; bas(true);
     const etaitNouvelle = !CONV, hote = HOTE, flux = FLUX = { id: CONV ? CONV.id : '', hote, detache: false, sauve: document.createElement('div') }, visible = () => !flux.detache;
     let finRecue = false;
     demarrerActivite();
@@ -1376,7 +1382,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     } catch (e) { if (e.name !== 'AbortError') { zone().appendChild(el('div', 'erreur', e.message)); if (!finRecue) zone().appendChild(el('div', 'info', T('Si l\'assistant travaillait encore, la réponse s\'affichera ici dès qu\'elle avance.'))); } }
     finSuspension(); const etaitVisible = visible(); FLUX = null;
     termine(flux.id, etaitVisible && !document.hidden && surChat());                              // pastille verte si tu n'étais pas en train de la lire
-    arreterActivite(); EN_COURS = false; $('bEnvoyer').disabled = false; $('bStop').hidden = true; if (etaitVisible) annoter(); signaler(T('✔ Terminé')); majTravail(); await rafraichir(); if (etaitVisible) bas();
+    arreterActivite(); EN_COURS = false; majBas(); $('bEnvoyer').disabled = false; $('bStop').hidden = true; if (etaitVisible) annoter(); signaler(T('✔ Terminé')); majTravail(); await rafraichir(); if (etaitVisible) bas();
     if (FILE.length) {                                                            // message suivant de la file d'attente (sauf si tu as appuyé sur Arrêter)
       if (PAUSE_FILE) majFile(); else { const suivant = FILE.shift(); majFile(); envoyer(suivant); }
     }
@@ -2066,7 +2072,8 @@ body[data-moteur="openai"] .biblio { display:none !important; }
   // la zone de saisie grandit avec le texte (jusqu'à un tiers de l'écran) et revient à une ligne après l'envoi
   const ajusterSaisie = () => { const s = $('saisie'); s.style.height = 'auto'; s.style.height = Math.min(s.scrollHeight + 2, Math.round(window.innerHeight * 0.33)) + 'px'; };
   $('saisie').addEventListener('input', ajusterSaisie);
-  $('saisie').addEventListener('focus', () => setTimeout(() => { bas(); }, 350));          // le clavier du téléphone réduit la zone : on garde le bas de la discussion visible
+  $('bBas').addEventListener('click', () => bas(true));
+  $('saisie').addEventListener('focus', () => setTimeout(() => { bas(true); }, 350));          // le clavier du téléphone réduit la zone : on garde le bas de la discussion visible
   // --- commandes « / » : menu d'aide à la saisie (nom, argument, explication d'une ligne) ---
   const infoLocale = (texte, brut) => { const d = el('div', 'info', texte); if (brut) d.style.whiteSpace = 'pre-wrap'; fil().appendChild(d); bas(); };          // message local : n'entre jamais dans la conversation du modèle
   // /web question : les résultats BRUTS d'une recherche, sans modèle (rien n'est écrit dans la conversation). Tu coches ceux qui comptent, puis « Demander au modèle de les lire » prépare le message.
@@ -3308,6 +3315,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     $('aideAjoutMcp').textContent = r.modifiable ? T('Exemples : « npx -y @modelcontextprotocol/server-filesystem C:/mes-documents » (un programme que Lutin lance), ou « https://mon-serveur/mcp » (une adresse). Après l\'ajout, Lutin liste les outils du connecteur : coche ceux que le modèle peut utiliser. Dans Docker, le programme tourne dans le conteneur : préfère une adresse.') : explicationVerrou() + ' ' + T('Les connecteurs s\'ajoutent aussi en ligne de commande : lutin mcp add <nom> <commande ou adresse>, puis lutin mcp refresh <nom> et lutin mcp allow <nom> <outil>.');
     z.textContent = '';
     if (!r.connecteurs.length) z.appendChild(el('div', 'aide', T('Aucun connecteur pour le moment.')));
+    if (r.limite && r.limite.ecartes) z.appendChild(el('div', 'attention', '⚠ ' + T('{} outils sont autorisés mais le modèle n\'en reçoit que {} (un petit modèle se perd au-delà) : les {} derniers sont écartés. Décoche ceux dont tu n\'as pas besoin.').replace('{}', r.limite.exposables).replace('{}', r.limite.max).replace('{}', r.limite.ecartes)));
     const appel = async (url, corps, msg) => { $('mMcp').textContent = msg || ''; try { await api(url, corps); } catch (e) { $('mMcp').textContent = e.message; } chargerMcp(); };
     r.connecteurs.forEach(c => {
       const d = el('div', 'carte'); d.style.cssText = 'flex-direction:column;align-items:stretch;gap:6px';
@@ -3875,7 +3883,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
         b.addEventListener('click', async () => {
           b.disabled = true; res3.textContent = '';
           const x = await act(action, { id: m.id }, res3);
-          if (x) res3.textContent = action === 'import-skills' ? '✔ ' + x.ajoutes + ' ' + T('ajouté(s)') + ', ' + x.mis_a_jour + ' ' + T('mis à jour') + ', ' + x.deja_la + ' ' + T('déjà là') : '✔ ' + x.notes_ajoutees + ' ' + T('note(s) ajoutée(s)') + (x.profil_copie ? ' · ' + T('profil copié') : '');
+          if (x) res3.textContent = action === 'import-skills' ? '✔ ' + x.ajoutes + ' ' + T('ajouté(s)') + ', ' + x.mis_a_jour + ' ' + T('mis à jour') + ', ' + x.deja_la + ' ' + T('déjà là') : '✔ ' + x.notes_ajoutees + ' ' + T('note(s) ajoutée(s)') + (x.profil_copie ? ' · ' + T('profil copié') : '') + (x.notes_ignorees ? ' · ⚠ ' + x.notes_ignorees + ' ' + T('note(s) ignorée(s) : la mémoire de cette machine est pleine') : '') + (x.profil_coupe ? ' · ⚠ ' + T('profil coupé : trop long') : '');
           b.disabled = !droits[ok];
         });
         return b;
@@ -4066,8 +4074,8 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     if (seq === SEQ_AUTO && $('p-auto').classList.contains('vue')) minuteurAuto = setTimeout(chargerAuto, 4000);
   };
   // Panneau de l'addon « travail de fond » : travaux en cours (avancement, pause, rapport) et formulaire de création
-  const FOND = { ouvert: false, brouillon: { nom: '', dossier: '', motifs: '*.pdf', consigne: '', regulier: false, intervalle_h: 24 } };
-  const etatsFond = () => ({ attente: T('en attente'), en_cours: T('en cours'), pause: T('en pause'), termine: T('terminé'), erreur: T('en erreur') });
+  const FOND = { ouvert: false, brouillon: { nom: '', dossier: '', motifs: '*.pdf', consigne: '', regulier: false, intervalle_h: 24, essai: true } };
+  const etatsFond = () => ({ attente: T('en attente'), en_cours: T('en cours'), pause: T('en pause'), termine: T('terminé'), erreur: T('en erreur'), a_valider: T('à valider') });
   const panneauFond = async (zone) => {
     let r, tr;
     try { [r, tr] = await Promise.all([api('/api/fond'), api('/api/travaux')]); } catch (e) { zone.textContent = e.message; return; }
@@ -4091,6 +4099,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
       });
       const rel = el('button', '', T('Tout refaire')); rel.addEventListener('click', () => { if (confirm(T('Refaire tous les documents depuis le début ? Les résultats actuels sont effacés.'))) agir('relancer'); });
       const sup = el('button', 'danger', T('Supprimer')); sup.addEventListener('click', () => { if (confirm(T('Supprimer ce travail et ses résultats ?'))) agir('supprimer'); });
+      if (t.etat === 'a_valider') { const ok = el('button', 'principal', T('Valider et traiter le reste')); ok.addEventListener('click', () => agir('valider')); ligne.append(ok); d.style.borderColor = 'var(--accent)'; }
       ligne.append(pause, rap, rel, sup); d.appendChild(ligne); zone.appendChild(d);
     });
     zone.appendChild(msg);
@@ -4108,10 +4117,11 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     champ(T('Consigne pour chaque document'), 'consigne', 'texte');
     champ(T('Régulier (ne traiter que les nouveautés)'), 'regulier', 'case');
     champ(T('toutes les (heures)'), 'intervalle_h', 'nombre');
+    champ(T('M\'arrêter après les 3 premiers documents pour que je vérifie les résultats'), 'essai', 'case');
     const go = el('button', 'principal', T('Lancer le travail'));
     go.addEventListener('click', async () => {
       go.disabled = true; msg.textContent = '';
-      try { await api('/api/fond-creer', { nom: b.nom, dossier: b.dossier, motifs: b.motifs, consigne: b.consigne, regulier: b.regulier, intervalle_h: b.intervalle_h }); FOND.brouillon = { nom: '', dossier: b.dossier, motifs: '*.pdf', consigne: '', regulier: false, intervalle_h: 24 }; FOND.ouvert = false; chargerAuto(); }
+      try { await api('/api/fond-creer', { nom: b.nom, dossier: b.dossier, motifs: b.motifs, consigne: b.consigne, regulier: b.regulier, intervalle_h: b.intervalle_h, essai: b.essai }); FOND.brouillon = { nom: '', dossier: b.dossier, motifs: '*.pdf', consigne: '', regulier: false, intervalle_h: 24, essai: true }; FOND.ouvert = false; chargerAuto(); }
       catch (e) { msg.textContent = e.message; go.disabled = false; }
     });
     det.appendChild(go); zone.appendChild(det);

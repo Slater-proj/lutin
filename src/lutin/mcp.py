@@ -440,7 +440,13 @@ def est_outil(nom):
     return str(nom).startswith(PREFIXE)
 
 
-def outils_exposes(mode_lecture_seulement=False):
+def limite_outils(mode_lecture_seulement=False):
+    """{max, exposables, ecartes} : combien d'outils autorisés le modèle recevrait, et combien sont ÉCARTÉS parce qu'il y en a plus que OUTILS_MAX (la page le dit : rien n'est écarté en silence)."""
+    total = len(outils_exposes(mode_lecture_seulement, sans_limite=True))
+    return {"max": OUTILS_MAX, "exposables": total, "ecartes": max(0, total - OUTILS_MAX)}
+
+
+def outils_exposes(mode_lecture_seulement=False, sans_limite=False):
     """Les outils au format d'Ollama que le modèle reçoit : autorisés un par un, et seulement ceux qui ne modifient rien si le connecteur est en lecture seule (ou si le mode l'impose)."""
     sortie = []
     for ident, s in lire()["serveurs"].items():
@@ -453,7 +459,7 @@ def outils_exposes(mode_lecture_seulement=False):
                 continue
             description = "[{}] {}".format(s.get("nom", ident), o.get("description") or nom) + ("" if o.get("lecture") else _t(" (modifie quelque chose : demande ton accord à chaque appel)"))
             sortie.append({"type": "function", "function": {"name": nom_outil(ident, nom), "description": description[:700], "parameters": o.get("schema") or {"type": "object", "properties": {}}}})
-    return sortie[:OUTILS_MAX]
+    return sortie if sans_limite else sortie[:OUTILS_MAX]
 
 
 def texte_du_resultat(r):
