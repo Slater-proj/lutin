@@ -31,6 +31,7 @@ from . import bench as _bench
 from . import catalogue as _catalogue
 from . import config as _config
 from . import i18n as _i18n
+from . import reglages_outils as _reglages_outils
 from . import securite as _sec
 from .i18n import t as _t
 from .i18n import traduire as _tr
@@ -67,6 +68,8 @@ REGLAGES_DEFAUT = {"modele": os.environ.get("LUTIN_MODELE") or "qwen3:8b", "avan
 CHOIX_RAPPELS = ("scenario", "toujours", "jamais")
 BORNES_CHARGE = {"num_thread": (1, 256), "garde_min": (0, 240)}
 BORNES_RESSOURCES = {"seuil_ram_go": (0.5, 64.0), "seuil_disque_go": (1.0, 2000.0), "plafond_donnees_go": (0.2, 500.0), "limite_ram_commande_go": (0.0, 256.0)}
+
+REGLAGES_DEFAUT.update(_reglages_outils.DEFAUT)
 
 
 def nettoyer_ressources(r):
@@ -146,15 +149,19 @@ GARDE_RESSOURCES_ACTIF = os.environ.get("LUTIN_SANS_GARDE") != "1"          # d�
 AUTO_DEMARRAGE = os.environ.get("LUTIN_SANS_DEMARRAGE") != "1"          # démarre Ollama tout seul s'il est arrêté au moment d'une demande (désactivé dans les tests)
 LECTURE_MAX = 7000
 SORTIE_MAX = 9000
-def construire_commandes_lecture(posix):
-    """Les lectures simples lancées sans accord : git en lecture, echo, et les commandes de lecture du système (dir / type / where sous Windows ; ls / cat / pwd / which ailleurs)."""
+def construire_commandes_lecture(posix, en_plus=()):
+    """Les lectures simples lancées sans accord : git en lecture, echo, et les commandes de lecture du système (dir / type / where sous Windows ; ls / cat / pwd / which ailleurs).
+    `en_plus` : des commandes sûres ajoutées par l'utilisateur (Réglages > Outils), déjà validées : la commande exacte, ou suivie d'arguments sans enchaînement."""
     commun = r"git (status|diff|log|show|branch|ls-files)\b[^|&;<>]*|python -V|echo [^|&;<>]*"
     systeme = r"ls\b[^|&;<>]*|cat [^|&;<>]+|pwd|which [^|&;<>]+" if posix else r"dir\b[^|&;<>]*|type [^|&;<>]+|where [^|&;<>]+"
-    return re.compile("^(" + commun + "|" + systeme + ")$", re.I)
+    perso = "".join("|" + re.escape(c) + r"(?: [^|&;<>]+)?" for c in en_plus)
+    return re.compile("^(" + commun + "|" + systeme + perso + ")$", re.I)
 
 
 COMMANDES_LECTURE = construire_commandes_lecture(os.name != "nt")
 DOSSIERS_IGNORES = {".git", "__pycache__", "node_modules", ".venv", "venv", ".idea", ".vscode", "dist", "build", ".pytest_cache", ".ruff_cache", ".mypy_cache", "target"}
+DOSSIERS_IGNORES_BASE = frozenset(DOSSIERS_IGNORES)          # ceux de Lutin ; Réglages > Outils peut en ajouter (voir reglages_outils)
+DELAI_COMMANDE_S = 240          # temps maximal d'une commande de l'outil « executer » (réglable : Réglages > Outils)
 CHEMINS_IGNORES = ()          # chemins précis à sauter (en plus des noms de DOSSIERS_IGNORES)
 CHERCHER_DELAI = 25                                              # secondes au plus pour une recherche (gros dossier sur le réseau)
 JOURNAL_MAX = 1_000_000
@@ -251,6 +258,8 @@ def reglages():
         r["fiche_part"] = max(5, min(25, int(r.get("fiche_part", 10))))                      # part de la fenêtre de contexte que la fiche de suivi peut prendre (en %)
     except (TypeError, ValueError):
         r["fiche_part"] = 10
+    _reglages_outils.nettoyer(r)
+    _reglages_outils.appliquer(r, sys.modules[__name__])          # les limites des outils suivent les réglages (sans rien refaire tant qu'ils ne changent pas)
     return nettoyer_ressources(nettoyer_echantillonnage(r))
 
 

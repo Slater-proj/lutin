@@ -370,7 +370,7 @@ button.principal { box-shadow:0 6px 16px -8px rgba(63,143,232,.8); }
 .rubrique.masque { display:none; }
 .conv.hors { opacity:.6; }
 .bandeau-hote { margin:0 0 8px; padding:6px 12px; border:1px solid rgba(240,200,80,.4); border-radius:10px; background:rgba(240,200,80,.08); color:var(--muted); font-size:.84rem; }
-.sous-nav { display:flex; gap:6px; flex-wrap:wrap; margin:4px 0 14px; }
+.sous-nav { display:flex; gap:6px; flex-wrap:wrap; margin:0 0 14px; padding:8px 0; position:sticky; top:-1px; z-index:5; background:var(--bg); border-bottom:1px solid var(--line); }          /* reste visible quand on descend dans la page */
 .sous-nav button { border-radius:999px; padding:5px 14px; font-size:.84rem; color:#c3ccd8; background:#16202b; }
 .sous-nav button:hover:not([aria-selected=true]) { background:#1c2937; }
 .sous-nav button[aria-selected=true] { background:#1d3048; border-color:rgba(90,169,255,.35); color:#fff; }
@@ -521,6 +521,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     <div class="aide">Plus un modèle est gros, plus il est intelligent, mais plus il demande de mémoire (idéalement celle de ta carte graphique).
       <details class="aide-plus"><summary>En savoir plus</summary>Les modèles tournent sur ta machine, avec le moteur choisi (Ollama ou llama.cpp : la même bibliothèque, les mêmes modèles). Un seul modèle est chargé à la fois : en changer prend quelques secondes. Tu peux aussi les gérer en ligne de commande : <code>lutin models</code>.</details></div>
     <label class="opt-ligne" title="Montre des modèles modifiés par la communauté pour ne plus refuser de demandes. À utiliser en connaissance de cause."><input type="checkbox" id="cAvance"> Afficher les modèles avancés (sans filtre)</label>
+    <div class="carte" id="colibriModeles" hidden style="display:block"></div>
     <div class="carte" id="jaugeDisque" hidden style="display:block"></div>
     <div class="carte" id="barreTest" style="gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
       <button id="bTesterPc" class="principal" title="Mesure la vitesse du modèle actif sur cette machine (environ 20 secondes), puis donne des conseils : modèle plus léger, contexte, charge.">⏱ Tester mon PC</button>
@@ -623,10 +624,16 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     <div class="aide">Un connecteur est un programme que Lutin lance (ou une adresse qu'il appelle) pour donner de nouveaux outils à l'assistant. Aucun outil n'est donné au modèle tant que tu ne l'as pas coché. Lecture seule par défaut ; un outil qui modifie quelque chose demande ton accord à chaque appel. Ce qui revient des outils n'est jamais affiché brut ni obéi, et l'accord automatique est suspendu après un appel.</div>
     <div id="listeMcp" style="margin:6px 0"></div>
     <div class="carte" id="ajoutMcp" style="gap:8px;flex-wrap:wrap;align-items:center">
+      <select id="modeleMcp" aria-label="Partir d'un modèle de connecteur"><option value="">Partir d'un modèle…</option></select>
       <input id="nomMcp" placeholder="Nom (par exemple Fichiers)" style="width:170px">
       <input id="cibleMcp" placeholder="Commande à lancer (npx -y …) ou adresse https://…" style="flex:1;min-width:240px">
       <button id="bAjouterMcp" class="principal">Ajouter</button>
       <button id="bDemoMcp" title="Un petit serveur fourni avec Lutin, pour essayer sans rien installer">Essayer le serveur de démonstration</button>
+      <details style="flex-basis:100%"><summary>Clés d'accès (jetons, variables d'environnement, en-têtes)</summary>
+        <div class="aide">Pour un serveur qui demande un jeton : une variable par ligne sous la forme NOM=valeur (programme lancé par Lutin), ou un en-tête par ligne sous la forme Nom: valeur (serveur par adresse, par exemple Authorization: Bearer …). Elles restent sur cette machine et ne sont jamais réaffichées.</div>
+        <textarea id="envMcp" rows="2" style="width:100%;font-family:monospace" placeholder="GITHUB_TOKEN=…" autocomplete="off" spellcheck="false"></textarea>
+        <textarea id="entetesMcp" rows="2" style="width:100%;font-family:monospace" placeholder="Authorization: Bearer …" autocomplete="off" spellcheck="false"></textarea>
+      </details>
     </div>
     <div class="aide" id="aideAjoutMcp"></div>
     <div class="aide" id="mMcp"></div>
@@ -667,7 +674,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     <div id="machinesZone"></div>
   </div></section>
   <section class="page" id="p-reglages"><div class="cadre">
-    <div id="sousReglages" class="sous-nav" role="tablist" aria-label="Rubriques des réglages"><button data-g="general" role="tab">Général</button><button data-g="moteur" role="tab">Moteur</button><button data-g="conversation" role="tab">Conversation</button><button data-g="recherche" role="tab">Recherche web</button><button data-g="dossiers" role="tab">Dossiers</button><button data-g="machine" role="tab">Avancé</button></div>
+    <div id="sousReglages" class="sous-nav" role="tablist" aria-label="Rubriques des réglages"><button data-g="general" role="tab">Général</button><button data-g="moteur" role="tab">Moteur</button><button data-g="conversation" role="tab">Conversation</button><button data-g="outils" role="tab">Outils</button><button data-g="recherche" role="tab">Recherche web</button><button data-g="dossiers" role="tab">Dossiers</button><button data-g="machine" role="tab">Avancé</button></div>
     <details class="groupe" open data-g="general"><summary>Général</summary>
     <h2>Langue / Language</h2>
     <div style="margin:6px 0"><label><select id="selLangue"><option value="auto">Auto</option><option value="fr">Français</option><option value="en">English</option></select></label></div>
@@ -742,6 +749,9 @@ body[data-moteur="openai"] .biblio { display:none !important; }
       <label>min_p <input id="iMinP" type="number" step="0.01" min="0" max="1" placeholder="auto" style="width:90px"></label>
       <label>pénalité de répétition <input id="iRep" type="number" step="0.05" min="0.8" max="2" placeholder="auto" style="width:90px"></label>
     </div>
+    </details>
+    <details class="groupe" data-g="outils"><summary>Outils</summary>
+    <div id="outilsZone"></div>
     </details>
     <details class="groupe" data-g="machine"><summary>Machine et réglages avancés</summary>
     <h2>Garde-fous ressources</h2>
@@ -1887,6 +1897,8 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     $('cheminDonnees').textContent = ETAT.donnees || '';
     $('vCpus').textContent = ETAT.cpus ? T('(cette machine : {} cœurs)').replace('{}', ETAT.cpus) : '';
     $('cHorsLigne').checked = !!ETAT.hors_ligne; $('cWeb').disabled = !!ETAT.hors_ligne;
+    try { chargerOutils(); } catch (e) { /* la rubrique Outils se refera au prochain état */ }
+    try { chargerColibriModeles(); } catch (e) { /* la carte Colibri se refera au prochain état */ }
     majMission(); suivreMission();
     if (ETAT.bench && ETAT.bench.erreur) $('msgModeles').textContent = T('Banc d\'essai : ') + ETAT.bench.erreur;
     $('vCtx').textContent = $('rCtx').value; $('vTemp').textContent = $('rTemp').value; $('vTours').textContent = $('rTours').value;
@@ -3245,6 +3257,17 @@ body[data-moteur="openai"] .biblio { display:none !important; }
         bar.append(ac, su);
       }
       d.appendChild(bar);
+      if (r.modifiable) {          // les clés d'accès : seuls les NOMS sont connus de la page, jamais les valeurs ; remplir un champ remplace tout, vide : inchangé
+        const cles = el('details'), noms = [...(c.cles_env || []), ...(c.cles_entetes || [])];
+        cles.appendChild(el('summary', '', T('Clés d\'accès') + (noms.length ? ' (' + noms.join(', ') + ')' : ' (' + T('aucune') + ')')));
+        const te = el('textarea'), th = el('textarea'), ok = el('button', '', T('Remplacer les clés')), rien = el('button', '', T('Retirer toutes les clés'));
+        te.rows = th.rows = 2; te.style.cssText = th.style.cssText = 'width:100%;font-family:monospace'; te.placeholder = 'NOM=valeur'; th.placeholder = 'Nom: valeur'; te.autocomplete = th.autocomplete = 'off'; te.spellcheck = th.spellcheck = false;
+        const lire = (t, sep) => Object.fromEntries(t.value.split('\n').map(x => x.trim()).filter(Boolean).map(x => { const i = x.indexOf(sep); return i > 0 ? [x.slice(0, i).trim(), x.slice(i + 1).trim()] : [x, '']; }));
+        ok.addEventListener('click', () => { if (!te.value.trim() && !th.value.trim()) { $('mMcp').textContent = T('Rien à remplacer : remplis un des deux champs.'); return; } appel('/api/mcp-regler', { id: c.id, env: lire(te, '='), entetes: lire(th, ':') }, T('Clés remplacées.')); });
+        rien.addEventListener('click', () => { if (confirm(T('Retirer toutes les clés de ce connecteur ?'))) appel('/api/mcp-regler', { id: c.id, env: {}, entetes: {} }); });
+        cles.append(el('div', 'aide', T('Remplir un champ REMPLACE toutes les clés de ce type ; les valeurs actuelles ne sont jamais affichées.')), te, th, el('div', 'ligne'));
+        cles.lastChild.append(ok, rien); d.appendChild(cles);
+      }
       if (!c.outils.length) d.appendChild(el('div', 'aide', T('Aucun outil connu : clique sur « Actualiser la liste des outils ».')));
       c.outils.forEach(o => {
         const l = el('label'); l.style.display = 'block';
@@ -3257,9 +3280,24 @@ body[data-moteur="openai"] .biblio { display:none !important; }
       z.appendChild(d);
     });
   };
+  // Des connecteurs courants, un clic pour préremplir (rien n'est lancé tant que tu ne cliques pas sur « Ajouter »). Les programmes demandent Node.js (npx) ou uv (uvx) sur la machine de Lutin.
+  const MODELES_MCP = [
+    [T('Fichiers'), 'npx -y @modelcontextprotocol/server-filesystem C:/my-folder', T('Lire et modifier les fichiers d\'UN dossier que tu indiques (remplace le chemin). Node.js requis.')],
+    [T('Pages web (fetch)'), 'uvx mcp-server-fetch', T('Lire une page web et la convertir en texte. uv requis.')],
+    [T('Mémoire'), 'npx -y @modelcontextprotocol/server-memory', T('Un graphe de connaissances que l\'assistant enrichit d\'une conversation à l\'autre. Node.js requis.')],
+    ['Git', 'uvx mcp-server-git --repository C:/my-repo', T('Lire l\'historique et l\'état d\'un dépôt git (remplace le chemin). uv requis.')],
+    [T('Heure et fuseaux'), 'uvx mcp-server-time', T('L\'heure dans n\'importe quel fuseau. uv requis.')],
+    [T('Réflexion pas à pas'), 'npx -y @modelcontextprotocol/server-sequential-thinking', T('Un outil pour décomposer un problème en étapes. Node.js requis.')]];
+  MODELES_MCP.forEach(([nom, cmd], i) => { const o = el('option', '', nom); o.value = String(i); $('modeleMcp').appendChild(o); });
+  $('modeleMcp').addEventListener('change', () => {
+    const m = MODELES_MCP[+$('modeleMcp').value]; if (!m) return;
+    $('nomMcp').value = m[0]; $('cibleMcp').value = m[1]; $('mMcp').textContent = m[2] + ' ' + T('Vérifie la commande puis clique sur « Ajouter » ; Lutin n\'a pas testé ce connecteur lui-même.');
+  });
   $('bAjouterMcp').addEventListener('click', async () => {
     const cible = $('cibleMcp').value.trim(), nom = $('nomMcp').value.trim(); if (!nom || !cible) { $('mMcp').textContent = T('Donne un nom et une commande (ou une adresse).'); return; }
-    try { const r = await api('/api/mcp-ajouter', /^https?:\/\//i.test(cible) ? { nom, url: cible } : { nom, commande: cible }); $('nomMcp').value = $('cibleMcp').value = ''; await api('/api/mcp-actualiser', { id: r.id }); $('mMcp').textContent = T('Connecté. Coche les outils que le modèle peut utiliser.'); }
+    const lireLignes = (t, sep) => Object.fromEntries(t.value.split('\n').map(x => x.trim()).filter(Boolean).map(x => { const i = x.indexOf(sep); return i > 0 ? [x.slice(0, i).trim(), x.slice(i + 1).trim()] : [x, '']; }));
+    const secrets = { env: lireLignes($('envMcp'), '='), entetes: lireLignes($('entetesMcp'), ':') };
+    try { const r = await api('/api/mcp-ajouter', Object.assign(/^https?:\/\//i.test(cible) ? { nom, url: cible } : { nom, commande: cible }, secrets)); $('nomMcp').value = $('cibleMcp').value = $('envMcp').value = $('entetesMcp').value = ''; $('modeleMcp').value = ''; await api('/api/mcp-actualiser', { id: r.id }); $('mMcp').textContent = T('Connecté. Coche les outils que le modèle peut utiliser.'); }
     catch (e) { $('mMcp').textContent = e.message; }
     chargerMcp();
   });
@@ -4344,6 +4382,80 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     } catch (e) { $('rechMsg').textContent = e.message; }
     b.disabled = false; chargerRecherche();
   });
+  // ---- Réglages > Outils : ce que l'assistant peut utiliser, et les limites de l'exécuteur, de la lecture et de la recherche (les valeurs viennent des réglages, les bornes du serveur)
+  const OUTILS_REGLABLES = [
+    ['executer', T('Lancer des commandes'), T('L\'exécuteur : tests, git, scripts. Chaque commande demande ton accord, sauf les lectures simples listées plus bas.')],
+    ['ecrire', T('Écrire un fichier'), T('Crée ou remplace un fichier du dossier de travail (accord demandé).')],
+    ['modifier', T('Modifier un passage'), T('Remplace un passage précis d\'un fichier (accord demandé).')], ['modifier_plusieurs', T('Modifier plusieurs passages'), T('Plusieurs remplacements d\'un coup, tout ou rien.')],
+    ['creer_document', T('Créer un document'), T('PDF, Word, tableur, présentation.')], ['apercu_page', T('Aperçu d\'une page'), T('Ouvre une page HTML locale pour la montrer.')],
+    ['web_chercher', T('Chercher sur le web'), T('S\'ajoute à la case « Web » et au mode hors ligne, qui le coupent aussi.')], ['web_lire', T('Lire une page web'), T('Idem : lit le contenu d\'une adresse.')],
+    ['calculer', T('Calculer'), T('Une expression arithmétique, sans exécuter de code.')], ['symboles', T('Trouver une fonction ou une classe'), T('Où est définie une fonction, une classe, une variable.')],
+    ['lire_plusieurs', T('Lire plusieurs fichiers'), T('Jusqu\'à 6 fichiers d\'un coup.')], ['rappeler', T('Chercher dans mes documents'), T('Les documents que tu as ajoutés à Lutin.')],
+    ['trouver', T('Trouver un fichier par son nom'), T('Cherche dans le dossier de travail.')], ['\u0063hercher', T('Chercher dans les fichiers'), T('Une expression dans le contenu des fichiers du dossier de travail.')]];
+  const chargerOutils = () => {
+    if (!ETAT || !ETAT.reglages) return;
+    const z = $('outilsZone'), r = ETAT.reglages, coupes = new Set(r.outils_desactives || []);
+    if (z.contains(document.activeElement) && document.activeElement !== document.body) return;          // on ne reconstruit pas pendant qu'on écrit
+    const cle = JSON.stringify([r.outils_desactives, r.outil_delai_commande_s, r.outil_sortie_max, r.outil_lecture_max, r.outil_chercher_delai_s, r.commandes_sans_accord, r.dossiers_ignores_en_plus]);
+    if (z.dataset.cle === cle && z.children.length) return;          // rien n'a changé : on ne refait pas la rubrique à chaque état
+    z.dataset.cle = cle; z.textContent = '';
+    const aide = (t) => z.appendChild(el('div', 'aide', t));
+    z.appendChild(el('h2', '', T('Outils que l\'assistant peut utiliser')));
+    aide(T('Décoche un outil pour le retirer à l\'assistant : il n\'essaiera plus de s\'en servir. Moins d\'outils, c\'est aussi des réponses plus rapides et plus sûres avec un petit modèle. Les accords demandés avant d\'écrire ou de lancer une commande ne changent pas.'));
+    const cases = {};
+    const grille = el('div'); grille.style.cssText = 'display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:6px 18px;margin:8px 0';
+    OUTILS_REGLABLES.forEach(([id, nom, aideOutil]) => {
+      const l = el('label'), c = el('input'); c.type = 'checkbox'; c.checked = !coupes.has(id); cases[id] = c; l.title = aideOutil;
+      l.append(c, document.createTextNode(' ' + nom)); l.appendChild(el('div', 'aide', aideOutil)); grille.appendChild(l);
+    });
+    z.appendChild(grille);
+    z.appendChild(el('h2', '', T('Exécuteur de commandes')));
+    const champ = (id, libelle, valeur, mini, maxi, pas, unite, aideChamp) => {
+      const l = el('div', 'ligne'), c = el('input'); c.type = 'number'; c.min = mini; c.max = maxi; c.step = pas; c.value = valeur; c.style.width = '110px'; c.id = id;
+      l.append(el('span', '', libelle), c, el('span', 'aide', unite)); z.appendChild(l); if (aideChamp) aide(aideChamp); return c;
+    };
+    const delai = champ('oDelai', T('Durée maximale d\'une commande'), r.outil_delai_commande_s, 10, 3600, 10, T('secondes'), T('Une commande plus longue est arrêtée, avec tous ses sous-processus (par défaut 240 s). Monte-la pour de longs tests ou compilations.'));
+    const sortie = champ('oSortie', T('Sortie gardée d\'une commande'), r.outil_sortie_max, 2000, 60000, 1000, T('caractères'), T('Au-delà, le milieu est coupé pour ne garder que le début et la fin (par défaut 9 000). Plus grand = plus de contexte consommé.'));
+    z.appendChild(el('h2', '', T('Commandes lancées sans demander')));
+    aide(T('Déjà sans accord : git status/diff/log/show/branch/ls-files, echo, python -V, et la lecture de dossiers et de fichiers de ton système. Ajoute ici d\'autres commandes SÛRES, une par ligne (par exemple « git fetch » ou « pytest -q »). Pas d\'enchaînement ni de chemin hors du projet ; les programmes qui effacent, installent, téléchargent ou ouvrent un shell sont refusés.'));
+    const cmds = el('textarea'); cmds.rows = 4; cmds.style.cssText = 'width:100%;font-family:monospace'; cmds.value = (r.commandes_sans_accord || []).join('\n'); cmds.placeholder = 'git fetch\npytest -q'; z.appendChild(cmds);
+    z.appendChild(el('h2', '', T('Lecture et recherche dans les fichiers')));
+    const lecture = champ('oLecture', T('Texte rendu par une lecture'), r.outil_lecture_max, 2000, 60000, 1000, T('caractères'), T('Un fichier plus long se lit par morceaux (par défaut 7 000).'));
+    const cherche = champ('oCherche', T('Durée maximale d\'une recherche'), r.outil_chercher_delai_s, 5, 180, 5, T('secondes'), T('Utile sur un gros dossier ou un disque réseau (par défaut 25 s).'));
+    aide(T('Dossiers que les outils ne parcourent jamais (en plus de .git, node_modules, __pycache__, dist, build…) : un nom par ligne.'));
+    const ign = el('textarea'); ign.rows = 3; ign.style.cssText = 'width:100%;font-family:monospace'; ign.value = (r.dossiers_ignores_en_plus || []).join('\n'); ign.placeholder = 'data\narchives'; z.appendChild(ign);
+    const ligne = el('div', 'ligne'), ok = el('button', 'principal', T('Enregistrer')), defaut = el('button', '', T('Valeurs par défaut')), msg = el('span', 'aide');
+    const lignes = t => t.value.split('\n').map(x => x.trim()).filter(Boolean);
+    const envoyer = async corps => { msg.textContent = ''; try { await api('/api/reglages', corps); await rafraichir(); msg.textContent = T('Enregistré.'); } catch (e) { msg.textContent = e.message; msg.className = 'erreur'; return; } msg.className = 'aide'; };
+    ok.addEventListener('click', () => envoyer({ outils_desactives: OUTILS_REGLABLES.map(x => x[0]).filter(id => !cases[id].checked), outil_delai_commande_s: +delai.value, outil_sortie_max: +sortie.value, outil_lecture_max: +lecture.value,
+      outil_chercher_delai_s: +cherche.value, commandes_sans_accord: lignes(cmds), dossiers_ignores_en_plus: lignes(ign) }));
+    defaut.addEventListener('click', () => { if (confirm(T('Remettre tous les réglages d\'outils à leur valeur par défaut ?'))) envoyer({ outils_desactives: [], outil_delai_commande_s: 240, outil_sortie_max: 9000, outil_lecture_max: 7000, outil_chercher_delai_s: 25, commandes_sans_accord: [], dossiers_ignores_en_plus: [] }); });
+    ligne.append(ok, defaut, msg); z.appendChild(ligne);
+  };
+  // ---- Onglet Modèles avec Colibri : ses modèles (de très gros modèles lus depuis le disque), jugés pour cette machine par Colibri ; « Préparer » lui confie le téléchargement
+  const chargerColibriModeles = async () => {
+    const z = $('colibriModeles'); if (!ETAT || !ETAT.colibri_choisi) { z.hidden = true; return; }
+    z.hidden = false;
+    if (z.dataset.charge && Date.now() - +z.dataset.charge < 30000) return; z.dataset.charge = String(Date.now());
+    z.textContent = ''; z.appendChild(el('b', '', T('Modèles pour Colibri')));
+    z.appendChild(el('div', 'aide', T('Colibri fait tourner de très gros modèles (des centaines de milliards de paramètres) sur un PC ordinaire : il garde l\'essentiel sur le disque et ne charge en mémoire que ce dont il a besoin. Choisis donc des modèles bien plus gros que ce que ta carte graphique tient, et préfère un disque rapide (NVMe). Colibri juge lui-même ce qui tient sur cette machine.')));
+    let r; try { r = await api('/api/colibri-modeles'); } catch (e) { z.appendChild(el('div', 'erreur', e.message)); return; }
+    if (r.erreur) { z.appendChild(el('div', 'attention', r.erreur)); return; }
+    z.appendChild(el('div', 'aide', T('Téléchargés dans ') + r.dossier + T(' ; une interruption se reprend là où elle s\'est arrêtée. L\'avancement est dans la barre bleue du haut.')));
+    const msg = el('div', 'aide');
+    [...r.modeles].sort((a, b) => Number(b.ok) - Number(a.ok) || a.go - b.go).forEach(m => {
+      const l = el('div', 'ligne'), go = m.go >= 1000 ? (m.go / 1000).toFixed(2).replace('.', ',') + ' ' + T('To') : Math.round(m.go) + ' ' + T('Go');
+      l.appendChild(el('b', '', m.id)); l.appendChild(el('span', 'aide', ' · ' + go));
+      const b = el('button', m.ok ? 'principal' : '', m.ok ? T('Préparer avec Colibri') : T('Ne tient pas ici')); b.disabled = !m.ok; b.title = m.ok ? T('Colibri télécharge ce modèle et démarre son serveur') : m.raison;
+      b.addEventListener('click', async () => {
+        if (!confirm(T('Colibri va télécharger {} ({}). Continuer ?').replace('{}', m.id).replace('{}', go))) return;
+        b.disabled = true; try { await api('/api/colibri-preparer', { id: m.id }); msg.textContent = T('Préparation lancée : l\'avancement est dans la barre bleue du haut.'); rafraichir(); } catch (e) { msg.textContent = e.message; b.disabled = false; }
+      });
+      l.appendChild(b); if (!m.ok) l.appendChild(el('span', 'aide', ' ' + m.raison)); z.appendChild(l);
+    });
+    z.appendChild(msg);
+    z.appendChild(el('div', 'aide', T('Non vérifié par Lutin avec un vrai téléchargement : si quelque chose coince, le message de Colibri s\'affiche dans la barre du haut.')));
+  };
   // ---- Palette de commandes (Ctrl+K) : un seul endroit pour aller partout, au clavier
   const PAL = { ouverte: false, items: [], visibles: [], choix: 0, retour: null };
   const sansAccent = t => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();

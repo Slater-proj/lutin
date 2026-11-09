@@ -176,6 +176,66 @@ def demarrer(modele, port=PORT_DEFAUT, dossiers=None, attente_s=90, lancer=subpr
     raise ValueError(_t("Colibri ne répond pas après {} s (son journal : {}).").format(attente_s, journal))
 
 
+RE_LIGNE_CATALOGUE = re.compile(r"^\s+([a-z0-9][a-z0-9._-]{1,40})\s+(\d+(?:\.\d+)?) GB\s+(\S+)\s*(.*)$")
+
+
+def catalogue(dossiers=None, lancer=subprocess.run):
+    """Les modèles que Colibri sait préparer, jugés pour CETTE machine par Colibri lui-même (`coli setup --list --all`) : [{id, go, ok, statut, raison}].
+    `ok` : le modèle tient (mémoire et disque). Lecture seule : rien n'est téléchargé. ValueError si Colibri n'est pas installé ou ne répond pas."""
+    trouve = installee(dossiers)
+    if not trouve:
+        raise ValueError(_t("Colibri n'est pas installé : installe-le d'abord (Réglages > Moteur)."))
+    try:
+        r = lancer([sys.executable, str(Path(trouve[1]) / "coli"), "setup", "--list", "--all", "--dir", str(dossier_modeles(dossiers))], cwd=str(trouve[1]), capture_output=True, text=True, timeout=90, encoding="utf-8", errors="replace")
+    except (OSError, subprocess.SubprocessError) as e:
+        raise ValueError(_t("Colibri n'a pas pu lister ses modèles : {}").format(e)) from None
+    modeles = []
+    for ligne in (r.stdout or "").splitlines():
+        m = RE_LIGNE_CATALOGUE.match(ligne)
+        if m:
+            modeles.append({"id": m.group(1), "go": float(m.group(2)), "ok": not m.group(3).startswith("needs"), "statut": m.group(3), "raison": m.group(4).strip()})
+    if not modeles:
+        raise ValueError(_t("Colibri n'a rendu aucun modèle (version trop différente ?). Sa réponse : {}").format(((r.stdout or "") + (r.stderr or ""))[-300:]))
+    return modeles
+
+
+def dossier_modeles(dossiers=None):
+    """Où Colibri télécharge les modèles qu'on lui fait préparer : le dossier de Colibri dans les données de Lutin."""
+    return dossier_colibri(dossiers) / "modeles"
+
+
+def preparer(ident, port=PORT_DEFAUT, dossiers=None, dire=print, lancer=subprocess.Popen, annule=lambda: False):
+    """`coli setup --model ID --yes --background` : Colibri vérifie la machine, prend le moteur adapté, télécharge le modèle (reprise possible si on l'interrompt) et démarre son serveur sur 127.0.0.1.
+    Le modèle fait de quelques dizaines à plusieurs centaines de Go. Seuls les modèles du catalogue de Colibri sont acceptés. Chaque ligne que Colibri écrit est transmise à `dire`."""
+    modeles = {m["id"]: m for m in catalogue(dossiers)}
+    if ident not in modeles:
+        raise ValueError(_t("Modèle inconnu de Colibri : {}").format(str(ident)[:40]))
+    if not modeles[ident]["ok"]:
+        raise ValueError(_t("Ce modèle ne tient pas sur cette machine : {}").format(modeles[ident]["raison"]))
+    _, racine = installee(dossiers)
+    dossier = dossier_modeles(dossiers)
+    dossier.mkdir(parents=True, exist_ok=True)
+    cmd = [sys.executable, str(Path(racine) / "coli"), "setup", "--model", ident, "--yes", "--no-browser", "--background", "--host", HOTE, "--port", str(int(port)), "--dir", str(dossier)]
+    proc = lancer(cmd, cwd=str(racine), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, text=True, encoding="utf-8", errors="replace")
+    fin = []
+    try:
+        for ligne in proc.stdout:
+            ligne = ligne.strip()
+            if ligne:
+                fin = (fin + [ligne])[-12:]
+                dire(ligne[:200])
+            if annule():
+                proc.terminate()
+                break
+        code = proc.wait()
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+    if code != 0 and not annule():
+        raise ValueError(_t("Colibri s'est arrêté (code {}). Fin de son message :\n{}").format(code, "\n".join(fin[-6:])))
+    return True
+
+
 def arreter(port=PORT_DEFAUT, dossiers=None, lancer=subprocess.run):
     """`coli stop --port N` : Colibri arrête son serveur et son moteur."""
     trouve = installee(dossiers)

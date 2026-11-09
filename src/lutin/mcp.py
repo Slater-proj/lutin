@@ -67,6 +67,29 @@ def identifiant(nom):
     return ident
 
 
+RE_VARIABLE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,63}$")
+RE_ENTETE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9-]{0,63}$")
+
+
+def _secrets(env, entetes):
+    """Les variables d'environnement et en-têtes d'un connecteur (clés d'accès), validés : des noms sûrs, des valeurs sans retour à la ligne, au plus 30 en tout."""
+    env = {str(k).strip(): str(v) for k, v in (env or {}).items() if str(k).strip()}
+    entetes = {str(k).strip(): str(v) for k, v in (entetes or {}).items() if str(k).strip()}
+    if len(env) + len(entetes) > 30:
+        raise ValueError(_t("Trop de variables ou d'en-têtes (30 au plus)."))
+    for k, v in env.items():
+        if not RE_VARIABLE.match(k):
+            raise ValueError(_t("Nom de variable invalide : {} (lettres, chiffres et _, sans espace).").format(k[:40]))
+        if "\n" in v or "\r" in v or "\0" in v or len(v) > 2000:
+            raise ValueError(_t("Valeur invalide pour {} (une seule ligne, 2000 caractères au plus).").format(k[:40]))
+    for k, v in entetes.items():
+        if not RE_ENTETE.match(k):
+            raise ValueError(_t("Nom d'en-tête invalide : {} (lettres, chiffres et -).").format(k[:40]))
+        if "\n" in v or "\r" in v or "\0" in v or len(v) > 2000:
+            raise ValueError(_t("Valeur invalide pour {} (une seule ligne, 2000 caractères au plus).").format(k[:40]))
+    return env, entetes
+
+
 def ajouter(nom, commande=None, url="", env=None, entetes=None):
     """Enregistre un connecteur (désactivé tant qu'il n'a pas été essayé). `commande` : liste (programme + arguments) ou texte."""
     if isinstance(commande, str):
@@ -77,6 +100,7 @@ def ajouter(nom, commande=None, url="", env=None, entetes=None):
         raise ValueError(_t("Indique soit une commande à lancer, soit une adresse (http…), pas les deux."))
     if url and not re.match(r"^https?://", url, re.I):
         raise ValueError(_t("L'adresse doit commencer par http:// ou https://."))
+    env, entetes = _secrets(env, entetes)
     ident = identifiant(nom)
     cfg = lire()
     if ident in cfg["serveurs"]:
@@ -84,7 +108,7 @@ def ajouter(nom, commande=None, url="", env=None, entetes=None):
     if len(cfg["serveurs"]) >= 12:
         raise ValueError(_t("12 connecteurs au plus."))
     cfg["serveurs"][ident] = {"nom": str(nom).strip()[:40], "type": "http" if url else "stdio", "commande": commande, "url": url,
-                              "env": {str(k): str(v) for k, v in (env or {}).items()}, "entetes": {str(k): str(v) for k, v in (entetes or {}).items()},
+                              "env": env, "entetes": entetes,
                               "actif": True, "lecture_seule": True, "outils": {}, "vu": 0, "erreur": ""}
     ecrire(cfg)
     return ident
@@ -107,12 +131,16 @@ def supprimer(ident):
     ecrire(cfg)
 
 
-def regler(ident, actif=None, lecture_seule=None, outil=None, autorise=None):
-    """Active/désactive le connecteur, bascule « lecture seule », ou autorise/retire un outil."""
+def regler(ident, actif=None, lecture_seule=None, outil=None, autorise=None, env=None, entetes=None):
+    """Active/désactive le connecteur, bascule « lecture seule », autorise/retire un outil, ou REMPLACE ses clés d'accès (variables d'environnement / en-têtes ; {} les retire ; None : inchangées)."""
     cfg = lire()
     s = cfg["serveurs"].get(ident)
     if s is None:
         raise ValueError(_t("Connecteur introuvable."))
+    if env is not None or entetes is not None:
+        nouveau_env, nouveaux_entetes = _secrets(s.get("env") if env is None else env, s.get("entetes") if entetes is None else entetes)
+        s["env"], s["entetes"] = nouveau_env, nouveaux_entetes
+        fermer(ident)          # il redémarre avec les nouvelles clés au prochain appel
     if actif is not None:
         s["actif"] = bool(actif)
     if lecture_seule is not None:
@@ -132,7 +160,7 @@ def vue():
     sortie = []
     for ident, s in lire()["serveurs"].items():
         sortie.append({"id": ident, "nom": s.get("nom", ident), "type": s.get("type"), "commande": s.get("commande"), "url": s.get("url", ""), "actif": s.get("actif", True),
-                       "lecture_seule": s.get("lecture_seule", True), "vu": s.get("vu", 0), "erreur": s.get("erreur", ""), "cles_env": sorted((s.get("env") or {}).keys()),
+                       "lecture_seule": s.get("lecture_seule", True), "vu": s.get("vu", 0), "erreur": s.get("erreur", ""), "cles_env": sorted((s.get("env") or {}).keys()), "cles_entetes": sorted((s.get("entetes") or {}).keys()),
                        "connecte": ident in CONNEXIONS and CONNEXIONS[ident].vivante(),
                        "outils": [{"nom": n, "description": o.get("description", "")[:300], "lecture": bool(o.get("lecture")), "autorise": bool(o.get("autorise"))} for n, o in sorted(s.get("outils", {}).items())]})
     return sortie

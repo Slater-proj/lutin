@@ -49,6 +49,8 @@ def enregistrer_reglages(nouveau):
 
 
 def _enregistrer_reglages(nouveau):
+    from . import reglages_outils
+    reglages_outils.verifier(nouveau)          # une commande dangereuse ou un outil inconnu est refusé avec une explication (le nettoyage ne l'ignorerait qu'en silence)
     r = _m.reglages()
     mode_avant = r["mode"]
     moteur_avant, modele_avant = r.get("moteur") or "ollama", r["modele"]
@@ -103,6 +105,7 @@ def _enregistrer_reglages(nouveau):
         raise ValueError(_t("Mémoire des longues conversations inconnue (resume, fichier ou demander)."))
     _m.nettoyer_echantillonnage(r)
     _m.nettoyer_ressources(r)
+    reglages_outils.nettoyer(r)
     ecrire_atomique(_m.DONNEES / "reglages.json", json.dumps(dict(r, memoire_v=2), ensure_ascii=False, indent=1))
     return _m.reglages()
 

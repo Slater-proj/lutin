@@ -319,6 +319,7 @@ def outils_du_mode(r):
     exclus = _modes.outils_exclus(r.get("mode"), [t["function"]["name"] for t in _m.OUTILS])
     if not r.get("web", True) or _hl.actif():
         exclus |= OUTILS_WEB
+    exclus |= set(r.get("outils_desactives") or [])                     # outils coupés par l'utilisateur (Réglages > Outils)
     if not _m.OUTIL:
         exclus |= _modes.IMAGES
     if r.get("memoire_longue") != "fichier":

@@ -2,6 +2,13 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## Des outils réglables, des connecteurs MCP plus complets
+
+- **Réglages > Outils** : couper n'importe quel outil de base (exécuteur, écriture, web, documents…), régler la durée maximale d'une commande (10 s à 1 h), la sortie gardée, la taille d'une lecture, la durée d'une recherche, les dossiers jamais parcourus, et ajouter des **commandes sûres lancées sans accord** (« git fetch », « pytest -q »). Ces dernières sont strictement validées : pas d'enchaînement, pas de chemin hors du projet, pas de programme qui efface, installe, télécharge ou ouvre un shell. Les accords demandés avant d'écrire ou de lancer ne changent pas.
+- **Connecteurs MCP** : on peut maintenant saisir des **clés d'accès** (jetons, variables d'environnement, en-têtes `Authorization`) à l'ajout, **les remplacer ensuite**, et partir d'un **modèle** (fichiers, pages web, mémoire, git, heure, réflexion pas à pas). Les valeurs ne sont jamais réaffichées. Jusqu'ici ces champs n'existaient qu'en ligne de commande, ce qui rendait la plupart des serveurs à jeton inutilisables depuis la page.
+- **Le sous-menu des Réglages reste visible** quand on descend dans la page.
+- **Colibri : des modèles adaptés dans l'onglet Modèles.** Quand Colibri est le serveur choisi, l'onglet affiche les modèles que Colibri sait préparer (de très gros modèles lus depuis le disque), jugés pour cette machine par Colibri lui-même, avec un bouton « Préparer avec Colibri » qui lui confie le téléchargement (reprise possible, avancement dans la barre du haut). Non vérifié avec un vrai téléchargement : plusieurs dizaines à centaines de Go.
+
 ## Une seule recherche, des opérations de moteur qui s'expliquent
 
 - **La recherche d'en haut (Ctrl+K) trouve chaque réglage**, pas seulement les rubriques : elle ouvre la bonne rubrique, défile jusqu'au réglage et le fait clignoter. La seconde barre de recherche des Réglages disparaît.

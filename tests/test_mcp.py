@@ -146,6 +146,26 @@ class Mcp(unittest.TestCase):
         self.assertTrue(mcp.lire()["serveurs"]["demonstration"]["outils"]["heure"]["autorise"])
         commande("interdire", "Démonstration", "heure")
 
+    def test_les_cles_d_acces_se_valident_se_remplacent_et_ne_sortent_jamais(self):
+        ident = mcp.ajouter("Distant", url="http://127.0.0.1:9/mcp", env={}, entetes={"Authorization": "Bearer secret-123"})
+        try:
+            v = [x for x in mcp.vue() if x["id"] == ident][0]
+            self.assertEqual(v["cles_entetes"], ["Authorization"])
+            self.assertNotIn("secret-123", json.dumps(mcp.vue()), "la valeur d'un en-tête ne sort jamais")
+            mcp.regler(ident, env={"TOKEN": "abc"})          # remplace les variables, les en-têtes restent
+            v = [x for x in mcp.vue() if x["id"] == ident][0]
+            self.assertEqual((v["cles_env"], v["cles_entetes"]), (["TOKEN"], ["Authorization"]))
+            mcp.regler(ident, env={}, entetes={})
+            v = [x for x in mcp.vue() if x["id"] == ident][0]
+            self.assertEqual((v["cles_env"], v["cles_entetes"]), ([], []))
+            for mauvais in ({"env": {"a b": "x"}}, {"env": {"A": "ligne1\nligne2"}}, {"entetes": {"X Y": "1"}}, {"entetes": {"Authorization": "a\r\nb: c"}}, {"env": {str(i): "x" for i in range(31)}}):
+                with self.assertRaises(ValueError, msg=str(mauvais)[:40]):
+                    mcp.regler(ident, **mauvais)
+            with self.assertRaises(ValueError):
+                mcp.ajouter("Mauvais", url="http://127.0.0.1:9/mcp", entetes={"X\nY": "1"})
+        finally:
+            mcp.supprimer(ident)
+
     def test_modes(self):
         self.assertTrue(modes.sans_outils("discussion"))
         self.assertTrue(modes.lecture_seule("recherche"))

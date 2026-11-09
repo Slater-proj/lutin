@@ -1215,6 +1215,12 @@ class MoteurExterne(MoteurOpenAI):
                 if MoteurOpenAI.actif(self):
                     self._arreter_colibri()
                 shutil.rmtree(colibri.dossier_colibri(dossiers), ignore_errors=True)
+            elif action.startswith("preparer:"):
+                if moteurs.CONTEXTE["hors_ligne"]():
+                    raise ErreurMoteur(_t("Mode hors ligne : aucun téléchargement."))
+                progression(_t("Colibri prépare le modèle…"), 0, 0)
+                colibri.preparer(action.split(":", 1)[1], self.port_colibri(), dossiers, lambda texte: progression(texte, 0, 0), annule=lambda: bool(moteurs.TACHES.get(self.id, {}).get("annule")))
+                progression(_t("Modèle prêt : Colibri répond sur le port {}.").format(self.port_colibri()), 1, 1)
             elif action == "demarrer":
                 progression(_t("Démarrage de Colibri (le chargement du modèle peut être long)…"), 0, 0)
                 colibri.demarrer(self.modele_colibri(), self.port_colibri(), dossiers=dossiers)

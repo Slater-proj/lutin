@@ -788,18 +788,18 @@ def outil_executer(commande, ctx, shell="cmd"):
             raise _m.ErreurOutil(_t("PowerShell n'est pas installé sur cette machine : utilise le shell par défaut."))
         # PowerShell gère les chemins UNC nativement via Set-Location.
         ps_cmd = "Set-Location -LiteralPath '{}'; {}".format(str(_m.RACINE).replace("'", "''"), commande)
-        code, sortie, raison = lancer_processus([exe_ps, "-NoProfile", "-NonInteractive", "-Command", ps_cmd], False, None, stop, limite_ram=ctx.get("limite_ram", 0))
+        code, sortie, raison = lancer_processus([exe_ps, "-NoProfile", "-NonInteractive", "-Command", ps_cmd], False, None, stop, delai=_m.DELAI_COMMANDE_S, limite_ram=ctx.get("limite_ram", 0))
     else:
         # CMD.EXE ne sait pas démarrer dans un chemin UNC (NAS) : il retombe sur C:\Windows.
         # pushd crée alors une lettre de lecteur temporaire, ce qui règle le problème. (Sous Linux / macOS, le shell par défaut est sh.)
         if os.name == "nt" and "\\" in str(_m.RACINE):
-            code, sortie, raison = lancer_processus('pushd "{}" && {}'.format(str(_m.RACINE), commande), True, None, stop, limite_ram=ctx.get("limite_ram", 0))
+            code, sortie, raison = lancer_processus('pushd "{}" && {}'.format(str(_m.RACINE), commande), True, None, stop, delai=_m.DELAI_COMMANDE_S, limite_ram=ctx.get("limite_ram", 0))
         else:
-            code, sortie, raison = lancer_processus(commande, True, str(_m.RACINE), stop, limite_ram=ctx.get("limite_ram", 0))
+            code, sortie, raison = lancer_processus(commande, True, str(_m.RACINE), stop, delai=_m.DELAI_COMMANDE_S, limite_ram=ctx.get("limite_ram", 0))
     if raison == "stop":
         raise _m.Arret()
     if raison == "delai":
-        return _t("La commande a dépassé 4 minutes et a été arrêtée (avec ses sous-processus).")
+        return _t("La commande a dépassé {} s et a été arrêtée (avec ses sous-processus).").format(_m.DELAI_COMMANDE_S)
     try:
         texte = sortie.decode("utf-8")
     except UnicodeDecodeError:
