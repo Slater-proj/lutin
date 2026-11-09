@@ -32,7 +32,14 @@ TAILLE_MAX_TEXTE = 600_000
 def mots(texte):
     t = unicodedata.normalize("NFD", str(texte).lower())
     t = "".join(c for c in t if unicodedata.category(c) != "Mn")
-    return [m for m in re.findall(r"[a-z0-9_]{3,}", t) if m not in MOTS_VIDES]
+    return [singulier(m) for m in re.findall(r"[a-z0-9_]{3,}", t) if m not in MOTS_VIDES]
+
+
+def singulier(mot):
+    """« chats » -> « chat », « fonctions » -> « fonction », « tests » -> « test » : le pluriel (français et anglais) ne doit pas empêcher de retrouver un passage. Les mots en -ss, -us, -is restent tels quels (« access », « bonus », « mois »)."""
+    if len(mot) > 4 and mot.endswith(("s", "x")) and not mot.endswith(("ss", "us", "is")):
+        return mot[:-1]
+    return mot
 
 
 def sources_rappel():

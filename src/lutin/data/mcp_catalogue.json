@@ -1,0 +1,62 @@
+{
+ "version": 1,
+ "serveurs": [
+  {
+   "id": "fichiers", "nom": {"fr": "Fichiers", "en": "Files"}, "categorie": "fichiers",
+   "description": {"fr": "Lire, chercher et (si tu l'autorises) écrire dans des dossiers que tu choisis, en dehors du dossier de travail de Lutin.", "en": "Read, search and (if you allow it) write in folders you choose, outside Lutin's working folder."},
+   "execution": "npx", "paquet": "@modelcontextprotocol/server-filesystem", "version": "2.2.0",
+   "champs": [{"cle": "dossiers", "type": "dossier", "multiple": true, "obligatoire": true, "libelle": {"fr": "Dossiers accessibles (un par ligne)", "en": "Accessible folders (one per line)"}, "exemple": "C:/Documents"}],
+   "arguments": ["{dossiers}"]
+  },
+  {
+   "id": "pages-web", "nom": {"fr": "Pages web", "en": "Web pages"}, "categorie": "web",
+   "description": {"fr": "Lire une page web et la convertir en texte propre pour le modèle.", "en": "Read a web page and turn it into clean text for the model."},
+   "execution": "uvx", "paquet": "mcp-server-fetch", "version": "2026.11.4", "champs": [], "arguments": []
+  },
+  {
+   "id": "git", "nom": {"fr": "Dépôt Git", "en": "Git repository"}, "categorie": "code",
+   "description": {"fr": "Lire l'historique, les différences et l'état d'un dépôt git.", "en": "Read the history, differences and status of a git repository."},
+   "execution": "uvx", "paquet": "mcp-server-git", "version": "2026.11.4",
+   "champs": [{"cle": "depot", "type": "dossier", "obligatoire": true, "libelle": {"fr": "Dossier du dépôt", "en": "Repository folder"}, "exemple": "C:/projets/mon-depot"}],
+   "arguments": ["--repository", "{depot}"]
+  },
+  {
+   "id": "heure", "nom": {"fr": "Heure et fuseaux", "en": "Time and time zones"}, "categorie": "outils",
+   "description": {"fr": "L'heure exacte dans n'importe quel fuseau, et les conversions entre fuseaux.", "en": "The exact time in any time zone, and conversions between zones."},
+   "execution": "uvx", "paquet": "mcp-server-time", "version": "2026.11.4", "champs": [], "arguments": []
+  },
+  {
+   "id": "memoire-graphe", "nom": {"fr": "Mémoire en graphe", "en": "Knowledge graph memory"}, "categorie": "memoire",
+   "description": {"fr": "Une mémoire de personnes, lieux et faits reliés entre eux, que le modèle enrichit au fil des conversations.", "en": "A memory of people, places and facts linked together, which the model builds up over conversations."},
+   "execution": "npx", "paquet": "@modelcontextprotocol/server-memory", "version": "2.1.0", "champs": [], "arguments": []
+  },
+  {
+   "id": "raisonnement", "nom": {"fr": "Raisonnement pas à pas", "en": "Step-by-step reasoning"}, "categorie": "outils",
+   "description": {"fr": "Un outil qui aide un petit modèle à découper un problème difficile en étapes.", "en": "A tool that helps a small model break a hard problem into steps."},
+   "execution": "npx", "paquet": "@modelcontextprotocol/server-sequential-thinking", "version": "2.1.1", "champs": [], "arguments": []
+  },
+  {
+   "id": "sqlite", "nom": {"fr": "Base SQLite", "en": "SQLite database"}, "categorie": "donnees",
+   "description": {"fr": "Interroger et analyser une base de données SQLite.", "en": "Query and analyse a SQLite database."},
+   "execution": "uvx", "paquet": "mcp-server-sqlite", "version": "2025.4.25",
+   "champs": [{"cle": "base", "type": "fichier", "obligatoire": true, "libelle": {"fr": "Fichier de la base (.db)", "en": "Database file (.db)"}, "exemple": "C:/donnees/ma-base.db"}],
+   "arguments": ["--db-path", "{base}"]
+  },
+  {
+   "id": "home-assistant", "nom": {"fr": "Home Assistant", "en": "Home Assistant"}, "categorie": "maison",
+   "description": {"fr": "Piloter la maison : lumières, volets, scènes, capteurs. Active d'abord l'intégration « Model Context Protocol Server » dans Home Assistant et crée un jeton d'accès longue durée. Lutin parle au transport « HTTP streamable » (Home Assistant récent, adresse en /api/mcp) ; si le tien ne le propose pas, le branchement échoue proprement et rien n'est ajouté.", "en": "Control your home: lights, shutters, scenes, sensors. First enable the \"Model Context Protocol Server\" integration in Home Assistant and create a long-lived access token. Lutin speaks the \"streamable HTTP\" transport (recent Home Assistant, address ending in /api/mcp); if yours does not offer it, connecting fails cleanly and nothing is added."},
+   "execution": "http",
+   "champs": [{"cle": "adresse", "type": "url", "obligatoire": true, "libelle": {"fr": "Adresse du serveur MCP", "en": "MCP server address"}, "exemple": "http://homeassistant.local:8123/api/mcp"},
+              {"cle": "jeton", "type": "secret", "obligatoire": true, "libelle": {"fr": "Jeton d'accès longue durée", "en": "Long-lived access token"}}],
+   "url": "{adresse}", "entetes": {"Authorization": "Bearer {jeton}"}
+  },
+  {
+   "id": "n8n", "nom": {"fr": "n8n", "en": "n8n"}, "categorie": "automatisation",
+   "description": {"fr": "Déclencher tes workflows n8n (courriel, agenda, tableurs, centaines de services). Dans n8n, ajoute un nœud « MCP Server Trigger » et copie son adresse de production.", "en": "Run your n8n workflows (mail, calendar, spreadsheets, hundreds of services). In n8n, add an \"MCP Server Trigger\" node and copy its production URL."},
+   "execution": "http",
+   "champs": [{"cle": "adresse", "type": "url", "obligatoire": true, "libelle": {"fr": "Adresse de production du nœud", "en": "Node production URL"}, "exemple": "https://n8n.exemple.fr/mcp/abc123"},
+              {"cle": "jeton", "type": "secret", "obligatoire": false, "libelle": {"fr": "Jeton d'accès (si le nœud en exige un)", "en": "Access token (if the node requires one)"}}],
+   "url": "{adresse}", "entetes": {"Authorization": "Bearer {jeton}"}
+  }
+ ]
+}

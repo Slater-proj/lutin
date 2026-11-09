@@ -5,6 +5,7 @@ import re
 import subprocess
 import sys
 import time
+import unicodedata
 import unittest
 from pathlib import Path
 
@@ -95,6 +96,36 @@ class Parcours(unittest.TestCase):
             p.attendre("document.querySelectorAll('#santeCorps progress').length > 0")
             p.attendre("[...document.querySelectorAll('#santeCorps b')].some(b => b.textContent.includes('Disque') || b.textContent.includes('Dossier de données'))")
             self.assertEqual(p.evaluer("document.querySelectorAll('#santeCorps .erreur').length"), 0)
+
+    def test_les_menus_de_reglages_sont_par_ordre_alphabetique_dans_chaque_langue(self):
+        """Le menu Réglages, ses rubriques et les sous-menus des pages longues sont rangés dans l'ordre alphabétique de la langue affichée (pas celui du français en anglais)."""
+        attendu = {"fr": (["Accès", "Automatisation", "Général", "Machines", "Santé"], ["Avancé", "Conversation", "Dossiers", "Général", "Moteur", "Outils"]),
+                   "en": (["Access", "Automation", "General", "Health", "Machines"], None)}
+        for langue, (menu, rubriques) in attendu.items():
+            with self.captures.serveur_demo({"LUTIN_LANGUE": langue}) as (port, tmp):
+                p = self.ouvrir(tmp, "http://127.0.0.1:%d/" % port)
+                self.assertEqual(p.evaluer("[...document.querySelectorAll('#menuReglages .tx b')].map(b => b.textContent.replace(/[^\\p{L}]/gu, ''))"), menu)
+                lues = p.evaluer("[...document.querySelectorAll('#sousReglages button')].map(b => b.textContent)")
+                self.assertEqual(lues, rubriques or sorted(lues, key=str.lower), langue)
+                for page in ("p-memoire", "p-auto", "p-acces"):
+                    noms = p.evaluer("[...document.querySelectorAll('#%s .sous-nav button')].map(b => b.textContent)" % page)
+                    self.assertEqual(noms, sorted(noms, key=lambda n: unicodedata.normalize("NFD", n.lower()).encode("ascii", "ignore")), (langue, page))
+
+    def test_le_catalogue_mcp_s_affiche_et_demande_les_champs_d_un_serveur_distant(self):
+        """Automatisation > Connecteurs MCP : le catalogue montre ses cartes ; « Brancher » sur Home Assistant ouvre l'adresse et le jeton (champ masqué) au lieu de brancher à l'aveugle."""
+        with self.captures.serveur_demo({"LUTIN_LANGUE": "fr"}) as (port, tmp):
+            p = self.ouvrir(tmp, "http://127.0.0.1:%d/" % port)
+            p.evaluer(onglet("auto"))
+            p.evaluer("[...document.querySelectorAll('#p-auto .sous-nav button')].find(b => b.textContent.includes('MCP')).click()")
+            p.attendre("document.querySelectorAll('#catalogueMcp .carte').length >= 8")
+            texte = p.evaluer("document.getElementById('catalogueMcp').textContent")
+            for attendu in ("Fichiers", "Home Assistant", "n8n", "Pages web", "version précise"):
+                self.assertIn(attendu, texte)
+            carte = "[...document.querySelectorAll('#catalogueMcp .carte')].find(c => c.textContent.includes('Home Assistant'))"
+            p.evaluer(carte + ".querySelector('button').click()")
+            p.attendre(carte + ".querySelectorAll('input').length === 2")
+            self.assertEqual(p.evaluer(carte + ".querySelector('input[name=jeton]').type"), "password")
+            self.assertEqual(p.erreurs, [])
 
     def test_reglages_montre_les_machines_sans_erreur(self):
         """L'onglet Machines (menu Réglages) propose d'abord d'activer le mode multi-machines ; une fois activé, il montre la case « prêter le moteur » et le formulaire d'ajout, sans erreur, même sans aucune machine."""
@@ -211,7 +242,7 @@ class Parcours(unittest.TestCase):
             p.commande("Input.dispatchMouseEvent", type="mouseReleased", x=100, y=y - 60, button="left", clickCount=1)
             p.attendre("Math.round(document.querySelector('.options-lat').getBoundingClientRect().height) > %d" % (haut_avant + 30))
             # les onglets : Automatisation existe et contient les tâches planifiées (plus dans Mémoire)
-            self.assertEqual([p.evaluer("document.querySelectorAll('.onglets button[data-p]')[%d].dataset.p" % i) for i in range(8)], ["chat", "modeles", "memoire", "reglages", "auto", "machines", "sante", "acces"])
+            self.assertEqual([p.evaluer("document.querySelectorAll('.onglets button[data-p]')[%d].dataset.p" % i) for i in range(8)], ["chat", "modeles", "memoire", "acces", "auto", "reglages", "machines", "sante"])
             self.assertEqual(p.evaluer("document.querySelectorAll('.haut .onglets > button, .haut .onglets > .sous > button').length"), 4)          # la barre ne montre que quatre boutons : le reste est dans le menu Réglages
             p.evaluer(onglet("auto"))
             p.attendre("document.querySelector('#p-auto').classList.contains('vue')")

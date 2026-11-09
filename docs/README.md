@@ -10,6 +10,7 @@ One topic, one page. If two pages seem to say the same thing, one of them only l
 |---|---|
 | See what Lutin does every day | [FEATURES.md](FEATURES.md) |
 | Walk through the features step by step | [GUIDE-ESSAI.md](GUIDE-ESSAI.md) |
+| Check everything on real hardware (engines, several PCs, notifications) | [VALIDATION.md](VALIDATION.md) |
 | Choose or understand the models | [MODELS.md](MODELS.md) |
 | Set up or understand the web search (SearXNG, Brave) | [WEB_SEARCH.md](WEB_SEARCH.md) |
 | Give Lutin a voice (VoiceStudio addon) | [VOICESTUDIO.md](VOICESTUDIO.md) |

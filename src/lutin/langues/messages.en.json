@@ -2102,5 +2102,15 @@
 "Identifiant du chat (nombre)": "Chat identifier (number)",
 "Jeton du bot (donné par @BotFather)": "Bot token (given by @BotFather)",
 "Adresse du webhook": "Webhook address",
-"Format : discord, slack ou json": "Format: discord, slack or json"
+"Format : discord, slack ou json": "Format: discord, slack or json",
+"Connecteur du catalogue introuvable.": "Catalogue connector not found.",
+"Il faut d'abord installer {}.": "You first need to install {}.",
+"« {} » est obligatoire.": "\"{}\" is required.",
+"« {} » n'accepte qu'une seule valeur.": "\"{}\" accepts only one value.",
+"{} valeurs au plus.": "{} values at most.",
+"Valeur invalide pour « {} ».": "Invalid value for \"{}\".",
+"Un chemin ne peut pas commencer par « - ».": "A path cannot start with \"-\".",
+"Ce fichier n'existe pas : {}": "This file does not exist: {}",
+"Ce connecteur est déjà branché.": "This connector is already connected.",
+"Le connecteur « {} » n'a pas répondu, il n'a pas été branché : {}": "The connector \"{}\" did not answer and was not connected: {}"
 }

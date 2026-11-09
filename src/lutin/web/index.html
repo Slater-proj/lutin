@@ -405,7 +405,7 @@ button.principal { box-shadow:0 6px 16px -8px rgba(63,143,232,.8); }
 @media (min-width:861px) { .msg.moi .corps, .msg.ia .corps { max-width:min(93%, var(--lecture)); } }
 @media (min-width:1500px) {
   .cadre { --pad:36px; padding:24px var(--pad); }
-  #listeMoteurs, #listeAddons, #listeMcp { display:grid; grid-template-columns:repeat(auto-fit, minmax(460px, 1fr)); gap:12px; align-items:start; }
+  #listeMoteurs, #listeAddons, #listeMcp, #catalogueMcp .grille { display:grid; grid-template-columns:repeat(auto-fit, minmax(460px, 1fr)); gap:12px; align-items:start; }
   #listeMoteurs > .carte, #listeAddons > .carte, #listeMcp > .carte { margin:0; }
   #listeMoteurs > .attention, #listeAddons > .attention, #listeMcp > .aide { grid-column:1 / -1; }
 }
@@ -638,8 +638,10 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     <h2>Connecteurs MCP <span class="aide">(brancher un serveur d'outils : Home Assistant, GitHub, fichiers…)</span></h2>
     <div class="aide">Un connecteur est un programme que Lutin lance (ou une adresse qu'il appelle) pour donner de nouveaux outils à l'assistant. Aucun outil n'est donné au modèle tant que tu ne l'as pas coché. Lecture seule par défaut ; un outil qui modifie quelque chose demande ton accord à chaque appel. Ce qui revient des outils n'est jamais affiché brut ni obéi, et l'accord automatique est suspendu après un appel.</div>
     <div id="listeMcp" style="margin:6px 0"></div>
+    <h3>Catalogue</h3>
+    <div id="catalogueMcp" style="margin:6px 0"></div>
+    <details id="ajoutMcpPlie"><summary>Brancher un autre serveur (avancé)</summary>
     <div class="carte" id="ajoutMcp" style="gap:8px;flex-wrap:wrap;align-items:center">
-      <select id="modeleMcp" aria-label="Partir d'un modèle de connecteur"><option value="">Partir d'un modèle…</option></select>
       <input id="nomMcp" placeholder="Nom (par exemple Fichiers)" style="width:170px">
       <input id="cibleMcp" placeholder="Commande à lancer (npx -y …) ou adresse https://…" style="flex:1;min-width:240px">
       <button id="bAjouterMcp" class="principal">Ajouter</button>
@@ -651,6 +653,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
       </details>
     </div>
     <div class="aide" id="aideAjoutMcp"></div>
+    </details>
     <div class="aide" id="mMcp"></div>
   </div></section>
   <section class="page" id="p-acces"><div class="cadre">
@@ -2032,7 +2035,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     document.querySelectorAll('.page').forEach(p => p.classList.toggle('vue', p.id === 'p-' + b.dataset.p));
     if (!ETAT) await rafraichir();          // l'état du serveur (qui peut configurer, niveau d'accès…) est connu avant d'afficher un onglet qui en dépend
     if (b.dataset.p === 'memoire') { const m = await api('/api/memoire'); $('tContexte').value = m['CONTEXTE.md']; $('tMemoire').value = m['MEMOIRE.md']; chargerSkills(); chargerClaude(); chargerNotes(); chargerDocuments(); }
-    if (b.dataset.p === 'auto') { chargerPlanifie(); chargerAddons(); chargerAuto(); chargerMcp(); }
+    if (b.dataset.p === 'auto') { chargerPlanifie(); chargerAddons(); chargerAuto(); chargerMcp(); chargerCatalogueMcp(); }
     if (b.dataset.p === 'modeles') { await rafraichir(); chargerModelesMoteur(); }
     if (b.dataset.p === 'acces') chargerAcces();
     if (b.dataset.p === 'chat' && CONV && !(FLUX && FLUX.detache)) lue(CONV.id);          // on revient lire : la pastille verte s'éteint tout de suite
@@ -2301,6 +2304,11 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     try { localStorage.setItem('lutin.reglages.rubrique', g); } catch (e) { /* stockage refusé : la rubrique n'est pas retenue */ }
     if (g === 'moteur') { try { chargerMesures(); } catch (e) { /* la rubrique se refera à la prochaine ouverture */ } }
   };
+  // Les menus de réglages sont rangés par ordre alphabétique DANS LA LANGUE affichée (l'ordre alphabétique du français n'est pas celui de l'anglais) ; les boutons gardent leur lien avec leur section, seul leur rang à l'écran change.
+  const trierAlphabetique = (conteneur, libelle) => {
+    const boutons = [...conteneur.children];
+    boutons.sort((a, b) => libelle(a).localeCompare(libelle(b), LANGUE, { sensitivity: 'base' })).forEach(b => conteneur.appendChild(b));
+  };
   // Les pages longues (Mémoire, Automatisation, Accès) : un sous-menu bâti à partir de leurs titres, une rubrique à la fois, la dernière retenue
   const rubriquer = id => {
     const cadre = document.querySelector('#' + id + ' > .cadre'); if (!cadre) return;
@@ -2309,11 +2317,14 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     const sections = titres.map(h => { const sec = el('div', 'rubrique'); h.before(sec); let n = h; while (n && (n === h || n.tagName !== 'H2')) { const suivant = n.nextSibling; sec.appendChild(n); n = suivant; } return sec; });
     const montrer = i => { sections.forEach((s, k) => s.classList.toggle('masque', k !== i)); [...nav.children].forEach((b, k) => b.setAttribute('aria-selected', String(k === i))); try { localStorage.setItem('lutin.rubrique.' + id, String(i)); } catch (e) { /* stockage refusé */ } };
     titres.forEach((h, i) => { const b = el('button', '', (h.firstChild ? h.firstChild.textContent : h.textContent).trim()); b.setAttribute('role', 'tab'); b.addEventListener('click', () => montrer(i)); nav.appendChild(b); });
+    trierAlphabetique(nav, b => b.textContent);
     cadre.prepend(nav); cadre.classList.add('a-sous-nav');          // la barre est tout en haut de la page et reste visible (comme celle des Réglages)
     let v = 0; try { v = +(localStorage.getItem('lutin.rubrique.' + id) || 0); } catch (e) { /* idem */ }
     montrer(v >= 0 && v < sections.length ? v : 0);
   };
   ['p-memoire', 'p-auto', 'p-acces'].forEach(rubriquer);
+  trierAlphabetique($('menuReglages'), b => b.querySelector('b').textContent);
+  trierAlphabetique($('sousReglages'), b => b.textContent);
   document.querySelectorAll('#sousReglages button').forEach(b => b.addEventListener('click', () => montrerRubrique(b.dataset.g)));
   { let g = 'general'; try { g = localStorage.getItem('lutin.reglages.rubrique') || g; } catch (e) { /* idem */ } if (!document.querySelector('#sousReglages button[data-g="' + g + '"]')) g = 'general'; montrerRubrique(g); }
   // ---- Mémoire des longues conversations : résumé automatique ou fiche de suivi
@@ -3343,24 +3354,48 @@ body[data-moteur="openai"] .biblio { display:none !important; }
       z.appendChild(d);
     });
   };
-  // Des connecteurs courants, un clic pour préremplir (rien n'est lancé tant que tu ne cliques pas sur « Ajouter »). Les programmes demandent Node.js (npx) ou uv (uvx) sur la machine de Lutin.
-  const MODELES_MCP = [
-    [T('Fichiers'), 'npx -y @modelcontextprotocol/server-filesystem C:/my-folder', T('Lire et modifier les fichiers d\'UN dossier que tu indiques (remplace le chemin). Node.js requis.')],
-    [T('Pages web (fetch)'), 'uvx mcp-server-fetch', T('Lire une page web et la convertir en texte. uv requis.')],
-    [T('Mémoire'), 'npx -y @modelcontextprotocol/server-memory', T('Un graphe de connaissances que l\'assistant enrichit d\'une conversation à l\'autre. Node.js requis.')],
-    ['Git', 'uvx mcp-server-git --repository C:/my-repo', T('Lire l\'historique et l\'état d\'un dépôt git (remplace le chemin). uv requis.')],
-    [T('Heure et fuseaux'), 'uvx mcp-server-time', T('L\'heure dans n\'importe quel fuseau. uv requis.')],
-    [T('Réflexion pas à pas'), 'npx -y @modelcontextprotocol/server-sequential-thinking', T('Un outil pour décomposer un problème en étapes. Node.js requis.')]];
-  MODELES_MCP.forEach(([nom, cmd], i) => { const o = el('option', '', nom); o.value = String(i); $('modeleMcp').appendChild(o); });
-  $('modeleMcp').addEventListener('change', () => {
-    const m = MODELES_MCP[+$('modeleMcp').value]; if (!m) return;
-    $('nomMcp').value = m[0]; $('cibleMcp').value = m[1]; $('mMcp').textContent = m[2] + ' ' + T('Vérifie la commande puis clique sur « Ajouter » ; Lutin n\'a pas testé ce connecteur lui-même.');
-  });
+  // Le catalogue : des connecteurs courants à brancher en un clic (le serveur contrôle les valeurs, lance le connecteur à une version précise, l'essaie, et le retire s'il ne répond pas)
+  const chargerCatalogueMcp = async () => {
+    const z = $('catalogueMcp'); let r;
+    try { r = await api('/api/mcp-catalogue'); } catch (e) { z.textContent = e.message; return; }
+    const ouverts = new Set([...z.querySelectorAll('.carte[data-id]')].filter(c => c.querySelector('form') && !c.querySelector('form').hidden).map(c => c.dataset.id));
+    z.textContent = '';
+    z.appendChild(el('div', 'aide', T('Des connecteurs courants, à brancher en un clic. Chacun est lancé à une version précise, essayé tout de suite, et retiré s\'il ne répond pas. Seuls ses outils de lecture sont autorisés d\'emblée.')));
+    const grille = el('div', 'grille'); grille.style.margin = '8px 0';
+    r.serveurs.forEach(s => {
+      const c = el('div', 'carte'); c.dataset.id = s.id;
+      c.append(el('b', '', s.nom + (s.version ? '  ' + s.version : '')), el('div', 'aide', s.description));
+      if (s.installe) { c.appendChild(el('div', '', '✓ ' + T('Branché'))); grille.appendChild(c); return; }
+      if (s.manque) { c.appendChild(el('div', 'aide', '⚠ ' + s.manque)); grille.appendChild(c); return; }
+      if (!r.modifiable) { c.appendChild(el('div', 'aide', T('Se branche depuis la machine de Lutin.'))); grille.appendChild(c); return; }
+      const f = el('form'); f.hidden = !s.champs.length ? true : !ouverts.has(s.id); f.style.display = f.hidden ? 'none' : 'block';
+      const saisies = {};
+      s.champs.forEach(ch => {
+        const e = ch.multiple ? el('textarea') : el('input'); if (ch.multiple) e.rows = 2; else e.type = ch.type === 'secret' ? 'password' : 'text';
+        e.placeholder = ch.libelle + (ch.exemple ? ' — ' + ch.exemple : ''); e.setAttribute('aria-label', ch.libelle); e.autocomplete = 'off'; e.spellcheck = false; e.style.width = '100%'; e.style.margin = '3px 0';
+        if (ch.type === 'secret') e.name = 'jeton';
+        saisies[ch.cle] = e; f.appendChild(e);
+      });
+      const msg = el('div', 'aide');
+      const b = el('button', 'principal', T('Brancher')); b.type = 'button';
+      b.addEventListener('click', async () => {
+        if (s.champs.length && f.hidden) { f.hidden = false; f.style.display = 'block'; return; }
+        b.disabled = true; msg.textContent = T('Connexion…');
+        try {
+          const res = await api('/api/mcp-catalogue-installer', { id: s.id, saisie: Object.fromEntries(Object.entries(saisies).map(([k, e]) => [k, e.value])) });
+          $('mMcp').textContent = T('Branché : {} outil(s), dont {} autorisé(s) (lecture seule). Coche les autres si tu veux qu\'il puisse aussi modifier des choses.').replace('{}', res.outils).replace('{}', res.autorises);
+          chargerMcp(); chargerCatalogueMcp();
+        } catch (e) { msg.textContent = e.message; b.disabled = false; }
+      });
+      c.append(f, b, msg); grille.appendChild(c);
+    });
+    z.appendChild(grille);
+  };
   $('bAjouterMcp').addEventListener('click', async () => {
     const cible = $('cibleMcp').value.trim(), nom = $('nomMcp').value.trim(); if (!nom || !cible) { $('mMcp').textContent = T('Donne un nom et une commande (ou une adresse).'); return; }
     const lireLignes = (t, sep) => Object.fromEntries(t.value.split('\n').map(x => x.trim()).filter(Boolean).map(x => { const i = x.indexOf(sep); return i > 0 ? [x.slice(0, i).trim(), x.slice(i + 1).trim()] : [x, '']; }));
     const secrets = { env: lireLignes($('envMcp'), '='), entetes: lireLignes($('entetesMcp'), ':') };
-    try { const r = await api('/api/mcp-ajouter', Object.assign(/^https?:\/\//i.test(cible) ? { nom, url: cible } : { nom, commande: cible }, secrets)); $('nomMcp').value = $('cibleMcp').value = $('envMcp').value = $('entetesMcp').value = ''; $('modeleMcp').value = ''; await api('/api/mcp-actualiser', { id: r.id }); $('mMcp').textContent = T('Connecté. Coche les outils que le modèle peut utiliser.'); }
+    try { const r = await api('/api/mcp-ajouter', Object.assign(/^https?:\/\//i.test(cible) ? { nom, url: cible } : { nom, commande: cible }, secrets)); $('nomMcp').value = $('cibleMcp').value = $('envMcp').value = $('entetesMcp').value = ''; await api('/api/mcp-actualiser', { id: r.id }); $('mMcp').textContent = T('Connecté. Coche les outils que le modèle peut utiliser.'); }
     catch (e) { $('mMcp').textContent = e.message; }
     chargerMcp();
   });

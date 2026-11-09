@@ -10,6 +10,7 @@ Un sujet, une page. Si deux pages semblent dire la même chose, l'une ne fait qu
 |---|---|
 | Voir ce que Lutin fait au quotidien | [FEATURES.fr.md](FEATURES.fr.md) |
 | Parcourir les fonctions pas à pas | [GUIDE-ESSAI.fr.md](GUIDE-ESSAI.fr.md) |
+| Tout vérifier sur du vrai matériel (moteurs, plusieurs PC, notifications) | [VALIDATION.fr.md](VALIDATION.fr.md) |
 | Choisir ou comprendre les modèles | [MODELS.fr.md](MODELS.fr.md) |
 | Régler ou comprendre la recherche web (SearXNG, Brave) | [WEB_SEARCH.fr.md](WEB_SEARCH.fr.md) |
 | Donner une voix à Lutin (addon VoiceStudio) | [VOICESTUDIO.fr.md](VOICESTUDIO.fr.md) |

@@ -2,6 +2,13 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## Catalogue de connecteurs MCP, recherche dans la mémoire plus fiable, menus rangés, liste de contrôle sur matériel réel
+
+- **Catalogue MCP** (Automatisation > Connecteurs MCP) : Fichiers, Pages web, Dépôt Git, Heure, Mémoire en graphe, Raisonnement pas à pas, SQLite, **Home Assistant** et **n8n**, à brancher en un clic. Chaque serveur est lancé à une **version exacte** (jamais « la dernière »), ses valeurs sont contrôlées (un dossier qui existe, une adresse http, jamais une valeur qui commence par « - »), le programme manquant (Node.js, uv) est signalé avec la marche à suivre, le connecteur est **essayé tout de suite et retiré s'il ne répond pas**, et seuls ses outils de lecture sont autorisés d'emblée. Les jetons restent sur la machine. Remplace l'ancien menu « Partir d'un modèle ».
+- **Mémoire** : la recherche par mots ne se laisse plus arrêter par un pluriel (« chat » / « chats », « fonction » / « fonctions »). Un banc de mesure (`tools/mesurer_rappel.py`, 24 questions reformulées) passe de 88 % à 96 % de bonnes réponses en première position, et un test empêche toute régression. Un pur synonyme (« backups » pour « sauvegardes ») reste du ressort de la recherche par le sens.
+- **Menus rangés par ordre alphabétique**, dans la langue affichée : le menu Réglages, ses rubriques et les sous-menus des pages Mémoire, Automatisation et Accès.
+- **docs/VALIDATION.md** : la liste de contrôle à suivre pas à pas sur du vrai matériel (chaque moteur, deux PC, notifications, connecteurs, mémoire, sécurité) avant une 1.0.
+
 ## Icône au démarrage de Windows, données de Lutin interdites à l'assistant, CI plus robuste
 
 - **Windows : l'icône près de l'horloge apparaît maintenant quand Lutin démarre avec la session** (le démarrage automatique lançait un serveur sans icône ; il lance maintenant « lutin zone --no-browser » : serveur, icône, sans ouvrir de page). Si tu avais activé le démarrage automatique, désactive-le puis réactive-le une fois (Réglages > Avancé).

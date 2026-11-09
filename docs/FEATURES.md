@@ -230,6 +230,8 @@ The Models tab has three ways to follow what comes out, none of which needs a ne
 
 A connector plugs a tool server (Home Assistant, GitHub, files…) into the assistant, from **Automation > MCP connectors**. It is a program Lutin launches (command) or an address it calls (https). Only the machine itself, or a declared administrator, can add one: it launches a program.
 
+The **catalogue** under the list brings well-known servers (Files, Web pages, Git, Time, Knowledge graph, Step-by-step reasoning, SQLite, Home Assistant, n8n) one click away: each runs at an exact version, its values are checked, it is tried at once and removed if it does not answer, and only its read-only tools are allowed from the start.
+
 - **No tool is given to the model until you tick it**, tool by tool.
 - **Read-only by default**: a tool that can change something is not offered while "read-only" is ticked, and even then it asks for your approval at **every** call (never automatic) and is written in the action journal.
 - What comes back from the tools is treated like web content: never shown raw, never obeyed, and automatic approval is suspended for the rest of the request.

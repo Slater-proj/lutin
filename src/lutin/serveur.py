@@ -18,6 +18,7 @@ from . import observatoire as _observatoire
 from . import web as _web
 from . import moteurs_maj as _moteurs_maj
 from . import mcp as _mcp
+from . import mcp_catalogue as _mcp_catalogue
 from . import calibrage as _calibrage
 from . import acces as _acces
 from . import adequation as _adequation
@@ -487,6 +488,8 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 return self._envoyer(400, {"erreur": _t("Ce moteur n'a pas de bibliothèque de modèles à parcourir.")})
             except ValueError as e:
                 return self._envoyer(400, {"erreur": str(e)})
+        if chemin == "/api/mcp-catalogue":                       # les connecteurs du catalogue (sans rien lancer)
+            return self._envoyer(200, {"serveurs": _mcp_catalogue.liste(), "modifiable": self._configurateur()})
         if chemin == "/api/mcp":                                 # les connecteurs MCP (sans leurs secrets)
             return self._envoyer(200, {"connecteurs": _mcp.vue(), "modifiable": self._configurateur()})
         if chemin == "/api/decouvrir":                           # la bibliothèque d'Ollama (nouveautés, populaires, recherche)
@@ -1234,6 +1237,8 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 if action == "ajouter":
                     ident = _mcp.ajouter(str(donnees.get("nom", "")), donnees.get("commande"), donnees.get("url", ""), donnees.get("env"), donnees.get("entetes"))
                     return self._envoyer(200, {"id": ident})
+                if action == "catalogue-installer":
+                    return self._envoyer(200, _mcp_catalogue.installer(str(donnees.get("id", "")), donnees.get("saisie") or {}))
                 if action == "demo":
                     ident = _mcp.ajouter(_t("Démonstration"), [sys.executable, "-m", "lutin.mcp_demo"], "", {"PYTHONPATH": str(Path(__file__).resolve().parent.parent)})
                     return self._envoyer(200, {"id": ident})

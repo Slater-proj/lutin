@@ -230,6 +230,8 @@ L'onglet Modèles a trois façons de suivre ce qui sort, sans attendre une nouve
 
 Un connecteur branche un serveur d'outils (Home Assistant, GitHub, fichiers…) sur l'assistant, depuis **Automatisation > Connecteurs MCP**. C'est un programme que Lutin lance (commande) ou une adresse qu'il appelle (https). Seule la machine elle-même, ou un administrateur déclaré, peut en ajouter : c'est lancer un programme.
 
+Le **catalogue** sous la liste propose des serveurs connus (Fichiers, Pages web, Git, Heure, Mémoire en graphe, Raisonnement pas à pas, SQLite, Home Assistant, n8n) à un clic : chacun est lancé à une version exacte, ses valeurs sont contrôlées, il est essayé tout de suite et retiré s'il ne répond pas, et seuls ses outils de lecture sont autorisés d'emblée.
+
 - **Aucun outil n'est donné au modèle tant que tu ne l'as pas coché**, outil par outil.
 - **Lecture seule par défaut** : un outil qui peut modifier quelque chose n'est pas proposé tant que « lecture seule » est cochée, et même alors il demande ton accord à **chaque** appel (jamais automatique) et s'inscrit au journal des actions.
 - Ce qui revient des outils est traité comme du contenu web : jamais affiché brut, jamais obéi, et l'accord automatique est suspendu pour la suite de la demande.
