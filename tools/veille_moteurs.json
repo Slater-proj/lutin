@@ -3,6 +3,10 @@
   "depot": "JustVugg/colibri",
   "vue": "v2.1.0"
  },
+ "exllamav3": {
+  "depot": "turboderp-org/exllamav3",
+  "vue": "v1.6.6"
+ },
  "llamacpp": {
   "depot": "ggml-org/llama.cpp",
   "vue": "b12179"

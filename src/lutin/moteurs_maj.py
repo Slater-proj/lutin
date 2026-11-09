@@ -76,6 +76,19 @@ def _derniere_colibri(mo):
     return mo.version(), colibri.derniere_version()
 
 
+def _derniere_exllamav3(mo):
+    """(version d'ExLlamaV3 installée, dernière publiée) pour ExLlamaV3 installé par Lutin ; None sinon. TabbyAPI n'a pas de publications : c'est la bibliothèque qui donne le rythme."""
+    if not hasattr(mo, "exllamav3_choisi") or not mo.exllamav3_choisi() or not mo.version():
+        return None
+    from . import exllamav3
+    return mo.version(), exllamav3.derniere_version_lib()
+
+
+def _derniere_serveur(mo):
+    """Le serveur géré par Lutin derrière la carte « compatible OpenAI » (Colibri ou ExLlamaV3), s'il y en a un."""
+    return _derniere_colibri(mo) or _derniere_exllamav3(mo)
+
+
 def _derniere_ollama(http_json):
     """(version installée, dernière version publiée) pour Ollama local et démarré ; None sinon (Docker : l'image se met à jour avec docker compose)."""
     if moteurs.CONTEXTE["en_docker"]():
@@ -114,7 +127,7 @@ def verifier(force=False, http_json=None, maintenant=time.time):
                 elif mo.id == "ollama":
                     r = _derniere_ollama(http_json)
                 elif mo.id == "openai":
-                    r = _derniere_colibri(mo)
+                    r = _derniere_serveur(mo)
                 else:
                     r = None
             except (urllib.error.URLError, OSError, ValueError, KeyError):

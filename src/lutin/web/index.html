@@ -58,7 +58,7 @@ body.glisse { user-select:none; cursor:col-resize; } body.glisse-h { user-select
 #listeTravaux .conv button:hover, #listePlanifie .conv button:hover, #listeNotes .conv button:hover { color:var(--fg); background:#1a2634; border-color:var(--accent); }
 /* --- zone principale --- */
 main { display:flex; flex-direction:column; min-height:0; min-width:0; }
-.haut { display:flex; gap:10px; align-items:center; flex-wrap:wrap; padding:10px 16px; border-bottom:1px solid var(--line); background:rgba(18,24,33,.85); backdrop-filter:blur(6px); font-size:.85rem; }
+.haut { position:relative; z-index:20; display:flex; gap:10px; align-items:center; flex-wrap:wrap; padding:10px 16px; border-bottom:1px solid var(--line); background:rgba(18,24,33,.85); backdrop-filter:blur(6px); font-size:.85rem; }
 .haut select, .haut button, input, textarea, select { background:#0e141b; color:var(--fg); border:1px solid var(--line2); border-radius:8px; padding:6px 9px; font:inherit; transition:border-color .12s, box-shadow .12s; }
 input:focus, textarea:focus, select:focus { outline:none; border-color:var(--accent); box-shadow:0 0 0 3px rgba(90,169,255,.15); }
 button { cursor:pointer; transition:background .12s, border-color .12s, transform .05s; } button:hover:not(:disabled) { border-color:var(--accent); } button:active:not(:disabled) { transform:translateY(1px); } button:disabled { opacity:.5; cursor:default; }
@@ -272,7 +272,7 @@ details.pensee { color:var(--muted); font-size:.82rem; margin:4px 0; } details.p
 .saisie { border-top:1px solid var(--line); padding:12px 16px; background:rgba(18,24,33,.85); backdrop-filter:blur(6px); display:flex; gap:10px; }
 .saisie textarea { flex:1; min-height:52px; max-height:200px; resize:vertical; border-radius:12px; }
 /* --- pages Modèles / Mémoire / Réglages --- */
-.cadre { padding:20px 24px; overflow:auto; max-width:900px; }
+.cadre { --pad:24px; padding:20px var(--pad); overflow:auto; max-width:900px; }
 .cadre h2 { font-size:1.05rem; margin:18px 0 8px; font-weight:600; } .cadre h2:first-child { margin-top:0; }
 .cadre textarea { width:100%; min-height:260px; font:13px ui-monospace, Consolas, monospace; border-radius:10px; }
 .carte { border:1px solid var(--line); border-radius:10px; padding:10px 14px; margin:10px 0; display:flex; gap:10px; align-items:center; flex-wrap:wrap; background:#10161e; }
@@ -324,7 +324,8 @@ body.lat-cachee aside { width:0; min-width:0; border-right-width:0; overflow:hid
   .saisie .lb { display:none; } .saisie .ic { display:inline; }
   .actions { opacity:1; }
   #modalBoite { width:100vw; height:100vh; height:100dvh; max-height:none; border-radius:0; border:0; }
-  .cadre { padding:10px; max-width:100%; }
+  .cadre { --pad:10px; padding:10px; max-width:100%; }
+  .sous-nav { flex-wrap:nowrap; overflow-x:auto; scrollbar-width:none; padding-top:8px; padding-bottom:8px; } .sous-nav::-webkit-scrollbar { display:none; } .sous-nav button { flex:0 0 auto; white-space:nowrap; }          /* une seule ligne qui défile : la barre collante ne mange pas l'écran du téléphone */
   .cadre h2 { font-size:15px; }
   .carte { padding:8px 10px; }
   #menuPlus { position:fixed; right:6px; top:40px; min-width:min(280px, 92vw); }
@@ -370,7 +371,8 @@ button.principal { box-shadow:0 6px 16px -8px rgba(63,143,232,.8); }
 .rubrique.masque { display:none; }
 .conv.hors { opacity:.6; }
 .bandeau-hote { margin:0 0 8px; padding:6px 12px; border:1px solid rgba(240,200,80,.4); border-radius:10px; background:rgba(240,200,80,.08); color:var(--muted); font-size:.84rem; }
-.sous-nav { display:flex; gap:6px; flex-wrap:wrap; margin:0 0 14px; padding:8px 0; position:sticky; top:-1px; z-index:5; background:var(--bg); border-bottom:1px solid var(--line); }          /* reste visible quand on descend dans la page */
+#p-reglages > .cadre, .cadre.a-sous-nav { padding-top:0; }
+.sous-nav { display:flex; gap:6px; flex-wrap:wrap; margin:0 calc(-1 * var(--pad, 24px)) 16px; padding:10px var(--pad, 24px); position:sticky; top:0; z-index:5; background:var(--bg); border-bottom:1px solid var(--line); }          /* reste visible quand on descend dans la page */
 .sous-nav button { border-radius:999px; padding:5px 14px; font-size:.84rem; color:#c3ccd8; background:#16202b; }
 .sous-nav button:hover:not([aria-selected=true]) { background:#1c2937; }
 .sous-nav button[aria-selected=true] { background:#1d3048; border-color:rgba(90,169,255,.35); color:#fff; }
@@ -402,7 +404,7 @@ button.principal { box-shadow:0 6px 16px -8px rgba(63,143,232,.8); }
 .cadre { max-width:min(100%, var(--page)); }
 @media (min-width:861px) { .msg.moi .corps, .msg.ia .corps { max-width:min(93%, var(--lecture)); } }
 @media (min-width:1500px) {
-  .cadre { padding:24px 36px; }
+  .cadre { --pad:36px; padding:24px var(--pad); }
   #listeMoteurs, #listeAddons, #listeMcp { display:grid; grid-template-columns:repeat(auto-fit, minmax(460px, 1fr)); gap:12px; align-items:start; }
   #listeMoteurs > .carte, #listeAddons > .carte, #listeMcp > .carte { margin:0; }
   #listeMoteurs > .attention, #listeAddons > .attention, #listeMcp > .aide { grid-column:1 / -1; }
@@ -523,6 +525,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     <label class="opt-ligne" title="Montre des modèles modifiés par la communauté pour ne plus refuser de demandes. À utiliser en connaissance de cause."><input type="checkbox" id="cAvance"> Afficher les modèles avancés (sans filtre)</label>
     <div class="carte" id="colibriModeles" hidden style="display:block"></div>
     <div class="carte" id="lmstudioModeles" hidden style="display:block"></div>
+    <div class="carte" id="exllamav3Modeles" hidden style="display:block"></div>
     <div class="carte" id="jaugeDisque" hidden style="display:block"></div>
     <div class="carte" id="barreTest" style="gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
       <button id="bTesterPc" class="principal" title="Mesure la vitesse du modèle actif sur cette machine (environ 20 secondes), puis donne des conseils : modèle plus léger, contexte, charge.">⏱ Tester mon PC</button>
@@ -1759,14 +1762,15 @@ body[data-moteur="openai"] .biblio { display:none !important; }
   const FINS_VUES = new Set();          // opérations de moteur dont l'utilisateur a fermé le résultat
   const afficherPremierLancement = pl => {
     const bModeles = document.querySelector('.onglets button[data-p="modeles"]'), bloc = $('premierLancement');
-    if (bModeles) { bModeles.disabled = !pl.pret; bModeles.title = pl.pret ? '' : pl.raison; bModeles.style.opacity = pl.pret ? '' : '.45'; }
+    const ouvertQuandMemeArrete = pl.pret || !!pl.gere;          // un serveur géré par Lutin (Colibri, LM Studio, ExLlamaV3) arrêté : l'onglet Modèles porte justement le téléchargement de ses modèles
+    if (bModeles) { bModeles.disabled = !ouvertQuandMemeArrete; bModeles.title = ouvertQuandMemeArrete ? '' : pl.raison; bModeles.style.opacity = ouvertQuandMemeArrete ? '' : '.45'; }
     let plusTard = false; try { plusTard = sessionStorage.getItem('lutinPlusTard') === '1'; } catch (e) { /* facultatif */ }
     const cle = JSON.stringify([pl, plusTard]);
     if (bloc.dataset.cle === cle) return;
     bloc.dataset.cle = cle; bloc.textContent = ''; bloc.hidden = pl.pret || plusTard;
     if (bloc.hidden) return;
     bloc.className = 'carte'; bloc.style.cssText = 'display:block;margin:8px 0';
-    bloc.appendChild(el('b', '', (pl.installes || []).length ? T('Aucun moteur prêt : le moteur choisi ne répond pas') : T('Premier lancement : il manque un moteur')));
+    bloc.appendChild(el('b', '', pl.gere ? pl.gere.nom + ' ' + T('ne répond pas') : ((pl.installes || []).length ? T('Aucun moteur prêt : le moteur choisi ne répond pas') : T('Premier lancement : il manque un moteur'))));
     bloc.appendChild(el('div', 'aide', pl.raison));
     if (pl.recommande) bloc.appendChild(el('div', '', T('Conseillé pour cette machine : ') + pl.recommande.nom + ' — ' + pl.recommande.raison));
     if (pl.emplacement && pl.emplacement.probleme === 'non_modifiable') bloc.appendChild(el('div', 'erreur', '⚠ ' + pl.emplacement.montage + ' ' + T('est monté mais l\'utilisateur 1000 du conteneur ne peut pas y écrire : sur l\'hôte, « sudo chown -R 1000:1000 » sur ce dossier, puis redémarre le conteneur. En attendant, le moteur ira dans ') + pl.emplacement.dossier + '.'));
@@ -1788,10 +1792,16 @@ body[data-moteur="openai"] .biblio { display:none !important; }
       } catch (e) { msg.textContent = e.message; }
       oui.disabled = false; rafraichir();
     };
+    const gererCeServeur = async () => {          // « Démarrer » ou « Installer » le serveur que Lutin gère ; l'avancement est dans la barre bleue du haut
+      oui.disabled = true; msg.textContent = '';
+      try { await api('/api/moteur-action', { moteur: 'openai', action: pl.gere.installe ? 'demarrer' : 'installer' }); msg.textContent = T('Lancé : l\'avancement est dans la barre bleue du haut.'); }
+      catch (e) { msg.textContent = e.message; }
+      oui.disabled = false; rafraichir();
+    };
     const dejaLa = (pl.installes || [])[0];          // un autre moteur est déjà installé : le premier choix est de s'en servir, pas d'en installer un de plus
     const utiliser = async () => { oui.disabled = true; msg.textContent = ''; try { await api('/api/reglages', { moteur: dejaLa.moteur }); } catch (e) { msg.textContent = e.message; } oui.disabled = false; rafraichir(); };
-    const oui = el('button', 'principal', dejaLa ? T('Utiliser ') + dejaLa.nom : (pl.recommande ? T('Installer ') + pl.recommande.nom : T('Choisir un moteur'))); oui.addEventListener('click', dejaLa ? utiliser : (pl.recommande ? installerConseille : ouvrirReglages));
-    const autre = el('button', '', T('Choisir un autre moteur')); autre.addEventListener('click', ouvrirReglages);
+    const oui = el('button', 'principal', pl.gere ? (pl.gere.installe ? T('Démarrer ') : T('Installer ')) + pl.gere.nom : (dejaLa ? T('Utiliser ') + dejaLa.nom : (pl.recommande ? T('Installer ') + pl.recommande.nom : T('Choisir un moteur')))); oui.addEventListener('click', pl.gere ? gererCeServeur : (dejaLa ? utiliser : (pl.recommande ? installerConseille : ouvrirReglages)));
+    const autre = el('button', '', pl.gere && dejaLa ? T('Utiliser ') + dejaLa.nom : T('Choisir un autre moteur')); autre.addEventListener('click', pl.gere && dejaLa ? utiliser : ouvrirReglages);
     const tard = el('button', '', T('Plus tard')); tard.addEventListener('click', () => { try { sessionStorage.setItem('lutinPlusTard', '1'); } catch (e) { /* facultatif */ } afficherPremierLancement(pl); });
     l.append(oui, autre, tard); bloc.append(l, msg);
   };
@@ -1903,6 +1913,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     try { chargerOutils(); } catch (e) { /* la rubrique Outils se refera au prochain état */ }
     try { chargerColibriModeles(); } catch (e) { /* la carte Colibri se refera au prochain état */ }
     try { chargerLmstudioModeles(); } catch (e) { /* la carte LM Studio se refera au prochain état */ }
+    try { chargerExllamav3Modeles(); } catch (e) { /* la carte ExLlamaV3 se refera au prochain état */ }
     majMission(); suivreMission();
     if (ETAT.bench && ETAT.bench.erreur) $('msgModeles').textContent = T('Banc d\'essai : ') + ETAT.bench.erreur;
     $('vCtx').textContent = $('rCtx').value; $('vTemp').textContent = $('rTemp').value; $('vTours').textContent = $('rTours').value;
@@ -2281,7 +2292,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     const sections = titres.map(h => { const sec = el('div', 'rubrique'); h.before(sec); let n = h; while (n && (n === h || n.tagName !== 'H2')) { const suivant = n.nextSibling; sec.appendChild(n); n = suivant; } return sec; });
     const montrer = i => { sections.forEach((s, k) => s.classList.toggle('masque', k !== i)); [...nav.children].forEach((b, k) => b.setAttribute('aria-selected', String(k === i))); try { localStorage.setItem('lutin.rubrique.' + id, String(i)); } catch (e) { /* stockage refusé */ } };
     titres.forEach((h, i) => { const b = el('button', '', (h.firstChild ? h.firstChild.textContent : h.textContent).trim()); b.setAttribute('role', 'tab'); b.addEventListener('click', () => montrer(i)); nav.appendChild(b); });
-    sections[0].before(nav);
+    cadre.prepend(nav); cadre.classList.add('a-sous-nav');          // la barre est tout en haut de la page et reste visible (comme celle des Réglages)
     let v = 0; try { v = +(localStorage.getItem('lutin.rubrique.' + id) || 0); } catch (e) { /* idem */ }
     montrer(v >= 0 && v < sections.length ? v : 0);
   };
@@ -3413,16 +3424,17 @@ body[data-moteur="openai"] .biblio { display:none !important; }
       url.placeholder = m.id === 'llamacpp' ? T('Adresse d\'un llama-server déjà lancé (vide : Lutin le gère lui-même)') : T('Adresse du serveur, par exemple http://127.0.0.1:1234');
       cle.type = 'password'; cle.placeholder = m.reglages.cle_definie ? T('Clé enregistrée (vide : on la garde)') : T('Clé d\'accès (facultative)');
       const colibri = m.id === 'openai' && m.reglages.serveur === 'colibri';          // Colibri et LM Studio : les seuls serveurs de la liste que Lutin installe et lance lui-même
-      const lmstudio = m.id === 'openai' && m.reglages.serveur === 'lmstudio', gere = colibri || lmstudio;
+      const lmstudio = m.id === 'openai' && m.reglages.serveur === 'lmstudio', exllamav3 = m.id === 'openai' && m.reglages.serveur === 'exllamav3', gere = colibri || lmstudio || exllamav3;
       if (m.id === 'openai' && prereglages.length) {          // les serveurs connus du catalogue signé : un choix remplit l'adresse et explique le serveur
         const choix = el('select'), fiche = el('div', 'aide'); choix.disabled = !modifiable; choixServeur = choix;
         const vide = el('option', '', T('Autre serveur (j\'indique son adresse)')); vide.value = ''; choix.appendChild(vide);
-        [...prereglages].sort((a, b) => Number(a.experimental) - Number(b.experimental)).forEach(pr => { const o = el('option', '', pr.nom + (pr.experimental ? ' · ' + T('expérimental') : '') + (['colibri', 'lmstudio'].includes(pr.id) ? ' · ' + T('Lutin peut l\'installer') : ' · ' + T('à installer toi-même'))); o.value = pr.id; choix.appendChild(o); });          // les expérimentaux en dernier, jamais préselectionnés
+        const choisi = m.reglages.serveur || '', visibles = prereglages.filter(pr => pr.compatible !== false || pr.id === choisi), masques = prereglages.filter(pr => !visibles.includes(pr));          // seuls les serveurs qui peuvent tourner sur CETTE machine sont proposés (système, Docker, carte graphique)
+        [...visibles].sort((a, b) => Number(a.experimental) - Number(b.experimental)).forEach(pr => { const o = el('option', '', pr.nom + (pr.experimental ? ' · ' + T('expérimental') : '') + (['colibri', 'lmstudio', 'exllamav3'].includes(pr.id) ? ' · ' + T('Lutin peut l\'installer') : ' · ' + T('à installer toi-même'))); o.value = pr.id; choix.appendChild(o); });          // les expérimentaux en dernier, jamais préselectionnés
         choix.value = m.reglages.serveur || '';
         // Ce que Lutin fait ou ne fait pas pour le serveur choisi, dit en clair : seul Colibri s'installe depuis Lutin, et jamais sans clic sur « Installer »
         const montrerFiche = pr => {
           fiche.textContent = '';
-          if (pr && ['colibri', 'lmstudio'].includes(pr.id)) fiche.appendChild(el('div', 'aide', 'ℹ ' + T('Lutin sait installer ce serveur : utilise les boutons ci-dessous. Il n\'est installé que si tu cliques sur « Installer » ; l\'état (Pas installé, Arrêté, Prêt) est affiché en haut de la carte.')));
+          if (pr && ['colibri', 'lmstudio', 'exllamav3'].includes(pr.id)) fiche.appendChild(el('div', 'aide', 'ℹ ' + T('Lutin sait installer ce serveur : utilise les boutons ci-dessous. Il n\'est installé que si tu cliques sur « Installer » ; l\'état (Pas installé, Arrêté, Prêt) est affiché en haut de la carte.')));
           else fiche.appendChild(el('div', 'aide', 'ℹ ' + (pr ? T('Lutin n\'installe pas ce serveur : ') + pr.nom + ' ' : T('Lutin n\'installe pas ce genre de serveur : ')) + T('installe-le toi-même depuis son site, lance-le, puis indique son adresse ci-dessous. Lutin s\'y connecte seulement ; il ne le démarre ni ne le met à jour.')));
           if (!pr) return;
           if (pr.experimental) fiche.appendChild(el('div', 'erreur', '⚗ ' + T('Moteur expérimental : jeune, peu éprouvé avec Lutin. À essayer, pas à choisir pour travailler.')));
@@ -3434,7 +3446,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
         montrerFiche(prereglages.find(x => x.id === choix.value));
         choix.addEventListener('change', async () => {
           const pr = prereglages.find(x => x.id === choix.value); fiche.textContent = '';
-          if (['colibri', 'lmstudio'].includes(choix.value) || gere) {          // Colibri ou LM Studio apparaît ou disparaît avec ses boutons : le choix est enregistré tout de suite
+          if (['colibri', 'lmstudio', 'exllamav3'].includes(choix.value) || gere) {          // Colibri ou LM Studio apparaît ou disparaît avec ses boutons : le choix est enregistré tout de suite
             try { await api('/api/moteur-regler', { moteur: m.id, serveur: choix.value }); await rafraichir(); } catch (e) { alert(e.message); }
             chargerMoteurs(); return;
           }
@@ -3442,6 +3454,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
           if (pr && pr.adresse) url.value = pr.adresse;
         });
         d.appendChild(choix); d.appendChild(fiche);
+        if (masques.length) { const mq = el('details', 'aide'); mq.appendChild(el('summary', '', masques.length + ' ' + T('serveur(s) masqué(s) : incompatibles avec cette machine'))); masques.forEach(pr => mq.appendChild(el('div', '', '• ' + pr.nom + ' — ' + pr.raison_incompatible))); d.appendChild(mq); }
       }
       if (colibri) {
         const c = m.reglages.colibri || {}, lc = el('div', 'ligne'), dossier = el('input'), port = el('input'), okc = el('button', '', T('Enregistrer')), msgc = el('span', 'aide');
@@ -3459,6 +3472,14 @@ body[data-moteur="openai"] .biblio { display:none !important; }
         d.appendChild(el('div', 'attention', '⚗ ' + T('Les commandes de LM Studio viennent de sa documentation ; Lutin ne les a pas essayées sur une vraie installation.')));
         port.type = 'number'; port.min = 1024; port.max = 65535; port.value = c.port || 1234; port.style.width = '90px'; port.title = T('Port local de LM Studio'); port.disabled = okc.disabled = !modifiable;
         okc.addEventListener('click', async () => { try { await api('/api/moteur-regler', { moteur: m.id, port_lmstudio: port.value }); msgc.textContent = T('Enregistré.'); await rafraichir(); chargerMoteurs(); } catch (e) { msgc.textContent = e.message; } });
+        lc.append(el('span', '', T('port')), port, okc, msgc); d.appendChild(lc);
+      }
+      if (exllamav3) {
+        const c = m.reglages.exllamav3 || {}, lc = el('div', 'ligne'), port = el('input'), okc = el('button', '', T('Enregistrer')), msgc = el('span', 'aide');
+        d.appendChild(el('div', 'aide', T('ExLlamaV3 est installé et lancé par Lutin à travers TabbyAPI (son serveur officiel), dans un environnement Python dédié, sur une carte NVIDIA. Il n\'écoute que sur cette machine (127.0.0.1), sans clé. L\'installation télécharge plusieurs Go. Télécharge ensuite un modèle EXL3 depuis l\'onglet Modèles.')));
+        d.appendChild(el('div', 'attention', '⚗ ' + T('Lutin n\'a pas essayé cette intégration sur une vraie carte NVIDIA : les commandes viennent de la documentation de TabbyAPI.')));
+        port.type = 'number'; port.min = 1024; port.max = 65535; port.value = c.port || 5000; port.style.width = '90px'; port.title = T('Port local d\'ExLlamaV3'); port.disabled = okc.disabled = !modifiable;
+        okc.addEventListener('click', async () => { try { await api('/api/moteur-regler', { moteur: m.id, port_exllamav3: port.value }); msgc.textContent = T('Enregistré.'); await rafraichir(); chargerMoteurs(); } catch (e) { msgc.textContent = e.message; } });
         lc.append(el('span', '', T('port')), port, okc, msgc); d.appendChild(lc);
       }
       if (!gere) f.append(url, cle);
@@ -3517,7 +3538,11 @@ body[data-moteur="openai"] .biblio { display:none !important; }
       (b.resultat.ignores || []).forEach(i => c.appendChild(el('div', 'point', '— ' + i.nom + ' : ' + T('non mesuré') + ' (' + i.raison + ')')));
     }
     if (b.erreur) c.appendChild(el('div', 'erreur', '⚠ ' + b.erreur));
-    if (!deuxMoteurs && b.modele) c.appendChild(el('div', 'aide', 'ℹ ' + T('Pour comparer, il faut au moins deux moteurs installés qui ont ce modèle. Pour l\'instant : ') + (b.disponibilite || []).map(d => d.nom + ' (' + (d.raison || T('prêt')) + ')').join(' · ')));
+    if (!deuxMoteurs && b.modele) {
+      c.appendChild(el('div', 'aide', 'ℹ ' + T('Pour comparer, il faut au moins deux moteurs prêts qui ont ce modèle ou un équivalent (même famille et même taille). Pour l\'instant : ') + (b.disponibilite || []).map(d => d.nom + ' (' + (d.raison || T('prêt') + (d.modele && d.modele !== b.modele ? ' · ' + d.modele : '')) + ')').join(' · ')));
+      const lien = el('button', '', T('Mesurer chaque moteur avec son propre modèle ↓')); lien.title = T('La comparaison exacte demande le même modèle sur chaque moteur. Sinon, mesure chacun avec le sien : le classement ci-dessous reste utile pour choisir.');
+      lien.addEventListener('click', () => $('mesuresMoteurs').scrollIntoView({ block: 'center', behavior: 'smooth' })); c.appendChild(lien);
+    }
     const l = el('div', 'ligne');
     if (b.en_cours) l.appendChild(el('span', 'aide', '⏳ ' + b.etape));
     else {
@@ -4521,6 +4546,23 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     if (!(r.candidats || []).length && !r.etat.en_cours) z.appendChild(el('div', 'aide', T('Aucun moteur actif avec un modèle installé : démarre-en un (cartes ci-dessus) pour le mesurer.')));
     z.appendChild(msg);
   };
+  // ---- Onglet Modèles avec ExLlamaV3 : les modèles EXL3 téléchargés, et un champ pour en télécharger un depuis Hugging Face (propriétaire/modèle + révision = la quantification, par exemple 4.0bpw)
+  const chargerExllamav3Modeles = async () => {
+    const z = $('exllamav3Modeles'); if (!ETAT || !ETAT.exllamav3_choisi) { z.hidden = true; return; }
+    z.hidden = false;
+    if (z.contains(document.activeElement) && document.activeElement !== document.body) return;
+    if (z.dataset.charge && Date.now() - +z.dataset.charge < 20000) return; z.dataset.charge = String(Date.now());
+    z.textContent = ''; z.appendChild(el('b', '', T('Modèles d\'ExLlamaV3')));
+    let r; try { r = await api('/api/exllamav3-modeles'); } catch (e) { z.appendChild(el('div', 'erreur', e.message)); return; }
+    if (!r.installe) { z.appendChild(el('div', 'aide', T('ExLlamaV3 n\'est pas encore installé : installe-le dans Réglages > Moteur, puis reviens ici pour télécharger des modèles.'))); return; }
+    z.appendChild(el('div', 'aide', T('Choisis un modèle au format EXL3 dont la taille tient dans la mémoire de ta carte graphique (la « révision » est la quantification : plus le nombre de bits est petit, plus le modèle est léger). Dossier : ') + r.dossier));
+    z.appendChild(el('div', 'aide', r.modeles.length ? T('Déjà téléchargés :') : T('Aucun modèle téléchargé pour le moment.')));
+    r.modeles.forEach(m => z.appendChild(el('div', 'ligne', '• ' + m.nom + (m.taille_go ? ' · ' + String(m.taille_go).replace('.', ',') + ' ' + T('Go') : ''))));
+    const l = el('div', 'ligne'), depot = el('input'), rev = el('input'), b = el('button', 'principal', T('Télécharger')), msg = el('span', 'aide');
+    depot.placeholder = 'turboderp/Qwen2.5-VL-7B-Instruct-exl3'; depot.style.minWidth = '300px'; rev.placeholder = '4.0bpw'; rev.style.width = '90px'; rev.title = T('La révision (branche) du dépôt : en général la quantification, par exemple 4.0bpw');
+    b.addEventListener('click', async () => { const d = depot.value.trim(); if (!d) { msg.textContent = T('Écris le nom d\'un dépôt Hugging Face (propriétaire/modèle).'); return; } b.disabled = true; try { await api('/api/exllamav3-telecharger', { depot: d, revision: rev.value.trim() }); msg.textContent = T('Téléchargement lancé : l\'avancement est dans la barre bleue du haut.'); depot.value = ''; z.dataset.charge = ''; rafraichir(); } catch (e) { msg.textContent = e.message; } b.disabled = false; });
+    l.append(depot, rev, b, msg); z.appendChild(l);
+  };
   // ---- Palette de commandes (Ctrl+K) : un seul endroit pour aller partout, au clavier
   const PAL = { ouverte: false, items: [], visibles: [], choix: 0, retour: null };
   const sansAccent = t => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
@@ -4536,15 +4578,35 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     liste.push({ ic: '✔', t: T('Vérifier que tout marche'), g: g.action, k: 'sante test diagnostic', f: async () => { ouvrirOnglet('sante'); await window.ouvrirSante(); const b = [...document.querySelectorAll('#santeCorps button')].find(x => x.textContent.includes(T('Vérifier que tout marche'))); if (b) b.click(); } });
     ((ETAT && ETAT.conversations) || []).forEach(c => liste.push({ ic: c.epingle ? '★' : '💬', t: c.titre || T('(sans titre)'), g: g.conv, k: '', f: () => { ouvrirOnglet('chat'); ouvrir(c.id); } }));
     if (ETAT && ETAT.installes) installesDiscussion().forEach(m => liste.push({ ic: '🧠', t: m, g: g.modele, k: 'modele model changer', f: () => { const s = $('selModele'); s.value = m; s.dispatchEvent(new Event('change')); } }));
-    document.querySelectorAll('#p-reglages details.groupe').forEach(d => {          // chaque rubrique, puis chaque réglage qu'elle contient : la recherche d'en haut les trouve tous et y mène
-      const sm = d.querySelector('summary'), rubrique = sm.textContent.trim();
-      const aller = cible => () => { ouvrirOnglet('reglages'); montrerRubrique(d.dataset.g); setTimeout(() => { cible.scrollIntoView({ block: 'center' }); cible.classList.remove('trouve-reglage'); void cible.offsetWidth; cible.classList.add('trouve-reglage'); }, 80); };
-      liste.push({ ic: '⚙', t: rubrique, g: g.reglage, k: 'reglages parametres options', f: aller(sm) });
-      [...d.children].filter(c => c !== sm).slice(0, 80).forEach(c => {
-        const texte = (c.textContent || '').replace(/\s+/g, ' ').trim();
-        if (texte.length < 4) return;
-        const tete = c.querySelector('h2, h3, b, label, .nom, legend'), titre = ((tete ? tete.textContent : texte).replace(/\s+/g, ' ').trim()).slice(0, 80);
-        liste.push({ ic: '⚙', t: titre, g: g.reglage + ' › ' + rubrique, k: texte.slice(0, 500), f: aller(c) });
+    // Les réglages : chaque rubrique, puis chaque titre, case, liste et carte qu'elle contient ; un seul résultat par titre. Les mots-clés de la rubrique couvrent ce que ses cartes ne montrent qu'une fois chargées.
+    const MOTS_RUBRIQUES = { moteur: 'ollama llama.cpp openai compatible serveur colibri lm studio lmstudio exllamav3 exllama tabbyapi vllm moteur modeles vitesse mesure', recherche: 'web internet duckduckgo brave tavily exa perplexity searxng cle api',
+      outils: T('executeur commandes ecrire fichier delai sortie lecture outils mcp'), dossiers: T('dossier travail donnees emplacement'), conversation: 'mode contexte creativite temperature echantillonnage', machine: 'ressources memoire disque garde-fous securite sauvegarde' };
+    const SELECTEUR_REGLAGES = 'h2, h3, label, .carte, details > summary';
+    const texteDirect = n => [...n.childNodes].filter(x => x.nodeType === 3).map(x => x.textContent).join(' ').replace(/\s+/g, ' ').trim();
+    const titreReglage = n => {
+      if (n.matches('h2, h3')) return texteDirect(n);
+      if (n.matches('label')) return texteDirect(n) || (n.querySelector('input[placeholder]') || {}).placeholder || '';
+      if (n.matches('.carte')) { const b = n.querySelector(':scope > b, :scope > strong, :scope > .nom, :scope > div > b'); return b ? b.textContent.replace(/\s+/g, ' ').trim() : ''; }
+      return n.textContent.replace(/\s+/g, ' ').trim();
+    };
+    document.querySelectorAll('#p-reglages details.groupe').forEach(d => {
+      const sm = d.querySelector(':scope > summary'), rubrique = sm.textContent.trim(), vus = new Set([sansAccent(rubrique)]);
+      const aller = (cible, titre) => () => {
+        ouvrirOnglet('reglages'); montrerRubrique(d.dataset.g);
+        setTimeout(() => {          // la page a pu être redessinée depuis l'ouverture de la recherche : on retrouve l'élément par son titre
+          const cur = cible.isConnected ? cible : ([...d.querySelectorAll(SELECTEUR_REGLAGES)].find(x => titreReglage(x) === titre) || sm);
+          cur.scrollIntoView({ block: 'center' }); cur.classList.remove('trouve-reglage'); void cur.offsetWidth; cur.classList.add('trouve-reglage');
+        }, 80);
+      };
+      liste.push({ ic: '⚙', t: rubrique, g: g.reglage, k: 'reglages parametres options ' + (MOTS_RUBRIQUES[d.dataset.g] || ''), f: aller(sm, rubrique) });
+      let n = 0;
+      d.querySelectorAll(SELECTEUR_REGLAGES).forEach(c => {
+        if (c === sm || n >= 120) return;
+        const titre = titreReglage(c).slice(0, 80), cle = sansAccent(titre);
+        if (titre.length < 3 || vus.has(cle)) return;
+        vus.add(cle); n++;
+        const suite = c.matches('h2, h3') && c.nextElementSibling && c.nextElementSibling.classList.contains('aide') ? ' ' + c.nextElementSibling.textContent : '';
+        liste.push({ ic: '⚙', t: titre, g: g.reglage + ' › ' + rubrique, k: ((c.textContent || '') + suite).replace(/\s+/g, ' ').trim().slice(0, 600), f: aller(c, titre) });
       });
     });
     return liste;
@@ -4583,6 +4645,9 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     if (PAL.ouverte) return;
     PAL.retour = document.activeElement; PAL.items = itemsPalette(); PAL.ouverte = true;
     $('palette').hidden = false; $('palSaisie').value = ''; filtrerPalette(); $('palSaisie').focus();
+    if (!document.querySelector('#listeMoteurs .carte')) {          // les cartes des moteurs ne se construisent qu'à l'ouverture de la rubrique : on les charge pour que la recherche les trouve (OpenAI, Colibri, LM Studio…)
+      chargerMoteurs().then(() => { if (PAL.ouverte) { PAL.items = itemsPalette(); filtrerPalette(); } }).catch(() => { /* la recherche garde ce qu'elle a */ });
+    }
   };
   $('bPalette').addEventListener('click', ouvrirPalette);
   $('palFond').addEventListener('click', () => fermerPalette());

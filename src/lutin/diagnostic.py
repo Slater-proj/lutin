@@ -32,12 +32,18 @@ def _ollama_autre_conteneur():
     return moteurs_docker.ollama_externe()
 
 
-def premier_lancement(moteur_nom, actif, detail, recommande=None, emplacement=None, installes=None, choisi=None):
+def premier_lancement(moteur_nom, actif, detail, recommande=None, emplacement=None, installes=None, choisi=None, gere=None):
     """Le premier lancement : tant qu'AUCUN moteur n'est prêt, la page n'envoie pas l'utilisateur dans l'onglet Modèles (où rien ne marcherait) : elle dit pourquoi et propose d'installer le moteur conseillé,
     d'en choisir un autre ou de remettre à plus tard. {pret, raison, recommande}. `recommande` : la recommandation de bench_moteurs (moteur, nom, raison)."""
     if actif:
         return {"pret": True, "raison": "", "recommande": None}
     installes = [dict(i) for i in (installes or [])]          # les AUTRES moteurs déjà installés : [{moteur, nom}]
+    if gere:          # un serveur que Lutin gère (Colibri, LM Studio, ExLlamaV3) : on dit où il en est, jamais « installe Ollama »
+        nom = gere["nom"]
+        raison = (_t("{} est installé mais ne répond pas : démarre-le (bouton ci-dessous).") if gere["installe"] else _t("{} n'est pas installé : installe-le (bouton ci-dessous).")).format(nom)
+        if installes:
+            raison += " " + _t("Tu peux aussi utiliser {}, déjà installé.").format(", ".join(i["nom"] for i in installes))
+        return {"pret": False, "raison": raison, "recommande": None, "emplacement": None, "installes": installes, "gere": dict(gere)}
     if installes:
         noms = ", ".join(i["nom"] for i in installes)
         raison = _t("Le moteur choisi, « {} », n'est pas prêt ({}), mais {} est déjà installé : choisis-le pour commencer.").format(moteur_nom, detail or _t("pas installé ou arrêté"), noms)

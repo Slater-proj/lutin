@@ -28,6 +28,7 @@ URL_DEFAUT = "https://raw.githubusercontent.com/Slater-proj/lutin/main/src/lutin
 TAILLE_MAX = 256 * 1024
 GENRES = ("openai", "ollama")          # « ollama » : seulement pour le moteur Ollama géré par Lutin
 SYSTEMES = ("windows", "linux", "macos")
+MATERIELS = ("nvidia", "amd", "intel", "apple")          # « materiel » : au moins une carte de ce fabricant est nécessaire (absent : aucune exigence)
 TYPES = ("externe", "gere")          # « gere » : un moteur que Lutin installe et pilote lui-même (sa fiche vient du catalogue, son code reste dans Lutin)
 GERES = ("ollama", "llamacpp")
 RE_DEPOT = re.compile(r"^[A-Za-z0-9][\w.-]{0,38}/[A-Za-z0-9][\w.-]{0,99}$")
@@ -71,7 +72,7 @@ def valider(catalogue):
     inconnus = set(catalogue) - {"version", "date", "moteurs"}
     if inconnus:
         raise ErreurCatalogue("champ inconnu : {}".format(sorted(inconnus)[0]))
-    autorises = set(OBLIGATOIRES) | {"adresse_defaut", "cle_requise", "points_forts", "points_faibles", "plateformes", "site", "remarque", "type", "depot", "version_testee", "etiquette", "experimental"}
+    autorises = set(OBLIGATOIRES) | {"adresse_defaut", "cle_requise", "points_forts", "points_faibles", "plateformes", "site", "remarque", "type", "depot", "version_testee", "etiquette", "experimental", "materiel", "docker"}
     vus = set()
     for m in catalogue["moteurs"]:
         if not isinstance(m, dict):
@@ -123,6 +124,10 @@ def valider(catalogue):
             raise ErreurCatalogue("{} : « cle_requise » doit être vrai ou faux".format(ident))
         if "plateformes" in m and (not isinstance(m["plateformes"], list) or not set(m["plateformes"]) <= set(SYSTEMES)):
             raise ErreurCatalogue("{} : plateformes inconnues".format(ident))
+        if "materiel" in m and (not isinstance(m["materiel"], list) or not m["materiel"] or not set(m["materiel"]) <= set(MATERIELS)):
+            raise ErreurCatalogue("{} : matériel inconnu".format(ident))
+        if "docker" in m and not isinstance(m["docker"], bool):
+            raise ErreurCatalogue("{} : « docker » doit être vrai ou faux".format(ident))
     return catalogue
 
 
@@ -205,7 +210,25 @@ def vue(moteur):
     """Une entrée du catalogue prête pour la page : textes dans la langue courante."""
     return {"id": moteur["id"], "nom": moteur["nom"], "adresse": moteur.get("adresse_defaut", ""), "cle_requise": bool(moteur.get("cle_requise")), "site": moteur.get("site", ""),
             "description": texte(moteur["description"]), "points_forts": [texte(t) for t in moteur.get("points_forts", [])], "points_faibles": [texte(t) for t in moteur.get("points_faibles", [])],
-            "remarque": texte(moteur["remarque"]) if moteur.get("remarque") else "", "plateformes": list(moteur.get("plateformes", SYSTEMES)), "experimental": bool(moteur.get("experimental"))}
+            "remarque": texte(moteur["remarque"]) if moteur.get("remarque") else "", "plateformes": list(moteur.get("plateformes", SYSTEMES)), "experimental": bool(moteur.get("experimental")),
+            "materiel": list(moteur.get("materiel", [])), "docker": bool(moteur.get("docker", True))}
+
+
+def compatibilite(fiche, systeme, en_docker, fabricants):
+    """(compatible, raison) : ce serveur peut-il tourner sur CETTE machine ? `systeme` : windows | linux | macos ; `fabricants` : les fabricants de cartes graphiques détectées.
+    Une machine dont on ne connaît pas les cartes n'est pas écartée à tort : seul un fabricant CONNU et différent exclut."""
+    from .i18n import t as _t
+    if systeme not in fiche.get("plateformes", SYSTEMES):
+        return False, _t("pas disponible sous {}").format({"windows": "Windows", "linux": "Linux", "macos": "macOS"}.get(systeme, systeme))
+    if en_docker and not fiche.get("docker", True):
+        return False, _t("ne s'installe pas dans Docker (pas de carte graphique ni d'environnement Python dédié dans le conteneur)")
+    voulus = fiche.get("materiel") or []
+    connus = {f for f in (fabricants or []) if f and f != "inconnu"}
+    if voulus and connus and not (connus & set(voulus)):
+        return False, _t("demande une carte graphique {}").format(" ou ".join(v.upper() if v != "apple" else "Apple" for v in voulus))
+    if voulus and not connus:
+        return False, _t("demande une carte graphique {} (aucune carte détectée)").format(" ou ".join(v.upper() if v != "apple" else "Apple" for v in voulus))
+    return True, ""
 
 
 def prereglages(cache=None):

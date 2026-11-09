@@ -150,7 +150,20 @@ class Gestionnaire(BaseHTTPRequestHandler):
     def _prereglages():
         """Les serveurs compatibles OpenAI du catalogue signé (adresse habituelle, forces, faiblesses), pour les proposer d'un clic. Un catalogue illisible n'empêche jamais la page."""
         try:
-            return [dict(v) for v in (_catalogue_moteurs.vue(m) for m in _catalogue_moteurs.en_cours()["moteurs"] if m.get("type", "externe") == "externe")]
+            systeme, docker = _llamacpp._systeme(), bool(_moteurs.CONTEXTE["en_docker"]())
+            try:
+                profil = _moteurs.CONTEXTE["profil"]()
+                fabricants = sorted({g.fabricant for g in (getattr(profil, "gpus", None) or [])})
+            except Exception:  # noqa: BLE001  (profil illisible : aucun serveur n'est écarté à cause du matériel... sauf ceux qui exigent une carte)
+                fabricants = []
+            sortie = []
+            for m in _catalogue_moteurs.en_cours()["moteurs"]:
+                if m.get("type", "externe") != "externe":
+                    continue
+                v = dict(_catalogue_moteurs.vue(m))
+                v["compatible"], v["raison_incompatible"] = _catalogue_moteurs.compatibilite(v, systeme, docker, fabricants)          # filtré selon la machine où Lutin tourne (système, Docker, carte graphique)
+                sortie.append(v)
+            return sortie
         except Exception:  # noqa: BLE001
             return []
 
@@ -248,7 +261,12 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 detail = _t("Installé, il démarre à la demande.") if mo.serveur_pret() is not None else _t("Pas installé.")
             else:
                 detail = ""
-            return _diagnostic.premier_lancement(mo.nom, False, detail, {k: reco[k] for k in ("moteur", "nom", "raison")} if reco else None, emplacement, autres, mo.id)
+            gere = None          # Colibri, LM Studio ou ExLlamaV3 choisi : simple regard sur les fichiers (aucune sonde réseau)
+            if mo.id == "openai":
+                for choisi, nom, trouve in (("colibri_choisi", "Colibri", getattr(mo, "_colibri", None)), ("lmstudio_choisi", "LM Studio", getattr(mo, "_lms", None)), ("exllamav3_choisi", "ExLlamaV3", getattr(mo, "_exl", None))):
+                    if trouve and getattr(mo, choisi, lambda: False)():
+                        gere = {"nom": nom, "installe": trouve() is not None}
+            return _diagnostic.premier_lancement(mo.nom, False, detail, {k: reco[k] for k in ("moteur", "nom", "raison")} if reco else None, emplacement, autres, mo.id, gere)
         except Exception:  # noqa: BLE001  (jamais une page cassée pour un constat de plus)
             return {"pret": True, "raison": "", "recommande": None}
 
@@ -394,7 +412,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
                                        "familles": {k: _t(v) for k, v in (_m._CATALOGUE.get("familles") or {}).items()}, "disque_modeles": _emplacements.jauge_modeles(),
                                        "version": _m.VERSION, "partages": o.get("partages", []), "ollama": o["actif"], "ollama_installe": bool(_m.chemin_ollama()) or _m.moteur_actuel().id != "ollama", "moteur_nom": _m.moteur_actuel().nom, "installes": o["installes"], "modeles": modeles, "modeles_masques": len(_m.lire_registre_modeles()["masques"]), "actives": list(_m.TOURS_ACTIFS),
                                        "pulls": _m.PULLS, "reglages": r, "conversations": _m.conv_liste(), "racine": str(_m.RACINE), "donnees": str(_m.DONNEES),
-                                       "colibri_choisi": bool(getattr(_m.moteur_actuel(r), "colibri_choisi", lambda: False)()), "lmstudio_choisi": bool(getattr(_m.moteur_actuel(r), "lmstudio_choisi", lambda: False)()), "outil": bool(self._outil_vivant()), "hors_ligne": _hl.actif(), "moteur": _m.moteur_actuel().id, "niveau": _m.SECURITE.niveau, "docker": _acces.en_docker(), "ouverture_possible": _fichiers.ouverture_possible(), "missions": _mission.par_conversation(), "langue": _i18n.langue(), "langue_reglage": _i18n.langue_configuree(), "cpus": _machine.cpus_disponibles() or 1, "diagnostic": self._avec_estimation(self._diagnostic(o, r, profil, modeles), r, profil), "prudent": _estimation.mode_prudent(profil), "premier_lancement": self._premier_lancement(o, r, profil), "redemarrage": {"necessaire": _acces.securite_enregistree() != _m.SECURITE, "possible": _acces.peut_redemarrer()}, "nouvelle_version": _m.nouvelle_version_lutin(), "travaux": _m.travaux_etat(), "configurateur": self._configurateur(), "addons_alertes": _addons.alertes(), "embeddings": _embeddings.etat(),
+                                       "colibri_choisi": bool(getattr(_m.moteur_actuel(r), "colibri_choisi", lambda: False)()), "lmstudio_choisi": bool(getattr(_m.moteur_actuel(r), "lmstudio_choisi", lambda: False)()), "exllamav3_choisi": bool(getattr(_m.moteur_actuel(r), "exllamav3_choisi", lambda: False)()), "outil": bool(self._outil_vivant()), "hors_ligne": _hl.actif(), "moteur": _m.moteur_actuel().id, "niveau": _m.SECURITE.niveau, "docker": _acces.en_docker(), "ouverture_possible": _fichiers.ouverture_possible(), "missions": _mission.par_conversation(), "langue": _i18n.langue(), "langue_reglage": _i18n.langue_configuree(), "cpus": _machine.cpus_disponibles() or 1, "diagnostic": self._avec_estimation(self._diagnostic(o, r, profil, modeles), r, profil), "prudent": _estimation.mode_prudent(profil), "premier_lancement": self._premier_lancement(o, r, profil), "redemarrage": {"necessaire": _acces.securite_enregistree() != _m.SECURITE, "possible": _acces.peut_redemarrer()}, "nouvelle_version": _m.nouvelle_version_lutin(), "travaux": _m.travaux_etat(), "configurateur": self._configurateur(), "addons_alertes": _addons.alertes(), "embeddings": _embeddings.etat(),
                                        "reflexion_possible": self._reflexion_possible(r, o["actif"]), "cluster_actif": _machines.cluster_actif(r.get("cluster")), "modeles_distants": _machines.modeles_distants() if _machines.cluster_actif(r.get("cluster")) else [], "conversations_distantes": _machines.conversations_distantes() if _machines.cluster_actif(r.get("cluster")) else [], "machines_hors_ligne": _machines.hors_ligne() if _machines.cluster_actif(r.get("cluster")) else [], "taches_fond": _m.taches_en_cours(), "taches_moteur": [dict(v, nom=_moteurs.MOTEURS[k].nom) for k, v in _moteurs.toutes_les_taches().items() if v.get("statut") == "en cours" and k in _moteurs.MOTEURS], "fins_moteur": _moteurs.fins_recentes(), "memoire": self._memoire(r, o), "calibrage": _calibrage.etat(), "bench": {"en_cours": _m.BENCH["en_cours"], "etape": _m.BENCH["etape"], "erreur": _m.BENCH["erreur"], "file": list(_m.BENCH.get("file") or []), "mesures": _bench.lire(_m.chemin_bench())}, "attentes": [{"id": a.id, "titre": a.titre, "detail": a.detail, "diff": a.diff, "conv": a.conv} for a in _m.Attente.EN_COURS.values()],
                                        "en_attente": sorted({a.conv for a in _m.Attente.EN_COURS.values() if a.conv} | set(_m.CHOIX_MEMOIRE))})
         if chemin == "/api/conseil":
@@ -573,6 +591,12 @@ class Gestionnaire(BaseHTTPRequestHandler):
             return self._envoyer(200, dict(_recherche.vue(), moteurs=_m.etat_moteurs_recherche(), modifiable=self._configurateur()))
         if chemin == "/api/mesures-moteurs":                      # Réglages > Moteur : ce que chaque moteur a donné ici (classement des mesures) et ceux qu'on peut mesurer maintenant
             return self._envoyer(200, _mesures.vue(_m.DONNEES, dict(_moteurs.MOTEURS), _m.reglages()))
+        if chemin == "/api/exllamav3-modeles":                    # onglet Modèles avec ExLlamaV3 : ce qui est téléchargé, lecture seule
+            mo = _moteurs.par_id("openai")
+            if not mo.exllamav3_choisi():
+                return self._envoyer(404, {"erreur": _t("ExLlamaV3 n'est pas le serveur choisi.")})
+            from . import exllamav3 as _exl
+            return self._envoyer(200, {"modeles": _exl.modeles(mo._dossiers()), "installe": mo._exl() is not None, "dossier": str(_exl.dossier_modeles(mo._dossiers()))})
         if chemin == "/api/lmstudio-modeles":                     # onglet Modèles avec LM Studio : ce qui est téléchargé (lms ls), lecture seule
             mo = _moteurs.par_id("openai")
             if not mo.lmstudio_choisi():
@@ -1211,6 +1235,14 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 mo = _moteurs.par_id(str(donnees["moteur"]))
                 modele = str(donnees.get("modele", ""))
                 return self._envoyer(200, _mesures.lancer(_m.DONNEES, mo, modele, str(donnees.get("mode", "rapide")), memoire=lambda: _bench_moteurs.memoire_du_moteur(mo.id, modele)))
+            if self.path == "/api/exllamav3-telecharger":
+                if not self._configurateur():
+                    return self._envoyer(403, {"erreur": _t("Cela se fait depuis cette machine (niveau « cette machine seulement » ou navigateur de cette machine).")})
+                mo = _moteurs.par_id("openai")
+                if not mo.exllamav3_choisi():
+                    return self._envoyer(400, {"erreur": _t("ExLlamaV3 n'est pas le serveur choisi.")})
+                depot, revision = str(donnees.get("depot", ""))[:120], str(donnees.get("revision", ""))[:41]
+                return self._envoyer(200, _moteurs.lancer_tache(mo, "telecharger:" + depot + ("@" + revision if revision else "")))
             if self.path == "/api/lmstudio-telecharger":
                 if not self._configurateur():
                     return self._envoyer(403, {"erreur": _t("Cela se fait depuis cette machine (niveau « cette machine seulement » ou navigateur de cette machine).")})

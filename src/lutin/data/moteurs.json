@@ -1,6 +1,6 @@
 {
  "catalogue": {
-  "version": 4,
+  "version": 5,
   "date": "2026-11-09",
   "moteurs": [
    {
@@ -136,6 +136,47 @@
     "type": "externe"
    },
    {
+    "id": "exllamav3",
+    "nom": "ExLlamaV3",
+    "genre": "openai",
+    "adresse_defaut": "http://127.0.0.1:5000/v1",
+    "site": "https://github.com/turboderp-org/exllamav3",
+    "plateformes": [
+     "windows",
+     "linux"
+    ],
+    "materiel": [
+     "nvidia"
+    ],
+    "docker": false,
+    "type": "externe",
+    "depot": "turboderp-org/exllamav3",
+    "description": {
+     "fr": "Le moteur très rapide pour carte NVIDIA, successeur d'ExLlamaV2 : modèles « EXL3 » très compressés qui gardent leur qualité. Lutin l'installe et le pilote à travers TabbyAPI, son serveur officiel.",
+     "en": "The very fast engine for NVIDIA cards, successor of ExLlamaV2: heavily compressed « EXL3 » models that keep their quality. Lutin installs and drives it through TabbyAPI, its official server."
+    },
+    "points_forts": [
+     {
+      "fr": "Très rapide sur une carte NVIDIA, bonne qualité à taille égale.",
+      "en": "Very fast on an NVIDIA card, good quality at equal size."
+     },
+     {
+      "fr": "Installation, démarrage, arrêt, mise à jour et téléchargement de modèles depuis Lutin.",
+      "en": "Install, start, stop, update and model downloads from Lutin."
+     }
+    ],
+    "points_faibles": [
+     {
+      "fr": "Carte NVIDIA obligatoire ; pas dans Docker ; plusieurs Go à installer (torch).",
+      "en": "NVIDIA card required; not in Docker; several GB to install (torch)."
+     },
+     {
+      "fr": "Lutin ne l'a pas essayé sur une vraie carte NVIDIA ; TabbyAPI évolue vite.",
+      "en": "Lutin has not tried it on a real NVIDIA card; TabbyAPI moves fast."
+     }
+    ]
+   },
+   {
     "id": "colibri",
     "nom": "Colibri",
     "genre": "openai",
@@ -228,5 +269,5 @@
   ]
  },
  "cle": "2026a",
- "signature": "X3SpV4mMSCTFpoXJbMhO2hFSTusPGjguSsP6/Gr75t1Ml8FVHVztvxYMoQNxCVNxuA19leoHT+CkcUmz2wI6AA=="
+ "signature": "MlgVnRopQfxGolpqsfzo8rT/MNUkKZ/rHeSMJOTMSbQU1lcafGi8RGtHueHs7OuxH/oK7skXntOPCH8ngajECA=="
 }

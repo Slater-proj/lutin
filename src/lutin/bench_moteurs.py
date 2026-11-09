@@ -9,6 +9,7 @@ La recommandation répond à « quel moteur pour cette machine ? » AVEC SA RAIS
 Règle de fond : à performances proches (moins de 10 % d'écart), on garde le moteur le plus simple (Ollama) ; un autre n'est recommandé que s'il est nettement meilleur ET stable."""
 import hashlib
 import json
+import re
 import statistics
 import threading
 import time
@@ -22,7 +23,7 @@ PROMPT = "Écris un texte d'environ 150 mots sur la mer."
 PASSES = {"rapide": 2, "approfondi": 5}
 ECART_MINI = 0.10          # un moteur n'est recommandé contre le plus simple qu'au-dessus de ce gain
 SIMPLE = "ollama"
-MOTEURS_BANC = ("ollama", "llamacpp")
+MOTEURS_BANC = ("ollama", "llamacpp", "openai")          # « openai » : le serveur compatible OpenAI choisi (Colibri, LM Studio, ExLlamaV3…), seulement s'il est démarré
 
 
 # --------------------------------------------------------------------------- mesure d'un moteur
@@ -57,7 +58,8 @@ def une_passe(moteur, modele, ctx, horloge=time.monotonic):
 
 def mesurer(moteur, modele, mode="rapide", ctx=4096, horloge=time.monotonic, memoire=None, estime_go=None):
     """Mesure UN moteur avec UN modèle. Ne lève jamais : une panne est notée dans `erreurs` et `ok` vaut faux. `memoire()` rend {ram, vram} (octets) après les passes, ou None."""
-    r = {"id": moteur.id, "nom": moteur.nom, "version": str(moteur.statut().get("version") or ""), "ok": False, "passes": 0, "erreurs": [], "charge_s": None, "premier_jeton_s": None,
+    from .mesures_moteurs import nom_affiche
+    r = {"id": moteur.id, "nom": nom_affiche(moteur), "modele": modele, "version": str(moteur.statut().get("version") or ""), "ok": False, "passes": 0, "erreurs": [], "charge_s": None, "premier_jeton_s": None,
          "tok_s": None, "lecture_tok_s": None, "ram": None, "vram": None}
     debut = horloge()
     try:
@@ -113,12 +115,14 @@ def memoire_du_moteur(ident, modele):
 
 
 def liberer(autres, modele):
-    """Avant de mesurer un moteur, on décharge les autres : la mémoire et la carte graphique sont à lui seul, la comparaison est juste."""
+    """Avant de mesurer un moteur, on décharge les autres : la mémoire et la carte graphique sont à lui seul, la comparaison est juste.
+    `modele` : un nom, ou {moteur: son modèle} (le même modèle porte un nom différent d'un moteur à l'autre)."""
     from . import ressources_chargees as rc
     for ident in autres:
+        nom = modele.get(ident, "") if isinstance(modele, dict) else modele
         try:
             if ident == "ollama":
-                rc.decharger("ollama:" + modele)
+                rc.decharger("ollama:" + nom)
             elif ident == "llamacpp":
                 rc.decharger("llamacpp")
         except ValueError:
@@ -127,8 +131,33 @@ def liberer(autres, modele):
 
 # --------------------------------------------------------------------------- le banc complet, conservation, empreinte
 
+GENERIQUES = {"instruct", "chat", "it", "latest", "gguf", "exl3", "exl2", "base", "hf", "ai"}
+RE_QUANTIFICATION = re.compile(r"^(i?q\d.*|\d+(\.\d+)?bpw|f16|bf16|fp16|fp8|int[48]|mlx)$")
+RE_TAILLE = re.compile(r"^\d+(\.\d+)?[bm]$")
+
+
+def _jetons(nom):
+    """Les mots d'un nom de modèle sans l'éditeur, la quantification ni l'extension : « qwen3:8b » -> {qwen3, 8b} ; « Qwen3-8B-Q4_K_M.gguf » -> {qwen3, 8b}."""
+    nom = str(nom).lower().rsplit("/", 1)[-1]
+    nom = re.sub(r"\.(gguf|safetensors)$", "", nom)
+    mots = [m for m in re.split(r"[^a-z0-9.]+", nom) if m]
+    return {m for m in mots if m not in GENERIQUES and not RE_QUANTIFICATION.match(m)}
+
+
+def equivalent(modele, installes):
+    """Le modèle d'un moteur qui correspond à `modele` : le même nom, sinon même famille et même taille d'après le nom (« qwen3:8b » ~ « Qwen3-8B-Q4_K_M »). None si rien ne correspond."""
+    if modele in installes:
+        return modele
+    voulus = _jetons(modele)
+    taille = {m for m in voulus if RE_TAILLE.match(m)}
+    if not voulus or not taille:
+        return None          # sans taille dans le nom on ne devine pas : un « qwen3 » seul peut être n'importe quelle taille
+    candidats = [n for n in installes if voulus <= _jetons(n)]
+    return min(candidats, key=lambda n: (len(n), n)) if candidats else None
+
+
 def disponibles(modele):
-    """Les moteurs qui peuvent tourner ce modèle MAINTENANT : [(moteur, raison d'absence ou '')] pour chaque moteur du banc."""
+    """Les moteurs qui peuvent faire tourner ce modèle (ou son équivalent) MAINTENANT : [(moteur, raison d'absence ou '', modèle à utiliser avec lui)] pour chaque moteur du banc."""
     sortie = []
     for ident in MOTEURS_BANC:
         mo = moteurs.MOTEURS.get(ident)
@@ -136,18 +165,23 @@ def disponibles(modele):
             continue
         try:
             statut = mo.statut()
+            if ident == "openai" and not (mo.adresse() if hasattr(mo, "adresse") else ""):
+                continue          # aucun serveur réglé : rien à comparer, rien à montrer
             m = mo.modeles()
         except Exception as e:  # noqa: BLE001
-            sortie.append((mo, str(e)[:120]))
+            sortie.append((mo, str(e)[:120], modele))
             continue
+        propre = equivalent(modele, m.get("installes", []))
         if not statut.get("installe"):
-            sortie.append((mo, _t("pas installé")))
-        elif modele not in m.get("installes", []):
-            sortie.append((mo, _t("n'a pas ce modèle")))
+            sortie.append((mo, _t("pas installé"), modele))
+        elif ident == "openai" and not statut.get("actif"):
+            sortie.append((mo, _t("pas démarré"), modele))
+        elif propre is None:
+            sortie.append((mo, _t("n'a ni ce modèle ni un équivalent"), modele))
         elif ident == "ollama" and not m.get("actif"):
-            sortie.append((mo, _t("ne répond pas")))
+            sortie.append((mo, _t("ne répond pas"), propre))
         else:
-            sortie.append((mo, ""))
+            sortie.append((mo, "", propre))
     return sortie
 
 
@@ -172,10 +206,11 @@ def versions_actuelles():
 
 def comparer(modele, mode="rapide", profil=None, ctx=4096, progression=None, horloge=time.monotonic, memoire=memoire_du_moteur, liberer_autres=liberer, date=None):
     """Compare les moteurs disponibles sur ce modèle. Renvoie le résultat complet (jamais d'exception). `progression(texte, i, n)`."""
+    from .mesures_moteurs import nom_affiche
     dispo = disponibles(modele)
-    pret = [mo for mo, raison in dispo if not raison]
+    pret = [(mo, propre) for mo, raison, propre in dispo if not raison]
     r = {"version": VERSION, "date": date or time.strftime("%Y-%m-%dT%H:%M:%S"), "modele": modele, "mode": mode, "machine": profil.resume() if profil else "", "ctx": ctx,
-         "ignores": [{"id": mo.id, "nom": mo.nom, "raison": raison} for mo, raison in dispo if raison], "moteurs": []}
+         "ignores": [{"id": mo.id, "nom": nom_affiche(mo), "raison": raison} for mo, raison, _ in dispo if raison], "moteurs": []}
     estime_go = None
     try:          # ce que l'estimation d'avant chargement annonçait pour ce modèle (comparé ensuite à la mesure)
         from . import moteur as _mo
@@ -184,12 +219,13 @@ def comparer(modele, mode="rapide", profil=None, ctx=4096, progression=None, hor
             estime_go = estimation.estimer(fiche, ctx, profil)["total_go"]
     except Exception:  # noqa: BLE001  (un plus)
         estime_go = None
-    for i, mo in enumerate(pret):
+    par_moteur = {mo.id: propre for mo, propre in pret}
+    for i, (mo, propre) in enumerate(pret):
         if progression:
-            progression(_t("Mesure de {}").format(mo.nom), i, len(pret))
+            progression(_t("Mesure de {}").format(nom_affiche(mo)), i, len(pret))
         if len(pret) > 1:
-            liberer_autres([x.id for x in pret if x.id != mo.id], modele)
-        r["moteurs"].append(mesurer(mo, modele, mode, ctx, horloge, lambda mo=mo: memoire(mo.id, modele), estime_go=estime_go))
+            liberer_autres([x.id for x, _ in pret if x.id != mo.id], par_moteur)
+        r["moteurs"].append(mesurer(mo, propre, mode, ctx, horloge, lambda mo=mo, propre=propre: memoire(mo.id, propre), estime_go=estime_go))
     r["empreinte"] = empreinte(profil, {m["id"]: m["version"] for m in r["moteurs"]}) if profil else ""
     r["recommandation"] = recommander(profil, banc=r)
     return r
@@ -208,8 +244,9 @@ def lancer(modele, mode, dossier, profil, **options):
     if mode not in PASSES:
         raise ValueError(_t("Mode inconnu."))
     dispo = disponibles(modele)
-    if sum(1 for _, raison in dispo if not raison) < 2:          # comparer, c'est être au moins deux : avec un seul moteur il n'y a rien à comparer
-        raise ValueError(_t("Pour comparer, il faut au moins deux moteurs installés qui ont ce modèle. Pour l'instant : {}").format(" ; ".join("{} : {}".format(mo.nom, raison or _t("prêt")) for mo, raison in dispo) or "?"))
+    if sum(1 for _, raison, _p in dispo if not raison) < 2:          # comparer, c'est être au moins deux : avec un seul moteur il n'y a rien à comparer
+        from .mesures_moteurs import nom_affiche
+        raise ValueError(_t("Pour comparer, il faut au moins deux moteurs prêts qui ont ce modèle ou un équivalent (même famille et même taille). Pour l'instant : {}").format(" ; ".join("{} : {}".format(nom_affiche(mo), raison or _t("prêt")) for mo, raison, _p in dispo) or "?"))
     with VERROU_LANCEMENT:          # vérifier puis réserver d'un seul geste : deux demandes simultanées ne lancent pas deux comparaisons
         if ETAT["en_cours"]:
             raise ValueError(_t("Une comparaison est déjà en cours."))
@@ -231,6 +268,7 @@ def lancer(modele, mode, dossier, profil, **options):
 
 def vue(dossier, modele, profil, docker=False):
     """Ce que la page affiche : le dernier résultat pour ce modèle, s'il est à refaire, la recommandation (avec sa raison) et l'état d'une comparaison en cours."""
+    from .mesures_moteurs import nom_affiche
     resultat = lire(dossier).get(modele)
     caduc = a_refaire(resultat, profil, versions_actuelles()) if resultat else False
     banc = resultat if resultat and not caduc else None
@@ -239,7 +277,7 @@ def vue(dossier, modele, profil, docker=False):
     except Exception:  # noqa: BLE001  (un plus pour la page)
         dispo = []
     return {"modele": modele, "resultat": resultat, "a_refaire": caduc, "recommandation": recommander(profil, banc=banc, docker=docker, modele_installe=bool(modele)),
-            "comparables": sum(1 for _, raison in dispo if not raison), "disponibilite": [{"nom": mo.nom, "raison": raison} for mo, raison in dispo],
+            "comparables": sum(1 for _, raison, _p in dispo if not raison), "disponibilite": [{"nom": nom_affiche(mo), "raison": raison, "modele": propre if not raison else ""} for mo, raison, propre in dispo],
             "en_cours": ETAT["en_cours"], "etape": ETAT["etape"], "erreur": ETAT["erreur"]}
 
 
@@ -284,7 +322,7 @@ def lisible(resultat):
     lignes = [_t("Modèle : {} · {} · {}").format(resultat["modele"], resultat.get("machine") or "?", resultat["mode"])]
     for m in resultat["moteurs"]:
         if m["ok"]:
-            lignes.append(_t("  {} : {} jetons/s · premier jeton {} s · chargement {} s{}").format(m["nom"], m["tok_s"], m["premier_jeton_s"], m["charge_s"],
+            lignes.append(_t("  {} : {} jetons/s · premier jeton {} s · chargement {} s{}").format(m["nom"] + (" (" + m["modele"] + ")" if m.get("modele") and m["modele"] != resultat["modele"] else ""), m["tok_s"], m["premier_jeton_s"], m["charge_s"],
                                                                                               _t(" · mémoire vidéo {} Go").format(round(m["vram"] / 1024 ** 3, 1)) if m.get("vram") else ""))
         else:
             lignes.append(_t("  {} : échec ({})").format(m["nom"], (m["erreurs"] or ["?"])[0]))
@@ -333,7 +371,8 @@ def recommander(profil, banc=None, docker=False, modele_installe=True):
     gpu = profil.gpu_principal() if profil else None
     if gpu and gpu.fabricant == "nvidia" and gpu.vram_go >= 6:
         return {"moteur": SIMPLE, "nom": _nom(SIMPLE), "source": "regles", "theorique": theorique, "espace_go": 4,
-                "limites": [_t("llama.cpp (CUDA) peut être un peu plus rapide, surtout avec les modèles à experts : lance le banc pour le savoir sur ta machine")],
+                "limites": [_t("llama.cpp (CUDA) peut être un peu plus rapide, surtout avec les modèles à experts : lance le banc pour le savoir sur ta machine"),
+                            _t("ExLlamaV3 (Réglages > Moteur) peut être encore plus rapide avec des modèles EXL3 très compressés : installe-le puis mesure-le")],
                 "raison": prefixe + _t("carte NVIDIA avec {} Go : Ollama l'utilise très bien et reste le plus simple").format(round(gpu.vram_go))}
     if gpu and gpu.fabricant in ("amd", "intel") and gpu.vram_go >= 6:
         return {"moteur": "llamacpp", "nom": _nom("llamacpp"), "source": "regles", "theorique": theorique, "espace_go": 1,

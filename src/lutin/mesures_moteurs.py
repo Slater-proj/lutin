@@ -15,7 +15,7 @@ FICHIER = "mesures_moteurs.json"
 MAX = 200
 ETAT = {"en_cours": False, "moteur": "", "modele": "", "erreur": "", "debut": 0.0}
 VERROU = threading.Lock()
-SERVEURS = {"colibri": "Colibri", "lmstudio": "LM Studio"}
+SERVEURS = {"colibri": "Colibri", "lmstudio": "LM Studio", "exllamav3": "ExLlamaV3"}
 
 
 def nom_affiche(moteur):

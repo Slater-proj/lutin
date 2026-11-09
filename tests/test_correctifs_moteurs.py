@@ -72,6 +72,25 @@ class RemplacerDossier(unittest.TestCase):
             self.assertEqual(ml.liberer_processus(self.tmp), 0)
 
 
+class ModeleDuSetup(unittest.TestCase):
+    """Le modèle que `coli setup` a préparé est retrouvé sans qu'on indique son dossier (lecture seule de son setup.json)."""
+
+    def test_le_dossier_du_modele_est_lu_dans_le_setup_de_colibri(self):
+        from lutin import colibri
+        base = Path(tempfile.mkdtemp(prefix="lutin-setup-"))
+        modele = base / "colibri-models" / "qwen36-35b"
+        modele.mkdir(parents=True)
+        with mock.patch.dict(os.environ, {"COLI_SETUP_HOME": str(base / "home")}):
+            self.assertEqual(colibri.modele_du_setup(), "", "pas encore de setup")
+            (base / "home").mkdir()
+            (base / "home" / "setup.json").write_text(json.dumps({"model_dir": str(modele)}), encoding="utf-8")
+            self.assertEqual(colibri.modele_du_setup(), str(modele))
+            (base / "home" / "setup.json").write_text(json.dumps({"model_dir": str(base / "absent")}), encoding="utf-8")
+            self.assertEqual(colibri.modele_du_setup(), "", "un dossier qui n'existe plus n'est pas proposé")
+            (base / "home" / "setup.json").write_text("pas du json", encoding="utf-8")
+            self.assertEqual(colibri.modele_du_setup(), "")
+
+
 class Colibri(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="lutin-colibri-"))
@@ -195,6 +214,35 @@ class PremierLancement(unittest.TestCase):
         r = diagnostic.premier_lancement("Serveur compatible OpenAI", False, "", None, None, [], "openai")
         self.assertIn("Aucun moteur n'est choisi ni installé", r["raison"])
         self.assertNotIn("ne répond pas", r["raison"])
+
+    def test_colibri_installe_mais_arrete_se_demarre_il_ne_faut_pas_dire_d_installer_ollama(self):
+        r = diagnostic.premier_lancement("Serveur compatible OpenAI", False, "", None, None, [], "openai", {"nom": "Colibri", "installe": True})
+        self.assertFalse(r["pret"])
+        self.assertIn("Colibri est installé mais ne répond pas", r["raison"])
+        self.assertNotIn("Ollama", r["raison"])
+        self.assertEqual(r["gere"], {"nom": "Colibri", "installe": True})
+        self.assertIsNone(r["recommande"])
+
+    def test_serveur_gere_pas_installe_dit_de_l_installer_et_propose_l_autre_moteur_s_il_existe(self):
+        r = diagnostic.premier_lancement("Serveur compatible OpenAI", False, "", None, None, [{"moteur": "ollama", "nom": "Ollama"}], "openai", {"nom": "LM Studio", "installe": False})
+        self.assertIn("LM Studio n'est pas installé", r["raison"])
+        self.assertIn("Ollama, déjà installé", r["raison"])
+
+    def test_le_premier_lancement_de_la_page_reconnait_colibri_installe(self):
+        import lutin.serveur as srv
+        mo = moteurs.MOTEURS["openai"]
+        ancien = dict(moteurs.CONTEXTE)
+        moteurs.CONTEXTE["donnees"] = lambda: _TEMP / "donnees-pl"
+        try:
+            ml.regler_serveur("openai", {"serveur": "colibri"})
+            with mock.patch.object(type(mo), "_colibri", lambda self_: ("2.1.0", _TEMP)):
+                pl = srv.Gestionnaire._premier_lancement({"actif": False}, dict(_m.reglages(), moteur="openai"), None)
+            self.assertEqual(pl["gere"], {"nom": "Colibri", "installe": True})
+            self.assertNotIn("Ollama", pl["raison"])
+        finally:
+            ml.regler_serveur("openai", {"serveur": ""})
+            moteurs.CONTEXTE.clear()
+            moteurs.CONTEXTE.update(ancien)
 
     def test_comportement_inchange_pour_ollama_absent(self):
         r = diagnostic.premier_lancement("Ollama", False, "Pas installé.", None, None, [], "ollama")

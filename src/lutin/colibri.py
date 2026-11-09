@@ -176,6 +176,29 @@ def demarrer(modele, port=PORT_DEFAUT, dossiers=None, attente_s=90, lancer=subpr
     raise ValueError(_t("Colibri ne répond pas après {} s (son journal : {}).").format(attente_s, journal))
 
 
+def setup_home():
+    """Où `coli setup` garde sa configuration (la même règle que Colibri : COLI_SETUP_HOME, sinon le dossier de données de l'utilisateur)."""
+    import os
+    explicite = os.environ.get("COLI_SETUP_HOME")
+    if explicite:
+        return Path(explicite).expanduser()
+    if sys.platform == "win32":
+        return Path(os.environ.get("LOCALAPPDATA") or (Path.home() / "AppData" / "Local")) / "colibri"
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Application Support" / "colibri"
+    return Path(os.environ.get("XDG_DATA_HOME") or (Path.home() / ".local" / "share")) / "colibri"
+
+
+def modele_du_setup():
+    """Le dossier du modèle que `coli setup` a préparé (lu dans son setup.json, sans rien lancer), ou '' : Lutin sait alors démarrer Colibri sans qu'on lui indique le dossier."""
+    try:
+        d = json.loads((setup_home() / "setup.json").read_text(encoding="utf-8"))
+        m = str(d.get("model_dir") or "")
+    except (OSError, ValueError, AttributeError):
+        return ""
+    return m if m and Path(m).is_dir() else ""
+
+
 RE_LIGNE_CATALOGUE = re.compile(r"^\s+([a-z0-9][a-z0-9._-]{1,40})\s+(\d+(?:\.\d+)?) GB\s+(\S+)\s*(.*)$")
 
 

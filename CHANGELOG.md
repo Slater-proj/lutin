@@ -2,6 +2,16 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## ExLlamaV3, serveurs filtrés selon la machine, comparaison de moteurs qui marche partout
+
+- **ExLlamaV3 géré par Lutin** (à travers TabbyAPI, son serveur officiel, plus moderne que ExLlamaV2 : formats « EXL3 » plus fins) : installation dans un environnement Python dédié, démarrage, arrêt, mise à jour, téléchargement de modèles EXL3 depuis Hugging Face. Carte NVIDIA obligatoire, Windows ou Linux, pas dans Docker. Il n'écoute que sur 127.0.0.1. **Non essayé sur une vraie carte NVIDIA** : les commandes viennent de la documentation de TabbyAPI.
+- **Détection des nouvelles versions** : TabbyAPI n'a ni publications ni étiquettes, c'est la bibliothèque ExLlamaV3 qui donne le rythme. La carte du moteur indique quand une version plus récente est publiée, avec un bouton pour mettre à jour ; la veille hebdomadaire du catalogue la suit aussi.
+- **La liste des serveurs ne montre que ceux qui peuvent tourner sur ta machine** (système, Docker, carte graphique) ; les autres sont repliés avec la raison. Le catalogue signé (version 5) porte maintenant `materiel` et `docker`.
+- **« Quel moteur pour ma machine ? » marche avec tous les moteurs** : le même modèle porte un nom différent d'un moteur à l'autre (`qwen3:8b`, `Qwen3-8B-Q4_K_M.gguf`, `qwen/qwen3-8b`) ; la comparaison les rapproche par famille et taille et inclut Colibri, LM Studio, ExLlamaV3 et tout serveur OpenAI démarré. Sans équivalent, elle le dit et renvoie aux mesures par moteur au lieu de dire à tort qu'un moteur n'est pas installé. La règle théorique (non mesurée) mentionne ExLlamaV3 pour une carte NVIDIA.
+- **Colibri installé mais arrêté** n'envoie plus vers Ollama : la page propose « Démarrer Colibri » (ou « Installer »), l'onglet Modèles reste ouvert pour télécharger ses modèles, et le modèle préparé par `coli setup` est retrouvé tout seul. Idem pour LM Studio et ExLlamaV3.
+- **La recherche d'en haut (Ctrl+K)** trouve les cartes de moteurs (OpenAI, Colibri…), sans doublon.
+- **Réglages** : la barre de rubriques touche la barre du haut et reste visible, les menus de l'en-tête passent au-dessus d'elle, et sur téléphone elle tient sur une seule ligne qui défile.
+
 ## Mesurer chaque moteur sur sa machine
 
 - **Réglages > Moteur > Mesures sur cette machine** : un bouton « Mesurer » pour chaque moteur actif (Ollama, llama.cpp, Colibri, LM Studio, tout serveur compatible OpenAI), avec le modèle de ton choix. Lutin charge le modèle, écrit un court texte et note la vitesse (mots par seconde), le délai du premier mot, le chargement et la mémoire prise.

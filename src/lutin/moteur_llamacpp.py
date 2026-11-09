@@ -12,6 +12,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tarfile
 import threading
 import time
@@ -161,7 +162,7 @@ def regler_avance(moteur, donnees):
 def regler_serveur(moteur, donnees):
     """Le serveur compatible OpenAI choisi dans la liste (« serveur ») et, pour Colibri, le dossier de son modèle et son port. Renvoie vrai si un de ces réglages était dans la demande."""
     mo = moteurs.MOTEURS.get(moteur)
-    if not isinstance(mo, MoteurExterne) or not any(k in donnees for k in ("serveur", "modele_colibri", "port_colibri", "port_lmstudio")):
+    if not isinstance(mo, MoteurExterne) or not any(k in donnees for k in ("serveur", "modele_colibri", "port_colibri", "port_lmstudio", "port_exllamav3")):
         return False
     config = lire_config()
     c = config.setdefault(moteur, {})
@@ -173,6 +174,8 @@ def regler_serveur(moteur, donnees):
             raise ErreurMoteur(_t("Colibri tourne encore : arrête-le avant de choisir un autre serveur."))
         if s != "lmstudio" and mo.lmstudio_choisi() and MoteurOpenAI.actif(mo):
             raise ErreurMoteur(_t("LM Studio tourne encore : arrête-le avant de choisir un autre serveur."))
+        if s != "exllamav3" and mo.exllamav3_choisi() and MoteurOpenAI.actif(mo):
+            raise ErreurMoteur(_t("ExLlamaV3 tourne encore : arrête-le avant de choisir un autre serveur."))
         if s:
             c["serveur"] = s
         else:
@@ -210,6 +213,17 @@ def regler_serveur(moteur, donnees):
             c["port_lmstudio"] = n
         else:
             c.pop("port_lmstudio", None)
+    if "port_exllamav3" in donnees:
+        try:
+            n = int(donnees["port_exllamav3"] or 0)
+        except (TypeError, ValueError):
+            raise ErreurMoteur(_t("Port invalide (un nombre entre 1024 et 65535)."))
+        if n and not 1024 <= n <= 65535:
+            raise ErreurMoteur(_t("Port invalide (un nombre entre 1024 et 65535)."))
+        if n:
+            c["port_exllamav3"] = n
+        else:
+            c.pop("port_exllamav3", None)
     ecrire_config(config)
     return True
 
@@ -343,6 +357,8 @@ def vue_reglages(moteur):
             vue["colibri"] = {"modele": modele, "modele_ok": bool(modele) and Path(modele).is_dir(), "port": mo.port_colibri(), "installe": mo._colibri() is not None}
         if mo.lmstudio_choisi():
             vue["lmstudio"] = {"port": mo.port_lmstudio(), "installe": mo._lms() is not None}
+        if mo.exllamav3_choisi():
+            vue["exllamav3"] = {"port": mo.port_exllamav3(), "installe": mo._exl() is not None}
     return vue
 
 
@@ -1109,6 +1125,8 @@ class MoteurExterne(MoteurOpenAI):
 
     @property
     def description(self):
+        if self.exllamav3_choisi():
+            return _t("ExLlamaV3, installé et lancé par Lutin à travers TabbyAPI (son serveur officiel), sur cette machine, avec une carte NVIDIA. Les modèles (format EXL3) se téléchargent depuis l'onglet Modèles.")
         if self.lmstudio_choisi():
             return _t("LM Studio, installé et lancé par Lutin sans son interface (son démon « llmster »), sur cette machine. Les modèles se téléchargent depuis l'onglet Modèles.")
         if self.colibri_choisi():
@@ -1117,6 +1135,9 @@ class MoteurExterne(MoteurOpenAI):
 
     @property
     def points_forts(self):
+        if self.exllamav3_choisi():
+            return (_t("Très rapide sur une carte NVIDIA, avec des modèles très compressés (EXL3) qui gardent leur qualité."),
+                    _t("Installation, démarrage, arrêt, mise à jour et téléchargement de modèles depuis Lutin ; il n'écoute que sur cette machine (127.0.0.1)."))
         if self.lmstudio_choisi():
             return (_t("Installation, démarrage, arrêt, mise à jour et téléchargement de modèles depuis Lutin, avec l'installeur officiel de LM Studio."),
                     _t("Il n'écoute que sur cette machine (127.0.0.1)."))
@@ -1124,17 +1145,20 @@ class MoteurExterne(MoteurOpenAI):
             return (_t("Installation, mise à jour, suppression, démarrage et arrêt depuis Lutin, avec somme SHA-256 vérifiée."),
                     _t("Il n'écoute que sur cette machine (127.0.0.1)."))
         return (_t("Universel : s'adapte à n'importe quel serveur de ce genre, sur cette machine ou sur le réseau."),
-                _t("Lutin n'installe ni ne démarre rien (sauf Colibri et LM Studio) : le serveur reste maître de ses réglages."))
+                _t("Lutin n'installe ni ne démarre rien (sauf Colibri, LM Studio et ExLlamaV3) : le serveur reste maître de ses réglages."))
 
     @property
     def points_faibles(self):
+        if self.exllamav3_choisi():
+            return (_t("Carte NVIDIA obligatoire ; l'installation télécharge plusieurs Go (torch) dans un environnement Python dédié."),
+                    _t("Lutin n'a pas essayé cette intégration sur une vraie carte NVIDIA ; TabbyAPI est un projet communautaire en évolution rapide."))
         if self.lmstudio_choisi():
             return (_t("Lutin lance l'installeur officiel de LM Studio (lmstudio.ai) sans l'avoir testé sur une vraie installation."),
                     _t("Lutin ne le désinstalle pas : ses modèles sont dans son dossier (~/.lmstudio)."))
         if self.colibri_choisi():
             return (_t("Moteur jeune : le démarrage avec un vrai modèle n'a pas été vérifié avec Lutin."),
                     _t("Il demande un modèle préparé par Colibri (plusieurs dizaines de Go) : Lutin ne le télécharge pas."))
-        return (_t("Lutin ne peut ni installer, ni démarrer, ni mettre à jour ce serveur (sauf Colibri et LM Studio), ni lui télécharger de modèle."),
+        return (_t("Lutin ne peut ni installer, ni démarrer, ni mettre à jour ce serveur (sauf Colibri, LM Studio et ExLlamaV3), ni lui télécharger de modèle."),
                 _t("Selon le serveur, les appels d'outils ou les images peuvent ne pas fonctionner."))
 
     def config(self):
@@ -1164,13 +1188,31 @@ class MoteurExterne(MoteurOpenAI):
             p = 0
         return p if 1024 <= p <= 65535 else lmstudio.PORT_DEFAUT
 
+    # -- ExLlamaV3 : installé et lancé par Lutin à travers TabbyAPI (environnement Python dédié), sur cette machine seulement, carte NVIDIA
+    def exllamav3_choisi(self):
+        return self.config().get("serveur") == "exllamav3"
+
+    def port_exllamav3(self):
+        from . import exllamav3
+        try:
+            p = int(self.config().get("port_exllamav3") or 0)
+        except (TypeError, ValueError):
+            p = 0
+        return p if 1024 <= p <= 65535 else exllamav3.PORT_DEFAUT
+
+    def _exl(self):
+        """{tabby, lib} si ExLlamaV3 est installé par Lutin, sinon None."""
+        from . import exllamav3
+        return exllamav3.installee(self._dossiers()) if moteurs.CONTEXTE["donnees"]() else None
+
     def _lms(self):
         """Le chemin de la commande `lms` si LM Studio (ou son démon) est installé, sinon None."""
         from . import lmstudio
         return lmstudio.chemin_lms()
 
     def modele_colibri(self):
-        return str(self.config().get("modele_colibri") or "")
+        from . import colibri
+        return str(self.config().get("modele_colibri") or "") or colibri.modele_du_setup()          # sinon celui que « coli setup » a préparé
 
     def _dossiers(self):
         return {"donnees": moteurs.CONTEXTE["donnees"]()}
@@ -1181,10 +1223,15 @@ class MoteurExterne(MoteurOpenAI):
         return colibri.installee(self._dossiers()) if moteurs.CONTEXTE["donnees"]() else None
 
     def version(self):
+        if self.exllamav3_choisi():
+            e = self._exl()
+            return (e["lib"] or e["tabby"][:7]) if e else ""
         t = self._colibri() if self.colibri_choisi() else None
         return t[0] if t else ""
 
     def adresse(self):
+        if self.exllamav3_choisi():
+            return "http://127.0.0.1:{}/v1".format(self.port_exllamav3())
         if self.lmstudio_choisi():
             return "http://127.0.0.1:{}/v1".format(self.port_lmstudio())
         if self.colibri_choisi():
@@ -1195,6 +1242,16 @@ class MoteurExterne(MoteurOpenAI):
         return self.config().get("cle", "")
 
     def statut(self):
+        if self.exllamav3_choisi():
+            e = self._exl()
+            actif = MoteurOpenAI.actif(self)
+            if actif:
+                detail = _t("ExLlamaV3 répond sur {}").format(self.adresse())
+            elif e:
+                detail = _t("ExLlamaV3 est installé mais son serveur est arrêté : démarre-le.")
+            else:
+                detail = _t("ExLlamaV3 n'est pas installé.")
+            return {"installe": bool(e) or actif, "actif": actif, "version": self.version(), "detail": detail, "mode": "gere", "installe_par_lutin": bool(e)}
         if self.lmstudio_choisi():
             lms = self._lms()
             actif = MoteurOpenAI.actif(self)
@@ -1219,6 +1276,67 @@ class MoteurExterne(MoteurOpenAI):
             return {"installe": True, "actif": False, "version": "", "detail": _t("Aucune adresse : indique celle du serveur ci-dessous."), "mode": "externe"}
         actif = MoteurOpenAI.actif(self)
         return {"installe": True, "actif": actif, "version": "", "detail": _t("Connecté à {}").format(self.adresse()) if actif else _t("Le serveur {} ne répond pas.").format(self.adresse()), "mode": "externe"}
+
+    def _actions_exllamav3(self):
+        from . import exllamav3
+        e = self._exl() is not None
+        hl = moteurs.CONTEXTE["hors_ligne"]()
+        actif = MoteurOpenAI.actif(self)
+        sans = _t("ExLlamaV3 n'est pas installé.")
+        reseau = _t("Mode hors ligne : aucun téléchargement.") if hl else ""
+        obstacle = ""
+        if moteurs.CONTEXTE["en_docker"]():
+            obstacle = _t("Impossible dans Docker : pas de carte graphique ni d'environnement Python dédié dans le conteneur.")
+        elif not exllamav3.python_compatible():
+            obstacle = _t("Python {}.{} n'est pas pris en charge par TabbyAPI (3.10 à 3.14).").format(*sys.version_info[:2])
+        else:
+            try:
+                fabricants = {g.fabricant for g in (getattr(moteurs.CONTEXTE["profil"](), "gpus", None) or [])}
+            except Exception:  # noqa: BLE001  (profil illisible : on laisse essayer)
+                fabricants = {"nvidia"}
+            if "nvidia" not in fabricants:
+                obstacle = _t("Il faut une carte graphique NVIDIA : aucune n'a été détectée.")
+        peut_installer = not e and not hl and not obstacle
+        return {"installer": {"possible": peut_installer, "raison": obstacle or reseau or (_t("Déjà installé.") if e else _t("Télécharge TabbyAPI (GitHub) et installe ses dépendances dans un environnement Python dédié : plusieurs Go (torch), compte quelques minutes."))},
+                "mettre_a_jour": {"possible": e and not hl, "raison": reseau or (_t("Récupère le dernier code de TabbyAPI et met à jour ExLlamaV3 ; tes modèles sont gardés.") if e else sans)},
+                "desinstaller": {"possible": e, "raison": _t("Arrête TabbyAPI et supprime le programme et son environnement ; tes modèles téléchargés restent où ils sont.") if e else sans},
+                "reinstaller": {"possible": e and not hl, "raison": reseau or (_t("Refait l'installation de TabbyAPI et de ses dépendances.") if e else sans)},
+                "demarrer": {"possible": e and not actif, "raison": _t("Il tourne déjà.") if actif else (_t("Lance TabbyAPI sur cette machine seulement (127.0.0.1) ; le premier démarrage peut durer quelques minutes.") if e else sans)},
+                "arreter": {"possible": actif, "raison": _t("Arrête TabbyAPI et libère la mémoire de la carte graphique.") if actif else _t("Il n'est pas démarré.")}}
+
+    def _faire_exllamav3(self, action, progression):
+        from . import exllamav3
+        annule = lambda: bool(moteurs.TACHES.get(self.id, {}).get("annule"))  # noqa: E731
+        dossiers = self._dossiers()
+        try:
+            if action in ("installer", "mettre_a_jour", "reinstaller"):
+                if moteurs.CONTEXTE["hors_ligne"]():
+                    raise ErreurMoteur(_t("Mode hors ligne : aucun téléchargement."))
+                if self.exllamav3_choisi() and MoteurOpenAI.actif(self):
+                    exllamav3.arreter(dossiers)          # on ne remplace pas un programme qui tourne
+                progression(_t("Installation d'ExLlamaV3 (TabbyAPI)…"), 0, 0)
+                r = exllamav3.installer(dossiers, self.port_exllamav3(), lambda texte: progression(texte, 0, 0), annule=annule)
+                progression(_t("Installé : ExLlamaV3 {}.").format(r["lib"] or r["tabby"][:7]), 1, 1)
+            elif action == "desinstaller":
+                exllamav3.desinstaller(dossiers)
+            elif action == "demarrer":
+                progression(_t("Démarrage d'ExLlamaV3 (le premier démarrage peut être long)…"), 0, 0)
+                exllamav3.demarrer(self.port_exllamav3(), dossiers)
+            elif action == "arreter":
+                exllamav3.arreter(dossiers)
+            elif action.startswith("telecharger:"):
+                if moteurs.CONTEXTE["hors_ligne"]():
+                    raise ErreurMoteur(_t("Mode hors ligne : aucun téléchargement."))
+                depot, _, revision = action.split(":", 1)[1].partition("@")
+                progression(_t("Téléchargement de {}…").format(depot), 0, 0)
+                exllamav3.telecharger_modele(depot, revision, dossiers, lambda texte: progression(texte, 0, 0), annule=annule)
+                progression(_t("Modèle téléchargé : {}.").format(depot), 1, 1)
+            else:
+                raise ErreurMoteur(_t("Action impossible avec ce serveur."))
+        except ErreurMoteur:
+            raise
+        except (ValueError, OSError, subprocess.SubprocessError) as e:
+            raise ErreurMoteur(str(e))
 
     def _actions_lmstudio(self):
         lms = self._lms() is not None
@@ -1267,10 +1385,12 @@ class MoteurExterne(MoteurOpenAI):
             raise ErreurMoteur(str(e))
 
     def actions(self):
+        if self.exllamav3_choisi():
+            return self._actions_exllamav3()
         if self.lmstudio_choisi():
             return self._actions_lmstudio()
         if not self.colibri_choisi():
-            raison = _t("Sans objet : ce serveur n'est pas géré par Lutin (seuls Colibri et LM Studio peuvent l'être : choisis-les dans la liste des serveurs connus).")
+            raison = _t("Sans objet : ce serveur n'est pas géré par Lutin (seuls Colibri, LM Studio et ExLlamaV3 peuvent l'être : choisis-les dans la liste des serveurs connus).")
             return {a: {"possible": False, "raison": raison} for a in moteurs.ACTIONS}
         trouve = self._colibri() is not None
         hl = moteurs.CONTEXTE["hors_ligne"]()
@@ -1297,6 +1417,8 @@ class MoteurExterne(MoteurOpenAI):
                 "arreter": {"possible": actif, "raison": _t("Arrête Colibri et libère la mémoire.") if actif else _t("Il n'est pas démarré.")}}
 
     def faire(self, action, progression):
+        if self.exllamav3_choisi():
+            return self._faire_exllamav3(action, progression)
         if self.lmstudio_choisi():
             return self._faire_lmstudio(action, progression)
         if not self.colibri_choisi():
@@ -1348,7 +1470,7 @@ class MoteurExterne(MoteurOpenAI):
                 "outils": ("non_teste", _t("Dépend du serveur.")), "reflexion": ("non_teste", _t("Dépend du serveur.")), "vision": ("non_teste", _t("Dépend du serveur et du modèle.")),
                 "embeddings": ("non_teste", _t("Dépend du serveur.")), "plusieurs_modeles": ("non_teste", _t("Dépend du serveur.")),
                 "telechargement": ("non", _t("Le serveur gère ses modèles lui-même.")),
-                "installation": ("non_teste", _t("Lutin installe et lance Colibri ; le démarrage avec un vrai modèle n'est pas vérifié.")) if self.colibri_choisi() else ("non", _t("Lutin n'installe pas ce serveur (sauf Colibri et LM Studio)."))}
+                "installation": ("non_teste", _t("Lutin installe et lance Colibri ; le démarrage avec un vrai modèle n'est pas vérifié.")) if self.colibri_choisi() else ("non", _t("Lutin n'installe pas ce serveur (sauf Colibri, LM Studio et ExLlamaV3)."))}
 
 
 def _systeme():

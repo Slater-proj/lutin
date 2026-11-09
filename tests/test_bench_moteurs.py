@@ -121,6 +121,24 @@ class Mesure(Base):
         self.assertGreater(r["tok_s"], 0)
 
 
+class Equivalence(unittest.TestCase):
+    """Le même modèle porte un nom différent d'un moteur à l'autre : la comparaison les rapproche d'après la famille et la taille, jamais au hasard."""
+
+    def test_le_meme_nom_gagne_toujours(self):
+        self.assertEqual(bm.equivalent("qwen3:8b", ["autre", "qwen3:8b"]), "qwen3:8b")
+
+    def test_un_fichier_gguf_un_depot_lm_studio_et_un_nom_ollama_se_retrouvent(self):
+        self.assertEqual(bm.equivalent("qwen3:8b", ["Qwen3-8B-Q4_K_M", "Qwen3-14B-Q4_K_M", "llama3.1-8b"]), "Qwen3-8B-Q4_K_M")
+        self.assertEqual(bm.equivalent("qwen3:8b", ["qwen/qwen3-8b", "qwen/qwen3-4b"]), "qwen/qwen3-8b")
+        self.assertEqual(bm.equivalent("qwen3:8b", ["Qwen3-8B-Instruct-exl3-4.0bpw"]), "Qwen3-8B-Instruct-exl3-4.0bpw")
+
+    def test_une_autre_taille_ou_une_autre_famille_n_est_jamais_prise(self):
+        self.assertIsNone(bm.equivalent("qwen3:8b", ["Qwen3-14B-Q4_K_M", "llama3.1-8b", "qwen2.5-8b-x"][:2]))
+        self.assertIsNone(bm.equivalent("qwen3-coder:30b", ["Qwen3-30B-Q4_K_M"]), "qwen3-coder n'est pas qwen3")
+        self.assertIsNone(bm.equivalent("monmodele", ["monmodele-q4"]), "sans taille dans le nom on ne devine pas")
+        self.assertIsNone(bm.equivalent("", []))
+
+
 class Comparaison(Base):
     def lancer(self, o, l, **kw):
         self.installer(o, l)
@@ -151,7 +169,7 @@ class Comparaison(Base):
     def test_un_moteur_sans_le_modele_est_ignore_avec_la_raison(self):
         r, liberes = self.lancer(Faux("ollama", "Ollama", 100), Faux("llamacpp", "llama.cpp", modeles=("autre",)))
         self.assertEqual([m["id"] for m in r["moteurs"]], ["ollama"])
-        self.assertEqual([(i["id"], i["raison"]) for i in r["ignores"]], [("llamacpp", "n'a pas ce modèle")])
+        self.assertEqual([(i["id"], i["raison"]) for i in r["ignores"]], [("llamacpp", "n'a ni ce modèle ni un équivalent")])
         self.assertEqual(liberes, [], "un seul moteur : rien à décharger")
 
     def test_aucun_moteur_pret(self):
@@ -238,6 +256,33 @@ class Conservation(Base):
 
 
 class Lancement(Base):
+    def test_un_serveur_openai_demarre_entre_dans_la_comparaison_avec_son_propre_nom_de_modele(self):
+        class Serveur(Faux):
+            def adresse(self):
+                return "http://127.0.0.1:1234/v1"
+
+            def config(self):
+                return {"serveur": "lmstudio"}
+        self.installer(Faux("ollama", "Ollama", 100, modeles=("qwen3:8b",)), Faux("llamacpp", "llama.cpp", 100, installe=False))
+        moteurs.MOTEURS["openai"] = Serveur("openai", "Serveur compatible OpenAI", 60, modeles=("qwen/qwen3-8b", "autre-70b"))
+        utilises = []
+        r = bm.comparer("qwen3:8b", "rapide", Profil(), horloge=Horloge(), memoire=lambda i, m: utilises.append((i, m)) or None, liberer_autres=lambda a, m: None, date="2026-11-09T10:00:00")
+        self.assertEqual([(m["nom"], m["modele"]) for m in r["moteurs"]], [("Ollama", "qwen3:8b"), ("LM Studio", "qwen/qwen3-8b")])
+        self.assertIn(("openai", "qwen/qwen3-8b"), utilises, "la mémoire est lue avec le nom de modèle PROPRE à ce moteur")
+        self.assertEqual([i["id"] for i in r["ignores"]], ["llamacpp"])
+
+    def test_un_serveur_openai_arrete_est_signale_pas_demarre_et_sans_adresse_il_est_absent(self):
+        self.installer(Faux("ollama", "Ollama", 100), Faux("llamacpp", "llama.cpp", 100))
+        arrete = Faux("openai", "Serveur compatible OpenAI", 60, actif=False)
+        arrete.adresse = lambda: "http://127.0.0.1:1234/v1"
+        moteurs.MOTEURS["openai"] = arrete
+        raisons = {mo.id: raison for mo, raison, _ in bm.disponibles("m")}
+        self.assertEqual(raisons["openai"], "pas démarré")
+        sans_adresse = Faux("openai", "Serveur compatible OpenAI", 60)
+        sans_adresse.adresse = lambda: ""
+        moteurs.MOTEURS["openai"] = sans_adresse
+        self.assertNotIn("openai", [mo.id for mo, _, _ in bm.disponibles("m")])
+
     def test_comparer_demande_deux_moteurs(self):
         self.installer(Faux("ollama", "Ollama", 100), Faux("llamacpp", "llama.cpp", installe=False))
         d = Path(tempfile.mkdtemp(dir=_TEMP))

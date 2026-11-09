@@ -179,7 +179,7 @@ class Catalogue(unittest.TestCase):
         for retire in ("vllm", "sglang", "localai", "llama-swap"):
             self.assertNotIn(retire, ids)
         self.assertIn("lmstudio", ids)
-        self.assertEqual(catalogue_moteurs.verifier(_json.loads(catalogue_moteurs.FICHIER_LIVRE.read_text(encoding="utf-8")))["version"], 4)
+        self.assertGreaterEqual(catalogue_moteurs.verifier(_json.loads(catalogue_moteurs.FICHIER_LIVRE.read_text(encoding="utf-8")))["version"], 4)
 
 
 if __name__ == "__main__":
