@@ -183,6 +183,12 @@ class DemarrageAuto(unittest.TestCase):
         self.assertTrue(e["installe"])
         self.assertFalse(any(c[:2] == ["schtasks", "/Create"] for c in lanceur.appels), "une tâche planifiée à l'ouverture de session demande les droits d'administrateur : Windows la refuse")
 
+    def test_windows_demarre_avec_l_icone_pres_de_l_horloge_sans_ouvrir_le_navigateur(self):
+        """Au démarrage de session, c'est « zone » qui est lancé (serveur + icône) : « serve » seul tournait sans aucune icône."""
+        registre = self.Registre()
+        alimentation.installer_demarrage(self.Lanceur(code=1), "windows", registre=registre)
+        self.assertIn("-m lutin zone --no-browser", registre.valeurs["Lutin"])
+
     def test_windows_refus_dit_pourquoi(self):
         with self.assertRaises(ValueError):
             alimentation.installer_demarrage(self.Lanceur(code=1), "windows", commande=["x"], registre=self.Registre(refuse=True))

@@ -2,6 +2,13 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## Icône au démarrage de Windows, données de Lutin interdites à l'assistant, CI plus robuste
+
+- **Windows : l'icône près de l'horloge apparaît maintenant quand Lutin démarre avec la session** (le démarrage automatique lançait un serveur sans icône ; il lance maintenant « lutin zone --no-browser » : serveur, icône, sans ouvrir de page). Si tu avais activé le démarrage automatique, désactive-le puis réactive-le une fois (Réglages > Avancé).
+- **Le dossier de données de Lutin (jetons, canaux de notification, clés) est interdit à l'assistant** : ses outils de lecture et d'écriture le refusent, même s'il se trouve dans le projet.
+- **Intégration continue** : un test qui échoue sur un exécuteur lent est relancé une fois (signalé « instable » s'il repasse), et les attentes du navigateur y sont plus longues.
+- README : les points forts (moteurs au choix, plusieurs ordinateurs, tâches et notifications, extensions sûres).
+
 ## Machines plus claires et plus vives, tâches planifiées fiables, notifications, Outils réunis, LM Studio sous Linux
 
 - **Machines : un seul choix, « Qui répond à tes messages ? »** (cette machine ou une machine appairée), à la place du bouton « Répondre avec cette machine / Revenir au moteur local ».

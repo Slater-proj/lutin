@@ -196,7 +196,8 @@ def parseur():
     mc.add_argument("nom", nargs="?", metavar="name", help=_t("nom du connecteur"))
     mc.add_argument("cible", nargs="?", metavar="target", help=_t("commande à lancer ou adresse http (ajouter) ; nom de l'outil (autoriser, interdire)"))
     mc.add_argument("--env", action="append", default=[], help=_t("variable d'environnement CLE=VALEUR (ajouter), répétable"))
-    commande("zone", help=_t("Lutin dans la zone de notification de Windows, sans fenêtre de console (code PIN, redémarrer, quitter)"))
+    zo = commande("zone", help=_t("Lutin dans la zone de notification de Windows, sans fenêtre de console (code PIN, redémarrer, quitter)"))
+    zo.add_argument("--no-browser", action="store_true", help=_t("n'ouvre pas l'interface au lancement (démarrage automatique)"))
     return p
 
 
@@ -240,7 +241,7 @@ def lancer_enfant(sans_navigateur):
 def commande_zone(args):
     from . import zone
     d, cfg = contexte()
-    return zone.commande(d, cfg)
+    return zone.commande(d, cfg, ouvrir=not getattr(args, "no_browser", False))
 
 
 def commande_serve(args):

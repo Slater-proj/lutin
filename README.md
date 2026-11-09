@@ -31,6 +31,11 @@
 | 🗂️ **Several projects** | Several workspace folders; each conversation keeps its own. |
 | ⏱️ **It measures, it does not guess** | Built-in benchmark: speed, tool calls, code, French, instructions, **on your machine**. |
 | 📦 **Easy to install** | One command on Windows, one on Linux, or a Docker image **with Ollama inside**. No Python dependency. Running the installation again breaks nothing. |
+| 🔌 **Your engine, your choice** | **Ollama, llama.cpp, LM Studio, ExLlamaV3, Colibri**, or any OpenAI-compatible server: Lutin installs, starts, updates and compares them (only those that can run on your machine are offered), and downloads models in one click. |
+| 🖥️ **All your computers, one assistant** | Pair a second PC: wake it up (Wake-on-LAN), let it answer, update it, switch it off. **Nothing is ever granted remotely**: each permission is asked, then accepted on the machine concerned. |
+| ⏰ **It works while you sleep** | Scheduled tasks keep one conversation per task and send the result to **Gotify, ntfy, Telegram or a webhook** (Discord, Slack, Mattermost…). Tokens stay on your machine and are never shown again, nor readable by the assistant. |
+| 🧩 **Extensible, safely** | MCP servers and add-ons (Telegram, mail, ComfyUI…) are off by default, can only reach the sites they declare, and never apply a model-suggested fix without showing you the difference. |
+
 | 🔁 **Your Claude context, kept** | Take over a Claude Code repository (`CLAUDE.md`, `.claude/` skills, commands, agents): work in it or in a copy, nothing is lost when switching tools. [Details](docs/CLAUDE-PROJECTS.md). |
 | 📥 **Bring your old assistant** | `lutin migrate`: take over conversations, memory, skills and settings of another assistant, one category at a time, nothing overwritten. [Details](docs/MIGRATION.md). |
 | 🌍 **English and French** | The whole application (page, messages, terminal) and the docs. Language: `lutin language`, the page settings, or the system language. |

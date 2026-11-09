@@ -141,8 +141,9 @@ def preparer(dossiers, cfg):
 class Serveur:
     """Le serveur de Lutin dans un processus enfant sans fenêtre. `lancer` est ce que la supervision appelle à chaque démarrage."""
 
-    def __init__(self, dossiers):
+    def __init__(self, dossiers, ouvrir=True):
         self.dossiers = dossiers
+        self.ouvrir = ouvrir
         self.enfant = None
         self.arret = False
         self.redemarrage = False
@@ -151,7 +152,7 @@ class Serveur:
         from .cli import CODE_REDEMARRAGE
         if self.arret:
             return 0
-        commande = [sys.executable, "-m", "lutin", "serve", "--no-supervisor"] + ([] if premiere else ["--no-browser"])
+        commande = [sys.executable, "-m", "lutin", "serve", "--no-supervisor"] + ([] if premiere and self.ouvrir else ["--no-browser"])
         Path(self.dossiers["donnees"]).mkdir(parents=True, exist_ok=True)
         with open(Path(self.dossiers["donnees"]) / "serveur.log", "a", encoding="utf-8") as sortie:
             self.enfant = subprocess.Popen(commande, env=dict(os.environ, LUTIN_SUPERVISE="1"), stdout=sortie, stderr=subprocess.STDOUT,
@@ -323,21 +324,22 @@ class Zone:
             user32.DispatchMessageW(ctypes.byref(msg))
 
 
-def commande(dossiers, cfg):
+def commande(dossiers, cfg, ouvrir=True):
     """Lance Lutin dans la zone de notification. Renvoie un code de sortie."""
     if not disponible():
         print(_t("L'icône de zone de notification n'existe que sous Windows : utilise « lutin » dans un terminal."), file=sys.stderr)
         return 1
     mutex = kernel32.CreateMutexW(None, True, "Local\\LutinZone")
     if ctypes.get_last_error() == ERROR_ALREADY_EXISTS:
-        webbrowser.open(adresse_ouverture(dossiers, cfg))                 # déjà lancé : on montre l'interface au lieu d'en lancer une deuxième
+        if ouvrir:
+            webbrowser.open(adresse_ouverture(dossiers, cfg))                 # déjà lancé : on montre l'interface au lieu d'en lancer une deuxième
         return 0
     try:
         cfg = preparer(dossiers, cfg)
         if cfg is None:
             message("Lutin", _t("L'installation n'est pas terminée : relance Lutin pour la reprendre."))
             return 1
-        serveur = Serveur(dossiers)
+        serveur = Serveur(dossiers, ouvrir)
         zone = Zone(cfg, dossiers, serveur)
         zone.creer()
         from . import cli

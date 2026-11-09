@@ -31,6 +31,11 @@
 | 🗂️ **Plusieurs projets** | Plusieurs dossiers de travail ; chaque conversation garde le sien. |
 | ⏱️ **Il mesure, il ne devine pas** | Banc d'essai intégré : vitesse, appel d'outils, code, français, consignes, **sur ta machine**. |
 | 📦 **Simple à installer** | Une commande sous Windows, une sous Linux, ou une image Docker **avec Ollama dedans**. Aucune dépendance Python. Relancer l'installation ne casse rien. |
+| 🔌 **Ton moteur, ton choix** | **Ollama, llama.cpp, LM Studio, ExLlamaV3, Colibri**, ou tout serveur compatible OpenAI : Lutin les installe, les lance, les met à jour et les compare (seuls ceux qui peuvent tourner sur ta machine sont proposés), et télécharge les modèles en un clic. |
+| 🖥️ **Tous tes ordinateurs, un seul assistant** | Appaire un second PC : réveille-le (Wake-on-LAN), laisse-le répondre, mets-le à jour, éteins-le. **Rien n'est jamais accordé à distance** : chaque droit est demandé, puis accepté sur la machine concernée. |
+| ⏰ **Il travaille pendant que tu dors** | Les tâches planifiées gardent une conversation par tâche et envoient le résultat sur **Gotify, ntfy, Telegram ou un webhook** (Discord, Slack, Mattermost…). Les jetons restent sur ta machine, ne sont jamais réaffichés ni lisibles par l'assistant. |
+| 🧩 **Extensible, sans risque** | Serveurs MCP et addons (Telegram, courriel, ComfyUI…) désactivés par défaut, ne joignent que les sites qu'ils déclarent, et n'appliquent jamais seuls une correction proposée par un modèle. |
+
 | 🔁 **Ton contexte Claude, conservé** | Reprends un dépôt Claude Code (`CLAUDE.md`, skills, commandes, agents de `.claude/`) : travaille dedans ou dans une copie, rien ne se perd en changeant d'outil. [Détails](docs/CLAUDE-PROJECTS.fr.md). |
 | 📥 **Reprends ton ancien assistant** | `lutin migrate` : conversations, mémoire, skills et réglages d'un autre assistant, une catégorie à la fois, rien d'écrasé. [Détails](docs/MIGRATION.fr.md). |
 | 🌍 **Français et anglais** | Toute l'application (page, messages, terminal) et les docs. Langue : `lutin language`, les réglages de la page, ou la langue du système. |

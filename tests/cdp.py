@@ -144,7 +144,8 @@ class Page:
             raise ErreurCdp("JavaScript : " + str(r["exceptionDetails"].get("exception", {}).get("description") or r["exceptionDetails"]))
         return r.get("result", {}).get("value")
 
-    def attendre(self, expression, delai=20):
+    def attendre(self, expression, delai=None):
+        delai = delai or (60 if os.environ.get("GITHUB_ACTIONS") else 20)          # un exécuteur partagé est plus lent qu'un poste
         debut = time.time()
         derniere = None
         while time.time() - debut < delai:

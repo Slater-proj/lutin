@@ -27,6 +27,10 @@ def chemin_sur(rel, ecriture=False):
     parties = p.relative_to(_m.RACINE).parts
     if parties and parties[0] == ".git":
         raise _m.ErreurOutil(_t("Le dossier .git est protégé."))
+    for prive in (_m.DONNEES, Path.home() / ".lutin", Path.home() / ".lutin-signature"):
+        prive = prive.resolve()
+        if p == prive or prive in p.parents:
+            raise _m.ErreurOutil(_t("Le dossier des données de Lutin (jetons, canaux de notification, clés) est réservé : l'assistant ne peut ni le lire ni y écrire."))
     if ecriture:
         if p.suffix.lower() in (".safetensors", ".png", ".jpg", ".jpeg", ".webp", ".mp4", ".zip", ".exe", ".dll", ".ckpt", ".pt", ".gguf"):
             raise _m.ErreurOutil(_t("Fichier binaire refusé en écriture."))

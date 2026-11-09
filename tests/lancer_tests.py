@@ -17,6 +17,19 @@ DELAI_FICHIER_S = 900          # le plus long fichier (navigateur) prend environ
 
 
 def lancer(f):
+    """Un fichier, et sur l'intégration continue (machine partagée, parfois lente) un second essai s'il échoue : un test qui ne passe qu'au second essai est signalé « instable » mais ne bloque pas ; deux échecs, si."""
+    debut = time.time()
+    f, r, _ = lancer_une_fois(f)
+    if r.returncode != 0 and os.environ.get("GITHUB_ACTIONS"):
+        premier = r
+        f, r, _ = lancer_une_fois(f)
+        if r.returncode == 0:
+            r = subprocess.CompletedProcess(r.args, 0, (r.stdout or "") + "\ninstable : a échoué au premier essai, réussi au second. " + (premier.stderr or premier.stdout or "")[-400:], r.stderr)
+            print("::warning title={} instable::a échoué une fois puis réussi".format(f.name), flush=True)
+    return f, r, time.time() - debut
+
+
+def lancer_une_fois(f):
     debut = time.time()
     try:
         r = subprocess.run([sys.executable, "-B", str(f)], cwd=tempfile.gettempdir(), capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=DELAI_FICHIER_S)

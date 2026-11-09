@@ -117,5 +117,28 @@ class CheminReseau(unittest.TestCase):
         self.assertEqual(o.reparer_unc("dir " + unc[1:], "bonjour"), "dir " + unc[1:], "la demande ne parle d'aucun chemin réseau : rien n'est deviné")
 
 
+class DonneesReservees(unittest.TestCase):
+    def test_l_assistant_ne_lit_ni_n_ecrit_le_dossier_des_donnees(self):
+        """Jetons, canaux de notification et clés vivent dans le dossier de données : même s'il est dans le projet, l'outil de lecture le refuse."""
+        from lutin import moteur as m
+        from lutin import outils
+        with tempfile.TemporaryDirectory() as t:
+            racine, donnees = Path(t).resolve(), Path(t).resolve() / "donnees"
+            donnees.mkdir()
+            (donnees / "notifications.json").write_text("{}", encoding="utf-8")
+            (racine / "ok.txt").write_text("x", encoding="utf-8")
+            avant = (m.RACINE, m.DONNEES)
+            m.RACINE, m.DONNEES = racine, donnees
+            try:
+                self.assertEqual(outils.chemin_sur("ok.txt"), racine / "ok.txt")
+                for ecriture in (False, True):
+                    with self.assertRaises(m.ErreurOutil):
+                        outils.chemin_sur("donnees/notifications.json", ecriture)
+                with self.assertRaises(m.ErreurOutil):
+                    outils.chemin_sur("donnees")
+            finally:
+                m.RACINE, m.DONNEES = avant
+
+
 if __name__ == "__main__":
     unittest.main()

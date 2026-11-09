@@ -402,8 +402,8 @@ def etat_demarrage_memo():
 
 def installer_demarrage(lanceur=subprocess.run, systeme_actuel=None, maison=None, commande=None, registre=None):
     s = systeme_actuel or systeme()
-    commande = commande or commande_lutin()
     if s == "windows":
+        commande = commande or [sys.executable, "-m", "lutin", "zone", "--no-browser"]          # « zone » = le serveur ET l'icône près de l'horloge ; « serve » seul tournait sans aucune icône
         try:
             (registre or RegistreWindows()).ecrire(NOM_TACHE, commande_windows(commande))
         except OSError as e:
