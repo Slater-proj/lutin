@@ -406,5 +406,116 @@ class Reglage(Base):
         self.assertTrue(moteurs is not None)
 
 
+class Relais(Base):
+    """Une conversation menée SUR l'hôte : le tour s'exécute là-bas, la machine appairée ne fait que passer les octets. Droit « piloter », décoché par défaut."""
+
+    def preparer(self, piloter=True):
+        m = self.jumeler()
+        machines.noeud_autoriser_piloter(piloter)
+        self.jeton = machines.trouver(m["id"])["jeton"]
+        conv = A.conv_nouvelle()
+        conv["messages"] = [{"role": "user", "content": "bonjour"}, {"role": "assistant", "content": "salut"}]
+        conv["titre"] = "Sur l'hôte"
+        A.conv_ecrire(conv)
+        return m, conv
+
+    def relais(self, methode, chemin, corps=None, jeton=None):
+        return self.http(methode, "/api/noeud/relais" + chemin, corps, {"X-Noeud": self.jeton if jeton is None else jeton})
+
+    def test_sans_le_droit_rien_ne_passe(self):
+        m, conv = self.preparer(piloter=False)
+        statut, _ = self.relais("GET", "/api/conversation?id=" + conv["id"])
+        self.assertEqual(statut, 403)
+        self.assertFalse(machines.noeud_vue()["piloter"])
+
+    def test_sans_jeton_ou_avec_un_mauvais_jeton_c_est_refuse(self):
+        m, conv = self.preparer()
+        self.assertEqual(self.relais("GET", "/api/conversation?id=" + conv["id"], jeton="")[0], 401)
+        self.assertEqual(self.relais("GET", "/api/conversation?id=" + conv["id"], jeton="x" * 40)[0], 401)
+
+    def test_la_conversation_se_lit_sans_cookie_ni_jeton_de_page(self):
+        m, conv = self.preparer()
+        statut, corps = self.relais("GET", "/api/conversation?id=" + conv["id"])
+        self.assertEqual(statut, 200)
+        self.assertEqual(json.loads(corps)["messages"][1]["content"], "salut")
+
+    def test_seule_une_liste_blanche_est_joignable_et_rien_ne_configure_l_hote(self):
+        m, conv = self.preparer()
+        for chemin in ("/api/reglages", "/api/acces", "/api/mettre-a-jour", "/api/nouveau-pin", "/api/memoire", "/api/travaux-ajouter", "/api/machines"):
+            self.assertEqual(self.relais("POST", chemin, {"x": 1})[0], 404, chemin)
+        for chemin in ("/api/etat", "/api/acces", "/api/machines", "/api/conversation?id=../../x", "/image/../x"):
+            self.assertEqual(self.relais("GET", chemin)[0], 404, chemin)
+
+    def test_le_tour_relaye_garde_les_reglages_de_l_hote(self):
+        m, conv = self.preparer()
+        recus = {}
+
+        def faux_tour(c, texte, emit, r, stop, depuis, **kw):
+            recus.update(texte=texte, modele=r["modele"], machine=r.get("machine"), identite=kw.get("identite"))
+            emit({"type": "fin", "conversation": {"id": c["id"], "titre": c["titre"]}})
+        with mock.patch("lutin.serveur._m.tour", faux_tour):
+            statut, corps = self.relais("POST", "/api/chat", {"message": "salut", "conversation": conv["id"], "modele": "pirate:70b", "machine": "a" * 32, "options": {"auto_commandes": True, "auto_ecriture": True}})
+        self.assertEqual(statut, 200, corps)
+        self.assertIn('"type": "fin"', corps)
+        self.assertNotEqual(recus["modele"], "pirate:70b")
+        self.assertFalse(recus["machine"])
+        self.assertTrue(str(recus["identite"]).startswith("machine : "))
+        self.assertFalse(A.options_lire(conv["id"]).get("auto_commandes"), "une machine distante n'active pas les accords automatiques")
+
+    def test_depuis_cette_page_les_octets_passent_et_rien_n_est_garde_ici(self):
+        m, conv = self.preparer()
+        machines.DERNIER_ETAT[m["id"]] = "operationnel"
+        statut, corps = self.http("GET", "/h/{}/api/conversation?id={}".format(m["id"], conv["id"]))
+        self.assertEqual(statut, 200, corps)
+        self.assertEqual(json.loads(corps)["titre"], "Sur l'hôte")
+
+    def test_le_tour_en_flux_traverse_la_page_et_les_erreurs_de_l_hote_aussi(self):
+        m, conv = self.preparer()
+        machines.DERNIER_ETAT[m["id"]] = "operationnel"
+
+        def faux_tour(c, texte, emit, r, stop, depuis, **kw):
+            emit({"type": "texte", "texte": "voilà"})
+            emit({"type": "fin", "conversation": {"id": c["id"], "titre": c["titre"]}})
+        with mock.patch("lutin.serveur._m.tour", faux_tour):
+            statut, corps = self.http("POST", "/h/{}/api/chat".format(m["id"]), {"message": "salut", "conversation": conv["id"]}, {"X-Token": A.JETON})
+        self.assertEqual(statut, 200, corps)
+        evenements = [json.loads(l) for l in corps.splitlines() if l.strip()]
+        self.assertEqual([e["type"] for e in evenements], ["debut", "texte", "fin"])
+        statut, corps = self.http("POST", "/h/{}/api/image".format(m["id"]), None, {"X-Token": A.JETON})
+        self.assertEqual(statut, 400, "l'erreur de l'hôte est rendue telle quelle, pas déguisée en panne")
+        machines.noeud_autoriser_piloter(False)
+        statut, corps = self.http("GET", "/h/{}/api/conversation?id={}".format(m["id"], conv["id"]))
+        self.assertEqual(statut, 403)
+        self.assertIn("conversations pilotées", json.loads(corps)["erreur"])
+
+    def test_une_machine_qui_ne_repond_pas_donne_un_message_clair(self):
+        m, conv = self.preparer()
+        machines.DERNIER_ETAT[m["id"]] = "injoignable"
+        statut, corps = self.http("GET", "/h/{}/api/conversation?id={}".format(m["id"], conv["id"]))
+        self.assertEqual(statut, 503)
+        self.assertIn("ne répond pas", json.loads(corps)["erreur"])
+        self.assertEqual(self.http("GET", "/h/{}/api/conversation?id={}".format("0" * 32, conv["id"]))[0], 404)
+
+    def test_les_conversations_proposees_exigent_le_droit_de_l_hote(self):
+        m, conv = self.preparer(piloter=False)
+        with self.assertRaises(PermissionError):
+            machines.noeud_partager("conversations", {})
+        machines.noeud_autoriser_piloter(True)
+        self.assertIn(conv["id"], [c["id"] for c in machines.noeud_partager("conversations", {})["conversations"]])
+
+    def test_les_anciennes_copies_jamais_continuees_sont_supprimees(self):
+        copie = A.conv_nouvelle()
+        copie.update(messages=[{"role": "user", "content": "a"}], origine={"machine": "X", "messages_importes": 1})
+        A.conv_ecrire(copie)
+        continuee = A.conv_nouvelle()
+        continuee.update(messages=[{"role": "user", "content": "a"}, {"role": "user", "content": "suite"}], origine={"machine": "X", "messages_importes": 1})
+        A.conv_ecrire(continuee)
+        machines.COPIES_NETTOYEES[0] = False
+        self.assertEqual(machines.nettoyer_copies_importees(), 1)
+        ids = [c["id"] for c in A.conv_liste()]
+        self.assertNotIn(copie["id"], ids)
+        self.assertIn(continuee["id"], ids)
+
+
 if __name__ == "__main__":
     unittest.main()

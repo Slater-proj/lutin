@@ -22,7 +22,7 @@ Jamais d'acceptation automatique, jamais de découverte du réseau. Trop d'essai
 
 ## Ce que le jeton ouvre — et rien d'autre
 
-`GET /api/noeud/etat`, `POST /api/noeud/chat`, et c'est tout. Le jeton n'ouvre **ni conversations, ni fichiers, ni réglages, ni mémoire** : tous les autres chemins répondent « authentification requise » (test automatique). Le nœud ne garde rien des demandes : il fait tourner son moteur et renvoie la réponse. Il ne transmet à son moteur que les champs d'une conversation (modèle, messages, outils, options…), pas autre chose, et ne relaie jamais vers une troisième machine.
+`GET /api/noeud/etat`, `POST /api/noeud/chat`, et c'est tout — plus, seulement si le propriétaire a coché le droit *mener des conversations* décrit plus bas, la porte étroite `/api/noeud/relais/…`. Sans ce droit le jeton n'ouvre **ni conversations, ni fichiers, ni réglages, ni mémoire** : tous les autres chemins répondent « authentification requise » (test automatique). Le nœud ne garde rien des demandes : il fait tourner son moteur et renvoie la réponse. Il ne transmet à son moteur que les champs d'une conversation (modèle, messages, outils, options…), pas autre chose, et ne relaie jamais vers une troisième machine.
 
 ## Les quatre états
 
@@ -34,6 +34,16 @@ Jamais d'acceptation automatique, jamais de découverte du réseau. Trop d'essai
 | moteur opérationnel | la machine peut faire tourner ce modèle : la demande y part |
 
 L'état est vérifié (gardé 10 s) avant d'envoyer quoi que ce soit, et **l'identifiant du nœud est comparé à celui de l'appairage** : si une autre machine a pris l'adresse, rien ne lui est envoyé.
+
+## Conversations menées sur l'autre machine
+
+Une machine peut ouvrir et continuer les **conversations d'une autre machine** (entrées jaunes 🖥 de la liste) une fois que celle-ci a coché *Laisser les machines appairées mener des conversations ici* (onglet Machines, **décoché par défaut**).
+
+- **Tout le tour s'exécute sur l'hôte** : son modèle, ses outils, ses addons (images, voix…), ses dossiers autorisés. La conversation y est stockée ; rien n'est copié sur la machine où tu écris, donc rien à synchroniser et aucune divergence possible.
+- **Les fichiers restent sur l'hôte** : images, fichiers générés et pièces jointes sont demandés à l'hôte **quand tu les regardes ou les télécharges** (`/h/<machine>/…` sur ta page, transmis à l'hôte), jamais gardés chez toi. Les pièces que tu ajoutes sont envoyées à l'hôte.
+- **Une porte étroite** : `POST|GET /api/noeud/relais/…` avec le jeton de nœud, le droit ci-dessus et une courte liste blanche (lire une conversation, envoyer un message, arrêter, répondre à un accord, envoyer une pièce, servir une image ou un fichier). Les réglages, le niveau d'accès, les dossiers et les mises à jour ne sont **pas** joignables ainsi. Le tour ignore tout modèle, mode, accord automatique ou troisième machine envoyé de l'extérieur : les réglages de l'hôte s'appliquent. Chaque tour est noté dans le journal des machines.
+- **Accords** : les règles de l'hôte s'appliquent ; la carte d'accord apparaît là où tu écris et ta réponse repart vers l'hôte.
+- **Hôte éteint** : la conversation disparaît de la liste (et revient quand l'hôte répond de nouveau).
 
 ## Une machine injoignable ne dit rien dans la conversation
 

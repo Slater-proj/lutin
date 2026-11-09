@@ -2,6 +2,13 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## Conversations menées sur l'autre machine
+
+- **Les conversations d'une autre machine s'ouvrent au lieu de se copier** : tout le tour (modèle, outils, addons d'images ou de voix, dossiers autorisés) s'exécute sur la machine qui les héberge ; les fichiers générés et les pièces jointes y restent et sont servis à la demande. Plus de copie, donc plus de divergence. Nouveau droit sur l'hôte, **décoché par défaut** : « Laisser les machines appairées mener des conversations ici ».
+- **Une porte étroite** : liste blanche de chemins, jeton de nœud ; réglages, accès et mises à jour restent hors d'atteinte. Le tour garde les réglages de l'hôte (modèle, mode, accords) et chaque tour est journalisé.
+- **Les anciennes copies locales jamais continuées sont supprimées** automatiquement ; celles qui ont continué ici restent.
+- **À savoir** : testé avec une seule instance qui joue les deux rôles et un vrai navigateur ; pas encore entre deux vrais ordinateurs. Pas encore de « nouvelle conversation » démarrée directement sur une autre machine : on continue une conversation existante.
+
 ## Machines réactives, recherche gratuite expliquée
 
 - **Une machine éteinte disparaît vraiment** : Lutin la surveille en arrière-plan, même page Machines fermée. Si elle n'a pas répondu depuis ~40 s, ses modèles et ses conversations ne sont plus proposés ; à son retour ils reviennent. Les copies déjà importées restent utilisables ici, grisées avec une explication tant que leur machine ne répond pas.

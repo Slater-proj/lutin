@@ -103,6 +103,8 @@ class Gestionnaire(BaseHTTPRequestHandler):
         self.wfile.write(donnees)
 
     # ---- sécurité (voir lutin.securite) ----
+    _via_relais = ""          # nom de la machine appairée dont cette requête est relayée (droit « piloter »), sinon ""
+
     def _local(self):
         """La requête vient de cette machine : la boucle locale, ou l'adresse de la machine sur le réseau local (un navigateur d'ici qui ouvre http://192.168.x.y:8777 arrive avec cette adresse-là).
         Une autre machine ne peut pas se faire passer pour elle : la connexion TCP n'aboutirait pas."""
@@ -110,16 +112,22 @@ class Gestionnaire(BaseHTTPRequestHandler):
         return ip in ("127.0.0.1", "::1", "::ffff:127.0.0.1") or bool(_m.IP_LAN and ip == _m.IP_LAN)
 
     def _jeton_valide(self):
+        if self._via_relais:
+            return True                                      # déjà contrôlé par le jeton de nœud (voir _relais)
         donne = self.headers.get("X-Token") or ""
         return any(_sec.egal(donne, attendu) for attendu in (_m.JETON, _m.JETON_CONSOLE))
 
     def _authentifie(self):
+        if self._via_relais:
+            return True
         if self._local() and _sec.egal(self.headers.get("X-Token") or "", _m.JETON_CONSOLE):
             return True                                      # la console de cette machine (fichier réservé à l'utilisateur)
         return _sec.acces(_m.SECURITE, _m.APPAREILS, self.client_address[0], self.headers)[0]
 
     def _identite(self):
         """Qui fait cette requête, pour le journal : « console », « local », le nom donné par le proxy, ou « appareil »."""
+        if self._via_relais:
+            return "machine : " + self._via_relais
         if self._local() and _sec.egal(self.headers.get("X-Token") or "", _m.JETON_CONSOLE):
             return "console"
         return _sec.acces(_m.SECURITE, _m.APPAREILS, self.client_address[0], self.headers)[1]
@@ -293,6 +301,8 @@ class Gestionnaire(BaseHTTPRequestHandler):
 
     def _configurateur(self):
         """Peut-on configurer depuis cette page ? Oui depuis la machine elle-même, ou depuis n'importe quel appareil admis si le propriétaire a ouvert l'administration à distance."""
+        if self._via_relais:
+            return False                                     # une machine qui pilote une conversation ne configure jamais celle-ci
         if self._admin_tous():
             return self._authentifie()
         return self._configurateur_strict()
@@ -301,6 +311,8 @@ class Gestionnaire(BaseHTTPRequestHandler):
         """Peut-on changer ce qui ouvre ou modifie la machine (dossiers de travail, niveau d'accès, restauration) ? Seulement depuis cette machine : au niveau « machine seulement », avec le jeton de la console,
         ou — au niveau « réseau » — depuis le navigateur de cette machine (jamais depuis un appareil appairé). Derrière un proxy, la commande lutin seulement : le proxy est sur la machine, il ne prouve rien.
         C'est la règle d'origine, sans l'ouverture à distance (voir _configurateur) : elle seule peut activer ou retirer l'administration à distance."""
+        if self._via_relais:
+            return False
         if _m.SECURITE.niveau == _sec.LOCAL:
             return True
         if self._local() and _sec.egal(self.headers.get("X-Token") or "", _m.JETON_CONSOLE):
@@ -331,6 +343,10 @@ class Gestionnaire(BaseHTTPRequestHandler):
         chemin = self.path.split("?")[0]
         if not self._controle(False):
             return
+        if chemin.startswith("/api/noeud/relais/"):            # une machine appairée mène une conversation ICI (droit « piloter »)
+            return self._relais("GET")
+        if chemin.startswith("/h/"):                           # cette page affiche une conversation menée sur une autre machine
+            return self._vers_hote("GET")
         if chemin == "/api/noeud/etat":                        # une autre machine demande si ce Lutin peut faire tourner un modèle : jeton de nœud, rien d'autre n'est ouvert
             return self._noeud_etat()
         if chemin in ("/", "/index.html") and not self._authentifie():
@@ -684,6 +700,10 @@ class Gestionnaire(BaseHTTPRequestHandler):
     def do_POST(self):
         if not self._controle(True):
             return
+        if self.path.startswith("/api/noeud/relais/"):
+            return self._relais("POST")
+        if self.path.startswith("/h/"):
+            return self._vers_hote("POST")
         if self.path == "/api/image":
             return self._image()
         if self.path == "/api/document":
@@ -1218,6 +1238,73 @@ class Gestionnaire(BaseHTTPRequestHandler):
         except ValueError as e:
             return self._envoyer(400, {"erreur": str(e)})
 
+    RELAIS_GET = re.compile(r"^/(api/conversation\?id=[0-9a-f]{8}|image/[A-Za-z0-9_.\-]{1,80}|piece/[A-Za-z0-9_.\-]{1,80}(\?nom=[^&\s]{0,300})?|fichier/[0-9a-f]{8}/[A-Za-z0-9_.\-]{1,80})$")
+    RELAIS_POST = ("/api/chat", "/api/arreter", "/api/approuver", "/api/annuler-tour", "/api/memoire-choix", "/api/image", "/api/document", "/api/renommer", "/api/epingler", "/api/supprimer")
+
+    def _relais(self, methode):
+        """Cette machine (l'hôte) exécute ce qu'une machine appairée lui demande dans une de SES conversations : le tour entier, avec ses modèles, ses outils, ses addons ; les fichiers restent ici.
+        Droit « piloter » (décoché par défaut), jeton de nœud, liste blanche de chemins ; les règles de cette machine (dossiers, accords) s'appliquent et rien de ce qui change les accès n'est joignable."""
+        nom = _machines.noeud_jeton_valide(self.headers.get("X-Noeud"))
+        if not nom:
+            return self._envoyer(401, {"erreur": "machine non autorisée"})
+        if not _machines.noeud().get("piloter"):
+            return self._envoyer(403, {"erreur": _t("Cette machine n'accepte pas de conversations pilotées à distance : son propriétaire doit cocher « Laisser les machines appairées mener des conversations ici » dans l'onglet Machines.")})
+        interne = self.path[len("/api/noeud/relais"):]
+        chemin = interne.split("?")[0]
+        if not (self.RELAIS_GET.match(interne) if methode == "GET" else chemin in self.RELAIS_POST):
+            return self._envoyer(404, {"erreur": "chemin inconnu"})
+        if chemin == "/api/chat":
+            _machines.journaliser("conversation menée ici par {}".format(nom))
+        self._via_relais, self.path = nom, interne
+        return self.do_GET() if methode == "GET" else self.do_POST()
+
+    def _vers_hote(self, methode):
+        """`/h/<machine>/<chemin>` : la page parle à une conversation menée sur l'autre machine ; on transmet sans rien garder ici (la conversation, ses fichiers et ses images restent chez elle)."""
+        if not self._authentifie():
+            return self._envoyer(401, {"erreur": "authentification requise"})
+        if methode == "POST" and not self._jeton_valide():
+            return self._envoyer(403, {"erreur": "jeton invalide : recharge la page"})
+        reste = self.path[len("/h/"):]
+        ident, _, chemin = reste.partition("/")
+        chemin = "/" + chemin
+        m = _machines.trouver(ident) if _machines.RE_ID.match(ident) else None
+        if m is None:
+            return self._envoyer(404, {"erreur": _t("Machine inconnue.")})
+        if _machines.DERNIER_ETAT.get(ident) not in ("joignable", "operationnel"):
+            return self._envoyer(503, {"erreur": _t("La machine « {} » ne répond pas : sa conversation reviendra quand elle sera de nouveau en ligne.").format(m["nom"])})
+        corps = None
+        if methode == "POST":
+            taille = self._taille_corps()
+            if taille > 64 * 1024 * 1024:
+                return self._envoyer(413, {"erreur": "message trop gros"})
+            corps = self.rfile.read(taille)
+        try:
+            rep = _machines.ouvrir_relais(m, methode, chemin, corps, self.headers.get("Content-Type") or "application/json", self.headers.get("X-Nom") or "")
+        except urllib.error.HTTPError as e:
+            try:
+                detail = json.loads(e.read(100_000).decode("utf-8", "replace")).get("erreur", "")
+            except (ValueError, OSError, AttributeError):
+                detail = ""
+            return self._envoyer(e.code if e.code in (400, 403, 404, 409, 413, 429) else 502, {"erreur": detail or _t("Cette machine a répondu une erreur ({}).").format(e.code)})
+        except (ValueError, urllib.error.URLError, OSError):
+            _machines.signaler_panne(m)
+            return self._envoyer(502, {"erreur": _t("Impossible de joindre la machine « {} » : elle ne répond plus.").format(m["nom"])})
+        with rep:
+            self.send_response(rep.status)
+            for nom in _machines.ENTETES_RELAIS:
+                if rep.headers.get(nom):
+                    self.send_header(nom, rep.headers[nom])
+            self.end_headers()
+            try:
+                while True:
+                    morceau = rep.read1(8192)
+                    if not morceau:
+                        break
+                    self.wfile.write(morceau)
+                    self.wfile.flush()
+            except (OSError, ValueError):
+                pass                                                 # la page est partie ou la machine s'est tue : le tour, lui, continue chez elle
+
     NOEUD_PLACES = threading.BoundedSemaphore(2)          # deux demandes de machines à la fois au plus : une seule carte graphique
     NOEUD_ACTIFS = {"n": 0}          # demandes d'autres machines en cours ici (montré dans l'état du nœud)
     ATTENTE_LOCAL_S = 120          # une demande d'une autre machine laisse passer l'utilisateur de CETTE machine : au plus ce temps d'attente avant de passer quand même
@@ -1289,13 +1376,15 @@ class Gestionnaire(BaseHTTPRequestHandler):
             return _machines.eteindre(str(donnees.get("id", "")), bool(donnees.get("annuler")))
         elif action == "update":
             return _machines.mettre_a_jour_distante(str(donnees.get("id", "")))
-        elif action in ("node-shutdown", "node-update", "autostart", "cancel-local-shutdown"):          # ce qui touche l'extinction ou le démarrage de CETTE machine : depuis cette machine seulement
+        elif action in ("node-shutdown", "node-update", "node-pilot", "autostart", "cancel-local-shutdown"):          # ce qui touche l'extinction ou le démarrage de CETTE machine : depuis cette machine seulement
             if not self._configurateur_strict():
                 raise ValueError(_t("Cela se règle depuis cette machine elle-même."))
             if action == "node-shutdown":
                 _machines.noeud_autoriser_extinction(bool(donnees.get("actif")))
             elif action == "node-update":
                 _machines.noeud_autoriser_maj(bool(donnees.get("actif")))
+            elif action == "node-pilot":
+                _machines.noeud_autoriser_piloter(bool(donnees.get("actif")))
             elif action == "cancel-local-shutdown":
                 return {"annulee": _alimentation.annuler_extinction(_machines.journaliser)}
             elif donnees.get("actif"):
@@ -1306,8 +1395,6 @@ class Gestionnaire(BaseHTTPRequestHandler):
             if not self._configurateur_strict():
                 raise ValueError(_t("Cela se règle depuis cette machine elle-même."))
             _machines.noeud_droit(str(donnees.get("droit", "")), bool(donnees.get("actif")))
-        elif action == "import-conversation":
-            return _machines.importer_conversation(str(donnees.get("id", "")), str(donnees.get("conversation", "")))
         elif action == "import-skills":
             return _machines.importer_skills(str(donnees.get("id", "")))
         elif action == "import-memoire":
@@ -1345,6 +1432,8 @@ class Gestionnaire(BaseHTTPRequestHandler):
             pieces = _pieces.verifier_liste(donnees.get("pieces"))
         except ValueError as erreur:
             return self._envoyer(400, {"erreur": str(erreur)})
+        if self._via_relais:                                      # le tour s'exécute avec les réglages DE CETTE machine : ni modèle, ni mode, ni accords automatiques, ni autre machine imposés de l'extérieur
+            donnees = {k: v for k, v in donnees.items() if k not in ("modele", "machine", "mode", "options", "reflexion", "travail")}
         ident = str(donnees.get("conversation") or "")
         with _m.VERROU_TOURS:                                   # trop de réponses en cours : on refuse avant de créer quoi que ce soit
             if len(_m.TOURS_ACTIFS) >= _m.TOURS_SIMULTANES and ident not in _m.TOURS_ACTIFS:

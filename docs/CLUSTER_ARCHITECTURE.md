@@ -22,7 +22,7 @@ Never automatic acceptance, never network discovery. Too many code attempts from
 
 ## What the token opens — and nothing else
 
-`GET /api/noeud/etat`, `POST /api/noeud/chat`, that is all. The token opens **no conversations, no files, no settings, no memory**: every other path answers "authentication required" (automated test). The node keeps nothing of the requests: it runs its engine and returns the answer. It only passes the fields of a conversation to its engine (model, messages, tools, options…), nothing else, and never relays to a third machine.
+`GET /api/noeud/etat`, `POST /api/noeud/chat`, that is all — plus, only if the owner ticked the *hold conversations* right below, the narrow `/api/noeud/relais/…` door. Without that right the token opens **no conversations, no files, no settings, no memory**: every other path answers "authentication required" (automated test). The node keeps nothing of the requests: it runs its engine and returns the answer. It only passes the fields of a conversation to its engine (model, messages, tools, options…), nothing else, and never relays to a third machine.
 
 ## The four states
 
@@ -34,6 +34,16 @@ Never automatic acceptance, never network discovery. Too many code attempts from
 | engine operational | the machine can run this model: the request goes there |
 
 The state is checked (kept 10 s) before anything is sent, and **the node's identifier is compared to the one from pairing**: if another machine took over the address, nothing is sent to it.
+
+## Conversations led on the other machine
+
+A machine can open and continue the **conversations of another machine** (yellow 🖥 entries in the list) once that machine ticked *Let paired machines hold conversations here* (Machines tab, **off by default**).
+
+- **The whole turn runs on the host**: its model, its tools, its add-ons (images, voice…), its allowed folders. The conversation is stored there; nothing is copied to the machine you type on, so there is nothing to synchronise and nothing can diverge.
+- **Files stay on the host**: images, generated files and attachments are fetched from it **when you look at or download them** (`/h/<machine>/…` on your page, forwarded to the host), never stored on your side. Attachments you add are sent to the host.
+- **Narrow door**: `POST|GET /api/noeud/relais/…` with the node token, the right above, and a short allow-list (read a conversation, send a message, stop, answer an approval, upload an attachment, serve an image/file). Settings, access level, folders and updates are **not** reachable this way. The turn ignores any model, mode, automatic-approval option or third machine sent from outside: the host's own settings apply. Every turn is noted in the machines log.
+- **Approvals**: the host's rules apply; an approval card appears where you type and your answer goes back to the host.
+- **Host off**: the conversation disappears from the list (and comes back when the host answers again).
 
 ## An unreachable machine says nothing in the conversation
 

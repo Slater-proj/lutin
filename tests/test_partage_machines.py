@@ -84,7 +84,7 @@ class Base(unittest.TestCase):
 
 class DroitsDuNoeud(Base):
     def test_rien_n_est_partage_par_defaut_et_chaque_droit_se_donne_et_se_retire(self):
-        self.assertEqual(machines.noeud_droits(), {"conversations": False, "skills": False, "memoire": False})
+        self.assertEqual(machines.noeud_droits(), {"skills": False, "memoire": False})
         machines.noeud_droit("skills", True)
         self.assertEqual(machines.noeud_droits()["skills"], True)
         self.assertTrue(machines.noeud_vue()["droits"]["skills"])
@@ -94,7 +94,7 @@ class DroitsDuNoeud(Base):
             machines.noeud_droit("tout", True)
 
     def test_sans_droit_le_noeud_refuse(self):
-        for genre in ("conversations", "conversation", "skills", "skill", "memoire"):
+        for genre in ("conversations", "skills", "skill", "memoire"):
             with self.assertRaises(PermissionError, msg=genre):
                 machines.noeud_partager(genre, {"id": "0" * 8, "nom": "x.md"})
         with self.assertRaises(ValueError):
@@ -108,90 +108,23 @@ class DroitsDuNoeud(Base):
         with self.assertRaises(PermissionError):
             machines.noeud_partager("skills", {})
 
-    def test_la_conversation_partagee_n_emporte_ni_images_ni_fichiers_joints_et_les_importees_ne_sont_pas_relistees(self):
-        machines.noeud_droit("conversations", True)
-        conv = {"id": "a" * 8, "titre": "Sujet", "date": "2026-11-01T10:00:00", "maj": "2026-11-02T10:00:00", "resume": "r",
-                "messages": [{"role": "user", "content": "salut", "images": ["AAAA" * 1000]}, {"role": "assistant", "content": "ok", "fichiers_joints": [{"nom": "x"}], "medias": ["m"]}]}
-        with mock.patch.object(A, "conv_lire", lambda ident: conv), mock.patch.object(A, "conv_liste", lambda: [{"id": "a" * 8, "titre": "Sujet", "maj": "x", "messages": 2, "origine": ""}, {"id": "b" * 8, "titre": "Copie", "maj": "x", "messages": 1, "origine": "Autre"}]):
-            liste = machines.noeud_partager("conversations", {})["conversations"]
-            c = machines.noeud_partager("conversation", {"id": "a" * 8})["conversation"]
-        self.assertEqual([x["id"] for x in liste], ["a" * 8], "une copie importée d'ailleurs n'est pas proposée de nouveau")
-        self.assertTrue(all(not ({"images", "medias", "fichiers_joints"} & set(m)) for m in c["messages"]))
-        self.assertEqual(c["titre"], "Sujet")
 
-    def test_conversation_trop_volumineuse_refusee(self):
-        machines.noeud_droit("conversations", True)
-        enorme = {"id": "a" * 8, "titre": "t", "messages": [{"role": "user", "content": "x" * 1_000_000}] * 5}
-        with mock.patch.object(A, "conv_lire", lambda ident: enorme):
-            with self.assertRaises(ValueError):
-                machines.noeud_partager("conversation", {"id": "a" * 8})
-
-
-class ImporterDepuisLAutreMachine(Base):
+class ImporterSkillsEtMemoire(Base):
     def faux_partage(self, reponses):
         def demander(m, genre, **corps):
             r = reponses[genre]
             return r(corps) if callable(r) else r
         return mock.patch.object(machines, "demander_partage", demander)
 
-    def distante(self, maj="2026-11-02T10:00:00", messages=2):
-        return {"conversation": {"id": "a" * 8, "titre": "Sujet distant", "date": "2026-11-01T10:00:00", "maj": maj, "resume": "", "messages": [{"role": "user", "content": "q"}, {"role": "assistant", "content": "r"}][:messages]}}
-
-    def test_importer_une_conversation_la_copie_ici_avec_son_origine(self):
-        with self.faux_partage({"conversation": self.distante()}):
-            r = machines.importer_conversation(self.m["id"], "a" * 8)
-        self.assertEqual(r["etat"], "nouvelle")
-        copie = A.conv_lire(r["id"])
-        self.assertEqual((copie["titre"], len(copie["messages"]), copie["origine"]["machine"]), ("Sujet distant", 2, "Gaming PC"))
-        liste = {c["id"]: c for c in A.conv_liste()}
-        self.assertEqual(liste[r["id"]]["origine"], "Gaming PC", "la liste sait que c'est une copie (affichée en jaune)")
-
-    def test_reimporter_sans_changement_ne_cree_pas_de_doublon(self):
-        with self.faux_partage({"conversation": self.distante()}):
-            premiere = machines.importer_conversation(self.m["id"], "a" * 8)
-            seconde = machines.importer_conversation(self.m["id"], "a" * 8)
-        self.assertEqual((seconde["etat"], seconde["id"]), ("a_jour", premiere["id"]))
-
-    def test_l_original_a_avance_la_copie_non_modifiee_est_mise_a_jour(self):
-        with self.faux_partage({"conversation": self.distante(messages=1)}):
-            premiere = machines.importer_conversation(self.m["id"], "a" * 8)
-        with self.faux_partage({"conversation": self.distante(maj="2026-11-05T10:00:00", messages=2)}):
-            r = machines.importer_conversation(self.m["id"], "a" * 8)
-        self.assertEqual((r["etat"], r["id"], len(A.conv_lire(r["id"])["messages"])), ("mise_a_jour", premiere["id"], 2))
-
-    def test_la_copie_qui_a_continue_ici_n_est_jamais_ecrasee(self):
-        with self.faux_partage({"conversation": self.distante(messages=1)}):
-            premiere = machines.importer_conversation(self.m["id"], "a" * 8)
-        copie = A.conv_lire(premiere["id"])
-        copie["messages"].append({"role": "user", "content": "suite écrite ici"})
-        A.conv_ecrire(copie)
-        with self.faux_partage({"conversation": self.distante(maj="2026-11-09T10:00:00", messages=2)}):
-            r = machines.importer_conversation(self.m["id"], "a" * 8)
-        self.assertEqual(r["etat"], "divergente")
-        self.assertEqual(A.conv_lire(premiere["id"])["messages"][-1]["content"], "suite écrite ici")
-
-    def test_la_liste_distante_indique_ce_qui_est_deja_copie_et_ce_qui_a_avance(self):
-        machines.DERNIER_ETAT[self.m["id"]] = "operationnel"          # la machine répond : ses listes sont proposées
-        machines.SONDES[self.m["id"]] = (machines.time.monotonic(), {}, "")          # ... et vient de répondre
-        machines.CONVERSATIONS.update(t=machines.time.monotonic(), v=[{"machine": self.m["id"], "machine_nom": "Gaming PC", "id": "a" * 8, "titre": "Sujet", "maj": "2026-11-02T10:00:00", "messages": 2},
-                                                                    {"machine": self.m["id"], "machine_nom": "Gaming PC", "id": "d" * 8, "titre": "Autre", "maj": "2026-11-03T10:00:00", "messages": 1}])
-        with self.faux_partage({"conversation": self.distante()}):
-            machines.importer_conversation(self.m["id"], "a" * 8)
-        l = {c["id"]: c for c in machines.conversations_distantes()}
-        self.assertTrue(l["a" * 8]["locale"] and not l["a" * 8]["plus_recente"])
-        self.assertEqual(l["d" * 8]["locale"], "")
-        machines.CONVERSATIONS["v"][0]["maj"] = "2026-12-01T00:00:00"
-        self.assertTrue({c["id"]: c for c in machines.conversations_distantes()}["a" * 8]["plus_recente"])
-
-    def test_la_liste_distante_ne_montre_que_les_machines_qui_partagent(self):
+    def test_la_liste_distante_ne_montre_que_les_machines_qui_se_laissent_piloter(self):
         machines.DERNIER_ETAT[self.m["id"]] = "operationnel"          # la machine répond : ses listes sont proposées
         machines.SONDES[self.m["id"]] = (machines.time.monotonic(), {}, "")          # ... et vient de répondre
         reponses = {"conversations": {"conversations": [{"id": "e" * 8, "titre": "T", "maj": "m", "messages": 3}]}}
-        with self.faux_partage(reponses), mock.patch.object(machines, "sonder", lambda m, modele="", *a, **kw: {"etat": "operationnel", "detail": "", "modeles": [], "droits": {"conversations": True}}):
+        with self.faux_partage(reponses), mock.patch.object(machines, "sonder", lambda m, modele="", *a, **kw: {"etat": "operationnel", "detail": "", "modeles": [], "agir": {"piloter": True}}):
             l = machines.conversations_distantes(attente=True)
         self.assertEqual([(c["id"], c["machine_nom"]) for c in l], [("e" * 8, "Gaming PC")])
         machines.CONVERSATIONS.update(t=0.0, v=[])
-        with self.faux_partage(reponses), mock.patch.object(machines, "sonder", lambda m, modele="", *a, **kw: {"etat": "operationnel", "detail": "", "modeles": [], "droits": {"conversations": False}}):
+        with self.faux_partage(reponses), mock.patch.object(machines, "sonder", lambda m, modele="", *a, **kw: {"etat": "operationnel", "detail": "", "modeles": [], "agir": {"piloter": False}}):
             self.assertEqual(machines.conversations_distantes(attente=True), [])
 
     def test_importer_les_skills_les_deux_jeux_se_cumulent_sans_rien_ecraser(self):
@@ -294,7 +227,7 @@ class Api(Base):
         with mock.patch.object(A, "lister_skills", lambda: [("a.md", "Titre A")]):
             statut, r = self.appel("POST", "/api/noeud/partage", {"genre": "skills"}, entetes)
         self.assertEqual((statut, r["skills"]), (200, [{"nom": "a.md", "titre": "Titre A"}]))
-        self.assertEqual(self.appel("POST", "/api/noeud/partage", {"genre": "conversations"}, entetes)[0], 403, "seul ce qui est coché est ouvert")
+        self.assertEqual(self.appel("POST", "/api/noeud/partage", {"genre": "conversations"}, entetes)[0], 403, "seul ce qui est coché est ouvert (piloter n'est pas coché)")
         self.assertEqual(self.appel("POST", "/api/noeud/partage", {"genre": "inconnu"}, entetes)[0], 400)
 
     def test_le_droit_ne_se_donne_que_depuis_cette_machine(self):

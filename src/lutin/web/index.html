@@ -369,6 +369,7 @@ button.principal { box-shadow:0 6px 16px -8px rgba(63,143,232,.8); }
 .carte:hover { border-color:var(--line2); }
 .rubrique.masque { display:none; }
 .conv.hors { opacity:.6; }
+.bandeau-hote { margin:0 0 8px; padding:6px 12px; border:1px solid rgba(240,200,80,.4); border-radius:10px; background:rgba(240,200,80,.08); color:var(--muted); font-size:.84rem; }
 .sous-nav { display:flex; gap:6px; flex-wrap:wrap; margin:4px 0 14px; }
 .sous-nav button { border-radius:999px; padding:5px 14px; font-size:.84rem; color:#c3ccd8; background:#16202b; }
 .sous-nav button:hover:not([aria-selected=true]) { background:#1c2937; }
@@ -492,6 +493,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
   <section class="page vue" id="p-chat">
     <div id="premierLancement" hidden></div>
     <div id="diagnostic" hidden role="alert"></div>
+    <div id="bandeauHote" class="bandeau-hote" role="status" hidden></div>
     <div id="fil"></div>
     <div id="accueil"></div>
     <div id="taches" hidden></div>
@@ -826,6 +828,10 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     if (!r.ok) throw new Error(d.erreur || (T('Erreur ') + r.status));
     return d;
   };
+  // Une conversation peut être menée sur une AUTRE machine (appairée, droit « piloter ») : tout s'y exécute (modèles, outils, addons) et ses fichiers y restent ; cette page ne fait que les afficher.
+  // HOTE = l'identifiant de cette machine pour la conversation affichée ('' : celle-ci). U() préfixe un chemin pour qu'il passe par elle.
+  let HOTE = '';
+  const U = (u, h = HOTE) => h ? '/h/' + h + u : u;
   const el = (tag, cls, texte) => { const e = document.createElement(tag); if (cls) e.className = cls; if (texte !== undefined) e.textContent = texte; return e; };
   // Un appel d'outil en une phrase lisible (« Lit README.md »), l'appel exact reste en infobulle ; un outil inconnu garde l'affichage technique
   const libelleOutil = (nom, args) => {
@@ -949,7 +955,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     const ligne = el('div', 'ligne'), fiche = el('button', 'principal', T('Fiche de suivi')), resume = el('button', '', T('Résumé'));
     const repondre = async choix => {
       fiche.disabled = resume.disabled = true;
-      try { await api('/api/memoire-choix', { conversation: e.conversation, choix, garder: garder.checked }); d.style.opacity = .6; d.appendChild(el('div', 'aide', choix === 'fichier' ? T('✔ Fiche de suivi') : T('✔ Résumé'))); if (CONV && garder.checked) CONV.memoire_longue = choix; }
+      try { await api(U('/api/memoire-choix', FLUX ? FLUX.hote : HOTE), { conversation: e.conversation, choix, garder: garder.checked }); d.style.opacity = .6; d.appendChild(el('div', 'aide', choix === 'fichier' ? T('✔ Fiche de suivi') : T('✔ Résumé'))); if (CONV && garder.checked) CONV.memoire_longue = choix; }
       catch (err) { d.appendChild(el('div', 'erreur', err.message)); }
     };
     fiche.addEventListener('click', () => repondre('fichier')); resume.addEventListener('click', () => repondre('resume'));
@@ -960,12 +966,13 @@ body[data-moteur="openai"] .biblio { display:none !important; }
   const marquerSuspendu = raison => { for (const id of ['cAuto', 'cAutoCmd']) { const l = $(id).parentElement; if (!l.classList.contains('suspendu')) l.dataset.titre = l.title; l.classList.add('suspendu'); l.title = raison; } };
   const finSuspension = () => { for (const id of ['cAuto', 'cAutoCmd']) { const l = $(id).parentElement; if (l.classList.contains('suspendu')) { l.classList.remove('suspendu'); l.title = l.dataset.titre || ''; } } };
   const carteAccord = (a) => {
+    const hoteAccord = FLUX ? FLUX.hote : HOTE;          // la machine qui attend cet accord : celle qui mène le tour
     const d = el('div', 'accord'); d.dataset.id = a.id;
     d.appendChild(el('b', '', a.titre)); if (a.detail) d.appendChild(el('div', 'aide', a.detail)); if (a.raison) d.appendChild(el('div', 'aide', 'ℹ ' + a.raison));
     if (a.diff) { const pre = el('pre'); a.diff.split('\n').forEach(l => { const s = el('div', l.startsWith('+') && !l.startsWith('+++') ? 'add' : l.startsWith('-') && !l.startsWith('---') ? 'del' : '', l || ' '); pre.appendChild(s); }); d.appendChild(pre); }
     const ligne = el('div', 'ligne'), oui = el('button', 'principal', T('Accepter')), non = el('button', '', T('Refuser')), reactiver_ = el('button', '', T('Accepter et réactiver l\'accord automatique'));
     reactiver_.title = T('Du contenu web a été lu : il pourrait contenir une consigne piégée. En réactivant, tu acceptes ce risque pour la suite de cette demande seulement.'); reactiver_.hidden = !a.suspendu;
-    const repondre = async (ok, reactiver) => { oui.disabled = non.disabled = true; if (reactiver) reactiver_.disabled = true; document.removeEventListener('keydown', surTouche); try { await api('/api/approuver', { id: a.id, ok, reactiver: !!reactiver }); d.style.opacity = .6; d.appendChild(el('div', 'aide', ok ? T('Accepté.') : T('Refusé.'))); } catch (e) { d.appendChild(el('div', 'erreur', e.message)); } };
+    const repondre = async (ok, reactiver) => { oui.disabled = non.disabled = true; if (reactiver) reactiver_.disabled = true; document.removeEventListener('keydown', surTouche); try { await api(U('/api/approuver', hoteAccord), { id: a.id, ok, reactiver: !!reactiver }); d.style.opacity = .6; d.appendChild(el('div', 'aide', ok ? T('Accepté.') : T('Refusé.'))); } catch (e) { d.appendChild(el('div', 'erreur', e.message)); } };
     // Raccourcis clavier seulement quand le focus est DANS la carte (jamais pendant que tu tapes ailleurs) : Échap = Refuser ; Entrée sur un bouton le déclenche (comportement normal).
     const surTouche = (e) => {
       if (!d.contains(e.target)) return;
@@ -1152,10 +1159,10 @@ body[data-moteur="openai"] .biblio { display:none !important; }
   const miniatures = (parent, ids, pieces) => {
     if ((!ids || !ids.length) && (!pieces || !pieces.length)) return;
     const z = el('div', 'vignettes');
-    (ids || []).forEach(id => { const i = document.createElement('img'); i.src = '/image/' + id; i.alt = T('Image jointe'); i.addEventListener('click', () => window.open(i.src, '_blank', 'noopener')); z.appendChild(i); });
+    (ids || []).forEach(id => { const i = document.createElement('img'); i.src = U('/image/' + id); i.alt = T('Image jointe'); i.addEventListener('click', () => window.open(i.src, '_blank', 'noopener')); z.appendChild(i); });
     (pieces || []).forEach(p => {
       const d = el('span', 'piece', '📄 ' + p.nom); d.title = p.nom;
-      const tel = el('a', 'bouton-lien', '⬇'); tel.title = T('Télécharger'); tel.href = '/piece/' + encodeURIComponent(p.id) + '?nom=' + encodeURIComponent(p.nom); tel.download = p.nom;
+      const tel = el('a', 'bouton-lien', '⬇'); tel.title = T('Télécharger'); tel.href = U('/piece/' + encodeURIComponent(p.id)) + '?nom=' + encodeURIComponent(p.nom); tel.download = p.nom;
       const ouv = el('button', '', '↗'); ouv.hidden = !(ETAT && ETAT.ouverture_possible); ouv.title = T('Ouvrir avec l\'application choisie dans Windows');
       ouv.addEventListener('click', async () => { try { await api('/api/piece-ouvrir', { id: p.id, nom: p.nom }); } catch (e) { alert(e.message); } });
       d.append(' ', tel, ' ', ouv); z.appendChild(d);
@@ -1168,12 +1175,12 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     const z = el('div', 'medias');
     ids.forEach(id => {
       const f = el('figure', 'media'), i = document.createElement('img'), chemin = (fichiers || {})[id] || '';
-      i.src = '/image/' + id; i.alt = T('Image générée'); i.addEventListener('click', () => window.open(i.src, '_blank', 'noopener')); f.appendChild(i);
+      i.src = U('/image/' + id); i.alt = T('Image générée'); i.addEventListener('click', () => window.open(i.src, '_blank', 'noopener')); f.appendChild(i);
       if (chemin) { const lien = el('code', 'chemin-media', chemin); lien.title = T('Où le fichier est enregistré'); f.appendChild(lien); }
       const barre = el('div', 'ligne'), tel = el('a', 'bouton-lien', T('Télécharger'));
       tel.href = i.src; tel.download = (chemin.split(/[\\/]/).pop()) || ('lutin-' + id);
       const sup = el('button', 'danger', T('Supprimer'));
-      sup.title = T('Retire l\'image de la conversation et supprime le fichier créé');
+      sup.title = T('Retire l\'image de la conversation et supprime le fichier créé'); sup.hidden = !!HOTE;
       sup.addEventListener('click', async () => {
         if (!confirm(T('Supprimer cette image ? Le fichier créé est effacé.'))) return;
         try { await api('/api/media-supprimer', { conversation: convId, id }); f.remove(); if (CONV && CONV.id === convId) CONV.messages.forEach(m => { if (m.medias) m.medias = m.medias.filter(x => x !== id); }); } catch (e) { alert(e.message); }
@@ -1194,8 +1201,8 @@ body[data-moteur="openai"] .biblio { display:none !important; }
       const barre = el('div', 'ligne'), msg = el('span', 'attention');
       const ouvrir = el('button', 'principal', T('Ouvrir')); ouvrir.hidden = !(ETAT && ETAT.ouverture_possible); ouvrir.title = T('Ouvre le fichier avec l\'application choisie dans Windows pour ce type de fichier');
       ouvrir.addEventListener('click', async () => { msg.textContent = ''; try { await api('/api/fichier-ouvrir', { conversation: convId, id: f.id }); } catch (e) { msg.textContent = e.message; } });
-      const tel = el('a', 'bouton-lien', T('Télécharger')); tel.href = '/fichier/' + encodeURIComponent(convId) + '/' + f.id; tel.download = f.nom;
-      const sup = el('button', 'danger', T('Supprimer')); sup.title = T('Retire la carte de la conversation et supprime le fichier');
+      const tel = el('a', 'bouton-lien', T('Télécharger')); tel.href = U('/fichier/' + encodeURIComponent(convId) + '/' + f.id); tel.download = f.nom;
+      const sup = el('button', 'danger', T('Supprimer')); sup.title = T('Retire la carte de la conversation et supprime le fichier'); sup.hidden = !!HOTE;          // les fichiers d'une autre machine se gèrent depuis elle
       sup.addEventListener('click', async () => {
         if (!confirm(T('Supprimer ce fichier ? Il est effacé du disque.'))) return;
         try { await api('/api/fichier-supprimer', { conversation: convId, id: f.id }); c.remove(); if (CONV && CONV.id === convId) CONV.messages.forEach(m => { if (m.fichiers_joints) m.fichiers_joints = m.fichiers_joints.filter(x => x.id !== f.id); }); } catch (e) { msg.textContent = e.message; }
@@ -1209,7 +1216,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     PJ.forEach((p, n) => {
       let v;
       if (p.doc) { v = el('div', 'vignette doc'); v.appendChild(el('span', '', '📄 ' + p.nom)); v.title = p.nom + (p.caracteres ? ' (' + p.caracteres.toLocaleString() + ' ' + T('caractères') + ')' : ''); }
-      else { v = el('div', 'vignette'); const i = document.createElement('img'); i.src = '/image/' + p.id; i.alt = p.nom; v.appendChild(i); }
+      else { v = el('div', 'vignette'); const i = document.createElement('img'); i.src = U('/image/' + p.id); i.alt = p.nom; v.appendChild(i); }
       const x = el('button', '', '✕'); x.title = T('Retirer cette pièce jointe'); x.addEventListener('click', () => { PJ.splice(n, 1); dessinerPj(); }); v.appendChild(x); z.appendChild(v);
     });
   };
@@ -1220,7 +1227,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
       if (image && PJ.filter(p => !p.doc).length >= 4) { infoLocale(T('4 images au plus par message.')); continue; }
       if (!image && PJ.filter(p => p.doc).length >= 5) { infoLocale(T('5 fichiers au plus par message.')); continue; }
       try {
-        const r = await fetch(image ? '/api/image' : '/api/document', { method: 'POST', headers: { 'Content-Type': 'application/octet-stream', 'X-Token': TOKEN, 'X-Nom': encodeURIComponent(f.name || '') }, body: f });
+        const r = await fetch(U(image ? '/api/image' : '/api/document'), { method: 'POST', headers: { 'Content-Type': 'application/octet-stream', 'X-Token': TOKEN, 'X-Nom': encodeURIComponent(f.name || '') }, body: f });
         const d = await r.json().catch(() => ({})); if (!r.ok) throw new Error(d.erreur || T('Erreur ') + r.status);
         PJ.push(image ? { id: d.id, nom: f.name || 'image' } : { id: d.id, nom: d.nom, doc: true, caracteres: d.caracteres }); dessinerPj();
       } catch (e) { infoLocale((f.name ? f.name + ' : ' : '') + e.message); }
@@ -1274,12 +1281,13 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     const moi = el('div', 'msg moi'); moi.appendChild(el('div', 'corps', texte)); miniatures(moi, images, pieces); fil().appendChild(moi);
     if (!forcee) viderPj();
     let ia = messageIA(), detailsPensee = null; bas();
-    const etaitNouvelle = !CONV, flux = FLUX = { id: CONV ? CONV.id : '', detache: false, sauve: document.createElement('div') }, visible = () => !flux.detache;
+    const etaitNouvelle = !CONV, hote = HOTE, flux = FLUX = { id: CONV ? CONV.id : '', hote, detache: false, sauve: document.createElement('div') }, visible = () => !flux.detache;
     let finRecue = false;
     demarrerActivite();
     try {
-      const r = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Token': TOKEN }, signal: CONTROLE.signal,
-        body: JSON.stringify({ message: texte, conversation: CONV ? CONV.id : '', travail: (ETAT.travaux && ETAT.travaux.actif) || '', modele: modeleChoisi(), machine: machineChoisie(), options: lireOptions(), remplacer_depuis: depuis, images, pieces }) });
+      const r = await fetch(U('/api/chat', hote), { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Token': TOKEN }, signal: CONTROLE.signal,
+        body: JSON.stringify(hote ? { message: texte, conversation: CONV ? CONV.id : '', remplacer_depuis: depuis, images, pieces }
+          : { message: texte, conversation: CONV ? CONV.id : '', travail: (ETAT.travaux && ETAT.travaux.actif) || '', modele: modeleChoisi(), machine: machineChoisie(), options: lireOptions(), remplacer_depuis: depuis, images, pieces }) });
       if (!r.ok) { const d = await r.json().catch(() => ({})); throw new Error(d.erreur || T('Erreur ') + r.status); }
       const lecteur = r.body.getReader(), dec = new TextDecoder(); let reste = '';
       for (;;) {
@@ -1323,7 +1331,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
             finRecue = true; vider(ia);
             if (visible()) {                // si on est parti voir une autre conversation, on ne touche pas à l'écran : en y revenant elle sera relue
               // on recharge la conversation complète (messages compris) : l'export et le résumé en ont besoin
-              try { CONV = await api('/api/conversation?id=' + e.conversation.id); } catch (x) { CONV = { id: e.conversation.id, titre: e.conversation.titre, messages: [] }; }
+              try { CONV = await api(U('/api/conversation?id=' + e.conversation.id, hote)); CONV.hote = hote; } catch (x) { CONV = { id: e.conversation.id, titre: e.conversation.titre, messages: [], hote }; }
               majJauge(CONV.id); afficherTaches(CONV.taches, !$('taches').hidden); setVitesse(CONV.vitesse); majAnnuler();
             }
             if (etaitNouvelle && !String(e.conversation.titre || '').startsWith('🎯')) titreAuto(e.conversation.id);          // une conversation de mission garde le nom de sa mission
@@ -1352,13 +1360,17 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     } catch (e) { /* silencieux : le titre manuel reste disponible */ }
   };
   const fermerLat = () => document.querySelector('aside').classList.remove('ouverte');
-  const nouvelle = async () => { detacherFlux(); CONV = null; afficherOptions(null); fil().textContent = ''; finEdition(); afficherTaches([]); setJauge(null); setVitesse(null); $('bAnnuler').hidden = true; $('bRevue').hidden = true; if (!$('p-chat').classList.contains('vue')) ouvrirOnglet('chat'); $('saisie').focus(); [...document.querySelectorAll('.conv')].forEach(c => c.classList.remove('choisie')); fermerLat(); };
-  const ouvrir = async id => { try {
-      const c = await api('/api/conversation?id=' + id);
+  const nouvelle = async () => { detacherFlux(); if (HOTE) viderPj(); HOTE = ''; bandeauHote(); CONV = null; afficherOptions(null); fil().textContent = ''; finEdition(); afficherTaches([]); setJauge(null); setVitesse(null); $('bAnnuler').hidden = true; $('bRevue').hidden = true; if (!$('p-chat').classList.contains('vue')) ouvrirOnglet('chat'); $('saisie').focus(); [...document.querySelectorAll('.conv')].forEach(c => c.classList.remove('choisie')); fermerLat(); };
+  const ouvrir = async (id, h = '') => { try {
+      const c = await api(U('/api/conversation?id=' + id, h));
       if (FLUX && !FLUX.detache && FLUX.id !== id) detacherFlux();          // on quitte une réponse en cours : son affichage est mis de côté
+      if (h !== HOTE) viderPj();          // des pièces envoyées à une machine ne partent pas vers une autre
+      HOTE = h; c.hote = h; bandeauHote();
       CONV = c; afficherOptions(c.options); finEdition(); if (!document.hidden) lue(id);
       if (c.travail && ETAT && ETAT.travaux && ETAT.travaux.actif !== c.travail) { try { await api('/api/travaux-choisir', { id: c.travail }); rafraichir(); } catch (e) { /* une réponse travaille dans un autre dossier : on reste sur celui-ci */ } }
-      if (FLUX && FLUX.detache && FLUX.id === id) rattacherFlux(); else afficherHistorique(CONV); [...document.querySelectorAll('.conv')].forEach(c => c.classList.toggle('choisie', c.dataset.id === id)); if (!$('p-chat').classList.contains('vue')) ouvrirOnglet('chat'); fermerLat(); } catch (e) { fil().appendChild(el('div', 'erreur', e.message)); } };
+      if (FLUX && FLUX.detache && FLUX.id === id) rattacherFlux(); else afficherHistorique(CONV); [...document.querySelectorAll('.conv')].forEach(c => c.classList.toggle('choisie', c.dataset.id === (h ? 'distante-' + h + '-' + id : id))); if (!$('p-chat').classList.contains('vue')) ouvrirOnglet('chat'); fermerLat(); } catch (e) { fil().appendChild(el('div', 'erreur', e.message)); } };
+  // Bandeau au-dessus de la conversation menée sur une autre machine : où ça s'exécute, et ce qui change
+  const bandeauHote = () => { const b = $('bandeauHote'); const m = ((ETAT && ETAT.conversations_distantes) || []).find(c => c.machine === HOTE); const nom = m ? m.machine_nom : ''; b.hidden = !HOTE; b.textContent = HOTE ? '🖥 ' + T('Cette conversation est sur la machine « ') + nom + T(' » : tout s\'y exécute (modèles, outils, fichiers) et les fichiers y restent.') : ''; };
   // Le menu « ⋯ » d'une conversation : épingler, renommer, et choisir comment elle garde le fil (fiche de suivi ou résumé automatique)
   let MENU_CONV = null;
   const fermerMenuConv = () => { if (MENU_CONV) { MENU_CONV.remove(); MENU_CONV = null; } };
@@ -1403,18 +1415,12 @@ body[data-moteur="openai"] .biblio { display:none !important; }
   const listeConversations = () => {
     const z = $('conversations'); z.textContent = '';
     ETAT.conversations.forEach(c => { const d = el('div', 'conv' + (CONV && CONV.id === c.id ? ' choisie' : '') + (c.origine ? ' importee' : '') + (c.origine && (ETAT.machines_hors_ligne || []).includes(c.origine) ? ' hors' : '')); d.dataset.id = c.id; if (c.origine) d.title = T('Copie d\'une conversation de la machine « ') + c.origine + T(' » : tu continues ici, l\'original n\'est pas touché') + ((ETAT.machines_hors_ligne || []).includes(c.origine) ? T(' — cette machine ne répond pas : la copie ne se met plus à jour avant son retour') : ''); if (enAttente().has(c.id)) { const pt = el('i', 'travail'); pt.classList.add('wait'); pt.title = T('L\'assistant attend une action de ta part'); d.appendChild(pt); } else if ((ETAT.actives || []).includes(c.id) || (EN_COURS && ID_EN_COURS === c.id)) { const pt = el('i', 'travail'); pt.title = T('L\'assistant travaille sur cette conversation'); d.appendChild(pt); } else if (NONLUS.has(c.id)) { const pt = el('i', 'travail fini'); pt.title = T('Réponse terminée, pas encore lue'); d.appendChild(pt); } d.appendChild(el('span', 't', (c.epingle ? '★ ' : '') + (c.origine ? '🖥 ' : '') + (c.titre || T('(sans titre)')))); const mn = el('button', 'menu-ouvrir', '⋯'); mn.title = T('Options de la conversation'); mn.addEventListener('click', e => { e.stopPropagation(); ouvrirMenuConv(c, mn); }); d.appendChild(mn); const x = el('button', '', '✕'); x.title = T('Supprimer'); x.addEventListener('click', async e => { e.stopPropagation(); if (!confirm(T('Supprimer cette conversation ?'))) return; await api('/api/supprimer', { id: c.id }); if (CONV && CONV.id === c.id) nouvelle(); rafraichir(); }); d.appendChild(x); d.addEventListener('click', () => ouvrir(c.id)); z.appendChild(d); });
-    // Les conversations des machines appairées (si leur propriétaire les partage) : en jaune, comme leurs modèles. Un clic en fait une copie ici, qu'on continue avec les skills, la mémoire et les modèles de CETTE machine.
-    (ETAT.conversations_distantes || []).filter(c => !c.locale || c.plus_recente).forEach(c => {
-      const d = el('div', 'conv distante'); d.dataset.id = 'distante-' + c.machine + '-' + c.id;
-      d.title = (c.plus_recente ? T('Mise à jour disponible. ') : '') + T('Conversation de la machine « ') + c.machine_nom + T(' » : un clic en fait une copie ici pour la continuer');
-      d.appendChild(el('span', 't', '🖥 ' + (c.plus_recente ? '↻ ' : '') + (c.titre || T('(sans titre)')) + ' · ' + c.machine_nom));
-      d.addEventListener('click', async () => {
-        try {
-          const r = await api('/api/machines-import-conversation', { id: c.machine, conversation: c.id });
-          await rafraichir(); await ouvrir(r.id);
-          if (r.etat === 'divergente') infoLocale(T('Cette copie a continué ici depuis son import : je l\'ai gardée telle quelle (la version de l\'autre machine n\'a pas été reprise).'));
-        } catch (e) { alert(e.message); }
-      });
+    // Les conversations des machines appairées qui acceptent d'être pilotées : en jaune. Un clic les ouvre ; elles continuent SUR leur machine (rien n'est copié ici).
+    (ETAT.conversations_distantes || []).forEach(c => {
+      const d = el('div', 'conv distante' + (HOTE === c.machine && CONV && CONV.id === c.id ? ' choisie' : '')); d.dataset.id = 'distante-' + c.machine + '-' + c.id;
+      d.title = T('Conversation de la machine « ') + c.machine_nom + T(' » : elle s\'ouvre ici mais tout s\'exécute là-bas, et ses fichiers y restent');
+      d.appendChild(el('span', 't', '🖥 ' + (c.titre || T('(sans titre)')) + ' · ' + c.machine_nom));
+      d.addEventListener('click', () => ouvrir(c.id, c.machine));
       z.appendChild(d);
     });
   };
@@ -1987,7 +1993,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
   // Arrêter : on prévient d'abord le serveur (modèle, outils et accords en attente s'arrêtent vraiment), puis on laisse arriver la fin du flux.
   $('bStop').addEventListener('click', async () => {
     const c = CONTROLE; $('bStop').disabled = true; if (FILE.length) { PAUSE_FILE = true; majFile(); }          // Arrêter met aussi la file d'attente en pause
-    try { if (ID_EN_COURS) await api('/api/arreter', { conversation: ID_EN_COURS }); else if (c) c.abort(); }
+    try { if (ID_EN_COURS) await api(U('/api/arreter', FLUX ? FLUX.hote : HOTE), { conversation: ID_EN_COURS }); else if (c) c.abort(); }
     catch (e) { if (c) c.abort(); }
     setTimeout(() => { $('bStop').disabled = false; if (EN_COURS && CONTROLE === c && c) c.abort(); }, 8000);      // filet : si le serveur ne répond plus, on coupe côté page au bout de 8 s
   });
@@ -3536,18 +3542,22 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     }
     if (r.noeud.actif) {
       const partage = el('div'); partage.appendChild(el('div', 'aide', T('Partager avec les machines appairées (lecture seule, décoché par défaut) :')));
-      [['conversations', T('mes conversations')], ['skills', T('mes skills')], ['memoire', T('ma mémoire')]].forEach(([droit, nom]) => {
+      [['skills', T('mes skills')], ['memoire', T('ma mémoire')]].forEach(([droit, nom]) => {
         const lp = el('label'), cp = el('input'); cp.type = 'checkbox'; cp.checked = !!(r.noeud.droits || {})[droit];
         lp.append(cp, document.createTextNode(' ' + nom)); lp.style.marginRight = '14px';
         cp.addEventListener('change', async () => { await act('droit', { droit, actif: cp.checked }); chargerMachines(true); });
         partage.appendChild(lp);
       });
-      partage.appendChild(el('div', 'aide', T('Elles peuvent en faire une COPIE chez elles ; rien de ce qui est ici n\'est modifié, et les images et fichiers joints restent ici.')));
+      partage.appendChild(el('div', 'aide', T('Elles peuvent en faire une COPIE chez elles ; rien de ce qui est ici n\'est modifié.')));
       prete.appendChild(partage);
       const lx = el('label'), cx = el('input'); cx.type = 'checkbox'; cx.checked = r.noeud.extinction;
       lx.append(cx, document.createTextNode(' ' + T('Autoriser les machines appairées à l\'éteindre')));
       cx.addEventListener('change', async () => { await act('node-shutdown', { actif: cx.checked }); chargerMachines(true); });
       prete.append(lx, el('div', 'aide', T('Décoché par défaut. Une extinction demandée à distance a 30 secondes de délai, se laisse annuler et est notée dans le journal.')));
+      const lp2 = el('label'), cp2 = el('input'); cp2.type = 'checkbox'; cp2.checked = !!r.noeud.piloter;
+      lp2.append(cp2, document.createTextNode(' ' + T('Laisser les machines appairées mener des conversations ici')));
+      cp2.addEventListener('change', async () => { await act('node-pilot', { actif: cp2.checked }); chargerMachines(true); await rafraichir(); });
+      prete.append(lp2, el('div', 'aide', T('Décoché par défaut. Une machine appairée peut alors ouvrir et continuer les conversations d\'ici : le tour entier s\'exécute ICI (tes modèles, tes outils, tes addons, tes dossiers autorisés) et les fichiers produits restent ici. Tes règles s\'appliquent, les accords sont demandés à celui qui écrit, et chaque tour est noté dans le journal.')));
       const lm = el('label'), cm = el('input'); cm.type = 'checkbox'; cm.checked = !!r.noeud.maj;
       lm.append(cm, document.createTextNode(' ' + T('Autoriser les machines appairées à mettre Lutin à jour')));
       cm.addEventListener('change', async () => { await act('node-update', { actif: cm.checked }); chargerMachines(true); });
@@ -3622,6 +3632,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
         l.appendChild(bm);
       }
       c.append(l, msg);
+      if (['lutin', 'synchro', 'pret'].includes(etape) && !(m.agir || {}).piloter) c.appendChild(el('div', 'aide', 'ℹ ' + T('Ses conversations ne sont pas proposées ici : sur cette machine, onglet Machines, coche « Laisser les machines appairées mener des conversations ici ».')));
       // les détails : adresse MAC, charge, imports
       const d = el('details', 'plus'); d.appendChild(el('summary', '', T('Détails et réglages')));
       if (m.charge) {          // ce que la machine dit d'elle-même : mémoire, et qui utilise son moteur

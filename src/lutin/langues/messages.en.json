@@ -1946,12 +1946,13 @@
 "une demande qui demande de réfléchir (analyser, comparer, une longue explication)": "a request that needs thinking (analysing, comparing, a long explanation)",
 "une question courte, sans fichier ni outil": "a short question, no file or tool",
 "Droit inconnu.": "Unknown permission.",
-"Cette conversation est trop volumineuse pour être copiée.": "This conversation is too large to be copied.",
 "Demande inconnue.": "Unknown request.",
-"Réponse inattendue de la machine.": "Unexpected answer from the machine.",
-"Conversation importée": "Imported conversation",
 "Depuis {} ({})": "From {} ({})",
 "La machine « {} » ne partage pas cela : sur elle, onglet Machines > « Partager avec les machines appairées », puis coche la case voulue.": "The machine \"{}\" does not share this: on it, Machines tab > \"Share with paired machines\", then tick the right box.",
 "Lutin tourne dans Docker en réseau « bridge » : un paquet de réveil ne sort pas sur ton réseau local. Dans docker-compose.yml, ajoute « network_mode: host » (et retire « ports: ») pour pouvoir réveiller des machines (le code PIN de Lutin reste demandé).": "Lutin runs in Docker with \"bridge\" networking: a wake-up packet does not leave for your local network. In docker-compose.yml, add \"network_mode: host\" (and remove \"ports:\") to be able to wake machines (Lutin's PIN code is still required).",
-"Cette machine n'accepte pas d'être mise à jour à distance : son propriétaire doit cocher « Autoriser les machines appairées à mettre Lutin à jour » dans l'onglet Machines.": "This machine does not accept remote updates: its owner must tick \"Allow paired machines to update Lutin\" in the Machines tab."
+"Cette machine n'accepte pas d'être mise à jour à distance : son propriétaire doit cocher « Autoriser les machines appairées à mettre Lutin à jour » dans l'onglet Machines.": "This machine does not accept remote updates: its owner must tick \"Allow paired machines to update Lutin\" in the Machines tab.",
+"Chemin invalide.": "Invalid path.",
+"Cette machine n'accepte pas de conversations pilotées à distance : son propriétaire doit cocher « Laisser les machines appairées mener des conversations ici » dans l'onglet Machines.": "This machine does not accept remotely driven conversations: its owner must tick « Let paired machines hold conversations here » in the Machines tab.",
+"La machine « {} » ne répond pas : sa conversation reviendra quand elle sera de nouveau en ligne.": "The machine « {} » is not responding: its conversation will be back when it is online again.",
+"Impossible de joindre la machine « {} » : elle ne répond plus.": "Cannot reach the machine « {} »: it is no longer responding."
 }
