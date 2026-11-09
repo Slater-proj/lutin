@@ -2,6 +2,12 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## Mesurer chaque moteur sur sa machine
+
+- **Réglages > Moteur > Mesures sur cette machine** : un bouton « Mesurer » pour chaque moteur actif (Ollama, llama.cpp, Colibri, LM Studio, tout serveur compatible OpenAI), avec le modèle de ton choix. Lutin charge le modèle, écrit un court texte et note la vitesse (mots par seconde), le délai du premier mot, le chargement et la mémoire prise.
+- **Un classement des mesures réelles** (la plus récente réussie de chaque moteur et modèle, la plus rapide d'abord), au lieu de règles générales. Les pannes restent dans l'historique (200 mesures gardées). Le classement rappelle qu'il compare des modèles différents : pour départager deux moteurs, mesure-les avec le même modèle.
+- Une mesure n'est lancée que sur un moteur déjà actif (Lutin ne démarre rien à ta place) et jamais pendant une réponse.
+
 ## LM Studio géré par Lutin, catalogue de moteurs simplifié
 
 - **LM Studio s'installe, se démarre, s'arrête et se met à jour depuis Lutin**, sans son interface : Lutin lance l'installeur officiel (lmstudio.ai, qui vérifie lui-même ce qu'il télécharge), puis pilote le démon et le serveur local (`127.0.0.1` seulement) avec la commande `lms`. L'onglet Modèles propose de télécharger des modèles (`lms get`). Lutin ne le désinstalle jamais (ses modèles sont dans son dossier). **Les commandes viennent de la documentation de LM Studio ; elles n'ont pas été essayées sur une vraie installation.**

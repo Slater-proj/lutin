@@ -723,6 +723,8 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     <div class="aide">Lutin discute avec un moteur. Chaque moteur a ses forces et ses limites, et ce que tu peux faire avec lui (l'installer, le démarrer, télécharger ses modèles) dépend de lui et de ton installation : seul ce qui est possible est proposé, avec la raison du reste. Changer de moteur change aussi la liste des modèles et l'onglet Modèles.</div>
     <div id="listeMoteurs"></div>
     <div class="aide" id="aideMoteur"></div>
+    <h2>Mesures sur cette machine <span class="aide">(ce que chaque moteur donne vraiment ici, avec son modèle)</span></h2>
+    <div id="mesuresMoteurs"></div>
     </details>
     <details class="groupe" data-g="conversation"><summary>Conversation</summary>
     <h2>Modes <span class="aide">(à choisir dans la barre de gauche ; dans tous les modes, toute modification de fichier et toute commande te demandent ton accord)</span></h2>
@@ -2269,6 +2271,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     document.querySelectorAll('#p-reglages details.groupe').forEach(d => { d.open = true; d.classList.toggle('masque', d.dataset.g !== g); });
     document.querySelectorAll('#sousReglages button').forEach(b => b.setAttribute('aria-selected', String(b.dataset.g === g)));
     try { localStorage.setItem('lutin.reglages.rubrique', g); } catch (e) { /* stockage refusé : la rubrique n'est pas retenue */ }
+    if (g === 'moteur') { try { chargerMesures(); } catch (e) { /* la rubrique se refera à la prochaine ouverture */ } }
   };
   // Les pages longues (Mémoire, Automatisation, Accès) : un sous-menu bâti à partir de leurs titres, une rubrique à la fois, la dernière retenue
   const rubriquer = id => {
@@ -4483,6 +4486,40 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     champ.placeholder = 'openai/gpt-oss-20b'; champ.style.minWidth = '280px'; champ.title = T('Le nom du modèle comme dans le catalogue de LM Studio (propriétaire/modèle, avec @quantification si besoin)');
     b.addEventListener('click', async () => { const nom = champ.value.trim(); if (!nom) { msg.textContent = T('Écris le nom d\'un modèle.'); return; } b.disabled = true; try { await api('/api/lmstudio-telecharger', { nom }); msg.textContent = T('Téléchargement lancé : l\'avancement est dans la barre bleue du haut.'); champ.value = ''; z.dataset.charge = ''; rafraichir(); } catch (e) { msg.textContent = e.message; } b.disabled = false; });
     l.append(champ, b, msg); z.appendChild(l);
+  };
+  // ---- Réglages > Moteur : les mesures réelles de chaque moteur sur cette machine (vitesse, premier mot, chargement), classées ; on peut en lancer une pour tout moteur actif
+  let MINUTEUR_MESURES = null;
+  const chargerMesures = async () => {
+    clearTimeout(MINUTEUR_MESURES);
+    const z = $('mesuresMoteurs'); let r; try { r = await api('/api/mesures-moteurs'); } catch (e) { z.textContent = e.message; return; }
+    if (z.contains(document.activeElement) && document.activeElement !== document.body && !r.etat.en_cours) return;
+    z.textContent = '';
+    if (r.etat.en_cours) {
+      z.appendChild(el('div', 'carte', '⏱ ' + T('Mesure en cours : ') + r.etat.moteur + ' · ' + r.etat.modele + ' — ' + T('le modèle se charge puis écrit un court texte (de quelques secondes à quelques minutes).')));
+      MINUTEUR_MESURES = setTimeout(chargerMesures, 3000);
+    } else if (r.etat.erreur) z.appendChild(el('div', 'erreur', '⚠ ' + r.etat.erreur));
+    const msg = el('div', 'aide');
+    if (r.classement.length) {
+      const tab = el('div'); tab.style.cssText = 'display:grid;grid-template-columns:auto 1fr auto auto auto;gap:4px 14px;align-items:baseline;margin:6px 0;font-size:.92rem';
+      ['', T('Moteur · modèle'), T('Mots/s'), T('Premier mot'), T('Chargement')].forEach(t => tab.appendChild(el('b', 'aide', t)));
+      r.classement.forEach(m => {
+        tab.appendChild(el('span', '', m.rang === 1 ? '★' : String(m.rang)));
+        const c = el('span', '', m.nom + ' · ' + m.modele); c.title = T('Mesuré le ') + m.date + (m.version ? ' · ' + m.version : ''); tab.appendChild(c);
+        tab.appendChild(el('b', '', String(m.tok_s).replace('.', ',')));
+        tab.appendChild(el('span', '', m.premier_jeton_s != null ? String(m.premier_jeton_s).replace('.', ',') + ' s' : '—'));
+        tab.appendChild(el('span', '', m.charge_s != null ? String(m.charge_s).replace('.', ',') + ' s' : '—'));
+      });
+      z.appendChild(tab);
+      z.appendChild(el('div', 'aide', T('Le ★ est le plus rapide mesuré ici, mais compare des modèles différents : un petit modèle ira toujours plus vite qu\'un gros. Pour départager deux moteurs, mesure-les avec le même modèle ou un modèle de même taille.')));
+    } else if (!r.etat.en_cours) z.appendChild(el('div', 'aide', T('Aucune mesure pour le moment. Lance-en une ci-dessous : elle sert à choisir le moteur d\'après ce que ta machine fait vraiment, pas d\'après des règles générales.')));
+    (r.candidats || []).forEach(c => {
+      const l = el('div', 'ligne'), choix = el('select'), b = el('button', 'principal', T('Mesurer ') + c.nom);
+      c.modeles.forEach(n => { const o = el('option', '', n); o.value = n; choix.appendChild(o); }); choix.value = c.modele;
+      b.addEventListener('click', async () => { b.disabled = true; try { await api('/api/mesurer-moteur', { moteur: c.moteur, modele: choix.value, mode: 'rapide' }); chargerMesures(); } catch (e) { msg.textContent = e.message; b.disabled = false; } });
+      l.append(el('b', '', c.nom), choix, b); z.appendChild(l);
+    });
+    if (!(r.candidats || []).length && !r.etat.en_cours) z.appendChild(el('div', 'aide', T('Aucun moteur actif avec un modèle installé : démarre-en un (cartes ci-dessus) pour le mesurer.')));
+    z.appendChild(msg);
   };
   // ---- Palette de commandes (Ctrl+K) : un seul endroit pour aller partout, au clavier
   const PAL = { ouverte: false, items: [], visibles: [], choix: 0, retour: null };

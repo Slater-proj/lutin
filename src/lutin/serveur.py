@@ -3,6 +3,7 @@ import gzip
 from http.server import BaseHTTPRequestHandler
 from . import bench as _bench
 from . import bench_moteurs as _bench_moteurs
+from . import mesures_moteurs as _mesures
 from . import compat_modeles as _compat
 from . import alimentation as _alimentation
 from . import machines as _machines
@@ -570,6 +571,8 @@ class Gestionnaire(BaseHTTPRequestHandler):
             return self._envoyer(200, {"entrees": _sorties.lire(60), "modifiable": self._configurateur()})
         if chemin == "/api/web-recherche":                        # Réglages > Recherche web : ce qui est réglé (jamais la clé) et l'ordre des moteurs
             return self._envoyer(200, dict(_recherche.vue(), moteurs=_m.etat_moteurs_recherche(), modifiable=self._configurateur()))
+        if chemin == "/api/mesures-moteurs":                      # Réglages > Moteur : ce que chaque moteur a donné ici (classement des mesures) et ceux qu'on peut mesurer maintenant
+            return self._envoyer(200, _mesures.vue(_m.DONNEES, dict(_moteurs.MOTEURS), _m.reglages()))
         if chemin == "/api/lmstudio-modeles":                     # onglet Modèles avec LM Studio : ce qui est téléchargé (lms ls), lecture seule
             mo = _moteurs.par_id("openai")
             if not mo.lmstudio_choisi():
@@ -1198,6 +1201,16 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 if action == "regler":
                     _mcp.regler(ident, donnees.get("actif"), donnees.get("lecture_seule"), donnees.get("outil"), donnees.get("autorise"), donnees.get("env"), donnees.get("entetes"))
                     return self._envoyer(200, {"ok": True})
+            if self.path == "/api/mesurer-moteur":
+                if not self._configurateur():
+                    return self._envoyer(403, {"erreur": _t("Cela se fait depuis cette machine (niveau « cette machine seulement » ou navigateur de cette machine).")})
+                if _m.TOURS_ACTIFS:
+                    return self._envoyer(409, {"erreur": _t("Une réponse est en cours : attends sa fin avant de mesurer (la mesure occupe le moteur).")})
+                if str(donnees.get("moteur", "")) not in _moteurs.MOTEURS:
+                    return self._envoyer(400, {"erreur": _t("Moteur inconnu.")})
+                mo = _moteurs.par_id(str(donnees["moteur"]))
+                modele = str(donnees.get("modele", ""))
+                return self._envoyer(200, _mesures.lancer(_m.DONNEES, mo, modele, str(donnees.get("mode", "rapide")), memoire=lambda: _bench_moteurs.memoire_du_moteur(mo.id, modele)))
             if self.path == "/api/lmstudio-telecharger":
                 if not self._configurateur():
                     return self._envoyer(403, {"erreur": _t("Cela se fait depuis cette machine (niveau « cette machine seulement » ou navigateur de cette machine).")})

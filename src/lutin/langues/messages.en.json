@@ -2005,5 +2005,11 @@
 "LM Studio ne répond pas après {} s sur le port {}.": "LM Studio does not answer after {} s on port {}.",
 "La mise à jour de LM Studio a échoué : {}": "LM Studio's update failed: {}",
 "Nom de modèle invalide : {}": "Invalid model name: {}",
-"LM Studio n'a pas pu télécharger ce modèle (code {}). Fin de son message :\n{}": "LM Studio could not download this model (code {}). End of its message:\n{}"
+"LM Studio n'a pas pu télécharger ce modèle (code {}). Fin de son message :\n{}": "LM Studio could not download this model (code {}). End of its message:\n{}",
+"Ce moteur ne répond pas : démarre-le d'abord (Réglages > Moteur).": "This engine is not answering: start it first (Settings > Engine).",
+"Ce modèle n'est pas installé sur ce moteur : {}": "This model is not installed on this engine: {}",
+"Une mesure est déjà en cours : attends sa fin.": "A measurement is already running: wait for it to finish.",
+"La mesure n'a pas abouti.": "The measurement did not complete.",
+"Une réponse est en cours : attends sa fin avant de mesurer (la mesure occupe le moteur).": "An answer is in progress: wait for it to finish before measuring (the measurement occupies the engine).",
+"Serveur compatible OpenAI": "OpenAI-compatible server"
 }

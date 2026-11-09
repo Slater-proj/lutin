@@ -517,5 +517,14 @@ class Relais(Base):
         self.assertIn(continuee["id"], ids)
 
 
+class MesuresApi(Base):
+    def test_la_page_lit_le_classement_et_refuse_ce_qui_n_existe_pas(self):
+        statut, corps = self.http("GET", "/api/mesures-moteurs", None, {"X-Token": A.JETON})
+        self.assertEqual(statut, 200, corps)
+        vue = json.loads(corps)
+        self.assertEqual(sorted(vue), ["candidats", "classement", "etat", "nombre"])
+        self.assertEqual(self.http("POST", "/api/mesurer-moteur", {"moteur": "inconnu", "modele": "x"}, {"X-Token": A.JETON})[0], 400)
+
+
 if __name__ == "__main__":
     unittest.main()

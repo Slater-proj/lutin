@@ -202,6 +202,10 @@ Lutin discute avec un moteur de modèles. Trois sont proposés dans **Réglages 
 - Changer de moteur retient le modèle que tu utilisais avec chacun.
 
 
+### Mesurer chaque moteur sur ta machine
+
+**Réglages > Moteur > Mesures sur cette machine** liste chaque moteur actif (Ollama, llama.cpp, Colibri, LM Studio, tout serveur compatible OpenAI) avec un bouton *Mesurer* et un modèle au choix. Lutin charge le modèle, écrit un court texte et note la vitesse (mots par seconde), le délai du premier mot, le chargement et la mémoire prise. Le tableau classe la dernière mesure réussie de chaque moteur et modèle, la plus rapide d'abord. Il compare des modèles différents : pour départager deux moteurs, mesure-les avec le même modèle (ou un modèle de même taille). Rien n'est démarré à ta place, et rien n'est mesuré pendant une réponse.
+
 ## Trouver de nouveaux modèles
 
 L'onglet Modèles a trois façons de suivre ce qui sort, sans attendre une nouvelle version de Lutin :

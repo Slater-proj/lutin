@@ -202,6 +202,10 @@ Lutin talks to a model engine. Three are available in **Settings > Engine**: **O
 - Changing engine remembers the model you used with each one.
 
 
+### Measuring each engine on your machine
+
+**Settings > Engine > Measurements on this machine** lists every active engine (Ollama, llama.cpp, Colibri, LM Studio, any OpenAI-compatible server) with a *Measure* button and a model of your choice. Lutin loads the model, writes a short text and records the speed (words per second), the delay before the first word, the loading time and the memory taken. The table ranks the latest successful measure of each engine and model, fastest first. It compares different models, so to tell two engines apart measure them with the same model (or one of the same size). Nothing is started for you, and nothing is measured during an answer.
+
 ## Finding new models
 
 The Models tab has three ways to follow what comes out, none of which needs a new version of Lutin:

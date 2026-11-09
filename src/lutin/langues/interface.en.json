@@ -1451,5 +1451,18 @@
 "Déjà téléchargés :": "Already downloaded:",
 "Aucun modèle téléchargé pour le moment.": "No model downloaded yet.",
 "Écris le nom d'un modèle.": "Type a model name.",
-"Le nom du modèle comme dans le catalogue de LM Studio (propriétaire/modèle, avec @quantification si besoin)": "The model name as in LM Studio's catalogue (owner/model, with @quantization if needed)"
+"Le nom du modèle comme dans le catalogue de LM Studio (propriétaire/modèle, avec @quantification si besoin)": "The model name as in LM Studio's catalogue (owner/model, with @quantization if needed)",
+"Mesures sur cette machine": "Measurements on this machine",
+"(ce que chaque moteur donne vraiment ici, avec son modèle)": "(what each engine really gives here, with its model)",
+"Mesure en cours : ": "Measurement in progress: ",
+"le modèle se charge puis écrit un court texte (de quelques secondes à quelques minutes).": "the model loads then writes a short text (a few seconds to a few minutes).",
+"Moteur · modèle": "Engine · model",
+"Mots/s": "Words/s",
+"Premier mot": "First word",
+"Chargement": "Loading",
+"Mesuré le ": "Measured on ",
+"Le ★ est le plus rapide mesuré ici, mais compare des modèles différents : un petit modèle ira toujours plus vite qu'un gros. Pour départager deux moteurs, mesure-les avec le même modèle ou un modèle de même taille.": "The ★ is the fastest measured here, but it compares different models: a small model will always be faster than a big one. To tell two engines apart, measure them with the same model or a model of the same size.",
+"Aucune mesure pour le moment. Lance-en une ci-dessous : elle sert à choisir le moteur d'après ce que ta machine fait vraiment, pas d'après des règles générales.": "No measurement yet. Run one below: it helps choose the engine from what your machine really does, not from general rules.",
+"Mesurer ": "Measure ",
+"Aucun moteur actif avec un modèle installé : démarre-en un (cartes ci-dessus) pour le mesurer.": "No active engine with an installed model: start one (cards above) to measure it."
 }
