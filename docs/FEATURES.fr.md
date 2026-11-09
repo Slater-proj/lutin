@@ -211,6 +211,15 @@ L'onglet Modèles a trois façons de suivre ce qui sort, sans attendre une nouve
 - **Bibliothèque d'Ollama** liste ce que montre ollama.com (récents ou populaires, avec une recherche) : nom, description, capacités (tools, vision, thinking) et tailles disponibles, avec un bouton **Installer** par taille. Rien n'est installé sans ton clic, et si le site change ou ne répond pas, la liste le dit et tu peux toujours installer un modèle par son nom. Tu peux filtrer par usage (agent qui appelle des outils, code, vision, réflexion, recherche dans tes documents), par famille (qwen, llama, gemma…) ou ne garder que les légers (4 milliards ou moins). Chaque taille dit si elle tient sur **ta** machine (🟢 tient · 🟠 limite · 🔴 trop gros : une estimation d'après la taille, en Q4), ce qui est trop gros peut être masqué, et chaque modèle a un lien vers sa page sur ollama.com.
 - **Anciens modèles** : quand le catalogue dit qu'un modèle est remplacé par un autre que tu as installé, l'onglet Modèles propose de supprimer l'ancien pour libérer la place (jamais sans ton clic).
 
+## Réglages des outils : ce que l'assistant peut utiliser, et ses limites
+
+**Réglages > Outils** (aussi trouvable avec la recherche d'en haut, Ctrl+K) :
+
+- **Couper n'importe quel outil de base** (commandes, écriture, modification, documents, web, calcul, symboles…) : l'assistant n'essaie plus de s'en servir. Moins d'outils, c'est aussi des réponses plus rapides et plus sûres avec un petit modèle. Les accords demandés avant d'écrire ou de lancer une commande ne changent pas.
+- **Exécuteur de commandes** : durée maximale d'une commande (de 10 s à 1 h, 240 s par défaut) et quantité de sortie gardée (2 000 à 60 000 caractères).
+- **Commandes lancées sans demander** : ajoute des commandes *sûres*, une par ligne (par exemple `git fetch`, `pytest -q`). Elles sont strictement validées : pas d'enchaînement, pas de chemin hors du projet, pas de programme qui efface, installe, télécharge ou ouvre un shell. Les lectures d'origine (`git status`, `ls`…) restent.
+- **Lecture et recherche dans les fichiers** : taille d'une lecture, durée d'une recherche, et dossiers que les outils ne parcourent jamais (en plus de `.git`, `node_modules`…).
+
 ## Connecteurs MCP
 
 Un connecteur branche un serveur d'outils (Home Assistant, GitHub, fichiers…) sur l'assistant, depuis **Automatisation > Connecteurs MCP**. C'est un programme que Lutin lance (commande) ou une adresse qu'il appelle (https). Seule la machine elle-même, ou un administrateur déclaré, peut en ajouter : c'est lancer un programme.
@@ -219,6 +228,9 @@ Un connecteur branche un serveur d'outils (Home Assistant, GitHub, fichiers…) 
 - **Lecture seule par défaut** : un outil qui peut modifier quelque chose n'est pas proposé tant que « lecture seule » est cochée, et même alors il demande ton accord à **chaque** appel (jamais automatique) et s'inscrit au journal des actions.
 - Ce qui revient des outils est traité comme du contenu web : jamais affiché brut, jamais obéi, et l'accord automatique est suspendu pour la suite de la demande.
 - « Essayer le serveur de démonstration » ajoute un petit serveur fourni avec Lutin (l'heure, une addition, et un outil qui écrit une note), pour voir comment ça marche sans rien installer.
+- **Clés d'accès** : à l'ajout d'un connecteur (ou plus tard, avec *Remplacer les clés*), on peut donner des jetons sous forme de variables d'environnement (`NOM=valeur`, pour un programme que Lutin lance) ou d'en-têtes HTTP (`Authorization: Bearer …`, pour un serveur joint par adresse). Elles restent sur la machine et ne sont jamais réaffichées ; seuls leurs noms le sont.
+- **Modèles** : une liste déroulante préremplit des connecteurs courants (fichiers d'un dossier, pages web, mémoire, git, heure, réflexion pas à pas). Rien ne s'exécute avant le clic sur *Ajouter* ; ils demandent Node.js (`npx`) ou uv (`uvx`) sur la machine, et Lutin ne les a pas testés lui-même.
+- **Pas encore géré** : les ressources et prompts MCP (seulement les outils), la connexion OAuth et l'ancien transport SSE.
 
 ## Options de la conversation et modèle
 

@@ -211,6 +211,15 @@ The Models tab has three ways to follow what comes out, none of which needs a ne
 - **Ollama library** lists what ollama.com shows (newest or most popular, with a search box): name, description, abilities (tools, vision, thinking) and the available sizes, with an **Install** button per size. Nothing is installed without your click, and if the site changes or is unreachable the list says so and you can still install a model by its name. You can filter by use (agent that calls tools, code, vision, reasoning, document search), by family (qwen, llama, gemma…) or keep only the light ones (4 billion or fewer). Each size shows whether it fits **your** machine (🟢 fits · 🟠 borderline · 🔴 too big: an estimate from the size, in Q4), what is too big can be hidden, and each model links to its page on ollama.com.
 - **Old models**: when the catalogue says a model is replaced by another one that you have installed, the Models tab offers to delete the old one to free the space (never without your click).
 
+## Tool settings: what the assistant can use, and its limits
+
+**Settings > Tools** (also found by the search at the top, Ctrl+K):
+
+- **Turn off any basic tool** (commands, writing, editing, documents, web, calculation, symbols…): the assistant no longer tries to use it. Fewer tools also means faster, safer answers with a small model. The approvals asked before writing or running a command do not change.
+- **Command executor**: maximum duration of a command (10 s to 1 h, 240 s by default) and how much of its output is kept (2,000 to 60,000 characters).
+- **Commands run without asking**: add *safe* commands, one per line (for example `git fetch`, `pytest -q`). They are strictly validated: no chaining, no path outside the project, no program that deletes, installs, downloads or opens a shell. The built-in reads (`git status`, `ls`…) stay.
+- **Reading and searching files**: size of a read, duration of a search, and folders the tools never walk through (besides `.git`, `node_modules`…).
+
 ## MCP connectors
 
 A connector plugs a tool server (Home Assistant, GitHub, files…) into the assistant, from **Automation > MCP connectors**. It is a program Lutin launches (command) or an address it calls (https). Only the machine itself, or a declared administrator, can add one: it launches a program.
@@ -219,6 +228,9 @@ A connector plugs a tool server (Home Assistant, GitHub, files…) into the assi
 - **Read-only by default**: a tool that can change something is not offered while "read-only" is ticked, and even then it asks for your approval at **every** call (never automatic) and is written in the action journal.
 - What comes back from the tools is treated like web content: never shown raw, never obeyed, and automatic approval is suspended for the rest of the request.
 - "Try the demo server" adds a small server shipped with Lutin (the time, an addition, and a tool that writes a note), to see how it works without installing anything.
+- **Access keys**: when you add a connector (or later, with *Replace the keys*) you can give tokens as environment variables (`NAME=value`, for a program Lutin launches) or HTTP headers (`Authorization: Bearer …`, for a server reached by address). They stay on the machine and are never shown again; only their names are.
+- **Templates**: a drop-down fills in common connectors (files of one folder, web pages, memory, git, time, step-by-step thinking). Nothing runs until you click *Add*; they need Node.js (`npx`) or uv (`uvx`) on the machine, and Lutin has not tested them itself.
+- **Not supported yet**: MCP resources and prompts (tools only), OAuth sign-in, and the legacy SSE transport.
 
 ## Conversation options and model
 

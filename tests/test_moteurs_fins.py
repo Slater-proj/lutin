@@ -11,6 +11,7 @@ for cle, valeur in {"LUTIN_RACINE": str(_TEMP / "projet"), "LUTIN_DONNEES": str(
                     "LUTIN_SANS_DEMARRAGE": "1", "LUTIN_SANS_GARDE": "1"}.items():
     os.environ.setdefault(cle, valeur)
 
+from lutin import moteur as _m  # noqa: E402,F401  (avant les autres : import circulaire sinon, et c'est lui qui enregistre les moteurs)
 from lutin import moteurs  # noqa: E402
 
 
