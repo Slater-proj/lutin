@@ -67,7 +67,11 @@ Trois moteurs : Ollama (historique), llama.cpp (géré par Lutin ou externe par 
 ### Exo — irréalisable aujourd'hui
 - ✔ (sources secondaires, à vérifier sur le dépôt) moteur MLX d'abord pour Apple Silicon ; sous Linux, CPU seul d'après le README cité ; NVIDIA et Windows sont sur la feuille de route des auteurs, **pas livrés**. Inutilisable avec les deux machines de référence.
 
-### LM Studio — externe seulement
+### LM Studio — géré sans son interface (révisé le 2026-11-09)
+- Application fermée (gratuite) avec un serveur local compatible OpenAI. **Révisé après lecture de sa documentation** : elle fournit un démon sans interface, `llmster`, installé par un script officiel (`lmstudio.ai/install.sh`, `install.ps1` sous Windows ; le script vérifie la somme SHA-512 de ce qu'il télécharge) et piloté par la commande `lms` (`daemon up/down/update`, `server start --port`, `get`, `ls --json`). Lutin l'installe donc, le démarre, l'arrête et lui télécharge des modèles. **Pas essayé sur une vraie installation.**
+- Retirés du catalogue (pas intégrables simplement) : vLLM et SGLang (Linux + CUDA, plusieurs Go de paquets pip, aucun gain pour un seul utilisateur), LocalAI (pas de binaire Windows), llama-swap (redondant avec le routeur de llama.cpp). Un utilisateur averti les joint toujours avec « Autre serveur » et leur adresse.
+
+### Ancien avis sur LM Studio (avant révision)
 - Application fermée (gratuite) avec serveur local compatible OpenAI ; utile sous Windows pour tester. Pas d'installation gérée possible par Lutin.
 
 ## 3. Réexamen de ce que j'avais classé « irréalisable » ou « sans intérêt »

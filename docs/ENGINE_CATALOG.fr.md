@@ -2,7 +2,7 @@
 
 (English version: [ENGINE_CATALOG.md](ENGINE_CATALOG.md).)
 
-Lutin connaît des serveurs de modèles (LM Studio, vLLM, SGLang, LocalAI, llama-swap…) grâce à un **catalogue** : un fichier de données, jamais du code. Dans Réglages > Moteurs, la carte « Serveur compatible OpenAI » propose ces serveurs d'un clic : l'adresse habituelle se remplit, avec une courte description, les forces, les limites et un lien vers le site.
+Lutin connaît des serveurs de modèles (LM Studio, Colibri, Strata…) grâce à un **catalogue** : un fichier de données, jamais du code. Dans Réglages > Moteurs, la carte « Serveur compatible OpenAI » propose ces serveurs d'un clic : l'adresse habituelle se remplit, avec une courte description, les forces, les limites et un lien vers le site.
 
 Un moteur peut porter `"experimental": true` : la page l'étiquette « expérimental », le range en dernier et ne le préselectionne ni ne le recommande jamais (voir [EXPERIMENTAL_ENGINES.fr.md](EXPERIMENTAL_ENGINES.fr.md)).
 

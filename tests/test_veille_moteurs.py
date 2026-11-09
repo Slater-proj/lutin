@@ -56,7 +56,7 @@ class Fiches(unittest.TestCase):
         ids = [p["id"] for p in cm.prereglages()]
         self.assertNotIn("ollama", ids)
         self.assertNotIn("llamacpp", ids)
-        self.assertIn("vllm", ids)
+        self.assertIn("lmstudio", ids)
 
     def test_schema_des_moteurs_geres(self):
         def ok(m):

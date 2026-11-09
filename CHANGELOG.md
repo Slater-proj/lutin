@@ -2,6 +2,11 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## LM Studio géré par Lutin, catalogue de moteurs simplifié
+
+- **LM Studio s'installe, se démarre, s'arrête et se met à jour depuis Lutin**, sans son interface : Lutin lance l'installeur officiel (lmstudio.ai, qui vérifie lui-même ce qu'il télécharge), puis pilote le démon et le serveur local (`127.0.0.1` seulement) avec la commande `lms`. L'onglet Modèles propose de télécharger des modèles (`lms get`). Lutin ne le désinstalle jamais (ses modèles sont dans son dossier). **Les commandes viennent de la documentation de LM Studio ; elles n'ont pas été essayées sur une vraie installation.**
+- **vLLM, SGLang, LocalAI et llama-swap quittent le catalogue** (catalogue signé, version 4) : pas intégrables simplement (Linux + CUDA et paquets de plusieurs Go, pas de binaire Windows, ou redondant avec llama.cpp). On les joint toujours avec « Autre serveur » et leur adresse. Raisons détaillées dans `docs/ENGINE_STUDY.fr.md`.
+
 ## Des outils réglables, des connecteurs MCP plus complets
 
 - **Réglages > Outils** : couper n'importe quel outil de base (exécuteur, écriture, web, documents…), régler la durée maximale d'une commande (10 s à 1 h), la sortie gardée, la taille d'une lecture, la durée d'une recherche, les dossiers jamais parcourus, et ajouter des **commandes sûres lancées sans accord** (« git fetch », « pytest -q »). Ces dernières sont strictement validées : pas d'enchaînement, pas de chemin hors du projet, pas de programme qui efface, installe, télécharge ou ouvre un shell. Les accords demandés avant d'écrire ou de lancer ne changent pas.

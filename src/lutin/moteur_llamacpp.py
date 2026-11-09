@@ -161,7 +161,7 @@ def regler_avance(moteur, donnees):
 def regler_serveur(moteur, donnees):
     """Le serveur compatible OpenAI choisi dans la liste (« serveur ») et, pour Colibri, le dossier de son modèle et son port. Renvoie vrai si un de ces réglages était dans la demande."""
     mo = moteurs.MOTEURS.get(moteur)
-    if not isinstance(mo, MoteurExterne) or not any(k in donnees for k in ("serveur", "modele_colibri", "port_colibri")):
+    if not isinstance(mo, MoteurExterne) or not any(k in donnees for k in ("serveur", "modele_colibri", "port_colibri", "port_lmstudio")):
         return False
     config = lire_config()
     c = config.setdefault(moteur, {})
@@ -171,6 +171,8 @@ def regler_serveur(moteur, donnees):
             raise ErreurMoteur(_t("Serveur inconnu."))
         if s != "colibri" and mo.colibri_choisi() and MoteurOpenAI.actif(mo):
             raise ErreurMoteur(_t("Colibri tourne encore : arrête-le avant de choisir un autre serveur."))
+        if s != "lmstudio" and mo.lmstudio_choisi() and MoteurOpenAI.actif(mo):
+            raise ErreurMoteur(_t("LM Studio tourne encore : arrête-le avant de choisir un autre serveur."))
         if s:
             c["serveur"] = s
         else:
@@ -197,6 +199,17 @@ def regler_serveur(moteur, donnees):
             c["port_colibri"] = n
         else:
             c.pop("port_colibri", None)
+    if "port_lmstudio" in donnees:
+        try:
+            n = int(donnees["port_lmstudio"] or 0)
+        except (TypeError, ValueError):
+            raise ErreurMoteur(_t("Port invalide (un nombre entre 1024 et 65535)."))
+        if n and not 1024 <= n <= 65535:
+            raise ErreurMoteur(_t("Port invalide (un nombre entre 1024 et 65535)."))
+        if n:
+            c["port_lmstudio"] = n
+        else:
+            c.pop("port_lmstudio", None)
     ecrire_config(config)
     return True
 
@@ -328,6 +341,8 @@ def vue_reglages(moteur):
         if mo.colibri_choisi():
             modele = mo.modele_colibri()
             vue["colibri"] = {"modele": modele, "modele_ok": bool(modele) and Path(modele).is_dir(), "port": mo.port_colibri(), "installe": mo._colibri() is not None}
+        if mo.lmstudio_choisi():
+            vue["lmstudio"] = {"port": mo.port_lmstudio(), "installe": mo._lms() is not None}
     return vue
 
 
@@ -1094,24 +1109,32 @@ class MoteurExterne(MoteurOpenAI):
 
     @property
     def description(self):
+        if self.lmstudio_choisi():
+            return _t("LM Studio, installé et lancé par Lutin sans son interface (son démon « llmster »), sur cette machine. Les modèles se téléchargent depuis l'onglet Modèles.")
         if self.colibri_choisi():
             return _t("Colibri, installé et lancé par Lutin sur cette machine (expérimental). Les modèles se préparent avec Colibri lui-même (« coli setup » ou « coli import »).")
         return _t("Tout serveur qui parle l'interface OpenAI : LM Studio, vLLM, Strata, un llama-server sur un autre ordinateur… Tu donnes son adresse ; il gère ses modèles lui-même. Colibri, lui, Lutin sait l'installer (choisis-le dans la liste).")
 
     @property
     def points_forts(self):
+        if self.lmstudio_choisi():
+            return (_t("Installation, démarrage, arrêt, mise à jour et téléchargement de modèles depuis Lutin, avec l'installeur officiel de LM Studio."),
+                    _t("Il n'écoute que sur cette machine (127.0.0.1)."))
         if self.colibri_choisi():
             return (_t("Installation, mise à jour, suppression, démarrage et arrêt depuis Lutin, avec somme SHA-256 vérifiée."),
                     _t("Il n'écoute que sur cette machine (127.0.0.1)."))
         return (_t("Universel : s'adapte à n'importe quel serveur de ce genre, sur cette machine ou sur le réseau."),
-                _t("Lutin n'installe ni ne démarre rien (sauf Colibri) : le serveur reste maître de ses réglages."))
+                _t("Lutin n'installe ni ne démarre rien (sauf Colibri et LM Studio) : le serveur reste maître de ses réglages."))
 
     @property
     def points_faibles(self):
+        if self.lmstudio_choisi():
+            return (_t("Lutin lance l'installeur officiel de LM Studio (lmstudio.ai) sans l'avoir testé sur une vraie installation."),
+                    _t("Lutin ne le désinstalle pas : ses modèles sont dans son dossier (~/.lmstudio)."))
         if self.colibri_choisi():
             return (_t("Moteur jeune : le démarrage avec un vrai modèle n'a pas été vérifié avec Lutin."),
                     _t("Il demande un modèle préparé par Colibri (plusieurs dizaines de Go) : Lutin ne le télécharge pas."))
-        return (_t("Lutin ne peut ni installer, ni démarrer, ni mettre à jour ce serveur (sauf Colibri), ni lui télécharger de modèle."),
+        return (_t("Lutin ne peut ni installer, ni démarrer, ni mettre à jour ce serveur (sauf Colibri et LM Studio), ni lui télécharger de modèle."),
                 _t("Selon le serveur, les appels d'outils ou les images peuvent ne pas fonctionner."))
 
     def config(self):
@@ -1129,6 +1152,23 @@ class MoteurExterne(MoteurOpenAI):
             p = 0
         return p if 1024 <= p <= 65535 else colibri.PORT_DEFAUT
 
+    # -- LM Studio : installé et lancé par Lutin sans son interface (démon llmster + commande lms), sur cette machine seulement
+    def lmstudio_choisi(self):
+        return self.config().get("serveur") == "lmstudio"
+
+    def port_lmstudio(self):
+        from . import lmstudio
+        try:
+            p = int(self.config().get("port_lmstudio") or 0)
+        except (TypeError, ValueError):
+            p = 0
+        return p if 1024 <= p <= 65535 else lmstudio.PORT_DEFAUT
+
+    def _lms(self):
+        """Le chemin de la commande `lms` si LM Studio (ou son démon) est installé, sinon None."""
+        from . import lmstudio
+        return lmstudio.chemin_lms()
+
     def modele_colibri(self):
         return str(self.config().get("modele_colibri") or "")
 
@@ -1145,6 +1185,8 @@ class MoteurExterne(MoteurOpenAI):
         return t[0] if t else ""
 
     def adresse(self):
+        if self.lmstudio_choisi():
+            return "http://127.0.0.1:{}/v1".format(self.port_lmstudio())
         if self.colibri_choisi():
             return "http://127.0.0.1:{}/v1".format(self.port_colibri())
         return self.config().get("url", "")
@@ -1153,6 +1195,16 @@ class MoteurExterne(MoteurOpenAI):
         return self.config().get("cle", "")
 
     def statut(self):
+        if self.lmstudio_choisi():
+            lms = self._lms()
+            actif = MoteurOpenAI.actif(self)
+            if actif:
+                detail = _t("LM Studio répond sur {}").format(self.adresse())
+            elif lms:
+                detail = _t("LM Studio est installé mais son serveur est arrêté : démarre-le.")
+            else:
+                detail = _t("LM Studio n'est pas installé.")
+            return {"installe": bool(lms) or actif, "actif": actif, "version": "", "detail": detail, "mode": "gere", "installe_par_lutin": bool(lms)}
         if self.colibri_choisi():
             trouve = self._colibri()
             actif = MoteurOpenAI.actif(self)
@@ -1168,9 +1220,57 @@ class MoteurExterne(MoteurOpenAI):
         actif = MoteurOpenAI.actif(self)
         return {"installe": True, "actif": actif, "version": "", "detail": _t("Connecté à {}").format(self.adresse()) if actif else _t("Le serveur {} ne répond pas.").format(self.adresse()), "mode": "externe"}
 
+    def _actions_lmstudio(self):
+        lms = self._lms() is not None
+        hl = moteurs.CONTEXTE["hors_ligne"]()
+        actif = MoteurOpenAI.actif(self)
+        sans = _t("LM Studio n'est pas installé.")
+        reseau = _t("Mode hors ligne : aucun téléchargement.") if hl else ""
+        return {"installer": {"possible": not lms and not hl, "raison": reseau or (_t("Déjà installé.") if lms else _t("Télécharge l'installeur officiel de LM Studio (lmstudio.ai) et le lance ; il vérifie lui-même ce qu'il télécharge."))},
+                "mettre_a_jour": {"possible": lms and not hl, "raison": reseau or (_t("Met à jour LM Studio (lms daemon update).") if lms else sans)},
+                "desinstaller": {"possible": False, "raison": _t("Lutin ne désinstalle pas LM Studio : ses modèles sont dans son dossier (~/.lmstudio). Supprime-le toi-même si tu le veux vraiment.")},
+                "reinstaller": {"possible": lms and not hl, "raison": reseau or (_t("Relance l'installeur officiel de LM Studio.") if lms else sans)},
+                "demarrer": {"possible": lms and not actif, "raison": _t("Il tourne déjà.") if actif else (_t("Démarre le démon et le serveur de LM Studio sur cette machine seulement (127.0.0.1).") if lms else sans)},
+                "arreter": {"possible": actif, "raison": _t("Arrête le serveur et le démon de LM Studio et libère la mémoire.") if actif else _t("Il n'est pas démarré.")}}
+
+    def _faire_lmstudio(self, action, progression):
+        from . import lmstudio
+        annule = lambda: bool(moteurs.TACHES.get(self.id, {}).get("annule"))  # noqa: E731
+        try:
+            if action in ("installer", "mettre_a_jour", "reinstaller"):
+                if moteurs.CONTEXTE["hors_ligne"]():
+                    raise ErreurMoteur(_t("Mode hors ligne : aucun téléchargement."))
+                if action == "mettre_a_jour" and self._lms():
+                    progression(_t("Mise à jour de LM Studio…"), 0, 0)
+                    lmstudio.mettre_a_jour()
+                else:
+                    lmstudio.installer(lambda texte: progression(texte, 0, 0), annule=annule)
+                progression(_t("Installé : LM Studio est prêt."), 1, 1)
+            elif action == "demarrer":
+                progression(_t("Démarrage de LM Studio…"), 0, 0)
+                lmstudio.demarrer(self.port_lmstudio())
+            elif action == "arreter":
+                if not lmstudio.arreter():
+                    raise ErreurMoteur(_t("LM Studio n'a pas confirmé son arrêt."))
+            elif action.startswith("telecharger:"):
+                if moteurs.CONTEXTE["hors_ligne"]():
+                    raise ErreurMoteur(_t("Mode hors ligne : aucun téléchargement."))
+                nom = action.split(":", 1)[1]
+                progression(_t("Téléchargement de {}…").format(nom), 0, 0)
+                lmstudio.telecharger(nom, lambda texte: progression(texte, 0, 0), annule=annule)
+                progression(_t("Modèle téléchargé : {}.").format(nom), 1, 1)
+            else:
+                raise ErreurMoteur(_t("Action impossible avec ce serveur."))
+        except ErreurMoteur:
+            raise
+        except (ValueError, OSError, subprocess.SubprocessError) as e:
+            raise ErreurMoteur(str(e))
+
     def actions(self):
+        if self.lmstudio_choisi():
+            return self._actions_lmstudio()
         if not self.colibri_choisi():
-            raison = _t("Sans objet : ce serveur n'est pas géré par Lutin (seul Colibri peut l'être : choisis-le dans la liste des serveurs connus).")
+            raison = _t("Sans objet : ce serveur n'est pas géré par Lutin (seuls Colibri et LM Studio peuvent l'être : choisis-les dans la liste des serveurs connus).")
             return {a: {"possible": False, "raison": raison} for a in moteurs.ACTIONS}
         trouve = self._colibri() is not None
         hl = moteurs.CONTEXTE["hors_ligne"]()
@@ -1197,6 +1297,8 @@ class MoteurExterne(MoteurOpenAI):
                 "arreter": {"possible": actif, "raison": _t("Arrête Colibri et libère la mémoire.") if actif else _t("Il n'est pas démarré.")}}
 
     def faire(self, action, progression):
+        if self.lmstudio_choisi():
+            return self._faire_lmstudio(action, progression)
         if not self.colibri_choisi():
             raise ErreurMoteur(_t("Action impossible avec ce serveur : Lutin ne gère que Colibri."))
         from . import colibri
@@ -1246,7 +1348,7 @@ class MoteurExterne(MoteurOpenAI):
                 "outils": ("non_teste", _t("Dépend du serveur.")), "reflexion": ("non_teste", _t("Dépend du serveur.")), "vision": ("non_teste", _t("Dépend du serveur et du modèle.")),
                 "embeddings": ("non_teste", _t("Dépend du serveur.")), "plusieurs_modeles": ("non_teste", _t("Dépend du serveur.")),
                 "telechargement": ("non", _t("Le serveur gère ses modèles lui-même.")),
-                "installation": ("non_teste", _t("Lutin installe et lance Colibri ; le démarrage avec un vrai modèle n'est pas vérifié.")) if self.colibri_choisi() else ("non", _t("Lutin n'installe pas ce serveur (sauf Colibri)."))}
+                "installation": ("non_teste", _t("Lutin installe et lance Colibri ; le démarrage avec un vrai modèle n'est pas vérifié.")) if self.colibri_choisi() else ("non", _t("Lutin n'installe pas ce serveur (sauf Colibri et LM Studio)."))}
 
 
 def _systeme():

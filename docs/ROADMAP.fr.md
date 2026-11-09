@@ -64,7 +64,7 @@ Chaque jalon : étude → porte de validation → code ciblé → tests → docu
 
 ### 0.17.0 — Catalogue des moteurs signé
 - Format et schéma stricts, vérificateur Ed25519 (RFC 8032), `tools/` de signature, copie livrée avec Lutin, lecture en ligne, veille hebdomadaire (nouvelle version de llama.cpp, Colibri, Strata… : une demande de fusion à relire, jamais publiée toute seule).
-- La fiche d'un moteur (Réglages > Moteur) vient du catalogue ; les moteurs externes (LM Studio, vLLM, SGLang, LocalAI, llama-swap, Strata…) y sont des préréglages.
+- La fiche d'un moteur (Réglages > Moteur) vient du catalogue ; les moteurs externes (LM Studio, Colibri, Strata…) y sont des préréglages.
 - `ENGINE_CATALOG.md`, `ENGINE_DEVELOPMENT.md` (ajouter un moteur).
 - **Critère** : un moteur compatible OpenAI s'ajoute par une simple ligne de catalogue, sans toucher au code ; un catalogue modifié ou mal signé est refusé ; hors ligne, le catalogue livré suffit.
 

@@ -64,7 +64,7 @@ Each milestone: study → validation gate → targeted code → tests → FR/EN 
 
 ### 0.17.0 — Signed engine catalogue
 - Strict format and schema, Ed25519 verifier (RFC 8032), signing `tools/`, copy shipped with Lutin, online reading, weekly watch (new llama.cpp, Colibri, Strata… versions: a pull request to review, never published on its own).
-- An engine's card (Settings > Engine) comes from the catalogue; external engines (LM Studio, vLLM, SGLang, LocalAI, llama-swap, Strata…) are presets there.
+- An engine's card (Settings > Engine) comes from the catalogue; external engines (LM Studio, Colibri, Strata…) are presets there.
 - `ENGINE_CATALOG.md`, `ENGINE_DEVELOPMENT.md` (adding an engine).
 - **Criterion**: an OpenAI-compatible engine is added with one catalogue line, without touching code; a modified or badly signed catalogue is refused; offline, the shipped catalogue suffices.
 

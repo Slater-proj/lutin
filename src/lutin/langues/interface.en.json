@@ -1442,5 +1442,14 @@
 "Colibri télécharge ce modèle et démarre son serveur": "Colibri downloads this model and starts its server",
 "Colibri va télécharger {} ({}). Continuer ?": "Colibri will download {} ({}). Continue?",
 "Préparation lancée : l'avancement est dans la barre bleue du haut.": "Preparation started: progress is in the blue bar at the top.",
-"Non vérifié par Lutin avec un vrai téléchargement : si quelque chose coince, le message de Colibri s'affiche dans la barre du haut.": "Not checked by Lutin with a real download: if something gets stuck, Colibri's message appears in the bar at the top."
+"Non vérifié par Lutin avec un vrai téléchargement : si quelque chose coince, le message de Colibri s'affiche dans la barre du haut.": "Not checked by Lutin with a real download: if something gets stuck, Colibri's message appears in the bar at the top.",
+"LM Studio est installé et lancé par Lutin sans son interface, avec l'installeur officiel (lmstudio.ai) ; il n'écoute que sur cette machine (127.0.0.1). Télécharge ses modèles depuis l'onglet Modèles. Pour joindre un LM Studio qui tourne ailleurs, choisis « Autre serveur » et donne son adresse.": "LM Studio is installed and started by Lutin without its interface, with the official installer (lmstudio.ai); it only listens on this machine (127.0.0.1). Download its models from the Models tab. To reach a LM Studio running elsewhere, choose « Other server » and give its address.",
+"Les commandes de LM Studio viennent de sa documentation ; Lutin ne les a pas essayées sur une vraie installation.": "LM Studio's commands come from its documentation; Lutin has not tried them on a real installation.",
+"Port local de LM Studio": "LM Studio local port",
+"Modèles de LM Studio": "LM Studio models",
+"LM Studio n'est pas encore installé : installe-le dans Réglages > Moteur, puis reviens ici pour télécharger des modèles.": "LM Studio is not installed yet: install it in Settings > Engine, then come back here to download models.",
+"Déjà téléchargés :": "Already downloaded:",
+"Aucun modèle téléchargé pour le moment.": "No model downloaded yet.",
+"Écris le nom d'un modèle.": "Type a model name.",
+"Le nom du modèle comme dans le catalogue de LM Studio (propriétaire/modèle, avec @quantification si besoin)": "The model name as in LM Studio's catalogue (owner/model, with @quantization if needed)"
 }
