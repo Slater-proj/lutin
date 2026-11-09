@@ -140,7 +140,7 @@ class Colibri(unittest.TestCase):
         self.assertTrue(a["desinstaller"]["possible"] and a["mettre_a_jour"]["possible"] and a["reinstaller"]["possible"])
         self.assertFalse(a["installer"]["possible"])
         self.assertFalse(a["demarrer"]["possible"], "sans dossier de modèle, on ne démarre pas")
-        self.assertIn("dossier du modèle", a["demarrer"]["raison"])
+        self.assertIn("Prépare d'abord un modèle", a["demarrer"]["raison"])
         modele = _TEMP / "modele-colibri"
         modele.mkdir(exist_ok=True)
         self.regler(modele_colibri=str(modele), port_colibri=8123)

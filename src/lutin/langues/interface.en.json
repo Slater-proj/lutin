@@ -1218,7 +1218,6 @@
 "Utiliser ": "Use ",
 "Autre serveur (j'indique son adresse)": "Another server (I give its address)",
 "Moteur expérimental : Lutin l'installe et le lance, mais son démarrage avec un vrai modèle n'a pas été vérifié.": "Experimental engine: Lutin installs and starts it, but starting it with a real model has not been verified.",
-"Colibri écoute seulement sur cette machine (127.0.0.1). Son modèle se prépare avec Colibri lui-même (« coli setup » ou « coli import », plusieurs dizaines de Go) ; indique ici le dossier obtenu. Pour joindre un Colibri qui tourne ailleurs, choisis « Autre serveur » et donne son adresse.": "Colibri only listens on this machine (127.0.0.1). Its model is prepared with Colibri itself (\"coli setup\" or \"coli import\", tens of GB); enter the resulting folder here. To reach a Colibri running elsewhere, choose \"Another server\" and give its address.",
 "Dossier du modèle préparé par Colibri (chemin complet)": "Folder of the model prepared by Colibri (full path)",
 "Port local de Colibri": "Colibri local port",
 "port": "port",
@@ -1479,5 +1478,6 @@
 "Démarrer ": "Start ",
 "Lancé : l'avancement est dans la barre bleue du haut.": "Started: progress is in the blue bar at the top.",
 "executeur commandes ecrire fichier delai sortie lecture outils mcp": "executor commands write file delay output reading tools mcp executeur commandes",
-"dossier travail donnees emplacement": "folder working data location dossier travail donnees emplacement"
+"dossier travail donnees emplacement": "folder working data location dossier travail donnees emplacement",
+"Colibri écoute seulement sur cette machine (127.0.0.1). Son modèle (plusieurs dizaines de Go) se télécharge depuis l'onglet Modèles : Lutin lance la préparation de Colibri pour toi. Le dossier ci-dessous ne sert que si tu as déjà préparé un modèle toi-même. Pour joindre un Colibri qui tourne ailleurs, choisis « Autre serveur » et donne son adresse.": "Colibri only listens on this machine (127.0.0.1). Its model (tens of GB) is downloaded from the Models tab: Lutin runs Colibri's own preparation for you. The folder below is only for a model you prepared yourself. To reach a Colibri running elsewhere, pick \"Other server\" and give its address."
 }

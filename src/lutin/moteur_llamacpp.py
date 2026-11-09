@@ -1130,7 +1130,7 @@ class MoteurExterne(MoteurOpenAI):
         if self.lmstudio_choisi():
             return _t("LM Studio, installé et lancé par Lutin sans son interface (son démon « llmster »), sur cette machine. Les modèles se téléchargent depuis l'onglet Modèles.")
         if self.colibri_choisi():
-            return _t("Colibri, installé et lancé par Lutin sur cette machine (expérimental). Les modèles se préparent avec Colibri lui-même (« coli setup » ou « coli import »).")
+            return _t("Colibri, installé et lancé par Lutin sur cette machine (expérimental). Son modèle se télécharge depuis l'onglet Modèles.")
         return _t("Tout serveur qui parle l'interface OpenAI : LM Studio, vLLM, Strata, un llama-server sur un autre ordinateur… Tu donnes son adresse ; il gère ses modèles lui-même. Colibri, lui, Lutin sait l'installer (choisis-le dans la liste).")
 
     @property
@@ -1404,7 +1404,7 @@ class MoteurExterne(MoteurOpenAI):
         elif actif:
             demarrer = _t("Il tourne déjà.")
         elif not modele:
-            demarrer = _t("Indique d'abord le dossier du modèle préparé par Colibri (« coli setup » ou « coli import »).")
+            demarrer = _t("Prépare d'abord un modèle : onglet Modèles, carte Colibri.")
         elif not modele_ok:
             demarrer = _t("Le dossier du modèle n'existe pas : {}").format(modele)
         else:

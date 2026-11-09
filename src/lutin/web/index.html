@@ -3459,7 +3459,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
       if (colibri) {
         const c = m.reglages.colibri || {}, lc = el('div', 'ligne'), dossier = el('input'), port = el('input'), okc = el('button', '', T('Enregistrer')), msgc = el('span', 'aide');
         d.appendChild(el('div', 'erreur', '⚗ ' + T('Moteur expérimental : Lutin l\'installe et le lance, mais son démarrage avec un vrai modèle n\'a pas été vérifié.')));
-        d.appendChild(el('div', 'aide', T('Colibri écoute seulement sur cette machine (127.0.0.1). Son modèle se prépare avec Colibri lui-même (« coli setup » ou « coli import », plusieurs dizaines de Go) ; indique ici le dossier obtenu. Pour joindre un Colibri qui tourne ailleurs, choisis « Autre serveur » et donne son adresse.')));
+        d.appendChild(el('div', 'aide', T('Colibri écoute seulement sur cette machine (127.0.0.1). Son modèle (plusieurs dizaines de Go) se télécharge depuis l'onglet Modèles : Lutin lance la préparation de Colibri pour toi. Le dossier ci-dessous ne sert que si tu as déjà préparé un modèle toi-même. Pour joindre un Colibri qui tourne ailleurs, choisis « Autre serveur » et donne son adresse.')));
         dossier.value = c.modele || ''; dossier.placeholder = T('Dossier du modèle préparé par Colibri (chemin complet)'); dossier.style.minWidth = '320px';
         port.type = 'number'; port.min = 1024; port.max = 65535; port.value = c.port || 8000; port.style.width = '90px'; port.title = T('Port local de Colibri');
         dossier.disabled = port.disabled = okc.disabled = !modifiable;

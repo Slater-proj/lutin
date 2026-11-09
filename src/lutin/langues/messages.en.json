@@ -1858,7 +1858,6 @@
 "Aucun moteur n'est choisi ni installé : « {} » attend l'adresse d'un serveur (Réglages > Moteurs), et ni Ollama ni llama.cpp ne sont installés.": "No engine is chosen or installed: \"{}\" is waiting for a server address (Settings > Engines), and neither Ollama nor llama.cpp is installed.",
 "Tout serveur qui parle l'interface OpenAI : LM Studio, vLLM, Strata, un llama-server sur un autre ordinateur… Tu donnes son adresse ; il gère ses modèles lui-même. Colibri, lui, Lutin sait l'installer (choisis-le dans la liste).": "Any server that speaks the OpenAI interface: LM Studio, vLLM, Strata, a llama-server on another computer… You give its address; it manages its own models. Colibri, however, Lutin can install (pick it in the list).",
 "Remplacement de l'ancienne version…": "Replacing the old version…",
-"Colibri, installé et lancé par Lutin sur cette machine (expérimental). Les modèles se préparent avec Colibri lui-même (« coli setup » ou « coli import »).": "Colibri, installed and started by Lutin on this machine (experimental). Models are prepared with Colibri itself (\"coli setup\" or \"coli import\").",
 "Serveur inconnu.": "Unknown server.",
 "Colibri tourne encore : arrête-le avant de choisir un autre serveur.": "Colibri is still running: stop it before choosing another server.",
 "Port invalide (un nombre entre 1024 et 65535).": "Invalid port (a number between 1024 and 65535).",
@@ -1872,7 +1871,6 @@
 "Impossible de remplacer l'ancienne version ({}). Ferme tout ce qui utilise llama.cpp (un llama-server encore ouvert, un antivirus qui analyse le dossier) puis relance la mise à jour.": "Cannot replace the old version ({}). Close everything that uses llama.cpp (a llama-server still open, an antivirus scanning the folder) then run the update again.",
 "Donne un chemin complet (par exemple D:/IA/colibri-modele).": "Give a full path (for example D:/AI/colibri-model).",
 "Colibri est installé mais arrêté : indique le dossier de son modèle puis démarre-le.": "Colibri is installed but stopped: give the folder of its model, then start it.",
-"Indique d'abord le dossier du modèle préparé par Colibri (« coli setup » ou « coli import »).": "First give the folder of the model prepared by Colibri (\"coli setup\" or \"coli import\").",
 "Arrête et supprime le programme Colibri (ton modèle reste où il est).": "Stops and removes the Colibri program (your model stays where it is).",
 "Arrête Colibri et libère la mémoire.": "Stops Colibri and frees the memory.",
 "Recherche de la dernière version de Colibri…": "Looking for the latest Colibri version…",
@@ -2063,5 +2061,7 @@
 "{} n'est pas installé : installe-le (bouton ci-dessous).": "{} is not installed: install it (button below).",
 "Tu peux aussi utiliser {}, déjà installé.": "You can also use {}, already installed.",
 "ExLlamaV3 (Réglages > Moteur) peut être encore plus rapide avec des modèles EXL3 très compressés : installe-le puis mesure-le": "ExLlamaV3 (Settings > Engine) can be even faster with heavily compressed EXL3 models: install it then measure it",
-"Pour comparer, il faut au moins deux moteurs prêts qui ont ce modèle ou un équivalent (même famille et même taille). Pour l'instant : {}": "To compare, at least two ready engines are needed that have this model or an equivalent (same family and size). For now: {}"
+"Pour comparer, il faut au moins deux moteurs prêts qui ont ce modèle ou un équivalent (même famille et même taille). Pour l'instant : {}": "To compare, at least two ready engines are needed that have this model or an equivalent (same family and size). For now: {}",
+"Colibri, installé et lancé par Lutin sur cette machine (expérimental). Son modèle se télécharge depuis l'onglet Modèles.": "Colibri, installed and started by Lutin on this machine (experimental). Its model is downloaded from the Models tab.",
+"Prépare d'abord un modèle : onglet Modèles, carte Colibri.": "Prepare a model first: Models tab, Colibri card."
 }
