@@ -2,11 +2,19 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## Colibri, ExLlamaV3 et connecteurs : installation en un clic, sans bidouille
+
+- **ExLlamaV3 s'installe enfin avec l'installateur Windows** : son Python n'a pas le module « venv » (« No module named venv »). Lutin installe alors **uv** tout seul et lui fait créer l'environnement (testé pour de vrai : 3 s).
+- **Colibri : « HTTP 403 » réglé.** L'API de GitHub limite à 60 requêtes par heure et par adresse ; Colibri, ExLlamaV3, TabbyAPI et llama.cpp lisent maintenant leurs versions sur les pages publiques de github.com quand l'API refuse (testé pour de vrai : Colibri s'installe avec une API qui répond 403).
+- **L'onglet Modèles n'est plus vide** quand Colibri, LM Studio ou ExLlamaV3 est choisi : leurs cartes étaient rangées dans la bibliothèque d'Ollama, qui est masquée sous un « serveur compatible OpenAI ». Elles s'affichent, avec un bouton **Installer** si le serveur n'est pas encore là (au lieu d'un renvoi vers les Réglages).
+- **Mistral et autres modèles dont le gabarit refuse les outils** (erreur d'Ollama « Unable to generate parser for this template… Only user, system and assistant roles are supported ») : Lutin réessaie tout de suite sans outils (les résultats déjà lus deviennent du texte, les rôles alternent), retient le modèle et ne lui en redéclare plus, au lieu d'afficher l'erreur.
+- **uv et Node.js : un clic pour installer, un clic pour retirer** (Automatisation > Connecteurs MCP > « Programmes utilisés par les connecteurs »). Versions épinglées, somme SHA-256 vérifiée, installés dans le dossier de Lutin (jamais dans ton système), retirables ; un programme déjà présent sur la machine est utilisé tel quel. **Brancher un connecteur du catalogue installe au passage le programme qui lui manque** : plus de « pip install uv » à taper.
+
 ## Catalogue de connecteurs MCP, recherche dans la mémoire plus fiable, menus rangés, liste de contrôle sur matériel réel
 
 - **Catalogue MCP** (Automatisation > Connecteurs MCP) : Fichiers, Pages web, Dépôt Git, Heure, Mémoire en graphe, Raisonnement pas à pas, SQLite, **Home Assistant** et **n8n**, à brancher en un clic. Chaque serveur est lancé à une **version exacte** (jamais « la dernière »), ses valeurs sont contrôlées (un dossier qui existe, une adresse http, jamais une valeur qui commence par « - »), le programme manquant (Node.js, uv) est signalé avec la marche à suivre, le connecteur est **essayé tout de suite et retiré s'il ne répond pas**, et seuls ses outils de lecture sont autorisés d'emblée. Les jetons restent sur la machine. Remplace l'ancien menu « Partir d'un modèle ».
 - **Mémoire** : la recherche par mots ne se laisse plus arrêter par un pluriel (« chat » / « chats », « fonction » / « fonctions »). Un banc de mesure (`tools/mesurer_rappel.py`, 24 questions reformulées) passe de 88 % à 96 % de bonnes réponses en première position, et un test empêche toute régression. Un pur synonyme (« backups » pour « sauvegardes ») reste du ressort de la recherche par le sens.
-- **Menus rangés par ordre alphabétique**, dans la langue affichée : le menu Réglages, ses rubriques et les sous-menus des pages Mémoire, Automatisation et Accès.
+- **Menus rangés dans un ordre logique**, du plus courant au plus rare : Général, Automatisation, Machines, Santé, Accès ; dans Mémoire, « Projet Claude » (une importation rare) passe en dernier ; dans Accès, « Administration à distance » après la liste des appareils.
 - **docs/VALIDATION.md** : la liste de contrôle à suivre pas à pas sur du vrai matériel (chaque moteur, deux PC, notifications, connecteurs, mémoire, sécurité) avant une 1.0.
 
 ## Icône au démarrage de Windows, données de Lutin interdites à l'assistant, CI plus robuste

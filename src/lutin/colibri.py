@@ -49,13 +49,24 @@ def nom_archive(version, systeme=None, architecture=None):
 
 def derniere_version(http=miseajour.http_get):
     """Le numéro (X.Y.Z) de la dernière publication de Colibri, par l'API de GitHub. OSError sans réseau, ValueError si illisible."""
-    statut, _, corps = http("https://api.github.com/repos/{}/releases/latest".format(DEPOT), {"Accept": "application/vnd.github+json"})
-    if statut != 200:
-        raise ValueError(_t("Impossible de lire la dernière version de Colibri (HTTP {}).").format(statut))
-    version = str(json.loads(corps.decode("utf-8")).get("tag_name", "")).lstrip("v")
-    if not RE_VERSION.match(version):
-        raise ValueError(_t("Numéro de version de Colibri illisible : {}").format(version[:30]))
-    return version
+    cause = ""
+    try:
+        statut, _, corps = http("https://api.github.com/repos/{}/releases/latest".format(DEPOT), {"Accept": "application/vnd.github+json"})
+        if statut == 200:
+            version = str(json.loads(corps.decode("utf-8")).get("tag_name", "")).lstrip("v")
+            if not RE_VERSION.match(version):
+                raise ValueError(_t("Numéro de version de Colibri illisible : {}").format(version[:30]))
+            return version
+        cause = "HTTP {}".format(statut)
+    except OSError as e:
+        cause = str(e)
+    try:          # l'API de GitHub refuse (limite de requêtes : HTTP 403) ou ne répond pas : la page publique des publications dit la même chose
+        version = (miseajour.version_par_page(DEPOT, http) or "").lstrip("v")
+        if RE_VERSION.match(version):
+            return version
+    except OSError:
+        pass
+    raise ValueError(_t("Impossible de lire la dernière version de Colibri ({}). GitHub limite parfois les requêtes : réessaie dans quelques minutes.").format(cause))
 
 
 def dossier_colibri(dossiers=None):

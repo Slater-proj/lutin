@@ -5,7 +5,6 @@ import re
 import subprocess
 import sys
 import time
-import unicodedata
 import unittest
 from pathlib import Path
 
@@ -97,19 +96,21 @@ class Parcours(unittest.TestCase):
             p.attendre("[...document.querySelectorAll('#santeCorps b')].some(b => b.textContent.includes('Disque') || b.textContent.includes('Dossier de données'))")
             self.assertEqual(p.evaluer("document.querySelectorAll('#santeCorps .erreur').length"), 0)
 
-    def test_les_menus_de_reglages_sont_par_ordre_alphabetique_dans_chaque_langue(self):
-        """Le menu Réglages, ses rubriques et les sous-menus des pages longues sont rangés dans l'ordre alphabétique de la langue affichée (pas celui du français en anglais)."""
-        attendu = {"fr": (["Accès", "Automatisation", "Général", "Machines", "Santé"], ["Avancé", "Conversation", "Dossiers", "Général", "Moteur", "Outils"]),
-                   "en": (["Access", "Automation", "General", "Health", "Machines"], None)}
+    def test_les_menus_de_reglages_suivent_un_ordre_logique_du_plus_courant_au_plus_rare(self):
+        """Le menu Réglages (Général d'abord, Accès à la fin), ses rubriques et les sous-menus des pages longues : du quotidien à l'administration, dans les deux langues."""
+        attendu = {"fr": (["Général", "Automatisation", "Machines", "Santé", "Accès"], ["Général", "Moteur", "Conversation", "Outils", "Dossiers", "Avancé"]),
+                   "en": (["General", "Automation", "Machines", "Health", "Access"], ["General", "Engine", "Conversation", "Tools", "Folders", "Advanced"])}
         for langue, (menu, rubriques) in attendu.items():
             with self.captures.serveur_demo({"LUTIN_LANGUE": langue}) as (port, tmp):
                 p = self.ouvrir(tmp, "http://127.0.0.1:%d/" % port)
-                self.assertEqual(p.evaluer("[...document.querySelectorAll('#menuReglages .tx b')].map(b => b.textContent.replace(/[^\\p{L}]/gu, ''))"), menu)
-                lues = p.evaluer("[...document.querySelectorAll('#sousReglages button')].map(b => b.textContent)")
-                self.assertEqual(lues, rubriques or sorted(lues, key=str.lower), langue)
-                for page in ("p-memoire", "p-auto", "p-acces"):
+                self.assertEqual(p.evaluer("[...document.querySelectorAll('#menuReglages .tx b')].map(b => b.textContent.replace(/[^\\p{L}]/gu, ''))"), menu, langue)
+                self.assertEqual(p.evaluer("[...document.querySelectorAll('#sousReglages button')].map(b => b.textContent)"), rubriques, langue)
+                debuts = {"p-memoire": ("Contexte", "Projet Claude") if langue == "fr" else ("Project context", "Claude project"),
+                          "p-auto": ("T", "Connecteurs MCP") if langue == "fr" else ("Scheduled", "MCP connectors"),
+                          "p-acces": ("Qui peut", "Administration") if langue == "fr" else ("Who can", "Remote")}
+                for page, (premier, dernier) in debuts.items():
                     noms = p.evaluer("[...document.querySelectorAll('#%s .sous-nav button')].map(b => b.textContent)" % page)
-                    self.assertEqual(noms, sorted(noms, key=lambda n: unicodedata.normalize("NFD", n.lower()).encode("ascii", "ignore")), (langue, page))
+                    self.assertTrue(noms[0].startswith(premier) and noms[-1].startswith(dernier), (langue, page, noms))
 
     def test_le_catalogue_mcp_s_affiche_et_demande_les_champs_d_un_serveur_distant(self):
         """Automatisation > Connecteurs MCP : le catalogue montre ses cartes ; « Brancher » sur Home Assistant ouvre l'adresse et le jeton (champ masqué) au lieu de brancher à l'aveugle."""
@@ -121,10 +122,26 @@ class Parcours(unittest.TestCase):
             texte = p.evaluer("document.getElementById('catalogueMcp').textContent")
             for attendu in ("Fichiers", "Home Assistant", "n8n", "Pages web", "version précise"):
                 self.assertIn(attendu, texte)
+            self.assertIn("Programmes utilisés par les connecteurs", texte, "uv et Node.js : un bloc pour les installer ou les retirer")
+            for programme in ("uv", "Node.js"):
+                self.assertIn(programme, texte)
             carte = "[...document.querySelectorAll('#catalogueMcp .carte')].find(c => c.textContent.includes('Home Assistant'))"
             p.evaluer(carte + ".querySelector('button').click()")
             p.attendre(carte + ".querySelectorAll('input').length === 2")
             self.assertEqual(p.evaluer(carte + ".querySelector('input[name=jeton]').type"), "password")
+            self.assertEqual(p.erreurs, [])
+
+    def test_l_onglet_modeles_montre_les_serveurs_geres_meme_non_installes(self):
+        """Colibri (ou LM Studio, ExLlamaV3) choisi mais pas installé : l'onglet Modèles n'était pas vide par oubli mais caché (la bibliothèque d'Ollama, où ses cartes étaient rangées, est masquée sous un serveur compatible OpenAI). Il propose maintenant « Installer »."""
+        with self.captures.serveur_demo({"LUTIN_LANGUE": "fr"}) as (port, tmp):
+            p = self.ouvrir(tmp, "http://127.0.0.1:%d/" % port)
+            jeton = "document.documentElement.innerHTML.match(/TOKEN = '([0-9a-f]+)'/)[1]"
+            for corps in ("{moteur: 'openai', serveur: 'colibri'}", "{moteur: 'openai'}"):
+                url = "/api/moteur-regler" if "serveur" in corps else "/api/reglages"
+                p.evaluer("(async () => (await fetch('%s', {method: 'POST', headers: {'Content-Type': 'application/json', 'X-Token': %s}, body: JSON.stringify(%s)})).json())()" % (url, jeton, corps))
+            p.evaluer(onglet("modeles"))
+            p.attendre("document.getElementById('colibriModeles').getBoundingClientRect().height > 40 && document.getElementById('colibriModeles').textContent.includes('pas encore installé')")
+            self.assertTrue(p.evaluer("[...document.querySelectorAll('#colibriModeles button')].some(b => b.textContent === 'Installer Colibri')"))
             self.assertEqual(p.erreurs, [])
 
     def test_reglages_montre_les_machines_sans_erreur(self):
@@ -242,7 +259,7 @@ class Parcours(unittest.TestCase):
             p.commande("Input.dispatchMouseEvent", type="mouseReleased", x=100, y=y - 60, button="left", clickCount=1)
             p.attendre("Math.round(document.querySelector('.options-lat').getBoundingClientRect().height) > %d" % (haut_avant + 30))
             # les onglets : Automatisation existe et contient les tâches planifiées (plus dans Mémoire)
-            self.assertEqual([p.evaluer("document.querySelectorAll('.onglets button[data-p]')[%d].dataset.p" % i) for i in range(8)], ["chat", "modeles", "memoire", "acces", "auto", "reglages", "machines", "sante"])
+            self.assertEqual([p.evaluer("document.querySelectorAll('.onglets button[data-p]')[%d].dataset.p" % i) for i in range(8)], ["chat", "modeles", "memoire", "reglages", "auto", "machines", "sante", "acces"])
             self.assertEqual(p.evaluer("document.querySelectorAll('.haut .onglets > button, .haut .onglets > .sous > button').length"), 4)          # la barre ne montre que quatre boutons : le reste est dans le menu Réglages
             p.evaluer(onglet("auto"))
             p.attendre("document.querySelector('#p-auto').classList.contains('vue')")

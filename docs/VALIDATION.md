@@ -48,7 +48,7 @@ Do this with two real PCs (A = where you work, B = the other one).
 
 | Step | Do | See |
 |---|---|---|
-| No program | If Node.js or uv is not installed | The card says what to install; nothing is connected |
+| No program | If Node.js or uv is not installed, connect "Time and time zones" | Lutin installs uv on the way (the "Programs used by the connectors" block shows it, with a button to remove it) |
 | Time | Connect "Time and time zones" | "Connected" with the number of tools; ask for the time in Tokyo in a conversation |
 | Files | Connect "Files" with a test folder | The model reads that folder; refuses to write while the connector is read-only |
 | Broken | Connect with a folder that does not exist | Clear message, nothing is added |

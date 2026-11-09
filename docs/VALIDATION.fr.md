@@ -48,7 +48,7 @@ Pour **chaque** moteur : la liste des modèles installés s'affiche, un modèle 
 
 | Étape | Fais | Vois |
 |---|---|---|
-| Sans programme | Si Node.js ou uv n'est pas installé | La carte dit quoi installer ; rien n'est branché |
+| Sans programme | Si Node.js ou uv n'est pas installé, brancher « Heure et fuseaux » | Lutin installe uv au passage (le bloc « Programmes utilisés par les connecteurs » le montre, avec un bouton pour le retirer) |
 | Heure | Brancher « Heure et fuseaux » | « Branché » avec le nombre d'outils ; demander l'heure à Tokyo dans une conversation |
 | Fichiers | Brancher « Fichiers » avec un dossier de test | Le modèle lit ce dossier ; refuse d'écrire tant que le connecteur est en lecture seule |
 | Cassé | Brancher avec un dossier qui n'existe pas | Message clair, rien n'est ajouté |

@@ -9,6 +9,7 @@ import os
 import re
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 
@@ -148,6 +149,57 @@ def version_par_page(depot=DEPOT, http=http_get):
     _, entetes, _ = http("https://github.com/{}/releases/latest".format(depot), {"Accept": "text/html"})
     m = re.search(r"/releases/tag/v?(\d+\.\d+\.\d+[^/?#]*)$", entetes.get("x-lutin-url-finale", ""))
     return m.group(1) if m else None
+
+
+RE_ETIQUETTE = re.compile(r"/releases/tag/([^/?#]+)$")
+
+
+def publication_par_page(depot, etiquette="", http=http_get):
+    """Une publication GitHub reconstruite depuis les pages PUBLIQUES de github.com, sans l'API : {tag_name, assets: [{name, browser_download_url}]} (tailles et empreintes inconnues).
+    L'API de GitHub limite à 60 requêtes par heure et par adresse (HTTP 403 ensuite : un réseau partagé, une installation répétée) ; ces pages n'ont pas cette limite. Lève OSError ou ValueError."""
+    if not etiquette:
+        _, entetes, _ = http("https://github.com/{}/releases/latest".format(depot), {"Accept": "text/html"})
+        m = RE_ETIQUETTE.search(entetes.get("x-lutin-url-finale", ""))
+        if not m:
+            raise ValueError(_t("Aucune publication trouvée."))
+        etiquette = urllib.parse.unquote(m.group(1))
+    jeton = urllib.parse.quote(etiquette, safe="")
+    statut, _, corps = http("https://github.com/{}/releases/expanded_assets/{}".format(depot, jeton), {"Accept": "text/html"})
+    if statut != 200:
+        raise ValueError("github.com : HTTP {}".format(statut))
+    page = corps.decode("utf-8", "replace")
+    noms = []
+    for brut in re.findall(r'href="/{}/releases/download/{}/([^"?#]+)"'.format(re.escape(depot), re.escape(jeton)), page):
+        nom = urllib.parse.unquote(brut)
+        if nom not in noms:
+            noms.append(nom)
+    return {"tag_name": etiquette, "assets": [{"name": n, "browser_download_url": "https://github.com/{}/releases/download/{}/{}".format(depot, jeton, urllib.parse.quote(n))} for n in noms]}
+
+
+def publications_par_page(depot, motif=r".+", nombre=4, etiquette="", http=http_get):
+    """Les dernières publications d'un dépôt (étiquette conforme à `motif`, la plus récente d'abord), reconstruites sans l'API de GitHub : le flux public des publications donne les étiquettes, la page
+    de chacune ses fichiers. Utile quand « la dernière publication » n'est pas une version à installer (un dépôt qui publie aussi des étiquettes de maintenance). Lève ValueError si rien n'est lisible."""
+    if etiquette:
+        etiquettes = [etiquette]
+    else:
+        statut, _, corps = http("https://github.com/{}/releases.atom".format(depot), {"Accept": "application/atom+xml"})
+        if statut != 200:
+            raise ValueError("github.com : HTTP {}".format(statut))
+        etiquettes = []
+        for brute in re.findall(r"/releases/tag/([^\"<]+)", corps.decode("utf-8", "replace")):
+            e = urllib.parse.unquote(brute)
+            if re.fullmatch(motif, e) and e not in etiquettes:
+                etiquettes.append(e)
+        etiquettes = etiquettes[:nombre]
+    publications = []
+    for e in etiquettes:
+        try:
+            publications.append(publication_par_page(depot, e, http))
+        except (OSError, ValueError):
+            continue
+    if not publications:
+        raise ValueError(_t("Aucune publication trouvée."))
+    return publications
 
 
 def derniere_release_detail(depot=DEPOT, http=http_get):

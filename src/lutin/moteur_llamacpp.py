@@ -974,7 +974,15 @@ class MoteurLlamaCpp(MoteurOpenAI):
         try:
             releases = [(http_json or _http_json)(API_VERSION + epinglee)] if epinglee else (http_json or _http_json)(API_RELEASES)
         except (urllib.error.URLError, OSError, ValueError) as e:
-            raise ErreurMoteur(_t("GitHub ne répond pas : {}").format(e))
+            releases = None
+            if http_json is None:          # l'API de GitHub refuse (limite de requêtes, HTTP 403) : les pages publiques des publications donnent les mêmes fichiers
+                try:
+                    from . import miseajour
+                    releases = miseajour.publications_par_page("ggml-org/llama.cpp", r"b\d+", 4, epinglee)
+                except (OSError, ValueError):
+                    releases = None
+            if releases is None:
+                raise ErreurMoteur(_t("GitHub ne répond pas : {}").format(e))
         choix = choisir_fichiers(releases, systeme, arch, variante, epinglee)
         if choix is None and variante != "cpu":
             variante = "cpu"

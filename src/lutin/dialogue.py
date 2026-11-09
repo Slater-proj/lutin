@@ -43,6 +43,49 @@ RAPPEL_REPETITION = "Ta réflexion tournait en rond (les mêmes phrases revenaie
 RAPPEL_APPEL = "Ton dernier appel d'outil était mal formé et a été rejeté. Recommence en appelant l'outil avec des arguments simples ; pour un long contenu, fais plusieurs petits appels."
 
 
+# Le gabarit de conversation du modèle (jinja, dans le modèle lui-même) refuse les outils ou le rôle « tool » : Ollama répond 400 « Unable to generate parser for this template »
+# (certains Mistral : « Only user, system and assistant roles are supported », ou « roles must alternate »). Ce n'est ni un plantage ni un appel mal écrit : ce modèle ne peut pas servir avec des outils.
+RE_GABARIT = re.compile(r"Unable to generate parser|raise_exception|roles? (are|must)|chat template|jinja|template", re.I)
+GABARIT_SANS_OUTILS = set()          # modèles dont le gabarit refuse les outils (gardé aussi dans gabarits.json, pour ne pas refaire l'essai à chaque démarrage)
+
+
+def _fichier_gabarits():
+    return _m.DONNEES / "gabarits.json"
+
+
+def gabarits_connus():
+    GABARIT_SANS_OUTILS.update(str(x) for x in (_m.lire_json(_fichier_gabarits(), []) or []) if isinstance(x, str))
+    return GABARIT_SANS_OUTILS
+
+
+def noter_gabarit(modele):
+    GABARIT_SANS_OUTILS.add(modele)
+    try:
+        _m.ecrire_atomique(_fichier_gabarits(), json.dumps(sorted(GABARIT_SANS_OUTILS)))
+    except OSError:
+        pass
+
+
+def aplatir_sans_outils(corps):
+    """Le même échange sans outils ni rôle « tool » : un résultat d'outil devient un message de l'utilisateur, un appel d'outil une phrase, et deux messages de même rôle à la suite sont fusionnés
+    (les gabarits les plus stricts exigent l'alternance utilisateur / assistant). Ce que le modèle a lu reste donc sous ses yeux, en texte."""
+    sortie = []
+    for m in corps.get("messages", []):
+        role, texte = m.get("role"), str(m.get("content") or "")
+        if role == "tool":
+            role, texte = "user", "[" + _t("Résultat de l'outil") + " " + str(m.get("tool_name") or "") + "]\n" + texte
+        elif role == "assistant" and m.get("tool_calls"):
+            appels = ", ".join(str((c.get("function") or {}).get("name") or "") for c in m["tool_calls"])
+            texte = (texte + "\n" if texte else "") + "[" + _t("Appel de l'outil") + " " + appels + "]"
+        elif role not in ("system", "user", "assistant"):
+            role = "user"
+        if sortie and sortie[-1]["role"] == role and role != "system":
+            sortie[-1]["content"] += "\n\n" + texte
+        else:
+            sortie.append({"role": role, "content": texte})
+    return {k: v for k, v in dict(corps, messages=sortie).items() if k != "tools"}
+
+
 RE_PLANTAGE = re.compile(r"llama-server|out.of.memory|cudaMalloc|exit status|terminated|runner|connection (reset|refused)|unexpectedly", re.I)      # Ollama a planté ou manque de mémoire vidéo : on réessaie avec moins de contexte
 
 
@@ -1549,12 +1592,19 @@ def boucle_agent(conv, r, emit, ctx, stop):
             else:
                 corps["tools"] = outils
         fini, verifie, relance_outil, repli_demande, relance_vide, relance_repetition = False, False, False, False, False, False
+        plat = r["modele"] in gabarits_connus()
+        if plat:
+            corps = aplatir_sans_outils(corps)
+            if idx_tour == 0 and outils:
+                emit({"type": "info", "texte": _t("Le gabarit de ce modèle refuse les outils : il répond sans lire ni modifier de fichiers. Pour cela, choisis un autre modèle (Qwen ou Gemma).")})
         if moteur_actuel(r).en_memoire(r["modele"]) is None:
             emit({"type": "etat", "texte": "Chargement du modèle en mémoire (30 s à 2 min la première fois, ou si ComfyUI lui a pris la carte)."})
         for tentative in range(3):
             contenu, pensee, appels = "", "", []
             rond, verifie_rond, raison_fin = False, 0, ""
             corps_t = corps if tentative == 0 else dict(corps, messages=ajuster_contexte(msgs_base, r["num_ctx"], 0.7 ** tentative, outils) + ([{"role": "user", "content": RAPPEL_APPEL}] if relance_outil else [{"role": "user", "content": RAPPEL_REPETITION}] if relance_repetition else [{"role": "user", "content": RAPPEL_VIDE}] if relance_vide else []), options=dict(corps["options"], temperature=0.3, **({"repeat_penalty": 1.15} if relance_repetition else {})), think=False if (relance_vide or relance_repetition) else corps["think"])
+            if plat:
+                corps_t = aplatir_sans_outils(corps_t)
             if relance_vide and tentative >= 2 and "tools" in corps_t:
                 corps_t = {k: v for k, v in corps_t.items() if k != "tools"}          # dernier essai SANS outils : certains petits modèles ne produisent plus rien quand les outils sont déclarés ; mieux vaut une réponse en texte
             try:
@@ -1636,7 +1686,9 @@ def boucle_agent(conv, r, emit, ctx, stop):
                     detail = str(erreur)[:300]
                 _m.journaliser("Ollama ({}, essai {}) : {}".format("HTTP {}".format(erreur.code) if http else type(erreur).__name__, tentative + 1, detail))
                 # Une erreur d'Ollama qu'on peut réessayer (HTTP 500, ou erreur arrivée dans le flux) : le genre dit quoi changer au prochain essai.
-                if (http and erreur.code == 500) or isinstance(erreur, RuntimeError):
+                if (not http or erreur.code in (400, 500)) and RE_GABARIT.search(detail) and not plat:
+                    genre = "gabarit"
+                elif (http and erreur.code == 500) or isinstance(erreur, RuntimeError):
                     genre = "outil" if RE_APPEL_MAL_FORME.search(detail) else "contexte" if RE_CONTEXTE.search(detail) else "plantage" if RE_PLANTAGE.search(detail) else ""
                 else:
                     genre = ""
@@ -1657,6 +1709,11 @@ def boucle_agent(conv, r, emit, ctx, stop):
                         r["modele"] = repli
                         repli_demande = True
                         break
+                if genre == "gabarit" and tentative < 2:
+                    noter_gabarit(r["modele"])
+                    plat = True
+                    emit({"type": "info", "texte": _t("Le gabarit de conversation de « {} » refuse les outils (erreur d'Ollama : {}). Je réponds sans outils, en texte seulement ; ce modèle est retenu comme tel. Pour lire ou modifier des fichiers, choisis un autre modèle (Qwen ou Gemma).").format(r["modele"], detail[:90])})
+                    continue
                 if genre and tentative < 2:
                     if genre == "outil":
                         relance_outil = True

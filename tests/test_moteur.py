@@ -1237,6 +1237,39 @@ class Assistant(unittest.TestCase):
         self.assertTrue(any(e["type"] == "erreur" and "plante encore" in e["texte"] for e in ev))
         self.assertIn("cudaMalloc", (TEMP / "donnees" / "lutin.log").read_text(encoding="utf-8"), "l'erreur est dans le journal")
 
+    def test_gabarit_qui_refuse_les_outils_repond_sans_outils_et_retient_le_modele(self):
+        """Certains Mistral : Ollama répond « Unable to generate parser for this template… Only user, system and assistant roles are supported » dès qu'on lui envoie des outils. Lutin réessaie sans outils
+        (les résultats d'outils déjà lus deviennent du texte), retient le modèle, et ne redéclare plus d'outils à ce modèle."""
+        from lutin import dialogue as _dialogue
+        erreur = "Unable to generate parser for this template. Automatic parser generation failed: raise_exception('Only user, system and assistant roles are supported!')"
+        _dialogue.GABARIT_SANS_OUTILS.clear()
+        try:
+            ev = chat("Salut", reponses=[[{"error": erreur}], [{"content": "Réponse en texte"}]])
+            self.assertEqual(texte_de(ev), "Réponse en texte")
+            self.assertTrue(any(e["type"] == "info" and "refuse les outils" in e["texte"] for e in ev))
+            self.assertNotIn("tools", RECUES[-1], "le second essai n'a plus d'outils")
+            self.assertIn("qwen3.8:27b", _dialogue.GABARIT_SANS_OUTILS)
+            ev = chat("Encore une question", reponses=[[{"content": "Toujours en texte"}]])
+            self.assertEqual(texte_de(ev), "Toujours en texte")
+            self.assertNotIn("tools", RECUES[-1], "un modèle connu pour refuser les outils n'en reçoit plus d'emblée")
+            self.assertEqual({m["role"] for m in RECUES[-1]["messages"]} - {"system", "user", "assistant"}, set(), "plus de rôle « tool »")
+        finally:
+            _dialogue.GABARIT_SANS_OUTILS.clear()
+            (TEMP / "donnees" / "gabarits.json").unlink(missing_ok=True)
+
+    def test_aplatir_sans_outils_garde_ce_que_le_modele_a_lu_et_alterne_les_roles(self):
+        from lutin import dialogue as _dialogue
+        plat = _dialogue.aplatir_sans_outils({"model": "m", "tools": [{"x": 1}], "messages": [
+            {"role": "system", "content": "S"}, {"role": "user", "content": "cherche"},
+            {"role": "assistant", "content": "", "tool_calls": [{"function": {"name": "web_chercher", "arguments": {}}}]},
+            {"role": "tool", "tool_name": "web_chercher", "content": "résultat A"}, {"role": "tool", "tool_name": "web_lire", "content": "résultat B"},
+            {"role": "assistant", "content": "voilà"}]})
+        self.assertNotIn("tools", plat)
+        self.assertEqual([m["role"] for m in plat["messages"]], ["system", "user", "assistant", "user", "assistant"], "alternance respectée : les deux résultats sont fusionnés")
+        self.assertIn("résultat A", plat["messages"][3]["content"])
+        self.assertIn("résultat B", plat["messages"][3]["content"])
+        self.assertIn("web_chercher", plat["messages"][2]["content"], "l'appel d'outil devient une phrase")
+
     def test_resume_vide_ne_fait_rien_perdre(self):
         A.enregistrer_reglages({"num_ctx": 16384})
         ident = chat("Début", reponses=[[{"content": "Réponse initiale."}]])[-1]["conversation"]["id"]

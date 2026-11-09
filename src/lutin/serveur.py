@@ -19,6 +19,7 @@ from . import web as _web
 from . import moteurs_maj as _moteurs_maj
 from . import mcp as _mcp
 from . import mcp_catalogue as _mcp_catalogue
+from . import outils_externes as _outils_externes
 from . import calibrage as _calibrage
 from . import acces as _acces
 from . import adequation as _adequation
@@ -488,6 +489,8 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 return self._envoyer(400, {"erreur": _t("Ce moteur n'a pas de bibliothèque de modèles à parcourir.")})
             except ValueError as e:
                 return self._envoyer(400, {"erreur": str(e)})
+        if chemin == "/api/outils":                              # uv et Node.js : ce qui est installé (par Lutin ou sur la machine)
+            return self._envoyer(200, {"outils": _outils_externes.etat(), "modifiable": self._configurateur()})
         if chemin == "/api/mcp-catalogue":                       # les connecteurs du catalogue (sans rien lancer)
             return self._envoyer(200, {"serveurs": _mcp_catalogue.liste(), "modifiable": self._configurateur()})
         if chemin == "/api/mcp":                                 # les connecteurs MCP (sans leurs secrets)
@@ -618,9 +621,11 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 return self._envoyer(404, {"erreur": _t("Colibri n'est pas le serveur choisi.")})
             try:
                 from . import colibri as _colibri
-                return self._envoyer(200, {"modeles": _colibri.catalogue(mo._dossiers()), "dossier": str(_colibri.dossier_modeles(mo._dossiers()))})
+                if not _colibri.installee(mo._dossiers()):
+                    return self._envoyer(200, {"modeles": [], "installe": False})
+                return self._envoyer(200, {"modeles": _colibri.catalogue(mo._dossiers()), "dossier": str(_colibri.dossier_modeles(mo._dossiers())), "installe": True})
             except ValueError as e:
-                return self._envoyer(200, {"modeles": [], "erreur": str(e)})
+                return self._envoyer(200, {"modeles": [], "erreur": str(e), "installe": True})
         if chemin == "/api/machines":                             # onglet Machines : le nœud de cette machine, les machines appairées et leur état
             return self._envoyer(200, self._vue_machines())
         if chemin == "/api/ressources":                           # ce qui est chargé en mémoire en ce moment (page Santé)
@@ -1229,6 +1234,17 @@ class Gestionnaire(BaseHTTPRequestHandler):
                         mo.supprimer_modele(str(donnees.get("nom", "")))
                         return self._envoyer(200, {"ok": True})
                 except (ValueError, OSError) as e:
+                    return self._envoyer(400, {"erreur": str(e)})
+            if self.path in ("/api/outils-installer", "/api/outils-desinstaller"):
+                if not self._configurateur():
+                    return self._envoyer(403, {"erreur": _t("Installer un programme se fait depuis la machine de Lutin (ou par un administrateur déclaré).")})
+                try:
+                    if self.path.endswith("installer") and not self.path.endswith("desinstaller"):
+                        _outils_externes.installer(str(donnees.get("nom", "")))
+                    else:
+                        _outils_externes.desinstaller(str(donnees.get("nom", "")))
+                    return self._envoyer(200, {"ok": True})
+                except ValueError as e:
                     return self._envoyer(400, {"erreur": str(e)})
             if self.path.startswith("/api/mcp-"):
                 if not self._configurateur():

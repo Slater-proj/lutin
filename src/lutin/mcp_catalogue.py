@@ -15,10 +15,11 @@ from pathlib import Path
 
 from . import i18n as _i18n
 from . import mcp as _mcp
+from . import outils_externes
 from .i18n import t as _t
 
 FICHIER = Path(__file__).parent / "data" / "mcp_catalogue.json"
-PREREQUIS = {"npx": ("npx", "Node.js (https://nodejs.org)"), "uvx": ("uvx", "uv (https://docs.astral.sh/uv : « pip install uv »)")}
+PREREQUIS = {"npx": ("node", "Node.js"), "uvx": ("uv", "uv")}          # programme qui lance le serveur -> (outil à installer, nom affiché) ; voir outils_externes
 RE_ADRESSE = re.compile(r"^https?://[^\s]{3,500}$", re.I)
 DOSSIERS_MAX = 10
 
@@ -46,10 +47,13 @@ def _texte(valeur):
 
 
 def programme(execution, chercher=shutil.which):
-    """Le chemin complet du programme qui lance le serveur (npx, uvx), ou '' s'il est absent. Le chemin complet évite que Windows ne trouve pas « npx.cmd »."""
-    if execution not in PREREQUIS:
-        return ""
-    return chercher(PREREQUIS[execution][0]) or ""
+    """Le chemin complet du programme qui lance le serveur (npx, ou uv pour « uv tool run »), ou '' s'il est absent : celui que Lutin a installé d'abord, sinon celui de la machine.
+    Le chemin complet évite que Windows ne trouve pas « npx.cmd »."""
+    if execution == "npx":
+        return outils_externes.chemin("npx", chercher=chercher)
+    if execution == "uvx":
+        return outils_externes.chemin("uv", chercher=chercher)
+    return ""
 
 
 def liste(chercher=shutil.which):
@@ -59,9 +63,9 @@ def liste(chercher=shutil.which):
     for e in charger():
         manque = ""
         if e["execution"] in PREREQUIS and not programme(e["execution"], chercher):
-            manque = _t("Il faut d'abord installer {}.").format(PREREQUIS[e["execution"]][1])
+            manque = _t("Lutin installera d'abord {} (un téléchargement d'environ 30 Mo, retirable ensuite).").format(PREREQUIS[e["execution"]][1])
         sortie.append({"id": e["id"], "nom": _texte(e["nom"]), "description": _texte(e["description"]), "categorie": e.get("categorie", ""), "execution": e["execution"],
-                       "version": e.get("version", ""), "installe": e["id"] in installes, "manque": manque,
+                       "version": e.get("version", ""), "installe": e["id"] in installes, "manque": manque, "outil": PREREQUIS.get(e["execution"], ("", ""))[0] if manque else "",
                        "champs": [{"cle": c["cle"], "type": c["type"], "obligatoire": bool(c.get("obligatoire")), "multiple": bool(c.get("multiple")),
                                    "libelle": _texte(c["libelle"]), "exemple": c.get("exemple", "")} for c in e.get("champs", [])]})
     return sortie
@@ -112,8 +116,8 @@ def construire(e, saisie, chercher=shutil.which):
     chemin = programme(e["execution"], chercher)
     if not chemin:
         raise ValueError(_t("Il faut d'abord installer {}.").format(PREREQUIS[e["execution"]][1]))
-    # npx : paquet@version ; uvx : paquet@version aussi (version exacte dans les deux cas)
-    commande = [chemin] + (["-y"] if e["execution"] == "npx" else []) + ["{}@{}".format(e["paquet"], e["version"])]
+    # npx : paquet@version ; uv : « uv tool run paquet@version » (la version exacte dans les deux cas)
+    commande = [chemin] + (["-y"] if e["execution"] == "npx" else ["tool", "run"]) + ["{}@{}".format(e["paquet"], e["version"])]
     for a in e.get("arguments", []):
         m = re.fullmatch(r"\{([a-z]+)\}", a)
         if m:
@@ -123,15 +127,24 @@ def construire(e, saisie, chercher=shutil.which):
     return commande, "", {}
 
 
-def installer(ident, saisie, chercher=shutil.which):
-    """Branche un connecteur du catalogue, l'essaie, autorise ses outils en lecture seule. Rend {id, outils, autorises}. En cas d'échec, rien ne reste branché."""
+def installer(ident, saisie, chercher=shutil.which, installer_outil=None):
+    """Branche un connecteur du catalogue, l'essaie, autorise ses outils en lecture seule. Rend {id, outils, autorises}. En cas d'échec, rien ne reste branché.
+    Le programme qui lance le serveur (uv, Node.js) s'il manque est installé d'abord par Lutin : un seul clic pour l'utilisateur."""
     e = entree(ident)
     if any(s.get("catalogue") == ident for s in _mcp.lire()["serveurs"].values()):
         raise ValueError(_t("Ce connecteur est déjà branché."))
+    for c in e.get("champs", []):          # les valeurs d'abord : on n'installe rien pour une saisie fausse
+        _valider(c, (saisie or {}).get(c["cle"]))
+    if e["execution"] in PREREQUIS and not programme(e["execution"], chercher):
+        (installer_outil or outils_externes.installer)(PREREQUIS[e["execution"]][0])
     commande, url, entetes = construire(e, saisie, chercher)
     ident_mcp = _mcp.ajouter(_texte(e["nom"]), commande or None, url, None, entetes)
     cfg = _mcp.lire()
     cfg["serveurs"][ident_mcp]["catalogue"] = ident
+    if commande and e["execution"] == "npx":
+        propre = outils_externes.dossier("node")
+        if Path(commande[0]).is_relative_to(propre):
+            cfg["serveurs"][ident_mcp]["path_ajoute"] = outils_externes.dossiers_a_ajouter_au_path("node")
     _mcp.ecrire(cfg)
     try:
         total = _mcp.actualiser(ident_mcp)

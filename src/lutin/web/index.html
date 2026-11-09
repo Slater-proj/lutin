@@ -519,14 +519,15 @@ body[data-moteur="openai"] .biblio { display:none !important; }
   </section>
   <section class="page" id="p-sante"><div class="cadre" id="santeCorps"></div></section>
   <section class="page" id="p-modeles"><div class="cadre">
-    <div class="biblio">
-    <div class="aide">Plus un modèle est gros, plus il est intelligent, mais plus il demande de mémoire (idéalement celle de ta carte graphique).
-      <details class="aide-plus"><summary>En savoir plus</summary>Les modèles tournent sur ta machine, avec le moteur choisi (Ollama ou llama.cpp : la même bibliothèque, les mêmes modèles). Un seul modèle est chargé à la fois : en changer prend quelques secondes. Tu peux aussi les gérer en ligne de commande : <code>lutin models</code>.</details></div>
-    <label class="opt-ligne" title="Montre des modèles modifiés par la communauté pour ne plus refuser de demandes. À utiliser en connaissance de cause."><input type="checkbox" id="cAvance"> Afficher les modèles avancés (sans filtre)</label>
+    <!-- Les cartes des serveurs gérés par Lutin sont HORS du bloc « biblio » : celui-ci (bibliothèque d'Ollama) est caché sous un serveur compatible OpenAI, et elles avec lui. -->
     <div class="carte" id="colibriModeles" hidden style="display:block"></div>
     <div class="carte" id="lmstudioModeles" hidden style="display:block"></div>
     <div class="carte" id="exllamav3Modeles" hidden style="display:block"></div>
     <div class="carte" id="jaugeDisque" hidden style="display:block"></div>
+    <div class="biblio">
+    <div class="aide">Plus un modèle est gros, plus il est intelligent, mais plus il demande de mémoire (idéalement celle de ta carte graphique).
+      <details class="aide-plus"><summary>En savoir plus</summary>Les modèles tournent sur ta machine, avec le moteur choisi (Ollama ou llama.cpp : la même bibliothèque, les mêmes modèles). Un seul modèle est chargé à la fois : en changer prend quelques secondes. Tu peux aussi les gérer en ligne de commande : <code>lutin models</code>.</details></div>
+    <label class="opt-ligne" title="Montre des modèles modifiés par la communauté pour ne plus refuser de demandes. À utiliser en connaissance de cause."><input type="checkbox" id="cAvance"> Afficher les modèles avancés (sans filtre)</label>
     <div class="carte" id="barreTest" style="gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
       <button id="bTesterPc" class="principal" title="Mesure la vitesse du modèle actif sur cette machine (environ 20 secondes), puis donne des conseils : modèle plus léger, contexte, charge.">⏱ Tester mon PC</button>
       <span id="msgTest" class="aide"></span>
@@ -2304,11 +2305,8 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     try { localStorage.setItem('lutin.reglages.rubrique', g); } catch (e) { /* stockage refusé : la rubrique n'est pas retenue */ }
     if (g === 'moteur') { try { chargerMesures(); } catch (e) { /* la rubrique se refera à la prochaine ouverture */ } }
   };
-  // Les menus de réglages sont rangés par ordre alphabétique DANS LA LANGUE affichée (l'ordre alphabétique du français n'est pas celui de l'anglais) ; les boutons gardent leur lien avec leur section, seul leur rang à l'écran change.
-  const trierAlphabetique = (conteneur, libelle) => {
-    const boutons = [...conteneur.children];
-    boutons.sort((a, b) => libelle(a).localeCompare(libelle(b), LANGUE, { sensitivity: 'base' })).forEach(b => conteneur.appendChild(b));
-  };
+  // L'ordre des sous-menus des pages longues : du plus courant au plus rare. Ce sont les rangs d'origine des rubriques (l'ordre du texte de la page) dans l'ordre où elles s'affichent ; les boutons gardent leur lien avec leur section.
+  const ORDRE_RUBRIQUES = { 'p-memoire': [0, 1, 3, 4, 5, 2], 'p-acces': [0, 1, 3, 2] };
   // Les pages longues (Mémoire, Automatisation, Accès) : un sous-menu bâti à partir de leurs titres, une rubrique à la fois, la dernière retenue
   const rubriquer = id => {
     const cadre = document.querySelector('#' + id + ' > .cadre'); if (!cadre) return;
@@ -2317,14 +2315,12 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     const sections = titres.map(h => { const sec = el('div', 'rubrique'); h.before(sec); let n = h; while (n && (n === h || n.tagName !== 'H2')) { const suivant = n.nextSibling; sec.appendChild(n); n = suivant; } return sec; });
     const montrer = i => { sections.forEach((s, k) => s.classList.toggle('masque', k !== i)); [...nav.children].forEach((b, k) => b.setAttribute('aria-selected', String(k === i))); try { localStorage.setItem('lutin.rubrique.' + id, String(i)); } catch (e) { /* stockage refusé */ } };
     titres.forEach((h, i) => { const b = el('button', '', (h.firstChild ? h.firstChild.textContent : h.textContent).trim()); b.setAttribute('role', 'tab'); b.addEventListener('click', () => montrer(i)); nav.appendChild(b); });
-    trierAlphabetique(nav, b => b.textContent);
+    if (ORDRE_RUBRIQUES[id] && ORDRE_RUBRIQUES[id].length === nav.children.length) { const b = [...nav.children]; ORDRE_RUBRIQUES[id].forEach(i => nav.appendChild(b[i])); }
     cadre.prepend(nav); cadre.classList.add('a-sous-nav');          // la barre est tout en haut de la page et reste visible (comme celle des Réglages)
     let v = 0; try { v = +(localStorage.getItem('lutin.rubrique.' + id) || 0); } catch (e) { /* idem */ }
     montrer(v >= 0 && v < sections.length ? v : 0);
   };
   ['p-memoire', 'p-auto', 'p-acces'].forEach(rubriquer);
-  trierAlphabetique($('menuReglages'), b => b.querySelector('b').textContent);
-  trierAlphabetique($('sousReglages'), b => b.textContent);
   document.querySelectorAll('#sousReglages button').forEach(b => b.addEventListener('click', () => montrerRubrique(b.dataset.g)));
   { let g = 'general'; try { g = localStorage.getItem('lutin.reglages.rubrique') || g; } catch (e) { /* idem */ } if (!document.querySelector('#sousReglages button[data-g="' + g + '"]')) g = 'general'; montrerRubrique(g); }
   // ---- Mémoire des longues conversations : résumé automatique ou fiche de suivi
@@ -3361,12 +3357,30 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     const ouverts = new Set([...z.querySelectorAll('.carte[data-id]')].filter(c => c.querySelector('form') && !c.querySelector('form').hidden).map(c => c.dataset.id));
     z.textContent = '';
     z.appendChild(el('div', 'aide', T('Des connecteurs courants, à brancher en un clic. Chacun est lancé à une version précise, essayé tout de suite, et retiré s\'il ne répond pas. Seuls ses outils de lecture sont autorisés d\'emblée.')));
+    // Les programmes dont les connecteurs ont besoin (uv, Node.js) : un clic pour les installer, un clic pour les retirer
+    let outils = []; try { outils = (await api('/api/outils')).outils; } catch (e) { /* la liste des programmes se refera à la prochaine ouverture */ }
+    const lancerOutil = async (nom, b, msg, action) => {
+      b.disabled = true; msg.textContent = T('En cours… (un téléchargement peut durer une minute)');
+      try { await api('/api/outils-' + action, { nom }); } catch (e) { msg.textContent = e.message; b.disabled = false; return; }
+      chargerCatalogueMcp();
+    };
+    if (r.modifiable && outils.length) {
+      const bo = el('div', 'carte'); bo.style.marginTop = '8px'; bo.appendChild(el('b', '', T('Programmes utilisés par les connecteurs')));
+      outils.forEach(o => {
+        const l = el('div', 'ligne'), msg = el('span', 'aide');
+        l.appendChild(el('span', '', (o.installe ? '✓ ' : '✗ ') + o.libelle + (o.version ? ' ' + o.version : '') + ' — ' + (o.installe ? (o.par_lutin ? T('installé par Lutin') : T('installé sur cette machine')) : T('pas installé'))));
+        if (!o.installe) { const b = el('button', 'principal', T('Installer')); b.addEventListener('click', () => lancerOutil(o.nom, b, msg, 'installer')); l.appendChild(b); }
+        else if (o.par_lutin) { const b = el('button', '', T('Désinstaller')); b.addEventListener('click', () => { if (confirm(T('Retirer ce programme ? Les connecteurs qui en dépendent ne marcheront plus.'))) lancerOutil(o.nom, b, msg, 'desinstaller'); }); l.appendChild(b); }
+        l.appendChild(msg); bo.append(l, el('div', 'aide', o.aide));
+      });
+      z.appendChild(bo);
+    }
     const grille = el('div', 'grille'); grille.style.margin = '8px 0';
     r.serveurs.forEach(s => {
       const c = el('div', 'carte'); c.dataset.id = s.id;
       c.append(el('b', '', s.nom + (s.version ? '  ' + s.version : '')), el('div', 'aide', s.description));
       if (s.installe) { c.appendChild(el('div', '', '✓ ' + T('Branché'))); grille.appendChild(c); return; }
-      if (s.manque) { c.appendChild(el('div', 'aide', '⚠ ' + s.manque)); grille.appendChild(c); return; }
+      if (s.manque) c.appendChild(el('div', 'aide', 'ℹ ' + s.manque));
       if (!r.modifiable) { c.appendChild(el('div', 'aide', T('Se branche depuis la machine de Lutin.'))); grille.appendChild(c); return; }
       const f = el('form'); f.hidden = !s.champs.length ? true : !ouverts.has(s.id); f.style.display = f.hidden ? 'none' : 'block';
       const saisies = {};
@@ -4608,6 +4622,13 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     z.appendChild(RECHERCHE_BLOC);          // la recherche web vient après les réglages de l'exécuteur et des fichiers
   };
   // ---- Onglet Modèles avec Colibri : ses modèles (de très gros modèles lus depuis le disque), jugés pour cette machine par Colibri ; « Préparer » lui confie le téléchargement
+  // Un serveur géré par Lutin qui n'est pas encore installé : un bouton, au lieu d'un renvoi vers les Réglages
+  const carteNonInstallee = (z, nom) => {
+    z.appendChild(el('div', 'aide', T('{} n\'est pas encore installé.').replace('{}', nom)));
+    const l = el('div', 'ligne'), b = el('button', 'principal', T('Installer {}').replace('{}', nom)), msg = el('span', 'aide');
+    b.addEventListener('click', async () => { b.disabled = true; try { await api('/api/moteur-action', { moteur: 'openai', action: 'installer' }); msg.textContent = T('Installation lancée : l\'avancement est dans la barre bleue du haut.'); } catch (e) { msg.textContent = e.message; b.disabled = false; } });
+    l.append(b, msg); z.appendChild(l);
+  };
   const chargerColibriModeles = async () => {
     const z = $('colibriModeles'); if (!ETAT || !ETAT.colibri_choisi) { z.hidden = true; return; }
     z.hidden = false;
@@ -4615,6 +4636,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     z.textContent = ''; z.appendChild(el('b', '', T('Modèles pour Colibri')));
     z.appendChild(el('div', 'aide', T('Colibri fait tourner de très gros modèles (des centaines de milliards de paramètres) sur un PC ordinaire : il garde l\'essentiel sur le disque et ne charge en mémoire que ce dont il a besoin. Choisis donc des modèles bien plus gros que ce que ta carte graphique tient, et préfère un disque rapide (NVMe). Colibri juge lui-même ce qui tient sur cette machine.')));
     let r; try { r = await api('/api/colibri-modeles'); } catch (e) { z.appendChild(el('div', 'erreur', e.message)); return; }
+    if (r.installe === false) { carteNonInstallee(z, 'Colibri'); return; }
     if (r.erreur) { z.appendChild(el('div', 'attention', r.erreur)); return; }
     z.appendChild(el('div', 'aide', T('Téléchargés dans ') + r.dossier + T(' ; une interruption se reprend là où elle s\'est arrêtée. L\'avancement est dans la barre bleue du haut.')));
     const msg = el('div', 'aide');
@@ -4639,7 +4661,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     if (z.dataset.charge && Date.now() - +z.dataset.charge < 20000) return; z.dataset.charge = String(Date.now());
     z.textContent = ''; z.appendChild(el('b', '', T('Modèles de LM Studio')));
     let r; try { r = await api('/api/lmstudio-modeles'); } catch (e) { z.appendChild(el('div', 'erreur', e.message)); return; }
-    if (!r.installe) { z.appendChild(el('div', 'aide', T('LM Studio n\'est pas encore installé : installe-le dans Réglages > Moteur, puis reviens ici pour télécharger des modèles.'))); return; }
+    if (!r.installe) { carteNonInstallee(z, 'LM Studio'); return; }
     if (r.erreur) z.appendChild(el('div', 'attention', r.erreur));
     z.appendChild(el('div', 'aide', r.modeles.length ? T('Déjà téléchargés :') : T('Aucun modèle téléchargé pour le moment.')));
     r.modeles.forEach(m => z.appendChild(el('div', 'ligne', '• ' + m.nom + (m.taille_go ? ' · ' + String(m.taille_go).replace('.', ',') + ' ' + T('Go') : ''))));
@@ -4690,7 +4712,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     if (z.dataset.charge && Date.now() - +z.dataset.charge < 20000) return; z.dataset.charge = String(Date.now());
     z.textContent = ''; z.appendChild(el('b', '', T('Modèles d\'ExLlamaV3')));
     let r; try { r = await api('/api/exllamav3-modeles'); } catch (e) { z.appendChild(el('div', 'erreur', e.message)); return; }
-    if (!r.installe) { z.appendChild(el('div', 'aide', T('ExLlamaV3 n\'est pas encore installé : installe-le dans Réglages > Moteur, puis reviens ici pour télécharger des modèles.'))); return; }
+    if (!r.installe) { carteNonInstallee(z, 'ExLlamaV3'); return; }
     z.appendChild(el('div', 'aide', T('Choisis un modèle au format EXL3 dont la taille tient dans la mémoire de ta carte graphique (la « révision » est la quantification : plus le nombre de bits est petit, plus le modèle est léger). Dossier : ') + r.dossier));
     z.appendChild(el('div', 'aide', r.modeles.length ? T('Déjà téléchargés :') : T('Aucun modèle téléchargé pour le moment.')));
     r.modeles.forEach(m => z.appendChild(el('div', 'ligne', '• ' + m.nom + (m.taille_go ? ' · ' + String(m.taille_go).replace('.', ',') + ' ' + T('Go') : ''))));

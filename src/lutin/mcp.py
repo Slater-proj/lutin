@@ -196,6 +196,8 @@ class Connexion:
             if not exe:
                 raise ErreurMcp(_t("Programme introuvable : {}. Est-il installé et dans le PATH ?").format(commande[0] if commande else "?"))
             env = dict(os.environ, **{str(k): str(v) for k, v in (self.serveur.get("env") or {}).items()})
+            if self.serveur.get("path_ajoute"):          # Node.js installé par Lutin : npx y cherche « node » (sous Linux)
+                env["PATH"] = os.pathsep.join([str(d) for d in self.serveur["path_ajoute"]] + [env.get("PATH", "")])
             self.proc = subprocess.Popen([exe] + commande[1:], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, cwd=str(_m.RACINE),
                                          **({} if os.name == "nt" else {"start_new_session": True}))
             threading.Thread(target=self._lire_sortie, daemon=True, name="mcp-" + self.ident).start()

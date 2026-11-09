@@ -55,8 +55,8 @@ class Catalogue(unittest.TestCase):
         self.assertEqual(commande[3:], [dossier, dossier])
         self.assertEqual((url, entetes), ("", {}))
         commande, _, _ = mcp_catalogue.construire(mcp_catalogue.entree("git"), {"depot": dossier}, chercher_tout)
-        self.assertEqual(commande[:2], ["/usr/bin/uvx", "mcp-server-git@2026.11.4"])
-        self.assertEqual(commande[2:], ["--repository", dossier])
+        self.assertEqual(commande[:4], ["/usr/bin/uv", "tool", "run", "mcp-server-git@2026.11.4"])
+        self.assertEqual(commande[4:], ["--repository", dossier])
 
     def test_les_valeurs_sont_controlees(self):
         e = mcp_catalogue.entree("git")
@@ -85,9 +85,25 @@ class Catalogue(unittest.TestCase):
         self.assertIn("Node.js", entrees["fichiers"]["manque"])
         self.assertIn("uv", entrees["pages-web"]["manque"])
         self.assertEqual(entrees["home-assistant"]["manque"], "", "un serveur distant n'a besoin d'aucun programme")
-        with self.assertRaises(ValueError):
-            mcp_catalogue.installer("pages-web", {}, chercher_rien)
+        self.assertIn("Lutin installera", entrees["pages-web"]["manque"])
+        self.assertEqual(entrees["pages-web"]["outil"], "uv")
+        self.assertEqual(entrees["fichiers"]["outil"], "node")
+
+    def test_le_programme_manquant_est_installe_au_passage_apres_controle_des_valeurs(self):
+        installes = []
+
+        def hors_ligne(nom):
+            installes.append(nom)
+            raise ValueError("Mode hors ligne")
+        with self.assertRaises(ValueError) as e:
+            mcp_catalogue.installer("pages-web", {}, chercher_rien, hors_ligne)
+        self.assertEqual(installes, ["uv"], "uv est installé par Lutin au passage")
+        self.assertIn("hors ligne", str(e.exception))
         self.assertEqual(mcp.lire()["serveurs"], {}, "rien n'est resté")
+        installes.clear()
+        with self.assertRaises(ValueError):          # une saisie fausse : rien n'est téléchargé
+            mcp_catalogue.installer("git", {"depot": "/n/existe/pas"}, chercher_rien, hors_ligne)
+        self.assertEqual(installes, [])
 
     def test_un_connecteur_qui_ne_repond_pas_est_retire(self):
         with self.assertRaises(ValueError) as e:

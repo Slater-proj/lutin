@@ -20,7 +20,7 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
-from . import colibri, miseajour
+from . import colibri, miseajour, outils_externes
 from .i18n import t as _t
 from .remplacement import remplacer_dossier
 
@@ -80,23 +80,46 @@ def python_compatible(version=None):
 
 def derniere_version_lib(http=miseajour.http_get):
     """La dernière version publiée d'ExLlamaV3 (X.Y.Z). ValueError si illisible, OSError sans réseau."""
-    statut, _, corps = http(API_LIB, {"Accept": "application/vnd.github+json"})
-    if statut != 200:
-        raise ValueError(_t("Impossible de lire la dernière version d'ExLlamaV3 (HTTP {}).").format(statut))
-    version = str(json.loads(corps.decode("utf-8")).get("tag_name", "")).lstrip("v")
-    if not RE_VERSION.match(version):
-        raise ValueError(_t("Numéro de version d'ExLlamaV3 illisible : {}").format(version[:30]))
-    return version
+    cause = ""
+    try:
+        statut, _, corps = http(API_LIB, {"Accept": "application/vnd.github+json"})
+        if statut == 200:
+            version = str(json.loads(corps.decode("utf-8")).get("tag_name", "")).lstrip("v")
+            if not RE_VERSION.match(version):
+                raise ValueError(_t("Numéro de version d'ExLlamaV3 illisible : {}").format(version[:30]))
+            return version
+        cause = "HTTP {}".format(statut)
+    except OSError as e:
+        cause = str(e)
+    try:          # l'API de GitHub refuse (limite de requêtes) : la page publique des publications
+        version = (miseajour.version_par_page(DEPOT_LIB, http) or "").lstrip("v")
+        if RE_VERSION.match(version):
+            return version
+    except OSError:
+        pass
+    raise ValueError(_t("Impossible de lire la dernière version d'ExLlamaV3 ({}). GitHub limite parfois les requêtes : réessaie dans quelques minutes.").format(cause))
 
 
 def dernier_commit(http=miseajour.http_get):
-    statut, _, corps = http(API_COMMIT, {"Accept": "application/vnd.github+json"})
-    if statut != 200:
-        raise ValueError(_t("Impossible de lire le dernier code de TabbyAPI (HTTP {}).").format(statut))
-    sha = str(json.loads(corps.decode("utf-8")).get("sha", ""))
-    if not RE_SHA.match(sha):
-        raise ValueError(_t("Identifiant de version de TabbyAPI illisible."))
-    return sha
+    cause = ""
+    try:
+        statut, _, corps = http(API_COMMIT, {"Accept": "application/vnd.github+json"})
+        if statut == 200:
+            sha = str(json.loads(corps.decode("utf-8")).get("sha", ""))
+            if not RE_SHA.match(sha):
+                raise ValueError(_t("Identifiant de version de TabbyAPI illisible."))
+            return sha
+        cause = "HTTP {}".format(statut)
+    except OSError as e:
+        cause = str(e)
+    try:          # l'API refuse (limite de requêtes) : le flux public des modifications de la branche donne le même identifiant
+        statut, _, corps = http("https://github.com/{}/commits/main.atom".format(DEPOT_TABBY), {"Accept": "application/atom+xml"})
+        m = re.search(r"Commit/([0-9a-f]{40})", corps.decode("utf-8", "replace")) if statut == 200 else None
+        if m:
+            return m.group(1)
+    except OSError:
+        pass
+    raise ValueError(_t("Impossible de lire le dernier code de TabbyAPI ({}). GitHub limite parfois les requêtes : réessaie dans quelques minutes.").format(cause))
 
 
 def config_yaml(port, modeles):
@@ -147,7 +170,7 @@ def version_lib(dossiers=None, lancer=subprocess.run):
     return m.group(1) if m and RE_VERSION.match(m.group(1)) else ""
 
 
-def installer(dossiers=None, port=PORT_DEFAUT, dire=print, http=miseajour.http_get, ouvrir=urllib.request.urlopen, lancer=subprocess.Popen, annule=lambda: False, executer=subprocess.run):
+def installer(dossiers=None, port=PORT_DEFAUT, dire=print, http=miseajour.http_get, ouvrir=urllib.request.urlopen, lancer=subprocess.Popen, annule=lambda: False, executer=subprocess.run, installer_uv=None):
     """Installe (ou met à jour) TabbyAPI + ExLlamaV3. Renvoie {tabby, lib}. Longue : torch pèse plusieurs Go. ValueError claire à chaque étape qui échoue."""
     if not python_compatible():
         raise ValueError(_t("Python {}.{} n'est pas pris en charge par TabbyAPI (3.10 à 3.14).").format(*sys.version_info[:2]))
@@ -175,9 +198,7 @@ def installer(dossiers=None, port=PORT_DEFAUT, dire=print, http=miseajour.http_g
     venv = base / "venv"
     if not python_venv(dossiers).is_file():
         dire(_t("Création de l'environnement Python dédié…"))
-        r = executer([sys.executable, "-m", "venv", str(venv)], capture_output=True, text=True, timeout=300, encoding="utf-8", errors="replace")
-        if r.returncode != 0:
-            raise ValueError(_t("Impossible de créer l'environnement Python : {}").format(((r.stdout or "") + (r.stderr or ""))[-300:]))
+        outils_externes.creer_venv(venv, dossiers, dire, executer, installer_uv)          # le Python de l'installateur Windows n'a pas « venv » : uv le remplace, installé au besoin
     dire(_t("Installation des dépendances (torch et ExLlamaV3 : plusieurs Go, patience)…"))
     proc = lancer([str(python_venv(dossiers)), "-m", "pip", "install", "-U", ".[cu12]"], cwd=str(cible), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, text=True, encoding="utf-8", errors="replace")
     code, fin = _suivre(proc, dire, annule)

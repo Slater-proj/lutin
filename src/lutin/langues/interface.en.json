@@ -1423,7 +1423,6 @@
 "Les commandes de LM Studio viennent de sa documentation ; Lutin ne les a pas essayées sur une vraie installation.": "LM Studio's commands come from its documentation; Lutin has not tried them on a real installation.",
 "Port local de LM Studio": "LM Studio local port",
 "Modèles de LM Studio": "LM Studio models",
-"LM Studio n'est pas encore installé : installe-le dans Réglages > Moteur, puis reviens ici pour télécharger des modèles.": "LM Studio is not installed yet: install it in Settings > Engine, then come back here to download models.",
 "Déjà téléchargés :": "Already downloaded:",
 "Aucun modèle téléchargé pour le moment.": "No model downloaded yet.",
 "Écris le nom d'un modèle.": "Type a model name.",
@@ -1446,7 +1445,6 @@
 "Lutin n'a pas essayé cette intégration sur une vraie carte NVIDIA : les commandes viennent de la documentation de TabbyAPI.": "Lutin has not tried this integration on a real NVIDIA card: the commands come from TabbyAPI's documentation.",
 "Port local d'ExLlamaV3": "ExLlamaV3 local port",
 "Modèles d'ExLlamaV3": "ExLlamaV3 models",
-"ExLlamaV3 n'est pas encore installé : installe-le dans Réglages > Moteur, puis reviens ici pour télécharger des modèles.": "ExLlamaV3 is not installed yet: install it in Settings > Engine, then come back here to download models.",
 "Choisis un modèle au format EXL3 dont la taille tient dans la mémoire de ta carte graphique (la « révision » est la quantification : plus le nombre de bits est petit, plus le modèle est léger). Dossier : ": "Pick an EXL3 model whose size fits in your graphics card memory (the « revision » is the quantization: the fewer bits, the lighter the model). Folder: ",
 "La révision (branche) du dépôt : en général la quantification, par exemple 4.0bpw": "The repository revision (branch): usually the quantization, for example 4.0bpw",
 "Écris le nom d'un dépôt Hugging Face (propriétaire/modèle).": "Type a Hugging Face repository name (owner/model).",
@@ -1511,5 +1509,13 @@
 "Brancher": "Connect",
 "Branché : {} outil(s), dont {} autorisé(s) (lecture seule). Coche les autres si tu veux qu'il puisse aussi modifier des choses.": "Connected: {} tool(s), {} allowed (read-only). Tick the others if you want it to be able to change things too.",
 "Brancher un autre serveur (avancé)": "Connect another server (advanced)",
-"Catalogue": "Catalogue"
+"Catalogue": "Catalogue",
+"{} n'est pas encore installé.": "{} is not installed yet.",
+"Installer {}": "Install {}",
+"En cours… (un téléchargement peut durer une minute)": "In progress… (a download can take a minute)",
+"Programmes utilisés par les connecteurs": "Programs used by the connectors",
+"installé par Lutin": "installed by Lutin",
+"installé sur cette machine": "installed on this machine",
+"pas installé": "not installed",
+"Retirer ce programme ? Les connecteurs qui en dépendent ne marcheront plus.": "Remove this program? The connectors that depend on it will stop working."
 }
