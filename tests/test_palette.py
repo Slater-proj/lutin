@@ -198,30 +198,19 @@ class RechercheReglages(unittest.TestCase):
         except SystemExit:
             raise unittest.SkipTest("aucun navigateur (Chrome, Chromium ou Edge) trouvé")
 
-    def test_le_filtre_garde_les_groupes_qui_correspondent_et_restaure_ensuite(self):
+    def test_la_recherche_du_haut_trouve_un_reglage_precis_et_y_mene(self):
         with self.captures.serveur_demo() as (port, tmp):
             p = cdp.Page(self.chrome, tmp / "profil-rech")
             self.addCleanup(p.fermer)
-            p.aller("http://127.0.0.1:%d/#reglages" % port)
-            p.attendre("document.getElementById('p-reglages').classList.contains('vue') && document.querySelectorAll('#p-reglages details.groupe').length >= 3")
-            etat = "[...document.querySelectorAll('#p-reglages details.groupe')].map(d => [d.hidden, d.open])"
-            total = p.evaluer("document.querySelectorAll('#p-reglages details.groupe').length")
-            # on referme tout, puis on cherche : les groupes qui correspondent sont ouverts, les autres cachés
-            p.evaluer("document.querySelectorAll('#p-reglages details.groupe').forEach(d => d.open = false); true")
-            p.evaluer("(() => { const c = document.getElementById('rechReglages'); c.value = 'LANGUE'; c.dispatchEvent(new Event('input', {bubbles: true})); return true; })()")
-            etats = p.evaluer(etat)
-            visibles = [e for e in etats if not e[0]]
-            self.assertTrue(0 < len(visibles) < total, "la recherche « langue » ne garde pas tout")
-            self.assertTrue(all(e[1] for e in visibles), "les groupes gardés sont ouverts")
-            self.assertIn("groupe", p.evaluer("document.getElementById('rechReglagesInfo').textContent"))
-            # sans résultat : tout est caché et on le dit
-            p.evaluer("(() => { const c = document.getElementById('rechReglages'); c.value = 'zzzqqq'; c.dispatchEvent(new Event('input', {bubbles: true})); return true; })()")
-            self.assertTrue(all(e[0] for e in p.evaluer(etat)))
-            self.assertIn("Aucun réglage", p.evaluer("document.getElementById('rechReglagesInfo').textContent"))
-            # champ vidé : tout est de retour (les groupes sont toujours ouverts : une rubrique à la fois les masque)
-            p.evaluer("(() => { const c = document.getElementById('rechReglages'); c.value = ''; c.dispatchEvent(new Event('input', {bubbles: true})); return true; })()")
-            self.assertEqual(p.evaluer(etat), [[False, True]] * total)
-            self.assertEqual(p.evaluer("document.getElementById('rechReglagesInfo').textContent"), "")
+            p.aller("http://127.0.0.1:%d/" % port)
+            p.attendre("document.getElementById('bPalette') !== null")
+            self.assertEqual(p.evaluer("document.getElementById('rechReglages')"), None, "plus de seconde barre de recherche dans les Réglages")
+            p.evaluer("document.getElementById('bPalette').click(); true")
+            p.evaluer("(() => { const c = document.getElementById('palSaisie'); c.value = 'langue'; c.dispatchEvent(new Event('input', {bubbles: true})); return true; })()")
+            lignes = p.evaluer("[...document.querySelectorAll('#palListe li')].map(li => li.textContent)")
+            self.assertTrue(any("Réglages ›" in l for l in lignes), "un réglage précis (pas seulement la rubrique) est proposé : %r" % lignes)
+            p.evaluer("(() => { const i = [...document.querySelectorAll('#palListe li')].findIndex(li => li.textContent.includes('Réglages ›')); document.querySelectorAll('#palListe li')[i].click(); return true; })()")
+            p.attendre("document.getElementById('p-reglages').classList.contains('vue') && document.querySelector('.trouve-reglage') !== null")
             self.assertEqual(p.erreurs, [])
 
 

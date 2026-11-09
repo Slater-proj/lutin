@@ -1759,7 +1759,6 @@
 "Clé Brave invalide (des lettres, des chiffres, - et _ seulement).": "Invalid Brave key (letters, digits, - and _ only).",
 "Période inconnue : {} (jour, semaine, mois ou an).": "Unknown period: {} (jour, semaine, mois or an).",
 "Site invalide : {} (un nom de domaine, par exemple docs.python.org).": "Invalid site: {} (a domain name, for example docs.python.org).",
-"Régler la recherche web (adresse de SearXNG, clé de Brave) se fait depuis cette machine, pas depuis un autre appareil.": "Setting up web search (SearXNG address, Brave key) is done from this machine, not from another device.",
 "\n\nMoteur : {}": "\n\nEngine: {}",
 "Seule une page web a des liens.": "Only a web page has links.",
 "\nLiens de la page (lis-en un avec web_lire) :\n": "\nLinks on the page (read one with web_lire):\n",
@@ -1954,5 +1953,6 @@
 "Chemin invalide.": "Invalid path.",
 "Cette machine n'accepte pas de conversations pilotées à distance : son propriétaire doit cocher « Laisser les machines appairées mener des conversations ici » dans l'onglet Machines.": "This machine does not accept remotely driven conversations: its owner must tick « Let paired machines hold conversations here » in the Machines tab.",
 "La machine « {} » ne répond pas : sa conversation reviendra quand elle sera de nouveau en ligne.": "The machine « {} » is not responding: its conversation will be back when it is online again.",
-"Impossible de joindre la machine « {} » : elle ne répond plus.": "Cannot reach the machine « {} »: it is no longer responding."
+"Impossible de joindre la machine « {} » : elle ne répond plus.": "Cannot reach the machine « {} »: it is no longer responding.",
+"Régler la recherche web (adresse de SearXNG, clés d'API) est verrouillé depuis cet appareil. Depuis la machine elle-même c'est toujours possible ; en Docker ou depuis un autre appareil, ajoute LUTIN_ADMIN_TOUS=1 (ou ton nom dans LUTIN_ADMINS) au docker-compose, puis redémarre.": "Setting up web search (SearXNG address, API keys) is locked from this device. From the machine itself it is always possible; in Docker or from another device, add LUTIN_ADMIN_TOUS=1 (or your name in LUTIN_ADMINS) to the docker-compose, then restart."
 }

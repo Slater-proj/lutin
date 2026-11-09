@@ -374,8 +374,7 @@ button.principal { box-shadow:0 6px 16px -8px rgba(63,143,232,.8); }
 .sous-nav button { border-radius:999px; padding:5px 14px; font-size:.84rem; color:#c3ccd8; background:#16202b; }
 .sous-nav button:hover:not([aria-selected=true]) { background:#1c2937; }
 .sous-nav button[aria-selected=true] { background:#1d3048; border-color:rgba(90,169,255,.35); color:#fff; }
-#p-reglages:not(.cherche) details.groupe { border:0; background:transparent; padding:0; margin:0; } #p-reglages:not(.cherche) details.groupe > summary { display:none; } #p-reglages:not(.cherche) details.groupe.masque { display:none; }
-#p-reglages.cherche .sous-nav { display:none; }
+#p-reglages details.groupe { border:0; background:transparent; padding:0; margin:0; } #p-reglages details.groupe > summary { display:none; } #p-reglages details.groupe.masque { display:none; }
 .machine .tete-machine { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:4px; }
 .puce-version { font-size:.72rem; padding:1px 8px; border-radius:999px; border:1px solid var(--line2); color:var(--muted); }
 .puce-version.vieille { color:var(--warm); border-color:var(--warm); } .puce-version.choisie { color:#e0a84a; border-color:#e0a84a; }
@@ -425,7 +424,8 @@ body[data-moteur="openai"] .biblio { display:none !important; }
 .acc-carte:hover, .acc-carte:focus-visible { border-color:var(--accent2); background:var(--panel2); }
 .acc-carte b { font-weight:600; }
 .acc-carte span { color:var(--muted); font-size:.84rem; }
-.rech-reglages { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin:4px 0 10px; } .rech-reglages input { flex:1 1 280px; min-width:0; }
+.trouve-reglage { animation:trouve 2.2s ease-out; border-radius:8px; }
+@keyframes trouve { 0%,35% { background:rgba(90,169,255,.28); box-shadow:0 0 0 4px rgba(90,169,255,.28); } 100% { background:transparent; box-shadow:0 0 0 4px transparent; } }
 /* palette de commandes (Ctrl+K) */
 #palette { position:fixed; inset:0; z-index:300; display:flex; align-items:flex-start; justify-content:center; padding-top:12vh; }
 #palette[hidden] { display:none; }
@@ -476,7 +476,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
       <button data-p="chat" aria-selected="true" title="Conversation"><span class="ic">💬</span><span class="lb">Conversation</span><i class="travail" id="ptTravail" hidden title="L'assistant travaille"></i></button><button data-p="modeles" aria-selected="false" title="Modèles"><span class="ic">🧠</span><span class="lb">Modèles</span><i class="travail fini" id="ptModeles" hidden title="Nouveautés pour ta machine"></i></button><button data-p="memoire" aria-selected="false" title="Mémoire"><span class="ic">📝</span><span class="lb">Mémoire</span></button><div class="sous"><button id="bReglages" aria-haspopup="true" aria-expanded="false" aria-selected="false" title="Réglages et outils : automatisation, machines, santé, accès"><span class="ic">⚙️</span><span class="lb">Réglages</span><span class="fl">▾</span></button><div id="menuReglages" role="menu" hidden><button data-p="reglages" role="menuitem" aria-selected="false"><span class="ic">⚙️</span><span class="tx"><b>Général</b><small>Langue, dossiers, moteur, conversation</small></span></button><button data-p="auto" role="menuitem" aria-selected="false"><span class="ic">⏱</span><span class="tx"><b>Automatisation</b><small>Tâches planifiées, travaux de fond</small></span></button><button data-p="machines" role="menuitem" aria-selected="false"><span class="ic">🖧</span><span class="tx"><b>Machines</b><small>Utiliser le moteur d'un autre ordinateur</small></span></button><button id="bSante" data-p="sante" role="menuitem" aria-selected="false"><span class="ic">⚕</span><span class="tx"><b>Santé</b><small>Mémoire, carte graphique, disques</small></span></button><button data-p="acces" role="menuitem" aria-selected="false"><span class="ic">🔐</span><span class="tx"><b>Accès</b><small>Code PIN, appareils connectés</small></span></button></div></div>
     </div>
     <span class="puce" id="pOllama"><i></i><span>Ollama</span></span>
-    <button id="bPalette" aria-label="Tout trouver (Ctrl+K)" title="Tout trouver : conversations, onglets, modèles, actions (Ctrl+K)">🔎</button>
+    <button id="bPalette" aria-label="Tout trouver, réglages compris (Ctrl+K)" title="Tout trouver : conversations, onglets, modèles, réglages, actions (Ctrl+K)">🔎</button>
     <div class="menu">
       <button id="bPlus" aria-label="Plus d'actions" aria-haspopup="true" title="Plus d'actions">⋯</button>
       <div id="menuPlus" hidden>
@@ -668,7 +668,6 @@ body[data-moteur="openai"] .biblio { display:none !important; }
   </div></section>
   <section class="page" id="p-reglages"><div class="cadre">
     <div id="sousReglages" class="sous-nav" role="tablist" aria-label="Rubriques des réglages"><button data-g="general" role="tab">Général</button><button data-g="moteur" role="tab">Moteur</button><button data-g="conversation" role="tab">Conversation</button><button data-g="recherche" role="tab">Recherche web</button><button data-g="dossiers" role="tab">Dossiers</button><button data-g="machine" role="tab">Avancé</button></div>
-    <div class="rech-reglages"><input id="rechReglages" type="search" autocomplete="off" placeholder="Chercher un réglage (langue, PIN, moteur, dossier, mémoire…)" aria-label="Chercher un réglage"><span class="aide" id="rechReglagesInfo" role="status"></span></div>
     <details class="groupe" open data-g="general"><summary>Général</summary>
     <h2>Langue / Language</h2>
     <div style="margin:6px 0"><label><select id="selLangue"><option value="auto">Auto</option><option value="fr">Français</option><option value="en">English</option></select></label></div>
@@ -1705,13 +1704,21 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     if (ETAT.bench && ETAT.bench.en_cours) fond.push('📏 ' + T('Mesure de ') + ETAT.bench.en_cours + (ETAT.bench.etape ? ' : ' + ETAT.bench.etape : '…') + ((ETAT.bench.file || []).length ? ' (+' + ETAT.bench.file.length + ' ' + T('en attente') + ')' : ''));
     const gigas = n => (n / 1e9).toFixed(1).replace('.', ',') + ' ' + T('Go');
     const mem = ETAT.memoire ? '🧠 ' + ETAT.memoire.modele + ' : ' + gigas(ETAT.memoire.taille) + (ETAT.memoire.taille ? ' · ' + Math.round(100 * ETAT.memoire.vram / ETAT.memoire.taille) + ' % ' + T('sur la carte graphique') : '') : '';
-    const cle = JSON.stringify([encours.map(id => [id, pulls[id].fait, pulls[id].total, pulls[id].texte]), erreurs.map(id => [id, pulls[id].texte]), finis, fond, mem]);
+    const fins = (ETAT.fins_moteur || []).filter(f => !FINS_VUES.has(f.id + '|' + f.fin));          // opérations de moteur (installation…) : réussies ou en erreur, jamais disparues sans un mot
+    const cle = JSON.stringify([encours.map(id => [id, pulls[id].fait, pulls[id].total, pulls[id].texte]), erreurs.map(id => [id, pulls[id].texte]), finis, fond, mem, fins.map(f => [f.id, f.statut, f.texte])]);
     if (b.dataset.cle === cle) return;
     b.dataset.cle = cle; b.textContent = '';
-    if (!encours.length && !erreurs.length && !finis.length && !fond.length) { b.hidden = true; return; }
+    if (!encours.length && !erreurs.length && !finis.length && !fond.length && !fins.length) { b.hidden = true; return; }
     b.hidden = false;
     const mo = n => Math.round(n / 1e6);
     fond.forEach(t => b.appendChild(el('div', 'texte', t)));
+    fins.forEach(f => {
+      const ligne = el('div', 'ligne-dl');
+      ligne.appendChild(el('span', f.statut === 'erreur' ? 'erreur' : 'texte', (f.statut === 'erreur' ? '⚠ ' : '✔ ') + f.nom + ' : ' + f.texte));
+      if (f.statut === 'erreur') { const voir = el('button', 'principal', T('Ouvrir les réglages du moteur')); voir.addEventListener('click', () => { ouvrirOnglet('reglages'); montrerRubrique('moteur'); }); ligne.appendChild(voir); }
+      const fermer = el('button', '', T('Fermer')); fermer.addEventListener('click', () => { FINS_VUES.add(f.id + '|' + f.fin); b.dataset.cle = ''; majTelechargements(); });
+      ligne.appendChild(fermer); b.appendChild(ligne);
+    });
     encours.slice(0, 3).forEach(id => {
       const p = pulls[id], pct = p.total ? Math.round(100 * p.fait / p.total) : null, ligne = el('div', 'ligne-dl');
       ligne.appendChild(el('span', 'texte', '⬇ ' + T('Téléchargement de ') + id + ' : ' + (pct !== null ? pct + ' % (' + mo(p.fait) + ' / ' + mo(p.total) + ' ' + T('Mo') + ')' : (p.texte || '…'))));
@@ -1736,6 +1743,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     if (mem) b.appendChild(el('div', 'aide', mem));
   };
   // Premier lancement : tant qu'aucun moteur n'est prêt, l'onglet Modèles est désactivé (avec la raison) et une carte propose : installer le moteur conseillé / en choisir un autre / plus tard
+  const FINS_VUES = new Set();          // opérations de moteur dont l'utilisateur a fermé le résultat
   const afficherPremierLancement = pl => {
     const bModeles = document.querySelector('.onglets button[data-p="modeles"]'), bloc = $('premierLancement');
     if (bModeles) { bModeles.disabled = !pl.pret; bModeles.title = pl.pret ? '' : pl.raison; bModeles.style.opacity = pl.pret ? '' : '.45'; }
@@ -4298,7 +4306,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
       $('bRetirer_' + id).hidden = !r[id] || !r.modifiable; $('rech_' + id).disabled = $('bOk_' + id).disabled = !r.modifiable;
     });
     [$('rechSearxng'), $('rechBrave'), $('bRechSearxng'), $('bRechBrave'), $('bRechBraveRetirer')].forEach(x => { x.disabled = !r.modifiable; });
-    $('rechMsg').textContent = r.modifiable ? '' : T('À régler depuis cette machine.');
+    $('rechMsg').textContent = r.modifiable ? '' : T('Verrouillé depuis cet appareil : en Docker, ajoute LUTIN_ADMIN_TOUS=1 (ou ton nom dans LUTIN_ADMINS) au docker-compose, ou règle-le depuis la machine elle-même.');
   };
   // Tavily, Exa, Perplexity : une clé personnelle chacun. Seuls les résultats servent : le modèle de Lutin les lit et répond lui-même (jamais une réponse toute faite d'un autre modèle).
   const FOURNISSEURS_CLE = [
@@ -4336,26 +4344,6 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     } catch (e) { $('rechMsg').textContent = e.message; }
     b.disabled = false; chargerRecherche();
   });
-  // ---- Recherche dans les Réglages : on ne garde que les groupes qui parlent de ce qu'on cherche, et on les ouvre
-  const filtrerReglages = () => {
-    const mots = sansAccent($('rechReglages').value).split(/\s+/).filter(Boolean);
-    const groupes = [...document.querySelectorAll('#p-reglages details.groupe')];
-    let gardes = 0, premier = null;
-    groupes.forEach(d => {
-      if (mots.length && d.dataset.ouvertAvant === undefined) d.dataset.ouvertAvant = d.open ? '1' : '0';          // on se souvient de l'état d'avant la recherche
-      const texte = sansAccent(d.textContent);
-      const ok = !mots.length || mots.every(m => texte.includes(m));
-      d.hidden = !ok;
-      if (ok) { gardes++; if (!premier) premier = d; }
-      if (mots.length) { if (ok) d.open = true; }
-      else if (d.dataset.ouvertAvant !== undefined) { d.open = true; delete d.dataset.ouvertAvant; }
-    });
-    $('p-reglages').classList.toggle('cherche', mots.length > 0);
-    $('rechReglagesInfo').textContent = mots.length ? (gardes ? gardes + ' ' + (gardes > 1 ? T('groupes correspondent') : T('groupe correspond')) : T('Aucun réglage ne correspond.')) : '';
-    if (mots.length && premier) premier.scrollIntoView({ block: 'nearest' });
-  };
-  $('rechReglages').addEventListener('input', filtrerReglages);
-  $('rechReglages').addEventListener('keydown', e => { if (e.key === 'Escape' && $('rechReglages').value) { $('rechReglages').value = ''; filtrerReglages(); e.stopPropagation(); } });
   // ---- Palette de commandes (Ctrl+K) : un seul endroit pour aller partout, au clavier
   const PAL = { ouverte: false, items: [], visibles: [], choix: 0, retour: null };
   const sansAccent = t => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
@@ -4371,7 +4359,17 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     liste.push({ ic: '✔', t: T('Vérifier que tout marche'), g: g.action, k: 'sante test diagnostic', f: async () => { ouvrirOnglet('sante'); await window.ouvrirSante(); const b = [...document.querySelectorAll('#santeCorps button')].find(x => x.textContent.includes(T('Vérifier que tout marche'))); if (b) b.click(); } });
     ((ETAT && ETAT.conversations) || []).forEach(c => liste.push({ ic: c.epingle ? '★' : '💬', t: c.titre || T('(sans titre)'), g: g.conv, k: '', f: () => { ouvrirOnglet('chat'); ouvrir(c.id); } }));
     if (ETAT && ETAT.installes) installesDiscussion().forEach(m => liste.push({ ic: '🧠', t: m, g: g.modele, k: 'modele model changer', f: () => { const s = $('selModele'); s.value = m; s.dispatchEvent(new Event('change')); } }));
-    document.querySelectorAll('#p-reglages details.groupe > summary').forEach(sm => liste.push({ ic: '⚙', t: sm.textContent.trim(), g: g.reglage, k: 'reglages parametres options', f: () => { ouvrirOnglet('reglages'); const d = sm.parentElement; montrerRubrique(d.dataset.g); setTimeout(() => d.scrollIntoView({ block: 'start' }), 30); } }));
+    document.querySelectorAll('#p-reglages details.groupe').forEach(d => {          // chaque rubrique, puis chaque réglage qu'elle contient : la recherche d'en haut les trouve tous et y mène
+      const sm = d.querySelector('summary'), rubrique = sm.textContent.trim();
+      const aller = cible => () => { ouvrirOnglet('reglages'); montrerRubrique(d.dataset.g); setTimeout(() => { cible.scrollIntoView({ block: 'center' }); cible.classList.remove('trouve-reglage'); void cible.offsetWidth; cible.classList.add('trouve-reglage'); }, 80); };
+      liste.push({ ic: '⚙', t: rubrique, g: g.reglage, k: 'reglages parametres options', f: aller(sm) });
+      [...d.children].filter(c => c !== sm).slice(0, 80).forEach(c => {
+        const texte = (c.textContent || '').replace(/\s+/g, ' ').trim();
+        if (texte.length < 4) return;
+        const tete = c.querySelector('h2, h3, b, label, .nom, legend'), titre = ((tete ? tete.textContent : texte).replace(/\s+/g, ' ').trim()).slice(0, 80);
+        liste.push({ ic: '⚙', t: titre, g: g.reglage + ' › ' + rubrique, k: texte.slice(0, 500), f: aller(c) });
+      });
+    });
     return liste;
   };
   const notePalette = (it, mots) => {

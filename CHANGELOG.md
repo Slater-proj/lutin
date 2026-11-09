@@ -2,6 +2,12 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## Une seule recherche, des opérations de moteur qui s'expliquent
+
+- **La recherche d'en haut (Ctrl+K) trouve chaque réglage**, pas seulement les rubriques : elle ouvre la bonne rubrique, défile jusqu'au réglage et le fait clignoter. La seconde barre de recherche des Réglages disparaît.
+- **Une installation de moteur ne disparaît plus sans un mot** : la barre du haut garde le résultat (« ✔ Colibri : Installé : Colibri 2.1.0 ») quelques secondes, et une erreur reste affichée avec un bouton vers les réglages du moteur.
+- **Recherche web : les champs de clés d'API ne restent plus grisés en Docker.** Ils suivent la même règle que les connecteurs MCP (la machine elle-même, ou `LUTIN_ADMIN_TOUS=1` / `LUTIN_ADMINS`), et la page explique comment les débloquer.
+
 ## Conversations menées sur l'autre machine
 
 - **Les conversations d'une autre machine s'ouvrent au lieu de se copier** : tout le tour (modèle, outils, addons d'images ou de voix, dossiers autorisés) s'exécute sur la machine qui les héberge ; les fichiers générés et les pièces jointes y restent et sont servis à la demande. Plus de copie, donc plus de divergence. Nouveau droit sur l'hôte, **décoché par défaut** : « Laisser les machines appairées mener des conversations ici ».

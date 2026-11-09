@@ -1151,8 +1151,6 @@
 "Vérifier que tout marche": "Check that everything works",
 "Aller à…": "Go to…",
 "Aller à… (une conversation, un onglet, un modèle, une action)": "Go to… (a conversation, a tab, a model, an action)",
-"Tout trouver (Ctrl+K)": "Find anything (Ctrl+K)",
-"Tout trouver : conversations, onglets, modèles, actions (Ctrl+K)": "Find anything: conversations, tabs, models, actions (Ctrl+K)",
 "choisir": "select",
 "ouvrir": "open",
 "fermer": "close",
@@ -1190,11 +1188,6 @@
 "Retient une note": "Keeps a note",
 "Retrouve dans la mémoire": "Looks in memory for",
 "Crée un document": "Creates a document",
-"Chercher un réglage (langue, PIN, moteur, dossier, mémoire…)": "Search settings (language, PIN, engine, folder, memory…)",
-"Chercher un réglage": "Search settings",
-"groupes correspondent": "groups match",
-"groupe correspond": "group matches",
-"Aucun réglage ne correspond.": "No setting matches.",
 "Clé d'API": "API key",
 "L'adresse de ton SearXNG, par exemple http://127.0.0.1:8080 (le format « json » doit y être activé : voir docs/WEB_SEARCH.md). C'est la seule adresse locale que la recherche a le droit de joindre.": "The address of your SearXNG, for example http://127.0.0.1:8080 (the \"json\" format must be enabled there: see docs/WEB_SEARCH.md). It is the only local address the search is allowed to reach.",
 "Lutin cherche sur DuckDuckGo et Bing sans rien configurer. Pour des résultats plus complets et plus stables, ajoute SearXNG (un moteur qui tourne chez toi, gratuit) ou Brave (une clé gratuite à ton nom) : ils sont essayés en premier, les autres prennent le relais s'ils ne répondent pas.": "Lutin searches DuckDuckGo and Bing with nothing to set up. For fuller and steadier results, add SearXNG (an engine running at your place, free) or Brave (a free key in your name): they are tried first, the others take over if they do not answer.",
@@ -1205,7 +1198,6 @@
 "en pause (il n'a rien rendu)": "paused (it returned nothing)",
 "Clé enregistrée": "Key saved",
 "Pas de clé": "No key",
-"À régler depuis cette machine.": "To be set from this machine.",
 "Test en cours…": "Testing…",
 "résultats": "results",
 "Aucun moteur ne répond : vérifie ta connexion.": "No engine answers: check your connection.",
@@ -1365,5 +1357,8 @@
 "Elles peuvent en faire une COPIE chez elles ; rien de ce qui est ici n'est modifié.": "They can make a COPY of it on their side; nothing here is modified.",
 "Laisser les machines appairées mener des conversations ici": "Let paired machines hold conversations here",
 "Décoché par défaut. Une machine appairée peut alors ouvrir et continuer les conversations d'ici : le tour entier s'exécute ICI (tes modèles, tes outils, tes addons, tes dossiers autorisés) et les fichiers produits restent ici. Tes règles s'appliquent, les accords sont demandés à celui qui écrit, et chaque tour est noté dans le journal.": "Unchecked by default. A paired machine can then open and continue the conversations from here: the whole turn runs HERE (your models, your tools, your add-ons, your allowed folders) and the files produced stay here. Your rules apply, approvals are asked of whoever is typing, and every turn is noted in the journal.",
-"Ses conversations ne sont pas proposées ici : sur cette machine, onglet Machines, coche « Laisser les machines appairées mener des conversations ici ».": "Its conversations are not offered here: on that machine, Machines tab, tick « Let paired machines hold conversations here »."
+"Ses conversations ne sont pas proposées ici : sur cette machine, onglet Machines, coche « Laisser les machines appairées mener des conversations ici ».": "Its conversations are not offered here: on that machine, Machines tab, tick « Let paired machines hold conversations here ».",
+"Verrouillé depuis cet appareil : en Docker, ajoute LUTIN_ADMIN_TOUS=1 (ou ton nom dans LUTIN_ADMINS) au docker-compose, ou règle-le depuis la machine elle-même.": "Locked from this device: in Docker, add LUTIN_ADMIN_TOUS=1 (or your name in LUTIN_ADMINS) to the docker-compose, or set it from the machine itself.",
+"Tout trouver : conversations, onglets, modèles, réglages, actions (Ctrl+K)": "Find anything: conversations, tabs, models, settings, actions (Ctrl+K)",
+"Tout trouver, réglages compris (Ctrl+K)": "Find anything, settings included (Ctrl+K)"
 }

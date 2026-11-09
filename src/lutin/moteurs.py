@@ -233,6 +233,26 @@ def annuler_tache(ident):
     return False
 
 
+FIN_RESULTAT_S = 25          # un résultat réussi reste affiché ce temps dans la barre du haut
+FIN_ERREUR_S = 600          # une erreur y reste plus longtemps (jusqu'à ce qu'on la ferme)
+
+
+def fins_recentes(maintenant=None):
+    """Les opérations de moteur terminées depuis peu : [{id, nom, statut (termine | erreur), action, texte}] pour la barre du haut. Rien ne disparaît sans avoir dit comment ça s'est fini."""
+    maintenant = maintenant or time.time()
+    with VERROU:
+        sortie = []
+        for ident, t in TACHES.items():
+            if ident not in MOTEURS or not t.get("fin"):
+                continue
+            age = maintenant - t["fin"]
+            if t.get("statut") == "termine" and t.get("resultat") and age < FIN_RESULTAT_S:
+                sortie.append({"id": ident, "nom": MOTEURS[ident].nom, "statut": "termine", "action": t.get("action", ""), "texte": t["resultat"], "fin": t["fin"]})
+            elif t.get("statut") == "erreur" and age < FIN_ERREUR_S:
+                sortie.append({"id": ident, "nom": MOTEURS[ident].nom, "statut": "erreur", "action": t.get("action", ""), "texte": t.get("erreur", ""), "fin": t["fin"]})
+        return sortie
+
+
 def lancer_tache(moteur, action, executer=None, synchrone=False):
     """Lance `moteur.faire(action, progression)` dans un fil (ou tout de suite si `synchrone`, pour les tests). Une seule tâche à la fois par moteur."""
     with VERROU:
@@ -246,12 +266,15 @@ def lancer_tache(moteur, action, executer=None, synchrone=False):
             if TACHES[moteur.id].get("annule"):
                 raise ErreurAnnule("Opération annulée : ce qui est déjà téléchargé est gardé, relance pour reprendre.")
             TACHES[moteur.id].update({"texte": str(texte), "fait": int(fait or 0), "total": int(total or 0)})
+            if texte:
+                TACHES[moteur.id]["dernier"] = str(texte)
 
     def travail():
         try:
             (executer or moteur.faire)(action, progression)
             with VERROU:
-                TACHES[moteur.id].update({"statut": "termine", "texte": "", "fait": 0, "total": 0})
+                # le résultat reste lisible un moment dans la barre du haut : « Installé : Colibri 2.1.0 » ne doit pas disparaître sans un mot
+                TACHES[moteur.id].update({"statut": "termine", "resultat": TACHES[moteur.id].get("dernier", ""), "texte": "", "fait": 0, "total": 0, "fin": time.time()})
             try:
                 from . import moteurs_maj
                 moteurs_maj.oublier(moteur.id)          # la version installée a peut-être changé : le prochain contrôle refera le constat
@@ -265,7 +288,7 @@ def lancer_tache(moteur, action, executer=None, synchrone=False):
                 if cause is not None:
                     TACHES[moteur.id].update({"statut": "annule", "erreur": "", "texte": "", "fait": 0, "total": 0})
                 else:
-                    TACHES[moteur.id].update({"statut": "erreur", "erreur": str(erreur)[:500]})
+                    TACHES[moteur.id].update({"statut": "erreur", "erreur": str(erreur)[:500], "fin": time.time()})
     if synchrone:
         travail()
     else:
