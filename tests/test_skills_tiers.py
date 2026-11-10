@@ -107,6 +107,30 @@ class Recherche(Base):
         self.assertEqual([(s["dir"], s["nom"], s["scripts"], s["fichiers"]) for s in liste], [("skills/docx", "docx", False, 2), ("skills/pdf", "pdf", True, 3)])
         self.assertFalse(tronque)
 
+    def test_les_skills_rangees_dans_les_dossiers_des_agents_comptent_sans_les_copies(self):
+        """Une partie des skills d'un dépôt n'étaient pas vus : ceux de « .gemini/skills » ou « .claude/skills » étaient écartés avec tous les dossiers cachés, copies comprises."""
+        depot = depot_type(**{".claude/skills/outil/SKILL.md": SKILL.format(nom="outil", desc="Un outil rangé dans .claude"), ".gemini/skills/autre/SKILL.md": SKILL.format(nom="autre", desc="Unique à .gemini"),
+                              ".agents/skills/outil/SKILL.md": SKILL.format(nom="outil", desc="copie de la copie"), ".github/workflows/SKILL.md": "pas un skill", ".vc/x/SKILL.md": "outil de build", ".claude/commands/SKILL.md": "non"})
+        liste, _ = S.skills_du_depot("o/r", FauxGithub({"o/r": depot}))
+        self.assertEqual([s["dir"] for s in liste], [".claude/skills/outil", ".gemini/skills/autre", "skills/docx", "skills/pdf"], "pdf n'est pas compté deux fois ; .claude passe avant .agents")
+        f = S.fiche("o/r", ".claude/skills/outil", FauxGithub({"o/r": depot}))
+        self.assertEqual((f["nom"], f["nombre_fichiers"]), ("outil", 1), "la fiche d'un skill rangé dans un dossier caché s'ouvre")
+
+    def test_les_depots_cites_par_les_listes_communautaires(self):
+        liste = ("# Awesome\n- [docx](https://officialskills.sh/anthropics/skills/docx) - Word\n- [pdf](https://officialskills.sh/anthropics/skills/pdf)\n"
+                 "- [a](https://github.com/microsoft/skills) et [b](https://github.com/microsoft/skills/tree/main/x) et [c](https://github.com/microsoft/skills.git)\n"
+                 "- [d](https://github.com/openai/skills)\n- [autre liste](https://github.com/VoltAgent/awesome-agent-skills)\n- [sujet](https://github.com/topics/agent-skills) [page](https://github.com/orgs/x/y)\n"
+                 "- [fichier](https://github.com/o/r/blob/main/a.md) [issues](https://github.com/o/r/issues)\n")
+        gh = FauxGithub({"VoltAgent/awesome-agent-skills": {"README.md": liste}, "travisvn/awesome-claude-skills": {"README.md": "- [x](https://github.com/openai/skills)\n"}})
+        r = S.depots_recenses("", gh)
+        noms = {x["depot"]: x["citations"] for x in r}
+        self.assertEqual((noms["microsoft/skills"], noms["anthropics/skills"], noms["openai/skills"]), (3, 2, 2))
+        for jamais in ("VoltAgent/awesome-agent-skills", "topics/agent-skills", "orgs/x"):
+            self.assertNotIn(jamais, noms, "les listes elles-mêmes et les pages du site ne sont pas des dépôts de skills")
+        self.assertEqual([x["depot"] for x in S.depots_recenses("microsoft", gh)], ["microsoft/skills"])
+        with self.assertRaises(ValueError):
+            S.depots_recenses("", FauxGithub({}))
+
     def test_un_skill_a_la_racine_du_depot_est_reconnu(self):
         liste, _ = S.skills_du_depot("o/r", FauxGithub({"o/r": {"SKILL.md": SKILL.format(nom="seul", desc="d"), "scripts/a.sh": "echo"}}))
         self.assertEqual([(s["dir"], s["nom"], s["scripts"]) for s in liste], [("", "r", True)])

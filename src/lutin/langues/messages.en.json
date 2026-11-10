@@ -2224,5 +2224,11 @@
 "un très long bloc encodé (impossible à relire)": "a very long encoded block (impossible to re-read)",
 "Anthropic (officiel)": "Anthropic (official)",
 "Communauté : skills par métier": "Community: skills by profession",
-"Vercel : recherche de skills": "Vercel: skill search"
+"Vercel : recherche de skills": "Vercel: skill search",
+"Si Lutin ne démarre pas après la connexion de la session : sur cette machine, onglet Machines > « Démarrer Lutin à l'ouverture de ma session » (et auto-connexion Windows).": "If Lutin does not start after the session opens: on that machine, Machines tab > \"Start Lutin when my session opens\" (and Windows auto-login).",
+"Réveil non abouti : aucune réponse après {} minutes. {} Si la machine est en fait allumée, son adresse IP a peut-être changé (réserve-lui une adresse fixe dans ta box).": "Wake-up failed: no answer after {} minutes. {} If the machine is actually on, its IP address may have changed (reserve a fixed address for it in your router).",
+"La machine est allumée (elle répond au réseau) ; Lutin n'y répond pas encore — il démarre, ou ne démarre pas tout seul. Réveil envoyé il y a {} s ; je laisse jusqu'à {} min.": "The machine is on (it answers on the network); Lutin does not answer yet — it is starting, or it does not start by itself. Wake-up sent {} s ago; I wait up to {} min.",
+"Réveil envoyé il y a {} s : une machine met de 30 secondes à quelques minutes à démarrer. Je laisse jusqu'à {} min.": "Wake-up sent {} s ago: a machine takes from 30 seconds to a few minutes to start. I wait up to {} min.",
+"Réveil non abouti : la machine est bien allumée, mais Lutin n'y répond pas après {} minutes. Vérifie que Lutin y démarre avec la session (sur cette machine : onglet Machines > « Démarrer Lutin à l'ouverture de ma session »), que la session s'ouvre toute seule (auto-connexion Windows) et que le pare-feu laisse passer le port de Lutin.": "Wake-up failed: the machine is on, but Lutin does not answer after {} minutes. Check that Lutin starts with the session (on that machine: Machines tab > \"Start Lutin when my session opens\"), that the session opens by itself (Windows auto-login) and that the firewall lets Lutin's port through.",
+"Les listes communautaires de skills ne se lisent pas pour l'instant. Réessaie dans quelques minutes.": "The community skill lists cannot be read right now. Try again in a few minutes."
 }

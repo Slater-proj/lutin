@@ -20,8 +20,9 @@ from .i18n import t as _t
 
 RE_MAC = re.compile(r"^([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}$")
 DELAI_EXTINCTION_S = 30
-ATTENTE_REVEIL_S = 600          # au-delà, on ne dit plus « réveil envoyé » : il n'a pas marché
-SEUIL_RAISONS_S = 180          # après trois minutes sans réponse, on liste ce qui bloque d'habitude
+ATTENTE_REVEIL_S = 300          # cinq minutes : au-delà, le réveil n'a pas abouti — l'état revient à « pas démarrée » avec la raison, au lieu de rester bloqué sur « réveil envoyé »
+SEUIL_RAISONS_S = 120          # après deux minutes sans réponse, on liste ce qui bloque d'habitude
+PORTS_TEMOINS = (445, 135, 139, 3389, 22, 80, 443, 5985)          # un système allumé accepte ou REFUSE une connexion sur l'un d'eux (un port fermé répond « refusé ») : c'est la preuve qu'il est là
 NOM_TACHE = "Lutin"
 NOM_UNITE = "lutin.service"
 
@@ -120,6 +121,90 @@ def raison_echec(secondes_depuis_reveil, adresse_machine=""):
         return ""
     return _t("Elle ne répond toujours pas. Vérifie : le Wake-on-LAN activé dans le BIOS de la machine ; la carte réseau autorisée à la réveiller ; "
               "un câble Ethernet (le Wi-Fi réveille rarement) ; sous Windows, le « démarrage rapide » désactivé ; l'adresse MAC exacte ; et qu'elle ouvre sa session toute seule (auto-connexion) pour que Lutin démarre.")
+
+
+# --------------------------------------------------------------------------- la machine est-elle allumée ? (sans dépendre de Lutin ni de son port)
+
+def _masque_fenetre():
+    return {"creationflags": 0x08000000} if os.name == "nt" else {}
+
+
+def _tcp(hote, port, delai):
+    """Vrai si la machine a RÉPONDU à une connexion (acceptée ou refusée) ; faux si rien ne revient (éteinte, pare-feu qui jette tout, pas de route)."""
+    try:
+        with socket.create_connection((hote, port), timeout=delai):
+            return True
+    except ConnectionRefusedError:
+        return True
+    except OSError as e:
+        return getattr(e, "errno", None) in (111, 10061)          # « refusé » : Linux, Windows
+
+
+def _ping(hote, delai, lancer=subprocess.run):
+    """Vrai si la machine répond au ping (beaucoup de pare-feu l'interdisent : un « non » ne prouve rien)."""
+    commande = ["ping", "-n", "1", "-w", str(int(delai * 1000)), hote] if os.name == "nt" else ["ping", "-c", "1", "-W", str(max(1, int(delai))), hote]
+    try:
+        r = lancer(commande, capture_output=True, text=True, timeout=delai + 3, **_masque_fenetre())
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return r.returncode == 0 and (os.name != "nt" or "TTL=" in (r.stdout or "").upper())          # Windows rend 0 aussi pour « hôte inaccessible » : on exige une vraie réponse
+
+
+def voisin(hote, mac="", lancer=subprocess.run):
+    """Ce que dit la table des voisins du réseau local (ARP : aucun pare-feu n'y touche) de cette adresse : True (confirmée, avec la bonne adresse MAC), False (échec de résolution, ou une AUTRE machine a cette adresse),
+    None (on ne sait pas : pas de table lisible, entrée périmée, autre réseau, conteneur)."""
+    mac = normaliser_mac(mac)
+    try:
+        if os.name == "nt":
+            sortie = lancer(["powershell", "-NoProfile", "-NonInteractive", "-Command",
+                             "$n = Get-NetNeighbor -IPAddress '%s' -AddressFamily IPv4 -ErrorAction SilentlyContinue | Select-Object -First 1; if ($n) { '{0} {1}' -f $n.State, $n.LinkLayerAddress }" % hote],
+                            capture_output=True, text=True, timeout=8, **_masque_fenetre()).stdout or ""
+        else:
+            sortie = lancer(["ip", "-4", "neigh", "show", hote], capture_output=True, text=True, timeout=5).stdout or ""
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return analyser_voisin(sortie, mac)
+
+
+def analyser_voisin(texte, mac=""):
+    """Interprète une ligne de la table des voisins (Windows : « Reachable AA-BB-… » ; Linux : « 192.168.1.5 dev eth0 lladdr aa:bb:… REACHABLE ») — voir voisin()."""
+    ligne = " ".join(str(texte or "").split()).lower()
+    if not ligne:
+        return None
+    trouve = re.search(r"((?:[0-9a-f]{2}[:-]){5}[0-9a-f]{2})", ligne)
+    mots = set(re.split(r"[^a-z]+", ligne))          # des mots entiers : « unreachable » ne contient pas « reachable »
+    etat = next((e for e in ("reachable", "permanent", "stale", "delay", "probe", "incomplete", "failed", "unreachable") if e in mots), "")
+    if etat in ("failed", "incomplete", "unreachable"):
+        return False
+    if etat not in ("reachable", "permanent") or not trouve:
+        return None          # « stale » : peut dater d'avant l'extinction
+    vue = normaliser_mac(trouve.group(1))
+    return (vue == mac) if (mac and vue) else True
+
+
+def hote_allume(hote, mac="", port_lutin=0, delai=0.7, tcp=_tcp, ping=_ping, table=voisin):
+    """La machine est-elle allumée ? True / False. Trois indices, du plus fiable au moins fiable :
+    1. la table des voisins (ARP) après avoir frappé à sa porte : confirmée avec la bonne adresse MAC = allumée ; échec ou autre MAC = non (ce que pare-feu et ports ne peuvent pas fausser) ;
+    2. une connexion TCP acceptée OU refusée sur le port de Lutin ou un port courant (445, 3389…) : un système qui répond « refusé » est vivant ;
+    3. un ping.
+    Rien de tout cela ne dépend de Lutin : c'est ce qui distingue « la machine est allumée mais Lutin n'y tourne pas » de « elle est encore éteinte »."""
+    ports = ([port_lutin] if port_lutin else []) + [p for p in PORTS_TEMOINS if p != port_lutin]
+    reponses = []
+    verrou = threading.Lock()
+
+    def essai(p):
+        if tcp(hote, p, delai):
+            with verrou:
+                reponses.append(p)
+    fils = [threading.Thread(target=essai, args=(p,), daemon=True) for p in ports]
+    for f in fils:
+        f.start()
+    for f in fils:
+        f.join(delai + 0.5)
+    verdict = table(hote, mac)          # après les connexions : elles ont forcé la résolution ARP
+    if verdict is not None:
+        return verdict
+    return bool(reponses) or bool(ping(hote, delai))
 
 
 # --------------------------------------------------------------------------- l'adresse MAC de cette machine, et peut-elle être réveillée à distance ?

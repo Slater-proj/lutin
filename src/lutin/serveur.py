@@ -1372,6 +1372,8 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 return self._envoyer(200, _skills.chercher(un("q"), depots, un("page", "1")))
             if chemin == "/api/skills-tiers-depots":
                 return self._envoyer(200, {"depots": _skills.chercher_depots(un("q"))})
+            if chemin == "/api/skills-tiers-listes":                # les dépôts cités par les listes communautaires
+                return self._envoyer(200, {"depots": _skills.depots_recenses(un("q"))})
             if chemin == "/api/skills-tiers-fiche":
                 depot = "/".join(_skills.lire_depot(un("depot")))
                 if depot not in {s["depot"] for s in _skills.sources()}:

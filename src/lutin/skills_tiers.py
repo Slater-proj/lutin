@@ -34,6 +34,7 @@ SOURCES_DEFAUT = (          # des dépôts publics de skills, proposés au dépa
 RE_SEGMENT = re.compile(r"^[A-Za-z0-9_.-]{1,100}$")
 RE_NOM_SUR = re.compile(r"[^a-z0-9._-]+")
 CHEMIN_SKILLS = ".claude/skills"
+DOSSIERS_AGENTS = (".claude", ".agents", ".codex", ".cursor", ".opencode", ".gemini", ".github")          # là où les agents rangent leurs skills ; ordre = préférence quand le même skill est copié dans plusieurs
 SIGNATURE = ".lutin-skill.json"
 MAX_FICHIERS, MAX_OCTET_FICHIER, MAX_OCTETS = 200, 900_000, 8_000_000          # un skill est un dossier de texte : au-delà, ce n'est pas un skill
 DUREE_CACHE = 600
@@ -113,10 +114,36 @@ def arbre(depot, http=None):
 def chercher_depots(q, http=None):
     """Des dépôts de skills sur GitHub (recherche par sujet), les plus suivis d'abord : [{depot, etoiles, description, maj}]."""
     q = " ".join(str(q or "").split())[:60]
-    requete = (q + " " if q else "") + "topic:agent-skills"
+    requete = (q + " " if q else "") + "(topic:agent-skills OR topic:claude-skills OR topic:claude-code-skills)"
     d = _lire_json("https://api.github.com/search/repositories?" + urllib.parse.urlencode({"q": requete, "sort": "stars", "order": "desc", "per_page": "20"}), http)
     return [{"depot": e.get("full_name", ""), "etoiles": int(e.get("stargazers_count") or 0), "description": str(e.get("description") or "")[:200], "maj": str(e.get("pushed_at") or "")[:10]}
             for e in d.get("items", []) if RE_SEGMENT.match(str(e.get("full_name", "")).split("/")[0] or "")]
+
+
+LISTES_COMMUNAUTAIRES = ("VoltAgent/awesome-agent-skills", "travisvn/awesome-claude-skills")          # des listes de liens vers des dépôts de skills
+RE_LIEN_DEPOT = re.compile(r"https?://(?:www\.)?github\.com/([A-Za-z0-9][A-Za-z0-9_.-]{0,38})/([A-Za-z0-9_][A-Za-z0-9_.-]{0,99})(?=[/)#\s\"'>\]]|$)")
+RE_LIEN_ANNUAIRE = re.compile(r"https?://officialskills\.sh/([A-Za-z0-9][A-Za-z0-9_.-]{0,38})/([A-Za-z0-9_][A-Za-z0-9_.-]{0,99})/")
+NON_DEPOTS = {"orgs", "topics", "features", "sponsors", "marketplace", "settings", "apps", "about", "pricing", "search", "login", "collections", "trending", "explore"}
+
+
+def depots_recenses(q="", http=None):
+    """Les dépôts GitHub cités par les listes communautaires de skills (liens trouvés dans leur README), les plus cités d'abord : [{depot, citations}]. Filtrés par le mot cherché ; les listes elles-mêmes sont écartées."""
+    comptes = {}
+    for liste in LISTES_COMMUNAUTAIRES:
+        try:
+            texte = (_texte(liste, "README.md", http, 4_000_000) or b"").decode("utf-8", "replace")
+        except ValueError:
+            continue          # une liste qui ne se lit pas n'empêche pas les autres
+        for o, r in RE_LIEN_DEPOT.findall(texte) + RE_LIEN_ANNUAIRE.findall(texte):
+            r = re.sub(r"\.git$", "", r)
+            if o.lower() in NON_DEPOTS or o.startswith(".") or r in ("blob", "tree", "issues", "pull", "releases", "wiki", "actions") or "{}/{}".format(o, r) in LISTES_COMMUNAUTAIRES:
+                continue
+            comptes["{}/{}".format(o, r)] = comptes.get("{}/{}".format(o, r), 0) + 1
+    mots = [m for m in str(q or "").lower().split() if m]
+    sortie = [{"depot": d, "citations": n} for d, n in comptes.items() if all(m in d.lower() for m in mots)]
+    if not sortie and not comptes:
+        raise ValueError(_t("Les listes communautaires de skills ne se lisent pas pour l'instant. Réessaie dans quelques minutes."))
+    return sorted(sortie, key=lambda x: (-x["citations"], x["depot"]))[:120]
 
 
 # ------------------------------------------------------------------ le contenu d'un dépôt
@@ -130,17 +157,32 @@ def skills_du_depot(depot, http=None):
     a = arbre(depot, http)
     entrees = a["entrees"]
     dossiers_sha = {e["path"]: e.get("sha", "") for e in entrees if e.get("type") == "tree"}
-    sortie = []
+    sortie, cache = [], {}
     for e in entrees:
         if e.get("type") != "blob" or not (e["path"] == "SKILL.md" or e["path"].endswith("/SKILL.md")):
             continue
         dossier = e["path"].rsplit("/", 1)[0] if "/" in e["path"] else ""
-        if any(s.startswith(".") for s in dossier.split("/") if s) or "node_modules" in dossier.split("/"):
+        segments = [x for x in dossier.split("/") if x]
+        if "node_modules" in segments:
+            continue
+        if any(x.startswith(".") for x in segments):          # dossier caché : seulement ceux des agents (« .claude/skills/x »), et jamais en double d'un skill déjà vu ailleurs
+            if segments[0] not in DOSSIERS_AGENTS or len(segments) < 3 or segments[1] != "skills":
+                continue
+            cache[dossier] = segments[-1]
             continue
         prefixe = dossier + "/" if dossier else ""
         fichiers = [x for x in entrees if x.get("type") == "blob" and x["path"].startswith(prefixe) and not any(seg.startswith(".") for seg in x["path"][len(prefixe):].split("/"))]
         sortie.append({"dir": dossier, "nom": dossier.rsplit("/", 1)[-1] if dossier else depot.split("/")[1], "sha": dossiers_sha.get(dossier, a["sha"]), "fichiers": len(fichiers),
                        "octets": sum(int(x.get("size") or 0) for x in fichiers), "scripts": any(x["path"][len(prefixe):].startswith("scripts/") for x in fichiers)})
+    deja = {s["nom"] for s in sortie}
+    for dossier in sorted(cache, key=lambda d: (DOSSIERS_AGENTS.index(d.split("/")[0]), d)):
+        if cache[dossier] in deja:
+            continue          # la même fiche est déjà dans le dépôt (ou dans un dossier d'agent préféré) : une copie de plus n'est pas un autre skill
+        deja.add(cache[dossier])
+        prefixe = dossier + "/"
+        fichiers = [x for x in entrees if x.get("type") == "blob" and x["path"].startswith(prefixe)]
+        sortie.append({"dir": dossier, "nom": cache[dossier], "sha": dossiers_sha.get(dossier, a["sha"]), "fichiers": len(fichiers), "octets": sum(int(x.get("size") or 0) for x in fichiers),
+                       "scripts": any(x["path"][len(prefixe):].startswith("scripts/") for x in fichiers)})
     return sorted(sortie, key=lambda s: s["dir"]), a["tronque"]
 
 

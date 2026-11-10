@@ -94,6 +94,7 @@ class Skills(unittest.TestCase):
             p.evaluer(faux({
                 "/api/skills-tiers-chercher": (200, {"skills": [skill("skills/pdf", "pdf", "Travailler avec des PDF", scripts=True), skill("skills/docx", "docx", "Créer des documents Word", licence="", jetons=5000)], "total": 2, "page": 1, "suite": False, "tronque": False, "decrits": 2, "nombre": 40}),
                 "/api/skills-tiers-fiche": (200, fiche("danger")),
+                "/api/skills-tiers-indexer": (200, {"ok": True}),
                 "/api/skills-tiers-installer": (200, {"nom": "pdf", "dossier": "C:/projet/.claude/skills/pdf", "fichiers": 3, "ignores": []}),
                 "/api/skills-tiers-installes": (200, {"installes": [{"travail": "principal", "nom": "pdf", "dossier": "x", "depot": "anthropics/skills", "dir": "skills/pdf", "sha": "abc", "installe": "2026-11-10T10:00:00", "licence": "MIT", "gravite": "danger", "jetons": 40,
                                                                     "description": "Travailler avec des PDF", "maj": True, "disparu": False, "erreur": ""}]})}))
@@ -146,6 +147,22 @@ class Skills(unittest.TestCase):
             p.evaluer("document.querySelector('.onglets button[data-p=\"memoire\"]').click()")
             p.attendre("document.getElementById('skGithub').textContent.includes('pas de limite')", delai=20)
             api(p, "/api/github-enregistrer", {"jeton": ""})
+            self.assertEqual(p.erreurs, [])
+
+    def test_les_depots_des_listes_communautaires_se_proposent_et_s_ajoutent(self):
+        with self.captures.serveur_demo({"LUTIN_LANGUE": "fr"}) as (port, tmp):
+            p = self.ouvrir(tmp, port)
+            p.evaluer(faux({"/api/skills-tiers-listes": (200, {"depots": [{"depot": "microsoft/skills", "citations": 133}, {"depot": "anthropics/skills", "citations": 34}]})}))
+            self.page_skills(p)
+            p.evaluer("document.getElementById('bSkListes').click()")
+            p.attendre("document.getElementById('skDepotsTrouves').textContent.includes('microsoft/skills')", delai=20)
+            texte = p.evaluer("document.getElementById('skDepotsTrouves').textContent")
+            self.assertIn("133 citation(s)", texte)
+            self.assertIn("Déjà dans ma liste", texte, "un dépôt de départ n'est pas proposé une seconde fois")
+            p.evaluer("[...document.querySelectorAll('#skDepotsTrouves .ligne')].find(l => l.textContent.includes('microsoft')).querySelector('button').click()")
+            p.attendre("document.querySelectorAll('#skSources label').length === 4", delai=20)
+            self.assertEqual([s["depot"] for s in api(p, "/api/skills-tiers")["sources"]][-1], "microsoft/skills")
+            self.assertEqual(p.evaluer("[...document.querySelectorAll('#skSources label')].pop().querySelector('input').checked"), True, "le dépôt ajouté est coché : la prochaine recherche le parcourt")
             self.assertEqual(p.erreurs, [])
 
     def test_ajouter_et_retirer_un_depot_de_sa_liste(self):

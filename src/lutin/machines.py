@@ -35,6 +35,8 @@ ETATS = ("injoignable", "reveil_envoye", "joignable", "operationnel")
 DUREE_CODE_S = 300
 CODES_MAX = 3
 VALIDITE_SONDE_S = 10          # un constat d'état est gardé ce temps : pas de sonde à chaque message
+DELAI_SONDE_REVEIL_S = 3.0
+VERIFICATION_ALLUMEE_S = 4          # « le système de la machine répond-il ? » est regardé au plus toutes les 4 s pendant un réveil
 VALIDITE_SONDE_ATTENTE_S = 2          # une machine pas encore opérationnelle (éteinte, qui démarre) est resondée vite : on la voit s'allumer sans attendre
 DELAI_SONDE_S = 1.5
 RE_MAC = re.compile(r"^([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}$")
@@ -47,6 +49,10 @@ CODES = {}          # code (chiffres) -> instant d'expiration
 SONDES = {}          # id de machine -> (instant, résultat)
 DERNIER_ETAT = {}          # id de machine -> dernier état journalisé
 REVEIL = {}          # id de machine -> instant du dernier paquet de réveil envoyé
+ECHEC_REVEIL = {}          # id de machine -> texte : le réveil n'a pas abouti dans le délai (cinq minutes) ; effacé au prochain réveil ou dès que la machine répond
+ALLUMEE = {}          # id de machine -> (instant, verdict) : « le système répond » constaté pendant un réveil (gardé quelques secondes : la vérification coûte une ou deux secondes)
+DEPUIS_ALLUMEE = {}          # id de machine -> instant où elle a été vue allumée pour la première fois pendant ce réveil
+HOTE_ALLUME = None          # remplaçable (tests) ; par défaut alimentation.hote_allume
 INFOS_NOEUD = {}          # adresse locale -> (instant, infos du nœud)
 INFOS_EN_COURS = {}          # adresse locale -> évènement : un calcul d'infos est en cours
 DISTANTS = {"t": 0.0, "v": [], "en_cours": False}          # modèles des autres machines, pour la liste de choix (voir modeles_distants)
@@ -54,6 +60,7 @@ ARRET = {}          # id de machine -> instant où on lui a demandé de s'étein
 MAJ_DISTANTE = {}          # id de machine -> (instant, version d'avant) : une mise à jour lui a été demandée
 SYNCHRO = {}          # id de machine -> {"modeles": bool, "conv": bool} : ce qui a été relu depuis qu'elle répond
 DELAI_ARRET_S = 150
+DELAI_SYNCHRO_S = 90
 DELAI_MAJ_S = 400
 CAPACITES_DISTANTES = {}          # (id de machine, modèle) -> (instant, capacités)
 
@@ -561,7 +568,7 @@ def sonder(m, modele="", ouvrir=None, maintenant=time.monotonic, force=False):
             return gardee[1]
     charge, droits, version, agir, allumee, demandes = None, {}, "", {}, False, []
     try:
-        rep = _json(m, "/api/noeud/etat", ouvrir=ouvrir)
+        rep = _json(m, "/api/noeud/etat", ouvrir=ouvrir, delai=DELAI_SONDE_REVEIL_S if m["id"] in REVEIL else DELAI_SONDE_S)          # une machine qui vient de démarrer répond lentement : plus de patience pendant un réveil
         if rep.get("id") == m["id"]:
             retenir_infos(m, rep)
             charge = rep.get("charge") if isinstance(rep.get("charge"), dict) else None
@@ -580,12 +587,37 @@ def sonder(m, modele="", ouvrir=None, maintenant=time.monotonic, force=False):
     except urllib.error.HTTPError as e:
         r = {"etat": "injoignable", "detail": _t("La machine refuse ce Lutin (erreur {}) : l'autorisation a peut-être été retirée.").format(e.code), "modeles": []}
     except (urllib.error.URLError, OSError, ValueError) as e:
-        allumee = _hote_allume(e)
+        allumee = _hote_allume(e) or _allumee_pendant_reveil(m, maintenant)
         r = {"etat": "injoignable", "detail": _t("Pas de réponse (éteinte, hors réseau ou Lutin arrêté)."), "modeles": []}
-    r = _avec_reveil(m, dict(r, charge=charge, droits=droits, version=version, agir=agir, demandes=demandes, maj_disponible=_maj_disponible(version)), maintenant)
+    r = _avec_reveil(m, dict(r, charge=charge, droits=droits, version=version, agir=agir, demandes=demandes, maj_disponible=_maj_disponible(version)), maintenant, allumee)
     r = dict(r, **_etape(m, r, allumee))
     _noter(m, r["etat"], maintenant, r, modele)
     return r
+
+
+def _allumee_pendant_reveil(m, maintenant=time.monotonic):
+    """Pendant un réveil seulement : le système de la machine répond-il (même si Lutin n'y répond pas encore ni son pare-feu) ? Preuves indépendantes de Lutin : voir alimentation.hote_allume.
+    Windows jette les connexions que son pare-feu refuse au lieu de dire « refusé » : sans cela, une machine allumée restait « réveil envoyé » indéfiniment."""
+    if m["id"] not in REVEIL:
+        return False
+    with VERROU:
+        gardee = ALLUMEE.get(m["id"])
+        if gardee and maintenant() - gardee[0] < VERIFICATION_ALLUMEE_S:
+            return gardee[1]
+    hote = urllib.parse.urlparse(m["adresse"]).hostname or ""
+    try:
+        port = urllib.parse.urlparse(m["adresse"]).port or 0
+    except ValueError:
+        port = 0
+    try:
+        verdict = bool(hote) and bool((HOTE_ALLUME or alimentation.hote_allume)(hote, m.get("mac", ""), port))
+    except Exception:  # noqa: BLE001  (un constat de plus : jamais une page cassée)
+        verdict = False
+    with VERROU:
+        ALLUMEE[m["id"]] = (maintenant(), verdict)
+        if verdict:
+            DEPUIS_ALLUMEE.setdefault(m["id"], maintenant())
+    return verdict
 
 
 def _hote_allume(erreur):
@@ -620,6 +652,8 @@ def _etape(m, r, allumee):
                 ARRET.pop(m["id"], None)          # elle ne répond plus : c'est fait
             if majd is not None:
                 return {"etape": "maj", "dans_s": 0}
+            if r.get("reveil_echec"):
+                return {"etape": "eteinte", "dans_s": 0}          # le réveil n'a pas abouti : « pas démarrée », avec la raison (et le bouton Réveiller)
             return {"etape": "allumee" if allumee else ("reveil" if r["etat"] == "reveil_envoye" else "eteinte"), "dans_s": 0}
         if arret is not None:
             return {"etape": "extinction", "dans_s": max(0, round(30 - (maintenant - arret)))}
@@ -628,22 +662,46 @@ def _etape(m, r, allumee):
         if r["etat"] == "joignable":
             return {"etape": "lutin", "dans_s": 0}
         s = SYNCHRO.get(m["id"]) or {}
-        return {"etape": "pret" if s.get("modeles") and s.get("conv") else "synchro", "dans_s": 0}
+        coince = maintenant - s.get("debut", maintenant) > DELAI_SYNCHRO_S          # une relecture qui n'aboutit pas ne garde pas la machine « en synchronisation » indéfiniment
+        return {"etape": "pret" if (s.get("modeles") and s.get("conv")) or coince else "synchro", "dans_s": 0}
 
 
-def _avec_reveil(m, r, maintenant=time.monotonic):
-    """Un réveil a été envoyé et la machine ne répond pas encore : état « réveil envoyé » (avec ce qu'il faut vérifier si ça dure). Dès qu'elle répond, la marque du réveil est effacée."""
+def _avec_reveil(m, r, maintenant=time.monotonic, allumee=False):
+    """Un réveil a été envoyé et la machine ne répond pas encore : état « réveil envoyé » avec ce qu'on sait (le système répond-il ?). Dès qu'elle répond, la marque du réveil est effacée.
+    Au bout de ATTENTE_REVEIL_S (cinq minutes) sans réponse de Lutin, le réveil est déclaré non abouti : l'état revient à « pas démarrée », avec la RAISON la plus probable (machine éteinte, ou allumée sans Lutin), jusqu'au prochain réveil."""
     with VERROU:
         envoye = REVEIL.get(m["id"])
         if r["etat"] != "injoignable":
-            REVEIL.pop(m["id"], None)
+            for suivi in (REVEIL, ECHEC_REVEIL, ALLUMEE, DEPUIS_ALLUMEE):
+                suivi.pop(m["id"], None)
             return r
-        if envoye is None or maintenant() - envoye > alimentation.ATTENTE_REVEIL_S:
+        if envoye is None:
+            if m["id"] in ECHEC_REVEIL:
+                return dict(r, detail=ECHEC_REVEIL[m["id"]], reveil_echec=True)
             return r
         depuis = maintenant() - envoye
-    detail = _t("Réveil envoyé il y a {} s : une machine met de 30 secondes à quelques minutes à démarrer.").format(round(depuis))
-    suite = alimentation.raison_echec(depuis)
+        if depuis > alimentation.ATTENTE_REVEIL_S:
+            REVEIL.pop(m["id"], None)
+            DEPUIS_ALLUMEE.pop(m["id"], None)
+            ECHEC_REVEIL[m["id"]] = echec = _echec_reveil(m, allumee)
+            journaliser("réveil de {} non abouti après {} s ({})".format(m["nom"], round(depuis), "allumée, Lutin ne répond pas" if allumee else "aucune réponse"))
+            return dict(r, detail=echec, reveil_echec=True)
+        vue_depuis = maintenant() - DEPUIS_ALLUMEE.get(m["id"], maintenant()) if allumee else 0
+    if allumee:
+        detail = _t("La machine est allumée (elle répond au réseau) ; Lutin n'y répond pas encore — il démarre, ou ne démarre pas tout seul. Réveil envoyé il y a {} s ; je laisse jusqu'à {} min.").format(round(depuis), alimentation.ATTENTE_REVEIL_S // 60)
+        suite = _t("Si Lutin ne démarre pas après la connexion de la session : sur cette machine, onglet Machines > « Démarrer Lutin à l'ouverture de ma session » (et auto-connexion Windows).") if vue_depuis > 90 else ""
+    else:
+        detail = _t("Réveil envoyé il y a {} s : une machine met de 30 secondes à quelques minutes à démarrer. Je laisse jusqu'à {} min.").format(round(depuis), alimentation.ATTENTE_REVEIL_S // 60)
+        suite = alimentation.raison_echec(depuis)
     return {"etat": "reveil_envoye", "detail": detail + (" " + suite if suite else ""), "modeles": []}
+
+
+def _echec_reveil(m, allumee):
+    """Pourquoi le réveil n'a pas abouti (le texte qui reste affiché, avec le bouton « Réveiller », jusqu'au prochain essai)."""
+    minutes = alimentation.ATTENTE_REVEIL_S // 60
+    if allumee:
+        return _t("Réveil non abouti : la machine est bien allumée, mais Lutin n'y répond pas après {} minutes. Vérifie que Lutin y démarre avec la session (sur cette machine : onglet Machines > « Démarrer Lutin à l'ouverture de ma session »), que la session s'ouvre toute seule (auto-connexion Windows) et que le pare-feu laisse passer le port de Lutin.").format(minutes)
+    return _t("Réveil non abouti : aucune réponse après {} minutes. {} Si la machine est en fait allumée, son adresse IP a peut-être changé (réserve-lui une adresse fixe dans ta box).").format(minutes, alimentation.raison_echec(alimentation.ATTENTE_REVEIL_S))
 
 
 def reveiller(ident, envoyer=alimentation.envoyer_reveil):
@@ -657,7 +715,8 @@ def reveiller(ident, envoyer=alimentation.envoyer_reveil):
     envoyes = envoyer(m["mac"], hote)
     with VERROU:
         REVEIL[ident] = time.monotonic()
-        SONDES.pop(ident, None)
+        for suivi in (SONDES, ECHEC_REVEIL, ALLUMEE, DEPUIS_ALLUMEE):
+            suivi.pop(ident, None)
     journaliser("réveil envoyé à {}".format(m["nom"]))
     return {"ok": True, "mac": m["mac"], "envois": len(envoyes or []), "cartes": alimentation.adresses_locales(), "avertissements": [a for a in [alimentation.emission_limitee()] + avertissements(m) if a][:4]}          # le paquet est parti, mais on dit ce qui risque de l'empêcher de marcher
 
@@ -737,7 +796,7 @@ def _noter(m, etat, maintenant, resultat, modele):
             journaliser("{} : {}".format(m["nom"], etat))          # un trait à chaque CHANGEMENT d'état, jamais à chaque sonde
             if etat in ("operationnel", "joignable"):
                 DISTANTS["t"] = CONVERSATIONS["t"] = 0.0          # elle vient de répondre : ses modèles et ses conversations sont relus tout de suite
-                SYNCHRO[m["id"]] = {"modeles": False, "conv": False}
+                SYNCHRO[m["id"]] = {"modeles": False, "conv": False, "debut": time.monotonic()}
             else:
                 oublier_machine(m["id"])          # elle ne répond plus : ses modèles et ses conversations ne sont plus proposés
 

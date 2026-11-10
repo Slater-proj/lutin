@@ -619,10 +619,11 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     <div class="aide">Un skill est un dossier avec un fichier <code>SKILL.md</code> : des consignes que l'assistant lit quand le sujet arrive (format ouvert, utilisé par Claude, Codex, Cursor…). Cherche-en sur GitHub, examine la fiche (licence, scripts, analyse de sécurité) puis installe-le dans un dossier de travail, où Lutin l'utilise comme les skills de « Projet Claude ». <b>Rien ne s'exécute à l'installation</b>, et les scripts d'un skill ne tournent jamais sans ton accord, commande par commande. Un skill est un texte que le modèle suit : n'installe que ce que tu as lu.</div>
     <div id="skGithub" class="aide" style="margin:6px 0"></div>
     <div class="carte" style="display:block"><b>Dépôts parcourus</b> <span class="aide">(coche ceux où chercher)</span><div id="skSources" style="margin:6px 0"></div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><input id="skNouveauDepot" placeholder="Ajouter un dépôt : propriétaire/dépôt ou adresse GitHub" style="flex:1 1 280px"><button id="bSkAjouterDepot">Ajouter</button><button id="bSkTrouverDepots" title="Cherche sur GitHub des dépôts qui portent le sujet « agent-skills »">Trouver des dépôts…</button></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><input id="skNouveauDepot" placeholder="Ajouter un dépôt : propriétaire/dépôt ou adresse GitHub" style="flex:1 1 280px"><button id="bSkAjouterDepot">Ajouter</button><button id="bSkListes" title="Les dépôts cités par les listes communautaires de skills (VoltAgent, travisvn…), les plus cités d'abord. Écris un mot dans la case pour filtrer.">Dépôts des listes communautaires</button><button id="bSkTrouverDepots" title="Cherche sur GitHub des dépôts qui portent le sujet « agent-skills », « claude-skills » ou « claude-code-skills »">Trouver des dépôts…</button></div>
       <div id="skDepotsTrouves"></div></div>
-    <div class="carte" style="gap:8px;flex-wrap:wrap;align-items:center"><input id="skQ" placeholder="Chercher un skill (un nom ou un sujet : pdf, seo, tests…)" style="flex:1 1 280px"><button id="bSkChercher" class="principal">Chercher</button><button id="bSkIndexer" title="Lit la description de tous les skills des dépôts cochés pour que la recherche porte aussi sur elles (un fichier par skill : quelques minutes pour un gros dépôt)">Lire toutes les descriptions</button></div>
+    <div class="carte" style="gap:8px;flex-wrap:wrap;align-items:center"><input id="skQ" placeholder="Chercher un skill (un nom ou un sujet : pdf, seo, tests…)" style="flex:1 1 280px"><button id="bSkChercher" class="principal">Chercher</button><button id="bSkIndexer" title="Lit la description de tous les skills des dépôts cochés pour que la recherche porte aussi sur elles (un fichier par skill : quelques minutes pour un gros dépôt). Lancé tout seul à la première recherche ; gardé sur disque ensuite.">Lire toutes les descriptions</button></div>
     <div id="skMsg" class="aide" role="status"></div>
+    <div id="skIndexation" class="aide" role="status"></div>
     <div id="skResultats"></div>
     <div style="margin:6px 0"><button id="bSkPlus" hidden>Voir la suite</button></div>
     <h3>Skills installés par Lutin</h3>
@@ -2448,7 +2449,8 @@ body[data-moteur="openai"] .biblio { display:none !important; }
       if (page === 1) $('skResultats').textContent = '';
       r.skills.forEach(x => $('skResultats').appendChild(carteSkill(x)));
       SK.page = page; $('bSkPlus').hidden = !r.suite;
-      msg.textContent = r.total + ' ' + T('skill(s) trouvé(s)') + (r.decrits < r.nombre ? ' · ' + T('la recherche porte sur le nom et sur les descriptions déjà lues ({} sur {}) : « Lire toutes les descriptions » l\'étend à toutes.').replace('{}', r.decrits).replace('{}', r.nombre) : '') + (r.tronque ? ' · ' + T('liste incomplète : ce dépôt est énorme.') : '');
+      msg.textContent = r.total + ' ' + T('skill(s) trouvé(s) sur') + ' ' + r.nombre + (r.decrits < r.nombre ? ' · ' + T('la recherche porte sur le nom et sur les descriptions déjà lues ({} sur {}).').replace('{}', r.decrits).replace('{}', r.nombre) : '') + (r.tronque ? ' · ' + T('liste incomplète : ce dépôt est énorme.') : '');
+      if (r.decrits < r.nombre && !SK.indexation) indexerSkills(true);          // les descriptions manquantes se lisent en arrière-plan : la recherche s'élargit toute seule
     } catch (e) { erreurSk(msg, e); }
   };
   $('bSkChercher').addEventListener('click', () => chercherSkills(1)); $('bSkPlus').addEventListener('click', () => chercherSkills(SK.page + 1));
@@ -2456,6 +2458,20 @@ body[data-moteur="openai"] .biblio { display:none !important; }
   $('bSkAjouterDepot').addEventListener('click', async () => {
     try { const d = await api('/api/skills-tiers-source', { depot: $('skNouveauDepot').value }); SK.sources = d.sources; const n = d.sources[d.sources.length - 1]; if (n) SK.coches.add(n.depot); $('skNouveauDepot').value = ''; dessinerSources(); $('skMsg').textContent = ''; }
     catch (e) { $('skMsg').textContent = e.message; }
+  });
+  $('bSkListes').addEventListener('click', async () => {
+    const z = $('skDepotsTrouves'); z.textContent = T('Recherche…');
+    try {
+      const r = await api('/api/skills-tiers-listes?q=' + encodeURIComponent($('skNouveauDepot').value.trim().replace(/^https?:\/\/github\.com\//, ''))); z.textContent = '';
+      if (!r.depots.length) z.textContent = T('Aucun dépôt trouvé.');
+      else z.appendChild(el('div', 'aide', T('Dépôts cités par les listes communautaires de skills, les plus cités d\'abord (le nombre est celui des citations). Vérifie un dépôt avant de lui faire confiance.')));
+      r.depots.forEach(d => {
+        const l = el('div', 'ligne'); l.appendChild(el('b', '', d.depot)); l.appendChild(el('span', 'aide', ' · ' + d.citations + ' ' + T('citation(s)')));
+        const a = el('button', '', SK.sources.some(x => x.depot === d.depot) ? T('Déjà dans ma liste') : T('Ajouter')); a.disabled = SK.sources.some(x => x.depot === d.depot);
+        a.addEventListener('click', async () => { try { const x = await api('/api/skills-tiers-source', { depot: d.depot }); SK.sources = x.sources; SK.coches.add(d.depot); dessinerSources(); a.disabled = true; a.textContent = T('Ajouté'); } catch (e) { z.textContent = e.message; } });
+        l.appendChild(a); z.appendChild(l);
+      });
+    } catch (e) { erreurSk(z, e); }
   });
   $('bSkTrouverDepots').addEventListener('click', async () => {
     const z = $('skDepotsTrouves'); z.textContent = T('Recherche…');
@@ -2465,19 +2481,27 @@ body[data-moteur="openai"] .biblio { display:none !important; }
       r.depots.forEach(d => { const l = el('div', 'ligne'); l.appendChild(el('b', '', d.depot)); l.appendChild(el('span', 'aide', ' ★ ' + d.etoiles + ' · ' + d.description)); const a = el('button', '', T('Ajouter')); a.addEventListener('click', async () => { try { const x = await api('/api/skills-tiers-source', { depot: d.depot }); SK.sources = x.sources; SK.coches.add(d.depot); dessinerSources(); a.disabled = true; } catch (e) { z.textContent = e.message; } }); l.appendChild(a); z.appendChild(l); });
     } catch (e) { erreurSk(z, e); }
   });
-  $('bSkIndexer').addEventListener('click', async () => {
-    const depots = [...SK.coches], msg = $('skMsg'); if (!depots.length) { msg.textContent = T('Coche au moins un dépôt.'); return; }
+  // Lire les descriptions de tous les skills des dépôts cochés : la recherche porte alors aussi sur elles. Lancé tout seul à la première recherche (gardé sur disque : les fois suivantes, rien à relire).
+  const indexerSkills = async auto => {
+    const depots = [...SK.coches], msg = $('skMsg'); if (!depots.length || SK.indexation) return;
+    SK.indexation = true;
     try {
       for (const d of depots) await api('/api/skills-tiers-indexer', { depot: d });
-      msg.textContent = T('Lecture des descriptions…');
-      for (let i = 0; i < 600; i++) {
+      for (let i = 0; i < 900; i++) {
         await new Promise(r => setTimeout(r, 1500)); const e = (await api('/api/skills-tiers')).indexation, vus = depots.map(d => e[d]).filter(Boolean);
-        const erreur = vus.find(v => v.erreur); if (erreur) { erreurSk(msg, new Error(erreur.erreur)); return; }
-        msg.textContent = T('Lecture des descriptions…') + ' ' + vus.reduce((n, v) => n + v.fait, 0) + ' / ' + vus.reduce((n, v) => n + v.total, 0);
-        if (vus.length === depots.length && vus.every(v => v.fini)) { msg.textContent = '✔ ' + T('Descriptions lues : la recherche porte maintenant dessus.'); return; }
+        if (!vus.length && i > 10) return;          // le serveur n'a aucune trace de cette lecture (redémarré ?) : on n'attend pas indéfiniment
+        const erreur = vus.find(v => v.erreur); if (erreur) { erreurSk($('skIndexation'), new Error(erreur.erreur)); return; }
+        $('skIndexation').textContent = '⏳ ' + T('Lecture des descriptions…') + ' ' + vus.reduce((n, v) => n + v.fait, 0) + ' / ' + vus.reduce((n, v) => n + v.total, 0);
+        if (vus.length === depots.length && vus.every(v => v.fini)) {
+          $('skIndexation').textContent = '✔ ' + T('Descriptions lues : la recherche porte maintenant dessus.');
+          if (auto && $('skQ').value.trim()) chercherSkills(1);          // la recherche en cours est refaite avec les descriptions
+          return;
+        }
       }
-    } catch (e) { erreurSk(msg, e); }
-  });
+    } catch (e) { erreurSk($('skIndexation'), e); }
+    finally { SK.indexation = false; }
+  };
+  $('bSkIndexer').addEventListener('click', () => indexerSkills(true));
   const ouvrirFicheSkill = async x => {
     const z = ouvrirModal(T('Skill : ') + x.nom); z.appendChild(el('div', 'aide', T('Lecture et analyse du skill…')));
     let f; try { f = await api('/api/skills-tiers-fiche?depot=' + encodeURIComponent(x.depot) + '&dir=' + encodeURIComponent(x.dir)); } catch (e) { erreurSk(z, e); return; }
@@ -4052,6 +4076,9 @@ body[data-moteur="openai"] .biblio { display:none !important; }
         const idx = ETAPES.indexOf(etape), ligneE = el('div', 'etapes');
         ETAPES.forEach((k, i) => { const x = el('div', 'etape' + (i < idx ? ' fait' : '') + (i === idx ? ' courante' : '')); x.append(el('i', '', i < idx ? '✔' : String(i + 1)), el('span', '', LIBELLE_ETAPE[k])); ligneE.appendChild(x); });
         c.appendChild(ligneE);
+        c.appendChild(el('div', 'aide', '⏳ ' + m.detail));          // ce qu'on sait (depuis combien de temps, si le système répond) et ce qui est attendu : la séquence ne reste pas muette
+      } else if (m.reveil_echec) {
+        c.appendChild(el('div', 'attention', '⚠ ' + m.detail));          // le réveil n'a pas abouti dans le délai : « pas démarrée », avec la raison, jusqu'au prochain essai
       } else {
         const ST = { eteinte: '⚪', allumee: '🟡', lutin: '🟠', pret: '🟢' };
         c.appendChild(el('div', 'aide', (ST[etape] || '⚪') + ' ' + m.detail));
