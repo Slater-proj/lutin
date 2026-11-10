@@ -87,13 +87,20 @@ class Ecrans(unittest.TestCase):
                 time.sleep(1.5)
                 p.evaluer("location.reload()")
                 p.attendre("!!document.querySelector('#bNouvelle')")
-                self.aller(p, "modeles")
-                if nom in ("colibri", "lmstudio", "exllamav3"):
-                    carte = {"colibri": "colibriModeles", "lmstudio": "lmstudioModeles", "exllamav3": "exllamav3Modeles"}[nom]
-                    p.attendre("document.getElementById('%s').getBoundingClientRect().height > 30" % carte, delai=20)          # la carte se remplit à l'arrivée de l'état du serveur
-                textes = self.verifier_ecran(p, "modeles", "Modèles avec le moteur « %s »" % nom, 60)
-                if nom in ("colibri", "lmstudio", "exllamav3"):
-                    self.assertTrue(any("installé" in t or "Modèles" in t for t in textes), "la carte du serveur géré est visible : " + nom)
+                time.sleep(2.5)                                                    # l'état du moteur arrive après le chargement de la page : c'est lui qui active ou désactive l'onglet Modèles
+                if p.evaluer("document.querySelector('.onglets button[data-p=\"modeles\"]').disabled"):
+                    # Moteur choisi mais pas prêt (llama.cpp ou serveur externe non installé/éteint) : l'onglet Modèles est désactivé avec sa raison, et une carte guide l'installation (premier lancement)
+                    self.aller(p, "chat")
+                    carte = p.evaluer("(() => { const c = document.getElementById('premierLancement'); return c.hidden ? '' : c.textContent; })()")
+                    self.assertGreater(len(carte), 30, "moteur « %s » non prêt : la carte de premier lancement guide l'utilisateur" % nom)
+                else:
+                    self.aller(p, "modeles")
+                    if nom in ("colibri", "lmstudio", "exllamav3"):
+                        carte = {"colibri": "colibriModeles", "lmstudio": "lmstudioModeles", "exllamav3": "exllamav3Modeles"}[nom]
+                        p.attendre("document.getElementById('%s').getBoundingClientRect().height > 30" % carte, delai=20)          # la carte se remplit à l'arrivée de l'état du serveur
+                    textes = self.verifier_ecran(p, "modeles", "Modèles avec le moteur « %s »" % nom, 60)
+                    if nom in ("colibri", "lmstudio", "exllamav3"):
+                        self.assertTrue(any("installé" in t or "Modèles" in t for t in textes), "la carte du serveur géré est visible : " + nom)
                 self.aller(p, "reglages")
                 p.evaluer("document.querySelector('#sousReglages button[data-g=\"moteur\"]').click()")
                 time.sleep(1.2)
