@@ -235,9 +235,13 @@ class PremierLancement(unittest.TestCase):
         moteurs.CONTEXTE["donnees"] = lambda: _TEMP / "donnees-pl"
         try:
             ml.regler_serveur("openai", {"serveur": "colibri"})
-            with mock.patch.object(type(mo), "_colibri", lambda self_: ("2.1.0", _TEMP)):
+            with mock.patch.object(type(mo), "_colibri", lambda self_: ("2.1.0", _TEMP)), mock.patch.object(type(mo), "modele_colibri", lambda self_: ""):
                 pl = srv.Gestionnaire._premier_lancement({"actif": False}, dict(_m.reglages(), moteur="openai"), None)
-            self.assertEqual(pl["gere"], {"nom": "Colibri", "installe": True})
+            self.assertEqual(pl["gere"], {"nom": "Colibri", "installe": True, "sans_modele": True})
+            self.assertIn("aucun modèle", pl["raison"])
+            with mock.patch.object(type(mo), "_colibri", lambda self_: ("2.1.0", _TEMP)), mock.patch.object(type(mo), "modele_colibri", lambda self_: str(_TEMP)):
+                pl = srv.Gestionnaire._premier_lancement({"actif": False}, dict(_m.reglages(), moteur="openai"), None)
+            self.assertEqual(pl["gere"], {"nom": "Colibri", "installe": True, "sans_modele": False})
             self.assertNotIn("Ollama", pl["raison"])
         finally:
             ml.regler_serveur("openai", {"serveur": ""})
