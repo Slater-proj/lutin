@@ -1532,13 +1532,24 @@ class MoteurExterne(MoteurOpenAI):
             raise ErreurMoteur(str(e))
 
     def supprimer_modele(self, nom):
-        if not self.exllamav3_choisi():
+        """Supprime un modèle téléchargé par un serveur que Lutin gère (ExLlamaV3, LM Studio, Colibri). Un serveur qui tourne peut tenir le fichier : il est refusé avec la marche à suivre."""
+        if not (self.exllamav3_choisi() or self.lmstudio_choisi() or self.colibri_choisi()):
             raise ErreurMoteur(_t("Ce serveur gère ses modèles lui-même."))
-        from . import exllamav3
+        nom_serveur = "ExLlamaV3" if self.exllamav3_choisi() else ("LM Studio" if self.lmstudio_choisi() else "Colibri")
         try:
-            exllamav3.supprimer_modele(nom, self._dossiers())
+            if self.exllamav3_choisi():
+                from . import exllamav3
+                exllamav3.supprimer_modele(nom, self._dossiers())
+            elif self.lmstudio_choisi():
+                from . import lmstudio
+                lmstudio.supprimer_modele(nom)
+            else:
+                from . import colibri
+                if MoteurOpenAI.actif(self):
+                    self._arreter_colibri()          # Colibri lit son modèle depuis le disque : arrêté avant d'être effacé
+                colibri.supprimer_modele(nom, self._dossiers())
         except PermissionError:
-            raise ErreurMoteur(_t("Le modèle est utilisé : arrête ExLlamaV3 (bouton « Arrêter »), puis supprime-le."))
+            raise ErreurMoteur(_t("Le modèle est utilisé : arrête {} (bouton « Arrêter »), puis supprime-le.").format(nom_serveur))
         except (ValueError, OSError) as e:
             raise ErreurMoteur(str(e))
 
@@ -1554,7 +1565,7 @@ class MoteurExterne(MoteurOpenAI):
         return {"discuter": ("natif", ""), "flux": ("natif", ""), "arret": ("natif", _t("La connexion est coupée : le serveur arrête de générer.")),
                 "outils": ("non_teste", _t("Dépend du serveur.")), "reflexion": ("non_teste", _t("Dépend du serveur.")), "vision": ("non_teste", _t("Dépend du serveur et du modèle.")),
                 "embeddings": ("non_teste", _t("Dépend du serveur.")), "plusieurs_modeles": ("non_teste", _t("Dépend du serveur.")),
-                "telechargement": ("adapte", _t("Depuis Hugging Face (modèles EXL3), par Lutin.")) if self.exllamav3_choisi() else ("non", _t("Le serveur gère ses modèles lui-même.")),
+                "telechargement": ("adapte", _t("Depuis Hugging Face (modèles EXL3), par Lutin.")) if self.exllamav3_choisi() else (("adapte", _t("Depuis Hugging Face (modèles GGUF), par Lutin.")) if self.lmstudio_choisi() else (("adapte", _t("Colibri prépare et télécharge ses modèles.")) if self.colibri_choisi() else ("non", _t("Le serveur gère ses modèles lui-même.")))),
                 "installation": ("non_teste", _t("Lutin installe et lance Colibri ; le démarrage avec un vrai modèle n'est pas vérifié.")) if self.colibri_choisi() else (("non_teste", _t("Lutin installe et lance ExLlamaV3 (TabbyAPI) ; pas essayé sur une vraie carte NVIDIA.")) if self.exllamav3_choisi() else ("non", _t("Lutin n'installe pas ce serveur (sauf Colibri, LM Studio et ExLlamaV3).")))}
 
 

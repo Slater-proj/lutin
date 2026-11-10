@@ -2,6 +2,14 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## Réflexion repliée, messages datés, flèche « en bas », tâches planifiées fiables, même page Modèles pour ExLlamaV3, LM Studio et Colibri
+
+- **La réflexion du modèle est de nouveau hors de la bulle** : un serveur qui laisse sa réflexion dans le texte (`<think>…</think>`) donnait un seul énorme message. Elle est maintenant séparée au fil de l'eau (même si la balise arrive coupée en deux morceaux), affichée dans un bloc repliable au-dessus de la réponse (« Réflexion en cours… » puis « Réflexion · 12 s »), enregistrée avec la conversation, et jamais renvoyée au modèle. Les anciennes conversations qui contiennent encore la balise sont réparées à l'affichage.
+- **Date et heure sous chaque message** (à droite des boutons) : l'heure seule pour aujourd'hui, la date et l'heure sinon ; l'infobulle donne la date complète. Le modèle ne reçoit jamais ces dates.
+- **La flèche « revenir en bas » apparaît dès qu'on remonte**, plus seulement pendant qu'une réponse s'écrit ; plus grande (46 px), bleue, avec une ombre ; elle pulse quand la réponse continue de s'écrire plus bas.
+- **Tâches planifiées, tout le mécanisme vérifié** (24 tests) : *Modifier* une tâche, *Arrêter* une tâche qui travaille, *une seule fois à une date* (elle se met en pause toute seule), dossier de travail au choix, historique des 10 dernières exécutions. **Supprimer retire vraiment la tâche** : si elle travaillait, elle est arrêtée, plus rien ne s'écrit ni ne s'envoie ; sa conversation est gardée ou effacée au choix. Une tâche qui ne peut pas démarrer (dossier de travail disparu) l'écrit sur elle-même et dans la notification au lieu d'être relancée en silence toutes les 30 secondes ; une exécution coupée par l'arrêt de Lutin est dite « interrompue ».
+- **LM Studio et Colibri ont la même page Modèles qu'ExLlamaV3 et qu'Ollama** : mes modèles (verdict pour ta machine, utiliser, tester, supprimer), nouveautés, exploration du catalogue (modèles GGUF de Hugging Face avec choix de la quantification pour LM Studio ; catalogue jugé par Colibri lui-même), installation en un clic.
+
 ## ExLlamaV3 complet (étapes, démarrage, modèles à explorer), dossiers cohérents d'un moteur à l'autre
 
 - **L'installation d'ExLlamaV3 se suit** : cinq étapes numérotées (« Étape 4/5 : installation des dépendances — ce que pip fait en ce moment »), une barre qui avance, puis **le serveur démarre tout seul** (LM Studio aussi). Si le démarrage échoue, l'installation reste valable et le message dit pourquoi.

@@ -64,7 +64,7 @@ def _capacites(m):
     return sortie
 
 
-def chercher(q="", tri="recent", communaute=False, page=1, http=miseajour.http_get):
+def chercher(q="", tri="recent", communaute=False, page=1, http=miseajour.http_get, auteur=AUTEUR_OFFICIEL, etiquette="exl3", bpw=4.0):
     """Les dépôts EXL3 qui correspondent : [{id, nom, telechargements, aime, maj, capacites, licence, base, estimation_go}] et `suite` (il y en a d'autres).
     tri : « recent » ou « populaire » ; communaute : tous les auteurs au lieu du seul auteur officiel. Une page de PAR_PAGE ; `page` agrandit la liste (l'API n'a pas de page suivante simple)."""
     page = max(1, min(int(page or 1), 10))
@@ -72,9 +72,9 @@ def chercher(q="", tri="recent", communaute=False, page=1, http=miseajour.http_g
     q = str(q or "").strip()[:60]
     parametres = [("sort", "downloads" if tri == "populaire" else "lastModified"), ("direction", "-1"), ("limit", str(limite))]
     if communaute:
-        parametres += [("filter", "exl3")] + ([("search", q)] if q else [])
+        parametres += [("filter", etiquette)] + ([("search", q)] if q else [])
     else:
-        parametres += [("author", AUTEUR_OFFICIEL), ("search", (q + " exl3").strip())]
+        parametres += [("author", auteur), ("search", (q + " " + etiquette).strip())]
     parametres += [("expand[]", x) for x in ("downloads", "likes", "lastModified", "tags", "pipeline_tag")]
     donnees = _json(API + "?" + urllib.parse.urlencode(parametres), http)
     if not isinstance(donnees, list):
@@ -82,13 +82,13 @@ def chercher(q="", tri="recent", communaute=False, page=1, http=miseajour.http_g
     sortie = []
     for m in donnees:
         ident = str(m.get("id", ""))
-        if not RE_DEPOT.match(ident) or "exl3" not in (ident.lower() + " " + " ".join(str(t).lower() for t in (m.get("tags") or []))):
+        if not RE_DEPOT.match(ident) or etiquette not in (ident.lower() + " " + " ".join(str(t).lower() for t in (m.get("tags") or []))):
             continue
         tags = [str(t) for t in (m.get("tags") or [])]
         base = next((t.split(":", 2)[2] for t in tags if t.startswith("base_model:quantized:")), "") or next((t.split(":", 1)[1] for t in tags if t.startswith("base_model:") and t.count(":") == 1), "")
         sortie.append({"id": ident, "nom": ident.split("/")[-1], "auteur": ident.split("/")[0], "telechargements": int(m.get("downloads") or 0), "aime": int(m.get("likes") or 0), "maj": str(m.get("lastModified") or "")[:10],
                        "capacites": _capacites(m), "licence": next((t.split(":", 1)[1] for t in tags if t.startswith("license:")), ""), "base": base,
-                       "estimation_go": estimer_go(ident.split("/")[-1], 4.0)})
+                       "estimation_go": estimer_go(ident.split("/")[-1], bpw)})
     return {"modeles": sortie[:PAR_PAGE * page], "suite": len(sortie) > PAR_PAGE * page}
 
 

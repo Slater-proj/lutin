@@ -219,6 +219,29 @@ def modeles(lancer=subprocess.run):
         if isinstance(m, dict) and m.get("type", "llm") in ("llm", "vlm"):
             nom = str(m.get("modelKey") or m.get("path") or m.get("displayName") or "")
             if nom:
-                sortie.append({"nom": nom[:120], "taille_go": round(float(m.get("sizeBytes") or 0) / 1e9, 1)})
+                sortie.append({"nom": nom[:120], "taille_go": round(float(m.get("sizeBytes") or 0) / 1e9, 1), "chemin": str(m.get("path") or "")[:300]})
     return sortie
+
+
+def dossier_modeles():
+    return Path.home() / ".lmstudio" / "models"
+
+
+def supprimer_modele(nom, lister=None):
+    """Supprime le fichier d'un modèle téléchargé (et les dossiers qu'il laisse vides). Le fichier est cherché dans la liste de LM Studio et doit être DANS son dossier de modèles : rien d'autre n'est jamais effacé."""
+    trouve = next((m for m in (lister or modeles)() if m["nom"] == nom), None)
+    racine = dossier_modeles().resolve()
+    if not trouve or not trouve.get("chemin"):
+        raise ValueError(_t("Ce modèle n'est pas dans la liste de LM Studio."))
+    cible = (racine / trouve["chemin"]).resolve()
+    if racine not in cible.parents or not cible.is_file():
+        raise ValueError(_t("Le fichier de ce modèle n'est pas dans le dossier des modèles de LM Studio : Lutin ne le supprime pas."))
+    cible.unlink()
+    for dossier in (cible.parent, cible.parent.parent):
+        try:
+            if dossier != racine and not any(dossier.iterdir()):
+                dossier.rmdir()
+        except OSError:
+            break
+    return True
 

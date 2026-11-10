@@ -60,6 +60,20 @@ FAUX_RESEAU = """(() => {
   return true; })()"""
 
 
+def faux_reseau(routes):
+    """Un faux serveur côté page : ces routes (début d'adresse -> réponse) reçoivent la réponse donnée, les envois sont notés dans window.__envoyes."""
+    return """(() => { window.__envoyes = []; const f0 = window.fetch.bind(window), routes = %s;
+      window.fetch = (u, o) => { const url = String(u); if (o && o.method === 'POST') window.__envoyes.push([url, o.body]);
+        for (const [debut, corps] of Object.entries(routes)) if (url.startsWith(debut)) return Promise.resolve(new Response(JSON.stringify(corps), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+        return f0(u, o); };
+      return true; })()""" % json.dumps(routes)
+
+
+def carte_gguf(ident, nom, go, niveau, installes=()):
+    return {"id": ident, "nom": nom, "auteur": ident.split("/")[0], "telechargements": 900, "aime": 12, "maj": "2026-11-05", "capacites": [], "licence": "apache-2.0", "base": "", "estimation_go": go,
+            "adequation": {"niveau": niveau, "texte": "verdict"}, "installes": list(installes)}
+
+
 class Moteurs(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -225,6 +239,74 @@ class Moteurs(unittest.TestCase):
             p.attendre("%s.textContent.includes('pas encore installé')" % zone, delai=30)
             self.assertTrue(p.evaluer("[...%s.querySelectorAll('button')].some(b => b.textContent === 'Installer ExLlamaV3')" % zone))
             self.assertFalse(p.evaluer("%s.textContent.includes('Explorer les modèles')" % zone), "rien à explorer avant l'installation")
+            self.assertEqual(p.erreurs, [])
+
+
+    def choisir(self, p, serveur):
+        post(p, "/api/reglages", {"moteur": "openai"})
+        post(p, "/api/moteur-regler", {"moteur": "openai", "serveur": serveur})
+        time.sleep(1.2)
+        p.evaluer("location.reload()")
+        p.attendre("!!document.querySelector('#bNouvelle')")
+        p.evaluer("window.confirm = () => true")          # le rechargement a rendu les fenêtres de confirmation au navigateur : elles bloqueraient le test
+        time.sleep(2.5)
+
+    def test_la_page_modeles_de_lm_studio_est_celle_d_exllamav3_et_d_ollama(self):
+        with self.captures.serveur_demo({"LUTIN_LANGUE": "fr"}) as (port, tmp):
+            p = self.ouvrir(tmp, port)
+            self.choisir(p, "lmstudio")
+            p.evaluer(faux_reseau({
+                "/api/lmstudio-modeles": {"installe": True, "actif": False, "dossier": "C:/lms/models", "maj": False, "modeles": [
+                    {"nom": "qwen3-8b", "taille_go": 5.0, "chemin": "lmstudio-community/Qwen3-8B-GGUF/Qwen3-8B-Q4_K_M.gguf", "adequation": {"niveau": "ideal", "texte": "a l'aise"}, "utilise": False}]},
+                "/api/lmstudio-catalogue": {"suite": False, "modeles": [carte_gguf("lmstudio-community/Qwen3-8B-GGUF", "Qwen3-8B-GGUF", 5.4, "bien"), carte_gguf("lmstudio-community/Enorme-400B-GGUF", "Enorme-400B-GGUF", 240, "trop_gros")]},
+                "/api/lmstudio-quantifications": {"quantifications": [{"revision": "Q4_K_M", "go": 5.0, "adequation": {"niveau": "bien", "texte": "ok"}, "installe": False}, {"revision": "Q8_0", "go": 8.7, "adequation": {"niveau": "limite", "texte": "juste"}, "installe": False}]},
+                "/api/lmstudio-verifier": {"propositions": [carte_gguf("lmstudio-community/Nouveau-7B-GGUF", "Nouveau-7B-GGUF", 4.5, "ideal")]},
+                "/api/lmstudio-telecharger": {"tache": "ok"}}))
+            p.evaluer("document.querySelector('.onglets button[data-p=\"modeles\"]').click()")
+            zone = "document.getElementById('lmstudioModeles')"
+            p.attendre("%s.textContent.includes('Mes modèles') && %s.querySelectorAll('.mod').length >= 1" % (zone, zone), delai=30)
+            texte = p.evaluer(zone + ".textContent")
+            for attendu in ("Modèles de LM Studio", "Chercher de nouveaux modèles", "qwen3-8b", "Très adapté", "Explorer les modèles GGUF", "Un autre modèle", "Supprimer", "Utiliser"):
+                self.assertIn(attendu, texte)
+            self.assertNotIn("Chercher les mises à jour", texte, "LM Studio ne dit pas d'où vient un modèle : pas de fausse promesse de mise à jour")
+            p.attendre("%s.querySelectorAll('#lmsExplorer .carte[data-nom]').length === 1" % zone, delai=20)          # le trop gros est caché
+            p.evaluer("%s.querySelector('#lmsExplorer .carte[data-nom] button').click()" % zone)
+            p.attendre("%s.querySelectorAll('#lmsExplorer .carte[data-nom] .mod').length === 2" % zone, delai=20)
+            p.evaluer("[...%s.querySelectorAll('#lmsExplorer .carte[data-nom] .mod')].find(l => l.textContent.includes('Q8_0')).querySelector('button').click()" % zone)
+            p.attendre("window.__envoyes.some(e => e[0] === '/api/lmstudio-telecharger')")
+            self.assertEqual(json.loads(p.evaluer("window.__envoyes.filter(e => e[0] === '/api/lmstudio-telecharger')[0][1]")), {"nom": "lmstudio-community/Qwen3-8B-GGUF@Q8_0"})
+            p.evaluer("[...%s.querySelectorAll('button')].find(b => b.textContent.includes('Chercher de nouveaux modèles')).click()" % zone)
+            p.attendre("%s.textContent.includes('Nouveau-7B-GGUF')" % zone, delai=20)
+            p.evaluer("[...%s.querySelectorAll('.mod button')].find(b => b.textContent === 'Supprimer').click()" % zone)
+            p.attendre("window.__envoyes.some(e => e[0] === '/api/moteur-supprimer')")
+            self.assertEqual(json.loads(p.evaluer("window.__envoyes.filter(e => e[0] === '/api/moteur-supprimer')[0][1]")), {"moteur": "openai", "nom": "qwen3-8b"})
+            self.assertEqual(p.erreurs, [])
+
+    def test_la_page_modeles_de_colibri_est_la_meme_avec_son_catalogue_juge_par_colibri(self):
+        with self.captures.serveur_demo({"LUTIN_LANGUE": "fr"}) as (port, tmp):
+            p = self.ouvrir(tmp, port)
+            self.choisir(p, "colibri")
+            ok = dict(carte_gguf("deepseek-200b", "deepseek-200b", 120, "bien"), direct=True, auteur="colibri")
+            gros = dict(carte_gguf("enorme-1t", "enorme-1t", 900, "trop_gros"), direct=True, auteur="colibri")
+            p.evaluer(faux_reseau({
+                "/api/colibri-modeles": {"installe": True, "actif": False, "dossier": "C:/colibri/modeles", "maj": False, "modeles": [
+                    {"nom": "ancien-70b", "taille_go": 40.0, "chemin": "C:/colibri/modeles/ancien-70b", "supprimable": True, "adequation": None, "utilise": True},
+                    {"nom": "a-moi", "taille_go": 10.0, "chemin": "D:/a-moi", "supprimable": False, "adequation": None, "utilise": True}]},
+                "/api/colibri-catalogue": {"suite": False, "modeles": [ok, gros]},
+                "/api/colibri-verifier": {"propositions": [ok]},
+                "/api/colibri-preparer": {"tache": "ok"}}))
+            p.evaluer("document.querySelector('.onglets button[data-p=\"modeles\"]').click()")
+            zone = "document.getElementById('colibriModeles')"
+            p.attendre("%s.textContent.includes('Mes modèles') && %s.querySelectorAll('.mod').length === 2" % (zone, zone), delai=30)
+            texte = p.evaluer(zone + ".textContent")
+            for attendu in ("Modèles pour Colibri", "Chercher de nouveaux modèles", "ancien-70b", "Explorer les modèles de Colibri"):
+                self.assertIn(attendu, texte)
+            self.assertEqual(p.evaluer("[...%s.querySelectorAll('.mod')].map(l => !![...l.querySelectorAll('button')].find(b => b.textContent === 'Supprimer'))" % zone), [True, False], "un modèle posé par l'utilisateur ailleurs n'est jamais supprimé par Lutin")
+            self.assertEqual(p.evaluer("%s.querySelectorAll('#coliExplorer select').length" % zone), 0, "pas de tri ni de source : un seul catalogue")
+            p.attendre("%s.querySelectorAll('#coliExplorer .carte[data-nom]').length === 1" % zone, delai=20)
+            p.evaluer("%s.querySelector('#coliExplorer .carte[data-nom] button.principal').click()" % zone)
+            p.attendre("window.__envoyes.some(e => e[0] === '/api/colibri-preparer')")
+            self.assertEqual(json.loads(p.evaluer("window.__envoyes.filter(e => e[0] === '/api/colibri-preparer')[0][1]")), {"id": "deepseek-200b"})
             self.assertEqual(p.erreurs, [])
 
 

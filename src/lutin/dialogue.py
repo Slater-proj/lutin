@@ -16,6 +16,7 @@ from . import mission as _mission
 from . import horsligne as _hl
 from . import images as _images
 from . import modes as _modes
+from . import pensee as _pensee
 from . import pieces as _pieces
 from . import suivi as _suivi
 from . import projet_claude as _pc
@@ -1142,6 +1143,8 @@ def ajuster_contexte(msgs, num_ctx, facteur=1.0, outils=None, rapport=None):
             break
     for m in msgs:
         m.pop("epingle", None)                                   # le marquage est à nous : Ollama ne le reçoit pas
+        m.pop("ts", None)                                        # l'horodatage aussi : il sert à la page, pas au modèle
+        m.pop("reflexion", None)                                 # et la réflexion enregistrée pour l'affichage
         m.pop("medias", None)
         m.pop("medias_fichiers", None)
         m.pop("fichiers_joints", None)
@@ -1257,6 +1260,11 @@ def compacter_conversation(ident):
     return {"ok": True, "avant": avant, "apres": len(conv["messages"]), "jauge": jauge_contexte(conv), "fiche": fiche}
 
 
+def horodatage():
+    """La date et l'heure (locales, à la seconde) d'un message : la page les montre sous chaque bulle."""
+    return datetime.now().isoformat(timespec="seconds")
+
+
 def tour(conv, texte, emit, r=None, stop=None, remplacer_depuis=None, identite="", lecture_seule=False, images=(), pieces=()):
     """Un tour de conversation : message de l'utilisateur, puis la boucle de l'agent (réponse, outils, réponse...). emit(evenement) envoie à la page.
     stop (threading.Event) : déclenché par le bouton Arrêter ; le tour s'arrête alors pour de bon (modèle, outils, accords). Fermer la page ne l'arrête pas.
@@ -1330,7 +1338,7 @@ def tour(conv, texte, emit, r=None, stop=None, remplacer_depuis=None, identite="
     if dernier and dernier.get("role") == "user" and dernier.get("content") == texte:
         emit({"type": "info", "texte": "Cette demande est déjà dans la conversation sans réponse : je la reprends sans la dupliquer."})
     else:
-        conv["messages"].append(dict({"role": "user", "content": texte}, **({"images": list(images)} if images else {}), **({"pieces": list(pieces)} if pieces else {})))
+        conv["messages"].append(dict({"role": "user", "content": texte, "ts": horodatage()}, **({"images": list(images)} if images else {}), **({"pieces": list(pieces)} if pieces else {})))
     if images and not any(m.get("images") for m in conv["messages"][-1:]):
         conv["messages"][-1]["images"] = list(images)           # demande reprise sans doublon : on lui rend ses images
     if pieces and not conv["messages"][-1].get("pieces"):
@@ -1637,6 +1645,7 @@ def boucle_agent(conv, r, emit, ctx, stop):
             emit({"type": "etat", "texte": "Chargement du modèle en mémoire (30 s à 2 min la première fois, ou si ComfyUI lui a pris la carte)."})
         for tentative in range(3):
             contenu, pensee, appels = "", "", []
+            separateur = _pensee.Separateur()          # une réflexion laissée dans le texte (<think>…</think>) est rendue à part, comme celle que le moteur sépare lui-même
             rond, verifie_rond, raison_fin, rond_de_suite = False, 0, "", 0
             corps_t = corps if tentative == 0 else dict(corps, messages=ajuster_contexte(msgs_base, r["num_ctx"], 0.7 ** tentative, outils) + ([{"role": "user", "content": RAPPEL_APPEL}] if relance_outil else [{"role": "user", "content": RAPPEL_REPETITION}] if relance_repetition else [{"role": "user", "content": RAPPEL_VIDE}] if relance_vide else []), options=dict(corps["options"], temperature=0.3, **({"repeat_penalty": 1.15} if relance_repetition else {})), think=False if (relance_vide or relance_repetition) else corps["think"])
             if plat:
@@ -1650,7 +1659,7 @@ def boucle_agent(conv, r, emit, ctx, stop):
                     for e in flux:
                         if stop.is_set():
                             if contenu.strip():
-                                conv["messages"].append({"role": "assistant", "content": contenu})
+                                conv["messages"].append({"role": "assistant", "content": contenu, "ts": horodatage()})
                             raise _m.Arret()
                         if e.get("error"):
                             raise RuntimeError(e["error"])
@@ -1674,9 +1683,13 @@ def boucle_agent(conv, r, emit, ctx, stop):
                         if m.get("thinking"):
                             pensee += m["thinking"]
                             emit({"type": "pensee", "texte": m["thinking"]})
-                        if m.get("content"):
-                            contenu += m["content"]
-                            emit({"type": "texte", "texte": m["content"]})
+                        for genre_m, morceau in separateur.alimenter(m.get("content")):
+                            if genre_m == "pensee":
+                                pensee += morceau
+                                emit({"type": "pensee", "texte": morceau})
+                            else:
+                                contenu += morceau
+                                emit({"type": "texte", "texte": morceau})
                         appels += m.get("tool_calls") or []
                         if len(pensee) + len(contenu) - verifie_rond >= 400:                       # toutes les 400 lettres : le texte tourne-t-il en rond ? (sortir du « with » ferme la connexion, Ollama arrête de générer)
                             verifie_rond = len(pensee) + len(contenu)
@@ -1687,6 +1700,13 @@ def boucle_agent(conv, r, emit, ctx, stop):
                                     break
                             else:
                                 rond_de_suite = 0
+                for genre_m, morceau in separateur.fin():          # ce que la détection de balise retenait encore
+                    if genre_m == "pensee":
+                        pensee += morceau
+                        emit({"type": "pensee", "texte": morceau})
+                    else:
+                        contenu += morceau
+                        emit({"type": "texte", "texte": morceau})
                 if rond:
                     _m.journaliser("Texte répété par le modèle {} (pensée : {} caractères, réponse : {}, essai {})".format(r["modele"], len(pensee), len(contenu), tentative + 1))
                     _observatoire.noter("relance", conv["id"], motif="texte répété", modele=r["modele"])
@@ -1779,7 +1799,7 @@ def boucle_agent(conv, r, emit, ctx, stop):
             continue                                 # on refait ce tour avec le modèle de repli (capacités, échantillonnage et contexte recalculés)
         if not fini:
             if contenu.strip():                      # le texte déjà écrit est gardé dans la conversation
-                conv["messages"].append({"role": "assistant", "content": contenu})
+                conv["messages"].append({"role": "assistant", "content": contenu, "ts": horodatage()})
             emit({"type": "info", "texte": "Ta demande est gardée dans la conversation. Écris « continue » pour que je reprenne là où ça s'est arrêté."})
             break
         if not appels and contenu and "tools" in corps:
@@ -1798,6 +1818,8 @@ def boucle_agent(conv, r, emit, ctx, stop):
             if not contenu.strip():
                 emit({"type": "info", "texte": _t("Le modèle n'a pas conclu. Écris « continue », ou reformule ta demande.")})
         message = {"role": "assistant", "content": contenu}
+        if pensee.strip():
+            message["reflexion"] = pensee.strip()[:20000]          # gardée pour l'affichage de la conversation (bloc repliable) ; le modèle ne la reçoit jamais
         if appels:
             message["tool_calls"] = appels
         rappel_faux = "" if appels or corrige_affirmation or dernier_tour else (_affirmations.affirme_sans_agir(contenu, conv["messages"], ctx["outils_autorises"])
@@ -1810,6 +1832,7 @@ def boucle_agent(conv, r, emit, ctx, stop):
             _observatoire.noter("relance", conv["id"], motif="affirme sans agir", modele=r["modele"])
             emit({"type": "info", "texte": _t("Le modèle dit avoir agi (fichier, commande, recherche…) sans appeler d'outil : je lui demande de le faire pour de vrai.")})
             continue
+        message.setdefault("ts", horodatage())
         conv["messages"].append(message)
         if not appels:
             break

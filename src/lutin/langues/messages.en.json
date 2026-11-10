@@ -2162,5 +2162,20 @@
 "Le modèle est utilisé : arrête ExLlamaV3 (bouton « Arrêter »), puis supprime-le.": "The model is in use: stop ExLlamaV3 (\"Stop\" button), then delete it.",
 "Depuis Hugging Face (modèles EXL3), par Lutin.": "From Hugging Face (EXL3 models), by Lutin.",
 "Lutin installe et lance ExLlamaV3 (TabbyAPI) ; pas essayé sur une vraie carte NVIDIA.": "Lutin installs and starts ExLlamaV3 (TabbyAPI); not tried on a real NVIDIA card.",
-"{} est installé, mais il ne démarre pas : {} — clique sur « Démarrer » pour réessayer.": "{} is installed, but it does not start: {} — click \"Start\" to try again."
+"{} est installé, mais il ne démarre pas : {} — clique sur « Démarrer » pour réessayer.": "{} is installed, but it does not start: {} — click \"Start\" to try again.",
+"Ce modèle n'est pas dans le dossier des modèles de Colibri : Lutin ne supprime que ce qu'il a téléchargé.": "This model is not in Colibri's models folder: Lutin only deletes what it downloaded.",
+"Ce modèle n'est pas dans la liste de LM Studio.": "This model is not in LM Studio's list.",
+"Le fichier de ce modèle n'est pas dans le dossier des modèles de LM Studio : Lutin ne le supprime pas.": "This model's file is not in LM Studio's models folder: Lutin does not delete it.",
+"Depuis Hugging Face (modèles GGUF), par Lutin.": "From Hugging Face (GGUF models), by Lutin.",
+"Le modèle est utilisé : arrête {} (bouton « Arrêter »), puis supprime-le.": "The model is in use: stop {} (\"Stop\" button), then delete it.",
+"Colibri prépare et télécharge ses modèles.": "Colibri prepares and downloads its models.",
+"Colibri juge que ce modèle tient sur cette machine.": "Colibri judges that this model fits on this machine.",
+"Ne tient pas sur cette machine.": "Does not fit on this machine.",
+"Ce serveur n'est pas le serveur choisi.": "This server is not the chosen server.",
+"{} n'est pas le serveur choisi.": "{} is not the chosen server.",
+"Cette tâche ne travaille pas en ce moment.": "This task is not working right now.",
+"Cette date et cette heure sont déjà passées.": "This date and time have already passed.",
+"La date doit être au format AAAA-MM-JJ.": "The date must be in YYYY-MM-DD format.",
+"Cette tâche travaille déjà.": "This task is already working.",
+"Lutin s'est arrêté pendant que la tâche travaillait.": "Lutin stopped while the task was working."
 }

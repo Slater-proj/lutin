@@ -291,6 +291,19 @@ class Assistant(unittest.TestCase):
         post("/api/reglages", {"modele": "x"}, jeton=False, attendu=403)
         post("/api/chat", {"message": "a"}, jeton=False, attendu=403)
 
+    def test_une_reflexion_laissee_dans_le_texte_est_rendue_a_part_et_enregistree_pour_l_affichage(self):
+        """Un serveur qui ne sépare pas la réflexion l'écrit dans le texte (<think>…</think>) : la page ne doit pas montrer un seul énorme message, mais la réflexion (repliable) puis la réponse."""
+        ev = chat("Salut", reponses=[[{"content": "<thi"}, {"content": "nk>Je pèse la question"}, {"content": ".</thi"}, {"content": "nk>\n\nBon"}, {"content": "jour !"}]])
+        self.assertEqual("".join(e["texte"] for e in ev if e["type"] == "pensee"), "Je pèse la question.")
+        self.assertEqual(texte_de(ev), "Bonjour !")
+        self.assertNotIn("think", texte_de(ev))
+        fin = next(e for e in ev if e["type"] == "fin")["conversation"]
+        reponse = lire("/api/conversation?id=" + fin["id"])["messages"][-1]
+        self.assertEqual((reponse["content"], reponse["reflexion"]), ("Bonjour !", "Je pèse la question."))
+        self.assertTrue(reponse["ts"], "la réponse est datée")
+        self.assertNotIn("reflexion", json.dumps(RECUES[-1]["messages"]), "le modèle ne reçoit jamais la réflexion enregistrée pour l'affichage")
+        self.assertNotIn('"ts"', json.dumps(RECUES[-1]["messages"]), "ni l'horodatage")
+
     def test_conversation_simple_et_contexte(self):
         ev = chat("Bonjour", reponses=[[{"thinking": "je réfléchis"}, {"content": "Bon"}, {"content": "jour !"}]])
         self.assertEqual(texte_de(ev), "Bonjour !")

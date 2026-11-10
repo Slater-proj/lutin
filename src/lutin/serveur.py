@@ -24,6 +24,7 @@ from . import calibrage as _calibrage
 from . import acces as _acces
 from . import adequation as _adequation
 from . import exllamav3_catalogue as _exl_cat
+from . import lmstudio_catalogue as _lms_cat
 from . import conseil as _conseil
 from . import conseil_machine as _conseil_machine
 from . import variantes as _variantes
@@ -68,6 +69,11 @@ from . import moteur as _m
 DELAI_ECRITURE_FLUX = 20      # secondes : une page qui ne lit plus (onglet gelé) ne doit pas figer la réponse
 TYPES_COMPRESSIBLES = ("text/html", "application/json", "text/javascript", "application/javascript", "text/css", "image/svg+xml")          # jamais les images ni les archives (déjà compressées)
 BATTEMENT_FLUX = 15          # secondes entre deux lignes vides envoyées pour garder le flux ouvert derrière un reverse proxy
+
+
+ROUTES_MODELES_GERES = {          # les trois serveurs que Lutin gère ont les mêmes routes : (serveur, ce qu'elle rend)
+    "/api/{}-{}".format(serveur, route): (serveur, nom) for serveur in ("exllamav3", "lmstudio", "colibri")
+    for route, nom in (("modeles", "modeles"), ("catalogue", "catalogue"), ("quantifications", "quantifications"))}
 
 
 class Gestionnaire(BaseHTTPRequestHandler):
@@ -601,58 +607,8 @@ class Gestionnaire(BaseHTTPRequestHandler):
             return self._envoyer(200, dict(_recherche.vue(), moteurs=_m.etat_moteurs_recherche(), modifiable=self._configurateur()))
         if chemin == "/api/mesures-moteurs":                      # Réglages > Moteur : ce que chaque moteur a donné ici (classement des mesures) et ceux qu'on peut mesurer maintenant
             return self._envoyer(200, _mesures.vue(_m.DONNEES, dict(_moteurs.MOTEURS), _m.reglages()))
-        if chemin in ("/api/exllamav3-modeles", "/api/exllamav3-catalogue", "/api/exllamav3-quantifications"):          # onglet Modèles avec ExLlamaV3 : ce qui est téléchargé, ce qu'on peut télécharger (Hugging Face), jugé pour cette machine
-            mo = _moteurs.par_id("openai")
-            if not mo.exllamav3_choisi():
-                return self._envoyer(404, {"erreur": _t("ExLlamaV3 n'est pas le serveur choisi.")})
-            from . import exllamav3 as _exl
-            q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
-            profil = _adequation.profil_pret()
-            juger = (lambda go: _adequation.evaluer({"go": go}, profil)) if profil is not None else (lambda go: None)
-            installes = _exl.modeles(mo._dossiers())
-            try:
-                if chemin == "/api/exllamav3-modeles":
-                    actif = _m.reglages().get("modele")
-                    return self._envoyer(200, {"modeles": [dict(x, adequation=juger(x["taille_go"]) if x["taille_go"] else None, utilise=x["nom"] == actif) for x in installes], "installe": mo._exl() is not None,
-                                               "dossier": str(_exl.dossier_modeles(mo._dossiers())), "actif": bool(mo.modeles()["actif"])})
-                if chemin == "/api/exllamav3-catalogue":
-                    r = _exl_cat.chercher((q.get("q") or [""])[0], (q.get("tri") or ["recent"])[0], (q.get("communaute") or ["0"])[0] == "1", (q.get("page") or ["1"])[0])
-                    deja = {}
-                    for x in installes:
-                        deja.setdefault(x.get("depot", ""), []).append(x.get("revision") or "main")
-                    for m in r["modeles"]:
-                        m["adequation"] = juger(m["estimation_go"]) if m.get("estimation_go") else None
-                        m["installes"] = deja.get(m["id"], [])
-                    return self._envoyer(200, r)
-                depot = (q.get("depot") or [""])[0]
-                deja = {x.get("revision") or "main" for x in installes if x.get("depot") == depot}
-                quants = _exl_cat.quantifications(depot)
-                for x in quants:
-                    x["adequation"] = juger(x["go"]) if x.get("go") else None
-                    x["installe"] = x["revision"] in deja
-                return self._envoyer(200, {"quantifications": quants})
-            except ValueError as e:
-                return self._envoyer(502, {"erreur": str(e)})
-        if chemin == "/api/lmstudio-modeles":                     # onglet Modèles avec LM Studio : ce qui est téléchargé (lms ls), lecture seule
-            mo = _moteurs.par_id("openai")
-            if not mo.lmstudio_choisi():
-                return self._envoyer(404, {"erreur": _t("LM Studio n'est pas le serveur choisi.")})
-            try:
-                from . import lmstudio as _lmstudio
-                return self._envoyer(200, {"modeles": _lmstudio.modeles() if mo._lms() else [], "installe": mo._lms() is not None})
-            except ValueError as e:
-                return self._envoyer(200, {"modeles": [], "installe": mo._lms() is not None, "erreur": str(e)})
-        if chemin == "/api/colibri-modeles":                      # onglet Modèles avec Colibri : ses modèles, jugés pour cette machine par Colibri lui-même (lecture seule)
-            mo = _moteurs.par_id("openai")
-            if not mo.colibri_choisi():
-                return self._envoyer(404, {"erreur": _t("Colibri n'est pas le serveur choisi.")})
-            try:
-                from . import colibri as _colibri
-                if not _colibri.installee(mo._dossiers()):
-                    return self._envoyer(200, {"modeles": [], "installe": False})
-                return self._envoyer(200, {"modeles": _colibri.catalogue(mo._dossiers()), "dossier": str(_colibri.dossier_modeles(mo._dossiers())), "installe": True})
-            except ValueError as e:
-                return self._envoyer(200, {"modeles": [], "erreur": str(e), "installe": True})
+        if chemin.split("?")[0] in ROUTES_MODELES_GERES:          # onglet Modèles d'un serveur géré par Lutin : ce qui est téléchargé, ce qu'on peut télécharger, jugé pour cette machine
+            return self._modeles_serveur_gere(chemin)
         if chemin == "/api/machines":                             # onglet Machines : le nœud de cette machine, les machines appairées et leur état
             return self._envoyer(200, self._vue_machines())
         if chemin == "/api/ressources":                           # ce qui est chargé en mémoire en ce moment (page Santé)
@@ -1034,18 +990,24 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 if self.path == "/api/notifications-supprimer":
                     return self._envoyer(200, {"canaux": _notif.supprimer(str(donnees.get("id", "")))})
                 return self._envoyer(200, _notif.tester(str(donnees.get("id", ""))))
-            if self.path in ("/api/planifie-ajouter", "/api/planifie-supprimer", "/api/planifie-activer", "/api/planifie-lancer", "/api/planifie-notifier"):
+            if self.path in ("/api/planifie-ajouter", "/api/planifie-modifier", "/api/planifie-arreter", "/api/planifie-supprimer", "/api/planifie-activer", "/api/planifie-lancer", "/api/planifie-notifier"):
                 if not self._configurateur():
                     return self._envoyer(403, {"erreur": _t("Les tâches planifiées se gèrent depuis cette machine (niveau « cette machine seulement » ou navigateur de cette machine).")})
                 ident = str(donnees.get("id", ""))
                 if self.path == "/api/planifie-ajouter":
-                    return self._envoyer(200, _plan.ajouter(donnees.get("nom"), donnees.get("prompt"), donnees.get("heure"), donnees.get("jours"), donnees.get("travail"), donnees.get("notifier")))
+                    return self._envoyer(200, _plan.ajouter(donnees.get("nom"), donnees.get("prompt"), donnees.get("heure"), donnees.get("jours"), donnees.get("travail"), donnees.get("notifier"), donnees.get("date")))
+                if self.path == "/api/planifie-modifier":
+                    return self._envoyer(200, _plan.changer(ident, donnees.get("nom"), donnees.get("prompt"), donnees.get("heure"), donnees.get("jours"), donnees.get("travail"), donnees.get("notifier"), donnees.get("date")))
+                if self.path == "/api/planifie-arreter":
+                    return self._envoyer(200, _plan.arreter(ident))
                 if self.path == "/api/planifie-notifier":
                     return self._envoyer(200, _plan.definir_notification(ident, donnees.get("canal")))
                 if self.path == "/api/planifie-supprimer":
-                    return self._envoyer(200, _plan.supprimer(ident))
+                    return self._envoyer(200, _plan.supprimer(ident, bool(donnees.get("conversation"))))
                 if self.path == "/api/planifie-activer":
                     return self._envoyer(200, _plan.modifier(ident, actif=bool(donnees.get("actif"))))
+                if ident in _plan.EN_COURS:
+                    raise ValueError(_t("Cette tâche travaille déjà."))
                 if len(_m.TOURS_ACTIFS) >= _m.TOURS_SIMULTANES:
                     raise ValueError(_t("Une réponse est déjà en cours : attends sa fin."))
                 threading.Thread(target=lambda: _plan.executer(ident), daemon=True, name="planifie-lancer").start()
@@ -1304,20 +1266,30 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 mo = _moteurs.par_id(str(donnees["moteur"]))
                 modele = str(donnees.get("modele", ""))
                 return self._envoyer(200, _mesures.lancer(_m.DONNEES, mo, modele, str(donnees.get("mode", "rapide")), memoire=lambda: _bench_moteurs.memoire_du_moteur(mo.id, modele)))
-            if self.path == "/api/exllamav3-verifier":                 # chercher les mises à jour des modèles téléchargés, ou de nouveaux modèles qui tiennent sur cette machine
+            if self.path in ("/api/exllamav3-verifier", "/api/lmstudio-verifier", "/api/colibri-verifier"):          # chercher les mises à jour des modèles téléchargés (ExLlamaV3), ou de nouveaux modèles qui tiennent sur cette machine
+                genre = self.path[len("/api/"):-len("-verifier")]
                 mo = _moteurs.par_id("openai")
-                if not mo.exllamav3_choisi():
-                    return self._envoyer(400, {"erreur": _t("ExLlamaV3 n'est pas le serveur choisi.")})
-                from . import exllamav3 as _exl
-                installes = _exl.modeles(mo._dossiers())
+                if not {"exllamav3": mo.exllamav3_choisi, "lmstudio": mo.lmstudio_choisi, "colibri": mo.colibri_choisi}[genre]():
+                    return self._envoyer(400, {"erreur": _t("Ce serveur n'est pas le serveur choisi.")})
                 try:
-                    if str(donnees.get("portee")) == "maj":
-                        return self._envoyer(200, _exl_cat.versions_plus_recentes(installes))
+                    if genre == "exllamav3":
+                        from . import exllamav3 as _exl
+                        installes = _exl.modeles(mo._dossiers())
+                        if str(donnees.get("portee")) == "maj":
+                            return self._envoyer(200, _exl_cat.versions_plus_recentes(installes))
+                        candidats, deja = _exl_cat.chercher("", "recent", False, 1)["modeles"], {x.get("depot") for x in installes}
+                    elif genre == "lmstudio":
+                        from . import lmstudio as _lmstudio
+                        candidats, deja = _lms_cat.chercher("", "recent", False, 1)["modeles"], {x["nom"].split("/")[-1] for x in (_lmstudio.modeles() if mo._lms() else [])}
+                    else:
+                        from . import colibri as _colibri
+                        installes = _colibri.modeles_installes(mo._dossiers(), mo.modele_colibri())
+                        candidats = [m for m in self._catalogue_colibri(mo, installes, "")["modeles"] if not m["installes"]]
+                        deja = set()
                     profil = _adequation.profil_pret()
-                    deja = {x.get("depot") for x in installes}
                     propositions = []
-                    for m in _exl_cat.chercher("", "recent", False, 1)["modeles"]:
-                        ju = _adequation.evaluer({"go": m["estimation_go"]}, profil) if profil is not None and m.get("estimation_go") else None
+                    for m in candidats:
+                        ju = m.get("adequation") or (_adequation.evaluer({"go": m["estimation_go"]}, profil) if profil is not None and m.get("estimation_go") else None)
                         if m["id"] in deja or not ju or ju["niveau"] == "trop_gros":
                             continue
                         propositions.append(dict(m, adequation=ju))
@@ -1366,6 +1338,77 @@ class Gestionnaire(BaseHTTPRequestHandler):
         return self._envoyer(404, {"erreur": "introuvable"})
 
     # ---- ce Lutin prête son moteur à une autre machine (voir lutin.machines) ----
+    def _modeles_serveur_gere(self, chemin):
+        """ExLlamaV3, LM Studio et Colibri : les mêmes routes (modèles, catalogue, quantifications), les mêmes réponses — la page Modèles est donc la même pour les trois."""
+        genre, route = ROUTES_MODELES_GERES[chemin.split("?")[0]]
+        mo = _moteurs.par_id("openai")
+        choisi = {"exllamav3": mo.exllamav3_choisi, "lmstudio": mo.lmstudio_choisi, "colibri": mo.colibri_choisi}[genre]()
+        nom = {"exllamav3": "ExLlamaV3", "lmstudio": "LM Studio", "colibri": "Colibri"}[genre]
+        if not choisi:
+            return self._envoyer(404, {"erreur": _t("{} n'est pas le serveur choisi.").format(nom)})
+        q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+        profil = _adequation.profil_pret()
+        juger = (lambda go: _adequation.evaluer({"go": go}, profil)) if profil is not None else (lambda go: None)
+        actif = _m.reglages().get("modele")
+        try:
+            if genre == "exllamav3":
+                from . import exllamav3 as _exl
+                installes = _exl.modeles(mo._dossiers())
+                present = mo._exl() is not None
+                dossier = str(_exl.dossier_modeles(mo._dossiers()))
+                catalogue, quants = _exl_cat.chercher, _exl_cat.quantifications
+            elif genre == "lmstudio":
+                from . import lmstudio as _lmstudio
+                present = mo._lms() is not None
+                installes = _lmstudio.modeles() if present else []
+                dossier = str(_lmstudio.dossier_modeles())
+                catalogue, quants = _lms_cat.chercher, _lms_cat.quantifications
+            else:
+                from . import colibri as _colibri
+                present = _colibri.installee(mo._dossiers()) is not None
+                installes = _colibri.modeles_installes(mo._dossiers(), mo.modele_colibri()) if present else []
+                dossier = str(_colibri.dossier_modeles(mo._dossiers()))
+                catalogue = quants = None
+            if route == "modeles":
+                reponse = {"modeles": [dict(x, adequation=juger(x["taille_go"]) if x.get("taille_go") else None, utilise=(x["nom"] == actif) if genre != "colibri" else True) for x in installes],
+                           "installe": present, "dossier": dossier, "actif": bool(mo.modeles()["actif"]) if present else False,
+                           "maj": genre == "exllamav3"}
+                return self._envoyer(200, reponse)
+            if route == "catalogue":
+                if genre == "colibri":
+                    return self._envoyer(200, self._catalogue_colibri(mo, installes, (q.get("q") or [""])[0]))
+                r = catalogue((q.get("q") or [""])[0], (q.get("tri") or ["recent"])[0], (q.get("communaute") or ["0"])[0] == "1", (q.get("page") or ["1"])[0])
+                deja = {}
+                for x in installes:
+                    deja.setdefault(x.get("depot", "") or x["nom"], []).append(x.get("revision") or "main")
+                for m in r["modeles"]:
+                    m["adequation"] = juger(m["estimation_go"]) if m.get("estimation_go") else None
+                    m["installes"] = deja.get(m["id"], [])
+                return self._envoyer(200, r)
+            depot = (q.get("depot") or [""])[0]
+            deja = {x.get("revision") or "main" for x in installes if x.get("depot") == depot}
+            liste = quants(depot)
+            for x in liste:
+                x["adequation"] = juger(x["go"]) if x.get("go") else None
+                x["installe"] = x["revision"] in deja
+            return self._envoyer(200, {"quantifications": liste})
+        except ValueError as e:
+            return self._envoyer(502, {"erreur": str(e)})
+
+    @staticmethod
+    def _catalogue_colibri(mo, installes, q):
+        """Le catalogue de Colibri, dans la forme des autres : jugé par Colibri lui-même (« tient » / « ne tient pas »), filtré par le mot cherché."""
+        from . import colibri as _colibri
+        mots = str(q or "").lower().split()
+        sortie = []
+        for m in sorted(_colibri.catalogue(mo._dossiers()), key=lambda x: (not x["ok"], x["go"])):
+            if mots and not all(w in m["id"].lower() for w in mots):
+                continue
+            ad = {"niveau": "bien", "texte": _t("Colibri juge que ce modèle tient sur cette machine.")} if m["ok"] else {"niveau": "trop_gros", "texte": m["raison"] or _t("Ne tient pas sur cette machine.")}
+            sortie.append({"id": m["id"], "nom": m["id"], "auteur": "colibri", "telechargements": 0, "aime": 0, "maj": "", "capacites": [], "licence": "", "base": "", "estimation_go": m["go"], "adequation": ad,
+                           "installes": ["prêt"] if any(m["id"] in x["nom"] for x in installes) else [], "direct": True})
+        return {"modeles": sortie, "suite": False}
+
     def _noeud_etat(self):
         if not _machines.noeud_jeton_valide(self.headers.get("X-Noeud")):
             return self._envoyer(401, {"erreur": "machine non autorisée"})

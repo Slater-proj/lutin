@@ -82,7 +82,10 @@ button.danger:hover { background:linear-gradient(180deg, #b84545, #8f2f2f); }
 .page { flex:1; min-height:0; display:none; } .page.vue { display:flex; flex-direction:column; }
 /* --- fil de discussion --- */
 #fil { flex:1; overflow:auto; padding:14px 10px; }
-#zoneBas { position:relative; height:0; z-index:4; } #bBas { position:absolute; right:18px; bottom:10px; width:38px; height:38px; border-radius:50%; padding:0; font-size:1.2rem; background:var(--panel); border:1px solid var(--line2); box-shadow:var(--ombre); }
+#zoneBas { position:relative; height:0; z-index:4; }
+#bBas { position:absolute; right:22px; bottom:14px; width:46px; height:46px; border-radius:50%; padding:0; display:flex; align-items:center; justify-content:center; background:var(--accent); color:#06121f; border:2px solid rgba(255,255,255,.18); box-shadow:0 6px 18px rgba(0,0,0,.45), 0 0 0 4px rgba(90,169,255,.16); cursor:pointer; transition:transform .12s, box-shadow .12s, background .12s; animation:apparition .18s ease-out; }
+#bBas[hidden] { display:none; } #bBas svg { width:22px; height:22px; } #bBas:hover { background:var(--accent2); transform:translateY(2px); box-shadow:0 8px 22px rgba(0,0,0,.5), 0 0 0 6px rgba(90,169,255,.22); }
+#bBas.nouveau { animation:pouls 1.6s ease-in-out infinite; } @keyframes pouls { 0%,100% { box-shadow:0 6px 18px rgba(0,0,0,.45), 0 0 0 4px rgba(90,169,255,.16); } 50% { box-shadow:0 6px 18px rgba(0,0,0,.45), 0 0 0 10px rgba(90,169,255,.05); } }
 .msg { display:flex; margin:0 0 16px; animation:apparition .18s ease-out; }
 @keyframes apparition { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:none; } }
 .msg.moi { justify-content:flex-end; }
@@ -237,6 +240,7 @@ details.sous { margin:4px 0 4px 10px; } details.sous > summary { color:var(--mut
 /* actions sous les messages */
 .actions { display:flex; gap:6px; margin:3px 2px 0; opacity:.55; transition:opacity .12s; } .msg:hover .actions, .actions:focus-within { opacity:1; }
 .msg.moi { flex-direction:column; align-items:flex-end; }
+.horodatage { margin-left:auto; align-self:center; color:var(--muted); font-size:.72rem; white-space:nowrap; cursor:default; }
 .actions button { background:none; border:1px solid transparent; color:var(--muted); border-radius:6px; padding:1px 8px; font-size:.76rem; cursor:pointer; } .actions button:hover { border-color:var(--line2); color:var(--fg); }
 #bandeauEdition { display:flex; gap:10px; align-items:center; padding:6px 16px; background:#221c10; border-top:1px solid var(--warm); color:var(--warm); font-size:.82rem; }
 .corps a { color:var(--accent); }
@@ -250,7 +254,7 @@ details.sous { margin:4px 0 4px 10px; } details.sous > summary { color:var(--mut
 .bloc-mermaid { margin:8px 0; background:#0e141b; border:1px solid var(--line); border-radius:10px; padding:12px; overflow:auto; }
 .bloc-mermaid .mermaid { display:flex; justify-content:center; }
 .bloc-mermaid .mermaid-erreur { white-space:pre-wrap; font:13px ui-monospace, Consolas, monospace; color:#e0a0a0; }
-details.pensee { color:var(--muted); font-size:.82rem; margin:4px 0; } details.pensee summary { cursor:pointer; } details.pensee pre { white-space:pre-wrap; background:none; border:0; padding:0; font:inherit; }
+details.pensee { color:var(--muted); font-size:.82rem; margin:4px 0 8px; } details.pensee summary { cursor:pointer; user-select:none; padding:2px 0; } details.pensee summary:hover { color:var(--fg); } details.pensee[open] pre { border-left:2px solid var(--line2); padding-left:12px; margin:6px 0 4px 4px; } details.pensee pre { white-space:pre-wrap; background:none; border:0; padding:0; font:inherit; }
 .tbl { border-collapse:collapse; margin:8px 0; font-size:.84rem; width:100%; max-width:100%; }
 .tbl th { background:#1a2533; border:1px solid var(--line2); padding:6px 10px; text-align:left; font-weight:600; }
 .tbl td { border:1px solid var(--line); padding:5px 10px; }
@@ -499,7 +503,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     <div id="bandeauHote" class="bandeau-hote" role="status" hidden></div>
     <div id="fil"></div>
     <div id="accueil"></div>
-    <div id="zoneBas"><button id="bBas" type="button" hidden title="Revenir au dernier message" aria-label="Revenir au dernier message">↓</button></div>
+    <div id="zoneBas"><button id="bBas" type="button" hidden title="Revenir au dernier message" aria-label="Revenir au dernier message"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14"/><path d="M5 12l7 7 7-7"/></svg></button></div>
     <div id="taches" hidden></div>
     <div id="activite" role="status" aria-live="polite"><span class="pt"></span><span id="activiteTexte"></span></div>
     <div id="bandeauEdition" hidden><span>Modification d'un message : l'envoi remplace ce message et tout ce qui le suit.</span> <button id="bAnnulerEdition">Annuler</button></div>
@@ -620,10 +624,12 @@ body[data-moteur="openai"] .biblio { display:none !important; }
       <input id="pNom" placeholder="Nom (ex. Résumé du matin)" maxlength="60" style="width:220px">
       <input id="pHeure" type="time" value="08:00">
       <span id="pJours"></span>
+      <label class="aide" title="Laisse vide pour une tâche qui revient chaque semaine ; avec une date, elle n'a lieu qu'une fois puis se met en pause">ou une seule fois le <input id="pDate" type="date"></label>
+      <select id="pTravail" title="Dossier de travail de la tâche" hidden></select>
       <textarea id="pPrompt" placeholder="La demande à traiter, par exemple : résume ce qui a changé dans le dépôt depuis hier." style="flex:1 1 100%;min-height:70px" maxlength="4000"></textarea>
       <select id="pNotifier" title="Prévenir par ce canal quand la tâche a fini" hidden></select>
       <span class="aide" id="pNotifierAide">Pour être prévenu à la fin : ajoute un canal dans l'onglet Notifications.</span>
-      <button id="bAjouterPlanifie" class="principal">Planifier</button> <span class="aide" id="mPlanifie"></span>
+      <button id="bAjouterPlanifie" class="principal">Planifier</button> <button id="bAnnulerPlanifie" hidden>Annuler la modification</button> <span class="aide" id="mPlanifie"></span>
     </div>
     <h2>Notifications <span class="aide">(être prévenu sur ton téléphone ou ta messagerie quand une tâche planifiée a fini : Gotify, ntfy, Telegram ou un webhook Discord, Slack, Mattermost…)</span></h2>
     <div id="listeCanaux" class="aide" style="margin:6px 0"></div>
@@ -884,7 +890,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
   const ligneOutil = (nom, args) => { const d = el('div', 'outil'); const l = el('div', '', libelleOutil(nom, args)); l.title = nom + ' ' + JSON.stringify(args).slice(0, 600); d.appendChild(l); return d; };
   // Le fil ne te ramène en bas que si tu y étais : si tu remontes lire pendant que l'assistant écrit ou réfléchit, il te laisse là où tu es et un bouton « ↓ » propose de redescendre.
   let SUIT = true;
-  const fil = () => $('fil'), majBas = () => { const b = $('bBas'); if (b) b.hidden = SUIT || !EN_COURS; };
+  const fil = () => $('fil'), majBas = () => { const b = $('bBas'); if (b) { b.hidden = SUIT || !fil().children.length; b.classList.toggle('nouveau', !SUIT && !!EN_COURS); } };
   const bas = forcer => { if (forcer === true) SUIT = true; if (SUIT) fil().scrollTop = fil().scrollHeight; majBas(); };
   fil().addEventListener('scroll', () => { SUIT = fil().scrollHeight - fil().scrollTop - fil().clientHeight < 80; majBas(); }, { passive: true });
   // Copie dans le presse-papiers. Sur le téléphone la page est en http (pas « sécurisée ») : navigator.clipboard n'existe pas, on passe par une zone de texte cachée.
@@ -1079,6 +1085,13 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     });
     return b;
   };
+  // La date et l'heure d'un message (notées par Lutin quand il est écrit), à droite de ses boutons ; l'infobulle donne la date en toutes lettres et les secondes. Rien pour les messages d'avant cette fonction.
+  const horodatage = ts => {
+    const d = ts ? new Date(ts) : null; if (!d || isNaN(d)) return null;
+    const langue = document.documentElement.lang || undefined, auj = new Date(), memeJour = d.toDateString() === auj.toDateString();
+    const s = el('span', 'horodatage', memeJour ? d.toLocaleTimeString(langue, { hour: '2-digit', minute: '2-digit' }) : d.toLocaleString(langue, { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }));
+    s.title = d.toLocaleString(langue, { dateStyle: 'full', timeStyle: 'medium' }); s.dataset.ts = ts; return s;
+  };
   const annoter = () => {
     retirerActions();
     if (!CONV || !CONV.messages || EN_COURS) return;
@@ -1091,7 +1104,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
       barre.appendChild(boutonEpingle(b, idx));
       mod.title = T('Modifier ce message : la conversation repart de là');
       mod.addEventListener('click', () => { if (EN_COURS) return; EDIT_INDEX = idx; $('saisie').value = CONV.messages[idx].content; $('bandeauEdition').hidden = false; $('saisie').focus(); $('saisie').dispatchEvent(new Event('input')); });
-      barre.appendChild(mod); b.appendChild(barre);
+      barre.appendChild(mod); const hu = horodatage(CONV.messages[idx].ts); if (hu) barre.appendChild(hu); b.appendChild(barre);
     });
     const reponses = [...fil().querySelectorAll('.msg.ia')].filter(m => m.querySelector('.corps') && m.querySelector('.corps')._brut);
     const indicesIA = []; CONV.messages.forEach((m, i) => { if (m.role === 'assistant' && (m.content || '').trim()) indicesIA.push(i); });
@@ -1111,15 +1124,28 @@ body[data-moteur="openai"] .biblio { display:none !important; }
         reg.addEventListener('click', () => { if (EN_COURS) return; const i = indicesUser[indicesUser.length - 1]; EDIT_INDEX = i; $('saisie').value = CONV.messages[i].content; envoyer(); });
         barre.appendChild(reg);
       }
+      const hi = idxIA !== undefined ? horodatage(CONV.messages[idxIA].ts) : null; if (hi) barre.appendChild(hi);
       (m.querySelector('.colonne') || m).appendChild(barre);
     });
+  };
+  // Une réflexion (celle que le moteur a rendue à part, ou un bloc <think> resté dans le texte d'une ancienne conversation) : repliée, au-dessus de la réponse, jamais dans la bulle
+  const figerPensee = d => {
+    if (!d || d.dataset.fini) return;
+    d.dataset.fini = '1'; const s = d.querySelector('summary'); if (s) s.textContent = T('Réflexion') + ' · ' + Math.max(1, Math.round((Date.now() - (d._t0 || Date.now())) / 1000)) + ' s';
+  };
+  const ecarterPensee = texte => {
+    const m = /^\s*<(think|thinking|reasoning)>([\s\S]*?)(?:<\/\1>\s*|$)/i.exec(texte || '');
+    return m ? { pensee: m[2].trim(), texte: (texte || '').slice(m[0].length) } : { pensee: '', texte: texte || '' };
+  };
+  const blocPensee = texte => {
+    const d = el('details', 'pensee'); d.appendChild(el('summary', '', T('Réflexion'))); const pre = el('pre'); pre.textContent = texte; d.appendChild(pre); return d;
   };
   const afficherHistorique = c => {
     fil().textContent = '';
     (c.resume ? [{ role: 'resume', content: c.resume }] : []).concat(c.messages).forEach(m => {
       if (m.role === 'resume') { const d = el('div', 'info', T('Résumé du début de la conversation : ') + m.content.slice(0, 400) + (m.content.length > 400 ? '...' : '')); fil().appendChild(d); }
       else if (m.role === 'user') { const d = el('div', 'msg moi'); d.appendChild(el('div', 'corps', m.content)); miniatures(d, m.images, m.pieces); fil().appendChild(d); }
-      else if (m.role === 'assistant') { if (m.content) { const x = messageIA(); rendre(x.c, m.content); } (m.tool_calls || []).forEach(t => fil().appendChild(ligneOutil(t.function.name, t.function.arguments))); }
+      else if (m.role === 'assistant') { if (m.content) { const x = messageIA(), sep = ecarterPensee(m.content), refl = m.reflexion || sep.pensee; if (refl && x.c.parentNode) x.c.parentNode.insertBefore(blocPensee(refl), x.c); rendre(x.c, sep.texte); } (m.tool_calls || []).forEach(t => fil().appendChild(ligneOutil(t.function.name, t.function.arguments))); }
       else if (m.role === 'tool') { const d = el('div', 'outil'); d.appendChild(el('div', '', '↳ ' + (m.tool_name || T('résultat')))); d.appendChild(el('div', 'res', (['web_chercher', 'web_lire'].includes(m.tool_name) || (m.tool_name || '').startsWith('mcp__')) && /CONTENU (WEB|EXTERNE) NON FIABLE/.test((m.content || '').slice(0, 60)) ? T("(résultat transmis à l'assistant, non affiché)") : (m.content || '').slice(0, 700))); afficherMedias(d, m.medias, m.medias_fichiers, CONV.id); afficherFichiers(d, m.fichiers_joints, CONV.id); fil().appendChild(d); }
     });
     annoter(); afficherTaches(c.taches); majJauge(c.id); setVitesse(c.vitesse); majAnnuler();
@@ -1335,11 +1361,11 @@ body[data-moteur="openai"] .biblio { display:none !important; }
           if (!l.trim()) continue; let e; try { e = JSON.parse(l); } catch (x) { continue; }
           if (e.type !== 'fin') noterEvenement(e);
           if (e.type === 'debut') { ID_EN_COURS = flux.id = e.conversation; rafraichir(); }
-          else if (e.type === 'texte') { ia.texte += e.texte; planifier(ia); }
+          else if (e.type === 'texte') { figerPensee(detailsPensee); ia.texte += e.texte; planifier(ia); }
           else if (e.type === 'pensee') {
             if (!detailsPensee) {
               detailsPensee = el('details', 'pensee');
-              detailsPensee.appendChild(el('summary', '', T('Réflexion')));
+              detailsPensee.appendChild(el('summary', '', T('Réflexion en cours…'))); detailsPensee._t0 = Date.now();
               detailsPensee.appendChild(el('pre'));
 
               // Insérer la réflexion dans la colonne, avant le contenu du message.
@@ -1382,7 +1408,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     } catch (e) { if (e.name !== 'AbortError') { zone().appendChild(el('div', 'erreur', e.message)); if (!finRecue) zone().appendChild(el('div', 'info', T('Si l\'assistant travaillait encore, la réponse s\'affichera ici dès qu\'elle avance.'))); } }
     finSuspension(); const etaitVisible = visible(); FLUX = null;
     termine(flux.id, etaitVisible && !document.hidden && surChat());                              // pastille verte si tu n'étais pas en train de la lire
-    arreterActivite(); EN_COURS = false; majBas(); $('bEnvoyer').disabled = false; $('bStop').hidden = true; if (etaitVisible) annoter(); signaler(T('✔ Terminé')); majTravail(); await rafraichir(); if (etaitVisible) bas();
+    figerPensee(detailsPensee); arreterActivite(); EN_COURS = false; majBas(); $('bEnvoyer').disabled = false; $('bStop').hidden = true; if (etaitVisible) annoter(); signaler(T('✔ Terminé')); majTravail(); await rafraichir(); if (etaitVisible) bas();
     if (FILE.length) {                                                            // message suivant de la file d'attente (sauf si tu as appuyé sur Arrêter)
       if (PAUSE_FILE) majFile(); else { const suivant = FILE.shift(); majFile(); envoyer(suivant); }
     }
@@ -1937,9 +1963,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     $('vCpus').textContent = ETAT.cpus ? T('(cette machine : {} cœurs)').replace('{}', ETAT.cpus) : '';
     $('cHorsLigne').checked = !!ETAT.hors_ligne; $('cWeb').disabled = !!ETAT.hors_ligne;
     try { chargerOutils(); } catch (e) { /* la rubrique Outils se refera au prochain état */ }
-    try { chargerColibriModeles(); } catch (e) { /* la carte Colibri se refera au prochain état */ }
-    try { chargerLmstudioModeles(); } catch (e) { /* la carte LM Studio se refera au prochain état */ }
-    try { chargerExllamav3Modeles(); } catch (e) { /* la carte ExLlamaV3 se refera au prochain état */ }
+    chargerPagesGerees();          // ExLlamaV3, LM Studio, Colibri : la même page Modèles
     majMission(); suivreMission();
     if (ETAT.bench && ETAT.bench.erreur) $('msgModeles').textContent = T('Banc d\'essai : ') + ETAT.bench.erreur;
     $('vCtx').textContent = $('rCtx').value; $('vTemp').textContent = $('rTemp').value; $('vTours').textContent = $('rTours').value;
@@ -3246,7 +3270,14 @@ body[data-moteur="openai"] .biblio { display:none !important; }
   // ---- Tâches planifiées : une demande traitée toute seule à heure fixe, en lecture seule
   const JOURS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
   JOURS.forEach((j, i) => { const l = el('label'); const c = document.createElement('input'); c.type = 'checkbox'; c.dataset.j = i; c.checked = i < 5; l.appendChild(c); l.appendChild(document.createTextNode(' ' + T(j) + ' ')); $('pJours').appendChild(l); });
-  const etatPlan = e => e === 'en_cours' ? T('en cours') : e === 'ok' ? T('terminée') : e === 'erreur' ? T('en erreur') : e;
+  const etatPlan = e => ({ en_cours: T('en cours'), ok: T('terminée'), erreur: T('en erreur'), arretee: T('arrêtée'), interrompue: T('interrompue') }[e] || e);
+  const iconePlan = e => ({ ok: '✔', erreur: '⚠', arretee: '■', interrompue: '⚠', en_cours: '⏳' }[e] || '•');
+  let EDIT_PLAN = '', MINUTEUR_PLAN = 0;
+  const majJoursPlan = () => { $('pJours').querySelectorAll('input').forEach(c => { c.disabled = !!$('pDate').value; }); };
+  const finEditionPlan = () => {
+    EDIT_PLAN = ''; $('bAjouterPlanifie').textContent = T('Planifier'); $('bAnnulerPlanifie').hidden = true;
+    $('pNom').value = ''; $('pPrompt').value = ''; $('pDate').value = ''; majJoursPlan();
+  };
   let CANAUX = [], TYPES_NOTIF = [];
   const lireCanaux = async () => { try { const r = await api('/api/notifications'); CANAUX = r.canaux; TYPES_NOTIF = r.types; } catch (e) { CANAUX = []; } };
   const formulaireCanal = () => {
@@ -3271,25 +3302,50 @@ body[data-moteur="openai"] .biblio { display:none !important; }
   };
   const afficherPlanifie = taches => {
     const z = $('listePlanifie'); z.textContent = '';
+    const tr = (ETAT && ETAT.travaux) || { liste: [] }, sel0 = $('pTravail'), garde = sel0.value; sel0.textContent = '';          // le dossier de travail ne se choisit que s'il y en a plusieurs
+    const o0 = el('option', '', T('Dossier de travail actif')); o0.value = ''; sel0.appendChild(o0);
+    tr.liste.forEach(w => { const o = el('option', '', w.nom); o.value = w.id; sel0.appendChild(o); }); sel0.value = garde; sel0.hidden = tr.liste.length < 2;
+    clearTimeout(MINUTEUR_PLAN);
     if (!taches.length) { z.textContent = T('Aucune tâche planifiée.'); return; }
+    if (taches.some(t => t.en_cours) && $('p-auto').classList.contains('vue')) MINUTEUR_PLAN = setTimeout(chargerPlanifie, 3000);          // une tâche travaille : son état se met à jour tout seul
     taches.forEach(t => {
-      const l = el('div', 'conv'); l.style.cursor = 'default';
-      const col = el('div', 't'); col.appendChild(el('div', '', t.nom + (t.actif ? '' : ' (' + T('en pause') + ')')));
-      col.appendChild(el('div', 'extrait', t.heure + ' · ' + t.jours.map(j => T(JOURS[j])).join(' ') + (t.prochaine ? ' · ' + T('prochaine') + ' : ' + t.prochaine.replace('T', ' ') : '') + (t.derniere_etat ? ' · ' + T('dernière') + ' : ' + etatPlan(t.derniere_etat) : '')));
+      const l = el('div', 'conv'); l.style.cursor = 'default'; l.style.flexWrap = 'wrap';
+      const col = el('div', 't'); col.style.flex = '1 1 260px';
+      const fait = !t.actif && t.date && t.derniere_etat;
+      col.appendChild(el('div', '', t.nom + (t.actif ? '' : ' (' + (fait ? T('faite') : T('en pause')) + ')') + (t.en_cours ? ' ⏳ ' + T('travaille…') : '')));
+      const quand = t.date ? T('le') + ' ' + t.date + ' ' + t.heure + ' (' + T('une seule fois') + ')' : t.heure + ' · ' + t.jours.map(j => T(JOURS[j])).join(' ');
+      col.appendChild(el('div', 'extrait', quand + (t.prochaine ? ' · ' + T('prochaine') + ' : ' + t.prochaine.replace('T', ' ') : '') + (t.derniere_etat ? ' · ' + T('dernière') + ' : ' + etatPlan(t.derniere_etat) : '')));
+      if (t.derniere_erreur && ['erreur', 'interrompue'].includes(t.derniere_etat)) col.appendChild(el('div', 'erreur', '⚠ ' + t.derniere_erreur));
       if (t.notifier && t.derniere_notif) col.appendChild(el('div', t.derniere_notif === 'ok' ? 'extrait' : 'erreur', t.derniere_notif === 'ok' ? '🔔 ' + T('Notification envoyée.') : '🔔 ' + t.derniere_notif));
+      if ((t.historique || []).length) {
+        const det = el('details', 'aide'); det.appendChild(el('summary', '', T('Dernières exécutions') + ' (' + t.historique.length + ')'));
+        t.historique.forEach(h => det.appendChild(el('div', h.etat === 'ok' ? 'extrait' : 'erreur', iconePlan(h.etat) + ' ' + h.date.replace('T', ' ') + ' · ' + etatPlan(h.etat) + ' · ' + h.duree_s + ' s' + (h.erreur ? ' — ' + h.erreur : ''))));
+        col.appendChild(det);
+      }
       l.appendChild(col);
-      const action = (texte, f) => { const b = el('button', '', texte); b.addEventListener('click', async () => { try { await f(); chargerPlanifie(); } catch (e) { $('mPlanifie').textContent = e.message; } }); l.appendChild(b); };
+      const action = (texte, f, classe) => { const b = el('button', classe || '', texte); b.addEventListener('click', async () => { try { await f(); chargerPlanifie(); } catch (e) { $('mPlanifie').textContent = e.message; } }); l.appendChild(b); };
       if (CANAUX.length) {
         const sel = el('select'); sel.title = T('Prévenir par ce canal quand la tâche a fini');
-        const o0 = el('option', '', T('Sans notification')); o0.value = ''; sel.appendChild(o0);
+        const o1 = el('option', '', T('Sans notification')); o1.value = ''; sel.appendChild(o1);
         CANAUX.forEach(c => { const o = el('option', '', '🔔 ' + c.nom); o.value = c.id; sel.appendChild(o); }); sel.value = t.notifier || '';
         sel.addEventListener('change', async () => { try { await api('/api/planifie-notifier', { id: t.id, canal: sel.value }); chargerPlanifie(); } catch (e) { $('mPlanifie').textContent = e.message; } });
         l.appendChild(sel);
       }
       if (t.derniere_conv) { const b = el('button', '', T('Voir le résultat')); b.addEventListener('click', () => { ouvrirOnglet('chat'); ouvrir(t.derniere_conv); }); l.appendChild(b); }
-      action(T('Lancer maintenant'), () => api('/api/planifie-lancer', { id: t.id }));
+      if (t.en_cours) action(T('Arrêter'), () => api('/api/planifie-arreter', { id: t.id }));
+      else action(T('Lancer maintenant'), () => api('/api/planifie-lancer', { id: t.id }));
+      action(T('Modifier'), async () => {
+        EDIT_PLAN = t.id; $('pNom').value = t.nom; $('pPrompt').value = t.prompt; $('pHeure').value = t.heure; $('pDate').value = t.date || '';
+        $('pJours').querySelectorAll('input').forEach(c => { c.checked = t.jours.includes(+c.dataset.j); }); majJoursPlan(); $('pTravail').value = t.travail || ''; $('pNotifier').value = t.notifier || '';
+        $('bAjouterPlanifie').textContent = T('Enregistrer les modifications'); $('bAnnulerPlanifie').hidden = false; $('mPlanifie').textContent = ''; $('pNom').scrollIntoView({ block: 'center' }); $('pNom').focus();
+      });
       action(t.actif ? T('Pause') : T('Reprendre'), () => api('/api/planifie-activer', { id: t.id, actif: !t.actif }));
-      action(T('Supprimer'), () => confirm(T('Supprimer cette tâche planifiée ?')) ? api('/api/planifie-supprimer', { id: t.id }) : null);
+      action(T('Supprimer'), async () => {
+        if (!confirm(T('Supprimer cette tâche planifiée ?') + (t.en_cours ? ' ' + T('Elle travaille en ce moment : elle sera arrêtée.') : ''))) return null;
+        const avecConv = !!t.derniere_conv && confirm(T('Supprimer aussi sa conversation « ⏰ {} » (les résultats déjà obtenus) ? OK : la supprimer ; Annuler : la garder.').replace('{}', t.nom));
+        if (EDIT_PLAN === t.id) finEditionPlan();
+        return api('/api/planifie-supprimer', { id: t.id, conversation: avecConv });
+      });
       z.appendChild(l);
     });
   };
@@ -4360,11 +4416,15 @@ body[data-moteur="openai"] .biblio { display:none !important; }
   });
   $('bAjouterPlanifie').addEventListener('click', async () => {
     const jours = [...$('pJours').querySelectorAll('input:checked')].map(c => +c.dataset.j);
+    const corps = { nom: $('pNom').value, prompt: $('pPrompt').value, heure: $('pHeure').value, jours, notifier: $('pNotifier').value, travail: $('pTravail').value, date: $('pDate').value };
     try {
-      await api('/api/planifie-ajouter', { nom: $('pNom').value, prompt: $('pPrompt').value, heure: $('pHeure').value, jours, notifier: $('pNotifier').value });
-      $('pNom').value = ''; $('pPrompt').value = ''; $('mPlanifie').textContent = ''; chargerPlanifie();
+      if (EDIT_PLAN) { await api('/api/planifie-modifier', Object.assign({ id: EDIT_PLAN }, corps)); finEditionPlan(); }
+      else { await api('/api/planifie-ajouter', corps); $('pNom').value = ''; $('pPrompt').value = ''; $('pDate').value = ''; majJoursPlan(); }
+      $('mPlanifie').textContent = ''; chargerPlanifie();
     } catch (e) { $('mPlanifie').textContent = e.message; }
   });
+  $('bAnnulerPlanifie').addEventListener('click', () => { finEditionPlan(); $('mPlanifie').textContent = ''; });
+  $('pDate').addEventListener('change', majJoursPlan);
   // ---- Tester mon PC : mesure la vitesse du modèle actif, puis des conseils
   const afficherConseil = r => {
     const z = $('conseilTest'); z.textContent = '';
@@ -4638,47 +4698,6 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     b.addEventListener('click', async () => { b.disabled = true; try { await api('/api/moteur-action', { moteur: 'openai', action: 'installer' }); msg.textContent = T('Installation lancée : l\'avancement est dans la barre bleue du haut.'); } catch (e) { msg.textContent = e.message; b.disabled = false; } });
     l.append(b, msg); z.appendChild(l);
   };
-  const chargerColibriModeles = async () => {
-    const z = $('colibriModeles'); if (!ETAT || !ETAT.colibri_choisi) { z.hidden = true; z.dataset.charge = ''; return; }
-    z.hidden = false;
-    if (z.dataset.charge && Date.now() - +z.dataset.charge < 30000) return; z.dataset.charge = String(Date.now());
-    z.textContent = ''; z.appendChild(el('b', '', T('Modèles pour Colibri')));
-    z.appendChild(el('div', 'aide', T('Colibri fait tourner de très gros modèles (des centaines de milliards de paramètres) sur un PC ordinaire : il garde l\'essentiel sur le disque et ne charge en mémoire que ce dont il a besoin. Choisis donc des modèles bien plus gros que ce que ta carte graphique tient, et préfère un disque rapide (NVMe). Colibri juge lui-même ce qui tient sur cette machine.')));
-    let r; try { r = await api('/api/colibri-modeles'); } catch (e) { z.appendChild(el('div', 'erreur', e.message)); return; }
-    if (r.installe === false) { carteNonInstallee(z, 'Colibri'); return; }
-    if (r.erreur) { z.appendChild(el('div', 'attention', r.erreur)); return; }
-    z.appendChild(el('div', 'aide', T('Téléchargés dans ') + r.dossier + T(' ; une interruption se reprend là où elle s\'est arrêtée. L\'avancement est dans la barre bleue du haut.')));
-    const msg = el('div', 'aide');
-    [...r.modeles].sort((a, b) => Number(b.ok) - Number(a.ok) || a.go - b.go).forEach(m => {
-      const l = el('div', 'ligne'), go = m.go >= 1000 ? (m.go / 1000).toFixed(2).replace('.', ',') + ' ' + T('To') : Math.round(m.go) + ' ' + T('Go');
-      l.appendChild(el('b', '', m.id)); l.appendChild(el('span', 'aide', ' · ' + go));
-      const b = el('button', m.ok ? 'principal' : '', m.ok ? T('Préparer avec Colibri') : T('Ne tient pas ici')); b.disabled = !m.ok; b.title = m.ok ? T('Colibri télécharge ce modèle et démarre son serveur') : m.raison;
-      b.addEventListener('click', async () => {
-        if (!confirm(T('Colibri va télécharger {} ({}). Continuer ?').replace('{}', m.id).replace('{}', go))) return;
-        b.disabled = true; try { await api('/api/colibri-preparer', { id: m.id }); msg.textContent = T('Préparation lancée : l\'avancement est dans la barre bleue du haut.'); rafraichir(); } catch (e) { msg.textContent = e.message; b.disabled = false; }
-      });
-      l.appendChild(b); if (!m.ok) l.appendChild(el('span', 'aide', ' ' + m.raison)); z.appendChild(l);
-    });
-    z.appendChild(msg);
-    z.appendChild(el('div', 'aide', T('Non vérifié par Lutin avec un vrai téléchargement : si quelque chose coince, le message de Colibri s\'affiche dans la barre du haut.')));
-  };
-  // ---- Onglet Modèles avec LM Studio : ce qui est téléchargé, et un champ pour en télécharger (lms get)
-  const chargerLmstudioModeles = async () => {
-    const z = $('lmstudioModeles'); if (!ETAT || !ETAT.lmstudio_choisi) { z.hidden = true; z.dataset.charge = ''; return; }
-    z.hidden = false;
-    if (z.contains(document.activeElement) && document.activeElement !== document.body) return;
-    if (z.dataset.charge && Date.now() - +z.dataset.charge < 20000) return; z.dataset.charge = String(Date.now());
-    z.textContent = ''; z.appendChild(el('b', '', T('Modèles de LM Studio')));
-    let r; try { r = await api('/api/lmstudio-modeles'); } catch (e) { z.appendChild(el('div', 'erreur', e.message)); return; }
-    if (!r.installe) { carteNonInstallee(z, 'LM Studio'); return; }
-    if (r.erreur) z.appendChild(el('div', 'attention', r.erreur));
-    z.appendChild(el('div', 'aide', r.modeles.length ? T('Déjà téléchargés :') : T('Aucun modèle téléchargé pour le moment.')));
-    r.modeles.forEach(m => z.appendChild(el('div', 'ligne', '• ' + m.nom + (m.taille_go ? ' · ' + String(m.taille_go).replace('.', ',') + ' ' + T('Go') : ''))));
-    const l = el('div', 'ligne'), champ = el('input'), b = el('button', 'principal', T('Télécharger')), msg = el('span', 'aide');
-    champ.placeholder = 'openai/gpt-oss-20b'; champ.style.minWidth = '280px'; champ.title = T('Le nom du modèle comme dans le catalogue de LM Studio (propriétaire/modèle, avec @quantification si besoin)');
-    b.addEventListener('click', async () => { const nom = champ.value.trim(); if (!nom) { msg.textContent = T('Écris le nom d\'un modèle.'); return; } b.disabled = true; try { await api('/api/lmstudio-telecharger', { nom }); msg.textContent = T('Téléchargement lancé : l\'avancement est dans la barre bleue du haut.'); champ.value = ''; z.dataset.charge = ''; rafraichir(); } catch (e) { msg.textContent = e.message; } b.disabled = false; });
-    l.append(champ, b, msg); z.appendChild(l);
-  };
   // ---- Réglages > Moteur : les mesures réelles de chaque moteur sur cette machine (vitesse, premier mot, chargement), classées ; on peut en lancer une pour tout moteur actif
   let MINUTEUR_MESURES = null;
   const chargerMesures = async () => {
@@ -4713,65 +4732,100 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     if (!(r.candidats || []).length && !r.etat.en_cours) z.appendChild(el('div', 'aide', T('Aucun moteur actif avec un modèle installé : démarre-en un (cartes ci-dessus) pour le mesurer.')));
     z.appendChild(msg);
   };
-  // ---- Onglet Modèles avec ExLlamaV3 : la même page que pour Ollama — mes modèles (adaptés à la machine ou non, utiliser, tester, supprimer), chercher les mises à jour, chercher de nouveaux modèles, explorer le catalogue (Hugging Face), installer
-  const EXL = {};
+  // ---- Onglet Modèles d'un serveur géré par Lutin (ExLlamaV3, LM Studio, Colibri) : LA MÊME page que pour Ollama — mes modèles (verdict pour la machine, utiliser, tester, supprimer), chercher les mises à jour,
+  // chercher de nouveaux modèles, explorer le catalogue, installer. Un seul code pour les trois ; chacun ne décrit que ce qui lui est propre (voir PAGES_GEREES).
   const puceAdequation = ad => {
     if (!ad) return null;
     const p = el('span', 'puce ' + ({ ideal: 'ok', bien: 'ok', limite: 'warn', trop_gros: 'bad' }[ad.niveau] || ''));
     p.appendChild(document.createElement('i')); p.appendChild(document.createTextNode({ ideal: T('Très adapté'), bien: T('Adapté'), limite: T('Limite'), trop_gros: T('Trop gros') }[ad.niveau] || ''));
     p.title = ad.texte; return p;
   };
-  const telechargerExl = async (depot, revision, msg) => {
-    try { await api('/api/exllamav3-telecharger', { depot, revision }); msg.textContent = T('Téléchargement lancé : l\'avancement est dans la barre bleue du haut.'); $('exllamav3Modeles').dataset.charge = ''; rafraichir(); }
+  const PAGES_GEREES = {
+    exllamav3: {
+      zone: 'exllamav3Modeles', flag: 'exllamav3_choisi', nom: 'ExLlamaV3', explorerId: 'exl3Explorer', route: '/api/exllamav3-', tri: true, communaute: true, quantifs: true, utiliser: true, tester: true,
+      titre: () => T('Modèles d\'ExLlamaV3'), intro: () => T('ExLlamaV3 fait tourner des modèles au format EXL3 sur ta carte NVIDIA, très compressés pour leur qualité. Choisis-en un dont la taille tient dans la mémoire de ta carte graphique.'),
+      titreExplorer: () => T('Explorer les modèles EXL3'), introExplorer: () => T('Les modèles EXL3 sont publiés sur Hugging Face, une branche par quantification (« 4.0bpw » = 4 bits par poids : petit et rapide ; « 6.0bpw » : plus fidèle, plus gros). Par défaut, ceux de l\'auteur d\'ExLlamaV3 ; élargis à toute la communauté pour en voir plus. La taille sur disque et le verdict « adapté à ta machine » sont une estimation d\'après le nom, précisée quand tu choisis une quantification.'),
+      titreAutre: () => T('Un autre modèle EXL3'), placeholderAutre: 'turboderp/Qwen3-8B-exl3', revision: true, sourceOfficielle: () => T('Auteur d\'ExLlamaV3 (officiel)'),
+      detail: m => m.depot ? m.depot + (m.revision ? ' @ ' + m.revision : '') : T('posé à la main dans le dossier des modèles'),
+      lancer: (depot, revision) => ['/api/exllamav3-telecharger', { depot, revision }], aideQuant: () => T('Plus le nombre de bits est petit, plus le modèle est léger et rapide, mais moins fidèle. 4.0bpw est un bon équilibre.') },
+    lmstudio: {
+      zone: 'lmstudioModeles', flag: 'lmstudio_choisi', nom: 'LM Studio', explorerId: 'lmsExplorer', route: '/api/lmstudio-', tri: true, communaute: true, quantifs: true, utiliser: true, tester: true,
+      titre: () => T('Modèles de LM Studio'), intro: () => T('LM Studio fait tourner des modèles au format GGUF. Choisis-en un dont la taille tient dans la mémoire de ta carte graphique (ou de ton ordinateur).'),
+      titreExplorer: () => T('Explorer les modèles GGUF'), introExplorer: () => T('Les modèles GGUF sont publiés sur Hugging Face, un fichier par quantification (« Q4_K_M » : petit et rapide ; « Q8_0 » : plus fidèle, plus gros). Par défaut, ceux de la communauté officielle de LM Studio ; élargis à tous les auteurs pour en voir plus. La taille sur disque et le verdict « adapté à ta machine » sont une estimation d\'après le nom, précisée quand tu choisis une quantification.'),
+      titreAutre: () => T('Un autre modèle'), placeholderAutre: 'lmstudio-community/Qwen3-8B-GGUF', revision: true, sourceOfficielle: () => T('Communauté officielle de LM Studio'),
+      detail: m => m.chemin || '',
+      lancer: (depot, revision) => ['/api/lmstudio-telecharger', { nom: depot + (revision ? '@' + revision : '') }], aideQuant: () => T('Q4_K_M est un bon équilibre entre taille et qualité ; Q8_0 est plus fidèle mais près de deux fois plus gros.') },
+    colibri: {
+      zone: 'colibriModeles', flag: 'colibri_choisi', nom: 'Colibri', explorerId: 'coliExplorer', route: '/api/colibri-', tri: false, communaute: false, quantifs: false, utiliser: false, tester: false,
+      titre: () => T('Modèles pour Colibri'), intro: () => T('Colibri fait tourner de très gros modèles (des centaines de milliards de paramètres) sur un PC ordinaire : il garde l\'essentiel sur le disque et ne charge en mémoire que ce dont il a besoin. Choisis donc des modèles bien plus gros que ce que ta carte graphique tient, et préfère un disque rapide (NVMe). Colibri juge lui-même ce qui tient sur cette machine.'),
+      titreExplorer: () => T('Explorer les modèles de Colibri'), introExplorer: () => T('Le catalogue de Colibri : chaque modèle est jugé par Colibri pour cette machine. « Installer » lui confie la préparation (téléchargement de plusieurs dizaines de Go, repris là où il s\'est arrêté s\'il est interrompu).'),
+      titreAutre: () => '', placeholderAutre: '', revision: false,
+      detail: m => m.chemin || '',
+      lancer: id => ['/api/colibri-preparer', { id }],
+      confirmer: m => confirm(T('Colibri va télécharger {} ({} Go). Continuer ?').replace('{}', m.id).replace('{}', m.estimation_go)) },
+  };
+  const ETATS_PAGES = {};          // l'état de chaque page (structure construite une fois : l'exploration survit aux rafraîchissements de « Mes modèles »)
+  const lancerGere = async (cfg, depot, revision, msg) => {
+    const m = cfg.confirmer && !revision ? { id: depot, estimation_go: (cfg.derniers || {})[depot] || '?' } : null;
+    if (m && !cfg.confirmer(m)) return;
+    try { const [url, corps] = cfg.lancer(depot, revision); await api(url, corps); msg.textContent = T('Téléchargement lancé : l\'avancement est dans la barre bleue du haut.'); $(cfg.zone).dataset.charge = ''; rafraichir(); }
     catch (e) { msg.textContent = e.message; }
   };
   // Les quantifications d'un dépôt : une ligne par taille, avec ce que ça pèse et si ça tient ici
-  const quantificationsExl = (m, zone, msg) => {
+  const quantificationsGere = (cfg, m, zone, msg) => {
     zone.textContent = T('Recherche…');
-    api('/api/exllamav3-quantifications?depot=' + encodeURIComponent(m.id)).then(r => {
+    api(cfg.route + 'quantifications?depot=' + encodeURIComponent(m.id)).then(r => {
       zone.textContent = '';
-      if (!r.quantifications.length) { zone.appendChild(el('div', 'aide', T('Aucune quantification EXL3 dans ce dépôt (branches « 4.0bpw », « 6.0bpw »…).'))); return; }
-      zone.appendChild(el('div', 'aide', T('Plus le nombre de bits est petit, plus le modèle est léger et rapide, mais moins fidèle. 4.0bpw est un bon équilibre.')));
+      if (!r.quantifications.length) { zone.appendChild(el('div', 'aide', T('Aucune quantification utilisable dans ce dépôt.'))); return; }
+      zone.appendChild(el('div', 'aide', cfg.aideQuant()));
       r.quantifications.forEach(q => {
         const l = el('div', 'mod'), nom = el('div', 'mod-nom'), acts = el('div', 'mod-actions');
         nom.appendChild(el('b', '', q.revision)); nom.appendChild(el('span', 'aide', ' · ' + (q.go ? String(q.go).replace('.', ',') + ' ' + T('Go') : T('taille inconnue'))));
         const pa = puceAdequation(q.adequation); if (pa) nom.appendChild(pa);
         if (q.installe) nom.appendChild(el('span', 'puce ok', T('✔ installé')));
-        else { const b = el('button', 'principal', T('Installer')); b.title = m.id + ' @ ' + q.revision; b.addEventListener('click', () => { b.disabled = true; telechargerExl(m.id, q.revision, msg); }); acts.appendChild(b); }
+        else { const b = el('button', 'principal', T('Installer')); b.title = m.id + ' @ ' + q.revision; b.addEventListener('click', () => { b.disabled = true; lancerGere(cfg, m.id, q.revision, msg); }); acts.appendChild(b); }
         l.append(nom, acts); zone.appendChild(l);
       });
     }).catch(e => { zone.textContent = ''; zone.appendChild(el('div', 'erreur', e.message)); });
   };
-  const carteModeleExl = (m, cacherTropGros, msg) => {
+  const carteModeleGere = (cfg, m, cacherTropGros, msg) => {
     const ad = m.adequation;
     if (cacherTropGros && ad && ad.niveau === 'trop_gros') return null;
     const d = el('div', 'carte'); d.style.cssText = 'flex-direction:column;align-items:stretch;gap:4px'; d.dataset.nom = m.id;
+    (cfg.derniers = cfg.derniers || {})[m.id] = m.estimation_go;
     const t = el('div'); t.appendChild(el('b', '', m.nom));
     m.capacites.forEach(c => t.appendChild(el('span', 'aide', ' · ' + (c === 'vision' ? T('Images') : c))));
     if (m.maj) t.appendChild(el('span', 'aide', ' · ' + m.maj));
     if (m.telechargements) t.appendChild(el('span', 'aide', ' · ' + nombreCourt(m.telechargements) + ' ↓'));
     if (m.aime) t.appendChild(el('span', 'aide', ' · ♥ ' + nombreCourt(m.aime)));
-    const a = el('a', '', ' ↗ ' + T('page du modèle')); a.href = 'https://huggingface.co/' + m.id; a.target = '_blank'; a.rel = 'noopener noreferrer'; t.appendChild(a);
+    if (m.auteur !== 'colibri') { const a = el('a', '', ' ↗ ' + T('page du modèle')); a.href = 'https://huggingface.co/' + m.id; a.target = '_blank'; a.rel = 'noopener noreferrer'; t.appendChild(a); }
     d.appendChild(t);
-    const infos = [m.base ? T('Basé sur ') + m.base : '', m.licence ? T('licence ') + m.licence : '', m.auteur !== 'turboderp' ? T('par ') + m.auteur : '', m.estimation_go ? T('≈ {} Go à 4 bits (estimation)').replace('{}', String(m.estimation_go).replace('.', ',')) : ''].filter(Boolean);
+    const infos = [m.base ? T('Basé sur ') + m.base : '', m.licence ? T('licence ') + m.licence : '', m.auteur !== 'turboderp' && m.auteur !== 'lmstudio-community' && m.auteur !== 'colibri' ? T('par ') + m.auteur : '',
+      m.estimation_go ? (cfg.quantifs ? T('≈ {} Go à 4 bits (estimation)') : T('{} Go')).replace('{}', String(m.estimation_go).replace('.', ',')) : ''].filter(Boolean);
     if (infos.length) d.appendChild(el('div', 'aide', infos.join(' · ')));
     const bas = el('div', 'ligne'), pa = puceAdequation(ad); if (pa) bas.appendChild(pa);
     if ((m.installes || []).length) bas.appendChild(el('span', 'puce ok', T('✔ installé : ') + m.installes.join(', ')));
-    const voir = el('button', '', T('Choisir une quantification')), zone = el('div'); zone.hidden = true;
-    voir.addEventListener('click', () => { zone.hidden = !zone.hidden; if (!zone.hidden && !zone.dataset.charge) { zone.dataset.charge = '1'; quantificationsExl(m, zone, msg); } });
-    bas.appendChild(voir); d.append(bas, zone);
+    if (cfg.quantifs) {
+      const voir = el('button', '', T('Choisir une quantification')), zone = el('div'); zone.hidden = true;
+      voir.addEventListener('click', () => { zone.hidden = !zone.hidden; if (!zone.hidden && !zone.dataset.charge) { zone.dataset.charge = '1'; quantificationsGere(cfg, m, zone, msg); } });
+      bas.appendChild(voir); d.append(bas, zone);
+    } else {
+      const b = el('button', ad && ad.niveau === 'trop_gros' ? '' : 'principal', (m.installes || []).length ? T('Réinstaller') : T('Installer')); b.disabled = !!(ad && ad.niveau === 'trop_gros');
+      b.addEventListener('click', () => { b.disabled = true; lancerGere(cfg, m.id, '', msg); setTimeout(() => { b.disabled = false; }, 4000); });
+      bas.appendChild(b); d.appendChild(bas);
+    }
     return d;
   };
-  const construireExplorateurExl = () => {
-    const z = el('div'); z.id = 'exl3Explorer';
-    z.appendChild(el('h2', '', T('Explorer les modèles EXL3')));
-    z.appendChild(el('div', 'aide', T('Les modèles EXL3 sont publiés sur Hugging Face, une branche par quantification (« 4.0bpw » = 4 bits par poids : petit et rapide ; « 6.0bpw » : plus fidèle, plus gros). Par défaut, ceux de l\'auteur d\'ExLlamaV3 ; élargis à toute la communauté pour en voir plus. La taille sur disque et le verdict « adapté à ta machine » sont une estimation d\'après le nom, précisée quand tu choisis une quantification.')));
+  const construireExplorateurGere = cfg => {
+    const z = el('div'); z.id = cfg.explorerId;
+    z.appendChild(el('h2', '', cfg.titreExplorer()));
+    z.appendChild(el('div', 'aide', cfg.introExplorer()));
     const barre = el('div', 'carte'); barre.style.cssText = 'gap:8px;flex-wrap:wrap;align-items:center';
     const q = el('input'), tri = el('select'), src = el('select'), go = el('button', '', T('Parcourir'));
     q.placeholder = T('Rechercher (facultatif)'); q.style.cssText = 'flex:1;min-width:140px';
     [['recent', T('Les plus récents')], ['populaire', T('Les plus populaires')]].forEach(([v, n]) => { const o = el('option', '', n); o.value = v; tri.appendChild(o); });
-    [['0', T('Auteur d\'ExLlamaV3 (officiel)')], ['1', T('Toute la communauté')]].forEach(([v, n]) => { const o = el('option', '', n); o.value = v; src.appendChild(o); });
-    barre.append(q, tri, src, go);
+    [['0', cfg.sourceOfficielle ? cfg.sourceOfficielle() : ''], ['1', T('Toute la communauté')]].forEach(([v, n]) => { const o = el('option', '', n); o.value = v; src.appendChild(o); });
+    barre.appendChild(q); if (cfg.tri) barre.appendChild(tri); if (cfg.communaute) barre.appendChild(src); barre.appendChild(go);
     const options = el('div', 'carte'); options.style.cssText = 'gap:14px;flex-wrap:wrap;align-items:center';
     const cache = el('label'), cc = document.createElement('input'); cc.type = 'checkbox'; cc.checked = true; cache.append(cc, document.createTextNode(' ' + T('Cacher ce qui est trop gros pour ma machine')));
     options.appendChild(cache);
@@ -4780,9 +4834,9 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     const parcourir = async p => {
       msg.textContent = T('Recherche…');
       try {
-        const r = await api('/api/exllamav3-catalogue?q=' + encodeURIComponent(q.value.trim()) + '&tri=' + tri.value + '&communaute=' + src.value + '&page=' + p);
+        const r = await api(cfg.route + 'catalogue?q=' + encodeURIComponent(q.value.trim()) + '&tri=' + tri.value + '&communaute=' + src.value + '&page=' + p);
         liste.textContent = ''; let masques = 0;
-        r.modeles.forEach(m => { const c = carteModeleExl(m, cc.checked, msg); if (c) liste.appendChild(c); else masques++; });
+        r.modeles.forEach(m => { const c = carteModeleGere(cfg, m, cc.checked, msg); if (c) liste.appendChild(c); else masques++; });
         page = p; plus.hidden = !r.suite;
         msg.textContent = (masques ? T('{} modèle(s) masqué(s) car trop gros pour ta machine. ').replace('{}', masques) : '') + (r.modeles.length ? T('🟢 tient · 🟠 limite · 🔴 trop gros (estimation d\'après la taille).') : T('Aucun résultat.'));
       } catch (e) { msg.textContent = e.message; }
@@ -4791,18 +4845,20 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     [tri, src, cc].forEach(x => x.addEventListener('change', () => parcourir(1)));
     q.addEventListener('keydown', e => { if (e.key === 'Enter') parcourir(1); });
     z.append(barre, options, msg, liste, plus);
-    z.appendChild(el('h2', '', T('Un autre modèle EXL3')));
-    const l = el('div', 'carte'), depot = el('input'), rev = el('input'), b = el('button', 'principal', T('Installer')), m2 = el('span', 'aide');
-    depot.placeholder = 'turboderp/Qwen3-8B-exl3'; depot.style.cssText = 'flex:1;min-width:260px'; rev.placeholder = '4.0bpw'; rev.style.width = '90px'; rev.title = T('La révision (branche) du dépôt : en général la quantification, par exemple 4.0bpw');
-    b.addEventListener('click', () => { const dp = depot.value.trim(); if (!dp) { m2.textContent = T('Écris le nom d\'un dépôt Hugging Face (propriétaire/modèle).'); return; } telechargerExl(dp, rev.value.trim(), m2); depot.value = ''; });
-    l.append(depot, rev, b, m2); z.appendChild(l);
+    if (cfg.titreAutre()) {
+      z.appendChild(el('h2', '', cfg.titreAutre()));
+      const l = el('div', 'carte'), depot = el('input'), rev = el('input'), b = el('button', 'principal', T('Installer')), m2 = el('span', 'aide');
+      depot.placeholder = cfg.placeholderAutre; depot.style.cssText = 'flex:1;min-width:260px'; rev.placeholder = cfg.nom === 'LM Studio' ? 'Q4_K_M' : '4.0bpw'; rev.style.width = '90px'; rev.title = cfg.nom === 'LM Studio' ? T('La quantification (facultative), par exemple Q4_K_M') : T('La révision (branche) du dépôt : en général la quantification, par exemple 4.0bpw');
+      b.addEventListener('click', () => { const dp = depot.value.trim(); if (!dp) { m2.textContent = T('Écris le nom d\'un dépôt Hugging Face (propriétaire/modèle).'); return; } lancerGere(cfg, dp, rev.value.trim(), m2); depot.value = ''; });
+      l.append(depot, rev, b, m2); z.appendChild(l);
+    }
     parcourir(1);
     return z;
   };
-  const verifierExl = async portee => {
-    const z = EXL.props, msg = EXL.msgVerif, boutons = [EXL.bMaj, EXL.bNouveaux]; boutons.forEach(b => b.disabled = true); msg.textContent = T('Recherche en cours…'); z.textContent = '';
+  const verifierGere = async (cfg, portee) => {
+    const e = ETATS_PAGES[cfg.zone], z = e.props, msg = e.msgVerif, boutons = [e.bMaj, e.bNouveaux].filter(Boolean); boutons.forEach(b => b.disabled = true); msg.textContent = T('Recherche en cours…'); z.textContent = '';
     try {
-      const r = await api('/api/exllamav3-verifier', { portee });
+      const r = await api(cfg.route + 'verifier', { portee });
       if (portee === 'maj') {
         msg.textContent = r.plus_recentes.length ? r.plus_recentes.length + T(' mise(s) à jour ci-dessous.') : T('Tous tes modèles sont à jour.');
         if (r.erreurs.length) msg.textContent += ' ' + r.erreurs.join(' ; ');
@@ -4810,40 +4866,44 @@ body[data-moteur="openai"] .biblio { display:none !important; }
         r.plus_recentes.forEach(p => {
           const c = el('div', 'carte'), b = el('button', 'principal', T('Mettre à jour')), m2 = el('span', 'aide');
           c.append(el('div', 'nom', T('Mise à jour : ') + p.nom), el('div', 'aide', p.depot + (p.revision ? ' @ ' + p.revision : '') + ' — ' + T('une version plus récente de cette quantification existe.')), b, m2);
-          b.addEventListener('click', () => { b.disabled = true; telechargerExl(p.depot, p.revision, m2); });
+          b.addEventListener('click', () => { b.disabled = true; lancerGere(cfg, p.depot, p.revision, m2); });
           z.appendChild(c);
         });
       } else {
         msg.textContent = r.propositions.length ? r.propositions.length + T(' résultat(s) ci-dessous.') : T('Rien de nouveau qui tienne sur ta machine.');
         if (r.propositions.length) z.appendChild(el('h2', '', T('Nouveautés pour ta machine')));
-        r.propositions.forEach(m => { const c = carteModeleExl(m, false, msg); if (c) z.appendChild(c); });
+        r.propositions.forEach(m => { const c = carteModeleGere(cfg, m, false, msg); if (c) z.appendChild(c); });
       }
-    } catch (e) { msg.textContent = '✘ ' + e.message; }
+    } catch (x) { msg.textContent = '✘ ' + x.message; }
     boutons.forEach(b => b.disabled = false);
   };
-  const chargerExllamav3Modeles = async forcer => {
-    const z = $('exllamav3Modeles'); if (!ETAT || !ETAT.exllamav3_choisi) { z.hidden = true; z.dataset.charge = ''; return; }
+  const chargerPageGeree = async (cfg, forcer) => {
+    const z = $(cfg.zone); if (!ETAT || !ETAT[cfg.flag]) { z.hidden = true; z.dataset.charge = ''; return; }
     z.hidden = false;
-    if (!EXL.mes) {          // la structure est faite une fois : l'exploration (recherche, résultats) survit aux rafraîchissements de « Mes modèles »
+    const e = ETATS_PAGES[cfg.zone] = ETATS_PAGES[cfg.zone] || {};
+    if (!e.mes) {
       z.textContent = '';
-      z.appendChild(el('h2', '', T('Modèles d\'ExLlamaV3')));
-      z.appendChild(el('div', 'aide', T('ExLlamaV3 fait tourner des modèles au format EXL3 sur ta carte NVIDIA, très compressés pour leur qualité. Choisis-en un dont la taille tient dans la mémoire de ta carte graphique.')));
+      z.appendChild(el('h2', '', cfg.titre()));
+      z.appendChild(el('div', 'aide', cfg.intro()));
       const barre = el('div', 'carte'); barre.style.cssText = 'gap:8px;flex-wrap:wrap;align-items:center';
-      EXL.bMaj = el('button', '', '🔄 ' + T('Chercher les mises à jour')); EXL.bMaj.title = T('Compare tes modèles téléchargés avec leur dernière version sur Hugging Face');
-      EXL.bNouveaux = el('button', '', '✨ ' + T('Chercher de nouveaux modèles')); EXL.bNouveaux.title = T('Cherche, pour ta machine, des modèles récents que tu n\'as pas');
-      EXL.msgVerif = el('span', 'aide'); barre.append(EXL.bMaj, EXL.bNouveaux, EXL.msgVerif);
-      EXL.bMaj.addEventListener('click', () => verifierExl('maj')); EXL.bNouveaux.addEventListener('click', () => verifierExl('nouveaux'));
-      EXL.barre = barre; EXL.props = el('div'); EXL.mes = el('div'); EXL.explorateur = null;
-      z.append(barre, EXL.props, EXL.mes);
+      e.msgVerif = el('span', 'aide');
+      if (cfg.route === '/api/exllamav3-') {          // seul ExLlamaV3 sait d'où vient chaque modèle téléchargé : lui seul peut dire qu'une version plus récente existe
+        e.bMaj = el('button', '', '🔄 ' + T('Chercher les mises à jour')); e.bMaj.title = T('Compare tes modèles téléchargés avec leur dernière version sur Hugging Face');
+        e.bMaj.addEventListener('click', () => verifierGere(cfg, 'maj')); barre.appendChild(e.bMaj);
+      }
+      e.bNouveaux = el('button', '', '✨ ' + T('Chercher de nouveaux modèles')); e.bNouveaux.title = T('Cherche, pour ta machine, des modèles récents que tu n\'as pas');
+      e.bNouveaux.addEventListener('click', () => verifierGere(cfg, 'nouveaux')); barre.append(e.bNouveaux, e.msgVerif);
+      e.barre = barre; e.props = el('div'); e.mes = el('div'); e.explorateur = null;
+      z.append(barre, e.props, e.mes);
     }
     if (z.contains(document.activeElement) && document.activeElement !== document.body && !forcer) return;
     if (!forcer && z.dataset.charge && Date.now() - +z.dataset.charge < 15000) return; z.dataset.charge = String(Date.now());
-    let r; try { r = await api('/api/exllamav3-modeles'); } catch (e) { EXL.mes.textContent = ''; EXL.mes.appendChild(el('div', 'erreur', e.message)); return; }
-    const mes = EXL.mes; mes.textContent = '';
-    EXL.barre.hidden = !r.installe;
+    let r; try { r = await api(cfg.route + 'modeles'); } catch (x) { e.mes.textContent = ''; e.mes.appendChild(el('div', 'erreur', x.message)); return; }
+    const mes = e.mes; mes.textContent = '';
+    e.barre.hidden = !r.installe;
     if (!r.installe) {
-      carteNonInstallee(mes, 'ExLlamaV3');
-      if (EXL.explorateur) EXL.explorateur.hidden = true;
+      carteNonInstallee(mes, cfg.nom);
+      if (e.explorateur) e.explorateur.hidden = true;
       return;
     }
     mes.appendChild(el('h2', '', T('Mes modèles')));
@@ -4854,17 +4914,24 @@ body[data-moteur="openai"] .biblio { display:none !important; }
       tete.appendChild(el('b', '', m.nom)); tete.appendChild(el('span', 'aide', ' · ' + (m.taille_go ? String(m.taille_go).replace('.', ',') + ' ' + T('Go') : T('taille inconnue')))); nom.appendChild(tete);
       nom.appendChild(el('span', 'puce ok', m.utilise ? T('★ actif') : T('✔ installé')));
       const pa = puceAdequation(m.adequation); if (pa) nom.appendChild(pa);
-      desc.textContent = m.depot ? m.depot + (m.revision ? ' @ ' + m.revision : '') : T('posé à la main dans le dossier des modèles'); desc.title = desc.textContent;
-      if (!m.utilise) { const u = el('button', 'principal', T('Utiliser')); u.title = T('En faire le modèle de la conversation'); u.addEventListener('click', async () => { try { await api('/api/reglages', { modele: m.nom }); rafraichir(); chargerExllamav3Modeles(true); } catch (e) { alert(e.message); } }); acts.appendChild(u); }
-      const bv = el('button', '', '⏱'); bv.title = r.actif ? T('⏱ Tester la vitesse') + ' : ' + T('Environ 20 secondes (plus si le modèle doit d\'abord se charger)') : T('Démarre ExLlamaV3 (Réglages > Moteur) pour tester la vitesse'); bv.disabled = !r.actif || !!(ETAT.bench && ETAT.bench.en_cours);
-      bv.addEventListener('click', async () => { try { await api('/api/bench', { modele: m.nom, rapide: true }); rafraichir(); } catch (e) { alert(e.message); } });
-      const x = el('button', 'danger', T('Supprimer')); x.title = T('Supprimer ce modèle de la machine');
-      x.addEventListener('click', async () => { if (!confirm(T('Supprimer « ') + m.nom + T(' » ? Le téléchargement sera refait si tu le réinstalles.'))) return; try { await api('/api/moteur-supprimer', { moteur: 'openai', nom: m.nom }); chargerExllamav3Modeles(true); rafraichir(); } catch (e) { alert(e.message); } });
-      acts.append(bv, x); l.append(nom, desc, acts); mes.appendChild(l);
+      desc.textContent = cfg.detail(m); desc.title = desc.textContent;
+      if (cfg.utiliser && !m.utilise) { const u = el('button', 'principal', T('Utiliser')); u.title = T('En faire le modèle de la conversation'); u.addEventListener('click', async () => { try { await api('/api/reglages', { modele: m.nom }); rafraichir(); chargerPageGeree(cfg, true); } catch (x) { alert(x.message); } }); acts.appendChild(u); }
+      if (cfg.tester) {
+        const bv = el('button', '', '⏱'); bv.title = r.actif ? T('⏱ Tester la vitesse') + ' : ' + T('Environ 20 secondes (plus si le modèle doit d\'abord se charger)') : T('Démarre {} (Réglages > Moteur) pour tester la vitesse').replace('{}', cfg.nom); bv.disabled = !r.actif || !!(ETAT.bench && ETAT.bench.en_cours);
+        bv.addEventListener('click', async () => { try { await api('/api/bench', { modele: m.nom, rapide: true }); rafraichir(); } catch (x) { alert(x.message); } });
+        acts.appendChild(bv);
+      }
+      if (m.supprimable !== false) {
+        const x = el('button', 'danger', T('Supprimer')); x.title = T('Supprimer ce modèle de la machine');
+        x.addEventListener('click', async () => { if (!confirm(T('Supprimer « ') + m.nom + T(' » ? Le téléchargement sera refait si tu le réinstalles.'))) return; try { await api('/api/moteur-supprimer', { moteur: 'openai', nom: m.nom }); chargerPageGeree(cfg, true); rafraichir(); } catch (y) { alert(y.message); } });
+        acts.appendChild(x);
+      }
+      l.append(nom, desc, acts); mes.appendChild(l);
     });
-    if (!EXL.explorateur) { EXL.explorateur = construireExplorateurExl(); z.appendChild(EXL.explorateur); }
-    EXL.explorateur.hidden = false;
+    if (!e.explorateur) { e.explorateur = construireExplorateurGere(cfg); z.appendChild(e.explorateur); }
+    e.explorateur.hidden = false;
   };
+  const chargerPagesGerees = forcer => Object.values(PAGES_GEREES).forEach(cfg => { try { chargerPageGeree(cfg, forcer); } catch (x) { /* la page se refera au prochain état */ } });
   // ---- Palette de commandes (Ctrl+K) : un seul endroit pour aller partout, au clavier
   const PAL = { ouverte: false, items: [], visibles: [], choix: 0, retour: null };
   const sansAccent = t => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();

@@ -7,6 +7,7 @@ Ce que ce module fait, et seulement sur commande explicite de l'utilisateur (`lu
 Ce qu'il ne fait PAS : choisir ou télécharger un modèle (plusieurs dizaines de Go : `coli setup` / `coli import` de Colibri), ni l'exposer sur le réseau.
 Les commandes viennent de la lecture du script `coli` de la v2.1.0 ; **Colibri n'a pas été lancé avec un modèle** : le démarrage est à essayer (voir docs/TRIALS.md, S3)."""
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -236,6 +237,48 @@ def catalogue(dossiers=None, lancer=subprocess.run):
 def dossier_modeles(dossiers=None):
     """Où Colibri télécharge les modèles qu'on lui fait préparer : le dossier de Colibri dans les données de Lutin."""
     return dossier_colibri(dossiers) / "modeles"
+
+
+def _taille_dossier(chemin, max_fichiers=20000):
+    """Go occupés par un dossier (parcours borné : un modèle de Colibri pèse des centaines de Go, mais pas des millions de fichiers)."""
+    total, vus = 0, 0
+    for racine, _, fichiers in os.walk(chemin):
+        for f in fichiers:
+            vus += 1
+            if vus > max_fichiers:
+                return round(total / 1e9, 1)
+            try:
+                total += os.path.getsize(os.path.join(racine, f))
+            except OSError:
+                pass
+    return round(total / 1e9, 1)
+
+
+def modeles_installes(dossiers=None, modele=""):
+    """Les modèles déjà préparés : [{nom, chemin, taille_go, supprimable}] — les sous-dossiers du dossier des modèles de Lutin (supprimables) et, s'il est ailleurs, le dossier réglé ou préparé par `coli setup` (jamais supprimé par Lutin)."""
+    racine = dossier_modeles(dossiers)
+    sortie, vus = [], set()
+    try:
+        sous = sorted(p for p in racine.iterdir() if p.is_dir())
+    except OSError:
+        sous = []
+    for p in sous:
+        sortie.append({"nom": p.name, "chemin": str(p), "taille_go": _taille_dossier(p), "supprimable": True})
+        vus.add(os.path.normcase(str(p)))
+    if modele and Path(modele).is_dir() and os.path.normcase(str(Path(modele))) not in vus:
+        sortie.append({"nom": Path(modele).name, "chemin": str(modele), "taille_go": _taille_dossier(modele), "supprimable": False})
+    return sortie
+
+
+def supprimer_modele(nom, dossiers=None):
+    """Supprime un modèle préparé dans le dossier de Lutin (un sous-dossier direct du dossier des modèles, rien d'autre)."""
+    nom = str(nom or "")
+    racine = dossier_modeles(dossiers)
+    cible = racine / nom
+    if not nom or nom in (".", "..") or "/" in nom or "\\" in nom or not cible.is_dir() or cible.parent.resolve() != racine.resolve():
+        raise ValueError(_t("Ce modèle n'est pas dans le dossier des modèles de Colibri : Lutin ne supprime que ce qu'il a téléchargé."))
+    shutil.rmtree(cible)
+    return True
 
 
 def preparer(ident, port=PORT_DEFAUT, dossiers=None, dire=print, lancer=subprocess.Popen, annule=lambda: False):
