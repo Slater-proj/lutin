@@ -93,10 +93,11 @@ def repond(actif=True):
 
 class Sequence(unittest.TestCase):
     def setUp(self):
-        for d in (machines.REVEIL, machines.ECHEC_REVEIL, machines.ALLUMEE, machines.DEPUIS_ALLUMEE, machines.SONDES, machines.SYNCHRO, machines.DERNIER_ETAT):
+        for d in (machines.REVEIL, machines.ECHEC_REVEIL, machines.ALLUMEE, machines.DEPUIS_ALLUMEE, machines.REPONDU, machines.A_REPONDU, machines.SONDES, machines.SYNCHRO, machines.DERNIER_ETAT):
             d.clear()
         self.m = machine()
         machines._ecrire_registre([self.m])
+        machines._REVEILS_REPRIS["fait"] = True          # pas de reprise depuis le disque, sauf dans le test qui la vérifie
         self.addCleanup(lambda: setattr(machines, "HOTE_ALLUME", None))
 
     def sonder(self, ouvrir=injoignable):
@@ -170,7 +171,9 @@ class Sequence(unittest.TestCase):
         # puis elle répond : tout est remis à zéro
         r = self.sonder(repond())
         self.assertEqual(r["etat"], "operationnel")
-        for suivi in (machines.REVEIL, machines.ECHEC_REVEIL, machines.ALLUMEE, machines.DEPUIS_ALLUMEE):
+        machines.REPONDU[self.m["id"]] -= machines.STABLE_REPONSE_S + 1          # elle répond sans interruption depuis assez longtemps
+        self.sonder(repond())
+        for suivi in (machines.REVEIL, machines.ECHEC_REVEIL, machines.ALLUMEE, machines.DEPUIS_ALLUMEE, machines.REPONDU, machines.A_REPONDU):
             self.assertNotIn(self.m["id"], suivi)
 
     def test_lutin_repond_apres_l_echec_la_machine_redevient_utilisable(self):
@@ -180,6 +183,46 @@ class Sequence(unittest.TestCase):
         r = self.sonder(repond())
         self.assertEqual((r["etat"], r.get("reveil_echec")), ("operationnel", None))
         self.assertNotIn(self.m["id"], machines.ECHEC_REVEIL)
+
+    def test_lutin_qui_repond_puis_redemarre_ne_fait_pas_retomber_la_machine_a_eteinte(self):
+        """Le défaut : à la première réponse de Lutin, tout le suivi du réveil était effacé ; si Lutin redémarrait ensuite (démarrage de session, réseau pas prêt), la séquence disparaissait et la machine
+        allumée semblait éteinte — alors qu'un nouveau clic sur « Réveiller » la retrouvait aussitôt à l'étape 2."""
+        machines.HOTE_ALLUME = lambda hote, mac, port: True
+        self.reveil_il_y_a(60)
+        r = self.sonder(repond())
+        self.assertIn(r["etat"], ("operationnel", "joignable"))
+        self.assertIn(self.m["id"], machines.REVEIL, "elle a répondu une fois : le réveil continue")
+        r = self.sonder()          # Lutin redémarre : plus de réponse
+        self.assertEqual((r["etat"], r["etape"], r.get("reveil_echec")), ("reveil_envoye", "allumee", None))
+        self.assertIn("Lutin y avait répondu", r["detail"])
+        self.assertIn("il redémarre", r["detail"])
+        r = self.sonder(repond())          # et il revient
+        self.assertEqual(r["etat"], "operationnel")
+
+    def test_le_reveil_est_fini_quand_lutin_repond_sans_interruption(self):
+        self.reveil_il_y_a(60)
+        self.sonder(repond())
+        machines.REPONDU[self.m["id"]] -= machines.STABLE_REPONSE_S + 1
+        self.assertEqual(self.sonder(repond())["etat"], "operationnel")
+        for suivi in (machines.REVEIL, machines.REPONDU, machines.A_REPONDU, machines.ALLUMEE):
+            self.assertNotIn(self.m["id"], suivi)
+        r = self.sonder()          # plus tard, une vraie extinction : « pas de réponse », sans faux espoir
+        self.assertEqual((r["etat"], r["etape"]), ("injoignable", "eteinte"))
+
+    def test_un_reveil_survit_au_redemarrage_de_ce_lutin(self):
+        machines.HOTE_ALLUME = lambda hote, mac, port: False
+        machines.reveiller(self.m["id"], envoyer=lambda mac, hote: [(hote, 9)])
+        self.assertTrue((machines.dossier() / "reveils.json").is_file())
+        machines.REVEIL.clear()          # CE Lutin redémarre : la mémoire est vide
+        machines._REVEILS_REPRIS["fait"] = False
+        r = self.sonder()
+        self.assertEqual((r["etat"], r["etape"]), ("reveil_envoye", "reveil"), "la séquence reprend là où elle en était")
+        # un réveil périmé n'est pas repris
+        machines.REVEIL.clear()
+        machines.ALLUMEE.clear()
+        (machines.dossier() / "reveils.json").write_text(json.dumps({self.m["id"]: round(time.time()) - alimentation.ATTENTE_REVEIL_S - 30}), encoding="utf-8")
+        machines._REVEILS_REPRIS["fait"] = False
+        self.assertEqual(self.sonder()["etape"], "eteinte")
 
     def test_la_synchronisation_ne_reste_pas_coincee(self):
         r = self.sonder(repond())

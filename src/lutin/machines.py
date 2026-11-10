@@ -53,6 +53,10 @@ ECHEC_REVEIL = {}          # id de machine -> texte : le réveil n'a pas abouti 
 ALLUMEE = {}          # id de machine -> (instant, verdict) : « le système répond » constaté pendant un réveil (gardé quelques secondes : la vérification coûte une ou deux secondes)
 DEPUIS_ALLUMEE = {}          # id de machine -> instant où elle a été vue allumée pour la première fois pendant ce réveil
 HOTE_ALLUME = None          # remplaçable (tests) ; par défaut alimentation.hote_allume
+A_REPONDU = {}          # machines dont Lutin a répondu pendant ce réveil (pour dire « il redémarre » s'il disparaît de nouveau)
+REPONDU = {}          # id de machine -> instant où Lutin a répondu pour la première fois pendant ce réveil (sans interruption depuis)
+STABLE_REPONSE_S = 25          # le réveil n'est « fini » que quand Lutin répond sans interruption depuis ce temps : un Lutin qui redémarre juste après avoir répondu ne fait pas retomber la machine à « éteinte »
+_REVEILS_REPRIS = {"fait": False}
 INFOS_NOEUD = {}          # adresse locale -> (instant, infos du nœud)
 INFOS_EN_COURS = {}          # adresse locale -> évènement : un calcul d'infos est en cours
 DISTANTS = {"t": 0.0, "v": [], "en_cours": False}          # modèles des autres machines, pour la liste de choix (voir modeles_distants)
@@ -567,6 +571,7 @@ def sonder(m, modele="", ouvrir=None, maintenant=time.monotonic, force=False):
         if gardee and not force and maintenant() - gardee[0] < (VALIDITE_SONDE_S if gardee[1].get("etat") == "operationnel" else VALIDITE_SONDE_ATTENTE_S) and gardee[2] == modele:
             return gardee[1]
     charge, droits, version, agir, allumee, demandes = None, {}, "", {}, False, []
+    _reprendre_reveils()
     try:
         rep = _json(m, "/api/noeud/etat", ouvrir=ouvrir, delai=DELAI_SONDE_REVEIL_S if m["id"] in REVEIL else DELAI_SONDE_S)          # une machine qui vient de démarrer répond lentement : plus de patience pendant un réveil
         if rep.get("id") == m["id"]:
@@ -593,6 +598,30 @@ def sonder(m, modele="", ouvrir=None, maintenant=time.monotonic, force=False):
     r = dict(r, **_etape(m, r, allumee))
     _noter(m, r["etat"], maintenant, r, modele)
     return r
+
+
+def _sauver_reveils():
+    """Les réveils en cours (heure réelle) sont notés sur disque : si CE Lutin redémarre pendant que l'autre machine démarre, la séquence reprend là où elle en était au lieu de tout oublier."""
+    reste = {i: round(time.time() - (time.monotonic() - t)) for i, t in REVEIL.items()}
+    try:
+        _ecrire("reveils.json", reste)
+    except OSError:
+        pass
+
+
+def _reprendre_reveils():
+    """Une fois par processus : les réveils notés sur disque qui ne sont pas périmés redeviennent « en cours »."""
+    if _REVEILS_REPRIS["fait"]:
+        return
+    _REVEILS_REPRIS["fait"] = True
+    notes = _lire("reveils.json", {})
+    for ident, quand in (notes.items() if isinstance(notes, dict) else []):
+        try:
+            age = time.time() - float(quand or 0)
+        except (TypeError, ValueError):
+            continue
+        if 0 <= age < alimentation.ATTENTE_REVEIL_S and ident not in REVEIL and RE_ID.match(str(ident)):
+            REVEIL[ident] = time.monotonic() - age
 
 
 def _allumee_pendant_reveil(m, maintenant=time.monotonic):
@@ -672,9 +701,18 @@ def _avec_reveil(m, r, maintenant=time.monotonic, allumee=False):
     with VERROU:
         envoye = REVEIL.get(m["id"])
         if r["etat"] != "injoignable":
-            for suivi in (REVEIL, ECHEC_REVEIL, ALLUMEE, DEPUIS_ALLUMEE):
+            ECHEC_REVEIL.pop(m["id"], None)
+            if envoye is not None:
+                A_REPONDU[m["id"]] = True
+                debut = REPONDU.setdefault(m["id"], maintenant())
+                if maintenant() - debut < STABLE_REPONSE_S:
+                    return r          # Lutin répond, mais depuis trop peu pour dire que le réveil est fini : s'il disparaît de nouveau (il redémarre), la séquence continue
+                journaliser("{} répond depuis {} s : réveil terminé".format(m["nom"], round(maintenant() - debut)))
+            for suivi in (REVEIL, ALLUMEE, DEPUIS_ALLUMEE, REPONDU, A_REPONDU):
                 suivi.pop(m["id"], None)
+            _sauver_reveils()
             return r
+        REPONDU.pop(m["id"], None)          # elle ne répond plus : le compte de stabilité repart de zéro
         if envoye is None:
             if m["id"] in ECHEC_REVEIL:
                 return dict(r, detail=ECHEC_REVEIL[m["id"]], reveil_echec=True)
@@ -683,11 +721,16 @@ def _avec_reveil(m, r, maintenant=time.monotonic, allumee=False):
         if depuis > alimentation.ATTENTE_REVEIL_S:
             REVEIL.pop(m["id"], None)
             DEPUIS_ALLUMEE.pop(m["id"], None)
+            A_REPONDU.pop(m["id"], None)
+            _sauver_reveils()
             ECHEC_REVEIL[m["id"]] = echec = _echec_reveil(m, allumee)
             journaliser("réveil de {} non abouti après {} s ({})".format(m["nom"], round(depuis), "allumée, Lutin ne répond pas" if allumee else "aucune réponse"))
             return dict(r, detail=echec, reveil_echec=True)
         vue_depuis = maintenant() - DEPUIS_ALLUMEE.get(m["id"], maintenant()) if allumee else 0
-    if allumee:
+    if allumee and m["id"] in A_REPONDU:
+        detail = _t("La machine est allumée et Lutin y avait répondu, mais il ne répond plus : il redémarre (démarrage de session, réseau pas encore prêt). Je continue d'attendre.")
+        suite = ""
+    elif allumee:
         detail = _t("La machine est allumée (elle répond au réseau) ; Lutin n'y répond pas encore — il démarre, ou ne démarre pas tout seul. Réveil envoyé il y a {} s ; je laisse jusqu'à {} min.").format(round(depuis), alimentation.ATTENTE_REVEIL_S // 60)
         suite = _t("Si Lutin ne démarre pas après la connexion de la session : sur cette machine, onglet Machines > « Démarrer Lutin à l'ouverture de ma session » (et auto-connexion Windows).") if vue_depuis > 90 else ""
     else:
@@ -715,8 +758,9 @@ def reveiller(ident, envoyer=alimentation.envoyer_reveil):
     envoyes = envoyer(m["mac"], hote)
     with VERROU:
         REVEIL[ident] = time.monotonic()
-        for suivi in (SONDES, ECHEC_REVEIL, ALLUMEE, DEPUIS_ALLUMEE):
+        for suivi in (SONDES, ECHEC_REVEIL, ALLUMEE, DEPUIS_ALLUMEE, REPONDU, A_REPONDU):
             suivi.pop(ident, None)
+        _sauver_reveils()
     journaliser("réveil envoyé à {}".format(m["nom"]))
     return {"ok": True, "mac": m["mac"], "envois": len(envoyes or []), "cartes": alimentation.adresses_locales(), "avertissements": [a for a in [alimentation.emission_limitee()] + avertissements(m) if a][:4]}          # le paquet est parti, mais on dit ce qui risque de l'empêcher de marcher
 
