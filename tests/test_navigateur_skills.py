@@ -55,7 +55,7 @@ class Skills(unittest.TestCase):
         self.addCleanup(p.fermer)
         p.aller("http://127.0.0.1:%d/" % port)
         p.attendre("!!document.querySelector('#bNouvelle')")
-        p.evaluer("window.confirm = () => true")
+        p.evaluer("window.confirm = () => true; window.alert = () => {}")
         return p
 
     def page_skills(self, p):

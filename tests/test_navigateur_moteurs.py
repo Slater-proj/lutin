@@ -90,7 +90,7 @@ class Moteurs(unittest.TestCase):
         self.addCleanup(p.fermer)
         p.aller("http://127.0.0.1:%d/" % port)
         p.attendre("!!document.querySelector('#bNouvelle')")
-        p.evaluer("window.confirm = () => true")
+        p.evaluer("window.confirm = () => true; window.alert = () => {}")
         return p
 
     def moteur_exllamav3(self, p):
@@ -248,7 +248,7 @@ class Moteurs(unittest.TestCase):
         time.sleep(1.2)
         p.evaluer("location.reload()")
         p.attendre("!!document.querySelector('#bNouvelle')")
-        p.evaluer("window.confirm = () => true")          # le rechargement a rendu les fenêtres de confirmation au navigateur : elles bloqueraient le test
+        p.evaluer("window.confirm = () => true; window.alert = () => {}")          # le rechargement a rendu les fenêtres de confirmation au navigateur : elles bloqueraient le test
         time.sleep(2.5)
 
     def test_la_page_modeles_de_lm_studio_est_celle_d_exllamav3_et_d_ollama(self):
@@ -261,7 +261,7 @@ class Moteurs(unittest.TestCase):
                 "/api/lmstudio-catalogue": {"suite": False, "modeles": [carte_gguf("lmstudio-community/Qwen3-8B-GGUF", "Qwen3-8B-GGUF", 5.4, "bien"), carte_gguf("lmstudio-community/Enorme-400B-GGUF", "Enorme-400B-GGUF", 240, "trop_gros")]},
                 "/api/lmstudio-quantifications": {"quantifications": [{"revision": "Q4_K_M", "go": 5.0, "adequation": {"niveau": "bien", "texte": "ok"}, "installe": False}, {"revision": "Q8_0", "go": 8.7, "adequation": {"niveau": "limite", "texte": "juste"}, "installe": False}]},
                 "/api/lmstudio-verifier": {"propositions": [carte_gguf("lmstudio-community/Nouveau-7B-GGUF", "Nouveau-7B-GGUF", 4.5, "ideal")]},
-                "/api/lmstudio-telecharger": {"tache": "ok"}}))
+                "/api/lmstudio-telecharger": {"tache": "ok"}, "/api/moteur-supprimer": {"ok": True}}))
             p.evaluer("document.querySelector('.onglets button[data-p=\"modeles\"]').click()")
             zone = "document.getElementById('lmstudioModeles')"
             p.attendre("%s.textContent.includes('Mes modèles') && %s.querySelectorAll('.mod').length >= 1" % (zone, zone), delai=30)

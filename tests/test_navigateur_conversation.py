@@ -36,7 +36,7 @@ class Conversation(unittest.TestCase):
         self.addCleanup(p.fermer)
         p.aller(adresse)
         p.attendre("!!document.querySelector('#bNouvelle')")
-        p.evaluer("window.confirm = () => true")
+        p.evaluer("window.confirm = () => true; window.alert = () => {}")
         return p
 
     def conversation_longue(self, tmp):
