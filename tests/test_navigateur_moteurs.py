@@ -115,6 +115,22 @@ class Moteurs(unittest.TestCase):
             self.assertIn("Changer de dossier", exl, "le dossier des modèles d'ExLlamaV3 se change comme celui de llama.cpp")
             self.assertEqual(p.erreurs, [])
 
+    def test_un_moteur_dont_le_dossier_est_choisi_par_son_installateur_montre_quand_meme_ses_modeles(self):
+        """Sous Linux, Ollama s'installe où son script le met : Lutin ne connaît pas ce dossier. La carte le dit au lieu de cacher aussi le dossier des modèles (régression vue sur la CI Linux)."""
+        sans_dossier = """(() => { const f0 = window.fetch.bind(window);
+          window.fetch = async (u, o) => { const r = await f0(u, o); if (String(u) !== '/api/moteurs') return r;
+            const d = await r.json(); d.moteurs.forEach(m => { if (m.id === 'ollama' && m.reglages && m.reglages.dossier) { m.reglages.dossier.actuel = ''; m.reglages.dossier.libre_go = { actuel: null, propose: null, defaut: null }; } });
+            return new Response(JSON.stringify(d), { status: 200, headers: { 'Content-Type': 'application/json' } }); };
+          return true; })()"""
+        with self.captures.serveur_demo({"LUTIN_LANGUE": "fr"}) as (port, tmp):
+            p = self.ouvrir(tmp, port)
+            p.evaluer(sans_dossier)
+            self.page_moteur(p)
+            texte = p.evaluer("(%s).textContent" % (self.CARTE % json.dumps("Ollama")))
+            self.assertIn("Dossier d'installation : celui de son installateur", texte)
+            self.assertIn("Dossier des modèles", texte)
+            self.assertEqual(p.erreurs, [])
+
     def test_le_dossier_des_modeles_d_exllamav3_se_change_depuis_la_carte(self):
         with self.captures.serveur_demo({"LUTIN_LANGUE": "fr"}) as (port, tmp):
             installer_exllamav3_pour_de_faux(tmp)

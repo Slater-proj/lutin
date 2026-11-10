@@ -1556,5 +1556,6 @@
 "Mes modèles": "My models",
 "Aucun modèle téléchargé pour le moment. Choisis-en un ci-dessous.": "No model downloaded yet. Choose one below.",
 "posé à la main dans le dossier des modèles": "placed by hand in the models folder",
-"Démarre ExLlamaV3 (Réglages > Moteur) pour tester la vitesse": "Start ExLlamaV3 (Settings > Engine) to test the speed"
+"Démarre ExLlamaV3 (Réglages > Moteur) pour tester la vitesse": "Start ExLlamaV3 (Settings > Engine) to test the speed",
+"celui de son installateur (Lutin ne le choisit pas)": "the one chosen by its installer (Lutin does not choose it)"
 }

@@ -3490,10 +3490,10 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     const raisons = !possibles ? [...new Set(Object.keys(LIBELLE_ACTION).map(a => m.actions[a]).filter(x => x && x.raison).map(x => x.raison))] : (!m.statut.installe && m.actions.installer && m.actions.installer.raison ? [m.actions.installer.raison] : []);
     raisons.slice(0, 2).forEach(r => d.appendChild(el('div', 'aide', 'ℹ ' + r)));
     const dd = m.reglages && m.reglages.dossier;          // les mêmes lignes pour tous les moteurs gérés par Lutin : où il est installé, où sont ses modèles
-    if (dd && dd.actuel) {
+    if (dd) {
       const libre = g => (g != null ? ' · ' + g + ' ' + T('Go libres') : '');
-      d.appendChild(el('div', 'aide', T('Dossier d\'installation : ') + dd.actuel + libre(dd.libre_go.actuel)));
-      d.appendChild(el('div', 'aide', dd.par === 'programme' ? T('Choisi par ') + m.nom + T(' lui-même : Lutin ne le déplace pas.') : (dd.personnalise ? T('Dossier choisi pour ce moteur seul (avant le « Dossier des moteurs » commun).') : T('Il se change pour tous les moteurs à la fois, avec « Dossier des moteurs » en haut de cette page.'))));
+      d.appendChild(el('div', 'aide', T('Dossier d\'installation : ') + (dd.actuel ? dd.actuel + libre(dd.libre_go.actuel) : T('celui de son installateur (Lutin ne le choisit pas)'))));
+      if (dd.actuel) d.appendChild(el('div', 'aide', dd.par === 'programme' ? T('Choisi par ') + m.nom + T(' lui-même : Lutin ne le déplace pas.') : (dd.personnalise ? T('Dossier choisi pour ce moteur seul (avant le « Dossier des moteurs » commun).') : T('Il se change pour tous les moteurs à la fois, avec « Dossier des moteurs » en haut de cette page.'))));
       if (dd.personnalise && dd.modifiable) {
         const r0 = el('button', '', T('Revenir au dossier commun des moteurs')); r0.disabled = !modifiable || dd.installe;
         r0.addEventListener('click', async () => { try { await api('/api/moteur-regler', { moteur: m.id, dossier: '' }); await rafraichir(); chargerMoteurs(true); } catch (e) { $('aideMoteur').textContent = e.message; } });
