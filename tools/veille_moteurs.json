@@ -9,14 +9,14 @@
  },
  "llamacpp": {
   "depot": "ggml-org/llama.cpp",
-  "vue": "b12179"
+  "vue": "b12248"
  },
  "ollama": {
   "depot": "ollama/ollama",
-  "vue": "v0.40.15"
+  "vue": "v0.40.16"
  },
  "strata": {
   "depot": "Niko1221/Strata",
-  "vue": "v0.2.11"
+  "vue": "v0.2.13"
  }
 }
