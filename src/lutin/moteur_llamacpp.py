@@ -170,12 +170,8 @@ def regler_serveur(moteur, donnees):
         s = str(donnees["serveur"] or "").strip().lower()
         if not re.match(r"^[a-z0-9-]{0,30}$", s):
             raise ErreurMoteur(_t("Serveur inconnu."))
-        if s != "colibri" and mo.colibri_choisi() and MoteurOpenAI.actif(mo):
-            raise ErreurMoteur(_t("Colibri tourne encore : arrête-le avant de choisir un autre serveur."))
-        if s != "lmstudio" and mo.lmstudio_choisi() and MoteurOpenAI.actif(mo):
-            raise ErreurMoteur(_t("LM Studio tourne encore : arrête-le avant de choisir un autre serveur."))
-        if s != "exllamav3" and mo.exllamav3_choisi() and MoteurOpenAI.actif(mo):
-            raise ErreurMoteur(_t("ExLlamaV3 tourne encore : arrête-le avant de choisir un autre serveur."))
+        if s != str(c.get("serveur") or ""):
+            mo.arreter_gere()          # un seul serveur compatible OpenAI à la fois : celui que Lutin a lancé est arrêté (sa mémoire est rendue), jamais laissé tourner en cachette
         if s:
             c["serveur"] = s
         else:
@@ -268,11 +264,14 @@ def espace_libre(p):
 def regler_dossier_modeles(moteur, chemin):
     """Change le dossier où llama.cpp range ses modèles (vide : le sous-dossier « modeles » de son dossier). Les modèles déjà téléchargés ne sont pas déplacés."""
     mo = moteurs.MOTEURS.get(moteur)
-    if not isinstance(mo, MoteurLlamaCpp):
+    exl = isinstance(mo, MoteurExterne) and mo.exllamav3_choisi()
+    if not isinstance(mo, MoteurLlamaCpp) and not exl:
         raise ErreurMoteur(_t("Les modèles de ce moteur se règlent dans l'onglet Modèles."))
-    valeur = valider_dossier(chemin, False)
+    valeur = valider_dossier(chemin, False, "ExLlamaV3" if exl else "llama.cpp")
     config = lire_config()
     c = config.setdefault(moteur, {})
+    if exl:
+        mo.arreter_gere()          # TabbyAPI lit son dossier de modèles au démarrage : arrêté ici, il repart sur le nouveau dossier au prochain « Démarrer »
     if valeur:
         c["dossier_modeles"] = valeur
     else:
@@ -292,6 +291,8 @@ def moteurs_installes_par_lutin():
     autre = moteurs.MOTEURS.get(moteurs.OPENAI)
     if isinstance(autre, MoteurExterne) and autre._colibri() is not None:
         trouves.append("Colibri")
+    if isinstance(autre, MoteurExterne) and autre._exl() is not None:
+        trouves.append("ExLlamaV3")
     return trouves
 
 
@@ -305,8 +306,18 @@ def vue_dossier_moteurs():
     docker = moteurs.CONTEXTE["en_docker"]()
     if docker and moteurs_docker.est_monte(moteurs_docker.MONTAGE) and os.access(moteurs_docker.MONTAGE, os.W_OK):
         defaut = Path(moteurs_docker.MONTAGE)          # sans choix de ta part, c'est lui qui serait pris
-    return {"actuel": str(actuel or ""), "defaut": str(defaut or ""), "source": detail["source"], "probleme": detail["probleme"], "docker": docker, "montage": moteurs_docker.MONTAGE,
-            "modifiable": detail["source"] != "env", "personnalise": detail["source"] == "reglage", "libre_go": espace_libre(actuel), "installes": moteurs_installes_par_lutin()}
+    propose = None
+    try:
+        ollama = moteurs.CONTEXTE["dossier_ollama"]()
+        if ollama and not docker:          # Ollama dans un dossier à lui (pas celui de son profil) : les autres moteurs peuvent vivre à côté de lui
+            o = Path(ollama)
+            if not (o == Path.home() / ".ollama" / "models" or Path.home() in o.parents and ".ollama" in o.parts) and o.parent != Path(actuel or "."):
+                propose = o.parent
+    except Exception:  # noqa: BLE001  (une proposition de plus : jamais une page cassée)
+        propose = None
+    return {"actuel": str(actuel or ""), "defaut": str(defaut or ""), "propose": str(propose or ""), "libre_go_propose": espace_libre(propose) if propose else None, "source": detail["source"], "probleme": detail["probleme"], "docker": docker,
+            "montage": moteurs_docker.MONTAGE, "modifiable": detail["source"] != "env", "personnalise": detail["source"] == "reglage", "libre_go": espace_libre(actuel), "installes": moteurs_installes_par_lutin(),
+            "sous_dossiers": ["ollama", "llamacpp", "colibri", "exllamav3"]}
 
 
 def regler_dossier_moteurs(chemin):
@@ -349,7 +360,9 @@ def vue_reglages(moteur):
         vue["avance"] = {"routeur": bool(c.get("routeur")), "routeur_possible": mo.routeur_possible(), "modeles_max": int(c.get("modeles_max") or MODELES_MAX_DEFAUT), "n_cpu_moe": int(c.get("n_cpu_moe") or 0),
                          "n_cpu_moe_possible": mo.option_possible("--n-cpu-moe"), "version_epinglee": c.get("version_epinglee", "")}
     if hasattr(mo, "info_dossier"):
-        vue["dossier"] = mo.info_dossier()
+        info = mo.info_dossier()
+        if info:
+            vue["dossier"] = info
     if isinstance(mo, MoteurExterne):
         vue["serveur"] = str(c.get("serveur") or "")
         if mo.colibri_choisi():
@@ -1213,6 +1226,16 @@ class MoteurExterne(MoteurOpenAI):
         from . import exllamav3
         return exllamav3.installee(self._dossiers()) if moteurs.CONTEXTE["donnees"]() else None
 
+    def _demarrer_apres_installation(self, progression, total, nom, demarrer, patience):
+        """Un serveur qu'on vient d'installer est démarré tout de suite : on ne laisse pas l'utilisateur devant un bouton « Démarrer » qu'il devrait deviner. Un échec ne défait pas l'installation : il est dit."""
+        progression(_t("Étape {}/{} : démarrage de {} ({})…").format(total, total, nom, patience), total - 1, total)
+        try:
+            demarrer()
+        except (ValueError, OSError, subprocess.SubprocessError) as e:
+            progression("⚠ " + _t("{} est installé, mais il ne démarre pas : {} — clique sur « Démarrer » pour réessayer.").format(nom, str(e).splitlines()[0][:160]), total, total)
+            return
+        progression(_t("Installé et démarré : {}.").format(nom), total, total)
+
     def _lms(self):
         """Le chemin de la commande `lms` si LM Studio (ou son démon) est installé, sinon None."""
         from . import lmstudio
@@ -1223,7 +1246,47 @@ class MoteurExterne(MoteurOpenAI):
         return str(self.config().get("modele_colibri") or "") or colibri.modele_du_setup()          # sinon celui que « coli setup » a préparé
 
     def _dossiers(self):
-        return {"donnees": moteurs.CONTEXTE["donnees"]()}
+        d = {"donnees": moteurs.CONTEXTE["donnees"]()}
+        choisi = self.config().get("dossier_modeles") if self.exllamav3_choisi() else None
+        if choisi:
+            d["modeles"] = choisi
+        return d
+
+    def info_dossier(self):
+        """Les mêmes lignes que pour Ollama et llama.cpp : où le serveur géré par Lutin est installé et où sont ses modèles ({} quand le serveur choisi n'est pas géré par Lutin).
+        Le dossier d'installation se choisit une fois pour tous les moteurs (« Dossier des moteurs ») ; celui des modèles, moteur par moteur quand c'est possible."""
+        libre = espace_libre
+        dossiers = self._dossiers()
+        if self.exllamav3_choisi():
+            from . import exllamav3
+            actuel, modeles = exllamav3.dossier(dossiers), exllamav3.dossier_modeles(dossiers)
+            return {"actuel": str(actuel), "propose": "", "defaut": str(actuel), "personnalise": False, "libre_go": {"actuel": libre(actuel), "propose": None, "defaut": libre(actuel)}, "installe": self._exl() is not None,
+                    "modifiable": False, "par": "moteurs", "modeles": {"actuel": str(modeles), "libre_go": libre(modeles), "modifiable": True, "personnalise": bool(self.config().get("dossier_modeles"))}}
+        if self.colibri_choisi():
+            from . import colibri
+            actuel, modeles = colibri.dossier_colibri(dossiers), colibri.dossier_modeles(dossiers)
+            return {"actuel": str(actuel), "propose": "", "defaut": str(actuel), "personnalise": False, "libre_go": {"actuel": libre(actuel), "propose": None, "defaut": libre(actuel)}, "installe": self._colibri() is not None,
+                    "modifiable": False, "par": "moteurs", "modeles": {"actuel": str(modeles), "libre_go": libre(modeles), "modifiable": False, "personnalise": False}}
+        if self.lmstudio_choisi():
+            actuel = Path.home() / ".lmstudio"
+            return {"actuel": str(actuel), "propose": "", "defaut": str(actuel), "personnalise": False, "libre_go": {"actuel": libre(actuel), "propose": None, "defaut": libre(actuel)}, "installe": self._lms() is not None,
+                    "modifiable": False, "par": "programme", "modeles": {"actuel": str(actuel / "models"), "libre_go": libre(actuel / "models"), "modifiable": False, "personnalise": False}}
+        return {}
+
+    def arreter_gere(self):
+        """Arrête le serveur géré par Lutin qui est choisi en ce moment (Colibri, LM Studio ou ExLlamaV3), s'il tourne. Vrai si quelque chose a été arrêté."""
+        if not (self.colibri_choisi() or self.lmstudio_choisi() or self.exllamav3_choisi()) or not MoteurOpenAI.actif(self):
+            return False
+        if self.exllamav3_choisi():
+            from . import exllamav3
+            exllamav3.arreter(self._dossiers())
+        elif self.lmstudio_choisi():
+            from . import lmstudio
+            if not lmstudio.arreter():
+                raise ErreurMoteur(_t("LM Studio n'a pas confirmé son arrêt."))
+        else:
+            self._arreter_colibri()
+        return True
 
     def _colibri(self):
         """(version, dossier de coli) si Colibri est installé par Lutin, sinon None."""
@@ -1322,9 +1385,12 @@ class MoteurExterne(MoteurOpenAI):
                     raise ErreurMoteur(_t("Mode hors ligne : aucun téléchargement."))
                 if self.exllamav3_choisi() and MoteurOpenAI.actif(self):
                     exllamav3.arreter(dossiers)          # on ne remplace pas un programme qui tourne
-                progression(_t("Installation d'ExLlamaV3 (TabbyAPI)…"), 0, 0)
-                r = exllamav3.installer(dossiers, self.port_exllamav3(), lambda texte: progression(texte, 0, 0), annule=annule)
-                progression(_t("Installé : ExLlamaV3 {}.").format(r["lib"] or r["tabby"][:7]), 1, 1)
+                avancement = {"fait": 0, "total": exllamav3.ETAPES_INSTALLATION + 1}          # les étapes de l'installation, puis le démarrage : une barre qui avance de vrai
+                progression(_t("Installation d'ExLlamaV3 (TabbyAPI)…"), 0, avancement["total"])
+                r = exllamav3.installer(dossiers, self.port_exllamav3(), lambda texte: progression(texte, avancement["fait"], avancement["total"]), annule=annule,
+                                        etape=lambda n, total: avancement.update(fait=n - 1))
+                self._demarrer_apres_installation(progression, avancement["total"], "ExLlamaV3 " + (r["lib"] or r["tabby"][:7]),
+                                                  lambda: exllamav3.demarrer(self.port_exllamav3(), dossiers), _t("le premier démarrage charge torch : une à deux minutes"))
             elif action == "desinstaller":
                 exllamav3.desinstaller(dossiers)
             elif action == "demarrer":
@@ -1371,7 +1437,7 @@ class MoteurExterne(MoteurOpenAI):
                     lmstudio.mettre_a_jour()
                 else:
                     lmstudio.installer(lambda texte: progression(texte, 0, 0), annule=annule)
-                progression(_t("Installé : LM Studio est prêt."), 1, 1)
+                self._demarrer_apres_installation(progression, 2, "LM Studio", lambda: lmstudio.demarrer(self.port_lmstudio()), _t("quelques secondes"))
             elif action == "demarrer":
                 progression(_t("Démarrage de LM Studio…"), 0, 0)
                 lmstudio.demarrer(self.port_lmstudio())
@@ -1465,6 +1531,17 @@ class MoteurExterne(MoteurOpenAI):
         except (ValueError, OSError, subprocess.SubprocessError, tarfile.TarError, zipfile.BadZipFile) as e:
             raise ErreurMoteur(str(e))
 
+    def supprimer_modele(self, nom):
+        if not self.exllamav3_choisi():
+            raise ErreurMoteur(_t("Ce serveur gère ses modèles lui-même."))
+        from . import exllamav3
+        try:
+            exllamav3.supprimer_modele(nom, self._dossiers())
+        except PermissionError:
+            raise ErreurMoteur(_t("Le modèle est utilisé : arrête ExLlamaV3 (bouton « Arrêter »), puis supprime-le."))
+        except (ValueError, OSError) as e:
+            raise ErreurMoteur(str(e))
+
     def _arreter_colibri(self):
         from . import colibri
         if not colibri.arreter(self.port_colibri(), dossiers=self._dossiers()):
@@ -1477,8 +1554,8 @@ class MoteurExterne(MoteurOpenAI):
         return {"discuter": ("natif", ""), "flux": ("natif", ""), "arret": ("natif", _t("La connexion est coupée : le serveur arrête de générer.")),
                 "outils": ("non_teste", _t("Dépend du serveur.")), "reflexion": ("non_teste", _t("Dépend du serveur.")), "vision": ("non_teste", _t("Dépend du serveur et du modèle.")),
                 "embeddings": ("non_teste", _t("Dépend du serveur.")), "plusieurs_modeles": ("non_teste", _t("Dépend du serveur.")),
-                "telechargement": ("non", _t("Le serveur gère ses modèles lui-même.")),
-                "installation": ("non_teste", _t("Lutin installe et lance Colibri ; le démarrage avec un vrai modèle n'est pas vérifié.")) if self.colibri_choisi() else ("non", _t("Lutin n'installe pas ce serveur (sauf Colibri, LM Studio et ExLlamaV3)."))}
+                "telechargement": ("adapte", _t("Depuis Hugging Face (modèles EXL3), par Lutin.")) if self.exllamav3_choisi() else ("non", _t("Le serveur gère ses modèles lui-même.")),
+                "installation": ("non_teste", _t("Lutin installe et lance Colibri ; le démarrage avec un vrai modèle n'est pas vérifié.")) if self.colibri_choisi() else (("non_teste", _t("Lutin installe et lance ExLlamaV3 (TabbyAPI) ; pas essayé sur une vraie carte NVIDIA.")) if self.exllamav3_choisi() else ("non", _t("Lutin n'installe pas ce serveur (sauf Colibri, LM Studio et ExLlamaV3).")))}
 
 
 def _systeme():

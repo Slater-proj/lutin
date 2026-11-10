@@ -195,7 +195,7 @@ class Carte(unittest.TestCase):
             self.mo.faire("demarrer", lambda *a: None)
             self.mo.faire("telecharger:openai/gpt-oss-20b", lambda *a: None)
             self.mo.faire("arreter", lambda *a: None)
-        self.assertEqual(suivi, ["installer", ("demarrer", 1234), ("telecharger", "openai/gpt-oss-20b")])
+        self.assertEqual(suivi, ["installer", ("demarrer", 1234), ("demarrer", 1234), ("telecharger", "openai/gpt-oss-20b")], "installé, puis démarré tout de suite ; « Démarrer » démarre")
         moteurs.CONTEXTE["hors_ligne"] = lambda: True
         with self.assertRaises(Exception):
             self.mo.faire("installer", lambda *a: None)

@@ -15,7 +15,7 @@ Réglages > Moteur : seuls les moteurs qui peuvent tourner sur cette machine son
 | Ollama | « Installer » (ou ton installation existante), télécharger un petit modèle depuis l'onglet Modèles | Le modèle apparaît dans la liste, une réponse arrive en quelques secondes |
 | llama.cpp | « Installer », choisir un modèle GGUF proposé, « Démarrer » | État « en marche », une réponse arrive ; « Arrêter » libère la mémoire |
 | LM Studio | « Installer » (Linux : la bibliothèque libatomic est installée ou la commande exacte est donnée) | Serveur démarré, modèles installés listés |
-| ExLlamaV3 (NVIDIA, hors Docker) | « Installer », puis télécharger un modèle par son dépôt Hugging Face (propriétaire/modèle) | Carte visible seulement sur NVIDIA ; une réponse arrive |
+| ExLlamaV3 (NVIDIA, hors Docker) | « Installer » (cinq étapes numérotées), puis onglet Modèles : explorer, choisir une quantification, « Installer » | Carte visible seulement sur NVIDIA ; le serveur démarre tout seul après l'installation ; « Mes modèles » montre la taille et le verdict pour ta carte ; une réponse arrive |
 | Colibri | « Préparer le modèle » depuis l'onglet Modèles | Aucune commande à saisir à la main ; l'état passe à « prêt » |
 | Chaque moteur | « Comparer les moteurs » avec le même modèle | Vitesse et mémoire mesurées, sans erreur |
 

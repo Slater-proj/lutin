@@ -23,6 +23,7 @@ from . import outils_externes as _outils_externes
 from . import calibrage as _calibrage
 from . import acces as _acces
 from . import adequation as _adequation
+from . import exllamav3_catalogue as _exl_cat
 from . import conseil as _conseil
 from . import conseil_machine as _conseil_machine
 from . import variantes as _variantes
@@ -600,12 +601,38 @@ class Gestionnaire(BaseHTTPRequestHandler):
             return self._envoyer(200, dict(_recherche.vue(), moteurs=_m.etat_moteurs_recherche(), modifiable=self._configurateur()))
         if chemin == "/api/mesures-moteurs":                      # Réglages > Moteur : ce que chaque moteur a donné ici (classement des mesures) et ceux qu'on peut mesurer maintenant
             return self._envoyer(200, _mesures.vue(_m.DONNEES, dict(_moteurs.MOTEURS), _m.reglages()))
-        if chemin == "/api/exllamav3-modeles":                    # onglet Modèles avec ExLlamaV3 : ce qui est téléchargé, lecture seule
+        if chemin in ("/api/exllamav3-modeles", "/api/exllamav3-catalogue", "/api/exllamav3-quantifications"):          # onglet Modèles avec ExLlamaV3 : ce qui est téléchargé, ce qu'on peut télécharger (Hugging Face), jugé pour cette machine
             mo = _moteurs.par_id("openai")
             if not mo.exllamav3_choisi():
                 return self._envoyer(404, {"erreur": _t("ExLlamaV3 n'est pas le serveur choisi.")})
             from . import exllamav3 as _exl
-            return self._envoyer(200, {"modeles": _exl.modeles(mo._dossiers()), "installe": mo._exl() is not None, "dossier": str(_exl.dossier_modeles(mo._dossiers()))})
+            q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+            profil = _adequation.profil_pret()
+            juger = (lambda go: _adequation.evaluer({"go": go}, profil)) if profil is not None else (lambda go: None)
+            installes = _exl.modeles(mo._dossiers())
+            try:
+                if chemin == "/api/exllamav3-modeles":
+                    actif = _m.reglages().get("modele")
+                    return self._envoyer(200, {"modeles": [dict(x, adequation=juger(x["taille_go"]) if x["taille_go"] else None, utilise=x["nom"] == actif) for x in installes], "installe": mo._exl() is not None,
+                                               "dossier": str(_exl.dossier_modeles(mo._dossiers())), "actif": bool(mo.modeles()["actif"])})
+                if chemin == "/api/exllamav3-catalogue":
+                    r = _exl_cat.chercher((q.get("q") or [""])[0], (q.get("tri") or ["recent"])[0], (q.get("communaute") or ["0"])[0] == "1", (q.get("page") or ["1"])[0])
+                    deja = {}
+                    for x in installes:
+                        deja.setdefault(x.get("depot", ""), []).append(x.get("revision") or "main")
+                    for m in r["modeles"]:
+                        m["adequation"] = juger(m["estimation_go"]) if m.get("estimation_go") else None
+                        m["installes"] = deja.get(m["id"], [])
+                    return self._envoyer(200, r)
+                depot = (q.get("depot") or [""])[0]
+                deja = {x.get("revision") or "main" for x in installes if x.get("depot") == depot}
+                quants = _exl_cat.quantifications(depot)
+                for x in quants:
+                    x["adequation"] = juger(x["go"]) if x.get("go") else None
+                    x["installe"] = x["revision"] in deja
+                return self._envoyer(200, {"quantifications": quants})
+            except ValueError as e:
+                return self._envoyer(502, {"erreur": str(e)})
         if chemin == "/api/lmstudio-modeles":                     # onglet Modèles avec LM Studio : ce qui est téléchargé (lms ls), lecture seule
             mo = _moteurs.par_id("openai")
             if not mo.lmstudio_choisi():
@@ -1277,6 +1304,26 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 mo = _moteurs.par_id(str(donnees["moteur"]))
                 modele = str(donnees.get("modele", ""))
                 return self._envoyer(200, _mesures.lancer(_m.DONNEES, mo, modele, str(donnees.get("mode", "rapide")), memoire=lambda: _bench_moteurs.memoire_du_moteur(mo.id, modele)))
+            if self.path == "/api/exllamav3-verifier":                 # chercher les mises à jour des modèles téléchargés, ou de nouveaux modèles qui tiennent sur cette machine
+                mo = _moteurs.par_id("openai")
+                if not mo.exllamav3_choisi():
+                    return self._envoyer(400, {"erreur": _t("ExLlamaV3 n'est pas le serveur choisi.")})
+                from . import exllamav3 as _exl
+                installes = _exl.modeles(mo._dossiers())
+                try:
+                    if str(donnees.get("portee")) == "maj":
+                        return self._envoyer(200, _exl_cat.versions_plus_recentes(installes))
+                    profil = _adequation.profil_pret()
+                    deja = {x.get("depot") for x in installes}
+                    propositions = []
+                    for m in _exl_cat.chercher("", "recent", False, 1)["modeles"]:
+                        ju = _adequation.evaluer({"go": m["estimation_go"]}, profil) if profil is not None and m.get("estimation_go") else None
+                        if m["id"] in deja or not ju or ju["niveau"] == "trop_gros":
+                            continue
+                        propositions.append(dict(m, adequation=ju))
+                    return self._envoyer(200, {"propositions": propositions[:8]})
+                except ValueError as e:
+                    return self._envoyer(502, {"erreur": str(e)})
             if self.path == "/api/exllamav3-telecharger":
                 if not self._configurateur():
                     return self._envoyer(403, {"erreur": _t("Cela se fait depuis cette machine (niveau « cette machine seulement » ou navigateur de cette machine).")})

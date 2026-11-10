@@ -36,6 +36,7 @@ RE_VERSION = re.compile(r"^\d{1,3}(\.\d{1,4}){1,3}$")
 RE_DEPOT_MODELE = re.compile(r"^[A-Za-z0-9][\w.-]{0,60}/[A-Za-z0-9][\w.-]{0,100}$")
 RE_REVISION = re.compile(r"^[A-Za-z0-9][\w./-]{0,40}$")
 TAILLE_ARCHIVE_MAX = 80_000_000
+FICHIER_ORIGINE = ".lutin.json"          # dans le dossier d'un modèle : d'où il vient
 PYTHON_MIN, PYTHON_MAX = (3, 10), (3, 14)
 
 
@@ -45,7 +46,9 @@ def dossier(dossiers=None):
 
 
 def dossier_modeles(dossiers=None):
-    return dossier(dossiers) / "modeles"
+    """Où TabbyAPI range les modèles : le dossier choisi par l'utilisateur (dossiers["modeles"]), sinon le sous-dossier « modeles » du dossier d'ExLlamaV3."""
+    choisi = (dossiers or {}).get("modeles")
+    return Path(choisi) if choisi else dossier(dossiers) / "modeles"
 
 
 def dossier_tabby(dossiers=None):
@@ -170,18 +173,29 @@ def version_lib(dossiers=None, lancer=subprocess.run):
     return m.group(1) if m and RE_VERSION.match(m.group(1)) else ""
 
 
-def installer(dossiers=None, port=PORT_DEFAUT, dire=print, http=miseajour.http_get, ouvrir=urllib.request.urlopen, lancer=subprocess.Popen, annule=lambda: False, executer=subprocess.run, installer_uv=None):
-    """Installe (ou met à jour) TabbyAPI + ExLlamaV3. Renvoie {tabby, lib}. Longue : torch pèse plusieurs Go. ValueError claire à chaque étape qui échoue."""
+ETAPES_INSTALLATION = 5
+
+
+def installer(dossiers=None, port=PORT_DEFAUT, dire=print, http=miseajour.http_get, ouvrir=urllib.request.urlopen, lancer=subprocess.Popen, annule=lambda: False, executer=subprocess.run, installer_uv=None, etape=None):
+    """Installe (ou met à jour) TabbyAPI + ExLlamaV3. Renvoie {tabby, lib}. Longue : torch pèse plusieurs Go. ValueError claire à chaque étape qui échoue.
+    `etape(n, total)` est appelée au début de chacune des ETAPES_INSTALLATION étapes : la page en fait une barre, et chaque texte annonce « Étape n/total »."""
     if not python_compatible():
         raise ValueError(_t("Python {}.{} n'est pas pris en charge par TabbyAPI (3.10 à 3.14).").format(*sys.version_info[:2]))
+    courante = [0]
+
+    def passer(n, texte):
+        courante[0] = n
+        if etape:
+            etape(n, ETAPES_INSTALLATION)
+        dire(_t("Étape {}/{} : {}").format(n, ETAPES_INSTALLATION, texte))
     base = dossier(dossiers)
     base.mkdir(parents=True, exist_ok=True)
-    dire(_t("Recherche du dernier code de TabbyAPI…"))
+    passer(1, _t("recherche du dernier code de TabbyAPI…"))
     sha = dernier_commit(http)
     cible = dossier_tabby(dossiers)
     with tempfile.TemporaryDirectory(prefix="lutin-tabby-") as tmp:
         archive = Path(tmp) / "tabby.zip"
-        dire(_t("Téléchargement de TabbyAPI ({})…").format(sha[:7]))
+        passer(2, _t("téléchargement de TabbyAPI ({})…").format(sha[:7]))
         _telecharger_zip(sha, archive, ouvrir)
         partiel = base / "tabby.partiel"
         shutil.rmtree(partiel, ignore_errors=True)
@@ -197,13 +211,16 @@ def installer(dossiers=None, port=PORT_DEFAUT, dire=print, http=miseajour.http_g
         shutil.rmtree(partiel, ignore_errors=True)
     venv = base / "venv"
     if not python_venv(dossiers).is_file():
-        dire(_t("Création de l'environnement Python dédié…"))
+        passer(3, _t("création de l'environnement Python dédié…"))
         outils_externes.creer_venv(venv, dossiers, dire, executer, installer_uv)          # le Python de l'installateur Windows n'a pas « venv » : uv le remplace, installé au besoin
-    dire(_t("Installation des dépendances (torch et ExLlamaV3 : plusieurs Go, patience)…"))
+    else:
+        passer(3, _t("environnement Python dédié déjà là."))
+    passer(4, _t("installation des dépendances (torch et ExLlamaV3 : plusieurs Go, plusieurs minutes — la ligne ci-dessous montre ce que pip fait)…"))
     proc = lancer([str(python_venv(dossiers)), "-m", "pip", "install", "-U", ".[cu12]"], cwd=str(cible), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, text=True, encoding="utf-8", errors="replace")
-    code, fin = _suivre(proc, dire, annule)
+    code, fin = _suivre(proc, lambda ligne: dire(_t("Étape {}/{} : installation des dépendances — {}").format(4, ETAPES_INSTALLATION, ligne)), annule)
     if code != 0 and not annule():
         raise ValueError(_t("L'installation des dépendances a échoué (code {}). Fin du message :\n{}").format(code, "\n".join(fin[-6:])))
+    passer(5, _t("vérification et réglages…"))
     lib = version_lib(dossiers, executer)
     dossier_modeles(dossiers).mkdir(parents=True, exist_ok=True)
     (cible / "config.yml").write_text(config_yaml(port, dossier_modeles(dossiers)), encoding="utf-8")
@@ -274,7 +291,37 @@ def desinstaller(dossiers=None):
             pass
 
 
-def telecharger_modele(depot, revision="", dossiers=None, dire=print, lancer=subprocess.Popen, annule=lambda: False):
+def nom_dossier_modele(depot, revision=""):
+    """Le dossier où `main.py download` range un modèle : le nom du dépôt, suivi de « _révision » quand une révision est demandée."""
+    nom = str(depot).split("/")[-1]
+    return nom + ("_" + revision if revision else "")
+
+
+def _dossiers_modeles(dossiers):
+    try:
+        return {p.name for p in dossier_modeles(dossiers).iterdir() if p.is_dir()}
+    except OSError:
+        return set()
+
+
+def noter_modele(dossiers, nom, depot, revision, commit):
+    """Garde d'où vient un modèle téléchargé (dépôt, révision, empreinte de la révision) : sans cela, impossible de dire plus tard qu'une version plus récente existe."""
+    try:
+        (dossier_modeles(dossiers) / nom / FICHIER_ORIGINE).write_text(json.dumps({"depot": depot, "revision": revision, "commit": commit}), encoding="utf-8")
+    except OSError:
+        pass
+
+
+def origine_modele(dossiers, nom):
+    """{depot, revision, commit} d'un modèle téléchargé par Lutin, {} sinon (modèle posé à la main dans le dossier)."""
+    try:
+        d = json.loads((dossier_modeles(dossiers) / nom / FICHIER_ORIGINE).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return {k: str(d.get(k, "")) for k in ("depot", "revision", "commit")} if isinstance(d, dict) else {}
+
+
+def telecharger_modele(depot, revision="", dossiers=None, dire=print, lancer=subprocess.Popen, annule=lambda: False, http=miseajour.http_get):
     """`main.py download <propriétaire/modèle> [--revision X]` : le téléchargeur de TabbyAPI (Hugging Face) dans le dossier des modèles."""
     depot, revision = str(depot or "").strip(), str(revision or "").strip()
     if not RE_DEPOT_MODELE.match(depot):
@@ -285,16 +332,41 @@ def telecharger_modele(depot, revision="", dossiers=None, dire=print, lancer=sub
         raise ValueError(_t("ExLlamaV3 n'est pas installé : installe-le d'abord (Réglages > Moteur)."))
     tabby = dossier_tabby(dossiers)
     (tabby / "config.yml").write_text(config_yaml(PORT_DEFAUT, dossier_modeles(dossiers)), encoding="utf-8")
+    avant = _dossiers_modeles(dossiers)
     cmd = [str(python_venv(dossiers)), "main.py", "download", depot] + (["--revision", revision] if revision else [])
     proc = lancer(cmd, cwd=str(tabby), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, text=True, encoding="utf-8", errors="replace")
     code, fin = _suivre(proc, dire, annule)
     if code != 0 and not annule():
         raise ValueError(_t("Le téléchargement du modèle a échoué (code {}). Fin du message :\n{}").format(code, "\n".join(fin[-6:])))
+    if code == 0:
+        nouveaux = _dossiers_modeles(dossiers) - avant
+        nom = nom_dossier_modele(depot, revision)
+        nom = nom if nom in nouveaux or not nouveaux else (sorted(nouveaux)[0] if len(nouveaux) == 1 else nom)
+        if (dossier_modeles(dossiers) / nom).is_dir():
+            try:
+                from . import exllamav3_catalogue
+                commit = exllamav3_catalogue.commit(depot, revision or "main", http)
+            except (ValueError, OSError):
+                commit = ""
+            noter_modele(dossiers, nom, depot, revision, commit)
+    return True
+
+
+def supprimer_modele(nom, dossiers=None):
+    """Supprime un modèle téléchargé (son dossier, et rien d'autre). Le nom est celui d'un sous-dossier direct du dossier des modèles."""
+    nom = str(nom or "")
+    if not nom or nom in (".", "..") or "/" in nom or "\\" in nom:
+        raise ValueError(_t("Nom de modèle invalide."))
+    racine = dossier_modeles(dossiers)
+    cible = racine / nom
+    if not cible.is_dir() or cible.parent.resolve() != racine.resolve():
+        raise ValueError(_t("Ce modèle n'est pas dans le dossier des modèles d'ExLlamaV3."))
+    shutil.rmtree(cible)
     return True
 
 
 def modeles(dossiers=None):
-    """Les modèles téléchargés : [{nom, taille_go}] (un dossier avec un config.json)."""
+    """Les modèles téléchargés : [{nom, taille_go, depot, revision, commit}] (un dossier avec un config.json ; depot/revision/commit vides pour un modèle posé à la main)."""
     sortie = []
     racine = dossier_modeles(dossiers)
     try:
@@ -303,5 +375,5 @@ def modeles(dossiers=None):
         return []
     for p in sous:
         taille = sum(f.stat().st_size for f in p.rglob("*") if f.is_file())
-        sortie.append({"nom": p.name, "taille_go": round(taille / 1e9, 1)})
+        sortie.append(dict({"nom": p.name, "taille_go": round(taille / 1e9, 1), "depot": "", "revision": "", "commit": ""}, **origine_modele(dossiers, p.name)))
     return sortie

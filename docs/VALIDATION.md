@@ -15,7 +15,7 @@ Settings > Engine: only the engines that can run on this machine are offered (th
 | Ollama | "Install" (or use your existing install), download a small model from the Models tab | The model shows in the list; an answer arrives within seconds |
 | llama.cpp | "Install", pick a suggested GGUF model, "Start" | State "running", an answer arrives; "Stop" frees the memory |
 | LM Studio | "Install" (Linux: the libatomic library is installed, or the exact command is given) | Server started, installed models listed |
-| ExLlamaV3 (NVIDIA, not in Docker) | "Install", then download a model by its Hugging Face repository (owner/model) | Card visible on NVIDIA only; an answer arrives |
+| ExLlamaV3 (NVIDIA, not in Docker) | "Install" (watch the five numbered steps), then Models tab: browse, pick a quantization, "Install" | Card visible on NVIDIA only; the server starts by itself after the install; "My models" shows the size and the verdict for your card; an answer arrives |
 | Colibri | "Prepare the model" from the Models tab | No command to type by hand; state becomes "ready" |
 | Every engine | "Compare engines" with the same model | Speed and memory measured, no error |
 

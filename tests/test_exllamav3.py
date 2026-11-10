@@ -329,7 +329,7 @@ class Carte(unittest.TestCase):
                 mock.patch.object(X, "telecharger_modele", lambda depot, rev, dossiers, dire, annule=None, **k: suivi.append(("modele", depot, rev))):
             for action in ("installer", "demarrer", "arreter", "desinstaller", "telecharger:turboderp/Qwen-exl3@4.0bpw"):
                 self.mo.faire(action, lambda *a: None)
-        self.assertEqual(suivi, [("installer", 5000), ("demarrer", 5000), "arreter", "desinstaller", ("modele", "turboderp/Qwen-exl3", "4.0bpw")])
+        self.assertEqual(suivi, [("installer", 5000), ("demarrer", 5000), ("demarrer", 5000), "arreter", "desinstaller", ("modele", "turboderp/Qwen-exl3", "4.0bpw")], "installé, puis démarré tout de suite ; « Démarrer » démarre")
         moteurs.CONTEXTE["hors_ligne"] = lambda: True
         with self.assertRaises(Exception):
             self.mo.faire("installer", lambda *a: None)

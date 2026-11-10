@@ -2,6 +2,13 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## ExLlamaV3 complet (étapes, démarrage, modèles à explorer), dossiers cohérents d'un moteur à l'autre
+
+- **L'installation d'ExLlamaV3 se suit** : cinq étapes numérotées (« Étape 4/5 : installation des dépendances — ce que pip fait en ce moment »), une barre qui avance, puis **le serveur démarre tout seul** (LM Studio aussi). Si le démarrage échoue, l'installation reste valable et le message dit pourquoi.
+- **La page Modèles d'ExLlamaV3 est celle d'Ollama** : *Mes modèles* (taille, « Très adapté / Adapté / Limite / Trop gros » pour ta machine, utiliser, tester la vitesse, supprimer), *Chercher les mises à jour* (l'empreinte de la branche a changé), *Chercher de nouveaux modèles* (récents qui tiennent sur ta machine), et **Explorer** le catalogue de Hugging Face : récents ou populaires, auteur d'ExLlamaV3 ou toute la communauté, cacher ce qui est trop gros, lien vers la page du modèle, et **choix de la quantification** (« 4.0bpw », « 6.0bpw »…) avec la taille exacte de chacune. Plus de champ à remplir à la main (il reste « Un autre modèle EXL3 »).
+- **Dossiers : les mêmes lignes pour chaque moteur** — « Dossier d'installation » puis « Dossier des modèles ». Le dossier d'installation se choisit **une seule fois**, pour tous les moteurs, dans « Dossier des moteurs » (qui propose aussi le dossier à côté d'Ollama) ; celui des modèles se change moteur par moteur (llama.cpp, ExLlamaV3 ; Ollama garde sa fenêtre qui copie les modèles). ExLlamaV3 compte désormais parmi les moteurs installés qu'un changement de dossier laisserait derrière.
+- **Changer de serveur dans la liste redessine la carte** : la liste gardait le focus et la carte restait celle d'ExLlamaV3 sous « Colibri ». Choisir un autre serveur **arrête celui que Lutin avait lancé** (un seul à la fois, sa mémoire est rendue) au lieu de refuser.
+
 ## Défilement libre, détecteur de boucle patient, plus aucune coupure silencieuse, audit des écrans
 
 - **Tu peux remonter lire pendant que l'assistant réfléchit ou écrit** : le fil ne te ramène en bas que si tu y étais. Un bouton ↓ apparaît pour redescendre ; envoyer un message te ramène en bas.
