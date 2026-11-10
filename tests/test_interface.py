@@ -17,7 +17,7 @@ FR = re.compile(r"[àâçéèêëîïôûùüÿœ]|\b(le|la|les|des|une|pas|pour
 CLASSES = {"erreur", "mermaid-erreur", "texte", "travail", "travail fini", "nouveau", "supprimer", "btn-copier", "fichier", "resume", "resume|fichier", "demander", "resume|fichier|demander", "menu-ouvrir", "menu-conv", "menu-titre", "barre-disque", "legende-disque", "fichiers-joints", "carte-fichier", "tete-fichier", "nom-fichier", "/fichier/", "fichiers", "dossier", "adresse", "nouveau new clear"}          # noms de classes CSS ou d'évènements, noms d'arguments des outils et mots-clés de la palette : pas du texte affiché
 # Textes de la page identiques en français et en anglais (marques, réglages techniques, mots communs aux deux langues) : les seuls qui n'ont pas besoin de traduction
 NEUTRES = {"Auto", "auto", "Conversation", "Documents", "English", "Français", "Langue / Language", "Maximum", "Mode", "Normal", "Ollama", "Skills", "Web", "min_p", "top_k", "top_p",
-           "lutin models", "https://lutin.exemple.fr", "SearXNG", "Brave Search", "http://127.0.0.1:8080"}
+           "lutin models", "SKILL.md", "https://lutin.exemple.fr", "SearXNG", "Brave Search", "http://127.0.0.1:8080"}
 
 
 def script():

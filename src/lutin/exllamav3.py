@@ -100,7 +100,7 @@ def derniere_version_lib(http=miseajour.http_get):
             return version
     except OSError:
         pass
-    raise ValueError(_t("Impossible de lire la dernière version d'ExLlamaV3 ({}). GitHub limite parfois les requêtes : réessaie dans quelques minutes.").format(cause))
+    raise ValueError(_t("Impossible de lire la dernière version d'ExLlamaV3 ({}). {}").format(cause, miseajour.suite_erreur(cause)))
 
 
 def dernier_commit(http=miseajour.http_get):
@@ -122,7 +122,7 @@ def dernier_commit(http=miseajour.http_get):
             return m.group(1)
     except OSError:
         pass
-    raise ValueError(_t("Impossible de lire le dernier code de TabbyAPI ({}). GitHub limite parfois les requêtes : réessaie dans quelques minutes.").format(cause))
+    raise ValueError(_t("Impossible de lire le dernier code de TabbyAPI ({}). {}").format(cause, miseajour.suite_erreur(cause)))
 
 
 def config_yaml(port, modeles):

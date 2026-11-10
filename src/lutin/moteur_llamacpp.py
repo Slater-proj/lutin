@@ -1577,8 +1577,8 @@ def _systeme():
 def _http_json(url, delai=20, pauses=(2, 5)):
     """Un JSON de GitHub / Hugging Face. Une panne passagère (502, 503, 504, 429, coupure) est patientée : trois essais avant de renoncer."""
     entetes = {"Accept": "application/json", "User-Agent": "Lutin"}
-    if os.environ.get("GITHUB_TOKEN") and urllib.parse.urlparse(url).hostname == "api.github.com":
-        entetes["Authorization"] = "Bearer " + os.environ["GITHUB_TOKEN"]          # uniquement pour l'API de GitHub (la CI, ou quelqu'un qui le veut) : relève la limite de requêtes
+    from . import github as _github
+    entetes.update(_github.entetes_pour(url))          # le compte GitHub (variable GITHUB_TOKEN ou réglages) : seulement pour l'API de GitHub, il relève la limite de requêtes
     req = urllib.request.Request(url, headers=entetes)
     for pause in (*pauses, None):
         try:

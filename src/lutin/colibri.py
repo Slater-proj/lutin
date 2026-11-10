@@ -67,7 +67,7 @@ def derniere_version(http=miseajour.http_get):
             return version
     except OSError:
         pass
-    raise ValueError(_t("Impossible de lire la dernière version de Colibri ({}). GitHub limite parfois les requêtes : réessaie dans quelques minutes.").format(cause))
+    raise ValueError(_t("Impossible de lire la dernière version de Colibri ({}). {}").format(cause, miseajour.suite_erreur(cause)))
 
 
 def dossier_colibri(dossiers=None):

@@ -25,18 +25,25 @@ TAILLE_MAX = 1_000_000
 ACCEPT_MANIFESTE = "application/vnd.docker.distribution.manifest.v2+json"
 
 
-def http_get(url, entetes=None, delai=10, ouvrir=urllib.request.urlopen):
+def http_get(url, entetes=None, delai=10, ouvrir=urllib.request.urlopen, taille_max=None):
     """(statut, en-têtes en minuscules, corps). Lève OSError si le réseau est absent. HTTPS obligatoire."""
     if not url.startswith("https://"):
         raise OSError(_t("adresse non sécurisée refusée"))
     horsligne.garde(url)
-    req = urllib.request.Request(url, headers=dict(entetes or {}, **{"User-Agent": "lutin"}))
+    from . import github as _github
+    req = urllib.request.Request(url, headers=dict(_github.entetes_pour(url), **dict(entetes or {}), **{"User-Agent": "lutin"}))          # le compte GitHub (facultatif) lève la limite de requêtes ; il ne part que vers api.github.com
     try:
         with ouvrir(req, timeout=delai) as r:
-            corps = r.read(TAILLE_MAX + 1)
+            corps = r.read((taille_max or TAILLE_MAX) + 1)
             return r.status, dict({k.lower(): v for k, v in r.headers.items()}, **{"x-lutin-url-finale": r.geturl()}), corps          # l'adresse après redirections : la page des publications y met le numéro de version
     except urllib.error.HTTPError as e:
         return e.code, {k.lower(): v for k, v in (e.headers or {}).items()}, b""
+
+
+def suite_erreur(cause):
+    """La fin d'un message « impossible de lire sur GitHub » : le conseil du compte GitHub si la cause est la limite de requêtes, sinon patienter."""
+    from . import github as _github
+    return _github.suite_erreur(cause)
 
 
 def separer(modele):
@@ -217,6 +224,9 @@ def derniere_release_detail(depot=DEPOT, http=http_get):
             erreur = _t("aucune publication trouvée")
         else:
             erreur = "api.github.com : HTTP {}".format(statut)
+            if statut in (403, 429):
+                from . import github as _github
+                erreur += " — " + _github.conseil()
     except (OSError, ValueError) as e:
         erreur = "api.github.com : {}".format(e)
     try:

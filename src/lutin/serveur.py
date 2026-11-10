@@ -25,6 +25,9 @@ from . import acces as _acces
 from . import adequation as _adequation
 from . import exllamav3_catalogue as _exl_cat
 from . import lmstudio_catalogue as _lms_cat
+from . import github as _github
+from . import skills_tiers as _skills
+from . import travaux as _travaux
 from . import conseil as _conseil
 from . import conseil_machine as _conseil_machine
 from . import variantes as _variantes
@@ -436,6 +439,10 @@ class Gestionnaire(BaseHTTPRequestHandler):
             return self._envoyer(200, {"canaux": _notif.lister(), "types": _notif.types()})
         if chemin == "/api/planifie":
             return self._envoyer(200, _plan.etat())
+        if chemin == "/api/github":                              # le compte GitHub (facultatif) : configuré ou non, jamais le jeton
+            return self._envoyer(200, dict(_github.vue(), modifiable=self._configurateur()))
+        if chemin.startswith("/api/skills-tiers"):               # skills tiers : sources, recherche, fiche, installés
+            return self._skills_tiers_lire(chemin)
         if chemin == "/api/documents":
             return self._envoyer(200, _rappel.etat_documents())
         if chemin == "/api/documents-chercher":
@@ -990,6 +997,10 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 if self.path == "/api/notifications-supprimer":
                     return self._envoyer(200, {"canaux": _notif.supprimer(str(donnees.get("id", "")))})
                 return self._envoyer(200, _notif.tester(str(donnees.get("id", ""))))
+            if self.path.startswith(("/api/github-", "/api/skills-tiers-")):
+                if not self._configurateur():
+                    return self._envoyer(403, {"erreur": _t("Cela se règle depuis cette machine (niveau « cette machine seulement » ou navigateur de cette machine).")})
+                return self._skills_tiers_ecrire(self.path, donnees)
             if self.path in ("/api/planifie-ajouter", "/api/planifie-modifier", "/api/planifie-arreter", "/api/planifie-supprimer", "/api/planifie-activer", "/api/planifie-lancer", "/api/planifie-notifier"):
                 if not self._configurateur():
                     return self._envoyer(403, {"erreur": _t("Les tâches planifiées se gèrent depuis cette machine (niveau « cette machine seulement » ou navigateur de cette machine).")})
@@ -1338,6 +1349,85 @@ class Gestionnaire(BaseHTTPRequestHandler):
         return self._envoyer(404, {"erreur": "introuvable"})
 
     # ---- ce Lutin prête son moteur à une autre machine (voir lutin.machines) ----
+    @staticmethod
+    def _racines_travail():
+        """{id: chemin} des dossiers de travail, et l'identifiant du dossier actif (où les skills s'installent par défaut)."""
+        cfg = _m.config_lue()
+        actif = _travaux.actif(cfg)
+        return {t["id"]: t["chemin"] for t in _travaux.liste(cfg)}, (actif["id"] if actif else "")
+
+    def _skills_tiers_lire(self, chemin):
+        q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+        un = lambda cle, defaut="": (q.get(cle) or [defaut])[0]  # noqa: E731
+        try:
+            if chemin == "/api/skills-tiers":                     # tout ce que la page demande en arrivant
+                racines, actif = self._racines_travail()
+                return self._envoyer(200, {"sources": _skills.sources(), "github": _github.vue(), "travaux": [{"id": i, "nom": Path(c).name or c} for i, c in racines.items()], "actif": actif,
+                                           "indexation": {d: dict(e) for d, e in _skills.INDEXATION.items()}, "modifiable": self._configurateur()})
+            if chemin == "/api/skills-tiers-chercher":
+                depots = [d for d in un("depots").split(",") if d] or [s["depot"] for s in _skills.sources()]
+                connus = {s["depot"] for s in _skills.sources()}
+                if any(d not in connus for d in depots):
+                    return self._envoyer(400, {"erreur": _t("Ce dépôt n'est pas dans ta liste.")})
+                return self._envoyer(200, _skills.chercher(un("q"), depots, un("page", "1")))
+            if chemin == "/api/skills-tiers-depots":
+                return self._envoyer(200, {"depots": _skills.chercher_depots(un("q"))})
+            if chemin == "/api/skills-tiers-fiche":
+                depot = "/".join(_skills.lire_depot(un("depot")))
+                if depot not in {s["depot"] for s in _skills.sources()}:
+                    return self._envoyer(400, {"erreur": _t("Ce dépôt n'est pas dans ta liste.")})
+                return self._envoyer(200, _skills.fiche(depot, un("dir")))
+            if chemin == "/api/skills-tiers-installes":
+                racines, _ = self._racines_travail()
+                liste = _skills.installes(racines)
+                return self._envoyer(200, {"installes": _skills.mises_a_jour(liste) if un("verifier") == "1" else liste})
+        except ValueError as e:
+            return self._envoyer(400, {"erreur": str(e)})          # jamais 5xx : une lecture qui échoue (limite de GitHub, réseau) est un refus expliqué, pas une panne de Lutin
+        return self._envoyer(404, {"erreur": "introuvable"})
+
+    def _skills_tiers_ecrire(self, chemin, donnees):
+        try:
+            if chemin == "/api/github-enregistrer":
+                return self._envoyer(200, _github.enregistrer(donnees.get("jeton")))
+            if chemin == "/api/github-tester":
+                return self._envoyer(200, _github.tester(_skills.http_defaut))
+            if chemin == "/api/skills-tiers-source":
+                if donnees.get("retirer"):
+                    return self._envoyer(200, {"sources": _skills.retirer_source(str(donnees.get("depot", "")))})
+                return self._envoyer(200, {"sources": _skills.ajouter_source(donnees.get("depot"))})
+            racines, actif = self._racines_travail()
+            if chemin == "/api/skills-tiers-indexer":
+                depot = str(donnees.get("depot", ""))
+                if depot not in {s["depot"] for s in _skills.sources()}:
+                    return self._envoyer(400, {"erreur": _t("Ce dépôt n'est pas dans ta liste.")})
+                if not (_skills.INDEXATION.get(depot) or {}).get("fini", True):
+                    return self._envoyer(200, {"deja": True})
+                threading.Thread(target=lambda: _skills.indexer(depot), daemon=True, name="skills-indexation").start()
+                return self._envoyer(200, {"ok": True})
+            travail = str(donnees.get("travail") or actif)
+            if travail not in racines:
+                return self._envoyer(400, {"erreur": _t("Choisis le dossier de travail où installer le skill (Réglages > Dossiers).")})
+            if chemin in ("/api/skills-tiers-installer", "/api/skills-tiers-maj"):
+                if chemin == "/api/skills-tiers-maj":
+                    s = next((x for x in _skills.installes({travail: racines[travail]}) if x["nom"] == str(donnees.get("nom", ""))), None)
+                    if s is None:
+                        return self._envoyer(400, {"erreur": _t("Ce skill n'a pas été installé par Lutin.")})
+                    depot, dossier, remplacer, nom = s["depot"], s["dir"], True, s["nom"]
+                else:
+                    depot, dossier, remplacer, nom = "/".join(_skills.lire_depot(donnees.get("depot"))), str(donnees.get("dir", "")), False, ""
+                    if depot not in {x["depot"] for x in _skills.sources()}:
+                        return self._envoyer(400, {"erreur": _t("Ce dépôt n'est pas dans ta liste.")})
+                r = _skills.installer(depot, dossier, racines[travail], danger_ok=bool(donnees.get("danger_ok")), licence_ok=bool(donnees.get("licence_ok")), remplacer=remplacer, nom=nom)
+                _m.journaliser("Skill tiers installé : {} ({}, {}).".format(r["nom"], depot, dossier))
+                return self._envoyer(200, r)
+            if chemin == "/api/skills-tiers-retirer":
+                _skills.retirer(racines[travail], str(donnees.get("nom", "")))
+                _m.journaliser("Skill tiers retiré : {}.".format(str(donnees.get("nom", ""))[:60]))
+                return self._envoyer(200, {"ok": True})
+        except ValueError as e:
+            return self._envoyer(400, {"erreur": str(e)})          # jamais 5xx : une lecture qui échoue (limite de GitHub, réseau) est un refus expliqué, pas une panne de Lutin
+        return self._envoyer(404, {"erreur": "introuvable"})
+
     def _modeles_serveur_gere(self, chemin):
         """ExLlamaV3, LM Studio et Colibri : les mêmes routes (modèles, catalogue, quantifications), les mêmes réponses — la page Modèles est donc la même pour les trois."""
         genre, route = ROUTES_MODELES_GERES[chemin.split("?")[0]]

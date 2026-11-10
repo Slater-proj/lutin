@@ -615,6 +615,19 @@ body[data-moteur="openai"] .biblio { display:none !important; }
       <button id="bDSkill">Supprimer</button>
       <span class="aide" id="mS"></span>
     </div>
+    <h2>Skills tiers <span class="aide">(des skills publiés sur GitHub : cherche, examine, installe)</span></h2>
+    <div class="aide">Un skill est un dossier avec un fichier <code>SKILL.md</code> : des consignes que l'assistant lit quand le sujet arrive (format ouvert, utilisé par Claude, Codex, Cursor…). Cherche-en sur GitHub, examine la fiche (licence, scripts, analyse de sécurité) puis installe-le dans un dossier de travail, où Lutin l'utilise comme les skills de « Projet Claude ». <b>Rien ne s'exécute à l'installation</b>, et les scripts d'un skill ne tournent jamais sans ton accord, commande par commande. Un skill est un texte que le modèle suit : n'installe que ce que tu as lu.</div>
+    <div id="skGithub" class="aide" style="margin:6px 0"></div>
+    <div class="carte" style="display:block"><b>Dépôts parcourus</b> <span class="aide">(coche ceux où chercher)</span><div id="skSources" style="margin:6px 0"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><input id="skNouveauDepot" placeholder="Ajouter un dépôt : propriétaire/dépôt ou adresse GitHub" style="flex:1 1 280px"><button id="bSkAjouterDepot">Ajouter</button><button id="bSkTrouverDepots" title="Cherche sur GitHub des dépôts qui portent le sujet « agent-skills »">Trouver des dépôts…</button></div>
+      <div id="skDepotsTrouves"></div></div>
+    <div class="carte" style="gap:8px;flex-wrap:wrap;align-items:center"><input id="skQ" placeholder="Chercher un skill (un nom ou un sujet : pdf, seo, tests…)" style="flex:1 1 280px"><button id="bSkChercher" class="principal">Chercher</button><button id="bSkIndexer" title="Lit la description de tous les skills des dépôts cochés pour que la recherche porte aussi sur elles (un fichier par skill : quelques minutes pour un gros dépôt)">Lire toutes les descriptions</button></div>
+    <div id="skMsg" class="aide" role="status"></div>
+    <div id="skResultats"></div>
+    <div style="margin:6px 0"><button id="bSkPlus" hidden>Voir la suite</button></div>
+    <h3>Skills installés par Lutin</h3>
+    <div id="skInstalles" class="aide">Aucun.</div>
+    <div style="margin:6px 0"><button id="bSkVerifier">Chercher les mises à jour</button> <span class="aide" id="skMsgInstalles"></span></div>
   </div></section>
   <section class="page" id="p-auto"><div class="cadre">
     <div class="aide">Ce que Lutin fait tout seul, sans que tu sois devant l'écran. Lutin doit tourner (l'icône en bas à droite) ; la page n'a pas besoin d'être ouverte.</div>
@@ -782,6 +795,13 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     <div id="rechCles"></div>
     <div class="carte" style="gap:8px;flex-wrap:wrap;align-items:center"><button id="bRechTest" class="principal">Tester la recherche</button><span class="aide" id="rechMsg" role="status"></span></div>
     <div id="rechResultats"></div>
+    </div>
+    <div id="githubBloc">
+    <h2>Compte GitHub <span class="aide">(facultatif)</span></h2>
+    <div class="aide"><b>À quoi ça sert.</b> Lutin lit GitHub pour connaître les nouvelles versions de ses moteurs (Ollama, llama.cpp, Colibri, ExLlamaV3), pour se mettre à jour lui-même et pour chercher des skills. Sans compte, GitHub n'accepte que <b>60 requêtes par heure</b> depuis ton adresse ; avec un compte, <b>5 000</b>. Ajouter ton compte lève cette limite pour toute l'application.</div>
+    <div class="aide"><b>Comment faire.</b> Sur github.com : Settings &gt; Developer settings &gt; Personal access tokens &gt; « Generate new token », <b>sans cocher aucune permission</b> (Lutin n'en a pas besoin : le jeton ne sert qu'à s'identifier). Colle-le ici. Il reste sur cette machine, il n'est envoyé qu'à api.github.com, il n'est jamais réaffiché et l'assistant ne peut pas le lire.</div>
+    <div class="carte" style="gap:8px;flex-wrap:wrap;align-items:center"><input id="ghJeton" type="password" placeholder="Jeton GitHub (ghp_… ou github_pat_…)" autocomplete="off" style="flex:1 1 280px"><button id="bGhEnregistrer">Enregistrer</button><button id="bGhRetirer">Retirer</button><button id="bGhTester">Tester</button></div>
+    <div id="ghEtat" class="aide" role="status"></div>
     </div>
     </details>
     <details class="groupe" data-g="machine"><summary>Machine et réglages avancés</summary>
@@ -2071,7 +2091,8 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     if (b.dataset.p === 'acces') chargerAcces();
     if (b.dataset.p === 'chat' && CONV && !(FLUX && FLUX.detache)) lue(CONV.id);          // on revient lire : la pastille verte s'éteint tout de suite
     if (b.dataset.p === 'sante') window.ouvrirSante();
-    if (b.dataset.p === 'reglages') { chargerFichiersCrees(); chargerMoteurs(); chargerRecherche(); }
+    if (b.dataset.p === 'reglages') { chargerFichiersCrees(); chargerMoteurs(); chargerRecherche(); chargerGithub(); }
+    if (b.dataset.p === 'memoire') chargerSkillsTiers();
     if (b.dataset.p === 'machines') chargerMachines(true);
   }));
   $('bEnvoyer').addEventListener('click', () => envoyer());          // sans argument : l'évènement du clic n'est pas un message sorti de la file d'attente
@@ -2337,7 +2358,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     if (g === 'moteur') { try { chargerMesures(); } catch (e) { /* la rubrique se refera à la prochaine ouverture */ } }
   };
   // L'ordre des sous-menus des pages longues : du plus courant au plus rare. Ce sont les rangs d'origine des rubriques (l'ordre du texte de la page) dans l'ordre où elles s'affichent ; les boutons gardent leur lien avec leur section.
-  const ORDRE_RUBRIQUES = { 'p-memoire': [0, 1, 3, 4, 5, 2], 'p-acces': [0, 1, 3, 2] };
+  const ORDRE_RUBRIQUES = { 'p-memoire': [0, 1, 3, 4, 5, 6, 2], 'p-acces': [0, 1, 3, 2] };
   // Les pages longues (Mémoire, Automatisation, Accès) : un sous-menu bâti à partir de leurs titres, une rubrique à la fois, la dernière retenue
   const rubriquer = id => {
     const cadre = document.querySelector('#' + id + ' > .cadre'); if (!cadre) return;
@@ -2354,6 +2375,169 @@ body[data-moteur="openai"] .biblio { display:none !important; }
   ['p-memoire', 'p-auto', 'p-acces'].forEach(rubriquer);
   document.querySelectorAll('#sousReglages button').forEach(b => b.addEventListener('click', () => montrerRubrique(b.dataset.g)));
   { let g = 'general'; try { g = localStorage.getItem('lutin.reglages.rubrique') || g; } catch (e) { /* idem */ } if (!document.querySelector('#sousReglages button[data-g="' + g + '"]')) g = 'general'; montrerRubrique(g); }
+  // ---- Compte GitHub (Réglages > Outils) : lève la limite de 60 requêtes par heure pour toute l'application ; le jeton n'est jamais réaffiché
+  let GITHUB = null;
+  const chargerGithub = async () => {
+    try { GITHUB = await api('/api/github'); } catch (e) { return; }
+    const z = $('ghEtat'), env = GITHUB.source === 'environnement';
+    z.textContent = GITHUB.configure
+      ? '✔ ' + T('Compte GitHub enregistré (jeton se terminant par ') + GITHUB.fin + ') ' + (env ? T('— défini par la variable GITHUB_TOKEN : pour le changer, modifie la variable.') : '')
+      : T('Aucun compte GitHub : limite de 60 requêtes par heure. Ajoute un jeton pour ne plus être limité.');
+    $('bGhEnregistrer').disabled = $('ghJeton').disabled = !GITHUB.modifiable || env; $('bGhRetirer').disabled = !GITHUB.modifiable || !GITHUB.configure || env; $('bGhTester').disabled = false;
+    majSkGithub();
+  };
+  $('bGhEnregistrer').addEventListener('click', async () => {
+    try { GITHUB = await api('/api/github-enregistrer', { jeton: $('ghJeton').value }); $('ghJeton').value = ''; await chargerGithub(); $('ghEtat').textContent += ' ' + T('Enregistré.'); }
+    catch (e) { $('ghEtat').textContent = e.message; }
+  });
+  $('bGhRetirer').addEventListener('click', async () => { if (!confirm(T('Retirer ton compte GitHub de Lutin ?'))) return; try { await api('/api/github-enregistrer', { jeton: '' }); await chargerGithub(); } catch (e) { $('ghEtat').textContent = e.message; } });
+  $('bGhTester').addEventListener('click', async () => {
+    const b = $('bGhTester'); b.disabled = true; $('ghEtat').textContent = T('Test en cours…');
+    try {
+      const r = await api('/api/github-tester', {});
+      $('ghEtat').textContent = (r.identifie ? '✔ ' + (r.compte ? T('Identifié comme ') + r.compte + ' · ' : T('Jeton accepté · ')) : '⚠ ' + T('Sans compte · ')) + r.restantes + ' / ' + r.limite + ' ' + T('requêtes restantes cette heure') + (r.retour ? ' (' + T('remise à zéro vers ') + r.retour + ')' : '') + '.';
+    } catch (e) { $('ghEtat').textContent = e.message; }
+    b.disabled = false;
+  });
+  // ---- Skills tiers (Mémoire) : chercher sur GitHub, lire la fiche, installer dans un dossier de travail, mettre à jour, retirer
+  const SK = { sources: [], coches: new Set(), page: 1, travaux: [], actif: '', modifiable: false, q: '' };
+  const conseilGithub = z => {          // quand GitHub dit « trop de requêtes » et qu'aucun compte n'est donné : on le propose, avec le chemin
+    const b = el('button', 'principal', T('Ajouter mon compte GitHub')); b.addEventListener('click', () => { ouvrirOnglet('reglages'); montrerRubrique('outils'); $('githubBloc').scrollIntoView({ block: 'start' }); $('ghJeton').focus(); });
+    z.appendChild(document.createTextNode(' ')); z.appendChild(b);
+  };
+  const erreurSk = (z, e) => { z.textContent = ''; z.appendChild(el('span', 'erreur', e.message)); if (/GitHub limite|limite le nombre/.test(e.message) && !(GITHUB && GITHUB.configure)) conseilGithub(z); };
+  const majSkGithub = () => {
+    const z = $('skGithub'); if (!z) return; z.textContent = '';
+    if (GITHUB && GITHUB.configure) { z.textContent = '✔ ' + T('Compte GitHub ajouté : pas de limite de 60 requêtes par heure.'); return; }
+    z.textContent = 'ℹ ' + T('Sans compte GitHub, la recherche est limitée à 60 requêtes par heure (un dépôt = 1 requête, une fiche = 1 ou 2). Ajoute ton compte pour ne plus être limité.'); conseilGithub(z);
+  };
+  const chargerSkillsTiers = async () => {
+    let r; try { r = await api('/api/skills-tiers'); } catch (e) { return; }
+    SK.sources = r.sources; SK.travaux = r.travaux; SK.actif = r.actif; SK.modifiable = r.modifiable; GITHUB = Object.assign(GITHUB || {}, r.github, { modifiable: r.modifiable }); majSkGithub();
+    if (!SK.coches.size) r.sources.filter(x => x.defaut).forEach(x => SK.coches.add(x.depot));
+    dessinerSources(); chargerInstalles(false);
+  };
+  const dessinerSources = () => {
+    const z = $('skSources'); z.textContent = '';
+    SK.sources.forEach(x => {
+      const l = el('label'); l.style.cssText = 'display:inline-flex;gap:6px;align-items:center;margin:2px 14px 2px 0'; const c = document.createElement('input'); c.type = 'checkbox'; c.checked = SK.coches.has(x.depot);
+      c.addEventListener('change', () => { if (c.checked) SK.coches.add(x.depot); else SK.coches.delete(x.depot); });
+      l.append(c, document.createTextNode(' ' + x.depot)); if (x.nom !== x.depot) l.appendChild(el('span', 'aide', ' · ' + x.nom));
+      if (!x.defaut) { const r = el('button', '', '✕'); r.title = T('Retirer ce dépôt de ma liste'); r.addEventListener('click', async e => { e.preventDefault(); try { const d = await api('/api/skills-tiers-source', { depot: x.depot, retirer: true }); SK.sources = d.sources; SK.coches.delete(x.depot); dessinerSources(); } catch (er) { $('skMsg').textContent = er.message; } }); l.appendChild(r); }
+      z.appendChild(l);
+    });
+  };
+  const badge = (texte, classe, titre) => { const b = el('span', 'puce ' + (classe || ''), texte); if (titre) b.title = titre; return b; };
+  const carteSkill = x => {
+    const c = el('div', 'carte'); c.style.cssText = 'flex-direction:column;align-items:stretch;gap:4px;display:flex';
+    const t = el('div'); t.appendChild(el('b', '', x.nom)); t.appendChild(el('span', 'aide', ' · ' + x.depot + (x.dir ? ' / ' + x.dir : ''))); c.appendChild(t);
+    if (x.description) c.appendChild(el('div', '', x.description));
+    const b = el('div', 'ligne');
+    b.appendChild(badge(x.licence ? T('licence ') + x.licence : T('licence non déclarée'), x.licence ? '' : 'warn', T('La licence dit ce que tu as le droit de faire du skill.')));
+    b.appendChild(badge('≈ ' + x.jetons + ' ' + T('jetons'), x.jetons > 3500 ? 'warn' : '', T('Place prise dans la fenêtre de contexte quand le modèle ouvre ce skill (estimation).')));
+    if (x.scripts) b.appendChild(badge(T('contient des scripts'), 'warn', T('Des programmes accompagnent ce skill : ils ne tournent jamais sans ton accord.')));
+    b.appendChild(badge(x.fichiers + ' ' + T('fichier(s)'), ''));
+    const voir = el('button', 'principal', T('Voir la fiche')); voir.addEventListener('click', () => ouvrirFicheSkill(x)); b.appendChild(voir); c.appendChild(b);
+    return c;
+  };
+  const chercherSkills = async page => {
+    const msg = $('skMsg'); msg.textContent = T('Recherche…'); const depots = [...SK.coches];
+    if (!depots.length) { msg.textContent = T('Coche au moins un dépôt.'); return; }
+    try {
+      const r = await api('/api/skills-tiers-chercher?q=' + encodeURIComponent($('skQ').value.trim()) + '&depots=' + encodeURIComponent(depots.join(',')) + '&page=' + page);
+      if (page === 1) $('skResultats').textContent = '';
+      r.skills.forEach(x => $('skResultats').appendChild(carteSkill(x)));
+      SK.page = page; $('bSkPlus').hidden = !r.suite;
+      msg.textContent = r.total + ' ' + T('skill(s) trouvé(s)') + (r.decrits < r.nombre ? ' · ' + T('la recherche porte sur le nom et sur les descriptions déjà lues ({} sur {}) : « Lire toutes les descriptions » l\'étend à toutes.').replace('{}', r.decrits).replace('{}', r.nombre) : '') + (r.tronque ? ' · ' + T('liste incomplète : ce dépôt est énorme.') : '');
+    } catch (e) { erreurSk(msg, e); }
+  };
+  $('bSkChercher').addEventListener('click', () => chercherSkills(1)); $('bSkPlus').addEventListener('click', () => chercherSkills(SK.page + 1));
+  $('skQ').addEventListener('keydown', e => { if (e.key === 'Enter') chercherSkills(1); });
+  $('bSkAjouterDepot').addEventListener('click', async () => {
+    try { const d = await api('/api/skills-tiers-source', { depot: $('skNouveauDepot').value }); SK.sources = d.sources; const n = d.sources[d.sources.length - 1]; if (n) SK.coches.add(n.depot); $('skNouveauDepot').value = ''; dessinerSources(); $('skMsg').textContent = ''; }
+    catch (e) { $('skMsg').textContent = e.message; }
+  });
+  $('bSkTrouverDepots').addEventListener('click', async () => {
+    const z = $('skDepotsTrouves'); z.textContent = T('Recherche…');
+    try {
+      const r = await api('/api/skills-tiers-depots?q=' + encodeURIComponent($('skQ').value.trim())); z.textContent = '';
+      if (!r.depots.length) z.textContent = T('Aucun dépôt trouvé.');
+      r.depots.forEach(d => { const l = el('div', 'ligne'); l.appendChild(el('b', '', d.depot)); l.appendChild(el('span', 'aide', ' ★ ' + d.etoiles + ' · ' + d.description)); const a = el('button', '', T('Ajouter')); a.addEventListener('click', async () => { try { const x = await api('/api/skills-tiers-source', { depot: d.depot }); SK.sources = x.sources; SK.coches.add(d.depot); dessinerSources(); a.disabled = true; } catch (e) { z.textContent = e.message; } }); l.appendChild(a); z.appendChild(l); });
+    } catch (e) { erreurSk(z, e); }
+  });
+  $('bSkIndexer').addEventListener('click', async () => {
+    const depots = [...SK.coches], msg = $('skMsg'); if (!depots.length) { msg.textContent = T('Coche au moins un dépôt.'); return; }
+    try {
+      for (const d of depots) await api('/api/skills-tiers-indexer', { depot: d });
+      msg.textContent = T('Lecture des descriptions…');
+      for (let i = 0; i < 600; i++) {
+        await new Promise(r => setTimeout(r, 1500)); const e = (await api('/api/skills-tiers')).indexation, vus = depots.map(d => e[d]).filter(Boolean);
+        const erreur = vus.find(v => v.erreur); if (erreur) { erreurSk(msg, new Error(erreur.erreur)); return; }
+        msg.textContent = T('Lecture des descriptions…') + ' ' + vus.reduce((n, v) => n + v.fait, 0) + ' / ' + vus.reduce((n, v) => n + v.total, 0);
+        if (vus.length === depots.length && vus.every(v => v.fini)) { msg.textContent = '✔ ' + T('Descriptions lues : la recherche porte maintenant dessus.'); return; }
+      }
+    } catch (e) { erreurSk(msg, e); }
+  });
+  const ouvrirFicheSkill = async x => {
+    const z = ouvrirModal(T('Skill : ') + x.nom); z.appendChild(el('div', 'aide', T('Lecture et analyse du skill…')));
+    let f; try { f = await api('/api/skills-tiers-fiche?depot=' + encodeURIComponent(x.depot) + '&dir=' + encodeURIComponent(x.dir)); } catch (e) { erreurSk(z, e); return; }
+    z.textContent = '';
+    const lien = el('a', '', x.depot + (x.dir ? ' / ' + x.dir : '') + ' ↗'); lien.href = 'https://github.com/' + x.depot + '/tree/HEAD/' + x.dir; lien.target = '_blank'; lien.rel = 'noopener noreferrer'; z.appendChild(lien);
+    if (f.description) z.appendChild(el('p', '', f.description));
+    const b = el('div', 'ligne'); b.appendChild(badge(f.licence ? T('licence ') + f.licence : (f.licence_fichier ? T('licence : fichier LICENSE') : (f.licence_depot ? T('licence : celle du dépôt') : T('licence non déclarée'))), f.licence || f.licence_fichier || f.licence_depot ? '' : 'bad'));
+    b.appendChild(badge('≈ ' + f.jetons_skill + ' ' + T('jetons'), f.lourd ? 'warn' : '')); b.appendChild(badge(f.nombre_fichiers + ' ' + T('fichier(s)'), '')); z.appendChild(b);
+    if (f.lourd) z.appendChild(el('div', 'attention', '⚠ ' + T('Ce skill est long : un petit modèle local risque de s\'y perdre. Préfère un modèle de 14 milliards de paramètres ou plus, ou un skill plus court.')));
+    if (f.champs_claude.length) z.appendChild(el('div', 'aide', 'ℹ ' + T('Champs propres à Claude, ignorés par Lutin : ') + f.champs_claude.join(', ') + '.'));
+    // la sécurité
+    const sec = el('div', 'carte'); sec.style.cssText = 'display:block;margin:8px 0';
+    const titre = { danger: '⛔ ' + T('Éléments dangereux repérés'), attention: '⚠ ' + T('À savoir avant d\'installer'), aucune: '✔ ' + T('Rien d\'inquiétant repéré') }[f.gravite];
+    sec.appendChild(el('b', f.gravite === 'danger' ? 'erreur' : '', titre)); sec.appendChild(el('div', 'aide', T('Analyse automatique de {} fichier(s) : elle aide mais ne remplace pas une lecture. Lis le texte du skill ci-dessous.').replace('{}', f.analyses)));
+    f.constats.forEach(c => { const l = el('div', c.gravite === 'danger' ? 'erreur' : 'aide', (c.gravite === 'danger' ? '⛔ ' : '⚠ ') + c.fichier.slice(c.fichier.indexOf(f.dir) === 0 && f.dir ? f.dir.length + 1 : 0) + ' ligne ' + c.ligne + ' — ' + c.explication + ' : « ' + c.extrait + ' »'); l.style.margin = '3px 0'; sec.appendChild(l); });
+    z.appendChild(sec);
+    if (f.scripts.length) z.appendChild(el('div', 'aide', '🧩 ' + T('Scripts fournis : ') + f.scripts.slice(0, 12).join(', ') + (f.scripts.length > 12 ? '…' : '') + ' — ' + T('ils ne tournent jamais tout seuls : l\'exécuteur de Lutin demande ton accord à chaque commande.')));
+    if (f.trop_gros.length) z.appendChild(el('div', 'attention', '⚠ ' + T('Fichiers trop gros, non copiés : ') + f.trop_gros.join(', ')));
+    const det = el('details'); det.appendChild(el('summary', '', T('Lire SKILL.md'))); const pre = el('pre'); pre.style.cssText = 'white-space:pre-wrap;max-height:320px;overflow:auto'; pre.textContent = f.texte + (f.texte_coupe ? '\n…' : ''); det.appendChild(pre); z.appendChild(det);
+    // l'installation
+    const bas = el('div', 'carte'); bas.style.cssText = 'display:block;margin:10px 0 0';
+    const choix = el('select'); SK.travaux.forEach(t => { const o = el('option', '', t.nom); o.value = t.id; choix.appendChild(o); }); choix.value = SK.actif; choix.hidden = SK.travaux.length < 2;
+    const ligne = el('div', 'ligne'); if (!SK.travaux.length) ligne.appendChild(el('span', 'erreur', T('Ajoute d\'abord un dossier de travail (Réglages > Dossiers).'))); else if (SK.travaux.length > 1) ligne.appendChild(el('span', '', T('Installer dans le dossier de travail : '))), ligne.appendChild(choix);
+    bas.appendChild(ligne);
+    const confirmations = [];
+    const confirmer = (texte, requis) => { if (!requis) return null; const l = el('label'); l.style.display = 'block'; const c = document.createElement('input'); c.type = 'checkbox'; l.append(c, document.createTextNode(' ' + texte)); bas.appendChild(l); confirmations.push(c); return c; };
+    const cDanger = confirmer(T('Je comprends que ce skill contient des éléments dangereux et je veux l\'installer quand même.'), f.gravite === 'danger');
+    const cLicence = confirmer(T('Ce skill ne déclare aucune licence : je veux l\'installer quand même.'), !(f.licence || f.licence_fichier || f.licence_depot));
+    const ok = el('button', 'principal', T('Installer')), msg = el('span', 'aide'); ok.disabled = !SK.modifiable || !SK.travaux.length || !f.installable;
+    ok.addEventListener('click', async () => {
+      if (confirmations.some(c => !c.checked)) { msg.textContent = T('Coche la confirmation pour continuer.'); return; }
+      ok.disabled = true; msg.textContent = T('Installation…');
+      try {
+        const r = await api('/api/skills-tiers-installer', { depot: x.depot, dir: x.dir, travail: choix.value, danger_ok: !!(cDanger && cDanger.checked), licence_ok: !!(cLicence && cLicence.checked) });
+        msg.textContent = '✔ ' + T('Installé dans ') + r.dossier + (r.ignores.length ? ' · ' + T('non copiés : ') + r.ignores.join(', ') : ''); chargerInstalles(false);
+      } catch (e) { erreurSk(msg, e); ok.disabled = false; }
+    });
+    bas.append(ok, document.createTextNode(' '), msg); z.appendChild(bas);
+  };
+  const chargerInstalles = async verifier => {
+    const z = $('skInstalles'), msg = $('skMsgInstalles'); let r;
+    try { r = await api('/api/skills-tiers-installes' + (verifier ? '?verifier=1' : '')); } catch (e) { erreurSk(msg, e); return; }
+    z.textContent = ''; if (!r.installes.length) { z.textContent = T('Aucun.'); return; }
+    const nom = id => (SK.travaux.find(t => t.id === id) || {}).nom || id;
+    r.installes.forEach(s => {
+      const c = el('div', 'carte'); c.style.cssText = 'flex-direction:column;align-items:stretch;gap:4px;display:flex';
+      const t = el('div'); t.appendChild(el('b', '', s.nom)); t.appendChild(el('span', 'aide', ' · ' + s.depot + (s.dir ? ' / ' + s.dir : '') + ' · ' + nom(s.travail) + ' · ≈ ' + s.jetons + ' ' + T('jetons'))); c.appendChild(t);
+      if (s.description) c.appendChild(el('div', 'aide', s.description));
+      if (s.maj) c.appendChild(el('div', 'attention', '⬆ ' + T('Une version plus récente existe dans le dépôt.')));
+      if (s.disparu) c.appendChild(el('div', 'aide', 'ℹ ' + T('Ce skill n\'existe plus dans le dépôt.')));
+      if (s.erreur) c.appendChild(el('div', 'erreur', s.erreur));
+      const l = el('div', 'ligne');
+      if (s.maj) { const m = el('button', 'principal', T('Mettre à jour')); m.disabled = !SK.modifiable; m.addEventListener('click', async () => { m.disabled = true; try { await api('/api/skills-tiers-maj', { travail: s.travail, nom: s.nom, danger_ok: false, licence_ok: true }); chargerInstalles(true); } catch (e) { erreurSk(msg, e); m.disabled = false; } }); l.appendChild(m); }
+      const x = el('button', 'danger', T('Retirer')); x.disabled = !SK.modifiable;
+      x.addEventListener('click', async () => { if (!confirm(T('Retirer le skill « {} » du dossier de travail ?').replace('{}', s.nom))) return; try { await api('/api/skills-tiers-retirer', { travail: s.travail, nom: s.nom }); chargerInstalles(false); } catch (e) { erreurSk(msg, e); } });
+      l.appendChild(x); c.appendChild(l); z.appendChild(c);
+    });
+    if (verifier) msg.textContent = r.installes.some(s => s.maj) ? T('Des mises à jour sont disponibles.') : T('Tout est à jour.');
+  };
+  $('bSkVerifier').addEventListener('click', () => { $('skMsgInstalles').textContent = T('Recherche…'); chargerInstalles(true); });
   // ---- Mémoire des longues conversations : résumé automatique ou fiche de suivi
   const fichePart = () => String(ETAT.reglages.fiche_part || 10);
   // Recherche par le sens : il faut un petit modèle d'Ollama ; la page dit s'il est là et propose de l'installer
