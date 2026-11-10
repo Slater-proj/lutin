@@ -70,10 +70,15 @@ class Coupures(unittest.TestCase):
         self.assertEqual(len(dits), 1)
         self.assertIn("8192", dits[0]["texte"])
         self.assertIn("2 ancien(s) résultat(s)", dits[0]["texte"])
-        dialogue.annoncer_reduction(dict(rapport, raccourcis=5), dits.append, ctx, 8192)
+        dialogue.annoncer_reduction(dict(rapport, raccourcis=9), dits.append, ctx, 8192)
         self.assertEqual(len(dits), 2)
         dialogue.annoncer_reduction({"raccourcis": 0, "retires": 0, "tronques": 0, "tours": 0}, dits.append, {}, 8192)
         self.assertEqual(len(dits), 2, "rien de réduit : rien de dit")
+
+    def test_la_boucle_de_repetition_d_ollama_est_reconnue(self):
+        """« prediction aborted, token repeat limit reached » : le modèle radote, Ollama coupe. Ce n'est ni un plantage ni un contexte plein."""
+        self.assertTrue(dialogue.RE_REPETITION.search("prediction aborted, token repeat limit reached"))
+        self.assertFalse(dialogue.RE_REPETITION.search("the request exceeds the available context size"))
 
     def test_les_erreurs_de_contexte_sont_reconnues_par_des_expressions_precises(self):
         for vraie in ("the request exceeds the available context size", "prompt is too long: 9000 tokens", "no query found for input", "input is too large for n_ctx", "maximum context length is 4096"):

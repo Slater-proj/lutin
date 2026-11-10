@@ -77,6 +77,12 @@ class Routeur(Base):
         self.assertNotIn("passwd", t, "un nom qui tente d'ajouter une ligne est écarté")
         self.assertEqual(t.count("[*]"), 1)
 
+    def test_le_fichier_n_est_pas_garde_en_ram_en_plus_de_la_carte(self):
+        """Un modèle de 22 Go en VRAM était AUSSI gardé en entier en mémoire vive (mmap) : le PC saturait. `no-mmap` dès qu'une carte graphique sert, y compris avec `--fit`."""
+        for ajuste in (False, True):
+            self.assertIn("no-mmap = true", ml.texte_preset([("un", "/m/un.gguf", None)], 8192, {"fils": 8, "ngl": 99 if not ajuste else 0, "sans_mmap": True}))
+        self.assertNotIn("no-mmap", ml.texte_preset([("un", "/m/un.gguf", None)], 8192, {"fils": 8, "sans_mmap": False}))
+
     def test_deux_modeles_se_suivent_sans_redemarrer_le_serveur(self):
         """Critère : deux modèles (deux rôles) servis l'un après l'autre par le même serveur."""
         ml.regler_avance("llamacpp", {"routeur": True})

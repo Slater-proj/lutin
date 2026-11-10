@@ -1663,5 +1663,14 @@
 "Dépôts des listes communautaires": "Community list repositories",
 "Les dépôts cités par les listes communautaires de skills (VoltAgent, travisvn…), les plus cités d'abord. Écris un mot dans la case pour filtrer.": "The repositories cited by the community skill lists (VoltAgent, travisvn…), most cited first. Type a word in the box to filter.",
 "Cherche sur GitHub des dépôts qui portent le sujet « agent-skills », « claude-skills » ou « claude-code-skills »": "Searches GitHub for repositories tagged \"agent-skills\", \"claude-skills\" or \"claude-code-skills\"",
-"Lit la description de tous les skills des dépôts cochés pour que la recherche porte aussi sur elles (un fichier par skill : quelques minutes pour un gros dépôt). Lancé tout seul à la première recherche ; gardé sur disque ensuite.": "Reads the description of every skill in the ticked repositories so the search covers them too (one file per skill: a few minutes for a big repository). Started by itself at the first search; kept on disk afterwards."
+"Lit la description de tous les skills des dépôts cochés pour que la recherche porte aussi sur elles (un fichier par skill : quelques minutes pour un gros dépôt). Lancé tout seul à la première recherche ; gardé sur disque ensuite.": "Reads the description of every skill in the ticked repositories so the search covers them too (one file per skill: a few minutes for a big repository). Started by itself at the first search; kept on disk afterwards.",
+"arrêté": "stopped",
+"Le serveur sera arrêté pour libérer le fichier.": "The server will be stopped to free the file.",
+"incomplet": "incomplete",
+"Le téléchargement n'a pas été terminé ou le dossier est abîmé : supprime-le et télécharge-le de nouveau.": "The download was not finished or the folder is damaged: delete it and download it again.",
+"Plusieurs serveurs peuvent être installés ; un seul est utilisé à la fois — celui-ci. Le changer arrête l'ancien et met à jour la page.": "Several servers can be installed; only one is used at a time — this one. Changing it stops the old one and updates the page.",
+"Ouvrir ce fichier (du dossier de travail actif)": "Open this file (from the active working folder)",
+"étapes": "steps",
+"étape": "step",
+"Réflexion et notes": "Thinking and notes"
 }

@@ -105,6 +105,14 @@ def commit(depot, revision, http=miseajour.http_get):
     return branches(depot, http).get(revision or "main", "")
 
 
+def taille_revision(depot, revision, http=miseajour.http_get):
+    """Octets de tous les fichiers d'une révision (somme des fichiers de la branche) : le total d'un téléchargement. ValueError si illisible."""
+    if not RE_DEPOT.match(str(depot)):
+        raise ValueError(_t("Nom de dépôt invalide : écris « propriétaire/modèle » (Hugging Face)."))
+    d = _json(API + "/" + urllib.parse.quote(depot, safe="/") + "/tree/" + urllib.parse.quote(str(revision or "main"), safe=""), http)
+    return sum(int(f.get("size") or 0) for f in d if isinstance(f, dict) and f.get("type") == "file")
+
+
 def quantifications(depot, http=miseajour.http_get):
     """Les quantifications d'un dépôt : [{revision, bpw, go, commit}] triées du plus léger au plus lourd. `go` = somme exacte des fichiers de la branche (None si illisible)."""
     liste = []

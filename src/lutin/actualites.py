@@ -21,9 +21,11 @@ def demande_actualites(texte):
 
 
 URL = re.compile(r"https?://[^\s<>\"')\]]+", re.I)
-EXPLICITE = re.compile(r"\b(cherch\w*|recherch\w*|liens?|sur\s+(?:internet|le\s+(?:web|net))|en\s+ligne|google|search(?:\s+for)?|look\s*up|links?)\b", re.I)
+EXPLICITE = re.compile(r"\b(cherch\w*|recherch\w*|sur\s+(?:internet|le\s+(?:web|net))|en\s+ligne|google|search(?:\s+for)?|look\s*up)\b", re.I)
+LIEN = re.compile(r"\b(liens?|links?)\b", re.I)          # « donne-moi le lien de la page html » peut être un fichier de TON dossier : un lien ne suffit pas à partir sur internet
+SUJET_WEB = re.compile(r"\b(site|sites|article|articles|vid[ée]o|youtube|wikip[ée]dia|actualit\w*|tuto\w*|documentation|officiel\w*|internet|web|blog|forum|github|reddit)\b", re.I)
 IMPLICITE = re.compile(r"\b(qui\s+est|c'?est\s+qui|histoire\s+de|derni[eè]res?|r[ée]cents?|prix\s+d\w*|m[ée]t[ée]o|cours\s+d\w*|quand\s+sort|date\s+de\s+sortie|who\s+is|latest|price\s+of|weather)\b", re.I)
-PAS_LE_WEB = re.compile(r"```|\b(code|fichier|script|bug|erreur|fonction|dossier|d[ée]p[ôo]t|repo|projet|variable|classe|commande)\b", re.I)
+PAS_LE_WEB = re.compile(r"```|\b(code|fichiers?|script|bug|erreur|fonction|dossiers?|d[ée]p[ôo]t|repo|projet|variable|classe|commande|html?|css|galerie|chemin|r[ée]pertoire|disque|nas|sauvegard\w*|locale?s?)\b|\b[\w-]+\.(?:html?|md|py|js|pdf|png|jpe?g|webp|txt|json|csv|docx?|xlsx?|pptx?|zip|mp4)\b|[A-Za-z]:\\|\\\\|\bfile:///", re.I)
 SUJET_VIDE = frozenset("internet web net ligne lien liens link links google recherche recherches recherché cherché sources source article articles info infos information informations sujet propos".split())
 
 
@@ -60,7 +62,8 @@ def mode_guide(texte, modele):
         return "actualites" if petit_modele(modele) else ""
     if PAS_LE_WEB.search(texte) or RECLAMATION.search(texte) or not _mots(texte):          # code, fichiers... ; un reproche ; ou rien à chercher (« Cherche » tout seul)
         return ""
-    if EXPLICITE.search(NOM_RECHERCHE.sub(" ", texte)) or ORDRE_RECHERCHE.search(texte):
+    sans_nom = NOM_RECHERCHE.sub(" ", texte)
+    if EXPLICITE.search(sans_nom) or ORDRE_RECHERCHE.search(texte) or (LIEN.search(sans_nom) and SUJET_WEB.search(texte)):
         return "recherche"
     return "recherche" if IMPLICITE.search(texte) and petit_modele(modele) else ""
 

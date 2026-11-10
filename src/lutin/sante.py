@@ -141,6 +141,8 @@ def taille_modele(nom, charge=None):
     """Octets de mémoire vidéo qu'il faut au modèle : sa taille d'après Ollama (celle du modèle déjà chargé si on l'a, sinon la liste des modèles installés), sinon celle annoncée dans le catalogue."""
     if charge and charge.get("taille"):
         return int(charge["taille"])
+    if charge is not None:
+        return 0          # déjà chargé par un moteur qui ne dit pas sa taille (llama.cpp) : il n'y a rien de plus à lui trouver — avant, la demande réclamait une 2e fois la place du modèle déjà là et attendait 15 minutes
     t = (_m.etat_moteur().get("tailles") or {}).get(nom)
     if t:
         return int(t)

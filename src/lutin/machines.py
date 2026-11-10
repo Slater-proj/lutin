@@ -620,8 +620,8 @@ def _reprendre_reveils():
             age = time.time() - float(quand or 0)
         except (TypeError, ValueError):
             continue
-        if 0 <= age < alimentation.ATTENTE_REVEIL_S and ident not in REVEIL and RE_ID.match(str(ident)):
-            REVEIL[ident] = time.monotonic() - age
+        if -2 <= age < alimentation.ATTENTE_REVEIL_S and ident not in REVEIL and RE_ID.match(str(ident)):
+            REVEIL[ident] = time.monotonic() - max(age, 0)
 
 
 def _allumee_pendant_reveil(m, maintenant=time.monotonic):

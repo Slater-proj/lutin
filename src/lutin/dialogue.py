@@ -87,6 +87,7 @@ def aplatir_sans_outils(corps):
     return {k: v for k, v in dict(corps, messages=sortie).items() if k != "tools"}
 
 
+RE_REPETITION = re.compile(r"token repeat limit|repeat limit reached|prediction aborted", re.I)      # le modèle s'est mis à radoter en boucle : Ollama coupe la génération
 RE_PLANTAGE = re.compile(r"llama-server|out.of.memory|cudaMalloc|exit status|terminated|runner|connection (reset|refused)|unexpectedly", re.I)      # Ollama a planté ou manque de mémoire vidéo : on réessaie avec moins de contexte
 
 
@@ -1073,12 +1074,32 @@ RE_CONTEXTE = re.compile(r"no query found|context (length|window|size|limit)|(ex
 COUPURES_DITES = set()          # (conversation, fichier, taille) : l'avertissement « fichier de mémoire trop long » n'est donné qu'une fois
 
 
+DITS = {"reduction": {}, "rappel": {}}          # id de conversation -> ce qui a déjà été annoncé (une information répétée à chaque réponse n'informe plus : elle prend de la place pour rien)
+PAS_DE_NOUVEL_AVIS = 6          # une réduction du contexte n'est redite que si elle a grossi d'au moins ça (résultats raccourcis + messages retirés)
+
+
+RE_MEMOIRE_VIDEO = re.compile(r"insufficient\s+vram|out\s+of\s+memory|cuda\s+out\s+of\s+memory|failed\s+to\s+load|not\s+enough\s+(?:gpu\s+)?memory|oom\b", re.I)
+
+
+def nom_du_moteur(r):
+    """Le nom que l'utilisateur reconnaît pour le moteur de cette réponse (Ollama, llama.cpp, ExLlamaV3, Colibri, LM Studio…) : une erreur d'ExLlamaV3 ne doit pas commencer par « Ollama »."""
+    try:
+        from . import mesures_moteurs
+        return mesures_moteurs.nom_affiche(moteur_actuel(r))
+    except Exception:  # noqa: BLE001  (un nom de plus : jamais une réponse perdue)
+        return "Ollama"
+
+
 def annoncer_reduction(rapport, emit, ctx, num_ctx):
-    """Dit à l'utilisateur, avec des chiffres, ce qui a été raccourci ou retiré pour tenir dans la fenêtre de contexte (au lieu de le faire sans rien dire) ; seulement quand cela augmente."""
+    """Dit à l'utilisateur, avec des chiffres, ce qui a été raccourci ou retiré pour tenir dans la fenêtre de contexte (au lieu de le faire sans rien dire). Une seule fois par conversation tant que
+    la situation ne change pas : un nouvel avis seulement si la réduction a nettement grossi (le contexte est plein en continu dans une longue conversation, le dire à chaque réponse est du bruit)."""
     total = sum(rapport.values()) if rapport else 0
-    if not total or total <= ctx.get("reduction_dite", 0):
+    ident = (ctx.get("conv") or {}).get("id") or ctx.get("conversation") or "?"
+    deja = DITS["reduction"].get(ident, 0)
+    if not total or total <= ctx.get("reduction_dite", 0) or (deja and total < deja + PAS_DE_NOUVEL_AVIS):
         return
     ctx["reduction_dite"] = total
+    DITS["reduction"][ident] = total
     parties = []
     if rapport["raccourcis"] or rapport["tronques"]:
         parties.append(_t("{} ancien(s) résultat(s) d'outil raccourci(s)").format(rapport["raccourcis"] + rapport["tronques"]))
@@ -1552,7 +1573,8 @@ def boucle_agent(conv, r, emit, ctx, stop):
         try:
             etape = " ".join(_suivi.lire(conv["id"])["etape"] + _suivi.lire(conv["id"])["objectif"])
             extraits, nb_extraits = _m.rappel_du_fil(conv, etape)
-            if nb_extraits:
+            if nb_extraits and DITS["rappel"].get(conv["id"]) != nb_extraits:          # dit une fois, et quand le nombre change : pas à chaque réponse
+                DITS["rappel"][conv["id"]] = nb_extraits
                 emit({"type": "info", "texte": _t("📎 {} passage(s) retrouvé(s) plus tôt dans cette conversation.").format(nb_extraits)})
         except Exception as erreur:  # noqa: BLE001  (la recherche ne doit jamais empêcher de répondre)
             _m.journaliser("Rappel du fil impossible : {!r}".format(erreur))
@@ -1749,10 +1771,14 @@ def boucle_agent(conv, r, emit, ctx, stop):
                 if (not http or erreur.code in (400, 500)) and RE_GABARIT.search(detail) and not plat:
                     genre = "gabarit"
                 elif (http and erreur.code == 500) or isinstance(erreur, RuntimeError):
-                    genre = "outil" if RE_APPEL_MAL_FORME.search(detail) else "contexte" if RE_CONTEXTE.search(detail) else "plantage" if RE_PLANTAGE.search(detail) else ""
+                    genre = "repetition" if RE_REPETITION.search(detail) else "outil" if RE_APPEL_MAL_FORME.search(detail) else "contexte" if RE_CONTEXTE.search(detail) else "plantage" if RE_PLANTAGE.search(detail) else ""
                 else:
                     genre = ""
-                if not http and not isinstance(erreur, RuntimeError) and _m.AUTO_DEMARRAGE and tentative < 2 and not ctx.get("ollama_relance"):
+                nom_mo = nom_du_moteur(r)
+                if moteur_actuel(r).id != "ollama" and RE_MEMOIRE_VIDEO.search(detail):          # le modèle ne tient pas avec sa mémoire de conversation : le dire clairement, sans relancer pour rien
+                    emit({"type": "erreur", "texte": _t("{} n'a pas pu charger « {} » : la mémoire de la carte graphique ne suffit pas pour le modèle ET sa mémoire de conversation. Choisis une quantification plus légère (onglet Modèles), ou une fenêtre de contexte plus petite (Réglages > Conversation), puis redémarre {} (Réglages > Moteur). Détail : {}").format(nom_mo, r["modele"], nom_mo, detail[:160])})
+                    break
+                if not http and not isinstance(erreur, RuntimeError) and _m.AUTO_DEMARRAGE and tentative < 2 and not ctx.get("ollama_relance") and moteur_actuel(r).id == "ollama":
                     ctx["ollama_relance"] = True                        # Ollama est arrêté (ou a planté) : on le démarre et on réessaie, une seule fois par demande
                     emit({"type": "info", "texte": "Ollama ne répond pas : je le démarre (quelques secondes)..."})
                     try:
@@ -1778,6 +1804,8 @@ def boucle_agent(conv, r, emit, ctx, stop):
                     if genre == "outil":
                         relance_outil = True
                         emit({"type": "info", "texte": _t("Le modèle a mal écrit un appel d'outil (erreur d'Ollama : {}). Nouvelle tentative...").format(detail[:120])})
+                    elif genre == "repetition":
+                        emit({"type": "info", "texte": _t("Le modèle s'est mis à se répéter en boucle et Ollama a coupé la réponse. Je relance.")})
                     elif genre == "contexte":
                         emit({"type": "info", "texte": _t("Ollama a perdu le début de la conversation (contexte trop plein : {}). Je réduis les anciens résultats et je relance, ta demande est gardée.").format(detail[:80])})
                     else:
@@ -1788,10 +1816,14 @@ def boucle_agent(conv, r, emit, ctx, stop):
                     continue
                 if genre == "outil":
                     emit({"type": "erreur", "texte": _t("Le modèle écrit mal ses appels d'outils ({}). Reformule en une demande plus simple, ou choisis un autre modèle dans Réglages (gemma4:26b).").format(detail[:200])})
+                elif genre == "repetition":
+                    emit({"type": "erreur", "texte": _t("Le modèle se répète en boucle (Ollama : « token repeat limit reached ») : ce n'est pas un bug de Lutin. Dans Réglages > Avancé, monte la pénalité de répétition (1,1 à 1,2) ou baisse la température, ou essaie une autre quantification ou un autre modèle. Reformule ou écris « continue » pour reprendre.")})
                 elif genre == "plantage":
                     emit({"type": "erreur", "texte": _t("Ollama plante encore ({}). Ferme ComfyUI ou clique sur « 🧹 VRAM », baisse la fenêtre de contexte dans Réglages, puis écris « continue ».").format(detail[:200])})
                 elif http or isinstance(erreur, RuntimeError):
-                    emit({"type": "erreur", "texte": _t("Ollama a répondu une erreur : {}{}").format(detail, _t(" (le modèle est-il installé ? onglet Modèles)") if http and erreur.code == 404 else "")})
+                    emit({"type": "erreur", "texte": _t("{} a répondu une erreur : {}{}").format(nom_mo, detail, _t(" (le modèle est-il installé ? onglet Modèles)") if http and erreur.code == 404 else "")})
+                elif moteur_actuel(r).id != "ollama":
+                    emit({"type": "erreur", "texte": _t("{} ne répond pas : {}. Démarre-le (bouton « Démarrer » de la page Modèles, ou Réglages > Moteur).").format(nom_mo, detail)})
                 else:
                     emit({"type": "erreur", "texte": _t("Ollama ne répond pas : {}. Clique sur « Démarrer Ollama ».").format(detail)})
                 break

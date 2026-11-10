@@ -10,10 +10,12 @@ Rien n'est écrit hors du dossier du moteur. TabbyAPI n'a ni publications ni ét
 import json
 import os
 import re
+import secrets
 import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -36,6 +38,7 @@ RE_VERSION = re.compile(r"^\d{1,3}(\.\d{1,4}){1,3}$")
 RE_DEPOT_MODELE = re.compile(r"^[A-Za-z0-9][\w.-]{0,60}/[A-Za-z0-9][\w.-]{0,100}$")
 RE_REVISION = re.compile(r"^[A-Za-z0-9][\w./-]{0,40}$")
 TAILLE_ARCHIVE_MAX = 80_000_000
+INTERVALLE_PROGRES_S = 1.5          # la progression d'un téléchargement est relue toutes les 1,5 s
 FICHIER_ORIGINE = ".lutin.json"          # dans le dossier d'un modèle : d'où il vient
 PYTHON_MIN, PYTHON_MAX = (3, 10), (3, 14)
 
@@ -125,13 +128,20 @@ def dernier_commit(http=miseajour.http_get):
     raise ValueError(_t("Impossible de lire le dernier code de TabbyAPI ({}). {}").format(cause, miseajour.suite_erreur(cause)))
 
 
-def config_yaml(port, modeles):
-    """Le config.yml de TabbyAPI : adresse locale, aucune clé (réservé à cette machine), pas de page web, aucune origine de navigateur admise, modèle chargé à la demande."""
+CONTEXTE_DEFAUT = 16384          # jetons de conversation gardés en mémoire vidéo quand on ne sait pas mieux (le modèle en annonce parfois 128 000 ou plus : sa mémoire à elle seule dépasserait la carte)
+
+
+def config_yaml(port, modeles, contexte=0):
+    """Le config.yml de TabbyAPI : adresse locale, aucune clé (réservé à cette machine), pas de page web, aucune origine de navigateur admise, modèle chargé à la demande.
+    `contexte` : la longueur de conversation gardée en mémoire vidéo (celle des réglages de Lutin) et une mémoire de conversation compressée (Q8) : sans cela TabbyAPI réserve la longueur maximale du modèle
+    et refuse de le charger (« Insufficient VRAM in split for model and cache »)."""
+    contexte = int(contexte or 0)
+    contexte = max(2048, min(262144, contexte)) if contexte else CONTEXTE_DEFAUT
     chemin = Path(modeles).as_posix()
     if "#" in chemin or "\n" in chemin or chemin.startswith(("'", '"')):
         raise ValueError(_t("Le chemin du dossier des modèles contient un caractère que TabbyAPI ne sait pas lire ('#', guillemet ou retour à la ligne)."))
     return ("network:\n  host: {}\n  port: {}\n  disable_auth: true\n  allowed_origins: []\n  web_ui: false\n"
-            "logging:\n  log_auth_keys: false\nmodel:\n  model_dir: {}\n  inline_model_loading: true\n").format(HOTE, int(port), chemin)
+            "logging:\n  log_auth_keys: false\nmodel:\n  model_dir: {}\n  inline_model_loading: true\n  max_seq_len: {}\n  cache_mode: Q8\n").format(HOTE, int(port), chemin, contexte)
 
 
 def _suivre(proc, dire, annule=lambda: False):
@@ -236,14 +246,14 @@ def repond(port):
         return False
 
 
-def demarrer(port=PORT_DEFAUT, dossiers=None, attente_s=240, lancer=subprocess.Popen, repond_=repond, dormir=time.sleep):
+def demarrer(port=PORT_DEFAUT, dossiers=None, attente_s=240, lancer=subprocess.Popen, repond_=repond, dormir=time.sleep, contexte=0):
     """Écrit le config.yml (port demandé), lance `main.py` de TabbyAPI dans son environnement, attend que /v1/models réponde (le premier démarrage charge torch : long)."""
     if repond_(port):
         return port
     if not installee(dossiers):
         raise ValueError(_t("ExLlamaV3 n'est pas installé : installe-le d'abord (Réglages > Moteur)."))
     tabby, base = dossier_tabby(dossiers), dossier(dossiers)
-    (tabby / "config.yml").write_text(config_yaml(port, dossier_modeles(dossiers)), encoding="utf-8")
+    (tabby / "config.yml").write_text(config_yaml(port, dossier_modeles(dossiers), contexte), encoding="utf-8")
     journal = base / "tabby.log"
     extra = {"creationflags": getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0) | getattr(subprocess, "DETACHED_PROCESS", 0)} if os.name == "nt" else {"start_new_session": True}
     with open(journal, "wb") as sortie:
@@ -321,8 +331,36 @@ def origine_modele(dossiers, nom):
     return {k: str(d.get(k, "")) for k in ("depot", "revision", "commit")} if isinstance(d, dict) else {}
 
 
-def telecharger_modele(depot, revision="", dossiers=None, dire=print, lancer=subprocess.Popen, annule=lambda: False, http=miseajour.http_get):
-    """`main.py download <propriétaire/modèle> [--revision X]` : le téléchargeur de TabbyAPI (Hugging Face) dans le dossier des modèles."""
+def octets_dossier(chemin):
+    """Octets déjà posés dans un dossier, fichiers en cours de téléchargement compris (ceux de Hugging Face sont dans un sous-dossier caché)."""
+    total = 0
+    for racine, _, fichiers in os.walk(chemin):
+        for f in fichiers:
+            try:
+                total += os.path.getsize(os.path.join(racine, f))
+            except OSError:
+                pass
+    return total
+
+
+def _suivre_taille(cible, total, dire, progres, arret):
+    """Toutes les 1,5 s : « 3,2 / 14,8 Go (21 %) · 45 Mo/s ». Le téléchargeur de TabbyAPI écrit une barre sur UNE ligne qui se réécrit : sans cela, rien ne s'affichait jusqu'à la fin."""
+    dernier, t0, vitesse = octets_dossier(cible), time.monotonic(), 0.0
+    while not arret.wait(INTERVALLE_PROGRES_S):
+        maintenant = max(octets_dossier(cible), dernier)          # un fichier qui change de nom en fin de course peut faire passer la taille par un creux : la barre ne recule jamais
+        t1 = time.monotonic()
+        vitesse = 0.6 * vitesse + 0.4 * ((maintenant - dernier) / max(0.1, t1 - t0)) if maintenant >= dernier else vitesse
+        dernier, t0 = maintenant, t1
+        go = lambda o: str(round(o / 1e9, 1)).replace(".", ",")  # noqa: E731
+        texte = _t("Téléchargement : {} / {} Go ({} %)").format(go(maintenant), go(total), min(100, round(100 * maintenant / total))) if total else _t("Téléchargement : {} Go reçus").format(go(maintenant))
+        if vitesse > 0:
+            texte += " · {} {}".format(round(vitesse / 1e6), _t("Mo/s"))
+        progres(maintenant, total)
+        dire(texte)
+
+
+def telecharger_modele(depot, revision="", dossiers=None, dire=print, lancer=subprocess.Popen, annule=lambda: False, http=miseajour.http_get, progres=None):
+    """`main.py download <propriétaire/modèle> [--revision X]` : le téléchargeur de TabbyAPI (Hugging Face) dans le dossier des modèles. `progres(octets, total)` : l'avancement réel."""
     depot, revision = str(depot or "").strip(), str(revision or "").strip()
     if not RE_DEPOT_MODELE.match(depot):
         raise ValueError(_t("Nom de dépôt invalide : écris « propriétaire/modèle » (Hugging Face)."))
@@ -335,7 +373,19 @@ def telecharger_modele(depot, revision="", dossiers=None, dire=print, lancer=sub
     avant = _dossiers_modeles(dossiers)
     cmd = [str(python_venv(dossiers)), "main.py", "download", depot] + (["--revision", revision] if revision else [])
     proc = lancer(cmd, cwd=str(tabby), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, text=True, encoding="utf-8", errors="replace")
-    code, fin = _suivre(proc, dire, annule)
+    arret, suivi = threading.Event(), None
+    if progres is not None:
+        try:
+            from . import exllamav3_catalogue
+            total = int(exllamav3_catalogue.taille_revision(depot, revision or "main", http))
+        except (ValueError, OSError):
+            total = 0          # taille inconnue : on montre ce qui est reçu, sans pourcentage
+        suivi = threading.Thread(target=_suivre_taille, args=(dossier_modeles(dossiers) / nom_dossier_modele(depot, revision), total, dire, progres, arret), daemon=True, name="exl3-progression")
+        suivi.start()
+    try:
+        code, fin = _suivre(proc, dire, annule)
+    finally:
+        arret.set()
     if code != 0 and not annule():
         raise ValueError(_t("Le téléchargement du modèle a échoué (code {}). Fin du message :\n{}").format(code, "\n".join(fin[-6:])))
     if code == 0:
@@ -361,19 +411,32 @@ def supprimer_modele(nom, dossiers=None):
     cible = racine / nom
     if not cible.is_dir() or cible.parent.resolve() != racine.resolve():
         raise ValueError(_t("Ce modèle n'est pas dans le dossier des modèles d'ExLlamaV3."))
-    shutil.rmtree(cible)
+    a_effacer = racine / (".suppression-" + nom + "-" + secrets.token_hex(3))
+    os.replace(cible, a_effacer)          # PermissionError ici = un fichier est utilisé (serveur qui tourne) : RIEN n'a été touché, le modèle reste entier (effacer fichier par fichier le laissait sans config.json, donc « disparu » de la liste mais encore sur le disque)
+    shutil.rmtree(a_effacer, ignore_errors=True)
     return True
+
+
+def nettoyer_suppressions(dossiers=None):
+    """Efface ce que des suppressions interrompues ont laissé (dossiers « .suppression-… »)."""
+    try:
+        for p in dossier_modeles(dossiers).iterdir():
+            if p.is_dir() and p.name.startswith(".suppression-"):
+                shutil.rmtree(p, ignore_errors=True)
+    except OSError:
+        pass
 
 
 def modeles(dossiers=None):
     """Les modèles téléchargés : [{nom, taille_go, depot, revision, commit}] (un dossier avec un config.json ; depot/revision/commit vides pour un modèle posé à la main)."""
     sortie = []
     racine = dossier_modeles(dossiers)
+    nettoyer_suppressions(dossiers)
     try:
-        sous = sorted(p for p in racine.iterdir() if p.is_dir() and (p / "config.json").is_file())
+        sous = sorted(p for p in racine.iterdir() if p.is_dir() and not p.name.startswith(".") and ((p / "config.json").is_file() or next(p.glob("*.safetensors"), None) is not None))
     except OSError:
         return []
     for p in sous:
         taille = sum(f.stat().st_size for f in p.rglob("*") if f.is_file())
-        sortie.append(dict({"nom": p.name, "taille_go": round(taille / 1e9, 1), "depot": "", "revision": "", "commit": ""}, **origine_modele(dossiers, p.name)))
+        sortie.append(dict({"nom": p.name, "taille_go": round(taille / 1e9, 1), "depot": "", "revision": "", "commit": "", "incomplet": not (p / "config.json").is_file()}, **origine_modele(dossiers, p.name)))
     return sortie

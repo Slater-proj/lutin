@@ -2,6 +2,20 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## Serveurs gérés (ExLlamaV3…) fiables, réponses lisibles, mémoire mieux tenue
+
+- **Téléchargement ExLlamaV3 avec vraie progression** (« X / Y Go (Z %) · N Mo/s ») ; la mémoire de conversation de TabbyAPI est bornée (`max_seq_len` d'après le contexte des réglages, cache Q8) : fin du « Insufficient VRAM in split for model and cache ».
+- **Suppression sûre** d'un modèle : renommage atomique puis effacement ; un fichier tenu par le serveur n'efface plus à moitié (le modèle ne « disparaît » plus de la liste en restant sur le disque) ; le serveur est arrêté automatiquement ; un dossier abîmé est listé « incomplet ».
+- **Erreurs au nom du bon moteur** (plus « Ollama a répondu… » pour un autre) avec conseil en cas de VRAM insuffisante ; page des serveurs gérés avec carte d'état, bouton Démarrer, erreurs visibles ; « ✔ installé » dans la liste déroulante ; indicateurs de chargement animés.
+- **Réponse séparée du travail** : réflexions, notes entre deux outils, appels d'outils et résultats sont rangés dans un bloc « ⚙ N étapes » repliable ; la bulle ne contient que la réponse finale. Horodatage sur chaque message.
+- **Avis de contexte et passages retrouvés affichés une seule fois**, plus à chaque réponse.
+- **Liens et chemins cliquables** dans les réponses (fichiers du dossier de travail ouverts en lecture seule, jamais exécutés) ; une question sur un chemin ou une page locale ne lance plus de recherche sur Internet.
+- **Garde-fou mémoire : plus de double compte.** Avec llama.cpp, la demande réclamait la place du modèle EN PLUS du même modèle déjà chargé et attendait 15 minutes (« Pas assez de mémoire pour l'instant »).
+- **Pastille sur l'onglet** : orange pendant que l'assistant répond, bleue s'il attend ton accord, verte quand c'est terminé (jusqu'à ton retour sur l'onglet).
+- **« token repeat limit reached »** (le modèle radote en boucle, Ollama coupe) : relance automatique puis message qui explique et propose des réglages, au lieu d'une erreur brute.
+- Reprise d'un réveil après redémarrage : arrondi qui pouvait faire perdre la séquence.
+- **Mémoire** : llama.cpp n'est plus gardé en entier en RAM en plus de la VRAM (`--no-mmap` dès qu'une carte graphique sert, y compris quand les couches sont réparties). « Libérer la VRAM » décharge aussi llama.cpp (et, via le bouton, le serveur géré) au lieu de répondre « aucun modèle en mémoire ».
+
 ## Réveil d'une machine fiable (jamais coincé à l'étape 1), recherche de skills qui voit tout
 
 - **Wake-on-LAN : la machine allumée est enfin reconnue.** La séquence (Réveil envoyé → Machine allumée → Lutin démarré → Synchronisation → Prête) restait bloquée à l'étape 1 quand le pare-feu Windows de la machine réveillée jette les connexions au lieu de les refuser : seule une connexion *refusée* prouvait qu'elle était allumée. Pendant un réveil, Lutin vérifie maintenant son système sans dépendre de Lutin : table des voisins du réseau (ARP, que aucun pare-feu ne filtre, avec la bonne adresse MAC), connexion acceptée ou refusée sur le port de Lutin ou un port courant (445, 3389…), ping. La séquence affiche en plus une ligne d'explication (« Réveil envoyé il y a 40 s… », « La machine est allumée ; Lutin n'y répond pas encore… »).

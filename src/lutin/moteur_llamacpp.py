@@ -240,6 +240,8 @@ def texte_preset(modeles, ctx, reglages):
         lignes.append("n-cpu-moe = {}".format(int(reglages["n_cpu_moe"])))
     if reglages.get("ngl"):
         lignes.append("n-gpu-layers = {}".format(int(reglages["ngl"])))
+    if reglages.get("sans_mmap"):
+        lignes.append("no-mmap = true")
     for nom, fichier, projecteur in modeles:
         if not RE_NOM_PRESET.match(str(nom)):
             continue
@@ -372,6 +374,7 @@ def vue_reglages(moteur):
             vue["lmstudio"] = {"port": mo.port_lmstudio(), "installe": mo._lms() is not None}
         if mo.exllamav3_choisi():
             vue["exllamav3"] = {"port": mo.port_exllamav3(), "installe": mo._exl() is not None}
+        vue["serveurs_geres"] = {"exllamav3": mo._exl() is not None, "colibri": mo._colibri() is not None, "lmstudio": mo._lms() is not None}          # la liste des serveurs dit lesquels sont installés
     return vue
 
 
@@ -846,8 +849,11 @@ class MoteurLlamaCpp(MoteurOpenAI):
                 commande += machine
                 if moe and "--n-cpu-moe" in aide:
                     commande += ["--n-cpu-moe", str(moe)]          # modèle « à experts » : ses experts restent sur le processeur, le reste va sur la carte
-                if variante in ("cuda", "vulkan", "metal") and not ajuste:
+                gpu = variante in ("cuda", "vulkan", "metal")
+                if gpu and not ajuste:
                     commande += ["-ngl", "99"]          # tout le modèle sur la carte ; s'il est trop gros pour elle, `--fit` (ci-dessus) répartit les couches avec le processeur
+                if gpu and "--no-mmap" in aide and not moe:          # aussi avec `--fit` : un modèle « limite » pour la carte (22 Go sur 24) était gardé EN ENTIER en mémoire vive par-dessus ses couches sur la carte
+                    commande += ["--no-mmap"]          # le fichier n'est pas laissé en mémoire vive une fois ses poids passés dans la carte (sinon : 22 Go en VRAM ET 22 Go en RAM, et un PC qui sature)
             journal = self.dossier() / "serveur.log"
             journal.parent.mkdir(parents=True, exist_ok=True)
             sortie = open(journal, "wb")
@@ -884,7 +890,9 @@ class MoteurLlamaCpp(MoteurOpenAI):
             projecteur = commun.get("projecteur") if commun is not None and Path(f) == commun["fichier"] else None
             modeles.append((nom, f, projecteur))
         fils = int(machine[machine.index("--threads") + 1]) if "--threads" in machine else 0
-        reglages = {"fils": fils, "n_cpu_moe": moe if moe and self.option_possible("--n-cpu-moe") else 0, "ngl": 99 if variante in ("cuda", "vulkan", "metal") and not ajuste else 0}
+        tout_sur_la_carte = variante in ("cuda", "vulkan", "metal") and not ajuste
+        reglages = {"fils": fils, "n_cpu_moe": moe if moe and self.option_possible("--n-cpu-moe") else 0, "ngl": 99 if tout_sur_la_carte else 0,
+                    "sans_mmap": bool(variante in ("cuda", "vulkan", "metal") and not moe and self.option_possible("--no-mmap"))}
         return tuple(n for n, _, _ in modeles), texte_preset(modeles, ctx, reglages)
 
     def _pret(self):
@@ -1236,6 +1244,14 @@ class MoteurExterne(MoteurOpenAI):
             return
         progression(_t("Installé et démarré : {}.").format(nom), total, total)
 
+    def _contexte(self):
+        """La longueur de conversation des réglages de Lutin (en jetons) : TabbyAPI ne réserve en mémoire vidéo que celle-là, pas la longueur maximale du modèle."""
+        try:
+            from . import moteur as _m
+            return int(_m.reglages().get("num_ctx") or 0)
+        except Exception:  # noqa: BLE001  (réglages illisibles : la valeur prudente d'exllamav3.py)
+            return 0
+
     def _lms(self):
         """Le chemin de la commande `lms` si LM Studio (ou son démon) est installé, sinon None."""
         from . import lmstudio
@@ -1390,20 +1406,21 @@ class MoteurExterne(MoteurOpenAI):
                 r = exllamav3.installer(dossiers, self.port_exllamav3(), lambda texte: progression(texte, avancement["fait"], avancement["total"]), annule=annule,
                                         etape=lambda n, total: avancement.update(fait=n - 1))
                 self._demarrer_apres_installation(progression, avancement["total"], "ExLlamaV3 " + (r["lib"] or r["tabby"][:7]),
-                                                  lambda: exllamav3.demarrer(self.port_exllamav3(), dossiers), _t("le premier démarrage charge torch : une à deux minutes"))
+                                                  lambda: exllamav3.demarrer(self.port_exllamav3(), dossiers, contexte=self._contexte()), _t("le premier démarrage charge torch : une à deux minutes"))
             elif action == "desinstaller":
                 exllamav3.desinstaller(dossiers)
             elif action == "demarrer":
                 progression(_t("Démarrage d'ExLlamaV3 (le premier démarrage peut être long)…"), 0, 0)
-                exllamav3.demarrer(self.port_exllamav3(), dossiers)
+                exllamav3.demarrer(self.port_exllamav3(), dossiers, contexte=self._contexte())
             elif action == "arreter":
                 exllamav3.arreter(dossiers)
             elif action.startswith("telecharger:"):
                 if moteurs.CONTEXTE["hors_ligne"]():
                     raise ErreurMoteur(_t("Mode hors ligne : aucun téléchargement."))
                 depot, _, revision = action.split(":", 1)[1].partition("@")
+                avance = {"fait": 0, "total": 0}
                 progression(_t("Téléchargement de {}…").format(depot), 0, 0)
-                exllamav3.telecharger_modele(depot, revision, dossiers, lambda texte: progression(texte, 0, 0), annule=annule)
+                exllamav3.telecharger_modele(depot, revision, dossiers, lambda texte: progression(texte, avance["fait"], avance["total"]), annule=annule, progres=lambda fait, total: avance.update(fait=fait, total=total))
                 progression(_t("Modèle téléchargé : {}.").format(depot), 1, 1)
             else:
                 raise ErreurMoteur(_t("Action impossible avec ce serveur."))
@@ -1539,7 +1556,16 @@ class MoteurExterne(MoteurOpenAI):
         try:
             if self.exllamav3_choisi():
                 from . import exllamav3
-                exllamav3.supprimer_modele(nom, self._dossiers())
+                for essai in range(6):
+                    try:
+                        exllamav3.supprimer_modele(nom, self._dossiers())
+                        break
+                    except PermissionError:          # le serveur tient le modèle ouvert : on l'arrête (l'utilisateur a confirmé la suppression) et on réessaie quelques secondes ; rien n'est touché tant que ça échoue
+                        if essai == 0 and MoteurOpenAI.actif(self):
+                            exllamav3.arreter(self._dossiers())
+                        if essai == 5:
+                            raise
+                        time.sleep(1)
             elif self.lmstudio_choisi():
                 from . import lmstudio
                 lmstudio.supprimer_modele(nom)

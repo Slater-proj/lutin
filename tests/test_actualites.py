@@ -13,6 +13,18 @@ class Actualites(unittest.TestCase):
         for texte in ["Écris un script", "", "Explique-moi la différence entre TCP et UDP", "x" * 400 + " news"]:
             self.assertFalse(actualites.demande_actualites(texte), texte[:30])
 
+    def test_un_lien_ou_un_chemin_local_ne_lance_pas_une_recherche_sur_internet(self):
+        """Le défaut vécu : « tu peux me donner le lien de la page html » (un fichier de son dossier) partait chercher « affiche 11b mpage html » sur le web."""
+        petit, grand = "qwen3:4b", "qwen3:32b"
+        locaux = ["affiche moi le 11b tu peux me donner le lien de la mpage html", "donne-moi le lien de la page html de la galerie", "donne-moi le lien du fichier", "où est le lien vers ma sauvegarde ?",
+                  "ouvre C:\\Users\\x\\galerie.html", "où est \\\\NAS\\Software\\dossier", "affiche file:///C:/x/galerie-v11b.html", "montre-moi galerie-v11b.html", "donne-moi le chemin local de la galerie"]
+        for texte in locaux:
+            for modele in (petit, grand):
+                self.assertEqual(actualites.mode_guide(texte, modele), "", (texte, modele))
+        web = ["donne-moi des liens vers des articles sur le jazz", "cherche des liens sur la cuisine japonaise sur internet", "peux-tu chercher sur le web le prix du kWh", "donne-moi des liens vers des vidéos youtube sur le yoga"]
+        for texte in web:
+            self.assertEqual(actualites.mode_guide(texte, grand), "recherche", texte)
+
     def test_petit_modele(self):
         for nom in ["qwen3:4b", "granite4:tiny-h", "llama3.2:3b", "inconnu", "phi4-mini:3.8b"]:
             self.assertTrue(actualites.petit_modele(nom), nom)

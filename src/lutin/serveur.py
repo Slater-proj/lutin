@@ -1,5 +1,6 @@
 """Le serveur HTTP de Lutin : le gestionnaire de requêtes (pages, API JSON, flux de la conversation). L'état et les fonctions métier restent dans moteur ; ce module les atteint par « _m.NOM » (lu à chaque appel)."""
 import gzip
+import html
 from http.server import BaseHTTPRequestHandler
 from . import bench as _bench
 from . import bench_moteurs as _bench_moteurs
@@ -27,6 +28,7 @@ from . import exllamav3_catalogue as _exl_cat
 from . import lmstudio_catalogue as _lms_cat
 from . import github as _github
 from . import skills_tiers as _skills
+from . import ouverture as _ouverture
 from . import travaux as _travaux
 from . import conseil as _conseil
 from . import conseil_machine as _conseil_machine
@@ -405,6 +407,21 @@ class Gestionnaire(BaseHTTPRequestHandler):
             except ValueError as e:
                 return self._envoyer(404, {"erreur": str(e)})
             return self._envoyer(200, octets, mime, {"Content-Disposition": "attachment; filename*=UTF-8''" + urllib.parse.quote(nom), "Content-Security-Policy": "default-src 'none'; sandbox"})
+        if chemin == "/api/ouvrir-chemin" or chemin.startswith("/ouvrir/"):          # un chemin cité dans une réponse devient un lien : le fichier du DOSSIER DE TRAVAIL s'ouvre dans le navigateur (jamais lancé)
+            if not self._authentifie():
+                return self._envoyer(401, {"erreur": "authentification requise"})
+            try:
+                if chemin == "/api/ouvrir-chemin":
+                    q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+                    trouve = _ouverture.resoudre((q.get("p") or [""])[0], _m.RACINE)
+                    if trouve is None:
+                        return self._envoyer(404, "<!doctype html><meta charset=utf-8><title>Lutin</title><body style='font-family:sans-serif;margin:3em'><h3>" + html.escape(_t("Fichier introuvable dans le dossier de travail.")) + "</h3><p>"
+                                             + html.escape(_t("Lutin ne retrouve que les fichiers du dossier de travail actif ({}). Si le fichier est ailleurs, ajoute son dossier comme dossier de travail (Réglages > Dossiers).").format(_m.RACINE)) + "</p>", "text/html; charset=utf-8")
+                    return self._envoyer(302, b"", "text/plain", {"Location": _ouverture.adresse(trouve, _m.RACINE)})
+                octets, mime, entetes = _ouverture.lire(chemin[len("/ouvrir/"):], _m.RACINE)
+            except ValueError as e:
+                return self._envoyer(404, "<!doctype html><meta charset=utf-8><title>Lutin</title><body style='font-family:sans-serif;margin:3em'><h3>" + html.escape(str(e)) + "</h3>", "text/html; charset=utf-8")
+            return self._envoyer(200, octets, mime, entetes)
         if chemin.startswith("/fichier/"):                     # télécharger un fichier produit pendant une conversation (cookie de session, comme /image/)
             if not self._authentifie():
                 return self._envoyer(401, {"erreur": "authentification requise"})
@@ -423,7 +440,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
             profil = _adequation.profil_pret()
             return self._envoyer(200, {"compat": self._compat(o), "adequation": _adequation.pour_la_liste(modeles, profil, _m._CATALOGUE["modeles"]), "machine": profil.resume() if profil else "", "budget_go": profil.budget_go() if profil else 0,
                                        "familles": {k: _t(v) for k, v in (_m._CATALOGUE.get("familles") or {}).items()}, "disque_modeles": _emplacements.jauge_modeles(),
-                                       "version": _m.VERSION, "partages": o.get("partages", []), "ollama": o["actif"], "ollama_installe": bool(_m.chemin_ollama()) or _m.moteur_actuel().id != "ollama", "moteur_nom": _m.moteur_actuel().nom, "installes": o["installes"], "modeles": modeles, "modeles_masques": len(_m.lire_registre_modeles()["masques"]), "actives": list(_m.TOURS_ACTIFS),
+                                       "version": _m.VERSION, "partages": o.get("partages", []), "ollama": o["actif"], "ollama_installe": bool(_m.chemin_ollama()) or _m.moteur_actuel().id != "ollama", "moteur_nom": _mesures.nom_affiche(_m.moteur_actuel()), "installes": o["installes"], "modeles": modeles, "modeles_masques": len(_m.lire_registre_modeles()["masques"]), "actives": list(_m.TOURS_ACTIFS),
                                        "pulls": _m.PULLS, "reglages": r, "conversations": _m.conv_liste(), "racine": str(_m.RACINE), "donnees": str(_m.DONNEES),
                                        "colibri_choisi": bool(getattr(_m.moteur_actuel(r), "colibri_choisi", lambda: False)()), "lmstudio_choisi": bool(getattr(_m.moteur_actuel(r), "lmstudio_choisi", lambda: False)()), "exllamav3_choisi": bool(getattr(_m.moteur_actuel(r), "exllamav3_choisi", lambda: False)()), "outil": bool(self._outil_vivant()), "hors_ligne": _hl.actif(), "moteur": _m.moteur_actuel().id, "niveau": _m.SECURITE.niveau, "docker": _acces.en_docker(), "ouverture_possible": _fichiers.ouverture_possible(), "missions": _mission.par_conversation(), "langue": _i18n.langue(), "langue_reglage": _i18n.langue_configuree(), "cpus": _machine.cpus_disponibles() or 1, "diagnostic": self._avec_estimation(self._diagnostic(o, r, profil, modeles), r, profil), "prudent": _estimation.mode_prudent(profil), "premier_lancement": self._premier_lancement(o, r, profil), "redemarrage": {"necessaire": _acces.securite_enregistree() != _m.SECURITE, "possible": _acces.peut_redemarrer()}, "nouvelle_version": _m.nouvelle_version_lutin(), "travaux": _m.travaux_etat(), "configurateur": self._configurateur(), "addons_alertes": _addons.alertes(), "embeddings": _embeddings.etat(),
                                        "reflexion_possible": self._reflexion_possible(r, o["actif"]), "cluster_actif": _machines.cluster_actif(r.get("cluster")), "demandes_machines": len(_machines.noeud().get("demandes", [])), "modeles_distants": _machines.modeles_distants() if _machines.cluster_actif(r.get("cluster")) else [], "conversations_distantes": _machines.conversations_distantes() if _machines.cluster_actif(r.get("cluster")) else [], "machines_hors_ligne": _machines.hors_ligne() if _machines.cluster_actif(r.get("cluster")) else [], "taches_fond": _m.taches_en_cours(), "taches_moteur": [dict(v, nom=_moteurs.MOTEURS[k].nom) for k, v in _moteurs.toutes_les_taches().items() if v.get("statut") == "en cours" and k in _moteurs.MOTEURS], "fins_moteur": _moteurs.fins_recentes(), "memoire": self._memoire(r, o), "calibrage": _calibrage.etat(), "bench": {"en_cours": _m.BENCH["en_cours"], "etape": _m.BENCH["etape"], "erreur": _m.BENCH["erreur"], "file": list(_m.BENCH.get("file") or []), "mesures": _bench.lire(_m.chemin_bench())}, "attentes": [{"id": a.id, "titre": a.titre, "detail": a.detail, "diff": a.diff, "conv": a.conv} for a in _m.Attente.EN_COURS.values()],
@@ -1341,7 +1358,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
             if self.path == "/api/decharger":                          # décharger une chose de la liste des ressources (modèle d'Ollama, serveur llama.cpp, ComfyUI)
                 return self._envoyer(200, _ressources.decharger(donnees.get("id")))
             if self.path == "/api/liberer-vram":
-                return self._envoyer(200, _m.liberer_vram())
+                return self._envoyer(200, _m.liberer_vram(tout=True))
             if self.path == "/api/resumer":
                 return self._resumer(donnees)
         except (ValueError, OSError, TypeError, subprocess.SubprocessError) as erreur:
@@ -1464,7 +1481,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
             if route == "modeles":
                 reponse = {"modeles": [dict(x, adequation=juger(x["taille_go"]) if x.get("taille_go") else None, utilise=(x["nom"] == actif) if genre != "colibri" else True) for x in installes],
                            "installe": present, "dossier": dossier, "actif": bool(mo.modeles()["actif"]) if present else False,
-                           "maj": genre == "exllamav3"}
+                           "maj": genre == "exllamav3", "nom": nom, "statut": mo.statut().get("detail", "") if present else "", "demarrer": mo.actions().get("demarrer") if present else None}
                 return self._envoyer(200, reponse)
             if route == "catalogue":
                 if genre == "colibri":

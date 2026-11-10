@@ -503,15 +503,38 @@ from .dialogue import (  # noqa: F401  (déplacé dans dialogue.py : moteur ré-
 )
 
 
-def liberer_vram():
-    """Décharge les modèles chargés en mémoire Ollama (libère la VRAM)."""
+def _liberer_autres_moteurs(tout):
+    """Arrête le serveur llama.cpp de Lutin s'il tourne (il redémarre tout seul au prochain message), et, si `tout`, le serveur compatible OpenAI que Lutin gère (ExLlamaV3, Colibri, LM Studio : à redémarrer à la main).
+    Rend les noms de ce qui a été libéré. Avant, « Libérer la VRAM » ne regardait qu'Ollama et répondait « aucun modèle en mémoire » avec un modèle llama.cpp de 22 Go chargé."""
+    libres = []
+    try:
+        from . import moteur_llamacpp as _ml, moteurs as _mo
+        llama, proc = _mo.MOTEURS.get("llamacpp"), _ml.SERVEUR.get("proc")
+        if llama is not None and proc is not None and proc.poll() is None:
+            llama.arreter()
+            libres.append("llama.cpp")
+        gere = _mo.MOTEURS.get("openai")
+        if tout and gere is not None and hasattr(gere, "arreter_gere") and gere.arreter_gere():
+            from . import mesures_moteurs
+            libres.append(mesures_moteurs.nom_affiche(gere))
+    except Exception as e:  # noqa: BLE001  (libérer est un confort : jamais une erreur de plus)
+        journaliser("Libération des autres moteurs impossible : {!r}".format(e))
+    return libres
+
+
+def liberer_vram(tout=False):
+    """Décharge les modèles chargés en mémoire : ceux d'Ollama, le serveur llama.cpp de Lutin, et — avec `tout` (le bouton « Libérer la VRAM ») — le serveur ExLlamaV3, Colibri ou LM Studio qu'il gère."""
+    autres = _liberer_autres_moteurs(tout)
     try:
         charges = ollama_json("/api/ps", None, 3).get("models", [])
+        ollama_ok = True
     except (urllib.error.URLError, OSError, ValueError):
-        return {"ok": True, "message": "Ollama inaccessible — rien à faire."}
+        charges, ollama_ok = [], False
     if not charges:
-        return {"ok": True, "message": "Aucun modèle en mémoire, VRAM déjà libre."}
-    decharges = []
+        if autres:
+            return {"ok": True, "message": _t("Déchargé(s) : {}").format(", ".join(autres))}
+        return {"ok": True, "message": "Aucun modèle en mémoire, VRAM déjà libre." if ollama_ok else _t("Aucun modèle de Lutin en mémoire (Ollama n'est pas lancé), VRAM déjà libre.")}
+    decharges = list(autres)
     for m in charges:
         nom = m.get("name") or m.get("model", "?")
         try:
