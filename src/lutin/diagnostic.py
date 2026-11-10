@@ -41,6 +41,8 @@ def premier_lancement(moteur_nom, actif, detail, recommande=None, emplacement=No
     if gere:          # un serveur que Lutin gère (Colibri, LM Studio, ExLlamaV3) : on dit où il en est, jamais « installe Ollama »
         nom = gere["nom"]
         raison = (_t("{} est installé mais ne répond pas : démarre-le (bouton ci-dessous).") if gere["installe"] else _t("{} n'est pas installé : installe-le (bouton ci-dessous).")).format(nom)
+        if gere.get("sans_modele"):
+            raison = _t("{} est installé, mais il n'a encore aucun modèle : il ne peut pas démarrer sans. Onglet Modèles, carte {} : prépare-en un (plusieurs Go à télécharger).").format(nom, nom)
         if installes:
             raison += " " + _t("Tu peux aussi utiliser {}, déjà installé.").format(", ".join(i["nom"] for i in installes))
         return {"pret": False, "raison": raison, "recommande": None, "emplacement": None, "installes": installes, "gere": dict(gere)}

@@ -1921,12 +1921,12 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     const gererCeServeur = async () => {          // « Démarrer » ou « Installer » le serveur que Lutin gère ; l'avancement est dans la barre bleue du haut
       oui.disabled = true; msg.textContent = '';
       try { await api('/api/moteur-action', { moteur: 'openai', action: pl.gere.installe ? 'demarrer' : 'installer' }); msg.textContent = T('Lancé : l\'avancement est dans la barre bleue du haut.'); }
-      catch (e) { msg.textContent = e.message; }
+      catch (e) { msg.textContent = e.message; msg.className = 'erreur'; }
       oui.disabled = false; rafraichir();
     };
     const dejaLa = (pl.installes || [])[0];          // un autre moteur est déjà installé : le premier choix est de s'en servir, pas d'en installer un de plus
     const utiliser = async () => { oui.disabled = true; msg.textContent = ''; try { await api('/api/reglages', { moteur: dejaLa.moteur }); } catch (e) { msg.textContent = e.message; } oui.disabled = false; rafraichir(); };
-    const oui = el('button', 'principal', pl.gere ? (pl.gere.installe ? T('Démarrer ') : T('Installer ')) + pl.gere.nom : (dejaLa ? T('Utiliser ') + dejaLa.nom : (pl.recommande ? T('Installer ') + pl.recommande.nom : T('Choisir un moteur')))); oui.addEventListener('click', pl.gere ? gererCeServeur : (dejaLa ? utiliser : (pl.recommande ? installerConseille : ouvrirReglages)));
+    const oui = el('button', 'principal', pl.gere ? (pl.gere.sans_modele ? T('Préparer un modèle ') : pl.gere.installe ? T('Démarrer ') : T('Installer ')) + (pl.gere.sans_modele ? '' : pl.gere.nom) : (dejaLa ? T('Utiliser ') + dejaLa.nom : (pl.recommande ? T('Installer ') + pl.recommande.nom : T('Choisir un moteur')))); oui.addEventListener('click', pl.gere ? (pl.gere.sans_modele ? () => ouvrirOnglet('modeles') : gererCeServeur) : (dejaLa ? utiliser : (pl.recommande ? installerConseille : ouvrirReglages)));
     const autre = el('button', '', pl.gere && dejaLa ? T('Utiliser ') + dejaLa.nom : T('Choisir un autre moteur')); autre.addEventListener('click', pl.gere && dejaLa ? utiliser : ouvrirReglages);
     const tard = el('button', '', T('Plus tard')); tard.addEventListener('click', () => { try { sessionStorage.setItem('lutinPlusTard', '1'); } catch (e) { /* facultatif */ } afficherPremierLancement(pl); });
     l.append(oui, autre, tard); bloc.append(l, msg);

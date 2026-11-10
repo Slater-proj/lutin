@@ -281,6 +281,11 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 for choisi, nom, trouve in (("colibri_choisi", "Colibri", getattr(mo, "_colibri", None)), ("lmstudio_choisi", "LM Studio", getattr(mo, "_lms", None)), ("exllamav3_choisi", "ExLlamaV3", getattr(mo, "_exl", None))):
                     if trouve and getattr(mo, choisi, lambda: False)():
                         gere = {"nom": nom, "installe": trouve() is not None}
+                        if choisi == "colibri_choisi" and gere["installe"]:
+                            try:
+                                gere["sans_modele"] = not mo.modele_colibri()          # Colibri ne démarre qu'avec un modèle qu'il a préparé : sans lui, « Démarrer » ne peut rien faire
+                            except Exception:  # noqa: BLE001
+                                pass
             return _diagnostic.premier_lancement(mo.nom, False, detail, {k: reco[k] for k in ("moteur", "nom", "raison")} if reco else None, emplacement, autres, mo.id, gere)
         except Exception:  # noqa: BLE001  (jamais une page cassée pour un constat de plus)
             return {"pret": True, "raison": "", "recommande": None}

@@ -26,6 +26,14 @@ class Diagnostic(unittest.TestCase):
         self.assertTrue(p["action"]["modele"])
         self.assertIn(p["action"]["modele"], p["texte"])
 
+    def test_colibri_installe_sans_modele_dit_de_preparer_un_modele_au_lieu_d_un_bouton_muet(self):
+        """« Colibri ne répond pas » + « Démarrer » qui ne faisait rien : Colibri ne démarre qu'avec un modèle qu'il a préparé."""
+        r = diagnostic.premier_lancement("Serveur compatible OpenAI", False, "", gere={"nom": "Colibri", "installe": True, "sans_modele": True})
+        self.assertIn("aucun modèle", r["raison"])
+        self.assertNotIn("démarre-le", r["raison"])
+        r = diagnostic.premier_lancement("Serveur compatible OpenAI", False, "", gere={"nom": "Colibri", "installe": True})
+        self.assertIn("démarre-le", r["raison"])
+
     def test_sans_modele_et_machine_inconnue_renvoie_aux_modeles(self):
         p, = diag(installes=[])
         self.assertEqual(p["action"], {"type": "onglet", "nom": "modeles"})
