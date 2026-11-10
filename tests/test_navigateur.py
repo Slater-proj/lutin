@@ -489,7 +489,7 @@ class Parcours(unittest.TestCase):
             p.evaluer("document.getElementById('fil').insertAdjacentHTML('afterbegin', '<div id=\"cale\" style=\"height:3000px\"></div>')")
             p.evaluer("(() => { const s = document.getElementById('saisie'); s.value = '[tres-lent] question'; document.getElementById('bEnvoyer').click(); return true; })()")
             p.attendre("document.getElementById('fil').scrollHeight - document.getElementById('fil').scrollTop - document.getElementById('fil').clientHeight < 80")      # envoyer ramène en bas
-            p.evaluer("document.getElementById('fil').scrollTop = 0")                                                                  # on remonte lire pendant la réponse
+            p.evaluer("(() => { const f = document.getElementById('fil'); f.scrollTop = 0; f.dispatchEvent(new Event('scroll')); return true; })()")          # l'événement est envoyé à la main : un Chrome sans affichage (la CI) le retarde                                                                  # on remonte lire pendant la réponse
             p.attendre("!document.getElementById('bBas').hidden", delai=8)                                                           # le bouton ↓ apparaît
             p.attendre("[...document.querySelectorAll('#fil .msg.ia')].some(m => m.textContent.includes('Réponse de démonstration.') && m.textContent.length > 0) && document.getElementById('ptTravail').hidden", delai=40)
             self.assertLess(p.evaluer("document.getElementById('fil').scrollTop"), 40, "la réponse qui arrive ne te ramène pas en bas")
