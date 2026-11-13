@@ -17,9 +17,9 @@ Sizes are relative (S, M, L, XL), not durations.
 | # | Step | Size | State |
 |---|---|---|---|
 | 0 | Baseline: reproducible test run, hermetic tests, contract inventory, ADRs | S | Done — [BASELINE.md](BASELINE.md) |
-| 1 | Security and reliability | S/M | Part 1 done (ADR 0006, 0008); rest listed below |
-| 2 | HTTP contract: schemas and contract tests, design of `/api/v1` | M | Not started |
-| 3 | English: catalogues inverted, identifiers and modules renamed, data migration | L | Not started |
+| 1 | Security and reliability | S/M | Done except update signing and installer signing, which need the maintainer (below) |
+| 2 | HTTP contract: schemas and contract tests, design of `/api/v1` | M | Access contract and design done ([API_V1.md](API_V1.md)); field-by-field contract comes with each v1 area |
+| 3 | English: catalogues inverted, identifiers and modules renamed, data migration | L | Glossary and module names done ([GLOSSARY.md](GLOSSARY.md)); the rest not started |
 | 4 | Interface: foundation and design system, then screen by screen on `/api/v1` | XL | Not started |
 | 5 | Backend, targeted: route table, application context, agent loop split | L | Not started |
 | 6 | Retained differentiators: model router, projects, monitoring | M each | Not started |
@@ -38,32 +38,37 @@ Remaining, each its own commit:
    engine catalogue; refuse an unsigned release from a given version on. Needs a key ceremony by the maintainer.
 2. ~~Release workflow~~ — done: release channel and pre-releases (ADR 0004, [PUBLISHING.md](../PUBLISHING.md)).
 3. **Windows installer signing** (decision already recorded as postponed in DECISIONS.md): to reconsider before 1.0, it conditions adoption by beginners.
-4. **Security review of what the audit did not cover** (M) — partly done (2026-11-13). Read, nothing to fix: backup restore (`sauvegarde.py`: names checked against a closed list,
-   links and oversize refused, previous state kept), installation of third-party skills (`skills_tiers.installer`: paths checked, never executed, danger and licence confirmed),
-   the relay whitelist (`serveur._relais`: closed list of routes, no access-changing route), document extraction limits, upload names (random identifiers).
+4. **Security review of what the audit did not cover** (M) — partly done (2026-11-13). Read, nothing to fix: backup restore (`backup.py`: names checked against a closed list,
+   links and oversize refused, previous state kept), installation of third-party skills (`third_party_skills.installer`: paths checked, never executed, danger and licence confirmed),
+   the relay whitelist (`server._relais`: closed list of routes, no access-changing route), document extraction limits, upload names (random identifiers).
    One documentation error found and corrected: SECURITY_AUDIT stated a paired machine can never read files; the optional « lead conversations » right lets it run and approve actions.
-   **Still not read in depth**: the rest of `machines.py` (pairing, probes, wake-up, imports), the MCP client (`mcp.py`), the add-on modules, `ouverture.py`.
-5. **Logic tied to message text** (S): `serveur.py` recognises a refusal by the French words « cette machine »; replace by an error code. Fits naturally in step 2.
+   **Still not read in depth**: the rest of `machines.py` (pairing, probes, wake-up, imports), the MCP client (`mcp.py`), the add-on modules, `open_file.py`.
+5. **Logic tied to message text** (S): `server.py` recognises a refusal by the French words « cette machine »; replace by an error code. Fits naturally in step 2.
 6. ~~Add-on downloads~~ — not retained: `addons_comfyui` only downloads over HTTPS from a fixed list of hosts (Hugging Face, Civitai) and controls each redirection against that list; pinning the address adds nothing there.
 
 Acceptance: each audit finding has a test that failed before the fix and passes after; no finding is closed by documentation alone, except where the decision is to accept the risk, written in SECURITY.md.
 
 ### Step 2 — HTTP contract
 
-- A machine-readable description of every route actually used by the page: method, fields in, fields out, errors, required right (authenticated / configurator / this machine).
-- Contract tests driven by that description, run against the real server.
-- The design of `/api/v1`: English names, error codes instead of sentences, the same NDJSON stream with English event names, versioned node protocol.
+Done:
 
-Acceptance: the description covers 100 % of the routes of `tests/fixtures/api_contract.json`; a field renamed in the server fails a contract test.
+- The inventory records the right each route asks; `tests/test_api_access.py` calls every route for real, without a session and as a paired device (184 exact routes, 17 prefixes; no defect found).
+- The design of `/api/v1`: [API_V1.md](API_V1.md) — English names, resources, error codes instead of sentences, declared rights, the same NDJSON stream with English event names, a versioned node protocol.
+
+Remaining, with the implementation of v1 (it needs the route table of step 5, brought forward for that purpose):
+
+- Fields in, fields out and errors of each route, area by area, with contract tests run against the real server.
+
+Acceptance: every v1 route has a contract test on its fields; a field renamed in the server fails a contract test. The access test reads the route table instead of the source.
 
 ### Step 3 — English
 
 Order matters, to touch each file once:
 
-1. Glossary (French term → English term), validated before any renaming.
+1. ~~Glossary~~ — done: [GLOSSARY.md](GLOSSARY.md). It was not submitted for validation term by term: the maintainer asked for the plan to be carried out without stopping. Any term can still be changed by a mechanical commit.
 2. Catalogues inverted by script: the English sentence becomes the key, `messages.fr.json` and `interface.fr.json` are generated. `tests/test_langue.py` already guarantees every sentence is translated, so the inversion is total.
 3. Feature freeze starts (ADR 0003).
-4. Modules renamed and moved to their target package in the same commit, content unchanged; then identifiers, module by module, with a syntax-tree tool; then comments and docstrings.
+4. ~~Modules renamed~~ — done: 76 modules, one mechanical commit, contents unchanged, package kept flat (moving into sub-packages is left to step 5, when responsibilities are actually separated: a deviation from the first version of this plan, which wanted both at once). Then identifiers, module by module, with a syntax-tree tool; then comments and docstrings; then the test file names.
 5. Environment variables: English names, old names read as aliases through one function.
 6. Data migration 0.x → 1.0: versioned schema for every stored file, backup first, idempotent, tested on data written by 0.50.
 
