@@ -18,7 +18,7 @@ Sizes are relative (S, M, L, XL), not durations.
 |---|---|---|---|
 | 0 | Baseline: reproducible test run, hermetic tests, contract inventory, ADRs | S | Done — [BASELINE.md](BASELINE.md) |
 | 1 | Security and reliability | S/M | Done except update signing and installer signing, which need the maintainer (below) |
-| 2 | HTTP contract: schemas and contract tests, design of `/api/v1` | M | Access contract and design done ([API_V1.md](API_V1.md)); v1 started: dispatcher, status, settings, models, conversations, the turn stream, approvals (14 routes, `src/lutin/api_v1.py`). Next: engines, then the per-conversation options |
+| 2 | HTTP contract: schemas and contract tests, design of `/api/v1` | M | Access contract and design done ([API_V1.md](API_V1.md)); v1 started: dispatcher, status, settings, models, conversations, the turn stream, approvals (15 routes, `src/lutin/api_v1.py`). Next: engines, then the per-conversation options |
 | 3 | English: catalogues inverted, identifiers and modules renamed, data migration | L | Glossary and module names done ([GLOSSARY.md](GLOSSARY.md)); the rest not started |
 | 4 | Interface: foundation and design system, then screen by screen on `/api/v1` | XL | Not started |
 | 5 | Backend, targeted: route table, application context, agent loop split | L | Not started |

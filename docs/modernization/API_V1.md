@@ -64,8 +64,9 @@ routes disappear with the old page, in one deletion.
 
    `tokens` and `speed` are the two events the first inventory missed (their fields come from a variable). The request body: `message` and, optionally,
    `model`, `thinking`, `replace_from`, `images`, `attachments`, `workspace`. A refusal comes before the stream as an ordinary error: `400 invalid_request`,
-   `409 turn_running` or `workspace_conflict`, `429 too_many_turns`. Not in v1 yet: the per-conversation options (mode, automatic approvals), the choice of
-   another machine, and the answer to `memory_choice`.
+   `409 turn_running` or `workspace_conflict`, `429 too_many_turns`. `memory_choice` is answered with `POST /api/v1/conversations/{id}/memory-choice`
+   (`{"choice": "summary" | "file", "remember": false}`; `409 no_pending_choice` when nothing waits). Not in v1 yet: the per-conversation options (mode, automatic
+   approvals) and the choice of another machine.
 7. **Versioning.** `/api/v1` only ever gains optional fields and new routes. A change that breaks a client is `/api/v2`. The page and the server ship together,
    so the page never talks to a server of another version; the rule protects scripts and paired machines.
 8. **Machine-to-machine protocol** (`/api/noeud/*` today): versioned separately (`/node/v1`), because two machines may run different versions of Lutin.

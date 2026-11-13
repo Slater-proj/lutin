@@ -31,6 +31,11 @@
  },
  {
   "method": "POST",
+  "path": "/api/v1/conversations/{id}/memory-choice",
+  "right": "session"
+ },
+ {
+  "method": "POST",
   "path": "/api/v1/conversations/{id}/stop",
   "right": "session"
  },

@@ -434,6 +434,18 @@ def create_turn(request):
     return Streamed(lambda: handler._chat(dict({TURN_FIELDS[key]: value for key, value in body.items()}, conversation=identifier)))
 
 
+@route("POST", "/conversations/{id}/memory-choice", SESSION)
+def answer_memory_choice(request):
+    """Answers the `memory_choice` event of a long conversation: {"choice": "summary" | "file"}, and `remember` to make it the setting. The turn is waiting for it."""
+    body = request.body
+    choices = {"summary": "resume", "file": "fichier"}
+    if set(body) - {"choice", "remember"} or body.get("choice") not in choices or not isinstance(body.get("remember", False), bool):
+        raise ApiError(400, "invalid_request", _t("Valeur invalide pour « {} » (attendu : {}).").format("choice", ", ".join(choices)))
+    if not _m.repondre_choix_memoire(request.params["id"], choices[body["choice"]], body.get("remember", False)):
+        raise ApiError(409, "no_pending_choice", _t("Plus de question en attente pour cette conversation."))
+    return {"choice": body["choice"]}
+
+
 # ------------------------------------------------------------------------------------------------------------- approvals
 @route("POST", "/approvals/{id}", SESSION)
 def answer_approval(request):
