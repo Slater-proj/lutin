@@ -6,7 +6,7 @@ Sizes are relative (S, M, L, XL), not durations.
 ## Rules for every step
 
 - Work happens on the `modernization` branch, in small commits with one intention each. Nothing is pushed or merged without the maintainer.
-- `modernization` is **not merged into `main`** until the release workflow knows pre-releases (ADR 0004): a merge would publish a version.
+- `modernization` carries `tools/release_channel.json` (alpha, target 1.0.0): if it reaches `main`, what is published is a pre-release `1.0.0aN`, never `:latest` (ADR 0004). Merging stays the maintainer's decision.
 - No user data is modified, no destructive migration is run, outside the versioned migration of step 3.
 - A step is done when: its acceptance criteria below are met; the full suite passes (`python tests/lancer_tests.py`) and `ruff check src tests tools` is clean;
   the documentation is updated; the residual risks are written down; the way back is stated.
@@ -36,12 +36,12 @@ Remaining, each its own commit:
 
 1. **Update authenticity** (M). `SHA256SUMS.txt` sits next to the wheel: it proves integrity, not origin. Sign it with the Ed25519 mechanism already used for the
    engine catalogue; refuse an unsigned release from a given version on. Needs a key ceremony by the maintainer.
-2. **Release workflow** (S): pre-releases, no publication per merge (ADR 0004).
+2. ~~Release workflow~~ — done: release channel and pre-releases (ADR 0004, [PUBLISHING.md](../PUBLISHING.md)).
 3. **Windows installer signing** (decision already recorded as postponed in DECISIONS.md): to reconsider before 1.0, it conditions adoption by beginners.
 4. **Security review of what the audit did not cover** (M): machine-to-machine relay (`machines.py`), MCP connectors, third-party skills, add-ons,
    document extraction, backup restore. The audit read none of them in depth.
 5. **Logic tied to message text** (S): `serveur.py` recognises a refusal by the French words « cette machine »; replace by an error code. Fits naturally in step 2.
-6. **Add-on downloads** (S): give `addons_comfyui` the pinned connection of ADR 0008.
+6. ~~Add-on downloads~~ — not retained: `addons_comfyui` only downloads over HTTPS from a fixed list of hosts (Hugging Face, Civitai) and controls each redirection against that list; pinning the address adds nothing there.
 
 Acceptance: each audit finding has a test that failed before the fix and passes after; no finding is closed by documentation alone, except where the decision is to accept the risk, written in SECURITY.md.
 

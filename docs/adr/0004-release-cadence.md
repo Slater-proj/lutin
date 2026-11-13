@@ -1,6 +1,6 @@
 # ADR 0004 — Pre-releases during the migration instead of a release per merge
 
-- Status: Accepted (workflow change not applied yet)
+- Status: Accepted, implemented (`tools/release_channel.json`, `tools/prochaine_version.py`, `.github/workflows/release.yml`; the `main` path of the workflow has not run yet)
 - Date: 2026-11-11
 - Deciders: maintainer (validated after the Phase A audit)
 
@@ -22,7 +22,7 @@ During the migration, `main` will receive mechanical renamings and half-migrated
 
 - Positive: an installed Lutin does not update itself into a half-migrated state; the changelog becomes readable.
 - Negative: `tools/prochaine_version.py` and `release.yml` must learn pre-releases; the update check must ignore them.
-- Risks: until that workflow change is made, merging `modernization` into `main` would publish it. **Do not merge it before the workflow is changed.**
+- Risks: the pre-release path of the workflow only runs on `main`: it is covered by the tests of the version computation, not yet by a real run. The first merge should be watched.
 
 ## Migration and rollback
 

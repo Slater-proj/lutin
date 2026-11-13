@@ -2,6 +2,8 @@ name: release
 
 # Chaque envoi sur une branche :
 #   - main            -> une publication : version calculée, étiquette vX.Y.Z, GitHub Release (roue, archive source, sommes de contrôle), image Docker :X.Y.Z et :latest
+#                        si tools/release_channel.json demande des pré-versions (alpha, beta, rc) : étiquette vX.Y.ZaN, Release marquée « pre-release »
+#                        (jamais « dernière version », donc jamais proposée par les installateurs ni par l'annonce de mise à jour), image :X.Y.ZaN et :next, jamais :latest
 #   - toute autre     -> une candidate (rc) SANS étiquette ni Release : fichiers joints à l'exécution, image Docker :rc-<branche>
 # Les tests passent d'abord (ci.yml). Les règles de version sont dans tools/prochaine_version.py (docs/PUBLICATIONS.md).
 on:
@@ -29,6 +31,7 @@ jobs:
       version: ${{ steps.v.outputs.version }}
       etiquette: ${{ steps.v.outputs.etiquette }}
       publier: ${{ steps.v.outputs.publier }}
+      prerelease: ${{ steps.v.outputs.prerelease }}
       image: ${{ steps.nom.outputs.image }}
       balises: ${{ steps.nom.outputs.balises }}
       balises_leger: ${{ steps.nom.outputs.balises_leger }}
@@ -43,6 +46,7 @@ jobs:
       - name: Calculer la version
         id: v
         run: |
+          set -o pipefail          # un canal de publication illisible arrête tout ici, au lieu de laisser des sorties vides
           if [ "${GITHUB_REF}" = "refs/heads/main" ]; then
             python tools/prochaine_version.py --mode release | tee -a "$GITHUB_OUTPUT"
           else
@@ -53,7 +57,11 @@ jobs:
         run: |
           IMAGE="ghcr.io/${GITHUB_REPOSITORY,,}"
           VERSION="${{ steps.v.outputs.version }}"
-          if [ "${GITHUB_REF}" = "refs/heads/main" ]; then
+          if [ "${{ steps.v.outputs.prerelease }}" = "true" ]; then
+            BALISES="${IMAGE}:${VERSION},${IMAGE}:next"
+            LEGER="${IMAGE}:${VERSION}-slim,${IMAGE}:next-slim"
+            ROCM="${IMAGE}:${VERSION}-rocm,${IMAGE}:next-rocm"
+          elif [ "${GITHUB_REF}" = "refs/heads/main" ]; then
             BALISES="${IMAGE}:${VERSION},${IMAGE}:latest"
             LEGER="${IMAGE}:${VERSION}-slim,${IMAGE}:slim"
             ROCM="${IMAGE}:${VERSION}-rocm,${IMAGE}:rocm"
@@ -139,6 +147,7 @@ jobs:
           tag_name: ${{ needs.version.outputs.etiquette }}
           target_commitish: ${{ github.sha }}
           name: Lutin ${{ needs.version.outputs.version }}
+          prerelease: ${{ needs.version.outputs.prerelease == 'true' }}
           generate_release_notes: true
           files: dist/*
           body: |

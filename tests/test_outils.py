@@ -99,6 +99,72 @@ class ProchaineVersion(unittest.TestCase):
             rc = version("--mode", "rc", "--branche", "ma-branche", "--numero", "9")
             self.assertEqual((rc["version"], rc["etiquette"]), ("0.2.0rc9+ma.branche", ""))
             self.assertNotIn("v0.2.0", git("tag", "--list"), "le calcul ne crée aucune étiquette")
+            # Release channel (ADR 0004): with the file in the repository, main publishes pre-releases of the target and never a « latest » version
+            (Path(d) / "tools").mkdir()
+            (Path(d) / "tools" / "release_channel.json").write_text('{"channel": "alpha", "target": "1.0.0"}', encoding="utf-8")
+            r = version("--mode", "release")
+            self.assertEqual((r["version"], r["etiquette"], r["prerelease"], r["publier"]), ("1.0.0a1", "v1.0.0a1", "true", "true"))
+            git("tag", "v1.0.0a1")
+            self.assertEqual(version("--mode", "release")["publier"], "false", "HEAD already carries the pre-release tag")
+            git("commit", "-q", "--allow-empty", "-m", "fix: next")
+            self.assertEqual(version("--mode", "release")["version"], "1.0.0a2")
+            self.assertEqual(version("--mode", "rc", "--branche", "modernization", "--numero", "4")["version"], "1.0.0.dev4+modernization")
+            (Path(d) / "tools" / "release_channel.json").write_text("{not json", encoding="utf-8")
+            broken = subprocess.run([sys.executable, str(Path(__file__).resolve().parent.parent / "tools" / "prochaine_version.py"), "--mode", "release"], cwd=d, capture_output=True, text=True)
+            self.assertEqual((broken.returncode, broken.stdout), (2, ""), "an unreadable channel file stops the release instead of publishing a stable version by accident")
+
+
+class ReleaseChannel(unittest.TestCase):
+    """What `main` publishes is decided by tools/release_channel.json (docs/adr/0004-release-cadence.md)."""
+    ALPHA = {"channel": "alpha", "target": "1.0.0"}
+
+    def test_without_a_file_nothing_changes(self):
+        with tempfile.TemporaryDirectory() as d:
+            self.assertEqual(prochaine_version.lire_canal(Path(d) / "absent.json"), {"channel": "stable", "target": ""})
+        r = prochaine_version.calcul(["v0.50.3"], ["fix: a"], "release")
+        self.assertEqual((r["version"], r["prerelease"]), ("0.50.4", "false"))
+
+    def test_pre_releases_are_numbered_per_phase_and_never_stable(self):
+        c = prochaine_version.calcul
+        self.assertEqual(c(["v0.50.3"], ["feat: a"], "release", canal=self.ALPHA)["version"], "1.0.0a1", "the target, whatever the commits say")
+        r = c(["v0.50.3", "v1.0.0a1", "v1.0.0a7", "v0.9.0a9", "v1.0.0b2"], ["fix: a"], "release", canal=self.ALPHA)
+        self.assertEqual((r["version"], r["etiquette"], r["prerelease"], r["base"]), ("1.0.0a8", "v1.0.0a8", "true", "0.50.3"), "pre-release tags never become the base")
+        self.assertEqual(c(["v0.50.3", "v1.0.0a7"], [], "release", canal={"channel": "beta", "target": "1.0.0"})["version"], "1.0.0b1")
+        self.assertEqual(c(["v0.50.3", "v1.0.0b3"], [], "release", canal={"channel": "rc", "target": "1.0.0"})["version"], "1.0.0rc1")
+        self.assertEqual(c(["v0.50.3"], [], "release", canal=self.ALPHA, etiquettes_de_head=["v1.0.0a1"])["publier"], "false")
+
+    def test_the_stable_channel_reaches_the_target_then_counts_as_usual(self):
+        stable = {"channel": "stable", "target": "1.0.0"}
+        r = prochaine_version.calcul(["v0.50.3", "v1.0.0rc2"], ["fix: a"], "release", canal=stable)
+        self.assertEqual((r["version"], r["prerelease"]), ("1.0.0", "false"))
+        self.assertEqual(prochaine_version.calcul(["v0.50.3", "v1.0.0"], ["fix: a"], "release", canal=stable)["version"], "1.0.1")
+
+    def test_a_target_already_published_is_an_error_not_a_guess(self):
+        with self.assertRaises(ValueError):
+            prochaine_version.calcul(["v1.0.0"], ["fix: a"], "release", canal=self.ALPHA)
+
+    def test_branch_candidates_sort_below_every_pre_release(self):
+        rc = prochaine_version.calcul(["v0.50.3"], ["fix: a"], "rc", branche="modernization", numero=12, canal=self.ALPHA)
+        self.assertEqual((rc["version"], rc["etiquette"], rc["prerelease"]), ("1.0.0.dev12+modernization", "", "false"))
+        self.assertRegex(rc["version"], r"^\d+\.\d+\.\d+\.dev\d+\+[a-z0-9.]+$")
+
+    def test_a_wrong_file_is_refused(self):
+        with tempfile.TemporaryDirectory() as d:
+            f = Path(d) / "release_channel.json"
+            for wrong in ('{"channel": "alpha"}', '{"channel": "nightly", "target": "1.0.0"}', '{"channel": "beta", "target": "1.0"}', "[]", "{not json"):
+                f.write_text(wrong, encoding="utf-8")
+                with self.assertRaises(ValueError, msg=wrong):
+                    prochaine_version.lire_canal(f)
+            f.write_text('{"channel": "rc", "target": "2.1.0"}', encoding="utf-8")
+            self.assertEqual(prochaine_version.lire_canal(f), {"channel": "rc", "target": "2.1.0"})
+
+    def test_this_branch_publishes_pre_releases_only(self):
+        """The guard of the migration: if this branch reaches main, what comes out is 1.0.0aN, never a version offered as the latest."""
+        canal = prochaine_version.lire_canal(Path(__file__).resolve().parent.parent / "tools" / "release_channel.json")
+        self.assertIn(canal["channel"], prochaine_version.PHASES)
+        workflow = (Path(__file__).resolve().parent.parent / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+        self.assertIn("prerelease: ${{ needs.version.outputs.prerelease == 'true' }}", workflow)
+        self.assertIn('if [ "${{ steps.v.outputs.prerelease }}" = "true" ]', workflow, "a pre-release never takes the Docker tag :latest")
 
 
 class CheminReseau(unittest.TestCase):
