@@ -49,6 +49,12 @@ class Route:
     pattern: object
 
 
+@dataclass(frozen=True)
+class Streamed:
+    """What a route returns when the answer is written line by line (the turn stream): `write` is called once the checks of the route have passed."""
+    write: object
+
+
 @dataclass
 class Request:
     handler: object                                   # the HTTP request handler (lutin.server.Gestionnaire)
@@ -131,6 +137,7 @@ def dispatch(handler, method):
     """Answers a request whose path starts with /api/v1/. The caller has already checked Host and Origin."""
     parts = urllib.parse.urlsplit(handler.path)
     path = parts.path[len(PREFIX):] or "/"
+    streamed = None
     try:
         if method in WITH_BODY:
             body = _read_body(handler)
@@ -148,11 +155,16 @@ def dispatch(handler, method):
         _check_right(handler, entry.right)
         query = {k: v[-1] for k, v in urllib.parse.parse_qs(parts.query).items()}
         result = entry.handler(Request(handler, {k: urllib.parse.unquote(v) for k, v in match.groupdict().items()}, query, body))
-        status, payload = result if isinstance(result, tuple) else (200, result)
+        if isinstance(result, Streamed):
+            streamed = result
+        else:
+            status, payload = result if isinstance(result, tuple) else (200, result)
     except ApiError as refused:
         status, payload = refused.status, error(refused.code, refused.message)
     except ValueError as invalid:                          # the functions underneath say what is wrong with a ValueError written for the user
         status, payload = 400, error("invalid_request", str(invalid))
+    if streamed is not None:                               # outside the `try`: once the first line is sent, no error answer can follow it
+        return streamed.write()
     return handler._envoyer(status, payload)
 
 
@@ -250,6 +262,66 @@ def delete_conversation(request):
 def stop_turn(request):
     """The Stop button: the model, the tools and the pending approvals of the running turn stop. `was_running` says whether there was anything to stop."""
     return {"was_running": bool(_m.arreter_conversation(request.params["id"]).get("actif"))}
+
+
+# ----------------------------------------------------------------------------------------------------------------- turns
+# The answer stream (API_V1.md, rule 6): application/x-ndjson, one event per line, an empty line as a heartbeat. The agent emits French events; they are
+# renamed here, at the boundary, field by field. A type or a field that is not in this table goes through unchanged: tests/test_api_v1_turns.py reads the
+# source and fails when the agent emits one that the table does not know.
+TASK_STATES = {"a_faire": "todo", "en_cours": "in_progress", "fait": "done"}
+EVENTS = {
+    "debut": ("start", {"conversation": "conversation_id"}),
+    "texte": ("text", {"texte": "text"}),
+    "pensee": ("thinking", {"texte": "text"}),
+    "outil": ("tool_call", {"nom": "name", "args": "arguments"}),
+    "resultat": ("tool_result", {"nom": "name", "texte": "text", "medias": "media", "medias_fichiers": "media_files", "fichiers_joints": "attached_files"}),
+    "approbation": ("approval_request", {"id": "id", "titre": "title", "detail": "detail", "diff": "diff", "raison": "reason", "suspendu": "auto_approval_suspended"}),
+    "accord_suspendu": ("auto_approval_suspended", {"raison": "reason"}),
+    "accord_retabli": ("auto_approval_restored", {}),
+    "choix_memoire": ("memory_choice", {"conversation": "conversation_id"}),
+    "taches": ("tasks", {"liste": "tasks"}),
+    "etat": ("status", {"texte": "text"}),
+    "info": ("notice", {"texte": "text"}),
+    "essai": ("dry_run", {"titre": "title", "detail": "detail", "diff": "diff"}),
+    "erreur": ("error", {"texte": "message"}),
+    "jetons": ("tokens", {"utilise": "used", "total": "total", "reel": "measured"}),
+    "vitesse": ("speed", {"ecriture": "write_tokens_per_s", "lecture": "read_tokens_per_s", "chargement": "load_s", "total": "total_s", "jetons": "tokens"}),
+    "fin": ("end", {"conversation": "conversation"}),
+}
+TURN_FIELDS = {"message": "message", "model": "modele", "thinking": "reflexion", "replace_from": "remplacer_depuis", "images": "images", "attachments": "pieces",
+               "workspace": "travail"}
+
+
+def event(stored):
+    """One event of the answer stream under its v1 names. Tool names and their arguments are what the model wrote: they are not translated (ADR 0007)."""
+    known = EVENTS.get(stored.get("type")) if isinstance(stored, dict) else None
+    if known is None:
+        return stored
+    name, fields = known
+    if name == "error":                                    # the shape of every v1 error
+        return {"type": name, "error": {"code": "turn_failed", "message": stored.get("texte", "")}}
+    translated = {"type": name}
+    translated.update((fields.get(key, key), value) for key, value in stored.items() if key != "type")
+    if name == "end" and isinstance(stored.get("conversation"), dict):
+        translated["conversation"] = {"id": stored["conversation"].get("id", ""), "title": stored["conversation"].get("titre", "")}
+    if name == "tasks":
+        translated["tasks"] = [{"text": task.get("texte", ""), "state": TASK_STATES.get(task.get("etat"), "todo")} for task in stored.get("liste") or [] if isinstance(task, dict)]
+    return translated
+
+
+@route("POST", "/conversations/{id}/turns", SESSION)
+def create_turn(request):
+    """Sends a message in a conversation and streams the answer: {"message": "..."} and, optionally, `model`, `thinking`, `replace_from` (the index of the
+    user message to rewrite from), `images` and `attachments` (identifiers of uploaded files), `workspace`. A refusal comes before the stream, as an
+    ordinary error: 400 `invalid_request`, 409 `turn_running` or `workspace_conflict`, 429 `too_many_turns`. Once the stream has begun, a failure is an
+    `error` event. The turn itself is the one the French route runs (`lutin.server.Gestionnaire._chat`), mission mode included."""
+    identifier, body = request.params["id"], request.body
+    if set(body) - set(TURN_FIELDS) or not isinstance(body.get("message"), str):
+        raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format(", ".join(TURN_FIELDS)))
+    _read(identifier)
+    handler = request.handler
+    handler._flux_v1 = True
+    return Streamed(lambda: handler._chat(dict({TURN_FIELDS[key]: value for key, value in body.items()}, conversation=identifier)))
 
 
 # ------------------------------------------------------------------------------------------------------------- approvals

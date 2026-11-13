@@ -1785,21 +1785,30 @@ class Gestionnaire(BaseHTTPRequestHandler):
             return self._envoyer(403, {"erreur": "Code incorrect ou expiré. Demande-en un nouveau sur l'ordinateur (lutin pin)."})
         return self._envoyer(200, {"ok": True}, en_tetes={"Set-Cookie": _sec.en_tete_set_cookie(jeton, _m.SECURITE.url_publique.startswith("https://"))})
 
+    _flux_v1 = False          # posé par lutin.api_v1 : cette demande de réponse vient de /api/v1, ses refus et ses évènements sont traduits à la frontière
+
+    def _refus_tour(self, statut, message, code):
+        """Refus d'une demande de réponse, avant que le flux commence. `code` est le code d'erreur de /api/v1 ; les routes historiques ne renvoient que le message."""
+        return self._envoyer(statut, _api_v1.error(code, message) if self._flux_v1 else {"erreur": message})
+
+    def _evenement_flux(self, evenement):
+        return _api_v1.event(evenement) if self._flux_v1 else evenement
+
     def _chat(self, donnees):
         texte = str(donnees.get("message", "")).strip()
         if not texte or len(texte) > 60000:
-            return self._envoyer(400, {"erreur": "Écris un message (60 000 caractères au maximum)."})
+            return self._refus_tour(400, "Écris un message (60 000 caractères au maximum).", "invalid_request")
         try:
             images = _images.verifier_liste(donnees.get("images"))
             pieces = _pieces.verifier_liste(donnees.get("pieces"))
         except ValueError as erreur:
-            return self._envoyer(400, {"erreur": str(erreur)})
+            return self._refus_tour(400, str(erreur), "invalid_request")
         if self._via_relais:                                      # le tour s'exécute avec les réglages DE CETTE machine : ni modèle, ni mode, ni accords automatiques, ni autre machine imposés de l'extérieur
             donnees = {k: v for k, v in donnees.items() if k not in ("modele", "machine", "mode", "options", "reflexion", "travail")}
         ident = str(donnees.get("conversation") or "")
         with _m.VERROU_TOURS:                                   # trop de réponses en cours : on refuse avant de créer quoi que ce soit
             if len(_m.TOURS_ACTIFS) >= _m.TOURS_SIMULTANES and ident not in _m.TOURS_ACTIFS:
-                return self._envoyer(429, {"erreur": "Déjà {} réponses en cours : une seule carte graphique, attends la fin de l'une d'elles (ou clique sur Arrêter).".format(len(_m.TOURS_ACTIFS))})
+                return self._refus_tour(429, "Déjà {} réponses en cours : une seule carte graphique, attends la fin de l'une d'elles (ou clique sur Arrêter).".format(len(_m.TOURS_ACTIFS)), "too_many_turns")
         _fond.interrompre_pour_utilisateur(8)                    # le travail de fond cède la place : son document en cours sera refait plus tard
         conv = _m.conv_lire(ident) if ident else _m.conv_nouvelle()
 
@@ -1815,30 +1824,30 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 depuis = int(depuis)
             except (TypeError, ValueError):
                 abandon()
-                return self._envoyer(400, {"erreur": "Indice de message invalide."})
+                return self._refus_tour(400, "Indice de message invalide.", "invalid_request")
             if not (0 <= depuis < len(conv["messages"]) and conv["messages"][depuis].get("role") == "user"):
                 abandon()
-                return self._envoyer(400, {"erreur": "Ce message n'existe plus dans la conversation : recharge-la."})
+                return self._refus_tour(400, "Ce message n'existe plus dans la conversation : recharge-la.", "invalid_request")
         if isinstance(donnees.get("options"), dict):
             _m.options_ecrire(conv["id"], donnees["options"])                                  # les options affichées par la page deviennent celles de cette conversation (créée au premier message)
         mode_voulu = _m.options_lire(conv["id"]).get("mode") or (donnees.get("mode") if not isinstance(donnees.get("options"), dict) else None) or _m.reglages()["mode"]
         if mode_voulu == "mission":                                                            # mode « Mission longue » : ce message est le cahier des charges (ou une consigne), la conversation sert de compte rendu
             mission_en_cours = _mission.trouver_pour_conversation(conv["id"])
             if not (mission_en_cours and mission_en_cours["etat"] != "terminee") and conv["id"] in _m.TOURS_ACTIFS:
-                return self._envoyer(409, {"erreur": "Cette conversation est déjà en train de répondre. Attends la fin ou clique sur Arrêter."})
+                return self._refus_tour(409, "Cette conversation est déjà en train de répondre. Attends la fin ou clique sur Arrêter.", "turn_running")
             return self._mission_dans_la_conversation(conv, texte, donnees, mission_en_cours, abandon, not ident)
         stop = threading.Event()
         with _m.VERROU_TOURS:
             if conv["id"] in _m.TOURS_ACTIFS:
-                return self._envoyer(409, {"erreur": "Cette conversation est déjà en train de répondre (autre onglet ou téléphone ?). Attends la fin ou clique sur Arrêter."})
+                return self._refus_tour(409, "Cette conversation est déjà en train de répondre (autre onglet ou téléphone ?). Attends la fin ou clique sur Arrêter.", "turn_running")
             if len(_m.TOURS_ACTIFS) >= _m.TOURS_SIMULTANES:
                 abandon()
-                return self._envoyer(429, {"erreur": "Déjà {} réponses en cours : une seule carte graphique, attends la fin de l'une d'elles (ou clique sur Arrêter).".format(len(_m.TOURS_ACTIFS))})
+                return self._refus_tour(429, "Déjà {} réponses en cours : une seule carte graphique, attends la fin de l'une d'elles (ou clique sur Arrêter).".format(len(_m.TOURS_ACTIFS)), "too_many_turns")
             try:
                 _m.activer_travail(conv, str(donnees.get("travail") or ""))
             except ValueError as erreur:
                 abandon()
-                return self._envoyer(409, {"erreur": str(erreur)})
+                return self._refus_tour(409, str(erreur), "workspace_conflict")
             _m.RACINE_TOURS[conv["id"]] = str(_m.RACINE)
             _m.TOURS_ACTIFS[conv["id"]] = stop
         fin_flux = threading.Event()
@@ -1852,7 +1861,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 r["machine"] = ident if ident and _machines.trouver(ident) else ""
             if not _modes.valide(r["mode"]):
                 abandon()
-                return self._envoyer(400, {"erreur": "Mode inconnu."})
+                return self._refus_tour(400, "Mode inconnu.", "invalid_request")
             self.send_response(200)
             self.send_header("Content-Type", "application/x-ndjson; charset=utf-8")
             self.send_header("Cache-Control", "no-store")
@@ -1878,7 +1887,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
                         page_partie[0] = True
 
             def emit(evenement):
-                ecrire((json.dumps(_m.traduire_evenement(evenement), ensure_ascii=False) + "\n").encode("utf-8"))
+                ecrire((json.dumps(self._evenement_flux(_m.traduire_evenement(evenement)), ensure_ascii=False) + "\n").encode("utf-8"))
 
             def battement():
                 while not fin_flux.wait(BATTEMENT_FLUX):                  # une ligne vide (la page l'ignore) : un reverse proxy coupe un flux resté silencieux (modèle qui charge, commande longue, attente d'un accord)
@@ -1902,7 +1911,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
             try:
                 _mission.action("repondre", {"id": mission_en_cours["id"], "texte": texte})
             except ValueError as erreur:
-                return self._envoyer(400, {"erreur": str(erreur)})
+                return self._refus_tour(400, str(erreur), "invalid_request")
             info = _t("✉ Noté, Lutin en tient compte à son prochain tour : {}").format(extrait)
         else:
             autonome = bool(opts.get("auto_ecriture") and opts.get("auto_commandes"))
@@ -1919,7 +1928,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 elif conv.get("titre") != titre_avant:
                     conv["titre"] = titre_avant
                     _m.conv_ecrire(conv)
-                return self._envoyer(400, {"erreur": str(erreur)})
+                return self._refus_tour(400, str(erreur), "invalid_request")
             info = (_t("🎯 Mission lancée : Lutin travaille seul, jusqu'à {} h, et tu suis tout ici. Pause ou arrêt avec les boutons au-dessus du champ de saisie.") if autonome else
                     _t("🎯 Mission lancée « à blanc » : Lutin montre ce qu'il ferait sans rien écrire ni lancer. Coche Fichiers auto et Commandes auto pour qu'il agisse vraiment (ça compte dès le tour suivant).")).format(nouvelle_mission["duree_h"])
         self.send_response(200)
@@ -1928,7 +1937,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
         self.end_headers()
         for evenement in ({"type": "debut", "conversation": conv["id"]}, {"type": "info", "texte": info}, {"type": "fin", "conversation": {"id": conv["id"], "titre": conv.get("titre", "")}}):
             try:
-                self.wfile.write((json.dumps(evenement, ensure_ascii=False) + "\n").encode("utf-8"))
+                self.wfile.write((json.dumps(self._evenement_flux(evenement), ensure_ascii=False) + "\n").encode("utf-8"))
             except OSError:
                 break
 

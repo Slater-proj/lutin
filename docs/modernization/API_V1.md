@@ -1,7 +1,7 @@
 # `/api/v1`: design
 
 The contract the new interface will be built on ([ADR 0001](../adr/0001-english-and-clean-break-at-1.0.md), [ADR 0002](../adr/0002-frontend-svelte-typescript-vite.md)).
-This page fixes the rules. Implemented so far (`src/lutin/api_v1.py`, contract in `tests/test_api_v1.py` and `tests/fixtures/api_v1_routes.json`): the dispatcher with declared rights and coded errors, `GET /status`, the conversations (list, create, read, rename/pin, delete, stop) and the answer to an approval. Not yet: the turn stream, settings, models, engines and everything else. The present contract — 184 exact routes, 17 prefixes, 15 stream events, the right each route asks —
+This page fixes the rules. Implemented so far (`src/lutin/api_v1.py`, contract in `tests/test_api_v1.py` and `tests/fixtures/api_v1_routes.json`): the dispatcher with declared rights and coded errors, `GET /status`, the conversations (list, create, read, rename/pin, delete, stop), the turn stream and the answer to an approval. Not yet: settings, models, engines and everything else. The present contract — 184 exact routes, 17 prefixes, 15 stream events, the right each route asks —
 is inventoried in `tests/fixtures/api_contract.json` and enforced by `tests/test_api_contract.py` and `tests/test_api_access.py`.
 
 ## Why not rename the present routes in place
@@ -43,8 +43,29 @@ routes disappear with the old page, in one deletion.
    | `erreur` | `error` | same shape as rule 3 |
    | `fin` | `end` | the turn is over, with its figures |
 
-   Three event types the page handles are produced elsewhere than by a literal `emit` and are not in the inventory: token counts, speed, and a retry notice.
-   They are to be listed when the stream is specified field by field.
+   Implemented by `POST /api/v1/conversations/{id}/turns` (`api_v1.EVENTS`, contract in `tests/test_api_v1_turns.py`). Fields of each event, besides `type`:
+
+   | v1 event | Fields |
+   |---|---|
+   | `start` | `conversation_id` |
+   | `text`, `thinking`, `status`, `notice` | `text` |
+   | `tool_call` | `name`, `arguments` — what the model wrote, not translated ([ADR 0007](../adr/0007-model-facing-language.md)) |
+   | `tool_result` | `name`, `text`; when the tool produced files: `media`, `media_files`, `attached_files` |
+   | `approval_request` | `id` (answered with `POST /api/v1/approvals/{id}`), `title`, `detail`, `diff`, `reason`, `auto_approval_suspended` |
+   | `auto_approval_suspended` | `reason` |
+   | `auto_approval_restored` | — |
+   | `memory_choice` | `conversation_id` |
+   | `tasks` | `tasks`: `[{"text", "state"}]`, state `todo`, `in_progress` or `done` |
+   | `dry_run` | `title`, `detail`, `diff` |
+   | `error` | `error`: `{"code": "turn_failed", "message"}` |
+   | `tokens` | `used`, `total`, `measured` |
+   | `speed` | `write_tokens_per_s`, `read_tokens_per_s` (may be null), `load_s`, `total_s`, `tokens` |
+   | `end` | `conversation`: `{"id", "title"}` |
+
+   `tokens` and `speed` are the two events the first inventory missed (their fields come from a variable). The request body: `message` and, optionally,
+   `model`, `thinking`, `replace_from`, `images`, `attachments`, `workspace`. A refusal comes before the stream as an ordinary error: `400 invalid_request`,
+   `409 turn_running` or `workspace_conflict`, `429 too_many_turns`. Not in v1 yet: the per-conversation options (mode, automatic approvals), the choice of
+   another machine, and the answer to `memory_choice`.
 7. **Versioning.** `/api/v1` only ever gains optional fields and new routes. A change that breaks a client is `/api/v2`. The page and the server ship together,
    so the page never talks to a server of another version; the rule protects scripts and paired machines.
 8. **Machine-to-machine protocol** (`/api/noeud/*` today): versioned separately (`/node/v1`), because two machines may run different versions of Lutin.

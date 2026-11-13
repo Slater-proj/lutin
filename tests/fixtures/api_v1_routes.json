@@ -35,6 +35,11 @@
   "right": "session"
  },
  {
+  "method": "POST",
+  "path": "/api/v1/conversations/{id}/turns",
+  "right": "session"
+ },
+ {
   "method": "GET",
   "path": "/api/v1/status",
   "right": "session"
