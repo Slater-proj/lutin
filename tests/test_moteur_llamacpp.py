@@ -12,8 +12,8 @@ from pathlib import Path
 from unittest import mock
 
 import context  # noqa: F401
-from lutin import moteur_llamacpp as ml
-from lutin import moteurs
+from lutin import llamacpp_engine as ml
+from lutin import engines
 
 VRAI_POPEN = subprocess.Popen
 FAUX = str(Path(__file__).resolve().parent / "fixtures" / "faux_llama_server.py")
@@ -38,14 +38,14 @@ def port_libre():
 class Base(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="lutin-llamacpp-"))
-        self.ancien = dict(moteurs.CONTEXTE)
-        moteurs.CONTEXTE.update(donnees=lambda: self.tmp, en_docker=lambda: False, hors_ligne=lambda: False, profil=lambda: None)
+        self.ancien = dict(engines.CONTEXTE)
+        engines.CONTEXTE.update(donnees=lambda: self.tmp, en_docker=lambda: False, hors_ligne=lambda: False, profil=lambda: None)
         self.m = ml.MoteurLlamaCpp()
         self.addCleanup(self.fin)
 
     def fin(self):
         self.m.arreter()
-        moteurs.CONTEXTE.update(self.ancien)
+        engines.CONTEXTE.update(self.ancien)
 
 
 class Choix(Base):
@@ -112,17 +112,17 @@ class Dossier(Base):
     """Où llama.cpp s'installe : à côté d'Ollama (même disque) si celui-ci a été déplacé, sinon dans le dossier de Lutin ; l'utilisateur peut choisir ailleurs."""
 
     def test_dossier_equivalent_a_celui_d_ollama(self):
-        moteurs.CONTEXTE["dossier_ollama"] = lambda: self.tmp / "IA" / "ollama" / "models"
+        engines.CONTEXTE["dossier_ollama"] = lambda: self.tmp / "IA" / "ollama" / "models"
         self.assertEqual(self.m.dossier_propose(), self.tmp / "IA" / "ollama" / "llama.cpp")
-        moteurs.CONTEXTE["dossier_ollama"] = lambda: Path.home() / ".ollama" / "models"
+        engines.CONTEXTE["dossier_ollama"] = lambda: Path.home() / ".ollama" / "models"
         self.assertIsNone(self.m.dossier_propose(), "Ollama est à son emplacement habituel : rien d'équivalent à proposer")
-        moteurs.CONTEXTE["dossier_ollama"] = lambda: None
+        engines.CONTEXTE["dossier_ollama"] = lambda: None
         self.assertIsNone(self.m.dossier_propose(), "dossier d'Ollama inconnu (Docker, Ollama absent)")
 
     def test_le_dossier_choisi_remplace_celui_de_lutin_et_se_retire(self):
-        moteurs.CONTEXTE["dossier_ollama"] = lambda: self.tmp / "IA" / "ollama" / "models"
-        moteurs.MOTEURS[self.m.id] = self.m
-        self.addCleanup(moteurs.MOTEURS.pop, self.m.id, None)
+        engines.CONTEXTE["dossier_ollama"] = lambda: self.tmp / "IA" / "ollama" / "models"
+        engines.MOTEURS[self.m.id] = self.m
+        self.addCleanup(engines.MOTEURS.pop, self.m.id, None)
         info = self.m.info_dossier()
         self.assertEqual((info["actuel"], info["defaut"]), (str(self.tmp / "engines" / "llamacpp"), str(self.tmp / "engines" / "llamacpp")))
         self.assertTrue(info["propose"].endswith("llama.cpp") and not info["personnalise"])
@@ -134,8 +134,8 @@ class Dossier(Base):
         self.assertEqual(self.m.dossier(), self.tmp / "engines" / "llamacpp", "vide : retour au dossier de Lutin")
 
     def test_dossier_invalide_ou_deja_installe(self):
-        moteurs.MOTEURS[self.m.id] = self.m
-        self.addCleanup(moteurs.MOTEURS.pop, self.m.id, None)
+        engines.MOTEURS[self.m.id] = self.m
+        self.addCleanup(engines.MOTEURS.pop, self.m.id, None)
         with self.assertRaises(ml.ErreurMoteur):
             ml.regler_dossier(self.m.id, "dossier/relatif")
         fichier = self.tmp / "un-fichier"
@@ -149,10 +149,10 @@ class Dossier(Base):
         self.assertIn("désinstalle-le d'abord", str(e.exception), "rien n'est déplacé en douce")
 
     def test_la_page_recoit_les_infos_du_dossier_modifiables_aussi_sous_docker(self):
-        moteurs.MOTEURS[self.m.id] = self.m
-        self.addCleanup(moteurs.MOTEURS.pop, self.m.id, None)
+        engines.MOTEURS[self.m.id] = self.m
+        self.addCleanup(engines.MOTEURS.pop, self.m.id, None)
         self.assertTrue(ml.vue_reglages(self.m.id)["dossier"]["modifiable"])
-        moteurs.CONTEXTE["en_docker"] = lambda: True
+        engines.CONTEXTE["en_docker"] = lambda: True
         v = ml.vue_reglages(self.m.id)["dossier"]
         self.assertIn("actuel", v)          # le dossier est montré (le volume des moteurs)...
         self.assertTrue(v["modifiable"])          # ...et se choisit aussi dans la page (un chemin du conteneur)
@@ -175,11 +175,11 @@ class Reglages(Base):
         self.assertFalse(self.m.externe())
 
     def test_sous_docker_llamacpp_s_installe_comme_ailleurs(self):
-        moteurs.CONTEXTE["en_docker"] = lambda: True
+        engines.CONTEXTE["en_docker"] = lambda: True
         a = self.m.actions()
         self.assertTrue(a["installer"]["possible"])          # plus de « indique son adresse » : l'image est légère, le moteur s'installe dans le volume
         self.assertNotIn("Docker", a["installer"]["raison"])
-        moteurs.CONTEXTE["hors_ligne"] = lambda: True
+        engines.CONTEXTE["hors_ligne"] = lambda: True
         with self.assertRaises(ml.ErreurMoteur):
             self.m.installer(lambda *x: None)          # hors ligne : aucun téléchargement
 
@@ -235,10 +235,10 @@ class Installation(Base):
         self.assertFalse(f.exists(), "un fichier corrompu est supprimé")
 
     def test_hors_ligne_et_github_muet(self):
-        moteurs.CONTEXTE["hors_ligne"] = lambda: True
+        engines.CONTEXTE["hors_ligne"] = lambda: True
         with self.assertRaises(ml.ErreurMoteur):
             self.m.installer(lambda *x: None)
-        moteurs.CONTEXTE["hors_ligne"] = lambda: False
+        engines.CONTEXTE["hors_ligne"] = lambda: False
 
         def muet(url):
             raise OSError("pas de réseau")
@@ -326,7 +326,7 @@ class Externe(Base):
         self.assertIn("adresse", m.statut()["detail"])
         ml.regler("openai", adresse="http://192.168.1.50:8000")
         self.assertEqual(m.adresse(), "http://192.168.1.50:8000/v1")
-        moteurs.CONTEXTE["hors_ligne"] = lambda: True
+        engines.CONTEXTE["hors_ligne"] = lambda: True
         self.assertFalse(m.actif(), "hors ligne : un serveur distant n'est pas joint")
         self.assertTrue(all(not a["possible"] for a in m.actions().values()))
 

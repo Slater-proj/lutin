@@ -11,7 +11,7 @@ from pathlib import Path
 from unittest import mock
 
 import context  # noqa: F401
-from lutin import outils_externes as O  # noqa: E402
+from lutin import external_programs as O  # noqa: E402
 
 
 def zip_uv():

@@ -8,7 +8,7 @@ import re
 import time
 
 from .i18n import t as _t
-from . import moteur as _m
+from . import core as _m
 
 TAILLE_MAX = 8 * 1024 * 1024       # octets par image
 PAR_MESSAGE = 4

@@ -1,11 +1,11 @@
 """Partie vivante de l'addon Courriel : lit ta boîte de réception (IMAP) et prépare des réponses (SMTP) selon tes règles, jamais sans toi par défaut.
 
-Un courriel n'est JAMAIS un ordre : n'importe qui peut écrire n'importe quel nom d'expéditeur. Le modèle n'a donc aucun outil pour répondre (voir repondeur.py) et, par défaut, chaque réponse est un BROUILLON que tu valides sur la page.
+Un courriel n'est JAMAIS un ordre : n'importe qui peut écrire n'importe quel nom d'expéditeur. Le modèle n'a donc aucun outil pour répondre (voir auto_reply.py) et, par défaut, chaque réponse est un BROUILLON que tu valides sur la page.
 
 Solidité :
 - à la première activation, les courriels déjà présents sont ignorés (on ne répond pas à l'arriéré) : seuls les nouveaux comptent, repérés par leur UID ; la boîte n'est pas modifiée (lecture sans marquer « lu ») ;
 - jamais de réponse à un message automatique (noreply, listes de diffusion, accusés, absence), à soi-même, ni deux fois au même message ; au plus 20 réponses automatiques par jour ;
-- les règles (voir regles.py) disent quoi faire de chaque message ; sans règle qui correspond, il est ignoré ;
+- les règles (voir message_rules.py) disent quoi faire de chaque message ; sans règle qui correspond, il est ignoré ;
 - les serveurs sont joints en connexion chiffrée ; une adresse de ton réseau local n'est permise que si tu le dis ;
 - le mot de passe est rangé à part (utilise un mot de passe d'application, pas celui de ton compte), jamais renvoyé à la page ni écrit dans le journal ;
 - une panne est attendue avec un délai croissant."""
@@ -21,8 +21,8 @@ import time
 from email.message import EmailMessage
 from email.utils import parseaddr
 
-from . import addons, regles, repondeur
-from . import moteur as _m
+from . import addons, message_rules, auto_reply
+from . import core as _m
 from . import net_guard as _net_guard
 from .i18n import t as _t
 
@@ -57,8 +57,8 @@ def ecrire(e):
 # --------------------------------------------------------------------------- connexions
 def verifier_serveur(hote, reseau_local):
     """Refuse un serveur du réseau local sauf si l'utilisateur l'a permis (un réglage modifié ne doit pas faire lire autre chose que le courrier). En mode hors ligne strict, rien ne sort."""
-    from . import horsligne
-    horsligne.garde("https://" + hote)
+    from . import offline
+    offline.garde("https://" + hote)
     if reseau_local == "oui":
         return
     from . import web
@@ -96,9 +96,9 @@ def verifier():
     v = reglages_mail()
     etapes = []
     try:
-        n = len(regles.analyser(v.get("regles", "")))
+        n = len(message_rules.analyser(v.get("regles", "")))
         etapes.append({"appel": "regles", "ok": True, "message": _t("{} règle(s)").format(n)})
-    except regles.ErreurRegle as e:
+    except message_rules.ErreurRegle as e:
         return [{"appel": "regles", "ok": False, "message": str(e)}]
     try:
         imap = connexion_imap(v)
@@ -161,10 +161,10 @@ def traiter(msg, v, regles_liste):
     nom, adresse = parseaddr(str(msg.get("From", "")))
     sujet = " ".join(str(msg.get("Subject", "")).split())[:200]
     message = {"de": str(msg.get("From", "")), "sujet": sujet, "texte": texte_du_message(msg)}
-    regle = regles.choisir(regles_liste, message, repondeur.juger_ton if regles.besoin_du_ton(regles_liste) else None)
+    regle = message_rules.choisir(regles_liste, message, auto_reply.juger_ton if message_rules.besoin_du_ton(regles_liste) else None)
     if regle is None or regle["action"] == "ignorer":
         return
-    reponse = repondeur.reponse(IDENT, _t("Courriel"), adresse.lower(), nom or adresse, _t("Objet : {}\n\n{}").format(sujet, message["texte"]), regle["consigne"], VIVANT["stop"])
+    reponse = auto_reply.reponse(IDENT, _t("Courriel"), adresse.lower(), nom or adresse, _t("Objet : {}\n\n{}").format(sujet, message["texte"]), regle["consigne"], VIVANT["stop"])
     if not reponse:
         return
     brouillon = {"id": secrets.token_hex(4), "de": nom or adresse, "adresse": adresse, "sujet": sujet, "extrait": message["texte"][:500], "texte": reponse, "message_id": identifiant,
@@ -214,8 +214,8 @@ def une_lecture():
         VIVANT["erreur"] = _t("À configurer d'abord.")
         return -1
     try:
-        regles_liste = regles.analyser(v.get("regles", ""))
-    except regles.ErreurRegle as e:
+        regles_liste = message_rules.analyser(v.get("regles", ""))
+    except message_rules.ErreurRegle as e:
         VIVANT["erreur"] = str(e)
         return -1
     try:
@@ -328,8 +328,8 @@ def action(nom, donnees):
             return etat()
         if nom == "verifier_regles":
             try:
-                return {"ok": True, "regles": len(regles.analyser(addons.reglages(IDENT).get("regles", "")))}
-            except regles.ErreurRegle as erreur:
+                return {"ok": True, "regles": len(message_rules.analyser(addons.reglages(IDENT).get("regles", "")))}
+            except message_rules.ErreurRegle as erreur:
                 raise addons.ErreurAddon(str(erreur))
     raise addons.ErreurAddon(_t("Action inconnue."))
 

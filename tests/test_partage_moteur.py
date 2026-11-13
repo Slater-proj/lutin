@@ -17,9 +17,9 @@ for cle, valeur in {"LUTIN_RACINE": str(_TEMP / "projet"), "LUTIN_DONNEES": str(
 for d in ("projet", "donnees", "memoire"):
     (_TEMP / d).mkdir(exist_ok=True)
 
-from lutin import moteur as _m  # noqa: E402,F401  (avant les autres : import circulaire sinon)
-from lutin import alimentation, machines  # noqa: E402
-from lutin import ressources_chargees as rc  # noqa: E402
+from lutin import core as _m  # noqa: E402,F401  (avant les autres : import circulaire sinon)
+from lutin import power, machines  # noqa: E402
+from lutin import loaded_resources as rc  # noqa: E402
 
 
 class Local:
@@ -105,7 +105,7 @@ class DemarrageSansDoublon(unittest.TestCase):
             def supprimer(self, nom):
                 self.v.pop(nom, None)
         appels = []
-        alimentation.installer_demarrage(lanceur=lambda cmd, **kw: appels.append(cmd) or type("R", (), {"returncode": 0})(), systeme_actuel="windows", commande=["python", "-m", "lutin"], registre=Registre())
+        power.installer_demarrage(lanceur=lambda cmd, **kw: appels.append(cmd) or type("R", (), {"returncode": 0})(), systeme_actuel="windows", commande=["python", "-m", "lutin"], registre=Registre())
         self.assertTrue(any(c[:2] == ["schtasks", "/Delete"] for c in appels), "sinon deux Lutin se lanceraient à l'ouverture de session")
 
     def test_un_second_lutin_sur_le_meme_port_s_arrete_avant_de_lancer_quoi_que_ce_soit(self):
@@ -152,9 +152,9 @@ class GardeFousDesTests(unittest.TestCase):
     def test_le_vrai_registre_est_interdit_aux_tests(self):
         self.assertEqual(os.environ.get("LUTIN_TESTS"), "1")
         with self.assertRaises(OSError):
-            alimentation.RegistreWindows().ecrire("Lutin", "x")
+            power.RegistreWindows().ecrire("Lutin", "x")
         with self.assertRaises(OSError):
-            alimentation.RegistreWindows().supprimer("Lutin")
+            power.RegistreWindows().supprimer("Lutin")
 
     def test_l_installation_reelle_d_ollama_est_interdite_aux_tests(self):
         from lutin import ollama_client
@@ -166,7 +166,7 @@ class JetonGitHub(unittest.TestCase):
     """Un jeton GITHUB_TOKEN (la CI) n'est envoyé qu'à l'API de GitHub, jamais ailleurs."""
 
     def test_le_jeton_ne_part_qu_vers_api_github(self):
-        from lutin import moteur_llamacpp as ml
+        from lutin import llamacpp_engine as ml
         vus = []
 
         class Reponse:

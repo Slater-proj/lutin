@@ -11,8 +11,8 @@ for cle, valeur in {"LUTIN_RACINE": str(_TEMP / "projet"), "LUTIN_DONNEES": str(
     os.environ.setdefault(cle, valeur)
 (_TEMP / "projet").mkdir(exist_ok=True)
 
-from lutin import moteur as _m  # noqa: E402,F401  (avant les autres : import circulaire sinon)
-from lutin import mesures_moteurs as MM  # noqa: E402
+from lutin import core as _m  # noqa: E402,F401  (avant les autres : import circulaire sinon)
+from lutin import engine_metrics as MM  # noqa: E402
 
 
 class Flux:

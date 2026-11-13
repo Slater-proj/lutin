@@ -1,6 +1,6 @@
 """Accès au web (sans clé, sans compte) : recherche DuckDuckGo et lecture de pages, avec les garde-fous (adresses locales refusées, mode hors ligne)."""
 from html.parser import HTMLParser
-from . import horsligne as _hl
+from . import offline as _hl
 from .i18n import t as _t
 import base64
 import html
@@ -11,10 +11,10 @@ import threading
 import time
 import urllib.error
 import urllib.parse
-from . import moteur as _m
+from . import core as _m
 from . import net_guard as _garde_reseau
-from . import recherche as _recherche
-from . import sorties as _sorties
+from . import web_search as _recherche
+from . import outbound as _sorties
 
 
 # --------------------------------------------------------------------------- accès au web (sans clé, sans compte, sans installation)
@@ -35,7 +35,7 @@ AGENT_WEB = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML
 
 def verifier_hote_web(url, hote_autorise=None, resoudre=True):
     """Refuse les adresses locales (ta machine, ton réseau, le NAS) : une page piégée ne doit pas pouvoir faire lire tes services internes.
-    `hote_autorise` : le seul hôte local permis, celui du SearXNG que l'utilisateur a configuré lui-même (voir lutin.recherche) ; jamais pour lire une page.
+    `hote_autorise` : le seul hôte local permis, celui du SearXNG que l'utilisateur a configuré lui-même (voir lutin.web_search) ; jamais pour lire une page.
     `resoudre=False` : seulement la forme de l'adresse ; le nom est alors résolu et contrôlé par la connexion elle-même (voir lutin.net_guard), ce qui est plus sûr
     qu'un contrôle fait avant : entre les deux, la réponse du DNS peut changer."""
     p = urllib.parse.urlparse(url)
@@ -493,7 +493,7 @@ VERROU_PAGES = threading.Lock()
 def lire_pdf(url):
     """Le texte d'un PDF du web (jusqu'à 15 Mo) par la même extraction que les pièces jointes. ErreurOutil s'il est trop gros, protégé ou illisible."""
     import tempfile
-    from . import extraction, pieces
+    from . import text_extraction, attachments
     final, _, octets = web_telecharger(url, octets=True, max_octets=PDF_MAX_OCTETS)
     if len(octets) >= PDF_MAX_OCTETS:
         raise _m.ErreurOutil(_t("Ce PDF est trop gros pour être lu ({} Mo au plus).").format(PDF_MAX_OCTETS // 1_000_000))
@@ -501,8 +501,8 @@ def lire_pdf(url):
         f.write(octets)
         chemin = f.name
     try:
-        texte = pieces.texte_de_fichier(chemin, ".pdf")
-    except (extraction.ErreurExtraction, OSError, ValueError) as e:
+        texte = attachments.texte_de_fichier(chemin, ".pdf")
+    except (text_extraction.ErreurExtraction, OSError, ValueError) as e:
         raise _m.ErreurOutil(_t("Ce PDF n'a pas pu être lu : {}").format(str(e)[:150]))
     finally:
         try:

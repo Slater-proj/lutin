@@ -9,7 +9,7 @@ from pathlib import Path
 from unittest import mock
 
 import context  # noqa: F401
-from lutin import extraction
+from lutin import text_extraction
 
 RACINE = Path(__file__).resolve().parent.parent
 
@@ -68,30 +68,30 @@ class FormatsZip(unittest.TestCase):
         xml = ('<w:document><w:body><w:p><w:pPr><w:pStyle w:val="Heading1"/></w:pPr><w:r><w:t>Procédure de déploiement</w:t></w:r></w:p>'
                '<w:p><w:r><w:t xml:space="preserve">Étape 1 : </w:t></w:r><w:r><w:tab/><w:t>sauvegarder &amp; vérifier</w:t></w:r></w:p><w:p></w:p></w:body></w:document>')
         p = ecrire_zip(self.d / "a.docx", {"word/document.xml": xml})
-        self.assertEqual(extraction.parties(p), [("", "# Procédure de déploiement\n\nÉtape 1 : sauvegarder & vérifier")])
+        self.assertEqual(text_extraction.parties(p), [("", "# Procédure de déploiement\n\nÉtape 1 : sauvegarder & vérifier")])
 
     def test_odt(self):
         xml = '<office:text><text:h text:outline-level="1">Titre du guide</text:h><text:p>Un <text:span>paragraphe</text:span> utile.<text:tab/>Fin</text:p></office:text>'
         p = ecrire_zip(self.d / "a.odt", {"content.xml": xml})
-        self.assertEqual(extraction.parties(p), [("", "# Titre du guide\n\nUn paragraphe utile. Fin")])
+        self.assertEqual(text_extraction.parties(p), [("", "# Titre du guide\n\nUn paragraphe utile. Fin")])
 
     def test_pptx_une_partie_par_diapositive_dans_l_ordre(self):
         def diapo(texte):
             return '<p:sld><a:p><a:r><a:t>{}</a:t></a:r></a:p></p:sld>'.format(texte)
         p = ecrire_zip(self.d / "a.pptx", {"ppt/slides/slide10.xml": diapo("Dix"), "ppt/slides/slide2.xml": diapo("Deux"), "ppt/slides/slide1.xml": diapo("Un")})
-        self.assertEqual([t for _, t in extraction.parties(p)], ["Un", "Deux", "Dix"])
-        self.assertEqual(extraction.parties(p)[0][0], "Diapositive 1")
+        self.assertEqual([t for _, t in text_extraction.parties(p)], ["Un", "Deux", "Dix"])
+        self.assertEqual(text_extraction.parties(p)[0][0], "Diapositive 1")
 
     def test_xlsx(self):
         partages = "<sst><si><t>Serveur</t></si><si><t>Rôle</t></si><si><t>nas-01</t></si></sst>"
         feuille = '<worksheet><sheetData><row><c t="s"><v>0</v></c><c t="s"><v>1</v></c></row><row><c t="s"><v>2</v></c><c><v>42</v></c></row></sheetData></worksheet>'
         p = ecrire_zip(self.d / "a.xlsx", {"xl/sharedStrings.xml": partages, "xl/worksheets/sheet1.xml": feuille, "xl/workbook.xml": '<workbook><sheets><sheet name="Inventaire" sheetId="1"/></sheets></workbook>'})
-        self.assertEqual(extraction.parties(p), [("Inventaire", "Serveur | Rôle\nnas-01 | 42")])
+        self.assertEqual(text_extraction.parties(p), [("Inventaire", "Serveur | Rôle\nnas-01 | 42")])
 
     def test_html(self):
         p = self.d / "a.html"
         p.write_text("<html><head><style>x{}</style><script>alert(1)</script></head><body><h1>Guide</h1><p>Le <b>texte</b> &eacute;l&eacute;gant.</p></body></html>", encoding="utf-8")
-        texte = extraction.parties(p)[0][1]
+        texte = text_extraction.parties(p)[0][1]
         self.assertIn("# Guide", texte)
         self.assertIn("Le texte élégant.", texte)
         self.assertNotIn("alert", texte)
@@ -99,20 +99,20 @@ class FormatsZip(unittest.TestCase):
     def test_refus(self):
         faux = self.d / "faux.docx"
         faux.write_bytes(b"pas un zip")
-        with self.assertRaisesRegex(extraction.ErreurExtraction, "illisible"):
-            extraction.parties(faux)
+        with self.assertRaisesRegex(text_extraction.ErreurExtraction, "illisible"):
+            text_extraction.parties(faux)
         vide = ecrire_zip(self.d / "vide.docx", {"autre.txt": "x"})
-        with self.assertRaisesRegex(extraction.ErreurExtraction, "Word"):
-            extraction.parties(vide)
-        with self.assertRaisesRegex(extraction.ErreurExtraction, "Format non géré"):
-            extraction.parties(self.d / "a.exe")
-        with mock.patch.object(extraction, "DECOMPRESSE_MAX", 100):
+        with self.assertRaisesRegex(text_extraction.ErreurExtraction, "Word"):
+            text_extraction.parties(vide)
+        with self.assertRaisesRegex(text_extraction.ErreurExtraction, "Format non géré"):
+            text_extraction.parties(self.d / "a.exe")
+        with mock.patch.object(text_extraction, "DECOMPRESSE_MAX", 100):
             bombe = ecrire_zip(self.d / "bombe.docx", {"word/document.xml": "<w:p><w:t>" + "a" * 5000 + "</w:t></w:p>"})
-            with self.assertRaisesRegex(extraction.ErreurExtraction, "suspect"):
-                extraction.parties(bombe)
-        with mock.patch.object(extraction, "TAILLE_MAX", 10):
-            with self.assertRaisesRegex(extraction.ErreurExtraction, "trop gros"):
-                extraction.parties(self.d / "bombe.docx")
+            with self.assertRaisesRegex(text_extraction.ErreurExtraction, "suspect"):
+                text_extraction.parties(bombe)
+        with mock.patch.object(text_extraction, "TAILLE_MAX", 10):
+            with self.assertRaisesRegex(text_extraction.ErreurExtraction, "trop gros"):
+                text_extraction.parties(self.d / "bombe.docx")
 
 
 class Pdf(unittest.TestCase):
@@ -127,23 +127,23 @@ class Pdf(unittest.TestCase):
         for compresser in (False, True):
             p = self.d / "a.pdf"
             p.write_bytes(pdf_simple(compresser))
-            self.assertEqual(extraction.parties(p), [("Page 1", "Bonjour le monde, création d'un déploiement\nDeuxième ligne : procédure")], compresser)
+            self.assertEqual(text_extraction.parties(p), [("Page 1", "Bonjour le monde, création d'un déploiement\nDeuxième ligne : procédure")], compresser)
 
     def test_pdf_police_unicode_flux_d_objets_et_pages_dans_l_ordre(self):
         p = self.d / "b.pdf"
         p.write_bytes(pdf_avec_police_unicode_et_flux_d_objets())
-        self.assertEqual(extraction.parties(p), [("Page 1", "Hé abc"), ("Page 2", "H é")])
+        self.assertEqual(text_extraction.parties(p), [("Page 1", "Hé abc"), ("Page 2", "H é")])
 
     def test_pdf_chiffre_ou_abime(self):
         p = self.d / "c.pdf"
         p.write_bytes(pdf_simple().replace(b"trailer\n<< /Root 1 0 R >>", b"trailer\n<< /Root 1 0 R /Encrypt 9 0 R >>"))
-        with self.assertRaisesRegex(extraction.ErreurExtraction, "chiffré"):
-            extraction.parties(p)
+        with self.assertRaisesRegex(text_extraction.ErreurExtraction, "chiffré"):
+            text_extraction.parties(p)
         p.write_bytes(b"%PDF-1.4\n1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n2 0 obj <<")
-        self.assertEqual(extraction.parties(p), [])
+        self.assertEqual(text_extraction.parties(p), [])
         p.write_bytes(b"MZ pas un pdf")
-        with self.assertRaisesRegex(extraction.ErreurExtraction, "PDF"):
-            extraction.parties(p)
+        with self.assertRaisesRegex(text_extraction.ErreurExtraction, "PDF"):
+            text_extraction.parties(p)
 
     def test_un_vrai_pdf_fabrique_par_un_navigateur(self):
         sys.path.insert(0, str(RACINE / "tools"))
@@ -159,7 +159,7 @@ class Pdf(unittest.TestCase):
         subprocess.run([chrome, "--headless=new", "--disable-gpu", "--no-sandbox", "--user-data-dir=" + str(self.d / "profil"), "--no-pdf-header-footer", "--print-to-pdf=" + str(sortie), page.as_uri()],
                        capture_output=True, timeout=120)
         self.assertTrue(sortie.is_file())
-        pages = extraction.parties(sortie)
+        pages = text_extraction.parties(sortie)
         ensemble = " ".join(t for _, t in pages).replace("\n", " ")
         self.assertGreaterEqual(len(pages), 2, pages)
         for attendu in ("Guide de sauvegarde", "Première étape", "espace disque", "procédure de restauration", "même après une panne"):

@@ -14,7 +14,7 @@ for cle, valeur in {"LUTIN_RACINE": str(_TEMP / "projet"), "LUTIN_DONNEES": str(
     os.environ.setdefault(cle, valeur)
 (_TEMP / "projet").mkdir(exist_ok=True)
 
-from lutin import moteur as _m  # noqa: E402
+from lutin import core as _m  # noqa: E402
 from lutin import mission  # noqa: E402
 
 MODE, RECUES = {"v": "normal"}, []
@@ -144,8 +144,8 @@ class Mission(unittest.TestCase):
         outils = {t["function"]["name"] for t in RECUES[0]["tools"]}
         self.assertTrue({"mission_terminer", "mission_bloquee", "suivi", "executer"} <= outils)
         self.assertIn("MISSION LONGUE", RECUES[0]["messages"][0]["content"])
-        from lutin import dialogue
-        self.assertNotIn("mission_terminer", {t["function"]["name"] for t in dialogue.outils_du_mode(_m.reglages())})
+        from lutin import agent
+        self.assertNotIn("mission_terminer", {t["function"]["name"] for t in agent.outils_du_mode(_m.reglages())})
 
     def test_sans_autonomie_rien_n_est_ecrit(self):
         m = self.creer(autonome=False)

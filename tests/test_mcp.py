@@ -14,8 +14,8 @@ for cle, valeur in {"LUTIN_RACINE": str(_TEMP / "projet"), "LUTIN_DONNEES": str(
     os.environ.setdefault(cle, valeur)
 (_TEMP / "projet").mkdir(exist_ok=True)
 
-from lutin import mcp, modes, revue  # noqa: E402
-from lutin import moteur as _m  # noqa: E402
+from lutin import mcp, modes, change_review  # noqa: E402
+from lutin import core as _m  # noqa: E402
 
 SRC = str(Path(__file__).resolve().parent.parent / "src")
 NOTES = _TEMP / "notes.txt"
@@ -68,7 +68,7 @@ class Mcp(unittest.TestCase):
     def test_appel_en_lecture_resultat_non_fiable_et_accord_automatique_suspendu(self):
         mcp.regler(self.ident, outil="additionner", autorise=True)
         ctx = contexte()
-        r = revue.appeler_outil("mcp__demonstration__additionner", {"a": 2, "b": 3}, ctx)
+        r = change_review.appeler_outil("mcp__demonstration__additionner", {"a": 2, "b": 3}, ctx)
         self.assertIn(mcp.MARQUEUR, r[:80])
         self.assertIn("5.0", r)
         self.assertTrue(ctx["web_lu"], "après un appel externe, l'accord automatique est suspendu")
@@ -76,13 +76,13 @@ class Mcp(unittest.TestCase):
 
     def test_un_outil_non_autorise_n_est_pas_appelable(self):
         with self.assertRaises(_m.ErreurOutil):
-            revue.appeler_outil("mcp__demonstration__heure", {}, contexte())
+            change_review.appeler_outil("mcp__demonstration__heure", {}, contexte())
 
     def test_le_refus_est_respecte(self):
         mcp.regler(self.ident, lecture_seule=False)
         mcp.regler(self.ident, outil="noter", autorise=True)
         ctx = contexte(accorde=False)
-        r = revue.appeler_outil("mcp__demonstration__noter", {"texte": "ne doit pas exister"}, ctx)
+        r = change_review.appeler_outil("mcp__demonstration__noter", {"texte": "ne doit pas exister"}, ctx)
         self.assertIn("Refusé", r)
         self.assertFalse(NOTES.exists(), "refusé : rien n'a été écrit par le connecteur")
         self.assertEqual(len(ctx["demandes"]), 1)
@@ -91,7 +91,7 @@ class Mcp(unittest.TestCase):
     def test_accord_donne_action_faite_et_journalisee(self):
         mcp.regler(self.ident, lecture_seule=False)
         mcp.regler(self.ident, outil="noter", autorise=True)
-        r = revue.appeler_outil("mcp__demonstration__noter", {"texte": "bonjour"}, contexte(accorde=True))
+        r = change_review.appeler_outil("mcp__demonstration__noter", {"texte": "bonjour"}, contexte(accorde=True))
         self.assertIn(mcp.MARQUEUR, r[:80])
         self.assertEqual(NOTES.read_text(encoding="utf-8"), "bonjour\n")
         journal = _m.lire_journal(20)
@@ -100,7 +100,7 @@ class Mcp(unittest.TestCase):
     def test_lecture_seule_refuse_meme_un_appel_force(self):
         mcp.regler(self.ident, outil="noter", autorise=True)
         with self.assertRaises(_m.ErreurOutil):
-            revue.appeler_outil("mcp__demonstration__noter", {"texte": "x"}, contexte())
+            change_review.appeler_outil("mcp__demonstration__noter", {"texte": "x"}, contexte())
         self.assertFalse(NOTES.exists())
 
     def test_programme_introuvable_et_mauvaises_entrees(self):

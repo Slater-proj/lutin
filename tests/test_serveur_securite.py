@@ -17,8 +17,8 @@ for cle, valeur in {"LUTIN_RACINE": str(_TEMP / "projet"), "LUTIN_DONNEES": str(
 for d in ("projet", "donnees", "memoire"):
     (_TEMP / d).mkdir(exist_ok=True)
 
-from lutin import moteur as A  # noqa: E402
-from lutin import securite as S  # noqa: E402
+from lutin import core as A  # noqa: E402
+from lutin import security as S  # noqa: E402
 
 SERVEUR = ThreadingHTTPServer(("127.0.0.1", 0), A.Gestionnaire)
 threading.Thread(target=SERVEUR.serve_forever, daemon=True).start()
@@ -105,7 +105,7 @@ class NiveauLocal(Base):
         _, _, h = requete("GET", "/")
         self.assertEqual(h.get("x-content-type-options"), "nosniff")
         self.assertEqual(h.get("referrer-policy"), "no-referrer")
-        for chemin in ("/lib/C:/Windows/win.ini", "/lib/..%2f..%2fmoteur.py", "/lib/%2e%2e/moteur.py"):
+        for chemin in ("/lib/C:/Windows/win.ini", "/lib/..%2f..%2fmoteur.py", "/lib/%2e%2e/core.py"):
             self.assertNotEqual(requete("GET", chemin)[0], 200, chemin)
 
 

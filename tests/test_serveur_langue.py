@@ -19,7 +19,7 @@ for d in ("projet", "donnees", "memoire", "config"):
     (_TEMP / d).mkdir(exist_ok=True)
 
 from lutin import config, i18n  # noqa: E402
-from lutin import moteur as A  # noqa: E402
+from lutin import core as A  # noqa: E402
 
 SERVEUR = ThreadingHTTPServer(("127.0.0.1", 0), A.Gestionnaire)
 threading.Thread(target=SERVEUR.serve_forever, daemon=True).start()

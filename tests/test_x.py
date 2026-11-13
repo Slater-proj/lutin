@@ -20,7 +20,7 @@ for cle, valeur in {"LUTIN_RACINE": str(_TEMP / "projet"), "LUTIN_DONNEES": str(
     os.environ.setdefault(cle, valeur)
 (_TEMP / "projet").mkdir(exist_ok=True)
 
-from lutin import addons, repondeur  # noqa: E402
+from lutin import addons, auto_reply  # noqa: E402
 from lutin import addons_x as x  # noqa: E402
 
 CLES = {"cle_api": "ck-cle-api-xxxx", "secret_api": "cs-secret-api-xxxx", "jeton": "12345-token-xxxx", "secret_jeton": "ts-secret-jeton-xxxx"}
@@ -127,7 +127,7 @@ class X(unittest.TestCase):
         (livres / "addon.json").write_text(json.dumps(manifeste), encoding="utf-8")
         (livres / "flux.json").write_text((reel / "flux.json").read_text(encoding="utf-8").replace("https://api.x.com", "http://127.0.0.1:%d" % port), encoding="utf-8")
         addons.DOSSIER_LIVRE = _TEMP / "livres"
-        cls.vrai_reponse = staticmethod(repondeur.reponse)
+        cls.vrai_reponse = staticmethod(auto_reply.reponse)
 
     @classmethod
     def tearDownClass(cls):
@@ -141,13 +141,13 @@ class X(unittest.TestCase):
                 f.unlink()
         addons.enregistrer_reglages("x", dict(CLES, mentions="oui", regles="ton:agressif -> ignorer\nde:@troll -> ignorer\ntexte:*prix* -> brouillon: Donne le lien des tarifs.\n* -> brouillon"))
         self.demandes = []
-        repondeur.reponse = self.faux_modele
-        self.vrai_ton = repondeur.juger_ton
-        repondeur.juger_ton = lambda t: "agressif" if "nul" in t else "neutre"
+        auto_reply.reponse = self.faux_modele
+        self.vrai_ton = auto_reply.juger_ton
+        auto_reply.juger_ton = lambda t: "agressif" if "nul" in t else "neutre"
 
     def tearDown(self):
-        repondeur.reponse = self.vrai_reponse
-        repondeur.juger_ton = self.vrai_ton
+        auto_reply.reponse = self.vrai_reponse
+        auto_reply.juger_ton = self.vrai_ton
 
     def faux_modele(self, ident, canal, cle, titre, message, consigne="", arret=None, pause=2):
         self.demandes.append({"canal": canal, "titre": titre, "message": message, "consigne": consigne})

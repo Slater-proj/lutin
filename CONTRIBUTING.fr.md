@@ -15,7 +15,7 @@ Pas de dépendance à installer pour faire tourner Lutin ou ses tests : biblioth
 
 ## Organisation du code
 
-`src/lutin/moteur.py` porte l'état partagé (réglages, chemins, constantes) et ré-exporte le reste. Le travail est dans des modules qui lisent cet état au dernier moment (`from . import moteur as _m`) : `serveur` (routes HTTP), `dialogue` (un tour, la boucle de l'agent), `outils`, `donnees` (conversations, mémoire), `rappel` (rappel et recherche dans les documents), `planifie` (tâches planifiées), `images`, `acces`, `conseil`, `sante`, `revue`, `plan`. Une constante qu'un test remplace doit vivre dans `moteur`.
+`src/lutin/core.py` porte l'état partagé (réglages, chemins, constantes) et ré-exporte le reste. Le travail est dans des modules qui lisent cet état au dernier moment (`from . import moteur as _m`) : `serveur` (routes HTTP), `dialogue` (un tour, la boucle de l'agent), `outils`, `donnees` (conversations, mémoire), `rappel` (rappel et recherche dans les documents), `planifie` (tâches planifiées), `images`, `acces`, `conseil`, `sante`, `revue`, `plan`. Une constante qu'un test remplace doit vivre dans `moteur`.
 
 ## Commits et publications
 

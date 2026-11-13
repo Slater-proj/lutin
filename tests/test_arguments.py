@@ -2,8 +2,8 @@ import json
 import unittest
 
 import context  # noqa: F401
-from lutin import moteur as M
-from lutin.dialogue import normaliser_arguments as norm
+from lutin import core as M
+from lutin.agent import normaliser_arguments as norm
 
 
 def schema(nom):

@@ -41,12 +41,12 @@ class Faux(BaseHTTPRequestHandler):
 SERVEUR = ThreadingHTTPServer(("127.0.0.1", 0), Faux)
 threading.Thread(target=SERVEUR.serve_forever, daemon=True).start()
 BASE = "http://127.0.0.1:%d" % SERVEUR.server_address[1]
-os.environ["LUTIN_TAVILY_URL"] = BASE + "/tavily"          # avant l'import de lutin.recherche
+os.environ["LUTIN_TAVILY_URL"] = BASE + "/tavily"          # avant l'import de lutin.web_search
 os.environ["LUTIN_EXA_URL"] = BASE + "/exa"
 os.environ["LUTIN_PERPLEXITY_URL"] = BASE + "/perplexity"
 
-from lutin import moteur as _m  # noqa: E402,F401  (avant les autres : import circulaire sinon)
-from lutin import recherche, web  # noqa: E402
+from lutin import core as _m  # noqa: E402,F401  (avant les autres : import circulaire sinon)
+from lutin import web_search, web  # noqa: E402
 
 
 class Fournisseurs(unittest.TestCase):
@@ -54,34 +54,34 @@ class Fournisseurs(unittest.TestCase):
         RECUES.clear()
         c = _m.DONNEES / "recherche.json"
         c.unlink(missing_ok=True)
-        recherche.ACTUELLES.v = {}
-        self.addCleanup(setattr, recherche.ACTUELLES, "v", {})
+        web_search.ACTUELLES.v = {}
+        self.addCleanup(setattr, web_search.ACTUELLES, "v", {})
 
     def test_les_cles_ne_sont_jamais_renvoyees(self):
-        v = recherche.enregistrer(tavily_cle="tvly-abcdefghij1234", exa_cle="exa-key-1234567890", perplexity_cle="pplx-abcdefghij5678")
+        v = web_search.enregistrer(tavily_cle="tvly-abcdefghij1234", exa_cle="exa-key-1234567890", perplexity_cle="pplx-abcdefghij5678")
         self.assertTrue(v["tavily"] and v["exa"] and v["perplexity"])
         self.assertEqual((v["tavily_fin"], v["exa_fin"], v["perplexity_fin"]), ("1234", "7890", "5678"))
         self.assertNotIn("tvly-abcdefghij1234", json.dumps(v))
-        v = recherche.enregistrer(exa_cle="")
+        v = web_search.enregistrer(exa_cle="")
         self.assertFalse(v["exa"])
         self.assertTrue(v["tavily"], "retirer une clé ne touche pas les autres")
 
     def test_cle_invalide_refusee(self):
         for nom in ("tavily_cle", "exa_cle", "perplexity_cle"):
             with self.assertRaises(ValueError):
-                recherche.enregistrer(**{nom: "pas de espaces ni é"})
+                web_search.enregistrer(**{nom: "pas de espaces ni é"})
 
     def test_ordre_d_essai(self):
-        recherche.enregistrer(tavily_cle="tvly-abcdefghij1234", exa_cle="exa-key-1234567890", perplexity_cle="pplx-abcdefghij5678", brave_cle="BSAbravekey12345")
-        self.assertEqual([n for n, _ in recherche.fournisseurs_configures()], ["brave", "tavily", "exa", "perplexity"])
+        web_search.enregistrer(tavily_cle="tvly-abcdefghij1234", exa_cle="exa-key-1234567890", perplexity_cle="pplx-abcdefghij5678", brave_cle="BSAbravekey12345")
+        self.assertEqual([n for n, _ in web_search.fournisseurs_configures()], ["brave", "tavily", "exa", "perplexity"])
         self.assertEqual([n for n, _ in web.moteurs_de_recherche()][-2:], ["duckduckgo", "bing"], "les moteurs sans clé restent le dernier recours")
         etat = {e["nom"]: e["configure"] for e in web.etat_moteurs()}
         self.assertTrue(etat["tavily"] and etat["exa"] and etat["perplexity"] and not etat["duckduckgo"])
 
     def test_tavily_garde_les_resultats_et_ignore_la_reponse_toute_faite(self):
-        recherche.enregistrer(tavily_cle="tvly-abcdefghij1234")
-        recherche.ACTUELLES.v = {"periode": "semaine", "actualites": True}
-        r = recherche.resultats_tavily("lutin assistant")
+        web_search.enregistrer(tavily_cle="tvly-abcdefghij1234")
+        web_search.ACTUELLES.v = {"periode": "semaine", "actualites": True}
+        r = web_search.resultats_tavily("lutin assistant")
         self.assertEqual(r, [{"titre": "T1", "url": "https://exemple.org/a?utm_source=x", "extrait": "extrait tavily", "date": "2026-05-02"}])
         chemin, tetes, corps = RECUES[0]
         self.assertEqual(chemin, "/tavily/search")
@@ -90,9 +90,9 @@ class Fournisseurs(unittest.TestCase):
         self.assertNotIn("RÉPONSE TOUTE FAITE", json.dumps(r))
 
     def test_exa(self):
-        recherche.enregistrer(exa_cle="exa-key-1234567890")
-        recherche.ACTUELLES.v = {"periode": "jour"}
-        r = recherche.resultats_exa("question précise")
+        web_search.enregistrer(exa_cle="exa-key-1234567890")
+        web_search.ACTUELLES.v = {"periode": "jour"}
+        r = web_search.resultats_exa("question précise")
         self.assertEqual((r[0]["titre"], r[0]["extrait"], r[0]["date"]), ("E1", "extrait exa sur deux lignes", "2026-04-30"))
         chemin, tetes, corps = RECUES[0]
         self.assertEqual(tetes["x-api-key"], "exa-key-1234567890")
@@ -100,9 +100,9 @@ class Fournisseurs(unittest.TestCase):
         self.assertEqual(corps["contents"]["text"]["maxCharacters"], 600)
 
     def test_perplexity_api_de_recherche_pas_de_reponse_redigee(self):
-        recherche.enregistrer(perplexity_cle="pplx-abcdefghij5678")
-        recherche.ACTUELLES.v = {"periode": "mois", "site": "exemple.com"}
-        r = recherche.resultats_perplexity("actualité")
+        web_search.enregistrer(perplexity_cle="pplx-abcdefghij5678")
+        web_search.ACTUELLES.v = {"periode": "mois", "site": "exemple.com"}
+        r = web_search.resultats_perplexity("actualité")
         self.assertEqual((r[0]["titre"], r[0]["extrait"]), ("P1", "extrait perplexity"))
         chemin, tetes, corps = RECUES[0]
         self.assertEqual(chemin, "/perplexity/search")
@@ -112,13 +112,13 @@ class Fournisseurs(unittest.TestCase):
         self.assertNotIn("messages", corps, "aucun modèle de chat n'est appelé : seulement la recherche")
 
     def test_sans_cle_une_erreur_claire(self):
-        for f in (recherche.resultats_tavily, recherche.resultats_exa, recherche.resultats_perplexity):
+        for f in (web_search.resultats_tavily, web_search.resultats_exa, web_search.resultats_perplexity):
             with self.assertRaises(_m.ErreurOutil) as e:
                 f("x")
             self.assertIn("clé", str(e.exception).lower())
 
     def test_recherche_complete_passe_par_le_fournisseur_et_le_nettoie(self):
-        recherche.enregistrer(tavily_cle="tvly-abcdefghij1234")
+        web_search.enregistrer(tavily_cle="tvly-abcdefghij1234")
         web.CACHE_RECHERCHE.clear()
         web.BLOQUES.clear()
         trouves, raisons = web.chercher_resultats("lutin assistant local", 5)

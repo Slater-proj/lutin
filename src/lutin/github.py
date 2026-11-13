@@ -19,7 +19,7 @@ ADRESSE_LIMITE = "https://api.github.com/rate_limit"          # ne compte pas da
 
 
 def _chemin():
-    from . import moteur as _m
+    from . import core as _m
     return _m.DONNEES / "github.json"
 
 
@@ -41,7 +41,7 @@ def enregistrer(valeur):
     valeur = str(valeur or "").strip()
     if valeur and not RE_JETON.match(valeur):
         raise ValueError(_t("Ce jeton GitHub n'a pas la bonne forme (des lettres, des chiffres et _ ; il commence souvent par ghp_ ou github_pat_)."))
-    from . import moteur as _m          # importé ici : github.py est lu très tôt (miseajour), avant que moteur soit prêt
+    from . import core as _m          # importé ici : github.py est lu très tôt (miseajour), avant que moteur soit prêt
     chemin = _chemin()
     if valeur:
         _m.ecrire_atomique(chemin, json.dumps({"jeton": valeur}))

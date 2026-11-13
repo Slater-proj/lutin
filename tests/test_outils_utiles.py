@@ -4,8 +4,8 @@ import unittest
 from pathlib import Path
 
 import context  # noqa: F401
-from lutin import moteur as _m
-from lutin import outils_utiles as u
+from lutin import core as _m
+from lutin import find_tools as u
 
 
 class Calculer(unittest.TestCase):

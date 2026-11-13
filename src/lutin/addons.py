@@ -28,8 +28,8 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
-from . import horsligne as _hl
-from . import moteur as _m
+from . import offline as _hl
+from . import core as _m
 from . import net_guard as _net_guard
 from .i18n import t as _t
 
@@ -594,10 +594,10 @@ def proposer_correction(ident, demander_au_modele=None, lire_doc=None):
 
 
 def _demander_json(consigne):
-    from . import dialogue
+    from . import agent
     r = _m.reglages()
     try:
-        rep = dialogue.ollama_json("/api/chat", {"model": r["modele"], "stream": False, "think": False, "format": "json", "options": _m.options_modele(r, 0.1),
+        rep = agent.ollama_json("/api/chat", {"model": r["modele"], "stream": False, "think": False, "format": "json", "options": _m.options_modele(r, 0.1),
                                                  "messages": [{"role": "system", "content": "Réponds uniquement en JSON : {\"flux\": {...}, \"explication\": \"...\"}."}, {"role": "user", "content": consigne}]}, 300)
         return json.loads(rep.get("message", {}).get("content") or "{}")
     except (urllib.error.URLError, OSError, ValueError) as e:

@@ -20,7 +20,7 @@ import urllib.request
 from pathlib import Path
 
 from . import addons
-from . import moteur as _m
+from . import core as _m
 from .i18n import t as _t
 
 IDENT = "voicestudio"
@@ -163,8 +163,8 @@ def _dossier_audio(ctx):
     conv = (ctx or {}).get("conv") or {}
     if conv.get("id"):
         try:
-            from . import fichiers
-            return fichiers.dossier_de_conversation(conv["id"], conv.get("titre", ""), creer=True)
+            from . import produced_files
+            return produced_files.dossier_de_conversation(conv["id"], conv.get("titre", ""), creer=True)
         except OSError:
             pass
     return dossier_sortie()
@@ -172,7 +172,7 @@ def _dossier_audio(ctx):
 
 def _fichier_audio(chemin, maximum):
     """Un fichier audio du projet, ou produit plus tôt par l'addon. Lève ErreurOutil sinon (type, taille, chemin hors zone)."""
-    from .outils import chemin_sur
+    from .tools import chemin_sur
     brut = str(chemin or "").strip()
     if not brut:
         raise _m.ErreurOutil(_t("Il faut le chemin d'un enregistrement."))
@@ -199,8 +199,8 @@ def _nom_fichier(texte, extension):
 
 # ------------------------------------------------------------------------------- outils
 def _refus(ctx):
-    from . import outils
-    return outils.refus(ctx, _t("Refusé par l'utilisateur."))
+    from . import tools
+    return tools.refus(ctx, _t("Refusé par l'utilisateur."))
 
 
 def outil_parler(args, ctx):
@@ -277,7 +277,7 @@ def outil_cloner(args, ctx):
 
 
 def outil_voix(nom, args, ctx):
-    """Aiguillage des quatre outils de l'addon (revue.py)."""
+    """Aiguillage des quatre outils de l'addon (change_review.py)."""
     if not addons.actif(IDENT):
         raise _m.ErreurOutil(_t("L'addon VoiceStudio n'est pas activé."))
     if nom == "voix_liste":

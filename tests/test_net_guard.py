@@ -20,7 +20,7 @@ for key, value in {"LUTIN_RACINE": str(_TEMP / "project"), "LUTIN_DONNEES": str(
 os.environ.pop("LUTIN_WEB_LOCAL", None)          # the guard is tested for real: no local test mode in this file
 (_TEMP / "project").mkdir()
 
-from lutin import moteur as A  # noqa: E402
+from lutin import core as A  # noqa: E402
 from lutin import net_guard, web  # noqa: E402
 
 RECEIVED = []          # every request that reached the « internal » service

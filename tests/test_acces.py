@@ -27,9 +27,9 @@ for d in ("projet", "donnees", "memoire", "config"):
 CONFIG = _TEMP / "config" / "config.json"
 CONFIG.write_text(json.dumps({"schema": 1, "installe": True, "securite": {"niveau": "local", "port": 8777}, "emplacements": {"travail": str(_TEMP / "projet"), "travaux": [], "travail_actif": ""}}), encoding="utf-8")
 
-from lutin import acces, sauvegarde  # noqa: E402
-from lutin import moteur as A  # noqa: E402
-from lutin import securite as S  # noqa: E402
+from lutin import access, backup  # noqa: E402
+from lutin import core as A  # noqa: E402
+from lutin import security as S  # noqa: E402
 
 SERVEUR = ThreadingHTTPServer(("127.0.0.1", 0), A.Gestionnaire)
 threading.Thread(target=SERVEUR.serve_forever, daemon=True).start()
@@ -205,10 +205,10 @@ class ConseilPc(Base):
     def test_sans_mesure_puis_avec_mesure(self):
         from lutin import bench
         # le matériel et Ollama sont simulés : le test ne dépend pas de la machine (ni de son délai)
-        from lutin import machine
-        profil = machine.Profil(systeme="windows", cpu="test", coeurs=8, ram_go=16.0, ram_libre_go=10.0, gpus=[])
+        from lutin import hardware
+        profil = hardware.Profil(systeme="windows", cpu="test", coeurs=8, ram_go=16.0, ram_libre_go=10.0, gpus=[])
         ollama = {"actif": True, "installes": {}, "tailles": {}}
-        with mock.patch("lutin.machine.detecter", return_value=profil), mock.patch.object(A, "etat_ollama", return_value=ollama), mock.patch.object(A, "ps_modele", return_value=None):
+        with mock.patch("lutin.hardware.detecter", return_value=profil), mock.patch.object(A, "etat_ollama", return_value=ollama), mock.patch.object(A, "ps_modele", return_value=None):
             self._conseil_avec_mesure(bench)
 
     def _conseil_avec_mesure(self, bench):
@@ -248,16 +248,16 @@ class VerifierLutin(Base):
         super().tearDown()
 
     def test_version_plus_recente_annoncee(self):
-        from lutin import miseajour
-        with mock.patch.object(miseajour, "derniere_release_detail", return_value=("99.0.0", "https://example/roue.whl", "")):
+        from lutin import updates
+        with mock.patch.object(updates, "derniere_release_detail", return_value=("99.0.0", "https://example/roue.whl", "")):
             statut, r = requete("POST", "/api/verifier-lutin", corps={})
         self.assertEqual(statut, 200)
         self.assertEqual(r["derniere"], "99.0.0")
         self.assertEqual(r["nouvelle"]["version"], "99.0.0")
 
     def test_hors_ligne_le_dit(self):
-        from lutin import miseajour
-        with mock.patch.object(miseajour, "derniere_release_detail", return_value=(None, None, "api.github.com : timed out ; github.com : timed out")):
+        from lutin import updates
+        with mock.patch.object(updates, "derniere_release_detail", return_value=(None, None, "api.github.com : timed out ; github.com : timed out")):
             statut, r = requete("POST", "/api/verifier-lutin", corps={})
         self.assertEqual(statut, 503)
         self.assertIn("GitHub", r["erreur"])
@@ -267,9 +267,9 @@ class VerifierLutin(Base):
 class Planification(Base):
     def setUp(self):
         super().setUp()
-        from lutin import planifie
-        self.p = planifie
-        planifie.chemin().unlink(missing_ok=True)
+        from lutin import scheduled_tasks
+        self.p = scheduled_tasks
+        scheduled_tasks.chemin().unlink(missing_ok=True)
 
     def tearDown(self):
         self.p.chemin().unlink(missing_ok=True)
@@ -444,10 +444,10 @@ class Redemarrage(Base):
 
     def test_avec_superviseur(self):
         os.environ["LUTIN_SUPERVISE"] = "1"
-        with mock.patch.object(acces.threading, "Timer") as timer:
+        with mock.patch.object(access.threading, "Timer") as timer:
             self.assertEqual(requete("POST", "/api/redemarrer", corps={}), (200, {"ok": True}))
             args = timer.call_args[0]
-            self.assertEqual((args[0] > 0, args[1], args[2]), (True, os._exit, [acces.CODE_REDEMARRAGE]))
+            self.assertEqual((args[0] > 0, args[1], args[2]), (True, os._exit, [access.CODE_REDEMARRAGE]))
             timer.return_value.start.assert_called_once()
             A.TOURS_ACTIFS["abcd1234"] = object()
             try:
@@ -459,7 +459,7 @@ class Redemarrage(Base):
 
     def test_le_superviseur_relance_sans_compter_une_panne(self):
         from lutin import cli
-        codes = iter([acces.CODE_REDEMARRAGE] * 8 + [0])
+        codes = iter([access.CODE_REDEMARRAGE] * 8 + [0])
         lancements, messages = [], []
         r = cli.superviser(lambda premiere: (lancements.append(premiere), next(codes))[1], attendre=lambda s: None, maximum=2, ecrire=messages.append)
         self.assertEqual((r, len(lancements), lancements[0], any(lancements[1:])), (0, 9, True, False), "huit redémarrages d'affilée ne sont pas des pannes : le navigateur ne se rouvre pas")
@@ -469,7 +469,7 @@ class Redemarrage(Base):
 class Restauration(Base):
     def archive(self):
         sortie = io.BytesIO()
-        sauvegarde.exporter({"config": CONFIG.parent, "donnees": A.DONNEES, "memoire": A.MEMOIRE}, sortie)
+        backup.exporter({"config": CONFIG.parent, "donnees": A.DONNEES, "memoire": A.MEMOIRE}, sortie)
         return sortie.getvalue()
 
     def test_restaurer_depuis_la_page(self):

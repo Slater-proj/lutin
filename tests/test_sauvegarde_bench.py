@@ -6,7 +6,7 @@ import zipfile
 from pathlib import Path
 
 import context  # noqa: F401
-from lutin import bench, config, sauvegarde
+from lutin import bench, config, backup
 from lutin.ollama_client import ErreurOllama
 
 
@@ -42,23 +42,23 @@ class Sauvegarde(unittest.TestCase):
 
     def test_contenu_et_exclusions(self):
         tampon = io.BytesIO()
-        resume = sauvegarde.exporter(self.d, tampon)
+        resume = backup.exporter(self.d, tampon)
         noms = self.noms(tampon)
         self.assertIn("config/config.json", noms)
         self.assertIn("donnees/conversations/abcd1234.json", noms)
         self.assertIn("donnees/reglages.json", noms)
         self.assertIn("memoire/MEMOIRE.md", noms)
-        self.assertIn(sauvegarde.MANIFESTE, noms)
+        self.assertIn(backup.MANIFESTE, noms)
         for jamais in ("config/appareils.json", "donnees/console.json", "donnees/lutin.log", "donnees/sauvegardes/gros.bin", "donnees/conversations/abcd1234.json.bak", "cache/catalogue.json"):
             self.assertNotIn(jamais, noms, jamais + " ne doit jamais être exporté")
         self.assertEqual(resume["fichiers"], len(noms) - 1)
 
     def test_aller_retour_vers_une_autre_installation(self):
         archive = Path(self.t.name) / "sauvegarde.zip"
-        sauvegarde.exporter(self.d, archive)
+        backup.exporter(self.d, archive)
         autre = config.dossiers({"LUTIN_HOME": str(Path(self.t.name) / "b")})
         config.preparer(autre)
-        r = sauvegarde.restaurer(autre, archive, autre["cache"])
+        r = backup.restaurer(autre, archive, autre["cache"])
         self.assertGreaterEqual(r["fichiers"], 4)
         self.assertEqual(json.loads((autre["donnees"] / "conversations" / "abcd1234.json").read_text(encoding="utf-8"))["titre"], "Une conversation")
         self.assertIn("thé", (autre["memoire"] / "MEMOIRE.md").read_text(encoding="utf-8"))
@@ -67,9 +67,9 @@ class Sauvegarde(unittest.TestCase):
 
     def test_restaurer_remplace_et_garde_l_ancien_dans_le_zip_de_secours(self):
         archive = Path(self.t.name) / "s.zip"
-        sauvegarde.exporter(self.d, archive)
+        backup.exporter(self.d, archive)
         (self.d["memoire"] / "MEMOIRE.md").write_text("modifié après la sauvegarde", encoding="utf-8")
-        r = sauvegarde.restaurer(self.d, archive, self.d["cache"])
+        r = backup.restaurer(self.d, archive, self.d["cache"])
         self.assertIn("thé", (self.d["memoire"] / "MEMOIRE.md").read_text(encoding="utf-8"))
         with zipfile.ZipFile(r["secours"]) as z:
             self.assertEqual(z.read("memoire/MEMOIRE.md").decode("utf-8"), "modifié après la sauvegarde")
@@ -77,7 +77,7 @@ class Sauvegarde(unittest.TestCase):
     def fabriquer(self, membres):
         chemin = Path(self.t.name) / "piege.zip"
         with zipfile.ZipFile(chemin, "w") as z:
-            z.writestr(sauvegarde.MANIFESTE, "{}")
+            z.writestr(backup.MANIFESTE, "{}")
             for nom, contenu in membres.items():
                 z.writestr(nom, contenu)
         return chemin
@@ -88,35 +88,35 @@ class Sauvegarde(unittest.TestCase):
             with self.subTest(nom):
                 archive = self.fabriquer({nom: "x"}) if not nom.endswith("/") else self.fabriquer({"config/ok.json": "x", nom + "../z": "y"})
                 avant = sorted(str(p) for p in Path(self.t.name).rglob("*"))
-                with self.assertRaises(sauvegarde.ErreurSauvegarde):
-                    sauvegarde.restaurer(self.d, archive, self.d["cache"])
+                with self.assertRaises(backup.ErreurSauvegarde):
+                    backup.restaurer(self.d, archive, self.d["cache"])
                 self.assertEqual(sorted(str(p) for p in Path(self.t.name).rglob("*")), avant, "rien n'a été créé ni modifié")
 
     def test_ce_n_est_pas_une_sauvegarde(self):
         faux = Path(self.t.name) / "faux.zip"
         faux.write_text("pas un zip", encoding="utf-8")
-        with self.assertRaises(sauvegarde.ErreurSauvegarde):
-            sauvegarde.verifier(faux)
+        with self.assertRaises(backup.ErreurSauvegarde):
+            backup.verifier(faux)
         sans_manifeste = Path(self.t.name) / "sans.zip"
         with zipfile.ZipFile(sans_manifeste, "w") as z:
             z.writestr("config/config.json", "{}")
-        with self.assertRaises(sauvegarde.ErreurSauvegarde):
-            sauvegarde.verifier(sans_manifeste)
+        with self.assertRaises(backup.ErreurSauvegarde):
+            backup.verifier(sans_manifeste)
 
     def test_lien_symbolique_refuse(self):
         chemin = Path(self.t.name) / "lien.zip"
         with zipfile.ZipFile(chemin, "w") as z:
-            z.writestr(sauvegarde.MANIFESTE, "{}")
+            z.writestr(backup.MANIFESTE, "{}")
             info = zipfile.ZipInfo("memoire/lien.md")
             info.external_attr = (0o120777 << 16)
             z.writestr(info, "/etc/passwd")
-        with self.assertRaises(sauvegarde.ErreurSauvegarde):
-            sauvegarde.verifier(chemin)
+        with self.assertRaises(backup.ErreurSauvegarde):
+            backup.verifier(chemin)
 
     def test_verifier_renvoie_le_manifeste(self):
         archive = Path(self.t.name) / "s.zip"
-        sauvegarde.exporter(self.d, archive)
-        m = sauvegarde.verifier(archive)
+        backup.exporter(self.d, archive)
+        m = backup.verifier(archive)
         self.assertIn("lutin", m)
         self.assertGreater(m["octets"], 0)
 

@@ -13,8 +13,8 @@ for cle, valeur in {"LUTIN_RACINE": str(_TEMP / "projet"), "LUTIN_DONNEES": str(
 for d in ("projet", "donnees", "memoire"):
     (_TEMP / d).mkdir(exist_ok=True)
 
-from lutin import moteur as A  # noqa: E402
-from lutin import reglages_outils as RO  # noqa: E402
+from lutin import core as A  # noqa: E402
+from lutin import tool_settings as RO  # noqa: E402
 
 PAR_DEFAUT = {"outils_desactives": [], "outil_delai_commande_s": 240, "outil_sortie_max": 9000, "outil_lecture_max": 7000, "outil_chercher_delai_s": 25, "commandes_sans_accord": [], "dossiers_ignores_en_plus": []}
 
@@ -67,8 +67,8 @@ class Outils(unittest.TestCase):
         self.assertNotIn("archives", A.DOSSIERS_IGNORES)
 
     def test_un_outil_coupe_n_est_plus_propose_au_modele(self):
-        from lutin import dialogue
-        noms = lambda r: {t["function"]["name"] for t in dialogue.outils_du_mode(r)}  # noqa: E731
+        from lutin import agent
+        noms = lambda r: {t["function"]["name"] for t in agent.outils_du_mode(r)}  # noqa: E731
         base = dict(A.reglages(), mode="polyvalent")
         self.assertIn("executer", noms(base))
         A.enregistrer_reglages({"outils_desactives": ["executer", "web_lire"]})

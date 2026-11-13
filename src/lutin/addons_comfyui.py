@@ -24,7 +24,7 @@ import urllib.request
 from pathlib import Path
 
 from . import addons
-from . import moteur as _m
+from . import core as _m
 from . import net_guard as _net_guard
 from .i18n import t as _t
 
@@ -557,8 +557,8 @@ def outil_generer(args, ctx):
     detail = _t("Description : {}\nTaille : {}×{} · modèle : {}").format(v["prompt"][:300], v["largeur"], v["hauteur"], v["modele"] or _t("(celui du workflow)"))
     auto = bool(ctx.get("auto_commandes"))          # générer lance ComfyUI et prend la carte graphique : la case « Commandes automatiques » vaut aussi pour cela
     if not ctx["accord"](_t("Générer {} avec ComfyUI").format({"image": _t("une image"), "video": _t("une vidéo"), "son": _t("un son")}[type_]), detail, "", auto=auto):
-        from . import outils
-        return outils.refus(ctx, _t("Refusé par l'utilisateur."))
+        from . import tools
+        return tools.refus(ctx, _t("Refusé par l'utilisateur."))
     lance = assurer_comfyui(ctx.get("stop"))
     try:
         res = _soumettre_et_attendre(f, v, complet, type_, ctx)

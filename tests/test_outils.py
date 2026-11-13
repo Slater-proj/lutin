@@ -9,9 +9,9 @@ import context  # noqa: F401
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools"))
 import prochaine_version  # noqa: E402
 import verifier_catalogue  # noqa: E402
-from lutin import catalogue  # noqa: E402
+from lutin import model_catalog  # noqa: E402
 
-CAT = catalogue.charger()
+CAT = model_catalog.charger()
 
 
 class VerifierCatalogue(unittest.TestCase):
@@ -171,8 +171,8 @@ class CheminReseau(unittest.TestCase):
     """Un chemin réseau perd un antislash de tête en passant par le JSON d'un petit modèle : Lutin le rend à la commande."""
 
     def test_le_chemin_reseau_de_la_demande_est_retabli_dans_la_commande(self):
-        from lutin import moteur  # noqa: F401  (avant outils : import circulaire sinon)
-        from lutin import outils as o
+        from lutin import core  # noqa: F401  (avant outils : import circulaire sinon)
+        from lutin import tools as o
         B = chr(92)
         unc = B * 2 + "NAS" + B + "Partage" + B + "Dossier" + B + "sorties"
         demande = "dis-moi ce qu'il y a ici " + unc
@@ -186,8 +186,8 @@ class CheminReseau(unittest.TestCase):
 class DonneesReservees(unittest.TestCase):
     def test_l_assistant_ne_lit_ni_n_ecrit_le_dossier_des_donnees(self):
         """Jetons, canaux de notification et clés vivent dans le dossier de données : même s'il est dans le projet, l'outil de lecture le refuse."""
-        from lutin import moteur as m
-        from lutin import outils
+        from lutin import core as m
+        from lutin import tools
         with tempfile.TemporaryDirectory() as t:
             racine, donnees = Path(t).resolve(), Path(t).resolve() / "donnees"
             donnees.mkdir()
@@ -196,12 +196,12 @@ class DonneesReservees(unittest.TestCase):
             avant = (m.RACINE, m.DONNEES)
             m.RACINE, m.DONNEES = racine, donnees
             try:
-                self.assertEqual(outils.chemin_sur("ok.txt"), racine / "ok.txt")
+                self.assertEqual(tools.chemin_sur("ok.txt"), racine / "ok.txt")
                 for ecriture in (False, True):
                     with self.assertRaises(m.ErreurOutil):
-                        outils.chemin_sur("donnees/notifications.json", ecriture)
+                        tools.chemin_sur("donnees/notifications.json", ecriture)
                 with self.assertRaises(m.ErreurOutil):
-                    outils.chemin_sur("donnees")
+                    tools.chemin_sur("donnees")
             finally:
                 m.RACINE, m.DONNEES = avant
 

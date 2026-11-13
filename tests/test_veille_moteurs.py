@@ -14,9 +14,9 @@ for cle, valeur in {"LUTIN_RACINE": str(_TEMP / "projet"), "LUTIN_DONNEES": str(
     os.environ.setdefault(cle, valeur)
 (_TEMP / "projet").mkdir(exist_ok=True)
 
-from lutin import moteur as _m  # noqa: E402,F401  (avant les autres : import circulaire sinon ; enregistre les moteurs)
-from lutin import catalogue_moteurs as cm  # noqa: E402
-from lutin import ed25519, moteurs  # noqa: E402
+from lutin import core as _m  # noqa: E402,F401  (avant les autres : import circulaire sinon ; enregistre les moteurs)
+from lutin import engine_catalog as cm  # noqa: E402
+from lutin import ed25519, engines  # noqa: E402
 
 RACINE = Path(__file__).resolve().parent.parent
 _spec = importlib.util.spec_from_file_location("veille_moteurs", RACINE / "tools" / "veille_moteurs.py")
@@ -36,7 +36,7 @@ class Fiches(unittest.TestCase):
         for ident in ("ollama", "llamacpp"):
             f = cm.fiche(ident)
             self.assertIsNotNone(f, ident)
-            vue = moteurs.MOTEURS[ident].vue()
+            vue = engines.MOTEURS[ident].vue()
             self.assertEqual(vue["source_fiche"], "catalogue")
             self.assertEqual(vue["description"], f["description"])
             self.assertEqual(vue["points_forts"], f["points_forts"])
@@ -45,12 +45,12 @@ class Fiches(unittest.TestCase):
     def test_langue_et_repli_sur_le_code(self):
         os.environ["LUTIN_LANGUE"] = "en"
         try:
-            self.assertIn("Ollama", moteurs.MOTEURS["ollama"].vue()["description"])
-            self.assertIn("managed by Lutin", moteurs.MOTEURS["ollama"].vue()["description"])
+            self.assertIn("Ollama", engines.MOTEURS["ollama"].vue()["description"])
+            self.assertIn("managed by Lutin", engines.MOTEURS["ollama"].vue()["description"])
         finally:
             os.environ.pop("LUTIN_LANGUE", None)
         self.assertIsNone(cm.fiche("ollama", {"moteurs": []}), "pas dans le catalogue : la page garde les textes du code")
-        self.assertEqual(moteurs.MOTEURS["openai"].vue()["source_fiche"], "code", "le serveur externe n'est pas un moteur géré")
+        self.assertEqual(engines.MOTEURS["openai"].vue()["source_fiche"], "code", "le serveur externe n'est pas un moteur géré")
 
     def test_les_moteurs_geres_ne_sont_pas_des_prereglages(self):
         ids = [p["id"] for p in cm.prereglages()]

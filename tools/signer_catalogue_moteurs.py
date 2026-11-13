@@ -14,7 +14,7 @@ from pathlib import Path
 RACINE = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(RACINE / "src"))
 
-from lutin import catalogue_moteurs as cm  # noqa: E402
+from lutin import engine_catalog as cm  # noqa: E402
 
 SOURCE = RACINE / "tools" / "moteurs.source.json"
 

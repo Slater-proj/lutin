@@ -15,11 +15,11 @@ for cle, valeur in {"LUTIN_RACINE": str(_TEMP / "projet"), "LUTIN_DONNEES": str(
     os.environ.setdefault(cle, valeur)
 (_TEMP / "projet").mkdir(exist_ok=True)
 
-from lutin import moteur as _m  # noqa: E402,F401  (avant les autres : import circulaire sinon)
-from lutin import catalogue_moteurs as cm  # noqa: E402
+from lutin import core as _m  # noqa: E402,F401  (avant les autres : import circulaire sinon)
+from lutin import engine_catalog as cm  # noqa: E402
 from lutin import exllamav3 as X  # noqa: E402
-from lutin import moteur_llamacpp as ml  # noqa: E402
-from lutin import moteurs, moteurs_maj  # noqa: E402
+from lutin import llamacpp_engine as ml  # noqa: E402
+from lutin import engines, engine_updates  # noqa: E402
 
 SHA = "a" * 40
 
@@ -240,14 +240,14 @@ class Versions(Base):
             def version(self):
                 return "1.6.6"
         with mock.patch.object(X, "derniere_version_lib", lambda *a, **k: "1.7.0"):
-            self.assertEqual(moteurs_maj._derniere_exllamav3(Fausse()), ("1.6.6", "1.7.0"))
-            self.assertTrue(moteurs_maj.plus_recente("1.7.0", "1.6.6"))
-            self.assertFalse(moteurs_maj.plus_recente("1.6.6", "1.6.6"))
+            self.assertEqual(engine_updates._derniere_exllamav3(Fausse()), ("1.6.6", "1.7.0"))
+            self.assertTrue(engine_updates.plus_recente("1.7.0", "1.6.6"))
+            self.assertFalse(engine_updates.plus_recente("1.6.6", "1.6.6"))
 
         class Autre(Fausse):
             def exllamav3_choisi(self):
                 return False
-        self.assertIsNone(moteurs_maj._derniere_exllamav3(Autre()))
+        self.assertIsNone(engine_updates._derniere_exllamav3(Autre()))
 
 
 class Compatibilite(unittest.TestCase):
@@ -285,31 +285,31 @@ class Compatibilite(unittest.TestCase):
 class Carte(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="lutin-exl-carte-"))
-        self.ancien = dict(moteurs.CONTEXTE)
-        moteurs.CONTEXTE["donnees"] = lambda: self.tmp
-        moteurs.CONTEXTE["hors_ligne"] = lambda: False
-        moteurs.CONTEXTE["en_docker"] = lambda: False
-        self.mo = moteurs.MOTEURS["openai"]
+        self.ancien = dict(engines.CONTEXTE)
+        engines.CONTEXTE["donnees"] = lambda: self.tmp
+        engines.CONTEXTE["hors_ligne"] = lambda: False
+        engines.CONTEXTE["en_docker"] = lambda: False
+        self.mo = engines.MOTEURS["openai"]
         ml.regler_serveur("openai", {"serveur": "exllamav3"})
         self.addCleanup(self.remettre)
 
     def remettre(self):
         ml.regler_serveur("openai", {"serveur": "", "port_exllamav3": 0})
-        moteurs.CONTEXTE.clear()
-        moteurs.CONTEXTE.update(self.ancien)
+        engines.CONTEXTE.clear()
+        engines.CONTEXTE.update(self.ancien)
 
     def profil(self, fabricant):
         return lambda: mock.Mock(gpus=[mock.Mock(fabricant=fabricant)])
 
     def test_l_installation_demande_une_carte_nvidia_et_pas_docker(self):
-        moteurs.CONTEXTE["profil"] = self.profil("nvidia")
+        engines.CONTEXTE["profil"] = self.profil("nvidia")
         self.assertTrue(self.mo.actions()["installer"]["possible"])
-        moteurs.CONTEXTE["profil"] = self.profil("amd")
+        engines.CONTEXTE["profil"] = self.profil("amd")
         a = self.mo.actions()["installer"]
         self.assertFalse(a["possible"])
         self.assertIn("NVIDIA", a["raison"])
-        moteurs.CONTEXTE["profil"] = self.profil("nvidia")
-        moteurs.CONTEXTE["en_docker"] = lambda: True
+        engines.CONTEXTE["profil"] = self.profil("nvidia")
+        engines.CONTEXTE["en_docker"] = lambda: True
         self.assertFalse(self.mo.actions()["installer"]["possible"])
 
     def test_adresse_locale_imposee_port_regle_et_statut(self):
@@ -330,7 +330,7 @@ class Carte(unittest.TestCase):
             for action in ("installer", "demarrer", "arreter", "desinstaller", "telecharger:turboderp/Qwen-exl3@4.0bpw"):
                 self.mo.faire(action, lambda *a: None)
         self.assertEqual(suivi, [("installer", 5000), ("demarrer", 5000), ("demarrer", 5000), "arreter", "desinstaller", ("modele", "turboderp/Qwen-exl3", "4.0bpw")], "installé, puis démarré tout de suite ; « Démarrer » démarre")
-        moteurs.CONTEXTE["hors_ligne"] = lambda: True
+        engines.CONTEXTE["hors_ligne"] = lambda: True
         with self.assertRaises(Exception):
             self.mo.faire("installer", lambda *a: None)
 

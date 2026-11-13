@@ -15,9 +15,9 @@ os.environ["LUTIN_CONFIG"] = str(_TEMP / "config" / "config.json")
 for d in ("projet", "donnees", "memoire", "config"):
     (_TEMP / d).mkdir(exist_ok=True)
 
-from lutin import catalogue, selection  # noqa: E402
-from lutin import moteur as A  # noqa: E402
-from lutin.machine import Gpu, Profil, est_integree  # noqa: E402
+from lutin import model_catalog, model_selection  # noqa: E402
+from lutin import core as A  # noqa: E402
+from lutin.hardware import Gpu, Profil, est_integree  # noqa: E402
 
 
 class CartesIntegrees(unittest.TestCase):
@@ -40,7 +40,7 @@ class CartesIntegrees(unittest.TestCase):
         self.assertEqual(p.budget_go(), 19.2, "60 % de la RAM, pas 85 % des 4 Go de la carte intégrée")
         self.assertEqual(p.classe(), "sans_gpu")
         self.assertIn("non utilisée", p.resume())
-        choix = selection.choisir(p, catalogue.charger())
+        choix = model_selection.choisir(p, model_catalog.charger())
         retenu = choix["polyvalent"]
         self.assertIsNotNone(retenu)
         self.assertGreater(retenu.modele["go"], 4, "un modèle bien plus gros que la mémoire de la carte intégrée")
@@ -74,7 +74,7 @@ class ReglagesDeCharge(unittest.TestCase):
         r = A.reglages()
         for temperature in (0, 0.2, 0.3, 0.4, r["temperature"]):
             self.assertEqual(A.options_modele(r, temperature)["num_thread"], 3)
-        source = (Path(__file__).resolve().parent.parent / "src" / "lutin" / "moteur.py").read_text(encoding="utf-8")
+        source = (Path(__file__).resolve().parent.parent / "src" / "lutin" / "core.py").read_text(encoding="utf-8")
         self.assertEqual(source.count('{"num_ctx": r["num_ctx"]'), 1, "toute requête passe par options_modele (la seule construction du dictionnaire) : un jeu d'options différent ferait recharger le modèle")
 
     def test_duree_de_garde(self):

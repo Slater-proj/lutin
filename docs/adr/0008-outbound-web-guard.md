@@ -32,7 +32,7 @@ A small module, standard library only, used by `web.web_telecharger`:
   (redirections are still checked hop by hop). The rebinding window remains in that configuration.
 - The add-ons (`addons.py`, `addons_comfyui.py`, `addons_mail.py`) keep their own guards: hosts restricted by a shipped manifest or a fixed list, redirections
   refused or controlled. They do not pin the address yet.
-- The page preview (`apercu.py`) only opens workspace files and this machine's addresses, by design; it is not concerned.
+- The page preview (`page_preview.py`) only opens workspace files and this machine's addresses, by design; it is not concerned.
 
 ## Consequences
 

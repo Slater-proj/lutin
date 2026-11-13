@@ -13,9 +13,9 @@ for cle, valeur in {"LUTIN_RACINE": str(_TEMP / "projet"), "LUTIN_DONNEES": str(
     os.environ.setdefault(cle, valeur)
 (_TEMP / "projet").mkdir(exist_ok=True)
 
-from lutin import moteur as _m  # noqa: E402
-from lutin import moteur_llamacpp as ml  # noqa: E402
-from lutin import moteurs  # noqa: E402
+from lutin import core as _m  # noqa: E402
+from lutin import llamacpp_engine as ml  # noqa: E402
+from lutin import engines  # noqa: E402
 
 
 class Fil:
@@ -29,7 +29,7 @@ class Fil:
 class Liberation(unittest.TestCase):
     def setUp(self):
         self.arrets = []
-        self.llama = moteurs.MOTEURS["llamacpp"]
+        self.llama = engines.MOTEURS["llamacpp"]
         self.avant = ml.SERVEUR.get("proc")
         self.addCleanup(lambda: ml.SERVEUR.update(proc=self.avant))
         self.p1 = mock.patch.object(type(self.llama), "arreter", lambda s: self.arrets.append("llama.cpp"))
@@ -60,7 +60,7 @@ class Liberation(unittest.TestCase):
 
     def test_le_serveur_gere_n_est_arrete_que_sur_demande_du_bouton(self):
         ml.SERVEUR["proc"] = None
-        gere = moteurs.MOTEURS["openai"]
+        gere = engines.MOTEURS["openai"]
         with mock.patch.object(type(gere), "arreter_gere", lambda s: self.arrets.append("gere") or True), self.sans_ollama():
             _m.liberer_vram()          # garde-fous, passage de relais à ComfyUI : le serveur géré ne se redémarre pas tout seul, on ne le coupe pas en douce
             self.assertEqual(self.arrets, [])
@@ -82,9 +82,9 @@ class Liberation(unittest.TestCase):
 class DejaCharge(unittest.TestCase):
     def test_un_modele_deja_charge_ne_reclame_pas_sa_place_une_seconde_fois(self):
         """Avec llama.cpp (qui ne dit pas la taille chargée), le garde-fou réclamait la taille du modèle EN PLUS de celui déjà en mémoire : « Pas assez de mémoire » pour un modèle qui tournait."""
-        from lutin import sante
-        self.assertEqual(sante.taille_modele("x", {"taille": 0, "vram": 0}), 0)
-        self.assertEqual(sante.taille_modele("x", {"taille": 5 * 10 ** 9}), 5 * 10 ** 9)
+        from lutin import health
+        self.assertEqual(health.taille_modele("x", {"taille": 0, "vram": 0}), 0)
+        self.assertEqual(health.taille_modele("x", {"taille": 5 * 10 ** 9}), 5 * 10 ** 9)
 
 
 if __name__ == "__main__":

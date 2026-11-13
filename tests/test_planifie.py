@@ -16,9 +16,9 @@ for cle, valeur in {"LUTIN_RACINE": str(_TEMP / "projet"), "LUTIN_DONNEES": str(
     os.environ.setdefault(cle, valeur)
 (_TEMP / "projet").mkdir(exist_ok=True)
 
-from lutin import moteur as _m  # noqa: E402
-from lutin import donnees as _d  # noqa: E402
-from lutin import notifications, planifie as P  # noqa: E402
+from lutin import core as _m  # noqa: E402
+from lutin import storage as _d  # noqa: E402
+from lutin import notifications, scheduled_tasks as P  # noqa: E402
 
 LUNDI_8H = datetime(2026, 11, 9, 8, 30)          # un lundi
 

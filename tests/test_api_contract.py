@@ -46,7 +46,7 @@ class Contract(unittest.TestCase):
 
     def test_the_reader_reads_each_form_of_comparison(self):
         source = ROOT / "tests" / "fixtures"          # any folder: the stream events are searched in its *.py files
-        sample = Path(context.tempfile.mkdtemp(prefix="lutin-api-")) / "serveur.py"
+        sample = Path(context.tempfile.mkdtemp(prefix="lutin-api-")) / "server.py"
         sample.write_text(
             "class Gestionnaire:\n"
             "    def do_GET(self):\n"

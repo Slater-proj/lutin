@@ -15,8 +15,8 @@ for cle, valeur in {"LUTIN_RACINE": str(_TEMP / "projet"), "LUTIN_DONNEES": str(
     os.environ.setdefault(cle, valeur)
 (_TEMP / "projet").mkdir(exist_ok=True)
 
-from lutin import embeddings, rappel  # noqa: E402
-from lutin import moteur as _m  # noqa: E402
+from lutin import embeddings, recall  # noqa: E402
+from lutin import core as _m  # noqa: E402
 
 # des « familles de sens » : les mots d'une même famille donnent le même vecteur, sans aucun mot commun nécessaire
 FAMILLES = [("prison", "détention", "cellule", "incarcération"), ("musique", "guitare", "concert"), ("cuisine", "recette", "four")]
@@ -84,46 +84,46 @@ class Sens(unittest.TestCase):
         ]
         _m.conv_ecrire(c)
         self.ident = c["id"]
-        rappel.FIL.clear()
+        recall.FIL.clear()
 
     def test_un_passage_sans_mot_commun_est_retrouve_par_le_sens(self):
-        passages = rappel.passages_du_fil(self.ident, "Durée d une incarcération ?", 1)
+        passages = recall.passages_du_fil(self.ident, "Durée d une incarcération ?", 1)
         self.assertTrue(passages and "détention" in passages[0]["m"]["texte"], passages)
         self.sens["recherche_sens"] = False                                     # sans le sens, aucun mot utile en commun avec « personne ne sort »
-        sans = rappel.passages_du_fil(self.ident, "Durée d une incarcération ?", 1)
+        sans = recall.passages_du_fil(self.ident, "Durée d une incarcération ?", 1)
         self.assertFalse(sans and "détention" in sans[0]["m"]["texte"])
 
     def test_les_vecteurs_sont_gardes_sur_le_disque_et_pas_recalcules(self):
-        rappel.passages_du_fil(self.ident, "détention", 1)
+        recall.passages_du_fil(self.ident, "détention", 1)
         premiers = sum(len(a) for a in APPELS)
-        self.assertEqual(premiers, 1 + len(rappel.morceaux_du_fil(self.ident)[0]))      # la question + chaque passage, une fois
+        self.assertEqual(premiers, 1 + len(recall.morceaux_du_fil(self.ident)[0]))      # la question + chaque passage, une fois
         self.assertTrue(embeddings._chemin(self.ident).exists())
         APPELS.clear()
-        rappel.FIL.clear()
-        rappel.passages_du_fil(self.ident, "concert", 1)
+        recall.FIL.clear()
+        recall.passages_du_fil(self.ident, "concert", 1)
         self.assertEqual(sum(len(a) for a in APPELS), 1)                        # seule la question est vectorisée
         embeddings.supprimer(self.ident)
         self.assertFalse(embeddings._chemin(self.ident).exists())
 
     def test_sans_le_modele_on_retombe_sur_les_mots_sans_erreur_et_sans_insister(self):
         MODE["v"] = "absent"
-        passages = rappel.passages_du_fil(self.ident, "guitare", 1)
+        passages = recall.passages_du_fil(self.ident, "guitare", 1)
         self.assertTrue(passages and "guitare" in passages[0]["m"]["texte"].lower())
         n = len(APPELS)
-        rappel.passages_du_fil(self.ident, "guitare", 1)
+        recall.passages_du_fil(self.ident, "guitare", 1)
         self.assertEqual(len(APPELS), n, "pas de nouvelle tentative pendant la pause")
 
     def test_coupee_elle_ne_contacte_pas_ollama(self):
         self.sens["recherche_sens"] = False
-        rappel.passages_du_fil(self.ident, "prison", 1)
+        recall.passages_du_fil(self.ident, "prison", 1)
         self.assertEqual(APPELS, [])
 
     def test_le_budget_de_temps_borne_la_vectorisation(self):
-        self.assertEqual(embeddings.similarites(self.ident, rappel.morceaux_du_fil(self.ident)[0], "prison", budget=-1).__class__, dict)
+        self.assertEqual(embeddings.similarites(self.ident, recall.morceaux_du_fil(self.ident)[0], "prison", budget=-1).__class__, dict)
         self.assertFalse(embeddings._chemin(self.ident).exists(), "budget épuisé : rien n'a été vectorisé")
 
     def test_les_vecteurs_d_un_autre_modele_ne_sont_pas_utilises(self):
-        rappel.passages_du_fil(self.ident, "prison", 1)
+        recall.passages_du_fil(self.ident, "prison", 1)
         self.sens["modele_embeddings"] = "autre-modele"
         try:
             self.assertEqual(embeddings._charger(self.ident, "autre-modele"), {})
@@ -131,7 +131,7 @@ class Sens(unittest.TestCase):
             self.sens["modele_embeddings"] = "nomic-embed-text"
 
     def test_nettoyage_des_orphelins(self):
-        rappel.passages_du_fil(self.ident, "prison", 1)
+        recall.passages_du_fil(self.ident, "prison", 1)
         (embeddings._chemin("zzzzzzzz")).write_text("{}", encoding="utf-8")
         embeddings.nettoyer_orphelins({self.ident})
         self.assertTrue(embeddings._chemin(self.ident).exists())

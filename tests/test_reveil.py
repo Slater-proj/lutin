@@ -17,8 +17,8 @@ for cle, valeur in {"LUTIN_RACINE": str(_TEMP / "projet"), "LUTIN_DONNEES": str(
     os.environ.setdefault(cle, valeur)
 (_TEMP / "projet").mkdir(exist_ok=True)
 
-from lutin import moteur as _m  # noqa: E402,F401  (avant les autres : import circulaire sinon)
-from lutin import alimentation, machines  # noqa: E402
+from lutin import core as _m  # noqa: E402,F401  (avant les autres : import circulaire sinon)
+from lutin import power, machines  # noqa: E402
 
 MAC = "00:1A:2B:3C:4D:5E"
 
@@ -30,17 +30,17 @@ class Voisins(unittest.TestCase):
                ("192.168.1.59 dev eth0 lladdr 00:1a:2b:3c:4d:5e REACHABLE", MAC, True), ("192.168.1.59 dev eth0 lladdr aa:bb:cc:dd:ee:ff REACHABLE", MAC, False),
                ("192.168.1.59 dev eth0 FAILED", MAC, False), ("192.168.1.59 dev eth0 lladdr 00:1a:2b:3c:4d:5e STALE", MAC, None), ("192.168.1.59 dev eth0 lladdr 00:1a:2b:3c:4d:5e DELAY", MAC, None)]
         for texte, mac, attendu in cas:
-            self.assertEqual(alimentation.analyser_voisin(texte, mac), attendu, (texte, mac))
+            self.assertEqual(power.analyser_voisin(texte, mac), attendu, (texte, mac))
 
     def test_une_commande_absente_ne_donne_pas_de_verdict(self):
         def absente(*a, **k):
             raise FileNotFoundError("ip")
-        self.assertIsNone(alimentation.voisin("192.168.1.59", MAC, lancer=absente))
+        self.assertIsNone(power.voisin("192.168.1.59", MAC, lancer=absente))
 
 
 class MachineAllumee(unittest.TestCase):
     def verdict(self, tcp=False, ping=False, table=None, **plus):
-        return alimentation.hote_allume("192.168.1.59", MAC, 8765, delai=0.2, tcp=lambda h, p, d: tcp(p) if callable(tcp) else tcp, ping=lambda h, d: ping, table=lambda h, m: table, **plus)
+        return power.hote_allume("192.168.1.59", MAC, 8765, delai=0.2, tcp=lambda h, p, d: tcp(p) if callable(tcp) else tcp, ping=lambda h, d: ping, table=lambda h, m: table, **plus)
 
     def test_la_table_des_voisins_tranche_quand_elle_sait(self):
         self.assertTrue(self.verdict(tcp=False, ping=False, table=True), "ARP confirme : allumée même si le pare-feu jette tout")
@@ -53,21 +53,21 @@ class MachineAllumee(unittest.TestCase):
         self.assertFalse(self.verdict(tcp=False, ping=False), "rien ne revient : éteinte")
 
     def test_un_port_refuse_compte_comme_une_reponse_et_un_silence_non(self):
-        with mock.patch.object(alimentation.socket, "create_connection", side_effect=ConnectionRefusedError()):
-            self.assertTrue(alimentation._tcp("192.168.1.59", 445, 0.2))
-        with mock.patch.object(alimentation.socket, "create_connection", side_effect=TimeoutError()):
-            self.assertFalse(alimentation._tcp("192.168.1.59", 445, 0.2))
-        with mock.patch.object(alimentation.socket, "create_connection", side_effect=OSError(10065, "hôte inaccessible")):
-            self.assertFalse(alimentation._tcp("192.168.1.59", 445, 0.2))
-        with mock.patch.object(alimentation.socket, "create_connection", side_effect=OSError(10061, "refusé")):
-            self.assertTrue(alimentation._tcp("192.168.1.59", 445, 0.2))
+        with mock.patch.object(power.socket, "create_connection", side_effect=ConnectionRefusedError()):
+            self.assertTrue(power._tcp("192.168.1.59", 445, 0.2))
+        with mock.patch.object(power.socket, "create_connection", side_effect=TimeoutError()):
+            self.assertFalse(power._tcp("192.168.1.59", 445, 0.2))
+        with mock.patch.object(power.socket, "create_connection", side_effect=OSError(10065, "hôte inaccessible")):
+            self.assertFalse(power._tcp("192.168.1.59", 445, 0.2))
+        with mock.patch.object(power.socket, "create_connection", side_effect=OSError(10061, "refusé")):
+            self.assertTrue(power._tcp("192.168.1.59", 445, 0.2))
 
     def test_le_ping_windows_exige_une_vraie_reponse(self):
         def lancer(sortie, code):
             return lambda *a, **k: mock.Mock(returncode=code, stdout=sortie)
-        with mock.patch.object(alimentation.os, "name", "nt"):
-            self.assertFalse(alimentation._ping("192.168.1.59", 0.2, lancer("Réponse de 192.168.1.20 : Impossible de joindre l'hôte de destination.", 0)), "Windows rend 0 pour « inaccessible »")
-            self.assertTrue(alimentation._ping("192.168.1.59", 0.2, lancer("Réponse de 192.168.1.59 : octets=32 temps<1ms TTL=128", 0)))
+        with mock.patch.object(power.os, "name", "nt"):
+            self.assertFalse(power._ping("192.168.1.59", 0.2, lancer("Réponse de 192.168.1.20 : Impossible de joindre l'hôte de destination.", 0)), "Windows rend 0 pour « inaccessible »")
+            self.assertTrue(power._ping("192.168.1.59", 0.2, lancer("Réponse de 192.168.1.59 : octets=32 temps<1ms TTL=128", 0)))
 
 
 IDENT = "ab12cd34" * 4
@@ -135,11 +135,11 @@ class Sequence(unittest.TestCase):
         self.assertEqual((r["etat"], r["etape"]), ("injoignable", "eteinte"))
 
     def test_apres_cinq_minutes_le_reveil_revient_a_pas_demarree_avec_la_raison(self):
-        self.assertEqual(alimentation.ATTENTE_REVEIL_S, 300)
+        self.assertEqual(power.ATTENTE_REVEIL_S, 300)
         machines.HOTE_ALLUME = lambda hote, mac, port: False
-        self.reveil_il_y_a(alimentation.ATTENTE_REVEIL_S - 5)
+        self.reveil_il_y_a(power.ATTENTE_REVEIL_S - 5)
         self.assertEqual(self.sonder()["etat"], "reveil_envoye", "pas encore")
-        self.reveil_il_y_a(alimentation.ATTENTE_REVEIL_S + 5)
+        self.reveil_il_y_a(power.ATTENTE_REVEIL_S + 5)
         r = self.sonder()
         self.assertEqual((r["etat"], r["etape"], r.get("reveil_echec")), ("injoignable", "eteinte", True))
         self.assertIn("Réveil non abouti", r["detail"])
@@ -153,7 +153,7 @@ class Sequence(unittest.TestCase):
 
     def test_machine_allumee_sans_lutin_le_dit_autrement(self):
         machines.HOTE_ALLUME = lambda hote, mac, port: True
-        self.reveil_il_y_a(alimentation.ATTENTE_REVEIL_S + 5)
+        self.reveil_il_y_a(power.ATTENTE_REVEIL_S + 5)
         r = self.sonder()
         self.assertEqual((r["etape"], r.get("reveil_echec")), ("eteinte", True))
         self.assertIn("bien allumée", r["detail"])
@@ -161,7 +161,7 @@ class Sequence(unittest.TestCase):
         self.assertNotIn("Wake-on-LAN", r["detail"], "le réveil a marché : inutile de vérifier le BIOS")
 
     def test_un_nouveau_reveil_efface_l_echec_et_la_reponse_de_la_machine_aussi(self):
-        self.reveil_il_y_a(alimentation.ATTENTE_REVEIL_S + 5)
+        self.reveil_il_y_a(power.ATTENTE_REVEIL_S + 5)
         machines.HOTE_ALLUME = lambda *a: False
         self.assertTrue(self.sonder().get("reveil_echec"))
         machines.reveiller(self.m["id"], envoyer=lambda mac, hote: [(hote, 9)])
@@ -177,7 +177,7 @@ class Sequence(unittest.TestCase):
             self.assertNotIn(self.m["id"], suivi)
 
     def test_lutin_repond_apres_l_echec_la_machine_redevient_utilisable(self):
-        self.reveil_il_y_a(alimentation.ATTENTE_REVEIL_S + 5)
+        self.reveil_il_y_a(power.ATTENTE_REVEIL_S + 5)
         machines.HOTE_ALLUME = lambda *a: False
         self.sonder()
         r = self.sonder(repond())
@@ -220,7 +220,7 @@ class Sequence(unittest.TestCase):
         # un réveil périmé n'est pas repris
         machines.REVEIL.clear()
         machines.ALLUMEE.clear()
-        (machines.dossier() / "reveils.json").write_text(json.dumps({self.m["id"]: round(time.time()) - alimentation.ATTENTE_REVEIL_S - 30}), encoding="utf-8")
+        (machines.dossier() / "reveils.json").write_text(json.dumps({self.m["id"]: round(time.time()) - power.ATTENTE_REVEIL_S - 30}), encoding="utf-8")
         machines._REVEILS_REPRIS["fait"] = False
         self.assertEqual(self.sonder()["etape"], "eteinte")
 

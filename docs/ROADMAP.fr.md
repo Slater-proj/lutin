@@ -24,11 +24,11 @@ Ceux du plan du mainteneur et de [DECISIONS.fr.md](DECISIONS.fr.md) :
 
 | Plan | État |
 |---|---|
-| Interface commune des moteurs | **Fait** (`moteurs.py`) : Ollama, llama.cpp (géré ou externe), serveur compatible OpenAI ; actions possibles par moteur avec raison ; tâches de fond. **À compléter** : grille de capacités (natif / adapté / non supporté / non testé), tests de conformité communs, healthcheck formel. |
+| Interface commune des moteurs | **Fait** (`engines.py`) : Ollama, llama.cpp (géré ou externe), serveur compatible OpenAI ; actions possibles par moteur avec raison ; tâches de fond. **À compléter** : grille de capacités (natif / adapté / non supporté / non testé), tests de conformité communs, healthcheck formel. |
 | Installation à la demande | **Fait pour llama.cpp** (téléchargement, empreinte, extraction sûre, désinstallation, réinstallation) et **Ollama sous Windows** (signature). **Manque** : mises à jour, annulation et reprise propres, Docker, Ollama sous Linux/Mac guidé. |
 | Onglet Modèles adaptatif | **Fait** (masque ce qui est propre à Ollama ; Hugging Face pour llama.cpp). |
 | Catalogue de modèles actualisable | **Existe** (JSON sur GitHub, vérification hebdomadaire). **Catalogue de moteurs : à créer.** |
-| Détection matérielle, banc, calibrage | **Existent** (`machine.py`, `bench.py`, « Tester mon PC ») mais centrés sur Ollama. |
+| Détection matérielle, banc, calibrage | **Existent** (`hardware.py`, `bench.py`, « Tester mon PC ») mais centrés sur Ollama. |
 | Sécurité | Niveaux d'accès, appairage par code, proxy, journal, accords, MCP. **Rien** pour l'authentification entre machines. |
 | Docker | Image complète (Lutin + Ollama), image légère, profils GPU/AMD/Intel/proxy, volume persistant. |
 | CI | Ruff, tests Linux/Windows, scripts d'installation, paquet, installateur Windows, image Docker, détection de secrets. **Manque** : couverture mesurée, test Docker de volumes. |
@@ -86,7 +86,7 @@ Chaque jalon : étude → porte de validation → code ciblé → tests → docu
 - **Critère** : redémarrer ou recréer le conteneur ne réinstalle rien ni ne perd moteurs et modèles (test de CI sur les volumes).
 
 ### 0.21.0 — Modèles et rôles multi-moteurs
-- **Fait (0.21.0)** : catalogue filtré par moteur (`compat_modeles.py`, format / quantification / mémoire estimée / raisons), installation incompatible refusée, rôles par moteur en ligne de commande, banc indépendant d'Ollama en ligne de commande (`lutin bench --engine`). **Pas encore** : les boutons du banc dans la page restent propres à Ollama.
+- **Fait (0.21.0)** : catalogue filtré par moteur (`model_compat.py`, format / quantification / mémoire estimée / raisons), installation incompatible refusée, rôles par moteur en ligne de commande, banc indépendant d'Ollama en ligne de commande (`lutin bench --engine`). **Pas encore** : les boutons du banc dans la page restent propres à Ollama.
 - **Déjà fait en 0.16.8** : les modèles d'Ollama (« sans filtre » compris) sont lus tels quels par llama.cpp, sous les mêmes noms ; mêmes lignes de dossiers sur chaque carte de moteur.
 - Catalogue de modèles filtré par moteur (format, quantification, mémoire estimée, compatibilité) ; rôles par moteur ; banc rapide et approfondi indépendants d'Ollama.
 - **Critère** : jamais un modèle proposé qui n'est pas compatible avec le moteur choisi.
@@ -95,7 +95,7 @@ Chaque jalon : étude → porte de validation → code ciblé → tests → docu
 - Estimation avant chargement et avertissement de saturation, mode prudent pour machines modestes, préréglages pour modèles à experts (carte de 24 Go + 32 Go de RAM : experts en RAM, reste sur la carte), recommandations de contexte et de cache KV.
 - **Critère** : un modèle trop gros est signalé **avant** le chargement ; l'estimation est comparée aux mesures du banc et son écart documenté.
 
-- **Fait (0.22.0)** : `estimation.py` (niveaux, où, conseils, préréglage experts, mode prudent), avertissement avant chargement, `/api/estimation`, écart estimation / mesure dans le banc. **Reste** : mesurer l'écart sur du vrai matériel et documenter les chiffres.
+- **Fait (0.22.0)** : `memory_estimate.py` (niveaux, où, conseils, préréglage experts, mode prudent), avertissement avant chargement, `/api/estimation`, écart estimation / mesure dans le banc. **Reste** : mesurer l'écart sur du vrai matériel et documenter les chiffres.
 ### 0.23.0 — Machines (cluster, niveau 1)
 - D7 : registre, appairage, jeton de nœud, état visible (quatre états), routage, repli local silencieux, journal ; **une machine injoignable ne produit ni erreur ni avertissement dans la conversation**, seulement un état visible dans la page Machines.
 - `CLUSTER_ARCHITECTURE.md`.
@@ -107,7 +107,7 @@ Chaque jalon : étude → porte de validation → code ciblé → tests → docu
 - D8 : réveil, extinction, démarrage automatique ; états « réveil envoyé → nœud joignable → moteur opérationnel » ; raison claire quand ça ne marche pas.
 - **Critère** : essais S5 et S6 réussis ou limites documentées (auto-connexion Windows, BIOS).
 
-- **Fait (0.24.0)** : `alimentation.py` (paquet magique, extinction autorisée/annulable/journalisée, démarrage à l'ouverture de session). **Reste** : essais S5 et S6 sur du vrai matériel (réveil depuis le petit PC Debian, auto-connexion Windows, BIOS).
+- **Fait (0.24.0)** : `power.py` (paquet magique, extinction autorisée/annulable/journalisée, démarrage à l'ouverture de session). **Reste** : essais S5 et S6 sur du vrai matériel (réveil depuis le petit PC Debian, auto-connexion Windows, BIOS).
 
 ### 0.25.0 — Moteurs expérimentaux
 - Colibri : intégration **gérée** (archives précompilées + empreinte) **seulement si l'essai S3 la justifie** ; Strata et autres : préréglages externes. Étiquette « expérimental », jamais proposés par défaut.

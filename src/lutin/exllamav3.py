@@ -22,9 +22,9 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
-from . import colibri, miseajour, outils_externes
+from . import colibri, updates, external_programs
 from .i18n import t as _t
-from .remplacement import remplacer_dossier
+from .engine_replace import remplacer_dossier
 
 DEPOT_TABBY = "theroyallab/tabbyAPI"
 DEPOT_LIB = "turboderp-org/exllamav3"
@@ -44,8 +44,8 @@ PYTHON_MIN, PYTHON_MAX = (3, 10), (3, 14)
 
 
 def dossier(dossiers=None):
-    from . import moteurs_docker
-    return moteurs_docker.base_moteurs((dossiers or colibri.config.dossiers())["donnees"]) / "exllamav3"
+    from . import docker_engines
+    return docker_engines.base_moteurs((dossiers or colibri.config.dossiers())["donnees"]) / "exllamav3"
 
 
 def dossier_modeles(dossiers=None):
@@ -84,7 +84,7 @@ def python_compatible(version=None):
     return PYTHON_MIN <= v <= PYTHON_MAX
 
 
-def derniere_version_lib(http=miseajour.http_get):
+def derniere_version_lib(http=updates.http_get):
     """La dernière version publiée d'ExLlamaV3 (X.Y.Z). ValueError si illisible, OSError sans réseau."""
     cause = ""
     try:
@@ -98,15 +98,15 @@ def derniere_version_lib(http=miseajour.http_get):
     except OSError as e:
         cause = str(e)
     try:          # l'API de GitHub refuse (limite de requêtes) : la page publique des publications
-        version = (miseajour.version_par_page(DEPOT_LIB, http) or "").lstrip("v")
+        version = (updates.version_par_page(DEPOT_LIB, http) or "").lstrip("v")
         if RE_VERSION.match(version):
             return version
     except OSError:
         pass
-    raise ValueError(_t("Impossible de lire la dernière version d'ExLlamaV3 ({}). {}").format(cause, miseajour.suite_erreur(cause)))
+    raise ValueError(_t("Impossible de lire la dernière version d'ExLlamaV3 ({}). {}").format(cause, updates.suite_erreur(cause)))
 
 
-def dernier_commit(http=miseajour.http_get):
+def dernier_commit(http=updates.http_get):
     cause = ""
     try:
         statut, _, corps = http(API_COMMIT, {"Accept": "application/vnd.github+json"})
@@ -125,7 +125,7 @@ def dernier_commit(http=miseajour.http_get):
             return m.group(1)
     except OSError:
         pass
-    raise ValueError(_t("Impossible de lire le dernier code de TabbyAPI ({}). {}").format(cause, miseajour.suite_erreur(cause)))
+    raise ValueError(_t("Impossible de lire le dernier code de TabbyAPI ({}). {}").format(cause, updates.suite_erreur(cause)))
 
 
 CONTEXTE_DEFAUT = 16384          # jetons de conversation gardés en mémoire vidéo quand on ne sait pas mieux (le modèle en annonce parfois 128 000 ou plus : sa mémoire à elle seule dépasserait la carte)
@@ -186,7 +186,7 @@ def version_lib(dossiers=None, lancer=subprocess.run):
 ETAPES_INSTALLATION = 5
 
 
-def installer(dossiers=None, port=PORT_DEFAUT, dire=print, http=miseajour.http_get, ouvrir=urllib.request.urlopen, lancer=subprocess.Popen, annule=lambda: False, executer=subprocess.run, installer_uv=None, etape=None):
+def installer(dossiers=None, port=PORT_DEFAUT, dire=print, http=updates.http_get, ouvrir=urllib.request.urlopen, lancer=subprocess.Popen, annule=lambda: False, executer=subprocess.run, installer_uv=None, etape=None):
     """Installe (ou met à jour) TabbyAPI + ExLlamaV3. Renvoie {tabby, lib}. Longue : torch pèse plusieurs Go. ValueError claire à chaque étape qui échoue.
     `etape(n, total)` est appelée au début de chacune des ETAPES_INSTALLATION étapes : la page en fait une barre, et chaque texte annonce « Étape n/total »."""
     if not python_compatible():
@@ -222,7 +222,7 @@ def installer(dossiers=None, port=PORT_DEFAUT, dire=print, http=miseajour.http_g
     venv = base / "venv"
     if not python_venv(dossiers).is_file():
         passer(3, _t("création de l'environnement Python dédié…"))
-        outils_externes.creer_venv(venv, dossiers, dire, executer, installer_uv)          # le Python de l'installateur Windows n'a pas « venv » : uv le remplace, installé au besoin
+        external_programs.creer_venv(venv, dossiers, dire, executer, installer_uv)          # le Python de l'installateur Windows n'a pas « venv » : uv le remplace, installé au besoin
     else:
         passer(3, _t("environnement Python dédié déjà là."))
     passer(4, _t("installation des dépendances (torch et ExLlamaV3 : plusieurs Go, plusieurs minutes — la ligne ci-dessous montre ce que pip fait)…"))
@@ -273,7 +273,7 @@ def demarrer(port=PORT_DEFAUT, dossiers=None, attente_s=240, lancer=subprocess.P
 def arreter(dossiers=None, tuer=None):
     """Arrête TabbyAPI (et ses sous-processus) d'après le numéro de processus noté au démarrage. True s'il y avait quelque chose à arrêter ou si rien ne tournait."""
     if tuer is None:
-        from .outils import tuer_arbre as tuer
+        from .tools import tuer_arbre as tuer
     pid_fichier = dossier(dossiers) / "tabby.pid"
     try:
         pid = int(pid_fichier.read_text(encoding="utf-8").strip())
@@ -359,7 +359,7 @@ def _suivre_taille(cible, total, dire, progres, arret):
         dire(texte)
 
 
-def telecharger_modele(depot, revision="", dossiers=None, dire=print, lancer=subprocess.Popen, annule=lambda: False, http=miseajour.http_get, progres=None):
+def telecharger_modele(depot, revision="", dossiers=None, dire=print, lancer=subprocess.Popen, annule=lambda: False, http=updates.http_get, progres=None):
     """`main.py download <propriétaire/modèle> [--revision X]` : le téléchargeur de TabbyAPI (Hugging Face) dans le dossier des modèles. `progres(octets, total)` : l'avancement réel."""
     depot, revision = str(depot or "").strip(), str(revision or "").strip()
     if not RE_DEPOT_MODELE.match(depot):
@@ -376,8 +376,8 @@ def telecharger_modele(depot, revision="", dossiers=None, dire=print, lancer=sub
     arret, suivi = threading.Event(), None
     if progres is not None:
         try:
-            from . import exllamav3_catalogue
-            total = int(exllamav3_catalogue.taille_revision(depot, revision or "main", http))
+            from . import exllamav3_catalog
+            total = int(exllamav3_catalog.taille_revision(depot, revision or "main", http))
         except (ValueError, OSError):
             total = 0          # taille inconnue : on montre ce qui est reçu, sans pourcentage
         suivi = threading.Thread(target=_suivre_taille, args=(dossier_modeles(dossiers) / nom_dossier_modele(depot, revision), total, dire, progres, arret), daemon=True, name="exl3-progression")
@@ -394,8 +394,8 @@ def telecharger_modele(depot, revision="", dossiers=None, dire=print, lancer=sub
         nom = nom if nom in nouveaux or not nouveaux else (sorted(nouveaux)[0] if len(nouveaux) == 1 else nom)
         if (dossier_modeles(dossiers) / nom).is_dir():
             try:
-                from . import exllamav3_catalogue
-                commit = exllamav3_catalogue.commit(depot, revision or "main", http)
+                from . import exllamav3_catalog
+                commit = exllamav3_catalog.commit(depot, revision or "main", http)
             except (ValueError, OSError):
                 commit = ""
             noter_modele(dossiers, nom, depot, revision, commit)

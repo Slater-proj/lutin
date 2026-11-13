@@ -8,8 +8,8 @@ from unittest import mock
 import context  # noqa: F401
 import cdp
 import test_machines as T
-from lutin import moteur as A
-from lutin import serveur as srv
+from lutin import core as A
+from lutin import server as srv
 from lutin import machines
 
 RACINE = Path(__file__).resolve().parent.parent

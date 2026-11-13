@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 
 import context  # noqa: F401
-from lutin import infos_modele as im
+from lutin import model_info as im
 
 
 def show_dense():

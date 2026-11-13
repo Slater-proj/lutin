@@ -19,7 +19,7 @@ for cle, valeur in {"LUTIN_RACINE": str(_TEMP / "projet"), "LUTIN_DONNEES": str(
 for d in ("projet", "donnees", "memoire"):
     (_TEMP / d).mkdir(exist_ok=True)
 
-from lutin import moteur as A  # noqa: E402
+from lutin import core as A  # noqa: E402
 
 SERVEUR = ThreadingHTTPServer(("127.0.0.1", 0), A.Gestionnaire)
 threading.Thread(target=SERVEUR.serve_forever, daemon=True).start()
@@ -66,7 +66,7 @@ class ParcoursVierge(unittest.TestCase):
         self.assertEqual(statut, 404)
 
     def test_chemins_hors_dossier_refuses(self):
-        for chemin in ("/fichier/../../../etc/passwd", "/lib/../serveur.py", "/image/..%2f..%2fsecret", "/piece/%2e%2e/%2e%2e/x"):
+        for chemin in ("/fichier/../../../etc/passwd", "/lib/../server.py", "/image/..%2f..%2fsecret", "/piece/%2e%2e/%2e%2e/x"):
             with self.subTest(chemin=chemin):
                 statut, corps = lire(chemin)
                 self.assertIn(statut, (400, 403, 404), chemin)

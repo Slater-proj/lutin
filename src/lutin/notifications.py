@@ -12,8 +12,8 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-from . import donnees as _d
-from . import moteur as _m
+from . import storage as _d
+from . import core as _m
 from .i18n import t as _t
 
 MAX_CANAUX = 10

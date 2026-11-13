@@ -5,7 +5,7 @@ le premier message (ou le test de la machine) tombait sur une erreur obscure. Ch
 que la page propose en un clic (installer le modèle conseillé, démarrer Ollama, ouvrir l'onglet Modèles)."""
 import os
 
-from . import selection
+from . import model_selection
 from .i18n import t as _t
 
 SEUIL_DISQUE_GO = 2.0
@@ -16,7 +16,7 @@ def modele_conseille(profil, catalogue):
     if profil is None:
         return None
     try:
-        choix = selection.choisir(profil, catalogue)
+        choix = model_selection.choisir(profil, catalogue)
     except (KeyError, TypeError, ValueError):
         return None
     for role in ("polyvalent", "rapide"):
@@ -28,8 +28,8 @@ def modele_conseille(profil, catalogue):
 
 def _ollama_autre_conteneur():
     """OLLAMA_URL désigne-t-il un autre conteneur ? Sinon Lutin installe et lance Ollama lui-même (ollama.log dans le volume /data)."""
-    from . import moteurs_docker
-    return moteurs_docker.ollama_externe()
+    from . import docker_engines
+    return docker_engines.ollama_externe()
 
 
 def premier_lancement(moteur_nom, actif, detail, recommande=None, emplacement=None, installes=None, choisi=None, gere=None):

@@ -7,7 +7,7 @@ import tempfile
 import time
 from pathlib import Path
 
-from . import __version__, bench, catalogue, chat_terminal, client, config, horsligne, i18n, installation, machine, miseajour, ollama_client, projet_claude, reprise, sauvegarde, securite, selection, travaux
+from . import __version__, bench, model_catalog, terminal_chat, client, config, offline, i18n, setup_wizard, hardware, updates, ollama_client, claude_project, migrate, backup, security, model_selection, workspaces
 from .i18n import t as _t
 
 AIDE_GENERALE = """Lutin : un assistant IA local qui choisit les modèles adaptés à ta machine.
@@ -34,7 +34,7 @@ AIDE_GENERALE = """Lutin : un assistant IA local qui choisit les modèles adapt�
 
 # Codes de sortie d'un arrêt voulu (Ctrl+C, arrêt demandé) : pas de relance automatique.
 SORTIES_VOULUES = {0, 130, -2, -15, 3221225786, -1073741510}
-CODE_REDEMARRAGE = 75          # « relance-moi » demandé depuis la page (voir lutin.acces) : relance immédiate, ce n'est pas une panne
+CODE_REDEMARRAGE = 75          # « relance-moi » demandé depuis la page (voir lutin.access) : relance immédiate, ce n'est pas une panne
 
 
 def superviser(lancer, attendre=time.sleep, horloge=time.time, maximum=5, fenetre=600, delai=3, ecrire=print):
@@ -211,9 +211,9 @@ def commande_setup(args, es=None):
     options = {"niveau": args.niveau, "port": args.port, "url": args.url, "proxy_ips": args.proxy_ips, "travail": args.travail, "dossier_modeles": args.dossier_modeles,
                "roles": [r.strip() for r in args.roles.split(",") if r.strip()] if args.roles else None, "sans_modeles": args.sans_modeles, "sans_ollama": args.sans_ollama,
                "reconfigurer": getattr(args, "reconfigurer", False), "ecoute": getattr(args, "ecoute", None), "langue": getattr(args, "langue", None)}
-    es = es or installation.Es(oui=args.oui)
+    es = es or setup_wizard.Es(oui=args.oui)
     try:
-        installation.executer(cfg, d, es, options)
+        setup_wizard.executer(cfg, d, es, options)
     except ValueError as e:
         print("✘ " + str(e), file=sys.stderr)
         return 2
@@ -239,13 +239,13 @@ def lancer_enfant(sans_navigateur):
 
 
 def commande_zone(args):
-    from . import zone
+    from . import tray
     d, cfg = contexte()
-    return zone.commande(d, cfg, ouvrir=not getattr(args, "no_browser", False))
+    return tray.commande(d, cfg, ouvrir=not getattr(args, "no_browser", False))
 
 
 def commande_serve(args):
-    from . import demarrage
+    from . import startup
     d, cfg = contexte()
     if not cfg["installe"]:
         print(_t("Première utilisation : installation guidée.\n"))
@@ -255,7 +255,7 @@ def commande_serve(args):
         d, cfg = contexte()
     sans_navigateur = getattr(args, "sans_navigateur", False)
     if getattr(args, "sans_superviseur", False):
-        demarrage.lancer_serveur(cfg, d, ouvrir_navigateur=not sans_navigateur)
+        startup.lancer_serveur(cfg, d, ouvrir_navigateur=not sans_navigateur)
         return 0
     return superviser(lambda premiere: lancer_enfant(sans_navigateur or not premiere))          # le navigateur ne s'ouvre qu'au premier démarrage, pas à chaque relance
 
@@ -270,7 +270,7 @@ def sauvegarde_avant_mise_a_jour(dire=print):
         dossier = Path(config.dossiers()["cache"]) / "avant-mise-a-jour"
         dossier.mkdir(parents=True, exist_ok=True)
         fichier = dossier / "lutin-{}-{}.zip".format(__version__, time.strftime("%Y%m%d-%H%M%S"))
-        sauvegarde.exporter(config.dossiers(), fichier)
+        backup.exporter(config.dossiers(), fichier)
         for ancien in sorted(dossier.glob("lutin-*.zip"), key=lambda p: p.stat().st_mtime)[:-AVANT_MAJ_GARDEES]:
             ancien.unlink(missing_ok=True)
         dire(_t("Sauvegarde de tes données avant la mise à jour : {}").format(fichier))
@@ -295,7 +295,7 @@ def mise_a_jour_detaillee(dire=print, erreur=None, capturer=False, revenir_a=Non
             erreur(_t("✘ Le retour à une version précise n'est possible que pour une installation faite depuis GitHub."))
             return 1, __version__, None
         try:
-            version, source = miseajour.roue_de_version(revenir_a, source[len("github:"):])
+            version, source = updates.roue_de_version(revenir_a, source[len("github:"):])
         except ValueError as e:
             erreur("✘ " + str(e))
             return 1, __version__, None
@@ -303,11 +303,11 @@ def mise_a_jour_detaillee(dire=print, erreur=None, capturer=False, revenir_a=Non
             dire(_t("Lutin est déjà en version {}.").format(version))
             return 0, __version__, None
     elif source.startswith("github:"):
-        version, roue = miseajour.derniere_release(source[len("github:"):])
+        version, roue = updates.derniere_release(source[len("github:"):])
         if not roue:
             erreur(_t("✘ Impossible de lire la dernière version de Lutin sur GitHub (pas d'internet, ou aucune publication)."))
             return 1, __version__, None
-        if not miseajour.plus_recente(version, __version__):
+        if not updates.plus_recente(version, __version__):
             dire(_t("Lutin est déjà à jour ({}).").format(__version__))
             return 0, __version__, None
         source = roue
@@ -317,8 +317,8 @@ def mise_a_jour_detaillee(dire=print, erreur=None, capturer=False, revenir_a=Non
     with tempfile.TemporaryDirectory(prefix="lutin-maj-") as dossier:
         if verifier:
             try:
-                chemin, verifie = miseajour.telecharger_roue_verifiee(source, dossier)
-            except miseajour.ErreurVerification as e:
+                chemin, verifie = updates.telecharger_roue_verifiee(source, dossier)
+            except updates.ErreurVerification as e:
                 erreur("✘ " + str(e))
                 return 1, avant, None
             except OSError as e:
@@ -346,7 +346,7 @@ def commande_update(args):
     """Met à jour Lutin lui-même (avec la source mémorisée par l'installateur) puis cherche des mises à jour de modèles. Ne change rien si tout est à jour."""
     tout = not (args.app or args.modeles)
     code = 0
-    if (args.app or tout) and horsligne.actif(Path(config.dossiers()["config"]) / "config.json"):
+    if (args.app or tout) and offline.actif(Path(config.dossiers()["config"]) / "config.json"):
         print(_t("Mode hors ligne strict : Lutin n'est pas mis à jour (lutin offline off pour le permettre)."))
     elif getattr(args, "revenir_a", None):
         code = mettre_a_jour_lutin(args.revenir_a)
@@ -354,7 +354,7 @@ def commande_update(args):
         code = mettre_a_jour_lutin()
     if args.modeles or tout:
         d, cfg = contexte()
-        r = miseajour.verifier(machine.detecter(), cfg, d, ollama_client.Ollama(), force=True)
+        r = updates.verifier(hardware.detecter(), cfg, d, ollama_client.Ollama(), force=True)
         for p in r["propositions"]:
             print("• {} : {}".format(p["modele"], p["raison"]))
         print(_t("Modèles : rien de nouveau.") if not r["propositions"] else _t("Pour en installer un :  lutin models install <identifiant>"))
@@ -376,7 +376,7 @@ def commande_chat(args):
     c = client_pret()
     if not c:
         return 1
-    t = chat_terminal.Terminal(c)
+    t = terminal_chat.Terminal(c)
     if args.message:
         t.repondre(" ".join(args.message))
         return 0
@@ -385,26 +385,26 @@ def commande_chat(args):
 
 def commande_modeles(args):
     d, cfg = contexte()
-    cat = catalogue.charger(Path(d["cache"]) / "catalogue.json")
-    profil = machine.detecter()
+    cat = model_catalog.charger(Path(d["cache"]) / "catalogue.json")
+    profil = hardware.detecter()
     o = ollama_client.Ollama()
     if args.action == "recommander":
         if getattr(args, "moteur", ""):          # les rôles sont propres à chaque moteur : jamais un modèle que ce moteur ne sait pas faire tourner
             os.environ.setdefault("LUTIN_RACINE", str(Path.home() / "Lutin"))
             os.environ.setdefault("LUTIN_DONNEES", str(d["donnees"]))
             os.environ.setdefault("LUTIN_MEMOIRE", str(d["memoire"]))
-            from . import compat_modeles, moteur as _moteur, moteurs  # noqa: F401  (importer le moteur enregistre les moteurs)
-            mo = moteurs.MOTEURS.get(args.moteur)
+            from . import model_compat, core as _moteur, engines  # noqa: F401  (importer le moteur enregistre les moteurs)
+            mo = engines.MOTEURS.get(args.moteur)
             if mo is None:
                 print(_t("Moteur inconnu : {}.").format(args.moteur), file=sys.stderr)
                 return 1
-            choix = compat_modeles.roles_pour(profil, cat, mo)
+            choix = model_compat.roles_pour(profil, cat, mo)
         else:
-            choix = selection.choisir(profil, cat)
+            choix = model_selection.choisir(profil, cat)
         print(_t("Ta machine : ") + profil.resume() + "\n")
-        for role in catalogue.ROLES:
+        for role in model_catalog.ROLES:
             c = choix.get(role)
-            titre = _t(catalogue.LIBELLES[role][0])
+            titre = _t(model_catalog.LIBELLES[role][0])
             print("{:<11} {}".format(titre, "—" if not c else "{} ({:g} Go)".format(c.id, c.modele["go"])))
             if c:
                 print("            " + c.modele["phrase"])
@@ -417,7 +417,7 @@ def commande_modeles(args):
             print("✘ " + str(e), file=sys.stderr)
             return 1
         mesures = bench.lire(Path(d["cache"]) / "bench.json")
-        for x in selection.lister(profil, cat, avance=args.avance or cfg.get("avance", False)):
+        for x in model_selection.lister(profil, cat, avance=args.avance or cfg.get("avance", False)):
             m = x["modele"]
             etat = _t("installé") if m["id"] in installes else ("tient" if x["tient"] else "trop gros")
             print("{:<38} {:>5g} Go  {:<10} {}".format(m["id"], m["go"], etat, m["phrase"]))
@@ -429,22 +429,22 @@ def commande_modeles(args):
         return 2
     try:
         if args.action == "installer":
-            m = catalogue.par_id(cat).get(args.modele)
+            m = model_catalog.par_id(cat).get(args.modele)
             if m and m.get("avertissement"):
                 print("⚠ " + m["avertissement"])
-            o.telecharger(args.modele, installation.barre(installation.Es()))
+            o.telecharger(args.modele, setup_wizard.barre(setup_wizard.Es()))
             print(_t("✔ installé : ") + args.modele)
         elif args.action == "supprimer":
             o.supprimer(args.modele)
             print(_t("✔ supprimé : ") + args.modele)
         elif args.action == "maj":
-            r = miseajour.verifier(profil, cfg, d, o, force=True)
+            r = updates.verifier(profil, cfg, d, o, force=True)
             for p in r["propositions"]:
                 print("• {} : {}".format(p["modele"], p["raison"]))
             print(_t("Rien de nouveau.") if not r["propositions"] else _t("\nInstaller :  lutin models install <identifiant>"))
             for e in r["erreurs"]:
                 print("(" + e + ")")
-    except (ollama_client.ErreurOllama, horsligne.HorsLigne) as e:
+    except (ollama_client.ErreurOllama, offline.HorsLigne) as e:
         print("✘ " + str(e), file=sys.stderr)
         return 1
     return 0
@@ -487,8 +487,8 @@ def commande_hors_ligne(args):
     d, _ = contexte()
     chemin = Path(d["config"]) / "config.json"
     if args.etat != "etat":
-        horsligne.definir(args.etat == "oui", chemin)
-    actif = horsligne.actif(chemin)
+        offline.definir(args.etat == "oui", chemin)
+    actif = offline.actif(chemin)
     print(_t("Mode hors ligne strict : {}.").format(_t("ACTIF (aucune connexion vers Internet)") if actif else _t("coupé")))
     if args.etat != "etat":
         print(_t("Si Lutin tourne, il en tient compte tout de suite."))
@@ -500,79 +500,79 @@ def commande_travaux(args):
     interdits = [d["config"], d["donnees"], d["memoire"], d["cache"]]
     try:
         if args.action == "ajouter":
-            t = travaux.ajouter(cfg, args.valeur, args.nom, interdits)
+            t = workspaces.ajouter(cfg, args.valeur, args.nom, interdits)
             config.enregistrer(d, cfg)
             print(_t("✔ Dossier de travail « {} » : {}").format(t["nom"], t["chemin"]))
         elif args.action == "retirer":
-            travaux.retirer(cfg, args.valeur or "")
+            workspaces.retirer(cfg, args.valeur or "")
             config.enregistrer(d, cfg)
             print(_t("✔ Retiré de la liste (les fichiers ne sont pas touchés)."))
         elif args.action == "actif":
-            t = travaux.choisir(cfg, args.valeur or "")
+            t = workspaces.choisir(cfg, args.valeur or "")
             config.enregistrer(d, cfg)
             print(_t("✔ Dossier actif : {} ({})").format(t["nom"], t["chemin"]))
             print(_t("Si Lutin tourne déjà, choisis aussi ce dossier dans l'interface (ou relance Lutin)."))
-    except travaux.ErreurTravail as e:
+    except workspaces.ErreurTravail as e:
         print("✘ " + str(e), file=sys.stderr)
         return 1
-    actif = travaux.actif(cfg)
-    for t in travaux.liste(cfg):
+    actif = workspaces.actif(cfg)
+    for t in workspaces.liste(cfg):
         print("{} {:<14} {:<22} {}".format("→" if actif and t["id"] == actif["id"] else " ", t["id"], t["nom"], t["chemin"]))
-    if not travaux.liste(cfg):
+    if not workspaces.liste(cfg):
         print(_t("Aucun dossier de travail : lutin workspaces add <chemin>"))
     return 0
 
 
 def commande_bench_moteurs(args):
-    """Compare les moteurs disponibles (Ollama, llama.cpp) sur le même modèle et conserve un résultat lisible et partageable (voir bench_moteurs.py)."""
+    """Compare les moteurs disponibles (Ollama, llama.cpp) sur le même modèle et conserve un résultat lisible et partageable (voir engine_bench.py)."""
     d, cfg = contexte()
     os.environ.setdefault("LUTIN_RACINE", str(Path.home() / "Lutin"))
     os.environ.setdefault("LUTIN_DONNEES", str(d["donnees"]))
     os.environ.setdefault("LUTIN_MEMOIRE", str(d["memoire"]))
-    from . import bench_moteurs, moteur as _moteur  # noqa: F401  (importer le moteur enregistre les moteurs)
-    profil = machine.detecter()
+    from . import engine_bench, core as _moteur  # noqa: F401  (importer le moteur enregistre les moteurs)
+    profil = hardware.detecter()
     modele = args.modele or cfg["modeles"]["choisis"].get("polyvalent") or ""
     if not modele:
         print(_t("Aucun modèle à mesurer : indique-le (lutin bench-engines <modèle>)."), file=sys.stderr)
         return 1
     print(_t("Comparaison des moteurs avec {} ({}, environ {})…").format(modele, args.mode, "1 minute" if args.mode == "rapide" else "5 minutes"))
-    r = bench_moteurs.comparer(modele, args.mode, profil, progression=lambda texte, i, n: print("  {} ({}/{})".format(texte, i + 1, n)))
-    print(bench_moteurs.lisible(r))
+    r = engine_bench.comparer(modele, args.mode, profil, progression=lambda texte, i, n: print("  {} ({}/{})".format(texte, i + 1, n)))
+    print(engine_bench.lisible(r))
     if r["moteurs"]:
-        bench_moteurs.enregistrer(d["donnees"], r)
+        engine_bench.enregistrer(d["donnees"], r)
     if args.sortie:
-        Path(args.sortie).write_text(bench_moteurs.exporter(r), encoding="utf-8")
+        Path(args.sortie).write_text(engine_bench.exporter(r), encoding="utf-8")
         print(_t("Résultat écrit dans {} (rien de personnel : à partager tel quel).").format(args.sortie))
     return 0 if r["moteurs"] and all(m["ok"] for m in r["moteurs"]) else 1
 
 
 def commande_essai_moteur(args):
-    """Fait pour de vrai, sur cette machine, ce que Lutin fait avec un moteur (voir essai_moteur.py) et écrit un rapport."""
+    """Fait pour de vrai, sur cette machine, ce que Lutin fait avec un moteur (voir engine_trial.py) et écrit un rapport."""
     d, cfg = contexte()
-    actif = travaux.actif(cfg)
+    actif = workspaces.actif(cfg)
     os.environ.setdefault("LUTIN_RACINE", str(actif["chemin"] if actif else Path.home() / "Lutin"))
     os.environ.setdefault("LUTIN_DONNEES", str(d["donnees"]))
     os.environ.setdefault("LUTIN_MEMOIRE", str(d["memoire"]))
-    from . import essai_moteur, moteur as _moteur, moteur_llamacpp, moteurs  # noqa: F401  (importer le moteur enregistre les moteurs)
-    mo = moteurs.par_id(args.moteur)
+    from . import engine_trial, core as _moteur, llamacpp_engine, engines  # noqa: F401  (importer le moteur enregistre les moteurs)
+    mo = engines.par_id(args.moteur)
     if args.variante:
-        moteur_llamacpp.regler(mo.id, variante=args.variante)
+        llamacpp_engine.regler(mo.id, variante=args.variante)
     if args.dossier:
         try:
-            moteur_llamacpp.regler_dossier(mo.id, args.dossier)
+            llamacpp_engine.regler_dossier(mo.id, args.dossier)
         except ValueError as e:
             print("✘ " + str(e), file=sys.stderr)
             return 1
     horodatage = time.strftime("%Y%m%d-%H%M%S")
     rapport = Path(d["donnees"]) / "essais" / "essai-{}-{}.json".format(mo.id, horodatage)
-    resultat = essai_moteur.executer({"modele": args.modele, "modele_local": args.modele_local, "modele_test": args.modele_test, "oui": args.oui, "sans_outils": args.sans_outils, "ctx": args.ctx}, mo, chemin_rapport=rapport)
+    resultat = engine_trial.executer({"modele": args.modele, "modele_local": args.modele_local, "modele_test": args.modele_test, "oui": args.oui, "sans_outils": args.sans_outils, "ctx": args.ctx}, mo, chemin_rapport=rapport)
     return 0 if resultat["reussi"] else 1
 
 
 def commande_mcp(args):
     """Les connecteurs MCP en ligne de commande (utile dans Docker, où la page ne peut pas les modifier)."""
     d, cfg = contexte()
-    actif = travaux.actif(cfg)          # le moteur lit ces dossiers à l'import : on les fixe sans rien créer (ni dossier de travail, ni réglage)
+    actif = workspaces.actif(cfg)          # le moteur lit ces dossiers à l'import : on les fixe sans rien créer (ni dossier de travail, ni réglage)
     os.environ.setdefault("LUTIN_RACINE", str(actif["chemin"] if actif else Path.home() / "Lutin"))
     os.environ.setdefault("LUTIN_DONNEES", str(d["donnees"]))
     os.environ.setdefault("LUTIN_MEMOIRE", str(d["memoire"]))
@@ -633,8 +633,8 @@ def commande_bench(args):
         os.environ.setdefault("LUTIN_RACINE", str(Path.home() / "Lutin"))
         os.environ.setdefault("LUTIN_DONNEES", str(d["donnees"]))
         os.environ.setdefault("LUTIN_MEMOIRE", str(d["memoire"]))
-        from . import moteur as _moteur, moteurs  # noqa: F401  (importer le moteur enregistre les moteurs)
-        mo = moteurs.MOTEURS.get(args.moteur)
+        from . import core as _moteur, engines  # noqa: F401  (importer le moteur enregistre les moteurs)
+        mo = engines.MOTEURS.get(args.moteur)
         if mo is None:
             print(_t("Moteur inconnu : {}.").format(args.moteur), file=sys.stderr)
             return 1
@@ -654,7 +654,7 @@ def commande_bench(args):
     if not cibles or not cibles[0]:
         print(_t("Aucun modèle installé à mesurer."), file=sys.stderr)
         return 1
-    resume = machine.detecter().resume()
+    resume = hardware.detecter().resume()
     code = 0
     for m in cibles:
         if m not in installes:
@@ -666,7 +666,7 @@ def commande_bench(args):
         bench.enregistrer(Path(d["cache"]) / "bench.json", mesure)
         print("  → " + bench.resume(mesure))
         if mesure["notes"]:
-            print(_t("  Notes mesurées (indicatives, une vingtaine de questions) : ") + ", ".join("{} {}/10".format(_t(catalogue.LIBELLES[r][0]).lower(), n) for r, n in mesure["notes"].items()))
+            print(_t("  Notes mesurées (indicatives, une vingtaine de questions) : ") + ", ".join("{} {}/10".format(_t(model_catalog.LIBELLES[r][0]).lower(), n) for r, n in mesure["notes"].items()))
         if mesure.get("erreur"):
             print(_t("  ⚠ Mesure incomplète : ") + mesure["erreur"])
             code = 1
@@ -679,8 +679,8 @@ def commande_sauvegarde(args):
     d, _ = contexte()
     destination = Path(args.fichier or "lutin-sauvegarde-{}.zip".format(time.strftime("%Y%m%d-%H%M%S")))
     try:
-        r = sauvegarde.exporter(d, destination)
-    except sauvegarde.ErreurSauvegarde as e:
+        r = backup.exporter(d, destination)
+    except backup.ErreurSauvegarde as e:
         print("✘ " + str(e), file=sys.stderr)
         return 1
     print(_t("✔ {} : {} fichier(s), {:.1f} Mo avant compression.").format(destination, r["fichiers"], r["octets"] / 1024 ** 2))
@@ -691,8 +691,8 @@ def commande_sauvegarde(args):
 def commande_restaurer(args):
     d, _ = contexte()
     try:
-        m = sauvegarde.verifier(args.fichier)
-    except sauvegarde.ErreurSauvegarde as e:
+        m = backup.verifier(args.fichier)
+    except backup.ErreurSauvegarde as e:
         print("✘ " + str(e), file=sys.stderr)
         return 1
     if not args.forcer and client.ClientLocal(d["donnees"]).disponible():
@@ -702,7 +702,7 @@ def commande_restaurer(args):
     if not args.oui and input(_t("Remplacer tes données actuelles par celles-ci ? L'état actuel est gardé dans un zip « avant-restauration ». [o/N] ")).strip().lower() not in ("o", "oui", "y", "yes"):
         print(_t("Rien n'a été changé."))
         return 0
-    r = sauvegarde.restaurer(d, args.fichier, d["cache"])
+    r = backup.restaurer(d, args.fichier, d["cache"])
     print(_t("✔ {} fichier(s) restauré(s). État précédent : {}").format(r["fichiers"], r["secours"]))
     return 0
 
@@ -713,10 +713,10 @@ def commande_securite(args):
         cfg["admin_a_distance"] = args.admin_distance == "on"
         config.enregistrer(d, cfg)
         print(_t("✔ Administration à distance {}.").format(_t("ouverte") if cfg["admin_a_distance"] else _t("fermée")))
-    s = securite.Securite.depuis_dict(cfg["securite"])
-    texte = {securite.LOCAL: _t("cette machine seulement"), securite.RESEAU: _t("réseau local (code PIN)"), securite.PROXY: _t("derrière un proxy")}[s.niveau]
+    s = security.Securite.depuis_dict(cfg["securite"])
+    texte = {security.LOCAL: _t("cette machine seulement"), security.RESEAU: _t("réseau local (code PIN)"), security.PROXY: _t("derrière un proxy")}[s.niveau]
     print(_t("Niveau : {} — {}").format(s.niveau, texte))
-    if s.niveau == securite.PROXY:
+    if s.niveau == security.PROXY:
         print(_t("Adresse publique : {}   Proxy de confiance : {}").format(s.url_publique, ", ".join(s.proxy_ips)))
     for p in s.valider():
         print("⚠ " + p)
@@ -729,8 +729,8 @@ def commande_reprendre(args, entree=input):
     """Reprend les données d'un autre assistant, au choix. Rien n'est écrasé sans --overwrite ; l'état actuel de Lutin est gardé dans un zip avant."""
     d, cfg = contexte()
     try:
-        with reprise.ouvrir(args.source, args.dossier_skills) as trouve:
-            nombres = reprise.decrire(trouve)
+        with migrate.ouvrir(args.source, args.dossier_skills) as trouve:
+            nombres = migrate.decrire(trouve)
             lignes = [("conversations", _t("Conversations : {}").format(nombres["conversations"])),
                       ("memoire", _t("Mémoire : {}").format(", ".join(nombres["memoire"]) or "-")),
                       ("skills", _t("Skills : {}").format(nombres["skills"]) + ((" (" + trouve["dossier_skills"] + ")") if trouve["dossier_skills"] else "")),
@@ -738,23 +738,23 @@ def commande_reprendre(args, entree=input):
             print(_t("Trouvé dans {} :").format(trouve["origine"]))
             for i, (_, texte) in enumerate(lignes, 1):
                 print("  {}. {}".format(i, texte))
-            choix = [k for k in reprise.CATEGORIES if getattr(args, k)] if not args.tout else list(reprise.CATEGORIES)
+            choix = [k for k in migrate.CATEGORIES if getattr(args, k)] if not args.tout else list(migrate.CATEGORIES)
             if not choix:
                 try:
                     reponse = entree(_t("Que reprendre ? (numéros séparés par des virgules, Entrée = tout)") + " ").strip()
                 except EOFError:
                     reponse = ""
                 nums = {int(x) for x in reponse.replace(" ", ",").split(",") if x.isdigit()}
-                choix = [lignes[i - 1][0] for i in sorted(nums) if 1 <= i <= len(lignes)] if nums else list(reprise.CATEGORIES)
-            actif = travaux.par_id(cfg, args.cible) if args.cible else travaux.actif(cfg)
+                choix = [lignes[i - 1][0] for i in sorted(nums) if 1 <= i <= len(lignes)] if nums else list(migrate.CATEGORIES)
+            actif = workspaces.par_id(cfg, args.cible) if args.cible else workspaces.actif(cfg)
             if args.cible and not actif:
                 raise ValueError(_t("Dossier de travail inconnu."))
             racine = actif["chemin"] if actif else cfg["emplacements"]["travail"]
-            rapport = reprise.importer(trouve, d, choix, racine_travail=racine, ecraser=args.ecraser, workspaces=[t["id"] for t in travaux.liste(cfg)])
+            rapport = migrate.importer(trouve, d, choix, racine_travail=racine, ecraser=args.ecraser, workspaces=[t["id"] for t in workspaces.liste(cfg)])
     except ValueError as e:
         print("✘ " + str(e), file=sys.stderr)
         return 2
-    for ligne in reprise.resume(rapport):
+    for ligne in migrate.resume(rapport):
         print(ligne)
     return 0
 
@@ -766,11 +766,11 @@ def commande_importer(args, entree=input):
     if not source.is_dir():
         print("✘ " + _t("Ce dossier n'existe pas : {}").format(source), file=sys.stderr)
         return 2
-    trouve = projet_claude.detecter(source)
-    if projet_claude.est_vide(trouve):
+    trouve = claude_project.detecter(source)
+    if claude_project.est_vide(trouve):
         print("✘ " + _t("Ni CLAUDE.md ni dossier .claude/ dans ce dossier : ce n'est pas un projet Claude (pour l'utiliser quand même : lutin workspaces add <dossier>)."), file=sys.stderr)
         return 2
-    print(_t("Trouvé dans {} : {}").format(source, projet_claude.resume(trouve)))
+    print(_t("Trouvé dans {} : {}").format(source, claude_project.resume(trouve)))
     mode = "ici" if args.ici else "copie" if args.copie else None
     if mode is None:
         print(_t("  1. Faire une copie (l'original n'est jamais touché)  [conseillé]\n  2. Travailler dedans (les fichiers sont lus et modifiés sur place, avec ton accord)"))
@@ -782,13 +782,13 @@ def commande_importer(args, entree=input):
     try:
         if mode == "copie":
             destination = Path(args.vers).expanduser() if args.vers else Path.home() / "Lutin" / source.name
-            cible = projet_claude.copier(source, destination)
+            cible = claude_project.copier(source, destination)
             print(_t("✔ Copie faite : {}").format(cible))
         else:
             cible = source.resolve()
         interdits = [d["config"], d["donnees"], d["memoire"], d["cache"]]
-        t = travaux.ajouter(cfg, str(cible), args.nom or source.name, interdits)
-        travaux.choisir(cfg, t["id"])
+        t = workspaces.ajouter(cfg, str(cible), args.nom or source.name, interdits)
+        workspaces.choisir(cfg, t["id"])
         config.enregistrer(d, cfg)
     except ValueError as e:
         print("✘ " + str(e), file=sys.stderr)
@@ -837,7 +837,7 @@ def diagnostic(cfg, dossiers, profil, ollama):
         lignes.append(("ok" if installes else "attention", _t("{} modèle(s) installé(s)").format(len(installes))))
     except ollama_client.ErreurOllama:
         lignes.append(("erreur", _t("Ollama ne répond pas (installé : {})").format("oui" if ollama_client.trouver_executable(profil.systeme) else "non")))
-    s = securite.Securite.depuis_dict(cfg["securite"])
+    s = security.Securite.depuis_dict(cfg["securite"])
     lignes.append(("info", _t("Niveau de sécurité : ") + s.niveau))
     lignes += [("erreur", p) for p in s.valider()]
     for disque in profil.disques:
@@ -847,9 +847,9 @@ def diagnostic(cfg, dossiers, profil, ollama):
 
 
 def commande_demarrage_auto(args):
-    from . import alimentation
+    from . import power
     try:
-        e = alimentation.installer_demarrage() if args.action == "installer" else alimentation.retirer_demarrage() if args.action == "retirer" else alimentation.etat_demarrage()
+        e = power.installer_demarrage() if args.action == "installer" else power.retirer_demarrage() if args.action == "retirer" else power.etat_demarrage()
     except ValueError as err:
         print("✘ " + str(err), file=sys.stderr)
         return 1
@@ -886,8 +886,8 @@ def commande_colibri(args):
 
 def commande_doctor(args):
     d, cfg = contexte()
-    from . import docker_aide
-    for niveau, texte in diagnostic(cfg, d, machine.detecter(), ollama_client.Ollama()) + docker_aide.diagnostiquer():
+    from . import docker_doctor
+    for niveau, texte in diagnostic(cfg, d, hardware.detecter(), ollama_client.Ollama()) + docker_doctor.diagnostiquer():
         print("{} {}".format({"ok": "✔", "info": " ", "attention": "⚠", "erreur": "✘"}[niveau], texte))
     return 0
 

@@ -15,7 +15,7 @@ for cle, valeur in {"LUTIN_RACINE": str(_TEMP / "projet"), "LUTIN_DONNEES": str(
 for d in ("projet", "donnees", "memoire"):
     (_TEMP / d).mkdir(exist_ok=True)
 
-from lutin import moteur as _m  # noqa: E402,F401  (avant les autres : import circulaire sinon)
+from lutin import core as _m  # noqa: E402,F401  (avant les autres : import circulaire sinon)
 from lutin import notifications as N  # noqa: E402
 
 JETON_TG = "123456789:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"

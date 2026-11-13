@@ -7,7 +7,7 @@ from unittest import mock
 
 import context  # noqa: F401
 
-from lutin import cli, miseajour as m  # noqa: E402
+from lutin import cli, updates as m  # noqa: E402
 
 URL = "https://github.com/Slater-proj/lutin/releases/download/v1.2.3/lutin-1.2.3-py3-none-any.whl"
 CONTENU = b"contenu de la roue" * 100
@@ -129,8 +129,8 @@ class DansLaMiseAJour(unittest.TestCase):
         appels = []
         sorties, erreurs = [], []
         with mock.patch.object(cli.config, "lire_source", lambda: "github:Slater-proj/lutin"), mock.patch.object(cli, "__version__", "1.0.0"), \
-                mock.patch.object(cli.miseajour, "derniere_release", lambda depot: ("1.2.3", URL)), mock.patch.object(cli, "sauvegarde_avant_mise_a_jour", lambda dire=None: None), \
-                mock.patch.object(cli.miseajour, "telecharger_roue_verifiee", side_effect=m.ErreurVerification("somme fausse")), \
+                mock.patch.object(cli.updates, "derniere_release", lambda depot: ("1.2.3", URL)), mock.patch.object(cli, "sauvegarde_avant_mise_a_jour", lambda dire=None: None), \
+                mock.patch.object(cli.updates, "telecharger_roue_verifiee", side_effect=m.ErreurVerification("somme fausse")), \
                 mock.patch.object(cli.subprocess, "run", lambda c, **k: appels.append(c)):
             code, avant, apres = cli.mise_a_jour_detaillee(dire=sorties.append, erreur=erreurs.append)
         self.assertEqual((code, apres, appels), (1, None, []), "pip n'est jamais lancé")

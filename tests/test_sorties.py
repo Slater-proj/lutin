@@ -17,8 +17,8 @@ for cle, valeur in {"LUTIN_RACINE": str(_TEMP / "projet"), "LUTIN_DONNEES": str(
 for d in ("projet", "donnees", "memoire"):
     (_TEMP / d).mkdir(exist_ok=True)
 
-from lutin import moteur as A  # noqa: E402
-from lutin import recherche, sorties, web  # noqa: E402
+from lutin import core as A  # noqa: E402
+from lutin import web_search, outbound, web  # noqa: E402
 
 
 class Nettoyage(unittest.TestCase):
@@ -36,57 +36,57 @@ class Nettoyage(unittest.TestCase):
             ("token 9f8e7d6c5b4a39281706f5e4d3c2b1a0aa bloqué", "clé ou jeton secret", "9f8e7d6c"),
         ]
         for texte, categorie, disparu in cas:
-            propre, retire = sorties.nettoyer_requete(texte)
+            propre, retire = outbound.nettoyer_requete(texte)
             self.assertIn(categorie, retire, texte)
             self.assertNotIn(disparu, propre, texte)
 
     def test_une_question_normale_n_est_pas_touchee(self):
         for texte in ("prix du kWh en France en 2026", "python 3.12.4 asyncio timeout", "version 10.2.1 de node", "date 12 03 2024 rapport", "numéro 4111 1111 1111 1112 invalide luhn", "iPhone 15 Pro Max 256 Go", "résultats du match 3-2 hier soir"):
-            propre, retire = sorties.nettoyer_requete(texte)
+            propre, retire = outbound.nettoyer_requete(texte)
             self.assertEqual((propre, retire), (texte, []), texte)
 
     def test_requete_toute_entiere_personnelle_devient_vide(self):
-        self.assertEqual(sorties.nettoyer_requete("jean@example.com")[0], "")
+        self.assertEqual(outbound.nettoyer_requete("jean@example.com")[0], "")
 
 
 class Journal(unittest.TestCase):
     def setUp(self):
-        sorties.vider()
+        outbound.vider()
 
     def test_noter_lire_vider_et_borne(self):
-        sorties.noter("tavily", "une requête", ["adresse e-mail"], True)
-        sorties.noter("exa", "autre", [], False)
-        e = sorties.lire()
+        outbound.noter("tavily", "une requête", ["adresse e-mail"], True)
+        outbound.noter("exa", "autre", [], False)
+        e = outbound.lire()
         self.assertEqual([(x["service"], x["ok"]) for x in e], [("exa", False), ("tavily", True)], "le plus récent d'abord")
         self.assertEqual(e[1]["retire"], ["adresse e-mail"])
-        for i in range(sorties.MAX_ENTREES + 80):
-            sorties.noter("duckduckgo", "q%d" % i, [], True)
-        assert len(sorties.lire(1000)) <= sorties.MAX_ENTREES
-        sorties.vider()
-        self.assertEqual(sorties.lire(), [])
+        for i in range(outbound.MAX_ENTREES + 80):
+            outbound.noter("duckduckgo", "q%d" % i, [], True)
+        assert len(outbound.lire(1000)) <= outbound.MAX_ENTREES
+        outbound.vider()
+        self.assertEqual(outbound.lire(), [])
 
     def test_un_journal_illisible_ne_plante_pas(self):
-        sorties._chemin().write_text("pas du json\n{\"service\": \"x\"}\n", encoding="utf-8")
-        self.assertEqual([x["service"] for x in sorties.lire()], ["x"])
+        outbound._chemin().write_text("pas du json\n{\"service\": \"x\"}\n", encoding="utf-8")
+        self.assertEqual([x["service"] for x in outbound.lire()], ["x"])
 
     def test_une_requete_tres_longue_est_coupee(self):
-        sorties.noter("bing", "x" * 5000)
-        self.assertLessEqual(len(sorties.lire()[0]["requete"]), 300)
+        outbound.noter("bing", "x" * 5000)
+        self.assertLessEqual(len(outbound.lire()[0]["requete"]), 300)
 
 
 class ChezSoi(unittest.TestCase):
     def test_searxng_local_n_est_pas_exterieur_les_autres_si(self):
         for adresse, attendu in (("http://127.0.0.1:8080", True), ("http://192.168.1.20:8080", True), ("http://searxng:8080", True), ("http://nas.local:8080", True),
                                  ("https://searx.exemple.org", False), ("http://8.8.8.8:8080", False)):
-            with mock.patch.object(recherche, "hote_autorise", lambda a=adresse: recherche.urllib.parse.urlparse(a).hostname):
-                self.assertEqual(recherche.est_chez_soi("searxng"), attendu, adresse)
+            with mock.patch.object(web_search, "hote_autorise", lambda a=adresse: web_search.urllib.parse.urlparse(a).hostname):
+                self.assertEqual(web_search.est_chez_soi("searxng"), attendu, adresse)
         for nom in ("brave", "tavily", "exa", "perplexity", "duckduckgo", "bing"):
-            self.assertFalse(recherche.est_chez_soi(nom))
+            self.assertFalse(web_search.est_chez_soi(nom))
 
 
 class RechercheEtJournal(unittest.TestCase):
     def setUp(self):
-        sorties.vider()
+        outbound.vider()
         web.CACHE_RECHERCHE.clear()
         web.BLOQUES.clear()
 
@@ -100,17 +100,17 @@ class RechercheEtJournal(unittest.TestCase):
             trouves, raisons = web.chercher_resultats("aide pour jean@example.com sur le kWh", 5)
         self.assertEqual(recues, ["aide pour sur le kWh"])
         self.assertTrue(trouves)
-        e = sorties.lire()[0]
+        e = outbound.lire()[0]
         self.assertEqual((e["service"], e["requete"], e["retire"], e["ok"]), ("tavily", "aide pour sur le kWh", ["adresse e-mail"], True))
-        self.assertNotIn("jean@example.com", json.dumps(sorties.lire()), "l'adresse n'est même pas dans le journal")
+        self.assertNotIn("jean@example.com", json.dumps(outbound.lire()), "l'adresse n'est même pas dans le journal")
 
     def test_un_searxng_chez_soi_recoit_la_requete_telle_quelle_sans_journal(self):
         recues = []
         with mock.patch.object(web, "moteurs_de_recherche", lambda: [("searxng", lambda q: recues.append(q) or [{"titre": "T", "url": "https://exemple.org/b", "extrait": "e", "date": ""}])]), \
-                mock.patch.object(recherche, "est_chez_soi", lambda nom: nom == "searxng"):
+                mock.patch.object(web_search, "est_chez_soi", lambda nom: nom == "searxng"):
             web.chercher_resultats("contacter jean@example.com", 5)
         self.assertEqual(recues, ["contacter jean@example.com"])
-        self.assertEqual(sorties.lire(), [])
+        self.assertEqual(outbound.lire(), [])
 
     def test_requete_entierement_personnelle_n_est_envoyee_nulle_part(self):
         appels = []
@@ -118,20 +118,20 @@ class RechercheEtJournal(unittest.TestCase):
             trouves, raisons = web.chercher_resultats("jean@example.com", 5)
         self.assertEqual((appels, trouves), ([], []))
         self.assertIn("données personnelles", " ".join(raisons))
-        self.assertEqual(sorties.lire(), [])
+        self.assertEqual(outbound.lire(), [])
 
     def test_un_echec_est_note_aussi(self):
         def casse(requete):
             raise A.ErreurOutil("HTTP 500")
         with mock.patch.object(web, "moteurs_de_recherche", lambda: [("perplexity", casse)]):
             web.chercher_resultats("question simple", 5)
-        self.assertFalse(sorties.lire()[0]["ok"])
+        self.assertFalse(outbound.lire()[0]["ok"])
 
 
 class Api(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        from lutin import securite as S
+        from lutin import security as S
         cls.serveur = ThreadingHTTPServer(("127.0.0.1", 0), A.Gestionnaire)
         threading.Thread(target=cls.serveur.serve_forever, daemon=True).start()
         cls.port = cls.serveur.server_address[1]
@@ -156,7 +156,7 @@ class Api(unittest.TestCase):
         return r.status, json.loads(texte) if texte else {}
 
     def test_apercu_web_nettoie_et_ne_rend_que_des_resultats(self):
-        sorties.vider()
+        outbound.vider()
         web.CACHE_RECHERCHE.clear()
         web.BLOQUES.clear()
         with mock.patch.object(web, "moteurs_de_recherche", lambda: [("tavily", lambda q: [{"titre": "T1", "url": "https://exemple.org/a?utm_source=x", "extrait": "e" * 500, "date": "2026-05-01"}])]):
@@ -169,8 +169,8 @@ class Api(unittest.TestCase):
         self.assertEqual(self.appel("POST", "/api/web-apercu", {"q": "x"})[0], 400)
 
     def test_journal_et_vidage_par_l_api(self):
-        sorties.vider()
-        sorties.noter("bing", "une question", [], True)
+        outbound.vider()
+        outbound.noter("bing", "une question", [], True)
         statut, r = self.appel("GET", "/api/sorties")
         self.assertEqual((statut, r["entrees"][0]["service"]), (200, "bing"))
         self.assertEqual(self.appel("POST", "/api/sorties-vider", {})[0], 200)

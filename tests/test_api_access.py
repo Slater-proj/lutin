@@ -26,9 +26,9 @@ for key, value in {"LUTIN_RACINE": str(_TEMP / "project"), "LUTIN_DONNEES": str(
 for folder in ("project", "donnees", "memoire"):
     (_TEMP / folder).mkdir(exist_ok=True)
 
-from lutin import acces, alimentation  # noqa: E402
-from lutin import moteur as A  # noqa: E402
-from lutin import securite as S  # noqa: E402
+from lutin import access, power  # noqa: E402
+from lutin import core as A  # noqa: E402
+from lutin import security as S  # noqa: E402
 
 CONTRACT = json.loads((Path(__file__).resolve().parent / "fixtures" / "api_contract.json").read_text(encoding="utf-8"))
 ELSEWHERE = {"X-Forwarded-For": "203.0.113.7"}          # the request was relayed from another device: never « this machine's browser »
@@ -77,8 +77,8 @@ def routes(method):
 def setUpModule():
     global SERVER, PORT, DEVICE
     patches = [mock.patch.object(A, "SECURITE", S.Securite(niveau=S.RESEAU)), mock.patch.object(A, "APPAREILS", S.Appareils()), mock.patch.object(A, "LIMITEUR_PIN", S.LimiteurDebit(10_000, 60)),
-               mock.patch.object(alimentation, "programmer_extinction", marker("shutdown")), mock.patch.object(acces, "mettre_a_jour", marker("update")),
-               mock.patch.object(acces, "redemarrer", marker("restart")), mock.patch.object(acces, "restaurer_flux", marker("restore")), mock.patch.object(acces, "appliquer", marker("access level"))]
+               mock.patch.object(power, "programmer_extinction", marker("shutdown")), mock.patch.object(access, "mettre_a_jour", marker("update")),
+               mock.patch.object(access, "redemarrer", marker("restart")), mock.patch.object(access, "restaurer_flux", marker("restore")), mock.patch.object(access, "appliquer", marker("access level"))]
     for patch in patches:
         patch.start()
         unittest.addModuleCleanup(patch.stop)

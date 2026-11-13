@@ -10,16 +10,16 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from lutin import catalogue, miseajour  # noqa: E402
+from lutin import model_catalog, updates  # noqa: E402
 
 
-def disparus(cat, http=miseajour.http_get):
+def disparus(cat, http=updates.http_get):
     """[(identifiant, raison)] pour les modèles que le registre ne connaît plus."""
     manquants, incertains = [], []
     for m in cat["modeles"]:
-        espace, nom, tag = miseajour.separer(m["id"])
+        espace, nom, tag = updates.separer(m["id"])
         try:
-            statut, _, _ = http("{}/{}/{}/manifests/{}".format(miseajour.REGISTRE, espace, nom, tag), {"Accept": miseajour.ACCEPT_MANIFESTE})
+            statut, _, _ = http("{}/{}/{}/manifests/{}".format(updates.REGISTRE, espace, nom, tag), {"Accept": updates.ACCEPT_MANIFESTE})
         except OSError as e:
             incertains.append((m["id"], "réseau : {}".format(e)))
             continue
@@ -31,13 +31,13 @@ def disparus(cat, http=miseajour.http_get):
 
 
 def principal():
-    manquants, incertains = disparus(catalogue.charger())
+    manquants, incertains = disparus(model_catalog.charger())
     for ident, raison in incertains:
         print("? {} : {} (ignoré)".format(ident, raison))
     for ident, raison in manquants:
         print("✘ {} : {}".format(ident, raison))
     if not manquants:
-        print("✔ tous les modèles du catalogue existent ({} vérifiés, {} incertains)".format(len(catalogue.charger()["modeles"]), len(incertains)))
+        print("✔ tous les modèles du catalogue existent ({} vérifiés, {} incertains)".format(len(model_catalog.charger()["modeles"]), len(incertains)))
     return 1 if manquants else 0
 
 

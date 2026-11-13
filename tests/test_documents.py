@@ -14,8 +14,8 @@ for cle, valeur in {"LUTIN_RACINE": str(_TEMP / "projet"), "LUTIN_DONNEES": str(
     os.environ.setdefault(cle, valeur)
 (_TEMP / "projet").mkdir(exist_ok=True)
 
-from lutin import moteur as _m  # noqa: E402
-from lutin import documents, extraction, revue  # noqa: E402
+from lutin import core as _m  # noqa: E402
+from lutin import documents, text_extraction, change_review  # noqa: E402
 
 MARKDOWN = """# Bilan de la semaine
 
@@ -56,7 +56,7 @@ class Documents(unittest.TestCase):
             self.assertEqual(octets[int(m.group(1)):].split(b" ")[0], b"%d" % n)
         f = _TEMP / "essai.pdf"
         f.write_bytes(octets)
-        texte = "\n".join(t for _, t in extraction.parties(str(f)))
+        texte = "\n".join(t for _, t in text_extraction.parties(str(f)))
         for attendu in ("Rapport", "Bilan de la semaine", "é è à ç œ", "première puce", "deuxième puce", "bonjour", "1 / "):
             self.assertIn(attendu, texte)
 
@@ -72,7 +72,7 @@ class Documents(unittest.TestCase):
         octets = documents.pdf("Emoji 😀 et idéogramme 漢字 et parenthèses (a) \\ fin")
         f = _TEMP / "exotique.pdf"
         f.write_bytes(octets)
-        texte = "\n".join(t for _, t in extraction.parties(str(f)))
+        texte = "\n".join(t for _, t in text_extraction.parties(str(f)))
         self.assertIn("parenthèses (a)", texte)
 
     def test_le_docx_est_valide_et_se_relit(self):
@@ -87,7 +87,7 @@ class Documents(unittest.TestCase):
         self.assertIn("<w:b/>", document)
         self.assertIn("<w:i/>", document)
         self.assertIn('w:val="Titre1"', document)
-        texte = "\n".join(t for _, t in extraction.parties(str(f)))
+        texte = "\n".join(t for _, t in text_extraction.parties(str(f)))
         for attendu in ("Rapport", "Bilan de la semaine", "é è à ç œ", "première puce", "bonjour", "gras"):
             self.assertIn(attendu, texte)
 
@@ -98,29 +98,29 @@ class Documents(unittest.TestCase):
 
     def test_l_outil_demande_l_accord_ecrit_relit_et_sauvegarde(self):
         ctx = self.ctx()
-        res = revue.appeler_outil("creer_document", {"chemin": "docs/bilan.pdf", "contenu": MARKDOWN, "titre": "Bilan"}, ctx)
+        res = change_review.appeler_outil("creer_document", {"chemin": "docs/bilan.pdf", "contenu": MARKDOWN, "titre": "Bilan"}, ctx)
         self.assertIn("relu", res)
         self.assertEqual(len(self.accords), 1)
         f = _m.RACINE / "docs" / "bilan.pdf"
         self.assertTrue(f.read_bytes().startswith(b"%PDF"))
-        res = revue.appeler_outil("creer_document", {"chemin": "docs/bilan.pdf", "contenu": "# Version 2"}, self.ctx())
+        res = change_review.appeler_outil("creer_document", {"chemin": "docs/bilan.pdf", "contenu": "# Version 2"}, self.ctx())
         self.assertIn("Ancienne version sauvegardée", res)
-        res = revue.appeler_outil("creer_document", {"chemin": "docs/note.docx", "contenu": "Bonjour"}, self.ctx())
+        res = change_review.appeler_outil("creer_document", {"chemin": "docs/note.docx", "contenu": "Bonjour"}, self.ctx())
         self.assertTrue(zipfile.is_zipfile(_m.RACINE / "docs" / "note.docx"), res)
 
     def test_markdown_et_texte_sont_ecrits_tels_quels(self):
-        revue.appeler_outil("creer_document", {"chemin": "docs/lisez.md", "contenu": "# Titre\n\ntexte"}, self.ctx())
+        change_review.appeler_outil("creer_document", {"chemin": "docs/lisez.md", "contenu": "# Titre\n\ntexte"}, self.ctx())
         self.assertEqual((_m.RACINE / "docs" / "lisez.md").read_text(encoding="utf-8"), "# Titre\n\ntexte")
 
     def test_refus_format_inconnu_et_chemin_hors_du_dossier(self):
-        revue.appeler_outil("creer_document", {"chemin": "docs/refuse.pdf", "contenu": "x"}, self.ctx(accord=False))
+        change_review.appeler_outil("creer_document", {"chemin": "docs/refuse.pdf", "contenu": "x"}, self.ctx(accord=False))
         self.assertFalse((_m.RACINE / "docs" / "refuse.pdf").exists())
         with self.assertRaises(_m.ErreurOutil):
-            revue.appeler_outil("creer_document", {"chemin": "docs/x.xyz", "contenu": "x"}, self.ctx())
+            change_review.appeler_outil("creer_document", {"chemin": "docs/x.xyz", "contenu": "x"}, self.ctx())
         with self.assertRaises(_m.ErreurOutil):
-            revue.appeler_outil("creer_document", {"chemin": "../dehors.pdf", "contenu": "x"}, self.ctx())
+            change_review.appeler_outil("creer_document", {"chemin": "../dehors.pdf", "contenu": "x"}, self.ctx())
         with self.assertRaises(_m.ErreurOutil):
-            revue.appeler_outil("creer_document", {"chemin": "docs/gros.pdf", "contenu": "x" * (documents.TAILLE_MAX + 1)}, self.ctx())
+            change_review.appeler_outil("creer_document", {"chemin": "docs/gros.pdf", "contenu": "x" * (documents.TAILLE_MAX + 1)}, self.ctx())
 
 
 if __name__ == "__main__":

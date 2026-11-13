@@ -19,8 +19,8 @@ for d in ("projet", "donnees", "memoire", "config"):
     (_TEMP / d).mkdir(exist_ok=True)
 (_TEMP / "config" / "config.json").write_text(json.dumps({"schema": 1, "installe": True, "emplacements": {"travail": str(_TEMP / "projet"), "travaux": [], "travail_actif": ""}}), encoding="utf-8")
 
-from lutin import cli, config, projet_claude  # noqa: E402
-from lutin import moteur as A  # noqa: E402
+from lutin import cli, config, claude_project  # noqa: E402
+from lutin import core as A  # noqa: E402
 
 
 def fabriquer(racine):
@@ -55,41 +55,41 @@ class Detection(unittest.TestCase):
         self.t.cleanup()
 
     def test_en_tete_markdown(self):
-        self.assertEqual(projet_claude.frontmatter("---\nname: a\ndescription: \"Un texte\"\n---\ncorps"), {"name": "a", "description": "Un texte"})
-        self.assertEqual(projet_claude.frontmatter("---\ndescription: >\n  deux\n  lignes\n---\n")["description"], "deux lignes")
-        self.assertEqual(projet_claude.frontmatter("pas d'en-tête"), {})
-        self.assertEqual(projet_claude.frontmatter("---\nnon refermé"), {"non refermé": ""} if False else {})
+        self.assertEqual(claude_project.frontmatter("---\nname: a\ndescription: \"Un texte\"\n---\ncorps"), {"name": "a", "description": "Un texte"})
+        self.assertEqual(claude_project.frontmatter("---\ndescription: >\n  deux\n  lignes\n---\n")["description"], "deux lignes")
+        self.assertEqual(claude_project.frontmatter("pas d'en-tête"), {})
+        self.assertEqual(claude_project.frontmatter("---\nnon refermé"), {"non refermé": ""} if False else {})
 
     def test_detecte_tout_ce_qui_est_utile(self):
-        d = projet_claude.detecter(self.depot)
+        d = claude_project.detecter(self.depot)
         self.assertEqual(d["contexte"], ["CLAUDE.md"])
         self.assertEqual([(s["nom"], s["description"], s["chemin"]) for s in d["skills"]], [("deploiement", "Déployer un service sur le cluster", ".claude/skills/deploy/SKILL.md")])
         self.assertEqual({c["nom"]: c["description"] for c in d["commandes"]}, {"sauvegarde": "Lancer la sauvegarde", "infra:dns": "Mettre à jour le DNS"})
         self.assertEqual([a["nom"] for a in d["agents"]], ["revue"])
         self.assertEqual(d["regles"], [".claude/rules/style.md"])
-        self.assertEqual(projet_claude.resume(d), "CLAUDE.md, 1 skill(s), 2 commande(s), 1 agent(s), 1 règle(s)")
+        self.assertEqual(claude_project.resume(d), "CLAUDE.md, 1 skill(s), 2 commande(s), 1 agent(s), 1 règle(s)")
 
     def test_un_dossier_ordinaire_n_est_pas_un_projet_claude(self):
         vide = Path(self.t.name) / "vide"
         vide.mkdir()
-        self.assertTrue(projet_claude.est_vide(projet_claude.detecter(vide)))
-        self.assertTrue(projet_claude.est_vide(projet_claude.detecter(Path(self.t.name) / "absent")))
-        self.assertEqual(projet_claude.bloc_prompt(vide), "")
+        self.assertTrue(claude_project.est_vide(claude_project.detecter(vide)))
+        self.assertTrue(claude_project.est_vide(claude_project.detecter(Path(self.t.name) / "absent")))
+        self.assertEqual(claude_project.bloc_prompt(vide), "")
 
     def test_les_imports_restent_dans_le_projet(self):
-        texte = projet_claude.texte_contexte(self.depot)
+        texte = claude_project.texte_contexte(self.depot)
         self.assertIn("Tout tourne sous Proxmox.", texte)
         self.assertIn("[docs/reseau.md]\nLe LAN est en 192.168.1.0/24.", texte)
         self.assertNotIn("MOT DE PASSE", texte, "un import qui sort du projet est ignoré")
-        self.assertLessEqual(len(projet_claude.texte_contexte(self.depot, 40)), 40)
+        self.assertLessEqual(len(claude_project.texte_contexte(self.depot, 40)), 40)
 
     def test_le_morceau_de_consignes_dans_les_deux_langues(self):
-        fr = projet_claude.bloc_prompt(self.depot)
+        fr = claude_project.bloc_prompt(self.depot)
         self.assertIn("# PROJET CLAUDE", fr)
         self.assertIn(".claude/skills/deploy/SKILL.md (deploiement) : Déployer un service sur le cluster", fr)
         self.assertIn("(infra:dns)", fr)
         with mock.patch.dict(os.environ, {"LUTIN_LANGUE": "en"}):
-            en = projet_claude.bloc_prompt(self.depot)
+            en = claude_project.bloc_prompt(self.depot)
         self.assertIn("# CLAUDE PROJECT", en)
         self.assertIn("## Commands (.claude/commands)", en)
         self.assertNotIn("PROJET CLAUDE", en)
@@ -107,23 +107,23 @@ class Commandes(unittest.TestCase):
         self.t.cleanup()
 
     def test_les_arguments_remplacent_arguments_et_les_numeros(self):
-        self.assertEqual(projet_claude.commande(self.depot, "dire", "Alice Bob"), "Dis bonjour à Alice puis à Bob. Tout : Alice Bob. Troisième : []")
-        self.assertEqual(projet_claude.commande(self.depot, "dire"), "Dis bonjour à  puis à . Tout : . Troisième : []")
-        self.assertEqual(projet_claude.commande(self.depot, "sauvegarde", "x"), "Fais la sauvegarde de x", "l'en-tête n'est jamais envoyé")
+        self.assertEqual(claude_project.commande(self.depot, "dire", "Alice Bob"), "Dis bonjour à Alice puis à Bob. Tout : Alice Bob. Troisième : []")
+        self.assertEqual(claude_project.commande(self.depot, "dire"), "Dis bonjour à  puis à . Tout : . Troisième : []")
+        self.assertEqual(claude_project.commande(self.depot, "sauvegarde", "x"), "Fais la sauvegarde de x", "l'en-tête n'est jamais envoyé")
 
     def test_commande_dans_un_sous_dossier_et_inconnue(self):
-        self.assertEqual(projet_claude.commande(self.depot, "infra:dns"), "# Mettre à jour le DNS")
+        self.assertEqual(claude_project.commande(self.depot, "infra:dns"), "# Mettre à jour le DNS")
         for mauvais in ("inconnue", "../../CLAUDE", "", "infra/dns"):
             with self.assertRaisesRegex(ValueError, "inconnue"):
-                projet_claude.commande(self.depot, mauvais)
+                claude_project.commande(self.depot, mauvais)
 
     def test_les_lignes_de_commande_ne_sont_pas_executees_et_on_le_dit(self):
-        texte = projet_claude.commande(self.depot, "etat")
+        texte = claude_project.commande(self.depot, "etat")
         self.assertIn("!git status", texte)
         self.assertIn("ne sont pas exécutées toutes seules", texte)
         with mock.patch.dict(os.environ, {"LUTIN_LANGUE": "en"}):
-            self.assertIn("are not run on their own", projet_claude.commande(self.depot, "etat"))
-        self.assertNotIn("ne sont pas exécutées", projet_claude.commande(self.depot, "dire", "a b"))
+            self.assertIn("are not run on their own", claude_project.commande(self.depot, "etat"))
+        self.assertNotIn("ne sont pas exécutées", claude_project.commande(self.depot, "dire", "a b"))
 
 
 class Copie(unittest.TestCase):
@@ -136,7 +136,7 @@ class Copie(unittest.TestCase):
 
     def test_la_copie_garde_l_historique_et_saute_les_dossiers_lourds(self):
         vers = Path(self.t.name) / "copie"
-        projet_claude.copier(self.depot, vers)
+        claude_project.copier(self.depot, vers)
         self.assertTrue((vers / "CLAUDE.md").is_file())
         self.assertTrue((vers / ".claude" / "skills" / "deploy" / "SKILL.md").is_file())
         self.assertTrue((vers / ".git" / "HEAD").is_file())
@@ -148,16 +148,16 @@ class Copie(unittest.TestCase):
         (base / "plein").mkdir()
         (base / "plein" / "a.txt").write_text("a", encoding="utf-8")
         with self.assertRaisesRegex(ValueError, "pas vide"):
-            projet_claude.copier(self.depot, base / "plein")
+            claude_project.copier(self.depot, base / "plein")
         with self.assertRaisesRegex(ValueError, "dans le projet"):
-            projet_claude.copier(self.depot, self.depot / "sous" / "copie")
+            claude_project.copier(self.depot, self.depot / "sous" / "copie")
         with self.assertRaisesRegex(ValueError, "dans le projet"):
-            projet_claude.copier(self.depot, base)
+            claude_project.copier(self.depot, base)
         with self.assertRaisesRegex(ValueError, "n'existe pas"):
-            projet_claude.copier(base / "absent", base / "x")
-        with mock.patch.object(projet_claude, "COPIE_MAX_OCTETS", 100):
+            claude_project.copier(base / "absent", base / "x")
+        with mock.patch.object(claude_project, "COPIE_MAX_OCTETS", 100):
             with self.assertRaisesRegex(ValueError, "trop gros"):
-                projet_claude.copier(self.depot, base / "gros")
+                claude_project.copier(self.depot, base / "gros")
         self.assertFalse((base / "gros").exists())
 
 

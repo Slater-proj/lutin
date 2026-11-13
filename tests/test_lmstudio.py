@@ -13,10 +13,10 @@ for cle, valeur in {"LUTIN_RACINE": str(_TEMP / "projet"), "LUTIN_DONNEES": str(
     os.environ.setdefault(cle, valeur)
 (_TEMP / "projet").mkdir(exist_ok=True)
 
-from lutin import moteur as _m  # noqa: E402,F401  (avant les autres : import circulaire sinon)
+from lutin import core as _m  # noqa: E402,F401  (avant les autres : import circulaire sinon)
 from lutin import lmstudio as L  # noqa: E402
-from lutin import moteur_llamacpp as ml  # noqa: E402
-from lutin import moteurs  # noqa: E402
+from lutin import llamacpp_engine as ml  # noqa: E402
+from lutin import engines  # noqa: E402
 
 
 class Reponse:
@@ -155,17 +155,17 @@ class Module(unittest.TestCase):
 class Carte(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="lutin-lms-carte-"))
-        self.ancien = dict(moteurs.CONTEXTE)
-        moteurs.CONTEXTE["donnees"] = lambda: self.tmp
-        moteurs.CONTEXTE["hors_ligne"] = lambda: False
-        self.mo = moteurs.MOTEURS["openai"]
+        self.ancien = dict(engines.CONTEXTE)
+        engines.CONTEXTE["donnees"] = lambda: self.tmp
+        engines.CONTEXTE["hors_ligne"] = lambda: False
+        self.mo = engines.MOTEURS["openai"]
         ml.regler_serveur("openai", {"serveur": "lmstudio"})
         self.addCleanup(self.remettre)
 
     def remettre(self):
         ml.regler_serveur("openai", {"serveur": "", "port_lmstudio": 0})
-        moteurs.CONTEXTE.clear()
-        moteurs.CONTEXTE.update(self.ancien)
+        engines.CONTEXTE.clear()
+        engines.CONTEXTE.update(self.ancien)
 
     def test_adresse_imposee_locale_et_port_regle(self):
         self.assertEqual(self.mo.adresse(), "http://127.0.0.1:1234/v1")
@@ -196,7 +196,7 @@ class Carte(unittest.TestCase):
             self.mo.faire("telecharger:openai/gpt-oss-20b", lambda *a: None)
             self.mo.faire("arreter", lambda *a: None)
         self.assertEqual(suivi, ["installer", ("demarrer", 1234), ("demarrer", 1234), ("telecharger", "openai/gpt-oss-20b")], "installé, puis démarré tout de suite ; « Démarrer » démarre")
-        moteurs.CONTEXTE["hors_ligne"] = lambda: True
+        engines.CONTEXTE["hors_ligne"] = lambda: True
         with self.assertRaises(Exception):
             self.mo.faire("installer", lambda *a: None)
 
@@ -204,12 +204,12 @@ class Carte(unittest.TestCase):
 class Catalogue(unittest.TestCase):
     def test_le_catalogue_ne_garde_que_ce_que_lutin_sait_gerer_ou_relier(self):
         import json as _json
-        from lutin import catalogue_moteurs
-        ids = [m["id"] for m in _json.loads(catalogue_moteurs.FICHIER_LIVRE.read_text(encoding="utf-8"))["catalogue"]["moteurs"]]
+        from lutin import engine_catalog
+        ids = [m["id"] for m in _json.loads(engine_catalog.FICHIER_LIVRE.read_text(encoding="utf-8"))["catalogue"]["moteurs"]]
         for retire in ("vllm", "sglang", "localai", "llama-swap"):
             self.assertNotIn(retire, ids)
         self.assertIn("lmstudio", ids)
-        self.assertGreaterEqual(catalogue_moteurs.verifier(_json.loads(catalogue_moteurs.FICHIER_LIVRE.read_text(encoding="utf-8")))["version"], 4)
+        self.assertGreaterEqual(engine_catalog.verifier(_json.loads(engine_catalog.FICHIER_LIVRE.read_text(encoding="utf-8")))["version"], 4)
 
 
 if __name__ == "__main__":

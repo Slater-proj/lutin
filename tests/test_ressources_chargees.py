@@ -15,9 +15,9 @@ for cle, valeur in {"LUTIN_RACINE": str(_TEMP / "projet"), "LUTIN_DONNEES": str(
     os.environ.setdefault(cle, valeur)
 (_TEMP / "projet").mkdir(exist_ok=True)
 
-from lutin import moteur as _m  # noqa: E402,F401  (avant les autres : import circulaire sinon)
-from lutin import moteur_llamacpp as ml  # noqa: E402
-from lutin import moteurs, ressources_chargees as rc  # noqa: E402
+from lutin import core as _m  # noqa: E402,F401  (avant les autres : import circulaire sinon)
+from lutin import llamacpp_engine as ml  # noqa: E402
+from lutin import engines, loaded_resources as rc  # noqa: E402
 
 APPELS = []
 
@@ -147,7 +147,7 @@ class Decharger(Base):
 
     def test_llamacpp_s_arrete(self):
         arrete = []
-        with mock.patch.object(moteurs.MOTEURS["llamacpp"], "arreter", lambda: arrete.append(1)):
+        with mock.patch.object(engines.MOTEURS["llamacpp"], "arreter", lambda: arrete.append(1)):
             rc.decharger("llamacpp")
         self.assertEqual(arrete, [1])
 
@@ -197,9 +197,9 @@ class Programmes(unittest.TestCase):
 
 class Page(Base):
     def test_les_routes_repondent(self):
-        from lutin import serveur
-        self.assertTrue(hasattr(serveur, "_ressources"))
-        src = Path(serveur.__file__).read_text(encoding="utf-8")
+        from lutin import server
+        self.assertTrue(hasattr(server, "_ressources"))
+        src = Path(server.__file__).read_text(encoding="utf-8")
         self.assertIn('"/api/ressources"', src)
         self.assertIn('"/api/decharger"', src)
 

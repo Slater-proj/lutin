@@ -9,7 +9,7 @@ import unittest.mock
 from pathlib import Path
 
 import context  # noqa: F401
-from lutin import moteurs, moteurs_docker as md
+from lutin import engines, docker_engines as md
 
 _TEMP = Path(tempfile.gettempdir())
 
@@ -29,8 +29,8 @@ def archive(fichiers):
 class Dossier(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(dir=_TEMP))
-        self.avant = dict(moteurs.CONTEXTE)
-        moteurs.CONTEXTE.update(donnees=lambda: self.tmp, en_docker=lambda: True, hors_ligne=lambda: False)
+        self.avant = dict(engines.CONTEXTE)
+        engines.CONTEXTE.update(donnees=lambda: self.tmp, en_docker=lambda: True, hors_ligne=lambda: False)
         patcher = unittest.mock.patch.dict(os.environ, {"LUTIN_DOCKER": "1"})
         patcher.start()
         self.addCleanup(patcher.stop)
@@ -38,8 +38,8 @@ class Dossier(unittest.TestCase):
         os.environ.pop("OLLAMA_URL", None)
 
     def tearDown(self):
-        moteurs.CONTEXTE.clear()
-        moteurs.CONTEXTE.update(self.avant)
+        engines.CONTEXTE.clear()
+        engines.CONTEXTE.update(self.avant)
 
     def test_hors_docker_rien(self):
         self.assertIsNone(md.dossier_moteurs({}))
@@ -160,7 +160,7 @@ class Actions(Dossier):
         self.assertTrue(a["demarrer"]["possible"])
 
     def test_llamacpp_s_installe_aussi_dans_docker(self):
-        from lutin import moteur_llamacpp as ml
+        from lutin import llamacpp_engine as ml
         mo = ml.MoteurLlamaCpp()
         self.assertEqual(mo.dossier_defaut(), self.tmp / "engines" / "llamacpp")
         a = mo.actions()

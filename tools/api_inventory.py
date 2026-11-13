@@ -3,7 +3,7 @@
     python tools/api_inventory.py            prints the inventory (JSON)
     python tools/api_inventory.py --write    updates tests/fixtures/api_contract.json
 
-Why: the routes live in two long `if` chains (`do_GET`, `do_POST` in src/lutin/serveur.py), with no table to read. Before the page is rebuilt and the API
+Why: the routes live in two long `if` chains (`do_GET`, `do_POST` in src/lutin/server.py), with no table to read. Before the page is rebuilt and the API
 gets a versioned English form (docs/adr/0001, 0002), the present contract has to be written down and kept from drifting silently:
 `tests/test_api_contract.py` fails when a route or a stream event appears or disappears without this inventory being updated on purpose.
 
@@ -26,7 +26,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-SERVER = ROOT / "src" / "lutin" / "serveur.py"
+SERVER = ROOT / "src" / "lutin" / "server.py"
 SOURCES = ROOT / "src" / "lutin"
 FIXTURE = ROOT / "tests" / "fixtures" / "api_contract.json"
 HANDLER = "Gestionnaire"
