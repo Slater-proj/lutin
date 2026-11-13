@@ -1,7 +1,7 @@
 # `/api/v1`: design
 
 The contract the new interface will be built on ([ADR 0001](../adr/0001-english-and-clean-break-at-1.0.md), [ADR 0002](../adr/0002-frontend-svelte-typescript-vite.md)).
-This page fixes the rules; it is not implemented yet. The present contract — 184 exact routes, 17 prefixes, 15 stream events, the right each route asks —
+This page fixes the rules. Implemented so far (`src/lutin/api_v1.py`, contract in `tests/test_api_v1.py` and `tests/fixtures/api_v1_routes.json`): the dispatcher with declared rights and coded errors, `GET /status`, the conversations (list, create, read, rename/pin, delete, stop) and the answer to an approval. Not yet: the turn stream, settings, models, engines and everything else. The present contract — 184 exact routes, 17 prefixes, 15 stream events, the right each route asks —
 is inventoried in `tests/fixtures/api_contract.json` and enforced by `tests/test_api_contract.py` and `tests/test_api_access.py`.
 
 ## Why not rename the present routes in place

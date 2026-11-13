@@ -23,6 +23,7 @@ from . import mcp_catalog as _mcp_catalogue
 from . import external_programs as _outils_externes
 from . import calibration as _calibrage
 from . import access as _acces
+from . import api_v1 as _api_v1
 from . import model_fit as _adequation
 from . import exllamav3_catalog as _exl_cat
 from . import lmstudio_catalog as _lms_cat
@@ -382,6 +383,8 @@ class Gestionnaire(BaseHTTPRequestHandler):
         chemin = self.path.split("?")[0]
         if not self._controle(False):
             return
+        if chemin.startswith("/api/v1/"):                      # l'API versionnée, en anglais (lutin.api_v1) : droits déclarés dans sa table, erreurs avec un code
+            return _api_v1.dispatch(self, "GET")
         if chemin.startswith("/api/noeud/relais/"):            # une machine appairée mène une conversation ICI (droit « piloter »)
             return self._relais("GET")
         if chemin.startswith("/h/"):                           # cette page affiche une conversation menée sur une autre machine
@@ -765,9 +768,25 @@ class Gestionnaire(BaseHTTPRequestHandler):
         except ValueError as e:
             return self._envoyer(400, {"erreur": str(e)})
 
+    def _api_v1_ecriture(self, methode):
+        """PATCH et DELETE n'existent que pour l'API versionnée ; comme tout ce qui modifie, la requête doit venir de la page de Lutin (contrôle de l'origine)."""
+        if not self._controle(True):
+            return
+        if not self.path.split("?")[0].startswith("/api/v1/"):
+            return self._envoyer(404, {"erreur": "introuvable"})
+        return _api_v1.dispatch(self, methode)
+
+    def do_PATCH(self):
+        return self._api_v1_ecriture("PATCH")
+
+    def do_DELETE(self):
+        return self._api_v1_ecriture("DELETE")
+
     def do_POST(self):
         if not self._controle(True):
             return
+        if self.path.split("?")[0].startswith("/api/v1/"):
+            return _api_v1.dispatch(self, "POST")
         if self.path.startswith("/api/noeud/relais/"):
             return self._relais("POST")
         if self.path.startswith("/h/"):

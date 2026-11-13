@@ -68,6 +68,7 @@
    "/api/noeud/relais/",
    "/api/skills-tiers",
    "/api/skills/",
+   "/api/v1/",
    "/fichier/",
    "/h/",
    "/image/",
@@ -209,6 +210,7 @@
    "/api/moteur-",
    "/api/noeud/relais/",
    "/api/skills-tiers-",
+   "/api/v1/",
    "/h/"
   ]
  },
@@ -233,6 +235,12 @@
   "texte"
  ],
  "helpers": {
+  "_api_v1_ecriture": {
+   "exact": [],
+   "prefix": [
+    "/api/v1/"
+   ]
+  },
   "_relais": {
    "exact": [
     "/api/chat"
