@@ -402,6 +402,7 @@
 "Adresse locale refusée ({}) : l'accès web est réservé à internet.": "Local address refused ({}): web access is reserved for the internet.",
 "Le site a répondu HTTP {}.": "The site answered HTTP {}.",
 "Impossible de joindre le site : {}": "Could not reach the site: {}",
+"trop de redirections": "too many redirections",
 "L'accès web est désactivé (case « Web » dans les options).": "Web access is turned off (« Web » box in the options).",
 "Requête vide.": "Empty request.",
 "Aucun résultat (le moteur peut limiter les requêtes : reformule ou réessaie dans une minute).": "No result (the search engine may limit requests: rephrase or try again in a minute).",

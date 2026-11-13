@@ -27,6 +27,7 @@ from unittest import mock
 
 ICI = Path(__file__).resolve().parent
 os.environ["LUTIN_LANGUE"] = "fr"          # les messages attendus par ces tests sont en français
+os.environ["LUTIN_TESTS"] = "1"          # this file does not import tests/context.py: without it, LUTIN_WEB_LOCAL no longer opens the fake local web (lutin.net_guard.local_test_mode)
 TEMP = Path(tempfile.mkdtemp(prefix="assistant-tests-"))
 PROJET = TEMP / "projet"
 for d in ("docs", "appli/moteur", "assistant", ".git", "sorties"):

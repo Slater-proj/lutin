@@ -23,6 +23,7 @@ from email.utils import parseaddr
 
 from . import addons, regles, repondeur
 from . import moteur as _m
+from . import net_guard as _net_guard
 from .i18n import t as _t
 
 IDENT = "mail"
@@ -61,8 +62,7 @@ def verifier_serveur(hote, reseau_local):
     if reseau_local == "oui":
         return
     from . import web
-    import os
-    if os.environ.get("LUTIN_WEB_LOCAL") == "1":
+    if _net_guard.local_test_mode():
         return
     web.verifier_hote_web("https://" + hote)
 

@@ -25,6 +25,7 @@ from pathlib import Path
 
 from . import addons
 from . import moteur as _m
+from . import net_guard as _net_guard
 from .i18n import t as _t
 
 IDENT = "comfyui"
@@ -683,7 +684,7 @@ def _soumettre_et_attendre(f, v, complet, type_, ctx):
 # --------------------------------------------------------------------------- télécharger un modèle
 def hote_telechargement_permis(hote):
     hote = (hote or "").lower()
-    if os.environ.get("LUTIN_WEB_LOCAL") == "1" and hote in ("127.0.0.1", "localhost"):          # pour les tests seulement
+    if _net_guard.local_test_mode() and hote in ("127.0.0.1", "localhost"):          # pour les tests seulement
         return True
     return any(hote == h or hote.endswith("." + h) for h in HOTES_TELECHARGEMENT)
 
@@ -707,7 +708,7 @@ class _RedirectionControlee(urllib.request.HTTPRedirectHandler):
 
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         p = urllib.parse.urlsplit(newurl)
-        local = os.environ.get("LUTIN_WEB_LOCAL") == "1" and p.hostname in ("127.0.0.1", "localhost")
+        local = _net_guard.local_test_mode() and p.hostname in ("127.0.0.1", "localhost")
         if (p.scheme != "https" and not local) or not hote_telechargement_permis(p.hostname):
             raise addons.ErreurAddon(_t("Le site redirige vers {} : refusé (seuls Hugging Face et Civitai sont permis).").format(p.hostname or "?"))
         return super().redirect_request(req, fp, code, msg, headers, newurl)
@@ -719,11 +720,11 @@ def _telecharger(url, destination_dossier):
         req = urllib.request.Request(url, headers={"User-Agent": "Lutin"})
         with urllib.request.build_opener(_RedirectionControlee).open(req, timeout=60) as r:
             final = urllib.parse.urlsplit(r.geturl())
-            if final.scheme != "https" and not (os.environ.get("LUTIN_WEB_LOCAL") == "1" and final.hostname in ("127.0.0.1", "localhost")):
+            if final.scheme != "https" and not (_net_guard.local_test_mode() and final.hostname in ("127.0.0.1", "localhost")):
                 raise addons.ErreurAddon(_t("Le site redirige vers une adresse non chiffrée : refusé."))
             if not hote_telechargement_permis(final.hostname):
                 raise addons.ErreurAddon(_t("Le site redirige vers {} : refusé (seuls Hugging Face et Civitai sont permis).").format(final.hostname))
-            if os.environ.get("LUTIN_WEB_LOCAL") != "1":
+            if not _net_guard.local_test_mode():
                 from . import web
                 web.verifier_hote_web(r.geturl())
             nom = nom_de_fichier(r.geturl(), r.headers.get("Content-Disposition", "")) if not t["nom"] else t["nom"]
@@ -769,7 +770,7 @@ def demarrer_telechargement(url, genre):
     """Lance le téléchargement d'un modèle dans models/<genre> de ComfyUI, en arrière-plan. Seuls Hugging Face et Civitai sont permis, en https ; rien n'est écrasé."""
     url = str(url or "").strip()
     p = urllib.parse.urlsplit(url)
-    if p.scheme != "https" and not (os.environ.get("LUTIN_WEB_LOCAL") == "1" and p.scheme == "http"):
+    if p.scheme != "https" and not (_net_guard.local_test_mode() and p.scheme == "http"):
         raise addons.ErreurAddon(_t("Colle l'adresse complète du fichier (https://…)."))
     if not hote_telechargement_permis(p.hostname):
         raise addons.ErreurAddon(_t("Seuls les téléchargements depuis Hugging Face et Civitai sont permis."))
