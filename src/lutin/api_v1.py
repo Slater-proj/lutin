@@ -29,6 +29,7 @@ PUBLIC, SESSION, CONFIGURATOR, LOCAL = "public", "session", "configurator", "loc
 RIGHTS = (PUBLIC, SESSION, CONFIGURATOR, LOCAL)
 WITH_BODY = ("POST", "PATCH", "PUT")
 BODY_MAX = 2_000_000
+DISCARD_MAX = 64 * 1024 * 1024                        # what is read and thrown away before a refusal (the bound of lutin.server for the same purpose)
 ACCESS_LEVELS = {_sec.LOCAL: "local", _sec.RESEAU: "network", _sec.PROXY: "proxy"}
 ROUTES = []
 
@@ -89,10 +90,26 @@ def _check_right(handler, right):
         raise ApiError(403, "local_only", _t("Possible seulement depuis cette machine."))
 
 
+def _discard_body(handler):
+    """Reads and throws away a body that will not be used: answering with it unread makes the caller's connection reset, and the answer is lost.
+    Bounded: beyond DISCARD_MAX (or with a length that is not a number) nothing is read, since no one may make this server read without end; the
+    connection is then closed after the answer."""
+    left = handler._taille_corps()
+    if left > DISCARD_MAX:
+        handler.close_connection = True
+        return
+    while left > 0:
+        chunk = handler.rfile.read(min(left, 65536))
+        if not chunk:
+            break
+        left -= len(chunk)
+
+
 def _read_body(handler):
     """The JSON object of the request. Read before any refusal: a request refused with its body unread makes the caller's connection reset."""
     size = handler._taille_corps()
     if size > BODY_MAX:
+        _discard_body(handler)
         raise ApiError(413, "too_large", _t("Requête trop volumineuse."))
     raw = handler.rfile.read(size) if size > 0 else b""
     try:
@@ -109,7 +126,11 @@ def dispatch(handler, method):
     parts = urllib.parse.urlsplit(handler.path)
     path = parts.path[len(PREFIX):] or "/"
     try:
-        body = _read_body(handler) if method in WITH_BODY else {}
+        if method in WITH_BODY:
+            body = _read_body(handler)
+        else:
+            body = {}
+            _discard_body(handler)                         # a GET or a DELETE sent with a body: not used, but read
         matching = [(r, m) for r in ROUTES for m in [r.pattern.match(path)] if m]
         found = next(((r, m) for r, m in matching if r.method == method), None)
         if found is None:

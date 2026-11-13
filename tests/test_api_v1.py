@@ -3,6 +3,7 @@
 What is fixed here: the table of routes and the right each one declares (tests/fixtures/api_v1_routes.json), the shape of every answer field by field,
 the shape of every error ({"error": {"code", "message"}}), and the refusals. A field renamed or a right loosened fails a test."""
 import http.client
+import io
 import json
 import os
 import tempfile
@@ -127,6 +128,44 @@ class Errors(unittest.TestCase):
         for raw in (b"{not json", b"[1, 2]", b'"text"'):
             self.assertEqual(call("POST", "/api/v1/conversations", OWNER, raw=raw), (400, {"error": {"code": "invalid_json", "message": "Le corps de la requête doit être un objet JSON."}}), raw)
         status, answer = call("POST", "/api/v1/conversations", OWNER, raw=b'{"x": "' + b"a" * (api_v1.BODY_MAX + 10) + b'"}')
+        self.assertEqual((status, answer["error"]["code"]), (413, "too_large"))
+
+    def test_a_body_that_is_not_used_is_read_before_the_answer(self):
+        """An answer sent with the body unread resets the caller's connection and the answer is lost (WinError 10053 on Windows, most of the time)."""
+        big = b"a" * (api_v1.BODY_MAX + 10)
+        for attempt in range(3):
+            status, answer = call("POST", "/api/v1/conversations", OWNER, raw=big)
+            self.assertEqual((status, answer["error"]["code"]), (413, "too_large"), attempt)
+            status, answer = call("DELETE", "/api/v1/status", OWNER, raw=big)
+            self.assertEqual((status, answer["error"]["code"]), (405, "method_not_allowed"), attempt)
+
+    def test_a_refused_body_has_been_read_to_its_end(self):
+        """The same rule without a socket: the test above depends on timing (the reset does not happen every time), this one does not."""
+        class Caller:
+            close_connection = False
+
+            def __init__(self, announced, sent):
+                self.announced, self.rfile = announced, io.BytesIO(b"a" * sent)
+
+            def _taille_corps(self):
+                return self.announced
+
+        caller = Caller(api_v1.BODY_MAX + 10, api_v1.BODY_MAX + 10)
+        with self.assertRaises(api_v1.ApiError) as refused:
+            api_v1._read_body(caller)
+        self.assertEqual((refused.exception.status, caller.rfile.read(), caller.close_connection), (413, b"", False))
+        caller = Caller(100, 100)
+        api_v1._discard_body(caller)
+        self.assertEqual(caller.rfile.read(), b"", "a body sent with a method that takes none")
+        caller = Caller(api_v1.DISCARD_MAX + 1, 100)
+        with self.assertRaises(api_v1.ApiError):
+            api_v1._read_body(caller)
+        self.assertEqual((caller.rfile.tell(), caller.close_connection), (0, True), "beyond the bound nothing is read, and the connection is closed")
+
+    def test_a_length_that_is_not_a_number_is_refused_without_waiting_for_a_body(self):
+        status, answer = call("POST", "/api/v1/conversations", dict(OWNER, **{"Content-Length": "abc"}))
+        self.assertEqual((status, answer["error"]["code"]), (413, "too_large"))
+        status, answer = call("POST", "/api/v1/conversations", dict(OWNER, **{"Content-Length": "-5"}))
         self.assertEqual((status, answer["error"]["code"]), (413, "too_large"))
 
     def test_messages_follow_the_language_and_codes_do_not(self):
