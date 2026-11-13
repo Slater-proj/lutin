@@ -1,7 +1,7 @@
 # `/api/v1`: design
 
 The contract the new interface will be built on ([ADR 0001](../adr/0001-english-and-clean-break-at-1.0.md), [ADR 0002](../adr/0002-frontend-svelte-typescript-vite.md)).
-This page fixes the rules. Implemented so far (`src/lutin/api_v1.py`, contract in `tests/test_api_v1.py` and `tests/fixtures/api_v1_routes.json`): the dispatcher with declared rights and coded errors, `GET /status`, the conversations (list, create, read, rename/pin, delete, stop), the turn stream and the answer to an approval. Not yet: settings, models, engines and everything else. The present contract — 184 exact routes, 17 prefixes, 15 stream events, the right each route asks —
+This page fixes the rules. Implemented so far (`src/lutin/api_v1.py`, contract in `tests/test_api_v1.py` and `tests/fixtures/api_v1_routes.json`): the dispatcher with declared rights and coded errors, `GET /status`, the settings (read, change), the conversations (list, create, read, rename/pin, delete, stop), the turn stream and the answer to an approval. Not yet: models, engines and everything else. The present contract — 184 exact routes, 17 prefixes, 15 stream events, the right each route asks —
 is inventoried in `tests/fixtures/api_contract.json` and enforced by `tests/test_api_contract.py` and `tests/test_api_access.py`.
 
 ## Why not rename the present routes in place
@@ -72,6 +72,20 @@ routes disappear with the old page, in one deletion.
    A node states its protocol version in its status; an older or newer peer gets a clear refusal, not a malformed exchange.
 9. **No route does two things depending on a missing field.** Thirteen routes today check the configurator right only for some inputs; in v1 each becomes
    two routes or one route with one rule.
+
+## Settings
+
+`GET /api/v1/settings` gives every setting; `PATCH /api/v1/settings` changes the ones it names and answers with all of them as they now stand
+(`api_v1.SETTINGS`, contract in `tests/test_api_v1_settings.py`). Both ask for a session, as the French route does: a paired device may change them.
+
+- One English name and one kind per stored setting (46 today). Engine parameters keep the engines' own names (`num_ctx`, `num_predict`, `temperature`,
+  `top_p`, `top_k`, `min_p`, `repeat_penalty`, `num_thread`). A kind is `boolean`, `integer`, `number`, `string`, `strings` (a list) or `object`;
+  seven settings also accept `null`, which means « automatic ».
+- Four settings are a word, translated in both directions: `mode` (`general`, `technical`, `scenario`, `research`, `chat`), `thinking_steps`
+  (`always`, `first`), `long_memory` (`summary`, `file`, `ask`), `auto_recall` (`scenario`, `always`, `never`). The mission mode is not a setting:
+  it is chosen conversation by conversation. Tool names (`disabled_tools`) are what the models see and are not translated (ADR 0007).
+- A write is all or nothing: an unknown name or a value of the wrong kind answers `400 invalid_request` and nothing is stored. Values are then checked
+  and bounded by the function the French route calls (a dangerous command in `commands_without_approval` is refused, `max_steps` is kept within 4-40…).
 
 ## What v1 keeps
 

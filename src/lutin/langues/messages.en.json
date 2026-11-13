@@ -349,6 +349,8 @@
 "Le titre doit être un texte non vide.": "The title must be a non-empty text.",
 "« pinned » doit être vrai ou faux.": "« pinned » must be true or false.",
 "« approved » doit être vrai ou faux.": "« approved » must be true or false.",
+"Réglage inconnu : {}.": "Unknown setting: {}.",
+"Valeur invalide pour « {} » (attendu : {}).": "Invalid value for « {} » (expected: {}).",
 "Fichier trop gros pour être lu (plus de 6 Mo).": "File too big to be read (more than 6 MB).",
 "... (coupé : demande la suite avec debut={})": "... (cut: ask for the rest with debut={})",
 "{} : lignes {} à {} sur {}\n": "{}: lines {} to {} of {}\n",

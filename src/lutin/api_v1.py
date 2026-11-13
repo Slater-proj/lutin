@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 
 from . import core as _m
 from . import i18n as _i18n
+from . import machines as _machines
 from . import mission as _mission
 from . import offline as _offline
 from . import security as _sec
@@ -187,6 +188,78 @@ def status(request):
         "active_turns": sorted(_m.TOURS_ACTIFS),
         "pending_approvals": sorted({a.conv for a in _m.Attente.EN_COURS.values() if a.conv} | set(_m.CHOIX_MEMOIRE)),
     }
+
+
+# -------------------------------------------------------------------------------------------------------------- settings
+# The settings (defaults of new conversations, and settings of this machine) under their v1 names: {v1 name: (stored key, kind)}. A kind ending with
+# "?" also accepts null, which means « automatic ». The names of engine parameters (num_ctx, top_p…) are kept: they are the engines' own names.
+# tests/test_api_v1_settings.py compares this table with lutin.core.REGLAGES_DEFAUT: a setting added without a v1 name fails a test.
+SETTINGS = {
+    "model": ("modele", "string"), "engine": ("moteur", "string"), "machine": ("machine", "string"), "models_by_engine": ("modeles_par_moteur", "object"),
+    "auxiliary_model": ("modele_annexe", "string"), "embedding_model": ("modele_embeddings", "string"),
+    "mode": ("mode", "string"), "advanced": ("avance", "boolean"), "web": ("web", "boolean"), "dry_run": ("essai_a_blanc", "boolean"),
+    "thinking": ("reflexion", "boolean"), "thinking_steps": ("reflexion_tours", "string"), "max_steps": ("tours_max", "integer"),
+    "auto_approve_writes": ("auto_ecriture", "boolean"), "auto_approve_commands": ("auto_commandes", "boolean"),
+    "num_ctx": ("num_ctx", "integer"), "num_predict": ("num_predict", "integer"), "temperature": ("temperature", "number"), "top_p": ("top_p", "number?"),
+    "top_k": ("top_k", "number?"), "min_p": ("min_p", "number?"), "repeat_penalty": ("repeat_penalty", "number?"), "num_thread": ("num_thread", "integer?"),
+    "keep_alive_min": ("garde_min", "integer?"),
+    "resource_guard": ("garde_ressources", "boolean"), "ram_threshold_gb": ("seuil_ram_go", "number"), "disk_threshold_gb": ("seuil_disque_go", "number"),
+    "data_cap_gb": ("plafond_donnees_go", "number"), "command_ram_limit_gb": ("limite_ram_commande_go", "number"), "free_for_comfyui": ("liberer_si_comfy", "boolean"),
+    "machine_advice": ("conseil_machine", "boolean"), "routing": ("routage", "boolean"), "cluster": ("cluster", "boolean?"),
+    "conversation_backup": ("copie_conversations", "boolean"),
+    "long_memory": ("memoire_longue", "string"), "progress_sheet_share": ("fiche_part", "integer"), "progress_sheet_scribe": ("fiche_scribe", "boolean"),
+    "auto_recall": ("rappels_auto", "string"), "semantic_search": ("recherche_sens", "boolean"),
+    "disabled_tools": ("outils_desactives", "strings"), "tool_command_timeout_s": ("outil_delai_commande_s", "integer"), "tool_output_max": ("outil_sortie_max", "integer"),
+    "tool_read_max": ("outil_lecture_max", "integer"), "tool_search_timeout_s": ("outil_chercher_delai_s", "integer"),
+    "commands_without_approval": ("commandes_sans_accord", "strings"), "extra_ignored_folders": ("dossiers_ignores_en_plus", "strings"),
+}
+# Settings whose value is a word: {v1 name: {stored word: v1 word}}. Tool names (disabled_tools) are what the models see: not translated (ADR 0007).
+SETTING_WORDS = {
+    "mode": {"polyvalent": "general", "technique": "technical", "scenario": "scenario", "recherche": "research", "discussion": "chat"},
+    "thinking_steps": {"toujours": "always", "premier": "first"},
+    "long_memory": {"resume": "summary", "fichier": "file", "demander": "ask"},
+    "auto_recall": {"scenario": "scenario", "toujours": "always", "jamais": "never"},
+}
+KINDS = {"boolean": lambda v: isinstance(v, bool), "integer": lambda v: isinstance(v, int) and not isinstance(v, bool),
+         "number": lambda v: isinstance(v, (int, float)) and not isinstance(v, bool), "string": lambda v: isinstance(v, str),
+         "strings": lambda v: isinstance(v, list) and all(isinstance(item, str) for item in v),
+         "object": lambda v: isinstance(v, dict) and all(isinstance(item, str) for item in v.values())}
+
+
+def _settings(stored):
+    shown = {}
+    for name, (key, _) in SETTINGS.items():
+        value = stored.get(key)
+        shown[name] = SETTING_WORDS[name].get(value, value) if name in SETTING_WORDS else value
+    return shown
+
+
+@route("GET", "/settings", SESSION)
+def settings(request):
+    return _settings(_m.reglages())
+
+
+@route("PATCH", "/settings", SESSION)
+def update_settings(request):
+    """Changes some settings: {"temperature": 0.4, "web": false}. All or nothing: one unknown name or one value of the wrong kind and nothing is written.
+    The values are then checked and bounded by the function the French route calls; the answer is every setting as it now stands."""
+    body, changed = request.body, {}
+    unknown = sorted(set(body) - set(SETTINGS))
+    if unknown:
+        raise ApiError(400, "invalid_request", _t("Réglage inconnu : {}.").format(", ".join(unknown)))
+    if not body:
+        return _settings(_m.reglages())
+    for name, value in body.items():
+        key, kind = SETTINGS[name]
+        words = {v1: stored for stored, v1 in SETTING_WORDS.get(name, {}).items()}
+        expected = ", ".join(words) if words else kind.rstrip("?") + (" or null" if kind.endswith("?") else "")
+        if not ((value is None and kind.endswith("?")) or (value is not None and KINDS[kind.rstrip("?")](value))) or (words and value not in words):
+            raise ApiError(400, "invalid_request", _t("Valeur invalide pour « {} » (attendu : {}).").format(name, expected))
+        changed[key] = words[value] if words else value
+    stored = _m.enregistrer_reglages(changed)
+    if changed.get("cluster") is False:
+        _machines.vider_listes()                           # multi-machine mode switched off: no model and no conversation of another machine is kept
+    return _settings(stored)
 
 
 # --------------------------------------------------------------------------------------------------------- conversations

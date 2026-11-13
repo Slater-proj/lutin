@@ -41,6 +41,16 @@
  },
  {
   "method": "GET",
+  "path": "/api/v1/settings",
+  "right": "session"
+ },
+ {
+  "method": "PATCH",
+  "path": "/api/v1/settings",
+  "right": "session"
+ },
+ {
+  "method": "GET",
   "path": "/api/v1/status",
   "right": "session"
  }
