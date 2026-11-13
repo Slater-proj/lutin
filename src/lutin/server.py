@@ -24,6 +24,7 @@ from . import external_programs as _outils_externes
 from . import calibration as _calibrage
 from . import access as _acces
 from . import api_v1 as _api_v1
+from . import web_app as _web_app
 from . import model_fit as _adequation
 from . import exllamav3_catalog as _exl_cat
 from . import lmstudio_catalog as _lms_cat
@@ -383,6 +384,25 @@ class Gestionnaire(BaseHTTPRequestHandler):
             page = page.replace('<html lang="fr">', '<html lang="{}">'.format(_i18n.langue()))
         return self._envoyer(200, page, "text/html; charset=utf-8")
 
+    def _nouvelle_interface(self, chemin):
+        """`/app/` : la page construite depuis `frontend/` et ses fichiers (lutin.web_app). Rien n'est servi sans session ; la page reçoit le jeton comme l'ancienne."""
+        reste = chemin[len(_web_app.PREFIX):]
+        if reste.startswith("assets/"):
+            if not self._authentifie():
+                return self._envoyer(401, {"erreur": "authentification requise"})
+            fichier = _web_app.asset(reste[len("assets/"):])
+            if fichier is None:
+                return self._envoyer(404, {"erreur": "introuvable"})
+            return self._envoyer(200, fichier[0], fichier[1])
+        if reste not in ("", "index.html"):
+            return self._envoyer(404, {"erreur": "introuvable"})
+        if not self._authentifie():
+            return self._page_connexion()
+        page = _web_app.page(_m.JETON, _m.VERSION, _i18n.langue())
+        if page is None:
+            return self._envoyer(404, _web_app.NOT_BUILT, "text/html; charset=utf-8")
+        return self._envoyer(200, page, "text/html; charset=utf-8", {"Content-Security-Policy": _web_app.CSP})
+
     def do_GET(self):
         chemin = self.path.split("?")[0]
         if not self._controle(False):
@@ -395,6 +415,8 @@ class Gestionnaire(BaseHTTPRequestHandler):
             return self._vers_hote("GET")
         if chemin == "/api/noeud/etat":                        # une autre machine demande si ce Lutin peut faire tourner un modèle : jeton de nœud, rien d'autre n'est ouvert
             return self._noeud_etat()
+        if chemin.startswith("/app/"):                           # la nouvelle interface (ADR 0002), à côté de cette page jusqu'à parité
+            return self._nouvelle_interface(chemin)
         if chemin in ("/", "/index.html") and not self._authentifie():
             return self._page_connexion()
         if chemin.startswith("/api/"):
