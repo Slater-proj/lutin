@@ -152,13 +152,16 @@ SORTIE_MAX = 9000
 def construire_commandes_lecture(posix, en_plus=()):
     """Les lectures simples lancées sans accord : git en lecture, echo, et les commandes de lecture du système (dir / type / where sous Windows ; ls / cat / pwd / which ailleurs).
     `en_plus` : des commandes sûres ajoutées par l'utilisateur (Réglages > Outils), déjà validées : la commande exacte, ou suivie d'arguments sans enchaînement."""
-    commun = r"git (status|diff|log|show|branch|ls-files)\b[^|&;<>]*|python -V|echo [^|&;<>]*"
-    systeme = r"ls\b[^|&;<>]*|cat [^|&;<>]+|pwd|which [^|&;<>]+" if posix else r"dir\b[^|&;<>]*|type [^|&;<>]+|where [^|&;<>]+"
-    perso = "".join("|" + re.escape(c) + r"(?: [^|&;<>]+)?" for c in en_plus)
-    return re.compile("^(" + commun + "|" + systeme + perso + ")$", re.I)
+    a = r"[^|&;<>`$\x00-\x08\x0a-\x1f]"          # un argument : ni enchaînement, ni redirection, ni substitution, ni retour à la ligne (pour sh, une seconde commande)
+    commun = r"git (status|diff|log|show|branch|ls-files)\b" + a + r"*|python -V|echo " + a + "*"
+    systeme = (r"ls\b" + a + r"*|cat " + a + r"+|pwd|which " + a + "+") if posix else (r"dir\b" + a + r"*|type " + a + r"+|where " + a + "+")
+    perso = "".join("|" + re.escape(c) + r"(?: " + a + "+)?" for c in en_plus)
+    return re.compile("^(" + commun + "|" + systeme + perso + r")\Z", re.I)          # \Z et non $ : « $ » accepte un retour à la ligne final
 
 
+# Cette liste blanche n'est qu'un premier filtre : ce qui la passe est ensuite relu argument par argument et lancé SANS shell (voir lutin.safe_commands, outils.plan_lecture).
 COMMANDES_LECTURE = construire_commandes_lecture(os.name != "nt")
+COMMANDES_SANS_ACCORD = ()          # les commandes que l'utilisateur a déclarées sûres (Réglages > Outils), posées par reglages_outils.appliquer
 DOSSIERS_IGNORES = {".git", "__pycache__", "node_modules", ".venv", "venv", ".idea", ".vscode", "dist", "build", ".pytest_cache", ".ruff_cache", ".mypy_cache", "target"}
 DOSSIERS_IGNORES_BASE = frozenset(DOSSIERS_IGNORES)          # ceux de Lutin ; Réglages > Outils peut en ajouter (voir reglages_outils)
 DELAI_COMMANDE_S = 240          # temps maximal d'une commande de l'outil « executer » (réglable : Réglages > Outils)

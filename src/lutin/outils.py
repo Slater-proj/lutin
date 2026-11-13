@@ -16,6 +16,7 @@ import threading
 import time
 import urllib.request
 from . import moteur as _m
+from . import safe_commands as _safe
 
 
 # --------------------------------------------------------------------------- outils de l'agent
@@ -637,9 +638,27 @@ def construire_hors_projet(posix):
 RE_HORS_PROJET = construire_hors_projet(os.name != "nt")
 
 
+def _chemin_confine(chemin):
+    """Le chemin résolu s'il reste dans le dossier de travail (et hors des données de Lutin), sinon None : la règle de `chemin_sur`, sans exception."""
+    try:
+        return chemin_sur(chemin)
+    except _m.ErreurOutil:
+        return None
+
+
+def plan_lecture(commande):
+    """Comment lancer cette commande SANS accord et SANS shell, ou None si ce n'est pas une lecture sûre (voir lutin.safe_commands).
+    Trois contrôles, tous nécessaires : la liste blanche, aucun chemin hors du projet, puis un validateur propre à chaque programme qui relit chaque argument."""
+    commande = str(commande or "").strip()
+    if not _m.COMMANDES_LECTURE.match(commande) or RE_HORS_PROJET.search(commande):
+        return None
+    return _safe.plan(commande, posix=os.name != "nt", confine=_chemin_confine, root=_m.RACINE, extra=_m.COMMANDES_SANS_ACCORD)
+
+
 def commande_lecture_sure(commande):
-    """Une lecture simple (sans accord) : dans la liste blanche, sans chemin hors du projet (lecteur, réseau, « .. ») ni écriture déguisée (--output)."""
-    return bool(_m.COMMANDES_LECTURE.match(commande)) and not RE_HORS_PROJET.search(commande)
+    """Une lecture simple (sans accord) : dans la liste blanche, sans chemin hors du projet (lecteur, réseau, « .. ») ni écriture déguisée (--output),
+    et que Lutin sait lancer sans passer par un shell (aucune variable développée, aucune substitution, aucun enchaînement)."""
+    return plan_lecture(commande) is not None
 
 
 def tuer_arbre(pid):
@@ -789,11 +808,22 @@ def outil_executer(commande, ctx, shell="cmd"):
     shell = (shell or "cmd").strip().lower()
     if shell not in ("cmd", "powershell"):
         raise _m.ErreurOutil(_t("Shell inconnu « {} ». Utilise « cmd » (défaut) ou « powershell ».").format(shell))
-    lecture = commande_lecture_sure(commande) if shell == "cmd" else False
-    if not lecture and not ctx["accord"](_t("Lancer une commande ({})").format(shell), commande, "", auto=ctx.get("auto_commandes", False)):
+    lecture = plan_lecture(commande) if shell == "cmd" else None
+    if lecture is None and not ctx["accord"](_t("Lancer une commande ({})").format(shell), commande, "", auto=ctx.get("auto_commandes", False)):
         return refus(ctx, _t("Refusé par l'utilisateur : la commande n'a pas été lancée."))
     stop = ctx.get("stop")
-    if shell == "powershell":
+    if lecture is not None:                              # lecture sans accord : jamais de shell (rien ne peut être développé ni enchaîné après le contrôle)
+        if lecture.kind == _safe.ECHO:
+            return _t("Code de sortie {}.\n{}").format(0, lecture.text + "\n")
+        if lecture.kind == _safe.LIST:
+            return _t("Code de sortie {}.\n{}").format(0, outil_lister(lecture.paths[0]))
+        if lecture.kind == _safe.READ:
+            return _t("Code de sortie {}.\n{}").format(0, "\n\n".join(outil_lire(p) if len(lecture.paths) == 1 else "{}\n\n{}".format(p, outil_lire(p)) for p in lecture.paths))
+        try:
+            code, sortie, raison = lancer_processus(list(lecture.argv), False, str(_m.RACINE), stop, delai=_m.DELAI_COMMANDE_S, limite_ram=ctx.get("limite_ram", 0))
+        except OSError:
+            raise _m.ErreurOutil(_t("Programme introuvable : {}").format(lecture.argv[0]))
+    elif shell == "powershell":
         exe_ps = "powershell" if os.name == "nt" else shutil.which("pwsh")
         if not exe_ps:
             raise _m.ErreurOutil(_t("PowerShell n'est pas installé sur cette machine : utilise le shell par défaut."))

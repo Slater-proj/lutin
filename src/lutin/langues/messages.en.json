@@ -336,6 +336,7 @@
 "... (liste coupée)": "... (list cut)",
 "(dossier vide)": "(empty folder)",
 "Fichier introuvable : ": "File not found: ",
+"Programme introuvable : {}": "Program not found: {}",
 "Fichier trop gros pour être lu (plus de 6 Mo).": "File too big to be read (more than 6 MB).",
 "... (coupé : demande la suite avec debut={})": "... (cut: ask for the rest with debut={})",
 "{} : lignes {} à {} sur {}\n": "{}: lines {} to {} of {}\n",

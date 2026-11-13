@@ -78,3 +78,4 @@ def appliquer(r, m):
     m.DELAI_COMMANDE_S, m.SORTIE_MAX, m.LECTURE_MAX, m.CHERCHER_DELAI = cle[0], cle[1], cle[2], cle[3]
     m.DOSSIERS_IGNORES = set(m.DOSSIERS_IGNORES_BASE) | set(cle[5])
     m.COMMANDES_LECTURE = m.construire_commandes_lecture(m.os.name != "nt", cle[4])
+    m.COMMANDES_SANS_ACCORD = cle[4]
