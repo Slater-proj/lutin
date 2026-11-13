@@ -797,6 +797,8 @@ def chemin_ollama():
     exe = shutil.which("ollama")
     if exe:
         return exe
+    if os.environ.get("LUTIN_TESTS") == "1":          # tests never look at the real machine's standard install folders (tests/context.py also removes Ollama from the PATH)
+        return ""
     for base in (os.environ.get("LOCALAPPDATA", ""), os.environ.get("ProgramFiles", "")):
         c = Path(base) / "Programs" / "Ollama" / "ollama.exe" if base else None
         if c and c.is_file():
