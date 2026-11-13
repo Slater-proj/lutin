@@ -41,6 +41,21 @@
  },
  {
   "method": "GET",
+  "path": "/api/v1/models",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/models",
+  "right": "session"
+ },
+ {
+  "method": "DELETE",
+  "path": "/api/v1/models/{name}",
+  "right": "session"
+ },
+ {
+  "method": "GET",
   "path": "/api/v1/settings",
   "right": "session"
  },

@@ -162,6 +162,8 @@ def dispatch(handler, method):
             status, payload = result if isinstance(result, tuple) else (200, result)
     except ApiError as refused:
         status, payload = refused.status, error(refused.code, refused.message)
+    except _offline.HorsLigne as offline:                  # strict offline mode: the action needs the network
+        status, payload = 409, error("offline", str(offline))
     except ValueError as invalid:                          # the functions underneath say what is wrong with a ValueError written for the user
         status, payload = 400, error("invalid_request", str(invalid))
     if streamed is not None:                               # outside the `try`: once the first line is sent, no error answer can follow it
@@ -260,6 +262,41 @@ def update_settings(request):
     if changed.get("cluster") is False:
         _machines.vider_listes()                           # multi-machine mode switched off: no model and no conversation of another machine is kept
     return _settings(stored)
+
+
+# ---------------------------------------------------------------------------------------------------------------- models
+DOWNLOAD_STATES = {"en cours": "downloading", "termine": "done", "erreur": "failed"}
+
+
+def _download(name, stored):
+    return {"name": name, "state": DOWNLOAD_STATES.get(stored.get("statut"), "failed"), "done_bytes": int(stored.get("fait") or 0), "total_bytes": int(stored.get("total") or 0),
+            "text": str(stored.get("texte") or ""), "restart_engine_advised": stored.get("aide") == "redemarrer"}
+
+
+@route("GET", "/models", SESSION)
+def models(request):
+    """What the model selector needs: the models of the chosen engine, the one in use, and the downloads started since Lutin was launched."""
+    state = _m.etat_moteur()
+    sizes = state.get("tailles") or {}
+    return {"engine": _m.moteur_actuel().id, "running": bool(state["actif"]), "current": str(_m.reglages().get("modele") or ""),
+            "models": [{"name": name, "size_bytes": sizes.get(name)} for name in state["installes"]],
+            "downloads": [_download(name, stored) for name, stored in sorted(_m.PULLS.items())]}
+
+
+@route("POST", "/models", SESSION)
+def install_model(request):
+    """Starts the download of a model: {"name": "qwen3:8b"}. Answers at once (202) with the state of the download; `GET /models` then follows it."""
+    name = request.body.get("name")
+    if set(request.body) - {"name"} or not isinstance(name, str):
+        raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("name"))
+    return 202, _download(name, _m.installer_modele(name))
+
+
+@route("DELETE", "/models/{name}", SESSION)
+def delete_model(request):
+    """Deletes an installed model. The model in use may be deleted: `current` is the one Lutin switched to, or the same name when there is no other."""
+    _m.supprimer_modele(request.params["name"])
+    return {"deleted": True, "current": str(_m.reglages().get("modele") or "")}
 
 
 # --------------------------------------------------------------------------------------------------------- conversations

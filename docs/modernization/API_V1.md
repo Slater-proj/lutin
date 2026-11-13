@@ -1,7 +1,7 @@
 # `/api/v1`: design
 
 The contract the new interface will be built on ([ADR 0001](../adr/0001-english-and-clean-break-at-1.0.md), [ADR 0002](../adr/0002-frontend-svelte-typescript-vite.md)).
-This page fixes the rules. Implemented so far (`src/lutin/api_v1.py`, contract in `tests/test_api_v1.py` and `tests/fixtures/api_v1_routes.json`): the dispatcher with declared rights and coded errors, `GET /status`, the settings (read, change), the conversations (list, create, read, rename/pin, delete, stop), the turn stream and the answer to an approval. Not yet: models, engines and everything else. The present contract — 184 exact routes, 17 prefixes, 15 stream events, the right each route asks —
+This page fixes the rules. Implemented so far (`src/lutin/api_v1.py`, contract in `tests/test_api_v1.py` and `tests/fixtures/api_v1_routes.json`): the dispatcher with declared rights and coded errors, `GET /status`, the settings (read, change), the conversations (list, create, read, rename/pin, delete, stop), the turn stream and the answer to an approval, the models (list, install, delete). Not yet: engines and everything else. The present contract — 184 exact routes, 17 prefixes, 15 stream events, the right each route asks —
 is inventoried in `tests/fixtures/api_contract.json` and enforced by `tests/test_api_contract.py` and `tests/test_api_access.py`.
 
 ## Why not rename the present routes in place
@@ -21,7 +21,7 @@ routes disappear with the old page, in one deletion.
    No behaviour ever depends on the wording again: today the server appends a hint when a refusal contains the French words « cette machine ». That cannot
    work once the caller has already translated the message, and it misses two refusals worded « depuis la machine de Lutin ».
 4. **Status codes mean one thing each.** `400` invalid request, `401` no session, `403` session without the right (code says which: `page_token`, `configurator`,
-   `local_only`, `node_right`), `404` unknown, `409` conflicts with a running turn, `413` too large, `429` too many attempts, `503` engine unavailable.
+   `local_only`, `node_right`), `404` unknown, `409` conflict with the present state (`turn_running`, `workspace_conflict`, `offline`), `413` too large, `429` too many attempts, `503` engine unavailable.
 5. **Rights are declared, not scattered.** Each route of the table states one of: `public`, `session`, `configurator`, `local`, `node`. The check is done once,
    by the dispatcher, before the handler runs. The access test then reads the table instead of the source.
 6. **The stream keeps its format** (`application/x-ndjson`, one JSON object per line, a heartbeat line to stay open behind a proxy) with English event names:
@@ -86,6 +86,13 @@ routes disappear with the old page, in one deletion.
   it is chosen conversation by conversation. Tool names (`disabled_tools`) are what the models see and are not translated (ADR 0007).
 - A write is all or nothing: an unknown name or a value of the wrong kind answers `400 invalid_request` and nothing is stored. Values are then checked
   and bounded by the function the French route calls (a dangerous command in `commands_without_approval` is refused, `max_steps` is kept within 4-40…).
+
+## Models
+
+`GET /api/v1/models` gives what the model selector needs: `engine`, `running`, `current`, `models` (`[{"name", "size_bytes"}]`, the size may be null) and
+`downloads` (`[{"name", "state", "done_bytes", "total_bytes", "text", "restart_engine_advised"}]`, state `downloading`, `done` or `failed`).
+`POST /api/v1/models` with `{"name"}` starts a download and answers `202` with its state; `DELETE /api/v1/models/{name}` deletes a model and says which
+one is now `current`. A name that contains `/` is percent-encoded in the path. In strict offline mode a download is refused with `409 offline`.
 
 ## What v1 keeps
 
