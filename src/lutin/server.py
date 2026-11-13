@@ -364,12 +364,16 @@ class Gestionnaire(BaseHTTPRequestHandler):
     def _controle(self, ecriture):
         """Nom d'hôte (contre le « DNS rebinding ») et origine (contre les requêtes venues d'autres sites). Répond lui-même en cas de refus."""
         if not _sec.hote_autorise(_m.SECURITE, self.headers.get("Host"), _m.IP_LAN):
-            self._envoyer(403, {"erreur": "nom d'hôte non autorisé"})
-            return False
-        if ecriture and not _sec.origine_autorisee(_m.SECURITE, self.headers.get("Origin"), self.headers.get("Host"), _m.IP_LAN):
-            self._envoyer(403, {"erreur": "origine non autorisée"})
-            return False
-        return True
+            code, message = "host_not_allowed", "nom d'hôte non autorisé"
+        elif ecriture and not _sec.origine_autorisee(_m.SECURITE, self.headers.get("Origin"), self.headers.get("Host"), _m.IP_LAN):
+            code, message = "origin_not_allowed", "origine non autorisée"
+        else:
+            return True
+        if self.path.split("?")[0].startswith("/api/v1/"):      # l'API versionnée refuse dans SA forme (un code, un message) et lit le corps avant de répondre
+            _api_v1.refuse(self, 403, code, message)
+        else:
+            self._envoyer(403, {"erreur": message})
+        return False
 
     def _page_connexion(self):
         page = _m.PAGE_CONNEXION
@@ -773,6 +777,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
         if not self._controle(True):
             return
         if not self.path.split("?")[0].startswith("/api/v1/"):
+            _api_v1.discard_body(self)                             # un refus sans lire le corps fait réinitialiser la connexion chez l'appelant, même pour deux octets
             return self._envoyer(404, {"erreur": "introuvable"})
         return _api_v1.dispatch(self, methode)
 

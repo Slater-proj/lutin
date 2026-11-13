@@ -111,10 +111,12 @@ class Rights(unittest.TestCase):
         self.assertEqual(call("GET", "/api/v1/nothing-here", DEVICE), (404, {"error": {"code": "not_found", "message": "Route inconnue."}}))
 
     def test_a_write_from_another_site_is_refused_before_anything(self):
-        status, _ = call("POST", "/api/v1/conversations", dict(OWNER, Origin="https://evil.example"), body={})
-        self.assertEqual(status, 403)
-        status, _ = call("DELETE", "/api/v1/conversations/0123abcd", dict(OWNER, Origin="https://evil.example"))
-        self.assertEqual(status, 403)
+        refused = (403, {"error": {"code": "origin_not_allowed", "message": "origine non autorisée"}})
+        self.assertEqual(call("POST", "/api/v1/conversations", dict(OWNER, Origin="https://evil.example"), body={}), refused)
+        self.assertEqual(call("DELETE", "/api/v1/conversations/0123abcd", dict(OWNER, Origin="https://evil.example")), refused)
+        self.assertEqual(call("POST", "/api/v1/conversations", dict(OWNER, Origin="https://evil.example"), raw=b"a" * 300_000), refused, "its body is read before the answer")
+        self.assertEqual(call("GET", "/api/v1/status", dict(OWNER, Host="evil.example")), (403, {"error": {"code": "host_not_allowed", "message": "nom d'hôte non autorisé"}}))
+        self.assertEqual(call("GET", "/api/etat", dict(OWNER, Host="evil.example")), (403, {"erreur": "nom d'hôte non autorisé"}), "the French routes keep their shape")
 
     def test_patch_and_delete_exist_only_under_v1(self):
         self.assertEqual(call("DELETE", "/api/supprimer", OWNER)[0], 404)
@@ -155,7 +157,7 @@ class Errors(unittest.TestCase):
             api_v1._read_body(caller)
         self.assertEqual((refused.exception.status, caller.rfile.read(), caller.close_connection), (413, b"", False))
         caller = Caller(100, 100)
-        api_v1._discard_body(caller)
+        api_v1.discard_body(caller)
         self.assertEqual(caller.rfile.read(), b"", "a body sent with a method that takes none")
         caller = Caller(api_v1.DISCARD_MAX + 1, 100)
         with self.assertRaises(api_v1.ApiError):
