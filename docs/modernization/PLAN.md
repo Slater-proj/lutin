@@ -38,8 +38,11 @@ Remaining, each its own commit:
    engine catalogue; refuse an unsigned release from a given version on. Needs a key ceremony by the maintainer.
 2. ~~Release workflow~~ — done: release channel and pre-releases (ADR 0004, [PUBLISHING.md](../PUBLISHING.md)).
 3. **Windows installer signing** (decision already recorded as postponed in DECISIONS.md): to reconsider before 1.0, it conditions adoption by beginners.
-4. **Security review of what the audit did not cover** (M): machine-to-machine relay (`machines.py`), MCP connectors, third-party skills, add-ons,
-   document extraction, backup restore. The audit read none of them in depth.
+4. **Security review of what the audit did not cover** (M) — partly done (2026-11-13). Read, nothing to fix: backup restore (`sauvegarde.py`: names checked against a closed list,
+   links and oversize refused, previous state kept), installation of third-party skills (`skills_tiers.installer`: paths checked, never executed, danger and licence confirmed),
+   the relay whitelist (`serveur._relais`: closed list of routes, no access-changing route), document extraction limits, upload names (random identifiers).
+   One documentation error found and corrected: SECURITY_AUDIT stated a paired machine can never read files; the optional « lead conversations » right lets it run and approve actions.
+   **Still not read in depth**: the rest of `machines.py` (pairing, probes, wake-up, imports), the MCP client (`mcp.py`), the add-on modules, `ouverture.py`.
 5. **Logic tied to message text** (S): `serveur.py` recognises a refusal by the French words « cette machine »; replace by an error code. Fits naturally in step 2.
 6. ~~Add-on downloads~~ — not retained: `addons_comfyui` only downloads over HTTPS from a fixed list of hosts (Hugging Face, Civitai) and controls each redirection against that list; pinning the address adds nothing there.
 
