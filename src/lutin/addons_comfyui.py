@@ -628,7 +628,7 @@ def _afficher(fichiers, ctx):
         try:
             p = (sortie / f_).resolve()
             if sortie in p.parents and p.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp", ".gif") and p.is_file():
-                ident = images.enregistrer(p.read_bytes())
+                ident = images.save(p.read_bytes())
                 ids.append(ident)
                 ctx.setdefault("medias_fichiers", {})[ident] = str(p)
         except (OSError, ValueError):

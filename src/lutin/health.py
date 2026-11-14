@@ -399,7 +399,7 @@ def run_selftest(profond=False):
         return "lecture et remplacement de texte dans le projet"
 
     def plan_et_rappel():
-        _m.PLAN["sections"] = _m.construire_plan()
+        _m.PLAN["sections"] = _m.build_plan()
         _m.recall_tool("assistant", 1)
         return "plan du projet : {} dossier(s) ; recherche dans les documents prête".format(len(_m.PLAN["sections"]))
 

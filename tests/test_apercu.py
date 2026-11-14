@@ -36,11 +36,11 @@ class Apercu(unittest.TestCase):
 
     def setUp(self):
         (_m.RACINE / "page.html").write_text("<html></html>", encoding="utf-8")
-        self.vrai = page_preview.navigateur
-        page_preview.navigateur = lambda: [sys.executable, str(FAUX)]
+        self.vrai = page_preview.browser
+        page_preview.browser = lambda: [sys.executable, str(FAUX)]
 
     def tearDown(self):
-        page_preview.navigateur = self.vrai
+        page_preview.browser = self.vrai
 
     def test_la_capture_est_montree_et_le_texte_rendu_au_modele(self):
         ctx = self.ctx()
@@ -52,7 +52,7 @@ class Apercu(unittest.TestCase):
         self.assertIn("demarrer is not defined", res)
         self.assertIn("1 erreur(s)", res)
         self.assertIn("bonjour de la page", res)
-        octets, mime = images.lire(ctx["medias"][0])
+        octets, mime = images.read_image(ctx["medias"][0])
         self.assertEqual(mime, "image/png")
         self.assertTrue(octets.startswith(b"\x89PNG"))
 
@@ -71,13 +71,13 @@ class Apercu(unittest.TestCase):
     def test_seuls_les_fichiers_du_projet_et_les_adresses_locales(self):
         for cible in ("https://example.com/", "http://192.168.1.5/x", "../dehors.html", "inexistant.html", "file:///C:/Windows/win.ini"):
             with self.assertRaises(_m.ErreurOutil, msg=cible):
-                page_preview.adresse(cible)
-        self.assertTrue(page_preview.adresse("page.html").startswith("file:///"))
-        self.assertEqual(page_preview.adresse("http://127.0.0.1:8000/a"), "http://127.0.0.1:8000/a")
-        self.assertEqual(page_preview.adresse("http://localhost/"), "http://localhost/")
+                page_preview.address(cible)
+        self.assertTrue(page_preview.address("page.html").startswith("file:///"))
+        self.assertEqual(page_preview.address("http://127.0.0.1:8000/a"), "http://127.0.0.1:8000/a")
+        self.assertEqual(page_preview.address("http://localhost/"), "http://localhost/")
 
     def test_sans_navigateur_le_message_est_clair(self):
-        page_preview.navigateur = lambda: None
+        page_preview.browser = lambda: None
         with self.assertRaises(_m.ErreurOutil) as e:
             change_review.call_tool("apercu_page", {"chemin": "page.html"}, self.ctx())
         self.assertIn("Aucun navigateur", str(e.exception))

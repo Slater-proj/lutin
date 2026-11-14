@@ -16,7 +16,7 @@ def advised_model(profil, catalogue):
     if profil is None:
         return None
     try:
-        choix = model_selection.choisir(profil, catalogue)
+        choix = model_selection.choose(profil, catalogue)
     except (KeyError, TypeError, ValueError):
         return None
     for role in ("polyvalent", "rapide"):

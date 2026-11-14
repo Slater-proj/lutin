@@ -83,7 +83,7 @@ class Base(unittest.TestCase):
         self.dossiers = {"donnees": self.tmp}
         self.travail = self.tmp / "projet-travail"
         self.travail.mkdir()
-        for f in (S._fichier_sources(), github._chemin()):
+        for f in (S._fichier_sources(), github._path()):
             try:
                 f.unlink()
             except OSError:
@@ -189,7 +189,7 @@ class Limite(Base):
             self.assertIn(attendu, t)
 
     def test_avec_un_compte_on_ne_le_conseille_plus(self):
-        github.enregistrer("ghp_" + "a" * 36)
+        github.save("ghp_" + "a" * 36)
         gh = FauxGithub({"o/r": depot_type()})
         gh.limite = True
         with self.assertRaises(ValueError) as e:
@@ -207,30 +207,30 @@ class CompteGithub(Base):
     def test_le_jeton_est_controle_range_et_jamais_renvoye(self):
         for mauvais in ("abc", "ghp_ avec espace et trop court", "x" * 300, "ghp_" + "é" * 30):
             with self.assertRaises(ValueError, msg=mauvais):
-                github.enregistrer(mauvais)
+                github.save(mauvais)
         jeton = "ghp_" + "Ab1_" * 9
-        v = github.enregistrer(jeton)
+        v = github.save(jeton)
         self.assertEqual(v, {"configure": True, "fin": jeton[-4:], "source": "reglages"})
         self.assertNotIn(jeton, json.dumps(v))
-        self.assertEqual(github.jeton(), jeton)
+        self.assertEqual(github.github_token(), jeton)
         if os.name != "nt":
-            self.assertEqual(oct(github._chemin().stat().st_mode)[-3:], "600")
-        self.assertEqual(github.enregistrer(""), {"configure": False, "fin": "", "source": ""})
-        self.assertFalse(github._chemin().exists())
+            self.assertEqual(oct(github._path().stat().st_mode)[-3:], "600")
+        self.assertEqual(github.save(""), {"configure": False, "fin": "", "source": ""})
+        self.assertFalse(github._path().exists())
 
     def test_la_variable_d_environnement_l_emporte(self):
-        github.enregistrer("ghp_" + "a" * 36)
+        github.save("ghp_" + "a" * 36)
         os.environ["GITHUB_TOKEN"] = "ghp_" + "z" * 36
-        self.assertEqual((github.jeton()[-4:], github.vue()["source"]), ("zzzz", "environnement"))
+        self.assertEqual((github.github_token()[-4:], github.view()["source"]), ("zzzz", "environnement"))
 
     def test_le_jeton_ne_part_que_vers_l_api_de_github(self):
-        github.enregistrer("ghp_" + "a" * 36)
-        self.assertEqual(github.entetes_pour("https://api.github.com/repos/o/r"), {"Authorization": "Bearer ghp_" + "a" * 36})
+        github.save("ghp_" + "a" * 36)
+        self.assertEqual(github.headers_for("https://api.github.com/repos/o/r"), {"Authorization": "Bearer ghp_" + "a" * 36})
         for ailleurs in ("https://github.com/o/r", "https://raw.githubusercontent.com/o/r/HEAD/x", "https://api.github.com.evil.org/x", "https://huggingface.co/api/models", "pas une adresse"):
-            self.assertEqual(github.entetes_pour(ailleurs), {}, ailleurs)
+            self.assertEqual(github.headers_for(ailleurs), {}, ailleurs)
 
     def test_toute_requete_de_l_application_vers_github_porte_le_compte(self):
-        github.enregistrer("ghp_" + "a" * 36)
+        github.save("ghp_" + "a" * 36)
         envoyees = []
 
         class Reponse:
@@ -258,12 +258,12 @@ class CompteGithub(Base):
             if url.endswith("/rate_limit"):
                 return 200, {}, json.dumps({"resources": {"core": {"limit": 5000, "remaining": 4990, "reset": 1893456000}}}).encode()
             return 200, {}, json.dumps({"login": "poube"}).encode()
-        self.assertEqual(github.tester(http)["limite"], 5000)
-        github.enregistrer("ghp_" + "a" * 36)
-        r = github.tester(http)
+        self.assertEqual(github.test_token(http)["limite"], 5000)
+        github.save("ghp_" + "a" * 36)
+        r = github.test_token(http)
         self.assertEqual((r["identifie"], r["compte"], r["restantes"]), (True, "poube", 4990))
         with self.assertRaises(ValueError) as e:
-            github.tester(lambda url, entetes=None: (401, {}, b""))
+            github.test_token(lambda url, entetes=None: (401, {}, b""))
         self.assertIn("refuse ce jeton", str(e.exception))
 
 

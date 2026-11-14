@@ -52,7 +52,7 @@ class Conseils(unittest.TestCase):
         self.assertIn("55 % dessus", textes(l))
 
     def test_modele_rapide_deja_installe_et_dans_les_deux_langues(self):
-        choix = performance_advice.model_selection.choisir(pc(None, 32.0), CAT)["rapide"]
+        choix = performance_advice.model_selection.choose(pc(None, 32.0), CAT)["rapide"]
         l = performance_advice.analyze({"tok_s": 4.0}, pc(None, 32.0), {"modele": "gros:70b", "num_ctx": 4096}, CAT, [choix.id])
         self.assertIn("déjà installé", textes(l))
         with mock.patch.dict(os.environ, {"LUTIN_LANGUE": "en"}):

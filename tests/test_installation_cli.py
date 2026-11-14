@@ -370,7 +370,7 @@ class DejaInstalle(unittest.TestCase):
     def test_reconfigurer_ne_retelecharge_pas_ce_qui_est_deja_la(self):
         profil = GROS
         from lutin import model_selection
-        choix = model_selection.choisir(profil, model_catalog.charger())
+        choix = model_selection.choose(profil, model_catalog.charger())
         INSTALLES[choix["polyvalent"].id] = "d"
         e, sortie = es(oui=True)
         cfg = self.lancer(e, reconfigurer=True, travail=str(Path(self.t.name) / "w"))

@@ -14,14 +14,14 @@ from pathlib import Path
 
 from .i18n import t as _t
 
-MEMOIRE_MINI_GO = 8.0
+MIN_MEMORY_GB = 8.0
 
 
-def en_conteneur(env=None):
+def in_container(env=None):
     return (os.environ if env is None else env).get("LUTIN_DOCKER") == "1"
 
 
-def points_de_montage(texte):
+def mount_points(texte):
     """Les dossiers montés d'après le contenu de /proc/self/mountinfo (5e champ de chaque ligne)."""
     sortie = set()
     for ligne in texte.splitlines():
@@ -31,7 +31,7 @@ def points_de_montage(texte):
     return sortie
 
 
-def memoire_conteneur(lire=lambda chemin: Path(chemin).read_text(errors="replace")):
+def container_memory(lire=lambda chemin: Path(chemin).read_text(errors="replace")):
     """(limite du conteneur en octets ou None si aucune, mémoire totale vue par le conteneur en octets ou None)."""
     limite = None
     for chemin in ("/sys/fs/cgroup/memory.max", "/sys/fs/cgroup/memory/memory.limit_in_bytes"):
@@ -52,7 +52,7 @@ def memoire_conteneur(lire=lambda chemin: Path(chemin).read_text(errors="replace
     return limite, total
 
 
-def joint(url, ouvrir=urllib.request.urlopen, delai=3):
+def joined(url, ouvrir=urllib.request.urlopen, delai=3):
     """Vrai si ce moteur répond (n'importe quelle réponse HTTP : même une erreur d'accès prouve que quelqu'un écoute)."""
     try:
         with ouvrir(urllib.request.Request(url), timeout=delai):
@@ -63,12 +63,12 @@ def joint(url, ouvrir=urllib.request.urlopen, delai=3):
         return False
 
 
-def verifier_conteneur(env=None, montages=None, memoire=None, ouvrir=urllib.request.urlopen, ecriture=os.access, libre=lambda d: shutil.disk_usage(d).free):
+def check_container(env=None, montages=None, memoire=None, ouvrir=urllib.request.urlopen, ecriture=os.access, libre=lambda d: shutil.disk_usage(d).free):
     """Les lignes du diagnostic pour un Lutin qui tourne dans un conteneur."""
     env = os.environ if env is None else env
     if montages is None:
         try:
-            montages = points_de_montage(Path("/proc/self/mountinfo").read_text(errors="replace"))
+            montages = mount_points(Path("/proc/self/mountinfo").read_text(errors="replace"))
         except OSError:
             montages = None
     lignes = [("info", _t("Lutin tourne dans un conteneur Docker."))]
@@ -87,20 +87,20 @@ def verifier_conteneur(env=None, montages=None, memoire=None, ouvrir=urllib.requ
             except OSError:
                 go = None
             lignes.append(("ok" if go is None or go >= 5 else "attention", _t("{} : volume monté, {} Go libres.").format(dossier, "{:.0f}".format(go) if go is not None else "?")))
-    limite, total = memoire if memoire is not None else memoire_conteneur()
+    limite, total = memoire if memoire is not None else container_memory()
     if limite:
-        lignes.append(("attention" if limite / 1e9 < MEMOIRE_MINI_GO else "info", _t("Mémoire limitée pour ce conteneur : {:.1f} Go.").format(limite / 1e9)))
+        lignes.append(("attention" if limite / 1e9 < MIN_MEMORY_GB else "info", _t("Mémoire limitée pour ce conteneur : {:.1f} Go.").format(limite / 1e9)))
     elif total:
-        lignes.append(("attention" if total / 1e9 < MEMOIRE_MINI_GO else "info", _t("Mémoire vue par le conteneur : {:.1f} Go (sous Windows : celle de WSL2, voir .wslconfig).").format(total / 1e9)))
+        lignes.append(("attention" if total / 1e9 < MIN_MEMORY_GB else "info", _t("Mémoire vue par le conteneur : {:.1f} Go (sous Windows : celle de WSL2, voir .wslconfig).").format(total / 1e9)))
     for nom, variable, defaut in (("Ollama", "OLLAMA_URL", ""), ("llama.cpp", "LUTIN_LLAMACPP_URL", "")):
         url = (env.get(variable) or defaut).strip()
         if url:
             sonde = url.rstrip("/") + ("/api/version" if variable == "OLLAMA_URL" else "/models")
-            lignes.append(("ok", _t("{} répond à {}.").format(nom, url)) if joint(sonde, ouvrir) else ("erreur", _t("{} ne répond pas à {} : le conteneur du moteur est-il démarré (profil Compose) et sur le même réseau ?").format(nom, url)))
+            lignes.append(("ok", _t("{} répond à {}.").format(nom, url)) if joined(sonde, ouvrir) else ("erreur", _t("{} ne répond pas à {} : le conteneur du moteur est-il démarré (profil Compose) et sur le même réseau ?").format(nom, url)))
     return lignes
 
 
-def verifier_hote(lanceur=subprocess.run, qui=shutil.which, systeme=None):
+def check_host(lanceur=subprocess.run, qui=shutil.which, systeme=None):
     """Les lignes du diagnostic pour la machine qui héberge (ou hébergerait) Docker. Vide si Docker n'est pas installé : ce n'est pas un problème."""
     exe = qui("docker")
     if not exe:
@@ -125,13 +125,13 @@ def verifier_hote(lanceur=subprocess.run, qui=shutil.which, systeme=None):
         if memoire.isdigit():
             go = int(memoire) / 1e9
             conseil = _t(" Sous Windows, augmente-la dans le fichier .wslconfig (memory=…).") if "desktop" in os_nom.lower() or "wsl" in os_nom.lower() else ""
-            lignes.append(("attention" if go < MEMOIRE_MINI_GO else "info", _t("Mémoire donnée à Docker : {:.1f} Go.").format(go) + (_t(" Trop peu pour un modèle de taille moyenne.") + conseil if go < MEMOIRE_MINI_GO else "")))
+            lignes.append(("attention" if go < MIN_MEMORY_GB else "info", _t("Mémoire donnée à Docker : {:.1f} Go.").format(go) + (_t(" Trop peu pour un modèle de taille moyenne.") + conseil if go < MIN_MEMORY_GB else "")))
     return lignes
 
 
-def diagnostiquer(env=None):
+def diagnose(env=None):
     """Les lignes à ajouter à `lutin doctor`."""
-    lignes = verifier_conteneur(env) if en_conteneur(env) else []
-    if not en_conteneur(env):
-        lignes += verifier_hote()
+    lignes = check_container(env) if in_container(env) else []
+    if not in_container(env):
+        lignes += check_host()
     return lignes

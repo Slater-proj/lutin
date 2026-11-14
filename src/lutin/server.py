@@ -231,9 +231,9 @@ class Gestionnaire(BaseHTTPRequestHandler):
         m = next((x for x in _m._CATALOGUE["modeles"] if x["id"] == modele), None)
         if m is None:
             return None
-        e = _estimation.estimer(m, int(ctx), profil)
+        e = _estimation.estimate(m, int(ctx), profil)
         e["modele"] = modele
-        e["preset_experts"] = _estimation.preset_experts(m, profil, int(ctx))
+        e["preset_experts"] = _estimation.experts_preset(m, profil, int(ctx))
         return e
 
     @staticmethod
@@ -428,7 +428,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
             if not self._authentifie():
                 return self._envoyer(401, {"erreur": "authentification requise"})
             try:
-                octets, mime = _images.lire(chemin[len("/image/"):])
+                octets, mime = _images.read_image(chemin[len("/image/"):])
             except ValueError:
                 return self._envoyer(404, {"erreur": _t("Image inconnue.")})
             return self._envoyer(200, octets, mime, {"Content-Security-Policy": "default-src 'none'; sandbox"})
@@ -474,9 +474,9 @@ class Gestionnaire(BaseHTTPRequestHandler):
             profil = _adequation.profil_pret()
             return self._envoyer(200, {"compat": self._compat(o), "adequation": _adequation.pour_la_liste(modeles, profil, _m._CATALOGUE["modeles"]), "machine": profil.resume() if profil else "", "budget_go": profil.budget_go() if profil else 0,
                                        "familles": {k: _t(v) for k, v in (_m._CATALOGUE.get("familles") or {}).items()}, "disque_modeles": _emplacements.models_gauge(),
-                                       "version": _m.VERSION, "partages": o.get("partages", []), "ollama": o["actif"], "ollama_installe": bool(_m.chemin_ollama()) or _m.moteur_actuel().id != "ollama", "moteur_nom": _mesures.nom_affiche(_m.moteur_actuel()), "installes": o["installes"], "modeles": modeles, "modeles_masques": len(_m.lire_registre_modeles()["masques"]), "actives": list(_m.TOURS_ACTIFS),
+                                       "version": _m.VERSION, "partages": o.get("partages", []), "ollama": o["actif"], "ollama_installe": bool(_m.chemin_ollama()) or _m.moteur_actuel().id != "ollama", "moteur_nom": _mesures.display_name(_m.moteur_actuel()), "installes": o["installes"], "modeles": modeles, "modeles_masques": len(_m.lire_registre_modeles()["masques"]), "actives": list(_m.TOURS_ACTIFS),
                                        "pulls": _m.PULLS, "reglages": r, "conversations": _m.conv_liste(), "racine": str(_m.RACINE), "donnees": str(_m.DONNEES),
-                                       "colibri_choisi": bool(getattr(_m.moteur_actuel(r), "colibri_choisi", lambda: False)()), "lmstudio_choisi": bool(getattr(_m.moteur_actuel(r), "lmstudio_choisi", lambda: False)()), "exllamav3_choisi": bool(getattr(_m.moteur_actuel(r), "exllamav3_choisi", lambda: False)()), "outil": bool(self._outil_vivant()), "hors_ligne": _hl.is_active(), "moteur": _m.moteur_actuel().id, "niveau": _m.SECURITE.niveau, "docker": _acces.en_docker(), "ouverture_possible": _fichiers.ouverture_possible(), "missions": _mission.par_conversation(), "langue": _i18n.langue(), "langue_reglage": _i18n.langue_configuree(), "cpus": _machine.cpus_disponibles() or 1, "diagnostic": self._avec_estimation(self._diagnostic(o, r, profil, modeles), r, profil), "prudent": _estimation.mode_prudent(profil), "premier_lancement": self._premier_lancement(o, r, profil), "redemarrage": {"necessaire": _acces.securite_enregistree() != _m.SECURITE, "possible": _acces.peut_redemarrer()}, "nouvelle_version": _m.nouvelle_version_lutin(), "travaux": _m.travaux_etat(), "configurateur": self._configurateur(), "addons_alertes": _addons.alertes(), "embeddings": _embeddings.etat(),
+                                       "colibri_choisi": bool(getattr(_m.moteur_actuel(r), "colibri_choisi", lambda: False)()), "lmstudio_choisi": bool(getattr(_m.moteur_actuel(r), "lmstudio_choisi", lambda: False)()), "exllamav3_choisi": bool(getattr(_m.moteur_actuel(r), "exllamav3_choisi", lambda: False)()), "outil": bool(self._outil_vivant()), "hors_ligne": _hl.is_active(), "moteur": _m.moteur_actuel().id, "niveau": _m.SECURITE.niveau, "docker": _acces.en_docker(), "ouverture_possible": _fichiers.ouverture_possible(), "missions": _mission.par_conversation(), "langue": _i18n.langue(), "langue_reglage": _i18n.langue_configuree(), "cpus": _machine.cpus_disponibles() or 1, "diagnostic": self._avec_estimation(self._diagnostic(o, r, profil, modeles), r, profil), "prudent": _estimation.cautious_mode(profil), "premier_lancement": self._premier_lancement(o, r, profil), "redemarrage": {"necessaire": _acces.securite_enregistree() != _m.SECURITE, "possible": _acces.peut_redemarrer()}, "nouvelle_version": _m.nouvelle_version_lutin(), "travaux": _m.travaux_etat(), "configurateur": self._configurateur(), "addons_alertes": _addons.alertes(), "embeddings": _embeddings.etat(),
                                        "reflexion_possible": self._reflexion_possible(r, o["actif"]), "cluster_actif": _machines.cluster_actif(r.get("cluster")), "demandes_machines": len(_machines.noeud().get("demandes", [])), "modeles_distants": _machines.modeles_distants() if _machines.cluster_actif(r.get("cluster")) else [], "conversations_distantes": _machines.conversations_distantes() if _machines.cluster_actif(r.get("cluster")) else [], "machines_hors_ligne": _machines.hors_ligne() if _machines.cluster_actif(r.get("cluster")) else [], "taches_fond": _m.taches_en_cours(), "taches_moteur": [dict(v, nom=_moteurs.MOTEURS[k].nom) for k, v in _moteurs.toutes_les_taches().items() if v.get("statut") == "en cours" and k in _moteurs.MOTEURS], "fins_moteur": _moteurs.fins_recentes(), "memoire": self._memoire(r, o), "calibrage": _calibrage.state(), "bench": {"en_cours": _m.BENCH["en_cours"], "etape": _m.BENCH["etape"], "erreur": _m.BENCH["erreur"], "file": list(_m.BENCH.get("file") or []), "mesures": _bench.lire(_m.chemin_bench())}, "attentes": [{"id": a.id, "titre": a.titre, "detail": a.detail, "diff": a.diff, "conv": a.conv} for a in _m.Attente.EN_COURS.values()],
                                        "en_attente": sorted({a.conv for a in _m.Attente.EN_COURS.values() if a.conv} | set(_m.CHOIX_MEMOIRE))})
         if chemin == "/api/conseil":
@@ -491,7 +491,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
         if chemin == "/api/planifie":
             return self._envoyer(200, _plan.etat())
         if chemin == "/api/github":                              # le compte GitHub (facultatif) : configuré ou non, jamais le jeton
-            return self._envoyer(200, dict(_github.vue(), modifiable=self._configurateur()))
+            return self._envoyer(200, dict(_github.view(), modifiable=self._configurateur()))
         if chemin.startswith("/api/skills-tiers"):               # skills tiers : sources, recherche, fiche, installés
             return self._skills_tiers_lire(chemin)
         if chemin == "/api/documents":
@@ -664,7 +664,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
         if chemin == "/api/web-recherche":                        # Réglages > Recherche web : ce qui est réglé (jamais la clé) et l'ordre des moteurs
             return self._envoyer(200, dict(_recherche.vue(), moteurs=_m.etat_moteurs_recherche(), modifiable=self._configurateur()))
         if chemin == "/api/mesures-moteurs":                      # Réglages > Moteur : ce que chaque moteur a donné ici (classement des mesures) et ceux qu'on peut mesurer maintenant
-            return self._envoyer(200, _mesures.vue(_m.DONNEES, dict(_moteurs.MOTEURS), _m.reglages()))
+            return self._envoyer(200, _mesures.view(_m.DONNEES, dict(_moteurs.MOTEURS), _m.reglages()))
         if chemin.split("?")[0] in ROUTES_MODELES_GERES:          # onglet Modèles d'un serveur géré par Lutin : ce qui est téléchargé, ce qu'on peut télécharger, jugé pour cette machine
             return self._modeles_serveur_gere(chemin)
         if chemin == "/api/machines":                             # onglet Machines : le nœud de cette machine, les machines appairées et leur état
@@ -772,10 +772,10 @@ class Gestionnaire(BaseHTTPRequestHandler):
         if not self._jeton_valide():
             return self._envoyer(403, {"erreur": "jeton invalide : recharge la page"})
         taille = self._taille_corps()
-        if taille > _images.TAILLE_MAX:
-            return self._envoyer(413, {"erreur": _t("Image trop grosse ({} Mo au plus).").format(_images.TAILLE_MAX // (1024 * 1024))})
+        if taille > _images.MAX_SIZE:
+            return self._envoyer(413, {"erreur": _t("Image trop grosse ({} Mo au plus).").format(_images.MAX_SIZE // (1024 * 1024))})
         try:
-            return self._envoyer(200, {"id": _images.enregistrer(self.rfile.read(taille))})
+            return self._envoyer(200, {"id": _images.save(self.rfile.read(taille))})
         except ValueError as e:
             return self._envoyer(400, {"erreur": str(e)})
 
@@ -1195,7 +1195,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
             if self.path == "/api/compacter":
                 return self._envoyer(200, _m.compacter_conversation(str(donnees.get("conversation", ""))))
             if self.path == "/api/plan":
-                _m.rafraichir_plan(force=True)
+                _m.refresh_plan(force=True)
                 return self._envoyer(200, {"ok": True})
             if self.path == "/api/rappeler":
                 try:
@@ -1344,7 +1344,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
                     return self._envoyer(400, {"erreur": _t("Moteur inconnu.")})
                 mo = _moteurs.par_id(str(donnees["moteur"]))
                 modele = str(donnees.get("modele", ""))
-                return self._envoyer(200, _mesures.lancer(_m.DONNEES, mo, modele, str(donnees.get("mode", "rapide")), memoire=lambda: _bench_moteurs.memoire_du_moteur(mo.id, modele)))
+                return self._envoyer(200, _mesures.launch(_m.DONNEES, mo, modele, str(donnees.get("mode", "rapide")), memoire=lambda: _bench_moteurs.memoire_du_moteur(mo.id, modele)))
             if self.path in ("/api/exllamav3-verifier", "/api/lmstudio-verifier", "/api/colibri-verifier"):          # chercher les mises à jour des modèles téléchargés (ExLlamaV3), ou de nouveaux modèles qui tiennent sur cette machine
                 genre = self.path[len("/api/"):-len("-verifier")]
                 mo = _moteurs.par_id("openai")
@@ -1430,7 +1430,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
         try:
             if chemin == "/api/skills-tiers":                     # tout ce que la page demande en arrivant
                 racines, actif = self._racines_travail()
-                return self._envoyer(200, {"sources": _skills.sources(), "github": _github.vue(), "travaux": [{"id": i, "nom": Path(c).name or c} for i, c in racines.items()], "actif": actif,
+                return self._envoyer(200, {"sources": _skills.sources(), "github": _github.view(), "travaux": [{"id": i, "nom": Path(c).name or c} for i, c in racines.items()], "actif": actif,
                                            "indexation": {d: dict(e) for d, e in _skills.INDEXATION.items()}, "modifiable": self._configurateur()})
             if chemin == "/api/skills-tiers-chercher":
                 depots = [d for d in un("depots").split(",") if d] or [s["depot"] for s in _skills.sources()]
@@ -1458,9 +1458,9 @@ class Gestionnaire(BaseHTTPRequestHandler):
     def _skills_tiers_ecrire(self, chemin, donnees):
         try:
             if chemin == "/api/github-enregistrer":
-                return self._envoyer(200, _github.enregistrer(donnees.get("jeton")))
+                return self._envoyer(200, _github.save(donnees.get("jeton")))
             if chemin == "/api/github-tester":
-                return self._envoyer(200, _github.tester(_skills.http_defaut))
+                return self._envoyer(200, _github.test_token(_skills.http_defaut))
             if chemin == "/api/skills-tiers-source":
                 if donnees.get("retirer"):
                     return self._envoyer(200, {"sources": _skills.retirer_source(str(donnees.get("depot", "")))})
@@ -1821,7 +1821,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
         if not texte or len(texte) > 60000:
             return self._refus_tour(400, "Écris un message (60 000 caractères au maximum).", "invalid_request")
         try:
-            images = _images.verifier_liste(donnees.get("images"))
+            images = _images.check_list(donnees.get("images"))
             pieces = _pieces.verifier_liste(donnees.get("pieces"))
         except ValueError as erreur:
             return self._refus_tour(400, str(erreur), "invalid_request")

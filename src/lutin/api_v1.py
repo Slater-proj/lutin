@@ -704,10 +704,10 @@ def stop_turn(request):
 
 
 # ---------------------------------------------------------------------------------------------------------------- uploads
-@route("POST", "/images", SESSION, raw=True, limit=_images.TAILLE_MAX)
+@route("POST", "/images", SESSION, raw=True, limit=_images.MAX_SIZE)
 def upload_image(request):
     """An image for the next message: the bytes of a PNG, JPEG, GIF or WebP as the body (the type is recognised from the content, never from a header). Answers its identifier."""
-    identifier = _images.enregistrer(request.raw)
+    identifier = _images.save(request.raw)
     return 201, {"id": identifier, "url": "{}/images/{}".format(PREFIX, identifier)}
 
 
@@ -715,7 +715,7 @@ def upload_image(request):
 def image(request):
     """An image sent in a conversation. READ: a browser tag cannot send the page token, the session cookie is what it has."""
     try:
-        data, content_type = _images.lire(request.params["id"])
+        data, content_type = _images.read_image(request.params["id"])
     except ValueError:
         raise ApiError(404, "not_found", _t("Image inconnue.")) from None
     return Binary(data, content_type, {"Content-Security-Policy": "default-src 'none'; sandbox"})

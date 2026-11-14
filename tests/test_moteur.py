@@ -1742,21 +1742,21 @@ class Assistant(unittest.TestCase):
         self.assertIsNone(A.calculer_vitesse({"eval_count": 50, "eval_duration": 0}))
 
     def test_plan_du_projet(self):
-        A.PLAN["sections"] = A.construire_plan()
+        A.PLAN["sections"] = A.build_plan()
         A.PLAN["valide"] = True
         A.PLAN["date"] = time.time()
-        plan = A.texte_plan(6000)
+        plan = A.plan_text(6000)
         self.assertIn("docs/", plan)
         self.assertIn("univers.md (", plan)
         self.assertRegex(plan, r"code\.py \(\d+ l\. : f\)", "les fonctions principales sont listées")
         self.assertNotIn(".git", plan.replace("gitattributes", ""), "les dossiers techniques sont absents")
-        petit = A.texte_plan(300)
+        petit = A.plan_text(300)
         self.assertIn("docs/", petit)
         self.assertIn("appli/", petit, "un budget serré répartit la place entre les dossiers au lieu de couper les derniers")
         systeme = A.consignes_systeme(A.reglages())
         self.assertIn("# PLAN DU PROJET", systeme)
         self.assertIn("univers.md", systeme)
-        self.assertEqual(A.texte_plan(100), "", "un budget minuscule ne met rien")
+        self.assertEqual(A.plan_text(100), "", "un budget minuscule ne met rien")
 
     def test_outils_de_recherche_ameliores(self):
         res = A.outil_chercher("Marly", "docs", 1)
@@ -3365,7 +3365,7 @@ class Assistant(unittest.TestCase):
             self.assertEqual(conv["messages"][0]["images"], [ident], "la conversation ne garde que le nom")
             # les vieilles images ne sont plus rejouées : sept messages plus tard, l'image du début est remplacée par une mention
             msgs = [{"role": "user", "content": "a", "images": [ident]}] + [{"role": "assistant", "content": "x"}] * 7 + [{"role": "user", "content": "b"}]
-            sortie = images.pour_le_modele(msgs)
+            sortie = images.for_model(msgs)
             self.assertNotIn("images", sortie[0])
             self.assertIn("1 image(s) jointe(s)", sortie[0]["content"])
         finally:
@@ -3376,17 +3376,17 @@ class Assistant(unittest.TestCase):
 
     def test_nettoyage_des_images_orphelines(self):
         from lutin import images
-        orpheline = images.enregistrer(b"\xff\xd8\xff" + b"orpheline-unique" * 3)
-        citee = images.enregistrer(b"\xff\xd8\xff" + b"citee-unique" * 3)
+        orpheline = images.save(b"\xff\xd8\xff" + b"orpheline-unique" * 3)
+        citee = images.save(b"\xff\xd8\xff" + b"citee-unique" * 3)
         c = A.conv_nouvelle()
         c["messages"].append({"role": "user", "content": "x", "images": [citee]})
         A.conv_ecrire(c)
         vieux = time.time() - 5 * 86400
         for i in (orpheline, citee):
-            os.utime(images.dossier() / i, (vieux, vieux))
-        images.nettoyer()
-        self.assertFalse((images.dossier() / orpheline).exists())
-        self.assertTrue((images.dossier() / citee).exists(), "une image citée par une conversation reste")
+            os.utime(images.folder() / i, (vieux, vieux))
+        images.clean()
+        self.assertFalse((images.folder() / orpheline).exists())
+        self.assertTrue((images.folder() / citee).exists(), "une image citée par une conversation reste")
 
     def test_fichiers_joints(self):
         """Documents et fichiers texte : téléversés, lus une fois, ajoutés au message pour le modèle seulement, bornés, nettoyés."""

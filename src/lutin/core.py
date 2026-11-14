@@ -351,10 +351,10 @@ from .project_map import (  # noqa: F401  (déplacé dans project_map.py : moteu
     PLAN_MAX,
     RE_SYM_JS,
     RE_SYM_PY,
-    construire_plan,
-    rafraichir_plan,
-    resume_fichier,
-    texte_plan,
+    build_plan,
+    refresh_plan,
+    file_summary,
+    plan_text,
 )
 
 
@@ -519,7 +519,7 @@ def _liberer_autres_moteurs(tout):
         gere = _mo.MOTEURS.get("openai")
         if tout and gere is not None and hasattr(gere, "arreter_gere") and gere.arreter_gere():
             from . import engine_metrics
-            libres.append(engine_metrics.nom_affiche(gere))
+            libres.append(engine_metrics.display_name(gere))
     except Exception as e:  # noqa: BLE001  (libérer est un confort : jamais une erreur de plus)
         journaliser("Libération des autres moteurs impossible : {!r}".format(e))
     return libres
@@ -1049,7 +1049,7 @@ def principal():
         purger_donnees()
     except OSError as erreur:
         journaliser("Purge impossible : {!r}".format(erreur))
-    rafraichir_plan(force=True)
+    refresh_plan(force=True)
     threading.Thread(target=watch_loop, daemon=True).start()
     from . import scheduled_tasks
     scheduled_tasks.demarrer()

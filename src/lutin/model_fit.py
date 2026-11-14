@@ -27,11 +27,11 @@ def evaluer(m, profil, ctx_voulu=0):
     complet = dict(pseudo_modele(m), **{k: v for k, v in m.items() if k in ("kv_mo_1k", "ctx_max", "params_b", "actifs_b")})
     complet["go"] = m["go"]
     budget = profil.budget_go()
-    place = model_selection.meilleur_contexte(complet, budget, profil.ram_libre_go or profil.ram_go * 0.5, experts_en_ram=not profil.sans_gpu())
-    if place is None and not profil.sans_gpu() and model_selection.meilleur_contexte(complet, budget / 0.85, 0, experts_en_ram=False):
+    place = model_selection.best_context(complet, budget, profil.ram_libre_go or profil.ram_go * 0.5, experts_en_ram=not profil.sans_gpu())
+    if place is None and not profil.sans_gpu() and model_selection.best_context(complet, budget / 0.85, 0, experts_en_ram=False):
         return {"niveau": "limite", "texte": _t("Tient presque entièrement sur la carte graphique, sans marge : ferme les autres programmes qui l'utilisent et garde une conversation courte.")}
     if place is None:
-        besoin = model_selection.memoire_necessaire_go(complet, model_selection.CTX_PLANCHER)
+        besoin = model_selection.required_memory_gb(complet, model_selection.CTX_PLANCHER)
         return {"niveau": "trop_gros", "texte": _t("Trop gros pour ta machine : il demande environ {} Go et tu en as {} d'utilisables.").format(round(besoin, 1), budget)}
     ctx, besoin, tient = place
     if tient == "partiel":

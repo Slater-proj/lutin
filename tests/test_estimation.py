@@ -22,35 +22,35 @@ EXPERTS = {"id": "e:30b", "go": 18.0, "kv_mo_1k": 48, "ctx_max": 32768, "params_
 
 class Niveaux(unittest.TestCase):
     def test_tient_sur_la_carte(self):
-        e = memory_estimate.estimer(DENSE, 8192, Profil(budget=20, ram=32))
+        e = memory_estimate.estimate(DENSE, 8192, Profil(budget=20, ram=32))
         self.assertEqual(e["niveau"], "tient")
         self.assertEqual(e["sur_ram_go"], 0.0)
 
     def test_deborde_en_memoire_vive(self):
-        e = memory_estimate.estimer(DENSE, 8192, Profil(budget=4, ram=32))
+        e = memory_estimate.estimate(DENSE, 8192, Profil(budget=4, ram=32))
         self.assertEqual(e["niveau"], "partiel")
         self.assertGreater(e["sur_ram_go"], 0.5)
 
     def test_trop_gros_est_dit_avant_le_chargement(self):
-        e = memory_estimate.estimer(EXPERTS, 8192, Profil(budget=6, ram=10, ram_libre=5))
+        e = memory_estimate.estimate(EXPERTS, 8192, Profil(budget=6, ram=10, ram_libre=5))
         self.assertEqual(e["niveau"], "trop_gros")
         self.assertIn("Ne tient pas", e["texte"])
 
     def test_sature_quand_il_ne_reste_presque_rien(self):
-        e = memory_estimate.estimer(DENSE, 8192, Profil(budget=0.1, ram=12, ram_libre=7.5))
+        e = memory_estimate.estimate(DENSE, 8192, Profil(budget=0.1, ram=12, ram_libre=7.5))
         self.assertEqual(e["niveau"], "sature")
 
     def test_sans_carte_tout_est_en_memoire_vive(self):
-        e = memory_estimate.estimer(DENSE, 8192, Profil(budget=12, ram=32, gpu=False))
+        e = memory_estimate.estimate(DENSE, 8192, Profil(budget=12, ram=32, gpu=False))
         self.assertEqual(e["sur_carte_go"], 0.0)
         self.assertGreater(e["sur_ram_go"], 5.0)
 
     def test_machine_inconnue(self):
-        self.assertEqual(memory_estimate.estimer(DENSE, 8192, None)["niveau"], "inconnu")
+        self.assertEqual(memory_estimate.estimate(DENSE, 8192, None)["niveau"], "inconnu")
 
     def test_un_cache_plus_leger_pese_moins(self):
-        a = memory_estimate.estimer(DENSE, 16384, Profil(budget=20, ram=32), cache="f16")
-        b = memory_estimate.estimer(DENSE, 16384, Profil(budget=20, ram=32), cache="q4_0")
+        a = memory_estimate.estimate(DENSE, 16384, Profil(budget=20, ram=32), cache="f16")
+        b = memory_estimate.estimate(DENSE, 16384, Profil(budget=20, ram=32), cache="q4_0")
         self.assertGreater(a["kv_go"], b["kv_go"] * 3)
 
 
@@ -59,47 +59,47 @@ class Experts(unittest.TestCase):
         """Le cas de la feuille de route : 24 Go de carte + 32 Go de RAM, modèle à experts de 30 milliards (18 Go) avec une grande conversation."""
         profil = Profil(budget=24 * 0.85, ram=32, ram_libre=24)
         gros = dict(EXPERTS, go=40.0)
-        p = memory_estimate.preset_experts(gros, profil)
+        p = memory_estimate.experts_preset(gros, profil)
         self.assertIsNotNone(p)
         self.assertTrue(0 < p["part"] < 1)
         self.assertTrue(1 <= p["n_cpu_moe"] <= p["couches"])
         self.assertIn("--n-cpu-moe", p["texte"])
 
     def test_inutile_si_ca_tient(self):
-        self.assertIsNone(memory_estimate.preset_experts(EXPERTS, Profil(budget=40, ram=64)))
+        self.assertIsNone(memory_estimate.experts_preset(EXPERTS, Profil(budget=40, ram=64)))
 
     def test_inutile_pour_un_modele_dense_ou_sans_carte(self):
-        self.assertIsNone(memory_estimate.preset_experts(DENSE, Profil(budget=2, ram=32)))
-        self.assertIsNone(memory_estimate.preset_experts(EXPERTS, Profil(budget=2, ram=32, gpu=False)))
+        self.assertIsNone(memory_estimate.experts_preset(DENSE, Profil(budget=2, ram=32)))
+        self.assertIsNone(memory_estimate.experts_preset(EXPERTS, Profil(budget=2, ram=32, gpu=False)))
 
     def test_impossible_meme_avec_tous_les_experts_dehors(self):
-        self.assertIsNone(memory_estimate.preset_experts(dict(EXPERTS, go=200.0), Profil(budget=8, ram=32, ram_libre=10)))
+        self.assertIsNone(memory_estimate.experts_preset(dict(EXPERTS, go=200.0), Profil(budget=8, ram=32, ram_libre=10)))
 
     def test_les_conseils_citent_le_preset(self):
         profil = Profil(budget=24 * 0.85, ram=32, ram_libre=24)
-        e = memory_estimate.estimer(dict(EXPERTS, go=40.0), 8192, profil, experts_cpu=0.0)
+        e = memory_estimate.estimate(dict(EXPERTS, go=40.0), 8192, profil, experts_cpu=0.0)
         self.assertTrue(any("--n-cpu-moe" in c for c in e["conseils"]), e)
 
 
 class Prudent(unittest.TestCase):
     def test_machine_modeste(self):
-        r = memory_estimate.mode_prudent(Profil(budget=4, ram=8, gpu=False))
+        r = memory_estimate.cautious_mode(Profil(budget=4, ram=8, gpu=False))
         self.assertTrue(r["actif"])
-        self.assertEqual(r["reglages"]["num_ctx"], memory_estimate.CTX_PRUDENT)
+        self.assertEqual(r["reglages"]["num_ctx"], memory_estimate.CAUTIOUS_CTX)
 
     def test_grosse_machine(self):
-        self.assertFalse(memory_estimate.mode_prudent(Profil(budget=24, ram=64))["actif"])
+        self.assertFalse(memory_estimate.cautious_mode(Profil(budget=24, ram=64))["actif"])
 
     def test_inconnue(self):
-        self.assertFalse(memory_estimate.mode_prudent(None)["actif"])
+        self.assertFalse(memory_estimate.cautious_mode(None)["actif"])
 
 
 class Ecart(unittest.TestCase):
     def test_ecart_en_pourcentage_de_la_mesure(self):
-        self.assertEqual(memory_estimate.ecart(11.0, 10.0), 10.0)
-        self.assertEqual(memory_estimate.ecart(9.0, 10.0), -10.0)
-        self.assertIsNone(memory_estimate.ecart(None, 10.0))
-        self.assertIsNone(memory_estimate.ecart(10.0, 0))
+        self.assertEqual(memory_estimate.gap(11.0, 10.0), 10.0)
+        self.assertEqual(memory_estimate.gap(9.0, 10.0), -10.0)
+        self.assertIsNone(memory_estimate.gap(None, 10.0))
+        self.assertIsNone(memory_estimate.gap(10.0, 0))
 
 
 class AvecLeBanc(unittest.TestCase):

@@ -243,7 +243,7 @@ class ComfyUI(unittest.TestCase):
         ctx = self.ctx()
         res = cu.outil_generer({"prompt": "un phare"}, ctx)
         self.assertEqual(len(ctx.get("medias", [])), 1, res)
-        octets, mime = images.lire(ctx["medias"][0])
+        octets, mime = images.read_image(ctx["medias"][0])
         self.assertEqual((mime, octets[8:]), ("image/png", b"pixels"))
         self.assertIn("affichée", res)
         # un chemin qui sort du dossier de sortie n'est jamais copié
@@ -260,7 +260,7 @@ class ComfyUI(unittest.TestCase):
         cu._afficher(["a_supprimer.png"], ctx)
         ident_image = ctx["medias"][0]
         self.assertEqual(ctx["medias_fichiers"][ident_image], str((sortie / "a_supprimer.png").resolve()))
-        autre = images.enregistrer(b"\x89PNG\r\n\x1a\n" + b"deux")
+        autre = images.save(b"\x89PNG\r\n\x1a\n" + b"deux")
         c = _m.conv_nouvelle()
         c["messages"] = [{"role": "tool", "tool_name": "comfy_generer", "content": "ok", "medias": [ident_image, autre],
                           "medias_fichiers": {ident_image: str(sortie / "a_supprimer.png"), autre: str(COMFY / "main_intact.png")}}]
@@ -269,7 +269,7 @@ class ComfyUI(unittest.TestCase):
         self.assertFalse((sortie / "a_supprimer.png").exists())
         self.assertEqual(_m.conv_lire(c["id"])["messages"][0]["medias"], [autre])
         with self.assertRaises(ValueError):
-            images.chemin(ident_image)
+            images.path_of(ident_image)
         self.assertFalse(change_review.delete_media(c["id"], autre)["fichier_supprime"], "un fichier hors du dossier de sortie n'est jamais effacé")
         self.assertTrue((COMFY / "main_intact.png").exists())
         self.assertNotIn("medias", _m.conv_lire(c["id"])["messages"][0])

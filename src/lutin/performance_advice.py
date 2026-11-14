@@ -22,7 +22,7 @@ def quality(tok_s):
 
 def analyze(mesure, profil, reglages, catalogue, installes=(), charge=None):
     """[{niveau: ok | info | attention, texte}] : la vitesse mesurée en une phrase, puis ce qui peut l'améliorer.
-    mesure : {tok_s, charge_s} ; charge : {taille, vram} du modèle chargé dans Ollama (ou None) ; catalogue : le catalogue de modèles (selection.choisir)."""
+    mesure : {tok_s, charge_s} ; charge : {taille, vram} du modèle chargé dans Ollama (ou None) ; catalogue : le catalogue de modèles (selection.choose)."""
     tok_s = float(mesure.get("tok_s") or 0)
     modele = reglages.get("modele", "")
     q = quality(tok_s)
@@ -42,7 +42,7 @@ def analyze(mesure, profil, reglages, catalogue, installes=(), charge=None):
     if profil.sans_gpu():
         lignes.append({"niveau": "info", "texte": _t("Aucune carte graphique utilisable : tout tourne sur le processeur et la RAM, c'est normal que ce soit plus lent. Les modèles « experts » (peu de paramètres actifs par mot) et les petits modèles sont les plus à l'aise.")})
     if q in ("lent", "tres_lent"):
-        choix = model_selection.choisir(profil, catalogue).get("rapide")
+        choix = model_selection.choose(profil, catalogue).get("rapide")
         if choix and choix.id != modele:
             etat = _t("déjà installé") if choix.id in installes else _t("à installer : {} Go").format(choix.modele["go"])
             lignes.append({"niveau": "attention", "texte": _t("Le modèle rapide conseillé pour ta machine est « {} » ({}) : lui, tiendrait mieux. Onglet Modèles pour l'essayer.").format(choix.id, etat)})

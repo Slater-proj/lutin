@@ -8,13 +8,13 @@ from dataclasses import dataclass
 from .model_catalog import ROLES
 
 CTX_PLAFOND, CTX_PLANCHER = 32768, 8192
-MARGE_GO = 0.5                       # tampon de calcul d'Ollama
-SEUIL_NOTE = 5                       # en dessous, un modèle n'est pas proposé pour ce rôle
-PETIT_GO = 5.0                       # « Rapide » est coché par défaut seulement s'il pèse peu
+MARGIN_GB = 0.5                       # tampon de calcul d'Ollama
+SCORE_THRESHOLD = 5                       # en dessous, un modèle n'est pas proposé pour ce rôle
+SMALL_GB = 5.0                       # « Rapide » est coché par défaut seulement s'il pèse peu
 
 
 @dataclass
-class Choix:
+class Choice:
     modele: dict
     num_ctx: int
     memoire_go: float
@@ -26,24 +26,24 @@ class Choix:
         return self.modele["id"]
 
 
-def memoire_necessaire_go(modele, num_ctx, cache_compresse=True):
+def required_memory_gb(modele, num_ctx, cache_compresse=True):
     """Poids + mémoire de contexte (divisée par 2 si le cache est compressé en q8, réglage par défaut de Lutin) + marge."""
     contexte = modele["kv_mo_1k"] * (num_ctx / 1000) / 1024 * (0.5 if cache_compresse else 1.0)
-    return modele["go"] + contexte + MARGE_GO
+    return modele["go"] + contexte + MARGIN_GB
 
 
-def meilleur_contexte(modele, budget_go, ram_libre_go=0.0, experts_en_ram=True):
+def best_context(modele, budget_go, ram_libre_go=0.0, experts_en_ram=True):
     """(num_ctx, mémoire nécessaire, 'gpu'|'partiel') du plus grand contexte qui tient, ou None."""
     plafond = min(CTX_PLAFOND, modele["ctx_max"])
     ctx = plafond
     while ctx >= min(CTX_PLANCHER, plafond):
-        besoin = memoire_necessaire_go(modele, ctx)
+        besoin = required_memory_gb(modele, ctx)
         if besoin <= budget_go:
             return ctx, besoin, "gpu"
         ctx //= 2
     # Modèle à experts : le surplus passe en RAM (plus lent mais utilisable).
     if experts_en_ram and modele["actifs_b"] * 3 <= modele["params_b"]:
-        besoin = memoire_necessaire_go(modele, min(CTX_PLANCHER, plafond))
+        besoin = required_memory_gb(modele, min(CTX_PLANCHER, plafond))
         if besoin <= budget_go + ram_libre_go * 0.5:
             return min(CTX_PLANCHER, plafond), besoin, "partiel"
     return None
@@ -61,7 +61,7 @@ def _score(modele, role, tient, budget_go):
     return s
 
 
-def choisir(profil, catalogue):
+def choose(profil, catalogue):
     """{rôle: Choix ou None}. Les modèles marqués « avancés » (sans filtre) ne sont JAMAIS choisis automatiquement : ils se choisissent à la main (voir `lister`)."""
     budget = profil.budget_go()
     cpu = profil.sans_gpu()
@@ -72,11 +72,11 @@ def choisir(profil, catalogue):
         for m in catalogue["modeles"]:
             if m.get("avance"):
                 continue
-            if "outils" not in m["capacites"] or m["notes"].get(role, 0) < SEUIL_NOTE:
+            if "outils" not in m["capacites"] or m["notes"].get(role, 0) < SCORE_THRESHOLD:
                 continue
             if role == "vision" and "vision" not in m["capacites"]:
                 continue
-            place = meilleur_contexte(m, budget, ram_libre, experts_en_ram=not cpu)
+            place = best_context(m, budget, ram_libre, experts_en_ram=not cpu)
             if place is None:
                 continue
             ctx, besoin, tient = place
@@ -84,23 +84,23 @@ def choisir(profil, catalogue):
                 tient = "cpu"
             sc = _score(m, role, tient, budget)
             if meilleur_score is None or sc > meilleur_score:
-                meilleur, meilleur_score = Choix(m, ctx, round(besoin, 1), tient, role), sc
+                meilleur, meilleur_score = Choice(m, ctx, round(besoin, 1), tient, role), sc
         resultat[role] = meilleur
     return resultat
 
 
-def par_defaut(choix):
+def default_choice(choix):
     """Rôles cochés au départ : Polyvalent, plus Rapide s'il est différent et léger. Les autres se choisissent à la main (un modèle = plusieurs Go)."""
     coches = []
     if choix.get("polyvalent"):
         coches.append("polyvalent")
     r = choix.get("rapide")
-    if r and (not choix.get("polyvalent") or r.id != choix["polyvalent"].id) and r.modele["go"] <= PETIT_GO:
+    if r and (not choix.get("polyvalent") or r.id != choix["polyvalent"].id) and r.modele["go"] <= SMALL_GB:
         coches.append("rapide")
     return coches
 
 
-def a_telecharger(choix, roles, deja_installes=()):
+def to_download(choix, roles, deja_installes=()):
     """(liste de modèles distincts, total en Go) pour les rôles demandés, sans recompter ce qui est déjà là."""
     vus, liste, total = set(), [], 0.0
     for role in roles:
@@ -112,7 +112,7 @@ def a_telecharger(choix, roles, deja_installes=()):
     return liste, round(total, 1)
 
 
-def lister(profil, catalogue, avance=False):
+def list_models(profil, catalogue, avance=False):
     """Tous les modèles du catalogue avec ce qu'il en est pour cette machine (liste « Autres modèles »). Les avancés n'y figurent que si l'utilisateur a ouvert l'option."""
     budget, cpu = profil.budget_go(), profil.sans_gpu()
     ram_libre = profil.ram_libre_go or profil.ram_go * 0.5
@@ -120,6 +120,6 @@ def lister(profil, catalogue, avance=False):
     for m in catalogue["modeles"]:
         if m.get("avance") and not avance:
             continue
-        place = meilleur_contexte(m, budget, ram_libre, experts_en_ram=not cpu)
+        place = best_context(m, budget, ram_libre, experts_en_ram=not cpu)
         sortie.append({"modele": m, "tient": None if place is None else ("cpu" if cpu else place[2]), "memoire_go": None if place is None else round(place[1], 1)})
     return sorted(sortie, key=lambda x: (x["tient"] is None, -x["modele"]["go"]))

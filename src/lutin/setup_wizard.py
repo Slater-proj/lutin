@@ -122,7 +122,7 @@ def afficher_choix(es, choix, coches, profil):
 
 
 def choisir_roles(es, options, choix, profil):
-    coches = model_selection.par_defaut(choix)
+    coches = model_selection.default_choice(choix)
     if options.get("sans_modeles"):
         return []
     if options.get("roles") is not None:
@@ -234,11 +234,11 @@ def executer(cfg, dossiers, es, options=None, profil=None, ollama=None):
     if profil.sans_gpu():
         es.dire(_t("(Pas de carte graphique utilisable détectée : les modèles tourneront sur le processeur, plus lentement. Les petits modèles restent agréables.)"))
     cat = model_catalog.charger(Path(dossiers["cache"]) / "catalogue.json")
-    choix = model_selection.choisir(profil, cat)
+    choix = model_selection.choose(profil, cat)
 
     cfg["securite"] = vars(choisir_securite(es, options)).copy()
     cfg["securite"]["proxy_ips"] = list(cfg["securite"]["proxy_ips"])
-    besoin = sum(c.modele["go"] for c in {choix[r].id: choix[r] for r in model_selection.par_defaut(choix)}.values())
+    besoin = sum(c.modele["go"] for c in {choix[r].id: choix[r] for r in model_selection.default_choice(choix)}.values())
     cfg["emplacements"].update(choisir_emplacements(es, options, profil, besoin))          # update : les autres dossiers de travail déjà ajoutés ne disparaissent pas
     roles = choisir_roles(es, options, choix, profil)
     o = ollama or ollama_client.Ollama()
@@ -246,7 +246,7 @@ def executer(cfg, dossiers, es, options=None, profil=None, ollama=None):
         deja = set(o.installes())
     except ollama_client.ErreurOllama:
         deja = set()
-    liste, total = model_selection.a_telecharger(choix, roles, deja)
+    liste, total = model_selection.to_download(choix, roles, deja)
     for r in roles:
         if choix[r] and choix[r].id in deja:
             cfg["modeles"]["choisis"][r] = choix[r].id          # déjà installé : on le garde, sans retélécharger

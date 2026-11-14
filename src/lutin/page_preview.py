@@ -17,15 +17,15 @@ from pathlib import Path
 from . import core as _m
 from .i18n import t as _t
 
-DELAI = 40                # secondes au plus par lancement du navigateur
-ATTENTE_MS = 3000         # temps virtuel laissé à la page pour se charger et s'animer
-LARGEUR = (320, 3000)
-HAUTEUR = (200, 4000)
-TEXTE_MAX = 1800
+TIMEOUT = 40                # secondes au plus par lancement du navigateur
+WAIT_MS = 3000         # temps virtuel laissé à la page pour se charger et s'animer
+WIDTH = (320, 3000)
+HEIGHT = (200, 4000)
+MAX_TEXT = 1800
 RE_CONSOLE = re.compile(r'CONSOLE[^\]]*\]\s*"(.*?)"(?:, source: (\S+) \((\d+)\))?\s*$')
 
 
-def navigateur():
+def browser():
     """La commande (liste) d'un navigateur Chromium installé, ou None. LUTIN_NAVIGATEUR impose un chemin."""
     impose = os.environ.get("LUTIN_NAVIGATEUR", "").strip()
     if impose and Path(impose).is_file():
@@ -46,7 +46,7 @@ def navigateur():
     return None
 
 
-def adresse(cible):
+def address(cible):
     """L'adresse à ouvrir : un fichier du dossier de travail (chemin relatif) ou http://127.0.0.1|localhost[:port]/… ; sinon ErreurOutil."""
     cible = str(cible or "").strip()
     if re.match(r"^https?://", cible, re.I):
@@ -61,7 +61,7 @@ def adresse(cible):
     return f.as_uri()
 
 
-def _nettoyer(dossier):
+def _clean(dossier):
     """Supprime le profil temporaire ; sous Windows le navigateur met un instant à lâcher ses fichiers, on réessaie."""
     for _ in range(8):
         shutil.rmtree(dossier, ignore_errors=True)
@@ -70,35 +70,35 @@ def _nettoyer(dossier):
         time.sleep(0.5)
 
 
-def _lancer(commande, delai):
+def _launch(commande, delai):
     return subprocess.run(commande, capture_output=True, timeout=delai, stdin=subprocess.DEVNULL)
 
 
-def photographier(url, largeur=1200, hauteur=800, navigateur_=None):
+def screenshot(url, largeur=1200, hauteur=800, navigateur_=None):
     """(octets PNG, texte affiché, titre, messages de la console). Lève ErreurOutil si le navigateur manque ou ne produit rien."""
-    nav = navigateur_ or navigateur()
+    nav = navigateur_ or browser()
     if not nav:
         raise _m.ErreurOutil(_t("Aucun navigateur (Chrome, Edge ou Chromium) n'est installé sur cette machine : l'aperçu est impossible."))
-    largeur, hauteur = max(LARGEUR[0], min(LARGEUR[1], int(largeur))), max(HAUTEUR[0], min(HAUTEUR[1], int(hauteur)))
+    largeur, hauteur = max(WIDTH[0], min(WIDTH[1], int(largeur))), max(HEIGHT[0], min(HEIGHT[1], int(hauteur)))
     tmp = tempfile.mkdtemp(prefix="lutin-apercu-")
     try:
         sortie = Path(tmp) / "capture.png"
         base = nav + ["--headless=new", "--disable-gpu", "--no-first-run", "--disable-extensions", "--hide-scrollbars", "--mute-audio", "--user-data-dir=" + str(Path(tmp) / "profil"),
-                      "--window-size=%d,%d" % (largeur, hauteur), "--virtual-time-budget=%d" % ATTENTE_MS]
+                      "--window-size=%d,%d" % (largeur, hauteur), "--virtual-time-budget=%d" % WAIT_MS]
         if hasattr(os, "geteuid") and os.geteuid() == 0:
             base.append("--no-sandbox")                                    # dans un conteneur (root), Chrome refuse sinon de démarrer
         try:
-            photo = _lancer(base + ["--enable-logging=stderr", "--v=0", "--screenshot=" + str(sortie), url], DELAI)
-            dom = _lancer(base + ["--dump-dom", url], DELAI)
+            photo = _launch(base + ["--enable-logging=stderr", "--v=0", "--screenshot=" + str(sortie), url], TIMEOUT)
+            dom = _launch(base + ["--dump-dom", url], TIMEOUT)
         except subprocess.TimeoutExpired:
-            raise _m.ErreurOutil(_t("La page n'a pas fini de se charger en {} secondes.").format(DELAI))
+            raise _m.ErreurOutil(_t("La page n'a pas fini de se charger en {} secondes.").format(TIMEOUT))
         except OSError as erreur:
             raise _m.ErreurOutil(_t("Le navigateur n'a pas pu démarrer : {}").format(erreur))
         if not sortie.is_file() or sortie.stat().st_size < 100:
             raise _m.ErreurOutil(_t("Le navigateur n'a produit aucune capture : {}").format(photo.stderr.decode("utf-8", "replace").strip()[-300:] or _t("(aucun message)")))
         png = sortie.read_bytes()
     finally:
-        _nettoyer(tmp)
+        _clean(tmp)
     console = []
     for ligne in photo.stderr.decode("utf-8", "replace").splitlines():
         m = RE_CONSOLE.search(ligne)
@@ -113,9 +113,9 @@ def photographier(url, largeur=1200, hauteur=800, navigateur_=None):
     return png, _html.unescape(texte), _html.unescape(titre.group(1).strip()) if titre else "", console[:15]
 
 
-def outil_apercu(cible, largeur, hauteur, ctx, navigateur_=None):
+def tool_preview(cible, largeur, hauteur, ctx, navigateur_=None):
     """L'outil « apercu_page » : demande l'accord, photographie, montre la capture à l'utilisateur et décrit au modèle ce que la page affiche."""
-    url = adresse(cible)
+    url = address(cible)
     largeur, hauteur = largeur or 1200, hauteur or 800
     try:
         largeur, hauteur = int(largeur), int(hauteur)
@@ -125,13 +125,13 @@ def outil_apercu(cible, largeur, hauteur, ctx, navigateur_=None):
         from . import tools
         return tools.refus(ctx, _t("Refusé par l'utilisateur : rien n'a été ouvert."))
     from . import images
-    png, texte, titre, console = photographier(url, largeur, hauteur, navigateur_)
-    ident = images.enregistrer(png)
+    png, texte, titre, console = screenshot(url, largeur, hauteur, navigateur_)
+    ident = images.save(png)
     ctx.setdefault("medias", []).append(ident)
     erreurs = [c for c in console if re.search(r"Uncaught|Error|erreur|Failed|refused|404|not defined", c, re.I)]
     lignes = [_t("Capture faite ({}×{}) et montrée à l'utilisateur dans la conversation. Tu ne vois pas l'image : appuie-toi sur ce texte.").format(largeur, hauteur),
               _t("Titre de la page : {}").format(titre or _t("(aucun)")),
-              _t("Texte affiché ({} caractères) : {}").format(len(texte), texte[:TEXTE_MAX] + (" …" if len(texte) > TEXTE_MAX else "") or _t("(la page est vide)"))]
+              _t("Texte affiché ({} caractères) : {}").format(len(texte), texte[:MAX_TEXT] + (" …" if len(texte) > MAX_TEXT else "") or _t("(la page est vide)"))]
     if console:
         lignes.append(_t("Console du navigateur ({} message(s), dont {} erreur(s)) :").format(len(console), len(erreurs)))
         lignes += ["- " + c for c in console]

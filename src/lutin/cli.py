@@ -400,7 +400,7 @@ def commande_modeles(args):
                 return 1
             choix = model_compat.roles_pour(profil, cat, mo)
         else:
-            choix = model_selection.choisir(profil, cat)
+            choix = model_selection.choose(profil, cat)
         print(_t("Ta machine : ") + profil.resume() + "\n")
         for role in model_catalog.ROLES:
             c = choix.get(role)
@@ -417,7 +417,7 @@ def commande_modeles(args):
             print("✘ " + str(e), file=sys.stderr)
             return 1
         mesures = bench.lire(Path(d["cache"]) / "bench.json")
-        for x in model_selection.lister(profil, cat, avance=args.avance or cfg.get("avance", False)):
+        for x in model_selection.list_models(profil, cat, avance=args.avance or cfg.get("avance", False)):
             m = x["modele"]
             etat = _t("installé") if m["id"] in installes else ("tient" if x["tient"] else "trop gros")
             print("{:<38} {:>5g} Go  {:<10} {}".format(m["id"], m["go"], etat, m["phrase"]))
@@ -887,7 +887,7 @@ def commande_colibri(args):
 def commande_doctor(args):
     d, cfg = contexte()
     from . import docker_doctor
-    for niveau, texte in diagnostic(cfg, d, hardware.detecter(), ollama_client.Ollama()) + docker_doctor.diagnostiquer():
+    for niveau, texte in diagnostic(cfg, d, hardware.detecter(), ollama_client.Ollama()) + docker_doctor.diagnose():
         print("{} {}".format({"ok": "✔", "info": " ", "attention": "⚠", "erreur": "✘"}[niveau], texte))
     return 0
 

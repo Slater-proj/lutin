@@ -67,7 +67,7 @@ class Images(unittest.TestCase):
 
     def test_an_upload_over_the_limit_is_read_then_refused_with_413(self):
         for attempt in range(2):
-            status, answer, _ = send("/api/v1/images", PNG + b"\x00" * (api_v1._images.TAILLE_MAX + 1))
+            status, answer, _ = send("/api/v1/images", PNG + b"\x00" * (api_v1._images.MAX_SIZE + 1))
             self.assertEqual((status, answer["error"]["code"]), (413, "too_large"), attempt)
 
     def test_the_only_route_without_the_page_token_reads_and_nothing_else_does(self):

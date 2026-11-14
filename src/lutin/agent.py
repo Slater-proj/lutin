@@ -139,7 +139,7 @@ def _estimer_avant_charge(r, emit):
         profil = model_fit.profil_pret()
         if m is None or profil is None or moteur_actuel(r).en_memoire(r["modele"]):
             return
-        e = memory_estimate.estimer(m, int(r["num_ctx"]), profil)
+        e = memory_estimate.estimate(m, int(r["num_ctx"]), profil)
         if e["niveau"] in ("trop_gros", "sature") and _avertir_une_fois("estimation:" + r["modele"]):
             emit({"type": "info", "texte": "⚠ " + e["texte"] + (" " + " ".join(e["conseils"]) if e["conseils"] else "")})
     except Exception:  # noqa: BLE001  (une estimation ratée ne doit jamais empêcher de répondre)
@@ -838,7 +838,7 @@ def modeles_connus(installes, tailles=None):
     a_lire = []
     for entree in liste:                                                                   # la précision installée (4 bits, 8 bits…) de chaque modèle du catalogue qui est installé
         if entree["id"] in installes:
-            infos = _infos.deja_connu(entree["id"], _m.DONNEES)
+            infos = _infos.already_known(entree["id"], _m.DONNEES)
             if infos is None:
                 a_lire.append(entree["id"])
             elif infos.get("quantification"):
@@ -849,7 +849,7 @@ def modeles_connus(installes, tailles=None):
         vus.add(nom)
         entree = {"id": nom, "nom": nom, "go": round(tailles.get(nom, 0) / 1e9, 1), "role": "perso", "origine": "perso" if nom in reg["perso"] else "installe"}
         if nom in installes:
-            infos = _infos.deja_connu(nom, _m.DONNEES)
+            infos = _infos.already_known(nom, _m.DONNEES)
             if infos is None:
                 a_lire.append(nom)
             elif infos:
@@ -858,10 +858,10 @@ def modeles_connus(installes, tailles=None):
                     entree["capacites"] = infos["capacites"]
                 if infos.get("embedding"):
                     entree["embedding"] = True                                          # la page ne propose ni « Utiliser » ni banc d'essai pour un modèle de recherche
-                entree["phrase"] = _infos.phrase(infos)
+                entree["phrase"] = _infos.sentence(infos)
         liste.append(entree)
     if a_lire:
-        _infos.demander(a_lire, _m.DONNEES, lambda n: ollama_json("/api/show", {"model": n}, 8))          # en arrière-plan : la liste s'améliore au rafraîchissement suivant
+        _infos.ask(a_lire, _m.DONNEES, lambda n: ollama_json("/api/show", {"model": n}, 8))          # en arrière-plan : la liste s'améliore au rafraîchissement suivant
     return liste
 
 
@@ -1031,7 +1031,7 @@ def consignes_systeme(r):
 
 def bloc_plan(r):
     """Le plan du projet dans le prompt (un quart de la fenêtre au plus, 6 500 caractères au plus) : le modèle sait où chercher sans dix recherches."""
-    plan = _m.texte_plan(min(_m.PLAN_MAX, int(r["num_ctx"] * 0.25)))
+    plan = _m.plan_text(min(_m.PLAN_MAX, int(r["num_ctx"] * 0.25)))
     if not plan:
         return ""
     return _t("\n\n# PLAN DU PROJET (dossiers, fichiers, taille en lignes et fonctions principales ; il peut être en retard de quelques minutes : vérifie avec « lire » avant de modifier)\n") + plan + "\n"
@@ -1087,7 +1087,7 @@ def nom_du_moteur(r):
     """Le nom que l'utilisateur reconnaît pour le moteur de cette réponse (Ollama, llama.cpp, ExLlamaV3, Colibri, LM Studio…) : une erreur d'ExLlamaV3 ne doit pas commencer par « Ollama »."""
     try:
         from . import engine_metrics
-        return engine_metrics.nom_affiche(moteur_actuel(r))
+        return engine_metrics.display_name(moteur_actuel(r))
     except Exception:  # noqa: BLE001  (un nom de plus : jamais une réponse perdue)
         return "Ollama"
 
@@ -1304,7 +1304,7 @@ def tour(conv, texte, emit, r=None, stop=None, remplacer_depuis=None, identite="
         if evenement.get("type") in ("texte", "erreur"):
             parle["texte"] = True
         sortie_page(evenement)
-    _m.rafraichir_plan()
+    _m.refresh_plan()
     if remplacer_depuis is not None:
         i = int(remplacer_depuis)
         if not (0 <= i < len(conv["messages"]) and conv["messages"][i].get("role") == "user"):
@@ -1500,7 +1500,7 @@ def contexte_routage():
         budget = (vram["total"] / 1024 ** 3) if vram else ((ram["total"] / 1024 ** 3) * 0.6 if ram else 0)
     except Exception:  # noqa: BLE001  (une mesure qui échoue ne doit pas empêcher de répondre)
         budget = 0
-    trop_gros = {n for n in installes if budget and (_routeur.taille_go(n, _m.MODELES) or 0) > budget * 0.95}
+    trop_gros = {n for n in installes if budget and (_routeur.size_gb(n, _m.MODELES) or 0) > budget * 0.95}
     try:
         distants = machines.modeles_distants()
     except Exception:  # noqa: BLE001
@@ -1522,7 +1522,7 @@ def router_la_demande(r, demande, images, emit, conv_id):
         if not r.get("routage") or r.get("_mission") or r.get("essai_a_blanc"):
             return False
         installes, trop_gros, distants = contexte_routage()
-        choix = _routeur.choisir(demande, installes, r["modele"], _m.MODELES, images, trop_gros, distants)
+        choix = _routeur.choose(demande, installes, r["modele"], _m.MODELES, images, trop_gros, distants)
         if choix:
             appliquer_choix(r, choix, emit, conv_id, choix["raison"])
             return True
@@ -1537,7 +1537,7 @@ def monter_en_gamme(r, corps, emit, conv_id, motif):
         if not r.get("routage") or r.get("_mission") or r.get("_monte"):
             return False
         installes, trop_gros, distants = contexte_routage()
-        choix = _routeur.plus_gros(r["modele"], installes, _m.MODELES, trop_gros, distants, exiger_reflexion=False)
+        choix = _routeur.biggest(r["modele"], installes, _m.MODELES, trop_gros, distants, exiger_reflexion=False)
         if not choix:
             return False
         r["_monte"] = True
@@ -1637,7 +1637,7 @@ def boucle_agent(conv, r, emit, ctx, stop):
             if idx_tour == 0:
                 emit({"type": "info", "texte": "Ce modèle n'a pas de mode réflexion : je le désactive pour cette demande."})
         options.update(_m.options_echantillonnage(r, reflechit))
-        if idx_tour == 0 and any(m.get("images") for m in conv["messages"][-_images.RECENTS:]):
+        if idx_tour == 0 and any(m.get("images") for m in conv["messages"][-_images.RECENT:]):
             voit = caps is None or "vision" in caps
             if not voit:
                 autre = modele_qui_voit(r["modele"])
@@ -1647,7 +1647,7 @@ def boucle_agent(conv, r, emit, ctx, stop):
                     caps = moteur_actuel(r).capacites(autre)
                 else:
                     emit({"type": "info", "texte": _t("Ce modèle ne voit pas les images et aucun modèle « Images » n'est installé : elles sont ignorées. Onglet Modèles pour en installer un.")})
-        if idx_tour == 0 and router_la_demande(r, derniere_demande, any(m.get("images") for m in conv["messages"][-_images.RECENTS:]), emit, conv["id"]):
+        if idx_tour == 0 and router_la_demande(r, derniere_demande, any(m.get("images") for m in conv["messages"][-_images.RECENT:]), emit, conv["id"]):
             caps = moteur_actuel(r).capacites(r["modele"])
             reflechit = reflechit and (caps is None or "thinking" in caps)
         rapport_contexte = {}
@@ -1677,7 +1677,7 @@ def boucle_agent(conv, r, emit, ctx, stop):
             if relance_vide and tentative >= 2 and "tools" in corps_t:
                 corps_t = {k: v for k, v in corps_t.items() if k != "tools"}          # dernier essai SANS outils : certains petits modèles ne produisent plus rien quand les outils sont déclarés ; mieux vaut une réponse en texte
             try:
-                corps_t = dict(corps_t, messages=_images.pour_le_modele(corps_t["messages"], caps is None or "vision" in caps))
+                corps_t = dict(corps_t, messages=_images.for_model(corps_t["messages"], caps is None or "vision" in caps))
                 moteur_choisi = moteur_actuel(r)
                 with _moteurs.FluxInterruptible(lambda: moteur_choisi.chat_flux(corps_t, 900), stop) as flux:          # le moteur choisi (engines.py) ; Arrêter coupe même un modèle qui charge ou qui se fige
                     for e in flux:

@@ -268,9 +268,9 @@ def delete_media(ident, media_id):
                 supprime = True
         except OSError:
             pass
-    if media_id not in images.referencees():
+    if media_id not in images.referenced():
         try:
-            images.chemin(media_id).unlink()
+            images.path_of(media_id).unlink()
         except (OSError, ValueError):
             pass
     return {"ok": True, "fichier_supprime": supprime}
@@ -345,7 +345,7 @@ def _call_tool(nom, args, ctx):
         return _m.outil_taches(args.get("liste", []), ctx)
     if nom == "apercu_page":
         from . import page_preview
-        return page_preview.outil_apercu(args.get("chemin"), args.get("largeur"), args.get("hauteur"), ctx)
+        return page_preview.tool_preview(args.get("chemin"), args.get("largeur"), args.get("hauteur"), ctx)
     if nom == "creer_document":
         return _m.outil_document(args.get("chemin"), str(args.get("contenu", "")), args.get("titre", ""), ctx)
     if nom in ("mission_terminer", "mission_bloquee"):

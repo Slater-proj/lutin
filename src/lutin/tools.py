@@ -294,7 +294,7 @@ def purger_donnees():
                 pass
     try:
         from . import images, attachments
-        images.nettoyer()
+        images.clean()
         attachments.nettoyer()
         from . import progress_sheet
         ids = {c.stem for c in (_m.DONNEES / "conversations").glob("*.json")}

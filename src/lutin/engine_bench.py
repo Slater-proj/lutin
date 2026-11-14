@@ -58,8 +58,8 @@ def une_passe(moteur, modele, ctx, horloge=time.monotonic):
 
 def mesurer(moteur, modele, mode="rapide", ctx=4096, horloge=time.monotonic, memoire=None, estime_go=None):
     """Mesure UN moteur avec UN modèle. Ne lève jamais : une panne est notée dans `erreurs` et `ok` vaut faux. `memoire()` rend {ram, vram} (octets) après les passes, ou None."""
-    from .engine_metrics import nom_affiche
-    r = {"id": moteur.id, "nom": nom_affiche(moteur), "modele": modele, "version": str(moteur.statut().get("version") or ""), "ok": False, "passes": 0, "erreurs": [], "charge_s": None, "premier_jeton_s": None,
+    from .engine_metrics import display_name
+    r = {"id": moteur.id, "nom": display_name(moteur), "modele": modele, "version": str(moteur.statut().get("version") or ""), "ok": False, "passes": 0, "erreurs": [], "charge_s": None, "premier_jeton_s": None,
          "tok_s": None, "lecture_tok_s": None, "ram": None, "vram": None}
     debut = horloge()
     try:
@@ -96,7 +96,7 @@ def mesurer(moteur, modele, mode="rapide", ctx=4096, horloge=time.monotonic, mem
         r["ram"], r["vram"] = m.get("ram"), m.get("vram")
         if estime_go and (m.get("ram") or m.get("vram")):
             mesure = ((m.get("ram") or 0) + (m.get("vram") or 0)) / 1024 ** 3
-            r["estimation"] = {"estime_go": estime_go, "mesure_go": round(mesure, 1), "ecart_pct": memory_estimate.ecart(estime_go, mesure)}          # l'estimation d'avant chargement, comparée à ce qui est réellement pris
+            r["estimation"] = {"estime_go": estime_go, "mesure_go": round(mesure, 1), "ecart_pct": memory_estimate.gap(estime_go, mesure)}          # l'estimation d'avant chargement, comparée à ce qui est réellement pris
     r["ok"] = bool(vitesses) and not r["erreurs"]
     return r
 
@@ -206,23 +206,23 @@ def versions_actuelles():
 
 def comparer(modele, mode="rapide", profil=None, ctx=4096, progression=None, horloge=time.monotonic, memoire=memoire_du_moteur, liberer_autres=liberer, date=None):
     """Compare les moteurs disponibles sur ce modèle. Renvoie le résultat complet (jamais d'exception). `progression(texte, i, n)`."""
-    from .engine_metrics import nom_affiche
+    from .engine_metrics import display_name
     dispo = disponibles(modele)
     pret = [(mo, propre) for mo, raison, propre in dispo if not raison]
     r = {"version": VERSION, "date": date or time.strftime("%Y-%m-%dT%H:%M:%S"), "modele": modele, "mode": mode, "machine": profil.resume() if profil else "", "ctx": ctx,
-         "ignores": [{"id": mo.id, "nom": nom_affiche(mo), "raison": raison} for mo, raison, _ in dispo if raison], "moteurs": []}
+         "ignores": [{"id": mo.id, "nom": display_name(mo), "raison": raison} for mo, raison, _ in dispo if raison], "moteurs": []}
     estime_go = None
     try:          # ce que l'estimation d'avant chargement annonçait pour ce modèle (comparé ensuite à la mesure)
         from . import core as _mo
         fiche = next((x for x in _mo._CATALOGUE["modeles"] if x["id"] == modele), None)
         if fiche and profil:
-            estime_go = memory_estimate.estimer(fiche, ctx, profil)["total_go"]
+            estime_go = memory_estimate.estimate(fiche, ctx, profil)["total_go"]
     except Exception:  # noqa: BLE001  (un plus)
         estime_go = None
     par_moteur = {mo.id: propre for mo, propre in pret}
     for i, (mo, propre) in enumerate(pret):
         if progression:
-            progression(_t("Mesure de {}").format(nom_affiche(mo)), i, len(pret))
+            progression(_t("Mesure de {}").format(display_name(mo)), i, len(pret))
         if len(pret) > 1:
             liberer_autres([x.id for x, _ in pret if x.id != mo.id], par_moteur)
         r["moteurs"].append(mesurer(mo, propre, mode, ctx, horloge, lambda mo=mo, propre=propre: memoire(mo.id, propre), estime_go=estime_go))
@@ -245,8 +245,8 @@ def lancer(modele, mode, dossier, profil, **options):
         raise ValueError(_t("Mode inconnu."))
     dispo = disponibles(modele)
     if sum(1 for _, raison, _p in dispo if not raison) < 2:          # comparer, c'est être au moins deux : avec un seul moteur il n'y a rien à comparer
-        from .engine_metrics import nom_affiche
-        raise ValueError(_t("Pour comparer, il faut au moins deux moteurs prêts qui ont ce modèle ou un équivalent (même famille et même taille). Pour l'instant : {}").format(" ; ".join("{} : {}".format(nom_affiche(mo), raison or _t("prêt")) for mo, raison, _p in dispo) or "?"))
+        from .engine_metrics import display_name
+        raise ValueError(_t("Pour comparer, il faut au moins deux moteurs prêts qui ont ce modèle ou un équivalent (même famille et même taille). Pour l'instant : {}").format(" ; ".join("{} : {}".format(display_name(mo), raison or _t("prêt")) for mo, raison, _p in dispo) or "?"))
     with VERROU_LANCEMENT:          # vérifier puis réserver d'un seul geste : deux demandes simultanées ne lancent pas deux comparaisons
         if ETAT["en_cours"]:
             raise ValueError(_t("Une comparaison est déjà en cours."))
@@ -268,7 +268,7 @@ def lancer(modele, mode, dossier, profil, **options):
 
 def vue(dossier, modele, profil, docker=False):
     """Ce que la page affiche : le dernier résultat pour ce modèle, s'il est à refaire, la recommandation (avec sa raison) et l'état d'une comparaison en cours."""
-    from .engine_metrics import nom_affiche
+    from .engine_metrics import display_name
     resultat = lire(dossier).get(modele)
     caduc = a_refaire(resultat, profil, versions_actuelles()) if resultat else False
     banc = resultat if resultat and not caduc else None
@@ -277,7 +277,7 @@ def vue(dossier, modele, profil, docker=False):
     except Exception:  # noqa: BLE001  (un plus pour la page)
         dispo = []
     return {"modele": modele, "resultat": resultat, "a_refaire": caduc, "recommandation": recommander(profil, banc=banc, docker=docker, modele_installe=bool(modele)),
-            "comparables": sum(1 for _, raison, _p in dispo if not raison), "disponibilite": [{"nom": nom_affiche(mo), "raison": raison, "modele": propre if not raison else ""} for mo, raison, propre in dispo],
+            "comparables": sum(1 for _, raison, _p in dispo if not raison), "disponibilite": [{"nom": display_name(mo), "raison": raison, "modele": propre if not raison else ""} for mo, raison, propre in dispo],
             "en_cours": ETAT["en_cours"], "etape": ETAT["etape"], "erreur": ETAT["erreur"]}
 
 

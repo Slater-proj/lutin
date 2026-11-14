@@ -37,54 +37,54 @@ class Classer(unittest.TestCase):
                ("compare ces deux approches et analyse les compromis", "raisonnement"), ("lis le fichier notes.txt et résume", "defaut"), ("x" * 800, "raisonnement"),
                ("```py\nprint(1)\n```", "code"), ("corrige ce bug dans app.js", "code")]
         for texte, attendu in cas:
-            self.assertEqual(model_router.classer(texte)[0], attendu, texte)
-        self.assertEqual(model_router.classer("regarde cette photo", images=True)[0], "images")
-        self.assertEqual(model_router.classer("")[0], "defaut")
+            self.assertEqual(model_router.classify(texte)[0], attendu, texte)
+        self.assertEqual(model_router.classify("regarde cette photo", images=True)[0], "images")
+        self.assertEqual(model_router.classify("")[0], "defaut")
 
     def test_taille_connue_ou_deduite_du_nom(self):
-        self.assertEqual(model_router.taille_go("qwen3:8b", CATALOGUE), 5.2)
-        self.assertEqual(model_router.taille_go("inconnu:70b", CATALOGUE), 42.0)
-        self.assertIsNone(model_router.taille_go("sans-taille", CATALOGUE))
+        self.assertEqual(model_router.size_gb("qwen3:8b", CATALOGUE), 5.2)
+        self.assertEqual(model_router.size_gb("inconnu:70b", CATALOGUE), 42.0)
+        self.assertIsNone(model_router.size_gb("sans-taille", CATALOGUE))
 
 
 class Choisir(unittest.TestCase):
     def test_code_prend_le_modele_code(self):
-        c = model_router.choisir("écris une fonction python", TOUS, "qwen3:8b", CATALOGUE)
+        c = model_router.choose("écris une fonction python", TOUS, "qwen3:8b", CATALOGUE)
         self.assertEqual((c["modele"], c["profil"]), ("qwen3-coder:30b", "code"))
-        self.assertIsNone(model_router.choisir("écris une fonction python", TOUS, "qwen3-coder:30b", CATALOGUE), "déjà un modèle code")
+        self.assertIsNone(model_router.choose("écris une fonction python", TOUS, "qwen3-coder:30b", CATALOGUE), "déjà un modèle code")
 
     def test_reflexion_prend_le_plus_gros_qui_sait_reflechir_si_le_gain_est_net(self):
-        c = model_router.choisir("pourquoi la mer est salée ?", TOUS, "qwen3:8b", CATALOGUE)
+        c = model_router.choose("pourquoi la mer est salée ?", TOUS, "qwen3:8b", CATALOGUE)
         self.assertEqual(c["modele"], "qwen3:32b")
-        self.assertIsNone(model_router.choisir("pourquoi la mer est salée ?", TOUS, "qwen3:32b", CATALOGUE))
-        self.assertIsNone(model_router.choisir("pourquoi la mer est salée ?", ["qwen3:8b", "granite4:3b"], "qwen3:8b", CATALOGUE), "granite ne sait pas réfléchir : rien à gagner")
+        self.assertIsNone(model_router.choose("pourquoi la mer est salée ?", TOUS, "qwen3:32b", CATALOGUE))
+        self.assertIsNone(model_router.choose("pourquoi la mer est salée ?", ["qwen3:8b", "granite4:3b"], "qwen3:8b", CATALOGUE), "granite ne sait pas réfléchir : rien à gagner")
 
     def test_un_modele_trop_gros_pour_la_machine_n_est_jamais_propose(self):
-        self.assertIsNone(model_router.choisir("pourquoi la mer est salée ?", TOUS, "qwen3:8b", CATALOGUE, trop_gros={"qwen3:32b"}))
-        self.assertIsNone(model_router.choisir("écris une fonction python", TOUS, "qwen3:8b", CATALOGUE, trop_gros={"qwen3-coder:30b"}))
+        self.assertIsNone(model_router.choose("pourquoi la mer est salée ?", TOUS, "qwen3:8b", CATALOGUE, trop_gros={"qwen3:32b"}))
+        self.assertIsNone(model_router.choose("écris une fonction python", TOUS, "qwen3:8b", CATALOGUE, trop_gros={"qwen3-coder:30b"}))
 
     def test_question_courte_prend_un_petit_modele_seulement_si_c_est_net(self):
-        c = model_router.choisir("quelle est la capitale de l'Italie ?", TOUS, "qwen3:8b", CATALOGUE)
+        c = model_router.choose("quelle est la capitale de l'Italie ?", TOUS, "qwen3:8b", CATALOGUE)
         self.assertEqual(c["modele"], "qwen3:1.7b")
-        self.assertIsNone(model_router.choisir("quelle est la capitale de l'Italie ?", ["granite4:3b", "qwen3:1.7b"], "granite4:3b", CATALOGUE), "1,4 contre 2,1 Go : pas deux fois plus petit")
-        self.assertIsNone(model_router.choisir("salut", TOUS, "modele-inconnu", CATALOGUE), "un modèle inconnu n'est pas rétrogradé à l'aveugle")
+        self.assertIsNone(model_router.choose("quelle est la capitale de l'Italie ?", ["granite4:3b", "qwen3:1.7b"], "granite4:3b", CATALOGUE), "1,4 contre 2,1 Go : pas deux fois plus petit")
+        self.assertIsNone(model_router.choose("salut", TOUS, "modele-inconnu", CATALOGUE), "un modèle inconnu n'est pas rétrogradé à l'aveugle")
 
     def test_un_seul_modele_installe_rien_a_choisir(self):
-        self.assertIsNone(model_router.choisir("écris une fonction python", ["qwen3:8b"], "qwen3:8b", CATALOGUE))
+        self.assertIsNone(model_router.choose("écris une fonction python", ["qwen3:8b"], "qwen3:8b", CATALOGUE))
 
     def test_images_laissees_au_mecanisme_existant(self):
-        self.assertIsNone(model_router.choisir("décris", TOUS, "qwen3:8b", CATALOGUE, images=True))
+        self.assertIsNone(model_router.choose("décris", TOUS, "qwen3:8b", CATALOGUE, images=True))
 
     def test_une_machine_appairee_peut_porter_le_gros_modele(self):
         distants = [{"id": "m" * 32, "nom": "Gros PC", "etat": "operationnel", "modeles": ["llama3.3:70b"]}]
-        c = model_router.choisir("analyse en détail les compromis de cette architecture", ["qwen3:8b", "granite4:3b"], "qwen3:8b", CATALOGUE, distants=distants)
+        c = model_router.choose("analyse en détail les compromis de cette architecture", ["qwen3:8b", "granite4:3b"], "qwen3:8b", CATALOGUE, distants=distants)
         self.assertEqual((c["modele"], c["machine"], c["machine_nom"]), ("llama3.3:70b", "m" * 32, "Gros PC"))
         hors = [dict(distants[0], etat="injoignable")]
-        self.assertIsNone(model_router.choisir("analyse en détail les compromis de cette architecture", ["qwen3:8b", "granite4:3b"], "qwen3:8b", CATALOGUE, distants=hors), "une machine éteinte n'est pas proposée")
+        self.assertIsNone(model_router.choose("analyse en détail les compromis de cette architecture", ["qwen3:8b", "granite4:3b"], "qwen3:8b", CATALOGUE, distants=hors), "une machine éteinte n'est pas proposée")
 
     def test_plus_gros_pour_la_reprise(self):
-        self.assertEqual(model_router.plus_gros("qwen3:1.7b", TOUS, CATALOGUE, exiger_reflexion=False)["modele"], "qwen3:32b")
-        self.assertIsNone(model_router.plus_gros("qwen3:32b", TOUS, CATALOGUE, exiger_reflexion=False))
+        self.assertEqual(model_router.biggest("qwen3:1.7b", TOUS, CATALOGUE, exiger_reflexion=False)["modele"], "qwen3:32b")
+        self.assertIsNone(model_router.biggest("qwen3:32b", TOUS, CATALOGUE, exiger_reflexion=False))
 
 
 class BrancheeDansLeDialogue(unittest.TestCase):

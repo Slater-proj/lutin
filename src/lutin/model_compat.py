@@ -35,7 +35,7 @@ def evaluer(modele, moteur, installes=(), profil=None):          # profil : rés
     ident = modele["id"]
     sortie = {"compatible": True, "raisons": [], "avertissements": [], "format": "GGUF", "quant": quantification(ident), "memoire_go": None}
     try:
-        sortie["memoire_go"] = round(model_selection.memoire_necessaire_go(modele, CTX_ESTIMATION), 1)          # poids + mémoire de conversation (8 192 jetons, cache compressé) + marge
+        sortie["memoire_go"] = round(model_selection.required_memory_gb(modele, CTX_ESTIMATION), 1)          # poids + mémoire de conversation (8 192 jetons, cache compressé) + marge
     except (KeyError, TypeError):
         pass
     telechargeable = moteur.telechargeable() if hasattr(moteur, "telechargeable") else {"genre": "ollama"}
@@ -68,4 +68,4 @@ def filtrer(catalogue, moteur, installes=(), profil=None):
 
 def roles_pour(profil, catalogue, moteur, installes=()):
     """{rôle: Choix ou None} sur le catalogue filtré par ce moteur : les rôles sont propres à chaque moteur."""
-    return model_selection.choisir(profil, filtrer(catalogue, moteur, installes))
+    return model_selection.choose(profil, filtrer(catalogue, moteur, installes))

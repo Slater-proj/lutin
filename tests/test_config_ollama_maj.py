@@ -312,7 +312,7 @@ class MisesAJour(unittest.TestCase):
 
     def test_pas_de_proposition_si_deja_au_meilleur_ignoree_ou_inutile(self):
         machine = Profil(ram_go=32, ram_libre_go=20, gpus=[Gpu("x", "nvidia", 24)])
-        meilleur = __import__("lutin.model_selection", fromlist=["x"]).choisir(machine, CAT)["code"].id
+        meilleur = __import__("lutin.model_selection", fromlist=["x"]).choose(machine, CAT)["code"].id
         self.assertEqual(updates.nouveautes(machine, CAT, {"code": meilleur}, {meilleur: {}}), [])
         deja = updates.nouveautes(machine, CAT, {"code": "qwen2.5-coder:7b"}, {"qwen2.5-coder:7b": {}})[0]["cle"]
         self.assertEqual(updates.nouveautes(machine, CAT, {"code": "qwen2.5-coder:7b"}, {"qwen2.5-coder:7b": {}}, ignores=[deja]), [])

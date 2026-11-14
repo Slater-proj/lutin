@@ -58,7 +58,7 @@ def est_modele_de_recherche(nom):
     base = str(nom).split(":")[0]
     if base == nom_modele().split(":")[0]:
         return True
-    return bool((model_info.deja_connu(str(nom), _m.DONNEES) or {}).get("embedding"))
+    return bool((model_info.already_known(str(nom), _m.DONNEES) or {}).get("embedding"))
 
 
 def etat():

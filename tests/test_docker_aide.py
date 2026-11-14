@@ -26,7 +26,7 @@ def injoignable(*a, **k):
 class Montages(unittest.TestCase):
     def test_points_de_montage(self):
         texte = "30 22 0:27 / /data rw,relatime - ext4 /dev/sda1 rw\n31 22 0:28 / /models rw - ext4 /dev/sdb rw\n32 22 0:1 / / rw - overlay overlay rw\n"
-        self.assertEqual(docker_doctor.points_de_montage(texte), {"/data", "/models", "/"})
+        self.assertEqual(docker_doctor.mount_points(texte), {"/data", "/models", "/"})
 
 
 class Conteneur(unittest.TestCase):
@@ -38,7 +38,7 @@ class Conteneur(unittest.TestCase):
 
     def lignes(self, tmp, montages, env=None, memoire=(None, 16e9), ouvrir=injoignable):
         env = dict({"LUTIN_HOME": str(tmp / "data"), "OLLAMA_MODELS": str(tmp / "models")}, **(env or {}))
-        return docker_doctor.verifier_conteneur(env, montages=montages, memoire=memoire, ouvrir=ouvrir, libre=lambda d: 50e9)
+        return docker_doctor.check_container(env, montages=montages, memoire=memoire, ouvrir=ouvrir, libre=lambda d: 50e9)
 
     def test_des_volumes_montes_sont_ok(self):
         tmp = self.prepare()
@@ -71,12 +71,12 @@ class Conteneur(unittest.TestCase):
 
 class Hote(unittest.TestCase):
     def test_sans_docker_rien_a_dire(self):
-        self.assertEqual(docker_doctor.verifier_hote(qui=lambda n: None), [])
+        self.assertEqual(docker_doctor.check_host(qui=lambda n: None), [])
 
     def test_docker_arrete(self):
         class R:
             returncode, stdout = 1, b""
-        lignes = docker_doctor.verifier_hote(lanceur=lambda *a, **k: R(), qui=lambda n: "docker")
+        lignes = docker_doctor.check_host(lanceur=lambda *a, **k: R(), qui=lambda n: "docker")
         self.assertEqual(lignes[0][0], "attention")
 
     def test_memoire_wsl_trop_petite(self):
@@ -87,7 +87,7 @@ class Hote(unittest.TestCase):
                 returncode = 0
                 stdout = reponses[cmd[1]]
             return R()
-        lignes = docker_doctor.verifier_hote(lanceur=lanceur, qui=lambda n: "docker")
+        lignes = docker_doctor.check_host(lanceur=lanceur, qui=lambda n: "docker")
         self.assertTrue(any(n == "attention" and ".wslconfig" in t for n, t in lignes), lignes)
 
 

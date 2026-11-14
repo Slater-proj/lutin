@@ -31,7 +31,7 @@ def http_get(url, entetes=None, delai=10, ouvrir=urllib.request.urlopen, taille_
         raise OSError(_t("adresse non sécurisée refusée"))
     offline.guard(url)
     from . import github as _github
-    req = urllib.request.Request(url, headers=dict(_github.entetes_pour(url), **dict(entetes or {}), **{"User-Agent": "lutin"}))          # le compte GitHub (facultatif) lève la limite de requêtes ; il ne part que vers api.github.com
+    req = urllib.request.Request(url, headers=dict(_github.headers_for(url), **dict(entetes or {}), **{"User-Agent": "lutin"}))          # le compte GitHub (facultatif) lève la limite de requêtes ; il ne part que vers api.github.com
     try:
         with ouvrir(req, timeout=delai) as r:
             corps = r.read((taille_max or TAILLE_MAX) + 1)
@@ -43,7 +43,7 @@ def http_get(url, entetes=None, delai=10, ouvrir=urllib.request.urlopen, taille_
 def suite_erreur(cause):
     """La fin d'un message « impossible de lire sur GitHub » : le conseil du compte GitHub si la cause est la limite de requêtes, sinon patienter."""
     from . import github as _github
-    return _github.suite_erreur(cause)
+    return _github.error_followup(cause)
 
 
 def separer(modele):
@@ -94,7 +94,7 @@ def obsoletes(catalogue, installes, ignores=()):
 
 def nouveautes(profil, catalogue, choisis, installes, ignores=()):
     """Meilleurs choix pour CETTE machine, comparés à ce que l'utilisateur a installé pour chaque rôle."""
-    meilleurs = model_selection.choisir(profil, catalogue)
+    meilleurs = model_selection.choose(profil, catalogue)
     par_id = cat.par_id(catalogue)
     budget = profil.budget_go()
     sortie = []
@@ -110,7 +110,7 @@ def nouveautes(profil, catalogue, choisis, installes, ignores=()):
             raison = _t("Ton modèle n'est plus dans le catalogue ; celui-ci est recommandé pour ta machine.")
         elif vieux.get("remplace_par") == nouveau.id:
             raison = _t("Le modèle installé est remplacé par celui-ci.")
-        elif model_selection.meilleur_contexte(vieux, budget, profil.ram_libre_go or profil.ram_go * 0.5) is None:
+        elif model_selection.best_context(vieux, budget, profil.ram_libre_go or profil.ram_go * 0.5) is None:
             raison = _t("Le modèle installé ne tient plus dans la mémoire disponible.")
         elif nouveau.modele["notes"].get(role, 0) >= vieux["notes"].get(role, 0) + 1:
             raison = _t("Mieux noté pour ce rôle ({} contre {}).").format(nouveau.modele["notes"][role], vieux["notes"].get(role, 0))
@@ -226,7 +226,7 @@ def derniere_release_detail(depot=DEPOT, http=http_get):
             erreur = "api.github.com : HTTP {}".format(statut)
             if statut in (403, 429):
                 from . import github as _github
-                erreur += " — " + _github.conseil()
+                erreur += " — " + _github.advice()
     except (OSError, ValueError) as e:
         erreur = "api.github.com : {}".format(e)
     try:

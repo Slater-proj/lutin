@@ -244,9 +244,9 @@ def _supprimer_directement(e):
     verifier(e).unlink()
     if e.get("genre") == "image":
         from . import images
-        if e["id"] not in images.referencees():
+        if e["id"] not in images.referenced():
             try:
-                images.chemin(e["id"]).unlink()
+                images.path_of(e["id"]).unlink()
             except (OSError, ValueError):
                 pass
 

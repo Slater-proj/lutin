@@ -72,8 +72,8 @@ def _lire_json(url, http):
         statut, entetes, corps = http(url, {"Accept": "application/vnd.github+json"})
     except OSError as e:
         raise ValueError(_t("GitHub ne répond pas ({}). Vérifie ta connexion.").format(str(e)[:80]))
-    if github.limite_atteinte(statut, entetes):
-        raise github.erreur_limite(entetes)
+    if github.limit_reached(statut, entetes):
+        raise github.limit_error(entetes)
     if statut == 404:
         raise ValueError(_t("Dépôt introuvable sur GitHub (ou privé)."))
     if statut == 401:
@@ -97,8 +97,8 @@ def _texte(depot, chemin, http, maxi=MAX_OCTET_FICHIER):
         statut, entetes, corps = http(url, {})
     except OSError as e:
         raise ValueError(_t("GitHub ne répond pas ({}). Vérifie ta connexion.").format(str(e)[:80]))
-    if github.limite_atteinte(statut, entetes) or statut == 429:
-        raise github.erreur_limite(entetes)
+    if github.limit_reached(statut, entetes) or statut == 429:
+        raise github.limit_error(entetes)
     if statut != 200:
         raise ValueError(_t("Fichier introuvable dans le dépôt : {}").format(chemin[:80]))
     return None if len(corps) > maxi else corps

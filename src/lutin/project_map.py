@@ -30,7 +30,7 @@ RE_SYM_PY = re.compile(r"^(?:async\s+)?def\s+(\w+)|^class\s+(\w+)", re.M)
 RE_SYM_JS = re.compile(r"^[ \t]*(?:async\s+)?function\s+(\w+)|^[ \t]*(?:const|let|var)\s+(\w+)\s*=\s*(?:async\s*)?(?:\([^)\n]*\)|\w+)\s*=>", re.M)
 
 
-def resume_fichier(f, taille):
+def file_summary(f, taille):
     """« 120 l. : fonction1, fonction2... » pour le plan. Python et JavaScript : noms des fonctions ; Markdown : premier titre."""
     suffixe = f.suffix.lower()
     if suffixe in (".json", ".txt", ".bat", ".ps1"):
@@ -56,7 +56,7 @@ def resume_fichier(f, taille):
     return "{} l.".format(texte.count("\n") + 1) + (" : " + ", ".join(noms) if noms else "")
 
 
-def construire_plan():
+def build_plan():
     """Parcourt le projet et renvoie {dossier de premier niveau: [lignes]}. Les fichiers inchangés ne sont pas relus."""
     sections = {}
     for racine, sous, noms in os.walk(str(_m.RACINE)):
@@ -79,7 +79,7 @@ def construire_plan():
             if en_cache and en_cache[0] == st.st_mtime_ns and en_cache[1] == st.st_size:
                 resume = en_cache[2]
             else:
-                resume = resume_fichier(f, st.st_size)
+                resume = file_summary(f, st.st_size)
                 PLAN_CACHE[str(f)] = (st.st_mtime_ns, st.st_size, resume)
             lignes.append("  {} ({})".format(n, resume) if resume else "  " + n)
         if len(fichiers) > 25:
@@ -87,7 +87,7 @@ def construire_plan():
     return sections
 
 
-def rafraichir_plan(force=False):
+def refresh_plan(force=False):
     """Reconstruit le plan en arrière-plan (jamais bloquant : le tour en cours utilise la dernière version)."""
     if PLAN["en_cours"] or (not force and PLAN["valide"] and time.time() - PLAN["date"] < PLAN_DELAI):
         return
@@ -95,7 +95,7 @@ def rafraichir_plan(force=False):
 
     def travail():
         try:
-            PLAN["sections"], PLAN["date"], PLAN["valide"] = construire_plan(), time.time(), True
+            PLAN["sections"], PLAN["date"], PLAN["valide"] = build_plan(), time.time(), True
         except Exception as erreur:  # noqa: BLE001
             _m.journaliser("Plan du projet impossible : {!r}".format(erreur))
         finally:
@@ -103,7 +103,7 @@ def rafraichir_plan(force=False):
     threading.Thread(target=travail, daemon=True).start()
 
 
-def texte_plan(budget):
+def plan_text(budget):
     """Le plan, réparti équitablement entre les dossiers de premier niveau pour tenir dans budget caractères (un gros dossier n'écrase pas les autres)."""
     sections = {k: "\n".join(v) for k, v in PLAN["sections"].items() if v}
     if not sections or budget < 300:
