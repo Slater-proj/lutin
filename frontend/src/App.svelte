@@ -8,6 +8,7 @@
   import type { Status } from "./lib/types";
   import Chat from "./screens/Chat.svelte";
   import Models from "./screens/Models.svelte";
+  import Setup from "./screens/Setup.svelte";
   import ComingSoon from "./screens/ComingSoon.svelte";
 
   const AREAS = ["chat", "agents", "projects", "models", "settings"] as const;
@@ -22,6 +23,7 @@
   let theme = $state<Theme>(readTheme());
   let status = $state<Status | null>(null);
   let problem = $state("");
+  let setupNeeded = $state<boolean | null>(null); // null while the server is asked: the shell is not drawn first and replaced a moment later
 
   async function refreshStatus(): Promise<void> {
     try {
@@ -43,10 +45,16 @@
     };
     addEventListener("hashchange", onHash);
     void refreshStatus();
+    api<{ needed: boolean }>("GET", "/setup").then((answer) => (setupNeeded = answer.needed), () => (setupNeeded = false)); // a server that does not answer must not trap the person in a guide
     return () => removeEventListener("hashchange", onHash);
   });
 </script>
 
+{#if setupNeeded === null}
+  <p class="loading" role="status">{t("setup.engine_looking")}</p>
+{:else if setupNeeded}
+  <Setup {status} onfinished={() => ((setupNeeded = false), void refreshStatus())} />
+{:else}
 <a class="skip" href="#main">{t("a11y.skip")}</a>
 <div class="shell">
   <nav class="rail" aria-label={t("nav.label")}>
@@ -77,8 +85,14 @@
     {/if}
   </main>
 </div>
+{/if}
 
 <style>
+  .loading {
+    padding: var(--space-6);
+    color: var(--color-text-muted);
+  }
+
   .skip {
     position: absolute;
     left: var(--space-2);

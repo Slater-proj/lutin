@@ -1,6 +1,6 @@
 # Guided models and first launch: design
 
-Proposal for plan step 4 (onboarding and the Models screen). The maintainer answered the four open questions on 2026-11-14 (below). Built so far: the routes `GET /machine`, `GET /models/catalog` and `GET /models/recommendation` ([API_V1.md](API_V1.md)).
+Proposal for plan step 4 (onboarding and the Models screen). The maintainer answered the four open questions on 2026-11-14 (below). Built so far: the routes `GET /machine`, `/models/catalog`, `/models/recommendation`, `GET /engines` with its actions, `GET /setup` and `POST /setup/complete` ([API_V1.md](API_V1.md)), the « Recommended » tab of the Models screen and the screens of the first launch ([INTERFACE.md](INTERFACE.md)). Missing: language choice, manual correction of the machine, the optional speed test, the phone pairing step.
 
 ## Goal
 

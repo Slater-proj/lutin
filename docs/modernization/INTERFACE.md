@@ -17,6 +17,21 @@ This page says what exists, what was verified and how, and what is missing. It i
 | Base components (button, card, field…) as shared components | not yet: styles are shared classes, components come with the second screen |
 | Offline: no font, no CDN, nothing fetched from another origin | done — enforced by the policy |
 
+## First launch
+
+Verified in Chrome against the fake engine and a fictive machine and disk (`tests/test_web_app_chat.py`, tests 5e and 5f), with automatic accessibility checks on every step.
+Shown **after the first installation on a new machine** (the maintainer's rule); an installation that already lives is never taken for a new one (see [API_V1.md](API_V1.md), « First launch »).
+
+| Step | State |
+|---|---|
+| Welcome: what Lutin is, three promises (everything local, it asks before it acts, nothing is installed or downloaded without agreement), « skip, I will set it up myself » | done |
+| Engine: found and running; installed and stopped → « Start »; missing → « Install » with a confirmation that says what it does (the reason given by the engine); refused in strict offline mode; failure shown with the way to do it by hand | done on the engines routes; the real installation of Ollama is **not tried** (the tests never install a program) |
+| Model: the guide of the Models screen, then the downloads in progress | done |
+| End: the chat opens; a download goes on in the background | done |
+| Language choice, correction of the detected machine, the optional speed test (« fast, behind a yes/no option », decided by the maintainer), pairing a phone | **missing** |
+
+A real finding on the way: the models folder of the development machine is on a disk with 4.7 GB free, and the guide refused a 5.2 GB download with « not enough free space »: the safeguard works on real hardware.
+
 ## Models
 
 First version, on the v1 routes that exist (list, install, delete, setting of the model in use), verified in Chrome against the fake engine (`tests/test_web_app_chat.py`, test 5b):

@@ -17,7 +17,7 @@ from unittest import mock
 import test_moteur as T  # the fake engine and a server at the « this machine » level (imported as a module: its tests do not run here)
 
 import cdp  # noqa: E402
-from lutin import hardware, model_fit, web_app  # noqa: E402
+from lutin import api_v1, hardware, model_fit, web_app  # noqa: E402
 
 CHROME = next((c for c in (os.environ.get("CHROME"), shutil.which("google-chrome"), shutil.which("chromium"), shutil.which("chrome"),
                            r"C:\Program Files\Google\Chrome\Application\chrome.exe", r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
@@ -42,6 +42,10 @@ class Chat(unittest.TestCase):
         machine = mock.patch.dict(model_fit._etat, {"profil": hardware.profil_demo(), "quand": time.time() + 3600, "en_cours": False})
         machine.start()
         cls.addClassCleanup(machine.stop)
+        # And a fictive disk: the free space of the real one (the models folder of this machine may be on a nearly full disk) decides whether a download is allowed.
+        disk = mock.patch.object(api_v1._health, "disk_space", return_value={"total": 931 * 1024 ** 3, "libre": 400 * 1024 ** 3, "racine": "C:\\"})
+        disk.start()
+        cls.addClassCleanup(disk.stop)
         cls.page = cdp.Page(CHROME, tempfile.mkdtemp(prefix="lutin-chrome-"), "1280,900")
         cls.addClassCleanup(cls.page.fermer)
         cls.page.commande("Page.addScriptToEvaluateOnNewDocument", source=WATCH)
@@ -389,6 +393,83 @@ class Chat(unittest.TestCase):
         p.attendre("!!document.querySelector('.models .downloads .card')")
         self.assertEqual(p.erreurs, [])
         p.evaluer("location.hash = '#/chat'")
+
+    def first_launch(self):
+        """A machine that looks new: no history, no model, no flag. The engine is the fake one, which runs."""
+        installed, model = list(T.INSTALLES), T.A.reglages()["modele"]
+        flag = api_v1._setup_path()
+        flag.unlink(missing_ok=True)
+        self.addCleanup(lambda: (T.INSTALLES.__setitem__(slice(None), installed), T.A.PULLS.clear(), T.A.enregistrer_reglages({"modele": model}), flag.unlink(missing_ok=True)))
+        T.INSTALLES[:] = []
+        history = mock.patch.object(api_v1, "_has_history", return_value=False)
+        history.start()
+        self.addCleanup(history.stop)
+        return flag
+
+    def test_5e_the_first_launch_leads_to_a_model_and_the_chat(self):
+        p = self.page
+        flag = self.first_launch()
+        p.aller(T.BASE + "/app/")
+        p.attendre("!!document.querySelector('.setup h1')")
+        self.assertEqual(p.evaluer("document.querySelector('.setup h1').innerText"), "Bienvenue dans Lutin")
+        self.assertFalse(p.evaluer("!!document.querySelector('nav')"), "the guide replaces the shell: no navigation to wander off with")
+        self.assertEqual(p.evaluer("document.querySelector('.steps li[aria-current=step] .label').innerText"), "Bienvenue")
+        if AXE.is_file():
+            self.axe("on the welcome of the first launch")
+        self.picture("5e-welcome")
+        p.evaluer("document.querySelector('.setup .button.primary').click()")
+        p.attendre("!!document.querySelector('.setup .card .state.on')")
+        self.assertIn("en marche", p.evaluer("document.querySelector('.setup .card').innerText"), "the engine is found running")
+        if AXE.is_file():
+            self.axe("on the engine step")
+        p.evaluer("[...document.querySelectorAll('.setup .button.primary')].find(b => b.innerText === 'Continuer').click()")
+        p.attendre("!!document.querySelector('.setup .guide .pick h3')")
+        self.assertEqual(p.evaluer("document.querySelector('.setup h1').innerText"), "Ton premier modèle")
+        before = list(T.INSTALLES)
+        p.evaluer("[...document.querySelectorAll('.setup .guide .actions .button')].find(b => b.innerText.startsWith('Télécharger')).click()")
+        try:
+            p.attendre("!!document.querySelector('.setup .guide .confirm')")
+        except cdp.ErreurCdp:
+            self.fail("no confirmation; the guide shows: " + p.evaluer("document.querySelector('.setup .guide').innerText").replace(chr(10), " | "))
+        time.sleep(0.5)
+        self.assertEqual(T.INSTALLES, before, "nothing is downloaded before the agreement, on the first launch either")
+        if AXE.is_file():
+            self.axe("on the model step")
+        self.picture("5e-model")
+        p.evaluer("document.querySelector('.setup .guide .confirm .button.primary').click()")
+        p.attendre("!!document.querySelector('.setup .guide .ok[role=status]')")
+        self.eventually(lambda: len(T.INSTALLES) == len(before) + 1, "the confirmed download reached the engine", 10)
+        p.attendre("!!document.querySelector('.setup .downloads li')")
+        p.evaluer("[...document.querySelectorAll('.setup .button.primary')].find(b => ['Continuer', 'Choisir plus tard'].includes(b.innerText)).click()")
+        p.attendre("document.querySelector('.setup h1') && document.querySelector('.setup h1').innerText === 'Tout est prêt'")
+        self.assertFalse(flag.exists(), "not recorded before the end")
+        if AXE.is_file():
+            self.axe("on the last step")
+        p.evaluer("[...document.querySelectorAll('.setup .button.primary')].find(b => b.innerText === 'Ouvrir le chat').click()")
+        p.attendre("!!document.querySelector('nav') && !!document.querySelector('#message')")
+        self.assertFalse(p.evaluer("!!document.querySelector('.setup')"))
+        self.eventually(flag.exists, "the end of the guide was recorded on the server")
+        self.assertEqual(json.loads(flag.read_text(encoding="utf-8")), {"done": True, "skipped": False})
+        p.aller(T.BASE + "/app/")
+        p.attendre("!!document.querySelector('#message')")
+        self.assertFalse(p.evaluer("!!document.querySelector('.setup')"), "once done, the guide does not come back")
+        self.assertEqual(p.erreurs, [])
+
+    def test_5f_the_guide_can_be_skipped_and_an_existing_installation_never_sees_it(self):
+        p = self.page
+        flag = self.first_launch()
+        p.aller(T.BASE + "/app/")
+        p.attendre("!!document.querySelector('.setup h1')")
+        p.evaluer("[...document.querySelectorAll('.setup .button')].find(b => b.innerText.startsWith('Passer')).click()")
+        p.attendre("!!document.querySelector('nav') && !!document.querySelector('#message')")
+        self.eventually(flag.exists, "skipping was recorded")
+        self.assertEqual(json.loads(flag.read_text(encoding="utf-8")), {"done": True, "skipped": True})
+        flag.unlink()
+        with mock.patch.object(api_v1, "_has_history", return_value=True):          # a machine that has lived: the same empty engine, but a history
+            p.aller(T.BASE + "/app/")
+            p.attendre("!!document.querySelector('#message')")
+            self.assertFalse(p.evaluer("!!document.querySelector('.setup')"), "an existing installation is never taken for a new machine")
+        self.assertEqual(p.erreurs, [])
 
     def test_6_nothing_overflows_at_360_px_and_another_area_says_it_is_not_there_yet(self):
         p = self.page
