@@ -19,28 +19,28 @@ import re
 from .i18n import t as _t
 
 ACTIONS = ("ignorer", "brouillon", "auto")
-TONS = ("agressif", "passif", "neutre", "amical")
-CRITERES = ("de", "sujet", "texte", "ton")
-RE_LIGNE = re.compile(r"^(?P<criteres>.+?)\s*->\s*(?P<action>[a-zé]+)\s*(?::\s*(?P<consigne>.*))?$")
+TONES = ("agressif", "passif", "neutre", "amical")
+CRITERIA = ("de", "sujet", "texte", "ton")
+RE_LINE = re.compile(r"^(?P<criteres>.+?)\s*->\s*(?P<action>[a-zé]+)\s*(?::\s*(?P<consigne>.*))?$")
 
 
-class ErreurRegle(ValueError):
+class RuleError(ValueError):
     pass
 
 
-def analyser(texte):
+def parse(texte):
     """Transforme le texte des règles en liste de {criteres: [(nom, motif)], action, consigne, ligne}. Lève ErreurRegle (avec le numéro de ligne) si une ligne est mal écrite."""
     regles = []
     for numero, brut in enumerate(str(texte or "").splitlines(), 1):
         ligne = brut.strip()
         if not ligne or ligne.startswith("#"):
             continue
-        m = RE_LIGNE.match(ligne)
+        m = RE_LINE.match(ligne)
         if not m:
-            raise ErreurRegle(_t("ligne {} : « {} » (attendu : critère -> action)").format(numero, ligne[:60]))
+            raise RuleError(_t("ligne {} : « {} » (attendu : critère -> action)").format(numero, ligne[:60]))
         action = m.group("action")
         if action not in ACTIONS:
-            raise ErreurRegle(_t("ligne {} : action « {} » inconnue (ignorer, brouillon ou auto)").format(numero, action))
+            raise RuleError(_t("ligne {} : action « {} » inconnue (ignorer, brouillon ou auto)").format(numero, action))
         criteres = []
         for morceau in m.group("criteres").split("+"):
             morceau = morceau.strip()
@@ -48,25 +48,25 @@ def analyser(texte):
                 continue
             nom, _, motif = morceau.partition(":")
             nom, motif = nom.strip().lower(), motif.strip()
-            if nom not in CRITERES or not motif:
-                raise ErreurRegle(_t("ligne {} : critère « {} » inconnu (de, sujet, texte, ton ou *)").format(numero, morceau[:40]))
-            if nom == "ton" and motif.lower() not in TONS:
-                raise ErreurRegle(_t("ligne {} : ton « {} » inconnu ({})").format(numero, motif, ", ".join(TONS)))
+            if nom not in CRITERIA or not motif:
+                raise RuleError(_t("ligne {} : critère « {} » inconnu (de, sujet, texte, ton ou *)").format(numero, morceau[:40]))
+            if nom == "ton" and motif.lower() not in TONES:
+                raise RuleError(_t("ligne {} : ton « {} » inconnu ({})").format(numero, motif, ", ".join(TONES)))
             criteres.append((nom, motif.lower()))
         regles.append({"criteres": criteres, "action": action, "consigne": (m.group("consigne") or "").strip(), "ligne": numero})
     return regles
 
 
-def motif_en_expression(motif):
+def pattern_to_regex(motif):
     """Un motif avec jokers (* = n'importe quoi, ? = un caractère) cherché n'importe où dans le champ : « *@banque.fr » reconnaît « Banque <contact@banque.fr> »."""
     return "".join(".*" if c == "*" else "." if c == "?" else re.escape(c) for c in motif)
 
 
-def besoin_du_ton(regles):
+def needs_tone(regles):
     return any(nom == "ton" for r in regles for nom, _ in r["criteres"])
 
 
-def choisir(regles, message, juger_ton=None):
+def choose(regles, message, juger_ton=None):
     """La première règle qui correspond au message {de, sujet, texte}, ou None. juger_ton(texte) -> un des TONS, appelé une seule fois et seulement si une règle le demande."""
     ton = []
 
@@ -84,7 +84,7 @@ def choisir(regles, message, juger_ton=None):
             if nom == "ton":
                 ok = le_ton() == motif
             else:
-                ok = bool(re.search(motif_en_expression(motif), str(message.get(nom, "")).lower()))
+                ok = bool(re.search(pattern_to_regex(motif), str(message.get(nom, "")).lower()))
             if not ok:
                 break
         if ok:

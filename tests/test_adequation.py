@@ -164,26 +164,26 @@ class Emplacements(unittest.TestCase):
     def test_null_et_vide_comptent_comme_absents(self):
         for valeur in (None, "", "null", "  "):
             Path(os.environ["LUTIN_CONFIG"]).write_text(json.dumps({"emplacements": {"modeles": valeur}}), encoding="utf-8")
-            self.assertEqual(locations.lire_config_modeles(), "", repr(valeur))
-        self.assertEqual(locations.dossier_modeles(), Path.home() / ".ollama" / "models")
+            self.assertEqual(locations.read_models_config(), "", repr(valeur))
+        self.assertEqual(locations.models_folder(), Path.home() / ".ollama" / "models")
 
     def test_changer_le_dossier_des_modeles(self):
         nouveau = _TEMP / "modeles-ollama"
         if os.name == "nt":
             from unittest import mock
             with mock.patch("lutin.setup_wizard.definir_variables_utilisateur") as definir:
-                p = locations.definir_dossier_modeles(str(nouveau))
+                p = locations.set_models_folder(str(nouveau))
             definir.assert_called_once()
         else:
-            p = locations.definir_dossier_modeles(str(nouveau))
+            p = locations.set_models_folder(str(nouveau))
         self.assertEqual(p, nouveau)
         self.assertTrue(nouveau.is_dir())
-        self.assertEqual(locations.lire_config_modeles(), str(nouveau))
-        self.assertEqual(locations.dossier_modeles(), nouveau)
+        self.assertEqual(locations.read_models_config(), str(nouveau))
+        self.assertEqual(locations.models_folder(), nouveau)
         with self.assertRaises(ValueError):
-            locations.definir_dossier_modeles("relatif/chemin")
+            locations.set_models_folder("relatif/chemin")
         with self.assertRaises(ValueError):
-            locations.definir_dossier_modeles("")
+            locations.set_models_folder("")
 
     def test_la_liste_montre_tous_les_emplacements(self):
         r = locations.lister()
@@ -192,18 +192,18 @@ class Emplacements(unittest.TestCase):
             self.assertIn(attendu, cles)
         for ligne in r["lignes"]:
             self.assertTrue(ligne["chemin"] and ligne["explication"])
-        self.assertIn("libre", (locations.jauge_modeles() or {"libre": 0}))
+        self.assertIn("libre", (locations.models_gauge() or {"libre": 0}))
 
     def test_analyse_d_un_dossier_local(self):
         d = _TEMP / "analyse"
         d.mkdir(exist_ok=True)
-        a = locations.analyse_dossier(str(d))
+        a = locations.analyze_folder(str(d))
         self.assertFalse(a["reseau"])
         self.assertTrue(a["existe"])
         self.assertIsNotNone(a["debit"])
         self.assertGreater(a["debit"], 0)
         self.assertFalse((d / ".lutin-debit").exists(), "le fichier d'essai est supprimé")
-        r = locations.analyse_dossier(chr(92) * 2 + "nas-qui-n-existe-pas" + chr(92) + "modeles")
+        r = locations.analyze_folder(chr(92) * 2 + "nas-qui-n-existe-pas" + chr(92) + "modeles")
         self.assertTrue(r["reseau"])
         self.assertTrue(any("réseau" in w for w in r["avertissements"]), "un dossier réseau est signalé")
 
@@ -217,23 +217,23 @@ class Emplacements(unittest.TestCase):
         (source / "manifests" / "registry.ollama.ai" / "library" / "x" / "1b").write_text("{}", encoding="utf-8")
         os.environ["OLLAMA_MODELS"] = str(source)
         with self.assertRaises(ValueError):
-            locations.copier_modeles(source)                                  # même dossier
+            locations.copy_models(source)                                  # même dossier
         with self.assertRaises(ValueError):
-            locations.copier_modeles(source / "dedans")                       # dans l'ancien
-        locations.copier_modeles(cible)
+            locations.copy_models(source / "dedans")                       # dans l'ancien
+        locations.copy_models(cible)
         fin = time.time() + 20
-        while time.time() < fin and locations.etat_copie()["etat"] == "en cours":
+        while time.time() < fin and locations.copy_state()["etat"] == "en cours":
             time.sleep(0.05)
-        self.assertEqual(locations.etat_copie()["etat"], "fini", locations.etat_copie())
+        self.assertEqual(locations.copy_state()["etat"], "fini", locations.copy_state())
         self.assertEqual((cible / "blobs" / "sha256-aaa").stat().st_size, 3_000_000)
         self.assertTrue((cible / "manifests" / "registry.ollama.ai" / "library" / "x" / "1b").is_file())
         self.assertTrue((source / "blobs" / "sha256-aaa").is_file(), "l'ancien dossier n'est jamais supprimé")
         self.assertEqual(list(cible.rglob("*.lutin-tmp")), [], "pas de fichier temporaire laissé")
-        locations.copier_modeles(cible)                                      # relancer saute ce qui est déjà copié
+        locations.copy_models(cible)                                      # relancer saute ce qui est déjà copié
         fin = time.time() + 20
-        while time.time() < fin and locations.etat_copie()["etat"] == "en cours":
+        while time.time() < fin and locations.copy_state()["etat"] == "en cours":
             time.sleep(0.05)
-        self.assertEqual(locations.etat_copie()["etat"], "fini")
+        self.assertEqual(locations.copy_state()["etat"], "fini")
 
 
 if __name__ == "__main__":

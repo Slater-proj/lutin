@@ -363,7 +363,7 @@ def models_folder(engine_running):
     if engine_running:
         return _health.ollama_models_folder()
     from . import locations
-    return Path(os.environ.get("OLLAMA_MODELS") or locations.lire_config_modeles() or (Path.home() / ".ollama" / "models"))
+    return Path(os.environ.get("OLLAMA_MODELS") or locations.read_models_config() or (Path.home() / ".ollama" / "models"))
 
 
 def machine_profile():

@@ -38,7 +38,7 @@ def s_assurer_qu_ollama_tourne(cfg, profil, ecrire=print):
             ecrire(_t("Ollama n'est pas installé : lance « lutin setup »."))
         return False
     from . import locations
-    ollama_client.demarrer_serveur(exe, ollama_client.variables_serveur(profil, cfg["emplacements"]["modeles"] or os.environ.get("OLLAMA_MODELS") or locations.dossier_vu()), config.systeme())
+    ollama_client.demarrer_serveur(exe, ollama_client.variables_serveur(profil, cfg["emplacements"]["modeles"] or os.environ.get("OLLAMA_MODELS") or locations.seen_folder()), config.systeme())
     import time
     for _ in range(30):
         if o.actif():

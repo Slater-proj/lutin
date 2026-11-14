@@ -96,9 +96,9 @@ def verifier():
     v = reglages_mail()
     etapes = []
     try:
-        n = len(message_rules.analyser(v.get("regles", "")))
+        n = len(message_rules.parse(v.get("regles", "")))
         etapes.append({"appel": "regles", "ok": True, "message": _t("{} règle(s)").format(n)})
-    except message_rules.ErreurRegle as e:
+    except message_rules.RuleError as e:
         return [{"appel": "regles", "ok": False, "message": str(e)}]
     try:
         imap = connexion_imap(v)
@@ -161,7 +161,7 @@ def traiter(msg, v, regles_liste):
     nom, adresse = parseaddr(str(msg.get("From", "")))
     sujet = " ".join(str(msg.get("Subject", "")).split())[:200]
     message = {"de": str(msg.get("From", "")), "sujet": sujet, "texte": texte_du_message(msg)}
-    regle = message_rules.choisir(regles_liste, message, auto_reply.juger_ton if message_rules.besoin_du_ton(regles_liste) else None)
+    regle = message_rules.choose(regles_liste, message, auto_reply.juger_ton if message_rules.needs_tone(regles_liste) else None)
     if regle is None or regle["action"] == "ignorer":
         return
     reponse = auto_reply.reponse(IDENT, _t("Courriel"), adresse.lower(), nom or adresse, _t("Objet : {}\n\n{}").format(sujet, message["texte"]), regle["consigne"], VIVANT["stop"])
@@ -214,8 +214,8 @@ def une_lecture():
         VIVANT["erreur"] = _t("À configurer d'abord.")
         return -1
     try:
-        regles_liste = message_rules.analyser(v.get("regles", ""))
-    except message_rules.ErreurRegle as e:
+        regles_liste = message_rules.parse(v.get("regles", ""))
+    except message_rules.RuleError as e:
         VIVANT["erreur"] = str(e)
         return -1
     try:
@@ -328,8 +328,8 @@ def action(nom, donnees):
             return etat()
         if nom == "verifier_regles":
             try:
-                return {"ok": True, "regles": len(message_rules.analyser(addons.reglages(IDENT).get("regles", "")))}
-            except message_rules.ErreurRegle as erreur:
+                return {"ok": True, "regles": len(message_rules.parse(addons.reglages(IDENT).get("regles", "")))}
+            except message_rules.RuleError as erreur:
                 raise addons.ErreurAddon(str(erreur))
     raise addons.ErreurAddon(_t("Action inconnue."))
 

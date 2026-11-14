@@ -321,11 +321,11 @@ class Gestionnaire(BaseHTTPRequestHandler):
             r = dict(r, modele="")
         if mo.id != "ollama":
             return Gestionnaire._diagnostic_moteur(mo, o, r)
-        jauge = _emplacements.jauge_modeles() or {}
+        jauge = _emplacements.models_gauge() or {}
         libre = jauge.get("libre")
         try:
             return _diagnostic.diagnostiquer(o["actif"], bool(_m.chemin_ollama()), [n for n in o["installes"] if not _embeddings.est_modele_de_recherche(n)], r, profil, _m._CATALOGUE, _adequation.pour_la_liste(modeles, profil, _m._CATALOGUE["modeles"]),
-                                             libre / 1e9 if libre else None, conseils=_conseil_machine.conseils(profil, r), modeles_ailleurs=_emplacements.modeles_ailleurs(o["installes"]) if o["actif"] else None)
+                                             libre / 1e9 if libre else None, conseils=_conseil_machine.advice(profil, r), modeles_ailleurs=_emplacements.models_elsewhere(o["installes"]) if o["actif"] else None)
         except (KeyError, TypeError, ValueError, AttributeError):
             return []
 
@@ -473,11 +473,11 @@ class Gestionnaire(BaseHTTPRequestHandler):
             modeles = _m.modeles_connus(o["installes"], o.get("tailles"))
             profil = _adequation.profil_pret()
             return self._envoyer(200, {"compat": self._compat(o), "adequation": _adequation.pour_la_liste(modeles, profil, _m._CATALOGUE["modeles"]), "machine": profil.resume() if profil else "", "budget_go": profil.budget_go() if profil else 0,
-                                       "familles": {k: _t(v) for k, v in (_m._CATALOGUE.get("familles") or {}).items()}, "disque_modeles": _emplacements.jauge_modeles(),
+                                       "familles": {k: _t(v) for k, v in (_m._CATALOGUE.get("familles") or {}).items()}, "disque_modeles": _emplacements.models_gauge(),
                                        "version": _m.VERSION, "partages": o.get("partages", []), "ollama": o["actif"], "ollama_installe": bool(_m.chemin_ollama()) or _m.moteur_actuel().id != "ollama", "moteur_nom": _mesures.nom_affiche(_m.moteur_actuel()), "installes": o["installes"], "modeles": modeles, "modeles_masques": len(_m.lire_registre_modeles()["masques"]), "actives": list(_m.TOURS_ACTIFS),
                                        "pulls": _m.PULLS, "reglages": r, "conversations": _m.conv_liste(), "racine": str(_m.RACINE), "donnees": str(_m.DONNEES),
                                        "colibri_choisi": bool(getattr(_m.moteur_actuel(r), "colibri_choisi", lambda: False)()), "lmstudio_choisi": bool(getattr(_m.moteur_actuel(r), "lmstudio_choisi", lambda: False)()), "exllamav3_choisi": bool(getattr(_m.moteur_actuel(r), "exllamav3_choisi", lambda: False)()), "outil": bool(self._outil_vivant()), "hors_ligne": _hl.is_active(), "moteur": _m.moteur_actuel().id, "niveau": _m.SECURITE.niveau, "docker": _acces.en_docker(), "ouverture_possible": _fichiers.ouverture_possible(), "missions": _mission.par_conversation(), "langue": _i18n.langue(), "langue_reglage": _i18n.langue_configuree(), "cpus": _machine.cpus_disponibles() or 1, "diagnostic": self._avec_estimation(self._diagnostic(o, r, profil, modeles), r, profil), "prudent": _estimation.mode_prudent(profil), "premier_lancement": self._premier_lancement(o, r, profil), "redemarrage": {"necessaire": _acces.securite_enregistree() != _m.SECURITE, "possible": _acces.peut_redemarrer()}, "nouvelle_version": _m.nouvelle_version_lutin(), "travaux": _m.travaux_etat(), "configurateur": self._configurateur(), "addons_alertes": _addons.alertes(), "embeddings": _embeddings.etat(),
-                                       "reflexion_possible": self._reflexion_possible(r, o["actif"]), "cluster_actif": _machines.cluster_actif(r.get("cluster")), "demandes_machines": len(_machines.noeud().get("demandes", [])), "modeles_distants": _machines.modeles_distants() if _machines.cluster_actif(r.get("cluster")) else [], "conversations_distantes": _machines.conversations_distantes() if _machines.cluster_actif(r.get("cluster")) else [], "machines_hors_ligne": _machines.hors_ligne() if _machines.cluster_actif(r.get("cluster")) else [], "taches_fond": _m.taches_en_cours(), "taches_moteur": [dict(v, nom=_moteurs.MOTEURS[k].nom) for k, v in _moteurs.toutes_les_taches().items() if v.get("statut") == "en cours" and k in _moteurs.MOTEURS], "fins_moteur": _moteurs.fins_recentes(), "memoire": self._memoire(r, o), "calibrage": _calibrage.etat(), "bench": {"en_cours": _m.BENCH["en_cours"], "etape": _m.BENCH["etape"], "erreur": _m.BENCH["erreur"], "file": list(_m.BENCH.get("file") or []), "mesures": _bench.lire(_m.chemin_bench())}, "attentes": [{"id": a.id, "titre": a.titre, "detail": a.detail, "diff": a.diff, "conv": a.conv} for a in _m.Attente.EN_COURS.values()],
+                                       "reflexion_possible": self._reflexion_possible(r, o["actif"]), "cluster_actif": _machines.cluster_actif(r.get("cluster")), "demandes_machines": len(_machines.noeud().get("demandes", [])), "modeles_distants": _machines.modeles_distants() if _machines.cluster_actif(r.get("cluster")) else [], "conversations_distantes": _machines.conversations_distantes() if _machines.cluster_actif(r.get("cluster")) else [], "machines_hors_ligne": _machines.hors_ligne() if _machines.cluster_actif(r.get("cluster")) else [], "taches_fond": _m.taches_en_cours(), "taches_moteur": [dict(v, nom=_moteurs.MOTEURS[k].nom) for k, v in _moteurs.toutes_les_taches().items() if v.get("statut") == "en cours" and k in _moteurs.MOTEURS], "fins_moteur": _moteurs.fins_recentes(), "memoire": self._memoire(r, o), "calibrage": _calibrage.state(), "bench": {"en_cours": _m.BENCH["en_cours"], "etape": _m.BENCH["etape"], "erreur": _m.BENCH["erreur"], "file": list(_m.BENCH.get("file") or []), "mesures": _bench.lire(_m.chemin_bench())}, "attentes": [{"id": a.id, "titre": a.titre, "detail": a.detail, "diff": a.diff, "conv": a.conv} for a in _m.Attente.EN_COURS.values()],
                                        "en_attente": sorted({a.conv for a in _m.Attente.EN_COURS.values() if a.conv} | set(_m.CHOIX_MEMOIRE))})
         if chemin == "/api/conseil":
             r = _m.reglages()
@@ -485,7 +485,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
             if not vitesse or not vitesse.get("tok_s"):
                 return self._envoyer(200, {"mesure": None, "conseil": []})
             from .hardware import detecter
-            return self._envoyer(200, {"mesure": vitesse, "conseil": _conseil.analyser(vitesse, detecter(), r, _m._CATALOGUE, _m.etat_moteur()["installes"], _m.ps_modele(r["modele"]))})
+            return self._envoyer(200, {"mesure": vitesse, "conseil": _conseil.analyze(vitesse, detecter(), r, _m._CATALOGUE, _m.etat_moteur()["installes"], _m.ps_modele(r["modele"]))})
         if chemin == "/api/notifications":
             return self._envoyer(200, {"canaux": _notif.lister(), "types": _notif.types()})
         if chemin == "/api/planifie":
@@ -623,9 +623,9 @@ class Gestionnaire(BaseHTTPRequestHandler):
         if chemin == "/api/dossier-modeles-chercher":            # retrouver des modèles déjà téléchargés (autre disque, ancien dossier)
             if not self._configurateur():
                 return self._envoyer(403, {"erreur": _t("Cela se fait depuis cette machine (niveau « cette machine seulement » ou navigateur de cette machine).")})
-            return self._envoyer(200, {"dossiers": _emplacements.chercher_dossiers_modeles(connus=[_emplacements.dossier_vu(), os.environ.get("OLLAMA_MODELS", ""), _emplacements.lire_config_modeles()]), "actuel": str(_emplacements.dossier_modeles())})
+            return self._envoyer(200, {"dossiers": _emplacements.find_models_folders(connus=[_emplacements.seen_folder(), os.environ.get("OLLAMA_MODELS", ""), _emplacements.read_models_config()]), "actuel": str(_emplacements.models_folder())})
         if chemin == "/api/dossier-modeles-etat":
-            return self._envoyer(200, _emplacements.etat_copie())
+            return self._envoyer(200, _emplacements.copy_state())
         if chemin == "/api/emplacements":                        # tous les dossiers que Lutin utilise, leur taille et la place libre
             from . import locations
             return self._envoyer(200, dict(locations.lister(), modifiable=self._configurateur()))
@@ -1026,15 +1026,15 @@ class Gestionnaire(BaseHTTPRequestHandler):
                     return self._envoyer(403, {"erreur": _t("Le dossier des modèles se change depuis cette machine.")})
                 from . import locations
                 if self.path == "/api/dossier-modeles-analyse":
-                    return self._envoyer(200, locations.analyse_dossier(str(donnees.get("chemin", ""))))
+                    return self._envoyer(200, locations.analyze_folder(str(donnees.get("chemin", ""))))
                 if self.path == "/api/dossier-modeles-copie":
-                    return self._envoyer(200, locations.copier_modeles(str(donnees.get("chemin", ""))))
+                    return self._envoyer(200, locations.copy_models(str(donnees.get("chemin", ""))))
                 return self._envoyer(200, {"message": _m.redemarrer_ollama()})
             if self.path == "/api/dossier-modeles":
                 if not self._configurateur():
                     return self._envoyer(403, {"erreur": _t("Le dossier des modèles se change depuis cette machine.")})
                 from . import locations
-                return self._envoyer(200, {"dossier": str(locations.definir_dossier_modeles(str(donnees.get("chemin", "")))), "note": _t("Les modèles déjà téléchargés ne sont pas déplacés : déplace-les à la main dans le nouveau dossier, ou retélécharge-les. Redémarre Ollama (quitte-le puis relance-le) pour qu'il utilise le nouveau dossier.")})
+                return self._envoyer(200, {"dossier": str(locations.set_models_folder(str(donnees.get("chemin", "")))), "note": _t("Les modèles déjà téléchargés ne sont pas déplacés : déplace-les à la main dans le nouveau dossier, ou retélécharge-les. Redémarre Ollama (quitte-le puis relance-le) pour qu'il utilise le nouveau dossier.")})
             if self.path == "/api/travaux-choisir":
                 return self._envoyer(200, _m.choisir_travail(str(donnees.get("id", ""))))
             if self.path in ("/api/travaux-ajouter", "/api/travaux-retirer", "/api/travaux-deplacer", "/api/travaux-chemin"):
@@ -1094,11 +1094,11 @@ class Gestionnaire(BaseHTTPRequestHandler):
             if self.path == "/api/calibrage":
                 action = str(donnees.get("action", ""))
                 if action == "start":
-                    return self._envoyer(200, _calibrage.lancer())
+                    return self._envoyer(200, _calibrage.start())
                 if action == "cancel":
-                    return self._envoyer(200, _calibrage.annuler())
+                    return self._envoyer(200, _calibrage.cancel())
                 if action == "apply":
-                    return self._envoyer(200, _calibrage.appliquer())
+                    return self._envoyer(200, _calibrage.apply())
                 return self._envoyer(400, {"erreur": _t("Action inconnue.")})
             if self.path == "/api/conseil-machine":
                 action = str(donnees.get("action", ""))
@@ -1106,7 +1106,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
                     _m.enregistrer_reglages({"conseil_machine": False})
                     return self._envoyer(200, {"ok": True})
                 if action == "appliquer":
-                    changements = _conseil_machine.appliquer(_adequation.profil_pret(), _m.reglages())
+                    changements = _conseil_machine.apply(_adequation.profil_pret(), _m.reglages())
                     if changements:
                         _m.enregistrer_reglages(changements)
                     return self._envoyer(200, {"ok": True, "appliques": changements})

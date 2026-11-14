@@ -594,9 +594,9 @@ class MoteurOllama(_moteurs.Moteur):
         """Le dossier où Ollama range ses modèles AVANT une installation, s'il contient des modèles : une installation (ou une réinstallation) peut le faire retomber sur le dossier par défaut, vide."""
         try:
             from . import locations
-            dossier = locations.dossier_modeles()
+            dossier = locations.models_folder()
             if (Path(dossier) / "manifests").is_dir():
-                locations.retenir_dossier_vu(dossier)
+                locations.remember_seen_folder(dossier)
                 return str(dossier)
         except (OSError, ValueError):
             pass
@@ -608,7 +608,7 @@ class MoteurOllama(_moteurs.Moteur):
             return
         try:
             from . import locations
-            locations.definir_dossier_modeles(dossier)
+            locations.set_models_folder(dossier)
         except (OSError, ValueError) as erreur:
             _m.journaliser("Dossier des modèles d'Ollama non rétabli après l'installation ({!r}).".format(erreur))
 

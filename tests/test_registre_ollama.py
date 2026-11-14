@@ -156,10 +156,10 @@ class RetrouverMesModeles(unittest.TestCase):
         (ancien / "blobs" / ("sha256-" + EMP_GGUF.split(":")[1])).write_bytes(GGUF)
         vide = self.tmp / "C" / "Users" / "x" / ".ollama" / "models"
         (vide / "manifests").mkdir(parents=True)
-        vrai = locations.racines_a_visiter
-        locations.racines_a_visiter = lambda: [self.tmp / "E", self.tmp / "D"]
+        vrai = locations.roots_to_visit
+        locations.roots_to_visit = lambda: [self.tmp / "E", self.tmp / "D"]
         self.addCleanup(setattr, locations, "racines_a_visiter", vrai)
-        trouves = locations.chercher_dossiers_modeles(connus=[str(vide)])
+        trouves = locations.find_models_folders(connus=[str(vide)])
         self.assertEqual([t["chemin"] for t in trouves], [str(self.tmp / "E" / "IA" / "Ollama" / "models")], "le dossier vide n'est pas proposé")
         self.assertEqual(trouves[0]["modeles"], 1)
 

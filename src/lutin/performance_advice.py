@@ -5,27 +5,27 @@ Les seuils sont des repères de confort de lecture, pas des mesures de qualité 
 from . import model_selection
 from .i18n import t as _t
 
-CONFORTABLE = 25.0        # jetons par seconde : réponse plus rapide que la lecture
-CORRECT = 10.0
-LENT = 5.0
+COMFORTABLE = 25.0        # jetons par seconde : réponse plus rapide que la lecture
+ACCEPTABLE = 10.0
+SLOW = 5.0
 
 
-def qualite(tok_s):
-    if tok_s >= CONFORTABLE:
+def quality(tok_s):
+    if tok_s >= COMFORTABLE:
         return "tres_bien"
-    if tok_s >= CORRECT:
+    if tok_s >= ACCEPTABLE:
         return "bien"
-    if tok_s >= LENT:
+    if tok_s >= SLOW:
         return "lent"
     return "tres_lent"
 
 
-def analyser(mesure, profil, reglages, catalogue, installes=(), charge=None):
+def analyze(mesure, profil, reglages, catalogue, installes=(), charge=None):
     """[{niveau: ok | info | attention, texte}] : la vitesse mesurée en une phrase, puis ce qui peut l'améliorer.
     mesure : {tok_s, charge_s} ; charge : {taille, vram} du modèle chargé dans Ollama (ou None) ; catalogue : le catalogue de modèles (selection.choisir)."""
     tok_s = float(mesure.get("tok_s") or 0)
     modele = reglages.get("modele", "")
-    q = qualite(tok_s)
+    q = quality(tok_s)
     mots_par_s = tok_s * 0.75
     lignes = [{"niveau": "ok" if q in ("tres_bien", "bien") else "attention",
                "texte": _t("{} écrit environ {:.0f} jetons par seconde (≈ {:.0f} mots) : {}.").format(modele, tok_s, mots_par_s, {

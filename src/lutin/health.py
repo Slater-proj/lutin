@@ -134,7 +134,7 @@ def folder_size(d, delai=4.0):
 
 def ollama_models_folder():
     from . import locations
-    return locations.dossier_modeles()
+    return locations.models_folder()
 
 
 def model_size(nom, charge=None):

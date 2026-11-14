@@ -108,7 +108,7 @@ def traiter_mention(m, auteurs, mon_id, regles_liste):
     nom = (auteurs.get(str(m.get("author_id", ""))) or {}).get("name", "") or pseudo
     texte = " ".join(str(m.get("text", "")).split())[:1000]
     message = {"de": "@" + pseudo, "sujet": "", "texte": texte}
-    regle = message_rules.choisir(regles_liste, message, auto_reply.juger_ton if message_rules.besoin_du_ton(regles_liste) else None)
+    regle = message_rules.choose(regles_liste, message, auto_reply.juger_ton if message_rules.needs_tone(regles_liste) else None)
     if regle is None or regle["action"] == "ignorer":
         return
     reponse = auto_reply.reponse(IDENT, "X", str(m.get("author_id", "")), "@" + pseudo, _t("Message de @{} : {}").format(pseudo, texte),
@@ -148,8 +148,8 @@ def lire_mentions():
             return -1
     mon_id = VIVANT["moi"].get("id")
     try:
-        regles_liste = message_rules.analyser(v.get("regles", ""))
-    except message_rules.ErreurRegle as erreur:
+        regles_liste = message_rules.parse(v.get("regles", ""))
+    except message_rules.RuleError as erreur:
         VIVANT["erreur"] = str(erreur)
         return -1
     e = lire()

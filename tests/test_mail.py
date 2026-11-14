@@ -79,28 +79,28 @@ class FauxSMTP:
 class Regles(unittest.TestCase):
     def test_analyse_et_choix(self):
         texte = "# commentaire\nde:*@banque.fr -> ignorer\nsujet:*facture* + de:compta -> brouillon: Réponds que je regarde.\nton:agressif -> ignorer\n* -> brouillon\n"
-        liste = message_rules.analyser(texte)
+        liste = message_rules.parse(texte)
         self.assertEqual([r["action"] for r in liste], ["ignorer", "brouillon", "ignorer", "brouillon"])
         self.assertEqual(liste[1]["consigne"], "Réponds que je regarde.")
-        choix = lambda m, ton=None: message_rules.choisir(liste, m, (lambda t: ton) if ton else None)  # noqa: E731
+        choix = lambda m, ton=None: message_rules.choose(liste, m, (lambda t: ton) if ton else None)  # noqa: E731
         self.assertEqual(choix({"de": "Banque <contact@banque.fr>", "sujet": "x", "texte": "x"})["action"], "ignorer", "le motif cherché dans « Nom <adresse> »")
         self.assertEqual(choix({"de": "Compta <compta@asso.fr>", "sujet": "Facture 12", "texte": "x"})["consigne"], "Réponds que je regarde.", "« + » combine les critères")
         self.assertEqual(choix({"de": "compta@asso.fr", "sujet": "Autre", "texte": "x"}, ton="neutre")["ligne"], 5, "une seule ligne correspond ici : la dernière")
         self.assertEqual(choix({"de": "x@y.fr", "sujet": "x", "texte": "grr"}, ton="agressif")["action"], "ignorer")
         appels = []
-        message_rules.choisir(liste, {"de": "a", "sujet": "b", "texte": "c"}, lambda t: appels.append(t) or "neutre")
+        message_rules.choose(liste, {"de": "a", "sujet": "b", "texte": "c"}, lambda t: appels.append(t) or "neutre")
         self.assertEqual(len(appels), 1, "le ton n'est jugé qu'une fois, et seulement si une règle le demande")
         appels.clear()
-        message_rules.choisir(message_rules.analyser("* -> brouillon"), {"de": "a", "sujet": "b", "texte": "c"}, lambda t: appels.append(t))
+        message_rules.choose(message_rules.parse("* -> brouillon"), {"de": "a", "sujet": "b", "texte": "c"}, lambda t: appels.append(t))
         self.assertEqual(appels, [])
-        self.assertIsNone(message_rules.choisir([], {"de": "a"}), "sans règle : rien n'est fait")
-        self.assertTrue(message_rules.besoin_du_ton(liste))
-        self.assertEqual(message_rules.choisir(liste, {"de": "x", "sujet": "x", "texte": "x"}, lambda t: 1 / 0)["ligne"], 5, "un jugement qui plante vaut « neutre »")
+        self.assertIsNone(message_rules.choose([], {"de": "a"}), "sans règle : rien n'est fait")
+        self.assertTrue(message_rules.needs_tone(liste))
+        self.assertEqual(message_rules.choose(liste, {"de": "x", "sujet": "x", "texte": "x"}, lambda t: 1 / 0)["ligne"], 5, "un jugement qui plante vaut « neutre »")
 
     def test_erreurs_lisibles(self):
         for mauvais, attendu in (("n'importe quoi", "ligne 1"), ("* -> detruire", "inconnue"), ("couleur:rouge -> ignorer", "critère"), ("ton:furieux -> ignorer", "ton"), ("de: -> ignorer", "critère")):
-            with self.assertRaises(message_rules.ErreurRegle) as e:
-                message_rules.analyser(mauvais)
+            with self.assertRaises(message_rules.RuleError) as e:
+                message_rules.parse(mauvais)
             self.assertIn(attendu, str(e.exception))
 
 

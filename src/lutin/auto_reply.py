@@ -72,4 +72,4 @@ def juger_ton(texte):
         mot = (rep.get("message", {}).get("content") or "").strip().lower()
     except Exception:  # noqa: BLE001
         return "neutre"
-    return next((t for t in message_rules.TONS if t in mot), "neutre")
+    return next((t for t in message_rules.TONES if t in mot), "neutre")

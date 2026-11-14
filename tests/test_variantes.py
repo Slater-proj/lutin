@@ -80,19 +80,19 @@ GROS = Profil(systeme="linux", ram_go=64.0, ram_libre_go=40.0, gpus=[Gpu("RTX", 
 
 class ConseilMachine(unittest.TestCase):
     def test_machine_sans_carte_graphique(self):
-        c = low_end_mode.conseils(CPU, {"num_ctx": 24576, "reflexion": True})
+        c = low_end_mode.advice(CPU, {"num_ctx": 24576, "reflexion": True})
         self.assertEqual({x["cle"]: x["conseille"] for x in c}, {"num_ctx": 12288, "reflexion": False})
-        self.assertEqual(low_end_mode.appliquer(CPU, {"num_ctx": 24576, "reflexion": True}), {"num_ctx": 12288, "reflexion": False})
+        self.assertEqual(low_end_mode.apply(CPU, {"num_ctx": 24576, "reflexion": True}), {"num_ctx": 12288, "reflexion": False})
 
     def test_rien_a_conseiller_quand_les_reglages_conviennent_ou_que_la_machine_est_grosse(self):
-        self.assertEqual(low_end_mode.conseils(CPU, {"num_ctx": 8192, "reflexion": False}), [])
-        self.assertEqual(low_end_mode.conseils(GROS, {"num_ctx": 24576, "reflexion": True}), [])
-        self.assertEqual(low_end_mode.conseils(None, {"num_ctx": 24576}), [])
-        self.assertEqual(low_end_mode.appliquer(GROS, {"num_ctx": 24576}), {})
-        self.assertEqual([x["cle"] for x in low_end_mode.conseils(CPU, {"num_ctx": 8192, "reflexion": True})], ["reflexion"], "un seul réglage à changer")
+        self.assertEqual(low_end_mode.advice(CPU, {"num_ctx": 8192, "reflexion": False}), [])
+        self.assertEqual(low_end_mode.advice(GROS, {"num_ctx": 24576, "reflexion": True}), [])
+        self.assertEqual(low_end_mode.advice(None, {"num_ctx": 24576}), [])
+        self.assertEqual(low_end_mode.apply(GROS, {"num_ctx": 24576}), {})
+        self.assertEqual([x["cle"] for x in low_end_mode.advice(CPU, {"num_ctx": 8192, "reflexion": True})], ["reflexion"], "un seul réglage à changer")
 
     def test_le_conseil_apparait_dans_le_diagnostic_sans_masquer_une_erreur_et_se_laisse_ignorer(self):
-        c = low_end_mode.conseils(CPU, {"num_ctx": 24576, "reflexion": True})
+        c = low_end_mode.advice(CPU, {"num_ctx": 24576, "reflexion": True})
         base = dict(ollama_actif=True, ollama_installe=True, installes=["qwen3:4b"], docker=False, conseils=c)
         p, = diagnostic.diagnostiquer(reglages={"modele": "qwen3:4b", "conseil_machine": True}, **base)
         self.assertEqual((p["code"], p["niveau"], p["action"]["type"], p["action2"]["type"]), ("petite_machine", "info", "appliquer_conseil", "ignorer_conseil"))
