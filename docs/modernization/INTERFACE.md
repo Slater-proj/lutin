@@ -21,7 +21,7 @@ This page says what exists, what was verified and how, and what is missing. It i
 
 Verified end to end in a real Chrome against a fake engine (`tests/test_web_app_chat.py`): page loads without any policy violation; a message is sent and
 the answer is written as it arrives; Markdown is drawn and no HTML comes out of an answer; an action waits for an approval given on the page and a refusal leaves the file untouched;
-a conversation is renamed and pinned; the options are chosen before or after the first message and kept by the server for that conversation only; a message is edited and the conversation goes on from it; a refusal of the server is shown and the message
+a document and an image are attached, sent, shown in the message and kept when it is edited; a conversation is renamed and pinned; the options are chosen before or after the first message and kept by the server for that conversation only; a message is edited and the conversation goes on from it; a refusal of the server is shown and the message
 given back; themes; no overflow at 360 px.
 
 Not verified: a real engine, a real phone, a screen reader, other browsers than Chrome, automated accessibility checks (WCAG 2.2 AA is the target, no tool has been run yet).
@@ -39,7 +39,7 @@ Not verified: a real engine, a real phone, a screen reader, other browsers than 
 | Syntax colouring of code, diagrams (Mermaid), formulas | missing |
 | Rename, pin a conversation | done |
 | Edit a message and answer again from it | done |
-| Images and attached documents | missing (upload routes are not in v1 yet) |
+| Images and attached documents | done: file dialog, paste of a picture, drop on the field; sent, shown in the message, kept when the message is edited. Missing: download of a sent document; a sign that the chosen model cannot see images |
 | Per-conversation options: mode, reasoning, web, dry run, automatic approvals, mission duration | done — a panel beside the field; an approval that is on stays visible while the panel is shut |
 | Conversations led on another machine | missing (not in v1 yet) |
 | Reconnecting to a turn still running after a reload | missing: the page shows the stored conversation, not the running answer |

@@ -3,15 +3,28 @@
   import { t } from "../lib/messages";
   import Icon from "./Icon.svelte";
   import Markdown from "./Markdown.svelte";
-  import type { Block, Item, LiveTurn } from "../lib/turn";
+  import type { Block, Item, LiveTurn, Sent } from "../lib/turn";
 
-  let { items, pending, live, onedit }: { items: Item[]; pending: string; live: LiveTurn | null; onedit?: (index: number, text: string) => void } = $props();
+  let { items, pending, live, onedit }: { items: Item[]; pending: ({ text: string } & Sent) | null; live: LiveTurn | null; onedit?: (item: Extract<Item, { role: "user" }>) => void } = $props();
 
   function shown(value: unknown): string {
     if (value === null || value === undefined) return "";
     return typeof value === "string" ? value : JSON.stringify(value, null, 2);
   }
 </script>
+
+{#snippet sentView(sent: Sent)}
+  {#if sent.images.length}
+    <div class="sent">
+      {#each sent.images as id (id)}<img src={"/api/v1/images/" + encodeURIComponent(id)} alt={t("chat.image_sent")} loading="lazy" />{/each}
+    </div>
+  {/if}
+  {#if sent.files.length}
+    <ul class="files">
+      {#each sent.files as name, index (index)}<li><Icon name="file" size={16} /><span>{t("chat.file_sent", name)}</span></li>{/each}
+    </ul>
+  {/if}
+{/snippet}
 
 {#snippet blocksView(blocks: Block[])}
   {#each blocks as block, index (index)}
@@ -53,10 +66,11 @@
     {#if item.role === "user"}
       <li class="mine">
         {#if onedit}
-          <button type="button" class="edit" onclick={() => onedit(item.index, item.text)}><Icon name="pencil" size={16} /><span class="visually-hidden">{t("chat.edit")}</span></button>
+          <button type="button" class="edit" onclick={() => onedit(item)}><Icon name="pencil" size={16} /><span class="visually-hidden">{t("chat.edit")}</span></button>
         {/if}
         <div class="user">
           <h2 class="visually-hidden">{t("chat.you")}</h2>
+          {@render sentView(item)}
           <p class="text">{item.text}</p>
         </div>
       </li>
@@ -71,7 +85,8 @@
     <li class="mine">
       <div class="user">
         <h2 class="visually-hidden">{t("chat.you")}</h2>
-        <p class="text">{pending}</p>
+        {@render sentView(pending)}
+        <p class="text">{pending.text}</p>
       </div>
     </li>
   {/if}
@@ -168,6 +183,36 @@
     gap: var(--space-2);
     font-size: var(--text-sm);
     font-weight: 650;
+  }
+
+  .sent {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    margin-bottom: var(--space-2);
+  }
+
+  .sent img {
+    max-width: 100%;
+    max-height: 14rem;
+    border-radius: var(--radius-md);
+    object-fit: contain;
+  }
+
+  .files {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    margin: 0 0 var(--space-2);
+    padding: 0;
+    list-style: none;
+    font-size: var(--text-sm);
+  }
+
+  .files li {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
   }
 
   .text {

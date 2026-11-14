@@ -81,7 +81,7 @@ describe("the stored conversation", () => {
       { role: "user", content: "Thanks" },
     ]);
     expect(items).toEqual([
-      { role: "user", text: "Change it", index: 1 },
+      { role: "user", text: "Change it", index: 1, images: [], files: [] },
       {
         role: "assistant",
         blocks: [
@@ -90,7 +90,7 @@ describe("the stored conversation", () => {
           { kind: "text", text: "Understood." },
         ],
       },
-      { role: "user", text: "Thanks", index: 5 },
+      { role: "user", text: "Thanks", index: 5, images: [], files: [] },
     ]);
   });
 });

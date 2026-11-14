@@ -28,6 +28,8 @@ export interface StoredMessage {
   content?: string;
   thinking?: string;
   tool_name?: string;
+  images?: string[]; // identifiers of the images sent with this message
+  pieces?: { id: string; nom: string }[]; // the documents sent with it
   tool_calls?: { function?: { name?: string; arguments?: unknown } }[];
 }
 

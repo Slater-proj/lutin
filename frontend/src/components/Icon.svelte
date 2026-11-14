@@ -18,6 +18,8 @@
     close: ["M6 6l12 12", "M18 6L6 18"],
     pencil: ["M4 20h4L19 9l-4-4L4 16z", "M13.5 6.5l4 4"],
     pin: ["M9 4h6l-1 6 3 3H7l3-3z", "M12 13v7"],
+    attach: ["M21 11.5l-8.5 8.5a5 5 0 0 1-7-7l9-9a3.5 3.5 0 0 1 5 5l-9 9a2 2 0 0 1-3-3l8-8"],
+    file: ["M7 3h7l5 5v11a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z", "M14 3v5h5"],
   } as const;
 
   export type IconName = keyof typeof SHAPES;

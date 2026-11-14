@@ -11,7 +11,12 @@ export type Block =
   | { kind: "error"; message: string };
 
 /** `index` is the position of the message in the stored conversation: what `replace_from` takes to answer again from it. */
-export type Item = { role: "user"; text: string; index: number } | { role: "assistant"; blocks: Block[] };
+export interface Sent {
+  images: string[]; // identifiers: shown through /api/v1/images/{id}
+  files: string[]; // names of the documents
+}
+
+export type Item = ({ role: "user"; text: string; index: number } & Sent) | { role: "assistant"; blocks: Block[] };
 
 export interface Approval {
   id: string;
@@ -108,7 +113,7 @@ export function storedToItems(messages: StoredMessage[]): Item[] {
   };
   for (const [index, message] of messages.entries()) {
     if (message.role === "user") {
-      items.push({ role: "user", text: message.content ?? "", index });
+      items.push({ role: "user", text: message.content ?? "", index, images: message.images ?? [], files: (message.pieces ?? []).map((piece) => piece.nom) });
       answer = null;
     } else if (message.role === "assistant") {
       const blocks = blocksOfAnswer();

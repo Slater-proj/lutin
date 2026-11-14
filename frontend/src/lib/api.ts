@@ -30,12 +30,28 @@ async function send(method: string, path: string, body: unknown, signal?: AbortS
     if (cause instanceof DOMException && cause.name === "AbortError") throw cause;
     throw new ApiError(0, "unreachable", "");
   }
-  if (!response.ok) {
-    const answer: unknown = await response.json().catch(() => null);
-    const error = (answer as { error?: { code?: unknown; message?: unknown } } | null)?.error;
-    throw new ApiError(response.status, typeof error?.code === "string" ? error.code : "unknown", typeof error?.message === "string" ? error.message : "");
-  }
+  if (!response.ok) throw await failure(response);
   return response;
+}
+
+async function failure(response: Response): Promise<ApiError> {
+  const answer: unknown = await response.json().catch(() => null);
+  const error = (answer as { error?: { code?: unknown; message?: unknown } } | null)?.error;
+  return new ApiError(response.status, typeof error?.code === "string" ? error.code : "unknown", typeof error?.message === "string" ? error.message : "");
+}
+
+/** Sends a file as the raw body of a POST (the bytes, not JSON). The name goes in `X-Name`, URL-encoded, for a document. */
+export async function upload<T>(path: string, file: File, name?: string): Promise<T> {
+  const headers: Record<string, string> = { "X-Token": pageToken(), "Content-Type": file.type || "application/octet-stream" };
+  if (name !== undefined) headers["X-Name"] = encodeURIComponent(name);
+  let response: Response;
+  try {
+    response = await fetch(PREFIX + path, { method: "POST", headers, body: file, credentials: "same-origin" });
+  } catch {
+    throw new ApiError(0, "unreachable", "");
+  }
+  if (!response.ok) throw await failure(response);
+  return (await response.json()) as T;
 }
 
 export async function api<T>(method: "GET" | "POST" | "PATCH" | "DELETE", path: string, body?: unknown): Promise<T> {
@@ -43,7 +59,7 @@ export async function api<T>(method: "GET" | "POST" | "PATCH" | "DELETE", path: 
 }
 
 /** Sends a message and calls `onEvent` for each event of the answer, until the stream ends. A refusal before the stream throws an ApiError. */
-export async function streamTurn(conversationId: string, body: { message: string; model?: string; replace_from?: number }, onEvent: (event: TurnEvent) => void, signal?: AbortSignal): Promise<void> {
+export async function streamTurn(conversationId: string, body: { message: string; model?: string; replace_from?: number; images?: string[]; attachments?: { id: string; name: string }[] }, onEvent: (event: TurnEvent) => void, signal?: AbortSignal): Promise<void> {
   const response = await send("POST", `/conversations/${encodeURIComponent(conversationId)}/turns`, body, signal);
   const parser = lineParser(onEvent);
   if (!response.body) {

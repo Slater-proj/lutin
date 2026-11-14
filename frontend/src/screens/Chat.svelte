@@ -1,12 +1,14 @@
 <script lang="ts">
   // The Chat screen: the conversations, the one that is open, the answer as it is written, and what Lutin asks before it acts.
   import { onMount } from "svelte";
+  import AttachmentBar from "../components/AttachmentBar.svelte";
   import Icon from "../components/Icon.svelte";
   import Options from "../components/Options.svelte";
   import Thread from "../components/Thread.svelte";
-  import { api, ApiError, streamTurn } from "../lib/api";
+  import { api, ApiError, streamTurn, upload } from "../lib/api";
+  import { fromStored, MAX_DOCUMENTS, MAX_IMAGES, kindOf, refusal, turnFields, uploading, type Attachment } from "../lib/attachments";
   import { t } from "../lib/messages";
-  import { applyEvent, newTurn, storedToItems, type LiveTurn } from "../lib/turn";
+  import { applyEvent, newTurn, storedToItems, type Item, type LiveTurn, type Sent } from "../lib/turn";
   import type { Conversation, ConversationOptions, ConversationSummary, Models, Settings, Status } from "../lib/types";
 
   let { status, onchanged }: { status: Status | null; onchanged: () => void } = $props();
@@ -15,7 +17,9 @@
   let conversation = $state<Conversation | null>(null);
   let models = $state<Models | null>(null);
   let live = $state<LiveTurn | null>(null);
-  let pending = $state("");
+  let pending = $state<({ text: string } & Sent) | null>(null);
+  let attachments = $state<Attachment[]>([]);
+  let counter = 0;
   let draft = $state("");
   let problem = $state("");
   let listOpen = $state(false);
@@ -85,6 +89,7 @@
       conversation = await api<Conversation>("GET", `/conversations/${encodeURIComponent(id)}`);
       options = await api<ConversationOptions>("GET", `/conversations/${encodeURIComponent(id)}/options`);
       optionsToSend = {};
+      attachments = [];
       listOpen = false;
       renaming = false;
       cancelEdit();
@@ -97,6 +102,7 @@
     listOpen = false;
     renaming = false;
     optionsToSend = {};
+    attachments = [];
     cancelEdit();
     void guarded(async () => {
       options = await newConversationOptions();
@@ -134,15 +140,57 @@
     });
   }
 
-  function startEdit(index: number, text: string): void {
-    editing = index;
-    draft = text;
+  function startEdit(item: Extract<Item, { role: "user" }>): void {
+    const stored = conversation?.messages[item.index];
+    editing = item.index;
+    draft = item.text;
+    attachments = stored ? fromStored(stored) : []; // answering again from this message needs what was sent with it
     box?.focus();
   }
 
   function cancelEdit(): void {
-    if (editing !== null) draft = "";
+    if (editing !== null) {
+      draft = "";
+      attachments = [];
+    }
     editing = null;
+  }
+
+  async function addFiles(files: File[]): Promise<void> {
+    for (const file of files) {
+      const why = refusal(attachments, file);
+      if (why !== null) {
+        problem = why === "too_many" ? t("chat.attach_too_many", MAX_IMAGES, MAX_DOCUMENTS) : why === "too_big" ? t("chat.attach_too_big", file.name) : t("chat.attach_empty", file.name);
+        continue;
+      }
+      const kind = kindOf(file);
+      const key = "upload-" + ++counter;
+      attachments = [...attachments, { key, kind, name: file.name, id: "", state: "uploading" }];
+      try {
+        const done = kind === "image" ? await upload<{ id: string }>("/images", file) : await upload<{ id: string; name: string }>("/attachments", file, file.name);
+        attachments = attachments.map((item) => (item.key === key ? { ...item, id: done.id, state: "ready" } : item));
+      } catch (cause) {
+        attachments = attachments.filter((item) => item.key !== key);
+        problem = explain(cause);
+      }
+    }
+  }
+
+  function removeAttachment(key: string): void {
+    attachments = attachments.filter((item) => item.key !== key);
+  }
+
+  function onPaste(event: ClipboardEvent): void {
+    const files = Array.from(event.clipboardData?.files ?? []);
+    if (files.length) {
+      event.preventDefault(); // a picture or a file pasted is attached; pasted text stays text
+      void addFiles(files);
+    }
+  }
+
+  function onDrop(event: DragEvent): void {
+    event.preventDefault();
+    void addFiles(Array.from(event.dataTransfer?.files ?? []));
   }
 
   async function remove(entry: ConversationSummary): Promise<void> {
@@ -156,7 +204,7 @@
 
   async function send(): Promise<void> {
     const message = draft.trim();
-    if (!message || busy) return;
+    if (!message || busy || uploading(attachments)) return;
     await guarded(async () => {
       if (conversation === null) {
         conversation = await api<Conversation>("POST", "/conversations", {});
@@ -167,19 +215,22 @@
       }
       const id = conversation.id;
       const from = editing;
+      const sent = attachments;
       draft = "";
       editing = null;
+      attachments = [];
       cut = from;
-      pending = message;
+      pending = { text: message, images: sent.filter((item) => item.kind === "image").map((item) => item.id), files: sent.filter((item) => item.kind === "document").map((item) => item.name) };
       live = newTurn();
       try {
-        await streamTurn(id, from === null ? { message } : { message, replace_from: from }, (event) => {
+        await streamTurn(id, { message, ...(from === null ? {} : { replace_from: from }), ...turnFields(sent) }, (event) => {
           if (live) live = applyEvent(live, event);
         });
       } catch (cause) {
         if (live !== null && live.blocks.length === 0) {
-          draft = message; // refused before anything was written: the message is given back, still as an edit if it was one
+          draft = message; // refused before anything was written: the message is given back, with its files, still as an edit if it was one
           editing = from;
+          attachments = sent;
         }
         throw cause;
       } finally {
@@ -187,7 +238,7 @@
         const stored = await api<Conversation>("GET", `/conversations/${encodeURIComponent(id)}`).catch(() => null);
         if (stored) conversation = stored;
         cut = null;
-        pending = "";
+        pending = null;
         live = null;
         await loadList().catch(() => undefined);
         onchanged();
@@ -369,13 +420,14 @@
       {#if editing !== null}
         <p class="editing"><span>{t("chat.editing")}</span><button type="button" class="link" onclick={cancelEdit}>{t("chat.cancel")}</button></p>
       {/if}
-      <form class="composer" onsubmit={onSubmit}>
+      <form class="composer" onsubmit={onSubmit} ondragover={(event) => event.preventDefault()} ondrop={onDrop}>
+        <AttachmentBar {attachments} onadd={addFiles} onremove={removeAttachment} disabled={busy} />
         <label class="visually-hidden" for="message">{t("chat.message")}</label>
-        <textarea id="message" rows="1" placeholder={t("chat.placeholder")} aria-describedby="keys" bind:value={draft} bind:this={box} onkeydown={onKey}></textarea>
+        <textarea id="message" rows="1" placeholder={t("chat.placeholder")} aria-describedby="keys" bind:value={draft} bind:this={box} onkeydown={onKey} onpaste={onPaste}></textarea>
         {#if busy}
           <button type="button" class="round stop" onclick={stop}><Icon name="stop" /><span class="visually-hidden">{t("chat.stop")}</span></button>
         {:else}
-          <button type="submit" class="round send" disabled={!draft.trim()}><Icon name="send" /><span class="visually-hidden">{t("chat.send")}</span></button>
+          <button type="submit" class="round send" disabled={!draft.trim() || uploading(attachments)}><Icon name="send" /><span class="visually-hidden">{t("chat.send")}</span></button>
         {/if}
       </form>
       <p class="meter" id="keys">
@@ -770,9 +822,10 @@
   /* The field and its button are one rounded box; the box shows the focus of the field. */
   .composer {
     display: flex;
+    flex-wrap: wrap;
     align-items: flex-end;
     gap: var(--space-2);
-    padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
+    padding: var(--space-2);
     border: 1px solid var(--color-border-strong);
     border-radius: var(--radius-xl);
     background: var(--color-surface);
@@ -788,7 +841,7 @@
 
   textarea {
     flex: 1;
-    min-width: 0;
+    min-width: 8rem;
     min-height: var(--target);
     max-height: 12rem;
     padding: 0.6rem 0;

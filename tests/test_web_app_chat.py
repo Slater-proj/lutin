@@ -192,6 +192,48 @@ class Chat(unittest.TestCase):
         p.attendre("!document.querySelector('.bar .auto')")
         self.assertEqual(p.erreurs, [])
 
+    def choose_files(self, *paths):
+        """What a person does with the file dialog: the chosen files reach the input of the page, which fires its change event."""
+        p = self.page
+        root = p.commande("DOM.getDocument")["root"]["nodeId"]
+        node = p.commande("DOM.querySelector", nodeId=root, selector="#file-input")["nodeId"]
+        p.commande("DOM.setFileInputFiles", files=[str(path) for path in paths], nodeId=node)
+
+    def test_3f_a_document_and_an_image_are_attached_sent_shown_and_kept_when_the_message_is_edited(self):
+        p = self.page
+        folder = Path(tempfile.mkdtemp(prefix="lutin-attach-"))
+        note = folder / "note.txt"
+        note.write_text("The secret word is marmalade. " * 3, encoding="utf-8")
+        picture = folder / "dot.png"
+        picture.write_bytes(base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="))
+        p.evaluer("[...document.querySelectorAll('.list .new')].forEach(b => b.click())")
+        p.attendre("!!document.querySelector('.welcome')")
+        self.choose_files(note, picture)
+        p.attendre("document.querySelectorAll('.chips li').length === 2 && document.querySelectorAll('.chips li.busy').length === 0")
+        self.assertEqual(p.evaluer("document.querySelector('.chips img').naturalWidth"), 1, "the picture is shown from the server through the session cookie alone")
+        self.assertIn("note.txt", p.evaluer("document.querySelector('.chips').innerText"))
+        self.picture("3f-attached")
+        p.evaluer("document.querySelector('.chips .remove').click()")           # remove the first chip, the document
+        p.attendre("document.querySelectorAll('.chips li').length === 1")
+        self.choose_files(note)
+        p.attendre("document.querySelectorAll('.chips li').length === 2 && document.querySelectorAll('.chips li.busy').length === 0")
+        T.SCENARIO[:] = [[{"content": "The note says marmalade."}]]
+        self.write("What does the note say?")
+        p.evaluer("document.querySelector('.composer button[type=submit]').click()")
+        p.attendre(TEXT + ".includes('The note says marmalade.')")
+        p.attendre("!!document.querySelector('.composer button[type=submit]')")
+        self.assertIn("marmalade", json.dumps(T.RECUES[-1]["messages"]), "the text of the document was given to the model")
+        self.assertEqual(p.evaluer("document.querySelectorAll('.chips li').length"), 0, "what was sent is no longer attached")
+        self.assertEqual(p.evaluer("document.querySelector('.thread .sent img').naturalWidth"), 1, "the image is shown in the message, read back from the server")
+        self.assertIn("note.txt", p.evaluer("document.querySelector('.thread .files').innerText"))
+        self.picture("3f-sent")
+        edits = p.evaluer("document.querySelectorAll('.thread .mine .edit').length")
+        p.evaluer("document.querySelectorAll('.thread .mine .edit')[%d].click()" % (edits - 1))
+        self.assertEqual(p.evaluer("document.querySelectorAll('.chips li').length"), 2, "editing a message keeps what was sent with it")
+        p.evaluer("document.querySelector('.editing .link').click()")
+        self.assertEqual(p.evaluer("document.querySelectorAll('.chips li').length"), 0, "cancelling the edit drops them")
+        self.assertEqual(p.erreurs, [])
+
     def test_4_a_refusal_of_the_server_is_shown_and_the_message_is_given_back(self):
         p = self.page
         with mock.patch.object(T.A, "TOURS_SIMULTANES", 0):
