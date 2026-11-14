@@ -1,6 +1,7 @@
 <script lang="ts">
   // The Models screen: what is installed, which one Lutin uses, a download with its progress, and deleting a model.
   import { onMount } from "svelte";
+  import ModelGuide from "../components/ModelGuide.svelte";
   import { api, ApiError } from "../lib/api";
   import { formatBytes, percent } from "../lib/format";
   import { language, t } from "../lib/messages";
@@ -12,6 +13,7 @@
   let problem = $state("");
   let name = $state("");
   let asking = $state(false);
+  let tab = $state<"recommended" | "installed" | "unset">("unset"); // chosen once the list is known: the guide when nothing is installed, the list otherwise
 
   const lang = language();
   const downloading = $derived(models?.downloads.some((download) => download.state === "downloading") ?? false);
@@ -32,6 +34,7 @@
 
   async function load(): Promise<void> {
     models = await api<Models>("GET", "/models");
+    if (tab === "unset") tab = models.models.length === 0 ? "recommended" : "installed";
   }
 
   async function install(event: SubmitEvent): Promise<void> {
@@ -88,15 +91,6 @@
   {#if problem}<p class="problem" role="alert">{problem}</p>{/if}
   {#if models && !models.running}<p class="hint">{t("models.engine_hint")} <a href="/">{t("legacy.link")}</a></p>{/if}
 
-  <form class="add" onsubmit={install}>
-    <label for="model-name">{t("models.add")}</label>
-    <div class="row">
-      <input id="model-name" type="text" placeholder="qwen3:8b" autocomplete="off" spellcheck="false" bind:value={name} />
-      <button type="submit" class="button primary" disabled={!name.trim() || asking}>{t("models.download")}</button>
-    </div>
-    <p class="help">{t("models.add_help")}</p>
-  </form>
-
   {#if models && models.downloads.length}
     <h2>{t("models.downloads")}</h2>
     <ul class="cards downloads">
@@ -119,6 +113,23 @@
     </ul>
   {/if}
 
+  <div class="tabs" role="group" aria-label={t("models.tabs")}>
+    <button type="button" class:on={tab === "recommended"} aria-pressed={tab === "recommended"} onclick={() => (tab = "recommended")}>{t("models.tab_recommended")}</button>
+    <button type="button" class:on={tab === "installed"} aria-pressed={tab === "installed"} onclick={() => (tab = "installed")}>{t("models.tab_installed")}</button>
+  </div>
+
+  {#if tab === "recommended"}
+    <ModelGuide onstarted={() => void guarded(load)} onuse={use} />
+  {:else if tab === "installed"}
+  <form class="add" onsubmit={install}>
+    <label for="model-name">{t("models.add_expert")}</label>
+    <div class="row">
+      <input id="model-name" type="text" placeholder="qwen3:8b" autocomplete="off" spellcheck="false" bind:value={name} />
+      <button type="submit" class="button primary" disabled={!name.trim() || asking}>{t("models.download")}</button>
+    </div>
+    <p class="help">{t("models.add_help")}</p>
+  </form>
+
   <h2>{t("models.installed")}</h2>
   {#if models && models.models.length === 0}
     <p class="empty">{t("models.none")}</p>
@@ -138,6 +149,7 @@
         </li>
       {/each}
     </ul>
+  {/if}
   {/if}
 </section>
 
@@ -190,6 +202,32 @@
 
   .engine.down .dot {
     background: var(--color-danger);
+  }
+
+  .tabs {
+    display: flex;
+    gap: var(--space-1);
+    padding: var(--space-1);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-pill);
+    background: var(--color-surface);
+    align-self: flex-start;
+  }
+
+  .tabs button {
+    min-height: 2.5rem;
+    padding: 0 var(--space-4);
+    border: 0;
+    border-radius: var(--radius-pill);
+    background: transparent;
+    color: var(--color-text-muted);
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .tabs button.on {
+    background: var(--color-accent-soft);
+    color: var(--color-accent-text);
   }
 
   .problem {

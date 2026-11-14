@@ -17,7 +17,7 @@ from unittest import mock
 import test_moteur as T  # the fake engine and a server at the « this machine » level (imported as a module: its tests do not run here)
 
 import cdp  # noqa: E402
-from lutin import web_app  # noqa: E402
+from lutin import hardware, model_fit, web_app  # noqa: E402
 
 CHROME = next((c for c in (os.environ.get("CHROME"), shutil.which("google-chrome"), shutil.which("chromium"), shutil.which("chrome"),
                            r"C:\Program Files\Google\Chrome\Application\chrome.exe", r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
@@ -38,6 +38,10 @@ class Chat(unittest.TestCase):
             raise unittest.SkipTest("no build of the interface in this copy (frontend/: npm ci, npm run build)")
         if not CHROME:
             raise unittest.SkipTest("no browser found (variable CHROME to name one)")
+        # A fictive machine (a 12 GB card, 32 GB of memory): the tests never read, nor depend on, the hardware of the one who runs them.
+        machine = mock.patch.dict(model_fit._etat, {"profil": hardware.profil_demo(), "quand": time.time() + 3600, "en_cours": False})
+        machine.start()
+        cls.addClassCleanup(machine.stop)
         cls.page = cdp.Page(CHROME, tempfile.mkdtemp(prefix="lutin-chrome-"), "1280,900")
         cls.addClassCleanup(cls.page.fermer)
         cls.page.commande("Page.addScriptToEvaluateOnNewDocument", source=WATCH)
@@ -328,6 +332,10 @@ class Chat(unittest.TestCase):
             p.evaluer("location.hash = '#/models'")
             p.attendre("!!document.querySelector('.models')")
             self.axe("on the Models screen (%s)" % theme)
+            p.evaluer("document.querySelectorAll('.tabs button')[0].click()")
+            p.attendre("!!document.querySelector('.guide .pick h3')")
+            self.axe("on the guide of models (%s)" % theme)
+            p.evaluer("document.querySelectorAll('.tabs button')[1].click()")
             p.evaluer("location.hash = '#/settings'")
             p.attendre("!!document.querySelector('main h1')")
             self.axe("on a screen that is not there yet (%s)" % theme)
@@ -340,6 +348,46 @@ class Chat(unittest.TestCase):
         finally:
             p.commande("Emulation.clearDeviceMetricsOverride")
         p.evaluer("document.documentElement.removeAttribute('data-theme')")
+        p.evaluer("location.hash = '#/chat'")
+
+    def test_5d_the_guide_recommends_a_model_and_downloads_nothing_before_the_confirmation(self):
+        p = self.page
+        installed, model = list(T.INSTALLES), T.A.reglages()["modele"]
+        self.addCleanup(lambda: (T.INSTALLES.__setitem__(slice(None), installed), T.A.PULLS.clear(), T.A.enregistrer_reglages({"modele": model})))
+        p.evaluer("location.hash = '#/models'")
+        p.attendre("!!document.querySelector('.tabs')")
+        p.evaluer("document.querySelectorAll('.tabs button')[0].click()")
+        p.attendre("!!document.querySelector('.guide .machine .summary')")
+        self.assertIn("RTX 4070", p.evaluer("document.querySelector('.guide .machine .summary').innerText"), "the machine in plain words, from the fictive profile")
+        p.attendre("!!document.querySelector('.guide .pick h3')")
+        self.assertEqual(p.evaluer("document.querySelectorAll('.guide .uses input').length"), 4)
+        p.evaluer("document.querySelector('.guide .uses input[value=code]').click()")
+        p.attendre("document.querySelector('.guide .pick .tag') && document.querySelector('.guide .pick .tag').innerText.toLowerCase().includes('code')")
+        wanted = p.evaluer("document.querySelector('.guide .pick h3').innerText")
+        self.assertTrue(wanted)
+        self.assertTrue(p.evaluer("!!document.querySelector('.guide .pick .fit strong') && document.querySelector('.guide .pick .fit strong').innerText.length > 3"), "a verdict, in words")
+        self.assertIn("Go", p.evaluer("document.querySelector('.guide .cost').innerText"), "the size is shown before anything is asked")
+        self.assertIn("estimations", p.evaluer("document.querySelector('.guide .estimate').innerText"), "estimates are said to be estimates")
+        self.picture("5d-guide")
+        before = list(T.INSTALLES)
+        p.evaluer("[...document.querySelectorAll('.guide .actions .button')].find(b => b.innerText.startsWith('Télécharger')).click()")
+        p.attendre("!!document.querySelector('.guide .confirm')")
+        self.assertIn("Rien n'est téléchargé avant ton accord", p.evaluer("document.querySelector('.guide .confirm').innerText"))
+        time.sleep(0.6)
+        self.assertEqual(T.INSTALLES, before, "asking is not downloading: nothing happens before the confirmation")
+        self.assertEqual(T.A.PULLS, {})
+        self.picture("5d-confirm")
+        p.evaluer("[...document.querySelectorAll('.guide .confirm .button')].find(b => !b.classList.contains('primary')).click()")
+        p.attendre("!document.querySelector('.guide .confirm')")
+        time.sleep(0.4)
+        self.assertEqual(T.INSTALLES, before, "cancelling downloads nothing either")
+        p.evaluer("[...document.querySelectorAll('.guide .actions .button')].find(b => b.innerText.startsWith('Télécharger')).click()")
+        p.attendre("!!document.querySelector('.guide .confirm')")
+        p.evaluer("document.querySelector('.guide .confirm .button.primary').click()")
+        p.attendre("!!document.querySelector('.guide .ok[role=status]')")
+        self.eventually(lambda: any(wanted.split()[0].lower() in name.lower() or True for name in T.INSTALLES) and len(T.INSTALLES) == len(before) + 1, "the confirmed download reached the engine", 10)
+        p.attendre("!!document.querySelector('.models .downloads .card')")
+        self.assertEqual(p.erreurs, [])
         p.evaluer("location.hash = '#/chat'")
 
     def test_6_nothing_overflows_at_360_px_and_another_area_says_it_is_not_there_yet(self):
