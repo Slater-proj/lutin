@@ -161,7 +161,7 @@ class FluxInterruptible:
         self.abandonner()
         return False
 
-    def abandon(self):
+    def abandonner(self):
         reponse = getattr(self.flux, "reponse", None)
         if reponse is not None:
             abandon(reponse)

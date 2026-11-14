@@ -309,7 +309,7 @@ class Connexion:
         self.derniere_utilisation = time.time()
         return reponse.get("result") or {}
 
-    def close(self):
+    def fermer(self):
         if self.proc is not None and self.proc.poll() is None:
             try:
                 from . import tools
@@ -363,7 +363,7 @@ def _surveiller():
     def boucle():
         while True:
             time.sleep(30)
-            close_idle_the()
+            close_idle()
     SURVEILLANT.append(threading.Thread(target=boucle, daemon=True, name="mcp-inactifs"))
     SURVEILLANT[0].start()
     atexit.register(close)
@@ -377,7 +377,7 @@ def close(ident=None):
                 c.fermer()
 
 
-def close_idle_the(maintenant=None):
+def close_idle(maintenant=None):
     maintenant = maintenant or time.time()
     with LOCK:
         for i, c in list(CONNECTIONS.items()):

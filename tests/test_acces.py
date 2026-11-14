@@ -272,7 +272,7 @@ class Planification(Base):
         scheduled_tasks.path().unlink(missing_ok=True)
 
     def tearDown(self):
-        self.p.chemin().unlink(missing_ok=True)
+        self.p.path().unlink(missing_ok=True)
         super().tearDown()
 
     def test_ajout_validation_et_suppression(self):
@@ -298,7 +298,7 @@ class Planification(Base):
         self.assertNotIn("SECRET1", json.dumps(liste))
         self.assertEqual([c["nom"] for c in liste["canaux"]], ["Tel"])
         self.assertEqual(requete("POST", "/api/notifications-ajouter", corps={"nom": "x", "type": "inconnu", "params": {}})[0], 400)
-        t = self.p.ajouter("Matin", "x", "08:00", [0], notifier=liste["canaux"][0]["id"])
+        t = self.p.add("Matin", "x", "08:00", [0], notifier=liste["canaux"][0]["id"])
         self.assertEqual(requete("POST", "/api/planifie-notifier", corps={"id": t["id"], "canal": ""})[1]["notifier"], "")
         self.assertEqual(requete("POST", "/api/planifie-notifier", corps={"id": t["id"], "canal": "zzzz"})[0], 400)
         self.assertEqual(requete("POST", "/api/notifications-supprimer", corps={"id": liste["canaux"][0]["id"]})[0], 200)
@@ -312,19 +312,19 @@ class Planification(Base):
         A.SECURITE = S.Securite(niveau=S.RESEAU, port=8777)
         statut, r = requete("POST", "/api/planifie-ajouter", en_tetes=dict(self.session(), **{"X-Forwarded-For": "192.168.1.20"}), corps={"nom": "a", "prompt": "x", "heure": "08:00", "jours": [0]})
         self.assertEqual(statut, 403, "un appareil appairé, ou un relais, ne planifie pas")
-        self.assertEqual(self.p.lire(), [])
+        self.assertEqual(self.p.read(), [])
 
     def test_echeance(self):
         from datetime import datetime
         t = {"actif": True, "heure": "08:30", "jours": [0, 1, 2, 3, 4], "cree": "2026-10-20T07:00:00", "derniere_exec": ""}
         lundi = lambda h, m: datetime(2026, 10, 26, h, m)  # noqa: E731
-        self.assertIsNone(self.p.echeance(t, lundi(8, 29)), "pas avant l'heure")
-        self.assertIsNotNone(self.p.echeance(t, lundi(8, 31)))
-        self.assertIsNotNone(self.p.echeance(t, lundi(23, 0)), "PC allumé en retard : rattrapé le jour même")
-        self.assertIsNone(self.p.echeance(dict(t, derniere_exec="2026-10-26T08:31:00"), lundi(9, 0)), "déjà faite aujourd'hui")
-        self.assertIsNone(self.p.echeance(dict(t, cree="2026-10-26T09:00:00"), lundi(9, 30)), "créée après l'heure : attend demain")
-        self.assertIsNone(self.p.echeance(t, datetime(2026, 10, 31, 9, 0)), "samedi : pas un jour choisi")
-        self.assertIsNone(self.p.echeance(dict(t, actif=False), lundi(9, 0)))
+        self.assertIsNone(self.p.due(t, lundi(8, 29)), "pas avant l'heure")
+        self.assertIsNotNone(self.p.due(t, lundi(8, 31)))
+        self.assertIsNotNone(self.p.due(t, lundi(23, 0)), "PC allumé en retard : rattrapé le jour même")
+        self.assertIsNone(self.p.due(dict(t, derniere_exec="2026-10-26T08:31:00"), lundi(9, 0)), "déjà faite aujourd'hui")
+        self.assertIsNone(self.p.due(dict(t, cree="2026-10-26T09:00:00"), lundi(9, 30)), "créée après l'heure : attend demain")
+        self.assertIsNone(self.p.due(t, datetime(2026, 10, 31, 9, 0)), "samedi : pas un jour choisi")
+        self.assertIsNone(self.p.due(dict(t, actif=False), lundi(9, 0)))
 
     @staticmethod
     def faux_tour(reponse="voici", appels=None, evenements=()):
@@ -341,7 +341,7 @@ class Planification(Base):
         return tour
 
     def test_execution_en_lecture_seule_dans_une_conversation_planifiee(self):
-        t = self.p.ajouter("Matin", "résume le dépôt", "08:30", [0, 1, 2, 3, 4, 5, 6])
+        t = self.p.add("Matin", "résume le dépôt", "08:30", [0, 1, 2, 3, 4, 5, 6])
         appels = []
         with mock.patch.object(A, "tour", side_effect=self.faux_tour(appels=appels)):
             ident = self.p.executer(t["id"])
@@ -349,11 +349,11 @@ class Planification(Base):
         self.assertTrue(appels[0][1].startswith("(Tâche planifiée « Matin » lancée le "), "la demande est datée : le modèle sait quel jour et quelle heure il est")
         self.assertTrue(appels[0][1].endswith("résume le dépôt"))
         self.assertEqual(A.TOURS_ACTIFS, {}, "la machine est libérée après la tâche")
-        fait = self.p.lire()[0]
+        fait = self.p.read()[0]
         self.assertEqual((fait["derniere_conv"], fait["derniere_etat"]), (ident, "ok"))
 
     def test_une_tache_garde_une_seule_conversation(self):
-        t = self.p.ajouter("Heure", "donne-moi l'heure", "19:00", [0, 1, 2, 3, 4, 5, 6])
+        t = self.p.add("Heure", "donne-moi l'heure", "19:00", [0, 1, 2, 3, 4, 5, 6])
         avant = len(A.conv_liste())
         with mock.patch.object(A, "tour", side_effect=self.faux_tour("il est 19 h")):
             premiere = self.p.executer(t["id"])
@@ -364,7 +364,7 @@ class Planification(Base):
         self.assertEqual([m["role"] for m in messages], ["user", "assistant", "user", "assistant"])
 
     def test_une_conversation_supprimee_est_recreee(self):
-        t = self.p.ajouter("Heure", "x", "19:00", [0, 1, 2, 3, 4, 5, 6])
+        t = self.p.add("Heure", "x", "19:00", [0, 1, 2, 3, 4, 5, 6])
         with mock.patch.object(A, "tour", side_effect=self.faux_tour()):
             premiere = self.p.executer(t["id"])
             A.conv_supprimer(premiere)
@@ -373,57 +373,57 @@ class Planification(Base):
         self.assertEqual(A.conv_lire(seconde)["titre"], "⏰ Heure")
 
     def test_un_moteur_muet_n_est_jamais_un_rien_fait_silencieux(self):
-        t = self.p.ajouter("Heure", "x", "19:00", [0, 1, 2, 3, 4, 5, 6])
+        t = self.p.add("Heure", "x", "19:00", [0, 1, 2, 3, 4, 5, 6])
         with mock.patch.object(A, "tour", side_effect=self.faux_tour(reponse="")):
             ident = self.p.executer(t["id"])
-        self.assertEqual(self.p.lire()[0]["derniere_etat"], "erreur")
+        self.assertEqual(self.p.read()[0]["derniere_etat"], "erreur")
         dernier = A.conv_lire(ident)["messages"][-1]
         self.assertEqual(dernier["role"], "assistant")
         self.assertTrue(dernier["content"].startswith("⚠"), "le problème est écrit dans la conversation")
 
     def test_une_erreur_du_tour_est_ecrite_dans_la_conversation(self):
-        t = self.p.ajouter("Heure", "x", "19:00", [0, 1, 2, 3, 4, 5, 6])
+        t = self.p.add("Heure", "x", "19:00", [0, 1, 2, 3, 4, 5, 6])
         with mock.patch.object(A, "tour", side_effect=self.faux_tour(reponse="", evenements=[{"type": "erreur", "texte": "Ollama ne répond pas"}])):
             ident = self.p.executer(t["id"])
-        self.assertEqual(self.p.lire()[0]["derniere_etat"], "erreur")
+        self.assertEqual(self.p.read()[0]["derniere_etat"], "erreur")
         self.assertIn("Ollama ne répond pas", A.conv_lire(ident)["messages"][-1]["content"])
 
     def test_le_resultat_part_sur_le_canal_associe(self):
         from lutin import notifications
         envois = []
         with mock.patch.object(notifications, "find", lambda i: {"id": i, "nom": "Tel"}), mock.patch.object(notifications, "send", lambda canal, titre, msg, ouvrir=None: envois.append((canal, titre, msg))):
-            t = self.p.ajouter("Heure", "x", "19:00", [0, 1, 2, 3, 4, 5, 6], notifier="abcd1234")
+            t = self.p.add("Heure", "x", "19:00", [0, 1, 2, 3, 4, 5, 6], notifier="abcd1234")
             with mock.patch.object(A, "tour", side_effect=self.faux_tour("il est 19 h")):
                 self.p.executer(t["id"])
         self.assertEqual(envois, [("abcd1234", "⏰ Heure", "il est 19 h")])
-        self.assertEqual(self.p.lire()[0]["derniere_notif"], "ok")
+        self.assertEqual(self.p.read()[0]["derniere_notif"], "ok")
 
     def test_une_notification_qui_echoue_est_dite_sans_casser_la_tache(self):
         from lutin import notifications
         def casse(canal, titre, msg, ouvrir=None):
             raise ValueError("« Tel » n'a pas répondu")
         with mock.patch.object(notifications, "find", lambda i: {"id": i}), mock.patch.object(notifications, "send", casse):
-            t = self.p.ajouter("Heure", "x", "19:00", [0, 1, 2, 3, 4, 5, 6], notifier="abcd1234")
+            t = self.p.add("Heure", "x", "19:00", [0, 1, 2, 3, 4, 5, 6], notifier="abcd1234")
             with mock.patch.object(A, "tour", side_effect=self.faux_tour("ok")):
                 self.p.executer(t["id"])
-        fait = self.p.lire()[0]
+        fait = self.p.read()[0]
         self.assertEqual(fait["derniere_etat"], "ok")
         self.assertIn("n'a pas répondu", fait["derniere_notif"])
 
     def test_un_canal_inconnu_est_refuse(self):
         with self.assertRaises(ValueError):
-            self.p.ajouter("a", "x", "08:00", [0], notifier="zzzz")
+            self.p.add("a", "x", "08:00", [0], notifier="zzzz")
 
     def test_une_erreur_est_notee_et_ne_casse_pas_la_boucle(self):
-        t = self.p.ajouter("Matin", "x", "08:30", [0, 1, 2, 3, 4, 5, 6])
+        t = self.p.add("Matin", "x", "08:30", [0, 1, 2, 3, 4, 5, 6])
         with mock.patch.object(A, "tour", side_effect=RuntimeError("boum")):
             self.p.executer(t["id"])
-        self.assertEqual(self.p.lire()[0]["derniere_etat"], "erreur")
+        self.assertEqual(self.p.read()[0]["derniere_etat"], "erreur")
 
     def test_pas_de_demarrage_si_une_reponse_est_en_cours(self):
         from datetime import datetime, timedelta
-        t = self.p.ajouter("Matin", "x", "00:00", [0, 1, 2, 3, 4, 5, 6])
-        self.p.modifier(t["id"], cree=(datetime.now() - timedelta(days=2)).isoformat(timespec="seconds"))
+        t = self.p.add("Matin", "x", "00:00", [0, 1, 2, 3, 4, 5, 6])
+        self.p.modify(t["id"], cree=(datetime.now() - timedelta(days=2)).isoformat(timespec="seconds"))
         A.TOURS_ACTIFS["abcdef12"] = threading.Event()
         try:
             with mock.patch.object(self.p, "executer") as ex:
