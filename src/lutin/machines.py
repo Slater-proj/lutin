@@ -371,7 +371,7 @@ def noeud_vue():
 def noeud_charge(locale_occupee, distantes):
     """Ce que le nœud dit de sa charge : mémoire, et qui utilise son moteur en ce moment (son utilisateur, des machines appairées). Lecture seule, rien de plus."""
     from . import core as _m
-    ram, vram = _m.memoire_vive(), _m.memoire_video()
+    ram, vram = _m.system_memory(), _m.video_memory()
     return {"locale_occupee": bool(locale_occupee), "distantes": int(distantes),
             "ram": {"total": ram["total"], "libre": ram["libre"]} if ram else None, "vram": {"total": vram["total"], "libre": vram["libre"], "nom": vram["nom"]} if vram else None}
 

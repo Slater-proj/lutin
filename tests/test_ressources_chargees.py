@@ -123,8 +123,8 @@ class Charges(Base):
         self.assertEqual(rc.charges_llamacpp(), [], "arrêté : rien à décharger")
 
     def test_etat_complet(self):
-        with mock.patch.object(_m, "memoire_vive", lambda: {"total": 32 * 1024 ** 3, "libre": 10 * 1024 ** 3, "engagement_libre": 0}), \
-                mock.patch.object(_m, "memoire_video", lambda: {"nom": "Carte", "total": 12 * 1024 ** 3, "utilise": 8 * 1024 ** 3, "libre": 4 * 1024 ** 3}), \
+        with mock.patch.object(_m, "system_memory", lambda: {"total": 32 * 1024 ** 3, "libre": 10 * 1024 ** 3, "engagement_libre": 0}), \
+                mock.patch.object(_m, "video_memory", lambda: {"nom": "Carte", "total": 12 * 1024 ** 3, "utilise": 8 * 1024 ** 3, "libre": 4 * 1024 ** 3}), \
                 mock.patch.object(rc, "lister_processus", lambda: [("ollama", 500), ("chrome", 900), ("chrome", 800)]):
             rc.MEMO["t"] = 0
             e = rc.etat()

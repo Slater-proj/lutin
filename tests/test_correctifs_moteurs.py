@@ -335,7 +335,7 @@ class SanteVideo(unittest.TestCase):
 
     def item(self, partiel):
         r = _m.reglages()
-        return next(i for i in health.evaluer_sante(self.MESURES, r, int(19.5 * 1024 ** 3), None, partiel)["items"] if i["id"] == "vram")
+        return next(i for i in health.assess_health(self.MESURES, r, int(19.5 * 1024 ** 3), None, partiel)["items"] if i["id"] == "vram")
 
     def test_ollama_modele_trop_gros_pour_la_place_libre_reste_bloquant_mais_explique(self):
         i = self.item(False)
@@ -350,7 +350,7 @@ class SanteVideo(unittest.TestCase):
 
     def test_llamacpp_charge_sans_taille_connue_pas_de_zero_pour_cent(self):
         r = _m.reglages()
-        i = next(i for i in health.evaluer_sante(self.MESURES, r, 0, {"taille": 0, "vram": 0}, True)["items"] if i["id"] == "vram")
+        i = next(i for i in health.assess_health(self.MESURES, r, 0, {"taille": 0, "vram": 0}, True)["items"] if i["id"] == "vram")
         self.assertEqual(i["niveau"], "ok")
         self.assertNotIn("0 %", i["valeur"])
 

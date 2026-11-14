@@ -581,9 +581,9 @@ class Gestionnaire(BaseHTTPRequestHandler):
             try:
                 conv = _m.conv_lire(ident)
                 r = _m.reglages()
-                sections = _suivi.lire(ident)
-                return self._envoyer(200, {"sections": sections, "texte": _suivi.serialiser(ident, sections), "mesure": _suivi.mesure(ident, r["num_ctx"]), "mode": _m.memoire_longue(conv, r),
-                                           "mode_general": r["memoire_longue"], "chemin": str(_suivi.chemin(ident))})
+                sections = _suivi.read(ident)
+                return self._envoyer(200, {"sections": sections, "texte": _suivi.serialize(ident, sections), "mesure": _suivi.measure(ident, r["num_ctx"]), "mode": _m.memoire_longue(conv, r),
+                                           "mode_general": r["memoire_longue"], "chemin": str(_suivi.path(ident))})
             except ValueError as e:
                 return self._envoyer(400, {"erreur": str(e)})
         if chemin == "/api/addons":                              # les addons : état, réglages (jamais les secrets), dernière vérification
@@ -636,8 +636,8 @@ class Gestionnaire(BaseHTTPRequestHandler):
             tampon = io.BytesIO()
             c = _m.chemin_config()
             try:
-                _sauv.exporter({"config": c.parent if c else None, "donnees": _m.DONNEES, "memoire": _m.MEMOIRE}, tampon)
-            except _sauv.ErreurSauvegarde as e:
+                _sauv.export({"config": c.parent if c else None, "donnees": _m.DONNEES, "memoire": _m.MEMOIRE}, tampon)
+            except _sauv.BackupError as e:
                 return self._envoyer(400, {"erreur": str(e)})
             return self._envoyer(200, tampon.getvalue(), "application/zip", {"Content-Disposition": 'attachment; filename="lutin-sauvegarde-{}.zip"'.format(datetime.now().strftime("%Y%m%d-%H%M%S"))})
         if chemin == "/api/propositions":
@@ -660,7 +660,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
             historique = _bench.lire_historique(_m.chemin_bench())
             return self._envoyer(200, {"regressions": _bench.regressions(_m.chemin_bench()), "modeles": [{"modele": m, "mesures": v[-6:]} for m, v in historique.items() if len(v) >= 1]})
         if chemin == "/api/sorties":                              # Santé : ce qui est sorti de la machine (recherches envoyées à un service extérieur)
-            return self._envoyer(200, {"entrees": _sorties.lire(60), "modifiable": self._configurateur()})
+            return self._envoyer(200, {"entrees": _sorties.read(60), "modifiable": self._configurateur()})
         if chemin == "/api/web-recherche":                        # Réglages > Recherche web : ce qui est réglé (jamais la clé) et l'ordre des moteurs
             return self._envoyer(200, dict(_recherche.vue(), moteurs=_m.etat_moteurs_recherche(), modifiable=self._configurateur()))
         if chemin == "/api/mesures-moteurs":                      # Réglages > Moteur : ce que chaque moteur a donné ici (classement des mesures) et ceux qu'on peut mesurer maintenant
@@ -672,7 +672,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
         if chemin == "/api/ressources":                           # ce qui est chargé en mémoire en ce moment (page Santé)
             return self._envoyer(200, _ressources.etat())
         if chemin == "/api/sante-systeme":
-            return self._envoyer(200, _m.etat_sante())
+            return self._envoyer(200, _m.health_state())
         if chemin == "/api/git":
             return self._envoyer(200, _m.git_etat())
         if chemin == "/api/revue":
@@ -902,7 +902,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
             if self.path == "/api/chat":
                 return self._chat(donnees)
             if self.path == "/api/autotest":
-                return self._envoyer(200, _m.lancer_autotest(bool(donnees.get("profond"))))
+                return self._envoyer(200, _m.run_selftest(bool(donnees.get("profond"))))
             if self.path == "/api/annuler-tour":
                 return self._envoyer(200, _m.annuler_tour(str(donnees.get("conversation", ""))))
             if self.path == "/api/annuler-fichier":
@@ -928,9 +928,9 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 r = _m.reglages()
                 amorce = 0
                 if self.path == "/api/suivi":
-                    _suivi.ecrire(ident, _suivi.analyser(str(donnees.get("texte", ""))[:20000]))
+                    _suivi.write(ident, _suivi.parse(str(donnees.get("texte", ""))[:20000]))
                 elif self.path == "/api/suivi-vider":
-                    _suivi.supprimer(ident)
+                    _suivi.delete(ident)
                 else:
                     choix = str(donnees.get("mode", ""))
                     if choix not in ("", "resume", "fichier"):
@@ -942,7 +942,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
                     conv.pop("memoire_provisoire", None)
                     amorce = _m.amorcer_fiche(conv, r) if choix == "fichier" else 0          # une fiche vide est remplie à partir du début de la conversation
                     _m.conv_ecrire(conv)
-                return self._envoyer(200, {"mode": _m.memoire_longue(_m.conv_lire(ident), r), "mesure": _suivi.mesure(ident, r["num_ctx"]), "amorce": amorce})
+                return self._envoyer(200, {"mode": _m.memoire_longue(_m.conv_lire(ident), r), "mesure": _suivi.measure(ident, r["num_ctx"]), "amorce": amorce})
             if self.path == "/api/embeddings-installer":
                 if not self._configurateur():
                     return self._envoyer(403, {"erreur": _t("L'installation d'un modèle se lance depuis cette machine.")})
@@ -1241,13 +1241,13 @@ class Gestionnaire(BaseHTTPRequestHandler):
             if self.path == "/api/sorties-vider":
                 if not self._configurateur():
                     return self._envoyer(403, {"erreur": _t("Cela se règle depuis cette machine elle-même.")})
-                _sorties.vider()
+                _sorties.clear()
                 return self._envoyer(200, {"ok": True})
             if self.path == "/api/web-apercu":                          # /web : les résultats BRUTS d'une recherche, sans modèle ; la requête est nettoyée comme pour le modèle
                 requete = str(donnees.get("q") or "").strip()[:300]
                 if len(requete) < 2:
                     return self._envoyer(400, {"erreur": _t("Écris quelques mots à chercher, par exemple /web prix du kWh en France.")})
-                propre, retire = _sorties.nettoyer_requete(requete)
+                propre, retire = _sorties.clean_query(requete)
                 trouves, raisons = _web.chercher_resultats(propre or requete, 8) if propre else ([], [_t("requête vide une fois les données personnelles retirées")])
                 return self._envoyer(200, {"requete": propre, "retire": retire, "raisons": raisons,
                                            "resultats": [{"titre": x.get("titre", ""), "url": x.get("url", ""), "extrait": str(x.get("extrait", ""))[:300], "date": x.get("date", ""), "source": x.get("source", ""),

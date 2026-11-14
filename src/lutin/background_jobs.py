@@ -338,7 +338,7 @@ def un_pas(modele_pret=None):
         chemin = restants[0]
         r = _m.reglages()
         info = []
-        if not _m.controle_avant_demande(r, lambda ev: info.append(ev.get("texte", "")), "fond"):
+        if not _m.check_before_request(r, lambda ev: info.append(ev.get("texte", "")), "fond"):
             e.update(message=_t("En attente : le PC manque de ressources. ") + " ".join(info)[:300])
             ecrire_etat(t["id"], e)
             return False

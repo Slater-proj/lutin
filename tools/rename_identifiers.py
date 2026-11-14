@@ -130,64 +130,89 @@ def plan(module, mapping):
     clash = collisions(own_tree, set(mapping))
     if clash:
         sys.exit("refused, the name is also a local or an argument: " + ", ".join("{} (line {})".format(n, l) for n, l in clash))
+    clash = collisions(own_tree, set(mapping.values()))          # the new name would be hidden inside a function that has a variable of that name
+    if clash:
+        sys.exit("refused, the NEW name is already a local or an argument of this module: " + ", ".join("{} (line {})".format(n, l) for n, l in clash))
     changes, checks = {}, []
-    for path in python_files():
-        text, tree = parse(path)
+    files = [(path,) + parse(path) for path in python_files()]
+    targets = [(module, dict(mapping))]
+    # A module that imports the name BY NAME and does not rename it re-exports it (`core` does for many modules): `core.old` is then a use of the name too.
+    for path, text, tree in files:
+        if path != own_path and path.parent == PACKAGE:
+            _, imported = uses_of(module, tree, False)
+            taken = {orig: mapping[orig] for local, orig in imported.items() if orig in mapping and local == orig}
+            if taken:
+                targets.append((path.stem, taken))
+    for path, text, tree in files:
         own = path == own_path
-        aliases, imported = uses_of(module, tree, own)
-        if not own and not aliases and not imported and "lutin." + module not in text:
-            continue
         edits = Edits(text)
-        wanted = {local: mapping[orig] for local, orig in imported.items() if orig in mapping}
-        for node in ast.walk(tree):
-            if own and isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and node.name in mapping:
-                position = name_position(edits, node, node.name)
-                if position:
-                    edits.add(node.lineno, position[0], position[1], mapping[node.name])
-            elif own and isinstance(node, ast.Name) and node.id in mapping:
-                edits.add(node.lineno, node.col_offset, node.end_col_offset, mapping[node.id])
-            elif own and isinstance(node, ast.Global):
-                for name in node.names:
-                    if name in mapping:
-                        raw = edits.lines[node.lineno - 1].encode("utf-8")
-                        match = re.compile(rb"\b" + name.encode() + rb"\b").search(raw, node.col_offset + 6)
-                        if match:
-                            edits.add(node.lineno, match.start(), match.end(), mapping[name])
-            elif not own and isinstance(node, ast.Attribute) and node.attr in mapping and isinstance(node.value, ast.Name) and node.value.id in aliases:
-                edits.add(node.end_lineno, node.end_col_offset - len(node.attr.encode("utf-8")), node.end_col_offset, mapping[node.attr])
-            elif not own and isinstance(node, ast.ImportFrom) and (node.module or "").split(".")[-1] == module and (node.level >= 1 or (node.module or "").startswith("lutin.")):
-                for item in node.names:
-                    if item.name in mapping:
-                        raw = edits.lines[node.lineno - 1].encode("utf-8")
-                        pattern = re.compile(rb"\b" + item.name.encode() + rb"\b")
-                        for line_number in range(node.lineno, (node.end_lineno or node.lineno) + 1):
-                            raw = edits.lines[line_number - 1].encode("utf-8")
-                            match = pattern.search(raw, node.col_offset + 4 if line_number == node.lineno else 0)
-                            if match:
-                                edits.add(line_number, match.start(), match.end(), mapping[item.name])
-                                break
-                        if item.asname is None:
-                            wanted[item.name] = mapping[item.name]
-            elif not own and isinstance(node, ast.Call):
-                function = node.func
-                patched = isinstance(function, ast.Attribute) and function.attr == "object" and len(node.args) >= 2 and isinstance(node.args[0], ast.Name) and node.args[0].id in aliases
-                if patched and isinstance(node.args[1], ast.Constant) and node.args[1].value in mapping:
-                    constant = node.args[1]
-                    edits.add(constant.lineno, constant.col_offset + 1, constant.end_col_offset - 1, mapping[constant.value])
-                if isinstance(function, ast.Attribute) and function.attr == "patch" and node.args and isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, str):
-                    target = node.args[0]
-                    prefix = "lutin." + module + "."
-                    if target.value.startswith(prefix) and target.value[len(prefix):].split(".")[0] in mapping:
-                        old = target.value[len(prefix):].split(".")[0]
-                        edits.add(target.lineno, target.col_offset + 1 + len(prefix.encode()), target.col_offset + 1 + len(prefix.encode()) + len(old.encode()), mapping[old])
-        if wanted:
-            for node in ast.walk(tree):
-                if isinstance(node, ast.Name) and node.id in wanted:
-                    edits.add(node.lineno, node.col_offset, node.end_col_offset, wanted[node.id])
+        for index, (target, wanted_map) in enumerate(targets):
+            aliases, imported = uses_of(target, tree, own and index == 0)
+            if own and index == 0:
+                outside_none(edits, tree, mapping)
+                continue
+            if not aliases and not imported:
+                continue
+            outside_uses(edits, tree, target, wanted_map, aliases, imported)
         if edits.found:
             changes[path] = edits.result()
         checks += string_checks(path, tree, set(mapping))
     return changes, checks
+
+
+def outside_none(edits, tree, mapping):
+    """Inside the module itself: its definitions and every use of the names."""
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and node.name in mapping:
+            position = name_position(edits, node, node.name)
+            if position:
+                edits.add(node.lineno, position[0], position[1], mapping[node.name])
+        elif isinstance(node, ast.Name) and node.id in mapping:
+            edits.add(node.lineno, node.col_offset, node.end_col_offset, mapping[node.id])
+        elif isinstance(node, ast.Global):
+            for name in node.names:
+                if name in mapping:
+                    raw = edits.lines[node.lineno - 1].encode("utf-8")
+                    match = re.compile(rb"\b" + name.encode() + rb"\b").search(raw, node.col_offset + 6)
+                    if match:
+                        edits.add(node.lineno, match.start(), match.end(), mapping[name])
+
+
+def outside_uses(edits, tree, target, mapping, aliases, imported):
+    """In another file: `from .target import old`, `alias.old`, and the uses of a name imported without a new local name."""
+    wanted = {local: mapping[orig] for local, orig in imported.items() if orig in mapping}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Attribute) and node.attr in mapping and isinstance(node.value, ast.Name) and node.value.id in aliases:
+            edits.add(node.end_lineno, node.end_col_offset - len(node.attr.encode("utf-8")), node.end_col_offset, mapping[node.attr])
+        elif isinstance(node, ast.ImportFrom) and (node.module or "").split(".")[-1] == target and (node.level >= 1 or (node.module or "").startswith("lutin.")):
+            for item in node.names:
+                if item.name in mapping:
+                    pattern = re.compile(rb"\b" + item.name.encode() + rb"\b")
+                    for line_number in range(node.lineno, (node.end_lineno or node.lineno) + 1):
+                        raw = edits.lines[line_number - 1].encode("utf-8")
+                        match = pattern.search(raw, node.col_offset + 4 if line_number == node.lineno else 0)
+                        if match:
+                            edits.add(line_number, match.start(), match.end(), mapping[item.name])
+                            break
+                    if item.asname is None:
+                        wanted[item.name] = mapping[item.name]
+        elif isinstance(node, ast.Call):
+            function = node.func
+            patched = isinstance(function, ast.Attribute) and function.attr == "object" and len(node.args) >= 2 and isinstance(node.args[0], ast.Name) and node.args[0].id in aliases
+            if patched and isinstance(node.args[1], ast.Constant) and node.args[1].value in mapping:
+                constant = node.args[1]
+                edits.add(constant.lineno, constant.col_offset + 1, constant.end_col_offset - 1, mapping[constant.value])
+            if isinstance(function, ast.Attribute) and function.attr == "patch" and node.args and isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, str):
+                string = node.args[0]
+                prefix = "lutin." + target + "."
+                if string.value.startswith(prefix) and string.value[len(prefix):].split(".")[0] in mapping:
+                    old = string.value[len(prefix):].split(".")[0]
+                    start = string.col_offset + 1 + len(prefix.encode())
+                    edits.add(string.lineno, start, start + len(old.encode()), mapping[old])
+    if wanted:
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Name) and node.id in wanted:
+                edits.add(node.lineno, node.col_offset, node.end_col_offset, wanted[node.id])
 
 
 def string_checks(path, tree, names):

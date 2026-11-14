@@ -284,7 +284,7 @@ def purger_donnees():
     """Garde donnees/ sous le plafond réglé (Réglages) : efface d'abord les restes temporaires, puis les plus anciennes sauvegardes de fichiers.
     Ne touche jamais aux conversations, ni aux 5 sauvegardes les plus récentes, ni à celles dont dépend un bouton « Annuler »."""
     PURGE["derniere"] = time.time()
-    plafond = int(_m.reglages()["plafond_donnees_go"] * _m.GO)
+    plafond = int(_m.reglages()["plafond_donnees_go"] * _m.GB)
     for motif in ("verif-*.js", "commit-*.txt", "autotest-*.tmp"):
         for f in _m.DONNEES.glob(motif):
             try:
@@ -298,15 +298,15 @@ def purger_donnees():
         attachments.nettoyer()
         from . import progress_sheet
         ids = {c.stem for c in (_m.DONNEES / "conversations").glob("*.json")}
-        progress_sheet.nettoyer_orphelins(ids)
+        progress_sheet.clean_orphans(ids)
         from . import archive, embeddings
         archive.nettoyer_orphelins(ids)
         embeddings.nettoyer_orphelins(ids)
         _m.options_nettoyer_orphelins(ids)
     except OSError:
         pass
-    _m.CACHE_TAILLES.pop(str(_m.DONNEES), None)
-    taille = _m.taille_dossier(_m.DONNEES, delai=10)
+    _m.SIZE_CACHE.pop(str(_m.DONNEES), None)
+    taille = _m.folder_size(_m.DONNEES, delai=10)
     if taille <= plafond:
         return 0
     dossier = _m.DONNEES / "sauvegardes"
@@ -328,8 +328,8 @@ def purger_donnees():
         supprimes += 1
         if taille <= plafond * 0.8:
             break
-    _m.CACHE_TAILLES.pop(str(_m.DONNEES), None)
-    _m.journaliser("Dossier de données au-dessus du plafond ({} Go) : {} ancienne(s) sauvegarde(s) supprimée(s).".format(round(plafond / _m.GO, 1), supprimes))
+    _m.SIZE_CACHE.pop(str(_m.DONNEES), None)
+    _m.journaliser("Dossier de données au-dessus du plafond ({} Go) : {} ancienne(s) sauvegarde(s) supprimée(s).".format(round(plafond / _m.GB, 1), supprimes))
     return supprimes
 
 
@@ -433,9 +433,9 @@ def outil_document(chemin, contenu, titre, ctx):
     if not ctx["accord"](_t("Créer ") + rel(f), _t("{} ({} caractères de texte, {} Ko).").format(_t("Remplace le document") if f.is_file() else _t("Crée le document"), len(contenu), len(octets) // 1024 + 1), "", auto=ctx["auto_ecriture"]):
         return refus(ctx, _t("Refusé par l'utilisateur : rien n'a été écrit."))
     for dossier_ecrit in (f.parent, _m.DONNEES):
-        d = _m.espace_disque(dossier_ecrit)
+        d = _m.disk_space(dossier_ecrit)
         if d and d["libre"] < 300 * 1024 ** 2:
-            raise _m.ErreurOutil(_t("Le disque {} est presque plein ({} libres) : je n'écris pas. Fais de la place d'abord.").format(d["racine"], _m.go(d["libre"])))
+            raise _m.ErreurOutil(_t("Le disque {} est presque plein ({} libres) : je n'écris pas. Fais de la place d'abord.").format(d["racine"], _m.gb(d["libre"])))
     copie = sauvegarder(f, ctx)
     f.parent.mkdir(parents=True, exist_ok=True)
     provisoire = f.with_name(f.name + ".tmp")
@@ -461,9 +461,9 @@ def refus(ctx, texte):
 def ecrire_et_verifier(f, texte, eol, ctx, message):
     """Sauvegarde, écrit, puis contrôle la syntaxe et le dit au modèle tout de suite (il peut corriger sans que l'utilisateur ait à le remarquer)."""
     for dossier_ecrit in (f.parent, _m.DONNEES):                      # pas d'écriture sur un disque presque plein (fichier tronqué, sauvegarde impossible)
-        d = _m.espace_disque(dossier_ecrit)
+        d = _m.disk_space(dossier_ecrit)
         if d and d["libre"] < 300 * 1024 ** 2:
-            raise _m.ErreurOutil(_t("Le disque {} est presque plein ({} libres) : je n'écris pas pour ne pas abîmer le fichier. Fais de la place d'abord.").format(d["racine"], _m.go(d["libre"])))
+            raise _m.ErreurOutil(_t("Le disque {} est presque plein ({} libres) : je n'écris pas pour ne pas abîmer le fichier. Fais de la place d'abord.").format(d["racine"], _m.gb(d["libre"])))
     copie = sauvegarder(f, ctx)
     cree = not f.exists()
     f.parent.mkdir(parents=True, exist_ok=True)

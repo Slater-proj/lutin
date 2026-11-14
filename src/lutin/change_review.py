@@ -358,7 +358,7 @@ def _appeler_outil(nom, args, ctx):
         conv = ctx.get("conv")
         if conv is None:
             raise _m.ErreurOutil("Pas de conversation active.")
-        return progress_sheet.modifier(conv["id"], args.get("section", ""), args.get("texte", ""), args.get("mode", ""))
+        return progress_sheet.modify(conv["id"], args.get("section", ""), args.get("texte", ""), args.get("mode", ""))
     if nom in ("comfy_modeles", "comfy_generer"):
         from . import addons, addons_comfyui
         if not addons.actif("comfyui"):

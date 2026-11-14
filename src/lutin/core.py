@@ -375,26 +375,26 @@ from .recall import (  # noqa: F401  (déplacé dans recall.py : moteur ré-expo
 
 
 from .health import (  # noqa: F401  (déplacé dans health.py : moteur ré-exporte ses noms)
-    ALERTES_VUES,
-    CACHE_TAILLES,
-    GO,
-    MARGE_VRAM,
-    boucle_surveillance,
-    controle_avant_demande,
-    dossier_modeles_ollama,
-    espace_disque,
-    etat_sante,
-    evaluer_sante,
-    go,
-    lancer_autotest,
+    ALERTS_SEEN,
+    SIZE_CACHE,
+    GB,
+    VRAM_MARGIN,
+    watch_loop,
+    check_before_request,
+    ollama_models_folder,
+    disk_space,
+    health_state,
+    assess_health,
+    gb,
+    run_selftest,
     memo,
-    memoire_video,
-    oublier_mesures,
-    memoire_vive,
-    niveau_seuil,
-    surveiller_comfy_une_fois,
-    taille_dossier,
-    taille_modele,
+    video_memory,
+    forget_measures,
+    system_memory,
+    threshold_level,
+    watch_comfy_once,
+    folder_size,
+    model_size,
 )
 
 
@@ -412,16 +412,16 @@ def mesurer_disques():
     if os.environ.get("LUTIN_DEMO"):
         disque = {"total": 931 * 10 ** 9, "libre": 412 * 10 ** 9, "racine": "C:\\"}
         return {"Ollama (modèles)": disque, "Projet": disque, "Données de l'assistant": disque}
-    return {"Ollama (modèles)": espace_disque(dossier_modeles_ollama()), "Projet": espace_disque(RACINE), "Données de l'assistant": espace_disque(DONNEES)}
+    return {"Ollama (modèles)": disk_space(ollama_models_folder()), "Projet": disk_space(RACINE), "Données de l'assistant": disk_space(DONNEES)}
 
 
 def mesures_systeme():
     """Toutes les mesures brutes d'un coup (séparées de leur interprétation, pour pouvoir tester celle-ci). Les mesures lentes (carte graphique, ComfyUI, disques) se font en parallèle et
     sont gardées quelques secondes (sante.memo) ; la taille du dossier de données se refait en arrière-plan."""
     with ThreadPoolExecutor(max_workers=4) as pool:
-        vram, comfy, disques = pool.submit(memo, "vram", memoire_video), pool.submit(memo, "comfy", etat_comfy), pool.submit(memo, "disques", mesurer_disques)
-        taille = pool.submit(taille_dossier, DONNEES)          # la toute première mesure d'un gros dossier (ou d'un partage réseau) peut prendre des secondes : en parallèle des autres
-        ram = memoire_vive()
+        vram, comfy, disques = pool.submit(memo, "vram", video_memory), pool.submit(memo, "comfy", etat_comfy), pool.submit(memo, "disques", mesurer_disques)
+        taille = pool.submit(folder_size, DONNEES)          # la toute première mesure d'un gros dossier (ou d'un partage réseau) peut prendre des secondes : en parallèle des autres
+        ram = system_memory()
         return {"ram": ram, "vram": vram.result(), "comfy": comfy.result(), "disques": disques.result(), "donnees_octets": taille.result()}
 
 
@@ -1050,7 +1050,7 @@ def principal():
     except OSError as erreur:
         journaliser("Purge impossible : {!r}".format(erreur))
     rafraichir_plan(force=True)
-    threading.Thread(target=boucle_surveillance, daemon=True).start()
+    threading.Thread(target=watch_loop, daemon=True).start()
     from . import scheduled_tasks
     scheduled_tasks.demarrer()
     from . import background_jobs as fond, mission                                   # le traitement de documents et les missions longues : toujours là, ils ne font rien tant qu'il n'y a rien à traiter

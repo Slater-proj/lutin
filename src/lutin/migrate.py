@@ -268,7 +268,7 @@ def importer(d, dossiers, choix, racine_travail=None, ecraser=False, workspaces=
     avant = Path(dossiers["donnees"]) / "import" / "avant-import-{}.zip".format(time.strftime("%Y%m%d-%H%M%S"))
     avant.parent.mkdir(parents=True, exist_ok=True)
     tampon = io.BytesIO()
-    backup.exporter({k: dossiers.get(k) for k in ("config", "donnees", "memoire")}, tampon)
+    backup.export({k: dossiers.get(k) for k in ("config", "donnees", "memoire")}, tampon)
     avant.write_bytes(tampon.getvalue())
     rapport["sauvegarde"] = str(avant)
     if "conversations" in choix:

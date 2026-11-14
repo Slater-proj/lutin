@@ -384,7 +384,7 @@ def chercher_resultats(requete, nombre, maintenant=time.time, options=None):
     for nom, fonction in ordre:
         envoyee, retire = requete, []
         if not _recherche.est_chez_soi(nom):
-            envoyee, retire = _sorties.nettoyer_requete(requete)          # rien de personnel ne part chez un service extérieur
+            envoyee, retire = _sorties.clean_query(requete)          # rien de personnel ne part chez un service extérieur
             if not envoyee:
                 raisons.append("{} : {}".format(nom, _t("requête vide une fois les données personnelles retirées")))
                 continue
@@ -397,7 +397,7 @@ def chercher_resultats(requete, nombre, maintenant=time.time, options=None):
         else:
             raison = _t("aucun résultat")
         if not _recherche.est_chez_soi(nom):
-            _sorties.noter(nom, envoyee, retire, bool(trouves))
+            _sorties.record(nom, envoyee, retire, bool(trouves))
         if trouves:
             with VERROU_RECHERCHE:
                 BLOQUES.pop(nom, None)

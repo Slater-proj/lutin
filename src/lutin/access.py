@@ -154,7 +154,7 @@ def restaurer_flux(flux, taille):
                 restant -= len(morceau)
         if restant:
             raise ValueError(_t("Envoi interrompu."))
-        r = backup.restaurer(dossiers, fichier, dossier_secours=_m.DONNEES / "import")
+        r = backup.restore(dossiers, fichier, dossier_secours=_m.DONNEES / "import")
     _m.journaliser("Sauvegarde restaurée : {} fichiers".format(r["fichiers"]))
     return dict(r, redemarrage_necessaire=True)
 

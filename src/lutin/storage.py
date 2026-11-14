@@ -593,7 +593,7 @@ def conv_supprimer(ident):
         f.unlink()
     Path(str(f) + ".bak").unlink(missing_ok=True)
     from . import progress_sheet
-    progress_sheet.supprimer(ident)                                  # la fiche de suivi disparaît avec la conversation
+    progress_sheet.delete(ident)                                  # la fiche de suivi disparaît avec la conversation
     from . import archive, embeddings
     archive.supprimer(ident)                                # et le début archivé par le résumé
     embeddings.supprimer(ident)                             # et ses vecteurs de recherche par le sens

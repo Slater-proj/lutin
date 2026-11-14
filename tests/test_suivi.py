@@ -19,109 +19,109 @@ ID = "abcd1234"
 
 class Fiche(unittest.TestCase):
     def setUp(self):
-        progress_sheet.supprimer(ID)
-        self.addCleanup(progress_sheet.supprimer, ID)
+        progress_sheet.delete(ID)
+        self.addCleanup(progress_sheet.delete, ID)
 
     def test_ecrire_lire_et_aller_retour_du_fichier(self):
-        progress_sheet.modifier(ID, "objectif", "Finir la saison 1")
-        progress_sheet.modifier(ID, "Décisions", "Le héros reste en prison")
-        progress_sheet.modifier(ID, "decision", "Narration à la 3e personne")
-        s = progress_sheet.lire(ID)
+        progress_sheet.modify(ID, "objectif", "Finir la saison 1")
+        progress_sheet.modify(ID, "Décisions", "Le héros reste en prison")
+        progress_sheet.modify(ID, "decision", "Narration à la 3e personne")
+        s = progress_sheet.read(ID)
         self.assertEqual(s["objectif"], ["Finir la saison 1"])
         self.assertEqual(len(s["decisions"]), 2)
-        texte = progress_sheet.chemin(ID).read_text(encoding="utf-8")
+        texte = progress_sheet.path(ID).read_text(encoding="utf-8")
         self.assertIn("## Objectif", texte)
-        self.assertEqual(progress_sheet.analyser(texte), s, "le fichier relu donne la même fiche (l'utilisateur peut le modifier à la main)")
+        self.assertEqual(progress_sheet.parse(texte), s, "le fichier relu donne la même fiche (l'utilisateur peut le modifier à la main)")
 
     def test_remplacer_ajouter_retirer(self):
-        progress_sheet.modifier(ID, "plan", "1. Écrire\n2. Relire")
-        progress_sheet.modifier(ID, "plan", "1. Écrire\n2. Relire\n3. Publier")
-        self.assertEqual(len(progress_sheet.lire(ID)["plan"]), 3, "le plan se remplace en entier")
-        progress_sheet.modifier(ID, "fait", "Chapitre 1")
-        progress_sheet.modifier(ID, "fait", "Chapitre 2")
-        self.assertEqual(len(progress_sheet.lire(ID)["fait"]), 2, "« fait » s'ajoute")
-        progress_sheet.modifier(ID, "fait", "chapitre 1", "retirer")
-        self.assertEqual(progress_sheet.lire(ID)["fait"], ["Chapitre 2"])
+        progress_sheet.modify(ID, "plan", "1. Écrire\n2. Relire")
+        progress_sheet.modify(ID, "plan", "1. Écrire\n2. Relire\n3. Publier")
+        self.assertEqual(len(progress_sheet.read(ID)["plan"]), 3, "le plan se remplace en entier")
+        progress_sheet.modify(ID, "fait", "Chapitre 1")
+        progress_sheet.modify(ID, "fait", "Chapitre 2")
+        self.assertEqual(len(progress_sheet.read(ID)["fait"]), 2, "« fait » s'ajoute")
+        progress_sheet.modify(ID, "fait", "chapitre 1", "retirer")
+        self.assertEqual(progress_sheet.read(ID)["fait"], ["Chapitre 2"])
         with self.assertRaises(_m.ErreurOutil):
-            progress_sheet.modifier(ID, "nimporte", "x")
+            progress_sheet.modify(ID, "nimporte", "x")
         with self.assertRaises(_m.ErreurOutil):
-            progress_sheet.modifier(ID, "fait", "")
+            progress_sheet.modify(ID, "fait", "")
         with self.assertRaises(_m.ErreurOutil):
-            progress_sheet.modifier(ID, "fait", "x", "bizarre")
+            progress_sheet.modify(ID, "fait", "x", "bizarre")
 
     def test_la_fiche_ne_grossit_pas_sans_fin(self):
         for i in range(200):
-            progress_sheet.modifier(ID, "fait", "étape numéro {} ".format(i) + "x" * 600)
-        s = progress_sheet.lire(ID)
-        self.assertLessEqual(len(s["fait"]), progress_sheet.LIGNES_MAX["fait"])
-        self.assertTrue(all(len(ligne) <= progress_sheet.LIGNE_MAX for ligne in s["fait"]))
+            progress_sheet.modify(ID, "fait", "étape numéro {} ".format(i) + "x" * 600)
+        s = progress_sheet.read(ID)
+        self.assertLessEqual(len(s["fait"]), progress_sheet.MAX_LINES["fait"])
+        self.assertTrue(all(len(ligne) <= progress_sheet.MAX_LINE for ligne in s["fait"]))
         self.assertIn("199", s["fait"][-1], "on garde les plus récentes")
         for i in range(100):
-            progress_sheet.apres_tour(ID, "demande {} ".format(i) + "y" * 500, "réponse " + "z" * 500, ["src/f{}.py".format(i)])
-        s = progress_sheet.lire(ID)
-        self.assertLessEqual(len(s["demandes"]), progress_sheet.LIGNES_MAX["demandes"])
-        self.assertLessEqual(len(s["fichiers"]), progress_sheet.LIGNES_MAX["fichiers"])
+            progress_sheet.after_turn(ID, "demande {} ".format(i) + "y" * 500, "réponse " + "z" * 500, ["src/f{}.py".format(i)])
+        s = progress_sheet.read(ID)
+        self.assertLessEqual(len(s["demandes"]), progress_sheet.MAX_LINES["demandes"])
+        self.assertLessEqual(len(s["fichiers"]), progress_sheet.MAX_LINES["fichiers"])
 
     def test_le_texte_donne_au_modele_respecte_la_part_du_contexte(self):
         for cle in ("decisions", "fait", "ouvert", "fichiers"):
             for i in range(30):
-                progress_sheet.modifier(ID, cle, "{} ligne {} ".format(cle, i) + "mot " * 40)
-        progress_sheet.modifier(ID, "objectif", "Mon objectif principal")
-        progress_sheet.modifier(ID, "etape", "Étape en cours importante")
+                progress_sheet.modify(ID, cle, "{} ligne {} ".format(cle, i) + "mot " * 40)
+        progress_sheet.modify(ID, "objectif", "Mon objectif principal")
+        progress_sheet.modify(ID, "etape", "Étape en cours importante")
         for num_ctx in (4096, 24576):
-            texte = progress_sheet.texte_pour_modele(ID, num_ctx)
+            texte = progress_sheet.text_for_model(ID, num_ctx)
             self.assertLessEqual(len(texte), progress_sheet.budget_caracteres(num_ctx) + 400)
             self.assertIn("Mon objectif principal", texte, "l'objectif survit toujours")
             self.assertIn("Étape en cours importante", texte)
             self.assertTrue(texte.startswith("[Fiche de suivi]"))
 
     def test_mesure_et_avertissement(self):
-        self.assertEqual(progress_sheet.mesure(ID, 24576)["niveau"], "vide")
-        progress_sheet.modifier(ID, "objectif", "court")
-        m = progress_sheet.mesure(ID, 24576)
+        self.assertEqual(progress_sheet.measure(ID, 24576)["niveau"], "vide")
+        progress_sheet.modify(ID, "objectif", "court")
+        m = progress_sheet.measure(ID, 24576)
         self.assertEqual(m["niveau"], "ok")
         self.assertGreater(m["jetons"], 0)
         for cle in ("decisions", "fait", "ouvert", "fichiers", "plan"):
             for i in range(30):
-                progress_sheet.modifier(ID, cle, "{} {} ".format(cle, i) + "mot " * 40)
-        gros = progress_sheet.mesure(ID, 4096)
+                progress_sheet.modify(ID, cle, "{} {} ".format(cle, i) + "mot " * 40)
+        gros = progress_sheet.measure(ID, 4096)
         self.assertEqual(gros["niveau"], "attention")
         self.assertIn("ralentit", gros["avertissement"])
 
     def test_identifiant_invalide_refuse(self):
         for mauvais in ("../x", "a/b", "", "a", "x" * 80):
             with self.assertRaises(ValueError):
-                progress_sheet.chemin(mauvais)
+                progress_sheet.path(mauvais)
 
     def test_orphelins_nettoyes_et_suppression(self):
-        progress_sheet.modifier(ID, "objectif", "x")
-        progress_sheet.modifier("zzzz9999", "objectif", "y")
-        self.assertEqual(progress_sheet.nettoyer_orphelins({ID}), 1)
-        self.assertTrue(progress_sheet.chemin(ID).is_file())
-        self.assertFalse(progress_sheet.chemin("zzzz9999").exists())
-        self.assertTrue(progress_sheet.supprimer(ID))
-        self.assertFalse(progress_sheet.supprimer(ID))
+        progress_sheet.modify(ID, "objectif", "x")
+        progress_sheet.modify("zzzz9999", "objectif", "y")
+        self.assertEqual(progress_sheet.clean_orphans({ID}), 1)
+        self.assertTrue(progress_sheet.path(ID).is_file())
+        self.assertFalse(progress_sheet.path("zzzz9999").exists())
+        self.assertTrue(progress_sheet.delete(ID))
+        self.assertFalse(progress_sheet.delete(ID))
 
 
 class Validation(unittest.TestCase):
     def test_reconnait_les_validations(self):
         for oui in ("oui", "Oui !", "ok vas-y", "On passe à l'action", "d'accord", "go", "yes", "c'est bon, lance", "parfait, fonce"):
-            self.assertTrue(progress_sheet.est_confirmation(oui), oui)
+            self.assertTrue(progress_sheet.is_confirmation(oui), oui)
         for non in ("non", "oui mais change le titre", "", "Explique-moi le chapitre 3", "oui je veux que tu réécrives tout le premier acte avec plus de suspense"):
-            self.assertFalse(progress_sheet.est_confirmation(non), non)
+            self.assertFalse(progress_sheet.is_confirmation(non), non)
 
     def test_directive_seulement_s_il_y_a_quelque_chose_a_faire(self):
         conv = {"taches": [{"texte": "Écrire le chapitre 1", "etat": "fait"}, {"texte": "Écrire le chapitre 2", "etat": "en_cours"}]}
-        d = progress_sheet.directive_execution(conv, "oui", ID)
+        d = progress_sheet.execution_directive(conv, "oui", ID)
         self.assertIn("chapitre 2", d)
         self.assertIn("Ne refais pas le plan", d)
-        self.assertEqual(progress_sheet.directive_execution(conv, "explique-moi", ID), "")
-        self.assertEqual(progress_sheet.directive_execution({"taches": []}, "oui", ID), "", "rien à exécuter : pas de consigne")
-        progress_sheet.modifier(ID, "etape", "Relire l'acte 2")
+        self.assertEqual(progress_sheet.execution_directive(conv, "explique-moi", ID), "")
+        self.assertEqual(progress_sheet.execution_directive({"taches": []}, "oui", ID), "", "rien à exécuter : pas de consigne")
+        progress_sheet.modify(ID, "etape", "Relire l'acte 2")
         try:
-            self.assertIn("Relire l'acte 2", progress_sheet.directive_execution({}, "ok", ID), "l'étape de la fiche sert quand il n'y a pas de liste de tâches")
+            self.assertIn("Relire l'acte 2", progress_sheet.execution_directive({}, "ok", ID), "l'étape de la fiche sert quand il n'y a pas de liste de tâches")
         finally:
-            progress_sheet.supprimer(ID)
+            progress_sheet.delete(ID)
 
 
 class PartDuContexte(unittest.TestCase):
@@ -129,7 +129,7 @@ class PartDuContexte(unittest.TestCase):
 
     def tearDown(self):
         _m.enregistrer_reglages({"fiche_part": 10})
-        progress_sheet.supprimer(ID)
+        progress_sheet.delete(ID)
 
     def test_le_plafond_suit_le_reglage_et_reste_borne(self):
         self.assertEqual(_m.reglages()["fiche_part"], 10)
@@ -145,13 +145,13 @@ class PartDuContexte(unittest.TestCase):
 
     def test_la_fiche_garde_plus_de_lignes_avec_un_plafond_plus_haut_et_l_avertissement_suit(self):
         for i in range(25):
-            progress_sheet.modifier(ID, "decisions", "Décision numéro %d : " % i + "détail " * 25)
-        petit = progress_sheet.texte_pour_modele(ID, 4096)
+            progress_sheet.modify(ID, "decisions", "Décision numéro %d : " % i + "détail " * 25)
+        petit = progress_sheet.text_for_model(ID, 4096)
         _m.enregistrer_reglages({"fiche_part": 25})
-        grand = progress_sheet.texte_pour_modele(ID, 4096)
+        grand = progress_sheet.text_for_model(ID, 4096)
         self.assertGreater(len(grand), len(petit), "plus de place : plus de la fiche passe au modèle")
         self.assertLessEqual(len(grand), int(4096 * 0.25 * 3) + 400)
-        m = progress_sheet.mesure(ID, 4096)
+        m = progress_sheet.measure(ID, 4096)
         self.assertEqual(m["niveau"], "attention", "la fiche pèse beaucoup pour un petit contexte")
         self.assertIn("25 %", m["avertissement"], "l'avertissement cite le plafond réglé")
 
@@ -162,8 +162,8 @@ class Scribe(unittest.TestCase):
     def setUp(self):
         from lutin import agent
         self.dialogue = agent
-        progress_sheet.supprimer(ID)
-        self.addCleanup(progress_sheet.supprimer, ID)
+        progress_sheet.delete(ID)
+        self.addCleanup(progress_sheet.delete, ID)
         self.vrai = agent.ollama_json
         self.addCleanup(setattr, agent, "ollama_json", self.vrai)
         self.conv = {"id": ID, "messages": [{"role": "user" if i % 2 == 0 else "assistant", "content": "message %d sur le budget" % i} for i in range(8)]}
@@ -180,11 +180,11 @@ class Scribe(unittest.TestCase):
         return appels
 
     def test_remplit_remplace_ajoute_sans_doublon_et_retire_les_questions_resolues(self):
-        progress_sheet.modifier(ID, "ouvert", "Quel budget pour la salle ?")
-        progress_sheet.modifier(ID, "decisions", "Budget plafonné à 500 euros")
+        progress_sheet.modify(ID, "ouvert", "Quel budget pour la salle ?")
+        progress_sheet.modify(ID, "decisions", "Budget plafonné à 500 euros")
         appels = self.avec(json_ops(objectif=["Organiser la fête"], etape=["Réserver la salle"], decisions=["budget plafonné à 500 euros", "Salle réservée au 12 mai"], fait=["Devis reçu"], resolu=["Quel budget pour la salle ?"]))
         n = self.dialogue.scribe(self.conv, {"modele": "m", "num_ctx": 8192, "temperature": 0.2})
-        s = progress_sheet.lire(ID)
+        s = progress_sheet.read(ID)
         self.assertEqual((s["objectif"], s["etape"], s["fait"]), (["Organiser la fête"], ["Réserver la salle"], ["Devis reçu"]))
         self.assertEqual(s["decisions"], ["Budget plafonné à 500 euros", "Salle réservée au 12 mai"], "la décision déjà présente n'est pas dupliquée")
         self.assertEqual(s["ouvert"], [], "la question résolue (recopiée telle quelle) est retirée")
@@ -196,20 +196,20 @@ class Scribe(unittest.TestCase):
         self.assertEqual(len(appels), 1)
 
     def test_une_decision_n_est_jamais_retiree_et_les_excès_sont_bornes(self):
-        progress_sheet.modifier(ID, "decisions", "Ne jamais toucher à la production")
+        progress_sheet.modify(ID, "decisions", "Ne jamais toucher à la production")
         self.avec(json_ops(decisions=["décision %d" % i for i in range(30)], resolu=["Ne jamais toucher à la production"], ouvert=["x" * 5000]))
         self.dialogue.scribe(self.conv, {"modele": "m", "num_ctx": 8192, "temperature": 0.2})
-        s = progress_sheet.lire(ID)
+        s = progress_sheet.read(ID)
         self.assertIn("Ne jamais toucher à la production", s["decisions"], "le scribe ne supprime jamais une décision")
         self.assertEqual(len(s["decisions"]), 1 + self.dialogue.SCRIBE_AJOUTS_MAX, "au plus quatre lignes ajoutées par passage")
-        self.assertLessEqual(max(len(x) for x in s["ouvert"]), progress_sheet.LIGNE_MAX)
+        self.assertLessEqual(max(len(x) for x in s["ouvert"]), progress_sheet.MAX_LINE)
 
     def test_reponse_absurde_ou_panne_ne_cassent_rien(self):
         for reponse in ("pas du json", "[1, 2]", "null", '{"decisions": 5, "etape": {"a": 1}}', ValueError("boum"), OSError("réseau")):
             self.conv.pop("scribe_a", None)
             self.avec(reponse)
             self.dialogue.scribe(self.conv, {"modele": "m", "num_ctx": 8192, "temperature": 0.2})
-        self.assertEqual(progress_sheet.lire(ID)["objectif"], [])
+        self.assertEqual(progress_sheet.read(ID)["objectif"], [])
         self.conv["messages"] = self.conv["messages"][:3]
         self.conv.pop("scribe_a", None)
         appels = self.avec("{}")
@@ -231,7 +231,7 @@ class Scribe(unittest.TestCase):
         self.assertEqual(self.conv["messages"], avant, "la fiche n'a rien lu : rien n'est retiré")
         appels = self.avec(json_ops(decisions=["Budget fixé"]))
         self.assertTrue(self.dialogue.elaguer(self.conv, r, lambda e: None, forcer=True))
-        self.assertIn("Budget fixé", progress_sheet.lire(ID)["decisions"], "ce qui sort est passé dans la fiche")
+        self.assertIn("Budget fixé", progress_sheet.read(ID)["decisions"], "ce qui sort est passé dans la fiche")
         self.assertEqual(self.conv["messages"][-1]["content"], "dernière réponse")
 
     def test_beaucoup_de_messages_sont_lus_par_lots_sans_rien_sauter(self):

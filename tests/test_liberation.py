@@ -83,8 +83,8 @@ class DejaCharge(unittest.TestCase):
     def test_un_modele_deja_charge_ne_reclame_pas_sa_place_une_seconde_fois(self):
         """Avec llama.cpp (qui ne dit pas la taille chargée), le garde-fou réclamait la taille du modèle EN PLUS de celui déjà en mémoire : « Pas assez de mémoire » pour un modèle qui tournait."""
         from lutin import health
-        self.assertEqual(health.taille_modele("x", {"taille": 0, "vram": 0}), 0)
-        self.assertEqual(health.taille_modele("x", {"taille": 5 * 10 ** 9}), 5 * 10 ** 9)
+        self.assertEqual(health.model_size("x", {"taille": 0, "vram": 0}), 0)
+        self.assertEqual(health.model_size("x", {"taille": 5 * 10 ** 9}), 5 * 10 ** 9)
 
 
 if __name__ == "__main__":

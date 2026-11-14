@@ -504,7 +504,7 @@ def charges_comfy():
 def etat():
     """Tout ce qu'il faut à la page : mémoire de la machine, ce qui est chargé (avec de quoi le décharger), programmes les plus gourmands."""
     from . import core as _m
-    ram, vram = _m.memoire_vive(), _m.memoire_video()
+    ram, vram = _m.system_memory(), _m.video_memory()
     suivies = charges_llamacpp()
     suivis = set()
     for c in suivies:

@@ -960,23 +960,23 @@ class Assistant(unittest.TestCase):
         from lutin import locations as E
         from lutin import health
         vues = []
-        vrai_espace, vrai_reel = health.espace_disque, E.dossier_indique_par_ollama
-        vrai_moteur = A.espace_disque
-        health.espace_disque = A.espace_disque = lambda chemin: (vues.append(str(chemin)), None)[1]
+        vrai_espace, vrai_reel = health.disk_space, E.dossier_indique_par_ollama
+        vrai_moteur = A.disk_space
+        health.disk_space = A.disk_space = lambda chemin: (vues.append(str(chemin)), None)[1]
         try:
             E.dossier_indique_par_ollama = lambda *a, **k: "Z:/NouveauxModeles"
-            health.oublier_mesures("disques", "jauge")
+            health.forget_measures("disques", "jauge")
             A.mesurer_disques()
             E.jauge_modeles()
             self.assertTrue(any("NouveauxModeles" in v for v in vues), vues)
             vues.clear()
             E.dossier_indique_par_ollama = lambda *a, **k: "Y:/EncorAutre"
-            health.oublier_mesures("disques", "jauge")
+            health.forget_measures("disques", "jauge")
             A.mesurer_disques()
             self.assertTrue(any("EncorAutre" in v for v in vues) and not any("NouveauxModeles" in v for v in vues), "le nouveau dossier est pris en compte")
         finally:
-            health.espace_disque, A.espace_disque, E.dossier_indique_par_ollama = vrai_espace, vrai_moteur, vrai_reel
-            health.oublier_mesures("disques", "jauge")
+            health.disk_space, A.disk_space, E.dossier_indique_par_ollama = vrai_espace, vrai_moteur, vrai_reel
+            health.forget_measures("disques", "jauge")
 
     def test_le_dossier_des_modeles_est_demande_a_ollama(self):
         """Le réglage de l'application Ollama n'est pas visible de Lutin : on lit le chemin réel dans le Modelfile d'un modèle installé (ligne FROM …/blobs/sha256-…)."""
@@ -1988,8 +1988,8 @@ class Assistant(unittest.TestCase):
         mesures = mesures_saines()
 
         def ligne(m, id_, besoin=18 * GO, charge=None):
-            return next(i for i in A.evaluer_sante(m, r, besoin, charge)["items"] if i["id"] == id_)
-        s = A.evaluer_sante(mesures, r, 18 * GO, None)
+            return next(i for i in A.assess_health(m, r, besoin, charge)["items"] if i["id"] == id_)
+        s = A.assess_health(mesures, r, 18 * GO, None)
         self.assertEqual(s["niveau"], "ok", s)
         self.assertEqual({i["niveau"] for i in s["items"]}, {"ok"})
         # mémoire vive : seuil réglé à 3 Go
@@ -2011,7 +2011,7 @@ class Assistant(unittest.TestCase):
         self.assertEqual(ligne(dict(mesures, disques=dict(mesures["disques"], Projet=None)), "disque-projet")["niveau"], "attention", "partage réseau injoignable")
         self.assertEqual(ligne(dict(mesures, donnees_octets=3 * GO), "donnees")["niveau"], "attention")
         self.assertEqual(ligne(dict(mesures, donnees_octets=4 * GO), "donnees")["niveau"], "critique")
-        self.assertEqual(A.evaluer_sante(dict(mesures, ram=None), r)["items"][0]["niveau"], "attention", "mesure impossible : on le dit")
+        self.assertEqual(A.assess_health(dict(mesures, ram=None), r)["items"][0]["niveau"], "attention", "mesure impossible : on le dit")
         # réglages bornés
         post("/api/reglages", {"seuil_ram_go": 0, "seuil_disque_go": "abc", "plafond_donnees_go": 9999, "limite_ram_commande_go": -4})
         reg = lire("/api/etat")["reglages"]
@@ -2020,8 +2020,8 @@ class Assistant(unittest.TestCase):
 
     def test_garde_fous_avant_la_demande(self):
         from lutin import health
-        vrai_mesures, vrai_liberer, vraie_attente = A.mesures_systeme, A.liberer_vram, health.ATTENTE_RESSOURCES_S
-        health.ATTENTE_RESSOURCES_S = 0                                   # ici on teste le refus immédiat ; l'attente a son propre test
+        vrai_mesures, vrai_liberer, vraie_attente = A.mesures_systeme, A.liberer_vram, health.RESOURCE_WAIT_S
+        health.RESOURCE_WAIT_S = 0                                   # ici on teste le refus immédiat ; l'attente a son propre test
         etat = {"ram": 10 * GO, "vram": 22 * GO}
         liberations = []
 
@@ -2078,14 +2078,14 @@ class Assistant(unittest.TestCase):
             self.assertEqual(texte_de(ev), "Je passe")
         finally:
             A.GARDE_RESSOURCES_ACTIF, A.mesures_systeme, A.liberer_vram = False, vrai_mesures, vrai_liberer
-            health.ATTENTE_RESSOURCES_S = vraie_attente
+            health.RESOURCE_WAIT_S = vraie_attente
             PS[:] = []
             post("/api/reglages", {"garde_ressources": True})
 
     def test_pas_assez_de_memoire_la_demande_est_gardee_et_reprise_quand_la_place_revient(self):
         """Mémoire insuffisante (un autre programme gourmand) : le message envoyé n'est pas perdu, Lutin attend et répond tout seul dès que la mémoire revient."""
         from lutin import health
-        vrai_mesures, vraie_attente, vrai_pas = A.mesures_systeme, health.ATTENTE_RESSOURCES_S, health.PAS_ATTENTE_S
+        vrai_mesures, vraie_attente, vrai_pas = A.mesures_systeme, health.RESOURCE_WAIT_S, health.WAIT_STEP_S
         etat = {"ram": 1 * GO}
 
         def fausses_mesures():
@@ -2093,7 +2093,7 @@ class Assistant(unittest.TestCase):
             mesure["ram"] = dict(mesure["ram"], libre=etat["ram"])
             return mesure
         A.GARDE_RESSOURCES_ACTIF, A.mesures_systeme = True, fausses_mesures
-        health.ATTENTE_RESSOURCES_S, health.PAS_ATTENTE_S = 20, 0.05
+        health.RESOURCE_WAIT_S, health.WAIT_STEP_S = 20, 0.05
         try:
             threading.Timer(0.5, lambda: etat.update(ram=10 * GO)).start()
             ev = chat("Fais un gros travail", reponses=[[{"content": "Fait, la mémoire est revenue."}]])
@@ -2104,14 +2104,14 @@ class Assistant(unittest.TestCase):
             self.assertFalse([e for e in ev if e["type"] == "erreur"])
             # la place ne revient pas dans le temps imparti : refus expliqué, demande gardée
             etat["ram"] = 1 * GO
-            health.ATTENTE_RESSOURCES_S = 0.3
+            health.RESOURCE_WAIT_S = 0.3
             ev = chat("Encore", reponses=[[{"content": "ne doit pas arriver"}]])
             self.assertTrue(any(e["type"] == "erreur" and "Demande suspendue" in e["texte"] for e in ev))
             ident = next(e for e in ev if e["type"] == "fin")["conversation"]["id"]
             self.assertEqual(A.conv_lire(ident)["messages"][-1]["content"], "Encore", "la demande est gardée")
         finally:
             A.GARDE_RESSOURCES_ACTIF, A.mesures_systeme = False, vrai_mesures
-            health.ATTENTE_RESSOURCES_S, health.PAS_ATTENTE_S = vraie_attente, vrai_pas
+            health.RESOURCE_WAIT_S, health.WAIT_STEP_S = vraie_attente, vrai_pas
 
     def test_conversation_robuste(self):
         c = A.conv_nouvelle()
@@ -2203,7 +2203,7 @@ class Assistant(unittest.TestCase):
             A.conv_supprimer(c["id"])
             for nom in noms:
                 shutil.rmtree(base / nom, ignore_errors=True)
-            A.CACHE_TAILLES.clear()
+            A.SIZE_CACHE.clear()
 
     def test_chaque_reglage_se_change_et_se_relit(self):
         """Toutes les options des Réglages : une valeur différente, enregistrée par l'API, est relue à l'identique (aucune option n'est perdue ni ignorée) ; l'absurde est borné ou refusé."""
@@ -2235,7 +2235,7 @@ class Assistant(unittest.TestCase):
         try:
             ev = chat("On prépare la saison 2", reponses=[[appel_outil("suivi", section="objectif", texte="Écrire la saison 2")], [{"content": "Noté, objectif enregistré."}]])
             cid = [e for e in ev if e["type"] == "debut"][0]["conversation"]
-            fiche = progress_sheet.lire(cid)
+            fiche = progress_sheet.read(cid)
             self.assertEqual(fiche["objectif"], ["Écrire la saison 2"], "l'outil met la fiche à jour")
             self.assertTrue(fiche["demandes"] and "saison 2" in fiche["demandes"][0], "et elle se remplit aussi toute seule")
             chat("Continuons", conversation=cid, reponses=[[{"content": "Voici la suite."}]])
@@ -2255,12 +2255,12 @@ class Assistant(unittest.TestCase):
             self.assertEqual(post("/api/memoire-conversation", {"conversation": cid, "mode": "resume"})["mode"], "resume")
             chat("Et maintenant", conversation=cid, reponses=[[{"content": "Voilà."}]])
             self.assertFalse(any(str(m.get("content", "")).startswith("[Fiche de suivi]") for m in RECUES[-1]["messages"]))
-            self.assertTrue(progress_sheet.chemin(cid).is_file(), "la fiche reste sur le disque quand on repasse au résumé")
+            self.assertTrue(progress_sheet.path(cid).is_file(), "la fiche reste sur le disque quand on repasse au résumé")
             post("/api/memoire-conversation", {"conversation": cid, "mode": "pirate"}, attendu=400)
             post("/api/suivi", {"conversation": cid, "texte": "## Objectif\n- Nouvel objectif\n"})
-            self.assertEqual(progress_sheet.lire(cid)["objectif"], ["Nouvel objectif"])
+            self.assertEqual(progress_sheet.read(cid)["objectif"], ["Nouvel objectif"])
             post("/api/supprimer", {"id": cid})
-            self.assertFalse(progress_sheet.chemin(cid).exists(), "supprimer la conversation supprime sa fiche")
+            self.assertFalse(progress_sheet.path(cid).exists(), "supprimer la conversation supprime sa fiche")
         finally:
             A.enregistrer_reglages({"memoire_longue": "resume", "fiche_scribe": True})
 
@@ -2386,7 +2386,7 @@ class Assistant(unittest.TestCase):
             conv = A.conv_lire(cid)
             self.assertEqual(conv["memoire_longue"], "fichier", "« garder » retient le choix pour la conversation")
             self.assertLess(len(conv["messages"]), 14, "en mode fiche, la conversation presque pleine est allégée du début (archivé, retrouvable avec « rappeler »)")
-            self.assertIn("Retrouver le code du coffre", progress_sheet.lire(cid)["objectif"], "la fiche est amorcée à partir du début de la conversation")
+            self.assertIn("Retrouver le code du coffre", progress_sheet.read(cid)["objectif"], "la fiche est amorcée à partir du début de la conversation")
             ev = chat("Encore", conversation=cid, reponses=[[{"content": "Oui."}]])
             self.assertFalse(any(e["type"] == "choix_memoire" for e in ev), "choix gardé : la question n'est plus posée")
             # sans « garder » : la fiche sert pour cette fois, puis la question reviendra
@@ -2486,7 +2486,7 @@ class Assistant(unittest.TestCase):
             i = next(n for n, m in enumerate(msgs) if str(m.get("content", "")).startswith("[Extraits de la conversation]") or "[Extraits de la conversation]" in str(m.get("content", "")))
             self.assertIn("4711-ZEBRE", msgs[i]["content"], "le détail ancien est remis sous les yeux du modèle, sans qu'il l'ait demandé")
             self.assertEqual(msgs[i + 2]["content"], "Quel est le code du coffre ZEBRE ?", "juste avant la dernière question (le début reste identique : cache d'Ollama)")
-            fiche = progress_sheet.lire(cid)
+            fiche = progress_sheet.read(cid)
             self.assertIn("Le code du coffre est 4711-ZEBRE", fiche["decisions"], "le scribe a écrit la décision sans que le modèle ait appelé l'outil")
             self.assertEqual((fiche["etape"], fiche["ouvert"]), (["Ouvrir le coffre"], ["Qui garde la clé ?"]))
             self.assertEqual(A.conv_lire(cid).get("scribe_a"), len(A.conv_lire(cid)["messages"]), "le scribe retient jusqu'où il a lu (et son rang suit le retrait du début)")
@@ -2720,9 +2720,9 @@ class Assistant(unittest.TestCase):
             appels["comfy"] += 1
             time.sleep(0.3)
             return {"actif": False, "en_cours": 0, "attente": 0}
-        vrais = A.memoire_video, A.etat_comfy
-        A.memoire_video, A.etat_comfy = vram, comfy
-        health.oublier_mesures()
+        vrais = A.video_memory, A.etat_comfy
+        A.video_memory, A.etat_comfy = vram, comfy
+        health.forget_measures()
         try:
             debut = time.time()
             A.mesures_systeme()
@@ -2731,14 +2731,14 @@ class Assistant(unittest.TestCase):
             A.mesures_systeme()
             self.assertLess(time.time() - debut, 0.2, "la seconde demande réutilise les mesures")
             self.assertEqual(appels, {"vram": 1, "comfy": 1})
-            health.oublier_mesures("vram")
+            health.forget_measures("vram")
             A.mesures_systeme()
             self.assertEqual(appels, {"vram": 2, "comfy": 1}, "on peut forcer une nouvelle mesure (après avoir déchargé un modèle)")
         finally:
-            A.memoire_video, A.etat_comfy = vrais
-            health.oublier_mesures()
+            A.video_memory, A.etat_comfy = vrais
+            health.forget_measures()
         # une mesure gardée ne survit pas au remplacement de sa fonction
-        health.oublier_mesures()
+        health.forget_measures()
         self.assertEqual(health.memo("vram", lambda: 1), 1)
         self.assertEqual(health.memo("vram", lambda: 2), 2)
 
@@ -2748,19 +2748,19 @@ class Assistant(unittest.TestCase):
         shutil.rmtree(d, ignore_errors=True)
         d.mkdir()
         (d / "a.bin").write_bytes(b"x" * 1000)
-        health.CACHE_TAILLES.pop(str(d), None)
-        self.assertEqual(health.taille_dossier(d), 1000, "la toute première mesure est faite sur place")
+        health.SIZE_CACHE.pop(str(d), None)
+        self.assertEqual(health.folder_size(d), 1000, "la toute première mesure est faite sur place")
         (d / "b.bin").write_bytes(b"x" * 500)
-        self.assertEqual(health.taille_dossier(d), 1000, "une mesure récente est renvoyée telle quelle")
-        health.CACHE_TAILLES[str(d)] = (time.time() - 120, 1000)
-        self.assertEqual(health.taille_dossier(d), 1000, "une vieille mesure est renvoyée aussitôt, la nouvelle se fait en arrière-plan")
+        self.assertEqual(health.folder_size(d), 1000, "une mesure récente est renvoyée telle quelle")
+        health.SIZE_CACHE[str(d)] = (time.time() - 120, 1000)
+        self.assertEqual(health.folder_size(d), 1000, "une vieille mesure est renvoyée aussitôt, la nouvelle se fait en arrière-plan")
         fin = time.time() + 5
-        while time.time() < fin and health.CACHE_TAILLES[str(d)][1] != 1500:
+        while time.time() < fin and health.SIZE_CACHE[str(d)][1] != 1500:
             time.sleep(0.05)
-        self.assertEqual(health.taille_dossier(d), 1500)
+        self.assertEqual(health.folder_size(d), 1500)
         shutil.rmtree(d, ignore_errors=True)
         # la taille d'un modèle déjà chargé vient d'Ollama sans autre requête
-        self.assertEqual(health.taille_modele("n'importe-quoi", {"taille": 123, "vram": 100}), 123)
+        self.assertEqual(health.model_size("n'importe-quoi", {"taille": 123, "vram": 100}), 123)
 
     def test_sante_et_autotest(self):
         vrai = A.mesures_systeme
@@ -2788,7 +2788,7 @@ class Assistant(unittest.TestCase):
         ancien = A.OLLAMA
         A.OLLAMA = "http://127.0.0.1:9"
         try:
-            rapport = A.lancer_autotest()
+            rapport = A.run_selftest()
             self.assertFalse(rapport["ok"])
             self.assertIn("ne répond pas", {x["nom"]: x for x in rapport["resultats"]}["Ollama répond"]["detail"])
         finally:
@@ -3006,24 +3006,24 @@ class Assistant(unittest.TestCase):
         en_memoire = [{"name": "qwen3.8:27b", "size": 18 * GO, "size_vram": 18 * GO}]
         PS[:] = en_memoire
         try:
-            self.assertTrue(A.surveiller_comfy_une_fois())
+            self.assertTrue(A.watch_comfy_once())
             self.assertEqual(len(liberations), 1)
             self.assertIn("ComfyUI travaille", (TEMP / "donnees" / "lutin.log").read_text(encoding="utf-8"))
             A.TOURS_ACTIFS["cccccccc"] = threading.Event()
-            self.assertFalse(A.surveiller_comfy_une_fois(), "l'assistant est en train de répondre : on n'y touche pas")
+            self.assertFalse(A.watch_comfy_once(), "l'assistant est en train de répondre : on n'y touche pas")
             A.TOURS_ACTIFS.pop("cccccccc")
             A.etat_comfy = lambda: {"actif": True, "en_cours": 0, "attente": 0}
-            self.assertFalse(A.surveiller_comfy_une_fois(), "ComfyUI au repos")
+            self.assertFalse(A.watch_comfy_once(), "ComfyUI au repos")
             A.etat_comfy = lambda: {"actif": False, "en_cours": 0, "attente": 0}
-            self.assertFalse(A.surveiller_comfy_une_fois(), "ComfyUI éteint")
+            self.assertFalse(A.watch_comfy_once(), "ComfyUI éteint")
             A.etat_comfy = lambda: {"actif": True, "en_cours": 0, "attente": 2}
-            self.assertTrue(A.surveiller_comfy_une_fois(), "des images en attente comptent aussi")
+            self.assertTrue(A.watch_comfy_once(), "des images en attente comptent aussi")
             A.etat_comfy = lambda: genere
             PS[:] = []
-            self.assertFalse(A.surveiller_comfy_une_fois(), "rien en mémoire : rien à décharger")
+            self.assertFalse(A.watch_comfy_once(), "rien en mémoire : rien à décharger")
             PS[:] = en_memoire
             post("/api/reglages", {"liberer_si_comfy": False})
-            self.assertFalse(A.surveiller_comfy_une_fois(), "réglage coupé")
+            self.assertFalse(A.watch_comfy_once(), "réglage coupé")
             self.assertEqual(len(liberations), 2)
         finally:
             A.etat_comfy, A.liberer_vram = vrai_comfy, vrai_liberer

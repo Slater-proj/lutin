@@ -181,7 +181,7 @@ class Archives(Base):
     def test_une_sauvegarde_de_lutin_se_reprend(self):
         self.reprendre(choix=("conversations", "memoire", "reglages"))
         archive = Path(self.t.name) / "sauvegarde.zip"
-        backup.exporter({k: self.dossiers[k] for k in ("config", "donnees", "memoire")}, str(archive))
+        backup.export({k: self.dossiers[k] for k in ("config", "donnees", "memoire")}, str(archive))
         ailleurs = Path(self.t.name) / "ailleurs"
         self.dossiers = {k: ailleurs / k for k in ("config", "donnees", "memoire", "cache")}
         for d in self.dossiers.values():

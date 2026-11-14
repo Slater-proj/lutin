@@ -270,7 +270,7 @@ def sauvegarde_avant_mise_a_jour(dire=print):
         dossier = Path(config.dossiers()["cache"]) / "avant-mise-a-jour"
         dossier.mkdir(parents=True, exist_ok=True)
         fichier = dossier / "lutin-{}-{}.zip".format(__version__, time.strftime("%Y%m%d-%H%M%S"))
-        backup.exporter(config.dossiers(), fichier)
+        backup.export(config.dossiers(), fichier)
         for ancien in sorted(dossier.glob("lutin-*.zip"), key=lambda p: p.stat().st_mtime)[:-AVANT_MAJ_GARDEES]:
             ancien.unlink(missing_ok=True)
         dire(_t("Sauvegarde de tes données avant la mise à jour : {}").format(fichier))
@@ -679,8 +679,8 @@ def commande_sauvegarde(args):
     d, _ = contexte()
     destination = Path(args.fichier or "lutin-sauvegarde-{}.zip".format(time.strftime("%Y%m%d-%H%M%S")))
     try:
-        r = backup.exporter(d, destination)
-    except backup.ErreurSauvegarde as e:
+        r = backup.export(d, destination)
+    except backup.BackupError as e:
         print("✘ " + str(e), file=sys.stderr)
         return 1
     print(_t("✔ {} : {} fichier(s), {:.1f} Mo avant compression.").format(destination, r["fichiers"], r["octets"] / 1024 ** 2))
@@ -691,8 +691,8 @@ def commande_sauvegarde(args):
 def commande_restaurer(args):
     d, _ = contexte()
     try:
-        m = backup.verifier(args.fichier)
-    except backup.ErreurSauvegarde as e:
+        m = backup.verify(args.fichier)
+    except backup.BackupError as e:
         print("✘ " + str(e), file=sys.stderr)
         return 1
     if not args.forcer and client.ClientLocal(d["donnees"]).disponible():
@@ -702,7 +702,7 @@ def commande_restaurer(args):
     if not args.oui and input(_t("Remplacer tes données actuelles par celles-ci ? L'état actuel est gardé dans un zip « avant-restauration ». [o/N] ")).strip().lower() not in ("o", "oui", "y", "yes"):
         print(_t("Rien n'a été changé."))
         return 0
-    r = backup.restaurer(d, args.fichier, d["cache"])
+    r = backup.restore(d, args.fichier, d["cache"])
     print(_t("✔ {} fichier(s) restauré(s). État précédent : {}").format(r["fichiers"], r["secours"]))
     return 0
 

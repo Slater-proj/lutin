@@ -250,14 +250,14 @@ def scribe(conv, r, emit=None, jusqua=None, forcer=False):
 
 def _scribe_lot(conv, r, ident, echange):
     """Un appel au modèle pour un lot d'échanges ; renvoie le nombre de lignes écrites, ou None si l'appel a échoué (le lot sera relu au prochain passage)."""
-    sections = _suivi.lire(ident)
+    sections = _suivi.read(ident)
     consigne = ("Tu tiens la fiche de suivi d'une conversation. On te donne la fiche actuelle et les derniers échanges. Réponds en JSON avec ces clés (listes de phrases courtes, 150 caractères au plus) : "
                 "objectif (seulement si le but a changé ou vient d'être dit), plan (seulement si un plan vient d'être décidé ou modifié), etape (l'étape en cours maintenant), decisions (NOUVELLES décisions prises), "
                 "fait (ce qui vient d'être terminé), ouvert (NOUVELLES questions restées sans réponse), resolu (questions de la fiche qui ont maintenant une réponse, recopiées telles quelles). "
                 "N'invente rien : ne note que ce qui est dit dans les échanges. Liste vide si rien à ajouter.")
     try:
         corps_scribe = {"model": modele_annexe(r), "stream": False, "think": False, "format": "json", "options": _m.options_modele(r, 0.1),
-                        "messages": [{"role": "system", "content": consigne}, {"role": "user", "content": "FICHE ACTUELLE :\n" + _suivi.serialiser(ident, sections) + "\n\nDERNIERS ÉCHANGES :\n" + echange}]}
+                        "messages": [{"role": "system", "content": consigne}, {"role": "user", "content": "FICHE ACTUELLE :\n" + _suivi.serialize(ident, sections) + "\n\nDERNIERS ÉCHANGES :\n" + echange}]}
         with _m.tache_de_fond("fiche:" + str(ident), _t("Mise à jour de la fiche de suivi")):          # montré dans la barre d'état de la page
             rep = moteur_actuel(r).chat(corps_scribe, 300)
         ops = json.loads((rep.get("message", {}).get("content") or "{}").strip() or "{}")
@@ -270,23 +270,23 @@ def _scribe_lot(conv, r, ident, echange):
     def lignes(cle):
         v = ops.get(cle)
         v = v if isinstance(v, list) else ([v] if v else [])
-        return [x for x in (_suivi.nettoyer_ligne(str(i)) for i in v if i) if x]
+        return [x for x in (_suivi.clean_line(str(i)) for i in v if i) if x]
     n = 0
     try:
         for cle in ("objectif", "plan", "etape"):                                      # remplacés seulement si le modèle a quelque chose à dire
             nouveau = lignes(cle)[:LIGNES_REMPLACEES.get(cle, 3)]
             if nouveau and nouveau != sections[cle]:
-                _suivi.modifier(ident, cle, "\n".join(nouveau), "remplacer")
+                _suivi.modify(ident, cle, "\n".join(nouveau), "remplacer")
                 n += len(nouveau)
         for cle in ("decisions", "fait", "ouvert"):                                   # ajoutés sans doublon
             existantes = {x.lower() for x in sections[cle]}
             neuves = [x for x in lignes(cle) if x.lower() not in existantes][:SCRIBE_AJOUTS_MAX]
             if neuves:
-                _suivi.modifier(ident, cle, "\n".join(neuves), "ajouter")
+                _suivi.modify(ident, cle, "\n".join(neuves), "ajouter")
                 n += len(neuves)
         for question in lignes("resolu")[:SCRIBE_AJOUTS_MAX]:                         # une question ouverte n'est retirée que si le modèle la recopie vraiment (jamais une décision)
             if len(question) >= 12 and any(question.lower() in x.lower() for x in sections["ouvert"]):
-                _suivi.modifier(ident, "ouvert", question, "retirer")
+                _suivi.modify(ident, "ouvert", question, "retirer")
     except (ValueError, _m.ErreurOutil) as erreur:
         _m.journaliser("Scribe : consigne refusée (conversation {}) : {!r}".format(ident, erreur))
     return n
@@ -324,7 +324,7 @@ def amorcer_fiche(conv, r, emit=None):
     Renvoie le nombre de lignes écrites ; 0 si la fiche n'était pas vide ou si l'appel a échoué (la conversation n'en souffre pas : la fiche se remplira ensuite)."""
     ident = conv.get("id")
     try:
-        if any(_suivi.lire(ident).values()):
+        if any(_suivi.read(ident).values()):
             return 0
     except ValueError:
         return 0
@@ -347,12 +347,12 @@ def amorcer_fiche(conv, r, emit=None):
         _m.journaliser("Fiche de suivi non amorcée (conversation {}) : {!r}".format(ident, erreur))
         return 0
     n = 0
-    for cle in _suivi.CLES:
+    for cle in _suivi.KEYS:
         valeur = donnees.get(cle) if isinstance(donnees, dict) else None
         lignes = [str(x) for x in (valeur if isinstance(valeur, list) else [valeur]) if x and str(x).strip()]
         if lignes:
             try:
-                _suivi.modifier(ident, cle, "\n".join(lignes), "remplacer")
+                _suivi.modify(ident, cle, "\n".join(lignes), "remplacer")
                 n += len(lignes)
             except (ValueError, _m.ErreurOutil):
                 continue
@@ -1063,7 +1063,7 @@ def jauge_contexte(conv, r=None):
     msgs += conv.get("messages", [])
     if memoire_longue(conv, r) == "fichier" and conv.get("id"):
         try:
-            msgs.append({"role": "user", "content": _suivi.texte_pour_modele(conv["id"], r["num_ctx"])})          # la place de la fiche compte dans la jauge
+            msgs.append({"role": "user", "content": _suivi.text_for_model(conv["id"], r["num_ctx"])})          # la place de la fiche compte dans la jauge
         except ValueError:
             pass
     return {"utilise": estimer(msgs) + len(json.dumps(_m.OUTILS, ensure_ascii=False)) // 3, "total": r["num_ctx"], "reel": False}
@@ -1355,7 +1355,7 @@ def tour(conv, texte, emit, r=None, stop=None, remplacer_depuis=None, identite="
         emit({"type": "info", "texte": (_t("Accepté : {}") if ok else _t("Refusé : {}")).format(titre)})
         ctx["dernier_accord"] = "manuel"
         return ok
-    ctx = {"essai": bool(r.get("essai_a_blanc")), "identite": identite, "accord": accord, "auto_ecriture": bool(r.get("auto_ecriture")), "auto_commandes": bool(r.get("auto_commandes")), "mission": r.get("_mission", ""), "stop": stop, "conv": conv, "emit": emit, "web": bool(r.get("web", True)), "limite_ram": int(r.get("limite_ram_commande_go", 0) * _m.GO),
+    ctx = {"essai": bool(r.get("essai_a_blanc")), "identite": identite, "accord": accord, "auto_ecriture": bool(r.get("auto_ecriture")), "auto_commandes": bool(r.get("auto_commandes")), "mission": r.get("_mission", ""), "stop": stop, "conv": conv, "emit": emit, "web": bool(r.get("web", True)), "limite_ram": int(r.get("limite_ram_commande_go", 0) * _m.GB),
            "tour": {"id": datetime.now().strftime("%Y%m%d-%H%M%S-") + secrets.token_hex(2), "conversation": conv["id"], "fichiers": {}}}
     dernier = conv["messages"][-1] if conv["messages"] else None
     if dernier and dernier.get("role") == "user" and dernier.get("content") == texte:
@@ -1369,7 +1369,7 @@ def tour(conv, texte, emit, r=None, stop=None, remplacer_depuis=None, identite="
     if conv["titre"] == "Nouvelle conversation":
         conv["titre"] = " ".join(texte.split())[:60]
     _m.reparer_conversation(conv)
-    if not _m.controle_avant_demande(r, emit, conv["id"], stop):
+    if not _m.check_before_request(r, emit, conv["id"], stop):
         _m.conv_ecrire(conv)                             # la demande est gardée : « continue » la relancera quand le problème sera réglé
         emit({"type": "fin", "conversation": {"id": conv["id"], "titre": conv["titre"]}})
         return
@@ -1404,7 +1404,7 @@ def tour(conv, texte, emit, r=None, stop=None, remplacer_depuis=None, identite="
     if r["memoire_longue"] == "fichier" and not lecture_seule:
         try:
             reponse = next((m.get("content") or "" for m in reversed(conv["messages"]) if m.get("role") == "assistant" and m.get("content")), "")
-            _suivi.apres_tour(conv["id"], texte, reponse, sorted(ctx["tour"]["fichiers"]))
+            _suivi.after_turn(conv["id"], texte, reponse, sorted(ctx["tour"]["fichiers"]))
             if r.get("fiche_scribe", True) and not stop.is_set():
                 scribe(conv, r, emit)
         except (OSError, ValueError) as erreur:
@@ -1496,7 +1496,7 @@ def contexte_routage():
     from . import embeddings, machines
     installes = [n for n in etat_moteur().get("installes", []) if not embeddings.est_modele_de_recherche(n)]
     try:
-        vram, ram = _m.memoire_video(), _m.memoire_vive()
+        vram, ram = _m.video_memory(), _m.system_memory()
         budget = (vram["total"] / 1024 ** 3) if vram else ((ram["total"] / 1024 ** 3) * 0.6 if ram else 0)
     except Exception:  # noqa: BLE001  (une mesure qui échoue ne doit pas empêcher de répondre)
         budget = 0
@@ -1567,13 +1567,13 @@ def boucle_agent(conv, r, emit, ctx, stop):
     forcer_fin = False                                                # le modèle tourne en rond : un dernier tour SANS outil pour qu'il conclue, au lieu de couper net
     if r.get("memoire_longue") == "fichier":
         try:
-            fiche = _suivi.texte_pour_modele(conv["id"], r["num_ctx"])            # lue UNE fois pour tout le tour : le début de la requête reste identique, Ollama le garde en cache
+            fiche = _suivi.text_for_model(conv["id"], r["num_ctx"])            # lue UNE fois pour tout le tour : le début de la requête reste identique, Ollama le garde en cache
         except ValueError:
             fiche = ""
     extraits = ""
     if r.get("rappel_ici"):                       # le début de la conversation n'est plus sous les yeux du modèle : on lui remet ce qui touche à la demande
         try:
-            etape = " ".join(_suivi.lire(conv["id"])["etape"] + _suivi.lire(conv["id"])["objectif"])
+            etape = " ".join(_suivi.read(conv["id"])["etape"] + _suivi.read(conv["id"])["objectif"])
             extraits, nb_extraits = _m.rappel_du_fil(conv, etape)
             if nb_extraits and DITS["rappel"].get(conv["id"]) != nb_extraits:          # dit une fois, et quand le nombre change : pas à chaque réponse
                 DITS["rappel"][conv["id"]] = nb_extraits
@@ -1582,7 +1582,7 @@ def boucle_agent(conv, r, emit, ctx, stop):
             _m.journaliser("Rappel du fil impossible : {!r}".format(erreur))
     derniere_demande = next((m.get("content") or "" for m in reversed(conv["messages"]) if m.get("role") == "user"), "")
     try:
-        consigne = _suivi.directive_execution(conv, derniere_demande, conv["id"])
+        consigne = _suivi.execution_directive(conv, derniere_demande, conv["id"])
     except ValueError:
         consigne = ""
     if consigne:
@@ -1592,10 +1592,10 @@ def boucle_agent(conv, r, emit, ctx, stop):
     garde = _boucles.Guard()
     guide = ""
     if not consigne and not r.get("_mission") and "web_chercher" in ctx["outils_autorises"] and conv["messages"] and conv["messages"][-1].get("role") == "user":
-        guide = _actualites.mode_guide(derniere_demande, r["modele"])
+        guide = _actualites.guided_mode(derniere_demande, r["modele"])
     if guide:
         try:                                                              # actualités, recherche demandée, adresse collée : Lutin cherche et lit lui-même, le modèle ne fait que répondre d'après ce qu'on lui montre
-            consigne = _actualites.preparer(conv, derniere_demande, ctx, emit, reformuler=lambda t: reformuler_recherche(t, r), mode=guide) or ""
+            consigne = _actualites.prepare(conv, derniere_demande, ctx, emit, reformuler=lambda t: reformuler_recherche(t, r), mode=guide) or ""
             forcer_fin = bool(consigne)
         except (_m.ErreurOutil, OSError) as erreur:
             _m.journaliser("Actualités guidées impossibles : {!r}".format(erreur))

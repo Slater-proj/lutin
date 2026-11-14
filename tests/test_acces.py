@@ -469,7 +469,7 @@ class Redemarrage(Base):
 class Restauration(Base):
     def archive(self):
         sortie = io.BytesIO()
-        backup.exporter({"config": CONFIG.parent, "donnees": A.DONNEES, "memoire": A.MEMOIRE}, sortie)
+        backup.export({"config": CONFIG.parent, "donnees": A.DONNEES, "memoire": A.MEMOIRE}, sortie)
         return sortie.getvalue()
 
     def test_restaurer_depuis_la_page(self):

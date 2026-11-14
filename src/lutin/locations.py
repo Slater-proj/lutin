@@ -181,21 +181,21 @@ def definir_dossier_modeles(chemin):
     if os.name == "nt":
         from . import setup_wizard
         setup_wizard.definir_variables_utilisateur({"OLLAMA_MODELS": str(p)}, "windows")
-    _s.oublier_mesures("disques")
+    _s.forget_measures("disques")
     _REEL["t"] = 0.0                                                      # l'avis d'Ollama sera redemandé (il ne changera qu'à son redémarrage)
     return p
 
 
 def taille(chemin):
     try:
-        return _s.taille_dossier(chemin, DELAI_MESURE) if Path(chemin).is_dir() else 0
+        return _s.folder_size(chemin, DELAI_MESURE) if Path(chemin).is_dir() else 0
     except OSError:
         return None
 
 
 def ligne(cle, nom, chemin, explication, **plus):
     chemin = Path(chemin)
-    disque = _s.espace_disque(chemin)
+    disque = _s.disk_space(chemin)
     return dict({"cle": cle, "nom": nom, "chemin": str(chemin), "explication": explication, "existe": chemin.exists(), "taille": taille(chemin) if plus.pop("mesurer", True) else None,
                  "disque": {"libre": disque["libre"], "total": disque["total"], "racine": disque["racine"]} if disque else None}, **plus)
 
@@ -234,7 +234,7 @@ def _jauge():
         o = _m.etat_ollama()
         return {"chemin": r"C:\Users\demo\.ollama\models", "libre": 412 * 10 ** 9, "total": 931 * 10 ** 9, "modeles": sum((o.get("tailles") or {}).values()), "racine": "C:\\"}
     dossier = dossier_modeles()
-    disque = _s.espace_disque(dossier)
+    disque = _s.disk_space(dossier)
     if not disque:
         return None
     o = _m.etat_ollama()
@@ -287,7 +287,7 @@ def analyse_dossier(chemin):
             avert.append(_t("Préfère l'adresse réseau complète (\\\\serveur\\partage\\dossier) à une lettre de lecteur : une lettre mappée n'existe pas pour Ollama quand il tourne en service ou dans une autre session."))
     if debit is not None and debit < DEBIT_LENT_MO_S:
         avert.append(_t("Débit d'écriture mesuré : {} Mo/s. C'est lent pour des modèles de plusieurs Go : prévois {} min pour copier 17 Go.").format(debit, round(17 * 1024 / max(debit, 1) / 60)))
-    disque = _s.espace_disque(p)
+    disque = _s.disk_space(p)
     ancien = dossier_modeles()
     return {"chemin": str(p), "reseau": bool(reseau), "debit": debit, "avertissements": avert, "libre": disque["libre"] if disque else None,
             "existe": existe, "modeles_ici": existe and (p / "manifests").is_dir(), "source": str(ancien), "source_existe": ancien.is_dir(), "source_octets": taille_modeles_installes()}
@@ -326,7 +326,7 @@ def copier_modeles(cible):
         raise ValueError(_t("Le nouveau dossier ne peut pas être dans l'ancien."))
     fichiers = list(_fichiers(source))
     total = sum(f.stat().st_size for f in fichiers)
-    disque = _s.espace_disque(cible)
+    disque = _s.disk_space(cible)
     if disque and total > disque["libre"] * 0.98:
         raise ValueError(_t("Pas assez de place : il faut {} Go et il en reste {} sur ce disque.").format(round(total / 1e9, 1), round(disque["libre"] / 1e9, 1)))
     with _verrou_copie:
