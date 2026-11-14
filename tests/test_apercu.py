@@ -44,7 +44,7 @@ class Apercu(unittest.TestCase):
 
     def test_la_capture_est_montree_et_le_texte_rendu_au_modele(self):
         ctx = self.ctx()
-        res = change_review.appeler_outil("apercu_page", {"chemin": "page.html", "largeur": 900, "hauteur": 600}, ctx)
+        res = change_review.call_tool("apercu_page", {"chemin": "page.html", "largeur": 900, "hauteur": 600}, ctx)
         self.assertEqual(len(self.accords), 1)
         self.assertIn("Titre de la page : Ma page", res)
         self.assertIn("Titre visible Un élément", res, "le texte affiché, sans script ni style")
@@ -59,12 +59,12 @@ class Apercu(unittest.TestCase):
     def test_le_profil_temporaire_est_supprime(self):
         import glob
         avant = set(glob.glob(os.path.join(tempfile.gettempdir(), "lutin-apercu-*")))
-        change_review.appeler_outil("apercu_page", {"chemin": "page.html"}, self.ctx())
+        change_review.call_tool("apercu_page", {"chemin": "page.html"}, self.ctx())
         self.assertEqual(set(glob.glob(os.path.join(tempfile.gettempdir(), "lutin-apercu-*"))) - avant, set())
 
     def test_refus_et_essai_a_blanc_n_ouvrent_rien(self):
         ctx = self.ctx(accord=False)
-        res = change_review.appeler_outil("apercu_page", {"chemin": "page.html"}, ctx)
+        res = change_review.call_tool("apercu_page", {"chemin": "page.html"}, ctx)
         self.assertIn("Refusé", res)
         self.assertNotIn("medias", ctx)
 
@@ -79,12 +79,12 @@ class Apercu(unittest.TestCase):
     def test_sans_navigateur_le_message_est_clair(self):
         page_preview.navigateur = lambda: None
         with self.assertRaises(_m.ErreurOutil) as e:
-            change_review.appeler_outil("apercu_page", {"chemin": "page.html"}, self.ctx())
+            change_review.call_tool("apercu_page", {"chemin": "page.html"}, self.ctx())
         self.assertIn("Aucun navigateur", str(e.exception))
 
     def test_dimensions_invalides(self):
         with self.assertRaises(_m.ErreurOutil):
-            change_review.appeler_outil("apercu_page", {"chemin": "page.html", "largeur": "large"}, self.ctx())
+            change_review.call_tool("apercu_page", {"chemin": "page.html", "largeur": "large"}, self.ctx())
 
 
 if __name__ == "__main__":

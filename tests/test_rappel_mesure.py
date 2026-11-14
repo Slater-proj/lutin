@@ -18,9 +18,9 @@ class QualiteDuRappel(unittest.TestCase):
         self.assertGreaterEqual(r["mrr"], 0.92, r["ratees"])
 
     def test_le_pluriel_n_empeche_pas_de_retrouver(self):
-        self.assertEqual(recall.mots("Mes chats et mon chat"), ["chat", "chat"])
-        self.assertEqual(recall.mots("fonctions"), ["fonction"])
-        self.assertEqual(recall.mots("access bonus mois"), ["access", "bonus", "mois"])
+        self.assertEqual(recall.words("Mes chats et mon chat"), ["chat", "chat"])
+        self.assertEqual(recall.words("fonctions"), ["fonction"])
+        self.assertEqual(recall.words("access bonus mois"), ["access", "bonus", "mois"])
 
 
 if __name__ == "__main__":

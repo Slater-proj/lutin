@@ -729,8 +729,8 @@ def commande_reprendre(args, entree=input):
     """Reprend les données d'un autre assistant, au choix. Rien n'est écrasé sans --overwrite ; l'état actuel de Lutin est gardé dans un zip avant."""
     d, cfg = contexte()
     try:
-        with migrate.ouvrir(args.source, args.dossier_skills) as trouve:
-            nombres = migrate.decrire(trouve)
+        with migrate.open_source(args.source, args.dossier_skills) as trouve:
+            nombres = migrate.describe(trouve)
             lignes = [("conversations", _t("Conversations : {}").format(nombres["conversations"])),
                       ("memoire", _t("Mémoire : {}").format(", ".join(nombres["memoire"]) or "-")),
                       ("skills", _t("Skills : {}").format(nombres["skills"]) + ((" (" + trouve["dossier_skills"] + ")") if trouve["dossier_skills"] else "")),
@@ -750,11 +750,11 @@ def commande_reprendre(args, entree=input):
             if args.cible and not actif:
                 raise ValueError(_t("Dossier de travail inconnu."))
             racine = actif["chemin"] if actif else cfg["emplacements"]["travail"]
-            rapport = migrate.importer(trouve, d, choix, racine_travail=racine, ecraser=args.ecraser, workspaces=[t["id"] for t in workspaces.liste(cfg)])
+            rapport = migrate.import_all(trouve, d, choix, racine_travail=racine, ecraser=args.ecraser, workspaces=[t["id"] for t in workspaces.liste(cfg)])
     except ValueError as e:
         print("✘ " + str(e), file=sys.stderr)
         return 2
-    for ligne in migrate.resume(rapport):
+    for ligne in migrate.summary(rapport):
         print(ligne)
     return 0
 
@@ -849,7 +849,7 @@ def diagnostic(cfg, dossiers, profil, ollama):
 def commande_demarrage_auto(args):
     from . import power
     try:
-        e = power.installer_demarrage() if args.action == "installer" else power.retirer_demarrage() if args.action == "retirer" else power.etat_demarrage()
+        e = power.install_startup() if args.action == "installer" else power.remove_startup() if args.action == "retirer" else power.startup_state()
     except ValueError as err:
         print("✘ " + str(err), file=sys.stderr)
         return 1

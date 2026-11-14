@@ -1555,7 +1555,7 @@ def boucle_agent(conv, r, emit, ctx, stop):
     outils = outils_du_mode(r)                                      # seulement les outils utiles dans ce mode : moins de jetons, moins de confusion
     ctx["outils_autorises"] = {t["function"]["name"] for t in outils}
     try:
-        rappels_texte, rappels_sources = _m.rappels_automatiques(conv, r)
+        rappels_texte, rappels_sources = _m.automatic_recalls(conv, r)
     except Exception as erreur:  # noqa: BLE001
         _m.journaliser("Rappels automatiques impossibles : {!r}".format(erreur))
         rappels_texte, rappels_sources = "", []
@@ -1574,7 +1574,7 @@ def boucle_agent(conv, r, emit, ctx, stop):
     if r.get("rappel_ici"):                       # le début de la conversation n'est plus sous les yeux du modèle : on lui remet ce qui touche à la demande
         try:
             etape = " ".join(_suivi.read(conv["id"])["etape"] + _suivi.read(conv["id"])["objectif"])
-            extraits, nb_extraits = _m.rappel_du_fil(conv, etape)
+            extraits, nb_extraits = _m.thread_recall(conv, etape)
             if nb_extraits and DITS["rappel"].get(conv["id"]) != nb_extraits:          # dit une fois, et quand le nombre change : pas à chaque réponse
                 DITS["rappel"][conv["id"]] = nb_extraits
                 emit({"type": "info", "texte": _t("📎 {} passage(s) retrouvé(s) plus tôt dans cette conversation.").format(nb_extraits)})
@@ -1889,7 +1889,7 @@ def boucle_agent(conv, r, emit, ctx, stop):
                 elif nom not in ctx["outils_autorises"]:
                     raise _m.ErreurOutil("L'outil « {} » n'est pas disponible ici (mode ou option désactivés). Outils disponibles : {}.".format(nom, ", ".join(sorted(ctx["outils_autorises"]))))
                 else:
-                    resultat = _m.appeler_outil(nom, args, ctx)
+                    resultat = _m.call_tool(nom, args, ctx)
             except _m.Arret:
                 for b in appels[position:]:
                     conv["messages"].append({"role": "tool", "tool_name": (b.get("function") or {}).get("name", ""), "content": "Interrompu par l'utilisateur."})

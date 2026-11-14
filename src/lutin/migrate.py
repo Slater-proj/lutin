@@ -21,81 +21,81 @@ from . import workspaces as travaux
 from .i18n import t as _t
 
 CATEGORIES = ("conversations", "memoire", "skills", "reglages")
-REGLAGES_REPRIS = ("num_ctx", "temperature", "reflexion", "mode", "num_predict", "tours_max", "web", "top_p", "top_k", "min_p", "repeat_penalty", "garde_ressources", "seuil_ram_go",
+SETTINGS_TAKEN = ("num_ctx", "temperature", "reflexion", "mode", "num_predict", "tours_max", "web", "top_p", "top_k", "min_p", "repeat_penalty", "garde_ressources", "seuil_ram_go",
                    "seuil_disque_go", "plafond_donnees_go", "limite_ram_commande_go", "liberer_si_comfy", "rappels_auto", "num_thread", "garde_min")
-REGLAGES_JAMAIS = ("modele", "auto_ecriture", "auto_commandes", "avance")
+SETTINGS_NEVER = ("modele", "auto_ecriture", "auto_commandes", "avance")
 RE_ID = re.compile(r"^[A-Za-z0-9_-]{4,64}$")
-RE_NOM_MD = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 ._-]{0,100}\.md$")
+RE_MD_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 ._-]{0,100}\.md$")
 CONVERSATION_MAX = 50_000_000
-MEMOIRE_MAX = 1_000_000
+MEMORY_MAX = 1_000_000
 ARCHIVE_MAX = 2 * 1024 ** 3
 MEMBRES_MAX = 100_000
-MODELE_MEMOIRE = ("CONTEXTE.md", "MEMOIRE.md")
+MEMORY_TEMPLATE = ("CONTEXTE.md", "MEMOIRE.md")
 
 
-class ErreurReprise(ValueError):
+class MigrationError(ValueError):
     pass
 
 
-def _premier_dossier(*candidats):
+def _first_folder(*candidats):
     return next((Path(c) for c in candidats if c and Path(c).is_dir()), None)
 
 
-NOMS_PROJET = ("assistant", "lutin", "Lutin")          # où l'ancien assistant range ses dossiers donnees/ et memoire/ dans un projet
+PROJECT_NAMES = ("assistant", "lutin", "Lutin")          # où l'ancien assistant range ses dossiers donnees/ et memoire/ dans un projet
 
 
-def _contient_donnees(d):
+def _contains_data(d):
     d = Path(d)
     return any((d / n).is_dir() for n in ("donnees", "memoire")) or (d / "conversations").is_dir()
 
 
-def _enfant_avec_donnees(base):
+def _child_with_data(base):
     """Le sous-dossier de `base` qui contient donnees/ ou memoire/ (les noms habituels d'abord), ou None."""
     try:
         enfants = [e for e in Path(base).iterdir() if e.is_dir()]
     except OSError:
         return None
-    for nom in NOMS_PROJET:
+    for nom in PROJECT_NAMES:
         for e in enfants:
-            if e.name == nom and _contient_donnees(e):
+            if e.name == nom and _contains_data(e):
                 return e
-    return next((e for e in sorted(enfants) if _contient_donnees(e)), None)
+    return next((e for e in sorted(enfants) if _contains_data(e)), None)
 
 
-def localiser(source, dossier_skills=None):
+def locate(source, dossier_skills=None):
     """Où sont les données, d'après ce que la personne a indiqué. Elle peut avoir donné le dossier de l'assistant (donnees/ et memoire/ dedans ; skills/ dedans ou à côté), le dossier du PROJET qui le
     contient (assistant/ dedans), ou directement donnees/, memoire/ ou skills/. Renvoie (donnees, memoire, skills, dossier de l'assistant retenu) ; les dossiers absents valent None."""
     base = Path(source)
     if (base / "conversations").is_dir() and not (base / "donnees").is_dir():                 # donnees/ lui-même
         b = base.parent
-        return base, _premier_dossier(b / "memoire"), _premier_dossier(dossier_skills, b / "skills", b.parent / "skills"), b
-    if base.name.lower() == "memoire" or (any((base / n).is_file() for n in MODELE_MEMOIRE) and not _contient_donnees(base)):          # memoire/ lui-même
+        return base, _first_folder(b / "memoire"), _first_folder(dossier_skills, b / "skills", b.parent / "skills"), b
+    if base.name.lower() == "memoire" or (any((base / n).is_file() for n in MEMORY_TEMPLATE) and not _contains_data(base)):          # memoire/ lui-même
         b = base.parent
-        return _premier_dossier(b / "donnees"), base, _premier_dossier(dossier_skills, b / "skills", b.parent / "skills"), b
-    if base.name.lower() == "skills" and not _contient_donnees(base):                          # skills/ lui-même : l'assistant est un voisin
-        voisin = _enfant_avec_donnees(base.parent)
+        return _first_folder(b / "donnees"), base, _first_folder(dossier_skills, b / "skills", b.parent / "skills"), b
+    if base.name.lower() == "skills" and not _contains_data(base):                          # skills/ lui-même : l'assistant est un voisin
+        voisin = _child_with_data(base.parent)
         b = voisin or base.parent
-        return (_premier_dossier(b / "donnees") if voisin else None), (_premier_dossier(b / "memoire") if voisin else None), _premier_dossier(dossier_skills, base), b
+        return (_first_folder(b / "donnees") if voisin else None), (_first_folder(b / "memoire") if voisin else None), _first_folder(dossier_skills, base), b
     b = base
-    if not _contient_donnees(base):                                                               # le projet qui contient l'assistant
-        b = _enfant_avec_donnees(base) or base
-    return _premier_dossier(b / "donnees"), _premier_dossier(b / "memoire"), _premier_dossier(dossier_skills, b / "skills", b.parent / "skills"), b
+    if not _contains_data(base):                                                               # le projet qui contient l'assistant
+        b = _child_with_data(base) or base
+    return _first_folder(b / "donnees"), _first_folder(b / "memoire"), _first_folder(dossier_skills, b / "skills", b.parent / "skills"), b
 
 
-def _extraire(archive, destination):
+def _extract(archive, destination):
     """Extrait seulement ce qu'on sait reprendre (donnees/conversations/*.json, donnees/reglages.json, memoire/*.md, skills/*.md), après avoir tout vérifié."""
     try:
         z = zipfile.ZipFile(archive)
     except (zipfile.BadZipFile, OSError) as e:
-        raise ErreurReprise(_t("Cette archive n'est pas lisible : {}").format(e)) from e
+        raise MigrationError(_t("Cette archive n'est pas lisible : {}").format(e)) from e
     with z:
         infos = z.infolist()
         if len(infos) > MEMBRES_MAX or sum(i.file_size for i in infos) > ARCHIVE_MAX:
-            raise ErreurReprise(_t("Archive trop grande."))
+            raise MigrationError(_t("Archive trop grande."))
         for i in infos:
             n = i.filename.replace("\\", "/")
             if n.startswith("/") or ".." in n.split("/") or re.match(r"^[A-Za-z]:", n):
-                raise ErreurReprise(_t("Archive refusée : « {} » sortirait de ses dossiers.").format(i.filename))
+                raise MigrationError(_t("Archive refusée : « {} » sortirait de ses dossiers.").format(i.filename))
         for i in infos:
             n = i.filename.replace("\\", "/")
             if i.is_dir() or not (re.match(r"^donnees/conversations/[^/]+\.json$", n) or n == "donnees/reglages.json" or re.match(r"^(memoire|skills)/[^/]+\.md$", n)):
@@ -107,47 +107,47 @@ def _extraire(archive, destination):
 
 
 @contextlib.contextmanager
-def ouvrir(source, dossier_skills=None):
+def open_source(source, dossier_skills=None):
     """Rend la détection de ce que la source contient : {conversations, memoire, skills, reglages} (listes de chemins sur le disque, valables pendant le `with`)."""
     source = Path(str(source).strip().strip('"')).expanduser()
     fini, valeur = travaux.avec_delai(lambda: source.is_file())
     if fini is None:
-        raise ErreurReprise(_t("Le dossier « {} » ne répond pas (plus de {} s) : un partage réseau éteint, un disque déconnecté ?").format(source, travaux.DELAI_DISQUE_S))
+        raise MigrationError(_t("Le dossier « {} » ne répond pas (plus de {} s) : un partage réseau éteint, un disque déconnecté ?").format(source, travaux.DELAI_DISQUE_S))
     if not (fini and valeur):                        # ce n'est pas une archive : un dossier, qui doit exister et se lire (message précis pour un partage réseau)
         raison = travaux.diagnostic(source)
         if raison:
-            raise ErreurReprise(raison)
+            raise MigrationError(raison)
     nettoyage = None
     try:
         if source.is_file():
             if source.suffix.lower() != ".zip":
-                raise ErreurReprise(_t("Donne le dossier de l'ancien assistant, ou une archive .zip."))
+                raise MigrationError(_t("Donne le dossier de l'ancien assistant, ou une archive .zip."))
             nettoyage = tempfile.TemporaryDirectory(prefix="lutin-reprise-")
-            _extraire(source, nettoyage.name)
+            _extract(source, nettoyage.name)
             base = Path(nettoyage.name)
             donnees, memoire = base / "donnees", base / "memoire"
-            skills = _premier_dossier(dossier_skills, base / "skills")
+            skills = _first_folder(dossier_skills, base / "skills")
         else:
-            donnees, memoire, skills, base = localiser(source, dossier_skills)
+            donnees, memoire, skills, base = locate(source, dossier_skills)
         conv = sorted(p for p in (donnees / "conversations").glob("*.json") if p.is_file()) if donnees and (donnees / "conversations").is_dir() else []
         mem = sorted(p for p in memoire.glob("*.md") if p.is_file()) if memoire and Path(memoire).is_dir() else []
         sk = sorted(p for p in skills.glob("*.md") if p.is_file()) if skills else []
         reg = donnees / "reglages.json" if donnees and (donnees / "reglages.json").is_file() else None
         d = {"conversations": conv, "memoire": mem, "skills": sk, "reglages": reg, "origine": str(source), "dossier_utilise": str(base), "dossier_skills": str(skills) if skills else ""}
         if not (conv or mem or sk or reg):
-            raise ErreurReprise(_t("Rien à reprendre dans {} (il faut des dossiers donnees/ et memoire/, ou des skills).").format(source))
+            raise MigrationError(_t("Rien à reprendre dans {} (il faut des dossiers donnees/ et memoire/, ou des skills).").format(source))
         yield d
     finally:
         if nettoyage:
             nettoyage.cleanup()
 
 
-def decrire(d):
+def describe(d):
     """Ce que la détection a trouvé, pour l'affichage : {conversations: n, memoire: [noms], skills: n, reglages: bool}."""
     return {"conversations": len(d["conversations"]), "memoire": [p.name for p in d["memoire"]], "skills": len(d["skills"]), "reglages": bool(d["reglages"])}
 
 
-def _ecrire(chemin, texte):
+def _write(chemin, texte):
     chemin = Path(chemin)
     chemin.parent.mkdir(parents=True, exist_ok=True)
     tmp = chemin.with_name(chemin.name + ".tmp")
@@ -155,30 +155,30 @@ def _ecrire(chemin, texte):
     tmp.replace(chemin)
 
 
-def _lire_json(chemin):
+def _read_json(chemin):
     try:
         return json.loads(Path(chemin).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
 
 
-def _gabarits_memoire():
+def _memory_templates():
     """Les textes de départ de Lutin (français et anglais) : une mémoire qui leur est identique n'a jamais été touchée, on peut la remplacer sans rien perdre."""
     base = Path(__file__).resolve().parent / "data"
     sortie = {}
-    for nom in MODELE_MEMOIRE:
+    for nom in MEMORY_TEMPLATE:
         sortie[nom] = [p.read_text(encoding="utf-8").strip() for p in (base / nom, base / "en" / nom) if p.is_file()]
     return sortie
 
 
-def _importer_conversations(d, dossiers, ecraser, workspaces, rapport):
+def _import_conversations(d, dossiers, ecraser, workspaces, rapport):
     dest = Path(dossiers["donnees"]) / "conversations"
     ok = ignorees = invalides = 0
     for src in d["conversations"]:
         if src.stat().st_size > CONVERSATION_MAX:
             invalides += 1
             continue
-        c = _lire_json(src)
+        c = _read_json(src)
         if not isinstance(c, dict) or not isinstance(c.get("messages"), list) or not RE_ID.match(str(c.get("id", ""))):
             invalides += 1
             continue
@@ -189,46 +189,46 @@ def _importer_conversations(d, dossiers, ecraser, workspaces, rapport):
         c.pop("annulable", None)          # renvoie à des sauvegardes de fichiers de l'ancien assistant, absentes ici
         if c.get("travail") and c["travail"] not in workspaces:
             c.pop("travail")              # un dossier de travail qui n'existe pas ici : la conversation prendra le dossier actif à sa première utilisation
-        _ecrire(cible, json.dumps(c, ensure_ascii=False))
+        _write(cible, json.dumps(c, ensure_ascii=False))
         ok += 1
     rapport["conversations"] = {"importees": ok, "deja_presentes": ignorees, "illisibles": invalides}
 
 
-def _importer_memoire(d, dossiers, ecraser, rapport):
+def _import_memory(d, dossiers, ecraser, rapport):
     dest = Path(dossiers["memoire"])
-    modeles = _gabarits_memoire()
+    modeles = _memory_templates()
     stamp = time.strftime("%Y%m%d")
     posees, a_cote, identiques = [], [], []
     for src in d["memoire"]:
-        if src.stat().st_size > MEMOIRE_MAX:
+        if src.stat().st_size > MEMORY_MAX:
             continue
         texte = src.read_text(encoding="utf-8-sig", errors="replace")
         cible = dest / src.name
         if not cible.exists():
-            _ecrire(cible, texte)
+            _write(cible, texte)
             posees.append(src.name)
             continue
         actuel = cible.read_text(encoding="utf-8-sig", errors="replace")
         if actuel.strip() == texte.strip():
             identiques.append(src.name)
         elif ecraser or actuel.strip() in modeles.get(src.name, []):
-            _ecrire(cible, texte)
+            _write(cible, texte)
             posees.append(src.name)
         else:
-            _ecrire(dest / "{}.importe-{}.md".format(src.stem, stamp), texte)
+            _write(dest / "{}.importe-{}.md".format(src.stem, stamp), texte)
             a_cote.append("{}.importe-{}.md".format(src.stem, stamp))
     rapport["memoire"] = {"posees": posees, "a_cote": a_cote, "identiques": identiques}
 
 
-def est_projet_claude(dossier):
+def is_claude_project(dossier):
     return (Path(dossier) / "CLAUDE.md").is_file() or (Path(dossier) / ".claude").is_dir()
 
 
-def _importer_skills(d, racine_travail, ecraser, rapport):
+def _import_skills(d, racine_travail, ecraser, rapport):
     dest = Path(racine_travail) / "skills"
     ok, ignores, refuses = [], [], []
     for src in d["skills"]:
-        if not RE_NOM_MD.match(src.name) or src.stat().st_size > MEMOIRE_MAX:
+        if not RE_MD_NAME.match(src.name) or src.stat().st_size > MEMORY_MAX:
             refuses.append(src.name)
             continue
         if (dest / src.name).exists() and not ecraser:
@@ -237,33 +237,33 @@ def _importer_skills(d, racine_travail, ecraser, rapport):
         dest.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(src, dest / src.name)
         ok.append(src.name)
-    rapport["skills"] = {"importes": ok, "deja_presents": ignores, "refuses": refuses, "dossier": str(dest), "projet_claude": bool(ok) and est_projet_claude(racine_travail)}
+    rapport["skills"] = {"importes": ok, "deja_presents": ignores, "refuses": refuses, "dossier": str(dest), "projet_claude": bool(ok) and is_claude_project(racine_travail)}
 
 
-def _importer_reglages(d, dossiers, rapport):
-    ancien = _lire_json(d["reglages"])
+def _import_settings(d, dossiers, rapport):
+    ancien = _read_json(d["reglages"])
     if not isinstance(ancien, dict):
         rapport["reglages"] = {"repris": [], "laisses": []}
         return
     chemin = Path(dossiers["donnees"]) / "reglages.json"
-    actuel = _lire_json(chemin) if chemin.is_file() else {}
+    actuel = _read_json(chemin) if chemin.is_file() else {}
     actuel = actuel if isinstance(actuel, dict) else {}
-    repris = [k for k in REGLAGES_REPRIS if k in ancien]
+    repris = [k for k in SETTINGS_TAKEN if k in ancien]
     for k in repris:
         actuel[k] = ancien[k]
     if repris:
-        _ecrire(chemin, json.dumps(actuel, ensure_ascii=False, indent=1))
-    rapport["reglages"] = {"repris": repris, "laisses": [k for k in REGLAGES_JAMAIS if k in ancien]}
+        _write(chemin, json.dumps(actuel, ensure_ascii=False, indent=1))
+    rapport["reglages"] = {"repris": repris, "laisses": [k for k in SETTINGS_NEVER if k in ancien]}
 
 
-def importer(d, dossiers, choix, racine_travail=None, ecraser=False, workspaces=()):
+def import_all(d, dossiers, choix, racine_travail=None, ecraser=False, workspaces=()):
     """Reprend les catégories de `choix` (sous-ensemble de CATEGORIES). `dossiers` : {config, donnees, memoire} de Lutin ; `racine_travail` : où poser les skills ; `workspaces` : identifiants de
     dossiers de travail connus. Renvoie un rapport. Un zip de l'état actuel est gardé d'abord."""
     choix = [c for c in CATEGORIES if c in set(choix)]
     if not choix:
-        raise ErreurReprise(_t("Rien n'est choisi."))
+        raise MigrationError(_t("Rien n'est choisi."))
     if "skills" in choix and not racine_travail:
-        raise ErreurReprise(_t("Pas de dossier de travail actif pour y poser les skills."))          # avant d'écrire quoi que ce soit : pas d'import à moitié
+        raise MigrationError(_t("Pas de dossier de travail actif pour y poser les skills."))          # avant d'écrire quoi que ce soit : pas d'import à moitié
     rapport = {"choix": choix}
     avant = Path(dossiers["donnees"]) / "import" / "avant-import-{}.zip".format(time.strftime("%Y%m%d-%H%M%S"))
     avant.parent.mkdir(parents=True, exist_ok=True)
@@ -272,17 +272,17 @@ def importer(d, dossiers, choix, racine_travail=None, ecraser=False, workspaces=
     avant.write_bytes(tampon.getvalue())
     rapport["sauvegarde"] = str(avant)
     if "conversations" in choix:
-        _importer_conversations(d, dossiers, ecraser, set(workspaces), rapport)
+        _import_conversations(d, dossiers, ecraser, set(workspaces), rapport)
     if "memoire" in choix:
-        _importer_memoire(d, dossiers, ecraser, rapport)
+        _import_memory(d, dossiers, ecraser, rapport)
     if "skills" in choix:
-        _importer_skills(d, racine_travail, ecraser, rapport)
+        _import_skills(d, racine_travail, ecraser, rapport)
     if "reglages" in choix and d["reglages"]:
-        _importer_reglages(d, dossiers, rapport)
+        _import_settings(d, dossiers, rapport)
     return rapport
 
 
-def a_reprendre(d, donnees, memoire, dossiers_skills=()):
+def to_migrate(d, donnees, memoire, dossiers_skills=()):
     """Ce que la source contient et que Lutin n'a pas encore : {conversations, memoire, skills} (nombres). Sert à ne plus proposer la reprise quand elle est faite : une conversation déjà présente,
     une mémoire identique à la sienne (ou déjà posée à côté sous un nom « .importe- »), un skill déjà dans un des dossiers donnés, ne comptent pas."""
     presentes = {p.stem for p in (Path(donnees) / "conversations").glob("*.json")}
@@ -303,7 +303,7 @@ def a_reprendre(d, donnees, memoire, dossiers_skills=()):
     return {"conversations": conv, "memoire": mem, "skills": sk}
 
 
-def resume(rapport):
+def summary(rapport):
     """Le rapport en lignes lisibles."""
     lignes = []
     c = rapport.get("conversations")

@@ -400,11 +400,11 @@ def run_selftest(profond=False):
 
     def plan_et_rappel():
         _m.PLAN["sections"] = _m.construire_plan()
-        _m.outil_rappeler("assistant", 1)
+        _m.recall_tool("assistant", 1)
         return "plan du projet : {} dossier(s) ; recherche dans les documents prête".format(len(_m.PLAN["sections"]))
 
     def git_ok():
-        g = _m.git_etat()
+        g = _m.git_state()
         if not g["dispo"]:
             raise RuntimeError(g["raison"])
         return "branche {}, {} changement(s) en attente".format(g["branche"], g["total"])

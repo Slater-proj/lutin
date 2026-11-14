@@ -98,29 +98,29 @@ class Documents(unittest.TestCase):
 
     def test_l_outil_demande_l_accord_ecrit_relit_et_sauvegarde(self):
         ctx = self.ctx()
-        res = change_review.appeler_outil("creer_document", {"chemin": "docs/bilan.pdf", "contenu": MARKDOWN, "titre": "Bilan"}, ctx)
+        res = change_review.call_tool("creer_document", {"chemin": "docs/bilan.pdf", "contenu": MARKDOWN, "titre": "Bilan"}, ctx)
         self.assertIn("relu", res)
         self.assertEqual(len(self.accords), 1)
         f = _m.RACINE / "docs" / "bilan.pdf"
         self.assertTrue(f.read_bytes().startswith(b"%PDF"))
-        res = change_review.appeler_outil("creer_document", {"chemin": "docs/bilan.pdf", "contenu": "# Version 2"}, self.ctx())
+        res = change_review.call_tool("creer_document", {"chemin": "docs/bilan.pdf", "contenu": "# Version 2"}, self.ctx())
         self.assertIn("Ancienne version sauvegardée", res)
-        res = change_review.appeler_outil("creer_document", {"chemin": "docs/note.docx", "contenu": "Bonjour"}, self.ctx())
+        res = change_review.call_tool("creer_document", {"chemin": "docs/note.docx", "contenu": "Bonjour"}, self.ctx())
         self.assertTrue(zipfile.is_zipfile(_m.RACINE / "docs" / "note.docx"), res)
 
     def test_markdown_et_texte_sont_ecrits_tels_quels(self):
-        change_review.appeler_outil("creer_document", {"chemin": "docs/lisez.md", "contenu": "# Titre\n\ntexte"}, self.ctx())
+        change_review.call_tool("creer_document", {"chemin": "docs/lisez.md", "contenu": "# Titre\n\ntexte"}, self.ctx())
         self.assertEqual((_m.RACINE / "docs" / "lisez.md").read_text(encoding="utf-8"), "# Titre\n\ntexte")
 
     def test_refus_format_inconnu_et_chemin_hors_du_dossier(self):
-        change_review.appeler_outil("creer_document", {"chemin": "docs/refuse.pdf", "contenu": "x"}, self.ctx(accord=False))
+        change_review.call_tool("creer_document", {"chemin": "docs/refuse.pdf", "contenu": "x"}, self.ctx(accord=False))
         self.assertFalse((_m.RACINE / "docs" / "refuse.pdf").exists())
         with self.assertRaises(_m.ErreurOutil):
-            change_review.appeler_outil("creer_document", {"chemin": "docs/x.xyz", "contenu": "x"}, self.ctx())
+            change_review.call_tool("creer_document", {"chemin": "docs/x.xyz", "contenu": "x"}, self.ctx())
         with self.assertRaises(_m.ErreurOutil):
-            change_review.appeler_outil("creer_document", {"chemin": "../dehors.pdf", "contenu": "x"}, self.ctx())
+            change_review.call_tool("creer_document", {"chemin": "../dehors.pdf", "contenu": "x"}, self.ctx())
         with self.assertRaises(_m.ErreurOutil):
-            change_review.appeler_outil("creer_document", {"chemin": "docs/gros.pdf", "contenu": "x" * (documents.TAILLE_MAX + 1)}, self.ctx())
+            change_review.call_tool("creer_document", {"chemin": "docs/gros.pdf", "contenu": "x" * (documents.TAILLE_MAX + 1)}, self.ctx())
 
 
 if __name__ == "__main__":

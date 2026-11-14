@@ -125,12 +125,12 @@ class VoiceStudio(unittest.TestCase):
         addons.activer(vs.IDENT, False)
         for nom in ("voix_liste", "voix_parler", "voix_transcrire", "voix_cloner"):
             with self.assertRaises(_m.ErreurOutil, msg=nom):
-                change_review._appeler_outil(nom, {"texte": "x"}, self.ctx())
+                change_review._call_tool(nom, {"texte": "x"}, self.ctx())
 
     # --- lire à voix haute
     def test_parler_demande_l_accord_cree_le_fichier_et_le_joint(self):
         ctx = self.ctx()
-        res = change_review._appeler_outil("voix_parler", {"texte": "Bonjour à tous", "voix": "Narrateur", "vitesse": 1.5, "langue": "fr"}, ctx)
+        res = change_review._call_tool("voix_parler", {"texte": "Bonjour à tous", "voix": "Narrateur", "vitesse": 1.5, "langue": "fr"}, ctx)
         self.assertIn("Audio créé", res)
         self.assertEqual(len(self.accords), 1)
         self.assertFalse(self.accords[0][2], "pas d'accord automatique sans la case")

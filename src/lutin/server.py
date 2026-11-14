@@ -495,13 +495,13 @@ class Gestionnaire(BaseHTTPRequestHandler):
         if chemin.startswith("/api/skills-tiers"):               # skills tiers : sources, recherche, fiche, installés
             return self._skills_tiers_lire(chemin)
         if chemin == "/api/documents":
-            return self._envoyer(200, _rappel.etat_documents())
+            return self._envoyer(200, _rappel.documents_state())
         if chemin == "/api/documents-chercher":
             q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
             requete = (q.get("q") or [""])[0][:300]
-            if not _rappel.mots(requete):
+            if not _rappel.words(requete):
                 return self._envoyer(400, {"erreur": _t("Requête vide ou trop vague : donne quelques mots-clés.")})
-            return self._envoyer(200, {"passages": _rappel.chercher_documents(requete)})
+            return self._envoyer(200, {"passages": _rappel.search_documents(requete)})
         if chemin == "/api/notes":
             return self._envoyer(200, {"notes": _donnees.lister_notes()})
         if chemin == "/api/acces":
@@ -674,14 +674,14 @@ class Gestionnaire(BaseHTTPRequestHandler):
         if chemin == "/api/sante-systeme":
             return self._envoyer(200, _m.health_state())
         if chemin == "/api/git":
-            return self._envoyer(200, _m.git_etat())
+            return self._envoyer(200, _m.git_state())
         if chemin == "/api/revue":
             try:
-                return self._envoyer(200, _m.revue_tour((re.search(r"id=([0-9a-f]+)", self.path) or [None, ""])[1]))
+                return self._envoyer(200, _m.turn_review((re.search(r"id=([0-9a-f]+)", self.path) or [None, ""])[1]))
             except ValueError as erreur:
                 return self._envoyer(404, {"erreur": str(erreur)})
         if chemin == "/api/recherche":
-            return self._envoyer(200, _m.chercher_conversations(urllib.parse.unquote_plus(self.path.split("q=", 1)[1]) if "q=" in self.path else ""))
+            return self._envoyer(200, _m.search_conversations(urllib.parse.unquote_plus(self.path.split("q=", 1)[1]) if "q=" in self.path else ""))
         if chemin == "/api/contexte":
             try:
                 ident = (re.search(r"id=([0-9a-f]+)", self.path) or [None, ""])[1]
@@ -904,15 +904,15 @@ class Gestionnaire(BaseHTTPRequestHandler):
             if self.path == "/api/autotest":
                 return self._envoyer(200, _m.run_selftest(bool(donnees.get("profond"))))
             if self.path == "/api/annuler-tour":
-                return self._envoyer(200, _m.annuler_tour(str(donnees.get("conversation", ""))))
+                return self._envoyer(200, _m.undo_turn(str(donnees.get("conversation", ""))))
             if self.path == "/api/annuler-fichier":
-                return self._envoyer(200, _m.annuler_tour(str(donnees.get("conversation", "")), str(donnees.get("chemin", ""))))
+                return self._envoyer(200, _m.undo_turn(str(donnees.get("conversation", "")), str(donnees.get("chemin", ""))))
             if self.path == "/api/epingler" and str(donnees.get("id", "")) in _m.TOURS_ACTIFS:
                 return self._envoyer(409, {"erreur": _t("Une réponse est en cours dans cette conversation : attends la fin ou arrête-la.")})
             if self.path == "/api/epingler":
-                return self._envoyer(200, _m.epingler_conversation(str(donnees.get("id", "")), donnees.get("epingle")))
+                return self._envoyer(200, _m.pin_conversation(str(donnees.get("id", "")), donnees.get("epingle")))
             if self.path == "/api/git-message":
-                return self._envoyer(200, _m.git_message(donnees.get("fichiers")))
+                return self._envoyer(200, _m.git_message_of(donnees.get("fichiers")))
             if self.path == "/api/git-commit":
                 return self._envoyer(200, _m.git_commit(donnees.get("message"), donnees.get("fichiers")))
             if self.path == "/api/memoire-choix":                                   # réponse à la question « fiche de suivi ou résumé ? » (le tour est en attente, donc pas de verrou)
@@ -988,14 +988,14 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 except ValueError as e:
                     return self._envoyer(400, {"erreur": str(e)})
             if self.path == "/api/media-supprimer":
-                return self._envoyer(200, _m.supprimer_media(str(donnees.get("conversation", "")), str(donnees.get("id", ""))))
+                return self._envoyer(200, _m.delete_media(str(donnees.get("conversation", "")), str(donnees.get("id", ""))))
             if self.path == "/api/conversation-options":
                 ident = str(donnees.get("conversation", ""))
                 if not _m.conv_chemin(ident).exists():
                     return self._envoyer(404, {"erreur": _t("Conversation inconnue.")})
                 return self._envoyer(200, {"options": _m.options_ecrire(ident, donnees.get("options"))})
             if self.path == "/api/epingler-message":
-                return self._envoyer(200, _m.epingler_message(str(donnees.get("conversation", "")), donnees.get("index"), donnees.get("epingle")))
+                return self._envoyer(200, _m.pin_message(str(donnees.get("conversation", "")), donnees.get("index"), donnees.get("epingle")))
             if self.path in ("/api/addon-activer", "/api/addon-reglages", "/api/addon-verifier", "/api/addon-correction", "/api/addon-flux", "/api/addon-flux-restaurer", "/api/addon-action", "/api/fond-creer", "/api/fond-action"):
                 if not self._configurateur():
                     return self._envoyer(403, {"erreur": _t("Les extensions se gèrent depuis cette machine (niveau « cette machine seulement » ou navigateur de cette machine).")})
@@ -1199,7 +1199,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 return self._envoyer(200, {"ok": True})
             if self.path == "/api/rappeler":
                 try:
-                    return self._envoyer(200, {"texte": _m.outil_rappeler(str(donnees.get("requete", "")), 6)})
+                    return self._envoyer(200, {"texte": _m.recall_tool(str(donnees.get("requete", "")), 6)})
                 except _m.ErreurOutil as erreur:
                     raise ValueError(str(erreur))
             if self.path == "/api/oublier-modele":
@@ -1590,9 +1590,9 @@ class Gestionnaire(BaseHTTPRequestHandler):
         if not _machines.noeud().get("extinction"):
             return self._envoyer(403, {"erreur": "l'extinction à distance n'est pas autorisée sur cette machine"})
         if donnees.get("annuler"):
-            return self._envoyer(200, {"annulee": _alimentation.annuler_extinction(_machines.journaliser)})
+            return self._envoyer(200, {"annulee": _alimentation.cancel_shutdown(_machines.journaliser)})
         try:
-            return self._envoyer(200, {"dans_s": _alimentation.programmer_extinction(nom, journaliser=_machines.journaliser)})
+            return self._envoyer(200, {"dans_s": _alimentation.schedule_shutdown(nom, journaliser=_machines.journaliser)})
         except ValueError as e:
             return self._envoyer(400, {"erreur": str(e)})
 
@@ -1770,11 +1770,11 @@ class Gestionnaire(BaseHTTPRequestHandler):
             elif action == "node-pilot":
                 _machines.noeud_autoriser_piloter(bool(donnees.get("actif")))
             elif action == "cancel-local-shutdown":
-                return {"annulee": _alimentation.annuler_extinction(_machines.journaliser)}
+                return {"annulee": _alimentation.cancel_shutdown(_machines.journaliser)}
             elif donnees.get("actif"):
-                _alimentation.installer_demarrage()
+                _alimentation.install_startup()
             else:
-                _alimentation.retirer_demarrage()
+                _alimentation.remove_startup()
         elif action == "droit":                                    # ce que CETTE machine partage avec les autres : depuis cette machine seulement
             if not self._configurateur_strict():
                 raise ValueError(_t("Cela se règle depuis cette machine elle-même."))
@@ -1794,7 +1794,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
     @staticmethod
     def _vue_machines():
         r = _m.reglages()
-        return {"noeud": _machines.noeud_vue(), "machines": _machines.etats(r["modele"], choisie=r.get("machine", "")), "choisie": r.get("machine", ""), "niveau_local": _m.SECURITE.niveau == _sec.LOCAL, "demarrage": _alimentation.etat_demarrage_memo(), "journal": _machines.journal()}
+        return {"noeud": _machines.noeud_vue(), "machines": _machines.etats(r["modele"], choisie=r.get("machine", "")), "choisie": r.get("machine", ""), "niveau_local": _m.SECURITE.niveau == _sec.LOCAL, "demarrage": _alimentation.startup_state_memo(), "journal": _machines.journal()}
 
     def _appairer(self, donnees):
         if _m.SECURITE.niveau == _sec.LOCAL:

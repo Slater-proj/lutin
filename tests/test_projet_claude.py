@@ -180,7 +180,7 @@ class DansLeMoteur(unittest.TestCase):
 
     def test_le_rappel_cherche_dans_claude_md_et_dans_le_dossier_claude(self):
         base = self.depot.resolve()          # Windows : le dossier temporaire peut s'écrire en nom court (RUNNER~1) ou long
-        noms = {p.resolve().relative_to(base).as_posix() for p in A.sources_rappel() if base in p.resolve().parents}
+        noms = {p.resolve().relative_to(base).as_posix() for p in A.recall_sources() if base in p.resolve().parents}
         self.assertTrue({"CLAUDE.md", ".claude/skills/deploy/SKILL.md", ".claude/commands/sauvegarde.md", ".claude/rules/style.md"} <= noms, noms)
 
     def test_le_modele_peut_lire_un_skill_du_projet(self):

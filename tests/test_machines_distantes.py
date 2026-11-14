@@ -36,26 +36,26 @@ class FauxRegistre:
 
 class AdresseMac(unittest.TestCase):
     def test_normalisee(self):
-        self.assertEqual(power.normaliser_mac("00-1a-2b-3c-4d-5e"), "00:1A:2B:3C:4D:5E")
-        self.assertEqual(power.normaliser_mac("001a2b3c4d5e"), "00:1A:2B:3C:4D:5E")
+        self.assertEqual(power.normalize_mac("00-1a-2b-3c-4d-5e"), "00:1A:2B:3C:4D:5E")
+        self.assertEqual(power.normalize_mac("001a2b3c4d5e"), "00:1A:2B:3C:4D:5E")
         for mauvaise in ("", "00:00:00:00:00:00", "01:00:5e:00:00:01", "zz:1a:2b:3c:4d:5e", "00:1a:2b"):
-            self.assertEqual(power.normaliser_mac(mauvaise), "", mauvaise)
+            self.assertEqual(power.normalize_mac(mauvaise), "", mauvaise)
 
     def test_cartes_windows_lues_du_json(self):
         texte = json.dumps([{"nom": "Ethernet", "description": "Intel I225-V", "mac": "00-1A-2B-3C-4D-5E", "etat": "Up", "ip": "192.168.1.20", "reveil": True},
                             {"nom": "Wi-Fi", "description": "Intel Wi-Fi 6", "mac": "AA-BB-CC-DD-EE-02", "etat": "Up", "ip": "192.168.1.21", "reveil": None},
                             {"nom": "Ancienne", "description": "x", "mac": "00-1A-2B-3C-4D-5F", "etat": "Disconnected", "ip": "", "reveil": False}])
-        cartes = power.analyser_cartes_windows(texte)
+        cartes = power.parse_windows_adapters(texte)
         self.assertEqual([c["nom"] for c in cartes], ["Ethernet", "Wi-Fi"], "une carte débranchée n'est pas retenue")
         self.assertTrue(cartes[0]["filaire"])
         self.assertFalse(cartes[1]["filaire"])
-        self.assertEqual(power.analyser_cartes_windows("pas du json"), [])
+        self.assertEqual(power.parse_windows_adapters("pas du json"), [])
 
     def test_la_carte_retenue_est_celle_de_l_adresse_utilisee(self):
         cartes = [{"nom": "wifi", "mac": "AA:BB:CC:DD:EE:02", "ip": "192.168.1.21", "filaire": False, "reveil": None}, {"nom": "eth", "mac": "00:1A:2B:3C:4D:5E", "ip": "192.168.1.20", "filaire": True, "reveil": True}]
-        self.assertEqual(power.choisir_carte(cartes, "192.168.1.21")["nom"], "wifi")
-        self.assertEqual(power.choisir_carte(cartes, "10.0.0.1")["nom"], "eth", "sinon une carte filaire")
-        self.assertIsNone(power.choisir_carte([], ""))
+        self.assertEqual(power.choose_adapter(cartes, "192.168.1.21")["nom"], "wifi")
+        self.assertEqual(power.choose_adapter(cartes, "10.0.0.1")["nom"], "eth", "sinon une carte filaire")
+        self.assertIsNone(power.choose_adapter([], ""))
 
     def test_cartes_linux_lues_dans_sys(self):
         racine = Path(tempfile.mkdtemp(prefix="lutin-sys-"))
@@ -69,7 +69,7 @@ class AdresseMac(unittest.TestCase):
 
         class Sortie:
             stdout = b"Settings for enp3s0:\n\tWake-on: g\n"
-        cartes = power.cartes_reseau(lanceur=lambda cmd, **kw: Sortie(), systeme_actuel="linux", racine_sys=str(racine), sortie_ip="2: enp3s0    inet 192.168.1.20/24 brd 192.168.1.255 scope global enp3s0\n")
+        cartes = power.network_adapters(lanceur=lambda cmd, **kw: Sortie(), systeme_actuel="linux", racine_sys=str(racine), sortie_ip="2: enp3s0    inet 192.168.1.20/24 brd 192.168.1.255 scope global enp3s0\n")
         self.assertEqual([(c["nom"], c["mac"], c["ip"], c["reveil"]) for c in cartes], [("enp3s0", "00:1A:2B:3C:4D:5E", "192.168.1.20", True)])
 
 
@@ -77,7 +77,7 @@ class ReveilVerifie(unittest.TestCase):
     CARTE = {"nom": "Ethernet", "mac": "00:1A:2B:3C:4D:5E", "ip": "192.168.1.20", "filaire": True}
 
     def etat(self, **kw):
-        return power.etat_reveil("192.168.1.20", cartes=[dict(self.CARTE, **kw)], systeme_actuel="windows", demarrage_rapide=False)
+        return power.wake_state("192.168.1.20", cartes=[dict(self.CARTE, **kw)], systeme_actuel="windows", demarrage_rapide=False)
 
     def test_tout_est_en_regle(self):
         e = self.etat(reveil=True)
@@ -95,17 +95,17 @@ class ReveilVerifie(unittest.TestCase):
         self.assertIn("Impossible de vérifier", e["avertissements"][0])
 
     def test_wifi_et_demarrage_rapide(self):
-        e = power.etat_reveil("", cartes=[dict(self.CARTE, filaire=False, reveil=True)], systeme_actuel="windows", demarrage_rapide=True)
+        e = power.wake_state("", cartes=[dict(self.CARTE, filaire=False, reveil=True)], systeme_actuel="windows", demarrage_rapide=True)
         self.assertFalse(e["pret"])
         texte = " ".join(e["avertissements"])
         self.assertIn("Wi-Fi", texte)
         self.assertIn("démarrage rapide", texte)
 
     def test_docker_et_machine_sans_carte(self):
-        d = power.etat_reveil("", en_docker=True)
+        d = power.wake_state("", en_docker=True)
         self.assertIsNone(d["pret"])
         self.assertIn("conteneur", d["avertissements"][0])
-        self.assertIn("à la main", power.etat_reveil("", cartes=[], systeme_actuel="linux")["avertissements"][0])
+        self.assertIn("à la main", power.wake_state("", cartes=[], systeme_actuel="linux")["avertissements"][0])
 
 
 class DemarrageAutomatique(unittest.TestCase):
@@ -116,7 +116,7 @@ class DemarrageAutomatique(unittest.TestCase):
             raise AssertionError("aucune tâche planifiée ne doit être créée (elle demande les droits d'administrateur) : {}".format(cmd))
         ancien = power.subprocess.list2cmdline
         self.assertEqual(ancien(["python", "-m", "lutin"]), "python -m lutin")
-        e = power.installer_demarrage(lanceur=lambda cmd, **kw: type("R", (), {"returncode": 1})(), systeme_actuel="windows", commande=["C:/Python/python.exe", "-m", "lutin", "serve", "--sans-navigateur"], registre=reg)
+        e = power.install_startup(lanceur=lambda cmd, **kw: type("R", (), {"returncode": 1})(), systeme_actuel="windows", commande=["C:/Python/python.exe", "-m", "lutin", "serve", "--sans-navigateur"], registre=reg)
         self.assertTrue(e["installe"])
         self.assertIn("lutin serve --sans-navigateur", reg.valeurs["Lutin"])
         self.assertEqual(lanceur.__name__, "lanceur")
@@ -125,19 +125,19 @@ class DemarrageAutomatique(unittest.TestCase):
         reg = FauxRegistre()
         reg.valeurs["Lutin"] = "x"
         appels = []
-        e = power.retirer_demarrage(lanceur=lambda cmd, **kw: appels.append(cmd) or type("R", (), {"returncode": 1})(), systeme_actuel="windows", registre=reg)
+        e = power.remove_startup(lanceur=lambda cmd, **kw: appels.append(cmd) or type("R", (), {"returncode": 1})(), systeme_actuel="windows", registre=reg)
         self.assertFalse(e["installe"])
         self.assertNotIn("Lutin", reg.valeurs)
         self.assertTrue(any("/Delete" in c for c in appels), "l'ancienne tâche planifiée d'une version précédente est retirée aussi")
 
     def test_une_ancienne_tache_planifiee_compte_comme_installee(self):
         reg = FauxRegistre()
-        e = power.etat_demarrage(lanceur=lambda cmd, **kw: type("R", (), {"returncode": 0})(), systeme_actuel="windows", registre=reg)
+        e = power.startup_state(lanceur=lambda cmd, **kw: type("R", (), {"returncode": 0})(), systeme_actuel="windows", registre=reg)
         self.assertTrue(e["installe"])
 
     def test_refus_de_windows_dit_clairement(self):
         with self.assertRaises(ValueError) as e:
-            power.installer_demarrage(systeme_actuel="windows", commande=["python"], registre=FauxRegistre(refuse=True))
+            power.install_startup(systeme_actuel="windows", commande=["python"], registre=FauxRegistre(refuse=True))
         self.assertIn("refusé", str(e.exception))
 
 
@@ -181,8 +181,8 @@ class MachinesInfos(unittest.TestCase):
     def test_noeud_etat_donne_mac_reveil_demarrage(self):
         class Moteur:
             id, nom = "ollama", "Ollama"
-        with mock.patch.object(power, "etat_reveil", lambda ip, **kw: {"mac": "00:1A:2B:3C:4D:5E", "carte": "eth", "pret": True, "avertissements": []}), \
-                mock.patch.object(power, "etat_demarrage", lambda: {"installe": True, "possible": True}),                 mock.patch.object(power, "cartes_reseau", lambda **kw: []):
+        with mock.patch.object(power, "wake_state", lambda ip, **kw: {"mac": "00:1A:2B:3C:4D:5E", "carte": "eth", "pret": True, "avertissements": []}), \
+                mock.patch.object(power, "startup_state", lambda: {"installe": True, "possible": True}),                 mock.patch.object(power, "network_adapters", lambda **kw: []):
             machines.INFOS_NOEUD.clear()
             machines.CARTES.update(t=-999.0, v=None)
             e = machines.noeud_etat(Moteur(), {"actif": True, "installes": ["gros:70b"]}, "192.168.1.20")
@@ -251,7 +251,7 @@ class InfosEnArrierePlan(unittest.TestCase):
         def lent(ip, **kw):
             libere.wait(5)
             return {"mac": "00:1A:2B:3C:4D:5E", "carte": "eth", "pret": True, "avertissements": []}
-        with mock.patch.object(power, "etat_reveil", lent), mock.patch.object(power, "etat_demarrage", lambda: {"installe": True, "possible": True}),                 mock.patch.object(power, "cartes_reseau", lambda **kw: []):
+        with mock.patch.object(power, "wake_state", lent), mock.patch.object(power, "startup_state", lambda: {"installe": True, "possible": True}),                 mock.patch.object(power, "network_adapters", lambda **kw: []):
             machines.CARTES.update(t=-999.0, v=None)
             debut = time.monotonic()
             infos = machines.noeud_infos("10.0.0.1", attente=0.2)

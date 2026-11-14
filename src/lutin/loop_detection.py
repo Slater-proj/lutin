@@ -35,7 +35,7 @@ def repeated_text(texte):
 
 
 def useful_words(texte):
-    return set(m for m in recall.mots(texte) if len(m) > 3)
+    return set(m for m in recall.words(texte) if len(m) > 3)
 
 
 def similarity(a, b):

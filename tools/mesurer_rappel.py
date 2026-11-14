@@ -62,11 +62,11 @@ QUESTIONS = [
 
 
 def indexer(corpus=None):
-    """Les morceaux du corpus avec leurs comptes de mots, comme rappel.morceaux_fichier les fabrique."""
+    """Les morceaux du corpus avec leurs comptes de mots, comme recall.file_chunks les fabrique."""
     morceaux = []
     for ident, texte in (corpus or CORPUS).items():
-        for m in recall.decouper(texte, ident):
-            m["tf"] = collections.Counter(recall.mots(m["titre"] + " " + m["texte"]))
+        for m in recall.split_text(texte, ident):
+            m["tf"] = collections.Counter(recall.words(m["titre"] + " " + m["texte"]))
             m["longueur"] = sum(m["tf"].values()) or 1
             morceaux.append(m)
     df = collections.Counter()
@@ -83,8 +83,8 @@ def mesurer(corpus=None, questions=None, rang_max=3):
     inverse = 0.0
     ratees = []
     for question, attendu in questions:
-        termes = set(recall.mots(question))
-        classes = recall.noter(morceaux, df, moyenne, len(morceaux), termes, 10, 1) if termes else []
+        termes = set(recall.words(question))
+        classes = recall.rank_chunks(morceaux, df, moyenne, len(morceaux), termes, 10, 1) if termes else []
         sources = [c["m"]["source"] for c in classes]
         if sources[:1] == [attendu]:
             premier += 1

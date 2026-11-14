@@ -10,14 +10,14 @@ from . import core as _m
 
 
 # --------------------------------------------------------------------------- revue des changements d'une demande, et git
-def lire_utf8(f):
+def read_utf8(f):
     try:
         return Path(f).read_bytes().decode("utf-8").replace("\r\n", "\n")
     except (OSError, UnicodeDecodeError):
         return None
 
 
-def retablir_fichier(dossier, chemin, e):
+def restore_file(dossier, chemin, e):
     """Remet un fichier dans l'état d'avant la demande. Renvoie (réussi, raison de l'échec)."""
     try:
         f = _m.chemin_sur(chemin, ecriture=True)
@@ -36,7 +36,7 @@ def retablir_fichier(dossier, chemin, e):
     return True, ""
 
 
-def manifeste_annulable(ident):
+def undoable_manifest(ident):
     if ident in _m.TOURS_ACTIFS:
         raise ValueError("Une réponse est en cours dans cette conversation : arrête-la d'abord.")
     conv = _m.conv_lire(ident)
@@ -50,7 +50,7 @@ def manifeste_annulable(ident):
     return conv, dossier, manifeste
 
 
-def revue_tour(ident):
+def turn_review(ident):
     """Pour chaque fichier touché par la dernière demande : état, lignes ajoutées et retirées, différences."""
     conv = _m.conv_lire(ident)
     if not conv.get("annulable"):
@@ -65,8 +65,8 @@ def revue_tour(ident):
             f = _m.chemin_sur(chemin)
         except _m.ErreurOutil:
             continue
-        avant = lire_utf8(dossier / chemin) if e.get("avant") else ""
-        apres = lire_utf8(f) if f.is_file() else ""
+        avant = read_utf8(dossier / chemin) if e.get("avant") else ""
+        apres = read_utf8(f) if f.is_file() else ""
         binaire = avant is None or apres is None
         diff = "" if binaire else _m.difference(avant, apres, chemin)
         sortie.append({"chemin": chemin, "etat": "créé" if not e.get("avant") else ("supprimé" if not f.is_file() else "modifié"), "binaire": binaire, "diff": diff,
@@ -75,15 +75,15 @@ def revue_tour(ident):
     return {"fichiers": sortie}
 
 
-def annuler_tour(ident, seulement=None):
+def undo_turn(ident, seulement=None):
     """Rétablit les fichiers modifiés ou créés par la dernière demande qui en a touché (outils « modifier », « ecrire » et « modifier_plusieurs » ;
     pas les effets des commandes). Un fichier modifié depuis par quelqu'un d'autre n'est pas touché. seulement : un chemin, pour n'annuler que celui-là."""
-    conv, dossier, manifeste = manifeste_annulable(ident)
+    conv, dossier, manifeste = undoable_manifest(ident)
     retablis, ignores = [], []
     for chemin, e in manifeste["fichiers"].items():
         if e.get("annule") or (seulement is not None and chemin != seulement):
             continue
-        ok, raison = retablir_fichier(dossier, chemin, e)
+        ok, raison = restore_file(dossier, chemin, e)
         if ok:
             retablis.append(chemin)
             e["annule"] = True
@@ -105,10 +105,10 @@ def annuler_tour(ident, seulement=None):
     return {"ok": True, "retablis": retablis, "ignores": ignores}
 
 
-ETATS_GIT = {"??": "nouveau", "M": "modifié", "A": "ajouté", "D": "supprimé", "R": "renommé", "C": "copié", "U": "conflit"}
+GIT_STATES = {"??": "nouveau", "M": "modifié", "A": "ajouté", "D": "supprimé", "R": "renommé", "C": "copié", "U": "conflit"}
 
 
-def git_etat():
+def git_state():
     """Les changements en attente dans le dépôt du projet, pour l'écran Git."""
     if not shutil.which("git"):
         return {"dispo": False, "raison": "git n'est pas installé sur cette machine."}
@@ -127,13 +127,13 @@ def git_etat():
         xy, chemin = ligne[:2], ligne[3:].strip().strip('"')
         if " -> " in chemin:
             chemin = chemin.split(" -> ", 1)[1]
-        etat = ETATS_GIT.get(xy.strip()) or ETATS_GIT.get(xy.strip()[:1]) or ETATS_GIT.get(xy.strip()[-1:], "modifié")
+        etat = GIT_STATES.get(xy.strip()) or GIT_STATES.get(xy.strip()[:1]) or GIT_STATES.get(xy.strip()[-1:], "modifié")
         modifies.append({"chemin": chemin, "etat": etat})
     code2, branche, _ = _m.git(["rev-parse", "--abbrev-ref", "HEAD"])
     return {"dispo": True, "branche": branche.strip() if code2 == 0 else "(aucun commit)", "modifies": modifies[:400], "total": len(modifies)}
 
 
-def chemins_git(fichiers):
+def git_paths(fichiers):
     if not isinstance(fichiers, list) or not fichiers or len(fichiers) > 300:
         raise ValueError("Choisis entre 1 et 300 fichiers.")
     propres = []
@@ -146,10 +146,10 @@ def chemins_git(fichiers):
     return propres
 
 
-def git_message(fichiers, r=None):
+def git_message_of(fichiers, r=None):
     """Fait écrire par le modèle un message de commit à partir des changements des fichiers choisis (rien n'est commité)."""
     r = r or _m.reglages()
-    fichiers = chemins_git(fichiers)
+    fichiers = git_paths(fichiers)
     code, sortie, _ = _m.git(["status", "--porcelain=v1", "--"] + fichiers)
     nouveaux = [l[3:].strip().strip('"') for l in sortie.splitlines() if l.startswith("??")]
     suivis = [f for f in fichiers if f not in nouveaux]
@@ -162,7 +162,7 @@ def git_message(fichiers, r=None):
         diff = stat + "\n" + corps
     for n in nouveaux[:6]:
         p = _m.chemin_sur(n)
-        extrait = "\n".join((lire_utf8(p) or "(fichier non texte)").splitlines()[:40]) if p.is_file() else "(dossier)"
+        extrait = "\n".join((read_utf8(p) or "(fichier non texte)").splitlines()[:40]) if p.is_file() else "(dossier)"
         diff += "\n\nNouveau fichier {} :\n{}".format(n, extrait)
     if not diff.strip():
         raise ValueError("Aucune différence à décrire pour ces fichiers.")
@@ -187,7 +187,7 @@ def git_commit(message, fichiers):
     message = str(message or "").strip()
     if not message or len(message) > 4000:
         raise ValueError("Écris un message de commit (4 000 caractères au plus).")
-    fichiers = chemins_git(fichiers)
+    fichiers = git_paths(fichiers)
     code, sortie, erreur = _m.git(["add", "--"] + fichiers)
     if code != 0:
         raise ValueError(_t("git add a échoué : {}").format((erreur or sortie).strip()[:400]))
@@ -208,17 +208,17 @@ def git_commit(message, fichiers):
     return {"ok": True, "sortie": sortie.strip()[:600]}
 
 
-def epingler_conversation(ident, epingle):
+def pin_conversation(ident, epingle):
     c = _m.conv_lire(ident)
     c["epingle"] = bool(epingle)
     _m.ecrire_atomique(_m.conv_chemin(ident), json.dumps(c, ensure_ascii=False))          # sans toucher à la date « maj » : épingler ne remonte pas la conversation
     return {"ok": True, "epingle": c["epingle"]}
 
 
-EPINGLES_MAX = 8                 # messages épinglés au plus par conversation (ils prennent de la place à chaque réponse)
+PINS_MAX = 8                 # messages épinglés au plus par conversation (ils prennent de la place à chaque réponse)
 
 
-def epingler_message(ident, index, epingle):
+def pin_message(ident, index, epingle):
     """Marque un message comme important : il n'est jamais retiré du contexte du modèle (ni par la réduction du contexte, ni par le résumé), dans la limite d'un quart de la fenêtre."""
     if ident in _m.TOURS_ACTIFS:
         raise ValueError(_t("Une réponse est en cours dans cette conversation : attends la fin ou arrête-la."))
@@ -231,8 +231,8 @@ def epingler_message(ident, index, epingle):
     if not 0 <= i < len(msgs) or msgs[i].get("role") not in ("user", "assistant") or not (msgs[i].get("content") or "").strip():
         raise ValueError(_t("Ce message ne peut pas être épinglé."))
     if epingle:
-        if not msgs[i].get("epingle") and sum(1 for m in msgs if m.get("epingle")) >= EPINGLES_MAX:
-            raise ValueError(_t("{} messages épinglés au plus : désépingle-en un d'abord.").format(EPINGLES_MAX))
+        if not msgs[i].get("epingle") and sum(1 for m in msgs if m.get("epingle")) >= PINS_MAX:
+            raise ValueError(_t("{} messages épinglés au plus : désépingle-en un d'abord.").format(PINS_MAX))
         msgs[i]["epingle"] = True
     else:
         msgs[i].pop("epingle", None)
@@ -240,7 +240,7 @@ def epingler_message(ident, index, epingle):
     return {"ok": True, "epingles": sum(1 for m in msgs if m.get("epingle"))}
 
 
-def supprimer_media(ident, media_id):
+def delete_media(ident, media_id):
     """Retire une image créée par un outil : de la conversation, de la copie gardée par Lutin si plus rien ne la cite, et du dossier de sortie de ComfyUI (jamais un fichier hors de ce dossier)."""
     from pathlib import Path
     from . import addons, images
@@ -276,7 +276,7 @@ def supprimer_media(ident, media_id):
     return {"ok": True, "fichier_supprime": supprime}
 
 
-def chercher_conversations(q):
+def search_conversations(q):
     """Recherche dans le titre et le contenu des conversations enregistrées."""
     q = " ".join(str(q or "").lower().split())
     if len(q) < 2:
@@ -303,7 +303,7 @@ def chercher_conversations(q):
     return {"resultats": trouves[:30]}
 
 
-def _appeler_outil(nom, args, ctx):
+def _call_tool(nom, args, ctx):
     if not isinstance(args, dict):
         raise _m.ErreurOutil("Arguments invalides.")
     if nom.startswith("mcp__"):
@@ -326,7 +326,7 @@ def _appeler_outil(nom, args, ctx):
     if nom == "lire_plusieurs":
         return _m.outil_lire_plusieurs(args.get("fichiers"))
     if nom == "rappeler":
-        return _m.outil_rappeler(args.get("requete", ""), args.get("nombre"), (ctx.get("conv") or {}).get("id", ""), bool(args.get("ici")))
+        return _m.recall_tool(args.get("requete", ""), args.get("nombre"), (ctx.get("conv") or {}).get("id", ""), bool(args.get("ici")))
     if nom == "modifier":
         return _m.outil_modifier(args.get("chemin"), str(args.get("ancien", "")), str(args.get("nouveau", "")), ctx)
     if nom == "modifier_plusieurs":
@@ -374,13 +374,13 @@ def _appeler_outil(nom, args, ctx):
     raise _m.ErreurOutil("Outil inconnu : " + str(nom))
 
 
-def appeler_outil(nom, args, ctx):
+def call_tool(nom, args, ctx):
     """Exécute un outil ; les actions qui modifient quelque chose (fichiers, commandes, modules) sont inscrites au journal des actions."""
     if nom not in _m.OUTILS_JOURNALISES or not isinstance(args, dict):
-        return _appeler_outil(nom, args, ctx)
+        return _call_tool(nom, args, ctx)
     ctx.pop("dernier_accord", None)
     try:
-        resultat = _appeler_outil(nom, args, ctx)
+        resultat = _call_tool(nom, args, ctx)
     except _m.ErreurOutil as e:
         _m.noter_action(ctx, nom, args, "erreur : " + str(e))
         raise

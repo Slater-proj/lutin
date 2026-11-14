@@ -30,17 +30,17 @@ class Voisins(unittest.TestCase):
                ("192.168.1.59 dev eth0 lladdr 00:1a:2b:3c:4d:5e REACHABLE", MAC, True), ("192.168.1.59 dev eth0 lladdr aa:bb:cc:dd:ee:ff REACHABLE", MAC, False),
                ("192.168.1.59 dev eth0 FAILED", MAC, False), ("192.168.1.59 dev eth0 lladdr 00:1a:2b:3c:4d:5e STALE", MAC, None), ("192.168.1.59 dev eth0 lladdr 00:1a:2b:3c:4d:5e DELAY", MAC, None)]
         for texte, mac, attendu in cas:
-            self.assertEqual(power.analyser_voisin(texte, mac), attendu, (texte, mac))
+            self.assertEqual(power.parse_neighbor(texte, mac), attendu, (texte, mac))
 
     def test_une_commande_absente_ne_donne_pas_de_verdict(self):
         def absente(*a, **k):
             raise FileNotFoundError("ip")
-        self.assertIsNone(power.voisin("192.168.1.59", MAC, lancer=absente))
+        self.assertIsNone(power.neighbor("192.168.1.59", MAC, lancer=absente))
 
 
 class MachineAllumee(unittest.TestCase):
     def verdict(self, tcp=False, ping=False, table=None, **plus):
-        return power.hote_allume("192.168.1.59", MAC, 8765, delai=0.2, tcp=lambda h, p, d: tcp(p) if callable(tcp) else tcp, ping=lambda h, d: ping, table=lambda h, m: table, **plus)
+        return power.host_is_up("192.168.1.59", MAC, 8765, delai=0.2, tcp=lambda h, p, d: tcp(p) if callable(tcp) else tcp, ping=lambda h, d: ping, table=lambda h, m: table, **plus)
 
     def test_la_table_des_voisins_tranche_quand_elle_sait(self):
         self.assertTrue(self.verdict(tcp=False, ping=False, table=True), "ARP confirme : allumée même si le pare-feu jette tout")
@@ -135,11 +135,11 @@ class Sequence(unittest.TestCase):
         self.assertEqual((r["etat"], r["etape"]), ("injoignable", "eteinte"))
 
     def test_apres_cinq_minutes_le_reveil_revient_a_pas_demarree_avec_la_raison(self):
-        self.assertEqual(power.ATTENTE_REVEIL_S, 300)
+        self.assertEqual(power.WAKE_WAIT_S, 300)
         machines.HOTE_ALLUME = lambda hote, mac, port: False
-        self.reveil_il_y_a(power.ATTENTE_REVEIL_S - 5)
+        self.reveil_il_y_a(power.WAKE_WAIT_S - 5)
         self.assertEqual(self.sonder()["etat"], "reveil_envoye", "pas encore")
-        self.reveil_il_y_a(power.ATTENTE_REVEIL_S + 5)
+        self.reveil_il_y_a(power.WAKE_WAIT_S + 5)
         r = self.sonder()
         self.assertEqual((r["etat"], r["etape"], r.get("reveil_echec")), ("injoignable", "eteinte", True))
         self.assertIn("Réveil non abouti", r["detail"])
@@ -153,7 +153,7 @@ class Sequence(unittest.TestCase):
 
     def test_machine_allumee_sans_lutin_le_dit_autrement(self):
         machines.HOTE_ALLUME = lambda hote, mac, port: True
-        self.reveil_il_y_a(power.ATTENTE_REVEIL_S + 5)
+        self.reveil_il_y_a(power.WAKE_WAIT_S + 5)
         r = self.sonder()
         self.assertEqual((r["etape"], r.get("reveil_echec")), ("eteinte", True))
         self.assertIn("bien allumée", r["detail"])
@@ -161,7 +161,7 @@ class Sequence(unittest.TestCase):
         self.assertNotIn("Wake-on-LAN", r["detail"], "le réveil a marché : inutile de vérifier le BIOS")
 
     def test_un_nouveau_reveil_efface_l_echec_et_la_reponse_de_la_machine_aussi(self):
-        self.reveil_il_y_a(power.ATTENTE_REVEIL_S + 5)
+        self.reveil_il_y_a(power.WAKE_WAIT_S + 5)
         machines.HOTE_ALLUME = lambda *a: False
         self.assertTrue(self.sonder().get("reveil_echec"))
         machines.reveiller(self.m["id"], envoyer=lambda mac, hote: [(hote, 9)])
@@ -177,7 +177,7 @@ class Sequence(unittest.TestCase):
             self.assertNotIn(self.m["id"], suivi)
 
     def test_lutin_repond_apres_l_echec_la_machine_redevient_utilisable(self):
-        self.reveil_il_y_a(power.ATTENTE_REVEIL_S + 5)
+        self.reveil_il_y_a(power.WAKE_WAIT_S + 5)
         machines.HOTE_ALLUME = lambda *a: False
         self.sonder()
         r = self.sonder(repond())
@@ -220,7 +220,7 @@ class Sequence(unittest.TestCase):
         # un réveil périmé n'est pas repris
         machines.REVEIL.clear()
         machines.ALLUMEE.clear()
-        (machines.dossier() / "reveils.json").write_text(json.dumps({self.m["id"]: round(time.time()) - power.ATTENTE_REVEIL_S - 30}), encoding="utf-8")
+        (machines.dossier() / "reveils.json").write_text(json.dumps({self.m["id"]: round(time.time()) - power.WAKE_WAIT_S - 30}), encoding="utf-8")
         machines._REVEILS_REPRIS["fait"] = False
         self.assertEqual(self.sonder()["etape"], "eteinte")
 

@@ -265,16 +265,16 @@ class ComfyUI(unittest.TestCase):
         c["messages"] = [{"role": "tool", "tool_name": "comfy_generer", "content": "ok", "medias": [ident_image, autre],
                           "medias_fichiers": {ident_image: str(sortie / "a_supprimer.png"), autre: str(COMFY / "main_intact.png")}}]
         _m.conv_ecrire(c)
-        self.assertTrue(change_review.supprimer_media(c["id"], ident_image)["fichier_supprime"])
+        self.assertTrue(change_review.delete_media(c["id"], ident_image)["fichier_supprime"])
         self.assertFalse((sortie / "a_supprimer.png").exists())
         self.assertEqual(_m.conv_lire(c["id"])["messages"][0]["medias"], [autre])
         with self.assertRaises(ValueError):
             images.chemin(ident_image)
-        self.assertFalse(change_review.supprimer_media(c["id"], autre)["fichier_supprime"], "un fichier hors du dossier de sortie n'est jamais effacé")
+        self.assertFalse(change_review.delete_media(c["id"], autre)["fichier_supprime"], "un fichier hors du dossier de sortie n'est jamais effacé")
         self.assertTrue((COMFY / "main_intact.png").exists())
         self.assertNotIn("medias", _m.conv_lire(c["id"])["messages"][0])
         with self.assertRaises(ValueError):
-            change_review.supprimer_media(c["id"], autre)
+            change_review.delete_media(c["id"], autre)
 
     def test_les_cases_d_accord_automatique_valent_aussi_pour_generer(self):
         cu.outil_generer({"prompt": "x"}, self.ctx())
@@ -670,15 +670,15 @@ class ComfyUI(unittest.TestCase):
         comfy = {"comfy_generer", "comfy_modeles"}
         self.assertFalse(comfy & noms("polyvalent"), "addon désactivé : le modèle ne voit pas ces outils")
         with self.assertRaises(_m.ErreurOutil):
-            change_review.appeler_outil("comfy_generer", {"prompt": "x"}, self.ctx())
+            change_review.call_tool("comfy_generer", {"prompt": "x"}, self.ctx())
         vrai = addons.actif
         addons.actif = lambda ident: True
         try:
             self.assertTrue(comfy <= noms("polyvalent"))
             self.assertEqual(comfy & noms("recherche"), {"comfy_modeles"}, "en lecture seule, le modèle peut voir les modèles mais pas générer")
             self.assertFalse(comfy & noms("discussion"))
-            self.assertIn("Modèles installés", change_review.appeler_outil("comfy_modeles", {}, self.ctx()))
-            self.assertIn("lutin_00001_.png", change_review.appeler_outil("comfy_generer", {"prompt": "un phare"}, self.ctx()))
+            self.assertIn("Modèles installés", change_review.call_tool("comfy_modeles", {}, self.ctx()))
+            self.assertIn("lutin_00001_.png", change_review.call_tool("comfy_generer", {"prompt": "un phare"}, self.ctx()))
         finally:
             addons.actif = vrai
 

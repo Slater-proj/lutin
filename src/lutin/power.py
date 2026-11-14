@@ -19,17 +19,17 @@ from pathlib import Path
 from .i18n import t as _t
 
 RE_MAC = re.compile(r"^([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}$")
-DELAI_EXTINCTION_S = 30
-ATTENTE_REVEIL_S = 300          # cinq minutes : au-delà, le réveil n'a pas abouti — l'état revient à « pas démarrée » avec la raison, au lieu de rester bloqué sur « réveil envoyé »
+SHUTDOWN_DELAY_S = 30
+WAKE_WAIT_S = 300          # cinq minutes : au-delà, le réveil n'a pas abouti — l'état revient à « pas démarrée » avec la raison, au lieu de rester bloqué sur « réveil envoyé »
 SEUIL_RAISONS_S = 120          # après deux minutes sans réponse, on liste ce qui bloque d'habitude
-PORTS_TEMOINS = (445, 135, 139, 3389, 22, 80, 443, 5985)          # un système allumé accepte ou REFUSE une connexion sur l'un d'eux (un port fermé répond « refusé ») : c'est la preuve qu'il est là
-NOM_TACHE = "Lutin"
-NOM_UNITE = "lutin.service"
+PROBE_PORTS = (445, 135, 139, 3389, 22, 80, 443, 5985)          # un système allumé accepte ou REFUSE une connexion sur l'un d'eux (un port fermé répond « refusé ») : c'est la preuve qu'il est là
+TASK_NAME = "Lutin"
+UNIT_NAME = "lutin.service"
 
 
 # --------------------------------------------------------------------------- réveil
 
-def paquet_magique(mac):
+def magic_packet(mac):
     """Le paquet de réveil pour cette adresse MAC (102 octets). Lève ValueError si l'adresse est invalide."""
     mac = str(mac or "").strip()
     if not RE_MAC.match(mac):
@@ -38,7 +38,7 @@ def paquet_magique(mac):
     return b"\xff" * 6 + octets * 16
 
 
-def diffusions(adresse_machine=""):
+def broadcasts(adresse_machine=""):
     """Les adresses de diffusion où envoyer le paquet : tout le réseau local, et le /24 de la machine si on connaît son adresse."""
     cibles = ["255.255.255.255"]
     m = re.match(r"^(\d{1,3}\.\d{1,3}\.\d{1,3})\.\d{1,3}$", str(adresse_machine or ""))
@@ -47,7 +47,7 @@ def diffusions(adresse_machine=""):
     return cibles
 
 
-def adresses_locales():
+def local_addresses():
     """Les adresses IPv4 de cette machine (une par carte réseau, hors boucle locale et adresses auto-attribuées). Un paquet de diffusion ne part que par UNE carte si on ne dit pas laquelle :
     avec un VPN, Hyper-V, WSL ou Docker, c'est souvent la mauvaise, et le réveil n'atteint jamais le réseau."""
     trouvees = []
@@ -69,23 +69,23 @@ def adresses_locales():
     return sortie
 
 
-def emission_limitee():
+def limited_send():
     """Un message si cette machine ne PEUT PAS atteindre le réseau local par diffusion (conteneur Docker en réseau « bridge » : le paquet reste dans le réseau interne de Docker), sinon « »."""
     if not (os.environ.get("LUTIN_DOCKER") or os.path.exists("/.dockerenv")):
         return ""
-    locales = adresses_locales()
+    locales = local_addresses()
     if locales and not all(re.match(r"^172\.(1[6-9]|2\d|3[01])\.", a) for a in locales):
         return ""
     return _t("Lutin tourne dans Docker en réseau « bridge » : un paquet de réveil ne sort pas sur ton réseau local. Dans docker-compose.yml, ajoute « network_mode: host » (et retire « ports: ») pour pouvoir réveiller des machines (le code PIN de Lutin reste demandé).")
 
 
-def envoyer_reveil(mac, adresse_machine="", ports=(9, 7), socket_factory=socket.socket, locales=None):
+def send_wake(mac, adresse_machine="", ports=(9, 7), socket_factory=socket.socket, locales=None):
     """Envoie le paquet magique PAR CHAQUE CARTE RÉSEAU de cette machine ; renvoie la liste des (adresse, port) atteints. Lève ValueError si rien n'a pu partir."""
-    paquet = paquet_magique(mac)
+    paquet = magic_packet(mac)
     envoyes = []
-    sources = [""] + list(adresses_locales() if locales is None else locales)
+    sources = [""] + list(local_addresses() if locales is None else locales)
     for source in sources:
-        cibles = diffusions(adresse_machine)
+        cibles = broadcasts(adresse_machine)
         m = re.match(r"^(\d{1,3}\.\d{1,3}\.\d{1,3})\.\d{1,3}$", source)
         if m and m.group(1) + ".255" not in cibles:
             cibles.append(m.group(1) + ".255")
@@ -115,7 +115,7 @@ def envoyer_reveil(mac, adresse_machine="", ports=(9, 7), socket_factory=socket.
     return envoyes
 
 
-def raison_echec(secondes_depuis_reveil, adresse_machine=""):
+def failure_reason(secondes_depuis_reveil, adresse_machine=""):
     """Quand la machine ne répond toujours pas : ce qu'il faut vérifier, dans l'ordre. Vide tant qu'il est trop tôt pour conclure."""
     if secondes_depuis_reveil < SEUIL_RAISONS_S:
         return ""
@@ -125,7 +125,7 @@ def raison_echec(secondes_depuis_reveil, adresse_machine=""):
 
 # --------------------------------------------------------------------------- la machine est-elle allumée ? (sans dépendre de Lutin ni de son port)
 
-def _masque_fenetre():
+def _window_mask():
     return {"creationflags": 0x08000000} if os.name == "nt" else {}
 
 
@@ -144,29 +144,29 @@ def _ping(hote, delai, lancer=subprocess.run):
     """Vrai si la machine répond au ping (beaucoup de pare-feu l'interdisent : un « non » ne prouve rien)."""
     commande = ["ping", "-n", "1", "-w", str(int(delai * 1000)), hote] if os.name == "nt" else ["ping", "-c", "1", "-W", str(max(1, int(delai))), hote]
     try:
-        r = lancer(commande, capture_output=True, text=True, timeout=delai + 3, **_masque_fenetre())
+        r = lancer(commande, capture_output=True, text=True, timeout=delai + 3, **_window_mask())
     except (OSError, subprocess.SubprocessError):
         return False
     return r.returncode == 0 and (os.name != "nt" or "TTL=" in (r.stdout or "").upper())          # Windows rend 0 aussi pour « hôte inaccessible » : on exige une vraie réponse
 
 
-def voisin(hote, mac="", lancer=subprocess.run):
+def neighbor(hote, mac="", lancer=subprocess.run):
     """Ce que dit la table des voisins du réseau local (ARP : aucun pare-feu n'y touche) de cette adresse : True (confirmée, avec la bonne adresse MAC), False (échec de résolution, ou une AUTRE machine a cette adresse),
     None (on ne sait pas : pas de table lisible, entrée périmée, autre réseau, conteneur)."""
-    mac = normaliser_mac(mac)
+    mac = normalize_mac(mac)
     try:
         if os.name == "nt":
             sortie = lancer(["powershell", "-NoProfile", "-NonInteractive", "-Command",
                              "$n = Get-NetNeighbor -IPAddress '%s' -AddressFamily IPv4 -ErrorAction SilentlyContinue | Select-Object -First 1; if ($n) { '{0} {1}' -f $n.State, $n.LinkLayerAddress }" % hote],
-                            capture_output=True, text=True, timeout=8, **_masque_fenetre()).stdout or ""
+                            capture_output=True, text=True, timeout=8, **_window_mask()).stdout or ""
         else:
             sortie = lancer(["ip", "-4", "neigh", "show", hote], capture_output=True, text=True, timeout=5).stdout or ""
     except (OSError, subprocess.SubprocessError):
         return None
-    return analyser_voisin(sortie, mac)
+    return parse_neighbor(sortie, mac)
 
 
-def analyser_voisin(texte, mac=""):
+def parse_neighbor(texte, mac=""):
     """Interprète une ligne de la table des voisins (Windows : « Reachable AA-BB-… » ; Linux : « 192.168.1.5 dev eth0 lladdr aa:bb:… REACHABLE ») — voir voisin()."""
     ligne = " ".join(str(texte or "").split()).lower()
     if not ligne:
@@ -178,17 +178,17 @@ def analyser_voisin(texte, mac=""):
         return False
     if etat not in ("reachable", "permanent") or not trouve:
         return None          # « stale » : peut dater d'avant l'extinction
-    vue = normaliser_mac(trouve.group(1))
+    vue = normalize_mac(trouve.group(1))
     return (vue == mac) if (mac and vue) else True
 
 
-def hote_allume(hote, mac="", port_lutin=0, delai=0.7, tcp=_tcp, ping=_ping, table=voisin):
+def host_is_up(hote, mac="", port_lutin=0, delai=0.7, tcp=_tcp, ping=_ping, table=neighbor):
     """La machine est-elle allumée ? True / False. Trois indices, du plus fiable au moins fiable :
     1. la table des voisins (ARP) après avoir frappé à sa porte : confirmée avec la bonne adresse MAC = allumée ; échec ou autre MAC = non (ce que pare-feu et ports ne peuvent pas fausser) ;
     2. une connexion TCP acceptée OU refusée sur le port de Lutin ou un port courant (445, 3389…) : un système qui répond « refusé » est vivant ;
     3. un ping.
     Rien de tout cela ne dépend de Lutin : c'est ce qui distingue « la machine est allumée mais Lutin n'y tourne pas » de « elle est encore éteinte »."""
-    ports = ([port_lutin] if port_lutin else []) + [p for p in PORTS_TEMOINS if p != port_lutin]
+    ports = ([port_lutin] if port_lutin else []) + [p for p in PROBE_PORTS if p != port_lutin]
     reponses = []
     verrou = threading.Lock()
 
@@ -209,7 +209,7 @@ def hote_allume(hote, mac="", port_lutin=0, delai=0.7, tcp=_tcp, ping=_ping, tab
 
 # --------------------------------------------------------------------------- l'adresse MAC de cette machine, et peut-elle être réveillée à distance ?
 
-def normaliser_mac(mac):
+def normalize_mac(mac):
     """« 00-1A-2B-3C-4D-5E » ou « 001a2b3c4d5e » -> « 00:1A:2B:3C:4D:5E » ; « » si ce n'est pas une adresse MAC utilisable (nulle, multicast, mal formée)."""
     brut = re.sub(r"[^0-9A-Fa-f]", "", str(mac or ""))
     if len(brut) != 12 or int(brut, 16) == 0 or int(brut[1], 16) & 1:
@@ -217,7 +217,7 @@ def normaliser_mac(mac):
     return ":".join(brut[i:i + 2] for i in range(0, 12, 2)).upper()
 
 
-def analyser_cartes_windows(texte):
+def parse_windows_adapters(texte):
     """Sortie JSON de `Get-NetAdapter -Physical` (+ adresses IPv4) -> [{nom, mac, ip, filaire, pret}]."""
     import json
     try:
@@ -228,26 +228,26 @@ def analyser_cartes_windows(texte):
         brut = [brut]
     cartes = []
     for x in brut if isinstance(brut, list) else []:
-        mac = normaliser_mac(x.get("mac"))
+        mac = normalize_mac(x.get("mac"))
         if mac and str(x.get("etat", "")).lower() == "up":
             cartes.append({"nom": str(x.get("nom") or ""), "mac": mac, "ip": str(x.get("ip") or ""), "filaire": not re.search(r"wi-?fi|wireless|wlan|sans fil", str(x.get("description") or "") + " " + str(x.get("nom") or ""), re.I),
                            "reveil": x.get("reveil")})
     return cartes
 
 
-SCRIPT_CARTES_WINDOWS = (
+WINDOWS_ADAPTERS_SCRIPT = (
     "[Console]::OutputEncoding=[Text.Encoding]::UTF8; $r=@(Get-NetAdapter -Physical -ErrorAction SilentlyContinue | ForEach-Object { $i=$_; $ip=(Get-NetIPAddress -InterfaceIndex $i.ifIndex -AddressFamily IPv4 -ErrorAction SilentlyContinue | Select-Object -First 1).IPAddress; "
     "$w=$null; try { $pm=Get-NetAdapterPowerManagement -Name $i.Name -ErrorAction Stop; $w=($pm.WakeOnMagicPacket -eq 'Enabled') } catch {}; "
     "[pscustomobject]@{nom=$i.Name; description=$i.InterfaceDescription; mac=$i.MacAddress; etat=[string]$i.Status; ip=$ip; reveil=$w} }); ConvertTo-Json -Compress -InputObject $r")
 
 
-def cartes_reseau(lanceur=subprocess.run, systeme_actuel=None, racine_sys="/sys/class/net", sortie_ip=None):
+def network_adapters(lanceur=subprocess.run, systeme_actuel=None, racine_sys="/sys/class/net", sortie_ip=None):
     """Les cartes réseau physiques actives de cette machine : [{nom, mac, ip, filaire, reveil}] (reveil : True / False / None si on ne sait pas)."""
     s = systeme_actuel or systeme()
     try:
         if s == "windows":
-            r = lanceur(["powershell", "-NoProfile", "-NonInteractive", "-Command", SCRIPT_CARTES_WINDOWS], capture_output=True, timeout=20, creationflags=0x08000000)
-            return analyser_cartes_windows(r.stdout.decode("utf-8", "replace"))
+            r = lanceur(["powershell", "-NoProfile", "-NonInteractive", "-Command", WINDOWS_ADAPTERS_SCRIPT], capture_output=True, timeout=20, creationflags=0x08000000)
+            return parse_windows_adapters(r.stdout.decode("utf-8", "replace"))
         if s == "linux":
             adresses = {}
             texte = sortie_ip if sortie_ip is not None else lanceur(["ip", "-o", "-4", "addr"], capture_output=True, timeout=10).stdout.decode("utf-8", "replace")
@@ -261,16 +261,16 @@ def cartes_reseau(lanceur=subprocess.run, systeme_actuel=None, racine_sys="/sys/
                     continue          # lo, docker0, veth…, ponts : pas de matériel derrière
                 if (d / "operstate").read_text(encoding="utf-8", errors="replace").strip() != "up":
                     continue
-                mac = normaliser_mac((d / "address").read_text(encoding="utf-8", errors="replace"))
+                mac = normalize_mac((d / "address").read_text(encoding="utf-8", errors="replace"))
                 if mac:
-                    cartes.append({"nom": d.name, "mac": mac, "ip": adresses.get(d.name, ""), "filaire": not (d / "wireless").exists(), "reveil": reveil_linux(d.name, lanceur)})
+                    cartes.append({"nom": d.name, "mac": mac, "ip": adresses.get(d.name, ""), "filaire": not (d / "wireless").exists(), "reveil": linux_wake(d.name, lanceur)})
             return cartes
     except (OSError, subprocess.SubprocessError):
         pass
     return []
 
 
-def reveil_linux(interface, lanceur=subprocess.run):
+def linux_wake(interface, lanceur=subprocess.run):
     """`Wake-on: g` d'après ethtool : True / False ; None si ethtool est absent ou refuse (il demande souvent root)."""
     try:
         r = lanceur(["ethtool", interface], capture_output=True, timeout=10)
@@ -280,14 +280,14 @@ def reveil_linux(interface, lanceur=subprocess.run):
     return ("g" in m.group(1)) if m else None
 
 
-def choisir_carte(cartes, ip_locale=""):
+def choose_adapter(cartes, ip_locale=""):
     """La carte à retenir pour réveiller cette machine : celle qui porte l'adresse par laquelle l'autre Lutin l'a jointe, sinon une carte filaire, sinon la première."""
     if not cartes:
         return None
     return next((c for c in cartes if ip_locale and c["ip"] == ip_locale), None) or next((c for c in cartes if c["filaire"]), cartes[0])
 
 
-def demarrage_rapide_windows():
+def windows_fast_startup():
     """Le « démarrage rapide » de Windows est-il actif ? (une machine éteinte avec lui ne se réveille souvent pas par le réseau) True / False / None."""
     if os.name != "nt":
         return None
@@ -299,13 +299,13 @@ def demarrage_rapide_windows():
         return None
 
 
-def etat_reveil(ip_locale="", cartes=None, en_docker=False, systeme_actuel=None, demarrage_rapide=None):
+def wake_state(ip_locale="", cartes=None, en_docker=False, systeme_actuel=None, demarrage_rapide=None):
     """Ce que cette machine dit de sa capacité à être réveillée à distance : {mac, carte, pret, avertissements}. `pret` : True (tout est en règle), False (un réglage manque), None (impossible à vérifier d'ici)."""
     s = systeme_actuel or systeme()
     if en_docker:
         return {"mac": "", "carte": "", "pret": None, "avertissements": [_t("Lutin tourne dans un conteneur : il ne voit pas la carte réseau de la machine hôte. Renseigne son adresse MAC à la main (« ip link » sur l'hôte) et active le Wake-on-LAN sur l'hôte.")]}
-    cartes = cartes if cartes is not None else cartes_reseau(systeme_actuel=s)
-    carte = choisir_carte(cartes, ip_locale)
+    cartes = cartes if cartes is not None else network_adapters(systeme_actuel=s)
+    carte = choose_adapter(cartes, ip_locale)
     if carte is None:
         return {"mac": "", "carte": "", "pret": None, "avertissements": [_t("Aucune carte réseau physique active n'a été trouvée : l'adresse MAC est à saisir à la main.")]}
     avertissements = []
@@ -321,7 +321,7 @@ def etat_reveil(ip_locale="", cartes=None, en_docker=False, systeme_actuel=None,
         pret = False if pret is not None else pret
         avertissements.append(_t("Cette machine est en Wi-Fi : le réveil par le réseau marche rarement sans câble Ethernet."))
     if s == "windows":
-        rapide = demarrage_rapide_windows() if demarrage_rapide is None else demarrage_rapide
+        rapide = windows_fast_startup() if demarrage_rapide is None else demarrage_rapide
         if rapide:
             pret = False
             avertissements.append(_t("Le « démarrage rapide » de Windows est actif : une machine éteinte avec lui ne se réveille souvent pas par le réseau. Désactive-le (Options d'alimentation > Choisir l'action des boutons d'alimentation)."))
@@ -330,9 +330,9 @@ def etat_reveil(ip_locale="", cartes=None, en_docker=False, systeme_actuel=None,
 
 # --------------------------------------------------------------------------- extinction
 
-COMMANDES_EXTINCTION = {"windows": ["shutdown", "/s", "/t", "0"], "linux": ["systemctl", "poweroff"], "macos": ["osascript", "-e", 'tell application "System Events" to shut down']}
-EXTINCTION = {"minuteur": None, "quand": 0.0, "par": ""}
-VERROU = threading.Lock()
+SHUTDOWN_COMMANDS = {"windows": ["shutdown", "/s", "/t", "0"], "linux": ["systemctl", "poweroff"], "macos": ["osascript", "-e", 'tell application "System Events" to shut down']}
+SHUTDOWN = {"minuteur": None, "quand": 0.0, "par": ""}
+LOCK = threading.Lock()
 
 
 def systeme():
@@ -341,9 +341,9 @@ def systeme():
     return "macos" if sys.platform == "darwin" else "linux"
 
 
-def programmer_extinction(par, lanceur=subprocess.run, delai=DELAI_EXTINCTION_S, systeme_actuel=None, journaliser=lambda t: None):
+def schedule_shutdown(par, lanceur=subprocess.run, delai=SHUTDOWN_DELAY_S, systeme_actuel=None, journaliser=lambda t: None):
     """Éteint cette machine dans `delai` secondes (annulable). Renvoie le délai. À n'appeler que si le propriétaire l'a autorisée."""
-    commande = COMMANDES_EXTINCTION.get(systeme_actuel or systeme())
+    commande = SHUTDOWN_COMMANDS.get(systeme_actuel or systeme())
     if not commande:
         raise ValueError(_t("Système non pris en charge."))
 
@@ -353,56 +353,56 @@ def programmer_extinction(par, lanceur=subprocess.run, delai=DELAI_EXTINCTION_S,
             lanceur(commande, timeout=30)
         except (OSError, subprocess.SubprocessError) as e:
             journaliser("extinction impossible : {}".format(e))
-    with VERROU:
-        if EXTINCTION["minuteur"] is not None:
-            EXTINCTION["minuteur"].cancel()
+    with LOCK:
+        if SHUTDOWN["minuteur"] is not None:
+            SHUTDOWN["minuteur"].cancel()
         t = threading.Timer(delai, partir)
         t.daemon = True
-        EXTINCTION.update(minuteur=t, quand=time.time() + delai, par=par)
+        SHUTDOWN.update(minuteur=t, quand=time.time() + delai, par=par)
         t.start()
     journaliser("extinction demandée par {} : dans {} s".format(par, delai))
     return delai
 
 
-def annuler_extinction(journaliser=lambda t: None):
+def cancel_shutdown(journaliser=lambda t: None):
     """Annule une extinction en attente. True si quelque chose a été annulé."""
-    with VERROU:
-        t = EXTINCTION["minuteur"]
+    with LOCK:
+        t = SHUTDOWN["minuteur"]
         if t is None or not t.is_alive():
             return False
         t.cancel()
-        EXTINCTION.update(minuteur=None, quand=0.0, par="")
+        SHUTDOWN.update(minuteur=None, quand=0.0, par="")
     journaliser("extinction annulée")
     return True
 
 
-def extinction_en_attente():
-    with VERROU:
-        t = EXTINCTION["minuteur"]
+def pending_shutdown():
+    with LOCK:
+        t = SHUTDOWN["minuteur"]
         if t is None or not t.is_alive():
             return None
-        return {"dans_s": max(0, round(EXTINCTION["quand"] - time.time())), "par": EXTINCTION["par"]}
+        return {"dans_s": max(0, round(SHUTDOWN["quand"] - time.time())), "par": SHUTDOWN["par"]}
 
 
 # --------------------------------------------------------------------------- démarrage automatique
 
-def commande_lutin():
+def lutin_command():
     """Le programme qui lance Lutin : [python, -m, lutin] (celui qui tourne en ce moment, donc celui qui est installé)."""
     return [sys.executable, "-m", "lutin", "serve", "--no-browser"]
 
 
-def texte_unite(commande=None):
+def unit_text(commande=None):
     """L'unité systemd UTILISATEUR (~/.config/systemd/user/lutin.service)."""
-    commande = commande or commande_lutin()
+    commande = commande or lutin_command()
     return ("[Unit]\nDescription=Lutin, assistant IA local\nAfter=network-online.target\n\n[Service]\nExecStart={}\nRestart=on-failure\nRestartSec=10\n\n[Install]\nWantedBy=default.target\n"
             .format(" ".join(shlex.quote(c) for c in commande)))
 
 
-def dossier_unite(maison=None):
+def unit_folder(maison=None):
     return Path(maison or Path.home()) / ".config" / "systemd" / "user"
 
 
-def limites(systeme_actuel=None):
+def limits(systeme_actuel=None):
     """Ce que le démarrage automatique ne peut PAS faire, dit à l'utilisateur."""
     s = systeme_actuel or systeme()
     if s == "windows":
@@ -412,46 +412,46 @@ def limites(systeme_actuel=None):
     return _t("Le démarrage automatique n'est pas pris en charge sur ce système.")
 
 
-CLE_RUN = r"Software\Microsoft\Windows\CurrentVersion\Run"
+RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 
 
-def interdit_pendant_les_tests():
+def forbidden_during_tests():
     """Les tests (LUTIN_TESTS=1, posé par tests/context.py) n'ont pas le droit de modifier le vrai registre : ils doivent donner un faux registre. Évite qu'une valeur factice reste sur la machine de développement."""
     if os.environ.get("LUTIN_TESTS") == "1":
         raise OSError("écriture du registre interdite pendant les tests : utilise un faux registre")
 
 
-class RegistreWindows:
+class WindowsRegistry:
     """La clé « Run » de l'utilisateur (HKCU) : les programmes lancés à l'ouverture de SA session. Aucun droit d'administrateur n'est nécessaire, contrairement à une tâche planifiée « à l'ouverture de session »
     que Windows refuse (« Accès refusé ») à un utilisateur ordinaire. Remplaçable par un faux dans les tests."""
 
     def lire(self, nom):
         import winreg
         try:
-            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, CLE_RUN, 0, winreg.KEY_READ) as cle:
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY, 0, winreg.KEY_READ) as cle:
                 return str(winreg.QueryValueEx(cle, nom)[0])
         except OSError:
             return ""
 
     def ecrire(self, nom, valeur):
-        interdit_pendant_les_tests()
+        forbidden_during_tests()
         import winreg
-        with winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER, CLE_RUN, 0, winreg.KEY_SET_VALUE) as cle:
+        with winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER, RUN_KEY, 0, winreg.KEY_SET_VALUE) as cle:
             winreg.SetValueEx(cle, nom, 0, winreg.REG_SZ, valeur)
 
     def supprimer(self, nom):
-        interdit_pendant_les_tests()
+        forbidden_during_tests()
         import winreg
         try:
-            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, CLE_RUN, 0, winreg.KEY_SET_VALUE) as cle:
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY, 0, winreg.KEY_SET_VALUE) as cle:
                 winreg.DeleteValue(cle, nom)
         except OSError:
             pass
 
 
-def commande_windows(commande=None):
+def windows_command(commande=None):
     """La commande de la clé Run : `pythonw.exe` (sans fenêtre de console) quand il existe à côté de Python."""
-    commande = list(commande or commande_lutin())
+    commande = list(commande or lutin_command())
     exe = Path(commande[0])
     sans_console = exe.with_name("pythonw.exe")
     if exe.name.lower() == "python.exe" and sans_console.is_file():
@@ -459,72 +459,72 @@ def commande_windows(commande=None):
     return subprocess.list2cmdline(commande)
 
 
-def etat_demarrage(lanceur=subprocess.run, systeme_actuel=None, maison=None, registre=None):
+def startup_state(lanceur=subprocess.run, systeme_actuel=None, maison=None, registre=None):
     """{installe, possible, limites}."""
     s = systeme_actuel or systeme()
     if s == "windows":
-        installe = bool((registre or RegistreWindows()).lire(NOM_TACHE))
+        installe = bool((registre or WindowsRegistry()).lire(TASK_NAME))
         if not installe:          # une ancienne version a pu créer une tâche planifiée : elle compte aussi (et se retire avec le bouton)
             try:
-                installe = lanceur(["schtasks", "/Query", "/TN", NOM_TACHE], capture_output=True, timeout=15).returncode == 0
+                installe = lanceur(["schtasks", "/Query", "/TN", TASK_NAME], capture_output=True, timeout=15).returncode == 0
             except (OSError, subprocess.SubprocessError):
                 installe = False
-        return {"installe": installe, "possible": True, "limites": limites(s)}
+        return {"installe": installe, "possible": True, "limites": limits(s)}
     if s == "linux":
-        return {"installe": (dossier_unite(maison) / NOM_UNITE).is_file(), "possible": True, "limites": limites(s)}
-    return {"installe": False, "possible": False, "limites": limites(s)}
+        return {"installe": (unit_folder(maison) / UNIT_NAME).is_file(), "possible": True, "limites": limits(s)}
+    return {"installe": False, "possible": False, "limites": limits(s)}
 
 
-MEMO_DEMARRAGE = {"t": 0.0, "v": None}
+STARTUP_MEMO = {"t": 0.0, "v": None}
 
 
-def etat_demarrage_memo():
+def startup_state_memo():
     """Comme etat_demarrage, gardé 30 s (sous Windows il lance un programme ; la page le demande toutes les 8 s)."""
-    if MEMO_DEMARRAGE["v"] is None or time.monotonic() - MEMO_DEMARRAGE["t"] > 30:
-        MEMO_DEMARRAGE.update(t=time.monotonic(), v=etat_demarrage())
-    return MEMO_DEMARRAGE["v"]
+    if STARTUP_MEMO["v"] is None or time.monotonic() - STARTUP_MEMO["t"] > 30:
+        STARTUP_MEMO.update(t=time.monotonic(), v=startup_state())
+    return STARTUP_MEMO["v"]
 
 
-def installer_demarrage(lanceur=subprocess.run, systeme_actuel=None, maison=None, commande=None, registre=None):
+def install_startup(lanceur=subprocess.run, systeme_actuel=None, maison=None, commande=None, registre=None):
     s = systeme_actuel or systeme()
     if s == "windows":
         commande = commande or [sys.executable, "-m", "lutin", "zone", "--no-browser"]          # « zone » = le serveur ET l'icône près de l'horloge ; « serve » seul tournait sans aucune icône
         try:
-            (registre or RegistreWindows()).ecrire(NOM_TACHE, commande_windows(commande))
+            (registre or WindowsRegistry()).ecrire(TASK_NAME, windows_command(commande))
         except OSError as e:
             raise ValueError(_t("Windows a refusé d'inscrire Lutin au démarrage de ta session : {}").format(e)) from e
         try:
-            lanceur(["schtasks", "/Delete", "/TN", NOM_TACHE, "/F"], capture_output=True, timeout=15)          # une ancienne tâche planifiée « Lutin » lancerait un SECOND Lutin à chaque ouverture de session
+            lanceur(["schtasks", "/Delete", "/TN", TASK_NAME, "/F"], capture_output=True, timeout=15)          # une ancienne tâche planifiée « Lutin » lancerait un SECOND Lutin à chaque ouverture de session
         except (OSError, subprocess.SubprocessError):
             pass
     elif s == "linux":
-        d = dossier_unite(maison)
+        d = unit_folder(maison)
         d.mkdir(parents=True, exist_ok=True)
-        (d / NOM_UNITE).write_text(texte_unite(commande), encoding="utf-8")
-        for args in (["systemctl", "--user", "daemon-reload"], ["systemctl", "--user", "enable", NOM_UNITE]):
+        (d / UNIT_NAME).write_text(unit_text(commande), encoding="utf-8")
+        for args in (["systemctl", "--user", "daemon-reload"], ["systemctl", "--user", "enable", UNIT_NAME]):
             try:
                 lanceur(args, capture_output=True, timeout=30)
             except (OSError, subprocess.SubprocessError) as e:
                 raise ValueError(_t("systemd n'a pas répondu : {}").format(e)) from e
     else:
         raise ValueError(_t("Le démarrage automatique n'est pas pris en charge sur ce système."))
-    MEMO_DEMARRAGE["v"] = None
-    return etat_demarrage(lanceur, s, maison, registre)
+    STARTUP_MEMO["v"] = None
+    return startup_state(lanceur, s, maison, registre)
 
 
-def retirer_demarrage(lanceur=subprocess.run, systeme_actuel=None, maison=None, registre=None):
+def remove_startup(lanceur=subprocess.run, systeme_actuel=None, maison=None, registre=None):
     s = systeme_actuel or systeme()
     if s == "windows":
-        (registre or RegistreWindows()).supprimer(NOM_TACHE)
+        (registre or WindowsRegistry()).supprimer(TASK_NAME)
         try:
-            lanceur(["schtasks", "/Delete", "/TN", NOM_TACHE, "/F"], capture_output=True, timeout=15)          # l'ancienne tâche planifiée, s'il y en a une
+            lanceur(["schtasks", "/Delete", "/TN", TASK_NAME, "/F"], capture_output=True, timeout=15)          # l'ancienne tâche planifiée, s'il y en a une
         except (OSError, subprocess.SubprocessError):
             pass
     elif s == "linux":
         try:
-            lanceur(["systemctl", "--user", "disable", NOM_UNITE], capture_output=True, timeout=30)
+            lanceur(["systemctl", "--user", "disable", UNIT_NAME], capture_output=True, timeout=30)
         except (OSError, subprocess.SubprocessError):
             pass
-        (dossier_unite(maison) / NOM_UNITE).unlink(missing_ok=True)
-    MEMO_DEMARRAGE["v"] = None
-    return etat_demarrage(lanceur, s, maison, registre)
+        (unit_folder(maison) / UNIT_NAME).unlink(missing_ok=True)
+    STARTUP_MEMO["v"] = None
+    return startup_state(lanceur, s, maison, registre)

@@ -149,11 +149,11 @@ def _apercu(p):
     ancien = None
     try:
         if _trav.cle(p) != _trav.cle(_m.DONNEES.parent):
-            with _rep.ouvrir(p) as d:
+            with _rep.open_source(p) as d:
                 if d["conversations"] or d["memoire"]:
-                    nouvelles = _rep.a_reprendre(d, _m.DONNEES, _m.MEMOIRE, [p / "skills", _m.RACINE / "skills"])
-                    ancien = dict(_rep.decrire(d), dossier=d["dossier_utilise"], nouvelles=nouvelles, a_reprendre=any(nouvelles.values()))
-    except _rep.ErreurReprise:
+                    nouvelles = _rep.to_migrate(d, _m.DONNEES, _m.MEMOIRE, [p / "skills", _m.RACINE / "skills"])
+                    ancien = dict(_rep.describe(d), dossier=d["dossier_utilise"], nouvelles=nouvelles, a_reprendre=any(nouvelles.values()))
+    except _rep.MigrationError:
         ancien = None
     return {"fichiers": n, "tronque": tronque, "lus": lus, "copies": copies, "ancien": ancien, "git": (p / ".git").exists()}
 
@@ -278,12 +278,12 @@ def importer_projet_claude(chemin, mode, vers="", nom=""):
 
 def reprise_detecter(chemin, dossier_skills=""):
     """Ce qu'on peut reprendre dans le dossier (ou l'archive .zip) d'un autre assistant : des nombres, rien n'est écrit. Avec les dossiers de travail où poser les skills."""
-    with _rep.ouvrir(chemin, dossier_skills or None) as d:
+    with _rep.open_source(chemin, dossier_skills or None) as d:
         cfg = _m.config_lue()
-        liste = [dict(t, claude=_rep.est_projet_claude(t["chemin"])) for t in _trav.liste(cfg)]
+        liste = [dict(t, claude=_rep.is_claude_project(t["chemin"])) for t in _trav.liste(cfg)]
         actif = _trav.actif(cfg)
         cible = Path(actif["chemin"]) if actif else _m.RACINE
-        return dict(_rep.decrire(d), dossier_skills=d["dossier_skills"], dossier_utilise=d["dossier_utilise"], travaux=liste, actif=travaux_etat()["actif"], cible_skills=str(cible / "skills"))
+        return dict(_rep.describe(d), dossier_skills=d["dossier_skills"], dossier_utilise=d["dossier_utilise"], travaux=liste, actif=travaux_etat()["actif"], cible_skills=str(cible / "skills"))
 
 
 def reprise_importer(chemin, choix, dossier_skills="", ecraser=False, cible=""):
@@ -296,7 +296,7 @@ def reprise_importer(chemin, choix, dossier_skills="", ecraser=False, cible=""):
         racine = Path(t["chemin"])
     c = _m.chemin_config()
     dossiers = {"config": c.parent if c else None, "donnees": _m.DONNEES, "memoire": _m.MEMOIRE}
-    with _rep.ouvrir(chemin, dossier_skills or None) as d:
-        rapport = _rep.importer(d, dossiers, choix, racine_travail=racine, ecraser=ecraser, workspaces=[t["id"] for t in _trav.liste(_m.config_lue())])
-    rapport["resume"] = _rep.resume(rapport)
+    with _rep.open_source(chemin, dossier_skills or None) as d:
+        rapport = _rep.import_all(d, dossiers, choix, racine_travail=racine, ecraser=ecraser, workspaces=[t["id"] for t in _trav.liste(_m.config_lue())])
+    rapport["resume"] = _rep.summary(rapport)
     return rapport

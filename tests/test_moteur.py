@@ -1795,13 +1795,13 @@ class Assistant(unittest.TestCase):
         c["messages"] = [{"role": "user", "content": "On garde le pivot de fin de saison fixe, jamais modifiable."}, {"role": "assistant", "content": "Noté : le pivot reste fixe."}]
         A.conv_ecrire(c)
         try:
-            res = A.outil_rappeler("tatouage cheville androide")
+            res = A.recall_tool("tatouage cheville androide")
             self.assertTrue(res.startswith("1. docs/arc.md — La Orion"), res)
             self.assertNotIn("Cuisine", res.split("\n\n")[0])
-            self.assertIn("conversation « Décision pivot »", A.outil_rappeler("pivot fin de saison fixe"))
-            self.assertIn("Aucun passage", A.outil_rappeler("zzzxyzabc"))
+            self.assertIn("conversation « Décision pivot »", A.recall_tool("pivot fin de saison fixe"))
+            self.assertIn("Aucun passage", A.recall_tool("zzzxyzabc"))
             with self.assertRaises(A.ErreurOutil):
-                A.outil_rappeler("le la les")
+                A.recall_tool("le la les")
             ev = chat("Rappelle-toi", reponses=[[appel_outil("rappeler", requete="robots gris mat")], [{"content": "."}]])
             self.assertIn("docs/arc.md", next(e for e in ev if e["type"] == "resultat")["texte"])
         finally:
@@ -1910,7 +1910,7 @@ class Assistant(unittest.TestCase):
         try:
             (depot / "a.txt").write_text("bonjour\n", encoding="utf-8")
             (depot / "autre.txt").write_text("pas dans le commit\n", encoding="utf-8")
-            etat = A.git_etat()
+            etat = A.git_state()
             self.assertTrue(etat["dispo"])
             self.assertEqual({(m["chemin"], m["etat"]) for m in etat["modifies"]}, {("a.txt", "nouveau"), ("autre.txt", "nouveau")})
             SCENARIO[:] = [[{"content": "```\nAjoute a.txt\n\n- message de bienvenue\n```"}]]
@@ -1931,9 +1931,9 @@ class Assistant(unittest.TestCase):
             self.assertIn("autre.txt", reste, "seuls les fichiers choisis sont commités")
             self.assertNotIn("a.txt", reste)
             (depot / "a.txt").write_text("bonjour\nsalut\n", encoding="utf-8")
-            self.assertEqual([(m["chemin"], m["etat"]) for m in A.git_etat()["modifies"] if m["chemin"] == "a.txt"], [("a.txt", "modifié")])
+            self.assertEqual([(m["chemin"], m["etat"]) for m in A.git_state()["modifies"] if m["chemin"] == "a.txt"], [("a.txt", "modifié")])
             SCENARIO[:] = [[{"content": "Complète a.txt"}]]
-            self.assertEqual(A.git_message(["a.txt"])["message"], "Complète a.txt")
+            self.assertEqual(A.git_message_of(["a.txt"])["message"], "Complète a.txt")
             self.assertIn("+salut", json.dumps(RECUES[-1]["messages"]), "le modèle voit la différence")
         finally:
             A.RACINE = ancienne_racine
@@ -1958,7 +1958,7 @@ class Assistant(unittest.TestCase):
         ancien_git = A.git
         A.git = lambda args, delai=60: (128, "", "fatal: detected dubious ownership in repository at '//nas/x'")
         try:
-            etat = A.git_etat()
+            etat = A.git_state()
         finally:
             A.git = ancien_git
         self.assertFalse(etat["dispo"])
@@ -2364,9 +2364,9 @@ class Assistant(unittest.TestCase):
         self.assertTrue(conv["resume"].startswith("RÉSUMÉ") and len(conv["messages"]) < 12, "le début est résumé")
         self.assertIn("4711-ZEBRE", archive.texte(cid), "mais il reste sur le disque")
         self.assertIn("DÉBUT DE LA CONVERSATION", RECUES[-1]["messages"][0]["content"], "le modèle sait qu'il peut retrouver le début")
-        trouve = A.outil_rappeler("coffre code ZEBRE", 3, cid, True)
+        trouve = A.recall_tool("coffre code ZEBRE", 3, cid, True)
         self.assertIn("4711", trouve, "le détail perdu par le résumé est retrouvé")
-        self.assertIn("Aucun passage", A.outil_rappeler("coffre ZEBRE", 3, "autre-conversation", True), "ici=true ne cherche que dans cette conversation")
+        self.assertIn("Aucun passage", A.recall_tool("coffre ZEBRE", 3, "autre-conversation", True), "ici=true ne cherche que dans cette conversation")
         chat("Quel est le code ?", conversation=cid, reponses=[[appel_outil("rappeler", requete="coffre code ZEBRE", ici=True)], [{"content": "Le code est 4711-ZEBRE."}]])
         self.assertTrue(any("4711-ZEBRE" in str(m.get("content", "")) for m in RECUES[-1]["messages"] if m.get("role") == "tool"), "le modèle retrouve le détail avec l'outil, depuis la conversation en cours")
         post("/api/supprimer", {"id": cid})
@@ -2992,8 +2992,8 @@ class Assistant(unittest.TestCase):
             chat("Donne une recette de soupe de poireaux au cumin", reponses=[[{"content": "ok"}]], mode="scenario")
             self.assertNotIn("RAPPELS POSSIBLEMENT", RECUES[-1]["messages"][0]["content"])
             # la conversation en cours n'est jamais rappelée à elle-même
-            self.assertTrue(any(p["m"].get("conv") == ident for p in A.passages_rappel(question, 10, min_termes=2)))
-            self.assertFalse(any(p["m"].get("conv") == ident for p in A.passages_rappel(question, 10, exclure_conv=ident, min_termes=2)))
+            self.assertTrue(any(p["m"].get("conv") == ident for p in A.recall_passages(question, 10, min_termes=2)))
+            self.assertFalse(any(p["m"].get("conv") == ident for p in A.recall_passages(question, 10, exclure_conv=ident, min_termes=2)))
         finally:
             (PROJET / "docs" / "arc.md").unlink(missing_ok=True)
 

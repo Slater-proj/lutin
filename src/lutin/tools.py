@@ -77,7 +77,7 @@ def outil_lire(chemin, debut=1, fin=None):
     if f.suffix.lower() in rappel_formats():
         from . import text_extraction, recall
         try:
-            texte = "\n\n".join(("## {}\n\n".format(t) if t else "") + c for t, c in recall.parties_document(f)).splitlines()
+            texte = "\n\n".join(("## {}\n\n".format(t) if t else "") + c for t, c in recall.document_parts(f)).splitlines()
         except text_extraction.ErreurExtraction as e:
             raise _m.ErreurOutil(str(e)) from e
     elif f.stat().st_size > 6_000_000:

@@ -172,8 +172,8 @@ class Fichiers(unittest.TestCase):
 
     def test_creer_document_attache_le_fichier_au_resultat(self):
         ctx = {"accord": lambda t, d, df, auto=False: True, "essai": False, "auto_ecriture": False, "stop": None, "tour": {"id": "t", "conversation": "abcdef01", "fichiers": {}}, "conv": {"id": "abcdef01"}}
-        change_review.appeler_outil("creer_document", {"chemin": "docs/rapport.pdf", "contenu": "# Rapport"}, ctx)
-        change_review.appeler_outil("creer_document", {"chemin": "docs/rapport.md", "contenu": "# Rapport"}, ctx)
+        change_review.call_tool("creer_document", {"chemin": "docs/rapport.pdf", "contenu": "# Rapport"}, ctx)
+        change_review.call_tool("creer_document", {"chemin": "docs/rapport.md", "contenu": "# Rapport"}, ctx)
         self.assertEqual([Path(p).name for p in ctx["fichiers_joints"]], ["rapport.pdf", "rapport.md"])
 
 

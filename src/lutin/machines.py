@@ -198,18 +198,18 @@ CARTES = {"t": -999.0, "v": None}
 def cartes_en_cache():
     """Les cartes réseau de cette machine (le plus lent à lire : PowerShell sous Windows), gardées 60 s."""
     if CARTES["v"] is None or time.monotonic() - CARTES["t"] > 60:
-        CARTES.update(t=time.monotonic(), v=power.cartes_reseau())
+        CARTES.update(t=time.monotonic(), v=power.network_adapters())
     return CARTES["v"]
 
 
 def _calculer_infos(ip_locale):
     docker = os.environ.get("LUTIN_DOCKER") == "1"
     try:
-        reveil = power.etat_reveil(ip_locale, cartes=None if docker else cartes_en_cache(), en_docker=docker)
+        reveil = power.wake_state(ip_locale, cartes=None if docker else cartes_en_cache(), en_docker=docker)
     except Exception:  # noqa: BLE001  (un renseignement de plus : jamais un appairage qui échoue)
         reveil = {"mac": "", "carte": "", "pret": None, "avertissements": []}
     try:
-        demarrage = power.etat_demarrage()
+        demarrage = power.startup_state()
     except Exception:  # noqa: BLE001
         demarrage = {"installe": False, "possible": False}
     infos = {"mac": reveil.get("mac", ""), "reveil": {k: reveil.get(k) for k in ("pret", "carte", "avertissements")},
@@ -364,7 +364,7 @@ def noeud_partager(genre, corps):
 
 def noeud_vue():
     n = noeud()
-    return {"actif": n["actif"], "id": n["id"], "droits": noeud_droits(), "extinction": bool(n.get("extinction")), "maj": bool(n.get("maj")), "piloter": bool(n.get("piloter")), "extinction_en_attente": power.extinction_en_attente(),
+    return {"actif": n["actif"], "id": n["id"], "droits": noeud_droits(), "extinction": bool(n.get("extinction")), "maj": bool(n.get("maj")), "piloter": bool(n.get("piloter")), "extinction_en_attente": power.pending_shutdown(),
             "demandes": [dict(d) for d in n.get("demandes", [])], "autorisees": [{"nom": j["nom"], "date": j["date"]} for j in n["jetons"]]}
 
 
@@ -486,7 +486,7 @@ def ajouter(adresse, code, nom="", mac="", ouvrir=None):
 
 
 def alimentation_mac(mac):
-    return power.normaliser_mac(mac)
+    return power.normalize_mac(mac)
 
 
 def retenir_infos(m, rep):
@@ -620,7 +620,7 @@ def _reprendre_reveils():
             age = time.time() - float(quand or 0)
         except (TypeError, ValueError):
             continue
-        if -2 <= age < power.ATTENTE_REVEIL_S and ident not in REVEIL and RE_ID.match(str(ident)):
+        if -2 <= age < power.WAKE_WAIT_S and ident not in REVEIL and RE_ID.match(str(ident)):
             REVEIL[ident] = time.monotonic() - max(age, 0)
 
 
@@ -639,7 +639,7 @@ def _allumee_pendant_reveil(m, maintenant=time.monotonic):
     except ValueError:
         port = 0
     try:
-        verdict = bool(hote) and bool((HOTE_ALLUME or power.hote_allume)(hote, m.get("mac", ""), port))
+        verdict = bool(hote) and bool((HOTE_ALLUME or power.host_is_up)(hote, m.get("mac", ""), port))
     except Exception:  # noqa: BLE001  (un constat de plus : jamais une page cassée)
         verdict = False
     with VERROU:
@@ -718,7 +718,7 @@ def _avec_reveil(m, r, maintenant=time.monotonic, allumee=False):
                 return dict(r, detail=ECHEC_REVEIL[m["id"]], reveil_echec=True)
             return r
         depuis = maintenant() - envoye
-        if depuis > power.ATTENTE_REVEIL_S:
+        if depuis > power.WAKE_WAIT_S:
             REVEIL.pop(m["id"], None)
             DEPUIS_ALLUMEE.pop(m["id"], None)
             A_REPONDU.pop(m["id"], None)
@@ -731,23 +731,23 @@ def _avec_reveil(m, r, maintenant=time.monotonic, allumee=False):
         detail = _t("La machine est allumée et Lutin y avait répondu, mais il ne répond plus : il redémarre (démarrage de session, réseau pas encore prêt). Je continue d'attendre.")
         suite = ""
     elif allumee:
-        detail = _t("La machine est allumée (elle répond au réseau) ; Lutin n'y répond pas encore — il démarre, ou ne démarre pas tout seul. Réveil envoyé il y a {} s ; je laisse jusqu'à {} min.").format(round(depuis), power.ATTENTE_REVEIL_S // 60)
+        detail = _t("La machine est allumée (elle répond au réseau) ; Lutin n'y répond pas encore — il démarre, ou ne démarre pas tout seul. Réveil envoyé il y a {} s ; je laisse jusqu'à {} min.").format(round(depuis), power.WAKE_WAIT_S // 60)
         suite = _t("Si Lutin ne démarre pas après la connexion de la session : sur cette machine, onglet Machines > « Démarrer Lutin à l'ouverture de ma session » (et auto-connexion Windows).") if vue_depuis > 90 else ""
     else:
-        detail = _t("Réveil envoyé il y a {} s : une machine met de 30 secondes à quelques minutes à démarrer. Je laisse jusqu'à {} min.").format(round(depuis), power.ATTENTE_REVEIL_S // 60)
-        suite = power.raison_echec(depuis)
+        detail = _t("Réveil envoyé il y a {} s : une machine met de 30 secondes à quelques minutes à démarrer. Je laisse jusqu'à {} min.").format(round(depuis), power.WAKE_WAIT_S // 60)
+        suite = power.failure_reason(depuis)
     return {"etat": "reveil_envoye", "detail": detail + (" " + suite if suite else ""), "modeles": []}
 
 
 def _echec_reveil(m, allumee):
     """Pourquoi le réveil n'a pas abouti (le texte qui reste affiché, avec le bouton « Réveiller », jusqu'au prochain essai)."""
-    minutes = power.ATTENTE_REVEIL_S // 60
+    minutes = power.WAKE_WAIT_S // 60
     if allumee:
         return _t("Réveil non abouti : la machine est bien allumée, mais Lutin n'y répond pas après {} minutes. Vérifie que Lutin y démarre avec la session (sur cette machine : onglet Machines > « Démarrer Lutin à l'ouverture de ma session »), que la session s'ouvre toute seule (auto-connexion Windows) et que le pare-feu laisse passer le port de Lutin.").format(minutes)
-    return _t("Réveil non abouti : aucune réponse après {} minutes. {} Si la machine est en fait allumée, son adresse IP a peut-être changé (réserve-lui une adresse fixe dans ta box).").format(minutes, power.raison_echec(power.ATTENTE_REVEIL_S))
+    return _t("Réveil non abouti : aucune réponse après {} minutes. {} Si la machine est en fait allumée, son adresse IP a peut-être changé (réserve-lui une adresse fixe dans ta box).").format(minutes, power.failure_reason(power.WAKE_WAIT_S))
 
 
-def reveiller(ident, envoyer=power.envoyer_reveil):
+def reveiller(ident, envoyer=power.send_wake):
     """Envoie le paquet de réveil à cette machine (il faut son adresse MAC). L'état passe à « réveil envoyé » puis suit la machine : nœud joignable, moteur opérationnel."""
     m = trouver(ident)
     if m is None:
@@ -762,7 +762,7 @@ def reveiller(ident, envoyer=power.envoyer_reveil):
             suivi.pop(ident, None)
         _sauver_reveils()
     journaliser("réveil envoyé à {}".format(m["nom"]))
-    return {"ok": True, "mac": m["mac"], "envois": len(envoyes or []), "cartes": power.adresses_locales(), "avertissements": [a for a in [power.emission_limitee()] + avertissements(m) if a][:4]}          # le paquet est parti, mais on dit ce qui risque de l'empêcher de marcher
+    return {"ok": True, "mac": m["mac"], "envois": len(envoyes or []), "cartes": power.local_addresses(), "avertissements": [a for a in [power.limited_send()] + avertissements(m) if a][:4]}          # le paquet est parti, mais on dit ce qui risque de l'empêcher de marcher
 
 
 def eteindre(ident, annuler=False, ouvrir=None):

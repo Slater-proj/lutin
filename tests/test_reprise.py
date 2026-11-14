@@ -68,37 +68,37 @@ class Base(unittest.TestCase):
         self.t.cleanup()
 
     def reprendre(self, source=None, choix=migrate.CATEGORIES, **kw):
-        with migrate.ouvrir(source or self.assistant) as d:
-            return migrate.importer(d, self.dossiers, choix, racine_travail=self.travail, workspaces=kw.pop("workspaces", ()), **kw)
+        with migrate.open_source(source or self.assistant) as d:
+            return migrate.import_all(d, self.dossiers, choix, racine_travail=self.travail, workspaces=kw.pop("workspaces", ()), **kw)
 
 
 class Detection(Base):
     def test_ce_qui_est_trouve(self):
-        with migrate.ouvrir(self.assistant) as d:
-            self.assertEqual(migrate.decrire(d), {"conversations": 4, "memoire": ["CONTEXTE.md", "MEMOIRE.md"], "skills": 2, "reglages": True})
+        with migrate.open_source(self.assistant) as d:
+            self.assertEqual(migrate.describe(d), {"conversations": 4, "memoire": ["CONTEXTE.md", "MEMOIRE.md"], "skills": 2, "reglages": True})
             self.assertTrue(d["dossier_skills"].endswith("skills"))
 
     def test_on_peut_donner_le_dossier_donnees_ou_un_dossier_de_skills(self):
-        with migrate.ouvrir(self.assistant / "donnees") as d:
-            self.assertEqual(migrate.decrire(d)["conversations"], 4)
-            self.assertEqual(migrate.decrire(d)["skills"], 2, "les skills sont cherchés au-dessus de l'assistant")
+        with migrate.open_source(self.assistant / "donnees") as d:
+            self.assertEqual(migrate.describe(d)["conversations"], 4)
+            self.assertEqual(migrate.describe(d)["skills"], 2, "les skills sont cherchés au-dessus de l'assistant")
         autre = Path(self.t.name) / "mes-skills"
         autre.mkdir()
         (autre / "a.md").write_text("# a", encoding="utf-8")
-        with migrate.ouvrir(self.assistant, str(autre)) as d:
-            self.assertEqual(migrate.decrire(d)["skills"], 1)
+        with migrate.open_source(self.assistant, str(autre)) as d:
+            self.assertEqual(migrate.describe(d)["skills"], 1)
 
     def test_rien_a_reprendre_ou_mauvaise_source(self):
         vide = Path(self.t.name) / "vide"
         vide.mkdir()
-        with self.assertRaisesRegex(migrate.ErreurReprise, "Rien à reprendre"):
-            migrate.ouvrir(vide).__enter__()
-        with self.assertRaisesRegex(migrate.ErreurReprise, "n'existe pas"):
-            migrate.ouvrir(Path(self.t.name) / "absent").__enter__()
+        with self.assertRaisesRegex(migrate.MigrationError, "Rien à reprendre"):
+            migrate.open_source(vide).__enter__()
+        with self.assertRaisesRegex(migrate.MigrationError, "n'existe pas"):
+            migrate.open_source(Path(self.t.name) / "absent").__enter__()
         texte = Path(self.t.name) / "a.txt"
         texte.write_text("x", encoding="utf-8")
-        with self.assertRaisesRegex(migrate.ErreurReprise, "archive .zip"):
-            migrate.ouvrir(texte).__enter__()
+        with self.assertRaisesRegex(migrate.MigrationError, "archive .zip"):
+            migrate.open_source(texte).__enter__()
 
 
 class Import(Base):
@@ -140,7 +140,7 @@ class Import(Base):
         self.assertEqual(list(r), ["choix", "sauvegarde", "skills"])
         self.assertEqual(list(self.dossiers["donnees"].glob("conversations/*")), [])
         self.assertFalse((self.dossiers["memoire"] / "CONTEXTE.md").exists())
-        with self.assertRaisesRegex(migrate.ErreurReprise, "Rien n'est choisi"):
+        with self.assertRaisesRegex(migrate.MigrationError, "Rien n'est choisi"):
             self.reprendre(choix=())
 
     def test_rien_n_est_ecrase_sans_le_dire(self):
@@ -169,12 +169,12 @@ class Import(Base):
         self.assertIn("Je fais un jeu", (self.dossiers["memoire"] / "CONTEXTE.md").read_text(encoding="utf-8"))
 
     def test_skills_refuses_sans_dossier_de_travail_et_noms_dangereux(self):
-        with migrate.ouvrir(self.assistant) as d:
-            with self.assertRaisesRegex(migrate.ErreurReprise, "Pas de dossier de travail"):
-                migrate.importer(d, self.dossiers, ("skills",), racine_travail=None)
-        self.assertEqual(migrate.RE_NOM_MD.match("../x.md"), None)
-        self.assertEqual(migrate.RE_NOM_MD.match("a/b.md"), None)
-        self.assertIsNotNone(migrate.RE_NOM_MD.match("mon skill-2.md"))
+        with migrate.open_source(self.assistant) as d:
+            with self.assertRaisesRegex(migrate.MigrationError, "Pas de dossier de travail"):
+                migrate.import_all(d, self.dossiers, ("skills",), racine_travail=None)
+        self.assertEqual(migrate.RE_MD_NAME.match("../x.md"), None)
+        self.assertEqual(migrate.RE_MD_NAME.match("a/b.md"), None)
+        self.assertIsNotNone(migrate.RE_MD_NAME.match("mon skill-2.md"))
 
 
 class Archives(Base):
@@ -187,9 +187,9 @@ class Archives(Base):
         for d in self.dossiers.values():
             d.mkdir(parents=True)
         (ailleurs / "config" / "config.json").write_text("{}", encoding="utf-8")
-        with migrate.ouvrir(archive) as d:
-            self.assertEqual(migrate.decrire(d)["conversations"], 2)
-            r = migrate.importer(d, self.dossiers, ("conversations", "memoire"), racine_travail=self.travail)
+        with migrate.open_source(archive) as d:
+            self.assertEqual(migrate.describe(d)["conversations"], 2)
+            r = migrate.import_all(d, self.dossiers, ("conversations", "memoire"), racine_travail=self.travail)
         self.assertEqual(r["conversations"]["importees"], 2)
         self.assertTrue((ailleurs / "memoire" / "MEMOIRE.md").is_file())
 
@@ -198,17 +198,17 @@ class Archives(Base):
         with zipfile.ZipFile(mauvaise, "w") as z:
             z.writestr("donnees/conversations/a1b2c3d4.json", json.dumps(conversation("a1b2c3d4")))
             z.writestr("../evil.md", "x")
-        with self.assertRaisesRegex(migrate.ErreurReprise, "sortirait"):
-            migrate.ouvrir(mauvaise).__enter__()
+        with self.assertRaisesRegex(migrate.MigrationError, "sortirait"):
+            migrate.open_source(mauvaise).__enter__()
         absolue = Path(self.t.name) / "absolue.zip"
         with zipfile.ZipFile(absolue, "w") as z:
             z.writestr("/etc/passwd", "x")
-        with self.assertRaisesRegex(migrate.ErreurReprise, "sortirait"):
-            migrate.ouvrir(absolue).__enter__()
+        with self.assertRaisesRegex(migrate.MigrationError, "sortirait"):
+            migrate.open_source(absolue).__enter__()
         cassee = Path(self.t.name) / "cassee.zip"
         cassee.write_bytes(b"pas un zip")
-        with self.assertRaisesRegex(migrate.ErreurReprise, "pas lisible"):
-            migrate.ouvrir(cassee).__enter__()
+        with self.assertRaisesRegex(migrate.MigrationError, "pas lisible"):
+            migrate.open_source(cassee).__enter__()
 
 
 class DansLeMoteurEtLaLigneDeCommande(Base):
@@ -268,7 +268,7 @@ class OuEstLaDonnee(Base):
 
     # 4 fichiers .json dans l'ancien dossier : 2 conversations, un fichier cassé, un à l'identifiant interdit (l'import les écarte et le dit)
     def compter(self, chemin):
-        with migrate.ouvrir(chemin) as d:
+        with migrate.open_source(chemin) as d:
             return (len(d["conversations"]), [m.name for m in d["memoire"]], len(d["skills"]), bool(d["reglages"]), Path(d["dossier_utilise"]))
 
     def test_le_dossier_de_l_assistant(self):
@@ -294,17 +294,17 @@ class OuEstLaDonnee(Base):
     def test_un_dossier_sans_rien_dit_qu_il_n_y_a_rien(self):
         vide = Path(self.t.name) / "vide"
         vide.mkdir()
-        with self.assertRaisesRegex(migrate.ErreurReprise, "Rien à reprendre"):
+        with self.assertRaisesRegex(migrate.MigrationError, "Rien à reprendre"):
             self.compter(vide)
 
     def test_un_dossier_qui_n_existe_pas_donne_une_phrase_precise(self):
-        with self.assertRaisesRegex(migrate.ErreurReprise, "n'existe pas"):
+        with self.assertRaisesRegex(migrate.MigrationError, "n'existe pas"):
             self.compter(Path(self.t.name) / "absent")
 
     def test_un_partage_reseau_introuvable_dit_quoi_verifier(self):
         reseau = Path(chr(92) * 2 + "nas" + chr(92) + "partage")
         with mock.patch.object(migrate.travaux, "avec_delai", side_effect=[(True, False), (True, (False, False, False))]):
-            with self.assertRaisesRegex(migrate.ErreurReprise, "réseau.*compte Windows"):
+            with self.assertRaisesRegex(migrate.MigrationError, "réseau.*compte Windows"):
                 self.compter(reseau)
 
 

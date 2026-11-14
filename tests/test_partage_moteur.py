@@ -105,7 +105,7 @@ class DemarrageSansDoublon(unittest.TestCase):
             def supprimer(self, nom):
                 self.v.pop(nom, None)
         appels = []
-        power.installer_demarrage(lanceur=lambda cmd, **kw: appels.append(cmd) or type("R", (), {"returncode": 0})(), systeme_actuel="windows", commande=["python", "-m", "lutin"], registre=Registre())
+        power.install_startup(lanceur=lambda cmd, **kw: appels.append(cmd) or type("R", (), {"returncode": 0})(), systeme_actuel="windows", commande=["python", "-m", "lutin"], registre=Registre())
         self.assertTrue(any(c[:2] == ["schtasks", "/Delete"] for c in appels), "sinon deux Lutin se lanceraient à l'ouverture de session")
 
     def test_un_second_lutin_sur_le_meme_port_s_arrete_avant_de_lancer_quoi_que_ce_soit(self):
@@ -152,9 +152,9 @@ class GardeFousDesTests(unittest.TestCase):
     def test_le_vrai_registre_est_interdit_aux_tests(self):
         self.assertEqual(os.environ.get("LUTIN_TESTS"), "1")
         with self.assertRaises(OSError):
-            power.RegistreWindows().ecrire("Lutin", "x")
+            power.WindowsRegistry().ecrire("Lutin", "x")
         with self.assertRaises(OSError):
-            power.RegistreWindows().supprimer("Lutin")
+            power.WindowsRegistry().supprimer("Lutin")
 
     def test_l_installation_reelle_d_ollama_est_interdite_aux_tests(self):
         from lutin import ollama_client

@@ -629,7 +629,7 @@ def update_conversation(request):
     if "pinned" in body:
         if not isinstance(body["pinned"], bool):
             raise ApiError(400, "invalid_request", _t("« pinned » doit être vrai ou faux."))
-        _m.epingler_conversation(identifier, body["pinned"])
+        _m.pin_conversation(identifier, body["pinned"])
     return _conversation(_read(identifier))
 
 

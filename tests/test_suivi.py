@@ -257,7 +257,7 @@ class RappelDuFil(unittest.TestCase):
     def setUp(self):
         self.ident = "f1e2d3c4"
         self.addCleanup(lambda: _m.conv_chemin(self.ident).unlink(missing_ok=True))
-        self.addCleanup(lambda: __import__("lutin.recall", fromlist=["FIL"]).FIL.clear())
+        self.addCleanup(lambda: __import__("lutin.recall", fromlist=["FIL"]).THREAD.clear())
 
     def conv(self, messages):
         c = {"id": self.ident, "titre": "t", "messages": messages}
@@ -269,7 +269,7 @@ class RappelDuFil(unittest.TestCase):
         anciens = [{"role": "user" if i % 2 == 0 else "assistant", "content": ("Le code du coffre est 4711-ZEBRE. " if i == 0 else "") + "blabla de remplissage numéro %d " % i * 3} for i in range(14)]
         c = self.conv(anciens)
         c["messages"] = anciens + [{"role": "user", "content": "Rappelle-moi le code du coffre ZEBRE s'il te plaît ?"}]
-        texte, n = recall.rappel_du_fil(c)
+        texte, n = recall.thread_recall(c)
         self.assertEqual(n, 1)
         self.assertIn("4711-ZEBRE", texte)
         self.assertTrue(texte.startswith("[Extraits de la conversation]"))
@@ -277,7 +277,7 @@ class RappelDuFil(unittest.TestCase):
         recents = [{"role": "user", "content": "Le code du coffre est 4711-ZEBRE, noté."}, {"role": "assistant", "content": "ok"}]
         c2 = self.conv(recents)
         c2["messages"] = recents + [{"role": "user", "content": "Rappelle-moi le code du coffre ZEBRE s'il te plaît ?"}]
-        self.assertEqual(recall.rappel_du_fil(c2), ("", 0))
+        self.assertEqual(recall.thread_recall(c2), ("", 0))
 
     def test_un_oui_est_complete_par_la_derniere_reponse_et_l_etape(self):
         from lutin import recall
@@ -285,14 +285,14 @@ class RappelDuFil(unittest.TestCase):
         msgs += [{"role": "user" if i % 2 == 0 else "assistant", "content": "autre sujet sans rapport %d et encore des mots" % i} for i in range(10)]
         c = self.conv(msgs)
         c["messages"] = msgs + [{"role": "assistant", "content": "On passe au traiteur ?"}, {"role": "user", "content": "oui"}]
-        texte, n = recall.rappel_du_fil(c, "Contacter le traiteur")
+        texte, n = recall.thread_recall(c, "Contacter le traiteur")
         self.assertEqual(n, 1)
         self.assertIn("35 euros", texte, "« oui » seul ne dit rien : la question précédente et l'étape en cours guident la recherche")
 
     def test_conversation_inconnue_ou_vide(self):
         from lutin import recall
-        self.assertEqual(recall.rappel_du_fil({"id": "e9d8c7b6", "messages": [{"role": "user", "content": "une longue question sans historique ici"}]}), ("", 0))
-        self.assertEqual(recall.rappel_du_fil({"id": "", "messages": []}), ("", 0))
+        self.assertEqual(recall.thread_recall({"id": "e9d8c7b6", "messages": [{"role": "user", "content": "une longue question sans historique ici"}]}), ("", 0))
+        self.assertEqual(recall.thread_recall({"id": "", "messages": []}), ("", 0))
 
 
 if __name__ == "__main__":

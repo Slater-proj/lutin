@@ -192,7 +192,7 @@ class Documents(Base):
             lu = A.outil_lire("docs/panne.pdf")
             self.assertIn("Deuxième ligne : procédure", lu)
             self.assertIn("## Page 1", lu)
-            self.assertIn("Page 1", A.outil_rappeler("déploiement"))
+            self.assertIn("Page 1", A.recall_tool("déploiement"))
             with self.assertRaisesRegex(A.ErreurOutil, "illisible"):
                 A.outil_lire("docs/casse.docx")
             self.assertTrue(list((A.DONNEES / "cache-documents").glob("*.json")), "le texte extrait est gardé : pas de nouvelle lecture au prochain démarrage")

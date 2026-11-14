@@ -270,7 +270,7 @@ def supprimer_selection(ids):
                 raise ValueError(_t("Une réponse est en cours dans cette conversation : attends la fin ou arrête-la."))
             try:
                 if conv and _m.conv_chemin(conv).exists():
-                    (change_review.supprimer_media(conv, e["id"]) if e.get("genre") == "image" else supprimer(conv, e["id"]))
+                    (change_review.delete_media(conv, e["id"]) if e.get("genre") == "image" else supprimer(conv, e["id"]))
                     if Path(e["chemin"]).is_file():
                         _supprimer_directement(e)                        # la conversation ne montrait plus ce fichier : on l'efface quand même
                 else:

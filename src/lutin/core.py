@@ -359,18 +359,18 @@ from .project_map import (  # noqa: F401  (déplacé dans project_map.py : moteu
 
 
 from .recall import (  # noqa: F401  (déplacé dans recall.py : moteur ré-exporte ses noms)
-    MOTS_VIDES,
-    RAPPEL,
-    decouper,
-    etiquette_rappel,
-    formater_passages,
-    indexer_rappel,
-    mots,
-    outil_rappeler,
-    passages_rappel,
-    rappel_du_fil,
-    rappels_automatiques,
-    sources_rappel,
+    STOP_WORDS,
+    RECALL,
+    split_text,
+    recall_label,
+    format_passages,
+    index_recall,
+    words,
+    recall_tool,
+    recall_passages,
+    thread_recall,
+    automatic_recalls,
+    recall_sources,
 )
 
 
@@ -426,22 +426,22 @@ def mesures_systeme():
 
 
 from .change_review import (  # noqa: F401  (déplacé dans change_review.py : moteur ré-exporte ses noms)
-    ETATS_GIT,
-    _appeler_outil,
-    annuler_tour,
-    appeler_outil,
-    chemins_git,
-    chercher_conversations,
-    epingler_conversation,
-    epingler_message,
-    supprimer_media,
+    GIT_STATES,
+    _call_tool,
+    undo_turn,
+    call_tool,
+    git_paths,
+    search_conversations,
+    pin_conversation,
+    pin_message,
+    delete_media,
     git_commit,
-    git_etat,
-    git_message,
-    lire_utf8,
-    manifeste_annulable,
-    retablir_fichier,
-    revue_tour,
+    git_state,
+    git_message_of,
+    read_utf8,
+    undoable_manifest,
+    restore_file,
+    turn_review,
 )
 
 
@@ -714,7 +714,7 @@ def definir_racine(chemin):
     if nouveau != RACINE:
         RACINE = nouveau
         PLAN["valide"] = False                      # le plan du projet et l'index de rappel appartiennent à l'ancien dossier
-        RAPPEL["signature"] = None
+        RECALL["signature"] = None
 
 
 # --------------------------------------------------------------------------- journal des actions (qui a modifié quoi, lancé quelle commande, avec quel accord)
