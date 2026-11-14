@@ -40,7 +40,11 @@ the answer is written as it arrives; Markdown is drawn and no HTML comes out of 
 a document and an image are attached, sent, shown in the message and kept when it is edited; a conversation is renamed and pinned; the options are chosen before or after the first message and kept by the server for that conversation only; a message is edited and the conversation goes on from it; a refusal of the server is shown and the message
 given back; themes; no overflow at 360 px.
 
-Not verified: a real engine, a real phone, a screen reader, other browsers than Chrome, automated accessibility checks (WCAG 2.2 AA is the target, no tool has been run yet).
+Accessibility: the automatic checks of axe-core (WCAG 2.0, 2.1 and 2.2, levels A and AA, contrast included) run in `tests/test_web_app_chat.py` on the Chat screen, a conversation, the options panel, the Models screen and
+a screen not built yet, in the light and the dark theme, and on Chat and Models at 360 px: **no violation**. The checker is proven by planting an image without text and an unreadable button, which it must find.
+It found one real defect on the way (the model list had no accessible name at 360 px), now fixed.
+What an automatic tool cannot judge is **not verified**: reading order and wording for a screen reader (never tried with one), keyboard-only use end to end (the controls are real buttons and fields, but no test walks the page with the Tab key),
+colour use beyond contrast, and the quality of the texts. Not verified either: a real engine, a real phone, other browsers than Chrome.
 
 | Present page | New interface |
 |---|---|

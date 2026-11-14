@@ -22,6 +22,7 @@ from lutin import web_app  # noqa: E402
 CHROME = next((c for c in (os.environ.get("CHROME"), shutil.which("google-chrome"), shutil.which("chromium"), shutil.which("chrome"),
                            r"C:\Program Files\Google\Chrome\Application\chrome.exe", r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
                            "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome") if c and Path(c).is_file()), None)
+AXE = Path(__file__).resolve().parent.parent / "frontend" / "node_modules" / "axe-core" / "axe.min.js"
 WATCH = "window.__violations = []; document.addEventListener('securitypolicyviolation', e => window.__violations.push(e.violatedDirective + ' ' + e.blockedURI));"
 TEXT = "(document.querySelector('.thread') || document.body).innerText"
 
@@ -286,6 +287,59 @@ class Chat(unittest.TestCase):
         p.attendre("document.querySelectorAll('.models .cards:not(.downloads) .card').length === 2")
         self.eventually(lambda: "gemma4:12b" not in T.INSTALLES, "the model was deleted on the engine")
         self.assertEqual(p.erreurs, [])
+        p.evaluer("location.hash = '#/chat'")
+
+    def axe_violations(self):
+        """The automatic accessibility checks of axe-core (a development dependency of frontend/) on the page as it is: WCAG 2.0, 2.1 and 2.2 levels A and AA, contrast included."""
+        p = self.page
+        if not p.evaluer("typeof axe === 'object'"):
+            p.evaluer(AXE.read_text(encoding="utf-8"))
+        return json.loads(p.evaluer("axe.run(document, {runOnly: {type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']}}).then(r => JSON.stringify(r.violations.map(v => ({id: v.id, impact: v.impact, help: v.help, nodes: v.nodes.slice(0, 4).map(n => n.target.join(' ') + ' :: ' + (n.failureSummary || '').split(String.fromCharCode(10)).slice(0, 3).join(' | '))}))))"))
+
+    def axe(self, where):
+        found = self.axe_violations()
+        self.assertEqual(found, [], "accessibility violations %s: %s" % (where, json.dumps(found, indent=1, ensure_ascii=False)))
+
+    def test_5c_automatic_accessibility_checks_are_clean_on_every_screen_in_both_themes(self):
+        if not AXE.is_file():
+            self.skipTest("axe-core is not installed (frontend/: npm ci)")
+        p = self.page
+        # The page forbids inline style attributes (its content security policy): the defect is built through the DOM, which the policy allows.
+        p.evaluer("""(() => { const image = document.createElement('img'); image.id = 'axe-probe'; image.src = '/icone.svg'; document.body.append(image);
+                   const button = document.createElement('button'); button.id = 'axe-probe-2'; button.textContent = 'low contrast';
+                   for (const [key, value] of Object.entries({position: 'fixed', top: '0', left: '0', zIndex: '9999', color: '#777', background: '#888'})) button.style[key] = value;
+                   document.body.append(button); })()""")
+        probe = {violation["id"] for violation in self.axe_violations()}
+        p.evaluer("document.querySelectorAll('#axe-probe, #axe-probe-2').forEach(e => e.remove())")
+        self.assertLessEqual({"image-alt", "color-contrast"}, probe, "the checker finds a defect that was planted on purpose: its silence means something")
+        for theme in ("light", "dark"):
+            p.evaluer("document.documentElement.setAttribute('data-theme', %s)" % js(theme))
+            p.evaluer("location.hash = '#/chat'")
+            p.attendre("!!document.querySelector('#message')")
+            self.axe("on the Chat screen (%s)" % theme)
+            p.evaluer("[...document.querySelectorAll('.list .entry')][0].click()")
+            p.attendre("!!document.querySelector('.thread')")
+            self.axe("on a conversation (%s)" % theme)
+            if not p.evaluer("!!document.querySelector('#options-panel')"):
+                p.evaluer("document.querySelector('.bar .toggle').click()")
+            p.attendre("!!document.querySelector('#options-panel')")
+            self.axe("with the options panel open (%s)" % theme)
+            p.evaluer("document.querySelector('.bar .toggle').click()")
+            p.evaluer("location.hash = '#/models'")
+            p.attendre("!!document.querySelector('.models')")
+            self.axe("on the Models screen (%s)" % theme)
+            p.evaluer("location.hash = '#/settings'")
+            p.attendre("!!document.querySelector('main h1')")
+            self.axe("on a screen that is not there yet (%s)" % theme)
+        p.commande("Emulation.setDeviceMetricsOverride", width=360, height=740, deviceScaleFactor=1, mobile=True)
+        try:
+            for screen in ("chat", "models"):
+                p.evaluer("location.hash = '#/%s'" % screen)
+                p.attendre("!!document.querySelector('#message, .models')")
+                self.axe("on the %s screen at 360 px (%s)" % (screen, theme))
+        finally:
+            p.commande("Emulation.clearDeviceMetricsOverride")
+        p.evaluer("document.documentElement.removeAttribute('data-theme')")
         p.evaluer("location.hash = '#/chat'")
 
     def test_6_nothing_overflows_at_360_px_and_another_area_says_it_is_not_there_yet(self):

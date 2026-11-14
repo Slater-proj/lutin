@@ -915,8 +915,14 @@
       display: inline-flex;
     }
 
+    /* The label of the model list is hidden from the eyes but kept for screen readers (display: none would remove the name of the list). */
     .model span {
-      display: none;
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
     }
 
     select {
