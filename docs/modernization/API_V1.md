@@ -129,6 +129,13 @@ the six `actions` (`install`, `uninstall`, `reinstall`, `start`, `stop`, `update
 `DELETE /api/v1/engines/{id}/task` asks the running task to stop (what was downloaded is kept). It is the machinery of the present page (`lutin.engines`), under English names.
 Not in v1 yet: the settings of an engine (address, key, folders, variant) and the catalogue of external servers.
 
+## First launch
+
+`GET /api/v1/setup` answers `{"done", "needed", "skipped"}`: `needed` says the guide of the first launch should be shown (the maintainer's rule: after the first installation on a new machine).
+A machine counts as new only if **nothing** shows a past use: no flag of the guide, no conversation, no settings file, no installed model. The first two are cheap and decided before the engine is asked,
+so an existing installation whose engine is only stopped for a moment never sees the guide. `POST /api/v1/setup/complete` (right `configurator`; `{"skipped": true}` when it was skipped) records that it is over.
+The flag is the file `setup.json` of the data folder.
+
 ## Models
 
 `GET /api/v1/models` gives what the model selector needs: `engine`, `running`, `current`, `models` (`[{"name", "size_bytes"}]`, the size may be null) and

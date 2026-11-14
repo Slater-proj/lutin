@@ -533,6 +533,47 @@ def cancel_engine_task(request):
     return {"cancelled": bool(_engines.annuler_tache(_known_engine(request.params["id"]).id))}
 
 
+# ------------------------------------------------------------------------------------------------------------------------ setup
+# The guide of the first launch (docs/modernization/GUIDED_SETUP.md): shown after the first installation on a NEW machine, never on an installation that already lives.
+# « New » is proven by the absence of everything an installation leaves: the flag of this guide, conversations, a settings file, an installed model. An existing installation that
+# is only stopped for a moment (its engine does not answer) therefore never sees the guide.
+SETUP_FILE = "setup.json"
+
+
+def _setup_path():
+    return _m.DONNEES / SETUP_FILE
+
+
+def _has_history():
+    """Conversations or a settings file: signs of an installation that has been used. Cheap, and decided before the engine is asked."""
+    return bool(_m.conv_liste()) or (_m.DONNEES / "reglages.json").is_file()
+
+
+def setup_state():
+    stored = _storage.lire_json(_setup_path(), {})
+    if stored.get("done"):
+        return {"done": True, "needed": False, "skipped": bool(stored.get("skipped"))}
+    if _has_history():
+        return {"done": False, "needed": False, "skipped": False}
+    # Nothing proves a past use: the last proof is a model already installed (a machine where Ollama was set up before Lutin).
+    return {"done": False, "needed": not _m.etat_moteur()["installes"], "skipped": False}
+
+
+@route("GET", "/setup", SESSION)
+def setup(request):
+    """`needed`: the guide of the first launch should be shown. `done`: it was finished or skipped. An installation that already lived is never `needed`."""
+    return setup_state()
+
+
+@route("POST", "/setup/complete", CONFIGURATOR)
+def complete_setup(request):
+    """Records that the guide is over, finished or skipped (`{"skipped": true}`): it is not shown again."""
+    if set(request.body) - {"skipped"} or not isinstance(request.body.get("skipped", False), bool):
+        raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("skipped"))
+    _storage.ecrire_atomique(_setup_path(), json.dumps({"done": True, "skipped": bool(request.body.get("skipped"))}))
+    return setup_state()
+
+
 # --------------------------------------------------------------------------------------------------------- conversations
 def _summary(entry):
     return {"id": entry["id"], "title": entry.get("titre", ""), "updated_at": entry.get("maj", ""), "message_count": int(entry.get("messages") or 0),
