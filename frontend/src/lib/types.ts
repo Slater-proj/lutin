@@ -41,6 +41,25 @@ export interface Conversation {
   messages: StoredMessage[];
 }
 
+export interface Settings {
+  mode: "general" | "technical" | "scenario" | "research" | "chat";
+  thinking: boolean;
+  web: boolean;
+  dry_run: boolean;
+  num_predict: number;
+}
+
+export interface ConversationOptions {
+  mode: "general" | "technical" | "scenario" | "research" | "chat" | "mission";
+  thinking: boolean;
+  web: boolean;
+  dry_run: boolean;
+  auto_approve_writes: boolean;
+  auto_approve_commands: boolean;
+  num_predict: number;
+  mission_hours: number;
+}
+
 export interface Download {
   name: string;
   state: "downloading" | "done" | "failed";

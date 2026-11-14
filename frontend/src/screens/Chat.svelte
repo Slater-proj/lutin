@@ -2,11 +2,12 @@
   // The Chat screen: the conversations, the one that is open, the answer as it is written, and what Lutin asks before it acts.
   import { onMount } from "svelte";
   import Icon from "../components/Icon.svelte";
+  import Options from "../components/Options.svelte";
   import Thread from "../components/Thread.svelte";
   import { api, ApiError, streamTurn } from "../lib/api";
   import { t } from "../lib/messages";
   import { applyEvent, newTurn, storedToItems, type LiveTurn } from "../lib/turn";
-  import type { Conversation, ConversationSummary, Models, Status } from "../lib/types";
+  import type { Conversation, ConversationOptions, ConversationSummary, Models, Settings, Status } from "../lib/types";
 
   let { status, onchanged }: { status: Status | null; onchanged: () => void } = $props();
 
@@ -21,6 +22,8 @@
   let scroller = $state<HTMLElement | null>(null);
   let box = $state<HTMLTextAreaElement | null>(null);
   let renaming = $state(false);
+  let options = $state<ConversationOptions | null>(null);
+  let optionsToSend = $state<Partial<ConversationOptions>>({}); // chosen before the conversation exists: sent when the first message creates it
   let titleDraft = $state("");
   let titleBox = $state<HTMLInputElement | null>(null);
   let editing = $state<number | null>(null); // the stored position of the message being rewritten
@@ -53,9 +56,35 @@
     models = await api<Models>("GET", "/models");
   }
 
+  /** What a new conversation starts with: the settings of the machine, and the two automatic approvals off. */
+  async function newConversationOptions(): Promise<ConversationOptions> {
+    const settings = await api<Settings>("GET", "/settings");
+    return { mode: settings.mode, thinking: settings.thinking, web: settings.web, dry_run: settings.dry_run, auto_approve_writes: false, auto_approve_commands: false, num_predict: settings.num_predict, mission_hours: 8 };
+  }
+
+  async function changeOptions(patch: Partial<ConversationOptions>): Promise<void> {
+    if (options) options = { ...options, ...patch };
+    if (conversation === null) {
+      optionsToSend = { ...optionsToSend, ...patch };
+      return;
+    }
+    const id = conversation.id;
+    await guarded(async () => {
+      try {
+        options = await api<ConversationOptions>("PATCH", `/conversations/${encodeURIComponent(id)}/options`, patch);
+      } catch (cause) {
+        // The change was shown at once; the server did not keep it: what is on screen must be what the server holds, above all for an approval.
+        options = await api<ConversationOptions>("GET", `/conversations/${encodeURIComponent(id)}/options`).catch(() => options);
+        throw cause;
+      }
+    });
+  }
+
   async function open(id: string): Promise<void> {
     await guarded(async () => {
       conversation = await api<Conversation>("GET", `/conversations/${encodeURIComponent(id)}`);
+      options = await api<ConversationOptions>("GET", `/conversations/${encodeURIComponent(id)}/options`);
+      optionsToSend = {};
       listOpen = false;
       renaming = false;
       cancelEdit();
@@ -67,7 +96,11 @@
     problem = "";
     listOpen = false;
     renaming = false;
+    optionsToSend = {};
     cancelEdit();
+    void guarded(async () => {
+      options = await newConversationOptions();
+    });
   }
 
   function startRename(): void {
@@ -127,6 +160,10 @@
     await guarded(async () => {
       if (conversation === null) {
         conversation = await api<Conversation>("POST", "/conversations", {});
+        if (Object.keys(optionsToSend).length) {
+          options = await api<ConversationOptions>("PATCH", `/conversations/${encodeURIComponent(conversation.id)}/options`, optionsToSend);
+          optionsToSend = {};
+        }
       }
       const id = conversation.id;
       const from = editing;
@@ -222,6 +259,7 @@
   onMount(() => {
     void guarded(async () => {
       await Promise.all([loadList(), loadModels()]);
+      options = await newConversationOptions();
     });
   });
 </script>
@@ -327,6 +365,7 @@
           </div>
         </div>
       {/if}
+      {#if options}<Options {options} onchange={changeOptions} />{/if}
       {#if editing !== null}
         <p class="editing"><span>{t("chat.editing")}</span><button type="button" class="link" onclick={cancelEdit}>{t("chat.cancel")}</button></p>
       {/if}

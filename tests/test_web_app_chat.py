@@ -9,6 +9,7 @@ import json
 import os
 import shutil
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -41,6 +42,15 @@ class Chat(unittest.TestCase):
         cls.page.commande("Page.addScriptToEvaluateOnNewDocument", source=WATCH)
         cls.page.aller(T.BASE + "/app/")
         cls.page.attendre("!!document.querySelector('#message')")
+
+    def eventually(self, check, what, seconds=5):
+        """The page shows a change at once and the server keeps it a moment later: wait for the server, do not read it on the spot."""
+        end = time.time() + seconds
+        while time.time() < end:
+            if check():
+                return
+            time.sleep(0.05)
+        self.fail("never true within %s s: %s" % (seconds, what))
 
     def picture(self, name):
         folder = os.environ.get("LUTIN_SCREENSHOTS")
@@ -137,6 +147,49 @@ class Chat(unittest.TestCase):
         self.assertNotIn("Left as it was.", text, "and what followed it is gone")
         self.assertIn("Hello from the fake engine.", text, "what came before is kept")
         self.assertEqual(p.evaluer("[document.querySelectorAll('.thread .mine').length, !!document.querySelector('.editing')]"), [2, False])
+        self.assertEqual(p.erreurs, [])
+
+    def test_3d_the_options_of_a_conversation_are_chosen_on_the_page_and_kept_by_the_server(self):
+        p = self.page
+        p.evaluer("document.querySelector('.bar .toggle').click()")
+        p.attendre("!!document.querySelector('#options-panel')")
+        self.assertEqual(p.evaluer("[...document.querySelectorAll('.approvals input')].map(i => i.checked)"), [False, False], "the automatic approvals start off")
+        self.assertFalse(p.evaluer("!!document.querySelector('.bar .auto')"))
+        p.evaluer("document.querySelectorAll('.approvals input')[1].click()")
+        p.attendre("!!document.querySelector('.bar .auto')")
+        self.assertIn("commandes", p.evaluer("document.querySelector('.bar .auto').innerText"), "an approval that is on stays visible while the panel is shut")
+        conversation = p.evaluer("document.querySelector('.list .entry[aria-current=true]') && 'open'")
+        self.assertEqual(conversation, "open")
+        stored = [c for c in T.lire("/api/etat")["conversations"] if c["titre"] == "Renamed on the page"][0]["id"]
+        self.eventually(lambda: T.A.options_lire(stored).get("auto_commandes") is True, "auto_commandes stored on the server, for this conversation")
+        p.evaluer("(() => { const s = document.querySelector('#options-panel select'); s.value = 'mission'; s.dispatchEvent(new Event('change', {bubbles: true})); })()")
+        p.attendre("document.querySelectorAll('#options-panel select').length === 2")
+        self.eventually(lambda: T.A.options_lire(stored).get("mode") == "mission", "mode stored on the server")
+        self.picture("3d-options")
+        p.evaluer("(() => { const s = document.querySelector('#options-panel select'); s.value = 'general'; s.dispatchEvent(new Event('change', {bubbles: true})); })()")
+        p.evaluer("document.querySelectorAll('.approvals input')[1].click()")
+        p.attendre("!document.querySelector('.bar .auto')")
+        self.assertEqual(p.erreurs, [])
+
+    def test_3e_options_chosen_before_the_first_message_apply_to_the_conversation_it_creates(self):
+        p = self.page
+        p.evaluer("[...document.querySelectorAll('.list .new')].forEach(b => b.click())")
+        p.attendre("!!document.querySelector('.welcome')")
+        p.attendre("!!document.querySelector('.bar .toggle')")
+        if not p.evaluer("!!document.querySelector('#options-panel')"):
+            p.evaluer("document.querySelector('.bar .toggle').click()")
+        p.attendre("!!document.querySelector('#options-panel')")
+        p.evaluer("document.querySelectorAll('.approvals input')[0].click()")
+        T.SCENARIO[:] = [[{"content": "Done with the option."}]]
+        self.write("Message with an option chosen first")
+        p.evaluer("document.querySelector('.composer button[type=submit]').click()")
+        p.attendre(TEXT + ".includes('Done with the option.')")
+        p.attendre("!!document.querySelector('.composer button[type=submit]')")
+        created = [c for c in T.lire("/api/etat")["conversations"] if c["titre"].startswith("Message with an option")][0]["id"]
+        self.eventually(lambda: T.A.options_lire(created).get("auto_ecriture") is True, "the option chosen before the conversation existed was applied to it")
+        self.assertEqual(p.evaluer("document.querySelector('.bar .auto').innerText.includes('fichiers')"), True)
+        p.evaluer("document.querySelectorAll('.approvals input')[0].click()")
+        p.attendre("!document.querySelector('.bar .auto')")
         self.assertEqual(p.erreurs, [])
 
     def test_4_a_refusal_of_the_server_is_shown_and_the_message_is_given_back(self):
