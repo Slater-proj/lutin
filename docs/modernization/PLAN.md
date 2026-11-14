@@ -81,7 +81,7 @@ Way back: every renaming commit is mechanical and reverts cleanly; the data migr
 
 - Foundation: project layout, build integrated to the wheel, design tokens, light and dark themes, the base components, the five areas (Chat, Agents, Projects, Models, Settings).
 - Then one screen at a time, each with its end-to-end tests, starting with Chat.
-- Onboarding: hardware detection, a recommended configuration with its size and compatibility explained, confirmation before any download.
+- Onboarding: hardware detection, a recommended configuration with its size and compatibility explained, confirmation before any download. **Designed in [GUIDED_SETUP.md](GUIDED_SETUP.md)** (the same guide serves the first launch and the Models screen); awaiting the maintainer's answers to its four questions.
 
 Acceptance, per screen: functional parity with the old page listed and checked; keyboard-only use possible; automated accessibility checks clean (target WCAG 2.2 AA);
 usable at 360 px wide; works with the network cable unplugged. The old page is removed only when every screen is accepted.
