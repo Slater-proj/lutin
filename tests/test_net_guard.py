@@ -34,6 +34,7 @@ class Internal(http.server.BaseHTTPRequestHandler):
 
     def _answer(self):
         RECEIVED.append((self.command, self.path, self.headers.get("X-Api-Key")))
+        self.rfile.read(int(self.headers.get("Content-Length") or 0))          # answering a POST without reading its body resets the caller's connection on Windows, now and then
         if self.path.startswith("/to-internal"):
             self.send_response(302)
             self.send_header("Location", "http://127.0.0.1:%d/admin/delete-everything" % PORT)
