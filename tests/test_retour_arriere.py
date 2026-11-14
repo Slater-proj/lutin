@@ -77,7 +77,7 @@ class SauvegardeAvant(Base):
         self.assertNotIn("lutin-0.1.0-20200101-000000.zip", restes, "les plus anciennes partent")
 
     def test_une_sauvegarde_impossible_ne_bloque_pas_la_mise_a_jour(self):
-        with mock.patch.object(cli.backup, "exporter", side_effect=OSError("disque plein")), \
+        with mock.patch.object(cli.backup, "export", side_effect=OSError("disque plein")), \
                 mock.patch.object(cli.updates, "derniere_release", lambda depot: ("0.23.0", "https://exemple/lutin.whl")):
             (code, avant, apres), faux = self.lancer(faux=Faux(version_apres="0.23.0"))
         self.assertEqual(code, 0)

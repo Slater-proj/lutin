@@ -116,26 +116,41 @@ def collisions(tree, old_names):
     return problems
 
 
-def plan(module, mapping):
+def chain_names(module, files):
+    """Every name the module is imported under in some file, and its own name: `cli.backup.export` is a use when `backup` is one of them."""
+    names = {module}
+    for path, text, tree in files:
+        aliases, _ = uses_of(module, tree, False)
+        names |= aliases
+    return names
+
+
+def plan(module, mapping, sweep=False):
     own_path = PACKAGE / (module + ".py")
     if not own_path.is_file():
         sys.exit("no such module: " + module)
     own_text, own_tree = parse(own_path)
     defined = set(top_level_names(own_tree))
     for old, new in mapping.items():
+        if sweep:
+            if new not in defined:
+                sys.exit("--sweep: `{}` is not defined in {}: this is for names that were already renamed there".format(new, module))
+            continue
         if old not in defined:
             sys.exit("`{}` is not a top-level name of {}".format(old, module))
         if new in defined or not re.match(r"^[A-Za-z_][A-Za-z0-9_]*$", new):
             sys.exit("`{}` cannot be the new name of `{}` (already defined, or not an identifier)".format(new, old))
-    clash = collisions(own_tree, set(mapping))
-    if clash:
-        sys.exit("refused, the name is also a local or an argument: " + ", ".join("{} (line {})".format(n, l) for n, l in clash))
-    clash = collisions(own_tree, set(mapping.values()))          # the new name would be hidden inside a function that has a variable of that name
-    if clash:
-        sys.exit("refused, the NEW name is already a local or an argument of this module: " + ", ".join("{} (line {})".format(n, l) for n, l in clash))
+    if not sweep:
+        clash = collisions(own_tree, set(mapping))
+        if clash:
+            sys.exit("refused, the name is also a local or an argument: " + ", ".join("{} (line {})".format(n, l) for n, l in clash))
+        clash = collisions(own_tree, set(mapping.values()))          # the new name would be hidden inside a function that has a variable of that name
+        if clash:
+            sys.exit("refused, the NEW name is already a local or an argument of this module: " + ", ".join("{} (line {})".format(n, l) for n, l in clash))
     changes, checks = {}, []
     files = [(path,) + parse(path) for path in python_files()]
     targets = [(module, dict(mapping))]
+    chains = {module: chain_names(module, files)}
     # A module that imports the name BY NAME and does not rename it re-exports it (`core` does for many modules): `core.old` is then a use of the name too.
     for path, text, tree in files:
         if path != own_path and path.parent == PACKAGE:
@@ -143,17 +158,17 @@ def plan(module, mapping):
             taken = {orig: mapping[orig] for local, orig in imported.items() if orig in mapping and local == orig}
             if taken:
                 targets.append((path.stem, taken))
+                chains[path.stem] = chain_names(path.stem, files)
     for path, text, tree in files:
         own = path == own_path
         edits = Edits(text)
         for index, (target, wanted_map) in enumerate(targets):
             aliases, imported = uses_of(target, tree, own and index == 0)
             if own and index == 0:
-                outside_none(edits, tree, mapping)
+                if not sweep:
+                    outside_none(edits, tree, mapping)
                 continue
-            if not aliases and not imported:
-                continue
-            outside_uses(edits, tree, target, wanted_map, aliases, imported)
+            outside_uses(edits, tree, target, wanted_map, aliases, imported, chains[target])
         if edits.found:
             changes[path] = edits.result()
         checks += string_checks(path, tree, set(mapping))
@@ -178,11 +193,12 @@ def outside_none(edits, tree, mapping):
                         edits.add(node.lineno, match.start(), match.end(), mapping[name])
 
 
-def outside_uses(edits, tree, target, mapping, aliases, imported):
+def outside_uses(edits, tree, target, mapping, aliases, imported, chain):
     """In another file: `from .target import old`, `alias.old`, and the uses of a name imported without a new local name."""
     wanted = {local: mapping[orig] for local, orig in imported.items() if orig in mapping}
     for node in ast.walk(tree):
-        if isinstance(node, ast.Attribute) and node.attr in mapping and isinstance(node.value, ast.Name) and node.value.id in aliases:
+        if isinstance(node, ast.Attribute) and node.attr in mapping and (
+                (isinstance(node.value, ast.Name) and node.value.id in aliases) or (isinstance(node.value, ast.Attribute) and node.value.attr in chain)):
             edits.add(node.end_lineno, node.end_col_offset - len(node.attr.encode("utf-8")), node.end_col_offset, mapping[node.attr])
         elif isinstance(node, ast.ImportFrom) and (node.module or "").split(".")[-1] == target and (node.level >= 1 or (node.module or "").startswith("lutin.")):
             for item in node.names:
@@ -198,7 +214,9 @@ def outside_uses(edits, tree, target, mapping, aliases, imported):
                         wanted[item.name] = mapping[item.name]
         elif isinstance(node, ast.Call):
             function = node.func
-            patched = isinstance(function, ast.Attribute) and function.attr == "object" and len(node.args) >= 2 and isinstance(node.args[0], ast.Name) and node.args[0].id in aliases
+            first = node.args[0] if node.args else None
+            patched = isinstance(function, ast.Attribute) and function.attr == "object" and len(node.args) >= 2 and (
+                (isinstance(first, ast.Name) and first.id in aliases) or (isinstance(first, ast.Attribute) and first.attr in chain))
             if patched and isinstance(node.args[1], ast.Constant) and node.args[1].value in mapping:
                 constant = node.args[1]
                 edits.add(constant.lineno, constant.col_offset + 1, constant.end_col_offset - 1, mapping[constant.value])
@@ -240,6 +258,7 @@ def main(argv):
     parser.add_argument("pairs", nargs="*", help="old=new")
     parser.add_argument("--list", action="store_true")
     parser.add_argument("--apply", action="store_true")
+    parser.add_argument("--sweep", action="store_true", help="the names were already renamed in the module: only look for the uses that were missed")
     args = parser.parse_args(argv)
     module = args.module.removesuffix(".py")
     if args.list:
@@ -259,7 +278,7 @@ def main(argv):
     mapping = dict(pair.split("=", 1) for pair in args.pairs)
     if not mapping:
         parser.error("give old=new pairs, or --list")
-    changes, checks = plan(module, mapping)
+    changes, checks = plan(module, mapping, args.sweep)
     for path, new_text in changes.items():
         print("{} {}".format("WRITE" if args.apply else "WOULD CHANGE", path.relative_to(ROOT).as_posix()))
         if args.apply:
