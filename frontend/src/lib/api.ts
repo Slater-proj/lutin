@@ -43,7 +43,7 @@ export async function api<T>(method: "GET" | "POST" | "PATCH" | "DELETE", path: 
 }
 
 /** Sends a message and calls `onEvent` for each event of the answer, until the stream ends. A refusal before the stream throws an ApiError. */
-export async function streamTurn(conversationId: string, body: { message: string; model?: string }, onEvent: (event: TurnEvent) => void, signal?: AbortSignal): Promise<void> {
+export async function streamTurn(conversationId: string, body: { message: string; model?: string; replace_from?: number }, onEvent: (event: TurnEvent) => void, signal?: AbortSignal): Promise<void> {
   const response = await send("POST", `/conversations/${encodeURIComponent(conversationId)}/turns`, body, signal);
   const parser = lineParser(onEvent);
   if (!response.body) {

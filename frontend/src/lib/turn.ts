@@ -10,7 +10,8 @@ export type Block =
   | { kind: "dry_run"; title: string; detail: string; diff: string }
   | { kind: "error"; message: string };
 
-export type Item = { role: "user"; text: string } | { role: "assistant"; blocks: Block[] };
+/** `index` is the position of the message in the stored conversation: what `replace_from` takes to answer again from it. */
+export type Item = { role: "user"; text: string; index: number } | { role: "assistant"; blocks: Block[] };
 
 export interface Approval {
   id: string;
@@ -105,9 +106,9 @@ export function storedToItems(messages: StoredMessage[]): Item[] {
     }
     return answer;
   };
-  for (const message of messages) {
+  for (const [index, message] of messages.entries()) {
     if (message.role === "user") {
-      items.push({ role: "user", text: message.content ?? "" });
+      items.push({ role: "user", text: message.content ?? "", index });
       answer = null;
     } else if (message.role === "assistant") {
       const blocks = blocksOfAnswer();

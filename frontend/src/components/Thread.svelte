@@ -1,10 +1,11 @@
 <script lang="ts">
   // The messages of a conversation: what is stored, then the message just sent and the answer being written.
   import { t } from "../lib/messages";
+  import Icon from "./Icon.svelte";
   import Markdown from "./Markdown.svelte";
   import type { Block, Item, LiveTurn } from "../lib/turn";
 
-  let { items, pending, live }: { items: Item[]; pending: string; live: LiveTurn | null } = $props();
+  let { items, pending, live, onedit }: { items: Item[]; pending: string; live: LiveTurn | null; onedit?: (index: number, text: string) => void } = $props();
 
   function shown(value: unknown): string {
     if (value === null || value === undefined) return "";
@@ -50,9 +51,14 @@
 <ol class="thread">
   {#each items as item, index (index)}
     {#if item.role === "user"}
-      <li class="user">
-        <h2 class="visually-hidden">{t("chat.you")}</h2>
-        <p class="text">{item.text}</p>
+      <li class="mine">
+        {#if onedit}
+          <button type="button" class="edit" onclick={() => onedit(item.index, item.text)}><Icon name="pencil" size={16} /><span class="visually-hidden">{t("chat.edit")}</span></button>
+        {/if}
+        <div class="user">
+          <h2 class="visually-hidden">{t("chat.you")}</h2>
+          <p class="text">{item.text}</p>
+        </div>
       </li>
     {:else}
       <li class="assistant">
@@ -62,9 +68,11 @@
     {/if}
   {/each}
   {#if pending}
-    <li class="user">
-      <h2 class="visually-hidden">{t("chat.you")}</h2>
-      <p class="text">{pending}</p>
+    <li class="mine">
+      <div class="user">
+        <h2 class="visually-hidden">{t("chat.you")}</h2>
+        <p class="text">{pending}</p>
+      </div>
     </li>
   {/if}
   {#if live}
@@ -108,8 +116,46 @@
     min-width: 0;
   }
 
+  .thread > li.mine {
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--space-1);
+  }
+
+  .edit {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: var(--target);
+    height: var(--target);
+    border: 0;
+    border-radius: var(--radius-pill);
+    background: transparent;
+    color: var(--color-text-muted);
+    cursor: pointer;
+  }
+
+  .edit:hover {
+    background: var(--color-surface-raised);
+    color: var(--color-text);
+  }
+
+  /* With a mouse, the button shows when the message is pointed at or reached with the keyboard; on a touch screen it is always there. */
+  @media (hover: hover) {
+    .edit {
+      opacity: 0;
+    }
+
+    .mine:hover .edit,
+    .edit:focus-visible {
+      opacity: 1;
+    }
+  }
+
   .user {
-    align-self: flex-end;
+    min-width: 0;
     max-width: 85%;
     padding: var(--space-3) var(--space-4);
     border-radius: var(--radius-lg) var(--radius-lg) var(--radius-sm) var(--radius-lg);

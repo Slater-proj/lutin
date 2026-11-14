@@ -16,6 +16,8 @@
     trash: ["M4 7h16", "M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2", "M6 7l1 12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-12"],
     menu: ["M4 6h16", "M4 12h16", "M4 18h16"],
     close: ["M6 6l12 12", "M18 6L6 18"],
+    pencil: ["M4 20h4L19 9l-4-4L4 16z", "M13.5 6.5l4 4"],
+    pin: ["M9 4h6l-1 6 3 3H7l3-3z", "M12 13v7"],
   } as const;
 
   export type IconName = keyof typeof SHAPES;

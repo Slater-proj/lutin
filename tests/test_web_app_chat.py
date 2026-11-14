@@ -106,6 +106,39 @@ class Chat(unittest.TestCase):
         self.assertTrue(p.evaluer("[...document.querySelectorAll('.thread details summary')].some(s => s.innerText.includes('modifier'))"), "the tool call stays visible in the stored conversation")
         self.assertEqual(p.erreurs, [])
 
+    def test_3b_the_conversation_is_renamed_and_pinned(self):
+        p = self.page
+        p.evaluer("document.querySelector('.rename-button').click()")
+        p.attendre("document.activeElement && document.activeElement.id === 'title'")
+        p.evaluer("(() => { const box = document.querySelector('#title'); box.value = 'Renamed on the page'; box.dispatchEvent(new Event('input', {bubbles: true})); box.form.requestSubmit(); })()")
+        p.attendre("document.querySelector('header h1') && document.querySelector('header h1').innerText === 'Renamed on the page'")
+        self.assertEqual(p.evaluer("document.querySelector('.list .entry .title').innerText"), "Renamed on the page")
+        p.evaluer("document.querySelector('.pin-button').click()")
+        p.attendre("document.querySelector('.pin-button').getAttribute('aria-pressed') === 'true'")
+        self.assertTrue(p.evaluer("!!document.querySelector('.list .entry .tag')"), "the pin shows in the list")
+        stored = [c for c in T.lire("/api/etat")["conversations"] if c["titre"] == "Renamed on the page"]
+        self.assertEqual([c.get("epingle") for c in stored], [True], "renamed and pinned on the server, not only on the page")
+        self.assertEqual(p.erreurs, [])
+
+    def test_3c_a_message_is_edited_and_the_conversation_goes_on_from_it(self):
+        p = self.page
+        before = p.evaluer("document.querySelectorAll('.thread .mine').length")
+        self.assertEqual(before, 2)
+        p.evaluer("document.querySelectorAll('.thread .mine .edit')[1].click()")
+        self.assertEqual(p.evaluer("[document.querySelector('#message').value, !!document.querySelector('.editing')]"), ["Change the file", True])
+        T.SCENARIO[:] = [[{"content": "Answer to the edited message."}]]
+        self.write("Say hello instead")
+        p.evaluer("document.querySelector('.composer button[type=submit]').click()")
+        p.attendre(TEXT + ".includes('Answer to the edited message.')")
+        p.attendre("!!document.querySelector('.composer button[type=submit]')")
+        text = p.evaluer(TEXT)
+        self.assertIn("Say hello instead", text)
+        self.assertNotIn("Change the file", text, "the message that was edited is replaced")
+        self.assertNotIn("Left as it was.", text, "and what followed it is gone")
+        self.assertIn("Hello from the fake engine.", text, "what came before is kept")
+        self.assertEqual(p.evaluer("[document.querySelectorAll('.thread .mine').length, !!document.querySelector('.editing')]"), [2, False])
+        self.assertEqual(p.erreurs, [])
+
     def test_4_a_refusal_of_the_server_is_shown_and_the_message_is_given_back(self):
         p = self.page
         with mock.patch.object(T.A, "TOURS_SIMULTANES", 0):

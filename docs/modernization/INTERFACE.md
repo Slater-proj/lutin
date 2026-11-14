@@ -20,8 +20,9 @@ This page says what exists, what was verified and how, and what is missing. It i
 ## Chat
 
 Verified end to end in a real Chrome against a fake engine (`tests/test_web_app_chat.py`): page loads without any policy violation; a message is sent and
-the answer is written as it arrives; an action waits for an approval given on the page and a refusal leaves the file untouched; a refusal of the server
-is shown and the message given back; themes; no overflow at 360 px.
+the answer is written as it arrives; Markdown is drawn and no HTML comes out of an answer; an action waits for an approval given on the page and a refusal leaves the file untouched;
+a conversation is renamed and pinned; a message is edited and the conversation goes on from it; a refusal of the server is shown and the message
+given back; themes; no overflow at 360 px.
 
 Not verified: a real engine, a real phone, a screen reader, other browsers than Chrome, automated accessibility checks (WCAG 2.2 AA is the target, no tool has been run yet).
 
@@ -36,8 +37,8 @@ Not verified: a real engine, a real phone, a screen reader, other browsers than 
 | Context gauge, speed, task list | done, during the turn only |
 | Markdown in answers: headings, lists, tables, quotes, links, code blocks with a copy button | done — own parser (`frontend/src/lib/markdown.ts`), no HTML ever interpreted |
 | Syntax colouring of code, diagrams (Mermaid), formulas | missing |
-| Rename, pin a conversation | missing (routes exist in v1) |
-| Edit a message and answer again from it | missing (`replace_from` exists in v1) |
+| Rename, pin a conversation | done |
+| Edit a message and answer again from it | done |
 | Images and attached documents | missing (upload routes are not in v1 yet) |
 | Per-conversation options: mode, automatic approvals, mission | missing (not in v1 yet) |
 | Conversations led on another machine | missing (not in v1 yet) |

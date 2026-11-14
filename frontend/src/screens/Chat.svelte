@@ -20,10 +20,15 @@
   let listOpen = $state(false);
   let scroller = $state<HTMLElement | null>(null);
   let box = $state<HTMLTextAreaElement | null>(null);
+  let renaming = $state(false);
+  let titleDraft = $state("");
+  let titleBox = $state<HTMLInputElement | null>(null);
+  let editing = $state<number | null>(null); // the stored position of the message being rewritten
+  let cut = $state<number | null>(null); // while the new answer is written, what followed that message is no longer shown
 
   const SUGGESTIONS = ["chat.suggest_explain", "chat.suggest_write", "chat.suggest_fix", "chat.suggest_summarise"] as const;
 
-  const items = $derived(storedToItems(conversation?.messages ?? []));
+  const items = $derived(storedToItems((conversation?.messages ?? []).slice(0, cut ?? undefined)));
   const busy = $derived(live !== null);
 
   function explain(cause: unknown): string {
@@ -52,6 +57,8 @@
     await guarded(async () => {
       conversation = await api<Conversation>("GET", `/conversations/${encodeURIComponent(id)}`);
       listOpen = false;
+      renaming = false;
+      cancelEdit();
     });
   }
 
@@ -59,6 +66,50 @@
     conversation = null;
     problem = "";
     listOpen = false;
+    renaming = false;
+    cancelEdit();
+  }
+
+  function startRename(): void {
+    if (!conversation) return;
+    titleDraft = conversation.title;
+    renaming = true;
+  }
+
+  async function saveRename(): Promise<void> {
+    if (!renaming) return; // Enter then the loss of focus: saved once
+    renaming = false;
+    const current = conversation;
+    const title = titleDraft.trim();
+    if (!current || !title || title === current.title) return;
+    await guarded(async () => {
+      conversation = await api<Conversation>("PATCH", `/conversations/${encodeURIComponent(current.id)}`, { title });
+      await loadList();
+    });
+  }
+
+  function onTitleKey(event: KeyboardEvent): void {
+    if (event.key === "Escape") renaming = false;
+  }
+
+  async function togglePin(): Promise<void> {
+    const current = conversation;
+    if (!current) return;
+    await guarded(async () => {
+      conversation = await api<Conversation>("PATCH", `/conversations/${encodeURIComponent(current.id)}`, { pinned: !current.pinned });
+      await loadList();
+    });
+  }
+
+  function startEdit(index: number, text: string): void {
+    editing = index;
+    draft = text;
+    box?.focus();
+  }
+
+  function cancelEdit(): void {
+    if (editing !== null) draft = "";
+    editing = null;
   }
 
   async function remove(entry: ConversationSummary): Promise<void> {
@@ -78,20 +129,27 @@
         conversation = await api<Conversation>("POST", "/conversations", {});
       }
       const id = conversation.id;
+      const from = editing;
       draft = "";
+      editing = null;
+      cut = from;
       pending = message;
       live = newTurn();
       try {
-        await streamTurn(id, { message }, (event) => {
+        await streamTurn(id, from === null ? { message } : { message, replace_from: from }, (event) => {
           if (live) live = applyEvent(live, event);
         });
       } catch (cause) {
-        if (live !== null && live.blocks.length === 0) draft = message; // refused before anything was written: the message is given back
+        if (live !== null && live.blocks.length === 0) {
+          draft = message; // refused before anything was written: the message is given back, still as an edit if it was one
+          editing = from;
+        }
         throw cause;
       } finally {
         // What is stored is the truth: the conversation is read again, whether the stream ended well or was cut.
         const stored = await api<Conversation>("GET", `/conversations/${encodeURIComponent(id)}`).catch(() => null);
         if (stored) conversation = stored;
+        cut = null;
         pending = "";
         live = null;
         await loadList().catch(() => undefined);
@@ -150,6 +208,10 @@
   }
 
   $effect(() => {
+    if (renaming) titleBox?.focus();
+  });
+
+  $effect(() => {
     // Follow the answer while it is written: each change of the conversation or of the live turn scrolls to the end.
     void items;
     void live;
@@ -178,7 +240,7 @@
           <li>
             <button type="button" class="entry" aria-current={conversation?.id === entry.id ? "true" : undefined} onclick={() => open(entry.id)}>
               <span class="title">{entry.title || t("chat.untitled")}</span>
-              {#if entry.pinned}<span class="tag">{t("chat.pinned")}</span>{/if}
+              {#if entry.pinned}<span class="tag"><Icon name="pin" size={14} /><span class="visually-hidden">{t("chat.pinned")}</span></span>{/if}
             </button>
             <button type="button" class="icon remove" onclick={() => remove(entry)} disabled={busy && conversation?.id === entry.id}>
               <Icon name="trash" size={16} /><span class="visually-hidden">{t("chat.delete")} : {entry.title || t("chat.untitled")}</span>
@@ -192,7 +254,20 @@
   <section class="main">
     <header>
       <button type="button" class="icon open-list" onclick={() => (listOpen = true)}><Icon name="menu" /><span class="visually-hidden">{t("chat.show_list")}</span></button>
-      <h1>{conversation?.title || t("chat.untitled")}</h1>
+      {#if renaming}
+        <form class="rename" onsubmit={(event) => (event.preventDefault(), void saveRename())}>
+          <label class="visually-hidden" for="title">{t("chat.title")}</label>
+          <input id="title" maxlength="120" bind:value={titleDraft} bind:this={titleBox} onkeydown={onTitleKey} onblur={saveRename} />
+        </form>
+      {:else}
+        <h1>{conversation?.title || t("chat.untitled")}</h1>
+        {#if conversation}
+          <button type="button" class="icon rename-button" onclick={startRename} disabled={busy}><Icon name="pencil" size={18} /><span class="visually-hidden">{t("chat.rename")}</span></button>
+          <button type="button" class="icon pin-button" aria-pressed={conversation.pinned} onclick={togglePin} disabled={busy}>
+            <Icon name="pin" size={18} /><span class="visually-hidden">{t(conversation.pinned ? "chat.unpin" : "chat.pin")}</span>
+          </button>
+        {/if}
+      {/if}
       <label class="model">
         <span>{t("chat.model")}</span>
         <select onchange={chooseModel} disabled={busy || !models || models.models.length === 0}>
@@ -222,7 +297,7 @@
           </ul>
         </div>
       {:else}
-        <Thread {items} {pending} {live} />
+        <Thread {items} {pending} {live} onedit={busy ? undefined : startEdit} />
       {/if}
     </div>
 
@@ -251,6 +326,9 @@
             <button type="button" class="button" onclick={() => answerMemory("file")}>{t("memory.file")}</button>
           </div>
         </div>
+      {/if}
+      {#if editing !== null}
+        <p class="editing"><span>{t("chat.editing")}</span><button type="button" class="link" onclick={cancelEdit}>{t("chat.cancel")}</button></p>
       {/if}
       <form class="composer" onsubmit={onSubmit}>
         <label class="visually-hidden" for="message">{t("chat.message")}</label>
@@ -391,8 +469,13 @@
   }
 
   .tag {
-    font-size: var(--text-xs);
-    color: var(--color-text-muted);
+    display: inline-flex;
+    flex: none;
+    color: var(--color-accent-text);
+  }
+
+  .entry .title {
+    flex: 1;
   }
 
   /* With a mouse, the delete button appears when the line is pointed at or reached with the keyboard; on a touch screen it is always there. */
@@ -442,6 +525,50 @@
     font-weight: 650;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  .rename {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .rename input {
+    flex: 1;
+    min-width: 0;
+    min-height: 2.5rem;
+    padding: 0 var(--space-3);
+    border: 1px solid var(--color-accent);
+    border-radius: var(--radius-md);
+    background: var(--color-surface);
+    font-weight: 650;
+  }
+
+  .pin-button[aria-pressed="true"] {
+    background: var(--color-accent-soft);
+    color: var(--color-accent-text);
+  }
+
+  .editing {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-md);
+    background: var(--color-accent-soft);
+    font-size: var(--text-sm);
+  }
+
+  .link {
+    min-height: 2rem;
+    padding: 0 var(--space-2);
+    border: 0;
+    background: transparent;
+    color: var(--color-accent-text);
+    font-weight: 650;
+    text-decoration: underline;
+    cursor: pointer;
   }
 
   .model {
