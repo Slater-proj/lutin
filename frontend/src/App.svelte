@@ -1,6 +1,7 @@
 <script lang="ts">
   // The shell: five areas, one navigation, the theme. Each area is a screen under screens/.
   import { onMount } from "svelte";
+  import Icon, { type IconName } from "./components/Icon.svelte";
   import { api, ApiError } from "./lib/api";
   import { t, type MessageKey } from "./lib/messages";
   import { applyTheme, nextTheme, readTheme, type Theme } from "./lib/theme";
@@ -48,14 +49,18 @@
 <a class="skip" href="#main">{t("a11y.skip")}</a>
 <div class="shell">
   <nav class="rail" aria-label={t("nav.label")}>
-    <p class="brand">Lutin</p>
+    <p class="brand"><img src="/logo.svg" alt="" width="30" height="30" /><span>Lutin</span></p>
     <ul>
       {#each AREAS as name (name)}
-        <li><a href={"#/" + name} aria-current={area === name ? "page" : undefined}>{t(("nav." + name) as MessageKey)}</a></li>
+        <li>
+          <a href={"#/" + name} aria-current={area === name ? "page" : undefined}>
+            <Icon name={name as IconName} /><span>{t(("nav." + name) as MessageKey)}</span>
+          </a>
+        </li>
       {/each}
     </ul>
     <div class="foot">
-      <button type="button" class="button quiet" onclick={changeTheme}>{t(("theme." + theme) as MessageKey)}</button>
+      <button type="button" class="theme" onclick={changeTheme}><Icon name={theme as IconName} size={18} /><span>{t(("theme." + theme) as MessageKey)}</span></button>
       <a class="legacy" href="/">{t("legacy.link")}</a>
       {#if status}<p class="version">Lutin {status.version}</p>{/if}
     </div>
@@ -94,16 +99,20 @@
   .rail {
     display: flex;
     flex-direction: column;
-    gap: var(--space-4);
+    gap: var(--space-5);
     padding: var(--space-4) var(--space-3);
     border-right: 1px solid var(--color-border);
     background: var(--color-surface);
   }
 
   .brand {
-    padding: 0 var(--space-3);
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: var(--space-1) var(--space-2);
     font-size: var(--text-lg);
     font-weight: 700;
+    letter-spacing: -0.01em;
   }
 
   ul {
@@ -118,35 +127,61 @@
   li a {
     display: flex;
     align-items: center;
+    gap: var(--space-3);
     min-height: var(--target);
     padding: 0 var(--space-3);
     border-radius: var(--radius-md);
-    color: var(--color-text);
+    color: var(--color-text-muted);
+    font-weight: 500;
     text-decoration: none;
   }
 
   li a:hover {
     background: var(--color-surface-raised);
+    color: var(--color-text);
   }
 
   li a[aria-current="page"] {
     background: var(--color-accent-soft);
-    font-weight: 600;
+    color: var(--color-accent-text);
+    font-weight: 650;
   }
 
   .foot {
     display: flex;
     flex-direction: column;
-    align-items: flex-start;
+    align-items: stretch;
     gap: var(--space-2);
     margin-top: auto;
     font-size: var(--text-sm);
   }
 
+  .theme {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-height: var(--target);
+    padding: 0 var(--space-3);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: transparent;
+    color: var(--color-text-muted);
+    cursor: pointer;
+  }
+
+  .theme:hover {
+    background: var(--color-surface-raised);
+    color: var(--color-text);
+  }
+
   .legacy,
   .version {
-    padding: 0 var(--space-4);
+    padding: 0 var(--space-3);
     color: var(--color-text-muted);
+  }
+
+  .version {
+    font-size: var(--text-xs);
   }
 
   main {
@@ -165,7 +200,7 @@
     background: var(--color-danger-soft);
   }
 
-  /* Narrow screens (a phone held upright, down to 360 px): the navigation becomes a bar at the bottom. */
+  /* Narrow screens (a phone held upright, down to 360 px): the navigation becomes a bar at the bottom, an icon above each name. */
   @media (max-width: 720px) {
     .shell {
       grid-template-columns: minmax(0, 1fr);
@@ -175,7 +210,7 @@
     .rail {
       grid-row: 2;
       flex-direction: row;
-      padding: var(--space-1);
+      padding: var(--space-1) var(--space-1) max(var(--space-1), env(safe-area-inset-bottom));
       border-top: 1px solid var(--color-border);
       border-right: 0;
     }
@@ -196,8 +231,11 @@
     }
 
     li a {
+      flex-direction: column;
       justify-content: center;
-      padding: 0 var(--space-1);
+      gap: 2px;
+      min-height: 3.25rem;
+      padding: var(--space-1);
       font-size: var(--text-xs);
     }
   }

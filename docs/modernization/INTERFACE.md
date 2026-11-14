@@ -12,7 +12,7 @@ This page says what exists, what was verified and how, and what is missing. It i
 | A shipped build that no longer matches its sources is detected | done — same hash computed by the build and by Python |
 | Built by the CI before tests and packaging; wheel checked for the built files | written, **never run**: the branch has not been pushed |
 | Design tokens, light and dark themes, theme kept per browser | done |
-| Shell with the five areas (Chat, Agents, Projects, Models, Settings) | done; four areas say « not here yet » and link to the present page |
+| Shell with the five areas (Chat, Agents, Projects, Models, Settings), icons, navigation bar at the bottom on a phone | done; four areas say « not here yet » and link to the present page |
 | Texts in English and French | done — a unit test fails on a missing French text |
 | Base components (button, card, field…) as shared components | not yet: styles are shared classes, components come with the second screen |
 | Offline: no font, no CDN, nothing fetched from another origin | done — enforced by the policy |
@@ -29,12 +29,13 @@ Not verified: a real engine, a real phone, a screen reader, other browsers than 
 |---|---|
 | List, open, create, delete a conversation | done |
 | Send a message, answer written as it arrives, stop | done |
-| Reasoning, tool calls and results, notices, dry runs, errors | done (plain text) |
+| Reasoning, tool calls and results, notices, dry runs, errors | done |
 | Approval of an action, with its diff | done |
 | « Summary or progress sheet » question of a long conversation | done (the route is tested; the card has no end-to-end test) |
 | Choice of the model | done (changes the setting, as the present page does) |
 | Context gauge, speed, task list | done, during the turn only |
-| Markdown, code blocks, diagrams in answers | **missing**: answers are shown as plain text |
+| Markdown in answers: headings, lists, tables, quotes, links, code blocks with a copy button | done — own parser (`frontend/src/lib/markdown.ts`), no HTML ever interpreted |
+| Syntax colouring of code, diagrams (Mermaid), formulas | missing |
 | Rename, pin a conversation | missing (routes exist in v1) |
 | Edit a message and answer again from it | missing (`replace_from` exists in v1) |
 | Images and attached documents | missing (upload routes are not in v1 yet) |

@@ -58,6 +58,10 @@ class Chat(unittest.TestCase):
         self.assertEqual(p.evaluer("document.querySelector('nav a[aria-current=page]').getAttribute('href')"), "#/chat")
         self.assertEqual(p.evaluer("document.documentElement.lang"), "fr")
         self.assertIn("Que puis-je faire pour toi", p.evaluer("document.body.innerText"))
+        p.evaluer("document.querySelector('.suggestions .chip').click()")
+        self.assertEqual(p.evaluer("[document.querySelector('#message').value, document.activeElement.id]"), ["Explique-moi ce que contient ce dossier", "message"],
+                         "a suggestion fills the field and puts the cursor in it")
+        p.evaluer("(() => { const box = document.querySelector('#message'); box.value = ''; box.dispatchEvent(new Event('input', {bubbles: true})); })()")
         p.attendre("document.querySelector('header select').options.length > 0 && !document.querySelector('header select').disabled")
         self.assertIn(T.INSTALLES[0], p.evaluer("[...document.querySelector('header select').options].map(o => o.value)"))
         self.assertEqual(p.evaluer("window.__violations"), [], "the content security policy blocked something the page needs")
@@ -66,7 +70,7 @@ class Chat(unittest.TestCase):
 
     def test_2_a_message_is_sent_and_the_answer_is_written(self):
         p = self.page
-        T.SCENARIO[:] = [[{"content": "Hello from "}, {"content": "the fake engine."}]]
+        T.SCENARIO[:] = [[{"content": "Hello from **the fake** eng"}, {"content": "ine.\n\n- one\n- two\n\n```python\nprint('<b>hi</b>')\n```\n"}]]
         self.write("First message of the test")
         p.evaluer("document.querySelector('.composer button[type=submit]').click()")
         p.attendre(TEXT + ".includes('Hello from the fake engine.')")
@@ -75,6 +79,9 @@ class Chat(unittest.TestCase):
         self.assertIn("First message of the test", text)
         self.assertEqual(text.count("Hello from the fake engine."), 1, "the stored answer replaces the one that was being written")
         self.assertEqual(p.evaluer("document.querySelector('#message').value"), "")
+        self.assertEqual(p.evaluer("[document.querySelector('.thread strong').innerText, document.querySelectorAll('.thread .markdown ul li').length]"), ["the fake", 2], "Markdown is drawn")
+        self.assertEqual(p.evaluer("document.querySelector('.thread figure.code pre').innerText"), "print('<b>hi</b>')", "code is shown as written")
+        self.assertEqual(p.evaluer("document.querySelectorAll('.thread b, .thread script').length"), 0, "an answer never becomes HTML")
         self.assertEqual(p.evaluer("document.querySelectorAll('.list .entry').length"), 1)
         self.assertEqual(p.evaluer("document.querySelector('.list .entry').getAttribute('aria-current')"), "true")
         self.assertEqual(p.erreurs, [])
@@ -89,7 +96,7 @@ class Chat(unittest.TestCase):
         p.evaluer("document.querySelector('.composer button[type=submit]').click()")
         p.attendre("!!document.querySelector('.card .button.danger')")
         self.assertIn("return 2", p.evaluer("document.querySelector('.card').innerText"))
-        self.assertTrue(p.evaluer("!!document.querySelector('.composer .button.danger')"), "while Lutin works, the button stops the turn")
+        self.assertTrue(p.evaluer("!!document.querySelector('.composer .stop')"), "while Lutin works, the button stops the turn")
         self.picture("3-approval")
         p.evaluer("document.querySelector('.card .button.danger').click()")
         p.attendre(TEXT + ".includes('Left as it was.')")

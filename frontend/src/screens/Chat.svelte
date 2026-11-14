@@ -1,6 +1,7 @@
 <script lang="ts">
   // The Chat screen: the conversations, the one that is open, the answer as it is written, and what Lutin asks before it acts.
   import { onMount } from "svelte";
+  import Icon from "../components/Icon.svelte";
   import Thread from "../components/Thread.svelte";
   import { api, ApiError, streamTurn } from "../lib/api";
   import { t } from "../lib/messages";
@@ -18,6 +19,9 @@
   let problem = $state("");
   let listOpen = $state(false);
   let scroller = $state<HTMLElement | null>(null);
+  let box = $state<HTMLTextAreaElement | null>(null);
+
+  const SUGGESTIONS = ["chat.suggest_explain", "chat.suggest_write", "chat.suggest_fix", "chat.suggest_summarise"] as const;
 
   const items = $derived(storedToItems(conversation?.messages ?? []));
   const busy = $derived(live !== null);
@@ -128,6 +132,11 @@
     });
   }
 
+  function suggest(text: string): void {
+    draft = text;
+    box?.focus();
+  }
+
   function onKey(event: KeyboardEvent): void {
     if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
       event.preventDefault();
@@ -158,8 +167,8 @@
 <div class="chat" class:list-open={listOpen}>
   <aside class="list" aria-label={t("chat.conversations")}>
     <div class="list-head">
-      <button type="button" class="button primary" onclick={startNew}>{t("chat.new")}</button>
-      <button type="button" class="button quiet close" onclick={() => (listOpen = false)}>{t("chat.hide_list")}</button>
+      <button type="button" class="new" onclick={startNew}><Icon name="plus" size={18} /><span>{t("chat.new")}</span></button>
+      <button type="button" class="icon close" onclick={() => (listOpen = false)}><Icon name="close" /><span class="visually-hidden">{t("chat.hide_list")}</span></button>
     </div>
     {#if conversations.length === 0}
       <p class="empty">{t("chat.empty_list")}</p>
@@ -171,8 +180,8 @@
               <span class="title">{entry.title || t("chat.untitled")}</span>
               {#if entry.pinned}<span class="tag">{t("chat.pinned")}</span>{/if}
             </button>
-            <button type="button" class="button quiet remove" onclick={() => remove(entry)} disabled={busy && conversation?.id === entry.id}>
-              <span aria-hidden="true">×</span><span class="visually-hidden">{t("chat.delete")} : {entry.title || t("chat.untitled")}</span>
+            <button type="button" class="icon remove" onclick={() => remove(entry)} disabled={busy && conversation?.id === entry.id}>
+              <Icon name="trash" size={16} /><span class="visually-hidden">{t("chat.delete")} : {entry.title || t("chat.untitled")}</span>
             </button>
           </li>
         {/each}
@@ -182,7 +191,7 @@
 
   <section class="main">
     <header>
-      <button type="button" class="button quiet open-list" onclick={() => (listOpen = true)}>{t("chat.show_list")}</button>
+      <button type="button" class="icon open-list" onclick={() => (listOpen = true)}><Icon name="menu" /><span class="visually-hidden">{t("chat.show_list")}</span></button>
       <h1>{conversation?.title || t("chat.untitled")}</h1>
       <label class="model">
         <span>{t("chat.model")}</span>
@@ -203,8 +212,14 @@
       {#if status && !status.engine.running}<p class="banner">{t("chat.engine_stopped", status.engine.name)}</p>{/if}
       {#if items.length === 0 && !pending && !live}
         <div class="welcome">
-          <p class="hello">{t("chat.welcome")}</p>
+          <img src="/logo.svg" alt="" width="64" height="64" />
+          <h2>{t("chat.welcome")}</h2>
           <p>{t("chat.welcome_hint")}</p>
+          <ul class="suggestions" aria-label={t("chat.suggestions")}>
+            {#each SUGGESTIONS as key (key)}
+              <li><button type="button" class="chip" onclick={() => suggest(t(key))}>{t(key)}</button></li>
+            {/each}
+          </ul>
         </div>
       {:else}
         <Thread {items} {pending} {live} />
@@ -239,11 +254,11 @@
       {/if}
       <form class="composer" onsubmit={onSubmit}>
         <label class="visually-hidden" for="message">{t("chat.message")}</label>
-        <textarea id="message" rows="2" placeholder={t("chat.placeholder")} aria-describedby="keys" bind:value={draft} onkeydown={onKey}></textarea>
+        <textarea id="message" rows="1" placeholder={t("chat.placeholder")} aria-describedby="keys" bind:value={draft} bind:this={box} onkeydown={onKey}></textarea>
         {#if busy}
-          <button type="button" class="button danger" onclick={stop}>{t("chat.stop")}</button>
+          <button type="button" class="round stop" onclick={stop}><Icon name="stop" /><span class="visually-hidden">{t("chat.stop")}</span></button>
         {:else}
-          <button type="submit" class="button primary" disabled={!draft.trim()}>{t("chat.send")}</button>
+          <button type="submit" class="round send" disabled={!draft.trim()}><Icon name="send" /><span class="visually-hidden">{t("chat.send")}</span></button>
         {/if}
       </form>
       <p class="meter" id="keys">
@@ -269,12 +284,55 @@
     padding: var(--space-3);
     overflow-y: auto;
     border-right: 1px solid var(--color-border);
+    scrollbar-width: thin;
   }
 
   .list-head {
     display: flex;
-    flex-direction: column;
     gap: var(--space-2);
+  }
+
+  .new {
+    display: flex;
+    flex: 1;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2);
+    min-height: var(--target);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-surface);
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .new:hover {
+    border-color: var(--color-accent);
+    color: var(--color-accent-text);
+  }
+
+  .icon {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: var(--target);
+    height: var(--target);
+    border: 0;
+    border-radius: var(--radius-md);
+    background: transparent;
+    color: var(--color-text-muted);
+    cursor: pointer;
+  }
+
+  .icon:hover:not(:disabled) {
+    background: var(--color-surface-raised);
+    color: var(--color-text);
+  }
+
+  .icon:disabled {
+    cursor: not-allowed;
+    opacity: 0.4;
   }
 
   .close,
@@ -285,7 +343,7 @@
   .list ul {
     display: flex;
     flex-direction: column;
-    gap: var(--space-1);
+    gap: 2px;
     margin: 0;
     padding: 0;
     list-style: none;
@@ -294,7 +352,16 @@
   .list li {
     display: flex;
     align-items: center;
-    gap: var(--space-1);
+    border-radius: var(--radius-md);
+  }
+
+  .list li:hover,
+  .list li:focus-within {
+    background: var(--color-surface-raised);
+  }
+
+  .list li:has(.entry[aria-current="true"]) {
+    background: var(--color-accent-soft);
   }
 
   .entry {
@@ -312,13 +379,9 @@
     cursor: pointer;
   }
 
-  .entry:hover {
-    background: var(--color-surface-raised);
-  }
-
   .entry[aria-current="true"] {
-    background: var(--color-accent-soft);
-    font-weight: 600;
+    color: var(--color-accent-text);
+    font-weight: 650;
   }
 
   .title {
@@ -332,13 +395,25 @@
     color: var(--color-text-muted);
   }
 
-  .remove {
-    min-width: var(--target);
-    padding: 0;
-    color: var(--color-text-muted);
+  /* With a mouse, the delete button appears when the line is pointed at or reached with the keyboard; on a touch screen it is always there. */
+  @media (hover: hover) {
+    .remove {
+      opacity: 0;
+    }
+
+    .list li:hover .remove,
+    .list li:focus-within .remove {
+      opacity: 1;
+    }
+  }
+
+  .remove:hover:not(:disabled) {
+    background: transparent;
+    color: var(--color-danger);
   }
 
   .empty {
+    padding: var(--space-2);
     color: var(--color-text-muted);
     font-size: var(--text-sm);
   }
@@ -354,6 +429,7 @@
     display: flex;
     align-items: center;
     gap: var(--space-3);
+    min-height: 3.5rem;
     padding: var(--space-2) var(--space-4);
     border-bottom: 1px solid var(--color-border);
   }
@@ -363,6 +439,7 @@
     min-width: 0;
     overflow: hidden;
     font-size: var(--text-md);
+    font-weight: 650;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
@@ -376,41 +453,78 @@
   }
 
   select {
-    min-height: var(--target);
+    min-height: 2.5rem;
     max-width: 14rem;
-    padding: 0 var(--space-2);
+    padding: 0 var(--space-3);
     border: 1px solid var(--color-border-strong);
-    border-radius: var(--radius-md);
+    border-radius: var(--radius-pill);
     background: var(--color-surface);
     color: var(--color-text);
+    cursor: pointer;
   }
 
   .scroll {
     flex: 1;
     min-height: 0;
     overflow-y: auto;
+    scrollbar-width: thin;
   }
 
   .welcome {
     display: flex;
     flex-direction: column;
-    gap: var(--space-2);
-    max-width: var(--measure);
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-3);
+    max-width: 38rem;
+    min-height: 100%;
     margin: 0 auto;
     padding: var(--space-6) var(--space-4);
+    text-align: center;
     color: var(--color-text-muted);
   }
 
-  .hello {
-    font-size: var(--text-lg);
-    font-weight: 600;
+  .welcome h2 {
+    margin: 0;
+    font-size: var(--text-xl);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1.2;
     color: var(--color-text);
+  }
+
+  .suggestions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-2);
+    width: 100%;
+    margin: var(--space-4) 0 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .chip {
+    width: 100%;
+    min-height: 3.5rem;
+    padding: var(--space-3) var(--space-4);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    background: var(--color-surface);
+    color: var(--color-text);
+    font-size: var(--text-sm);
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .chip:hover {
+    border-color: var(--color-accent);
+    background: var(--color-accent-soft);
   }
 
   .banner,
   .hint {
-    margin: var(--space-3) auto 0;
     max-width: var(--measure);
+    margin: var(--space-3) auto 0;
     padding: var(--space-2) var(--space-3);
     border-radius: var(--radius-md);
     background: var(--color-warning-soft);
@@ -423,15 +537,15 @@
     gap: var(--space-2);
     width: 100%;
     max-width: var(--measure);
-    max-height: 65%;
+    max-height: 70%;
     margin: 0 auto;
     padding: var(--space-2) var(--space-4) var(--space-3);
     overflow-y: auto;
   }
 
   .hint {
-    margin: 0;
     max-width: none;
+    margin: 0;
   }
 
   .problem {
@@ -445,21 +559,23 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-2);
-    padding: var(--space-3) var(--space-4);
-    border: 2px solid var(--color-accent);
+    padding: var(--space-4);
+    border: 1px solid var(--color-accent);
     border-radius: var(--radius-lg);
     background: var(--color-surface);
     box-shadow: var(--shadow-raised);
   }
 
   .card-head {
-    font-size: var(--text-sm);
-    font-weight: 600;
-    color: var(--color-text-muted);
+    font-size: var(--text-xs);
+    font-weight: 650;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--color-accent-text);
   }
 
   .card-title {
-    font-weight: 600;
+    font-weight: 650;
   }
 
   .pre {
@@ -470,9 +586,9 @@
   .card pre {
     max-height: 14rem;
     margin: 0;
-    padding: var(--space-2) var(--space-3);
+    padding: var(--space-3);
     overflow: auto;
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-md);
     background: var(--color-code-bg);
     white-space: pre-wrap;
     overflow-wrap: anywhere;
@@ -482,12 +598,26 @@
     display: flex;
     flex-wrap: wrap;
     gap: var(--space-2);
+    margin-top: var(--space-1);
   }
 
+  /* The field and its button are one rounded box; the box shows the focus of the field. */
   .composer {
     display: flex;
     align-items: flex-end;
     gap: var(--space-2);
+    padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-xl);
+    background: var(--color-surface);
+    box-shadow: var(--shadow-raised);
+  }
+
+  .composer:focus-within {
+    border-color: var(--color-accent);
+    box-shadow:
+      0 0 0 3px color-mix(in srgb, var(--color-accent) 35%, transparent),
+      var(--shadow-raised);
   }
 
   textarea {
@@ -495,16 +625,50 @@
     min-width: 0;
     min-height: var(--target);
     max-height: 12rem;
-    padding: var(--space-2) var(--space-3);
-    border: 1px solid var(--color-border-strong);
-    border-radius: var(--radius-md);
-    background: var(--color-surface);
-    resize: vertical;
+    padding: 0.6rem 0;
+    border: 0;
+    outline: none;
+    background: transparent;
+    resize: none;
+    field-sizing: content;
+  }
+
+  .round {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: var(--target);
+    height: var(--target);
+    border: 0;
+    border-radius: var(--radius-pill);
+    cursor: pointer;
+  }
+
+  .send {
+    background: var(--color-accent);
+    color: var(--color-on-accent);
+  }
+
+  .send:hover:not(:disabled) {
+    background: var(--color-accent-hover);
+  }
+
+  .send:disabled {
+    background: var(--color-surface-raised);
+    color: var(--color-text-muted);
+    cursor: not-allowed;
+  }
+
+  .stop {
+    background: var(--color-danger-soft);
+    color: var(--color-danger);
   }
 
   .meter {
     min-height: 1.4em;
     font-size: var(--text-xs);
+    text-align: center;
     color: var(--color-text-muted);
   }
 
@@ -530,7 +694,6 @@
     .close,
     .open-list {
       display: inline-flex;
-      align-items: center;
     }
 
     .model span {
@@ -539,6 +702,20 @@
 
     select {
       max-width: 9rem;
+    }
+  }
+
+  @media (max-width: 520px) {
+    header {
+      padding: var(--space-2);
+    }
+
+    .suggestions {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .welcome h2 {
+      font-size: 1.4rem;
     }
   }
 </style>

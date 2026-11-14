@@ -1,6 +1,7 @@
 <script lang="ts">
   // The messages of a conversation: what is stored, then the message just sent and the answer being written.
   import { t } from "../lib/messages";
+  import Markdown from "./Markdown.svelte";
   import type { Block, Item, LiveTurn } from "../lib/turn";
 
   let { items, pending, live }: { items: Item[]; pending: string; live: LiveTurn | null } = $props();
@@ -14,7 +15,7 @@
 {#snippet blocksView(blocks: Block[])}
   {#each blocks as block, index (index)}
     {#if block.kind === "text"}
-      <p class="text">{block.text}</p>
+      <Markdown source={block.text} />
     {:else if block.kind === "thinking"}
       <details class="aside">
         <summary>{t("chat.thinking")}</summary>
@@ -55,7 +56,7 @@
       </li>
     {:else}
       <li class="assistant">
-        <h2 class="who">{t("chat.assistant")}</h2>
+        <h2 class="who"><img src="/logo.svg" alt="" width="22" height="22" />{t("chat.assistant")}</h2>
         {@render blocksView(item.blocks)}
       </li>
     {/if}
@@ -68,7 +69,7 @@
   {/if}
   {#if live}
     <li class="assistant">
-      <h2 class="who">{t("chat.assistant")}</h2>
+      <h2 class="who"><img src="/logo.svg" alt="" width="22" height="22" />{t("chat.assistant")}</h2>
       {@render blocksView(live.blocks)}
       {#if live.tasks.length}
         <div class="tasks">
@@ -83,7 +84,7 @@
           </ul>
         </div>
       {/if}
-      <p class="status" aria-live="polite">{live.done ? "" : live.status || t("chat.working")}</p>
+      <p class="status" aria-live="polite">{#if !live.done}<span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>{live.status || t("chat.working")}{/if}</p>
     </li>
   {/if}
 </ol>
@@ -92,7 +93,7 @@
   .thread {
     display: flex;
     flex-direction: column;
-    gap: var(--space-4);
+    gap: var(--space-5);
     width: 100%;
     max-width: var(--measure);
     margin: 0 auto;
@@ -111,14 +112,16 @@
     align-self: flex-end;
     max-width: 85%;
     padding: var(--space-3) var(--space-4);
-    border-radius: var(--radius-lg);
+    border-radius: var(--radius-lg) var(--radius-lg) var(--radius-sm) var(--radius-lg);
     background: var(--color-accent-soft);
   }
 
   .who {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
     font-size: var(--text-sm);
-    font-weight: 600;
-    color: var(--color-text-muted);
+    font-weight: 650;
   }
 
   .text {
@@ -187,8 +190,47 @@
   }
 
   .status {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
     min-height: 1.5em;
     font-size: var(--text-sm);
     color: var(--color-text-muted);
+  }
+
+  /* Three dots that breathe while Lutin works; still when the system asks for less motion (styles/base.css). */
+  .dots {
+    display: inline-flex;
+    gap: 4px;
+  }
+
+  .dots i {
+    width: 6px;
+    height: 6px;
+    border-radius: var(--radius-pill);
+    background: var(--color-accent);
+    animation: breathe 1.2s ease-in-out infinite;
+  }
+
+  .dots i:nth-child(2) {
+    animation-delay: 0.15s;
+  }
+
+  .dots i:nth-child(3) {
+    animation-delay: 0.3s;
+  }
+
+  @keyframes breathe {
+    0%,
+    80%,
+    100% {
+      opacity: 0.25;
+      transform: scale(0.8);
+    }
+
+    40% {
+      opacity: 1;
+      transform: scale(1);
+    }
   }
 </style>
