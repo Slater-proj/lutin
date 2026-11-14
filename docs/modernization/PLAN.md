@@ -21,8 +21,8 @@ Sizes are relative (S, M, L, XL), not durations.
 | 2 | HTTP contract: schemas and contract tests, design of `/api/v1` | M | Access contract and design done ([API_V1.md](API_V1.md)); v1 started: dispatcher, status, settings, models, conversations, the turn stream, approvals (15 routes, `src/lutin/api_v1.py`). Next: engines, then the per-conversation options |
 | 3 | English: catalogues inverted, identifiers and modules renamed, data migration | L | Glossary and module names done ([GLOSSARY.md](GLOSSARY.md)); the rest not started |
 | 4 | Interface: foundation and design system, then screen by screen on `/api/v1` | XL | Started: foundation and a first Chat screen under `/app/`, not at parity — [INTERFACE.md](INTERFACE.md) |
-| 5 | Backend, targeted: route table, application context, agent loop split | L | Not started |
-| 6 | Retained differentiators: model router, projects, monitoring | M each | Not started |
+| 5 | Backend, targeted: route table, application context, agent runtime (loop split, tool table, approval rules, context manager) | L | Not started; widened by [ATOMIC_AGENT.md](ATOMIC_AGENT.md) |
+| 6 | Retained differentiators: evaluation first, then engine performance, SQLite memory, scheduler triggers, grammar tool calls, team mode; model router, projects, monitoring | M each | Not started; reordered by [ATOMIC_AGENT.md](ATOMIC_AGENT.md) |
 
 ### Step 1 — Security and reliability
 
@@ -90,14 +90,33 @@ Way back: the old page stays the default until parity (ADR 0002).
 
 ### Step 5 — Backend, targeted
 
-Only what the earlier steps showed to hurt: a route table in place of the two `if` chains, an explicit application context in place of module-level state
-(which is why each test file needs its own process today), the agent loop split into context building, model call, tool dispatch, approval and persistence, with explicit task states.
+Only what the earlier steps showed to hurt, and what the study of a comparable runtime ([ATOMIC_AGENT.md](ATOMIC_AGENT.md)) showed to be missing for a coherent architecture.
+One idea organises it: **one runtime owns a turn** (`run_turn`), and the web server, the terminal chat, the tray, the scheduler and the add-ons are frontends that call it.
 
-Acceptance: test files can share a process; no behaviour change (the contract tests of step 2 and the end-to-end tests of step 4 are the proof).
+1. A route table in place of the two `if` chains (v1 is its first user), an explicit application context in place of module-level state (which is why each test file needs its own process today).
+2. The agent loop split into context building, model call, tool dispatch, approval and persistence, with explicit turn states (running, waiting for approval, stalled, cancelled) that the interface and the scheduler can show.
+3. **A tool table**: for each tool its name (unchanged, ADR 0007), schema, `readonly`, approval category, resource class, result budget; read by the loop, the approval engine, the dry run and the scheduler's read-only mode (today these lists are written separately), with a conformance test per tool like the access test for routes.
+4. **Read-only batches**: calls of one step that only read run together, everything else stays sequential; events keep the order of the calls.
+5. **Approval rules**: deny > ask > allow; project rules can only ask or deny; answers « once », « this chat », « always » (stored as a command shape, listable and deletable); a hardline list that no rule overrides; named presets over today's two switches; the approval card of the new interface shows the three answers.
+6. **Context manager**: the prompt in two parts, a prefix that never changes inside a session and a tail that does, with a recall budget; the progress sheet stays as it is.
+7. **Engine capabilities**: a record per engine (grammar, slots, prompt cache, embeddings, tools through template) so that the loop adapts instead of assuming Ollama.
+
+Acceptance: test files can share a process; no behaviour change except 4 and 5 (the contract tests of step 2 and the end-to-end tests of step 4 are the proof for the rest); every tool has a table entry and a conformance test;
+the approval rules have tests for precedence, for a rule written by the model in the workspace, and for the hardline list.
 
 ### Step 6 — Differentiators
 
-Each starts with a short study of use and a prototype (ADR 0003 lists what is retained, deferred and dropped).
+Each starts with a short study of use and a prototype (ADR 0003 lists what is retained, deferred and dropped). Order, after the study of [ATOMIC_AGENT.md](ATOMIC_AGENT.md):
+
+1. **Evaluation first** (M): a deterministic suite of agent tasks on the fake engine and on a real small model, and a recorder/replayer of turns that fails when the prompt drifts. Every later item is judged by it; none of them is accepted on a feeling.
+2. **Engine performance** (S/M): measure the prompt tokens re-read at each step on llama.cpp and Ollama; audit the order of the prompt; send `cache_prompt` and keep one slot per conversation on llama.cpp; keep the API key out of the command line.
+3. **SQLite store** (M, inside the one-time data migration of step 3): index of conversations, notes and recall with FTS5, versioned facts about the user. The Python standard library is enough: still no dependency. Data on a local disk only (SQLite locking is unreliable on a network share). Backup before migration.
+4. **Scheduler triggers** (M): interval, cron (small parser, no dependency) and webhook triggers, retries with a bounded backoff, explicit terminal states, a « missed while off » line. Scheduled runs stay read-only; a task that must write is a mission started by a person.
+5. **Grammar-constrained tool calls** (M, experimental, llama.cpp only, opt-in): judged by the suite of item 1 on small models; the grammar follows the live list of tools (disabled tools, MCP); never the default until measured.
+6. **Team mode** (L, **needs the maintainer's decision**: it is a new feature and ADR 0003 froze new features during the migration): a planner that writes briefs, workers as missions on paired machines (or in sequence on one), each in its own git worktree, acceptance by the project's own checks, a review turn; budgets in hours, steps and machines; **local by default**, any cloud seat opt-in and shown as such. Its distinctive value is several paired machines working as one local team; on a single graphics card parallel workers are slower than one agent.
+7. Model router, projects, monitoring as before.
+
+Not retained from the study, with the reason in [ATOMIC_AGENT.md](ATOMIC_AGENT.md): a Node runtime or a Tauri/Electron shell, a private llama.cpp fork, a connector marketplace through an intermediary, telemetry on by default, traces stored in plaintext by default, automatic « reflection » that writes memory by itself, plugin hooks that can change tool calls, a one-flag « full trust », cloud as the default seat of a multi-agent run.
 
 ## Global rollback
 
