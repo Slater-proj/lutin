@@ -192,7 +192,7 @@ class ColibriRemplacement(unittest.TestCase):
         with mock.patch.object(engine_replace.os, "replace", capricieux), mock.patch.object(engine_replace.time, "sleep", lambda s: None):
             engine_replace.replace_folder(partiel, cible)
         self.assertEqual((cible / "coli").read_text(encoding="utf-8"), "x")
-        self.assertTrue(hasattr(colibri, "remplacer_dossier"), "colibri utilise le remplacement commun")
+        self.assertTrue(hasattr(colibri, "replace_folder"), "colibri utilise le remplacement commun")
 
 
 class SeuilVideoPourTousLesMoteurs(unittest.TestCase):

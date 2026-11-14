@@ -127,7 +127,7 @@ class DansLlamaCpp(unittest.TestCase):
     def test_telecharger_puis_lister_puis_supprimer(self):
         vrai = ollama_registry.download
         ollama_registry.download = lambda modele, dossier, progression=None: vrai(modele, dossier, progression, http=faux_http(), recuperer=faux_recuperer(TOUS))
-        self.addCleanup(setattr, ollama_registry, "telecharger", vrai)
+        self.addCleanup(setattr, ollama_registry, "download", vrai)
         self.m.telecharger_ollama("qwen3:8b", lambda *a: None)
         r = self.m.modeles()
         self.assertEqual(r["installes"], ["qwen3:8b"])
