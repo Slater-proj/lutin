@@ -224,7 +224,7 @@ class ModelesRetrouves(unittest.TestCase):
         self.assertIsNone(locations.models_elsewhere(["qwen3:8b"]), "Ollama voit ses modèles : rien à dire")
         ailleurs = locations.models_elsewhere([])
         self.assertEqual(ailleurs, (str(self.models), 1))
-        problemes = diagnostic.diagnostiquer(True, True, [], {}, docker=False, modeles_ailleurs=ailleurs)
+        problemes = diagnostic.diagnose(True, True, [], {}, docker=False, modeles_ailleurs=ailleurs)
         self.assertEqual([p["code"] for p in problemes], ["modeles_ailleurs"])
         self.assertIn("ne sont pas perdus", problemes[0]["texte"])
         self.assertEqual(problemes[0]["action"]["type"], "redemarrer_ollama")

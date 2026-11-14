@@ -67,7 +67,7 @@ def needs_tone(regles):
 
 
 def choose(regles, message, juger_ton=None):
-    """La première règle qui correspond au message {de, sujet, texte}, ou None. juger_ton(texte) -> un des TONS, appelé une seule fois et seulement si une règle le demande."""
+    """La première règle qui correspond au message {de, sujet, texte}, ou None. judge_tone(texte) -> un des TONS, appelé une seule fois et seulement si une règle le demande."""
     ton = []
 
     def le_ton():

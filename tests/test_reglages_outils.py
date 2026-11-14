@@ -29,7 +29,7 @@ class Outils(unittest.TestCase):
         self.assertEqual((A.DELAI_COMMANDE_S, A.SORTIE_MAX, A.LECTURE_MAX, A.CHERCHER_DELAI), (240, 9000, 7000, 25))
 
     def test_les_valeurs_absurdes_reviennent_dans_les_bornes(self):
-        r = RO.nettoyer({"outil_delai_commande_s": 99999, "outil_sortie_max": -5, "outil_lecture_max": "abc", "outil_chercher_delai_s": 0,
+        r = RO.clean({"outil_delai_commande_s": 99999, "outil_sortie_max": -5, "outil_lecture_max": "abc", "outil_chercher_delai_s": 0,
                          "outils_desactives": ["executer", "memoriser", "suivi", "n_importe_quoi"], "commandes_sans_accord": ["rm -rf x", "pytest -q", "git status && del x"], "dossiers_ignores_en_plus": ["data", "../x", "a/b"]})
         self.assertEqual((r["outil_delai_commande_s"], r["outil_sortie_max"], r["outil_lecture_max"], r["outil_chercher_delai_s"]), (3600, 2000, 7000, 5))
         self.assertEqual(r["outils_desactives"], ["executer"], "la mémoire et la fiche de suivi ne se coupent pas ici")

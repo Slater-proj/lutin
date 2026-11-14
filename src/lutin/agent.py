@@ -361,12 +361,12 @@ def amorcer_fiche(conv, r, emit=None):
 
 def outils_du_mode(r):
     """Les outils envoyés au modèle : ceux du mode (voir modes.py), sans web si la case « Web » est décochée ou en mode hors ligne, sans l'outil d'images s'il n'est pas branché."""
-    exclus = _modes.outils_exclus(r.get("mode"), [t["function"]["name"] for t in _m.OUTILS])
+    exclus = _modes.excluded_tools(r.get("mode"), [t["function"]["name"] for t in _m.OUTILS])
     if not r.get("web", True) or _hl.is_active():
         exclus |= OUTILS_WEB
     exclus |= set(r.get("outils_desactives") or [])                     # outils coupés par l'utilisateur (Réglages > Outils)
     if not _m.OUTIL:
-        exclus |= _modes.IMAGES
+        exclus |= _modes.IMAGE_TOOLS
     if r.get("memoire_longue") != "fichier":
         exclus.add("suivi")                                             # sans fiche de suivi, l'outil n'a pas de sens
     if not r.get("_mission"):
@@ -377,9 +377,9 @@ def outils_du_mode(r):
     if not addons.actif("voicestudio"):
         exclus |= {"voix_liste", "voix_parler", "voix_transcrire", "voix_cloner"}          # idem pour les outils de voix
     outils = [t for t in _m.OUTILS if t["function"]["name"] not in exclus]
-    if not _modes.sans_outils(r.get("mode")):
+    if not _modes.without_tools(r.get("mode")):
         try:
-            outils += _mcp.outils_exposes(_modes.lecture_seule(r.get("mode")))          # connecteurs MCP : seulement les outils autorisés un par un (voir mcp.py)
+            outils += _mcp.outils_exposes(_modes.read_only(r.get("mode")))          # connecteurs MCP : seulement les outils autorisés un par un (voir mcp.py)
         except Exception as erreur:  # noqa: BLE001  (un connecteur en panne ne doit pas empêcher de répondre)
             _m.journaliser("Connecteurs MCP : liste impossible ({!r}).".format(erreur))
     if any(t["function"]["name"] == "comfy_generer" for t in outils):
@@ -1010,7 +1010,7 @@ def supprimer_modele(modele):
 
 def consignes_systeme(r):
     contexte, memoire = _m.lire_memoire("CONTEXTE.md"), _m.lire_memoire("MEMOIRE.md")
-    mode = _modes.consigne(r["mode"])
+    mode = _modes.instruction(r["mode"])
     skills = _m.lister_skills()
     bloc_skills = ""
     if skills:
@@ -1200,7 +1200,7 @@ def compacter(conv, r, emit, forcer=False):
         if not nouveau_resume:                      # résumé vide : on garde tout plutôt que de perdre le début
             _m.journaliser("Résumé vide : conversation {} gardée entière.".format(conv.get("id")))
             return False
-        _archive.ajouter(conv["id"], ancien)                  # le résumé perd des détails : le début reste retrouvable (« rappeler »)
+        _archive.add(conv["id"], ancien)                  # le résumé perd des détails : le début reste retrouvable (« rappeler »)
         conv["resume"] = nouveau_resume
         conv["messages"] = [m for m in ancien if m.get("epingle")] + msgs[coupe:]          # les messages épinglés restent tels quels, en plus du résumé
         _decaler_scribe(conv, coupe, len([m for m in ancien if m.get("epingle")]))
@@ -1260,7 +1260,7 @@ def elaguer(conv, r, emit, forcer=False):
         if messages_non_lus(conv, coupe):
             raise ValueError(_t("La fiche de suivi n'a pas pu être mise à jour (le modèle ne répond pas ?) : rien n'est retiré, pour ne rien perdre. Réessaie dans un moment."))
     ancien = msgs[:coupe]
-    _archive.ajouter(conv["id"], ancien)
+    _archive.add(conv["id"], ancien)
     conv["messages"] = [m for m in ancien if m.get("epingle")] + msgs[coupe:]
     _decaler_scribe(conv, coupe, len([m for m in ancien if m.get("epingle")]))
     conv.pop("jetons", None)                                                    # le chiffre de contexte d'avant le retrait n'est plus vrai
@@ -1669,7 +1669,7 @@ def boucle_agent(conv, r, emit, ctx, stop):
             emit({"type": "etat", "texte": "Chargement du modèle en mémoire (30 s à 2 min la première fois, ou si ComfyUI lui a pris la carte)."})
         for tentative in range(3):
             contenu, pensee, appels = "", "", []
-            separateur = _pensee.Separateur()          # une réflexion laissée dans le texte (<think>…</think>) est rendue à part, comme celle que le moteur sépare lui-même
+            separateur = _pensee.Splitter()          # une réflexion laissée dans le texte (<think>…</think>) est rendue à part, comme celle que le moteur sépare lui-même
             rond, verifie_rond, raison_fin, rond_de_suite = False, 0, "", 0
             corps_t = corps if tentative == 0 else dict(corps, messages=ajuster_contexte(msgs_base, r["num_ctx"], 0.7 ** tentative, outils) + ([{"role": "user", "content": RAPPEL_APPEL}] if relance_outil else [{"role": "user", "content": RAPPEL_REPETITION}] if relance_repetition else [{"role": "user", "content": RAPPEL_VIDE}] if relance_vide else []), options=dict(corps["options"], temperature=0.3, **({"repeat_penalty": 1.15} if relance_repetition else {})), think=False if (relance_vide or relance_repetition) else corps["think"])
             if plat:

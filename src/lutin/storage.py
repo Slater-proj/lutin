@@ -50,7 +50,7 @@ def enregistrer_reglages(nouveau):
 
 def _enregistrer_reglages(nouveau):
     from . import tool_settings
-    tool_settings.verifier(nouveau)          # une commande dangereuse ou un outil inconnu est refusé avec une explication (le nettoyage ne l'ignorerait qu'en silence)
+    tool_settings.check(nouveau)          # une commande dangereuse ou un outil inconnu est refusé avec une explication (le nettoyage ne l'ignorerait qu'en silence)
     r = _m.reglages()
     mode_avant = r["mode"]
     moteur_avant, modele_avant = r.get("moteur") or "ollama", r["modele"]
@@ -75,7 +75,7 @@ def _enregistrer_reglages(nouveau):
     r["modeles_par_moteur"] = {k: v for k, v in par.items() if isinstance(k, str) and isinstance(v, str)}
     if r.get("mode") == "mission":
         r["mode"] = mode_avant                               # « mission longue » se choisit conversation par conversation, jamais comme mode des nouvelles conversations
-    if not _modes.valide(r["mode"]):
+    if not _modes.is_valid(r["mode"]):
         raise ValueError("Mode inconnu.")
     if not re.match(r"^[A-Za-z0-9_./:-]{1,100}$", str(r["modele"])):
         raise ValueError("Nom de modèle invalide.")
@@ -105,7 +105,7 @@ def _enregistrer_reglages(nouveau):
         raise ValueError(_t("Mémoire des longues conversations inconnue (resume, fichier ou demander)."))
     _m.nettoyer_echantillonnage(r)
     _m.nettoyer_ressources(r)
-    tool_settings.nettoyer(r)
+    tool_settings.clean(r)
     ecrire_atomique(_m.DONNEES / "reglages.json", json.dumps(dict(r, memoire_v=2), ensure_ascii=False, indent=1))
     return _m.reglages()
 
@@ -520,7 +520,7 @@ def nettoyer_options(brut):
             continue
         v = brut[k]
         if k == "mode":
-            if _modes.valide(v):
+            if _modes.is_valid(v):
                 sortie[k] = v
         elif k in ("num_predict", "mission_duree_h"):
             try:
@@ -595,7 +595,7 @@ def conv_supprimer(ident):
     from . import progress_sheet
     progress_sheet.delete(ident)                                  # la fiche de suivi disparaît avec la conversation
     from . import archive, embeddings
-    archive.supprimer(ident)                                # et le début archivé par le résumé
+    archive.remove(ident)                                # et le début archivé par le résumé
     embeddings.supprimer(ident)                             # et ses vecteurs de recherche par le sens
     try:
         options_chemin(ident).unlink(missing_ok=True)       # et ses options

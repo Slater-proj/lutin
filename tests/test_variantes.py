@@ -94,12 +94,12 @@ class ConseilMachine(unittest.TestCase):
     def test_le_conseil_apparait_dans_le_diagnostic_sans_masquer_une_erreur_et_se_laisse_ignorer(self):
         c = low_end_mode.advice(CPU, {"num_ctx": 24576, "reflexion": True})
         base = dict(ollama_actif=True, ollama_installe=True, installes=["qwen3:4b"], docker=False, conseils=c)
-        p, = diagnostic.diagnostiquer(reglages={"modele": "qwen3:4b", "conseil_machine": True}, **base)
+        p, = diagnostic.diagnose(reglages={"modele": "qwen3:4b", "conseil_machine": True}, **base)
         self.assertEqual((p["code"], p["niveau"], p["action"]["type"], p["action2"]["type"]), ("petite_machine", "info", "appliquer_conseil", "ignorer_conseil"))
-        self.assertEqual(diagnostic.diagnostiquer(reglages={"modele": "qwen3:4b", "conseil_machine": False}, **base), [], "ignoré")
-        erreurs = diagnostic.diagnostiquer(reglages={"modele": "qwen3:4b"}, **dict(base, installes=[]))
+        self.assertEqual(diagnostic.diagnose(reglages={"modele": "qwen3:4b", "conseil_machine": False}, **base), [], "ignoré")
+        erreurs = diagnostic.diagnose(reglages={"modele": "qwen3:4b"}, **dict(base, installes=[]))
         self.assertEqual([e["code"] for e in erreurs], ["aucun_modele"], "une vraie panne passe avant le conseil")
-        self.assertEqual(diagnostic.diagnostiquer(reglages={"modele": "qwen3:4b"}, **dict(base, conseils=[])), [])
+        self.assertEqual(diagnostic.diagnose(reglages={"modele": "qwen3:4b"}, **dict(base, conseils=[])), [])
 
 
 if __name__ == "__main__":

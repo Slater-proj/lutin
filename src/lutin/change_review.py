@@ -317,10 +317,10 @@ def _call_tool(nom, args, ctx):
         return _m.outil_chercher(args.get("motif", ""), args.get("dossier", "."), args.get("contexte", 0), args.get("fichiers", ""))
     if nom == "trouver":
         from . import find_tools
-        return find_tools.outil_trouver(args.get("motif", ""), args.get("dossier", "."))
+        return find_tools.tool_find(args.get("motif", ""), args.get("dossier", "."))
     if nom == "calculer":
         from . import find_tools
-        return find_tools.outil_calculer(args.get("expression", ""))
+        return find_tools.tool_calculate(args.get("expression", ""))
     if nom == "symboles":
         return _m.outil_symboles(args.get("nom", ""), args.get("dossier", "."))
     if nom == "lire_plusieurs":

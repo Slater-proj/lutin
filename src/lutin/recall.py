@@ -143,7 +143,7 @@ def file_chunks(f):
                 texte = "\n\n".join("[{}] {}".format("moi" if m.get("role") == "user" else "assistant", m.get("content", "")) for m in c.get("messages", []) if m.get("role") in ("user", "assistant") and m.get("content"))
                 if c.get("resume"):
                     texte = "# Résumé\n" + c["resume"] + "\n\n" + texte
-                archive = _archive.texte(c.get("id"))                         # ce que le résumé automatique a retiré de la conversation
+                archive = _archive.text_of(c.get("id"))                         # ce que le résumé automatique a retiré de la conversation
                 if archive:
                     texte = texte + "\n\n# Début de la conversation (avant le résumé)\n" + archive
                 for m_ in split_text(texte, nom):
@@ -165,7 +165,7 @@ def file_signature(f):
     sig = (st.st_mtime_ns, st.st_size)
     if f.parent.name == "conversations" and f.suffix.lower() == ".json":
         try:
-            sa = _archive.chemin(f.stem).stat()
+            sa = _archive.path_of(f.stem).stat()
             sig += (sa.st_mtime_ns, sa.st_size)
         except (OSError, ValueError):
             pass
@@ -366,7 +366,7 @@ def automatic_recalls(conv, r):
     """Passages des documents et des anciennes conversations liés à la dernière question, ajoutés au prompt sans que le modèle ait à les demander (mode scénariste par défaut).
     Renvoie (texte pour le prompt, liste des sources) ; vide si le réglage est coupé ou si rien de vraiment lié n'existe."""
     mode = r.get("rappels_auto", "scenario")
-    if mode == "jamais" or (mode == "scenario" and not _modes.rappels_par_defaut(r.get("mode"))):
+    if mode == "jamais" or (mode == "scenario" and not _modes.default_recalls(r.get("mode"))):
         return "", []
     question = next((m["content"] for m in reversed(conv["messages"]) if m.get("role") == "user" and m.get("content") and not m["content"].startswith("[")), "")
     if len(question) < 15:

@@ -12,12 +12,12 @@ import re
 from . import core as _m
 from .i18n import t as _t
 
-MAX_TROUVES = 200
+MAX_FOUND = 200
 
 # ------------------------------------------------------------------------------- trouver
 
 
-def outil_trouver(motif, dossier="."):
+def tool_find(motif, dossier="."):
     """Les fichiers dont le NOM correspond au motif (« *.py », « test_*.py », « docs/*.md »), dans le dossier et dessous, triés du plus récent au plus ancien."""
     from .tools import chemin_sur, rel
     motif = str(motif or "").strip().replace("\\", "/")
@@ -41,56 +41,56 @@ def outil_trouver(motif, dossier="."):
                 except OSError:
                     continue
                 trouves.append((st.st_mtime, relatif, st.st_size))
-        if len(trouves) >= MAX_TROUVES * 5:          # on arrête de parcourir : trop de fichiers, le motif est trop large
+        if len(trouves) >= MAX_FOUND * 5:          # on arrête de parcourir : trop de fichiers, le motif est trop large
             coupe = True
             break
     if not trouves:
         return _t("Aucun fichier ne correspond à « {} » dans {}. Essaie un motif plus large (par exemple « *.md ») ou un autre dossier.").format(motif, rel(racine))
     trouves.sort(reverse=True)
-    lignes = ["{}  ({} octets)".format(r, t) for _, r, t in trouves[:MAX_TROUVES]]
-    if len(trouves) > MAX_TROUVES or coupe:
-        lignes.append(_t("... (liste coupée : {} fichiers ou plus, précise le motif ou le dossier)").format(MAX_TROUVES))
+    lignes = ["{}  ({} octets)".format(r, t) for _, r, t in trouves[:MAX_FOUND]]
+    if len(trouves) > MAX_FOUND or coupe:
+        lignes.append(_t("... (liste coupée : {} fichiers ou plus, précise le motif ou le dossier)").format(MAX_FOUND))
     return "\n".join(lignes)
 
 
 # ------------------------------------------------------------------------------- calculer
-OPERATEURS = {ast.Add: operator.add, ast.Sub: operator.sub, ast.Mult: operator.mul, ast.Div: operator.truediv, ast.FloorDiv: operator.floordiv, ast.Mod: operator.mod, ast.Pow: operator.pow}
-UNAIRES = {ast.UAdd: operator.pos, ast.USub: operator.neg}
-FONCTIONS = {"sqrt": math.sqrt, "abs": abs, "round": round, "min": min, "max": max, "floor": math.floor, "ceil": math.ceil, "log": math.log, "log10": math.log10, "log2": math.log2, "exp": math.exp,
+OPERATORS = {ast.Add: operator.add, ast.Sub: operator.sub, ast.Mult: operator.mul, ast.Div: operator.truediv, ast.FloorDiv: operator.floordiv, ast.Mod: operator.mod, ast.Pow: operator.pow}
+UNARY = {ast.UAdd: operator.pos, ast.USub: operator.neg}
+FUNCTIONS = {"sqrt": math.sqrt, "abs": abs, "round": round, "min": min, "max": max, "floor": math.floor, "ceil": math.ceil, "log": math.log, "log10": math.log10, "log2": math.log2, "exp": math.exp,
              "sin": math.sin, "cos": math.cos, "tan": math.tan, "asin": math.asin, "acos": math.acos, "atan": math.atan, "radians": math.radians, "degrees": math.degrees, "factorial": math.factorial,
              "gcd": math.gcd, "sum": lambda *a: sum(a), "pow": pow}
-CONSTANTES = {"pi": math.pi, "e": math.e, "tau": math.tau}
-LIMITE_PUISSANCE = 10_000
-LIMITE_CHIFFRES = 400
-LIMITE_PROFONDEUR = 40
+CONSTANTS = {"pi": math.pi, "e": math.e, "tau": math.tau}
+POWER_LIMIT = 10_000
+DIGITS_LIMIT = 400
+DEPTH_LIMIT = 40
 
 
 def _eval(noeud, profondeur=0):
-    if profondeur > LIMITE_PROFONDEUR:
+    if profondeur > DEPTH_LIMIT:
         raise ValueError(_t("expression trop imbriquée"))
     p = profondeur + 1
     if isinstance(noeud, ast.Expression):
         return _eval(noeud.body, p)
     if isinstance(noeud, ast.Constant) and isinstance(noeud.value, (int, float)) and not isinstance(noeud.value, bool):
         return noeud.value
-    if isinstance(noeud, ast.Name) and noeud.id in CONSTANTES:
-        return CONSTANTES[noeud.id]
-    if isinstance(noeud, ast.BinOp) and type(noeud.op) in OPERATEURS:
+    if isinstance(noeud, ast.Name) and noeud.id in CONSTANTS:
+        return CONSTANTS[noeud.id]
+    if isinstance(noeud, ast.BinOp) and type(noeud.op) in OPERATORS:
         a, b = _eval(noeud.left, p), _eval(noeud.right, p)
-        if isinstance(noeud.op, ast.Pow) and (abs(b) > LIMITE_PUISSANCE or (isinstance(a, int) and isinstance(b, int) and b > 0 and abs(a) > 1 and b * math.log10(abs(a)) > LIMITE_CHIFFRES)):
+        if isinstance(noeud.op, ast.Pow) and (abs(b) > POWER_LIMIT or (isinstance(a, int) and isinstance(b, int) and b > 0 and abs(a) > 1 and b * math.log10(abs(a)) > DIGITS_LIMIT)):
             raise ValueError(_t("puissance trop grande"))
-        return OPERATEURS[type(noeud.op)](a, b)
-    if isinstance(noeud, ast.UnaryOp) and type(noeud.op) in UNAIRES:
-        return UNAIRES[type(noeud.op)](_eval(noeud.operand, p))
-    if isinstance(noeud, ast.Call) and isinstance(noeud.func, ast.Name) and noeud.func.id in FONCTIONS and not noeud.keywords and len(noeud.args) <= 8:
+        return OPERATORS[type(noeud.op)](a, b)
+    if isinstance(noeud, ast.UnaryOp) and type(noeud.op) in UNARY:
+        return UNARY[type(noeud.op)](_eval(noeud.operand, p))
+    if isinstance(noeud, ast.Call) and isinstance(noeud.func, ast.Name) and noeud.func.id in FUNCTIONS and not noeud.keywords and len(noeud.args) <= 8:
         args = [_eval(a, p) for a in noeud.args]
         if noeud.func.id == "factorial" and (len(args) != 1 or not isinstance(args[0], int) or args[0] > 500):
             raise ValueError(_t("factorielle trop grande"))
-        return FONCTIONS[noeud.func.id](*args)
+        return FUNCTIONS[noeud.func.id](*args)
     raise ValueError(_t("élément non autorisé (seuls les nombres, + - * / // % **, les parenthèses et les fonctions mathématiques courantes sont permis)"))
 
 
-def _formate(valeur):
+def _format_value(valeur):
     if isinstance(valeur, float):
         if valeur != valeur or valeur in (math.inf, -math.inf):
             return str(valeur)
@@ -101,7 +101,7 @@ def _formate(valeur):
     return texte if len(texte) <= 60 else "{} ({} chiffres)".format(texte[:20] + "…" + texte[-10:], len(texte.lstrip("-")))
 
 
-def outil_calculer(expression):
+def tool_calculate(expression):
     """Le résultat exact d'une expression arithmétique (« 17 * 23 + 4 », « sqrt(2) * 10 », « 15% de 80 » s'écrit « 80 * 0.15 »)."""
     texte = str(expression or "").strip().replace("×", "*").replace("÷", "/").replace("^", "**")
     if not re.search(r"[A-Za-z]", texte):
@@ -114,4 +114,4 @@ def outil_calculer(expression):
         raise _m.ErreurOutil(_t("Division par zéro."))
     except (ValueError, SyntaxError, TypeError, OverflowError) as erreur:
         raise _m.ErreurOutil(_t("Calcul impossible : {}.").format(str(erreur)[:150] or _t("expression invalide")))
-    return "{} = {}".format(texte, _formate(resultat))
+    return "{} = {}".format(texte, _format_value(resultat))

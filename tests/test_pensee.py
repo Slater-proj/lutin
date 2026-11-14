@@ -11,7 +11,7 @@ def decouper(texte, taille):
 
 
 def lire(morceaux):
-    s, sortie = P.Separateur(), []
+    s, sortie = P.Splitter(), []
     for m in morceaux:
         sortie += s.alimenter(m)
     sortie += s.fin()
@@ -45,7 +45,7 @@ class Flux(unittest.TestCase):
         self.assertEqual(lire(["  \n<reasoning>a</reasoning>b"]), ("a", "b"), "des espaces avant la balise ne la cachent pas")
 
     def test_un_texte_sans_balise_passe_tel_quel_sans_attente_inutile(self):
-        s = P.Separateur()
+        s = P.Splitter()
         self.assertEqual(s.alimenter("Bonjour, "), [("texte", "Bonjour, ")])
         self.assertEqual(s.alimenter("<think> au milieu, ce n'est pas une réflexion"), [("texte", "<think> au milieu, ce n'est pas une réflexion")])
         self.assertEqual(s.fin(), [])
@@ -67,9 +67,9 @@ class Flux(unittest.TestCase):
         self.assertEqual(lire(["<think>seulement</think>"]), ("seulement", ""))
 
     def test_separer_un_texte_entier_deja_enregistre(self):
-        self.assertEqual(P.separer(self.TEXTE), ("Je dois d'abord regarder le fichier.\nPuis répondre.", "Voici la réponse : **bonjour**."))
-        self.assertEqual(P.separer("Bonjour"), ("", "Bonjour"))
-        self.assertEqual(P.separer(None), ("", ""))
+        self.assertEqual(P.split(self.TEXTE), ("Je dois d'abord regarder le fichier.\nPuis répondre.", "Voici la réponse : **bonjour**."))
+        self.assertEqual(P.split("Bonjour"), ("", "Bonjour"))
+        self.assertEqual(P.split(None), ("", ""))
 
 
 if __name__ == "__main__":

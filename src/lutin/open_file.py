@@ -14,12 +14,12 @@ from pathlib import Path
 from . import tools as _outils
 from .i18n import t as _t
 
-TAILLE_MAX = 80_000_000
-AFFICHABLES = ("text/", "image/", "audio/", "video/", "application/pdf", "application/json")
-BAC_A_SABLE = "sandbox allow-scripts allow-popups allow-forms"          # sans « allow-same-origin » : la page n'est pas de l'origine de Lutin
+MAX_SIZE = 80_000_000
+DISPLAYABLE = ("text/", "image/", "audio/", "video/", "application/pdf", "application/json")
+SANDBOX = "sandbox allow-scripts allow-popups allow-forms"          # sans « allow-same-origin » : la page n'est pas de l'origine de Lutin
 
 
-def normaliser(texte):
+def normalize(texte):
     """Les morceaux du chemin cité, sans « file:/// », sans lettre de disque ni nom de serveur, avec des « / »."""
     t = urllib.parse.unquote(str(texte or "").strip().strip("`'\" "))
     t = re.sub(r"^file:/*", "", t, flags=re.I).replace("\\", "/")
@@ -27,9 +27,9 @@ def normaliser(texte):
     return [x for x in t.split("/") if x and x != "."]
 
 
-def resoudre(texte, racine):
+def resolve(texte, racine):
     """Le fichier du dossier de travail que ce texte désigne, ou None. Refuse tout ce qui sort du dossier."""
-    morceaux = normaliser(texte)
+    morceaux = normalize(texte)
     if not morceaux or ".." in morceaux:
         return None
     racine = Path(racine).resolve()
@@ -48,13 +48,13 @@ def resoudre(texte, racine):
     return None
 
 
-def adresse(p, racine):
+def address(p, racine):
     """/ouvrir/<chemin relatif encodé> : l'adresse qui garde les chemins relatifs de la page (ses images voisines) valables."""
     rel = Path(p).resolve().relative_to(Path(racine).resolve()).as_posix()
     return "/ouvrir/" + "/".join(urllib.parse.quote(x) for x in rel.split("/"))
 
 
-def lire(rel_url, racine):
+def read(rel_url, racine):
     """(octets, type, en-têtes) du fichier désigné par l'adresse /ouvrir/… ; ValueError si introuvable ou trop gros."""
     morceaux = [x for x in urllib.parse.unquote(str(rel_url or "")).replace("\\", "/").split("/") if x]
     if not morceaux or ".." in morceaux:
@@ -65,14 +65,14 @@ def lire(rel_url, racine):
         raise ValueError(str(e))
     if not p.is_file():
         raise ValueError(_t("Fichier introuvable dans le dossier de travail."))
-    if p.stat().st_size > TAILLE_MAX:
+    if p.stat().st_size > MAX_SIZE:
         raise ValueError(_t("Ce fichier est trop gros pour être ouvert ici ({} Mo).").format(p.stat().st_size // 1_000_000))
     mime = mimetypes.guess_type(p.name)[0] or "application/octet-stream"
     entetes = {"X-Content-Type-Options": "nosniff"}
     if mime in ("text/html", "image/svg+xml") or p.suffix.lower() in (".html", ".htm", ".svg"):
         mime = "text/html; charset=utf-8" if p.suffix.lower() != ".svg" else "image/svg+xml"
-        entetes["Content-Security-Policy"] = BAC_A_SABLE
-    elif any(mime.startswith(a) for a in AFFICHABLES):
+        entetes["Content-Security-Policy"] = SANDBOX
+    elif any(mime.startswith(a) for a in DISPLAYABLE):
         entetes["Content-Security-Policy"] = "default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; media-src 'self'; sandbox"
         if mime.startswith("text/") and "charset" not in mime:
             mime += "; charset=utf-8"

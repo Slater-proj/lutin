@@ -69,7 +69,7 @@ CHOIX_RAPPELS = ("scenario", "toujours", "jamais")
 BORNES_CHARGE = {"num_thread": (1, 256), "garde_min": (0, 240)}
 BORNES_RESSOURCES = {"seuil_ram_go": (0.5, 64.0), "seuil_disque_go": (1.0, 2000.0), "plafond_donnees_go": (0.2, 500.0), "limite_ram_commande_go": (0.0, 256.0)}
 
-REGLAGES_DEFAUT.update(_reglages_outils.DEFAUT)
+REGLAGES_DEFAUT.update(_reglages_outils.DEFAULTS)
 
 
 def nettoyer_ressources(r):
@@ -264,8 +264,8 @@ def reglages():
         r["fiche_part"] = max(5, min(25, int(r.get("fiche_part", 10))))                      # part de la fenêtre de contexte que la fiche de suivi peut prendre (en %)
     except (TypeError, ValueError):
         r["fiche_part"] = 10
-    _reglages_outils.nettoyer(r)
-    _reglages_outils.appliquer(r, sys.modules[__name__])          # les limites des outils suivent les réglages (sans rien refaire tant qu'ils ne changent pas)
+    _reglages_outils.clean(r)
+    _reglages_outils.apply(r, sys.modules[__name__])          # les limites des outils suivent les réglages (sans rien refaire tant qu'ils ne changent pas)
     return nettoyer_ressources(nettoyer_echantillonnage(r))
 
 

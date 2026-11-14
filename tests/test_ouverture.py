@@ -35,38 +35,38 @@ class Chemins(unittest.TestCase):
         for ecrit in ("tests-naomi/galerie-v11b.html", "tests-naomi\\galerie-v11b.html", "file:///tests-naomi/galerie-v11b.html", "C:\\Users\\moi\\projet\\tests-naomi\\galerie-v11b.html",
                       "\\\\NAS\\Software\\Perso\\depot_git\\game\\assistant\\illustrateur\\tests-naomi\\galerie-v11b.html", "file:///\\NAS\\Software\\tests-naomi\\galerie-v11b.html",
                       "/home/moi/projet/tests-naomi/galerie-v11b.html", "`tests-naomi/galerie-v11b.html`", str(attendu)):
-            self.assertEqual(O.resoudre(ecrit, self.racine), attendu, ecrit)
-        self.assertEqual(O.resoudre("README.md", self.racine), (self.racine / "README.md").resolve())
+            self.assertEqual(O.resolve(ecrit, self.racine), attendu, ecrit)
+        self.assertEqual(O.resolve("README.md", self.racine), (self.racine / "README.md").resolve())
 
     def test_un_nom_trop_vague_ou_inconnu_ne_devine_rien(self):
         (self.racine / "a").mkdir()
         (self.racine / "a" / "index.html").write_text("x", encoding="utf-8")
         for ecrit in ("galerie-v11b.html", "D:\\ailleurs\\index.html", "inconnu.html", "", "tests-naomi", "../x.html", "tests-naomi/../../etc/passwd"):
-            self.assertIsNone(O.resoudre(ecrit, self.racine), ecrit)
+            self.assertIsNone(O.resolve(ecrit, self.racine), ecrit)
 
     def test_rien_hors_du_dossier_ni_les_dossiers_proteges(self):
         for ecrit in ("C:\\Windows\\System32\\drivers\\etc\\hosts", "/etc/passwd", ".git/config", "projet/.git/config"):
-            self.assertIsNone(O.resoudre(ecrit, self.racine), ecrit)
+            self.assertIsNone(O.resolve(ecrit, self.racine), ecrit)
         with self.assertRaises(ValueError):
-            O.lire(".git/config", self.racine)
+            O.read(".git/config", self.racine)
         with self.assertRaises(ValueError):
-            O.lire("../secret.txt", self.racine)
+            O.read("../secret.txt", self.racine)
 
     def test_l_adresse_garde_les_chemins_relatifs_de_la_page_valables(self):
-        p = O.resoudre("tests-naomi/galerie-v11b.html", self.racine)
-        self.assertEqual(O.adresse(p, self.racine), "/ouvrir/tests-naomi/galerie-v11b.html")
-        octets, mime, entetes = O.lire("tests-naomi/results/a.png", self.racine)          # l'image voisine, demandée par la page à /ouvrir/tests-naomi/results/a.png
+        p = O.resolve("tests-naomi/galerie-v11b.html", self.racine)
+        self.assertEqual(O.address(p, self.racine), "/ouvrir/tests-naomi/galerie-v11b.html")
+        octets, mime, entetes = O.read("tests-naomi/results/a.png", self.racine)          # l'image voisine, demandée par la page à /ouvrir/tests-naomi/results/a.png
         self.assertEqual((octets, mime), (b"\x89PNG", "image/png"))
 
     def test_une_page_html_s_ouvre_en_bac_a_sable_et_un_programme_se_telecharge_sans_se_lancer(self):
-        octets, mime, entetes = O.lire("tests-naomi/galerie-v11b.html", self.racine)
+        octets, mime, entetes = O.read("tests-naomi/galerie-v11b.html", self.racine)
         self.assertTrue(mime.startswith("text/html"))
         self.assertIn("sandbox", entetes["Content-Security-Policy"])
         self.assertNotIn("allow-same-origin", entetes["Content-Security-Policy"], "la page n'a aucun accès à Lutin (cookies, interface)")
         self.assertEqual(entetes["X-Content-Type-Options"], "nosniff")
-        octets, mime, entetes = O.lire("outil.exe", self.racine)
+        octets, mime, entetes = O.read("outil.exe", self.racine)
         self.assertIn("attachment", entetes["Content-Disposition"])
-        octets, mime, entetes = O.lire("README.md", self.racine)
+        octets, mime, entetes = O.read("README.md", self.racine)
         self.assertTrue(mime.startswith("text/"))
 
 

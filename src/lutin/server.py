@@ -253,7 +253,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
         try:
             mo = _m.moteur_actuel(r)
             if o["actif"]:
-                return _diagnostic.premier_lancement(mo.nom, True, "")
+                return _diagnostic.first_launch(mo.nom, True, "")
             reco = None          # pas de mo.statut() ici : il sonde le moteur (2 s) et /api/etat doit rester immédiat
             try:
                 reco = _bench_moteurs.recommander(profil, banc=None, docker=_moteurs.CONTEXTE["en_docker"](), modele_installe=False)
@@ -288,7 +288,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
                                 gere["sans_modele"] = not mo.modele_colibri()          # Colibri ne démarre qu'avec un modèle qu'il a préparé : sans lui, « Démarrer » ne peut rien faire
                             except Exception:  # noqa: BLE001
                                 pass
-            return _diagnostic.premier_lancement(mo.nom, False, detail, {k: reco[k] for k in ("moteur", "nom", "raison")} if reco else None, emplacement, autres, mo.id, gere)
+            return _diagnostic.first_launch(mo.nom, False, detail, {k: reco[k] for k in ("moteur", "nom", "raison")} if reco else None, emplacement, autres, mo.id, gere)
         except Exception:  # noqa: BLE001  (jamais une page cassée pour un constat de plus)
             return {"pret": True, "raison": "", "recommande": None}
 
@@ -324,7 +324,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
         jauge = _emplacements.models_gauge() or {}
         libre = jauge.get("libre")
         try:
-            return _diagnostic.diagnostiquer(o["actif"], bool(_m.chemin_ollama()), [n for n in o["installes"] if not _embeddings.est_modele_de_recherche(n)], r, profil, _m._CATALOGUE, _adequation.pour_la_liste(modeles, profil, _m._CATALOGUE["modeles"]),
+            return _diagnostic.diagnose(o["actif"], bool(_m.chemin_ollama()), [n for n in o["installes"] if not _embeddings.est_modele_de_recherche(n)], r, profil, _m._CATALOGUE, _adequation.pour_la_liste(modeles, profil, _m._CATALOGUE["modeles"]),
                                              libre / 1e9 if libre else None, conseils=_conseil_machine.advice(profil, r), modeles_ailleurs=_emplacements.models_elsewhere(o["installes"]) if o["actif"] else None)
         except (KeyError, TypeError, ValueError, AttributeError):
             return []
@@ -447,12 +447,12 @@ class Gestionnaire(BaseHTTPRequestHandler):
             try:
                 if chemin == "/api/ouvrir-chemin":
                     q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
-                    trouve = _ouverture.resoudre((q.get("p") or [""])[0], _m.RACINE)
+                    trouve = _ouverture.resolve((q.get("p") or [""])[0], _m.RACINE)
                     if trouve is None:
                         return self._envoyer(404, "<!doctype html><meta charset=utf-8><title>Lutin</title><body style='font-family:sans-serif;margin:3em'><h3>" + html.escape(_t("Fichier introuvable dans le dossier de travail.")) + "</h3><p>"
                                              + html.escape(_t("Lutin ne retrouve que les fichiers du dossier de travail actif ({}). Si le fichier est ailleurs, ajoute son dossier comme dossier de travail (Réglages > Dossiers).").format(_m.RACINE)) + "</p>", "text/html; charset=utf-8")
-                    return self._envoyer(302, b"", "text/plain", {"Location": _ouverture.adresse(trouve, _m.RACINE)})
-                octets, mime, entetes = _ouverture.lire(chemin[len("/ouvrir/"):], _m.RACINE)
+                    return self._envoyer(302, b"", "text/plain", {"Location": _ouverture.address(trouve, _m.RACINE)})
+                octets, mime, entetes = _ouverture.read(chemin[len("/ouvrir/"):], _m.RACINE)
             except ValueError as e:
                 return self._envoyer(404, "<!doctype html><meta charset=utf-8><title>Lutin</title><body style='font-family:sans-serif;margin:3em'><h3>" + html.escape(str(e)) + "</h3>", "text/html; charset=utf-8")
             return self._envoyer(200, octets, mime, entetes)
@@ -1881,7 +1881,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
             if "machine" in donnees:          # le modèle choisi dans la liste peut être celui d'une autre machine (« » : cette machine-ci)
                 ident = str(donnees.get("machine") or "")
                 r["machine"] = ident if ident and _machines.trouver(ident) else ""
-            if not _modes.valide(r["mode"]):
+            if not _modes.is_valid(r["mode"]):
                 abandon()
                 return self._refus_tour(400, "Mode inconnu.", "invalid_request")
             self.send_response(200)

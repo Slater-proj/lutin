@@ -300,7 +300,7 @@ def purger_donnees():
         ids = {c.stem for c in (_m.DONNEES / "conversations").glob("*.json")}
         progress_sheet.clean_orphans(ids)
         from . import archive, embeddings
-        archive.nettoyer_orphelins(ids)
+        archive.clean_orphans(ids)
         embeddings.nettoyer_orphelins(ids)
         _m.options_nettoyer_orphelins(ids)
     except OSError:

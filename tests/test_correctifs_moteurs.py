@@ -203,7 +203,7 @@ class SeuilVideoPourTousLesMoteurs(unittest.TestCase):
 
 class PremierLancement(unittest.TestCase):
     def test_un_autre_moteur_est_installe_on_le_propose_au_lieu_de_dire_qu_il_manque_un_moteur(self):
-        r = diagnostic.premier_lancement("Serveur compatible OpenAI", False, "", {"moteur": "ollama", "nom": "Ollama", "raison": "x"}, None, [{"moteur": "ollama", "nom": "Ollama"}], "openai")
+        r = diagnostic.first_launch("Serveur compatible OpenAI", False, "", {"moteur": "ollama", "nom": "Ollama", "raison": "x"}, None, [{"moteur": "ollama", "nom": "Ollama"}], "openai")
         self.assertFalse(r["pret"])
         self.assertIn("Ollama est déjà installé", r["raison"])
         self.assertNotIn("Aucun moteur n'est prêt", r["raison"])
@@ -211,12 +211,12 @@ class PremierLancement(unittest.TestCase):
         self.assertEqual(r["installes"], [{"moteur": "ollama", "nom": "Ollama"}])
 
     def test_rien_de_choisi_ni_d_installe(self):
-        r = diagnostic.premier_lancement("Serveur compatible OpenAI", False, "", None, None, [], "openai")
+        r = diagnostic.first_launch("Serveur compatible OpenAI", False, "", None, None, [], "openai")
         self.assertIn("Aucun moteur n'est choisi ni installé", r["raison"])
         self.assertNotIn("ne répond pas", r["raison"])
 
     def test_colibri_installe_mais_arrete_se_demarre_il_ne_faut_pas_dire_d_installer_ollama(self):
-        r = diagnostic.premier_lancement("Serveur compatible OpenAI", False, "", None, None, [], "openai", {"nom": "Colibri", "installe": True})
+        r = diagnostic.first_launch("Serveur compatible OpenAI", False, "", None, None, [], "openai", {"nom": "Colibri", "installe": True})
         self.assertFalse(r["pret"])
         self.assertIn("Colibri est installé mais ne répond pas", r["raison"])
         self.assertNotIn("Ollama", r["raison"])
@@ -224,7 +224,7 @@ class PremierLancement(unittest.TestCase):
         self.assertIsNone(r["recommande"])
 
     def test_serveur_gere_pas_installe_dit_de_l_installer_et_propose_l_autre_moteur_s_il_existe(self):
-        r = diagnostic.premier_lancement("Serveur compatible OpenAI", False, "", None, None, [{"moteur": "ollama", "nom": "Ollama"}], "openai", {"nom": "LM Studio", "installe": False})
+        r = diagnostic.first_launch("Serveur compatible OpenAI", False, "", None, None, [{"moteur": "ollama", "nom": "Ollama"}], "openai", {"nom": "LM Studio", "installe": False})
         self.assertIn("LM Studio n'est pas installé", r["raison"])
         self.assertIn("Ollama, déjà installé", r["raison"])
 
@@ -249,7 +249,7 @@ class PremierLancement(unittest.TestCase):
             engines.CONTEXTE.update(ancien)
 
     def test_comportement_inchange_pour_ollama_absent(self):
-        r = diagnostic.premier_lancement("Ollama", False, "Pas installé.", None, None, [], "ollama")
+        r = diagnostic.first_launch("Ollama", False, "Pas installé.", None, None, [], "ollama")
         self.assertIn("Aucun moteur n'est prêt", r["raison"])
 
 

@@ -7,19 +7,19 @@ de l'eau (une balise coupée entre deux morceaux est reconnue) et rend la réfle
 Seule une balise placée AU DÉBUT de la réponse ouvre une réflexion : un modèle qui écrirait « <think> » au milieu d'un texte (un article sur le sujet, du code) n'est pas touché."""
 import re
 
-BALISES = (("<think>", "</think>"), ("<thinking>", "</thinking>"), ("<reasoning>", "</reasoning>"))
-RE_BLOC = re.compile(r"^\s*<(think|thinking|reasoning)>(.*?)</\1>\s*", re.S | re.I)
+TAGS = (("<think>", "</think>"), ("<thinking>", "</thinking>"), ("<reasoning>", "</reasoning>"))
+RE_BLOCK = re.compile(r"^\s*<(think|thinking|reasoning)>(.*?)</\1>\s*", re.S | re.I)
 
 
-def separer(texte):
+def split(texte):
     """(réflexion, réponse) d'un texte entier : la réflexion est le bloc balisé du début, s'il y en a un (sinon '' et le texte tel quel). Sert aux conversations déjà enregistrées."""
-    m = RE_BLOC.match(str(texte or ""))
+    m = RE_BLOCK.match(str(texte or ""))
     if not m:
         return "", str(texte or "")
     return m.group(2).strip(), str(texte)[m.end():]
 
 
-class Separateur:
+class Splitter:
     """À alimenter avec les morceaux du texte d'une réponse, dans l'ordre ; rend à chaque fois une liste de (genre, texte) où genre est « pensee » ou « texte ». `fin()` vide ce qui était retenu."""
 
     def __init__(self):
@@ -51,11 +51,11 @@ class Separateur:
                 if not s:
                     break                                    # que des espaces pour l'instant : on attend de savoir
                 bas = s.lower()
-                ouverte = next(((o, f) for o, f in BALISES if bas.startswith(o)), None)
+                ouverte = next(((o, f) for o, f in TAGS if bas.startswith(o)), None)
                 if ouverte:
                     self.tampon, self.ferme, self.debut = s[len(ouverte[0]):], ouverte[1], False
                     continue
-                if any(o.startswith(bas) for o, _ in BALISES):
+                if any(o.startswith(bas) for o, _ in TAGS):
                     break                                    # « <thi » : peut-être le début d'une balise, on attend la suite
                 self.debut = False
             texte = self.tampon.lstrip("\r\n") if self.apres else self.tampon

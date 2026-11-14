@@ -134,10 +134,10 @@ class Reglages(unittest.TestCase):
 
 class PremierLancement(unittest.TestCase):
     def test_moteur_pret(self):
-        self.assertTrue(diagnostic.premier_lancement("Ollama", True, "")["pret"])
+        self.assertTrue(diagnostic.first_launch("Ollama", True, "")["pret"])
 
     def test_aucun_moteur_dit_pourquoi_et_recommande(self):
-        r = diagnostic.premier_lancement("Ollama", False, "Pas installé.", {"moteur": "ollama", "nom": "Ollama", "raison": "le plus simple"})
+        r = diagnostic.first_launch("Ollama", False, "Pas installé.", {"moteur": "ollama", "nom": "Ollama", "raison": "le plus simple"})
         self.assertFalse(r["pret"])
         self.assertIn("Ollama", r["raison"])
         self.assertIn("Pas installé.", r["raison"])

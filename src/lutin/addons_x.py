@@ -108,10 +108,10 @@ def traiter_mention(m, auteurs, mon_id, regles_liste):
     nom = (auteurs.get(str(m.get("author_id", ""))) or {}).get("name", "") or pseudo
     texte = " ".join(str(m.get("text", "")).split())[:1000]
     message = {"de": "@" + pseudo, "sujet": "", "texte": texte}
-    regle = message_rules.choose(regles_liste, message, auto_reply.juger_ton if message_rules.needs_tone(regles_liste) else None)
+    regle = message_rules.choose(regles_liste, message, auto_reply.judge_tone if message_rules.needs_tone(regles_liste) else None)
     if regle is None or regle["action"] == "ignorer":
         return
-    reponse = auto_reply.reponse(IDENT, "X", str(m.get("author_id", "")), "@" + pseudo, _t("Message de @{} : {}").format(pseudo, texte),
+    reponse = auto_reply.reply(IDENT, "X", str(m.get("author_id", "")), "@" + pseudo, _t("Message de @{} : {}").format(pseudo, texte),
                                 (regle["consigne"] + " " if regle["consigne"] else "") + _t("Réponds en 280 caractères au plus."), VIVANT["stop"])
     if not reponse:
         return

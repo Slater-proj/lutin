@@ -127,7 +127,7 @@ class X(unittest.TestCase):
         (livres / "addon.json").write_text(json.dumps(manifeste), encoding="utf-8")
         (livres / "flux.json").write_text((reel / "flux.json").read_text(encoding="utf-8").replace("https://api.x.com", "http://127.0.0.1:%d" % port), encoding="utf-8")
         addons.DOSSIER_LIVRE = _TEMP / "livres"
-        cls.vrai_reponse = staticmethod(auto_reply.reponse)
+        cls.vrai_reponse = staticmethod(auto_reply.reply)
 
     @classmethod
     def tearDownClass(cls):
@@ -141,13 +141,13 @@ class X(unittest.TestCase):
                 f.unlink()
         addons.enregistrer_reglages("x", dict(CLES, mentions="oui", regles="ton:agressif -> ignorer\nde:@troll -> ignorer\ntexte:*prix* -> brouillon: Donne le lien des tarifs.\n* -> brouillon"))
         self.demandes = []
-        auto_reply.reponse = self.faux_modele
-        self.vrai_ton = auto_reply.juger_ton
-        auto_reply.juger_ton = lambda t: "agressif" if "nul" in t else "neutre"
+        auto_reply.reply = self.faux_modele
+        self.vrai_ton = auto_reply.judge_tone
+        auto_reply.judge_tone = lambda t: "agressif" if "nul" in t else "neutre"
 
     def tearDown(self):
-        auto_reply.reponse = self.vrai_reponse
-        auto_reply.juger_ton = self.vrai_ton
+        auto_reply.reply = self.vrai_reponse
+        auto_reply.judge_tone = self.vrai_ton
 
     def faux_modele(self, ident, canal, cle, titre, message, consigne="", arret=None, pause=2):
         self.demandes.append({"canal": canal, "titre": titre, "message": message, "consigne": consigne})

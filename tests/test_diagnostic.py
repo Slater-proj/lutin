@@ -13,7 +13,7 @@ PROFIL = Profil(systeme="linux", ram_go=32.0, ram_libre_go=20.0, gpus=[])
 def diag(**kw):
     base = dict(ollama_actif=True, ollama_installe=True, installes=["qwen3:4b"], reglages={"modele": "qwen3:4b"}, docker=False)
     base.update(kw)
-    return diagnostic.diagnostiquer(**base)
+    return diagnostic.diagnose(**base)
 
 
 class Diagnostic(unittest.TestCase):
@@ -28,10 +28,10 @@ class Diagnostic(unittest.TestCase):
 
     def test_colibri_installe_sans_modele_dit_de_preparer_un_modele_au_lieu_d_un_bouton_muet(self):
         """« Colibri ne répond pas » + « Démarrer » qui ne faisait rien : Colibri ne démarre qu'avec un modèle qu'il a préparé."""
-        r = diagnostic.premier_lancement("Serveur compatible OpenAI", False, "", gere={"nom": "Colibri", "installe": True, "sans_modele": True})
+        r = diagnostic.first_launch("Serveur compatible OpenAI", False, "", gere={"nom": "Colibri", "installe": True, "sans_modele": True})
         self.assertIn("aucun modèle", r["raison"])
         self.assertNotIn("démarre-le", r["raison"])
-        r = diagnostic.premier_lancement("Serveur compatible OpenAI", False, "", gere={"nom": "Colibri", "installe": True})
+        r = diagnostic.first_launch("Serveur compatible OpenAI", False, "", gere={"nom": "Colibri", "installe": True})
         self.assertIn("démarre-le", r["raison"])
 
     def test_sans_modele_et_machine_inconnue_renvoie_aux_modeles(self):
@@ -40,9 +40,9 @@ class Diagnostic(unittest.TestCase):
 
     def test_premier_lancement_dit_ou_le_moteur_sera_installe_sous_docker(self):
         emp = {"dossier": "/data/moteurs", "dedie": False}
-        r = diagnostic.premier_lancement("Ollama", False, "", None, emp)
+        r = diagnostic.first_launch("Ollama", False, "", None, emp)
         self.assertEqual(r["emplacement"], emp)
-        self.assertIsNone(diagnostic.premier_lancement("Ollama", False, "")["emplacement"])          # hors Docker : rien à dire
+        self.assertIsNone(diagnostic.first_launch("Ollama", False, "")["emplacement"])          # hors Docker : rien à dire
 
     def test_ollama_arrete(self):
         p, = diag(ollama_actif=False)

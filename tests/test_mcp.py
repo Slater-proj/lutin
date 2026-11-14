@@ -167,9 +167,9 @@ class Mcp(unittest.TestCase):
             mcp.supprimer(ident)
 
     def test_modes(self):
-        self.assertTrue(modes.sans_outils("discussion"))
-        self.assertTrue(modes.lecture_seule("recherche"))
-        self.assertFalse(modes.lecture_seule("technique"))
+        self.assertTrue(modes.without_tools("discussion"))
+        self.assertTrue(modes.read_only("recherche"))
+        self.assertFalse(modes.read_only("technique"))
 
     def test_noms(self):
         self.assertEqual(mcp.analyser_nom("mcp__home_assistant__turn_on-light"), ("home_assistant", "turn_on-light"))

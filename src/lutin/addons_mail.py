@@ -161,10 +161,10 @@ def traiter(msg, v, regles_liste):
     nom, adresse = parseaddr(str(msg.get("From", "")))
     sujet = " ".join(str(msg.get("Subject", "")).split())[:200]
     message = {"de": str(msg.get("From", "")), "sujet": sujet, "texte": texte_du_message(msg)}
-    regle = message_rules.choose(regles_liste, message, auto_reply.juger_ton if message_rules.needs_tone(regles_liste) else None)
+    regle = message_rules.choose(regles_liste, message, auto_reply.judge_tone if message_rules.needs_tone(regles_liste) else None)
     if regle is None or regle["action"] == "ignorer":
         return
-    reponse = auto_reply.reponse(IDENT, _t("Courriel"), adresse.lower(), nom or adresse, _t("Objet : {}\n\n{}").format(sujet, message["texte"]), regle["consigne"], VIVANT["stop"])
+    reponse = auto_reply.reply(IDENT, _t("Courriel"), adresse.lower(), nom or adresse, _t("Objet : {}\n\n{}").format(sujet, message["texte"]), regle["consigne"], VIVANT["stop"])
     if not reponse:
         return
     brouillon = {"id": secrets.token_hex(4), "de": nom or adresse, "adresse": adresse, "sujet": sujet, "extrait": message["texte"][:500], "texte": reponse, "message_id": identifiant,

@@ -42,7 +42,7 @@ class Table(unittest.TestCase):
 
     def test_the_translated_words_cover_what_the_server_accepts(self):
         words = {name: sorted(table) for name, table in api_v1.SETTING_WORDS.items()}
-        self.assertEqual(words, {"mode": sorted(set(modes.ids()) - {"mission"}), "thinking_steps": ["premier", "toujours"], "long_memory": ["demander", "fichier", "resume"],
+        self.assertEqual(words, {"mode": sorted(set(modes.mode_ids()) - {"mission"}), "thinking_steps": ["premier", "toujours"], "long_memory": ["demander", "fichier", "resume"],
                                  "auto_recall": sorted(A.CHOIX_RAPPELS)}, "« mission » is chosen conversation by conversation, never as a setting")
         for name, table in api_v1.SETTING_WORDS.items():
             self.assertEqual(len(set(table.values())), len(table), name)

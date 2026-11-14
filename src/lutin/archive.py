@@ -8,20 +8,20 @@ import re
 from . import core as _m
 
 RE_ID = re.compile(r"^[A-Za-z0-9_-]{4,64}$")
-TAILLE_MAX = 20_000_000                 # au-delà, l'archive n'est plus agrandie (la conversation, elle, continue)
+MAX_SIZE = 20_000_000                 # au-delà, l'archive n'est plus agrandie (la conversation, elle, continue)
 
 
-def dossier():
+def folder():
     return _m.DONNEES / "archives"
 
 
-def chemin(ident):
+def path_of(ident):
     if not RE_ID.match(str(ident or "")):
         raise ValueError("Conversation inconnue.")
-    return dossier() / (str(ident) + ".jsonl")
+    return folder() / (str(ident) + ".jsonl")
 
 
-def ajouter(ident, messages):
+def add(ident, messages):
     """Ajoute des messages à l'archive. Renvoie le nombre de messages gardés (0 si l'archive est pleine ou illisible : on ne bloque jamais la conversation)."""
     lignes = []
     for m in messages:
@@ -32,8 +32,8 @@ def ajouter(ident, messages):
     if not lignes:
         return 0
     try:
-        f = chemin(ident)
-        if f.is_file() and f.stat().st_size > TAILLE_MAX:
+        f = path_of(ident)
+        if f.is_file() and f.stat().st_size > MAX_SIZE:
             return 0
         f.parent.mkdir(parents=True, exist_ok=True)
         with open(f, "a", encoding="utf-8", newline="\n") as sortie:
@@ -44,10 +44,10 @@ def ajouter(ident, messages):
         return 0
 
 
-def texte(ident):
+def text_of(ident):
     """Les messages archivés, en texte lisible (« [moi] … », « [assistant] … »). Les outils ne sont pas repris : leur sortie ne servirait qu'à brouiller la recherche."""
     try:
-        f = chemin(ident)
+        f = path_of(ident)
         brut = f.read_text(encoding="utf-8", errors="replace")
     except (OSError, ValueError):
         return ""
@@ -62,9 +62,9 @@ def texte(ident):
     return "\n\n".join(sortie)
 
 
-def supprimer(ident):
+def remove(ident):
     try:
-        f = chemin(ident)
+        f = path_of(ident)
     except ValueError:
         return False
     existait = f.is_file()
@@ -72,10 +72,10 @@ def supprimer(ident):
     return existait
 
 
-def nettoyer_orphelins(ids_existants):
+def clean_orphans(ids_existants):
     n = 0
     try:
-        for f in dossier().glob("*.jsonl"):
+        for f in folder().glob("*.jsonl"):
             if f.stem not in ids_existants:
                 f.unlink(missing_ok=True)
                 n += 1

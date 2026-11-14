@@ -2287,7 +2287,7 @@ class Assistant(unittest.TestCase):
             self.assertFalse(conv.get("resume"), "pas de résumé : la fiche garde le fil")
             self.assertNotEqual(RECUES[-1].get("stream"), False, "et aucun appel au modèle pour résumer")
             self.assertLess(len(conv["messages"]), nb, "le début est sorti du contexte")
-            self.assertIn("4711-ZEBRE", archive.texte(cid), "mais il reste retrouvable")
+            self.assertIn("4711-ZEBRE", archive.text_of(cid), "mais il reste retrouvable")
             avant = len(conv["messages"])
             chat("Autre question", conversation=cid, reponses=[[{"content": "Réponse."}]])
             debut1 = [m.get("content") for m in RECUES[-1]["messages"][:3]]
@@ -2362,7 +2362,7 @@ class Assistant(unittest.TestCase):
         chat("Et la suite ?", conversation=cid, reponses=[[{"content": "RÉSUMÉ : un coffre."}], [{"content": "Voilà."}]])
         conv = A.conv_lire(cid)
         self.assertTrue(conv["resume"].startswith("RÉSUMÉ") and len(conv["messages"]) < 12, "le début est résumé")
-        self.assertIn("4711-ZEBRE", archive.texte(cid), "mais il reste sur le disque")
+        self.assertIn("4711-ZEBRE", archive.text_of(cid), "mais il reste sur le disque")
         self.assertIn("DÉBUT DE LA CONVERSATION", RECUES[-1]["messages"][0]["content"], "le modèle sait qu'il peut retrouver le début")
         trouve = A.recall_tool("coffre code ZEBRE", 3, cid, True)
         self.assertIn("4711", trouve, "le détail perdu par le résumé est retrouvé")
@@ -2370,7 +2370,7 @@ class Assistant(unittest.TestCase):
         chat("Quel est le code ?", conversation=cid, reponses=[[appel_outil("rappeler", requete="coffre code ZEBRE", ici=True)], [{"content": "Le code est 4711-ZEBRE."}]])
         self.assertTrue(any("4711-ZEBRE" in str(m.get("content", "")) for m in RECUES[-1]["messages"] if m.get("role") == "tool"), "le modèle retrouve le détail avec l'outil, depuis la conversation en cours")
         post("/api/supprimer", {"id": cid})
-        self.assertFalse(archive.chemin(cid).exists(), "l'archive disparaît avec la conversation")
+        self.assertFalse(archive.path_of(cid).exists(), "l'archive disparaît avec la conversation")
 
     def test_question_fiche_ou_resume_au_premier_resume(self):
         """Réglage « demander » : rien tant que la conversation est courte ; au premier résumé, la question est posée ; la case « garder » évite de la reposer."""
@@ -2862,7 +2862,7 @@ class Assistant(unittest.TestCase):
             return {t["function"]["name"] for t in A.outils_du_mode(dict(base, mode=mode))}
         tous = {t["function"]["name"] for t in A.OUTILS} - {"comfy_modeles", "comfy_generer", "voix_liste", "voix_parler", "voix_transcrire", "voix_cloner"}          # ces outils n'existent que si l'addon ComfyUI ou VoiceStudio est activé
         self.assertEqual(A.REGLAGES_DEFAUT["mode"], "polyvalent", "un nouveau Lutin démarre en polyvalent")
-        self.assertEqual(modes.ids(), ("polyvalent", "technique", "scenario", "recherche", "discussion", "mission"))
+        self.assertEqual(modes.mode_ids(), ("polyvalent", "technique", "scenario", "recherche", "discussion", "mission"))
         self.assertIn("executer", noms("polyvalent"))
         self.assertIn("ecrire", noms("polyvalent"))
         self.assertNotIn("symboles", noms("polyvalent"), "la recherche de définitions est propre au mode code")
@@ -2872,11 +2872,11 @@ class Assistant(unittest.TestCase):
         self.assertTrue({"lire", "chercher", "rappeler", "lire_plusieurs", "lister", "web_chercher"} <= noms("recherche"))
         self.assertEqual(noms("discussion"), set(), "aucun outil en discussion")
         self.assertEqual(noms("technique") | noms("scenario") | noms("polyvalent") | noms("recherche"), tous - {"mission_terminer", "mission_bloquee"}, "rien d'oublié : chaque outil existe dans au moins un mode")
-        consignes = {m: modes.consigne(m) for m in modes.ids()}
+        consignes = {m: modes.instruction(m) for m in modes.mode_ids()}
         self.assertEqual(len(set(consignes.values())), 6, "une consigne différente par mode")
         self.assertIn("RECHERCHE", consignes["recherche"])
-        self.assertTrue(modes.rappels_par_defaut("scenario") and modes.rappels_par_defaut("recherche"))
-        self.assertFalse(modes.rappels_par_defaut("polyvalent") or modes.rappels_par_defaut("discussion"))
+        self.assertTrue(modes.default_recalls("scenario") and modes.default_recalls("recherche"))
+        self.assertFalse(modes.default_recalls("polyvalent") or modes.default_recalls("discussion"))
 
     def test_mode_discussion_n_envoie_aucun_outil_au_modele(self):
         ev = chat("Salut, ça va ?", reponses=[[{"content": "Très bien."}]], mode="discussion")
