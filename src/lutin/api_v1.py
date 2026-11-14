@@ -23,6 +23,7 @@ from . import machines as _machines
 from . import mission as _mission
 from . import offline as _offline
 from . import security as _sec
+from . import storage as _storage
 from .i18n import t as _t
 
 PREFIX = "/api/v1"
@@ -356,6 +357,60 @@ def update_conversation(request):
             raise ApiError(400, "invalid_request", _t("« pinned » doit être vrai ou faux."))
         _m.epingler_conversation(identifier, body["pinned"])
     return _conversation(_read(identifier))
+
+
+# The options of ONE conversation: what the page shows beside the field (mode, automatic approvals…). They override the settings of the machine for that conversation,
+# except the two automatic approvals, which never come from the settings: false until the user ticks them for this conversation (storage.appliquer_options).
+OPTIONS = {
+    "mode": ("mode", "string"), "thinking": ("reflexion", "boolean"), "web": ("web", "boolean"), "dry_run": ("essai_a_blanc", "boolean"),
+    "auto_approve_writes": ("auto_ecriture", "boolean"), "auto_approve_commands": ("auto_commandes", "boolean"),
+    "num_predict": ("num_predict", "integer"), "mission_hours": ("mission_duree_h", "integer"),
+}
+OPTION_MODES = dict(SETTING_WORDS["mode"], mission="mission")          # « mission » is chosen conversation by conversation, never as a setting
+OPTION_CHOICES = {"num_predict": _storage.LONGUEURS, "mission_hours": _storage.DUREES_MISSION}
+MISSION_HOURS_DEFAULT = 8
+
+
+def _options_view(identifier):
+    stored = _m.options_lire(identifier)
+    effective = _m.appliquer_options(_m.reglages(), identifier)
+    shown = {name: effective[key] for name, (key, _) in OPTIONS.items() if key in effective}
+    shown["mode"] = OPTION_MODES.get(effective["mode"], effective["mode"])
+    shown["mission_hours"] = stored.get("mission_duree_h", MISSION_HOURS_DEFAULT)
+    return shown
+
+
+@route("GET", "/conversations/{id}/options", SESSION)
+def conversation_options(request):
+    identifier = request.params["id"]
+    _read(identifier)
+    return _options_view(identifier)
+
+
+@route("PATCH", "/conversations/{id}/options", SESSION)
+def update_conversation_options(request):
+    """Changes some options of the conversation: {"auto_approve_commands": true, "mode": "technical"}. All or nothing; answers every option as it now stands.
+    Allowed while a turn runs, as for the French route: a box ticked during an answer counts from the next tool."""
+    identifier, body, changed = request.params["id"], request.body, {}
+    _read(identifier)
+    unknown = sorted(set(body) - set(OPTIONS))
+    if unknown:
+        raise ApiError(400, "invalid_request", _t("Réglage inconnu : {}.").format(", ".join(unknown)))
+    words = {v1: stored for stored, v1 in OPTION_MODES.items()}
+    for name, value in body.items():
+        key, kind = OPTIONS[name]
+        if name == "mode":
+            valid, expected = value in words, ", ".join(words)
+        elif name in OPTION_CHOICES:
+            valid, expected = KINDS["integer"](value) and value in OPTION_CHOICES[name], ", ".join(str(choice) for choice in OPTION_CHOICES[name])
+        else:
+            valid, expected = KINDS[kind](value), kind
+        if not valid:
+            raise ApiError(400, "invalid_request", _t("Valeur invalide pour « {} » (attendu : {}).").format(name, expected))
+        changed[key] = words[value] if name == "mode" else value
+    if changed:
+        _m.options_ecrire(identifier, changed)
+    return _options_view(identifier)
 
 
 @route("DELETE", "/conversations/{id}", SESSION)

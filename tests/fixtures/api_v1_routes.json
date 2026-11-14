@@ -35,6 +35,16 @@
   "right": "session"
  },
  {
+  "method": "GET",
+  "path": "/api/v1/conversations/{id}/options",
+  "right": "session"
+ },
+ {
+  "method": "PATCH",
+  "path": "/api/v1/conversations/{id}/options",
+  "right": "session"
+ },
+ {
   "method": "POST",
   "path": "/api/v1/conversations/{id}/stop",
   "right": "session"

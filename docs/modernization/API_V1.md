@@ -1,7 +1,7 @@
 # `/api/v1`: design
 
 The contract the new interface will be built on ([ADR 0001](../adr/0001-english-and-clean-break-at-1.0.md), [ADR 0002](../adr/0002-frontend-svelte-typescript-vite.md)).
-This page fixes the rules. Implemented so far (`src/lutin/api_v1.py`, contract in `tests/test_api_v1.py` and `tests/fixtures/api_v1_routes.json`): the dispatcher with declared rights and coded errors, `GET /status`, the settings (read, change), the conversations (list, create, read, rename/pin, delete, stop), the turn stream and the answer to an approval, the models (list, install, delete). Not yet: engines and everything else. The present contract — 184 exact routes, 17 prefixes, 15 stream events, the right each route asks —
+This page fixes the rules. Implemented so far (`src/lutin/api_v1.py`, contract in `tests/test_api_v1.py` and `tests/fixtures/api_v1_routes.json`): the dispatcher with declared rights and coded errors, `GET /status`, the settings (read, change), the conversations (list, create, read, rename/pin, delete, stop), the turn stream and the answer to an approval, the options of a conversation, the models (list, install, delete). Not yet: engines and everything else. The present contract — 184 exact routes, 17 prefixes, 15 stream events, the right each route asks —
 is inventoried in `tests/fixtures/api_contract.json` and enforced by `tests/test_api_contract.py` and `tests/test_api_access.py`.
 
 ## Why not rename the present routes in place
@@ -65,8 +65,7 @@ routes disappear with the old page, in one deletion.
    `tokens` and `speed` are the two events the first inventory missed (their fields come from a variable). The request body: `message` and, optionally,
    `model`, `thinking`, `replace_from`, `images`, `attachments`, `workspace`. A refusal comes before the stream as an ordinary error: `400 invalid_request`,
    `409 turn_running` or `workspace_conflict`, `429 too_many_turns`. `memory_choice` is answered with `POST /api/v1/conversations/{id}/memory-choice`
-   (`{"choice": "summary" | "file", "remember": false}`; `409 no_pending_choice` when nothing waits). Not in v1 yet: the per-conversation options (mode, automatic
-   approvals) and the choice of another machine.
+   (`{"choice": "summary" | "file", "remember": false}`; `409 no_pending_choice` when nothing waits). Not in v1 yet: the choice of another machine.
 7. **Versioning.** `/api/v1` only ever gains optional fields and new routes. A change that breaks a client is `/api/v2`. The page and the server ship together,
    so the page never talks to a server of another version; the rule protects scripts and paired machines.
 8. **Machine-to-machine protocol** (`/api/noeud/*` today): versioned separately (`/node/v1`), because two machines may run different versions of Lutin.
@@ -87,6 +86,14 @@ routes disappear with the old page, in one deletion.
   it is chosen conversation by conversation. Tool names (`disabled_tools`) are what the models see and are not translated (ADR 0007).
 - A write is all or nothing: an unknown name or a value of the wrong kind answers `400 invalid_request` and nothing is stored. Values are then checked
   and bounded by the function the French route calls (a dangerous command in `commands_without_approval` is refused, `max_steps` is kept within 4-40…).
+
+## Options of a conversation
+
+`GET /api/v1/conversations/{id}/options` gives the options that apply to one conversation; `PATCH` changes the ones it names and answers with all of them
+(`api_v1.OPTIONS`, contract in `tests/test_api_v1_settings.py`). They override the settings of the machine for that conversation, **except the two automatic approvals**
+(`auto_approve_writes`, `auto_approve_commands`), which never come from the settings: they are false until the user ticks them for this conversation.
+Options: `mode` (`general`, `technical`, `scenario`, `research`, `chat`, and `mission`, which is chosen conversation by conversation and makes the next message the brief of a long task),
+`thinking`, `web`, `dry_run`, `num_predict` (0, 512, 1024 … 32768) and `mission_hours` (1, 2, 4, 8, 12, 24, 48, 72). A write is all or nothing. It is allowed while a turn runs: a box ticked during an answer counts from the next tool.
 
 ## Models
 

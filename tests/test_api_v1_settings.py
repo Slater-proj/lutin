@@ -107,5 +107,49 @@ class Settings(unittest.TestCase):
             self.assertEqual(V.call("PATCH", "/api/v1/settings", V.OWNER, body={"web": 1})[1]["error"]["message"], "Invalid value for « web » (expected: boolean).")
 
 
+class Options(unittest.TestCase):
+    def setUp(self):
+        self.addCleanup(lambda: (A.DONNEES / "reglages.json").unlink(missing_ok=True))
+        status, created = V.call("POST", "/api/v1/conversations", V.OWNER, body={})
+        self.assertEqual(status, 201)
+        self.path = "/api/v1/conversations/{}/options".format(created["id"])
+        self.identifier = created["id"]
+
+    def test_reading_gives_the_effective_options_and_the_two_approvals_start_false(self):
+        status, answer = V.call("GET", self.path, V.OWNER)
+        self.assertEqual((status, sorted(answer)), (200, sorted(api_v1.OPTIONS)))
+        self.assertEqual((answer["mode"], answer["auto_approve_writes"], answer["auto_approve_commands"], answer["dry_run"], answer["web"], answer["mission_hours"]), ("general", False, False, False, True, 8))
+
+    def test_the_automatic_approvals_never_come_from_the_settings(self):
+        V.call("PATCH", "/api/v1/settings", V.OWNER, body={"auto_approve_writes": True, "auto_approve_commands": True, "web": False, "mode": "research"})
+        answer = V.call("GET", self.path, V.OWNER)[1]
+        self.assertEqual((answer["auto_approve_writes"], answer["auto_approve_commands"]), (False, False), "ticked for the machine is not ticked for this conversation")
+        self.assertEqual((answer["web"], answer["mode"]), (False, "research"), "the other options follow the settings until the conversation says otherwise")
+
+    def test_a_change_is_stored_for_this_conversation_only_under_the_french_names(self):
+        status, answer = V.call("PATCH", self.path, V.OWNER, body={"auto_approve_commands": True, "mode": "mission", "mission_hours": 4, "thinking": True, "num_predict": 2048})
+        self.assertEqual((status, answer["auto_approve_commands"], answer["mode"], answer["mission_hours"], answer["thinking"], answer["num_predict"]), (200, True, "mission", 4, True, 2048))
+        self.assertEqual(A.options_lire(self.identifier), {"auto_commandes": True, "mode": "mission", "mission_duree_h": 4, "reflexion": True, "num_predict": 2048})
+        other = V.call("POST", "/api/v1/conversations", V.OWNER, body={})[1]["id"]
+        self.assertEqual(V.call("GET", "/api/v1/conversations/{}/options".format(other), V.OWNER)[1]["auto_approve_commands"], False)
+        self.assertEqual(V.call("PATCH", self.path, V.OWNER, body={})[1], V.call("GET", self.path, V.OWNER)[1], "nothing asked, nothing changed")
+
+    def test_a_write_is_all_or_nothing_and_each_refusal_has_a_code(self):
+        before = V.call("GET", self.path, V.OWNER)[1]
+        self.assertEqual(V.call("PATCH", self.path, V.OWNER, body={"web": False, "auto": 1}), (400, {"error": {"code": "invalid_request", "message": "Réglage inconnu : auto."}}))
+        for body, name, expected in (({"dry_run": "yes"}, "dry_run", "boolean"), ({"mode": "polyvalent"}, "mode", "general, technical, scenario, research, chat, mission"),
+                                     ({"num_predict": 100}, "num_predict", "0, 512, 1024, 2048, 4096, 8192, 16384, 32768"), ({"mission_hours": True}, "mission_hours", "1, 2, 4, 8, 12, 24, 48, 72"),
+                                     ({"auto_approve_writes": 1}, "auto_approve_writes", "boolean")):
+            self.assertEqual(V.call("PATCH", self.path, V.OWNER, body=dict({"web": False}, **body)), invalid(name, expected), body)
+        self.assertEqual(V.call("GET", self.path, V.OWNER)[1], before, "nothing was written by a refused request")
+
+    def test_an_unknown_or_malformed_conversation_is_not_found_and_nothing_is_created(self):
+        for identifier in ("ffffffff", "..%2F..%2Fconfig", "A" * 8):
+            for method in ("GET", "PATCH"):
+                status, answer = V.call(method, "/api/v1/conversations/{}/options".format(identifier), V.OWNER, body={} if method == "PATCH" else None)
+                self.assertEqual((status, answer["error"]["code"]), (404, "not_found"), (method, identifier))
+        self.assertFalse((A.DONNEES / "options" / "ffffffff.json").exists())
+
+
 if __name__ == "__main__":
     unittest.main()
