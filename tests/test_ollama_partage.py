@@ -37,7 +37,7 @@ class Lecture(unittest.TestCase):
     def test_les_noms_sont_ceux_d_ollama(self):
         ranger(self.d, "registry.ollama.ai", "library/qwen3/8b", [("model", "a", True), ("template", "b", True)])
         ranger(self.d, "registry.ollama.ai", "huihui_ai/qwen3-abliterated/4b", [("model", "c", True)])
-        lus = ollama_shared_models.lire(self.d)
+        lus = ollama_shared_models.read_shared(self.d)
         self.assertEqual(sorted(lus), ["huihui_ai/qwen3-abliterated:4b", "qwen3:8b"], "le modèle « sans filtre » aussi")
         self.assertEqual(lus["qwen3:8b"]["fichier"].read_bytes(), b"GGUF-a", "le morceau « modèle », pas le gabarit")
         self.assertEqual(lus["qwen3:8b"]["taille"], 6)
@@ -49,19 +49,19 @@ class Lecture(unittest.TestCase):
         casse = Path(self.d) / "manifests" / "registry.ollama.ai" / "library" / "casse" / "1b"
         casse.parent.mkdir(parents=True)
         casse.write_text("{pas du json", encoding="utf-8")
-        self.assertEqual(ollama_shared_models.lire(self.d), {})
-        self.assertEqual(ollama_shared_models.lire(self.d / "inexistant"), {})
-        self.assertEqual(ollama_shared_models.lire(None), {})
+        self.assertEqual(ollama_shared_models.read_shared(self.d), {})
+        self.assertEqual(ollama_shared_models.read_shared(self.d / "inexistant"), {})
+        self.assertEqual(ollama_shared_models.read_shared(None), {})
 
     def test_empreinte_piegee_refusee(self):
         manif = Path(self.d) / "manifests" / "registry.ollama.ai" / "library" / "piege" / "1b"
         manif.parent.mkdir(parents=True)
-        manif.write_text(json.dumps({"layers": [{"mediaType": ollama_shared_models.TYPE_MODELE, "digest": "sha256:../../secret", "size": 1}]}), encoding="utf-8")
-        self.assertEqual(ollama_shared_models.lire(self.d), {}, "un chemin glissé dans l'empreinte ne sort jamais du dossier des morceaux")
+        manif.write_text(json.dumps({"layers": [{"mediaType": ollama_shared_models.MODEL_TYPE, "digest": "sha256:../../secret", "size": 1}]}), encoding="utf-8")
+        self.assertEqual(ollama_shared_models.read_shared(self.d), {}, "un chemin glissé dans l'empreinte ne sort jamais du dossier des morceaux")
 
     def test_projecteur_d_un_modele_qui_voit(self):
         ranger(self.d, "registry.ollama.ai", "library/gemma3/4b", [("model", "1", True), ("projector", "2", True)])
-        lu = ollama_shared_models.lire(self.d)["gemma3:4b"]
+        lu = ollama_shared_models.read_shared(self.d)["gemma3:4b"]
         self.assertEqual(lu["projecteur"].read_bytes(), b"GGUF-2")
 
 

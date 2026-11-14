@@ -182,7 +182,7 @@ class Mission(unittest.TestCase):
 
     def test_une_mission_dont_le_dossier_est_occupe_ne_bloque_pas_la_suivante(self):
         premiere, seconde = self.creer(nom="A"), self.creer(nom="B")
-        vrai = _m.activer_travail
+        vrai = _m.activate_work
         appels = []
 
         def activer(conv, demande=""):
@@ -190,11 +190,11 @@ class Mission(unittest.TestCase):
             if len(appels) == 1:
                 raise ValueError("dossier occupé")
             return vrai(conv, demande)
-        _m.activer_travail = activer
+        _m.activate_work = activer
         try:
             self.assertTrue(mission.un_pas(), "la seconde mission a tourné")
         finally:
-            _m.activer_travail = vrai
+            _m.activate_work = vrai
         self.assertEqual(mission.trouver(premiere["id"])["tours"], 0)
         self.assertEqual(mission.trouver(seconde["id"])["tours"], 1)
 

@@ -11,7 +11,7 @@ import prochaine_version  # noqa: E402
 import verifier_catalogue  # noqa: E402
 from lutin import model_catalog  # noqa: E402
 
-CAT = model_catalog.charger()
+CAT = model_catalog.load()
 
 
 class VerifierCatalogue(unittest.TestCase):

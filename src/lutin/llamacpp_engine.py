@@ -23,7 +23,7 @@ import zipfile
 from pathlib import Path
 
 from . import engines
-from .engine_replace import liberer_processus, remplacer_dossier  # noqa: F401  (le remplacement d'un dossier est commun à tous les moteurs)
+from .engine_replace import free_process, replace_folder  # noqa: F401  (le remplacement d'un dossier est commun à tous les moteurs)
 from .i18n import t as _t
 from .openai_engine import MoteurOpenAI
 
@@ -690,8 +690,8 @@ class MoteurLlamaCpp(MoteurOpenAI):
         if cache.get("cle") == cle and time.time() - cache.get("quand", 0) < 10:
             return cache["modeles"]
         from . import ollama_shared_models
-        lus = {n: dict(v, origine="ollama") for n, v in ollama_shared_models.lire(dossier).items()} if dossier else {}
-        lus.update({n: dict(v, origine="lutin") for n, v in ollama_shared_models.lire(self.bibliotheque()).items()})
+        lus = {n: dict(v, origine="ollama") for n, v in ollama_shared_models.read_shared(dossier).items()} if dossier else {}
+        lus.update({n: dict(v, origine="lutin") for n, v in ollama_shared_models.read_shared(self.bibliotheque()).items()})
         cache.update(cle=cle, quand=time.time(), modeles=lus)
         return lus
 
@@ -702,7 +702,7 @@ class MoteurLlamaCpp(MoteurOpenAI):
         if engines.CONTEXTE["hors_ligne"]():
             raise ErreurMoteur(_t("Mode hors ligne : aucun téléchargement."))
         from . import ollama_registry
-        ollama_registry.telecharger(modele, self.bibliotheque(), progression)
+        ollama_registry.download(modele, self.bibliotheque(), progression)
         CACHE_PARTAGE.clear()
 
     def modeles(self):
@@ -1046,7 +1046,7 @@ class MoteurLlamaCpp(MoteurOpenAI):
                     pass
         self.arreter()
         progression(_t("Remplacement de l'ancienne version…"), deja, total_octets)
-        remplacer_dossier(neuf, base / "bin", liberer=lambda: liberer_processus(base))
+        replace_folder(neuf, base / "bin", liberer=lambda: free_process(base))
         shutil.rmtree(telechargement, ignore_errors=True)
         (base / "version.txt").write_text("{} ({})".format(etiquette, variante), encoding="utf-8")
         config = lire_config()
@@ -1136,7 +1136,7 @@ class MoteurLlamaCpp(MoteurOpenAI):
             with SERVEUR["verrou"]:
                 if SERVEUR["modele"] == nom:
                     self.arreter()
-            ollama_registry.supprimer(str(nom), self.bibliotheque())
+            ollama_registry.remove(str(nom), self.bibliotheque())
             CACHE_PARTAGE.clear()
             return
         f = self._fichier_modele(nom)
@@ -1215,7 +1215,7 @@ class MoteurExterne(MoteurOpenAI):
             p = int(self.config().get("port_lmstudio") or 0)
         except (TypeError, ValueError):
             p = 0
-        return p if 1024 <= p <= 65535 else lmstudio.PORT_DEFAUT
+        return p if 1024 <= p <= 65535 else lmstudio.DEFAULT_PORT
 
     # -- ExLlamaV3 : installé et lancé par Lutin à travers TabbyAPI (environnement Python dédié), sur cette machine seulement, carte NVIDIA
     def exllamav3_choisi(self):
@@ -1255,7 +1255,7 @@ class MoteurExterne(MoteurOpenAI):
     def _lms(self):
         """Le chemin de la commande `lms` si LM Studio (ou son démon) est installé, sinon None."""
         from . import lmstudio
-        return lmstudio.chemin_lms()
+        return lmstudio.lms_path()
 
     def modele_colibri(self):
         from . import colibri
@@ -1298,7 +1298,7 @@ class MoteurExterne(MoteurOpenAI):
             exllamav3.arreter(self._dossiers())
         elif self.lmstudio_choisi():
             from . import lmstudio
-            if not lmstudio.arreter():
+            if not lmstudio.stop():
                 raise ErreurMoteur(_t("LM Studio n'a pas confirmé son arrêt."))
         else:
             self._arreter_colibri()
@@ -1451,22 +1451,22 @@ class MoteurExterne(MoteurOpenAI):
                     raise ErreurMoteur(_t("Mode hors ligne : aucun téléchargement."))
                 if action == "mettre_a_jour" and self._lms():
                     progression(_t("Mise à jour de LM Studio…"), 0, 0)
-                    lmstudio.mettre_a_jour()
+                    lmstudio.update()
                 else:
-                    lmstudio.installer(lambda texte: progression(texte, 0, 0), annule=annule)
-                self._demarrer_apres_installation(progression, 2, "LM Studio", lambda: lmstudio.demarrer(self.port_lmstudio()), _t("quelques secondes"))
+                    lmstudio.install(lambda texte: progression(texte, 0, 0), annule=annule)
+                self._demarrer_apres_installation(progression, 2, "LM Studio", lambda: lmstudio.start(self.port_lmstudio()), _t("quelques secondes"))
             elif action == "demarrer":
                 progression(_t("Démarrage de LM Studio…"), 0, 0)
-                lmstudio.demarrer(self.port_lmstudio())
+                lmstudio.start(self.port_lmstudio())
             elif action == "arreter":
-                if not lmstudio.arreter():
+                if not lmstudio.stop():
                     raise ErreurMoteur(_t("LM Studio n'a pas confirmé son arrêt."))
             elif action.startswith("telecharger:"):
                 if engines.CONTEXTE["hors_ligne"]():
                     raise ErreurMoteur(_t("Mode hors ligne : aucun téléchargement."))
                 nom = action.split(":", 1)[1]
                 progression(_t("Téléchargement de {}…").format(nom), 0, 0)
-                lmstudio.telecharger(nom, lambda texte: progression(texte, 0, 0), annule=annule)
+                lmstudio.download(nom, lambda texte: progression(texte, 0, 0), annule=annule)
                 progression(_t("Modèle téléchargé : {}.").format(nom), 1, 1)
             else:
                 raise ErreurMoteur(_t("Action impossible avec ce serveur."))
@@ -1568,7 +1568,7 @@ class MoteurExterne(MoteurOpenAI):
                         time.sleep(1)
             elif self.lmstudio_choisi():
                 from . import lmstudio
-                lmstudio.supprimer_modele(nom)
+                lmstudio.remove_model(nom)
             else:
                 from . import colibri
                 if MoteurOpenAI.actif(self):

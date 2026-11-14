@@ -7,7 +7,7 @@ import context  # noqa: F401
 from lutin import model_catalog, performance_advice
 from lutin.hardware import Gpu, Profil
 
-CAT = model_catalog.charger()
+CAT = model_catalog.load()
 
 
 def pc(gpu=None, ram=32.0):

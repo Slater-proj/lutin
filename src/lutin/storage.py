@@ -409,7 +409,7 @@ def nom_de_copie(c):
 def dossier_de_travail_de(c):
     """Le dossier de travail de cette conversation (le sien, sinon le dossier courant)."""
     from . import workspaces as _trav
-    t = _trav.par_id(_m.config_lue(), c["travail"]) if c.get("travail") else None
+    t = _trav.by_id(_m.config_lue(), c["travail"]) if c.get("travail") else None
     return Path(t["chemin"]) if t else _m.RACINE
 
 

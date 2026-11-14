@@ -10,18 +10,18 @@ from . import exllamav3_catalog as base
 from . import updates
 from .i18n import t as _t
 
-AUTEUR_OFFICIEL = "lmstudio-community"
+OFFICIAL_AUTHOR = "lmstudio-community"
 BPW_ESTIME = 4.85          # Q4_K_M, la quantification la plus courante
 RE_QUANT = re.compile(r"[-_.]((?:IQ|Q)\d\w*?|BF16|F16|F32|MXFP4)(?:-\d{5}-of-\d{5})?\.gguf$", re.I)
 
 
-def chercher(q="", tri="recent", communaute=False, page=1, http=updates.http_get):
-    return base.chercher(q, tri, communaute, page, http, auteur=AUTEUR_OFFICIEL, etiquette="gguf", bpw=BPW_ESTIME)
+def search(q="", tri="recent", communaute=False, page=1, http=updates.http_get):
+    return base.search(q, tri, communaute, page, http, auteur=OFFICIAL_AUTHOR, etiquette="gguf", bpw=BPW_ESTIME)
 
 
-def quantifications(depot, http=updates.http_get):
+def quantizations(depot, http=updates.http_get):
     """Les fichiers GGUF d'un dépôt regroupés par quantification : [{revision (la quantification), go, fichiers}] du plus léger au plus lourd. Les projecteurs d'images (mmproj) ne sont pas des modèles."""
-    if not base.RE_DEPOT.match(str(depot)):
+    if not base.RE_REPO.match(str(depot)):
         raise ValueError(_t("Nom de dépôt invalide : écris « propriétaire/modèle » (Hugging Face)."))
     fichiers = base._json(base.API + "/" + urllib.parse.quote(depot, safe="/") + "/tree/main", http)
     groupes = {}

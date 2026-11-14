@@ -13,54 +13,54 @@ from . import updates
 from .i18n import t as _t
 
 URL = "https://ollama.com/search"
-ORDRES = ("newest", "popular")
+ORDERS = ("newest", "popular")
 CATEGORIES = ("", "tools", "vision", "thinking", "embedding")          # le filtre « capacité » d'ollama.com (paramètre c)
-GO_PAR_MILLIARD = 0.62          # ordre de grandeur d'un modèle en Q4_K_M, contexte et marge compris : « 8b » ≈ 5 Go
-LEGER_B = 4          # « léger » : au plus 4 milliards de paramètres
-DUREE_CACHE = 15 * 60
-CAPACITES = ("tools", "vision", "thinking", "embedding", "audio", "cloud")
+GB_PER_BILLION = 0.62          # ordre de grandeur d'un modèle en Q4_K_M, contexte et marge compris : « 8b » ≈ 5 Go
+LIGHT_B = 4          # « léger » : au plus 4 milliards de paramètres
+CACHE_DURATION = 15 * 60
+CAPABILITIES = ("tools", "vision", "thinking", "embedding", "audio", "cloud")
 RE_BLOC = re.compile(r'<li\s[^>]*>\s*<a href="/library/([A-Za-z0-9._-]+)"(.*?)</a>\s*</li>', re.S)
-RE_TAILLE = re.compile(r"^(\d+(?:\.\d+)?[bm]|e\d+b|\d+x\d+(?:\.\d+)?b)$", re.I)
-MILLIONS_MIN = 20          # « 1m » n'est pas un modèle d'un million de paramètres (c'est une longueur de contexte) : en millions, les vrais petits modèles font 22m, 135m, 270m…
+RE_SIZE = re.compile(r"^(\d+(?:\.\d+)?[bm]|e\d+b|\d+x\d+(?:\.\d+)?b)$", re.I)
+MIN_MILLIONS = 20          # « 1m » n'est pas un modèle d'un million de paramètres (c'est une longueur de contexte) : en millions, les vrais petits modèles font 22m, 135m, 270m…
 CACHE = {}
 
 
-def pour_mac(nom):
+def for_mac(nom):
     """Vrai pour un modèle ou une variante faits pour les Mac (MLX, la puce Apple) : « -mlx » dans le nom. Hors d'un Mac, Ollama refuse de les lancer."""
     return bool(re.search(r"(^|[-_.:/])mlx([-_.:]|$)", str(nom or ""), re.I))
 
 
-def compatible(nom):
+def compatible_with(nom):
     """Faux pour un modèle qui ne tournera pas sur cette machine (les modèles MLX hors d'un Mac) : il n'est pas proposé."""
-    return platform.system() == "Darwin" or not pour_mac(nom)
+    return platform.system() == "Darwin" or not for_mac(nom)
 
 
-def texte(fragment):
+def text_of(fragment):
     return html.unescape(re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", fragment))).strip()
 
 
-def analyser(page):
+def parse(page):
     """La liste des modèles d'une page de résultats : [{nom, description, capacites, tailles, maj, telechargements}]. Une page méconnaissable donne une liste vide."""
     sortie = []
     for nom, corps in RE_BLOC.findall(page or ""):
         sans_age = re.sub(r'<span[^>]*title="Updated[^>]*>.*?</span>', "", corps, flags=re.S)          # « 5m » = il y a 5 minutes, pas 5 millions de paramètres
-        etiquettes = [texte(s) for s in re.findall(r"<span[^>]*>(.*?)</span>", sans_age, re.S)]
+        etiquettes = [text_of(s) for s in re.findall(r"<span[^>]*>(.*?)</span>", sans_age, re.S)]
         etiquettes = [e for e in etiquettes if e]
         description = re.search(r"<p[^>]*>(.*?)</p>", corps, re.S)
         maj = re.search(r'title="Updated ([^"]+)"', corps)
         telechargements = re.search(r'title="([\d,]+) downloads"', corps)
         sortie.append({
             "nom": nom,
-            "description": texte(description.group(1))[:300] if description else "",
-            "capacites": [e.lower() for e in etiquettes if e.lower() in CAPACITES],
-            "tailles": [e.lower() for e in etiquettes if RE_TAILLE.match(e) and not (e.lower().endswith("m") and 0 < milliards(e) * 1000 < MILLIONS_MIN)],
+            "description": text_of(description.group(1))[:300] if description else "",
+            "capacites": [e.lower() for e in etiquettes if e.lower() in CAPABILITIES],
+            "tailles": [e.lower() for e in etiquettes if RE_SIZE.match(e) and not (e.lower().endswith("m") and 0 < billions(e) * 1000 < MIN_MILLIONS)],
             "maj": html.unescape(maj.group(1)) if maj else "",
             "telechargements": int(telechargements.group(1).replace(",", "")) if telechargements else 0,
         })
     return sortie
 
 
-def milliards(taille):
+def billions(taille):
     """Le nombre de milliards de paramètres d'une taille affichée (« 8b » → 8, « 8x7b » → 56, « e4b » → 4, « 270m » → 0.27), ou 0 si on ne sait pas."""
     t = str(taille or "").lower()
     m = re.match(r"^(\d+)x(\d+(?:\.\d+)?)b$", t)
@@ -72,27 +72,27 @@ def milliards(taille):
     return float(m.group(1)) * (1 if m.group(2) == "b" else 0.001)
 
 
-def go_estime(taille):
+def estimated_gb(taille):
     """Place estimée en Go d'une taille (Q4, la précision par défaut d'Ollama). Une estimation, pas une mesure : l'étiquette le dit."""
-    return round(max(milliards(taille) * GO_PAR_MILLIARD, 0.3), 1) if milliards(taille) else 0
+    return round(max(billions(taille) * GB_PER_BILLION, 0.3), 1) if billions(taille) else 0
 
 
-def evaluer_tailles(modeles, juger):
+def evaluate_sizes(modeles, juger):
     """Ajoute à chaque modèle `evaluations` : {taille: {go, niveau, texte}} d'après `juger(go) -> {niveau, texte}` (le jugement de cette machine). Ne modifie pas la liste d'origine (elle est en cache)."""
     sortie = []
     for m in modeles:
         evals = {}
         for t in m["tailles"]:
-            go = go_estime(t)
+            go = estimated_gb(t)
             if go:
                 evals[t] = dict(juger(go), go=go)
         sortie.append(dict(m, evaluations=evals))
     return sortie
 
 
-def chercher(terme="", ordre="newest", page=1, http=updates.http_get, maintenant=time.time, categorie="", leger=False):
+def search(terme="", ordre="newest", page=1, http=updates.http_get, maintenant=time.time, categorie="", leger=False):
     """{modeles, suite} pour une recherche (vide = tout). Lève OSError si le site ne répond pas (ou en mode hors ligne)."""
-    if ordre not in ORDRES:
+    if ordre not in ORDERS:
         raise ValueError(_t("Tri inconnu."))
     if categorie not in CATEGORIES:
         raise ValueError(_t("Catégorie inconnue."))
@@ -100,19 +100,19 @@ def chercher(terme="", ordre="newest", page=1, http=updates.http_get, maintenant
     page = max(1, min(int(page or 1), 20))
     cle = (terme, ordre, page, categorie, bool(leger))
     en_cache = CACHE.get(cle)
-    if en_cache and maintenant() - en_cache[0] < DUREE_CACHE:
+    if en_cache and maintenant() - en_cache[0] < CACHE_DURATION:
         return en_cache[1]
     adresse = URL + "?" + urllib.parse.urlencode(dict({"q": terme, "o": ordre, "p": page}, **({"c": categorie} if categorie else {})))
     statut, _, corps = http(adresse)
     if statut != 200:
         raise OSError(_t("ollama.com a répondu {}.").format(statut))
     page_html = corps.decode("utf-8", "replace")
-    trouves = analyser(page_html)
+    trouves = parse(page_html)
     vus = set()
     uniques = [m for m in trouves if not (m["nom"] in vus or vus.add(m["nom"]))]          # une même page ne répète pas un modèle
-    gardes = [m for m in uniques if compatible(m["nom"]) and (categorie == "embedding" or "embedding" not in m["capacites"]) and not ("cloud" in m["capacites"] and not m["tailles"])]
+    gardes = [m for m in uniques if compatible_with(m["nom"]) and (categorie == "embedding" or "embedding" not in m["capacites"]) and not ("cloud" in m["capacites"] and not m["tailles"])]
     if leger:
-        gardes = [m for m in gardes if any(0 < milliards(t) <= LEGER_B for t in m["tailles"])]          # au moins une taille qui tient sur une machine modeste
+        gardes = [m for m in gardes if any(0 < billions(t) <= LIGHT_B for t in m["tailles"])]          # au moins une taille qui tient sur une machine modeste
     for m in gardes:
         m["lien"] = "https://ollama.com/library/" + m["nom"]
     resultat = {"modeles": gardes, "suite": 'data-has-more="true"' in page_html}          # ni modèles d'embeddings (pas de conversation), ni modèles seulement dans le nuage

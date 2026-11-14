@@ -385,7 +385,7 @@ def commande_chat(args):
 
 def commande_modeles(args):
     d, cfg = contexte()
-    cat = model_catalog.charger(Path(d["cache"]) / "catalogue.json")
+    cat = model_catalog.load(Path(d["cache"]) / "catalogue.json")
     profil = hardware.detecter()
     o = ollama_client.Ollama()
     if args.action == "recommander":
@@ -398,13 +398,13 @@ def commande_modeles(args):
             if mo is None:
                 print(_t("Moteur inconnu : {}.").format(args.moteur), file=sys.stderr)
                 return 1
-            choix = model_compat.roles_pour(profil, cat, mo)
+            choix = model_compat.roles_for(profil, cat, mo)
         else:
             choix = model_selection.choose(profil, cat)
         print(_t("Ta machine : ") + profil.resume() + "\n")
         for role in model_catalog.ROLES:
             c = choix.get(role)
-            titre = _t(model_catalog.LIBELLES[role][0])
+            titre = _t(model_catalog.LABELS[role][0])
             print("{:<11} {}".format(titre, "—" if not c else "{} ({:g} Go)".format(c.id, c.modele["go"])))
             if c:
                 print("            " + c.modele["phrase"])
@@ -429,7 +429,7 @@ def commande_modeles(args):
         return 2
     try:
         if args.action == "installer":
-            m = model_catalog.par_id(cat).get(args.modele)
+            m = model_catalog.by_id(cat).get(args.modele)
             if m and m.get("avertissement"):
                 print("⚠ " + m["avertissement"])
             o.telecharger(args.modele, setup_wizard.barre(setup_wizard.Es()))
@@ -500,25 +500,25 @@ def commande_travaux(args):
     interdits = [d["config"], d["donnees"], d["memoire"], d["cache"]]
     try:
         if args.action == "ajouter":
-            t = workspaces.ajouter(cfg, args.valeur, args.nom, interdits)
+            t = workspaces.add(cfg, args.valeur, args.nom, interdits)
             config.save(d, cfg)
             print(_t("✔ Dossier de travail « {} » : {}").format(t["nom"], t["chemin"]))
         elif args.action == "retirer":
-            workspaces.retirer(cfg, args.valeur or "")
+            workspaces.remove(cfg, args.valeur or "")
             config.save(d, cfg)
             print(_t("✔ Retiré de la liste (les fichiers ne sont pas touchés)."))
         elif args.action == "actif":
-            t = workspaces.choisir(cfg, args.valeur or "")
+            t = workspaces.choose(cfg, args.valeur or "")
             config.save(d, cfg)
             print(_t("✔ Dossier actif : {} ({})").format(t["nom"], t["chemin"]))
             print(_t("Si Lutin tourne déjà, choisis aussi ce dossier dans l'interface (ou relance Lutin)."))
-    except workspaces.ErreurTravail as e:
+    except workspaces.WorkError as e:
         print("✘ " + str(e), file=sys.stderr)
         return 1
-    actif = workspaces.actif(cfg)
-    for t in workspaces.liste(cfg):
+    actif = workspaces.active(cfg)
+    for t in workspaces.entries(cfg):
         print("{} {:<14} {:<22} {}".format("→" if actif and t["id"] == actif["id"] else " ", t["id"], t["nom"], t["chemin"]))
-    if not workspaces.liste(cfg):
+    if not workspaces.entries(cfg):
         print(_t("Aucun dossier de travail : lutin workspaces add <chemin>"))
     return 0
 
@@ -549,7 +549,7 @@ def commande_bench_moteurs(args):
 def commande_essai_moteur(args):
     """Fait pour de vrai, sur cette machine, ce que Lutin fait avec un moteur (voir engine_trial.py) et écrit un rapport."""
     d, cfg = contexte()
-    actif = workspaces.actif(cfg)
+    actif = workspaces.active(cfg)
     os.environ.setdefault("LUTIN_RACINE", str(actif["chemin"] if actif else Path.home() / "Lutin"))
     os.environ.setdefault("LUTIN_DONNEES", str(d["donnees"]))
     os.environ.setdefault("LUTIN_MEMOIRE", str(d["memoire"]))
@@ -565,14 +565,14 @@ def commande_essai_moteur(args):
             return 1
     horodatage = time.strftime("%Y%m%d-%H%M%S")
     rapport = Path(d["donnees"]) / "essais" / "essai-{}-{}.json".format(mo.id, horodatage)
-    resultat = engine_trial.executer({"modele": args.modele, "modele_local": args.modele_local, "modele_test": args.modele_test, "oui": args.oui, "sans_outils": args.sans_outils, "ctx": args.ctx}, mo, chemin_rapport=rapport)
+    resultat = engine_trial.run({"modele": args.modele, "modele_local": args.modele_local, "modele_test": args.modele_test, "oui": args.oui, "sans_outils": args.sans_outils, "ctx": args.ctx}, mo, chemin_rapport=rapport)
     return 0 if resultat["reussi"] else 1
 
 
 def commande_mcp(args):
     """Les connecteurs MCP en ligne de commande (utile dans Docker, où la page ne peut pas les modifier)."""
     d, cfg = contexte()
-    actif = workspaces.actif(cfg)          # le moteur lit ces dossiers à l'import : on les fixe sans rien créer (ni dossier de travail, ni réglage)
+    actif = workspaces.active(cfg)          # le moteur lit ces dossiers à l'import : on les fixe sans rien créer (ni dossier de travail, ni réglage)
     os.environ.setdefault("LUTIN_RACINE", str(actif["chemin"] if actif else Path.home() / "Lutin"))
     os.environ.setdefault("LUTIN_DONNEES", str(d["donnees"]))
     os.environ.setdefault("LUTIN_MEMOIRE", str(d["memoire"]))
@@ -666,7 +666,7 @@ def commande_bench(args):
         bench.enregistrer(Path(d["cache"]) / "bench.json", mesure)
         print("  → " + bench.resume(mesure))
         if mesure["notes"]:
-            print(_t("  Notes mesurées (indicatives, une vingtaine de questions) : ") + ", ".join("{} {}/10".format(_t(model_catalog.LIBELLES[r][0]).lower(), n) for r, n in mesure["notes"].items()))
+            print(_t("  Notes mesurées (indicatives, une vingtaine de questions) : ") + ", ".join("{} {}/10".format(_t(model_catalog.LABELS[r][0]).lower(), n) for r, n in mesure["notes"].items()))
         if mesure.get("erreur"):
             print(_t("  ⚠ Mesure incomplète : ") + mesure["erreur"])
             code = 1
@@ -746,11 +746,11 @@ def commande_reprendre(args, entree=input):
                     reponse = ""
                 nums = {int(x) for x in reponse.replace(" ", ",").split(",") if x.isdigit()}
                 choix = [lignes[i - 1][0] for i in sorted(nums) if 1 <= i <= len(lignes)] if nums else list(migrate.CATEGORIES)
-            actif = workspaces.par_id(cfg, args.cible) if args.cible else workspaces.actif(cfg)
+            actif = workspaces.by_id(cfg, args.cible) if args.cible else workspaces.active(cfg)
             if args.cible and not actif:
                 raise ValueError(_t("Dossier de travail inconnu."))
             racine = actif["chemin"] if actif else cfg["emplacements"]["travail"]
-            rapport = migrate.import_all(trouve, d, choix, racine_travail=racine, ecraser=args.ecraser, workspaces=[t["id"] for t in workspaces.liste(cfg)])
+            rapport = migrate.import_all(trouve, d, choix, racine_travail=racine, ecraser=args.ecraser, workspaces=[t["id"] for t in workspaces.entries(cfg)])
     except ValueError as e:
         print("✘ " + str(e), file=sys.stderr)
         return 2
@@ -766,11 +766,11 @@ def commande_importer(args, entree=input):
     if not source.is_dir():
         print("✘ " + _t("Ce dossier n'existe pas : {}").format(source), file=sys.stderr)
         return 2
-    trouve = claude_project.detecter(source)
-    if claude_project.est_vide(trouve):
+    trouve = claude_project.detect(source)
+    if claude_project.is_empty(trouve):
         print("✘ " + _t("Ni CLAUDE.md ni dossier .claude/ dans ce dossier : ce n'est pas un projet Claude (pour l'utiliser quand même : lutin workspaces add <dossier>)."), file=sys.stderr)
         return 2
-    print(_t("Trouvé dans {} : {}").format(source, claude_project.resume(trouve)))
+    print(_t("Trouvé dans {} : {}").format(source, claude_project.summary(trouve)))
     mode = "ici" if args.ici else "copie" if args.copie else None
     if mode is None:
         print(_t("  1. Faire une copie (l'original n'est jamais touché)  [conseillé]\n  2. Travailler dedans (les fichiers sont lus et modifiés sur place, avec ton accord)"))
@@ -782,13 +782,13 @@ def commande_importer(args, entree=input):
     try:
         if mode == "copie":
             destination = Path(args.vers).expanduser() if args.vers else Path.home() / "Lutin" / source.name
-            cible = claude_project.copier(source, destination)
+            cible = claude_project.copy(source, destination)
             print(_t("✔ Copie faite : {}").format(cible))
         else:
             cible = source.resolve()
         interdits = [d["config"], d["donnees"], d["memoire"], d["cache"]]
-        t = workspaces.ajouter(cfg, str(cible), args.nom or source.name, interdits)
-        workspaces.choisir(cfg, t["id"])
+        t = workspaces.add(cfg, str(cible), args.nom or source.name, interdits)
+        workspaces.choose(cfg, t["id"])
         config.save(d, cfg)
     except ValueError as e:
         print("✘ " + str(e), file=sys.stderr)

@@ -50,7 +50,7 @@ def racines_permises():
     from . import addons, workspaces
     racines = []
     try:
-        racines += [Path(t["chemin"]).resolve() for t in workspaces.liste(_m.config_lue())]
+        racines += [Path(t["chemin"]).resolve() for t in workspaces.entries(_m.config_lue())]
     except (OSError, ValueError):
         pass
     racines.append(_m.RACINE.resolve())
@@ -337,8 +337,8 @@ def dossiers_conversation(ident):
     from . import workspaces
     cfg = _m.config_lue()
     conv = _m.conv_lire(ident)
-    t = workspaces.par_id(cfg, conv["travail"]) if conv.get("travail") else None
-    t = t or workspaces.actif(cfg)
+    t = workspaces.by_id(cfg, conv["travail"]) if conv.get("travail") else None
+    t = t or workspaces.active(cfg)
     permises = racines_permises()
     vus, sortie = set(), []
 

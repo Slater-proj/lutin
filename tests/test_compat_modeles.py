@@ -28,46 +28,46 @@ class Compatibilite(unittest.TestCase):
     def test_ollama_accepte_tout_le_catalogue(self):
         mo = FauxMoteur("ollama", "Ollama", TOUT)
         for m in CATALOGUE["modeles"]:
-            self.assertTrue(model_compat.evaluer(m, mo)["compatible"])
+            self.assertTrue(model_compat.evaluate(m, mo)["compatible"])
 
     def test_une_capacite_non_supportee_exclut_le_modele_avec_la_raison(self):
         grille = dict(TOUT, vision=("non", "pas d'images ici"))
         mo = FauxMoteur("x", "Moteur X", grille)
-        r = model_compat.evaluer(CATALOGUE["modeles"][1], mo)
+        r = model_compat.evaluate(CATALOGUE["modeles"][1], mo)
         self.assertFalse(r["compatible"])
         self.assertIn("vision", r["raisons"][0])
         self.assertIn("pas d'images ici", r["raisons"][0])
-        self.assertTrue(model_compat.evaluer(CATALOGUE["modeles"][0], mo)["compatible"])
+        self.assertTrue(model_compat.evaluate(CATALOGUE["modeles"][0], mo)["compatible"])
 
     def test_une_capacite_non_testee_est_un_avertissement_pas_un_refus(self):
         mo = FauxMoteur("x", "Moteur X", dict(TOUT, vision=("non_teste", "")))
-        r = model_compat.evaluer(CATALOGUE["modeles"][1], mo)
+        r = model_compat.evaluate(CATALOGUE["modeles"][1], mo)
         self.assertTrue(r["compatible"])
         self.assertTrue(r["avertissements"])
 
     def test_un_serveur_externe_ne_propose_que_ses_modeles(self):
         mo = FauxMoteur("openai", "Serveur", TOUT, genre="aucun")
-        self.assertFalse(model_compat.evaluer(CATALOGUE["modeles"][0], mo)["compatible"])
-        self.assertTrue(model_compat.evaluer(CATALOGUE["modeles"][0], mo, installes=["a:8b"])["compatible"])
+        self.assertFalse(model_compat.evaluate(CATALOGUE["modeles"][0], mo)["compatible"])
+        self.assertTrue(model_compat.evaluate(CATALOGUE["modeles"][0], mo, installes=["a:8b"])["compatible"])
 
     def test_quantification_et_memoire(self):
-        self.assertEqual(model_compat.quantification("qwen3:8b-q8_0"), "Q8_0")
-        self.assertEqual(model_compat.quantification("qwen3:8b-q4_K_M"), "Q4_K_M")
-        self.assertEqual(model_compat.quantification("qwen3:8b"), "par défaut")
-        r = model_compat.evaluer(CATALOGUE["modeles"][0], FauxMoteur("ollama", "Ollama", TOUT))
+        self.assertEqual(model_compat.quantization("qwen3:8b-q8_0"), "Q8_0")
+        self.assertEqual(model_compat.quantization("qwen3:8b-q4_K_M"), "Q4_K_M")
+        self.assertEqual(model_compat.quantization("qwen3:8b"), "par défaut")
+        r = model_compat.evaluate(CATALOGUE["modeles"][0], FauxMoteur("ollama", "Ollama", TOUT))
         self.assertEqual(r["format"], "GGUF")
         self.assertGreater(r["memoire_go"], 5.0)
 
     def test_le_catalogue_filtre_ne_garde_que_le_compatible(self):
         mo = FauxMoteur("x", "Moteur X", dict(TOUT, vision=("non", "")))
-        f = model_compat.filtrer(CATALOGUE, mo)
+        f = model_compat.filter_models(CATALOGUE, mo)
         self.assertEqual([m["id"] for m in f["modeles"]], ["a:8b"])
 
     def test_les_vrais_moteurs_ont_une_grille_utilisable(self):
         """Le catalogue livré, filtré par chaque vrai moteur, garde au moins un modèle à outils (sinon Lutin n'aurait rien à proposer)."""
         for ident in ("ollama", "llamacpp"):
             mo = engines.MOTEURS[ident]
-            f = model_compat.filtrer(_m._CATALOGUE, mo)
+            f = model_compat.filter_models(_m._CATALOGUE, mo)
             self.assertTrue(any("outils" in m["capacites"] for m in f["modeles"]), ident)
 
 

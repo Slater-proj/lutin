@@ -47,8 +47,8 @@ class CatalogueGguf(unittest.TestCase):
     def test_la_communaute_officielle_est_la_valeur_par_defaut_et_tous_les_auteurs_un_choix(self):
         appels = []
         depot = {"id": "lmstudio-community/Qwen3-8B-GGUF", "downloads": 900, "likes": 12, "lastModified": "2026-11-05T10:00:00Z", "pipeline_tag": "text-generation", "tags": ["gguf", "license:apache-2.0"]}
-        r = LC.chercher("qwen", "recent", False, 1, faux_hf(depots=[depot, {"id": "x/autre-modele", "tags": ["exl3"]}], appels=appels))
-        LC.chercher("qwen", "populaire", True, 1, faux_hf(depots=[depot], appels=appels))
+        r = LC.search("qwen", "recent", False, 1, faux_hf(depots=[depot, {"id": "x/autre-modele", "tags": ["exl3"]}], appels=appels))
+        LC.search("qwen", "populaire", True, 1, faux_hf(depots=[depot], appels=appels))
         self.assertIn("author=lmstudio-community", appels[0])
         self.assertIn("filter=gguf", appels[1])
         self.assertNotIn("author=", appels[1])
@@ -58,10 +58,10 @@ class CatalogueGguf(unittest.TestCase):
     def test_les_fichiers_sont_regroupes_par_quantification_sans_les_projecteurs_d_images(self):
         arbre = [fichier("Qwen3-8B-Q8_0.gguf", 8.7), fichier("Qwen3-8B-Q4_K_M.gguf", 5.0), fichier("mmproj-Qwen3-8B-F16.gguf", 1.2), fichier("README.md", 0.00001),
                  fichier("Gros-Q4_K_M-00001-of-00002.gguf", 20), fichier("Gros-Q4_K_M-00002-of-00002.gguf", 18), {"type": "directory", "path": "sous-dossier"}]
-        q = LC.quantifications("lmstudio-community/Qwen3-8B-GGUF", faux_hf(arbre))
+        q = LC.quantizations("lmstudio-community/Qwen3-8B-GGUF", faux_hf(arbre))
         self.assertEqual([(x["revision"], x["go"], x["fichiers"]) for x in q], [("Q8_0", 8.7, 1), ("Q4_K_M", 43.0, 3)])
         with self.assertRaises(ValueError):
-            LC.quantifications("--help", faux_hf())
+            LC.quantizations("--help", faux_hf())
 
 
 class Suppression(unittest.TestCase):
@@ -74,12 +74,12 @@ class Suppression(unittest.TestCase):
         (racine / "pub" / "modele" / "a.gguf").write_bytes(b"x")
         (self.tmp / "ailleurs.txt").write_text("à garder", encoding="utf-8")
         liste = lambda: [{"nom": "a", "chemin": "pub/modele/a.gguf"}, {"nom": "piege", "chemin": "../ailleurs.txt"}, {"nom": "vide", "chemin": ""}]  # noqa: E731
-        with mock.patch.object(L, "dossier_modeles", lambda: racine):
+        with mock.patch.object(L, "models_folder", lambda: racine):
             for mauvais in ("inconnu", "piege", "vide"):
                 with self.assertRaises(ValueError, msg=mauvais):
-                    L.supprimer_modele(mauvais, liste)
+                    L.remove_model(mauvais, liste)
             self.assertTrue((self.tmp / "ailleurs.txt").is_file())
-            self.assertTrue(L.supprimer_modele("a", liste))
+            self.assertTrue(L.remove_model("a", liste))
         self.assertFalse((racine / "pub").exists(), "les dossiers laissés vides disparaissent aussi")
         self.assertTrue(racine.is_dir(), "mais pas le dossier des modèles lui-même")
 
@@ -119,10 +119,10 @@ class Moteur(unittest.TestCase):
     def test_supprimer_un_modele_lm_studio_passe_par_lutin(self):
         ml.regler_serveur("openai", {"serveur": "lmstudio"})
         appels = []
-        with mock.patch.object(L, "supprimer_modele", lambda nom: appels.append(nom)):
+        with mock.patch.object(L, "remove_model", lambda nom: appels.append(nom)):
             self.mo.supprimer_modele("a")
         self.assertEqual(appels, ["a"])
-        with mock.patch.object(L, "supprimer_modele", mock.Mock(side_effect=PermissionError())):
+        with mock.patch.object(L, "remove_model", mock.Mock(side_effect=PermissionError())):
             with self.assertRaises(ml.ErreurMoteur) as e:
                 self.mo.supprimer_modele("a")
         self.assertIn("arrête LM Studio", str(e.exception))

@@ -144,11 +144,11 @@ class Completude(unittest.TestCase):
             self.assertTrue(en.strip(), fr)
 
     def test_le_catalogue_est_entierement_traduit(self):
-        for m in model_catalog.charger()["modeles"]:
+        for m in model_catalog.load()["modeles"]:
             for champ in ("nom", "phrase", "avertissement"):
                 if m.get(champ):
                     self.assertIn(m[champ], self.dico, "{} : {}".format(m["id"], champ))
-        for role, (titre, detail) in model_catalog.LIBELLES.items():
+        for role, (titre, detail) in model_catalog.LABELS.items():
             self.assertIn(titre, self.dico)
             self.assertIn(detail, self.dico)
 

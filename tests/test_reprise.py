@@ -213,12 +213,12 @@ class Archives(Base):
 
 class DansLeMoteurEtLaLigneDeCommande(Base):
     def test_fonctions_du_moteur(self):
-        trouve = A.reprise_detecter(str(self.assistant))
+        trouve = A.resume_detect(str(self.assistant))
         self.assertEqual((trouve["conversations"], trouve["skills"]), (4, 2))
         avant = A.RACINE
         try:
             A.definir_racine(str(self.travail))
-            r = A.reprise_importer(str(self.assistant), ["skills", "conversations"])
+            r = A.resume_import(str(self.assistant), ["skills", "conversations"])
         finally:
             A.definir_racine(str(avant))
         self.assertEqual(len(r["skills"]["importes"]), 2)
@@ -303,7 +303,7 @@ class OuEstLaDonnee(Base):
 
     def test_un_partage_reseau_introuvable_dit_quoi_verifier(self):
         reseau = Path(chr(92) * 2 + "nas" + chr(92) + "partage")
-        with mock.patch.object(migrate.travaux, "avec_delai", side_effect=[(True, False), (True, (False, False, False))]):
+        with mock.patch.object(migrate.travaux, "with_timeout", side_effect=[(True, False), (True, (False, False, False))]):
             with self.assertRaisesRegex(migrate.MigrationError, "réseau.*compte Windows"):
                 self.compter(reseau)
 

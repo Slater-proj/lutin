@@ -57,7 +57,7 @@ IP_LAN = ""
 VERIFICATEUR = None          # fonction(portee) -> propositions de modèles ; fournie par le lanceur (boutons « chercher » de l'onglet Modèles)
 
 # Modèles proposés : le catalogue livré avec Lutin (lutin/data/modeles.json), pas du code. Le lanceur peut y ajouter une copie plus récente.
-_CATALOGUE = _catalogue.charger(os.environ.get("LUTIN_CATALOGUE") or None)
+_CATALOGUE = _catalogue.load(os.environ.get("LUTIN_CATALOGUE") or None)
 MODELES = [{"id": m["id"], "nom": m["nom"], "phrase": m["phrase"], "go": m["go"], "role": max(m["notes"], key=m["notes"].get), "avance": bool(m.get("avance")),
             "avertissement": m.get("avertissement", ""), "licence": m["licence"], "capacites": m["capacites"]} for m in _CATALOGUE["modeles"]]
 REGLAGES_DEFAUT = {"modele": os.environ.get("LUTIN_MODELE") or "qwen3:8b", "avance": False, "num_ctx": 24576, "temperature": 0.6, "reflexion": False, "auto_ecriture": False, "auto_commandes": False, "mode": "polyvalent", "num_predict": 0, "tours_max": 14, "web": True,
@@ -870,18 +870,18 @@ def _rendre_la_main(ident, stop):
 
 
 from .workspace_manager import (  # noqa: F401  (déplacé dans workspace_manager.py : moteur ré-exporte ses noms)
-    activer_travail,
-    ajouter_travail,
-    apercu_travail,
-    changer_chemin_travail,
-    choisir_travail,
-    deplacer_travail,
-    importer_projet_claude,
-    lister_dossiers,
-    reprise_detecter,
-    reprise_importer,
-    retirer_travail,
-    travaux_etat,
+    activate_work,
+    add_work,
+    work_preview,
+    change_work_path,
+    choose_work,
+    move_work,
+    import_claude_project,
+    list_folders,
+    resume_detect,
+    resume_import,
+    remove_work,
+    works_state,
 )
 
 from .server import (  # noqa: F401  (déplacé dans server.py : moteur ré-exporte ses noms)

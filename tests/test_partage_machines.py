@@ -47,14 +47,14 @@ class ModelesTelechargesSousDocker(unittest.TestCase):
         def lire(dossier):
             lus.append(Path(dossier) if dossier else None)
             return {"qwen3:8b": {"fichier": Path(dossier) / "blob", "taille": 5_000_000_000, "projecteur": None}}
-        with mock.patch.object(self.mo, "bibliotheque", lambda: self.lib), mock.patch("lutin.ollama_shared_models.lire", lire):
+        with mock.patch.object(self.mo, "bibliotheque", lambda: self.lib), mock.patch("lutin.ollama_shared_models.read_shared", lire):
             communs = self.mo.partages()
         self.assertEqual(list(communs), ["qwen3:8b"])
         self.assertEqual(communs["qwen3:8b"]["origine"], "lutin")
         self.assertEqual(lus, [self.lib], "sous Docker, le dossier d'Ollama (un autre conteneur) n'est pas lu ; la bibliothèque de Lutin, si")
 
     def test_le_modele_telecharge_apparait_dans_la_liste_des_modeles_installes(self):
-        with mock.patch.object(self.mo, "bibliotheque", lambda: self.lib), mock.patch("lutin.ollama_shared_models.lire", lambda d: {"granite4:3b": {"fichier": Path(d) / "b", "taille": 2_000_000_000, "projecteur": None}}):
+        with mock.patch.object(self.mo, "bibliotheque", lambda: self.lib), mock.patch("lutin.ollama_shared_models.read_shared", lambda d: {"granite4:3b": {"fichier": Path(d) / "b", "taille": 2_000_000_000, "projecteur": None}}):
             m = self.mo.modeles()
         self.assertIn("granite4:3b", m["installes"])
         self.assertEqual(m["tailles"]["granite4:3b"], 2_000_000_000)
@@ -62,7 +62,7 @@ class ModelesTelechargesSousDocker(unittest.TestCase):
     def test_hors_docker_rien_ne_change_et_un_serveur_externe_n_a_pas_de_modele_local(self):
         engines.CONTEXTE["en_docker"] = lambda: False
         lus = []
-        with mock.patch.object(self.mo, "bibliotheque", lambda: self.lib), mock.patch("lutin.ollama_shared_models.lire", lambda d: lus.append(d) or {}):
+        with mock.patch.object(self.mo, "bibliotheque", lambda: self.lib), mock.patch("lutin.ollama_shared_models.read_shared", lambda d: lus.append(d) or {}):
             ml.CACHE_PARTAGE.clear()
             self.mo.partages()
         self.assertEqual(len(lus), 2, "hors Docker : le dossier d'Ollama ET la bibliothèque")

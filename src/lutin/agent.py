@@ -911,7 +911,7 @@ def installer_modele(modele):
     catalogue_m = next((m for m in _m._CATALOGUE["modeles"] if m["id"] == modele), None)
     if catalogue_m is not None:          # un modèle du catalogue que ce moteur ne sait pas faire tourner n'est jamais installé
         from . import model_compat
-        verdict = model_compat.evaluer(catalogue_m, moteur_actuel(), etat_moteur()["installes"])
+        verdict = model_compat.evaluate(catalogue_m, moteur_actuel(), etat_moteur()["installes"])
         if not verdict["compatible"]:
             raise ValueError(" ".join(verdict["raisons"]))
     if PULLS.get(modele, {}).get("statut") == "en cours":
@@ -1024,7 +1024,7 @@ def consignes_systeme(r):
             + ("" if r.get("mode") in ("discussion", "recherche") else _t("\n\n# CRÉER UN FICHIER\nQuand on te demande de créer ou d'écrire un fichier (docker-compose, script, configuration, document), appelle l'outil « ecrire » avec le chemin et le contenu complet, y compris après une recherche web. Ne te contente pas de montrer le contenu dans ta réponse."))
             + (_t("\n\n# ESSAI À BLANC\nTes écritures et tes commandes ne sont PAS exécutées : c'est une simulation, l'utilisateur voit ce que tu proposes. Propose ce que tu ferais (fichiers, contenu, commandes), sans insister ni réessayer. Ce que tu simules n'existe PAS ensuite : un fichier « créé » ici ne se relira pas, une commande « lancée » n'a rien produit. Ne dis jamais que c'est fait : conclus par « voici ce que je ferais ». Lire et chercher fonctionnent normalement.\n") if r.get("essai_a_blanc") else "")
             + (_t("\n\n# DÉBUT DE LA CONVERSATION\nLes premiers échanges ne sont plus tous sous tes yeux (fiche de suivi ou résumé). Pour retrouver un détail précis (une décision, un nom, un chiffre, un texte), appelle « rappeler » avec quelques mots-clés et ici=true : ne le devine pas.\n") if r.get("rappel_ici") else "")
-            + _pc.bloc_prompt(_m.RACINE)
+            + _pc.prompt_block(_m.RACINE)
             + bloc_plan(r)
             + _t("\n\nDate : ") + datetime.now().strftime("%Y-%m-%d") + _t(". Dossier du projet : ") + str(_m.RACINE))
 

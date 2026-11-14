@@ -77,7 +77,7 @@ def creer(nom, cahier, travail, duree_h=DUREE_DEFAUT_H, autonome=True, conv_id="
         duree_h = max(1, min(DUREE_MAX_H, int(duree_h)))
     except (TypeError, ValueError):
         duree_h = DUREE_DEFAUT_H
-    t = _trav.par_id(_m.config_lue(), str(travail or ""))
+    t = _trav.by_id(_m.config_lue(), str(travail or ""))
     if t is None:
         raise ValueError(_t("Choisis un de tes dossiers de travail (onglet Dossiers de travail)."))
     with VERROU:
@@ -231,7 +231,7 @@ def _tour(m):
             conv["titre"] = "🎯 " + m["nom"]
             conv["travail"] = m["travail"]
         try:
-            _m.activer_travail(conv, m["travail"])
+            _m.activate_work(conv, m["travail"])
         except ValueError as erreur:
             if nouvelle:
                 _d.conv_chemin(conv["id"]).unlink(missing_ok=True)

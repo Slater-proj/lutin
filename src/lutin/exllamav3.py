@@ -24,7 +24,7 @@ from pathlib import Path
 
 from . import colibri, updates, external_programs
 from .i18n import t as _t
-from .engine_replace import remplacer_dossier
+from .engine_replace import replace_folder
 
 DEPOT_TABBY = "theroyallab/tabbyAPI"
 DEPOT_LIB = "turboderp-org/exllamav3"
@@ -217,12 +217,12 @@ def installer(dossiers=None, port=PORT_DEFAUT, dire=print, http=updates.http_get
         except Exception:
             shutil.rmtree(partiel, ignore_errors=True)
             raise
-        remplacer_dossier(racine, cible)
+        replace_folder(racine, cible)
         shutil.rmtree(partiel, ignore_errors=True)
     venv = base / "venv"
     if not python_venv(dossiers).is_file():
         passer(3, _t("création de l'environnement Python dédié…"))
-        external_programs.creer_venv(venv, dossiers, dire, executer, installer_uv)          # le Python de l'installateur Windows n'a pas « venv » : uv le remplace, installé au besoin
+        external_programs.create_venv(venv, dossiers, dire, executer, installer_uv)          # le Python de l'installateur Windows n'a pas « venv » : uv le remplace, installé au besoin
     else:
         passer(3, _t("environnement Python dédié déjà là."))
     passer(4, _t("installation des dépendances (torch et ExLlamaV3 : plusieurs Go, plusieurs minutes — la ligne ci-dessous montre ce que pip fait)…"))
@@ -377,7 +377,7 @@ def telecharger_modele(depot, revision="", dossiers=None, dire=print, lancer=sub
     if progres is not None:
         try:
             from . import exllamav3_catalog
-            total = int(exllamav3_catalog.taille_revision(depot, revision or "main", http))
+            total = int(exllamav3_catalog.revision_size(depot, revision or "main", http))
         except (ValueError, OSError):
             total = 0          # taille inconnue : on montre ce qui est reçu, sans pourcentage
         suivi = threading.Thread(target=_suivre_taille, args=(dossier_modeles(dossiers) / nom_dossier_modele(depot, revision), total, dire, progres, arret), daemon=True, name="exl3-progression")
@@ -395,7 +395,7 @@ def telecharger_modele(depot, revision="", dossiers=None, dire=print, lancer=sub
         if (dossier_modeles(dossiers) / nom).is_dir():
             try:
                 from . import exllamav3_catalog
-                commit = exllamav3_catalog.commit(depot, revision or "main", http)
+                commit = exllamav3_catalog.commit_of(depot, revision or "main", http)
             except (ValueError, OSError):
                 commit = ""
             noter_modele(dossiers, nom, depot, revision, commit)

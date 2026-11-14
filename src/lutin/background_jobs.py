@@ -78,7 +78,7 @@ def dossier_autorise(chemin):
         raise ValueError(_t("Dossier invalide."))
     if not p.is_dir():
         raise ValueError(_t("Ce dossier n'existe pas ou n'est pas joignable."))
-    for t in _trav.liste(_m.config_lue()):
+    for t in _trav.entries(_m.config_lue()):
         try:
             racine = Path(t["chemin"]).resolve()
         except (OSError, ValueError):

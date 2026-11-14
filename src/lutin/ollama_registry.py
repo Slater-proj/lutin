@@ -12,45 +12,45 @@ from . import updates, ollama_client
 from . import ollama_shared_models as _partage
 from .i18n import t as _t
 
-HOTE = "registry.ollama.ai"
-URL = "https://" + HOTE + "/v2/{espace}/{nom}/{genre}/{reference}"
+HOST = "registry.ollama.ai"
+URL = "https://" + HOST + "/v2/{espace}/{nom}/{genre}/{reference}"
 ACCEPT = "application/vnd.docker.distribution.manifest.v2+json"
-RE_NOM = re.compile(r"^(?:([A-Za-z0-9][\w.-]*)/)?([A-Za-z0-9][\w.-]*)(?::([A-Za-z0-9][\w.-]*))?$")
-RE_EMPREINTE = re.compile(r"^sha256:([0-9a-f]{64})$")
+RE_NAME = re.compile(r"^(?:([A-Za-z0-9][\w.-]*)/)?([A-Za-z0-9][\w.-]*)(?::([A-Za-z0-9][\w.-]*))?$")
+RE_DIGEST = re.compile(r"^sha256:([0-9a-f]{64})$")
 
 
-class ErreurRegistre(Exception):
+class RegistryError(Exception):
     pass
 
 
-def decomposer(modele):
+def decompose(modele):
     """« qwen3:8b » -> (« library », « qwen3 », « 8b ») ; « huihui_ai/x:4b » -> (« huihui_ai », « x », « 4b »). ErreurRegistre si le nom est invalide."""
-    m = RE_NOM.match(str(modele or "").strip())
+    m = RE_NAME.match(str(modele or "").strip())
     if not m:
-        raise ErreurRegistre(_t("Nom de modèle invalide."))
+        raise RegistryError(_t("Nom de modèle invalide."))
     return m.group(1) or "library", m.group(2), m.group(3) or "latest"
 
 
-def lire_manifeste(modele, http=updates.http_get):
-    espace, nom, tag = decomposer(modele)
+def read_manifest(modele, http=updates.http_get):
+    espace, nom, tag = decompose(modele)
     try:
         statut, _, corps = http(URL.format(espace=espace, nom=nom, genre="manifests", reference=tag), {"Accept": ACCEPT}, 20)
     except OSError as e:
-        raise ErreurRegistre(_t("Le registre d'Ollama ne répond pas : {}").format(e))
+        raise RegistryError(_t("Le registre d'Ollama ne répond pas : {}").format(e))
     if statut == 404:
-        raise ErreurRegistre("model does not exist: " + str(modele))
+        raise RegistryError("model does not exist: " + str(modele))
     if statut != 200:
-        raise ErreurRegistre(_t("Le registre d'Ollama a répondu {}.").format(statut))
+        raise RegistryError(_t("Le registre d'Ollama a répondu {}.").format(statut))
     try:
         manifeste = json.loads(corps.decode("utf-8"))
     except ValueError:
-        raise ErreurRegistre(_t("Réponse illisible du registre d'Ollama."))
+        raise RegistryError(_t("Réponse illisible du registre d'Ollama."))
     if not isinstance(manifeste, dict) or not isinstance(manifeste.get("layers"), list):
-        raise ErreurRegistre(_t("Réponse inattendue du registre d'Ollama."))
+        raise RegistryError(_t("Réponse inattendue du registre d'Ollama."))
     return manifeste, corps
 
 
-def _empreinte_fichier(f):
+def _file_digest(f):
     h = hashlib.sha256()
     with open(f, "rb") as flux:
         for bloc in iter(lambda: flux.read(1 << 20), b""):
@@ -58,24 +58,24 @@ def _empreinte_fichier(f):
     return h.hexdigest()
 
 
-def _morceaux(manifeste):
+def _chunks(manifeste):
     """[(empreinte hexadécimale, taille, type)] de tous les morceaux, dans l'ordre : configuration, puis couches."""
     sortie = []
     for c in ([manifeste.get("config")] if isinstance(manifeste.get("config"), dict) else []) + [c for c in manifeste["layers"] if isinstance(c, dict)]:
-        m = RE_EMPREINTE.match(str(c.get("digest") or ""))
+        m = RE_DIGEST.match(str(c.get("digest") or ""))
         if m:
             sortie.append((m.group(1), int(c.get("size") or 0), str(c.get("mediaType") or "")))
     return sortie
 
 
-def telecharger(modele, dossier, progression=None, http=updates.http_get, recuperer=ollama_client.telecharger_fichier):
+def download(modele, dossier, progression=None, http=updates.http_get, recuperer=ollama_client.telecharger_fichier):
     """Télécharge `modele` dans `dossier` (disposition d'Ollama). progression(texte, fait, total). Renvoie le dossier. ErreurRegistre si le modèle n'existe pas, si un morceau est corrompu ou si le réseau lâche."""
-    manifeste, brut = lire_manifeste(modele, http)
-    if not any(c.get("mediaType") == _partage.TYPE_MODELE for c in manifeste["layers"] if isinstance(c, dict)):
-        raise ErreurRegistre(_t("Ce modèle n'a pas de fichier de modèle utilisable par un autre moteur."))
-    espace, nom, tag = decomposer(modele)
+    manifeste, brut = read_manifest(modele, http)
+    if not any(c.get("mediaType") == _partage.MODEL_TYPE for c in manifeste["layers"] if isinstance(c, dict)):
+        raise RegistryError(_t("Ce modèle n'a pas de fichier de modèle utilisable par un autre moteur."))
+    espace, nom, tag = decompose(modele)
     dossier = Path(dossier)
-    morceaux = _morceaux(manifeste)
+    morceaux = _chunks(manifeste)
     total = sum(t for _, t, _ in morceaux)
     deja = 0
     for hexa, taille, _type in morceaux:
@@ -90,12 +90,12 @@ def telecharger(modele, dossier, progression=None, http=updates.http_get, recupe
             recuperer(URL.format(espace=espace, nom=nom, genre="blobs", reference="sha256:" + hexa), destination,
                       (lambda texte, fait, tot, b=base: progression(modele, b + fait, total)) if progression else None, taille_min=1)
         except ollama_client.ErreurOllama as e:
-            raise ErreurRegistre(str(e))
-        if _empreinte_fichier(destination) != hexa:
+            raise RegistryError(str(e))
+        if _file_digest(destination) != hexa:
             destination.unlink(missing_ok=True)
-            raise ErreurRegistre(_t("Un morceau du modèle est corrompu (empreinte différente) : il a été supprimé, relance le téléchargement."))
+            raise RegistryError(_t("Un morceau du modèle est corrompu (empreinte différente) : il a été supprimé, relance le téléchargement."))
         deja += taille
-    manif = dossier / "manifests" / HOTE / espace / nom / tag
+    manif = dossier / "manifests" / HOST / espace / nom / tag
     manif.parent.mkdir(parents=True, exist_ok=True)
     tmp = manif.with_name(manif.name + ".tmp")
     tmp.write_bytes(brut)
@@ -103,22 +103,22 @@ def telecharger(modele, dossier, progression=None, http=updates.http_get, recupe
     return dossier
 
 
-def supprimer(modele, dossier):
+def remove(modele, dossier):
     """Supprime le manifeste de `modele` et les morceaux que plus aucun autre modèle de `dossier` n'utilise. Renvoie les octets libérés (0 si le modèle n'y était pas)."""
-    espace, nom, tag = decomposer(modele)
+    espace, nom, tag = decompose(modele)
     dossier = Path(dossier)
-    manif = dossier / "manifests" / HOTE / espace / nom / tag
+    manif = dossier / "manifests" / HOST / espace / nom / tag
     if not manif.is_file():
         return 0
     try:
-        a_retirer = {h for h, _, _ in _morceaux(json.loads(manif.read_text(encoding="utf-8")))}
+        a_retirer = {h for h, _, _ in _chunks(json.loads(manif.read_text(encoding="utf-8")))}
     except (OSError, ValueError):
         a_retirer = set()
     manif.unlink()
-    for autre in (dossier / "manifests" / HOTE).rglob("*"):
+    for autre in (dossier / "manifests" / HOST).rglob("*"):
         if autre.is_file():
             try:
-                a_retirer -= {h for h, _, _ in _morceaux(json.loads(autre.read_text(encoding="utf-8")))}
+                a_retirer -= {h for h, _, _ in _chunks(json.loads(autre.read_text(encoding="utf-8")))}
             except (OSError, ValueError):
                 continue
     libere = 0

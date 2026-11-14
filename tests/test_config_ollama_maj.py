@@ -11,7 +11,7 @@ from lutin import model_catalog, config, updates, ollama_client
 from lutin.hardware import Gpu, Profil
 from lutin.ollama_client import ErreurOllama, Ollama
 
-CAT = model_catalog.charger()
+CAT = model_catalog.load()
 
 
 class Chemins(unittest.TestCase):
@@ -339,7 +339,7 @@ class MisesAJour(unittest.TestCase):
             corps = json.dumps(nouveau).encode()
             h = faux_http({"https://ex.org/c.json": (200, {"etag": "v2"}, corps)})
             self.assertEqual(updates.telecharger_catalogue("https://ex.org/c.json", t, h), "maj")
-            self.assertEqual(model_catalog.charger(Path(t) / "catalogue.json")["version"], CAT["version"] + 1)
+            self.assertEqual(model_catalog.load(Path(t) / "catalogue.json")["version"], CAT["version"] + 1)
             h2 = faux_http({"https://ex.org/c.json": (304, {}, b"")})
             self.assertEqual(updates.telecharger_catalogue("https://ex.org/c.json", t, h2), "inchange")
             self.assertEqual(h2.appels[0][1].get("If-None-Match"), "v2")

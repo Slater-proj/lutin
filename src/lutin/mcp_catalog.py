@@ -50,9 +50,9 @@ def program(execution, chercher=shutil.which):
     """Le chemin complet du programme qui lance le serveur (npx, ou uv pour « uv tool run »), ou '' s'il est absent : celui que Lutin a installé d'abord, sinon celui de la machine.
     Le chemin complet évite que Windows ne trouve pas « npx.cmd »."""
     if execution == "npx":
-        return external_programs.chemin("npx", chercher=chercher)
+        return external_programs.path_of("npx", chercher=chercher)
     if execution == "uvx":
-        return external_programs.chemin("uv", chercher=chercher)
+        return external_programs.path_of("uv", chercher=chercher)
     return ""
 
 
@@ -136,15 +136,15 @@ def install(ident, saisie, chercher=shutil.which, installer_outil=None):
     for c in e.get("champs", []):          # les valeurs d'abord : on n'installe rien pour une saisie fausse
         _validate(c, (saisie or {}).get(c["cle"]))
     if e["execution"] in PREREQUISITES and not program(e["execution"], chercher):
-        (installer_outil or external_programs.installer)(PREREQUISITES[e["execution"]][0])
+        (installer_outil or external_programs.install)(PREREQUISITES[e["execution"]][0])
     commande, url, entetes = build(e, saisie, chercher)
     ident_mcp = _mcp.ajouter(_text(e["nom"]), commande or None, url, None, entetes)
     cfg = _mcp.lire()
     cfg["serveurs"][ident_mcp]["catalogue"] = ident
     if commande and e["execution"] == "npx":
-        propre = external_programs.dossier("node")
+        propre = external_programs.folder("node")
         if Path(commande[0]).is_relative_to(propre):
-            cfg["serveurs"][ident_mcp]["path_ajoute"] = external_programs.dossiers_a_ajouter_au_path("node")
+            cfg["serveurs"][ident_mcp]["path_ajoute"] = external_programs.folders_for_path("node")
     _mcp.ecrire(cfg)
     try:
         total = _mcp.actualiser(ident_mcp)

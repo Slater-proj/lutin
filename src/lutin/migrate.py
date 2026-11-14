@@ -110,9 +110,9 @@ def _extract(archive, destination):
 def open_source(source, dossier_skills=None):
     """Rend la détection de ce que la source contient : {conversations, memoire, skills, reglages} (listes de chemins sur le disque, valables pendant le `with`)."""
     source = Path(str(source).strip().strip('"')).expanduser()
-    fini, valeur = travaux.avec_delai(lambda: source.is_file())
+    fini, valeur = travaux.with_timeout(lambda: source.is_file())
     if fini is None:
-        raise MigrationError(_t("Le dossier « {} » ne répond pas (plus de {} s) : un partage réseau éteint, un disque déconnecté ?").format(source, travaux.DELAI_DISQUE_S))
+        raise MigrationError(_t("Le dossier « {} » ne répond pas (plus de {} s) : un partage réseau éteint, un disque déconnecté ?").format(source, travaux.DISK_TIMEOUT_S))
     if not (fini and valeur):                        # ce n'est pas une archive : un dossier, qui doit exister et se lire (message précis pour un partage réseau)
         raison = travaux.diagnostic(source)
         if raison:

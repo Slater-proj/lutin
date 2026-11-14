@@ -21,7 +21,7 @@ import zipfile
 from pathlib import Path
 
 from . import config, updates
-from .engine_replace import remplacer_dossier
+from .engine_replace import replace_folder
 from .i18n import t as _t
 
 DEPOT = "JustVugg/colibri"
@@ -135,7 +135,7 @@ def installer(version=None, dossiers=None, http=updates.http_get, ouvrir=urllib.
             except (ValueError, OSError, zipfile.BadZipFile, tarfile.TarError):
                 shutil.rmtree(partiel, ignore_errors=True)
                 raise
-            remplacer_dossier(partiel, cible)          # même remplacement robuste que llama.cpp (antivirus, fichiers ouverts sous Windows)
+            replace_folder(partiel, cible)          # même remplacement robuste que llama.cpp (antivirus, fichiers ouverts sous Windows)
     (base / "actuelle.txt").write_text(version, encoding="utf-8")
     return version, racine_archive(cible)
 

@@ -9,35 +9,35 @@ import json
 import re
 from pathlib import Path
 
-HOTE_OFFICIEL = "registry.ollama.ai"
-TYPE_MODELE = "application/vnd.ollama.image.model"
-TYPE_PROJECTEUR = "application/vnd.ollama.image.projector"
-RE_EMPREINTE = re.compile(r"^sha256[:-]([0-9a-f]{64})$")
-RE_PARTIE = re.compile(r"^[A-Za-z0-9][\w.-]*$")
+OFFICIAL_HOST = "registry.ollama.ai"
+MODEL_TYPE = "application/vnd.ollama.image.model"
+PROJECTOR_TYPE = "application/vnd.ollama.image.projector"
+RE_DIGEST = re.compile(r"^sha256[:-]([0-9a-f]{64})$")
+RE_PART = re.compile(r"^[A-Za-z0-9][\w.-]*$")
 
 
 def _blob(dossier, digest):
-    m = RE_EMPREINTE.match(str(digest or ""))
+    m = RE_DIGEST.match(str(digest or ""))
     if not m:
         return None
     f = Path(dossier) / "blobs" / ("sha256-" + m.group(1))
     return f if f.is_file() else None
 
 
-def lire(dossier_ollama):
+def read_shared(dossier_ollama):
     """{nom: {fichier, taille, projecteur}} pour chaque modèle de l'installation d'Ollama située dans `dossier_ollama` (son dossier « models »). Vide si le dossier n'existe pas ou n'est pas lisible.
     Les modèles hébergés ailleurs que sur le registre officiel d'Ollama sont ignorés. Un manifeste illisible ou dont le fichier manque est ignoré sans bruit."""
     sortie = {}
     if not dossier_ollama:
         return sortie
-    base = Path(dossier_ollama) / "manifests" / HOTE_OFFICIEL
+    base = Path(dossier_ollama) / "manifests" / OFFICIAL_HOST
     try:
         fichiers = [f for f in base.rglob("*") if f.is_file()]
     except OSError:
         return sortie
     for f in fichiers:
         parties = f.relative_to(base).parts
-        if len(parties) < 3 or not all(RE_PARTIE.match(p) for p in parties):
+        if len(parties) < 3 or not all(RE_PART.match(p) for p in parties):
             continue
         espace, nom, tag = parties[0], "/".join(parties[1:-1]), parties[-1]
         ident = "{}:{}".format(nom if espace == "library" else "{}/{}".format(espace, nom), tag)
@@ -52,9 +52,9 @@ def lire(dossier_ollama):
         for c in couches or []:
             if not isinstance(c, dict):
                 continue
-            if c.get("mediaType") == TYPE_MODELE:
+            if c.get("mediaType") == MODEL_TYPE:
                 modele = _blob(dossier_ollama, c.get("digest"))
-            elif c.get("mediaType") == TYPE_PROJECTEUR:
+            elif c.get("mediaType") == PROJECTOR_TYPE:
                 projecteur = _blob(dossier_ollama, c.get("digest"))
         if modele is None:
             continue

@@ -8,7 +8,7 @@ import context  # noqa: F401
 from lutin import model_catalog, model_selection
 from lutin.hardware import Gpu, Profil
 
-CAT = model_catalog.charger()
+CAT = model_catalog.load()
 
 
 def profil(vram=None, ram=32.0, fabricant="nvidia"):
@@ -17,7 +17,7 @@ def profil(vram=None, ram=32.0, fabricant="nvidia"):
 
 class Catalogue(unittest.TestCase):
     def test_le_catalogue_livre_est_valide(self):
-        model_catalog.valider(CAT)
+        model_catalog.validate(CAT)
 
     def test_chaque_role_a_au_moins_un_modele_et_une_phrase(self):
         for role in model_catalog.ROLES:
@@ -36,20 +36,20 @@ class Catalogue(unittest.TestCase):
         c = copy.deepcopy(CAT); [m for m in c["modeles"] if m.get("avance")][0].pop("avertissement"); mauvais.append(c)
         mauvais += [{}, {"version": 1, "modeles": []}, {"modeles": [{}]}]
         for c in mauvais:
-            with self.assertRaises(model_catalog.ErreurCatalogue):
-                model_catalog.valider(c)
+            with self.assertRaises(model_catalog.CatalogError):
+                model_catalog.validate(c)
 
     def test_cache_plus_recent_gagne_cache_abime_ignore(self):
         with tempfile.TemporaryDirectory() as t:
             cache = Path(t) / "c.json"
             plus_recent = copy.deepcopy(CAT); plus_recent["version"] += 1
             cache.write_text(json.dumps(plus_recent), encoding="utf-8")
-            self.assertEqual(model_catalog.charger(cache)["version"], CAT["version"] + 1)
+            self.assertEqual(model_catalog.load(cache)["version"], CAT["version"] + 1)
             cache.write_text("{pas du json", encoding="utf-8")
-            self.assertEqual(model_catalog.charger(cache)["version"], CAT["version"])
+            self.assertEqual(model_catalog.load(cache)["version"], CAT["version"])
             plus_vieux = copy.deepcopy(CAT); plus_vieux["version"] = 0
             cache.write_text(json.dumps(plus_vieux), encoding="utf-8")
-            self.assertEqual(model_catalog.charger(cache)["version"], CAT["version"])
+            self.assertEqual(model_catalog.load(cache)["version"], CAT["version"])
 
 
 class Selection(unittest.TestCase):

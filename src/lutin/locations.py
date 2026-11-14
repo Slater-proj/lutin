@@ -82,7 +82,7 @@ def find_models_folders(connus=()):
             if cle in vus or not (c / "manifests").is_dir():
                 continue
             vus.add(cle)
-            lus = ollama_shared_models.lire(c)
+            lus = ollama_shared_models.read_shared(c)
         except OSError:
             continue
         if lus:
@@ -97,7 +97,7 @@ def models_elsewhere(installes):
     d = seen_folder()
     if d:
         from . import ollama_shared_models
-        n = len(ollama_shared_models.lire(d))
+        n = len(ollama_shared_models.read_shared(d))
         if n:
             return (d, n)
     if time.time() - _RECHERCHE["t"] > 300:          # jamais retenu : on cherche dans les emplacements usuels, sans insister, en arrière-plan (un disque réseau lent ne doit pas bloquer la page)
@@ -218,7 +218,7 @@ def lister():
     else:
         modeles["taille"] = taille(models_folder())
     lignes.append(modeles)
-    for t in (_m.travaux_etat().get("liste") or []):
+    for t in (_m.works_state().get("liste") or []):
         lignes.append(ligne("travail:" + t["id"], _t("Dossier de travail : {}").format(t["nom"]), t["chemin"], _t("Les fichiers que Lutin peut lire et, avec ton accord, modifier."), mesurer=False))
     detail = []
     try:
@@ -276,14 +276,14 @@ def analyze_folder(chemin):
     """Ce qu'il faut savoir avant d'utiliser ce dossier pour les modèles : réseau ou local, débit, place libre, modèles déjà présents."""
     from . import workspaces
     p = Path(str(chemin).strip().strip('"'))
-    reseau = workspaces.est_reseau(p) or (os.name == "nt" and p.drive[:1].isalpha() and _network_drive(p.drive))
+    reseau = workspaces.is_network(p) or (os.name == "nt" and p.drive[:1].isalpha() and _network_drive(p.drive))
     avert = []
-    fini, existe = workspaces.avec_delai(p.is_dir, 4)                      # un partage éteint ne doit pas figer la page
+    fini, existe = workspaces.with_timeout(p.is_dir, 4)                      # un partage éteint ne doit pas figer la page
     existe = bool(fini and existe)
     debit = measure_throughput(p) if existe else None
     if reseau:
         avert.append(_t("C'est un dossier réseau : Ollama relit le modèle depuis le réseau à chaque chargement (un modèle de 17 Go prend plusieurs minutes sur un réseau gigabit) et ne marche plus si le NAS est éteint ou injoignable."))
-        if p.drive[:1].isalpha() and not workspaces.est_reseau(p):
+        if p.drive[:1].isalpha() and not workspaces.is_network(p):
             avert.append(_t("Préfère l'adresse réseau complète (\\\\serveur\\partage\\dossier) à une lettre de lecteur : une lettre mappée n'existe pas pour Ollama quand il tourne en service ou dans une autre session."))
     if debit is not None and debit < SLOW_THROUGHPUT_MB_S:
         avert.append(_t("Débit d'écriture mesuré : {} Mo/s. C'est lent pour des modèles de plusieurs Go : prévois {} min pour copier 17 Go.").format(debit, round(17 * 1024 / max(debit, 1) / 60)))

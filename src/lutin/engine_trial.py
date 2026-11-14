@@ -17,11 +17,11 @@ from . import engines
 from .i18n import t as _t
 
 SUGGESTION = ("unsloth/Qwen3-4B-Instruct-2507-GGUF", "Qwen3-4B-Instruct-2507-Q4_K_M.gguf")          # un modèle à outils, 2,5 Go, présent sur Hugging Face (vérifié le 2026-11-06)
-MODELE_TEST = ("ggml-org/tiny-llamas", "stories260K.gguf")          # 1,2 Mo : il ne sait rien dire d'utile, mais il prouve que le serveur démarre et répond (essais automatiques)
-OUTIL_HEURE = {"type": "function", "function": {"name": "heure", "description": "Donne l'heure actuelle.", "parameters": {"type": "object", "properties": {}}}}
+TEST_MODEL = ("ggml-org/tiny-llamas", "stories260K.gguf")          # 1,2 Mo : il ne sait rien dire d'utile, mais il prouve que le serveur démarre et répond (essais automatiques)
+TIME_TOOL = {"type": "function", "function": {"name": "heure", "description": "Donne l'heure actuelle.", "parameters": {"type": "object", "properties": {}}}}
 
 
-class Rapport:
+class Report:
     def __init__(self, ecrire):
         self.etapes, self.ecrire = [], ecrire
 
@@ -37,7 +37,7 @@ class Rapport:
         return [e["etape"] for e in self.etapes if e["avertissement"] and not e["ok"]]
 
 
-def decouper_modele(texte):
+def split_model(texte):
     """« auteur/depot/fichier.gguf » -> (« auteur/depot », « fichier.gguf »)."""
     morceaux = str(texte).split("/")
     if len(morceaux) < 3:
@@ -45,7 +45,7 @@ def decouper_modele(texte):
     return "/".join(morceaux[:2]), "/".join(morceaux[2:])
 
 
-def barre_de_progression(ecrire):
+def progress_bar(ecrire):
     """Une ligne de progression sobre (un point d'avancement tous les 10 %)."""
     etat = {"dernier": -1, "texte": ""}
 
@@ -60,7 +60,7 @@ def barre_de_progression(ecrire):
     return progression
 
 
-def diagnostic_linux(moteur):
+def linux_diagnostic(moteur):
     """Sous Linux, un serveur qui ne démarre pas manque souvent d'une bibliothèque : on la nomme."""
     exe = moteur.serveur_pret()
     if not exe or os.name == "nt":
@@ -75,9 +75,9 @@ def diagnostic_linux(moteur):
     return (_t("Bibliothèques manquantes : {}. ").format(", ".join(manquantes)) if manquantes else "") + _t("glibc du système : {}.").format(" ".join(glibc))
 
 
-def executer(options, moteur, ecrire=print, entree=input, chemin_rapport=None, maintenant=time.time):
+def run(options, moteur, ecrire=print, entree=input, chemin_rapport=None, maintenant=time.time):
     """Fait l'essai et rend le rapport (dictionnaire). `options` : modele (« auteur/depot/fichier.gguf »), modele_local, oui, sans_outils, ctx, modele_test."""
-    rapport = Rapport(ecrire)
+    rapport = Report(ecrire)
 
     def demande(question):
         return bool(options.get("oui")) or entree(question + " " + _t("[o/N] ")).strip().lower() in ("o", "oui", "y", "yes")
@@ -126,7 +126,7 @@ def executer(options, moteur, ecrire=print, entree=input, chemin_rapport=None, m
             return fin(False)
         debut = maintenant()
         try:
-            moteur.installer(barre_de_progression(ecrire))
+            moteur.installer(progress_bar(ecrire))
             rapport.etape(_t("Installation de llama.cpp"), True, moteur.version(), maintenant() - debut)
         except (ValueError, OSError) as e:
             rapport.etape(_t("Installation de llama.cpp"), False, e, maintenant() - debut)
@@ -136,7 +136,7 @@ def executer(options, moteur, ecrire=print, entree=input, chemin_rapport=None, m
 
     # 3. le modèle
     modele = options.get("modele_local") or ""
-    choix = MODELE_TEST if options.get("modele_test") else (decouper_modele(options["modele"]) if options.get("modele") else None)
+    choix = TEST_MODEL if options.get("modele_test") else (split_model(options["modele"]) if options.get("modele") else None)
     if not modele:
         if choix is None:
             installes = moteur.modeles()["installes"]
@@ -161,7 +161,7 @@ def executer(options, moteur, ecrire=print, entree=input, chemin_rapport=None, m
                     return fin(False)
                 debut = maintenant()
                 try:
-                    modele = moteur.telecharger_modele(repo, fichier, barre_de_progression(ecrire))
+                    modele = moteur.telecharger_modele(repo, fichier, progress_bar(ecrire))
                     rapport.etape(_t("Modèle"), True, "{} ({} Mo)".format(modele, taille // 1_000_000), maintenant() - debut)
                 except (ValueError, OSError) as e:
                     rapport.etape(_t("Modèle"), False, e, maintenant() - debut)
@@ -178,7 +178,7 @@ def executer(options, moteur, ecrire=print, entree=input, chemin_rapport=None, m
         moteur.demarrer(modele, ctx)
         rapport.etape(_t("Démarrage du serveur"), True, _t("contexte {} jetons").format(ctx), maintenant() - debut)
     except (ValueError, OSError) as e:
-        rapport.etape(_t("Démarrage du serveur"), False, "{} {}".format(e, diagnostic_linux(moteur)).strip(), maintenant() - debut)
+        rapport.etape(_t("Démarrage du serveur"), False, "{} {}".format(e, linux_diagnostic(moteur)).strip(), maintenant() - debut)
         return fin()
 
     # 5. la santé
@@ -220,7 +220,7 @@ def executer(options, moteur, ecrire=print, entree=input, chemin_rapport=None, m
         try:
             messages = [{"role": "user", "content": "Quelle heure est-il ? Utilise l'outil heure."}]
             appels = []
-            with moteur.chat_flux({"model": modele, "messages": messages, "tools": [OUTIL_HEURE], "options": {"num_ctx": ctx, "temperature": 0.1, "num_predict": 120}}, 180) as flux:
+            with moteur.chat_flux({"model": modele, "messages": messages, "tools": [TIME_TOOL], "options": {"num_ctx": ctx, "temperature": 0.1, "num_predict": 120}}, 180) as flux:
                 for e in flux:
                     appels += (e.get("message") or {}).get("tool_calls") or []
             if not any((a.get("function") or {}).get("name") == "heure" for a in appels):
@@ -228,7 +228,7 @@ def executer(options, moteur, ecrire=print, entree=input, chemin_rapport=None, m
             else:
                 messages += [{"role": "assistant", "content": "", "tool_calls": appels}, {"role": "tool", "tool_name": "heure", "content": "Il est 14 h 32."}]
                 suite = ""
-                with moteur.chat_flux({"model": modele, "messages": messages, "tools": [OUTIL_HEURE], "options": {"num_ctx": ctx, "temperature": 0.1, "num_predict": 80}}, 180) as flux:
+                with moteur.chat_flux({"model": modele, "messages": messages, "tools": [TIME_TOOL], "options": {"num_ctx": ctx, "temperature": 0.1, "num_predict": 80}}, 180) as flux:
                     for e in flux:
                         suite += (e.get("message") or {}).get("content") or ""
                 ok = bool(re.search(r"14|32", suite))

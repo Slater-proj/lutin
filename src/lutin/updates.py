@@ -79,7 +79,7 @@ def mises_a_jour(installes, http=http_get):
 
 def obsoletes(catalogue, installes, ignores=()):
     """Modèles installés que le catalogue dit remplacés (`remplace_par`) par un autre qui est installé lui aussi : on propose de libérer la place. Rien n'est supprimé sans clic."""
-    par_id = cat.par_id(catalogue)
+    par_id = cat.by_id(catalogue)
     sortie = []
     for nom in installes:
         vieux = par_id.get(nom)
@@ -95,7 +95,7 @@ def obsoletes(catalogue, installes, ignores=()):
 def nouveautes(profil, catalogue, choisis, installes, ignores=()):
     """Meilleurs choix pour CETTE machine, comparés à ce que l'utilisateur a installé pour chaque rôle."""
     meilleurs = model_selection.choose(profil, catalogue)
-    par_id = cat.par_id(catalogue)
+    par_id = cat.by_id(catalogue)
     budget = profil.budget_go()
     sortie = []
     for role, ancien in (choisis or {}).items():
@@ -141,8 +141,8 @@ def telecharger_catalogue(url, cache, http=http_get):
     if statut != 200 or len(corps) > TAILLE_MAX:
         return "echec"
     try:
-        cat.valider(json.loads(corps.decode("utf-8")))
-    except (ValueError, cat.ErreurCatalogue):
+        cat.validate(json.loads(corps.decode("utf-8")))
+    except (ValueError, cat.CatalogError):
         return "echec"                                       # un catalogue invalide n'est jamais appliqué
     cache.mkdir(parents=True, exist_ok=True)
     fichier.write_bytes(corps)
@@ -438,7 +438,7 @@ def verifier(profil, cfg, dossiers, ollama, http=http_get, maintenant=time.time,
             resultat["catalogue"] = telecharger_catalogue(CATALOGUE_URL_DEFAUT if url is None else url, cache, http)
             if resultat["catalogue"] == "echec":
                 resultat["erreurs"].append(_t("catalogue en ligne indisponible : copie locale utilisée"))
-        catalogue = cat.charger(cache / "catalogue.json")
+        catalogue = cat.load(cache / "catalogue.json")
         installes = ollama.installes()
         ignores = set(cfg.get("modeles", {}).get("ignores", []))
         nouvelles, recalcule = [], []

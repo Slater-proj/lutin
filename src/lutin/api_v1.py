@@ -389,7 +389,7 @@ def machine(request):
 
 def _catalog_entry(model, profile, engine, installed):
     fit = _model_fit.evaluer(model, profile) if profile is not None else None
-    compatibility = _model_compat.evaluer(model, engine, installed)
+    compatibility = _model_compat.evaluate(model, engine, installed)
     return {
         "id": model["id"], "name": model["nom"], "summary": model["phrase"], "size_gb": model["go"], "parameters_b": model["params_b"], "active_parameters_b": model["actifs_b"],
         "context_max": model["ctx_max"], "capabilities": [CAPABILITIES.get(item, item) for item in model.get("capacites") or []], "licence": model["licence"],
@@ -423,7 +423,7 @@ def models_recommendation(request):
         return {"detected": False, "use": use}
     engine, state = _m.moteur_actuel(), _m.etat_moteur()
     installed = set(state["installes"])
-    chosen = _model_compat.roles_pour(profile, _m._CATALOGUE, engine, installed)
+    chosen = _model_compat.roles_for(profile, _m._CATALOGUE, engine, installed)
 
     def described(role, choice):
         entry = _catalog_entry(choice.modele, profile, engine, installed)

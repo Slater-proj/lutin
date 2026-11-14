@@ -57,12 +57,12 @@ def rien(*a, **k):
     raise AssertionError("rien ne doit être lancé")
 
 
-REEL_DEPENDANCES = L.preparer_dependances
+REEL_DEPENDANCES = L.prepare_dependencies
 
 
 class Module(unittest.TestCase):
     def setUp(self):
-        p = mock.patch.object(L, "preparer_dependances", lambda dire=print, **kw: None)
+        p = mock.patch.object(L, "prepare_dependencies", lambda dire=print, **kw: None)
         p.start()
         self.addCleanup(p.stop)
 
@@ -82,34 +82,34 @@ class Module(unittest.TestCase):
         self.assertIn("dnf install -y libatomic", str(e.exception))
 
     def test_l_installeur_qui_se_plaint_de_libatomic_est_explique(self):
-        with mock.patch.object(L, "chemin_lms", lambda: None):
+        with mock.patch.object(L, "lms_path", lambda: None):
             with self.assertRaises(ValueError) as e:
-                L.installer(lambda t: None, ouvrir=lambda req, timeout: Reponse(b"x"), lancer=lambda cmd, **kw: Faux(['ERROR: Missing required dependency: "libatomic" is not installed\n'], 1))
+                L.install(lambda t: None, ouvrir=lambda req, timeout: Reponse(b"x"), lancer=lambda cmd, **kw: Faux(['ERROR: Missing required dependency: "libatomic" is not installed\n'], 1))
         self.assertIn("apt-get install -y libatomic1", str(e.exception))
         self.assertNotIn("code 1", str(e.exception))
 
     def test_l_installeur_vient_de_lmstudio_ai_seulement_et_est_lance_sans_shell(self):
         lances, vus = [], []
-        with mock.patch.object(L, "chemin_lms", lambda: "/x/lms"):
-            L.installer(vus.append, ouvrir=lambda req, timeout: Reponse(b"echo ok\n"), lancer=lambda cmd, **kw: (lances.append(cmd), Faux(["etape 1\n", "fini\n"]))[1])
+        with mock.patch.object(L, "lms_path", lambda: "/x/lms"):
+            L.install(vus.append, ouvrir=lambda req, timeout: Reponse(b"echo ok\n"), lancer=lambda cmd, **kw: (lances.append(cmd), Faux(["etape 1\n", "fini\n"]))[1])
         self.assertIn("etape 1", vus)
         self.assertEqual(len(lances), 1)
         self.assertIn(lances[0][0], ("bash", "powershell"))
         with self.assertRaises(ValueError):          # redirigé hors de lmstudio.ai
-            L.installer(lambda t: None, ouvrir=lambda req, timeout: Reponse(b"x", "https://exemple.org/pirate.sh"), lancer=rien)
+            L.install(lambda t: None, ouvrir=lambda req, timeout: Reponse(b"x", "https://exemple.org/pirate.sh"), lancer=rien)
         with self.assertRaises(ValueError):          # vide
-            L.installer(lambda t: None, ouvrir=lambda req, timeout: Reponse(b"  "), lancer=rien)
+            L.install(lambda t: None, ouvrir=lambda req, timeout: Reponse(b"  "), lancer=rien)
         with self.assertRaises(ValueError):          # énorme
-            L.installer(lambda t: None, ouvrir=lambda req, timeout: Reponse(b"x" * (L.TAILLE_SCRIPT_MAX + 5)), lancer=rien)
+            L.install(lambda t: None, ouvrir=lambda req, timeout: Reponse(b"x" * (L.MAX_SCRIPT_SIZE + 5)), lancer=rien)
 
     def test_un_installeur_qui_echoue_ou_ne_laisse_pas_lms_est_une_erreur_claire(self):
-        with mock.patch.object(L, "chemin_lms", lambda: "/x/lms"):
+        with mock.patch.object(L, "lms_path", lambda: "/x/lms"):
             with self.assertRaises(ValueError) as e:
-                L.installer(lambda t: None, ouvrir=lambda req, timeout: Reponse(b"exit 3"), lancer=lambda cmd, **kw: Faux(["boom\n"], 3))
+                L.install(lambda t: None, ouvrir=lambda req, timeout: Reponse(b"exit 3"), lancer=lambda cmd, **kw: Faux(["boom\n"], 3))
             self.assertIn("boom", str(e.exception))
-        with mock.patch.object(L, "chemin_lms", lambda: None):
+        with mock.patch.object(L, "lms_path", lambda: None):
             with self.assertRaises(ValueError) as e:
-                L.installer(lambda t: None, ouvrir=lambda req, timeout: Reponse(b"echo"), lancer=lambda cmd, **kw: Faux([], 0))
+                L.install(lambda t: None, ouvrir=lambda req, timeout: Reponse(b"echo"), lancer=lambda cmd, **kw: Faux([], 0))
             self.assertIn("lms", str(e.exception))
 
     def test_demarrer_lance_le_demon_puis_le_serveur_sur_le_port_demande(self):
@@ -120,36 +120,36 @@ class Module(unittest.TestCase):
             if cmd[1:3] == ["server", "start"]:
                 etat["ok"] = True
             return mock.Mock(returncode=0, stdout="", stderr="")
-        with mock.patch.object(L, "chemin_lms", lambda: "/x/lms"):
-            self.assertEqual(L.demarrer(4321, lancer=lancer, repond_=lambda p: etat["ok"], dormir=lambda s: None), 4321)
+        with mock.patch.object(L, "lms_path", lambda: "/x/lms"):
+            self.assertEqual(L.start(4321, lancer=lancer, repond_=lambda p: etat["ok"], dormir=lambda s: None), 4321)
             self.assertEqual(appels, [["daemon", "up"], ["server", "start", "--port", "4321"]])
-            self.assertEqual(L.demarrer(4321, lancer=rien, repond_=lambda p: True), 4321, "déjà en marche : rien à lancer")
+            self.assertEqual(L.start(4321, lancer=rien, repond_=lambda p: True), 4321, "déjà en marche : rien à lancer")
 
     def test_demarrer_sans_lms_ou_avec_un_demon_qui_refuse(self):
-        with mock.patch.object(L, "chemin_lms", lambda: None):
+        with mock.patch.object(L, "lms_path", lambda: None):
             with self.assertRaises(ValueError):
-                L.demarrer(1234, repond_=lambda p: False)
-        with mock.patch.object(L, "chemin_lms", lambda: "/x/lms"):
+                L.start(1234, repond_=lambda p: False)
+        with mock.patch.object(L, "lms_path", lambda: "/x/lms"):
             with self.assertRaises(ValueError) as e:
-                L.demarrer(1234, lancer=lambda cmd, **kw: mock.Mock(returncode=1, stdout="", stderr="pas de GPU"), repond_=lambda p: False)
+                L.start(1234, lancer=lambda cmd, **kw: mock.Mock(returncode=1, stdout="", stderr="pas de GPU"), repond_=lambda p: False)
             self.assertIn("pas de GPU", str(e.exception))
 
     def test_telecharger_n_accepte_que_des_noms_simples(self):
         lances = []
-        with mock.patch.object(L, "chemin_lms", lambda: "/x/lms"):
+        with mock.patch.object(L, "lms_path", lambda: "/x/lms"):
             for mauvais in ("--help", "a b", "../x", "x;y", "", "-y", "$(id)"):
                 with self.assertRaises(ValueError, msg=mauvais):
-                    L.telecharger(mauvais, lancer=rien)
-            L.telecharger("openai/gpt-oss-20b", lancer=lambda cmd, **kw: (lances.append(cmd), Faux(["50 %\n"]))[1])
-            L.telecharger("llama-3.1-8b@q4_k_m", lancer=lambda cmd, **kw: (lances.append(cmd), Faux([]))[1])
+                    L.download(mauvais, lancer=rien)
+            L.download("openai/gpt-oss-20b", lancer=lambda cmd, **kw: (lances.append(cmd), Faux(["50 %\n"]))[1])
+            L.download("llama-3.1-8b@q4_k_m", lancer=lambda cmd, **kw: (lances.append(cmd), Faux([]))[1])
         self.assertEqual([c[1:] for c in lances], [["get", "openai/gpt-oss-20b"], ["get", "llama-3.1-8b@q4_k_m"]])
 
     def test_la_liste_des_modeles_se_lit_et_une_sortie_illisible_donne_une_liste_vide(self):
         sortie = json.dumps([{"type": "llm", "modelKey": "qwen/qwen3-4b", "sizeBytes": 2_500_000_000}, {"type": "embedding", "modelKey": "nomic"}, {"type": "vlm", "path": "x/y", "sizeBytes": 1_000_000_000}])
-        with mock.patch.object(L, "chemin_lms", lambda: "/x/lms"):
-            m = L.modeles(lancer=lambda cmd, **kw: mock.Mock(returncode=0, stdout=sortie, stderr=""))
+        with mock.patch.object(L, "lms_path", lambda: "/x/lms"):
+            m = L.models(lancer=lambda cmd, **kw: mock.Mock(returncode=0, stdout=sortie, stderr=""))
             self.assertEqual([(x["nom"], x["taille_go"]) for x in m], [("qwen/qwen3-4b", 2.5), ("x/y", 1.0)])
-            self.assertEqual(L.modeles(lancer=lambda cmd, **kw: mock.Mock(returncode=0, stdout="pas du json", stderr="")), [])
+            self.assertEqual(L.models(lancer=lambda cmd, **kw: mock.Mock(returncode=0, stdout="pas du json", stderr="")), [])
 
 
 class Carte(unittest.TestCase):
@@ -176,12 +176,12 @@ class Carte(unittest.TestCase):
                 ml.regler_serveur("openai", {"port_lmstudio": mauvais})
 
     def test_les_actions_suivent_l_etat_et_lutin_ne_desinstalle_jamais(self):
-        with mock.patch.object(L, "chemin_lms", lambda: None):
+        with mock.patch.object(L, "lms_path", lambda: None):
             a = self.mo.actions()
             self.assertTrue(a["installer"]["possible"])
             self.assertFalse(a["demarrer"]["possible"] or a["arreter"]["possible"])
             self.assertEqual(self.mo.statut()["detail"], "LM Studio n'est pas installé.")
-        with mock.patch.object(L, "chemin_lms", lambda: "/x/lms"), mock.patch.object(ml.MoteurOpenAI, "actif", lambda self_: False):
+        with mock.patch.object(L, "lms_path", lambda: "/x/lms"), mock.patch.object(ml.MoteurOpenAI, "actif", lambda self_: False):
             a = self.mo.actions()
             self.assertFalse(a["installer"]["possible"])
             self.assertTrue(a["demarrer"]["possible"] and a["mettre_a_jour"]["possible"])
@@ -189,8 +189,8 @@ class Carte(unittest.TestCase):
 
     def test_les_taches_appellent_les_bonnes_commandes_et_refusent_hors_ligne(self):
         suivi = []
-        with mock.patch.object(L, "installer", lambda dire, annule=None, **kw: suivi.append("installer")), mock.patch.object(L, "demarrer", lambda port, **kw: suivi.append(("demarrer", port))), \
-                mock.patch.object(L, "telecharger", lambda nom, dire, annule=None, **kw: suivi.append(("telecharger", nom))), mock.patch.object(L, "arreter", lambda **kw: True):
+        with mock.patch.object(L, "install", lambda dire, annule=None, **kw: suivi.append("installer")), mock.patch.object(L, "start", lambda port, **kw: suivi.append(("demarrer", port))), \
+                mock.patch.object(L, "download", lambda nom, dire, annule=None, **kw: suivi.append(("telecharger", nom))), mock.patch.object(L, "stop", lambda **kw: True):
             self.mo.faire("installer", lambda *a: None)
             self.mo.faire("demarrer", lambda *a: None)
             self.mo.faire("telecharger:openai/gpt-oss-20b", lambda *a: None)

@@ -271,7 +271,7 @@ def executer(ident):
             conv, neuve = _conversation(tache)
             if neuve:
                 try:
-                    _m.activer_travail(conv, tache.get("travail", ""))
+                    _m.activate_work(conv, tache.get("travail", ""))
                 except ValueError as erreur:
                     _d.conv_chemin(conv["id"]).unlink(missing_ok=True)
                     raise Impossible(str(erreur))

@@ -15,16 +15,16 @@ from . import workspaces as _trav
 from .i18n import t as _t
 
 
-def activer_travail(conv, demande=""):
+def activate_work(conv, demande=""):
     """Dossier de travail de cette conversation : le sien s'il en a un, sinon celui demandé, sinon le dossier actif. Appelé avec VERROU_TOURS tenu.
     Une seule racine à la fois : si une autre réponse travaille dans un autre dossier, celle-ci attend. Sans dossier configuré (tests, usage direct), la racine ne change pas."""
     cfg = _m.config_lue()
-    t = _trav.par_id(cfg, conv["travail"]) if conv.get("travail") else None
+    t = _trav.by_id(cfg, conv["travail"]) if conv.get("travail") else None
     if conv.get("travail") and t is None:
         raise ValueError("Le dossier de travail de cette conversation (« {} ») n'est plus dans la liste. Ajoute-le de nouveau, ou ouvre une nouvelle conversation.".format(conv["travail"]))
     if t is None:
-        t = _trav.par_id(cfg, demande) if demande else None
-        t = t or _trav.actif(cfg)
+        t = _trav.by_id(cfg, demande) if demande else None
+        t = t or _trav.active(cfg)
     if t is None:
         return None
     chemin = Path(t["chemin"])
@@ -38,16 +38,16 @@ def activer_travail(conv, demande=""):
     return t
 
 
-def travaux_etat():
+def works_state():
     cfg = _m.config_lue()
-    liste = _trav.liste(cfg)
-    courant = next((t["id"] for t in liste if _trav.cle(t["chemin"]) == _trav.cle(_m.RACINE)), "")
-    return {"liste": liste, "actif": courant or (_trav.actif(cfg) or {}).get("id", "")}
+    liste = _trav.entries(cfg)
+    courant = next((t["id"] for t in liste if _trav.key(t["chemin"]) == _trav.key(_m.RACINE)), "")
+    return {"liste": liste, "actif": courant or (_trav.active(cfg) or {}).get("id", "")}
 
 
-def choisir_travail(ident):
+def choose_work(ident):
     cfg = _m.config_lue()
-    t = _trav.par_id(cfg, ident)
+    t = _trav.by_id(cfg, ident)
     if not t:
         raise ValueError("Dossier de travail inconnu.")
     raison = _trav.diagnostic(Path(t["chemin"]))
@@ -57,42 +57,42 @@ def choisir_travail(ident):
         if any(r != str(Path(t["chemin"]).resolve()) for r in _m.RACINE_TOURS.values()):
             raise ValueError("Une réponse est en cours dans un autre dossier de travail : attends sa fin pour changer.")
         _m.definir_racine(t["chemin"])
-    _trav.choisir(cfg, ident)
+    _trav.choose(cfg, ident)
     if _m.chemin_config():
         _m.config_ecrire(cfg)
-    return travaux_etat()
+    return works_state()
 
 
-def ajouter_travail(chemin, nom):
+def add_work(chemin, nom):
     cfg = _m.config_lue()
-    _trav.ajouter(cfg, chemin, nom, _m.dossiers_de_lutin())
+    _trav.add(cfg, chemin, nom, _m.dossiers_de_lutin())
     _m.config_ecrire(cfg)
-    return travaux_etat()
+    return works_state()
 
 
-def retirer_travail(ident, nettoyer=False):
+def remove_work(ident, nettoyer=False):
     """Retire le dossier de la liste. `nettoyer` : supprime aussi ce que Lutin y a créé lui-même (le sous-dossier des copies de conversations) ; jamais un autre fichier."""
     cfg = _m.config_lue()
-    t = _trav.par_id(cfg, ident)
+    t = _trav.by_id(cfg, ident)
     supprimes = 0
     if nettoyer and t:
-        supprimes = nettoyer_copies(Path(t["chemin"]))
+        supprimes = clean_copies(Path(t["chemin"]))
     with _m.VERROU_TOURS:
         if t and str(Path(t["chemin"]).resolve()) in _m.RACINE_TOURS.values():
             raise ValueError("Une réponse travaille dans ce dossier : attends sa fin.")
-    _trav.retirer(cfg, ident)
+    _trav.remove(cfg, ident)
     _m.config_ecrire(cfg)
     with _m.VERROU_TOURS:
         if t and str(Path(t["chemin"]).resolve()) == str(_m.RACINE):          # le dossier qu'on retire était le courant : on bascule tout de suite
-            suivant = _trav.actif(cfg)
+            suivant = _trav.active(cfg)
             defaut = Path.home() / "Lutin"
             if not suivant:
                 defaut.mkdir(parents=True, exist_ok=True)
             _m.definir_racine(suivant["chemin"] if suivant else defaut)
-    return dict(travaux_etat(), copies_supprimees=supprimes)
+    return dict(works_state(), copies_supprimees=supprimes)
 
 
-def nettoyer_copies(dossier):
+def clean_copies(dossier):
     """Supprime le sous-dossier des copies de conversations que Lutin a posé dans ce dossier de travail. Renvoie le nombre de fichiers supprimés (0 s'il n'y en a pas)."""
     from . import storage
     cible = Path(dossier) / storage.DOSSIER_COPIES
@@ -103,7 +103,7 @@ def nettoyer_copies(dossier):
     return n
 
 
-def compter_fichiers(dossier, maximum=20000, delai=3.0):
+def count_files(dossier, maximum=20000, delai=3.0):
     """(nombre de fichiers, tronqué ?) : parcours borné en nombre et en temps, sans entrer dans .git ni node_modules."""
     n, fin = 0, time.time() + delai
     for racine, sous, noms in os.walk(dossier):
@@ -114,27 +114,27 @@ def compter_fichiers(dossier, maximum=20000, delai=3.0):
     return n, False
 
 
-def apercu_travail(ident):
+def work_preview(ident):
     """Ce que Lutin trouve et utilise dans un dossier de travail, pour le dire clairement après l'ajout : fichiers, consignes et skills lus, copies de conversations, et surtout un ANCIEN
     ASSISTANT (dossiers donnees/ et memoire/ avec des conversations) qu'on peut reprendre. Rien n'est écrit."""
-    t = _trav.par_id(_m.config_lue(), ident)
+    t = _trav.by_id(_m.config_lue(), ident)
     if not t:
         raise ValueError(_t("Dossier de travail inconnu."))
     p = Path(t["chemin"])
-    fini, resultat = _trav.avec_delai(lambda: _apercu(p))
+    fini, resultat = _trav.with_timeout(lambda: _preview(p))
     if fini is None:
-        return {"id": ident, "erreur": _t("Le dossier « {} » ne répond pas (plus de {} s) : un partage réseau éteint, un disque déconnecté ?").format(p, _trav.DELAI_DISQUE_S)}
+        return {"id": ident, "erreur": _t("Le dossier « {} » ne répond pas (plus de {} s) : un partage réseau éteint, un disque déconnecté ?").format(p, _trav.DISK_TIMEOUT_S)}
     if not fini:
         return {"id": ident, "erreur": str(resultat)}
     return dict(resultat, id=ident)
 
 
-def _apercu(p):
+def _preview(p):
     raison = _trav.diagnostic(p)
     if raison:
         return {"erreur": raison}
-    n, tronque = compter_fichiers(p)
-    claude = _pc.detecter(p)
+    n, tronque = count_files(p)
+    claude = _pc.detect(p)
     lus = []
     if claude["contexte"]:
         lus.append(", ".join(claude["contexte"]))
@@ -148,7 +148,7 @@ def _apercu(p):
     copies = sum(1 for f in (p / storage.DOSSIER_COPIES).glob("*.md")) if (p / storage.DOSSIER_COPIES).is_dir() else 0
     ancien = None
     try:
-        if _trav.cle(p) != _trav.cle(_m.DONNEES.parent):
+        if _trav.key(p) != _trav.key(_m.DONNEES.parent):
             with _rep.open_source(p) as d:
                 if d["conversations"] or d["memoire"]:
                     nouvelles = _rep.to_migrate(d, _m.DONNEES, _m.MEMOIRE, [p / "skills", _m.RACINE / "skills"])
@@ -158,46 +158,46 @@ def _apercu(p):
     return {"fichiers": n, "tronque": tronque, "lus": lus, "copies": copies, "ancien": ancien, "git": (p / ".git").exists()}
 
 
-def deplacer_travail(ident, nouveau_parent, nom=""):
+def move_work(ident, nouveau_parent, nom=""):
     """Déplace un dossier de travail (ses fichiers aussi) ailleurs et met à jour la liste. Refusé tant qu'une réponse y travaille ; les nouvelles réponses attendent la fin du déplacement."""
     cfg = _m.config_lue()
-    t = _trav.par_id(cfg, ident)
+    t = _trav.by_id(cfg, ident)
     if not t:
         raise ValueError(_t("Dossier de travail inconnu."))
     with _m.VERROU_TOURS:
         ancien = Path(t["chemin"])
         if str(ancien.resolve()) in _m.RACINE_TOURS.values():
             raise ValueError(_t("Une réponse travaille dans ce dossier : attends sa fin."))
-        courant = _trav.cle(ancien) == _trav.cle(_m.RACINE)
-        nouveau, restes = _trav.deplacer(cfg, ident, nouveau_parent, nom, _m.dossiers_de_lutin())
+        courant = _trav.key(ancien) == _trav.key(_m.RACINE)
+        nouveau, restes = _trav.move(cfg, ident, nouveau_parent, nom, _m.dossiers_de_lutin())
         _m.config_ecrire(cfg)
         if courant:
             _m.definir_racine(nouveau["chemin"])
-    return dict(travaux_etat(), restes=restes, ancien=str(ancien), nouveau=nouveau["chemin"])
+    return dict(works_state(), restes=restes, ancien=str(ancien), nouveau=nouveau["chemin"])
 
 
-def changer_chemin_travail(ident, nouveau):
+def change_work_path(ident, nouveau):
     """Le dossier a été déplacé à la main : on lui donne son nouveau chemin (rien n'est déplacé)."""
     cfg = _m.config_lue()
-    t = _trav.par_id(cfg, ident)
+    t = _trav.by_id(cfg, ident)
     if not t:
         raise ValueError(_t("Dossier de travail inconnu."))
     with _m.VERROU_TOURS:
         if str(Path(t["chemin"]).resolve()) in _m.RACINE_TOURS.values():
             raise ValueError(_t("Une réponse travaille dans ce dossier : attends sa fin."))
-        courant = _trav.cle(t["chemin"]) == _trav.cle(_m.RACINE)
-        modifie = _trav.changer_chemin(cfg, ident, nouveau, _m.dossiers_de_lutin())
+        courant = _trav.key(t["chemin"]) == _trav.key(_m.RACINE)
+        modifie = _trav.change_path(cfg, ident, nouveau, _m.dossiers_de_lutin())
         _m.config_ecrire(cfg)
         if courant:
             _m.definir_racine(modifie["chemin"])
-    return travaux_etat()
+    return works_state()
 
 
 # --------------------------------------------------------------------------- navigateur de dossiers (la page choisit un dossier sans que l'utilisateur ait à taper son chemin)
-MAX_DOSSIERS = 500
+MAX_FOLDERS = 500
 
 
-def racines():
+def roots():
     """Les points de départ : les disques (Windows) ou « / », le dossier personnel et ses dossiers usuels."""
     sortie = []
     if sys.platform == "win32":
@@ -219,11 +219,11 @@ def racines():
     return sortie
 
 
-def lister_dossiers(chemin=""):
+def list_folders(chemin=""):
     """Les sous-dossiers de `chemin` (jamais les fichiers), triés ; sans chemin, les points de départ. `parent` vide = retour aux points de départ. Lève ValueError avec la raison si le dossier est inutilisable."""
     texte = str(chemin or "").strip().strip('"')
     if not texte:
-        return {"chemin": "", "parent": None, "dossiers": racines()}
+        return {"chemin": "", "parent": None, "dossiers": roots()}
     p = Path(texte)
     raison = _trav.diagnostic(p)
     if raison:
@@ -239,64 +239,64 @@ def lister_dossiers(chemin=""):
                 except OSError:
                     continue
         return sorted(sortie, key=lambda d: d["nom"].lower())
-    fini, valeur = _trav.avec_delai(lire)
+    fini, valeur = _trav.with_timeout(lire)
     if fini is None:
-        raise ValueError(_t("Le dossier « {} » ne répond pas (plus de {} s) : un partage réseau éteint, un disque déconnecté ?").format(p, _trav.DELAI_DISQUE_S))
+        raise ValueError(_t("Le dossier « {} » ne répond pas (plus de {} s) : un partage réseau éteint, un disque déconnecté ?").format(p, _trav.DISK_TIMEOUT_S))
     if not fini:
         raise ValueError(_t("Impossible de lire « {} » : {}").format(p, valeur))
     parent = p.parent
-    return {"chemin": str(p), "parent": "" if parent == p else str(parent), "dossiers": valeur[:MAX_DOSSIERS], "tronque": len(valeur) > MAX_DOSSIERS}
+    return {"chemin": str(p), "parent": "" if parent == p else str(parent), "dossiers": valeur[:MAX_FOLDERS], "tronque": len(valeur) > MAX_FOLDERS}
 
 
 # --------------------------------------------------------------------------- projet Claude et reprise d'un autre assistant
-def importer_projet_claude(chemin, mode, vers="", nom=""):
+def import_claude_project(chemin, mode, vers="", nom=""):
     """Reprend un projet « Claude » (CLAUDE.md, .claude/) : `ici` = on travaille dans le dossier lui-même, `copie` = dans une copie (l'original n'est jamais touché). Le dossier devient un dossier de travail
     et le dossier actif."""
     source = Path(chemin.strip()).expanduser()
     raison = _trav.diagnostic(source)
     if raison:
         raise ValueError(raison)
-    d = _pc.detecter(source)
-    if _pc.est_vide(d):
+    d = _pc.detect(source)
+    if _pc.is_empty(d):
         raise ValueError(_t("Ni CLAUDE.md ni dossier .claude/ dans ce dossier : ce n'est pas un projet Claude (pour l'utiliser quand même, ajoute-le comme dossier de travail)."))
     if mode not in ("ici", "copie"):
         raise ValueError(_t("Mode inconnu (ici ou copie)."))
     if mode == "copie":
         destination = Path(vers.strip()).expanduser() if vers.strip() else Path.home() / "Lutin" / source.name
-        cible = _pc.copier(source, destination)
+        cible = _pc.copy(source, destination)
     else:
         cible = source.resolve()
-    etat = ajouter_travail(str(cible), nom.strip() or source.name)
-    ident = next((t["id"] for t in etat["liste"] if _trav.cle(t["chemin"]) == _trav.cle(cible)), "")
+    etat = add_work(str(cible), nom.strip() or source.name)
+    ident = next((t["id"] for t in etat["liste"] if _trav.key(t["chemin"]) == _trav.key(cible)), "")
     choisi = True
     try:
-        etat = choisir_travail(ident)
+        etat = choose_work(ident)
     except ValueError:
         choisi = False          # une réponse travaille ailleurs : le dossier est ajouté, on le choisira ensuite
-    return {"mode": mode, "chemin": str(cible), "resume": _pc.resume(d), "actif": choisi, "travaux": etat}
+    return {"mode": mode, "chemin": str(cible), "resume": _pc.summary(d), "actif": choisi, "travaux": etat}
 
 
-def reprise_detecter(chemin, dossier_skills=""):
+def resume_detect(chemin, dossier_skills=""):
     """Ce qu'on peut reprendre dans le dossier (ou l'archive .zip) d'un autre assistant : des nombres, rien n'est écrit. Avec les dossiers de travail où poser les skills."""
     with _rep.open_source(chemin, dossier_skills or None) as d:
         cfg = _m.config_lue()
-        liste = [dict(t, claude=_rep.is_claude_project(t["chemin"])) for t in _trav.liste(cfg)]
-        actif = _trav.actif(cfg)
+        liste = [dict(t, claude=_rep.is_claude_project(t["chemin"])) for t in _trav.entries(cfg)]
+        actif = _trav.active(cfg)
         cible = Path(actif["chemin"]) if actif else _m.RACINE
-        return dict(_rep.describe(d), dossier_skills=d["dossier_skills"], dossier_utilise=d["dossier_utilise"], travaux=liste, actif=travaux_etat()["actif"], cible_skills=str(cible / "skills"))
+        return dict(_rep.describe(d), dossier_skills=d["dossier_skills"], dossier_utilise=d["dossier_utilise"], travaux=liste, actif=works_state()["actif"], cible_skills=str(cible / "skills"))
 
 
-def reprise_importer(chemin, choix, dossier_skills="", ecraser=False, cible=""):
+def resume_import(chemin, choix, dossier_skills="", ecraser=False, cible=""):
     """Reprend les catégories choisies (conversations, memoire, skills, reglages) ; l'état actuel est gardé dans un zip avant. `cible` : identifiant du dossier de travail où poser les skills (défaut : l'actif)."""
     racine = _m.RACINE
     if cible:
-        t = _trav.par_id(_m.config_lue(), cible)
+        t = _trav.by_id(_m.config_lue(), cible)
         if not t:
             raise ValueError(_t("Dossier de travail inconnu."))
         racine = Path(t["chemin"])
     c = _m.chemin_config()
     dossiers = {"config": c.parent if c else None, "donnees": _m.DONNEES, "memoire": _m.MEMOIRE}
     with _rep.open_source(chemin, dossier_skills or None) as d:
-        rapport = _rep.import_all(d, dossiers, choix, racine_travail=racine, ecraser=ecraser, workspaces=[t["id"] for t in _trav.liste(_m.config_lue())])
+        rapport = _rep.import_all(d, dossiers, choix, racine_travail=racine, ecraser=ecraser, workspaces=[t["id"] for t in _trav.entries(_m.config_lue())])
     rapport["resume"] = _rep.summary(rapport)
     return rapport

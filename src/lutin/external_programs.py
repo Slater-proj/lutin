@@ -22,24 +22,24 @@ from pathlib import Path
 
 from . import config, updates
 from .i18n import t as _t
-from .engine_replace import remplacer_dossier
+from .engine_replace import replace_folder
 
-VERSION_UV = "0.13.7"
-VERSION_NODE = "24.22.2"
-DEPOT_UV = "astral-sh/uv"
-OUTILS = {
+UV_VERSION = "0.13.7"
+NODE_VERSION = "24.22.2"
+UV_REPO = "astral-sh/uv"
+TOOLS = {
     "uv": {"libelle": "uv", "aide": "Python isolé : serveurs MCP en Python (Pages web, Git, Heure, SQLite) et environnement d'ExLlamaV3. https://docs.astral.sh/uv"},
     "node": {"libelle": "Node.js", "aide": "Serveurs MCP en JavaScript (Fichiers, Mémoire en graphe, Raisonnement). https://nodejs.org"},
 }
-RE_SOMME = re.compile(r"^[0-9a-f]{64}$")
+RE_CHECKSUM = re.compile(r"^[0-9a-f]{64}$")
 
 
-def dossier(nom=None, dossiers=None):
+def folder(nom=None, dossiers=None):
     base = Path((dossiers or config.folders())["donnees"]) / "outils"
     return base / nom if nom else base
 
 
-def _plateforme(systeme=None, architecture=None):
+def _platform(systeme=None, architecture=None):
     """('windows'|'linux'|'macos', 'x64'|'arm64') ou ValueError."""
     s = (systeme or sys.platform).lower()
     a = (architecture or platform.machine()).lower()
@@ -50,19 +50,19 @@ def _plateforme(systeme=None, architecture=None):
     return systeme, arch
 
 
-def archive_uv(systeme=None, architecture=None):
-    s, a = _plateforme(systeme, architecture)
+def uv_archive(systeme=None, architecture=None):
+    s, a = _platform(systeme, architecture)
     cible = {"windows": "{}-pc-windows-msvc.zip", "linux": "{}-unknown-linux-gnu.tar.gz", "macos": "{}-apple-darwin.tar.gz"}[s]
     return "uv-" + cible.format("x86_64" if a == "x64" else "aarch64")
 
 
-def archive_node(systeme=None, architecture=None):
-    s, a = _plateforme(systeme, architecture)
+def node_archive(systeme=None, architecture=None):
+    s, a = _platform(systeme, architecture)
     fin = {"windows": "win-{}.zip", "linux": "linux-{}.tar.xz", "macos": "darwin-{}.tar.gz"}[s].format(a)
-    return "node-v{}-{}".format(VERSION_NODE, fin)
+    return "node-v{}-{}".format(NODE_VERSION, fin)
 
 
-def _trouver(racine, noms):
+def _find(racine, noms):
     """Le premier fichier de ce nom sous `racine` (les archives ont un sous-dossier ou non selon le programme)."""
     racine = Path(racine)
     if not racine.is_dir():
@@ -74,28 +74,28 @@ def _trouver(racine, noms):
     return ""
 
 
-def chemin(nom, dossiers=None, chercher=shutil.which):
+def path_of(nom, dossiers=None, chercher=shutil.which):
     """Le programme à lancer : celui que Lutin a installé d'abord, sinon celui de la machine ; '' s'il n'y en a pas. nom : uv, node, npx."""
     propre = {"uv": ("uv.exe", "uv"), "node": ("node.exe", "node"), "npx": ("npx.cmd", "npx")}.get(nom, ())
-    base = dossier("uv" if nom == "uv" else "node", dossiers)
-    trouve = _trouver(base / "bin", propre) or _trouver(base, propre) if propre else ""
+    base = folder("uv" if nom == "uv" else "node", dossiers)
+    trouve = _find(base / "bin", propre) or _find(base, propre) if propre else ""
     return trouve or chercher(nom) or ""
 
 
-def dossiers_a_ajouter_au_path(nom, dossiers=None):
+def folders_for_path(nom, dossiers=None):
     """Les dossiers à mettre devant le PATH d'un programme lancé par Lutin : celui de Node.js installé par Lutin (npx cherche `node` dans son PATH sous Linux)."""
     if nom != "node":
         return []
-    exe = _trouver(dossier("node", dossiers), ("node.exe", "node"))
+    exe = _find(folder("node", dossiers), ("node.exe", "node"))
     return [str(Path(exe).parent)] if exe else []
 
 
-def par_lutin(nom, dossiers=None):
-    return bool(_trouver(dossier(nom, dossiers), ("uv.exe", "uv") if nom == "uv" else ("node.exe", "node")))
+def by_lutin(nom, dossiers=None):
+    return bool(_find(folder(nom, dossiers), ("uv.exe", "uv") if nom == "uv" else ("node.exe", "node")))
 
 
 def version(nom, dossiers=None, lancer=subprocess.run, chercher=shutil.which):
-    exe = chemin(nom, dossiers, chercher)
+    exe = path_of(nom, dossiers, chercher)
     if not exe:
         return ""
     try:
@@ -106,17 +106,17 @@ def version(nom, dossiers=None, lancer=subprocess.run, chercher=shutil.which):
     return m.group(1) if m else ""
 
 
-def etat(dossiers=None, lancer=subprocess.run, chercher=shutil.which):
+def state(dossiers=None, lancer=subprocess.run, chercher=shutil.which):
     """Pour chaque programme : {nom, libelle, aide, installe, par_lutin, version}."""
     sortie = []
-    for nom, d in OUTILS.items():
-        exe = chemin(nom, dossiers, chercher)
-        sortie.append({"nom": nom, "libelle": d["libelle"], "aide": _t(d["aide"]), "installe": bool(exe), "par_lutin": par_lutin(nom, dossiers),
+    for nom, d in TOOLS.items():
+        exe = path_of(nom, dossiers, chercher)
+        sortie.append({"nom": nom, "libelle": d["libelle"], "aide": _t(d["aide"]), "installe": bool(exe), "par_lutin": by_lutin(nom, dossiers),
                        "version": version(nom, dossiers, lancer, chercher) if exe else ""})
     return sortie
 
 
-def somme_de(fichier):
+def checksum_of(fichier):
     h = hashlib.sha256()
     with open(fichier, "rb") as f:
         for bloc in iter(lambda: f.read(1 << 20), b""):
@@ -124,7 +124,7 @@ def somme_de(fichier):
     return h.hexdigest()
 
 
-def extraire_sur(archive, cible):
+def extract_to(archive, cible):
     """Décompresse sans jamais écrire hors de `cible` ; les liens (nécessaires à Node.js sous Linux : npx) ne sont acceptés que s'ils restent dans `cible`."""
     cible = Path(cible).resolve()
     cible.mkdir(parents=True, exist_ok=True)
@@ -151,39 +151,39 @@ def extraire_sur(archive, cible):
         tf.extractall(cible)          # noqa: S202  (chaque nom et chaque lien a été vérifié au-dessus)
 
 
-def _somme_publiee(nom, archive, http):
+def _published_checksum(nom, archive, http):
     """La somme SHA-256 publiée par l'éditeur pour cette archive, ou ValueError (sans somme, on n'installe pas)."""
     if nom == "uv":
-        url = "https://github.com/{}/releases/download/{}/{}.sha256".format(DEPOT_UV, VERSION_UV, archive)
+        url = "https://github.com/{}/releases/download/{}/{}.sha256".format(UV_REPO, UV_VERSION, archive)
         statut, _, corps = http(url, {})
         texte = corps.decode("utf-8", "replace") if statut == 200 else ""
         m = re.match(r"\s*([0-9a-f]{64})\b", texte)
     else:
-        url = "https://nodejs.org/dist/v{}/SHASUMS256.txt".format(VERSION_NODE)
+        url = "https://nodejs.org/dist/v{}/SHASUMS256.txt".format(NODE_VERSION)
         statut, _, corps = http(url, {})
         m = None
         for ligne in (corps.decode("utf-8", "replace") if statut == 200 else "").splitlines():
             morceaux = ligne.split()
-            if len(morceaux) == 2 and morceaux[1] == archive and RE_SOMME.match(morceaux[0]):
+            if len(morceaux) == 2 and morceaux[1] == archive and RE_CHECKSUM.match(morceaux[0]):
                 m = re.match(r"([0-9a-f]{64})", morceaux[0])
     if not m:
         raise ValueError(_t("La somme de contrôle de {} n'a pas pu être lue (HTTP {}) : rien n'est installé.").format(archive, statut))
     return m.group(1)
 
 
-def installer(nom, dossiers=None, dire=print, http=updates.http_get, telecharger=None, systeme=None, architecture=None):
+def install(nom, dossiers=None, dire=print, http=updates.http_get, telecharger=None, systeme=None, architecture=None):
     """Télécharge, vérifie et installe uv ou Node.js dans le dossier de Lutin. Rend le chemin du programme. ValueError claire à chaque étape qui échoue."""
-    if nom not in OUTILS:
+    if nom not in TOOLS:
         raise ValueError(_t("Programme inconnu."))
     from . import offline, ollama_client
     if offline.is_active():
         raise ValueError(_t("Mode hors ligne : aucun téléchargement."))
     telecharger = telecharger or ollama_client.telecharger_fichier
-    archive = archive_uv(systeme, architecture) if nom == "uv" else archive_node(systeme, architecture)
-    url = ("https://github.com/{}/releases/download/{}/{}".format(DEPOT_UV, VERSION_UV, archive) if nom == "uv" else "https://nodejs.org/dist/v{}/{}".format(VERSION_NODE, archive))
-    dire(_t("Recherche de la somme de contrôle de {}…").format(OUTILS[nom]["libelle"]))
-    attendue = _somme_publiee(nom, archive, http)
-    base = dossier(dossiers=dossiers)
+    archive = uv_archive(systeme, architecture) if nom == "uv" else node_archive(systeme, architecture)
+    url = ("https://github.com/{}/releases/download/{}/{}".format(UV_REPO, UV_VERSION, archive) if nom == "uv" else "https://nodejs.org/dist/v{}/{}".format(NODE_VERSION, archive))
+    dire(_t("Recherche de la somme de contrôle de {}…").format(TOOLS[nom]["libelle"]))
+    attendue = _published_checksum(nom, archive, http)
+    base = folder(dossiers=dossiers)
     base.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="lutin-outil-") as tmp:
         fichier = Path(tmp) / archive
@@ -192,22 +192,22 @@ def installer(nom, dossiers=None, dire=print, http=updates.http_get, telecharger
             telecharger(url, fichier, lambda t, fait, total: None, taille_min=1_000_000)
         except (OSError, RuntimeError) as e:
             raise ValueError(_t("Téléchargement impossible : {}").format(e)) from e
-        if somme_de(fichier) != attendue:
+        if checksum_of(fichier) != attendue:
             raise ValueError(_t("Le fichier téléchargé est corrompu (somme de contrôle différente de celle publiée) : rien n'est installé, réessaie."))
         partiel = base / (nom + ".partiel")
         shutil.rmtree(partiel, ignore_errors=True)
         try:
             dire(_t("Installation…"))
-            extraire_sur(fichier, partiel)
+            extract_to(fichier, partiel)
         except Exception:
             shutil.rmtree(partiel, ignore_errors=True)
             raise
-        if not _trouver(partiel, ("uv.exe", "uv") if nom == "uv" else ("node.exe", "node")):
+        if not _find(partiel, ("uv.exe", "uv") if nom == "uv" else ("node.exe", "node")):
             shutil.rmtree(partiel, ignore_errors=True)
             raise ValueError(_t("Le programme est introuvable dans l'archive téléchargée."))
-        remplacer_dossier(partiel, base / nom)
+        replace_folder(partiel, base / nom)
     shutil.rmtree(base / (nom + ".partiel"), ignore_errors=True)
-    exe = chemin("uv" if nom == "uv" else "node", dossiers)
+    exe = path_of("uv" if nom == "uv" else "node", dossiers)
     if not exe:
         raise ValueError(_t("Le programme est introuvable dans l'archive téléchargée."))
     if sys.platform != "win32":
@@ -217,16 +217,16 @@ def installer(nom, dossiers=None, dire=print, http=updates.http_get, telecharger
     return exe
 
 
-def desinstaller(nom, dossiers=None):
+def uninstall(nom, dossiers=None):
     """Retire ce que Lutin a installé (jamais un programme de la machine)."""
-    if nom not in OUTILS:
+    if nom not in TOOLS:
         raise ValueError(_t("Programme inconnu."))
-    if not par_lutin(nom, dossiers):
+    if not by_lutin(nom, dossiers):
         raise ValueError(_t("Lutin ne l'a pas installé : il n'y a rien à retirer ici."))
-    shutil.rmtree(dossier(nom, dossiers), ignore_errors=True)
+    shutil.rmtree(folder(nom, dossiers), ignore_errors=True)
 
 
-def creer_venv(venv, dossiers=None, dire=print, executer=subprocess.run, installer_uv=None):
+def create_venv(venv, dossiers=None, dire=print, executer=subprocess.run, installer_uv=None):
     """Un environnement Python isolé (avec pip) dans `venv`. Le module « venv » du Python de Lutin d'abord ; s'il manque (le Python fourni avec l'installateur Windows ne l'a pas), uv, installé au besoin,
     crée l'environnement avec son propre Python. ValueError avec la raison si rien ne marche."""
     venv = Path(venv)
@@ -235,10 +235,10 @@ def creer_venv(venv, dossiers=None, dire=print, executer=subprocess.run, install
         return
     shutil.rmtree(venv, ignore_errors=True)
     dire(_t("Le module venv manque à ce Python : uv crée l'environnement à sa place…"))
-    uv = chemin("uv", dossiers)
+    uv = path_of("uv", dossiers)
     if not uv:
         dire(_t("Installation de uv…"))
-        uv = (installer_uv or installer)("uv", dossiers, dire)
+        uv = (installer_uv or install)("uv", dossiers, dire)
     r = executer([uv, "venv", "--seed", "--python", "3.12", str(venv)], capture_output=True, text=True, timeout=900, encoding="utf-8", errors="replace")
     if r.returncode != 0:
         shutil.rmtree(venv, ignore_errors=True)

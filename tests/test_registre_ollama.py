@@ -65,54 +65,54 @@ class Telechargement(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.d, True)
 
     def test_noms(self):
-        self.assertEqual(ollama_registry.decomposer("qwen3:8b"), ("library", "qwen3", "8b"))
-        self.assertEqual(ollama_registry.decomposer("huihui_ai/qwen3-abliterated:4b"), ("huihui_ai", "qwen3-abliterated", "4b"))
-        self.assertEqual(ollama_registry.decomposer("qwen3"), ("library", "qwen3", "latest"))
+        self.assertEqual(ollama_registry.decompose("qwen3:8b"), ("library", "qwen3", "8b"))
+        self.assertEqual(ollama_registry.decompose("huihui_ai/qwen3-abliterated:4b"), ("huihui_ai", "qwen3-abliterated", "4b"))
+        self.assertEqual(ollama_registry.decompose("qwen3"), ("library", "qwen3", "latest"))
         for mauvais in ("", "../x", "a b", "x/../y:1", "a/b/c:1"):
-            with self.assertRaises(ollama_registry.ErreurRegistre):
-                ollama_registry.decomposer(mauvais)
+            with self.assertRaises(ollama_registry.RegistryError):
+                ollama_registry.decompose(mauvais)
 
     def test_un_modele_est_range_comme_ollama_et_relu_sous_le_meme_nom(self):
         http = faux_http()
         suivi = []
-        ollama_registry.telecharger("huihui_ai/qwen3-abliterated:4b", self.d, lambda t, f, tot: suivi.append((f, tot)), http=http, recuperer=faux_recuperer(TOUS))
+        ollama_registry.download("huihui_ai/qwen3-abliterated:4b", self.d, lambda t, f, tot: suivi.append((f, tot)), http=http, recuperer=faux_recuperer(TOUS))
         self.assertIn("/v2/huihui_ai/qwen3-abliterated/manifests/4b", http.appels[0])
-        lus = ollama_shared_models.lire(self.d)
+        lus = ollama_shared_models.read_shared(self.d)
         self.assertEqual(list(lus), ["huihui_ai/qwen3-abliterated:4b"], "le même nom que dans Ollama")
         self.assertEqual(lus["huihui_ai/qwen3-abliterated:4b"]["fichier"].read_bytes(), GGUF)
         self.assertEqual(suivi[-1][0], suivi[-1][1], "la progression va jusqu'au bout")
 
     def test_modele_inexistant_morceau_corrompu_et_reprise(self):
-        with self.assertRaises(ollama_registry.ErreurRegistre) as e:
-            ollama_registry.telecharger("nexiste:pas", self.d, http=faux_http(404, b""), recuperer=faux_recuperer(TOUS))
+        with self.assertRaises(ollama_registry.RegistryError) as e:
+            ollama_registry.download("nexiste:pas", self.d, http=faux_http(404, b""), recuperer=faux_recuperer(TOUS))
         self.assertIn("does not exist", str(e.exception), "le message est reconnu par la page (modèle retiré de la liste)")
-        with self.assertRaises(ollama_registry.ErreurRegistre) as e:
-            ollama_registry.telecharger("qwen3:8b", self.d, http=faux_http(), recuperer=faux_recuperer(TOUS, abime=True))
+        with self.assertRaises(ollama_registry.RegistryError) as e:
+            ollama_registry.download("qwen3:8b", self.d, http=faux_http(), recuperer=faux_recuperer(TOUS, abime=True))
         self.assertIn("corrompu", str(e.exception))
-        self.assertEqual(ollama_shared_models.lire(self.d), {}, "rien n'est annoncé tant que le modèle n'est pas entier")
+        self.assertEqual(ollama_shared_models.read_shared(self.d), {}, "rien n'est annoncé tant que le modèle n'est pas entier")
         self.assertFalse(list((self.d / "blobs").glob("sha256-*")) and any(f.stat().st_size == len(GGUF) and f.read_bytes() != GGUF for f in (self.d / "blobs").glob("sha256-*")), "le morceau abîmé est supprimé")
         deux = faux_recuperer(TOUS)
-        ollama_registry.telecharger("qwen3:8b", self.d, http=faux_http(), recuperer=deux)
+        ollama_registry.download("qwen3:8b", self.d, http=faux_http(), recuperer=deux)
         un_autre = faux_recuperer(TOUS)
-        ollama_registry.telecharger("qwen3:4b", self.d, http=faux_http(), recuperer=un_autre)
+        ollama_registry.download("qwen3:4b", self.d, http=faux_http(), recuperer=un_autre)
         self.assertEqual(un_autre.pris, [], "les morceaux déjà présents ne sont pas retéléchargés")
 
     def test_un_manifeste_sans_modele_ou_illisible_est_refuse(self):
         sans = json.dumps({"layers": [{"mediaType": "application/vnd.ollama.image.template", "digest": EMP_GAB, "size": 3}]}).encode()
-        with self.assertRaises(ollama_registry.ErreurRegistre):
-            ollama_registry.telecharger("x:1", self.d, http=faux_http(200, sans), recuperer=faux_recuperer(TOUS))
-        with self.assertRaises(ollama_registry.ErreurRegistre):
-            ollama_registry.telecharger("x:1", self.d, http=faux_http(200, b"pas du json"), recuperer=faux_recuperer(TOUS))
+        with self.assertRaises(ollama_registry.RegistryError):
+            ollama_registry.download("x:1", self.d, http=faux_http(200, sans), recuperer=faux_recuperer(TOUS))
+        with self.assertRaises(ollama_registry.RegistryError):
+            ollama_registry.download("x:1", self.d, http=faux_http(200, b"pas du json"), recuperer=faux_recuperer(TOUS))
 
     def test_suppression_garde_les_morceaux_encore_utilises(self):
         for nom in ("qwen3:8b", "qwen3:4b"):
-            ollama_registry.telecharger(nom, self.d, http=faux_http(), recuperer=faux_recuperer(TOUS))
-        libere = ollama_registry.supprimer("qwen3:8b", self.d)
+            ollama_registry.download(nom, self.d, http=faux_http(), recuperer=faux_recuperer(TOUS))
+        libere = ollama_registry.remove("qwen3:8b", self.d)
         self.assertEqual(libere, 0, "le même fichier sert encore au modèle 4b")
-        self.assertEqual(list(ollama_shared_models.lire(self.d)), ["qwen3:4b"])
-        ollama_registry.supprimer("qwen3:4b", self.d)
+        self.assertEqual(list(ollama_shared_models.read_shared(self.d)), ["qwen3:4b"])
+        ollama_registry.remove("qwen3:4b", self.d)
         self.assertEqual(list((self.d / "blobs").glob("sha256-*")), [], "plus aucun modèle : plus aucun morceau")
-        self.assertEqual(ollama_registry.supprimer("absent:1", self.d), 0)
+        self.assertEqual(ollama_registry.remove("absent:1", self.d), 0)
 
 
 class DansLlamaCpp(unittest.TestCase):
@@ -125,8 +125,8 @@ class DansLlamaCpp(unittest.TestCase):
         self.addCleanup(lambda: (engines.CONTEXTE.update(self.ancien), ml.CACHE_PARTAGE.clear(), shutil.rmtree(self.tmp, ignore_errors=True)))
 
     def test_telecharger_puis_lister_puis_supprimer(self):
-        vrai = ollama_registry.telecharger
-        ollama_registry.telecharger = lambda modele, dossier, progression=None: vrai(modele, dossier, progression, http=faux_http(), recuperer=faux_recuperer(TOUS))
+        vrai = ollama_registry.download
+        ollama_registry.download = lambda modele, dossier, progression=None: vrai(modele, dossier, progression, http=faux_http(), recuperer=faux_recuperer(TOUS))
         self.addCleanup(setattr, ollama_registry, "telecharger", vrai)
         self.m.telecharger_ollama("qwen3:8b", lambda *a: None)
         r = self.m.modeles()
@@ -151,7 +151,7 @@ class RetrouverMesModeles(unittest.TestCase):
         ancien = self.tmp / "E" / "IA" / "Ollama" / "models"
         manif = ancien / "manifests" / "registry.ollama.ai" / "library" / "qwen3" / "8b"
         manif.parent.mkdir(parents=True)
-        manif.write_text(json.dumps({"layers": [{"mediaType": ollama_shared_models.TYPE_MODELE, "digest": EMP_GGUF, "size": len(GGUF)}]}), encoding="utf-8")
+        manif.write_text(json.dumps({"layers": [{"mediaType": ollama_shared_models.MODEL_TYPE, "digest": EMP_GGUF, "size": len(GGUF)}]}), encoding="utf-8")
         (ancien / "blobs").mkdir()
         (ancien / "blobs" / ("sha256-" + EMP_GGUF.split(":")[1])).write_bytes(GGUF)
         vide = self.tmp / "C" / "Users" / "x" / ".ollama" / "models"

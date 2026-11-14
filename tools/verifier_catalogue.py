@@ -31,13 +31,13 @@ def disparus(cat, http=updates.http_get):
 
 
 def principal():
-    manquants, incertains = disparus(model_catalog.charger())
+    manquants, incertains = disparus(model_catalog.load())
     for ident, raison in incertains:
         print("? {} : {} (ignoré)".format(ident, raison))
     for ident, raison in manquants:
         print("✘ {} : {}".format(ident, raison))
     if not manquants:
-        print("✔ tous les modèles du catalogue existent ({} vérifiés, {} incertains)".format(len(model_catalog.charger()["modeles"]), len(incertains)))
+        print("✔ tous les modèles du catalogue existent ({} vérifiés, {} incertains)".format(len(model_catalog.load()["modeles"]), len(incertains)))
     return 1 if manquants else 0
 
 

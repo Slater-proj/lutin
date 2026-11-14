@@ -46,7 +46,7 @@ class Essai(unittest.TestCase):
 
     def essai(self, options, **kw):
         with mock.patch.object(self.m, "serveur_pret", lambda: Path("llama-server")), mock.patch.object(ml.subprocess, "Popen", self.lancer):
-            return engine_trial.executer(options, self.m, ecrire=self.sortie.append, chemin_rapport=self.tmp / "rapport.json", **kw)
+            return engine_trial.run(options, self.m, ecrire=self.sortie.append, chemin_rapport=self.tmp / "rapport.json", **kw)
 
     def test_un_essai_complet_reussit_et_ecrit_son_rapport(self):
         self.modele()
@@ -63,7 +63,7 @@ class Essai(unittest.TestCase):
     def test_rien_n_est_telecharge_sans_accord(self):
         appels = []
         with mock.patch.object(self.m, "serveur_pret", lambda: None), mock.patch.object(self.m, "installer", lambda *a, **k: appels.append("installer")):
-            r = engine_trial.executer({}, self.m, ecrire=self.sortie.append, entree=lambda q: "n")
+            r = engine_trial.run({}, self.m, ecrire=self.sortie.append, entree=lambda q: "n")
         self.assertFalse(r["reussi"])
         self.assertEqual(appels, [], "refusé : rien n'a été téléchargé")
         self.assertIn("refusée", r["etapes"][-1]["detail"])
@@ -82,15 +82,15 @@ class Essai(unittest.TestCase):
             self.modele("m")
             return "m"
         with mock.patch.object(self.m, "fichiers_du_depot", lambda repo, http_json=None: [{"fichier": "m.gguf", "taille": 2_500_000_000}]), mock.patch.object(self.m, "telecharger_modele", telecharge),                 mock.patch.object(self.m, "serveur_pret", lambda: Path("llama-server")), mock.patch.object(ml.subprocess, "Popen", self.lancer):
-            r = engine_trial.executer({"modele": "auteur/depot/m.gguf", "sans_outils": True}, self.m, ecrire=self.sortie.append, entree=lambda q: questions.append(q) or "oui", chemin_rapport=self.tmp / "r.json")
+            r = engine_trial.run({"modele": "auteur/depot/m.gguf", "sans_outils": True}, self.m, ecrire=self.sortie.append, entree=lambda q: questions.append(q) or "oui", chemin_rapport=self.tmp / "r.json")
         self.assertTrue(r["reussi"], self.sortie)
         self.assertEqual(len(questions), 1)
         self.assertIn("2500 Mo", questions[0], "la taille est annoncée avant de télécharger")
 
     def test_nom_de_modele_invalide(self):
         with self.assertRaises(ValueError):
-            engine_trial.decouper_modele("juste-un-nom")
-        self.assertEqual(engine_trial.decouper_modele("a/b/c/d.gguf"), ("a/b", "c/d.gguf"))
+            engine_trial.split_model("juste-un-nom")
+        self.assertEqual(engine_trial.split_model("a/b/c/d.gguf"), ("a/b", "c/d.gguf"))
 
     def test_un_serveur_qui_ne_demarre_pas_est_rapporte_avec_le_journal(self):
         self.modele()
@@ -98,7 +98,7 @@ class Essai(unittest.TestCase):
         def casse(commande, **kw):
             return VRAI_POPEN([sys.executable, "-c", "import sys; print('erreur de bibliotheque'); sys.exit(3)"], **kw)
         with mock.patch.object(self.m, "serveur_pret", lambda: Path("llama-server")), mock.patch.object(ml.subprocess, "Popen", casse):
-            r = engine_trial.executer({"modele_local": "un"}, self.m, ecrire=self.sortie.append, chemin_rapport=self.tmp / "r.json")
+            r = engine_trial.run({"modele_local": "un"}, self.m, ecrire=self.sortie.append, chemin_rapport=self.tmp / "r.json")
         self.assertFalse(r["reussi"])
         self.assertEqual(r["etapes"][-1]["etape"], "Démarrage du serveur")
         self.assertIn("erreur de bibliotheque", r["etapes"][-1]["detail"])

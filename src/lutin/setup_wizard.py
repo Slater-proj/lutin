@@ -113,7 +113,7 @@ def afficher_choix(es, choix, coches, profil):
     ordre = [r for r in model_catalog.ROLES if choix.get(r)]
     for i, role in enumerate(ordre, 1):
         c = choix[role]
-        titre, detail = (_t(x) for x in model_catalog.LIBELLES[role])
+        titre, detail = (_t(x) for x in model_catalog.LABELS[role])
         place = {"gpu": "", "partiel": _t("  · plus lent : déborde en mémoire vive"), "cpu": "  · sans carte graphique : lent"}[c.tient]
         es.dire("  {}. {}{}".format(i, titre, _t("   ← conseillé") if role in coches else ""))
         es.dire("     {}  ({:g} Go){}".format(c.modele["nom"], c.modele["go"], place))
@@ -207,7 +207,7 @@ def deja_installe(cfg, dossiers, es, ollama=None):
     manquants = []
     for role, ident in cfg["modeles"]["choisis"].items():
         ok = installes is None or ident in installes
-        es.dire("  {} {} : {}{}".format("✔" if ok else "✘", _t(model_catalog.LIBELLES.get(role, (role,))[0]), ident, "" if ok else _t("  (n'est plus installé)")))
+        es.dire("  {} {} : {}{}".format("✔" if ok else "✘", _t(model_catalog.LABELS.get(role, (role,))[0]), ident, "" if ok else _t("  (n'est plus installé)")))
         if not ok:
             manquants.append(ident)
     if manquants and es.confirmer(_t("Retélécharger les modèles manquants ?"), False):
@@ -233,7 +233,7 @@ def executer(cfg, dossiers, es, options=None, profil=None, ollama=None):
     es.dire(_t("\nTa machine : ") + profil.resume())
     if profil.sans_gpu():
         es.dire(_t("(Pas de carte graphique utilisable détectée : les modèles tourneront sur le processeur, plus lentement. Les petits modèles restent agréables.)"))
-    cat = model_catalog.charger(Path(dossiers["cache"]) / "catalogue.json")
+    cat = model_catalog.load(Path(dossiers["cache"]) / "catalogue.json")
     choix = model_selection.choose(profil, cat)
 
     cfg["securite"] = vars(choisir_securite(es, options)).copy()

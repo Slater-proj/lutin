@@ -2670,25 +2670,25 @@ class Assistant(unittest.TestCase):
 
     def test_bibliotheque_d_ollama_par_l_api(self):
         from lutin import model_discovery
-        vrai = model_discovery.chercher
+        vrai = model_discovery.search
         appels = []
         try:
-            model_discovery.chercher = lambda q, o, p, categorie="", leger=False: appels.append((q, o, p, categorie, leger)) or {"modeles": [{"nom": "x", "description": "d", "capacites": ["tools"], "tailles": ["8b"], "maj": "", "telechargements": 1}], "suite": False}
+            model_discovery.search = lambda q, o, p, categorie="", leger=False: appels.append((q, o, p, categorie, leger)) or {"modeles": [{"nom": "x", "description": "d", "capacites": ["tools"], "tailles": ["8b"], "maj": "", "telechargements": 1}], "suite": False}
             r = lire("/api/decouvrir?q=qwen&o=popular&p=2")
             self.assertEqual((r["modeles"][0]["nom"], appels[-1]), ("x", ("qwen", "popular", "2", "", False)))
             self.assertIn("8b", r["modeles"][0]["evaluations"], "chaque taille est jugée pour cette machine")
             lire("/api/decouvrir?q=qwen&c=tools&leger=1")
             self.assertEqual(appels[-1][3:], ("tools", True))
-            model_discovery.chercher = lambda q, o, p, categorie="", leger=False: (_ for _ in ()).throw(OSError("pas de réseau"))
+            model_discovery.search = lambda q, o, p, categorie="", leger=False: (_ for _ in ()).throw(OSError("pas de réseau"))
             with self.assertRaises(urllib.error.HTTPError) as e:
                 lire("/api/decouvrir")
             self.assertEqual(e.exception.code, 503)
-            model_discovery.chercher = vrai
+            model_discovery.search = vrai
             with self.assertRaises(urllib.error.HTTPError) as e:
                 lire("/api/decouvrir?o=au-hasard")
             self.assertEqual(e.exception.code, 400)
         finally:
-            model_discovery.chercher = vrai
+            model_discovery.search = vrai
 
     def test_taille_de_corps_absurde(self):
         """Un Content-Length négatif ou illisible ne bloque pas le serveur dans une lecture sans fin : il est refusé tout de suite."""

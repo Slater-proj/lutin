@@ -54,8 +54,8 @@ class Catalogue(unittest.TestCase):
 
     def test_l_auteur_officiel_est_la_valeur_par_defaut_et_la_communaute_un_choix(self):
         appels = []
-        C.chercher("qwen", "recent", False, 1, faux_hf([depot("Qwen3-8B-exl3")], appels))
-        C.chercher("qwen", "populaire", True, 1, faux_hf([depot("Qwen3-8B-exl3")], appels))
+        C.search("qwen", "recent", False, 1, faux_hf([depot("Qwen3-8B-exl3")], appels))
+        C.search("qwen", "populaire", True, 1, faux_hf([depot("Qwen3-8B-exl3")], appels))
         self.assertIn("author=turboderp", appels[0])
         self.assertIn("sort=lastModified", appels[0])
         self.assertIn("filter=exl3", appels[1])
@@ -64,7 +64,7 @@ class Catalogue(unittest.TestCase):
 
     def test_les_depots_sont_decrits_et_ceux_qui_ne_sont_pas_exl3_ecartes(self):
         brut = [depot("Qwen3-8B-exl3"), depot("Qwen2.5-VL-7B-exl3", pipeline_tag="image-text-to-text"), {"id": "x/autre-modele", "tags": ["gguf"]}, {"id": "../mal/forme-exl3", "tags": ["exl3"]}]
-        r = C.chercher("", "recent", True, 1, faux_hf(brut))
+        r = C.search("", "recent", True, 1, faux_hf(brut))
         self.assertEqual([m["nom"] for m in r["modeles"]], ["Qwen3-8B-exl3", "Qwen2.5-VL-7B-exl3"])
         m = r["modeles"][0]
         self.assertEqual((m["auteur"], m["telechargements"], m["aime"], m["maj"], m["licence"], m["base"]), ("turboderp", 1200, 30, "2026-11-06", "apache-2.0", "Qwen/Qwen3-8B"))
@@ -73,21 +73,21 @@ class Catalogue(unittest.TestCase):
         self.assertEqual(m["capacites"], [])
 
     def test_une_page_de_plus_agrandit_la_liste_et_dit_s_il_y_a_une_suite(self):
-        brut = [depot("M{}-8B-exl3".format(i)) for i in range(C.PAR_PAGE + 5)]
-        a = C.chercher("", "recent", False, 1, faux_hf(brut))
-        self.assertEqual((len(a["modeles"]), a["suite"]), (C.PAR_PAGE, True))
+        brut = [depot("M{}-8B-exl3".format(i)) for i in range(C.PER_PAGE + 5)]
+        a = C.search("", "recent", False, 1, faux_hf(brut))
+        self.assertEqual((len(a["modeles"]), a["suite"]), (C.PER_PAGE, True))
         C.CACHE.clear()
-        b = C.chercher("", "recent", False, 2, faux_hf(brut))
-        self.assertEqual((len(b["modeles"]), b["suite"]), (C.PAR_PAGE + 5, False))
+        b = C.search("", "recent", False, 2, faux_hf(brut))
+        self.assertEqual((len(b["modeles"]), b["suite"]), (C.PER_PAGE + 5, False))
 
     def test_l_estimation_vient_du_nom_et_ne_se_trompe_pas_sur_les_modeles_a_experts(self):
-        self.assertEqual(C.estimer_go("Qwen3-8B-exl3", 4.0), 5.2, "mesuré : 8B à 4 bits = 5,2 Go")
-        self.assertGreater(C.estimer_go("Qwen3-30B-A3B-exl3", 4.0), 15, "30 milliards de poids, pas 3")
-        self.assertIsNone(C.estimer_go("GLM-Flash-exl3", 4.0))
-        self.assertIsNone(C.estimer_go("Qwen3-8B-exl3", 0))
+        self.assertEqual(C.estimate_gb("Qwen3-8B-exl3", 4.0), 5.2, "mesuré : 8B à 4 bits = 5,2 Go")
+        self.assertGreater(C.estimate_gb("Qwen3-30B-A3B-exl3", 4.0), 15, "30 milliards de poids, pas 3")
+        self.assertIsNone(C.estimate_gb("GLM-Flash-exl3", 4.0))
+        self.assertIsNone(C.estimate_gb("Qwen3-8B-exl3", 0))
 
     def test_les_quantifications_ont_leur_taille_exacte_et_sont_triees(self):
-        q = C.quantifications("turboderp/Qwen3-8B-exl3", faux_hf())
+        q = C.quantizations("turboderp/Qwen3-8B-exl3", faux_hf())
         self.assertEqual([x["revision"] for x in q], ["4.0bpw", "6.0bpw", "8.0bpw_H8"], "« main » n'est pas une quantification")
         self.assertEqual([x["go"] for x in q], [5.2, 6.9, 8.8])
         self.assertEqual(q[0]["commit"], "a" * 40)
@@ -101,22 +101,22 @@ class Catalogue(unittest.TestCase):
         for http, mot in ((panne(404), "n'existe pas"), (panne(500), "HTTP 500"), (coupe, "ne répond pas"), (lambda url, entetes=None: (200, {}, b"pas du json"), "illisible")):
             C.CACHE.clear()
             with self.assertRaises(ValueError, msg=mot) as e:
-                C.quantifications("turboderp/Qwen3-8B-exl3", http)
+                C.quantizations("turboderp/Qwen3-8B-exl3", http)
             self.assertIn(mot, str(e.exception))
         for mauvais in ("--help", "a b/c", "solo", "../x/y"):
             with self.assertRaises(ValueError, msg=mauvais):
-                C.quantifications(mauvais, faux_hf())
+                C.quantizations(mauvais, faux_hf())
 
     def test_une_version_plus_recente_est_reperee_par_l_empreinte_de_la_branche(self):
         installes = [{"nom": "A_4.0bpw", "depot": "turboderp/A", "revision": "4.0bpw", "commit": "a" * 40},
                      {"nom": "B_6.0bpw", "depot": "turboderp/B", "revision": "6.0bpw", "commit": "z" * 40},
                      {"nom": "main", "depot": "turboderp/C", "revision": "", "commit": "m" * 40},
                      {"nom": "posé-à-la-main", "depot": "", "revision": "", "commit": ""}]
-        r = C.versions_plus_recentes(installes, faux_hf())
+        r = C.newer_versions(installes, faux_hf())
         self.assertEqual([x["nom"] for x in r["plus_recentes"]], ["B_6.0bpw"])
         self.assertEqual(r["erreurs"], [])
         C.CACHE.clear()
-        r = C.versions_plus_recentes(installes[:1], lambda url, entetes=None: (500, {}, b""))
+        r = C.newer_versions(installes[:1], lambda url, entetes=None: (500, {}, b""))
         self.assertEqual((r["plus_recentes"], len(r["erreurs"])), ([], 1), "une panne n'est pas une mise à jour : elle est dite")
 
 

@@ -207,21 +207,21 @@ class Gestionnaire(BaseHTTPRequestHandler):
     @staticmethod
     def _variantes_jugees(modele):
         """Les variantes de précision de `modele` avec, pour chacune, ce que cette machine en dit (tient ou pas) et si elle est déjà installée."""
-        lues = _variantes.lister(modele)
+        lues = _variantes.list_variants(modele)
         profil = _adequation.profil_pret()
         base = next((m for m in _m._CATALOGUE["modeles"] if m["id"] == modele), {})
         installes = set(_m.etat_moteur()["installes"])
         sortie = []
         for v in lues["variantes"]:
             jugement = _adequation.evaluer(dict(base, go=v["go"]), profil) if profil is not None else {"niveau": "bien", "texte": ""}
-            sortie.append(dict(v, installe=v["id"] in installes, niveau=jugement["niveau"], jugement=jugement["texte"], explication=_variantes.decrire(v["precision"])))
+            sortie.append(dict(v, installe=v["id"] in installes, niveau=jugement["niveau"], jugement=jugement["texte"], explication=_variantes.describe(v["precision"])))
         return {"modele": modele, "defaut": lues["defaut"], "variantes": sortie}
 
     @staticmethod
     def _compat(o):
         """Pour chaque modèle du catalogue : compatible avec le moteur choisi ? (format, quantification, mémoire estimée, raisons). La page ne propose que les compatibles."""
         try:
-            return _compat.pour_la_liste(_m._CATALOGUE["modeles"], _m.moteur_actuel(), o["installes"])
+            return _compat.for_list(_m._CATALOGUE["modeles"], _m.moteur_actuel(), o["installes"])
         except Exception:  # noqa: BLE001  (jamais une page cassée : sans cette liste, rien n'est masqué)
             return {}
 
@@ -476,7 +476,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
                                        "familles": {k: _t(v) for k, v in (_m._CATALOGUE.get("familles") or {}).items()}, "disque_modeles": _emplacements.models_gauge(),
                                        "version": _m.VERSION, "partages": o.get("partages", []), "ollama": o["actif"], "ollama_installe": bool(_m.chemin_ollama()) or _m.moteur_actuel().id != "ollama", "moteur_nom": _mesures.display_name(_m.moteur_actuel()), "installes": o["installes"], "modeles": modeles, "modeles_masques": len(_m.lire_registre_modeles()["masques"]), "actives": list(_m.TOURS_ACTIFS),
                                        "pulls": _m.PULLS, "reglages": r, "conversations": _m.conv_liste(), "racine": str(_m.RACINE), "donnees": str(_m.DONNEES),
-                                       "colibri_choisi": bool(getattr(_m.moteur_actuel(r), "colibri_choisi", lambda: False)()), "lmstudio_choisi": bool(getattr(_m.moteur_actuel(r), "lmstudio_choisi", lambda: False)()), "exllamav3_choisi": bool(getattr(_m.moteur_actuel(r), "exllamav3_choisi", lambda: False)()), "outil": bool(self._outil_vivant()), "hors_ligne": _hl.is_active(), "moteur": _m.moteur_actuel().id, "niveau": _m.SECURITE.niveau, "docker": _acces.in_docker(), "ouverture_possible": _fichiers.ouverture_possible(), "missions": _mission.par_conversation(), "langue": _i18n.langue(), "langue_reglage": _i18n.langue_configuree(), "cpus": _machine.cpus_disponibles() or 1, "diagnostic": self._avec_estimation(self._diagnostic(o, r, profil, modeles), r, profil), "prudent": _estimation.cautious_mode(profil), "premier_lancement": self._premier_lancement(o, r, profil), "redemarrage": {"necessaire": _acces.saved_security() != _m.SECURITE, "possible": _acces.can_restart()}, "nouvelle_version": _m.nouvelle_version_lutin(), "travaux": _m.travaux_etat(), "configurateur": self._configurateur(), "addons_alertes": _addons.alertes(), "embeddings": _embeddings.state(),
+                                       "colibri_choisi": bool(getattr(_m.moteur_actuel(r), "colibri_choisi", lambda: False)()), "lmstudio_choisi": bool(getattr(_m.moteur_actuel(r), "lmstudio_choisi", lambda: False)()), "exllamav3_choisi": bool(getattr(_m.moteur_actuel(r), "exllamav3_choisi", lambda: False)()), "outil": bool(self._outil_vivant()), "hors_ligne": _hl.is_active(), "moteur": _m.moteur_actuel().id, "niveau": _m.SECURITE.niveau, "docker": _acces.in_docker(), "ouverture_possible": _fichiers.ouverture_possible(), "missions": _mission.par_conversation(), "langue": _i18n.langue(), "langue_reglage": _i18n.langue_configuree(), "cpus": _machine.cpus_disponibles() or 1, "diagnostic": self._avec_estimation(self._diagnostic(o, r, profil, modeles), r, profil), "prudent": _estimation.cautious_mode(profil), "premier_lancement": self._premier_lancement(o, r, profil), "redemarrage": {"necessaire": _acces.saved_security() != _m.SECURITE, "possible": _acces.can_restart()}, "nouvelle_version": _m.nouvelle_version_lutin(), "travaux": _m.works_state(), "configurateur": self._configurateur(), "addons_alertes": _addons.alertes(), "embeddings": _embeddings.state(),
                                        "reflexion_possible": self._reflexion_possible(r, o["actif"]), "cluster_actif": _machines.cluster_actif(r.get("cluster")), "demandes_machines": len(_machines.noeud().get("demandes", [])), "modeles_distants": _machines.modeles_distants() if _machines.cluster_actif(r.get("cluster")) else [], "conversations_distantes": _machines.conversations_distantes() if _machines.cluster_actif(r.get("cluster")) else [], "machines_hors_ligne": _machines.hors_ligne() if _machines.cluster_actif(r.get("cluster")) else [], "taches_fond": _m.taches_en_cours(), "taches_moteur": [dict(v, nom=_moteurs.MOTEURS[k].nom) for k, v in _moteurs.toutes_les_taches().items() if v.get("statut") == "en cours" and k in _moteurs.MOTEURS], "fins_moteur": _moteurs.fins_recentes(), "memoire": self._memoire(r, o), "calibrage": _calibrage.state(), "bench": {"en_cours": _m.BENCH["en_cours"], "etape": _m.BENCH["etape"], "erreur": _m.BENCH["erreur"], "file": list(_m.BENCH.get("file") or []), "mesures": _bench.lire(_m.chemin_bench())}, "attentes": [{"id": a.id, "titre": a.titre, "detail": a.detail, "diff": a.diff, "conv": a.conv} for a in _m.Attente.EN_COURS.values()],
                                        "en_attente": sorted({a.conv for a in _m.Attente.EN_COURS.values() if a.conv} | set(_m.CHOIX_MEMOIRE))})
         if chemin == "/api/conseil":
@@ -515,20 +515,20 @@ class Gestionnaire(BaseHTTPRequestHandler):
         if chemin == "/api/commande-claude":
             q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
             try:
-                return self._envoyer(200, {"texte": _pc.commande(_m.RACINE, (q.get("nom") or [""])[0], (q.get("args") or [""])[0][:2000])})
+                return self._envoyer(200, {"texte": _pc.command(_m.RACINE, (q.get("nom") or [""])[0], (q.get("args") or [""])[0][:2000])})
             except ValueError as e:
                 return self._envoyer(400, {"erreur": str(e)})
         if chemin == "/api/projet-claude":
-            d = _pc.detecter(_m.RACINE)
-            return self._envoyer(200, {"detecte": d, "resume": _pc.resume(d) if not _pc.est_vide(d) else "", "racine": str(_m.RACINE)})
+            d = _pc.detect(_m.RACINE)
+            return self._envoyer(200, {"detecte": d, "resume": _pc.summary(d) if not _pc.is_empty(d) else "", "racine": str(_m.RACINE)})
         if chemin == "/api/travaux":
-            return self._envoyer(200, dict(_m.travaux_etat(), modifiable=self._configurateur()))
+            return self._envoyer(200, dict(_m.works_state(), modifiable=self._configurateur()))
         if chemin == "/api/dossiers":                          # le navigateur de dossiers de la page : seulement pour qui peut gérer les dossiers de travail (cette machine)
             if not self._configurateur():
                 return self._envoyer(403, {"erreur": _t("Les dossiers se parcourent depuis cette machine (niveau « cette machine seulement » ou navigateur de cette machine).")})
             q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
             try:
-                return self._envoyer(200, _m.lister_dossiers((q.get("chemin") or [""])[0]))
+                return self._envoyer(200, _m.list_folders((q.get("chemin") or [""])[0]))
             except ValueError as e:
                 return self._envoyer(400, {"erreur": str(e)})
         if chemin == "/api/variantes":                           # les précisions (q4, q8, fp16…) d'un modèle de la bibliothèque, jugées pour CETTE machine
@@ -555,7 +555,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
             except ValueError as e:
                 return self._envoyer(400, {"erreur": str(e)})
         if chemin == "/api/outils":                              # uv et Node.js : ce qui est installé (par Lutin ou sur la machine)
-            return self._envoyer(200, {"outils": _outils_externes.etat(), "modifiable": self._configurateur()})
+            return self._envoyer(200, {"outils": _outils_externes.state(), "modifiable": self._configurateur()})
         if chemin == "/api/mcp-catalogue":                       # les connecteurs du catalogue (sans rien lancer)
             return self._envoyer(200, {"serveurs": _mcp_catalogue.entries(), "modifiable": self._configurateur()})
         if chemin == "/api/mcp":                                 # les connecteurs MCP (sans leurs secrets)
@@ -563,11 +563,11 @@ class Gestionnaire(BaseHTTPRequestHandler):
         if chemin == "/api/decouvrir":                           # la bibliothèque d'Ollama (nouveautés, populaires, recherche)
             q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
             try:
-                r = _decouverte.chercher((q.get("q") or [""])[0], (q.get("o") or ["newest"])[0], (q.get("p") or ["1"])[0], categorie=(q.get("c") or [""])[0], leger=(q.get("leger") or ["0"])[0] == "1")
+                r = _decouverte.search((q.get("q") or [""])[0], (q.get("o") or ["newest"])[0], (q.get("p") or ["1"])[0], categorie=(q.get("c") or [""])[0], leger=(q.get("leger") or ["0"])[0] == "1")
                 profil = _adequation.profil_pret()
                 juger = (lambda go: _adequation.evaluer({"go": go}, profil)) if profil is not None else (lambda go: {"niveau": "bien", "texte": ""})
                 installes = set(_m.etat_moteur()["installes"])
-                modeles = _decouverte.evaluer_tailles(r["modeles"], juger)
+                modeles = _decouverte.evaluate_sizes(r["modeles"], juger)
                 for m in modeles:
                     m["installes"] = sorted(t for t in m["tailles"] if m["nom"] + ":" + t in installes) + ([""] if m["nom"] in installes or m["nom"] + ":latest" in installes else [])
                 return self._envoyer(200, dict(r, modeles=modeles))
@@ -1020,7 +1020,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 except (_addons.ErreurAddon, ValueError) as e:
                     return self._envoyer(400, {"erreur": str(e)})
             if self.path == "/api/travaux-apercu":
-                return self._envoyer(200, _m.apercu_travail(str(donnees.get("id", ""))))
+                return self._envoyer(200, _m.work_preview(str(donnees.get("id", ""))))
             if self.path in ("/api/dossier-modeles-analyse", "/api/dossier-modeles-copie", "/api/redemarrer-ollama"):
                 if not self._configurateur():
                     return self._envoyer(403, {"erreur": _t("Le dossier des modèles se change depuis cette machine.")})
@@ -1036,27 +1036,27 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 from . import locations
                 return self._envoyer(200, {"dossier": str(locations.set_models_folder(str(donnees.get("chemin", "")))), "note": _t("Les modèles déjà téléchargés ne sont pas déplacés : déplace-les à la main dans le nouveau dossier, ou retélécharge-les. Redémarre Ollama (quitte-le puis relance-le) pour qu'il utilise le nouveau dossier.")})
             if self.path == "/api/travaux-choisir":
-                return self._envoyer(200, _m.choisir_travail(str(donnees.get("id", ""))))
+                return self._envoyer(200, _m.choose_work(str(donnees.get("id", ""))))
             if self.path in ("/api/travaux-ajouter", "/api/travaux-retirer", "/api/travaux-deplacer", "/api/travaux-chemin"):
                 if not self._configurateur():
                     return self._envoyer(403, {"erreur": "Les dossiers de travail se gèrent depuis cette machine (niveau « cette machine seulement ») ou avec la commande lutin workspaces."})
                 if self.path == "/api/travaux-ajouter":
-                    return self._envoyer(200, _m.ajouter_travail(str(donnees.get("chemin", "")), str(donnees.get("nom", ""))))
+                    return self._envoyer(200, _m.add_work(str(donnees.get("chemin", "")), str(donnees.get("nom", ""))))
                 if self.path == "/api/travaux-deplacer":
-                    return self._envoyer(200, _m.deplacer_travail(str(donnees.get("id", "")), str(donnees.get("parent", "")), str(donnees.get("nom", ""))))
+                    return self._envoyer(200, _m.move_work(str(donnees.get("id", "")), str(donnees.get("parent", "")), str(donnees.get("nom", ""))))
                 if self.path == "/api/travaux-chemin":
-                    return self._envoyer(200, _m.changer_chemin_travail(str(donnees.get("id", "")), str(donnees.get("chemin", ""))))
-                return self._envoyer(200, _m.retirer_travail(str(donnees.get("id", "")), bool(donnees.get("nettoyer"))))
+                    return self._envoyer(200, _m.change_work_path(str(donnees.get("id", "")), str(donnees.get("chemin", ""))))
+                return self._envoyer(200, _m.remove_work(str(donnees.get("id", "")), bool(donnees.get("nettoyer"))))
             if self.path in ("/api/reprise-detecter", "/api/reprise"):
                 if not self._configurateur():
                     return self._envoyer(403, {"erreur": _t("La reprise des données d'un autre assistant se fait depuis cette machine (niveau « cette machine seulement ») ou avec la commande lutin migrate.")})
                 if self.path == "/api/reprise-detecter":
-                    return self._envoyer(200, _m.reprise_detecter(str(donnees.get("chemin", "")), str(donnees.get("dossier_skills", ""))))
-                return self._envoyer(200, _m.reprise_importer(str(donnees.get("chemin", "")), [str(c) for c in (donnees.get("choix") or [])], str(donnees.get("dossier_skills", "")), bool(donnees.get("ecraser")), str(donnees.get("cible", ""))))
+                    return self._envoyer(200, _m.resume_detect(str(donnees.get("chemin", "")), str(donnees.get("dossier_skills", ""))))
+                return self._envoyer(200, _m.resume_import(str(donnees.get("chemin", "")), [str(c) for c in (donnees.get("choix") or [])], str(donnees.get("dossier_skills", "")), bool(donnees.get("ecraser")), str(donnees.get("cible", ""))))
             if self.path == "/api/importer-claude":
                 if not self._configurateur():
                     return self._envoyer(403, {"erreur": _t("Un projet Claude s'importe depuis cette machine (niveau « cette machine seulement ») ou avec la commande lutin import-project.")})
-                return self._envoyer(200, _m.importer_projet_claude(str(donnees.get("chemin", "")), str(donnees.get("mode", "")), str(donnees.get("vers", "")), str(donnees.get("nom", ""))))
+                return self._envoyer(200, _m.import_claude_project(str(donnees.get("chemin", "")), str(donnees.get("mode", "")), str(donnees.get("vers", "")), str(donnees.get("nom", ""))))
             if self.path in ("/api/notifications-ajouter", "/api/notifications-supprimer", "/api/notifications-tester"):
                 if not self._configurateur():
                     return self._envoyer(403, {"erreur": _t("Les notifications se règlent depuis cette machine (niveau « cette machine seulement » ou navigateur de cette machine).")})
@@ -1308,9 +1308,9 @@ class Gestionnaire(BaseHTTPRequestHandler):
                     return self._envoyer(403, {"erreur": _t("Installer un programme se fait depuis la machine de Lutin (ou par un administrateur déclaré).")})
                 try:
                     if self.path.endswith("installer") and not self.path.endswith("desinstaller"):
-                        _outils_externes.installer(str(donnees.get("nom", "")))
+                        _outils_externes.install(str(donnees.get("nom", "")))
                     else:
-                        _outils_externes.desinstaller(str(donnees.get("nom", "")))
+                        _outils_externes.uninstall(str(donnees.get("nom", "")))
                     return self._envoyer(200, {"ok": True})
                 except ValueError as e:
                     return self._envoyer(400, {"erreur": str(e)})
@@ -1355,11 +1355,11 @@ class Gestionnaire(BaseHTTPRequestHandler):
                         from . import exllamav3 as _exl
                         installes = _exl.modeles(mo._dossiers())
                         if str(donnees.get("portee")) == "maj":
-                            return self._envoyer(200, _exl_cat.versions_plus_recentes(installes))
-                        candidats, deja = _exl_cat.chercher("", "recent", False, 1)["modeles"], {x.get("depot") for x in installes}
+                            return self._envoyer(200, _exl_cat.newer_versions(installes))
+                        candidats, deja = _exl_cat.search("", "recent", False, 1)["modeles"], {x.get("depot") for x in installes}
                     elif genre == "lmstudio":
                         from . import lmstudio as _lmstudio
-                        candidats, deja = _lms_cat.chercher("", "recent", False, 1)["modeles"], {x["nom"].split("/")[-1] for x in (_lmstudio.modeles() if mo._lms() else [])}
+                        candidats, deja = _lms_cat.search("", "recent", False, 1)["modeles"], {x["nom"].split("/")[-1] for x in (_lmstudio.models() if mo._lms() else [])}
                     else:
                         from . import colibri as _colibri
                         installes = _colibri.modeles_installes(mo._dossiers(), mo.modele_colibri())
@@ -1421,8 +1421,8 @@ class Gestionnaire(BaseHTTPRequestHandler):
     def _racines_travail():
         """{id: chemin} des dossiers de travail, et l'identifiant du dossier actif (où les skills s'installent par défaut)."""
         cfg = _m.config_lue()
-        actif = _travaux.actif(cfg)
-        return {t["id"]: t["chemin"] for t in _travaux.liste(cfg)}, (actif["id"] if actif else "")
+        actif = _travaux.active(cfg)
+        return {t["id"]: t["chemin"] for t in _travaux.entries(cfg)}, (actif["id"] if actif else "")
 
     def _skills_tiers_lire(self, chemin):
         q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
@@ -1516,13 +1516,13 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 installes = _exl.modeles(mo._dossiers())
                 present = mo._exl() is not None
                 dossier = str(_exl.dossier_modeles(mo._dossiers()))
-                catalogue, quants = _exl_cat.chercher, _exl_cat.quantifications
+                catalogue, quants = _exl_cat.search, _exl_cat.quantizations
             elif genre == "lmstudio":
                 from . import lmstudio as _lmstudio
                 present = mo._lms() is not None
-                installes = _lmstudio.modeles() if present else []
-                dossier = str(_lmstudio.dossier_modeles())
-                catalogue, quants = _lms_cat.chercher, _lms_cat.quantifications
+                installes = _lmstudio.models() if present else []
+                dossier = str(_lmstudio.models_folder())
+                catalogue, quants = _lms_cat.search, _lms_cat.quantizations
             else:
                 from . import colibri as _colibri
                 present = _colibri.installee(mo._dossiers()) is not None
@@ -1866,7 +1866,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 abandon()
                 return self._refus_tour(429, "Déjà {} réponses en cours : une seule carte graphique, attends la fin de l'une d'elles (ou clique sur Arrêter).".format(len(_m.TOURS_ACTIFS)), "too_many_turns")
             try:
-                _m.activer_travail(conv, str(donnees.get("travail") or ""))
+                _m.activate_work(conv, str(donnees.get("travail") or ""))
             except ValueError as erreur:
                 abandon()
                 return self._refus_tour(409, str(erreur), "workspace_conflict")

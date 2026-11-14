@@ -106,13 +106,13 @@ class Dossiers(unittest.TestCase):
         return a
 
     def ajouter(self, dossier):
-        r = workspace_manager.ajouter_travail(str(dossier), "")
+        r = workspace_manager.add_work(str(dossier), "")
         return next(t for t in r["liste"] if t["chemin"] == str(dossier))
 
     def test_apercu_detecte_un_ancien_assistant(self):
         a = self.ancien_assistant()
         t = self.ajouter(a)
-        ap = workspace_manager.apercu_travail(t["id"])
+        ap = workspace_manager.work_preview(t["id"])
         self.assertEqual(ap["ancien"]["conversations"], 1)
         self.assertEqual(ap["ancien"]["skills"], 1)
         self.assertIn("skills/ : 1 fiche(s)", ap["lus"], "les skills lus par Lutin sont dits")
@@ -123,7 +123,7 @@ class Dossiers(unittest.TestCase):
         d.mkdir()
         (d / "CLAUDE.md").write_text("consignes", encoding="utf-8")
         (d / "donnees").mkdir()                                     # un dossier « donnees » sans conversation n'est pas un ancien assistant
-        ap = workspace_manager.apercu_travail(self.ajouter(d)["id"])
+        ap = workspace_manager.work_preview(self.ajouter(d)["id"])
         self.assertIsNone(ap["ancien"])
         self.assertIn("CLAUDE.md", " ".join(ap["lus"]))
 
@@ -132,7 +132,7 @@ class Dossiers(unittest.TestCase):
         d.mkdir()
         t = self.ajouter(d)
         d.rmdir()
-        self.assertIn("n'existe pas", workspace_manager.apercu_travail(t["id"])["erreur"])
+        self.assertIn("n'existe pas", workspace_manager.work_preview(t["id"])["erreur"])
 
     def test_retirer_avec_nettoyage_ne_supprime_que_les_copies(self):
         d = self.tmp / "projet2"
@@ -140,8 +140,8 @@ class Dossiers(unittest.TestCase):
         (d / "conversations-lutin" / "a.md").write_text("x", encoding="utf-8")
         (d / "vrai.txt").write_text("à garder", encoding="utf-8")
         t = self.ajouter(d)
-        self.assertEqual(workspace_manager.apercu_travail(t["id"])["copies"], 1)
-        r = workspace_manager.retirer_travail(t["id"], nettoyer=True)
+        self.assertEqual(workspace_manager.work_preview(t["id"])["copies"], 1)
+        r = workspace_manager.remove_work(t["id"], nettoyer=True)
         self.assertEqual(r["copies_supprimees"], 1)
         self.assertFalse((d / "conversations-lutin").exists())
         self.assertTrue((d / "vrai.txt").is_file(), "aucun fichier à toi n'est touché")
@@ -151,7 +151,7 @@ class Dossiers(unittest.TestCase):
         (d / "conversations-lutin").mkdir(parents=True)
         (d / "conversations-lutin" / "a.md").write_text("x", encoding="utf-8")
         t = self.ajouter(d)
-        self.assertEqual(workspace_manager.retirer_travail(t["id"])["copies_supprimees"], 0)
+        self.assertEqual(workspace_manager.remove_work(t["id"])["copies_supprimees"], 0)
         self.assertTrue((d / "conversations-lutin" / "a.md").is_file())
 
 

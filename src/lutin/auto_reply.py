@@ -43,7 +43,7 @@ def reply(ident, canal, cle, titre, message, consigne="", arret=None, pause=2):
         time.sleep(pause)
     erreurs = []
     try:
-        _m.activer_travail(conv, "")
+        _m.activate_work(conv, "")
         _m.tour(conv, demande, lambda ev: erreurs.append(ev.get("texte", "")) if ev.get("type") == "erreur" else None, r, stop, None, identite=canal.lower(), lecture_seule=True)
     except Exception as erreur:  # noqa: BLE001  (une demande qui plante ne doit pas arrêter l'écoute)
         _m.journaliser("{} : réponse en erreur ({!r}).".format(canal, erreur))

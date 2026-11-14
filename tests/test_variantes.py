@@ -18,23 +18,23 @@ PAGE = "".join([bloc("qwen3", "8b", "5.2GB"), bloc("qwen3", "8b-q4_K_M", "5.2GB"
 
 class Lecture(unittest.TestCase):
     def test_variantes_d_un_modele(self):
-        r = model_variants.analyser(PAGE, "qwen3", "8b")
+        r = model_variants.parse(PAGE, "qwen3", "8b")
         self.assertEqual(r["defaut"], {"id": "qwen3:8b", "go": 5.2})
         self.assertEqual([(v["precision"], v["go"], v["defaut"]) for v in r["variantes"]], [("q4_K_M", 5.2, True), ("q8_0", 8.9, False), ("fp16", 16.0, False)],
                          "triées par taille ; « instruct-2507 » n'est pas une précision ; l'autre modèle est ignoré")
         self.assertEqual(r["variantes"][1]["id"], "qwen3:8b-q8_0")
 
     def test_la_variante_par_defaut_tolere_un_petit_ecart_d_arrondi(self):
-        r = model_variants.analyser(PAGE, "qwen3", "4b")
+        r = model_variants.parse(PAGE, "qwen3", "4b")
         self.assertTrue(next(v for v in r["variantes"] if v["precision"] == "q4_K_M")["defaut"], "2,5 contre 2,6 Go : c'est la même")
         self.assertFalse(next(v for v in r["variantes"] if v["precision"] == "q8_0")["defaut"])
 
     def test_page_meconnaissable_ou_sans_variantes(self):
-        self.assertEqual(model_variants.analyser("<html>rien</html>", "qwen3", "8b"), {"defaut": None, "variantes": []})
-        self.assertEqual(model_variants.analyser(None, "qwen3", "8b"), {"defaut": None, "variantes": []})
+        self.assertEqual(model_variants.parse("<html>rien</html>", "qwen3", "8b"), {"defaut": None, "variantes": []})
+        self.assertEqual(model_variants.parse(None, "qwen3", "8b"), {"defaut": None, "variantes": []})
 
     def test_megaoctets(self):
-        r = model_variants.analyser(PAGE, "qwen3", "0.6b")
+        r = model_variants.parse(PAGE, "qwen3", "0.6b")
         self.assertEqual(r["variantes"][0]["go"], 0.64)
 
     def test_lister_utilise_le_cache_et_refuse_les_noms_sans_taille_ou_deja_precis(self):
@@ -44,34 +44,34 @@ class Lecture(unittest.TestCase):
         def http(url):
             appels.append(url)
             return 200, {}, PAGE.encode("utf-8")
-        self.assertEqual(len(model_variants.lister("qwen3:8b", http=http)["variantes"]), 3)
-        model_variants.lister("qwen3:4b", http=http)
+        self.assertEqual(len(model_variants.list_variants("qwen3:8b", http=http)["variantes"]), 3)
+        model_variants.list_variants("qwen3:4b", http=http)
         self.assertEqual(appels, ["https://ollama.com/library/qwen3/tags"], "une seule lecture par modèle")
         for mauvais in ("qwen3", "qwen3:8b-q8_0", "huihui_ai/qwen3-abliterated:4b-q8_0", "", "qwen3:8b:q8", "a/b/c:8b"):
             with self.assertRaises(ValueError, msg=mauvais):
-                model_variants.lister(mauvais, http=http)
+                model_variants.list_variants(mauvais, http=http)
         model_variants.CACHE.clear()
         with self.assertRaises(OSError):
-            model_variants.lister("qwen3:8b", http=lambda u: (500, {}, b""))
+            model_variants.list_variants("qwen3:8b", http=lambda u: (500, {}, b""))
         with self.assertRaises(OSError):
-            model_variants.lister("zzz:8b", http=lambda u: (200, {}, PAGE.encode("utf-8")))
+            model_variants.list_variants("zzz:8b", http=lambda u: (200, {}, PAGE.encode("utf-8")))
         model_variants.CACHE.clear()
 
     def test_modeles_sans_filtre_d_un_auteur_ont_aussi_leurs_variantes(self):
         page = bloc("huihui_ai/qwen3-abliterated", "4b", "2.5GB") + bloc("huihui_ai/qwen3-abliterated", "4b-q8_0", "4.3GB") + bloc("huihui_ai/qwen3-abliterated", "4b-v2-q8_0", "4.3GB")
         page = page.replace('href="/library/huihui_ai', 'href="/huihui_ai')
-        r = model_variants.analyser(page, "huihui_ai/qwen3-abliterated", "4b")
+        r = model_variants.parse(page, "huihui_ai/qwen3-abliterated", "4b")
         self.assertEqual([(v["precision"], v["id"]) for v in r["variantes"]], [("q8_0", "huihui_ai/qwen3-abliterated:4b-q8_0")], "la variante « v2 » n'est pas une précision")
         adresses = []
         model_variants.CACHE.clear()
-        model_variants.lister("huihui_ai/qwen3-abliterated:4b", http=lambda u: (adresses.append(u), (200, {}, page.encode("utf-8")))[1])
+        model_variants.list_variants("huihui_ai/qwen3-abliterated:4b", http=lambda u: (adresses.append(u), (200, {}, page.encode("utf-8")))[1])
         self.assertEqual(adresses, ["https://ollama.com/huihui_ai/qwen3-abliterated/tags"])
         model_variants.CACHE.clear()
 
     def test_chaque_precision_a_son_explication(self):
         for p in ("q4_K_M", "q5_K_M", "q6_K", "q8_0", "fp16", "q3_K_S"):
-            self.assertTrue(model_variants.decrire(p).endswith("."), p)
-        self.assertNotEqual(model_variants.decrire("q4_K_M"), model_variants.decrire("q8_0"))
+            self.assertTrue(model_variants.describe(p).endswith("."), p)
+        self.assertNotEqual(model_variants.describe("q4_K_M"), model_variants.describe("q8_0"))
 
 
 CPU = Profil(systeme="linux", ram_go=32.0, ram_libre_go=13.0, gpus=[])

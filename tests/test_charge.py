@@ -40,7 +40,7 @@ class CartesIntegrees(unittest.TestCase):
         self.assertEqual(p.budget_go(), 19.2, "60 % de la RAM, pas 85 % des 4 Go de la carte intégrée")
         self.assertEqual(p.classe(), "sans_gpu")
         self.assertIn("non utilisée", p.resume())
-        choix = model_selection.choose(p, model_catalog.charger())
+        choix = model_selection.choose(p, model_catalog.load())
         retenu = choix["polyvalent"]
         self.assertIsNotNone(retenu)
         self.assertGreater(retenu.modele["go"], 4, "un modèle bien plus gros que la mémoire de la carte intégrée")

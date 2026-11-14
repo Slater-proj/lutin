@@ -11,7 +11,7 @@ from .i18n import t as _t
 def prepare_environment(cfg, dossiers):
     """Fixe l'environnement lu par le moteur AVANT son import (il lit ces variables au chargement)."""
     config.prepare(dossiers)
-    actif = workspaces.actif(cfg)
+    actif = workspaces.active(cfg)
     travail = Path(actif["chemin"] if actif else Path.home() / "Lutin")
     travail.mkdir(parents=True, exist_ok=True)
     cache_catalogue = Path(dossiers["cache"]) / "catalogue.json"

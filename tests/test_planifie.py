@@ -194,7 +194,7 @@ class Execution(Base):
     def test_une_tache_qui_ne_peut_pas_demarrer_l_ecrit_et_n_est_pas_relancee_en_boucle(self):
         t = self.tache(notifier="c1")
         P.modifier(t["id"], cree=(LUNDI_8H - timedelta(days=3)).isoformat())
-        with mock.patch.object(_m, "activer_travail", mock.Mock(side_effect=ValueError("Le dossier de travail « x » n'est plus dans la liste."))), mock.patch.object(_m, "tour", mock.Mock(side_effect=AssertionError("ne démarre pas"))):
+        with mock.patch.object(_m, "activate_work", mock.Mock(side_effect=ValueError("Le dossier de travail « x » n'est plus dans la liste."))), mock.patch.object(_m, "tour", mock.Mock(side_effect=AssertionError("ne démarre pas"))):
             self.assertEqual(P.un_regard(LUNDI_8H), t["id"])
             n = P.lire()[0]
             self.assertEqual((n["derniere_etat"], len(n["historique"])), ("erreur", 1))

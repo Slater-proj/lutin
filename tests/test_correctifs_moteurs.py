@@ -33,7 +33,7 @@ class RemplacerDossier(unittest.TestCase):
         self.cible = dossier_avec(self.tmp / "bin", {"llama-server.exe": "v1"})
 
     def test_cas_normal(self):
-        ml.remplacer_dossier(self.neuf, self.cible, dormir=lambda s: self.fail("aucune attente quand tout va bien"))
+        ml.replace_folder(self.neuf, self.cible, dormir=lambda s: self.fail("aucune attente quand tout va bien"))
         self.assertEqual((self.cible / "llama-server.exe").read_text(encoding="utf-8"), "v2")
         self.assertFalse(self.neuf.exists())
 
@@ -48,28 +48,28 @@ class RemplacerDossier(unittest.TestCase):
             return vrai(a, b)
         attentes = []
         with mock.patch.object(ml.os, "replace", capricieux):
-            ml.remplacer_dossier(self.neuf, self.cible, dormir=attentes.append)
+            ml.replace_folder(self.neuf, self.cible, dormir=attentes.append)
         self.assertEqual((self.cible / "llama-server.exe").read_text(encoding="utf-8"), "v2")
         self.assertEqual(len(essais), 3)
         self.assertEqual(attentes, [1, 2], "pauses croissantes entre les essais")
 
     def test_renommage_impossible_copie_en_dernier_recours(self):
         with mock.patch.object(ml.os, "replace", side_effect=PermissionError(5, "Accès refusé")):
-            ml.remplacer_dossier(self.neuf, self.cible, dormir=lambda s: None)
+            ml.replace_folder(self.neuf, self.cible, dormir=lambda s: None)
         self.assertEqual((self.cible / "llama-server.exe").read_text(encoding="utf-8"), "v2")
         self.assertFalse(self.neuf.exists())
 
     def test_fichier_verrouille_arrete_les_processus_puis_dit_pourquoi(self):
         appels = []
-        with mock.patch.object(engine_replace, "supprimer_arbre", lambda d: None), mock.patch.object(ml.shutil, "copytree", side_effect=PermissionError(5, "Accès refusé")):
-            with self.assertRaises(engine_replace.ErreurRemplacement) as e:
-                ml.remplacer_dossier(self.neuf, self.cible, dormir=lambda s: None, liberer=lambda: appels.append(1))
+        with mock.patch.object(engine_replace, "remove_tree", lambda d: None), mock.patch.object(ml.shutil, "copytree", side_effect=PermissionError(5, "Accès refusé")):
+            with self.assertRaises(engine_replace.ReplacementError) as e:
+                ml.replace_folder(self.neuf, self.cible, dormir=lambda s: None, liberer=lambda: appels.append(1))
         self.assertIn("Ferme tout ce qui utilise llama.cpp", str(e.exception))
         self.assertGreaterEqual(len(appels), 1, "les programmes restés dans le dossier sont arrêtés")
 
     def test_pas_de_powershell_hors_windows(self):
         with mock.patch.object(engine_replace.os, "name", "posix"), mock.patch.object(engine_replace.subprocess, "run", side_effect=AssertionError("ne doit rien lancer")):
-            self.assertEqual(ml.liberer_processus(self.tmp), 0)
+            self.assertEqual(ml.free_process(self.tmp), 0)
 
 
 class ModeleDuSetup(unittest.TestCase):
@@ -190,7 +190,7 @@ class ColibriRemplacement(unittest.TestCase):
                 raise PermissionError(5, "Accès refusé")
             return vrai(a, b)
         with mock.patch.object(engine_replace.os, "replace", capricieux), mock.patch.object(engine_replace.time, "sleep", lambda s: None):
-            engine_replace.remplacer_dossier(partiel, cible)
+            engine_replace.replace_folder(partiel, cible)
         self.assertEqual((cible / "coli").read_text(encoding="utf-8"), "x")
         self.assertTrue(hasattr(colibri, "remplacer_dossier"), "colibri utilise le remplacement commun")
 

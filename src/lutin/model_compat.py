@@ -12,30 +12,30 @@ import re
 from . import model_selection
 from .i18n import t as _t
 
-CAPACITES = {"outils": "outils", "reflexion": "reflexion", "vision": "vision"}          # capacité du catalogue -> fonction de la grille des moteurs
-CTX_ESTIMATION = 8192
+CAPABILITIES = {"outils": "outils", "reflexion": "reflexion", "vision": "vision"}          # capacité du catalogue -> fonction de la grille des moteurs
+ESTIMATION_CTX = 8192
 RE_QUANT = re.compile(r"(?:^|[-_:])(q\d(?:_[a-z0-9]+)*|fp16|f16|bf16|int4|int8)$", re.I)
 
 
-def quantification(ident):
+def quantization(ident):
     """La quantification lue dans le nom du modèle (« qwen3:8b-q8_0 » -> « Q8_0 »), ou « par défaut » (celle de la bibliothèque, en général Q4_K_M)."""
     m = RE_QUANT.search(str(ident or ""))
     return m.group(1).upper() if m else _t("par défaut")
 
 
-def _etat_fonction(moteur, fonction):
+def _feature_state(moteur, fonction):
     try:
         return (moteur.grille() or {}).get(fonction, ("non_teste", ""))
     except Exception:  # noqa: BLE001  (une grille illisible ne doit jamais masquer tout le catalogue)
         return ("non_teste", "")
 
 
-def evaluer(modele, moteur, installes=(), profil=None):          # profil : réservé (l'adéquation à la machine reste dans model_fit.py)
+def evaluate(modele, moteur, installes=(), profil=None):          # profil : réservé (l'adéquation à la machine reste dans model_fit.py)
     """{compatible, raisons, avertissements, format, quant, memoire_go} pour ce modèle du catalogue sur ce moteur."""
     ident = modele["id"]
-    sortie = {"compatible": True, "raisons": [], "avertissements": [], "format": "GGUF", "quant": quantification(ident), "memoire_go": None}
+    sortie = {"compatible": True, "raisons": [], "avertissements": [], "format": "GGUF", "quant": quantization(ident), "memoire_go": None}
     try:
-        sortie["memoire_go"] = round(model_selection.required_memory_gb(modele, CTX_ESTIMATION), 1)          # poids + mémoire de conversation (8 192 jetons, cache compressé) + marge
+        sortie["memoire_go"] = round(model_selection.required_memory_gb(modele, ESTIMATION_CTX), 1)          # poids + mémoire de conversation (8 192 jetons, cache compressé) + marge
     except (KeyError, TypeError):
         pass
     telechargeable = moteur.telechargeable() if hasattr(moteur, "telechargeable") else {"genre": "ollama"}
@@ -43,10 +43,10 @@ def evaluer(modele, moteur, installes=(), profil=None):          # profil : rés
         sortie["compatible"] = False
         sortie["raisons"].append(_t("Ce serveur gère ses modèles lui-même : Lutin ne peut pas installer celui-ci."))
     for capacite in modele.get("capacites") or []:
-        fonction = CAPACITES.get(capacite)
+        fonction = CAPABILITIES.get(capacite)
         if not fonction:
             continue
-        etat, note = _etat_fonction(moteur, fonction)
+        etat, note = _feature_state(moteur, fonction)
         if etat == "non":
             sortie["compatible"] = False
             sortie["raisons"].append(_t("« {} » n'est pas pris en charge par {}.").format(capacite, moteur.nom) + (" " + note if note else ""))
@@ -55,17 +55,17 @@ def evaluer(modele, moteur, installes=(), profil=None):          # profil : rés
     return sortie
 
 
-def pour_la_liste(catalogue_modeles, moteur, installes=(), profil=None):
+def for_list(catalogue_modeles, moteur, installes=(), profil=None):
     """{identifiant: évaluation} pour tout le catalogue."""
-    return {m["id"]: evaluer(m, moteur, installes, profil) for m in catalogue_modeles}
+    return {m["id"]: evaluate(m, moteur, installes, profil) for m in catalogue_modeles}
 
 
-def filtrer(catalogue, moteur, installes=(), profil=None):
+def filter_models(catalogue, moteur, installes=(), profil=None):
     """Le catalogue sans les modèles incompatibles (même forme que `catalogue`), pour que les rôles ne choisissent jamais un modèle que le moteur ne sait pas faire tourner."""
-    garde = [m for m in catalogue["modeles"] if evaluer(m, moteur, installes, None)["compatible"]]
+    garde = [m for m in catalogue["modeles"] if evaluate(m, moteur, installes, None)["compatible"]]
     return dict(catalogue, modeles=garde)
 
 
-def roles_pour(profil, catalogue, moteur, installes=()):
+def roles_for(profil, catalogue, moteur, installes=()):
     """{rôle: Choix ou None} sur le catalogue filtré par ce moteur : les rôles sont propres à chaque moteur."""
-    return model_selection.choose(profil, filtrer(catalogue, moteur, installes))
+    return model_selection.choose(profil, filter_models(catalogue, moteur, installes))
