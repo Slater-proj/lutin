@@ -24,7 +24,7 @@ def problemes(dossier):
             if attendu not in noms:
                 p.append("roue : « {} » manque".format(attendu))
         for n in noms:
-            if any(j in n for j in JAMAIS):
+            if any(j in n for j in JAMAIS) and not n.startswith("lutin/web/app/assets/"):          # le dossier assets/ du dépôt est exclu ; celui de l'interface construite (ADR 0002) est livré
                 p.append("roue : « {} » ne devrait pas y être".format(n))
         meta = next((n for n in noms if n.endswith(".dist-info/METADATA")), None)
         if meta and "Requires-Dist" in z.read(meta).decode("utf-8", "replace"):
@@ -35,7 +35,7 @@ def problemes(dossier):
         with tarfile.open(s) as t:
             for nom in t.getnames():
                 reste = nom.split("/", 1)[-1]
-                if any(reste.startswith(j) or ("/" + j) in "/" + reste for j in ("tests/", "docs/", "tools/", "assets/", "installateur/", ".github/", "docker/", "frontend/")):
+                if not reste.startswith("src/lutin/web/app/assets/") and any(reste.startswith(j) or ("/" + j) in "/" + reste for j in ("tests/", "docs/", "tools/", "assets/", "installateur/", ".github/", "docker/", "frontend/")):
                     p.append("source : « {} » ne devrait pas y être".format(nom))
     return p
 
