@@ -585,7 +585,7 @@ class MoteurOllama(_moteurs.Moteur):
             from . import docker_engines
             defaut = docker_engines.ollama_dossier()
             actuel = Path(exe).parent.parent if exe and defaut and str(defaut) in exe else (defaut or actuel)
-        modeles = __import__("lutin.locations", fromlist=["x"]).dossier_modeles()
+        modeles = __import__("lutin.locations", fromlist=["x"]).models_folder()
         return {"actuel": str(actuel or ""), "propose": "", "defaut": str(defaut or ""), "personnalise": bool(choisi), "libre_go": {"actuel": _llamacpp.espace_libre(actuel), "propose": None, "defaut": _llamacpp.espace_libre(defaut)},
                 "installe": exe is not None, "modifiable": os.name == "nt" and not os.environ.get("LUTIN_DOCKER"),
                 "modeles": {"actuel": str(modeles), "libre_go": _llamacpp.espace_libre(modeles), "modifiable": False}}
@@ -738,7 +738,7 @@ _moteurs.enregistrer(MoteurOllama())
 _moteurs.CONTEXTE.update(donnees=lambda: _m.DONNEES, en_docker=lambda: bool(os.environ.get("LUTIN_DOCKER")), hors_ligne=lambda: _hl.is_active(),
                          profil=lambda: __import__("lutin.model_fit", fromlist=["x"]).profil_pret(),
                          profil_attendu=lambda: __import__("lutin.model_fit", fromlist=["x"]).profil_attendu(),
-                         dossier_ollama=lambda: (None if os.environ.get("LUTIN_DOCKER") else __import__("lutin.locations", fromlist=["x"]).dossier_modeles()))
+                         dossier_ollama=lambda: (None if os.environ.get("LUTIN_DOCKER") else __import__("lutin.locations", fromlist=["x"]).models_folder()))
 _moteurs.enregistrer(_llamacpp.MoteurLlamaCpp())
 _moteurs.enregistrer(_llamacpp.MoteurExterne())
 

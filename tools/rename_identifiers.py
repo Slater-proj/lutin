@@ -193,12 +193,22 @@ def outside_none(edits, tree, mapping):
                         edits.add(node.lineno, match.start(), match.end(), mapping[name])
 
 
+def dynamic_import_of(node, target):
+    """`__import__("lutin.target", ...)` or `importlib.import_module("lutin.target")`: the module reached by its name written in a string."""
+    if not (isinstance(node, ast.Call) and node.args and isinstance(node.args[0], ast.Constant) and isinstance(node.args[0].value, str)):
+        return False
+    function = node.func
+    named = (isinstance(function, ast.Name) and function.id == "__import__") or (isinstance(function, ast.Attribute) and function.attr == "import_module")
+    return named and node.args[0].value == "lutin." + target
+
+
 def outside_uses(edits, tree, target, mapping, aliases, imported, chain):
     """In another file: `from .target import old`, `alias.old`, and the uses of a name imported without a new local name."""
     wanted = {local: mapping[orig] for local, orig in imported.items() if orig in mapping}
     for node in ast.walk(tree):
         if isinstance(node, ast.Attribute) and node.attr in mapping and (
-                (isinstance(node.value, ast.Name) and node.value.id in aliases) or (isinstance(node.value, ast.Attribute) and node.value.attr in chain)):
+                (isinstance(node.value, ast.Name) and node.value.id in aliases) or (isinstance(node.value, ast.Attribute) and node.value.attr in chain)
+                or dynamic_import_of(node.value, target)):
             edits.add(node.end_lineno, node.end_col_offset - len(node.attr.encode("utf-8")), node.end_col_offset, mapping[node.attr])
         elif isinstance(node, ast.ImportFrom) and (node.module or "").split(".")[-1] == target and (node.level >= 1 or (node.module or "").startswith("lutin.")):
             for item in node.names:
