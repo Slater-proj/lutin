@@ -29,7 +29,7 @@ def advised_model(profil, catalogue):
 def _ollama_in_other_container():
     """OLLAMA_URL désigne-t-il un autre conteneur ? Sinon Lutin installe et lance Ollama lui-même (ollama.log dans le volume /data)."""
     from . import docker_engines
-    return docker_engines.ollama_externe()
+    return docker_engines.external_ollama()
 
 
 def first_launch(moteur_nom, actif, detail, recommande=None, emplacement=None, installes=None, choisi=None, gere=None):

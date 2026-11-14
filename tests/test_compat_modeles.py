@@ -66,7 +66,7 @@ class Compatibilite(unittest.TestCase):
     def test_les_vrais_moteurs_ont_une_grille_utilisable(self):
         """Le catalogue livré, filtré par chaque vrai moteur, garde au moins un modèle à outils (sinon Lutin n'aurait rien à proposer)."""
         for ident in ("ollama", "llamacpp"):
-            mo = engines.MOTEURS[ident]
+            mo = engines.ENGINES[ident]
             f = model_compat.filter_models(_m._CATALOGUE, mo)
             self.assertTrue(any("outils" in m["capacites"] for m in f["modeles"]), ident)
 

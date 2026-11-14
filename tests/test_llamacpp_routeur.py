@@ -34,9 +34,9 @@ def port_libre():
 class Base(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="lutin-routeur-"))
-        self.ancien = dict(engines.CONTEXTE)
-        engines.CONTEXTE.update(donnees=lambda: self.tmp, en_docker=lambda: False, hors_ligne=lambda: False, profil=lambda: None)
-        self.m = engines.MOTEURS["llamacpp"]          # l'instance enregistrée : c'est elle que regler_avance retrouve
+        self.ancien = dict(engines.CONTEXT)
+        engines.CONTEXT.update(donnees=lambda: self.tmp, en_docker=lambda: False, hors_ligne=lambda: False, profil=lambda: None)
+        self.m = engines.ENGINES["llamacpp"]          # l'instance enregistrée : c'est elle que regler_avance retrouve
         self.args = self.tmp / "args.jsonl"
         os.environ["LUTIN_FAUX_ARGS"] = str(self.args)
         self.addCleanup(self.fin)
@@ -61,7 +61,7 @@ class Base(unittest.TestCase):
     def fin(self):
         self.m.arreter()
         os.environ.pop("LUTIN_FAUX_ARGS", None)
-        engines.CONTEXTE.update(self.ancien)
+        engines.CONTEXT.update(self.ancien)
 
 
 class Routeur(Base):

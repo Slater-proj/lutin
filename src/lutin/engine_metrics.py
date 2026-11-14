@@ -104,7 +104,7 @@ def launch(dossier, moteur, modele, mode="rapide", ctx=4096, memoire=None, synch
 
     def travail():
         try:
-            mesure = engine_bench.mesurer(moteur, modele, mode, ctx, horloge, memoire)
+            mesure = engine_bench.measure(moteur, modele, mode, ctx, horloge, memoire)
             record(dossier, moteur, modele, mesure, mode)
             STATE["erreur"] = "" if mesure.get("ok") else ("; ".join(mesure.get("erreurs") or []) or _t("La mesure n'a pas abouti."))[:200]
         except Exception as e:  # noqa: BLE001  (jamais une trace dans la page)

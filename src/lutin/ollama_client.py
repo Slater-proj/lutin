@@ -15,8 +15,8 @@ from . import offline
 from .i18n import t as _t
 
 URL_PAR_DEFAUT = "http://127.0.0.1:11434"
-URL_TELECHARGEMENT_WINDOWS = "https://ollama.com/download/OllamaSetup.exe"
-COMMANDE_LINUX = "curl -fsSL https://ollama.com/install.sh | sh"
+URL_DOWNLOAD_WINDOWS = "https://ollama.com/download/OllamaSetup.exe"
+COMMAND_LINUX = "curl -fsSL https://ollama.com/install.sh | sh"
 EDITEUR_ATTENDU = "ollama"            # le nom de l'éditeur dans la signature Authenticode de l'installateur Windows
 
 
@@ -118,7 +118,7 @@ def trouver_executable(systeme, env=None, quelle=shutil.which):
     return ""
 
 
-def variables_serveur(profil, dossier_modeles=""):
+def variables_server(profil, dossier_modeles=""):
     """Réglages d'Ollama adaptés à CETTE machine (au lieu de ceux d'une carte précise) : attention rapide, cache de contexte compressé, déchargement après 5 min."""
     v = {"OLLAMA_KEEP_ALIVE": "5m"}
     if not profil.sans_gpu():
@@ -129,7 +129,7 @@ def variables_serveur(profil, dossier_modeles=""):
     return v
 
 
-def demarrer_serveur(exe, variables, systeme, lanceur=subprocess.Popen):
+def start_server(exe, variables, systeme, lanceur=subprocess.Popen):
     env = dict(os.environ)
     env.update(variables)
     options = {"stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL, "stdin": subprocess.DEVNULL, "env": env}
@@ -140,7 +140,7 @@ def demarrer_serveur(exe, variables, systeme, lanceur=subprocess.Popen):
     return lanceur([exe, "serve"], **options)
 
 
-def telecharger_fichier(url, destination, progression=None, ouvrir=urllib.request.urlopen, taille_min=50_000_000, pauses=(3, 8)):
+def download_file(url, destination, progression=None, ouvrir=urllib.request.urlopen, taille_min=50_000_000, pauses=(3, 8)):
     """Télécharge `url` vers `destination` (fichier .part renommé à la fin, reprise si interrompu). HTTPS obligatoire."""
     if not url.startswith("https://"):
         raise ErreurOllama(_t("téléchargement refusé : adresse non sécurisée"))
@@ -180,7 +180,7 @@ def telecharger_fichier(url, destination, progression=None, ouvrir=urllib.reques
     return destination
 
 
-def verifier_signature_windows(chemin, lanceur):
+def check_signature_windows(chemin, lanceur):
     """(ok, sujet) : l'installateur doit porter une signature Authenticode valide dont le sujet contient « Ollama »."""
     sortie = lanceur(["powershell", "-NoProfile", "-Command",
                       "$s = Get-AuthenticodeSignature -LiteralPath '{}'; \"$($s.Status)|$($s.SignerCertificate.Subject)\"".format(str(chemin).replace("'", "''"))], 30)
@@ -198,7 +198,7 @@ def desinstalleur_windows(env=None):
     return None
 
 
-def desinstaller_windows(executer=subprocess.run, env=None):
+def uninstall_windows(executer=subprocess.run, env=None):
     """Désinstalle Ollama en silence ; les modèles téléchargés (dans le dossier .ollama de l'utilisateur) ne sont pas touchés."""
     exe = desinstalleur_windows(env)
     if exe is None:
@@ -208,14 +208,14 @@ def desinstaller_windows(executer=subprocess.run, env=None):
         raise ErreurOllama(_t("la désinstallation d'Ollama a échoué (code {})").format(r.returncode))
 
 
-def installer_windows(dossier_cache, progression=None, ouvrir=urllib.request.urlopen, lanceur_sortie=None, executer=subprocess.run, taille_min=50_000_000, dossier=None):
+def install_windows(dossier_cache, progression=None, ouvrir=urllib.request.urlopen, lanceur_sortie=None, executer=subprocess.run, taille_min=50_000_000, dossier=None):
     """Télécharge, VÉRIFIE LA SIGNATURE, puis installe Ollama en silence (pour l'utilisateur courant, sans droits administrateur)."""
-    from .hardware import lancer
+    from .hardware import launch
     if os.environ.get("LUTIN_TESTS") == "1" and executer is subprocess.run:
         raise ErreurOllama("installation réelle d'Ollama interdite pendant les tests : donne un faux `executer`")          # garde-fou : un test ne doit jamais installer un vrai programme sur la machine
-    lanceur_sortie = lanceur_sortie or lancer
-    installateur = telecharger_fichier(URL_TELECHARGEMENT_WINDOWS, Path(dossier_cache) / "OllamaSetup.exe", progression, ouvrir, taille_min)
-    ok, sujet = verifier_signature_windows(installateur, lanceur_sortie)
+    lanceur_sortie = lanceur_sortie or launch
+    installateur = download_file(URL_DOWNLOAD_WINDOWS, Path(dossier_cache) / "OllamaSetup.exe", progression, ouvrir, taille_min)
+    ok, sujet = check_signature_windows(installateur, lanceur_sortie)
     if not ok:
         installateur.unlink(missing_ok=True)
         raise ErreurOllama(_t("la signature de l'installateur d'Ollama n'est pas valide ({}) : installation annulée").format(sujet or "aucune signature"))

@@ -87,7 +87,7 @@ def setUpModule():
     unittest.addModuleCleanup(SERVER.shutdown)
     PORT = SERVER.server_address[1]
     session = A.APPAREILS.appairer(A.APPAREILS.nouveau_pin(), "phone")
-    DEVICE = {"Cookie": "{}={}".format(S.NOM_COOKIE, session), "X-Token": A.JETON}
+    DEVICE = {"Cookie": "{}={}".format(S.NAME_COOKIE, session), "X-Token": A.JETON}
 
 
 class Nobody(unittest.TestCase):

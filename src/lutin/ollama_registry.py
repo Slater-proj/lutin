@@ -68,7 +68,7 @@ def _chunks(manifeste):
     return sortie
 
 
-def download(modele, dossier, progression=None, http=updates.http_get, recuperer=ollama_client.telecharger_fichier):
+def download(modele, dossier, progression=None, http=updates.http_get, recuperer=ollama_client.download_file):
     """Télécharge `modele` dans `dossier` (disposition d'Ollama). progression(texte, fait, total). Renvoie le dossier. ErreurRegistre si le modèle n'existe pas, si un morceau est corrompu ou si le réseau lâche."""
     manifeste, brut = read_manifest(modele, http)
     if not any(c.get("mediaType") == _partage.MODEL_TYPE for c in manifeste["layers"] if isinstance(c, dict)):

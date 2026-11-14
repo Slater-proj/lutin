@@ -19,12 +19,12 @@ from pathlib import Path
 from .i18n import t as _t
 
 LOCAL, RESEAU, PROXY = "local", "reseau", "proxy"
-NIVEAUX = (LOCAL, RESEAU, PROXY)
-NOM_COOKIE = "lutin_session"
-DUREE_SESSION_S = 30 * 24 * 3600
-DUREE_PIN_S = 600
-ESSAIS_PIN = 5
-BLOCAGE_S = 300
+LEVELS = (LOCAL, RESEAU, PROXY)
+NAME_COOKIE = "lutin_session"
+DURATION_SESSION_S = 30 * 24 * 3600
+DURATION_PIN_S = 600
+ATTEMPTS_PIN = 5
+LOCK_OUT_S = 300
 
 
 @dataclass
@@ -39,7 +39,7 @@ class Securite:
     def valider(self):
         """Liste des problèmes de configuration (vide = correcte)."""
         pb = []
-        if self.niveau not in NIVEAUX:
+        if self.niveau not in LEVELS:
             pb.append("niveau inconnu : " + str(self.niveau))
         if not (1 <= int(self.port) <= 65535):
             pb.append("port invalide")
@@ -70,19 +70,19 @@ class Securite:
         return Securite(**{k: v for k, v in (d or {}).items() if k in Securite.__dataclass_fields__})
 
 
-def adresse_ecoute(sec, ip_lan=""):
+def address_listening(sec, ip_lan=""):
     """Adresse sur laquelle le serveur se lie. `local` : jamais autre chose que 127.0.0.1 ; proxy : l'interface locale (le proxy est sur la même machine) ou le réseau si un proxy distant est déclaré."""
     if sec.niveau == LOCAL:
         return "127.0.0.1"
     if sec.ecoute:
         return sec.ecoute
     if sec.niveau == PROXY:
-        distants = [i for i in sec.proxy_ips if not _est_boucle(i)]
+        distants = [i for i in sec.proxy_ips if not _is_loop(i)]
         return (ip_lan or "0.0.0.0") if distants else "127.0.0.1"
     return ip_lan or "0.0.0.0"
 
 
-def _est_boucle(texte):
+def _is_loop(texte):
     try:
         return ipaddress.ip_network(texte, strict=False).is_loopback
     except ValueError:
@@ -96,7 +96,7 @@ def _sans_port(hote):
     return hote.rsplit(":", 1)[0] if hote.count(":") == 1 else hote
 
 
-def hote_autorise(sec, entete_host, ip_lan=""):
+def allowed_host(sec, entete_host, ip_lan=""):
     """Protège du « DNS rebinding » : le nom demandé doit être un des noms de CETTE application (pas celui d'un site tiers qui pointerait vers 127.0.0.1)."""
     hote = _sans_port(entete_host)
     if not hote:
@@ -115,14 +115,14 @@ def hote_autorise(sec, entete_host, ip_lan=""):
     return hote in permis
 
 
-def origine_autorisee(sec, entete_origin, entete_host, ip_lan=""):
+def allowed_origin(sec, entete_origin, entete_host, ip_lan=""):
     """Les requêtes qui MODIFIENT quelque chose doivent venir de la page de Lutin elle-même. Pas d'Origin (outil en ligne de commande) : acceptée, le jeton protège."""
     if not entete_origin:
         return True
     if entete_origin == "null":
         return False
     hote = entete_origin.split("://", 1)[-1].split("/")[0]
-    return hote_autorise(sec, hote, ip_lan) and _sans_port(hote) == _sans_port(entete_host)
+    return allowed_host(sec, hote, ip_lan) and _sans_port(hote) == _sans_port(entete_host)
 
 
 def ip_dans(ip, reseaux):
@@ -139,18 +139,18 @@ def ip_dans(ip, reseaux):
     return False
 
 
-def administrateurs():
+def admins():
     """Les identités (en minuscules) qui peuvent configurer Lutin depuis la page au niveau « proxy » : variable LUTIN_ADMINS (« alice,bob »). Vide par défaut : personne, tout se configure alors par la commande lutin."""
     return {x.strip().lower() for x in os.environ.get("LUTIN_ADMINS", "").replace(";", ",").replace(" ", ",").split(",") if x.strip()}
 
 
 def est_admin_proxy(sec, ip_client, en_tetes):
     """La requête vient du proxy de confiance, qui a identifié un administrateur déclaré (l'en-tête n'est cru que de la part du proxy : voir identite_proxy)."""
-    nom = identite_proxy(sec, ip_client, en_tetes)
-    return bool(nom) and nom.lower() in administrateurs()
+    nom = identity_proxy(sec, ip_client, en_tetes)
+    return bool(nom) and nom.lower() in admins()
 
 
-def identite_proxy(sec, ip_client, en_tetes):
+def identity_proxy(sec, ip_client, en_tetes):
     """Nom d'utilisateur transmis par le proxy, ou None. L'en-tête n'est cru QUE si la connexion vient du proxy déclaré : n'importe qui peut écrire « Remote-User: admin »."""
     if sec.niveau != PROXY or not ip_dans(ip_client, sec.proxy_ips):
         return None
@@ -158,12 +158,12 @@ def identite_proxy(sec, ip_client, en_tetes):
     return nom[:128] or None
 
 
-def egal(a, b):
+def equal(a, b):
     """Comparaison de secrets à temps constant, sur des octets : un caractère hors ASCII n'est pas une exception."""
     return hmac.compare_digest(str(a).encode("utf-8"), str(b).encode("utf-8"))
 
 
-def _empreinte(jeton):
+def _digest(jeton):
     return hashlib.sha256(jeton.encode("utf-8")).hexdigest()
 
 
@@ -225,7 +225,7 @@ class Appareils:
     def nouveau_pin(self):
         """Affiché sur la machine elle-même (jamais envoyé sur le réseau)."""
         self.pin = "{:06d}".format(secrets.randbelow(1_000_000))
-        self.pin_expire = self.horloge() + DUREE_PIN_S
+        self.pin_expire = self.horloge() + DURATION_PIN_S
         self.echecs = 0
         return self.pin
 
@@ -234,13 +234,13 @@ class Appareils:
         maintenant = self.horloge()
         if maintenant < self.bloque_jusqua or not self.pin or maintenant > (self.pin_expire or 0):
             return None
-        if not egal(str(pin).strip(), self.pin):
+        if not equal(str(pin).strip(), self.pin):
             self.echecs += 1
-            if self.echecs >= ESSAIS_PIN:
-                self.pin, self.bloque_jusqua = None, maintenant + BLOCAGE_S
+            if self.echecs >= ATTEMPTS_PIN:
+                self.pin, self.bloque_jusqua = None, maintenant + LOCK_OUT_S
             return None
         jeton = secrets.token_urlsafe(32)
-        self.sessions[_empreinte(jeton)] = {"nom": (nom_appareil or "Appareil")[:60], "cree": maintenant, "vu": maintenant}
+        self.sessions[_digest(jeton)] = {"nom": (nom_appareil or "Appareil")[:60], "cree": maintenant, "vu": maintenant}
         self.pin = None                                     # un PIN ne sert qu'une fois
         self._ecrire()
         return jeton
@@ -248,12 +248,12 @@ class Appareils:
     def valide(self, jeton):
         if not jeton:
             return False
-        e = self.sessions.get(_empreinte(jeton))
+        e = self.sessions.get(_digest(jeton))
         if not e:
             return False
         maintenant = self.horloge()
-        if maintenant - e["cree"] > DUREE_SESSION_S:
-            self.sessions.pop(_empreinte(jeton), None)
+        if maintenant - e["cree"] > DURATION_SESSION_S:
+            self.sessions.pop(_digest(jeton), None)
             self._ecrire()
             return False
         e["vu"] = maintenant
@@ -275,13 +275,13 @@ def cookie_session(en_tetes_cookie):
     """Valeur du cookie de session dans l'en-tête Cookie, ou ''."""
     for morceau in (en_tetes_cookie or "").split(";"):
         cle, _, valeur = morceau.strip().partition("=")
-        if cle == NOM_COOKIE:
+        if cle == NAME_COOKIE:
             return valeur
     return ""
 
 
 def en_tete_set_cookie(jeton, https):
-    return "{}={}; Path=/; HttpOnly; SameSite=Strict; Max-Age={}{}".format(NOM_COOKIE, jeton, DUREE_SESSION_S, "; Secure" if https else "")
+    return "{}={}; Path=/; HttpOnly; SameSite=Strict; Max-Age={}{}".format(NAME_COOKIE, jeton, DURATION_SESSION_S, "; Secure" if https else "")
 
 
 def acces(sec, appareils, ip_client, en_tetes, jeton_local=None):
@@ -294,7 +294,7 @@ def acces(sec, appareils, ip_client, en_tetes, jeton_local=None):
     if sec.niveau == LOCAL:
         return True, "local"
     if sec.niveau == PROXY:
-        nom = identite_proxy(sec, ip_client, en_tetes)
+        nom = identity_proxy(sec, ip_client, en_tetes)
         if nom:
             return True, nom
     if appareils.valide(cookie_session(en_tetes.get("Cookie"))):

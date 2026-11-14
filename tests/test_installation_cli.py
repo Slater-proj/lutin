@@ -64,7 +64,7 @@ class Parcours(unittest.TestCase):
         self.cfg = config.load(self.d)
         self.travail = str(Path(self.t.name) / "travail")
         # Filet de sécurité : aucun test ne doit jamais lancer un vrai script d'installation.
-        self.garde = mock.patch.object(setup_wizard, "_lancer", side_effect=AssertionError("un test a tenté d'exécuter une commande système"))
+        self.garde = mock.patch.object(setup_wizard, "_launch", side_effect=AssertionError("un test a tenté d'exécuter une commande système"))
         self.garde.start()
 
     def tearDown(self):
@@ -73,7 +73,7 @@ class Parcours(unittest.TestCase):
 
     def lancer(self, e, disque=DISQUE_LARGE, **options):
         options.setdefault("travail", self.travail)
-        with mock.patch.object(setup_wizard, "definir_variables_utilisateur"), mock.patch.object(setup_wizard.shutil, "disk_usage", return_value=disque):
+        with mock.patch.object(setup_wizard, "set_variables_user"), mock.patch.object(setup_wizard.shutil, "disk_usage", return_value=disque):
             return setup_wizard.executer(self.cfg, self.d, e, options, profil=GROS)
 
     def test_mode_automatique_installe_le_polyvalent_seulement(self):
@@ -246,7 +246,7 @@ class Cli(unittest.TestCase):
             cli.parseur().parse_args(["setup", "--niveau", "ouvert"])
 
     def test_setup_automatique_de_bout_en_bout(self):
-        with mock.patch.object(hardware, "detecter", return_value=GROS), mock.patch.object(setup_wizard, "definir_variables_utilisateur"),                 mock.patch.object(setup_wizard.shutil, "disk_usage", return_value=DISQUE_LARGE):
+        with mock.patch.object(hardware, "detecter", return_value=GROS), mock.patch.object(setup_wizard, "set_variables_user"),                 mock.patch.object(setup_wizard.shutil, "disk_usage", return_value=DISQUE_LARGE):
             code, sortie = self.lancer("setup", "--oui", "--travail", str(Path(self.t.name) / "w"))
         self.assertEqual(code, 0, sortie)
         d = config.folders()
@@ -323,7 +323,7 @@ class DejaInstalle(unittest.TestCase):
         self.cfg["modeles"]["choisis"] = {"polyvalent": "qwen3:8b"}
         self.cfg["emplacements"]["travail"] = str(Path(self.t.name) / "w")
         config.save(self.d, self.cfg)
-        self.garde = mock.patch.object(setup_wizard, "_lancer", side_effect=AssertionError("commande système interdite en test"))
+        self.garde = mock.patch.object(setup_wizard, "_launch", side_effect=AssertionError("commande système interdite en test"))
         self.garde.start()
 
     def tearDown(self):
@@ -331,7 +331,7 @@ class DejaInstalle(unittest.TestCase):
         self.t.cleanup()
 
     def lancer(self, e, **options):
-        with mock.patch.object(setup_wizard, "definir_variables_utilisateur"), mock.patch.object(setup_wizard.shutil, "disk_usage", return_value=DISQUE_LARGE):
+        with mock.patch.object(setup_wizard, "set_variables_user"), mock.patch.object(setup_wizard.shutil, "disk_usage", return_value=DISQUE_LARGE):
             return setup_wizard.executer(config.load(self.d), self.d, e, options, profil=GROS)
 
     def test_ne_change_rien(self):
@@ -558,7 +558,7 @@ class CommandesDuQuotidien(unittest.TestCase):
 
     def test_reconfigurer_garde_les_autres_dossiers_de_travail(self):
         self.lancer("travaux", "ajouter", self.dossier("deux"))
-        with mock.patch.object(hardware, "detecter", return_value=GROS), mock.patch.object(setup_wizard, "definir_variables_utilisateur"), mock.patch.object(setup_wizard.shutil, "disk_usage", return_value=DISQUE_LARGE):
+        with mock.patch.object(hardware, "detecter", return_value=GROS), mock.patch.object(setup_wizard, "set_variables_user"), mock.patch.object(setup_wizard.shutil, "disk_usage", return_value=DISQUE_LARGE):
             code, sortie = self.lancer("setup", "--oui", "--sans-modeles", "--sans-ollama", "--travail", self.dossier("principal-neuf"))
         self.assertEqual(code, 0, sortie)
         cfg = config.load(self.d)
@@ -618,7 +618,7 @@ class CommandesDuQuotidien(unittest.TestCase):
         self.assertIn("50 jetons/s", sortie)
         self.assertIn('"modele": "qwen3:8b"', sortie)
         from lutin import bench as _bench
-        self.assertIn("qwen3:8b", _bench.lire(self.d["cache"] / "bench.json"))
+        self.assertIn("qwen3:8b", _bench.read(self.d["cache"] / "bench.json"))
 
     def test_hors_ligne_par_la_commande(self):
         self.lancer("setup", "--oui", "--sans-modeles", "--sans-ollama", "--travail", self.dossier("w"))
@@ -634,7 +634,7 @@ class CommandesDuQuotidien(unittest.TestCase):
         self.assertIn("coupé", self.lancer("hors-ligne", "non")[1])
 
     def test_ecoute_imposee_seulement_hors_niveau_local(self):
-        with mock.patch.object(hardware, "detecter", return_value=GROS), mock.patch.object(setup_wizard, "definir_variables_utilisateur"):
+        with mock.patch.object(hardware, "detecter", return_value=GROS), mock.patch.object(setup_wizard, "set_variables_user"):
             code, sortie = self.lancer("setup", "--oui", "--sans-modeles", "--sans-ollama", "--travail", self.dossier("w"), "--ecoute", "0.0.0.0")
             self.assertEqual(code, 2, "au niveau local, on n'impose pas l'adresse d'écoute")
             self.assertIn("écoute", sortie)

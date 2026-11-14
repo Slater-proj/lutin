@@ -15,7 +15,7 @@ MAX_WAIT = 180            # secondes d'attente d'une place libre (Lutin répond 
 
 
 def _read(ident):
-    return _m.lire_json(addons.dossier_donnees() / ident / "conversations.json", {})
+    return _m.lire_json(addons.folder_data() / ident / "conversations.json", {})
 
 
 def reply(ident, canal, cle, titre, message, consigne="", arret=None, pause=2):
@@ -54,7 +54,7 @@ def reply(ident, canal, cle, titre, message, consigne="", arret=None, pause=2):
             _m.RACINE_TOURS.pop(conv["id"], None)
     convs = _read(ident)
     convs[cle] = conv["id"]
-    _m.ecrire_atomique(addons.dossier_donnees() / ident / "conversations.json", json.dumps(convs, ensure_ascii=False))
+    _m.ecrire_atomique(addons.folder_data() / ident / "conversations.json", json.dumps(convs, ensure_ascii=False))
     conv = _m.conv_lire(conv["id"])
     texte = next((m.get("content") or "" for m in reversed(conv["messages"]) if m.get("role") == "assistant" and (m.get("content") or "").strip()), "")
     return texte.strip() or None

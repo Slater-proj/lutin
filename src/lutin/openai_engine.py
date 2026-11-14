@@ -88,7 +88,7 @@ def arguments_json(texte):
     return {}
 
 
-def comptes(usage, timings):
+def counts(usage, timings):
     """Les chiffres de fin de réponse au format d'Ollama (jetons lus et écrits, durées en nanosecondes) d'après `usage` (OpenAI) et `timings` (llama.cpp)."""
     usage, timings = usage or {}, timings or {}
     sortie = {"prompt_eval_count": int(usage.get("prompt_tokens") or timings.get("prompt_n") or 0), "eval_count": int(usage.get("completion_tokens") or timings.get("predicted_n") or 0)}
@@ -111,7 +111,7 @@ def depuis_openai_complet(rep):
         message["thinking"] = raisonnement
     if m.get("tool_calls"):
         message["tool_calls"] = [{"function": {"name": (a.get("function") or {}).get("name", ""), "arguments": arguments_json((a.get("function") or {}).get("arguments"))}} for a in m["tool_calls"]]
-    return dict({"message": message, "done": True, "done_reason": choix.get("finish_reason") or "stop"}, **comptes(rep.get("usage"), rep.get("timings")))
+    return dict({"message": message, "done": True, "done_reason": choix.get("finish_reason") or "stop"}, **counts(rep.get("usage"), rep.get("timings")))
 
 
 class FluxOpenAI:
@@ -160,7 +160,7 @@ class FluxOpenAI:
                 fin = choix.get("finish_reason") or fin
         if appels:
             yield {"message": {"role": "assistant", "tool_calls": [{"function": {"name": a["name"], "arguments": arguments_json(a["arguments"])}} for _, a in sorted(appels.items())]}, "done": False}
-        yield dict({"done": True, "done_reason": "stop" if fin in ("", "tool_calls") else fin}, **comptes(usage, timings))
+        yield dict({"done": True, "done_reason": "stop" if fin in ("", "tool_calls") else fin}, **counts(usage, timings))
 
 
 class MoteurOpenAI(engines.Moteur):
@@ -178,7 +178,7 @@ class MoteurOpenAI(engines.Moteur):
         base = self.adresse().rstrip("/")
         if not base:
             raise urllib.error.URLError(_t("aucune adresse pour ce moteur"))
-        if engines.CONTEXTE["hors_ligne"]() and not engines.est_local(base):
+        if engines.CONTEXT["hors_ligne"]() and not engines.est_local(base):
             raise urllib.error.URLError(_t("mode hors ligne : ce moteur distant n'est pas joint"))
         entetes = {"Content-Type": "application/json"}
         if self.cle():

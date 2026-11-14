@@ -127,8 +127,8 @@ def options_modele(r, temperature, **extra):
     if r.get("num_thread"):
         options["num_thread"] = r["num_thread"]
     else:
-        from .hardware import cpus_disponibles
-        limite = cpus_disponibles()
+        from .hardware import cpus_available
+        limite = cpus_available()
         if 0 < limite < (os.cpu_count() or 0):
             options["num_thread"] = limite                    # conteneur limité à N processeurs : Ollama ne lance pas 18 fils sur 6 processeurs (ils se gêneraient)
     options.update(extra)
@@ -322,24 +322,24 @@ from .tools import (  # noqa: F401  (déplacé dans tools.py : moteur ré-export
 
 from .web import (  # noqa: F401  (déplacé dans web.py : moteur ré-exporte ses noms)
     AGENT_WEB,
-    AVERTISSEMENT_WEB,
+    WARNING_WEB,
     DDG_URL,
-    ETATS_TACHE,
+    STATES_TASK,
     HtmlEnTexte,
     ResultatsDDG,
     SIGNES_TACHE,
-    WEB_MAX_OCTETS,
+    WEB_MAX_BYTES,
     WEB_PAGE,
-    adresse_resultat,
-    normaliser_taches,
-    outil_taches,
-    etat_moteurs as etat_moteurs_recherche,
-    outil_web_chercher,
-    outil_web_lire,
+    address_result,
+    normalize_tasks,
+    tool_tasks,
+    state_engines as etat_moteurs_recherche,
+    tool_web_search,
+    tool_web_read,
     tester_moteurs as tester_moteurs_recherche,
-    texte_taches,
-    verifier_hote_web,
-    web_telecharger,
+    text_tasks,
+    check_host_web,
+    web_download,
 )
 
 
@@ -512,11 +512,11 @@ def _liberer_autres_moteurs(tout):
     libres = []
     try:
         from . import llamacpp_engine as _ml, engines as _mo
-        llama, proc = _mo.MOTEURS.get("llamacpp"), _ml.SERVEUR.get("proc")
+        llama, proc = _mo.ENGINES.get("llamacpp"), _ml.SERVEUR.get("proc")
         if llama is not None and proc is not None and proc.poll() is None:
             llama.arreter()
             libres.append("llama.cpp")
-        gere = _mo.MOTEURS.get("openai")
+        gere = _mo.ENGINES.get("openai")
         if tout and gere is not None and hasattr(gere, "arreter_gere") and gere.arreter_gere():
             from . import engine_metrics
             libres.append(engine_metrics.display_name(gere))
@@ -561,7 +561,7 @@ def demarrer_ollama():
         return "Ollama tourne déjà."
     if os.environ.get("LUTIN_DOCKER"):
         from . import docker_engines
-        docker_engines.demarrer_ollama(lambda: etat_ollama()["actif"])
+        docker_engines.start_ollama(lambda: etat_ollama()["actif"])
         return "Ollama démarré."
     env = dict(os.environ, **ENV_OLLAMA)
     from . import locations
@@ -584,7 +584,7 @@ def arreter_ollama():
     """Arrête Ollama (le service ou l'icône d'Ollama comprise), à la demande de l'utilisateur : nécessaire pour qu'il relise OLLAMA_MODELS. Renvoie True s'il ne répond plus ensuite."""
     if os.environ.get("LUTIN_DOCKER"):
         from . import docker_engines
-        docker_engines.arreter_ollama()
+        docker_engines.stop_ollama()
         return not etat_ollama()["actif"]
     if os.name == "nt":
         for nom in ("ollama.exe", "ollama app.exe"):
@@ -800,7 +800,7 @@ def _mesurer_un(modele, rapide):
             mesure["moteur"] = {"id": moteur.id, "version": str(getattr(moteur, "version", lambda: "")() or "")[:40]}          # pour dire, plus tard, si une baisse vient d'un changement de moteur
         except Exception:  # noqa: BLE001
             pass
-        _bench.enregistrer(chemin_bench(), mesure)
+        _bench.save(chemin_bench(), mesure)
         if mesure.get("erreur"):
             BENCH["erreur"] = mesure["erreur"]
     except Exception as erreur:  # noqa: BLE001
@@ -1038,7 +1038,7 @@ def principal():
     if problemes:
         raise SystemExit(_t("Configuration de sécurité invalide : {}").format(" ; ".join(problemes)))
     IP_LAN = ip_locale() if SECURITE.niveau != _sec.LOCAL else ""
-    hote = _sec.adresse_ecoute(SECURITE, IP_LAN)
+    hote = _sec.address_listening(SECURITE, IP_LAN)
     try:
         serveur = lier_le_port(hote)
     except OSError as erreur:
@@ -1052,12 +1052,12 @@ def principal():
     refresh_plan(force=True)
     threading.Thread(target=watch_loop, daemon=True).start()
     from . import scheduled_tasks
-    scheduled_tasks.demarrer()
+    scheduled_tasks.start()
     from . import background_jobs as fond, mission                                   # le traitement de documents et les missions longues : toujours là, ils ne font rien tant qu'il n'y a rien à traiter
-    fond.demarrer()
-    mission.demarrer()
+    fond.start()
+    mission.start()
     from . import addons
-    addons.demarrer_actifs()
+    addons.start_active()
     journaliser("Démarrage de Lutin (version {}, dossier de travail {}).".format(VERSION, RACINE))
     boucle_locale = ecouter_aussi_en_local(hote)
     en_local = boucle_locale is not None or hote in ADRESSES_LOCALES
@@ -1067,7 +1067,7 @@ def principal():
     pin = ""
     if SECURITE.niveau == _sec.RESEAU:
         pin = APPAREILS.nouveau_pin()
-        print(_t("Code PIN     : {}   (valable {} min ; pour appairer un appareil)").format(pin, _sec.DUREE_PIN_S // 60))
+        print(_t("Code PIN     : {}   (valable {} min ; pour appairer un appareil)").format(pin, _sec.DURATION_PIN_S // 60))
     if SECURITE.niveau == _sec.PROXY:
         print(_t("Adresse publique : {}   (proxy de confiance : {})").format(SECURITE.url_publique, ", ".join(SECURITE.proxy_ips)))
     print(_t("Journal      : {}").format(DONNEES / "lutin.log"))

@@ -36,17 +36,17 @@ class Catalogue(unittest.TestCase):
 
     def test_aucun_moteur_experimental_n_a_d_adaptateur_propre(self):
         for ident in EXPERIMENTAUX:
-            self.assertNotIn(ident, engines.MOTEURS)
-            self.assertNotIn(ident, cm.GERES)
+            self.assertNotIn(ident, engines.ENGINES)
+            self.assertNotIn(ident, cm.MANAGED)
 
     def test_ils_sont_dans_la_liste_des_preregalages_mais_marques(self):
-        pre = {p["id"]: p for p in cm.prereglages()}
+        pre = {p["id"]: p for p in cm.presets()}
         for ident in EXPERIMENTAUX:
             self.assertTrue(pre[ident]["experimental"])
         self.assertFalse(pre["lmstudio"]["experimental"])
 
     def test_les_limites_sont_dites(self):
-        pre = {p["id"]: p for p in cm.prereglages()}
+        pre = {p["id"]: p for p in cm.presets()}
         self.assertTrue(any("recherche" in t for t in pre["colibri"]["points_faibles"]))
         self.assertTrue(any("ni ne le démarre" in t for t in pre["colibri"]["points_faibles"]))
         self.assertIn("recommandation", pre["strata"]["remarque"])
@@ -57,17 +57,17 @@ class Catalogue(unittest.TestCase):
             if m["id"] == "colibri":
                 m["experimental"] = "oui"
         with self.assertRaises(cm.ErreurCatalogue):
-            cm.valider(c)
+            cm.validate(c)
 
     def test_le_catalogue_livre_est_bien_signe(self):
         enveloppe = json.loads((RACINE / "src" / "lutin" / "data" / "moteurs.json").read_text(encoding="utf-8"))
-        cm.verifier(enveloppe)
+        cm.check(enveloppe)
 
 
 class JamaisParDefaut(unittest.TestCase):
     def test_le_banc_et_la_recommandation_ne_les_connaissent_pas(self):
         for ident in EXPERIMENTAUX:
-            self.assertNotIn(ident, engine_bench.MOTEURS_BANC)
+            self.assertNotIn(ident, engine_bench.ENGINES_BENCH)
         for docker in (False, True):
             r = engine_bench.recommander(None, docker=docker)
             self.assertNotIn(r["moteur"], EXPERIMENTAUX)
@@ -90,13 +90,13 @@ class AvecUnFauxServeur(unittest.TestCase):
         cls.srv.shutdown()
 
     def setUp(self):
-        self.ancien = dict(engines.CONTEXTE)
+        self.ancien = dict(engines.CONTEXT)
         dossier = Path(tempfile.mkdtemp(prefix="lutin-exper-d-"))
-        engines.CONTEXTE.update(donnees=lambda: dossier, en_docker=lambda: False, hors_ligne=lambda: False, profil=lambda: None)
-        self.addCleanup(engines.CONTEXTE.update, self.ancien)
+        engines.CONTEXT.update(donnees=lambda: dossier, en_docker=lambda: False, hors_ligne=lambda: False, profil=lambda: None)
+        self.addCleanup(engines.CONTEXT.update, self.ancien)
 
     def test_un_serveur_experimental_repond_comme_un_serveur_externe(self):
-        mo = engines.MOTEURS["openai"]
+        mo = engines.ENGINES["openai"]
         ml.regler("openai", self.adresse, None)
         self.assertEqual(mo.modeles()["installes"], ["modele-test"])
         rep = mo.chat({"model": "modele-test", "messages": [{"role": "user", "content": "Salut"}], "stream": False}, 20)

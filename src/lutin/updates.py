@@ -18,10 +18,10 @@ from . import offline, model_selection
 from .i18n import t as _t
 
 CATALOGUE_URL_DEFAUT = "https://raw.githubusercontent.com/Slater-proj/lutin/main/src/lutin/data/modeles.json"          # le catalogue de la branche principale ; `catalogue_url` dans la configuration le remplace ("" = pas de catalogue en ligne)
-DEPOT = "Slater-proj/lutin"
-REGISTRE = "https://registry.ollama.ai/v2"
-INTERVALLE_S = 24 * 3600
-TAILLE_MAX = 1_000_000
+REPO = "Slater-proj/lutin"
+REGISTRY = "https://registry.ollama.ai/v2"
+INTERVAL_S = 24 * 3600
+MAX_SIZE = 1_000_000
 ACCEPT_MANIFESTE = "application/vnd.docker.distribution.manifest.v2+json"
 
 
@@ -34,13 +34,13 @@ def http_get(url, entetes=None, delai=10, ouvrir=urllib.request.urlopen, taille_
     req = urllib.request.Request(url, headers=dict(_github.headers_for(url), **dict(entetes or {}), **{"User-Agent": "lutin"}))          # le compte GitHub (facultatif) lève la limite de requêtes ; il ne part que vers api.github.com
     try:
         with ouvrir(req, timeout=delai) as r:
-            corps = r.read((taille_max or TAILLE_MAX) + 1)
+            corps = r.read((taille_max or MAX_SIZE) + 1)
             return r.status, dict({k.lower(): v for k, v in r.headers.items()}, **{"x-lutin-url-finale": r.geturl()}), corps          # l'adresse après redirections : la page des publications y met le numéro de version
     except urllib.error.HTTPError as e:
         return e.code, {k.lower(): v for k, v in (e.headers or {}).items()}, b""
 
 
-def suite_erreur(cause):
+def followup_error(cause):
     """La fin d'un message « impossible de lire sur GitHub » : le conseil du compte GitHub si la cause est la limite de requêtes, sinon patienter."""
     from . import github as _github
     return _github.error_followup(cause)
@@ -57,7 +57,7 @@ def digest_registre(modele, http=http_get):
     """Empreinte (hexadécimale) du manifeste du modèle dans le registre, ou None (modèle inconnu, hors ligne)."""
     espace, nom, tag = separer(modele)
     try:
-        statut, entetes, corps = http("{}/{}/{}/manifests/{}".format(REGISTRE, espace, nom, tag), {"Accept": ACCEPT_MANIFESTE})
+        statut, entetes, corps = http("{}/{}/{}/manifests/{}".format(REGISTRY, espace, nom, tag), {"Accept": ACCEPT_MANIFESTE})
     except OSError:
         return None
     if statut != 200:
@@ -66,7 +66,7 @@ def digest_registre(modele, http=http_get):
     return d.split(":", 1)[-1]
 
 
-def mises_a_jour(installes, http=http_get):
+def available_updates(installes, http=http_get):
     """Modèles installés dont le contenu a changé dans le registre (même nom, nouvelle version)."""
     sortie = []
     for nom, info in installes.items():
@@ -77,7 +77,7 @@ def mises_a_jour(installes, http=http_get):
     return sortie
 
 
-def obsoletes(catalogue, installes, ignores=()):
+def obsolete(catalogue, installes, ignores=()):
     """Modèles installés que le catalogue dit remplacés (`remplace_par`) par un autre qui est installé lui aussi : on propose de libérer la place. Rien n'est supprimé sans clic."""
     par_id = cat.by_id(catalogue)
     sortie = []
@@ -92,7 +92,7 @@ def obsoletes(catalogue, installes, ignores=()):
     return sortie
 
 
-def nouveautes(profil, catalogue, choisis, installes, ignores=()):
+def news(profil, catalogue, choisis, installes, ignores=()):
     """Meilleurs choix pour CETTE machine, comparés à ce que l'utilisateur a installé pour chaque rôle."""
     meilleurs = model_selection.choose(profil, catalogue)
     par_id = cat.by_id(catalogue)
@@ -138,7 +138,7 @@ def telecharger_catalogue(url, cache, http=http_get):
         return "echec"
     if statut == 304:
         return "inchange"
-    if statut != 200 or len(corps) > TAILLE_MAX:
+    if statut != 200 or len(corps) > MAX_SIZE:
         return "echec"
     try:
         cat.validate(json.loads(corps.decode("utf-8")))
@@ -151,14 +151,14 @@ def telecharger_catalogue(url, cache, http=http_get):
     return "maj"
 
 
-def version_par_page(depot=DEPOT, http=http_get):
+def version_par_page(depot=REPO, http=http_get):
     """La dernière version d'après la page publique des publications (github.com/…/releases/latest redirige vers …/tag/vX.Y.Z), sans passer par l'API de GitHub. Lève OSError."""
     _, entetes, _ = http("https://github.com/{}/releases/latest".format(depot), {"Accept": "text/html"})
     m = re.search(r"/releases/tag/v?(\d+\.\d+\.\d+[^/?#]*)$", entetes.get("x-lutin-url-finale", ""))
     return m.group(1) if m else None
 
 
-RE_ETIQUETTE = re.compile(r"/releases/tag/([^/?#]+)$")
+RE_LABEL = re.compile(r"/releases/tag/([^/?#]+)$")
 
 
 def publication_par_page(depot, etiquette="", http=http_get):
@@ -166,7 +166,7 @@ def publication_par_page(depot, etiquette="", http=http_get):
     L'API de GitHub limite à 60 requêtes par heure et par adresse (HTTP 403 ensuite : un réseau partagé, une installation répétée) ; ces pages n'ont pas cette limite. Lève OSError ou ValueError."""
     if not etiquette:
         _, entetes, _ = http("https://github.com/{}/releases/latest".format(depot), {"Accept": "text/html"})
-        m = RE_ETIQUETTE.search(entetes.get("x-lutin-url-finale", ""))
+        m = RE_LABEL.search(entetes.get("x-lutin-url-finale", ""))
         if not m:
             raise ValueError(_t("Aucune publication trouvée."))
         etiquette = urllib.parse.unquote(m.group(1))
@@ -209,7 +209,7 @@ def publications_par_page(depot, motif=r".+", nombre=4, etiquette="", http=http_
     return publications
 
 
-def derniere_release_detail(depot=DEPOT, http=http_get):
+def derniere_release_detail(depot=REPO, http=http_get):
     """(version sans « v », adresse de la roue, cause de l'échec) de la dernière publication. L'API de GitHub d'abord ; si elle ne répond pas (réseau d'entreprise, API bloquée),
     la page publique des publications. Sans réponse : (None, None, texte de l'erreur)."""
     erreur = ""
@@ -238,7 +238,7 @@ def derniere_release_detail(depot=DEPOT, http=http_get):
     return None, None, erreur
 
 
-def derniere_release(depot=DEPOT, http=http_get):
+def derniere_release(depot=REPO, http=http_get):
     """(version sans « v », adresse de la roue) de la dernière publication GitHub ; (None, None) si le réseau ou la publication manque."""
     version, roue, _ = derniere_release_detail(depot, http)
     return version, roue
@@ -248,7 +248,7 @@ class ErreurVerification(ValueError):
     """La roue téléchargée n'est pas celle que la publication annonce : on ne l'installe pas."""
 
 
-TAILLE_ROUE_MAX = 60_000_000
+MAX_SIZE_WHEEL = 60_000_000
 PAUSES = (2, 5, 12)          # secondes entre les essais quand GitHub est momentanément indisponible (504, 502, 503, 429, coupure) : 4 essais en tout
 
 
@@ -269,7 +269,7 @@ def _avec_reprises(action, pauses=PAUSES, dormir=None):
             if not _panne_passagere(statut) or pause is None:
                 return statut, entetes, corps
         (dormir or time.sleep)(pause)
-RE_NOM_ROUE = re.compile(r"^lutin-[0-9A-Za-z.+_-]+-py3-none-any\.whl$")
+RE_NAME_WHEEL = re.compile(r"^lutin-[0-9A-Za-z.+_-]+-py3-none-any\.whl$")
 
 
 def somme_attendue(texte, nom_fichier):
@@ -281,7 +281,7 @@ def somme_attendue(texte, nom_fichier):
     return None
 
 
-def telecharger_roue_verifiee(url_roue, dossier, http=http_get, ouvrir=urllib.request.urlopen, nom_valide=RE_NOM_ROUE, exiger_sommes=False, prefixe="https://", pauses=PAUSES):
+def telecharger_roue_verifiee(url_roue, dossier, http=http_get, ouvrir=urllib.request.urlopen, nom_valide=RE_NAME_WHEEL, exiger_sommes=False, prefixe="https://", pauses=PAUSES):
     """Télécharge la roue dans `dossier`, calcule sa somme SHA-256 pendant la lecture et la compare au SHA256SUMS.txt publié à côté. Renvoie (chemin, verifie).
     `verifie` est faux seulement quand la publication n'a pas de SHA256SUMS.txt (anciennes versions) : l'appelant le dit. Une somme qui ne correspond pas, un fichier absent de la liste ou une roue trop grosse lèvent ErreurVerification ;
     le réseau absent lève OSError. L'installation se fait ensuite depuis CE fichier : aucun octet non vérifié n'est installé."""
@@ -311,7 +311,7 @@ def telecharger_roue_verifiee(url_roue, dossier, http=http_get, ouvrir=urllib.re
                 if not bloc:
                     break
                 total += len(bloc)
-                if total > TAILLE_ROUE_MAX:
+                if total > MAX_SIZE_WHEEL:
                     raise ErreurVerification(_t("Roue anormalement grosse : mise à jour refusée."))
                 h.update(bloc)
                 sortie.write(bloc)
@@ -331,7 +331,7 @@ def telecharger_roue_verifiee(url_roue, dossier, http=http_get, ouvrir=urllib.re
     return chemin, bool(attendue)
 
 
-def roue_de_version(version, depot=DEPOT):
+def roue_de_version(version, depot=REPO):
     """L'adresse de la roue d'une version publiée (retour arrière), ou ValueError si le numéro n'a pas la forme X.Y.Z (rien d'autre n'est jamais passé à pip)."""
     v = str(version or "").strip().lstrip("v")
     if not re.fullmatch(r"\d{1,3}\.\d{1,3}\.\d{1,3}", v):
@@ -367,12 +367,12 @@ def lire_fichier_version(chemin):
     return d if isinstance(d, dict) else {}
 
 
-def verifier_lutin(dossiers, depot=DEPOT, http=http_get, maintenant=time.time, force=False):
+def check_lutin(dossiers, depot=REPO, http=http_get, maintenant=time.time, force=False):
     """Y a-t-il une version de Lutin plus récente ? Au plus une fois par 24 h, jamais bloquant (une seule requête GET anonyme vers l'API de GitHub), silencieux hors ligne.
     Le résultat est gardé dans cache/lutin-version.json ; la page l'affiche, rien n'est installé sans toi."""
     chemin = fichier_version(dossiers)
     d = lire_fichier_version(chemin)
-    if not force and maintenant() - float(d.get("date") or 0) < INTERVALLE_S:
+    if not force and maintenant() - float(d.get("date") or 0) < INTERVAL_S:
         return d
     version, _, erreur = derniere_release_detail(depot, http)
     if version:
@@ -394,7 +394,7 @@ def nouvelle_version(chemin, locale):
     v = str(d.get("version") or "")
     if not plus_recente(v, locale) or v == d.get("ignoree"):
         return None
-    return {"version": v, "actuelle": locale, "page": "https://github.com/{}/releases/tag/v{}".format(d.get("depot") or DEPOT, v), "commande": commande_mise_a_jour()}
+    return {"version": v, "actuelle": locale, "page": "https://github.com/{}/releases/tag/v{}".format(d.get("depot") or REPO, v), "commande": commande_mise_a_jour()}
 
 
 def ignorer_version(chemin, version):
@@ -408,7 +408,7 @@ def ignorer_version(chemin, version):
 PORTEES = ("maj", "nouveaux", "tout")
 
 
-def verifier(profil, cfg, dossiers, ollama, http=http_get, maintenant=time.time, force=False, portee="tout"):
+def check(profil, cfg, dossiers, ollama, http=http_get, maintenant=time.time, force=False, portee="tout"):
     """Une vérification. Écrit cache/propositions.json et renvoie son contenu. Ne lève jamais d'exception.
 
     portee « maj » : seulement les mises à jour des modèles installés ; « nouveaux » : le catalogue en ligne puis les meilleurs modèles pour cette machine ; « tout » : les deux.
@@ -420,7 +420,7 @@ def verifier(profil, cfg, dossiers, ollama, http=http_get, maintenant=time.time,
     etat = cache / "derniere-verification.json"
     if not force:
         try:
-            if maintenant() - json.loads(etat.read_text(encoding="utf-8")).get("date", 0) < INTERVALLE_S:
+            if maintenant() - json.loads(etat.read_text(encoding="utf-8")).get("date", 0) < INTERVAL_S:
                 return lire_propositions(dossiers)
         except (OSError, ValueError):
             pass
@@ -443,11 +443,11 @@ def verifier(profil, cfg, dossiers, ollama, http=http_get, maintenant=time.time,
         ignores = set(cfg.get("modeles", {}).get("ignores", []))
         nouvelles, recalcule = [], []
         if portee in ("maj", "tout") and portee_reseau:
-            nouvelles += mises_a_jour(installes, http)
+            nouvelles += available_updates(installes, http)
             recalcule.append("maj")
         if portee in ("nouveaux", "tout"):
-            nouvelles += nouveautes(profil, catalogue, cfg.get("modeles", {}).get("choisis", {}), installes, ignores)
-            nouvelles += obsoletes(catalogue, installes, ignores)
+            nouvelles += news(profil, catalogue, cfg.get("modeles", {}).get("choisis", {}), installes, ignores)
+            nouvelles += obsolete(catalogue, installes, ignores)
             recalcule += ["nouveau", "obsolete"]
         gardees = [p for p in ancien.get("propositions", []) if p.get("type") not in recalcule]
         resultat["propositions"] = [p for p in gardees + nouvelles if p["cle"] not in ignores]

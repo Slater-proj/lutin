@@ -379,13 +379,13 @@ def outils_du_mode(r):
     outils = [t for t in _m.OUTILS if t["function"]["name"] not in exclus]
     if not _modes.without_tools(r.get("mode")):
         try:
-            outils += _mcp.outils_exposes(_modes.read_only(r.get("mode")))          # connecteurs MCP : seulement les outils autorisés un par un (voir mcp.py)
+            outils += _mcp.exposed_tools(_modes.read_only(r.get("mode")))          # connecteurs MCP : seulement les outils autorisés un par un (voir mcp.py)
         except Exception as erreur:  # noqa: BLE001  (un connecteur en panne ne doit pas empêcher de répondre)
             _m.journaliser("Connecteurs MCP : liste impossible ({!r}).".format(erreur))
     if any(t["function"]["name"] == "comfy_generer" for t in outils):
         try:
             from . import addons_comfyui
-            outils = [addons_comfyui.adapter_outil(t) if t["function"]["name"] == "comfy_generer" else t for t in outils]
+            outils = [addons_comfyui.adapt_tool(t) if t["function"]["name"] == "comfy_generer" else t for t in outils]
         except Exception as erreur:  # noqa: BLE001  (l'outil reste utilisable avec sa description générale)
             _m.journaliser("Outil d'images : description adaptée impossible ({!r}).".format(erreur))
     return outils
@@ -561,7 +561,7 @@ class MoteurOllama(_moteurs.Moteur):
     def dossier_defaut(self):
         if os.name == "nt":
             from . import docker_engines
-            choisi = docker_engines.reglage_dossier_moteurs()          # tu as choisi un dossier pour tous les moteurs : Ollama s'y installe aussi (sous-dossier ollama)
+            choisi = docker_engines.setting_folder_engines()          # tu as choisi un dossier pour tous les moteurs : Ollama s'y installe aussi (sous-dossier ollama)
             if choisi:
                 return Path(choisi) / "ollama"
         base = os.environ.get("LOCALAPPDATA")
@@ -573,7 +573,7 @@ class MoteurOllama(_moteurs.Moteur):
         if propre:
             return propre
         from . import docker_engines
-        return str(self.dossier_defaut()) if os.name == "nt" and docker_engines.reglage_dossier_moteurs() else None
+        return str(self.dossier_defaut()) if os.name == "nt" and docker_engines.setting_folder_engines() else None
 
     def info_dossier(self):
         """Comme pour llama.cpp : où il s'installe (choisi avant l'installation, sous Windows seulement : l'installateur d'Ollama accepte un dossier) et où sont ses modèles (réglés dans l'onglet Modèles)."""
@@ -583,7 +583,7 @@ class MoteurOllama(_moteurs.Moteur):
         actuel = Path(exe).parent if exe else (Path(choisi) if choisi else defaut)
         if os.environ.get("LUTIN_DOCKER"):
             from . import docker_engines
-            defaut = docker_engines.ollama_dossier()
+            defaut = docker_engines.ollama_folder()
             actuel = Path(exe).parent.parent if exe and defaut and str(defaut) in exe else (defaut or actuel)
         modeles = __import__("lutin.locations", fromlist=["x"]).models_folder()
         return {"actuel": str(actuel or ""), "propose": "", "defaut": str(defaut or ""), "personnalise": bool(choisi), "libre_go": {"actuel": _llamacpp.espace_libre(actuel), "propose": None, "defaut": _llamacpp.espace_libre(defaut)},
@@ -642,7 +642,7 @@ class MoteurOllama(_moteurs.Moteur):
             installer = _t("Télécharge Ollama sur https://ollama.com/download, puis ouvre-le.")
             retirer = _t("Glisse l'application Ollama dans la corbeille.")
         else:
-            installer = _t("Sous Linux, l'installation demande les droits administrateur : lance dans un terminal « {} ».").format(ollama_client.COMMANDE_LINUX)
+            installer = _t("Sous Linux, l'installation demande les droits administrateur : lance dans un terminal « {} ».").format(ollama_client.COMMAND_LINUX)
             retirer = _t("Sous Linux, la désinstallation demande les droits administrateur : suis la procédure de https://docs.ollama.com/linux#uninstall.")
         return {"mettre_a_jour": {"possible": False, "raison": _t("Relance la commande d'installation dans un terminal.") if st["installe"] else pas_installe},
                 "installer": {"possible": False, "raison": deja if st["installe"] else installer}, "desinstaller": {"possible": False, "raison": retirer if st["installe"] else pas_installe},
@@ -655,8 +655,8 @@ class MoteurOllama(_moteurs.Moteur):
         if os.environ.get("LUTIN_DOCKER"):
             from . import docker_engines
             try:
-                gpus = getattr(_moteurs.CONTEXTE["profil"](), "gpus", None) or []
-                docker_engines.faire_ollama(action, progression, lambda: etat_ollama()["actif"], rocm=any(getattr(g, "fabricant", "") == "amd" for g in gpus))
+                gpus = getattr(_moteurs.CONTEXT["profil"](), "gpus", None) or []
+                docker_engines.do_ollama(action, progression, lambda: etat_ollama()["actif"], rocm=any(getattr(g, "fabricant", "") == "amd" for g in gpus))
             finally:
                 CAPACITES.clear()
             return
@@ -671,20 +671,20 @@ class MoteurOllama(_moteurs.Moteur):
             elif action == "mettre_a_jour":
                 progression(_t("Arrêt d'Ollama…"), 0, 0)
                 _m.arreter_ollama()
-                ollama_client.installer_windows(cache, progression)          # par-dessus l'existant : le même dossier, rien n'est désinstallé
+                ollama_client.install_windows(cache, progression)          # par-dessus l'existant : le même dossier, rien n'est désinstallé
                 self._rendre_dossier_modeles(dossier_modeles)
                 _m.demarrer_ollama()
             elif action in ("desinstaller", "reinstaller"):
                 progression(_t("Arrêt d'Ollama…"), 0, 0)
                 _m.arreter_ollama()
                 progression(_t("Désinstallation…"), 0, 0)
-                ollama_client.desinstaller_windows()
+                ollama_client.uninstall_windows()
                 if action == "reinstaller":
-                    ollama_client.installer_windows(cache, progression, dossier=self.dossier_installation())
+                    ollama_client.install_windows(cache, progression, dossier=self.dossier_installation())
                     self._rendre_dossier_modeles(dossier_modeles)
                     _m.demarrer_ollama()
             elif action == "installer":
-                ollama_client.installer_windows(cache, progression, dossier=self.dossier_installation())
+                ollama_client.install_windows(cache, progression, dossier=self.dossier_installation())
                 self._rendre_dossier_modeles(dossier_modeles)
                 _m.demarrer_ollama()
         except ollama_client.ErreurOllama as e:
@@ -734,13 +734,13 @@ class MoteurOllama(_moteurs.Moteur):
         return _FluxOllama(urllib.request.urlopen(req, timeout=delai))          # l'erreur de connexion ou HTTP est levée ici, chez l'appelant
 
 
-_moteurs.enregistrer(MoteurOllama())
-_moteurs.CONTEXTE.update(donnees=lambda: _m.DONNEES, en_docker=lambda: bool(os.environ.get("LUTIN_DOCKER")), hors_ligne=lambda: _hl.is_active(),
+_moteurs.save(MoteurOllama())
+_moteurs.CONTEXT.update(donnees=lambda: _m.DONNEES, en_docker=lambda: bool(os.environ.get("LUTIN_DOCKER")), hors_ligne=lambda: _hl.is_active(),
                          profil=lambda: __import__("lutin.model_fit", fromlist=["x"]).profil_pret(),
                          profil_attendu=lambda: __import__("lutin.model_fit", fromlist=["x"]).profil_attendu(),
                          dossier_ollama=lambda: (None if os.environ.get("LUTIN_DOCKER") else __import__("lutin.locations", fromlist=["x"]).models_folder()))
-_moteurs.enregistrer(_llamacpp.MoteurLlamaCpp())
-_moteurs.enregistrer(_llamacpp.MoteurExterne())
+_moteurs.save(_llamacpp.MoteurLlamaCpp())
+_moteurs.save(_llamacpp.MoteurExterne())
 
 
 def capacites(modele):
@@ -793,7 +793,7 @@ def etat_ollama():
 def chemin_ollama():
     if os.environ.get("LUTIN_DOCKER"):
         from . import docker_engines
-        return docker_engines.chemin_ollama()          # celui que Lutin a installé dans le dossier des moteurs (volume)
+        return docker_engines.path_ollama()          # celui que Lutin a installé dans le dossier des moteurs (volume)
     exe = shutil.which("ollama")
     if exe:
         return exe
@@ -1020,7 +1020,7 @@ def consignes_systeme(r):
     return (_t("Tu es Lutin, l'assistant local de l'utilisateur. Tu réponds dans la langue de l'utilisateur, de façon directe et concise. Tu disposes d'outils pour lire et modifier le projet : utilise-les plutôt que de deviner. "
             "Chaque modification de fichier garde une sauvegarde de l'ancienne version et passe par l'accord de l'utilisateur, sauf s'il a activé l'accord automatique.\n\n") + mode + _t("\n\n# CONTEXTE DU PROJET (memoire/CONTEXTE.md)\n") + _m.borner_contexte(contexte) + _t("\n\n# NOTES DURABLES (memoire/MEMOIRE.md)\n") + (_m.texte_memoire(memoire) or _t("(aucune pour l'instant)"))
             + bloc_skills
-            + (_mission.consigne_systeme() if r.get("_mission") else "")
+            + (_mission.instruction_system() if r.get("_mission") else "")
             + ("" if r.get("mode") in ("discussion", "recherche") else _t("\n\n# CRÉER UN FICHIER\nQuand on te demande de créer ou d'écrire un fichier (docker-compose, script, configuration, document), appelle l'outil « ecrire » avec le chemin et le contenu complet, y compris après une recherche web. Ne te contente pas de montrer le contenu dans ta réponse."))
             + (_t("\n\n# ESSAI À BLANC\nTes écritures et tes commandes ne sont PAS exécutées : c'est une simulation, l'utilisateur voit ce que tu proposes. Propose ce que tu ferais (fichiers, contenu, commandes), sans insister ni réessayer. Ce que tu simules n'existe PAS ensuite : un fichier « créé » ici ne se relira pas, une commande « lancée » n'a rien produit. Ne dis jamais que c'est fait : conclus par « voici ce que je ferais ». Lire et chercher fonctionnent normalement.\n") if r.get("essai_a_blanc") else "")
             + (_t("\n\n# DÉBUT DE LA CONVERSATION\nLes premiers échanges ne sont plus tous sous tes yeux (fiche de suivi ou résumé). Pour retrouver un détail précis (une décision, un nom, un chiffre, un texte), appelle « rappeler » avec quelques mots-clés et ici=true : ne le devine pas.\n") if r.get("rappel_ici") else "")
@@ -1057,7 +1057,7 @@ def jauge_contexte(conv, r=None):
     r = r or _m.reglages()
     if conv.get("jetons"):
         return {"utilise": int(conv["jetons"]["utilise"]), "total": r["num_ctx"], "reel": True}
-    msgs = [{"role": "system", "content": consignes_systeme(r) + _fichiers.consigne_dossier(conv) + _m.texte_taches(conv)}]
+    msgs = [{"role": "system", "content": consignes_systeme(r) + _fichiers.instruction_folder(conv) + _m.text_tasks(conv)}]
     if conv.get("resume"):
         msgs.append({"role": "user", "content": conv["resume"]})
     msgs += conv.get("messages", [])
@@ -1601,7 +1601,7 @@ def boucle_agent(conv, r, emit, ctx, stop):
             _m.journaliser("Actualités guidées impossibles : {!r}".format(erreur))
             emit({"type": "info", "texte": _t("La recherche d'actualités n'a pas pu se faire ({}) : je continue normalement.").format(erreur)})
     for idx_tour in range(tours_max):
-        msgs = [{"role": "system", "content": consignes_systeme(r) + _fichiers.consigne_dossier(conv) + _m.texte_taches(conv) + rappels_texte}]
+        msgs = [{"role": "system", "content": consignes_systeme(r) + _fichiers.instruction_folder(conv) + _m.text_tasks(conv) + rappels_texte}]
         if idx_tour == 0:
             for nom_coupe, (taille_coupe, relu_coupe) in sorted(_m.COUPURES.items()):          # un fichier de mémoire plus long que ce que le modèle relit : tu le sais, au lieu de le découvrir plus tard
                 if (conv.get("id"), nom_coupe, taille_coupe) in COUPURES_DITES:          # une fois par conversation et par taille, pas à chaque message
@@ -1911,10 +1911,10 @@ def boucle_agent(conv, r, emit, ctx, stop):
             if joints:
                 extra["fichiers_joints"] = joints
             try:
-                _fichiers.enregistrer([dict(e, genre="fichier") for e in joints] + [_fichiers.entree_image(i, fichiers.get(i)) for i in medias if fichiers.get(i)], conv["id"])
+                _fichiers.save([dict(e, genre="fichier") for e in joints] + [_fichiers.entree_image(i, fichiers.get(i)) for i in medias if fichiers.get(i)], conv["id"])
             except Exception as erreur:  # noqa: BLE001  (le registre aide au ménage, il ne doit jamais gêner une réponse)
                 _m.journaliser("Registre des fichiers créés : {!r}".format(erreur))
-            affiche = _t("(résultat transmis à l'assistant, non affiché)") if (nom in OUTILS_INTERNES or _mcp.est_outil(nom)) and ("CONTENU WEB NON FIABLE" in resultat[:60] or _mcp.MARQUEUR in resultat[:60]) else resultat[:1500]          # la recherche web sert à l'assistant, pas à remplir la conversation : c'est à lui d'en tirer la réponse
+            affiche = _t("(résultat transmis à l'assistant, non affiché)") if (nom in OUTILS_INTERNES or _mcp.is_tool(nom)) and ("CONTENU WEB NON FIABLE" in resultat[:60] or _mcp.MARKER in resultat[:60]) else resultat[:1500]          # la recherche web sert à l'assistant, pas à remplir la conversation : c'est à lui d'en tirer la réponse
             emit(dict({"type": "resultat", "nom": nom, "texte": affiche}, **extra))
             conv["messages"].append(dict({"role": "tool", "tool_name": nom, "content": resultat[:_m.LECTURE_MAX + 2000]}, **extra))
             _m.conv_ecrire(conv)                        # enregistré à chaque étape : un plantage du PC en pleine demande ne perd que l'étape en cours

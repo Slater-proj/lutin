@@ -27,50 +27,50 @@ from . import core as _m
 from . import workspaces as _trav
 from .i18n import t as _t
 
-MAX_TRAVAUX = 10
+MAX_WORKS = 10
 DOCUMENTS_MAX = 20000               # documents suivis par travail
-ERREURS_DE_SUITE = 5                # au-delà, le travail se met en pause (le PC, le modèle ou le dossier ont un problème)
+MAX_CONSECUTIVE_ERRORS = 5                # au-delà, le travail se met en pause (le PC, le modèle ou le dossier ont un problème)
 ESSAI_DOCUMENTS = 3                 # un travail « à valider » s'arrête après ces premiers documents : tu lis leurs résultats avant qu'il traite tout le dossier
 DELAI_DOCUMENT = 900                # secondes au plus pour un document
-TAILLE_MAX = 80_000_000             # octets : un document plus gros est signalé, pas lu (une extraction ne doit pas figer le travail)
-PERIODE = 5                         # secondes entre deux regards
-TEXTES = (".txt", ".md", ".csv", ".json", ".log")
+MAX_SIZE = 80_000_000             # octets : un document plus gros est signalé, pas lu (une extraction ne doit pas figer le travail)
+PERIOD = 5                         # secondes entre deux regards
+TEXTS = (".txt", ".md", ".csv", ".json", ".log")
 RE_ID = re.compile(r"^[a-f0-9]{8}$")
-VERROU = threading.Lock()
-VIVANT = {"fil": None, "stop": threading.Event(), "document": None, "interrompre": threading.Event()}
+LOCK = threading.Lock()
+ALIVE = {"fil": None, "stop": threading.Event(), "document": None, "interrompre": threading.Event()}
 
 
 # --------------------------------------------------------------------------- stockage
-def dossier():
+def folder():
     return _m.DONNEES / "fond"
 
 
-def lire_travaux():
-    liste = _m.lire_json(dossier() / "travaux.json", [])
+def read_works():
+    liste = _m.lire_json(folder() / "travaux.json", [])
     return [t for t in liste if isinstance(t, dict) and RE_ID.match(str(t.get("id", "")))] if isinstance(liste, list) else []
 
 
-def _ecrire_travaux(liste):
-    _m.ecrire_atomique(dossier() / "travaux.json", json.dumps(liste, ensure_ascii=False, indent=1))
+def _write_works(liste):
+    _m.ecrire_atomique(folder() / "travaux.json", json.dumps(liste, ensure_ascii=False, indent=1))
 
 
-def dossier_travail(ident):
-    return dossier() / ident
+def folder_work(ident):
+    return folder() / ident
 
 
-def lire_etat(ident):
-    e = _m.lire_json(dossier_travail(ident) / "etat.json", {})
+def read_state(ident):
+    e = _m.lire_json(folder_work(ident) / "etat.json", {})
     e.setdefault("faits", {})
     e.setdefault("erreurs", {})
     e.setdefault("etat", "attente")
     return e
 
 
-def ecrire_etat(ident, e):
-    _m.ecrire_atomique(dossier_travail(ident) / "etat.json", json.dumps(e, ensure_ascii=False))
+def write_state(ident, e):
+    _m.ecrire_atomique(folder_work(ident) / "etat.json", json.dumps(e, ensure_ascii=False))
 
 
-def dossier_autorise(chemin):
+def allowed_folder(chemin):
     """Le dossier est-il un dossier de travail déjà déclaré dans Lutin (ou dedans) ? Renvoie le chemin résolu ou lève ValueError."""
     try:
         p = Path(str(chemin)).resolve()
@@ -89,14 +89,14 @@ def dossier_autorise(chemin):
 
 
 # --------------------------------------------------------------------------- gestion des travaux
-def creer(nom, chemin, motifs, consigne, regulier=False, intervalle_h=24, essai=False):
+def create(nom, chemin, motifs, consigne, regulier=False, intervalle_h=24, essai=False):
     """essai : le travail s'arrête après les premiers documents (ESSAI_DOCUMENTS) et attend que tu valides leurs résultats avant de traiter le reste (une consigne mal comprise ne gâche pas tout le dossier)."""
     nom, consigne = " ".join(str(nom or "").split())[:80], str(consigne or "").strip()
     if not nom or not consigne:
         raise ValueError(_t("Donne un nom et une consigne."))
     if len(consigne) > 4000:
         raise ValueError(_t("Consigne trop longue (4 000 caractères au plus)."))
-    p = dossier_autorise(chemin)
+    p = allowed_folder(chemin)
     liste_motifs = [m.strip() for m in re.split(r"[,;\s]+", str(motifs or "")) if m.strip()] or ["*.pdf"]
     if len(liste_motifs) > 12 or any(not re.match(r"^[\w*?.\-\[\]]{1,40}$", m) for m in liste_motifs):
         raise ValueError(_t("Types de fichiers invalides (exemple : *.pdf, *.docx)."))
@@ -104,20 +104,20 @@ def creer(nom, chemin, motifs, consigne, regulier=False, intervalle_h=24, essai=
         intervalle_h = max(1, min(24 * 30, int(intervalle_h)))
     except (TypeError, ValueError):
         intervalle_h = 24
-    with VERROU:
-        liste = lire_travaux()
-        if len(liste) >= MAX_TRAVAUX:
-            raise ValueError(_t("{} travaux de fond au plus : supprime-en un.").format(MAX_TRAVAUX))
+    with LOCK:
+        liste = read_works()
+        if len(liste) >= MAX_WORKS:
+            raise ValueError(_t("{} travaux de fond au plus : supprime-en un.").format(MAX_WORKS))
         t = {"id": secrets.token_hex(4), "nom": nom, "dossier": str(p), "motifs": liste_motifs, "consigne": consigne, "regulier": bool(regulier), "intervalle_h": intervalle_h,
              "cree": int(time.time()), "pause": False, "essai": bool(essai), "valide": not essai}
         liste.append(t)
-        _ecrire_travaux(liste)
-    ecrire_etat(t["id"], {"faits": {}, "erreurs": {}, "etat": "attente", "total": 0, "debut": 0, "fin": 0})
+        _write_works(liste)
+    write_state(t["id"], {"faits": {}, "erreurs": {}, "etat": "attente", "total": 0, "debut": 0, "fin": 0})
     return t
 
 
-def trouver(ident):
-    t = next((t for t in lire_travaux() if t["id"] == str(ident)), None)
+def find(ident):
+    t = next((t for t in read_works() if t["id"] == str(ident)), None)
     if t is None:
         raise ValueError(_t("Ce travail de fond n'existe plus."))
     return t
@@ -125,43 +125,43 @@ def trouver(ident):
 
 def action(ident, quoi):
     """pause, reprendre, relancer (tout refaire), supprimer."""
-    t = trouver(ident)
-    with VERROU:
-        liste = lire_travaux()
+    t = find(ident)
+    with LOCK:
+        liste = read_works()
         if quoi == "supprimer":
-            _ecrire_travaux([x for x in liste if x["id"] != t["id"]])
+            _write_works([x for x in liste if x["id"] != t["id"]])
             import shutil
-            shutil.rmtree(str(dossier_travail(t["id"])), ignore_errors=True)
-            if VIVANT["document"] and VIVANT["document"][0] == t["id"]:
-                VIVANT["interrompre"].set()
+            shutil.rmtree(str(folder_work(t["id"])), ignore_errors=True)
+            if ALIVE["document"] and ALIVE["document"][0] == t["id"]:
+                ALIVE["interrompre"].set()
             return {"ok": True}
         if quoi in ("pause", "reprendre"):
             for x in liste:
                 if x["id"] == t["id"]:
                     x["pause"] = quoi == "pause"
-            _ecrire_travaux(liste)
+            _write_works(liste)
             if quoi == "reprendre":                                           # reprendre = réessayer aussi les documents en erreur
-                e = lire_etat(t["id"])
+                e = read_state(t["id"])
                 e.update(erreurs={}, de_suite=0, etat="attente", message="")
-                ecrire_etat(t["id"], e)
-            if quoi == "pause" and VIVANT["document"] and VIVANT["document"][0] == t["id"]:
-                VIVANT["interrompre"].set()
+                write_state(t["id"], e)
+            if quoi == "pause" and ALIVE["document"] and ALIVE["document"][0] == t["id"]:
+                ALIVE["interrompre"].set()
             return {"ok": True}
         if quoi == "valider":                                                 # les premiers résultats sont bons : le travail traite le reste
             for x in liste:
                 if x["id"] == t["id"]:
                     x["valide"] = True
-            _ecrire_travaux(liste)
-            e = lire_etat(t["id"])
+            _write_works(liste)
+            e = read_state(t["id"])
             if e.get("etat") == "a_valider":
                 e.update(etat="attente", message="")
-                ecrire_etat(t["id"], e)
+                write_state(t["id"], e)
             return {"ok": True}
         if quoi == "relancer":
-            e = lire_etat(t["id"])
+            e = read_state(t["id"])
             e.update(faits={}, erreurs={}, etat="attente", fin=0)
-            ecrire_etat(t["id"], e)
-            (dossier_travail(t["id"]) / "resultats.jsonl").unlink(missing_ok=True)
+            write_state(t["id"], e)
+            (folder_work(t["id"]) / "resultats.jsonl").unlink(missing_ok=True)
             return {"ok": True}
     raise ValueError(_t("Action inconnue."))
 
@@ -171,7 +171,7 @@ def signature(f):
     return "%d:%d" % (st.st_mtime_ns, st.st_size)
 
 
-def scanner(t):
+def scan(t):
     """Les documents du travail : {chemin: signature}. Au plus DOCUMENTS_MAX ; les dossiers cachés et ceux que Lutin ignore sont sautés."""
     trouves = {}
     racine = Path(t["dossier"])
@@ -189,29 +189,29 @@ def scanner(t):
     return trouves
 
 
-def a_faire(t, e, trouves):
+def to_do(t, e, trouves):
     return [c for c, s in trouves.items() if e["faits"].get(c) != s and c not in e["erreurs"]]
 
 
 def progression(t):
-    e = lire_etat(t["id"])
+    e = read_state(t["id"])
     return {"id": t["id"], "nom": t["nom"], "dossier": t["dossier"], "motifs": t["motifs"], "consigne": t["consigne"], "regulier": t["regulier"], "intervalle_h": t["intervalle_h"],
             "pause": t.get("pause", False), "valide": t.get("valide", True), "etat": "pause" if t.get("pause") else e["etat"], "total": e.get("total", 0), "faits": len(e["faits"]), "erreurs": len(e["erreurs"]),
-            "dernier_message": e.get("message", ""), "debut": e.get("debut", 0), "fin": e.get("fin", 0), "rapport": (dossier_travail(t["id"]) / "rapport.md").is_file()}
+            "dernier_message": e.get("message", ""), "debut": e.get("debut", 0), "fin": e.get("fin", 0), "rapport": (folder_work(t["id"]) / "rapport.md").is_file()}
 
 
 def liste():
-    return [progression(t) for t in lire_travaux()]
+    return [progression(t) for t in read_works()]
 
 
 # --------------------------------------------------------------------------- un document
 def texte_document(chemin):
     f = Path(chemin)
-    if f.stat().st_size > TAILLE_MAX:
-        raise text_extraction.ErreurExtraction(_t("Document trop gros ({} Mo au plus).").format(TAILLE_MAX // 1_000_000))
+    if f.stat().st_size > MAX_SIZE:
+        raise text_extraction.ErreurExtraction(_t("Document trop gros ({} Mo au plus).").format(MAX_SIZE // 1_000_000))
     if f.suffix.lower() in text_extraction.FORMATS:
         return text_extraction.texte(f)
-    if f.suffix.lower() in TEXTES:
+    if f.suffix.lower() in TEXTS:
         return f.read_text(encoding="utf-8", errors="replace")
     raise text_extraction.ErreurExtraction(_t("Format non géré : {}").format(f.suffix))
 
@@ -236,7 +236,7 @@ def traiter_document(t, chemin, r, interrompre):
     with urllib.request.urlopen(req, timeout=120) as flux:
         for brut_ligne in flux:
             if interrompre.is_set() or time.time() - debut > DELAI_DOCUMENT:
-                return None if interrompre.is_set() else _echec_delai()
+                return None if interrompre.is_set() else _failure_timeout()
             try:
                 morceau = json.loads(brut_ligne.decode("utf-8"))
             except ValueError:
@@ -252,21 +252,21 @@ def traiter_document(t, chemin, r, interrompre):
     return reponse + (_t("\n(document tronqué : seul le début a été lu)") if tronque else "")
 
 
-def _echec_delai():
+def _failure_timeout():
     raise ValueError(_t("Document trop long à traiter (délai dépassé)."))
 
 
-def enregistrer_resultat(t, chemin, reponse):
-    d = dossier_travail(t["id"])
+def save_result(t, chemin, reponse):
+    d = folder_work(t["id"])
     d.mkdir(parents=True, exist_ok=True)
     with open(d / "resultats.jsonl", "a", encoding="utf-8", newline="\n") as f:
         f.write(json.dumps({"chemin": chemin, "date": int(time.time()), "reponse": reponse}, ensure_ascii=False) + "\n")
 
 
-def resultats(t):
+def results(t):
     out = {}
     try:
-        for ligne in (dossier_travail(t["id"]) / "resultats.jsonl").read_text(encoding="utf-8").splitlines():
+        for ligne in (folder_work(t["id"]) / "resultats.jsonl").read_text(encoding="utf-8").splitlines():
             try:
                 x = json.loads(ligne)
             except ValueError:
@@ -279,10 +279,10 @@ def resultats(t):
 
 def rapport(t):
     """Génère rapport.md (un titre par document, la réponse dessous) et renvoie son texte."""
-    e = lire_etat(t["id"])
+    e = read_state(t["id"])
     lignes = ["# " + t["nom"], "", "> " + t["consigne"].replace("\n", " "), "", _t("{} document(s) traité(s), {} en erreur.").format(len(e["faits"]), len(e["erreurs"])), ""]
     racine = Path(t["dossier"])
-    for chemin, x in sorted(resultats(t).items()):
+    for chemin, x in sorted(results(t).items()):
         if chemin not in e["faits"]:
             continue
         try:
@@ -293,7 +293,7 @@ def rapport(t):
     if e["erreurs"]:
         lignes += ["## " + _t("Documents en erreur"), ""] + ["- {} : {}".format(c, m) for c, m in sorted(e["erreurs"].items())] + [""]
     texte = "\n".join(lignes)
-    _m.ecrire_atomique(dossier_travail(t["id"]) / "rapport.md", texte)
+    _m.ecrire_atomique(folder_work(t["id"]) / "rapport.md", texte)
     return texte
 
 
@@ -303,35 +303,35 @@ def un_pas(modele_pret=None):
     if _m.TOURS_ACTIFS:
         return False                                                         # quelqu'un parle à Lutin : le travail de fond cède la place
     maintenant = time.time()
-    for t in lire_travaux():
+    for t in read_works():
         if t.get("pause"):
             continue
-        e = lire_etat(t["id"])
+        e = read_state(t["id"])
         if e["etat"] == "termine":
             if not (t["regulier"] and maintenant - e.get("fin", 0) >= t["intervalle_h"] * 3600):
                 continue
             e.update(etat="attente", erreurs={})
         try:
-            trouves = scanner(t)
+            trouves = scan(t)
         except OSError as erreur:
             e.update(etat="erreur", message=_t("Dossier illisible : {}").format(erreur))
-            ecrire_etat(t["id"], e)
+            write_state(t["id"], e)
             continue
         e["faits"] = {c: s for c, s in e["faits"].items() if c in trouves}              # un document disparu n'est plus compté
-        restants = a_faire(t, e, trouves)
+        restants = to_do(t, e, trouves)
         e["total"] = len(trouves)
         if not restants:
             if e["etat"] != "termine":
                 e.update(etat="termine", fin=int(maintenant), message="")
-                ecrire_etat(t["id"], e)
+                write_state(t["id"], e)
                 rapport(t)
             else:
-                ecrire_etat(t["id"], e)
+                write_state(t["id"], e)
             continue
         if not t.get("valide", True) and len(e["faits"]) >= ESSAI_DOCUMENTS:          # les premiers résultats sont prêts : on attend que tu les aies lus
             if e["etat"] != "a_valider":
                 e.update(etat="a_valider", message=_t("Les {} premiers résultats sont prêts (bouton « Rapport »). Si la consigne est bien comprise, valide pour traiter les {} autres documents ; sinon supprime le travail et reformule.").format(len(e["faits"]), len(restants)))
-            ecrire_etat(t["id"], e)
+            write_state(t["id"], e)
             continue
         if e["etat"] != "en_cours":
             e.update(etat="en_cours", debut=e.get("debut") or int(maintenant), message="")
@@ -340,71 +340,71 @@ def un_pas(modele_pret=None):
         info = []
         if not _m.check_before_request(r, lambda ev: info.append(ev.get("texte", "")), "fond"):
             e.update(message=_t("En attente : le PC manque de ressources. ") + " ".join(info)[:300])
-            ecrire_etat(t["id"], e)
+            write_state(t["id"], e)
             return False
-        VIVANT["interrompre"].clear()
-        VIVANT["document"] = (t["id"], chemin)
+        ALIVE["interrompre"].clear()
+        ALIVE["document"] = (t["id"], chemin)
         try:
-            reponse = traiter_document(t, chemin, r, VIVANT["interrompre"])
+            reponse = traiter_document(t, chemin, r, ALIVE["interrompre"])
         except (OSError, ValueError, text_extraction.ErreurExtraction, urllib.error.URLError) as erreur:
             e["erreurs"][chemin] = str(erreur)[:300]
             e["message"] = ""
             suite = e.get("de_suite", 0) + 1
             e["de_suite"] = suite
-            if suite >= ERREURS_DE_SUITE:
-                _mettre_en_pause(t["id"])
+            if suite >= MAX_CONSECUTIVE_ERRORS:
+                _pause(t["id"])
                 e.update(etat="erreur", message=_t("{} erreurs de suite : travail mis en pause. Dernière : {}").format(suite, str(erreur)[:200]))
-            ecrire_etat(t["id"], e)
+            write_state(t["id"], e)
             return True
         finally:
-            VIVANT["document"] = None
+            ALIVE["document"] = None
         if reponse is None:                                                  # interrompu : le document sera refait
             return True
-        enregistrer_resultat(t, chemin, reponse)
+        save_result(t, chemin, reponse)
         e["faits"][chemin] = trouves[chemin]
         e["de_suite"] = 0
-        ecrire_etat(t["id"], e)
+        write_state(t["id"], e)
         return True
     return False
 
 
-def _mettre_en_pause(ident):
-    with VERROU:
-        liste = lire_travaux()
+def _pause(ident):
+    with LOCK:
+        liste = read_works()
         for x in liste:
             if x["id"] == ident:
                 x["pause"] = True
-        _ecrire_travaux(liste)
+        _write_works(liste)
 
 
-def interrompre_pour_utilisateur(attente=8):
+def interrupt_for_user(attente=8):
     """Une conversation veut démarrer : on interrompt le document en cours et on attend qu'il s'arrête (le document sera refait). Renvoie True si la place est libre."""
-    VIVANT["interrompre"].set()
+    ALIVE["interrompre"].set()
     fin = time.time() + attente
-    while VIVANT["document"] is not None and time.time() < fin:
+    while ALIVE["document"] is not None and time.time() < fin:
         time.sleep(0.1)
-    return VIVANT["document"] is None
+    return ALIVE["document"] is None
 
 
-def boucle():
-    while not VIVANT["stop"].is_set():
+def loop():
+    while not ALIVE["stop"].is_set():
         try:
             fait = un_pas()
         except Exception as erreur:  # noqa: BLE001  (une panne ne doit jamais arrêter la boucle)
             _m.journaliser("Travail de fond : {!r}".format(erreur))
             fait = False
-        VIVANT["stop"].wait(0.2 if fait else PERIODE)
+        ALIVE["stop"].wait(0.2 if fait else PERIOD)
 
 
-def demarrer():
-    if VIVANT["fil"] and VIVANT["fil"].is_alive():
+def start():
+    if ALIVE["fil"] and ALIVE["fil"].is_alive():
         return
-    VIVANT["stop"].clear()
-    VIVANT["interrompre"].clear()
-    VIVANT["fil"] = threading.Thread(target=boucle, daemon=True, name="travail-de-fond")
-    VIVANT["fil"].start()
+    ALIVE["stop"].clear()
+    ALIVE["interrompre"].clear()
+    ALIVE["fil"] = threading.Thread(target=loop, daemon=True, name="travail-de-fond")
+    ALIVE["fil"].start()
 
 
-def arreter():
-    VIVANT["stop"].set()
-    VIVANT["interrompre"].set()
+def stop():
+    ALIVE["stop"].set()
+    ALIVE["interrompre"].set()

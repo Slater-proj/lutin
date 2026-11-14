@@ -118,11 +118,11 @@ class Telechargement(unittest.TestCase):
 class DansLlamaCpp(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="lutin-registre-llama-"))
-        self.ancien = dict(engines.CONTEXTE)
-        engines.CONTEXTE.update(donnees=lambda: self.tmp, en_docker=lambda: False, hors_ligne=lambda: False, profil=lambda: None, profil_attendu=None, dossier_ollama=lambda: None)
+        self.ancien = dict(engines.CONTEXT)
+        engines.CONTEXT.update(donnees=lambda: self.tmp, en_docker=lambda: False, hors_ligne=lambda: False, profil=lambda: None, profil_attendu=None, dossier_ollama=lambda: None)
         ml.CACHE_PARTAGE.clear()
         self.m = ml.MoteurLlamaCpp()
-        self.addCleanup(lambda: (engines.CONTEXTE.update(self.ancien), ml.CACHE_PARTAGE.clear(), shutil.rmtree(self.tmp, ignore_errors=True)))
+        self.addCleanup(lambda: (engines.CONTEXT.update(self.ancien), ml.CACHE_PARTAGE.clear(), shutil.rmtree(self.tmp, ignore_errors=True)))
 
     def test_telecharger_puis_lister_puis_supprimer(self):
         vrai = ollama_registry.download

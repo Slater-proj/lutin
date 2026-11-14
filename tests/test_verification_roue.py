@@ -114,7 +114,7 @@ class Telechargement(unittest.TestCase):
                 self.appeler(200, "", url=url)
 
     def test_roue_anormalement_grosse_refusee(self):
-        with mock.patch.object(m, "TAILLE_ROUE_MAX", 1000), self.assertRaises(m.ErreurVerification):
+        with mock.patch.object(m, "MAX_SIZE_WHEEL", 1000), self.assertRaises(m.ErreurVerification):
             self.appeler(200, "{}  lutin-1.2.3-py3-none-any.whl".format(SOMME))
 
     def test_reseau_absent_est_une_oserror(self):

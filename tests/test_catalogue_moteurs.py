@@ -64,33 +64,33 @@ class Ed25519(unittest.TestCase):
 
 class Enveloppe(unittest.TestCase):
     def setUp(self):
-        self.ancien = dict(cm.CLES_PUBLIQUES)
-        cm.CLES_PUBLIQUES[CLE_TEST] = ed25519.cle_publique(GRAINE_TEST).hex()
+        self.ancien = dict(cm.PUBLIC_KEYS)
+        cm.PUBLIC_KEYS[CLE_TEST] = ed25519.cle_publique(GRAINE_TEST).hex()
 
     def tearDown(self):
-        cm.CLES_PUBLIQUES.clear()
-        cm.CLES_PUBLIQUES.update(self.ancien)
+        cm.PUBLIC_KEYS.clear()
+        cm.PUBLIC_KEYS.update(self.ancien)
 
     def test_catalogue_bien_signe_accepte(self):
         e = cm.signer(minimal(), GRAINE_TEST, CLE_TEST)
-        self.assertEqual(cm.verifier(json.loads(json.dumps(e)))["moteurs"][0]["id"], "demo")
+        self.assertEqual(cm.check(json.loads(json.dumps(e)))["moteurs"][0]["id"], "demo")
 
     def test_une_virgule_modifiee_est_refusee(self):
         e = cm.signer(minimal(), GRAINE_TEST, CLE_TEST)
         e["catalogue"]["moteurs"][0]["adresse_defaut"] = "http://127.0.0.1:9001/v1"
         with self.assertRaisesRegex(cm.ErreurCatalogue, "signature invalide"):
-            cm.verifier(e)
+            cm.check(e)
 
     def test_cle_inconnue_signature_absente_ou_illisible(self):
         e = cm.signer(minimal(), GRAINE_TEST, CLE_TEST)
         for abime in (dict(e, cle="inconnue"), dict(e, signature="!!pas du base64!!"), dict(e, signature=""), {k: v for k, v in e.items() if k != "signature"}, {"catalogue": minimal()}, [], None):
             with self.assertRaises(cm.ErreurCatalogue):
-                cm.verifier(abime)
+                cm.check(abime)
 
     def test_signe_par_une_autre_cle_refuse(self):
         e = cm.signer(minimal(), bytes([7]) * 32, CLE_TEST)          # la clé nommée n'est pas celle qui a signé
         with self.assertRaisesRegex(cm.ErreurCatalogue, "signature invalide"):
-            cm.verifier(e)
+            cm.check(e)
 
     def test_le_schema_est_strict_meme_bien_signe(self):
         mauvais = [minimal(moteurs=[]), minimal(extra=1), minimal(version="1"), minimal(version=True)]
@@ -104,14 +104,14 @@ class Enveloppe(unittest.TestCase):
         mauvais.append(c)
         for catalogue in mauvais:
             with self.assertRaises(cm.ErreurCatalogue, msg=str(catalogue)[:120]):
-                cm.verifier(cm.signer(catalogue, GRAINE_TEST, CLE_TEST))
+                cm.check(cm.signer(catalogue, GRAINE_TEST, CLE_TEST))
 
 
 class Livre(unittest.TestCase):
     def test_le_catalogue_livre_est_valide_et_signe_par_une_cle_embarquee(self):
-        c = cm.lire_fichier(cm.FICHIER_LIVRE)
+        c = cm.read_file(cm.SHIPPED_FILE)
         self.assertGreaterEqual(len(c["moteurs"]), 5)
-        self.assertEqual(len(cm.CLES_PUBLIQUES), 2)          # deux clés pour pouvoir changer de clé sans casser les installations
+        self.assertEqual(len(cm.PUBLIC_KEYS), 2)          # deux clés pour pouvoir changer de clé sans casser les installations
         for m in c["moteurs"]:
             self.assertIn("fr", m["description"])
             self.assertIn("en", m["description"], m["id"] + " : description anglaise manquante")
@@ -119,28 +119,28 @@ class Livre(unittest.TestCase):
     def test_la_copie_livree_est_celle_de_la_source(self):
         """Une source modifiée sans re-signature ferait mentir le fichier livré : tools/signer_catalogue_moteurs.py à relancer."""
         source = json.loads((Path(__file__).resolve().parent.parent / "tools" / "moteurs.source.json").read_text(encoding="utf-8"))
-        self.assertEqual(cm.lire_fichier(cm.FICHIER_LIVRE), source)
+        self.assertEqual(cm.read_file(cm.SHIPPED_FILE), source)
 
     def test_vue_dans_la_langue_courante(self):
         os.environ["LUTIN_LANGUE"] = "en"
         try:
-            v = {x["id"]: x for x in cm.prereglages()}
+            v = {x["id"]: x for x in cm.presets()}
             self.assertIn("desktop app", v["lmstudio"]["description"].lower())
             os.environ["LUTIN_LANGUE"] = "fr"
-            self.assertIn("bureau", {x["id"]: x for x in cm.prereglages()}["lmstudio"]["description"])
+            self.assertIn("bureau", {x["id"]: x for x in cm.presets()}["lmstudio"]["description"])
         finally:
             os.environ.pop("LUTIN_LANGUE", None)
 
 
 class Lecture(unittest.TestCase):
     def setUp(self):
-        self.ancien = dict(cm.CLES_PUBLIQUES)
-        cm.CLES_PUBLIQUES[CLE_TEST] = ed25519.cle_publique(GRAINE_TEST).hex()
+        self.ancien = dict(cm.PUBLIC_KEYS)
+        cm.PUBLIC_KEYS[CLE_TEST] = ed25519.cle_publique(GRAINE_TEST).hex()
         self.dossier = Path(tempfile.mkdtemp(dir=_TEMP))
 
     def tearDown(self):
-        cm.CLES_PUBLIQUES.clear()
-        cm.CLES_PUBLIQUES.update(self.ancien)
+        cm.PUBLIC_KEYS.clear()
+        cm.PUBLIC_KEYS.update(self.ancien)
 
     def _ecrire(self, nom, enveloppe):
         f = self.dossier / nom
@@ -148,15 +148,15 @@ class Lecture(unittest.TestCase):
         return f
 
     def test_hors_ligne_le_catalogue_livre_suffit(self):
-        self.assertEqual(cm.charger(self.dossier / "absent.json")["version"], cm.lire_fichier(cm.FICHIER_LIVRE)["version"])
-        self.assertEqual(cm.charger(None)["version"], cm.lire_fichier(cm.FICHIER_LIVRE)["version"])
+        self.assertEqual(cm.charger(self.dossier / "absent.json")["version"], cm.read_file(cm.SHIPPED_FILE)["version"])
+        self.assertEqual(cm.charger(None)["version"], cm.read_file(cm.SHIPPED_FILE)["version"])
 
     def test_le_cache_en_ligne_plus_recent_et_bien_signe_est_pris(self):
         plus_recent = cm.signer(minimal(version=99, moteurs=minimal()["moteurs"]), GRAINE_TEST, CLE_TEST)
         self.assertEqual(cm.charger(self._ecrire("c.json", plus_recent))["version"], 99)
 
     def test_un_cache_falsifie_ou_ancien_est_ignore(self):
-        livre = cm.lire_fichier(cm.FICHIER_LIVRE)["version"]
+        livre = cm.read_file(cm.SHIPPED_FILE)["version"]
         e = cm.signer(minimal(version=99), GRAINE_TEST, CLE_TEST)
         e["catalogue"]["version"] = 100          # modifié après signature
         self.assertEqual(cm.charger(self._ecrire("f.json", e))["version"], livre)
@@ -169,17 +169,17 @@ class Lecture(unittest.TestCase):
         falsifie = json.loads(bon)
         falsifie["catalogue"]["moteurs"][0]["nom"] = "Pirate"
         cache = self.dossier / "dl.json"
-        self.assertEqual(cm.telecharger("https://x/m.json", cache, lambda u, h: (200, {}, json.dumps(falsifie).encode())), "echec")
+        self.assertEqual(cm.download("https://x/m.json", cache, lambda u, h: (200, {}, json.dumps(falsifie).encode())), "echec")
         self.assertFalse(cache.exists())
-        self.assertEqual(cm.telecharger("https://x/m.json", cache, lambda u, h: (200, {}, b"<html>")), "echec")
-        self.assertEqual(cm.telecharger("https://x/m.json", cache, lambda u, h: (404, {}, b"")), "echec")
-        self.assertEqual(cm.telecharger("https://x/m.json", cache, lambda u, h: (200, {}, b"x" * (cm.TAILLE_MAX + 1))), "echec")
+        self.assertEqual(cm.download("https://x/m.json", cache, lambda u, h: (200, {}, b"<html>")), "echec")
+        self.assertEqual(cm.download("https://x/m.json", cache, lambda u, h: (404, {}, b"")), "echec")
+        self.assertEqual(cm.download("https://x/m.json", cache, lambda u, h: (200, {}, b"x" * (cm.MAX_SIZE + 1))), "echec")
 
         def coupe(u, h):
             raise OSError("pas de réseau")
-        self.assertEqual(cm.telecharger("https://x/m.json", cache, coupe), "echec")
-        self.assertEqual(cm.telecharger("", cache, coupe), "absent")
-        self.assertEqual(cm.telecharger("https://x/m.json", cache, lambda u, h: (200, {}, bon)), "maj")
+        self.assertEqual(cm.download("https://x/m.json", cache, coupe), "echec")
+        self.assertEqual(cm.download("", cache, coupe), "absent")
+        self.assertEqual(cm.download("https://x/m.json", cache, lambda u, h: (200, {}, bon)), "maj")
         self.assertEqual(cm.charger(cache)["version"], 50)
 
     def test_un_moteur_s_ajoute_par_une_ligne_sans_toucher_au_code(self):

@@ -58,7 +58,7 @@ def program(execution, chercher=shutil.which):
 
 def entries(chercher=shutil.which):
     """Ce que la page affiche : le catalogue dans la langue courante, avec ce qui manque (programme absent) et ce qui est déjà branché."""
-    installes = {s.get("catalogue") for s in _mcp.lire()["serveurs"].values() if s.get("catalogue")}
+    installes = {s.get("catalogue") for s in _mcp.read()["serveurs"].values() if s.get("catalogue")}
     sortie = []
     for e in load():
         manque = ""
@@ -131,29 +131,29 @@ def install(ident, saisie, chercher=shutil.which, installer_outil=None):
     """Branche un connecteur du catalogue, l'essaie, autorise ses outils en lecture seule. Rend {id, outils, autorises}. En cas d'échec, rien ne reste branché.
     Le programme qui lance le serveur (uv, Node.js) s'il manque est installé d'abord par Lutin : un seul clic pour l'utilisateur."""
     e = entry(ident)
-    if any(s.get("catalogue") == ident for s in _mcp.lire()["serveurs"].values()):
+    if any(s.get("catalogue") == ident for s in _mcp.read()["serveurs"].values()):
         raise ValueError(_t("Ce connecteur est déjà branché."))
     for c in e.get("champs", []):          # les valeurs d'abord : on n'installe rien pour une saisie fausse
         _validate(c, (saisie or {}).get(c["cle"]))
     if e["execution"] in PREREQUISITES and not program(e["execution"], chercher):
         (installer_outil or external_programs.install)(PREREQUISITES[e["execution"]][0])
     commande, url, entetes = build(e, saisie, chercher)
-    ident_mcp = _mcp.ajouter(_text(e["nom"]), commande or None, url, None, entetes)
-    cfg = _mcp.lire()
+    ident_mcp = _mcp.add(_text(e["nom"]), commande or None, url, None, entetes)
+    cfg = _mcp.read()
     cfg["serveurs"][ident_mcp]["catalogue"] = ident
     if commande and e["execution"] == "npx":
         propre = external_programs.folder("node")
         if Path(commande[0]).is_relative_to(propre):
             cfg["serveurs"][ident_mcp]["path_ajoute"] = external_programs.folders_for_path("node")
-    _mcp.ecrire(cfg)
+    _mcp.write(cfg)
     try:
         total = _mcp.actualiser(ident_mcp)
     except ValueError as erreur:
-        _mcp.supprimer(ident_mcp)
+        _mcp.remove(ident_mcp)
         raise ValueError(_t("Le connecteur « {} » n'a pas répondu, il n'a pas été branché : {}").format(_text(e["nom"]), erreur)) from erreur
     autorises = 0
-    for nom, o in _mcp.lire()["serveurs"][ident_mcp]["outils"].items():
+    for nom, o in _mcp.read()["serveurs"][ident_mcp]["outils"].items():
         if o.get("lecture"):
-            _mcp.regler(ident_mcp, outil=nom, autorise=True)
+            _mcp.set_value(ident_mcp, outil=nom, autorise=True)
             autorises += 1
     return {"id": ident_mcp, "outils": total, "autorises": autorises}

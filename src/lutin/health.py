@@ -414,7 +414,7 @@ def run_selftest(profond=False):
             return "désactivé (mode hors ligne strict)"
         if not r.get("web", True):
             return "désactivé dans les options"
-        texte = _m.outil_web_chercher("assistant local test", 1, {"web": True})
+        texte = _m.tool_web_search("assistant local test", 1, {"web": True})
         if "Aucun résultat" in texte:
             raise RuntimeError("DuckDuckGo n'a rien renvoyé (limitation temporaire, ou pas d'internet).")
         return "recherche web fonctionnelle"

@@ -19,7 +19,7 @@ RE_PUCE = re.compile(r"^(\s*)[-*•]\s+(.*)$")
 RE_NUM = re.compile(r"^(\s*)(\d{1,3})[.)]\s+(.*)$")
 RE_SEP = re.compile(r"^\s*([-*_])(\s*\1){2,}\s*$")
 RE_INLINE = re.compile(r"(\*\*[^*]+\*\*|\*[^*\s][^*]*\*|`[^`]+`)")
-TAILLE_MAX = 400_000
+MAX_SIZE = 400_000
 
 # Largeurs de la police Helvetica (millièmes d'em), caractères 32 à 126 ; les lettres accentuées ont la largeur de leur lettre de base.
 _H = [278, 278, 355, 556, 556, 889, 667, 191, 333, 333, 389, 584, 278, 333, 278, 278, 556, 556, 556, 556, 556, 556, 556, 556, 556, 556, 278, 278, 584, 584, 584, 556, 1015,
@@ -97,7 +97,7 @@ def blocs(markdown):
     return fusion
 
 
-def sans_balises(texte):
+def without_tags(texte):
     return re.sub(r"`([^`]+)`", r"\1", re.sub(r"\*([^*\s][^*]*)\*", r"\1", re.sub(r"\*\*([^*]+)\*\*", r"\1", texte)))
 
 
@@ -151,18 +151,18 @@ def pdf(markdown, titre=""):
     for b in corps:
         if b[0] == "titre":
             taille = {0: 22, 1: 18, 2: 14, 3: 12}[b[1]]
-            for k, t in enumerate(_couper(sans_balises(b[2]), "F2", taille, texte_max)):
+            for k, t in enumerate(_couper(without_tags(b[2]), "F2", taille, texte_max)):
                 ligne("F2", taille, MARGE, t, avant=(taille * 0.9 if k == 0 else 0), interligne=1.25)
             y -= 3
         elif b[0] == "para":
-            for k, t in enumerate(_couper(sans_balises(b[1]), "F1", 11, texte_max)):
+            for k, t in enumerate(_couper(without_tags(b[1]), "F1", 11, texte_max)):
                 ligne("F1", 11, MARGE, t, avant=(4 if k == 0 else 0))
         elif b[0] in ("puce", "num"):
             retrait = MARGE + 14 * b[1]
             marque = "•" if b[0] == "puce" else b[2].split(" ", 1)[0]
             reste = b[2] if b[0] == "puce" else b[2].split(" ", 1)[1] if " " in b[2] else ""
             x_texte = retrait + (14 if b[0] == "puce" else 22)
-            for k, t in enumerate(_couper(sans_balises(reste), "F1", 11, texte_max - (x_texte - MARGE))):
+            for k, t in enumerate(_couper(without_tags(reste), "F1", 11, texte_max - (x_texte - MARGE))):
                 if k == 0:
                     ligne("F1", 11, x_texte, t, avant=2)
                     courante.insert(len(courante) - 1, ("F1", 11, retrait, y + 11 * 0.28, marque))          # la puce avant son texte (ordre de lecture)
@@ -245,11 +245,11 @@ def _runs(texte):
             morceau, props = morceau[1:-1], '<w:rFonts w:ascii="Courier New" w:hAnsi="Courier New"/><w:sz w:val="20"/>'
         elif morceau.startswith("*") and morceau.endswith("*") and len(morceau) > 2:
             morceau, props = morceau[1:-1], "<w:i/>"
-        xml.append('<w:r>%s<w:t xml:space="preserve">%s</w:t></w:r>' % ("<w:rPr>%s</w:rPr>" % props if props else "", escape(_propre(morceau))))
+        xml.append('<w:r>%s<w:t xml:space="preserve">%s</w:t></w:r>' % ("<w:rPr>%s</w:rPr>" % props if props else "", escape(_clean(morceau))))
     return "".join(xml) or "<w:r><w:t></w:t></w:r>"
 
 
-def _propre(texte):
+def _clean(texte):
     """Retire les caractères interdits en XML."""
     return re.sub("[\x00-\x08\x0b\x0c\x0e-\x1f￾￿]", "", texte)
 
@@ -278,7 +278,7 @@ def docx(markdown, titre=""):
         elif b[0] == "num":
             corps.append(_paragraphe(b[2], "", 360 + 360 * b[1], 360))
         elif b[0] == "code":
-            corps.extend('<w:p><w:pPr><w:pStyle w:val="Code"/></w:pPr><w:r><w:t xml:space="preserve">%s</w:t></w:r></w:p>' % escape(_propre(t)) for t in (b[1] or [""]))
+            corps.extend('<w:p><w:pPr><w:pStyle w:val="Code"/></w:pPr><w:r><w:t xml:space="preserve">%s</w:t></w:r></w:p>' % escape(_clean(t)) for t in (b[1] or [""]))
         elif b[0] == "sep":
             corps.append('<w:p><w:pPr><w:pBdr><w:bottom w:val="single" w:sz="6" w:space="1" w:color="999999"/></w:pBdr></w:pPr></w:p>')
     document = ('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="%s"><w:body>%s<w:sectPr><w:pgSz w:w="11906" w:h="16838"/>'

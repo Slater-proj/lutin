@@ -19,7 +19,7 @@ def disparus(cat, http=updates.http_get):
     for m in cat["modeles"]:
         espace, nom, tag = updates.separer(m["id"])
         try:
-            statut, _, _ = http("{}/{}/{}/manifests/{}".format(updates.REGISTRE, espace, nom, tag), {"Accept": updates.ACCEPT_MANIFESTE})
+            statut, _, _ = http("{}/{}/{}/manifests/{}".format(updates.REGISTRY, espace, nom, tag), {"Accept": updates.ACCEPT_MANIFESTE})
         except OSError as e:
             incertains.append((m["id"], "réseau : {}".format(e)))
             continue

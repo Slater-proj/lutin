@@ -39,17 +39,17 @@ class Fichiers(unittest.TestCase):
         dehors.parent.mkdir(exist_ok=True)
         dehors.write_bytes(b"x")
         ident, _ = self.conversation(f, dehors)
-        produced_files.enregistrer([produced_files.entree(f), produced_files.entree(dehors)], ident)
-        dossiers = produced_files.dossiers_conversation(ident)
+        produced_files.save([produced_files.entree(f), produced_files.entree(dehors)], ident)
+        dossiers = produced_files.folders_conversation(ident)
         self.assertEqual([d["chemin"] for d in dossiers], [str(f.parent.resolve())], "le dossier où elle a créé des fichiers ; pas celui hors des dossiers de travail")
-        with mock.patch.object(produced_files, "_lancer", lambda p: self.ouvertures.append(str(p))), mock.patch.object(produced_files, "ouverture_possible", lambda: True):
-            produced_files.ouvrir_dossier_conversation(ident, str(f.parent.resolve()))
+        with mock.patch.object(produced_files, "_launch", lambda p: self.ouvertures.append(str(p))), mock.patch.object(produced_files, "opening_possible", lambda: True):
+            produced_files.open_folder_conversation(ident, str(f.parent.resolve()))
             with self.assertRaises(ValueError):
-                produced_files.ouvrir_dossier_conversation(ident, str(dehors.parent))
+                produced_files.open_folder_conversation(ident, str(dehors.parent))
         self.assertEqual(self.ouvertures, [str(f.parent.resolve())])
-        with mock.patch.object(produced_files, "ouverture_possible", lambda: False):
+        with mock.patch.object(produced_files, "opening_possible", lambda: False):
             with self.assertRaises(ValueError) as e:
-                produced_files.ouvrir_dossier_conversation(ident, str(f.parent.resolve()))
+                produced_files.open_folder_conversation(ident, str(f.parent.resolve()))
         self.assertIn("Docker", str(e.exception), "sous Docker : explication, pas d'échec muet")
 
     def test_telechargement_d_un_fichier_inscrit(self):
@@ -57,7 +57,7 @@ class Fichiers(unittest.TestCase):
         f.parent.mkdir(exist_ok=True)
         f.write_bytes(b"%PDF-1.4 contenu")
         ident, (fid,) = self.conversation(f)
-        octets, mime, nom = produced_files.lire(ident, fid)
+        octets, mime, nom = produced_files.read(ident, fid)
         self.assertEqual((octets, mime, nom), (b"%PDF-1.4 contenu", "application/pdf", "bilan.pdf"))
 
     def test_un_fichier_non_inscrit_ou_hors_des_dossiers_permis_est_refuse(self):
@@ -65,11 +65,11 @@ class Fichiers(unittest.TestCase):
         dehors.write_bytes(b"x")
         ident, (fid,) = self.conversation(dehors)
         with self.assertRaises(ValueError):
-            produced_files.lire(ident, fid)                                              # inscrit, mais hors des dossiers de travail
+            produced_files.read(ident, fid)                                              # inscrit, mais hors des dossiers de travail
         with self.assertRaises(ValueError):
-            produced_files.lire(ident, "0123456789ab")                                    # jamais inscrit
+            produced_files.read(ident, "0123456789ab")                                    # jamais inscrit
         with self.assertRaises(ValueError):
-            produced_files.ouvrir(ident, fid)
+            produced_files.open_item(ident, fid)
 
     def test_ouvrir_demande_au_systeme_et_refuse_les_programmes(self):
         document = _m.RACINE / "docs" / "note.docx"
@@ -79,9 +79,9 @@ class Fichiers(unittest.TestCase):
         programme.write_bytes(b"MZ")
         ident, (d_id, p_id) = self.conversation(document, programme)
         with mock.patch.object(produced_files.sys, "platform", "linux"), mock.patch.object(produced_files.subprocess, "Popen", lambda cmd: self.ouvertures.append(cmd)):
-            self.assertTrue(produced_files.ouvrir(ident, d_id)["ok"])
+            self.assertTrue(produced_files.open_item(ident, d_id)["ok"])
             with self.assertRaises(ValueError):
-                produced_files.ouvrir(ident, p_id)
+                produced_files.open_item(ident, p_id)
         self.assertEqual(self.ouvertures, [["xdg-open", str(document.resolve())]])
 
     def test_supprimer_efface_le_fichier_et_la_carte(self):
@@ -89,33 +89,33 @@ class Fichiers(unittest.TestCase):
         f.parent.mkdir(exist_ok=True)
         f.write_text("# x", encoding="utf-8")
         ident, (fid,) = self.conversation(f)
-        self.assertTrue(produced_files.supprimer(ident, fid)["fichier_supprime"])
+        self.assertTrue(produced_files.remove(ident, fid)["fichier_supprime"])
         self.assertFalse(f.exists())
         self.assertNotIn("fichiers_joints", _m.conv_lire(ident)["messages"][0])
         with self.assertRaises(ValueError):
-            produced_files.supprimer(ident, fid)
+            produced_files.remove(ident, fid)
 
     def test_supprimer_ne_touche_jamais_un_fichier_hors_des_dossiers_permis(self):
         dehors = _TEMP / "precieux.pdf"
         dehors.write_bytes(b"x")
         ident, (fid,) = self.conversation(dehors)
-        self.assertFalse(produced_files.supprimer(ident, fid)["fichier_supprime"])
+        self.assertFalse(produced_files.remove(ident, fid)["fichier_supprime"])
         self.assertTrue(dehors.exists())
 
     def test_une_piece_jointe_se_retelecharge_sous_son_vrai_nom_et_s_ouvre_par_une_copie(self):
         from lutin import attachments
         ident, nom, _ = attachments.save("# Notes\nbonjour".encode("utf-8"), "mes notes.md")
-        octets, mime, vrai_nom = produced_files.piece_lire(ident, "mes notes.md")
+        octets, mime, vrai_nom = produced_files.part_read(ident, "mes notes.md")
         self.assertEqual((octets, vrai_nom), ("# Notes\nbonjour".encode("utf-8"), "mes notes.md"))
         with mock.patch.object(produced_files.sys, "platform", "linux"), mock.patch.object(produced_files.subprocess, "Popen", lambda cmd: self.ouvertures.append(cmd)):
-            produced_files.piece_ouvrir(ident, "mes notes.md")
+            produced_files.part_open(ident, "mes notes.md")
             with self.assertRaises(ValueError):
-                produced_files.piece_ouvrir(ident, "script.bat")
+                produced_files.part_open(ident, "script.bat")
         copie = Path(self.ouvertures[0][1])
         self.assertEqual(copie.name, "mes notes.md", "la copie porte le vrai nom")
         self.assertEqual(copie.read_text(encoding="utf-8"), "# Notes\nbonjour")
         with self.assertRaises(ValueError):
-            produced_files.piece_lire("../../etc/passwd", "x")
+            produced_files.part_read("../../etc/passwd", "x")
 
     def test_le_registre_liste_nettoie_et_supprime_pour_faire_le_menage(self):
         a, b = _m.RACINE / "docs" / "a.pdf", _m.RACINE / "docs" / "b.docx"
@@ -123,19 +123,19 @@ class Fichiers(unittest.TestCase):
         a.write_bytes(b"%PDF" + b"x" * 2000)
         b.write_bytes(b"PK" + b"y" * 500)
         ident, (a_id, b_id) = self.conversation(a, b)
-        produced_files.enregistrer([dict(produced_files.entree(a), genre="fichier"), dict(produced_files.entree(b), genre="fichier")], ident)
-        produced_files.enregistrer([dict(produced_files.entree(a), genre="fichier")], ident)                     # une seule fois chacun
-        r = produced_files.lister()
+        produced_files.save([dict(produced_files.entree(a), genre="fichier"), dict(produced_files.entree(b), genre="fichier")], ident)
+        produced_files.save([dict(produced_files.entree(a), genre="fichier")], ident)                     # une seule fois chacun
+        r = produced_files.entries()
         noms = [x["nom"] for x in r["liste"] if x["conversation"] == ident]
         self.assertEqual(sorted(noms), ["a.pdf", "b.docx"])
         self.assertGreaterEqual(r["total"], 2500)
         b.unlink()                                                                                   # supprimé à la main : il quitte la liste tout seul
-        self.assertEqual([x["nom"] for x in produced_files.lister()["liste"] if x["conversation"] == ident], ["a.pdf"])
-        res = produced_files.supprimer_selection([a_id, "n-importe-quoi"])
+        self.assertEqual([x["nom"] for x in produced_files.entries()["liste"] if x["conversation"] == ident], ["a.pdf"])
+        res = produced_files.remove_selection([a_id, "n-importe-quoi"])
         self.assertEqual(res["supprimes"], 1)
         self.assertGreaterEqual(res["libere"], 2000)
         self.assertFalse(a.exists())
-        self.assertEqual([x for x in produced_files.lister()["liste"] if x["conversation"] == ident], [])
+        self.assertEqual([x for x in produced_files.entries()["liste"] if x["conversation"] == ident], [])
         restantes = [c["id"] for c in _m.conv_lire(ident)["messages"][0].get("fichiers_joints", [])]
         self.assertNotIn(a_id, restantes, "la carte du fichier supprimé a disparu de la conversation")
 
@@ -145,9 +145,9 @@ class Fichiers(unittest.TestCase):
         f.write_text("# x", encoding="utf-8")
         dehors = _TEMP / "intouchable.pdf"
         dehors.write_bytes(b"x")
-        produced_files.enregistrer([dict(produced_files.entree(f), genre="fichier"), dict(produced_files.entree(dehors), genre="fichier")], "deadbeef")
-        ids = [produced_files.identifiant(f), produced_files.identifiant(dehors)]
-        res = produced_files.supprimer_selection(ids)
+        produced_files.save([dict(produced_files.entree(f), genre="fichier"), dict(produced_files.entree(dehors), genre="fichier")], "deadbeef")
+        ids = [produced_files.identifier(f), produced_files.identifier(dehors)]
+        res = produced_files.remove_selection(ids)
         self.assertFalse(f.exists(), "conversation disparue : le fichier est supprimé quand même")
         self.assertTrue(dehors.exists(), "hors des dossiers permis : jamais touché")
         self.assertEqual(res["supprimes"], 1)
@@ -158,14 +158,14 @@ class Fichiers(unittest.TestCase):
         vrai = os.environ.get("LUTIN_DOCKER")
         try:
             os.environ["LUTIN_DOCKER"] = "1"
-            self.assertFalse(produced_files.ouverture_possible(), "dans un conteneur : jamais")
+            self.assertFalse(produced_files.opening_possible(), "dans un conteneur : jamais")
             os.environ.pop("LUTIN_DOCKER", None)
             with mock.patch.object(produced_files.sys, "platform", "win32"):
-                self.assertTrue(produced_files.ouverture_possible())
+                self.assertTrue(produced_files.opening_possible())
             with mock.patch.object(produced_files.sys, "platform", "linux"):
                 os.environ.pop("DISPLAY", None)
                 os.environ.pop("WAYLAND_DISPLAY", None)
-                self.assertFalse(produced_files.ouverture_possible(), "Linux sans écran (serveur Debian) : non")
+                self.assertFalse(produced_files.opening_possible(), "Linux sans écran (serveur Debian) : non")
         finally:
             if vrai is not None:
                 os.environ["LUTIN_DOCKER"] = vrai

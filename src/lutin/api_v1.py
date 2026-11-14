@@ -381,7 +381,7 @@ def machine(request):
     return {
         "detected": True, "system": profile.systeme, "architecture": profile.architecture, "cpu": profile.cpu, "cores": profile.coeurs,
         "ram_gb": profile.ram_go, "ram_free_gb": profile.ram_libre_go or None,
-        "gpus": [{"name": gpu.nom, "vendor": gpu.fabricant, "memory_gb": gpu.vram_go, "free_gb": gpu.libre_go or None, "integrated": _hardware.est_integree(gpu)} for gpu in profile.gpus],
+        "gpus": [{"name": gpu.nom, "vendor": gpu.fabricant, "memory_gb": gpu.vram_go, "free_gb": gpu.libre_go or None, "integrated": _hardware.integrated_is(gpu)} for gpu in profile.gpus],
         "disks": [{"path": disk.racine, "free_gb": disk.libre_go, "total_gb": disk.total_go} for disk in profile.disques],
         "budget_gb": profile.budget_go(), "class": MACHINE_CLASSES.get(profile.classe(), profile.classe()), "summary": profile.resume(),
     }
@@ -458,7 +458,7 @@ ENGINE_TASK_STATES = {"en cours": "running", "termine": "done", "erreur": "faile
 
 
 def _task(engine_id):
-    task = _engines.tache(engine_id)
+    task = _engines.task(engine_id)
     if not task:
         return None
     return {"action": next((name for name, stored in ENGINE_ACTIONS.items() if stored == task.get("action")), task.get("action", "")), "state": ENGINE_TASK_STATES.get(task.get("statut"), task.get("statut", "")),
@@ -488,7 +488,7 @@ def _engine_view(engine, current, state, models, possible):
 def engines(request):
     """Every engine with its state, the actions it allows and its running task. The engines are read at the same time: one that does not answer must not make the others wait."""
     current = _m.moteur_actuel().id
-    listed = _engines.liste()
+    listed = _engines.entries()
     unknown = ({"installe": False, "actif": False, "version": "", "detail": ""}, {"installes": []}, {})
     # Three questions per engine, each of which waits 2 s when the engine does not answer: all asked at the same time, so the whole list costs one wait and not three per engine.
     with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, min(24, 3 * len(listed)))) as pool:
@@ -498,7 +498,7 @@ def engines(request):
 
 
 def _known_engine(identifier):
-    engine = _engines.MOTEURS.get(identifier)
+    engine = _engines.ENGINES.get(identifier)
     if engine is None:
         raise ApiError(404, "not_found", _t("Moteur inconnu."))
     return engine
@@ -521,7 +521,7 @@ def engine_action(request):
     if name in NEEDS_NETWORK and _offline.is_active():
         raise ApiError(409, "offline", _t("Mode hors ligne strict : impossible de {}. Désactive-le pour continuer (lutin offline off).").format(name))
     try:
-        _engines.lancer_tache(engine, ENGINE_ACTIONS[name])
+        _engines.launch_task(engine, ENGINE_ACTIONS[name])
     except ValueError as busy:
         raise ApiError(409, "task_running", str(busy)) from None
     return 202, _task(engine.id)
@@ -530,7 +530,7 @@ def engine_action(request):
 @route("DELETE", "/engines/{id}/task", CONFIGURATOR)
 def cancel_engine_task(request):
     """Asks the running task of this engine to stop; what was already downloaded is kept. `cancelled` says whether something was running."""
-    return {"cancelled": bool(_engines.annuler_tache(_known_engine(request.params["id"]).id))}
+    return {"cancelled": bool(_engines.cancel_task(_known_engine(request.params["id"]).id))}
 
 
 # ------------------------------------------------------------------------------------------------------------------------ setup

@@ -12,7 +12,7 @@ from . import bench, model_catalog, config, offline, i18n, hardware, ollama_clie
 from .i18n import t as _t
 
 GO = 1024 ** 3
-_lancer = subprocess.run          # un seul point d'entrée pour les commandes système : les tests le remplacent (patcher subprocess.run lui-même gênerait les autres threads)
+_launch = subprocess.run          # un seul point d'entrée pour les commandes système : les tests le remplacent (patcher subprocess.run lui-même gênerait les autres threads)
 
 
 class Es:
@@ -40,18 +40,18 @@ class Es:
         return defaut if not r else r in ("o", "oui", "y", "yes")
 
 
-NIVEAUX_TEXTE = {
+LEVELS_TEXT = {
     security.LOCAL: ("1", "Cette machine seulement", "Personne d'autre ne peut y accéder. Recommandé."),
     security.RESEAU: ("2", "Mon réseau local", "Téléphone, tablette, autre PC de la maison, avec un code PIN à chaque nouvel appareil."),
     security.PROXY: ("3", "Depuis Internet, derrière un proxy", "Lutin n'est pas exposé directement : un proxy (Authelia, Authentik…) s'occupe de l'identité."),
 }
-AVERTISSEMENT_RESEAU = ("Attention : toute personne qui connaît le code PIN et se trouve sur ton réseau pourra demander à Lutin de lire les fichiers du dossier de travail. "
+WARNING_NETWORK = ("Attention : toute personne qui connaît le code PIN et se trouve sur ton réseau pourra demander à Lutin de lire les fichiers du dossier de travail. "
                         "Les accords automatiques se règlent conversation par conversation (désactivés par défaut) : ne les active pas pour une conversation ouverte depuis un appareil que tu ne maîtrises pas.")
-AVERTISSEMENT_PROXY = ("Attention : exposer un assistant capable de lire des fichiers et de lancer des commandes à Internet est risqué. Ne le fais que derrière une "
+WARNING_PROXY = ("Attention : exposer un assistant capable de lire des fichiers et de lancer des commandes à Internet est risqué. Ne le fais que derrière une "
                        "authentification forte (idéalement avec second facteur) et un HTTPS valide. Les accords automatiques se règlent conversation par conversation (désactivés par défaut) : active-les avec prudence.")
 
 
-def choisir_langue(es, options, cfg):
+def choose_language(es, options, cfg):
     """Première question de l'installation : la langue (français ou anglais). Posée seulement si rien ne l'a déjà fixée (option, variable LUTIN_LANGUE, réglage existant) et jamais avec --yes."""
     voulue = options.get("langue")
     if not voulue:
@@ -64,20 +64,20 @@ def choisir_langue(es, options, cfg):
     i18n.forcer(cfg["langue"])
 
 
-def choisir_securite(es, options):
+def choose_security(es, options):
     if options.get("niveau"):
         niveau = options["niveau"]
     else:
         es.dire(_t("\nQui doit pouvoir utiliser Lutin ?"))
-        for n, (num, titre, detail) in NIVEAUX_TEXTE.items():
+        for n, (num, titre, detail) in LEVELS_TEXT.items():
             es.dire("  {}. {} : {}".format(num, _t(titre), _t(detail)))
         r = es.demander(_t("Ton choix"), "1")
-        niveau = next((n for n, (num, _, _) in NIVEAUX_TEXTE.items() if num == r or n == r), security.LOCAL)
+        niveau = next((n for n, (num, _, _) in LEVELS_TEXT.items() if num == r or n == r), security.LOCAL)
     sec = security.Securite(niveau=niveau, port=int(options.get("port") or 8777), ecoute=str(options.get("ecoute") or ""))
     if niveau == security.RESEAU:
-        es.dire("\n" + _t(AVERTISSEMENT_RESEAU))
+        es.dire("\n" + _t(WARNING_NETWORK))
     if niveau == security.PROXY:
-        es.dire("\n" + _t(AVERTISSEMENT_PROXY))
+        es.dire("\n" + _t(WARNING_PROXY))
         sec.url_publique = options.get("url") or es.demander(_t("Adresse publique (https://…)"), "")
         ips = options.get("proxy_ips") or [x for x in es.demander(_t("Adresse du proxy de confiance (celle qu'il a vue de Lutin, ex. 192.168.1.10)"), "").replace(",", " ").split() if x]
         sec.proxy_ips = list(ips)
@@ -90,7 +90,7 @@ def choisir_securite(es, options):
     return sec
 
 
-def choisir_emplacements(es, options, profil, besoin_go):
+def choose_locations(es, options, profil, besoin_go):
     em = {"modeles": "", "travail": ""}
     maison = Path.home()
     travail = options.get("travail") or es.demander(_t("\nDossier de travail (le seul endroit où Lutin pourra lire et modifier des fichiers)"), str(maison / "Lutin"))
@@ -121,7 +121,7 @@ def afficher_choix(es, choix, coches, profil):
     return ordre
 
 
-def choisir_roles(es, options, choix, profil):
+def choose_roles(es, options, choix, profil):
     coches = model_selection.default_choice(choix)
     if options.get("sans_modeles"):
         return []
@@ -137,7 +137,7 @@ def choisir_roles(es, options, choix, profil):
     return [ordre[int(x) - 1] for x in r.replace(",", " ").split() if x.isdigit() and 1 <= int(x) <= len(ordre)]
 
 
-def barre(es):
+def bar(es):
     """Progression d'un téléchargement : une ligne tous les 10 % (lisible dans un terminal comme dans un journal)."""
     vu = {"palier": -1, "texte": ""}
 
@@ -163,11 +163,11 @@ def installer_ollama_si_besoin(es, profil, cfg, options, cache):
         return False
     try:
         if systeme == "windows":
-            ollama_client.installer_windows(cache, lambda t, f, tot: None)
+            ollama_client.install_windows(cache, lambda t, f, tot: None)
         elif systeme == "linux":
-            es.dire(_t("Commande exécutée (le script officiel d'Ollama, il peut demander ton mot de passe) :\n   ") + ollama_client.COMMANDE_LINUX)
+            es.dire(_t("Commande exécutée (le script officiel d'Ollama, il peut demander ton mot de passe) :\n   ") + ollama_client.COMMAND_LINUX)
             try:
-                reussi = _lancer(["sh", "-c", ollama_client.COMMANDE_LINUX]).returncode == 0
+                reussi = _launch(["sh", "-c", ollama_client.COMMAND_LINUX]).returncode == 0
             except OSError as e:
                 raise ollama_client.ErreurOllama(_t("impossible de lancer le script d'installation : {}").format(e)) from e
             if not reussi:
@@ -183,7 +183,7 @@ def installer_ollama_si_besoin(es, profil, cfg, options, cache):
     return True
 
 
-def definir_variables_utilisateur(variables, systeme, lanceur=hardware.lancer):
+def set_variables_user(variables, systeme, lanceur=hardware.launch):
     """Rend OLLAMA_MODELS permanent (Windows : variable utilisateur), pour qu'Ollama retrouve ses modèles à chaque démarrage."""
     if systeme == "windows":
         for k, v in variables.items():
@@ -193,7 +193,7 @@ def definir_variables_utilisateur(variables, systeme, lanceur=hardware.lancer):
 CLES_RECONFIGURATION = ("niveau", "port", "url", "proxy_ips", "travail", "dossier_modeles", "roles")
 
 
-def deja_installe(cfg, dossiers, es, ollama=None):
+def installed_already(cfg, dossiers, es, ollama=None):
     """Lutin est déjà en place : on regarde, on ne change rien. Seule exception, sur ta demande : retélécharger un modèle qui a disparu."""
     es.dire(_t("Lutin est déjà installé : rien à faire."))
     s = cfg["securite"]
@@ -213,7 +213,7 @@ def deja_installe(cfg, dossiers, es, ollama=None):
     if manquants and es.confirmer(_t("Retélécharger les modèles manquants ?"), False):
         for ident in manquants:
             try:
-                o.telecharger(ident, barre(es))
+                o.telecharger(ident, bar(es))
                 es.dire(_t("✔ {} installé.").format(ident))
             except (ollama_client.ErreurOllama, offline.OfflineError) as e:
                 es.dire("✘ " + str(e))
@@ -226,8 +226,8 @@ def executer(cfg, dossiers, es, options=None, profil=None, ollama=None):
     Si Lutin est déjà installé, il ne fait rien (sauf `reconfigurer`, ou une option qui demande un changement) ; ce qui est déjà téléchargé n'est jamais retéléchargé."""
     options = options or {}
     if cfg.get("installe") and not (options.get("reconfigurer") or any(options.get(k) not in (None, False) for k in CLES_RECONFIGURATION)):
-        return deja_installe(cfg, dossiers, es, ollama)
-    choisir_langue(es, options, cfg)
+        return installed_already(cfg, dossiers, es, ollama)
+    choose_language(es, options, cfg)
     profil = profil or hardware.detecter()
     es.dire(_t("Lutin {} : installation guidée.").format(__import__("lutin").__version__))
     es.dire(_t("\nTa machine : ") + profil.resume())
@@ -236,11 +236,11 @@ def executer(cfg, dossiers, es, options=None, profil=None, ollama=None):
     cat = model_catalog.load(Path(dossiers["cache"]) / "catalogue.json")
     choix = model_selection.choose(profil, cat)
 
-    cfg["securite"] = vars(choisir_securite(es, options)).copy()
+    cfg["securite"] = vars(choose_security(es, options)).copy()
     cfg["securite"]["proxy_ips"] = list(cfg["securite"]["proxy_ips"])
     besoin = sum(c.modele["go"] for c in {choix[r].id: choix[r] for r in model_selection.default_choice(choix)}.values())
-    cfg["emplacements"].update(choisir_emplacements(es, options, profil, besoin))          # update : les autres dossiers de travail déjà ajoutés ne disparaissent pas
-    roles = choisir_roles(es, options, choix, profil)
+    cfg["emplacements"].update(choose_locations(es, options, profil, besoin))          # update : les autres dossiers de travail déjà ajoutés ne disparaissent pas
+    roles = choose_roles(es, options, choix, profil)
     o = ollama or ollama_client.Ollama()
     try:
         deja = set(o.installes())
@@ -268,13 +268,13 @@ def executer(cfg, dossiers, es, options=None, profil=None, ollama=None):
 
     if liste or not options.get("sans_ollama"):
         if installer_ollama_si_besoin(es, profil, cfg, options, dossiers["cache"]) and liste:
-            variables = ollama_client.variables_serveur(profil, cfg["emplacements"]["modeles"])
+            variables = ollama_client.variables_server(profil, cfg["emplacements"]["modeles"])
             if cfg["emplacements"]["modeles"]:
-                definir_variables_utilisateur({"OLLAMA_MODELS": cfg["emplacements"]["modeles"]}, profil.systeme)
+                set_variables_user({"OLLAMA_MODELS": cfg["emplacements"]["modeles"]}, profil.systeme)
             if not o.actif():
                 exe = ollama_client.trouver_executable(profil.systeme)
                 if exe:
-                    ollama_client.demarrer_serveur(exe, variables, profil.systeme)
+                    ollama_client.start_server(exe, variables, profil.systeme)
                     import time
                     for _ in range(40):
                         if o.actif():
@@ -286,7 +286,7 @@ def executer(cfg, dossiers, es, options=None, profil=None, ollama=None):
                 for c in liste:
                     es.dire(_t("\nTéléchargement de {} ({:g} Go)…").format(c.id, c.modele["go"]))
                     try:
-                        o.telecharger(c.id, barre(es))
+                        o.telecharger(c.id, bar(es))
                     except (ollama_client.ErreurOllama, offline.OfflineError) as e:
                         es.dire("✘ " + str(e))
                         continue
@@ -299,8 +299,8 @@ def executer(cfg, dossiers, es, options=None, profil=None, ollama=None):
     if principal and any(c.id == principal for c in liste) and es.confirmer(_t("Tester la vitesse de {} maintenant ? (une vingtaine de secondes)").format(principal), False):
         try:
             mesure = bench.executer(ollama or ollama_client.Ollama(), principal, rapide=True, resume_machine=profil.resume())
-            bench.enregistrer(Path(dossiers["cache"]) / "bench.json", mesure)
-            es.dire("  {} : {}".format(principal, bench.resume(mesure)))
+            bench.save(Path(dossiers["cache"]) / "bench.json", mesure)
+            es.dire("  {} : {}".format(principal, bench.summary(mesure)))
         except (ollama_client.ErreurOllama, OSError) as e:
             es.dire(_t("  (test de vitesse impossible : {})").format(e))
     cfg["installe"] = True

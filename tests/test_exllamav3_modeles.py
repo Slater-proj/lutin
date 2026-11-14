@@ -123,7 +123,7 @@ class Catalogue(unittest.TestCase):
 class Modeles(Base):
     def test_un_modele_telecharge_garde_son_origine(self):
         self.installer()
-        racine = X.dossier_modeles(self.dossiers)
+        racine = X.folder_models(self.dossiers)
 
         def lancer(cmd, **k):
             (racine / "Qwen3-8B-exl3_4.0bpw").mkdir(parents=True)
@@ -131,20 +131,20 @@ class Modeles(Base):
             (racine / "Qwen3-8B-exl3_4.0bpw" / "model.safetensors").write_bytes(b"x" * 1000)
             return Faux(["ok\n"])
         C.CACHE.clear()
-        X.telecharger_modele("turboderp/Qwen3-8B-exl3", "4.0bpw", self.dossiers, lancer=lancer, http=faux_hf())
+        X.download_model("turboderp/Qwen3-8B-exl3", "4.0bpw", self.dossiers, lancer=lancer, http=faux_hf())
         m = X.modeles(self.dossiers)
         self.assertEqual([(x["nom"], x["depot"], x["revision"], x["commit"]) for x in m], [("Qwen3-8B-exl3_4.0bpw", "turboderp/Qwen3-8B-exl3", "4.0bpw", "a" * 40)])
-        self.assertEqual(X.nom_dossier_modele("turboderp/Qwen3-8B-exl3", ""), "Qwen3-8B-exl3")
+        self.assertEqual(X.name_folder_model("turboderp/Qwen3-8B-exl3", ""), "Qwen3-8B-exl3")
 
     def test_un_modele_pose_a_la_main_n_a_pas_d_origine_mais_est_liste(self):
-        d = X.dossier_modeles(self.dossiers) / "maison"
+        d = X.folder_models(self.dossiers) / "maison"
         d.mkdir(parents=True)
         (d / "config.json").write_text("{}", encoding="utf-8")
         self.assertEqual([(m["nom"], m["depot"], m["commit"]) for m in X.modeles(self.dossiers)], [("maison", "", "")])
 
     def test_un_depot_sans_reseau_ne_fait_pas_echouer_le_telechargement(self):
         self.installer()
-        racine = X.dossier_modeles(self.dossiers)
+        racine = X.folder_models(self.dossiers)
 
         def lancer(cmd, **k):
             (racine / "M").mkdir(parents=True)
@@ -154,28 +154,28 @@ class Modeles(Base):
         def coupe(url, entetes=None):
             raise OSError("hors ligne")
         C.CACHE.clear()
-        self.assertTrue(X.telecharger_modele("turboderp/M-exl3", "", self.dossiers, lancer=lancer, http=coupe))
+        self.assertTrue(X.download_model("turboderp/M-exl3", "", self.dossiers, lancer=lancer, http=coupe))
         self.assertEqual(X.modeles(self.dossiers)[0]["commit"], "")
 
     def test_supprimer_n_efface_que_le_dossier_d_un_modele(self):
-        racine = X.dossier_modeles(self.dossiers)
+        racine = X.folder_models(self.dossiers)
         (racine / "A").mkdir(parents=True)
         (racine / "A" / "config.json").write_text("{}", encoding="utf-8")
         (self.tmp / "intouchable").mkdir()
         for mauvais in ("", "..", "../intouchable", "a/b", "a\\b", "absent"):
             with self.assertRaises(ValueError, msg=repr(mauvais)):
-                X.supprimer_modele(mauvais, self.dossiers)
+                X.remove_model(mauvais, self.dossiers)
         self.assertTrue((self.tmp / "intouchable").is_dir())
-        self.assertTrue(X.supprimer_modele("A", self.dossiers))
+        self.assertTrue(X.remove_model("A", self.dossiers))
         self.assertEqual(X.modeles(self.dossiers), [])
 
     def test_le_dossier_des_modeles_choisi_va_dans_la_configuration_de_tabby(self):
         ailleurs = self.tmp / "disque-d" / "modeles"
         d = {"donnees": self.tmp, "modeles": str(ailleurs)}
-        self.assertEqual(X.dossier_modeles(d), ailleurs)
-        self.assertEqual(X.dossier_modeles(self.dossiers), X.dossier(self.dossiers) / "modeles")
+        self.assertEqual(X.folder_models(d), ailleurs)
+        self.assertEqual(X.folder_models(self.dossiers), X.folder(self.dossiers) / "modeles")
         self.installer(dossiers=d)
-        self.assertIn(ailleurs.as_posix(), (X.dossier_tabby(d) / "config.yml").read_text(encoding="utf-8"))
+        self.assertIn(ailleurs.as_posix(), (X.folder_tabby(d) / "config.yml").read_text(encoding="utf-8"))
 
     def test_l_installation_annonce_ses_etapes(self):
         textes, etapes = [], []
@@ -189,7 +189,7 @@ class Telechargement(Base):
     def test_la_progression_suit_la_taille_du_dossier_et_dit_le_pourcentage(self):
         """Le téléchargeur de TabbyAPI réécrit une barre sur UNE ligne : rien ne s'affichait. La taille du dossier qui grossit, comparée à la taille annoncée par Hugging Face, donne le vrai avancement."""
         self.installer()
-        racine = X.dossier_modeles(self.dossiers)
+        racine = X.folder_models(self.dossiers)
         dossier = racine / "Qwen3-8B-exl3_4.0bpw"
 
         class Lent:
@@ -227,8 +227,8 @@ class Telechargement(Base):
                 return 200, {}, _json.dumps([{"type": "file", "size": total_hf, "path": "model.safetensors"}]).encode()
             return faux(url, entetes)
         C.CACHE.clear()
-        with mock.patch.object(X, "INTERVALLE_PROGRES_S", 0.05):
-            X.telecharger_modele("turboderp/Qwen3-8B-exl3", "4.0bpw", self.dossiers, dire=textes.append, lancer=lambda cmd, **k: Lent(), http=http, progres=lambda f, t: mesures.append((f, t)))
+        with mock.patch.object(X, "INTERVAL_PROGRESS_S", 0.05):
+            X.download_model("turboderp/Qwen3-8B-exl3", "4.0bpw", self.dossiers, dire=textes.append, lancer=lambda cmd, **k: Lent(), http=http, progres=lambda f, t: mesures.append((f, t)))
         self.assertTrue(mesures, "la progression est remontée")
         self.assertTrue(all(t == total_hf for _, t in mesures), "le total vient de Hugging Face")
         self.assertEqual(mesures, sorted(mesures), "elle ne recule jamais")
@@ -237,7 +237,7 @@ class Telechargement(Base):
 
     def test_sans_taille_connue_on_montre_ce_qui_est_recu(self):
         self.installer()
-        racine = X.dossier_modeles(self.dossiers)
+        racine = X.folder_models(self.dossiers)
 
         class Court:
             code, pid = 0, 1
@@ -262,14 +262,14 @@ class Telechargement(Base):
         def panne(url, entetes=None):
             raise OSError("hors ligne")
         C.CACHE.clear()
-        with mock.patch.object(X, "INTERVALLE_PROGRES_S", 0.05):
-            X.telecharger_modele("turboderp/M-exl3", "", self.dossiers, dire=textes.append, lancer=lambda cmd, **k: Court(), http=panne, progres=lambda f, t: None)
+        with mock.patch.object(X, "INTERVAL_PROGRESS_S", 0.05):
+            X.download_model("turboderp/M-exl3", "", self.dossiers, dire=textes.append, lancer=lambda cmd, **k: Court(), http=panne, progres=lambda f, t: None)
         self.assertTrue(any("reçus" in t for t in textes), textes)
 
 
 class SuppressionSure(Base):
     def modele(self, nom="Gros-exl3_4.0bpw", config=True):
-        d = X.dossier_modeles(self.dossiers) / nom
+        d = X.folder_models(self.dossiers) / nom
         d.mkdir(parents=True)
         if config:
             (d / "config.json").write_text("{}", encoding="utf-8")
@@ -281,17 +281,17 @@ class SuppressionSure(Base):
         d = self.modele()
         with mock.patch.object(X.os, "replace", side_effect=PermissionError("fichier utilisé")):
             with self.assertRaises(PermissionError):
-                X.supprimer_modele(d.name, self.dossiers)
+                X.remove_model(d.name, self.dossiers)
         self.assertTrue((d / "config.json").is_file() and (d / "model.safetensors").is_file(), "rien n'a été touché")
         self.assertEqual([m["nom"] for m in X.modeles(self.dossiers)], [d.name], "il est toujours dans la liste")
 
     def test_la_suppression_reussie_ne_laisse_aucun_dossier(self):
         d = self.modele()
-        X.supprimer_modele(d.name, self.dossiers)
-        self.assertEqual(list(X.dossier_modeles(self.dossiers).iterdir()), [])
+        X.remove_model(d.name, self.dossiers)
+        self.assertEqual(list(X.folder_models(self.dossiers).iterdir()), [])
 
     def test_les_restes_d_une_suppression_interrompue_sont_effaces_et_jamais_listes(self):
-        reste = X.dossier_modeles(self.dossiers) / ".suppression-Vieux-a1b2c3"
+        reste = X.folder_models(self.dossiers) / ".suppression-Vieux-a1b2c3"
         reste.mkdir(parents=True)
         (reste / "config.json").write_text("{}", encoding="utf-8")
         self.assertEqual(X.modeles(self.dossiers), [])
@@ -301,7 +301,7 @@ class SuppressionSure(Base):
         d = self.modele("Abime-exl3", config=False)
         m = X.modeles(self.dossiers)
         self.assertEqual([(x["nom"], x["incomplet"]) for x in m], [(d.name, True)])
-        X.supprimer_modele(d.name, self.dossiers)          # et il se supprime comme un autre
+        X.remove_model(d.name, self.dossiers)          # et il se supprime comme un autre
         self.assertEqual(X.modeles(self.dossiers), [])
 
 
@@ -311,7 +311,7 @@ class ContexteBorne(Base):
         c = X.config_yaml(5000, self.tmp / "modeles", 24576)
         self.assertIn("max_seq_len: 24576", c)
         self.assertIn("cache_mode: Q8", c)
-        self.assertIn("max_seq_len: %d" % X.CONTEXTE_DEFAUT, X.config_yaml(5000, self.tmp / "modeles"), "sans réglage connu : une valeur prudente, pas la longueur maximale du modèle")
+        self.assertIn("max_seq_len: %d" % X.DEFAULT_CONTEXT, X.config_yaml(5000, self.tmp / "modeles"), "sans réglage connu : une valeur prudente, pas la longueur maximale du modèle")
         self.assertIn("max_seq_len: 2048", X.config_yaml(5000, self.tmp / "modeles", 10))
         self.assertIn("max_seq_len: 262144", X.config_yaml(5000, self.tmp / "modeles", 10 ** 9))
 
@@ -322,18 +322,18 @@ class ContexteBorne(Base):
         def lancer(cmd, **k):
             etat["ok"] = True
             return Faux(code=None, pid=9)
-        X.demarrer(5000, self.dossiers, lancer=lancer, repond_=lambda p: etat["ok"], dormir=lambda s: None, contexte=32768)
-        self.assertIn("max_seq_len: 32768", (X.dossier_tabby(self.dossiers) / "config.yml").read_text(encoding="utf-8"))
+        X.start(5000, self.dossiers, lancer=lancer, repond_=lambda p: etat["ok"], dormir=lambda s: None, contexte=32768)
+        self.assertIn("max_seq_len: 32768", (X.folder_tabby(self.dossiers) / "config.yml").read_text(encoding="utf-8"))
 
 
 class Carte(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="lutin-exlm-carte-"))
-        self.ancien = dict(engines.CONTEXTE)
-        engines.CONTEXTE["donnees"] = lambda: self.tmp
-        engines.CONTEXTE["hors_ligne"] = lambda: False
-        engines.CONTEXTE["en_docker"] = lambda: False
-        self.mo = engines.MOTEURS["openai"]
+        self.ancien = dict(engines.CONTEXT)
+        engines.CONTEXT["donnees"] = lambda: self.tmp
+        engines.CONTEXT["hors_ligne"] = lambda: False
+        engines.CONTEXT["en_docker"] = lambda: False
+        self.mo = engines.ENGINES["openai"]
         ml.regler_serveur("openai", {"serveur": "exllamav3"})
         self.addCleanup(self.remettre)
 
@@ -341,18 +341,18 @@ class Carte(unittest.TestCase):
         cfg = ml.lire_config()
         cfg.pop("openai", None)
         ml.ecrire_config(cfg)
-        engines.CONTEXTE.clear()
-        engines.CONTEXTE.update(self.ancien)
+        engines.CONTEXT.clear()
+        engines.CONTEXT.update(self.ancien)
 
     def faux_modeles(self):
-        racine = X.dossier_modeles(self.mo._dossiers())
+        racine = X.folder_models(self.mo._dossiers())
         (racine / "A-exl3").mkdir(parents=True)
         (racine / "A-exl3" / "config.json").write_text("{}", encoding="utf-8")
 
     def test_l_installation_est_suivie_d_un_demarrage_et_la_barre_avance_par_etapes(self):
         suivi, progression = [], []
-        with mock.patch.object(X, "installer", lambda dossiers, port, dire, annule=None, etape=None, **k: ([etape(n, 5) for n in range(1, 6)], dire("Étape 4/5 : pip"), {"tabby": SHA, "lib": "1.6.6"})[2]), \
-                mock.patch.object(X, "demarrer", lambda port, dossiers=None, **k: suivi.append(("demarrer", port))):
+        with mock.patch.object(X, "install", lambda dossiers, port, dire, annule=None, etape=None, **k: ([etape(n, 5) for n in range(1, 6)], dire("Étape 4/5 : pip"), {"tabby": SHA, "lib": "1.6.6"})[2]), \
+                mock.patch.object(X, "start", lambda port, dossiers=None, **k: suivi.append(("demarrer", port))):
             self.mo.faire("installer", lambda t, f, total: progression.append((t, f, total)))
         self.assertEqual(suivi, [("demarrer", 5000)])
         self.assertEqual(progression[-1][1:], (6, 6))
@@ -362,8 +362,8 @@ class Carte(unittest.TestCase):
 
     def test_un_demarrage_qui_echoue_ne_defait_pas_l_installation_et_est_dit(self):
         progression = []
-        with mock.patch.object(X, "installer", lambda dossiers, port, dire, annule=None, etape=None, **k: {"tabby": SHA, "lib": "1.6.6"}), \
-                mock.patch.object(X, "demarrer", mock.Mock(side_effect=ValueError("CUDA introuvable\nsuite du journal"))):
+        with mock.patch.object(X, "install", lambda dossiers, port, dire, annule=None, etape=None, **k: {"tabby": SHA, "lib": "1.6.6"}), \
+                mock.patch.object(X, "start", mock.Mock(side_effect=ValueError("CUDA introuvable\nsuite du journal"))):
             self.mo.faire("installer", lambda t, f, total: progression.append((t, f, total)))        # aucune exception : l'installation a réussi
         self.assertTrue(progression[-1][0].startswith("⚠"), progression[-1])
         self.assertIn("CUDA introuvable", progression[-1][0])
@@ -387,7 +387,7 @@ class Carte(unittest.TestCase):
     def test_le_dossier_des_modeles_se_choisit_et_arrete_le_serveur_qui_le_lit(self):
         ailleurs = self.tmp / "autre-disque"
         arrets = []
-        with mock.patch.object(ml.MoteurOpenAI, "actif", lambda self: True), mock.patch.object(X, "arreter", lambda dossiers=None, **k: arrets.append(1)):
+        with mock.patch.object(ml.MoteurOpenAI, "actif", lambda self: True), mock.patch.object(X, "stop", lambda dossiers=None, **k: arrets.append(1)):
             ml.regler_dossier_modeles("openai", str(ailleurs))
         self.assertEqual(arrets, [1])
         self.assertEqual(self.mo._dossiers()["modeles"], str(ailleurs))
@@ -400,17 +400,17 @@ class Carte(unittest.TestCase):
 
     def test_choisir_un_autre_serveur_arrete_celui_qui_tourne_au_lieu_de_refuser(self):
         arrets = []
-        with mock.patch.object(ml.MoteurOpenAI, "actif", lambda self: True), mock.patch.object(X, "arreter", lambda dossiers=None, **k: arrets.append("exllamav3")):
+        with mock.patch.object(ml.MoteurOpenAI, "actif", lambda self: True), mock.patch.object(X, "stop", lambda dossiers=None, **k: arrets.append("exllamav3")):
             self.assertTrue(ml.regler_serveur("openai", {"serveur": "colibri"}))
         self.assertEqual(arrets, ["exllamav3"])
         self.assertTrue(self.mo.colibri_choisi() and not self.mo.exllamav3_choisi())
         arrets.clear()
-        with mock.patch.object(ml.MoteurOpenAI, "actif", lambda self: True), mock.patch.object(X, "arreter", lambda dossiers=None, **k: arrets.append("x")):
+        with mock.patch.object(ml.MoteurOpenAI, "actif", lambda self: True), mock.patch.object(X, "stop", lambda dossiers=None, **k: arrets.append("x")):
             ml.regler_serveur("openai", {"serveur": "colibri"})          # le même serveur : rien n'est arrêté
         self.assertEqual(arrets, [])
 
     def test_changer_de_serveur_eteint_ne_demande_rien(self):
-        with mock.patch.object(ml.MoteurOpenAI, "actif", lambda self: False), mock.patch.object(X, "arreter", lambda dossiers=None, **k: self.fail("rien ne tourne")):
+        with mock.patch.object(ml.MoteurOpenAI, "actif", lambda self: False), mock.patch.object(X, "stop", lambda dossiers=None, **k: self.fail("rien ne tourne")):
             ml.regler_serveur("openai", {"serveur": "lmstudio"})
         self.assertTrue(self.mo.lmstudio_choisi())
 
@@ -420,7 +420,7 @@ class Carte(unittest.TestCase):
             self.mo.supprimer_modele("../x")
         self.mo.supprimer_modele("A-exl3")
         self.assertEqual(X.modeles(self.mo._dossiers()), [])
-        with mock.patch.object(X, "supprimer_modele", mock.Mock(side_effect=PermissionError())):
+        with mock.patch.object(X, "remove_model", mock.Mock(side_effect=PermissionError())):
             with self.assertRaises(ml.ErreurMoteur) as e:
                 self.mo.supprimer_modele("A-exl3")
         self.assertIn("arrête ExLlamaV3", str(e.exception))
@@ -442,20 +442,20 @@ class Carte(unittest.TestCase):
             if appels["n"] == 1:
                 raise PermissionError("utilisé")
             suivi.append(("supprime", nom))
-        with mock.patch.object(ml.MoteurOpenAI, "actif", lambda self: True), mock.patch.object(X, "arreter", lambda dossiers=None, **k: suivi.append("arret")), \
-                mock.patch.object(X, "supprimer_modele", supprimer), mock.patch.object(ml.time, "sleep", lambda s: None):
+        with mock.patch.object(ml.MoteurOpenAI, "actif", lambda self: True), mock.patch.object(X, "stop", lambda dossiers=None, **k: suivi.append("arret")), \
+                mock.patch.object(X, "remove_model", supprimer), mock.patch.object(ml.time, "sleep", lambda s: None):
             self.mo.supprimer_modele("A-exl3")
         self.assertEqual(suivi, ["arret", ("supprime", "A-exl3")], "arrêté une fois, puis supprimé")
 
     def test_si_le_fichier_reste_utilise_le_modele_reste_entier_et_l_erreur_est_dite(self):
-        with mock.patch.object(ml.MoteurOpenAI, "actif", lambda self: False), mock.patch.object(X, "supprimer_modele", mock.Mock(side_effect=PermissionError())), mock.patch.object(ml.time, "sleep", lambda s: None):
+        with mock.patch.object(ml.MoteurOpenAI, "actif", lambda self: False), mock.patch.object(X, "remove_model", mock.Mock(side_effect=PermissionError())), mock.patch.object(ml.time, "sleep", lambda s: None):
             with self.assertRaises(ml.ErreurMoteur) as e:
                 self.mo.supprimer_modele("A-exl3")
         self.assertIn("arrête ExLlamaV3", str(e.exception))
 
     def test_le_demarrage_donne_au_serveur_le_contexte_des_reglages(self):
         vus = []
-        with mock.patch.object(X, "demarrer", lambda port, dossiers=None, **k: vus.append(k.get("contexte"))), mock.patch.object(ml.MoteurExterne, "_contexte", lambda self: 20480):
+        with mock.patch.object(X, "start", lambda port, dossiers=None, **k: vus.append(k.get("contexte"))), mock.patch.object(ml.MoteurExterne, "_contexte", lambda self: 20480):
             self.mo.faire("demarrer", lambda *a: None)
         self.assertEqual(vus, [20480])
 

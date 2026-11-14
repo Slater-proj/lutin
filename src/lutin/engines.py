@@ -19,16 +19,16 @@ import time
 OLLAMA = "ollama"
 LLAMACPP = "llamacpp"
 OPENAI = "openai"
-VERROU = threading.Lock()
+LOCK = threading.Lock()
 # La grille de capacités : pour chaque fonction, ce que le moteur fait « natif » (il le fait lui-même), « adapte » (Lutin traduit ou complète), « non » (impossible) ou « non_teste » (pas vérifié).
 # La suite de conformité (tests/test_conformite_moteurs.py) vérifie chaque case « natif » ou « adapte » contre un faux serveur : la grille ne ment pas.
 FONCTIONS = ("discuter", "flux", "arret", "outils", "reflexion", "vision", "embeddings", "plusieurs_modeles", "telechargement", "installation")
-ETATS = ("natif", "adapte", "non", "non_teste")
-MOTEURS = {}          # identifiant -> instance (voir enregistrer)
-TACHES = {}          # identifiant du moteur -> {action, statut, texte, fait, total, erreur, debut}
+STATES = ("natif", "adapte", "non", "non_teste")
+ENGINES = {}          # identifiant -> instance (voir enregistrer)
+TASKS = {}          # identifiant du moteur -> {action, statut, texte, fait, total, erreur, debut}
 ACTIONS = ("installer", "desinstaller", "reinstaller", "demarrer", "arreter", "mettre_a_jour")
 # Ce que les moteurs ont besoin de savoir de Lutin sans l'importer (rempli par agent.py) : le dossier des données, Docker, le mode hors ligne, le profil de la machine.
-CONTEXTE = {"donnees": lambda: None, "en_docker": lambda: False, "hors_ligne": lambda: False, "profil": lambda: None, "profil_attendu": None, "dossier_ollama": lambda: None}
+CONTEXT = {"donnees": lambda: None, "en_docker": lambda: False, "hors_ligne": lambda: False, "profil": lambda: None, "profil_attendu": None, "dossier_ollama": lambda: None}
 
 
 def est_local(adresse):
@@ -118,7 +118,7 @@ class Moteur:
                 "grille": [{"fonction": f, "etat": e, "note": n} for f, (e, n) in ((f, self.grille().get(f, ("non_teste", ""))) for f in FONCTIONS)]}
 
 
-def abandonner(reponse):
+def abandon(reponse):
     """Coupe net une connexion HTTP en cours de lecture, même si un autre fil est bloqué dessus : le serveur de modèle voit la connexion se fermer et arrête de générer."""
     try:
         reponse.fp.raw._sock.shutdown(socket.SHUT_RDWR)
@@ -161,10 +161,10 @@ class FluxInterruptible:
         self.abandonner()
         return False
 
-    def abandonner(self):
+    def abandon(self):
         reponse = getattr(self.flux, "reponse", None)
         if reponse is not None:
-            abandonner(reponse)
+            abandon(reponse)
 
     def __iter__(self):
         while True:
@@ -185,112 +185,112 @@ class FluxInterruptible:
                 raise valeur
 
 
-def enregistrer(moteur):
-    with VERROU:
-        MOTEURS[moteur.id] = moteur
+def save(moteur):
+    with LOCK:
+        ENGINES[moteur.id] = moteur
     return moteur
 
 
-def liste():
-    with VERROU:
-        return list(MOTEURS.values())
+def entries():
+    with LOCK:
+        return list(ENGINES.values())
 
 
 def par_id(ident):
     """Le moteur de cet identifiant ; Ollama si l'identifiant est inconnu ou vide (un réglage ancien ne doit jamais empêcher de discuter)."""
-    with VERROU:
-        return MOTEURS.get(ident) or MOTEURS.get(OLLAMA)
+    with LOCK:
+        return ENGINES.get(ident) or ENGINES.get(OLLAMA)
 
 
-def valide(ident):
-    with VERROU:
-        return ident in MOTEURS
+def valid(ident):
+    with LOCK:
+        return ident in ENGINES
 
 
 # --------------------------------------------------------------------------- tâches de fond d'un moteur (installation, désinstallation, démarrage…)
 
-def tache(ident):
-    with VERROU:
-        return dict(TACHES.get(ident) or {})
+def task(ident):
+    with LOCK:
+        return dict(TASKS.get(ident) or {})
 
 
-def toutes_les_taches():
-    with VERROU:
-        return {k: dict(v) for k, v in TACHES.items()}
+def all_tasks():
+    with LOCK:
+        return {k: dict(v) for k, v in TASKS.items()}
 
 
 class ErreurAnnule(ValueError):
     """L'utilisateur a annulé l'opération en cours (installation, mise à jour, téléchargement). Ce qui était déjà téléchargé est gardé : relancer reprend où ça s'était arrêté."""
 
 
-def annuler_tache(ident):
+def cancel_task(ident):
     """Demande l'arrêt de l'opération en cours de ce moteur. True si une opération tournait."""
-    with VERROU:
-        t = TACHES.get(ident)
+    with LOCK:
+        t = TASKS.get(ident)
         if t and t.get("statut") == "en cours":
             t["annule"] = True
             return True
     return False
 
 
-FIN_RESULTAT_S = 25          # un résultat réussi reste affiché ce temps dans la barre du haut
-FIN_ERREUR_S = 600          # une erreur y reste plus longtemps (jusqu'à ce qu'on la ferme)
+END_RESULT_S = 25          # un résultat réussi reste affiché ce temps dans la barre du haut
+END_ERROR_S = 600          # une erreur y reste plus longtemps (jusqu'à ce qu'on la ferme)
 
 
-def fins_recentes(maintenant=None):
+def recent_ends(maintenant=None):
     """Les opérations de moteur terminées depuis peu : [{id, nom, statut (termine | erreur), action, texte}] pour la barre du haut. Rien ne disparaît sans avoir dit comment ça s'est fini."""
     maintenant = maintenant or time.time()
-    with VERROU:
+    with LOCK:
         sortie = []
-        for ident, t in TACHES.items():
-            if ident not in MOTEURS or not t.get("fin"):
+        for ident, t in TASKS.items():
+            if ident not in ENGINES or not t.get("fin"):
                 continue
             age = maintenant - t["fin"]
-            if t.get("statut") == "termine" and t.get("resultat") and age < FIN_RESULTAT_S:
-                sortie.append({"id": ident, "nom": MOTEURS[ident].nom, "statut": "termine", "action": t.get("action", ""), "texte": t["resultat"], "fin": t["fin"]})
-            elif t.get("statut") == "erreur" and age < FIN_ERREUR_S:
-                sortie.append({"id": ident, "nom": MOTEURS[ident].nom, "statut": "erreur", "action": t.get("action", ""), "texte": t.get("erreur", ""), "fin": t["fin"]})
+            if t.get("statut") == "termine" and t.get("resultat") and age < END_RESULT_S:
+                sortie.append({"id": ident, "nom": ENGINES[ident].nom, "statut": "termine", "action": t.get("action", ""), "texte": t["resultat"], "fin": t["fin"]})
+            elif t.get("statut") == "erreur" and age < END_ERROR_S:
+                sortie.append({"id": ident, "nom": ENGINES[ident].nom, "statut": "erreur", "action": t.get("action", ""), "texte": t.get("erreur", ""), "fin": t["fin"]})
         return sortie
 
 
-def lancer_tache(moteur, action, executer=None, synchrone=False):
+def launch_task(moteur, action, executer=None, synchrone=False):
     """Lance `moteur.faire(action, progression)` dans un fil (ou tout de suite si `synchrone`, pour les tests). Une seule tâche à la fois par moteur."""
-    with VERROU:
-        en_cours = TACHES.get(moteur.id)
+    with LOCK:
+        en_cours = TASKS.get(moteur.id)
         if en_cours and en_cours.get("statut") == "en cours":
             raise ValueError("Une opération est déjà en cours avec ce moteur : attends sa fin.")
-        TACHES[moteur.id] = {"action": action, "statut": "en cours", "texte": "", "fait": 0, "total": 0, "erreur": "", "debut": time.time()}
+        TASKS[moteur.id] = {"action": action, "statut": "en cours", "texte": "", "fait": 0, "total": 0, "erreur": "", "debut": time.time()}
 
     def progression(texte="", fait=0, total=0):
-        with VERROU:
-            if TACHES[moteur.id].get("annule"):
+        with LOCK:
+            if TASKS[moteur.id].get("annule"):
                 raise ErreurAnnule("Opération annulée : ce qui est déjà téléchargé est gardé, relance pour reprendre.")
-            TACHES[moteur.id].update({"texte": str(texte), "fait": int(fait or 0), "total": int(total or 0)})
+            TASKS[moteur.id].update({"texte": str(texte), "fait": int(fait or 0), "total": int(total or 0)})
             if texte:
-                TACHES[moteur.id]["dernier"] = str(texte)
+                TASKS[moteur.id]["dernier"] = str(texte)
 
     def travail():
         try:
             (executer or moteur.faire)(action, progression)
-            with VERROU:
+            with LOCK:
                 # le résultat reste lisible un moment dans la barre du haut : « Installé : Colibri 2.1.0 » ne doit pas disparaître sans un mot
-                TACHES[moteur.id].update({"statut": "termine", "resultat": TACHES[moteur.id].get("dernier", ""), "texte": "", "fait": 0, "total": 0, "fin": time.time()})
+                TASKS[moteur.id].update({"statut": "termine", "resultat": TASKS[moteur.id].get("dernier", ""), "texte": "", "fait": 0, "total": 0, "fin": time.time()})
             try:
                 from . import engine_updates
                 engine_updates.forget(moteur.id)          # la version installée a peut-être changé : le prochain contrôle refera le constat
             except Exception:  # noqa: BLE001  (sans importance pour la tâche)
                 pass
         except Exception as erreur:  # noqa: BLE001  (l'échec est montré dans la page, jamais une trace)
-            with VERROU:
+            with LOCK:
                 cause = erreur
                 while cause is not None and not isinstance(cause, ErreurAnnule):
                     cause = cause.__cause__ or cause.__context__
                 if cause is not None:
-                    TACHES[moteur.id].update({"statut": "annule", "erreur": "", "texte": "", "fait": 0, "total": 0})
+                    TASKS[moteur.id].update({"statut": "annule", "erreur": "", "texte": "", "fait": 0, "total": 0})
                 else:
-                    TACHES[moteur.id].update({"statut": "erreur", "erreur": str(erreur)[:500], "fin": time.time()})
+                    TASKS[moteur.id].update({"statut": "erreur", "erreur": str(erreur)[:500], "fin": time.time()})
     if synchrone:
         travail()
     else:
         threading.Thread(target=travail, daemon=True, name="moteur-" + moteur.id).start()
-    return tache(moteur.id)
+    return task(moteur.id)

@@ -78,10 +78,10 @@ class ChezSoi(unittest.TestCase):
     def test_searxng_local_n_est_pas_exterieur_les_autres_si(self):
         for adresse, attendu in (("http://127.0.0.1:8080", True), ("http://192.168.1.20:8080", True), ("http://searxng:8080", True), ("http://nas.local:8080", True),
                                  ("https://searx.exemple.org", False), ("http://8.8.8.8:8080", False)):
-            with mock.patch.object(web_search, "hote_autorise", lambda a=adresse: web_search.urllib.parse.urlparse(a).hostname):
-                self.assertEqual(web_search.est_chez_soi("searxng"), attendu, adresse)
+            with mock.patch.object(web_search, "allowed_host", lambda a=adresse: web_search.urllib.parse.urlparse(a).hostname):
+                self.assertEqual(web_search.is_at_home("searxng"), attendu, adresse)
         for nom in ("brave", "tavily", "exa", "perplexity", "duckduckgo", "bing"):
-            self.assertFalse(web_search.est_chez_soi(nom))
+            self.assertFalse(web_search.is_at_home(nom))
 
 
 class RechercheEtJournal(unittest.TestCase):
@@ -96,8 +96,8 @@ class RechercheEtJournal(unittest.TestCase):
         def faux(requete):
             recues.append(requete)
             return [{"titre": "T", "url": "https://exemple.org/a", "extrait": "e", "date": ""}]
-        with mock.patch.object(web, "moteurs_de_recherche", lambda: [("tavily", faux)]):
-            trouves, raisons = web.chercher_resultats("aide pour jean@example.com sur le kWh", 5)
+        with mock.patch.object(web, "engines_of_search", lambda: [("tavily", faux)]):
+            trouves, raisons = web.search_results("aide pour jean@example.com sur le kWh", 5)
         self.assertEqual(recues, ["aide pour sur le kWh"])
         self.assertTrue(trouves)
         e = outbound.read()[0]
@@ -106,16 +106,16 @@ class RechercheEtJournal(unittest.TestCase):
 
     def test_un_searxng_chez_soi_recoit_la_requete_telle_quelle_sans_journal(self):
         recues = []
-        with mock.patch.object(web, "moteurs_de_recherche", lambda: [("searxng", lambda q: recues.append(q) or [{"titre": "T", "url": "https://exemple.org/b", "extrait": "e", "date": ""}])]), \
-                mock.patch.object(web_search, "est_chez_soi", lambda nom: nom == "searxng"):
-            web.chercher_resultats("contacter jean@example.com", 5)
+        with mock.patch.object(web, "engines_of_search", lambda: [("searxng", lambda q: recues.append(q) or [{"titre": "T", "url": "https://exemple.org/b", "extrait": "e", "date": ""}])]), \
+                mock.patch.object(web_search, "is_at_home", lambda nom: nom == "searxng"):
+            web.search_results("contacter jean@example.com", 5)
         self.assertEqual(recues, ["contacter jean@example.com"])
         self.assertEqual(outbound.read(), [])
 
     def test_requete_entierement_personnelle_n_est_envoyee_nulle_part(self):
         appels = []
-        with mock.patch.object(web, "moteurs_de_recherche", lambda: [("exa", lambda q: appels.append(q) or [])]):
-            trouves, raisons = web.chercher_resultats("jean@example.com", 5)
+        with mock.patch.object(web, "engines_of_search", lambda: [("exa", lambda q: appels.append(q) or [])]):
+            trouves, raisons = web.search_results("jean@example.com", 5)
         self.assertEqual((appels, trouves), ([], []))
         self.assertIn("données personnelles", " ".join(raisons))
         self.assertEqual(outbound.read(), [])
@@ -123,8 +123,8 @@ class RechercheEtJournal(unittest.TestCase):
     def test_un_echec_est_note_aussi(self):
         def casse(requete):
             raise A.ErreurOutil("HTTP 500")
-        with mock.patch.object(web, "moteurs_de_recherche", lambda: [("perplexity", casse)]):
-            web.chercher_resultats("question simple", 5)
+        with mock.patch.object(web, "engines_of_search", lambda: [("perplexity", casse)]):
+            web.search_results("question simple", 5)
         self.assertFalse(outbound.read()[0]["ok"])
 
 
@@ -159,7 +159,7 @@ class Api(unittest.TestCase):
         outbound.clear()
         web.CACHE_RECHERCHE.clear()
         web.BLOQUES.clear()
-        with mock.patch.object(web, "moteurs_de_recherche", lambda: [("tavily", lambda q: [{"titre": "T1", "url": "https://exemple.org/a?utm_source=x", "extrait": "e" * 500, "date": "2026-05-01"}])]):
+        with mock.patch.object(web, "engines_of_search", lambda: [("tavily", lambda q: [{"titre": "T1", "url": "https://exemple.org/a?utm_source=x", "extrait": "e" * 500, "date": "2026-05-01"}])]):
             statut, r = self.appel("POST", "/api/web-apercu", {"q": "tarif électricité écrire à marie@example.com"})
         self.assertEqual(statut, 200)
         self.assertEqual(r["retire"], ["adresse e-mail"])

@@ -38,7 +38,7 @@ def ensure_ollama_runs(cfg, profil, ecrire=print):
             ecrire(_t("Ollama n'est pas installé : lance « lutin setup »."))
         return False
     from . import locations
-    ollama_client.demarrer_serveur(exe, ollama_client.variables_serveur(profil, cfg["emplacements"]["modeles"] or os.environ.get("OLLAMA_MODELS") or locations.seen_folder()), config.system_info())
+    ollama_client.start_server(exe, ollama_client.variables_server(profil, cfg["emplacements"]["modeles"] or os.environ.get("OLLAMA_MODELS") or locations.seen_folder()), config.system_info())
     import time
     for _ in range(30):
         if o.actif():
@@ -61,12 +61,12 @@ def start_server(cfg, dossiers, ouvrir_navigateur=True, ecrire=print):
 
     def verifier_a_la_demande(portee):
         """Boutons de l'onglet Modèles : la configuration est relue à chaque fois (les propositions refusées entre-temps comptent)."""
-        return updates.verifier(profil, config.load(dossiers), dossiers, ollama_client.Ollama(), force=True, portee=portee)
+        return updates.check(profil, config.load(dossiers), dossiers, ollama_client.Ollama(), force=True, portee=portee)
     core.VERIFICATEUR = verifier_a_la_demande
     if cfg.get("verifier_maj", True):
         def verification():
             try:
-                updates.verifier(profil, cfg, dossiers, ollama_client.Ollama())
+                updates.check(profil, cfg, dossiers, ollama_client.Ollama())
             except Exception as e:  # noqa: BLE001 — jamais bloquant
                 ecrire(_t("(vérification des modèles impossible : {})").format(e))
         threading.Thread(target=verification, daemon=True, name="verification-modeles").start()
@@ -74,7 +74,7 @@ def start_server(cfg, dossiers, ouvrir_navigateur=True, ecrire=print):
         def verification_lutin():
             while True:
                 try:
-                    updates.verifier_lutin(dossiers)
+                    updates.check_lutin(dossiers)
                 except Exception:  # noqa: BLE001 — jamais bloquant, jamais bruyant
                     pass
                 time.sleep(6 * 3600)          # le serveur peut tourner des semaines : on recontrôle (au plus une requête par 24 h grâce au cache)

@@ -33,9 +33,9 @@ def tour_qui_repond(texte="Voici le résumé."):
 
 class Base(unittest.TestCase):
     def setUp(self):
-        P._ecrire([])
+        P._write([])
         P.EN_COURS.clear()
-        P.A_SUPPRIMER.clear()
+        P.TO_REMOVE.clear()
         self.envoyes = []
         self.canal = mock.patch.object(notifications, "find", lambda ident: {"id": ident} if ident == "c1" else None)
         self.envoi = mock.patch.object(notifications, "send", lambda canal, titre, texte: self.envoyes.append((canal, titre, texte)))
@@ -47,7 +47,7 @@ class Base(unittest.TestCase):
     def tache(self, **plus):
         d = dict(nom="Résumé", prompt="Résume le dépôt.", heure="08:00", jours=[0, 1, 2, 3, 4], travail="", notifier="")
         d.update(plus)
-        return P.ajouter(**d)
+        return P.add(**d)
 
     def lancer(self, ident, tour):
         with mock.patch.object(_m, "tour", tour):
@@ -59,15 +59,15 @@ class Validation(Base):
         for mauvais in (dict(nom=""), dict(prompt="  "), dict(prompt="x" * 4001), dict(heure="8h"), dict(heure="25:00"), dict(jours=[]), dict(jours=[7]), dict(jours=["a"]), dict(notifier="inconnu")):
             with self.assertRaises(ValueError, msg=str(mauvais)):
                 self.tache(**mauvais)
-        self.assertEqual(P.lire(), [], "rien n'est enregistré à moitié")
+        self.assertEqual(P.read(), [], "rien n'est enregistré à moitié")
 
     def test_une_tache_creee_a_ses_champs_et_un_nom_propre(self):
         t = self.tache(nom="  Résumé   du  matin ", jours=[4, 0, 0], notifier="c1")
         self.assertEqual((t["nom"], t["jours"], t["notifier"], t["actif"], t["historique"], t["date"]), ("Résumé du matin", [0, 4], "c1", True, [], ""))
-        self.assertEqual(P.lire()[0]["id"], t["id"])
+        self.assertEqual(P.read()[0]["id"], t["id"])
 
     def test_vingt_taches_au_plus(self):
-        for i in range(P.MAX_TACHES):
+        for i in range(P.MAX_TASKS):
             self.tache(nom="t%d" % i)
         with self.assertRaises(ValueError):
             self.tache(nom="de trop")
@@ -86,56 +86,56 @@ class Echeances(Base):
     def test_chaque_semaine_aux_jours_choisis_une_seule_fois_par_jour(self):
         t = self.tache(jours=[0])
         t["cree"] = (LUNDI_8H - timedelta(days=3)).isoformat()
-        self.assertIsNone(P.echeance(dict(t, heure="09:00"), LUNDI_8H), "pas encore l'heure")
-        self.assertEqual(P.echeance(t, LUNDI_8H), LUNDI_8H.replace(hour=8, minute=0))
-        self.assertIsNone(P.echeance(t, LUNDI_8H + timedelta(days=1)), "pas le bon jour")
-        self.assertIsNone(P.echeance(dict(t, derniere_exec=LUNDI_8H.isoformat()), LUNDI_8H + timedelta(hours=2)), "déjà faite aujourd'hui")
-        self.assertIsNone(P.echeance(dict(t, actif=False), LUNDI_8H), "en pause")
-        self.assertIsNone(P.echeance(dict(t, cree=LUNDI_8H.isoformat()), LUNDI_8H), "créée après l'heure du jour : elle attend le lendemain")
+        self.assertIsNone(P.due(dict(t, heure="09:00"), LUNDI_8H), "pas encore l'heure")
+        self.assertEqual(P.due(t, LUNDI_8H), LUNDI_8H.replace(hour=8, minute=0))
+        self.assertIsNone(P.due(t, LUNDI_8H + timedelta(days=1)), "pas le bon jour")
+        self.assertIsNone(P.due(dict(t, derniere_exec=LUNDI_8H.isoformat()), LUNDI_8H + timedelta(hours=2)), "déjà faite aujourd'hui")
+        self.assertIsNone(P.due(dict(t, actif=False), LUNDI_8H), "en pause")
+        self.assertIsNone(P.due(dict(t, cree=LUNDI_8H.isoformat()), LUNDI_8H), "créée après l'heure du jour : elle attend le lendemain")
 
     def test_une_seule_fois_a_la_date_dite_et_pas_un_autre_jour(self):
         t = {"actif": True, "heure": "08:00", "jours": [0], "date": "2026-11-09", "cree": "2026-11-01T10:00:00", "derniere_exec": ""}
-        self.assertIsNotNone(P.echeance(t, LUNDI_8H))
-        self.assertIsNone(P.echeance(t, LUNDI_8H + timedelta(days=7)), "le lundi suivant n'est pas la date")
-        self.assertIsNone(P.echeance(t, LUNDI_8H - timedelta(days=1)))
-        self.assertEqual(P.prochaine(dict(t, heure="09:00"), LUNDI_8H), "2026-11-09T09:00")
-        self.assertEqual(P.prochaine(dict(t, derniere_exec="2026-11-09T08:00:00"), LUNDI_8H + timedelta(hours=1)), "", "faite : plus de prochaine fois")
+        self.assertIsNotNone(P.due(t, LUNDI_8H))
+        self.assertIsNone(P.due(t, LUNDI_8H + timedelta(days=7)), "le lundi suivant n'est pas la date")
+        self.assertIsNone(P.due(t, LUNDI_8H - timedelta(days=1)))
+        self.assertEqual(P.next_one(dict(t, heure="09:00"), LUNDI_8H), "2026-11-09T09:00")
+        self.assertEqual(P.next_one(dict(t, derniere_exec="2026-11-09T08:00:00"), LUNDI_8H + timedelta(hours=1)), "", "faite : plus de prochaine fois")
 
     def test_la_prochaine_fois_saute_au_jour_suivant_prevu(self):
         t = {"actif": True, "heure": "08:00", "jours": [0, 2], "date": "", "cree": "2026-11-01T10:00:00", "derniere_exec": LUNDI_8H.isoformat()}
-        self.assertEqual(P.prochaine(t, LUNDI_8H + timedelta(hours=1)), "2026-11-11T08:00")
-        self.assertEqual(P.prochaine(dict(t, actif=False), LUNDI_8H), "")
+        self.assertEqual(P.next_one(t, LUNDI_8H + timedelta(hours=1)), "2026-11-11T08:00")
+        self.assertEqual(P.next_one(dict(t, actif=False), LUNDI_8H), "")
 
 
 class Modification(Base):
     def test_on_modifie_tout_et_une_heure_deja_passee_n_est_pas_rattrapee(self):
         t = self.tache(jours=[0, 1, 2, 3, 4, 5, 6])
-        avant = P.lire()[0]["cree"]
+        avant = P.read()[0]["cree"]
         time.sleep(1.1)
-        n = P.changer(t["id"], "Autre nom", "Autre demande", "09:15", [1, 3], "", "c1", "")
+        n = P.change(t["id"], "Autre nom", "Autre demande", "09:15", [1, 3], "", "c1", "")
         self.assertEqual((n["nom"], n["prompt"], n["heure"], n["jours"], n["notifier"]), ("Autre nom", "Autre demande", "09:15", [1, 3], "c1"))
-        self.assertGreater(P.lire()[0]["cree"], avant, "le moment a changé : la tâche repart de maintenant")
-        garde = P.lire()[0]["cree"]
+        self.assertGreater(P.read()[0]["cree"], avant, "le moment a changé : la tâche repart de maintenant")
+        garde = P.read()[0]["cree"]
         time.sleep(1.1)
-        P.changer(t["id"], "Encore", "Demande", "09:15", [1, 3], "", "", "")
-        self.assertEqual(P.lire()[0]["cree"], garde, "seul le nom a changé : le moment ne bouge pas")
+        P.change(t["id"], "Encore", "Demande", "09:15", [1, 3], "", "", "")
+        self.assertEqual(P.read()[0]["cree"], garde, "seul le nom a changé : le moment ne bouge pas")
 
     def test_modifier_une_tache_en_pause_dont_le_moment_change_la_reactive(self):
         t = self.tache()
-        P.modifier(t["id"], actif=False)
-        P.changer(t["id"], "Résumé", "Résume.", "10:00", [0], "", "", "")
-        self.assertTrue(P.lire()[0]["actif"])
-        P.modifier(t["id"], actif=False)
-        P.changer(t["id"], "Résumé bis", "Résume.", "10:00", [0], "", "", "")
-        self.assertFalse(P.lire()[0]["actif"], "le moment n'a pas changé : la pause reste")
+        P.modify(t["id"], actif=False)
+        P.change(t["id"], "Résumé", "Résume.", "10:00", [0], "", "", "")
+        self.assertTrue(P.read()[0]["actif"])
+        P.modify(t["id"], actif=False)
+        P.change(t["id"], "Résumé bis", "Résume.", "10:00", [0], "", "", "")
+        self.assertFalse(P.read()[0]["actif"], "le moment n'a pas changé : la pause reste")
 
     def test_modifier_une_tache_inconnue_ou_avec_des_champs_faux_est_refuse(self):
         with self.assertRaises(ValueError):
-            P.changer("inconnue", "n", "p", "08:00", [0], "", "", "")
+            P.change("inconnue", "n", "p", "08:00", [0], "", "", "")
         t = self.tache()
         with self.assertRaises(ValueError):
-            P.changer(t["id"], "n", "p", "bientôt", [0], "", "", "")
-        self.assertEqual(P.lire()[0]["heure"], "08:00")
+            P.change(t["id"], "n", "p", "bientôt", [0], "", "", "")
+        self.assertEqual(P.read()[0]["heure"], "08:00")
 
 
 class Execution(Base):
@@ -144,7 +144,7 @@ class Execution(Base):
         c1 = self.lancer(t["id"], tour_qui_repond("Premier résumé."))
         c2 = self.lancer(t["id"], tour_qui_repond("Deuxième résumé."))
         self.assertEqual(c1, c2, "une seule conversation « ⏰ nom » par tâche")
-        n = P.lire()[0]
+        n = P.read()[0]
         self.assertEqual((n["derniere_etat"], n["derniere_erreur"], n["derniere_conv"]), ("ok", "", c1))
         self.assertEqual([h["etat"] for h in n["historique"]], ["ok", "ok"])
         self.assertTrue(all(h["date"] and h["duree_s"] >= 0 for h in n["historique"]))
@@ -154,9 +154,9 @@ class Execution(Base):
 
     def test_l_historique_garde_les_dix_dernieres(self):
         t = self.tache()
-        for _ in range(P.HISTORIQUE_MAX + 3):
+        for _ in range(P.MAX_HISTORY + 3):
             self.lancer(t["id"], tour_qui_repond())
-        self.assertEqual(len(P.lire()[0]["historique"]), P.HISTORIQUE_MAX)
+        self.assertEqual(len(P.read()[0]["historique"]), P.MAX_HISTORY)
 
     def test_un_modele_muet_ou_en_erreur_est_dit_dans_la_conversation_et_la_notification(self):
         t = self.tache(notifier="c1")
@@ -164,7 +164,7 @@ class Execution(Base):
         def muet(conv, demande, emit, *a, **k):
             _m.conv_ecrire(dict(conv, messages=conv["messages"] + [{"role": "user", "content": demande}]))
         c = self.lancer(t["id"], muet)
-        n = P.lire()[0]
+        n = P.read()[0]
         self.assertEqual(n["derniere_etat"], "erreur")
         self.assertIn("Aucune réponse", n["derniere_erreur"])
         dernier = _m.conv_lire(c)["messages"][-1]
@@ -174,43 +174,43 @@ class Execution(Base):
         def casse(conv, demande, emit, *a, **k):
             emit({"type": "erreur", "texte": "Ollama ne répond pas"})
         self.lancer(t["id"], casse)
-        self.assertIn("Ollama ne répond pas", P.lire()[0]["derniere_erreur"])
-        self.assertEqual([h["etat"] for h in P.lire()[0]["historique"]], ["erreur", "erreur"])
+        self.assertIn("Ollama ne répond pas", P.read()[0]["derniere_erreur"])
+        self.assertEqual([h["etat"] for h in P.read()[0]["historique"]], ["erreur", "erreur"])
 
         def leve(conv, demande, emit, *a, **k):
             raise RuntimeError("boum")
         self.lancer(t["id"], leve)
-        self.assertEqual(P.lire()[0]["derniere_etat"], "erreur")
+        self.assertEqual(P.read()[0]["derniere_etat"], "erreur")
 
     def test_une_tache_a_date_fixe_se_met_en_pause_apres_son_passage(self):
         demain = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
         t = self.tache(date=demain, jours=[])
         self.lancer(t["id"], tour_qui_repond())
-        n = P.lire()[0]
+        n = P.read()[0]
         self.assertFalse(n["actif"])
         self.assertEqual(n["derniere_etat"], "ok")
-        self.assertEqual(P.prochaine(n, datetime.now()), "")
+        self.assertEqual(P.next_one(n, datetime.now()), "")
 
     def test_une_tache_qui_ne_peut_pas_demarrer_l_ecrit_et_n_est_pas_relancee_en_boucle(self):
         t = self.tache(notifier="c1")
-        P.modifier(t["id"], cree=(LUNDI_8H - timedelta(days=3)).isoformat())
+        P.modify(t["id"], cree=(LUNDI_8H - timedelta(days=3)).isoformat())
         with mock.patch.object(_m, "activate_work", mock.Mock(side_effect=ValueError("Le dossier de travail « x » n'est plus dans la liste."))), mock.patch.object(_m, "tour", mock.Mock(side_effect=AssertionError("ne démarre pas"))):
             self.assertEqual(P.un_regard(LUNDI_8H), t["id"])
-            n = P.lire()[0]
+            n = P.read()[0]
             self.assertEqual((n["derniere_etat"], len(n["historique"])), ("erreur", 1))
             self.assertIn("n'est plus dans la liste", n["derniere_erreur"])
             self.assertIn("n'est plus dans la liste", self.envoyes[-1][2])
             self.assertIsNone(P.un_regard(LUNDI_8H + timedelta(minutes=1)), "pas de nouvelle tentative toutes les 30 secondes")
-            self.assertEqual(len(P.lire()[0]["historique"]), 1)
+            self.assertEqual(len(P.read()[0]["historique"]), 1)
 
     def test_machine_occupee_la_tache_attend_sans_rien_noter(self):
         t = self.tache()
-        P.modifier(t["id"], cree=(LUNDI_8H - timedelta(days=3)).isoformat())
+        P.modify(t["id"], cree=(LUNDI_8H - timedelta(days=3)).isoformat())
         with mock.patch.dict(_m.TOURS_ACTIFS, {"autre": threading.Event()}), mock.patch.object(_m, "TOURS_SIMULTANES", 1), mock.patch.object(_m, "tour", mock.Mock(side_effect=AssertionError("ne démarre pas"))):
             self.assertIsNone(P.un_regard(LUNDI_8H))
             with self.assertRaises(ValueError):
                 P.executer(t["id"])
-        self.assertEqual((P.lire()[0]["derniere_exec"], P.lire()[0]["historique"]), ("", []))
+        self.assertEqual((P.read()[0]["derniere_exec"], P.read()[0]["historique"]), ("", []))
         with mock.patch.object(_m, "tour", tour_qui_repond()):
             self.assertEqual(P.un_regard(LUNDI_8H), t["id"], "la machine est libre : elle part")
 
@@ -226,13 +226,13 @@ class Execution(Base):
         fil = threading.Thread(target=lambda: self.lancer(t["id"], lent))
         fil.start()
         self.assertTrue(demarree.wait(10))
-        self.assertTrue(P.etat()["taches"][0]["en_cours"])
+        self.assertTrue(P.state()["taches"][0]["en_cours"])
         with mock.patch.object(_m, "tour", tour_qui_repond()), self.assertRaises(ValueError) as e:
             P.executer(t["id"])
         self.assertIn("déjà", str(e.exception))
         libre.set()
         fil.join(10)
-        self.assertFalse(P.etat()["taches"][0]["en_cours"])
+        self.assertFalse(P.state()["taches"][0]["en_cours"])
 
 
 class ArretEtSuppression(Base):
@@ -254,7 +254,7 @@ class ArretEtSuppression(Base):
         fil = self.en_plein_travail(t)
         P.arreter(t["id"])
         fil.join(10)
-        n = P.lire()[0]
+        n = P.read()[0]
         self.assertEqual((n["derniere_etat"], n["actif"], self.envoyes), ("arretee", True, []))
         self.assertEqual(n["historique"][0]["etat"], "arretee")
         with self.assertRaises(ValueError):
@@ -263,42 +263,42 @@ class ArretEtSuppression(Base):
     def test_supprimer_une_tache_en_cours_l_arrete_pour_de_bon(self):
         t = self.tache(notifier="c1")
         fil = self.en_plein_travail(t)
-        P.supprimer(t["id"])
+        P.remove(t["id"])
         fil.join(10)
         self.assertFalse(fil.is_alive(), "le tour a été arrêté")
-        self.assertEqual((P.lire(), self.envoyes, P.EN_COURS), ([], [], {}), "supprimée : plus rien ne s'écrit, personne n'est prévenu")
+        self.assertEqual((P.read(), self.envoyes, P.EN_COURS), ([], [], {}), "supprimée : plus rien ne s'écrit, personne n'est prévenu")
         self.assertIsNone(P.un_regard(LUNDI_8H + timedelta(days=30)))
 
     def test_la_conversation_est_gardee_par_defaut_et_effacee_sur_demande(self):
         t = self.tache()
         conv = self.lancer(t["id"], tour_qui_repond())
-        P.supprimer(t["id"])
+        P.remove(t["id"])
         self.assertTrue(_d.conv_chemin(conv).is_file(), "la conversation reste : elle contient les résultats")
         t2 = self.tache(nom="Autre")
         conv2 = self.lancer(t2["id"], tour_qui_repond())
-        P.supprimer(t2["id"], conversation=True)
+        P.remove(t2["id"], conversation=True)
         self.assertFalse(_d.conv_chemin(conv2).exists())
 
     def test_supprimer_avec_sa_conversation_en_plein_travail_n_en_laisse_aucune_trace(self):
         t = self.tache()
         fil = self.en_plein_travail(t)
-        conv = P.lire()[0]["derniere_conv"]
-        P.supprimer(t["id"], conversation=True)
+        conv = P.read()[0]["derniere_conv"]
+        P.remove(t["id"], conversation=True)
         fil.join(10)
         self.assertFalse(_d.conv_chemin(conv).exists(), "la fin du tour n'a pas réécrit la conversation")
-        self.assertEqual(P.A_SUPPRIMER, set())
+        self.assertEqual(P.TO_REMOVE, set())
 
     def test_supprimer_une_tache_inconnue_est_dit(self):
         with self.assertRaises(ValueError):
-            P.supprimer("inconnue")
+            P.remove("inconnue")
 
     def test_une_tache_interrompue_par_l_arret_de_lutin_est_dite_interrompue(self):
         t = self.tache()
-        P.modifier(t["id"], derniere_etat="en_cours", derniere_conv="abc")
-        self.assertEqual(P.etat()["taches"][0]["derniere_etat"], "interrompue", "affiché tout de suite")
-        with mock.patch.object(P, "boucle", lambda: None):
-            P.demarrer()
-        n = P.lire()[0]
+        P.modify(t["id"], derniere_etat="en_cours", derniere_conv="abc")
+        self.assertEqual(P.state()["taches"][0]["derniere_etat"], "interrompue", "affiché tout de suite")
+        with mock.patch.object(P, "loop", lambda: None):
+            P.start()
+        n = P.read()[0]
         self.assertEqual(n["derniere_etat"], "interrompue")
         self.assertIn("arrêté", n["derniere_erreur"])
 
@@ -311,7 +311,7 @@ class Notification(Base):
             raise ValueError("Ce canal n'existe plus.")
         with mock.patch.object(notifications, "send", envoi_casse):
             self.lancer(t["id"], tour_qui_repond())
-        n = P.lire()[0]
+        n = P.read()[0]
         self.assertEqual(n["derniere_etat"], "ok")
         self.assertIn("n'existe plus", n["derniere_notif"])
 

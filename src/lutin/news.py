@@ -153,7 +153,7 @@ def prepare(conv, texte, ctx, emit, chercher=None, reformuler=None, mode="actual
     de réponse, ou None si rien n'a été trouvé (la boucle habituelle prend alors le relais). Lève ErreurOutil si le web est coupé."""
     from . import web
     if mode == "lecture":
-        lire = lire or web.outil_web_lire
+        lire = lire or web.tool_web_read
         adresse = URL.search(texte).group(0).rstrip(".,;:!?")
         args = {"url": adresse}
         emit({"type": "info", "texte": _t("📄 Je lis la page, puis je réponds.")})
@@ -162,7 +162,7 @@ def prepare(conv, texte, ctx, emit, chercher=None, reformuler=None, mode="actual
         emit({"type": "resultat", "nom": "web_lire", "texte": _t("(résultat transmis à l'assistant, non affiché)")})
         _add(conv, "web_lire", args, page)
         return reading_instruction()
-    chercher = chercher or web.outil_web_chercher
+    chercher = chercher or web.tool_web_search
     news = mode == "actualites"
     q = query(texte, reformuler=reformuler, datee=news)
     args = {"requete": q, "nombre": 6, "lire": 3}

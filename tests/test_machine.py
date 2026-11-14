@@ -15,38 +15,38 @@ MEMINFO = "MemTotal:       32768000 kB\nMemFree:         1000000 kB\nMemAvailabl
 
 class Detection(unittest.TestCase):
     def test_nvidia_smi_une_carte(self):
-        g = hardware.analyser_nvidia_smi(NVIDIA_4090)
+        g = hardware.parse_nvidia_smi(NVIDIA_4090)
         self.assertEqual(len(g), 1)
         self.assertEqual((g[0].nom, g[0].fabricant, g[0].vram_go, g[0].libre_go), ("NVIDIA GeForce RTX 4090", "nvidia", 24.0, 22.5))
 
     def test_nvidia_smi_deux_cartes_et_nom_avec_virgule(self):
-        self.assertEqual([g.vram_go for g in hardware.analyser_nvidia_smi(NVIDIA_DEUX)], [12.0, 4.0])
-        g = hardware.analyser_nvidia_smi("NVIDIA RTX A6000, Edition, 49140, 48000")
+        self.assertEqual([g.vram_go for g in hardware.parse_nvidia_smi(NVIDIA_DEUX)], [12.0, 4.0])
+        g = hardware.parse_nvidia_smi("NVIDIA RTX A6000, Edition, 49140, 48000")
         self.assertEqual(g[0].nom, "NVIDIA RTX A6000, Edition")
 
     def test_nvidia_smi_sortie_vide_ou_cassee(self):
         for texte in ("", None, "No devices were found", "a,b,c"):
-            self.assertEqual(hardware.analyser_nvidia_smi(texte), [])
+            self.assertEqual(hardware.parse_nvidia_smi(texte), [])
 
     def test_windows_prefere_le_registre_au_champ_wmi_plafonne(self):
-        g = hardware.analyser_gpus_windows(WIN_AMD_16GO)
+        g = hardware.parse_gpus_windows(WIN_AMD_16GO)
         self.assertEqual(len(g), 1, "le pilote d'affichage de base est ignoré")
         self.assertEqual((g[0].fabricant, g[0].vram_go, g[0].source), ("amd", 16.0, "registre"))
 
     def test_windows_sans_registre_signale_le_plafond(self):
-        g = hardware.analyser_gpus_windows(WIN_SANS_REGISTRE)
+        g = hardware.parse_gpus_windows(WIN_SANS_REGISTRE)
         self.assertEqual((g[0].fabricant, g[0].vram_go), ("intel", 1.0))
         self.assertIn("plafonné", g[0].source)
 
     def test_windows_sortie_illisible(self):
         for texte in ("", "pas du json", "[]", None):
-            self.assertEqual(hardware.analyser_gpus_windows(texte), [])
+            self.assertEqual(hardware.parse_gpus_windows(texte), [])
 
     def test_meminfo(self):
-        total, dispo = hardware.analyser_meminfo(MEMINFO)
+        total, dispo = hardware.parse_meminfo(MEMINFO)
         self.assertAlmostEqual(total, 31.25, places=1)
         self.assertAlmostEqual(dispo, 19.07, places=1)
-        self.assertEqual(hardware.analyser_meminfo(""), (0.0, 0.0))
+        self.assertEqual(hardware.parse_meminfo(""), (0.0, 0.0))
 
     def test_limite_de_memoire_d_un_conteneur_cgroup_v2_et_v1(self):
         import tempfile
@@ -76,21 +76,21 @@ class Detection(unittest.TestCase):
         cpus = os.cpu_count() or 1
         with tempfile.TemporaryDirectory() as d:
             racine = Path(d)
-            self.assertEqual(hardware.cpus_disponibles(str(racine)), cpus, "pas de fichier : tous les processeurs")
+            self.assertEqual(hardware.cpus_available(str(racine)), cpus, "pas de fichier : tous les processeurs")
             (racine / "cpu.max").write_text("max 100000\n")
-            self.assertEqual(hardware.cpus_disponibles(str(racine)), cpus, "« max » : aucune limite")
+            self.assertEqual(hardware.cpus_available(str(racine)), cpus, "« max » : aucune limite")
             (racine / "cpu.max").write_text("200000 100000\n")
-            self.assertEqual(hardware.cpus_disponibles(str(racine)), min(cpus, 2), "cgroup v2 : 2 processeurs")
+            self.assertEqual(hardware.cpus_available(str(racine)), min(cpus, 2), "cgroup v2 : 2 processeurs")
             (racine / "cpu.max").write_text("150000 100000\n")
-            self.assertEqual(hardware.cpus_disponibles(str(racine)), min(cpus, 2), "1,5 processeur : arrondi au-dessus")
+            self.assertEqual(hardware.cpus_available(str(racine)), min(cpus, 2), "1,5 processeur : arrondi au-dessus")
         with tempfile.TemporaryDirectory() as d:
             racine = Path(d)
             (racine / "cpu").mkdir()
             (racine / "cpu" / "cpu.cfs_quota_us").write_text("300000\n")
             (racine / "cpu" / "cpu.cfs_period_us").write_text("100000\n")
-            self.assertEqual(hardware.cpus_disponibles(str(racine)), min(cpus, 3), "cgroup v1 : 3 processeurs")
+            self.assertEqual(hardware.cpus_available(str(racine)), min(cpus, 3), "cgroup v1 : 3 processeurs")
             (racine / "cpu" / "cpu.cfs_quota_us").write_text("-1\n")
-            self.assertEqual(hardware.cpus_disponibles(str(racine)), cpus, "-1 : aucune limite")
+            self.assertEqual(hardware.cpus_available(str(racine)), cpus, "-1 : aucune limite")
 
     def test_le_budget_peut_etre_impose_pour_un_serveur_partage(self):
         import os
@@ -112,8 +112,8 @@ class Detection(unittest.TestCase):
 
     def test_nom_du_processeur_lu_dans_cpuinfo(self):
         texte = "processor\t: 0\nvendor_id\t: GenuineIntel\nmodel name\t: Intel(R) Core(TM) i7-1165G7\n\nprocessor\t: 1\nmodel name\t: autre\n"
-        self.assertEqual(hardware.nom_cpu_linux(texte), "Intel(R) Core(TM) i7-1165G7")
-        self.assertEqual(hardware.nom_cpu_linux(""), "")
+        self.assertEqual(hardware.name_cpu_linux(texte), "Intel(R) Core(TM) i7-1165G7")
+        self.assertEqual(hardware.name_cpu_linux(""), "")
 
     def test_sysfs_amd(self):
         import tempfile
@@ -124,9 +124,9 @@ class Detection(unittest.TestCase):
             (carte / "vendor").write_text("0x1002\n")
             (carte / "mem_info_vram_total").write_text(str(16 * 1024 ** 3))
             (Path(t) / "card0-HDMI-A-1").mkdir()          # connecteur : ignoré
-            g = hardware.lire_gpus_linux(t)
+            g = hardware.read_gpus_linux(t)
             self.assertEqual([(x.fabricant, x.vram_go) for x in g], [("amd", 16.0)])
-            self.assertEqual(hardware.lire_gpus_linux(str(Path(t) / "absent")), [])
+            self.assertEqual(hardware.read_gpus_linux(str(Path(t) / "absent")), [])
 
     def test_detecter_ne_plante_jamais_meme_sans_aucune_commande(self):
         p = hardware.detecter(lanceur=lambda *a, **k: "")

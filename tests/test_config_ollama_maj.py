@@ -151,12 +151,12 @@ class ClientOllama(unittest.TestCase):
         """Sans console du tout (DETACHED_PROCESS), chaque moteur de modèle qu'Ollama lance ouvre sa propre fenêtre noire qui clignote : il faut une console CACHÉE (CREATE_NO_WINDOW)."""
         from lutin import ollama_client
         appels = []
-        ollama_client.demarrer_serveur("ollama.exe", {}, "windows", lanceur=lambda cmd, **kw: appels.append(kw))
+        ollama_client.start_server("ollama.exe", {}, "windows", lanceur=lambda cmd, **kw: appels.append(kw))
         drapeaux = appels[0]["creationflags"]
         self.assertTrue(drapeaux & 0x08000000, "console cachée")
         self.assertFalse(drapeaux & 0x00000008, "pas de DETACHED_PROCESS")
         appels.clear()
-        ollama_client.demarrer_serveur("ollama", {}, "linux", lanceur=lambda cmd, **kw: appels.append(kw))
+        ollama_client.start_server("ollama", {}, "linux", lanceur=lambda cmd, **kw: appels.append(kw))
         self.assertTrue(appels[0]["start_new_session"])
 
     def test_capacites(self):
@@ -174,9 +174,9 @@ class ClientOllama(unittest.TestCase):
 
     def test_variables_selon_la_machine(self):
         gros = Profil(ram_go=32, gpus=[Gpu("x", "nvidia", 24)])
-        v = ollama_client.variables_serveur(gros, "D:\\modeles")
+        v = ollama_client.variables_server(gros, "D:\\modeles")
         self.assertEqual((v["OLLAMA_FLASH_ATTENTION"], v["OLLAMA_KV_CACHE_TYPE"], v["OLLAMA_MODELS"]), ("1", "q8_0", "D:\\modeles"))
-        sans = ollama_client.variables_serveur(Profil(ram_go=8))
+        sans = ollama_client.variables_server(Profil(ram_go=8))
         self.assertNotIn("OLLAMA_FLASH_ATTENTION", sans)
         self.assertNotIn("OLLAMA_MODELS", sans)
 
@@ -210,16 +210,16 @@ class InstallationOllama(unittest.TestCase):
     def test_refuse_http_et_les_fichiers_trop_petits(self):
         with tempfile.TemporaryDirectory() as t:
             with self.assertRaises(ErreurOllama):
-                ollama_client.telecharger_fichier("http://exemple.org/x.exe", Path(t) / "x.exe")
+                ollama_client.download_file("http://exemple.org/x.exe", Path(t) / "x.exe")
             with self.assertRaises(ErreurOllama):
-                ollama_client.telecharger_fichier("https://exemple.org/x.exe", Path(t) / "x.exe", ouvrir=lambda r, timeout: Reponse(b"petit"))
+                ollama_client.download_file("https://exemple.org/x.exe", Path(t) / "x.exe", ouvrir=lambda r, timeout: Reponse(b"petit"))
             self.assertFalse((Path(t) / "x.exe").exists())
 
     def test_telechargement_et_reprise(self):
         with tempfile.TemporaryDirectory() as t:
             dest = Path(t) / "x.exe"
             vu = []
-            ollama_client.telecharger_fichier("https://exemple.org/x.exe", dest, lambda *a: vu.append(a), lambda r, timeout: Reponse(b"a" * 100), taille_min=10)
+            ollama_client.download_file("https://exemple.org/x.exe", dest, lambda *a: vu.append(a), lambda r, timeout: Reponse(b"a" * 100), taille_min=10)
             self.assertEqual(dest.read_bytes(), b"a" * 100)
             self.assertEqual(vu[-1], ("téléchargement", 100, 100))
             dest2 = Path(t) / "y.exe"
@@ -229,7 +229,7 @@ class InstallationOllama(unittest.TestCase):
             def ouvrir(req, timeout):
                 requetes.append(req.headers.get("Range"))
                 return Reponse(b"b" * 60, 206)
-            ollama_client.telecharger_fichier("https://exemple.org/y.exe", dest2, ouvrir=ouvrir, taille_min=10)
+            ollama_client.download_file("https://exemple.org/y.exe", dest2, ouvrir=ouvrir, taille_min=10)
             self.assertEqual(requetes, ["bytes=40-"])
             self.assertEqual(dest2.read_bytes(), b"a" * 40 + b"b" * 60)
 
@@ -245,24 +245,24 @@ class InstallationOllama(unittest.TestCase):
                     raise OSError("coupure")
                 return Reponse(b"c" * 60, 200)
             with mock.patch.object(ollama_client.time, "sleep") as dormir:
-                ollama_client.telecharger_fichier("https://exemple.org/z.exe", dest, ouvrir=coupe_puis_marche, taille_min=10)
+                ollama_client.download_file("https://exemple.org/z.exe", dest, ouvrir=coupe_puis_marche, taille_min=10)
             self.assertEqual(len(essais), 3)
             self.assertEqual([c.args[0] for c in dormir.call_args_list], [3, 8])
             self.assertEqual(dest.read_bytes(), b"c" * 60)
             with mock.patch.object(ollama_client.time, "sleep"), self.assertRaises(ollama_client.ErreurOllama):
-                ollama_client.telecharger_fichier("https://exemple.org/w.exe", Path(t) / "w.exe", ouvrir=lambda req, timeout: (_ for _ in ()).throw(OSError("hors ligne")), taille_min=10)
+                ollama_client.download_file("https://exemple.org/w.exe", Path(t) / "w.exe", ouvrir=lambda req, timeout: (_ for _ in ()).throw(OSError("hors ligne")), taille_min=10)
 
     def test_signature(self):
-        ok, _ = ollama_client.verifier_signature_windows("x.exe", lambda cmd, delai=0: "Valid|CN=Ollama Inc, O=Ollama")
+        ok, _ = ollama_client.check_signature_windows("x.exe", lambda cmd, delai=0: "Valid|CN=Ollama Inc, O=Ollama")
         self.assertTrue(ok)
         for sortie in ("Valid|CN=Pirate", "NotSigned|", "HashMismatch|CN=Ollama", ""):
-            self.assertFalse(ollama_client.verifier_signature_windows("x.exe", lambda cmd, delai=0, s=sortie: s)[0], sortie)
+            self.assertFalse(ollama_client.check_signature_windows("x.exe", lambda cmd, delai=0, s=sortie: s)[0], sortie)
 
     def test_installation_windows_annulee_si_la_signature_est_mauvaise(self):
         with tempfile.TemporaryDirectory() as t:
             lance = []
             with self.assertRaises(ErreurOllama):
-                ollama_client.installer_windows(t, ouvrir=lambda r, timeout: Reponse(b"x" * 100), lanceur_sortie=lambda c, d=0: "NotSigned|", executer=lambda *a, **k: lance.append(a), taille_min=10)
+                ollama_client.install_windows(t, ouvrir=lambda r, timeout: Reponse(b"x" * 100), lanceur_sortie=lambda c, d=0: "NotSigned|", executer=lambda *a, **k: lance.append(a), taille_min=10)
             self.assertEqual(lance, [], "l'installateur n'est jamais exécuté")
             self.assertFalse((Path(t) / "OllamaSetup.exe").exists(), "et il est supprimé")
 
@@ -290,22 +290,22 @@ class MisesAJour(unittest.TestCase):
         self.assertEqual(updates.separer("llama3"), ("library", "llama3", "latest"))
 
     def test_digest_registre(self):
-        h = faux_http({updates.REGISTRE: (200, {"docker-content-digest": "sha256:abc"}, b"{}")})
+        h = faux_http({updates.REGISTRY: (200, {"docker-content-digest": "sha256:abc"}, b"{}")})
         self.assertEqual(updates.digest_registre("qwen3:8b", h), "abc")
         self.assertIn("/library/qwen3/manifests/8b", h.appels[0][0])
         self.assertIsNone(updates.digest_registre("x", faux_http({})))
-        self.assertIsNone(updates.digest_registre("x", faux_http({updates.REGISTRE: OSError("hors ligne")})))
+        self.assertIsNone(updates.digest_registre("x", faux_http({updates.REGISTRY: OSError("hors ligne")})))
 
     def test_detecte_une_mise_a_jour(self):
-        h = faux_http({updates.REGISTRE: (200, {"docker-content-digest": "sha256:nouveau"}, b"")})
-        p = updates.mises_a_jour({"qwen3:8b": {"digest": "ancien"}}, h)
+        h = faux_http({updates.REGISTRY: (200, {"docker-content-digest": "sha256:nouveau"}, b"")})
+        p = updates.available_updates({"qwen3:8b": {"digest": "ancien"}}, h)
         self.assertEqual([x["type"] for x in p], ["maj"])
-        h = faux_http({updates.REGISTRE: (200, {"docker-content-digest": "sha256:ancien"}, b"")})
-        self.assertEqual(updates.mises_a_jour({"qwen3:8b": {"digest": "ancien"}}, h), [], "même empreinte : rien à proposer")
+        h = faux_http({updates.REGISTRY: (200, {"docker-content-digest": "sha256:ancien"}, b"")})
+        self.assertEqual(updates.available_updates({"qwen3:8b": {"digest": "ancien"}}, h), [], "même empreinte : rien à proposer")
 
     def test_nouveaute_quand_un_modele_mieux_note_tient(self):
         machine = Profil(ram_go=32, ram_libre_go=20, gpus=[Gpu("x", "nvidia", 24)])
-        p = updates.nouveautes(machine, CAT, {"code": "qwen2.5-coder:7b"}, {"qwen2.5-coder:7b": {}})
+        p = updates.news(machine, CAT, {"code": "qwen2.5-coder:7b"}, {"qwen2.5-coder:7b": {}})
         self.assertEqual(len(p), 1)
         self.assertEqual((p[0]["role"], p[0]["ancien"]), ("code", "qwen2.5-coder:7b"))
         self.assertGreater(CAT and [m for m in CAT["modeles"] if m["id"] == p[0]["modele"]][0]["notes"]["code"], 7)
@@ -313,23 +313,23 @@ class MisesAJour(unittest.TestCase):
     def test_pas_de_proposition_si_deja_au_meilleur_ignoree_ou_inutile(self):
         machine = Profil(ram_go=32, ram_libre_go=20, gpus=[Gpu("x", "nvidia", 24)])
         meilleur = __import__("lutin.model_selection", fromlist=["x"]).choose(machine, CAT)["code"].id
-        self.assertEqual(updates.nouveautes(machine, CAT, {"code": meilleur}, {meilleur: {}}), [])
-        deja = updates.nouveautes(machine, CAT, {"code": "qwen2.5-coder:7b"}, {"qwen2.5-coder:7b": {}})[0]["cle"]
-        self.assertEqual(updates.nouveautes(machine, CAT, {"code": "qwen2.5-coder:7b"}, {"qwen2.5-coder:7b": {}}, ignores=[deja]), [])
-        self.assertEqual(updates.nouveautes(machine, CAT, {"code": "qwen2.5-coder:7b"}, {}), [], "le modèle n'est plus installé : on ne propose pas de le remplacer")
+        self.assertEqual(updates.news(machine, CAT, {"code": meilleur}, {meilleur: {}}), [])
+        deja = updates.news(machine, CAT, {"code": "qwen2.5-coder:7b"}, {"qwen2.5-coder:7b": {}})[0]["cle"]
+        self.assertEqual(updates.news(machine, CAT, {"code": "qwen2.5-coder:7b"}, {"qwen2.5-coder:7b": {}}, ignores=[deja]), [])
+        self.assertEqual(updates.news(machine, CAT, {"code": "qwen2.5-coder:7b"}, {}), [], "le modèle n'est plus installé : on ne propose pas de le remplacer")
 
     def test_ancien_modele_remplace_et_deja_installe_est_propose_a_la_suppression(self):
         cat = copy.deepcopy(CAT)
         cat["modeles"][0]["remplace_par"] = cat["modeles"][1]["id"]
         vieux, neuf = cat["modeles"][0]["id"], cat["modeles"][1]["id"]
-        p = updates.obsoletes(cat, {vieux: {}, neuf: {}})
+        p = updates.obsolete(cat, {vieux: {}, neuf: {}})
         self.assertEqual([(x["type"], x["modele"], x["remplace_par"]) for x in p], [("obsolete", vieux, neuf)])
-        self.assertEqual(updates.obsoletes(cat, {vieux: {}}), [], "le remplaçant n'est pas installé : on ne propose pas de retirer le seul modèle")
-        self.assertEqual(updates.obsoletes(cat, {vieux: {}, neuf: {}}, ignores=[p[0]["cle"]]), [], "« le garder » est respecté")
+        self.assertEqual(updates.obsolete(cat, {vieux: {}}), [], "le remplaçant n'est pas installé : on ne propose pas de retirer le seul modèle")
+        self.assertEqual(updates.obsolete(cat, {vieux: {}, neuf: {}}, ignores=[p[0]["cle"]]), [], "« le garder » est respecté")
 
     def test_modele_qui_ne_tient_plus_est_signale(self):
         petite = Profil(ram_go=16, ram_libre_go=8, gpus=[Gpu("x", "nvidia", 8)])
-        p = updates.nouveautes(petite, CAT, {"polyvalent": "llama3.3:70b"}, {"llama3.3:70b": {}})
+        p = updates.news(petite, CAT, {"polyvalent": "llama3.3:70b"}, {"llama3.3:70b": {}})
         self.assertTrue(p and "ne tient plus" in p[0]["raison"])
 
     def test_telechargement_du_catalogue(self):
@@ -347,7 +347,7 @@ class MisesAJour(unittest.TestCase):
 
     def test_catalogue_invalide_ou_reseau_absent_jamais_applique(self):
         with tempfile.TemporaryDirectory() as t:
-            for rep in ((200, {}, b"{pas du json"), (200, {}, b'{"version":1,"modeles":[{}]}'), (500, {}, b""), (200, {}, b"x" * (updates.TAILLE_MAX + 1)), OSError("hors ligne")):
+            for rep in ((200, {}, b"{pas du json"), (200, {}, b'{"version":1,"modeles":[{}]}'), (500, {}, b""), (200, {}, b"x" * (updates.MAX_SIZE + 1)), OSError("hors ligne")):
                 self.assertEqual(updates.telecharger_catalogue("https://ex.org/c.json", t, faux_http({"https://ex.org/c.json": rep})), "echec")
             self.assertFalse((Path(t) / "catalogue.json").exists())
 
@@ -358,19 +358,19 @@ class MisesAJour(unittest.TestCase):
             cfg = {"modeles": {"choisis": {"code": "qwen2.5-coder:7b"}, "ignores": []}, "catalogue_url": ""}
             INSTALLES.clear(); INSTALLES.update({"qwen2.5-coder:7b": "d1"})
             hors_ligne = faux_http({"https://": OSError("hors ligne")})
-            r = updates.verifier(machine, cfg, d, OLLAMA, hors_ligne, maintenant=lambda: 1000.0)
+            r = updates.check(machine, cfg, d, OLLAMA, hors_ligne, maintenant=lambda: 1000.0)
             self.assertEqual([p["type"] for p in r["propositions"]], ["nouveau"], "le catalogue livré suffit même sans réseau")
             appels = len(hors_ligne.appels)
-            updates.verifier(machine, cfg, d, OLLAMA, hors_ligne, maintenant=lambda: 2000.0)
+            updates.check(machine, cfg, d, OLLAMA, hors_ligne, maintenant=lambda: 2000.0)
             self.assertEqual(len(hors_ligne.appels), appels, "pas de nouvelle vérification avant 24 h")
-            updates.verifier(machine, cfg, d, OLLAMA, hors_ligne, maintenant=lambda: 1000.0 + updates.INTERVALLE_S + 1)
+            updates.check(machine, cfg, d, OLLAMA, hors_ligne, maintenant=lambda: 1000.0 + updates.INTERVAL_S + 1)
             self.assertGreater(len(hors_ligne.appels), appels)
             self.assertEqual(len(updates.lire_propositions(d)["propositions"]), 1)
             INSTALLES.clear(); INSTALLES.update({"qwen3:8b": "aaa111"})
 
     def test_ollama_arrete_ne_leve_pas_d_exception(self):
         with tempfile.TemporaryDirectory() as t:
-            r = updates.verifier(Profil(ram_go=8), {"modeles": {}}, {"cache": Path(t)}, Ollama("http://127.0.0.1:9"), faux_http({}), force=True)
+            r = updates.check(Profil(ram_go=8), {"modeles": {}}, {"cache": Path(t)}, Ollama("http://127.0.0.1:9"), faux_http({}), force=True)
             self.assertEqual(r["propositions"], [])
             self.assertTrue(r["erreurs"])
 
@@ -410,46 +410,46 @@ class Portee(unittest.TestCase):
         self.machine = Profil(ram_go=32, ram_libre_go=20, gpus=[Gpu("x", "nvidia", 24)])
         self.cfg = {"modeles": {"choisis": {"code": "qwen2.5-coder:7b"}, "ignores": []}, "catalogue_url": ""}
         INSTALLES.clear(); INSTALLES.update({"qwen2.5-coder:7b": "ancien"})
-        self.http = faux_http({updates.REGISTRE: (200, {"docker-content-digest": "sha256:nouveau"}, b"")})
+        self.http = faux_http({updates.REGISTRY: (200, {"docker-content-digest": "sha256:nouveau"}, b"")})
 
     def tearDown(self):
         INSTALLES.clear(); INSTALLES.update({"qwen3:8b": "aaa111"})
         self.t.cleanup()
 
     def test_chaque_portee_garde_l_autre_moitie(self):
-        tout = updates.verifier(self.machine, self.cfg, self.d, OLLAMA, self.http, force=True)
+        tout = updates.check(self.machine, self.cfg, self.d, OLLAMA, self.http, force=True)
         self.assertEqual(sorted(p["type"] for p in tout["propositions"]), ["maj", "nouveau"])
         INSTALLES["qwen2.5-coder:7b"] = "nouveau"                         # le modèle vient d'être mis à jour
-        seulement_maj = updates.verifier(self.machine, self.cfg, self.d, OLLAMA, self.http, force=True, portee="maj")
+        seulement_maj = updates.check(self.machine, self.cfg, self.d, OLLAMA, self.http, force=True, portee="maj")
         self.assertEqual([p["type"] for p in seulement_maj["propositions"]], ["nouveau"], "plus de mise à jour, mais la proposition de nouveau modèle est conservée")
         self.assertEqual(seulement_maj["portee"], "maj")
-        seulement_nouveaux = updates.verifier(self.machine, self.cfg, self.d, OLLAMA, self.http, force=True, portee="nouveaux")
+        seulement_nouveaux = updates.check(self.machine, self.cfg, self.d, OLLAMA, self.http, force=True, portee="nouveaux")
         self.assertEqual([p["type"] for p in seulement_nouveaux["propositions"]], ["nouveau"])
 
     def test_portee_maj_ne_touche_pas_au_catalogue_en_ligne(self):
         self.cfg["catalogue_url"] = "https://ex.org/c.json"
-        updates.verifier(self.machine, self.cfg, self.d, OLLAMA, self.http, force=True, portee="maj")
+        updates.check(self.machine, self.cfg, self.d, OLLAMA, self.http, force=True, portee="maj")
         self.assertFalse([u for u, _ in self.http.appels if "ex.org" in u])
-        r = updates.verifier(self.machine, self.cfg, self.d, OLLAMA, self.http, force=True, portee="nouveaux")
+        r = updates.check(self.machine, self.cfg, self.d, OLLAMA, self.http, force=True, portee="nouveaux")
         self.assertTrue([u for u, _ in self.http.appels if "ex.org" in u])
         self.assertEqual(r["catalogue"], "echec", "adresse injoignable ici : signalé, copie locale utilisée")
 
     def test_catalogue_absent_est_signale(self):
-        self.assertEqual(updates.verifier(self.machine, self.cfg, self.d, OLLAMA, self.http, force=True, portee="nouveaux")["catalogue"], "absent")
+        self.assertEqual(updates.check(self.machine, self.cfg, self.d, OLLAMA, self.http, force=True, portee="nouveaux")["catalogue"], "absent")
 
     def test_une_verification_manuelle_ne_decale_pas_la_verification_quotidienne(self):
-        updates.verifier(self.machine, self.cfg, self.d, OLLAMA, self.http, force=True, portee="maj")
+        updates.check(self.machine, self.cfg, self.d, OLLAMA, self.http, force=True, portee="maj")
         self.assertFalse((self.d["cache"] / "derniere-verification.json").exists())
-        updates.verifier(self.machine, self.cfg, self.d, OLLAMA, self.http, force=True)
+        updates.check(self.machine, self.cfg, self.d, OLLAMA, self.http, force=True)
         self.assertTrue((self.d["cache"] / "derniere-verification.json").exists())
 
     def test_portee_inconnue(self):
         with self.assertRaises(ValueError):
-            updates.verifier(self.machine, self.cfg, self.d, OLLAMA, self.http, force=True, portee="n'importe quoi")
+            updates.check(self.machine, self.cfg, self.d, OLLAMA, self.http, force=True, portee="n'importe quoi")
 
     def test_une_panne_garde_les_anciennes_propositions(self):
-        updates.verifier(self.machine, self.cfg, self.d, OLLAMA, self.http, force=True)
-        r = updates.verifier(self.machine, self.cfg, self.d, Ollama("http://127.0.0.1:9"), self.http, force=True)
+        updates.check(self.machine, self.cfg, self.d, OLLAMA, self.http, force=True)
+        r = updates.check(self.machine, self.cfg, self.d, Ollama("http://127.0.0.1:9"), self.http, force=True)
         self.assertTrue(r["erreurs"])
         self.assertEqual(len(r["propositions"]), 2, "le réseau ou Ollama tombe : on n'efface pas ce qu'on savait")
 

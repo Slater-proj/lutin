@@ -52,7 +52,7 @@ class BancDeLaPage(unittest.TestCase):
         A._mesurer_un("m1", True)
         self.assertEqual(A.BENCH["erreur"], "")
         self.assertTrue(self.moteur.demandes, "le moteur choisi a reçu la demande de mesure")
-        mesure = bench.lire(A.chemin_bench())["m1"]
+        mesure = bench.read(A.chemin_bench())["m1"]
         self.assertEqual(mesure["resultats"]["vitesse"]["tok_s"], 50.0)
 
     def test_la_serie_demande_les_modeles_du_moteur_choisi(self):

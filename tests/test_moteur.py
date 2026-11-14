@@ -380,7 +380,7 @@ class Assistant(unittest.TestCase):
         res = next(e for e in ev if e["type"] == "resultat")
         self.assertEqual([j["nom"] for j in res.get("fichiers_joints", [])], ["docker-compose.yml"], "une carte pour le fichier créé")
         cid = [e for e in ev if e["type"] == "debut"][0]["conversation"]
-        trace = [x for x in __import__("lutin.produced_files", fromlist=["x"]).lister()["liste"] if x["conversation"] == cid]
+        trace = [x for x in __import__("lutin.produced_files", fromlist=["x"]).entries()["liste"] if x["conversation"] == cid]
         self.assertEqual([x["nom"] for x in trace], ["docker-compose.yml"], "inscrit dans Réglages > Fichiers créés")
         outil = next(m["content"] for m in A.conv_lire(cid)["messages"] if m.get("role") == "tool")
         self.assertIn(str(cible.resolve()), outil, "le modèle reçoit le chemin complet")
@@ -401,11 +401,11 @@ class Assistant(unittest.TestCase):
     def test_connecteur_mcp_de_bout_en_bout(self):
         """Un connecteur autorisé outil par outil est utilisable par le modèle ; son retour n'est jamais recopié dans la conversation."""
         from lutin import mcp
-        mcp.ecrire({"serveurs": {}})
-        self.addCleanup(lambda: (mcp.fermer(), mcp.ecrire({"serveurs": {}})))
-        ident = mcp.ajouter("Demo", [sys.executable, "-m", "lutin.mcp_demo"], env={"PYTHONPATH": str(Path(__file__).resolve().parent.parent / "src")})
+        mcp.write({"serveurs": {}})
+        self.addCleanup(lambda: (mcp.close(), mcp.write({"serveurs": {}})))
+        ident = mcp.add("Demo", [sys.executable, "-m", "lutin.mcp_demo"], env={"PYTHONPATH": str(Path(__file__).resolve().parent.parent / "src")})
         mcp.actualiser(ident)
-        mcp.regler(ident, outil="heure", autorise=True)
+        mcp.set_value(ident, outil="heure", autorise=True)
         ev = chat("Quelle heure est-il ?", reponses=[[appel_outil("mcp__demo__heure")], [{"content": "Voilà l'heure."}]])
         affiche = next(e for e in ev if e["type"] == "resultat")["texte"]
         self.assertIn("non affiché", affiche)
@@ -457,7 +457,7 @@ class Assistant(unittest.TestCase):
                     def __iter__(self_):
                         return iter(evenements)
                 return Flux()
-        engines.enregistrer(Faux())
+        engines.save(Faux())
         avant = lire("/api/etat")["reglages"]["moteur"]
         modele_avant = lire("/api/etat")["reglages"]["modele"]
         try:
@@ -472,7 +472,7 @@ class Assistant(unittest.TestCase):
             self.assertEqual(lire("/api/etat")["reglages"]["modele"], modele_avant, "retour à Ollama : on retrouve le modèle qu'on y utilisait")
         finally:
             post("/api/reglages", {"moteur": avant})
-            engines.MOTEURS.pop("faux", None)
+            engines.ENGINES.pop("faux", None)
 
     def test_ollama_sous_docker_ne_s_installe_pas_et_dit_pourquoi_et_le_cycle_reinstaller_est_ordonne(self):
         """Sous Docker rien n'est possible (Ollama est un autre conteneur) ; ailleurs, réinstaller = arrêter, désinstaller, installer, démarrer, en gardant les modèles."""
@@ -484,7 +484,7 @@ class Assistant(unittest.TestCase):
         self.assertTrue(all(not x["possible"] and "docker compose" in x["raison"] for x in a.values()))          # un autre conteneur : Lutin n'y touche pas
         appels = []
         possibles = {k: {"possible": True, "raison": "ok"} for k in engines.ACTIONS}
-        with mock.patch.object(mo, "actions", lambda: possibles), mock.patch.object(A, "arreter_ollama", lambda: appels.append("arreter")), mock.patch.object(A, "demarrer_ollama", lambda: appels.append("demarrer")),                 mock.patch.object(ollama_client, "desinstaller_windows", lambda: appels.append("desinstaller")), mock.patch.object(ollama_client, "installer_windows", lambda cache, progression, **k: appels.append("installer")):
+        with mock.patch.object(mo, "actions", lambda: possibles), mock.patch.object(A, "arreter_ollama", lambda: appels.append("arreter")), mock.patch.object(A, "demarrer_ollama", lambda: appels.append("demarrer")),                 mock.patch.object(ollama_client, "uninstall_windows", lambda: appels.append("desinstaller")), mock.patch.object(ollama_client, "install_windows", lambda cache, progression, **k: appels.append("installer")):
             mo.faire("reinstaller", lambda *x: None)
             self.assertEqual(appels, ["arreter", "desinstaller", "installer", "demarrer"])
             appels.clear()
@@ -1346,8 +1346,8 @@ class Assistant(unittest.TestCase):
         self.assertEqual(len(A.conv_lire(ident)["taches"]), 3, "la liste est enregistrée avec la conversation")
         chat("Suite", conversation=ident, reponses=[[{"content": "ok"}]])
         self.assertIn("[x] Lire", RECUES[-1]["messages"][0]["content"], "la liste survit d'un message à l'autre")
-        self.assertEqual(A.normaliser_taches('[{"texte": "a", "etat": "terminé"}, {"texte": "b", "etat": "bizarre"}]'), [{"texte": "a", "etat": "fait"}, {"texte": "b", "etat": "a_faire"}])
-        self.assertEqual(len(A.normaliser_taches(["t%d" % i for i in range(30)])), 12)
+        self.assertEqual(A.normalize_tasks('[{"texte": "a", "etat": "terminé"}, {"texte": "b", "etat": "bizarre"}]'), [{"texte": "a", "etat": "fait"}, {"texte": "b", "etat": "a_faire"}])
+        self.assertEqual(len(A.normalize_tasks(["t%d" % i for i in range(30)])), 12)
         ev = chat("Mal", reponses=[[appel_outil("taches", liste=42)], [{"content": "."}]])
         self.assertIn("Erreur", next(e for e in ev if e["type"] == "resultat")["texte"])
 
@@ -1422,28 +1422,28 @@ class Assistant(unittest.TestCase):
         self.assertNotIn("alert", res, "les scripts ne sont pas lus")
         self.assertNotIn("color:red", res, "les styles non plus")
         # page longue : on lit par morceaux et le résultat dit comment obtenir la suite
-        res = A.outil_web_lire(URL_WEB + "/long", 0, {"web": True})
+        res = A.tool_web_read(URL_WEB + "/long", 0, {"web": True})
         self.assertIn("suite : web_lire avec debut=%d" % A.WEB_PAGE, res)
-        suite = A.outil_web_lire(URL_WEB + "/long", A.WEB_PAGE, {"web": True})
+        suite = A.tool_web_read(URL_WEB + "/long", A.WEB_PAGE, {"web": True})
         self.assertIn("ligne 0600", suite, "la deuxième page commence où la première s'arrête")
         self.assertNotIn("ligne 0000", suite)
         ctx = {"web": True}
-        A.outil_web_lire(URL_WEB + "/page", 0, ctx)
+        A.tool_web_read(URL_WEB + "/page", 0, ctx)
         self.assertTrue(ctx["web_lu"])
         for mauvais, message in ((URL_WEB + "/image", "pas lisible"), (URL_WEB + "/absent", "HTTP 404"), ("ftp://exemple.org/x", "invalide"), ("pas une adresse", "invalide")):
             with self.assertRaises(A.ErreurOutil, msg=mauvais) as cm:
-                A.outil_web_lire(mauvais, 0, {"web": True})
+                A.tool_web_read(mauvais, 0, {"web": True})
             self.assertIn(message, str(cm.exception))
-        vide = A.outil_web_lire(URL_WEB + "/vide", 0, {"web": True})
+        vide = A.tool_web_read(URL_WEB + "/vide", 0, {"web": True})
         self.assertIn("JavaScript", vide)
         self.assertIn("copier-coller", vide, "on dit à l'utilisateur quoi faire plutôt que de s'arrêter là")
-        js = A.outil_web_lire(URL_WEB + "/js", 0, {"web": True})
+        js = A.tool_web_read(URL_WEB + "/js", 0, {"web": True})
         for attendu in ("CONTENU WEB NON FIABLE", "Un fil de discussion", "Résumé annoncé par le serveur", "DiscussionForumPosting", "JavaScript", "trombone"):
             self.assertIn(attendu, js)
         self.assertNotIn("charger()", js, "le script n'est pas lu")
         self.assertNotIn("Reddit", js, "le conseil propre à Reddit n'apparaît que sur Reddit")
         with self.assertRaises(A.ErreurOutil) as cm:
-            A.outil_web_lire(URL_WEB + "/page", 0, {"web": False})
+            A.tool_web_read(URL_WEB + "/page", 0, {"web": False})
         self.assertIn("désactivé", str(cm.exception))
 
     def test_web_adresses_locales_refusees(self):
@@ -1452,7 +1452,7 @@ class Assistant(unittest.TestCase):
         try:
             for adresse in ("http://127.0.0.1:11434/api/tags", "http://localhost:8765/", "http://192.168.0.10/", "http://10.0.0.1/", "http://169.254.169.254/", "http://[::1]/"):
                 with self.assertRaises(A.ErreurOutil, msg=adresse) as cm:
-                    A.outil_web_lire(adresse, 0, {"web": True})
+                    A.tool_web_read(adresse, 0, {"web": True})
                 self.assertIn("locale refusée", str(cm.exception))
         finally:
             os.environ["LUTIN_WEB_LOCAL"] = ancien
@@ -1473,9 +1473,9 @@ class Assistant(unittest.TestCase):
         self.assertIn("Second extrait.", res)
         self.assertNotIn("Publicité", res, "les publicités sont écartées")
         self.assertIn("q=version+r%C3%A9cente+de+ComfyUI", WEB_RECU[0][1])
-        self.assertIn("ne répond pas pour le moment", A.outil_web_chercher("introuvable", 6, {"web": True}))
+        self.assertIn("ne répond pas pour le moment", A.tool_web_search("introuvable", 6, {"web": True}))
         with self.assertRaises(A.ErreurOutil):
-            A.outil_web_chercher("   ", 6, {"web": True})
+            A.tool_web_search("   ", 6, {"web": True})
 
     def test_actualites_guidees_pour_un_petit_modele(self):
         """« Les news du jour » : Lutin cherche et lit lui-même, le modèle ne fait que résumer (une seule réponse, sans outil), et le résultat brut n'est pas recopié dans la conversation."""
@@ -1500,31 +1500,31 @@ class Assistant(unittest.TestCase):
         _web.extrait_page = lambda url: pages.get(url, "")
         _web.LIRE_AUTO = 3
         try:
-            res = A.outil_web_chercher("plan écoles", 5, {"web": True})
+            res = A.tool_web_search("plan écoles", 5, {"web": True})
             self.assertIn("Début de la page : Le gouvernement a annoncé hier", res)
             self.assertIn("synthèse", res, "la consigne demande une synthèse sourcée, pas une liste de liens")
             self.assertEqual(res.count("Début de la page"), 1, "une page illisible ne casse rien et n'ajoute rien")
-            res0 = A.outil_web_chercher("plan écoles", 5, {"web": True}, 0)
+            res0 = A.tool_web_search("plan écoles", 5, {"web": True}, 0)
             self.assertNotIn("Début de la page", res0, "lire=0 : l'ancien comportement")
             _web.extrait_page = lambda url: (_ for _ in ()).throw(RuntimeError("panne"))
-            self.assertIn("1. Doc officielle", A.outil_web_chercher("plan écoles", 5, {"web": True}), "même si toutes les lectures échouent, les résultats sont rendus")
+            self.assertIn("1. Doc officielle", A.tool_web_search("plan écoles", 5, {"web": True}), "même si toutes les lectures échouent, les résultats sont rendus")
         finally:
             _web.extrait_page, _web.LIRE_AUTO = vrai, vrai_auto
 
     def test_extrait_de_page_ignore_les_menus_et_borne_la_longueur(self):
-        vrai = _web.web_telecharger
+        vrai = _web.web_download
         page = "<html><body><nav>Accueil</nav><p>Menu</p><p>" + "Un vrai paragraphe d'information sur l'actualité du jour. " * 40 + "</p></body></html>"
-        _web.web_telecharger = lambda url, donnees=None, **_: (url, "text/html", page)
+        _web.web_download = lambda url, donnees=None, **_: (url, "text/html", page)
         try:
             e = _web.extrait_page("https://exemple.org/x")
             self.assertTrue(e.startswith("Un vrai paragraphe"), e[:40])
-            self.assertLessEqual(len(e), _web.EXTRAIT_CARACTERES)
-            _web.web_telecharger = lambda url, donnees=None, **_: (url, "image/png", "x")
+            self.assertLessEqual(len(e), _web.EXCERPT_CHARACTERS)
+            _web.web_download = lambda url, donnees=None, **_: (url, "image/png", "x")
             self.assertEqual(_web.extrait_page("https://exemple.org/y"), "")
             self.assertEqual(_web.extraits_en_parallele([], lambda u: "x"), {})
             self.assertEqual(_web.extraits_en_parallele(["a", "b"], lambda u: "texte " + u), {0: "texte a", 1: "texte b"})
         finally:
-            _web.web_telecharger = vrai
+            _web.web_download = vrai
 
     def test_web_suspend_l_accord_automatique(self):
         """Garde-fou : après une lecture web, plus d'accord automatique pendant la suite de la demande (consigne piégée possible)."""
@@ -1709,23 +1709,23 @@ class Assistant(unittest.TestCase):
             ident = next(e for e in ev if e["type"] == "fin")["conversation"]["id"]
             self.assertTrue(any(e["type"] == "info" and "Mission lancée" in e["texte"] for e in ev))
             self.assertFalse(any(e["type"] in ("texte", "outil") for e in ev), "aucune réponse du modèle : la mission travaille ensuite, dans la conversation")
-            m = mission.trouver_pour_conversation(ident)
+            m = mission.find_for_conversation(ident)
             self.assertEqual((m["conv"], m["lie"], m["duree_h"], m["cahier"]), (ident, True, 2, "Crée un petit jeu"))
             self.assertTrue(m["autonome"], "Fichiers auto et Commandes auto cochés : autonome")
             self.assertEqual(lire("/api/conversation?id=" + ident)["options"]["mode"], "mission")
             self.assertEqual(lire("/api/etat")["missions"][ident]["etat"], "en_cours", "l'état de la mission est donné à la page")
             ev = chat("Ajoute un score", conversation=ident, travail="principal", options={"mode": "mission"})
             self.assertTrue(any(e["type"] == "info" and "Noté" in e["texte"] for e in ev), "le message suivant est une consigne pour la mission")
-            self.assertEqual(mission.trouver_pour_conversation(ident)["note"], "Ajoute un score")
-            self.assertEqual(len(mission.lire()), 1, "pas de seconde mission")
+            self.assertEqual(mission.find_for_conversation(ident)["note"], "Ajoute un score")
+            self.assertEqual(len(mission.read()), 1, "pas de seconde mission")
             ev = chat("Bonjour", conversation=ident, reponses=[[{"content": "Salut."}]], options={"mode": "polyvalent"})
             self.assertEqual(texte_de(ev), "Salut.", "dans un autre mode, la conversation répond normalement")
             post("/api/supprimer", {"id": ident})
-            self.assertIsNone(mission.trouver_pour_conversation(ident), "supprimer la conversation arrête sa mission")
-            self.assertEqual(mission.lire(), [])
+            self.assertIsNone(mission.find_for_conversation(ident), "supprimer la conversation arrête sa mission")
+            self.assertEqual(mission.read(), [])
         finally:
             A.config_lue = vrai_config
-            for m in mission.lire():
+            for m in mission.read():
                 mission.action("supprimer", {"id": m["id"]})
             if ident:
                 A.conv_supprimer(ident)
@@ -2451,10 +2451,10 @@ class Assistant(unittest.TestCase):
         post("/api/mission-action", {"action": "creer", "nom": "", "cahier": "x", "travail": "principal"}, attendu=400)
         post("/api/mission-action", {"action": "danse"}, attendu=400)
         self.assertEqual(lire("/api/fichiers-crees")["liste"], [])
-        vrai = background_jobs.dossier_autorise
+        vrai = background_jobs.allowed_folder
         dossier = TEMP / "fond-vide"
         dossier.mkdir(exist_ok=True)
-        background_jobs.dossier_autorise = lambda chemin: Path(chemin)
+        background_jobs.allowed_folder = lambda chemin: Path(chemin)
         try:
             post("/api/fond-creer", {"nom": "", "dossier": str(dossier), "consigne": "x"}, attendu=400)
             t = post("/api/fond-creer", {"nom": "Essai", "dossier": str(dossier), "motifs": "*.pdf", "consigne": "Résume."})
@@ -2466,10 +2466,10 @@ class Assistant(unittest.TestCase):
             post("/api/fond-action", {"id": t["id"], "action": "supprimer"})
             self.assertEqual(lire("/api/fond")["liste"], [])
         finally:
-            background_jobs.dossier_autorise = vrai
+            background_jobs.allowed_folder = vrai
         post("/api/fond-creer", {"nom": "x", "dossier": str(TEMP), "consigne": "x"}, attendu=400)          # pas un dossier de travail
         post("/api/addon-flux", {"id": "comfyui", "flux": {"appels": {"x": {"url": "https://evil.example.com/"}}}}, attendu=400)
-        addons.restaurer_flux("comfyui")
+        addons.restore_stream("comfyui")
 
     def test_le_fil_de_la_conversation_est_retrouve_tout_seul_et_le_scribe_tient_la_fiche(self):
         """Mode fiche : les passages anciens qui touchent à la demande sont remis au modèle sans qu'il les demande, et un appel séparé (le scribe) met la fiche à jour."""

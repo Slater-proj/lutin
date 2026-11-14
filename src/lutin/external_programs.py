@@ -178,7 +178,7 @@ def install(nom, dossiers=None, dire=print, http=updates.http_get, telecharger=N
     from . import offline, ollama_client
     if offline.is_active():
         raise ValueError(_t("Mode hors ligne : aucun téléchargement."))
-    telecharger = telecharger or ollama_client.telecharger_fichier
+    telecharger = telecharger or ollama_client.download_file
     archive = uv_archive(systeme, architecture) if nom == "uv" else node_archive(systeme, architecture)
     url = ("https://github.com/{}/releases/download/{}/{}".format(UV_REPO, UV_VERSION, archive) if nom == "uv" else "https://nodejs.org/dist/v{}/{}".format(NODE_VERSION, archive))
     dire(_t("Recherche de la somme de contrôle de {}…").format(TOOLS[nom]["libelle"]))

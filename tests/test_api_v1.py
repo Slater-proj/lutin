@@ -58,7 +58,7 @@ def setUpModule():
     threading.Thread(target=SERVER.serve_forever, daemon=True).start()
     unittest.addModuleCleanup(SERVER.shutdown)
     PORT = SERVER.server_address[1]
-    session = {"Cookie": "{}={}".format(S.NOM_COOKIE, A.APPAREILS.appairer(A.APPAREILS.nouveau_pin(), "browser")), "X-Token": A.JETON}
+    session = {"Cookie": "{}={}".format(S.NAME_COOKIE, A.APPAREILS.appairer(A.APPAREILS.nouveau_pin(), "browser")), "X-Token": A.JETON}
     OWNER = dict(session)                              # the browser of this machine: may configure
     DEVICE = dict(session, **ELSEWHERE)                # a paired phone: a session, no right to configure
 

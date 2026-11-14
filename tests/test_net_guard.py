@@ -124,7 +124,7 @@ class Pinning(unittest.TestCase):
     def test_web_download_refuses_a_name_that_points_inside(self):
         patch, calls = fake_dns({"rebind.test": ["127.0.0.1"]})
         with patch, self.assertRaises(A.ErreurOutil) as caught:
-            web.web_telecharger("http://rebind.test:%d/secret" % PORT)
+            web.web_download("http://rebind.test:%d/secret" % PORT)
         self.assertIn("rebind.test", str(caught.exception))
         self.assertEqual(RECEIVED, [])
         self.assertEqual(len(calls), 1)
@@ -132,7 +132,7 @@ class Pinning(unittest.TestCase):
     def test_the_host_the_user_configured_is_reached_and_resolved_once(self):
         patch, calls = fake_dns({"searx.test": ["127.0.0.1"]})
         with patch:
-            final, kind, text = web.web_telecharger("http://searx.test:%d/page" % PORT, hote_autorise="searx.test")
+            final, kind, text = web.web_download("http://searx.test:%d/page" % PORT, hote_autorise="searx.test")
         self.assertEqual((kind, text), ("text/plain", "INTERNAL-SECRET"))
         self.assertEqual(calls, ["searx.test"])
 
@@ -145,7 +145,7 @@ class Redirections(unittest.TestCase):
         """The audit's reproduction: the first host is legitimate (here the allowed one), it redirects to an internal address."""
         patch, _ = fake_dns({"searx.test": ["127.0.0.1"]})
         with patch, self.assertRaises(A.ErreurOutil) as caught:
-            web.web_telecharger("http://searx.test:%d/to-internal" % PORT, hote_autorise="searx.test")
+            web.web_download("http://searx.test:%d/to-internal" % PORT, hote_autorise="searx.test")
         self.assertIn("127.0.0.1", str(caught.exception))
         self.assertEqual([path for _, path, _ in RECEIVED], ["/to-internal"], "the internal target received nothing")
 
@@ -184,7 +184,7 @@ class Redirections(unittest.TestCase):
     def test_other_schemes_are_refused_by_the_web_check(self):
         for url in ("file:///etc/passwd", "ftp://example.org/x", "gopher://example.org/", "http:///nohost"):
             with self.assertRaises(A.ErreurOutil, msg=url):
-                web.web_telecharger(url)
+                web.web_download(url)
 
 
 if __name__ == "__main__":

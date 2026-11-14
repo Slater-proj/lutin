@@ -68,7 +68,7 @@ class Base(unittest.TestCase):
 
 class Installation(Base):
     def installer(self, reseau, **kw):
-        return C.installer(None, self.dossiers, http=reseau.http, ouvrir=reseau.ouvrir, systeme="win32", architecture="AMD64", dire=lambda t: None, **kw)
+        return C.install(None, self.dossiers, http=reseau.http, ouvrir=reseau.ouvrir, systeme="win32", architecture="AMD64", dire=lambda t: None, **kw)
 
     def test_installation_verifiee(self):
         reseau = Reseau(zip_colibri())
@@ -76,18 +76,18 @@ class Installation(Base):
         self.assertEqual(version, "2.1.0")
         self.assertTrue((racine / "coli").is_file())
         self.assertIn("https://github.com/JustVugg/colibri/releases/download/v2.1.0/colibri-v2.1.0-windows-x86_64.zip", reseau.demandes)
-        self.assertEqual(C.installee(self.dossiers)[0], "2.1.0")
+        self.assertEqual(C.installed(self.dossiers)[0], "2.1.0")
         self.assertEqual(list((self.dossiers["donnees"] / "engines" / "colibri").glob("*.partiel")), [], "pas de dossier provisoire oublié")
 
     def test_somme_fausse_n_installe_rien(self):
         with self.assertRaises(ValueError):
             self.installer(Reseau(zip_colibri(), somme="0" * 64))
-        self.assertIsNone(C.installee(self.dossiers))
+        self.assertIsNone(C.installed(self.dossiers))
 
     def test_pas_de_sommes_publiees_refuse_pour_un_programme_tiers(self):
         with self.assertRaises(ValueError):
             self.installer(Reseau(zip_colibri(), avec_sommes=False))
-        self.assertIsNone(C.installee(self.dossiers))
+        self.assertIsNone(C.installed(self.dossiers))
 
     def test_archive_qui_sort_du_dossier_refusee(self):
         archive = zip_colibri({"../evade.txt": "x"})
@@ -96,7 +96,7 @@ class Installation(Base):
         self.assertIn("sortirait", str(e.exception))
         self.assertFalse((self.dossiers["donnees"] / "engines" / "evade.txt").exists())
         self.assertFalse((self.tmp / "evade.txt").exists())
-        self.assertIsNone(C.installee(self.dossiers))
+        self.assertIsNone(C.installed(self.dossiers))
 
     def test_archive_sans_script_coli_refusee(self):
         tampon = io.BytesIO()
@@ -104,7 +104,7 @@ class Installation(Base):
             z.writestr("autre.txt", "x")
         with self.assertRaises(ValueError):
             self.installer(Reseau(tampon.getvalue()))
-        self.assertIsNone(C.installee(self.dossiers))
+        self.assertIsNone(C.installed(self.dossiers))
 
     def test_deuxieme_installation_ne_retelecharge_pas(self):
         reseau = Reseau(zip_colibri())
@@ -115,7 +115,7 @@ class Installation(Base):
 
     def test_version_et_systeme_valides(self):
         with self.assertRaises(ValueError):
-            C.installer("2.1.0; rm", self.dossiers, systeme="win32", architecture="AMD64", dire=lambda t: None)
+            C.install("2.1.0; rm", self.dossiers, systeme="win32", architecture="AMD64", dire=lambda t: None)
         with self.assertRaises(ValueError):
             C.nom_archive("2.1.0", "freebsd", "x86_64")
         self.assertEqual(C.nom_archive("2.1.0", "linux", "x86_64"), "colibri-v2.1.0-linux-x86_64.tar.gz")
@@ -140,22 +140,22 @@ class Installation(Base):
 class Demarrage(Base):
     def preparer(self):
         reseau = Reseau(zip_colibri())
-        C.installer("2.1.0", self.dossiers, http=reseau.http, ouvrir=reseau.ouvrir, systeme="win32", architecture="AMD64", dire=lambda t: None)
+        C.install("2.1.0", self.dossiers, http=reseau.http, ouvrir=reseau.ouvrir, systeme="win32", architecture="AMD64", dire=lambda t: None)
         modele = self.tmp / "modele"
         modele.mkdir()
         return modele
 
     def test_la_commande_est_locale_et_porte_le_modele(self):
-        cmd = C.commande_serveur("/x", "/m", 8123, python="py")
+        cmd = C.command_server("/x", "/m", 8123, python="py")
         self.assertEqual(cmd, ["py", str(Path("/x") / "coli"), "serve", "--host", "127.0.0.1", "--port", "8123", "--model", "/m"])
         self.assertNotIn("0.0.0.0", cmd)
 
     def test_demarrer_sans_installation_ou_sans_modele(self):
         with self.assertRaises(ValueError):
-            C.demarrer(str(self.tmp), dossiers=self.dossiers)
+            C.start(str(self.tmp), dossiers=self.dossiers)
         modele = self.preparer()
         with self.assertRaises(ValueError):
-            C.demarrer(str(self.tmp / "absent"), dossiers=self.dossiers)
+            C.start(str(self.tmp / "absent"), dossiers=self.dossiers)
         self.assertTrue(modele.is_dir())
 
     def test_demarrage_reussi_attend_la_reponse(self):
@@ -164,7 +164,7 @@ class Demarrage(Base):
         proc = mock.Mock()
         proc.poll.return_value = None
         reponses = iter([False, False, True])
-        port = C.demarrer(str(modele), 8001, self.dossiers, lancer=lambda cmd, **kw: (lances.append((cmd, kw)), proc)[1], repond_=lambda p: next(reponses), dormir=lambda s: None)
+        port = C.start(str(modele), 8001, self.dossiers, lancer=lambda cmd, **kw: (lances.append((cmd, kw)), proc)[1], repond_=lambda p: next(reponses), dormir=lambda s: None)
         self.assertEqual(port, 8001)
         cmd, kw = lances[0]
         self.assertIn("--port", cmd)
@@ -180,13 +180,13 @@ class Demarrage(Base):
             proc.poll.return_value = 1
             return proc
         with self.assertRaises(ValueError) as e:
-            C.demarrer(str(modele), 8001, self.dossiers, lancer=lancer, repond_=lambda p: False, dormir=lambda s: None)
+            C.start(str(modele), 8001, self.dossiers, lancer=lancer, repond_=lambda p: False, dormir=lambda s: None)
         self.assertIn("modele illisible", str(e.exception))
 
     def test_arreter_appelle_coli_stop(self):
         self.preparer()
         appels = []
-        ok = C.arreter(8000, self.dossiers, lancer=lambda cmd, **kw: (appels.append(cmd), mock.Mock(returncode=0))[1])
+        ok = C.stop(8000, self.dossiers, lancer=lambda cmd, **kw: (appels.append(cmd), mock.Mock(returncode=0))[1])
         self.assertTrue(ok)
         self.assertEqual(appels[0][2:], ["stop", "--port", "8000"])
 
@@ -206,7 +206,7 @@ class Modeles(unittest.TestCase):
         self.dossiers = {"donnees": self.tmp}
         racine = self.tmp / "racine"
         racine.mkdir()
-        self.p = mock.patch.object(C, "installee", lambda dossiers=None: ("2.1.0", racine))
+        self.p = mock.patch.object(C, "installed", lambda dossiers=None: ("2.1.0", racine))
         self.p.start()
         self.addCleanup(self.p.stop)
 

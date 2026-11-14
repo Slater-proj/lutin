@@ -172,36 +172,36 @@ class Laboratoire(unittest.TestCase):
 
     def setUp(self):
         self.chemin = _TEMP / "donnees" / "bench-lab.json"
-        bench.chemin_historique(self.chemin).unlink(missing_ok=True)
+        bench.path_history(self.chemin).unlink(missing_ok=True)
 
     def test_chaque_mesure_est_gardee_et_la_derniere_remplace_la_precedente_dans_bench_json(self):
-        bench.enregistrer(self.chemin, self.mesure(40))
-        bench.enregistrer(self.chemin, self.mesure(41))
-        self.assertEqual(len(bench.lire_historique(self.chemin)["qwen3:8b"]), 2)
-        self.assertEqual(bench.lire(self.chemin)["qwen3:8b"]["resultats"]["vitesse"]["tok_s"], 41)
+        bench.save(self.chemin, self.mesure(40))
+        bench.save(self.chemin, self.mesure(41))
+        self.assertEqual(len(bench.read_history(self.chemin)["qwen3:8b"]), 2)
+        self.assertEqual(bench.read(self.chemin)["qwen3:8b"]["resultats"]["vitesse"]["tok_s"], 41)
 
     def test_une_baisse_nette_de_vitesse_est_une_regression_et_dit_si_le_moteur_a_change(self):
-        bench.enregistrer(self.chemin, self.mesure(40))
-        bench.enregistrer(self.chemin, self.mesure(25, moteur=("ollama", "0.13"), date="2026-11-08T10:00:00"))
+        bench.save(self.chemin, self.mesure(40))
+        bench.save(self.chemin, self.mesure(25, moteur=("ollama", "0.13"), date="2026-11-08T10:00:00"))
         g = bench.regressions(self.chemin)
         self.assertEqual([(x["genre"], x["avant"], x["apres"], x["moteur_change"]) for x in g], [("vitesse", 40, 25, True)])
 
     def test_une_epreuve_qui_chute_est_signalee_une_petite_variation_non(self):
-        bench.enregistrer(self.chemin, self.mesure(40, outils=(4, 4)))
-        bench.enregistrer(self.chemin, self.mesure(38, outils=(2, 4), code=(3, 3)))
+        bench.save(self.chemin, self.mesure(40, outils=(4, 4)))
+        bench.save(self.chemin, self.mesure(38, outils=(2, 4), code=(3, 3)))
         self.assertEqual([(x["genre"], x["avant"], x["apres"]) for x in bench.regressions(self.chemin)], [("outils", 1.0, 0.5)])
 
     def test_une_seule_mesure_ou_une_amelioration_ne_signale_rien(self):
-        bench.enregistrer(self.chemin, self.mesure(30))
+        bench.save(self.chemin, self.mesure(30))
         self.assertEqual(bench.regressions(self.chemin), [])
-        bench.enregistrer(self.chemin, self.mesure(45))
+        bench.save(self.chemin, self.mesure(45))
         self.assertEqual(bench.regressions(self.chemin), [])
 
     def test_historique_borne_et_abime(self):
-        bench.chemin_historique(self.chemin).write_text("pas du json\n", encoding="utf-8")
-        bench.enregistrer(self.chemin, self.mesure(40))
-        self.assertEqual(len(bench.lire_historique(self.chemin)["qwen3:8b"]), 1)
-        bench.noter_historique(self.chemin, {"pas": "une mesure"})          # ne lève pas
+        bench.path_history(self.chemin).write_text("pas du json\n", encoding="utf-8")
+        bench.save(self.chemin, self.mesure(40))
+        self.assertEqual(len(bench.read_history(self.chemin)["qwen3:8b"]), 1)
+        bench.note_history(self.chemin, {"pas": "une mesure"})          # ne lève pas
 
 
 class Api(unittest.TestCase):
@@ -244,10 +244,10 @@ class Api(unittest.TestCase):
 
     def test_historique_des_mesures_par_l_api(self):
         chemin = A.chemin_bench()
-        bench.chemin_historique(chemin).unlink(missing_ok=True)
+        bench.path_history(chemin).unlink(missing_ok=True)
         l = Laboratoire()
-        bench.enregistrer(chemin, l.mesure(40))
-        bench.enregistrer(chemin, l.mesure(20, date="2026-11-08T10:00:00"))
+        bench.save(chemin, l.mesure(40))
+        bench.save(chemin, l.mesure(20, date="2026-11-08T10:00:00"))
         statut, r = self.appel("GET", "/api/bench-historique")
         self.assertEqual(statut, 200)
         self.assertEqual(r["regressions"][0]["genre"], "vitesse")

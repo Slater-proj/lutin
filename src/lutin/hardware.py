@@ -14,7 +14,7 @@ from pathlib import Path
 from .i18n import t as _t
 
 GO = 1024 ** 3
-FABRICANTS = {"0x10de": "nvidia", "0x1002": "amd", "0x8086": "intel"}
+VENDORS = {"0x10de": "nvidia", "0x1002": "amd", "0x8086": "intel"}
 
 
 @dataclass
@@ -28,11 +28,11 @@ class Gpu:
 
 # Cartes graphiques intégrées au processeur : Ollama ne s'en sert pas (ou mal), et leur « mémoire » n'est qu'une part de la RAM. On les reconnaît à leur nom et on ne s'en sert pas pour choisir
 # les modèles : une machine avec seulement une carte intégrée se choisit comme une machine sans carte (la RAM compte). Une carte déclarée à la main (LUTIN_GPU) est toujours crue.
-INTEGREE = re.compile(r"\b(UHD|Iris|HD Graphics|Intel\(R\) Graphics|Arc\(TM\) Graphics|Arc Graphics|Radeon\(TM\) Graphics|Radeon Graphics|Radeon\(TM\) \d{3}M|Radeon \d{3}M|Vega \d+ Graphics|Vega Graphics)", re.I)
+INTEGRATED = re.compile(r"\b(UHD|Iris|HD Graphics|Intel\(R\) Graphics|Arc\(TM\) Graphics|Arc Graphics|Radeon\(TM\) Graphics|Radeon Graphics|Radeon\(TM\) \d{3}M|Radeon \d{3}M|Vega \d+ Graphics|Vega Graphics)", re.I)
 
 
-def est_integree(g):
-    return g.fabricant in ("intel", "amd", "inconnu") and not g.source.startswith("déclarée") and bool(INTEGREE.search(g.nom))
+def integrated_is(g):
+    return g.fabricant in ("intel", "amd", "inconnu") and not g.source.startswith("déclarée") and bool(INTEGRATED.search(g.nom))
 
 
 @dataclass
@@ -55,18 +55,18 @@ class Profil:
 
     def gpu_principal(self):
         """La carte qu'Ollama utilisera le plus probablement : la plus grosse mémoire, NVIDIA d'abord à mémoire égale."""
-        utilisables = [g for g in self.gpus if not est_integree(g)]
+        utilisables = [g for g in self.gpus if not integrated_is(g)]
         if not utilisables:
             return None
         return max(utilisables, key=lambda g: (g.vram_go, g.fabricant == "nvidia"))
 
     def gpus_integrees(self):
-        return [g for g in self.gpus if est_integree(g)]
+        return [g for g in self.gpus if integrated_is(g)]
 
     def budget_go(self):
         """Mémoire qu'on accepte de remplir avec un modèle. 85 % de la carte (le bureau en garde un peu) ; sur Mac la mémoire est partagée ; sans carte, la RAM (60 %).
         LUTIN_BUDGET_GO l'impose (serveur partagé avec d'autres services : « 8 » = au plus 8 Go pour les modèles) ; une limite de mémoire du conteneur est déjà prise en compte dans la RAM."""
-        voulu = imposer_budget(os.environ.get("LUTIN_BUDGET_GO", ""))
+        voulu = impose_budget(os.environ.get("LUTIN_BUDGET_GO", ""))
         if voulu:
             return voulu
         g = self.gpu_principal()
@@ -110,7 +110,7 @@ class Profil:
 
 # ---------------------------------------------------------------- lecture de commandes
 
-def lancer(commande, delai=8):
+def launch(commande, delai=8):
     """Exécute une commande et renvoie sa sortie texte ('' si absente, en erreur ou trop lente)."""
     try:
         r = subprocess.run(commande, capture_output=True, text=True, timeout=delai, encoding="utf-8", errors="replace",
@@ -122,7 +122,7 @@ def lancer(commande, delai=8):
 
 # ---------------------------------------------------------------- analyse des sorties (fonctions pures, testées sur des enregistrements)
 
-def analyser_nvidia_smi(texte):
+def parse_nvidia_smi(texte):
     """`nvidia-smi --query-gpu=name,memory.total,memory.free --format=csv,noheader,nounits` -> liste de Gpu (valeurs en Mo)."""
     gpus = []
     for ligne in (texte or "").splitlines():
@@ -139,7 +139,7 @@ def analyser_nvidia_smi(texte):
     return gpus
 
 
-def _fabricant_depuis_nom(nom):
+def _vendor_from_name(nom):
     n = nom.lower()
     for mot, f in (("nvidia", "nvidia"), ("geforce", "nvidia"), ("quadro", "nvidia"), ("rtx", "nvidia"), ("amd", "amd"), ("radeon", "amd"), ("intel", "intel"), ("arc", "intel"), ("apple", "apple")):
         if mot in n:
@@ -147,7 +147,7 @@ def _fabricant_depuis_nom(nom):
     return "inconnu"
 
 
-def _entier_registre(valeur):
+def _integer_registry(valeur):
     """Le registre Windows donne la mémoire vidéo soit en entier, soit en liste d'octets (little-endian)."""
     if isinstance(valeur, int):
         return valeur
@@ -164,7 +164,7 @@ SCRIPT_GPU_WINDOWS = (
     "[pscustomobject]@{ registre=$r; wmi=$c } | ConvertTo-Json -Depth 4 -Compress")
 
 
-def analyser_gpus_windows(texte):
+def parse_gpus_windows(texte):
     """Sortie de SCRIPT_GPU_WINDOWS. Le champ AdapterRAM de WMI plafonne à 4 Go : on préfère la valeur du registre (64 bits) quand elle existe."""
     try:
         donnees = json.loads(texte or "{}")
@@ -177,7 +177,7 @@ def analyser_gpus_windows(texte):
         return x if isinstance(x, list) else ([x] if x else [])
     registre = {}
     for e in liste(donnees.get("registre")):
-        nom, octets = str(e.get("nom") or "").strip(), _entier_registre(e.get("octets"))
+        nom, octets = str(e.get("nom") or "").strip(), _integer_registry(e.get("octets"))
         if nom and octets:
             registre[nom] = octets
     gpus = []
@@ -188,7 +188,7 @@ def analyser_gpus_windows(texte):
         octets, source = registre.get(nom, 0), "registre"
         if not octets:
             octets, source = int(e.get("adapter") or 0), "wmi (plafonné à 4 Go)"
-        gpus.append(Gpu(nom, _fabricant_depuis_nom(nom), round(octets / GO, 1), 0.0, source))
+        gpus.append(Gpu(nom, _vendor_from_name(nom), round(octets / GO, 1), 0.0, source))
     return gpus
 
 
@@ -206,11 +206,11 @@ def analyser_gpu_declare(texte):
     if not 0.5 <= go <= 1024:
         return []
     nom = nom.strip() or "Carte déclarée"
-    fabricant = fab.strip().lower() if fab.strip().lower() in ("nvidia", "amd", "intel", "apple") else (_fabricant_depuis_nom(nom) if nom != "Carte déclarée" else "nvidia")
+    fabricant = fab.strip().lower() if fab.strip().lower() in ("nvidia", "amd", "intel", "apple") else (_vendor_from_name(nom) if nom != "Carte déclarée" else "nvidia")
     return [Gpu(nom, "nvidia" if fabricant == "inconnu" else fabricant, round(go, 1), 0.0, "déclarée (LUTIN_GPU)")]
 
 
-def lire_gpus_linux(racine="/sys/class/drm"):
+def read_gpus_linux(racine="/sys/class/drm"):
     """Cartes AMD/Intel/NVIDIA vues par le noyau (sans outil à installer). La mémoire vient de mem_info_vram_total (AMD)."""
     gpus = []
     base = Path(racine)
@@ -221,7 +221,7 @@ def lire_gpus_linux(racine="/sys/class/drm"):
             continue
         dev = carte / "device"
         try:
-            fabricant = FABRICANTS.get((dev / "vendor").read_text().strip().lower(), "inconnu")
+            fabricant = VENDORS.get((dev / "vendor").read_text().strip().lower(), "inconnu")
         except OSError:
             continue
         octets = 0
@@ -248,7 +248,7 @@ def _ram_windows():
     return 0.0, 0.0
 
 
-def nom_cpu_linux(texte):
+def name_cpu_linux(texte):
     """Le nom du processeur d'après /proc/cpuinfo (« Intel(R) Core(TM) i7-1165G7 »), ou une chaîne vide."""
     for ligne in (texte or "").splitlines():
         if ligne.lower().startswith("model name") and ":" in ligne:
@@ -256,7 +256,7 @@ def nom_cpu_linux(texte):
     return ""
 
 
-def analyser_meminfo(texte):
+def parse_meminfo(texte):
     """/proc/meminfo -> (total, disponible) en Go."""
     valeurs = {}
     for ligne in (texte or "").splitlines():
@@ -268,7 +268,7 @@ def analyser_meminfo(texte):
     return valeurs.get("MemTotal", 0) / GO, valeurs.get("MemAvailable", valeurs.get("MemFree", 0)) / GO
 
 
-def cpus_disponibles(racine="/sys/fs/cgroup"):
+def cpus_available(racine="/sys/fs/cgroup"):
     """Le nombre de processeurs que ce processus peut vraiment utiliser : les cœurs de la machine, sauf si un conteneur a reçu une limite (cpus: '6' dans docker-compose)."""
     n = os.cpu_count() or 0
     try:
@@ -288,7 +288,7 @@ def cpus_disponibles(racine="/sys/fs/cgroup"):
     return n
 
 
-def imposer_budget(texte):
+def impose_budget(texte):
     """Le budget voulu par l'utilisateur (Go), ou 0 s'il n'en a pas donné ou si la valeur est absurde."""
     try:
         v = float(str(texte).replace(",", ".").strip())
@@ -311,12 +311,12 @@ def limite_conteneur(racine="/sys/fs/cgroup"):
     return 0.0, 0.0
 
 
-def lire_ram(systeme, lanceur=lancer):
+def read_ram(systeme, lanceur=launch):
     if systeme == "windows":
         return _ram_windows()
     if systeme == "linux":
         try:
-            total, dispo = analyser_meminfo(Path("/proc/meminfo").read_text())
+            total, dispo = parse_meminfo(Path("/proc/meminfo").read_text())
         except OSError:
             return 0.0, 0.0
         limite, utilise = limite_conteneur()
@@ -329,7 +329,7 @@ def lire_ram(systeme, lanceur=lancer):
     return 0.0, 0.0
 
 
-def lister_disques(systeme):
+def list_disks(systeme):
     racines = []
     if systeme == "windows":
         import ctypes
@@ -360,30 +360,30 @@ def profil_demo():
                   gpus=[Gpu("NVIDIA GeForce RTX 4070", "nvidia", 12.0, 10.6, "démonstration")], disques=[Disque("C:\\", 412.0, 931.0)])
 
 
-def detecter(lanceur=lancer):
+def detecter(lanceur=launch):
     """Le profil complet de cette machine."""
     if os.environ.get("LUTIN_DEMO"):
         return profil_demo()
     systeme = {"Windows": "windows", "Linux": "linux", "Darwin": "macos"}.get(platform.system(), platform.system().lower())
-    p = Profil(systeme=systeme, architecture=platform.machine().lower(), cpu=platform.processor() or "", coeurs=cpus_disponibles())
+    p = Profil(systeme=systeme, architecture=platform.machine().lower(), cpu=platform.processor() or "", coeurs=cpus_available())
     if systeme == "linux" and (not p.cpu or p.cpu in ("x86_64", "aarch64")):
         try:
-            p.cpu = nom_cpu_linux(Path("/proc/cpuinfo").read_text()) or p.cpu
+            p.cpu = name_cpu_linux(Path("/proc/cpuinfo").read_text()) or p.cpu
         except OSError:
             pass
-    p.ram_go, p.ram_libre_go = (round(x, 1) for x in lire_ram(systeme, lanceur))
-    nvidia = analyser_nvidia_smi(lanceur(["nvidia-smi", "--query-gpu=name,memory.total,memory.free", "--format=csv,noheader,nounits"])) if shutil.which("nvidia-smi") else []
+    p.ram_go, p.ram_libre_go = (round(x, 1) for x in read_ram(systeme, lanceur))
+    nvidia = parse_nvidia_smi(lanceur(["nvidia-smi", "--query-gpu=name,memory.total,memory.free", "--format=csv,noheader,nounits"])) if shutil.which("nvidia-smi") else []
     autres = []
     if systeme == "windows":
-        autres = analyser_gpus_windows(lanceur(["powershell", "-NoProfile", "-Command", SCRIPT_GPU_WINDOWS], 20))
+        autres = parse_gpus_windows(lanceur(["powershell", "-NoProfile", "-Command", SCRIPT_GPU_WINDOWS], 20))
         autres = [g for g in autres if not (g.fabricant == "nvidia" and nvidia)]                  # nvidia-smi est plus fiable pour NVIDIA
     elif systeme == "linux":
-        autres = [g for g in lire_gpus_linux() if not (g.fabricant == "nvidia" and nvidia)]
+        autres = [g for g in read_gpus_linux() if not (g.fabricant == "nvidia" and nvidia)]
     elif systeme == "macos" and p.architecture in ("arm64", "aarch64"):
         autres = [Gpu("Apple Silicon (mémoire partagée)", "apple", round(p.ram_go, 1), 0.0, "mémoire unifiée")]
     p.gpus = nvidia + autres
     declare = analyser_gpu_declare(os.environ.get("LUTIN_GPU", ""))
     if declare:
         p.gpus = declare                                     # la déclaration de l'utilisateur l'emporte sur la détection
-    p.disques = lister_disques(systeme)
+    p.disques = list_disks(systeme)
     return p

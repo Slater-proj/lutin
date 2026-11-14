@@ -70,14 +70,14 @@ class DansLlamaCpp(unittest.TestCase):
         self.tmp = Path(tempfile.mkdtemp(prefix="lutin-llamacpp-partage-"))
         self.ollama = self.tmp / "ollama-models"
         ranger(self.ollama, "registry.ollama.ai", "library/qwen3/8b", [("model", "a", True)])
-        self.ancien = dict(engines.CONTEXTE)
-        engines.CONTEXTE.update(donnees=lambda: self.tmp, en_docker=lambda: False, hors_ligne=lambda: False, profil=lambda: None, profil_attendu=None, dossier_ollama=lambda: self.ollama)
+        self.ancien = dict(engines.CONTEXT)
+        engines.CONTEXT.update(donnees=lambda: self.tmp, en_docker=lambda: False, hors_ligne=lambda: False, profil=lambda: None, profil_attendu=None, dossier_ollama=lambda: self.ollama)
         ml.CACHE_PARTAGE.clear()
         self.m = ml.MoteurLlamaCpp()
         self.addCleanup(self.fin)
 
     def fin(self):
-        engines.CONTEXTE.update(self.ancien)
+        engines.CONTEXT.update(self.ancien)
         ml.CACHE_PARTAGE.clear()
         shutil.rmtree(self.tmp, ignore_errors=True)
 
@@ -98,10 +98,10 @@ class DansLlamaCpp(unittest.TestCase):
         self.assertTrue((self.ollama / "blobs" / ("sha256-" + empreinte("a"))).is_file())
 
     def test_sous_docker_ou_partage_coupe_ou_serveur_externe_rien_n_est_partage(self):
-        engines.CONTEXTE["en_docker"] = lambda: True
+        engines.CONTEXT["en_docker"] = lambda: True
         ml.CACHE_PARTAGE.clear()
         self.assertEqual(self.m.partages(), {})
-        engines.CONTEXTE["en_docker"] = lambda: False
+        engines.CONTEXT["en_docker"] = lambda: False
         ml.CACHE_PARTAGE.clear()
         ml.regler("llamacpp", partager_ollama=False)
         self.assertEqual(self.m.partages(), {}, "coupé par l'utilisateur")
@@ -145,14 +145,14 @@ class DossiersCommuns(unittest.TestCase):
 
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="lutin-dossiers-"))
-        self.ancien = dict(engines.CONTEXTE)
-        engines.CONTEXTE.update(donnees=lambda: self.tmp, en_docker=lambda: False, hors_ligne=lambda: False, profil=lambda: None, dossier_ollama=lambda: self.tmp / "ollama-models")
-        self.addCleanup(lambda: (engines.CONTEXTE.update(self.ancien), shutil.rmtree(self.tmp, ignore_errors=True)))
+        self.ancien = dict(engines.CONTEXT)
+        engines.CONTEXT.update(donnees=lambda: self.tmp, en_docker=lambda: False, hors_ligne=lambda: False, profil=lambda: None, dossier_ollama=lambda: self.tmp / "ollama-models")
+        self.addCleanup(lambda: (engines.CONTEXT.update(self.ancien), shutil.rmtree(self.tmp, ignore_errors=True)))
 
     def test_llama_cpp_dossier_des_modeles_reglable(self):
         mo = ml.MoteurLlamaCpp()
-        engines.MOTEURS[mo.id] = mo
-        self.addCleanup(engines.MOTEURS.pop, mo.id, None)
+        engines.ENGINES[mo.id] = mo
+        self.addCleanup(engines.ENGINES.pop, mo.id, None)
         info = mo.info_dossier()
         self.assertEqual(info["modeles"]["actuel"], str(self.tmp / "engines" / "llamacpp" / "modeles"))
         ailleurs = self.tmp / "gros-disque" / "modeles"
@@ -189,7 +189,7 @@ class DossiersCommuns(unittest.TestCase):
         lances = []
         with tempfile.TemporaryDirectory() as t:
             try:
-                ollama_client.installer_windows(t, ouvrir=lambda r, timeout: Rep(b"x" * 100), lanceur_sortie=lambda c, d=0: "Valid|CN=Ollama Inc, O=Ollama", executer=lambda cmd, **k: lances.append(cmd) or type("R", (), {"returncode": 0})(), taille_min=10, dossier="E:/IA/Ollama")
+                ollama_client.install_windows(t, ouvrir=lambda r, timeout: Rep(b"x" * 100), lanceur_sortie=lambda c, d=0: "Valid|CN=Ollama Inc, O=Ollama", executer=lambda cmd, **k: lances.append(cmd) or type("R", (), {"returncode": 0})(), taille_min=10, dossier="E:/IA/Ollama")
             except ollama_client.ErreurOllama:
                 pass          # « introuvable » après installation : sans importance ici, seule la commande lancée compte
         self.assertTrue(lances and "/DIR=E:/IA/Ollama" in lances[0] and "/SILENT" in lances[0], lances)
@@ -203,7 +203,7 @@ class ModelesRetrouves(unittest.TestCase):
         self.tmp = Path(tempfile.mkdtemp(prefix="lutin-retrouves-"))
         self.models = self.tmp / "gros-disque" / "ollama-models"
         ranger(self.models, "registry.ollama.ai", "library/qwen3/8b", [("model", "a", True)])
-        self.avant = (_m.DONNEES, dict(engines.CONTEXTE))
+        self.avant = (_m.DONNEES, dict(engines.CONTEXT))
         _m.DONNEES = self.tmp / "donnees"
         _m.DONNEES.mkdir()
         self.addCleanup(self.fin)
@@ -211,7 +211,7 @@ class ModelesRetrouves(unittest.TestCase):
 
     def fin(self):
         _m.DONNEES = self.avant[0]
-        engines.CONTEXTE.update(self.avant[1])
+        engines.CONTEXT.update(self.avant[1])
         shutil.rmtree(self.tmp, ignore_errors=True)
 
     def test_le_dernier_dossier_vu_est_retenu_et_signale_quand_ollama_ne_voit_rien(self):
@@ -243,7 +243,7 @@ class ModelesRetrouves(unittest.TestCase):
         mo = agent.MoteurOllama()
         appels = []
         possibles = {k: {"possible": True, "raison": "ok"} for k in engines.ACTIONS}
-        with self.mock.patch.object(mo, "actions", lambda: possibles), self.mock.patch.object(_m, "arreter_ollama", lambda: appels.append("arreter")), self.mock.patch.object(_m, "demarrer_ollama", lambda: appels.append("demarrer")),                 self.mock.patch.object(ollama_client, "desinstaller_windows", lambda: appels.append("desinstaller")), self.mock.patch.object(ollama_client, "installer_windows", lambda c, p, **k: appels.append("installer")),                 self.mock.patch.object(locations, "models_folder", lambda: self.models), self.mock.patch.object(locations, "set_models_folder", lambda d: appels.append("dossier:" + str(d))):
+        with self.mock.patch.object(mo, "actions", lambda: possibles), self.mock.patch.object(_m, "arreter_ollama", lambda: appels.append("arreter")), self.mock.patch.object(_m, "demarrer_ollama", lambda: appels.append("demarrer")),                 self.mock.patch.object(ollama_client, "uninstall_windows", lambda: appels.append("desinstaller")), self.mock.patch.object(ollama_client, "install_windows", lambda c, p, **k: appels.append("installer")),                 self.mock.patch.object(locations, "models_folder", lambda: self.models), self.mock.patch.object(locations, "set_models_folder", lambda d: appels.append("dossier:" + str(d))):
             mo.faire("mettre_a_jour", lambda *x: None)
         self.assertEqual(appels, ["arreter", "installer", "dossier:" + str(self.models), "demarrer"], "par-dessus, sans désinstaller, et le dossier des modèles est rétabli avant le redémarrage")
         self.assertEqual(locations.seen_folder(), str(self.models))

@@ -70,7 +70,7 @@ class Base(unittest.TestCase):
     def session(self):
         pin = A.APPAREILS.nouveau_pin()
         jeton = A.APPAREILS.appairer(pin, "Téléphone")
-        return {"Cookie": "{}={}".format(S.NOM_COOKIE, jeton)}
+        return {"Cookie": "{}={}".format(S.NAME_COOKIE, jeton)}
 
 
 class NiveauDAcces(Base):
@@ -219,7 +219,7 @@ class ConseilPc(Base):
         try:
             chemin.unlink(missing_ok=True)
             self.assertEqual(requete("GET", "/api/conseil"), (200, {"mesure": None, "conseil": []}))
-            bench.enregistrer(chemin, {"modele": modele, "date": "2026-10-26T10:00:00", "resultats": {"vitesse": {"tok_s": 4.0, "chargement_s": 3.0}}, "notes": [], "complet": False})
+            bench.save(chemin, {"modele": modele, "date": "2026-10-26T10:00:00", "resultats": {"vitesse": {"tok_s": 4.0, "chargement_s": 3.0}}, "notes": [], "complet": False})
             statut, r = requete("GET", "/api/conseil")
             self.assertEqual(statut, 200)
             self.assertEqual(r["mesure"]["tok_s"], 4.0)
@@ -269,7 +269,7 @@ class Planification(Base):
         super().setUp()
         from lutin import scheduled_tasks
         self.p = scheduled_tasks
-        scheduled_tasks.chemin().unlink(missing_ok=True)
+        scheduled_tasks.path().unlink(missing_ok=True)
 
     def tearDown(self):
         self.p.chemin().unlink(missing_ok=True)

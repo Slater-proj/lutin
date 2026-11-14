@@ -22,13 +22,13 @@ QUESTIONS_CODE = [
     ("Que valent les valeurs affichées ? Réponds seulement par la valeur.\n```python\nprint(10 // 3 + 10 % 3)\n```", "4"),
     ("Que valent les valeurs affichées ? Réponds seulement par la valeur.\n```python\nx = [1, 2, 3]\nprint([i * 2 for i in x if i != 2])\n```", "[2, 6]"),
 ]
-OUTILS = [
+TOOLS = [
     {"type": "function", "function": {"name": "lire", "description": "Lit un fichier du projet.", "parameters": {"type": "object", "properties": {"chemin": {"type": "string"}}, "required": ["chemin"]}}},
     {"type": "function", "function": {"name": "chercher", "description": "Cherche un mot dans les fichiers du projet.", "parameters": {"type": "object", "properties": {"motif": {"type": "string"}}, "required": ["motif"]}}},
     {"type": "function", "function": {"name": "lister", "description": "Liste le contenu d'un dossier du projet.", "parameters": {"type": "object", "properties": {"dossier": {"type": "string"}}, "required": ["dossier"]}}},
     {"type": "function", "function": {"name": "executer", "description": "Lance une commande dans le dossier du projet.", "parameters": {"type": "object", "properties": {"commande": {"type": "string"}}, "required": ["commande"]}}},
 ]
-CAS_OUTILS = [
+CASES_TOOLS = [
     ("Ouvre le fichier docs/notes.md et dis-moi ce qu'il contient.", "lire", "notes.md"),
     ("Où est définie la fonction connexion dans le projet ?", "chercher", "connexion"),
     ("Montre-moi le contenu du dossier docs.", "lister", "docs"),
@@ -36,8 +36,8 @@ CAS_OUTILS = [
     ("Quelle est la capitale de la France ?", None, None),
     ("Bonjour, comment vas-tu ?", None, None),
 ]
-MOTS_FR = {"le", "la", "les", "de", "des", "du", "un", "une", "et", "est", "que", "qui", "dans", "pour", "pas", "sur", "au", "aux", "ce", "cette", "il", "elle", "à", "en", "par", "se"}
-MOTS_EN = {"the", "and", "is", "of", "to", "in", "that", "it", "for", "with", "this", "are"}
+WORDS_FR = {"le", "la", "les", "de", "des", "du", "un", "une", "et", "est", "que", "qui", "dans", "pour", "pas", "sur", "au", "aux", "ce", "cette", "il", "elle", "à", "en", "par", "se"}
+WORDS_EN = {"the", "and", "is", "of", "to", "in", "that", "it", "for", "with", "this", "are"}
 SURNOMS = {"vitesse": "Vitesse", "outils": "Appel d'outils", "code": "Code (lecture)", "francais": "Français", "consignes": "Consignes"}
 
 
@@ -48,24 +48,24 @@ def etiquette_code(question):
     return " ; ".join(ligne.strip() for ligne in code.strip().splitlines() if ligne.strip())[:70]
 
 
-def nettoyer(texte):
+def clean(texte):
     """Réponse sans bloc de réflexion (<think>…</think>) ni espaces superflus."""
     return re.sub(r"<think>.*?</think>", "", texte or "", flags=re.S | re.I).strip()
 
 
-def est_francais(texte):
+def is_french(texte):
     mots = re.findall(r"[a-zàâçéèêëîïôûùüÿœ']+", texte.lower())
     if len(mots) < 5:
         return False
-    fr = sum(m in MOTS_FR for m in mots) / len(mots)
-    en = sum(m in MOTS_EN for m in mots) / len(mots)
+    fr = sum(m in WORDS_FR for m in mots) / len(mots)
+    en = sum(m in WORDS_EN for m in mots) / len(mots)
     return fr >= 0.12 and en < 0.05
 
 
-def reponse_exacte(texte, attendu):
+def exact_reply(texte, attendu):
     """La valeur attendue figure seule (pas collée à d'autres chiffres ou lettres) dans la dernière ou dans la première ligne, et la réponse reste courte.
     Un point final ne compte pas (« Le résultat est 14. » est juste) ; « 14.5 » n'est pas « 14 ». Avant, un modèle qui concluait par une phrase se voyait compter faux une bonne réponse."""
-    t = nettoyer(texte).replace("`", "").replace('"', "").replace("'", "")
+    t = clean(texte).replace("`", "").replace('"', "").replace("'", "")
     if not t or len(t) > 400:
         return False
     lignes = [ligne for ligne in t.splitlines() if ligne.strip()]
@@ -73,14 +73,14 @@ def reponse_exacte(texte, attendu):
     return any(re.search(motif, ligne, re.I) for ligne in (lignes[-1], lignes[0]))
 
 
-def trois_puces(texte):
-    lignes = [ligne.strip() for ligne in nettoyer(texte).splitlines() if ligne.strip()]
+def three_bullets(texte):
+    lignes = [ligne.strip() for ligne in clean(texte).splitlines() if ligne.strip()]
     puces = [ligne for ligne in lignes if ligne.startswith(("-", "•", "*"))]
     return len(puces) == 3 and len(lignes) <= 4
 
 
-def json_valide(texte):
-    t = re.sub(r"^```(?:json)?\s*|\s*```$", "", nettoyer(texte), flags=re.I).strip()
+def valid_json(texte):
+    t = re.sub(r"^```(?:json)?\s*|\s*```$", "", clean(texte), flags=re.I).strip()
     try:
         d = json.loads(t)
     except ValueError:
@@ -90,14 +90,14 @@ def json_valide(texte):
     return isinstance(d, dict) and norm(d.get("ville")) == "paris" and norm(d.get("pays")) == "france"
 
 
-def note_vitesse(tok_s):
+def grade_speed(tok_s):
     for seuil, note in ((8, 2), (15, 4), (30, 6), (60, 8)):
         if tok_s < seuil:
             return note
     return 10
 
 
-def notes_depuis(r):
+def grades_from(r):
     """Notes de 0 à 10 par rôle d'après les résultats. Formules simples, écrites ici pour qu'on puisse les contester."""
     def part(cle):
         x = r.get(cle)
@@ -112,12 +112,12 @@ def notes_depuis(r):
     if len(parts) == 4:
         notes["polyvalent"] = round(10 * sum(parts) / 4)
     if r.get("vitesse", {}).get("tok_s") is not None:
-        n = note_vitesse(r["vitesse"]["tok_s"])
+        n = grade_speed(r["vitesse"]["tok_s"])
         notes["rapide"] = min(n, 4) if outils is not None and outils < 0.67 else n          # un modèle qui n'appelle pas les outils ne sert pas à Lutin
     return notes
 
 
-def _resultat(details):
+def _result(details):
     """Le score ET le détail question par question : « 1/3 » seul ne dit pas lesquelles ont échoué."""
     return {"points": sum(d["ok"] for d in details), "sur": len(details), "details": details}
 
@@ -172,12 +172,12 @@ class Banc:
 
     def outils(self):
         details = []
-        for question, attendu, motif in CAS_OUTILS:
-            msg = self.demander([{"role": "user", "content": question}], outils=OUTILS, num_predict=100).get("message") or {}
+        for question, attendu, motif in CASES_TOOLS:
+            msg = self.demander([{"role": "user", "content": question}], outils=TOOLS, num_predict=100).get("message") or {}
             appels = msg.get("tool_calls") or []
             ok = False
             if attendu is None:
-                ok = not appels and bool(nettoyer(msg.get("content")))
+                ok = not appels and bool(clean(msg.get("content")))
             elif appels:
                 f = appels[0].get("function") or {}
                 args = f.get("arguments")
@@ -190,28 +190,28 @@ class Banc:
             noms = {"lire": _t("Ouvrir un fichier avec l'outil « lire »"), "chercher": _t("Chercher un mot avec l'outil « chercher »"), "lister": _t("Lister un dossier avec l'outil « lister »"),
                     "executer": _t("Lancer une commande avec l'outil « executer »")}
             details.append({"test": noms.get(attendu) or (_t("Répondre directement, sans outil, à une question de culture générale") if "capitale" in question else _t("Répondre simplement, sans outil, à une salutation")), "ok": ok})
-        return _resultat(details)
+        return _result(details)
 
     def code(self):
-        details = [{"test": _t("Lire un programme : {}").format(etiquette_code(q)), "ok": reponse_exacte(self.texte(q, 80), a)} for q, a in QUESTIONS_CODE]
-        return _resultat(details)
+        details = [{"test": _t("Lire un programme : {}").format(etiquette_code(q)), "ok": exact_reply(self.texte(q, 80), a)} for q, a in QUESTIONS_CODE]
+        return _result(details)
 
     def francais(self):
-        a = nettoyer(self.texte("Explique en une phrase, en français, pourquoi le ciel est bleu.", 120))
+        a = clean(self.texte("Explique en une phrase, en français, pourquoi le ciel est bleu.", 120))
         b = self.texte("Donne exactement 3 conseils pour bien dormir, chacun sur une ligne commençant par « - », sans introduction.", 120)
-        c = nettoyer(self.texte("Traduis en français : « The cat sleeps on the sofa. » Réponds seulement par la traduction.", 60)).lower()
-        d = nettoyer(self.texte("Corrige les fautes de cette phrase et réponds seulement par la phrase corrigée : « Les enfant mange des pomme. »", 60)).lower()
-        return _resultat([{"test": _t("Expliquer en une phrase, en français correct"), "ok": est_francais(a) and 5 <= len(a.split()) <= 60},
-                          {"test": _t("Donner exactement 3 conseils, un par ligne avec « - »"), "ok": trois_puces(b)},
-                          {"test": _t("Traduire une phrase de l'anglais vers le français"), "ok": "chat" in c and ("canapé" in c or "sofa" in c or "divan" in c) and est_francais(c)},
+        c = clean(self.texte("Traduis en français : « The cat sleeps on the sofa. » Réponds seulement par la traduction.", 60)).lower()
+        d = clean(self.texte("Corrige les fautes de cette phrase et réponds seulement par la phrase corrigée : « Les enfant mange des pomme. »", 60)).lower()
+        return _result([{"test": _t("Expliquer en une phrase, en français correct"), "ok": is_french(a) and 5 <= len(a.split()) <= 60},
+                          {"test": _t("Donner exactement 3 conseils, un par ligne avec « - »"), "ok": three_bullets(b)},
+                          {"test": _t("Traduire une phrase de l'anglais vers le français"), "ok": "chat" in c and ("canapé" in c or "sofa" in c or "divan" in c) and is_french(c)},
                           {"test": _t("Corriger l'accord d'une phrase (enfants, mangent, pommes)"), "ok": "enfants" in d and "mangent" in d and "pommes" in d}])
 
     def consignes(self):
         t = self.texte("Réponds uniquement avec un objet JSON valide, sans aucun texte autour, avec les clés \"ville\" et \"pays\", pour la capitale de la France.", 80)
-        oui = re.sub(r"[^a-zé]", "", nettoyer(self.texte("Réponds uniquement par un seul mot, oui ou non : le ciel est-il bleu par beau temps ?", 20)).lower())
-        mots = re.findall(r"[A-Za-zÀ-ÿ']+", nettoyer(self.texte("Écris exactement trois mots sur la mer, sans ponctuation et sans rien d'autre.", 30)))
-        liste = [ligne.strip() for ligne in nettoyer(self.texte("Donne exactement 4 fruits en liste numérotée (1. 2. 3. 4.), un par ligne, sans introduction ni conclusion.", 60)).splitlines() if ligne.strip()]
-        return _resultat([{"test": _t("Répondre uniquement par un objet JSON valide, sans texte autour"), "ok": json_valide(t)},
+        oui = re.sub(r"[^a-zé]", "", clean(self.texte("Réponds uniquement par un seul mot, oui ou non : le ciel est-il bleu par beau temps ?", 20)).lower())
+        mots = re.findall(r"[A-Za-zÀ-ÿ']+", clean(self.texte("Écris exactement trois mots sur la mer, sans ponctuation et sans rien d'autre.", 30)))
+        liste = [ligne.strip() for ligne in clean(self.texte("Donne exactement 4 fruits en liste numérotée (1. 2. 3. 4.), un par ligne, sans introduction ni conclusion.", 60)).splitlines() if ligne.strip()]
+        return _result([{"test": _t("Répondre uniquement par un objet JSON valide, sans texte autour"), "ok": valid_json(t)},
                           {"test": _t("Répondre par un seul mot (oui ou non)"), "ok": oui in ("oui", "non")},
                           {"test": _t("Écrire exactement trois mots"), "ok": len(mots) == 3},
                           {"test": _t("Donner une liste numérotée d'exactement 4 éléments"), "ok": len(liste) == 4 and all(re.match(r"^[1-4][.)]", ligne) for ligne in liste)}])
@@ -230,11 +230,11 @@ def executer(ollama, modele, rapide=False, progression=None, resume_machine="", 
         except (ErreurOllama, OSError) as e:
             mesure["erreur"] = "{} : {}".format(SURNOMS[nom], e)
             break
-    mesure["notes"] = notes_depuis(mesure["resultats"])
+    mesure["notes"] = grades_from(mesure["resultats"])
     return mesure
 
 
-def resume(mesure):
+def summary(mesure):
     r, morceaux = mesure.get("resultats", {}), []
     v = r.get("vitesse", {})
     if v.get("tok_s") is not None:
@@ -247,7 +247,7 @@ def resume(mesure):
     return " · ".join(morceaux) or "aucune mesure"
 
 
-def lire(chemin):
+def read(chemin):
     try:
         d = json.loads(Path(chemin).read_text(encoding="utf-8"))
         return d if isinstance(d, dict) else {}
@@ -255,47 +255,47 @@ def lire(chemin):
         return {}
 
 
-def enregistrer(chemin, mesure):
+def save(chemin, mesure):
     chemin = Path(chemin)
-    tout = lire(chemin)
+    tout = read(chemin)
     tout[mesure["modele"]] = mesure
     chemin.parent.mkdir(parents=True, exist_ok=True)
     tmp = chemin.with_suffix(".tmp")
     tmp.write_text(json.dumps(tout, ensure_ascii=False, indent=1), encoding="utf-8")
     tmp.replace(chemin)
-    noter_historique(chemin, mesure)
+    note_history(chemin, mesure)
 
 
 # --------------------------------------------------------------------------- l'historique : chaque mesure est gardée, pour voir l'évolution et repérer une régression
-EPREUVES = ("outils", "code", "francais", "consignes")
-HISTORIQUE_MAX = 600
+TESTS = ("outils", "code", "francais", "consignes")
+MAX_HISTORY = 600
 
 
-def chemin_historique(chemin):
+def path_history(chemin):
     return Path(chemin).with_name("bench_historique.jsonl")
 
 
-def noter_historique(chemin, mesure):
+def note_history(chemin, mesure):
     """Une ligne par mesure (modèle, date, moteur et sa version, vitesse, réussite de chaque épreuve en fraction de 0 à 1). Ne lève jamais : l'historique est un plus."""
     try:
         r = mesure.get("resultats") or {}
         ligne = {"modele": mesure["modele"], "date": str(mesure.get("date", ""))[:19], "moteur": mesure.get("moteur") or {}, "tok_s": (r.get("vitesse") or {}).get("tok_s"),
-                 "epreuves": {cle: round(r[cle]["points"] / r[cle]["sur"], 2) for cle in EPREUVES if cle in r and r[cle].get("sur")}}
-        f = chemin_historique(chemin)
+                 "epreuves": {cle: round(r[cle]["points"] / r[cle]["sur"], 2) for cle in TESTS if cle in r and r[cle].get("sur")}}
+        f = path_history(chemin)
         with open(f, "a", encoding="utf-8") as fichier:
             fichier.write(json.dumps(ligne, ensure_ascii=False) + "\n")
-        if f.stat().st_size > HISTORIQUE_MAX * 500:
-            lignes = f.read_text(encoding="utf-8", errors="replace").splitlines()[-HISTORIQUE_MAX:]
+        if f.stat().st_size > MAX_HISTORY * 500:
+            lignes = f.read_text(encoding="utf-8", errors="replace").splitlines()[-MAX_HISTORY:]
             f.write_text("\n".join(lignes) + "\n", encoding="utf-8")
     except (OSError, KeyError, TypeError, ValueError, ZeroDivisionError):
         pass
 
 
-def lire_historique(chemin):
+def read_history(chemin):
     """{modèle: [mesures, de la plus ancienne à la plus récente]}."""
     sortie = {}
     try:
-        lignes = chemin_historique(chemin).read_text(encoding="utf-8", errors="replace").splitlines()
+        lignes = path_history(chemin).read_text(encoding="utf-8", errors="replace").splitlines()
     except OSError:
         return sortie
     for ligne in lignes:
@@ -312,14 +312,14 @@ def regressions(chemin, seuil=0.25):
     """Les modèles dont la DERNIÈRE mesure est nettement moins bonne que la précédente : vitesse en baisse de plus de `seuil` (25 %) ou une épreuve en baisse de plus de `seuil` (en part des points).
     [{modele, genre (vitesse, outils, code…), avant, apres, moteur_change}] ; `moteur_change` : le moteur ou sa version n'est plus le même (la cause probable)."""
     trouvees = []
-    for modele, mesures in lire_historique(chemin).items():
+    for modele, mesures in read_history(chemin).items():
         if len(mesures) < 2:
             continue
         avant, apres = mesures[-2], mesures[-1]
         change = (avant.get("moteur") or {}) != (apres.get("moteur") or {})
         if avant.get("tok_s") and apres.get("tok_s") and apres["tok_s"] < avant["tok_s"] * (1 - seuil):
             trouvees.append({"modele": modele, "genre": "vitesse", "avant": avant["tok_s"], "apres": apres["tok_s"], "moteur_change": change})
-        for cle in EPREUVES:
+        for cle in TESTS:
             a, b = (avant.get("epreuves") or {}).get(cle), (apres.get("epreuves") or {}).get(cle)
             if a is not None and b is not None and b <= a - seuil:
                 trouvees.append({"modele": modele, "genre": cle, "avant": a, "apres": b, "moteur_change": change})

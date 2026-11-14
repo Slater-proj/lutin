@@ -16,40 +16,40 @@ from . import storage as _d
 from .i18n import t as _t
 from . import core as _m
 
-MAX_TACHES = 20
-HISTORIQUE_MAX = 10
-RE_HEURE = re.compile(r"^([01]\d|2[0-3]):([0-5]\d)$")
+MAX_TASKS = 20
+MAX_HISTORY = 10
+RE_HOUR = re.compile(r"^([01]\d|2[0-3]):([0-5]\d)$")
 EN_COURS = {}            # id de tâche -> évènement d'arrêt, tant qu'elle travaille
-A_SUPPRIMER = set()      # conversations de tâches supprimées pendant qu'elles travaillaient : effacées quand le tour se termine (sinon il les réécrirait)
-VERROU = threading.Lock()
-PERIODE = 30            # secondes entre deux regards sur l'horloge
+TO_REMOVE = set()      # conversations de tâches supprimées pendant qu'elles travaillaient : effacées quand le tour se termine (sinon il les réécrirait)
+LOCK = threading.Lock()
+PERIOD = 30            # secondes entre deux regards sur l'horloge
 
 
-def chemin():
+def path():
     return _m.DONNEES / "planifie.json"
 
 
-def lire():
-    liste = _d.lire_json(chemin(), [])
+def read():
+    liste = _d.lire_json(path(), [])
     return [t for t in liste if isinstance(t, dict) and t.get("id")] if isinstance(liste, list) else []
 
 
-def _ecrire(liste):
+def _write(liste):
     import json
-    _d.ecrire_atomique(chemin(), json.dumps(liste, ensure_ascii=False, indent=1))
+    _d.ecrire_atomique(path(), json.dumps(liste, ensure_ascii=False, indent=1))
 
 
 class Impossible(Exception):
     """Une tâche qui ne peut pas démarrer (son dossier de travail a disparu…) : ce n'est pas « la machine est occupée », il ne faut pas réessayer toutes les 30 secondes."""
 
 
-def _valider(nom, prompt, heure, jours, travail, notifier, date, maintenant=None):
+def _validate(nom, prompt, heure, jours, travail, notifier, date, maintenant=None):
     nom, prompt = " ".join(str(nom or "").split())[:60], str(prompt or "").strip()
     if not nom or not prompt:
         raise ValueError(_t("Donne un nom et la demande à traiter."))
     if len(prompt) > 4000:
         raise ValueError(_t("La demande est trop longue (4 000 caractères au plus)."))
-    if not RE_HEURE.match(str(heure or "")):
+    if not RE_HOUR.match(str(heure or "")):
         raise ValueError(_t("L'heure doit être au format HH:MM (par exemple 08:30)."))
     maintenant = maintenant or datetime.now()
     date = str(date or "").strip()
@@ -77,23 +77,23 @@ def _valider(nom, prompt, heure, jours, travail, notifier, date, maintenant=None
     return {"nom": nom, "prompt": prompt, "heure": heure, "jours": jours, "date": date, "travail": str(travail or "")[:80], "notifier": notifier}
 
 
-def ajouter(nom, prompt, heure, jours, travail="", notifier="", date=""):
-    champs = _valider(nom, prompt, heure, jours, travail, notifier, date)
-    with VERROU:
-        liste = lire()
-        if len(liste) >= MAX_TACHES:
-            raise ValueError(_t("Déjà {} tâches planifiées : supprime-en une d'abord.").format(MAX_TACHES))
+def add(nom, prompt, heure, jours, travail="", notifier="", date=""):
+    champs = _validate(nom, prompt, heure, jours, travail, notifier, date)
+    with LOCK:
+        liste = read()
+        if len(liste) >= MAX_TASKS:
+            raise ValueError(_t("Déjà {} tâches planifiées : supprime-en une d'abord.").format(MAX_TASKS))
         tache = dict(champs, id=secrets.token_hex(4), derniere_notif="", actif=True, cree=datetime.now().isoformat(timespec="seconds"), derniere_exec="", derniere_conv="", derniere_etat="", derniere_erreur="", historique=[])
         liste.append(tache)
-        _ecrire(liste)
+        _write(liste)
     return tache
 
 
-def changer(ident, nom, prompt, heure, jours, travail="", notifier="", date=""):
+def change(ident, nom, prompt, heure, jours, travail="", notifier="", date=""):
     """Modifie une tâche (tout ce qu'on peut régler à la création). Si le moment change, la tâche repart de maintenant : elle ne « rattrape » pas une heure qui vient de passer."""
-    champs = _valider(nom, prompt, heure, jours, travail, notifier, date)
-    with VERROU:
-        liste = lire()
+    champs = _validate(nom, prompt, heure, jours, travail, notifier, date)
+    with LOCK:
+        liste = read()
         for t in liste:
             if t["id"] == ident:
                 moment_change = (t.get("heure"), t.get("jours"), t.get("date", "")) != (champs["heure"], champs["jours"], champs["date"])
@@ -101,18 +101,18 @@ def changer(ident, nom, prompt, heure, jours, travail="", notifier="", date=""):
                 if moment_change:
                     t["cree"] = datetime.now().isoformat(timespec="seconds")
                     t["actif"] = True
-                _ecrire(liste)
+                _write(liste)
                 return t
     raise ValueError(_t("Cette tâche planifiée n'existe plus."))
 
 
-def modifier(ident, **champs):
-    with VERROU:
-        liste = lire()
+def modify(ident, **champs):
+    with LOCK:
+        liste = read()
         for t in liste:
             if t["id"] == ident:
                 t.update(champs)
-                _ecrire(liste)
+                _write(liste)
                 return t
     raise ValueError(_t("Cette tâche planifiée n'existe plus."))
 
@@ -124,24 +124,24 @@ def definir_notification(ident, canal):
         from . import notifications
         if notifications.find(canal) is None:
             raise ValueError(_t("Ce canal de notification n'existe plus."))
-    return modifier(ident, notifier=canal, derniere_notif="")
+    return modify(ident, notifier=canal, derniere_notif="")
 
 
-def supprimer(ident, conversation=False):
+def remove(ident, conversation=False):
     """Supprime la tâche pour de bon (elle ne se relancera plus). Si elle travaille en ce moment, elle est arrêtée. `conversation` : efface aussi sa conversation « ⏰ … » (par défaut elle est gardée)."""
-    with VERROU:
-        liste = lire()
+    with LOCK:
+        liste = read()
         tache = next((t for t in liste if t["id"] == ident), None)
         if tache is None:
             raise ValueError(_t("Cette tâche planifiée n'existe plus."))
-        _ecrire([t for t in liste if t["id"] != ident])
+        _write([t for t in liste if t["id"] != ident])
     arret = EN_COURS.get(ident)
     if arret is not None:
         arret.set()
     conv = tache.get("derniere_conv")
     if conversation and conv:
         if arret is not None:
-            A_SUPPRIMER.add(conv)
+            TO_REMOVE.add(conv)
         else:
             _m.conv_supprimer(conv)
     _m.journaliser("Tâche planifiée « {} » supprimée{}.".format(tache.get("nom", ""), " (et sa conversation)" if conversation and conv else ""))
@@ -157,7 +157,7 @@ def arreter(ident):
     return {"ok": True}
 
 
-def echeance(tache, maintenant):
+def due(tache, maintenant):
     """Date de la dernière occurrence prévue (aujourd'hui à l'heure dite) si elle est passée et pas encore traitée, sinon None.
     Une tâche créée après l'heure du jour attend le lendemain ; un PC éteint à l'heure dite la rattrape au démarrage, le jour même seulement."""
     if not tache.get("actif"):
@@ -177,7 +177,7 @@ def echeance(tache, maintenant):
     return prevue
 
 
-def prochaine(tache, maintenant):
+def next_one(tache, maintenant):
     """Texte ISO de la prochaine exécution prévue, pour l'affichage."""
     if not tache.get("actif"):
         return ""
@@ -185,22 +185,22 @@ def prochaine(tache, maintenant):
     h, m = (int(x) for x in tache["heure"].split(":"))
     if tache.get("date"):
         jour = datetime.strptime(tache["date"], "%Y-%m-%d").replace(hour=h, minute=m)
-        return jour.isoformat(timespec="minutes") if jour > maintenant or echeance(tache, maintenant) else ""
+        return jour.isoformat(timespec="minutes") if jour > maintenant or due(tache, maintenant) else ""
     for plus in range(0, 8):
         jour = (maintenant + timedelta(days=plus)).replace(hour=h, minute=m, second=0, microsecond=0)
-        if jour.weekday() in tache["jours"] and (jour > maintenant or (plus == 0 and echeance(tache, maintenant))):
+        if jour.weekday() in tache["jours"] and (jour > maintenant or (plus == 0 and due(tache, maintenant))):
             return jour.isoformat(timespec="minutes")
     return ""
 
 
-def etat():
+def state():
     maintenant = datetime.now()
     taches = []
-    for t in lire():
+    for t in read():
         etat_t = t.get("derniere_etat", "")
         if etat_t == "en_cours" and t["id"] not in EN_COURS:
             etat_t = "interrompue"          # Lutin s'est arrêté pendant qu'elle travaillait
-        taches.append(dict(t, derniere_etat=etat_t, prochaine=prochaine(t, maintenant), en_cours=t["id"] in EN_COURS))
+        taches.append(dict(t, derniere_etat=etat_t, prochaine=next_one(t, maintenant), en_cours=t["id"] in EN_COURS))
     return {"taches": taches}
 
 
@@ -216,7 +216,7 @@ def _conversation(tache):
     return conv, True
 
 
-def _derniere_reponse(conv):
+def _latest_reply(conv):
     for m in reversed(conv.get("messages", [])):
         if m.get("role") == "assistant" and isinstance(m.get("content"), str) and m["content"].strip():
             return m["content"].strip()
@@ -225,40 +225,40 @@ def _derniere_reponse(conv):
     return ""
 
 
-def _noter(ident, **champs):
+def _note(ident, **champs):
     """Met à jour une tâche sans jamais échouer si elle a été supprimée entre-temps. Vrai si elle existe encore."""
     try:
-        modifier(ident, **champs)
+        modify(ident, **champs)
         return True
     except ValueError:
         return False
 
 
-def _historiser(ident, etat_final, debut, erreur=""):
+def _record(ident, etat_final, debut, erreur=""):
     """Ajoute cette exécution aux dix dernières (date, résultat, durée, erreur) de la tâche."""
-    with VERROU:
-        liste = lire()
+    with LOCK:
+        liste = read()
         for t in liste:
             if t["id"] == ident:
                 entree = {"date": debut.isoformat(timespec="seconds"), "etat": etat_final, "duree_s": int((datetime.now() - debut).total_seconds()), "erreur": str(erreur)[:300]}
-                t["historique"] = ([entree] + list(t.get("historique") or []))[:HISTORIQUE_MAX]
-                _ecrire(liste)
+                t["historique"] = ([entree] + list(t.get("historique") or []))[:MAX_HISTORY]
+                _write(liste)
                 return
 
 
-def _echec_demarrage(tache, texte):
+def _failure_startup(tache, texte):
     """La tâche n'a pas pu démarrer (dossier de travail disparu…) : c'est écrit sur la tâche, dans le journal et dans la notification, et elle n'est pas relancée toutes les 30 secondes."""
     debut = datetime.now()
     _m.journaliser("Tâche planifiée « {} » : impossible de démarrer ({}).".format(tache["nom"], texte[:200]))
-    if _noter(tache["id"], derniere_exec=debut.isoformat(timespec="seconds"), derniere_etat="erreur", derniere_erreur=texte[:300]):
-        _historiser(tache["id"], "erreur", debut, texte)
+    if _note(tache["id"], derniere_exec=debut.isoformat(timespec="seconds"), derniere_etat="erreur", derniere_erreur=texte[:300]):
+        _record(tache["id"], "erreur", debut, texte)
         _notifier(tache, "erreur", "⚠ " + texte)
 
 
 def executer(ident):
     """Traite une tâche maintenant. Renvoie l'identifiant de SA conversation (la même à chaque exécution), ou lève ValueError si la machine est déjà occupée ou si la tâche travaille déjà.
     Une tâche qui ne peut pas démarrer (dossier de travail disparu) l'écrit sur elle-même et renvoie ''."""
-    tache = next((t for t in lire() if t["id"] == ident), None)
+    tache = next((t for t in read() if t["id"] == ident), None)
     if tache is None:
         raise ValueError(_t("Cette tâche planifiée n'existe plus."))
     stop = threading.Event()
@@ -279,10 +279,10 @@ def executer(ident):
             _m.TOURS_ACTIFS[conv["id"]] = stop
             EN_COURS[ident] = stop
     except Impossible as erreur:
-        _echec_demarrage(tache, str(erreur))
+        _failure_startup(tache, str(erreur))
         return ""
     debut = datetime.now()
-    _noter(ident, derniere_exec=debut.isoformat(timespec="seconds"), derniere_conv=conv["id"], derniere_etat="en_cours", derniere_erreur="")
+    _note(ident, derniere_exec=debut.isoformat(timespec="seconds"), derniere_conv=conv["id"], derniere_etat="en_cours", derniere_erreur="")
     etat_final, problemes = "ok", []
 
     def recueillir(evenement):                           # les erreurs du tour arrivent comme des événements : on les garde pour les écrire dans la conversation
@@ -305,7 +305,7 @@ def executer(ident):
     resultat = ""
     try:
         finale = _m.conv_lire(conv["id"])
-        resultat = _derniere_reponse(finale)
+        resultat = _latest_reply(finale)
         if (problemes or not resultat) and not arretee:  # une tâche qui n'a rien produit le dit dans sa conversation : jamais « rien fait » sans explication
             etat_final = "erreur"
             texte = problemes[-1] if problemes else _t("Aucune réponse n'a été écrite : le moteur n'a rien répondu. Vérifie qu'un moteur est démarré (Réglages > Moteur) puis lance la tâche de nouveau.")
@@ -316,8 +316,8 @@ def executer(ident):
             _m.journaliser("Tâche planifiée « {} » sans résultat : {}".format(tache["nom"], texte[:200]))
     except (OSError, ValueError):
         pass
-    if conv["id"] in A_SUPPRIMER:                        # sa tâche a été supprimée avec sa conversation pendant qu'elle travaillait : l'écriture de fin de tour est défaite
-        A_SUPPRIMER.discard(conv["id"])
+    if conv["id"] in TO_REMOVE:                        # sa tâche a été supprimée avec sa conversation pendant qu'elle travaillait : l'écriture de fin de tour est défaite
+        TO_REMOVE.discard(conv["id"])
         try:
             _m.conv_supprimer(conv["id"])
         except (OSError, ValueError):
@@ -325,10 +325,10 @@ def executer(ident):
     if arretee:
         etat_final = "arretee"
     erreur_texte = "" if etat_final == "ok" else (resultat if etat_final == "erreur" else "")
-    existe = _noter(ident, derniere_etat=etat_final, derniere_erreur=erreur_texte[:300], **({"actif": False} if tache.get("date") and etat_final != "arretee" else {}))
+    existe = _note(ident, derniere_etat=etat_final, derniere_erreur=erreur_texte[:300], **({"actif": False} if tache.get("date") and etat_final != "arretee" else {}))
     if not existe:
         return conv["id"]                                 # supprimée pendant son exécution : rien à noter, personne à prévenir
-    _historiser(ident, etat_final, debut, erreur_texte)
+    _record(ident, etat_final, debut, erreur_texte)
     if etat_final != "arretee":
         _notifier(tache, etat_final, resultat)
     return conv["id"]
@@ -347,7 +347,7 @@ def _notifier(tache, etat_final, resultat):
         bilan = str(erreur)[:200]
         _m.journaliser("Tâche planifiée « {} » : notification impossible ({}).".format(tache["nom"], bilan))
     try:
-        modifier(tache["id"], derniere_notif=bilan)
+        modify(tache["id"], derniere_notif=bilan)
     except ValueError:
         pass
 
@@ -355,8 +355,8 @@ def _notifier(tache, etat_final, resultat):
 def un_regard(maintenant=None):
     """Lance la première tâche échue si la machine est libre. Renvoie son identifiant (ou None)."""
     maintenant = maintenant or datetime.now()
-    for tache in lire():
-        if echeance(tache, maintenant) and not _m.TOURS_ACTIFS and tache["id"] not in EN_COURS:
+    for tache in read():
+        if due(tache, maintenant) and not _m.TOURS_ACTIFS and tache["id"] not in EN_COURS:
             try:
                 executer(tache["id"])
             except ValueError:
@@ -365,17 +365,17 @@ def un_regard(maintenant=None):
     return None
 
 
-def boucle():
+def loop():
     while True:
         try:
             un_regard()
         except Exception as erreur:  # noqa: BLE001
             _m.journaliser("Planification : {!r}".format(erreur))
-        time.sleep(PERIODE)
+        time.sleep(PERIOD)
 
 
-def demarrer():
-    for t in lire():
+def start():
+    for t in read():
         if t.get("derniere_etat") == "en_cours":
-            _noter(t["id"], derniere_etat="interrompue", derniere_erreur=_t("Lutin s'est arrêté pendant que la tâche travaillait."))
-    threading.Thread(target=boucle, daemon=True, name="planification").start()
+            _note(t["id"], derniere_etat="interrompue", derniere_erreur=_t("Lutin s'est arrêté pendant que la tâche travaillait."))
+    threading.Thread(target=loop, daemon=True, name="planification").start()

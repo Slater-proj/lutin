@@ -29,7 +29,7 @@ class Fil:
 class Liberation(unittest.TestCase):
     def setUp(self):
         self.arrets = []
-        self.llama = engines.MOTEURS["llamacpp"]
+        self.llama = engines.ENGINES["llamacpp"]
         self.avant = ml.SERVEUR.get("proc")
         self.addCleanup(lambda: ml.SERVEUR.update(proc=self.avant))
         self.p1 = mock.patch.object(type(self.llama), "arreter", lambda s: self.arrets.append("llama.cpp"))
@@ -60,7 +60,7 @@ class Liberation(unittest.TestCase):
 
     def test_le_serveur_gere_n_est_arrete_que_sur_demande_du_bouton(self):
         ml.SERVEUR["proc"] = None
-        gere = engines.MOTEURS["openai"]
+        gere = engines.ENGINES["openai"]
         with mock.patch.object(type(gere), "arreter_gere", lambda s: self.arrets.append("gere") or True), self.sans_ollama():
             _m.liberer_vram()          # garde-fous, passage de relais à ComfyUI : le serveur géré ne se redémarre pas tout seul, on ne le coupe pas en douce
             self.assertEqual(self.arrets, [])

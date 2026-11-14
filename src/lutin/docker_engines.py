@@ -22,15 +22,15 @@ from . import engines
 from .i18n import t as _t
 
 API_OLLAMA = "https://api.github.com/repos/ollama/ollama/releases/latest"
-MONTAGE = "/engines"
-PROCESSUS = {"proc": None}
+MOUNT = "/engines"
+PROCESS = {"proc": None}
 
 
 def en_docker(env=None):
     return (os.environ if env is None else env).get("LUTIN_DOCKER") == "1"
 
 
-def est_monte(dossier, mountinfo="/proc/self/mountinfo"):
+def is_mounted(dossier, mountinfo="/proc/self/mountinfo"):
     """Le dossier est-il un point de montage (volume ou dossier de l'hôte) ? Sinon il disparaîtrait avec le conteneur."""
     try:
         for ligne in Path(mountinfo).read_text(errors="replace").splitlines():
@@ -42,9 +42,9 @@ def est_monte(dossier, mountinfo="/proc/self/mountinfo"):
     return False
 
 
-def reglage_dossier_moteurs():
+def setting_folder_engines():
     """Le dossier des moteurs choisi dans la page (Réglages > Moteurs), ou « »."""
-    donnees = engines.CONTEXTE["donnees"]()
+    donnees = engines.CONTEXT["donnees"]()
     if not donnees:
         return ""
     try:
@@ -66,7 +66,7 @@ def dossier_par_defaut(donnees):
         return ancien
 
 
-def detail_dossier_moteurs(env=None, monte=est_monte, ecriture=None):
+def detail_folder_engines(env=None, monte=is_mounted, ecriture=None):
     """{dossier, source, probleme} : où les moteurs s'installent et pourquoi là. Hors Docker : le dossier choisi dans la page, sinon `engines/` dans les données.
     Dans Docker : `LUTIN_ENGINES` (ou l'ancien `LUTIN_MOTEURS`), sinon le dossier choisi dans la page, sinon `/engines` s'il est monté ET modifiable, sinon `engines/` dans le volume des données.
     source : env, reglage, montage, donnees. probleme (Docker, source « donnees » seulement) : non_monte (aucun volume sur /engines) ou non_modifiable (monté, mais l'utilisateur 1000 ne peut pas y écrire)."""
@@ -75,58 +75,58 @@ def detail_dossier_moteurs(env=None, monte=est_monte, ecriture=None):
     choisi = (env.get("LUTIN_ENGINES") or env.get("LUTIN_MOTEURS") or "").strip() if en_docker(env) else ""
     if choisi:
         return {"dossier": Path(choisi), "source": "env", "probleme": ""}
-    reglage = reglage_dossier_moteurs()
+    reglage = setting_folder_engines()
     if reglage:
         return {"dossier": Path(reglage), "source": "reglage", "probleme": ""}
     docker = en_docker(env)
     probleme = ""
     if docker:
-        if monte(MONTAGE):
-            if ecriture(MONTAGE):
-                return {"dossier": Path(MONTAGE), "source": "montage", "probleme": ""}
+        if monte(MOUNT):
+            if ecriture(MOUNT):
+                return {"dossier": Path(MOUNT), "source": "montage", "probleme": ""}
             probleme = "non_modifiable"
         else:
             probleme = "non_monte"
-    donnees = engines.CONTEXTE["donnees"]() or (env.get("LUTIN_HOME") if docker else None)
+    donnees = engines.CONTEXT["donnees"]() or (env.get("LUTIN_HOME") if docker else None)
     if not donnees:
         return {"dossier": None, "source": "donnees", "probleme": probleme}
     return {"dossier": dossier_par_defaut(donnees), "source": "donnees", "probleme": probleme}
 
 
-def dossier_moteurs(env=None, monte=est_monte):
+def folder_engines(env=None, monte=is_mounted):
     """Où les moteurs s'installent dans Docker (voir detail_dossier_moteurs). None hors Docker."""
     env = os.environ if env is None else env
     if not en_docker(env):
         return None
-    return detail_dossier_moteurs(env, monte)["dossier"]
+    return detail_folder_engines(env, monte)["dossier"]
 
 
-def base_moteurs(donnees=None):
+def base_engines(donnees=None):
     """Le dossier qui contient un sous-dossier par moteur (`ollama`, `llamacpp`, `colibri`), partout : Docker ou non. `donnees` : pour un autre dossier de données que celui de Lutin (tests, colibri en ligne de commande)."""
     if donnees is not None and not en_docker():
-        reglage = reglage_dossier_moteurs()
+        reglage = setting_folder_engines()
         return Path(reglage) if reglage else dossier_par_defaut(donnees)
-    return detail_dossier_moteurs()["dossier"]
+    return detail_folder_engines()["dossier"]
 
 
-def ollama_dossier():
-    d = dossier_moteurs()
+def ollama_folder():
+    d = folder_engines()
     return d / "ollama" if d else None
 
 
 def ollama_installe_par_lutin():
     """Le programme `ollama` installé par Lutin dans le dossier des moteurs, ou ''."""
-    d = ollama_dossier()
+    d = ollama_folder()
     exe = d / "bin" / "ollama" if d else None
     return str(exe) if exe and exe.is_file() else ""
 
 
-def chemin_ollama():
+def path_ollama():
     """Le programme `ollama` à lancer dans Docker : celui du dossier des moteurs, sinon un `ollama` du PATH (ancienne image complète)."""
     return ollama_installe_par_lutin() or (shutil.which("ollama") or "")
 
 
-def ollama_externe(env=None):
+def external_ollama(env=None):
     """OLLAMA_URL désigne-t-il un autre conteneur (profil Compose « ollama ») ? Alors Lutin n'installe ni ne lance rien."""
     adresse = ((os.environ if env is None else env).get("OLLAMA_URL") or "").strip()
     return bool(adresse) and not engines.est_local(adresse)
@@ -139,7 +139,7 @@ def _http_json(url, delai=20):
     return lire(url, delai)
 
 
-def fichiers_ollama(release, arch, rocm=False):
+def files_ollama(release, arch, rocm=False):
     """Les fichiers de cette version pour Linux : le programme (+ la bibliothèque ROCm pour les cartes AMD). [] si rien ne correspond."""
     arch = {"x86_64": "amd64", "amd64": "amd64", "aarch64": "arm64", "arm64": "arm64"}.get(arch.lower())
     if not arch:
@@ -149,7 +149,7 @@ def fichiers_ollama(release, arch, rocm=False):
     return [par_nom[n] for n in voulus if n in par_nom] if all(n in par_nom for n in voulus) else []
 
 
-def _verifier_empreinte(fichier, asset):
+def _check_digest(fichier, asset):
     attendu = str(asset.get("digest") or "")
     if not attendu.startswith("sha256:"):
         return
@@ -204,9 +204,9 @@ def extraire_tar(flux, destination):
                     pass
 
 
-def installer_ollama(progression, rocm=False, http_json=None, telecharger=None, ouvrir_archive=None):
+def install_ollama(progression, rocm=False, http_json=None, telecharger=None, ouvrir_archive=None):
     """Télécharge la dernière version d'Ollama (vérifiée par son empreinte) et l'installe dans `<moteurs>/ollama/`. Les modèles ne sont pas touchés (ils sont dans /models)."""
-    base = ollama_dossier()
+    base = ollama_folder()
     if base is None:
         raise ValueError(_t("Aucun dossier pour les moteurs."))
     from . import ollama_client
@@ -215,7 +215,7 @@ def installer_ollama(progression, rocm=False, http_json=None, telecharger=None, 
         release = (http_json or _http_json)(API_OLLAMA)
     except (urllib.error.URLError, OSError, ValueError) as e:
         raise ValueError(_t("GitHub ne répond pas : {}").format(e))
-    fichiers = fichiers_ollama(release, platform.machine(), rocm)
+    fichiers = files_ollama(release, platform.machine(), rocm)
     if not fichiers:
         raise ValueError(_t("Aucun programme Ollama publié pour cette machine ({}).").format(platform.machine()))
     cache, neuf = base / "telechargement", base / "neuf"
@@ -226,10 +226,10 @@ def installer_ollama(progression, rocm=False, http_json=None, telecharger=None, 
     for a in fichiers:
         nom = a["name"]
         try:
-            f = (telecharger or ollama_client.telecharger_fichier)(a["browser_download_url"], cache / nom, lambda t, fait, tot, d=deja, n=nom: progression(_t("Téléchargement de {}").format(n), d + fait, total), taille_min=100_000)
+            f = (telecharger or ollama_client.download_file)(a["browser_download_url"], cache / nom, lambda t, fait, tot, d=deja, n=nom: progression(_t("Téléchargement de {}").format(n), d + fait, total), taille_min=100_000)
         except (RuntimeError, OSError) as e:
             raise ValueError(str(e))
-        _verifier_empreinte(f, a)
+        _check_digest(f, a)
         deja += int(a.get("size") or 0)
         progression(_t("Installation…"), deja, total)
         flux = (ouvrir_archive or _Zstd)(f)
@@ -243,7 +243,7 @@ def installer_ollama(progression, rocm=False, http_json=None, telecharger=None, 
     if not exe.is_file():
         shutil.rmtree(neuf, ignore_errors=True)
         raise ValueError(_t("Le programme « ollama » est introuvable dans l'archive téléchargée."))
-    arreter_ollama()
+    stop_ollama()
     for sous in ("bin", "lib"):
         shutil.rmtree(base / sous, ignore_errors=True)
         if (neuf / sous).exists():
@@ -254,11 +254,11 @@ def installer_ollama(progression, rocm=False, http_json=None, telecharger=None, 
     progression(_t("Installé : {}.").format(release.get("tag_name") or "Ollama"), 1, 1)
 
 
-def desinstaller_ollama():
-    base = ollama_dossier()
+def uninstall_ollama():
+    base = ollama_folder()
     if base is None or not ollama_installe_par_lutin():
         raise ValueError(_t("Ollama n'a pas été installé par Lutin : il n'y a rien à supprimer ici."))
-    arreter_ollama()
+    stop_ollama()
     for sous in ("bin", "lib"):
         shutil.rmtree(base / sous, ignore_errors=True)
     (base / "version.txt").unlink(missing_ok=True)
@@ -271,17 +271,17 @@ def variables_ollama(env=None):
     return {"OLLAMA_HOST": env.get("OLLAMA_HOST") or "127.0.0.1:11434", "OLLAMA_MODELS": env.get("OLLAMA_MODELS") or "/models", "OLLAMA_KEEP_ALIVE": env.get("OLLAMA_KEEP_ALIVE") or "5m"}
 
 
-def demarrer_ollama(attendre=lambda: False, delai=30, lanceur=subprocess.Popen):
+def start_ollama(attendre=lambda: False, delai=30, lanceur=subprocess.Popen):
     """Lance `ollama serve` (journal : <données>/ollama.log) et attend qu'il réponde. `attendre()` rend vrai quand il répond."""
-    exe = chemin_ollama()
+    exe = path_ollama()
     if not exe:
         raise ValueError(_t("Ollama n'est pas installé."))
     if attendre():
         return
-    donnees = engines.CONTEXTE["donnees"]() or os.environ.get("LUTIN_HOME") or "/data"
+    donnees = engines.CONTEXT["donnees"]() or os.environ.get("LUTIN_HOME") or "/data"
     journal = open(Path(donnees) / "ollama.log", "ab")
     env = dict(os.environ, **variables_ollama())
-    PROCESSUS["proc"] = lanceur([exe, "serve"], env=env, stdout=journal, stderr=journal, stdin=subprocess.DEVNULL, start_new_session=True)
+    PROCESS["proc"] = lanceur([exe, "serve"], env=env, stdout=journal, stderr=journal, stdin=subprocess.DEVNULL, start_new_session=True)
     for _ in range(int(delai * 2)):
         time.sleep(0.5)
         if attendre():
@@ -301,9 +301,9 @@ def _pids_ollama():
     return sortie
 
 
-def arreter_ollama():
-    p = PROCESSUS.get("proc")
-    PROCESSUS["proc"] = None
+def stop_ollama():
+    p = PROCESS.get("proc")
+    PROCESS["proc"] = None
     if p is not None and p.poll() is None:
         try:
             p.terminate()
@@ -322,12 +322,12 @@ def arreter_ollama():
 
 def actions_ollama(installe, actif, hors_ligne):
     pas, deja = _t("Pas installé."), _t("Déjà installé.")
-    if ollama_externe():
+    if external_ollama():
         raison = _t("Cet Ollama est un autre conteneur (OLLAMA_URL) : il se gère avec docker compose.")
         return {a: {"possible": False, "raison": raison} for a in engines.ACTIONS}
     par_lutin = bool(ollama_installe_par_lutin())
     hl = _t("Mode hors ligne : aucun téléchargement.")
-    emplacement = ollama_dossier()
+    emplacement = ollama_folder()
     return {"installer": {"possible": not installe and not hors_ligne, "raison": deja if installe else (hl if hors_ligne else _t("Télécharge Ollama (environ 1,5 Go) dans {} : il reste là quand l'image de Lutin est mise à jour.").format(emplacement))},
             "mettre_a_jour": {"possible": par_lutin and not hors_ligne, "raison": (hl if hors_ligne else _t("Télécharge la dernière version ; tes modèles sont gardés.")) if par_lutin else (_t("Ollama fait partie de l'image : mets l'image à jour.") if installe else pas)},
             "desinstaller": {"possible": par_lutin, "raison": _t("Supprime le programme (tes modèles restent dans /models).") if par_lutin else (_t("Ollama fait partie de l'image : il ne se supprime pas ici.") if installe else pas)},
@@ -336,16 +336,16 @@ def actions_ollama(installe, actif, hors_ligne):
             "arreter": {"possible": actif, "raison": _t("Arrête Ollama et libère la mémoire.") if actif else _t("Il n'est pas démarré.")}}
 
 
-def faire_ollama(action, progression, attendre, rocm=False):
+def do_ollama(action, progression, attendre, rocm=False):
     """Fait une action d'Ollama dans Docker (appelée par MoteurOllama.faire, une fois l'action reconnue possible)."""
     if action == "demarrer":
         progression(_t("Démarrage d'Ollama…"), 0, 0)
-        return demarrer_ollama(attendre)
+        return start_ollama(attendre)
     if action == "arreter":
-        return arreter_ollama()
+        return stop_ollama()
     if action == "desinstaller":
         progression(_t("Désinstallation…"), 0, 0)
-        return desinstaller_ollama()
-    installer_ollama(progression, rocm=rocm)
+        return uninstall_ollama()
+    install_ollama(progression, rocm=rocm)
     progression(_t("Démarrage d'Ollama…"), 0, 0)
-    demarrer_ollama(attendre)
+    start_ollama(attendre)

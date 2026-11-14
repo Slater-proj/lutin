@@ -159,7 +159,7 @@ class GardeFousDesTests(unittest.TestCase):
     def test_l_installation_reelle_d_ollama_est_interdite_aux_tests(self):
         from lutin import ollama_client
         with self.assertRaises(ollama_client.ErreurOllama):
-            ollama_client.installer_windows(tempfile.mkdtemp(prefix="lutin-garde-"))
+            ollama_client.install_windows(tempfile.mkdtemp(prefix="lutin-garde-"))
 
 
 class JetonGitHub(unittest.TestCase):
@@ -196,13 +196,13 @@ class ReconnaitreUnLlamaServer(unittest.TestCase):
 
     def test_un_programme_sans_chemin_connu_est_reconnu_par_sa_ligne_de_commande(self):
         dossier = Path(tempfile.mkdtemp(prefix="lutin-llama-cmd-")).resolve()
-        with mock.patch.object(rc, "dossiers_lutin", lambda: [dossier]):
-            self.assertFalse(rc._chez_lutin("", "llama-server -m x.gguf --port 8081"))
-            self.assertTrue(rc._chez_lutin("", 'llama-server --models-preset "{}/modeles.ini"'.format(str(dossier).replace("\\", "/"))))
-            self.assertTrue(rc._chez_lutin(str(dossier / "bin" / "llama-server.exe"), ""))
+        with mock.patch.object(rc, "folders_lutin", lambda: [dossier]):
+            self.assertFalse(rc._at_lutin("", "llama-server -m x.gguf --port 8081"))
+            self.assertTrue(rc._at_lutin("", 'llama-server --models-preset "{}/modeles.ini"'.format(str(dossier).replace("\\", "/"))))
+            self.assertTrue(rc._at_lutin(str(dossier / "bin" / "llama-server.exe"), ""))
 
     def test_la_ligne_de_commande_est_lue_dans_le_json_de_windows(self):
-        r = rc.analyser_instantane('[{"pid": 5, "ppid": 1, "nom": "llama-server.exe", "exe": null, "cmd": "llama-server --port 8081", "ram": 10, "vram": null}]')
+        r = rc.parse_snapshot('[{"pid": 5, "ppid": 1, "nom": "llama-server.exe", "exe": null, "cmd": "llama-server --port 8081", "ram": 10, "vram": null}]')
         self.assertEqual((r[0]["cmd"], r[0]["exe"]), ("llama-server --port 8081", ""))
 
 

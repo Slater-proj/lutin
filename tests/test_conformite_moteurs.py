@@ -203,7 +203,7 @@ class Conformite:
         g = self.moteur.grille()
         self.assertEqual(set(g), set(engines.FONCTIONS))
         for f, (etat, note) in g.items():
-            self.assertIn(etat, engines.ETATS, f)
+            self.assertIn(etat, engines.STATES, f)
         vue = {x["fonction"]: x for x in self.moteur.vue()["grille"]}
         self.assertEqual(list(vue), list(engines.FONCTIONS))
         self.verifier_liste()
@@ -230,7 +230,7 @@ class OllamaAdaptateur(Conformite, unittest.TestCase):
         cls.s = serveur(FauxOllama)
         cls.ancien = _m.OLLAMA
         _m.OLLAMA = "http://127.0.0.1:%d" % cls.s.server_address[1]
-        cls.moteur = engines.MOTEURS["ollama"]
+        cls.moteur = engines.ENGINES["ollama"]
 
     @classmethod
     def tearDownClass(cls):
@@ -244,15 +244,15 @@ class OpenAIBase(Conformite):
     @classmethod
     def setUpClass(cls):
         cls.s = serveur(FauxOpenAI)
-        cls.ancien = dict(engines.CONTEXTE)
+        cls.ancien = dict(engines.CONTEXT)
         cls.dossier = Path(tempfile.mkdtemp(dir=_TEMP))
-        engines.CONTEXTE.update(donnees=lambda: cls.dossier, en_docker=lambda: False, hors_ligne=lambda: False)
+        engines.CONTEXT.update(donnees=lambda: cls.dossier, en_docker=lambda: False, hors_ligne=lambda: False)
         ml.regler(cls.id, adresse="http://127.0.0.1:%d" % cls.s.server_address[1])
-        cls.moteur = engines.MOTEURS[cls.id]
+        cls.moteur = engines.ENGINES[cls.id]
 
     @classmethod
     def tearDownClass(cls):
-        engines.CONTEXTE.update(cls.ancien)
+        engines.CONTEXT.update(cls.ancien)
         cls.s.shutdown()
 
 
@@ -266,10 +266,10 @@ class ServeurExterneAdaptateur(OpenAIBase, unittest.TestCase):
 
 class Garde(unittest.TestCase):
     def test_trois_adaptateurs_et_chaque_fonction_declaree_est_couverte(self):
-        self.assertEqual({"ollama", "llamacpp", "openai"} <= set(engines.MOTEURS), True)
+        self.assertEqual({"ollama", "llamacpp", "openai"} <= set(engines.ENGINES), True)
         for ident in ("ollama", "llamacpp", "openai"):
             for f in engines.FONCTIONS:
-                etat = engines.MOTEURS[ident].grille()[f][0]
+                etat = engines.ENGINES[ident].grille()[f][0]
                 if etat in ("natif", "adapte") and f not in VERIFIE_AILLEURS:
                     self.assertTrue(hasattr(Conformite, "verifier_" + f), "{} : aucune vérification pour « {} »".format(ident, f))
 

@@ -258,7 +258,7 @@ def delete_media(ident, media_id):
         trouve.pop("medias_fichiers", None)
     _m.ecrire_atomique(_m.conv_chemin(ident), json.dumps(c, ensure_ascii=False))
     supprime = False
-    dossier = addons.reglages("comfyui").get("dossier") or ""
+    dossier = addons.settings("comfyui").get("dossier") or ""
     if chemin and dossier:
         sortie = (Path(dossier) / "output").resolve()
         try:
@@ -338,11 +338,11 @@ def _call_tool(nom, args, ctx):
     if nom == "memoriser":
         return _m.noter(args.get("note", ""))
     if nom == "web_chercher":
-        return _m.outil_web_chercher(args.get("requete", ""), args.get("nombre"), ctx, args.get("lire"), args.get("periode"), args.get("site"), bool(args.get("actualites")))
+        return _m.tool_web_search(args.get("requete", ""), args.get("nombre"), ctx, args.get("lire"), args.get("periode"), args.get("site"), bool(args.get("actualites")))
     if nom == "web_lire":
-        return _m.outil_web_lire(args.get("url", ""), args.get("debut"), ctx, bool(args.get("liens")))
+        return _m.tool_web_read(args.get("url", ""), args.get("debut"), ctx, bool(args.get("liens")))
     if nom == "taches":
-        return _m.outil_taches(args.get("liste", []), ctx)
+        return _m.tool_tasks(args.get("liste", []), ctx)
     if nom == "apercu_page":
         from . import page_preview
         return page_preview.tool_preview(args.get("chemin"), args.get("largeur"), args.get("hauteur"), ctx)
@@ -363,7 +363,7 @@ def _call_tool(nom, args, ctx):
         from . import addons, addons_comfyui
         if not addons.actif("comfyui"):
             raise _m.ErreurOutil("L'addon ComfyUI n'est pas activé.")
-        return addons_comfyui.texte_modeles() if nom == "comfy_modeles" else addons_comfyui.outil_generer(args, ctx)
+        return addons_comfyui.text_models() if nom == "comfy_modeles" else addons_comfyui.outil_generer(args, ctx)
     if nom.startswith("voix_"):
         from . import addons_voicestudio
         return addons_voicestudio.outil_voix(nom, args, ctx)

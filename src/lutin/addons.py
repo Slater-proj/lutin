@@ -33,19 +33,19 @@ from . import core as _m
 from . import net_guard as _net_guard
 from .i18n import t as _t
 
-DOSSIER_LIVRE = Path(__file__).parent / "addons_livres"      # addons livrés (les tests peuvent pointer ailleurs)
+SHIPPED_FOLDER = Path(__file__).parent / "addons_livres"      # addons livrés (les tests peuvent pointer ailleurs)
 RE_ID = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
-RE_CLE = re.compile(r"^[a-z][a-z0-9_]{0,31}$")
+RE_KEY = re.compile(r"^[a-z][a-z0-9_]{0,31}$")
 RE_VARIABLE = re.compile(r"\{([a-z][a-z0-9_]{0,31})\}")
 RE_VARIABLE_ENTIERE = re.compile(r"^\{([a-z][a-z0-9_]{0,31})\}$")
 METHODES = ("GET", "POST")
-APPELS_MAX = 20
-REPONSE_MAX = 1_000_000
-DELAI_APPEL = 30
-HISTORIQUE_FLUX = 5                 # anciennes versions du flux gardées
+MAX_CALLS = 20
+MAX_REPLY = 1_000_000
+TIMEOUT_CALL = 30
+HISTORY_STREAM = 5                 # anciennes versions du flux gardées
 VERIFICATION_TOUS_LES = 24 * 3600   # secondes entre deux vérifications automatiques d'un addon actif
-VERROU_ETAT = threading.RLock()        # lire-modifier-écrire de addons.json et secrets.json : la page, la vérification quotidienne et les fils d'écoute ne s'écrasent pas
-ETAT = {}                           # identifiant -> état d'exécution en mémoire (fil d'un addon qui tourne…)
+LOCK_STATE = threading.RLock()        # lire-modifier-écrire de addons.json et secrets.json : la page, la vérification quotidienne et les fils d'écoute ne s'écrasent pas
+STATE = {}                           # identifiant -> état d'exécution en mémoire (fil d'un addon qui tourne…)
 
 
 class ErreurAddon(Exception):
@@ -63,14 +63,14 @@ OUVREUR = urllib.request.build_opener(_SansRedirection)
 
 
 # --------------------------------------------------------------------------- manifestes et flux
-def dossier_donnees():
+def folder_data():
     return _m.DONNEES / "addons"
 
 
 def ids():
     """Les addons livrés, dans l'ordre alphabétique."""
     try:
-        return sorted(d.name for d in DOSSIER_LIVRE.iterdir() if d.is_dir() and RE_ID.match(d.name) and (d / "addon.json").is_file())
+        return sorted(d.name for d in SHIPPED_FOLDER.iterdir() if d.is_dir() and RE_ID.match(d.name) and (d / "addon.json").is_file())
     except OSError:
         return []
 
@@ -78,7 +78,7 @@ def ids():
 def manifeste(ident):
     if not RE_ID.match(str(ident or "")):
         raise ErreurAddon(_t("Addon inconnu."))
-    f = DOSSIER_LIVRE / ident / "addon.json"
+    f = SHIPPED_FOLDER / ident / "addon.json"
     try:
         m = json.loads(f.read_text(encoding="utf-8"))
     except (OSError, ValueError):
@@ -91,33 +91,33 @@ def manifeste(ident):
     return m
 
 
-def flux_livre(ident):
+def shipped_stream(ident):
     try:
-        return json.loads((DOSSIER_LIVRE / ident / "flux.json").read_text(encoding="utf-8"))
+        return json.loads((SHIPPED_FOLDER / ident / "flux.json").read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return {"version": 1, "appels": {}}
 
 
-def chemin_flux(ident):
-    return dossier_donnees() / ident / "flux.json"
+def path_stream(ident):
+    return folder_data() / ident / "flux.json"
 
 
-def flux(ident):
+def stream(ident):
     """Le flux en vigueur : la version corrigée par l'utilisateur si elle existe et reste valide, sinon la version livrée."""
     m = manifeste(ident)
-    f = chemin_flux(ident)
+    f = path_stream(ident)
     if f.is_file():
         try:
             propre = json.loads(f.read_text(encoding="utf-8"))
-            valider_flux(propre, m)
+            validate_stream(propre, m)
             return propre
         except (OSError, ValueError, ErreurAddon):
             _m.journaliser("Flux de l'addon {} illisible ou invalide : version livrée utilisée.".format(ident))
-    return flux_livre(ident)
+    return shipped_stream(ident)
 
 
-def flux_modifie(ident):
-    return chemin_flux(ident).is_file()
+def modified_stream(ident):
+    return path_stream(ident).is_file()
 
 
 def _pct(valeur):
@@ -143,7 +143,7 @@ def entete_oauth1(methode, url, cles, nonce=None, horodatage=None):
     return "OAuth " + ", ".join('%s="%s"' % (_pct(k), _pct(v)) for k, v in sorted(oauth))
 
 
-def hote_autorise(url, m):
+def allowed_host(url, m):
     """Seuls les sites du manifeste sont joignables, en https (http seulement pour la boucle locale, déclarée dans le manifeste : tests et services de la machine)."""
     p = urllib.parse.urlparse(url)
     if not p.hostname or p.hostname.lower() not in [h.lower() for h in m["hotes"]]:
@@ -151,19 +151,19 @@ def hote_autorise(url, m):
     return p.scheme == "https" or (p.scheme == "http" and p.hostname in ("127.0.0.1", "localhost"))
 
 
-def valider_flux(f, m):
+def validate_stream(f, m):
     """Refuse un flux mal formé ou qui viserait un site hors manifeste. Lève ErreurAddon."""
     if not isinstance(f, dict) or not isinstance(f.get("appels"), dict):
         raise ErreurAddon(_t("Flux invalide : il faut un objet avec « appels »."))
-    if len(f["appels"]) > APPELS_MAX:
-        raise ErreurAddon(_t("Flux invalide : {} appels au plus.").format(APPELS_MAX))
+    if len(f["appels"]) > MAX_CALLS:
+        raise ErreurAddon(_t("Flux invalide : {} appels au plus.").format(MAX_CALLS))
     for nom, a in f["appels"].items():
-        if not RE_CLE.match(str(nom)) or not isinstance(a, dict):
+        if not RE_KEY.match(str(nom)) or not isinstance(a, dict):
             raise ErreurAddon(_t("Flux invalide : appel « {} » mal formé.").format(nom))
         if str(a.get("methode", "GET")).upper() not in METHODES:
             raise ErreurAddon(_t("Flux invalide : méthode de « {} » (GET ou POST).").format(nom))
         url = str(a.get("url", ""))
-        if not hote_autorise(RE_VARIABLE.sub("x", url), m):
+        if not allowed_host(RE_VARIABLE.sub("x", url), m):
             raise ErreurAddon(_t("Flux invalide : l'adresse de « {} » vise un site que cet addon n'a pas le droit de joindre.").format(nom))
         for cle in ("params", "corps", "attendu", "extraire"):
             if cle in a and not isinstance(a[cle], dict):
@@ -172,20 +172,20 @@ def valider_flux(f, m):
 
 
 # --------------------------------------------------------------------------- état, réglages et secrets
-def lire_etat():
-    return _m.lire_json(dossier_donnees() / "addons.json", {})
+def read_state():
+    return _m.lire_json(folder_data() / "addons.json", {})
 
 
-def ecrire_etat(etat):
-    _m.ecrire_atomique(dossier_donnees() / "addons.json", json.dumps(etat, ensure_ascii=False, indent=1))
+def write_state(etat):
+    _m.ecrire_atomique(folder_data() / "addons.json", json.dumps(etat, ensure_ascii=False, indent=1))
 
 
-def secrets_lire():
-    return _m.lire_json(dossier_donnees() / "secrets.json", {})
+def secrets_read():
+    return _m.lire_json(folder_data() / "secrets.json", {})
 
 
-def secrets_ecrire(secrets):
-    f = dossier_donnees() / "secrets.json"
+def secrets_write(secrets):
+    f = folder_data() / "secrets.json"
     _m.ecrire_atomique(f, json.dumps(secrets, ensure_ascii=False, indent=1))
     try:
         os.chmod(str(f), 0o600)                      # lisible par toi seul (sans effet sous Windows, où le dossier de l'utilisateur l'est déjà)
@@ -193,11 +193,11 @@ def secrets_ecrire(secrets):
         pass
 
 
-def reglages(ident):
+def settings(ident):
     """Les valeurs saisies : réglages simples et secrets réunis (pour l'usage interne seulement)."""
     m = manifeste(ident)
-    valeurs = dict(lire_etat().get(ident, {}).get("reglages", {}))
-    sec = secrets_lire().get(ident, {})
+    valeurs = dict(read_state().get(ident, {}).get("reglages", {}))
+    sec = secrets_read().get(ident, {})
     for r in m["reglages"]:
         if r.get("secret"):
             valeurs[r["cle"]] = sec.get(r["cle"], "")
@@ -206,12 +206,12 @@ def reglages(ident):
     return valeurs
 
 
-def enregistrer_reglages(ident, nouveaux):
+def save_settings(ident, nouveaux):
     """Enregistre les réglages saisis. Un secret vide garde l'ancienne valeur ; une clé inconnue est refusée."""
     m = manifeste(ident)
     connus = {r["cle"]: r for r in m["reglages"]}
-    with VERROU_ETAT:
-        etat, sec = lire_etat(), secrets_lire()
+    with LOCK_STATE:
+        etat, sec = read_state(), secrets_read()
         courant = etat.setdefault(ident, {}).setdefault("reglages", {})
         secret_courant = sec.setdefault(ident, {})
         for cle, valeur in (nouveaux or {}).items():
@@ -227,12 +227,12 @@ def enregistrer_reglages(ident, nouveaux):
                     secret_courant[cle] = valeur
             else:
                 courant[cle] = valeur
-        secrets_ecrire(sec)
-        ecrire_etat(etat)
+        secrets_write(sec)
+        write_state(etat)
     return decrire(ident)
 
 
-def textes_visibles(m):
+def visible_texts(m):
     """Tous les textes d'un manifeste que la page montre à l'utilisateur (ils sont écrits en français et traduits à l'affichage)."""
     textes = [m.get("nom", ""), m.get("description", "")]
     for e in m["etapes"]:
@@ -245,8 +245,8 @@ def textes_visibles(m):
 def decrire(ident):
     """Ce que la page voit : le manifeste (traduit), l'état, les réglages (jamais la valeur d'un secret : seulement s'il est défini)."""
     m = manifeste(ident)
-    etat = lire_etat().get(ident, {})
-    valeurs = reglages(ident)
+    etat = read_state().get(ident, {})
+    valeurs = settings(ident)
     champs = []
     for r in m["reglages"]:
         champ = {k: r.get(k) for k in ("cle", "secret", "defaut", "texte")}
@@ -272,15 +272,15 @@ def decrire(ident):
     etapes = [dict(e, titre=_t(e.get("titre", "")), texte=_t(e.get("texte", ""))) for e in m["etapes"]]
     a_configurer = [r.get("libelle", r["cle"]) for r in m["reglages"] if r.get("obligatoire", True) and not valeurs.get(r["cle"])]
     return {"id": ident, "nom": _t(m.get("nom", ident)), "description": _t(m.get("description", "")), "doc": m.get("doc", ""), "etapes": etapes, "hotes": m["hotes"], "reglages": champs, "a_configurer": [_t(x) for x in a_configurer],
-            "actif": bool(etat.get("actif")), "verification": etat.get("verification"), "flux_modifie": flux_modifie(ident), "etat": ETAT.get(ident, {}).get("etat", "")}
+            "actif": bool(etat.get("actif")), "verification": etat.get("verification"), "flux_modifie": modified_stream(ident), "etat": STATE.get(ident, {}).get("etat", "")}
 
 
-def liste():
+def entries():
     return [decrire(i) for i in ids()]
 
 
 # --------------------------------------------------------------------------- les appels
-def _chemin(donnees, chemin):
+def _path(donnees, chemin):
     """Valeur à un chemin comme « result.0.username » dans un JSON."""
     cur = donnees
     for morceau in str(chemin).split("."):
@@ -336,17 +336,17 @@ def _port_ouvert(hote, port):
         return False
 
 
-def appeler(ident, nom, variables=None, delai=DELAI_APPEL):
+def appeler(ident, nom, variables=None, delai=TIMEOUT_CALL):
     """Fait un appel du flux. Renvoie {ok, donnees, extrait, erreur}. Ne lève pas pour une panne du service (ok=False + erreur lisible) ; lève ErreurAddon pour un appel inconnu ou une variable manquante."""
     m = manifeste(ident)
-    f = flux(ident)
+    f = stream(ident)
     a = f["appels"].get(nom)
     if not a:
         raise ErreurAddon(_t("Appel inconnu dans le flux : {}.").format(nom))
-    valeurs = dict(reglages(ident))
+    valeurs = dict(settings(ident))
     valeurs.update(variables or {})
     url = _remplir(a["url"], valeurs, url=True)
-    if not hote_autorise(url, m):
+    if not allowed_host(url, m):
         raise ErreurAddon(_t("Adresse refusée : cet addon ne peut pas joindre ce site."))
     params = _remplir(a.get("params", {}), valeurs)
     corps = _remplir(a.get("corps", {}), valeurs)
@@ -365,7 +365,7 @@ def appeler(ident, nom, variables=None, delai=DELAI_APPEL):
     if not _net_guard.local_test_mode() and hote not in ("127.0.0.1", "localhost"):          # une adresse de la machine n'est permise que si le manifeste (livré) la déclare : sinon hote_autorise l'a déjà refusée
         from . import web
         try:
-            web.verifier_hote_web(url)                                          # même garde-fou que l'accès web : jamais une adresse du réseau local
+            web.check_host_web(url)                                          # même garde-fou que l'accès web : jamais une adresse du réseau local
         except _m.ErreurOutil as e:
             return {"ok": False, "donnees": None, "extrait": {}, "erreur": str(e)}
     auth = m.get("auth") or {}
@@ -380,30 +380,30 @@ def appeler(ident, nom, variables=None, delai=DELAI_APPEL):
     req = urllib.request.Request(url, data=donnees_envoi, headers=en_tetes, method=methode)
     try:
         with OUVREUR.open(req, timeout=delai) as r:
-            brut = r.read(REPONSE_MAX + 1)
+            brut = r.read(MAX_REPLY + 1)
     except urllib.error.HTTPError as e:
         corps_err = e.read(4000).decode("utf-8", "replace")
         return {"ok": False, "donnees": None, "extrait": {}, "erreur": masquer("HTTP {} : {}".format(e.code, corps_err.strip()[:300]), valeurs), "corps": masquer(corps_err, valeurs)}
     except (urllib.error.URLError, OSError, ValueError) as e:
         return {"ok": False, "donnees": None, "extrait": {}, "erreur": masquer(_t("Le service ne répond pas : {}").format(e), valeurs)}
-    if len(brut) > REPONSE_MAX:
+    if len(brut) > MAX_REPLY:
         return {"ok": False, "donnees": None, "extrait": {}, "erreur": _t("Réponse trop grosse (plus de 1 Mo).")}
     try:
         donnees = json.loads(brut.decode("utf-8", "replace"))
     except ValueError:
         return {"ok": False, "donnees": None, "extrait": {}, "erreur": _t("Le service n'a pas répondu en JSON (a-t-il changé ?) : {}").format(masquer(brut.decode("utf-8", "replace")[:200], valeurs))}
     for chemin, attendu in (a.get("attendu") or {}).items():
-        if _chemin(donnees, chemin) != attendu:
+        if _path(donnees, chemin) != attendu:
             return {"ok": False, "donnees": donnees, "extrait": {}, "erreur": _t("Réponse inattendue : « {} » devrait valoir {} (le service a-t-il changé ?).").format(chemin, json.dumps(attendu))}
-    extrait = {cle: _chemin(donnees, chemin) for cle, chemin in (a.get("extraire") or {}).items()}
+    extrait = {cle: _path(donnees, chemin) for cle, chemin in (a.get("extraire") or {}).items()}
     return {"ok": True, "donnees": donnees, "extrait": extrait, "erreur": ""}
 
 
 # --------------------------------------------------------------------------- vérification, activation
-def verifier(ident):
+def check(ident):
     """Vérifie l'addon : réglages présents puis chaque appel de vérification du manifeste. Enregistre et renvoie {ok, date, etapes: [{appel, ok, message}]}."""
     m = manifeste(ident)
-    valeurs = reglages(ident)
+    valeurs = settings(ident)
     etapes = []
     manquants = [r.get("libelle", r["cle"]) for r in m["reglages"] if r.get("obligatoire", True) and not valeurs.get(r["cle"])]
     if manquants:
@@ -423,10 +423,10 @@ def verifier(ident):
             if not etapes[-1]["ok"]:
                 break
     resultat = {"ok": all(e["ok"] for e in etapes), "date": int(time.time()), "etapes": etapes}
-    with VERROU_ETAT:
-        etat = lire_etat()
+    with LOCK_STATE:
+        etat = read_state()
         etat.setdefault(ident, {})["verification"] = resultat
-        ecrire_etat(etat)
+        write_state(etat)
     return resultat
 
 
@@ -434,13 +434,13 @@ def activer(ident, actif):
     """Active ou désactive. Activer demande une vérification réussie ; le démarrage de la partie vivante (fil d'écoute…) est confié au module de l'addon s'il en a un."""
     manifeste(ident)
     if actif:
-        v = verifier(ident)
+        v = check(ident)
         if not v["ok"]:
             raise ErreurAddon(_t("Vérification échouée : {}").format(" ; ".join(e["message"] for e in v["etapes"] if not e["ok"])))
-    with VERROU_ETAT:
-        etat = lire_etat()
+    with LOCK_STATE:
+        etat = read_state()
         etat.setdefault(ident, {})["actif"] = bool(actif)
-        ecrire_etat(etat)
+        write_state(etat)
     module = module_code(ident)
     if module:
         try:
@@ -448,10 +448,10 @@ def activer(ident, actif):
         except Exception as e:  # noqa: BLE001  (un addon qui plante ne doit pas faire tomber Lutin)
             _m.journaliser("Addon {} : {} impossible ({!r}).".format(ident, "démarrage" if actif else "arrêt", e))
             if actif:
-                with VERROU_ETAT:
-                    etat = lire_etat()
+                with LOCK_STATE:
+                    etat = read_state()
                     etat.setdefault(ident, {})["actif"] = False
-                    ecrire_etat(etat)
+                    write_state(etat)
                 raise ErreurAddon(_t("Démarrage impossible : {}").format(e))
     return decrire(ident)
 
@@ -465,7 +465,7 @@ def module_code(ident):
         return None
 
 
-def boucle_verification():
+def loop_verification():
     while True:
         time.sleep(3600)
         try:
@@ -474,11 +474,11 @@ def boucle_verification():
             _m.journaliser("Vérification des addons : {!r}".format(erreur))
 
 
-def demarrer_actifs():
+def start_active():
     """Au démarrage de Lutin : relance la partie vivante des addons actifs et la vérification régulière. Un addon qui échoue est signalé, les autres continuent."""
     import threading
-    threading.Thread(target=boucle_verification, daemon=True, name="addons-verification").start()
-    for ident, e in lire_etat().items():
+    threading.Thread(target=loop_verification, daemon=True, name="addons-verification").start()
+    for ident, e in read_state().items():
         if e.get("actif") and ident in ids():
             module = module_code(ident)
             if module:
@@ -492,13 +492,13 @@ def verifier_si_besoin(maintenant=None):
     """Appelé régulièrement : vérifie les addons actifs dont la dernière vérification date de plus d'un jour. Renvoie les identifiants vérifiés."""
     maintenant = maintenant or time.time()
     faits = []
-    for ident, e in lire_etat().items():
+    for ident, e in read_state().items():
         if not e.get("actif") or ident not in ids():
             continue
         derniere = (e.get("verification") or {}).get("date", 0)
         if maintenant - derniere >= VERIFICATION_TOUS_LES:
             try:
-                verifier(ident)
+                check(ident)
                 faits.append(ident)
             except ErreurAddon:
                 continue
@@ -507,15 +507,15 @@ def verifier_si_besoin(maintenant=None):
 
 def alertes():
     """Les addons actifs dont la dernière vérification a échoué (la page affiche un avertissement)."""
-    return [{"id": i, "nom": _t(manifeste(i).get("nom", i))} for i, e in lire_etat().items() if e.get("actif") and i in ids() and e.get("verification") and not e["verification"].get("ok")]
+    return [{"id": i, "nom": _t(manifeste(i).get("nom", i))} for i, e in read_state().items() if e.get("actif") and i in ids() and e.get("verification") and not e["verification"].get("ok")]
 
 
 def actif(ident):
     """L'addon est-il activé ? (sert à n'offrir ses outils au modèle que lorsqu'il l'est)"""
-    return bool(lire_etat().get(ident, {}).get("actif"))
+    return bool(read_state().get(ident, {}).get("actif"))
 
 
-def etat_vivant(ident):
+def alive_state(ident):
     """Ce que la partie vivante de l'addon montre dans son panneau (module.etat()), ou {} s'il n'en a pas."""
     module = module_code(ident)
     manifeste(ident)
@@ -532,25 +532,25 @@ def action(ident, nom, donnees):
 
 
 # --------------------------------------------------------------------------- corriger le flux
-def appliquer_flux(ident, nouveau):
+def apply_stream(ident, nouveau):
     """Enregistre un flux corrigé (validé), après avoir gardé l'ancien. Renvoie l'état de l'addon."""
     m = manifeste(ident)
-    valider_flux(nouveau, m)
-    f = chemin_flux(ident)
+    validate_stream(nouveau, m)
+    f = path_stream(ident)
     if f.is_file():
         histo = f.parent / "historique"
         histo.mkdir(parents=True, exist_ok=True)
         (histo / ("flux-%d.json" % int(time.time() * 1000))).write_text(f.read_text(encoding="utf-8"), encoding="utf-8")
-        for ancien in sorted(histo.glob("flux-*.json"))[:-HISTORIQUE_FLUX]:
+        for ancien in sorted(histo.glob("flux-*.json"))[:-HISTORY_STREAM]:
             ancien.unlink(missing_ok=True)
     _m.ecrire_atomique(f, json.dumps(nouveau, ensure_ascii=False, indent=1))
     return decrire(ident)
 
 
-def restaurer_flux(ident):
+def restore_stream(ident):
     """Revient au flux livré avec Lutin."""
     manifeste(ident)
-    chemin_flux(ident).unlink(missing_ok=True)
+    path_stream(ident).unlink(missing_ok=True)
     return decrire(ident)
 
 
@@ -565,8 +565,8 @@ def proposer_correction(ident, demander_au_modele=None, lire_doc=None):
     """Après une vérification échouée : demande au modèle de proposer un flux corrigé d'après la documentation du service. Rien n'est appliqué : renvoie {flux, diff, explication}.
     demander_au_modele(consigne, flux_actuel) -> dict et lire_doc(url) -> texte sont injectables (tests) ; par défaut le modèle local et la lecture web (adresses locales refusées)."""
     m = manifeste(ident)
-    actuel = flux(ident)
-    verif = (lire_etat().get(ident) or {}).get("verification")
+    actuel = stream(ident)
+    verif = (read_state().get(ident) or {}).get("verification")
     if not verif or verif.get("ok"):
         raise ErreurAddon(_t("Rien à réparer : la dernière vérification a réussi (lance d'abord « Vérifier »)."))
     erreurs = " ; ".join(e["message"] for e in verif["etapes"] if not e["ok"])
@@ -577,7 +577,7 @@ def proposer_correction(ident, demander_au_modele=None, lire_doc=None):
                 doc = lire_doc(m["doc"])
             else:
                 from . import web
-                doc = web.outil_web_lire(m["doc"], 0, {"web": True})
+                doc = web.tool_web_read(m["doc"], 0, {"web": True})
         except (_m.ErreurOutil, OSError) as e:
             doc = _t("(documentation illisible : {})").format(e)
     consigne = (_t("Le flux d'un addon ne marche plus : le service a peut-être changé. Voici la vérification qui échoue, le flux actuel (JSON) et la documentation du service. "
@@ -589,7 +589,7 @@ def proposer_correction(ident, demander_au_modele=None, lire_doc=None):
     else:
         reponse = _demander_json(consigne)
     nouveau = reponse.get("flux") if isinstance(reponse, dict) and "flux" in reponse else reponse
-    valider_flux(nouveau, m)                                              # un flux qui vise un autre site ou est mal formé est refusé AVANT d'être montré
+    validate_stream(nouveau, m)                                              # un flux qui vise un autre site ou est mal formé est refusé AVANT d'être montré
     return {"flux": nouveau, "diff": difference(actuel, nouveau), "explication": str(reponse.get("explication", ""))[:600] if isinstance(reponse, dict) else ""}
 
 

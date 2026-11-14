@@ -180,7 +180,7 @@ def set_models_folder(chemin):
     _m.ENV_OLLAMA["OLLAMA_MODELS"] = str(p)
     if os.name == "nt":
         from . import setup_wizard
-        setup_wizard.definir_variables_utilisateur({"OLLAMA_MODELS": str(p)}, "windows")
+        setup_wizard.set_variables_user({"OLLAMA_MODELS": str(p)}, "windows")
     _s.forget_measures("disques")
     _REEL["t"] = 0.0                                                      # l'avis d'Ollama sera redemandé (il ne changera qu'à son redémarrage)
     return p

@@ -72,10 +72,10 @@ def start(mesure=None):
             raise ValueError(_t("Une mesure est déjà en cours."))
         if modele not in _m.etat_ollama()["installes"]:
             raise ValueError(_t("Le modèle « {} » n'est pas installé : installe-le ou choisis-en un autre en haut à gauche.").format(modele))
-        from .hardware import cpus_disponibles
-        liste = candidates(cpus_disponibles())
+        from .hardware import cpus_available
+        liste = candidates(cpus_available())
         if len(liste) < 2:
-            raise ValueError(_t("Cette machine n'a que {} cœurs : il n'y a rien à comparer.").format(cpus_disponibles()))
+            raise ValueError(_t("Cette machine n'a que {} cœurs : il n'y a rien à comparer.").format(cpus_available()))
         CALIBRATION.update(en_cours=True, etape=_t("démarrage"), erreur="", annule=False, resultats=[], recommande=None, modele=modele, date="")
         _m.BENCH.update(en_cours="calibrage", etape=_t("calibrage"))                  # bloque les bancs d'essai pendant ce temps
 

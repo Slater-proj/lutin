@@ -129,7 +129,7 @@ class AvecLeBanc(unittest.TestCase):
 
             def chat_flux(self, corps, delai=60):
                 return Flux()
-        r = bm.mesurer(Moteur(), "m", "rapide", 4096, memoire=lambda: {"ram": 2 * 1024 ** 3, "vram": 4 * 1024 ** 3}, estime_go=6.6)
+        r = bm.measure(Moteur(), "m", "rapide", 4096, memoire=lambda: {"ram": 2 * 1024 ** 3, "vram": 4 * 1024 ** 3}, estime_go=6.6)
         self.assertEqual(r["estimation"]["mesure_go"], 6.0)
         self.assertEqual(r["estimation"]["ecart_pct"], 10.0)
 

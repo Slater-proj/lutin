@@ -28,7 +28,7 @@ def chercher_rien(nom):
 
 class Catalogue(unittest.TestCase):
     def setUp(self):
-        mcp.ecrire({"serveurs": {}})
+        mcp.write({"serveurs": {}})
 
     def test_chaque_entree_est_complete_et_epinglee(self):
         entrees = mcp_catalog.load()
@@ -99,7 +99,7 @@ class Catalogue(unittest.TestCase):
             mcp_catalog.install("pages-web", {}, chercher_rien, hors_ligne)
         self.assertEqual(installes, ["uv"], "uv est installé par Lutin au passage")
         self.assertIn("hors ligne", str(e.exception))
-        self.assertEqual(mcp.lire()["serveurs"], {}, "rien n'est resté")
+        self.assertEqual(mcp.read()["serveurs"], {}, "rien n'est resté")
         installes.clear()
         with self.assertRaises(ValueError):          # une saisie fausse : rien n'est téléchargé
             mcp_catalog.install("git", {"depot": "/n/existe/pas"}, chercher_rien, hors_ligne)
@@ -109,7 +109,7 @@ class Catalogue(unittest.TestCase):
         with self.assertRaises(ValueError) as e:
             mcp_catalog.install("pages-web", {}, lambda nom: sys.executable.replace("python", "programme-introuvable"))
         self.assertIn("pas été branché", str(e.exception))
-        self.assertEqual(mcp.lire()["serveurs"], {}, "un connecteur cassé ne reste pas dans la liste")
+        self.assertEqual(mcp.read()["serveurs"], {}, "un connecteur cassé ne reste pas dans la liste")
 
     def test_branchement_reel_de_bout_en_bout_avec_le_serveur_de_demonstration(self):
         """Une entrée du catalogue lancée pour de vrai : le serveur de démonstration de Lutin joue le rôle du serveur npx/uvx."""
@@ -124,7 +124,7 @@ class Catalogue(unittest.TestCase):
             return [sys.executable, "-m", "lutin.mcp_demo"], url, entetes
         mcp_catalog.build = construire
         try:
-            mcp.ecrire({"serveurs": {}})
+            mcp.write({"serveurs": {}})
             ancien_env = os.environ.get("PYTHONPATH")
             os.environ["PYTHONPATH"] = SRC + (os.pathsep + ancien_env if ancien_env else "")
             try:
@@ -135,7 +135,7 @@ class Catalogue(unittest.TestCase):
                 else:
                     os.environ["PYTHONPATH"] = ancien_env
             self.assertGreaterEqual(r["outils"], 1)
-            serveur = mcp.lire()["serveurs"][r["id"]]
+            serveur = mcp.read()["serveurs"][r["id"]]
             self.assertEqual(serveur["catalogue"], "demo")
             self.assertTrue(serveur["lecture_seule"], "reste en lecture seule")
             lecture = [n for n, o in serveur["outils"].items() if o["lecture"]]
@@ -145,7 +145,7 @@ class Catalogue(unittest.TestCase):
                 mcp_catalog.install("demo", {})
             self.assertIn("déjà", str(e.exception))
             self.assertTrue(mcp_catalog.entries()[0]["installe"])
-            mcp.fermer()
+            mcp.close()
         finally:
             mcp_catalog.load, mcp_catalog.program = avant
             mcp_catalog.build = original

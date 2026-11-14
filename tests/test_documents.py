@@ -120,7 +120,7 @@ class Documents(unittest.TestCase):
         with self.assertRaises(_m.ErreurOutil):
             change_review.call_tool("creer_document", {"chemin": "../dehors.pdf", "contenu": "x"}, self.ctx())
         with self.assertRaises(_m.ErreurOutil):
-            change_review.call_tool("creer_document", {"chemin": "docs/gros.pdf", "contenu": "x" * (documents.TAILLE_MAX + 1)}, self.ctx())
+            change_review.call_tool("creer_document", {"chemin": "docs/gros.pdf", "contenu": "x" * (documents.MAX_SIZE + 1)}, self.ctx())
 
 
 if __name__ == "__main__":

@@ -171,7 +171,7 @@ class Emplacements(unittest.TestCase):
         nouveau = _TEMP / "modeles-ollama"
         if os.name == "nt":
             from unittest import mock
-            with mock.patch("lutin.setup_wizard.definir_variables_utilisateur") as definir:
+            with mock.patch("lutin.setup_wizard.set_variables_user") as definir:
                 p = locations.set_models_folder(str(nouveau))
             definir.assert_called_once()
         else:

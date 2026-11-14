@@ -18,12 +18,12 @@ from pathlib import Path
 from . import core as _m
 from .i18n import t as _t
 
-OUVRABLES = {".pdf", ".docx", ".doc", ".odt", ".rtf", ".md", ".txt", ".csv", ".html", ".htm", ".json", ".xlsx", ".ods", ".pptx", ".odp", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg",
+OPENABLE = {".pdf", ".docx", ".doc", ".odt", ".rtf", ".md", ".txt", ".csv", ".html", ".htm", ".json", ".xlsx", ".ods", ".pptx", ".odp", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg",
              ".mp4", ".webm", ".mov", ".mkv", ".wav", ".mp3", ".flac", ".ogg", ".m4a", ".zip"}
-TAILLE_MAX = 300 * 1024 * 1024          # octets servis à la page
+MAX_SIZE = 300 * 1024 * 1024          # octets servis à la page
 
 
-def ouverture_possible():
+def opening_possible():
     """Peut-on demander au système d'ouvrir un fichier ? Pas dans un conteneur ni sur un serveur sans écran : la page ne montre alors que Télécharger."""
     if os.environ.get("LUTIN_DOCKER") == "1":
         return False
@@ -32,7 +32,7 @@ def ouverture_possible():
     return bool((os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")) and shutil.which("xdg-open"))
 
 
-def identifiant(chemin):
+def identifier(chemin):
     return hashlib.sha1(str(chemin).encode("utf-8")).hexdigest()[:12]
 
 
@@ -43,10 +43,10 @@ def entree(chemin):
         taille = p.stat().st_size
     except OSError:
         taille = 0
-    return {"id": identifiant(p), "chemin": str(p), "nom": p.name, "taille": taille}
+    return {"id": identifier(p), "chemin": str(p), "nom": p.name, "taille": taille}
 
 
-def racines_permises():
+def allowed_roots():
     from . import addons, workspaces
     racines = []
     try:
@@ -54,13 +54,13 @@ def racines_permises():
     except (OSError, ValueError):
         pass
     racines.append(_m.RACINE.resolve())
-    dossier = addons.reglages("comfyui").get("dossier") or ""
+    dossier = addons.settings("comfyui").get("dossier") or ""
     if dossier:
         racines.append((Path(dossier) / "output").resolve())
     return racines
 
 
-def trouver(ident, fichier_id):
+def find(ident, fichier_id):
     """(message, entrée) du fichier inscrit dans cette conversation, ou ValueError."""
     c = _m.conv_lire(ident)
     for m in c["messages"]:
@@ -70,7 +70,7 @@ def trouver(ident, fichier_id):
     raise ValueError(_t("Ce fichier n'est plus dans la conversation."))
 
 
-def verifier(entree_):
+def check(entree_):
     """Le Path du fichier s'il existe et se trouve dans un dossier permis ; ValueError sinon."""
     p = Path(entree_.get("chemin", ""))
     try:
@@ -79,31 +79,31 @@ def verifier(entree_):
         raise ValueError(_t("Fichier introuvable."))
     if not r.is_file():
         raise ValueError(_t("Ce fichier n'existe plus (déplacé ou supprimé)."))
-    if not any(racine == r or racine in r.parents for racine in racines_permises()):
+    if not any(racine == r or racine in r.parents for racine in allowed_roots()):
         raise ValueError(_t("Ce fichier est en dehors des dossiers de travail : refusé."))
     return r
 
 
-def lire(ident, fichier_id):
+def read(ident, fichier_id):
     """(octets, type MIME, nom) pour le téléchargement."""
-    _, _, e = trouver(ident, fichier_id)
-    p = verifier(e)
-    if p.stat().st_size > TAILLE_MAX:
-        raise ValueError(_t("Fichier trop gros pour être envoyé à la page ({} Mo au plus) : ouvre-le depuis son dossier.").format(TAILLE_MAX // (1024 * 1024)))
+    _, _, e = find(ident, fichier_id)
+    p = check(e)
+    if p.stat().st_size > MAX_SIZE:
+        raise ValueError(_t("Fichier trop gros pour être envoyé à la page ({} Mo au plus) : ouvre-le depuis son dossier.").format(MAX_SIZE // (1024 * 1024)))
     return p.read_bytes(), mimetypes.guess_type(p.name)[0] or "application/octet-stream", p.name
 
 
-def ouvrir(ident, fichier_id):
+def open_item(ident, fichier_id):
     """Demande au système d'ouvrir le fichier avec son application par défaut."""
-    _, _, e = trouver(ident, fichier_id)
-    p = verifier(e)
-    if p.suffix.lower() not in OUVRABLES:
+    _, _, e = find(ident, fichier_id)
+    p = check(e)
+    if p.suffix.lower() not in OPENABLE:
         raise ValueError(_t("Ce type de fichier ne s'ouvre pas d'ici (seuls les documents et les médias le permettent) : ouvre-le depuis son dossier."))
-    _lancer(p)
+    _launch(p)
     return {"ok": True}
 
 
-def _lancer(p):
+def _launch(p):
     try:
         if sys.platform.startswith("win"):
             os.startfile(str(p))                                                       # noqa: S606  (le geste d'un double-clic : l'application choisie par l'utilisateur)
@@ -116,7 +116,7 @@ def _lancer(p):
 
 
 # --------------------------------------------------------------------------- fichiers envoyés par l'utilisateur (pièces jointes)
-def piece_lire(piece_id, nom):
+def part_read(piece_id, nom):
     """(octets, type MIME, nom) d'une pièce jointe, pour la télécharger de nouveau sous son vrai nom."""
     from . import attachments
     p = attachments.chemin(piece_id)
@@ -124,29 +124,29 @@ def piece_lire(piece_id, nom):
     return p.read_bytes(), mimetypes.guess_type(nom)[0] or "application/octet-stream", nom
 
 
-def piece_ouvrir(piece_id, nom):
+def part_open(piece_id, nom):
     """Ouvre une pièce jointe avec l'application par défaut : une copie est faite sous son vrai nom (la pièce gardée porte un nom tiré de son contenu), seulement pour les documents et médias."""
     import shutil
     from . import attachments
     p = attachments.chemin(piece_id)
     nom = attachments.clean_name(nom) if nom else p.name
-    if Path(nom).suffix.lower() not in OUVRABLES:
+    if Path(nom).suffix.lower() not in OPENABLE:
         raise ValueError(_t("Ce type de fichier ne s'ouvre pas d'ici (seuls les documents et les médias le permettent) : ouvre-le depuis son dossier."))
     cible = _m.DONNEES / "pieces-ouvertes" / piece_id.split(".")[0][:10] / nom
     cible.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(p, cible)
-    _lancer(cible)
+    _launch(cible)
     return {"ok": True}
 
 
-def supprimer(ident, fichier_id):
+def remove(ident, fichier_id):
     """Retire la carte de la conversation et supprime le fichier."""
     if ident in _m.TOURS_ACTIFS:
         raise ValueError(_t("Une réponse est en cours dans cette conversation : attends la fin ou arrête-la."))
-    c, m, e = trouver(ident, fichier_id)
+    c, m, e = find(ident, fichier_id)
     supprime = False
     try:
-        p = verifier(e)
+        p = check(e)
         p.unlink()
         supprime = True
     except (ValueError, OSError):
@@ -160,16 +160,16 @@ def supprimer(ident, fichier_id):
 
 
 # --------------------------------------------------------------------------- le registre : tout ce que Lutin a créé, pour faire le ménage
-VERROU_REGISTRE = threading.Lock()
-REGISTRE_MAX = 5000
+LOCK_REGISTRY = threading.Lock()
+MAX_REGISTRY = 5000
 
 
-def _registre():
+def _registry():
     d = _m.lire_json(_m.DONNEES / "fichiers_crees.json", {})
     return d if isinstance(d, dict) else {}
 
 
-def _ecrire_registre(d):
+def _write_registry(d):
     _m.ecrire_atomique(_m.DONNEES / "fichiers_crees.json", json.dumps(d, ensure_ascii=False))
 
 
@@ -182,22 +182,22 @@ def entree_image(image_id, chemin):
     return {"id": image_id, "genre": "image", "chemin": str(p), "nom": p.name, "taille": taille}
 
 
-def enregistrer(entrees, conversation):
+def save(entrees, conversation):
     """Inscrit des fichiers créés au registre (une fois chacun) : la conversation d'où ils viennent, la date."""
     if not entrees:
         return
-    with VERROU_REGISTRE:
-        reg = _registre()
+    with LOCK_REGISTRY:
+        reg = _registry()
         liste = reg.get("liste") if isinstance(reg.get("liste"), list) else []
         connus = {e.get("id") for e in liste}
         for e in entrees:
             if e.get("id") and e["id"] not in connus:
                 liste.append(dict(e, conversation=conversation, date=int(time.time())))
-        reg["liste"] = liste[-REGISTRE_MAX:]
-        _ecrire_registre(reg)
+        reg["liste"] = liste[-MAX_REGISTRY:]
+        _write_registry(reg)
 
 
-def _depuis_les_conversations():
+def _from_the_conversations():
     """Les fichiers déjà inscrits dans des conversations d'avant le registre : repris une seule fois."""
     trouves = []
     for f in (_m.DONNEES / "conversations").glob("*.json"):
@@ -212,14 +212,14 @@ def _depuis_les_conversations():
     return trouves
 
 
-def lister():
+def entries():
     """Les fichiers créés qui existent encore, les plus récents d'abord, avec leur taille. Ceux qui ont disparu du disque sont retirés du registre."""
-    with VERROU_REGISTRE:
-        reg = _registre()
+    with LOCK_REGISTRY:
+        reg = _registry()
         liste = reg.get("liste") if isinstance(reg.get("liste"), list) else []
         if not reg.get("rempli"):
             connus = {e.get("id") for e in liste}
-            liste += [e for e in _depuis_les_conversations() if e["id"] not in connus]
+            liste += [e for e in _from_the_conversations() if e["id"] not in connus]
             reg["rempli"] = True
         gardes, sortie = [], []
         for e in liste:
@@ -233,15 +233,15 @@ def lister():
             gardes.append(e)
             sortie.append({"id": e["id"], "genre": e.get("genre", "fichier"), "nom": e.get("nom") or p.name, "chemin": str(p), "taille": taille, "date": e.get("date", 0),
                            "conversation": e.get("conversation", ""), "conversation_existe": _m.conv_chemin(e.get("conversation", "")).exists() if e.get("conversation") else False})
-        if len(gardes) != len(liste) or not _registre().get("rempli"):
+        if len(gardes) != len(liste) or not _registry().get("rempli"):
             reg["liste"] = gardes
-            _ecrire_registre(reg)
+            _write_registry(reg)
     sortie.sort(key=lambda x: -x["date"])
     return {"liste": sortie, "total": sum(x["taille"] for x in sortie)}
 
 
-def _supprimer_directement(e):
-    verifier(e).unlink()
+def _remove_directly(e):
+    check(e).unlink()
     if e.get("genre") == "image":
         from . import images
         if e["id"] not in images.referenced():
@@ -251,11 +251,11 @@ def _supprimer_directement(e):
                 pass
 
 
-def supprimer_selection(ids):
+def remove_selection(ids):
     """Supprime ces fichiers créés (du disque, et des conversations qui les montrent) et les retire du registre. Rend ce qui a été fait et ce qui n'a pas pu l'être."""
     from . import change_review
     voulus = set(ids)
-    reg = _registre()
+    reg = _registry()
     cibles = [e for e in (reg.get("liste") or []) if e.get("id") in voulus]
     faits, ignores, libere = [], [], 0
     for e in cibles:
@@ -270,28 +270,28 @@ def supprimer_selection(ids):
                 raise ValueError(_t("Une réponse est en cours dans cette conversation : attends la fin ou arrête-la."))
             try:
                 if conv and _m.conv_chemin(conv).exists():
-                    (change_review.delete_media(conv, e["id"]) if e.get("genre") == "image" else supprimer(conv, e["id"]))
+                    (change_review.delete_media(conv, e["id"]) if e.get("genre") == "image" else remove(conv, e["id"]))
                     if Path(e["chemin"]).is_file():
-                        _supprimer_directement(e)                        # la conversation ne montrait plus ce fichier : on l'efface quand même
+                        _remove_directly(e)                        # la conversation ne montrait plus ce fichier : on l'efface quand même
                 else:
-                    _supprimer_directement(e)
+                    _remove_directly(e)
             except ValueError:
                 if conv in _m.TOURS_ACTIFS:                              # une réponse a démarré entre-temps : on ne touche à rien
                     raise ValueError(_t("Une réponse est en cours dans cette conversation : attends la fin ou arrête-la."))
                 if Path(e["chemin"]).is_file():
-                    _supprimer_directement(e)                            # la conversation n'a plus la carte : on supprime le fichier lui-même
+                    _remove_directly(e)                            # la conversation n'a plus la carte : on supprime le fichier lui-même
             faits.append(e["id"])
             libere += taille
         except (ValueError, OSError) as erreur:
             ignores.append({"nom": e.get("nom", ""), "raison": str(erreur)})
-    with VERROU_REGISTRE:
-        reg = _registre()
+    with LOCK_REGISTRY:
+        reg = _registry()
         reg["liste"] = [e for e in (reg.get("liste") or []) if e.get("id") not in set(faits)]
-        _ecrire_registre(reg)
+        _write_registry(reg)
     return {"supprimes": len(faits), "libere": libere, "ignores": ignores}
 
 
-def _nom_dossier_conversation(titre, ident):
+def _name_folder_conversation(titre, ident):
     """« conversations/<titre court>-<fin de l'identifiant> » : lisible, et stable même si le titre change (on retrouve le dossier par la fin de l'identifiant)."""
     import re
     import unicodedata
@@ -300,29 +300,29 @@ def _nom_dossier_conversation(titre, ident):
     return "{}-{}".format(slug, re.sub(r"\W", "", str(ident))[-6:] or "conv")
 
 
-def dossier_de_conversation(ident, titre="", creer=False):
+def folder_of_conversation(ident, titre="", creer=False):
     """Le dossier où ranger ce que cette conversation produit (documents, exports, images, audio…), dans le dossier de travail, à côté des autres conversations mais jamais mélangé avec elles.
     Retrouvé par la fin de l'identifiant s'il existe déjà. Créé seulement si `creer`."""
     base = _m.RACINE / "conversations"
-    fin = "-" + _nom_dossier_conversation("", ident).rsplit("-", 1)[-1]
+    fin = "-" + _name_folder_conversation("", ident).rsplit("-", 1)[-1]
     try:
         for d in base.iterdir() if base.is_dir() else ():
             if d.is_dir() and d.name.endswith(fin):
                 return d
     except OSError:
         pass
-    d = base / _nom_dossier_conversation(titre, ident)
+    d = base / _name_folder_conversation(titre, ident)
     if creer:
         d.mkdir(parents=True, exist_ok=True)
     return d
 
 
-def consigne_dossier(conv):
+def instruction_folder(conv):
     """Ce que le modèle doit savoir : où ranger ce qu'il produit POUR cette conversation. Vide sans conversation (ligne de commande, tests)."""
     ident = (conv or {}).get("id", "")
     if not ident:
         return ""
-    d = dossier_de_conversation(ident, (conv or {}).get("titre", ""))
+    d = folder_of_conversation(ident, (conv or {}).get("titre", ""))
     try:
         rel = d.relative_to(_m.RACINE).as_posix()
     except ValueError:
@@ -331,7 +331,7 @@ def consigne_dossier(conv):
             "Le code et les fichiers du projet restent là où le projet les attend.").format(rel)
 
 
-def dossiers_conversation(ident):
+def folders_conversation(ident):
     """Les dossiers propres à une conversation : son dossier de travail, puis ceux où elle a créé des fichiers (cinq au plus). [{chemin, role}] ; seulement des dossiers qui existent et sont permis.
     Sert au menu « ⋯ » de la conversation : ouvrir l'endroit où elle travaille, sans chercher."""
     from . import workspaces
@@ -339,7 +339,7 @@ def dossiers_conversation(ident):
     conv = _m.conv_lire(ident)
     t = workspaces.by_id(cfg, conv["travail"]) if conv.get("travail") else None
     t = t or workspaces.active(cfg)
-    permises = racines_permises()
+    permises = allowed_roots()
     vus, sortie = set(), []
 
     def ajouter(p, role):
@@ -352,36 +352,36 @@ def dossiers_conversation(ident):
         vus.add(r)
         sortie.append({"chemin": str(r), "role": role})
     try:
-        d = dossier_de_conversation(ident, conv.get("titre", ""))
+        d = folder_of_conversation(ident, conv.get("titre", ""))
         if d.is_dir():
             ajouter(d, "conversation")          # le dossier propre à cette conversation, s'il existe (il se crée à la première écriture)
     except OSError:
         pass
     if t:
         ajouter(t["chemin"], "travail")
-    for e in reversed([x for x in (_registre().get("liste") or []) if x.get("conversation") == ident]):
+    for e in reversed([x for x in (_registry().get("liste") or []) if x.get("conversation") == ident]):
         if len(sortie) >= 6:
             break
         ajouter(Path(e.get("chemin", "")).parent, "fichiers")
     return sortie
 
 
-def ouvrir_dossier_conversation(ident, chemin):
+def open_folder_conversation(ident, chemin):
     """Ouvre dans l'explorateur un des dossiers de la conversation (jamais un autre chemin que ceux de dossiers_conversation)."""
-    if not ouverture_possible():
+    if not opening_possible():
         raise ValueError(_t("L'ouverture d'un dossier ne marche que depuis cette machine (pas sous Docker ni sur un serveur sans écran) : copie le chemin, ou télécharge les fichiers depuis la conversation."))
-    permis = {d["chemin"] for d in dossiers_conversation(ident)}
+    permis = {d["chemin"] for d in folders_conversation(ident)}
     if str(chemin) not in permis:
         raise ValueError(_t("Ce dossier n'est pas un dossier de cette conversation."))
-    _lancer(Path(chemin))
+    _launch(Path(chemin))
     return {"ok": True}
 
 
-def ouvrir_dossier(fichier_id):
+def open_folder(fichier_id):
     """Ouvre le dossier qui contient un fichier créé (l'explorateur de fichiers)."""
-    e = next((x for x in (_registre().get("liste") or []) if x.get("id") == fichier_id), None)
+    e = next((x for x in (_registry().get("liste") or []) if x.get("id") == fichier_id), None)
     if e is None:
         raise ValueError(_t("Ce fichier n'est plus dans la liste."))
-    p = verifier(e)
-    _lancer(p.parent)
+    p = check(e)
+    _launch(p.parent)
     return {"ok": True}

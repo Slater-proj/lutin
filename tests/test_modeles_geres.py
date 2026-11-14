@@ -85,36 +85,36 @@ class Suppression(unittest.TestCase):
 
     def test_colibri_liste_ses_modeles_et_ne_supprime_que_ceux_de_son_dossier(self):
         d = {"donnees": self.tmp}
-        racine = CO.dossier_modeles(d)
+        racine = CO.folder_models(d)
         (racine / "deepseek-v4").mkdir(parents=True)
         (racine / "deepseek-v4" / "poids.bin").write_bytes(b"x" * 2000)
         autre = self.tmp / "ailleurs" / "mon-modele"
         autre.mkdir(parents=True)
         (autre / "poids.bin").write_bytes(b"y")
-        liste = CO.modeles_installes(d, str(autre))
+        liste = CO.installed_models(d, str(autre))
         self.assertEqual([(m["nom"], m["supprimable"]) for m in liste], [("deepseek-v4", True), ("mon-modele", False)])
         for mauvais in ("", "..", "../ailleurs", "a/b", "mon-modele"):
             with self.assertRaises(ValueError, msg=repr(mauvais)):
-                CO.supprimer_modele(mauvais, d)
+                CO.remove_model(mauvais, d)
         self.assertTrue(autre.is_dir())
-        self.assertTrue(CO.supprimer_modele("deepseek-v4", d))
-        self.assertEqual([m["nom"] for m in CO.modeles_installes(d, "")], [])
+        self.assertTrue(CO.remove_model("deepseek-v4", d))
+        self.assertEqual([m["nom"] for m in CO.installed_models(d, "")], [])
 
 
 class Moteur(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="lutin-mg-m-"))
-        self.ancien = dict(engines.CONTEXTE)
-        engines.CONTEXTE["donnees"] = lambda: self.tmp
-        self.mo = engines.MOTEURS["openai"]
+        self.ancien = dict(engines.CONTEXT)
+        engines.CONTEXT["donnees"] = lambda: self.tmp
+        self.mo = engines.ENGINES["openai"]
         self.addCleanup(self.remettre)
 
     def remettre(self):
         cfg = ml.lire_config()
         cfg.pop("openai", None)
         ml.ecrire_config(cfg)
-        engines.CONTEXTE.clear()
-        engines.CONTEXTE.update(self.ancien)
+        engines.CONTEXT.clear()
+        engines.CONTEXT.update(self.ancien)
 
     def test_supprimer_un_modele_lm_studio_passe_par_lutin(self):
         ml.regler_serveur("openai", {"serveur": "lmstudio"})
@@ -130,8 +130,8 @@ class Moteur(unittest.TestCase):
     def test_colibri_est_arrete_avant_que_son_modele_soit_efface(self):
         ml.regler_serveur("openai", {"serveur": "colibri"})
         suivi = []
-        with mock.patch.object(ml.MoteurOpenAI, "actif", lambda self: True), mock.patch.object(CO, "arreter", lambda *a, **k: suivi.append("arret") or True), \
-                mock.patch.object(CO, "supprimer_modele", lambda nom, d: suivi.append(("supprime", nom))):
+        with mock.patch.object(ml.MoteurOpenAI, "actif", lambda self: True), mock.patch.object(CO, "stop", lambda *a, **k: suivi.append("arret") or True), \
+                mock.patch.object(CO, "remove_model", lambda nom, d: suivi.append(("supprime", nom))):
             self.mo.supprimer_modele("m")
         self.assertEqual(suivi, ["arret", ("supprime", "m")])
 

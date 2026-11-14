@@ -59,7 +59,7 @@ def _enregistrer_reglages(nouveau):
             r[k] = nouveau[k]
     from . import engines
     r["moteur"] = str(r.get("moteur") or engines.OLLAMA)
-    if not engines.valide(r["moteur"]):
+    if not engines.valid(r["moteur"]):
         raise ValueError(_t("Moteur inconnu."))
     par = dict(r.get("modeles_par_moteur") or {})
     if r["moteur"] != moteur_avant:          # un autre moteur a d'autres modèles : on retrouve celui qu'on y utilisait, ou le premier qu'il propose

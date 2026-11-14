@@ -139,12 +139,12 @@ class Points_de_sortie(Base):
 
     def test_telechargement_de_fichier_refuse(self):
         with self.assertRaises(offline.OfflineError):
-            ollama_client.telecharger_fichier("https://ollama.com/download/OllamaSetup.exe", Path(self.t.name) / "x.exe")
+            ollama_client.download_file("https://ollama.com/download/OllamaSetup.exe", Path(self.t.name) / "x.exe")
         self.assertEqual(self.contacts, [])
 
     def test_web_refuse_et_outils_web_retires(self):
         with self.assertRaises(A.ErreurOutil) as e:
-            A.web_telecharger("https://exemple.org/")
+            A.web_download("https://exemple.org/")
         self.assertIn("hors ligne", str(e.exception))
         self.assertEqual(self.exterieur(), [])
         noms = {t["function"]["name"] for t in A.outils_du_mode(dict(A.REGLAGES_DEFAUT, web=True))}
@@ -157,7 +157,7 @@ class Points_de_sortie(Base):
         machine = Profil(ram_go=32, ram_libre_go=20, gpus=[Gpu("x", "nvidia", 24)])
         cfg = {"modeles": {"choisis": {"code": "qwen2.5-coder:7b"}, "ignores": []}, "catalogue_url": "https://exemple.org/catalogue.json"}
         d = {"cache": Path(self.t.name) / "cache", "config": self.config.parent}
-        r = updates.verifier(machine, cfg, d, ollama_client.Ollama(ADRESSE_OLLAMA), force=True)        # vrai http_get, vraie résolution : rien ne doit partir
+        r = updates.check(machine, cfg, d, ollama_client.Ollama(ADRESSE_OLLAMA), force=True)        # vrai http_get, vraie résolution : rien ne doit partir
         self.assertEqual(self.exterieur(), [], "aucune connexion vers autre chose que cette machine")
         self.assertTrue(any("hors ligne" in e for e in r["erreurs"]))
         self.assertEqual([p["type"] for p in r["propositions"]], ["nouveau"], "la comparaison avec la liste livrée reste possible")

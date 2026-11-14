@@ -33,26 +33,26 @@ SOURCES_DEFAUT = (          # des dépôts publics de skills, proposés au dépa
 )
 RE_SEGMENT = re.compile(r"^[A-Za-z0-9_.-]{1,100}$")
 RE_NOM_SUR = re.compile(r"[^a-z0-9._-]+")
-CHEMIN_SKILLS = ".claude/skills"
-DOSSIERS_AGENTS = (".claude", ".agents", ".codex", ".cursor", ".opencode", ".gemini", ".github")          # là où les agents rangent leurs skills ; ordre = préférence quand le même skill est copié dans plusieurs
+PATH_SKILLS = ".claude/skills"
+FOLDERS_AGENTS = (".claude", ".agents", ".codex", ".cursor", ".opencode", ".gemini", ".github")          # là où les agents rangent leurs skills ; ordre = préférence quand le même skill est copié dans plusieurs
 SIGNATURE = ".lutin-skill.json"
 MAX_FICHIERS, MAX_OCTET_FICHIER, MAX_OCTETS = 200, 900_000, 8_000_000          # un skill est un dossier de texte : au-delà, ce n'est pas un skill
 DUREE_CACHE = 600
-TAILLE_ARBRE_MAX = 12_000_000          # l'arbre d'un dépôt de centaines de skills pèse plusieurs Mo de JSON
+MAX_SIZE_TREE = 12_000_000          # l'arbre d'un dépôt de centaines de skills pèse plusieurs Mo de JSON
 
 
-def http_defaut(url, entetes=None):
-    return updates.http_get(url, entetes, delai=30, taille_max=TAILLE_ARBRE_MAX)
+def default_http(url, entetes=None):
+    return updates.http_get(url, entetes, delai=30, taille_max=MAX_SIZE_TREE)
 
 PAR_PAGE = 20
-JETONS_LOURD = 3500          # au-delà, un petit modèle perd le fil : la fiche le dit
+HEAVY_TOKENS = 3500          # au-delà, un petit modèle perd le fil : la fiche le dit
 CACHE = {}
-VERROU = threading.Lock()
-INDEXATION = {}          # dépôt -> {fait, total, fini, erreur}
+LOCK = threading.Lock()
+INDEXING = {}          # dépôt -> {fait, total, fini, erreur}
 
 
 # ------------------------------------------------------------------ GitHub
-def lire_depot(texte):
+def read_repo(texte):
     """(propriétaire, dépôt) d'après « propriétaire/dépôt » ou une adresse github.com. ValueError sinon."""
     t = str(texte or "").strip().rstrip("/")
     t = re.sub(r"^(https?://)?(www\.)?github\.com/", "", t)
@@ -63,8 +63,8 @@ def lire_depot(texte):
     return morceaux[0], morceaux[1]
 
 
-def _lire_json(url, http):
-    http = http or http_defaut
+def _read_json(url, http):
+    http = http or default_http
     garde = CACHE.get(url)
     if garde and time.time() - garde[0] < DUREE_CACHE:
         return garde[1]
@@ -88,10 +88,10 @@ def _lire_json(url, http):
     return valeur
 
 
-def _texte(depot, chemin, http, maxi=MAX_OCTET_FICHIER):
-    http = http or http_defaut
+def _text(depot, chemin, http, maxi=MAX_OCTET_FICHIER):
+    http = http or default_http
     """Le contenu d'un fichier du dépôt (raw.githubusercontent.com, hors de la limite de l'API). None s'il est trop gros ; ValueError si illisible."""
-    o, r = lire_depot(depot)
+    o, r = read_repo(depot)
     url = "https://raw.githubusercontent.com/{}/{}/HEAD/{}".format(o, r, "/".join(urllib.parse.quote(s) for s in chemin.split("/")))
     try:
         statut, entetes, corps = http(url, {})
@@ -104,39 +104,39 @@ def _texte(depot, chemin, http, maxi=MAX_OCTET_FICHIER):
     return None if len(corps) > maxi else corps
 
 
-def arbre(depot, http=None):
+def tree(depot, http=None):
     """L'arbre complet du dépôt en UNE requête : {sha, tronque, entrees: [{path, type, sha, size, mode}]}."""
-    o, r = lire_depot(depot)
-    d = _lire_json("https://api.github.com/repos/{}/{}/git/trees/HEAD?recursive=1".format(o, r), http)
+    o, r = read_repo(depot)
+    d = _read_json("https://api.github.com/repos/{}/{}/git/trees/HEAD?recursive=1".format(o, r), http)
     return {"sha": str(d.get("sha", "")), "tronque": bool(d.get("truncated")), "entrees": [e for e in d.get("tree", []) if isinstance(e, dict)]}
 
 
-def chercher_depots(q, http=None):
+def search_repos(q, http=None):
     """Des dépôts de skills sur GitHub (recherche par sujet), les plus suivis d'abord : [{depot, etoiles, description, maj}]."""
     q = " ".join(str(q or "").split())[:60]
     requete = (q + " " if q else "") + "(topic:agent-skills OR topic:claude-skills OR topic:claude-code-skills)"
-    d = _lire_json("https://api.github.com/search/repositories?" + urllib.parse.urlencode({"q": requete, "sort": "stars", "order": "desc", "per_page": "20"}), http)
+    d = _read_json("https://api.github.com/search/repositories?" + urllib.parse.urlencode({"q": requete, "sort": "stars", "order": "desc", "per_page": "20"}), http)
     return [{"depot": e.get("full_name", ""), "etoiles": int(e.get("stargazers_count") or 0), "description": str(e.get("description") or "")[:200], "maj": str(e.get("pushed_at") or "")[:10]}
             for e in d.get("items", []) if RE_SEGMENT.match(str(e.get("full_name", "")).split("/")[0] or "")]
 
 
-LISTES_COMMUNAUTAIRES = ("VoltAgent/awesome-agent-skills", "travisvn/awesome-claude-skills")          # des listes de liens vers des dépôts de skills
-RE_LIEN_DEPOT = re.compile(r"https?://(?:www\.)?github\.com/([A-Za-z0-9][A-Za-z0-9_.-]{0,38})/([A-Za-z0-9_][A-Za-z0-9_.-]{0,99})(?=[/)#\s\"'>\]]|$)")
-RE_LIEN_ANNUAIRE = re.compile(r"https?://officialskills\.sh/([A-Za-z0-9][A-Za-z0-9_.-]{0,38})/([A-Za-z0-9_][A-Za-z0-9_.-]{0,99})/")
+LISTS_COMMUNITY = ("VoltAgent/awesome-agent-skills", "travisvn/awesome-claude-skills")          # des listes de liens vers des dépôts de skills
+RE_LINK_REPO = re.compile(r"https?://(?:www\.)?github\.com/([A-Za-z0-9][A-Za-z0-9_.-]{0,38})/([A-Za-z0-9_][A-Za-z0-9_.-]{0,99})(?=[/)#\s\"'>\]]|$)")
+RE_LINK_DIRECTORY = re.compile(r"https?://officialskills\.sh/([A-Za-z0-9][A-Za-z0-9_.-]{0,38})/([A-Za-z0-9_][A-Za-z0-9_.-]{0,99})/")
 NON_DEPOTS = {"orgs", "topics", "features", "sponsors", "marketplace", "settings", "apps", "about", "pricing", "search", "login", "collections", "trending", "explore"}
 
 
-def depots_recenses(q="", http=None):
+def listed_repos(q="", http=None):
     """Les dépôts GitHub cités par les listes communautaires de skills (liens trouvés dans leur README), les plus cités d'abord : [{depot, citations}]. Filtrés par le mot cherché ; les listes elles-mêmes sont écartées."""
     comptes = {}
-    for liste in LISTES_COMMUNAUTAIRES:
+    for liste in LISTS_COMMUNITY:
         try:
-            texte = (_texte(liste, "README.md", http, 4_000_000) or b"").decode("utf-8", "replace")
+            texte = (_text(liste, "README.md", http, 4_000_000) or b"").decode("utf-8", "replace")
         except ValueError:
             continue          # une liste qui ne se lit pas n'empêche pas les autres
-        for o, r in RE_LIEN_DEPOT.findall(texte) + RE_LIEN_ANNUAIRE.findall(texte):
+        for o, r in RE_LINK_REPO.findall(texte) + RE_LINK_DIRECTORY.findall(texte):
             r = re.sub(r"\.git$", "", r)
-            if o.lower() in NON_DEPOTS or o.startswith(".") or r in ("blob", "tree", "issues", "pull", "releases", "wiki", "actions") or "{}/{}".format(o, r) in LISTES_COMMUNAUTAIRES:
+            if o.lower() in NON_DEPOTS or o.startswith(".") or r in ("blob", "tree", "issues", "pull", "releases", "wiki", "actions") or "{}/{}".format(o, r) in LISTS_COMMUNITY:
                 continue
             comptes["{}/{}".format(o, r)] = comptes.get("{}/{}".format(o, r), 0) + 1
     mots = [m for m in str(q or "").lower().split() if m]
@@ -152,9 +152,9 @@ def _dossier_cache(dossiers=None):
     return (dossiers or {}).get("donnees", _m.DONNEES) / "cache" / "skills_tiers"
 
 
-def skills_du_depot(depot, http=None):
+def skills_of_repo(depot, http=None):
     """Les skills d'un dépôt d'après son arbre : [{dir, nom, sha, fichiers, octets, scripts}]. Les dossiers cachés (.gemini, .github…) sont ignorés : ce sont des copies ou des outils, pas des skills."""
-    a = arbre(depot, http)
+    a = tree(depot, http)
     entrees = a["entrees"]
     dossiers_sha = {e["path"]: e.get("sha", "") for e in entrees if e.get("type") == "tree"}
     sortie, cache = [], {}
@@ -166,7 +166,7 @@ def skills_du_depot(depot, http=None):
         if "node_modules" in segments:
             continue
         if any(x.startswith(".") for x in segments):          # dossier caché : seulement ceux des agents (« .claude/skills/x »), et jamais en double d'un skill déjà vu ailleurs
-            if segments[0] not in DOSSIERS_AGENTS or len(segments) < 3 or segments[1] != "skills":
+            if segments[0] not in FOLDERS_AGENTS or len(segments) < 3 or segments[1] != "skills":
                 continue
             cache[dossier] = segments[-1]
             continue
@@ -175,7 +175,7 @@ def skills_du_depot(depot, http=None):
         sortie.append({"dir": dossier, "nom": dossier.rsplit("/", 1)[-1] if dossier else depot.split("/")[1], "sha": dossiers_sha.get(dossier, a["sha"]), "fichiers": len(fichiers),
                        "octets": sum(int(x.get("size") or 0) for x in fichiers), "scripts": any(x["path"][len(prefixe):].startswith("scripts/") for x in fichiers)})
     deja = {s["nom"] for s in sortie}
-    for dossier in sorted(cache, key=lambda d: (DOSSIERS_AGENTS.index(d.split("/")[0]), d)):
+    for dossier in sorted(cache, key=lambda d: (FOLDERS_AGENTS.index(d.split("/")[0]), d)):
         if cache[dossier] in deja:
             continue          # la même fiche est déjà dans le dépôt (ou dans un dossier d'agent préféré) : une copie de plus n'est pas un autre skill
         deja.add(cache[dossier])
@@ -191,13 +191,13 @@ def _entete_skill(texte):
     return {"nom": str(f.get("name") or ""), "description": " ".join(str(f.get("description") or "").split())[:400], "licence": str(f.get("license") or "")[:120]}
 
 
-def _fichier_index(depot, dossiers=None):
-    o, r = lire_depot(depot)
+def _file_index(depot, dossiers=None):
+    o, r = read_repo(depot)
     return _dossier_cache(dossiers) / "{}__{}.json".format(o, r)
 
 
 def _index_lu(depot, dossiers=None):
-    d = _donnees.lire_json(_fichier_index(depot, dossiers), {})
+    d = _donnees.lire_json(_file_index(depot, dossiers), {})
     return d if isinstance(d, dict) else {}
 
 
@@ -209,7 +209,7 @@ def descriptions(depot, skills, http=None, dossiers=None, travailleurs=6):
 
     def lire(s):
         try:
-            texte = _texte(depot, (s["dir"] + "/" if s["dir"] else "") + "SKILL.md", http)
+            texte = _text(depot, (s["dir"] + "/" if s["dir"] else "") + "SKILL.md", http)
             return s, _entete_skill((texte or b"").decode("utf-8", "replace"))
         except ValueError as e:
             return s, {"_erreur": str(e)}
@@ -221,8 +221,8 @@ def descriptions(depot, skills, http=None, dossiers=None, travailleurs=6):
             if "_erreur" not in r:
                 deja[s["dir"]] = dict(r, sha=s["sha"])
         try:
-            _fichier_index(depot, dossiers).parent.mkdir(parents=True, exist_ok=True)
-            _donnees.ecrire_atomique(_fichier_index(depot, dossiers), json.dumps({"skills": deja}, ensure_ascii=False))
+            _file_index(depot, dossiers).parent.mkdir(parents=True, exist_ok=True)
+            _donnees.ecrire_atomique(_file_index(depot, dossiers), json.dumps({"skills": deja}, ensure_ascii=False))
         except OSError:
             pass
         if limite:
@@ -235,14 +235,14 @@ def _correspond(s, mots):
     return all(m in texte for m in mots)
 
 
-def chercher(q, depots, page=1, http=None, dossiers=None):
+def search(q, depots, page=1, http=None, dossiers=None):
     """Les skills qui correspondent, sur les dépôts choisis : {skills, total, page, suite, tronque, decrits}. La recherche porte sur le nom, le chemin et la description (celle des skills déjà lus ou indexés) ;
     la page demandée est complétée avec ses descriptions. ValueError (limite de GitHub, dépôt introuvable…) si un dépôt ne se lit pas."""
     mots = [m for m in re.split(r"\s+", str(q or "").lower().strip()) if m]
     page = max(1, int(page or 1))
     tous, tronque = [], False
     for depot in depots:
-        liste, t = skills_du_depot(depot, http)
+        liste, t = skills_of_repo(depot, http)
         tronque = tronque or t
         deja = _index_lu(depot, dossiers).get("skills", {})
         for s in liste:
@@ -257,15 +257,15 @@ def chercher(q, depots, page=1, http=None, dossiers=None):
             enrichis = {e["dir"]: e for e in descriptions(depot, groupe, http, dossiers)}
             morceau = [dict(enrichis.get(s["dir"], s)) if s["depot"] == depot else s for s in morceau]
     for s in morceau:
-        s["jetons"] = _jetons_octets(s["octets"])
+        s["jetons"] = _tokens_bytes(s["octets"])
     return {"skills": morceau, "total": len(trouves), "page": page, "suite": page * PAR_PAGE < len(trouves), "tronque": tronque, "decrits": sum(1 for s in tous if "description" in s), "nombre": len(tous)}
 
 
 def indexer(depot, http=None, dossiers=None):
     """Lit les descriptions de TOUS les skills d'un dépôt (pour que la recherche porte aussi sur elles). Long pour un gros dépôt (un fichier par skill) : à lancer dans un fil ; l'avancement est dans INDEXATION."""
-    etat = INDEXATION[depot] = {"fait": 0, "total": 0, "fini": False, "erreur": ""}
+    etat = INDEXING[depot] = {"fait": 0, "total": 0, "fini": False, "erreur": ""}
     try:
-        liste, _ = skills_du_depot(depot, http)
+        liste, _ = skills_of_repo(depot, http)
         etat["total"] = len(liste)
         for i in range(0, len(liste), 24):
             descriptions(depot, liste[i:i + 24], http, dossiers)
@@ -276,7 +276,7 @@ def indexer(depot, http=None, dossiers=None):
     return etat
 
 
-def _jetons_octets(octets):
+def _tokens_bytes(octets):
     return int(octets / 3.6)
 
 
@@ -300,7 +300,7 @@ MOTIFS = (          # (gravité, identifiant, expression, explication)
 GRAVITES = {"danger": 2, "attention": 1, "info": 0}
 
 
-def analyser(fichiers):
+def parse(fichiers):
     """Cherche dans les textes {chemin: texte} ce qui doit alerter. Rend [{gravite, motif, explication, fichier, ligne, extrait}] (trois par motif et par fichier au plus), les plus graves d'abord.
     Les motifs « attention » sont normaux dans un script (il lance, télécharge, envoie) : ils informent ; les motifs « danger » ne le sont jamais."""
     trouves = []
@@ -324,19 +324,19 @@ def gravite_max(constats):
 
 # ------------------------------------------------------------------ fiche
 def _dossier_du_skill(depot, dossier, http):
-    a = arbre(depot, http)
+    a = tree(depot, http)
     prefixe = dossier + "/" if dossier else ""
     fichiers = [e for e in a["entrees"] if e.get("type") == "blob" and e["path"].startswith(prefixe) and not any(seg.startswith(".") for seg in e["path"][len(prefixe):].split("/"))]
     sha = next((e.get("sha", "") for e in a["entrees"] if e.get("type") == "tree" and e["path"] == dossier), a["sha"])
     return fichiers, prefixe, sha, a["entrees"]
 
 
-def fiche(depot, dossier, http=None):
+def card(depot, dossier, http=None):
     """Tout ce qu'il faut pour décider : le texte de SKILL.md, les fichiers, la licence, le poids pour un petit modèle et l'analyse de sécurité (texte + scripts + références, bornés)."""
     fichiers, prefixe, sha, entrees = _dossier_du_skill(depot, dossier, http)
     if not any(f["path"] == prefixe + "SKILL.md" for f in fichiers):
         raise ValueError(_t("Ce dossier ne contient pas de SKILL.md."))
-    principal = (_texte(depot, prefixe + "SKILL.md", http, 200_000) or b"").decode("utf-8", "replace")
+    principal = (_text(depot, prefixe + "SKILL.md", http, 200_000) or b"").decode("utf-8", "replace")
     en_tete = _entete_skill(principal)
     a_scanner = {prefixe + "SKILL.md": principal}
     lisibles = [f for f in fichiers if f["path"] != prefixe + "SKILL.md" and int(f.get("size") or 0) <= 200_000 and re.search(r"\.(md|txt|py|sh|bash|ps1|js|mjs|ts|json|ya?ml|toml|bat|cmd|rb|pl|html)$", f["path"], re.I)]
@@ -344,14 +344,14 @@ def fiche(depot, dossier, http=None):
 
     def lire(f):
         try:
-            return f["path"], (_texte(depot, f["path"], http, 200_000) or b"").decode("utf-8", "replace")
+            return f["path"], (_text(depot, f["path"], http, 200_000) or b"").decode("utf-8", "replace")
         except ValueError:
             return f["path"], ""
     with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool:
         for chemin, texte in pool.map(lire, lisibles):
             if texte:
                 a_scanner[chemin] = texte
-    constats = analyser(a_scanner)
+    constats = parse(a_scanner)
     racine = [e["path"] for e in entrees if e.get("type") == "blob" and "/" not in e["path"] and re.match(r"(?i)^licen[cs]e", e["path"])]
     licence_fichier = any(re.match(r"(?i)^licen[cs]e", f["path"][len(prefixe):]) for f in fichiers)
     scripts = [f["path"][len(prefixe):] for f in fichiers if f["path"][len(prefixe):].startswith("scripts/")]
@@ -359,7 +359,7 @@ def fiche(depot, dossier, http=None):
     trop_gros = [f["path"][len(prefixe):] for f in fichiers if int(f.get("size") or 0) > MAX_OCTET_FICHIER]
     return {"depot": depot, "dir": dossier, "sha": sha, "nom": en_tete["nom"] or (dossier.rsplit("/", 1)[-1] if dossier else depot.split("/")[1]), "description": en_tete["description"], "licence": en_tete["licence"], "licence_fichier": licence_fichier,
             "licence_depot": bool(racine), "texte": principal[:20_000], "texte_coupe": len(principal) > 20_000, "fichiers": [{"chemin": f["path"][len(prefixe):], "octets": int(f.get("size") or 0)} for f in fichiers][:80],
-            "nombre_fichiers": len(fichiers), "octets": octets, "scripts": scripts, "jetons_skill": _jetons_octets(len(principal.encode("utf-8"))), "lourd": _jetons_octets(len(principal.encode("utf-8"))) > JETONS_LOURD,
+            "nombre_fichiers": len(fichiers), "octets": octets, "scripts": scripts, "jetons_skill": _tokens_bytes(len(principal.encode("utf-8"))), "lourd": _tokens_bytes(len(principal.encode("utf-8"))) > HEAVY_TOKENS,
             "champs_claude": sorted(c for c in claude_project.frontmatter(principal[:6000]) if c in ("allowed-tools", "model", "context", "agent", "hooks", "disable-model-invocation", "user-invocable", "argument-hint")),
             "constats": constats, "gravite": gravite_max(constats), "trop_gros": trop_gros, "analyses": len(a_scanner), "installable": len(fichiers) <= MAX_FICHIERS and octets <= MAX_OCTETS}
 
@@ -373,14 +373,14 @@ def nom_sur(nom):
 
 
 def _destination(racine, nom):
-    base = Path(racine) / CHEMIN_SKILLS
+    base = Path(racine) / PATH_SKILLS
     return base, base / nom_sur(nom)
 
 
-def installer(depot, dossier, racine, http=None, danger_ok=False, licence_ok=False, remplacer=False, nom=""):
+def install(depot, dossier, racine, http=None, danger_ok=False, licence_ok=False, remplacer=False, nom=""):
     """Copie le skill dans `<racine>/.claude/skills/<nom>/` (jamais d'exécution), avec sa signature. Refusé : danger non confirmé, licence absente non confirmée, trop de fichiers, nom déjà pris par autre chose
     qu'un skill installé par Lutin. `remplacer` : mise à jour d'un skill signé. Rend {nom, dossier, fichiers, ignores}."""
-    f = fiche(depot, dossier, http)
+    f = card(depot, dossier, http)
     if not f["installable"]:
         raise ValueError(_t("Ce skill est trop gros ({} fichiers, {} Mo) : un skill fait au plus {} fichiers et {} Mo.").format(f["nombre_fichiers"], round(f["octets"] / 1e6, 1), MAX_FICHIERS, MAX_OCTETS // 1_000_000))
     if f["gravite"] == "danger" and not danger_ok:
@@ -407,7 +407,7 @@ def installer(depot, dossier, racine, http=None, danger_ok=False, licence_ok=Fal
     tmp = Path(tempfile.mkdtemp(prefix=".lutin-skill-", dir=str(base)))
     try:
         def lire(item):
-            return item[1], _texte(depot, item[0], http, MAX_OCTET_FICHIER)
+            return item[1], _text(depot, item[0], http, MAX_OCTET_FICHIER)
         with concurrent.futures.ThreadPoolExecutor(max_workers=6) as pool:
             for relatif, corps in pool.map(lire, a_copier):
                 if corps is None:
@@ -430,11 +430,11 @@ def installer(depot, dossier, racine, http=None, danger_ok=False, licence_ok=Fal
 
 
 # ------------------------------------------------------------------ ce qui est installé
-def installes(racines):
+def installed(racines):
     """Les skills installés par Lutin dans ces dossiers de travail ({id: chemin}) : [{travail, nom, dossier, depot, dir, sha, installe, licence, gravite, jetons}]."""
     sortie = []
     for ident, racine in racines.items():
-        base = Path(racine) / CHEMIN_SKILLS
+        base = Path(racine) / PATH_SKILLS
         try:
             dossiers = sorted(p for p in base.iterdir() if p.is_dir() and (p / SIGNATURE).is_file())
         except OSError:
@@ -446,7 +446,7 @@ def installes(racines):
             except (OSError, ValueError):
                 continue
             sortie.append({"travail": ident, "nom": d.name, "dossier": str(d), "depot": str(s.get("depot", "")), "dir": str(s.get("dir", "")), "sha": str(s.get("sha", "")), "installe": str(s.get("installe", "")),
-                           "licence": str(s.get("licence", "")), "gravite": str(s.get("gravite", "")), "jetons": _jetons_octets(len(texte.encode("utf-8"))), "description": _entete_skill(texte)["description"]})
+                           "licence": str(s.get("licence", "")), "gravite": str(s.get("gravite", "")), "jetons": _tokens_bytes(len(texte.encode("utf-8"))), "description": _entete_skill(texte)["description"]})
     return sortie
 
 
@@ -459,7 +459,7 @@ def retirer(racine, nom):
     return True
 
 
-def mises_a_jour(liste, http=None):
+def available_updates(liste, http=None):
     """Ajoute `maj` (le skill a changé dans son dépôt) et `disparu` à chaque skill installé, en une requête par dépôt. Une erreur de lecture est mise dans `erreur` (sans casser le reste)."""
     par_depot = {}
     for s in liste:
@@ -467,7 +467,7 @@ def mises_a_jour(liste, http=None):
     sortie = []
     for depot, groupe in par_depot.items():
         try:
-            a = arbre(depot, http)
+            a = tree(depot, http)
             shas = {e["path"]: e.get("sha", "") for e in a["entrees"] if e.get("type") == "tree"}
             for s in groupe:
                 actuel = shas.get(s["dir"]) if s["dir"] else a["sha"]
@@ -492,9 +492,9 @@ def sources():
 
 
 def ajouter_source(texte):
-    o, r = lire_depot(texte)
+    o, r = read_repo(texte)
     depot = "{}/{}".format(o, r)
-    with VERROU:
+    with LOCK:
         courant = [s["depot"] for s in sources() if not s["defaut"]]
         if depot in dict(SOURCES_DEFAUT) or depot in courant:
             return sources()
@@ -505,7 +505,7 @@ def ajouter_source(texte):
 
 
 def retirer_source(depot):
-    with VERROU:
+    with LOCK:
         courant = [s["depot"] for s in sources() if not s["defaut"]]
         if depot not in courant:
             raise ValueError(_t("Ce dépôt n'est pas dans ta liste (ceux proposés au départ ne se retirent pas)."))

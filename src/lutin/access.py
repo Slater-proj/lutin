@@ -42,8 +42,8 @@ def state(configurateur, strict=None, admin_distance=False):
         "admin_distance": {"actif": bool(admin_distance), "docker": in_docker(), "modifiable": bool(configurateur if strict is None else strict) and not in_docker()}, "peut_redemarrer": can_restart(),
         "adresse": "http://{}:{}/".format(_m.IP_LAN or _m.ip_locale(), s.port),
         "appareils": _m.APPAREILS.liste(),
-        "avertissements": {"reseau": _t(setup_wizard.AVERTISSEMENT_RESEAU), "proxy": _t(setup_wizard.AVERTISSEMENT_PROXY)},
-        "niveaux": {n: {"titre": _t(t), "detail": _t(d)} for n, (_, t, d) in setup_wizard.NIVEAUX_TEXTE.items()},
+        "avertissements": {"reseau": _t(setup_wizard.WARNING_NETWORK), "proxy": _t(setup_wizard.WARNING_PROXY)},
+        "niveaux": {n: {"titre": _t(t), "detail": _t(d)} for n, (_, t, d) in setup_wizard.LEVELS_TEXT.items()},
     }
 
 
@@ -54,7 +54,7 @@ def apply(donnees, configurateur):
     if not configurateur:
         raise ValueError(_t("Le niveau d'accès ne se change que depuis cette machine."))
     niveau = str(donnees.get("niveau", ""))
-    if niveau not in _sec.NIVEAUX:
+    if niveau not in _sec.LEVELS:
         raise ValueError(_t("Niveau inconnu : {}").format(niveau))
     actuel = _m.SECURITE
     nouveau = _sec.Securite(niveau=niveau, port=actuel.port, ecoute=actuel.ecoute if niveau != _sec.LOCAL else "",

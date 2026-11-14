@@ -36,9 +36,9 @@ class Controle(unittest.TestCase):
         self.donnees = _TEMP / "donnees-test"
         shutil.rmtree(self.donnees, ignore_errors=True)
         self.donnees.mkdir()
-        self.avant = dict(engines.CONTEXTE)
-        engines.CONTEXTE.update(donnees=lambda: self.donnees, hors_ligne=lambda: False, en_docker=lambda: False)
-        self.addCleanup(lambda: engines.CONTEXTE.update(self.avant))
+        self.avant = dict(engines.CONTEXT)
+        engines.CONTEXT.update(donnees=lambda: self.donnees, hors_ligne=lambda: False, en_docker=lambda: False)
+        self.addCleanup(lambda: engines.CONTEXT.update(self.avant))
         self.appels = []
 
         def llamacpp(mo, http_json):
@@ -74,7 +74,7 @@ class Controle(unittest.TestCase):
         self.assertTrue(e["llamacpp"]["disponible"], "le dernier résultat connu reste affiché")
 
     def test_hors_ligne_aucune_requete(self):
-        engines.CONTEXTE["hors_ligne"] = lambda: True
+        engines.CONTEXT["hors_ligne"] = lambda: True
         self.assertEqual(engine_updates.check(force=True), {})
         self.assertEqual(self.appels, [])
 

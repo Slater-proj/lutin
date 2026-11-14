@@ -34,9 +34,9 @@ class ModelesTelechargesSousDocker(unittest.TestCase):
 
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="lutin-docker-mod-"))
-        self.avant = dict(engines.CONTEXTE)
-        engines.CONTEXTE.update(donnees=lambda: self.tmp, en_docker=lambda: True, hors_ligne=lambda: False, dossier_ollama=lambda: self.tmp / "ollama-autre")
-        self.addCleanup(lambda: (engines.CONTEXTE.clear(), engines.CONTEXTE.update(self.avant)))
+        self.avant = dict(engines.CONTEXT)
+        engines.CONTEXT.update(donnees=lambda: self.tmp, en_docker=lambda: True, hors_ligne=lambda: False, dossier_ollama=lambda: self.tmp / "ollama-autre")
+        self.addCleanup(lambda: (engines.CONTEXT.clear(), engines.CONTEXT.update(self.avant)))
         ml.CACHE_PARTAGE.clear()
         self.mo = ml.MoteurLlamaCpp()
         self.lib = self.tmp / "bibliotheque"
@@ -60,7 +60,7 @@ class ModelesTelechargesSousDocker(unittest.TestCase):
         self.assertEqual(m["tailles"]["granite4:3b"], 2_000_000_000)
 
     def test_hors_docker_rien_ne_change_et_un_serveur_externe_n_a_pas_de_modele_local(self):
-        engines.CONTEXTE["en_docker"] = lambda: False
+        engines.CONTEXT["en_docker"] = lambda: False
         lus = []
         with mock.patch.object(self.mo, "bibliotheque", lambda: self.lib), mock.patch("lutin.ollama_shared_models.read_shared", lambda d: lus.append(d) or {}):
             ml.CACHE_PARTAGE.clear()

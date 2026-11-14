@@ -81,27 +81,27 @@ class ModeleDuSetup(unittest.TestCase):
         modele = base / "colibri-models" / "qwen36-35b"
         modele.mkdir(parents=True)
         with mock.patch.dict(os.environ, {"COLI_SETUP_HOME": str(base / "home")}):
-            self.assertEqual(colibri.modele_du_setup(), "", "pas encore de setup")
+            self.assertEqual(colibri.model_of_setup(), "", "pas encore de setup")
             (base / "home").mkdir()
             (base / "home" / "setup.json").write_text(json.dumps({"model_dir": str(modele)}), encoding="utf-8")
-            self.assertEqual(colibri.modele_du_setup(), str(modele))
+            self.assertEqual(colibri.model_of_setup(), str(modele))
             (base / "home" / "setup.json").write_text(json.dumps({"model_dir": str(base / "absent")}), encoding="utf-8")
-            self.assertEqual(colibri.modele_du_setup(), "", "un dossier qui n'existe plus n'est pas proposé")
+            self.assertEqual(colibri.model_of_setup(), "", "un dossier qui n'existe plus n'est pas proposé")
             (base / "home" / "setup.json").write_text("pas du json", encoding="utf-8")
-            self.assertEqual(colibri.modele_du_setup(), "")
+            self.assertEqual(colibri.model_of_setup(), "")
 
 
 class Colibri(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="lutin-colibri-"))
-        self.ancien = dict(engines.CONTEXTE)
-        engines.CONTEXTE["donnees"] = lambda: self.tmp
-        engines.CONTEXTE["hors_ligne"] = lambda: False
-        self.mo = engines.MOTEURS["openai"]
+        self.ancien = dict(engines.CONTEXT)
+        engines.CONTEXT["donnees"] = lambda: self.tmp
+        engines.CONTEXT["hors_ligne"] = lambda: False
+        self.mo = engines.ENGINES["openai"]
 
     def tearDown(self):
-        engines.CONTEXTE.clear()
-        engines.CONTEXTE.update(self.ancien)
+        engines.CONTEXT.clear()
+        engines.CONTEXT.update(self.ancien)
 
     def regler(self, **d):
         ml.regler_serveur("openai", d)
@@ -125,12 +125,12 @@ class Colibri(unittest.TestCase):
         vues = []
 
         def faux_installer(version=None, dossiers=None, dire=print, **kw):
-            base = colibri.dossier_colibri(dossiers) / "v2.1.0"
+            base = colibri.folder_colibri(dossiers) / "v2.1.0"
             dossier_avec(base, {"coli": "#!/usr/bin/env python3"})
-            (colibri.dossier_colibri(dossiers) / "actuelle.txt").write_text("2.1.0", encoding="utf-8")
+            (colibri.folder_colibri(dossiers) / "actuelle.txt").write_text("2.1.0", encoding="utf-8")
             dire("✔ Somme SHA-256 vérifiée.")
             return "2.1.0", base
-        with mock.patch.object(colibri, "installer", faux_installer):
+        with mock.patch.object(colibri, "install", faux_installer):
             self.mo.faire("installer", lambda *a: vues.append(a[0]))
         self.assertTrue(any("Installé" in v for v in vues))
         s = self.mo.statut()
@@ -146,7 +146,7 @@ class Colibri(unittest.TestCase):
         self.regler(modele_colibri=str(modele), port_colibri=8123)
         self.assertTrue(self.mo.actions()["demarrer"]["possible"])
         lances = []
-        with mock.patch.object(colibri, "demarrer", lambda m, port, **kw: lances.append((m, port))):
+        with mock.patch.object(colibri, "start", lambda m, port, **kw: lances.append((m, port))):
             self.mo.faire("demarrer", lambda *a: None)
         self.assertEqual(lances, [(str(modele), 8123)])
         self.mo.faire("desinstaller", lambda *a: None)
@@ -159,7 +159,7 @@ class Colibri(unittest.TestCase):
                 self.regler(**d)
 
     def test_hors_ligne_pas_de_telechargement(self):
-        engines.CONTEXTE["hors_ligne"] = lambda: True
+        engines.CONTEXT["hors_ligne"] = lambda: True
         self.regler(serveur="colibri")
         a = self.mo.actions()
         self.assertFalse(a["installer"]["possible"])
@@ -230,9 +230,9 @@ class PremierLancement(unittest.TestCase):
 
     def test_le_premier_lancement_de_la_page_reconnait_colibri_installe(self):
         import lutin.server as srv
-        mo = engines.MOTEURS["openai"]
-        ancien = dict(engines.CONTEXTE)
-        engines.CONTEXTE["donnees"] = lambda: _TEMP / "donnees-pl"
+        mo = engines.ENGINES["openai"]
+        ancien = dict(engines.CONTEXT)
+        engines.CONTEXT["donnees"] = lambda: _TEMP / "donnees-pl"
         try:
             ml.regler_serveur("openai", {"serveur": "colibri"})
             with mock.patch.object(type(mo), "_colibri", lambda self_: ("2.1.0", _TEMP)), mock.patch.object(type(mo), "modele_colibri", lambda self_: ""):
@@ -245,8 +245,8 @@ class PremierLancement(unittest.TestCase):
             self.assertNotIn("Ollama", pl["raison"])
         finally:
             ml.regler_serveur("openai", {"serveur": ""})
-            engines.CONTEXTE.clear()
-            engines.CONTEXTE.update(ancien)
+            engines.CONTEXT.clear()
+            engines.CONTEXT.update(ancien)
 
     def test_comportement_inchange_pour_ollama_absent(self):
         r = diagnostic.first_launch("Ollama", False, "Pas installé.", None, None, [], "ollama")
@@ -261,12 +261,12 @@ class ProcessusMoteurs(unittest.TestCase):
 
     def test_instantane_windows_lu_depuis_le_json_de_powershell(self):
         texte = json.dumps([{"pid": 5, "ppid": 1, "nom": "llama-server.exe", "exe": "E:\\IA\\llama.cpp\\bin\\llama-server.exe", "ram": 100, "vram": 3000}, {"pid": 6, "ppid": 5, "nom": "ollama.exe", "exe": None, "ram": 1, "vram": None}, {"casse": 1}])
-        r = rc.analyser_instantane(texte)
+        r = rc.parse_snapshot(texte)
         self.assertEqual([x["pid"] for x in r], [5, 6])
         self.assertEqual(r[0]["nom"], "llama-server")
         self.assertIsNone(r[1]["vram"], "inconnu n'est pas zéro")
-        self.assertEqual(rc.analyser_instantane(json.dumps({"pid": 7, "nom": "x.exe"}))[0]["pid"], 7, "PowerShell rend un objet seul sans liste")
-        self.assertEqual(rc.analyser_instantane("pas du json"), [])
+        self.assertEqual(rc.parse_snapshot(json.dumps({"pid": 7, "nom": "x.exe"}))[0]["pid"], 7, "PowerShell rend un objet seul sans liste")
+        self.assertEqual(rc.parse_snapshot("pas du json"), [])
 
     def test_vram_du_routeur_est_celle_de_ses_fils_et_le_cache_du_fichier_n_est_pas_de_la_ram(self):
         class Proc:
@@ -281,7 +281,7 @@ class ProcessusMoteurs(unittest.TestCase):
         ancien = dict(ml.SERVEUR)
         ml.SERVEUR.update(proc=Proc(), modele=ml.ROUTEUR, noms=("a",))
         try:
-            with mock.patch.object(rc, "instantane_processus", lambda **kw: instantane), mock.patch.object(rc, "placement_llamacpp", lambda mo: (rc.analyser_journal_llamacpp(journal), "cuda")):
+            with mock.patch.object(rc, "snapshot_process", lambda **kw: instantane), mock.patch.object(rc, "placement_llamacpp", lambda mo: (rc.parse_log_llamacpp(journal), "cuda")):
                 c = rc.charges_llamacpp()[0]
         finally:
             ml.SERVEUR.update(ancien)
@@ -293,7 +293,7 @@ class ProcessusMoteurs(unittest.TestCase):
     def test_journal_dernier_chargement_et_memoire_hote(self):
         j = ("load_tensors: offloading 10 repeating layers to GPU\nload_tensors: offloaded 11/11 layers to GPU\nCUDA0 model buffer size = 100.00 MiB\nCPU_Mapped model buffer size = 50.00 MiB\n"
              "load_tensors: offloading 30 repeating layers to GPU\nload_tensors: offloaded 31/31 layers to GPU\nCUDA0 model buffer size = 4000.00 MiB\nCUDA_Host model buffer size = 300.00 MiB\nCUDA0 KV buffer size = 500.00 MiB\nCPU compute buffer size = 20.00 MiB\n")
-        p = rc.analyser_journal_llamacpp(j)
+        p = rc.parse_log_llamacpp(j)
         self.assertEqual(p["couches"], 31)
         self.assertEqual(p["gpu"], 4000 * 1024 ** 2, "seul le dernier chargement compte")
         self.assertEqual(p["cpu"], 300 * 1024 ** 2, "la mémoire hôte est de la RAM")
@@ -307,7 +307,7 @@ class ProcessusMoteurs(unittest.TestCase):
         exe.write_text("x")
         instantane = [{"pid": 50, "ppid": 1, "nom": "llama-server", "exe": str(exe), "ram": 10, "vram": 7 * 1024 ** 3}, {"pid": 51, "ppid": 50, "nom": "llama-server", "exe": str(exe), "ram": 5, "vram": 1024},
                       {"pid": 60, "ppid": 1, "nom": "LM Studio", "exe": "C:/Autre/LM Studio.exe", "ram": 3, "vram": None}, {"pid": 70, "ppid": 1, "nom": "ollama", "exe": "", "ram": 3, "vram": 9}]
-        with mock.patch.object(rc, "instantane_processus", lambda **kw: instantane), mock.patch.object(rc, "dossiers_lutin", lambda: [dossier]):
+        with mock.patch.object(rc, "snapshot_process", lambda **kw: instantane), mock.patch.object(rc, "folders_lutin", lambda: [dossier]):
             c = rc.charges_orphelines(set())
             ids = {x["id"]: x for x in c}
             self.assertEqual(set(ids), {"processus:50", "processus:60"}, "les fils sont regroupés avec leur père ; Ollama est vu par son interface")
@@ -317,7 +317,7 @@ class ProcessusMoteurs(unittest.TestCase):
             self.assertIsNone(ids["processus:60"]["vram"], "inconnu n'est pas zéro")
             self.assertEqual(rc.charges_orphelines({50, 51}) and [x["id"] for x in rc.charges_orphelines({50, 51})], ["processus:60"], "ce que Lutin pilote n'est pas compté deux fois")
             arretes = []
-            with mock.patch.object(rc, "arreter_processus", lambda pid, tous, **kw: arretes.append((pid, sorted(tous)))):
+            with mock.patch.object(rc, "stop_process", lambda pid, tous, **kw: arretes.append((pid, sorted(tous)))):
                 self.assertIn("arrêté", rc.decharger("processus:50")["message"])
                 self.assertEqual(arretes, [(50, [50, 51])])
                 with self.assertRaises(ValueError):
@@ -362,8 +362,8 @@ class DossierDesMoteurs(unittest.TestCase):
         from lutin import docker_engines as md
         self.md = md
         self.tmp = Path(tempfile.mkdtemp(prefix="lutin-dossier-moteurs-"))
-        self.ancien = dict(engines.CONTEXTE)
-        engines.CONTEXTE.update(donnees=lambda: self.tmp, en_docker=lambda: False, hors_ligne=lambda: False)
+        self.ancien = dict(engines.CONTEXT)
+        engines.CONTEXT.update(donnees=lambda: self.tmp, en_docker=lambda: False, hors_ligne=lambda: False)
         for k in ("LUTIN_ENGINES", "LUTIN_MOTEURS", "LUTIN_DOCKER"):
             patcher = mock.patch.dict(os.environ)
             patcher.start()
@@ -371,38 +371,38 @@ class DossierDesMoteurs(unittest.TestCase):
             os.environ.pop(k, None)
 
     def tearDown(self):
-        engines.CONTEXTE.clear()
-        engines.CONTEXTE.update(self.ancien)
+        engines.CONTEXT.clear()
+        engines.CONTEXT.update(self.ancien)
 
     def test_par_defaut_engines_en_anglais(self):
-        self.assertEqual(self.md.base_moteurs(), self.tmp / "engines")
+        self.assertEqual(self.md.base_engines(), self.tmp / "engines")
 
     def test_l_ancien_dossier_moteurs_est_renomme_sans_rien_perdre(self):
         (self.tmp / "moteurs" / "llamacpp").mkdir(parents=True)
         (self.tmp / "moteurs" / "llamacpp" / "version.txt").write_text("b1", encoding="utf-8")
-        self.assertEqual(self.md.base_moteurs(), self.tmp / "engines")
+        self.assertEqual(self.md.base_engines(), self.tmp / "engines")
         self.assertEqual((self.tmp / "engines" / "llamacpp" / "version.txt").read_text(encoding="utf-8"), "b1")
         self.assertFalse((self.tmp / "moteurs").exists())
 
     def test_renommage_impossible_l_ancien_reste_utilise(self):
         (self.tmp / "moteurs").mkdir()
         with mock.patch.object(Path, "rename", side_effect=PermissionError(5, "Accès refusé")):
-            self.assertEqual(self.md.base_moteurs(), self.tmp / "moteurs")
+            self.assertEqual(self.md.base_engines(), self.tmp / "moteurs")
 
     def test_choix_dans_la_page_et_retour_au_defaut(self):
         choisi = self.tmp / "ailleurs"
         ml.regler_dossier_moteurs(str(choisi))
-        self.assertEqual(self.md.base_moteurs(), choisi)
-        self.assertEqual(engines.MOTEURS["llamacpp"].dossier(), choisi / "llamacpp")
+        self.assertEqual(self.md.base_engines(), choisi)
+        self.assertEqual(engines.ENGINES["llamacpp"].dossier(), choisi / "llamacpp")
         v = ml.vue_dossier_moteurs()
         self.assertEqual((v["source"], v["personnalise"], v["actuel"]), ("reglage", True, str(choisi)))
         ml.regler_dossier_moteurs("")
-        self.assertEqual(self.md.base_moteurs(), self.tmp / "engines")
+        self.assertEqual(self.md.base_engines(), self.tmp / "engines")
 
     def test_refuse_un_chemin_relatif_et_tant_qu_un_moteur_y_est_installe(self):
         with self.assertRaises(ml.ErreurMoteur):
             ml.regler_dossier_moteurs("relatif/dossier")
-        installe = engines.MOTEURS["llamacpp"]
+        installe = engines.ENGINES["llamacpp"]
         exe = installe.dossier_defaut() / "bin" / ("llama-server.exe" if os.name == "nt" else "llama-server")
         exe.parent.mkdir(parents=True)
         exe.write_text("x")
@@ -413,23 +413,23 @@ class DossierDesMoteurs(unittest.TestCase):
 
     def test_docker_priorites_et_cause_quand_engines_n_est_pas_utilise(self):
         env = {"LUTIN_DOCKER": "1"}
-        engines.CONTEXTE["en_docker"] = lambda: True
-        d = self.md.detail_dossier_moteurs(env, monte=lambda p: True, ecriture=lambda p: False)
+        engines.CONTEXT["en_docker"] = lambda: True
+        d = self.md.detail_folder_engines(env, monte=lambda p: True, ecriture=lambda p: False)
         self.assertEqual((d["source"], d["probleme"], d["dossier"]), ("donnees", "non_modifiable", self.tmp / "engines"))
-        d = self.md.detail_dossier_moteurs(env, monte=lambda p: False)
+        d = self.md.detail_folder_engines(env, monte=lambda p: False)
         self.assertEqual((d["source"], d["probleme"]), ("donnees", "non_monte"))
-        d = self.md.detail_dossier_moteurs(env, monte=lambda p: True, ecriture=lambda p: True)
+        d = self.md.detail_folder_engines(env, monte=lambda p: True, ecriture=lambda p: True)
         self.assertEqual((d["source"], d["dossier"]), ("montage", Path("/engines")))
         ml.regler_dossier_moteurs(str(self.tmp / "choisi"))
-        d = self.md.detail_dossier_moteurs(env, monte=lambda p: True, ecriture=lambda p: True)
+        d = self.md.detail_folder_engines(env, monte=lambda p: True, ecriture=lambda p: True)
         self.assertEqual((d["source"], d["dossier"]), ("reglage", self.tmp / "choisi"), "le choix de la page passe avant /engines")
-        d = self.md.detail_dossier_moteurs(dict(env, LUTIN_ENGINES="/vol"), monte=lambda p: True)
+        d = self.md.detail_folder_engines(dict(env, LUTIN_ENGINES="/vol"), monte=lambda p: True)
         self.assertEqual((d["source"], d["dossier"]), ("env", Path("/vol")), "la variable passe avant tout")
-        d = self.md.detail_dossier_moteurs(dict(env, LUTIN_MOTEURS="/ancien"), monte=lambda p: True)
+        d = self.md.detail_folder_engines(dict(env, LUTIN_MOTEURS="/ancien"), monte=lambda p: True)
         self.assertEqual(d["dossier"], Path("/ancien"), "l'ancienne variable française est encore lue")
 
     def test_docker_le_dossier_est_choisissable_dans_la_page_sauf_si_impose_par_la_variable(self):
-        engines.CONTEXTE["en_docker"] = lambda: True
+        engines.CONTEXT["en_docker"] = lambda: True
         with mock.patch.dict(os.environ, {"LUTIN_DOCKER": "1", "LUTIN_ENGINES": "/vol"}):
             self.assertFalse(ml.vue_dossier_moteurs()["modifiable"])
             with self.assertRaises(ml.ErreurMoteur):

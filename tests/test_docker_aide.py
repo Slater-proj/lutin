@@ -126,7 +126,7 @@ class Reglages(unittest.TestCase):
     def test_l_adresse_de_llamacpp_vient_de_l_environnement(self):
         import os
         from unittest import mock
-        mo = engines.MOTEURS["llamacpp"]
+        mo = engines.ENGINES["llamacpp"]
         with mock.patch.dict(os.environ, {"LUTIN_LLAMACPP_URL": "http://llamacpp:8080"}):
             self.assertTrue(mo.externe())
             self.assertEqual(mo.adresse(), "http://llamacpp:8080/v1")
@@ -156,16 +156,16 @@ class Annulation(unittest.TestCase):
 
             def statut(self):
                 return {}
-        engines.lancer_tache(Faux(), "installer")
+        engines.launch_task(Faux(), "installer")
         time.sleep(0.2)
-        self.assertTrue(engines.annuler_tache("faux"))
+        self.assertTrue(engines.cancel_task("faux"))
         for _ in range(100):
-            if engines.tache("faux")["statut"] != "en cours":
+            if engines.task("faux")["statut"] != "en cours":
                 break
             time.sleep(0.05)
-        self.assertEqual(engines.tache("faux")["statut"], "annule")
-        self.assertEqual(engines.tache("faux")["erreur"], "")
-        self.assertFalse(engines.annuler_tache("faux"), "rien à annuler ensuite")
+        self.assertEqual(engines.task("faux")["statut"], "annule")
+        self.assertEqual(engines.task("faux")["erreur"], "")
+        self.assertFalse(engines.cancel_task("faux"), "rien à annuler ensuite")
 
 
 if __name__ == "__main__":

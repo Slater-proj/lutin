@@ -49,14 +49,14 @@ def call(method, path, body=None, who=None):
 class Engines(unittest.TestCase):
     def setUp(self):
         self.fake = Fake()
-        patch = mock.patch.dict(engines.MOTEURS, {"fake": self.fake})
+        patch = mock.patch.dict(engines.ENGINES, {"fake": self.fake})
         patch.start()
         self.addCleanup(patch.stop)
-        self.addCleanup(lambda: engines.TACHES.pop("fake", None))
+        self.addCleanup(lambda: engines.TASKS.pop("fake", None))
 
     def listing(self):
         """The list of the fake engine alone: the real ones, which do not answer here, would make every reading wait 2 s."""
-        with mock.patch.object(engines, "liste", return_value=[self.fake]):
+        with mock.patch.object(engines, "entries", return_value=[self.fake]):
             return call("GET", "/api/v1/engines")[1]["engines"]
 
     def finished(self):

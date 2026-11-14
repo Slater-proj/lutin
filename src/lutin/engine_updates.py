@@ -32,7 +32,7 @@ def latest(derniere, actuelle):
 
 
 def _file():
-    donnees = engines.CONTEXTE["donnees"]()
+    donnees = engines.CONTEXT["donnees"]()
     return Path(donnees) / "moteurs_maj.json" if donnees else None
 
 
@@ -91,13 +91,13 @@ def _latest_server(mo):
 
 def _latest_ollama(http_json):
     """(version installée, dernière version publiée) pour Ollama local et démarré ; None sinon (Docker : l'image se met à jour avec docker compose)."""
-    if engines.CONTEXTE["en_docker"]():
+    if engines.CONTEXT["en_docker"]():
         from . import docker_engines
         if not docker_engines.ollama_installe_par_lutin():
             return None          # Ollama de l'image ou d'un autre conteneur : il se met à jour avec docker compose
         try:
             derniere = ((http_json or docker_engines._http_json)(docker_engines.API_OLLAMA) or {}).get("tag_name", "")
-            actuelle = (docker_engines.ollama_dossier() / "version.txt").read_text(encoding="utf-8").strip()
+            actuelle = (docker_engines.ollama_folder() / "version.txt").read_text(encoding="utf-8").strip()
         except (OSError, ValueError, urllib.error.URLError):
             return None
         return (actuelle, derniere) if actuelle and derniere else None
@@ -113,11 +113,11 @@ def _latest_ollama(http_json):
 
 def check(force=False, http_json=None, maintenant=time.time):
     """Contrôle chaque moteur géré par Lutin (au plus une fois par 24 h, sauf `force`) et garde le résultat. Renvoie l'état complet. Les pannes réseau sont silencieuses : l'ancien résultat reste."""
-    if engines.CONTEXTE["hors_ligne"]():
+    if engines.CONTEXT["hors_ligne"]():
         return state()
     with LOCK:
         d = load()
-        for mo in engines.liste():
+        for mo in engines.entries():
             ancien = d.get(mo.id) or {}
             if not force and maintenant() - float(ancien.get("verifie") or 0) < INTERVAL_S:
                 continue
@@ -143,7 +143,7 @@ def state():
     for ident, e in load().items():
         if not isinstance(e, dict) or not e.get("derniere"):
             continue
-        mo = engines.MOTEURS.get(ident)
+        mo = engines.ENGINES.get(ident)
         actuelle = (mo.version() if mo is not None and ident in ("llamacpp", "openai") else "") or e.get("actuelle", "")
         sortie[ident] = {"actuelle": actuelle, "derniere": e["derniere"], "disponible": latest(e["derniere"], actuelle), "verifie": e.get("verifie", 0)}
     return sortie
@@ -162,7 +162,7 @@ def in_background(activer=True):
     if not activer or RUNNING["actif"]:
         return
     d = load()
-    if d and all(time.time() - float((d.get(m.id) or {}).get("verifie") or 0) < INTERVAL_S for m in engines.liste() if m.id in ("llamacpp", "ollama")):
+    if d and all(time.time() - float((d.get(m.id) or {}).get("verifie") or 0) < INTERVAL_S for m in engines.entries() if m.id in ("llamacpp", "ollama")):
         return
     RUNNING["actif"] = True
 

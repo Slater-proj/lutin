@@ -17,21 +17,21 @@ for d in ("projet", "donnees", "memoire", "config"):
 
 from lutin import model_catalog, model_selection  # noqa: E402
 from lutin import core as A  # noqa: E402
-from lutin.hardware import Gpu, Profil, est_integree  # noqa: E402
+from lutin.hardware import Gpu, Profil, integrated_is  # noqa: E402
 
 
 class CartesIntegrees(unittest.TestCase):
     def test_reconnues_a_leur_nom(self):
         for nom, fab in (("Intel(R) UHD Graphics 770", "intel"), ("AMD Radeon(TM) Graphics", "amd"), ("AMD Radeon 780M Graphics", "amd"), ("Intel(R) Arc(TM) Graphics", "intel"),
                          ("Intel(R) Iris(R) Xe Graphics", "intel"), ("Intel(R) HD Graphics 630", "intel"), ("AMD Radeon(TM) Vega 8 Graphics", "amd")):
-            self.assertTrue(est_integree(Gpu(nom, fab, 4.0)), nom)
+            self.assertTrue(integrated_is(Gpu(nom, fab, 4.0)), nom)
 
     def test_les_vraies_cartes_ne_sont_pas_touchees(self):
         for nom, fab in (("NVIDIA GeForce RTX 4060", "nvidia"), ("AMD Radeon RX 7800 XT", "amd"), ("Intel(R) Arc(TM) A770 Graphics", "intel"), ("AMD Radeon RX 6800M", "amd")):
-            self.assertFalse(est_integree(Gpu(nom, fab, 8.0)), nom)
+            self.assertFalse(integrated_is(Gpu(nom, fab, 8.0)), nom)
 
     def test_une_carte_declaree_a_la_main_est_toujours_crue(self):
-        self.assertFalse(est_integree(Gpu("AMD Radeon 780M Graphics", "amd", 8.0, 0.0, "déclarée (LUTIN_GPU)")))
+        self.assertFalse(integrated_is(Gpu("AMD Radeon 780M Graphics", "amd", 8.0, 0.0, "déclarée (LUTIN_GPU)")))
 
     def test_pc_avec_carte_integree_et_32_go_se_choisit_comme_un_pc_sans_carte(self):
         p = Profil(systeme="windows", cpu="Ryzen 7 7840U", coeurs=8, ram_go=32.0, ram_libre_go=24.0, gpus=[Gpu("AMD Radeon(TM) Graphics", "amd", 4.0, 0.0, "registre")])

@@ -105,7 +105,7 @@ def run(options, moteur, ecrire=print, entree=input, chemin_rapport=None, mainte
 
     # 1. la machine
     debut = maintenant()
-    profil = (engines.CONTEXTE.get("profil_attendu") or engines.CONTEXTE["profil"])()          # la détection du matériel démarre en arrière-plan : on l'attend, le choix du programme en dépend
+    profil = (engines.CONTEXT.get("profil_attendu") or engines.CONTEXT["profil"])()          # la détection du matériel démarre en arrière-plan : on l'attend, le choix du programme en dépend
     from . import llamacpp_engine as _ml
     systeme = _ml._systeme()
     variante = (moteur.config().get("variante") if hasattr(moteur, "config") else None) or "auto"

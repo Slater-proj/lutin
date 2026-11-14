@@ -354,7 +354,7 @@ def commande_update(args):
         code = mettre_a_jour_lutin()
     if args.modeles or tout:
         d, cfg = contexte()
-        r = updates.verifier(hardware.detecter(), cfg, d, ollama_client.Ollama(), force=True)
+        r = updates.check(hardware.detecter(), cfg, d, ollama_client.Ollama(), force=True)
         for p in r["propositions"]:
             print("• {} : {}".format(p["modele"], p["raison"]))
         print(_t("Modèles : rien de nouveau.") if not r["propositions"] else _t("Pour en installer un :  lutin models install <identifiant>"))
@@ -394,7 +394,7 @@ def commande_modeles(args):
             os.environ.setdefault("LUTIN_DONNEES", str(d["donnees"]))
             os.environ.setdefault("LUTIN_MEMOIRE", str(d["memoire"]))
             from . import model_compat, core as _moteur, engines  # noqa: F401  (importer le moteur enregistre les moteurs)
-            mo = engines.MOTEURS.get(args.moteur)
+            mo = engines.ENGINES.get(args.moteur)
             if mo is None:
                 print(_t("Moteur inconnu : {}.").format(args.moteur), file=sys.stderr)
                 return 1
@@ -416,13 +416,13 @@ def commande_modeles(args):
         except ollama_client.ErreurOllama as e:
             print("✘ " + str(e), file=sys.stderr)
             return 1
-        mesures = bench.lire(Path(d["cache"]) / "bench.json")
+        mesures = bench.read(Path(d["cache"]) / "bench.json")
         for x in model_selection.list_models(profil, cat, avance=args.avance or cfg.get("avance", False)):
             m = x["modele"]
             etat = _t("installé") if m["id"] in installes else ("tient" if x["tient"] else "trop gros")
             print("{:<38} {:>5g} Go  {:<10} {}".format(m["id"], m["go"], etat, m["phrase"]))
             if m["id"] in mesures:
-                print("{:<38} {}".format("", _t("mesuré ici : ") + bench.resume(mesures[m["id"]])))
+                print("{:<38} {}".format("", _t("mesuré ici : ") + bench.summary(mesures[m["id"]])))
         return 0
     if args.action in ("installer", "supprimer") and not args.modele:
         print(_t("Indique un modèle : lutin models {} <identifiant>").format(args.action), file=sys.stderr)
@@ -432,13 +432,13 @@ def commande_modeles(args):
             m = model_catalog.by_id(cat).get(args.modele)
             if m and m.get("avertissement"):
                 print("⚠ " + m["avertissement"])
-            o.telecharger(args.modele, setup_wizard.barre(setup_wizard.Es()))
+            o.telecharger(args.modele, setup_wizard.bar(setup_wizard.Es()))
             print(_t("✔ installé : ") + args.modele)
         elif args.action == "supprimer":
             o.supprimer(args.modele)
             print(_t("✔ supprimé : ") + args.modele)
         elif args.action == "maj":
-            r = updates.verifier(profil, cfg, d, o, force=True)
+            r = updates.check(profil, cfg, d, o, force=True)
             for p in r["propositions"]:
                 print("• {} : {}".format(p["modele"], p["raison"]))
             print(_t("Rien de nouveau.") if not r["propositions"] else _t("\nInstaller :  lutin models install <identifiant>"))
@@ -536,10 +536,10 @@ def commande_bench_moteurs(args):
         print(_t("Aucun modèle à mesurer : indique-le (lutin bench-engines <modèle>)."), file=sys.stderr)
         return 1
     print(_t("Comparaison des moteurs avec {} ({}, environ {})…").format(modele, args.mode, "1 minute" if args.mode == "rapide" else "5 minutes"))
-    r = engine_bench.comparer(modele, args.mode, profil, progression=lambda texte, i, n: print("  {} ({}/{})".format(texte, i + 1, n)))
+    r = engine_bench.compare(modele, args.mode, profil, progression=lambda texte, i, n: print("  {} ({}/{})".format(texte, i + 1, n)))
     print(engine_bench.lisible(r))
     if r["moteurs"]:
-        engine_bench.enregistrer(d["donnees"], r)
+        engine_bench.save(d["donnees"], r)
     if args.sortie:
         Path(args.sortie).write_text(engine_bench.exporter(r), encoding="utf-8")
         print(_t("Résultat écrit dans {} (rien de personnel : à partager tel quel).").format(args.sortie))
@@ -582,20 +582,20 @@ def commande_mcp(args):
             if not args.nom or not args.cible:
                 raise ValueError(_t("lutin mcp add <nom> <commande ou adresse>"))
             env = dict(x.split("=", 1) for x in args.env if "=" in x)
-            ident = mcp.ajouter(args.nom, None if args.cible.lower().startswith(("http://", "https://")) else args.cible, args.cible if args.cible.lower().startswith(("http://", "https://")) else "", env)
+            ident = mcp.add(args.nom, None if args.cible.lower().startswith(("http://", "https://")) else args.cible, args.cible if args.cible.lower().startswith(("http://", "https://")) else "", env)
             print(_t("✔ Connecteur « {} » ajouté. Étape suivante : lutin mcp refresh {}").format(ident, ident))
         elif args.action == "retirer":
-            mcp.supprimer(mcp.identifiant(args.nom))
+            mcp.remove(mcp.identifier(args.nom))
             print(_t("✔ Connecteur retiré."))
         elif args.action == "actualiser":
-            n = mcp.actualiser(mcp.identifiant(args.nom))
-            mcp.fermer()
+            n = mcp.actualiser(mcp.identifier(args.nom))
+            mcp.close()
             print(_t("✔ {} outil(s) trouvé(s). Autorise ceux que le modèle peut utiliser : lutin mcp allow {} <outil>").format(n, args.nom))
         elif args.action in ("autoriser", "interdire"):
-            mcp.regler(mcp.identifiant(args.nom), outil=args.cible, autorise=args.action == "autoriser")
+            mcp.set_value(mcp.identifier(args.nom), outil=args.cible, autorise=args.action == "autoriser")
             print(_t("✔ Fait."))
         elif args.action == "ecriture":
-            mcp.regler(mcp.identifiant(args.nom), lecture_seule=False)
+            mcp.set_value(mcp.identifier(args.nom), lecture_seule=False)
             print(_t("✔ Ce connecteur n'est plus en lecture seule : ses outils qui modifient quelque chose restent soumis à ton accord, à chaque appel."))
     except ValueError as e:
         print("✘ " + str(e), file=sys.stderr)
@@ -634,7 +634,7 @@ def commande_bench(args):
         os.environ.setdefault("LUTIN_DONNEES", str(d["donnees"]))
         os.environ.setdefault("LUTIN_MEMOIRE", str(d["memoire"]))
         from . import core as _moteur, engines  # noqa: F401  (importer le moteur enregistre les moteurs)
-        mo = engines.MOTEURS.get(args.moteur)
+        mo = engines.ENGINES.get(args.moteur)
         if mo is None:
             print(_t("Moteur inconnu : {}.").format(args.moteur), file=sys.stderr)
             return 1
@@ -663,8 +663,8 @@ def commande_bench(args):
             continue
         print(_t("Mesure de {} ({})…").format(m, "vitesse seulement" if args.rapide else "banc complet, quelques minutes"))
         mesure = bench.executer(o, m, rapide=args.rapide, resume_machine=resume, progression=lambda nom, i, n: print("  {} ({}/{})".format(_t(nom), i + 1, n)))
-        bench.enregistrer(Path(d["cache"]) / "bench.json", mesure)
-        print("  → " + bench.resume(mesure))
+        bench.save(Path(d["cache"]) / "bench.json", mesure)
+        print("  → " + bench.summary(mesure))
         if mesure["notes"]:
             print(_t("  Notes mesurées (indicatives, une vingtaine de questions) : ") + ", ".join("{} {}/10".format(_t(model_catalog.LABELS[r][0]).lower(), n) for r, n in mesure["notes"].items()))
         if mesure.get("erreur"):
@@ -863,19 +863,19 @@ def commande_colibri(args):
     from . import colibri
     try:
         if args.action == "installer":
-            version, racine = colibri.installer(args.version_colibri)
+            version, racine = colibri.install(args.version_colibri)
             print(_t("✔ Colibri {} installé dans {}").format(version, racine))
             print(_t("Étape suivante : prépare un modèle avec « coli setup » ou « coli import » (voir la documentation de Colibri), puis : lutin colibri start --model <dossier>"))
         elif args.action == "demarrer":
             if not args.modele:
                 print("✘ " + _t("Indique le dossier de modèle : lutin colibri start --model <dossier>"), file=sys.stderr)
                 return 1
-            colibri.demarrer(args.modele, args.port)
+            colibri.start(args.modele, args.port)
             print(_t("✔ Colibri répond sur http://127.0.0.1:{}/v1 : dans les réglages, choisis « Serveur compatible OpenAI » puis Colibri dans les serveurs connus.").format(args.port))
         elif args.action == "arreter":
-            print(_t("✔ Colibri arrêté.") if colibri.arreter(args.port) else _t("Colibri n'a pas confirmé l'arrêt (déjà arrêté ?)."))
+            print(_t("✔ Colibri arrêté.") if colibri.stop(args.port) else _t("Colibri n'a pas confirmé l'arrêt (déjà arrêté ?)."))
         else:
-            trouve = colibri.installee()
+            trouve = colibri.installed()
             print(_t("Colibri {} installé dans {}").format(*trouve) if trouve else _t("Colibri n'est pas installé."))
             print(_t("Répond sur le port {} : {}").format(args.port, _t("oui") if colibri.repond(args.port) else _t("non")))
     except (ValueError, OSError) as e:

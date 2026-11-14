@@ -85,21 +85,21 @@ class Mission(unittest.TestCase):
         RECUES.clear()
         _m.TOURS_ACTIFS.clear()
         _m.RACINE_TOURS.clear()
-        for m in mission.lire():
+        for m in mission.read():
             mission.action("supprimer", {"id": m["id"]})
         for f in self.dossier.glob("*"):
             f.unlink()
 
     def creer(self, **kw):
-        return mission.creer(kw.get("nom", "Jeu"), kw.get("cahier", "Crée un petit jeu."), "principal", kw.get("duree_h", 8), kw.get("autonome", True))
+        return mission.create(kw.get("nom", "Jeu"), kw.get("cahier", "Crée un petit jeu."), "principal", kw.get("duree_h", 8), kw.get("autonome", True))
 
     def test_une_mission_autonome_travaille_seule_puis_rend_son_bilan(self):
         m = self.creer()
         self.assertTrue(mission.un_pas())                                      # tour 1 : le plan puis le fichier, sans que personne n'accepte
         self.assertEqual((self.dossier / "jeu.txt").read_text(encoding="utf-8"), "version 1")
-        self.assertEqual(mission.trouver(m["id"])["etat"], "en_cours")
+        self.assertEqual(mission.find(m["id"])["etat"], "en_cours")
         self.assertTrue(mission.un_pas())                                      # tour 2 : le modèle déclare la fin
-        fin = mission.trouver(m["id"])
+        fin = mission.find(m["id"])
         self.assertEqual((fin["etat"], fin["bilan"], fin["tours"]), ("terminee", "Jeu écrit dans jeu.txt.", 2))
         self.assertGreaterEqual(fin["actions"], 2)
         self.assertFalse(mission.un_pas(), "une mission terminée ne tourne plus")
@@ -112,25 +112,25 @@ class Mission(unittest.TestCase):
         horloge = {"t": 100.0}
         emettre = mission.suivre_le_tour(m["id"], maintenant=lambda: horloge["t"])
         emettre({"type": "pensee", "texte": "a" * 120})
-        self.assertIn("réfléchit", mission.trouver(m["id"])["message"])
-        self.assertIn("120", mission.trouver(m["id"])["message"])
+        self.assertIn("réfléchit", mission.find(m["id"])["message"])
+        self.assertIn("120", mission.find(m["id"])["message"])
         horloge["t"] += 1.0
         emettre({"type": "pensee", "texte": "b" * 50})
-        self.assertIn("120", mission.trouver(m["id"])["message"], "pas de réécriture du fichier à chaque jeton : au plus toutes les 3 secondes")
+        self.assertIn("120", mission.find(m["id"])["message"], "pas de réécriture du fichier à chaque jeton : au plus toutes les 3 secondes")
         horloge["t"] += 5.0
         emettre({"type": "texte", "texte": "voilà"})
-        self.assertIn("écrit sa réponse", mission.trouver(m["id"])["message"])
+        self.assertIn("écrit sa réponse", mission.find(m["id"])["message"])
         emettre({"type": "outil", "nom": "executer", "args": {"commande": "ping -n 1 google.fr"}})
         emettre({"type": "resultat", "nom": "executer", "texte": "Code de sortie 0." + chr(10) + "Réponse de google.fr"})
         emettre({"type": "info", "texte": "Refusé (mission sans surveillance) : Lancer une commande"})
-        j = mission.trouver(m["id"])["journal"]
+        j = mission.find(m["id"])["journal"]
         self.assertEqual(len(j), 3)
         self.assertTrue(j[0].startswith("⚙ executer") and "ping" in j[0])
         self.assertIn("Code de sortie 0.", j[1])
         for i in range(12):
             emettre({"type": "info", "texte": "ligne %d" % i})
-        self.assertEqual(len(mission.trouver(m["id"])["journal"]), mission.JOURNAL_MAX, "les dernières actions seulement")
-        self.assertIn("journal", mission.resume(mission.trouver(m["id"])), "la page le reçoit")
+        self.assertEqual(len(mission.find(m["id"])["journal"]), mission.MAX_LOG, "les dernières actions seulement")
+        self.assertIn("journal", mission.summary(mission.find(m["id"])), "la page le reçoit")
         emettre({"type": "approbation", "titre": "x"})                          # un évènement qu'on ne suit pas ne casse rien
 
     def test_la_consigne_demande_un_point_d_avancement_a_chaque_tour(self):
@@ -151,23 +151,23 @@ class Mission(unittest.TestCase):
         m = self.creer(autonome=False)
         mission.un_pas()
         self.assertFalse((self.dossier / "jeu.txt").exists())
-        self.assertEqual(mission.trouver(m["id"])["etat"], "en_cours")
+        self.assertEqual(mission.find(m["id"])["etat"], "en_cours")
 
     def test_le_modele_pose_une_question_et_la_reponse_est_donnee_au_tour_suivant(self):
         m = self.creer()
         mission.un_pas()
         MODE["v"] = "question"
         mission.un_pas()
-        x = mission.trouver(m["id"])
+        x = mission.find(m["id"])
         self.assertEqual((x["etat"], x["question"]), ("bloquee", "Quel moteur utiliser ?"))
         self.assertFalse(mission.un_pas(), "bloquée : elle attend")
         mission.action("repondre", {"id": m["id"], "texte": "Godot"})
-        self.assertEqual(mission.trouver(m["id"])["etat"], "en_cours")
+        self.assertEqual(mission.find(m["id"])["etat"], "en_cours")
         MODE["v"] = "normal"
         mission.un_pas()
         dernier = RECUES[-1]["messages"]
         self.assertTrue(any("Godot" in (x.get("content") or "") for x in dernier if x.get("role") == "user"))
-        self.assertEqual(mission.trouver(m["id"])["note"], "")
+        self.assertEqual(mission.find(m["id"])["note"], "")
 
     def test_sans_place_libre_la_mission_attend_au_lieu_de_tourner_a_vide(self):
         self.creer()
@@ -175,7 +175,7 @@ class Mission(unittest.TestCase):
             _m.TOURS_ACTIFS["occupe%d" % i] = __import__("threading").Event()
         try:
             self.assertFalse(mission.un_pas(), "aucune place : pas de tour, et un_pas() le dit pour que la boucle attende")
-            self.assertEqual(mission.lire()[0]["tours"], 0)
+            self.assertEqual(mission.read()[0]["tours"], 0)
         finally:
             _m.TOURS_ACTIFS.clear()
         self.assertTrue(mission.un_pas(), "une place se libère : le tour a lieu")
@@ -195,33 +195,33 @@ class Mission(unittest.TestCase):
             self.assertTrue(mission.un_pas(), "la seconde mission a tourné")
         finally:
             _m.activate_work = vrai
-        self.assertEqual(mission.trouver(premiere["id"])["tours"], 0)
-        self.assertEqual(mission.trouver(seconde["id"])["tours"], 1)
+        self.assertEqual(mission.find(premiere["id"])["tours"], 0)
+        self.assertEqual(mission.find(seconde["id"])["tours"], 1)
 
     def test_une_mission_menee_dans_une_conversation_suit_ses_options_et_le_dit_a_la_page(self):
         """Mission liée à une conversation : elle travaille dans CETTE conversation, son autonomie suit les cases de la conversation (relues à chaque tour), elle est résumée par conversation et s'efface avec elle."""
         c = _m.conv_nouvelle()
         _m.conv_ecrire(c)
-        m = mission.creer("Jeu", "Crée un petit jeu.", "principal", 2, False, c["id"])
+        m = mission.create("Jeu", "Crée un petit jeu.", "principal", 2, False, c["id"])
         self.assertTrue(m["lie"] and m["conv"] == c["id"])
-        self.assertEqual(mission.trouver_pour_conversation(c["id"])["id"], m["id"])
+        self.assertEqual(mission.find_for_conversation(c["id"])["id"], m["id"])
         self.assertEqual(mission.par_conversation()[c["id"]]["etat"], "en_cours")
         self.assertTrue(mission.un_pas())                                          # sans cases cochées : à blanc, rien n'est écrit
         self.assertFalse((self.dossier / "jeu.txt").exists())
-        self.assertFalse(mission.trouver(m["id"])["autonome"])
+        self.assertFalse(mission.find(m["id"])["autonome"])
         _m.options_ecrire(c["id"], {"auto_ecriture": True, "auto_commandes": True})   # l'utilisateur coche les deux cases dans la conversation
         self.assertTrue(mission.un_pas())
-        self.assertTrue(mission.trouver(m["id"])["autonome"], "l'autonomie suit les cases, relues à chaque tour")
+        self.assertTrue(mission.find(m["id"])["autonome"], "l'autonomie suit les cases, relues à chaque tour")
         apres = _m.conv_lire(c["id"])
-        self.assertEqual(mission.trouver(m["id"])["conv"], c["id"], "toujours la même conversation")
+        self.assertEqual(mission.find(m["id"])["conv"], c["id"], "toujours la même conversation")
         self.assertTrue(any("Crée un petit jeu." in (x.get("content") or "") for x in apres["messages"] if x.get("role") == "user"), "le cahier des charges est dans la conversation")
         mission.oublier_conversation(c["id"])
-        self.assertIsNone(mission.trouver_pour_conversation(c["id"]))
+        self.assertIsNone(mission.find_for_conversation(c["id"]))
 
     def test_arreter_la_reponse_en_cours_met_la_mission_en_pause(self):
         c = _m.conv_nouvelle()
         _m.conv_ecrire(c)
-        m = mission.creer("Jeu", "Crée un petit jeu.", "principal", 2, True, c["id"])
+        m = mission.create("Jeu", "Crée un petit jeu.", "principal", 2, True, c["id"])
         vrai_tour = _m.tour
 
         def tour_arrete(conv, texte, emit, r, stop, *a, **k):
@@ -232,19 +232,19 @@ class Mission(unittest.TestCase):
             mission.un_pas()
         finally:
             _m.tour = vrai_tour
-        x = mission.trouver(m["id"])
+        x = mission.find(m["id"])
         self.assertEqual(x["etat"], "pause")
         self.assertIn("Arrêtée par toi", x["message"])
         self.assertFalse(mission.un_pas(), "en pause : plus de tour")
         mission.action("reprendre", {"id": m["id"]})
-        self.assertEqual(mission.trouver(m["id"])["etat"], "en_cours")
+        self.assertEqual(mission.find(m["id"])["etat"], "en_cours")
 
     def test_le_proprietaire_est_prevenu_par_telegram_quand_la_mission_finit_ou_se_bloque(self):
         from lutin import addons, addons_telegram
         envoyes = []
-        vrai_actif, vrai_prevenir = addons.actif, addons_telegram.prevenir_proprietaires
+        vrai_actif, vrai_prevenir = addons.actif, addons_telegram.notify_owners
         addons.actif = lambda ident: ident == "telegram"
-        addons_telegram.prevenir_proprietaires = lambda texte: envoyes.append(texte)
+        addons_telegram.notify_owners = lambda texte: envoyes.append(texte)
         try:
             self.creer()
             mission.un_pas()
@@ -256,46 +256,46 @@ class Mission(unittest.TestCase):
             m2 = self.creer(nom="Autre")
             mission.un_pas()
             mission.un_pas()
-            self.assertEqual(mission.trouver(m2["id"])["etat"], "bloquee")
+            self.assertEqual(mission.find(m2["id"])["etat"], "bloquee")
             self.assertTrue(any("a besoin de toi" in x for x in envoyes[1:]))
             addons.actif = lambda ident: False                                       # Telegram n'est pas activé : aucune notification, aucune erreur
             avant = len(envoyes)
             mission.signaler(m2["id"], "terminee", "fini")
             self.assertEqual(len(envoyes), avant)
         finally:
-            addons.actif, addons_telegram.prevenir_proprietaires = vrai_actif, vrai_prevenir
+            addons.actif, addons_telegram.notify_owners = vrai_actif, vrai_prevenir
 
     def test_pause_reprise_arret(self):
         m = self.creer()
         mission.action("pause", {"id": m["id"]})
         self.assertFalse(mission.un_pas())
         mission.action("reprendre", {"id": m["id"]})
-        self.assertEqual(mission.trouver(m["id"])["etat"], "en_cours")
+        self.assertEqual(mission.find(m["id"])["etat"], "en_cours")
         mission.action("arreter", {"id": m["id"]})
-        self.assertEqual(mission.trouver(m["id"])["etat"], "terminee")
+        self.assertEqual(mission.find(m["id"])["etat"], "terminee")
 
     def test_trois_reponses_sans_aucune_action_demandent_de_l_aide(self):
         MODE["v"] = "muet"
         m = self.creer()
         for _ in range(mission.SANS_ACTION_MAX):
             mission.un_pas()
-        x = mission.trouver(m["id"])
+        x = mission.find(m["id"])
         self.assertEqual(x["etat"], "bloquee")
         self.assertIn("n'avance plus", x["question"])
 
     def test_la_duree_maximale_arrete_la_mission(self):
         m = self.creer()
-        mission.modifier(m["id"], debut=0)
+        mission.modify(m["id"], debut=0)
         mission.un_pas()
-        self.assertEqual(mission.trouver(m["id"])["etat"], "terminee")
+        self.assertEqual(mission.find(m["id"])["etat"], "terminee")
 
     def test_les_champs_sont_verifies(self):
-        for kw in ({"nom": ""}, {"cahier": ""}, {"cahier": "x" * (mission.CAHIER_MAX + 1)}):
+        for kw in ({"nom": ""}, {"cahier": ""}, {"cahier": "x" * (mission.MAX_NOTEBOOK + 1)}):
             with self.assertRaises(ValueError):
                 self.creer(**kw)
         with self.assertRaises(ValueError):
-            mission.creer("x", "y", "dossier-inconnu")
-        self.assertEqual(self.creer(duree_h=500)["duree_h"], mission.DUREE_MAX_H)
+            mission.create("x", "y", "dossier-inconnu")
+        self.assertEqual(self.creer(duree_h=500)["duree_h"], mission.DURATION_MAX_H)
         for _ in range(mission.MAX_MISSIONS - 1):
             self.creer()
         with self.assertRaises(ValueError):
@@ -304,11 +304,11 @@ class Mission(unittest.TestCase):
     def test_une_mission_est_reprise_apres_un_redemarrage(self):
         m = self.creer()
         mission.un_pas()
-        avant = mission.trouver(m["id"])["conv"]
-        mission.VIVANT["arrets"].clear()                                       # « redémarrage » : seul le fichier d'état reste
+        avant = mission.find(m["id"])["conv"]
+        mission.ALIVE["arrets"].clear()                                       # « redémarrage » : seul le fichier d'état reste
         mission.un_pas()
-        self.assertEqual(mission.trouver(m["id"])["conv"], avant, "même conversation")
-        self.assertEqual(mission.trouver(m["id"])["etat"], "terminee")
+        self.assertEqual(mission.find(m["id"])["conv"], avant, "même conversation")
+        self.assertEqual(mission.find(m["id"])["etat"], "terminee")
 
 
 if __name__ == "__main__":

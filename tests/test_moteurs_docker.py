@@ -29,8 +29,8 @@ def archive(fichiers):
 class Dossier(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(dir=_TEMP))
-        self.avant = dict(engines.CONTEXTE)
-        engines.CONTEXTE.update(donnees=lambda: self.tmp, en_docker=lambda: True, hors_ligne=lambda: False)
+        self.avant = dict(engines.CONTEXT)
+        engines.CONTEXT.update(donnees=lambda: self.tmp, en_docker=lambda: True, hors_ligne=lambda: False)
         patcher = unittest.mock.patch.dict(os.environ, {"LUTIN_DOCKER": "1"})
         patcher.start()
         self.addCleanup(patcher.stop)
@@ -38,25 +38,25 @@ class Dossier(unittest.TestCase):
         os.environ.pop("OLLAMA_URL", None)
 
     def tearDown(self):
-        engines.CONTEXTE.clear()
-        engines.CONTEXTE.update(self.avant)
+        engines.CONTEXT.clear()
+        engines.CONTEXT.update(self.avant)
 
     def test_hors_docker_rien(self):
-        self.assertIsNone(md.dossier_moteurs({}))
+        self.assertIsNone(md.folder_engines({}))
 
     def test_sans_montage_les_moteurs_vont_dans_le_volume_des_donnees(self):
-        self.assertEqual(md.dossier_moteurs(monte=lambda d: False), self.tmp / "engines")
+        self.assertEqual(md.folder_engines(monte=lambda d: False), self.tmp / "engines")
 
     def test_dossier_choisi_par_variable(self):
         with unittest.mock.patch.dict(os.environ, {"LUTIN_MOTEURS": "/autre"}):
-            self.assertEqual(md.dossier_moteurs(), Path("/autre"))
+            self.assertEqual(md.folder_engines(), Path("/autre"))
 
     def test_point_de_montage_reconnu(self):
         info = self.tmp / "mountinfo"
         info.write_text("36 35 98:0 / /engines rw,noatime - ext4 /dev/sda1 rw\n37 35 98:0 / /data rw - ext4 /dev/sda1 rw\n", encoding="utf-8")
-        self.assertTrue(md.est_monte("/engines", str(info)))
-        self.assertFalse(md.est_monte("/models", str(info)))
-        self.assertFalse(md.est_monte("/engines", str(self.tmp / "absent")))
+        self.assertTrue(md.is_mounted("/engines", str(info)))
+        self.assertFalse(md.is_mounted("/models", str(info)))
+        self.assertFalse(md.is_mounted("/engines", str(self.tmp / "absent")))
 
 
 class Extraction(unittest.TestCase):
@@ -96,7 +96,7 @@ class Installation(Dossier):
             destination.write_bytes(contenu)
             return destination
         etapes = []
-        md.installer_ollama(lambda t, f, n: etapes.append(t), http_json=lambda url: self.release(contenu, **kw), telecharger=telecharger, ouvrir_archive=lambda f: open(f, "rb"))
+        md.install_ollama(lambda t, f, n: etapes.append(t), http_json=lambda url: self.release(contenu, **kw), telecharger=telecharger, ouvrir_archive=lambda f: open(f, "rb"))
         return etapes
 
     def test_installe_dans_le_dossier_des_moteurs_et_retient_la_version(self):
@@ -105,7 +105,7 @@ class Installation(Dossier):
         exe = md.ollama_installe_par_lutin()
         self.assertEqual(Path(exe), self.tmp / "engines" / "ollama" / "bin" / "ollama")
         self.assertEqual((self.tmp / "engines" / "ollama" / "version.txt").read_text(encoding="utf-8"), "v9.9.9")
-        self.assertEqual(md.chemin_ollama(), exe)
+        self.assertEqual(md.path_ollama(), exe)
         self.assertFalse((self.tmp / "engines" / "ollama" / "telechargement").exists())          # l'archive de 1,5 Go ne reste pas sur le disque
 
     def test_une_archive_corrompue_est_refusee(self):
@@ -122,9 +122,9 @@ class Installation(Dossier):
 
     def test_rocm_ajoute_son_archive(self):
         r = self.release(b"x")
-        self.assertEqual(len(md.fichiers_ollama(r, "x86_64", rocm=True)), 2)
-        self.assertEqual(len(md.fichiers_ollama(r, "x86_64")), 1)
-        self.assertEqual(md.fichiers_ollama(r, "riscv"), [])
+        self.assertEqual(len(md.files_ollama(r, "x86_64", rocm=True)), 2)
+        self.assertEqual(len(md.files_ollama(r, "x86_64")), 1)
+        self.assertEqual(md.files_ollama(r, "riscv"), [])
 
     def test_desinstaller_garde_les_modeles(self):
         with unittest.mock.patch("platform.machine", return_value="x86_64"):
@@ -132,8 +132,8 @@ class Installation(Dossier):
         modeles = self.tmp / "modeles"
         modeles.mkdir()
         (modeles / "gros.bin").write_bytes(b"1")
-        with unittest.mock.patch.object(md, "arreter_ollama"):
-            md.desinstaller_ollama()
+        with unittest.mock.patch.object(md, "stop_ollama"):
+            md.uninstall_ollama()
         self.assertEqual(md.ollama_installe_par_lutin(), "")
         self.assertTrue((modeles / "gros.bin").is_file())
 

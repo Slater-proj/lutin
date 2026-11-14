@@ -25,8 +25,8 @@ def port_libre():
 class Essai(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="lutin-essai-"))
-        self.ancien = dict(engines.CONTEXTE)
-        engines.CONTEXTE.update(donnees=lambda: self.tmp, en_docker=lambda: False, hors_ligne=lambda: False, profil=lambda: None)
+        self.ancien = dict(engines.CONTEXT)
+        engines.CONTEXT.update(donnees=lambda: self.tmp, en_docker=lambda: False, hors_ligne=lambda: False, profil=lambda: None)
         self.m = ml.MoteurLlamaCpp()
         ml.regler("llamacpp", port=port_libre(), variante_installee="cpu")
         self.sortie = []
@@ -34,7 +34,7 @@ class Essai(unittest.TestCase):
 
     def fin(self):
         self.m.arreter()
-        engines.CONTEXTE.update(self.ancien)
+        engines.CONTEXT.update(self.ancien)
 
     def lancer(self, commande, **kw):
         return VRAI_POPEN([sys.executable, FAUX] + commande[1:], **kw)

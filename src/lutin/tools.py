@@ -427,8 +427,8 @@ def outil_document(chemin, contenu, titre, ctx):
     fabrique = documents.FORMATS.get(ext)
     if fabrique is None:
         raise _m.ErreurOutil(_t("Format non géré : {}. Formats possibles : .md, .txt, .html, .csv, .pdf, .docx.").format(ext or _t("(sans extension)")))
-    if len(contenu) > documents.TAILLE_MAX:
-        raise _m.ErreurOutil(_t("Contenu trop long ({} caractères au maximum).").format(documents.TAILLE_MAX))
+    if len(contenu) > documents.MAX_SIZE:
+        raise _m.ErreurOutil(_t("Contenu trop long ({} caractères au maximum).").format(documents.MAX_SIZE))
     octets = fabrique(contenu, str(titre or "").strip()[:150])
     if not ctx["accord"](_t("Créer ") + rel(f), _t("{} ({} caractères de texte, {} Ko).").format(_t("Remplace le document") if f.is_file() else _t("Crée le document"), len(contenu), len(octets) // 1024 + 1), "", auto=ctx["auto_ecriture"]):
         return refus(ctx, _t("Refusé par l'utilisateur : rien n'a été écrit."))

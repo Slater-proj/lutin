@@ -154,9 +154,9 @@ class Completude(unittest.TestCase):
 
     def test_les_constantes_de_niveau_module_sont_traduites(self):
         from lutin import terminal_chat, setup_wizard, core
-        for texte in (cli.AIDE_GENERALE, terminal_chat.HELP, setup_wizard.AVERTISSEMENT_RESEAU, setup_wizard.AVERTISSEMENT_PROXY, *core.TEXTES_PAGE_CONNEXION):
+        for texte in (cli.AIDE_GENERALE, terminal_chat.HELP, setup_wizard.WARNING_NETWORK, setup_wizard.WARNING_PROXY, *core.TEXTES_PAGE_CONNEXION):
             self.assertIn(texte, self.dico, texte[:60])
-        for _, titre, detail in setup_wizard.NIVEAUX_TEXTE.values():
+        for _, titre, detail in setup_wizard.LEVELS_TEXT.values():
             self.assertIn(titre, self.dico)
             self.assertIn(detail, self.dico)
 
@@ -182,7 +182,7 @@ class QuestionALInstallation(unittest.TestCase):
         sortie = []
         reponses = list(reponses)
         es = setup_wizard.Es(entree=lambda invite: (sortie.append(invite), reponses.pop(0))[1], sortie=lambda *a: None, oui=oui)
-        setup_wizard.choisir_langue(es, options or {}, cfg)
+        setup_wizard.choose_language(es, options or {}, cfg)
         return cfg, sortie
 
     def test_le_choix_est_enregistre_et_applique_tout_de_suite(self):
