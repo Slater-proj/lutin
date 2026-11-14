@@ -91,7 +91,7 @@ def connection_smtp(v):
     return smtp
 
 
-def check():
+def verifier():
     """La vérification de l'addon (appelée par addons.verifier) : règles lisibles, boîte de réception joignable, envoi possible. Renvoie des étapes {appel, ok, message}."""
     v = settings_mail()
     etapes = []

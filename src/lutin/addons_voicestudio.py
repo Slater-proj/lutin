@@ -132,7 +132,7 @@ def list_voices():
     return [v for v in sortie if v["id"] or v["nom"]]
 
 
-def check():
+def verifier():
     """La vérification de l'addon (appelée à l'activation et chaque jour) : VoiceStudio répond-il, avec combien de voix ?"""
     try:
         voix = list_voices()

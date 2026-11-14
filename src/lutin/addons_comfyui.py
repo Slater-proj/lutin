@@ -221,7 +221,7 @@ def stop_comfyui():
 atexit.register(stop_comfyui)
 
 
-def check():
+def verifier():
     """La vérification de l'addon : trouve (ou valide) le dossier de ComfyUI et regarde si Lutin saura le lancer. ComfyUI n'a PAS besoin de tourner."""
     etapes = []
     regle = addons.settings(IDENT).get("dossier") or ""
