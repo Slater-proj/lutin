@@ -261,6 +261,33 @@ class Chat(unittest.TestCase):
         p.evaluer("document.querySelector('nav .foot button').click()")          # dark
         self.picture("5-dark")
 
+    def test_5b_the_models_screen_lists_uses_downloads_and_deletes(self):
+        p = self.page
+        installed, model = list(T.INSTALLES), T.A.reglages()["modele"]
+        self.addCleanup(lambda: (T.INSTALLES.__setitem__(slice(None), installed), T.A.PULLS.clear(), T.A.enregistrer_reglages({"modele": model})))
+        T.INSTALLES[:] = ["qwen3.8:27b", "other:7b"]
+        T.A.enregistrer_reglages({"modele": "qwen3.8:27b"})
+        p.evaluer("location.hash = '#/models'")
+        p.attendre("document.querySelectorAll('.models .card').length === 2")
+        self.assertEqual(p.evaluer("document.querySelector('.models .card.current strong').innerText"), "qwen3.8:27b")
+        self.assertIn("tourne", p.evaluer("document.querySelector('.models .engine').innerText"))
+        self.picture("5b-models")
+        p.evaluer("[...document.querySelectorAll('.models .card')].find(c => c.innerText.includes('other:7b')).querySelector('.button:not(.danger)').click()")
+        self.eventually(lambda: T.A.reglages()["modele"] == "other:7b", "the model in use was changed on the server")
+        p.attendre("document.querySelector('.models .card.current strong').innerText === 'other:7b'")
+        p.evaluer("(() => { const i = document.querySelector('#model-name'); i.value = 'gemma4:12b'; i.dispatchEvent(new Event('input', {bubbles: true})); })()")
+        p.attendre("!document.querySelector('.models .add .button').disabled")
+        p.evaluer("document.querySelector('.models .add .button').click()")
+        p.attendre("!!document.querySelector('.models .downloads .card')")
+        p.attendre("document.querySelectorAll('.models .cards:not(.downloads) .card').length === 3", 20)
+        self.assertEqual(p.evaluer("document.querySelector('.models .downloads .card').dataset.state"), "done")
+        p.evaluer("window.confirm = () => true")
+        p.evaluer("[...document.querySelectorAll('.models .card')].find(c => c.innerText.includes('gemma4:12b') && c.querySelector('.danger')).querySelector('.danger').click()")
+        p.attendre("document.querySelectorAll('.models .cards:not(.downloads) .card').length === 2")
+        self.eventually(lambda: "gemma4:12b" not in T.INSTALLES, "the model was deleted on the engine")
+        self.assertEqual(p.erreurs, [])
+        p.evaluer("location.hash = '#/chat'")
+
     def test_6_nothing_overflows_at_360_px_and_another_area_says_it_is_not_there_yet(self):
         p = self.page
         p.commande("Emulation.setDeviceMetricsOverride", width=360, height=740, deviceScaleFactor=1, mobile=True)

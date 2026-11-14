@@ -17,6 +17,22 @@ This page says what exists, what was verified and how, and what is missing. It i
 | Base components (button, card, field…) as shared components | not yet: styles are shared classes, components come with the second screen |
 | Offline: no font, no CDN, nothing fetched from another origin | done — enforced by the policy |
 
+## Models
+
+First version, on the v1 routes that exist (list, install, delete, setting of the model in use), verified in Chrome against the fake engine (`tests/test_web_app_chat.py`, test 5b):
+the engine state, the installed models with their size, the one in use, « use » and « delete » (with a confirmation), a download by name with its progress (the list is read again every second while something downloads), a failed download with its reason.
+
+| Present page | New interface |
+|---|---|
+| Installed models, use, delete | done |
+| Download by name, progress | done |
+| Recommended models for this machine (catalogue, fit verdict, compatibility with the engine) | **missing**: needs a v1 route and a design (several engines, verdicts from `model_fit` and `model_compat`) |
+| Choice and start of an engine, engine installation | missing: no engines in v1 yet; the screen links to the present interface |
+| Search a model on Hugging Face, quantisations, models of other machines | missing |
+| Onboarding with hardware detection and a recommended configuration (plan step 4) | missing |
+
+A beginner must not have to know the name of a model: the catalogue with its verdicts is the next piece of this screen.
+
 ## Chat
 
 Verified end to end in a real Chrome against a fake engine (`tests/test_web_app_chat.py`): page loads without any policy violation; a message is sent and

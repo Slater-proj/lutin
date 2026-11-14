@@ -7,6 +7,7 @@
   import { applyTheme, nextTheme, readTheme, type Theme } from "./lib/theme";
   import type { Status } from "./lib/types";
   import Chat from "./screens/Chat.svelte";
+  import Models from "./screens/Models.svelte";
   import ComingSoon from "./screens/ComingSoon.svelte";
 
   const AREAS = ["chat", "agents", "projects", "models", "settings"] as const;
@@ -69,6 +70,8 @@
     {#if problem}<p class="banner" role="alert">{problem}</p>{/if}
     {#if area === "chat"}
       <Chat {status} onchanged={refreshStatus} />
+    {:else if area === "models"}
+      <Models {status} onchanged={refreshStatus} />
     {:else}
       <ComingSoon name={t(("nav." + area) as MessageKey)} />
     {/if}
