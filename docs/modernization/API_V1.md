@@ -118,6 +118,17 @@ Three read-only routes, the first pieces of the guided choice of a model ([GUIDE
 
 The verdicts are computed by the server (`model_fit`, `model_compat`) and never by the page. Not done yet: the manual correction of the machine, and the English text of the catalogue (summaries and families are French only).
 
+## Engines
+
+`GET /api/v1/engines` gives every engine (Ollama, llama.cpp, servers compatible with OpenAI…): `id`, `name`, `kind`, `current`, `installed`, `running`, `version`, `models_count`, strengths and weaknesses,
+the six `actions` (`install`, `uninstall`, `reinstall`, `start`, `stop`, `update`), each with `possible` and the `reason` (what it does, or why it cannot), and the `task` in progress
+(`state`: `running`, `done` or `failed`; `text`, `done`, `total`, `error`). The engines are read at the same time and, for each, its three questions too: one that does not answer costs one wait of 2 s for the whole list, not three per engine.
+`POST /api/v1/engines/{id}/actions/{action}` (right `configurator`) starts an action in the background and answers `202` with the task. **What changes the machine (install, uninstall, reinstall, update) needs
+`{"confirm": true}`**: without it the answer is `400 confirmation_required` carrying what the action does, so that a client has to show it and have it accepted. What needs the network is refused in strict offline mode
+(`409 offline`); an action the engine does not allow is `400 action_impossible` with its reason; a second task on the same engine is `409 task_running`.
+`DELETE /api/v1/engines/{id}/task` asks the running task to stop (what was downloaded is kept). It is the machinery of the present page (`lutin.engines`), under English names.
+Not in v1 yet: the settings of an engine (address, key, folders, variant) and the catalogue of external servers.
+
 ## Models
 
 `GET /api/v1/models` gives what the model selector needs: `engine`, `running`, `current`, `models` (`[{"name", "size_bytes"}]`, the size may be null) and

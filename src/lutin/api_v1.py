@@ -12,6 +12,7 @@ re-implements them. A machine leading a conversation through the relay cannot re
 """
 from __future__ import annotations
 
+import concurrent.futures
 import json
 import os
 import re
@@ -20,6 +21,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import core as _m
+from . import engines as _engines
 from . import hardware as _hardware
 from . import health as _health
 from . import attachments as _pieces
@@ -443,6 +445,92 @@ def models_recommendation(request):
         "download": {"models": to_download, "size_gb": size_gb, "free_gb": free_gb, "fits_on_disk": None if free_gb is None else size_gb <= free_gb},
         "engine": {"id": engine.id, "name": engine.nom, "running": bool(state["actif"])}, "offline": bool(_offline.is_active()),
     }
+
+
+# --------------------------------------------------------------------------------------------------------------------- engines
+# The engines (Ollama, llama.cpp, servers compatible with OpenAI…) and what can be done with each: the state, the actions that are possible (or why not), the task that runs.
+# It is the machinery of the present page (lutin.engines: `actions()`, `lancer_tache`, `annuler_tache`), under English names. An action that changes the machine is not started
+# without `{"confirm": true}`: a client must have shown what it does (the reason given by `actions`) and had it accepted.
+ENGINE_ACTIONS = {"install": "installer", "uninstall": "desinstaller", "reinstall": "reinstaller", "start": "demarrer", "stop": "arreter", "update": "mettre_a_jour"}
+NEEDS_CONFIRMATION = ("install", "uninstall", "reinstall", "update")
+NEEDS_NETWORK = ("install", "reinstall", "update")
+ENGINE_TASK_STATES = {"en cours": "running", "termine": "done", "erreur": "failed"}
+
+
+def _task(engine_id):
+    task = _engines.tache(engine_id)
+    if not task:
+        return None
+    return {"action": next((name for name, stored in ENGINE_ACTIONS.items() if stored == task.get("action")), task.get("action", "")), "state": ENGINE_TASK_STATES.get(task.get("statut"), task.get("statut", "")),
+            "text": task.get("texte") or task.get("dernier", ""), "done": int(task.get("fait") or 0), "total": int(task.get("total") or 0), "error": task.get("erreur", ""),
+            "result": task.get("resultat", "")}
+
+
+def _settled(future, default):
+    try:
+        return future.result()
+    except Exception:  # noqa: BLE001  (an engine that cannot be read is shown as stopped, it must not hide the others)
+        return default
+
+
+def _engine_view(engine, current, state, models, possible):
+    sheet = engine.vue(engine.id == current)
+    return {
+        "id": engine.id, "name": engine.nom, "kind": engine.genre, "manages_models": bool(engine.gere_modeles), "current": engine.id == current, "description": sheet["description"],
+        "strengths": sheet["points_forts"], "weaknesses": sheet["points_faibles"], "installed": bool(state.get("installe")), "running": bool(state.get("actif")),
+        "version": state.get("version", ""), "detail": state.get("detail", ""), "models_count": len(models.get("installes") or []),
+        "actions": {name: {"possible": bool((possible.get(stored) or {}).get("possible")), "reason": (possible.get(stored) or {}).get("raison", "")} for name, stored in ENGINE_ACTIONS.items()},
+        "task": _task(engine.id),
+    }
+
+
+@route("GET", "/engines", SESSION)
+def engines(request):
+    """Every engine with its state, the actions it allows and its running task. The engines are read at the same time: one that does not answer must not make the others wait."""
+    current = _m.moteur_actuel().id
+    listed = _engines.liste()
+    unknown = ({"installe": False, "actif": False, "version": "", "detail": ""}, {"installes": []}, {})
+    # Three questions per engine, each of which waits 2 s when the engine does not answer: all asked at the same time, so the whole list costs one wait and not three per engine.
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, min(24, 3 * len(listed)))) as pool:
+        asked = [(engine, pool.submit(engine.statut), pool.submit(engine.modeles), pool.submit(engine.actions)) for engine in listed]
+        views = [_engine_view(engine, current, _settled(a, unknown[0]), _settled(b, unknown[1]), _settled(c, unknown[2])) for engine, a, b, c in asked]
+    return {"current": current, "engines": views}
+
+
+def _known_engine(identifier):
+    engine = _engines.MOTEURS.get(identifier)
+    if engine is None:
+        raise ApiError(404, "not_found", _t("Moteur inconnu."))
+    return engine
+
+
+@route("POST", "/engines/{id}/actions/{action}", CONFIGURATOR)
+def engine_action(request):
+    """Starts an action in the background: `install`, `uninstall`, `reinstall`, `start`, `stop` or `update`. Answers 202 with the task; `GET /engines` follows it.
+    What changes the machine (all but start and stop) needs `{"confirm": true}`; what needs the network is refused in strict offline mode (409 `offline`); one task at a time per engine (409 `task_running`)."""
+    engine, name = _known_engine(request.params["id"]), request.params["action"]
+    if name not in ENGINE_ACTIONS:
+        raise ApiError(400, "invalid_request", _t("Valeur invalide pour « {} » (attendu : {}).").format("action", ", ".join(ENGINE_ACTIONS)))
+    if set(request.body) - {"confirm"} or not isinstance(request.body.get("confirm", False), bool):
+        raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("confirm"))
+    possible = engine.actions().get(ENGINE_ACTIONS[name]) or {}
+    if not possible.get("possible"):
+        raise ApiError(400, "action_impossible", possible.get("raison") or _t("Cette action n'est pas possible avec ce moteur."))
+    if name in NEEDS_CONFIRMATION and not request.body.get("confirm"):
+        raise ApiError(400, "confirmation_required", possible.get("raison") or _t("Cette action modifie cette machine : elle demande une confirmation."))
+    if name in NEEDS_NETWORK and _offline.is_active():
+        raise ApiError(409, "offline", _t("Mode hors ligne strict : impossible de {}. Désactive-le pour continuer (lutin offline off).").format(name))
+    try:
+        _engines.lancer_tache(engine, ENGINE_ACTIONS[name])
+    except ValueError as busy:
+        raise ApiError(409, "task_running", str(busy)) from None
+    return 202, _task(engine.id)
+
+
+@route("DELETE", "/engines/{id}/task", CONFIGURATOR)
+def cancel_engine_task(request):
+    """Asks the running task of this engine to stop; what was already downloaded is kept. `cancelled` says whether something was running."""
+    return {"cancelled": bool(_engines.annuler_tache(_known_engine(request.params["id"]).id))}
 
 
 # --------------------------------------------------------------------------------------------------------- conversations

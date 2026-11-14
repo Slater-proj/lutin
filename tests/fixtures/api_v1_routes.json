@@ -60,6 +60,21 @@
   "right": "session"
  },
  {
+  "method": "GET",
+  "path": "/api/v1/engines",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/engines/{id}/actions/{action}",
+  "right": "configurator"
+ },
+ {
+  "method": "DELETE",
+  "path": "/api/v1/engines/{id}/task",
+  "right": "configurator"
+ },
+ {
   "method": "POST",
   "path": "/api/v1/images",
   "right": "session"
