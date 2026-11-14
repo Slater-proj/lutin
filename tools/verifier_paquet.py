@@ -7,9 +7,9 @@ import tarfile
 import zipfile
 from pathlib import Path
 
-DANS_LA_ROUE = ("lutin/__init__.py", "lutin/cli.py", "lutin/core.py", "lutin/web/index.html", "lutin/web/logo.svg", "lutin/web/lib/mermaid.min.js", "lutin/web/icones/icone-192.png",
+DANS_LA_ROUE = ("lutin/__init__.py", "lutin/cli.py", "lutin/core.py", "lutin/web/index.html", "lutin/web/app/index.html", "lutin/web/app/build.json", "lutin/web/logo.svg", "lutin/web/lib/mermaid.min.js", "lutin/web/icones/icone-192.png",
                 "lutin/web/icones/icone-512.png", "lutin/web/icones/icone-180.png", "lutin/web/lutin.ico", "lutin/tray.py", "lutin/no_console.py", "lutin/model_discovery.py", "lutin/model_fit.py", "lutin/progress_sheet.py", "lutin/archive.py", "lutin/embeddings.py", "lutin/loop_detection.py", "lutin/addons.py", "lutin/page_preview.py", "lutin/documents.py", "lutin/produced_files.py", "lutin/mission.py", "lutin/background_jobs.py", "lutin/addons_telegram.py", "lutin/addons_comfyui.py", "lutin/addons_mail.py", "lutin/addons_x.py", "lutin/addons_livres/x/addon.json", "lutin/addons_livres/x/flux.json", "lutin/message_rules.py", "lutin/auto_reply.py", "lutin/addons_livres/mail/addon.json", "lutin/addons_livres/mail/flux.json", "lutin/addons_livres/comfyui/addon.json", "lutin/addons_livres/comfyui/flux.json", "lutin/addons_livres/telegram/addon.json", "lutin/addons_livres/telegram/flux.json", "lutin/external_programs.py", "lutin/exllamav3_catalog.py", "lutin/lmstudio_catalog.py", "lutin/thinking.py", "lutin/open_file.py", "lutin/github.py", "lutin/third_party_skills.py", "lutin/mcp_catalog.py", "lutin/data/mcp_catalogue.json", "lutin/locations.py", "lutin/workspace_manager.py", "lutin/workspaces.py", "lutin/migrate.py", "lutin/modes.py", "lutin/attachments.py", "lutin/images.py", "lutin/scheduled_tasks.py", "lutin/performance_advice.py", "lutin/text_extraction.py", "lutin/qr.py", "lutin/data/modeles.json", "lutin/data/CONTEXTE.md", "lutin/data/MEMOIRE.md", "lutin/data/en/CONTEXTE.md", "lutin/data/en/MEMOIRE.md", "lutin/i18n.py", "lutin/langues/messages.en.json", "lutin/langues/interface.en.json")
-JAMAIS = ("tests/", "docs/", "tools/", "assets/", "installateur/", ".github/", "docker/", "Dockerfile", ".git/", "__pycache__", ".pyc", "console.json", "config.json", ".log")
+JAMAIS = ("tests/", "docs/", "tools/", "assets/", "installateur/", ".github/", "docker/", "frontend/", "node_modules", "Dockerfile", ".git/", "__pycache__", ".pyc", "console.json", "config.json", ".log")
 
 
 def problemes(dossier):
@@ -35,7 +35,7 @@ def problemes(dossier):
         with tarfile.open(s) as t:
             for nom in t.getnames():
                 reste = nom.split("/", 1)[-1]
-                if any(reste.startswith(j) or ("/" + j) in "/" + reste for j in ("tests/", "docs/", "tools/", "assets/", "installateur/", ".github/", "docker/")):
+                if any(reste.startswith(j) or ("/" + j) in "/" + reste for j in ("tests/", "docs/", "tools/", "assets/", "installateur/", ".github/", "docker/", "frontend/")):
                     p.append("source : « {} » ne devrait pas y être".format(nom))
     return p
 

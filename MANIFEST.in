@@ -5,6 +5,7 @@ recursive-include src/lutin/langues *
 recursive-include src/lutin/web *
 recursive-include src/lutin/addons_livres *
 prune tests
+prune frontend
 prune docs
 prune tools
 prune assets
