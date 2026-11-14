@@ -215,7 +215,7 @@ def deja_installe(cfg, dossiers, es, ollama=None):
             try:
                 o.telecharger(ident, barre(es))
                 es.dire(_t("✔ {} installé.").format(ident))
-            except (ollama_client.ErreurOllama, offline.HorsLigne) as e:
+            except (ollama_client.ErreurOllama, offline.OfflineError) as e:
                 es.dire("✘ " + str(e))
     es.dire(_t("Mises à jour : lutin update      Tout reconfigurer : lutin setup --reconfigure"))
     return cfg
@@ -287,7 +287,7 @@ def executer(cfg, dossiers, es, options=None, profil=None, ollama=None):
                     es.dire(_t("\nTéléchargement de {} ({:g} Go)…").format(c.id, c.modele["go"]))
                     try:
                         o.telecharger(c.id, barre(es))
-                    except (ollama_client.ErreurOllama, offline.HorsLigne) as e:
+                    except (ollama_client.ErreurOllama, offline.OfflineError) as e:
                         es.dire("✘ " + str(e))
                         continue
                     for r in roles:

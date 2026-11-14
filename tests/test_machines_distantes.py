@@ -270,16 +270,16 @@ class AnnonceSansAction(unittest.TestCase):
 
     def test_une_simple_annonce_est_relancee(self):
         for texte in ("Je vais vérifier si le profil Arnold 2 est disponible dans VoiceStudio.", "Un instant, je regarde.", "Laisse-moi chercher cela."):
-            self.assertTrue(false_claims.annonce_sans_agir(texte, [], self.OUTILS), texte)
+            self.assertTrue(false_claims.announces_without_acting(texte, [], self.OUTILS), texte)
 
     def test_une_vraie_reponse_n_est_pas_touchee(self):
-        self.assertEqual(false_claims.annonce_sans_agir("Oui, le profil Arnold 2 est disponible : je le vois dans la liste de VoiceStudio, avec la voix clonée le 3 mars et deux échantillons enregistrés.", [], self.OUTILS), "")
-        self.assertEqual(false_claims.annonce_sans_agir("Voici la liste : a, b, c.", [], self.OUTILS), "")
+        self.assertEqual(false_claims.announces_without_acting("Oui, le profil Arnold 2 est disponible : je le vois dans la liste de VoiceStudio, avec la voix clonée le 3 mars et deux échantillons enregistrés.", [], self.OUTILS), "")
+        self.assertEqual(false_claims.announces_without_acting("Voici la liste : a, b, c.", [], self.OUTILS), "")
 
     def test_rien_quand_il_agit_deja_ou_sans_outils(self):
-        self.assertEqual(false_claims.annonce_sans_agir("Je vais vérifier.", [{"function": {"name": "voix_liste"}}], self.OUTILS), "")
-        self.assertEqual(false_claims.annonce_sans_agir("Je vais vérifier.", [], set()), "")
-        self.assertEqual(false_claims.annonce_sans_agir("Je vais " + "vérifier " * 60, [], self.OUTILS), "", "une longue réponse n'est pas une annonce")
+        self.assertEqual(false_claims.announces_without_acting("Je vais vérifier.", [{"function": {"name": "voix_liste"}}], self.OUTILS), "")
+        self.assertEqual(false_claims.announces_without_acting("Je vais vérifier.", [], set()), "")
+        self.assertEqual(false_claims.announces_without_acting("Je vais " + "vérifier " * 60, [], self.OUTILS), "", "une longue réponse n'est pas une annonce")
 
 
 if __name__ == "__main__":

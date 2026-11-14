@@ -54,29 +54,29 @@ class Base(unittest.TestCase):
         self.t.cleanup()
 
     def couper(self, valeur=True):
-        offline.definir(valeur, self.config)
+        offline.set_mode(valeur, self.config)
 
 
 class Etat(Base):
     def test_lecture_de_la_configuration_et_changement_pris_en_compte_tout_de_suite(self):
-        self.assertFalse(offline.actif())
+        self.assertFalse(offline.is_active())
         self.couper(True)
-        self.assertTrue(offline.actif())
+        self.assertTrue(offline.is_active())
         self.assertTrue(json.loads(self.config.read_text(encoding="utf-8"))["hors_ligne"])
         self.couper(False)
-        self.assertFalse(offline.actif())
+        self.assertFalse(offline.is_active())
 
     def test_variable_d_environnement_force_le_mode(self):
         with mock.patch.dict(os.environ, {"LUTIN_HORS_LIGNE": "1"}):
-            self.assertTrue(offline.actif())
+            self.assertTrue(offline.is_active())
         with mock.patch.dict(os.environ, {"LUTIN_HORS_LIGNE": "non"}):
-            self.assertFalse(offline.actif())
+            self.assertFalse(offline.is_active())
 
     def test_fichier_absent_ou_abime_n_active_rien_et_ne_plante_pas(self):
         self.config.write_text("{pas du json", encoding="utf-8")
-        self.assertFalse(offline.actif())
+        self.assertFalse(offline.is_active())
         self.config.unlink()
-        self.assertFalse(offline.actif())
+        self.assertFalse(offline.is_active())
 
     def test_definir_garde_le_reste_de_la_configuration(self):
         self.config.write_text(json.dumps({"installe": True, "securite": {"niveau": "reseau"}}), encoding="utf-8")
@@ -85,27 +85,27 @@ class Etat(Base):
         self.assertEqual((d["installe"], d["securite"]["niveau"], d["hors_ligne"]), (True, "reseau", True))
 
     def test_garde(self):
-        offline.garde("https://exemple.org/x")            # mode coupé : tout passe
+        offline.guard("https://exemple.org/x")            # mode coupé : tout passe
         self.couper(True)
         for ok in (ADRESSE_OLLAMA + "/api/tags", "http://localhost:11434/", "http://127.0.0.1/"):
-            offline.garde(ok)
+            offline.guard(ok)
         for non in ("https://exemple.org/x", "http://192.168.1.10/", "https://registry.ollama.ai/v2/library/qwen3/manifests/8b", "http:///"):
-            with self.assertRaises(offline.HorsLigne, msg=non):
-                offline.garde(non)
+            with self.assertRaises(offline.OfflineError, msg=non):
+                offline.guard(non)
 
     def test_les_services_declares_sont_autorises(self):
         self.couper(True)
         with mock.patch.dict(os.environ, {"OLLAMA_URL": "http://ollama:11434", "LUTIN_OUTIL_URL": "http://192.168.1.50:8765"}):
-            offline.garde("http://ollama:11434/api/tags")
-            offline.garde("http://192.168.1.50:8765/api/sante")
-            with self.assertRaises(offline.HorsLigne):
-                offline.garde("http://192.168.1.51:8765/")
+            offline.guard("http://ollama:11434/api/tags")
+            offline.guard("http://192.168.1.50:8765/api/sante")
+            with self.assertRaises(offline.OfflineError):
+                offline.guard("http://192.168.1.51:8765/")
 
     def test_exiger_en_ligne(self):
-        offline.exiger_en_ligne("télécharger")
+        offline.require_online("télécharger")
         self.couper(True)
-        with self.assertRaises(offline.HorsLigne) as e:
-            offline.exiger_en_ligne("télécharger un modèle")
+        with self.assertRaises(offline.OfflineError) as e:
+            offline.require_online("télécharger un modèle")
         self.assertIn("télécharger un modèle", str(e.exception))
 
 
@@ -130,15 +130,15 @@ class Points_de_sortie(Base):
         return [c for c in self.contacts if c not in ("127.0.0.1", "::1", "localhost")]
 
     def test_telechargement_de_modele_refuse_sans_contacter_ollama(self):
-        with self.assertRaises(offline.HorsLigne):
+        with self.assertRaises(offline.OfflineError):
             ollama_client.Ollama(ADRESSE_OLLAMA).telecharger("qwen3:8b")
         self.assertEqual(self.contacts, [])
-        with self.assertRaises(offline.HorsLigne):
+        with self.assertRaises(offline.OfflineError):
             A.installer_modele("qwen3:8b")
         self.assertEqual(self.contacts, [])
 
     def test_telechargement_de_fichier_refuse(self):
-        with self.assertRaises(offline.HorsLigne):
+        with self.assertRaises(offline.OfflineError):
             ollama_client.telecharger_fichier("https://ollama.com/download/OllamaSetup.exe", Path(self.t.name) / "x.exe")
         self.assertEqual(self.contacts, [])
 
@@ -164,7 +164,7 @@ class Points_de_sortie(Base):
         self.assertEqual(r["catalogue"], "absent")
 
     def test_http_get_refuse_directement(self):
-        with self.assertRaises(offline.HorsLigne):
+        with self.assertRaises(offline.OfflineError):
             updates.http_get("https://registry.ollama.ai/v2/library/qwen3/manifests/8b")
         self.assertEqual(self.contacts, [])
 

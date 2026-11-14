@@ -9,17 +9,17 @@ import time
 
 from . import storage as _donnees
 
-MAX_EVENEMENTS = 2000
+MAX_EVENTS = 2000
 TYPES = ("tour", "outil", "relance", "routage", "erreur")
-VERROU = threading.Lock()
+LOCK = threading.Lock()
 
 
-def _chemin():
+def _path():
     from . import core as _m
     return _m.DONNEES / "observatoire.jsonl"
 
 
-def noter(genre, conversation="", **champs):
+def record(genre, conversation="", **champs):
     """Un évènement de plus. `champs` : valeurs simples seulement (texte court, nombre, booléen)."""
     if genre not in TYPES:
         return
@@ -31,22 +31,22 @@ def noter(genre, conversation="", **champs):
             else:
                 propres[cle] = str(valeur)[:160]
         ligne = json.dumps(dict(propres, quand=time.strftime("%Y-%m-%d %H:%M:%S"), type=genre, conv=str(conversation)[:16]), ensure_ascii=False)
-        with VERROU:
-            chemin = _chemin()
+        with LOCK:
+            chemin = _path()
             chemin.parent.mkdir(parents=True, exist_ok=True)
             with open(chemin, "a", encoding="utf-8") as f:
                 f.write(ligne + "\n")
-            if chemin.stat().st_size > MAX_EVENEMENTS * 400:          # rogner de temps en temps, sans relire le fichier à chaque évènement
-                lignes = chemin.read_text(encoding="utf-8", errors="replace").splitlines()[-MAX_EVENEMENTS:]
+            if chemin.stat().st_size > MAX_EVENTS * 400:          # rogner de temps en temps, sans relire le fichier à chaque évènement
+                lignes = chemin.read_text(encoding="utf-8", errors="replace").splitlines()[-MAX_EVENTS:]
                 _donnees.ecrire_atomique(chemin, "\n".join(lignes) + "\n")
     except (OSError, ValueError, TypeError):
         pass
 
 
-def lire(n=400):
+def read(n=400):
     """Les derniers évènements, du plus récent au plus ancien."""
     try:
-        lignes = _chemin().read_text(encoding="utf-8", errors="replace").splitlines()[-max(1, min(int(n), MAX_EVENEMENTS)):]
+        lignes = _path().read_text(encoding="utf-8", errors="replace").splitlines()[-max(1, min(int(n), MAX_EVENTS)):]
     except OSError:
         return []
     sortie = []
@@ -60,10 +60,10 @@ def lire(n=400):
     return sortie
 
 
-def resume(evenements=None):
+def summary(evenements=None):
     """Par modèle : nombre de tours, vitesse moyenne d'écriture (pondérée par les jetons), jetons écrits ; et globalement les outils (appels, échecs, durée moyenne) et les relances.
     {modeles: [{modele, machine, tours, jetons, tok_s}], outils: [{outil, appels, echecs, duree_ms}], relances: {motif: nombre}, routages: nombre}."""
-    evenements = lire() if evenements is None else evenements
+    evenements = read() if evenements is None else evenements
     modeles, outils, relances, routages = {}, {}, {}, 0
     for e in evenements:
         if e["type"] == "tour":
@@ -97,8 +97,8 @@ def resume(evenements=None):
     return {"modeles": sorted(sortie_modeles, key=lambda m: -m["tours"]), "outils": sorted(sortie_outils, key=lambda o: -o["appels"]), "relances": relances, "routages": routages}
 
 
-def vider():
+def clear():
     try:
-        _chemin().unlink(missing_ok=True)
+        _path().unlink(missing_ok=True)
     except OSError:
         pass

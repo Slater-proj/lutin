@@ -362,7 +362,7 @@ def amorcer_fiche(conv, r, emit=None):
 def outils_du_mode(r):
     """Les outils envoyés au modèle : ceux du mode (voir modes.py), sans web si la case « Web » est décochée ou en mode hors ligne, sans l'outil d'images s'il n'est pas branché."""
     exclus = _modes.outils_exclus(r.get("mode"), [t["function"]["name"] for t in _m.OUTILS])
-    if not r.get("web", True) or _hl.actif():
+    if not r.get("web", True) or _hl.is_active():
         exclus |= OUTILS_WEB
     exclus |= set(r.get("outils_desactives") or [])                     # outils coupés par l'utilisateur (Réglages > Outils)
     if not _m.OUTIL:
@@ -622,9 +622,9 @@ class MoteurOllama(_moteurs.Moteur):
         if os.environ.get("LUTIN_DOCKER"):
             from . import docker_engines
             st = self.statut()
-            return docker_engines.actions_ollama(st["installe"], st["actif"], _hl.actif())
+            return docker_engines.actions_ollama(st["installe"], st["actif"], _hl.is_active())
         st = self.statut()
-        hors = _hl.actif()
+        hors = _hl.is_active()
         pas_installe, deja = _t("Pas installé."), _t("Déjà installé.")
         demarrer = {"possible": st["installe"] and not st["actif"], "raison": _t("Démarre Ollama.") if st["installe"] else pas_installe}
         arreter = {"possible": st["actif"], "raison": _t("Arrête Ollama et libère la mémoire.") if st["actif"] else _t("Il n'est pas démarré.")}
@@ -692,7 +692,7 @@ class MoteurOllama(_moteurs.Moteur):
         CAPACITES.clear()
 
     def telechargeable(self):
-        if _hl.actif():
+        if _hl.is_active():
             return {"possible": False, "raison": _t("Hors ligne : aucun téléchargement."), "genre": "bibliotheque"}
         return {"possible": True, "raison": _t("La bibliothèque d'Ollama : un clic par modèle."), "genre": "bibliotheque"}
 
@@ -735,7 +735,7 @@ class MoteurOllama(_moteurs.Moteur):
 
 
 _moteurs.enregistrer(MoteurOllama())
-_moteurs.CONTEXTE.update(donnees=lambda: _m.DONNEES, en_docker=lambda: bool(os.environ.get("LUTIN_DOCKER")), hors_ligne=lambda: _hl.actif(),
+_moteurs.CONTEXTE.update(donnees=lambda: _m.DONNEES, en_docker=lambda: bool(os.environ.get("LUTIN_DOCKER")), hors_ligne=lambda: _hl.is_active(),
                          profil=lambda: __import__("lutin.model_fit", fromlist=["x"]).profil_pret(),
                          profil_attendu=lambda: __import__("lutin.model_fit", fromlist=["x"]).profil_attendu(),
                          dossier_ollama=lambda: (None if os.environ.get("LUTIN_DOCKER") else __import__("lutin.locations", fromlist=["x"]).dossier_modeles()))
@@ -903,7 +903,7 @@ def restaurer_modeles():
 
 
 def installer_modele(modele):
-    _hl.exiger_en_ligne("télécharger un modèle")
+    _hl.require_online("télécharger un modèle")
     if moteur_actuel().id != _moteurs.OLLAMA and not hasattr(moteur_actuel(), "telecharger_ollama"):
         raise ValueError(_t("Ce moteur gère ses modèles lui-même : installe-les depuis le moteur."))
     if modele not in [m["id"] for m in _m.MODELES] and not RE_NOM_MODELE.match(modele):
@@ -1410,7 +1410,7 @@ def tour(conv, texte, emit, r=None, stop=None, remplacer_depuis=None, identite="
         except (OSError, ValueError) as erreur:
             _m.journaliser("Fiche de suivi non mise à jour (conversation {}) : {!r}".format(conv.get("id"), erreur))
     try:
-        if _boucles.repete_derniere_reponse(conv):
+        if _boucles.repeats_last_answer(conv):
             conv["boucle"] = int(conv.get("boucle") or 0) + 1
             emit({"type": "info", "texte": _t("↻ Cette réponse ressemble presque mot pour mot à la précédente : à ta prochaine demande, j'ordonnerai au modèle d'agir au lieu de répéter.")})
         else:
@@ -1513,7 +1513,7 @@ def appliquer_choix(r, choix, emit, conv_id, motif_court):
     r["modele"], r["machine"] = choix["modele"], choix.get("machine", "")
     chez = _t(" (sur la machine « {} »)").format(choix["machine_nom"]) if choix.get("machine") else ""
     emit({"type": "info", "texte": "🧭 " + _t("Modèle choisi pour cette demande : {}{} — {}.").format(choix["modele"], chez, motif_court)})
-    _observatoire.noter("routage", conv_id, profil=choix.get("profil", "reprise"), modele=choix["modele"], machine=choix.get("machine", ""), raison=motif_court)
+    _observatoire.record("routage", conv_id, profil=choix.get("profil", "reprise"), modele=choix["modele"], machine=choix.get("machine", ""), raison=motif_court)
 
 
 def router_la_demande(r, demande, images, emit, conv_id):
@@ -1588,8 +1588,8 @@ def boucle_agent(conv, r, emit, ctx, stop):
     if consigne:
         emit({"type": "info", "texte": _t("▶ Validation reçue : j'exécute l'étape en cours sans replanifier.")})
     elif conv.get("boucle"):                                      # la dernière réponse répétait la précédente : cette fois on ordonne d'agir
-        consigne = _boucles.consigne()
-    garde = _boucles.Garde()
+        consigne = _boucles.instruction()
+    garde = _boucles.Guard()
     guide = ""
     if not consigne and not r.get("_mission") and "web_chercher" in ctx["outils_autorises"] and conv["messages"] and conv["messages"][-1].get("role") == "user":
         guide = _actualites.mode_guide(derniere_demande, r["modele"])
@@ -1694,7 +1694,7 @@ def boucle_agent(conv, r, emit, ctx, stop):
                         if e.get("done"):
                             raison_fin = str(e.get("done_reason") or "")
                             vitesse = calculer_vitesse(e)
-                            _observatoire.noter("tour", conv["id"], modele=r["modele"], machine=r.get("machine", ""), jetons=int(e.get("eval_count") or 0), tok_s=vitesse["ecriture"] if vitesse else None,
+                            _observatoire.record("tour", conv["id"], modele=r["modele"], machine=r.get("machine", ""), jetons=int(e.get("eval_count") or 0), tok_s=vitesse["ecriture"] if vitesse else None,
                                                 duree_s=vitesse["total"] if vitesse else None)
                             if vitesse:
                                 conv["vitesse"] = vitesse
@@ -1717,9 +1717,9 @@ def boucle_agent(conv, r, emit, ctx, stop):
                         appels += m.get("tool_calls") or []
                         if len(pensee) + len(contenu) - verifie_rond >= 400:                       # toutes les 400 lettres : le texte tourne-t-il en rond ? (sortir du « with » ferme la connexion, Ollama arrête de générer)
                             verifie_rond = len(pensee) + len(contenu)
-                            if _boucles.texte_repete(pensee) or _boucles.texte_repete(contenu):
+                            if _boucles.repeated_text(pensee) or _boucles.repeated_text(contenu):
                                 rond_de_suite += 1
-                                if rond_de_suite >= _boucles.VERIFICATIONS_DE_SUITE:          # il TOURNE en rond : un seul contrôle positif ne coupe pas une analyse qui se répète un instant
+                                if rond_de_suite >= _boucles.CONSECUTIVE_CHECKS:          # il TOURNE en rond : un seul contrôle positif ne coupe pas une analyse qui se répète un instant
                                     rond = True
                                     break
                             else:
@@ -1733,7 +1733,7 @@ def boucle_agent(conv, r, emit, ctx, stop):
                         emit({"type": "texte", "texte": morceau})
                 if rond:
                     _m.journaliser("Texte répété par le modèle {} (pensée : {} caractères, réponse : {}, essai {})".format(r["modele"], len(pensee), len(contenu), tentative + 1))
-                    _observatoire.noter("relance", conv["id"], motif="texte répété", modele=r["modele"])
+                    _observatoire.record("relance", conv["id"], motif="texte répété", modele=r["modele"])
                     if tentative < 2:
                         relance_repetition = True
                         emit({"type": "info", "texte": _t("Le modèle répète les mêmes phrases : je l'arrête et je relance sans réflexion, avec une pénalité de répétition.")})
@@ -1743,7 +1743,7 @@ def boucle_agent(conv, r, emit, ctx, stop):
                     emit({"type": "info", "texte": _t("Le modèle répète encore les mêmes phrases : j'arrête là. Reformule en plus court, ou choisis un autre modèle.")})
                 if not contenu.strip() and not appels:             # le modèle a (peut-être) réfléchi puis s'est tu : sans ceci la page restait sur « Réflexion » sans aucune réponse ni explication
                     _m.journaliser("Réponse vide du modèle {} (pensée : {} caractères, raison de fin : {!r}, essai {}, outils : {})".format(r["modele"], len(pensee), raison_fin, tentative + 1, "tools" in corps_t))
-                    _observatoire.noter("relance", conv["id"], motif="réponse vide", modele=r["modele"])
+                    _observatoire.record("relance", conv["id"], motif="réponse vide", modele=r["modele"])
                     if tentative < 2:
                         relance_vide = True
                         if tentative >= 1:
@@ -1856,14 +1856,14 @@ def boucle_agent(conv, r, emit, ctx, stop):
             message["reflexion"] = pensee.strip()[:20000]          # gardée pour l'affichage de la conversation (bloc repliable) ; le modèle ne la reçoit jamais
         if appels:
             message["tool_calls"] = appels
-        rappel_faux = "" if appels or corrige_affirmation or dernier_tour else (_affirmations.affirme_sans_agir(contenu, conv["messages"], ctx["outils_autorises"])
-                                                                              or _affirmations.annonce_sans_agir(contenu, appels, ctx["outils_autorises"])
-                                                                              or ("" if r.get("_mission") or r.get("essai_a_blanc") else _affirmations.oubli_d_ecrire(derniere_demande, conv["messages"], ctx["outils_autorises"]))
-                                                                              or ("" if r.get("essai_a_blanc") else _affirmations.refus_a_tort(derniere_demande, contenu, conv["messages"], ctx["outils_autorises"])))
+        rappel_faux = "" if appels or corrige_affirmation or dernier_tour else (_affirmations.claims_without_acting(contenu, conv["messages"], ctx["outils_autorises"])
+                                                                              or _affirmations.announces_without_acting(contenu, appels, ctx["outils_autorises"])
+                                                                              or ("" if r.get("_mission") or r.get("essai_a_blanc") else _affirmations.forgot_to_write(derniere_demande, conv["messages"], ctx["outils_autorises"]))
+                                                                              or ("" if r.get("essai_a_blanc") else _affirmations.wrongful_refusal(derniere_demande, contenu, conv["messages"], ctx["outils_autorises"])))
         if rappel_faux:
             corrige_affirmation, faux_accompli = True, (contenu, rappel_faux)
             _m.journaliser("Le modèle {} affirme avoir agi sans appeler d'outil : je le lui fais remarquer.".format(r["modele"]))
-            _observatoire.noter("relance", conv["id"], motif="affirme sans agir", modele=r["modele"])
+            _observatoire.record("relance", conv["id"], motif="affirme sans agir", modele=r["modele"])
             emit({"type": "info", "texte": _t("Le modèle dit avoir agi (fichier, commande, recherche…) sans appeler d'outil : je lui demande de le faire pour de vrai.")})
             continue
         message.setdefault("ts", horodatage())
@@ -1883,9 +1883,9 @@ def boucle_agent(conv, r, emit, ctx, stop):
             _m.rafraichir_accords(ctx)                                  # une case cochée ou décochée pendant la réponse compte dès cet outil
             emit({"type": "outil", "nom": nom, "args": {k: (v if not isinstance(v, str) or len(v) < 300 else v[:300] + "...") for k, v in args.items()}})
             try:
-                if repetitions >= _boucles.SEUIL_APPEL:                  # le même appel pour la énième fois : on n'exécute plus, on dit de passer à autre chose
+                if repetitions >= _boucles.CALL_THRESHOLD:                  # le même appel pour la énième fois : on n'exécute plus, on dit de passer à autre chose
                     emit({"type": "info", "texte": _t("↻ Le modèle refait le même appel ({} fois) : je lui dis de passer à autre chose.").format(repetitions)})
-                    resultat = _boucles.Garde.message(repetitions)
+                    resultat = _boucles.Guard.message(repetitions)
                 elif nom not in ctx["outils_autorises"]:
                     raise _m.ErreurOutil("L'outil « {} » n'est pas disponible ici (mode ou option désactivés). Outils disponibles : {}.".format(nom, ", ".join(sorted(ctx["outils_autorises"]))))
                 else:
@@ -1899,11 +1899,11 @@ def boucle_agent(conv, r, emit, ctx, stop):
             except Exception as erreur:  # noqa: BLE001
                 _m.journaliser("Outil « {} » : erreur inattendue {!r}".format(nom, erreur))
                 resultat = "Erreur inattendue : " + str(erreur)[:300]
-            if repetitions >= _boucles.SEUIL_APPEL:
+            if repetitions >= _boucles.CALL_THRESHOLD:
                 garde.refuser(nom, args)
             else:
                 garde.noter_resultat(nom, args, resultat)          # un résultat qui change n'est pas une boucle
-            _observatoire.noter("outil", conv["id"], outil=nom, duree_ms=int((time.monotonic() - debut_outil) * 1000), ok=not str(resultat).startswith(("Erreur", "Interrompu")), modele=r["modele"],
+            _observatoire.record("outil", conv["id"], outil=nom, duree_ms=int((time.monotonic() - debut_outil) * 1000), ok=not str(resultat).startswith(("Erreur", "Interrompu")), modele=r["modele"],
                                 detail=str(resultat)[:100] if str(resultat).startswith("Erreur") else "")
             medias, fichiers = ctx.pop("medias", []), ctx.pop("medias_fichiers", {})          # images produites par l'outil (et où elles sont), affichées dans la conversation
             extra = {"medias": medias, "medias_fichiers": fichiers} if medias else {}
@@ -1922,7 +1922,7 @@ def boucle_agent(conv, r, emit, ctx, stop):
             if forcer_fin:
                 break
             forcer_fin = True
-            emit({"type": "info", "texte": _t("↻ Le modèle tourne en rond (le même appel {} fois) : je lui demande de conclure avec ce qu'il a déjà obtenu.").format(_boucles.SEUIL_ABANDON)})
+            emit({"type": "info", "texte": _t("↻ Le modèle tourne en rond (le même appel {} fois) : je lui demande de conclure avec ce qu'il a déjà obtenu.").format(_boucles.GIVE_UP_THRESHOLD)})
             continue
     else:
         emit({"type": "info", "texte": "Beaucoup d'étapes d'outils dans ce tour : écris « continue » pour que je poursuive."})

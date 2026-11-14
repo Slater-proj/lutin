@@ -176,7 +176,7 @@ def installer(nom, dossiers=None, dire=print, http=updates.http_get, telecharger
     if nom not in OUTILS:
         raise ValueError(_t("Programme inconnu."))
     from . import offline, ollama_client
-    if offline.actif():
+    if offline.is_active():
         raise ValueError(_t("Mode hors ligne : aucun téléchargement."))
     telecharger = telecharger or ollama_client.telecharger_fichier
     archive = archive_uv(systeme, architecture) if nom == "uv" else archive_node(systeme, architecture)

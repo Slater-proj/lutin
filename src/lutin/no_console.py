@@ -9,10 +9,10 @@ import subprocess
 CREATE_NO_WINDOW = 0x08000000
 DETACHED_PROCESS = 0x00000008
 CREATE_NEW_CONSOLE = 0x00000010
-_actif = False
+_enabled = False
 
 
-def console_visible():
+def console_is_visible():
     """Vrai si ce processus a une fenêtre de console (un terminal)."""
     try:
         import ctypes
@@ -21,32 +21,32 @@ def console_visible():
         return True
 
 
-def drapeaux(creationflags):
+def flags(creationflags):
     """Les drapeaux de création avec « pas de fenêtre », sauf si l'appelant a demandé autre chose (une console à lui, ou un processus détaché)."""
     if creationflags & (DETACHED_PROCESS | CREATE_NEW_CONSOLE | CREATE_NO_WINDOW):
         return creationflags
     return creationflags | CREATE_NO_WINDOW
 
 
-def envelopper(init):
+def wrap(init):
     def popen_init(self, *args, **kw):
-        kw["creationflags"] = drapeaux(kw.get("creationflags", 0))
+        kw["creationflags"] = flags(kw.get("creationflags", 0))
         init(self, *args, **kw)
     popen_init.__wrapped__ = init
     return popen_init
 
 
-def activer(force=False):
+def enable(force=False):
     """Active la règle (une seule fois) si Windows et pas de console. Renvoie vrai si elle est active."""
-    global _actif
+    global _enabled
     if os.name != "nt":
         return False
-    if _actif:
+    if _enabled:
         return True
-    if not force and console_visible():
+    if not force and console_is_visible():
         return False
-    subprocess.Popen.__init__ = envelopper(subprocess.Popen.__init__)
-    _actif = True
+    subprocess.Popen.__init__ = wrap(subprocess.Popen.__init__)
+    _enabled = True
     return True
 
 
@@ -54,7 +54,7 @@ def activer(force=False):
 _trace = {"fichier": None, "origine": None}
 
 
-def tracer(fichier):
+def start_trace(fichier):
     """Note dans `fichier` chaque programme que Lutin lance (heure, commande, si la fenêtre est masquée). Si une fenêtre clignote mais que rien n'est noté ici, ce n'est pas Lutin.
     Activé par la variable LUTIN_TRACE_PROCESSUS (« 1 » = fichier lutin-processus.log dans le dossier temporaire, ou un chemin de fichier). Renvoie le fichier utilisé."""
     import tempfile
@@ -68,7 +68,7 @@ def tracer(fichier):
     def popen_trace(self, *a, **kw):
         try:
             args = a[0] if a else kw.get("args", "")
-            masque = bool(int(kw.get("creationflags", 0) or 0) & CREATE_NO_WINDOW) or _actif
+            masque = bool(int(kw.get("creationflags", 0) or 0) & CREATE_NO_WINDOW) or _enabled
             commande = args if isinstance(args, str) else " ".join(str(x) for x in args)
             with open(chemin, "a", encoding="utf-8") as f:
                 f.write("{} pid={} fenetre_masquee={} shell={} : {}\n".format(time.strftime("%H:%M:%S"), os.getpid(), masque, bool(kw.get("shell")), commande[:400]))
@@ -80,7 +80,7 @@ def tracer(fichier):
     return chemin
 
 
-def arreter_trace():
+def stop_trace():
     if _trace["origine"] is not None:
         subprocess.Popen.__init__ = _trace["origine"]
     _trace["fichier"] = _trace["origine"] = None

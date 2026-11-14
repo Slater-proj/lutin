@@ -107,7 +107,7 @@ class Verification(unittest.TestCase):
         self.assertFalse(d.get("date"), "pas de date : on réessaie au prochain démarrage")
 
     def test_hors_ligne_strict_le_dit_clairement(self):
-        with mock.patch.object(offline, "actif", return_value=True):
+        with mock.patch.object(offline, "is_active", return_value=True):
             version, _, erreur = updates.derniere_release_detail()
         self.assertIsNone(version)
         self.assertIn("hors ligne", erreur.lower())
@@ -121,7 +121,7 @@ class Verification(unittest.TestCase):
             raise OSError("pas de réseau")
 
         def refuse(url, entetes=None, delai=10):
-            raise offline.HorsLigne("hors ligne")
+            raise offline.OfflineError("hors ligne")
         for faux in (panne, refuse):
             d = updates.verifier_lutin(DOSSIERS, http=faux, force=True)
             self.assertNotIn("version", d)

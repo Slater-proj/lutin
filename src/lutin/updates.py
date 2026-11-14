@@ -29,7 +29,7 @@ def http_get(url, entetes=None, delai=10, ouvrir=urllib.request.urlopen, taille_
     """(statut, en-têtes en minuscules, corps). Lève OSError si le réseau est absent. HTTPS obligatoire."""
     if not url.startswith("https://"):
         raise OSError(_t("adresse non sécurisée refusée"))
-    offline.garde(url)
+    offline.guard(url)
     from . import github as _github
     req = urllib.request.Request(url, headers=dict(_github.entetes_pour(url), **dict(entetes or {}), **{"User-Agent": "lutin"}))          # le compte GitHub (facultatif) lève la limite de requêtes ; il ne part que vers api.github.com
     try:
@@ -299,7 +299,7 @@ def telecharger_roue_verifiee(url_roue, dossier, http=http_get, ouvrir=urllib.re
         if _panne_passagere(statut):
             raise ErreurVerification(_t("GitHub est momentanément indisponible (HTTP {}) : la somme de contrôle de la mise à jour n'a pas pu être lue après plusieurs essais. Rien n'a été installé ; réessaie dans quelques minutes.").format(statut))
         raise ErreurVerification(_t("SHA256SUMS.txt illisible (HTTP {}) : mise à jour refusée.").format(statut))
-    offline.garde(url_roue)
+    offline.guard(url_roue)
     requete = urllib.request.Request(url_roue, headers={"User-Agent": "lutin"})
     chemin = Path(dossier) / nom
 
@@ -426,7 +426,7 @@ def verifier(profil, cfg, dossiers, ollama, http=http_get, maintenant=time.time,
             pass
     ancien = lire_propositions(dossiers)
     resultat = {"date": maintenant(), "propositions": [], "erreurs": [], "catalogue": "absent", "portee": portee}
-    hors_ligne = offline.actif(Path(dossiers.get("config", "")) / "config.json" if dossiers.get("config") else None)
+    hors_ligne = offline.is_active(Path(dossiers.get("config", "")) / "config.json" if dossiers.get("config") else None)
     if hors_ligne:
         resultat["erreurs"].append(_t("mode hors ligne strict : seule la liste livrée avec Lutin est comparée, les mises à jour de modèles ne sont pas cherchées"))
         portee_reseau = False

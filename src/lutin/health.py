@@ -410,7 +410,7 @@ def lancer_autotest(profond=False):
         return "branche {}, {} changement(s) en attente".format(g["branche"], g["total"])
 
     def web_ok():
-        if _hl.actif():
+        if _hl.is_active():
             return "désactivé (mode hors ligne strict)"
         if not r.get("web", True):
             return "désactivé dans les options"

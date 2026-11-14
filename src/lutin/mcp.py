@@ -188,7 +188,7 @@ class Connexion:
     def ouvrir(self):
         if self.serveur.get("type") == "http":
             from . import offline
-            if offline.actif() and not re.match(r"^https?://(127\.0\.0\.1|localhost|\[::1\])", self.serveur.get("url", ""), re.I):
+            if offline.is_active() and not re.match(r"^https?://(127\.0\.0\.1|localhost|\[::1\])", self.serveur.get("url", ""), re.I):
                 raise ErreurMcp(_t("Mode hors ligne : ce connecteur distant n'est pas joint."))
         else:
             commande = list(self.serveur.get("commande") or [])

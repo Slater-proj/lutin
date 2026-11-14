@@ -73,8 +73,8 @@ def web_telecharger(url, donnees=None, *, hote_autorise=None, entetes=None, octe
     def controler(adresse):
         """Avant CHAQUE requête, la première comme la cible de chaque redirection : rien n'est envoyé à une adresse qui n'a pas été contrôlée."""
         try:
-            _hl.garde(adresse)
-        except _hl.HorsLigne as e:
+            _hl.guard(adresse)
+        except _hl.OfflineError as e:
             raise _m.ErreurOutil(str(e))
         verifier_hote_web(adresse, hote_autorise, resoudre=not epingle)
 
@@ -515,8 +515,8 @@ def lire_pdf(url):
 def page_en_cache(url, maintenant=time.time):
     """(adresse finale, type, contenu) de la page, gardée dix minutes. Un PDF donne son texte ; une page HTML son code."""
     try:
-        _hl.garde(url)          # le mode hors ligne l'emporte toujours, cache ou pas
-    except _hl.HorsLigne as e:
+        _hl.guard(url)          # le mode hors ligne l'emporte toujours, cache ou pas
+    except _hl.OfflineError as e:
         raise _m.ErreurOutil(str(e))
     with VERROU_PAGES:
         trouve = CACHE_PAGES.get(url)

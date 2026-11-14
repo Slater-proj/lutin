@@ -346,7 +346,7 @@ def commande_update(args):
     """Met à jour Lutin lui-même (avec la source mémorisée par l'installateur) puis cherche des mises à jour de modèles. Ne change rien si tout est à jour."""
     tout = not (args.app or args.modeles)
     code = 0
-    if (args.app or tout) and offline.actif(Path(config.dossiers()["config"]) / "config.json"):
+    if (args.app or tout) and offline.is_active(Path(config.dossiers()["config"]) / "config.json"):
         print(_t("Mode hors ligne strict : Lutin n'est pas mis à jour (lutin offline off pour le permettre)."))
     elif getattr(args, "revenir_a", None):
         code = mettre_a_jour_lutin(args.revenir_a)
@@ -444,7 +444,7 @@ def commande_modeles(args):
             print(_t("Rien de nouveau.") if not r["propositions"] else _t("\nInstaller :  lutin models install <identifiant>"))
             for e in r["erreurs"]:
                 print("(" + e + ")")
-    except (ollama_client.ErreurOllama, offline.HorsLigne) as e:
+    except (ollama_client.ErreurOllama, offline.OfflineError) as e:
         print("✘ " + str(e), file=sys.stderr)
         return 1
     return 0
@@ -487,8 +487,8 @@ def commande_hors_ligne(args):
     d, _ = contexte()
     chemin = Path(d["config"]) / "config.json"
     if args.etat != "etat":
-        offline.definir(args.etat == "oui", chemin)
-    actif = offline.actif(chemin)
+        offline.set_mode(args.etat == "oui", chemin)
+    actif = offline.is_active(chemin)
     print(_t("Mode hors ligne strict : {}.").format(_t("ACTIF (aucune connexion vers Internet)") if actif else _t("coupé")))
     if args.etat != "etat":
         print(_t("Si Lutin tourne, il en tient compte tout de suite."))

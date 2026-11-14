@@ -103,7 +103,7 @@ class BrancheeDansLeDialogue(unittest.TestCase):
             self.assertTrue(agent.router_la_demande(r, "écris une fonction python", False, evenements.append, "c1"))
         self.assertEqual(r["modele"], "qwen3-coder:30b")
         self.assertIn("Modèle choisi pour cette demande", evenements[0]["texte"])
-        self.assertEqual(observatory.lire(5)[0]["type"], "routage")
+        self.assertEqual(observatory.read(5)[0]["type"], "routage")
 
     def test_jamais_pendant_une_mission_et_jamais_une_erreur(self):
         r = {"modele": "qwen3:8b", "machine": "", "routage": True, "_mission": True}
@@ -126,18 +126,18 @@ class BrancheeDansLeDialogue(unittest.TestCase):
 
 class Observatoire(unittest.TestCase):
     def setUp(self):
-        observatory.vider()
+        observatory.clear()
 
     def test_noter_lire_resumer(self):
-        observatory.noter("tour", "c1", modele="qwen3:8b", machine="", jetons=100, tok_s=50.0, duree_s=2.0)
-        observatory.noter("tour", "c1", modele="qwen3:8b", machine="", jetons=100, tok_s=25.0, duree_s=4.0)
-        observatory.noter("tour", "c2", modele="gros:70b", machine="m1", jetons=10, tok_s=None)
-        observatory.noter("outil", "c1", outil="lire", duree_ms=40, ok=True, modele="qwen3:8b")
-        observatory.noter("outil", "c1", outil="lire", duree_ms=60, ok=False, detail="Erreur : introuvable")
-        observatory.noter("relance", "c1", motif="réponse vide")
-        observatory.noter("routage", "c1", profil="code", modele="x", raison="code")
-        observatory.noter("inconnu", "c1")          # ignoré
-        s = observatory.resume()
+        observatory.record("tour", "c1", modele="qwen3:8b", machine="", jetons=100, tok_s=50.0, duree_s=2.0)
+        observatory.record("tour", "c1", modele="qwen3:8b", machine="", jetons=100, tok_s=25.0, duree_s=4.0)
+        observatory.record("tour", "c2", modele="gros:70b", machine="m1", jetons=10, tok_s=None)
+        observatory.record("outil", "c1", outil="lire", duree_ms=40, ok=True, modele="qwen3:8b")
+        observatory.record("outil", "c1", outil="lire", duree_ms=60, ok=False, detail="Erreur : introuvable")
+        observatory.record("relance", "c1", motif="réponse vide")
+        observatory.record("routage", "c1", profil="code", modele="x", raison="code")
+        observatory.record("inconnu", "c1")          # ignoré
+        s = observatory.summary()
         m = {x["modele"]: x for x in s["modeles"]}
         self.assertEqual((m["qwen3:8b"]["tours"], m["qwen3:8b"]["jetons"], m["qwen3:8b"]["tok_s"]), (2, 200, 33.3), "vitesse moyenne pondérée par les jetons")
         self.assertIsNone(m["gros:70b"]["tok_s"])
@@ -145,24 +145,24 @@ class Observatoire(unittest.TestCase):
         o = s["outils"][0]
         self.assertEqual((o["outil"], o["appels"], o["echecs"], o["duree_ms"]), ("lire", 2, 1, 50))
         self.assertEqual((s["relances"], s["routages"]), ({"réponse vide": 1}, 1))
-        self.assertEqual(len(observatory.lire()), 7)
+        self.assertEqual(len(observatory.read()), 7)
 
     def test_jamais_le_contenu_des_messages_et_valeurs_bornees(self):
-        observatory.noter("outil", "c1", outil="x" * 500, ok=True, args={"secret": 1}, detail="y" * 500)
-        e = observatory.lire()[0]
+        observatory.record("outil", "c1", outil="x" * 500, ok=True, args={"secret": 1}, detail="y" * 500)
+        e = observatory.read()[0]
         self.assertLessEqual(len(e["outil"]), 160)
         self.assertLessEqual(len(e["detail"]), 160)
 
     def test_borne_et_fichier_abime(self):
-        for i in range(observatory.MAX_EVENEMENTS + 100):
-            observatory.noter("relance", "c", motif="m%d" % i)
-        self.assertLessEqual(len(observatory.lire(10 ** 6)), observatory.MAX_EVENEMENTS)
-        observatory._chemin().write_text("pas du json\n{\"type\": \"relance\", \"motif\": \"ok\"}\n", encoding="utf-8")
-        self.assertEqual([e["motif"] for e in observatory.lire()], ["ok"])
+        for i in range(observatory.MAX_EVENTS + 100):
+            observatory.record("relance", "c", motif="m%d" % i)
+        self.assertLessEqual(len(observatory.read(10 ** 6)), observatory.MAX_EVENTS)
+        observatory._path().write_text("pas du json\n{\"type\": \"relance\", \"motif\": \"ok\"}\n", encoding="utf-8")
+        self.assertEqual([e["motif"] for e in observatory.read()], ["ok"])
 
     def test_ecrire_ne_leve_jamais(self):
-        with mock.patch.object(observatory, "_chemin", side_effect=OSError("disque plein")):
-            observatory.noter("relance", "c", motif="x")
+        with mock.patch.object(observatory, "_path", side_effect=OSError("disque plein")):
+            observatory.record("relance", "c", motif="x")
 
 
 class Laboratoire(unittest.TestCase):
@@ -232,9 +232,9 @@ class Api(unittest.TestCase):
         return r.status, json.loads(texte) if texte else {}
 
     def test_observatoire_par_l_api(self):
-        observatory.vider()
-        observatory.noter("tour", "c1", modele="qwen3:8b", machine="", jetons=50, tok_s=25.0)
-        observatory.noter("outil", "c1", outil="lire", duree_ms=10, ok=True)
+        observatory.clear()
+        observatory.record("tour", "c1", modele="qwen3:8b", machine="", jetons=50, tok_s=25.0)
+        observatory.record("outil", "c1", outil="lire", duree_ms=10, ok=True)
         statut, r = self.appel("GET", "/api/observatoire")
         self.assertEqual(statut, 200)
         self.assertEqual(r["resume"]["modeles"][0]["modele"], "qwen3:8b")

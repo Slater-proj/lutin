@@ -74,7 +74,7 @@ class Ollama:
 
     def telecharger(self, modele, progression=None):
         """Télécharge un modèle (reprise automatique par Ollama). progression(texte, fait, total) est appelée pendant le téléchargement."""
-        offline.exiger_en_ligne(_t("télécharger un modèle"))
+        offline.require_online(_t("télécharger un modèle"))
         try:
             with self._requete("/api/pull", {"model": modele, "stream": True}, delai=3600) as r:
                 for brut in r:
@@ -144,7 +144,7 @@ def telecharger_fichier(url, destination, progression=None, ouvrir=urllib.reques
     """Télécharge `url` vers `destination` (fichier .part renommé à la fin, reprise si interrompu). HTTPS obligatoire."""
     if not url.startswith("https://"):
         raise ErreurOllama(_t("téléchargement refusé : adresse non sécurisée"))
-    offline.garde(url)
+    offline.guard(url)
     destination = Path(destination)
     destination.parent.mkdir(parents=True, exist_ok=True)
     part = destination.with_suffix(destination.suffix + ".part")

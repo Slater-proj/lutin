@@ -197,7 +197,7 @@ def dispatch(handler, method):
             status, payload = result if isinstance(result, tuple) else (200, result)
     except ApiError as refused:
         status, payload = refused.status, error(refused.code, refused.message)
-    except _offline.HorsLigne as offline:                  # strict offline mode: the action needs the network
+    except _offline.OfflineError as offline:                  # strict offline mode: the action needs the network
         status, payload = 409, error("offline", str(offline))
     except ValueError as invalid:                          # the functions underneath say what is wrong with a ValueError written for the user
         status, payload = 400, error("invalid_request", str(invalid))
@@ -219,7 +219,7 @@ def status(request):
         "version": _m.VERSION,
         "language": _i18n.langue(),
         "access": {"level": ACCESS_LEVELS.get(_m.SECURITE.niveau, _m.SECURITE.niveau), "can_configure": bool(request.handler._configurateur())},
-        "offline": bool(_offline.actif()),
+        "offline": bool(_offline.is_active()),
         "engine": {"id": engine.id, "name": engine.nom, "running": bool(state["actif"])},
         "model": str(settings.get("modele") or ""),
         "installed_models": list(state["installes"]),

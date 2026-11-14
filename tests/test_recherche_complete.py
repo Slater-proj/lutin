@@ -356,16 +356,16 @@ class LecturePages(Base):
     def test_hors_ligne_l_emporte_sur_le_cache(self):
         from lutin import offline
         A.outil_web_lire(URL_PG + "/long", 0, {"web": True})
-        vrai = offline.garde
+        vrai = offline.guard
 
         def refuse(url):
-            raise offline.HorsLigne("mode hors ligne")
-        offline.garde = refuse
+            raise offline.OfflineError("mode hors ligne")
+        offline.guard = refuse
         try:
             with self.assertRaises(A.ErreurOutil):
                 A.outil_web_lire(URL_PG + "/long", 0, {"web": True})
         finally:
-            offline.garde = vrai
+            offline.guard = vrai
 
 
 class Legerete(Base):

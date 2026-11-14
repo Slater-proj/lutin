@@ -58,7 +58,7 @@ class Models(unittest.TestCase):
         self.assertEqual(api("DELETE", "/api/v1/models/bad%20name!"), (400, {"error": {"code": "invalid_request", "message": "Nom de modèle invalide."}}))
         self.assertEqual(api("DELETE", "/api/v1/models/unknown:1b"), (400, {"error": {"code": "invalid_request", "message": "Ce modèle n'est pas installé."}}))
         self.assertEqual(A.PULLS, {}, "no download was started by a refused request")
-        with mock.patch.object(offline, "actif", lambda *a: True):          # strict offline mode
+        with mock.patch.object(offline, "is_active", lambda *a: True):          # strict offline mode
             status, answer = api("POST", "/api/v1/models", {"name": "gemma4:12b"})
         self.assertEqual((status, answer["error"]["code"]), (409, "offline"))
 

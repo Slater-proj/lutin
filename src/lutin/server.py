@@ -476,7 +476,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
                                        "familles": {k: _t(v) for k, v in (_m._CATALOGUE.get("familles") or {}).items()}, "disque_modeles": _emplacements.jauge_modeles(),
                                        "version": _m.VERSION, "partages": o.get("partages", []), "ollama": o["actif"], "ollama_installe": bool(_m.chemin_ollama()) or _m.moteur_actuel().id != "ollama", "moteur_nom": _mesures.nom_affiche(_m.moteur_actuel()), "installes": o["installes"], "modeles": modeles, "modeles_masques": len(_m.lire_registre_modeles()["masques"]), "actives": list(_m.TOURS_ACTIFS),
                                        "pulls": _m.PULLS, "reglages": r, "conversations": _m.conv_liste(), "racine": str(_m.RACINE), "donnees": str(_m.DONNEES),
-                                       "colibri_choisi": bool(getattr(_m.moteur_actuel(r), "colibri_choisi", lambda: False)()), "lmstudio_choisi": bool(getattr(_m.moteur_actuel(r), "lmstudio_choisi", lambda: False)()), "exllamav3_choisi": bool(getattr(_m.moteur_actuel(r), "exllamav3_choisi", lambda: False)()), "outil": bool(self._outil_vivant()), "hors_ligne": _hl.actif(), "moteur": _m.moteur_actuel().id, "niveau": _m.SECURITE.niveau, "docker": _acces.en_docker(), "ouverture_possible": _fichiers.ouverture_possible(), "missions": _mission.par_conversation(), "langue": _i18n.langue(), "langue_reglage": _i18n.langue_configuree(), "cpus": _machine.cpus_disponibles() or 1, "diagnostic": self._avec_estimation(self._diagnostic(o, r, profil, modeles), r, profil), "prudent": _estimation.mode_prudent(profil), "premier_lancement": self._premier_lancement(o, r, profil), "redemarrage": {"necessaire": _acces.securite_enregistree() != _m.SECURITE, "possible": _acces.peut_redemarrer()}, "nouvelle_version": _m.nouvelle_version_lutin(), "travaux": _m.travaux_etat(), "configurateur": self._configurateur(), "addons_alertes": _addons.alertes(), "embeddings": _embeddings.etat(),
+                                       "colibri_choisi": bool(getattr(_m.moteur_actuel(r), "colibri_choisi", lambda: False)()), "lmstudio_choisi": bool(getattr(_m.moteur_actuel(r), "lmstudio_choisi", lambda: False)()), "exllamav3_choisi": bool(getattr(_m.moteur_actuel(r), "exllamav3_choisi", lambda: False)()), "outil": bool(self._outil_vivant()), "hors_ligne": _hl.is_active(), "moteur": _m.moteur_actuel().id, "niveau": _m.SECURITE.niveau, "docker": _acces.en_docker(), "ouverture_possible": _fichiers.ouverture_possible(), "missions": _mission.par_conversation(), "langue": _i18n.langue(), "langue_reglage": _i18n.langue_configuree(), "cpus": _machine.cpus_disponibles() or 1, "diagnostic": self._avec_estimation(self._diagnostic(o, r, profil, modeles), r, profil), "prudent": _estimation.mode_prudent(profil), "premier_lancement": self._premier_lancement(o, r, profil), "redemarrage": {"necessaire": _acces.securite_enregistree() != _m.SECURITE, "possible": _acces.peut_redemarrer()}, "nouvelle_version": _m.nouvelle_version_lutin(), "travaux": _m.travaux_etat(), "configurateur": self._configurateur(), "addons_alertes": _addons.alertes(), "embeddings": _embeddings.etat(),
                                        "reflexion_possible": self._reflexion_possible(r, o["actif"]), "cluster_actif": _machines.cluster_actif(r.get("cluster")), "demandes_machines": len(_machines.noeud().get("demandes", [])), "modeles_distants": _machines.modeles_distants() if _machines.cluster_actif(r.get("cluster")) else [], "conversations_distantes": _machines.conversations_distantes() if _machines.cluster_actif(r.get("cluster")) else [], "machines_hors_ligne": _machines.hors_ligne() if _machines.cluster_actif(r.get("cluster")) else [], "taches_fond": _m.taches_en_cours(), "taches_moteur": [dict(v, nom=_moteurs.MOTEURS[k].nom) for k, v in _moteurs.toutes_les_taches().items() if v.get("statut") == "en cours" and k in _moteurs.MOTEURS], "fins_moteur": _moteurs.fins_recentes(), "memoire": self._memoire(r, o), "calibrage": _calibrage.etat(), "bench": {"en_cours": _m.BENCH["en_cours"], "etape": _m.BENCH["etape"], "erreur": _m.BENCH["erreur"], "file": list(_m.BENCH.get("file") or []), "mesures": _bench.lire(_m.chemin_bench())}, "attentes": [{"id": a.id, "titre": a.titre, "detail": a.detail, "diff": a.diff, "conv": a.conv} for a in _m.Attente.EN_COURS.values()],
                                        "en_attente": sorted({a.conv for a in _m.Attente.EN_COURS.values() if a.conv} | set(_m.CHOIX_MEMOIRE))})
         if chemin == "/api/conseil":
@@ -541,7 +541,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 return self._envoyer(503, {"erreur": str(e)})
         if chemin == "/api/moteurs":                             # les moteurs de modèles : leur état, ce qui est possible avec chacun, et celui qui est choisi
             courant = _m.moteur_actuel().id
-            _moteurs_maj.en_arriere_plan(bool(_m.reglages().get("verifier_maj", True)) and not _hl.actif())          # au plus un contrôle par 24 h, en arrière-plan : la carte du moteur l'affichera au prochain rafraîchissement
+            _moteurs_maj.en_arriere_plan(bool(_m.reglages().get("verifier_maj", True)) and not _hl.is_active())          # au plus un contrôle par 24 h, en arrière-plan : la carte du moteur l'affichera au prochain rafraîchissement
             return self._envoyer(200, {"courant": courant, "modifiable": self._configurateur(), "moteurs": [self._vue_moteur(mo, courant) for mo in _moteurs.liste()], "prereglages": self._prereglages(), "dossier_moteurs": _llamacpp.vue_dossier_moteurs()})
         if chemin in ("/api/moteur-recherche", "/api/moteur-fichiers"):          # chercher un modèle (Hugging Face pour llama.cpp), puis voir les fichiers d'un dépôt
             q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
@@ -654,8 +654,8 @@ class Gestionnaire(BaseHTTPRequestHandler):
             e = self._estimation(modele, max(512, min(ctx, 1048576)), _adequation.profil_pret())
             return self._envoyer(200 if e else 404, e or {"erreur": _t("Ce modèle n'est pas au catalogue : pas d'estimation possible.")})
         if chemin == "/api/observatoire":                         # Santé : ce que les modèles et les outils ont fait (noms, durées, compteurs ; jamais le texte des messages)
-            evenements = _observatoire.lire(400)
-            return self._envoyer(200, {"resume": _observatoire.resume(evenements), "recents": [e for e in evenements if e["type"] != "tour"][:25], "modifiable": self._configurateur()})
+            evenements = _observatoire.read(400)
+            return self._envoyer(200, {"resume": _observatoire.summary(evenements), "recents": [e for e in evenements if e["type"] != "tour"][:25], "modifiable": self._configurateur()})
         if chemin == "/api/bench-historique":                     # Santé : l'évolution des mesures de chaque modèle et les régressions
             historique = _bench.lire_historique(_m.chemin_bench())
             return self._envoyer(200, {"regressions": _bench.regressions(_m.chemin_bench()), "modeles": [{"modele": m, "mesures": v[-6:]} for m, v in historique.items() if len(v) >= 1]})
@@ -1141,7 +1141,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 voulu = bool(donnees.get("actif"))
                 if not voulu and not self._configurateur():
                     return self._envoyer(403, {"erreur": "Le mode hors ligne ne se coupe que depuis cette machine."})
-                return self._envoyer(200, {"hors_ligne": _hl.definir(voulu)})
+                return self._envoyer(200, {"hors_ligne": _hl.set_mode(voulu)})
             if self.path == "/api/modeles-verifier":
                 if _m.VERIFICATEUR is None:
                     return self._envoyer(501, {"erreur": "La vérification des modèles n'est pas disponible dans ce mode de lancement."})
@@ -1236,7 +1236,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
             if self.path == "/api/observatoire-vider":
                 if not self._configurateur():
                     return self._envoyer(403, {"erreur": _t("Cela se règle depuis cette machine elle-même.")})
-                _observatoire.vider()
+                _observatoire.clear()
                 return self._envoyer(200, {"ok": True})
             if self.path == "/api/sorties-vider":
                 if not self._configurateur():

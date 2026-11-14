@@ -358,8 +358,8 @@ def appeler(ident, nom, variables=None, delai=DELAI_APPEL):
         donnees_envoi = json.dumps(corps or params).encode("utf-8")
         en_tetes["Content-Type"] = "application/json"
     try:
-        _hl.garde(url)
-    except _hl.HorsLigne as e:
+        _hl.guard(url)
+    except _hl.OfflineError as e:
         return {"ok": False, "donnees": None, "extrait": {}, "erreur": str(e)}
     hote = urllib.parse.urlparse(url).hostname
     if not _net_guard.local_test_mode() and hote not in ("127.0.0.1", "localhost"):          # une adresse de la machine n'est permise que si le manifeste (livré) la déclare : sinon hote_autorise l'a déjà refusée

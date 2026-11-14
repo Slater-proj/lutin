@@ -58,7 +58,7 @@ def ecrire(e):
 def verifier_serveur(hote, reseau_local):
     """Refuse un serveur du réseau local sauf si l'utilisateur l'a permis (un réglage modifié ne doit pas faire lire autre chose que le courrier). En mode hors ligne strict, rien ne sort."""
     from . import offline
-    offline.garde("https://" + hote)
+    offline.guard("https://" + hote)
     if reseau_local == "oui":
         return
     from . import web

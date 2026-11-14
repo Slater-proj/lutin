@@ -92,7 +92,7 @@ def mettre_a_jour():
     from . import offline
     if en_docker():
         raise ValueError(_t("Dans Docker, la mise à jour se fait en récupérant la nouvelle image : docker compose pull && docker compose up -d"))
-    if offline.actif():
+    if offline.is_active():
         raise ValueError(_t("Mode hors ligne strict : Lutin n'est pas mis à jour."))
     if _m.TOURS_ACTIFS:
         raise ValueError(_t("Une réponse est en cours : attends la fin avant de mettre à jour."))
