@@ -541,7 +541,7 @@ class ComfyUI(unittest.TestCase):
         addons.save_settings(cu.IDENT, {"dossier": ""})
         vrai_trouver = cu.find_folder
         cu.find_folder = lambda *a, **k: ""
-        self.addCleanup(setattr, cu, "trouver_dossier", vrai_trouver)
+        self.addCleanup(setattr, cu, "find_folder", vrai_trouver)
         with self.assertRaises(_m.ErreurOutil) as e:
             cu.outil_generer({"prompt": "x"}, self.ctx())
         self.assertIn("ne trouve pas ComfyUI", str(e.exception))
