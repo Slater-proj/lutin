@@ -56,10 +56,16 @@ docker pull ghcr.io/slater-proj/lutin:rc-my-branch
 pip install lutin-0.5.0rc17+my.branch-py3-none-any.whl
 ```
 
+## Publishing a pre-release from a branch (by hand)
+
+A candidate (`rc`) is built on every push, but it has no tag and no Release. To test the application for real from a feature branch (alpha/beta/rc as chosen in `tools/release_channel.json`):
+**Actions > release > Run workflow**, pick the branch, tick *prerelease*. The tests run first, then a tag `vX.Y.ZaN`, a GitHub Release marked *pre-release* and the Docker image `:X.Y.ZaN` and `:next` are published; never `:latest`, and the installers and the update notice ignore it.
+Refused outside `main` if the channel says « stable ». Only a manual run does this: a push never publishes from a branch.
+
 ## Setting up GitHub (once)
 
 1. **Settings > Actions > General**: « Workflow permissions » = *Read and write permissions* (needed to create tags and publish the image).
-2. **Settings > Branches**: protect `main` (require a pull request and the success of the `ci / …` checks). Without protection, a direct push to `main` publishes too.
+2. **Settings > Branches**: protect `main` (require a pull request and the success of the `ci / result` check, which gathers all the others). Without protection, a direct push to `main` publishes too.
 3. **Packages**: after the first image, make the `lutin` package public (Package settings > Change visibility) so that `docker pull` works without signing in.
 4. Optional: **Security > Code security**: enable private vulnerability reporting and Dependabot.
 

@@ -56,10 +56,16 @@ docker pull ghcr.io/slater-proj/lutin:rc-ma-branche
 pip install lutin-0.5.0rc17+ma.branche-py3-none-any.whl
 ```
 
+## Publier une pré-version depuis une branche (à la main)
+
+Une candidate (`rc`) est construite à chaque envoi, mais sans étiquette ni Release. Pour tester vraiment l'application depuis une branche de fonctionnalité (alpha/beta/rc selon `tools/release_channel.json`) :
+**Actions > release > Run workflow**, choisir la branche, cocher *prerelease*. Les tests passent d'abord, puis l'étiquette `vX.Y.ZaN`, une Release GitHub marquée *pre-release* et l'image Docker `:X.Y.ZaN` et `:next` sont publiées ; jamais `:latest`, et les installateurs et l'annonce de mise à jour l'ignorent.
+Refusé hors de `main` si le canal dit « stable ». Seul un lancement manuel le fait : un envoi ne publie jamais depuis une branche.
+
 ## Mise en place sur GitHub (une seule fois)
 
 1. **Réglages > Actions > Général** : « Workflow permissions » = *Read and write permissions* (nécessaire pour créer les étiquettes et publier l'image).
-2. **Réglages > Branches** : protéger `main` (exiger une pull request et le succès des vérifications `ci / …`). Sans protection, un envoi direct sur `main` publie aussi.
+2. **Réglages > Branches** : protéger `main` (exiger une pull request et le succès de la vérification `ci / résultat`, qui rassemble toutes les autres). Sans protection, un envoi direct sur `main` publie aussi.
 3. **Packages** : après la première image, rendre le paquet `lutin` public (Package settings > Change visibility) pour que `docker pull` marche sans connexion.
 4. Facultatif : **Security > Code security** : activer le signalement privé de failles et Dependabot.
 

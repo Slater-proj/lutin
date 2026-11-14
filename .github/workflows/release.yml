@@ -5,14 +5,23 @@ name: release
 #                        si tools/release_channel.json demande des pré-versions (alpha, beta, rc) : étiquette vX.Y.ZaN, Release marquée « pre-release »
 #                        (jamais « dernière version », donc jamais proposée par les installateurs ni par l'annonce de mise à jour), image :X.Y.ZaN et :next, jamais :latest
 #   - toute autre     -> une candidate (rc) SANS étiquette ni Release : fichiers joints à l'exécution, image Docker :rc-<branche>
+#   - lancement MANUEL (Actions > release > Run workflow) avec « prerelease » coché, sur n'importe quelle branche -> une PRÉ-version publiée depuis cette branche
+#                        (alpha/beta/rc selon tools/release_channel.json) : étiquette, Release « pre-release », image :next. Jamais une version stable hors de main :
+#                        si le canal disait « stable », le travail s'arrête.
 # Les tests passent d'abord (ci.yml). Les règles de version sont dans tools/prochaine_version.py (docs/PUBLICATIONS.md).
 on:
   push:
     branches: ["**"]
+  workflow_dispatch:
+    inputs:
+      prerelease:
+        description: "Publier une PRÉ-version (étiquette, Release « pre-release », image :next) depuis cette branche"
+        type: boolean
+        default: false
 
 concurrency:
   group: release-${{ github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}      # sur main, les publications se suivent ; sur une branche, la plus récente remplace l'ancienne
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' && github.event_name != 'workflow_dispatch' }}      # sur main et pour une publication manuelle, les exécutions se suivent ; sur une branche, la plus récente remplace l'ancienne
 
 permissions:
   contents: write
@@ -27,6 +36,7 @@ jobs:
   version:
     needs: tests
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     outputs:
       version: ${{ steps.v.outputs.version }}
       etiquette: ${{ steps.v.outputs.etiquette }}
@@ -47,8 +57,11 @@ jobs:
         id: v
         run: |
           set -o pipefail          # un canal de publication illisible arrête tout ici, au lieu de laisser des sorties vides
-          if [ "${GITHUB_REF}" = "refs/heads/main" ]; then
+          if [ "${GITHUB_REF}" = "refs/heads/main" ] || [ "${{ inputs.prerelease }}" = "true" ]; then
             python tools/prochaine_version.py --mode release | tee -a "$GITHUB_OUTPUT"
+            if [ "${GITHUB_REF}" != "refs/heads/main" ] && ! grep -q '^prerelease=true$' "$GITHUB_OUTPUT"; then
+              echo "refus : hors de main, seule une PRÉ-version se publie (vérifie tools/release_channel.json)"; exit 1
+            fi
           else
             python tools/prochaine_version.py --mode rc --branche "${GITHUB_REF_NAME}" --numero "${GITHUB_RUN_NUMBER}" | tee -a "$GITHUB_OUTPUT"
           fi
@@ -80,6 +93,7 @@ jobs:
     needs: version
     if: needs.version.outputs.publier == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     env:
       SETUPTOOLS_SCM_PRETEND_VERSION: ${{ needs.version.outputs.version }}
     steps:
@@ -104,6 +118,7 @@ jobs:
     needs: version
     if: needs.version.outputs.publier == 'true'
     runs-on: windows-latest
+    timeout-minutes: 30
     env:
       SETUPTOOLS_SCM_PRETEND_VERSION: ${{ needs.version.outputs.version }}
     steps:
@@ -128,10 +143,11 @@ jobs:
           retention-days: 30
 
   publier:
-    name: publication (main)
+    name: publication (version, ou pré-version lancée à la main)
     needs: [version, construire, installateur]
-    if: github.ref == 'refs/heads/main' && needs.version.outputs.publier == 'true'
+    if: (github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && inputs.prerelease)) && needs.version.outputs.publier == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/download-artifact@v8
         with:
@@ -168,6 +184,7 @@ jobs:
     needs: [version, construire]
     if: needs.version.outputs.publier == 'true' && (github.event.repository.fork == false)
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
       - uses: ./.github/actions/frontend          # the interface is built before anything is tested or packaged (ADR 0002)

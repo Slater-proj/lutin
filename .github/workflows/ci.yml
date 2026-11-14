@@ -1,6 +1,12 @@
 name: ci
 
 # Appelé par release.yml (à chaque envoi de branche) et lancé sur chaque pull request.
+# One run of the tests per push, not two.
+#   - a push to a branch of this repository runs `release.yml`, which calls this workflow (workflow_call): that is THE run, and its results are attached to the commit,
+#     so they show on the pull request too;
+#   - a pull request from the same repository would run the same tests a second time on the same commit: its jobs are skipped (`if:` of every job);
+#   - a pull request from a FORK is the one case where no push reached this repository: it runs here.
+# The job `gate` is the single result to require in the protection of `main` (see docs/PUBLISHING.md).
 on:
   pull_request:
   workflow_call:
@@ -10,6 +16,7 @@ permissions:
 
 jobs:
   tests:
+    if: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) }}
     timeout-minutes: 25
     name: tests (${{ matrix.os }}, Python ${{ matrix.python }})
     runs-on: ${{ matrix.os }}
@@ -35,6 +42,7 @@ jobs:
         run: python tests/lancer_tests.py
 
   paquet:
+    if: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) }}
     timeout-minutes: 15
     name: paquet (roue, archive source) sur ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
@@ -64,6 +72,7 @@ jobs:
           "$PY" -m lutin offline
 
   docker:
+    if: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) }}
     timeout-minutes: 25
     name: image Docker (construction et démarrage)
     runs-on: ubuntu-latest
@@ -127,6 +136,7 @@ jobs:
           docker rm -f lutin-vol2
 
   installateur-linux:
+    if: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) }}
     timeout-minutes: 10
     name: install.sh (installation, réinstallation)
     runs-on: ubuntu-latest
@@ -153,6 +163,7 @@ jobs:
           LUTIN_HOME="$RUNNER_TEMP/donnees" LUTIN_LANGUE=en "$LUTIN_BIN/lutin" securite | grep -q "this machine only"
 
   installateur-windows:
+    if: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) }}
     name: installateur Windows (construction, installation, désinstallation)
     runs-on: windows-latest
     env:
@@ -174,6 +185,7 @@ jobs:
         run: ./installateur/windows/verifier.ps1 -Installateur (Get-ChildItem dist/lutin-setup-*.exe | Select-Object -First 1).FullName -Version 0.0.0.dev0
 
   syntaxe-installateurs:
+    if: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) }}
     name: scripts d'installation (syntaxe)
     runs-on: windows-latest
     steps:
@@ -192,6 +204,7 @@ jobs:
         run: for f in installateur/*.sh docker/*.sh; do bash -n "$f" && echo "OK $f"; done
 
   securite:
+    if: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) }}
     name: secrets
     runs-on: ubuntu-latest
     steps:
@@ -201,3 +214,17 @@ jobs:
       - uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  gate:
+    name: ci (résultat)
+    if: ${{ always() && !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) }}
+    needs: [tests, paquet, docker, installateur-linux, installateur-windows, syntaxe-installateurs, securite]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Tous les travaux ont réussi
+        run: |
+          echo "résultats : ${{ join(needs.*.result, ' ') }}"
+          if [ "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}" = "true" ]; then
+            echo "un travail a échoué ou a été annulé"; exit 1
+          fi
