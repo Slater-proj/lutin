@@ -1,6 +1,6 @@
 # Guided models and first launch: design
 
-Proposal for plan step 4 (onboarding and the Models screen). **Not built yet.** It needs the maintainer's answers to the open questions at the end.
+Proposal for plan step 4 (onboarding and the Models screen). The maintainer answered the four open questions on 2026-11-14 (below). Built so far: the routes `GET /machine`, `GET /models/catalog` and `GET /models/recommendation` ([API_V1.md](API_V1.md)).
 
 ## Goal
 
@@ -71,7 +71,16 @@ automatic accessibility checks on every step in both themes and at 360 px (the t
 4. `GET /setup`, the guide's screens 1 to 6, the Chrome test of the first launch.
 5. Phone pairing step, the end, polish, accessibility checks.
 
-## Open questions for the maintainer
+## Decisions of the maintainer (2026-11-14)
+
+The four questions are answered; the original text is kept so that the reasons stay readable.
+
+1. **Trigger**: the guide is shown **after the first installation on a new machine**.
+2. **Installing Ollama from the page**: **kept, but framed** (a confirmation that shows the size, the right `local`, refused in strict offline mode, never without the click), as Lutin does today.
+3. **Wording of the verdicts**: not discussed; the server has four levels (`comfortable`, `good`, `tight`, `too_big`) and the proposal stands: « very comfortable », « fits », « tight », « too big for this machine ». To change by one commit if wanted.
+4. **Speed test** after the first download: **yes, but fast and behind a yes/no option.**
+
+## The original questions
 
 1. **Trigger**: show the guide when no model is installed only, or also once for existing installations that never saw it?
 2. **Installing Ollama from the page**: offer it (with the confirmation), or only explain and link to the official site? The first is friendlier, the second never runs a downloaded program.

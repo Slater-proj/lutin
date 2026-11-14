@@ -13,16 +13,22 @@ re-implements them. A machine leading a conversation through the relay cannot re
 from __future__ import annotations
 
 import json
+import os
 import re
 import urllib.parse
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from . import core as _m
+from . import hardware as _hardware
+from . import health as _health
 from . import attachments as _pieces
 from . import i18n as _i18n
 from . import images as _images
 from . import machines as _machines
 from . import mission as _mission
+from . import model_compat as _model_compat
+from . import model_fit as _model_fit
 from . import offline as _offline
 from . import security as _sec
 from . import storage as _storage
@@ -334,6 +340,109 @@ def delete_model(request):
     """Deletes an installed model. The model in use may be deleted: `current` is the one Lutin switched to, or the same name when there is no other."""
     _m.supprimer_modele(request.params["name"])
     return {"deleted": True, "current": str(_m.reglages().get("modele") or "")}
+
+
+# ----------------------------------------------------------------------------------------------------------- machine and guide
+# What the guided choice of a model needs (docs/modernization/GUIDED_SETUP.md): the machine in plain figures, the catalogue with a verdict for THIS machine, and a recommendation by use.
+# The verdicts come from model_fit and model_compat, never from the page; the editorial notes of the catalogue are estimates, not measures (its own warning, given back as `disclaimer`).
+FIT_LEVELS = {"ideal": "comfortable", "bien": "good", "limite": "tight", "trop_gros": "too_big"}
+CAPABILITIES = {"outils": "tools", "reflexion": "thinking", "vision": "vision"}
+MACHINE_CLASSES = {"sans_gpu": "no_gpu", "petite": "small", "moyenne": "medium", "grande": "large", "tres_grande": "very_large"}
+RUNS_ON = {"gpu": "gpu", "partiel": "partial", "cpu": "cpu"}
+# What a person says they want to do, and the roles of the catalogue that answer it, the best first.
+USES = {"chat": ("polyvalent", "creatif"), "code": ("code", "polyvalent"), "documents": ("polyvalent", "vision"), "unsure": ("polyvalent", "rapide")}
+ROLE_IDS = ("polyvalent", "rapide", "creatif", "code", "vision")
+ROLES_V1 = {"polyvalent": "general", "rapide": "fast", "creatif": "creative", "code": "code", "vision": "images"}
+
+
+def models_folder(engine_running):
+    """The folder the models go to. When the engine answers it says which one it uses; when it does not, asking it would wait for its timeout (2 s, and the first launch is
+    exactly that case), so the folder is the one of the configuration, then the usual place."""
+    if engine_running:
+        return _health.ollama_models_folder()
+    from . import locations
+    return Path(os.environ.get("OLLAMA_MODELS") or locations.lire_config_modeles() or (Path.home() / ".ollama" / "models"))
+
+
+def machine_profile():
+    """The profile of the machine if it is known, else None: the detection (which runs programs) starts in the background and is never waited for here."""
+    return _model_fit.profil_pret()
+
+
+@route("GET", "/machine", SESSION)
+def machine(request):
+    """The machine in figures: `{"detected": false}` while the detection runs (ask again in a second or two), else its processor, memory, graphics cards and disks, and the memory Lutin
+    would let a model fill (`budget_gb`)."""
+    profile = machine_profile()
+    if profile is None:
+        return {"detected": False}
+    return {
+        "detected": True, "system": profile.systeme, "architecture": profile.architecture, "cpu": profile.cpu, "cores": profile.coeurs,
+        "ram_gb": profile.ram_go, "ram_free_gb": profile.ram_libre_go or None,
+        "gpus": [{"name": gpu.nom, "vendor": gpu.fabricant, "memory_gb": gpu.vram_go, "free_gb": gpu.libre_go or None, "integrated": _hardware.est_integree(gpu)} for gpu in profile.gpus],
+        "disks": [{"path": disk.racine, "free_gb": disk.libre_go, "total_gb": disk.total_go} for disk in profile.disques],
+        "budget_gb": profile.budget_go(), "class": MACHINE_CLASSES.get(profile.classe(), profile.classe()), "summary": profile.resume(),
+    }
+
+
+def _catalog_entry(model, profile, engine, installed):
+    fit = _model_fit.evaluer(model, profile) if profile is not None else None
+    compatibility = _model_compat.evaluer(model, engine, installed)
+    return {
+        "id": model["id"], "name": model["nom"], "summary": model["phrase"], "size_gb": model["go"], "parameters_b": model["params_b"], "active_parameters_b": model["actifs_b"],
+        "context_max": model["ctx_max"], "capabilities": [CAPABILITIES.get(item, item) for item in model.get("capacites") or []], "licence": model["licence"],
+        "roles": {ROLES_V1.get(role, role): note for role, note in (model.get("notes") or {}).items()}, "advanced": bool(model.get("avance")), "warning": model.get("avertissement", ""),
+        "installed": model["id"] in installed,
+        "fit": None if fit is None else {"level": FIT_LEVELS.get(fit["niveau"], fit["niveau"]), "text": fit["texte"]},
+        "compatibility": {"compatible": compatibility["compatible"], "reasons": compatibility["raisons"], "warnings": compatibility["avertissements"], "memory_gb": compatibility["memoire_go"]},
+    }
+
+
+@route("GET", "/models/catalog", SESSION)
+def models_catalog(request):
+    """The catalogue with, for each model, a verdict for this machine (`fit`, null until the machine is detected) and for the engine in use (`compatibility`).
+    The models marked advanced are left out unless `?advanced=1`."""
+    profile, engine, state = machine_profile(), _m.moteur_actuel(), _m.etat_moteur()          # the state of the engine once: it waits 2 s when the engine does not answer
+    installed = set(state["installes"])
+    advanced = request.query.get("advanced") == "1"
+    models = [_catalog_entry(model, profile, engine, installed) for model in _m._CATALOGUE["modeles"] if advanced or not model.get("avance")]
+    return {"detected": profile is not None, "disclaimer": _m._CATALOGUE.get("avertissement", ""), "models": models}
+
+
+@route("GET", "/models/recommendation", SESSION)
+def models_recommendation(request):
+    """What to download for a use: `?use=chat|code|documents|unsure`. The model that fits this machine and this engine best, why, the other fitting choices, and what the download would cost
+    in disk space. Nothing is downloaded: the page asks for a confirmation that shows these figures, then calls `POST /models`."""
+    use = request.query.get("use", "unsure")
+    if use not in USES:
+        raise ApiError(400, "invalid_request", _t("Valeur invalide pour « {} » (attendu : {}).").format("use", ", ".join(USES)))
+    profile = machine_profile()
+    if profile is None:
+        return {"detected": False, "use": use}
+    engine, state = _m.moteur_actuel(), _m.etat_moteur()
+    installed = set(state["installes"])
+    chosen = _model_compat.roles_pour(profile, _m._CATALOGUE, engine, installed)
+
+    def described(role, choice):
+        entry = _catalog_entry(choice.modele, profile, engine, installed)
+        return {"role": ROLES_V1.get(role, role), "model": entry, "context_tokens": choice.num_ctx, "memory_gb": choice.memoire_go, "runs_on": RUNS_ON.get(choice.tient, choice.tient)}
+    main_role = next((role for role in USES[use] if chosen.get(role)), None)
+    main = chosen.get(main_role) if main_role else None
+    others, seen = [], {main.id} if main else set()
+    for role in ROLE_IDS:
+        choice = chosen.get(role)
+        if choice and choice.id not in seen:
+            seen.add(choice.id)
+            others.append(described(role, choice))
+    to_download = [main.id] if main and main.id not in installed else []
+    space = _health.disk_space(models_folder(bool(state["actif"])))
+    free_gb = round(space["libre"] / _health.GB, 1) if space else None
+    size_gb = round(main.modele["go"], 1) if to_download else 0.0
+    return {
+        "detected": True, "use": use, "recommended": described(main_role, main) if main else None, "alternatives": others,
+        "download": {"models": to_download, "size_gb": size_gb, "free_gb": free_gb, "fits_on_disk": None if free_gb is None else size_gb <= free_gb},
+        "engine": {"id": engine.id, "name": engine.nom, "running": bool(state["actif"])}, "offline": bool(_offline.is_active()),
+    }
 
 
 # --------------------------------------------------------------------------------------------------------- conversations

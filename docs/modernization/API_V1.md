@@ -103,6 +103,21 @@ An upload over its limit is read, thrown away and answered `413 too_large`. The 
 `GET /api/v1/images/{id}` gives the image back. It is the one route with the right **`read`**: a session is enough and the page token is not asked, because a browser tag (`<img>`) sends the cookie and cannot send a header.
 The right is for a `GET` only (declared in `route()`, tested), and a test lists the routes that have it. Stored messages keep the shape of the chat format: `images` is a list of identifiers and `pieces` a list of `{"id", "nom"}`.
 
+## Machine and guided choice
+
+Three read-only routes, the first pieces of the guided choice of a model ([GUIDED_SETUP.md](GUIDED_SETUP.md)); contract in `tests/test_api_v1_guide.py`, on a fictive machine.
+
+- `GET /api/v1/machine`: `{"detected": false}` while the detection runs (it starts programs, so it is never waited for: ask again in a second or two), else `cpu`, `cores`, `ram_gb`, `gpus`
+  (`name`, `vendor`, `memory_gb`, `integrated`), `disks`, `budget_gb` (what a model may fill), `class` (`no_gpu`, `small`, `medium`, `large`, `very_large`) and a `summary` sentence.
+- `GET /api/v1/models/catalog` (`?advanced=1` adds the advanced models): each model with its figures, `capabilities` (`tools`, `thinking`, `vision`), `roles` (editorial notes, 1 to 10),
+  `fit` for **this machine** (`level`: `comfortable`, `good`, `tight` or `too_big`, with a `text`; null until the machine is detected), `compatibility` with the engine in use, and `installed`.
+  The `disclaimer` of the catalogue says its notes are estimates, not measures: the page shows it.
+- `GET /api/v1/models/recommendation?use=chat|code|documents|unsure`: the model that fits this machine and this engine best (`recommended`: the same entry as the catalogue, `context_tokens`, `memory_gb`,
+  `runs_on`: `gpu`, `partial` or `cpu`), the other fitting choices (`alternatives`), and `download`: the models still to fetch, their size, the free space of the disk they go to and whether it fits
+  (null when the disk cannot be reached). It also gives the engine state and whether strict offline mode is on. **It downloads nothing**: the page shows these figures, asks for a confirmation, then calls `POST /models`.
+
+The verdicts are computed by the server (`model_fit`, `model_compat`) and never by the page. Not done yet: the manual correction of the machine, and the English text of the catalogue (summaries and families are French only).
+
 ## Models
 
 `GET /api/v1/models` gives what the model selector needs: `engine`, `running`, `current`, `models` (`[{"name", "size_bytes"}]`, the size may be null) and

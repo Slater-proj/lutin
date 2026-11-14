@@ -71,12 +71,27 @@
  },
  {
   "method": "GET",
+  "path": "/api/v1/machine",
+  "right": "session"
+ },
+ {
+  "method": "GET",
   "path": "/api/v1/models",
   "right": "session"
  },
  {
   "method": "POST",
   "path": "/api/v1/models",
+  "right": "session"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/models/catalog",
+  "right": "session"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/models/recommendation",
   "right": "session"
  },
  {
