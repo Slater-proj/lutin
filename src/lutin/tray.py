@@ -134,7 +134,7 @@ def preparer(dossiers, cfg):
         return cfg
     from . import config
     subprocess.run([python_console(), "-m", "lutin", "setup"], creationflags=CREATE_NEW_CONSOLE)
-    cfg = config.charger(dossiers)
+    cfg = config.load(dossiers)
     return cfg if cfg.get("installe") else None
 
 

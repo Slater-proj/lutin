@@ -89,7 +89,7 @@ class Attachments(unittest.TestCase):
             status, answer, _ = self.upload(data, name)
             self.assertEqual((status, answer["error"]["code"]), (400, "invalid_request"), name)
         self.assertEqual(self.upload(b"text", "a.txt", V.ELSEWHERE)[0], 401)
-        status, answer, _ = send("/api/v1/attachments", b"x" * (api_v1._pieces.TAILLE_MAX + 1), {"X-Name": "big.txt"})
+        status, answer, _ = send("/api/v1/attachments", b"x" * (api_v1._pieces.MAX_SIZE + 1), {"X-Name": "big.txt"})
         self.assertEqual((status, answer["error"]["code"]), (413, "too_large"))
 
 

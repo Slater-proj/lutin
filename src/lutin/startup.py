@@ -8,9 +8,9 @@ from . import config, hardware, updates, ollama_client, security, workspaces
 from .i18n import t as _t
 
 
-def preparer_environnement(cfg, dossiers):
+def prepare_environment(cfg, dossiers):
     """Fixe l'environnement lu par le moteur AVANT son import (il lit ces variables au chargement)."""
-    config.preparer(dossiers)
+    config.prepare(dossiers)
     actif = workspaces.actif(cfg)
     travail = Path(actif["chemin"] if actif else Path.home() / "Lutin")
     travail.mkdir(parents=True, exist_ok=True)
@@ -27,18 +27,18 @@ def preparer_environnement(cfg, dossiers):
     return travail
 
 
-def s_assurer_qu_ollama_tourne(cfg, profil, ecrire=print):
+def ensure_ollama_runs(cfg, profil, ecrire=print):
     """Démarre Ollama s'il est installé mais arrêté. Renvoie True s'il répond."""
     o = ollama_client.Ollama()
     if o.actif():
         return True
-    exe = ollama_client.trouver_executable(config.systeme())
+    exe = ollama_client.trouver_executable(config.system_info())
     if not exe:
         if not os.environ.get("LUTIN_DOCKER"):          # Docker : normal au premier lancement, la page propose d'installer un moteur
             ecrire(_t("Ollama n'est pas installé : lance « lutin setup »."))
         return False
     from . import locations
-    ollama_client.demarrer_serveur(exe, ollama_client.variables_serveur(profil, cfg["emplacements"]["modeles"] or os.environ.get("OLLAMA_MODELS") or locations.seen_folder()), config.systeme())
+    ollama_client.demarrer_serveur(exe, ollama_client.variables_serveur(profil, cfg["emplacements"]["modeles"] or os.environ.get("OLLAMA_MODELS") or locations.seen_folder()), config.system_info())
     import time
     for _ in range(30):
         if o.actif():
@@ -48,12 +48,12 @@ def s_assurer_qu_ollama_tourne(cfg, profil, ecrire=print):
     return False
 
 
-def lancer_serveur(cfg, dossiers, ouvrir_navigateur=True, ecrire=print):
+def start_server(cfg, dossiers, ouvrir_navigateur=True, ecrire=print):
     profil = hardware.detecter()
-    preparer_environnement(cfg, dossiers)
+    prepare_environment(cfg, dossiers)
     if not ouvrir_navigateur:
         os.environ["LUTIN_SANS_NAVIGATEUR"] = "1"
-    s_assurer_qu_ollama_tourne(cfg, profil, ecrire)
+    ensure_ollama_runs(cfg, profil, ecrire)
     from . import core
     core.SECURITE = security.Securite.depuis_dict(cfg["securite"])
     core.PORT = int(cfg["securite"]["port"])
@@ -61,7 +61,7 @@ def lancer_serveur(cfg, dossiers, ouvrir_navigateur=True, ecrire=print):
 
     def verifier_a_la_demande(portee):
         """Boutons de l'onglet Modèles : la configuration est relue à chaque fois (les propositions refusées entre-temps comptent)."""
-        return updates.verifier(profil, config.charger(dossiers), dossiers, ollama_client.Ollama(), force=True, portee=portee)
+        return updates.verifier(profil, config.load(dossiers), dossiers, ollama_client.Ollama(), force=True, portee=portee)
     core.VERIFICATEUR = verifier_a_la_demande
     if cfg.get("verifier_maj", True):
         def verification():
@@ -85,9 +85,9 @@ def lancer_serveur(cfg, dossiers, ouvrir_navigateur=True, ecrire=print):
             while True:
                 try:
                     from . import engine_updates
-                    engine_updates.en_arriere_plan()
+                    engine_updates.in_background()
                     from . import engine_catalog
-                    engine_catalog.en_arriere_plan(config.charger(dossiers).get("catalogue_moteurs_url"))
+                    engine_catalog.en_arriere_plan(config.load(dossiers).get("catalogue_moteurs_url"))
                 except Exception:  # noqa: BLE001 — jamais bloquant, jamais bruyant
                     pass
                 time.sleep(6 * 3600)

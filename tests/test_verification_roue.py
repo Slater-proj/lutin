@@ -128,7 +128,7 @@ class DansLaMiseAJour(unittest.TestCase):
     def test_une_somme_fausse_n_installe_rien(self):
         appels = []
         sorties, erreurs = [], []
-        with mock.patch.object(cli.config, "lire_source", lambda: "github:Slater-proj/lutin"), mock.patch.object(cli, "__version__", "1.0.0"), \
+        with mock.patch.object(cli.config, "read_source", lambda: "github:Slater-proj/lutin"), mock.patch.object(cli, "__version__", "1.0.0"), \
                 mock.patch.object(cli.updates, "derniere_release", lambda depot: ("1.2.3", URL)), mock.patch.object(cli, "sauvegarde_avant_mise_a_jour", lambda dire=None: None), \
                 mock.patch.object(cli.updates, "telecharger_roue_verifiee", side_effect=m.ErreurVerification("somme fausse")), \
                 mock.patch.object(cli.subprocess, "run", lambda c, **k: appels.append(c)):

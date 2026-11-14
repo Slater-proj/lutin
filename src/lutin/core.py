@@ -691,14 +691,14 @@ def chemin_config():
 
 def config_lue():
     c = chemin_config()
-    return _config.migrer(lire_json(c, {})) if c else _config.migrer({})
+    return _config.migrate_config(lire_json(c, {})) if c else _config.migrate_config({})
 
 
 def config_ecrire(cfg):
     c = chemin_config()
     if not c:
         raise ValueError("Pas de fichier de configuration.")
-    _config.enregistrer({"config": c.parent}, cfg)
+    _config.save({"config": c.parent}, cfg)
 
 
 def dossiers_de_lutin():

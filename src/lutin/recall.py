@@ -269,10 +269,10 @@ def thread_passages(ident, question, nombre=3, min_termes=1):
         return []
     termes = set(words(question[:900]))
     par_mots = rank_chunks(morceaux, df, moyenne, len(morceaux), termes, 8, min_termes) if termes else []
-    sims = _embeddings.similarites(ident, morceaux, question[:900])
+    sims = _embeddings.similarities(ident, morceaux, question[:900])
     if not sims:
         return par_mots[:nombre]
-    par_sens = sorted(((s, i) for i, s in sims.items() if s >= _embeddings.SEUIL), reverse=True)[:8]
+    par_sens = sorted(((s, i) for i, s in sims.items() if s >= _embeddings.THRESHOLD), reverse=True)[:8]
     rangs = {}
     for r, p in enumerate(par_mots):
         rangs.setdefault(id(p["m"]), [p["m"], p, 0.0])[2] += 1.0 / (60 + r)

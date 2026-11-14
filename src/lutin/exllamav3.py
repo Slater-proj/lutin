@@ -45,7 +45,7 @@ PYTHON_MIN, PYTHON_MAX = (3, 10), (3, 14)
 
 def dossier(dossiers=None):
     from . import docker_engines
-    return docker_engines.base_moteurs((dossiers or colibri.config.dossiers())["donnees"]) / "exllamav3"
+    return docker_engines.base_moteurs((dossiers or colibri.config.folders())["donnees"]) / "exllamav3"
 
 
 def dossier_modeles(dossiers=None):

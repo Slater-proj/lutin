@@ -154,7 +154,7 @@ class Completude(unittest.TestCase):
 
     def test_les_constantes_de_niveau_module_sont_traduites(self):
         from lutin import terminal_chat, setup_wizard, core
-        for texte in (cli.AIDE_GENERALE, terminal_chat.AIDE, setup_wizard.AVERTISSEMENT_RESEAU, setup_wizard.AVERTISSEMENT_PROXY, *core.TEXTES_PAGE_CONNEXION):
+        for texte in (cli.AIDE_GENERALE, terminal_chat.HELP, setup_wizard.AVERTISSEMENT_RESEAU, setup_wizard.AVERTISSEMENT_PROXY, *core.TEXTES_PAGE_CONNEXION):
             self.assertIn(texte, self.dico, texte[:60])
         for _, titre, detail in setup_wizard.NIVEAUX_TEXTE.values():
             self.assertIn(titre, self.dico)
@@ -253,7 +253,7 @@ class LigneDeCommandeEnAnglais(unittest.TestCase):
         code, sortie = self.lancer("langue", "fr")
         self.assertEqual(code, 0, sortie)
         self.assertIn("Langue : Français", sortie)
-        self.assertEqual(config.charger(config.dossiers())["langue"], "fr")
+        self.assertEqual(config.load(config.folders())["langue"], "fr")
         self.assertIn("cette machine seulement", self.lancer("securite")[1])
         code, sortie = self.lancer("langue", "en")
         self.assertIn("Language: English", sortie)

@@ -120,7 +120,7 @@ def piece_lire(piece_id, nom):
     """(octets, type MIME, nom) d'une pièce jointe, pour la télécharger de nouveau sous son vrai nom."""
     from . import attachments
     p = attachments.chemin(piece_id)
-    nom = attachments.nom_propre(nom) if nom else p.name
+    nom = attachments.clean_name(nom) if nom else p.name
     return p.read_bytes(), mimetypes.guess_type(nom)[0] or "application/octet-stream", nom
 
 
@@ -129,7 +129,7 @@ def piece_ouvrir(piece_id, nom):
     import shutil
     from . import attachments
     p = attachments.chemin(piece_id)
-    nom = attachments.nom_propre(nom) if nom else p.name
+    nom = attachments.clean_name(nom) if nom else p.name
     if Path(nom).suffix.lower() not in OUVRABLES:
         raise ValueError(_t("Ce type de fichier ne s'ouvre pas d'ici (seuls les documents et les médias le permettent) : ouvre-le depuis son dossier."))
     cible = _m.DONNEES / "pieces-ouvertes" / piece_id.split(".")[0][:10] / nom

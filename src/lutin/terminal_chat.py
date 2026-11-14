@@ -4,7 +4,7 @@ import sys
 from .client import ErreurClient
 from .i18n import t as _t
 
-AIDE = """Commandes :
+HELP = """Commandes :
   /aide                 cette aide
   /nouvelle             nouvelle conversation
   /liste                tes conversations récentes
@@ -16,9 +16,9 @@ AIDE = """Commandes :
 Pendant une réponse : Ctrl+C l'arrête (ce qui est déjà fait est gardé)."""
 
 
-ALIAS_MODES = {"polyvalent": "polyvalent", "travail": "technique", "code": "technique", "technique": "technique", "ecriture": "scenario", "écriture": "scenario", "scenario": "scenario",
+MODE_ALIASES = {"polyvalent": "polyvalent", "travail": "technique", "code": "technique", "technique": "technique", "ecriture": "scenario", "écriture": "scenario", "scenario": "scenario",
                "recherche": "recherche", "discussion": "discussion"}
-NOMS_MODES = {"polyvalent": "polyvalent", "technique": "travail", "scenario": "écriture", "recherche": "recherche", "discussion": "discussion"}
+MODE_NAMES = {"polyvalent": "polyvalent", "technique": "travail", "scenario": "écriture", "recherche": "recherche", "discussion": "discussion"}
 
 
 class Terminal:
@@ -85,7 +85,7 @@ class Terminal:
         if mot in ("quitter", "q", "exit"):
             return False
         if mot == "aide":
-            self.ecrire(_t(AIDE))
+            self.ecrire(_t(HELP))
         elif mot == "nouvelle":
             self.conversation = ""
             self.ecrire("Nouvelle conversation.")
@@ -104,11 +104,11 @@ class Terminal:
                 self.client.envoyer("/api/reglages", {"modele": arg})
             self.ecrire(_t("Modèle : ") + self.client.obtenir("/api/etat")["reglages"]["modele"])
         elif mot == "mode":
-            if arg in ALIAS_MODES:
-                self.options["mode"] = ALIAS_MODES[arg]
+            if arg in MODE_ALIASES:
+                self.options["mode"] = MODE_ALIASES[arg]
             elif arg:
                 self.ecrire(_t("Modes : polyvalent, travail, écriture, recherche, discussion."))
-            self.ecrire(_t("Mode : ") + _t(NOMS_MODES[self.options["mode"]]))
+            self.ecrire(_t("Mode : ") + _t(MODE_NAMES[self.options["mode"]]))
         elif mot == "reflexion":
             self.options["reflexion"] = not self.options["reflexion"]
             self.ecrire(_t("Réflexion : ") + (_t("activée") if self.options["reflexion"] else _t("coupée")))

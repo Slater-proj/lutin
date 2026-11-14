@@ -277,7 +277,7 @@ def lancer_tache(moteur, action, executer=None, synchrone=False):
                 TACHES[moteur.id].update({"statut": "termine", "resultat": TACHES[moteur.id].get("dernier", ""), "texte": "", "fait": 0, "total": 0, "fin": time.time()})
             try:
                 from . import engine_updates
-                engine_updates.oublier(moteur.id)          # la version installée a peut-être changé : le prochain contrôle refera le constat
+                engine_updates.forget(moteur.id)          # la version installée a peut-être changé : le prochain contrôle refera le constat
             except Exception:  # noqa: BLE001  (sans importance pour la tâche)
                 pass
         except Exception as erreur:  # noqa: BLE001  (l'échec est montré dans la page, jamais une trace)

@@ -202,8 +202,8 @@ def parseur():
 
 
 def contexte():
-    d = config.dossiers()
-    return d, config.charger(d)
+    d = config.folders()
+    return d, config.load(d)
 
 
 def commande_setup(args, es=None):
@@ -255,7 +255,7 @@ def commande_serve(args):
         d, cfg = contexte()
     sans_navigateur = getattr(args, "sans_navigateur", False)
     if getattr(args, "sans_superviseur", False):
-        startup.lancer_serveur(cfg, d, ouvrir_navigateur=not sans_navigateur)
+        startup.start_server(cfg, d, ouvrir_navigateur=not sans_navigateur)
         return 0
     return superviser(lambda premiere: lancer_enfant(sans_navigateur or not premiere))          # le navigateur ne s'ouvre qu'au premier démarrage, pas à chaque relance
 
@@ -267,10 +267,10 @@ def sauvegarde_avant_mise_a_jour(dire=print):
     """Une sauvegarde des données avant de changer de version : on ne perd rien si la nouvelle version se comporte mal (voir « lutin restore »). Les trois dernières sont gardées.
     Ne bloque jamais la mise à jour : si la sauvegarde échoue, on le dit et on continue. Renvoie le chemin du fichier, ou None."""
     try:
-        dossier = Path(config.dossiers()["cache"]) / "avant-mise-a-jour"
+        dossier = Path(config.folders()["cache"]) / "avant-mise-a-jour"
         dossier.mkdir(parents=True, exist_ok=True)
         fichier = dossier / "lutin-{}-{}.zip".format(__version__, time.strftime("%Y%m%d-%H%M%S"))
-        backup.export(config.dossiers(), fichier)
+        backup.export(config.folders(), fichier)
         for ancien in sorted(dossier.glob("lutin-*.zip"), key=lambda p: p.stat().st_mtime)[:-AVANT_MAJ_GARDEES]:
             ancien.unlink(missing_ok=True)
         dire(_t("Sauvegarde de tes données avant la mise à jour : {}").format(fichier))
@@ -286,7 +286,7 @@ def mise_a_jour_detaillee(dire=print, erreur=None, capturer=False, revenir_a=Non
     `revenir_a` : un numéro de version publiée (« 0.22.0 ») à réinstaller à la place de la dernière (retour arrière).
     Renvoie (code de sortie, version avant, version après) ; « après » vaut None si rien n'a été installé."""
     erreur = erreur or (lambda texte: print(texte, file=sys.stderr))
-    source = config.lire_source()
+    source = config.read_source()
     if not source:
         dire(_t("Lutin ne sait pas d'où se mettre à jour (installé à la main ?). Relance le script d'installation, ou : python -m pip install --upgrade <source>"))
         return 0, __version__, None
@@ -346,7 +346,7 @@ def commande_update(args):
     """Met à jour Lutin lui-même (avec la source mémorisée par l'installateur) puis cherche des mises à jour de modèles. Ne change rien si tout est à jour."""
     tout = not (args.app or args.modeles)
     code = 0
-    if (args.app or tout) and offline.is_active(Path(config.dossiers()["config"]) / "config.json"):
+    if (args.app or tout) and offline.is_active(Path(config.folders()["config"]) / "config.json"):
         print(_t("Mode hors ligne strict : Lutin n'est pas mis à jour (lutin offline off pour le permettre)."))
     elif getattr(args, "revenir_a", None):
         code = mettre_a_jour_lutin(args.revenir_a)
@@ -501,15 +501,15 @@ def commande_travaux(args):
     try:
         if args.action == "ajouter":
             t = workspaces.ajouter(cfg, args.valeur, args.nom, interdits)
-            config.enregistrer(d, cfg)
+            config.save(d, cfg)
             print(_t("✔ Dossier de travail « {} » : {}").format(t["nom"], t["chemin"]))
         elif args.action == "retirer":
             workspaces.retirer(cfg, args.valeur or "")
-            config.enregistrer(d, cfg)
+            config.save(d, cfg)
             print(_t("✔ Retiré de la liste (les fichiers ne sont pas touchés)."))
         elif args.action == "actif":
             t = workspaces.choisir(cfg, args.valeur or "")
-            config.enregistrer(d, cfg)
+            config.save(d, cfg)
             print(_t("✔ Dossier actif : {} ({})").format(t["nom"], t["chemin"]))
             print(_t("Si Lutin tourne déjà, choisis aussi ce dossier dans l'interface (ou relance Lutin)."))
     except workspaces.ErreurTravail as e:
@@ -711,7 +711,7 @@ def commande_securite(args):
     d, cfg = contexte()
     if getattr(args, "admin_distance", None):
         cfg["admin_a_distance"] = args.admin_distance == "on"
-        config.enregistrer(d, cfg)
+        config.save(d, cfg)
         print(_t("✔ Administration à distance {}.").format(_t("ouverte") if cfg["admin_a_distance"] else _t("fermée")))
     s = security.Securite.depuis_dict(cfg["securite"])
     texte = {security.LOCAL: _t("cette machine seulement"), security.RESEAU: _t("réseau local (code PIN)"), security.PROXY: _t("derrière un proxy")}[s.niveau]
@@ -789,7 +789,7 @@ def commande_importer(args, entree=input):
         interdits = [d["config"], d["donnees"], d["memoire"], d["cache"]]
         t = workspaces.ajouter(cfg, str(cible), args.nom or source.name, interdits)
         workspaces.choisir(cfg, t["id"])
-        config.enregistrer(d, cfg)
+        config.save(d, cfg)
     except ValueError as e:
         print("✘ " + str(e), file=sys.stderr)
         return 2
@@ -904,7 +904,7 @@ def utf8():
 def principal(argv=None):
     utf8()
     args = parseur().parse_args(argv)
-    os.environ["LUTIN_CONFIG"] = str(Path(config.dossiers()["config"]) / "config.json")          # les gardes (mode hors ligne…) lisent la configuration de cette installation
+    os.environ["LUTIN_CONFIG"] = str(Path(config.folders()["config"]) / "config.json")          # les gardes (mode hors ligne…) lisent la configuration de cette installation
     commandes = {"setup": commande_setup, "serve": commande_serve, "update": commande_update, "chat": commande_chat, "modeles": commande_modeles, "pin": commande_pin,
                  "appareils": commande_appareils, "securite": commande_securite, "langue": commande_langue, "importer": commande_importer, "reprendre": commande_reprendre, "hors-ligne": commande_hors_ligne,
                  "travaux": commande_travaux, "journal": commande_journal, "bench": commande_bench, "sauvegarde": commande_sauvegarde, "restaurer": commande_restaurer, "doctor": commande_doctor, "demarrage-auto": commande_demarrage_auto, "zone": commande_zone, "mcp": commande_mcp, "essai-moteur": commande_essai_moteur, "bench-moteurs": commande_bench_moteurs, "colibri": commande_colibri}

@@ -12,28 +12,28 @@ from . import text_extraction
 from . import core as _m
 from .i18n import t as _t
 
-TAILLE_MAX = 20 * 1024 * 1024
-PAR_MESSAGE = 5
-RECENTS = 6                 # le texte des pièces n'est renvoyé au modèle que pour les derniers messages : les anciennes alourdiraient chaque réponse pour rien
-PART_DU_CONTEXTE = 0.5      # au plus la moitié de la fenêtre de contexte pour les pièces d'une demande
-CARACTERES_PAR_JETON = 3
-PARTIE_MIN = 2000           # chaque pièce garde au moins ce début, même si elles sont nombreuses
-EXT_TEXTE = {".txt", ".md", ".markdown", ".rst", ".csv", ".tsv", ".json", ".jsonl", ".xml", ".yaml", ".yml", ".toml", ".ini", ".cfg", ".conf", ".log", ".srt", ".vtt", ".tex",
+MAX_SIZE = 20 * 1024 * 1024
+PER_MESSAGE = 5
+RECENT = 6                 # le texte des pièces n'est renvoyé au modèle que pour les derniers messages : les anciennes alourdiraient chaque réponse pour rien
+CONTEXT_SHARE = 0.5      # au plus la moitié de la fenêtre de contexte pour les pièces d'une demande
+CHARS_PER_TOKEN = 3
+MIN_PART = 2000           # chaque pièce garde au moins ce début, même si elles sont nombreuses
+TEXT_EXTENSIONS = {".txt", ".md", ".markdown", ".rst", ".csv", ".tsv", ".json", ".jsonl", ".xml", ".yaml", ".yml", ".toml", ".ini", ".cfg", ".conf", ".log", ".srt", ".vtt", ".tex",
              ".py", ".js", ".mjs", ".ts", ".tsx", ".jsx", ".css", ".scss", ".c", ".h", ".cpp", ".hpp", ".cs", ".java", ".kt", ".go", ".rs", ".rb", ".php", ".sh", ".bat", ".cmd", ".ps1", ".sql", ".r", ".lua", ".swift"}
 RE_ID = re.compile(r"^[0-9a-f]{20}\.[a-z0-9]{1,8}$")
 
 
-def dossier():
+def folder():
     return _m.DONNEES / "pieces"
 
 
-def nom_propre(nom):
+def clean_name(nom):
     """Le nom affiché : sans chemin, sans caractère de contrôle, 120 caractères au plus."""
     nom = re.sub(r"[\x00-\x1f\x7f]", "", str(nom or "")).replace("\\", "/").rsplit("/", 1)[-1].strip()
     return nom[:120] or _t("fichier")
 
 
-def decoder(octets):
+def decode(octets):
     """Le texte d'un fichier texte, ou None si c'est du binaire (octets nuls, ou trop de caractères de contrôle)."""
     if b"\x00" in octets[:8192]:
         return None
@@ -47,49 +47,49 @@ def decoder(octets):
     return None
 
 
-def extension(nom, octets):
+def extension_of(nom, octets):
     """L'extension retenue pour le fichier gardé, ou None si ce n'est ni un document connu ni du texte."""
     ext = Path(nom).suffix.lower()
-    if ext in text_extraction.FORMATS or ext in EXT_TEXTE:
+    if ext in text_extraction.FORMATS or ext in TEXT_EXTENSIONS:
         return ext
-    return ".txt" if decoder(octets) is not None else None
+    return ".txt" if decode(octets) is not None else None
 
 
-def texte_de_fichier(chemin, ext):
-    if ext in EXT_TEXTE or ext == ".txt":
-        t = decoder(Path(chemin).read_bytes())
+def file_text(chemin, ext):
+    if ext in TEXT_EXTENSIONS or ext == ".txt":
+        t = decode(Path(chemin).read_bytes())
         if t is None:
             raise text_extraction.ErreurExtraction(_t("Ce fichier n'est pas du texte lisible."))
         return t.strip()
     return text_extraction.texte(chemin)
 
 
-def enregistrer(octets, nom):
+def save(octets, nom):
     """(identifiant, nom affiché, nombre de caractères) ; ValueError si le fichier est vide, trop gros, d'un format inconnu ou illisible."""
     if not octets:
         raise ValueError(_t("Fichier vide."))
-    if len(octets) > TAILLE_MAX:
-        raise ValueError(_t("Fichier trop gros ({} Mo au plus).").format(TAILLE_MAX // (1024 * 1024)))
-    nom = nom_propre(nom)
-    ext = extension(nom, octets)
+    if len(octets) > MAX_SIZE:
+        raise ValueError(_t("Fichier trop gros ({} Mo au plus).").format(MAX_SIZE // (1024 * 1024)))
+    nom = clean_name(nom)
+    ext = extension_of(nom, octets)
     if ext is None:
         raise ValueError(_t("Format non géré : « {} ». Joins un PDF, un document Word, LibreOffice, PowerPoint ou Excel, une page HTML, une image, ou un fichier texte.").format(Path(nom).suffix or nom))
     ident = hashlib.sha256(octets).hexdigest()[:20] + ext
-    f = dossier() / ident
+    f = folder() / ident
     if not f.is_file():
-        dossier().mkdir(parents=True, exist_ok=True)
+        folder().mkdir(parents=True, exist_ok=True)
         tmp = f.with_suffix(f.suffix + ".tmp")
         tmp.write_bytes(octets)
         tmp.replace(f)
     try:
-        texte = lire_texte(ident)
+        texte = read_text(ident)
     except text_extraction.ErreurExtraction as erreur:
         f.unlink(missing_ok=True)
-        (dossier() / (ident + ".texte")).unlink(missing_ok=True)
+        (folder() / (ident + ".texte")).unlink(missing_ok=True)
         raise ValueError(str(erreur)) from erreur
     if not texte.strip():
         f.unlink(missing_ok=True)
-        (dossier() / (ident + ".texte")).unlink(missing_ok=True)
+        (folder() / (ident + ".texte")).unlink(missing_ok=True)
         raise ValueError(_t("Aucun texte lisible dans « {} » (un PDF scanné ne contient que des images).").format(nom))
     return ident, nom, len(texte)
 
@@ -97,22 +97,22 @@ def enregistrer(octets, nom):
 def chemin(ident):
     if not RE_ID.match(str(ident or "")):
         raise ValueError(_t("Fichier joint inconnu."))
-    f = dossier() / ident
+    f = folder() / ident
     if not f.is_file():
         raise ValueError(_t("Fichier joint inconnu."))
     return f
 
 
-def lire_texte(ident):
+def read_text(ident):
     """Le texte extrait de la pièce (extrait une fois, gardé à côté)."""
     f = chemin(ident)
-    cache = dossier() / (ident + ".texte")
+    cache = folder() / (ident + ".texte")
     try:
         if cache.is_file() and cache.stat().st_mtime >= f.stat().st_mtime:
             return cache.read_text(encoding="utf-8")
     except OSError:
         pass
-    texte = texte_de_fichier(f, f.suffix.lower())
+    texte = file_text(f, f.suffix.lower())
     try:
         cache.write_text(texte, encoding="utf-8")
     except OSError:
@@ -120,28 +120,28 @@ def lire_texte(ident):
     return texte
 
 
-def verifier_liste(pieces):
+def check_list(pieces):
     """Liste [{id, nom}] nettoyée (au plus PAR_MESSAGE) ; ValueError si une pièce n'existe pas."""
     sortie = []
     for p in pieces or []:
         if not isinstance(p, dict):
             raise ValueError(_t("Fichier joint inconnu."))
         chemin(p.get("id"))
-        sortie.append({"id": p["id"], "nom": nom_propre(p.get("nom"))})
-    if len(sortie) > PAR_MESSAGE:
-        raise ValueError(_t("{} fichiers au plus par message.").format(PAR_MESSAGE))
+        sortie.append({"id": p["id"], "nom": clean_name(p.get("nom"))})
+    if len(sortie) > PER_MESSAGE:
+        raise ValueError(_t("{} fichiers au plus par message.").format(PER_MESSAGE))
     return sortie
 
 
-def budget_caracteres(num_ctx):
-    return int(num_ctx * PART_DU_CONTEXTE * CARACTERES_PAR_JETON)
+def character_budget(num_ctx):
+    return int(num_ctx * CONTEXT_SHARE * CHARS_PER_TOKEN)
 
 
-def pour_le_modele(messages, budget):
+def for_model(messages, budget):
     """Copie des messages où le texte des pièces des derniers messages est ajouté au message de l'utilisateur (borné par `budget` caractères pour toutes les pièces). Les anciennes pièces sont
     seulement nommées. Le contenu enregistré dans la conversation n'est jamais modifié."""
-    recents = [n for n, m in enumerate(messages) if m.get("pieces") and n >= len(messages) - RECENTS]
-    part = max(PARTIE_MIN, budget // max(1, sum(len(messages[n]["pieces"]) for n in recents)))
+    recents = [n for n, m in enumerate(messages) if m.get("pieces") and n >= len(messages) - RECENT]
+    part = max(MIN_PART, budget // max(1, sum(len(messages[n]["pieces"]) for n in recents)))
     sortie = []
     for n, m in enumerate(messages):
         if not m.get("pieces"):
@@ -152,7 +152,7 @@ def pour_le_modele(messages, budget):
         for p in m.pop("pieces"):
             if n in recents:
                 try:
-                    texte = lire_texte(p["id"])
+                    texte = read_text(p["id"])
                 except (ValueError, text_extraction.ErreurExtraction, OSError):
                     blocs.append(_t("[Fichier joint « {} » : devenu illisible]").format(p.get("nom", "")))
                     continue
@@ -167,7 +167,7 @@ def pour_le_modele(messages, budget):
     return sortie
 
 
-def referencees():
+def referenced():
     """Identifiants cités par au moins une conversation."""
     vus = set()
     for c in (_m.DONNEES / "conversations").glob("*.json"):
@@ -176,12 +176,12 @@ def referencees():
     return vus
 
 
-def nettoyer(age_jours=2):
+def clean(age_jours=2):
     """Supprime les pièces que plus aucune conversation ne cite, après un délai. Renvoie le nombre de fichiers supprimés."""
-    if not dossier().is_dir():
+    if not folder().is_dir():
         return 0
-    gardees, limite, n = referencees(), time.time() - age_jours * 86400, 0
-    for f in dossier().iterdir():
+    gardees, limite, n = referenced(), time.time() - age_jours * 86400, 0
+    for f in folder().iterdir():
         base = f.name[:-len(".texte")] if f.name.endswith(".texte") else (f.name[:-len(".tmp")] if f.name.endswith(".tmp") else f.name)
         try:
             if base not in gardees and f.stat().st_mtime < limite:

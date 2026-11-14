@@ -16,61 +16,61 @@ CAT = model_catalog.charger()
 
 class Chemins(unittest.TestCase):
     def test_windows(self):
-        d = config.dossiers({"APPDATA": r"C:\U\AppData\Roaming", "LOCALAPPDATA": r"C:\U\AppData\Local", "USERPROFILE": r"C:\U"}, "windows")
+        d = config.folders({"APPDATA": r"C:\U\AppData\Roaming", "LOCALAPPDATA": r"C:\U\AppData\Local", "USERPROFILE": r"C:\U"}, "windows")
         self.assertEqual(d["config"], Path(r"C:\U\AppData\Roaming") / "Lutin")
         self.assertEqual(d["cache"], Path(r"C:\U\AppData\Local") / "Lutin" / "cache")
         self.assertEqual(d["memoire"].parent, d["config"], "mémoire et données avec la configuration, le cache à part")
 
     def test_linux_respecte_xdg(self):
-        d = config.dossiers({"HOME": "/home/a", "XDG_DATA_HOME": "/d", "XDG_CONFIG_HOME": "/c", "XDG_CACHE_HOME": "/k"}, "linux")
+        d = config.folders({"HOME": "/home/a", "XDG_DATA_HOME": "/d", "XDG_CONFIG_HOME": "/c", "XDG_CACHE_HOME": "/k"}, "linux")
         self.assertEqual((d["config"], d["donnees"], d["cache"]), (Path("/c/lutin"), Path("/d/lutin"), Path("/k/lutin")))
-        d = config.dossiers({"HOME": "/home/a"}, "linux")
+        d = config.folders({"HOME": "/home/a"}, "linux")
         self.assertEqual(d["donnees"], Path("/home/a/.local/share/lutin"))
 
     def test_macos(self):
-        d = config.dossiers({"HOME": "/Users/a"}, "macos")
+        d = config.folders({"HOME": "/Users/a"}, "macos")
         self.assertIn("Application Support", str(d["donnees"]))
 
     def test_mode_portable(self):
-        d = config.dossiers({"LUTIN_HOME": "/portable"}, "windows")
+        d = config.folders({"LUTIN_HOME": "/portable"}, "windows")
         self.assertTrue(all(str(v).replace("\\", "/").startswith("/portable") for v in d.values()))
 
 
 class Configuration(unittest.TestCase):
     def test_fichier_absent_abime_ou_inattendu_donne_les_valeurs_par_defaut(self):
         with tempfile.TemporaryDirectory() as t:
-            d = config.dossiers({"LUTIN_HOME": t})
-            self.assertEqual(config.charger(d), config.DEFAUT)
+            d = config.folders({"LUTIN_HOME": t})
+            self.assertEqual(config.load(d), config.DEFAULTS)
             d["config"].mkdir(parents=True)
             for contenu in ("{pas du json", "[1,2]", "null", '"texte"'):
                 (d["config"] / "config.json").write_text(contenu, encoding="utf-8")
-                self.assertEqual(config.charger(d), config.DEFAUT, contenu)
+                self.assertEqual(config.load(d), config.DEFAULTS, contenu)
 
     def test_aller_retour_et_copie_de_la_version_precedente(self):
         with tempfile.TemporaryDirectory() as t:
-            d = config.dossiers({"LUTIN_HOME": t})
-            cfg = config.charger(d)
+            d = config.folders({"LUTIN_HOME": t})
+            cfg = config.load(d)
             cfg["securite"]["niveau"] = "reseau"
-            config.enregistrer(d, cfg)
+            config.save(d, cfg)
             cfg["installe"] = True
-            config.enregistrer(d, cfg)
-            self.assertEqual(config.charger(d)["securite"]["niveau"], "reseau")
+            config.save(d, cfg)
+            self.assertEqual(config.load(d)["securite"]["niveau"], "reseau")
             self.assertFalse(json.loads((d["config"] / "config.json.bak").read_text(encoding="utf-8"))["installe"], "la version précédente est gardée")
 
     def test_migration_garde_le_connu_ignore_l_inconnu_complete_le_manquant(self):
         ancien = {"securite": {"niveau": "reseau"}, "inconnu": 1, "installe": True}
-        n = config.migrer(ancien)
+        n = config.migrate_config(ancien)
         self.assertEqual((n["schema"], n["securite"]["niveau"], n["securite"]["port"], n["installe"]), (config.SCHEMA, "reseau", 8777, True))
         self.assertNotIn("inconnu", n)
         self.assertNotIn("schema", ancien, "l'entrée n'est pas modifiée")
 
     def test_preparer_pose_la_memoire_sans_ecraser(self):
         with tempfile.TemporaryDirectory() as t:
-            d = config.dossiers({"LUTIN_HOME": t})
-            config.preparer(d)
+            d = config.folders({"LUTIN_HOME": t})
+            config.prepare(d)
             self.assertTrue((d["memoire"] / "CONTEXTE.md").is_file() and (d["memoire"] / "MEMOIRE.md").is_file())
             (d["memoire"] / "CONTEXTE.md").write_text("à moi", encoding="utf-8")
-            config.preparer(d)
+            config.prepare(d)
             self.assertEqual((d["memoire"] / "CONTEXTE.md").read_text(encoding="utf-8"), "à moi")
 
 

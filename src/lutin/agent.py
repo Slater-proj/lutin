@@ -1001,7 +1001,7 @@ def supprimer_modele(modele):
     nouveau = ""
     if suppression_active:
         from . import embeddings
-        restants = [n for n in etat_ollama().get("installes", []) if n != modele and not embeddings.est_modele_de_recherche(n)]
+        restants = [n for n in etat_ollama().get("installes", []) if n != modele and not embeddings.is_search_model(n)]
         if restants:
             nouveau = restants[0]
             _m.enregistrer_reglages({"modele": nouveau})
@@ -1494,7 +1494,7 @@ def normaliser_arguments(nom, args, parametres=None):
 def contexte_routage():
     """(modèles installés pour discuter, ceux qui sont trop gros pour la machine, modèles des machines appairées) : ce dont le routeur a besoin. Jamais d'attente réseau (les machines sont lues en cache)."""
     from . import embeddings, machines
-    installes = [n for n in etat_moteur().get("installes", []) if not embeddings.est_modele_de_recherche(n)]
+    installes = [n for n in etat_moteur().get("installes", []) if not embeddings.is_search_model(n)]
     try:
         vram, ram = _m.video_memory(), _m.system_memory()
         budget = (vram["total"] / 1024 ** 3) if vram else ((ram["total"] / 1024 ** 3) * 0.6 if ram else 0)
@@ -1611,7 +1611,7 @@ def boucle_agent(conv, r, emit, ctx, stop):
         if conv.get("resume"):
             msgs.append({"role": "user", "content": "[Résumé de la conversation jusqu'ici]\n" + conv["resume"]})
             msgs.append({"role": "assistant", "content": "Compris, je continue."})
-        historique = _pieces.pour_le_modele(conv["messages"], _pieces.budget_caracteres(r["num_ctx"]))          # le texte des fichiers joints s'ajoute ici, jamais dans la conversation enregistrée
+        historique = _pieces.for_model(conv["messages"], _pieces.character_budget(r["num_ctx"]))          # le texte des fichiers joints s'ajoute ici, jamais dans la conversation enregistrée
         dernier_user = max((i for i, m in enumerate(historique) if m.get("role") == "user"), default=-1)
         if consigne and dernier_user >= 0:
             historique = list(historique)

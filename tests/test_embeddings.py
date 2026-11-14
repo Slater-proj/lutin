@@ -73,7 +73,7 @@ class Sens(unittest.TestCase):
         MODE["v"] = "ok"
         APPELS.clear()
         PULL.clear()
-        embeddings.ECHEC.update(jusqua=0.0, vu=False)
+        embeddings.FAILURE.update(jusqua=0.0, vu=False)
         self.sens["recherche_sens"] = True
         c = _m.conv_nouvelle()
         bourrage = " Voici un long développement quelconque, sans rapport avec le reste." * 12      # chaque sujet fait son propre morceau (environ 800 caractères)
@@ -97,13 +97,13 @@ class Sens(unittest.TestCase):
         recall.thread_passages(self.ident, "détention", 1)
         premiers = sum(len(a) for a in APPELS)
         self.assertEqual(premiers, 1 + len(recall.thread_chunks(self.ident)[0]))      # la question + chaque passage, une fois
-        self.assertTrue(embeddings._chemin(self.ident).exists())
+        self.assertTrue(embeddings._path(self.ident).exists())
         APPELS.clear()
         recall.THREAD.clear()
         recall.thread_passages(self.ident, "concert", 1)
         self.assertEqual(sum(len(a) for a in APPELS), 1)                        # seule la question est vectorisée
-        embeddings.supprimer(self.ident)
-        self.assertFalse(embeddings._chemin(self.ident).exists())
+        embeddings.remove(self.ident)
+        self.assertFalse(embeddings._path(self.ident).exists())
 
     def test_sans_le_modele_on_retombe_sur_les_mots_sans_erreur_et_sans_insister(self):
         MODE["v"] = "absent"
@@ -119,34 +119,34 @@ class Sens(unittest.TestCase):
         self.assertEqual(APPELS, [])
 
     def test_le_budget_de_temps_borne_la_vectorisation(self):
-        self.assertEqual(embeddings.similarites(self.ident, recall.thread_chunks(self.ident)[0], "prison", budget=-1).__class__, dict)
-        self.assertFalse(embeddings._chemin(self.ident).exists(), "budget épuisé : rien n'a été vectorisé")
+        self.assertEqual(embeddings.similarities(self.ident, recall.thread_chunks(self.ident)[0], "prison", budget=-1).__class__, dict)
+        self.assertFalse(embeddings._path(self.ident).exists(), "budget épuisé : rien n'a été vectorisé")
 
     def test_les_vecteurs_d_un_autre_modele_ne_sont_pas_utilises(self):
         recall.thread_passages(self.ident, "prison", 1)
         self.sens["modele_embeddings"] = "autre-modele"
         try:
-            self.assertEqual(embeddings._charger(self.ident, "autre-modele"), {})
+            self.assertEqual(embeddings._load(self.ident, "autre-modele"), {})
         finally:
             self.sens["modele_embeddings"] = "nomic-embed-text"
 
     def test_nettoyage_des_orphelins(self):
         recall.thread_passages(self.ident, "prison", 1)
-        (embeddings._chemin("zzzzzzzz")).write_text("{}", encoding="utf-8")
-        embeddings.nettoyer_orphelins({self.ident})
-        self.assertTrue(embeddings._chemin(self.ident).exists())
-        self.assertFalse(embeddings._chemin("zzzzzzzz").exists())
+        (embeddings._path("zzzzzzzz")).write_text("{}", encoding="utf-8")
+        embeddings.clean_orphans({self.ident})
+        self.assertTrue(embeddings._path(self.ident).exists())
+        self.assertFalse(embeddings._path("zzzzzzzz").exists())
 
     def test_l_installation_telecharge_en_arriere_plan_avec_sa_progression_comme_tous_les_modeles(self):
         """Le téléchargement passe par le même suivi que les modèles de l'onglet Modèles : progression, entrée dans la liste, suppression possible."""
         embeddings._m.PULLS.pop("nomic-embed-text", None)
-        self.assertEqual(embeddings.installation()["etat"], "")
-        embeddings.demarrer_installation()
+        self.assertEqual(embeddings.installation_state()["etat"], "")
+        embeddings.start_installation()
         for _ in range(100):
-            if embeddings.installation()["etat"] != "en cours":
+            if embeddings.installation_state()["etat"] != "en cours":
                 break
             time.sleep(0.05)
-        i = embeddings.installation()
+        i = embeddings.installation_state()
         self.assertEqual(i["etat"], "fini", i)
         self.assertEqual(i["fait"], 1000)
         self.assertEqual(PULL[0]["model"], "nomic-embed-text")
@@ -156,7 +156,7 @@ class Sens(unittest.TestCase):
     def test_une_erreur_de_telechargement_est_montree_et_on_peut_reessayer(self):
         embeddings._m.PULLS["nomic-embed-text"] = {"statut": "erreur", "fait": 0, "total": 0, "texte": "pas de réseau"}
         try:
-            i = embeddings.installation()
+            i = embeddings.installation_state()
             self.assertEqual((i["etat"], i["erreur"]), ("erreur", "pas de réseau"))
         finally:
             embeddings._m.PULLS.pop("nomic-embed-text", None)

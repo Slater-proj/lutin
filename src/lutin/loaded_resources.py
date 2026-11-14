@@ -342,7 +342,7 @@ def conseil_variante(mo, variante):
         from . import config
         from . import llamacpp_engine as ml
         profil = (engines.CONTEXTE.get("profil_attendu") or engines.CONTEXTE["profil"])()
-        voulue = ml.variante_auto(profil, config.systeme())
+        voulue = ml.variante_auto(profil, config.system_info())
     except Exception:  # noqa: BLE001
         return ""
     if variante in ("", "cpu") and voulue in ("cuda", "vulkan"):

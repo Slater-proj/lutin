@@ -104,7 +104,7 @@ class Fichiers(unittest.TestCase):
 
     def test_une_piece_jointe_se_retelecharge_sous_son_vrai_nom_et_s_ouvre_par_une_copie(self):
         from lutin import attachments
-        ident, nom, _ = attachments.enregistrer("# Notes\nbonjour".encode("utf-8"), "mes notes.md")
+        ident, nom, _ = attachments.save("# Notes\nbonjour".encode("utf-8"), "mes notes.md")
         octets, mime, vrai_nom = produced_files.piece_lire(ident, "mes notes.md")
         self.assertEqual((octets, vrai_nom), ("# Notes\nbonjour".encode("utf-8"), "mes notes.md"))
         with mock.patch.object(produced_files.sys, "platform", "linux"), mock.patch.object(produced_files.subprocess, "Popen", lambda cmd: self.ouvertures.append(cmd)):

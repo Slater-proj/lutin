@@ -60,8 +60,8 @@ class Parcours(unittest.TestCase):
     def setUp(self):
         PULLS.clear(); INSTALLES.clear()
         self.t = tempfile.TemporaryDirectory()
-        self.d = config.dossiers({"LUTIN_HOME": self.t.name})
-        self.cfg = config.charger(self.d)
+        self.d = config.folders({"LUTIN_HOME": self.t.name})
+        self.cfg = config.load(self.d)
         self.travail = str(Path(self.t.name) / "travail")
         # Filet de sécurité : aucun test ne doit jamais lancer un vrai script d'installation.
         self.garde = mock.patch.object(setup_wizard, "_lancer", side_effect=AssertionError("un test a tenté d'exécuter une commande système"))
@@ -84,7 +84,7 @@ class Parcours(unittest.TestCase):
         self.assertTrue(cfg["installe"])
         self.assertEqual(cfg["securite"]["niveau"], "local")
         self.assertTrue(Path(self.travail).is_dir())
-        self.assertTrue(config.charger(self.d)["installe"], "la configuration est enregistrée")
+        self.assertTrue(config.load(self.d)["installe"], "la configuration est enregistrée")
         texte = "\n".join(map(str, sortie))
         self.assertIn("Ta machine", texte)
         self.assertIn("lutin chat", texte)
@@ -249,8 +249,8 @@ class Cli(unittest.TestCase):
         with mock.patch.object(hardware, "detecter", return_value=GROS), mock.patch.object(setup_wizard, "definir_variables_utilisateur"),                 mock.patch.object(setup_wizard.shutil, "disk_usage", return_value=DISQUE_LARGE):
             code, sortie = self.lancer("setup", "--oui", "--travail", str(Path(self.t.name) / "w"))
         self.assertEqual(code, 0, sortie)
-        d = config.dossiers()
-        self.assertTrue(config.charger(d)["installe"])
+        d = config.folders()
+        self.assertTrue(config.load(d)["installe"])
         self.assertEqual(len(PULLS), 1)
 
     def test_setup_proxy_invalide_est_refuse_proprement(self):
@@ -258,7 +258,7 @@ class Cli(unittest.TestCase):
             code, sortie = self.lancer("setup", "--oui", "--niveau", "proxy", "--sans-modeles", "--sans-ollama", "--travail", str(Path(self.t.name) / "w"))
         self.assertEqual(code, 2)
         self.assertIn("adresse publique", sortie)
-        self.assertFalse(config.charger(config.dossiers())["installe"], "rien n'est enregistré")
+        self.assertFalse(config.load(config.folders())["installe"], "rien n'est enregistré")
 
     def test_securite_affiche_le_niveau(self):
         code, sortie = self.lancer("securite")
@@ -290,7 +290,7 @@ class Cli(unittest.TestCase):
         self.assertIn("lutin serve", sortie)
 
     def test_diagnostic(self):
-        cfg = config.charger(config.dossiers())
+        cfg = config.load(config.folders())
         lignes = cli.diagnostic(cfg, {}, GROS, ollama_client.Ollama())
         textes = " | ".join(t for _, t in lignes)
         self.assertIn("Ollama 0.12.0 répond", textes)
@@ -317,12 +317,12 @@ class DejaInstalle(unittest.TestCase):
     def setUp(self):
         PULLS.clear(); INSTALLES.clear()
         self.t = tempfile.TemporaryDirectory()
-        self.d = config.dossiers({"LUTIN_HOME": self.t.name})
-        self.cfg = config.charger(self.d)
+        self.d = config.folders({"LUTIN_HOME": self.t.name})
+        self.cfg = config.load(self.d)
         self.cfg.update(installe=True)
         self.cfg["modeles"]["choisis"] = {"polyvalent": "qwen3:8b"}
         self.cfg["emplacements"]["travail"] = str(Path(self.t.name) / "w")
-        config.enregistrer(self.d, self.cfg)
+        config.save(self.d, self.cfg)
         self.garde = mock.patch.object(setup_wizard, "_lancer", side_effect=AssertionError("commande système interdite en test"))
         self.garde.start()
 
@@ -332,7 +332,7 @@ class DejaInstalle(unittest.TestCase):
 
     def lancer(self, e, **options):
         with mock.patch.object(setup_wizard, "definir_variables_utilisateur"), mock.patch.object(setup_wizard.shutil, "disk_usage", return_value=DISQUE_LARGE):
-            return setup_wizard.executer(config.charger(self.d), self.d, e, options, profil=GROS)
+            return setup_wizard.executer(config.load(self.d), self.d, e, options, profil=GROS)
 
     def test_ne_change_rien(self):
         INSTALLES["qwen3:8b"] = "d"
@@ -365,7 +365,7 @@ class DejaInstalle(unittest.TestCase):
         e, sortie = es(oui=True)
         cfg = self.lancer(e, niveau="reseau", sans_modeles=True, sans_ollama=True, travail=str(Path(self.t.name) / "autre"))
         self.assertEqual(cfg["securite"]["niveau"], "reseau")
-        self.assertEqual(config.charger(self.d)["securite"]["niveau"], "reseau")
+        self.assertEqual(config.load(self.d)["securite"]["niveau"], "reseau")
 
     def test_reconfigurer_ne_retelecharge_pas_ce_qui_est_deja_la(self):
         profil = GROS
@@ -439,7 +439,7 @@ class Update(unittest.TestCase):
     def test_sans_source_connue_explique_quoi_faire_sans_rien_changer(self):
         faux = mock.MagicMock()                       # le module « subprocess » vu par cli est remplacé : le vrai (partagé avec les autres threads) n'est jamais touché
         faux.run.side_effect = AssertionError("pas de pip sans source")
-        with mock.patch.object(config, "lire_source", return_value=""), mock.patch.object(cli, "subprocess", faux):
+        with mock.patch.object(config, "read_source", return_value=""), mock.patch.object(cli, "subprocess", faux):
             code, sortie = self.lancer("update", "--app")
         self.assertEqual(code, 0)
         self.assertIn("ne sait pas d'où", sortie)
@@ -447,7 +447,7 @@ class Update(unittest.TestCase):
     def test_deja_a_jour(self):
         faux = mock.MagicMock()
         faux.run.return_value = mock.Mock(returncode=0, stdout="Lutin " + cli.__version__ + "\n")
-        with mock.patch.object(config, "lire_source", return_value="git+https://exemple/lutin"), mock.patch.object(cli, "subprocess", faux):
+        with mock.patch.object(config, "read_source", return_value="git+https://exemple/lutin"), mock.patch.object(cli, "subprocess", faux):
             code, sortie = self.lancer("update", "--app")
         self.assertEqual(code, 0)
         self.assertIn("déjà à jour", sortie)
@@ -456,10 +456,10 @@ class Update(unittest.TestCase):
     def test_mise_a_jour_et_echec_de_pip(self):
         faux = mock.MagicMock()
         faux.run.return_value = mock.Mock(returncode=0, stdout="Lutin 9.9.9\n")
-        with mock.patch.object(config, "lire_source", return_value="x"), mock.patch.object(cli, "subprocess", faux):
+        with mock.patch.object(config, "read_source", return_value="x"), mock.patch.object(cli, "subprocess", faux):
             self.assertIn("→ 9.9.9", self.lancer("update", "--app")[1])
         faux.run.return_value = mock.Mock(returncode=1, stdout="")
-        with mock.patch.object(config, "lire_source", return_value="x"), mock.patch.object(cli, "subprocess", faux):
+        with mock.patch.object(config, "read_source", return_value="x"), mock.patch.object(cli, "subprocess", faux):
             code, sortie = self.lancer("update", "--app")
         self.assertEqual(code, 1)
         self.assertIn("a échoué", sortie)
@@ -467,7 +467,7 @@ class Update(unittest.TestCase):
     def test_source_github_met_a_jour_seulement_si_une_version_plus_recente_existe(self):
         faux = mock.MagicMock()
         faux.run.return_value = mock.Mock(returncode=0, stdout="Lutin 9.9.9\n")
-        with mock.patch.object(config, "lire_source", return_value="github:Slater-proj/lutin"), mock.patch.object(cli, "subprocess", faux), \
+        with mock.patch.object(config, "read_source", return_value="github:Slater-proj/lutin"), mock.patch.object(cli, "subprocess", faux), \
                 mock.patch.object(updates, "derniere_release", return_value=("9.9.9", "https://github.com/Slater-proj/lutin/releases/download/v9.9.9/lutin-9.9.9-py3-none-any.whl")),                 mock.patch.object(updates, "telecharger_roue_verifiee", lambda url, dossier, **k: (Path(dossier) / url.rsplit("/", 1)[-1], True)):          # jamais de vrai téléchargement dans un test
             code, sortie = self.lancer("update", "--app")
         self.assertEqual(code, 0, sortie)
@@ -480,7 +480,7 @@ class Update(unittest.TestCase):
     def test_source_github_deja_a_jour_ou_sans_publication(self):
         faux = mock.MagicMock()
         faux.run.side_effect = AssertionError("pas de pip")
-        with mock.patch.object(config, "lire_source", return_value="github:Slater-proj/lutin"), mock.patch.object(cli, "subprocess", faux):
+        with mock.patch.object(config, "read_source", return_value="github:Slater-proj/lutin"), mock.patch.object(cli, "subprocess", faux):
             with mock.patch.object(updates, "derniere_release", return_value=("0.0.0", "https://x/y.whl")):
                 code, sortie = self.lancer("update", "--app")
                 self.assertEqual(code, 0)
@@ -491,16 +491,16 @@ class Update(unittest.TestCase):
                 self.assertIn("Impossible de lire", sortie)
 
     def test_source_lue_dans_l_environnement_ou_le_fichier(self):
-        self.assertEqual(config.lire_source({"LUTIN_SOURCE": " abc "}), "abc")
+        self.assertEqual(config.read_source({"LUTIN_SOURCE": " abc "}), "abc")
         with tempfile.TemporaryDirectory() as t:
             venv = Path(t) / "venv"
             venv.mkdir()
             (Path(t) / "source.txt").write_text("depuis-fichier\n", encoding="utf-8")
             with mock.patch.object(config.sys, "prefix", str(venv)):
-                self.assertEqual(config.lire_source({}), "depuis-fichier")
+                self.assertEqual(config.read_source({}), "depuis-fichier")
             (Path(t) / "source.txt").unlink()
             with mock.patch.object(config.sys, "prefix", str(venv)):
-                self.assertEqual(config.lire_source({}), "", "pas de fichier : source inconnue, sans erreur")
+                self.assertEqual(config.read_source({}), "", "pas de fichier : source inconnue, sans erreur")
 
 
 class CommandesDuQuotidien(unittest.TestCase):
@@ -512,8 +512,8 @@ class CommandesDuQuotidien(unittest.TestCase):
         self.env = mock.patch.dict(os.environ, {"LUTIN_HOME": self.t.name})
         self.env.start()
         os.environ.pop("LUTIN_HORS_LIGNE", None)
-        self.d = config.dossiers()
-        config.preparer(self.d)
+        self.d = config.folders()
+        config.prepare(self.d)
 
     def tearDown(self):
         self.env.stop()
@@ -544,7 +544,7 @@ class CommandesDuQuotidien(unittest.TestCase):
         self.assertEqual([t["id"] for t in travaux_liste()], ["projet-a", "projet-b"])
         code, sortie = self.lancer("travaux", "actif", "projet-b")
         self.assertIn("→ projet-b", sortie)
-        self.assertEqual(config.charger(self.d)["emplacements"]["travail_actif"], "projet-b")
+        self.assertEqual(config.load(self.d)["emplacements"]["travail_actif"], "projet-b")
         code, sortie = self.lancer("travaux", "retirer", "projet-a")
         self.assertEqual(code, 0)
         self.assertEqual([t["id"] for t in travaux_liste()], ["projet-b"])
@@ -561,7 +561,7 @@ class CommandesDuQuotidien(unittest.TestCase):
         with mock.patch.object(hardware, "detecter", return_value=GROS), mock.patch.object(setup_wizard, "definir_variables_utilisateur"), mock.patch.object(setup_wizard.shutil, "disk_usage", return_value=DISQUE_LARGE):
             code, sortie = self.lancer("setup", "--oui", "--sans-modeles", "--sans-ollama", "--travail", self.dossier("principal-neuf"))
         self.assertEqual(code, 0, sortie)
-        cfg = config.charger(self.d)
+        cfg = config.load(self.d)
         self.assertEqual([t["id"] for t in travaux_liste()], ["principal", "deux"])
         self.assertTrue(cfg["installe"])
 
@@ -624,7 +624,7 @@ class CommandesDuQuotidien(unittest.TestCase):
         self.lancer("setup", "--oui", "--sans-modeles", "--sans-ollama", "--travail", self.dossier("w"))
         self.assertIn("coupé", self.lancer("hors-ligne")[1])
         self.assertIn("ACTIF", self.lancer("hors-ligne", "oui")[1])
-        self.assertTrue(config.charger(self.d)["hors_ligne"])
+        self.assertTrue(config.load(self.d)["hors_ligne"])
         code, sortie = self.lancer("modeles", "installer", "qwen3:4b")
         self.assertEqual(code, 1)
         self.assertIn("hors ligne", sortie)
@@ -640,7 +640,7 @@ class CommandesDuQuotidien(unittest.TestCase):
             self.assertIn("écoute", sortie)
             code, sortie = self.lancer("setup", "--oui", "--sans-modeles", "--sans-ollama", "--travail", self.dossier("w"), "--niveau", "reseau", "--ecoute", "0.0.0.0")
         self.assertEqual(code, 0, sortie)
-        self.assertEqual(config.charger(self.d)["securite"]["ecoute"], "0.0.0.0")
+        self.assertEqual(config.load(self.d)["securite"]["ecoute"], "0.0.0.0")
 
 
 class ScriptsDInstallation(unittest.TestCase):
@@ -663,7 +663,7 @@ class ScriptsDInstallation(unittest.TestCase):
 
 def travaux_liste():
     from lutin import workspaces as _travaux
-    return _travaux.liste(config.charger(config.dossiers()))
+    return _travaux.liste(config.load(config.folders()))
 
 
 class ImagesDeLInstallateur(unittest.TestCase):

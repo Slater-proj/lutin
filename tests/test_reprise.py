@@ -161,7 +161,7 @@ class Import(Base):
 
     def test_la_memoire_de_depart_non_touchee_est_remplacee_sans_perte(self):
         from lutin import config as _config
-        _config.preparer(self.dossiers)
+        _config.prepare(self.dossiers)
         self.assertIn("Mémoire de Lutin", (self.dossiers["memoire"] / "MEMOIRE.md").read_text(encoding="utf-8"))
         r = self.reprendre(choix=("memoire",))
         self.assertEqual(sorted(r["memoire"]["posees"]), ["CONTEXTE.md", "MEMOIRE.md"])

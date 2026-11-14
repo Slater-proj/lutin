@@ -72,7 +72,7 @@ def derniere_version(http=updates.http_get):
 
 def dossier_colibri(dossiers=None):
     from . import docker_engines
-    return docker_engines.base_moteurs((dossiers or config.dossiers())["donnees"]) / "colibri"
+    return docker_engines.base_moteurs((dossiers or config.folders())["donnees"]) / "colibri"
 
 
 def extraire(archive, cible):

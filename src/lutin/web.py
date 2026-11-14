@@ -501,7 +501,7 @@ def lire_pdf(url):
         f.write(octets)
         chemin = f.name
     try:
-        texte = attachments.texte_de_fichier(chemin, ".pdf")
+        texte = attachments.file_text(chemin, ".pdf")
     except (text_extraction.ErreurExtraction, OSError, ValueError) as e:
         raise _m.ErreurOutil(_t("Ce PDF n'a pas pu être lu : {}").format(str(e)[:150]))
     finally:

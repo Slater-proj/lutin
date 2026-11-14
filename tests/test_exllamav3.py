@@ -240,14 +240,14 @@ class Versions(Base):
             def version(self):
                 return "1.6.6"
         with mock.patch.object(X, "derniere_version_lib", lambda *a, **k: "1.7.0"):
-            self.assertEqual(engine_updates._derniere_exllamav3(Fausse()), ("1.6.6", "1.7.0"))
-            self.assertTrue(engine_updates.plus_recente("1.7.0", "1.6.6"))
-            self.assertFalse(engine_updates.plus_recente("1.6.6", "1.6.6"))
+            self.assertEqual(engine_updates._latest_exllamav3(Fausse()), ("1.6.6", "1.7.0"))
+            self.assertTrue(engine_updates.latest("1.7.0", "1.6.6"))
+            self.assertFalse(engine_updates.latest("1.6.6", "1.6.6"))
 
         class Autre(Fausse):
             def exllamav3_choisi(self):
                 return False
-        self.assertIsNone(engine_updates._derniere_exllamav3(Autre()))
+        self.assertIsNone(engine_updates._latest_exllamav3(Autre()))
 
 
 class Compatibilite(unittest.TestCase):

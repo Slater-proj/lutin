@@ -721,11 +721,11 @@ def image(request):
     return Binary(data, content_type, {"Content-Security-Policy": "default-src 'none'; sandbox"})
 
 
-@route("POST", "/attachments", SESSION, raw=True, limit=_pieces.TAILLE_MAX)
+@route("POST", "/attachments", SESSION, raw=True, limit=_pieces.MAX_SIZE)
 def upload_attachment(request):
     """A document for the next message: the bytes of the file as the body, its name in `X-Name` (URL-encoded). The text is extracted at once: a file with none is refused."""
     name = urllib.parse.unquote(request.handler.headers.get("X-Name") or "")
-    identifier, shown, characters = _pieces.enregistrer(request.raw, name)
+    identifier, shown, characters = _pieces.save(request.raw, name)
     return 201, {"id": identifier, "name": shown, "characters": characters}
 
 

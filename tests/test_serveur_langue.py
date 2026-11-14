@@ -87,7 +87,7 @@ class LangueDuServeur(unittest.TestCase):
         os.environ["LUTIN_LANGUE"] = "en"
         try:
             dossiers = {"memoire": str(_TEMP / "memoire-en"), "donnees": str(_TEMP / "d-en"), "config": str(_TEMP / "c-en"), "cache": str(_TEMP / "ca-en")}
-            config.preparer(dossiers)
+            config.prepare(dossiers)
             memoire = (_TEMP / "memoire-en" / "MEMOIRE.md").read_text(encoding="utf-8")
             self.assertIn("## Assistant notes", memoire)
             self.assertIn("Answer in the user's language", (_TEMP / "memoire-en" / "CONTEXTE.md").read_text(encoding="utf-8"))
@@ -95,7 +95,7 @@ class LangueDuServeur(unittest.TestCase):
             self.assertEqual(A.position_notes(memoire), memoire.index("## Assistant notes") - 1)
             os.environ["LUTIN_LANGUE"] = "fr"
             dossiers_fr = {"memoire": str(_TEMP / "memoire-fr"), "donnees": str(_TEMP / "d-fr"), "config": str(_TEMP / "c-fr"), "cache": str(_TEMP / "ca-fr")}
-            config.preparer(dossiers_fr)
+            config.prepare(dossiers_fr)
             self.assertIn("## Notes de l'assistant", (_TEMP / "memoire-fr" / "MEMOIRE.md").read_text(encoding="utf-8"))
         finally:
             os.environ.pop("LUTIN_LANGUE", None)

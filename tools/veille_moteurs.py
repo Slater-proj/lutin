@@ -63,7 +63,7 @@ def surveiller(moteurs, etat, lire=http_json):
         etiquette, adresse = r
         ancienne = (etat.get(m["id"]) or {}).get("vue", "")
         neuf[m["id"]] = {"depot": m["depot"], "vue": etiquette}
-        if ancienne and etiquette != ancienne and engine_updates.plus_recente(etiquette, ancienne):
+        if ancienne and etiquette != ancienne and engine_updates.latest(etiquette, ancienne):
             changements.append({"id": m["id"], "nom": m["nom"], "depot": m["depot"], "ancienne": ancienne, "nouvelle": etiquette, "adresse": adresse, "testee": m.get("version_testee", "")})
     return neuf, changements
 

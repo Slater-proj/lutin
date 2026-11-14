@@ -89,7 +89,7 @@ class PremiereUtilisation(unittest.TestCase):
 
     def test_pas_installe_l_installation_guidee_s_ouvre_dans_une_console(self):
         from lutin import config
-        with mock.patch.object(zone.subprocess, "run") as run, mock.patch.object(config, "charger", return_value={"installe": True, "x": 1}):
+        with mock.patch.object(zone.subprocess, "run") as run, mock.patch.object(config, "load", return_value={"installe": True, "x": 1}):
             cfg = zone.preparer({"donnees": "x"}, {"installe": False})
         self.assertEqual(cfg, {"installe": True, "x": 1}, "on repart de la configuration que l'installation vient d'écrire")
         commande = run.call_args[0][0]
@@ -98,7 +98,7 @@ class PremiereUtilisation(unittest.TestCase):
 
     def test_installation_abandonnee_on_ne_demarre_pas(self):
         from lutin import config
-        with mock.patch.object(zone.subprocess, "run"), mock.patch.object(config, "charger", return_value={"installe": False}):
+        with mock.patch.object(zone.subprocess, "run"), mock.patch.object(config, "load", return_value={"installe": False}):
             self.assertIsNone(zone.preparer({"donnees": "x"}, {"installe": False}))
 
     def test_python_console_prefere_python_exe_a_pythonw(self):

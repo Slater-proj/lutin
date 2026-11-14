@@ -16,7 +16,7 @@ import sys
 from pathlib import Path
 
 SCHEMA = 1
-DEFAUT = {
+DEFAULTS = {
     "schema": SCHEMA,
     "installe": False,
     "securite": {"niveau": "local", "port": 8777, "url_publique": "", "proxy_ips": [], "ecoute": ""},
@@ -33,14 +33,14 @@ DEFAUT = {
 }
 
 
-def systeme():
+def system_info():
     return {"Windows": "windows", "Linux": "linux", "Darwin": "macos"}.get(platform.system(), "linux")
 
 
-def dossiers(env=None, os_=None):
+def folders(env=None, os_=None):
     """{config, donnees, memoire, cache} pour ce système."""
     env = os.environ if env is None else env
-    os_ = os_ or systeme()
+    os_ = os_ or system_info()
     home = env.get("LUTIN_HOME")
     if home:
         b = Path(home)
@@ -58,7 +58,7 @@ def dossiers(env=None, os_=None):
     return {"config": config, "donnees": donnees, "memoire": donnees / "memoire", "cache": Path(env.get("XDG_CACHE_HOME") or utilisateur / ".cache") / "lutin"}
 
 
-def lire_source(env=None):
+def read_source(env=None):
     """D'où Lutin a été installé (adresse ou roue donnée à pip), pour `lutin update` : variable LUTIN_SOURCE, sinon le fichier `source.txt` que l'installateur pose à côté de l'environnement privé."""
     env = os.environ if env is None else env
     if env.get("LUTIN_SOURCE"):
@@ -72,15 +72,15 @@ def lire_source(env=None):
 MIGRATIONS = {}          # {version_de_départ: fonction(dict) -> dict} ; ajoutée à chaque changement de schéma, testée avec un ancien fichier réel
 
 
-def migrer(d):
+def migrate_config(d):
     """Amène une configuration quelconque au schéma courant en gardant tout ce qui est connu ; ne plante jamais sur un fichier inattendu."""
     if not isinstance(d, dict):
-        return copy.deepcopy(DEFAUT)
+        return copy.deepcopy(DEFAULTS)
     version = d.get("schema") if isinstance(d.get("schema"), int) else 0
     while version < SCHEMA:
         d = MIGRATIONS.get(version, lambda x: x)(d)
         version += 1
-    sortie = copy.deepcopy(DEFAUT)
+    sortie = copy.deepcopy(DEFAULTS)
     for cle, valeur in d.items():
         if cle in sortie and isinstance(sortie[cle], dict) and isinstance(valeur, dict):
             sortie[cle].update(valeur)
@@ -90,16 +90,16 @@ def migrer(d):
     return sortie
 
 
-def charger(d):
+def load(d):
     f = Path(d["config"]) / "config.json"
     try:
         brut = json.loads(f.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         brut = None
-    return migrer(brut)
+    return migrate_config(brut)
 
 
-def enregistrer(d, cfg):
+def save(d, cfg):
     f = Path(d["config"]) / "config.json"
     f.parent.mkdir(parents=True, exist_ok=True)
     if f.is_file():
@@ -112,7 +112,7 @@ def enregistrer(d, cfg):
     tmp.replace(f)
 
 
-def preparer(d):
+def prepare(d):
     """Crée les dossiers et pose les fichiers de mémoire de départ (sans jamais écraser ceux de l'utilisateur)."""
     for chemin in d.values():
         Path(chemin).mkdir(parents=True, exist_ok=True)

@@ -80,7 +80,7 @@ def _enregistrer_reglages(nouveau):
     if not re.match(r"^[A-Za-z0-9_./:-]{1,100}$", str(r["modele"])):
         raise ValueError("Nom de modèle invalide.")
     from . import embeddings
-    if embeddings.est_modele_de_recherche(r["modele"]):
+    if embeddings.is_search_model(r["modele"]):
         raise ValueError(_t("« {} » est un modèle de recherche, pas de discussion : choisis un autre modèle.").format(r["modele"]))
     r["num_ctx"] = max(4096, min(131072, int(r["num_ctx"])))
     r["num_predict"] = max(0, min(32768, int(r.get("num_predict", 0))))
@@ -596,7 +596,7 @@ def conv_supprimer(ident):
     progress_sheet.delete(ident)                                  # la fiche de suivi disparaît avec la conversation
     from . import archive, embeddings
     archive.remove(ident)                                # et le début archivé par le résumé
-    embeddings.supprimer(ident)                             # et ses vecteurs de recherche par le sens
+    embeddings.remove(ident)                             # et ses vecteurs de recherche par le sens
     try:
         options_chemin(ident).unlink(missing_ok=True)       # et ses options
     except (ValueError, OSError):

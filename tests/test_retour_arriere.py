@@ -34,7 +34,7 @@ class Base(unittest.TestCase):
         (self.tmp / "donnees" / "reglages.json").write_text('{"moteur": "ollama"}', encoding="utf-8")
         self.dossiers = {d: self.tmp / d for d in ("config", "donnees", "memoire", "cache")}
         self.sorties, self.erreurs = [], []
-        patchs = [mock.patch.object(cli.config, "dossiers", lambda *a, **k: self.dossiers),
+        patchs = [mock.patch.object(cli.config, "folders", lambda *a, **k: self.dossiers),
                   mock.patch.object(cli, "__version__", "0.22.0")]
         for p in patchs:
             p.start()
@@ -50,7 +50,7 @@ class Base(unittest.TestCase):
     def lancer(self, source="github:Slater-proj/lutin", faux=None, **kw):
         faux = faux or Faux()
         self.telechargees = []
-        with mock.patch.object(cli.config, "lire_source", lambda: source), mock.patch.object(cli.subprocess, "run", faux),                 mock.patch.object(cli.updates, "telecharger_roue_verifiee", self.telecharger):
+        with mock.patch.object(cli.config, "read_source", lambda: source), mock.patch.object(cli.subprocess, "run", faux),                 mock.patch.object(cli.updates, "telecharger_roue_verifiee", self.telecharger):
             res = cli.mise_a_jour_detaillee(dire=self.sorties.append, erreur=self.erreurs.append, **kw)
         return res, faux
 

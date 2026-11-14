@@ -11,8 +11,8 @@ from lutin.ollama_client import ErreurOllama
 
 
 def installation(racine):
-    d = config.dossiers({"LUTIN_HOME": str(racine)})
-    config.preparer(d)
+    d = config.folders({"LUTIN_HOME": str(racine)})
+    config.prepare(d)
     (d["config"] / "config.json").write_text(json.dumps({"installe": True}), encoding="utf-8")
     (d["config"] / "appareils.json").write_text(json.dumps({"hash": {"nom": "Téléphone"}}), encoding="utf-8")
     (d["donnees"] / "conversations").mkdir(parents=True, exist_ok=True)
@@ -56,8 +56,8 @@ class Sauvegarde(unittest.TestCase):
     def test_aller_retour_vers_une_autre_installation(self):
         archive = Path(self.t.name) / "sauvegarde.zip"
         backup.export(self.d, archive)
-        autre = config.dossiers({"LUTIN_HOME": str(Path(self.t.name) / "b")})
-        config.preparer(autre)
+        autre = config.folders({"LUTIN_HOME": str(Path(self.t.name) / "b")})
+        config.prepare(autre)
         r = backup.restore(autre, archive, autre["cache"])
         self.assertGreaterEqual(r["fichiers"], 4)
         self.assertEqual(json.loads((autre["donnees"] / "conversations" / "abcd1234.json").read_text(encoding="utf-8"))["titre"], "Une conversation")

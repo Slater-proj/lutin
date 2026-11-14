@@ -68,13 +68,13 @@ class BoutEnBout(unittest.TestCase):
         threading.Thread(target=cls.ollama.serve_forever, daemon=True).start()
         url = "http://127.0.0.1:%d" % cls.ollama.server_address[1]
         cls.env = dict(os.environ, LUTIN_HOME=cls.t.name, OLLAMA_URL=url, PYTHONPATH=str(SRC), LUTIN_SANS_GARDE="1", LUTIN_SANS_DEMARRAGE="1", PYTHONIOENCODING="utf-8")
-        d = config.dossiers({"LUTIN_HOME": cls.t.name})
-        cfg = config.charger(d)
+        d = config.folders({"LUTIN_HOME": cls.t.name})
+        cfg = config.load(d)
         cfg.update(installe=True, verifier_maj=False)
         cfg["securite"]["port"] = port_libre()
         cfg["emplacements"]["travail"] = str(Path(cls.t.name) / "travail")
         cfg["modeles"]["choisis"] = {"polyvalent": "qwen3:8b"}
-        config.enregistrer(d, cfg)
+        config.save(d, cfg)
         cls.serveur = subprocess.Popen([sys.executable, "-B", "-m", "lutin", "serve", "--sans-navigateur", "--sans-superviseur"], cwd=tempfile.gettempdir(), env=cls.env,
                                        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="replace")
         cls.client = client.ClientLocal(d["donnees"])

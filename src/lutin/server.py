@@ -96,7 +96,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
             pass
 
     def _envoyer(self, code, corps, type_="application/json; charset=utf-8", en_tetes=None):
-        if code == 403 and isinstance(corps, dict) and "cette machine" in str(corps.get("erreur", "")) and _acces.en_docker():
+        if code == 403 and isinstance(corps, dict) and "cette machine" in str(corps.get("erreur", "")) and _acces.in_docker():
             corps = dict(corps, erreur=str(corps["erreur"]) + _t(" Dans Docker : ajoute LUTIN_ADMIN_TOUS=1 aux variables du conteneur (ou, derrière un proxy, ton identifiant dans LUTIN_ADMINS), puis redémarre-le."))
         elif code == 403 and isinstance(corps, dict) and "cette machine" in str(corps.get("erreur", "")):
             corps = dict(corps, erreur=str(corps["erreur"]) + _t(" Pour le faire depuis un autre appareil : Accès > Administration à distance (à activer depuis cette machine)."))
@@ -160,7 +160,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
         v = mo.vue(mo.id == courant)
         modeles = mo.modeles()
         statut = mo.statut()
-        return dict(v, statut=statut, actif=bool(modeles["actif"]), nb_modeles=len(modeles["installes"]), actions=mo.actions(), tache=_moteurs.tache(mo.id), telechargeable=mo.telechargeable(), maj=_moteurs_maj.etat().get(mo.id),
+        return dict(v, statut=statut, actif=bool(modeles["actif"]), nb_modeles=len(modeles["installes"]), actions=mo.actions(), tache=_moteurs.tache(mo.id), telechargeable=mo.telechargeable(), maj=_moteurs_maj.state().get(mo.id),
                     reglages=_llamacpp.vue_reglages(mo.id) if (mo.adresse_modifiable or hasattr(mo, "info_dossier")) else {})
 
     @staticmethod
@@ -324,7 +324,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
         jauge = _emplacements.models_gauge() or {}
         libre = jauge.get("libre")
         try:
-            return _diagnostic.diagnose(o["actif"], bool(_m.chemin_ollama()), [n for n in o["installes"] if not _embeddings.est_modele_de_recherche(n)], r, profil, _m._CATALOGUE, _adequation.pour_la_liste(modeles, profil, _m._CATALOGUE["modeles"]),
+            return _diagnostic.diagnose(o["actif"], bool(_m.chemin_ollama()), [n for n in o["installes"] if not _embeddings.is_search_model(n)], r, profil, _m._CATALOGUE, _adequation.pour_la_liste(modeles, profil, _m._CATALOGUE["modeles"]),
                                              libre / 1e9 if libre else None, conseils=_conseil_machine.advice(profil, r), modeles_ailleurs=_emplacements.models_elsewhere(o["installes"]) if o["actif"] else None)
         except (KeyError, TypeError, ValueError, AttributeError):
             return []
@@ -333,7 +333,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
     def _admin_tous():
         """Le propriétaire a ouvert la configuration à toute personne déjà admise par le niveau d'accès : Docker (LUTIN_ADMIN_TOUS=1 dans le docker-compose, car le navigateur n'y est jamais « sur la machine »)
         ou, partout, le réglage Accès > Administration à distance (qui ne se change que depuis la machine elle-même)."""
-        if _acces.en_docker() and os.environ.get("LUTIN_ADMIN_TOUS", "").strip().lower() in ("1", "true", "oui", "yes", "on"):
+        if _acces.in_docker() and os.environ.get("LUTIN_ADMIN_TOUS", "").strip().lower() in ("1", "true", "oui", "yes", "on"):
             return True
         try:
             return bool(_m.config_lue().get("admin_a_distance"))
@@ -476,7 +476,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
                                        "familles": {k: _t(v) for k, v in (_m._CATALOGUE.get("familles") or {}).items()}, "disque_modeles": _emplacements.models_gauge(),
                                        "version": _m.VERSION, "partages": o.get("partages", []), "ollama": o["actif"], "ollama_installe": bool(_m.chemin_ollama()) or _m.moteur_actuel().id != "ollama", "moteur_nom": _mesures.display_name(_m.moteur_actuel()), "installes": o["installes"], "modeles": modeles, "modeles_masques": len(_m.lire_registre_modeles()["masques"]), "actives": list(_m.TOURS_ACTIFS),
                                        "pulls": _m.PULLS, "reglages": r, "conversations": _m.conv_liste(), "racine": str(_m.RACINE), "donnees": str(_m.DONNEES),
-                                       "colibri_choisi": bool(getattr(_m.moteur_actuel(r), "colibri_choisi", lambda: False)()), "lmstudio_choisi": bool(getattr(_m.moteur_actuel(r), "lmstudio_choisi", lambda: False)()), "exllamav3_choisi": bool(getattr(_m.moteur_actuel(r), "exllamav3_choisi", lambda: False)()), "outil": bool(self._outil_vivant()), "hors_ligne": _hl.is_active(), "moteur": _m.moteur_actuel().id, "niveau": _m.SECURITE.niveau, "docker": _acces.en_docker(), "ouverture_possible": _fichiers.ouverture_possible(), "missions": _mission.par_conversation(), "langue": _i18n.langue(), "langue_reglage": _i18n.langue_configuree(), "cpus": _machine.cpus_disponibles() or 1, "diagnostic": self._avec_estimation(self._diagnostic(o, r, profil, modeles), r, profil), "prudent": _estimation.cautious_mode(profil), "premier_lancement": self._premier_lancement(o, r, profil), "redemarrage": {"necessaire": _acces.securite_enregistree() != _m.SECURITE, "possible": _acces.peut_redemarrer()}, "nouvelle_version": _m.nouvelle_version_lutin(), "travaux": _m.travaux_etat(), "configurateur": self._configurateur(), "addons_alertes": _addons.alertes(), "embeddings": _embeddings.etat(),
+                                       "colibri_choisi": bool(getattr(_m.moteur_actuel(r), "colibri_choisi", lambda: False)()), "lmstudio_choisi": bool(getattr(_m.moteur_actuel(r), "lmstudio_choisi", lambda: False)()), "exllamav3_choisi": bool(getattr(_m.moteur_actuel(r), "exllamav3_choisi", lambda: False)()), "outil": bool(self._outil_vivant()), "hors_ligne": _hl.is_active(), "moteur": _m.moteur_actuel().id, "niveau": _m.SECURITE.niveau, "docker": _acces.in_docker(), "ouverture_possible": _fichiers.ouverture_possible(), "missions": _mission.par_conversation(), "langue": _i18n.langue(), "langue_reglage": _i18n.langue_configuree(), "cpus": _machine.cpus_disponibles() or 1, "diagnostic": self._avec_estimation(self._diagnostic(o, r, profil, modeles), r, profil), "prudent": _estimation.cautious_mode(profil), "premier_lancement": self._premier_lancement(o, r, profil), "redemarrage": {"necessaire": _acces.saved_security() != _m.SECURITE, "possible": _acces.can_restart()}, "nouvelle_version": _m.nouvelle_version_lutin(), "travaux": _m.travaux_etat(), "configurateur": self._configurateur(), "addons_alertes": _addons.alertes(), "embeddings": _embeddings.state(),
                                        "reflexion_possible": self._reflexion_possible(r, o["actif"]), "cluster_actif": _machines.cluster_actif(r.get("cluster")), "demandes_machines": len(_machines.noeud().get("demandes", [])), "modeles_distants": _machines.modeles_distants() if _machines.cluster_actif(r.get("cluster")) else [], "conversations_distantes": _machines.conversations_distantes() if _machines.cluster_actif(r.get("cluster")) else [], "machines_hors_ligne": _machines.hors_ligne() if _machines.cluster_actif(r.get("cluster")) else [], "taches_fond": _m.taches_en_cours(), "taches_moteur": [dict(v, nom=_moteurs.MOTEURS[k].nom) for k, v in _moteurs.toutes_les_taches().items() if v.get("statut") == "en cours" and k in _moteurs.MOTEURS], "fins_moteur": _moteurs.fins_recentes(), "memoire": self._memoire(r, o), "calibrage": _calibrage.state(), "bench": {"en_cours": _m.BENCH["en_cours"], "etape": _m.BENCH["etape"], "erreur": _m.BENCH["erreur"], "file": list(_m.BENCH.get("file") or []), "mesures": _bench.lire(_m.chemin_bench())}, "attentes": [{"id": a.id, "titre": a.titre, "detail": a.detail, "diff": a.diff, "conv": a.conv} for a in _m.Attente.EN_COURS.values()],
                                        "en_attente": sorted({a.conv for a in _m.Attente.EN_COURS.values() if a.conv} | set(_m.CHOIX_MEMOIRE))})
         if chemin == "/api/conseil":
@@ -487,7 +487,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
             from .hardware import detecter
             return self._envoyer(200, {"mesure": vitesse, "conseil": _conseil.analyze(vitesse, detecter(), r, _m._CATALOGUE, _m.etat_moteur()["installes"], _m.ps_modele(r["modele"]))})
         if chemin == "/api/notifications":
-            return self._envoyer(200, {"canaux": _notif.lister(), "types": _notif.types()})
+            return self._envoyer(200, {"canaux": _notif.list_channels(), "types": _notif.channel_types()})
         if chemin == "/api/planifie":
             return self._envoyer(200, _plan.etat())
         if chemin == "/api/github":                              # le compte GitHub (facultatif) : configuré ou non, jamais le jeton
@@ -505,7 +505,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
         if chemin == "/api/notes":
             return self._envoyer(200, {"notes": _donnees.lister_notes()})
         if chemin == "/api/acces":
-            return self._envoyer(200, _acces.etat(self._configurateur(), self._configurateur_strict(), self._admin_tous()))
+            return self._envoyer(200, _acces.state(self._configurateur(), self._configurateur_strict(), self._admin_tous()))
         if chemin == "/api/qr":
             texte = urllib.parse.unquote(self.path.split("d=", 1)[1]) if "d=" in self.path else ""
             try:
@@ -541,7 +541,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 return self._envoyer(503, {"erreur": str(e)})
         if chemin == "/api/moteurs":                             # les moteurs de modèles : leur état, ce qui est possible avec chacun, et celui qui est choisi
             courant = _m.moteur_actuel().id
-            _moteurs_maj.en_arriere_plan(bool(_m.reglages().get("verifier_maj", True)) and not _hl.is_active())          # au plus un contrôle par 24 h, en arrière-plan : la carte du moteur l'affichera au prochain rafraîchissement
+            _moteurs_maj.in_background(bool(_m.reglages().get("verifier_maj", True)) and not _hl.is_active())          # au plus un contrôle par 24 h, en arrière-plan : la carte du moteur l'affichera au prochain rafraîchissement
             return self._envoyer(200, {"courant": courant, "modifiable": self._configurateur(), "moteurs": [self._vue_moteur(mo, courant) for mo in _moteurs.liste()], "prereglages": self._prereglages(), "dossier_moteurs": _llamacpp.vue_dossier_moteurs()})
         if chemin in ("/api/moteur-recherche", "/api/moteur-fichiers"):          # chercher un modèle (Hugging Face pour llama.cpp), puis voir les fichiers d'un dépôt
             q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
@@ -557,7 +557,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
         if chemin == "/api/outils":                              # uv et Node.js : ce qui est installé (par Lutin ou sur la machine)
             return self._envoyer(200, {"outils": _outils_externes.etat(), "modifiable": self._configurateur()})
         if chemin == "/api/mcp-catalogue":                       # les connecteurs du catalogue (sans rien lancer)
-            return self._envoyer(200, {"serveurs": _mcp_catalogue.liste(), "modifiable": self._configurateur()})
+            return self._envoyer(200, {"serveurs": _mcp_catalogue.entries(), "modifiable": self._configurateur()})
         if chemin == "/api/mcp":                                 # les connecteurs MCP (sans leurs secrets)
             return self._envoyer(200, {"connecteurs": _mcp.vue(), "modifiable": self._configurateur(), "limite": _mcp.limite_outils()})
         if chemin == "/api/decouvrir":                           # la bibliothèque d'Ollama (nouveautés, populaires, recherche)
@@ -619,7 +619,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
             except ValueError as e:
                 return self._envoyer(400, {"erreur": str(e)})
         if chemin == "/api/mettre-a-jour-etat":
-            return self._envoyer(200, _acces.etat_maj())
+            return self._envoyer(200, _acces.update_state())
         if chemin == "/api/dossier-modeles-chercher":            # retrouver des modèles déjà téléchargés (autre disque, ancien dossier)
             if not self._configurateur():
                 return self._envoyer(403, {"erreur": _t("Cela se fait depuis cette machine (niveau « cette machine seulement » ou navigateur de cette machine).")})
@@ -761,7 +761,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
         if not self._configurateur():
             return self._envoyer(403, {"erreur": _t("Une sauvegarde se restaure depuis cette machine (niveau « cette machine seulement ») ou avec la commande lutin restore.")})
         try:
-            return self._envoyer(200, _acces.restaurer_flux(self.rfile, self._taille_corps()))
+            return self._envoyer(200, _acces.restore_stream(self.rfile, self._taille_corps()))
         except ValueError as e:
             return self._envoyer(400, {"erreur": str(e)})
 
@@ -786,10 +786,10 @@ class Gestionnaire(BaseHTTPRequestHandler):
         if not self._jeton_valide():
             return self._envoyer(403, {"erreur": "jeton invalide : recharge la page"})
         taille = self._taille_corps()
-        if taille > _pieces.TAILLE_MAX:
-            return self._envoyer(413, {"erreur": _t("Fichier trop gros ({} Mo au plus).").format(_pieces.TAILLE_MAX // (1024 * 1024))})
+        if taille > _pieces.MAX_SIZE:
+            return self._envoyer(413, {"erreur": _t("Fichier trop gros ({} Mo au plus).").format(_pieces.MAX_SIZE // (1024 * 1024))})
         try:
-            ident, nom, caracteres = _pieces.enregistrer(self.rfile.read(taille), urllib.parse.unquote(self.headers.get("X-Nom") or ""))
+            ident, nom, caracteres = _pieces.save(self.rfile.read(taille), urllib.parse.unquote(self.headers.get("X-Nom") or ""))
             return self._envoyer(200, {"id": ident, "nom": nom, "caracteres": caracteres})
         except ValueError as e:
             return self._envoyer(400, {"erreur": str(e)})
@@ -882,15 +882,15 @@ class Gestionnaire(BaseHTTPRequestHandler):
             if self.path == "/api/acces":
                 if not self._configurateur():
                     return self._envoyer(403, {"erreur": _t("Le niveau d'accès ne se change que depuis cette machine.")})
-                return self._envoyer(200, _acces.appliquer(donnees, True))
+                return self._envoyer(200, _acces.apply(donnees, True))
             if self.path == "/api/mettre-a-jour":
                 if not self._configurateur():
                     return self._envoyer(403, {"erreur": _t("La mise à jour se lance depuis cette machine (ou avec la commande lutin update).")})
-                return self._envoyer(200, _acces.mettre_a_jour())
+                return self._envoyer(200, _acces.update())
             if self.path == "/api/redemarrer":
                 if not self._configurateur():
                     return self._envoyer(403, {"erreur": _t("Le redémarrage se demande depuis cette machine.")})
-                return self._envoyer(200, _acces.redemarrer())
+                return self._envoyer(200, _acces.restart())
             if self.path == "/api/nouveau-pin":
                 if not self._configurateur():
                     return self._envoyer(403, {"erreur": "le code ne se demande que depuis cette machine"})
@@ -946,7 +946,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
             if self.path == "/api/embeddings-installer":
                 if not self._configurateur():
                     return self._envoyer(403, {"erreur": _t("L'installation d'un modèle se lance depuis cette machine.")})
-                return self._envoyer(200, _embeddings.demarrer_installation())
+                return self._envoyer(200, _embeddings.start_installation())
             if self.path == "/api/mission-action":                   # pause, reprise, arrêt d'une mission : comme envoyer un message, pour qui peut discuter
                 try:
                     return self._envoyer(200, _mission.action(str(donnees.get("action", "")), donnees))
@@ -1061,10 +1061,10 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 if not self._configurateur():
                     return self._envoyer(403, {"erreur": _t("Les notifications se règlent depuis cette machine (niveau « cette machine seulement » ou navigateur de cette machine).")})
                 if self.path == "/api/notifications-ajouter":
-                    return self._envoyer(200, {"canaux": _notif.ajouter(donnees.get("nom"), str(donnees.get("type", "")), donnees.get("params"))})
+                    return self._envoyer(200, {"canaux": _notif.add(donnees.get("nom"), str(donnees.get("type", "")), donnees.get("params"))})
                 if self.path == "/api/notifications-supprimer":
-                    return self._envoyer(200, {"canaux": _notif.supprimer(str(donnees.get("id", "")))})
-                return self._envoyer(200, _notif.tester(str(donnees.get("id", ""))))
+                    return self._envoyer(200, {"canaux": _notif.remove(str(donnees.get("id", "")))})
+                return self._envoyer(200, _notif.test_channel(str(donnees.get("id", ""))))
             if self.path.startswith(("/api/github-", "/api/skills-tiers-")):
                 if not self._configurateur():
                     return self._envoyer(403, {"erreur": _t("Cela se règle depuis cette machine (niveau « cette machine seulement » ou navigateur de cette machine).")})
@@ -1209,7 +1209,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
             if self.path == "/api/admin-distance":
                 if not self._configurateur_strict():
                     return self._envoyer(403, {"erreur": _t("L'administration à distance s'active ou se retire depuis cette machine seulement (ou avec la commande lutin security).")})
-                if _acces.en_docker():
+                if _acces.in_docker():
                     return self._envoyer(400, {"erreur": _t("Dans Docker, l'administration à distance se règle avec la variable LUTIN_ADMIN_TOUS du conteneur (docs/DOCKER.md).")})
                 cfg = _m.config_lue()
                 cfg["admin_a_distance"] = bool(donnees.get("actif"))
@@ -1322,7 +1322,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
                     ident = _mcp.ajouter(str(donnees.get("nom", "")), donnees.get("commande"), donnees.get("url", ""), donnees.get("env"), donnees.get("entetes"))
                     return self._envoyer(200, {"id": ident})
                 if action == "catalogue-installer":
-                    return self._envoyer(200, _mcp_catalogue.installer(str(donnees.get("id", "")), donnees.get("saisie") or {}))
+                    return self._envoyer(200, _mcp_catalogue.install(str(donnees.get("id", "")), donnees.get("saisie") or {}))
                 if action == "demo":
                     ident = _mcp.ajouter(_t("Démonstration"), [sys.executable, "-m", "lutin.mcp_demo"], "", {"PYTHONPATH": str(Path(__file__).resolve().parent.parent)})
                     return self._envoyer(200, {"id": ident})
@@ -1603,7 +1603,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
             return self._envoyer(403, {"erreur": "la mise à jour à distance n'est pas autorisée sur cette machine"})
         try:
             _machines.journaliser("mise à jour demandée par une machine appairée")
-            return self._envoyer(200, {"ok": True, "maj": _acces.mettre_a_jour()})
+            return self._envoyer(200, {"ok": True, "maj": _acces.update()})
         except ValueError as e:
             return self._envoyer(400, {"erreur": str(e)})
 
@@ -1822,7 +1822,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
             return self._refus_tour(400, "Écris un message (60 000 caractères au maximum).", "invalid_request")
         try:
             images = _images.check_list(donnees.get("images"))
-            pieces = _pieces.verifier_liste(donnees.get("pieces"))
+            pieces = _pieces.check_list(donnees.get("pieces"))
         except ValueError as erreur:
             return self._refus_tour(400, str(erreur), "invalid_request")
         if self._via_relais:                                      # le tour s'exécute avec les réglages DE CETTE machine : ni modèle, ni mode, ni accords automatiques, ni autre machine imposés de l'extérieur

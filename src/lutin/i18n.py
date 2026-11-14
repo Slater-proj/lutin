@@ -44,7 +44,7 @@ def _chemin_config():
     if chemin:
         return Path(chemin)
     from . import config
-    return Path(config.dossiers()["config"]) / "config.json"
+    return Path(config.folders()["config"]) / "config.json"
 
 
 def langue_configuree(chemin_config=None):

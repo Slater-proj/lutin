@@ -295,13 +295,13 @@ def purger_donnees():
     try:
         from . import images, attachments
         images.clean()
-        attachments.nettoyer()
+        attachments.clean()
         from . import progress_sheet
         ids = {c.stem for c in (_m.DONNEES / "conversations").glob("*.json")}
         progress_sheet.clean_orphans(ids)
         from . import archive, embeddings
         archive.clean_orphans(ids)
-        embeddings.nettoyer_orphelins(ids)
+        embeddings.clean_orphans(ids)
         _m.options_nettoyer_orphelins(ids)
     except OSError:
         pass

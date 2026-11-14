@@ -291,7 +291,7 @@ class Planification(Base):
 
     def test_canaux_de_notification_par_l_api_sans_jamais_renvoyer_un_secret(self):
         from lutin import notifications
-        notifications.chemin().unlink(missing_ok=True)
+        notifications.path_of().unlink(missing_ok=True)
         statut, r = requete("POST", "/api/notifications-ajouter", corps={"nom": "Tel", "type": "gotify", "params": {"url": "http://h:8080", "jeton": "SECRET1"}})
         self.assertEqual(statut, 200)
         liste = requete("GET", "/api/notifications")[1]
@@ -391,7 +391,7 @@ class Planification(Base):
     def test_le_resultat_part_sur_le_canal_associe(self):
         from lutin import notifications
         envois = []
-        with mock.patch.object(notifications, "trouver", lambda i: {"id": i, "nom": "Tel"}), mock.patch.object(notifications, "envoyer", lambda canal, titre, msg, ouvrir=None: envois.append((canal, titre, msg))):
+        with mock.patch.object(notifications, "find", lambda i: {"id": i, "nom": "Tel"}), mock.patch.object(notifications, "send", lambda canal, titre, msg, ouvrir=None: envois.append((canal, titre, msg))):
             t = self.p.ajouter("Heure", "x", "19:00", [0, 1, 2, 3, 4, 5, 6], notifier="abcd1234")
             with mock.patch.object(A, "tour", side_effect=self.faux_tour("il est 19 h")):
                 self.p.executer(t["id"])
@@ -402,7 +402,7 @@ class Planification(Base):
         from lutin import notifications
         def casse(canal, titre, msg, ouvrir=None):
             raise ValueError("« Tel » n'a pas répondu")
-        with mock.patch.object(notifications, "trouver", lambda i: {"id": i}), mock.patch.object(notifications, "envoyer", casse):
+        with mock.patch.object(notifications, "find", lambda i: {"id": i}), mock.patch.object(notifications, "send", casse):
             t = self.p.ajouter("Heure", "x", "19:00", [0, 1, 2, 3, 4, 5, 6], notifier="abcd1234")
             with mock.patch.object(A, "tour", side_effect=self.faux_tour("ok")):
                 self.p.executer(t["id"])
@@ -447,7 +447,7 @@ class Redemarrage(Base):
         with mock.patch.object(access.threading, "Timer") as timer:
             self.assertEqual(requete("POST", "/api/redemarrer", corps={}), (200, {"ok": True}))
             args = timer.call_args[0]
-            self.assertEqual((args[0] > 0, args[1], args[2]), (True, os._exit, [access.CODE_REDEMARRAGE]))
+            self.assertEqual((args[0] > 0, args[1], args[2]), (True, os._exit, [access.RESTART_CODE]))
             timer.return_value.start.assert_called_once()
             A.TOURS_ACTIFS["abcd1234"] = object()
             try:
@@ -459,7 +459,7 @@ class Redemarrage(Base):
 
     def test_le_superviseur_relance_sans_compter_une_panne(self):
         from lutin import cli
-        codes = iter([access.CODE_REDEMARRAGE] * 8 + [0])
+        codes = iter([access.RESTART_CODE] * 8 + [0])
         lancements, messages = [], []
         r = cli.superviser(lambda premiere: (lancements.append(premiere), next(codes))[1], attendre=lambda s: None, maximum=2, ecrire=messages.append)
         self.assertEqual((r, len(lancements), lancements[0], any(lancements[1:])), (0, 9, True, False), "huit redémarrages d'affilée ne sont pas des pannes : le navigateur ne se rouvre pas")

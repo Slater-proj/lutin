@@ -35,7 +35,7 @@ RE_SOMME = re.compile(r"^[0-9a-f]{64}$")
 
 
 def dossier(nom=None, dossiers=None):
-    base = Path((dossiers or config.dossiers())["donnees"]) / "outils"
+    base = Path((dossiers or config.folders())["donnees"]) / "outils"
     return base / nom if nom else base
 
 

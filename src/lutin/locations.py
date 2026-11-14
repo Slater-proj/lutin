@@ -203,7 +203,7 @@ def ligne(cle, nom, chemin, explication, **plus):
 def lister():
     """Tous les emplacements utilisés : [{cle, nom, chemin, explication, existe, taille, disque}], et le détail du dossier de données."""
     from . import config
-    d = config.dossiers()
+    d = config.folders()
     cfg_fichier = _m.chemin_config()
     lignes = [ligne("programme", _t("Programme"), Path(sys.prefix), _t("Lutin et son Python (supprimés par la désinstallation)."))]
     lignes.append(ligne("config", _t("Configuration de Lutin"), cfg_fichier.parent if cfg_fichier else d["config"], _t("config.json : niveau d'accès, dossiers de travail, langue.")))

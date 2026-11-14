@@ -251,7 +251,7 @@ def executer(cfg, dossiers, es, options=None, profil=None, ollama=None):
         if choix[r] and choix[r].id in deja:
             cfg["modeles"]["choisis"][r] = choix[r].id          # déjà installé : on le garde, sans retélécharger
 
-    config.preparer(dossiers)
+    config.prepare(dossiers)
     Path(cfg["emplacements"]["travail"]).mkdir(parents=True, exist_ok=True)
     cible = Path(cfg["emplacements"]["modeles"] or Path.home())
     try:
@@ -304,7 +304,7 @@ def executer(cfg, dossiers, es, options=None, profil=None, ollama=None):
         except (ollama_client.ErreurOllama, OSError) as e:
             es.dire(_t("  (test de vitesse impossible : {})").format(e))
     cfg["installe"] = True
-    config.enregistrer(dossiers, cfg)
+    config.save(dossiers, cfg)
     es.dire(_t("\nTerminé. Pour démarrer :  lutin"))
     es.dire(_t("Dans le terminal :     lutin chat"))
     if cfg["securite"]["niveau"] == security.RESEAU:

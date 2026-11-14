@@ -37,8 +37,8 @@ class Base(unittest.TestCase):
         P.EN_COURS.clear()
         P.A_SUPPRIMER.clear()
         self.envoyes = []
-        self.canal = mock.patch.object(notifications, "trouver", lambda ident: {"id": ident} if ident == "c1" else None)
-        self.envoi = mock.patch.object(notifications, "envoyer", lambda canal, titre, texte: self.envoyes.append((canal, titre, texte)))
+        self.canal = mock.patch.object(notifications, "find", lambda ident: {"id": ident} if ident == "c1" else None)
+        self.envoi = mock.patch.object(notifications, "send", lambda canal, titre, texte: self.envoyes.append((canal, titre, texte)))
         self.canal.start()
         self.envoi.start()
         self.addCleanup(self.canal.stop)
@@ -309,7 +309,7 @@ class Notification(Base):
 
         def envoi_casse(canal, titre, texte):
             raise ValueError("Ce canal n'existe plus.")
-        with mock.patch.object(notifications, "envoyer", envoi_casse):
+        with mock.patch.object(notifications, "send", envoi_casse):
             self.lancer(t["id"], tour_qui_repond())
         n = P.lire()[0]
         self.assertEqual(n["derniere_etat"], "ok")

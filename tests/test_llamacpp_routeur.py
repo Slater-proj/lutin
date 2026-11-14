@@ -196,7 +196,7 @@ class VersionEpinglee(Base):
             with self.assertRaises(ml.ErreurMoteur):          # le téléchargement lui-même n'est pas simulé ici : seule la recherche de la version compte
                 self.m.installer(lambda *a: None, http_json=faux_json, telecharger=lambda *a, **k: (_ for _ in ()).throw(RuntimeError("stop")))
         self.assertEqual(vus, [ml.API_VERSION + "b199"])
-        self.assertIsNone(engine_updates._derniere_llamacpp(self.m, lambda url: self.RELEASES), "version épinglée : aucune mise à jour proposée")
+        self.assertIsNone(engine_updates._latest_llamacpp(self.m, lambda url: self.RELEASES), "version épinglée : aucune mise à jour proposée")
 
 
 if __name__ == "__main__":

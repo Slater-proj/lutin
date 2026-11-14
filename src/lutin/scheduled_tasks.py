@@ -72,7 +72,7 @@ def _valider(nom, prompt, heure, jours, travail, notifier, date, maintenant=None
     notifier = str(notifier or "")
     if notifier:
         from . import notifications
-        if notifications.trouver(notifier) is None:
+        if notifications.find(notifier) is None:
             raise ValueError(_t("Ce canal de notification n'existe plus."))
     return {"nom": nom, "prompt": prompt, "heure": heure, "jours": jours, "date": date, "travail": str(travail or "")[:80], "notifier": notifier}
 
@@ -122,7 +122,7 @@ def definir_notification(ident, canal):
     canal = str(canal or "")
     if canal:
         from . import notifications
-        if notifications.trouver(canal) is None:
+        if notifications.find(canal) is None:
             raise ValueError(_t("Ce canal de notification n'existe plus."))
     return modifier(ident, notifier=canal, derniere_notif="")
 
@@ -341,7 +341,7 @@ def _notifier(tache, etat_final, resultat):
     from . import notifications
     titre = "⏰ " + tache["nom"] + ("" if etat_final == "ok" else " — " + _t("problème"))
     try:
-        notifications.envoyer(tache["notifier"], titre, resultat or _t("(pas de réponse)"))
+        notifications.send(tache["notifier"], titre, resultat or _t("(pas de réponse)"))
         bilan = "ok"
     except ValueError as erreur:
         bilan = str(erreur)[:200]

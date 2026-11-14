@@ -13,33 +13,33 @@ from . import core as _m
 from . import security as _sec
 from .i18n import t as _t
 
-CODE_REDEMARRAGE = 75          # code de sortie « relance-moi » : le superviseur (lutin / lutin serve) relance tout de suite, sans compter une panne
-RESTAURATION_MAX = 1024 ** 3
+RESTART_CODE = 75          # code de sortie « relance-moi » : le superviseur (lutin / lutin serve) relance tout de suite, sans compter une panne
+MAX_RESTORE = 1024 ** 3
 
 
-def en_docker():
+def in_docker():
     return bool(os.environ.get("LUTIN_DOCKER"))
 
 
-def peut_redemarrer():
+def can_restart():
     """Vrai si quelque chose relancera Lutin après sa sortie : le superviseur de `lutin`, ou la politique de redémarrage du conteneur."""
-    return bool(os.environ.get("LUTIN_SUPERVISE")) or en_docker()
+    return bool(os.environ.get("LUTIN_SUPERVISE")) or in_docker()
 
 
-def securite_enregistree():
+def saved_security():
     return _sec.Securite.depuis_dict(_m.config_lue().get("securite"))
 
 
-def etat(configurateur, strict=None, admin_distance=False):
+def state(configurateur, strict=None, admin_distance=False):
     """Tout ce que la page Accès affiche."""
     s = _m.SECURITE
-    sur_disque = securite_enregistree()
+    sur_disque = saved_security()
     return {
         "niveau": s.niveau, "port": s.port, "url_publique": s.url_publique, "proxy_ips": list(s.proxy_ips), "ecoute": s.ecoute,
         "enregistre": {"niveau": sur_disque.niveau, "url_publique": sur_disque.url_publique, "proxy_ips": list(sur_disque.proxy_ips)},
         "redemarrage_necessaire": sur_disque != s,
-        "modifiable": bool(configurateur) and not en_docker(), "docker": en_docker(),
-        "admin_distance": {"actif": bool(admin_distance), "docker": en_docker(), "modifiable": bool(configurateur if strict is None else strict) and not en_docker()}, "peut_redemarrer": peut_redemarrer(),
+        "modifiable": bool(configurateur) and not in_docker(), "docker": in_docker(),
+        "admin_distance": {"actif": bool(admin_distance), "docker": in_docker(), "modifiable": bool(configurateur if strict is None else strict) and not in_docker()}, "peut_redemarrer": can_restart(),
         "adresse": "http://{}:{}/".format(_m.IP_LAN or _m.ip_locale(), s.port),
         "appareils": _m.APPAREILS.liste(),
         "avertissements": {"reseau": _t(setup_wizard.AVERTISSEMENT_RESEAU), "proxy": _t(setup_wizard.AVERTISSEMENT_PROXY)},
@@ -47,9 +47,9 @@ def etat(configurateur, strict=None, admin_distance=False):
     }
 
 
-def appliquer(donnees, configurateur):
+def apply(donnees, configurateur):
     """Enregistre le nouveau niveau d'accès dans la configuration (pour le prochain démarrage). Les accords automatiques restent coupés hors du niveau « local » quoi qu'il arrive (règle du moteur)."""
-    if en_docker():
+    if in_docker():
         raise ValueError(_t("Dans Docker, le niveau d'accès vient de la variable LUTIN_NIVEAU du conteneur : change-la là (docs/DOCKER.md)."))
     if not configurateur:
         raise ValueError(_t("Le niveau d'accès ne se change que depuis cette machine."))
@@ -72,61 +72,61 @@ def appliquer(donnees, configurateur):
     return {"redemarrage_necessaire": nouveau != actuel}
 
 
-def redemarrer():
+def restart():
     """Quitte avec le code « relance-moi » après avoir répondu. Refuse pendant une réponse du modèle."""
-    if not peut_redemarrer():
+    if not can_restart():
         raise ValueError(_t("Lutin n'a pas été lancé par la commande « lutin » : relance-le toi-même."))
     if _m.TOURS_ACTIFS:
         raise ValueError(_t("Une réponse est en cours : attends la fin avant de redémarrer."))
     _m.journaliser("Redémarrage demandé depuis la page.")
-    threading.Timer(0.8, os._exit, [CODE_REDEMARRAGE]).start()
+    threading.Timer(0.8, os._exit, [RESTART_CODE]).start()
     return {"ok": True}
 
 
-MAJ = {"etat": "", "lignes": [], "avant": "", "apres": ""}
-_verrou_maj = threading.Lock()
+UPDATE = {"etat": "", "lignes": [], "avant": "", "apres": ""}
+_update_lock = threading.Lock()
 
 
-def mettre_a_jour():
+def update():
     """Met Lutin à jour depuis la page (même chose que la commande `lutin update --app`), puis le redémarre tout seul s'il tourne sous la supervision de `lutin` ou de l'icône. Le suivi se lit avec etat_maj()."""
     from . import offline
-    if en_docker():
+    if in_docker():
         raise ValueError(_t("Dans Docker, la mise à jour se fait en récupérant la nouvelle image : docker compose pull && docker compose up -d"))
     if offline.is_active():
         raise ValueError(_t("Mode hors ligne strict : Lutin n'est pas mis à jour."))
     if _m.TOURS_ACTIFS:
         raise ValueError(_t("Une réponse est en cours : attends la fin avant de mettre à jour."))
-    with _verrou_maj:
-        if MAJ["etat"] == "en cours":
+    with _update_lock:
+        if UPDATE["etat"] == "en cours":
             raise ValueError(_t("Une mise à jour est déjà en cours."))
-        MAJ.update(etat="en cours", lignes=[_t("Recherche de la dernière version…")], avant="", apres="")
+        UPDATE.update(etat="en cours", lignes=[_t("Recherche de la dernière version…")], avant="", apres="")
 
     def travail():
         from . import cli
         try:
-            code, avant, apres = cli.mise_a_jour_detaillee(MAJ["lignes"].append, MAJ["lignes"].append, capturer=True)
+            code, avant, apres = cli.mise_a_jour_detaillee(UPDATE["lignes"].append, UPDATE["lignes"].append, capturer=True)
         except Exception as erreur:  # noqa: BLE001 — la page doit toujours apprendre comment ça s'est fini
-            MAJ.update(etat="erreur")
-            MAJ["lignes"].append(str(erreur)[:300])
+            UPDATE.update(etat="erreur")
+            UPDATE["lignes"].append(str(erreur)[:300])
             return
-        MAJ.update(avant=avant, apres=apres or "")
+        UPDATE.update(avant=avant, apres=apres or "")
         if code != 0:
-            MAJ["etat"] = "erreur"
+            UPDATE["etat"] = "erreur"
         elif not apres:
-            MAJ["etat"] = "a_jour"
-        elif peut_redemarrer():
-            MAJ["etat"] = "redemarrage"
-            MAJ["lignes"].append(_t("Redémarrage de Lutin pour appliquer la mise à jour…"))
-            threading.Timer(1.5, redemarrer).start()               # le temps que la page lise l'état
+            UPDATE["etat"] = "a_jour"
+        elif can_restart():
+            UPDATE["etat"] = "redemarrage"
+            UPDATE["lignes"].append(_t("Redémarrage de Lutin pour appliquer la mise à jour…"))
+            threading.Timer(1.5, restart).start()               # le temps que la page lise l'état
         else:
-            MAJ["etat"] = "fini"
-            MAJ["lignes"].append(_t("Relance Lutin toi-même pour appliquer la mise à jour (fermer puis rouvrir)."))
+            UPDATE["etat"] = "fini"
+            UPDATE["lignes"].append(_t("Relance Lutin toi-même pour appliquer la mise à jour (fermer puis rouvrir)."))
     threading.Thread(target=travail, daemon=True, name="mise-a-jour").start()
-    return dict(MAJ)
+    return dict(UPDATE)
 
 
-def etat_maj():
-    return dict(MAJ)
+def update_state():
+    return dict(UPDATE)
 
 
 def qr_json(texte):
@@ -136,9 +136,9 @@ def qr_json(texte):
     return {"taille": len(m), "lignes": ["".join(map(str, ligne)) for ligne in m]}
 
 
-def restaurer_flux(flux, taille):
+def restore_stream(flux, taille):
     """Restaure une sauvegarde (.zip) reçue en flux : vérifiée en entier avant d'écrire, état actuel gardé dans un zip avant."""
-    if taille <= 0 or taille > RESTAURATION_MAX:
+    if taille <= 0 or taille > MAX_RESTORE:
         raise ValueError(_t("Archive vide ou trop grande."))
     c = _m.chemin_config()
     dossiers = {"config": c.parent if c else None, "donnees": _m.DONNEES, "memoire": _m.MEMOIRE}

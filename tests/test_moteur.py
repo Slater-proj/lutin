@@ -2607,13 +2607,13 @@ class Assistant(unittest.TestCase):
     def test_mise_a_jour_depuis_la_page(self):
         import time
         from lutin import access, cli
-        access.MAJ.update(etat="", lignes=[], avant="", apres="")
-        vrai_peut = access.peut_redemarrer
+        access.UPDATE.update(etat="", lignes=[], avant="", apres="")
+        vrai_peut = access.can_restart
         redem = []
         try:
-            access.peut_redemarrer = lambda: True
-            vrai_redem = access.redemarrer
-            access.redemarrer = lambda: redem.append(1)
+            access.can_restart = lambda: True
+            vrai_redem = access.restart
+            access.restart = lambda: redem.append(1)
             vrai_cli = cli.mise_a_jour_detaillee
             cli.mise_a_jour_detaillee = lambda dire, erreur, capturer=False: (dire("✔ Lutin mis à jour : 0.6.2 → 0.6.3."), (0, "0.6.2", "0.6.3"))[1]
             post("/api/mettre-a-jour", {})
@@ -2639,7 +2639,7 @@ class Assistant(unittest.TestCase):
                 time.sleep(0.05)
             self.assertEqual(lire("/api/mettre-a-jour-etat")["etat"], "erreur")
             # pas de redémarrage possible : on le dit
-            access.peut_redemarrer = lambda: False
+            access.can_restart = lambda: False
             cli.mise_a_jour_detaillee = lambda dire, erreur, capturer=False: (dire("ok"), (0, "0.6.3", "0.6.4"))[1]
             post("/api/mettre-a-jour", {})
             fin = time.time() + 10
@@ -2649,10 +2649,10 @@ class Assistant(unittest.TestCase):
             self.assertEqual(e["etat"], "fini")
             self.assertTrue(any("Relance Lutin" in ligne for ligne in e["lignes"]))
         finally:
-            access.peut_redemarrer = vrai_peut
-            access.redemarrer = vrai_redem
+            access.can_restart = vrai_peut
+            access.restart = vrai_redem
             cli.mise_a_jour_detaillee = vrai_cli
-            access.MAJ.update(etat="", lignes=[], avant="", apres="")
+            access.UPDATE.update(etat="", lignes=[], avant="", apres="")
 
     def test_etat_emplacements_et_apercu_par_l_api(self):
         e = lire("/api/etat")
@@ -3417,30 +3417,30 @@ class Assistant(unittest.TestCase):
         self.assertEqual(conv["messages"][0]["content"], "Résume", "la conversation enregistrée ne contient pas le texte du fichier")
         self.assertEqual(conv["messages"][0]["pieces"], [{"id": ident, "nom": "note.txt"}])
         # borne : un long fichier est coupé avec mention, sans toucher la conversation
-        gros, _, _ = attachments.enregistrer(b"ligne de texte\n" * 1000, "gros.txt")
-        coupe = attachments.pour_le_modele([{"role": "user", "content": "q", "pieces": [{"id": gros, "nom": "gros.txt"}]}], 0)[0]["content"]
+        gros, _, _ = attachments.save(b"ligne de texte\n" * 1000, "gros.txt")
+        coupe = attachments.for_model([{"role": "user", "content": "q", "pieces": [{"id": gros, "nom": "gros.txt"}]}], 0)[0]["content"]
         self.assertIn("caractères coupés", coupe)
-        self.assertLess(len(coupe), attachments.PARTIE_MIN + 400)
+        self.assertLess(len(coupe), attachments.MIN_PART + 400)
         # les vieilles pièces ne sont plus rejouées
         msgs = [{"role": "user", "content": "a", "pieces": [{"id": ident, "nom": "note.txt"}]}] + [{"role": "assistant", "content": "x"}] * 7 + [{"role": "user", "content": "b"}]
-        self.assertIn("non rejoué", attachments.pour_le_modele(msgs, 10000)[0]["content"])
-        self.assertNotIn("voici ma note", attachments.pour_le_modele(msgs, 10000)[0]["content"])
+        self.assertIn("non rejoué", attachments.for_model(msgs, 10000)[0]["content"])
+        self.assertNotIn("voici ma note", attachments.for_model(msgs, 10000)[0]["content"])
         # une pièce disparue ne casse pas la demande
-        (attachments.dossier() / ident).unlink()
-        (attachments.dossier() / (ident + ".texte")).unlink(missing_ok=True)
-        self.assertIn("devenu illisible", attachments.pour_le_modele(conv["messages"], 10000)[0]["content"])
+        (attachments.folder() / ident).unlink()
+        (attachments.folder() / (ident + ".texte")).unlink(missing_ok=True)
+        self.assertIn("devenu illisible", attachments.for_model(conv["messages"], 10000)[0]["content"])
         # nettoyage : l'orpheline ancienne part, la citée reste
-        orpheline, _, _ = attachments.enregistrer(b"orpheline unique\n", "o.txt")
-        citee, _, _ = attachments.enregistrer(b"citee unique\n", "c.txt")
+        orpheline, _, _ = attachments.save(b"orpheline unique\n", "o.txt")
+        citee, _, _ = attachments.save(b"citee unique\n", "c.txt")
         c = A.conv_nouvelle()
         c["messages"].append({"role": "user", "content": "x", "pieces": [{"id": citee, "nom": "c.txt"}]})
         A.conv_ecrire(c)
         vieux = time.time() - 5 * 86400
         for i in (orpheline, citee):
-            os.utime(attachments.dossier() / i, (vieux, vieux))
-        attachments.nettoyer()
-        self.assertFalse((attachments.dossier() / orpheline).exists())
-        self.assertTrue((attachments.dossier() / citee).exists())
+            os.utime(attachments.folder() / i, (vieux, vieux))
+        attachments.clean()
+        self.assertFalse((attachments.folder() / orpheline).exists())
+        self.assertTrue((attachments.folder() / citee).exists())
 
     def test_export_de_sauvegarde(self):
         req = urllib.request.Request(BASE + "/api/sauvegarde", headers={"X-Token": A.JETON})

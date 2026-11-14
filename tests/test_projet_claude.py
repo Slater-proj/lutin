@@ -233,7 +233,7 @@ class LigneDeCommande(unittest.TestCase):
         return code, sortie.getvalue()
 
     def travaux(self):
-        return config.charger(config.dossiers())["emplacements"]["travaux"]
+        return config.load(config.folders())["emplacements"]["travaux"]
 
     def test_copie_demandee(self):
         vers = Path(self.t.name) / "copie"
