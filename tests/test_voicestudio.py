@@ -16,8 +16,8 @@ for cle, valeur in {"LUTIN_RACINE": str(_TEMP / "projet"), "LUTIN_DONNEES": str(
 (_TEMP / "projet").mkdir(exist_ok=True)
 
 from lutin import addons, addons_voicestudio as vs  # noqa: E402
-from lutin import moteur as _m  # noqa: E402
-from lutin import revue  # noqa: E402
+from lutin import core as _m  # noqa: E402
+from lutin import change_review  # noqa: E402
 
 AUDIO = b"RIFF" + b"\x00" * 400
 SERVICE = {}
@@ -125,12 +125,12 @@ class VoiceStudio(unittest.TestCase):
         addons.activer(vs.IDENT, False)
         for nom in ("voix_liste", "voix_parler", "voix_transcrire", "voix_cloner"):
             with self.assertRaises(_m.ErreurOutil, msg=nom):
-                revue._appeler_outil(nom, {"texte": "x"}, self.ctx())
+                change_review._appeler_outil(nom, {"texte": "x"}, self.ctx())
 
     # --- lire à voix haute
     def test_parler_demande_l_accord_cree_le_fichier_et_le_joint(self):
         ctx = self.ctx()
-        res = revue._appeler_outil("voix_parler", {"texte": "Bonjour à tous", "voix": "Narrateur", "vitesse": 1.5, "langue": "fr"}, ctx)
+        res = change_review._appeler_outil("voix_parler", {"texte": "Bonjour à tous", "voix": "Narrateur", "vitesse": 1.5, "langue": "fr"}, ctx)
         self.assertIn("Audio créé", res)
         self.assertEqual(len(self.accords), 1)
         self.assertFalse(self.accords[0][2], "pas d'accord automatique sans la case")

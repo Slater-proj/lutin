@@ -13,8 +13,8 @@ for cle, valeur in {"LUTIN_RACINE": str(_TEMP / "projet"), "LUTIN_DONNEES": str(
 for d in ("projet", "donnees", "memoire"):
     (_TEMP / d).mkdir(exist_ok=True)
 
-from lutin import moteur as A  # noqa: E402
-from lutin import bench, dialogue  # noqa: E402
+from lutin import core as A  # noqa: E402
+from lutin import bench, agent  # noqa: E402
 
 
 class MoteurFictif:
@@ -36,17 +36,17 @@ class MoteurFictif:
 class BancDeLaPage(unittest.TestCase):
     def setUp(self):
         self.moteur = MoteurFictif()
-        self.vrai = dialogue.moteur_local
+        self.vrai = agent.moteur_local
         A.moteur_local = lambda r=None: self.moteur
-        dialogue.moteur_local = lambda r=None: self.moteur
+        agent.moteur_local = lambda r=None: self.moteur
         A.BENCH.update(en_cours="", etape="", erreur="", file=[])
 
     def tearDown(self):
         A.moteur_local = self.vrai
-        dialogue.moteur_local = self.vrai
+        agent.moteur_local = self.vrai
 
     def test_le_client_du_banc_est_l_adaptateur_pour_un_autre_moteur(self):
-        self.assertIsInstance(dialogue.client_banc(), bench.AdaptateurMoteur)
+        self.assertIsInstance(agent.client_banc(), bench.AdaptateurMoteur)
 
     def test_la_mesure_rapide_passe_par_le_moteur_choisi(self):
         A._mesurer_un("m1", True)
@@ -64,7 +64,7 @@ class BancDeLaPage(unittest.TestCase):
 
 class AvecOllama(unittest.TestCase):
     def test_ollama_reste_interroge_directement(self):
-        self.assertNotIsInstance(dialogue.client_banc({"moteur": "ollama"}), bench.AdaptateurMoteur)
+        self.assertNotIsInstance(agent.client_banc({"moteur": "ollama"}), bench.AdaptateurMoteur)
 
 
 if __name__ == "__main__":

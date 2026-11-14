@@ -124,10 +124,10 @@ S_SX, S_BR, S_PG = lancer(FauxSearxng), lancer(FauxBrave), lancer(FauxPages)
 URL_SX = "http://127.0.0.1:%d" % S_SX.server_address[1]
 URL_BR = "http://127.0.0.1:%d/res/v1/" % S_BR.server_address[1]
 URL_PG = "http://127.0.0.1:%d" % S_PG.server_address[1]
-os.environ["LUTIN_BRAVE_URL"] = URL_BR          # avant l'import de lutin.recherche
+os.environ["LUTIN_BRAVE_URL"] = URL_BR          # avant l'import de lutin.web_search
 
-from lutin import moteur as A  # noqa: E402
-from lutin import recherche, web  # noqa: E402
+from lutin import core as A  # noqa: E402
+from lutin import web_search, web  # noqa: E402
 
 
 def derniere(nom):
@@ -142,51 +142,51 @@ class Base(unittest.TestCase):
     def setUp(self):
         del RECU[:]
         ETAT.update(searxng="json", page503=1)
-        recherche.enregistrer("", "")
+        web_search.enregistrer("", "")
         web.CACHE_RECHERCHE.clear()
         web.CACHE_PAGES.clear()
         web.BLOQUES.clear()
 
     def tearDown(self):
-        recherche.enregistrer("", "")
-        recherche.ACTUELLES.v = {}
+        web_search.enregistrer("", "")
+        web_search.ACTUELLES.v = {}
 
 
 class Configuration(Base):
     def test_adresse_de_searxng_validee_et_normalisee(self):
-        self.assertEqual(recherche.normaliser_adresse("127.0.0.1:8080/"), "http://127.0.0.1:8080")
-        self.assertEqual(recherche.normaliser_adresse("https://sx.exemple.org/moteur/"), "https://sx.exemple.org/moteur")
-        self.assertEqual(recherche.normaliser_adresse(""), "")
+        self.assertEqual(web_search.normaliser_adresse("127.0.0.1:8080/"), "http://127.0.0.1:8080")
+        self.assertEqual(web_search.normaliser_adresse("https://sx.exemple.org/moteur/"), "https://sx.exemple.org/moteur")
+        self.assertEqual(web_search.normaliser_adresse(""), "")
         for mauvaise in ("ftp://x", "http://u:p@x", "http://x/?a=b", "http://x:99999", "http://x/#f", "pas une adresse /"):
             with self.subTest(mauvaise=mauvaise), self.assertRaises(ValueError):
-                recherche.normaliser_adresse(mauvaise)
+                web_search.normaliser_adresse(mauvaise)
 
     def test_la_cle_n_est_jamais_dans_la_vue_et_le_fichier_est_prive(self):
-        vue = recherche.enregistrer(URL_SX, "cle-brave-123456")
+        vue = web_search.enregistrer(URL_SX, "cle-brave-123456")
         self.assertEqual((vue["searxng"], vue["brave"], vue["brave_fin"]), (URL_SX, True, "3456"))
         self.assertNotIn("cle-brave-123456", json.dumps(vue))
         if os.name != "nt":
-            self.assertEqual(stat.S_IMODE(os.stat(recherche._chemin()).st_mode), 0o600)
-        self.assertEqual(recherche.enregistrer(brave_cle="")["brave"], False, "retirer la clé")
-        self.assertEqual(recherche.vue()["searxng"], URL_SX, "ne pas toucher à SearXNG en retirant la clé")
+            self.assertEqual(stat.S_IMODE(os.stat(web_search._chemin()).st_mode), 0o600)
+        self.assertEqual(web_search.enregistrer(brave_cle="")["brave"], False, "retirer la clé")
+        self.assertEqual(web_search.vue()["searxng"], URL_SX, "ne pas toucher à SearXNG en retirant la clé")
         for mauvaise in ("trop court", "avec espace dedans!!", "x" * 300):
             with self.subTest(mauvaise=mauvaise), self.assertRaises(ValueError):
-                recherche.enregistrer(brave_cle=mauvaise)
+                web_search.enregistrer(brave_cle=mauvaise)
 
     def test_un_fichier_de_configuration_abime_ne_plante_pas(self):
-        recherche._chemin().write_text("[1, 2", encoding="utf-8")
-        self.assertEqual(recherche.config(), {"searxng": "", "brave_cle": "", "tavily_cle": "", "exa_cle": "", "perplexity_cle": ""})
-        recherche._chemin().write_text('"texte"', encoding="utf-8")
-        self.assertEqual(recherche.config()["searxng"], "")
+        web_search._chemin().write_text("[1, 2", encoding="utf-8")
+        self.assertEqual(web_search.config(), {"searxng": "", "brave_cle": "", "tavily_cle": "", "exa_cle": "", "perplexity_cle": ""})
+        web_search._chemin().write_text('"texte"', encoding="utf-8")
+        self.assertEqual(web_search.config()["searxng"], "")
 
     def test_options_validees_et_propres_a_chaque_fil(self):
-        self.assertEqual(recherche.definir_options("Semaine", "https://www.Docs.Python.org/3/", True, "en"), {"periode": "semaine", "site": "docs.python.org", "actualites": True, "langue": "en"})
+        self.assertEqual(web_search.definir_options("Semaine", "https://www.Docs.Python.org/3/", True, "en"), {"periode": "semaine", "site": "docs.python.org", "actualites": True, "langue": "en"})
         for periode, site in (("hier", None), (None, "pas un domaine"), (None, "x.y;rm")):
             with self.subTest(periode=periode, site=site), self.assertRaises(ValueError):
-                recherche.definir_options(periode, site)
-        recherche.definir_options("jour")
+                web_search.definir_options(periode, site)
+        web_search.definir_options("jour")
         vu = []
-        t = threading.Thread(target=lambda: vu.append(recherche.options()))
+        t = threading.Thread(target=lambda: vu.append(web_search.options()))
         t.start()
         t.join()
         self.assertEqual(vu, [{}], "un autre fil ne voit pas les options de celui-ci")
@@ -194,7 +194,7 @@ class Configuration(Base):
 
 class Nettoyage(Base):
     def test_suivi_ancres_et_doublons(self):
-        res = recherche.nettoyer([
+        res = web_search.nettoyer([
             {"titre": "A", "url": "https://exemple.org/p?utm_source=a&fbclid=1&id=7#ancre"},
             {"titre": "A bis", "url": "https://www.exemple.org/p/?id=7"},
             {"titre": "Faux", "url": "javascript:alert(1)"}, {"titre": "Vide", "url": ""}, {"titre": "Mail", "url": "mailto:x@y.z"}], 10)
@@ -202,20 +202,20 @@ class Nettoyage(Base):
 
     def test_au_plus_deux_par_site_sauf_si_un_site_est_demande(self):
         entree = [{"titre": str(i), "url": "https://meme.exemple.org/%d" % i} for i in range(5)] + [{"titre": "autre", "url": "https://autre.exemple.net/"}]
-        self.assertEqual(len(recherche.nettoyer(entree, 10)), 3)
-        self.assertEqual(len(recherche.nettoyer(entree, 10, par_site=0)), 6)
-        self.assertEqual(len(recherche.nettoyer(entree, 2)), 2, "et jamais plus que demandé")
+        self.assertEqual(len(web_search.nettoyer(entree, 10)), 3)
+        self.assertEqual(len(web_search.nettoyer(entree, 10, par_site=0)), 6)
+        self.assertEqual(len(web_search.nettoyer(entree, 2)), 2, "et jamais plus que demandé")
 
     def test_textes_nettoyes_et_bornes(self):
-        r = recherche.nettoyer([{"titre": "  Un   titre \n long ", "url": "https://exemple.org/", "extrait": "x" * 900, "date": "2026-10-30 08:00:00 +0200 et beaucoup trop long pour une date"}], 5)[0]
+        r = web_search.nettoyer([{"titre": "  Un   titre \n long ", "url": "https://exemple.org/", "extrait": "x" * 900, "date": "2026-10-30 08:00:00 +0200 et beaucoup trop long pour une date"}], 5)[0]
         self.assertEqual(r["titre"], "Un titre long")
         self.assertEqual((len(r["extrait"]), len(r["date"])), (300, 40))
 
 
 class Searxng(Base):
     def test_exception_d_hote_limitee_a_searxng(self):
-        recherche.enregistrer(URL_SX)
-        res = recherche.resultats_searxng("requete")
+        web_search.enregistrer(URL_SX)
+        res = web_search.resultats_searxng("requete")
         self.assertTrue(res)
         autre = URL_PG + "/article"
         with self.assertRaises(A.ErreurOutil) as e:
@@ -227,14 +227,14 @@ class Searxng(Base):
             web.web_telecharger(URL_PG + "/article", hote_autorise="un.autre.hote")
 
     def test_requete_envoyee_et_resultats_nettoyes(self):
-        recherche.enregistrer(URL_SX)
-        recherche.definir_options("semaine", "docs.exemple.org", True, "en")
-        recherche.resultats_searxng("guide installation")
+        web_search.enregistrer(URL_SX)
+        web_search.definir_options("semaine", "docs.exemple.org", True, "en")
+        web_search.resultats_searxng("guide installation")
         q = requete_de(derniere("searxng")[1])
         self.assertEqual((q["format"], q["language"], q["time_range"], q["categories"]), (["json"], ["en"], ["week"], ["news"]))
         self.assertEqual(q["q"], ["site:docs.exemple.org guide installation"])
-        recherche.definir_options()
-        res, _ = web.chercher_resultats("guide", 10, options=recherche.options())
+        web_search.definir_options()
+        res, _ = web.chercher_resultats("guide", 10, options=web_search.options())
         self.assertEqual([x["source"] for x in res], ["searxng"] * 3)
         urls = [x["url"] for x in res]
         self.assertIn("https://docs.exemple.org/guide?id=3", urls, "suivi et ancre retirés")
@@ -243,19 +243,19 @@ class Searxng(Base):
         self.assertEqual(res[0]["date"], "2026-10-30")
 
     def test_reponse_non_json_dit_comment_corriger(self):
-        recherche.enregistrer(URL_SX)
+        web_search.enregistrer(URL_SX)
         ETAT["searxng"] = "html"
         with self.assertRaises(A.ErreurOutil) as e:
-            recherche.resultats_searxng("x")
+            web_search.resultats_searxng("x")
         self.assertIn("settings.yml", str(e.exception))
 
     def test_il_passe_avant_duckduckgo_et_bing(self):
         self.assertEqual([n for n, _ in web.moteurs_de_recherche()], ["duckduckgo", "bing"])
-        recherche.enregistrer(URL_SX, "cle-brave-123456")
+        web_search.enregistrer(URL_SX, "cle-brave-123456")
         self.assertEqual([n for n, _ in web.moteurs_de_recherche()], ["searxng", "brave", "duckduckgo", "bing"])
 
     def test_outil_complet_citations_date_et_moteur(self):
-        recherche.enregistrer(URL_SX)
+        web_search.enregistrer(URL_SX)
         texte = A.outil_web_chercher("guide d'installation", 6, {"web": True}, 0, "mois", "docs.exemple.org")
         for attendu in ("CONTENU WEB NON FIABLE", "1. Docs officielles", "https://docs.exemple.org/guide?id=3", "Date : 2026-10-30", "Moteur : searxng", "période : mois", "site : docs.exemple.org"):
             self.assertIn(attendu, texte)
@@ -265,10 +265,10 @@ class Searxng(Base):
                 A.outil_web_chercher("x", 3, {"web": True}, 0, mauvais.get("periode"), mauvais.get("site"))
 
     def test_une_instance_arretee_laisse_les_autres_moteurs_prendre_le_relais(self):
-        recherche.enregistrer("http://127.0.0.1:9")          # personne n'y répond
+        web_search.enregistrer("http://127.0.0.1:9")          # personne n'y répond
         appels = []
         vrai = web.moteurs_de_recherche
-        web.moteurs_de_recherche = lambda: recherche.fournisseurs_configures() + [("secours", lambda q: appels.append(q) or [{"titre": "S", "url": "https://secours.exemple.org/", "extrait": ""}])]
+        web.moteurs_de_recherche = lambda: web_search.fournisseurs_configures() + [("secours", lambda q: appels.append(q) or [{"titre": "S", "url": "https://secours.exemple.org/", "extrait": ""}])]
         try:
             res, raisons = web.chercher_resultats("x", 3, options={})
         finally:
@@ -279,9 +279,9 @@ class Searxng(Base):
 
 class Brave(Base):
     def test_cle_en_en_tete_fraicheur_et_description_nettoyee(self):
-        recherche.enregistrer(brave_cle="cle-brave-123456")
-        recherche.definir_options("jour", None, False, "fr")
-        res = recherche.resultats_brave("python 3.14")
+        web_search.enregistrer(brave_cle="cle-brave-123456")
+        web_search.definir_options("jour", None, False, "fr")
+        res = web_search.resultats_brave("python 3.14")
         self.assertEqual(res[0]["extrait"], "un extrait")
         chemin, en_tetes = derniere("brave")[1], derniere("brave")[2]
         self.assertTrue(chemin.startswith("/res/v1/web/search?"))
@@ -289,16 +289,16 @@ class Brave(Base):
         self.assertEqual(en_tetes.get("X-Subscription-Token"), "cle-brave-123456")
 
     def test_actualites_utilisent_le_point_d_acces_des_nouvelles(self):
-        recherche.enregistrer(brave_cle="cle-brave-123456")
-        recherche.definir_options(None, None, True)
-        res = recherche.resultats_brave("élections")
+        web_search.enregistrer(brave_cle="cle-brave-123456")
+        web_search.definir_options(None, None, True)
+        res = web_search.resultats_brave("élections")
         self.assertEqual((res[0]["titre"], res[0]["extrait"]), ("Une dépêche", "Dernière minute"))
         self.assertIn("/news/search", derniere("brave")[1])
 
     def test_mauvaise_cle_est_une_erreur_claire(self):
-        recherche.enregistrer(brave_cle="mauvaise-cle-000000")
+        web_search.enregistrer(brave_cle="mauvaise-cle-000000")
         with self.assertRaises(A.ErreurOutil) as e:
-            recherche.resultats_brave("x")
+            web_search.resultats_brave("x")
         self.assertIn("401", str(e.exception))
 
 
@@ -354,18 +354,18 @@ class LecturePages(Base):
             A.outil_web_lire(URL_PG + "/long", 0, {"web": True}, True)
 
     def test_hors_ligne_l_emporte_sur_le_cache(self):
-        from lutin import horsligne
+        from lutin import offline
         A.outil_web_lire(URL_PG + "/long", 0, {"web": True})
-        vrai = horsligne.garde
+        vrai = offline.garde
 
         def refuse(url):
-            raise horsligne.HorsLigne("mode hors ligne")
-        horsligne.garde = refuse
+            raise offline.HorsLigne("mode hors ligne")
+        offline.garde = refuse
         try:
             with self.assertRaises(A.ErreurOutil):
                 A.outil_web_lire(URL_PG + "/long", 0, {"web": True})
         finally:
-            horsligne.garde = vrai
+            offline.garde = vrai
 
 
 class Legerete(Base):
@@ -414,19 +414,19 @@ class Legerete(Base):
 
     def test_aucun_fil_de_fond_n_est_ajoute(self):
         avant = threading.active_count()
-        recherche.enregistrer(URL_SX)
+        web_search.enregistrer(URL_SX)
         for _ in range(3):
-            recherche.resultats_searxng("x")
-        recherche.enregistrer("", "")
+            web_search.resultats_searxng("x")
+        web_search.enregistrer("", "")
         time.sleep(0.2)
         self.assertLessEqual(threading.active_count(), avant, "la recherche ne laisse aucun fil derrière elle")
 
 
 class Test(Base):
     def test_chaque_moteur_est_interroge_separement(self):
-        recherche.enregistrer(URL_SX, "cle-brave-123456")
+        web_search.enregistrer(URL_SX, "cle-brave-123456")
         vrai = web.moteurs_de_recherche
-        web.moteurs_de_recherche = lambda: recherche.fournisseurs_configures() + [("muet", lambda q: [])]
+        web.moteurs_de_recherche = lambda: web_search.fournisseurs_configures() + [("muet", lambda q: [])]
         try:
             res = web.tester_moteurs("x")
             etat = web.etat_moteurs()
@@ -444,7 +444,7 @@ class Test(Base):
 class Api(Base):
     @classmethod
     def setUpClass(cls):
-        from lutin import securite as S
+        from lutin import security as S
         cls.serveur = ThreadingHTTPServer(("127.0.0.1", 0), A.Gestionnaire)
         threading.Thread(target=cls.serveur.serve_forever, daemon=True).start()
         cls.port = cls.serveur.server_address[1]
@@ -501,7 +501,7 @@ class Api(Base):
         try:
             statut, v = self.appel("POST", "/api/web-recherche-config", {"searxng": URL_SX, "brave_cle": "cle-brave-123456"})
             self.assertEqual(statut, 403)
-            self.assertEqual((recherche.vue()["searxng"], recherche.vue()["brave"]), ("", False), "rien n'a été enregistré")
+            self.assertEqual((web_search.vue()["searxng"], web_search.vue()["brave"]), ("", False), "rien n'a été enregistré")
             self.assertFalse(self.appel("GET", "/api/web-recherche")[1]["modifiable"])
         finally:
             self.serveur.RequestHandlerClass._configurateur_strict = vrai

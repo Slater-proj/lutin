@@ -16,7 +16,7 @@ for cle, valeur in {"LUTIN_RACINE": str(_TEMP / "projet"), "LUTIN_DONNEES": str(
 (_TEMP / "projet").mkdir(exist_ok=True)
 
 from lutin import addons, addons_telegram as tg  # noqa: E402
-from lutin import moteur as _m  # noqa: E402
+from lutin import core as _m  # noqa: E402
 
 JETON = "123456:TOKEN-SECRET-TELEGRAM"
 SERVICE = {"updates": [], "envoyes": [], "panne": False}

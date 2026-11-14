@@ -3,7 +3,7 @@ import random
 import unittest
 
 import context  # noqa: F401
-from lutin import pensee as P
+from lutin import thinking as P
 
 
 def decouper(texte, taille):

@@ -19,9 +19,9 @@ import secrets
 import threading
 import time
 
-from . import donnees as _d
-from . import moteur as _m
-from . import travaux as _trav
+from . import storage as _d
+from . import core as _m
+from . import workspaces as _trav
 from .i18n import t as _t
 
 MAX_MISSIONS = 5

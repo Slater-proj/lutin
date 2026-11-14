@@ -18,7 +18,7 @@ import time
 import urllib.error
 import urllib.request
 
-from . import moteur as _m
+from . import core as _m
 from .i18n import t as _t
 
 VERSION_PROTOCOLE = "2025-03-26"
@@ -187,8 +187,8 @@ class Connexion:
     # -- ouverture
     def ouvrir(self):
         if self.serveur.get("type") == "http":
-            from . import horsligne
-            if horsligne.actif() and not re.match(r"^https?://(127\.0\.0\.1|localhost|\[::1\])", self.serveur.get("url", ""), re.I):
+            from . import offline
+            if offline.actif() and not re.match(r"^https?://(127\.0\.0\.1|localhost|\[::1\])", self.serveur.get("url", ""), re.I):
                 raise ErreurMcp(_t("Mode hors ligne : ce connecteur distant n'est pas joint."))
         else:
             commande = list(self.serveur.get("commande") or [])
@@ -312,8 +312,8 @@ class Connexion:
     def fermer(self):
         if self.proc is not None and self.proc.poll() is None:
             try:
-                from . import outils
-                outils.tuer_arbre(self.proc.pid)
+                from . import tools
+                tools.tuer_arbre(self.proc.pid)
             except Exception:  # noqa: BLE001
                 try:
                     self.proc.kill()

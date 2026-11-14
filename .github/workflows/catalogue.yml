@@ -20,6 +20,6 @@ jobs:
         with:
           python-version: "3.12"
       - name: Schéma du catalogue
-        run: python -c "import sys; sys.path.insert(0, 'src'); from lutin import catalogue; catalogue.charger(); print('catalogue valide')"
+        run: python -c "import sys; sys.path.insert(0, 'src'); from lutin import model_catalog; model_catalog.charger(); print('catalogue valide')"
       - name: Existence dans le registre
         run: python tools/verifier_catalogue.py

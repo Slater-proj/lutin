@@ -30,6 +30,22 @@ La première publication est **0.1.0**. Chaque fusion dans `main` produit une pu
 
 Conseil : pour que la version suive ce que tu as fait, fusionne par **squash** avec un titre conventionnel (`feat: dossiers de travail multiples`).
 
+## Canal de publication : des pré-versions pendant la migration vers la 1.0
+
+Le fichier `tools/release_channel.json`, quand le dépôt en a un, décide de ce que `main` publie ([ADR 0004](adr/0004-release-cadence.md), en anglais) :
+
+| Fichier | Ce que `main` publie |
+|---|---|
+| aucun (la ligne 0.x) | une version stable par fusion, comme décrit plus haut |
+| `{"channel": "alpha", "target": "1.0.0"}` | des **pré-versions** `1.0.0a1`, `1.0.0a2`… (`beta` : `b1`…, `rc` : `rc1`…) : étiquette `v1.0.0a1`, GitHub Release marquée *pre-release*, images Docker `:1.0.0a1` et `:next` — **jamais** `:latest` |
+| `{"channel": "stable", "target": "1.0.0"}` | la version stable `1.0.0`, puis le calcul habituel |
+
+Une pré-version n'est jamais « la dernière version » pour GitHub : les scripts d'installation, `lutin update` et l'annonce de mise à jour dans la page demandent tous la dernière version, donc aucun ne la propose. Pour en essayer une, il faut la nommer : `docker pull ghcr.io/slater-proj/lutin:next`, ou la roue de cette Release.
+
+Sur une branche qui porte une cible, la candidate s'appelle `1.0.0.devN+branche` (toujours plus petite que `1.0.0a1`). Un fichier illisible ou incohérent arrête le calcul : rien n'est publié, plutôt qu'une version stable par accident.
+
+La branche `modernization` porte le fichier `alpha` : si elle arrivait dans `main` avant que la 1.0 soit prête, il en sortirait une pré-version.
+
 ## Utiliser une candidate
 
 ```bash

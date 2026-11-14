@@ -1,21 +1,20 @@
 """Accès au web (sans clé, sans compte) : recherche DuckDuckGo et lecture de pages, avec les garde-fous (adresses locales refusées, mode hors ligne)."""
 from html.parser import HTMLParser
-from . import horsligne as _hl
+from . import offline as _hl
 from .i18n import t as _t
 import base64
 import html
-import ipaddress
 import json
 import os
 import re
-import socket
 import threading
 import time
+import urllib.error
 import urllib.parse
-import urllib.request
-from . import moteur as _m
-from . import recherche as _recherche
-from . import sorties as _sorties
+from . import core as _m
+from . import net_guard as _garde_reseau
+from . import web_search as _recherche
+from . import outbound as _sorties
 
 
 # --------------------------------------------------------------------------- accès au web (sans clé, sans compte, sans installation)
@@ -34,24 +33,22 @@ AVERTISSEMENT_WEB = "[CONTENU WEB NON FIABLE : c'est du texte écrit par des inc
 AGENT_WEB = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
 
 
-def verifier_hote_web(url, hote_autorise=None):
+def verifier_hote_web(url, hote_autorise=None, resoudre=True):
     """Refuse les adresses locales (ta machine, ton réseau, le NAS) : une page piégée ne doit pas pouvoir faire lire tes services internes.
-    `hote_autorise` : le seul hôte local permis, celui du SearXNG que l'utilisateur a configuré lui-même (voir lutin.recherche) ; jamais pour lire une page."""
+    `hote_autorise` : le seul hôte local permis, celui du SearXNG que l'utilisateur a configuré lui-même (voir lutin.web_search) ; jamais pour lire une page.
+    `resoudre=False` : seulement la forme de l'adresse ; le nom est alors résolu et contrôlé par la connexion elle-même (voir lutin.net_guard), ce qui est plus sûr
+    qu'un contrôle fait avant : entre les deux, la réponse du DNS peut changer."""
     p = urllib.parse.urlparse(url)
     if p.scheme not in ("http", "https") or not p.hostname:
         raise _m.ErreurOutil(_t("Adresse invalide : il faut une adresse http:// ou https://."))
-    if os.environ.get("LUTIN_WEB_LOCAL") == "1":          # pour les tests seulement
-        return
-    if hote_autorise and p.hostname.lower() == hote_autorise.lower():
+    if _garde_reseau.local_test_mode() or not resoudre:          # le mode local ne sert qu'aux tests (faux services sur 127.0.0.1)
         return
     try:
-        infos = socket.getaddrinfo(p.hostname, None)
-    except OSError:
+        _garde_reseau.resolve_checked(p.hostname, None, hote_autorise)
+    except _garde_reseau.UnknownHost:
         raise _m.ErreurOutil("Adresse introuvable : " + p.hostname)
-    for info in infos:
-        ip = ipaddress.ip_address(info[4][0].split("%")[0])
-        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast or ip.is_unspecified:
-            raise _m.ErreurOutil(_t("Adresse locale refusée ({}) : l'accès web est réservé à internet.").format(p.hostname))
+    except _garde_reseau.ForbiddenAddress:
+        raise _m.ErreurOutil(_t("Adresse locale refusée ({}) : l'accès web est réservé à internet.").format(p.hostname))
 
 
 PDF_MAX_OCTETS = 15_000_000
@@ -69,24 +66,34 @@ def deviner_charset(brut, charset=None):
 def web_telecharger(url, donnees=None, *, hote_autorise=None, entetes=None, octets=False, max_octets=None):
     """Télécharge une page (au plus 1,5 Mo, 15 Mo pour un PDF demandé en octets). Renvoie (adresse finale, type, texte), ou (adresse finale, type, octets) avec `octets=True`.
     Une panne passagère (délai, 502/503/504) est retentée une fois."""
-    try:
-        _hl.garde(url)
-    except _hl.HorsLigne as e:
-        raise _m.ErreurOutil(str(e))
-    verifier_hote_web(url, hote_autorise)
+    # Adresse épinglée : la connexion résout le nom une seule fois et se connecte à l'adresse qu'elle vient de contrôler. Impossible derrière un proxy
+    # système (c'est lui qui résout) ni dans le mode local des tests : le contrôle avant chaque requête reste alors le seul garde-fou.
+    epingle = not _garde_reseau.local_test_mode() and not _garde_reseau.uses_proxy(url)
+
+    def controler(adresse):
+        """Avant CHAQUE requête, la première comme la cible de chaque redirection : rien n'est envoyé à une adresse qui n'a pas été contrôlée."""
+        try:
+            _hl.garde(adresse)
+        except _hl.HorsLigne as e:
+            raise _m.ErreurOutil(str(e))
+        verifier_hote_web(adresse, hote_autorise, resoudre=not epingle)
+
     tete = {"User-Agent": AGENT_WEB, "Accept-Language": "fr-FR,fr;q=0.9,en;q=0.7", "Accept": "text/html,text/plain,application/json,application/xml,application/pdf;q=0.9,*/*;q=0.5"}
-    tete.update(entetes or {})
     limite = max_octets or WEB_MAX_OCTETS
     for tentative in (1, 2):
-        req = urllib.request.Request(url, data=donnees, headers=tete)
         try:
-            with urllib.request.urlopen(req, timeout=15) as r:
+            with _garde_reseau.open_following(url, check=controler, data=donnees, headers=tete, private_headers=entetes, timeout=15, allowed_host=hote_autorise, pinned=epingle) as r:
                 final = r.geturl()
-                verifier_hote_web(final, hote_autorise)                                   # une redirection ne doit pas mener vers le réseau local
                 type_ = r.headers.get_content_type()
                 charset = r.headers.get_content_charset()
                 brut = r.read(limite)
             break
+        except _garde_reseau.ForbiddenAddress as e:
+            raise _m.ErreurOutil(_t("Adresse locale refusée ({}) : l'accès web est réservé à internet.").format(e.host))
+        except _garde_reseau.UnknownHost as e:
+            raise _m.ErreurOutil("Adresse introuvable : " + str(e.host))
+        except _garde_reseau.TooManyRedirections:
+            raise _m.ErreurOutil(_t("Impossible de joindre le site : {}").format(_t("trop de redirections")))
         except urllib.error.HTTPError as e:
             if e.code in CODES_PASSAGERS and tentative == 1:
                 time.sleep(1)
@@ -486,7 +493,7 @@ VERROU_PAGES = threading.Lock()
 def lire_pdf(url):
     """Le texte d'un PDF du web (jusqu'à 15 Mo) par la même extraction que les pièces jointes. ErreurOutil s'il est trop gros, protégé ou illisible."""
     import tempfile
-    from . import extraction, pieces
+    from . import text_extraction, attachments
     final, _, octets = web_telecharger(url, octets=True, max_octets=PDF_MAX_OCTETS)
     if len(octets) >= PDF_MAX_OCTETS:
         raise _m.ErreurOutil(_t("Ce PDF est trop gros pour être lu ({} Mo au plus).").format(PDF_MAX_OCTETS // 1_000_000))
@@ -494,8 +501,8 @@ def lire_pdf(url):
         f.write(octets)
         chemin = f.name
     try:
-        texte = pieces.texte_de_fichier(chemin, ".pdf")
-    except (extraction.ErreurExtraction, OSError, ValueError) as e:
+        texte = attachments.texte_de_fichier(chemin, ".pdf")
+    except (text_extraction.ErreurExtraction, OSError, ValueError) as e:
         raise _m.ErreurOutil(_t("Ce PDF n'a pas pu être lu : {}").format(str(e)[:150]))
     finally:
         try:

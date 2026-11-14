@@ -7,11 +7,11 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import context  # noqa: F401
-from lutin import catalogue, config, miseajour, ollama_client
-from lutin.machine import Gpu, Profil
+from lutin import model_catalog, config, updates, ollama_client
+from lutin.hardware import Gpu, Profil
 from lutin.ollama_client import ErreurOllama, Ollama
 
-CAT = catalogue.charger()
+CAT = model_catalog.charger()
 
 
 class Chemins(unittest.TestCase):
@@ -285,51 +285,51 @@ def faux_http(routes):
 
 class MisesAJour(unittest.TestCase):
     def test_separer(self):
-        self.assertEqual(miseajour.separer("qwen3:8b"), ("library", "qwen3", "8b"))
-        self.assertEqual(miseajour.separer("huihui_ai/Qwen3.8-abliterated:27b"), ("huihui_ai", "Qwen3.8-abliterated", "27b"))
-        self.assertEqual(miseajour.separer("llama3"), ("library", "llama3", "latest"))
+        self.assertEqual(updates.separer("qwen3:8b"), ("library", "qwen3", "8b"))
+        self.assertEqual(updates.separer("huihui_ai/Qwen3.8-abliterated:27b"), ("huihui_ai", "Qwen3.8-abliterated", "27b"))
+        self.assertEqual(updates.separer("llama3"), ("library", "llama3", "latest"))
 
     def test_digest_registre(self):
-        h = faux_http({miseajour.REGISTRE: (200, {"docker-content-digest": "sha256:abc"}, b"{}")})
-        self.assertEqual(miseajour.digest_registre("qwen3:8b", h), "abc")
+        h = faux_http({updates.REGISTRE: (200, {"docker-content-digest": "sha256:abc"}, b"{}")})
+        self.assertEqual(updates.digest_registre("qwen3:8b", h), "abc")
         self.assertIn("/library/qwen3/manifests/8b", h.appels[0][0])
-        self.assertIsNone(miseajour.digest_registre("x", faux_http({})))
-        self.assertIsNone(miseajour.digest_registre("x", faux_http({miseajour.REGISTRE: OSError("hors ligne")})))
+        self.assertIsNone(updates.digest_registre("x", faux_http({})))
+        self.assertIsNone(updates.digest_registre("x", faux_http({updates.REGISTRE: OSError("hors ligne")})))
 
     def test_detecte_une_mise_a_jour(self):
-        h = faux_http({miseajour.REGISTRE: (200, {"docker-content-digest": "sha256:nouveau"}, b"")})
-        p = miseajour.mises_a_jour({"qwen3:8b": {"digest": "ancien"}}, h)
+        h = faux_http({updates.REGISTRE: (200, {"docker-content-digest": "sha256:nouveau"}, b"")})
+        p = updates.mises_a_jour({"qwen3:8b": {"digest": "ancien"}}, h)
         self.assertEqual([x["type"] for x in p], ["maj"])
-        h = faux_http({miseajour.REGISTRE: (200, {"docker-content-digest": "sha256:ancien"}, b"")})
-        self.assertEqual(miseajour.mises_a_jour({"qwen3:8b": {"digest": "ancien"}}, h), [], "même empreinte : rien à proposer")
+        h = faux_http({updates.REGISTRE: (200, {"docker-content-digest": "sha256:ancien"}, b"")})
+        self.assertEqual(updates.mises_a_jour({"qwen3:8b": {"digest": "ancien"}}, h), [], "même empreinte : rien à proposer")
 
     def test_nouveaute_quand_un_modele_mieux_note_tient(self):
         machine = Profil(ram_go=32, ram_libre_go=20, gpus=[Gpu("x", "nvidia", 24)])
-        p = miseajour.nouveautes(machine, CAT, {"code": "qwen2.5-coder:7b"}, {"qwen2.5-coder:7b": {}})
+        p = updates.nouveautes(machine, CAT, {"code": "qwen2.5-coder:7b"}, {"qwen2.5-coder:7b": {}})
         self.assertEqual(len(p), 1)
         self.assertEqual((p[0]["role"], p[0]["ancien"]), ("code", "qwen2.5-coder:7b"))
         self.assertGreater(CAT and [m for m in CAT["modeles"] if m["id"] == p[0]["modele"]][0]["notes"]["code"], 7)
 
     def test_pas_de_proposition_si_deja_au_meilleur_ignoree_ou_inutile(self):
         machine = Profil(ram_go=32, ram_libre_go=20, gpus=[Gpu("x", "nvidia", 24)])
-        meilleur = __import__("lutin.selection", fromlist=["x"]).choisir(machine, CAT)["code"].id
-        self.assertEqual(miseajour.nouveautes(machine, CAT, {"code": meilleur}, {meilleur: {}}), [])
-        deja = miseajour.nouveautes(machine, CAT, {"code": "qwen2.5-coder:7b"}, {"qwen2.5-coder:7b": {}})[0]["cle"]
-        self.assertEqual(miseajour.nouveautes(machine, CAT, {"code": "qwen2.5-coder:7b"}, {"qwen2.5-coder:7b": {}}, ignores=[deja]), [])
-        self.assertEqual(miseajour.nouveautes(machine, CAT, {"code": "qwen2.5-coder:7b"}, {}), [], "le modèle n'est plus installé : on ne propose pas de le remplacer")
+        meilleur = __import__("lutin.model_selection", fromlist=["x"]).choisir(machine, CAT)["code"].id
+        self.assertEqual(updates.nouveautes(machine, CAT, {"code": meilleur}, {meilleur: {}}), [])
+        deja = updates.nouveautes(machine, CAT, {"code": "qwen2.5-coder:7b"}, {"qwen2.5-coder:7b": {}})[0]["cle"]
+        self.assertEqual(updates.nouveautes(machine, CAT, {"code": "qwen2.5-coder:7b"}, {"qwen2.5-coder:7b": {}}, ignores=[deja]), [])
+        self.assertEqual(updates.nouveautes(machine, CAT, {"code": "qwen2.5-coder:7b"}, {}), [], "le modèle n'est plus installé : on ne propose pas de le remplacer")
 
     def test_ancien_modele_remplace_et_deja_installe_est_propose_a_la_suppression(self):
         cat = copy.deepcopy(CAT)
         cat["modeles"][0]["remplace_par"] = cat["modeles"][1]["id"]
         vieux, neuf = cat["modeles"][0]["id"], cat["modeles"][1]["id"]
-        p = miseajour.obsoletes(cat, {vieux: {}, neuf: {}})
+        p = updates.obsoletes(cat, {vieux: {}, neuf: {}})
         self.assertEqual([(x["type"], x["modele"], x["remplace_par"]) for x in p], [("obsolete", vieux, neuf)])
-        self.assertEqual(miseajour.obsoletes(cat, {vieux: {}}), [], "le remplaçant n'est pas installé : on ne propose pas de retirer le seul modèle")
-        self.assertEqual(miseajour.obsoletes(cat, {vieux: {}, neuf: {}}, ignores=[p[0]["cle"]]), [], "« le garder » est respecté")
+        self.assertEqual(updates.obsoletes(cat, {vieux: {}}), [], "le remplaçant n'est pas installé : on ne propose pas de retirer le seul modèle")
+        self.assertEqual(updates.obsoletes(cat, {vieux: {}, neuf: {}}, ignores=[p[0]["cle"]]), [], "« le garder » est respecté")
 
     def test_modele_qui_ne_tient_plus_est_signale(self):
         petite = Profil(ram_go=16, ram_libre_go=8, gpus=[Gpu("x", "nvidia", 8)])
-        p = miseajour.nouveautes(petite, CAT, {"polyvalent": "llama3.3:70b"}, {"llama3.3:70b": {}})
+        p = updates.nouveautes(petite, CAT, {"polyvalent": "llama3.3:70b"}, {"llama3.3:70b": {}})
         self.assertTrue(p and "ne tient plus" in p[0]["raison"])
 
     def test_telechargement_du_catalogue(self):
@@ -338,17 +338,17 @@ class MisesAJour(unittest.TestCase):
             nouveau["version"] += 1
             corps = json.dumps(nouveau).encode()
             h = faux_http({"https://ex.org/c.json": (200, {"etag": "v2"}, corps)})
-            self.assertEqual(miseajour.telecharger_catalogue("https://ex.org/c.json", t, h), "maj")
-            self.assertEqual(catalogue.charger(Path(t) / "catalogue.json")["version"], CAT["version"] + 1)
+            self.assertEqual(updates.telecharger_catalogue("https://ex.org/c.json", t, h), "maj")
+            self.assertEqual(model_catalog.charger(Path(t) / "catalogue.json")["version"], CAT["version"] + 1)
             h2 = faux_http({"https://ex.org/c.json": (304, {}, b"")})
-            self.assertEqual(miseajour.telecharger_catalogue("https://ex.org/c.json", t, h2), "inchange")
+            self.assertEqual(updates.telecharger_catalogue("https://ex.org/c.json", t, h2), "inchange")
             self.assertEqual(h2.appels[0][1].get("If-None-Match"), "v2")
-            self.assertEqual(miseajour.telecharger_catalogue("", t, h), "absent")
+            self.assertEqual(updates.telecharger_catalogue("", t, h), "absent")
 
     def test_catalogue_invalide_ou_reseau_absent_jamais_applique(self):
         with tempfile.TemporaryDirectory() as t:
-            for rep in ((200, {}, b"{pas du json"), (200, {}, b'{"version":1,"modeles":[{}]}'), (500, {}, b""), (200, {}, b"x" * (miseajour.TAILLE_MAX + 1)), OSError("hors ligne")):
-                self.assertEqual(miseajour.telecharger_catalogue("https://ex.org/c.json", t, faux_http({"https://ex.org/c.json": rep})), "echec")
+            for rep in ((200, {}, b"{pas du json"), (200, {}, b'{"version":1,"modeles":[{}]}'), (500, {}, b""), (200, {}, b"x" * (updates.TAILLE_MAX + 1)), OSError("hors ligne")):
+                self.assertEqual(updates.telecharger_catalogue("https://ex.org/c.json", t, faux_http({"https://ex.org/c.json": rep})), "echec")
             self.assertFalse((Path(t) / "catalogue.json").exists())
 
     def test_verification_complete_limitee_a_une_fois_par_jour_et_sure_hors_ligne(self):
@@ -358,19 +358,19 @@ class MisesAJour(unittest.TestCase):
             cfg = {"modeles": {"choisis": {"code": "qwen2.5-coder:7b"}, "ignores": []}, "catalogue_url": ""}
             INSTALLES.clear(); INSTALLES.update({"qwen2.5-coder:7b": "d1"})
             hors_ligne = faux_http({"https://": OSError("hors ligne")})
-            r = miseajour.verifier(machine, cfg, d, OLLAMA, hors_ligne, maintenant=lambda: 1000.0)
+            r = updates.verifier(machine, cfg, d, OLLAMA, hors_ligne, maintenant=lambda: 1000.0)
             self.assertEqual([p["type"] for p in r["propositions"]], ["nouveau"], "le catalogue livré suffit même sans réseau")
             appels = len(hors_ligne.appels)
-            miseajour.verifier(machine, cfg, d, OLLAMA, hors_ligne, maintenant=lambda: 2000.0)
+            updates.verifier(machine, cfg, d, OLLAMA, hors_ligne, maintenant=lambda: 2000.0)
             self.assertEqual(len(hors_ligne.appels), appels, "pas de nouvelle vérification avant 24 h")
-            miseajour.verifier(machine, cfg, d, OLLAMA, hors_ligne, maintenant=lambda: 1000.0 + miseajour.INTERVALLE_S + 1)
+            updates.verifier(machine, cfg, d, OLLAMA, hors_ligne, maintenant=lambda: 1000.0 + updates.INTERVALLE_S + 1)
             self.assertGreater(len(hors_ligne.appels), appels)
-            self.assertEqual(len(miseajour.lire_propositions(d)["propositions"]), 1)
+            self.assertEqual(len(updates.lire_propositions(d)["propositions"]), 1)
             INSTALLES.clear(); INSTALLES.update({"qwen3:8b": "aaa111"})
 
     def test_ollama_arrete_ne_leve_pas_d_exception(self):
         with tempfile.TemporaryDirectory() as t:
-            r = miseajour.verifier(Profil(ram_go=8), {"modeles": {}}, {"cache": Path(t)}, Ollama("http://127.0.0.1:9"), faux_http({}), force=True)
+            r = updates.verifier(Profil(ram_go=8), {"modeles": {}}, {"cache": Path(t)}, Ollama("http://127.0.0.1:9"), faux_http({}), force=True)
             self.assertEqual(r["propositions"], [])
             self.assertTrue(r["erreurs"])
 
@@ -381,24 +381,24 @@ class PublicationsGitHub(unittest.TestCase):
 
     def test_derniere_publication(self):
         h = faux_http({"https://api.github.com/repos/Slater-proj/lutin/releases/latest": (200, {}, self.CORPS)})
-        self.assertEqual(miseajour.derniere_release("Slater-proj/lutin", h), ("1.4.2", "https://x/lutin-1.4.2-py3-none-any.whl"))
+        self.assertEqual(updates.derniere_release("Slater-proj/lutin", h), ("1.4.2", "https://x/lutin-1.4.2-py3-none-any.whl"))
         self.assertIn("application/vnd.github+json", h.appels[0][1]["Accept"])
 
     def test_pas_de_publication_reseau_absent_ou_reponse_cassee(self):
         for rep in ((404, {}, b""), (200, {}, b"{pas du json"), (200, {}, b'{"tag_name": "v1"}'), OSError("hors ligne")):
-            r = miseajour.derniere_release("a/b", faux_http({"https://api.github.com": rep}))
+            r = updates.derniere_release("a/b", faux_http({"https://api.github.com": rep}))
             self.assertTrue(r == (None, None) or r[1] is None, rep)
 
     def test_comparaison_de_versions(self):
-        self.assertEqual(miseajour.numeros("1.2.3rc4+x"), (1, 2, 3))
-        self.assertEqual(miseajour.numeros("n'importe quoi"), ())
-        self.assertTrue(miseajour.plus_recente("0.10.0", "0.9.9"), "comparaison numérique, pas alphabétique")
-        self.assertTrue(miseajour.plus_recente("1.0.0", "0.0.0+source"))
-        self.assertTrue(miseajour.plus_recente("1.0.0", "illisible"))
-        self.assertFalse(miseajour.plus_recente("1.2.3", "1.2.3"))
-        self.assertFalse(miseajour.plus_recente("1.2.2", "1.2.3"), "jamais de retour en arrière")
-        self.assertFalse(miseajour.plus_recente("", "1.0.0"))
-        self.assertFalse(miseajour.plus_recente(None, "1.0.0"))
+        self.assertEqual(updates.numeros("1.2.3rc4+x"), (1, 2, 3))
+        self.assertEqual(updates.numeros("n'importe quoi"), ())
+        self.assertTrue(updates.plus_recente("0.10.0", "0.9.9"), "comparaison numérique, pas alphabétique")
+        self.assertTrue(updates.plus_recente("1.0.0", "0.0.0+source"))
+        self.assertTrue(updates.plus_recente("1.0.0", "illisible"))
+        self.assertFalse(updates.plus_recente("1.2.3", "1.2.3"))
+        self.assertFalse(updates.plus_recente("1.2.2", "1.2.3"), "jamais de retour en arrière")
+        self.assertFalse(updates.plus_recente("", "1.0.0"))
+        self.assertFalse(updates.plus_recente(None, "1.0.0"))
 
 
 class Portee(unittest.TestCase):
@@ -410,46 +410,46 @@ class Portee(unittest.TestCase):
         self.machine = Profil(ram_go=32, ram_libre_go=20, gpus=[Gpu("x", "nvidia", 24)])
         self.cfg = {"modeles": {"choisis": {"code": "qwen2.5-coder:7b"}, "ignores": []}, "catalogue_url": ""}
         INSTALLES.clear(); INSTALLES.update({"qwen2.5-coder:7b": "ancien"})
-        self.http = faux_http({miseajour.REGISTRE: (200, {"docker-content-digest": "sha256:nouveau"}, b"")})
+        self.http = faux_http({updates.REGISTRE: (200, {"docker-content-digest": "sha256:nouveau"}, b"")})
 
     def tearDown(self):
         INSTALLES.clear(); INSTALLES.update({"qwen3:8b": "aaa111"})
         self.t.cleanup()
 
     def test_chaque_portee_garde_l_autre_moitie(self):
-        tout = miseajour.verifier(self.machine, self.cfg, self.d, OLLAMA, self.http, force=True)
+        tout = updates.verifier(self.machine, self.cfg, self.d, OLLAMA, self.http, force=True)
         self.assertEqual(sorted(p["type"] for p in tout["propositions"]), ["maj", "nouveau"])
         INSTALLES["qwen2.5-coder:7b"] = "nouveau"                         # le modèle vient d'être mis à jour
-        seulement_maj = miseajour.verifier(self.machine, self.cfg, self.d, OLLAMA, self.http, force=True, portee="maj")
+        seulement_maj = updates.verifier(self.machine, self.cfg, self.d, OLLAMA, self.http, force=True, portee="maj")
         self.assertEqual([p["type"] for p in seulement_maj["propositions"]], ["nouveau"], "plus de mise à jour, mais la proposition de nouveau modèle est conservée")
         self.assertEqual(seulement_maj["portee"], "maj")
-        seulement_nouveaux = miseajour.verifier(self.machine, self.cfg, self.d, OLLAMA, self.http, force=True, portee="nouveaux")
+        seulement_nouveaux = updates.verifier(self.machine, self.cfg, self.d, OLLAMA, self.http, force=True, portee="nouveaux")
         self.assertEqual([p["type"] for p in seulement_nouveaux["propositions"]], ["nouveau"])
 
     def test_portee_maj_ne_touche_pas_au_catalogue_en_ligne(self):
         self.cfg["catalogue_url"] = "https://ex.org/c.json"
-        miseajour.verifier(self.machine, self.cfg, self.d, OLLAMA, self.http, force=True, portee="maj")
+        updates.verifier(self.machine, self.cfg, self.d, OLLAMA, self.http, force=True, portee="maj")
         self.assertFalse([u for u, _ in self.http.appels if "ex.org" in u])
-        r = miseajour.verifier(self.machine, self.cfg, self.d, OLLAMA, self.http, force=True, portee="nouveaux")
+        r = updates.verifier(self.machine, self.cfg, self.d, OLLAMA, self.http, force=True, portee="nouveaux")
         self.assertTrue([u for u, _ in self.http.appels if "ex.org" in u])
         self.assertEqual(r["catalogue"], "echec", "adresse injoignable ici : signalé, copie locale utilisée")
 
     def test_catalogue_absent_est_signale(self):
-        self.assertEqual(miseajour.verifier(self.machine, self.cfg, self.d, OLLAMA, self.http, force=True, portee="nouveaux")["catalogue"], "absent")
+        self.assertEqual(updates.verifier(self.machine, self.cfg, self.d, OLLAMA, self.http, force=True, portee="nouveaux")["catalogue"], "absent")
 
     def test_une_verification_manuelle_ne_decale_pas_la_verification_quotidienne(self):
-        miseajour.verifier(self.machine, self.cfg, self.d, OLLAMA, self.http, force=True, portee="maj")
+        updates.verifier(self.machine, self.cfg, self.d, OLLAMA, self.http, force=True, portee="maj")
         self.assertFalse((self.d["cache"] / "derniere-verification.json").exists())
-        miseajour.verifier(self.machine, self.cfg, self.d, OLLAMA, self.http, force=True)
+        updates.verifier(self.machine, self.cfg, self.d, OLLAMA, self.http, force=True)
         self.assertTrue((self.d["cache"] / "derniere-verification.json").exists())
 
     def test_portee_inconnue(self):
         with self.assertRaises(ValueError):
-            miseajour.verifier(self.machine, self.cfg, self.d, OLLAMA, self.http, force=True, portee="n'importe quoi")
+            updates.verifier(self.machine, self.cfg, self.d, OLLAMA, self.http, force=True, portee="n'importe quoi")
 
     def test_une_panne_garde_les_anciennes_propositions(self):
-        miseajour.verifier(self.machine, self.cfg, self.d, OLLAMA, self.http, force=True)
-        r = miseajour.verifier(self.machine, self.cfg, self.d, Ollama("http://127.0.0.1:9"), self.http, force=True)
+        updates.verifier(self.machine, self.cfg, self.d, OLLAMA, self.http, force=True)
+        r = updates.verifier(self.machine, self.cfg, self.d, Ollama("http://127.0.0.1:9"), self.http, force=True)
         self.assertTrue(r["erreurs"])
         self.assertEqual(len(r["propositions"]), 2, "le réseau ou Ollama tombe : on n'efface pas ce qu'on savait")
 

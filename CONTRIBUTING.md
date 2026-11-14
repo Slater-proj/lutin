@@ -15,7 +15,7 @@ Nothing to install to run Lutin or its tests: standard library only. Keep it tha
 
 ## Code layout
 
-`src/lutin/moteur.py` holds the shared state (settings, paths, constants) and re-exports the rest. The work lives in modules that read that state late (`from . import moteur as _m`): `serveur` (HTTP routes), `dialogue` (a turn, the agent loop), `outils` (tools), `donnees` (conversations, memory), `rappel` (recall and document search), `planifie` (scheduled tasks), `images`, `acces`, `conseil`, `sante`, `revue`, `plan`. A constant that a test patches must live in `moteur`.
+`src/lutin/core.py` holds the shared state (settings, paths, constants) and re-exports the rest. The work lives in modules that read that state late (`from . import moteur as _m`): `serveur` (HTTP routes), `dialogue` (a turn, the agent loop), `outils` (tools), `donnees` (conversations, memory), `rappel` (recall and document search), `planifie` (scheduled tasks), `images`, `acces`, `conseil`, `sante`, `revue`, `plan`. A constant that a test patches must live in `moteur`.
 
 ## Commits and releases
 

@@ -16,11 +16,11 @@ for cle, valeur in {"LUTIN_RACINE": str(_TEMP / "projet"), "LUTIN_DONNEES": str(
     os.environ.setdefault(cle, valeur)
 (_TEMP / "projet").mkdir(exist_ok=True)
 
-from lutin import moteur as _m  # noqa: E402,F401  (avant les autres : import circulaire sinon)
+from lutin import core as _m  # noqa: E402,F401  (avant les autres : import circulaire sinon)
 from lutin import exllamav3 as X  # noqa: E402
-from lutin import exllamav3_catalogue as C  # noqa: E402
-from lutin import moteur_llamacpp as ml  # noqa: E402
-from lutin import moteurs  # noqa: E402
+from lutin import exllamav3_catalog as C  # noqa: E402
+from lutin import llamacpp_engine as ml  # noqa: E402
+from lutin import engines  # noqa: E402
 from test_exllamav3 import SHA, Base, Faux  # noqa: E402
 
 TAILLES = {"4.0bpw": 5_200_000_000, "6.0bpw": 6_900_000_000, "8.0bpw_H8": 8_800_000_000}
@@ -329,11 +329,11 @@ class ContexteBorne(Base):
 class Carte(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="lutin-exlm-carte-"))
-        self.ancien = dict(moteurs.CONTEXTE)
-        moteurs.CONTEXTE["donnees"] = lambda: self.tmp
-        moteurs.CONTEXTE["hors_ligne"] = lambda: False
-        moteurs.CONTEXTE["en_docker"] = lambda: False
-        self.mo = moteurs.MOTEURS["openai"]
+        self.ancien = dict(engines.CONTEXTE)
+        engines.CONTEXTE["donnees"] = lambda: self.tmp
+        engines.CONTEXTE["hors_ligne"] = lambda: False
+        engines.CONTEXTE["en_docker"] = lambda: False
+        self.mo = engines.MOTEURS["openai"]
         ml.regler_serveur("openai", {"serveur": "exllamav3"})
         self.addCleanup(self.remettre)
 
@@ -341,8 +341,8 @@ class Carte(unittest.TestCase):
         cfg = ml.lire_config()
         cfg.pop("openai", None)
         ml.ecrire_config(cfg)
-        moteurs.CONTEXTE.clear()
-        moteurs.CONTEXTE.update(self.ancien)
+        engines.CONTEXTE.clear()
+        engines.CONTEXTE.update(self.ancien)
 
     def faux_modeles(self):
         racine = X.dossier_modeles(self.mo._dossiers())

@@ -2,8 +2,8 @@
 import unittest
 
 import context  # noqa: F401
-from lutin import moteur as _m  # noqa: F401  (avant les autres : import circulaire sinon)
-from lutin import bench, compat_modeles, moteurs
+from lutin import core as _m  # noqa: F401  (avant les autres : import circulaire sinon)
+from lutin import bench, model_compat, engines
 
 
 class FauxMoteur:
@@ -28,60 +28,60 @@ class Compatibilite(unittest.TestCase):
     def test_ollama_accepte_tout_le_catalogue(self):
         mo = FauxMoteur("ollama", "Ollama", TOUT)
         for m in CATALOGUE["modeles"]:
-            self.assertTrue(compat_modeles.evaluer(m, mo)["compatible"])
+            self.assertTrue(model_compat.evaluer(m, mo)["compatible"])
 
     def test_une_capacite_non_supportee_exclut_le_modele_avec_la_raison(self):
         grille = dict(TOUT, vision=("non", "pas d'images ici"))
         mo = FauxMoteur("x", "Moteur X", grille)
-        r = compat_modeles.evaluer(CATALOGUE["modeles"][1], mo)
+        r = model_compat.evaluer(CATALOGUE["modeles"][1], mo)
         self.assertFalse(r["compatible"])
         self.assertIn("vision", r["raisons"][0])
         self.assertIn("pas d'images ici", r["raisons"][0])
-        self.assertTrue(compat_modeles.evaluer(CATALOGUE["modeles"][0], mo)["compatible"])
+        self.assertTrue(model_compat.evaluer(CATALOGUE["modeles"][0], mo)["compatible"])
 
     def test_une_capacite_non_testee_est_un_avertissement_pas_un_refus(self):
         mo = FauxMoteur("x", "Moteur X", dict(TOUT, vision=("non_teste", "")))
-        r = compat_modeles.evaluer(CATALOGUE["modeles"][1], mo)
+        r = model_compat.evaluer(CATALOGUE["modeles"][1], mo)
         self.assertTrue(r["compatible"])
         self.assertTrue(r["avertissements"])
 
     def test_un_serveur_externe_ne_propose_que_ses_modeles(self):
         mo = FauxMoteur("openai", "Serveur", TOUT, genre="aucun")
-        self.assertFalse(compat_modeles.evaluer(CATALOGUE["modeles"][0], mo)["compatible"])
-        self.assertTrue(compat_modeles.evaluer(CATALOGUE["modeles"][0], mo, installes=["a:8b"])["compatible"])
+        self.assertFalse(model_compat.evaluer(CATALOGUE["modeles"][0], mo)["compatible"])
+        self.assertTrue(model_compat.evaluer(CATALOGUE["modeles"][0], mo, installes=["a:8b"])["compatible"])
 
     def test_quantification_et_memoire(self):
-        self.assertEqual(compat_modeles.quantification("qwen3:8b-q8_0"), "Q8_0")
-        self.assertEqual(compat_modeles.quantification("qwen3:8b-q4_K_M"), "Q4_K_M")
-        self.assertEqual(compat_modeles.quantification("qwen3:8b"), "par défaut")
-        r = compat_modeles.evaluer(CATALOGUE["modeles"][0], FauxMoteur("ollama", "Ollama", TOUT))
+        self.assertEqual(model_compat.quantification("qwen3:8b-q8_0"), "Q8_0")
+        self.assertEqual(model_compat.quantification("qwen3:8b-q4_K_M"), "Q4_K_M")
+        self.assertEqual(model_compat.quantification("qwen3:8b"), "par défaut")
+        r = model_compat.evaluer(CATALOGUE["modeles"][0], FauxMoteur("ollama", "Ollama", TOUT))
         self.assertEqual(r["format"], "GGUF")
         self.assertGreater(r["memoire_go"], 5.0)
 
     def test_le_catalogue_filtre_ne_garde_que_le_compatible(self):
         mo = FauxMoteur("x", "Moteur X", dict(TOUT, vision=("non", "")))
-        f = compat_modeles.filtrer(CATALOGUE, mo)
+        f = model_compat.filtrer(CATALOGUE, mo)
         self.assertEqual([m["id"] for m in f["modeles"]], ["a:8b"])
 
     def test_les_vrais_moteurs_ont_une_grille_utilisable(self):
         """Le catalogue livré, filtré par chaque vrai moteur, garde au moins un modèle à outils (sinon Lutin n'aurait rien à proposer)."""
         for ident in ("ollama", "llamacpp"):
-            mo = moteurs.MOTEURS[ident]
-            f = compat_modeles.filtrer(_m._CATALOGUE, mo)
+            mo = engines.MOTEURS[ident]
+            f = model_compat.filtrer(_m._CATALOGUE, mo)
             self.assertTrue(any("outils" in m["capacites"] for m in f["modeles"]), ident)
 
 
 class Installation(unittest.TestCase):
     def test_un_modele_incompatible_n_est_jamais_installe(self):
         from unittest import mock
-        from lutin import dialogue
+        from lutin import agent
         vision = next(m for m in _m._CATALOGUE["modeles"] if "vision" in m["capacites"])
         mo = FauxMoteur("ollama", "Moteur X", dict(TOUT, vision=("non", "pas d'images")))
-        with mock.patch.object(dialogue, "moteur_actuel", lambda *a, **k: mo), mock.patch.object(dialogue, "etat_moteur", lambda: {"installes": []}):
+        with mock.patch.object(agent, "moteur_actuel", lambda *a, **k: mo), mock.patch.object(agent, "etat_moteur", lambda: {"installes": []}):
             with self.assertRaises(ValueError) as e:
-                dialogue.installer_modele(vision["id"])
+                agent.installer_modele(vision["id"])
         self.assertIn("vision", str(e.exception))
-        self.assertNotIn(vision["id"], dialogue.PULLS, "aucun téléchargement n'a commencé")
+        self.assertNotIn(vision["id"], agent.PULLS, "aucun téléchargement n'a commencé")
 
 
 class BancIndependant(unittest.TestCase):

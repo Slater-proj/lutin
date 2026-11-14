@@ -11,7 +11,7 @@ from pathlib import Path
 from unittest import mock
 
 import context  # noqa: F401
-from lutin import catalogue, cli, config, i18n
+from lutin import model_catalog, cli, config, i18n
 
 SRC = Path(__file__).resolve().parent.parent / "src" / "lutin"
 VARIABLE = re.compile(r"\{[^{}]*\}")
@@ -104,7 +104,7 @@ class Traduction(unittest.TestCase):
             self.assertEqual(i18n.traduire(5), 5)
 
     def test_traduction_complete_des_messages_du_moteur(self):
-        from lutin import moteur as A
+        from lutin import core as A
         with self.en():
             self.assertEqual(A.traduire_json({"erreur": "Nom de modèle invalide.", "titre": "Ma conversation", "messages": [{"content": "Nom de modèle invalide."}]}),
                              {"erreur": "Invalid model name.", "titre": "Ma conversation", "messages": [{"content": "Nom de modèle invalide."}]}), "le contenu des conversations n'est jamais traduit"
@@ -144,19 +144,19 @@ class Completude(unittest.TestCase):
             self.assertTrue(en.strip(), fr)
 
     def test_le_catalogue_est_entierement_traduit(self):
-        for m in catalogue.charger()["modeles"]:
+        for m in model_catalog.charger()["modeles"]:
             for champ in ("nom", "phrase", "avertissement"):
                 if m.get(champ):
                     self.assertIn(m[champ], self.dico, "{} : {}".format(m["id"], champ))
-        for role, (titre, detail) in catalogue.LIBELLES.items():
+        for role, (titre, detail) in model_catalog.LIBELLES.items():
             self.assertIn(titre, self.dico)
             self.assertIn(detail, self.dico)
 
     def test_les_constantes_de_niveau_module_sont_traduites(self):
-        from lutin import chat_terminal, installation, moteur
-        for texte in (cli.AIDE_GENERALE, chat_terminal.AIDE, installation.AVERTISSEMENT_RESEAU, installation.AVERTISSEMENT_PROXY, *moteur.TEXTES_PAGE_CONNEXION):
+        from lutin import terminal_chat, setup_wizard, core
+        for texte in (cli.AIDE_GENERALE, terminal_chat.AIDE, setup_wizard.AVERTISSEMENT_RESEAU, setup_wizard.AVERTISSEMENT_PROXY, *core.TEXTES_PAGE_CONNEXION):
             self.assertIn(texte, self.dico, texte[:60])
-        for _, titre, detail in installation.NIVEAUX_TEXTE.values():
+        for _, titre, detail in setup_wizard.NIVEAUX_TEXTE.values():
             self.assertIn(titre, self.dico)
             self.assertIn(detail, self.dico)
 
@@ -177,12 +177,12 @@ class QuestionALInstallation(unittest.TestCase):
         self.env.stop()
 
     def poser(self, reponses, options=None, cfg=None, oui=False):
-        from lutin import installation
+        from lutin import setup_wizard
         cfg = {} if cfg is None else cfg
         sortie = []
         reponses = list(reponses)
-        es = installation.Es(entree=lambda invite: (sortie.append(invite), reponses.pop(0))[1], sortie=lambda *a: None, oui=oui)
-        installation.choisir_langue(es, options or {}, cfg)
+        es = setup_wizard.Es(entree=lambda invite: (sortie.append(invite), reponses.pop(0))[1], sortie=lambda *a: None, oui=oui)
+        setup_wizard.choisir_langue(es, options or {}, cfg)
         return cfg, sortie
 
     def test_le_choix_est_enregistre_et_applique_tout_de_suite(self):

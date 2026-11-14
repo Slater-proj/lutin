@@ -19,7 +19,7 @@ from pathlib import Path
 RACINE = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(RACINE / "src"))
 
-from lutin import moteurs_maj  # noqa: E402
+from lutin import engine_updates  # noqa: E402
 
 SOURCE = RACINE / "tools" / "moteurs.source.json"
 ETAT = RACINE / "tools" / "veille_moteurs.json"
@@ -63,7 +63,7 @@ def surveiller(moteurs, etat, lire=http_json):
         etiquette, adresse = r
         ancienne = (etat.get(m["id"]) or {}).get("vue", "")
         neuf[m["id"]] = {"depot": m["depot"], "vue": etiquette}
-        if ancienne and etiquette != ancienne and moteurs_maj.plus_recente(etiquette, ancienne):
+        if ancienne and etiquette != ancienne and engine_updates.plus_recente(etiquette, ancienne):
             changements.append({"id": m["id"], "nom": m["nom"], "depot": m["depot"], "ancienne": ancienne, "nouvelle": etiquette, "adresse": adresse, "testee": m.get("version_testee", "")})
     return neuf, changements
 

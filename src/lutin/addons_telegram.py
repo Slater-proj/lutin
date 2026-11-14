@@ -16,7 +16,7 @@ import threading
 import time
 
 from . import addons
-from . import moteur as _m
+from . import core as _m
 from .i18n import t as _t
 
 IDENT = "telegram"

@@ -1,11 +1,11 @@
 """Archive d'une conversation : les messages que le résumé automatique retire de la conversation.
 
 Le résumé garde l'essentiel mais perd des détails. Pour que rien ne soit définitivement perdu, les messages retirés sont gardés dans donnees/archives/<identifiant>.jsonl ;
-l'outil « rappeler » les retrouve par mots-clés (voir rappel.py). L'archive disparaît avec la conversation, et les archives orphelines sont nettoyées."""
+l'outil « rappeler » les retrouve par mots-clés (voir recall.py). L'archive disparaît avec la conversation, et les archives orphelines sont nettoyées."""
 import json
 import re
 
-from . import moteur as _m
+from . import core as _m
 
 RE_ID = re.compile(r"^[A-Za-z0-9_-]{4,64}$")
 TAILLE_MAX = 20_000_000                 # au-delà, l'archive n'est plus agrandie (la conversation, elle, continue)

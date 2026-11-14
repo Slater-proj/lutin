@@ -16,7 +16,7 @@ for cle, valeur in {"LUTIN_RACINE": str(_TEMP / "projet"), "LUTIN_DONNEES": str(
     os.environ.setdefault(cle, valeur)
 (_TEMP / "projet").mkdir(exist_ok=True)
 
-from lutin import moteur as _m  # noqa: E402,F401
+from lutin import core as _m  # noqa: E402,F401
 from lutin import addons  # noqa: E402
 
 SERVICE = {"version": 1, "jeton": "123456:SECRET-TOKEN", "recus": []}

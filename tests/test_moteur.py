@@ -27,6 +27,7 @@ from unittest import mock
 
 ICI = Path(__file__).resolve().parent
 os.environ["LUTIN_LANGUE"] = "fr"          # les messages attendus par ces tests sont en français
+os.environ["LUTIN_TESTS"] = "1"          # this file does not import tests/context.py: without it, LUTIN_WEB_LOCAL no longer opens the fake local web (lutin.net_guard.local_test_mode)
 TEMP = Path(tempfile.mkdtemp(prefix="assistant-tests-"))
 PROJET = TEMP / "projet"
 for d in ("docs", "appli/moteur", "assistant", ".git", "sorties"):
@@ -218,11 +219,11 @@ os.environ.update({"LUTIN_WEB_LOCAL": "1", "LUTIN_RECHERCHE_URL": URL_WEB + "/re
                    "LUTIN_RACINE": str(PROJET), "LUTIN_DONNEES": str(TEMP / "donnees"), "LUTIN_MEMOIRE": str(MEMOIRE),
                    "OLLAMA_URL": "http://127.0.0.1:%d" % S_OLLAMA.server_address[1], "LUTIN_OUTIL_URL": "http://127.0.0.1:%d" % S_OUTIL.server_address[1]})
 sys.path.insert(0, str(ICI.parent / "src"))
-from lutin import moteur as A  # noqa: E402
+from lutin import core as A  # noqa: E402
 from lutin import web as _web  # noqa: E402
 
 _web.LIRE_AUTO = 0          # les tests n'ouvrent aucune page du vrai internet : la lecture automatique des premiers résultats a son propre test
-from lutin.donnees import DOSSIER_COPIES  # noqa: E402
+from lutin.storage import DOSSIER_COPIES  # noqa: E402
 
 S_ASSISTANT = lancer(A.Gestionnaire)
 BASE = "http://127.0.0.1:%d" % S_ASSISTANT.server_address[1]
@@ -379,7 +380,7 @@ class Assistant(unittest.TestCase):
         res = next(e for e in ev if e["type"] == "resultat")
         self.assertEqual([j["nom"] for j in res.get("fichiers_joints", [])], ["docker-compose.yml"], "une carte pour le fichier créé")
         cid = [e for e in ev if e["type"] == "debut"][0]["conversation"]
-        trace = [x for x in __import__("lutin.fichiers", fromlist=["x"]).lister()["liste"] if x["conversation"] == cid]
+        trace = [x for x in __import__("lutin.produced_files", fromlist=["x"]).lister()["liste"] if x["conversation"] == cid]
         self.assertEqual([x["nom"] for x in trace], ["docker-compose.yml"], "inscrit dans Réglages > Fichiers créés")
         outil = next(m["content"] for m in A.conv_lire(cid)["messages"] if m.get("role") == "tool")
         self.assertIn(str(cible.resolve()), outil, "le modèle reçoit le chemin complet")
@@ -417,7 +418,7 @@ class Assistant(unittest.TestCase):
 
     def test_les_moteurs_ollama_par_defaut_inconnu_refuse_et_un_autre_moteur_prend_la_place(self):
         """Couche moteur : Ollama est le moteur par défaut, un moteur inconnu est refusé, et tout autre moteur enregistré fait la conversation à la place d'Ollama."""
-        from lutin import moteurs
+        from lutin import engines
         r = lire("/api/moteurs")
         self.assertEqual((r["courant"], [m["id"] for m in r["moteurs"]]), ("ollama", ["ollama", "llamacpp", "openai"]))
         ollama = r["moteurs"][0]
@@ -432,9 +433,9 @@ class Assistant(unittest.TestCase):
         post("/api/moteur-regler", {"moteur": "ollama", "url": "http://x"}, attendu=400)          # pas d'adresse à régler pour Ollama
         self.assertEqual(lire("/api/etat")["moteur"], "ollama")
         post("/api/reglages", {"moteur": "inconnu"}, attendu=400)
-        self.assertEqual(moteurs.par_id("inconnu").id, "ollama", "un réglage ancien ou inconnu retombe sur Ollama")
+        self.assertEqual(engines.par_id("inconnu").id, "ollama", "un réglage ancien ou inconnu retombe sur Ollama")
 
-        class Faux(moteurs.Moteur):
+        class Faux(engines.Moteur):
             id, nom, genre = "faux", "Faux moteur", "openai"
 
             def actif(self):
@@ -456,7 +457,7 @@ class Assistant(unittest.TestCase):
                     def __iter__(self_):
                         return iter(evenements)
                 return Flux()
-        moteurs.enregistrer(Faux())
+        engines.enregistrer(Faux())
         avant = lire("/api/etat")["reglages"]["moteur"]
         modele_avant = lire("/api/etat")["reglages"]["modele"]
         try:
@@ -471,18 +472,18 @@ class Assistant(unittest.TestCase):
             self.assertEqual(lire("/api/etat")["reglages"]["modele"], modele_avant, "retour à Ollama : on retrouve le modèle qu'on y utilisait")
         finally:
             post("/api/reglages", {"moteur": avant})
-            moteurs.MOTEURS.pop("faux", None)
+            engines.MOTEURS.pop("faux", None)
 
     def test_ollama_sous_docker_ne_s_installe_pas_et_dit_pourquoi_et_le_cycle_reinstaller_est_ordonne(self):
         """Sous Docker rien n'est possible (Ollama est un autre conteneur) ; ailleurs, réinstaller = arrêter, désinstaller, installer, démarrer, en gardant les modèles."""
         from unittest import mock
-        from lutin import moteurs, ollama_client
+        from lutin import engines, ollama_client
         mo = A.moteur_actuel()
         with mock.patch.dict(os.environ, {"LUTIN_DOCKER": "1", "OLLAMA_URL": "http://ollama:11434"}):
             a = mo.actions()
         self.assertTrue(all(not x["possible"] and "docker compose" in x["raison"] for x in a.values()))          # un autre conteneur : Lutin n'y touche pas
         appels = []
-        possibles = {k: {"possible": True, "raison": "ok"} for k in moteurs.ACTIONS}
+        possibles = {k: {"possible": True, "raison": "ok"} for k in engines.ACTIONS}
         with mock.patch.object(mo, "actions", lambda: possibles), mock.patch.object(A, "arreter_ollama", lambda: appels.append("arreter")), mock.patch.object(A, "demarrer_ollama", lambda: appels.append("demarrer")),                 mock.patch.object(ollama_client, "desinstaller_windows", lambda: appels.append("desinstaller")), mock.patch.object(ollama_client, "installer_windows", lambda cache, progression, **k: appels.append("installer")):
             mo.faire("reinstaller", lambda *x: None)
             self.assertEqual(appels, ["arreter", "desinstaller", "installer", "demarrer"])
@@ -516,12 +517,12 @@ class Assistant(unittest.TestCase):
 
     def test_les_accords_automatiques_sont_propres_a_chaque_conversation_et_marchent_a_tous_les_niveaux_d_acces(self):
         """Fichiers auto et Commandes auto se règlent conversation par conversation (faux par défaut) ; ils marchent quel que soit le niveau d'accès (local, réseau, proxy) : téléphone et reverse proxy compris."""
-        from lutin import securite
+        from lutin import security
         vrai = A.SECURITE
         cible = PROJET / "niveau.txt"
 
         def lancer(niveau, options):
-            A.SECURITE = securite.Securite(niveau=niveau, proxy_ips=["10.0.0.1"], url_publique="https://x.example.com") if niveau == securite.PROXY else securite.Securite(niveau=niveau)
+            A.SECURITE = security.Securite(niveau=niveau, proxy_ips=["10.0.0.1"], url_publique="https://x.example.com") if niveau == security.PROXY else security.Securite(niveau=niveau)
             cible.unlink(missing_ok=True)
             SCENARIO[:] = [[appel_outil("executer", commande="echo ok> niveau.txt")], [{"content": "."}]]
             evenements = []
@@ -536,11 +537,11 @@ class Assistant(unittest.TestCase):
             A.tour(conv, "lance la commande", emit, A.appliquer_options(A.reglages(), conv["id"]), None)
             return evenements, conv["id"]
         try:
-            for niveau in (securite.LOCAL, securite.RESEAU, securite.PROXY):
+            for niveau in (security.LOCAL, security.RESEAU, security.PROXY):
                 ev, _ = lancer(niveau, {"auto_commandes": True})
                 self.assertFalse(any(e["type"] == "approbation" for e in ev), "commandes auto cochées pour cette conversation, niveau " + niveau)
                 self.assertTrue(cible.exists())
-            ev, ident = lancer(securite.PROXY, None)
+            ev, ident = lancer(security.PROXY, None)
             self.assertTrue(any(e["type"] == "approbation" for e in ev), "décoché par défaut : l'accord est demandé")
             # chaque conversation a les siennes
             a, b = A.conv_nouvelle(), A.conv_nouvelle()
@@ -743,16 +744,16 @@ class Assistant(unittest.TestCase):
         self.assertTrue(any("a répondu une erreur" in e["texte"] for e in ev if e["type"] == "erreur"))
 
     def test_indicateurs_de_chargement_et_de_debordement(self):
-        from lutin import adequation, dialogue
-        from lutin.machine import Gpu, Profil
-        vrai = adequation.profil_pret
-        adequation.profil_pret = lambda *a, **k: Profil(systeme="linux", ram_go=32.0, ram_libre_go=13.0, gpus=[Gpu("RTX", "nvidia", 24)])          # l'avertissement « carte graphique » n'existe que sur une machine qui en a une
-        dialogue.AVERTIS_CARTE.clear()
+        from lutin import model_fit, agent
+        from lutin.hardware import Gpu, Profil
+        vrai = model_fit.profil_pret
+        model_fit.profil_pret = lambda *a, **k: Profil(systeme="linux", ram_go=32.0, ram_libre_go=13.0, gpus=[Gpu("RTX", "nvidia", 24)])          # l'avertissement « carte graphique » n'existe que sur une machine qui en a une
+        agent.AVERTIS_CARTE.clear()
         try:
             self._indicateurs_de_chargement_et_de_debordement()
         finally:
-            adequation.profil_pret = vrai
-            dialogue.AVERTIS_CARTE.clear()
+            model_fit.profil_pret = vrai
+            agent.AVERTIS_CARTE.clear()
 
     def _indicateurs_de_chargement_et_de_debordement(self):
         PS[:] = []
@@ -851,7 +852,7 @@ class Assistant(unittest.TestCase):
 
     def test_variantes_de_precision_conseil_machine_et_serie_de_bancs(self):
         import time as _t
-        from lutin import variantes as V
+        from lutin import model_variants as V
         page = ('<a href="/library/qwen3:8b" class="md:hidden x"><span> abc &nbsp;·&nbsp; 5.2GB &nbsp;·&nbsp; 40K</span></a>'
                 '<a href="/library/qwen3:8b-q8_0" class="md:hidden x"><span> def &nbsp;·&nbsp; 8.9GB &nbsp;·&nbsp; 40K</span></a>')
         V.CACHE["qwen3"] = (_t.time(), page)
@@ -879,14 +880,14 @@ class Assistant(unittest.TestCase):
         self.assertEqual(lire("/api/etat")["bench"]["file"], [])
 
     def test_calibrage_des_coeurs_mesure_choisit_et_applique_sur_demande(self):
-        from lutin import calibrage
+        from lutin import calibration
         mesures = []
 
         def faux(ollama, modele, fils, num_ctx, repetitions=2):
             mesures.append(fils)
             return {2: 8.0, 3: 10.0, 4: 10.2, 6: 10.3, 7: 10.3, 8: 10.1, 12: 10.0, 18: 9.0}.get(fils, 5.0)
-        vrai, vrais_candidats = calibrage.mesurer_fils, calibrage.candidats
-        calibrage.mesurer_fils, calibrage.candidats = faux, lambda *a, **k: [2, 3, 4, 6, 12]          # la machine de test n'a que deux cœurs
+        vrai, vrais_candidats = calibration.mesurer_fils, calibration.candidats
+        calibration.mesurer_fils, calibration.candidats = faux, lambda *a, **k: [2, 3, 4, 6, 12]          # la machine de test n'a que deux cœurs
         avant = A.reglages()["num_thread"]
         try:
             post("/api/calibrage", {"action": "start"})
@@ -897,17 +898,17 @@ class Assistant(unittest.TestCase):
             e = lire("/api/etat")["calibrage"]
             self.assertEqual([r["fils"] for r in e["resultats"]], mesures)
             self.assertGreaterEqual(len(mesures), 3, "plusieurs nombres de cœurs essayés")
-            self.assertEqual(e["recommande"], calibrage.choisir(e["resultats"]))
+            self.assertEqual(e["recommande"], calibration.choisir(e["resultats"]))
             self.assertEqual(A.reglages()["num_thread"], avant, "rien n'est appliqué sans clic")
             self.assertEqual(lire("/api/etat")["bench"]["en_cours"], "", "le blocage des bancs est levé")
             r = post("/api/calibrage", {"action": "apply"})
             self.assertEqual(A.reglages()["num_thread"], r["num_thread"])
             post("/api/calibrage", {"action": "danse"}, attendu=400)
         finally:
-            calibrage.mesurer_fils, calibrage.candidats = vrai, vrais_candidats
+            calibration.mesurer_fils, calibration.candidats = vrai, vrais_candidats
             A.enregistrer_reglages({"num_thread": avant})
-            calibrage.CALIBRAGE.update(resultats=[], recommande=None)
-            calibrage.chemin().unlink(missing_ok=True)
+            calibration.CALIBRAGE.update(resultats=[], recommande=None)
+            calibration.chemin().unlink(missing_ok=True)
 
     def test_reflexion_seulement_avant_la_premiere_reponse_si_demande(self):
         appel = appel_outil("lister", dossier="docs")
@@ -956,30 +957,30 @@ class Assistant(unittest.TestCase):
 
     def test_sante_et_jauges_suivent_le_dossier_des_modeles_d_ollama(self):
         """L'onglet Santé (disques) et la jauge de l'onglet Modèles mesurent le disque du dossier qu'Ollama utilise vraiment, et se remettent à jour quand il change."""
-        from lutin import emplacements as E
-        from lutin import sante
+        from lutin import locations as E
+        from lutin import health
         vues = []
-        vrai_espace, vrai_reel = sante.espace_disque, E.dossier_indique_par_ollama
+        vrai_espace, vrai_reel = health.espace_disque, E.dossier_indique_par_ollama
         vrai_moteur = A.espace_disque
-        sante.espace_disque = A.espace_disque = lambda chemin: (vues.append(str(chemin)), None)[1]
+        health.espace_disque = A.espace_disque = lambda chemin: (vues.append(str(chemin)), None)[1]
         try:
             E.dossier_indique_par_ollama = lambda *a, **k: "Z:/NouveauxModeles"
-            sante.oublier_mesures("disques", "jauge")
+            health.oublier_mesures("disques", "jauge")
             A.mesurer_disques()
             E.jauge_modeles()
             self.assertTrue(any("NouveauxModeles" in v for v in vues), vues)
             vues.clear()
             E.dossier_indique_par_ollama = lambda *a, **k: "Y:/EncorAutre"
-            sante.oublier_mesures("disques", "jauge")
+            health.oublier_mesures("disques", "jauge")
             A.mesurer_disques()
             self.assertTrue(any("EncorAutre" in v for v in vues) and not any("NouveauxModeles" in v for v in vues), "le nouveau dossier est pris en compte")
         finally:
-            sante.espace_disque, A.espace_disque, E.dossier_indique_par_ollama = vrai_espace, vrai_moteur, vrai_reel
-            sante.oublier_mesures("disques", "jauge")
+            health.espace_disque, A.espace_disque, E.dossier_indique_par_ollama = vrai_espace, vrai_moteur, vrai_reel
+            health.oublier_mesures("disques", "jauge")
 
     def test_le_dossier_des_modeles_est_demande_a_ollama(self):
         """Le réglage de l'application Ollama n'est pas visible de Lutin : on lit le chemin réel dans le Modelfile d'un modèle installé (ligne FROM …/blobs/sha256-…)."""
-        from lutin import emplacements as E
+        from lutin import locations as E
         bs = chr(92)
         windows = "# Modelfile generated by " + chr(34) + "ollama show" + chr(34) + chr(10) + "FROM D:" + bs + "IA" + bs + "ollama" + bs + "models" + bs + "blobs" + bs + "sha256-abc123" + chr(10) + "TEMPLATE x"
         self.assertEqual(E.depuis_modelfile(windows), "D:" + bs + "IA" + bs + "ollama" + bs + "models")
@@ -1042,24 +1043,24 @@ class Assistant(unittest.TestCase):
 
     def test_l_avertissement_carte_graphique_n_est_ni_repete_ni_donne_sans_carte(self):
         """« Seulement 0 % du modèle tient sur la carte » à chaque réponse d'une machine SANS carte était du bruit : connu, et inutile à répéter. Avec une carte : une fois par modèle et par demi-heure."""
-        from lutin import adequation, dialogue
-        from lutin.machine import Gpu, Profil
-        vrai = adequation.profil_pret
+        from lutin import model_fit, agent
+        from lutin.hardware import Gpu, Profil
+        vrai = model_fit.profil_pret
         try:
-            adequation.profil_pret = lambda *a, **k: Profil(systeme="linux", ram_go=32.0, ram_libre_go=13.0, gpus=[])
-            self.assertFalse(dialogue.a_une_carte_graphique())
-            adequation.profil_pret = lambda *a, **k: Profil(systeme="linux", ram_go=32.0, ram_libre_go=13.0, gpus=[Gpu("RTX", "nvidia", 24)])
-            self.assertTrue(dialogue.a_une_carte_graphique())
-            adequation.profil_pret = lambda *a, **k: None
-            self.assertTrue(dialogue.a_une_carte_graphique(), "machine pas encore détectée : on garde l'avertissement")
+            model_fit.profil_pret = lambda *a, **k: Profil(systeme="linux", ram_go=32.0, ram_libre_go=13.0, gpus=[])
+            self.assertFalse(agent.a_une_carte_graphique())
+            model_fit.profil_pret = lambda *a, **k: Profil(systeme="linux", ram_go=32.0, ram_libre_go=13.0, gpus=[Gpu("RTX", "nvidia", 24)])
+            self.assertTrue(agent.a_une_carte_graphique())
+            model_fit.profil_pret = lambda *a, **k: None
+            self.assertTrue(agent.a_une_carte_graphique(), "machine pas encore détectée : on garde l'avertissement")
         finally:
-            adequation.profil_pret = vrai
-        dialogue.AVERTIS_CARTE.clear()
-        self.assertTrue(dialogue._avertir_une_fois("x:1b", lambda: 10000.0))
-        self.assertFalse(dialogue._avertir_une_fois("x:1b", lambda: 10100.0), "pas deux fois en moins d'une demi-heure")
-        self.assertTrue(dialogue._avertir_une_fois("y:1b", lambda: 10100.0), "un autre modèle a son propre avertissement")
-        self.assertTrue(dialogue._avertir_une_fois("x:1b", lambda: 10000.0 + dialogue.DELAI_AVERTISSEMENT_CARTE + 1))
-        dialogue.AVERTIS_CARTE.clear()
+            model_fit.profil_pret = vrai
+        agent.AVERTIS_CARTE.clear()
+        self.assertTrue(agent._avertir_une_fois("x:1b", lambda: 10000.0))
+        self.assertFalse(agent._avertir_une_fois("x:1b", lambda: 10100.0), "pas deux fois en moins d'une demi-heure")
+        self.assertTrue(agent._avertir_une_fois("y:1b", lambda: 10100.0), "un autre modèle a son propre avertissement")
+        self.assertTrue(agent._avertir_une_fois("x:1b", lambda: 10000.0 + agent.DELAI_AVERTISSEMENT_CARTE + 1))
+        agent.AVERTIS_CARTE.clear()
 
     def test_un_modele_qui_reflechit_sans_repondre_est_relance_puis_explique(self):
         ev = chat("Bonjour", reponses=[[{"thinking": "hum"}], [{"content": "Voilà la réponse."}]])
@@ -1176,7 +1177,7 @@ class Assistant(unittest.TestCase):
 
     def test_un_tour_fige_est_abandonne_apres_arreter_et_n_ecrase_rien(self):
         """Filet : même un outil qui ne regarde jamais « stop » ne bloque plus la conversation plus de quelques secondes après « Arrêter »."""
-        from lutin import donnees
+        from lutin import storage as donnees
         stop = threading.Event()
         A.TOURS_ACTIFS["conv-figee"] = stop
         avant = A.DELAI_ABANDON_S
@@ -1253,7 +1254,7 @@ class Assistant(unittest.TestCase):
     def test_gabarit_qui_refuse_les_outils_repond_sans_outils_et_retient_le_modele(self):
         """Certains Mistral : Ollama répond « Unable to generate parser for this template… Only user, system and assistant roles are supported » dès qu'on lui envoie des outils. Lutin réessaie sans outils
         (les résultats d'outils déjà lus deviennent du texte), retient le modèle, et ne redéclare plus d'outils à ce modèle."""
-        from lutin import dialogue as _dialogue
+        from lutin import agent as _dialogue
         erreur = "Unable to generate parser for this template. Automatic parser generation failed: raise_exception('Only user, system and assistant roles are supported!')"
         _dialogue.GABARIT_SANS_OUTILS.clear()
         try:
@@ -1271,7 +1272,7 @@ class Assistant(unittest.TestCase):
             (TEMP / "donnees" / "gabarits.json").unlink(missing_ok=True)
 
     def test_aplatir_sans_outils_garde_ce_que_le_modele_a_lu_et_alterne_les_roles(self):
-        from lutin import dialogue as _dialogue
+        from lutin import agent as _dialogue
         plat = _dialogue.aplatir_sans_outils({"model": "m", "tools": [{"x": 1}], "messages": [
             {"role": "system", "content": "S"}, {"role": "user", "content": "cherche"},
             {"role": "assistant", "content": "", "tool_calls": [{"function": {"name": "web_chercher", "arguments": {}}}]},
@@ -1657,7 +1658,7 @@ class Assistant(unittest.TestCase):
 
     def test_l_index_des_conversations_evite_de_tout_relire_au_demarrage(self):
         """Beaucoup de conversations : le premier affichage les relisait toutes. L'index gardé sur le disque n'est cru que si la date et la taille du fichier n'ont pas changé."""
-        from lutin import donnees
+        from lutin import storage as donnees
         ids = []
         for i in range(25):
             c = A.conv_nouvelle()
@@ -1764,12 +1765,12 @@ class Assistant(unittest.TestCase):
         self.assertIn("docs/univers.md-3- Le Tonnerre", res, "ligne de contexte après")
         self.assertEqual(A.outil_chercher("Marly", "docs", 0, "*.py"), "Aucun résultat.", "le filtre de noms de fichiers")
         self.assertIn("docs/univers.md:2:", A.outil_chercher("Marly", ".", 0, "*.md,*.py"))
-        outils = PROJET / "docs" / "outils.py"
+        outils = PROJET / "docs" / "tools.py"
         try:
             outils.write_text("def calculer_total(a):\n    return a\n\nx = calculer_total(2)\ny = calculer_total(3)\n", encoding="utf-8")
             res = A.outil_symboles("calculer_total")
             self.assertIn("Définitions (1)", res)
-            self.assertIn("docs/outils.py:1: def calculer_total(a):", res)
+            self.assertIn("docs/tools.py:1: def calculer_total(a):", res)
             self.assertIn("Utilisations (2 lignes dans 1 fichier(s))", res)
             self.assertIn("«", A.outil_symboles("nom_qui_nexiste_pas_du_tout"))
             with self.assertRaises(A.ErreurOutil):
@@ -2018,9 +2019,9 @@ class Assistant(unittest.TestCase):
         post("/api/reglages", {"seuil_ram_go": 3, "seuil_disque_go": 10, "plafond_donnees_go": 2, "limite_ram_commande_go": 0})
 
     def test_garde_fous_avant_la_demande(self):
-        from lutin import sante
-        vrai_mesures, vrai_liberer, vraie_attente = A.mesures_systeme, A.liberer_vram, sante.ATTENTE_RESSOURCES_S
-        sante.ATTENTE_RESSOURCES_S = 0                                   # ici on teste le refus immédiat ; l'attente a son propre test
+        from lutin import health
+        vrai_mesures, vrai_liberer, vraie_attente = A.mesures_systeme, A.liberer_vram, health.ATTENTE_RESSOURCES_S
+        health.ATTENTE_RESSOURCES_S = 0                                   # ici on teste le refus immédiat ; l'attente a son propre test
         etat = {"ram": 10 * GO, "vram": 22 * GO}
         liberations = []
 
@@ -2077,14 +2078,14 @@ class Assistant(unittest.TestCase):
             self.assertEqual(texte_de(ev), "Je passe")
         finally:
             A.GARDE_RESSOURCES_ACTIF, A.mesures_systeme, A.liberer_vram = False, vrai_mesures, vrai_liberer
-            sante.ATTENTE_RESSOURCES_S = vraie_attente
+            health.ATTENTE_RESSOURCES_S = vraie_attente
             PS[:] = []
             post("/api/reglages", {"garde_ressources": True})
 
     def test_pas_assez_de_memoire_la_demande_est_gardee_et_reprise_quand_la_place_revient(self):
         """Mémoire insuffisante (un autre programme gourmand) : le message envoyé n'est pas perdu, Lutin attend et répond tout seul dès que la mémoire revient."""
-        from lutin import sante
-        vrai_mesures, vraie_attente, vrai_pas = A.mesures_systeme, sante.ATTENTE_RESSOURCES_S, sante.PAS_ATTENTE_S
+        from lutin import health
+        vrai_mesures, vraie_attente, vrai_pas = A.mesures_systeme, health.ATTENTE_RESSOURCES_S, health.PAS_ATTENTE_S
         etat = {"ram": 1 * GO}
 
         def fausses_mesures():
@@ -2092,7 +2093,7 @@ class Assistant(unittest.TestCase):
             mesure["ram"] = dict(mesure["ram"], libre=etat["ram"])
             return mesure
         A.GARDE_RESSOURCES_ACTIF, A.mesures_systeme = True, fausses_mesures
-        sante.ATTENTE_RESSOURCES_S, sante.PAS_ATTENTE_S = 20, 0.05
+        health.ATTENTE_RESSOURCES_S, health.PAS_ATTENTE_S = 20, 0.05
         try:
             threading.Timer(0.5, lambda: etat.update(ram=10 * GO)).start()
             ev = chat("Fais un gros travail", reponses=[[{"content": "Fait, la mémoire est revenue."}]])
@@ -2103,14 +2104,14 @@ class Assistant(unittest.TestCase):
             self.assertFalse([e for e in ev if e["type"] == "erreur"])
             # la place ne revient pas dans le temps imparti : refus expliqué, demande gardée
             etat["ram"] = 1 * GO
-            sante.ATTENTE_RESSOURCES_S = 0.3
+            health.ATTENTE_RESSOURCES_S = 0.3
             ev = chat("Encore", reponses=[[{"content": "ne doit pas arriver"}]])
             self.assertTrue(any(e["type"] == "erreur" and "Demande suspendue" in e["texte"] for e in ev))
             ident = next(e for e in ev if e["type"] == "fin")["conversation"]["id"]
             self.assertEqual(A.conv_lire(ident)["messages"][-1]["content"], "Encore", "la demande est gardée")
         finally:
             A.GARDE_RESSOURCES_ACTIF, A.mesures_systeme = False, vrai_mesures
-            sante.ATTENTE_RESSOURCES_S, sante.PAS_ATTENTE_S = vraie_attente, vrai_pas
+            health.ATTENTE_RESSOURCES_S, health.PAS_ATTENTE_S = vraie_attente, vrai_pas
 
     def test_conversation_robuste(self):
         c = A.conv_nouvelle()
@@ -2229,12 +2230,12 @@ class Assistant(unittest.TestCase):
 
     def test_memoire_par_fiche_de_suivi(self):
         """Mode « fichier » : la fiche est tenue (outil + automatique), donnée au modèle AVANT la dernière question, « oui » ordonne d'exécuter, et elle disparaît avec la conversation."""
-        from lutin import suivi
+        from lutin import progress_sheet
         A.enregistrer_reglages({"memoire_longue": "fichier", "fiche_scribe": False})          # le scribe fait un appel de plus : testé à part
         try:
             ev = chat("On prépare la saison 2", reponses=[[appel_outil("suivi", section="objectif", texte="Écrire la saison 2")], [{"content": "Noté, objectif enregistré."}]])
             cid = [e for e in ev if e["type"] == "debut"][0]["conversation"]
-            fiche = suivi.lire(cid)
+            fiche = progress_sheet.lire(cid)
             self.assertEqual(fiche["objectif"], ["Écrire la saison 2"], "l'outil met la fiche à jour")
             self.assertTrue(fiche["demandes"] and "saison 2" in fiche["demandes"][0], "et elle se remplit aussi toute seule")
             chat("Continuons", conversation=cid, reponses=[[{"content": "Voici la suite."}]])
@@ -2254,12 +2255,12 @@ class Assistant(unittest.TestCase):
             self.assertEqual(post("/api/memoire-conversation", {"conversation": cid, "mode": "resume"})["mode"], "resume")
             chat("Et maintenant", conversation=cid, reponses=[[{"content": "Voilà."}]])
             self.assertFalse(any(str(m.get("content", "")).startswith("[Fiche de suivi]") for m in RECUES[-1]["messages"]))
-            self.assertTrue(suivi.chemin(cid).is_file(), "la fiche reste sur le disque quand on repasse au résumé")
+            self.assertTrue(progress_sheet.chemin(cid).is_file(), "la fiche reste sur le disque quand on repasse au résumé")
             post("/api/memoire-conversation", {"conversation": cid, "mode": "pirate"}, attendu=400)
             post("/api/suivi", {"conversation": cid, "texte": "## Objectif\n- Nouvel objectif\n"})
-            self.assertEqual(suivi.lire(cid)["objectif"], ["Nouvel objectif"])
+            self.assertEqual(progress_sheet.lire(cid)["objectif"], ["Nouvel objectif"])
             post("/api/supprimer", {"id": cid})
-            self.assertFalse(suivi.chemin(cid).exists(), "supprimer la conversation supprime sa fiche")
+            self.assertFalse(progress_sheet.chemin(cid).exists(), "supprimer la conversation supprime sa fiche")
         finally:
             A.enregistrer_reglages({"memoire_longue": "resume", "fiche_scribe": True})
 
@@ -2341,13 +2342,13 @@ class Assistant(unittest.TestCase):
             A.enregistrer_reglages({"memoire_longue": "resume", "fiche_scribe": True})
 
     def test_une_demande_sans_aucune_reponse_ecrite_le_dit(self):
-        from lutin import dialogue
-        vrai = dialogue.boucle_agent
-        dialogue.boucle_agent = lambda conv, r, emit, ctx, stop: None          # le modèle n'a rien écrit et rien signalé
+        from lutin import agent
+        vrai = agent.boucle_agent
+        agent.boucle_agent = lambda conv, r, emit, ctx, stop: None          # le modèle n'a rien écrit et rien signalé
         try:
             ev = chat("Bonjour ?", reponses=[])
         finally:
-            dialogue.boucle_agent = vrai
+            agent.boucle_agent = vrai
         erreurs = [e["texte"] for e in ev if e["type"] == "erreur"]
         self.assertTrue(erreurs and "Aucune réponse" in erreurs[0], "plus de silence : la page dit pourquoi")
         ev = chat("Salut", reponses=[[{"content": "Bonjour !"}]])
@@ -2373,7 +2374,7 @@ class Assistant(unittest.TestCase):
 
     def test_question_fiche_ou_resume_au_premier_resume(self):
         """Réglage « demander » : rien tant que la conversation est courte ; au premier résumé, la question est posée ; la case « garder » évite de la reposer."""
-        from lutin import dialogue, suivi
+        from lutin import agent, progress_sheet
         A.enregistrer_reglages({"memoire_longue": "demander"})
         try:
             court = [e for e in chat("Bonjour", reponses=[[{"content": "Salut."}]])]
@@ -2385,7 +2386,7 @@ class Assistant(unittest.TestCase):
             conv = A.conv_lire(cid)
             self.assertEqual(conv["memoire_longue"], "fichier", "« garder » retient le choix pour la conversation")
             self.assertLess(len(conv["messages"]), 14, "en mode fiche, la conversation presque pleine est allégée du début (archivé, retrouvable avec « rappeler »)")
-            self.assertIn("Retrouver le code du coffre", suivi.lire(cid)["objectif"], "la fiche est amorcée à partir du début de la conversation")
+            self.assertIn("Retrouver le code du coffre", progress_sheet.lire(cid)["objectif"], "la fiche est amorcée à partir du début de la conversation")
             ev = chat("Encore", conversation=cid, reponses=[[{"content": "Oui."}]])
             self.assertFalse(any(e["type"] == "choix_memoire" for e in ev), "choix gardé : la question n'est plus posée")
             # sans « garder » : la fiche sert pour cette fois, puis la question reviendra
@@ -2401,12 +2402,12 @@ class Assistant(unittest.TestCase):
             self.assertEqual(A.conv_lire(cid3)["memoire_longue"], "resume")
             self.assertTrue(A.conv_lire(cid3)["resume"])
             # sans réponse : résumé pour cette fois
-            vrai, dialogue.ATTENTE_CHOIX = dialogue.ATTENTE_CHOIX, 1
+            vrai, agent.ATTENTE_CHOIX = agent.ATTENTE_CHOIX, 1
             try:
                 cid4 = self.conversation_longue()
                 ev = chat("Continue", conversation=cid4, reponses=[[{"content": "RÉSUMÉ"}], [{"content": "Ok."}]])
             finally:
-                dialogue.ATTENTE_CHOIX = vrai
+                agent.ATTENTE_CHOIX = vrai
             self.assertIn("Pas de réponse", " ".join(e.get("texte", "") for e in ev if e["type"] == "info"))
             self.assertTrue(A.conv_lire(cid4)["resume"], "le résumé automatique a eu lieu")
             post("/api/memoire-choix", {"conversation": cid4, "choix": "fichier"}, attendu=409)
@@ -2433,7 +2434,7 @@ class Assistant(unittest.TestCase):
 
     def test_addons_et_travail_de_fond_par_l_api(self):
         """Les addons : liste sans secret, activation qui passe par la vérification, travail de fond créé, mis en pause, rapporté et supprimé par l'API ; rien de tout cela sans dossier de travail."""
-        from lutin import addons, fond
+        from lutin import addons, background_jobs
         liste = lire("/api/addons")["liste"]
         f = next(a for a in liste if a["id"] == "comfyui")
         self.assertFalse(f["actif"], "désactivé par défaut")
@@ -2450,10 +2451,10 @@ class Assistant(unittest.TestCase):
         post("/api/mission-action", {"action": "creer", "nom": "", "cahier": "x", "travail": "principal"}, attendu=400)
         post("/api/mission-action", {"action": "danse"}, attendu=400)
         self.assertEqual(lire("/api/fichiers-crees")["liste"], [])
-        vrai = fond.dossier_autorise
+        vrai = background_jobs.dossier_autorise
         dossier = TEMP / "fond-vide"
         dossier.mkdir(exist_ok=True)
-        fond.dossier_autorise = lambda chemin: Path(chemin)
+        background_jobs.dossier_autorise = lambda chemin: Path(chemin)
         try:
             post("/api/fond-creer", {"nom": "", "dossier": str(dossier), "consigne": "x"}, attendu=400)
             t = post("/api/fond-creer", {"nom": "Essai", "dossier": str(dossier), "motifs": "*.pdf", "consigne": "Résume."})
@@ -2465,14 +2466,14 @@ class Assistant(unittest.TestCase):
             post("/api/fond-action", {"id": t["id"], "action": "supprimer"})
             self.assertEqual(lire("/api/fond")["liste"], [])
         finally:
-            fond.dossier_autorise = vrai
+            background_jobs.dossier_autorise = vrai
         post("/api/fond-creer", {"nom": "x", "dossier": str(TEMP), "consigne": "x"}, attendu=400)          # pas un dossier de travail
         post("/api/addon-flux", {"id": "comfyui", "flux": {"appels": {"x": {"url": "https://evil.example.com/"}}}}, attendu=400)
         addons.restaurer_flux("comfyui")
 
     def test_le_fil_de_la_conversation_est_retrouve_tout_seul_et_le_scribe_tient_la_fiche(self):
         """Mode fiche : les passages anciens qui touchent à la demande sont remis au modèle sans qu'il les demande, et un appel séparé (le scribe) met la fiche à jour."""
-        from lutin import suivi
+        from lutin import progress_sheet
         A.enregistrer_reglages({"memoire_longue": "fichier", "fiche_scribe": True})
         try:
             cid = self.conversation_longue("Le code du coffre est 4711-ZEBRE.")
@@ -2485,7 +2486,7 @@ class Assistant(unittest.TestCase):
             i = next(n for n, m in enumerate(msgs) if str(m.get("content", "")).startswith("[Extraits de la conversation]") or "[Extraits de la conversation]" in str(m.get("content", "")))
             self.assertIn("4711-ZEBRE", msgs[i]["content"], "le détail ancien est remis sous les yeux du modèle, sans qu'il l'ait demandé")
             self.assertEqual(msgs[i + 2]["content"], "Quel est le code du coffre ZEBRE ?", "juste avant la dernière question (le début reste identique : cache d'Ollama)")
-            fiche = suivi.lire(cid)
+            fiche = progress_sheet.lire(cid)
             self.assertIn("Le code du coffre est 4711-ZEBRE", fiche["decisions"], "le scribe a écrit la décision sans que le modèle ait appelé l'outil")
             self.assertEqual((fiche["etape"], fiche["ouvert"]), (["Ouvrir le coffre"], ["Qui garde la clé ?"]))
             self.assertEqual(A.conv_lire(cid).get("scribe_a"), len(A.conv_lire(cid)["messages"]), "le scribe retient jusqu'où il a lu (et son rang suit le retrait du début)")
@@ -2605,14 +2606,14 @@ class Assistant(unittest.TestCase):
 
     def test_mise_a_jour_depuis_la_page(self):
         import time
-        from lutin import acces, cli
-        acces.MAJ.update(etat="", lignes=[], avant="", apres="")
-        vrai_peut = acces.peut_redemarrer
+        from lutin import access, cli
+        access.MAJ.update(etat="", lignes=[], avant="", apres="")
+        vrai_peut = access.peut_redemarrer
         redem = []
         try:
-            acces.peut_redemarrer = lambda: True
-            vrai_redem = acces.redemarrer
-            acces.redemarrer = lambda: redem.append(1)
+            access.peut_redemarrer = lambda: True
+            vrai_redem = access.redemarrer
+            access.redemarrer = lambda: redem.append(1)
             vrai_cli = cli.mise_a_jour_detaillee
             cli.mise_a_jour_detaillee = lambda dire, erreur, capturer=False: (dire("✔ Lutin mis à jour : 0.6.2 → 0.6.3."), (0, "0.6.2", "0.6.3"))[1]
             post("/api/mettre-a-jour", {})
@@ -2638,7 +2639,7 @@ class Assistant(unittest.TestCase):
                 time.sleep(0.05)
             self.assertEqual(lire("/api/mettre-a-jour-etat")["etat"], "erreur")
             # pas de redémarrage possible : on le dit
-            acces.peut_redemarrer = lambda: False
+            access.peut_redemarrer = lambda: False
             cli.mise_a_jour_detaillee = lambda dire, erreur, capturer=False: (dire("ok"), (0, "0.6.3", "0.6.4"))[1]
             post("/api/mettre-a-jour", {})
             fin = time.time() + 10
@@ -2648,10 +2649,10 @@ class Assistant(unittest.TestCase):
             self.assertEqual(e["etat"], "fini")
             self.assertTrue(any("Relance Lutin" in ligne for ligne in e["lignes"]))
         finally:
-            acces.peut_redemarrer = vrai_peut
-            acces.redemarrer = vrai_redem
+            access.peut_redemarrer = vrai_peut
+            access.redemarrer = vrai_redem
             cli.mise_a_jour_detaillee = vrai_cli
-            acces.MAJ.update(etat="", lignes=[], avant="", apres="")
+            access.MAJ.update(etat="", lignes=[], avant="", apres="")
 
     def test_etat_emplacements_et_apercu_par_l_api(self):
         e = lire("/api/etat")
@@ -2668,26 +2669,26 @@ class Assistant(unittest.TestCase):
         post("/api/travaux-apercu", {"id": "inconnu"}, attendu=400)
 
     def test_bibliotheque_d_ollama_par_l_api(self):
-        from lutin import decouverte
-        vrai = decouverte.chercher
+        from lutin import model_discovery
+        vrai = model_discovery.chercher
         appels = []
         try:
-            decouverte.chercher = lambda q, o, p, categorie="", leger=False: appels.append((q, o, p, categorie, leger)) or {"modeles": [{"nom": "x", "description": "d", "capacites": ["tools"], "tailles": ["8b"], "maj": "", "telechargements": 1}], "suite": False}
+            model_discovery.chercher = lambda q, o, p, categorie="", leger=False: appels.append((q, o, p, categorie, leger)) or {"modeles": [{"nom": "x", "description": "d", "capacites": ["tools"], "tailles": ["8b"], "maj": "", "telechargements": 1}], "suite": False}
             r = lire("/api/decouvrir?q=qwen&o=popular&p=2")
             self.assertEqual((r["modeles"][0]["nom"], appels[-1]), ("x", ("qwen", "popular", "2", "", False)))
             self.assertIn("8b", r["modeles"][0]["evaluations"], "chaque taille est jugée pour cette machine")
             lire("/api/decouvrir?q=qwen&c=tools&leger=1")
             self.assertEqual(appels[-1][3:], ("tools", True))
-            decouverte.chercher = lambda q, o, p, categorie="", leger=False: (_ for _ in ()).throw(OSError("pas de réseau"))
+            model_discovery.chercher = lambda q, o, p, categorie="", leger=False: (_ for _ in ()).throw(OSError("pas de réseau"))
             with self.assertRaises(urllib.error.HTTPError) as e:
                 lire("/api/decouvrir")
             self.assertEqual(e.exception.code, 503)
-            decouverte.chercher = vrai
+            model_discovery.chercher = vrai
             with self.assertRaises(urllib.error.HTTPError) as e:
                 lire("/api/decouvrir?o=au-hasard")
             self.assertEqual(e.exception.code, 400)
         finally:
-            decouverte.chercher = vrai
+            model_discovery.chercher = vrai
 
     def test_taille_de_corps_absurde(self):
         """Un Content-Length négatif ou illisible ne bloque pas le serveur dans une lecture sans fin : il est refusé tout de suite."""
@@ -2707,7 +2708,7 @@ class Assistant(unittest.TestCase):
 
     def test_mesures_du_garde_fou_gardees_et_paralleles(self):
         """Le garde-fou passe avant chaque message : une mesure lente (nvidia-smi, ComfyUI, disque réseau) n'est pas refaite à chaque fois, et ne bloque pas les autres."""
-        from lutin import sante
+        from lutin import health
         appels = {"vram": 0, "comfy": 0}
 
         def vram():
@@ -2721,7 +2722,7 @@ class Assistant(unittest.TestCase):
             return {"actif": False, "en_cours": 0, "attente": 0}
         vrais = A.memoire_video, A.etat_comfy
         A.memoire_video, A.etat_comfy = vram, comfy
-        sante.oublier_mesures()
+        health.oublier_mesures()
         try:
             debut = time.time()
             A.mesures_systeme()
@@ -2730,36 +2731,36 @@ class Assistant(unittest.TestCase):
             A.mesures_systeme()
             self.assertLess(time.time() - debut, 0.2, "la seconde demande réutilise les mesures")
             self.assertEqual(appels, {"vram": 1, "comfy": 1})
-            sante.oublier_mesures("vram")
+            health.oublier_mesures("vram")
             A.mesures_systeme()
             self.assertEqual(appels, {"vram": 2, "comfy": 1}, "on peut forcer une nouvelle mesure (après avoir déchargé un modèle)")
         finally:
             A.memoire_video, A.etat_comfy = vrais
-            sante.oublier_mesures()
+            health.oublier_mesures()
         # une mesure gardée ne survit pas au remplacement de sa fonction
-        sante.oublier_mesures()
-        self.assertEqual(sante.memo("vram", lambda: 1), 1)
-        self.assertEqual(sante.memo("vram", lambda: 2), 2)
+        health.oublier_mesures()
+        self.assertEqual(health.memo("vram", lambda: 1), 1)
+        self.assertEqual(health.memo("vram", lambda: 2), 2)
 
     def test_taille_du_dossier_de_donnees_sans_attente(self):
-        from lutin import sante
+        from lutin import health
         d = TEMP / "mesure-taille"
         shutil.rmtree(d, ignore_errors=True)
         d.mkdir()
         (d / "a.bin").write_bytes(b"x" * 1000)
-        sante.CACHE_TAILLES.pop(str(d), None)
-        self.assertEqual(sante.taille_dossier(d), 1000, "la toute première mesure est faite sur place")
+        health.CACHE_TAILLES.pop(str(d), None)
+        self.assertEqual(health.taille_dossier(d), 1000, "la toute première mesure est faite sur place")
         (d / "b.bin").write_bytes(b"x" * 500)
-        self.assertEqual(sante.taille_dossier(d), 1000, "une mesure récente est renvoyée telle quelle")
-        sante.CACHE_TAILLES[str(d)] = (time.time() - 120, 1000)
-        self.assertEqual(sante.taille_dossier(d), 1000, "une vieille mesure est renvoyée aussitôt, la nouvelle se fait en arrière-plan")
+        self.assertEqual(health.taille_dossier(d), 1000, "une mesure récente est renvoyée telle quelle")
+        health.CACHE_TAILLES[str(d)] = (time.time() - 120, 1000)
+        self.assertEqual(health.taille_dossier(d), 1000, "une vieille mesure est renvoyée aussitôt, la nouvelle se fait en arrière-plan")
         fin = time.time() + 5
-        while time.time() < fin and sante.CACHE_TAILLES[str(d)][1] != 1500:
+        while time.time() < fin and health.CACHE_TAILLES[str(d)][1] != 1500:
             time.sleep(0.05)
-        self.assertEqual(sante.taille_dossier(d), 1500)
+        self.assertEqual(health.taille_dossier(d), 1500)
         shutil.rmtree(d, ignore_errors=True)
         # la taille d'un modèle déjà chargé vient d'Ollama sans autre requête
-        self.assertEqual(sante.taille_modele("n'importe-quoi", {"taille": 123, "vram": 100}), 123)
+        self.assertEqual(health.taille_modele("n'importe-quoi", {"taille": 123, "vram": 100}), 123)
 
     def test_sante_et_autotest(self):
         vrai = A.mesures_systeme
@@ -2905,7 +2906,7 @@ class Assistant(unittest.TestCase):
     def test_copie_lisible_des_conversations_dans_le_dossier_de_travail(self):
         """Réglage coché : un fichier .md par conversation dans conversations-lutin/, mis à jour, renommé avec le titre, sans jamais empêcher d'enregistrer."""
         import shutil
-        from lutin import donnees
+        from lutin import storage as donnees
         dossier = PROJET / DOSSIER_COPIES
         shutil.rmtree(dossier, ignore_errors=True)
         chat("Pas de copie par défaut", reponses=[[{"content": "ok"}]])
@@ -3389,7 +3390,7 @@ class Assistant(unittest.TestCase):
 
     def test_fichiers_joints(self):
         """Documents et fichiers texte : téléversés, lus une fois, ajoutés au message pour le modèle seulement, bornés, nettoyés."""
-        from lutin import pieces
+        from lutin import attachments
 
         def televerser(octets, nom):
             req = urllib.request.Request(BASE + "/api/document", data=octets, headers={"Content-Type": "application/octet-stream", "X-Token": A.JETON, "X-Nom": urllib.parse.quote(nom)})
@@ -3416,30 +3417,30 @@ class Assistant(unittest.TestCase):
         self.assertEqual(conv["messages"][0]["content"], "Résume", "la conversation enregistrée ne contient pas le texte du fichier")
         self.assertEqual(conv["messages"][0]["pieces"], [{"id": ident, "nom": "note.txt"}])
         # borne : un long fichier est coupé avec mention, sans toucher la conversation
-        gros, _, _ = pieces.enregistrer(b"ligne de texte\n" * 1000, "gros.txt")
-        coupe = pieces.pour_le_modele([{"role": "user", "content": "q", "pieces": [{"id": gros, "nom": "gros.txt"}]}], 0)[0]["content"]
+        gros, _, _ = attachments.enregistrer(b"ligne de texte\n" * 1000, "gros.txt")
+        coupe = attachments.pour_le_modele([{"role": "user", "content": "q", "pieces": [{"id": gros, "nom": "gros.txt"}]}], 0)[0]["content"]
         self.assertIn("caractères coupés", coupe)
-        self.assertLess(len(coupe), pieces.PARTIE_MIN + 400)
+        self.assertLess(len(coupe), attachments.PARTIE_MIN + 400)
         # les vieilles pièces ne sont plus rejouées
         msgs = [{"role": "user", "content": "a", "pieces": [{"id": ident, "nom": "note.txt"}]}] + [{"role": "assistant", "content": "x"}] * 7 + [{"role": "user", "content": "b"}]
-        self.assertIn("non rejoué", pieces.pour_le_modele(msgs, 10000)[0]["content"])
-        self.assertNotIn("voici ma note", pieces.pour_le_modele(msgs, 10000)[0]["content"])
+        self.assertIn("non rejoué", attachments.pour_le_modele(msgs, 10000)[0]["content"])
+        self.assertNotIn("voici ma note", attachments.pour_le_modele(msgs, 10000)[0]["content"])
         # une pièce disparue ne casse pas la demande
-        (pieces.dossier() / ident).unlink()
-        (pieces.dossier() / (ident + ".texte")).unlink(missing_ok=True)
-        self.assertIn("devenu illisible", pieces.pour_le_modele(conv["messages"], 10000)[0]["content"])
+        (attachments.dossier() / ident).unlink()
+        (attachments.dossier() / (ident + ".texte")).unlink(missing_ok=True)
+        self.assertIn("devenu illisible", attachments.pour_le_modele(conv["messages"], 10000)[0]["content"])
         # nettoyage : l'orpheline ancienne part, la citée reste
-        orpheline, _, _ = pieces.enregistrer(b"orpheline unique\n", "o.txt")
-        citee, _, _ = pieces.enregistrer(b"citee unique\n", "c.txt")
+        orpheline, _, _ = attachments.enregistrer(b"orpheline unique\n", "o.txt")
+        citee, _, _ = attachments.enregistrer(b"citee unique\n", "c.txt")
         c = A.conv_nouvelle()
         c["messages"].append({"role": "user", "content": "x", "pieces": [{"id": citee, "nom": "c.txt"}]})
         A.conv_ecrire(c)
         vieux = time.time() - 5 * 86400
         for i in (orpheline, citee):
-            os.utime(pieces.dossier() / i, (vieux, vieux))
-        pieces.nettoyer()
-        self.assertFalse((pieces.dossier() / orpheline).exists())
-        self.assertTrue((pieces.dossier() / citee).exists())
+            os.utime(attachments.dossier() / i, (vieux, vieux))
+        attachments.nettoyer()
+        self.assertFalse((attachments.dossier() / orpheline).exists())
+        self.assertTrue((attachments.dossier() / citee).exists())
 
     def test_export_de_sauvegarde(self):
         req = urllib.request.Request(BASE + "/api/sauvegarde", headers={"X-Token": A.JETON})
@@ -3462,7 +3463,7 @@ class Assistant(unittest.TestCase):
             self.assertEqual(lire("/api/etat")["bench"]["mesures"], {})
             SCENARIO[:] = []
             post("/api/bench", {"modele": "mauvais nom !"}, attendu=400)
-            from lutin import machine as _machine
+            from lutin import hardware as _machine
             with mock.patch.object(_machine, "detecter", return_value=_machine.Profil(cpu="processeur de test")):
                 self.assertTrue(post("/api/bench", {"modele": "qwen3.8:27b", "rapide": True})["ok"])
                 for _ in range(300):

@@ -6,7 +6,7 @@ import context  # noqa: F401
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "tools"))
 import mesurer_rappel  # noqa: E402
-from lutin import rappel  # noqa: E402
+from lutin import recall  # noqa: E402
 
 
 class QualiteDuRappel(unittest.TestCase):
@@ -18,9 +18,9 @@ class QualiteDuRappel(unittest.TestCase):
         self.assertGreaterEqual(r["mrr"], 0.92, r["ratees"])
 
     def test_le_pluriel_n_empeche_pas_de_retrouver(self):
-        self.assertEqual(rappel.mots("Mes chats et mon chat"), ["chat", "chat"])
-        self.assertEqual(rappel.mots("fonctions"), ["fonction"])
-        self.assertEqual(rappel.mots("access bonus mois"), ["access", "bonus", "mois"])
+        self.assertEqual(recall.mots("Mes chats et mon chat"), ["chat", "chat"])
+        self.assertEqual(recall.mots("fonctions"), ["fonction"])
+        self.assertEqual(recall.mots("access bonus mois"), ["access", "bonus", "mois"])
 
 
 if __name__ == "__main__":

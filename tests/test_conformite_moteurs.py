@@ -18,9 +18,9 @@ for cle, valeur in {"LUTIN_RACINE": str(_TEMP / "projet"), "LUTIN_DONNEES": str(
     os.environ.setdefault(cle, valeur)
 (_TEMP / "projet").mkdir(exist_ok=True)
 
-from lutin import moteur as _m  # noqa: E402,F401  (avant les autres : import circulaire sinon)
-from lutin import moteur_llamacpp as ml  # noqa: E402
-from lutin import moteurs  # noqa: E402
+from lutin import core as _m  # noqa: E402,F401  (avant les autres : import circulaire sinon)
+from lutin import llamacpp_engine as ml  # noqa: E402
+from lutin import engines  # noqa: E402
 
 PNG = "iVBORw0KGgo="
 EVENEMENTS = {"ferme": threading.Event(), "dernier": {}}
@@ -145,7 +145,7 @@ class Conformite:
         return dict({"model": self.modele, "messages": messages, "options": {}}, **plus)
 
     def flux(self, corps, stop=None):
-        with moteurs.FluxInterruptible(lambda: self.moteur.chat_flux(corps), stop or threading.Event()) as f:
+        with engines.FluxInterruptible(lambda: self.moteur.chat_flux(corps), stop or threading.Event()) as f:
             return list(f)
 
     def verifier_discuter(self):
@@ -185,7 +185,7 @@ class Conformite:
         threading.Timer(0.4, stop.set).start()
         debut = time.time()
         lus = 0
-        with moteurs.FluxInterruptible(lambda: self.moteur.chat_flux(self.corps([{"role": "user", "content": "LONG"}])), stop) as f:
+        with engines.FluxInterruptible(lambda: self.moteur.chat_flux(self.corps([{"role": "user", "content": "LONG"}])), stop) as f:
             for e in f:
                 lus += 1
                 if stop.is_set():
@@ -201,11 +201,11 @@ class Conformite:
 
     def test_la_grille_est_complete_et_honnete(self):
         g = self.moteur.grille()
-        self.assertEqual(set(g), set(moteurs.FONCTIONS))
+        self.assertEqual(set(g), set(engines.FONCTIONS))
         for f, (etat, note) in g.items():
-            self.assertIn(etat, moteurs.ETATS, f)
+            self.assertIn(etat, engines.ETATS, f)
         vue = {x["fonction"]: x for x in self.moteur.vue()["grille"]}
-        self.assertEqual(list(vue), list(moteurs.FONCTIONS))
+        self.assertEqual(list(vue), list(engines.FONCTIONS))
         self.verifier_liste()
         for f, (etat, note) in g.items():
             if etat not in ("natif", "adapte"):
@@ -230,7 +230,7 @@ class OllamaAdaptateur(Conformite, unittest.TestCase):
         cls.s = serveur(FauxOllama)
         cls.ancien = _m.OLLAMA
         _m.OLLAMA = "http://127.0.0.1:%d" % cls.s.server_address[1]
-        cls.moteur = moteurs.MOTEURS["ollama"]
+        cls.moteur = engines.MOTEURS["ollama"]
 
     @classmethod
     def tearDownClass(cls):
@@ -244,15 +244,15 @@ class OpenAIBase(Conformite):
     @classmethod
     def setUpClass(cls):
         cls.s = serveur(FauxOpenAI)
-        cls.ancien = dict(moteurs.CONTEXTE)
+        cls.ancien = dict(engines.CONTEXTE)
         cls.dossier = Path(tempfile.mkdtemp(dir=_TEMP))
-        moteurs.CONTEXTE.update(donnees=lambda: cls.dossier, en_docker=lambda: False, hors_ligne=lambda: False)
+        engines.CONTEXTE.update(donnees=lambda: cls.dossier, en_docker=lambda: False, hors_ligne=lambda: False)
         ml.regler(cls.id, adresse="http://127.0.0.1:%d" % cls.s.server_address[1])
-        cls.moteur = moteurs.MOTEURS[cls.id]
+        cls.moteur = engines.MOTEURS[cls.id]
 
     @classmethod
     def tearDownClass(cls):
-        moteurs.CONTEXTE.update(cls.ancien)
+        engines.CONTEXTE.update(cls.ancien)
         cls.s.shutdown()
 
 
@@ -266,10 +266,10 @@ class ServeurExterneAdaptateur(OpenAIBase, unittest.TestCase):
 
 class Garde(unittest.TestCase):
     def test_trois_adaptateurs_et_chaque_fonction_declaree_est_couverte(self):
-        self.assertEqual({"ollama", "llamacpp", "openai"} <= set(moteurs.MOTEURS), True)
+        self.assertEqual({"ollama", "llamacpp", "openai"} <= set(engines.MOTEURS), True)
         for ident in ("ollama", "llamacpp", "openai"):
-            for f in moteurs.FONCTIONS:
-                etat = moteurs.MOTEURS[ident].grille()[f][0]
+            for f in engines.FONCTIONS:
+                etat = engines.MOTEURS[ident].grille()[f][0]
                 if etat in ("natif", "adapte") and f not in VERIFIE_AILLEURS:
                     self.assertTrue(hasattr(Conformite, "verifier_" + f), "{} : aucune vérification pour « {} »".format(ident, f))
 

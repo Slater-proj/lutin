@@ -19,9 +19,9 @@ for cle, valeur in {"LUTIN_RACINE": str(_TEMP / "projet"), "LUTIN_DONNEES": str(
 for d in ("projet", "donnees", "memoire"):
     (_TEMP / d).mkdir(exist_ok=True)
 
-from lutin import moteur as A  # noqa: E402
-from lutin import machines, moteurs  # noqa: E402
-from lutin import securite as S  # noqa: E402
+from lutin import core as A  # noqa: E402
+from lutin import machines, engines  # noqa: E402
+from lutin import security as S  # noqa: E402
 
 
 class FauxNoeud:
@@ -80,7 +80,7 @@ class Base(unittest.TestCase):
         self.noeud = FauxNoeud()
         self.avant = (A.SECURITE, A.APPAREILS)
         A.SECURITE = S.Securite()
-        import lutin.serveur as srv
+        import lutin.server as srv
         self.p_moteur = mock.patch.object(srv._moteurs, "par_id", lambda ident: self.noeud)
         self.p_reglages = mock.patch.object(srv._m, "reglages", lambda: dict(A.REGLAGES_DEFAUT))
         self.p_moteur.start()
@@ -291,7 +291,7 @@ class Etats(Base):
         machines.signaler_panne(h)
 
     def test_la_version_du_nœud_dit_si_lutin_n_y_est_pas_a_jour(self):
-        with mock.patch("lutin.moteur.VERSION", "0.38.0"):
+        with mock.patch("lutin.core.VERSION", "0.38.0"):
             self.assertTrue(machines._maj_disponible("0.36.1"))
             self.assertFalse(machines._maj_disponible("0.38.0"))
             self.assertFalse(machines._maj_disponible("0.40.0"))
@@ -392,18 +392,18 @@ class Routage(Base):
 
 class Reglage(Base):
     def test_choisir_une_machine_inconnue_est_refuse(self):
-        from lutin import donnees
+        from lutin import storage
         with self.assertRaises(ValueError):
-            donnees._enregistrer_reglages({"machine": "a" * 32})
+            storage._enregistrer_reglages({"machine": "a" * 32})
 
     def test_la_page_machines(self):
         self.jumeler()
-        import lutin.serveur as srv
+        import lutin.server as srv
         vue = srv.Gestionnaire._vue_machines()
         self.assertTrue(vue["noeud"]["actif"])
         self.assertEqual(vue["machines"][0]["etat"], "operationnel")
         self.assertNotIn("jeton", json.dumps(vue))
-        self.assertTrue(moteurs is not None)
+        self.assertTrue(engines is not None)
 
 
 class Demandes(Base):
@@ -535,7 +535,7 @@ class Relais(Base):
         def faux_tour(c, texte, emit, r, stop, depuis, **kw):
             recus.update(texte=texte, modele=r["modele"], machine=r.get("machine"), identite=kw.get("identite"))
             emit({"type": "fin", "conversation": {"id": c["id"], "titre": c["titre"]}})
-        with mock.patch("lutin.serveur._m.tour", faux_tour):
+        with mock.patch("lutin.server._m.tour", faux_tour):
             statut, corps = self.relais("POST", "/api/chat", {"message": "salut", "conversation": conv["id"], "modele": "pirate:70b", "machine": "a" * 32, "options": {"auto_commandes": True, "auto_ecriture": True}})
         self.assertEqual(statut, 200, corps)
         self.assertIn('"type": "fin"', corps)
@@ -558,7 +558,7 @@ class Relais(Base):
         def faux_tour(c, texte, emit, r, stop, depuis, **kw):
             emit({"type": "texte", "texte": "voilà"})
             emit({"type": "fin", "conversation": {"id": c["id"], "titre": c["titre"]}})
-        with mock.patch("lutin.serveur._m.tour", faux_tour):
+        with mock.patch("lutin.server._m.tour", faux_tour):
             statut, corps = self.http("POST", "/h/{}/api/chat".format(m["id"]), {"message": "salut", "conversation": conv["id"]}, {"X-Token": A.JETON})
         self.assertEqual(statut, 200, corps)
         evenements = [json.loads(l) for l in corps.splitlines() if l.strip()]

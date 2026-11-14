@@ -24,7 +24,7 @@ CLES = ("id", "conversation", "chemin", "nom", "texte", "mode", "modele", "messa
 
 
 def routes():
-    source = (SRC / "lutin" / "serveur.py").read_text(encoding="utf-8")
+    source = (SRC / "lutin" / "server.py").read_text(encoding="utf-8")
     trouvees = sorted(set(re.findall(r'"(/api/[a-z0-9-]+)"', source)))
     return [r for r in trouvees if not any(x in r for x in EXCLUES)]
 

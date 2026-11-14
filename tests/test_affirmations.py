@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
-from lutin.affirmations import affirme_sans_agir, oubli_d_ecrire, refus_a_tort  # noqa: E402
+from lutin.false_claims import affirme_sans_agir, oubli_d_ecrire, refus_a_tort  # noqa: E402
 
 TOUS = {"ecrire", "modifier", "modifier_plusieurs", "creer_document", "executer", "web_chercher", "web_lire", "comfy_generer", "memoriser", "lire", "installer_module"}
 DEMANDE = [{"role": "user", "content": "fais-le"}]

@@ -3,8 +3,8 @@ import unittest
 from pathlib import Path
 
 import context  # noqa: F401
-from lutin import securite as s
-from lutin.securite import Appareils, LimiteurDebit, Securite
+from lutin import security as s
+from lutin.security import Appareils, LimiteurDebit, Securite
 
 
 class Horloge:

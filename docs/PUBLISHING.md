@@ -30,6 +30,22 @@ The first release is **0.1.0**. Every merge into `main` produces a release, even
 
 Tip: so that the version follows what you did, merge with a **squash** and a conventional title (`feat: multiple workspace folders`).
 
+## Release channel: pre-releases during the migration to 1.0
+
+The file `tools/release_channel.json`, when the repository has one, decides what `main` publishes ([ADR 0004](adr/0004-release-cadence.md)):
+
+| File | What `main` publishes |
+|---|---|
+| none (the 0.x line) | a stable release per merge, as described above |
+| `{"channel": "alpha", "target": "1.0.0"}` | **pre-releases** `1.0.0a1`, `1.0.0a2`… (`beta`: `b1`…, `rc`: `rc1`…): tag `v1.0.0a1`, GitHub Release marked *pre-release*, Docker images `:1.0.0a1` and `:next` — **never** `:latest` |
+| `{"channel": "stable", "target": "1.0.0"}` | the stable `1.0.0`, then the usual computation |
+
+A pre-release is never « the latest release » for GitHub: the install scripts, `lutin update` and the update notice in the page all ask for the latest release, so none of them offers it. To try one, name it: `docker pull ghcr.io/slater-proj/lutin:next`, or the wheel of that Release.
+
+On a branch that carries a target, the candidate is called `1.0.0.devN+branch` (always lower than `1.0.0a1`). An unreadable or inconsistent file stops the computation: nothing is published rather than a stable version by accident.
+
+The `modernization` branch carries the `alpha` file: should it reach `main` before 1.0 is ready, what comes out is a pre-release.
+
 ## Using a candidate
 
 ```bash

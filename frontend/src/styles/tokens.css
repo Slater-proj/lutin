@@ -1,0 +1,62 @@
+/* Design tokens: every colour, size and space of the interface is one of these. A component never writes a raw colour.
+   Each colour is given once for both themes with light-dark(); the theme follows the system unless the user chose one
+   (data-theme on <html>, see lib/theme.ts). Text colours are chosen for a contrast of at least 4.5:1 on their surface
+   (WCAG 2.2 AA), borders of controls for at least 3:1. No web font: the interface works offline.
+   The green is the one of the logo (the hat of the Lutin). */
+:root {
+  color-scheme: light dark;
+
+  --color-bg: light-dark(#f5f6f3, #101214);
+  --color-surface: light-dark(#ffffff, #171a1d);
+  --color-surface-raised: light-dark(#ecefea, #20252a);
+  --color-border: light-dark(#dfe2dd, #2a3036);
+  --color-border-strong: light-dark(#7d848c, #7b8491);
+  --color-text: light-dark(#171a1d, #eceef0);
+  --color-text-muted: light-dark(#555c66, #a4acb8);
+  --color-accent: light-dark(#126a57, #5fd4b1);
+  --color-accent-hover: light-dark(#0c5244, #86e2c6);
+  --color-on-accent: light-dark(#ffffff, #06201a);
+  --color-accent-soft: light-dark(#e0f2eb, #15302a);
+  --color-accent-text: light-dark(#0f5e4d, #7ddcbe); /* the accent used as a text colour on a surface */
+  --color-danger: light-dark(#a3271f, #ff9a8f);
+  --color-danger-soft: light-dark(#fbe6e3, #381b18);
+  --color-warning-soft: light-dark(#fbf1d3, #332b14);
+  --color-focus: light-dark(#1a56c4, #8fb8ff);
+  --color-code-bg: light-dark(#f1f2ee, #0c0e10);
+
+  --font-sans: system-ui, -apple-system, "Segoe UI Variable Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "Cascadia Code", "SF Mono", Menlo, Consolas, monospace;
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-md: 1rem;
+  --text-lg: 1.25rem;
+  --text-xl: 1.75rem;
+  --line: 1.6;
+
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
+  --radius-pill: 999px;
+  --shadow-raised: 0 1px 2px rgb(0 0 0 / 0.06), 0 6px 20px rgb(0 0 0 / 0.08);
+
+  --rail-width: 14rem;
+  --list-width: 17.5rem;
+  --measure: 46rem; /* the widest a line of text gets */
+  --target: 2.75rem; /* the smallest side of anything one taps (44 px) */
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}

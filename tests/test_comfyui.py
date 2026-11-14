@@ -16,7 +16,7 @@ for cle, valeur in {"LUTIN_RACINE": str(_TEMP / "projet"), "LUTIN_DONNEES": str(
 (_TEMP / "projet").mkdir(exist_ok=True)
 
 from lutin import addons, addons_comfyui as cu  # noqa: E402
-from lutin import moteur as _m  # noqa: E402
+from lutin import core as _m  # noqa: E402
 
 COMFY = _TEMP / "ComfyUI"
 SERVICE = {"panne": False, "soumis": [], "histoire": 0, "refus": False, "interrompu": 0, "erreur_historique": False, "mode": "checkpoints", "sans_clip": False}
@@ -250,7 +250,7 @@ class ComfyUI(unittest.TestCase):
         self.assertEqual(cu._afficher(["../main.py", "../../secret.png"], self.ctx()), [])
 
     def test_supprimer_une_image_creee_efface_le_fichier_et_la_copie_mais_jamais_hors_de_la_sortie(self):
-        from lutin import images, revue
+        from lutin import images, change_review
         sortie = COMFY / "output"
         sortie.mkdir(exist_ok=True)
         (sortie / "a_supprimer.png").write_bytes(b"\x89PNG\r\n\x1a\n" + b"un")
@@ -265,16 +265,16 @@ class ComfyUI(unittest.TestCase):
         c["messages"] = [{"role": "tool", "tool_name": "comfy_generer", "content": "ok", "medias": [ident_image, autre],
                           "medias_fichiers": {ident_image: str(sortie / "a_supprimer.png"), autre: str(COMFY / "main_intact.png")}}]
         _m.conv_ecrire(c)
-        self.assertTrue(revue.supprimer_media(c["id"], ident_image)["fichier_supprime"])
+        self.assertTrue(change_review.supprimer_media(c["id"], ident_image)["fichier_supprime"])
         self.assertFalse((sortie / "a_supprimer.png").exists())
         self.assertEqual(_m.conv_lire(c["id"])["messages"][0]["medias"], [autre])
         with self.assertRaises(ValueError):
             images.chemin(ident_image)
-        self.assertFalse(revue.supprimer_media(c["id"], autre)["fichier_supprime"], "un fichier hors du dossier de sortie n'est jamais effacé")
+        self.assertFalse(change_review.supprimer_media(c["id"], autre)["fichier_supprime"], "un fichier hors du dossier de sortie n'est jamais effacé")
         self.assertTrue((COMFY / "main_intact.png").exists())
         self.assertNotIn("medias", _m.conv_lire(c["id"])["messages"][0])
         with self.assertRaises(ValueError):
-            revue.supprimer_media(c["id"], autre)
+            change_review.supprimer_media(c["id"], autre)
 
     def test_les_cases_d_accord_automatique_valent_aussi_pour_generer(self):
         cu.outil_generer({"prompt": "x"}, self.ctx())
@@ -612,8 +612,8 @@ class ComfyUI(unittest.TestCase):
         self.assertIn("ancien_modele.safetensors", valeurs, "un modèle enregistré mais introuvable reste affiché")
         self.assertIn("introuvable", dict(champ["choix"])["ancien_modele.safetensors"])
         # l'outil montré au modèle de langage : types disponibles et modèles utilisables
-        from lutin import outils
-        outil = next(o for o in outils.OUTILS if o["function"]["name"] == "comfy_generer")
+        from lutin import tools
+        outil = next(o for o in tools.OUTILS if o["function"]["name"] == "comfy_generer")
         adapte = cu.adapter_outil(outil)
         props = adapte["function"]["parameters"]["properties"]
         self.assertEqual(props["type"]["enum"], ["image"], "pas de moteur vidéo ni son : ils ne sont pas proposés")
@@ -662,23 +662,23 @@ class ComfyUI(unittest.TestCase):
             DIFFUSION["VAELoader"] = ("vae_name", ["ae.safetensors", "qwen_image_vae.safetensors"])
 
     def test_les_outils_n_existent_que_si_l_addon_est_actif(self):
-        from lutin import dialogue, revue
+        from lutin import agent, change_review
         base = dict(_m.reglages(), web=True)
 
         def noms(mode):
-            return {t["function"]["name"] for t in dialogue.outils_du_mode(dict(base, mode=mode))}
+            return {t["function"]["name"] for t in agent.outils_du_mode(dict(base, mode=mode))}
         comfy = {"comfy_generer", "comfy_modeles"}
         self.assertFalse(comfy & noms("polyvalent"), "addon désactivé : le modèle ne voit pas ces outils")
         with self.assertRaises(_m.ErreurOutil):
-            revue.appeler_outil("comfy_generer", {"prompt": "x"}, self.ctx())
+            change_review.appeler_outil("comfy_generer", {"prompt": "x"}, self.ctx())
         vrai = addons.actif
         addons.actif = lambda ident: True
         try:
             self.assertTrue(comfy <= noms("polyvalent"))
             self.assertEqual(comfy & noms("recherche"), {"comfy_modeles"}, "en lecture seule, le modèle peut voir les modèles mais pas générer")
             self.assertFalse(comfy & noms("discussion"))
-            self.assertIn("Modèles installés", revue.appeler_outil("comfy_modeles", {}, self.ctx()))
-            self.assertIn("lutin_00001_.png", revue.appeler_outil("comfy_generer", {"prompt": "un phare"}, self.ctx()))
+            self.assertIn("Modèles installés", change_review.appeler_outil("comfy_modeles", {}, self.ctx()))
+            self.assertIn("lutin_00001_.png", change_review.appeler_outil("comfy_generer", {"prompt": "un phare"}, self.ctx()))
         finally:
             addons.actif = vrai
 

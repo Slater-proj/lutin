@@ -23,6 +23,7 @@ jobs:
           - {os: windows-latest, python: "3.12"}
     steps:
       - uses: actions/checkout@v7
+      - uses: ./.github/actions/frontend          # the interface is built before anything is tested or packaged (ADR 0002)
       - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python }}
@@ -44,6 +45,7 @@ jobs:
       SETUPTOOLS_SCM_PRETEND_VERSION: "0.0.0.dev0"
     steps:
       - uses: actions/checkout@v7
+      - uses: ./.github/actions/frontend          # the interface is built before anything is tested or packaged (ADR 0002)
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
@@ -69,6 +71,7 @@ jobs:
       SETUPTOOLS_SCM_PRETEND_VERSION: "0.0.0.dev0"
     steps:
       - uses: actions/checkout@v7
+      - uses: ./.github/actions/frontend          # the interface is built before anything is tested or packaged (ADR 0002)
       - name: "Construire les deux images (complète = Lutin + Ollama, légère = Lutin seul)"
         run: |
           docker build --target leger --build-arg LUTIN_VERSION=0.0.0.dev0 -t lutin:ci-slim .
@@ -131,6 +134,7 @@ jobs:
       SETUPTOOLS_SCM_PRETEND_VERSION: "0.0.0.dev0"
     steps:
       - uses: actions/checkout@v7
+      - uses: ./.github/actions/frontend          # the interface is built before anything is tested or packaged (ADR 0002)
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
@@ -155,6 +159,7 @@ jobs:
       SETUPTOOLS_SCM_PRETEND_VERSION: "0.0.0.dev0"
     steps:
       - uses: actions/checkout@v7
+      - uses: ./.github/actions/frontend          # the interface is built before anything is tested or packaged (ADR 0002)
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"

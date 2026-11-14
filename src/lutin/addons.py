@@ -28,8 +28,9 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
-from . import horsligne as _hl
-from . import moteur as _m
+from . import offline as _hl
+from . import core as _m
+from . import net_guard as _net_guard
 from .i18n import t as _t
 
 DOSSIER_LIVRE = Path(__file__).parent / "addons_livres"      # addons livrés (les tests peuvent pointer ailleurs)
@@ -361,7 +362,7 @@ def appeler(ident, nom, variables=None, delai=DELAI_APPEL):
     except _hl.HorsLigne as e:
         return {"ok": False, "donnees": None, "extrait": {}, "erreur": str(e)}
     hote = urllib.parse.urlparse(url).hostname
-    if os.environ.get("LUTIN_WEB_LOCAL") != "1" and hote not in ("127.0.0.1", "localhost"):          # une adresse de la machine n'est permise que si le manifeste (livré) la déclare : sinon hote_autorise l'a déjà refusée
+    if not _net_guard.local_test_mode() and hote not in ("127.0.0.1", "localhost"):          # une adresse de la machine n'est permise que si le manifeste (livré) la déclare : sinon hote_autorise l'a déjà refusée
         from . import web
         try:
             web.verifier_hote_web(url)                                          # même garde-fou que l'accès web : jamais une adresse du réseau local
@@ -593,10 +594,10 @@ def proposer_correction(ident, demander_au_modele=None, lire_doc=None):
 
 
 def _demander_json(consigne):
-    from . import dialogue
+    from . import agent
     r = _m.reglages()
     try:
-        rep = dialogue.ollama_json("/api/chat", {"model": r["modele"], "stream": False, "think": False, "format": "json", "options": _m.options_modele(r, 0.1),
+        rep = agent.ollama_json("/api/chat", {"model": r["modele"], "stream": False, "think": False, "format": "json", "options": _m.options_modele(r, 0.1),
                                                  "messages": [{"role": "system", "content": "Réponds uniquement en JSON : {\"flux\": {...}, \"explication\": \"...\"}."}, {"role": "user", "content": consigne}]}, 300)
         return json.loads(rep.get("message", {}).get("content") or "{}")
     except (urllib.error.URLError, OSError, ValueError) as e:

@@ -24,11 +24,11 @@ Those of the maintainer's plan and of [DECISIONS.md](DECISIONS.md):
 
 | Plan | State |
 |---|---|
-| Common engine interface | **Done** (`moteurs.py`): Ollama, llama.cpp (managed or external), OpenAI-compatible server; possible actions per engine with reason; background tasks. **To complete**: capability grid (native / adapted / unsupported / untested), common conformance tests, formal healthcheck. |
+| Common engine interface | **Done** (`engines.py`): Ollama, llama.cpp (managed or external), OpenAI-compatible server; possible actions per engine with reason; background tasks. **To complete**: capability grid (native / adapted / unsupported / untested), common conformance tests, formal healthcheck. |
 | On-demand installation | **Done for llama.cpp** (download, fingerprint, safe extraction, uninstall, reinstall) and **Ollama on Windows** (signature). **Missing**: updates, clean cancel and resume, Docker, guided Ollama on Linux/Mac. |
 | Adaptive Models tab | **Done** (hides what is Ollama-specific; Hugging Face for llama.cpp). |
 | Updatable model catalogue | **Exists** (JSON on GitHub, weekly check). **Engine catalogue: to create.** |
-| Hardware detection, benchmark, calibration | **Exist** (`machine.py`, `bench.py`, "Test my PC") but Ollama-centred. |
+| Hardware detection, benchmark, calibration | **Exist** (`hardware.py`, `bench.py`, "Test my PC") but Ollama-centred. |
 | Security | Access levels, pairing code, proxy, journal, approvals, MCP. **Nothing** for authentication between machines. |
 | Docker | Full image (Lutin + Ollama), light image, GPU/AMD/Intel/proxy profiles, persistent volume. |
 | CI | Ruff, Linux/Windows tests, install scripts, package, Windows installer, Docker image, secret detection. **Missing**: measured coverage, Docker volume test. |

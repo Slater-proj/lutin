@@ -15,13 +15,13 @@ for cle, valeur in {"LUTIN_RACINE": str(_TEMP / "projet"), "LUTIN_DONNEES": str(
     os.environ.setdefault(cle, valeur)
 (_TEMP / "projet").mkdir(exist_ok=True)
 
-from lutin import moteur as _m  # noqa: E402,F401  (avant les autres : import circulaire sinon)
+from lutin import core as _m  # noqa: E402,F401  (avant les autres : import circulaire sinon)
 from lutin import colibri as CO  # noqa: E402
-from lutin import exllamav3_catalogue as C  # noqa: E402
+from lutin import exllamav3_catalog as C  # noqa: E402
 from lutin import lmstudio as L  # noqa: E402
-from lutin import lmstudio_catalogue as LC  # noqa: E402
-from lutin import moteur_llamacpp as ml  # noqa: E402
-from lutin import moteurs, serveur  # noqa: E402
+from lutin import lmstudio_catalog as LC  # noqa: E402
+from lutin import llamacpp_engine as ml  # noqa: E402
+from lutin import engines, server  # noqa: E402
 
 
 def faux_hf(fichiers=None, depots=None, appels=None):
@@ -104,17 +104,17 @@ class Suppression(unittest.TestCase):
 class Moteur(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="lutin-mg-m-"))
-        self.ancien = dict(moteurs.CONTEXTE)
-        moteurs.CONTEXTE["donnees"] = lambda: self.tmp
-        self.mo = moteurs.MOTEURS["openai"]
+        self.ancien = dict(engines.CONTEXTE)
+        engines.CONTEXTE["donnees"] = lambda: self.tmp
+        self.mo = engines.MOTEURS["openai"]
         self.addCleanup(self.remettre)
 
     def remettre(self):
         cfg = ml.lire_config()
         cfg.pop("openai", None)
         ml.ecrire_config(cfg)
-        moteurs.CONTEXTE.clear()
-        moteurs.CONTEXTE.update(self.ancien)
+        engines.CONTEXTE.clear()
+        engines.CONTEXTE.update(self.ancien)
 
     def test_supprimer_un_modele_lm_studio_passe_par_lutin(self):
         ml.regler_serveur("openai", {"serveur": "lmstudio"})
@@ -147,22 +147,22 @@ class CatalogueColibri(unittest.TestCase):
                 {"id": "petit-70b", "go": 40.0, "ok": True, "statut": "ready", "raison": ""}]
         mo = mock.Mock(_dossiers=lambda: {})
         with mock.patch.object(CO, "catalogue", lambda d: brut):
-            r = serveur.Gestionnaire._catalogue_colibri(mo, [{"nom": "petit-70b-q4"}], "")
+            r = server.Gestionnaire._catalogue_colibri(mo, [{"nom": "petit-70b-q4"}], "")
             self.assertEqual([m["id"] for m in r["modeles"]], ["petit-70b", "moyen-200b", "enorme-1t"], "ce qui tient d'abord, du plus petit au plus gros")
             self.assertEqual([m["adequation"]["niveau"] for m in r["modeles"]], ["bien", "bien", "trop_gros"])
             self.assertIn("400 Go", r["modeles"][2]["adequation"]["texte"], "la raison de Colibri est montrée telle quelle")
             self.assertEqual([bool(m["installes"]) for m in r["modeles"]], [True, False, False])
             self.assertTrue(all(m["direct"] for m in r["modeles"]) and r["suite"] is False)
-            self.assertEqual([m["id"] for m in serveur.Gestionnaire._catalogue_colibri(mo, [], "moyen")["modeles"]], ["moyen-200b"])
+            self.assertEqual([m["id"] for m in server.Gestionnaire._catalogue_colibri(mo, [], "moyen")["modeles"]], ["moyen-200b"])
 
 
 class Routes(unittest.TestCase):
     def test_les_trois_serveurs_geres_ont_les_memes_routes(self):
         for serveur_gere in ("exllamav3", "lmstudio", "colibri"):
             for route in ("modeles", "catalogue", "quantifications"):
-                self.assertEqual(serveur.ROUTES_MODELES_GERES["/api/{}-{}".format(serveur_gere, route)], (serveur_gere, route))
-        self.assertEqual(len(serveur.ROUTES_MODELES_GERES), 9)
-        self.assertEqual(urllib.parse.urlsplit("/api/lmstudio-catalogue?q=x").path in serveur.ROUTES_MODELES_GERES, True)
+                self.assertEqual(server.ROUTES_MODELES_GERES["/api/{}-{}".format(serveur_gere, route)], (serveur_gere, route))
+        self.assertEqual(len(server.ROUTES_MODELES_GERES), 9)
+        self.assertEqual(urllib.parse.urlsplit("/api/lmstudio-catalogue?q=x").path in server.ROUTES_MODELES_GERES, True)
 
 
 if __name__ == "__main__":

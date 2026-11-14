@@ -6,7 +6,7 @@ from pathlib import Path
 from unittest import mock
 
 import context  # noqa: F401
-from lutin import zone
+from lutin import tray as zone
 
 
 class Enfant:

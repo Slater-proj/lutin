@@ -11,9 +11,9 @@ for cle, valeur in {"LUTIN_RACINE": str(_TEMP / "projet"), "LUTIN_DONNEES": str(
     os.environ.setdefault(cle, valeur)
 (_TEMP / "projet").mkdir(exist_ok=True)
 
-from lutin import moteur as _m  # noqa: E402
-from lutin import ouverture as O  # noqa: E402
-from lutin import dialogue  # noqa: E402
+from lutin import core as _m  # noqa: E402
+from lutin import open_file as O  # noqa: E402
+from lutin import agent  # noqa: E402
 
 
 class Chemins(unittest.TestCase):
@@ -72,25 +72,25 @@ class Chemins(unittest.TestCase):
 
 class AvisUneSeuleFois(unittest.TestCase):
     def test_la_reduction_du_contexte_n_est_pas_redite_a_chaque_reponse(self):
-        dialogue.DITS["reduction"].clear()
+        agent.DITS["reduction"].clear()
         dits = []
         emit = dits.append
         rapport = {"raccourcis": 5, "tronques": 0, "retires": 0, "tours": 0}
         conv = {"id": "aaaa1111"}
-        dialogue.annoncer_reduction(rapport, emit, {"conv": conv}, 36864)
+        agent.annoncer_reduction(rapport, emit, {"conv": conv}, 36864)
         self.assertEqual(len(dits), 1)
-        dialogue.annoncer_reduction(rapport, emit, {"conv": conv}, 36864)          # une autre réponse (nouveau contexte de tour) : la même situation
-        dialogue.annoncer_reduction(dict(rapport, raccourcis=7), emit, {"conv": conv}, 36864)
+        agent.annoncer_reduction(rapport, emit, {"conv": conv}, 36864)          # une autre réponse (nouveau contexte de tour) : la même situation
+        agent.annoncer_reduction(dict(rapport, raccourcis=7), emit, {"conv": conv}, 36864)
         self.assertEqual(len(dits), 1, "à peine plus : pas un nouvel avis")
-        dialogue.annoncer_reduction(dict(rapport, raccourcis=9, tours=5), emit, {"conv": conv}, 36864)
+        agent.annoncer_reduction(dict(rapport, raccourcis=9, tours=5), emit, {"conv": conv}, 36864)
         self.assertEqual(len(dits), 2, "la réduction a nettement grossi : on le redit")
-        dialogue.annoncer_reduction(rapport, emit, {"conv": {"id": "bbbb2222"}}, 36864)
+        agent.annoncer_reduction(rapport, emit, {"conv": {"id": "bbbb2222"}}, 36864)
         self.assertEqual(len(dits), 3, "une autre conversation a son propre avis")
 
     def test_le_nom_du_moteur_et_les_erreurs_de_memoire_video(self):
         for texte in ('{"detail":"Model X failed to load: Insufficient VRAM in split for model and cache"}', "CUDA out of memory", "not enough GPU memory", "Failed to load model"):
-            self.assertTrue(dialogue.RE_MEMOIRE_VIDEO.search(texte), texte)
-        self.assertFalse(dialogue.RE_MEMOIRE_VIDEO.search("Connection refused"))
+            self.assertTrue(agent.RE_MEMOIRE_VIDEO.search(texte), texte)
+        self.assertFalse(agent.RE_MEMOIRE_VIDEO.search("Connection refused"))
 
 
 if __name__ == "__main__":

@@ -16,9 +16,9 @@ for cle, valeur in {"LUTIN_RACINE": str(_TEMP / "projet"), "LUTIN_DONNEES": str(
     os.environ.setdefault(cle, valeur)
 (_TEMP / "projet").mkdir(exist_ok=True)
 
-from lutin import moteur as _m  # noqa: E402,F401  (avant les autres : import circulaire sinon)
-from lutin import bench_moteurs as bm  # noqa: E402
-from lutin import machine, moteurs  # noqa: E402
+from lutin import core as _m  # noqa: E402,F401  (avant les autres : import circulaire sinon)
+from lutin import engine_bench as bm  # noqa: E402
+from lutin import hardware, engines  # noqa: E402
 
 RACINE = Path(__file__).resolve().parent.parent
 
@@ -81,16 +81,16 @@ class Profil:
 
 
 def carte(fabricant, vram, nom="Carte"):
-    return machine.Gpu(nom=nom, fabricant=fabricant, vram_go=vram, source="test")
+    return hardware.Gpu(nom=nom, fabricant=fabricant, vram_go=vram, source="test")
 
 
 class Base(unittest.TestCase):
     def setUp(self):
-        self.ancien = dict(moteurs.MOTEURS)
-        self.addCleanup(lambda: (moteurs.MOTEURS.clear(), moteurs.MOTEURS.update(self.ancien)))
+        self.ancien = dict(engines.MOTEURS)
+        self.addCleanup(lambda: (engines.MOTEURS.clear(), engines.MOTEURS.update(self.ancien)))
 
     def installer(self, ollama, llama):
-        moteurs.MOTEURS["ollama"], moteurs.MOTEURS["llamacpp"] = ollama, llama
+        engines.MOTEURS["ollama"], engines.MOTEURS["llamacpp"] = ollama, llama
 
 
 class Mesure(Base):
@@ -264,7 +264,7 @@ class Lancement(Base):
             def config(self):
                 return {"serveur": "lmstudio"}
         self.installer(Faux("ollama", "Ollama", 100, modeles=("qwen3:8b",)), Faux("llamacpp", "llama.cpp", 100, installe=False))
-        moteurs.MOTEURS["openai"] = Serveur("openai", "Serveur compatible OpenAI", 60, modeles=("qwen/qwen3-8b", "autre-70b"))
+        engines.MOTEURS["openai"] = Serveur("openai", "Serveur compatible OpenAI", 60, modeles=("qwen/qwen3-8b", "autre-70b"))
         utilises = []
         r = bm.comparer("qwen3:8b", "rapide", Profil(), horloge=Horloge(), memoire=lambda i, m: utilises.append((i, m)) or None, liberer_autres=lambda a, m: None, date="2026-11-09T10:00:00")
         self.assertEqual([(m["nom"], m["modele"]) for m in r["moteurs"]], [("Ollama", "qwen3:8b"), ("LM Studio", "qwen/qwen3-8b")])
@@ -275,12 +275,12 @@ class Lancement(Base):
         self.installer(Faux("ollama", "Ollama", 100), Faux("llamacpp", "llama.cpp", 100))
         arrete = Faux("openai", "Serveur compatible OpenAI", 60, actif=False)
         arrete.adresse = lambda: "http://127.0.0.1:1234/v1"
-        moteurs.MOTEURS["openai"] = arrete
+        engines.MOTEURS["openai"] = arrete
         raisons = {mo.id: raison for mo, raison, _ in bm.disponibles("m")}
         self.assertEqual(raisons["openai"], "pas démarré")
         sans_adresse = Faux("openai", "Serveur compatible OpenAI", 60)
         sans_adresse.adresse = lambda: ""
-        moteurs.MOTEURS["openai"] = sans_adresse
+        engines.MOTEURS["openai"] = sans_adresse
         self.assertNotIn("openai", [mo.id for mo, _, _ in bm.disponibles("m")])
 
     def test_comparer_demande_deux_moteurs(self):
@@ -335,7 +335,7 @@ class Branchement(unittest.TestCase):
         self.assertIn("--sortie", r.stdout)
 
     def test_les_routes_et_la_page(self):
-        src = (RACINE / "src" / "lutin" / "serveur.py").read_text(encoding="utf-8")
+        src = (RACINE / "src" / "lutin" / "server.py").read_text(encoding="utf-8")
         self.assertEqual(src.count('"/api/bench-moteurs"'), 2)
         page = (RACINE / "src" / "lutin" / "web" / "index.html").read_text(encoding="utf-8")
         self.assertIn("carteBancMoteurs", page)

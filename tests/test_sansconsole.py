@@ -8,7 +8,7 @@ from pathlib import Path
 from unittest import mock
 
 import context  # noqa: F401
-from lutin import sansconsole
+from lutin import no_console
 
 SRC = Path(__file__).resolve().parent.parent / "src"
 
@@ -19,8 +19,8 @@ from ctypes import wintypes
 mode, sortie = sys.argv[1], sys.argv[2]
 if mode == "avec":
     sys.path.insert(0, %r)
-    from lutin import sansconsole
-    sansconsole.activer()
+    from lutin import no_console
+    no_console.activer()
 user32 = ctypes.windll.user32
 Proc = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
 
@@ -51,33 +51,33 @@ json.dump({"nouvelles": sorted(vues)}, open(sortie, "w"))
 
 class Regle(unittest.TestCase):
     def test_un_programme_lance_sans_console_n_ouvre_pas_de_fenetre(self):
-        self.assertEqual(sansconsole.drapeaux(0), sansconsole.CREATE_NO_WINDOW)
-        self.assertEqual(sansconsole.drapeaux(0x200), 0x200 | sansconsole.CREATE_NO_WINDOW, "les autres drapeaux de l'appelant sont gardés")
+        self.assertEqual(no_console.drapeaux(0), no_console.CREATE_NO_WINDOW)
+        self.assertEqual(no_console.drapeaux(0x200), 0x200 | no_console.CREATE_NO_WINDOW, "les autres drapeaux de l'appelant sont gardés")
 
     def test_un_processus_detache_ou_une_console_voulue_ne_sont_pas_touches(self):
-        for voulu in (sansconsole.DETACHED_PROCESS, sansconsole.CREATE_NEW_CONSOLE, sansconsole.CREATE_NO_WINDOW):
-            self.assertEqual(sansconsole.drapeaux(voulu), voulu)
+        for voulu in (no_console.DETACHED_PROCESS, no_console.CREATE_NEW_CONSOLE, no_console.CREATE_NO_WINDOW):
+            self.assertEqual(no_console.drapeaux(voulu), voulu)
 
     def test_popen_recoit_les_drapeaux(self):
         appels = []
-        enveloppe = sansconsole.envelopper(lambda self, *a, **kw: appels.append(kw))
+        enveloppe = no_console.envelopper(lambda self, *a, **kw: appels.append(kw))
         enveloppe(object(), ["x"])
-        enveloppe(object(), ["x"], creationflags=sansconsole.CREATE_NEW_CONSOLE)
-        self.assertEqual([c["creationflags"] for c in appels], [sansconsole.CREATE_NO_WINDOW, sansconsole.CREATE_NEW_CONSOLE])
+        enveloppe(object(), ["x"], creationflags=no_console.CREATE_NEW_CONSOLE)
+        self.assertEqual([c["creationflags"] for c in appels], [no_console.CREATE_NO_WINDOW, no_console.CREATE_NEW_CONSOLE])
 
     def test_dans_un_vrai_terminal_rien_n_est_change(self):
-        with mock.patch.object(sansconsole, "console_visible", return_value=True), mock.patch.object(sansconsole, "_actif", False), mock.patch.object(sansconsole.os, "name", "nt"):
+        with mock.patch.object(no_console, "console_visible", return_value=True), mock.patch.object(no_console, "_actif", False), mock.patch.object(no_console.os, "name", "nt"):
             avant = subprocess.Popen.__init__
-            self.assertFalse(sansconsole.activer())
+            self.assertFalse(no_console.activer())
             self.assertIs(subprocess.Popen.__init__, avant)
 
     def test_hors_windows_rien_n_est_fait(self):
-        with mock.patch.object(sansconsole.os, "name", "posix"):
-            self.assertFalse(sansconsole.activer(force=True))
+        with mock.patch.object(no_console.os, "name", "posix"):
+            self.assertFalse(no_console.activer(force=True))
 
     def test_le_paquet_l_active_au_chargement(self):
         source = (SRC / "lutin" / "__init__.py").read_text(encoding="utf-8")
-        self.assertIn("sansconsole.activer()", source)
+        self.assertIn("no_console.activer()", source)
 
 
 @unittest.skipUnless(sys.platform == "win32", "fenêtres Windows")
@@ -108,12 +108,12 @@ class Enquete(unittest.TestCase):
             fichier = os.path.join(d, "trace.log")
             avant = subprocess.Popen.__init__
             try:
-                self.assertEqual(sansconsole.tracer(fichier), fichier)
+                self.assertEqual(no_console.tracer(fichier), fichier)
                 subprocess.run([sys.executable, "-c", "pass"], capture_output=True)
                 subprocess.run(sys.executable + " -c pass", shell=True, capture_output=True)
                 subprocess.Popen(args=[sys.executable, "-c", "pass"]).wait()
             finally:
-                sansconsole.arreter_trace()
+                no_console.arreter_trace()
             self.assertIs(subprocess.Popen.__init__, avant, "la trace se retire proprement")
             lignes = open(fichier, encoding="utf-8").read().splitlines()
             self.assertEqual(len(lignes), 3)

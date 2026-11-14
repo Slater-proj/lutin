@@ -14,9 +14,9 @@ for cle, valeur in {"LUTIN_RACINE": str(_TEMP / "projet"), "LUTIN_DONNEES": str(
     os.environ.setdefault(cle, valeur)
 (_TEMP / "projet").mkdir(exist_ok=True)
 
-from lutin import moteur as _m  # noqa: E402,F401  (avant les autres : import circulaire sinon ; enregistre les moteurs)
-from lutin import moteur_llamacpp as ml  # noqa: E402
-from lutin import moteurs, moteurs_maj
+from lutin import core as _m  # noqa: E402,F401  (avant les autres : import circulaire sinon ; enregistre les moteurs)
+from lutin import llamacpp_engine as ml  # noqa: E402
+from lutin import engines, engine_updates
 
 VRAI_POPEN = subprocess.Popen
 FAUX = str(Path(__file__).resolve().parent / "fixtures" / "faux_llama_server.py")
@@ -34,9 +34,9 @@ def port_libre():
 class Base(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="lutin-routeur-"))
-        self.ancien = dict(moteurs.CONTEXTE)
-        moteurs.CONTEXTE.update(donnees=lambda: self.tmp, en_docker=lambda: False, hors_ligne=lambda: False, profil=lambda: None)
-        self.m = moteurs.MOTEURS["llamacpp"]          # l'instance enregistrée : c'est elle que regler_avance retrouve
+        self.ancien = dict(engines.CONTEXTE)
+        engines.CONTEXTE.update(donnees=lambda: self.tmp, en_docker=lambda: False, hors_ligne=lambda: False, profil=lambda: None)
+        self.m = engines.MOTEURS["llamacpp"]          # l'instance enregistrée : c'est elle que regler_avance retrouve
         self.args = self.tmp / "args.jsonl"
         os.environ["LUTIN_FAUX_ARGS"] = str(self.args)
         self.addCleanup(self.fin)
@@ -61,7 +61,7 @@ class Base(unittest.TestCase):
     def fin(self):
         self.m.arreter()
         os.environ.pop("LUTIN_FAUX_ARGS", None)
-        moteurs.CONTEXTE.update(self.ancien)
+        engines.CONTEXTE.update(self.ancien)
 
 
 class Routeur(Base):
@@ -196,7 +196,7 @@ class VersionEpinglee(Base):
             with self.assertRaises(ml.ErreurMoteur):          # le téléchargement lui-même n'est pas simulé ici : seule la recherche de la version compte
                 self.m.installer(lambda *a: None, http_json=faux_json, telecharger=lambda *a, **k: (_ for _ in ()).throw(RuntimeError("stop")))
         self.assertEqual(vus, [ml.API_VERSION + "b199"])
-        self.assertIsNone(moteurs_maj._derniere_llamacpp(self.m, lambda url: self.RELEASES), "version épinglée : aucune mise à jour proposée")
+        self.assertIsNone(engine_updates._derniere_llamacpp(self.m, lambda url: self.RELEASES), "version épinglée : aucune mise à jour proposée")
 
 
 if __name__ == "__main__":

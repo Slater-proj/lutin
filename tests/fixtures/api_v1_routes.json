@@ -1,0 +1,77 @@
+[
+ {
+  "method": "POST",
+  "path": "/api/v1/approvals/{id}",
+  "right": "session"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/conversations",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/conversations",
+  "right": "session"
+ },
+ {
+  "method": "DELETE",
+  "path": "/api/v1/conversations/{id}",
+  "right": "session"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/conversations/{id}",
+  "right": "session"
+ },
+ {
+  "method": "PATCH",
+  "path": "/api/v1/conversations/{id}",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/conversations/{id}/memory-choice",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/conversations/{id}/stop",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/conversations/{id}/turns",
+  "right": "session"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/models",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/models",
+  "right": "session"
+ },
+ {
+  "method": "DELETE",
+  "path": "/api/v1/models/{name}",
+  "right": "session"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/settings",
+  "right": "session"
+ },
+ {
+  "method": "PATCH",
+  "path": "/api/v1/settings",
+  "right": "session"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/status",
+  "right": "session"
+ }
+]

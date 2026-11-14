@@ -103,7 +103,7 @@ Les addons facultatifs (Telegram, courriel, X, ComfyUI, travail de fond) sont **
 
 - Autorisés : cette machine, **Ollama** (l'adresse `OLLAMA_URL`), et les extensions que tu as déclarées (`LUTIN_OUTIL_URL`, `COMFY_URL`).
 - Bloqués : recherche et lecture web (les outils ne sont même plus proposés au modèle), catalogue en ligne, mises à jour de modèles et de Lutin, téléchargement de modèles (Ollama les télécharge lui-même : l'action est refusée).
-- Un seul endroit du code décide (`lutin/horsligne.py`) et un test surveille les **connexions réelles** (`tests/test_hors_ligne.py`) : aucune vers autre chose que cette machine.
+- Un seul endroit du code décide (`lutin/offline.py`) et un test surveille les **connexions réelles** (`tests/test_hors_ligne.py`) : aucune vers autre chose que cette machine.
 - Il se **coupe** seulement depuis cette machine (pas à distance, même avec une session valide).
 - Limites honnêtes : Lutin ne contrôle pas Ollama lui-même ni le reste de ton système. Pour une garantie totale, coupe aussi le réseau du conteneur ou de la machine.
 

@@ -20,8 +20,8 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
-from . import config, miseajour
-from .remplacement import remplacer_dossier
+from . import config, updates
+from .engine_replace import remplacer_dossier
 from .i18n import t as _t
 
 DEPOT = "JustVugg/colibri"
@@ -48,7 +48,7 @@ def nom_archive(version, systeme=None, architecture=None):
     return "colibri-v{}-{}".format(version, fin)
 
 
-def derniere_version(http=miseajour.http_get):
+def derniere_version(http=updates.http_get):
     """Le numéro (X.Y.Z) de la dernière publication de Colibri, par l'API de GitHub. OSError sans réseau, ValueError si illisible."""
     cause = ""
     try:
@@ -62,17 +62,17 @@ def derniere_version(http=miseajour.http_get):
     except OSError as e:
         cause = str(e)
     try:          # l'API de GitHub refuse (limite de requêtes : HTTP 403) ou ne répond pas : la page publique des publications dit la même chose
-        version = (miseajour.version_par_page(DEPOT, http) or "").lstrip("v")
+        version = (updates.version_par_page(DEPOT, http) or "").lstrip("v")
         if RE_VERSION.match(version):
             return version
     except OSError:
         pass
-    raise ValueError(_t("Impossible de lire la dernière version de Colibri ({}). {}").format(cause, miseajour.suite_erreur(cause)))
+    raise ValueError(_t("Impossible de lire la dernière version de Colibri ({}). {}").format(cause, updates.suite_erreur(cause)))
 
 
 def dossier_colibri(dossiers=None):
-    from . import moteurs_docker
-    return moteurs_docker.base_moteurs((dossiers or config.dossiers())["donnees"]) / "colibri"
+    from . import docker_engines
+    return docker_engines.base_moteurs((dossiers or config.dossiers())["donnees"]) / "colibri"
 
 
 def extraire(archive, cible):
@@ -111,7 +111,7 @@ def racine_archive(cible):
     raise ValueError(_t("Le script « coli » est introuvable dans l'archive de Colibri."))
 
 
-def installer(version=None, dossiers=None, http=miseajour.http_get, ouvrir=urllib.request.urlopen, systeme=None, architecture=None, dire=print):
+def installer(version=None, dossiers=None, http=updates.http_get, ouvrir=urllib.request.urlopen, systeme=None, architecture=None, dire=print):
     """Télécharge, vérifie et décompresse Colibri. Renvoie (version, dossier contenant `coli`). Ne fait rien si cette version est déjà là."""
     version = (version or derniere_version(http)).lstrip("v")
     if not RE_VERSION.match(version):
@@ -125,7 +125,7 @@ def installer(version=None, dossiers=None, http=miseajour.http_get, ouvrir=urlli
         url = "{}v{}/{}".format(PREFIXE, version, nom)
         with tempfile.TemporaryDirectory(prefix="lutin-colibri-") as tmp:
             dire(_t("Téléchargement de {} …").format(nom))
-            archive, _ = miseajour.telecharger_roue_verifiee(url, tmp, http=http, ouvrir=ouvrir, nom_valide=RE_NOM, exiger_sommes=True, prefixe=PREFIXE)
+            archive, _ = updates.telecharger_roue_verifiee(url, tmp, http=http, ouvrir=ouvrir, nom_valide=RE_NOM, exiger_sommes=True, prefixe=PREFIXE)
             dire(_t("✔ Somme SHA-256 vérifiée."))
             partiel = base / ("v" + version + ".partiel")
             shutil.rmtree(partiel, ignore_errors=True)

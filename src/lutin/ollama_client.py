@@ -11,7 +11,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-from . import horsligne
+from . import offline
 from .i18n import t as _t
 
 URL_PAR_DEFAUT = "http://127.0.0.1:11434"
@@ -74,7 +74,7 @@ class Ollama:
 
     def telecharger(self, modele, progression=None):
         """Télécharge un modèle (reprise automatique par Ollama). progression(texte, fait, total) est appelée pendant le téléchargement."""
-        horsligne.exiger_en_ligne(_t("télécharger un modèle"))
+        offline.exiger_en_ligne(_t("télécharger un modèle"))
         try:
             with self._requete("/api/pull", {"model": modele, "stream": True}, delai=3600) as r:
                 for brut in r:
@@ -108,8 +108,8 @@ def trouver_executable(systeme, env=None, quelle=shutil.which):
     else:
         candidats = [Path("/usr/local/bin/ollama"), Path("/usr/bin/ollama")]
         if env.get("LUTIN_DOCKER") == "1":
-            from . import moteurs_docker
-            installe = moteurs_docker.ollama_installe_par_lutin()          # Docker : celui que Lutin a installé dans le volume des moteurs
+            from . import docker_engines
+            installe = docker_engines.ollama_installe_par_lutin()          # Docker : celui que Lutin a installé dans le volume des moteurs
             if installe:
                 candidats.insert(0, Path(installe))
     for c in candidats:
@@ -144,7 +144,7 @@ def telecharger_fichier(url, destination, progression=None, ouvrir=urllib.reques
     """Télécharge `url` vers `destination` (fichier .part renommé à la fin, reprise si interrompu). HTTPS obligatoire."""
     if not url.startswith("https://"):
         raise ErreurOllama(_t("téléchargement refusé : adresse non sécurisée"))
-    horsligne.garde(url)
+    offline.garde(url)
     destination = Path(destination)
     destination.parent.mkdir(parents=True, exist_ok=True)
     part = destination.with_suffix(destination.suffix + ".part")
@@ -210,7 +210,7 @@ def desinstaller_windows(executer=subprocess.run, env=None):
 
 def installer_windows(dossier_cache, progression=None, ouvrir=urllib.request.urlopen, lanceur_sortie=None, executer=subprocess.run, taille_min=50_000_000, dossier=None):
     """Télécharge, VÉRIFIE LA SIGNATURE, puis installe Ollama en silence (pour l'utilisateur courant, sans droits administrateur)."""
-    from .machine import lancer
+    from .hardware import lancer
     if os.environ.get("LUTIN_TESTS") == "1" and executer is subprocess.run:
         raise ErreurOllama("installation réelle d'Ollama interdite pendant les tests : donne un faux `executer`")          # garde-fou : un test ne doit jamais installer un vrai programme sur la machine
     lanceur_sortie = lanceur_sortie or lancer

@@ -1,6 +1,6 @@
 """Recherche par le sens (facultative) : retrouver un passage de la conversation même s'il n'emploie pas les mêmes mots que la question.
 
-La recherche par mots (rappel.py) trouve « prison » quand on écrit « prison », pas « détention ». Un petit modèle d'embeddings d'Ollama (nomic-embed-text, environ 270 Mo) transforme chaque passage en un
+La recherche par mots (recall.py) trouve « prison » quand on écrit « prison », pas « détention ». Un petit modèle d'embeddings d'Ollama (nomic-embed-text, environ 270 Mo) transforme chaque passage en un
 vecteur de nombres : deux passages de même sens ont des vecteurs proches. Lutin combine les deux recherches (fusion des rangs) : les mots ET le sens.
 
 Règles de solidité :
@@ -20,7 +20,7 @@ import time
 import urllib.error
 import urllib.request
 
-from . import moteur as _m
+from . import core as _m
 
 MODELE_DEFAUT = "nomic-embed-text"
 RE_MODELE = re.compile(r"^[A-Za-z0-9_./:-]{1,100}$")
@@ -54,11 +54,11 @@ def installe(forcer=False):
 
 def est_modele_de_recherche(nom):
     """Vrai pour le modèle de recherche par le sens (il ne discute pas : jamais proposé comme modèle de conversation)."""
-    from . import infos_modele
+    from . import model_info
     base = str(nom).split(":")[0]
     if base == nom_modele().split(":")[0]:
         return True
-    return bool((infos_modele.deja_connu(str(nom), _m.DONNEES) or {}).get("embedding"))
+    return bool((model_info.deja_connu(str(nom), _m.DONNEES) or {}).get("embedding"))
 
 
 def etat():

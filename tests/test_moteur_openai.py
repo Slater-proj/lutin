@@ -5,7 +5,7 @@ import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import context  # noqa: F401
-from lutin import moteur_openai as mo
+from lutin import openai_engine as mo
 
 RECUES = []
 

@@ -1,4 +1,4 @@
-"""Mesure la qualité de la recherche par mots (rappel.py) sur un petit corpus bilingue de référence.
+"""Mesure la qualité de la recherche par mots (recall.py) sur un petit corpus bilingue de référence.
 
     python tools/mesurer_rappel.py
 
@@ -14,8 +14,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from lutin import moteur  # noqa: E402,F401  (à charger avant rappel : ils s'importent l'un l'autre)
-from lutin import rappel  # noqa: E402
+from lutin import core  # noqa: E402,F401  (à charger avant rappel : ils s'importent l'un l'autre)
+from lutin import recall  # noqa: E402
 
 CORPUS = {
     "sauvegarde": "# Sauvegarde\nLes sauvegardes de la base de données sont faites chaque nuit à trois heures et conservées pendant trente jours sur le NAS du salon.",
@@ -65,8 +65,8 @@ def indexer(corpus=None):
     """Les morceaux du corpus avec leurs comptes de mots, comme rappel.morceaux_fichier les fabrique."""
     morceaux = []
     for ident, texte in (corpus or CORPUS).items():
-        for m in rappel.decouper(texte, ident):
-            m["tf"] = collections.Counter(rappel.mots(m["titre"] + " " + m["texte"]))
+        for m in recall.decouper(texte, ident):
+            m["tf"] = collections.Counter(recall.mots(m["titre"] + " " + m["texte"]))
             m["longueur"] = sum(m["tf"].values()) or 1
             morceaux.append(m)
     df = collections.Counter()
@@ -83,8 +83,8 @@ def mesurer(corpus=None, questions=None, rang_max=3):
     inverse = 0.0
     ratees = []
     for question, attendu in questions:
-        termes = set(rappel.mots(question))
-        classes = rappel.noter(morceaux, df, moyenne, len(morceaux), termes, 10, 1) if termes else []
+        termes = set(recall.mots(question))
+        classes = recall.noter(morceaux, df, moyenne, len(morceaux), termes, 10, 1) if termes else []
         sources = [c["m"]["source"] for c in classes]
         if sources[:1] == [attendu]:
             premier += 1

@@ -13,8 +13,8 @@ for cle, valeur in {"LUTIN_RACINE": str(_TEMP / "projet"), "LUTIN_DONNEES": str(
     os.environ.setdefault(cle, valeur)
 (_TEMP / "projet").mkdir(exist_ok=True)
 
-from lutin import moteur as _m  # noqa: E402,F401  (avant les autres : import circulaire sinon)
-from lutin import catalogue_moteurs as cm  # noqa: E402
+from lutin import core as _m  # noqa: E402,F401  (avant les autres : import circulaire sinon)
+from lutin import engine_catalog as cm  # noqa: E402
 from lutin import ed25519  # noqa: E402
 
 # Vecteurs de test du RFC 8032 (section 7.1) : graine, clé publique, message, signature.
@@ -194,8 +194,8 @@ class Lecture(unittest.TestCase):
 
 class Page(unittest.TestCase):
     def test_l_api_donne_les_prereglages(self):
-        from lutin import serveur
-        liste = serveur.Gestionnaire._prereglages()
+        from lutin import server
+        liste = server.Gestionnaire._prereglages()
         self.assertIn("lmstudio", [p["id"] for p in liste])
         self.assertTrue(all(p["adresse"].startswith("http") or p["experimental"] for p in liste), "seuls les expérimentaux peuvent ne pas avoir d'adresse habituelle vérifiée")
 

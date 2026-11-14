@@ -3,10 +3,10 @@ import unittest
 import unittest.mock
 
 import context  # noqa: F401
-from lutin import catalogue, diagnostic
-from lutin.machine import Profil
+from lutin import model_catalog, diagnostic
+from lutin.hardware import Profil
 
-CAT = catalogue.charger()
+CAT = model_catalog.charger()
 PROFIL = Profil(systeme="linux", ram_go=32.0, ram_libre_go=20.0, gpus=[])
 
 

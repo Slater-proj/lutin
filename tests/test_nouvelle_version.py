@@ -20,8 +20,8 @@ os.environ["LUTIN_VERSION_CACHE"] = str(_TEMP / "cache" / "lutin-version.json")
 for d in ("projet", "donnees", "memoire", "config", "cache"):
     (_TEMP / d).mkdir(exist_ok=True)
 
-from lutin import horsligne, miseajour  # noqa: E402
-from lutin import moteur as A  # noqa: E402
+from lutin import offline, updates  # noqa: E402
+from lutin import core as A  # noqa: E402
 
 DOSSIERS = {"cache": str(_TEMP / "cache")}
 SERVEUR = ThreadingHTTPServer(("127.0.0.1", 0), A.Gestionnaire)
@@ -54,33 +54,33 @@ def requete(methode, chemin, corps=None):
 
 class Verification(unittest.TestCase):
     def setUp(self):
-        miseajour.fichier_version(DOSSIERS).unlink(missing_ok=True)
+        updates.fichier_version(DOSSIERS).unlink(missing_ok=True)
 
     def test_une_version_plus_recente_est_annoncee_une_fois_par_jour(self):
         appels = []
         t = [1_700_000_000.0]
-        d = miseajour.verifier_lutin(DOSSIERS, http=faux_github("0.5.0", appels), maintenant=lambda: t[0])
+        d = updates.verifier_lutin(DOSSIERS, http=faux_github("0.5.0", appels), maintenant=lambda: t[0])
         self.assertEqual(d["version"], "0.5.0")
         t[0] += 3600
-        miseajour.verifier_lutin(DOSSIERS, http=faux_github("0.6.0", appels), maintenant=lambda: t[0])
+        updates.verifier_lutin(DOSSIERS, http=faux_github("0.6.0", appels), maintenant=lambda: t[0])
         self.assertEqual(len(appels), 1, "une seule requête par 24 h")
-        self.assertEqual(miseajour.lire_fichier_version(miseajour.fichier_version(DOSSIERS))["version"], "0.5.0")
+        self.assertEqual(updates.lire_fichier_version(updates.fichier_version(DOSSIERS))["version"], "0.5.0")
         t[0] += 24 * 3600
-        miseajour.verifier_lutin(DOSSIERS, http=faux_github("0.6.0", appels), maintenant=lambda: t[0])
+        updates.verifier_lutin(DOSSIERS, http=faux_github("0.6.0", appels), maintenant=lambda: t[0])
         self.assertEqual(len(appels), 2)
 
     def test_nouvelle_version_seulement_si_plus_recente_et_non_ignoree(self):
-        chemin = miseajour.fichier_version(DOSSIERS)
-        miseajour.verifier_lutin(DOSSIERS, http=faux_github("1.2.3"))
-        n = miseajour.nouvelle_version(chemin, "1.2.0")
+        chemin = updates.fichier_version(DOSSIERS)
+        updates.verifier_lutin(DOSSIERS, http=faux_github("1.2.3"))
+        n = updates.nouvelle_version(chemin, "1.2.0")
         self.assertEqual((n["version"], n["actuelle"], n["page"], n["commande"]), ("1.2.3", "1.2.0", "https://github.com/Slater-proj/lutin/releases/tag/v1.2.3", "lutin update"))
-        self.assertIsNone(miseajour.nouvelle_version(chemin, "1.2.3"), "déjà à jour")
-        self.assertIsNone(miseajour.nouvelle_version(chemin, "2.0.0"), "jamais de retour en arrière")
-        self.assertIsNone(miseajour.nouvelle_version(chemin, "1.2.3rc4+branche"), "une candidate de la même version n'est pas « en retard »")
-        miseajour.ignorer_version(chemin, "1.2.3")
-        self.assertIsNone(miseajour.nouvelle_version(chemin, "1.2.0"))
-        miseajour.verifier_lutin(DOSSIERS, http=faux_github("1.3.0"), force=True)
-        self.assertEqual(miseajour.nouvelle_version(chemin, "1.2.0")["version"], "1.3.0", "la version suivante est annoncée de nouveau")
+        self.assertIsNone(updates.nouvelle_version(chemin, "1.2.3"), "déjà à jour")
+        self.assertIsNone(updates.nouvelle_version(chemin, "2.0.0"), "jamais de retour en arrière")
+        self.assertIsNone(updates.nouvelle_version(chemin, "1.2.3rc4+branche"), "une candidate de la même version n'est pas « en retard »")
+        updates.ignorer_version(chemin, "1.2.3")
+        self.assertIsNone(updates.nouvelle_version(chemin, "1.2.0"))
+        updates.verifier_lutin(DOSSIERS, http=faux_github("1.3.0"), force=True)
+        self.assertEqual(updates.nouvelle_version(chemin, "1.2.0")["version"], "1.3.0", "la version suivante est annoncée de nouveau")
 
     def test_api_bloquee_la_page_publique_donne_la_version(self):
         """Réseau d'entreprise, API de GitHub bloquée : github.com/…/releases/latest redirige vers …/tag/vX.Y.Z, c'est suffisant."""
@@ -88,54 +88,54 @@ class Verification(unittest.TestCase):
             if "api.github.com" in url:
                 raise OSError("API bloquée par le réseau")
             return 200, {"x-lutin-url-finale": "https://github.com/Slater-proj/lutin/releases/tag/v0.7.0"}, b"<html></html>"
-        version, roue, erreur = miseajour.derniere_release_detail(http=api_bloquee)
+        version, roue, erreur = updates.derniere_release_detail(http=api_bloquee)
         self.assertEqual((version, erreur), ("0.7.0", ""))
         self.assertEqual(roue, "https://github.com/Slater-proj/lutin/releases/download/v0.7.0/lutin-0.7.0-py3-none-any.whl")
-        d = miseajour.verifier_lutin(DOSSIERS, http=api_bloquee, force=True)
+        d = updates.verifier_lutin(DOSSIERS, http=api_bloquee, force=True)
         self.assertEqual(d["version"], "0.7.0")
         self.assertNotIn("erreur", d)
 
     def test_tout_bloque_la_cause_est_gardee_et_la_date_ne_bouge_pas(self):
         def panne(url, entetes=None, delai=10):
             raise OSError("SSL: CERTIFICATE_VERIFY_FAILED")
-        version, roue, erreur = miseajour.derniere_release_detail(http=panne)
+        version, roue, erreur = updates.derniere_release_detail(http=panne)
         self.assertEqual((version, roue), (None, None))
         self.assertIn("api.github.com : SSL: CERTIFICATE_VERIFY_FAILED", erreur)
         self.assertIn("github.com : SSL: CERTIFICATE_VERIFY_FAILED", erreur)
-        d = miseajour.verifier_lutin(DOSSIERS, http=panne, force=True)
+        d = updates.verifier_lutin(DOSSIERS, http=panne, force=True)
         self.assertIn("CERTIFICATE_VERIFY_FAILED", d["erreur"])
         self.assertFalse(d.get("date"), "pas de date : on réessaie au prochain démarrage")
 
     def test_hors_ligne_strict_le_dit_clairement(self):
-        with mock.patch.object(horsligne, "actif", return_value=True):
-            version, _, erreur = miseajour.derniere_release_detail()
+        with mock.patch.object(offline, "actif", return_value=True):
+            version, _, erreur = updates.derniere_release_detail()
         self.assertIsNone(version)
         self.assertIn("hors ligne", erreur.lower())
 
     def test_dans_un_conteneur_la_commande_est_celle_de_docker(self):
         with mock.patch.dict(os.environ, {"LUTIN_DOCKER": "1"}):
-            self.assertEqual(miseajour.commande_mise_a_jour(), "docker compose pull && docker compose up -d")
+            self.assertEqual(updates.commande_mise_a_jour(), "docker compose pull && docker compose up -d")
 
     def test_hors_ligne_et_reseau_absent_ne_cassent_rien(self):
         def panne(url, entetes=None, delai=10):
             raise OSError("pas de réseau")
 
         def refuse(url, entetes=None, delai=10):
-            raise horsligne.HorsLigne("hors ligne")
+            raise offline.HorsLigne("hors ligne")
         for faux in (panne, refuse):
-            d = miseajour.verifier_lutin(DOSSIERS, http=faux, force=True)
+            d = updates.verifier_lutin(DOSSIERS, http=faux, force=True)
             self.assertNotIn("version", d)
-        self.assertIsNone(miseajour.nouvelle_version(miseajour.fichier_version(DOSSIERS), "0.1.0"))
-        self.assertIsNone(miseajour.nouvelle_version(_TEMP / "absent.json", "0.1.0"))
+        self.assertIsNone(updates.nouvelle_version(updates.fichier_version(DOSSIERS), "0.1.0"))
+        self.assertIsNone(updates.nouvelle_version(_TEMP / "absent.json", "0.1.0"))
 
 
 class Serveur(unittest.TestCase):
     def setUp(self):
-        miseajour.fichier_version(DOSSIERS).unlink(missing_ok=True)
+        updates.fichier_version(DOSSIERS).unlink(missing_ok=True)
 
     def test_l_etat_annonce_la_version_et_on_peut_l_ignorer(self):
         self.assertIsNone(requete("GET", "/api/etat")[1]["nouvelle_version"])
-        miseajour.verifier_lutin(DOSSIERS, http=faux_github("99.0.0"))
+        updates.verifier_lutin(DOSSIERS, http=faux_github("99.0.0"))
         n = requete("GET", "/api/etat")[1]["nouvelle_version"]
         self.assertEqual((n["version"], n["actuelle"]), ("99.0.0", A.VERSION))
         self.assertEqual(requete("POST", "/api/version-ignorer", {"version": "99.0.0"}), (200, {"ok": True}))

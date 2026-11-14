@@ -4,10 +4,10 @@ import unittest
 from unittest import mock
 
 import context  # noqa: F401
-from lutin import catalogue, conseil
-from lutin.machine import Gpu, Profil
+from lutin import model_catalog, performance_advice
+from lutin.hardware import Gpu, Profil
 
-CAT = catalogue.charger()
+CAT = model_catalog.charger()
 
 
 def pc(gpu=None, ram=32.0):
@@ -20,13 +20,13 @@ def textes(lignes):
 
 class Seuils(unittest.TestCase):
     def test_qualite(self):
-        self.assertEqual([conseil.qualite(v) for v in (60, 25, 24.9, 10, 9.9, 5, 4.9, 0)], ["tres_bien", "tres_bien", "bien", "bien", "lent", "lent", "tres_lent", "tres_lent"])
+        self.assertEqual([performance_advice.qualite(v) for v in (60, 25, 24.9, 10, 9.9, 5, 4.9, 0)], ["tres_bien", "tres_bien", "bien", "bien", "lent", "lent", "tres_lent", "tres_lent"])
 
 
 class Conseils(unittest.TestCase):
     def test_pc_rapide_rien_a_changer(self):
         gpu = Gpu("NVIDIA RTX 4090", "nvidia", 24.0, 22.0, "nvidia-smi")
-        l = conseil.analyser({"tok_s": 54.2, "charge_s": 2.1}, pc(gpu), {"modele": "qwen3:8b", "num_ctx": 24576, "num_thread": None}, CAT, ["qwen3:8b"])
+        l = performance_advice.analyser({"tok_s": 54.2, "charge_s": 2.1}, pc(gpu), {"modele": "qwen3:8b", "num_ctx": 24576, "num_thread": None}, CAT, ["qwen3:8b"])
         self.assertEqual(l[0]["niveau"], "ok")
         t = textes(l)
         self.assertIn("54 jetons par seconde", t)
@@ -36,7 +36,7 @@ class Conseils(unittest.TestCase):
         self.assertNotIn("attention", [x["niveau"] for x in l])
 
     def test_pc_sans_carte_lent_propose_le_modele_rapide_et_un_contexte_plus_court(self):
-        l = conseil.analyser({"tok_s": 3.0, "charge_s": 12.0}, pc(None, 32.0), {"modele": "qwen3:30b", "num_ctx": 32768, "num_thread": None}, CAT, [])
+        l = performance_advice.analyser({"tok_s": 3.0, "charge_s": 12.0}, pc(None, 32.0), {"modele": "qwen3:30b", "num_ctx": 32768, "num_thread": None}, CAT, [])
         t = textes(l)
         self.assertEqual(l[0]["niveau"], "attention")
         self.assertIn("trop lent", t)
@@ -48,20 +48,20 @@ class Conseils(unittest.TestCase):
 
     def test_modele_deborde_de_la_carte(self):
         gpu = Gpu("NVIDIA RTX 3060", "nvidia", 12.0, 10.0, "nvidia-smi")
-        l = conseil.analyser({"tok_s": 6.0}, pc(gpu), {"modele": "qwen3:30b", "num_ctx": 8192}, CAT, ["qwen3:30b"], charge={"taille": 20_000_000_000, "vram": 11_000_000_000})
+        l = performance_advice.analyser({"tok_s": 6.0}, pc(gpu), {"modele": "qwen3:30b", "num_ctx": 8192}, CAT, ["qwen3:30b"], charge={"taille": 20_000_000_000, "vram": 11_000_000_000})
         self.assertIn("55 % dessus", textes(l))
 
     def test_modele_rapide_deja_installe_et_dans_les_deux_langues(self):
-        choix = conseil.selection.choisir(pc(None, 32.0), CAT)["rapide"]
-        l = conseil.analyser({"tok_s": 4.0}, pc(None, 32.0), {"modele": "gros:70b", "num_ctx": 4096}, CAT, [choix.id])
+        choix = performance_advice.model_selection.choisir(pc(None, 32.0), CAT)["rapide"]
+        l = performance_advice.analyser({"tok_s": 4.0}, pc(None, 32.0), {"modele": "gros:70b", "num_ctx": 4096}, CAT, [choix.id])
         self.assertIn("déjà installé", textes(l))
         with mock.patch.dict(os.environ, {"LUTIN_LANGUE": "en"}):
-            l = conseil.analyser({"tok_s": 4.0}, pc(None, 32.0), {"modele": "gros:70b", "num_ctx": 4096}, CAT, [choix.id])
+            l = performance_advice.analyser({"tok_s": 4.0}, pc(None, 32.0), {"modele": "gros:70b", "num_ctx": 4096}, CAT, [choix.id])
         self.assertIn("already installed", textes(l))
         self.assertIn("too slow", textes(l))
 
     def test_vitesse_nulle_ne_plante_pas(self):
-        l = conseil.analyser({"tok_s": 0}, pc(None), {"modele": "x", "num_ctx": 8192}, CAT)
+        l = performance_advice.analyser({"tok_s": 0}, pc(None), {"modele": "x", "num_ctx": 8192}, CAT)
         self.assertIn("Vitesse non mesurée", textes(l))
 
 
