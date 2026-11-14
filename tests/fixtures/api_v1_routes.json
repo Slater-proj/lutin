@@ -5,6 +5,11 @@
   "right": "session"
  },
  {
+  "method": "POST",
+  "path": "/api/v1/attachments",
+  "right": "session"
+ },
+ {
   "method": "GET",
   "path": "/api/v1/conversations",
   "right": "session"
@@ -53,6 +58,16 @@
   "method": "POST",
   "path": "/api/v1/conversations/{id}/turns",
   "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/images",
+  "right": "session"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/images/{id}",
+  "right": "read"
  },
  {
   "method": "GET",

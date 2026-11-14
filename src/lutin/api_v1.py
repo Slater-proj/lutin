@@ -18,7 +18,9 @@ import urllib.parse
 from dataclasses import dataclass, field
 
 from . import core as _m
+from . import attachments as _pieces
 from . import i18n as _i18n
+from . import images as _images
 from . import machines as _machines
 from . import mission as _mission
 from . import offline as _offline
@@ -27,8 +29,9 @@ from . import storage as _storage
 from .i18n import t as _t
 
 PREFIX = "/api/v1"
-PUBLIC, SESSION, CONFIGURATOR, LOCAL = "public", "session", "configurator", "local"
-RIGHTS = (PUBLIC, SESSION, CONFIGURATOR, LOCAL)
+PUBLIC, SESSION, CONFIGURATOR, LOCAL, READ = "public", "session", "configurator", "local", "read"
+# READ: a session is enough, the page token is not asked. Only for a GET that gives back what a browser tag fetches (an <img> sends the cookie, never a header).
+RIGHTS = (PUBLIC, SESSION, CONFIGURATOR, LOCAL, READ)
 WITH_BODY = ("POST", "PATCH", "PUT")
 BODY_MAX = 2_000_000
 DISCARD_MAX = 64 * 1024 * 1024                        # what is read and thrown away before a refusal (the bound of lutin.server for the same purpose)
@@ -49,6 +52,8 @@ class Route:
     right: str
     handler: object
     pattern: object
+    raw: bool = False                                 # the body is a file, not JSON: the route reads `Request.raw`, bounded by `limit`
+    limit: int = 0
 
 
 @dataclass(frozen=True)
@@ -57,21 +62,33 @@ class Streamed:
     write: object
 
 
+@dataclass(frozen=True)
+class Binary:
+    """What a route returns when the answer is a file (an image): bytes and their content type."""
+    data: bytes
+    content_type: str
+    headers: dict = field(default_factory=dict)
+
+
 @dataclass
 class Request:
     handler: object                                   # the HTTP request handler (lutin.server.Gestionnaire)
     params: dict = field(default_factory=dict)        # the {names} of the route template
     query: dict = field(default_factory=dict)
     body: dict = field(default_factory=dict)
+    raw: bytes = b""
 
 
-def route(method, template, right):
-    """Declares a route: `@route("GET", "/conversations/{id}", SESSION)`. A {name} matches one path segment."""
+def route(method, template, right, raw=False, limit=0):
+    """Declares a route: `@route("GET", "/conversations/{id}", SESSION)`. A {name} matches one path segment.
+    `raw=True, limit=N`: the body is a file of at most N bytes (an upload), given to the handler as `Request.raw`."""
     assert right in RIGHTS and template.startswith("/")
+    assert right != READ or method == "GET", "a right that skips the page token is for reading only"
+    assert not raw or (method == "POST" and limit > 0)
 
     def register(function):
         pattern = re.compile("^" + re.sub(r"\{(\w+)\}", r"(?P<\1>[^/]+)", template) + "$")
-        ROUTES.append(Route(method, template, right, function, pattern))
+        ROUTES.append(Route(method, template, right, function, pattern, raw, limit))
         return function
     return register
 
@@ -96,6 +113,8 @@ def _check_right(handler, right):
         return
     if not handler._authentifie():
         raise ApiError(401, "no_session", _t("Connexion requise."))
+    if right == READ:
+        return
     if not handler._jeton_valide():
         raise ApiError(403, "page_token", _t("Jeton de page invalide : recharge la page."))
     if right == CONFIGURATOR and not handler._configurateur():
@@ -135,19 +154,32 @@ def _read_body(handler):
     return body
 
 
+def _read_raw(handler, limit):
+    """The bytes of an upload, read before any refusal like a JSON body: over the limit, the body is thrown away (bounded) and the answer is 413."""
+    size = handler._taille_corps()
+    if size > limit:
+        discard_body(handler)
+        raise ApiError(413, "too_large", _t("Requête trop volumineuse."))
+    return handler.rfile.read(size) if size > 0 else b""
+
+
 def dispatch(handler, method):
     """Answers a request whose path starts with /api/v1/. The caller has already checked Host and Origin."""
     parts = urllib.parse.urlsplit(handler.path)
     path = parts.path[len(PREFIX):] or "/"
-    streamed = None
+    streamed = binary = None
     try:
-        if method in WITH_BODY:
+        matching = [(r, m) for r in ROUTES for m in [r.pattern.match(path)] if m]
+        found = next(((r, m) for r, m in matching if r.method == method), None)
+        raw = b""
+        if found is not None and found[0].raw:
+            body = {}
+            raw = _read_raw(handler, found[0].limit)
+        elif method in WITH_BODY:
             body = _read_body(handler)
         else:
             body = {}
             discard_body(handler)                         # a GET or a DELETE sent with a body: not used, but read
-        matching = [(r, m) for r in ROUTES for m in [r.pattern.match(path)] if m]
-        found = next(((r, m) for r, m in matching if r.method == method), None)
         if found is None:
             _check_right(handler, SESSION)                 # an unknown address tells nothing to a caller without a session
             if matching:
@@ -156,9 +188,11 @@ def dispatch(handler, method):
         entry, match = found
         _check_right(handler, entry.right)
         query = {k: v[-1] for k, v in urllib.parse.parse_qs(parts.query).items()}
-        result = entry.handler(Request(handler, {k: urllib.parse.unquote(v) for k, v in match.groupdict().items()}, query, body))
+        result = entry.handler(Request(handler, {k: urllib.parse.unquote(v) for k, v in match.groupdict().items()}, query, body, raw))
         if isinstance(result, Streamed):
             streamed = result
+        elif isinstance(result, Binary):
+            binary = result
         else:
             status, payload = result if isinstance(result, tuple) else (200, result)
     except ApiError as refused:
@@ -167,6 +201,8 @@ def dispatch(handler, method):
         status, payload = 409, error("offline", str(offline))
     except ValueError as invalid:                          # the functions underneath say what is wrong with a ValueError written for the user
         status, payload = 400, error("invalid_request", str(invalid))
+    if binary is not None:
+        return handler._envoyer(200, binary.data, binary.content_type, binary.headers)
     if streamed is not None:                               # outside the `try`: once the first line is sent, no error answer can follow it
         return streamed.write()
     return handler._envoyer(status, payload)
@@ -429,6 +465,32 @@ def stop_turn(request):
     return {"was_running": bool(_m.arreter_conversation(request.params["id"]).get("actif"))}
 
 
+# ---------------------------------------------------------------------------------------------------------------- uploads
+@route("POST", "/images", SESSION, raw=True, limit=_images.TAILLE_MAX)
+def upload_image(request):
+    """An image for the next message: the bytes of a PNG, JPEG, GIF or WebP as the body (the type is recognised from the content, never from a header). Answers its identifier."""
+    identifier = _images.enregistrer(request.raw)
+    return 201, {"id": identifier, "url": "{}/images/{}".format(PREFIX, identifier)}
+
+
+@route("GET", "/images/{id}", READ)
+def image(request):
+    """An image sent in a conversation. READ: a browser tag cannot send the page token, the session cookie is what it has."""
+    try:
+        data, content_type = _images.lire(request.params["id"])
+    except ValueError:
+        raise ApiError(404, "not_found", _t("Image inconnue.")) from None
+    return Binary(data, content_type, {"Content-Security-Policy": "default-src 'none'; sandbox"})
+
+
+@route("POST", "/attachments", SESSION, raw=True, limit=_pieces.TAILLE_MAX)
+def upload_attachment(request):
+    """A document for the next message: the bytes of the file as the body, its name in `X-Name` (URL-encoded). The text is extracted at once: a file with none is refused."""
+    name = urllib.parse.unquote(request.handler.headers.get("X-Name") or "")
+    identifier, shown, characters = _pieces.enregistrer(request.raw, name)
+    return 201, {"id": identifier, "name": shown, "characters": characters}
+
+
 # ----------------------------------------------------------------------------------------------------------------- turns
 # The answer stream (API_V1.md, rule 6): application/x-ndjson, one event per line, an empty line as a heartbeat. The agent emits French events; they are
 # renamed here, at the boundary, field by field. A type or a field that is not in this table goes through unchanged: tests/test_api_v1_turns.py reads the
@@ -486,7 +548,10 @@ def create_turn(request):
     _read(identifier)
     handler = request.handler
     handler._flux_v1 = True
-    return Streamed(lambda: handler._chat(dict({TURN_FIELDS[key]: value for key, value in body.items()}, conversation=identifier)))
+    payload = {TURN_FIELDS[key]: value for key, value in body.items()}
+    if isinstance(body.get("attachments"), list):          # {"id", "name"} in v1, {"id", "nom"} for the function underneath
+        payload["pieces"] = [{"id": item.get("id"), "nom": item.get("name")} if isinstance(item, dict) else item for item in body["attachments"]]
+    return Streamed(lambda: handler._chat(dict(payload, conversation=identifier)))
 
 
 @route("POST", "/conversations/{id}/memory-choice", SESSION)

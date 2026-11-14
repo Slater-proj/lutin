@@ -22,7 +22,7 @@ routes disappear with the old page, in one deletion.
    work once the caller has already translated the message, and it misses two refusals worded « depuis la machine de Lutin ».
 4. **Status codes mean one thing each.** `400` invalid request, `401` no session, `403` session without the right (code says which: `page_token`, `configurator`,
    `local_only`, `node_right`), `404` unknown, `409` conflict with the present state (`turn_running`, `workspace_conflict`, `offline`), `413` too large, `429` too many attempts, `503` engine unavailable.
-5. **Rights are declared, not scattered.** Each route of the table states one of: `public`, `session`, `configurator`, `local`, `node`. The check is done once,
+5. **Rights are declared, not scattered.** Each route of the table states one of: `public`, `session`, `read`, `configurator`, `local`, `node`. The check is done once,
    by the dispatcher, before the handler runs. The access test then reads the table instead of the source.
 6. **The stream keeps its format** (`application/x-ndjson`, one JSON object per line, a heartbeat line to stay open behind a proxy) with English event names:
 
@@ -65,7 +65,7 @@ routes disappear with the old page, in one deletion.
    `tokens` and `speed` are the two events the first inventory missed (their fields come from a variable). The request body: `message` and, optionally,
    `model`, `thinking`, `replace_from`, `images`, `attachments`, `workspace`. A refusal comes before the stream as an ordinary error: `400 invalid_request`,
    `409 turn_running` or `workspace_conflict`, `429 too_many_turns`. `memory_choice` is answered with `POST /api/v1/conversations/{id}/memory-choice`
-   (`{"choice": "summary" | "file", "remember": false}`; `409 no_pending_choice` when nothing waits). Not in v1 yet: the choice of another machine.
+   (`{"choice": "summary" | "file", "remember": false}`; `409 no_pending_choice` when nothing waits). Not in v1 yet: the choice of another machine and the download of an attached document.
 7. **Versioning.** `/api/v1` only ever gains optional fields and new routes. A change that breaks a client is `/api/v2`. The page and the server ship together,
    so the page never talks to a server of another version; the rule protects scripts and paired machines.
 8. **Machine-to-machine protocol** (`/api/noeud/*` today): versioned separately (`/node/v1`), because two machines may run different versions of Lutin.
@@ -94,6 +94,14 @@ routes disappear with the old page, in one deletion.
 (`auto_approve_writes`, `auto_approve_commands`), which never come from the settings: they are false until the user ticks them for this conversation.
 Options: `mode` (`general`, `technical`, `scenario`, `research`, `chat`, and `mission`, which is chosen conversation by conversation and makes the next message the brief of a long task),
 `thinking`, `web`, `dry_run`, `num_predict` (0, 512, 1024 … 32768) and `mission_hours` (1, 2, 4, 8, 12, 24, 48, 72). A write is all or nothing. It is allowed while a turn runs: a box ticked during an answer counts from the next tool.
+
+## Images and documents
+
+`POST /api/v1/images` takes the **bytes of the image as the body** (not JSON; PNG, JPEG, GIF or WebP, recognised from the content, at most 8 MB) and answers `201 {"id", "url"}`.
+`POST /api/v1/attachments` takes the bytes of a document (at most 20 MB), its name in the `X-Name` header (URL-encoded), and answers `201 {"id", "name", "characters"}`: the text is extracted at once and a file with none is refused (`400`).
+An upload over its limit is read, thrown away and answered `413 too_large`. The next message names them: `images: ["<id>"]`, `attachments: [{"id", "name"}]` (4 images and 5 documents at most).
+`GET /api/v1/images/{id}` gives the image back. It is the one route with the right **`read`**: a session is enough and the page token is not asked, because a browser tag (`<img>`) sends the cookie and cannot send a header.
+The right is for a `GET` only (declared in `route()`, tested), and a test lists the routes that have it. Stored messages keep the shape of the chat format: `images` is a list of identifiers and `pieces` a list of `{"id", "nom"}`.
 
 ## Models
 

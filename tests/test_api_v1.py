@@ -94,8 +94,8 @@ class Rights(unittest.TestCase):
 
     def test_a_session_without_the_page_token_answers_403(self):
         for entry in api_v1.table():
-            if entry["right"] == api_v1.PUBLIC:
-                continue
+            if entry["right"] in (api_v1.PUBLIC, api_v1.READ):
+                continue            # READ is the one right that asks no page token: tests/test_api_v1_files.py
             status, answer = call(entry["method"], sample(entry["path"]), {"Cookie": DEVICE["Cookie"]}, body={} if entry["method"] in api_v1.WITH_BODY else None)
             self.assertEqual((status, answer["error"]["code"]), (403, "page_token"), entry)
 

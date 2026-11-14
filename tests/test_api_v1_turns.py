@@ -103,6 +103,37 @@ class Stream(unittest.TestCase):
         self.assertEqual(events[-1]["type"], "end")
 
 
+def upload(path, data, headers=None):
+    request = urllib.request.Request(T.BASE + path, data=data, method="POST", headers=dict({"X-Token": A.JETON}, **(headers or {})))
+    with urllib.request.urlopen(request, timeout=30) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+class Uploads(unittest.TestCase):
+    PNG = bytes([0x89]) + b"PNG" + bytes([0x0D, 0x0A, 0x1A, 0x0A]) + bytes(24)
+
+    def test_what_was_uploaded_reaches_the_model_and_is_kept_with_the_message(self):
+        image = upload("/api/v1/images", self.PNG)["id"]
+        attachment = upload("/api/v1/attachments", b"The secret word is marmalade. " * 3, {"X-Name": "note.txt"})
+        conversation = new_conversation()
+        status, _, events = turn(conversation, {"message": "What does the note say?", "images": [image], "attachments": [{"id": attachment["id"], "name": attachment["name"]}]},
+                                 [[{"content": "It says marmalade."}]])
+        self.assertEqual((status, events[-1]["type"]), (200, "end"))
+        self.assertIn("marmalade", json.dumps(T.RECUES[-1]["messages"]), "the text of the document was given to the model")
+        stored = api("GET", "/api/v1/conversations/" + conversation)[1]["messages"]
+        user = [m for m in stored if m["role"] == "user"][0]
+        self.assertEqual(user["images"], [image])
+        self.assertEqual(user["pieces"], [{"id": attachment["id"], "nom": "note.txt"}], "stored messages keep the shape of the chat format")
+
+    def test_an_unknown_file_is_refused_before_the_stream(self):
+        conversation = new_conversation()
+        status, _, answer = turn(conversation, {"message": "Look", "images": ["ffffffffffffffffffff.png"]})
+        self.assertEqual((status, answer["error"]["code"]), (400, "invalid_request"))
+        status, _, answer = turn(conversation, {"message": "Look", "attachments": [{"id": "ffffffffffffffffffff.txt", "name": "x.txt"}]})
+        self.assertEqual((status, answer["error"]["code"]), (400, "invalid_request"))
+        self.assertEqual(api("GET", "/api/v1/conversations/" + conversation)[1]["messages"], [])
+
+
 class Refusals(unittest.TestCase):
     """Before the stream: an ordinary v1 error, and nothing is created or left running."""
 
