@@ -252,9 +252,9 @@ class ModelesRetrouves(unittest.TestCase):
 class ReglagesMachine(unittest.TestCase):
     """llama.cpp est réglé d'après la machine, avec les seules options que ce programme-là connaît."""
 
-    def profil(self, vram, coeurs=8):
+    def profil(self, vram, coeurs=8, ram=32):
         from lutin.hardware import Gpu, Profil
-        return Profil(systeme="windows", cpu="x", coeurs=coeurs, ram_go=32, ram_libre_go=20, gpus=[Gpu("NVIDIA GeForce RTX", "nvidia", vram)])
+        return Profil(systeme="windows", cpu="x", coeurs=coeurs, ram_go=ram, ram_libre_go=20, gpus=[Gpu("NVIDIA GeForce RTX", "nvidia", vram)])
 
     def test_fils_de_calcul_et_repartition_selon_la_machine(self):
         aide = "--threads n  --fit [on|off]"
@@ -268,6 +268,15 @@ class ReglagesMachine(unittest.TestCase):
     def test_une_option_inconnue_n_est_jamais_passee(self):
         self.assertEqual(ml.reglages_machine("rien de connu", "cuda", 40.0, self.profil(8)), ([], False))
         self.assertEqual(ml.reglages_machine("--threads --fit", "cuda", 40.0, None), ([], False), "machine inconnue : rien d'inventé")
+
+    def test_le_cache_de_conversations_en_memoire_vive_est_borne(self):
+        """Constat du mainteneur : llama.cpp « chargé deux fois », en mémoire vive ET dans la carte. Les versions récentes de llama-server gardent par défaut jusqu'à 8 Go de cache en mémoire vive."""
+        self.assertEqual([ml.cache_ram_mo(self.profil(24, ram=ram)) for ram in (8, 16, 32, 64, 128)], [0, 819, 1638, 2048, 2048])
+        args, _ = ml.reglages_machine("--threads n --cache-ram n --fit [on|off]", "cuda", 2.5, self.profil(24, ram=32))
+        self.assertEqual(args[args.index("--cache-ram") + 1], "1638")
+        self.assertNotIn("--cache-ram", ml.reglages_machine("--threads n", "cuda", 2.5, self.profil(24, ram=32))[0], "une version qui ne connaît pas l'option ne la reçoit pas")
+        self.assertIn("cache-ram = 0", ml.texte_preset([("un", "/m/un.gguf", None)], 8192, {"cache_ram": 0}), "0 coupe le cache : il doit être écrit, pas oublié")
+        self.assertNotIn("cache-ram", ml.texte_preset([("un", "/m/un.gguf", None)], 8192, {"fils": 8}))
 
 
 if __name__ == "__main__":

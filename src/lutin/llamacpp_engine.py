@@ -242,6 +242,8 @@ def texte_preset(modeles, ctx, reglages):
         lignes.append("n-gpu-layers = {}".format(int(reglages["ngl"])))
     if reglages.get("sans_mmap"):
         lignes.append("no-mmap = true")
+    if reglages.get("cache_ram") is not None:
+        lignes.append("cache-ram = {}".format(int(reglages["cache_ram"])))
     for nom, fichier, projecteur in modeles:
         if not RE_NOM_PRESET.match(str(nom)):
             continue
@@ -415,9 +417,20 @@ def aide_serveur(exe):
     return AIDE_CACHE[cle]
 
 
+def cache_ram_mo(profil):
+    """La mémoire vive (en Mio) que llama-server peut garder pour son cache de conversations (`--cache-ram`). Les versions récentes en prennent jusqu'à 8 Go par défaut,
+    EN PLUS du modèle : sur une machine où le modèle est dans la carte graphique, la mémoire vive se remplissait quand même au fil des messages (« chargé deux fois »).
+    Lutin le borne à 5 % de la mémoire vive, 2 Go au plus, et le coupe (0) sous 12 Go : le cache du créneau en cours, lui, reste (il est avec le modèle)."""
+    ram = float(getattr(profil, "ram_go", 0) or 0)
+    if ram < 12:
+        return 0
+    return int(min(2048, ram * 1024 * 0.05))
+
+
 def reglages_machine(aide, variante, taille_go, profil):
     """Ce que llama.cpp sait régler et que Lutin règle d'après la machine : (arguments, ajuste).
     - le nombre de fils de calcul = les cœurs physiques (llama.cpp en prend parfois trop, ce qui ralentit) ;
+    - le cache de conversations en mémoire vive, borné (voir cache_ram_mo) ;
     - sur une carte graphique, un modèle qui ne tient pas entièrement (jugement de Lutin, comme pour Ollama) : `--fit` laisse llama.cpp répartir les couches entre la carte et le processeur, au lieu de tout y forcer.
     `ajuste` vaut True dans ce second cas : l'appelant ne force alors pas toutes les couches sur la carte. Sans profil de machine ou sans l'option dans l'aide, rien n'est ajouté."""
     arguments, ajuste = [], False
@@ -425,6 +438,8 @@ def reglages_machine(aide, variante, taille_go, profil):
         return arguments, ajuste
     if getattr(profil, "coeurs", 0) and "--threads" in aide:
         arguments += ["--threads", str(int(profil.coeurs))]
+    if "--cache-ram" in aide:
+        arguments += ["--cache-ram", str(cache_ram_mo(profil))]
     if variante in ("cuda", "vulkan", "metal") and taille_go and "--fit" in aide:
         from . import model_fit
         if model_fit.evaluer({"go": taille_go}, profil).get("niveau") in ("limite", "trop_gros"):
@@ -841,6 +856,8 @@ class MoteurLlamaCpp(MoteurOpenAI):
                 preset.parent.mkdir(parents=True, exist_ok=True)
                 preset.write_text(texte, encoding="utf-8")
                 commande += ["--models-preset", str(preset), "--models-max", str(int(self.config().get("modeles_max") or MODELES_MAX_DEFAUT))]
+                if "--cache-ram" in machine:
+                    commande += machine[machine.index("--cache-ram"):machine.index("--cache-ram") + 2]          # le routeur le transmet aux serveurs qu'il lance
                 SERVEUR["noms"] = noms
             else:
                 commande += ["-m", str(fichier), "-c", str(ctx)]
@@ -891,7 +908,8 @@ class MoteurLlamaCpp(MoteurOpenAI):
             modeles.append((nom, f, projecteur))
         fils = int(machine[machine.index("--threads") + 1]) if "--threads" in machine else 0
         tout_sur_la_carte = variante in ("cuda", "vulkan", "metal") and not ajuste
-        reglages = {"fils": fils, "n_cpu_moe": moe if moe and self.option_possible("--n-cpu-moe") else 0, "ngl": 99 if tout_sur_la_carte else 0,
+        cache = int(machine[machine.index("--cache-ram") + 1]) if "--cache-ram" in machine else None
+        reglages = {"cache_ram": cache, "fils": fils, "n_cpu_moe": moe if moe and self.option_possible("--n-cpu-moe") else 0, "ngl": 99 if tout_sur_la_carte else 0,
                     "sans_mmap": bool(variante in ("cuda", "vulkan", "metal") and not moe and self.option_possible("--no-mmap"))}
         return tuple(n for n, _, _ in modeles), texte_preset(modeles, ctx, reglages)
 
