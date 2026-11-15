@@ -181,6 +181,41 @@
  },
  {
   "method": "GET",
+  "path": "/api/v1/missions",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/missions",
+  "right": "configurator"
+ },
+ {
+  "method": "DELETE",
+  "path": "/api/v1/missions/{id}",
+  "right": "configurator"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/missions/{id}/pause",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/missions/{id}/reply",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/missions/{id}/resume",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/missions/{id}/stop",
+  "right": "session"
+ },
+ {
+  "method": "GET",
   "path": "/api/v1/models",
   "right": "session"
  },

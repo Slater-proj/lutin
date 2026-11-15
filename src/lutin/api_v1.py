@@ -1057,6 +1057,89 @@ def refresh_mcp_connector(request):
     return {"tool_count": _mcp.actualiser(request.params["id"])}
 
 
+# --------------------------------------------------------------------------------------------------------- missions
+# A mission is a long job given to Lutin (hours of work in a project, with all its tools), carried on turn after turn in a conversation of its own. It ends when the model says it is
+# done, when it asks a question (`blocked`: it waits for an answer), or when a limit is reached. Starting one is a choice for the machine itself (`configurator`): it writes in a project.
+MISSION_STATES = {"en_cours": "running", "pause": "paused", "bloquee": "blocked", "terminee": "done"}
+
+
+def _mission_view(entry):
+    return {"id": entry["id"], "name": entry["nom"], "brief": entry.get("cahier") or "", "project_path": entry.get("dossier") or "", "hours": entry.get("duree_h"),
+            "autonomous": bool(entry.get("autonome")), "state": MISSION_STATES.get(entry.get("etat"), entry.get("etat")), "conversation": entry.get("conv") or "",
+            "turns": entry.get("tours") or 0, "actions": entry.get("actions") or 0, "started_at": entry.get("debut") or 0, "ended_at": entry.get("fin") or 0,
+            "report": entry.get("bilan") or "", "question": entry.get("question") or "", "message": entry.get("message") or "", "log": list(entry.get("journal") or [])}
+
+
+def _missions_view():
+    return {"missions": [_mission_view(entry) for entry in _mission.state()["liste"]]}
+
+
+def _mission_one(identifier):
+    if _mission.find(identifier) is None:
+        raise ApiError(404, "not_found", _t("Cette mission n'existe plus."))
+
+
+@route("GET", "/missions", SESSION)
+def missions(request):
+    """The missions with their state (`running`, `paused`, `blocked` = waits for an answer in `question`, `done` = ended, with its `report`), turns, actions, the last lines of `log`, and the conversation they are written in. `brief` is cut at 300 characters."""
+    return _missions_view()
+
+
+@route("POST", "/missions", CONFIGURATOR)
+def add_mission(request):
+    """{"name", "brief", "project": id of a project, "hours" (optional, 1 to 72), "autonomous" (optional, default true)}. Autonomous: writes and commands are carried out without asking, in the project, with the usual safeguards. Not autonomous: nothing is written or run, the model shows what it would do. Starts at once."""
+    body = request.body
+    unknown = sorted(set(body) - {"name", "brief", "project", "hours", "autonomous"})
+    if unknown or not isinstance(body.get("name"), str) or not isinstance(body.get("brief"), str) or not isinstance(body.get("project"), str) \
+            or not isinstance(body.get("autonomous", True), bool) or not isinstance(body.get("hours", _mission.DURATION_DEFAULT_H), int) or isinstance(body.get("hours"), bool):
+        raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("name, brief, project, hours, autonomous"))
+    entry = _mission.create(body["name"], body["brief"], body["project"], body.get("hours", _mission.DURATION_DEFAULT_H), body.get("autonomous", True))
+    return 201, _mission_view(_mission.summary(entry))
+
+
+@route("POST", "/missions/{id}/pause", SESSION)
+def pause_mission(request):
+    """Pauses the mission (the turn at work stops). Resume it with `resume`."""
+    _mission_one(request.params["id"])
+    _mission.action("pause", {"id": request.params["id"]})
+    return _missions_view()
+
+
+@route("POST", "/missions/{id}/resume", SESSION)
+def resume_mission(request):
+    """Starts a paused mission again (the count of errors in a row starts again from zero)."""
+    _mission_one(request.params["id"])
+    _mission.action("reprendre", {"id": request.params["id"]})
+    return _missions_view()
+
+
+@route("POST", "/missions/{id}/reply", SESSION)
+def reply_to_mission(request):
+    """{"text"}: the answer to the question of a `blocked` mission, or one more instruction given on the way; a blocked or paused mission starts again."""
+    text = request.body.get("text")
+    if set(request.body) - {"text"} or not isinstance(text, str):
+        raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("text"))
+    _mission_one(request.params["id"])
+    _mission.action("repondre", {"id": request.params["id"], "texte": text})
+    return _missions_view()
+
+
+@route("POST", "/missions/{id}/stop", SESSION)
+def stop_mission(request):
+    """Ends the mission now. The work already done stays in the project and in the conversation."""
+    _mission_one(request.params["id"])
+    _mission.action("arreter", {"id": request.params["id"]})
+    return _missions_view()
+
+
+@route("DELETE", "/missions/{id}", CONFIGURATOR)
+def delete_mission(request):
+    """Removes the mission from the list (a running one is stopped). Its conversation stays in the list of conversations."""
+    _mission_one(request.params["id"])
+    _mission.action("supprimer", {"id": request.params["id"]})
+    return _missions_view()
+
+
 # --------------------------------------------------------------------------------------------------------- conversations
 def _summary(entry):
     return {"id": entry["id"], "title": entry.get("titre", ""), "updated_at": entry.get("maj", ""), "message_count": int(entry.get("messages") or 0),
