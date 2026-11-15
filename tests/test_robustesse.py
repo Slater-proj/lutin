@@ -17,7 +17,7 @@ RACINE = Path(__file__).resolve().parent.parent
 SRC = RACINE / "src"
 # Routes exclues : elles agissent vraiment sur la machine ou sur d'autres données que celles du serveur de test.
 EXCLUES = ("arreter", "redemarrer", "mettre-a-jour", "installer", "ollama", "supprimer-modele", "oublier-modele", "bench", "autotest", "liberer-vram", "hors-ligne", "importer-claude", "reprise",
-           "commande-claude", "git", "acces", "dossier-modeles", "deplacer", "modeles-restaurer", "verifier-lutin", "langue", "projet-claude", "decouvrir", "propositions", "qr", "nouveau-pin")
+           "commande-claude", "git", "acces", "dossier-modeles", "web-recherche-test", "deplacer", "modeles-restaurer", "verifier-lutin", "langue", "projet-claude", "decouvrir", "propositions", "qr", "nouveau-pin")
 CLES = ("id", "conversation", "chemin", "nom", "texte", "mode", "modele", "message", "requete", "fichier", "fichiers", "dossier", "action", "pin", "url", "titre", "liste", "epingle", "choix", "garder",
         "reglages", "flux", "brouillon", "publication", "quand", "brief", "motifs", "consigne", "regulier", "intervalle_h", "actif", "section", "ok", "images", "pieces", "travail", "remplacer_depuis", "note",
         "heure", "jours", "prompt", "commande", "ancien", "nouveau", "contenu", "debut", "fin", "motif", "images", "version")

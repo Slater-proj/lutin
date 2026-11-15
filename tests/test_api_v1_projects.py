@@ -23,7 +23,7 @@ class Projects(unittest.TestCase):
 
     def clean(self):
         for entry in call("GET", "/api/v1/projects")[1]["projects"]:
-            if entry["path"] in self.folders:
+            if Path(entry["path"]).resolve() in [Path(f).resolve() for f in self.folders]:
                 call("DELETE", "/api/v1/projects/" + entry["id"])
 
     def folder(self):
@@ -36,7 +36,7 @@ class Projects(unittest.TestCase):
         path = self.folder()
         status, answer = call("POST", "/api/v1/projects", {"path": path, "name": "Demo"})
         self.assertEqual(status, 201)
-        mine = [entry for entry in answer["projects"] if entry["path"] == path]
+        mine = [entry for entry in answer["projects"] if Path(entry["path"]).resolve() == Path(path).resolve()]
         self.assertEqual([(entry["name"], entry["usable"], entry["problem"]) for entry in mine], [("Demo", True, "")])
         identifier = mine[0]["id"]
         self.assertEqual(sorted(answer), ["current", "projects"])
@@ -45,7 +45,7 @@ class Projects(unittest.TestCase):
         self.assertEqual(Path(A.RACINE).resolve(), Path(path).resolve(), "the working folder of the next conversations is the one chosen")
         status, answer = call("DELETE", "/api/v1/projects/" + identifier)
         self.assertEqual(status, 200)
-        self.assertNotIn(path, [entry["path"] for entry in answer["projects"]])
+        self.assertNotIn(Path(path).resolve(), [Path(entry["path"]).resolve() for entry in answer["projects"]])
         self.assertEqual(answer["copies_removed"], 0)
         self.assertTrue(Path(path).is_dir(), "taking a folder out of the list deletes nothing")
 
