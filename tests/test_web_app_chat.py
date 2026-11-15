@@ -688,6 +688,16 @@ class Chat(unittest.TestCase):
         p.evaluer("[...document.querySelectorAll('.notifications .list .button')].find(b => b.innerText === 'Envoyer un test').click()")
         p.attendre("!!document.querySelector('.notifications .done')")
         self.assertEqual(len(sent), 1, "the test message goes through the channel")
+        from lutin import scheduled_tasks
+        self.addCleanup(lambda: [scheduled_tasks.remove(task["id"]) for task in scheduled_tasks.read()])
+        identifier = notifications.list_channels()[0]["id"]
+        p.evaluer("location.hash = '#/agents'")
+        p.attendre("!!document.querySelector('#task-notify')")
+        p.evaluer("(() => { const set = (id, value, name) => { const box = document.querySelector(id); box.value = value; box.dispatchEvent(new Event(name, {bubbles: true})); }; set('#task-name', 'Ping', 'input'); set('#task-request', 'Say hello', 'input'); set('#task-notify', %s, 'change'); document.querySelector('.add').requestSubmit(); })()" % js(identifier))
+        p.attendre("!!document.querySelector('.agents .card')")
+        self.assertEqual([task["notifier"] for task in scheduled_tasks.read()], [identifier], "the task notifies the channel that was chosen")
+        p.evaluer("location.hash = '#/settings'")
+        p.attendre("!!document.querySelector('.notifications .list')")
         p.evaluer("[...document.querySelectorAll('.notifications .list .button')].find(b => b.innerText === 'Retirer').click()")
         p.attendre("!!document.querySelector('.notifications .confirm')")
         self.assertEqual(len(notifications.list_channels()), 1, "asking is not removing")

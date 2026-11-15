@@ -8,6 +8,7 @@
 
   const lang = language();
   type Tasks = { tasks: ScheduledTask[] };
+  type Channels = { channels: { id: string; name: string }[] };
 
   let data = $state<Tasks | null>(null);
   let problem = $state("");
@@ -21,6 +22,9 @@
   let checked = $state([true, true, true, true, true, false, false]);
   // The id of the task being changed: the form below then saves it instead of adding a new one.
   let editing = $state("");
+  // The channel a finished task writes to (empty: none). The channels are set up in the Settings; a failure to read them only hides the choice.
+  let notify = $state("");
+  let channels = $state<{ id: string; name: string }[]>([]);
 
   function explain(cause: unknown): string {
     if (cause instanceof ApiError) {
@@ -56,6 +60,7 @@
     name = "";
     request = "";
     time = "08:00";
+    notify = "";
     once = false;
     date = "";
     checked = [true, true, true, true, true, false, false];
@@ -66,9 +71,9 @@
     await act(async () => {
       // Changing a task sends the whole moment: a weekly task sent with an empty date stops being a one-time one, and the other way round.
       const when = once ? { date, days: [] } : { days: chosenDays(checked), date: "" };
-      const body = { name: name.trim(), request: request.trim(), time, ...when };
+      const body = { name: name.trim(), request: request.trim(), time, notify, ...when };
       if (editing) await api("PATCH", `/scheduled-tasks/${encodeURIComponent(editing)}`, body);
-      else await api("POST", "/scheduled-tasks", once ? { name: body.name, request: body.request, time, date } : { name: body.name, request: body.request, time, days: when.days });
+      else await api("POST", "/scheduled-tasks", once ? { name: body.name, request: body.request, time, notify, date } : { name: body.name, request: body.request, time, notify, days: when.days });
       resetForm();
       await reload();
     });
@@ -79,6 +84,7 @@
     name = task.name;
     request = task.request;
     time = task.time;
+    notify = task.notify;
     once = Boolean(task.date);
     date = task.date;
     checked = [0, 1, 2, 3, 4, 5, 6].map((day) => task.days.includes(day));
@@ -117,6 +123,9 @@
 
   onMount(() => {
     void load();
+    api<Channels>("GET", "/notification-channels")
+      .then((answer) => (channels = answer.channels))
+      .catch(() => undefined);
     // A task at work changes state without anyone asking: the list is read again every few seconds while the screen is open.
     const timer = setInterval(() => {
       if (!busy && data) void reload().catch(() => undefined);
@@ -192,6 +201,13 @@
       <p class="muted" id="task-request-help">{t("tasks.request_help")}</p>
       <label for="task-time">{t("tasks.time")}</label>
       <input id="task-time" type="time" bind:value={time} required />
+      {#if channels.length}
+        <label for="task-notify">{t("tasks.notify")}</label>
+        <select id="task-notify" bind:value={notify}>
+          <option value="">{t("tasks.notify_none")}</option>
+          {#each channels as channel (channel.id)}<option value={channel.id}>{channel.name}</option>{/each}
+        </select>
+      {/if}
       <fieldset class="when-choice">
         <legend>{t("tasks.when")}</legend>
         <label class="inline"><input type="radio" name="when" checked={!once} onchange={() => (once = false)} /> {t("tasks.weekly_choice")}</label>
@@ -373,6 +389,7 @@
   input[type="text"],
   input[type="time"],
   input[type="date"],
+  select,
   textarea {
     max-width: 24rem;
     min-height: var(--target);

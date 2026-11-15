@@ -9,6 +9,7 @@ export interface ScheduledTask {
   time: string;
   days: number[];
   date: string;
+  notify: string;
   active: boolean;
   next_run: string;
   running: boolean;
