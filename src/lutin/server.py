@@ -83,11 +83,58 @@ ROUTES_MODELES_GERES = {          # les trois serveurs que Lutin gère ont les m
     for route, nom in (("modeles", "modeles"), ("catalogue", "catalogue"), ("quantifications", "quantifications"))}
 
 
+class _CorpsCompte:
+    """Le flux d'entrée d'une requête, qui compte les octets du corps déjà lus (pour savoir, à la fin, ce qu'une réponse de refus a laissé sans lecture)."""
+
+    def __init__(self, brut):
+        self.brut = brut
+        self.lus = 0
+
+    def read(self, taille=-1):
+        donnees = self.brut.read(taille)
+        self.lus += len(donnees)
+        return donnees
+
+    def __getattr__(self, nom):
+        return getattr(self.brut, nom)
+
+
 class Gestionnaire(BaseHTTPRequestHandler):
     server_version = "Lutin/" + _m.VERSION
 
     def log_message(self, fmt, *args):
         pass
+
+    def parse_request(self):
+        self._corps = None
+        if not super().parse_request():
+            return False
+        self._corps = self.rfile if isinstance(self.rfile, _CorpsCompte) else _CorpsCompte(self.rfile)
+        self.rfile = self._corps
+        return True
+
+    def handle_one_request(self):
+        super().handle_one_request()
+        self._jeter_corps_restant()
+
+    def _jeter_corps_restant(self):
+        """Une requête refusée (401, 403...) sans que son corps ait été lu : fermer la connexion avec ces octets en attente la réinitialise chez l'appelant, qui perd la réponse
+        (une course, vue sur Windows). Après la réponse, on lit donc ce qui reste, dans la limite de `api_v1.DISCARD_MAX` et sans attendre plus de deux secondes."""
+        corps = getattr(self, "_corps", None)
+        if corps is None:
+            return
+        try:
+            reste = self._taille_corps() - corps.lus
+            if reste <= 0 or reste > _api_v1.DISCARD_MAX:
+                return
+            self.connection.settimeout(2)
+            while reste > 0:
+                morceau = corps.read(min(reste, 65536))
+                if not morceau:
+                    break
+                reste -= len(morceau)
+        except (OSError, ValueError, AttributeError):
+            self.close_connection = True
 
     def handle(self):
         try:

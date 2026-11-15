@@ -494,6 +494,11 @@ class Restauration(Base):
         self.assertEqual(requete("POST", "/api/restaurer", {"Content-Type": "application/zip"}, brut=b"")[0], 400)
         self.assertFalse((A.MEMOIRE.parent / "evil.txt").exists())
 
+    def test_une_requete_refusee_avec_un_gros_corps_recoit_quand_meme_sa_reponse(self):
+        """Un refus répondu sans lire le corps réinitialisait la connexion de l'appelant (il perdait la réponse) : le serveur lit ce qui reste après avoir répondu."""
+        for _ in range(15):
+            self.assertEqual(requete("POST", "/api/restaurer", {"X-Token": "faux"}, brut=b"x" * 300_000)[0], 403)
+
     def test_restauration_reservee_a_cette_machine_et_authentifiee(self):
         self.assertEqual(requete("POST", "/api/restaurer", {"X-Token": "faux"}, brut=b"x")[0], 403)
         A.SECURITE = S.Securite(niveau=S.RESEAU, port=8777)
