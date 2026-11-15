@@ -35,6 +35,15 @@ Shown **after the first installation on a new machine** (the maintainer's rule);
 
 A real finding on the way: the models folder of the development machine is on a disk with 4.7 GB free, and the guide refused a 5.2 GB download with « not enough free space »: the safeguard works on real hardware.
 
+## Settings
+
+Every setting of `/api/v1/settings` in six groups (answers, safety, web and memory, this machine, tools, sampling), each kept as soon as it is changed: a switch, a choice, a number (checked against its range before it is sent), a list (one line per item). What removes a question (writing or running without asking, commands always allowed) is marked « take care ». Language is chosen here too. Verified in Chrome (`tests/test_web_app_chat.py`, test 5h) and by the automatic accessibility checks in both themes and at 360 px.
+Not on this screen yet: the engine and the machine used for conversations (Models), the paired devices, the connectors, notifications and addons of the present page.
+
+## Projects
+
+The working folders: list with the one in use, « use this folder », add by path, remove from the list (nothing is deleted), with the reason shown for a folder that cannot be used. Adding and removing is for the machine itself. Verified in Chrome (test 5i) with the accessibility checks. Missing: the folder browser of the present page, moving a folder, the import of a Claude project and the take-over of another assistant's data.
+
 ## Models
 
 First version, on the v1 routes that exist (list, install, delete, setting of the model in use), verified in Chrome against the fake engine (`tests/test_web_app_chat.py`, test 5b):

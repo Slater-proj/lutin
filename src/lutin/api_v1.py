@@ -35,6 +35,7 @@ from . import model_fit as _model_fit
 from . import offline as _offline
 from . import security as _sec
 from . import storage as _storage
+from . import workspaces as _workspaces
 from .i18n import t as _t
 
 PREFIX = "/api/v1"
@@ -643,6 +644,53 @@ def start_speed_test(request):
     started = dict(SPEED)          # taken before the thread runs: a very quick test would already be done
     threading.Thread(target=work, daemon=True, name="speed-test").start()
     return 202, started
+
+
+# --------------------------------------------------------------------------------------------------------- projects
+# A project is a working folder: where Lutin reads and writes files for the conversations. The present page calls them « dossiers de travail ».
+def _projects_view():
+    state = _m.works_state()
+    projects = []
+    for entry in state["liste"]:
+        problem = _workspaces.diagnostic(Path(entry["chemin"]))
+        projects.append({"id": entry["id"], "name": entry["nom"], "path": entry["chemin"], "usable": not problem, "problem": problem or ""})
+    return {"projects": projects, "current": state["actif"]}
+
+
+@route("GET", "/projects", SESSION)
+def projects(request):
+    """The working folders and the one in use. `usable` is false, with the reason in `problem`, for a folder that cannot be used now (gone, read-only, on a disk that does not answer)."""
+    return _projects_view()
+
+
+@route("POST", "/projects", CONFIGURATOR)
+def add_project(request):
+    """{"path": "/home/me/code", "name": "optional"}: adds a folder to the list (it is not made the current one). Refused with the reason when the folder cannot be used."""
+    path = request.body.get("path")
+    if not isinstance(path, str) or not path.strip() or not isinstance(request.body.get("name", ""), str):
+        raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("path, name"))
+    _m.add_work(path.strip(), request.body.get("name", ""))
+    return 201, _projects_view()
+
+
+@route("POST", "/projects/{id}/select", SESSION)
+def select_project(request):
+    """Makes this folder the one the next conversations work in. Refused (409 `workspace_conflict`) while an answer is being written in another folder."""
+    try:
+        _m.choose_work(request.params["id"])
+    except ValueError as refused:
+        text = str(refused)
+        if _m.TOURS_ACTIFS and "réponse" in text:
+            raise ApiError(409, "workspace_conflict", text) from None
+        raise
+    return _projects_view()
+
+
+@route("DELETE", "/projects/{id}", CONFIGURATOR)
+def remove_project(request):
+    """Takes the folder out of the list. Nothing in it is deleted, except with `?clean=1`: the copies of conversations that Lutin itself wrote there, never another file."""
+    result = _m.remove_work(request.params["id"], request.query.get("clean") == "1")
+    return dict(_projects_view(), copies_removed=result.get("copies_supprimees", 0))
 
 
 # --------------------------------------------------------------------------------------------------------- conversations

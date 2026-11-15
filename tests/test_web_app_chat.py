@@ -369,6 +369,9 @@ class Chat(unittest.TestCase):
             p.evaluer("location.hash = '#/agents'")
             p.attendre("!!document.querySelector('main h1')")
             self.axe("on a screen that is not there yet (%s)" % theme)
+            p.evaluer("location.hash = '#/projects'")
+            p.attendre("!!document.querySelector('#project-path')")
+            self.axe("on the Projects screen (%s)" % theme)
         p.commande("Emulation.setDeviceMetricsOverride", width=360, height=740, deviceScaleFactor=1, mobile=True)
         try:
             for screen in ("chat", "models", "settings"):
@@ -477,6 +480,41 @@ class Chat(unittest.TestCase):
         p.evaluer("location.hash = '#/settings'")
         p.attendre("!!document.querySelector('#setting-temperature')")
         self.assertEqual(p.evaluer("document.querySelector('#setting-temperature').value"), "0.9", "after a reload the page shows what the server holds")
+        self.assertEqual(p.erreurs, [])
+        p.evaluer("location.hash = '#/chat'")
+
+    def test_5i_a_working_folder_is_added_chosen_and_removed_from_the_list(self):
+        p = self.page
+        folder = tempfile.mkdtemp(prefix="lutin-projects-")
+        self.addCleanup(shutil.rmtree, folder, True)
+        root = T.A.RACINE
+        self.addCleanup(lambda: T.A.definir_racine(root))
+        configuration = Path(tempfile.mkdtemp(prefix="lutin-projects-config-"))
+        self.addCleanup(shutil.rmtree, configuration, True)
+        (configuration / "config.json").write_text(json.dumps({"emplacements": {"travail": str(root)}}), encoding="utf-8")
+        environment = mock.patch.dict(os.environ, {"LUTIN_CONFIG": str(configuration / "config.json")})
+        environment.start()
+        self.addCleanup(environment.stop)
+        p.evaluer("location.hash = '#/projects'")
+        p.attendre("!!document.querySelector('#project-path')")
+        if AXE.is_file():
+            self.axe("on the Projects screen")
+        form = "(() => { const set = (id, value) => { const box = document.querySelector(id); box.value = value; box.dispatchEvent(new Event('input', {bubbles: true})); }; set('#project-path', %s); set('#project-name', 'Demo folder'); document.querySelector('.add').requestSubmit(); })()"
+        p.evaluer(form % js(folder + "-missing"))
+        p.attendre("!!document.querySelector('.projects .problem')")
+        p.evaluer(form % js(folder))
+        p.attendre("[...document.querySelectorAll('.projects .card strong')].some(e => e.innerText === 'Demo folder')")
+        self.assertEqual(p.evaluer("document.querySelector('#project-path').value"), "", "the form is cleared once the folder is added")
+        self.assertTrue(p.evaluer("!!document.querySelector('.projects .card.current')"), "one folder is in use")
+        p.evaluer("[...document.querySelectorAll('.projects .card')].find(c => c.innerText.includes('Demo folder')).querySelector('.button.primary').click()")
+        p.attendre("document.querySelector('.projects .card.current strong').innerText === 'Demo folder'")
+        self.assertEqual(Path(T.A.RACINE).resolve(), Path(folder).resolve(), "the folder of the next conversations is the chosen one")
+        p.evaluer("[...document.querySelectorAll('.projects .card')].find(c => c.innerText.includes('Demo folder')).querySelector('.button:not(.primary)').click()")
+        p.attendre("!!document.querySelector('.projects .confirm')")
+        self.assertTrue(Path(folder).is_dir())
+        p.evaluer("document.querySelector('.projects .confirm .danger').click()")
+        p.attendre("![...document.querySelectorAll('.projects .card strong')].some(e => e.innerText === 'Demo folder')")
+        self.assertTrue(Path(folder).is_dir(), "removing from the list deletes nothing")
         self.assertEqual(p.erreurs, [])
         p.evaluer("location.hash = '#/chat'")
 

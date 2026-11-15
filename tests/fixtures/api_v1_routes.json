@@ -131,6 +131,26 @@
  },
  {
   "method": "GET",
+  "path": "/api/v1/projects",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/projects",
+  "right": "configurator"
+ },
+ {
+  "method": "DELETE",
+  "path": "/api/v1/projects/{id}",
+  "right": "configurator"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/projects/{id}/select",
+  "right": "session"
+ },
+ {
+  "method": "GET",
   "path": "/api/v1/settings",
   "right": "session"
  },
