@@ -38,14 +38,15 @@ A real finding on the way: the models folder of the development machine is on a 
 ## Settings
 
 Every setting of `/api/v1/settings` in six groups (answers, safety, web and memory, this machine, tools, sampling), each kept as soon as it is changed: a switch, a choice, a number (checked against its range before it is sent), a list (one line per item). What removes a question (writing or running without asking, commands always allowed) is marked « take care ». Language is chosen here too. Verified in Chrome (`tests/test_web_app_chat.py`, test 5h) and by the automatic accessibility checks in both themes and at 360 px.
-Also on this screen: the paired devices (list, remove, pair with a code and a QR code drawn in SVG) and the approval rules for commands (list, add, remove, what always needs an approval). The notification channels (Gotify, ntfy, Telegram, webhook; the secrets are never shown again) are here too. Not on this screen yet: the access level itself (it needs a restart: present page).
+Also on this screen: the paired devices (list, remove, pair with a code and a QR code drawn in SVG) and the approval rules for commands (list, add, remove, what always needs an approval). The notification channels (Gotify, ntfy, Telegram, webhook; the secrets are never shown again) are here too. So are the two notes the model always has (context, memory) and the skills (sheets of your own: write, change, delete; test 5s). Not on this screen yet: the access level itself (it needs a restart: present page).
 
 ## Agents
 
 The scheduled tasks: the list with when, the next run, the state of the last one and its ten last runs; add a task (a name, what Lutin should do, a time, days of the week or one date); run it now, stop it, pause and resume it, delete it (with a confirmation). The list is read again every five seconds. Managing is for the machine itself. A task can be changed (the form is filled with it) and can name the channel that is told when it ends. Verified in Chrome (test 5j) and by the accessibility checks.
 The missions (test 5q): list with state, turns, actions, recent activity and report, start (name, brief, project, longest duration, autonomous or dry run), pause, resume, answer the question of a blocked mission, stop and delete (both with a confirmation); the progress is read again every five seconds. Starting and deleting are for the machine itself; following, pausing, answering and stopping are open to a paired device.
 The add-ons (test 5p): their settings drawn from each manifest, secrets kept and never shown, check, turn on and off. The connectors (MCP, test 5o): add, refresh the tools, allow them one by one, remove.
-Missing: the live panel of an add-on (the Telegram pairing code, drafts), its actions and flow editor, the catalogue of connectors, and the skills.
+The live panel of an add-on (test 5r) is under it once it is on: Telegram (pairing code, paired phones, replies waiting to be sent or thrown away), mail (replies waiting) and X (write, edit, schedule, publish posts, replies). ComfyUI has no panel here yet.
+Missing: the flow editor and the correction proposal of an add-on, the ComfyUI panel, the catalogue of connectors, and the third-party skills.
 
 ## Projects
 
