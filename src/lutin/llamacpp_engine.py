@@ -840,7 +840,10 @@ class MoteurLlamaCpp(MoteurOpenAI):
             variante = (self.config().get("variante_installee") or "cpu")
             aide = aide_serveur(exe)
             commande = [str(exe), "--host", "127.0.0.1", "--port", str(port), "--jinja"]
-            if "--api-key" in aide:
+            environnement = None
+            if "llama_api_key" in aide:          # la clé passe par l'environnement du serveur : sur la ligne de commande, tout programme de la machine la lisait dans la liste des processus
+                environnement = dict(os.environ, LLAMA_API_KEY=self._cle_serveur())
+            elif "--api-key" in aide:          # une version qui ne lit pas la variable : l'ancienne manière
                 commande += ["--api-key", self._cle_serveur()]
             commun = self.partages().get(str(modele))
             try:
@@ -875,7 +878,7 @@ class MoteurLlamaCpp(MoteurOpenAI):
             journal.parent.mkdir(parents=True, exist_ok=True)
             sortie = open(journal, "wb")
             try:
-                SERVEUR["proc"] = subprocess.Popen(commande, stdout=sortie, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, cwd=str(Path(exe).parent))
+                SERVEUR["proc"] = subprocess.Popen(commande, stdout=sortie, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, cwd=str(Path(exe).parent), env=environnement)
             except OSError as e:
                 raise ErreurMoteur(_t("Impossible de lancer llama-server : {}").format(e))
             finally:

@@ -53,6 +53,7 @@ class Base(unittest.TestCase):
             self.addCleanup(p.stop)
 
     def lancer_faux(self, commande, **kw):
+        self.environnements = getattr(self, "environnements", []) + [kw.get("env")]
         return VRAI_POPEN([sys.executable, FAUX] + commande[1:], **kw)
 
     def lancements(self):
@@ -149,6 +150,15 @@ class ClesEtReglages(Base):
         commande = self.lancements()[0]
         self.assertEqual(commande[commande.index("--api-key") + 1], k)
         self.assertEqual(ml.lire_config()["llamacpp"]["cle_serveur"], k)
+
+    def test_la_cle_ne_passe_plus_par_la_ligne_de_commande_quand_le_serveur_lit_la_variable(self):
+        """Sur la ligne de commande, la clé se lisait dans la liste des processus de la machine."""
+        self.aide = AIDE_COMPLETE + " (env: llama_api_key)"
+        k = self.m.cle()
+        self.m.chat({"model": "un", "messages": MESSAGE}, 30)
+        self.assertNotIn("--api-key", self.lancements()[0])
+        self.assertNotIn(k, self.lancements()[0])
+        self.assertEqual(self.environnements[-1]["LLAMA_API_KEY"], k)
 
     def test_un_serveur_externe_garde_sa_propre_cle(self):
         ml.regler("llamacpp", adresse="http://192.168.1.50:8080", cle="secret")

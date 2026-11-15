@@ -1,5 +1,20 @@
 [
  {
+  "method": "GET",
+  "path": "/api/v1/approval-rules",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/approval-rules",
+  "right": "configurator"
+ },
+ {
+  "method": "DELETE",
+  "path": "/api/v1/approval-rules/{id}",
+  "right": "configurator"
+ },
+ {
   "method": "POST",
   "path": "/api/v1/approvals/{id}",
   "right": "session"

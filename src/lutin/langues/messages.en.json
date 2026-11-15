@@ -2267,5 +2267,18 @@
 "Le test de vitesse n'est pas encore proposé avec ce moteur.": "The speed test is not offered with this engine yet.",
 "Le moteur n'a rien pu mesurer.": "The engine could not measure anything.",
 "Lutin n'écoute que sur cette machine : ouvre d'abord l'accès au réseau (Accès), puis redémarre-le.": "Lutin listens on this machine only: open the access to the network first (Access), then restart it.",
-"Appareil inconnu.": "Unknown device."
+"Appareil inconnu.": "Unknown device.",
+"Refusé par une règle d'accord ({}) : la commande n'a pas été lancée. Ne la relance pas : propose autre chose ou explique ce que tu voulais faire.": "Refused by an approval rule ({}): the command was not run. Do not run it again: suggest something else or explain what you wanted to do.",
+"la tienne": "yours",
+"celle du projet": "the project's",
+"Cette commande fait partie de celles qui demandent toujours ton accord.": "This command is one of those that always need your approval.",
+"Une règle d'accord demande ta confirmation pour cette commande.": "An approval rule asks for your confirmation of this command.",
+"Retenu : cette commande ne sera plus demandée ({}).": "Remembered: this command will not be asked again ({}).",
+"dans cette conversation": "in this conversation",
+"règle enregistrée, à retirer dans Réglages": "rule saved, removable in Settings",
+"Une règle permanente s'enregistre depuis cette machine.": "A permanent rule is saved from this machine.",
+"Règle inconnue.": "Unknown rule.",
+"Règle invalide : un effet (deny, ask, allow) et une commande de {} caractères au plus.": "Invalid rule: an effect (deny, ask, allow) and a command of {} characters at most.",
+"Cette commande fait partie de celles qui demandent toujours ton accord : aucune règle ne peut l'autoriser d'avance.": "This command is one of those that always need your approval: no rule can allow it in advance.",
+"Déjà {} règles : supprime-en d'abord.": "Already {} rules: delete some first."
 }

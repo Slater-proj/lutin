@@ -354,6 +354,7 @@ class Attente:
         self.evenement = threading.Event()
         self.ok = None
         self.reactiver = False          # « Accepter et réactiver l'accord automatique » : l'utilisateur accepte aussi le risque du contenu web pour la suite de la demande
+        self.retenir = "once"          # « once », « chat » (le reste de cette conversation) ou « always » (une règle) : voir approval_rules
         Attente.EN_COURS[self.id] = self
 
     def attendre(self, delai=900, stop=None):
@@ -365,12 +366,13 @@ class Attente:
         return bool(self.ok) and not (stop and stop.is_set())
 
 
-def repondre_attente(ident, ok, reactiver=False):
+def repondre_attente(ident, ok, reactiver=False, retenir="once"):
     a = Attente.EN_COURS.get(ident)
     if not a:
         raise ValueError("Demande inconnue ou déjà traitée.")
     a.ok = bool(ok)
     a.reactiver = bool(ok and reactiver)
+    a.retenir = retenir if ok and retenir in ("chat", "always") else "once"
     a.evenement.set()
 
 
@@ -809,8 +811,22 @@ def outil_executer(commande, ctx, shell="cmd"):
     if shell not in ("cmd", "powershell"):
         raise _m.ErreurOutil(_t("Shell inconnu « {} ». Utilise « cmd » (défaut) ou « powershell ».").format(shell))
     lecture = plan_lecture(commande) if shell == "cmd" else None
-    if lecture is None and not ctx["accord"](_t("Lancer une commande ({})").format(shell), commande, "", auto=ctx.get("auto_commandes", False)):
-        return refus(ctx, _t("Refusé par l'utilisateur : la commande n'a pas été lancée."))
+    from . import approval_rules
+    effet, origine = approval_rules.decide(commande, str((ctx.get("conv") or {}).get("id") or ""), _m.RACINE)          # refuser > demander > autoriser (voir approval_rules)
+    if effet == "deny":
+        return refus(ctx, _t("Refusé par une règle d'accord ({}) : la commande n'a pas été lancée. Ne la relance pas : propose autre chose ou explique ce que tu voulais faire.").format(_t("la tienne") if origine == "yours" else _t("celle du projet")))
+    if effet in ("hardline", "ask"):
+        lecture = None          # une commande que la liste ou une règle veut voir confirmée n'est jamais lancée comme une simple lecture
+    if lecture is None:
+        auto = effet == "allow" or (effet == "none" and bool(ctx.get("auto_commandes", False)))
+        ctx["sujet_accord"] = {"commande": commande, "retenir": effet != "hardline",
+                               "raison": _t("Cette commande fait partie de celles qui demandent toujours ton accord.") if effet == "hardline" else _t("Une règle d'accord demande ta confirmation pour cette commande.") if effet == "ask" else ""}
+        try:
+            accepte = ctx["accord"](_t("Lancer une commande ({})").format(shell), commande, "", auto=auto)
+        finally:
+            ctx.pop("sujet_accord", None)
+        if not accepte:
+            return refus(ctx, _t("Refusé par l'utilisateur : la commande n'a pas été lancée."))
     stop = ctx.get("stop")
     if lecture is not None:                              # lecture sans accord : jamais de shell (rien ne peut être développé ni enchaîné après le contrôle)
         if lecture.kind == _safe.ECHO:

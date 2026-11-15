@@ -15,3 +15,5 @@ These records are technical documentation, written in English only (ADR 0001). T
 | [0006](0006-approval-free-commands.md) | Approval-free commands run without a shell, one validator per program | Accepted, implemented |
 | [0007](0007-model-facing-language.md) | Language of tool names and system prompts: measure before switching | Accepted |
 | [0008](0008-outbound-web-guard.md) | Outbound web requests: pinned address, redirections checked hop by hop | Accepted, implemented |
+| [0009](0009-approval-rules.md) | Approval rules for commands: deny > ask > allow, a hardline list | Accepted |
+| [0010](0010-tool-table.md) | One table says what each tool does | Accepted |

@@ -1325,7 +1325,8 @@ def tour(conv, texte, emit, r=None, stop=None, remplacer_depuis=None, identite="
             ctx["dernier_accord"] = "essai"
             ctx["essai_titre"] = str(titre)[:120]          # le modèle le relit dans le résultat : de QUOI il s'agit, et que cela n'existe pas
             return False
-        raison = "" if auto else _t("La case d'accord automatique correspondante n'est pas cochée pour cette conversation.")          # pourquoi on te demande : jamais un mystère
+        sujet = ctx.get("sujet_accord") or {}          # posé par l'outil qui demande (une commande) : ce qui peut être retenu, et pourquoi on demande
+        raison = "" if auto else (sujet.get("raison") or _t("La case d'accord automatique correspondante n'est pas cochée pour cette conversation."))          # pourquoi on te demande : jamais un mystère
         if auto and ctx.get("web_lu") and not ctx.get("web_confiance"):
             # Garde-fou : du texte venu d'internet a été lu pendant ce tour, il pourrait contenir une consigne piégée. Plus d'accord automatique jusqu'à la fin du tour.
             emit({"type": "info", "texte": _t("Du contenu web a été lu : l'accord automatique est suspendu pour la suite de cette demande (il revient tout seul à la demande suivante), ta confirmation est demandée.")})
@@ -1345,10 +1346,17 @@ def tour(conv, texte, emit, r=None, stop=None, remplacer_depuis=None, identite="
             return False
         a = _m.Attente(titre, detail, diff, conv["id"])
         suspendu = bool(ctx.get("suspension_signalee"))
-        emit({"type": "approbation", "id": a.id, "titre": titre, "detail": detail, "diff": diff, "raison": raison, "suspendu": suspendu})
+        emit({"type": "approbation", "id": a.id, "titre": titre, "detail": detail, "diff": diff, "raison": raison, "suspendu": suspendu, "retenir": bool(sujet.get("retenir"))})
         ok = a.attendre(stop=stop)
         if stop.is_set():
             raise _m.Arret()
+        if ok and a.retenir != "once" and sujet.get("retenir") and sujet.get("commande"):
+            from . import approval_rules
+            try:
+                if approval_rules.remember(sujet["commande"], a.retenir, conv["id"]):
+                    emit({"type": "info", "texte": _t("Retenu : cette commande ne sera plus demandée ({}).").format(_t("dans cette conversation") if a.retenir == "chat" else _t("règle enregistrée, à retirer dans Réglages"))})
+            except ValueError as refus_regle:
+                emit({"type": "info", "texte": str(refus_regle)})
         if ok and a.reactiver and suspendu:
             ctx["web_confiance"] = True                                          # choisi sur la carte : l'accord automatique reprend pour la suite de CETTE demande
             emit({"type": "accord_retabli"})

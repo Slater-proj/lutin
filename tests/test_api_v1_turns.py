@@ -87,7 +87,7 @@ class Stream(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(of_type(events, "tool_call")[0], {"type": "tool_call", "name": "modifier", "arguments": {"chemin": "appli/moteur/code.py", "ancien": "return 1", "nouveau": "return 2"}})
         self.assertEqual(len(asked), 1)
-        self.assertEqual(sorted(asked[0]), ["auto_approval_suspended", "detail", "diff", "id", "reason", "title", "type"])
+        self.assertEqual(sorted(asked[0]), ["auto_approval_suspended", "can_remember", "detail", "diff", "id", "reason", "title", "type"])
         self.assertIn("return 2", asked[0]["diff"])
         result = of_type(events, "tool_result")[0]
         self.assertEqual((sorted(result), result["name"]), (["name", "text", "type"], "modifier"))

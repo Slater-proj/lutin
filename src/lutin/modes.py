@@ -5,9 +5,11 @@ Un mode décide trois choses : les outils que le modèle reçoit (lire, chercher
 commande demande ton accord, sauf si tu as coché l'accord automatique."""
 from .i18n import t as _t
 
+from . import tool_table
+
 DEFAULT = "polyvalent"
 
-READ_TOOLS = {"lister", "lire", "chercher", "trouver", "calculer", "voix_liste", "voix_transcrire", "symboles", "lire_plusieurs", "rappeler", "web_chercher", "web_lire", "taches", "memoriser", "suivi", "comfy_modeles"}
+READ_TOOLS = tool_table.research_tools()          # what the research mode keeps: derived from the tool table, where each tool says what it changes
 IMAGE_TOOLS = {"etat_outil", "installer_module"}          # l'extension facultative d'images
 
 # identifiant -> ce qui change : `exclus` (outils retirés), `seulement` (seuls ces outils restent), `aucun` (aucun outil), `rappels` (rappels automatiques proposés par défaut)

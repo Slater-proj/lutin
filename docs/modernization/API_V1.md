@@ -130,6 +130,14 @@ the six `actions` (`install`, `uninstall`, `reinstall`, `start`, `stop`, `update
 `DELETE /api/v1/engines/{id}/task` asks the running task to stop (what was downloaded is kept). It is the machinery of the present page (`lutin.engines`), under English names.
 Not in v1 yet: the settings of an engine (address, key, folders, variant) and the catalogue of external servers.
 
+## Devices and pairing
+
+`GET /api/v1/devices` answers `{"devices": [{id, name, paired_at, seen_at}], "level", "pairing_possible", "address"}`; `id` is ten characters of the digest of a session (a token is never stored nor shown). `POST /api/v1/devices/pairing-code` has the right `local`: the person in front of the machine only, never a paired device nor a remote administrator; it answers 201 `{code, valid_seconds, address, qr: {size, rows}}`, or `409 local_only` at the access level `local` (Lutin then listens on this machine only). `DELETE /api/v1/devices/{id}` and `DELETE /api/v1/devices` (right `configurator`) end sessions for real. The pairing itself (the code typed on the other device) is unchanged.
+
+## Approval rules
+
+`GET /api/v1/approval-rules` answers `{rules, project_rules, hardline}`; `POST` (`{"effect": "deny" | "ask" | "allow", "command"}`) and `DELETE /{id}` need the right `configurator`. See [ADR 0009](../adr/0009-approval-rules.md). The event `approval_request` carries `can_remember` for a command, and `POST /api/v1/approvals/{id}` takes `remember`: `once`, `chat` or `always` (`always` needs the right `configurator`).
+
 ## Projects
 
 A project is a working folder. `GET /api/v1/projects` answers `{"projects": [{"id", "name", "path", "usable", "problem"}], "current"}` (`usable` is false, with the reason in `problem`, for a folder that cannot be used now). `POST /api/v1/projects/{id}/select` makes one the current folder (any session; `409 workspace_conflict` while an answer is being written in another folder). Adding (`POST /api/v1/projects` with `{"path", "name"}`) and removing (`DELETE /api/v1/projects/{id}`, nothing in the folder is deleted; `?clean=1` also removes the copies of conversations Lutin wrote there) need the right `configurator`: the machine itself.

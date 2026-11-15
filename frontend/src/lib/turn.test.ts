@@ -40,7 +40,7 @@ describe("the turn being written", () => {
       { type: "tool_call", name: "modifier", arguments: { chemin: "a.py" } },
       { type: "approval_request", id: "x1", title: "Change a.py", detail: "", diff: "-1\n+2" },
     ]);
-    expect(asked.approval).toEqual({ id: "x1", title: "Change a.py", detail: "", diff: "-1\n+2", reason: "" });
+    expect(asked.approval).toEqual({ id: "x1", title: "Change a.py", detail: "", diff: "-1\n+2", reason: "", canRemember: false });
     const answered = applyEvent(asked, { type: "tool_result", name: "modifier", text: "refused" });
     expect(answered.approval).toBeNull();
     expect(answered.blocks).toEqual([{ kind: "tool", name: "modifier", arguments: { chemin: "a.py" }, result: "refused" }]);

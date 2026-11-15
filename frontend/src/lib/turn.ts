@@ -24,6 +24,7 @@ export interface Approval {
   detail: string;
   diff: string;
   reason: string;
+  canRemember: boolean; // a command: the « yes » can be kept for this conversation, or always
 }
 
 /** The answer being written. */
@@ -76,7 +77,7 @@ export function applyEvent(turn: LiveTurn, event: TurnEvent): LiveTurn {
     case "tool_result":
       return { ...turn, approval: null, blocks: withResult(turn.blocks, event.name, event.text) };
     case "approval_request":
-      return { ...turn, approval: { id: event.id, title: event.title, detail: event.detail, diff: event.diff, reason: event.reason ?? "" } };
+      return { ...turn, approval: { id: event.id, title: event.title, detail: event.detail, diff: event.diff, reason: event.reason ?? "", canRemember: event.can_remember === true } };
     case "auto_approval_suspended":
       return { ...turn, autoApprovalSuspended: event.reason };
     case "auto_approval_restored":

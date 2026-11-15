@@ -127,6 +127,25 @@ class Chat(unittest.TestCase):
         self.assertTrue(p.evaluer("[...document.querySelectorAll('.thread details summary')].some(s => s.innerText.includes('modifier'))"), "the tool call stays visible in the stored conversation")
         self.assertEqual(p.erreurs, [])
 
+    def test_3h_a_command_is_allowed_for_this_conversation_and_not_asked_again(self):
+        p = self.page
+        from lutin import approval_rules
+        self.addCleanup(approval_rules._CHAT.clear)
+        self.addCleanup(lambda: approval_rules._path().unlink(missing_ok=True))
+        T.SCENARIO[:] = [[T.appel_outil("executer", commande="hostname")], [T.appel_outil("executer", commande="hostname")], [{"content": "Both ran."}]]
+        self.write("Run the command twice")
+        p.evaluer("document.querySelector('.composer button[type=submit]').click()")
+        p.attendre("!!document.querySelector('.card .button.danger')")
+        self.assertEqual(p.evaluer("[...document.querySelectorAll('.card .button')].map(b => b.innerText)"), ["Oui, une fois", "Oui, pour cette conversation", "Toujours autoriser cette commande", "Refuser"],
+                         "a command offers the three answers, and no")
+        self.assertIn("hostname", p.evaluer("document.querySelector('.card').innerText"))
+        p.evaluer("[...document.querySelectorAll('.card .button')].find(b => b.innerText === 'Oui, pour cette conversation').click()")
+        p.attendre(TEXT + ".includes('Both ran.')", 40)
+        self.assertEqual(list(approval_rules._CHAT.values()), [{approval_rules.normalise("hostname")}], "kept for this conversation only")
+        self.assertEqual(approval_rules.user_rules(), [], "and not written as a rule")
+        self.assertFalse(p.evaluer("!!document.querySelector('.card')"), "the second time was not asked")
+        self.assertEqual(p.erreurs, [])
+
     def test_3b_the_conversation_is_renamed_and_pinned(self):
         p = self.page
         p.evaluer("document.querySelector('.rename-button').click()")
@@ -609,6 +628,27 @@ class Chat(unittest.TestCase):
         p.evaluer("document.querySelector('.devices .confirm .danger').click()")
         p.attendre("![...document.querySelectorAll('.devices .list strong')].some(e => e.innerText === 'Old phone')")
         self.assertFalse(spare.valide(token), "removed: its session is over")
+        self.assertEqual(p.erreurs, [])
+        p.evaluer("location.hash = '#/chat'")
+
+    def test_5m_an_approval_rule_is_added_listed_and_removed_in_the_settings(self):
+        p = self.page
+        from lutin import approval_rules
+        self.addCleanup(lambda: approval_rules._path().unlink(missing_ok=True))
+        p.evaluer("location.hash = '#/settings'")
+        p.attendre("!!document.querySelector('#rule-command')")
+        fill = "(() => { const set = (id, value, name) => { const box = document.querySelector(id); box.value = value; box.dispatchEvent(new Event(name, {bubbles: true})); }; set('#rule-effect', %s, 'change'); set('#rule-command', %s, 'input'); document.querySelector('.rules .add').requestSubmit(); })()"
+        p.evaluer(fill % (js("deny"), js("npm publish *")))
+        p.attendre("[...document.querySelectorAll('.rules .list code')].some(c => c.innerText === 'npm publish *')")
+        self.assertEqual([(rule["effect"], rule["command"]) for rule in approval_rules.user_rules()], [("deny", "npm publish *")])
+        p.evaluer(fill % (js("allow"), js("git push --force")))
+        p.attendre("!!document.querySelector('.rules .problem')")
+        self.assertEqual(len(approval_rules.user_rules()), 1, "a command of the hardline list cannot be allowed in advance, and the page says so")
+        if AXE.is_file():
+            self.axe("on the approval rules")
+        p.evaluer("document.querySelector('.rules .list .button').click()")
+        p.attendre("!document.querySelector('.rules .list code')")
+        self.assertEqual(approval_rules.user_rules(), [])
         self.assertEqual(p.erreurs, [])
         p.evaluer("location.hash = '#/chat'")
 

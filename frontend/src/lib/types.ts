@@ -93,7 +93,7 @@ export type TurnEvent =
   | { type: "notice"; text: string }
   | { type: "tool_call"; name: string; arguments: unknown }
   | { type: "tool_result"; name: string; text: string }
-  | { type: "approval_request"; id: string; title: string; detail: string; diff: string; reason?: string; auto_approval_suspended?: boolean }
+  | { type: "approval_request"; id: string; title: string; detail: string; diff: string; reason?: string; auto_approval_suspended?: boolean; can_remember?: boolean }
   | { type: "auto_approval_suspended"; reason: string }
   | { type: "auto_approval_restored" }
   | { type: "memory_choice"; conversation_id: string }

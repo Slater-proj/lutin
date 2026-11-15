@@ -25,6 +25,7 @@ from . import core as _m
 from . import engines as _engines
 from . import hardware as _hardware
 from . import health as _health
+from . import approval_rules as _approval_rules
 from . import attachments as _pieces
 from . import i18n as _i18n
 from . import images as _images
@@ -692,6 +693,36 @@ def revoke_all_devices(request):
     return _devices_view()
 
 
+# --------------------------------------------------------------------------------------------------------- approval rules
+def _rules_view():
+    return {"rules": [{"id": rule["id"], "effect": rule["effect"], "command": rule["command"], "created_at": rule.get("created", 0)} for rule in _approval_rules.user_rules()],
+            "project_rules": [{"effect": rule["effect"], "command": rule["command"]} for rule in _approval_rules.project_rules(_m.RACINE)],
+            "hardline": sorted({reason for _, reason in _approval_rules.HARDLINE})}
+
+
+@route("GET", "/approval-rules", SESSION)
+def approval_rules(request):
+    """The rules that decide whether a command is refused (`deny`), asked (`ask`) or run without asking (`allow`); deny > ask > allow. `project_rules` come from
+    `.lutin/approvals.json` of the working folder and can only ask or deny. `hardline` says what always needs a question, whatever the rules say."""
+    return _rules_view()
+
+
+@route("POST", "/approval-rules", CONFIGURATOR)
+def add_approval_rule(request):
+    """{"effect": "deny" | "ask" | "allow", "command": "git push *"}: a command exactly, or a beginning followed by ` *`. An `allow` for a hardline command is refused."""
+    if set(request.body) - {"effect", "command"}:
+        raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("effect, command"))
+    _approval_rules.add(request.body.get("effect"), request.body.get("command"))
+    return 201, _rules_view()
+
+
+@route("DELETE", "/approval-rules/{id}", CONFIGURATOR)
+def remove_approval_rule(request):
+    if not _approval_rules.remove(request.params["id"]):
+        raise ApiError(404, "not_found", _t("Règle inconnue."))
+    return _rules_view()
+
+
 # --------------------------------------------------------------------------------------------------------- projects
 # A project is a working folder: where Lutin reads and writes files for the conversations. The present page calls them « dossiers de travail ».
 def _projects_view():
@@ -1011,7 +1042,7 @@ EVENTS = {
     "pensee": ("thinking", {"texte": "text"}),
     "outil": ("tool_call", {"nom": "name", "args": "arguments"}),
     "resultat": ("tool_result", {"nom": "name", "texte": "text", "medias": "media", "medias_fichiers": "media_files", "fichiers_joints": "attached_files"}),
-    "approbation": ("approval_request", {"id": "id", "titre": "title", "detail": "detail", "diff": "diff", "raison": "reason", "suspendu": "auto_approval_suspended"}),
+    "approbation": ("approval_request", {"id": "id", "titre": "title", "detail": "detail", "diff": "diff", "raison": "reason", "suspendu": "auto_approval_suspended", "retenir": "can_remember"}),
     "accord_suspendu": ("auto_approval_suspended", {"raison": "reason"}),
     "accord_retabli": ("auto_approval_restored", {}),
     "choix_memoire": ("memory_choice", {"conversation": "conversation_id"}),
@@ -1078,12 +1109,19 @@ def answer_memory_choice(request):
 # ------------------------------------------------------------------------------------------------------------- approvals
 @route("POST", "/approvals/{id}", SESSION)
 def answer_approval(request):
-    """Answers a pending action: {"approved": true}. `restore_auto_approval` re-enables the automatic approvals suspended after a web read, for this request only."""
+    """Answers a pending action: {"approved": true}. `restore_auto_approval` re-enables the automatic approvals suspended after a web read, for this request only.
+    `remember` (`once`, `chat`, `always`) keeps a « yes » given to a command whose request said `can_remember`: for the rest of the conversation, or as a rule
+    (`always` needs the right to configure: a paired device cannot write a permanent rule)."""
     body = request.body
     if not isinstance(body.get("approved"), bool):
         raise ApiError(400, "invalid_request", _t("« approved » doit être vrai ou faux."))
+    remember = body.get("remember", "once")
+    if remember not in ("once", "chat", "always"):
+        raise ApiError(400, "invalid_request", _t("Valeur invalide pour « {} » (attendu : {}).").format("remember", "once, chat, always"))
+    if remember == "always" and not request.handler._configurateur():
+        raise ApiError(403, "configurator", _t("Une règle permanente s'enregistre depuis cette machine."))
     try:
-        _m.repondre_attente(request.params["id"], body["approved"], bool(body.get("restore_auto_approval")))
+        _m.repondre_attente(request.params["id"], body["approved"], bool(body.get("restore_auto_approval")), remember)
     except ValueError as gone:
         raise ApiError(404, "not_found", str(gone)) from None
     return {"approved": body["approved"]}

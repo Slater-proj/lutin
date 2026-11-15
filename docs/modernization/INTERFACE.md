@@ -31,14 +31,14 @@ Shown **after the first installation on a new machine** (the maintainer's rule);
 | Language choice (French, English, like the system) on the first screen | done |
 | Correction of the detected machine: the memory models may fill, in the guide (« this is not my machine ») | done — only that figure; the detected hardware itself is not editable |
 | The optional speed test (yes/no) at the end, Ollama only | done |
-| Pairing a phone | **missing**: needs the devices routes of the v1 (Settings) |
+| Pairing a phone: a card at the end of the guide (code, address, QR code); at the level « this machine only » it says why no device can reach Lutin | done |
 
 A real finding on the way: the models folder of the development machine is on a disk with 4.7 GB free, and the guide refused a 5.2 GB download with « not enough free space »: the safeguard works on real hardware.
 
 ## Settings
 
 Every setting of `/api/v1/settings` in six groups (answers, safety, web and memory, this machine, tools, sampling), each kept as soon as it is changed: a switch, a choice, a number (checked against its range before it is sent), a list (one line per item). What removes a question (writing or running without asking, commands always allowed) is marked « take care ». Language is chosen here too. Verified in Chrome (`tests/test_web_app_chat.py`, test 5h) and by the automatic accessibility checks in both themes and at 360 px.
-Not on this screen yet: the engine and the machine used for conversations (Models), the paired devices, the connectors, notifications and addons of the present page.
+Also on this screen: the paired devices (list, remove, pair with a code and a QR code drawn in SVG) and the approval rules for commands (list, add, remove, what always needs an approval). Not on this screen yet: the access level itself (it needs a restart: present page), the connectors, notifications and addons of the present page.
 
 ## Agents
 
@@ -83,7 +83,7 @@ colour use beyond contrast, and the quality of the texts. Not verified either: a
 | List, open, create, delete a conversation | done |
 | Send a message, answer written as it arrives, stop | done |
 | Reasoning, tool calls and results, notices, dry runs, errors | done |
-| Approval of an action, with its diff | done |
+| Approval of an action, with its diff | done; a command offers « once », « for this conversation », « always » ([ADR 0009](../adr/0009-approval-rules.md)) |
 | « Summary or progress sheet » question of a long conversation | done (the route is tested; the card has no end-to-end test) |
 | Choice of the model | done (changes the setting, as the present page does) |
 | Context gauge, speed, task list | done, during the turn only |

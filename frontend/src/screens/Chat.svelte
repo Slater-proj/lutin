@@ -282,11 +282,11 @@
     if (id) await guarded(async () => void (await api("POST", `/conversations/${encodeURIComponent(id)}/stop`, {})));
   }
 
-  async function answerApproval(approved: boolean): Promise<void> {
+  async function answerApproval(approved: boolean, remember: "once" | "chat" | "always" = "once"): Promise<void> {
     const approval = live?.approval;
     if (!approval) return;
     await guarded(async () => {
-      await api("POST", `/approvals/${encodeURIComponent(approval.id)}`, { approved });
+      await api("POST", `/approvals/${encodeURIComponent(approval.id)}`, { approved, remember });
       if (live) live = { ...live, approval: null };
     });
   }
@@ -434,7 +434,11 @@
           {#if live.approval.diff}<pre>{live.approval.diff}</pre>{/if}
           {#if live.approval.reason}<p class="hint">{live.approval.reason}</p>{/if}
           <div class="actions">
-            <button type="button" class="button primary" onclick={() => answerApproval(true)}>{t("approval.approve")}</button>
+            <button type="button" class="button primary" onclick={() => answerApproval(true)}>{live.approval.canRemember ? t("approval.once") : t("approval.approve")}</button>
+            {#if live.approval.canRemember}
+              <button type="button" class="button" onclick={() => answerApproval(true, "chat")}>{t("approval.chat")}</button>
+              <button type="button" class="button" onclick={() => answerApproval(true, "always")}>{t("approval.always")}</button>
+            {/if}
             <button type="button" class="button danger" onclick={() => answerApproval(false)}>{t("approval.refuse")}</button>
           </div>
         </div>
