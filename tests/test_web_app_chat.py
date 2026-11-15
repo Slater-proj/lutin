@@ -558,6 +558,12 @@ class Chat(unittest.TestCase):
         self.assertEqual([task["heure"] for task in scheduled_tasks.read()], ["07:45"], "the server holds the task")
         if AXE.is_file():
             self.axe("on the Agents screen with a task")
+        p.evaluer("[...document.querySelectorAll('.agents .card .button')].find(b => b.innerText === 'Modifier').click()")
+        p.attendre("document.querySelector('#task-name').value === 'Morning notes'")
+        self.assertEqual(p.evaluer("document.querySelector('#task-time').value"), "07:45", "the form is filled with the task")
+        p.evaluer("(() => { const set = (id, value) => { const box = document.querySelector(id); box.value = value; box.dispatchEvent(new Event('input', {bubbles: true})); }; set('#task-name', 'Evening notes'); set('#task-time', '18:30'); document.querySelector('.add').requestSubmit(); })()")
+        self.eventually(lambda: [(task["nom"], task["heure"]) for task in scheduled_tasks.read()] == [("Evening notes", "18:30")], "the server holds the change, and no second task was added")
+        p.attendre("document.querySelector('.agents .card').innerText.includes('Evening notes') && document.querySelector('#task-name').value === ''")
         p.evaluer("[...document.querySelectorAll('.agents .card .button')].find(b => b.innerText === 'Mettre en pause').click()")
         p.attendre("!!document.querySelector('.agents .paused-badge')")
         self.assertEqual([task["actif"] for task in scheduled_tasks.read()], [False])

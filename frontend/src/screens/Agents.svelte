@@ -19,6 +19,8 @@
   let once = $state(false);
   let date = $state("");
   let checked = $state([true, true, true, true, true, false, false]);
+  // The id of the task being changed: the form below then saves it instead of adding a new one.
+  let editing = $state("");
 
   function explain(cause: unknown): string {
     if (cause instanceof ApiError) {
@@ -49,14 +51,38 @@
     data = await api<Tasks>("GET", "/scheduled-tasks");
   }
 
+  function resetForm(): void {
+    editing = "";
+    name = "";
+    request = "";
+    time = "08:00";
+    once = false;
+    date = "";
+    checked = [true, true, true, true, true, false, false];
+  }
+
   async function create(event: SubmitEvent): Promise<void> {
     event.preventDefault();
     await act(async () => {
-      await api("POST", "/scheduled-tasks", { name: name.trim(), request: request.trim(), time, ...(once ? { date } : { days: chosenDays(checked) }) });
-      name = "";
-      request = "";
+      // Changing a task sends the whole moment: a weekly task sent with an empty date stops being a one-time one, and the other way round.
+      const when = once ? { date, days: [] } : { days: chosenDays(checked), date: "" };
+      const body = { name: name.trim(), request: request.trim(), time, ...when };
+      if (editing) await api("PATCH", `/scheduled-tasks/${encodeURIComponent(editing)}`, body);
+      else await api("POST", "/scheduled-tasks", once ? { name: body.name, request: body.request, time, date } : { name: body.name, request: body.request, time, days: when.days });
+      resetForm();
       await reload();
     });
+  }
+
+  function edit(task: ScheduledTask): void {
+    editing = task.id;
+    name = task.name;
+    request = task.request;
+    time = task.time;
+    once = Boolean(task.date);
+    date = task.date;
+    checked = [0, 1, 2, 3, 4, 5, 6].map((day) => task.days.includes(day));
+    document.getElementById("task-name")?.focus();
   }
 
   const pause = (task: ScheduledTask): Promise<void> =>
@@ -81,6 +107,7 @@
     act(async () => {
       data = await api<Tasks>("DELETE", `/scheduled-tasks/${encodeURIComponent(task.id)}`);
       deleting = "";
+      if (editing === task.id) resetForm();
     });
 
   function when(task: ScheduledTask): string {
@@ -139,6 +166,7 @@
               {:else}
                 <button type="button" class="button primary" disabled={busy} onclick={() => run(task)}>{t("tasks.run")}</button>
               {/if}
+              <button type="button" class="button" disabled={busy} onclick={() => edit(task)}>{t("tasks.edit")}</button>
               <button type="button" class="button" disabled={busy} onclick={() => pause(task)}>{task.active ? t("tasks.pause") : t("tasks.resume")}</button>
               {#if deleting === task.id}
                 <span class="confirm" role="group" aria-label={t("tasks.delete_confirm", task.name)}>
@@ -156,7 +184,7 @@
     {/if}
 
     <form class="add" onsubmit={create}>
-      <h2>{t("tasks.add_title")}</h2>
+      <h2>{editing ? t("tasks.edit_title") : t("tasks.add_title")}</h2>
       <label for="task-name">{t("tasks.name")}</label>
       <input id="task-name" type="text" bind:value={name} maxlength="60" autocomplete="off" required />
       <label for="task-request">{t("tasks.request")}</label>
@@ -180,7 +208,10 @@
           {/each}
         </fieldset>
       {/if}
-      <div class="actions"><button type="submit" class="button primary" disabled={busy || !name.trim() || !request.trim() || (once ? !date : !checked.some(Boolean))}>{t("tasks.add")}</button></div>
+      <div class="actions">
+        <button type="submit" class="button primary" disabled={busy || !name.trim() || !request.trim() || (once ? !date : !checked.some(Boolean))}>{editing ? t("tasks.save") : t("tasks.add")}</button>
+        {#if editing}<button type="button" class="button" disabled={busy} onclick={resetForm}>{t("chat.cancel")}</button>{/if}
+      </div>
     </form>
   {:else if !problem}
     <p class="muted">{t("tasks.loading")}</p>
