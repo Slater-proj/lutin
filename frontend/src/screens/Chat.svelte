@@ -251,7 +251,7 @@
       editing = null;
       attachments = [];
       cut = from;
-      pending = { text: message, images: sent.filter((item) => item.kind === "image").map((item) => item.id), files: sent.filter((item) => item.kind === "document").map((item) => item.name) };
+      pending = { text: message, images: sent.filter((item) => item.kind === "image").map((item) => item.id), files: sent.filter((item) => item.kind === "document").map((item) => ({ id: item.id, name: item.name })) };
       live = newTurn();
       try {
         await streamTurn(id, { message, ...(from === null ? {} : { replace_from: from }), ...turnFields(sent) }, (event) => {

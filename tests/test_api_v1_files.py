@@ -70,9 +70,9 @@ class Images(unittest.TestCase):
             status, answer, _ = send("/api/v1/images", PNG + b"\x00" * (api_v1._images.MAX_SIZE + 1))
             self.assertEqual((status, answer["error"]["code"]), (413, "too_large"), attempt)
 
-    def test_the_only_route_without_the_page_token_reads_and_nothing_else_does(self):
+    def test_the_only_routes_without_the_page_token_read_files_and_nothing_else_does(self):
         entries = [entry for entry in api_v1.table() if entry["right"] == api_v1.READ]
-        self.assertEqual([(entry["method"], entry["path"]) for entry in entries], [("GET", "/api/v1/images/{id}")])
+        self.assertEqual([(entry["method"], entry["path"]) for entry in entries], [("GET", "/api/v1/attachments/{id}"), ("GET", "/api/v1/images/{id}")])
 
 
 class Attachments(unittest.TestCase):
@@ -83,6 +83,19 @@ class Attachments(unittest.TestCase):
         status, answer, _ = self.upload("Marly est une ville.\nLe Tonnerre est un son grave.\n".encode("utf-8"), "résumé notes.txt")
         self.assertEqual((status, sorted(answer)), (201, ["characters", "id", "name"]))
         self.assertEqual((answer["name"], answer["characters"]), ("résumé notes.txt", 50), "the characters of the extracted text, trimmed")
+
+    def test_a_document_is_downloaded_as_it_was_sent_and_never_displayed(self):
+        content = "Marly est une ville.\n".encode("utf-8")
+        identifier = self.upload(content, "notes été.txt")[1]["id"]
+        status, data, headers = send("/api/v1/attachments/" + identifier + "?name=" + urllib.parse.quote("notes été.txt"), None, method="GET")
+        self.assertEqual((status, data), (200, content))
+        self.assertEqual(headers["Content-Type"], "application/octet-stream")
+        self.assertEqual(headers["Content-Disposition"], "attachment; filename*=UTF-8''notes%20%C3%A9t%C3%A9.txt")
+        self.assertEqual((headers["Content-Security-Policy"], headers["X-Content-Type-Options"]), ("default-src 'none'; sandbox", "nosniff"))
+        self.assertEqual(send("/api/v1/attachments/" + identifier, None, method="GET", who=V.ELSEWHERE)[0], 401)
+        for unknown in ("ffffffffffffffffffff.txt", "..%2F..%2Fconfig", "x"):
+            status, answer, _ = send("/api/v1/attachments/" + unknown, None, method="GET")
+            self.assertEqual((status, answer["error"]["code"]), (404, "not_found"), unknown)
 
     def test_refusals_carry_a_code(self):
         for data, name in ((b"", "empty.txt"), (b"\x00\x01\x02\xff" * 50, "binary.bin")):

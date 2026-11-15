@@ -21,7 +21,7 @@
   {/if}
   {#if sent.files.length}
     <ul class="files">
-      {#each sent.files as name, index (index)}<li><Icon name="file" size={16} /><span>{t("chat.file_sent", name)}</span></li>{/each}
+      {#each sent.files as file, index (index)}<li><Icon name="file" size={16} /><a href={"/api/v1/attachments/" + encodeURIComponent(file.id) + "?name=" + encodeURIComponent(file.name)} download={file.name}>{t("chat.file_sent", file.name)}</a></li>{/each}
     </ul>
   {/if}
 {/snippet}
@@ -207,6 +207,11 @@
     padding: 0;
     list-style: none;
     font-size: var(--text-sm);
+  }
+
+  .files a {
+    color: var(--color-accent-text);
+    overflow-wrap: anywhere;
   }
 
   .files li {

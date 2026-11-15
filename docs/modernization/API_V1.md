@@ -99,6 +99,7 @@ Options: `mode` (`general`, `technical`, `scenario`, `research`, `chat`, and `mi
 
 `POST /api/v1/images` takes the **bytes of the image as the body** (not JSON; PNG, JPEG, GIF or WebP, recognised from the content, at most 8 MB) and answers `201 {"id", "url"}`.
 `POST /api/v1/attachments` takes the bytes of a document (at most 20 MB), its name in the `X-Name` header (URL-encoded), and answers `201 {"id", "name", "characters"}`: the text is extracted at once and a file with none is refused (`400`).
+`GET /api/v1/attachments/{id}?name=` (right `read`, like the images) gives the document back as it was sent, always as a download (`Content-Disposition: attachment`, never displayed); `name` is the name it is saved under.
 An upload over its limit is read, thrown away and answered `413 too_large`. The next message names them: `images: ["<id>"]`, `attachments: [{"id", "name"}]` (4 images and 5 documents at most).
 `GET /api/v1/images/{id}` gives the image back. It is the one route with the right **`read`**: a session is enough and the page token is not asked, because a browser tag (`<img>`) sends the cookie and cannot send a header.
 The right is for a `GET` only (declared in `route()`, tested), and a test lists the routes that have it. Stored messages keep the shape of the chat format: `images` is a list of identifiers and `pieces` a list of `{"id", "nom"}`.

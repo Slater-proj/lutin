@@ -729,6 +729,19 @@ def upload_attachment(request):
     return 201, {"id": identifier, "name": shown, "characters": characters}
 
 
+@route("GET", "/attachments/{id}", READ)
+def download_attachment(request):
+    """A document sent in a conversation, as it was sent. READ, like the images: a link in the page carries the session cookie and not the page token.
+    Always a download, never displayed (a document is not trusted to be harmless in the page's own origin); `?name=` is the name the file is saved under."""
+    try:
+        data = _pieces.chemin(request.params["id"]).read_bytes()
+    except (ValueError, OSError):
+        raise ApiError(404, "not_found", _t("Fichier joint inconnu.")) from None
+    name = _pieces.clean_name(request.query.get("name") or "") or request.params["id"]
+    quoted = urllib.parse.quote(name)
+    return Binary(data, "application/octet-stream", {"Content-Disposition": "attachment; filename*=UTF-8''" + quoted, "Content-Security-Policy": "default-src 'none'; sandbox", "X-Content-Type-Options": "nosniff"})
+
+
 # ----------------------------------------------------------------------------------------------------------------- turns
 # The answer stream (API_V1.md, rule 6): application/x-ndjson, one event per line, an empty line as a heartbeat. The agent emits French events; they are
 # renamed here, at the boundary, field by field. A type or a field that is not in this table goes through unchanged: tests/test_api_v1_turns.py reads the

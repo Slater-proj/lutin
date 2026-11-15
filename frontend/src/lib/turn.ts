@@ -13,7 +13,7 @@ export type Block =
 /** `index` is the position of the message in the stored conversation: what `replace_from` takes to answer again from it. */
 export interface Sent {
   images: string[]; // identifiers: shown through /api/v1/images/{id}
-  files: string[]; // names of the documents
+  files: { id: string; name: string }[]; // the documents: downloaded through /api/v1/attachments/{id}
 }
 
 export type Item = ({ role: "user"; text: string; index: number } & Sent) | { role: "assistant"; blocks: Block[] };
@@ -113,7 +113,7 @@ export function storedToItems(messages: StoredMessage[]): Item[] {
   };
   for (const [index, message] of messages.entries()) {
     if (message.role === "user") {
-      items.push({ role: "user", text: message.content ?? "", index, images: message.images ?? [], files: (message.pieces ?? []).map((piece) => piece.nom) });
+      items.push({ role: "user", text: message.content ?? "", index, images: message.images ?? [], files: (message.pieces ?? []).map((piece) => ({ id: piece.id, name: piece.nom })) });
       answer = null;
     } else if (message.role === "assistant") {
       const blocks = blocksOfAnswer();
