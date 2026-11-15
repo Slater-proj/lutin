@@ -982,6 +982,76 @@ def check_addon(request):
     return _addon_view(identifier)["check"]
 
 
+# The live panel of an add-on: what it holds while it runs (the pairing code and the paired phones of Telegram, the drafts of replies waiting for a yes, the posts of X) and the actions on it.
+# Each add-on keeps its own French names inside; the translators below give them English ones. An add-on without a translator (ComfyUI, for now) has no panel here (`panel` is null).
+def _panel_drafts(items, keys):
+    return [{new: item.get(old, default) for new, (old, default) in keys.items()} for item in items]
+
+
+def _telegram_panel(raw):
+    return {"listening": bool(raw["ecoute"]), "error": raw["erreur"] or "", "pairing_code": raw["code"], "third_parties": raw["tiers"] == "oui",
+            "devices": [{"id": str(device["id"]), "name": device.get("nom", "")} for device in raw["autorises"]],
+            "drafts": _panel_drafts(raw["brouillons"], {"id": ("id", ""), "device": ("chat_id", ""), "from": ("de", ""), "request": ("demande", ""), "text": ("texte", ""), "at": ("date", 0)})}
+
+
+def _mail_panel(raw):
+    return {"listening": bool(raw["ecoute"]), "error": raw["erreur"] or "", "last_check_at": raw["derniere"] or 0, "address": raw["adresse"],
+            "drafts": _panel_drafts(raw["brouillons"], {"id": ("id", ""), "from": ("de", ""), "address": ("adresse", ""), "subject": ("sujet", ""), "excerpt": ("extrait", ""), "text": ("texte", ""), "at": ("date", 0)})}
+
+
+X_POST_STATES = {"brouillon": "draft", "programme": "scheduled", "publie": "published"}
+
+
+def _x_panel(raw):
+    posts = [{"id": post["id"], "text": post.get("texte", ""), "state": X_POST_STATES.get(post.get("etat"), post.get("etat", "")), "at": post.get("date", 0), "scheduled_for": post.get("quand", 0), "detail": post.get("detail", "")}
+             for post in raw["publications"]]
+    return {"listening": bool(raw["ecoute"]), "error": raw["erreur"] or "", "handle": raw["pseudo"], "mentions": bool(raw["mentions"]), "published_today": raw["publies"], "daily_limit": raw["plafond"], "posts": posts,
+            "replies": _panel_drafts(raw["reponses"], {"id": ("id", ""), "from": ("de", ""), "name": ("nom", ""), "to_post": ("a", ""), "excerpt": ("extrait", ""), "text": ("texte", ""), "at": ("date", 0)})}
+
+
+ADDON_PANELS = {"telegram": _telegram_panel, "mail": _mail_panel, "x": _x_panel}
+# The actions of each panel: {English name: (French name, {English field: French field})}. A field that is not listed is refused.
+ADDON_ACTIONS = {
+    "telegram": {"forget_device": ("oublier", {"device": "chat_id"}), "new_pairing_code": ("nouveau_code", {}), "send_draft": ("envoyer", {"draft": "brouillon", "text": "texte"}), "discard_draft": ("rejeter", {"draft": "brouillon"})},
+    "mail": {"send_draft": ("envoyer", {"draft": "brouillon", "text": "texte"}), "discard_draft": ("rejeter", {"draft": "brouillon"})},
+    "x": {"write_posts": ("rediger", {"brief": "brief", "count": "nombre"}), "edit_post": ("modifier", {"post": "publication", "text": "texte"}), "publish_post": ("publier", {"post": "publication", "text": "texte"}),
+          "schedule_post": ("programmer", {"post": "publication", "text": "texte", "at": "quand"}), "delete_post": ("supprimer", {"post": "publication"}),
+          "send_reply": ("envoyer", {"draft": "brouillon", "text": "texte"}), "discard_reply": ("rejeter", {"draft": "brouillon"})}}
+
+
+def _panel_view(identifier):
+    translate = ADDON_PANELS.get(identifier)
+    try:
+        return {"panel": translate(_addons.alive_state(identifier)) if translate else None}
+    except _addons.ErreurAddon as refused:
+        raise ApiError(400, "invalid_request", str(refused)) from None
+
+
+@route("GET", "/addons/{id}/panel", CONFIGURATOR)
+def addon_panel(request):
+    """What the add-on shows while it runs, in English names, or `{"panel": null}` for an add-on that has none here. Telegram: `pairing_code`, `devices`, `drafts` of replies; mail: `drafts`; X: `posts` and `replies`. For the machine itself only: the pairing code is the key to the add-on."""
+    _addon_one(request.params["id"])
+    return _panel_view(request.params["id"])
+
+
+@route("POST", "/addons/{id}/panel/{action}", CONFIGURATOR)
+def addon_panel_action(request):
+    """An action on the panel, with the fields of that action in the body (`send_draft` {draft, text}, `discard_draft` {draft}, `forget_device` {device}, `new_pairing_code`, X: `write_posts` {brief, count}, `edit_post`, `publish_post`, `schedule_post` {post, at: epoch seconds}, `delete_post`, `send_reply`, `discard_reply`). Answers the panel again; refused (400) with the reason when the add-on says no (nothing to send, service unreachable)."""
+    identifier, name = request.params["id"], request.params["action"]
+    _addon_one(identifier)
+    known = ADDON_ACTIONS.get(identifier, {})
+    if name not in known:
+        raise ApiError(404, "not_found", _t("Action inconnue."))
+    french_name, fields = known[name]
+    if set(request.body) - set(fields):
+        raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format(", ".join(fields) or "-"))
+    try:
+        _addons.action(identifier, french_name, {fields[key]: value for key, value in request.body.items()})
+    except _addons.ErreurAddon as refused:
+        raise ApiError(400, "invalid_request", str(refused)) from None
+    return _panel_view(identifier)
+
+
 # --------------------------------------------------------------------------------------------------------- MCP connectors
 # A connector lends Lutin the tools of another program (started by a command) or of a server (an address). Nothing is started by adding one: the tools are asked for
 # by `refresh`, and a tool is given to the model only once it is `allowed`. Starting a program is for the machine itself, hence the right `configurator` for all writes.

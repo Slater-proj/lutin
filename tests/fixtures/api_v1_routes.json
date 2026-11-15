@@ -16,6 +16,16 @@
  },
  {
   "method": "GET",
+  "path": "/api/v1/addons/{id}/panel",
+  "right": "configurator"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/addons/{id}/panel/{action}",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
   "path": "/api/v1/approval-rules",
   "right": "session"
  },
