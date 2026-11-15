@@ -576,6 +576,42 @@ class Chat(unittest.TestCase):
         self.assertEqual(p.erreurs, [])
         p.evaluer("location.hash = '#/chat'")
 
+    def test_5l_a_device_is_paired_with_a_code_shown_on_the_page_and_removed(self):
+        p = self.page
+        from lutin import security as S
+        spare = S.Appareils()
+        patch = mock.patch.object(T.A, "APPAREILS", spare)          # the test server is at the level « this machine only »: the page reaches it without a session
+        patch.start()
+        self.addCleanup(patch.stop)
+        p.evaluer("location.hash = '#/settings'")
+        p.attendre("!!document.querySelector('.devices')")
+        p.attendre("!!document.querySelector('.devices .note')")
+        self.assertIn("que sur cette machine", p.evaluer("document.querySelector('.devices .note').innerText"), "at the level « this machine only » the page says why no device can be paired")
+        self.assertFalse(p.evaluer("!!document.querySelector('.devices .button.primary')"))
+        network = mock.patch.dict(api_v1.ACCESS_LEVELS, {S.LOCAL: "network"})          # as if the network level was open, without changing how THIS page is let in
+        network.start()
+        self.addCleanup(network.stop)
+        token = spare.appairer(spare.nouveau_pin(), "Old phone")
+        p.evaluer("location.hash = '#/chat'")
+        p.evaluer("location.hash = '#/settings'")
+        p.attendre("[...document.querySelectorAll('.devices .list strong')].some(e => e.innerText === 'Old phone')")
+        p.evaluer("document.querySelector('.devices .button.primary').click()")
+        p.attendre("!!document.querySelector('.devices .digits')")
+        code = p.evaluer("document.querySelector('.devices .digits').innerText")
+        self.assertRegex(code, r"^\d{6,}$")
+        self.assertTrue(p.evaluer("document.querySelector('.devices .qr path').getAttribute('d').length > 200"), "the address is drawn as a QR code")
+        if AXE.is_file():
+            self.axe("with a pairing code shown")
+        self.assertTrue(spare.appairer(code, "New phone"), "the code shown on the page is the one that pairs")
+        p.evaluer("[...document.querySelectorAll('.devices .list li')].find(li => li.innerText.includes('Old phone')).querySelector('.button').click()")
+        p.attendre("!!document.querySelector('.devices .confirm')")
+        self.assertTrue(spare.valide(token), "asking is not removing")
+        p.evaluer("document.querySelector('.devices .confirm .danger').click()")
+        p.attendre("![...document.querySelectorAll('.devices .list strong')].some(e => e.innerText === 'Old phone')")
+        self.assertFalse(spare.valide(token), "removed: its session is over")
+        self.assertEqual(p.erreurs, [])
+        p.evaluer("location.hash = '#/chat'")
+
     def test_5e_the_first_launch_leads_to_a_model_and_the_chat(self):
         p = self.page
         flag = self.first_launch()

@@ -2,6 +2,7 @@
   // The Settings screen: every setting of /api/v1/settings in groups, each kept as soon as it is changed. What the person typed is checked here first
   // (a number, its range); the server checks again and has the last word, and what it answers is what is shown.
   import { onMount } from "svelte";
+  import Devices from "../components/Devices.svelte";
   import LanguageChoice from "../components/LanguageChoice.svelte";
   import { api, ApiError } from "../lib/api";
   import { t, type MessageKey } from "../lib/messages";
@@ -117,6 +118,8 @@
       <h2 id="g-language">{t("settings.language")}</h2>
       <LanguageChoice />
     </section>
+
+    <div class="group"><Devices /></div>
 
     {#each GROUPS as group (group)}
       {#if group === "sampling"}

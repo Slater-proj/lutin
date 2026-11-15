@@ -647,6 +647,51 @@ def start_speed_test(request):
     return 202, started
 
 
+# --------------------------------------------------------------------------------------------------------- devices
+# The devices that were paired with the code shown on this machine (a phone, another computer). Nothing here changes how a session is checked: the code,
+# its attempts and the sessions stay in lutin.security. Only the digests of the session tokens are stored, and only their first characters are shown.
+def _devices_view():
+    level = ACCESS_LEVELS.get(_m.SECURITE.niveau, _m.SECURITE.niveau)
+    return {"devices": [{"id": item["id"], "name": item["nom"], "paired_at": int(item["cree"]), "seen_at": int(item["vu"])} for item in _m.APPAREILS.liste()],
+            "level": level, "pairing_possible": level != "local", "address": "http://{}:{}/".format(_m.IP_LAN or _m.ip_locale(), _m.SECURITE.port)}
+
+
+@route("GET", "/devices", SESSION)
+def devices(request):
+    """The paired devices, the access level (`local`, `network`, `proxy`) and the address another device opens. `pairing_possible` is false at the level `local`:
+    Lutin then listens on this machine only, and no other device can reach it."""
+    return _devices_view()
+
+
+@route("POST", "/devices/pairing-code", LOCAL)
+def pairing_code(request):
+    """A new pairing code, for the person in front of THIS machine only (right `local`: never a paired device, never a remote administrator). The code replaces
+    the previous one and is valid a few minutes; it is typed on the other device, which opens `address`. `qr` draws that address."""
+    view = _devices_view()
+    if not view["pairing_possible"]:
+        raise ApiError(409, "local_only", _t("Lutin n'écoute que sur cette machine : ouvre d'abord l'accès au réseau (Accès), puis redémarre-le."))
+    from . import qr as _qr
+    matrix = _qr.matrice(view["address"])
+    return 201, {"code": _m.APPAREILS.nouveau_pin(), "valid_seconds": _sec.DURATION_PIN_S, "address": view["address"],
+                 "qr": {"size": len(matrix), "rows": ["".join(map(str, row)) for row in matrix]}}
+
+
+@route("DELETE", "/devices/{id}", CONFIGURATOR)
+def revoke_device(request):
+    """Ends the session of one device: it must be paired again to come back. 404 when no device has this identifier."""
+    identifier = request.params["id"]
+    if not re.fullmatch(r"[0-9a-f]{10}", identifier) or not _m.APPAREILS.revoquer(identifier):
+        raise ApiError(404, "not_found", _t("Appareil inconnu."))
+    return _devices_view()
+
+
+@route("DELETE", "/devices", CONFIGURATOR)
+def revoke_all_devices(request):
+    """Ends the session of every paired device."""
+    _m.APPAREILS.revoquer(None)
+    return _devices_view()
+
+
 # --------------------------------------------------------------------------------------------------------- projects
 # A project is a working folder: where Lutin reads and writes files for the conversations. The present page calls them « dossiers de travail ».
 def _projects_view():

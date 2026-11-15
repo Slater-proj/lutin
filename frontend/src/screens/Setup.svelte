@@ -2,6 +2,7 @@
   // The guide of the first launch: welcome, the engine (started or installed with a confirmation), the choice of a model (the guide of the Models screen), and the end.
   // Nothing is installed or downloaded without a click that says what it does and how big it is; the guide can be left at any step (the downloads go on without the page).
   import { onMount } from "svelte";
+  import Devices from "../components/Devices.svelte";
   import LanguageChoice from "../components/LanguageChoice.svelte";
   import ModelGuide from "../components/ModelGuide.svelte";
   import SpeedTest from "../components/SpeedTest.svelte";
@@ -195,6 +196,7 @@
         <p class="lead">{hasModel ? t("setup.done_ready") : downloading ? t("setup.done_downloading") : t("setup.done_no_model")}</p>
         {#if downloading}<p class="muted" aria-live="polite">{t("setup.done_goes_on")}</p>{/if}
         {#if hasModel && !downloading && engine?.id === "ollama"}<SpeedTest />{/if}
+        <div class="card"><Devices compact /></div>
         <div class="actions"><button type="button" class="button primary" onclick={() => finish(false)}>{t("setup.open_chat")}</button></div>
       </section>
     {/if}

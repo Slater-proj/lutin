@@ -2265,5 +2265,7 @@
 "Langue inconnue (fr, en ou auto).": "Unknown language (fr, en or auto).",
 "Une réponse ou une mesure est en cours : la mesure serait faussée. Attends sa fin.": "An answer or a measurement is in progress: the figure would be wrong. Wait for it to end.",
 "Le test de vitesse n'est pas encore proposé avec ce moteur.": "The speed test is not offered with this engine yet.",
-"Le moteur n'a rien pu mesurer.": "The engine could not measure anything."
+"Le moteur n'a rien pu mesurer.": "The engine could not measure anything.",
+"Lutin n'écoute que sur cette machine : ouvre d'abord l'accès au réseau (Accès), puis redémarre-le.": "Lutin listens on this machine only: open the access to the network first (Access), then restart it.",
+"Appareil inconnu.": "Unknown device."
 }

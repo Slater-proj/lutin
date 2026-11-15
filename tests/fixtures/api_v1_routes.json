@@ -65,6 +65,26 @@
   "right": "session"
  },
  {
+  "method": "DELETE",
+  "path": "/api/v1/devices",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/devices",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/devices/pairing-code",
+  "right": "local"
+ },
+ {
+  "method": "DELETE",
+  "path": "/api/v1/devices/{id}",
+  "right": "configurator"
+ },
+ {
   "method": "GET",
   "path": "/api/v1/engines",
   "right": "session"
