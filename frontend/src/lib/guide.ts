@@ -10,6 +10,7 @@ export interface Machine {
   summary?: string;
   ram_gb?: number;
   budget_gb?: number;
+  budget_set_gb?: number | null;
   class?: "no_gpu" | "small" | "medium" | "large" | "very_large";
   gpus?: { name: string; vendor: string; memory_gb: number; integrated: boolean }[];
 }

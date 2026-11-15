@@ -2,7 +2,9 @@
   // The guide of the first launch: welcome, the engine (started or installed with a confirmation), the choice of a model (the guide of the Models screen), and the end.
   // Nothing is installed or downloaded without a click that says what it does and how big it is; the guide can be left at any step (the downloads go on without the page).
   import { onMount } from "svelte";
+  import LanguageChoice from "../components/LanguageChoice.svelte";
   import ModelGuide from "../components/ModelGuide.svelte";
+  import SpeedTest from "../components/SpeedTest.svelte";
   import { api, ApiError } from "../lib/api";
   import { formatBytes } from "../lib/format";
   import { language, t, type MessageKey } from "../lib/messages";
@@ -115,6 +117,7 @@
           <li>{t("setup.promise_ask")}</li>
           <li>{t("setup.promise_download")}</li>
         </ul>
+        <LanguageChoice />
         <div class="actions">
           <button type="button" class="button primary" onclick={() => go("engine")}>{t("setup.start")}</button>
           <button type="button" class="button quiet" onclick={() => finish(true)}>{t("setup.skip")}</button>
@@ -191,6 +194,7 @@
         <h1>{t("setup.done_title")}</h1>
         <p class="lead">{hasModel ? t("setup.done_ready") : downloading ? t("setup.done_downloading") : t("setup.done_no_model")}</p>
         {#if downloading}<p class="muted" aria-live="polite">{t("setup.done_goes_on")}</p>{/if}
+        {#if hasModel && !downloading && engine?.id === "ollama"}<SpeedTest />{/if}
         <div class="actions"><button type="button" class="button primary" onclick={() => finish(false)}>{t("setup.open_chat")}</button></div>
       </section>
     {/if}

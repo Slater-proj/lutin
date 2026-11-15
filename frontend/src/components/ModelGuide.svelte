@@ -60,6 +60,32 @@
     }
   }
 
+  let budgetDraft = $state<number | null>(null);
+
+  /** The memory a model may fill, given by the person (0 gives it back to the detection): the verdicts are asked again with the new figure. */
+  async function setBudget(value: number): Promise<void> {
+    busy = true;
+    try {
+      problem = "";
+      await api("PATCH", "/settings", { memory_budget_gb: value });
+      machine = await api<Machine>("GET", "/machine");
+      budgetDraft = null;
+      await recommend(use);
+    } catch (cause) {
+      problem = explain(cause);
+    }
+    busy = false;
+  }
+
+  function saveBudget(event: SubmitEvent): void {
+    event.preventDefault();
+    if (budgetDraft) void setBudget(budgetDraft);
+  }
+
+  function resetBudget(): void {
+    void setBudget(0);
+  }
+
   async function begin(): Promise<void> {
     if (!selected || busy) return;
     busy = true;
@@ -103,6 +129,18 @@
     {#if machine?.detected}
       <p class="muted">{t("guide.machine")}</p>
       <p class="summary">{machine.summary}</p>
+      <details class="correct">
+        <summary>{t("guide.correct")}</summary>
+        <form onsubmit={saveBudget}>
+          <label for="budget">{t("guide.budget_label")}</label>
+          <input id="budget" type="number" min="1" max="4096" step="0.5" inputmode="decimal" bind:value={budgetDraft} aria-describedby="budget-help" />
+          <p id="budget-help" class="muted">{t("guide.budget_help", machine.budget_gb ?? 0)}</p>
+          <div class="actions">
+            <button type="submit" class="button primary" disabled={!budgetDraft || busy}>{t("guide.budget_save")}</button>
+            {#if machine.budget_set_gb}<button type="button" class="button" onclick={resetBudget} disabled={busy}>{t("guide.budget_reset")}</button>{/if}
+          </div>
+        </form>
+      </details>
     {:else if machineFailed}
       <p class="warn">{t("guide.detect_failed")}</p>
     {:else}
@@ -247,38 +285,40 @@
     font-weight: 600;
   }
 
-  .dots {
+  .correct {
+    margin-top: var(--space-2);
+    font-size: var(--text-sm);
+  }
+
+  .correct summary {
+    min-height: var(--target);
     display: inline-flex;
-    gap: 4px;
-    margin-right: var(--space-2);
+    align-items: center;
+    color: var(--color-accent-text);
+    cursor: pointer;
   }
 
-  .dots i {
-    width: 6px;
-    height: 6px;
-    border-radius: var(--radius-pill);
-    background: var(--color-accent);
-    animation: breathe 1.2s ease-in-out infinite;
+  .correct form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    max-width: 20rem;
   }
 
-  .dots i:nth-child(2) {
-    animation-delay: 0.15s;
+  .correct input {
+    min-height: var(--target);
+    padding: 0 var(--space-3);
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-md);
+    background: var(--color-surface);
+    color: var(--color-text);
+    font: inherit;
   }
 
-  .dots i:nth-child(3) {
-    animation-delay: 0.3s;
-  }
-
-  @keyframes breathe {
-    0%,
-    80%,
-    100% {
-      opacity: 0.25;
-    }
-
-    40% {
-      opacity: 1;
-    }
+  .correct .actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
   }
 
   .uses {

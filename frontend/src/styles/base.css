@@ -107,3 +107,38 @@ code {
     animation: none !important;
   }
 }
+
+/* Three dots that breathe: something is being looked for. Shared by the guide, the speed test… */
+.dots {
+  display: inline-flex;
+  gap: 4px;
+  margin-right: var(--space-2);
+}
+
+.dots i {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: var(--color-accent);
+  animation: breathe 1.2s ease-in-out infinite;
+}
+
+.dots i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.dots i:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes breathe {
+  0%,
+  80%,
+  100% {
+    opacity: 0.25;
+  }
+
+  40% {
+    opacity: 1;
+  }
+}

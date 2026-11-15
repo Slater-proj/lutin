@@ -429,6 +429,26 @@ class Chat(unittest.TestCase):
         self.addCleanup(history.stop)
         return flag
 
+    def test_5g_the_memory_given_to_models_can_be_corrected_in_the_guide(self):
+        p = self.page
+        self.addCleanup(lambda: T.A.enregistrer_reglages({"budget_go": 0.0}))
+        p.evaluer("location.hash = '#/models'")
+        p.attendre("!!document.querySelector('.tabs')")
+        p.evaluer("document.querySelectorAll('.tabs button')[0].click()")
+        p.attendre("!!document.querySelector('.guide .correct summary')")
+        p.evaluer("document.querySelector('.guide .correct summary').click()")
+        self.assertIn("RTX 4070", p.evaluer("document.querySelector('.guide .machine .summary').innerText"))
+        p.evaluer("(() => { const box = document.querySelector('#budget'); box.value = '2'; box.dispatchEvent(new Event('input', {bubbles: true})); box.form.requestSubmit(); })()")
+        p.attendre("[...document.querySelectorAll('.guide .correct .button')].some(b => b.innerText.startsWith('Revenir'))")
+        self.eventually(lambda: T.A.reglages()["budget_go"] == 2.0, "the figure is kept by the server")
+        if AXE.is_file():
+            self.axe("with the memory correction open")
+        p.evaluer("[...document.querySelectorAll('.guide .correct .button')].find(b => b.innerText.startsWith('Revenir')).click()")
+        p.attendre("![...document.querySelectorAll('.guide .correct .button')].some(b => b.innerText.startsWith('Revenir'))")
+        self.eventually(lambda: T.A.reglages()["budget_go"] == 0.0, "back to the detection")
+        self.assertEqual(p.erreurs, [])
+        p.evaluer("location.hash = '#/chat'")
+
     def test_5e_the_first_launch_leads_to_a_model_and_the_chat(self):
         p = self.page
         flag = self.first_launch()
@@ -436,6 +456,7 @@ class Chat(unittest.TestCase):
         p.attendre("!!document.querySelector('.setup h1')")
         self.assertEqual(p.evaluer("document.querySelector('.setup h1').innerText"), "Bienvenue dans Lutin")
         self.assertFalse(p.evaluer("!!document.querySelector('nav')"), "the guide replaces the shell: no navigation to wander off with")
+        self.assertEqual(p.evaluer("document.querySelectorAll('.setup .language input[type=radio]').length"), 3, "the language is offered on the first screen: French, English, like the system")
         self.assertEqual(p.evaluer("document.querySelector('.steps li[aria-current=step] .label').innerText"), "Bienvenue")
         if AXE.is_file():
             self.axe("on the welcome of the first launch")
@@ -466,6 +487,13 @@ class Chat(unittest.TestCase):
         p.evaluer("[...document.querySelectorAll('.setup .button.primary')].find(b => ['Continuer', 'Choisir plus tard'].includes(b.innerText)).click()")
         p.attendre("document.querySelector('.setup h1') && document.querySelector('.setup h1').innerText === 'Tout est prêt'")
         self.assertFalse(flag.exists(), "not recorded before the end")
+        with mock.patch.object(api_v1, "_measure_speed", return_value=33.0), mock.patch.object(api_v1, "SPEED", dict(api_v1.SPEED)):
+            p.attendre("!!document.querySelector('.setup .speed')")
+            self.assertEqual(p.evaluer("document.querySelector('.setup .speed .button.primary').innerText"), "Oui, mesurer", "the test is offered, as a choice: nothing runs before the click")
+            self.assertEqual(api_v1.SPEED["state"], "idle")
+            p.evaluer("document.querySelector('.setup .speed .button.primary').click()")
+            p.attendre("!!document.querySelector('.setup .speed [role=status]') && document.querySelector('.setup .speed [role=status]').innerText.includes('Rapide')", 15)
+            self.assertIn("33", p.evaluer("document.querySelector('.setup .speed').innerText"))
         if AXE.is_file():
             self.axe("on the last step")
         p.evaluer("[...document.querySelectorAll('.setup .button.primary')].find(b => b.innerText === 'Ouvrir le chat').click()")
