@@ -668,6 +668,35 @@ class Chat(unittest.TestCase):
         self.assertEqual(p.erreurs, [])
         p.evaluer("location.hash = '#/chat'")
 
+    def test_5n_a_notification_channel_is_added_tested_and_removed_in_the_settings(self):
+        p = self.page
+        from lutin import notifications
+        self.addCleanup(lambda: [notifications.remove(channel["id"]) for channel in notifications.list_channels()])
+        sent = []
+        patch = mock.patch.object(notifications, "_post", side_effect=lambda *args, **kwargs: sent.append(args) or True)
+        patch.start()
+        self.addCleanup(patch.stop)
+        p.evaluer("location.hash = '#/settings'")
+        p.attendre("!!document.querySelector('#notification-kind')")
+        p.evaluer("(() => { const box = document.querySelector('#notification-kind'); box.value = 'ntfy'; box.dispatchEvent(new Event('change', {bubbles: true})); })()")
+        p.attendre("!!document.querySelector('#notification-sujet')")
+        p.evaluer("(() => { const set = (id, value) => { const box = document.querySelector(id); box.value = value; box.dispatchEvent(new Event('input', {bubbles: true})); }; set('#notification-name', 'My phone'); set('#notification-sujet', 'lutin_demo'); document.querySelector('.notifications .add').requestSubmit(); })()")
+        p.attendre("[...document.querySelectorAll('.notifications .list strong')].some(e => e.innerText === 'My phone')")
+        self.assertEqual([(channel["nom"], channel["type"]) for channel in notifications.list_channels()], [("My phone", "ntfy")])
+        if AXE.is_file():
+            self.axe("on the notification channels")
+        p.evaluer("[...document.querySelectorAll('.notifications .list .button')].find(b => b.innerText === 'Envoyer un test').click()")
+        p.attendre("!!document.querySelector('.notifications .done')")
+        self.assertEqual(len(sent), 1, "the test message goes through the channel")
+        p.evaluer("[...document.querySelectorAll('.notifications .list .button')].find(b => b.innerText === 'Retirer').click()")
+        p.attendre("!!document.querySelector('.notifications .confirm')")
+        self.assertEqual(len(notifications.list_channels()), 1, "asking is not removing")
+        p.evaluer("document.querySelector('.notifications .confirm .danger').click()")
+        p.attendre("!document.querySelector('.notifications .list')")
+        self.assertEqual(notifications.list_channels(), [])
+        self.assertEqual(p.erreurs, [])
+        p.evaluer("location.hash = '#/chat'")
+
     def test_5e_the_first_launch_leads_to_a_model_and_the_chat(self):
         p = self.page
         flag = self.first_launch()

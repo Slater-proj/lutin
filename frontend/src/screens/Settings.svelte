@@ -4,6 +4,7 @@
   import { onMount } from "svelte";
   import ApprovalRules from "../components/ApprovalRules.svelte";
   import Devices from "../components/Devices.svelte";
+  import Notifications from "../components/Notifications.svelte";
   import LanguageChoice from "../components/LanguageChoice.svelte";
   import { api, ApiError } from "../lib/api";
   import { t, type MessageKey } from "../lib/messages";
@@ -122,6 +123,7 @@
 
     <div class="group"><Devices /></div>
     <div class="group"><ApprovalRules /></div>
+    <div class="group"><Notifications /></div>
 
     {#each GROUPS as group (group)}
       {#if group === "sampling"}

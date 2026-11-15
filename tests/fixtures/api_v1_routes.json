@@ -166,6 +166,26 @@
  },
  {
   "method": "GET",
+  "path": "/api/v1/notification-channels",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/notification-channels",
+  "right": "configurator"
+ },
+ {
+  "method": "DELETE",
+  "path": "/api/v1/notification-channels/{id}",
+  "right": "configurator"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/notification-channels/{id}/test",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
   "path": "/api/v1/projects",
   "right": "session"
  },

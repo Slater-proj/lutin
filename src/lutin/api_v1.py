@@ -34,6 +34,7 @@ from . import mission as _mission
 from . import model_compat as _model_compat
 from . import model_fit as _model_fit
 from . import offline as _offline
+from . import notifications as _notifications
 from . import scheduled_tasks as _scheduled_tasks
 from . import security as _sec
 from . import storage as _storage
@@ -868,6 +869,52 @@ def stop_scheduled_task(request):
     _scheduled_one(request.params["id"])
     _scheduled_tasks.arreter(request.params["id"])
     return {"stopped": True}
+
+
+# --------------------------------------------------------------------------------------------------------- notification channels
+# Where Lutin sends a message when a scheduled task is done (Gotify, ntfy, Telegram, a webhook). A secret (token, webhook address) is never given back: only whether it is set.
+def _channels_view():
+    types = [{"id": kind["id"], "name": kind["nom"], "fields": [{"key": field["cle"], "label": field["libelle"], "required": field["obligatoire"], "secret": field["secret"]} for field in kind["champs"]]}
+             for kind in _notifications.channel_types()]
+    channels = [{"id": channel["id"], "name": channel["nom"], "type": channel["type"], "type_name": channel["type_nom"], "params": channel["params"], "secrets_set": channel["secrets_definis"]}
+                for channel in _notifications.list_channels()]
+    return {"types": types, "channels": channels}
+
+
+def _channel_one(identifier):
+    if _notifications.find(identifier) is None:
+        raise ApiError(404, "not_found", _t("Ce canal n'existe plus."))
+
+
+@route("GET", "/notification-channels", SESSION)
+def notification_channels(request):
+    """The channels (without their secrets: `secrets_set` names the ones that are set) and the kinds that can be added, with the fields each one asks for."""
+    return _channels_view()
+
+
+@route("POST", "/notification-channels", CONFIGURATOR)
+def add_notification_channel(request):
+    """{"name", "type": "gotify" | "ntfy" | "telegram" | "webhook", "params": {field: value}}: adds a channel. Refused (400) with what to correct. At most ten channels."""
+    body = request.body
+    if not isinstance(body.get("name"), str) or not isinstance(body.get("type"), str) or not isinstance(body.get("params", {}), dict):
+        raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("name, type, params"))
+    _notifications.add(body["name"], body["type"], body.get("params", {}))
+    return 201, _channels_view()
+
+
+@route("DELETE", "/notification-channels/{id}", CONFIGURATOR)
+def remove_notification_channel(request):
+    """Removes the channel. A scheduled task that named it keeps working and simply stops notifying."""
+    _channel_one(request.params["id"])
+    _notifications.remove(request.params["id"])
+    return _channels_view()
+
+
+@route("POST", "/notification-channels/{id}/test", CONFIGURATOR)
+def test_notification_channel(request):
+    """Sends a test message through the channel. Refused (400) with the reason when the service does not answer or refuses it."""
+    _channel_one(request.params["id"])
+    return _notifications.test_channel(request.params["id"])
 
 
 # --------------------------------------------------------------------------------------------------------- conversations
