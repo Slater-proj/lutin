@@ -1,6 +1,21 @@
 [
  {
   "method": "GET",
+  "path": "/api/v1/addons",
+  "right": "session"
+ },
+ {
+  "method": "PATCH",
+  "path": "/api/v1/addons/{id}",
+  "right": "configurator"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/addons/{id}/check",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
   "path": "/api/v1/approval-rules",
   "right": "session"
  },

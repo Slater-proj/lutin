@@ -34,6 +34,7 @@ from . import mission as _mission
 from . import model_compat as _model_compat
 from . import model_fit as _model_fit
 from . import offline as _offline
+from . import addons as _addons
 from . import mcp as _mcp
 from . import notifications as _notifications
 from . import scheduled_tasks as _scheduled_tasks
@@ -916,6 +917,69 @@ def test_notification_channel(request):
     """Sends a test message through the channel. Refused (400) with the reason when the service does not answer or refuses it."""
     _channel_one(request.params["id"])
     return _notifications.test_channel(request.params["id"])
+
+
+# --------------------------------------------------------------------------------------------------------- add-ons
+# An add-on connects Lutin to a service (mail, Telegram, X, ComfyUI, a voice studio). Each one describes itself (its steps, the settings it asks for, the hosts it talks to):
+# this is all a page needs to draw it. The value of a secret is never given back, only whether it is set. Not in v1 yet: the live panel of an add-on (the pairing code of
+# Telegram, the drafts), its actions, and the editor of its calls.
+def _addon_view(identifier):
+    entry = _addons.decrire(identifier)
+    settings = []
+    for entry_field in entry["reglages"]:
+        item = {"key": entry_field["cle"], "secret": bool(entry_field.get("secret")), "multiline": bool(entry_field.get("texte")), "label": entry_field.get("libelle") or "", "help": entry_field.get("aide") or "",
+                "default": entry_field.get("defaut") or "", "choices": [{"value": choice[0], "label": choice[1]} for choice in entry_field["choix"]] if entry_field.get("choix") else None}
+        if item["secret"]:
+            item["set"] = bool(entry_field.get("defini"))
+        else:
+            item["value"] = entry_field.get("valeur") or ""
+        settings.append(item)
+    check = entry["verification"]
+    return {"id": entry["id"], "name": entry["nom"], "description": entry["description"], "doc": entry["doc"], "hosts": entry["hotes"],
+            "steps": [{"title": step.get("titre", ""), "text": step.get("texte", "")} for step in entry["etapes"]], "settings": settings, "missing": entry["a_configurer"],
+            "active": entry["actif"], "state": entry["etat"], "stream_modified": bool(entry["flux_modifie"]),
+            "check": None if not check else {"ok": bool(check["ok"]), "at": check["date"], "steps": [{"call": step["appel"], "ok": bool(step["ok"]), "message": step["message"]} for step in check["etapes"]]}}
+
+
+def _addons_view():
+    return {"addons": [_addon_view(identifier) for identifier in _addons.ids()], "alerts": [{"id": alert["id"], "name": alert["nom"]} for alert in _addons.alertes()]}
+
+
+def _addon_one(identifier):
+    if identifier not in _addons.ids():
+        raise ApiError(404, "not_found", _t("Cet addon n'existe pas."))
+
+
+@route("GET", "/addons", SESSION)
+def addons(request):
+    """The add-ons: what each does (`steps`, `hosts` it talks to), the `settings` it asks for (a secret says only whether it is `set`), what is `missing` before it can start, `active`, the last `check`, and the `alerts` (active add-ons whose last check failed)."""
+    return _addons_view()
+
+
+@route("PATCH", "/addons/{id}", CONFIGURATOR)
+def change_addon(request):
+    """{"settings": {key: value}} saves settings (an empty secret keeps the old one; an unknown key is refused), and/or {"active": true|false} starts or stops the add-on: starting runs a check first and is refused (400) with the reason when it fails."""
+    body, identifier = request.body, request.params["id"]
+    _addon_one(identifier)
+    if set(body) - {"settings", "active"} or not body or not isinstance(body.get("settings", {}), dict) or not isinstance(body.get("active", True), bool):
+        raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("settings, active"))
+    try:
+        if "settings" in body:
+            _addons.save_settings(identifier, body["settings"])
+        if "active" in body:
+            _addons.activer(identifier, body["active"])
+    except _addons.ErreurAddon as refused:
+        raise ApiError(400, "invalid_request", str(refused)) from None
+    return _addons_view()
+
+
+@route("POST", "/addons/{id}/check", CONFIGURATOR)
+def check_addon(request):
+    """Checks the add-on (the settings are there, then each call of its check: the add-on contacts its own hosts). Answers the check and keeps it."""
+    identifier = request.params["id"]
+    _addon_one(identifier)
+    _addons.check(identifier)
+    return _addon_view(identifier)["check"]
 
 
 # --------------------------------------------------------------------------------------------------------- MCP connectors

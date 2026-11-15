@@ -2,6 +2,7 @@
   // The Agents screen: what Lutin does by itself. For now, the scheduled tasks: a request carried out at a time of the week, or once on a date, always in the same
   // conversation. Managing them is for the machine itself (the server refuses a paired device and says so). Nothing runs because a form was opened.
   import { onMount } from "svelte";
+  import Addons from "../components/Addons.svelte";
   import Connectors from "../components/Connectors.svelte";
   import { api, ApiError } from "../lib/api";
   import { language, t, type MessageKey } from "../lib/messages";
@@ -145,9 +146,9 @@
 
   {#if data}
     {#if data.tasks.length === 0}
-      <p class="empty">{t("tasks.none")}</p>
+      <p class="empty tasks-empty">{t("tasks.none")}</p>
     {:else}
-      <ul class="list" aria-label={t("tasks.title")}>
+      <ul class="list tasks" aria-label={t("tasks.title")}>
         {#each data.tasks as task (task.id)}
           <li class="card" class:paused={!task.active}>
             <div class="what">
@@ -233,6 +234,8 @@
   {:else if !problem}
     <p class="muted">{t("tasks.loading")}</p>
   {/if}
+
+  <Addons />
 
   <Connectors />
 </div>
