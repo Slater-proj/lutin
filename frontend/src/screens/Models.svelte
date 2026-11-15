@@ -1,6 +1,7 @@
 <script lang="ts">
   // The Models screen: what is installed, which one Lutin uses, a download with its progress, and deleting a model.
   import { onMount } from "svelte";
+  import Engines from "../components/Engines.svelte";
   import ModelGuide from "../components/ModelGuide.svelte";
   import { api, ApiError } from "../lib/api";
   import { formatBytes, percent } from "../lib/format";
@@ -13,7 +14,7 @@
   let problem = $state("");
   let name = $state("");
   let asking = $state(false);
-  let tab = $state<"recommended" | "installed" | "unset">("unset"); // chosen once the list is known: the guide when nothing is installed, the list otherwise
+  let tab = $state<"recommended" | "installed" | "engines" | "unset">("unset"); // chosen once the list is known: the guide when nothing is installed, the list otherwise
 
   const lang = language();
   const downloading = $derived(models?.downloads.some((download) => download.state === "downloading") ?? false);
@@ -116,10 +117,13 @@
   <div class="tabs" role="group" aria-label={t("models.tabs")}>
     <button type="button" class:on={tab === "recommended"} aria-pressed={tab === "recommended"} onclick={() => (tab = "recommended")}>{t("models.tab_recommended")}</button>
     <button type="button" class:on={tab === "installed"} aria-pressed={tab === "installed"} onclick={() => (tab = "installed")}>{t("models.tab_installed")}</button>
+    <button type="button" class:on={tab === "engines"} aria-pressed={tab === "engines"} onclick={() => (tab = "engines")}>{t("models.tab_engines")}</button>
   </div>
 
   {#if tab === "recommended"}
     <ModelGuide onstarted={() => void guarded(load)} onuse={use} />
+  {:else if tab === "engines"}
+    <Engines onchanged={() => { void guarded(load); onchanged(); }} />
   {:else if tab === "installed"}
   <form class="add" onsubmit={install}>
     <label for="model-name">{t("models.add_expert")}</label>

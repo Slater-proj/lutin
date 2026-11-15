@@ -59,7 +59,7 @@ the engine state, the installed models with their size, the one in use, « use �
 | Installed models, use, delete | done |
 | Download by name, progress | done |
 | Recommended models for this machine (catalogue, fit verdict, compatibility with the engine) | **missing**: needs a v1 route and a design (several engines, verdicts from `model_fit` and `model_compat`) |
-| Choice and start of an engine, engine installation | missing: no engines in v1 yet; the screen links to the present interface |
+| Choice and start of an engine, engine installation | done: an « Engines » tab (state, in use, start, stop, install, update, reinstall, uninstall with a confirmation that says what it does, the task in progress with its progress and a cancel); verified in Chrome (test 5k) against the fake engines, nothing is installed by the tests |
 | Search a model on Hugging Face, quantisations, models of other machines | missing |
 | Onboarding with hardware detection and a recommended configuration (plan step 4) | missing |
 

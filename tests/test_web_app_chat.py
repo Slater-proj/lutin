@@ -555,6 +555,27 @@ class Chat(unittest.TestCase):
         self.assertEqual(p.erreurs, [])
         p.evaluer("location.hash = '#/chat'")
 
+    def test_5k_the_engines_are_listed_and_an_action_that_changes_the_machine_waits_for_a_click(self):
+        p = self.page
+        p.evaluer("location.hash = '#/models'")
+        p.attendre("!!document.querySelector('.tabs')")
+        p.evaluer("document.querySelectorAll('.tabs button')[2].click()")
+        p.attendre("document.querySelectorAll('.engines .card').length >= 2")
+        self.assertEqual(p.evaluer("document.querySelectorAll('.engines .card.current').length"), 1, "one engine is in use")
+        if AXE.is_file():
+            self.axe("on the engines tab")
+        other = "[...document.querySelectorAll('.engines .card')].find(c => !c.classList.contains('current'))"
+        self.assertTrue(p.evaluer(other + ".querySelector('.button.primary').innerText === 'Utiliser ce moteur'"), "another engine can be chosen")
+        asked = p.evaluer("(() => { const buttons = [...document.querySelectorAll('.engines .card .button')].filter(b => ['Installer', 'Désinstaller', 'Réinstaller', 'Mettre à jour'].includes(b.innerText)); return buttons.length ? buttons[0].innerText : ''; })()")
+        if asked:
+            p.evaluer("[...document.querySelectorAll('.engines .card .button')].find(b => b.innerText === %s).click()" % js(asked))
+            p.attendre("!!document.querySelector('.engines .confirm')")
+            self.assertTrue(p.evaluer("document.querySelector('.engines .confirm p:nth-of-type(2)').innerText.length > 5"), "it says what it does before it does it")
+            p.evaluer("[...document.querySelectorAll('.engines .confirm .button')].find(b => !b.classList.contains('primary')).click()")
+            p.attendre("!document.querySelector('.engines .confirm')")
+        self.assertEqual(p.erreurs, [])
+        p.evaluer("location.hash = '#/chat'")
+
     def test_5e_the_first_launch_leads_to_a_model_and_the_chat(self):
         p = self.page
         flag = self.first_launch()

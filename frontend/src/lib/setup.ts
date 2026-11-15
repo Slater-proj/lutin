@@ -22,6 +22,10 @@ export interface EngineView {
   installed: boolean;
   running: boolean;
   version: string;
+  description: string;
+  detail: string;
+  strengths: string[];
+  weaknesses: string[];
   actions: Record<"install" | "uninstall" | "reinstall" | "start" | "stop" | "update", EngineAction>;
   task: EngineTask | null;
 }
