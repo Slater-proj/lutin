@@ -1288,6 +1288,40 @@ def horodatage():
     return datetime.now().isoformat(timespec="seconds")
 
 
+LECTURES_ENSEMBLE = 4          # au plus quatre lectures à la fois : le disque, pas le processeur, est la limite
+
+
+def lectures_groupees(appels, preparer, executer, autorises):
+    """Les appels d'une même étape qui ne font que LIRE (tool_table.batchable) et se suivent sont lancés ensemble : {position: Future}. Tout le reste reste séquentiel,
+    et la boucle garde l'ordre des appels pour les évènements et pour la conversation. Une lecture seule n'est pas lancée d'avance : il n'y a rien à gagner.
+    Une lecture lancée d'avance dont la boucle ne veut finalement pas (appel répété, arrêt) est simplement ignorée : elle n'a rien changé."""
+    from concurrent.futures import ThreadPoolExecutor
+    from . import tool_table
+    lisibles = tool_table.batchable()
+    groupes, courant = [], []
+    for position, appel in enumerate(appels):
+        nom = (appel.get("function") or {}).get("name", "")
+        if nom in lisibles and nom in autorises:
+            courant.append((position, nom, (appel.get("function") or {}).get("arguments")))
+        else:
+            if len(courant) > 1:
+                groupes.append(courant)
+            courant = []
+    if len(courant) > 1:
+        groupes.append(courant)
+    if not groupes:
+        return {}
+    avance = {}
+    bassin = ThreadPoolExecutor(max_workers=LECTURES_ENSEMBLE, thread_name_prefix="lecture")
+    try:
+        for groupe in groupes:
+            for position, nom, brut in groupe:
+                avance[position] = bassin.submit(lambda n=nom, b=brut: executer(n, preparer(n, b)))
+    finally:
+        bassin.shutdown(wait=False)          # les lectures lancées se terminent ; la boucle attend chacune à son tour
+    return avance
+
+
 def tour(conv, texte, emit, r=None, stop=None, remplacer_depuis=None, identite="", lecture_seule=False, images=(), pieces=()):
     """Un tour de conversation : message de l'utilisateur, puis la boucle de l'agent (réponse, outils, réponse...). emit(evenement) envoie à la page.
     stop (threading.Event) : déclenché par le bouton Arrêter ; le tour s'arrête alors pour de bon (modèle, outils, accords). Fermer la page ne l'arrête pas.
@@ -1878,6 +1912,8 @@ def boucle_agent(conv, r, emit, ctx, stop):
         conv["messages"].append(message)
         if not appels:
             break
+        avance = lectures_groupees(appels, lambda nom, brut: normaliser_arguments(nom, brut, next((t["function"].get("parameters") for t in outils if t["function"]["name"] == nom), None)),
+                                   lambda nom, args: _m.call_tool(nom, args, ctx), ctx["outils_autorises"])
         for position, a in enumerate(appels):
             if stop.is_set():                        # arrêt demandé : les appels restants reçoivent une réponse, pour garder une conversation cohérente
                 for b in appels[position:]:
@@ -1896,6 +1932,8 @@ def boucle_agent(conv, r, emit, ctx, stop):
                     resultat = _boucles.Guard.message(repetitions)
                 elif nom not in ctx["outils_autorises"]:
                     raise _m.ErreurOutil("L'outil « {} » n'est pas disponible ici (mode ou option désactivés). Outils disponibles : {}.".format(nom, ", ".join(sorted(ctx["outils_autorises"]))))
+                elif position in avance:
+                    resultat = avance[position].result()          # lu en même temps que les lectures voisines ; l'ordre des évènements reste celui des appels
                 else:
                     resultat = _m.call_tool(nom, args, ctx)
             except _m.Arret:

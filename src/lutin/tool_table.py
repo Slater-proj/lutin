@@ -65,5 +65,11 @@ def research_tools():
     return names(READ, NOTES) - {"etat_outil"}          # the state of the image tool belongs to the optional image extension (modes.IMAGE_TOOLS)
 
 
+def batchable():
+    """The tools whose calls can run together inside one step: they read the working folder or compute, touch nothing shared and ask nothing.
+    Not the web (a page read changes how the rest of the turn is trusted), not the recall (it talks to the engine, which answers one request at a time)."""
+    return {name for name, tool in TABLE.items() if tool.effect == READ and not tool.network} - {"rappeler"}
+
+
 def asking():
     return {name for name, tool in TABLE.items() if tool.asks}
