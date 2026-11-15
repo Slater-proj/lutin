@@ -519,6 +519,16 @@ class Chat(unittest.TestCase):
         if AXE.is_file():
             self.axe("on the Projects screen")
         form = "(() => { const set = (id, value) => { const box = document.querySelector(id); box.value = value; box.dispatchEvent(new Event('input', {bubbles: true})); }; set('#project-path', %s); set('#project-name', 'Demo folder'); document.querySelector('.add').requestSubmit(); })()"
+        (Path(folder) / "inner").mkdir()
+        p.evaluer("(() => { const box = document.querySelector('#project-path'); box.value = %s; box.dispatchEvent(new Event('input', {bubbles: true})); [...document.querySelectorAll('.projects .add .button')].find(b => b.innerText === 'Parcourir les dossiers').click(); })()" % js(folder))
+        p.attendre("[...document.querySelectorAll('.browser .folder')].some(b => b.innerText === 'inner')")
+        if AXE.is_file():
+            self.axe("on the Projects screen with the folder browser open")
+        p.evaluer("[...document.querySelectorAll('.browser .folder')].find(b => b.innerText === 'inner').click()")
+        p.attendre("document.querySelector('.browser .path').innerText.endsWith('inner')")
+        p.evaluer("[...document.querySelectorAll('.browser .button')].find(b => b.innerText === 'Utiliser ce dossier').click()")
+        p.attendre("document.querySelector('#project-path').value.endsWith('inner')")
+        self.assertFalse(p.evaluer("!!document.querySelector('.browser')"), "choosing a folder closes the browser")
         p.evaluer(form % js(folder + "-missing"))
         p.attendre("!!document.querySelector('.projects .problem')")
         p.evaluer(form % js(folder))

@@ -1,5 +1,6 @@
 """`/api/v1/projects`: the working folders, on the real server of tests/test_api_v1.py. The folders are temporary ones; the configuration file is the test one."""
 import tempfile
+import urllib.parse
 import unittest
 from pathlib import Path
 
@@ -55,6 +56,25 @@ class Projects(unittest.TestCase):
         self.assertTrue(answer["error"]["message"])
         self.assertEqual(call("POST", "/api/v1/projects", {})[1]["error"]["code"], "invalid_request")
         self.assertEqual(call("POST", "/api/v1/projects/nope/select", {})[1]["error"]["code"], "invalid_request")
+
+    def test_the_folder_browser_lists_sub_folders_only_and_goes_up(self):
+        path = self.folder()
+        (Path(path) / "beta").mkdir()
+        (Path(path) / "Alpha").mkdir()
+        (Path(path) / "a file.txt").write_text("x", encoding="utf-8")
+        status, answer = call("GET", "/api/v1/projects/folders?path=" + urllib.parse.quote(path))
+        self.assertEqual(status, 200)
+        self.assertEqual([entry["name"] for entry in answer["folders"]], ["Alpha", "beta"], "folders only, sorted without regard to case")
+        self.assertEqual(Path(answer["parent"]).resolve(), Path(path).resolve().parent)
+        self.assertIn("path", answer["folders"][0])
+        status, answer = call("GET", "/api/v1/projects/folders")
+        self.assertEqual((status, answer["parent"]), (200, None), "no path: the starting points, nothing above")
+        self.assertTrue(answer["folders"])
+        status, answer = call("GET", "/api/v1/projects/folders?path=" + urllib.parse.quote(str(Path(path) / "missing")))
+        self.assertEqual((status, answer["error"]["code"]), (400, "invalid_request"))
+
+    def test_a_paired_device_may_not_browse_the_disk(self):
+        self.assertEqual(call("GET", "/api/v1/projects/folders", who=V.DEVICE)[1]["error"]["code"], "configurator")
 
     def test_a_paired_device_may_read_and_choose_but_not_add_or_remove(self):
         self.assertEqual(call("GET", "/api/v1/projects", who=V.DEVICE)[0], 200)

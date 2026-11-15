@@ -750,6 +750,13 @@ def add_project(request):
     return 201, _projects_view()
 
 
+@route("GET", "/projects/folders", CONFIGURATOR)
+def browse_folders(request):
+    """The sub-folders of `?path=` (never files), sorted, with the `parent` to go up. Without a path: the starting points (home, documents, drives) and an empty `parent`. Refused with the reason when the folder cannot be read. For the person at this machine only: it shows the disk."""
+    listing = _m.list_folders(request.query.get("path", ""))
+    return {"path": listing["chemin"], "parent": listing["parent"], "folders": [{"name": entry["nom"], "path": entry["chemin"]} for entry in listing["dossiers"]], "truncated": bool(listing.get("tronque"))}
+
+
 @route("POST", "/projects/{id}/select", SESSION)
 def select_project(request):
     """Makes this folder the one the next conversations work in. Refused (409 `workspace_conflict`) while an answer is being written in another folder."""

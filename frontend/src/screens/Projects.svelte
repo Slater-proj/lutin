@@ -15,6 +15,32 @@
   let busy = $state(false);
   let removing = $state("");
 
+  // The folder browser: the sub-folders of one folder, to go down or up, so that nobody has to type a path. Without a path the server gives the starting points.
+  type Listing = { path: string; parent: string | null; folders: { name: string; path: string }[]; truncated: boolean };
+  let browsing = $state(false);
+  let listing = $state<Listing | null>(null);
+  let browseProblem = $state("");
+
+  async function look(where: string): Promise<void> {
+    try {
+      browseProblem = "";
+      listing = await api<Listing>("GET", "/projects/folders" + (where ? `?path=${encodeURIComponent(where)}` : ""));
+    } catch (cause) {
+      browseProblem = explain(cause);
+    }
+  }
+
+  function toggleBrowser(): void {
+    browsing = !browsing;
+    if (browsing && !listing) void look(path.trim());
+  }
+
+  function useFolder(): void {
+    if (!listing?.path) return;
+    path = listing.path;
+    browsing = false;
+  }
+
   function explain(cause: unknown): string {
     if (cause instanceof ApiError) {
       if (cause.code === "configurator") return t("projects.not_here");
@@ -108,6 +134,31 @@
       <label for="project-path">{t("projects.path")}</label>
       <input id="project-path" type="text" bind:value={path} autocomplete="off" spellcheck="false" aria-describedby="project-path-help" />
       <p class="muted" id="project-path-help">{t("projects.path_help")}</p>
+      <div class="actions"><button type="button" class="button" aria-expanded={browsing} aria-controls="folder-browser" onclick={toggleBrowser}>{browsing ? t("projects.browse_close") : t("projects.browse")}</button></div>
+      {#if browsing}
+        <div class="browser" id="folder-browser" role="group" aria-label={t("projects.browse")}>
+          {#if browseProblem}<p class="problem" role="alert">{browseProblem}</p>{/if}
+          {#if listing}
+            <p class="path">{listing.path || t("projects.places")}</p>
+            <div class="actions">
+              {#if listing.parent !== null}<button type="button" class="button" onclick={() => look(listing?.parent ?? "")}>{t("projects.up")}</button>{/if}
+              {#if listing.path}<button type="button" class="button primary" onclick={useFolder}>{t("projects.use_folder")}</button>{/if}
+            </div>
+            {#if listing.folders.length === 0}
+              <p class="muted">{t("projects.no_subfolder")}</p>
+            {:else}
+              <ul class="folders">
+                {#each listing.folders as folder (folder.path)}
+                  <li><button type="button" class="button folder" onclick={() => look(folder.path)}>{folder.name}</button></li>
+                {/each}
+              </ul>
+              {#if listing.truncated}<p class="muted">{t("projects.truncated")}</p>{/if}
+            {/if}
+          {:else if !browseProblem}
+            <p class="muted">{t("projects.loading")}</p>
+          {/if}
+        </div>
+      {/if}
       <label for="project-name">{t("projects.name")}</label>
       <input id="project-name" type="text" bind:value={name} autocomplete="off" />
       <div class="actions"><button type="submit" class="button primary" disabled={busy || !path.trim()}>{t("projects.add")}</button></div>
@@ -236,6 +287,34 @@
     background: var(--color-bg);
     color: var(--color-text);
     font: inherit;
+  }
+
+  .browser {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding: var(--space-3);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-bg);
+  }
+
+  .folders {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    max-height: 16rem;
+    margin: 0;
+    padding: 0;
+    overflow-y: auto;
+    list-style: none;
+  }
+
+  .folder {
+    width: 100%;
+    justify-content: flex-start;
+    overflow-wrap: anywhere;
+    text-align: left;
   }
 
   .danger {

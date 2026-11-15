@@ -175,6 +175,11 @@
   "right": "configurator"
  },
  {
+  "method": "GET",
+  "path": "/api/v1/projects/folders",
+  "right": "configurator"
+ },
+ {
   "method": "DELETE",
   "path": "/api/v1/projects/{id}",
   "right": "configurator"
