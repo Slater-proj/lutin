@@ -151,6 +151,36 @@
  },
  {
   "method": "GET",
+  "path": "/api/v1/scheduled-tasks",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/scheduled-tasks",
+  "right": "configurator"
+ },
+ {
+  "method": "DELETE",
+  "path": "/api/v1/scheduled-tasks/{id}",
+  "right": "configurator"
+ },
+ {
+  "method": "PATCH",
+  "path": "/api/v1/scheduled-tasks/{id}",
+  "right": "configurator"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/scheduled-tasks/{id}/run",
+  "right": "configurator"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/scheduled-tasks/{id}/stop",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
   "path": "/api/v1/settings",
   "right": "session"
  },

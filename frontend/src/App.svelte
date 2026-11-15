@@ -9,6 +9,7 @@
   import Chat from "./screens/Chat.svelte";
   import Models from "./screens/Models.svelte";
   import Setup from "./screens/Setup.svelte";
+  import Agents from "./screens/Agents.svelte";
   import ComingSoon from "./screens/ComingSoon.svelte";
   import Projects from "./screens/Projects.svelte";
   import Settings from "./screens/Settings.svelte";
@@ -82,6 +83,8 @@
       <Chat {status} onchanged={refreshStatus} />
     {:else if area === "models"}
       <Models {status} onchanged={refreshStatus} />
+    {:else if area === "agents"}
+      <Agents />
     {:else if area === "projects"}
       <Projects />
     {:else if area === "settings"}

@@ -12,7 +12,7 @@ This page says what exists, what was verified and how, and what is missing. It i
 | A shipped build that no longer matches its sources is detected | done — same hash computed by the build and by Python |
 | Built by the CI before tests and packaging; wheel checked for the built files | written, **never run**: the branch has not been pushed |
 | Design tokens, light and dark themes, theme kept per browser | done |
-| Shell with the five areas (Chat, Agents, Projects, Models, Settings), icons, navigation bar at the bottom on a phone | done; Agents says « not here yet » and link to the present page |
+| Shell with the five areas (Chat, Agents, Projects, Models, Settings), icons, navigation bar at the bottom on a phone | done; all five areas exist (some only in part: see each one) |
 | Texts in English and French | done — a unit test fails on a missing French text |
 | Base components (button, card, field…) as shared components | not yet: styles are shared classes, components come with the second screen |
 | Offline: no font, no CDN, nothing fetched from another origin | done — enforced by the policy |
@@ -39,6 +39,11 @@ A real finding on the way: the models folder of the development machine is on a 
 
 Every setting of `/api/v1/settings` in six groups (answers, safety, web and memory, this machine, tools, sampling), each kept as soon as it is changed: a switch, a choice, a number (checked against its range before it is sent), a list (one line per item). What removes a question (writing or running without asking, commands always allowed) is marked « take care ». Language is chosen here too. Verified in Chrome (`tests/test_web_app_chat.py`, test 5h) and by the automatic accessibility checks in both themes and at 360 px.
 Not on this screen yet: the engine and the machine used for conversations (Models), the paired devices, the connectors, notifications and addons of the present page.
+
+## Agents
+
+For now the scheduled tasks: the list with when, the next run, the state of the last one and its ten last runs; add a task (a name, what Lutin should do, a time, days of the week or one date); run it now, stop it, pause and resume it, delete it (with a confirmation). The list is read again every five seconds. Managing is for the machine itself. Verified in Chrome (test 5j) and by the accessibility checks.
+Missing: editing a task (delete and add again), its working folder and its notification channel in the form, the missions and the addons (mail, Telegram, X, ComfyUI, voice) of the present page, the connectors (MCP) and the skills.
 
 ## Projects
 

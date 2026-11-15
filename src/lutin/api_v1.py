@@ -33,6 +33,7 @@ from . import mission as _mission
 from . import model_compat as _model_compat
 from . import model_fit as _model_fit
 from . import offline as _offline
+from . import scheduled_tasks as _scheduled_tasks
 from . import security as _sec
 from . import storage as _storage
 from . import workspaces as _workspaces
@@ -691,6 +692,99 @@ def remove_project(request):
     """Takes the folder out of the list. Nothing in it is deleted, except with `?clean=1`: the copies of conversations that Lutin itself wrote there, never another file."""
     result = _m.remove_work(request.params["id"], request.query.get("clean") == "1")
     return dict(_projects_view(), copies_removed=result.get("copies_supprimees", 0))
+
+
+# --------------------------------------------------------------------------------------------------------- scheduled tasks
+# A request that Lutin carries out by itself at a time of the week (or once, on a date), in the same conversation each time.
+TASK_RUN_STATES = {"": "never", "ok": "ok", "erreur": "failed", "arretee": "stopped", "en_cours": "running", "interrompue": "interrupted"}
+
+
+def _scheduled_view(task):
+    state = TASK_RUN_STATES.get(task.get("derniere_etat", ""), task.get("derniere_etat", ""))
+    history = [{"at": item.get("date", ""), "state": TASK_RUN_STATES.get(item.get("etat", ""), item.get("etat", "")), "seconds": item.get("duree_s", 0), "error": item.get("erreur", "")}
+               for item in task.get("historique") or []]
+    return {"id": task["id"], "name": task["nom"], "request": task["prompt"], "time": task["heure"], "days": task.get("jours") or [], "date": task.get("date") or "",
+            "project": task.get("travail") or "", "notify": task.get("notifier") or "", "active": bool(task.get("actif")), "next_run": task.get("prochaine") or "",
+            "running": bool(task.get("en_cours")), "last_run_at": task.get("derniere_exec") or "", "last_state": state, "last_error": task.get("derniere_erreur") or "",
+            "conversation": task.get("derniere_conv") or "", "history": history}
+
+
+def _scheduled_list():
+    return {"tasks": [_scheduled_view(task) for task in _scheduled_tasks.state()["taches"]]}
+
+
+def _scheduled_one(identifier):
+    task = next((task for task in _scheduled_tasks.state()["taches"] if task["id"] == identifier), None)
+    if task is None:
+        raise ApiError(404, "not_found", _t("Cette tâche planifiée n'existe plus."))
+    return task
+
+
+@route("GET", "/scheduled-tasks", SESSION)
+def scheduled_tasks(request):
+    """The scheduled tasks, with the next run, the state of the last one (`never`, `running`, `ok`, `failed`, `stopped`, `interrupted`) and the ten last runs."""
+    return _scheduled_list()
+
+
+SCHEDULED_FIELDS = {"name": "nom", "request": "prompt", "time": "heure", "days": "jours", "date": "date", "project": "travail", "notify": "notifier"}
+
+
+@route("POST", "/scheduled-tasks", CONFIGURATOR)
+def add_scheduled_task(request):
+    """{"name", "request", "time": "08:30", "days": [0..6] (Monday is 0) or "date": "2026-12-31" for a single run, "project" (optional), "notify" (optional channel)}."""
+    body = request.body
+    unknown = sorted(set(body) - set(SCHEDULED_FIELDS))
+    if unknown:
+        raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format(", ".join(SCHEDULED_FIELDS)))
+    task = _scheduled_tasks.add(body.get("name"), body.get("request"), body.get("time"), body.get("days"), body.get("project", ""), body.get("notify", ""), body.get("date", ""))
+    return 201, _scheduled_view(_scheduled_one(task["id"]))
+
+
+@route("PATCH", "/scheduled-tasks/{id}", CONFIGURATOR)
+def change_scheduled_task(request):
+    """Any of the fields of the creation, and `active` (false pauses the task). Changing the moment starts the task again from now: it does not catch up an hour that has just passed."""
+    body, identifier = request.body, request.params["id"]
+    unknown = sorted(set(body) - set(SCHEDULED_FIELDS) - {"active"})
+    if unknown or not body:
+        raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format(", ".join(list(SCHEDULED_FIELDS) + ["active"])))
+    current = _scheduled_one(identifier)
+    if "active" in body and not isinstance(body["active"], bool):
+        raise ApiError(400, "invalid_request", _t("Valeur invalide pour « {} » (attendu : {}).").format("active", "boolean"))
+    if set(body) - {"active"}:
+        merged = {name: body.get(name, current.get(key)) for name, key in SCHEDULED_FIELDS.items()}
+        _scheduled_tasks.change(identifier, merged["name"], merged["request"], merged["time"], merged["days"], merged["project"], merged["notify"], merged["date"])
+    if "active" in body:
+        _scheduled_tasks.modify(identifier, actif=body["active"])
+    return _scheduled_view(_scheduled_one(identifier))
+
+
+@route("DELETE", "/scheduled-tasks/{id}", CONFIGURATOR)
+def delete_scheduled_task(request):
+    """Deletes the task for good (a task at work is stopped). `?conversation=1` also deletes the conversation it wrote in."""
+    _scheduled_one(request.params["id"])
+    _scheduled_tasks.remove(request.params["id"], request.query.get("conversation") == "1")
+    return _scheduled_list()
+
+
+@route("POST", "/scheduled-tasks/{id}/run", CONFIGURATOR)
+def run_scheduled_task(request):
+    """Runs the task now, in the background (202). Refused (409) while it is already at work or while the machine is busy with as many answers as it allows."""
+    identifier = request.params["id"]
+    _scheduled_one(identifier)
+    if identifier in _scheduled_tasks.EN_COURS:
+        raise ApiError(409, "busy", _t("Cette tâche travaille déjà."))
+    if len(_m.TOURS_ACTIFS) >= _m.TOURS_SIMULTANES:
+        raise ApiError(409, "busy", _t("Une réponse est déjà en cours : attends sa fin."))
+    threading.Thread(target=lambda: _scheduled_tasks.executer(identifier), daemon=True, name="scheduled-run").start()
+    return 202, {"started": True}
+
+
+@route("POST", "/scheduled-tasks/{id}/stop", CONFIGURATOR)
+def stop_scheduled_task(request):
+    """Asks the task at work to stop (it stays scheduled for the next time). Refused with the reason when it is not at work."""
+    _scheduled_one(request.params["id"])
+    _scheduled_tasks.arreter(request.params["id"])
+    return {"stopped": True}
 
 
 # --------------------------------------------------------------------------------------------------------- conversations

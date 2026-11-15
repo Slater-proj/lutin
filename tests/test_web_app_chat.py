@@ -367,16 +367,16 @@ class Chat(unittest.TestCase):
             p.attendre("!!document.querySelector('#setting-temperature')")
             self.axe("on the Settings screen (%s)" % theme)
             p.evaluer("location.hash = '#/agents'")
-            p.attendre("!!document.querySelector('main h1')")
-            self.axe("on a screen that is not there yet (%s)" % theme)
+            p.attendre("!!document.querySelector('#task-name')")
+            self.axe("on the Agents screen (%s)" % theme)
             p.evaluer("location.hash = '#/projects'")
             p.attendre("!!document.querySelector('#project-path')")
             self.axe("on the Projects screen (%s)" % theme)
         p.commande("Emulation.setDeviceMetricsOverride", width=360, height=740, deviceScaleFactor=1, mobile=True)
         try:
-            for screen in ("chat", "models", "settings"):
+            for screen in ("chat", "models", "settings", "projects", "agents"):
                 p.evaluer("location.hash = '#/%s'" % screen)
-                p.attendre("!!document.querySelector('#message, .models, .settings')")
+                p.attendre("!!document.querySelector('#message, .models, .settings, .projects, .agents')")
                 self.axe("on the %s screen at 360 px (%s)" % (screen, theme))
         finally:
             p.commande("Emulation.clearDeviceMetricsOverride")
@@ -518,6 +518,43 @@ class Chat(unittest.TestCase):
         self.assertEqual(p.erreurs, [])
         p.evaluer("location.hash = '#/chat'")
 
+    def test_5j_a_scheduled_task_is_added_paused_run_and_deleted(self):
+        p = self.page
+        from lutin import scheduled_tasks
+        self.addCleanup(lambda: [scheduled_tasks.remove(task["id"]) for task in scheduled_tasks.read()])
+        ran = []
+        patch = mock.patch.object(scheduled_tasks, "executer", side_effect=lambda identifier: ran.append(identifier))
+        patch.start()
+        self.addCleanup(patch.stop)
+        p.evaluer("location.hash = '#/agents'")
+        p.attendre("!!document.querySelector('#task-name')")
+        self.assertTrue(p.evaluer("!!document.querySelector('.agents .empty')"), "no task yet: the page says so and shows the form")
+        fill = "(() => { const set = (id, value) => { const box = document.querySelector(id); box.value = value; box.dispatchEvent(new Event('input', {bubbles: true})); }; set('#task-name', 'Morning notes'); set('#task-request', 'Summarise my notes'); set('#task-time', '07:45'); document.querySelector('.add').requestSubmit(); })()"
+        p.evaluer(fill)
+        p.attendre("!!document.querySelector('.agents .card')")
+        card = "document.querySelector('.agents .card')"
+        self.assertIn("Morning notes", p.evaluer(card + ".innerText"))
+        self.assertIn("07:45", p.evaluer(card + ".querySelector('.when').innerText"))
+        self.assertEqual(p.evaluer(card + ".querySelector('.badge').innerText"), "pas encore lancée")
+        self.assertEqual([task["heure"] for task in scheduled_tasks.read()], ["07:45"], "the server holds the task")
+        if AXE.is_file():
+            self.axe("on the Agents screen with a task")
+        p.evaluer("[...document.querySelectorAll('.agents .card .button')].find(b => b.innerText === 'Mettre en pause').click()")
+        p.attendre("!!document.querySelector('.agents .paused-badge')")
+        self.assertEqual([task["actif"] for task in scheduled_tasks.read()], [False])
+        p.evaluer("[...document.querySelectorAll('.agents .card .button')].find(b => b.innerText === 'Reprendre').click()")
+        p.attendre("!document.querySelector('.agents .paused-badge')")
+        p.evaluer("[...document.querySelectorAll('.agents .card .button')].find(b => b.innerText === 'Lancer maintenant').click()")
+        self.eventually(lambda: len(ran) == 1, "the task is run on request, in the background")
+        p.evaluer("[...document.querySelectorAll('.agents .card .button')].find(b => b.innerText === 'Supprimer').click()")
+        p.attendre("!!document.querySelector('.agents .confirm')")
+        self.assertEqual(len(scheduled_tasks.read()), 1, "asking is not deleting")
+        p.evaluer("document.querySelector('.agents .confirm .danger').click()")
+        p.attendre("!document.querySelector('.agents .card')")
+        self.assertEqual(scheduled_tasks.read(), [])
+        self.assertEqual(p.erreurs, [])
+        p.evaluer("location.hash = '#/chat'")
+
     def test_5e_the_first_launch_leads_to_a_model_and_the_chat(self):
         p = self.page
         flag = self.first_launch()
@@ -591,7 +628,7 @@ class Chat(unittest.TestCase):
             self.assertFalse(p.evaluer("!!document.querySelector('.setup')"), "an existing installation is never taken for a new machine")
         self.assertEqual(p.erreurs, [])
 
-    def test_6_nothing_overflows_at_360_px_and_another_area_says_it_is_not_there_yet(self):
+    def test_6_nothing_overflows_at_360_px_and_the_areas_fit_a_phone(self):
         p = self.page
         p.commande("Emulation.setDeviceMetricsOverride", width=360, height=740, deviceScaleFactor=1, mobile=True)
         try:

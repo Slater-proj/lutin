@@ -134,6 +134,10 @@ Not in v1 yet: the settings of an engine (address, key, folders, variant) and th
 
 A project is a working folder. `GET /api/v1/projects` answers `{"projects": [{"id", "name", "path", "usable", "problem"}], "current"}` (`usable` is false, with the reason in `problem`, for a folder that cannot be used now). `POST /api/v1/projects/{id}/select` makes one the current folder (any session; `409 workspace_conflict` while an answer is being written in another folder). Adding (`POST /api/v1/projects` with `{"path", "name"}`) and removing (`DELETE /api/v1/projects/{id}`, nothing in the folder is deleted; `?clean=1` also removes the copies of conversations Lutin wrote there) need the right `configurator`: the machine itself.
 
+## Scheduled tasks
+
+A request Lutin carries out by itself. `GET /api/v1/scheduled-tasks` answers `{"tasks": [{id, name, request, time, days, date, project, notify, active, next_run, running, last_run_at, last_state, last_error, conversation, history}]}`; `days` are numbers with Monday as 0; `last_state` is `never`, `running`, `ok`, `failed`, `stopped` or `interrupted` (a run cut by a stop of Lutin); `history` keeps the ten last runs. Everything else needs the right `configurator`: `POST` (`name`, `request`, `time` as `HH:MM`, and `days` or a `date` for a single run; `project` and `notify` are optional) answers 201 with the task; `PATCH /{id}` takes any of those fields and `active` (false pauses it; changing the moment starts it again from now); `DELETE /{id}` (`?conversation=1` also deletes its conversation); `POST /{id}/run` (202, in the background; 409 `busy` while it works or two answers are already being written); `POST /{id}/stop` (refused with the reason when it is not at work).
+
 ## First launch
 
 `GET /api/v1/setup` answers `{"done", "needed", "skipped"}`: `needed` says the guide of the first launch should be shown (the maintainer's rule: after the first installation on a new machine).
