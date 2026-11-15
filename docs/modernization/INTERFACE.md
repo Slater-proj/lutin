@@ -28,7 +28,10 @@ Shown **after the first installation on a new machine** (the maintainer's rule);
 | Engine: found and running; installed and stopped → « Start »; missing → « Install » with a confirmation that says what it does (the reason given by the engine); refused in strict offline mode; failure shown with the way to do it by hand | done on the engines routes; the real installation of Ollama is **not tried** (the tests never install a program) |
 | Model: the guide of the Models screen, then the downloads in progress | done |
 | End: the chat opens; a download goes on in the background | done |
-| Language choice, correction of the detected machine, the optional speed test (« fast, behind a yes/no option », decided by the maintainer), pairing a phone | **missing** |
+| Language choice (French, English, like the system) on the first screen | done |
+| Correction of the detected machine: the memory models may fill, in the guide (« this is not my machine ») | done — only that figure; the detected hardware itself is not editable |
+| The optional speed test (yes/no) at the end, Ollama only | done |
+| Pairing a phone | **missing**: needs the devices routes of the v1 (Settings) |
 
 A real finding on the way: the models folder of the development machine is on a disk with 4.7 GB free, and the guide refused a 5.2 GB download with « not enough free space »: the safeguard works on real hardware.
 
@@ -71,13 +74,14 @@ colour use beyond contrast, and the quality of the texts. Not verified either: a
 | Choice of the model | done (changes the setting, as the present page does) |
 | Context gauge, speed, task list | done, during the turn only |
 | Markdown in answers: headings, lists, tables, quotes, links, code blocks with a copy button | done — own parser (`frontend/src/lib/markdown.ts`), no HTML ever interpreted |
-| Syntax colouring of code, diagrams (Mermaid), formulas | missing |
+| Syntax colouring of code (`frontend/src/lib/highlight.ts`: comments, strings, numbers, keywords of about twenty languages, no dependency) | done |
+| Diagrams (Mermaid), formulas | missing |
 | Rename, pin a conversation | done |
 | Edit a message and answer again from it | done |
-| Images and attached documents | done: file dialog, paste of a picture, drop on the field; sent, shown in the message, kept when the message is edited. Missing: download of a sent document; a sign that the chosen model cannot see images |
+| Images and attached documents | done: file dialog, paste of a picture, drop on the field; sent, shown in the message, kept when the message is edited. A sent document is a link that downloads it again; when the model cannot see images, the agent switches to one that can and says so in the thread (a notice). |
 | Per-conversation options: mode, reasoning, web, dry run, automatic approvals, mission duration | done — a panel beside the field; an approval that is on stays visible while the panel is shut |
 | Conversations led on another machine | missing (not in v1 yet) |
-| Reconnecting to a turn still running after a reload | missing: the page shows the stored conversation, not the running answer |
+| Reconnecting to a turn still running after a reload | done in a simple way: the page says an answer is still being written, offers Stop, and shows it when it is stored (it does not show the pieces as they are written) |
 
 This list comes from the routes the present page calls for a conversation; it is not yet a complete audit of the present page, which the acceptance of the
 screen requires (plan step 4: « functional parity with the old page listed and checked »).

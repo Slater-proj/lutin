@@ -137,6 +137,8 @@ A machine counts as new only if **nothing** shows a past use: no flag of the gui
 so an existing installation whose engine is only stopped for a moment never sees the guide. `POST /api/v1/setup/complete` (right `configurator`; `{"skipped": true}` when it was skipped) records that it is over.
 The flag is the file `setup.json` of the data folder.
 
+Three routes serve the end of the guide. `GET`/`PATCH /api/v1/language` (`{"language": "fr" | "en" | "auto"}`, answers `{language, choice}`; pages read the language when they load, so the caller loads the page again). `GET /api/v1/speed-test` and `POST /api/v1/speed-test` (202; refused with 409 `busy` during an answer, `model_missing`, `not_supported` for an engine other than Ollama): one short text written by the model; `state` `idle|running|done|failed`, then `tokens_per_second` and `level` (`slow|fair|comfortable|fast|very_fast`). The memory models may fill is the setting `memory_budget_gb` (0 = calculated from the machine), shown by `GET /machine` as `budget_gb` and `budget_set_gb`.
+
 ## Models
 
 `GET /api/v1/models` gives what the model selector needs: `engine`, `running`, `current`, `models` (`[{"name", "size_bytes"}]`, the size may be null) and
