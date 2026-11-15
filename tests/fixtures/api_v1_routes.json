@@ -91,6 +91,16 @@
  },
  {
   "method": "GET",
+  "path": "/api/v1/language",
+  "right": "session"
+ },
+ {
+  "method": "PATCH",
+  "path": "/api/v1/language",
+  "right": "session"
+ },
+ {
+  "method": "GET",
   "path": "/api/v1/machine",
   "right": "session"
  },
@@ -138,6 +148,16 @@
   "method": "POST",
   "path": "/api/v1/setup/complete",
   "right": "configurator"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/speed-test",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/speed-test",
+  "right": "session"
  },
  {
   "method": "GET",

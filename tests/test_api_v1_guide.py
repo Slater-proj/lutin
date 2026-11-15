@@ -42,11 +42,25 @@ class Machine(unittest.TestCase):
         with known_machine():
             status, answer = get("/api/v1/machine")
         self.assertEqual(status, 200)
-        self.assertEqual(sorted(answer), ["architecture", "budget_gb", "class", "cores", "cpu", "detected", "disks", "gpus", "ram_free_gb", "ram_gb", "summary", "system"])
+        self.assertEqual(sorted(answer), ["architecture", "budget_gb", "budget_set_gb", "class", "cores", "cpu", "detected", "disks", "gpus", "ram_free_gb", "ram_gb", "summary", "system"])
         self.assertEqual((answer["detected"], answer["cpu"], answer["cores"], answer["ram_gb"], answer["class"], answer["budget_gb"]), (True, "AMD Ryzen 7 7700 8-Core Processor", 16, 32.0, "medium", 10.2))
         self.assertEqual(answer["gpus"], [{"name": "NVIDIA GeForce RTX 4070", "vendor": "nvidia", "memory_gb": 12.0, "free_gb": 10.6, "integrated": False}])
         self.assertEqual(answer["disks"], [{"path": "C:\\", "free_gb": 412.0, "total_gb": 931.0}])
         self.assertIn("RTX 4070", answer["summary"])
+
+
+    def test_the_memory_given_to_models_can_be_corrected_by_hand_and_given_back_to_the_detection(self):
+        self.addCleanup(V.call, "PATCH", "/api/v1/settings", V.OWNER, {"memory_budget_gb": 0})
+        with known_machine():
+            self.assertEqual(get("/api/v1/machine")[1]["budget_set_gb"], None)
+            self.assertEqual(V.call("PATCH", "/api/v1/settings", V.OWNER, {"memory_budget_gb": 6})[0], 200)
+            answer = get("/api/v1/machine")[1]
+            self.assertEqual((answer["budget_gb"], answer["budget_set_gb"]), (6.0, 6.0), "the figure given by the person replaces the one Lutin calculates")
+            tight = [m for m in get("/api/v1/models/catalog")[1]["models"] if m["size_gb"] > 6.5 and m["fit"]]
+            self.assertTrue(tight and all(m["fit"]["level"] in ("tight", "too_big") for m in tight), "the verdicts follow the corrected figure")
+            self.assertEqual(V.call("PATCH", "/api/v1/settings", V.OWNER, {"memory_budget_gb": 0})[0], 200)
+            answer = get("/api/v1/machine")[1]
+            self.assertEqual((answer["budget_gb"], answer["budget_set_gb"]), (10.2, None), "0 gives it back to the detection")
 
 
 class Catalog(unittest.TestCase):

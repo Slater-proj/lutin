@@ -66,7 +66,7 @@ class Profil:
     def budget_go(self):
         """Mémoire qu'on accepte de remplir avec un modèle. 85 % de la carte (le bureau en garde un peu) ; sur Mac la mémoire est partagée ; sans carte, la RAM (60 %).
         LUTIN_BUDGET_GO l'impose (serveur partagé avec d'autres services : « 8 » = au plus 8 Go pour les modèles) ; une limite de mémoire du conteneur est déjà prise en compte dans la RAM."""
-        voulu = impose_budget(os.environ.get("LUTIN_BUDGET_GO", ""))
+        voulu = impose_budget(os.environ.get("LUTIN_BUDGET_GO", "")) or impose_budget(USER_BUDGET())          # la variable d'environnement l'emporte sur le réglage
         if voulu:
             return voulu
         g = self.gpu_principal()
@@ -286,6 +286,13 @@ def cpus_available(racine="/sys/fs/cgroup"):
     except (OSError, ValueError):
         pass
     return n
+
+
+def _no_user_budget():
+    return ""
+
+
+USER_BUDGET = _no_user_budget          # remplacé par core : le réglage « budget_go » (en Go, 0 = automatique) ; ce module ne lit pas les réglages lui-même
 
 
 def impose_budget(texte):

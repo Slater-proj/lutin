@@ -16,6 +16,7 @@ import concurrent.futures
 import json
 import os
 import re
+import threading
 import urllib.parse
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -251,7 +252,7 @@ SETTINGS = {
     "top_k": ("top_k", "number?"), "min_p": ("min_p", "number?"), "repeat_penalty": ("repeat_penalty", "number?"), "num_thread": ("num_thread", "integer?"),
     "keep_alive_min": ("garde_min", "integer?"),
     "resource_guard": ("garde_ressources", "boolean"), "ram_threshold_gb": ("seuil_ram_go", "number"), "disk_threshold_gb": ("seuil_disque_go", "number"),
-    "data_cap_gb": ("plafond_donnees_go", "number"), "command_ram_limit_gb": ("limite_ram_commande_go", "number"), "free_for_comfyui": ("liberer_si_comfy", "boolean"),
+    "data_cap_gb": ("plafond_donnees_go", "number"), "memory_budget_gb": ("budget_go", "number"), "command_ram_limit_gb": ("limite_ram_commande_go", "number"), "free_for_comfyui": ("liberer_si_comfy", "boolean"),
     "machine_advice": ("conseil_machine", "boolean"), "routing": ("routage", "boolean"), "cluster": ("cluster", "boolean?"),
     "conversation_backup": ("copie_conversations", "boolean"),
     "long_memory": ("memoire_longue", "string"), "progress_sheet_share": ("fiche_part", "integer"), "progress_sheet_scribe": ("fiche_scribe", "boolean"),
@@ -279,6 +280,22 @@ def _settings(stored):
         value = stored.get(key)
         shown[name] = SETTING_WORDS[name].get(value, value) if name in SETTING_WORDS else value
     return shown
+
+
+@route("GET", "/language", SESSION)
+def language(request):
+    """The language of the page and of the messages: `language` is the one in use, `choice` what was chosen (`fr`, `en`, or `auto` to follow the system)."""
+    return {"language": _i18n.langue(), "choice": _i18n.langue_configuree() or "auto"}
+
+
+@route("PATCH", "/language", SESSION)
+def set_language(request):
+    """{"language": "fr" | "en" | "auto"}. The pages read the language when they load: the caller loads the page again."""
+    value = request.body.get("language")
+    if value not in ("fr", "en", "auto"):
+        raise ApiError(400, "invalid_request", _t("Langue inconnue (fr, en ou auto)."))
+    _i18n.definir(value)
+    return {"language": _i18n.langue(), "choice": _i18n.langue_configuree() or "auto"}
 
 
 @route("GET", "/settings", SESSION)
@@ -383,7 +400,7 @@ def machine(request):
         "ram_gb": profile.ram_go, "ram_free_gb": profile.ram_libre_go or None,
         "gpus": [{"name": gpu.nom, "vendor": gpu.fabricant, "memory_gb": gpu.vram_go, "free_gb": gpu.libre_go or None, "integrated": _hardware.integrated_is(gpu)} for gpu in profile.gpus],
         "disks": [{"path": disk.racine, "free_gb": disk.libre_go, "total_gb": disk.total_go} for disk in profile.disques],
-        "budget_gb": profile.budget_go(), "class": MACHINE_CLASSES.get(profile.classe(), profile.classe()), "summary": profile.resume(),
+        "budget_gb": profile.budget_go(), "budget_set_gb": float(_m.reglages().get("budget_go") or 0) or None, "class": MACHINE_CLASSES.get(profile.classe(), profile.classe()), "summary": profile.resume(),
     }
 
 
@@ -572,6 +589,60 @@ def complete_setup(request):
         raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("skipped"))
     _storage.ecrire_atomique(_setup_path(), json.dumps({"done": True, "skipped": bool(request.body.get("skipped"))}))
     return setup_state()
+
+
+# A quick speed test, offered at the end of the first launch (a yes/no choice of the person): one short text written by the chosen model, and how fast.
+SPEED = {"state": "idle", "model": "", "tokens_per_second": None, "level": None, "error": ""}
+SPEED_LEVELS = ((8, "slow"), (15, "fair"), (30, "comfortable"), (60, "fast"))          # tokens per second below each bound; above the last: very_fast
+
+
+def _speed_level(tokens_per_second):
+    for bound, level in SPEED_LEVELS:
+        if tokens_per_second < bound:
+            return level
+    return "very_fast"
+
+
+def _measure_speed(model):
+    from . import bench
+    from .ollama_client import Ollama
+    return bench.Banc(Ollama(_m.OLLAMA), model, 4096, 120).vitesse().get("tok_s")
+
+
+@route("GET", "/speed-test", SESSION)
+def speed_test(request):
+    """`state`: `idle`, `running`, `done` or `failed`. `tokens_per_second` and `level` (`slow`, `fair`, `comfortable`, `fast`, `very_fast`) once it is done."""
+    return dict(SPEED)
+
+
+@route("POST", "/speed-test", SESSION)
+def start_speed_test(request):
+    """Starts the test on the model in use (Ollama only for now) and answers at once (202): `GET /speed-test` follows it. Refused while an answer is being written: the figure would be wrong."""
+    model = str(_m.reglages().get("modele") or "")
+    with _m.VERROU_TOURS:
+        if _m.TOURS_ACTIFS or _m.BENCH["en_cours"]:
+            raise ApiError(409, "busy", _t("Une réponse ou une mesure est en cours : la mesure serait faussée. Attends sa fin."))
+        if SPEED["state"] == "running":
+            raise ApiError(409, "busy", _t("Une mesure est déjà en cours."))
+        if _m.moteur_actuel().id != _engines.OLLAMA:
+            raise ApiError(409, "not_supported", _t("Le test de vitesse n'est pas encore proposé avec ce moteur."))
+        if model not in _m.etat_ollama()["installes"]:
+            raise ApiError(409, "model_missing", _t("Le modèle « {} » n'est pas installé : installe-le ou choisis-en un autre en haut à gauche.").format(model))
+        SPEED.update(state="running", model=model, tokens_per_second=None, level=None, error="")
+
+    def work():
+        try:
+            measured = _measure_speed(model)
+            if measured:
+                SPEED.update(state="done", tokens_per_second=measured, level=_speed_level(measured))
+            else:
+                SPEED.update(state="failed", error=_t("Le moteur n'a rien pu mesurer."))
+        except Exception as cause:  # noqa: BLE001  (an engine that fails ends the test, never the application)
+            SPEED.update(state="failed", error=str(cause)[:200])
+
+    started = dict(SPEED)          # taken before the thread runs: a very quick test would already be done
+    threading.Thread(target=work, daemon=True, name="speed-test").start()
+    return 202, started
 
 
 # --------------------------------------------------------------------------------------------------------- conversations

@@ -62,12 +62,12 @@ MODELES = [{"id": m["id"], "nom": m["nom"], "phrase": m["phrase"], "go": m["go"]
             "avertissement": m.get("avertissement", ""), "licence": m["licence"], "capacites": m["capacites"]} for m in _CATALOGUE["modeles"]]
 REGLAGES_DEFAUT = {"modele": os.environ.get("LUTIN_MODELE") or "qwen3:8b", "avance": False, "num_ctx": 24576, "temperature": 0.6, "reflexion": False, "auto_ecriture": False, "auto_commandes": False, "mode": "polyvalent", "num_predict": 0, "tours_max": 14, "web": True,
                     "top_p": None, "top_k": None, "min_p": None, "repeat_penalty": None,          # None = valeur conseillée pour la famille du modèle (voir profil_echantillonnage)
-                    "garde_ressources": True, "seuil_ram_go": 3.0, "seuil_disque_go": 10.0, "plafond_donnees_go": 2.0, "limite_ram_commande_go": 0.0,
+                    "garde_ressources": True, "seuil_ram_go": 3.0, "seuil_disque_go": 10.0, "plafond_donnees_go": 2.0, "limite_ram_commande_go": 0.0, "budget_go": 0.0,          # budget_go : la mémoire que le mainteneur de la machine accepte de remplir avec un modèle (0 = calculée d'après la machine)
                     "liberer_si_comfy": True, "rappels_auto": "scenario",
                     "num_thread": None, "garde_min": None, "essai_a_blanc": False, "copie_conversations": False, "conseil_machine": True, "routage": False, "cluster": None, "moteur": "ollama", "machine": "", "modeles_par_moteur": {}, "modele_annexe": "", "reflexion_tours": "toujours", "memoire_longue": "demander", "fiche_part": 10, "fiche_scribe": True, "recherche_sens": False, "modele_embeddings": "nomic-embed-text"}          # charge de la machine : cœurs du processeur utilisés et minutes de garde du modèle en mémoire (None = automatique)          # rappels_auto : « scenario » (mode scénariste seulement), « toujours » ou « jamais »
 CHOIX_RAPPELS = ("scenario", "toujours", "jamais")
 BORNES_CHARGE = {"num_thread": (1, 256), "garde_min": (0, 240)}
-BORNES_RESSOURCES = {"seuil_ram_go": (0.5, 64.0), "seuil_disque_go": (1.0, 2000.0), "plafond_donnees_go": (0.2, 500.0), "limite_ram_commande_go": (0.0, 256.0)}
+BORNES_RESSOURCES = {"seuil_ram_go": (0.5, 64.0), "seuil_disque_go": (1.0, 2000.0), "plafond_donnees_go": (0.2, 500.0), "limite_ram_commande_go": (0.0, 256.0), "budget_go": (0.0, 4096.0)}
 
 REGLAGES_DEFAUT.update(_reglages_outils.DEFAULTS)
 
@@ -267,6 +267,11 @@ def reglages():
     _reglages_outils.clean(r)
     _reglages_outils.apply(r, sys.modules[__name__])          # les limites des outils suivent les réglages (sans rien refaire tant qu'ils ne changent pas)
     return nettoyer_ressources(nettoyer_echantillonnage(r))
+
+
+from . import hardware as _hardware  # noqa: E402
+
+_hardware.USER_BUDGET = lambda: reglages().get("budget_go") or ""          # la mémoire voulue par l'utilisateur pour les modèles (voir Profil.budget_go)
 
 
 from .tools import (  # noqa: F401  (déplacé dans tools.py : moteur ré-exporte ses noms)
