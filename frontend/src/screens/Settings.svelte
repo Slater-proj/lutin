@@ -4,6 +4,8 @@
   import { onMount } from "svelte";
   import ApprovalRules from "../components/ApprovalRules.svelte";
   import Devices from "../components/Devices.svelte";
+  import Memory from "../components/Memory.svelte";
+  import Skills from "../components/Skills.svelte";
   import Notifications from "../components/Notifications.svelte";
   import LanguageChoice from "../components/LanguageChoice.svelte";
   import { api, ApiError } from "../lib/api";
@@ -124,6 +126,8 @@
     <div class="group"><Devices /></div>
     <div class="group"><ApprovalRules /></div>
     <div class="group"><Notifications /></div>
+    <div class="group"><Memory /></div>
+    <div class="group"><Skills /></div>
 
     {#each GROUPS as group (group)}
       {#if group === "sampling"}

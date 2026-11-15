@@ -2097,6 +2097,8 @@
 "Un canal porte déjà ce nom.": "A channel already has this name.",
 "Ce canal n'existe plus.": "This channel no longer exists.",
 "Cet addon n'existe pas.": "This add-on does not exist.",
+"Cette fiche n'existe pas.": "This skill does not exist.",
+"Cette fiche existe déjà.": "This skill already exists.",
 "« {} » a refusé le message (erreur {}) : vérifie l'adresse et le jeton.": "« {} » refused the message (error {}): check the address and the token.",
 "« {} » n'a pas répondu : {}": "« {} » did not answer: {}",
 "Ceci est un message de test : les notifications fonctionnent.": "This is a test message: notifications work.",

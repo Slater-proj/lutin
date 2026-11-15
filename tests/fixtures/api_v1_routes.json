@@ -191,6 +191,16 @@
  },
  {
   "method": "GET",
+  "path": "/api/v1/memory",
+  "right": "session"
+ },
+ {
+  "method": "PATCH",
+  "path": "/api/v1/memory",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
   "path": "/api/v1/missions",
   "right": "session"
  },
@@ -342,6 +352,31 @@
  {
   "method": "POST",
   "path": "/api/v1/setup/complete",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/skills",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/skills",
+  "right": "configurator"
+ },
+ {
+  "method": "DELETE",
+  "path": "/api/v1/skills/{name}",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/skills/{name}",
+  "right": "session"
+ },
+ {
+  "method": "PATCH",
+  "path": "/api/v1/skills/{name}",
   "right": "configurator"
  },
  {

@@ -1210,6 +1210,86 @@ def delete_mission(request):
     return _missions_view()
 
 
+# --------------------------------------------------------------------------------------------------------- skills and memory
+# A skill is a sheet of your own (`skills/NAME.md` in the Lutin folder): how you want something done. Only its title and its « read when… » line are given to the model; it opens the sheet when it needs it.
+# The memory is two notes the model always has: the context (who you are, what you work on) and the memory (what to remember). Writing them is for the machine itself.
+def _skill_entry(name, title):
+    return {"name": name, "title": title, "read_when": _m.description_skill(name)}
+
+
+def _skill_text(name):
+    try:
+        return _m.lire_skill(name)
+    except FileNotFoundError:
+        raise ApiError(404, "not_found", _t("Cette fiche n'existe pas.")) from None
+
+
+@route("GET", "/skills", SESSION)
+def skills(request):
+    """The skills: `name` (the file), `title` (its first « # » line) and `read_when` (its « À lire quand… » line, empty when it has none)."""
+    return {"skills": [_skill_entry(name, title) for name, title in _m.lister_skills()]}
+
+
+@route("GET", "/skills/{name}", SESSION)
+def skill(request):
+    """One skill with its whole `text`."""
+    return {"name": request.params["name"], "text": _skill_text(request.params["name"])}
+
+
+@route("POST", "/skills", CONFIGURATOR)
+def add_skill(request):
+    """{"name": "my-notes.md", "text"}: a new skill (letters, digits, hyphens, spaces and the `.md` ending; 60 000 characters at most). Refused (409) when the name is taken: change it with PATCH."""
+    body = request.body
+    if set(body) != {"name", "text"} or not isinstance(body["name"], str) or not isinstance(body["text"], str):
+        raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("name, text"))
+    if any(name == body["name"] for name, _title in _m.lister_skills()):
+        raise ApiError(409, "exists", _t("Cette fiche existe déjà."))
+    _m.ecrire_skill(body["name"], body["text"])
+    return 201, skill_view(body["name"])
+
+
+def skill_view(name):
+    return {"name": name, "text": _skill_text(name)}
+
+
+@route("PATCH", "/skills/{name}", CONFIGURATOR)
+def change_skill(request):
+    """{"text"}: replaces the text of the skill."""
+    if set(request.body) != {"text"} or not isinstance(request.body["text"], str):
+        raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("text"))
+    _skill_text(request.params["name"])
+    _m.ecrire_skill(request.params["name"], request.body["text"])
+    return skill_view(request.params["name"])
+
+
+@route("DELETE", "/skills/{name}", CONFIGURATOR)
+def delete_skill(request):
+    """Deletes the skill file for good."""
+    _skill_text(request.params["name"])
+    _m.supprimer_skill(request.params["name"])
+    return skills(request)
+
+
+MEMORY_NOTES = {"context": "CONTEXTE.md", "memory": "MEMOIRE.md"}
+
+
+@route("GET", "/memory", SESSION)
+def memory(request):
+    """The two notes the model always has: `context` and `memory`, as text."""
+    return {key: _m.lire_memoire(name) for key, name in MEMORY_NOTES.items()}
+
+
+@route("PATCH", "/memory", CONFIGURATOR)
+def change_memory(request):
+    """{"context": text} and/or {"memory": text}: replaces the note (60 000 characters at most)."""
+    body = request.body
+    if not body or set(body) - set(MEMORY_NOTES) or not all(isinstance(value, str) for value in body.values()):
+        raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("context, memory"))
+    for key, text in body.items():
+        _m.ecrire_memoire(MEMORY_NOTES[key], text)
+    return memory(request)
+
+
 # --------------------------------------------------------------------------------------------------------- conversations
 def _summary(entry):
     return {"id": entry["id"], "title": entry.get("titre", ""), "updated_at": entry.get("maj", ""), "message_count": int(entry.get("messages") or 0),

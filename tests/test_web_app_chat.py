@@ -848,6 +848,40 @@ class Chat(unittest.TestCase):
         self.assertEqual(p.erreurs, [])
         p.evaluer("location.hash = '#/chat'")
 
+    def test_5s_a_skill_is_written_changed_and_deleted_and_the_notes_are_kept(self):
+        p = self.page
+        folder = Path(T.A.RACINE) / "skills"
+        self.addCleanup(lambda: [f.unlink() for f in folder.glob("*.md")] if folder.is_dir() else None)
+        saved = {name: T.A.lire_memoire(name) for name in ("CONTEXTE.md", "MEMOIRE.md")}
+        self.addCleanup(lambda: [T.A.ecrire_memoire(name, text) for name, text in saved.items()])
+        p.evaluer("location.hash = '#/settings'")
+        p.attendre("!!document.querySelector('#skill-name') && !!document.querySelector('#memory-context')")
+        self.assertTrue(p.evaluer("!!document.querySelector('.skills-empty')"), "no skill yet: the page says so")
+        set_value = "(id, value) => { const box = document.querySelector(id); box.value = value; box.dispatchEvent(new Event('input', {bubbles: true})); }"
+        p.evaluer("(() => { const set = %s; set('#skill-name', 'cuisine.md'); set('#skill-text', %s); document.querySelector('.skills .add').requestSubmit(); })()" % (set_value, js("# Cuisine\nÀ lire quand je parle de cuisine.\nSel d abord.")))
+        p.attendre("[...document.querySelectorAll('.skills .item strong')].some(e => e.innerText === 'Cuisine')")
+        self.assertEqual((folder / "cuisine.md").read_text(encoding="utf-8"), "# Cuisine\nÀ lire quand je parle de cuisine.\nSel d abord.")
+        self.assertIn("je parle de cuisine", p.evaluer("document.querySelector('.skills .item').innerText"))
+        p.evaluer("[...document.querySelectorAll('.skills .item .button')].find(b => b.innerText === 'Modifier').click()")
+        p.attendre("document.querySelector('#skill-text').value.startsWith('# Cuisine')")
+        self.assertFalse(p.evaluer("!!document.querySelector('#skill-name')"), "the name of a sheet is not changed")
+        p.evaluer("(() => { const set = %s; set('#skill-text', %s); document.querySelector('.skills .add').requestSubmit(); })()" % (set_value, js("# Cuisine 2\nPoivre.")))
+        p.attendre("[...document.querySelectorAll('.skills .item strong')].some(e => e.innerText === 'Cuisine 2')")
+        self.assertEqual((folder / "cuisine.md").read_text(encoding="utf-8"), "# Cuisine 2\nPoivre.")
+        p.evaluer("(() => { const set = %s; set('#memory-context', 'Je fais des jeux.'); set('#memory-notes', 'Aime le the.'); document.querySelector('.memory form').requestSubmit(); })()" % set_value)
+        p.attendre("!!document.querySelector('.memory .done')")
+        self.assertEqual((T.A.lire_memoire("CONTEXTE.md"), T.A.lire_memoire("MEMOIRE.md")), ("Je fais des jeux.", "Aime le the."))
+        if AXE.is_file():
+            self.axe("on the skills and the memory")
+        p.evaluer("[...document.querySelectorAll('.skills .item .button')].find(b => b.innerText === 'Supprimer').click()")
+        p.attendre("!!document.querySelector('.skills .confirm')")
+        self.assertTrue((folder / "cuisine.md").is_file(), "asking is not deleting")
+        p.evaluer("document.querySelector('.skills .confirm .danger').click()")
+        p.attendre("!!document.querySelector('.skills-empty')")
+        self.assertFalse((folder / "cuisine.md").exists())
+        self.assertEqual(p.erreurs, [])
+        p.evaluer("location.hash = '#/chat'")
+
     def test_5e_the_first_launch_leads_to_a_model_and_the_chat(self):
         p = self.page
         flag = self.first_launch()
