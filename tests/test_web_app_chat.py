@@ -767,6 +767,53 @@ class Chat(unittest.TestCase):
         self.assertEqual(p.erreurs, [])
         p.evaluer("location.hash = '#/chat'")
 
+    def test_5q_a_mission_is_started_paused_resumed_stopped_and_deleted(self):
+        p = self.page
+        from lutin import mission
+        folder = tempfile.mkdtemp(prefix="lutin-mission-folder-")
+        self.addCleanup(shutil.rmtree, folder, True)
+        root = T.A.RACINE
+        self.addCleanup(lambda: T.A.definir_racine(root))
+        configuration = Path(tempfile.mkdtemp(prefix="lutin-mission-config-"))
+        self.addCleanup(shutil.rmtree, configuration, True)
+        (configuration / "config.json").write_text(json.dumps({"emplacements": {"travail": str(root)}}), encoding="utf-8")
+        environment = mock.patch.dict(os.environ, {"LUTIN_CONFIG": str(configuration / "config.json")})
+        environment.start()
+        self.addCleanup(environment.stop)
+        T.A.add_work(folder, "Mission folder")
+        self.addCleanup(lambda: [mission.action("supprimer", {"id": entry["id"]}) for entry in mission.read()])
+        p.evaluer("location.hash = '#/agents'")
+        p.attendre("!!document.querySelector('#mission-name') && document.querySelector('#mission-project').options.length > 0")
+        self.assertTrue(p.evaluer("!!document.querySelector('.missions-empty')"), "no mission yet: the page says so")
+        p.evaluer("(() => { const set = (id, value) => { const box = document.querySelector(id); box.value = value; box.dispatchEvent(new Event('input', {bubbles: true})); }; set('#mission-name', 'Build a game'); set('#mission-brief', 'Write a small game and test it.'); document.querySelector('.missions .add').requestSubmit(); })()")
+        p.attendre("[...document.querySelectorAll('.missions .card strong')].some(e => e.innerText === 'Build a game')")
+        self.assertEqual([(entry["nom"], entry["etat"], entry["autonome"]) for entry in mission.read()], [("Build a game", "en_cours", True)])
+        button = lambda label: "[...document.querySelectorAll('.missions .card .button')].find(b => b.innerText === %s)" % js(label)
+        p.evaluer(button("Mettre en pause") + ".click()")
+        self.eventually(lambda: mission.read()[0]["etat"] == "pause", "the pause is kept by the server")
+        p.attendre("!!(" + button("Reprendre") + ")")
+        if AXE.is_file():
+            self.axe("on the missions")
+        p.evaluer(button("Reprendre") + ".click()")
+        self.eventually(lambda: mission.read()[0]["etat"] == "en_cours", "the mission starts again")
+        mission.modify(mission.read()[0]["id"], etat="bloquee", question="Which colour?")
+        p.attendre("!!document.querySelector('.missions .question textarea')", 15)
+        self.assertIn("Which colour?", p.evaluer("document.querySelector('.missions .question').innerText"))
+        p.evaluer("(() => { const box = document.querySelector('.missions .question textarea'); box.value = 'Blue.'; box.dispatchEvent(new Event('input', {bubbles: true})); document.querySelector('.missions .question').requestSubmit(); })()")
+        self.eventually(lambda: (mission.read()[0]["etat"], mission.read()[0]["note"]) == ("en_cours", "Blue."), "the answer reaches the mission")
+        p.evaluer(button("Arrêter") + ".click()")
+        p.attendre("!!document.querySelector('.missions .confirm')")
+        self.assertEqual(mission.read()[0]["etat"], "en_cours", "asking is not stopping")
+        p.evaluer("document.querySelector('.missions .confirm .danger').click()")
+        self.eventually(lambda: mission.read()[0]["etat"] == "terminee", "the mission is stopped")
+        p.evaluer(button("Supprimer") + ".click()")
+        p.attendre("!!document.querySelector('.missions .confirm')")
+        p.evaluer("document.querySelector('.missions .confirm .danger').click()")
+        p.attendre("!!document.querySelector('.missions-empty')")
+        self.assertEqual(mission.read(), [])
+        self.assertEqual(p.erreurs, [])
+        p.evaluer("location.hash = '#/chat'")
+
     def test_5e_the_first_launch_leads_to_a_model_and_the_chat(self):
         p = self.page
         flag = self.first_launch()

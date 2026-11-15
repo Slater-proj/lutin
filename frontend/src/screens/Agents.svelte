@@ -4,6 +4,7 @@
   import { onMount } from "svelte";
   import Addons from "../components/Addons.svelte";
   import Connectors from "../components/Connectors.svelte";
+  import Missions from "../components/Missions.svelte";
   import { api, ApiError } from "../lib/api";
   import { language, t, type MessageKey } from "../lib/messages";
   import { chosenDays, dayList, dayName, isEveryDay, shownMoment, type ScheduledTask } from "../lib/tasks";
@@ -234,6 +235,8 @@
   {:else if !problem}
     <p class="muted">{t("tasks.loading")}</p>
   {/if}
+
+  <Missions />
 
   <Addons />
 
