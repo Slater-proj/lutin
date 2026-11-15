@@ -969,9 +969,9 @@ def change_mcp_connector(request):
     if unknown or not body or ("tool" in body) != ("allowed" in body):
         raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("active, read_only, tool + allowed, env, headers"))
     _connector_one(identifier)
-    for field in ("active", "read_only", "allowed"):
-        if field in body and not isinstance(body[field], bool):
-            raise ApiError(400, "invalid_request", _t("Valeur invalide pour « {} » (attendu : {}).").format(field, "boolean"))
+    for flag in ("active", "read_only", "allowed"):
+        if flag in body and not isinstance(body[flag], bool):
+            raise ApiError(400, "invalid_request", _t("Valeur invalide pour « {} » (attendu : {}).").format(flag, "boolean"))
     if "tool" in body and not isinstance(body["tool"], str):
         raise ApiError(400, "invalid_request", _t("Valeur invalide pour « {} » (attendu : {}).").format("tool", "string"))
     _mcp.set_value(identifier, body.get("active"), body.get("read_only"), body.get("tool"), body.get("allowed"), _text_map(body.get("env"), "env"), _text_map(body.get("headers"), "headers"))
