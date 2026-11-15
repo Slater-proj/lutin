@@ -14,7 +14,7 @@ from pathlib import Path
 from .i18n import t as _t
 
 FORMATS = (".pdf", ".docx", ".odt", ".ods", ".odp", ".pptx", ".xlsx", ".html", ".htm")
-TAILLE_MAX = 30 * 1024 * 1024
+MAX_SIZE = 30 * 1024 * 1024
 DECOMPRESSE_MAX = 80 * 1024 * 1024
 
 
@@ -26,7 +26,7 @@ class Suspect(ErreurExtraction):
     """Un document qui se décompresse en trop de données : on arrête tout (les autres erreurs d'objet, elles, sont sautées)."""
 
 
-def nettoyer(texte):
+def clean(texte):
     texte = html.unescape(texte)
     texte = re.sub(r"[ \t ]+", " ", texte)
     texte = re.sub(r" ?\n ?", "\n", texte)
@@ -35,8 +35,8 @@ def nettoyer(texte):
 
 # ----------------------------------------------------------------- formats zip
 def _zip(chemin):
-    if Path(chemin).stat().st_size > TAILLE_MAX:
-        raise ErreurExtraction(_t("Document trop gros ({} Mo au plus).").format(TAILLE_MAX // 1024 ** 2))
+    if Path(chemin).stat().st_size > MAX_SIZE:
+        raise ErreurExtraction(_t("Document trop gros ({} Mo au plus).").format(MAX_SIZE // 1024 ** 2))
     try:
         z = zipfile.ZipFile(chemin)
     except (zipfile.BadZipFile, OSError) as e:
@@ -46,7 +46,7 @@ def _zip(chemin):
     return z
 
 
-def _lire(z, nom):
+def _read(z, nom):
     try:
         return z.read(nom).decode("utf-8", "replace")
     except KeyError:
@@ -62,7 +62,7 @@ def _concat(xml, balise):
 
 def docx(chemin):
     z = _zip(chemin)
-    xml = _lire(z, "word/document.xml")
+    xml = _read(z, "word/document.xml")
     if not xml:
         raise ErreurExtraction(_t("Ce n'est pas un document Word (.docx) lisible."))
     paragraphes = []
@@ -71,12 +71,12 @@ def docx(chemin):
         titre = re.search(r'<w:pStyle w:val="(?:Heading|Titre)(\d)"', m.group(1))
         if texte:
             paragraphes.append(("#" * int(titre.group(1)) + " " + texte) if titre else texte)
-    return [("", nettoyer("\n\n".join(paragraphes)))]
+    return [("", clean("\n\n".join(paragraphes)))]
 
 
 def odt(chemin):
     z = _zip(chemin)
-    xml = _lire(z, "content.xml")
+    xml = _read(z, "content.xml")
     if not xml:
         raise ErreurExtraction(_t("Ce n'est pas un document LibreOffice (.odt) lisible."))
     xml = re.sub(r"<text:s\s*/>", " ", xml)
@@ -85,7 +85,7 @@ def odt(chemin):
         texte = re.sub(r"<[^>]+>", "", re.sub(r"<text:(?:tab|line-break)\s*/>", " ", m.group(2))).strip()
         if texte:
             blocs.append(("# " + texte) if m.group(1) == "h" else texte)
-    return [("", nettoyer("\n\n".join(blocs)))]
+    return [("", clean("\n\n".join(blocs)))]
 
 
 def pptx(chemin):
@@ -93,9 +93,9 @@ def pptx(chemin):
     noms = sorted((n for n in z.namelist() if re.match(r"^ppt/slides/slide\d+\.xml$", n)), key=lambda n: int(re.search(r"(\d+)\.xml$", n).group(1)))
     sortie = []
     for i, n in enumerate(noms, 1):
-        xml = _lire(z, n)
+        xml = _read(z, n)
         paragraphes = [_concat(m.group(1), "a:t").strip() for m in re.finditer(r"<a:p(?:\s[^>]*)?>(.*?)</a:p>", xml, re.S)]
-        texte = nettoyer("\n".join(p for p in paragraphes if p))
+        texte = clean("\n".join(p for p in paragraphes if p))
         if texte:
             sortie.append((_t("Diapositive {}").format(i), texte))
     return sortie
@@ -103,13 +103,13 @@ def pptx(chemin):
 
 def xlsx(chemin):
     z = _zip(chemin)
-    partages = [_concat(m.group(1), "t") for m in re.finditer(r"<si(?:\s[^>]*)?>(.*?)</si>", _lire(z, "xl/sharedStrings.xml"), re.S)]
-    noms_feuilles = re.findall(r'<sheet [^>]*name="([^"]*)"', _lire(z, "xl/workbook.xml"))
+    partages = [_concat(m.group(1), "t") for m in re.finditer(r"<si(?:\s[^>]*)?>(.*?)</si>", _read(z, "xl/sharedStrings.xml"), re.S)]
+    noms_feuilles = re.findall(r'<sheet [^>]*name="([^"]*)"', _read(z, "xl/workbook.xml"))
     feuilles = sorted((n for n in z.namelist() if re.match(r"^xl/worksheets/sheet\d+\.xml$", n)), key=lambda n: int(re.search(r"(\d+)\.xml$", n).group(1)))
     sortie = []
     for i, n in enumerate(feuilles):
         lignes = []
-        for rang in re.finditer(r"<row(?:\s[^>]*)?>(.*?)</row>", _lire(z, n), re.S):
+        for rang in re.finditer(r"<row(?:\s[^>]*)?>(.*?)</row>", _read(z, n), re.S):
             cases = []
             for c in re.finditer(r"<c(\s[^>]*)?>(.*?)</c>", rang.group(1), re.S):
                 attrs, corps = c.group(1) or "", c.group(2)
@@ -122,20 +122,20 @@ def xlsx(chemin):
                     cases.append(v.group(1))
             if any(cases):
                 lignes.append(" | ".join(cases))
-        texte = nettoyer("\n".join(lignes))
+        texte = clean("\n".join(lignes))
         if texte:
             sortie.append((html.unescape(noms_feuilles[i]) if i < len(noms_feuilles) else _t("Feuille {}").format(i + 1), texte))
     return sortie
 
 
 def page_html(chemin):
-    if Path(chemin).stat().st_size > TAILLE_MAX:
-        raise ErreurExtraction(_t("Document trop gros ({} Mo au plus).").format(TAILLE_MAX // 1024 ** 2))
+    if Path(chemin).stat().st_size > MAX_SIZE:
+        raise ErreurExtraction(_t("Document trop gros ({} Mo au plus).").format(MAX_SIZE // 1024 ** 2))
     brut = Path(chemin).read_bytes().decode("utf-8", "replace")
     brut = re.sub(r"<(script|style|noscript|svg)\b.*?</\1>", " ", brut, flags=re.S | re.I)
     brut = re.sub(r"<(h[1-6])\b[^>]*>(.*?)</\1>", lambda m: "\n\n# " + re.sub(r"<[^>]+>", "", m.group(2)) + "\n\n", brut, flags=re.S | re.I)
     brut = re.sub(r"</(p|div|li|tr|br|h\d)>|<br\s*/?>", "\n", brut, flags=re.I)
-    return [("", nettoyer(re.sub(r"<[^>]+>", " ", brut)))]
+    return [("", clean(re.sub(r"<[^>]+>", " ", brut)))]
 
 
 # ----------------------------------------------------------------- PDF
@@ -458,8 +458,8 @@ def _texte_contenu(flux, polices):
 
 
 def pdf(chemin):
-    if Path(chemin).stat().st_size > TAILLE_MAX:
-        raise ErreurExtraction(_t("Document trop gros ({} Mo au plus).").format(TAILLE_MAX // 1024 ** 2))
+    if Path(chemin).stat().st_size > MAX_SIZE:
+        raise ErreurExtraction(_t("Document trop gros ({} Mo au plus).").format(MAX_SIZE // 1024 ** 2))
     donnees = Path(chemin).read_bytes()
     if not donnees.startswith(b"%PDF") and b"%PDF" not in donnees[:1024]:
         raise ErreurExtraction(_t("Ce n'est pas un PDF lisible."))
@@ -492,7 +492,7 @@ def pdf(chemin):
         contenu = _resoudre(objets, page.get("/Contents"))
         refs = contenu if isinstance(contenu, list) else [page.get("/Contents")]
         flux = b"\n".join(objets[r[1]][1] for r in refs if isinstance(r, tuple) and r[1] in objets and objets[r[1]][1])
-        texte = nettoyer(_texte_contenu(flux, polices)) if flux else ""
+        texte = clean(_texte_contenu(flux, polices)) if flux else ""
         if texte:
             sortie.append((_t("Page {}").format(numero), texte))
     return sortie

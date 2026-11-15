@@ -10,7 +10,7 @@ from pathlib import Path
 from . import __version__, bench, model_catalog, terminal_chat, client, config, offline, i18n, setup_wizard, hardware, updates, ollama_client, claude_project, migrate, backup, security, model_selection, workspaces
 from .i18n import t as _t
 
-AIDE_GENERALE = """Lutin : un assistant IA local qui choisit les modèles adaptés à ta machine.
+HELP_GENERAL = """Lutin : un assistant IA local qui choisit les modèles adaptés à ta machine.
 
   lutin               démarre (la première fois : installation guidée ; sinon il ne change rien)
   lutin setup         installation guidée (sans effet si Lutin est déjà installé ; --reconfigure pour changer)
@@ -81,7 +81,7 @@ ALIAS_COMMANDES = {"models": "modeles", "devices": "appareils", "security": "sec
 
 
 def parseur():
-    p = argparse.ArgumentParser(prog="lutin", description=_t(AIDE_GENERALE), formatter_class=argparse.RawDescriptionHelpFormatter, epilog=_t("« lutin <commande> --help » détaille chaque commande."))
+    p = argparse.ArgumentParser(prog="lutin", description=_t(HELP_GENERAL), formatter_class=argparse.RawDescriptionHelpFormatter, epilog=_t("« lutin <commande> --help » détaille chaque commande."))
     p.add_argument("--version", action="version", version="Lutin " + __version__)
     sp = p.add_subparsers(dest="commande", metavar="<command>")
 
@@ -201,13 +201,13 @@ def parseur():
     return p
 
 
-def contexte():
+def context():
     d = config.folders()
     return d, config.load(d)
 
 
-def commande_setup(args, es=None):
-    d, cfg = contexte()
+def command_setup(args, es=None):
+    d, cfg = context()
     options = {"niveau": args.niveau, "port": args.port, "url": args.url, "proxy_ips": args.proxy_ips, "travail": args.travail, "dossier_modeles": args.dossier_modeles,
                "roles": [r.strip() for r in args.roles.split(",") if r.strip()] if args.roles else None, "sans_modeles": args.sans_modeles, "sans_ollama": args.sans_ollama,
                "reconfigurer": getattr(args, "reconfigurer", False), "ecoute": getattr(args, "ecoute", None), "langue": getattr(args, "langue", None)}
@@ -240,19 +240,19 @@ def lancer_enfant(sans_navigateur):
 
 def commande_zone(args):
     from . import tray
-    d, cfg = contexte()
+    d, cfg = context()
     return tray.commande(d, cfg, ouvrir=not getattr(args, "no_browser", False))
 
 
 def commande_serve(args):
     from . import startup
-    d, cfg = contexte()
+    d, cfg = context()
     if not cfg["installe"]:
         print(_t("Première utilisation : installation guidée.\n"))
-        if commande_setup(argparse.Namespace(oui=False, niveau=None, port=None, url=None, proxy_ips=None, travail=None, dossier_modeles=None, roles=None, sans_modeles=False, sans_ollama=False,
+        if command_setup(argparse.Namespace(oui=False, niveau=None, port=None, url=None, proxy_ips=None, travail=None, dossier_modeles=None, roles=None, sans_modeles=False, sans_ollama=False,
                                              reconfigurer=False)):
             return 2
-        d, cfg = contexte()
+        d, cfg = context()
     sans_navigateur = getattr(args, "sans_navigateur", False)
     if getattr(args, "sans_superviseur", False):
         startup.start_server(cfg, d, ouvrir_navigateur=not sans_navigateur)
@@ -342,7 +342,7 @@ def mettre_a_jour_lutin(revenir_a=None):
     return mise_a_jour_detaillee(revenir_a=revenir_a)[0]
 
 
-def commande_update(args):
+def command_update(args):
     """Met à jour Lutin lui-même (avec la source mémorisée par l'installateur) puis cherche des mises à jour de modèles. Ne change rien si tout est à jour."""
     tout = not (args.app or args.modeles)
     code = 0
@@ -353,7 +353,7 @@ def commande_update(args):
     elif args.app or tout:
         code = mettre_a_jour_lutin()
     if args.modeles or tout:
-        d, cfg = contexte()
+        d, cfg = context()
         r = updates.check(hardware.detecter(), cfg, d, ollama_client.Ollama(), force=True)
         for p in r["propositions"]:
             print("• {} : {}".format(p["modele"], p["raison"]))
@@ -364,7 +364,7 @@ def commande_update(args):
 
 
 def client_pret():
-    d, _ = contexte()
+    d, _ = context()
     c = client.ClientLocal(d["donnees"])
     if not c.disponible():
         print(_t("Lutin ne tourne pas. Lance « lutin serve » (ou « lutin ») dans une autre fenêtre, puis recommence."), file=sys.stderr)
@@ -383,8 +383,8 @@ def commande_chat(args):
     return t.boucle()
 
 
-def commande_modeles(args):
-    d, cfg = contexte()
+def command_models(args):
+    d, cfg = context()
     cat = model_catalog.load(Path(d["cache"]) / "catalogue.json")
     profil = hardware.detecter()
     o = ollama_client.Ollama()
@@ -450,7 +450,7 @@ def commande_modeles(args):
     return 0
 
 
-def commande_pin(args):
+def command_pin(args):
     c = client_pret()
     if not c:
         return 1
@@ -463,7 +463,7 @@ def commande_pin(args):
     return 0
 
 
-def commande_appareils(args):
+def command_devices(args):
     c = client_pret()
     if not c:
         return 1
@@ -484,7 +484,7 @@ def commande_appareils(args):
 
 
 def commande_hors_ligne(args):
-    d, _ = contexte()
+    d, _ = context()
     chemin = Path(d["config"]) / "config.json"
     if args.etat != "etat":
         offline.set_mode(args.etat == "oui", chemin)
@@ -495,8 +495,8 @@ def commande_hors_ligne(args):
     return 0
 
 
-def commande_travaux(args):
-    d, cfg = contexte()
+def command_works(args):
+    d, cfg = context()
     interdits = [d["config"], d["donnees"], d["memoire"], d["cache"]]
     try:
         if args.action == "ajouter":
@@ -525,7 +525,7 @@ def commande_travaux(args):
 
 def commande_bench_moteurs(args):
     """Compare les moteurs disponibles (Ollama, llama.cpp) sur le même modèle et conserve un résultat lisible et partageable (voir engine_bench.py)."""
-    d, cfg = contexte()
+    d, cfg = context()
     os.environ.setdefault("LUTIN_RACINE", str(Path.home() / "Lutin"))
     os.environ.setdefault("LUTIN_DONNEES", str(d["donnees"]))
     os.environ.setdefault("LUTIN_MEMOIRE", str(d["memoire"]))
@@ -546,9 +546,9 @@ def commande_bench_moteurs(args):
     return 0 if r["moteurs"] and all(m["ok"] for m in r["moteurs"]) else 1
 
 
-def commande_essai_moteur(args):
+def command_trial_engine(args):
     """Fait pour de vrai, sur cette machine, ce que Lutin fait avec un moteur (voir engine_trial.py) et écrit un rapport."""
-    d, cfg = contexte()
+    d, cfg = context()
     actif = workspaces.active(cfg)
     os.environ.setdefault("LUTIN_RACINE", str(actif["chemin"] if actif else Path.home() / "Lutin"))
     os.environ.setdefault("LUTIN_DONNEES", str(d["donnees"]))
@@ -571,7 +571,7 @@ def commande_essai_moteur(args):
 
 def commande_mcp(args):
     """Les connecteurs MCP en ligne de commande (utile dans Docker, où la page ne peut pas les modifier)."""
-    d, cfg = contexte()
+    d, cfg = context()
     actif = workspaces.active(cfg)          # le moteur lit ces dossiers à l'import : on les fixe sans rien créer (ni dossier de travail, ni réglage)
     os.environ.setdefault("LUTIN_RACINE", str(actif["chemin"] if actif else Path.home() / "Lutin"))
     os.environ.setdefault("LUTIN_DONNEES", str(d["donnees"]))
@@ -609,8 +609,8 @@ def commande_mcp(args):
     return 0
 
 
-def commande_journal(args):
-    d, _ = contexte()
+def command_log(args):
+    d, _ = context()
     f = Path(d["donnees"]) / "journal-actions.jsonl"
     try:
         lignes = f.read_text(encoding="utf-8").splitlines()[-max(1, args.n):]
@@ -628,7 +628,7 @@ def commande_journal(args):
 
 
 def commande_bench(args):
-    d, cfg = contexte()
+    d, cfg = context()
     if getattr(args, "moteur", "ollama") != "ollama":          # le banc ne dépend pas d'Ollama : n'importe quel moteur de Lutin se mesure de la même façon
         os.environ.setdefault("LUTIN_RACINE", str(Path.home() / "Lutin"))
         os.environ.setdefault("LUTIN_DONNEES", str(d["donnees"]))
@@ -675,8 +675,8 @@ def commande_bench(args):
     return code
 
 
-def commande_sauvegarde(args):
-    d, _ = contexte()
+def command_backup(args):
+    d, _ = context()
     destination = Path(args.fichier or "lutin-sauvegarde-{}.zip".format(time.strftime("%Y%m%d-%H%M%S")))
     try:
         r = backup.export(d, destination)
@@ -688,8 +688,8 @@ def commande_sauvegarde(args):
     return 0
 
 
-def commande_restaurer(args):
-    d, _ = contexte()
+def command_restore(args):
+    d, _ = context()
     try:
         m = backup.verify(args.fichier)
     except backup.BackupError as e:
@@ -707,8 +707,8 @@ def commande_restaurer(args):
     return 0
 
 
-def commande_securite(args):
-    d, cfg = contexte()
+def command_security(args):
+    d, cfg = context()
     if getattr(args, "admin_distance", None):
         cfg["admin_a_distance"] = args.admin_distance == "on"
         config.save(d, cfg)
@@ -727,7 +727,7 @@ def commande_securite(args):
 
 def commande_reprendre(args, entree=input):
     """Reprend les données d'un autre assistant, au choix. Rien n'est écrasé sans --overwrite ; l'état actuel de Lutin est gardé dans un zip avant."""
-    d, cfg = contexte()
+    d, cfg = context()
     try:
         with migrate.open_source(args.source, args.dossier_skills) as trouve:
             nombres = migrate.describe(trouve)
@@ -761,7 +761,7 @@ def commande_reprendre(args, entree=input):
 
 def commande_importer(args, entree=input):
     """Reprend un projet Claude : ce que Lutin y trouve, puis « travailler dedans » ou « en faire une copie » (copie par défaut : l'original reste intact)."""
-    d, cfg = contexte()
+    d, cfg = context()
     source = Path(args.chemin).expanduser()
     if not source.is_dir():
         print("✘ " + _t("Ce dossier n'existe pas : {}").format(source), file=sys.stderr)
@@ -803,9 +803,9 @@ def commande_importer(args, entree=input):
 NOMS_LANGUES = {"fr": "Français", "en": "English"}
 
 
-def commande_langue(args):
+def command_language(args):
     """Sans argument : affiche la langue. Avec fr, en ou auto : l'enregistre (auto = suivre la langue du système)."""
-    d, _ = contexte()
+    d, _ = context()
     chemin = Path(d["config"]) / "config.json"
     if args.valeur:
         try:
@@ -858,7 +858,7 @@ def commande_demarrage_auto(args):
     return 0
 
 
-def commande_colibri(args):
+def command_colibri(args):
     """Aide à Colibri, expérimentale : rien ne tourne sans cette commande, et le serveur n'écoute que sur 127.0.0.1."""
     from . import colibri
     try:
@@ -885,7 +885,7 @@ def commande_colibri(args):
 
 
 def commande_doctor(args):
-    d, cfg = contexte()
+    d, cfg = context()
     from . import docker_doctor
     for niveau, texte in diagnostic(cfg, d, hardware.detecter(), ollama_client.Ollama()) + docker_doctor.diagnose():
         print("{} {}".format({"ok": "✔", "info": " ", "attention": "⚠", "erreur": "✘"}[niveau], texte))
@@ -905,9 +905,9 @@ def principal(argv=None):
     utf8()
     args = parseur().parse_args(argv)
     os.environ["LUTIN_CONFIG"] = str(Path(config.folders()["config"]) / "config.json")          # les gardes (mode hors ligne…) lisent la configuration de cette installation
-    commandes = {"setup": commande_setup, "serve": commande_serve, "update": commande_update, "chat": commande_chat, "modeles": commande_modeles, "pin": commande_pin,
-                 "appareils": commande_appareils, "securite": commande_securite, "langue": commande_langue, "importer": commande_importer, "reprendre": commande_reprendre, "hors-ligne": commande_hors_ligne,
-                 "travaux": commande_travaux, "journal": commande_journal, "bench": commande_bench, "sauvegarde": commande_sauvegarde, "restaurer": commande_restaurer, "doctor": commande_doctor, "demarrage-auto": commande_demarrage_auto, "zone": commande_zone, "mcp": commande_mcp, "essai-moteur": commande_essai_moteur, "bench-moteurs": commande_bench_moteurs, "colibri": commande_colibri}
+    commandes = {"setup": command_setup, "serve": commande_serve, "update": command_update, "chat": commande_chat, "modeles": command_models, "pin": command_pin,
+                 "appareils": command_devices, "securite": command_security, "langue": command_language, "importer": commande_importer, "reprendre": commande_reprendre, "hors-ligne": commande_hors_ligne,
+                 "travaux": command_works, "journal": command_log, "bench": commande_bench, "sauvegarde": command_backup, "restaurer": command_restore, "doctor": commande_doctor, "demarrage-auto": commande_demarrage_auto, "zone": commande_zone, "mcp": commande_mcp, "essai-moteur": command_trial_engine, "bench-moteurs": commande_bench_moteurs, "colibri": command_colibri}
     try:
         if args.commande is None:
             return commande_serve(argparse.Namespace(sans_navigateur=False))

@@ -111,32 +111,32 @@ class PremiereUtilisation(unittest.TestCase):
 
 class Commande(unittest.TestCase):
     def test_refuse_hors_windows_avec_un_message(self):
-        with mock.patch.object(zone, "disponible", return_value=False), mock.patch("sys.stderr"):
+        with mock.patch.object(zone, "available", return_value=False), mock.patch("sys.stderr"):
             self.assertEqual(zone.commande({"donnees": "x"}, {"installe": True}), 1)
 
     def test_adresse_selon_le_port(self):
-        self.assertEqual(zone.adresse({"securite": {"port": 8790}}), "http://127.0.0.1:8790/")
+        self.assertEqual(zone.address({"securite": {"port": 8790}}), "http://127.0.0.1:8790/")
 
     def test_au_niveau_local_l_adresse_est_simple(self):
         cfg = {"securite": {"niveau": "local", "port": 8790}}
-        self.assertEqual(zone.adresse_ouverture({"donnees": "x"}, cfg), "http://127.0.0.1:8790/")
+        self.assertEqual(zone.address_opening({"donnees": "x"}, cfg), "http://127.0.0.1:8790/")
 
     def test_au_niveau_reseau_le_navigateur_de_cette_machine_s_appaire_avec_un_pin(self):
         """Au niveau réseau, la page demande un code PIN même ici : l'icône en demande un au serveur et le glisse dans l'adresse (#pin=), la page de connexion le valide seule."""
         from lutin import client
         cfg = {"securite": {"niveau": "reseau", "port": 8790}}
         with mock.patch.object(client.ClientLocal, "envoyer", return_value={"pin": "123456", "valable_s": 600}) as envoyer:
-            self.assertEqual(zone.adresse_ouverture({"donnees": "x"}, cfg), "http://127.0.0.1:8790/#pin=123456")
+            self.assertEqual(zone.address_opening({"donnees": "x"}, cfg), "http://127.0.0.1:8790/#pin=123456")
         envoyer.assert_called_once_with("/api/nouveau-pin", {})
 
     def test_serveur_pas_encore_pret_l_adresse_simple_suffit(self):
         from lutin import client
         cfg = {"securite": {"niveau": "reseau", "port": 8790}}
         with mock.patch.object(client.ClientLocal, "envoyer", side_effect=client.ErreurClient("pas prêt")):
-            self.assertEqual(zone.adresse_ouverture({"donnees": "x"}, cfg), "http://127.0.0.1:8790/")
+            self.assertEqual(zone.address_opening({"donnees": "x"}, cfg), "http://127.0.0.1:8790/")
 
 
-@unittest.skipUnless(zone.disponible(), "fenêtre : Windows seulement")
+@unittest.skipUnless(zone.available(), "fenêtre : Windows seulement")
 class MenuEtFenetre(unittest.TestCase):
     """Le vrai menu est essayé à la main et dans tests/ (voir DECISIONS) ; ici : ses actions, avec le choix de l'utilisateur simulé."""
 
@@ -191,17 +191,17 @@ class MenuEtFenetre(unittest.TestCase):
         from lutin import cli
         z, _ = self.zone()
         z.hwnd = 1
-        with mock.patch.object(cli, "mise_a_jour_detaillee", return_value=(0, "0.6.2", "0.6.3")), mock.patch.object(zone, "message") as boite,                 mock.patch.object(zone, "relancer_icone_apres_quitter") as relance, mock.patch.object(z, "quitter") as quitte:
+        with mock.patch.object(cli, "mise_a_jour_detaillee", return_value=(0, "0.6.2", "0.6.3")), mock.patch.object(zone, "message") as boite,                 mock.patch.object(zone, "relaunch_icon_after_quit") as relance, mock.patch.object(z, "quitter") as quitte:
             z.mettre_a_jour()
         relance.assert_called_once()
         quitte.assert_called_once()
         boite.assert_called_once()
         # rien à installer ou échec : on ne quitte pas
-        with mock.patch.object(cli, "mise_a_jour_detaillee", return_value=(0, "0.6.3", None)), mock.patch.object(zone, "message"),                 mock.patch.object(zone, "relancer_icone_apres_quitter") as relance, mock.patch.object(z, "quitter") as quitte:
+        with mock.patch.object(cli, "mise_a_jour_detaillee", return_value=(0, "0.6.3", None)), mock.patch.object(zone, "message"),                 mock.patch.object(zone, "relaunch_icon_after_quit") as relance, mock.patch.object(z, "quitter") as quitte:
             z.mettre_a_jour()
         relance.assert_not_called()
         quitte.assert_not_called()
-        with mock.patch.object(cli, "mise_a_jour_detaillee", side_effect=OSError("pip absent")), mock.patch.object(zone, "message") as boite,                 mock.patch.object(zone, "relancer_icone_apres_quitter") as relance, mock.patch.object(z, "quitter"):
+        with mock.patch.object(cli, "mise_a_jour_detaillee", side_effect=OSError("pip absent")), mock.patch.object(zone, "message") as boite,                 mock.patch.object(zone, "relaunch_icon_after_quit") as relance, mock.patch.object(z, "quitter"):
             z.mettre_a_jour()
         relance.assert_not_called()
         self.assertIn("pip absent", boite.call_args[0][1], "l'erreur est dite dans la fenêtre")

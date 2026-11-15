@@ -142,7 +142,7 @@ def check(enveloppe):
         signature = base64.b64decode(enveloppe["signature"], validate=True)
     except (ValueError, TypeError):
         raise ErreurCatalogue("signature illisible")
-    if not ed25519.verifier(bytes.fromhex(cle), canonical(enveloppe["catalogue"]), signature):
+    if not ed25519.check(bytes.fromhex(cle), canonical(enveloppe["catalogue"]), signature):
         raise ErreurCatalogue("signature invalide : catalogue modifié ou non signé par une clé de confiance")
     return validate(enveloppe["catalogue"])
 

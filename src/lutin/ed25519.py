@@ -108,7 +108,7 @@ def signer(graine, message):
     return grand_r + int.to_bytes((r + h * a) % L, 32, "little")
 
 
-def verifier(publique, message, signature):
+def check(publique, message, signature):
     """Vrai seulement si `signature` est la signature valide de `message` par la clé `publique`. Ne lève jamais d'exception : toute entrée mal formée donne False."""
     try:
         if len(publique) != 32 or len(signature) != 64:

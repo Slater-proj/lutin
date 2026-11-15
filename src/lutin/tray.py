@@ -35,11 +35,11 @@ MB_OK, MB_ICONINFORMATION, MB_TOPMOST = 0x0000, 0x0040, 0x00040000
 ERROR_ALREADY_EXISTS = 183
 
 
-def disponible():
+def available():
     return sys.platform == "win32"
 
 
-if disponible():
+if available():
     user32 = ctypes.WinDLL("user32", use_last_error=True)
     shell32 = ctypes.WinDLL("shell32", use_last_error=True)
     kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
@@ -91,14 +91,14 @@ if disponible():
     kernel32.CloseHandle.argtypes = [HANDLE]
 
 
-def adresse(cfg):
+def address(cfg):
     return "http://127.0.0.1:{}/".format(cfg["securite"]["port"])
 
 
-def adresse_ouverture(dossiers, cfg):
+def address_opening(dossiers, cfg):
     """L'adresse à ouvrir dans le navigateur. Au niveau « réseau », même le navigateur de cette machine s'appaire par code PIN : on en demande un au serveur (par la console, qui ne sert qu'à cette
     machine) et on le met dans l'adresse (#pin=…), la page de connexion le valide toute seule. Sans réponse du serveur, l'adresse simple."""
-    base = adresse(cfg)
+    base = address(cfg)
     if cfg.get("securite", {}).get("niveau") == "reseau":
         try:
             from . import client
@@ -109,10 +109,10 @@ def adresse_ouverture(dossiers, cfg):
 
 
 def ouvrir_interface(dossiers, cfg):
-    threading.Thread(target=lambda: webbrowser.open(adresse_ouverture(dossiers, cfg)), daemon=True, name="zone-ouvrir").start()
+    threading.Thread(target=lambda: webbrowser.open(address_opening(dossiers, cfg)), daemon=True, name="zone-ouvrir").start()
 
 
-def journaliser(dossiers, texte):
+def log(dossiers, texte):
     try:
         Path(dossiers["donnees"]).mkdir(parents=True, exist_ok=True)
         with open(Path(dossiers["donnees"]) / "zone.log", "a", encoding="utf-8") as f:
@@ -187,7 +187,7 @@ def code_pin(dossiers):
     return texte or _t("Lutin ne répond pas : relance-le depuis l'icône.")
 
 
-def relancer_icone_apres_quitter(delai=4):
+def relaunch_icon_after_quit(delai=4):
     """Lance, dans quelques secondes et sans fenêtre, une nouvelle icône Lutin (la mise à jour a remplacé le code : l'ancienne icône doit quitter et la nouvelle prendre sa place)."""
     code = "import time, subprocess, sys; time.sleep({}); subprocess.Popen([sys.executable, '-m', 'lutin', 'zone'])".format(int(delai))
     subprocess.Popen([sys.executable, "-c", code], creationflags=CREATE_NO_WINDOW | 0x00000008, close_fds=True)          # 0x8 = DETACHED_PROCESS
@@ -284,7 +284,7 @@ class Zone:
             lignes.append(str(erreur)[:300])
         message(_t("Lutin : mise à jour"), chr(10).join(lignes))
         if code == 0 and apres:
-            relancer_icone_apres_quitter()
+            relaunch_icon_after_quit()
             self.quitter()
 
     def quitter(self):
@@ -313,7 +313,7 @@ class Zone:
                 user32.PostQuitMessage(0)
                 return 0
         except Exception:  # noqa: BLE001
-            journaliser(self.dossiers, traceback.format_exc())
+            log(self.dossiers, traceback.format_exc())
             return 0
         return user32.DefWindowProcW(hwnd, msg, wparam, lparam)
 
@@ -326,13 +326,13 @@ class Zone:
 
 def commande(dossiers, cfg, ouvrir=True):
     """Lance Lutin dans la zone de notification. Renvoie un code de sortie."""
-    if not disponible():
+    if not available():
         print(_t("L'icône de zone de notification n'existe que sous Windows : utilise « lutin » dans un terminal."), file=sys.stderr)
         return 1
     mutex = kernel32.CreateMutexW(None, True, "Local\\LutinZone")
     if ctypes.get_last_error() == ERROR_ALREADY_EXISTS:
         if ouvrir:
-            webbrowser.open(adresse_ouverture(dossiers, cfg))                 # déjà lancé : on montre l'interface au lieu d'en lancer une deuxième
+            webbrowser.open(address_opening(dossiers, cfg))                 # déjà lancé : on montre l'interface au lieu d'en lancer une deuxième
         return 0
     try:
         cfg = preparer(dossiers, cfg)
@@ -343,12 +343,12 @@ def commande(dossiers, cfg, ouvrir=True):
         zone = Zone(cfg, dossiers, serveur)
         zone.creer()
         from . import cli
-        threading.Thread(target=lambda: cli.superviser(serveur.lancer, ecrire=lambda t: journaliser(dossiers, t)) or user32.PostMessageW(zone.hwnd, WM_CLOSE, 0, 0),
+        threading.Thread(target=lambda: cli.superviser(serveur.lancer, ecrire=lambda t: log(dossiers, t)) or user32.PostMessageW(zone.hwnd, WM_CLOSE, 0, 0),
                          daemon=True, name="zone-serveur").start()
         zone.boucle()
         serveur.arreter()
     except Exception:  # noqa: BLE001 — pas de fenêtre pour montrer l'erreur : le journal la garde
-        journaliser(dossiers, traceback.format_exc())
+        log(dossiers, traceback.format_exc())
         return 1
     finally:
         kernel32.CloseHandle(mutex)

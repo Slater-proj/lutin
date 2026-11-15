@@ -154,7 +154,7 @@ class Completude(unittest.TestCase):
 
     def test_les_constantes_de_niveau_module_sont_traduites(self):
         from lutin import terminal_chat, setup_wizard, core
-        for texte in (cli.AIDE_GENERALE, terminal_chat.HELP, setup_wizard.WARNING_NETWORK, setup_wizard.WARNING_PROXY, *core.TEXTES_PAGE_CONNEXION):
+        for texte in (cli.HELP_GENERAL, terminal_chat.HELP, setup_wizard.WARNING_NETWORK, setup_wizard.WARNING_PROXY, *core.TEXTES_PAGE_CONNEXION):
             self.assertIn(texte, self.dico, texte[:60])
         for _, titre, detail in setup_wizard.LEVELS_TEXT.values():
             self.assertIn(titre, self.dico)

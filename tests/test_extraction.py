@@ -110,7 +110,7 @@ class FormatsZip(unittest.TestCase):
             bombe = ecrire_zip(self.d / "bombe.docx", {"word/document.xml": "<w:p><w:t>" + "a" * 5000 + "</w:t></w:p>"})
             with self.assertRaisesRegex(text_extraction.ErreurExtraction, "suspect"):
                 text_extraction.parties(bombe)
-        with mock.patch.object(text_extraction, "TAILLE_MAX", 10):
+        with mock.patch.object(text_extraction, "MAX_SIZE", 10):
             with self.assertRaisesRegex(text_extraction.ErreurExtraction, "trop gros"):
                 text_extraction.parties(self.d / "bombe.docx")
 

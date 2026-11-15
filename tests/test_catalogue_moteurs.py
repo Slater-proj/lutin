@@ -42,24 +42,24 @@ class Ed25519(unittest.TestCase):
             graine, publique, message, signature = (bytes.fromhex(x) for x in (graine, publique, message, signature))
             self.assertEqual(ed25519.cle_publique(graine), publique)
             self.assertEqual(ed25519.signer(graine, message), signature)
-            self.assertTrue(ed25519.verifier(publique, message, signature))
+            self.assertTrue(ed25519.check(publique, message, signature))
 
     def test_refus_de_tout_ce_qui_est_modifie_ou_mal_forme(self):
         graine, publique, message, signature = (bytes.fromhex(x) for x in VECTEURS[1])
-        self.assertFalse(ed25519.verifier(publique, message + b"x", signature))
-        self.assertFalse(ed25519.verifier(publique, message, signature[:-1] + bytes([signature[-1] ^ 1])))
-        self.assertFalse(ed25519.verifier(bytes.fromhex(VECTEURS[0][1]), message, signature))          # mauvaise clé
+        self.assertFalse(ed25519.check(publique, message + b"x", signature))
+        self.assertFalse(ed25519.check(publique, message, signature[:-1] + bytes([signature[-1] ^ 1])))
+        self.assertFalse(ed25519.check(bytes.fromhex(VECTEURS[0][1]), message, signature))          # mauvaise clé
         for mauvais in (b"", b"\x00" * 64, signature[:63], signature + b"\x00", None, "texte"):
-            self.assertFalse(ed25519.verifier(publique, message, mauvais))
-        self.assertFalse(ed25519.verifier(b"\xff" * 32, message, signature))
-        self.assertFalse(ed25519.verifier(publique[:31], message, signature))
+            self.assertFalse(ed25519.check(publique, message, mauvais))
+        self.assertFalse(ed25519.check(b"\xff" * 32, message, signature))
+        self.assertFalse(ed25519.check(publique[:31], message, signature))
 
     def test_signature_non_canonique_refusee(self):
         """s >= L : une signature « malléable » est refusée."""
         graine, publique, message, signature = (bytes.fromhex(x) for x in VECTEURS[0])
         s = int.from_bytes(signature[32:], "little") + ed25519.L
         if s < 2 ** 256:
-            self.assertFalse(ed25519.verifier(publique, message, signature[:32] + s.to_bytes(32, "little")))
+            self.assertFalse(ed25519.check(publique, message, signature[:32] + s.to_bytes(32, "little")))
 
 
 class Enveloppe(unittest.TestCase):
