@@ -814,6 +814,40 @@ class Chat(unittest.TestCase):
         self.assertEqual(p.erreurs, [])
         p.evaluer("location.hash = '#/chat'")
 
+    def test_5r_the_telegram_panel_shows_the_code_and_sends_or_drops_a_draft(self):
+        p = self.page
+        from lutin import addons, addons_telegram
+        self.addCleanup(lambda: (addons.write_state({}), addons_telegram.write(saved)))
+        saved = addons_telegram.read()
+        state = dict(saved, code="123456", autorises=[{"id": 42, "nom": "My phone"}],
+                     brouillons=[{"id": "d1", "chat_id": 7, "de": "Ann", "demande": "Are you there?", "texte": "Yes.", "date": 1700000000},
+                                 {"id": "d2", "chat_id": 7, "de": "Ann", "demande": "And now?", "texte": "Still.", "date": 1700000100}])
+        addons_telegram.write(state)
+        addons.write_state({"telegram": {"actif": True}})
+        p.evaluer("location.hash = '#/agents'")
+        p.attendre("!!document.querySelector('.addons .panel .code')")
+        self.assertEqual(p.evaluer("document.querySelector('.addons .panel .code').innerText"), "123456")
+        self.assertIn("My phone", p.evaluer("document.querySelector('.addons .panel .devices').innerText"))
+        self.assertEqual(p.evaluer("document.querySelectorAll('.addons .panel .draft').length"), 2)
+        if AXE.is_file():
+            self.axe("on the add-on panel")
+        sent = []
+        with mock.patch.object(addons_telegram, "send", side_effect=lambda chat, text: (sent.append((chat, text)), (True, ""))[1]):
+            p.evaluer("(() => { const box = document.querySelector('.addons .panel .draft textarea'); box.value = 'Yes, I am here.'; box.dispatchEvent(new Event('input', {bubbles: true})); })()")
+            p.evaluer("[...document.querySelectorAll('.addons .panel .draft .button')].find(b => b.innerText === 'Envoyer').click()")
+            self.eventually(lambda: sent == [(7, "Yes, I am here.")], "the text in the box is the one that leaves")
+        p.attendre("document.querySelectorAll('.addons .panel .draft').length === 1")
+        p.evaluer("[...document.querySelectorAll('.addons .panel .draft .button')].find(b => b.innerText === 'Jeter').click()")
+        p.attendre("document.querySelectorAll('.addons .panel .draft').length === 0")
+        self.assertEqual(addons_telegram.read()["brouillons"], [])
+        p.evaluer("[...document.querySelectorAll('.addons .panel .devices .button')].find(b => b.innerText === 'Oublier').click()")
+        p.attendre("!!document.querySelector('.addons .panel .confirm')")
+        self.assertEqual(len(addons_telegram.read()["autorises"]), 1, "asking is not forgetting")
+        p.evaluer("document.querySelector('.addons .panel .confirm .danger').click()")
+        self.eventually(lambda: addons_telegram.read()["autorises"] == [] and addons_telegram.read()["code"] != "123456", "the phone is forgotten and the code changes")
+        self.assertEqual(p.erreurs, [])
+        p.evaluer("location.hash = '#/chat'")
+
     def test_5e_the_first_launch_leads_to_a_model_and_the_chat(self):
         p = self.page
         flag = self.first_launch()

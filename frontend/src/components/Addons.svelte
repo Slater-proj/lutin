@@ -4,6 +4,7 @@
   // page only says that it is set (leave the box empty to keep it). Setting up and starting are for the machine itself (the server refuses a paired device and says so).
   import { onMount } from "svelte";
   import { api, ApiError } from "../lib/api";
+  import AddonPanel from "./AddonPanel.svelte";
   import { t } from "../lib/messages";
 
   type Choice = { value: string; label: string };
@@ -23,6 +24,9 @@
     check: Check | null;
   };
   type View = { addons: Addon[]; alerts: { id: string; name: string }[] };
+
+  // The add-ons that have a live panel here (the others, ComfyUI for now, are set up above and used from the chat).
+  const PANELS = ["telegram", "mail", "x"];
 
   let view = $state<View | null>(null);
   let problem = $state("");
@@ -153,6 +157,8 @@
               </ul>
             </div>
           {/if}
+
+          {#if addon.active && PANELS.includes(addon.id)}<AddonPanel id={addon.id} />{/if}
 
           <div class="actions">
             {#if addon.active}
