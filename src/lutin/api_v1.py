@@ -34,6 +34,7 @@ from . import mission as _mission
 from . import model_compat as _model_compat
 from . import model_fit as _model_fit
 from . import offline as _offline
+from . import mcp as _mcp
 from . import notifications as _notifications
 from . import scheduled_tasks as _scheduled_tasks
 from . import security as _sec
@@ -915,6 +916,81 @@ def test_notification_channel(request):
     """Sends a test message through the channel. Refused (400) with the reason when the service does not answer or refuses it."""
     _channel_one(request.params["id"])
     return _notifications.test_channel(request.params["id"])
+
+
+# --------------------------------------------------------------------------------------------------------- MCP connectors
+# A connector lends Lutin the tools of another program (started by a command) or of a server (an address). Nothing is started by adding one: the tools are asked for
+# by `refresh`, and a tool is given to the model only once it is `allowed`. Starting a program is for the machine itself, hence the right `configurator` for all writes.
+# The values of the environment variables and headers are secrets: they are never given back, only their names.
+def _connectors_view():
+    connectors = []
+    for entry in _mcp.vue():
+        connectors.append({"id": entry["id"], "name": entry["nom"], "kind": "http" if entry["type"] == "http" else "command", "command": entry["commande"] or [], "url": entry["url"],
+                           "active": bool(entry["actif"]), "read_only": bool(entry["lecture_seule"]), "connected": bool(entry["connecte"]), "refreshed_at": entry["vu"], "error": entry["erreur"],
+                           "env_names": entry["cles_env"], "header_names": entry["cles_entetes"],
+                           "tools": [{"name": tool["nom"], "description": tool["description"], "read_only": bool(tool["lecture"]), "allowed": bool(tool["autorise"])} for tool in entry["outils"]]})
+    return {"connectors": connectors, "tool_limit": _mcp.limit_tools()}
+
+
+def _connector_one(identifier):
+    if identifier not in _mcp.read()["serveurs"]:
+        raise ApiError(404, "not_found", _t("Connecteur introuvable."))
+
+
+def _text_map(value, field):
+    if value is not None and (not isinstance(value, dict) or not all(isinstance(key, str) and isinstance(item, str) for key, item in value.items())):
+        raise ApiError(400, "invalid_request", _t("Valeur invalide pour « {} » (attendu : {}).").format(field, "object"))
+    return value
+
+
+@route("GET", "/mcp-connectors", SESSION)
+def mcp_connectors(request):
+    """The connectors with their tools (`allowed` is what the model may call) and `tool_limit`: how many allowed tools the model would receive and how many are left out because there are too many."""
+    return _connectors_view()
+
+
+@route("POST", "/mcp-connectors", CONFIGURATOR)
+def add_mcp_connector(request):
+    """{"name", "command": "program arg" or ["program", "arg"], "env": {NAME: value}} for a program, or {"name", "url": "https://...", "headers": {Name: value}} for a server (one of the two, not both).
+    The connector is added with no tool allowed and read-only; nothing is started."""
+    body = request.body
+    unknown = sorted(set(body) - {"name", "command", "url", "env", "headers"})
+    if unknown or not isinstance(body.get("name"), str) or not isinstance(body.get("url", ""), str) or not isinstance(body.get("command", []), (str, list)):
+        raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("name, command, url, env, headers"))
+    _mcp.add(body["name"], body.get("command"), body.get("url", ""), _text_map(body.get("env"), "env"), _text_map(body.get("headers"), "headers"))
+    return 201, _connectors_view()
+
+
+@route("PATCH", "/mcp-connectors/{id}", CONFIGURATOR)
+def change_mcp_connector(request):
+    """Any of `active`, `read_only` (booleans); `tool` + `allowed` (gives or takes back one tool: refresh the list first); `env` or `headers` REPLACE the secrets ({} removes them)."""
+    body, identifier = request.body, request.params["id"]
+    unknown = sorted(set(body) - {"active", "read_only", "tool", "allowed", "env", "headers"})
+    if unknown or not body or ("tool" in body) != ("allowed" in body):
+        raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("active, read_only, tool + allowed, env, headers"))
+    _connector_one(identifier)
+    for field in ("active", "read_only", "allowed"):
+        if field in body and not isinstance(body[field], bool):
+            raise ApiError(400, "invalid_request", _t("Valeur invalide pour « {} » (attendu : {}).").format(field, "boolean"))
+    if "tool" in body and not isinstance(body["tool"], str):
+        raise ApiError(400, "invalid_request", _t("Valeur invalide pour « {} » (attendu : {}).").format("tool", "string"))
+    _mcp.set_value(identifier, body.get("active"), body.get("read_only"), body.get("tool"), body.get("allowed"), _text_map(body.get("env"), "env"), _text_map(body.get("headers"), "headers"))
+    return _connectors_view()
+
+
+@route("DELETE", "/mcp-connectors/{id}", CONFIGURATOR)
+def remove_mcp_connector(request):
+    """Removes the connector and closes it. The program it started is stopped; nothing else is touched."""
+    _connector_one(request.params["id"])
+    _mcp.remove(request.params["id"])
+    return _connectors_view()
+
+
+@route("POST", "/mcp-connectors/{id}/refresh", CONFIGURATOR)
+def refresh_mcp_connector(request):
+    """Starts the connector if needed and asks it for its tools (the ones already allowed stay allowed). Answers `{"tool_count"}`; refused (400) with the reason when it does not start or answer."""
+    _connector_one(request.params["id"])
+    return {"tool_count": _mcp.actualiser(request.params["id"])}
 
 
 # --------------------------------------------------------------------------------------------------------- conversations

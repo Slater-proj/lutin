@@ -8,6 +8,7 @@ import base64
 import json
 import os
 import shutil
+import sys
 import tempfile
 import threading
 import time
@@ -704,6 +705,38 @@ class Chat(unittest.TestCase):
         p.evaluer("document.querySelector('.notifications .confirm .danger').click()")
         p.attendre("!document.querySelector('.notifications .list')")
         self.assertEqual(notifications.list_channels(), [])
+        self.assertEqual(p.erreurs, [])
+        p.evaluer("location.hash = '#/chat'")
+
+    def test_5o_a_connector_is_added_refreshed_allowed_and_removed(self):
+        p = self.page
+        from lutin import mcp
+        self.addCleanup(lambda: [mcp.remove(identifier) for identifier in list(mcp.read()["serveurs"])])
+        self.addCleanup(mcp.close)
+        source = str(Path(__file__).resolve().parent.parent / "src")
+        p.evaluer("location.hash = '#/agents'")
+        p.attendre("!!document.querySelector('#connector-name')")
+        self.assertTrue(p.evaluer("!!document.querySelector('.connectors .empty')"), "no connector yet: the page says so")
+        command = '"%s" -m lutin.mcp_demo' % sys.executable
+        p.evaluer("(() => { const set = (id, value) => { const box = document.querySelector(id); box.value = value; box.dispatchEvent(new Event('input', {bubbles: true})); }; set('#connector-name', 'Demo'); set('#connector-command', %s); set('#connector-secrets', %s); document.querySelector('.connectors .add').requestSubmit(); })()" % (js(command), js("PYTHONPATH=" + source)))
+        p.attendre("[...document.querySelectorAll('.connectors .card strong')].some(e => e.innerText === 'Demo')")
+        self.assertEqual([entry["nom"] for entry in mcp.read()["serveurs"].values()], ["Demo"])
+        self.assertIn("PYTHONPATH", p.evaluer("document.querySelector('.connectors .card').innerText"), "the names of the secrets are shown")
+        self.assertNotIn(source, p.evaluer("document.querySelector('.connectors .card').innerText"), "their values never are")
+        p.evaluer("[...document.querySelectorAll('.connectors .card .button')].find(b => b.innerText === 'Actualiser les outils').click()")
+        p.attendre("!!document.querySelector('.connectors .done')")
+        p.evaluer("document.querySelector('.connectors .card details summary').click()")
+        p.attendre("!!document.querySelector('.connectors .tools input[type=checkbox]')")
+        if AXE.is_file():
+            self.axe("on the connectors")
+        p.evaluer("document.querySelector('.connectors .tools input[type=checkbox]').click()")
+        self.eventually(lambda: any(tool.get("autorise") for server in mcp.read()["serveurs"].values() for tool in server["outils"].values()), "the allowed tool is kept by the server")
+        p.evaluer("[...document.querySelectorAll('.connectors .card .button')].find(b => b.innerText === 'Retirer').click()")
+        p.attendre("!!document.querySelector('.connectors .confirm')")
+        self.assertEqual(len(mcp.read()["serveurs"]), 1, "asking is not removing")
+        p.evaluer("document.querySelector('.connectors .confirm .danger').click()")
+        p.attendre("!!document.querySelector('.connectors .empty')")
+        self.assertEqual(mcp.read()["serveurs"], {})
         self.assertEqual(p.erreurs, [])
         p.evaluer("location.hash = '#/chat'")
 

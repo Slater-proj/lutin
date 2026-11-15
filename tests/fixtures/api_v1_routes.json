@@ -141,6 +141,31 @@
  },
  {
   "method": "GET",
+  "path": "/api/v1/mcp-connectors",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/mcp-connectors",
+  "right": "configurator"
+ },
+ {
+  "method": "DELETE",
+  "path": "/api/v1/mcp-connectors/{id}",
+  "right": "configurator"
+ },
+ {
+  "method": "PATCH",
+  "path": "/api/v1/mcp-connectors/{id}",
+  "right": "configurator"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/mcp-connectors/{id}/refresh",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
   "path": "/api/v1/models",
   "right": "session"
  },
