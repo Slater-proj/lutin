@@ -2,6 +2,7 @@
   // An answer written in Markdown, drawn with real elements from the tree of lib/markdown.ts. Nothing here interprets HTML.
   import { t } from "../lib/messages";
   import { parseMarkdown, type Block, type Inline } from "../lib/markdown";
+  import { highlight } from "../lib/highlight";
 
   let { source }: { source: string } = $props();
 
@@ -42,7 +43,7 @@
           <span>{node.language || t("md.code")}</span>
           {#if canCopy}<button type="button" onclick={() => copy(node.text)}>{copied === node.text ? t("md.copied") : t("md.copy")}</button>{/if}
         </figcaption>
-        <pre><code>{node.text}</code></pre>
+        <pre><code>{#each highlight(node.text, node.language) as run, at (at)}{#if run.kind === "plain"}{run.text}{:else}<span class={run.kind}>{run.text}</span>{/if}{/each}</code></pre>
       </figure>
     {:else if node.kind === "list"}
       {#if node.ordered}
@@ -175,6 +176,11 @@
     background: var(--color-surface-raised);
     color: var(--color-text);
   }
+
+  .comment { color: var(--color-syntax-comment); font-style: italic; }
+  .string { color: var(--color-syntax-string); }
+  .number, .literal { color: var(--color-syntax-number); }
+  .keyword { color: var(--color-syntax-keyword); font-weight: 600; }
 
   pre {
     margin: 0;

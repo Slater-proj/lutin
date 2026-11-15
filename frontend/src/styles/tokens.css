@@ -23,6 +23,10 @@
   --color-warning-soft: light-dark(#fbf1d3, #332b14);
   --color-focus: light-dark(#1a56c4, #8fb8ff);
   --color-code-bg: light-dark(#f1f2ee, #0c0e10);
+  --color-syntax-comment: light-dark(#545b65, #9aa3b0);
+  --color-syntax-string: light-dark(#0b6a3b, #82e3a6);
+  --color-syntax-number: light-dark(#8f4300, #ffb86b);
+  --color-syntax-keyword: light-dark(#7a2a8c, #d7b0ff);
 
   --font-sans: system-ui, -apple-system, "Segoe UI Variable Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-mono: ui-monospace, "Cascadia Code", "SF Mono", Menlo, Consolas, monospace;

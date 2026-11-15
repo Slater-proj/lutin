@@ -36,7 +36,36 @@
   const SUGGESTIONS = ["chat.suggest_explain", "chat.suggest_write", "chat.suggest_fix", "chat.suggest_summarise"] as const;
 
   const items = $derived(storedToItems((conversation?.messages ?? []).slice(0, cut ?? undefined)));
-  const busy = $derived(live !== null);
+  let elsewhere = $state(false); // an answer is being written in this conversation, but not by this page (it was reloaded, or another device sent it)
+  let watcher: ReturnType<typeof setInterval> | undefined;
+  const busy = $derived(live !== null || elsewhere);
+
+  function stopWatching(): void {
+    if (watcher !== undefined) clearInterval(watcher);
+    watcher = undefined;
+    elsewhere = false;
+  }
+
+  async function runningElsewhere(id: string): Promise<boolean> {
+    const current = await api<Status>("GET", "/status").catch(() => null);
+    return current?.active_turns.includes(id) ?? false;
+  }
+
+  /** After opening a conversation whose answer is still being written: wait for its end, then read what was stored. */
+  async function watch(id: string): Promise<void> {
+    stopWatching();
+    if (live !== null || !(await runningElsewhere(id))) return;
+    elsewhere = true;
+    watcher = setInterval(async () => {
+      if (conversation?.id !== id) return stopWatching();
+      if (await runningElsewhere(id)) return;
+      stopWatching();
+      const stored = await api<Conversation>("GET", `/conversations/${encodeURIComponent(id)}`).catch(() => null);
+      if (stored && conversation?.id === id) conversation = stored;
+      await loadList().catch(() => undefined);
+      onchanged();
+    }, 2000);
+  }
 
   function explain(cause: unknown): string {
     if (cause instanceof ApiError) return cause.message || (cause.code === "unreachable" ? t("error.unreachable") : t("error.generic", cause.code));
@@ -93,10 +122,12 @@
       listOpen = false;
       renaming = false;
       cancelEdit();
+      await watch(id);
     });
   }
 
   function startNew(): void {
+    stopWatching();
     conversation = null;
     problem = "";
     listOpen = false;
@@ -312,6 +343,7 @@
       await Promise.all([loadList(), loadModels()]);
       options = await newConversationOptions();
     });
+    return stopWatching;
   });
 </script>
 
@@ -387,6 +419,7 @@
         </div>
       {:else}
         <Thread {items} {pending} {live} onedit={busy ? undefined : startEdit} />
+        {#if elsewhere}<p class="elsewhere" role="status">{t("chat.elsewhere")}</p>{/if}
       {/if}
     </div>
 
@@ -877,6 +910,15 @@
     background: var(--color-surface-raised);
     color: var(--color-text-muted);
     cursor: not-allowed;
+  }
+
+  .elsewhere {
+    margin: var(--space-3) 0 0;
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-md);
+    background: var(--color-accent-soft);
+    color: var(--color-accent-text);
+    font-size: var(--text-sm);
   }
 
   .stop {

@@ -9,6 +9,7 @@ import json
 import os
 import shutil
 import tempfile
+import threading
 import time
 import unittest
 from pathlib import Path
@@ -101,6 +102,7 @@ class Chat(unittest.TestCase):
         self.assertEqual(p.evaluer("[document.querySelector('.thread strong').innerText, document.querySelectorAll('.thread .markdown ul li').length]"), ["the fake", 2], "Markdown is drawn")
         self.assertEqual(p.evaluer("document.querySelector('.thread figure.code pre').innerText"), "print('<b>hi</b>')", "code is shown as written")
         self.assertEqual(p.evaluer("document.querySelectorAll('.thread b, .thread script').length"), 0, "an answer never becomes HTML")
+        self.assertEqual(p.evaluer("[...document.querySelectorAll('.thread figure.code pre .string')].map(e => e.innerText)"), ["'<b>hi</b>'"], "the code is coloured: the string is its own run")
         self.assertEqual(p.evaluer("document.querySelectorAll('.list .entry').length"), 1)
         self.assertEqual(p.evaluer("document.querySelector('.list .entry').getAttribute('aria-current')"), "true")
         self.assertEqual(p.erreurs, [])
@@ -241,6 +243,23 @@ class Chat(unittest.TestCase):
         self.assertEqual(p.evaluer("document.querySelectorAll('.chips li').length"), 2, "editing a message keeps what was sent with it")
         p.evaluer("document.querySelector('.editing .link').click()")
         self.assertEqual(p.evaluer("document.querySelectorAll('.chips li').length"), 0, "cancelling the edit drops them")
+        self.assertEqual(p.erreurs, [])
+
+    def test_3g_an_answer_still_being_written_elsewhere_is_waited_for_after_a_reload(self):
+        p = self.page
+        conversation = T.lire("/api/etat")["conversations"][0]["id"]
+        T.A.TOURS_ACTIFS[conversation] = threading.Event()          # as if another page (or a page before the reload) had sent a message and the answer was not finished
+        self.addCleanup(T.A.TOURS_ACTIFS.pop, conversation, None)
+        p.aller(T.BASE + "/app/")
+        p.attendre("!!document.querySelector('.list .entry')")
+        p.evaluer("document.querySelector('.list .entry').click()")
+        p.attendre("!!document.querySelector('.elsewhere')")
+        self.assertTrue(p.evaluer("!!document.querySelector('.composer .stop')"), "the Stop button is offered: this turn can be stopped from here")
+        self.assertEqual(p.evaluer("document.querySelector('.elsewhere').getAttribute('role')"), "status")
+        if AXE.is_file():
+            self.axe("while an answer is written elsewhere")
+        T.A.TOURS_ACTIFS.pop(conversation)
+        p.attendre("!document.querySelector('.elsewhere') && !!document.querySelector('.composer button[type=submit]')", 10)
         self.assertEqual(p.erreurs, [])
 
     def test_4_a_refusal_of_the_server_is_shown_and_the_message_is_given_back(self):
