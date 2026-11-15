@@ -364,13 +364,16 @@ class Chat(unittest.TestCase):
             self.axe("on the guide of models (%s)" % theme)
             p.evaluer("document.querySelectorAll('.tabs button')[1].click()")
             p.evaluer("location.hash = '#/settings'")
+            p.attendre("!!document.querySelector('#setting-temperature')")
+            self.axe("on the Settings screen (%s)" % theme)
+            p.evaluer("location.hash = '#/agents'")
             p.attendre("!!document.querySelector('main h1')")
             self.axe("on a screen that is not there yet (%s)" % theme)
         p.commande("Emulation.setDeviceMetricsOverride", width=360, height=740, deviceScaleFactor=1, mobile=True)
         try:
-            for screen in ("chat", "models"):
+            for screen in ("chat", "models", "settings"):
                 p.evaluer("location.hash = '#/%s'" % screen)
-                p.attendre("!!document.querySelector('#message, .models')")
+                p.attendre("!!document.querySelector('#message, .models, .settings')")
                 self.axe("on the %s screen at 360 px (%s)" % (screen, theme))
         finally:
             p.commande("Emulation.clearDeviceMetricsOverride")
@@ -446,6 +449,34 @@ class Chat(unittest.TestCase):
         p.evaluer("[...document.querySelectorAll('.guide .correct .button')].find(b => b.innerText.startsWith('Revenir')).click()")
         p.attendre("![...document.querySelectorAll('.guide .correct .button')].some(b => b.innerText.startsWith('Revenir'))")
         self.eventually(lambda: T.A.reglages()["budget_go"] == 0.0, "back to the detection")
+        self.assertEqual(p.erreurs, [])
+        p.evaluer("location.hash = '#/chat'")
+
+    def test_5h_a_setting_is_changed_kept_by_the_server_and_refused_out_of_range(self):
+        p = self.page
+        before = T.A.reglages()
+        keys = ("temperature", "web", "mode", "memoire_longue")
+        self.addCleanup(lambda: T.A.enregistrer_reglages({key: before[key] for key in keys}))
+        p.evaluer("location.hash = '#/settings'")
+        p.attendre("!!document.querySelector('#setting-temperature')")
+        change = "(() => { const box = document.querySelector('#%s'); box.value = %s; box.dispatchEvent(new Event('change', {bubbles: true})); })()"
+        p.evaluer(change % ("setting-temperature", js("0.9")))
+        self.eventually(lambda: T.A.reglages()["temperature"] == 0.9, "a number is kept")
+        p.attendre("document.querySelector('.settings .saved').innerText.includes('Enregistré')")
+        p.evaluer(change % ("setting-temperature", js("5")))
+        p.attendre("!!document.querySelector('#setting-temperature').closest('.row').querySelector('.error')")
+        self.assertEqual(T.A.reglages()["temperature"], 0.9, "a value out of its range is refused before it is sent")
+        wanted = not before["web"]
+        p.evaluer("document.querySelector('#setting-web').click()")
+        self.eventually(lambda: T.A.reglages()["web"] == wanted, "a switch is kept as soon as it is clicked")
+        p.evaluer(change % ("setting-mode", js("technical")))
+        self.eventually(lambda: T.A.reglages()["mode"] == "technique", "a choice is stored under the word the engine knows")
+        self.assertTrue(p.evaluer("!!document.querySelector('#setting-auto_approve_commands').closest('.row').querySelector('.care')"), "what removes a question is marked")
+        p.aller(T.BASE + "/app/")
+        p.attendre("!!document.querySelector('#message')")
+        p.evaluer("location.hash = '#/settings'")
+        p.attendre("!!document.querySelector('#setting-temperature')")
+        self.assertEqual(p.evaluer("document.querySelector('#setting-temperature').value"), "0.9", "after a reload the page shows what the server holds")
         self.assertEqual(p.erreurs, [])
         p.evaluer("location.hash = '#/chat'")
 

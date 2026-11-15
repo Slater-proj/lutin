@@ -10,6 +10,7 @@
   import Models from "./screens/Models.svelte";
   import Setup from "./screens/Setup.svelte";
   import ComingSoon from "./screens/ComingSoon.svelte";
+  import Settings from "./screens/Settings.svelte";
 
   const AREAS = ["chat", "agents", "projects", "models", "settings"] as const;
   type Area = (typeof AREAS)[number];
@@ -80,6 +81,8 @@
       <Chat {status} onchanged={refreshStatus} />
     {:else if area === "models"}
       <Models {status} onchanged={refreshStatus} />
+    {:else if area === "settings"}
+      <Settings />
     {:else}
       <ComingSoon name={t(("nav." + area) as MessageKey)} />
     {/if}
