@@ -334,6 +334,11 @@ class Carte(unittest.TestCase):
         engines.CONTEXT["hors_ligne"] = lambda: False
         engines.CONTEXT["en_docker"] = lambda: False
         self.mo = engines.ENGINES["openai"]
+        # Changer de serveur arrête celui qui tourne, et « tourne » se lit sur un port fixe de la machine (1234 pour LM Studio) : si quelque chose y répond,
+        # le test lancerait le vrai « lms server stop ». Ici rien ne tourne : un test ne sonde ni n'arrête rien sur la machine qui le lance.
+        eteint = mock.patch.object(ml.MoteurOpenAI, "actif", return_value=False)
+        eteint.start()
+        self.addCleanup(eteint.stop)
         ml.regler_serveur("openai", {"serveur": "exllamav3"})
         self.addCleanup(self.remettre)
 
