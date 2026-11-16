@@ -97,7 +97,8 @@ colour use beyond contrast, and the quality of the texts. Not verified either: a
 | Context gauge, speed, task list | done, during the turn only |
 | Markdown in answers: headings, lists, tables, quotes, links, code blocks with a copy button | done — own parser (`frontend/src/lib/markdown.ts`), no HTML ever interpreted |
 | Syntax colouring of code (`frontend/src/lib/highlight.ts`: comments, strings, numbers, keywords of about twenty languages, no dependency) | done |
-| Diagrams (Mermaid), formulas | missing |
+| Diagrams (Mermaid) | done — drawn by Mermaid in a sandboxed frame with its own policy, shown as an image; the code one click away ([ADR 0011](../adr/0011-diagrams-in-an-isolated-frame.md)) |
+| Formulas (LaTeX between `$`, `$$`, `\( \)`, `\[ \]`) | done — new: own reader of a LaTeX subset (`frontend/src/lib/math.ts`), laid out by the browser as MathML; what it does not know is shown as written |
 | Rename, pin a conversation | done |
 | Edit a message and answer again from it | done |
 | Images and attached documents | done: file dialog, paste of a picture, drop on the field; sent, shown in the message, kept when the message is edited. A sent document is a link that downloads it again; when the model cannot see images, the agent switches to one that can and says so in the thread (a notice). |

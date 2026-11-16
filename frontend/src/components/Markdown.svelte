@@ -3,6 +3,9 @@
   import { t } from "../lib/messages";
   import { parseMarkdown, type Block, type Inline } from "../lib/markdown";
   import { highlight } from "../lib/highlight";
+  import { isDiagram } from "../lib/diagram";
+  import Diagram from "./Diagram.svelte";
+  import Formula from "./Formula.svelte";
 
   let { source }: { source: string } = $props();
 
@@ -25,7 +28,19 @@
 
 {#snippet inline(nodes: Inline[])}
   <!-- On one line on purpose: a line break between two pieces would become a space inside a word. -->
-  {#each nodes as node, index (index)}{#if node.kind === "text"}{node.text}{:else if node.kind === "code"}<code>{node.text}</code>{:else if node.kind === "strong"}<strong>{@render inline(node.children)}</strong>{:else if node.kind === "em"}<em>{@render inline(node.children)}</em>{:else if node.kind === "link"}<a href={node.href} target="_blank" rel="noopener noreferrer">{@render inline(node.children)}</a>{/if}{/each}
+  {#each nodes as node, index (index)}{#if node.kind === "text"}{node.text}{:else if node.kind === "code"}<code>{node.text}</code>{:else if node.kind === "strong"}<strong>{@render inline(node.children)}</strong>{:else if node.kind === "em"}<em>{@render inline(node.children)}</em>{:else if node.kind === "link"}<a href={node.href} target="_blank" rel="noopener noreferrer">{@render inline(node.children)}</a>{:else if node.kind === "math"}<Formula source={node.text} display={node.display} />{/if}{/each}
+{/snippet}
+
+{#snippet code(node: Extract<Block, { kind: "code" }>)}
+  <figure class="code">
+    <figcaption>
+      <span>{node.language || t("md.code")}</span>
+      {#if canCopy}<button type="button" onclick={() => copy(node.text)}>{copied === node.text ? t("md.copied") : t("md.copy")}</button>{/if}
+    </figcaption>
+    <!-- A long line makes this block scroll sideways: it takes the keyboard focus, so that the arrow keys can scroll it (WCAG 2.1.1). -->
+    <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+    <pre tabindex="0"><code>{#each highlight(node.text, node.language) as run, at (at)}{#if run.kind === "plain"}{run.text}{:else}<span class={run.kind}>{run.text}</span>{/if}{/each}</code></pre>
+  </figure>
 {/snippet}
 
 {#snippet block(nodes: Block[])}
@@ -38,13 +53,12 @@
       {:else if node.level === 2}<h4 class="h2">{@render inline(node.children)}</h4>
       {:else}<h5 class="h3">{@render inline(node.children)}</h5>{/if}
     {:else if node.kind === "code"}
-      <figure class="code">
-        <figcaption>
-          <span>{node.language || t("md.code")}</span>
-          {#if canCopy}<button type="button" onclick={() => copy(node.text)}>{copied === node.text ? t("md.copied") : t("md.copy")}</button>{/if}
-        </figcaption>
-        <pre><code>{#each highlight(node.text, node.language) as run, at (at)}{#if run.kind === "plain"}{run.text}{:else}<span class={run.kind}>{run.text}</span>{/if}{/each}</code></pre>
-      </figure>
+      <!-- A diagram is drawn once its block is whole; while it is being written, and when it cannot be drawn, it is the code it is made of. -->
+      {#if node.closed && isDiagram(node.language)}
+        <Diagram source={node.text}>{@render code(node)}</Diagram>
+      {:else}
+        {@render code(node)}
+      {/if}
     {:else if node.kind === "list"}
       {#if node.ordered}
         <ol start={node.start}>
@@ -58,7 +72,8 @@
     {:else if node.kind === "quote"}
       <blockquote>{@render block(node.children)}</blockquote>
     {:else if node.kind === "table"}
-      <div class="table">
+      <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+      <div class="table" tabindex="0">
         <table>
           <thead>
             <tr>{#each node.head as cell, at (at)}<th scope="col">{@render inline(cell)}</th>{/each}</tr>
@@ -70,6 +85,9 @@
           </tbody>
         </table>
       </div>
+    {:else if node.kind === "math"}
+      <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+      <div class="math" tabindex="0"><Formula source={node.text} display /></div>
     {:else if node.kind === "rule"}
       <hr />
     {/if}
@@ -200,8 +218,13 @@
     color: var(--color-text-muted);
   }
 
-  .table {
+  .table,
+  .math {
     overflow-x: auto;
+  }
+
+  .math {
+    text-align: center;
   }
 
   table {

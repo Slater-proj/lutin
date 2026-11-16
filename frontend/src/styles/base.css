@@ -142,3 +142,14 @@ code {
     opacity: 1;
   }
 }
+
+/* The frame that draws diagrams (lib/diagram.ts): never seen, but laid out, so that Mermaid can measure its texts. */
+.diagram-frame {
+  position: fixed;
+  top: 0;
+  left: -10000px;
+  width: 800px;
+  height: 600px;
+  border: 0;
+  visibility: hidden;
+}

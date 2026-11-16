@@ -1,6 +1,7 @@
 // Markdown as the models write it, turned into a small tree that components/Markdown.svelte draws with real elements.
 // No HTML is ever produced or interpreted here: a tag in an answer stays text. No dependency: the page works offline and under its strict policy.
-// Covered: paragraphs, headings, fenced code, lists (nested), quotes, tables, rules; inline code, bold, italic, links (http, https, mailto only).
+// Covered: paragraphs, headings, fenced code, lists (nested), quotes, tables, rules; inline code, bold, italic, links (http, https, mailto only);
+// formulas between « $ », « $$ », « \( \) » and « \[ \] » (their LaTeX is read by lib/math.ts).
 // An answer is parsed again at each piece that arrives, so an unfinished construct (an open code fence, a half-written table) must still give a tree.
 
 export type Inline =
@@ -8,15 +9,17 @@ export type Inline =
   | { kind: "code"; text: string }
   | { kind: "strong"; children: Inline[] }
   | { kind: "em"; children: Inline[] }
-  | { kind: "link"; href: string; children: Inline[] };
+  | { kind: "link"; href: string; children: Inline[] }
+  | { kind: "math"; text: string; display: boolean }; // a formula in LaTeX (lib/math.ts); display: on its own line
 
 export type Block =
   | { kind: "paragraph"; children: Inline[] }
   | { kind: "heading"; level: number; children: Inline[] }
-  | { kind: "code"; language: string; text: string }
+  | { kind: "code"; language: string; text: string; closed: boolean } // closed: its last fence is written (a diagram is drawn only then)
   | { kind: "list"; ordered: boolean; start: number; items: Block[][] }
   | { kind: "quote"; children: Block[] }
   | { kind: "table"; head: Inline[][]; rows: Inline[][][] }
+  | { kind: "math"; text: string }
   | { kind: "rule" };
 
 const FENCE = /^ {0,3}(`{3,}|~{3,})\s*([\w+#.-]*)\s*$/;
@@ -25,6 +28,8 @@ const RULE = /^ {0,3}([-*_])(?:\s*\1){2,}\s*$/;
 const QUOTE = /^ {0,3}>\s?(.*)$/;
 const ITEM = /^(\s*)([-*+]|\d{1,9}[.)])\s+(.*)$/;
 const TABLE_RULE = /^\s*\|?\s*:?-+:?\s*(?:\|\s*:?-+:?\s*)*\|?\s*$/;
+const MATH_OPEN = /^ {0,3}(?:\$\$|\\\[)/;
+const MATH_LINES = 80;
 const SAFE_LINK = /^(?:https?:\/\/|mailto:)/i;
 const PUNCTUATION = /[!-/:-@[-`{-~]/;
 
@@ -38,7 +43,42 @@ function cells(line: string): string[] {
 }
 
 function startsBlock(line: string): boolean {
-  return FENCE.test(line) || HEADING.test(line) || RULE.test(line) || QUOTE.test(line) || ITEM.test(line);
+  return FENCE.test(line) || HEADING.test(line) || RULE.test(line) || QUOTE.test(line) || ITEM.test(line) || MATH_OPEN.test(line);
+}
+
+/** The formula that opens on line `from` with « $$ » or « \[ » and is closed with nothing after it, or null: one still being written stays text. */
+function mathBlock(lines: string[], from: number): { text: string; next: number } | null {
+  const first = lines[from].trim();
+  const close = first.startsWith("$$") ? "$$" : "\\]";
+  const body: string[] = [];
+  for (let i = from; i < lines.length && i < from + MATH_LINES; i += 1) {
+    const line = i === from ? first.slice(2) : lines[i];
+    const end = line.indexOf(close);
+    if (end < 0) {
+      body.push(line);
+      continue;
+    }
+    if (line.slice(end + 2).trim()) return null; // the sentence goes on after it: a formula inside a paragraph
+    const text = [...body, line.slice(0, end)].join("\n").trim();
+    return text ? { text, next: i + 1 } : null;
+  }
+  return null;
+}
+
+/** The formula between dollars that starts at `at`, or null. Two dollars on each side always are one. One dollar is read as Pandoc reads it, because a
+ * dollar is also a price: nothing blank just inside, no digit right after the last one, no word stuck before the first, and all on one line. */
+function dollars(text: string, at: number): { text: string; display: boolean; length: number } | null {
+  if (text.startsWith("$$", at)) {
+    const end = text.indexOf("$$", at + 2);
+    const inside = end > 0 ? text.slice(at + 2, end).trim() : "";
+    return inside ? { text: inside, display: true, length: end + 2 - at } : null;
+  }
+  const after = text[at + 1];
+  if (isWord(text[at - 1]) || after === undefined || /\s/.test(after)) return null;
+  let end = text.indexOf("$", at + 1);
+  while (end > 0 && text[end - 1] === "\\") end = text.indexOf("$", end + 1); // « \$ » inside a formula is a dollar sign
+  if (end < 0 || /\s/.test(text[end - 1]) || /\d/.test(text[end + 1] ?? "") || text.slice(at + 1, end).includes("\n")) return null;
+  return { text: text.slice(at + 1, end), display: false, length: end + 1 - at };
 }
 
 export function parseMarkdown(source: string): Block[] {
@@ -62,8 +102,15 @@ function parseBlocks(lines: string[]): Block[] {
         body.push(lines[i]);
         i += 1;
       }
+      const closed = i < lines.length;
       i += 1; // the closing fence, or the end of an answer still being written
-      blocks.push({ kind: "code", language: fence[2], text: body.join("\n") });
+      blocks.push({ kind: "code", language: fence[2], text: body.join("\n"), closed });
+      continue;
+    }
+    const math = MATH_OPEN.test(line) ? mathBlock(lines, i) : null;
+    if (math) {
+      blocks.push({ kind: "math", text: math.text });
+      i = math.next;
       continue;
     }
     const heading = HEADING.exec(line);
@@ -170,6 +217,25 @@ export function parseInline(text: string): Inline[] {
   while (i < text.length) {
     const character = text[i];
     const rest = text.slice(i);
+    if (character === "\\" && (text[i + 1] === "(" || text[i + 1] === "[")) {
+      const end = text.indexOf(text[i + 1] === "(" ? "\\)" : "\\]", i + 2);
+      const inside = end > 0 ? text.slice(i + 2, end).trim() : "";
+      if (inside) {
+        flush();
+        out.push({ kind: "math", text: inside, display: text[i + 1] === "[" });
+        i = end + 2;
+        continue;
+      }
+    }
+    if (character === "$") {
+      const math = dollars(text, i);
+      if (math) {
+        flush();
+        out.push({ kind: "math", text: math.text, display: math.display });
+        i += math.length;
+        continue;
+      }
+    }
     if (character === "\\" && i + 1 < text.length && PUNCTUATION.test(text[i + 1])) {
       plain += text[i + 1];
       i += 2;

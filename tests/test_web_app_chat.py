@@ -148,6 +148,86 @@ class Chat(unittest.TestCase):
         self.assertFalse(p.evaluer("!!document.querySelector('.card')"), "the second time was not asked")
         self.assertEqual(p.erreurs, [])
 
+    def test_3i_a_diagram_is_drawn_in_an_isolated_frame_and_shown_as_an_image(self):
+        p = self.page
+        good = "graph TD\n  A[Start] --> B{Ready?}\n  B -- yes --> C[Done]"
+        trapped = "graph LR\n  X[\"<img src=x onerror='parent.__trap=1;window.__trap=1'>\"] --> Y[\"<script>window.__trap=2</script>\"] --> Z[\"" + "a label made long on purpose " * 4 + "\"]"
+        T.SCENARIO[:] = [[{"content": "Here it is:\n\n```mermaid\n" + good + "\n```\n\nA broken one:\n\n```mermaid\ngraph TD\n  A --> \n```\n\n"},
+                          {"content": "And a trapped one:\n\n```mermaid\n" + trapped + "\n```\n\nAn unfinished one:\n\n```mermaid\ngraph TD\n  Z --> W"}]]
+        self.write("Draw me a diagram")
+        p.evaluer("document.querySelector('.composer button[type=submit]').click()")
+        loaded = "[...document.querySelectorAll('.thread figure.diagram img')].filter(i => i.complete && i.naturalWidth > 0)"
+        p.attendre(loaded + ".length >= 1 && !!document.querySelector('.thread .note')")
+        p.attendre("!!document.querySelector('.composer button[type=submit]')")
+        image = p.evaluer("(() => { const i = %s[0]; return [i.src.slice(0, 5), i.naturalWidth === i.width || i.naturalWidth > i.width, i.getAttribute('width') > 0, i.alt.length > 10]; })()" % loaded)
+        self.assertEqual(image, ["blob:", True, True, True], "the drawing is an image made by this page, with a size and a text for those who cannot see it")
+        self.assertEqual(p.evaluer("[document.querySelectorAll('iframe').length, document.querySelector('iframe.diagram-frame').getAttribute('sandbox'), document.querySelector('iframe.diagram-frame').getAttribute('src')]"),
+                         [1, "allow-scripts", "/app/diagram.html"], "one frame for every diagram, allowed to run scripts and nothing else")
+        self.assertEqual(p.evaluer("(() => { try { return String(document.querySelector('iframe.diagram-frame').contentWindow.document); } catch (error) { return error.name; } })()"), "SecurityError",
+                         "the frame has no origin: this page cannot read it, and it cannot read this page")
+        self.assertEqual(p.evaluer("document.querySelectorAll('.thread .diagram svg, .thread .markdown script, .thread .markdown img:not([src^=\"blob:\"])').length"), 0, "a drawing never becomes markup of this page")
+        self.assertIsNone(p.evaluer("window.__trap || null"), "nothing written in a diagram runs")
+        notes = p.evaluer("[...document.querySelectorAll('.thread .note')].map(n => n.innerText)")
+        self.assertIn("Ce diagramme n'a pas pu être dessiné : voici son code.", notes)
+        codes = p.evaluer("[...document.querySelectorAll('.thread figure.code')].map(f => f.querySelector('pre').innerText)")
+        self.assertIn("graph TD\n  A --> ", codes, "a diagram that cannot be drawn stays the code it is made of")
+        self.assertIn("graph TD\n  Z --> W", codes, "a diagram whose block is not closed is not drawn")
+        self.assertNotIn(good, codes)
+        # The code of a drawn diagram is one click away, and the drawing one click back.
+        p.evaluer("document.querySelector('.thread figure.diagram figcaption button').click()")
+        p.attendre("[...document.querySelectorAll('.thread figure.code pre')].some(c => c.innerText === %s)" % js(good))
+        p.evaluer("[...document.querySelectorAll('.thread .note button')].find(b => b.innerText === 'Voir le diagramme').click()")
+        p.attendre(loaded + ".length >= 1 && ![...document.querySelectorAll('.thread figure.code pre')].some(c => c.innerText === %s)" % js(good))
+        # A line of code longer than its block scrolls sideways: the block takes the keyboard focus, or the arrow keys could not scroll it.
+        p.attendre(loaded + ".length === 2")
+        p.evaluer("document.querySelectorAll('.thread figure.diagram figcaption button')[1].click()")
+        long = "[...document.querySelectorAll('.thread figure.code pre')].find(c => c.innerText.includes('onerror'))"
+        p.attendre("!!" + long)
+        self.assertEqual(p.evaluer("(() => { const c = %s; return [c.scrollWidth > c.clientWidth, c.tabIndex]; })()" % long), [True, 0])
+        if AXE.is_file():
+            self.axe("on the code of a diagram, with a line longer than its block")
+        p.evaluer("[...document.querySelectorAll('.thread .note button')].find(b => b.innerText === 'Voir le diagramme').click()")
+        p.attendre(loaded + ".length === 2")
+        # The drawing follows the theme of the page.
+        before = p.evaluer(loaded + "[0].src")
+        was = p.evaluer("document.documentElement.getAttribute('data-theme')")
+        shown = was or p.evaluer("matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'")          # without a choice, the system decides: it may be dark on this machine
+        p.evaluer("document.documentElement.setAttribute('data-theme', %s)" % js("light" if shown == "dark" else "dark"))
+        p.attendre(loaded + ".length >= 1 && " + loaded + "[0].src !== %s" % js(before))
+        self.picture("3i-diagram")
+        if AXE.is_file():
+            self.axe("on an answer with a diagram")
+        p.evaluer("(() => { const was = %s; if (was) document.documentElement.setAttribute('data-theme', was); else document.documentElement.removeAttribute('data-theme'); })()" % js(was))
+        self.assertEqual(p.evaluer("window.__violations"), [], "the content security policy of the page blocked something the diagrams need")
+        self.assertEqual(p.erreurs, [])
+
+    def test_3j_formulas_are_laid_out_by_the_browser_and_prices_stay_text(self):
+        p = self.page
+        T.SCENARIO[:] = [[{"content": "Inline $x_i^2$ and prices from $5 to $10.\n\n$$\n\\frac{a+b}{2} = \\sum_{i=1}^{n} x_i\n$$\n\n"},
+                          {"content": "Unknown: \\(\\ce{H2O}\\)\n\n\\[ \\begin{pmatrix} 1 & 0 \\\\ 0 & 1 \\end{pmatrix} \\]\n\nStill written: $$ y = "}]]
+        self.write("Show me formulas")
+        p.evaluer("document.querySelector('.composer button[type=submit]').click()")
+        p.attendre("document.querySelectorAll('.thread math').length >= 3 && !!document.querySelector('.thread code.formula-source')")
+        p.attendre("!!document.querySelector('.composer button[type=submit]')")
+        last = "[...document.querySelectorAll('.thread .markdown')].at(-1)"
+        mathml = "http://www.w3.org/1998/Math/MathML"
+        self.assertEqual(p.evaluer("[...%s.querySelectorAll('math')].map(m => [m.namespaceURI, m.getAttribute('display')])" % last), [[mathml, "inline"], [mathml, "block"], [mathml, "block"]])
+        self.assertEqual(p.evaluer("[...new Set([...%s.querySelectorAll('math *')].map(e => e.namespaceURI))]" % last), [mathml], "every piece of a formula is a real MathML element")
+        self.assertEqual(p.evaluer("[...%s.querySelector('math').querySelectorAll('*')].map(e => e.localName + (e.children.length ? '' : ':' + e.textContent))" % last), ["msubsup", "mi:x", "mi:i", "mn:2"])
+        self.assertTrue(p.evaluer("(() => { const f = %s.querySelector('mfrac'); const [above, below] = [...f.children].map(c => c.getBoundingClientRect()); return above.height > 0 && above.bottom <= below.top + 1; })()" % last),
+                        "the browser lays the fraction out: what is above is above")
+        self.assertEqual(p.evaluer("%s.querySelectorAll('mtable mtr').length" % last), 2)
+        self.assertEqual(p.evaluer("%s.querySelector('code.formula-source').innerText" % last), "\\ce{H2O}", "what the reader does not know is shown as written, never guessed")
+        text = p.evaluer("%s.innerText" % last)
+        self.assertIn("prices from $5 to $10.", text, "a price is not a formula")
+        self.assertIn("Still written: $$ y =", text, "a formula still being written stays text")
+        self.assertEqual(p.evaluer("%s.querySelectorAll('[style]').length" % last), 0, "no inline style: the policy of the page forbids them")
+        self.picture("3j-formulas")
+        if AXE.is_file():
+            self.axe("on an answer with formulas")
+        self.assertEqual(p.evaluer("window.__violations"), [])
+        self.assertEqual(p.erreurs, [])
+
     def test_3b_the_conversation_is_renamed_and_pinned(self):
         p = self.page
         p.evaluer("document.querySelector('.rename-button').click()")

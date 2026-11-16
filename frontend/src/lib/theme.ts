@@ -26,6 +26,25 @@ export function applyTheme(theme: Theme): void {
   }
 }
 
+/** Whether the page is dark right now: the choice kept here, else the system's. */
+export function isDark(): boolean {
+  const chosen = document.documentElement.getAttribute("data-theme");
+  return chosen === "dark" || (chosen !== "light" && window.matchMedia("(prefers-color-scheme: dark)").matches);
+}
+
+/** Calls `change` each time the page turns dark or light, by the choice made here or by the system. Returns what stops it. */
+export function watchDark(change: (dark: boolean) => void): () => void {
+  const tell = (): void => change(isDark());
+  const observer = new MutationObserver(tell);
+  observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  const system = window.matchMedia("(prefers-color-scheme: dark)");
+  system.addEventListener("change", tell);
+  return () => {
+    observer.disconnect();
+    system.removeEventListener("change", tell);
+  };
+}
+
 export function nextTheme(theme: Theme): Theme {
   return theme === "system" ? "light" : theme === "light" ? "dark" : "system";
 }
