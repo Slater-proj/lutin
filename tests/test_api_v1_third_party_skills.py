@@ -203,7 +203,7 @@ class Install(Base):
         github_ = self.online()
         status, done = self.install()
         self.assertEqual((status, sorted(done), done["name"], done["files"], done["ignored"]), (201, ["files", "folder", "ignored", "name"], "pdf", 3, []))
-        self.assertEqual(Path(done["folder"]), self.skill_file())
+        self.assertEqual(Path(done["folder"]).resolve(), self.skill_file().resolve(), "the same folder, whatever the spelling of the path (short names on Windows runners)")
         self.assertTrue((self.skill_file() / "SKILL.md").is_file() and (self.skill_file() / "scripts" / "lire.py").is_file() and (self.skill_file() / S.SIGNATURE).is_file())
         self.assertFalse(any(path.suffix == ".pyc" for path in self.skill_file().rglob("*")), "nothing is ever run")
         status, listed = call("GET", BASE + "/installed")
