@@ -22,7 +22,8 @@ Sizes are relative (S, M, L, XL), not durations.
 | 3 | English: catalogues inverted, identifiers and modules renamed, data migration | L | Glossary and module names done ([GLOSSARY.md](GLOSSARY.md)); the rest not started |
 | 4 | Interface: foundation and design system, then screen by screen on `/api/v1` | XL | Started: foundation and a first Chat screen under `/app/`, not at parity — [INTERFACE.md](INTERFACE.md) |
 | 5 | Backend, targeted: route table, application context, agent runtime (loop split, tool table, approval rules, context manager) | L | Partly done: the tool table (item 3, [ADR 0010](../adr/0010-tool-table.md)) and the approval rules (item 5, [ADR 0009](../adr/0009-approval-rules.md)). Read-only batches (item 4) done: `agent.lectures_groupees`, `tests/test_read_batches.py`. Not started: the route table and application context (1), the loop split and turn states (2), the context manager (6), engine capabilities (7) |
-| 6 | Retained differentiators: evaluation first, then engine performance, SQLite memory, scheduler triggers, grammar tool calls, team mode; model router, projects, monitoring | M each | Not started; reordered by [ATOMIC_AGENT.md](ATOMIC_AGENT.md) |
+| 6 | Retained differentiators: evaluation first, then engine performance, SQLite memory, scheduler triggers, grammar tool calls, team mode; model router, projects, monitoring | M each | Not started; reordered by [ATOMIC_AGENT.md](ATOMIC_AGENT.md). Decided 2026-11-16: team mode is V2, not 1.0; the evaluation suite is postponed by the maintainer |
+| 7 | Final review before 1.0.0: how chat, prompts and tools are served to models, compared with other assistants; bug sweep; prompt assembly rebuilt | L | Not started; runs last, with the strongest model — see below. Not the start of V2 |
 
 ### Step 1 — Security and reliability
 
@@ -117,6 +118,18 @@ Each starts with a short study of use and a prototype (ADR 0003 lists what is re
 7. Model router, projects, monitoring as before.
 
 Not retained from the study, with the reason in [ATOMIC_AGENT.md](ATOMIC_AGENT.md): a Node runtime or a Tauri/Electron shell, a private llama.cpp fork, a connector marketplace through an intermediary, telemetry on by default, traces stored in plaintext by default, automatic « reflection » that writes memory by itself, plugin hooks that can change tool calls, a one-flag « full trust », cloud as the default seat of a multi-agent run.
+
+### Step 7 — Final review before 1.0.0
+
+Asked by the maintainer on 2026-11-16. It runs once everything else of 1.0 is in, with the strongest model, and it is **not** the start of V2 (no new feature, no team mode).
+
+1. **Study how other assistants serve chat and prompts**: system prompt layout, tool definitions and naming, tool-call protocol and error returns, context trimming, approvals. Sources are public documentation and code; write what was taken, skipped and why, as in [ATOMIC_AGENT.md](ATOMIC_AGENT.md).
+2. **Rebuild prompt assembly** in one place: a stable prefix (for cache reuse), the mode, the tool list built from the tool table, memory and notes; one description per tool that tells the model when to use it and what comes back. ADR 0007 applies: measure with the bench before renaming anything the models see.
+3. **Make tool use reliable**: a single protocol for calls and results, clear errors the model can act on, bounded retries, no silent drop of a call.
+4. **Bug sweep** of the chat path end to end (turn states, stop, resume, attachments, approvals, memory choice), with a test for each bug found.
+5. Acceptance: the full suite is green; every prompt change is shown with a before/after on the fake engine and, when it exists, the evaluation suite; the review report lists findings, fixes and what is left. If the evaluation suite is still postponed, say so and judge by the existing bench.
+
+Way back: one commit per finding; prompt changes revert cleanly.
 
 ## Global rollback
 
