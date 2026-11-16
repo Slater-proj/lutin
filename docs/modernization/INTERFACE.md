@@ -46,6 +46,7 @@ The scheduled tasks: the list with when, the next run, the state of the last one
 The missions (test 5q): list with state, turns, actions, recent activity and report, start (name, brief, project, longest duration, autonomous or dry run), pause, resume, answer the question of a blocked mission, stop and delete (both with a confirmation); the progress is read again every five seconds. Starting and deleting are for the machine itself; following, pausing, answering and stopping are open to a paired device.
 The add-ons (test 5p): their settings drawn from each manifest, secrets kept and never shown, check, turn on and off. The connectors (MCP, test 5o): add, refresh the tools, allow them one by one, remove. The catalogue of ready-made connectors (test 5t, `GET /mcp-catalog`, `POST /mcp-catalog/{id}/install`): set up with the values an entry asks for; a missing program to download waits for a confirmation; the connector is tried at once and only its read-only tools are allowed.
 The live panel of an add-on (test 5r) is under it once it is on: Telegram (pairing code, paired phones, replies waiting to be sent or thrown away), mail (replies waiting) and X (write, edit, schedule, publish posts, replies). ComfyUI has no panel here yet.
+Projects also take up a Claude project (test 5u, `GET /projects/claude`, `POST /projects/import-claude`): look inside first, then work in the folder itself or in a copy; the original is never touched.
 Missing: the flow editor and the correction proposal of an add-on, the ComfyUI panel, and the third-party skills.
 
 ## Projects

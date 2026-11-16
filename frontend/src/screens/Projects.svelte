@@ -4,6 +4,7 @@
   import { onMount } from "svelte";
   import { api, ApiError } from "../lib/api";
   import { t } from "../lib/messages";
+  import ClaudeImport from "../components/ClaudeImport.svelte";
 
   type Project = { id: string; name: string; path: string; usable: boolean; problem: string };
   type Projects = { projects: Project[]; current: string };
@@ -163,6 +164,7 @@
       <input id="project-name" type="text" bind:value={name} autocomplete="off" />
       <div class="actions"><button type="submit" class="button primary" disabled={busy || !path.trim()}>{t("projects.add")}</button></div>
     </form>
+    <ClaudeImport onimported={(answer) => (data = { projects: answer.projects as Project[], current: answer.current })} />
   {:else if !problem}
     <p class="muted">{t("projects.loading")}</p>
   {/if}

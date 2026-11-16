@@ -301,7 +301,17 @@
  },
  {
   "method": "GET",
+  "path": "/api/v1/projects/claude",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
   "path": "/api/v1/projects/folders",
+  "right": "configurator"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/projects/import-claude",
   "right": "configurator"
  },
  {

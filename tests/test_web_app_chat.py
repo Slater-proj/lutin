@@ -780,6 +780,55 @@ class Chat(unittest.TestCase):
         self.assertEqual(p.erreurs, [])
         p.evaluer("location.hash = '#/chat'")
 
+    def test_5u_a_claude_project_is_looked_at_then_taken_up_as_a_copy(self):
+        p = self.page
+        folder = tempfile.mkdtemp(prefix="lutin-claude-")
+        self.addCleanup(shutil.rmtree, folder, True)
+        plain = tempfile.mkdtemp(prefix="lutin-plain-")
+        self.addCleanup(shutil.rmtree, plain, True)
+        (Path(folder) / "CLAUDE.md").write_text("# Notes\n", encoding="utf-8")
+        skill = Path(folder, ".claude", "skills", "review")
+        skill.mkdir(parents=True)
+        (skill / "SKILL.md").write_text("---\nname: review\ndescription: Review a change\n---\nLook.\n", encoding="utf-8")
+        copy = str(Path(tempfile.mkdtemp(prefix="lutin-claude-copy-"), "copy"))
+        self.addCleanup(shutil.rmtree, str(Path(copy).parent), True)
+        root = T.A.RACINE
+        self.addCleanup(lambda: T.A.definir_racine(root))
+        configuration = Path(tempfile.mkdtemp(prefix="lutin-claude-config-"))
+        self.addCleanup(shutil.rmtree, configuration, True)
+        (configuration / "config.json").write_text(json.dumps({"emplacements": {"travail": str(root)}}), encoding="utf-8")
+        environment = mock.patch.dict(os.environ, {"LUTIN_CONFIG": str(configuration / "config.json")})
+        environment.start()
+        self.addCleanup(environment.stop)
+        fill = "(() => { const box = document.querySelector(%s); box.value = %s; box.dispatchEvent(new Event('input', {bubbles: true})); })()"
+        press = "[...document.querySelectorAll('.claude-import .button')].find(b => b.innerText === %s).click()"
+        p.evaluer("location.hash = '#/projects'")
+        p.attendre("!!document.querySelector('#claude-path')")
+        p.evaluer(fill % (js("#claude-path"), js(plain)))
+        p.evaluer(press % js("Regarder dedans"))
+        p.attendre("[...document.querySelectorAll('.claude-import p')].some(e => e.innerText.startsWith('Ni CLAUDE.md'))")
+        self.assertFalse(p.evaluer("!!document.querySelector('.claude-import .result')"), "a folder that is not a Claude project offers no import")
+        p.evaluer(fill % (js("#claude-path"), js(folder)))
+        p.evaluer(press % js("Regarder dedans"))
+        p.attendre("!!document.querySelector('.claude-import .result')")
+        self.assertIn("CLAUDE.md", p.evaluer("document.querySelector('.claude-import .result').innerText"))
+        self.assertIn("1 skill", p.evaluer("document.querySelector('.claude-import .result').innerText"))
+        p.evaluer("document.querySelectorAll('.claude-import input[name=claude-mode]')[1].click()")
+        p.attendre("!!document.querySelector('#claude-to')")
+        if AXE.is_file():
+            self.axe("on the Claude import")
+        p.evaluer(fill % (js("#claude-to"), js(copy)))
+        p.evaluer(fill % (js("#claude-name"), js("Claude copy")))
+        p.evaluer(press % js("Importer"))
+        p.attendre("!!document.querySelector('.claude-import .claude-done')")
+        self.assertTrue((Path(copy) / "CLAUDE.md").is_file() and (Path(copy) / ".claude" / "skills" / "review" / "SKILL.md").is_file(), "the project was copied")
+        self.assertEqual((Path(folder) / "CLAUDE.md").read_text(encoding="utf-8"), "# Notes\n", "the original is untouched")
+        p.attendre("[...document.querySelectorAll('.projects .card strong')].some(e => e.innerText === 'Claude copy')")
+        self.assertEqual(Path(T.A.RACINE).resolve(), Path(copy).resolve(), "the copy is now the folder of the next conversations")
+        self.assertEqual(p.evaluer("document.querySelector('.projects .card.current strong').innerText"), "Claude copy")
+        self.assertEqual(p.erreurs, [])
+        p.evaluer("location.hash = '#/chat'")
+
     def test_5p_an_addon_keeps_its_secret_and_is_not_started_before_it_is_set_up(self):
         p = self.page
         from lutin import addons

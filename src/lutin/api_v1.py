@@ -27,6 +27,7 @@ from . import hardware as _hardware
 from . import health as _health
 from . import approval_rules as _approval_rules
 from . import attachments as _pieces
+from . import claude_project as _claude_project
 from . import i18n as _i18n
 from . import images as _images
 from . import machines as _machines
@@ -759,6 +760,49 @@ def browse_folders(request):
     """The sub-folders of `?path=` (never files), sorted, with the `parent` to go up. Without a path: the starting points (home, documents, drives) and an empty `parent`. Refused with the reason when the folder cannot be read. For the person at this machine only: it shows the disk."""
     listing = _m.list_folders(request.query.get("path", ""))
     return {"path": listing["chemin"], "parent": listing["parent"], "folders": [{"name": entry["nom"], "path": entry["chemin"]} for entry in listing["dossiers"]], "truncated": bool(listing.get("tronque"))}
+
+
+CLAUDE_FOUND = {"contexte": "context", "regles": "rules", "skills": "skills", "commandes": "commands", "agents": "agents"}
+
+
+def _claude_found(found):
+    """What a folder holds on Claude's side, in English names: `context` and `rules` are file paths, the others lists of {name, description, path}."""
+    view = {}
+    for french, english in CLAUDE_FOUND.items():
+        items = found.get(french) or []
+        view[english] = [{"name": item["nom"], "description": item.get("description") or "", "path": item["chemin"]} if isinstance(item, dict) else item for item in items]
+    return view
+
+
+@route("GET", "/projects/claude", CONFIGURATOR)
+def detect_claude_project(request):
+    """What the folder `?path=` holds of a Claude project (CLAUDE.md, a `.claude/` folder): `is_claude_project`, a `summary` sentence and the `found` lists. Nothing is written."""
+    path = request.query.get("path", "").strip()
+    if not path:
+        raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("path"))
+    folder = Path(path).expanduser()
+    problem = _workspaces.diagnostic(folder)
+    if problem:
+        raise ApiError(400, "invalid_request", problem)
+    found = _claude_project.detect(folder)
+    empty = _claude_project.is_empty(found)
+    return {"path": str(folder), "is_claude_project": not empty, "summary": "" if empty else _claude_project.summary(found), "found": _claude_found(found)}
+
+
+CLAUDE_IMPORT_MODES = {"in_place": "ici", "copy": "copie"}
+
+
+@route("POST", "/projects/import-claude", CONFIGURATOR)
+def import_claude_project(request):
+    """{"path", "mode": "in_place" | "copy", "to": optional folder for the copy, "name": optional}. `in_place`: Lutin works in the folder itself; `copy`: in a copy, and the original is never
+    touched. The folder joins the list and becomes the current one, unless an answer is being written elsewhere (`current` then stays and `selected` is false)."""
+    body = request.body
+    if set(body) - {"path", "mode", "to", "name"} or not isinstance(body.get("path"), str) or not body["path"].strip() or any(not isinstance(body.get(key, ""), str) for key in ("to", "name")):
+        raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("path, mode, to, name"))
+    if body.get("mode") not in CLAUDE_IMPORT_MODES:
+        raise ApiError(400, "invalid_request", _t("Valeur invalide pour « {} » (attendu : {}).").format("mode", "in_place, copy"))
+    done = _m.import_claude_project(body["path"], CLAUDE_IMPORT_MODES[body["mode"]], body.get("to", ""), body.get("name", ""))
+    return dict(_projects_view(), mode=body["mode"], path=done["chemin"], summary=done["resume"], selected=bool(done["actif"]))
 
 
 @route("POST", "/projects/{id}/select", SESSION)
