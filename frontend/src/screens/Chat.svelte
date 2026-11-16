@@ -8,8 +8,8 @@
   import { api, ApiError, streamTurn, upload } from "../lib/api";
   import { fromStored, MAX_DOCUMENTS, MAX_IMAGES, kindOf, refusal, turnFields, uploading, type Attachment } from "../lib/attachments";
   import { t } from "../lib/messages";
-  import { applyEvent, newTurn, storedToItems, type Item, type LiveTurn, type Sent } from "../lib/turn";
-  import type { Conversation, ConversationOptions, ConversationSummary, Models, Settings, Status } from "../lib/types";
+  import { applyEvent, elsewhereNotice, newTurn, storedToItems, type Item, type LiveTurn, type Sent } from "../lib/turn";
+  import type { Conversation, ConversationOptions, ConversationSummary, Models, Settings, Status, TurnState } from "../lib/types";
 
   let { status, onchanged }: { status: Status | null; onchanged: () => void } = $props();
 
@@ -37,6 +37,7 @@
 
   const items = $derived(storedToItems((conversation?.messages ?? []).slice(0, cut ?? undefined)));
   let elsewhere = $state(false); // an answer is being written in this conversation, but not by this page (it was reloaded, or another device sent it)
+  let elsewhereTurn = $state<TurnState | undefined>(undefined); // where that turn is, when the server says it: waiting for an approval this page cannot show, stalled, being stopped
   let watcher: ReturnType<typeof setInterval> | undefined;
   const busy = $derived(live !== null || elsewhere);
 
@@ -44,10 +45,12 @@
     if (watcher !== undefined) clearInterval(watcher);
     watcher = undefined;
     elsewhere = false;
+    elsewhereTurn = undefined;
   }
 
   async function runningElsewhere(id: string): Promise<boolean> {
     const current = await api<Status>("GET", "/status").catch(() => null);
+    elsewhereTurn = current?.turns?.find((turn) => turn.conversation === id);
     return current?.active_turns.includes(id) ?? false;
   }
 
@@ -419,7 +422,7 @@
         </div>
       {:else}
         <Thread {items} {pending} {live} onedit={busy ? undefined : startEdit} />
-        {#if elsewhere}<p class="elsewhere" role="status">{t("chat.elsewhere")}</p>{/if}
+        {#if elsewhere}<p class="elsewhere" role="status">{t(elsewhereNotice(elsewhereTurn))}</p>{/if}
       {/if}
     </div>
 

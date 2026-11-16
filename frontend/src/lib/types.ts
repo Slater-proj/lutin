@@ -10,7 +10,19 @@ export interface Status {
   installed_models: string[];
   workspace: { path: string };
   active_turns: string[];
+  turns: TurnState[];
   pending_approvals: string[];
+}
+
+/** Where a running turn is (lutin/turn_state.py). A turn launched by something older than this record is in `active_turns` only. */
+export interface TurnState {
+  conversation: string;
+  state: "running" | "waiting_approval" | "stalled" | "cancelled";
+  phase: "context" | "model" | "tool";
+  step: number;
+  detail: string;
+  elapsed_s: number;
+  idle_s: number;
 }
 
 export interface ConversationSummary {

@@ -365,6 +365,15 @@ class Chat(unittest.TestCase):
         self.assertEqual(p.evaluer("document.querySelector('.elsewhere').getAttribute('role')"), "status")
         if AXE.is_file():
             self.axe("while an answer is written elsewhere")
+        # This page did not start that turn, so it will never receive its approval card: when the turn waits for one, the page says so instead of promising an answer.
+        from lutin import turn_state
+        turn = turn_state.begin(conversation, T.A.TOURS_ACTIFS[conversation])
+        self.addCleanup(turn_state.end, turn)
+        waits = turn_state.waiting(conversation, "Write notes.txt")
+        waits.__enter__()
+        self.addCleanup(waits.__exit__, None, None, None)
+        p.attendre("document.querySelector('.elsewhere').innerText.includes(\"demande d'accord\")", 10)
+        self.assertTrue(p.evaluer("!!document.querySelector('.composer .stop')"), "and it can still be stopped from here")
         T.A.TOURS_ACTIFS.pop(conversation)
         p.attendre("!document.querySelector('.elsewhere') && !!document.querySelector('.composer button[type=submit]')", 10)
         self.assertEqual(p.erreurs, [])

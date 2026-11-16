@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { lineParser } from "./stream";
 import { catalogue, translate } from "./messages";
-import { applyEvent, newTurn, storedToItems, type LiveTurn } from "./turn";
+import { applyEvent, elsewhereNotice, newTurn, storedToItems, type LiveTurn } from "./turn";
 import type { TurnEvent } from "./types";
 
 function play(events: TurnEvent[]): LiveTurn {
@@ -92,6 +92,16 @@ describe("the stored conversation", () => {
       },
       { role: "user", text: "Thanks", index: 5, images: [], files: [] },
     ]);
+  });
+});
+
+describe("an answer this page did not start", () => {
+  it("is described by the state of its turn, and plainly when the server gives none", () => {
+    expect(elsewhereNotice(undefined)).toBe("chat.elsewhere");
+    expect(elsewhereNotice({ state: "running" })).toBe("chat.elsewhere");
+    expect(elsewhereNotice({ state: "waiting_approval" })).toBe("chat.elsewhere.waiting");
+    expect(elsewhereNotice({ state: "stalled" })).toBe("chat.elsewhere.stalled");
+    expect(elsewhereNotice({ state: "cancelled" })).toBe("chat.elsewhere.stopping");
   });
 });
 

@@ -186,7 +186,8 @@ class Status(unittest.TestCase):
     def test_the_shape_of_the_status(self):
         status, answer = call("GET", "/api/v1/status", OWNER)
         self.assertEqual(status, 200)
-        self.assertEqual(sorted(answer), ["access", "active_turns", "engine", "installed_models", "language", "model", "offline", "pending_approvals", "version", "workspace"])
+        self.assertEqual(sorted(answer), ["access", "active_turns", "engine", "installed_models", "language", "model", "offline", "pending_approvals", "turns", "version", "workspace"])
+        self.assertEqual(answer["turns"], [], "no turn runs")
         self.assertEqual(answer["access"], {"level": "network", "can_configure": True})
         self.assertEqual(sorted(answer["engine"]), ["id", "name", "running"])
         self.assertEqual((answer["engine"]["id"], answer["engine"]["running"]), ("ollama", False), "no engine answers in this test")
@@ -194,6 +195,23 @@ class Status(unittest.TestCase):
         self.assertEqual(answer["workspace"], {"path": str(A.RACINE)})
         self.assertEqual((answer["active_turns"], answer["pending_approvals"], answer["installed_models"]), ([], [], []))
         self.assertIsInstance(answer["model"], str)
+
+    def test_the_status_says_where_each_running_turn_is(self):
+        from lutin import turn_state
+        stop = threading.Event()
+        turn = turn_state.begin("c-status", stop)
+        self.addCleanup(turn_state.end, turn)
+        turn_state.phase("c-status", turn_state.TOOL, "executer", step=2)
+        shown = call("GET", "/api/v1/status", OWNER)[1]["turns"]
+        self.assertEqual([sorted(one) for one in shown], [["conversation", "detail", "elapsed_s", "idle_s", "phase", "state", "step"]])
+        self.assertEqual([(one["conversation"], one["state"], one["phase"], one["step"], one["detail"]) for one in shown], [("c-status", "running", "tool", 2, "executer")])
+        with turn_state.waiting("c-status", "Write notes.txt"):
+            waits = call("GET", "/api/v1/status", OWNER)[1]["turns"][0]
+            self.assertEqual((waits["state"], waits["detail"]), ("waiting_approval", "Write notes.txt"))
+        stop.set()
+        self.assertEqual(call("GET", "/api/v1/status", OWNER)[1]["turns"][0]["state"], "cancelled")
+        turn_state.end(turn)
+        self.assertEqual(call("GET", "/api/v1/status", OWNER)[1]["turns"], [])
 
     def test_a_paired_device_reads_the_status_and_learns_it_cannot_configure(self):
         status, answer = call("GET", "/api/v1/status", DEVICE)

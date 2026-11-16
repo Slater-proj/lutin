@@ -1,6 +1,6 @@
 // What a conversation looks like on screen, built from two sources: the stored messages, and the events of the answer being written.
 // Pure functions: no DOM, no network (tested in turn.test.ts).
-import type { StoredMessage, Task, TurnEvent } from "./types";
+import type { StoredMessage, Task, TurnEvent, TurnState } from "./types";
 
 export type Block =
   | { kind: "text"; text: string }
@@ -99,6 +99,18 @@ export function applyEvent(turn: LiveTurn, event: TurnEvent): LiveTurn {
     default:
       return turn;
   }
+}
+
+/**
+ * What to say of an answer that this page did not start, from the state of its turn. A page that did not start a turn does not receive its approval cards:
+ * a turn that waits for one would otherwise look like an answer that never comes. Without a state (the server only knows the turn as active), the plain notice.
+ * The message never carries a count of seconds: it is read aloud each time it changes.
+ */
+export function elsewhereNotice(turn: Pick<TurnState, "state"> | undefined): "chat.elsewhere" | "chat.elsewhere.waiting" | "chat.elsewhere.stalled" | "chat.elsewhere.stopping" {
+  if (turn?.state === "waiting_approval") return "chat.elsewhere.waiting";
+  if (turn?.state === "stalled") return "chat.elsewhere.stalled";
+  if (turn?.state === "cancelled") return "chat.elsewhere.stopping";
+  return "chat.elsewhere";
 }
 
 /** The stored messages as items to show: one item per user message, and one per answer (its text, its reasoning, its tools and their results together). */

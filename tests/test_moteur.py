@@ -2146,6 +2146,20 @@ class Assistant(unittest.TestCase):
         chat("Lis puis écris", reponses=[[appel_outil("lister", dossier="docs")], [appel_outil("ecrire", chemin="docs/jamais.txt", contenu="x")], [{"content": "."}]], decider=regarder)
         self.assertEqual(vu[0], ["user", "assistant", "tool", "assistant"][:3], "la conversation est enregistrée après chaque outil, pas seulement à la fin")
 
+    def test_le_tour_dit_ou_il_en_est(self):
+        """Pendant une demande d'accord, le tour se dit « en attente d'un accord », dans l'outil qui le demande ; une fois fini, plus aucun tour n'est en cours (turn_state.py)."""
+        from lutin import turn_state
+        vus = []
+
+        def regarder(e):
+            vus.append(turn_state.snapshot())
+            return False
+        ev = chat("Écris puis conclus", reponses=[[appel_outil("lister", dossier="docs")], [appel_outil("ecrire", chemin="docs/etat-du-tour.txt", contenu="x")], [{"content": "Refus noté."}]], decider=regarder)
+        self.assertEqual(texte_de(ev), "Refus noté.")
+        self.assertEqual([(t["state"], t["phase"], t["step"]) for t in vus[0]], [("waiting_approval", "tool", 1)], "la carte arrive au deuxième appel du modèle, pendant l'outil")
+        self.assertTrue(vus[0][0]["detail"], "ce qui est attendu est nommé")
+        self.assertEqual(turn_state.snapshot(), [], "le tour fini ne laisse rien derrière lui")
+
     def test_commandes_bornees(self):
         t = time.time()
         code, sortie, raison = A.lancer_processus('"{}" -c "print(\'x\' * 3000000)"'.format(sys.executable), True, None)

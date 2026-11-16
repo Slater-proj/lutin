@@ -44,6 +44,7 @@ from . import scheduled_tasks as _scheduled_tasks
 from . import security as _sec
 from . import storage as _storage
 from . import third_party_skills as _skills
+from . import turn_state as _turn_state
 from . import workspaces as _workspaces
 from .i18n import t as _t
 
@@ -244,6 +245,7 @@ def status(request):
         "installed_models": list(state["installes"]),
         "workspace": {"path": str(_m.RACINE)},
         "active_turns": sorted(_m.TOURS_ACTIFS),
+        "turns": _turn_state.snapshot(),          # where each running turn is: running, waiting_approval, stalled or cancelled, and in which part of the loop (turn_state.py)
         "pending_approvals": sorted({a.conv for a in _m.Attente.EN_COURS.values() if a.conv} | set(_m.CHOIX_MEMOIRE)),
     }
 

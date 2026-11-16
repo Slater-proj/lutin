@@ -19,6 +19,7 @@ from . import modes as _modes
 from . import thinking as _pensee
 from . import attachments as _pieces
 from . import progress_sheet as _suivi
+from . import turn_state as _etat_tour
 from . import claude_project as _pc
 from .i18n import t as _t
 from datetime import datetime
@@ -302,10 +303,11 @@ def demander_memoire(conv, r, emit, stop):
     attente = {"evenement": threading.Event(), "choix": None, "garder": False}
     CHOIX_MEMOIRE[ident] = attente
     try:
-        emit({"type": "choix_memoire", "conversation": ident})
-        fin = time.time() + ATTENTE_CHOIX
-        while time.time() < fin and not stop.is_set() and not attente["evenement"].wait(0.4):
-            pass
+        with _etat_tour.waiting(ident, "memory"):          # dit AVANT la question : quand la page la reçoit, le tour est déjà « en attente »
+            emit({"type": "choix_memoire", "conversation": ident})
+            fin = time.time() + ATTENTE_CHOIX
+            while time.time() < fin and not stop.is_set() and not attente["evenement"].wait(0.4):
+                pass
     finally:
         CHOIX_MEMOIRE.pop(ident, None)
     if stop.is_set():
@@ -1332,11 +1334,21 @@ def tour(conv, texte, emit, r=None, stop=None, remplacer_depuis=None, identite="
     if lecture_seule:
         r["essai_a_blanc"] = True
     stop = stop if stop is not None else threading.Event()
+    etat = _etat_tour.begin(conv["id"], stop)          # le tour dit lui-même où il en est (turn_state.py), quel que soit celui qui le lance : page, tâche planifiée, mission, addon
+    try:
+        _derouler_tour(conv, texte, emit, r, stop, remplacer_depuis, identite, lecture_seule, images, pieces)
+    finally:
+        _etat_tour.end(etat)
+
+
+def _derouler_tour(conv, texte, emit, r, stop, remplacer_depuis, identite, lecture_seule, images, pieces):
+    """Le corps de `tour` : `r` est déjà une copie des réglages et `stop` existe."""
     sortie_page, parle = emit, {"texte": False}
 
     def emit(evenement):                                                  # noqa: F811  (même nom : tout le tour passe par ici, pour savoir si la page a reçu une réponse)
         if evenement.get("type") in ("texte", "erreur"):
             parle["texte"] = True
+        _etat_tour.touch(conv["id"])                                      # un signe de vie : un tour qui n'en donne plus est dit « sans signe de vie », pas « en cours »
         sortie_page(evenement)
     _m.refresh_plan()
     if remplacer_depuis is not None:
@@ -1380,8 +1392,9 @@ def tour(conv, texte, emit, r=None, stop=None, remplacer_depuis=None, identite="
             return False
         a = _m.Attente(titre, detail, diff, conv["id"])
         suspendu = bool(ctx.get("suspension_signalee"))
-        emit({"type": "approbation", "id": a.id, "titre": titre, "detail": detail, "diff": diff, "raison": raison, "suspendu": suspendu, "retenir": bool(sujet.get("retenir"))})
-        ok = a.attendre(stop=stop)
+        with _etat_tour.waiting(conv["id"], titre):          # dit AVANT la carte : quand la page la reçoit, le tour est déjà « en attente d'un accord »
+            emit({"type": "approbation", "id": a.id, "titre": titre, "detail": detail, "diff": diff, "raison": raison, "suspendu": suspendu, "retenir": bool(sujet.get("retenir"))})
+            ok = a.attendre(stop=stop)
         if stop.is_set():
             raise _m.Arret()
         if ok and a.retenir != "once" and sujet.get("retenir") and sujet.get("commande"):
@@ -1643,6 +1656,7 @@ def boucle_agent(conv, r, emit, ctx, stop):
             _m.journaliser("Actualités guidées impossibles : {!r}".format(erreur))
             emit({"type": "info", "texte": _t("La recherche d'actualités n'a pas pu se faire ({}) : je continue normalement.").format(erreur)})
     for idx_tour in range(tours_max):
+        _etat_tour.phase(conv["id"], _etat_tour.CONTEXT, step=idx_tour)
         msgs = [{"role": "system", "content": consignes_systeme(r) + _fichiers.instruction_folder(conv) + _m.text_tasks(conv) + rappels_texte}]
         if idx_tour == 0:
             for nom_coupe, (taille_coupe, relu_coupe) in sorted(_m.COUPURES.items()):          # un fichier de mémoire plus long que ce que le modèle relit : tu le sais, au lieu de le découvrir plus tard
@@ -1709,6 +1723,7 @@ def boucle_agent(conv, r, emit, ctx, stop):
                 emit({"type": "info", "texte": _t("Le gabarit de ce modèle refuse les outils : il répond sans lire ni modifier de fichiers. Pour cela, choisis un autre modèle (Qwen ou Gemma).")})
         if moteur_actuel(r).en_memoire(r["modele"]) is None:
             emit({"type": "etat", "texte": "Chargement du modèle en mémoire (30 s à 2 min la première fois, ou si ComfyUI lui a pris la carte)."})
+        _etat_tour.phase(conv["id"], _etat_tour.MODEL, r["modele"])
         for tentative in range(3):
             contenu, pensee, appels = "", "", []
             separateur = _pensee.Splitter()          # une réflexion laissée dans le texte (<think>…</think>) est rendue à part, comme celle que le moteur sépare lui-même
@@ -1925,6 +1940,7 @@ def boucle_agent(conv, r, emit, ctx, stop):
             repetitions = garde.compter(nom, args)
             debut_outil = time.monotonic()
             _m.rafraichir_accords(ctx)                                  # une case cochée ou décochée pendant la réponse compte dès cet outil
+            _etat_tour.phase(conv["id"], _etat_tour.TOOL, nom)
             emit({"type": "outil", "nom": nom, "args": {k: (v if not isinstance(v, str) or len(v) < 300 else v[:300] + "...") for k, v in args.items()}})
             try:
                 if repetitions >= _boucles.CALL_THRESHOLD:                  # le même appel pour la énième fois : on n'exécute plus, on dit de passer à autre chose
