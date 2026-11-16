@@ -1152,6 +1152,57 @@ def addon_panel_action(request):
     return _panel_view(identifier)
 
 
+# The flow of an add-on: the list of calls it makes to its service (addresses, methods, fields). It is a JSON document in the add-on's own format, given and taken as it is. A flow is
+# checked before it is kept (same structure, only the hosts the add-on declares), the old one is kept in a history, and the one shipped with Lutin can always be put back.
+def _flow_view(identifier):
+    try:
+        return {"flow": _addons.stream(identifier), "shipped": _addons.shipped_stream(identifier), "modified": bool(_addons.modified_stream(identifier))}
+    except _addons.ErreurAddon as refused:
+        raise ApiError(400, "invalid_request", str(refused)) from None
+
+
+@route("GET", "/addons/{id}/flow", CONFIGURATOR)
+def addon_flow(request):
+    """`{"flow", "shipped", "modified"}`: the flow in force, the one shipped with Lutin, and whether the one in force is the person's own."""
+    _addon_one(request.params["id"])
+    return _flow_view(request.params["id"])
+
+
+@route("PATCH", "/addons/{id}/flow", CONFIGURATOR)
+def change_addon_flow(request):
+    """{"flow": object}: keeps this flow after checking it (a flow that is badly formed or aims at a host the add-on does not declare is refused, nothing changes). Answers like GET."""
+    identifier = request.params["id"]
+    _addon_one(identifier)
+    if set(request.body) != {"flow"} or not isinstance(request.body["flow"], dict):
+        raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("flow"))
+    try:
+        _addons.apply_stream(identifier, request.body["flow"])
+    except _addons.ErreurAddon as refused:
+        raise ApiError(400, "invalid_request", str(refused)) from None
+    return _flow_view(identifier)
+
+
+@route("POST", "/addons/{id}/flow/restore", CONFIGURATOR)
+def restore_addon_flow(request):
+    """Puts back the flow shipped with Lutin (the person's own is dropped). Answers like GET."""
+    _addon_one(request.params["id"])
+    _addons.restore_stream(request.params["id"])
+    return _flow_view(request.params["id"])
+
+
+@route("POST", "/addons/{id}/correction", CONFIGURATOR)
+def propose_addon_correction(request):
+    """After a failed check: asks the model for a corrected flow from the documentation of the service. Nothing is kept: `{"flow", "diff", "explanation"}`, a proposal to read and then
+    send to `PATCH /addons/{id}/flow`. The proposal is checked first like any flow. Reads the documentation page, so refused offline (409)."""
+    _addon_one(request.params["id"])
+    _require_online(_t("chercher une correction de flux"))
+    try:
+        proposal = _addons.proposer_correction(request.params["id"])
+    except _addons.ErreurAddon as refused:
+        raise ApiError(400, "invalid_request", str(refused)) from None
+    return {"flow": proposal["flux"], "diff": proposal["diff"], "explanation": proposal["explication"]}
+
+
 # --------------------------------------------------------------------------------------------------------- MCP connectors
 # A connector lends Lutin the tools of another program (started by a command) or of a server (an address). Nothing is started by adding one: the tools are asked for
 # by `refresh`, and a tool is given to the model only once it is `allowed`. Starting a program is for the machine itself, hence the right `configurator` for all writes.
