@@ -2,6 +2,7 @@
   // The Models screen: what is installed, which one Lutin uses, a download with its progress, and deleting a model.
   import { onMount } from "svelte";
   import Engines from "../components/Engines.svelte";
+  import EngineLibrary from "../components/EngineLibrary.svelte";
   import ModelGuide from "../components/ModelGuide.svelte";
   import { api, ApiError } from "../lib/api";
   import { formatBytes, percent } from "../lib/format";
@@ -14,6 +15,7 @@
   let problem = $state("");
   let name = $state("");
   let asking = $state(false);
+  let refresh = $state(0); // bumped when a download starts: the engine cards are read again and show its progress
   let tab = $state<"recommended" | "installed" | "engines" | "unset">("unset"); // chosen once the list is known: the guide when nothing is installed, the list otherwise
 
   const lang = language();
@@ -123,7 +125,12 @@
   {#if tab === "recommended"}
     <ModelGuide onstarted={() => void guarded(load)} onuse={use} />
   {:else if tab === "engines"}
-    <Engines onchanged={() => { void guarded(load); onchanged(); }} />
+    {#key refresh}
+      <Engines onchanged={() => { void guarded(load); onchanged(); }} />
+    {/key}
+    {#if status?.engine.id === "llamacpp"}
+      <EngineLibrary engine="llamacpp" onstarted={() => (refresh += 1)} />
+    {/if}
   {:else if tab === "installed"}
   <form class="add" onsubmit={install}>
     <label for="model-name">{t("models.add_expert")}</label>

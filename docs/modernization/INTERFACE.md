@@ -65,7 +65,8 @@ the engine state, the installed models with their size, the one in use, « use �
 | Download by name, progress | done |
 | Recommended models for this machine (catalogue, fit verdict, compatibility with the engine) | **missing**: needs a v1 route and a design (several engines, verdicts from `model_fit` and `model_compat`) |
 | Choice and start of an engine, engine installation | done: an « Engines » tab (state, in use, start, stop, install, update, reinstall, uninstall with a confirmation that says what it does, the task in progress with its progress and a cancel); verified in Chrome (test 5k) against the fake engines, nothing is installed by the tests |
-| Search a model on Hugging Face, quantisations, models of other machines | missing |
+| Search a model on Hugging Face, quantisations | done for llama.cpp (test 5w, `GET /engines/{id}/library`, `/library/files`, `POST /library/download`): search, the files of a repository with what each means for this machine, a file that cannot fit is not offered, the download waits for a second click that says the size; strict offline mode is said |
+| Models of other machines | missing |
 | Onboarding with hardware detection and a recommended configuration (plan step 4) | missing |
 
 A beginner must not have to know the name of a model: the catalogue with its verdicts is the next piece of this screen.

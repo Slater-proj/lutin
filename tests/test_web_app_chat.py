@@ -940,6 +940,50 @@ class Chat(unittest.TestCase):
         self.assertEqual(p.erreurs, [])
         p.evaluer("location.hash = '#/chat'")
 
+    def test_5w_a_model_is_searched_on_huggingface_and_a_file_is_downloaded_after_a_confirmation(self):
+        p = self.page
+        from lutin import engines
+        llama = engines.ENGINES["llamacpp"]
+        def reopen():          # runs last (cleanups run in reverse): the patches are gone, the page reads Ollama again
+            p.evaluer("location.hash = '#/chat'")
+            p.evaluer("location.reload()")
+            p.attendre("!!document.querySelector('#message')")
+        self.addCleanup(reopen)
+        taken = []
+        files = [{"fichier": "m-q2.gguf", "taille": 2_000_000_000}, {"fichier": "m-q8-huge.gguf", "taille": 900_000_000_000}]
+        for patch in (mock.patch.object(api_v1._m, "moteur_actuel", return_value=llama),
+                      mock.patch.object(llama, "chercher_modeles", return_value=[{"id": "author/Qwen-GGUF", "telechargements": 1200, "likes": 3}]),
+                      mock.patch.object(llama, "fichiers_du_depot", return_value=files),
+                      mock.patch.object(llama, "telechargeable", return_value={"possible": True, "raison": ""}),
+                      mock.patch.object(llama, "telecharger_modele", side_effect=lambda repo, fichier, progression: taken.append((repo, fichier)) or "m-q2")):
+            patch.start()
+            self.addCleanup(patch.stop)
+        self.addCleanup(lambda: engines.TASKS.pop("llamacpp", None))
+        p.evaluer("location.hash = '#/models'")
+        p.evaluer("location.reload()")          # the engine in use is read once, when the page opens: read it again now that llama.cpp is in use
+        p.attendre("!!document.querySelector('.tabs')")
+        p.evaluer("document.querySelectorAll('.tabs button')[2].click()")
+        p.attendre("!!document.querySelector('#library-query')")
+        p.evaluer("(() => { const box = document.querySelector('#library-query'); box.value = 'qwen'; box.dispatchEvent(new Event('input', {bubbles: true})); document.querySelector('.library form.row').requestSubmit(); })()")
+        p.attendre("!!document.querySelector('.library .item')")
+        self.assertIn("author/Qwen-GGUF", p.evaluer("document.querySelector('.library .item').innerText"))
+        p.evaluer("[...document.querySelectorAll('.library .button')].find(b => b.innerText === 'Voir les fichiers').click()")
+        p.attendre("document.querySelectorAll('.library .file').length === 2")
+        small, huge = "document.querySelectorAll('.library .file')[0]", "document.querySelectorAll('.library .file')[1]"
+        self.assertTrue(p.evaluer(small + ".querySelector('.badge.ok') !== null"), "the small file suits this machine")
+        self.assertIn("trop gros", p.evaluer(huge + ".innerText"))
+        self.assertTrue(p.evaluer(huge + ".querySelector('.button.primary').disabled"), "a file the machine cannot hold is not offered")
+        if AXE.is_file():
+            self.axe("on the library of an engine")
+        p.evaluer(small + ".querySelector('.button.primary').click()")
+        p.attendre("!!document.querySelector('.library .warn')")
+        self.assertIn("m-q2.gguf", p.evaluer("document.querySelector('.library .warn').innerText"))
+        self.assertEqual(taken, [], "the first click only asks")
+        p.evaluer(small + ".querySelector('.button.primary').click()")
+        p.attendre("!!document.querySelector('.library .done')")
+        self.eventually(lambda: taken == [("author/Qwen-GGUF", "m-q2.gguf")], "the download runs once confirmed")
+        self.assertEqual(p.erreurs, [])
+
     def test_5v_a_third_party_skill_is_searched_looked_into_then_installed_and_removed(self):
         p = self.page
         from lutin import third_party_skills as skills
