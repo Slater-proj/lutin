@@ -834,8 +834,13 @@ class Chat(unittest.TestCase):
 
     def test_5p_an_addon_keeps_its_secret_and_is_not_started_before_it_is_set_up(self):
         p = self.page
-        from lutin import addons
+        from lutin import addons, addons_comfyui
         self.addCleanup(lambda: (addons.secrets_write({}), addons.write_state({})))
+        # The check of ComfyUI looks for it on the machine (the command lines of every process, through PowerShell on Windows: up to 20 s, the very delay
+        # of this test). A test never searches the machine that runs it: here ComfyUI is nowhere.
+        nowhere = mock.patch.object(addons_comfyui, "find_folder", return_value="")
+        nowhere.start()
+        self.addCleanup(nowhere.stop)
         secret_of = next((identifier, field["cle"]) for identifier in addons.ids() for field in addons.manifeste(identifier)["reglages"] if field.get("secret"))
         other = next(identifier for identifier in addons.ids() if identifier != secret_of[0])
         p.evaluer("location.hash = '#/agents'")
