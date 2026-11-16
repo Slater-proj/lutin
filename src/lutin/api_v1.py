@@ -560,6 +560,59 @@ def cancel_engine_task(request):
     return {"cancelled": bool(_engines.cancel_task(_known_engine(request.params["id"]).id))}
 
 
+# The library of an engine that downloads GGUF files itself (llama.cpp: Hugging Face): search a model, see the quantisations of a repository (one file each, sorted by size, with a
+# verdict for this machine) and download one. For the machine itself; refused offline (409 `offline`); a download needs `{"confirm": true}`.
+def _library_engine(identifier):
+    engine = _known_engine(identifier)
+    if not hasattr(engine, "chercher_modeles"):
+        raise ApiError(400, "no_library", _t("Ce moteur n'a pas de bibliothèque de modèles à parcourir."))
+    return engine
+
+
+@route("GET", "/engines/{id}/library", CONFIGURATOR)
+def search_engine_library(request):
+    """`?q=name`: the repositories that match, most downloaded first: `{"results": [{"repo", "downloads", "likes"}]}`. The words must be written (400 otherwise)."""
+    engine = _library_engine(request.params["id"])
+    _require_online(_t("chercher un modèle sur Hugging Face"))
+    return {"results": [{"repo": item["id"], "downloads": item["telechargements"], "likes": item["likes"]} for item in engine.chercher_modeles(request.query.get("q", ""))]}
+
+
+@route("GET", "/engines/{id}/library/files", CONFIGURATOR)
+def engine_library_files(request):
+    """`?repo=author/name`: the quantisations of a repository, smallest first: `{"files": [{"file", "size_bytes", "fit"}]}`. `fit` is the verdict for this machine
+    (`{"level": comfortable | good | tight | too_big, "text"}`), null while the machine is not detected or the size is unknown."""
+    engine = _library_engine(request.params["id"])
+    _require_online(_t("lire les fichiers d'un dépôt Hugging Face"))
+    profile = machine_profile()
+    files = []
+    for item in engine.fichiers_du_depot(request.query.get("repo", "")):
+        fit = _model_fit.evaluer({"go": item["taille"] / 1e9}, profile) if profile is not None and item["taille"] else None
+        files.append({"file": item["fichier"], "size_bytes": item["taille"], "fit": None if fit is None else {"level": FIT_LEVELS.get(fit["niveau"], fit["niveau"]), "text": fit["texte"]}})
+    return {"files": files}
+
+
+@route("POST", "/engines/{id}/library/download", CONFIGURATOR)
+def download_from_engine_library(request):
+    """{"repo", "file", "confirm": true}: downloads one file into the models folder of the engine, as a task (`GET /engines` follows it, `DELETE /engines/{id}/task` cancels it).
+    Answers 202 with the task. `confirm` is always needed: it is a download of several gigabytes."""
+    body = request.body
+    if set(body) - {"repo", "file", "confirm"} or any(not isinstance(body.get(key), str) for key in ("repo", "file")) or not isinstance(body.get("confirm", False), bool):
+        raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("repo, file, confirm"))
+    engine = _library_engine(request.params["id"])
+    if not body.get("confirm"):
+        raise ApiError(400, "confirmation_required", _t("Ce téléchargement peut peser plusieurs Go : confirme pour le lancer."))
+    _require_online(_t("télécharger un modèle"))
+    possible = engine.telechargeable()
+    if not possible["possible"]:
+        raise ApiError(400, "action_impossible", possible["raison"])
+    repo, file = body["repo"], body["file"]
+    try:
+        _engines.launch_task(engine, "telecharger", lambda action, progress: engine.telecharger_modele(repo, file, progress))
+    except ValueError as busy:
+        raise ApiError(409, "task_running", str(busy)) from None
+    return 202, _task(engine.id)
+
+
 # ------------------------------------------------------------------------------------------------------------------------ setup
 # The guide of the first launch (docs/modernization/GUIDED_SETUP.md): shown after the first installation on a NEW machine, never on an installation that already lives.
 # « New » is proven by the absence of everything an installation leaves: the flag of this guide, conversations, a settings file, an installed model. An existing installation that
@@ -1380,7 +1433,7 @@ def change_memory(request):
 # without `{"confirm": true}`, the card analyses it first (hidden orders, downloads, scripts) and a dangerous or unlicensed one needs its own acceptance. Nothing is ever run.
 # Everything that reads GitHub is for the machine itself (`configurator`: it spends the GitHub account of the person) and is refused in strict offline mode (409 `offline`).
 # The GitHub token is written and never given back.
-def _skill_online(verb):
+def _require_online(verb):
     if _offline.is_active():
         raise ApiError(409, "offline", _t("Mode hors ligne strict : impossible de {}. Désactive-le pour continuer (lutin offline off).").format(verb))
 
@@ -1475,7 +1528,7 @@ def set_github_token(request):
 @route("POST", "/third-party-skills/github/test", CONFIGURATOR)
 def test_github_token(request):
     """What GitHub says about the account in use: `{"limit", "remaining", "resets_at", "authenticated", "account"}`."""
-    _skill_online(_t("essayer le compte GitHub"))
+    _require_online(_t("essayer le compte GitHub"))
     result = _github.test_token(_skills.default_http)
     return {"limit": result["limite"], "remaining": result["restantes"], "resets_at": result["retour"], "authenticated": result["identifie"], "account": result["compte"]}
 
@@ -1484,7 +1537,7 @@ def test_github_token(request):
 def search_third_party_skills(request):
     """`?q=words&repos=a/b,c/d&page=1` (all the sources without `repos`): the skills whose name, path or description holds every word, 20 a page, `{"skills", "total", "page", "more",
     "truncated", "described", "count"}`. Each skill: `repo`, `dir`, `name`, `sha`, `files`, `bytes`, `scripts`, `tokens` and, once read, `description` and `license`."""
-    _skill_online(_t("chercher des skills sur GitHub"))
+    _require_online(_t("chercher des skills sur GitHub"))
     repos = [_skill_repo(item) for item in request.query.get("repos", "").split(",") if item] or [source["depot"] for source in _skills.sources()]
     found = _skills.search(request.query.get("q", "")[:200], repos, _skill_page(request.query.get("page")))
     return {"skills": [_skill_hit(skill) for skill in found["skills"]], "total": found["total"], "page": found["page"], "more": bool(found["suite"]), "truncated": bool(found["tronque"]),
@@ -1495,7 +1548,7 @@ def search_third_party_skills(request):
 def find_skill_repositories(request):
     """`?q=words`: repositories of skills found on GitHub by topic, most followed first (`repo`, `stars`, `description`, `updated`); with `listed=1`, the repositories the community lists
     point to, most quoted first (`repo`, `citations`). Adding one to the sources is a separate step."""
-    _skill_online(_t("chercher des dépôts de skills sur GitHub"))
+    _require_online(_t("chercher des dépôts de skills sur GitHub"))
     query = request.query.get("q", "")[:100]
     if request.query.get("listed") == "1":
         return {"repos": [{"repo": item["depot"], "citations": item["citations"]} for item in _skills.listed_repos(query)]}
@@ -1508,7 +1561,7 @@ def index_skill_repository(request):
     Answers `{"started": true}`, or `{"started": false}` when it is already running."""
     _skill_body(request.body, ("repo",), ())
     repo = _skill_repo(request.body.get("repo"))
-    _skill_online(_t("lire les descriptions des skills"))
+    _require_online(_t("lire les descriptions des skills"))
     if not (_skills.INDEXING.get(repo) or {}).get("fini", True):
         return {"started": False}
     threading.Thread(target=lambda: _skills.indexer(repo), daemon=True, name="skills-indexing").start()
@@ -1519,7 +1572,7 @@ def index_skill_repository(request):
 def third_party_skill_card(request):
     """`?repo=owner/name&dir=path`: all that is needed to decide, read from GitHub and analysed before anything is copied: the text of SKILL.md, the files, the licence, the weight for a small
     model (`heavy`) and the `findings` of the analysis (`severity` `danger` or `attention`; `severity` of the card is `none`, `attention` or `danger`). `installable` says the size is allowed."""
-    _skill_online(_t("lire la fiche d'un skill"))
+    _require_online(_t("lire la fiche d'un skill"))
     card = _skills.card(_skill_repo(request.query.get("repo", "")), request.query.get("dir", ""))
     return {"repo": card["depot"], "dir": card["dir"], "sha": card["sha"], "name": card["nom"], "description": card["description"], "license": card["licence"], "license_file": card["licence_fichier"],
             "license_repo": card["licence_depot"], "text": card["texte"], "text_truncated": card["texte_coupe"], "files": [{"path": item["chemin"], "bytes": item["octets"]} for item in card["fichiers"]],
@@ -1545,7 +1598,7 @@ def installed_third_party_skills(request):
 @route("GET", "/third-party-skills/updates", CONFIGURATOR)
 def third_party_skill_updates(request):
     """The same list, each skill with `update` (it changed in its repository), `gone` (it is not there any more) and `error` (why it could not be checked): one request a repository."""
-    _skill_online(_t("chercher des mises à jour de skills"))
+    _require_online(_t("chercher des mises à jour de skills"))
     return {"installed": [_installed_skill(skill) for skill in _skills.available_updates(_skills.installed(_skill_roots()))]}
 
 
@@ -1563,7 +1616,7 @@ def install_third_party_skill(request):
     _skill_body(body, ("repo", "dir", "project"), ("confirm", "accept_danger", "accept_no_license"))
     if not body.get("confirm"):
         raise ApiError(400, "confirmation_required", _t("Installer copie les fichiers de ce skill depuis GitHub dans ton dossier de travail : confirme pour continuer."))
-    _skill_online(_t("installer un skill"))
+    _require_online(_t("installer un skill"))
     repo = _skill_repo(body.get("repo"))
     _, root = _skill_project(body.get("project"))
     done = _skills.install(repo, body.get("dir", ""), root, danger_ok=bool(body.get("accept_danger")), licence_ok=bool(body.get("accept_no_license")))
@@ -1578,7 +1631,7 @@ def update_third_party_skill(request):
     _skill_body(body, ("project",), ("confirm", "accept_danger", "accept_no_license"))
     if not body.get("confirm"):
         raise ApiError(400, "confirmation_required", _t("Mettre à jour copie de nouveau les fichiers de ce skill depuis GitHub : confirme pour continuer."))
-    _skill_online(_t("mettre à jour un skill"))
+    _require_online(_t("mettre à jour un skill"))
     project, root = _skill_project(body.get("project"))
     current = next((skill for skill in _skills.installed({project: root}) if skill["nom"] == request.params["name"]), None)
     if current is None:

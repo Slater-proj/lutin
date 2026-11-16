@@ -135,6 +135,21 @@
   "right": "configurator"
  },
  {
+  "method": "GET",
+  "path": "/api/v1/engines/{id}/library",
+  "right": "configurator"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/engines/{id}/library/download",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/engines/{id}/library/files",
+  "right": "configurator"
+ },
+ {
   "method": "DELETE",
   "path": "/api/v1/engines/{id}/task",
   "right": "configurator"
