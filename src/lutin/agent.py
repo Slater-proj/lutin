@@ -32,6 +32,7 @@ import sys
 import tempfile
 import threading
 import time
+import types
 import urllib.request
 from . import core as _m
 
@@ -1604,8 +1605,9 @@ def monter_en_gamme(r, corps, emit, conv_id, motif):
         return False
 
 
-def boucle_agent(conv, r, emit, ctx, stop):
-    """La boucle de l'agent : le modèle répond, appelle des outils, on lui rend les résultats, jusqu'à la réponse finale."""
+def _preparer_boucle(conv, r, emit, ctx):
+    """Contexte du tour, lu UNE fois : les outils du mode, les rappels tirés des documents, la fiche de suivi, les extraits du fil, la consigne d'exécution, la recherche guidée.
+    Rien de ce qui est lu ici ne change d'une étape à l'autre du tour : le début de la requête reste identique, et le moteur le garde en cache."""
     tours_max = max(4, int(r.get("tours_max", _m.TOURS_MAX)))
     outils = outils_du_mode(r)                                      # seulement les outils utiles dans ce mode : moins de jetons, moins de confusion
     ctx["outils_autorises"] = {t["function"]["name"] for t in outils}
@@ -1617,8 +1619,6 @@ def boucle_agent(conv, r, emit, ctx, stop):
     if rappels_sources:
         emit({"type": "info", "texte": _t("📎 Rappels ajoutés d'après tes documents : {}").format(" ; ".join(rappels_sources[:4]))})
     fiche, consigne = "", ""
-    faux_accompli = None                                              # texte d'un modèle qui prétend avoir écrit un fichier sans l'avoir fait (corrigé une seule fois par demande)
-    corrige_affirmation = False
     forcer_fin = False                                                # le modèle tourne en rond : un dernier tour SANS outil pour qu'il conclue, au lieu de couper net
     if r.get("memoire_longue") == "fichier":
         try:
@@ -1655,237 +1655,327 @@ def boucle_agent(conv, r, emit, ctx, stop):
         except (_m.ErreurOutil, OSError) as erreur:
             _m.journaliser("Actualités guidées impossibles : {!r}".format(erreur))
             emit({"type": "info", "texte": _t("La recherche d'actualités n'a pas pu se faire ({}) : je continue normalement.").format(erreur)})
+    return types.SimpleNamespace(tours_max=tours_max, outils=outils, rappels_texte=rappels_texte, fiche=fiche, extraits=extraits, consigne=consigne, derniere_demande=derniere_demande, garde=garde, forcer_fin=forcer_fin)
+
+
+def _messages_de_l_etape(conv, r, emit, p, idx_tour, dernier_tour, faux_accompli):
+    """Les messages d'UNE étape : consignes, résumé, historique (la consigne, la fiche et les extraits passent juste avant la dernière question), puis ce qui ne vaut que pour cette étape
+    (l'ordre de conclure au dernier tour, la remarque faite à un modèle qui dit avoir agi sans l'avoir fait). `p` est ce que `_preparer_boucle` a lu."""
+    rappels_texte, consigne, fiche, extraits = p.rappels_texte, p.consigne, p.fiche, p.extraits
+    msgs = [{"role": "system", "content": consignes_systeme(r) + _fichiers.instruction_folder(conv) + _m.text_tasks(conv) + rappels_texte}]
+    if idx_tour == 0:
+        for nom_coupe, (taille_coupe, relu_coupe) in sorted(_m.COUPURES.items()):          # un fichier de mémoire plus long que ce que le modèle relit : tu le sais, au lieu de le découvrir plus tard
+            if (conv.get("id"), nom_coupe, taille_coupe) in COUPURES_DITES:          # une fois par conversation et par taille, pas à chaque message
+                continue
+            COUPURES_DITES.add((conv.get("id"), nom_coupe, taille_coupe))
+            emit({"type": "info", "texte": _t("⚠ {} fait {} caractères et l'assistant n'en relit que {} à chaque conversation : le reste est ignoré. Raccourcis-le (onglet Mémoire) si des informations manquent.").format(nom_coupe, taille_coupe, relu_coupe)})
+    if conv.get("resume"):
+        msgs.append({"role": "user", "content": "[Résumé de la conversation jusqu'ici]\n" + conv["resume"]})
+        msgs.append({"role": "assistant", "content": "Compris, je continue."})
+    historique = _pieces.for_model(conv["messages"], _pieces.character_budget(r["num_ctx"]))          # le texte des fichiers joints s'ajoute ici, jamais dans la conversation enregistrée
+    dernier_user = max((i for i, m in enumerate(historique) if m.get("role") == "user"), default=-1)
+    if consigne and dernier_user >= 0:
+        historique = list(historique)
+        historique[dernier_user] = dict(historique[dernier_user], content=(historique[dernier_user].get("content") or "") + "\n\n[" + consigne + "]")
+    if (fiche or extraits) and dernier_user >= 0:          # fiche et extraits passent juste AVANT la dernière question : tout ce qui précède est identique d'une réponse à l'autre (cache d'Ollama)
+        bloc = "\n\n".join(x for x in (fiche, extraits) if x)
+        historique = historique[:dernier_user] + [{"role": "user", "content": bloc}, {"role": "assistant", "content": "Compris, je m'appuie sur " + ("cette fiche." if fiche else "ces extraits.")}] + historique[dernier_user:]
+    msgs += historique
+    if dernier_tour:             # plus d'outils : le modèle doit répondre avec ce qu'il a trouvé
+        msgs.append({"role": "user", "content": "Tu as assez d'informations. Réponds maintenant à ma demande avec ce que tu as vu, sans appeler d'outil. Si quelque chose manque, dis-le."})
+    if faux_accompli:
+        msgs += [{"role": "assistant", "content": faux_accompli[0]}, {"role": "user", "content": faux_accompli[1]}]
+    return msgs
+
+
+def _preparer_requete(conv, r, emit, ctx, msgs, outils, idx_tour, dernier_tour, derniere_demande):
+    """La requête d'une étape : options, ce que le modèle sait faire (réflexion, images, outils), modèle choisi par le routeur, contexte ajusté à la fenêtre.
+    Peut changer `r["modele"]` (un modèle qui voit, le choix du routeur). Renvoie (corps, caps, plat) : la requête, les capacités du modèle, et si son gabarit refuse les outils."""
+    options = _m.options_modele(r, r["temperature"])
+    if r.get("num_predict", 0) > 0:
+        options["num_predict"] = r["num_predict"]
+    caps = moteur_actuel(r).capacites(r["modele"])
+    reflechit = bool(r["reflexion"]) and not (r.get("reflexion_tours") == "premier" and idx_tour > 0)          # option : la réflexion seulement avant la première réponse, pas à chaque retour d'outil
+    if reflechit and caps is not None and "thinking" not in caps:
+        reflechit = False
+        if idx_tour == 0:
+            emit({"type": "info", "texte": "Ce modèle n'a pas de mode réflexion : je le désactive pour cette demande."})
+    options.update(_m.options_echantillonnage(r, reflechit))
+    if idx_tour == 0 and any(m.get("images") for m in conv["messages"][-_images.RECENT:]):
+        voit = caps is None or "vision" in caps
+        if not voit:
+            autre = modele_qui_voit(r["modele"])
+            if autre:
+                emit({"type": "info", "texte": _t("Ce modèle ne voit pas les images : je passe sur « {} » pour cette demande.").format(autre)})
+                r["modele"] = autre
+                caps = moteur_actuel(r).capacites(autre)
+            else:
+                emit({"type": "info", "texte": _t("Ce modèle ne voit pas les images et aucun modèle « Images » n'est installé : elles sont ignorées. Onglet Modèles pour en installer un.")})
+    if idx_tour == 0 and router_la_demande(r, derniere_demande, any(m.get("images") for m in conv["messages"][-_images.RECENT:]), emit, conv["id"]):
+        caps = moteur_actuel(r).capacites(r["modele"])
+        reflechit = reflechit and (caps is None or "thinking" in caps)
+    rapport_contexte = {}
+    corps = {"model": r["modele"], "messages": ajuster_contexte(msgs, r["num_ctx"], 1.0, outils, rapport_contexte), "stream": True, "options": options, "think": reflechit}
+    if not dernier_tour and outils:                      # mode « discussion » : aucun outil, donc rien à envoyer ni à signaler
+        if caps is not None and "tools" not in caps:
+            if idx_tour == 0:
+                emit({"type": "info", "texte": "Ce modèle ne sait pas appeler d'outils : il répondra sans lire ni modifier les fichiers. Choisis un autre modèle (Qwen 3.8 ou Gemma 4) pour cela."})
+        else:
+            corps["tools"] = outils
+    annoncer_reduction(rapport_contexte, emit, ctx, r["num_ctx"])
+    plat = r["modele"] in gabarits_connus()
+    if plat:
+        corps = aplatir_sans_outils(corps)
+        if idx_tour == 0 and outils:
+            emit({"type": "info", "texte": _t("Le gabarit de ce modèle refuse les outils : il répond sans lire ni modifier de fichiers. Pour cela, choisis un autre modèle (Qwen ou Gemma).")})
+    if moteur_actuel(r).en_memoire(r["modele"]) is None:
+        emit({"type": "etat", "texte": "Chargement du modèle en mémoire (30 s à 2 min la première fois, ou si ComfyUI lui a pris la carte)."})
+    return corps, caps, plat
+
+
+def _appeler_modele(conv, r, emit, ctx, stop, corps, msgs_base, outils, caps, plat):
+    """L'appel du modèle pour une étape, avec ses reprises (trois essais) : lit le flux, sépare réflexion, texte et appels d'outils, reconnaît une réponse vide ou qui tourne en rond,
+    classe les erreurs du moteur et décide quoi changer à l'essai suivant. Renvoie (fini, repli_demande, contenu, pensee, appels) ; `repli_demande` : refaire l'étape avec le modèle de repli."""
+    fini, verifie, relance_outil, repli_demande, relance_vide, relance_repetition = False, False, False, False, False, False
+    for tentative in range(3):
+        contenu, pensee, appels = "", "", []
+        separateur = _pensee.Splitter()          # une réflexion laissée dans le texte (<think>…</think>) est rendue à part, comme celle que le moteur sépare lui-même
+        rond, verifie_rond, raison_fin, rond_de_suite = False, 0, "", 0
+        corps_t = corps if tentative == 0 else dict(corps, messages=ajuster_contexte(msgs_base, r["num_ctx"], 0.7 ** tentative, outils) + ([{"role": "user", "content": RAPPEL_APPEL}] if relance_outil else [{"role": "user", "content": RAPPEL_REPETITION}] if relance_repetition else [{"role": "user", "content": RAPPEL_VIDE}] if relance_vide else []), options=dict(corps["options"], temperature=0.3, **({"repeat_penalty": 1.15} if relance_repetition else {})), think=False if (relance_vide or relance_repetition) else corps["think"])
+        if plat:
+            corps_t = aplatir_sans_outils(corps_t)
+        if relance_vide and tentative >= 2 and "tools" in corps_t:
+            corps_t = {k: v for k, v in corps_t.items() if k != "tools"}          # dernier essai SANS outils : certains petits modèles ne produisent plus rien quand les outils sont déclarés ; mieux vaut une réponse en texte
+        try:
+            corps_t = dict(corps_t, messages=_images.for_model(corps_t["messages"], caps is None or "vision" in caps))
+            moteur_choisi = moteur_actuel(r)
+            with _moteurs.FluxInterruptible(lambda: moteur_choisi.chat_flux(corps_t, 900), stop) as flux:          # le moteur choisi (engines.py) ; Arrêter coupe même un modèle qui charge ou qui se fige
+                for e in flux:
+                    if stop.is_set():
+                        if contenu.strip():
+                            conv["messages"].append({"role": "assistant", "content": contenu, "ts": horodatage()})
+                        raise _m.Arret()
+                    if e.get("error"):
+                        raise RuntimeError(e["error"])
+                    m = e.get("message") or {}
+                    if e.get("done") and e.get("prompt_eval_count"):          # chiffres réels d'Ollama : jetons lus + écrits = place prise dans la fenêtre de contexte
+                        conv["jetons"] = {"utilise": int(e["prompt_eval_count"]) + int(e.get("eval_count") or 0), "total": r["num_ctx"]}
+                        emit(dict(conv["jetons"], type="jetons", reel=True))
+                    if e.get("done"):
+                        raison_fin = str(e.get("done_reason") or "")
+                        vitesse = calculer_vitesse(e)
+                        _observatoire.record("tour", conv["id"], modele=r["modele"], machine=r.get("machine", ""), jetons=int(e.get("eval_count") or 0), tok_s=vitesse["ecriture"] if vitesse else None,
+                                            duree_s=vitesse["total"] if vitesse else None)
+                        if vitesse:
+                            conv["vitesse"] = vitesse
+                            emit(dict(vitesse, type="vitesse"))
+                    if not verifie:
+                        verifie = True
+                        ps = moteur_actuel(r).en_memoire(r["modele"])
+                        if ps and ps["taille"] and ps["vram"] < 0.9 * ps["taille"] and a_une_carte_graphique() and _avertir_une_fois(r["modele"]):
+                            emit({"type": "info", "texte": "Attention : seulement {} % du modèle tient sur la carte graphique, le reste tourne sur le processeur, donc c'est lent. Ferme ComfyUI et le navigateur d'images, ou baisse le contexte dans Réglages.".format(round(100 * ps["vram"] / ps["taille"]))})
+                    if m.get("thinking"):
+                        pensee += m["thinking"]
+                        emit({"type": "pensee", "texte": m["thinking"]})
+                    for genre_m, morceau in separateur.alimenter(m.get("content")):
+                        if genre_m == "pensee":
+                            pensee += morceau
+                            emit({"type": "pensee", "texte": morceau})
+                        else:
+                            contenu += morceau
+                            emit({"type": "texte", "texte": morceau})
+                    appels += m.get("tool_calls") or []
+                    if len(pensee) + len(contenu) - verifie_rond >= 400:                       # toutes les 400 lettres : le texte tourne-t-il en rond ? (sortir du « with » ferme la connexion, Ollama arrête de générer)
+                        verifie_rond = len(pensee) + len(contenu)
+                        if _boucles.repeated_text(pensee) or _boucles.repeated_text(contenu):
+                            rond_de_suite += 1
+                            if rond_de_suite >= _boucles.CONSECUTIVE_CHECKS:          # il TOURNE en rond : un seul contrôle positif ne coupe pas une analyse qui se répète un instant
+                                rond = True
+                                break
+                        else:
+                            rond_de_suite = 0
+            for genre_m, morceau in separateur.fin():          # ce que la détection de balise retenait encore
+                if genre_m == "pensee":
+                    pensee += morceau
+                    emit({"type": "pensee", "texte": morceau})
+                else:
+                    contenu += morceau
+                    emit({"type": "texte", "texte": morceau})
+            if rond:
+                _m.journaliser("Texte répété par le modèle {} (pensée : {} caractères, réponse : {}, essai {})".format(r["modele"], len(pensee), len(contenu), tentative + 1))
+                _observatoire.record("relance", conv["id"], motif="texte répété", modele=r["modele"])
+                if tentative < 2:
+                    relance_repetition = True
+                    emit({"type": "info", "texte": _t("Le modèle répète les mêmes phrases : je l'arrête et je relance sans réflexion, avec une pénalité de répétition.")})
+                    if tentative >= 1:
+                        monter_en_gamme(r, corps, emit, conv["id"], _t("le modèle répète les mêmes phrases"))
+                    continue
+                emit({"type": "info", "texte": _t("Le modèle répète encore les mêmes phrases : j'arrête là. Reformule en plus court, ou choisis un autre modèle.")})
+            if not contenu.strip() and not appels:             # le modèle a (peut-être) réfléchi puis s'est tu : sans ceci la page restait sur « Réflexion » sans aucune réponse ni explication
+                _m.journaliser("Réponse vide du modèle {} (pensée : {} caractères, raison de fin : {!r}, essai {}, outils : {})".format(r["modele"], len(pensee), raison_fin, tentative + 1, "tools" in corps_t))
+                _observatoire.record("relance", conv["id"], motif="réponse vide", modele=r["modele"])
+                if tentative < 2:
+                    relance_vide = True
+                    if tentative >= 1:
+                        monter_en_gamme(r, corps, emit, conv["id"], _t("le modèle n'a rien écrit"))
+                    if pensee:
+                        emit({"type": "info", "texte": _t("Le modèle a réfléchi sans rien répondre : je relance (réflexion coupée pour cet essai).")})
+                    else:
+                        emit({"type": "info", "texte": _t("Le modèle n'a rien écrit : je relance{}.").format(_t(", sans outils cette fois") if tentative == 1 and "tools" in corps else "")})
+                    continue
+                utilise = int((conv.get("jetons") or {}).get("utilise") or 0)
+                if utilise >= int(r["num_ctx"] * 0.85):
+                    emit({"type": "erreur", "texte": _t("Le modèle n'a rien répondu, même après deux relances. Cause fréquente : la conversation dépasse sa fenêtre de contexte ({} jetons) ; ouvre une nouvelle conversation, ou augmente la fenêtre dans Réglages. Tu peux aussi écrire « continue ».").format(r["num_ctx"])})
+                else:
+                    emit({"type": "erreur", "texte": _t("Le modèle n'a rien produit, même après trois essais (dont un sans outils), alors que la fenêtre de contexte n'est pas pleine ({} / {} jetons). Ce n'est pas ta conversation : ce modèle ne répond pas correctement ici. Essaie un autre modèle (Réglages), ou écris « continue ».").format(utilise, r["num_ctx"])})
+            fini = True
+            break
+        except _m.Arret:
+            raise
+        except (urllib.error.URLError, OSError, RuntimeError) as erreur:
+            http = isinstance(erreur, urllib.error.HTTPError)
+            if http:
+                detail = erreur.read().decode("utf-8", "replace")[:300]
+            else:
+                detail = str(erreur)[:300]
+            _m.journaliser("Ollama ({}, essai {}) : {}".format("HTTP {}".format(erreur.code) if http else type(erreur).__name__, tentative + 1, detail))
+            # Une erreur d'Ollama qu'on peut réessayer (HTTP 500, ou erreur arrivée dans le flux) : le genre dit quoi changer au prochain essai.
+            if (not http or erreur.code in (400, 500)) and RE_GABARIT.search(detail) and not plat:
+                genre = "gabarit"
+            elif (http and erreur.code == 500) or isinstance(erreur, RuntimeError):
+                genre = "repetition" if RE_REPETITION.search(detail) else "outil" if RE_APPEL_MAL_FORME.search(detail) else "contexte" if RE_CONTEXTE.search(detail) else "plantage" if RE_PLANTAGE.search(detail) else ""
+            else:
+                genre = ""
+            nom_mo = nom_du_moteur(r)
+            if moteur_actuel(r).id != "ollama" and RE_MEMOIRE_VIDEO.search(detail):          # le modèle ne tient pas avec sa mémoire de conversation : le dire clairement, sans relancer pour rien
+                emit({"type": "erreur", "texte": _t("{} n'a pas pu charger « {} » : la mémoire de la carte graphique ne suffit pas pour le modèle ET sa mémoire de conversation. Choisis une quantification plus légère (onglet Modèles), ou une fenêtre de contexte plus petite (Réglages > Conversation), puis redémarre {} (Réglages > Moteur). Détail : {}").format(nom_mo, r["modele"], nom_mo, detail[:160])})
+                break
+            if not http and not isinstance(erreur, RuntimeError) and _m.AUTO_DEMARRAGE and tentative < 2 and not ctx.get("ollama_relance") and moteur_actuel(r).id == "ollama":
+                ctx["ollama_relance"] = True                        # Ollama est arrêté (ou a planté) : on le démarre et on réessaie, une seule fois par demande
+                emit({"type": "info", "texte": "Ollama ne répond pas : je le démarre (quelques secondes)..."})
+                try:
+                    _m.demarrer_ollama()
+                except ValueError as e2:
+                    emit({"type": "erreur", "texte": _t("Ollama ne répond pas et je n'ai pas pu le démarrer : {}").format(e2)})
+                    break
+                continue
+            if genre in ("outil", "plantage") and not ctx.get("repli_fait") and (tentative >= 2 or not genre):
+                repli = modele_de_repli(r["modele"], genre)
+                if repli:
+                    ctx["repli_fait"] = True
+                    emit({"type": "info", "texte": "Le modèle {} échoue ({}). Je bascule sur {} pour cette demande.".format(r["modele"], "appels d'outils mal formés" if genre == "outil" else "plantage ou mémoire vidéo", repli)})
+                    r["modele"] = repli
+                    repli_demande = True
+                    break
+            if genre == "gabarit" and tentative < 2:
+                noter_gabarit(r["modele"])
+                plat = True
+                emit({"type": "info", "texte": _t("Le gabarit de conversation de « {} » refuse les outils (erreur d'Ollama : {}). Je réponds sans outils, en texte seulement ; ce modèle est retenu comme tel. Pour lire ou modifier des fichiers, choisis un autre modèle (Qwen ou Gemma).").format(r["modele"], detail[:90])})
+                continue
+            if genre and tentative < 2:
+                if genre == "outil":
+                    relance_outil = True
+                    emit({"type": "info", "texte": _t("Le modèle a mal écrit un appel d'outil (erreur d'Ollama : {}). Nouvelle tentative...").format(detail[:120])})
+                elif genre == "repetition":
+                    emit({"type": "info", "texte": _t("Le modèle s'est mis à se répéter en boucle et Ollama a coupé la réponse. Je relance.")})
+                elif genre == "contexte":
+                    emit({"type": "info", "texte": _t("Ollama a perdu le début de la conversation (contexte trop plein : {}). Je réduis les anciens résultats et je relance, ta demande est gardée.").format(detail[:80])})
+                else:
+                    emit({"type": "info", "texte": _t("Ollama a planté ou manque de mémoire vidéo ({}). J'attends quelques secondes et je relance avec moins de contexte, ta demande est gardée.").format(detail[:100])})
+                    for _ in range(6):                  # le temps qu'Ollama relance son moteur (3 s), en restant interruptible
+                        if stop.wait(0.5):
+                            raise _m.Arret()
+                continue
+            if genre == "outil":
+                emit({"type": "erreur", "texte": _t("Le modèle écrit mal ses appels d'outils ({}). Reformule en une demande plus simple, ou choisis un autre modèle dans Réglages (gemma4:26b).").format(detail[:200])})
+            elif genre == "repetition":
+                emit({"type": "erreur", "texte": _t("Le modèle se répète en boucle (Ollama : « token repeat limit reached ») : ce n'est pas un bug de Lutin. Dans Réglages > Avancé, monte la pénalité de répétition (1,1 à 1,2) ou baisse la température, ou essaie une autre quantification ou un autre modèle. Reformule ou écris « continue » pour reprendre.")})
+            elif genre == "plantage":
+                emit({"type": "erreur", "texte": _t("Ollama plante encore ({}). Ferme ComfyUI ou clique sur « 🧹 VRAM », baisse la fenêtre de contexte dans Réglages, puis écris « continue ».").format(detail[:200])})
+            elif http or isinstance(erreur, RuntimeError):
+                emit({"type": "erreur", "texte": _t("{} a répondu une erreur : {}{}").format(nom_mo, detail, _t(" (le modèle est-il installé ? onglet Modèles)") if http and erreur.code == 404 else "")})
+            elif moteur_actuel(r).id != "ollama":
+                emit({"type": "erreur", "texte": _t("{} ne répond pas : {}. Démarre-le (bouton « Démarrer » de la page Modèles, ou Réglages > Moteur).").format(nom_mo, detail)})
+            else:
+                emit({"type": "erreur", "texte": _t("Ollama ne répond pas : {}. Clique sur « Démarrer Ollama ».").format(detail)})
+            break
+    return fini, repli_demande, contenu, pensee, appels
+
+
+def _executer_appels(conv, r, emit, ctx, stop, appels, outils, garde):
+    """Les outils demandés par le modèle, dans l'ordre des appels : garde contre les boucles, exécution (l'accord se demande dans l'outil), résultat rendu au modèle et montré à la page,
+    conversation enregistrée après chaque outil."""
+    avance = lectures_groupees(appels, lambda nom, brut: normaliser_arguments(nom, brut, next((t["function"].get("parameters") for t in outils if t["function"]["name"] == nom), None)),
+                               lambda nom, args: _m.call_tool(nom, args, ctx), ctx["outils_autorises"])
+    for position, a in enumerate(appels):
+        if stop.is_set():                        # arrêt demandé : les appels restants reçoivent une réponse, pour garder une conversation cohérente
+            for b in appels[position:]:
+                conv["messages"].append({"role": "tool", "tool_name": (b.get("function") or {}).get("name", ""), "content": "Interrompu par l'utilisateur."})
+            raise _m.Arret()
+        f = a.get("function") or {}
+        nom = f.get("name", "")
+        args = normaliser_arguments(nom, f.get("arguments"), next((t["function"].get("parameters") for t in outils if t["function"]["name"] == nom), None))
+        repetitions = garde.compter(nom, args)
+        debut_outil = time.monotonic()
+        _m.rafraichir_accords(ctx)                                  # une case cochée ou décochée pendant la réponse compte dès cet outil
+        _etat_tour.phase(conv["id"], _etat_tour.TOOL, nom)
+        emit({"type": "outil", "nom": nom, "args": {k: (v if not isinstance(v, str) or len(v) < 300 else v[:300] + "...") for k, v in args.items()}})
+        try:
+            if repetitions >= _boucles.CALL_THRESHOLD:                  # le même appel pour la énième fois : on n'exécute plus, on dit de passer à autre chose
+                emit({"type": "info", "texte": _t("↻ Le modèle refait le même appel ({} fois) : je lui dis de passer à autre chose.").format(repetitions)})
+                resultat = _boucles.Guard.message(repetitions)
+            elif nom not in ctx["outils_autorises"]:
+                raise _m.ErreurOutil("L'outil « {} » n'est pas disponible ici (mode ou option désactivés). Outils disponibles : {}.".format(nom, ", ".join(sorted(ctx["outils_autorises"]))))
+            elif position in avance:
+                resultat = avance[position].result()          # lu en même temps que les lectures voisines ; l'ordre des évènements reste celui des appels
+            else:
+                resultat = _m.call_tool(nom, args, ctx)
+        except _m.Arret:
+            for b in appels[position:]:
+                conv["messages"].append({"role": "tool", "tool_name": (b.get("function") or {}).get("name", ""), "content": "Interrompu par l'utilisateur."})
+            raise
+        except _m.ErreurOutil as erreur:
+            resultat = "Erreur : " + str(erreur)
+        except Exception as erreur:  # noqa: BLE001
+            _m.journaliser("Outil « {} » : erreur inattendue {!r}".format(nom, erreur))
+            resultat = "Erreur inattendue : " + str(erreur)[:300]
+        if repetitions >= _boucles.CALL_THRESHOLD:
+            garde.refuser(nom, args)
+        else:
+            garde.noter_resultat(nom, args, resultat)          # un résultat qui change n'est pas une boucle
+        _observatoire.record("outil", conv["id"], outil=nom, duree_ms=int((time.monotonic() - debut_outil) * 1000), ok=not str(resultat).startswith(("Erreur", "Interrompu")), modele=r["modele"],
+                            detail=str(resultat)[:100] if str(resultat).startswith("Erreur") else "")
+        medias, fichiers = ctx.pop("medias", []), ctx.pop("medias_fichiers", {})          # images produites par l'outil (et où elles sont), affichées dans la conversation
+        extra = {"medias": medias, "medias_fichiers": fichiers} if medias else {}
+        joints = [_fichiers.entree(c) for c in ctx.pop("fichiers_joints", [])][:8]           # documents et médias créés : une carte (ouvrir, télécharger, supprimer) sous le message
+        if joints:
+            extra["fichiers_joints"] = joints
+        try:
+            _fichiers.save([dict(e, genre="fichier") for e in joints] + [_fichiers.entree_image(i, fichiers.get(i)) for i in medias if fichiers.get(i)], conv["id"])
+        except Exception as erreur:  # noqa: BLE001  (le registre aide au ménage, il ne doit jamais gêner une réponse)
+            _m.journaliser("Registre des fichiers créés : {!r}".format(erreur))
+        affiche = _t("(résultat transmis à l'assistant, non affiché)") if (nom in OUTILS_INTERNES or _mcp.is_tool(nom)) and ("CONTENU WEB NON FIABLE" in resultat[:60] or _mcp.MARKER in resultat[:60]) else resultat[:1500]          # la recherche web sert à l'assistant, pas à remplir la conversation : c'est à lui d'en tirer la réponse
+        emit(dict({"type": "resultat", "nom": nom, "texte": affiche}, **extra))
+        conv["messages"].append(dict({"role": "tool", "tool_name": nom, "content": resultat[:_m.LECTURE_MAX + 2000]}, **extra))
+        _m.conv_ecrire(conv)                        # enregistré à chaque étape : un plantage du PC en pleine demande ne perd que l'étape en cours
+
+
+def boucle_agent(conv, r, emit, ctx, stop):
+    """La boucle de l'agent : le modèle répond, appelle des outils, on lui rend les résultats, jusqu'à la réponse finale.
+    Ses parties : `_preparer_boucle` (le contexte du tour), puis à chaque étape `_messages_de_l_etape`, `_preparer_requete`, `_appeler_modele` et `_executer_appels` ;
+    ce qui reste ici est la décision : continuer, relancer, conclure, garder la réponse."""
+    p = _preparer_boucle(conv, r, emit, ctx)
+    tours_max, outils, derniere_demande, garde, forcer_fin = p.tours_max, p.outils, p.derniere_demande, p.garde, p.forcer_fin
+    faux_accompli = None                                              # texte d'un modèle qui prétend avoir écrit un fichier sans l'avoir fait (corrigé une seule fois par demande)
+    corrige_affirmation = False
     for idx_tour in range(tours_max):
         _etat_tour.phase(conv["id"], _etat_tour.CONTEXT, step=idx_tour)
-        msgs = [{"role": "system", "content": consignes_systeme(r) + _fichiers.instruction_folder(conv) + _m.text_tasks(conv) + rappels_texte}]
-        if idx_tour == 0:
-            for nom_coupe, (taille_coupe, relu_coupe) in sorted(_m.COUPURES.items()):          # un fichier de mémoire plus long que ce que le modèle relit : tu le sais, au lieu de le découvrir plus tard
-                if (conv.get("id"), nom_coupe, taille_coupe) in COUPURES_DITES:          # une fois par conversation et par taille, pas à chaque message
-                    continue
-                COUPURES_DITES.add((conv.get("id"), nom_coupe, taille_coupe))
-                emit({"type": "info", "texte": _t("⚠ {} fait {} caractères et l'assistant n'en relit que {} à chaque conversation : le reste est ignoré. Raccourcis-le (onglet Mémoire) si des informations manquent.").format(nom_coupe, taille_coupe, relu_coupe)})
-        if conv.get("resume"):
-            msgs.append({"role": "user", "content": "[Résumé de la conversation jusqu'ici]\n" + conv["resume"]})
-            msgs.append({"role": "assistant", "content": "Compris, je continue."})
-        historique = _pieces.for_model(conv["messages"], _pieces.character_budget(r["num_ctx"]))          # le texte des fichiers joints s'ajoute ici, jamais dans la conversation enregistrée
-        dernier_user = max((i for i, m in enumerate(historique) if m.get("role") == "user"), default=-1)
-        if consigne and dernier_user >= 0:
-            historique = list(historique)
-            historique[dernier_user] = dict(historique[dernier_user], content=(historique[dernier_user].get("content") or "") + "\n\n[" + consigne + "]")
-        if (fiche or extraits) and dernier_user >= 0:          # fiche et extraits passent juste AVANT la dernière question : tout ce qui précède est identique d'une réponse à l'autre (cache d'Ollama)
-            bloc = "\n\n".join(x for x in (fiche, extraits) if x)
-            historique = historique[:dernier_user] + [{"role": "user", "content": bloc}, {"role": "assistant", "content": "Compris, je m'appuie sur " + ("cette fiche." if fiche else "ces extraits.")}] + historique[dernier_user:]
-        msgs += historique
         dernier_tour = idx_tour == tours_max - 1 or forcer_fin
-        if dernier_tour:             # plus d'outils : le modèle doit répondre avec ce qu'il a trouvé
-            msgs.append({"role": "user", "content": "Tu as assez d'informations. Réponds maintenant à ma demande avec ce que tu as vu, sans appeler d'outil. Si quelque chose manque, dis-le."})
-        if faux_accompli:
-            msgs += [{"role": "assistant", "content": faux_accompli[0]}, {"role": "user", "content": faux_accompli[1]}]
-            faux_accompli = None
-        msgs_base = msgs
-        options = _m.options_modele(r, r["temperature"])
-        if r.get("num_predict", 0) > 0:
-            options["num_predict"] = r["num_predict"]
-        caps = moteur_actuel(r).capacites(r["modele"])
-        reflechit = bool(r["reflexion"]) and not (r.get("reflexion_tours") == "premier" and idx_tour > 0)          # option : la réflexion seulement avant la première réponse, pas à chaque retour d'outil
-        if reflechit and caps is not None and "thinking" not in caps:
-            reflechit = False
-            if idx_tour == 0:
-                emit({"type": "info", "texte": "Ce modèle n'a pas de mode réflexion : je le désactive pour cette demande."})
-        options.update(_m.options_echantillonnage(r, reflechit))
-        if idx_tour == 0 and any(m.get("images") for m in conv["messages"][-_images.RECENT:]):
-            voit = caps is None or "vision" in caps
-            if not voit:
-                autre = modele_qui_voit(r["modele"])
-                if autre:
-                    emit({"type": "info", "texte": _t("Ce modèle ne voit pas les images : je passe sur « {} » pour cette demande.").format(autre)})
-                    r["modele"] = autre
-                    caps = moteur_actuel(r).capacites(autre)
-                else:
-                    emit({"type": "info", "texte": _t("Ce modèle ne voit pas les images et aucun modèle « Images » n'est installé : elles sont ignorées. Onglet Modèles pour en installer un.")})
-        if idx_tour == 0 and router_la_demande(r, derniere_demande, any(m.get("images") for m in conv["messages"][-_images.RECENT:]), emit, conv["id"]):
-            caps = moteur_actuel(r).capacites(r["modele"])
-            reflechit = reflechit and (caps is None or "thinking" in caps)
-        rapport_contexte = {}
-        corps = {"model": r["modele"], "messages": ajuster_contexte(msgs, r["num_ctx"], 1.0, outils, rapport_contexte), "stream": True, "options": options, "think": reflechit}
-        if not dernier_tour and outils:                      # mode « discussion » : aucun outil, donc rien à envoyer ni à signaler
-            if caps is not None and "tools" not in caps:
-                if idx_tour == 0:
-                    emit({"type": "info", "texte": "Ce modèle ne sait pas appeler d'outils : il répondra sans lire ni modifier les fichiers. Choisis un autre modèle (Qwen 3.8 ou Gemma 4) pour cela."})
-            else:
-                corps["tools"] = outils
-        annoncer_reduction(rapport_contexte, emit, ctx, r["num_ctx"])
-        fini, verifie, relance_outil, repli_demande, relance_vide, relance_repetition = False, False, False, False, False, False
-        plat = r["modele"] in gabarits_connus()
-        if plat:
-            corps = aplatir_sans_outils(corps)
-            if idx_tour == 0 and outils:
-                emit({"type": "info", "texte": _t("Le gabarit de ce modèle refuse les outils : il répond sans lire ni modifier de fichiers. Pour cela, choisis un autre modèle (Qwen ou Gemma).")})
-        if moteur_actuel(r).en_memoire(r["modele"]) is None:
-            emit({"type": "etat", "texte": "Chargement du modèle en mémoire (30 s à 2 min la première fois, ou si ComfyUI lui a pris la carte)."})
+        msgs = _messages_de_l_etape(conv, r, emit, p, idx_tour, dernier_tour, faux_accompli)
+        faux_accompli = None
+        corps, caps, plat = _preparer_requete(conv, r, emit, ctx, msgs, outils, idx_tour, dernier_tour, derniere_demande)
         _etat_tour.phase(conv["id"], _etat_tour.MODEL, r["modele"])
-        for tentative in range(3):
-            contenu, pensee, appels = "", "", []
-            separateur = _pensee.Splitter()          # une réflexion laissée dans le texte (<think>…</think>) est rendue à part, comme celle que le moteur sépare lui-même
-            rond, verifie_rond, raison_fin, rond_de_suite = False, 0, "", 0
-            corps_t = corps if tentative == 0 else dict(corps, messages=ajuster_contexte(msgs_base, r["num_ctx"], 0.7 ** tentative, outils) + ([{"role": "user", "content": RAPPEL_APPEL}] if relance_outil else [{"role": "user", "content": RAPPEL_REPETITION}] if relance_repetition else [{"role": "user", "content": RAPPEL_VIDE}] if relance_vide else []), options=dict(corps["options"], temperature=0.3, **({"repeat_penalty": 1.15} if relance_repetition else {})), think=False if (relance_vide or relance_repetition) else corps["think"])
-            if plat:
-                corps_t = aplatir_sans_outils(corps_t)
-            if relance_vide and tentative >= 2 and "tools" in corps_t:
-                corps_t = {k: v for k, v in corps_t.items() if k != "tools"}          # dernier essai SANS outils : certains petits modèles ne produisent plus rien quand les outils sont déclarés ; mieux vaut une réponse en texte
-            try:
-                corps_t = dict(corps_t, messages=_images.for_model(corps_t["messages"], caps is None or "vision" in caps))
-                moteur_choisi = moteur_actuel(r)
-                with _moteurs.FluxInterruptible(lambda: moteur_choisi.chat_flux(corps_t, 900), stop) as flux:          # le moteur choisi (engines.py) ; Arrêter coupe même un modèle qui charge ou qui se fige
-                    for e in flux:
-                        if stop.is_set():
-                            if contenu.strip():
-                                conv["messages"].append({"role": "assistant", "content": contenu, "ts": horodatage()})
-                            raise _m.Arret()
-                        if e.get("error"):
-                            raise RuntimeError(e["error"])
-                        m = e.get("message") or {}
-                        if e.get("done") and e.get("prompt_eval_count"):          # chiffres réels d'Ollama : jetons lus + écrits = place prise dans la fenêtre de contexte
-                            conv["jetons"] = {"utilise": int(e["prompt_eval_count"]) + int(e.get("eval_count") or 0), "total": r["num_ctx"]}
-                            emit(dict(conv["jetons"], type="jetons", reel=True))
-                        if e.get("done"):
-                            raison_fin = str(e.get("done_reason") or "")
-                            vitesse = calculer_vitesse(e)
-                            _observatoire.record("tour", conv["id"], modele=r["modele"], machine=r.get("machine", ""), jetons=int(e.get("eval_count") or 0), tok_s=vitesse["ecriture"] if vitesse else None,
-                                                duree_s=vitesse["total"] if vitesse else None)
-                            if vitesse:
-                                conv["vitesse"] = vitesse
-                                emit(dict(vitesse, type="vitesse"))
-                        if not verifie:
-                            verifie = True
-                            ps = moteur_actuel(r).en_memoire(r["modele"])
-                            if ps and ps["taille"] and ps["vram"] < 0.9 * ps["taille"] and a_une_carte_graphique() and _avertir_une_fois(r["modele"]):
-                                emit({"type": "info", "texte": "Attention : seulement {} % du modèle tient sur la carte graphique, le reste tourne sur le processeur, donc c'est lent. Ferme ComfyUI et le navigateur d'images, ou baisse le contexte dans Réglages.".format(round(100 * ps["vram"] / ps["taille"]))})
-                        if m.get("thinking"):
-                            pensee += m["thinking"]
-                            emit({"type": "pensee", "texte": m["thinking"]})
-                        for genre_m, morceau in separateur.alimenter(m.get("content")):
-                            if genre_m == "pensee":
-                                pensee += morceau
-                                emit({"type": "pensee", "texte": morceau})
-                            else:
-                                contenu += morceau
-                                emit({"type": "texte", "texte": morceau})
-                        appels += m.get("tool_calls") or []
-                        if len(pensee) + len(contenu) - verifie_rond >= 400:                       # toutes les 400 lettres : le texte tourne-t-il en rond ? (sortir du « with » ferme la connexion, Ollama arrête de générer)
-                            verifie_rond = len(pensee) + len(contenu)
-                            if _boucles.repeated_text(pensee) or _boucles.repeated_text(contenu):
-                                rond_de_suite += 1
-                                if rond_de_suite >= _boucles.CONSECUTIVE_CHECKS:          # il TOURNE en rond : un seul contrôle positif ne coupe pas une analyse qui se répète un instant
-                                    rond = True
-                                    break
-                            else:
-                                rond_de_suite = 0
-                for genre_m, morceau in separateur.fin():          # ce que la détection de balise retenait encore
-                    if genre_m == "pensee":
-                        pensee += morceau
-                        emit({"type": "pensee", "texte": morceau})
-                    else:
-                        contenu += morceau
-                        emit({"type": "texte", "texte": morceau})
-                if rond:
-                    _m.journaliser("Texte répété par le modèle {} (pensée : {} caractères, réponse : {}, essai {})".format(r["modele"], len(pensee), len(contenu), tentative + 1))
-                    _observatoire.record("relance", conv["id"], motif="texte répété", modele=r["modele"])
-                    if tentative < 2:
-                        relance_repetition = True
-                        emit({"type": "info", "texte": _t("Le modèle répète les mêmes phrases : je l'arrête et je relance sans réflexion, avec une pénalité de répétition.")})
-                        if tentative >= 1:
-                            monter_en_gamme(r, corps, emit, conv["id"], _t("le modèle répète les mêmes phrases"))
-                        continue
-                    emit({"type": "info", "texte": _t("Le modèle répète encore les mêmes phrases : j'arrête là. Reformule en plus court, ou choisis un autre modèle.")})
-                if not contenu.strip() and not appels:             # le modèle a (peut-être) réfléchi puis s'est tu : sans ceci la page restait sur « Réflexion » sans aucune réponse ni explication
-                    _m.journaliser("Réponse vide du modèle {} (pensée : {} caractères, raison de fin : {!r}, essai {}, outils : {})".format(r["modele"], len(pensee), raison_fin, tentative + 1, "tools" in corps_t))
-                    _observatoire.record("relance", conv["id"], motif="réponse vide", modele=r["modele"])
-                    if tentative < 2:
-                        relance_vide = True
-                        if tentative >= 1:
-                            monter_en_gamme(r, corps, emit, conv["id"], _t("le modèle n'a rien écrit"))
-                        if pensee:
-                            emit({"type": "info", "texte": _t("Le modèle a réfléchi sans rien répondre : je relance (réflexion coupée pour cet essai).")})
-                        else:
-                            emit({"type": "info", "texte": _t("Le modèle n'a rien écrit : je relance{}.").format(_t(", sans outils cette fois") if tentative == 1 and "tools" in corps else "")})
-                        continue
-                    utilise = int((conv.get("jetons") or {}).get("utilise") or 0)
-                    if utilise >= int(r["num_ctx"] * 0.85):
-                        emit({"type": "erreur", "texte": _t("Le modèle n'a rien répondu, même après deux relances. Cause fréquente : la conversation dépasse sa fenêtre de contexte ({} jetons) ; ouvre une nouvelle conversation, ou augmente la fenêtre dans Réglages. Tu peux aussi écrire « continue ».").format(r["num_ctx"])})
-                    else:
-                        emit({"type": "erreur", "texte": _t("Le modèle n'a rien produit, même après trois essais (dont un sans outils), alors que la fenêtre de contexte n'est pas pleine ({} / {} jetons). Ce n'est pas ta conversation : ce modèle ne répond pas correctement ici. Essaie un autre modèle (Réglages), ou écris « continue ».").format(utilise, r["num_ctx"])})
-                fini = True
-                break
-            except _m.Arret:
-                raise
-            except (urllib.error.URLError, OSError, RuntimeError) as erreur:
-                http = isinstance(erreur, urllib.error.HTTPError)
-                if http:
-                    detail = erreur.read().decode("utf-8", "replace")[:300]
-                else:
-                    detail = str(erreur)[:300]
-                _m.journaliser("Ollama ({}, essai {}) : {}".format("HTTP {}".format(erreur.code) if http else type(erreur).__name__, tentative + 1, detail))
-                # Une erreur d'Ollama qu'on peut réessayer (HTTP 500, ou erreur arrivée dans le flux) : le genre dit quoi changer au prochain essai.
-                if (not http or erreur.code in (400, 500)) and RE_GABARIT.search(detail) and not plat:
-                    genre = "gabarit"
-                elif (http and erreur.code == 500) or isinstance(erreur, RuntimeError):
-                    genre = "repetition" if RE_REPETITION.search(detail) else "outil" if RE_APPEL_MAL_FORME.search(detail) else "contexte" if RE_CONTEXTE.search(detail) else "plantage" if RE_PLANTAGE.search(detail) else ""
-                else:
-                    genre = ""
-                nom_mo = nom_du_moteur(r)
-                if moteur_actuel(r).id != "ollama" and RE_MEMOIRE_VIDEO.search(detail):          # le modèle ne tient pas avec sa mémoire de conversation : le dire clairement, sans relancer pour rien
-                    emit({"type": "erreur", "texte": _t("{} n'a pas pu charger « {} » : la mémoire de la carte graphique ne suffit pas pour le modèle ET sa mémoire de conversation. Choisis une quantification plus légère (onglet Modèles), ou une fenêtre de contexte plus petite (Réglages > Conversation), puis redémarre {} (Réglages > Moteur). Détail : {}").format(nom_mo, r["modele"], nom_mo, detail[:160])})
-                    break
-                if not http and not isinstance(erreur, RuntimeError) and _m.AUTO_DEMARRAGE and tentative < 2 and not ctx.get("ollama_relance") and moteur_actuel(r).id == "ollama":
-                    ctx["ollama_relance"] = True                        # Ollama est arrêté (ou a planté) : on le démarre et on réessaie, une seule fois par demande
-                    emit({"type": "info", "texte": "Ollama ne répond pas : je le démarre (quelques secondes)..."})
-                    try:
-                        _m.demarrer_ollama()
-                    except ValueError as e2:
-                        emit({"type": "erreur", "texte": _t("Ollama ne répond pas et je n'ai pas pu le démarrer : {}").format(e2)})
-                        break
-                    continue
-                if genre in ("outil", "plantage") and not ctx.get("repli_fait") and (tentative >= 2 or not genre):
-                    repli = modele_de_repli(r["modele"], genre)
-                    if repli:
-                        ctx["repli_fait"] = True
-                        emit({"type": "info", "texte": "Le modèle {} échoue ({}). Je bascule sur {} pour cette demande.".format(r["modele"], "appels d'outils mal formés" if genre == "outil" else "plantage ou mémoire vidéo", repli)})
-                        r["modele"] = repli
-                        repli_demande = True
-                        break
-                if genre == "gabarit" and tentative < 2:
-                    noter_gabarit(r["modele"])
-                    plat = True
-                    emit({"type": "info", "texte": _t("Le gabarit de conversation de « {} » refuse les outils (erreur d'Ollama : {}). Je réponds sans outils, en texte seulement ; ce modèle est retenu comme tel. Pour lire ou modifier des fichiers, choisis un autre modèle (Qwen ou Gemma).").format(r["modele"], detail[:90])})
-                    continue
-                if genre and tentative < 2:
-                    if genre == "outil":
-                        relance_outil = True
-                        emit({"type": "info", "texte": _t("Le modèle a mal écrit un appel d'outil (erreur d'Ollama : {}). Nouvelle tentative...").format(detail[:120])})
-                    elif genre == "repetition":
-                        emit({"type": "info", "texte": _t("Le modèle s'est mis à se répéter en boucle et Ollama a coupé la réponse. Je relance.")})
-                    elif genre == "contexte":
-                        emit({"type": "info", "texte": _t("Ollama a perdu le début de la conversation (contexte trop plein : {}). Je réduis les anciens résultats et je relance, ta demande est gardée.").format(detail[:80])})
-                    else:
-                        emit({"type": "info", "texte": _t("Ollama a planté ou manque de mémoire vidéo ({}). J'attends quelques secondes et je relance avec moins de contexte, ta demande est gardée.").format(detail[:100])})
-                        for _ in range(6):                  # le temps qu'Ollama relance son moteur (3 s), en restant interruptible
-                            if stop.wait(0.5):
-                                raise _m.Arret()
-                    continue
-                if genre == "outil":
-                    emit({"type": "erreur", "texte": _t("Le modèle écrit mal ses appels d'outils ({}). Reformule en une demande plus simple, ou choisis un autre modèle dans Réglages (gemma4:26b).").format(detail[:200])})
-                elif genre == "repetition":
-                    emit({"type": "erreur", "texte": _t("Le modèle se répète en boucle (Ollama : « token repeat limit reached ») : ce n'est pas un bug de Lutin. Dans Réglages > Avancé, monte la pénalité de répétition (1,1 à 1,2) ou baisse la température, ou essaie une autre quantification ou un autre modèle. Reformule ou écris « continue » pour reprendre.")})
-                elif genre == "plantage":
-                    emit({"type": "erreur", "texte": _t("Ollama plante encore ({}). Ferme ComfyUI ou clique sur « 🧹 VRAM », baisse la fenêtre de contexte dans Réglages, puis écris « continue ».").format(detail[:200])})
-                elif http or isinstance(erreur, RuntimeError):
-                    emit({"type": "erreur", "texte": _t("{} a répondu une erreur : {}{}").format(nom_mo, detail, _t(" (le modèle est-il installé ? onglet Modèles)") if http and erreur.code == 404 else "")})
-                elif moteur_actuel(r).id != "ollama":
-                    emit({"type": "erreur", "texte": _t("{} ne répond pas : {}. Démarre-le (bouton « Démarrer » de la page Modèles, ou Réglages > Moteur).").format(nom_mo, detail)})
-                else:
-                    emit({"type": "erreur", "texte": _t("Ollama ne répond pas : {}. Clique sur « Démarrer Ollama ».").format(detail)})
-                break
+        fini, repli_demande, contenu, pensee, appels = _appeler_modele(conv, r, emit, ctx, stop, corps, msgs, outils, caps, plat)
         if repli_demande:
             continue                                 # on refait ce tour avec le modèle de repli (capacités, échantillonnage et contexte recalculés)
         if not fini:
@@ -1927,59 +2017,7 @@ def boucle_agent(conv, r, emit, ctx, stop):
         conv["messages"].append(message)
         if not appels:
             break
-        avance = lectures_groupees(appels, lambda nom, brut: normaliser_arguments(nom, brut, next((t["function"].get("parameters") for t in outils if t["function"]["name"] == nom), None)),
-                                   lambda nom, args: _m.call_tool(nom, args, ctx), ctx["outils_autorises"])
-        for position, a in enumerate(appels):
-            if stop.is_set():                        # arrêt demandé : les appels restants reçoivent une réponse, pour garder une conversation cohérente
-                for b in appels[position:]:
-                    conv["messages"].append({"role": "tool", "tool_name": (b.get("function") or {}).get("name", ""), "content": "Interrompu par l'utilisateur."})
-                raise _m.Arret()
-            f = a.get("function") or {}
-            nom = f.get("name", "")
-            args = normaliser_arguments(nom, f.get("arguments"), next((t["function"].get("parameters") for t in outils if t["function"]["name"] == nom), None))
-            repetitions = garde.compter(nom, args)
-            debut_outil = time.monotonic()
-            _m.rafraichir_accords(ctx)                                  # une case cochée ou décochée pendant la réponse compte dès cet outil
-            _etat_tour.phase(conv["id"], _etat_tour.TOOL, nom)
-            emit({"type": "outil", "nom": nom, "args": {k: (v if not isinstance(v, str) or len(v) < 300 else v[:300] + "...") for k, v in args.items()}})
-            try:
-                if repetitions >= _boucles.CALL_THRESHOLD:                  # le même appel pour la énième fois : on n'exécute plus, on dit de passer à autre chose
-                    emit({"type": "info", "texte": _t("↻ Le modèle refait le même appel ({} fois) : je lui dis de passer à autre chose.").format(repetitions)})
-                    resultat = _boucles.Guard.message(repetitions)
-                elif nom not in ctx["outils_autorises"]:
-                    raise _m.ErreurOutil("L'outil « {} » n'est pas disponible ici (mode ou option désactivés). Outils disponibles : {}.".format(nom, ", ".join(sorted(ctx["outils_autorises"]))))
-                elif position in avance:
-                    resultat = avance[position].result()          # lu en même temps que les lectures voisines ; l'ordre des évènements reste celui des appels
-                else:
-                    resultat = _m.call_tool(nom, args, ctx)
-            except _m.Arret:
-                for b in appels[position:]:
-                    conv["messages"].append({"role": "tool", "tool_name": (b.get("function") or {}).get("name", ""), "content": "Interrompu par l'utilisateur."})
-                raise
-            except _m.ErreurOutil as erreur:
-                resultat = "Erreur : " + str(erreur)
-            except Exception as erreur:  # noqa: BLE001
-                _m.journaliser("Outil « {} » : erreur inattendue {!r}".format(nom, erreur))
-                resultat = "Erreur inattendue : " + str(erreur)[:300]
-            if repetitions >= _boucles.CALL_THRESHOLD:
-                garde.refuser(nom, args)
-            else:
-                garde.noter_resultat(nom, args, resultat)          # un résultat qui change n'est pas une boucle
-            _observatoire.record("outil", conv["id"], outil=nom, duree_ms=int((time.monotonic() - debut_outil) * 1000), ok=not str(resultat).startswith(("Erreur", "Interrompu")), modele=r["modele"],
-                                detail=str(resultat)[:100] if str(resultat).startswith("Erreur") else "")
-            medias, fichiers = ctx.pop("medias", []), ctx.pop("medias_fichiers", {})          # images produites par l'outil (et où elles sont), affichées dans la conversation
-            extra = {"medias": medias, "medias_fichiers": fichiers} if medias else {}
-            joints = [_fichiers.entree(c) for c in ctx.pop("fichiers_joints", [])][:8]           # documents et médias créés : une carte (ouvrir, télécharger, supprimer) sous le message
-            if joints:
-                extra["fichiers_joints"] = joints
-            try:
-                _fichiers.save([dict(e, genre="fichier") for e in joints] + [_fichiers.entree_image(i, fichiers.get(i)) for i in medias if fichiers.get(i)], conv["id"])
-            except Exception as erreur:  # noqa: BLE001  (le registre aide au ménage, il ne doit jamais gêner une réponse)
-                _m.journaliser("Registre des fichiers créés : {!r}".format(erreur))
-            affiche = _t("(résultat transmis à l'assistant, non affiché)") if (nom in OUTILS_INTERNES or _mcp.is_tool(nom)) and ("CONTENU WEB NON FIABLE" in resultat[:60] or _mcp.MARKER in resultat[:60]) else resultat[:1500]          # la recherche web sert à l'assistant, pas à remplir la conversation : c'est à lui d'en tirer la réponse
-            emit(dict({"type": "resultat", "nom": nom, "texte": affiche}, **extra))
-            conv["messages"].append(dict({"role": "tool", "tool_name": nom, "content": resultat[:_m.LECTURE_MAX + 2000]}, **extra))
-            _m.conv_ecrire(conv)                        # enregistré à chaque étape : un plantage du PC en pleine demande ne perd que l'étape en cours
+        _executer_appels(conv, r, emit, ctx, stop, appels, outils, garde)
         if garde.abandon:
             if forcer_fin:
                 break
