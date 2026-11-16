@@ -6,6 +6,7 @@
   import Devices from "../components/Devices.svelte";
   import Memory from "../components/Memory.svelte";
   import Skills from "../components/Skills.svelte";
+  import ThirdPartySkills from "../components/ThirdPartySkills.svelte";
   import Notifications from "../components/Notifications.svelte";
   import LanguageChoice from "../components/LanguageChoice.svelte";
   import { api, ApiError } from "../lib/api";
@@ -128,6 +129,7 @@
     <div class="group"><Notifications /></div>
     <div class="group"><Memory /></div>
     <div class="group"><Skills /></div>
+    <div class="group"><ThirdPartySkills /></div>
 
     {#each GROUPS as group (group)}
       {#if group === "sampling"}
