@@ -48,7 +48,8 @@ The add-ons (test 5p): their settings drawn from each manifest, secrets kept and
 The live panel of an add-on (test 5r) is under it once it is on: Telegram (pairing code, paired phones, replies waiting to be sent or thrown away), mail (replies waiting) and X (write, edit, schedule, publish posts, replies). ComfyUI has no panel here yet.
 Projects also take up a Claude project (test 5u, `GET /projects/claude`, `POST /projects/import-claude`): look inside first, then work in the folder itself or in a copy; the original is never touched.
 The third-party skills, in Settings (test 5v, 14 routes under `/third-party-skills`): search the listed GitHub repositories (names, and the descriptions already read; a button reads them all in the background), look inside before anything is copied (SKILL.md, files, licence, weight, and the findings of the analysis: hidden orders, downloads, scripts), install into a chosen project, check for updates and update (the new version is shown first), remove (only what Lutin installed). A dangerous skill and a skill without licence each need their own tick; the copy then needs a second press after the page says what it will copy. The repositories searched can be added and removed, found by topic or in the community lists, and the GitHub token is kept on the machine and never shown again. Strict offline mode is said and nothing is tried (409 `offline`). Everything that reads GitHub is for the machine itself.
-Missing: the flow editor and the correction proposal of an add-on, and the ComfyUI panel.
+The flow of an add-on (test 5x, `GET/PATCH /addons/{id}/flow`, `POST .../flow/restore`, `POST .../correction`): an advanced editor under each add-on; the text is checked by the server before it is kept, the shipped flow can be put back (with a confirmation), and after a failed check the model's proposal is placed in the box for reading, never kept by itself (refused offline).
+Missing: the ComfyUI panel.
 
 ## Projects
 

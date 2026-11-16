@@ -940,6 +940,40 @@ class Chat(unittest.TestCase):
         self.assertEqual(p.erreurs, [])
         p.evaluer("location.hash = '#/chat'")
 
+    def test_5x_an_addon_flow_is_edited_checked_kept_and_the_shipped_one_put_back(self):
+        p = self.page
+        from lutin import addons
+        self.addCleanup(addons.restore_stream, "telegram")
+        shipped = addons.shipped_stream("telegram")
+        p.evaluer("location.hash = '#/agents'")
+        p.attendre("!!document.querySelector('#flow-telegram') || !!document.querySelector('.addons .flow')")
+        opener = "[...document.querySelectorAll('.addons .card')].find(c => c.querySelector('strong').innerText.includes('Telegram')).querySelector('.flow summary').click()"
+        p.evaluer(opener)
+        p.attendre("!!document.querySelector('#flow-telegram')")
+        self.assertEqual(json.loads(p.evaluer("document.querySelector('#flow-telegram').value")), shipped, "the box holds the flow in force")
+        self.assertTrue(p.evaluer("[...document.querySelectorAll('.flow .button')].find(b => b.innerText === 'Vérifier et garder').disabled"), "nothing changed: nothing to keep")
+        if AXE.is_file():
+            self.axe("on the flow editor")
+        fill = "(() => { const box = document.querySelector('#flow-telegram'); box.value = %s; box.dispatchEvent(new Event('input', {bubbles: true})); })()"
+        p.evaluer(fill % js("{ this is not json"))
+        p.attendre("![...document.querySelectorAll('.flow .button')].find(b => b.innerText === 'Vérifier et garder').disabled")
+        p.evaluer("document.querySelector('.flow form').requestSubmit()")
+        p.attendre("!!document.querySelector('.flow .problem')")
+        self.assertFalse(addons.modified_stream("telegram"), "text that is not JSON never reaches the server")
+        p.evaluer(fill % js(json.dumps(dict(shipped, version=5))))
+        p.evaluer("document.querySelector('.flow form').requestSubmit()")
+        p.attendre("!!document.querySelector('.flow .done')")
+        self.assertEqual((addons.stream("telegram")["version"], addons.modified_stream("telegram")), (5, True))
+        self.assertIn("le tien", p.evaluer("document.querySelector('.flow form').innerText"))
+        p.evaluer("[...document.querySelectorAll('.flow .button')].find(b => b.innerText === 'Remettre le flux livré').click()")
+        p.attendre("!!document.querySelector('.flow .confirm')")
+        self.assertTrue(addons.modified_stream("telegram"), "asking is not putting back")
+        p.evaluer("[...document.querySelectorAll('.flow .confirm .button')].find(b => b.innerText === 'Oui, le remettre').click()")
+        p.attendre("!!document.querySelector('.flow .done')")
+        self.eventually(lambda: not addons.modified_stream("telegram"), "the shipped flow is back")
+        self.assertEqual(p.erreurs, [])
+        p.evaluer("location.hash = '#/chat'")
+
     def test_5w_a_model_is_searched_on_huggingface_and_a_file_is_downloaded_after_a_confirmation(self):
         p = self.page
         from lutin import engines

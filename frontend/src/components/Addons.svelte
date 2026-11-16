@@ -4,6 +4,7 @@
   // page only says that it is set (leave the box empty to keep it). Setting up and starting are for the machine itself (the server refuses a paired device and says so).
   import { onMount } from "svelte";
   import { api, ApiError } from "../lib/api";
+  import AddonFlow from "./AddonFlow.svelte";
   import AddonPanel from "./AddonPanel.svelte";
   import { t } from "../lib/messages";
 
@@ -159,6 +160,8 @@
           {/if}
 
           {#if addon.active && PANELS.includes(addon.id)}<AddonPanel id={addon.id} />{/if}
+
+          <AddonFlow id={addon.id} check={addon.check} />
 
           <div class="actions">
             {#if addon.active}
