@@ -3,7 +3,10 @@
 What is fixed here: nothing is served without a session, the page receives the token and a strict content security policy, only plain file names of
 `web/app/assets/` can be read, and a build that does not match the sources is detected. The files are a fake build in a temporary folder: these tests
 need neither Node.js nor a real build."""
+import base64
+import hashlib
 import http.client
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -81,6 +84,46 @@ class Served(unittest.TestCase):
         for name in ("", ".", "..", "a", ".js", "a..js", "../a.js", "a/b.js", "a\\b.js", "a.js ", "C:a.js"):
             self.assertIsNone(web_app.asset(name), name)
         self.assertIsNotNone(web_app.asset("index-B1x_9.js"))
+
+    def test_the_frame_of_diagrams_has_its_own_policy_runs_two_named_scripts_and_holds_no_secret(self):
+        status, headers, body = get("/app/diagram.html", V.OWNER)
+        policy = headers["Content-Security-Policy"]
+        self.assertEqual((status, headers["Content-Type"]), (200, "text/html; charset=utf-8"))
+        self.assertNotIn(A.JETON, body, "the frame never receives the page token")
+        directives = {part.split()[0]: part.split()[1:] for part in policy.split(";") if part.strip()}
+        self.assertEqual(directives["default-src"], ["'none'"])
+        self.assertEqual(directives["sandbox"], ["allow-scripts"], "scripts and nothing else: no origin, so no cookie, no storage and no request made as the user")
+        self.assertEqual(directives["frame-ancestors"], ["'self'"], "only the interface can hold it")
+        self.assertEqual(directives["style-src"], ["'unsafe-inline'"], "what Mermaid needs, allowed here only")
+        self.assertEqual(set(directives), {"default-src", "script-src", "style-src", "img-src", "font-src", "sandbox", "base-uri", "form-action", "frame-ancestors"}, "nothing connects, nothing is fetched")
+        scripts = re.findall(r"<script>(.*?)</script>", body, re.S)
+        self.assertEqual(len(scripts), 2)
+        self.assertEqual(directives["script-src"], ["'sha256-" + base64.b64encode(hashlib.sha256(script.encode("utf-8")).digest()).decode() + "'" for script in scripts],
+                         "the policy names the hash of each script of the page, and nothing else can run")
+        self.assertIn("mermaid", scripts[0][:400])
+        self.assertIn("securityLevel: \"strict\"", scripts[1])
+        self.assertIn("htmlLabels: false", scripts[1])
+        self.assertEqual(get("/app/diagram.html", V.ELSEWHERE)[0], 401, "not served without a session")
+        # The interface allows this one frame, and still nothing inline.
+        self.assertIn("frame-src 'self'", web_app.CSP)
+        self.assertNotIn("unsafe", web_app.CSP)
+
+    def test_a_script_that_would_end_its_own_tag_is_never_written_into_the_frame(self):
+        for script, early in (("let a = 1;", False), ("x = '</script>'", True), ("x = '</SCRIPT '", True), ("a = '<!-->'; b = '<!---->'; c = /<!--(?:-?>|[\\s\\S]*?(?:-->|$))/; d = '<(script|pre)'", False),
+                              ("a = '<!-- <script> -->'", True), ("a = '<!--'; b = '<script>'", True), ("a = '<!-- -->'; b = '<script>'", False)):
+            self.assertEqual(web_app._closes_early(script), early, script)
+        folder = Path(tempfile.mkdtemp(prefix="lutin-diagram-"))
+        (folder / "a.js").write_text("let a = 1;\r\n", encoding="utf-8", newline="")
+        (folder / "b.js").write_text("let b = 2;", encoding="utf-8")
+        with mock.patch.object(web_app, "DIAGRAM_SCRIPTS", (folder / "a.js", folder / "b.js")), mock.patch.dict(web_app._diagram, {"key": None, "page": None}):
+            page, policy = web_app.diagram_page()
+            self.assertIn("<script>let a = 1;\n</script><script>let b = 2;</script>", page, "line endings as the browser reads them: the hash is the one of that text")
+            self.assertIn("'sha256-" + base64.b64encode(hashlib.sha256(b"let a = 1;\n").digest()).decode() + "'", policy)
+            (folder / "b.js").write_text("let b = '</script><script>alert(1)';", encoding="utf-8")
+            self.assertIsNone(web_app.diagram_page(), "the page is made again when a script changes, and refused when it cannot be written safely")
+            (folder / "b.js").unlink()
+            self.assertIsNone(web_app.diagram_page())
+            self.assertEqual(get("/app/diagram.html", V.OWNER)[0], 404)
 
     def test_a_copy_without_a_build_says_so(self):
         (self.root / "index.html").unlink()

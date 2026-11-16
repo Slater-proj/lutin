@@ -441,6 +441,13 @@ class Gestionnaire(BaseHTTPRequestHandler):
             if fichier is None:
                 return self._envoyer(404, {"erreur": "introuvable"})
             return self._envoyer(200, fichier[0], fichier[1])
+        if reste == _web_app.DIAGRAM:                            # le cadre isolé qui dessine les diagrammes (ADR 0011) : sa propre politique, ni jeton ni session dedans
+            if not self._authentifie():
+                return self._envoyer(401, {"erreur": "authentification requise"})
+            cadre = _web_app.diagram_page()
+            if cadre is None:
+                return self._envoyer(404, {"erreur": "introuvable"})
+            return self._envoyer(200, cadre[0], "text/html; charset=utf-8", {"Content-Security-Policy": cadre[1]})
         if reste not in ("", "index.html"):
             return self._envoyer(404, {"erreur": "introuvable"})
         if not self._authentifie():
