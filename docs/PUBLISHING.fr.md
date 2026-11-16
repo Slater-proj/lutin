@@ -9,10 +9,13 @@ Tout est automatique ; personne ne fixe un numéro de version à la main.
 | Ce qui arrive | Ce qui est produit |
 |---|---|
 | **Fusion (ou envoi) dans `main`** | **Une publication** : version calculée, **étiquette** `vX.Y.Z`, **GitHub Release** (roue, archive source, `SHA256SUMS.txt`, notes générées), images Docker `:X.Y.Z` et `:latest` (complète), `:X.Y.Z-slim` et `:slim` (légère). |
-| **Envoi sur une autre branche** | **Une candidate (rc), sans étiquette ni Release** : roue et archive jointes à l'exécution du workflow (30 jours), images Docker `:rc-<branche>` et `:rc-<branche>-slim`. |
+| **Envoi sur une autre branche** | **Une candidate (rc), sans étiquette ni Release** : roue, archive et installateur Windows joints à l'exécution du workflow (30 jours), images Docker `:rc-<branche>` et `:rc-<branche>-slim`. |
+| **Le bouton** (Actions > release > Run workflow, sur une branche) | **Une pré-version de cette branche** : étiquette `vX.Y.ZaN`, GitHub Release marquée *pre-release*, image Docker `:next`. Voir « Le bouton » plus bas. |
 | **Pull request** | Les tests seulement (`ci.yml`). |
 
 Les tests (Windows et Linux, Python 3.10 à 3.13), le contrôle du paquet, la construction de l'image Docker et la recherche de secrets passent **avant** toute publication. Si un test échoue, rien n'est publié.
+
+**Construit une fois, testé, publié tel quel.** La version est calculée en premier ; `ci.yml` construit l'interface, la roue, l'archive source et l'installateur Windows une seule fois, avec cette version, et les teste. Ce qui est publié, ce sont ces fichiers-là : rien n'est reconstruit après les tests. La page de chaque exécution dit en haut quelle version elle fabrique et où la prendre.
 
 ## Comment le numéro est choisi
 
@@ -56,11 +59,21 @@ docker pull ghcr.io/slater-proj/lutin:rc-ma-branche
 pip install lutin-0.5.0rc17+ma.branche-py3-none-any.whl
 ```
 
-## Publier une pré-version depuis une branche (à la main)
+L'installateur Windows de la candidate est au même endroit : **Artifacts > `installateur-…`** (GitHub demande d'être connecté pour télécharger un artefact, et le donne en zip).
 
-Une candidate (`rc`) est construite à chaque envoi, mais sans étiquette ni Release. Pour tester vraiment l'application depuis une branche de fonctionnalité (alpha/beta/rc selon `tools/release_channel.json`) :
-**Actions > release > Run workflow**, choisir la branche, cocher *prerelease*. Les tests passent d'abord, puis l'étiquette `vX.Y.ZaN`, une Release GitHub marquée *pre-release* et l'image Docker `:X.Y.ZaN` et `:next` sont publiées ; jamais `:latest`, et les installateurs et l'annonce de mise à jour l'ignorent.
-Refusé hors de `main` si le canal dit « stable ». Seul un lancement manuel le fait : un envoi ne publie jamais depuis une branche.
+## Le bouton : une version de test d'une branche que tout le monde peut télécharger
+
+Une candidate est construite à chaque envoi, mais sans étiquette ni Release, et ses fichiers demandent un compte GitHub. Pour donner à quelqu'un une vraie version de test d'une branche de fonctionnalité (alpha/beta/rc selon `tools/release_channel.json`) :
+
+1. ouvrir **[Actions > release](https://github.com/Slater-proj/lutin/actions/workflows/release.yml)** ;
+2. cliquer **Run workflow**, choisir la branche ;
+3. cliquer le **Run workflow** vert. Il n'y a rien d'autre à remplir.
+
+La version est calculée (`1.0.0a1`, puis `a2`…), tout est construit avec elle et testé, puis l'étiquette `vX.Y.ZaN`, une Release GitHub marquée *pre-release* (roue, archive, installateur Windows, sommes de contrôle) et les images Docker `:X.Y.ZaN` et `:next` sont publiées ; jamais `:latest`, et les installateurs et l'annonce de mise à jour l'ignorent. Le lien vers la Release est en haut de la page de l'exécution. Compter vingt à trente minutes, surtout les tests.
+
+Refusé hors de `main` si le canal dit « stable ». Seul ce bouton le fait : un envoi ne publie jamais depuis une branche, et un envoi sur la branche n'annule pas une publication en cours.
+
+Depuis un terminal, avec [GitHub CLI](https://cli.github.com/) : `gh workflow run release.yml --ref ma-branche`.
 
 ## Mise en place sur GitHub (une seule fois)
 

@@ -9,10 +9,13 @@ Everything is automatic; nobody sets a version number by hand.
 | What happens | What is produced |
 |---|---|
 | **Merge (or push) into `main`** | **A release**: computed version, **tag** `vX.Y.Z`, **GitHub Release** (wheel, source archive, `SHA256SUMS.txt`, generated notes), Docker images `:X.Y.Z` and `:latest` (complete) and `:X.Y.Z-slim` and `:slim` (slim). |
-| **Push to another branch** | **A candidate (rc), with no tag or Release**: wheel and archive attached to the workflow run (30 days), Docker images `:rc-<branch>` and `:rc-<branch>-slim`. |
+| **Push to another branch** | **A candidate (rc), with no tag or Release**: wheel, archive and Windows installer attached to the workflow run (30 days), Docker images `:rc-<branch>` and `:rc-<branch>-slim`. |
+| **The button** (Actions > release > Run workflow, on a branch) | **A pre-release of that branch**: tag `vX.Y.ZaN`, GitHub Release marked *pre-release*, Docker image `:next`. See « The button » below. |
 | **Pull request** | Tests only (`ci.yml`). |
 
 The tests (Windows and Linux, Python 3.10 to 3.13), the package check, the build of the Docker images and the secret scan run **before** any publication. If a test fails, nothing is published.
+
+**Built once, tested, published as it is.** The version is computed first; `ci.yml` builds the interface, the wheel, the source archive and the Windows installer once, with that version, and tests them. What is published are those very files: nothing is built a second time after the tests. The page of every run says at its top which version it makes and where to take it.
 
 ## How the number is chosen
 
@@ -56,11 +59,21 @@ docker pull ghcr.io/slater-proj/lutin:rc-my-branch
 pip install lutin-0.5.0rc17+my.branch-py3-none-any.whl
 ```
 
-## Publishing a pre-release from a branch (by hand)
+The Windows installer of the candidate is in the same place: **Artifacts > `installateur-…`** (GitHub asks to be signed in to download an artifact, and gives it as a zip).
 
-A candidate (`rc`) is built on every push, but it has no tag and no Release. To test the application for real from a feature branch (alpha/beta/rc as chosen in `tools/release_channel.json`):
-**Actions > release > Run workflow**, pick the branch, tick *prerelease*. The tests run first, then a tag `vX.Y.ZaN`, a GitHub Release marked *pre-release* and the Docker image `:X.Y.ZaN` and `:next` are published; never `:latest`, and the installers and the update notice ignore it.
-Refused outside `main` if the channel says « stable ». Only a manual run does this: a push never publishes from a branch.
+## The button: a test version of a branch that anyone can download
+
+A candidate is built on every push, but it has no tag and no Release, and its files need a GitHub account. To hand a real test version of a feature branch to someone (alpha/beta/rc as chosen in `tools/release_channel.json`):
+
+1. open **[Actions > release](https://github.com/Slater-proj/lutin/actions/workflows/release.yml)**;
+2. click **Run workflow**, pick the branch;
+3. click the green **Run workflow**. There is nothing else to fill in.
+
+The version is computed (`1.0.0a1`, then `a2`…), everything is built with it and tested, then the tag `vX.Y.ZaN`, a GitHub Release marked *pre-release* (wheel, archive, Windows installer, checksums) and the Docker images `:X.Y.ZaN` and `:next` are published; never `:latest`, and the installers and the update notice ignore it. The link to the Release is at the top of the page of the run. Count twenty to thirty minutes, most of it the tests.
+
+Refused outside `main` if the channel says « stable ». Only this button does it: a push never publishes from a branch, and a push on the branch does not cancel a publication under way.
+
+From a terminal, with [GitHub CLI](https://cli.github.com/): `gh workflow run release.yml --ref my-branch`.
 
 ## Setting up GitHub (once)
 
