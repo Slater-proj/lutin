@@ -82,7 +82,7 @@ class Panels(unittest.TestCase):
         self.assertEqual(call("POST", path + "write_posts", {"brief": " "})[0], 400)
 
     def test_an_addon_without_a_panel_here_says_so_and_a_paired_device_is_refused(self):
-        self.assertEqual(call("GET", "/api/v1/addons/comfyui/panel")[1], {"panel": None})
+        self.assertEqual(call("GET", "/api/v1/addons/voicestudio/panel")[1], {"panel": None})
         self.assertEqual(call("GET", "/api/v1/addons/telegram/panel", who=V.DEVICE)[1]["error"]["code"], "configurator", "the pairing code is the key to the add-on")
         self.assertEqual(call("POST", "/api/v1/addons/telegram/panel/new_pairing_code", {}, who=V.DEVICE)[1]["error"]["code"], "configurator")
         self.assertIn("comfyui", addons.ids())

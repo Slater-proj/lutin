@@ -1083,7 +1083,7 @@ def check_addon(request):
 
 
 # The live panel of an add-on: what it holds while it runs (the pairing code and the paired phones of Telegram, the drafts of replies waiting for a yes, the posts of X) and the actions on it.
-# Each add-on keeps its own French names inside; the translators below give them English ones. An add-on without a translator (ComfyUI, for now) has no panel here (`panel` is null).
+# Each add-on keeps its own French names inside; the translators below give them English ones. An add-on without a translator has no panel here (`panel` is null).
 def _panel_drafts(items, keys):
     return [{new: item.get(old, default) for new, (old, default) in keys.items()} for item in items]
 
@@ -1109,14 +1109,34 @@ def _x_panel(raw):
             "replies": _panel_drafts(raw["reponses"], {"id": ("id", ""), "from": ("de", ""), "name": ("nom", ""), "to_post": ("a", ""), "excerpt": ("extrait", ""), "text": ("texte", ""), "at": ("date", 0)})}
 
 
-ADDON_PANELS = {"telegram": _telegram_panel, "mail": _mail_panel, "x": _x_panel}
+COMFY_DOWNLOAD_STATES = {"": "idle", "en cours": "running", "fini": "done", "erreur": "failed"}
+COMFY_MODEL_SOURCES = {"api": "api", "dossier": "folder", "aucune": "none"}
+
+
+def _comfyui_panel(raw):
+    """ComfyUI: where it is installed, the models it holds by kind (the names of ComfyUI's own model folders), what Lutin can make with them, and the download in progress."""
+    models = raw["modeles"]
+    download = raw["telechargement"]
+    return {"running": bool(raw["tourne"]), "error": raw["erreur"] or "", "version": raw["version"], "gpu": raw["gpu"], "folder": raw["dossier"] or "", "folder_set": bool(raw["dossier_regle"]),
+            "folder_valid": bool(raw["valide"]), "folder_problem": raw["raison"] or "", "can_launch": bool(raw["lancement"]),
+            "models": {"source": COMFY_MODEL_SOURCES.get(models["source"], models["source"]), "by_kind": models["modeles"]}, "families": raw["familles"], "family_labels": raw["libelles_familles"],
+            "workflows": raw["workflows"], "engines": {"image": raw["moteurs"]["image"], "video": raw["moteurs"]["video"], "sound": raw["moteurs"]["son"]}, "unusable_models": raw["inutilisables"],
+            "download": {"state": COMFY_DOWNLOAD_STATES.get(download["etat"], "failed"), "name": download["nom"], "done_bytes": download["fait"], "total_bytes": download["total"], "error": download["erreur"]},
+            "download_kinds": raw["genres"]}
+
+
+ADDON_PANELS = {"telegram": _telegram_panel, "mail": _mail_panel, "x": _x_panel, "comfyui": _comfyui_panel}
+# The actions that download something: they also take `confirm`, which must be true, and are refused offline.
+ADDON_DOWNLOADS = {("comfyui", "download")}
 # The actions of each panel: {English name: (French name, {English field: French field})}. A field that is not listed is refused.
 ADDON_ACTIONS = {
     "telegram": {"forget_device": ("oublier", {"device": "chat_id"}), "new_pairing_code": ("nouveau_code", {}), "send_draft": ("envoyer", {"draft": "brouillon", "text": "texte"}), "discard_draft": ("rejeter", {"draft": "brouillon"})},
     "mail": {"send_draft": ("envoyer", {"draft": "brouillon", "text": "texte"}), "discard_draft": ("rejeter", {"draft": "brouillon"})},
     "x": {"write_posts": ("rediger", {"brief": "brief", "count": "nombre"}), "edit_post": ("modifier", {"post": "publication", "text": "texte"}), "publish_post": ("publier", {"post": "publication", "text": "texte"}),
           "schedule_post": ("programmer", {"post": "publication", "text": "texte", "at": "quand"}), "delete_post": ("supprimer", {"post": "publication"}),
-          "send_reply": ("envoyer", {"draft": "brouillon", "text": "texte"}), "discard_reply": ("rejeter", {"draft": "brouillon"})}}
+          "send_reply": ("envoyer", {"draft": "brouillon", "text": "texte"}), "discard_reply": ("rejeter", {"draft": "brouillon"})},
+    "comfyui": {"detect": ("detecter", {}), "refresh_models": ("modeles", {}), "use_folder": ("utiliser_dossier", {"folder": "dossier"}), "download": ("telecharger", {"url": "url", "kind": "genre"}),
+                "cancel_download": ("annuler_telechargement", {})}}
 
 
 def _panel_view(identifier):
@@ -1143,10 +1163,18 @@ def addon_panel_action(request):
     if name not in known:
         raise ApiError(404, "not_found", _t("Action inconnue."))
     french_name, fields = known[name]
-    if set(request.body) - set(fields):
+    body = dict(request.body)
+    if (identifier, name) in ADDON_DOWNLOADS:
+        confirm = body.pop("confirm", False)
+        if not isinstance(confirm, bool) or set(body) - set(fields):
+            raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format(", ".join(list(fields) + ["confirm"])))
+        if not confirm:
+            raise ApiError(400, "confirmation_required", _t("Ce téléchargement peut peser plusieurs Go : confirme pour le lancer."))
+        _require_online(_t("télécharger un modèle"))
+    elif set(body) - set(fields):
         raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format(", ".join(fields) or "-"))
     try:
-        _addons.action(identifier, french_name, {fields[key]: value for key, value in request.body.items()})
+        _addons.action(identifier, french_name, {fields[key]: value for key, value in body.items()})
     except _addons.ErreurAddon as refused:
         raise ApiError(400, "invalid_request", str(refused)) from None
     return _panel_view(identifier)
