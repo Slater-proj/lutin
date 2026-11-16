@@ -940,6 +940,40 @@ class Chat(unittest.TestCase):
         self.assertEqual(p.erreurs, [])
         p.evaluer("location.hash = '#/chat'")
 
+    def test_5y_the_comfyui_panel_shows_its_models_and_a_download_waits_for_a_second_click(self):
+        p = self.page
+        from lutin import addons_comfyui
+        raw = {"tourne": True, "erreur": "", "version": "0.3.1", "gpu": "RTX", "dossier": "C:/ComfyUI", "dossier_regle": "C:/ComfyUI", "valide": True, "raison": "", "lancement": True,
+               "modeles": {"source": "api", "modeles": {"checkpoints": ["sd15.safetensors", "sdxl.safetensors"], "loras": ["style.safetensors"]}}, "familles": {}, "libelles_familles": {},
+               "workflows": ["flux"], "moteurs": {"image": ["Checkpoint", "Flux"], "video": [], "son": []}, "inutilisables": [],
+               "telechargement": {"etat": "", "nom": "", "fait": 0, "total": 0, "erreur": ""}, "genres": ["checkpoints", "loras"]}
+        taken = []
+        for patch in (mock.patch.object(addons_comfyui, "etat", side_effect=lambda: dict(raw)), mock.patch.object(addons_comfyui, "action", side_effect=lambda name, data: taken.append((name, data)) or {})):
+            patch.start()
+            self.addCleanup(patch.stop)
+        p.evaluer("location.hash = '#/agents'")
+        p.attendre("!!document.querySelector('.addons .card')")
+        p.evaluer("[...document.querySelectorAll('.addons .card')].find(c => c.querySelector('strong').innerText.includes('ComfyUI')).querySelector('.comfy summary').click()")
+        p.attendre("!!document.querySelector('.comfy .badge')")
+        text = p.evaluer("document.querySelector('.comfy').innerText")
+        self.assertIn("en marche", text)
+        self.assertIn("checkpoints: 2", text)
+        self.assertIn("loras: 1", text)
+        self.assertIn("Checkpoint, Flux", text)
+        if AXE.is_file():
+            self.axe("on the ComfyUI panel")
+        button = "[...document.querySelectorAll('.comfy .button')].find(b => b.innerText === %s)"
+        self.assertTrue(p.evaluer((button % js("Télécharger")) + ".disabled"), "no address yet")
+        p.evaluer("(() => { const box = document.querySelector('#comfy-url'); box.value = 'https://huggingface.co/a/b/resolve/main/m.safetensors'; box.dispatchEvent(new Event('input', {bubbles: true})); })()")
+        p.attendre("!(%s).disabled" % (button % js("Télécharger")))
+        p.evaluer((button % js("Télécharger")) + ".click()")
+        p.attendre("!!document.querySelector('.comfy .warn')")
+        self.assertEqual(taken, [], "the first click only asks")
+        p.evaluer((button % js("Oui, télécharger")) + ".click()")
+        self.eventually(lambda: taken == [("telecharger", {"url": "https://huggingface.co/a/b/resolve/main/m.safetensors", "genre": "checkpoints"})], "the download is asked for once confirmed")
+        self.assertEqual(p.erreurs, [])
+        p.evaluer("location.hash = '#/chat'")
+
     def test_5x_an_addon_flow_is_edited_checked_kept_and_the_shipped_one_put_back(self):
         p = self.page
         from lutin import addons
