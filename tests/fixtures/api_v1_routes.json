@@ -166,6 +166,16 @@
  },
  {
   "method": "GET",
+  "path": "/api/v1/mcp-catalog",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/mcp-catalog/{id}/install",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
   "path": "/api/v1/mcp-connectors",
   "right": "session"
  },

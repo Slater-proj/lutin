@@ -36,6 +36,7 @@ from . import model_fit as _model_fit
 from . import offline as _offline
 from . import addons as _addons
 from . import mcp as _mcp
+from . import mcp_catalog as _mcp_catalog
 from . import notifications as _notifications
 from . import scheduled_tasks as _scheduled_tasks
 from . import security as _sec
@@ -1125,6 +1126,44 @@ def refresh_mcp_connector(request):
     """Starts the connector if needed and asks it for its tools (the ones already allowed stay allowed). Answers `{"tool_count"}`; refused (400) with the reason when it does not start or answer."""
     _connector_one(request.params["id"])
     return {"tool_count": _mcp.actualiser(request.params["id"])}
+
+
+# The catalogue of connectors shipped with Lutin: known servers, each pinned to an exact version, plugged in with a few values (a folder, an address, a token). Installing one
+# starts a program, hence `configurator`; if the program that runs the server is missing, Lutin downloads it first, which asks for `{"confirm": true}`.
+CATALOG_FIELD_TYPES = {"dossier": "folder", "fichier": "file", "url": "url", "secret": "secret"}
+
+
+def _catalog_view():
+    entries = []
+    for entry in _mcp_catalog.entries():
+        entries.append({"id": entry["id"], "name": entry["nom"], "description": entry["description"], "category": entry["categorie"],
+                        "runner": entry["execution"], "version": entry["version"], "installed": bool(entry["installe"]), "prerequisite": entry["manque"],
+                        "fields": [{"key": field["cle"], "type": CATALOG_FIELD_TYPES.get(field["type"], field["type"]), "required": field["obligatoire"],
+                                    "multiple": field["multiple"], "label": field["libelle"], "example": field["exemple"]} for field in entry["champs"]]})
+    return {"entries": entries}
+
+
+@route("GET", "/mcp-catalog", SESSION)
+def mcp_catalog(request):
+    """The connectors of the catalogue, in the language shown. `prerequisite` is empty when the program that runs the server is there, else the sentence that says Lutin will
+    download it first; `installed` says a connector made from the entry already exists; `fields` are the values to give (`folder`, `file`, `url`, `secret`; `multiple` takes a list)."""
+    return _catalog_view()
+
+
+@route("POST", "/mcp-catalog/{id}/install", CONFIGURATOR)
+def install_mcp_catalog_entry(request):
+    """{"input": {field: value or [values]}, "confirm": true}. The values are checked first, the connector is tried at once and removed if it does not answer, and only the tools
+    that declare themselves read-only are allowed. `confirm` is needed when `prerequisite` is not empty (a download). Answers `{"connector", "tool_count", "allowed_count"}`."""
+    body = request.body
+    if set(body) - {"input", "confirm"} or not isinstance(body.get("input", {}), dict) or not isinstance(body.get("confirm", False), bool):
+        raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("input, confirm"))
+    entry = next((e for e in _mcp_catalog.entries() if e["id"] == request.params["id"]), None)
+    if entry is None:
+        raise ApiError(404, "not_found", _t("Connecteur du catalogue introuvable."))
+    if entry["manque"] and not body.get("confirm"):
+        raise ApiError(400, "confirmation_required", entry["manque"])
+    done = _mcp_catalog.install(entry["id"], body.get("input") or {})
+    return {"connector": done["id"], "tool_count": done["outils"], "allowed_count": done["autorises"]}
 
 
 # --------------------------------------------------------------------------------------------------------- missions

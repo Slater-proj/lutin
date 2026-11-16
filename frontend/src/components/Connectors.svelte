@@ -5,6 +5,7 @@
   import { onMount } from "svelte";
   import { api, ApiError } from "../lib/api";
   import { t } from "../lib/messages";
+  import ConnectorCatalog from "./ConnectorCatalog.svelte";
 
   type Tool = { name: string; description: string; read_only: boolean; allowed: boolean };
   type Connector = {
@@ -169,6 +170,8 @@
         {/each}
       </ul>
     {/if}
+
+    <ConnectorCatalog onchange={load} />
 
     <form class="add" onsubmit={add}>
       <h3>{t("connectors.add_title")}</h3>

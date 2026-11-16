@@ -740,6 +740,46 @@ class Chat(unittest.TestCase):
         self.assertEqual(p.erreurs, [])
         p.evaluer("location.hash = '#/chat'")
 
+    def test_5t_a_connector_of_the_catalogue_is_set_up_with_its_values_and_plugged_in(self):
+        p = self.page
+        from lutin import mcp, mcp_catalog
+        entry = {"id": "demo", "nom": {"fr": "Démo du catalogue", "en": "Catalogue demo"}, "execution": "uvx", "paquet": "lutin.mcp_demo", "version": "1",
+                 "champs": [{"cle": "dossier", "type": "dossier", "obligatoire": True, "libelle": {"fr": "Dossier", "en": "Folder"}, "exemple": "C:/Documents"}],
+                 "arguments": [], "description": {"fr": "Un serveur de démonstration.", "en": "A demonstration server."}, "categorie": "test"}
+        before = (mcp_catalog.load, mcp_catalog.program, mcp_catalog.build)
+        original_build = mcp_catalog.build
+        mcp_catalog.load = lambda: [entry]
+        mcp_catalog.program = lambda execution, chercher=None: sys.executable
+        mcp_catalog.build = lambda e, saisie, chercher=None: ([sys.executable, "-m", "lutin.mcp_demo"],) + original_build(e, saisie, chercher)[1:]
+
+        def restore():
+            mcp_catalog.load, mcp_catalog.program, mcp_catalog.build = before
+        self.addCleanup(restore)
+        self.addCleanup(lambda: [mcp.remove(identifier) for identifier in list(mcp.read()["serveurs"])])
+        self.addCleanup(mcp.close)
+        old_path = os.environ.get("PYTHONPATH")
+        source = str(Path(__file__).resolve().parent.parent / "src")
+        os.environ["PYTHONPATH"] = source + (os.pathsep + old_path if old_path else "")
+        self.addCleanup(lambda: os.environ.pop("PYTHONPATH", None) if old_path is None else os.environ.__setitem__("PYTHONPATH", old_path))
+        p.evaluer("location.hash = '#/agents'")
+        p.attendre("!!document.querySelector('.catalog .entry-card')")
+        self.assertIn("Démo du catalogue", p.evaluer("document.querySelector('.catalog .entry-card').innerText"))
+        p.evaluer("[...document.querySelectorAll('.catalog .button')].find(b => b.innerText === 'Configurer').click()")
+        p.attendre("!!document.querySelector('.catalog input[type=text]')")
+        if AXE.is_file():
+            self.axe("on the catalogue form")
+        self.assertTrue(p.evaluer("[...document.querySelectorAll('.catalog .button')].find(b => b.innerText === 'Installer').disabled"), "a required value is missing")
+        p.evaluer("(() => { const box = document.querySelector('.catalog input[type=text]'); box.value = %s; box.dispatchEvent(new Event('input', {bubbles: true})); })()" % json.dumps(tempfile.gettempdir()))
+        p.attendre("![...document.querySelectorAll('.catalog .button')].find(b => b.innerText === 'Installer').disabled")
+        p.evaluer("[...document.querySelectorAll('.catalog .button')].find(b => b.innerText === 'Installer').click()")
+        p.attendre("!!document.querySelector('.catalog .done')")
+        self.assertEqual([server.get("catalogue") for server in mcp.read()["serveurs"].values()], ["demo"])
+        p.attendre("[...document.querySelectorAll('.connectors .card strong')].some(e => e.innerText === 'Démo du catalogue')")
+        self.assertTrue(p.evaluer("!!document.querySelector('.catalog .badge.ok')"), "the entry says it is installed")
+        self.assertFalse(p.evaluer("[...document.querySelectorAll('.catalog .button')].some(b => b.innerText === 'Configurer')"), "and cannot be set up twice")
+        self.assertEqual(p.erreurs, [])
+        p.evaluer("location.hash = '#/chat'")
+
     def test_5p_an_addon_keeps_its_secret_and_is_not_started_before_it_is_set_up(self):
         p = self.page
         from lutin import addons
