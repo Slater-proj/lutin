@@ -583,6 +583,8 @@ class Chat(unittest.TestCase):
         p.attendre("!document.querySelector('.agents .tasks .paused-badge')")
         p.evaluer("[...document.querySelectorAll('.agents .tasks .card .button')].find(b => b.innerText === 'Lancer maintenant').click()")
         self.eventually(lambda: len(ran) == 1, "the task is run on request, in the background")
+        # The buttons stay disabled while the request to run is in flight: a click on a disabled button does nothing, so wait for it (a slow runner lost this race once).
+        p.attendre("[...document.querySelectorAll('.agents .tasks .card .button')].some(b => b.innerText === 'Supprimer' && !b.disabled)")
         p.evaluer("[...document.querySelectorAll('.agents .tasks .card .button')].find(b => b.innerText === 'Supprimer').click()")
         p.attendre("!!document.querySelector('.agents .tasks .confirm')")
         self.assertEqual(len(scheduled_tasks.read()), 1, "asking is not deleting")
