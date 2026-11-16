@@ -28,6 +28,7 @@ from . import health as _health
 from . import approval_rules as _approval_rules
 from . import attachments as _pieces
 from . import claude_project as _claude_project
+from . import github as _github
 from . import i18n as _i18n
 from . import images as _images
 from . import machines as _machines
@@ -42,6 +43,7 @@ from . import notifications as _notifications
 from . import scheduled_tasks as _scheduled_tasks
 from . import security as _sec
 from . import storage as _storage
+from . import third_party_skills as _skills
 from . import workspaces as _workspaces
 from .i18n import t as _t
 
@@ -1371,6 +1373,229 @@ def change_memory(request):
     for key, text in body.items():
         _m.ecrire_memoire(MEMORY_NOTES[key], text)
     return memory(request)
+
+
+# --------------------------------------------------------------------------------------------------------- third-party skills
+# Skills published on GitHub (a folder with a SKILL.md): find them, look inside, copy one into a project, update it, remove it. A skill is text the model follows, so nothing is copied
+# without `{"confirm": true}`, the card analyses it first (hidden orders, downloads, scripts) and a dangerous or unlicensed one needs its own acceptance. Nothing is ever run.
+# Everything that reads GitHub is for the machine itself (`configurator`: it spends the GitHub account of the person) and is refused in strict offline mode (409 `offline`).
+# The GitHub token is written and never given back.
+def _skill_online(verb):
+    if _offline.is_active():
+        raise ApiError(409, "offline", _t("Mode hors ligne strict : impossible de {}. Désactive-le pour continuer (lutin offline off).").format(verb))
+
+
+def _skill_body(body, texts, flags):
+    names = tuple(texts) + tuple(flags)
+    if set(body) - set(names) or any(not isinstance(body.get(key, ""), str) for key in texts) or any(not isinstance(body.get(key, False), bool) for key in flags):
+        raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format(", ".join(names)))
+
+
+def _skill_repo(text):
+    """The repository written as « owner/name » or by its address, only when it is in the list of sources."""
+    repo = "/".join(_skills.read_repo(text))
+    if repo not in {source["depot"] for source in _skills.sources()}:
+        raise ApiError(400, "invalid_request", _t("Ce dépôt n'est pas dans ta liste."))
+    return repo
+
+
+def _skill_roots():
+    """{id: folder} of the projects."""
+    return {entry["id"]: entry["chemin"] for entry in _m.works_state()["liste"]}
+
+
+def _skill_project(identifier):
+    """(id, folder) of the project to install in: the one asked for, else the current one."""
+    roots = _skill_roots()
+    identifier = identifier or _m.works_state()["actif"]
+    if identifier not in roots:
+        raise ApiError(400, "invalid_request", _t("Choisis le dossier de travail où installer le skill (Réglages > Dossiers)."))
+    return identifier, roots[identifier]
+
+
+def _skill_sources(listing):
+    return [{"repo": source["depot"], "name": source["nom"], "default": bool(source["defaut"])} for source in listing]
+
+
+def _github_view():
+    view = _github.view()
+    return {"configured": bool(view["configure"]), "source": {"environnement": "environment", "reglages": "settings"}.get(view["source"], "")}
+
+
+def _skill_page(value, default=1):
+    try:
+        return max(1, int(value))
+    except (TypeError, ValueError):
+        return default
+
+
+def _skill_severity(value):
+    return {"aucune": "none"}.get(value, value)
+
+
+def _skill_hit(skill):
+    return {"repo": skill["depot"], "dir": skill["dir"], "name": skill["nom"], "sha": skill["sha"], "files": skill["fichiers"], "bytes": skill["octets"], "scripts": bool(skill["scripts"]),
+            "description": skill.get("description", ""), "license": skill.get("licence", ""), "tokens": skill["jetons"]}
+
+
+@route("GET", "/third-party-skills", SESSION)
+def third_party_skills(request):
+    """What the page needs when it opens, from this machine only (no network): the `sources` (repositories searched; `default` ones cannot be removed), the `github` account
+    (`configured`, and where its token comes from: `environment` or `settings`; the token itself is never given), the `projects` a skill can go in and the `current` one, the
+    `indexing` of each repository being read (`done`, `total`, `finished`, `error`) and whether strict `offline` mode is on."""
+    state = _m.works_state()
+    return {"sources": _skill_sources(_skills.sources()), "github": _github_view(), "projects": [{"id": entry["id"], "name": entry["nom"]} for entry in state["liste"]], "current": state["actif"],
+            "indexing": {repo: {"done": item["fait"], "total": item["total"], "finished": item["fini"], "error": item["erreur"]} for repo, item in dict(_skills.INDEXING).items()},
+            "offline": bool(_offline.is_active())}
+
+
+@route("POST", "/third-party-skills/sources", CONFIGURATOR)
+def add_skill_source(request):
+    """{"repo": "owner/name" or its address}: adds a repository to search (30 at most). Nothing is read from GitHub yet. Answers `{"sources"}`."""
+    _skill_body(request.body, ("repo",), ())
+    return 201, {"sources": _skill_sources(_skills.ajouter_source(request.body.get("repo")))}
+
+
+@route("DELETE", "/third-party-skills/sources", CONFIGURATOR)
+def remove_skill_source(request):
+    """`?repo=owner/name`: removes a repository that was added (the ones offered at the start stay). Answers `{"sources"}`."""
+    return {"sources": _skill_sources(_skills.retirer_source(request.query.get("repo", "")))}
+
+
+@route("PATCH", "/third-party-skills/github", CONFIGURATOR)
+def set_github_token(request):
+    """{"token": text}: keeps the GitHub token (it lifts the limit of 60 requests an hour); an empty text removes it. Answers `{"github"}` without the token."""
+    _skill_body(request.body, ("token",), ())
+    if "token" not in request.body:
+        raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("token"))
+    _github.save(request.body["token"])
+    return {"github": _github_view()}
+
+
+@route("POST", "/third-party-skills/github/test", CONFIGURATOR)
+def test_github_token(request):
+    """What GitHub says about the account in use: `{"limit", "remaining", "resets_at", "authenticated", "account"}`."""
+    _skill_online(_t("essayer le compte GitHub"))
+    result = _github.test_token(_skills.default_http)
+    return {"limit": result["limite"], "remaining": result["restantes"], "resets_at": result["retour"], "authenticated": result["identifie"], "account": result["compte"]}
+
+
+@route("GET", "/third-party-skills/search", CONFIGURATOR)
+def search_third_party_skills(request):
+    """`?q=words&repos=a/b,c/d&page=1` (all the sources without `repos`): the skills whose name, path or description holds every word, 20 a page, `{"skills", "total", "page", "more",
+    "truncated", "described", "count"}`. Each skill: `repo`, `dir`, `name`, `sha`, `files`, `bytes`, `scripts`, `tokens` and, once read, `description` and `license`."""
+    _skill_online(_t("chercher des skills sur GitHub"))
+    repos = [_skill_repo(item) for item in request.query.get("repos", "").split(",") if item] or [source["depot"] for source in _skills.sources()]
+    found = _skills.search(request.query.get("q", "")[:200], repos, _skill_page(request.query.get("page")))
+    return {"skills": [_skill_hit(skill) for skill in found["skills"]], "total": found["total"], "page": found["page"], "more": bool(found["suite"]), "truncated": bool(found["tronque"]),
+            "described": found["decrits"], "count": found["nombre"]}
+
+
+@route("GET", "/third-party-skills/repos", CONFIGURATOR)
+def find_skill_repositories(request):
+    """`?q=words`: repositories of skills found on GitHub by topic, most followed first (`repo`, `stars`, `description`, `updated`); with `listed=1`, the repositories the community lists
+    point to, most quoted first (`repo`, `citations`). Adding one to the sources is a separate step."""
+    _skill_online(_t("chercher des dépôts de skills sur GitHub"))
+    query = request.query.get("q", "")[:100]
+    if request.query.get("listed") == "1":
+        return {"repos": [{"repo": item["depot"], "citations": item["citations"]} for item in _skills.listed_repos(query)]}
+    return {"repos": [{"repo": item["depot"], "stars": item["etoiles"], "description": item["description"], "updated": item["maj"]} for item in _skills.search_repos(query)]}
+
+
+@route("POST", "/third-party-skills/index", CONFIGURATOR)
+def index_skill_repository(request):
+    """{"repo"}: reads the description of every skill of a source in the background, so that a search also looks in them (long for a large repository). Follow it in `indexing`.
+    Answers `{"started": true}`, or `{"started": false}` when it is already running."""
+    _skill_body(request.body, ("repo",), ())
+    repo = _skill_repo(request.body.get("repo"))
+    _skill_online(_t("lire les descriptions des skills"))
+    if not (_skills.INDEXING.get(repo) or {}).get("fini", True):
+        return {"started": False}
+    threading.Thread(target=lambda: _skills.indexer(repo), daemon=True, name="skills-indexing").start()
+    return 202, {"started": True}
+
+
+@route("GET", "/third-party-skills/card", CONFIGURATOR)
+def third_party_skill_card(request):
+    """`?repo=owner/name&dir=path`: all that is needed to decide, read from GitHub and analysed before anything is copied: the text of SKILL.md, the files, the licence, the weight for a small
+    model (`heavy`) and the `findings` of the analysis (`severity` `danger` or `attention`; `severity` of the card is `none`, `attention` or `danger`). `installable` says the size is allowed."""
+    _skill_online(_t("lire la fiche d'un skill"))
+    card = _skills.card(_skill_repo(request.query.get("repo", "")), request.query.get("dir", ""))
+    return {"repo": card["depot"], "dir": card["dir"], "sha": card["sha"], "name": card["nom"], "description": card["description"], "license": card["licence"], "license_file": card["licence_fichier"],
+            "license_repo": card["licence_depot"], "text": card["texte"], "text_truncated": card["texte_coupe"], "files": [{"path": item["chemin"], "bytes": item["octets"]} for item in card["fichiers"]],
+            "file_count": card["nombre_fichiers"], "bytes": card["octets"], "scripts": card["scripts"], "tokens": card["jetons_skill"], "heavy": card["lourd"], "claude_fields": card["champs_claude"],
+            "findings": [{"severity": item["gravite"], "pattern": item["motif"], "explanation": item["explication"], "file": item["fichier"], "line": item["ligne"], "excerpt": item["extrait"]}
+                         for item in card["constats"]], "severity": _skill_severity(card["gravite"]), "too_big": card["trop_gros"], "analysed": card["analyses"], "installable": card["installable"]}
+
+
+def _installed_skill(skill):
+    view = {"project": skill["travail"], "name": skill["nom"], "folder": skill["dossier"], "repo": skill["depot"], "dir": skill["dir"], "sha": skill["sha"], "installed_at": skill["installe"],
+            "license": skill["licence"], "severity": _skill_severity(skill["gravite"] or "aucune"), "tokens": skill["jetons"], "description": skill["description"]}
+    if "maj" in skill:
+        view.update(update=bool(skill["maj"]), gone=bool(skill["disparu"]), error=skill["erreur"])
+    return view
+
+
+@route("GET", "/third-party-skills/installed", SESSION)
+def installed_third_party_skills(request):
+    """The skills Lutin copied, in every project: `project` (its id), `name`, `folder`, `repo`, `dir`, `sha`, `installed_at`, `license`, `severity`, `tokens`, `description`. Local only."""
+    return {"installed": [_installed_skill(skill) for skill in _skills.installed(_skill_roots())]}
+
+
+@route("GET", "/third-party-skills/updates", CONFIGURATOR)
+def third_party_skill_updates(request):
+    """The same list, each skill with `update` (it changed in its repository), `gone` (it is not there any more) and `error` (why it could not be checked): one request a repository."""
+    _skill_online(_t("chercher des mises à jour de skills"))
+    return {"installed": [_installed_skill(skill) for skill in _skills.available_updates(_skills.installed(_skill_roots()))]}
+
+
+def _skill_done(done, repo, folder):
+    _m.journaliser(_t("Skill tiers installé : {} ({}, {}).").format(done["nom"], repo, folder))
+    return {"name": done["nom"], "folder": done["dossier"], "files": done["fichiers"], "ignored": done["ignores"]}
+
+
+@route("POST", "/third-party-skills/install", CONFIGURATOR)
+def install_third_party_skill(request):
+    """{"repo", "dir", "project": optional id (else the current one), "confirm": true, "accept_danger", "accept_no_license"}: copies the folder into `<project>/.claude/skills/<name>/` with its
+    signature; nothing is run. `confirm` is always needed. A dangerous card needs `accept_danger`, a skill without any licence needs `accept_no_license`, a name already taken by something
+    Lutin did not install is refused. Answers `{"name", "folder", "files", "ignored"}`."""
+    body = request.body
+    _skill_body(body, ("repo", "dir", "project"), ("confirm", "accept_danger", "accept_no_license"))
+    if not body.get("confirm"):
+        raise ApiError(400, "confirmation_required", _t("Installer copie les fichiers de ce skill depuis GitHub dans ton dossier de travail : confirme pour continuer."))
+    _skill_online(_t("installer un skill"))
+    repo = _skill_repo(body.get("repo"))
+    _, root = _skill_project(body.get("project"))
+    done = _skills.install(repo, body.get("dir", ""), root, danger_ok=bool(body.get("accept_danger")), licence_ok=bool(body.get("accept_no_license")))
+    return 201, _skill_done(done, repo, body.get("dir", ""))
+
+
+@route("POST", "/third-party-skills/installed/{name}/update", CONFIGURATOR)
+def update_third_party_skill(request):
+    """{"project": optional id (else the current one), "confirm": true, "accept_danger", "accept_no_license"}: copies the skill again from where it came, replacing the copy Lutin made.
+    The same checks as an installation. Answers `{"name", "folder", "files", "ignored"}`."""
+    body = request.body
+    _skill_body(body, ("project",), ("confirm", "accept_danger", "accept_no_license"))
+    if not body.get("confirm"):
+        raise ApiError(400, "confirmation_required", _t("Mettre à jour copie de nouveau les fichiers de ce skill depuis GitHub : confirme pour continuer."))
+    _skill_online(_t("mettre à jour un skill"))
+    project, root = _skill_project(body.get("project"))
+    current = next((skill for skill in _skills.installed({project: root}) if skill["nom"] == request.params["name"]), None)
+    if current is None:
+        raise ApiError(404, "not_found", _t("Ce skill n'a pas été installé par Lutin."))
+    done = _skills.install(current["depot"], current["dir"], root, danger_ok=bool(body.get("accept_danger")), licence_ok=bool(body.get("accept_no_license")), remplacer=True, nom=current["nom"])
+    return _skill_done(done, current["depot"], current["dir"])
+
+
+@route("DELETE", "/third-party-skills/installed/{name}", CONFIGURATOR)
+def remove_third_party_skill(request):
+    """`?project=id` (else the current one): deletes a skill Lutin installed, and only that: a folder without Lutin's signature is never touched. Answers the list of what is left."""
+    project, root = _skill_project(request.query.get("project", ""))
+    if not any(skill["nom"] == request.params["name"] for skill in _skills.installed({project: root})):
+        raise ApiError(404, "not_found", _t("Ce skill n'a pas été installé par Lutin."))
+    _skills.retirer(root, request.params["name"])
+    _m.journaliser(_t("Skill tiers retiré : {}.").format(request.params["name"][:60]))
+    return installed_third_party_skills(request)
 
 
 # --------------------------------------------------------------------------------------------------------- conversations

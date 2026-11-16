@@ -2283,5 +2283,17 @@
 "Règle inconnue.": "Unknown rule.",
 "Règle invalide : un effet (deny, ask, allow) et une commande de {} caractères au plus.": "Invalid rule: an effect (deny, ask, allow) and a command of {} characters at most.",
 "Cette commande fait partie de celles qui demandent toujours ton accord : aucune règle ne peut l'autoriser d'avance.": "This command is one of those that always need your approval: no rule can allow it in advance.",
-"Déjà {} règles : supprime-en d'abord.": "Already {} rules: delete some first."
+"Déjà {} règles : supprime-en d'abord.": "Already {} rules: delete some first.",
+"essayer le compte GitHub": "test the GitHub account",
+"chercher des skills sur GitHub": "search skills on GitHub",
+"chercher des dépôts de skills sur GitHub": "search skill repositories on GitHub",
+"lire les descriptions des skills": "read the descriptions of the skills",
+"lire la fiche d'un skill": "read the card of a skill",
+"chercher des mises à jour de skills": "look for skill updates",
+"installer un skill": "install a skill",
+"mettre à jour un skill": "update a skill",
+"Installer copie les fichiers de ce skill depuis GitHub dans ton dossier de travail : confirme pour continuer.": "Installing copies the files of this skill from GitHub into your working folder: confirm to continue.",
+"Mettre à jour copie de nouveau les fichiers de ce skill depuis GitHub : confirme pour continuer.": "Updating copies the files of this skill from GitHub again: confirm to continue.",
+"Skill tiers installé : {} ({}, {}).": "Third-party skill installed: {} ({}, {}).",
+"Skill tiers retiré : {}.": "Third-party skill removed: {}."
 }

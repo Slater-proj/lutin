@@ -413,5 +413,75 @@
   "method": "GET",
   "path": "/api/v1/status",
   "right": "session"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/third-party-skills",
+  "right": "session"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/third-party-skills/card",
+  "right": "configurator"
+ },
+ {
+  "method": "PATCH",
+  "path": "/api/v1/third-party-skills/github",
+  "right": "configurator"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/third-party-skills/github/test",
+  "right": "configurator"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/third-party-skills/index",
+  "right": "configurator"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/third-party-skills/install",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/third-party-skills/installed",
+  "right": "session"
+ },
+ {
+  "method": "DELETE",
+  "path": "/api/v1/third-party-skills/installed/{name}",
+  "right": "configurator"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/third-party-skills/installed/{name}/update",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/third-party-skills/repos",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/third-party-skills/search",
+  "right": "configurator"
+ },
+ {
+  "method": "DELETE",
+  "path": "/api/v1/third-party-skills/sources",
+  "right": "configurator"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/third-party-skills/sources",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/third-party-skills/updates",
+  "right": "configurator"
  }
 ]
