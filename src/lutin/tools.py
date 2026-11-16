@@ -776,8 +776,10 @@ def lancer_processus(cmd, shell, cwd, stop=None, delai=240, limite_ram=0):
                 p.wait(5)
             except subprocess.TimeoutExpired:
                 pass
-        for t in lecteurs:
+        for t, flux in zip(lecteurs, (p.stdout, p.stderr)):
             t.join(1.5)                      # un sous-processus resté en arrière-plan peut garder le tube ouvert : on n'attend pas indéfiniment
+            if not t.is_alive():
+                flux.close()                 # lu jusqu'au bout : le tube est rendu tout de suite, sans attendre le ramasse-miettes (un tube encore lu reste à son lecteur)
     finally:
         if job and os.name == "nt":
             ctypes.windll.kernel32.CloseHandle(job)

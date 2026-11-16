@@ -2163,6 +2163,17 @@ class Assistant(unittest.TestCase):
         code, sortie, raison = A.lancer_processus('"{}" -c "import time; time.sleep(30)"'.format(sys.executable), True, None, stop)
         self.assertEqual(raison, "stop")
         self.assertLess(time.time() - t, 20, "les commandes arrêtées ne sont pas attendues jusqu'au bout")
+        # Une commande finie rend ses deux tubes tout de suite : sans cela, chaque commande laissait deux fichiers ouverts jusqu'au ramasse-miettes (ResourceWarning sous Linux).
+        from lutin import tools as o
+        lances, vrai = [], subprocess.Popen
+
+        def lancer(*a, **k):
+            lances.append(vrai(*a, **k))
+            return lances[-1]
+        with mock.patch.object(o.subprocess, "Popen", lancer):
+            code, sortie, raison = o.lancer_processus("echo tubes-rendus", True, None)
+        self.assertIn(b"tubes-rendus", sortie)
+        self.assertEqual([(p.stdout.closed, p.stderr.closed) for p in lances], [(True, True)])
         self.assertIsNone(A.limiter_memoire_processus(None, 0), "limite à 0 : aucune limite posée")
         gros = PROJET / "docs" / "enorme.txt"
         try:
