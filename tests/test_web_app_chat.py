@@ -159,8 +159,10 @@ class Chat(unittest.TestCase):
         loaded = "[...document.querySelectorAll('.thread figure.diagram img')].filter(i => i.complete && i.naturalWidth > 0)"
         p.attendre(loaded + ".length >= 1 && !!document.querySelector('.thread .note')")
         p.attendre("!!document.querySelector('.composer button[type=submit]')")
-        image = p.evaluer("(() => { const i = %s[0]; return [i.src.slice(0, 5), i.naturalWidth === i.width || i.naturalWidth > i.width, i.getAttribute('width') > 0, i.alt.length > 10]; })()" % loaded)
-        self.assertEqual(image, ["blob:", True, True, True], "the drawing is an image made by this page, with a size and a text for those who cannot see it")
+        # The size written on the image is the size of the drawing, to the pixel and both ways: whatever the fonts of the machine make of the labels, it is never stretched.
+        image = p.evaluer("(() => { const i = %s[0]; return [i.src.slice(0, 5), i.naturalWidth === Number(i.getAttribute('width')) && i.naturalHeight === Number(i.getAttribute('height')), "
+                          "i.width <= i.naturalWidth, i.getAttribute('width') > 0, i.alt.length > 10]; })()" % loaded)
+        self.assertEqual(image, ["blob:", True, True, True, True], "the drawing is an image made by this page, with its own size and a text for those who cannot see it")
         self.assertEqual(p.evaluer("[document.querySelectorAll('iframe').length, document.querySelector('iframe.diagram-frame').getAttribute('sandbox'), document.querySelector('iframe.diagram-frame').getAttribute('src')]"),
                          [1, "allow-scripts", "/app/diagram.html"], "one frame for every diagram, allowed to run scripts and nothing else")
         self.assertEqual(p.evaluer("(() => { try { return String(document.querySelector('iframe.diagram-frame').contentWindow.document); } catch (error) { return error.name; } })()"), "SecurityError",

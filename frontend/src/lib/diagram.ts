@@ -35,7 +35,11 @@ function attribute(tag: string, name: string): string {
   return found ? (found[1] ?? found[2] ?? "") : "";
 }
 
-/** A drawing with its size written on it in pixels, taken from its viewBox: as an image it then has a size of its own. Null when it is not a drawing. */
+/**
+ * A drawing with its size written on it in whole pixels, taken from its viewBox: as an image it then has a size of its own. Null when it is not a drawing.
+ * The size is rounded up on the drawing itself, not only for the page: a browser rounds the size of an image to the nearest pixel, so a drawing
+ * 547.08 wide would be an image 547 wide shown in a box of 548, stretched. Which side of the half the width falls on depends on the fonts of the machine.
+ */
 export function sized(svg: string): { svg: string; width: number; height: number } | null {
   const root = ROOT.exec(svg);
   if (!root) return null;
@@ -43,8 +47,9 @@ export function sized(svg: string): { svg: string; width: number; height: number
   let [width, height] = box.length === 4 ? [box[2], box[3]] : [Number.NaN, Number.NaN];
   if (!(width > 0 && height > 0)) [width, height] = [Number(attribute(root[1], "width")), Number(attribute(root[1], "height"))]; // « 100% » is not a number
   if (!(width > 0 && height > 0) || width > MAX_SIDE || height > MAX_SIDE) return null;
+  [width, height] = [Math.ceil(width), Math.ceil(height)];
   const kept = root[1].replace(/\s(?:width|height|style)\s*=\s*(?:"[^"]*"|'[^']*')/g, "");
-  return { svg: `<svg${kept} width="${width}" height="${height}">` + svg.slice(root[0].length), width: Math.ceil(width), height: Math.ceil(height) };
+  return { svg: `<svg${kept} width="${width}" height="${height}">` + svg.slice(root[0].length), width, height };
 }
 
 /** Drawings by theme and text, the oldest forgotten first. `forget` is called with what leaves. */

@@ -19,10 +19,12 @@ describe("diagrams", () => {
 
   it("writes on a drawing the size of its viewBox, whatever size it claimed", () => {
     expect(sized('<svg id="d1" width="100%" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 547.08 450" style="max-width: 547.08px;" role="img"><g/></svg>')).toEqual({
-      svg: '<svg id="d1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 547.08 450" role="img" width="547.08" height="450"><g/></svg>',
+      svg: '<svg id="d1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 547.08 450" role="img" width="548" height="450"><g/></svg>',
       width: 548,
       height: 450,
     });
+    // Whole pixels on the drawing itself, both ways: a browser rounds the size of an image to the nearest pixel, and the page would stretch it to its own rounding.
+    expect(sized('<svg viewBox="0 0 300.6 120.2"><g/></svg>')).toEqual({ svg: '<svg viewBox="0 0 300.6 120.2" width="301" height="121"><g/></svg>', width: 301, height: 121 });
     expect(sized('<svg viewBox="-50,-10,550,308" height="1" width="1" aria-label="a > b"><g/></svg>')).toEqual({
       svg: '<svg viewBox="-50,-10,550,308" aria-label="a > b" width="550" height="308"><g/></svg>',
       width: 550,
