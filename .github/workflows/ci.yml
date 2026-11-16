@@ -38,6 +38,7 @@ jobs:
           name: interface
           path: src/lutin/web/app/
           if-no-files-found: error
+          overwrite: true          # a job run again in the same run replaces its artifact instead of failing on the name
           retention-days: 7
 
   style:
@@ -119,6 +120,7 @@ jobs:
           name: lutin-${{ inputs.version || '0.0.0.dev0' }}
           path: dist/*
           if-no-files-found: error
+          overwrite: true          # a job run again in the same run replaces its artifact instead of failing on the name
           retention-days: 30
 
   paquet:
@@ -275,6 +277,7 @@ jobs:
           name: installateur-${{ inputs.version || '0.0.0.dev0' }}
           path: dist/lutin-setup-*.exe
           if-no-files-found: error
+          overwrite: true          # a job run again in the same run replaces its artifact instead of failing on the name
           retention-days: 30
 
   syntaxe-installateurs:

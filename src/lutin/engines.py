@@ -16,6 +16,8 @@ import socket
 import threading
 import time
 
+from . import engine_capabilities
+
 OLLAMA = "ollama"
 LLAMACPP = "llamacpp"
 OPENAI = "openai"
@@ -89,6 +91,17 @@ class Moteur:
     def grille(self):
         """{fonction: (état, note)} pour chaque fonction de FONCTIONS : ce que ce moteur fait, et comment (voir ETATS). Par défaut, rien n'est vérifié."""
         return {f: ("non_teste", "") for f in FONCTIONS}
+
+    def aptitudes(self):
+        """Ce que la BOUCLE de l'agent doit savoir pour piloter ce moteur (engine_capabilities.EngineCapabilities) : comment les appels d'outils arrivent au modèle,
+        si le début d'une requête est relu, ce qui arrive quand le modèle ne tient pas dans la mémoire vidéo, si la boucle peut démarrer le moteur.
+        Par défaut, rien n'est supposé. La grille ci-dessus dit, elle, ce qu'une personne peut faire avec le moteur."""
+        return engine_capabilities.CAUTIOUS
+
+    def demarrer_sur_demande(self):
+        """Démarre le moteur quand la boucle constate qu'il ne répond pas. Appelé seulement pour un moteur dont les aptitudes disent `starts_on_demand`.
+        Lève ValueError, avec un message clair, quand le démarrage est impossible."""
+        raise ValueError("Ce moteur ne se démarre pas tout seul.")
 
     def vecteurs(self, modele, textes, delai=60):
         """Les vecteurs (listes de nombres) de ces textes, pour la recherche par le sens. Lève ValueError si le moteur ne sait pas."""

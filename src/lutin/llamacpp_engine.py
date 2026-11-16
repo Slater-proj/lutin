@@ -22,7 +22,7 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
-from . import engines
+from . import engine_capabilities, engines
 from .engine_replace import free_process, replace_folder  # noqa: F401  (le remplacement d'un dossier est commun à tous les moteurs)
 from .i18n import t as _t
 from .openai_engine import MoteurOpenAI
@@ -755,6 +755,14 @@ class MoteurLlamaCpp(MoteurOpenAI):
                 raise ErreurMoteur(_t("Avec llama.cpp, la recherche par le sens demande le mode routeur (Réglages > Moteur > Mode routeur)."))
             self.demarrer(modele, CTX_DEFAUT)
         return super().vecteurs(modele, textes, delai)
+
+    def aptitudes(self):
+        # D'après la documentation de llama-server (tools/server/README.md, lue le 2026-11-16) : `grammar` et `json_schema` contraignent la sortie, `id_slot` donne une place à une
+        # demande, `cache_prompt` (vrai par défaut) évite de relire le début commun de deux requêtes. Lutin n'envoie encore ni `id_slot` ni `cache_prompt` (plan, étape 6, point 2).
+        # Les outils passent par le gabarit du modèle (--jinja). Un modèle qui ne tient pas dans la mémoire vidéo ne se charge pas ; et c'est ce moteur, pas la boucle, qui démarre son serveur.
+        return engine_capabilities.EngineCapabilities(tools=engine_capabilities.TEMPLATE, grammar=engine_capabilities.YES, slots=engine_capabilities.YES,
+                                                      prompt_cache=engine_capabilities.ON_REQUEST, embeddings=engine_capabilities.YES, token_counts=engine_capabilities.YES,
+                                                      starts_on_demand=False, spills_to_cpu=False)
 
     def grille(self):
         return {"discuter": ("natif", ""), "flux": ("natif", ""), "arret": ("natif", _t("La connexion est coupée : le serveur arrête de générer.")),

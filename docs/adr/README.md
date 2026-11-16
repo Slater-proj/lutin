@@ -18,3 +18,4 @@ These records are technical documentation, written in English only (ADR 0001). T
 | [0009](0009-approval-rules.md) | Approval rules for commands: deny > ask > allow, a hardline list | Accepted |
 | [0010](0010-tool-table.md) | One table says what each tool does | Accepted |
 | [0011](0011-diagrams-in-an-isolated-frame.md) | Diagrams are drawn in an isolated frame; formulas by the browser | Accepted, implemented |
+| [0012](0012-a-turn-says-where-it-is.md) | A turn says where it is; the loop is made of parts; an engine says what the loop may ask of it | Accepted, implemented |

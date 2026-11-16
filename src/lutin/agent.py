@@ -10,6 +10,7 @@ from . import news as _actualites
 from . import mcp as _mcp
 from . import llamacpp_engine as _llamacpp
 from . import engines as _moteurs
+from . import engine_capabilities as _aptitudes
 from . import ollama_client
 from . import produced_files as _fichiers
 from . import mission as _mission
@@ -713,6 +714,15 @@ class MoteurOllama(_moteurs.Moteur):
 
     def en_memoire(self, modele):
         return ps_ollama(modele)
+
+    def aptitudes(self):
+        # Ollama lit et écrit lui-même les appels d'outils, garde tout seul le début d'une requête, accepte un schéma JSON (« format »), n'a pas de place réservée par conversation ;
+        # un modèle trop gros pour la carte déborde sur le processeur au lieu d'échouer ; et Lutin sait le démarrer.
+        return _aptitudes.EngineCapabilities(tools=_aptitudes.NATIVE, grammar=_aptitudes.YES, slots=_aptitudes.NO, prompt_cache=_aptitudes.AUTOMATIC, embeddings=_aptitudes.YES,
+                                             token_counts=_aptitudes.YES, starts_on_demand=True, spills_to_cpu=True)
+
+    def demarrer_sur_demande(self):
+        return _m.demarrer_ollama()
 
     def grille(self):
         natif = ("natif", "")
@@ -1847,14 +1857,14 @@ def _appeler_modele(conv, r, emit, ctx, stop, corps, msgs_base, outils, caps, pl
             else:
                 genre = ""
             nom_mo = nom_du_moteur(r)
-            if moteur_actuel(r).id != "ollama" and RE_MEMOIRE_VIDEO.search(detail):          # le modèle ne tient pas avec sa mémoire de conversation : le dire clairement, sans relancer pour rien
+            if not _aptitudes.of(moteur_actuel(r)).spills_to_cpu and RE_MEMOIRE_VIDEO.search(detail):          # le modèle ne tient pas avec sa mémoire de conversation : le dire clairement, sans relancer pour rien
                 emit({"type": "erreur", "texte": _t("{} n'a pas pu charger « {} » : la mémoire de la carte graphique ne suffit pas pour le modèle ET sa mémoire de conversation. Choisis une quantification plus légère (onglet Modèles), ou une fenêtre de contexte plus petite (Réglages > Conversation), puis redémarre {} (Réglages > Moteur). Détail : {}").format(nom_mo, r["modele"], nom_mo, detail[:160])})
                 break
-            if not http and not isinstance(erreur, RuntimeError) and _m.AUTO_DEMARRAGE and tentative < 2 and not ctx.get("ollama_relance") and moteur_actuel(r).id == "ollama":
+            if not http and not isinstance(erreur, RuntimeError) and _m.AUTO_DEMARRAGE and tentative < 2 and not ctx.get("ollama_relance") and _aptitudes.of(moteur_actuel(r)).starts_on_demand:
                 ctx["ollama_relance"] = True                        # Ollama est arrêté (ou a planté) : on le démarre et on réessaie, une seule fois par demande
                 emit({"type": "info", "texte": "Ollama ne répond pas : je le démarre (quelques secondes)..."})
                 try:
-                    _m.demarrer_ollama()
+                    moteur_actuel(r).demarrer_sur_demande()          # le moteur dit lui-même qu'il se démarre à la demande (aptitudes) : la boucle ne demande plus « est-ce Ollama ? »
                 except ValueError as e2:
                     emit({"type": "erreur", "texte": _t("Ollama ne répond pas et je n'ai pas pu le démarrer : {}").format(e2)})
                     break
