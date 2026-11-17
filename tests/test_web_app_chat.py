@@ -861,6 +861,89 @@ class Chat(unittest.TestCase):
         self.assertEqual(p.erreurs, [])
         p.evaluer("location.hash = '#/chat'")
 
+    def test_5h5_a_conversation_held_by_another_machine_is_continued_renamed_and_deleted(self):
+        """ADR 0016, stages 6 and 7: the Chat lists the conversations of a machine that grants « lead » under its name, opens one, sends a message with
+        an image (kept by that machine), renames it and deletes it, all through the relayed routes. The server is paired with itself, so « the other
+        machine » is the real node code; what it reads of this computer is replaced."""
+        p = self.page
+        before = {key: T.A.reglages().get(key) for key in ("cluster", "machine")}
+        for kept in (machines.SONDES, machines.DERNIER_ETAT, machines.CODES, machines.INFOS_NOEUD):
+            kept.clear()
+        machines.CARTES.update(t=-999.0, v=None)
+        machines.CONVERSATIONS.update(t=0.0, v=[], en_cours=False)
+        T.A.LIMITEUR_PIN.evenements.clear()
+        for patch in (mock.patch.object(power, "network_adapters", lambda **k: []),
+                      mock.patch.object(power, "wake_state", lambda *a, **k: {"mac": "", "carte": "", "pret": None, "avertissements": []}),
+                      mock.patch.object(power, "startup_state", lambda *a, **k: {"installe": True, "possible": True, "limites": ""}),
+                      mock.patch.object(T.A, "system_memory", lambda: None), mock.patch.object(T.A, "video_memory", lambda: None)):
+            patch.start()
+            self.addCleanup(patch.stop)
+        T.A.enregistrer_reglages({"cluster": True})
+        machines.noeud_activer(True)
+        host = machines.ajouter(T.BASE, machines.noeud_nouveau_code()["code"], "Bureau")
+        machines.noeud_autoriser_piloter(True)
+        held = T.A.conv_nouvelle()["id"]
+        T.A.conv_renommer(held, "Rapport du bureau")
+
+        def restore():
+            machines._ecrire_registre([])
+            machines.noeud_autoriser_piloter(False)
+            for allowed in machines.noeud_vue()["autorisees"]:
+                machines.noeud_revoquer(allowed["nom"])
+            machines.noeud_activer(False)
+            for kept in (machines.SONDES, machines.DERNIER_ETAT, machines.CODES):
+                kept.clear()
+            machines.CONVERSATIONS.update(t=0.0, v=[], en_cours=False)
+            T.A.enregistrer_reglages(before)
+            try:
+                T.A.conv_supprimer(held)
+            except (OSError, ValueError):
+                pass
+        self.addCleanup(restore)
+        self.assertTrue(self.wait_for(lambda: any(entry["id"] == held for entry in machines.conversations_distantes(attente=True))), "the host lists it")
+
+        p.evaluer("location.hash = '#/models'")
+        p.attendre("!!document.querySelector('.models')")
+        p.evaluer("location.hash = '#/chat'")
+        remote_entry = "[...document.querySelectorAll('.list .remote .entry')].find(b => b.innerText.includes('Rapport du bureau'))"
+        p.attendre("!!(" + remote_entry + ")")
+        self.assertIn("Bureau", p.evaluer("document.querySelector('.list .host').innerText"), "under the name of the machine")
+        p.evaluer(remote_entry + ".click()")
+        p.attendre("!!document.querySelector('header .on-host')")
+        self.assertIn("Bureau", p.evaluer("document.querySelector('header .on-host').innerText"), "the machine that answers is said")
+        self.assertFalse(p.evaluer("!!document.querySelector('header select')"), "its own model answers: no selector")
+        self.assertFalse(p.evaluer("!!document.querySelector('.bar .toggle')"), "its options are its own")
+        if AXE.is_file():
+            self.axe("on a conversation held by another machine")
+
+        picture = Path(tempfile.mkdtemp(prefix="lutin-remote-")) / "dot.png"
+        picture.write_bytes(base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="))
+        self.choose_files(picture)
+        p.attendre("document.querySelectorAll('.chips li').length === 1 && document.querySelectorAll('.chips li.busy').length === 0")
+        self.assertIn("/machines/" + host["id"] + "/images/", p.evaluer("document.querySelector('.chips img').getAttribute('src')"), "the image went to the other machine")
+        self.assertEqual(p.evaluer("document.querySelector('.chips img').naturalWidth"), 1, "and is shown back from it")
+        T.SCENARIO[:] = [[{"content": "Answer from the host."}]]
+        self.write("Question for the host")
+        p.evaluer("document.querySelector('.composer button[type=submit]').click()")
+        p.attendre(TEXT + ".includes('Answer from the host.')")
+        p.attendre("!!document.querySelector('.composer button[type=submit]')")
+        sent = [m for m in T.A.conv_lire(held)["messages"] if m["role"] == "user"]
+        self.assertEqual((sent[-1]["content"], len(sent[-1].get("images") or [])), ("Question for the host", 1), "the turn ran on the host, which keeps it")
+        p.attendre("document.querySelector('.thread .sent img')?.naturalWidth === 1")
+        self.picture("5h5-remote-conversation")
+
+        p.evaluer("document.querySelector('.rename-button').click()")
+        p.attendre("!!document.querySelector('#title')")
+        p.evaluer("(() => { const box = document.querySelector('#title'); box.value = 'Notes du bureau'; box.dispatchEvent(new Event('input', {bubbles: true})); document.querySelector('form.rename').requestSubmit(); })()")
+        self.eventually(lambda: T.A.conv_lire(held)["titre"] == "Notes du bureau", "renamed on the host")
+        p.evaluer("window.confirm = () => true")
+        machines.CONVERSATIONS.update(t=0.0)          # the list of the host is read again
+        p.evaluer("[...document.querySelectorAll('.list .remote li')].find(li => li.innerText.includes('bureau')).querySelector('.remove').click()")
+        self.eventually(lambda: held not in [entry["id"] for entry in T.A.conv_liste()], "deleted on the host")
+        p.attendre("!document.querySelector('header .on-host')")
+        self.assertEqual(p.erreurs, [])
+        p.evaluer("location.hash = '#/chat'")
+
     def wait_for(self, check, seconds=20):
         end = time.monotonic() + seconds
         while time.monotonic() < end:

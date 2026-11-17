@@ -3,9 +3,11 @@
   import { t } from "../lib/messages";
   import Icon from "./Icon.svelte";
   import Markdown from "./Markdown.svelte";
+  import { attachmentUrl, imageUrl } from "../lib/place";
   import type { Block, Item, LiveTurn, Sent } from "../lib/turn";
 
-  let { items, pending, live, onedit }: { items: Item[]; pending: ({ text: string } & Sent) | null; live: LiveTurn | null; onedit?: (item: Extract<Item, { role: "user" }>) => void } = $props();
+  // `machine`: the paired machine that holds the conversation ("" for this one): its images and documents are read from it.
+  let { items, pending, live, onedit, machine = "" }: { items: Item[]; pending: ({ text: string } & Sent) | null; live: LiveTurn | null; onedit?: (item: Extract<Item, { role: "user" }>) => void; machine?: string } = $props();
 
   function shown(value: unknown): string {
     if (value === null || value === undefined) return "";
@@ -16,12 +18,12 @@
 {#snippet sentView(sent: Sent)}
   {#if sent.images.length}
     <div class="sent">
-      {#each sent.images as id (id)}<img src={"/api/v1/images/" + encodeURIComponent(id)} alt={t("chat.image_sent")} loading="lazy" />{/each}
+      {#each sent.images as id (id)}<img src={imageUrl(machine, id)} alt={t("chat.image_sent")} loading="lazy" />{/each}
     </div>
   {/if}
   {#if sent.files.length}
     <ul class="files">
-      {#each sent.files as file, index (index)}<li><Icon name="file" size={16} /><a href={"/api/v1/attachments/" + encodeURIComponent(file.id) + "?name=" + encodeURIComponent(file.name)} download={file.name}>{t("chat.file_sent", file.name)}</a></li>{/each}
+      {#each sent.files as file, index (index)}<li><Icon name="file" size={16} /><a href={attachmentUrl(machine, file.id, file.name)} download={file.name}>{t("chat.file_sent", file.name)}</a></li>{/each}
     </ul>
   {/if}
 {/snippet}

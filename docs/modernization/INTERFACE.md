@@ -97,7 +97,7 @@ What is left on this screen: the models of the other machines (plan step 4, desi
 
 Verified end to end in a real Chrome against a fake engine (`tests/test_web_app_chat.py`): page loads without any policy violation; a message is sent and
 the answer is written as it arrives; Markdown is drawn and no HTML comes out of an answer; an action waits for an approval given on the page and a refusal leaves the file untouched;
-a document and an image are attached, sent, shown in the message and kept when it is edited; a conversation is renamed and pinned; the options are chosen before or after the first message and kept by the server for that conversation only; a message is edited and the conversation goes on from it; a refusal of the server is shown and the message
+a document and an image are attached, sent, shown in the message and kept when it is edited; a conversation is renamed and pinned; a conversation held by a paired machine that grants « lead » is listed under its name, opened, continued with an image (kept by that machine, whose models, options and approvals answer: no model selector, « On <machine> » instead), renamed and deleted there (test 5h5, ADR 0016 stages 6 and 7, `lib/place.ts` for every path); the options are chosen before or after the first message and kept by the server for that conversation only; a message is edited and the conversation goes on from it; a refusal of the server is shown and the message
 given back; themes; no overflow at 360 px.
 
 Accessibility: the automatic checks of axe-core (WCAG 2.0, 2.1 and 2.2, levels A and AA, contrast included) run in `tests/test_web_app_chat.py` on the Chat screen, a conversation, the options panel, the Models screen and

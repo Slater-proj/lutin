@@ -1,10 +1,11 @@
 <script lang="ts">
   // The button to attach a file, and what is attached to the next message: a small picture for an image, an icon and the name for a document.
+  import { imageUrl } from "../lib/place";
   import Icon from "./Icon.svelte";
   import type { Attachment } from "../lib/attachments";
   import { t } from "../lib/messages";
 
-  let { attachments, onadd, onremove, disabled = false }: { attachments: Attachment[]; onadd: (files: File[]) => void; onremove: (key: string) => void; disabled?: boolean } = $props();
+  let { attachments, onadd, onremove, disabled = false, machine = "" }: { attachments: Attachment[]; onadd: (files: File[]) => void; onremove: (key: string) => void; disabled?: boolean; machine?: string } = $props();
   let input = $state<HTMLInputElement | null>(null);
 
   function chosen(event: Event): void {
@@ -22,7 +23,7 @@
     {#each attachments as item (item.key)}
       <li class:busy={item.state === "uploading"}>
         {#if item.kind === "image" && item.state === "ready"}
-          <img src={"/api/v1/images/" + encodeURIComponent(item.id)} alt="" width="28" height="28" />
+          <img src={imageUrl(machine, item.id)} alt="" width="28" height="28" />
         {:else}
           <Icon name="file" size={18} />
         {/if}

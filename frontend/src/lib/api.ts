@@ -58,9 +58,10 @@ export async function api<T>(method: "GET" | "POST" | "PATCH" | "DELETE", path: 
   return (await (await send(method, path, body)).json()) as T;
 }
 
-/** Sends a message and calls `onEvent` for each event of the answer, until the stream ends. A refusal before the stream throws an ApiError. */
-export async function streamTurn(conversationId: string, body: { message: string; model?: string; replace_from?: number; images?: string[]; attachments?: { id: string; name: string }[] }, onEvent: (event: TurnEvent) => void, signal?: AbortSignal): Promise<void> {
-  const response = await send("POST", `/conversations/${encodeURIComponent(conversationId)}/turns`, body, signal);
+/** Sends a message and calls `onEvent` for each event of the answer, until the stream ends. A refusal before the stream throws an ApiError.
+ *  `conversation` is the path of the conversation (lib/place.ts): here, or on the paired machine that holds it. */
+export async function streamTurn(conversation: string, body: { message: string; model?: string; replace_from?: number; images?: string[]; attachments?: { id: string; name: string }[] }, onEvent: (event: TurnEvent) => void, signal?: AbortSignal): Promise<void> {
+  const response = await send("POST", `${conversation}/turns`, body, signal);
   const parser = lineParser(onEvent);
   if (!response.body) {
     parser.push(await response.text());

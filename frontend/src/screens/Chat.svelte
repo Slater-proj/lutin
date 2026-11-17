@@ -8,6 +8,7 @@
   import { api, ApiError, streamTurn, upload } from "../lib/api";
   import { fromStored, MAX_DOCUMENTS, MAX_IMAGES, kindOf, refusal, turnFields, uploading, type Attachment } from "../lib/attachments";
   import { choiceValue, parseChoice, selector, type MachinesView } from "../lib/machines";
+  import { approvalPath, byMachine, conversationPath, uploadPath, type Listed } from "../lib/place";
   import { t } from "../lib/messages";
   import { applyEvent, elsewhereNotice, newTurn, storedToItems, type Item, type LiveTurn, type Sent } from "../lib/turn";
   import type { Conversation, ConversationOptions, ConversationSummary, Models, Settings, Status, TurnState } from "../lib/types";
@@ -15,6 +16,9 @@
   let { status, onchanged }: { status: Status | null; onchanged: () => void } = $props();
 
   let conversations = $state<ConversationSummary[]>([]);
+  let remote = $state<Listed[]>([]); // the conversations of the paired machines that grant « lead » (ADR 0016, stage 6)
+  let where = $state(""); // the machine that holds the open conversation: "" for this one
+  const hosts = $derived(byMachine(remote));
   let conversation = $state<Conversation | null>(null);
   let models = $state<Models | null>(null);
   let paired = $state<MachinesView | null>(null); // who answers by default and the names of the paired machines (GET /machines never waits)
@@ -88,7 +92,12 @@
   }
 
   async function loadList(): Promise<void> {
-    conversations = (await api<{ conversations: ConversationSummary[] }>("GET", "/conversations")).conversations;
+    const [here, others] = await Promise.all([
+      api<{ conversations: ConversationSummary[] }>("GET", "/conversations"),
+      api<{ conversations: { machine: string; machine_name: string; id: string; title: string }[] }>("GET", "/machines/conversations").catch(() => ({ conversations: [] })),
+    ]);
+    conversations = here.conversations;
+    remote = others.conversations.map((entry) => ({ id: entry.id, title: entry.title, pinned: false, machine: entry.machine, machine_name: entry.machine_name }));
   }
 
   async function loadModels(): Promise<void> {
@@ -121,22 +130,26 @@
     });
   }
 
-  async function open(id: string): Promise<void> {
+  /** Opens a conversation of this machine, or of the paired machine `machine`: that one keeps it, runs its turns and has its own options. */
+  async function open(id: string, machine = ""): Promise<void> {
     await guarded(async () => {
-      conversation = await api<Conversation>("GET", `/conversations/${encodeURIComponent(id)}`);
-      options = await api<ConversationOptions>("GET", `/conversations/${encodeURIComponent(id)}/options`);
+      conversation = await api<Conversation>("GET", conversationPath(machine, id));
+      where = machine;
+      options = machine ? null : await api<ConversationOptions>("GET", `/conversations/${encodeURIComponent(id)}/options`);
       optionsToSend = {};
       attachments = [];
       listOpen = false;
       renaming = false;
       cancelEdit();
-      await watch(id);
+      if (machine) stopWatching();
+      else await watch(id);
     });
   }
 
   function startNew(): void {
     stopWatching();
     conversation = null;
+    where = "";
     problem = "";
     listOpen = false;
     renaming = false;
@@ -161,7 +174,7 @@
     const title = titleDraft.trim();
     if (!current || !title || title === current.title) return;
     await guarded(async () => {
-      conversation = await api<Conversation>("PATCH", `/conversations/${encodeURIComponent(current.id)}`, { title });
+      conversation = await api<Conversation>("PATCH", conversationPath(where, current.id), { title });
       await loadList();
     });
   }
@@ -174,7 +187,7 @@
     const current = conversation;
     if (!current) return;
     await guarded(async () => {
-      conversation = await api<Conversation>("PATCH", `/conversations/${encodeURIComponent(current.id)}`, { pinned: !current.pinned });
+      conversation = await api<Conversation>("PATCH", conversationPath(where, current.id), { pinned: !current.pinned });
       await loadList();
     });
   }
@@ -206,7 +219,7 @@
       const key = "upload-" + ++counter;
       attachments = [...attachments, { key, kind, name: file.name, id: "", state: "uploading" }];
       try {
-        const done = kind === "image" ? await upload<{ id: string }>("/images", file) : await upload<{ id: string; name: string }>("/attachments", file, file.name);
+        const done = kind === "image" ? await upload<{ id: string }>(uploadPath(where, "images"), file) : await upload<{ id: string; name: string }>(uploadPath(where, "attachments"), file, file.name);
         attachments = attachments.map((item) => (item.key === key ? { ...item, id: done.id, state: "ready" } : item));
       } catch (cause) {
         attachments = attachments.filter((item) => item.key !== key);
@@ -232,11 +245,11 @@
     void addFiles(Array.from(event.dataTransfer?.files ?? []));
   }
 
-  async function remove(entry: ConversationSummary): Promise<void> {
+  async function remove(entry: { id: string; title: string }, machine = ""): Promise<void> {
     if (!confirm(t("chat.delete_confirm", entry.title || t("chat.untitled")))) return;
     await guarded(async () => {
-      await api("DELETE", `/conversations/${encodeURIComponent(entry.id)}`);
-      if (conversation?.id === entry.id) conversation = null;
+      await api("DELETE", conversationPath(machine, entry.id));
+      if (conversation?.id === entry.id && where === machine) (conversation = null), (where = "");
       await loadList();
     });
   }
@@ -253,6 +266,7 @@
         }
       }
       const id = conversation.id;
+      const at = where; // a new conversation is always one of this machine
       const from = editing;
       const sent = attachments;
       draft = "";
@@ -262,7 +276,7 @@
       pending = { text: message, images: sent.filter((item) => item.kind === "image").map((item) => item.id), files: sent.filter((item) => item.kind === "document").map((item) => ({ id: item.id, name: item.name })) };
       live = newTurn();
       try {
-        await streamTurn(id, { message, ...(from === null ? {} : { replace_from: from }), ...turnFields(sent) }, (event) => {
+        await streamTurn(conversationPath(at, id), { message, ...(from === null ? {} : { replace_from: from }), ...turnFields(sent) }, (event) => {
           if (live) live = applyEvent(live, event);
         });
       } catch (cause) {
@@ -274,8 +288,8 @@
         throw cause;
       } finally {
         // What is stored is the truth: the conversation is read again, whether the stream ended well or was cut.
-        const stored = await api<Conversation>("GET", `/conversations/${encodeURIComponent(id)}`).catch(() => null);
-        if (stored) conversation = stored;
+        const stored = await api<Conversation>("GET", conversationPath(at, id)).catch(() => null);
+        if (stored && where === at) conversation = stored;
         cut = null;
         pending = null;
         live = null;
@@ -287,14 +301,14 @@
 
   async function stop(): Promise<void> {
     const id = conversation?.id;
-    if (id) await guarded(async () => void (await api("POST", `/conversations/${encodeURIComponent(id)}/stop`, {})));
+    if (id) await guarded(async () => void (await api("POST", conversationPath(where, id) + "/stop", {})));
   }
 
   async function answerApproval(approved: boolean, remember: "once" | "chat" | "always" = "once"): Promise<void> {
     const approval = live?.approval;
     if (!approval) return;
     await guarded(async () => {
-      await api("POST", `/approvals/${encodeURIComponent(approval.id)}`, { approved, remember });
+      await api("POST", approvalPath(where, approval.id), { approved, remember });
       if (live) live = { ...live, approval: null };
     });
   }
@@ -303,7 +317,7 @@
     const id = conversation?.id;
     if (!id) return;
     await guarded(async () => {
-      await api("POST", `/conversations/${encodeURIComponent(id)}/memory-choice`, { choice });
+      await api("POST", conversationPath(where, id) + "/memory-choice", { choice });
       if (live) live = { ...live, memoryChoice: false };
     });
   }
@@ -367,17 +381,32 @@
       <ul>
         {#each conversations as entry (entry.id)}
           <li>
-            <button type="button" class="entry" aria-current={conversation?.id === entry.id ? "true" : undefined} onclick={() => open(entry.id)}>
+            <button type="button" class="entry" aria-current={conversation?.id === entry.id && where === "" ? "true" : undefined} onclick={() => open(entry.id)}>
               <span class="title">{entry.title || t("chat.untitled")}</span>
               {#if entry.pinned}<span class="tag"><Icon name="pin" size={14} /><span class="visually-hidden">{t("chat.pinned")}</span></span>{/if}
             </button>
-            <button type="button" class="icon remove" onclick={() => remove(entry)} disabled={busy && conversation?.id === entry.id}>
+            <button type="button" class="icon remove" onclick={() => remove(entry)} disabled={busy && conversation?.id === entry.id && where === ""}>
               <Icon name="trash" size={16} /><span class="visually-hidden">{t("chat.delete")} : {entry.title || t("chat.untitled")}</span>
             </button>
           </li>
         {/each}
       </ul>
     {/if}
+    {#each hosts as host (host.machine)}
+      <p class="host" id={"host-" + host.machine}><Icon name="models" size={16} /><span>{host.name}</span></p>
+      <ul class="remote" aria-labelledby={"host-" + host.machine}>
+        {#each host.conversations as entry (entry.id)}
+          <li>
+            <button type="button" class="entry" aria-current={conversation?.id === entry.id && where === host.machine ? "true" : undefined} onclick={() => open(entry.id, host.machine)}>
+              <span class="title">{entry.title || t("chat.untitled")}</span>
+            </button>
+            <button type="button" class="icon remove" onclick={() => remove(entry, host.machine)} disabled={busy && conversation?.id === entry.id && where === host.machine}>
+              <Icon name="trash" size={16} /><span class="visually-hidden">{t("chat.delete")} : {entry.title || t("chat.untitled")}</span>
+            </button>
+          </li>
+        {/each}
+      </ul>
+    {/each}
   </aside>
 
   <section class="main">
@@ -397,6 +426,9 @@
           </button>
         {/if}
       {/if}
+      {#if where}
+        <p class="model on-host" title={t("chat.on_machine_help")}>{t("chat.on_machine", remote.find((entry) => entry.machine === where)?.machine_name ?? paired?.machines.find((entry) => entry.id === where)?.name ?? "")}</p>
+      {:else}
       <label class="model">
         <span>{t("chat.model")}</span>
         <select onchange={chooseModel} disabled={busy || !choices || (choices.local.length === 0 && choices.groups.length === 0)} title={choices?.missing?.off ? t("chat.machine_off_help", choices.missing.name) : undefined}>
@@ -426,6 +458,7 @@
           {/if}
         </select>
       </label>
+      {/if}
     </header>
 
     <div class="scroll" bind:this={scroller}>
@@ -442,7 +475,7 @@
           </ul>
         </div>
       {:else}
-        <Thread {items} {pending} {live} onedit={busy ? undefined : startEdit} />
+        <Thread {items} {pending} {live} onedit={busy ? undefined : startEdit} machine={where} />
         {#if elsewhere}<p class="elsewhere" role="status">{t(elsewhereNotice(elsewhereTurn))}</p>{/if}
       {/if}
     </div>
@@ -458,8 +491,8 @@
           {#if live.approval.diff}<pre>{live.approval.diff}</pre>{/if}
           {#if live.approval.reason}<p class="hint">{live.approval.reason}</p>{/if}
           <div class="actions">
-            <button type="button" class="button primary" onclick={() => answerApproval(true)}>{live.approval.canRemember ? t("approval.once") : t("approval.approve")}</button>
-            {#if live.approval.canRemember}
+            <button type="button" class="button primary" onclick={() => answerApproval(true)}>{live.approval.canRemember && !where ? t("approval.once") : t("approval.approve")}</button>
+            {#if live.approval.canRemember && !where}
               <button type="button" class="button" onclick={() => answerApproval(true, "chat")}>{t("approval.chat")}</button>
               <button type="button" class="button" onclick={() => answerApproval(true, "always")}>{t("approval.always")}</button>
             {/if}
@@ -482,7 +515,7 @@
         <p class="editing"><span>{t("chat.editing")}</span><button type="button" class="link" onclick={cancelEdit}>{t("chat.cancel")}</button></p>
       {/if}
       <form class="composer" onsubmit={onSubmit} ondragover={(event) => event.preventDefault()} ondrop={onDrop}>
-        <AttachmentBar {attachments} onadd={addFiles} onremove={removeAttachment} disabled={busy} />
+        <AttachmentBar {attachments} onadd={addFiles} onremove={removeAttachment} disabled={busy} machine={where} />
         <label class="visually-hidden" for="message">{t("chat.message")}</label>
         <textarea id="message" rows="1" placeholder={t("chat.placeholder")} aria-describedby="keys" bind:value={draft} bind:this={box} onkeydown={onKey} onpaste={onPaste}></textarea>
         {#if busy}
@@ -653,6 +686,18 @@
     font-size: var(--text-sm);
   }
 
+  /* The conversations held by another machine, under its name. */
+  .host {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin: var(--space-4) 0 var(--space-1);
+    padding: 0 var(--space-2);
+    color: var(--color-text-muted);
+    font-size: var(--text-sm);
+    font-weight: 600;
+  }
+
   .main {
     display: flex;
     flex-direction: column;
@@ -729,6 +774,15 @@
     gap: var(--space-2);
     font-size: var(--text-sm);
     color: var(--color-text-muted);
+  }
+
+  .on-host {
+    margin: 0 0 0 auto;
+    padding: var(--space-1) var(--space-3);
+    border-radius: var(--radius-pill);
+    background: var(--color-accent-soft);
+    color: var(--color-accent-text);
+    font-weight: 600;
   }
 
   select {
