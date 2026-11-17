@@ -15,7 +15,9 @@ switch; each line is ticked here when it is done, with its test.
 3. ~~**Back up and restore** the data as a `.zip`, and the path of the data folder~~ — done: `/api/v1/backup…` (`tests/test_api_v1_backup.py`; downloading
    now needs `configurator`, a paired phone could before), the section « Data » of Settings (`components/Backup.svelte`, test 3m). Left: the take-over of
    another assistant's data; moving a work folder.
-4. **Search the conversations** (with extracts), and the markers in the list (working, waiting for you, finished and unread), the tab badge.
+4. ~~**Search the conversations** (with extracts), and the markers in the list (working, waiting for you, finished and unread)~~ — done:
+   `GET /conversations?q=` on the full-text index (`tests/test_api_v1_search.py`), the search field and the marks of the Chat (`lib/marks.ts`, test 3n).
+   Left: the tab badge.
 5. **Answer actions**: copy a whole answer, regenerate, the generated images and the produced files in the thread (open, download, delete).
 6. **Lutin's own version**: check and update, the new-version and restart banners, « Restart Lutin ».
 7. **The strict offline switch.**

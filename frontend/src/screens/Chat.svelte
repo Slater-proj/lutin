@@ -9,6 +9,7 @@
   import { api, ApiError, streamTurn, upload } from "../lib/api";
   import { fromStored, MAX_DOCUMENTS, MAX_IMAGES, kindOf, refusal, turnFields, uploading, type Attachment } from "../lib/attachments";
   import { conversationOf } from "../lib/address";
+  import { markOf, markSeen, readSeen } from "../lib/marks";
   import { choiceValue, parseChoice, selector, type MachinesView } from "../lib/machines";
   import { approvalPath, byMachine, conversationPath, uploadPath, type Listed } from "../lib/place";
   import { t } from "../lib/messages";
@@ -21,6 +22,12 @@
   let remote = $state<Listed[]>([]); // the conversations of the paired machines that grant « lead » (ADR 0016, stage 6)
   let where = $state(""); // the machine that holds the open conversation: "" for this one
   const hosts = $derived(byMachine(remote));
+  let query = $state(""); // what is searched in the conversations (titles and texts, GET /conversations?q=)
+  let found = $state<(ConversationSummary & { extract: string })[] | null>(null);
+  let searchTimer: ReturnType<typeof setTimeout> | undefined;
+  let seen = $state<Record<string, string>>(readSeen()); // when each conversation was last seen, in this browser
+  let activeNow = $state<string[]>([]);
+  let waitingNow = $state<string[]>([]);
   let conversation = $state<Conversation | null>(null);
   let models = $state<Models | null>(null);
   let paired = $state<MachinesView | null>(null); // who answers by default and the names of the paired machines (GET /machines never waits)
@@ -103,6 +110,29 @@
     remote = others.conversations.map((entry) => ({ id: entry.id, title: entry.title, pinned: false, machine: entry.machine, machine_name: entry.machine_name }));
   }
 
+  function onSearch(): void {
+    clearTimeout(searchTimer);
+    const words = query.trim();
+    if (!words) {
+      found = null;
+      return;
+    }
+    searchTimer = setTimeout(async () => {
+      const answer = await api<{ conversations: (ConversationSummary & { extract: string })[] }>("GET", "/conversations?q=" + encodeURIComponent(words)).catch(() => null);
+      if (answer && query.trim() === words) found = answer.conversations;
+    }, 250);
+  }
+
+  /** The turns running and the approvals waiting, for the marks of the list; a turn that ended reads the list again (its date changed). */
+  async function followTurns(): Promise<void> {
+    const now = await api<Status>("GET", "/status").catch(() => null);
+    if (!now) return;
+    const ended = activeNow.some((id) => !now.active_turns.includes(id));
+    activeNow = now.active_turns;
+    waitingNow = now.pending_approvals;
+    if (ended) await loadList().catch(() => undefined);
+  }
+
   async function loadModels(): Promise<void> {
     const [found, view] = await Promise.all([api<Models>("GET", "/models"), api<MachinesView>("GET", "/machines").catch(() => null)]);
     models = found;
@@ -145,6 +175,7 @@
       renaming = false;
       cancelEdit();
       history.replaceState(null, "", machine ? "#/chat" : "#/chat/" + id); // a reload or a bookmark opens it again (one of another machine is not kept)
+      if (!machine && conversation) seen = markSeen(id, conversation.updated_at);
       if (machine) stopWatching();
       else await watch(id);
     });
@@ -296,6 +327,7 @@
         // What is stored is the truth: the conversation is read again, whether the stream ended well or was cut.
         const stored = await api<Conversation>("GET", conversationPath(at, id)).catch(() => null);
         if (stored && where === at) conversation = stored;
+        if (stored && !at) seen = markSeen(id, stored.updated_at);
         cut = null;
         pending = null;
         live = null;
@@ -374,7 +406,13 @@
     });
     const named = conversationOf(location.hash);
     if (named) void open(named);
-    return stopWatching;
+    void followTurns();
+    const marks = setInterval(() => void followTurns(), 5000);
+    return () => {
+      stopWatching();
+      clearInterval(marks);
+      clearTimeout(searchTimer);
+    };
   });
 </script>
 
@@ -384,14 +422,32 @@
       <button type="button" class="new" onclick={startNew}><Icon name="plus" size={18} /><span>{t("chat.new")}</span></button>
       <button type="button" class="icon close" onclick={() => (listOpen = false)}><Icon name="close" /><span class="visually-hidden">{t("chat.hide_list")}</span></button>
     </div>
-    {#if conversations.length === 0}
+    <label class="visually-hidden" for="conversation-search">{t("chat.search")}</label>
+    <input id="conversation-search" class="search" type="search" placeholder={t("chat.search")} autocomplete="off" bind:value={query} oninput={onSearch} />
+    {#if query.trim()}
+      {#if found && found.length === 0}<p class="empty">{t("chat.search_none")}</p>{/if}
+      {#if found && found.length}
+        <ul class="found" aria-label={t("chat.search_results")}>
+          {#each found as entry (entry.id)}
+            <li>
+              <button type="button" class="entry" onclick={() => open(entry.id)}>
+                <span class="title">{entry.title || t("chat.untitled")}</span>
+                {#if entry.extract}<span class="extract">{entry.extract}</span>{/if}
+              </button>
+            </li>
+          {/each}
+        </ul>
+      {/if}
+    {:else if conversations.length === 0}
       <p class="empty">{t("chat.empty_list")}</p>
     {:else}
       <ul>
         {#each conversations as entry (entry.id)}
+          {@const mark = markOf(entry.id, entry.updated_at, activeNow, waitingNow, seen, where === "" ? (conversation?.id ?? null) : null)}
           <li>
             <button type="button" class="entry" aria-current={conversation?.id === entry.id && where === "" ? "true" : undefined} onclick={() => open(entry.id)}>
               <span class="title">{entry.title || t("chat.untitled")}</span>
+              {#if mark}<span class={"mark " + mark}>{t(("chat.mark." + mark) as "chat.mark.working")}</span>{/if}
               {#if entry.pinned}<span class="tag"><Icon name="pin" size={14} /><span class="visually-hidden">{t("chat.pinned")}</span></span>{/if}
             </button>
             <button type="button" class="icon remove" onclick={() => remove(entry)} disabled={busy && conversation?.id === entry.id && where === ""}>
@@ -690,6 +746,44 @@
   .remove:hover:not(:disabled) {
     background: transparent;
     color: var(--color-danger);
+  }
+
+  .search {
+    width: 100%;
+    min-height: var(--target);
+    margin: var(--space-2) 0;
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-md);
+    background: var(--color-bg);
+    color: var(--color-text);
+    font: inherit;
+  }
+
+  .found .entry {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .extract {
+    color: var(--color-text-muted);
+    font-size: var(--text-xs);
+    white-space: normal;
+  }
+
+  .mark {
+    flex: none;
+    padding: 0 var(--space-2);
+    border-radius: var(--radius-pill);
+    font-size: var(--text-xs);
+    font-weight: 600;
+    background: var(--color-accent-soft);
+    color: var(--color-accent-text);
+  }
+
+  .mark.waiting {
+    background: var(--color-warning-soft);
+    color: var(--color-text);
   }
 
   .empty {

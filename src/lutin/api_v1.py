@@ -2326,7 +2326,16 @@ def _not_running(identifier):
 
 @route("GET", "/conversations", SESSION)
 def conversations(request):
-    return {"conversations": [_summary(entry) for entry in _m.conv_liste()]}
+    """Every conversation, pinned ones first, then the most recent. `?q=words` searches their titles and texts instead (accents ignored, every word
+    needed, best first), each with an `extract` around what was found (ADR 0017: the full-text index of the store)."""
+    query = request.query.get("q", "").strip()
+    if not query:
+        return {"conversations": [_summary(entry) for entry in _m.conv_liste()]}
+    from . import store as _store
+    if len(query) > 200:
+        raise ApiError(400, "invalid_request", _t("Valeur invalide pour « {} » (attendu : {}).").format("q", "200"))
+    listed = {entry["id"]: entry for entry in _m.conv_liste()}
+    return {"query": query, "conversations": [dict(_summary(listed[found["id"]]), extract=found.get("extrait", "")) for found in _store.search(query, 50) if found["id"] in listed]}
 
 
 @route("POST", "/conversations", SESSION)

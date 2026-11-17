@@ -200,6 +200,30 @@ class Chat(unittest.TestCase):
         self.assertEqual(p.erreurs, [])
         p.evaluer("location.hash = '#/chat'")
 
+    def test_3n_the_conversations_are_searched_and_marked(self):
+        """docs/modernization/PARITY.md, item 4: the words of a conversation find it (accents ignored), and the list marks the one that is answering."""
+        p = self.page
+        c = T.A.conv_nouvelle()
+        c["titre"] = "Recette de cuisine"
+        c["messages"] = [{"role": "user", "content": "La pâte brisée repose une heure."}]
+        T.A.conv_ecrire(c)
+        self.addCleanup(lambda: T.A.conv_supprimer(c["id"]))
+        p.aller(T.BASE + "/app/#/chat")
+        p.attendre("!!document.querySelector('#conversation-search')")
+        p.evaluer("(() => { const box = document.querySelector('#conversation-search'); box.value = 'pate brisee'; box.dispatchEvent(new Event('input', {bubbles: true})); })()")
+        p.attendre("[...document.querySelectorAll('.found .entry')].some(e => e.innerText.includes('Recette de cuisine'))")
+        self.assertIn("brisée", p.evaluer("document.querySelector('.found .extract').innerText"), "an extract around what was found")
+        if AXE.is_file():
+            self.axe("on the search of the conversations")
+        p.evaluer("(() => { const box = document.querySelector('#conversation-search'); box.value = ''; box.dispatchEvent(new Event('input', {bubbles: true})); })()")
+        T.A.TOURS_ACTIFS[c["id"]] = threading.Event()
+        try:
+            p.attendre("[...document.querySelectorAll('.list .entry')].some(e => e.innerText.includes('Recette de cuisine') && e.querySelector('.mark.working'))", 15)
+        finally:
+            T.A.TOURS_ACTIFS.pop(c["id"], None)
+        p.attendre("![...document.querySelectorAll('.list .mark.working')].length", 15)
+        self.assertEqual(p.erreurs, [])
+
     def test_3_an_action_waits_for_the_approval_given_on_the_page(self):
         p = self.page
         target = T.PROJET / "appli" / "moteur" / "code.py"
