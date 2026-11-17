@@ -1,5 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { pageOf } from "./address";
+import { conversationOf, pageOf } from "./address";
+
+describe("the conversation named in the address", () => {
+  it("reads an identifier of this machine, and nothing else", () => {
+    expect(conversationOf("#/chat/0123abcd")).toBe("0123abcd");
+    expect(conversationOf("#chat/0123abcd")).toBe("0123abcd");
+    expect(conversationOf("#/chat")).toBeNull();
+    expect(conversationOf("#/chat/0123ABCD")).toBeNull();
+    expect(conversationOf("#/chat/0123abcd/x")).toBeNull();
+    expect(conversationOf("#/chat/../settings")).toBeNull();
+  });
+});
 
 const TABS = ["tasks", "missions", "addons", "connectors"] as const;
 

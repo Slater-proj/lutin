@@ -7,6 +7,7 @@
   import Thread from "../components/Thread.svelte";
   import { api, ApiError, streamTurn, upload } from "../lib/api";
   import { fromStored, MAX_DOCUMENTS, MAX_IMAGES, kindOf, refusal, turnFields, uploading, type Attachment } from "../lib/attachments";
+  import { conversationOf } from "../lib/address";
   import { choiceValue, parseChoice, selector, type MachinesView } from "../lib/machines";
   import { approvalPath, byMachine, conversationPath, uploadPath, type Listed } from "../lib/place";
   import { t } from "../lib/messages";
@@ -141,6 +142,7 @@
       listOpen = false;
       renaming = false;
       cancelEdit();
+      history.replaceState(null, "", machine ? "#/chat" : "#/chat/" + id); // a reload or a bookmark opens it again (one of another machine is not kept)
       if (machine) stopWatching();
       else await watch(id);
     });
@@ -151,6 +153,7 @@
     conversation = null;
     where = "";
     problem = "";
+    history.replaceState(null, "", "#/chat");
     listOpen = false;
     renaming = false;
     optionsToSend = {};
@@ -260,6 +263,7 @@
     await guarded(async () => {
       if (conversation === null) {
         conversation = await api<Conversation>("POST", "/conversations", {});
+        history.replaceState(null, "", "#/chat/" + conversation.id); // the first message makes the conversation: its address too
         if (Object.keys(optionsToSend).length) {
           options = await api<ConversationOptions>("PATCH", `/conversations/${encodeURIComponent(conversation.id)}/options`, optionsToSend);
           optionsToSend = {};
@@ -365,6 +369,8 @@
       await Promise.all([loadList(), loadModels()]);
       options = await newConversationOptions();
     });
+    const named = conversationOf(location.hash);
+    if (named) void open(named);
     return stopWatching;
   });
 </script>

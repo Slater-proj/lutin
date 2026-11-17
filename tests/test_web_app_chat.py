@@ -110,6 +110,11 @@ class Chat(unittest.TestCase):
         self.assertEqual(p.evaluer("[...document.querySelectorAll('.thread figure.code pre .string')].map(e => e.innerText)"), ["'<b>hi</b>'"], "the code is coloured: the string is its own run")
         self.assertEqual(p.evaluer("document.querySelectorAll('.list .entry').length"), 1)
         self.assertEqual(p.evaluer("document.querySelector('.list .entry').getAttribute('aria-current')"), "true")
+        conversation = p.evaluer("location.hash")
+        self.assertRegex(conversation, r"^#/chat/[0-9a-f]{8}$", "the open conversation is in the address")
+        p.aller(T.BASE + "/app/" + conversation)
+        p.attendre(TEXT + ".includes('First message of the test')")          # a reload, or a bookmark, opens it again
+        self.assertEqual(p.evaluer("document.querySelector('.list .entry[aria-current]') !== null"), True)
         self.assertEqual(p.erreurs, [])
         self.picture("2-answer")
 
