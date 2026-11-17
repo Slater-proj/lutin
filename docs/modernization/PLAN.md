@@ -22,7 +22,7 @@ Sizes are relative (S, M, L, XL), not durations.
 | 3 | English: catalogues inverted, identifiers and modules renamed, data migration | L | Glossary and module names done ([GLOSSARY.md](GLOSSARY.md)); the rest not started |
 | 4 | Interface: foundation and design system, then screen by screen on `/api/v1` | XL | Nearly done, under `/app/` (the old page stays the default until parity): the five areas, the first launch and the model guide, on 104 v1 routes. Missing: the models of other machines, conversations led on another machine, moving a work folder, the take-over of another assistant's data, and the complete audit of the old page that acceptance asks for — [INTERFACE.md](INTERFACE.md) |
 | 5 | Backend, targeted: route table, application context, agent runtime (loop split, tool table, approval rules, context manager) | L | Partly done: the tool table (item 3, [ADR 0010](../adr/0010-tool-table.md)) and the approval rules (item 5, [ADR 0009](../adr/0009-approval-rules.md)). Read-only batches (item 4) done: `agent.lectures_groupees`, `tests/test_read_batches.py`. The loop split and the turn states (item 2) and the engine capabilities (item 7) done: `turn_state.py`, `engine_capabilities.py`, [ADR 0012](../adr/0012-a-turn-says-where-it-is.md). The context manager (item 6) done: `prompt_layout.py`, [ADR 0013](../adr/0013-a-request-has-a-prefix-that-stays-and-a-tail-that-changes.md). One entry runs a turn for every launcher: `turn_runner.py`, [ADR 0015](../adr/0015-one-entry-runs-a-turn.md). Item 1 limited to the application context (the French routes go away with the old page): designed and accepted, [ADR 0014](../adr/0014-one-application-context.md), not started |
-| 6 | Retained differentiators: evaluation first, then engine performance, SQLite memory, scheduler triggers, grammar tool calls, team mode; model router, projects, monitoring | M each | Not started; reordered by [ATOMIC_AGENT.md](ATOMIC_AGENT.md). Decided 2026-11-16: team mode is V2, not 1.0; the evaluation suite is postponed by the maintainer |
+| 6 | Retained differentiators: evaluation first, then engine performance, SQLite memory, scheduler triggers, grammar tool calls, team mode; model router, projects, monitoring | M each | Not started; reordered by [ATOMIC_AGENT.md](ATOMIC_AGENT.md). Decided 2026-11-17: in 1.0, engine performance, the SQLite store and a reduced evaluation suite; scheduler triggers and grammar after 1.0; team mode V2 (see below) |
 | 7 | Final review before 1.0.0: how chat, prompts and tools are served to models, compared with other assistants; bug sweep; prompt assembly rebuilt | L | Not started; runs last, with the strongest model — see below. Not the start of V2 |
 
 ### Step 1 — Security and reliability
@@ -106,6 +106,16 @@ Acceptance: test files can share a process; no behaviour change except 4 and 5 (
 the approval rules have tests for precedence, for a rule written by the model in the workspace, and for the hardline list.
 
 ### Step 6 — Differentiators
+
+**Decided by the maintainer on 2026-11-17, for 1.0.0.** 1.0 must be stable, and its core behaviours (the prompt, reading files, running commands,
+searching the web) clean and optimised: that is the heart of the tool, and it must make the best of what local models can do. So:
+
+- **In 1.0**: item 2 (engine performance) and item 3 (SQLite store, decided now because it belongs to the one-time data migration of step 3), and a
+  **reduced** item 1 (about ten agent tasks on the fake engine and the recorder of turns), built just before step 7 so that the review is judged by it.
+- **After 1.0**: items 4 (scheduler triggers) and 5 (grammar-constrained tool calls); item 6 (team mode) is V2. Item 7 goes on as maintenance.
+- **Where data lives**: what must answer quickly (the SQLite store, the index, the settings, the conversations in use) stays on the disk of the machine
+  that runs Lutin; dead data that takes room (archives, old conversations, generated files) may be moved to a network disk. SQLite is never placed on
+  a network share.
 
 Each starts with a short study of use and a prototype (ADR 0003 lists what is retained, deferred and dropped). Order, after the study of [ATOMIC_AGENT.md](ATOMIC_AGENT.md):
 
