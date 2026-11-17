@@ -15,6 +15,7 @@ from datetime import datetime
 from . import storage as _d
 from .i18n import t as _t
 from . import core as _m
+from . import turn_runner as _turns
 
 MAX_TASKS = 20
 MAX_HISTORY = 10
@@ -37,10 +38,6 @@ def read():
 def _write(liste):
     import json
     _d.ecrire_atomique(path(), json.dumps(liste, ensure_ascii=False, indent=1))
-
-
-class Impossible(Exception):
-    """Une tâche qui ne peut pas démarrer (son dossier de travail a disparu…) : ce n'est pas « la machine est occupée », il ne faut pas réessayer toutes les 30 secondes."""
 
 
 def _validate(nom, prompt, heure, jours, travail, notifier, date, maintenant=None):
@@ -261,26 +258,28 @@ def executer(ident):
     tache = next((t for t in read() if t["id"] == ident), None)
     if tache is None:
         raise ValueError(_t("Cette tâche planifiée n'existe plus."))
-    stop = threading.Event()
+    with _m.VERROU_TOURS:
+        if ident in EN_COURS:
+            raise ValueError(_t("Cette tâche travaille déjà."))
+    if _turns.full():
+        raise ValueError(_t("Une réponse est déjà en cours : la tâche attend."))
+    conv, neuve = _conversation(tache)
+
+    def au_travail(stop):                                # sous le verrou des tours, avec la place : deux lancements de la même tâche ne passent pas tous les deux
+        if ident in EN_COURS:
+            raise ValueError(_t("Cette tâche travaille déjà."))
+        EN_COURS[ident] = stop
     try:
-        with _m.VERROU_TOURS:
-            if ident in EN_COURS:
-                raise ValueError(_t("Cette tâche travaille déjà."))
-            if len(_m.TOURS_ACTIFS) >= _m.TOURS_SIMULTANES:
-                raise ValueError(_t("Une réponse est déjà en cours : la tâche attend."))
-            conv, neuve = _conversation(tache)
-            if neuve:
-                try:
-                    _m.activate_work(conv, tache.get("travail", ""))
-                except ValueError as erreur:
-                    _d.conv_chemin(conv["id"]).unlink(missing_ok=True)
-                    raise Impossible(str(erreur))
-            _m.RACINE_TOURS[conv["id"]] = str(_m.RACINE)
-            _m.TOURS_ACTIFS[conv["id"]] = stop
-            EN_COURS[ident] = stop
-    except Impossible as erreur:
-        _failure_startup(tache, str(erreur))
-        return ""
+        siege = _turns.reserve(conv, work=tache.get("travail", "") if neuve else None, also=au_travail)          # une conversation où quelqu'un écrit n'a pas de second tour (ADR 0015)
+    except _turns.TurnRefused as refus:
+        if refus.code == _turns.WORKSPACE_CONFLICT:
+            _d.conv_chemin(conv["id"]).unlink(missing_ok=True)
+            _failure_startup(tache, refus.message)
+            return ""
+        if neuve:
+            _d.conv_chemin(conv["id"]).unlink(missing_ok=True)
+        raise ValueError(_t("Une réponse est déjà en cours : la tâche attend.")) from None
+    stop = siege.stop
     debut = datetime.now()
     _note(ident, derniere_exec=debut.isoformat(timespec="seconds"), derniere_conv=conv["id"], derniere_etat="en_cours", derniere_erreur="")
     etat_final, problemes = "ok", []
@@ -291,15 +290,14 @@ def executer(ident):
     demande = _t("(Tâche planifiée « {} » lancée le {} à {}.)").format(tache["nom"], debut.strftime("%d/%m/%Y"), debut.strftime("%H:%M")) + " " + tache["prompt"]
     try:
         _m.journaliser("Tâche planifiée « {} » : démarrage (conversation {}).".format(tache["nom"], conv["id"]))
-        _m.tour(conv, demande, recueillir, _m.reglages(), stop, None, identite="planifié", lecture_seule=True)
+        siege.run(demande, recueillir, _m.reglages(), identite="planifié", lecture_seule=True)
     except Exception as erreur:  # noqa: BLE001
         etat_final = "erreur"
         problemes.append(_t("Erreur inattendue : {}").format(str(erreur)[:300]))
         _m.journaliser("Tâche planifiée « {} » en erreur : {!r}".format(tache["nom"], erreur))
     finally:
+        siege.release()
         with _m.VERROU_TOURS:
-            _m.TOURS_ACTIFS.pop(conv["id"], None)
-            _m.RACINE_TOURS.pop(conv["id"], None)
             EN_COURS.pop(ident, None)
     arretee = stop.is_set()
     resultat = ""
