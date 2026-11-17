@@ -264,6 +264,30 @@ class InfosEnArrierePlan(unittest.TestCase):
                 time.sleep(0.05)
             self.assertEqual(machines.noeud_infos("10.0.0.1", attente=0.2)["mac"], "00:1A:2B:3C:4D:5E")
 
+    def test_une_sonde_recoit_sa_reponse_avant_d_abandonner(self):
+        """La machine qui sonde abandonne au bout de DELAI_SONDE_S : le nœud doit répondre avant, même quand PowerShell est lent (sinon la première
+        sonde après un démarrage dit « injoignable » une machine allumée)."""
+        import threading
+        import time
+        machines.INFOS_NOEUD.clear()
+        machines.INFOS_EN_COURS.clear()
+        libere = threading.Event()
+        self.addCleanup(libere.set)
+
+        def lent(ip, **kw):
+            libere.wait(5)
+            return {"mac": "", "carte": "", "pret": None, "avertissements": []}
+
+        class Moteur:
+            id, nom = "faux", "Faux"
+        with mock.patch.object(power, "wake_state", lent), mock.patch.object(power, "startup_state", lambda: {"installe": False, "possible": True}),                 mock.patch.object(power, "network_adapters", lambda **kw: []):
+            machines.CARTES.update(t=-999.0, v=None)
+            debut = time.monotonic()
+            etat = machines.noeud_etat(Moteur(), {"actif": True, "installes": ["m"]}, "10.0.0.2")
+            duree = time.monotonic() - debut
+        self.assertLess(duree, machines.DELAI_SONDE_S / 2, "une marge pour le réseau et le reste de la réponse")
+        self.assertEqual((etat["mac"], etat["modeles"]), ("", ["m"]), "les informations lentes viendront à la sonde suivante")
+
 
 class AnnonceSansAction(unittest.TestCase):
     OUTILS = {"voix_liste", "voix_parler"}

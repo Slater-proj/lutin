@@ -39,6 +39,7 @@ DELAI_SONDE_REVEIL_S = 3.0
 VERIFICATION_ALLUMEE_S = 4          # « le système de la machine répond-il ? » est regardé au plus toutes les 4 s pendant un réveil
 VALIDITE_SONDE_ATTENTE_S = 2          # une machine pas encore opérationnelle (éteinte, qui démarre) est resondée vite : on la voit s'allumer sans attendre
 DELAI_SONDE_S = 1.5
+ATTENTE_INFOS_SONDE_S = 0.4          # ce que le nœud attend ses informations lentes (PowerShell) avant de répondre à une sonde : bien moins que DELAI_SONDE_S, sinon la sonde abandonne avant la réponse
 RE_MAC = re.compile(r"^([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}$")
 RE_ID = re.compile(r"^[0-9a-f]{32}$")
 CLES_CHAT = ("model", "messages", "tools", "options", "think", "format", "stream", "keep_alive")          # ce que le nœud accepte de transmettre à son moteur
@@ -397,7 +398,7 @@ def noeud_etat(moteur, modeles, ip_locale="", charge=None, demandeur=""):
     """Ce que le nœud répond à `GET /api/noeud/etat` : de quoi savoir s'il est joignable et si son moteur peut faire tourner le modèle voulu, plus son adresse MAC, son aptitude au réveil et son démarrage automatique."""
     from . import core as _m
     n = noeud()
-    return dict(noeud_infos(ip_locale), id=n["id"], moteur=moteur.id, moteur_nom=moteur.nom, actif=bool(modeles.get("actif")), modeles=sorted(modeles.get("installes", []))[:500], charge=charge, droits=noeud_droits(),
+    return dict(noeud_infos(ip_locale, attente=ATTENTE_INFOS_SONDE_S), id=n["id"], moteur=moteur.id, moteur_nom=moteur.nom, actif=bool(modeles.get("actif")), modeles=sorted(modeles.get("installes", []))[:500], charge=charge, droits=noeud_droits(),
                 version=str(_m.VERSION), agir={"extinction": bool(n.get("extinction")), "maj": bool(n.get("maj")), "piloter": bool(n.get("piloter"))},
                 demandes=sorted({d["droit"] for d in n.get("demandes", []) if demandeur and d.get("machine") == demandeur}))          # seulement les demandes DE celui qui interroge
 
