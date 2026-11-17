@@ -68,7 +68,21 @@ the conversation, since it was all of it each time.
 ## Not done yet
 
 - The memory notes, the project map and the date stay in the prefix: a note written by `memoriser`, a map rebuilt in the background or midnight still change
-  the start of the next request. Reading the system message once per turn is the next step; moving the map is a question of order for the review of step 7.
+  the start of the next request. Moving the map is a question of order for the review of step 7.
+- **Reading the system message once per turn was measured and not kept** (2026-11-17, on `cf30e93`). Built once in `_preparer_boucle` instead of at each
+  step, a change no longer reaches the engine in the middle of the turn, but at the first request of the next one: the reading is postponed, not saved,
+  and by then the conversation is longer. Same fake engine and method as above; a turn that reads a file, calls `memoriser`, reads another file and
+  answers, then a second question with one search:
+
+  | Turn | Read again, read at each step | Read again, read once per turn |
+  |---|---|---|
+  | the project map is rebuilt during the turn, then the note is written (two changes) | 3 584 | 3 233 |
+  | the map is already built, only the note is written (one change) | 2 727 | 3 233 |
+
+  It only gains when two changes fall in the same turn; with one, it costs what the conversation grew between the change and the end of the turn. The map
+  changes when files have changed, at most once a turn, and a note is occasional: one change is the common case. What would save the reading is taking
+  what changes out of the prefix (a new note told at the tail until the system message is next rebuilt for another reason, the map moved), not reading
+  it less often; that belongs with moving the map, in the review of step 7.
 - Nothing is measured on a real engine: the prompt tokens actually read again on llama.cpp and Ollama belong to plan step 6, item 2.
 
 ## Way back
