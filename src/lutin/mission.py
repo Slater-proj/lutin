@@ -21,6 +21,7 @@ import time
 
 from . import storage as _d
 from . import core as _m
+from . import turn_runner as _turns
 from . import workspaces as _trav
 from .i18n import t as _t
 
@@ -220,26 +221,23 @@ def suivre_le_tour(ident, maintenant=time.time):
 # --------------------------------------------------------------------------- le fil
 def _tour(m):
     """Un tour de la mission. Renvoie False sans rien faire si aucune place n'est libre ou si le dossier de travail est occupé par un autre, True si un tour a eu lieu."""
-    stop = threading.Event()
-    with _m.VERROU_TOURS:
-        if len(_m.TOURS_ACTIFS) >= _m.TOURS_SIMULTANES:
-            return False
-        conv = _m.conv_lire(m["conv"]) if m.get("conv") and _d.conv_chemin(m["conv"]).exists() else None
-        nouvelle = conv is None
+    if _turns.full():
+        return False
+    conv = _m.conv_lire(m["conv"]) if m.get("conv") and _d.conv_chemin(m["conv"]).exists() else None
+    nouvelle = conv is None
+    if nouvelle:
+        conv = _m.conv_nouvelle()
+        conv["titre"] = "🎯 " + m["nom"]
+        conv["travail"] = m["travail"]
+    try:
+        siege = _turns.reserve(conv, work=m["travail"], also=lambda stop: ALIVE["arrets"].__setitem__(m["id"], stop))          # une conversation où quelqu'un écrit attend (ADR 0015)
+    except _turns.TurnRefused as refus:
         if nouvelle:
-            conv = _m.conv_nouvelle()
-            conv["titre"] = "🎯 " + m["nom"]
-            conv["travail"] = m["travail"]
-        try:
-            _m.activate_work(conv, m["travail"])
-        except ValueError as erreur:
-            if nouvelle:
-                _d.conv_chemin(conv["id"]).unlink(missing_ok=True)
-            modify(m["id"], message=str(erreur)[:200])
-            return False
-        _m.RACINE_TOURS[conv["id"]] = str(_m.RACINE)
-        _m.TOURS_ACTIFS[conv["id"]] = stop
-        ALIVE["arrets"][m["id"]] = stop
+            _d.conv_chemin(conv["id"]).unlink(missing_ok=True)
+        if refus.code == _turns.WORKSPACE_CONFLICT:
+            modify(m["id"], message=refus.message[:200])
+        return False
+    stop = siege.stop
     autonome = bool(m["autonome"])
     base = _m.reglages()
     if m.get("lie"):                                                       # mission menée dans une conversation : ses options font foi (autonome = Fichiers auto ET Commandes auto cochés, relu à chaque tour)
@@ -253,14 +251,12 @@ def _tour(m):
     modify(m["id"], conv=conv["id"], message=_t("tour {} en cours…").format(m["tours"] + 1))
     echec = None
     try:
-        _m.tour(conv, prompt_du_tour(m), suivre_le_tour(m["id"]), r, stop, None, identite="mission", lecture_seule=not autonome)
+        siege.run(prompt_du_tour(m), suivre_le_tour(m["id"]), r, identite="mission", lecture_seule=not autonome)
     except Exception as erreur:  # noqa: BLE001
         echec = erreur
         _m.journaliser("Mission « {} » : tour en erreur : {!r}".format(m["nom"], erreur))
     finally:
-        with _m.VERROU_TOURS:
-            _m.TOURS_ACTIFS.pop(conv["id"], None)
-            _m.RACINE_TOURS.pop(conv["id"], None)
+        siege.release()
         ALIVE["arrets"].pop(m["id"], None)
     actuel = find(m["id"])
     if actuel is None:

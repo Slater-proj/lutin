@@ -20,7 +20,7 @@ for key, value in {"LUTIN_RACINE": str(_TEMP / "project"), "LUTIN_DONNEES": str(
 (_TEMP / "work").mkdir(exist_ok=True)
 
 from lutin import core as _m  # noqa: E402
-from lutin import notifications, turn_runner  # noqa: E402
+from lutin import mission, notifications, turn_runner  # noqa: E402
 from lutin import scheduled_tasks as tasks  # noqa: E402
 
 
@@ -87,6 +87,25 @@ class ScheduledTasks(Clean):
             tasks.executer(self.task["id"])
         self.assertNotIn("late answer", [m.get("content") for m in _m.conv_lire(self.conversation)["messages"]])
         self.assertIs(_m.TOURS_ACTIFS.get(self.conversation), newer, "the newer turn keeps its seat")
+
+
+class Missions(Clean):
+    def setUp(self):
+        super().setUp()
+        config = mock.patch.object(_m, "config_lue", lambda: {"emplacements": {"travail": str(_TEMP / "work")}})
+        config.start()
+        self.addCleanup(config.stop)
+        for m in mission.read():
+            mission.action("supprimer", {"id": m["id"]})
+
+    def test_a_mission_waits_while_a_person_writes_in_its_conversation(self):
+        conv = _m.conv_nouvelle()
+        m = mission.create("Game", "Make a small game.", "principal", 8, True, conv_id=conv["id"])
+        person = self.person_writes_in(conv["id"], (_TEMP / "work").resolve())          # the same folder: only the conversation is busy
+        with mock.patch.object(_m, "tour", refusing):
+            self.assertFalse(mission._tour(mission.find(m["id"])), "no turn: the mission tries again at its next round")
+        self.assertIs(_m.TOURS_ACTIFS.get(conv["id"]), person)
+        self.assertNotIn(m["id"], mission.ALIVE["arrets"])
 
 
 class Seats(Clean):
