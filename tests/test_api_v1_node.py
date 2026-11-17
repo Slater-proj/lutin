@@ -120,6 +120,24 @@ class Node(unittest.TestCase):
         self.assertEqual((status, answer["authorized"]), (200, []))
         self.assertIsNone(machines.noeud_jeton_valide(token), "the token stops working at once")
 
+    def test_an_authorized_machine_is_renamed_to_say_who_it_is(self):
+        """Seen by the maintainer: a paired machine is listed under the name its computer sent (« DESKTOP-K2J8S9 »): it can be given a clear one."""
+        machines.noeud_activer(True)
+        token = self.authorize("DESKTOP-K2J8S9")
+        machines.noeud_demander("DESKTOP-K2J8S9", "maj")
+        self.authorize("Salon")
+        path = "/api/v1/node/authorized/DESKTOP-K2J8S9"
+        self.assertEqual(call("PATCH", path, {"name": "PC du bureau"}, who=V.DEVICE)[1]["error"]["code"], "configurator")
+        for body in ({}, {"name": ""}, {"name": "  "}, {"name": 1}, {"name": "x", "date": "y"}):
+            self.assertEqual(call("PATCH", path, body)[1]["error"]["code"], "invalid_request", body)
+        self.assertEqual(call("PATCH", path, {"name": "Salon"})[1]["error"]["code"], "conflict", "two machines never share a name")
+        self.assertEqual(call("PATCH", "/api/v1/node/authorized/Inconnu", {"name": "X"})[1]["error"]["code"], "not_found")
+        status, answer = call("PATCH", path, {"name": "PC du bureau <b>"})
+        self.assertEqual(status, 200, answer)
+        self.assertEqual(sorted(allowed["name"] for allowed in answer["authorized"]), ["PC du bureau b", "Salon"], "cleaned as at pairing")
+        self.assertEqual(machines.noeud_jeton_valide(token), "PC du bureau b", "its token still opens, under the new name")
+        self.assertEqual([request["machine"] for request in answer["requests"]], ["PC du bureau b"], "its waiting request follows it")
+
     def test_permissions_are_granted_from_this_machine_only(self):
         status, answer = call("PATCH", "/api/v1/node/permissions", {"shares": {"skills": True}, "allow": {"lead": True}})
         self.assertEqual((status, answer["shares"], answer["allow"]), (200, {"skills": True, "memory": False}, {"lead": True, "update": False, "shutdown": False}))

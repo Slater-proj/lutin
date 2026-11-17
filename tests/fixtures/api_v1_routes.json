@@ -415,6 +415,11 @@
   "right": "configurator"
  },
  {
+  "method": "PATCH",
+  "path": "/api/v1/node/authorized/{name}",
+  "right": "configurator"
+ },
+ {
   "method": "POST",
   "path": "/api/v1/node/pairing-code",
   "right": "configurator"

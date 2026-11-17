@@ -830,8 +830,13 @@ class Chat(unittest.TestCase):
         p.attendre("!!document.querySelector('.lend .code')")
         code = p.evaluer("document.querySelector('.lend .code').innerText")
         self.assertRegex(code, r"^\d{4}-\d{4}$")
-        token = machines.noeud_echanger(code, "Bureau")["jeton"]          # what the other machine does with the code
-        p.attendre("[...document.querySelectorAll('.lend .authorized strong')].some(e => e.innerText === 'Bureau')", 15)
+        token = machines.noeud_echanger(code, "DESKTOP-K2J8S9")["jeton"]          # what the other machine does with the code: it sends its computer's name
+        p.attendre("[...document.querySelectorAll('.lend .authorized strong')].some(e => e.innerText === 'DESKTOP-K2J8S9')", 15)
+        p.evaluer("[...document.querySelectorAll('.lend .authorized .button')].find(b => b.innerText.startsWith('Renommer')).click()")
+        p.attendre("!!document.querySelector('#lend-rename')")
+        p.evaluer("(() => { const box = document.querySelector('#lend-rename'); box.value = 'Bureau'; box.dispatchEvent(new Event('input', {bubbles: true})); document.querySelector('.lend form.rename').requestSubmit(); })()")
+        p.attendre("[...document.querySelectorAll('.lend .authorized strong')].some(e => e.innerText === 'Bureau')")
+        self.assertEqual(machines.noeud_jeton_valide(token), "Bureau", "renamed on the node, its token still valid")
         p.evaluer("[...document.querySelectorAll('.lend .authorized .button')].find(b => b.innerText.startsWith('Révoquer')).click()")
         p.attendre("!!document.querySelector('.lend .authorized .confirm')")
         self.assertEqual(machines.noeud_jeton_valide(token), "Bureau", "asking is not revoking")

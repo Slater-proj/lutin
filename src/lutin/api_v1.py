@@ -624,6 +624,22 @@ def revoke_node_machine(request):
     return _node()
 
 
+@route("PATCH", "/node/authorized/{name}", CONFIGURATOR)
+def rename_node_machine(request):
+    """{"name": "PC du bureau"}: a clear name for a machine that may use this one (the one it sent is often its computer's technical name). Cleaned as
+    at pairing; its token keeps working and its waiting requests follow it. 404 unknown, 409 `conflict` when another machine has that name."""
+    body = request.body
+    if set(body) != {"name"} or not isinstance(body["name"], str) or not _machines.nom_machine(body["name"]):
+        raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("name"))
+    try:
+        _machines.noeud_renommer(request.params["name"], body["name"])
+    except LookupError:
+        raise ApiError(404, "not_found", _t("Machine inconnue.")) from None
+    except FileExistsError:
+        raise ApiError(409, "conflict", _t("Une autre machine porte déjà ce nom.")) from None
+    return _node()
+
+
 @route("POST", "/node/requests/{machine}/{right}", LOCAL)
 def answer_node_request(request):
     """{"accept": true | false}: answers the request of a paired machine for a right (`requests` in `GET /node`), from this machine only. Accepting grants

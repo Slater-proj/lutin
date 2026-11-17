@@ -273,6 +273,34 @@ def noeud_revoquer(nom):
     return noeud_vue()
 
 
+def nom_machine(nom):
+    """Le nom d'une machine autorisée, nettoyé comme à l'appairage : lettres, chiffres, espaces, « . » et « - », 40 caractères au plus."""
+    return re.sub(r"[^\w .-]", "", str(nom or "")).strip()[:40]
+
+
+def noeud_renommer(ancien, nouveau):
+    """Donne un nom clair à une machine autorisée (celui qu'elle a envoyé est souvent le nom technique de son ordinateur). Son jeton reste valable ;
+    ses demandes en attente la suivent. ValueError si le nom est vide, LookupError si aucune machine ne porte `ancien`, FileExistsError si une autre porte déjà le nouveau."""
+    propre = nom_machine(nouveau)
+    if not propre:
+        raise ValueError(_t("Donne un nom (lettres, chiffres, espaces)."))
+    with VERROU:
+        n = noeud()
+        if not any(j["nom"] == ancien for j in n["jetons"]):
+            raise LookupError(ancien)
+        if propre != ancien and any(j["nom"] == propre for j in n["jetons"]):
+            raise FileExistsError(propre)
+        for j in n["jetons"]:
+            if j["nom"] == ancien:
+                j["nom"] = propre
+        for d in n.get("demandes", []):
+            if d.get("machine") == ancien:
+                d["machine"] = propre
+        _ecrire("noeud.json", n)
+    journaliser("machine renommée : {} → {}".format(ancien, propre))
+    return noeud_vue()
+
+
 def noeud_autoriser_extinction(autoriser):
     """Les machines appairées peuvent-elles éteindre celle-ci ? Décoché par défaut : c'est le propriétaire de CETTE machine qui le décide."""
     with VERROU:

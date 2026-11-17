@@ -18,6 +18,8 @@
   let problem = $state("");
   let busy = $state(false);
   let revoking = $state<string | null>(null);
+  let renaming = $state<string | null>(null); // the machine being given a clear name, and that name
+  let newName = $state("");
   let alive = true;
 
   const rightName = (right: Right): string => t(("machines.right." + right) as MessageKey);
@@ -68,6 +70,15 @@
       node = await api<NodeView>("DELETE", `/node/authorized/${encodeURIComponent(name)}`);
       revoking = null;
     });
+
+  function rename(event: SubmitEvent, name: string): void {
+    event.preventDefault();
+    if (!newName.trim()) return;
+    void act(async () => {
+      node = await api<NodeView>("PATCH", `/node/authorized/${encodeURIComponent(name)}`, { name: newName.trim() });
+      renaming = null;
+    });
+  }
 
   const answer = (request: NodeView["requests"][number], accept: boolean): Promise<void> =>
     act(async () => void (node = await api<NodeView>("POST", requestPath(request), { accept })));
@@ -145,14 +156,24 @@
             {#each node.authorized as allowed (allowed.name)}
               <li>
                 <span><strong>{allowed.name}</strong> <span class="muted">{t("lend.since", allowed.date)}</span></span>
-                {#if revoking === allowed.name}
+                {#if renaming === allowed.name}
+                  <form class="confirm rename" onsubmit={(event) => rename(event, allowed.name)}>
+                    <label class="visually-hidden" for="lend-rename">{t("lend.rename_label", allowed.name)}</label>
+                    <input id="lend-rename" type="text" maxlength="40" autocomplete="off" bind:value={newName} />
+                    <button type="submit" class="button primary" disabled={busy || !newName.trim()}>{t("lend.rename_save")}</button>
+                    <button type="button" class="button" onclick={() => (renaming = null)}>{t("chat.cancel")}</button>
+                  </form>
+                {:else if revoking === allowed.name}
                   <span class="confirm" role="group" aria-label={t("lend.revoke")}>
                     <span>{t("lend.revoke_confirm", allowed.name)}</span>
                     <button type="button" class="button danger" disabled={busy} onclick={() => revoke(allowed.name)}>{t("lend.revoke")}</button>
                     <button type="button" class="button" onclick={() => (revoking = null)}>{t("chat.cancel")}</button>
                   </span>
                 {:else}
-                  <button type="button" class="button quiet danger" disabled={busy} onclick={() => (revoking = allowed.name)}>{t("lend.revoke")}<span class="visually-hidden"> {allowed.name}</span></button>
+                  <span class="actions">
+                    <button type="button" class="button quiet" disabled={busy} onclick={() => ((renaming = allowed.name), (newName = allowed.name))}>{t("lend.rename")}<span class="visually-hidden"> {allowed.name}</span></button>
+                    <button type="button" class="button quiet danger" disabled={busy} onclick={() => (revoking = allowed.name)}>{t("lend.revoke")}<span class="visually-hidden"> {allowed.name}</span></button>
+                  </span>
                 {/if}
               </li>
             {/each}
@@ -299,6 +320,16 @@
     inline-size: 2.75rem;
     block-size: 1.5rem;
     accent-color: var(--color-accent);
+  }
+
+  .rename input {
+    min-height: var(--target);
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-md);
+    background: var(--color-bg);
+    color: var(--color-text);
+    font: inherit;
   }
 
   .code {
