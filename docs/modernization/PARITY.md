@@ -18,7 +18,8 @@ switch; each line is ticked here when it is done, with its test.
 4. ~~**Search the conversations** (with extracts), and the markers in the list (working, waiting for you, finished and unread)~~ — done:
    `GET /conversations?q=` on the full-text index (`tests/test_api_v1_search.py`), the search field and the marks of the Chat (`lib/marks.ts`, test 3n).
    Left: the tab badge.
-5. **Answer actions**: copy a whole answer, regenerate, the generated images and the produced files in the thread (open, download, delete).
+5. **Answer actions**: ~~copy a whole answer, regenerate~~ — done: « Copy » and « Answer again » under the answers (test 3o). Left: the generated
+   images and the produced files in the thread (open, download, delete).
 6. **Lutin's own version**: check and update, the new-version and restart banners, « Restart Lutin ».
 7. **The strict offline switch.**
 8. **Web search setup**: engine order, SearXNG, keys, « test the search ».

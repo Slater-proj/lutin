@@ -236,6 +236,14 @@
     box?.focus();
   }
 
+  /** Answers again from the last request: the same text and files, as an edit of that message that is sent at once. */
+  function regenerate(): void {
+    const last = [...items].reverse().find((item): item is Extract<Item, { role: "user" }> => item.role === "user");
+    if (!last || busy) return;
+    startEdit(last);
+    void send();
+  }
+
   function cancelEdit(): void {
     if (editing !== null) {
       draft = "";
@@ -540,7 +548,7 @@
           </ul>
         </div>
       {:else}
-        <Thread {items} {pending} {live} onedit={busy ? undefined : startEdit} machine={where} />
+        <Thread {items} {pending} {live} onedit={busy ? undefined : startEdit} onregenerate={busy ? undefined : regenerate} machine={where} />
         {#if elsewhere}<p class="elsewhere" role="status">{t(elsewhereNotice(elsewhereTurn))}</p>{/if}
       {/if}
     </div>

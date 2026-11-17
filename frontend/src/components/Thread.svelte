@@ -7,7 +7,32 @@
   import type { Block, Item, LiveTurn, Sent } from "../lib/turn";
 
   // `machine`: the paired machine that holds the conversation ("" for this one): its images and documents are read from it.
-  let { items, pending, live, onedit, machine = "" }: { items: Item[]; pending: ({ text: string } & Sent) | null; live: LiveTurn | null; onedit?: (item: Extract<Item, { role: "user" }>) => void; machine?: string } = $props();
+  // `onregenerate`: answer again from the last request (shown on the last answer only, when nothing runs).
+  let { items, pending, live, onedit, onregenerate, machine = "" }: { items: Item[]; pending: ({ text: string } & Sent) | null; live: LiveTurn | null; onedit?: (item: Extract<Item, { role: "user" }>) => void; onregenerate?: () => void; machine?: string } = $props();
+  let copied = $state(-1);
+
+  /** The text of an answer, without its thinking and its tools: what « Copy » puts on the clipboard. */
+  function answerText(blocks: Block[]): string {
+    return blocks.filter((block) => block.kind === "text").map((block) => (block as { text: string }).text).join("\n\n").trim();
+  }
+
+  async function copy(blocks: Block[], index: number): Promise<void> {
+    const text = answerText(blocks);
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      const area = document.createElement("textarea"); // an address that is not secure (a phone on the local network) has no clipboard API
+      area.value = text;
+      document.body.append(area);
+      area.select();
+      document.execCommand("copy");
+      area.remove();
+    }
+    copied = index;
+    setTimeout(() => (copied = copied === index ? -1 : copied), 2000);
+  }
+
+  const lastAnswer = $derived(items.map((item) => item.role).lastIndexOf("assistant"));
 
   function shown(value: unknown): string {
     if (value === null || value === undefined) return "";
@@ -80,6 +105,12 @@
       <li class="assistant">
         <h2 class="who"><img src="/logo.svg" alt="" width="22" height="22" />{t("chat.assistant")}</h2>
         {@render blocksView(item.blocks)}
+        {#if answerText(item.blocks)}
+          <div class="answer-actions">
+            <button type="button" class="quiet-action copy" onclick={() => copy(item.blocks, index)}>{copied === index ? t("chat.copied") : t("chat.copy")}</button>
+            {#if onregenerate && index === lastAnswer && !pending && !live}<button type="button" class="quiet-action regenerate" onclick={onregenerate}>{t("chat.regenerate")}</button>{/if}
+          </div>
+        {/if}
       </li>
     {/if}
   {/each}
@@ -330,5 +361,27 @@
       opacity: 1;
       transform: scale(1);
     }
+  }
+
+  .answer-actions {
+    display: flex;
+    gap: var(--space-2);
+    margin-top: var(--space-1);
+  }
+
+  .quiet-action {
+    min-height: 2rem;
+    padding: 0 var(--space-2);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-pill);
+    background: none;
+    color: var(--color-text-muted);
+    font: inherit;
+    font-size: var(--text-xs);
+    cursor: pointer;
+  }
+
+  .quiet-action:hover {
+    color: var(--color-text);
   }
 </style>

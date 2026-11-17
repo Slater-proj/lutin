@@ -224,6 +224,29 @@ class Chat(unittest.TestCase):
         p.attendre("![...document.querySelectorAll('.list .mark.working')].length", 15)
         self.assertEqual(p.erreurs, [])
 
+    def test_3o_an_answer_is_copied_and_given_again(self):
+        """docs/modernization/PARITY.md, item 5: « Copy » puts the text of an answer on the clipboard (not its tools), « Answer again » sends the last
+        request again and the new answer replaces the old one."""
+        p = self.page
+        p.evaluer("[...document.querySelectorAll('.list .new')].forEach(b => b.click())")
+        p.attendre("!!document.querySelector('.welcome')")
+        T.SCENARIO[:] = [[{"content": "First answer."}]]
+        self.write("Say something")
+        p.evaluer("document.querySelector('.composer button[type=submit]').click()")
+        p.attendre(TEXT + ".includes('First answer.')")
+        p.attendre("!!document.querySelector('.composer button[type=submit]') && !!document.querySelector('.thread .regenerate')")
+        p.evaluer("window.__copied = null; navigator.clipboard.writeText = (text) => { window.__copied = text; return Promise.resolve(); };")
+        p.evaluer("document.querySelector('.thread .copy').click()")
+        p.attendre("window.__copied !== null")
+        self.assertEqual(p.evaluer("window.__copied"), "First answer.")
+        T.SCENARIO[:] = [[{"content": "Second answer."}]]
+        p.evaluer("document.querySelector('.thread .regenerate').click()")
+        p.attendre(TEXT + ".includes('Second answer.')")
+        p.attendre("!!document.querySelector('.composer button[type=submit]')")
+        self.assertNotIn("First answer.", p.evaluer(TEXT), "the new answer replaces the old one")
+        self.assertEqual(p.evaluer(TEXT).count("Say something"), 1, "the request is not repeated")
+        self.assertEqual(p.erreurs, [])
+
     def test_3_an_action_waits_for_the_approval_given_on_the_page(self):
         p = self.page
         target = T.PROJET / "appli" / "moteur" / "code.py"
