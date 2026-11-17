@@ -192,8 +192,18 @@ lending is off); `DELETE /node/authorized/{name}` (the machine's token stops wor
 machine only (a remote administrator is refused too): `PATCH /node/permissions` `{shares?, allow?, autostart?}` (everything is checked before anything
 is written, autostart first since the system may refuse it); `POST /node/requests/{machine}/{right}` `{accept}` (accepting grants the right, refusing
 forgets the request; `404` when it is no longer there); `POST /node/shutdown/cancel` (`{cancelled}`). These routes answer `GET /node`, except the code
-and the cancel. The protocol between machines (`/api/noeud/*`) does not change. Still to come (ADR 0016, stages 4 to 7): the screens, and the
-conversations led on another machine.
+and the cancel. The protocol between machines (`/api/noeud/*`) does not change.
+
+Conversations led on another machine (stages 6 and 7, contract in `tests/test_api_v1_remote_conversations.py`), all `session` (the two
+downloads `read`, like `GET /images/{id}`): this machine relays to the host's own legacy routes (`/api/noeud/relais/…`, only if the host grants
+« lead ») and answers in the shapes of the local routes. `GET /machines/conversations` `{conversations: [{machine, machine_name, id, title,
+updated_at, message_count}]}` (gathered in the background, none for a machine that stopped answering); `GET /machines/{id}/conversations/{c}`
+(the shape of `GET /conversations/{id}`, plus `machine`); `POST …/turns` `{message, replace_from?, images?, attachments?}` (the host's stream,
+each event translated; model, mode and approvals are the host's own); `POST …/stop`; `POST /machines/{id}/approvals/{approval}` `{approved,
+restore_auto_approval?}` (`remember` only `once`: a lasting rule is the host's to set); `POST …/memory-choice`; `PATCH …` `{title?, pinned?}`;
+`DELETE …`; `POST /machines/{id}/images` and `/attachments` (the host keeps the file) and `GET /machines/{id}/images/{image}`,
+`/attachments/{attachment}?name=`. Refusals: `404 not_found` (machine or conversation), `403 machine_refused` (the host does not grant « lead »,
+its sentence passed on), `409 conflict`, `503 machine_unreachable`, `502 machine_error`, `400 invalid_request` before anything reaches the host.
 
 ## What v1 keeps
 

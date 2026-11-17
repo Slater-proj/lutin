@@ -210,6 +210,11 @@
   "right": "configurator"
  },
  {
+  "method": "GET",
+  "path": "/api/v1/machines/conversations",
+  "right": "session"
+ },
+ {
   "method": "DELETE",
   "path": "/api/v1/machines/{id}",
   "right": "configurator"
@@ -223,6 +228,61 @@
   "method": "POST",
   "path": "/api/v1/machines/{id}/actions/{action}",
   "right": "configurator"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/machines/{id}/approvals/{approval}",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/machines/{id}/attachments",
+  "right": "session"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/machines/{id}/attachments/{attachment}",
+  "right": "read"
+ },
+ {
+  "method": "DELETE",
+  "path": "/api/v1/machines/{id}/conversations/{conversation}",
+  "right": "session"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/machines/{id}/conversations/{conversation}",
+  "right": "session"
+ },
+ {
+  "method": "PATCH",
+  "path": "/api/v1/machines/{id}/conversations/{conversation}",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/machines/{id}/conversations/{conversation}/memory-choice",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/machines/{id}/conversations/{conversation}/stop",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/machines/{id}/conversations/{conversation}/turns",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/machines/{id}/images",
+  "right": "session"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/machines/{id}/images/{image}",
+  "right": "read"
  },
  {
   "method": "POST",

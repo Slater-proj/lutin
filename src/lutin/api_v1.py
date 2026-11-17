@@ -17,6 +17,7 @@ import json
 import os
 import re
 import threading
+import urllib.error
 import urllib.parse
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -644,6 +645,259 @@ def cancel_node_shutdown(request):
     if request.body:
         raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("-"))
     return {"cancelled": _power.cancel_shutdown(_machines.journaliser)}
+
+
+# --------------------------------------------------------------------------- conversations led on another machine (ADR 0016, stages 6 and 7)
+# This machine relays to the host (`/api/noeud/relais/…`, node token), which runs ITS OWN legacy routes from a closed list, with its own folders,
+# approvals and models, only if it grants « lead »: the relay never reaches the host's /api/v1, so a host running an older Lutin keeps working. The
+# translation is done here, at this machine's border: the answers in the shapes of the local routes, the stream through `event` (EVENTS).
+# A refusal of the host keeps its sentence; its status gets a v1 code (403: the host does not grant « lead »).
+RELAY_ERRORS = {400: "invalid_request", 403: "machine_refused", 404: "not_found", 409: "conflict", 413: "too_large", 429: "too_many_turns"}
+RELAY_READ_MAX = 64 * 1024 * 1024
+RE_CONVERSATION = re.compile(r"^[0-9a-f]{8}$")
+RE_FILE_ID = re.compile(r"^[A-Za-z0-9_.\-]{1,80}$")
+
+
+def _host(identifier):
+    """The paired machine that holds the conversation. 404 when unknown; 503 when it does not answer (probed once if nothing is known of it yet)."""
+    stored = _machines.trouver(identifier) if _machines.RE_ID.match(identifier) else None
+    if stored is None:
+        raise ApiError(404, "not_found", _t("Machine inconnue."))
+    if _machines.DERNIER_ETAT.get(identifier) is None:
+        _machines.sonder(stored)
+    if _machines.DERNIER_ETAT.get(identifier) not in ("joignable", "operationnel"):
+        raise ApiError(503, "machine_unreachable", _t("La machine « {} » ne répond pas : sa conversation reviendra quand elle sera de nouveau en ligne.").format(stored["nom"]))
+    return stored
+
+
+def _hosted(request, key="conversation"):
+    """(host, conversation id) of a route /machines/{id}/conversations/{conversation}…, both checked before anything is sent."""
+    identifier = request.params[key]
+    if not RE_CONVERSATION.match(identifier):
+        raise ApiError(404, "not_found", _t("Conversation inconnue."))
+    return _host(request.params["id"]), identifier
+
+
+def _relay(host, method, path, body=None, content_type="application/json", name=""):
+    """Opens the relayed request; its answer is read by the caller. Every failure becomes an ApiError before anything is written to the page."""
+    try:
+        return _machines.ouvrir_relais(host, method, path, body, content_type, name)
+    except urllib.error.HTTPError as refused:
+        try:
+            detail = str(json.loads(refused.read(100_000).decode("utf-8", "replace")).get("erreur", ""))
+        except (ValueError, OSError, AttributeError):
+            detail = ""
+        finally:
+            refused.close()
+        code = RELAY_ERRORS.get(refused.code)
+        if code is None:
+            raise ApiError(502, "machine_error", detail or _t("Cette machine a répondu une erreur ({}).").format(refused.code)) from None
+        raise ApiError(refused.code, code, detail or _t("Cette machine a répondu une erreur ({}).").format(refused.code)) from None
+    except (urllib.error.URLError, OSError):
+        _machines.signaler_panne(host)
+        raise ApiError(503, "machine_unreachable", _t("Impossible de joindre la machine « {} » : elle ne répond plus.").format(host["nom"])) from None
+
+
+def _relay_json(host, method, path, body=None):
+    with _relay(host, method, path, None if body is None else json.dumps(body, ensure_ascii=False).encode("utf-8")) as answer:
+        raw = answer.read(RELAY_READ_MAX)
+    try:
+        value = json.loads(raw or b"{}")
+    except ValueError:
+        value = None
+    if not isinstance(value, dict):
+        raise ApiError(502, "machine_error", _t("Réponse inattendue : ce n'est pas un Lutin qui prête son moteur."))
+    return value
+
+
+def _remote_conversation(host, stored):
+    return dict(_conversation(stored), machine=host["id"])
+
+
+@route("GET", "/machines/conversations", SESSION)
+def remote_conversations(request):
+    """The conversations of the paired machines that grant « lead », gathered in the background (never waits for a machine that is off); a machine that
+    stopped answering has none listed. Empty while the multi-machine mode is off."""
+    if not _multi_machine():
+        return {"conversations": []}
+    return {"conversations": [{"machine": entry["machine"], "machine_name": entry["machine_nom"], "id": entry["id"], "title": entry["titre"],
+                               "updated_at": entry["maj"], "message_count": entry["messages"]} for entry in _machines.conversations_distantes()]}
+
+
+@route("GET", "/machines/{id}/conversations/{conversation}", SESSION)
+def remote_conversation(request):
+    """One conversation of a paired machine, in the shape of GET /conversations/{id}, plus `machine`."""
+    host, identifier = _hosted(request)
+    return _remote_conversation(host, _relay_json(host, "GET", "/api/conversation?id=" + identifier))
+
+
+def _pass_stream(handler, answer):
+    """Writes the host's stream to the page, one event per line, each translated by `event`; an empty line (heartbeat) goes through. The host keeps
+    running the turn if the page goes: as for a local turn, the conversation is stored at the end."""
+    handler.send_response(200)
+    handler.send_header("Content-Type", "application/x-ndjson; charset=utf-8")
+    handler.send_header("Cache-Control", "no-store")
+    handler.send_header("X-Accel-Buffering", "no")
+    handler.end_headers()
+    with answer:
+        while True:
+            try:
+                line = answer.readline(1_000_000)
+            except (OSError, ValueError):
+                break
+            if not line:
+                break
+            text = line.strip()
+            if not text:
+                out = b"\n"
+            else:
+                try:
+                    out = (json.dumps(event(json.loads(text)), ensure_ascii=False) + "\n").encode("utf-8")
+                except ValueError:
+                    continue                                   # a line that is not an event is not passed on
+            try:
+                handler.wfile.write(out)
+                handler.wfile.flush()
+            except (OSError, ValueError):
+                break
+
+
+@route("POST", "/machines/{id}/conversations/{conversation}/turns", SESSION)
+def remote_turn(request):
+    """Sends a message in a conversation led on a paired machine and streams its answer, as POST /conversations/{id}/turns does: {"message"} and,
+    optionally, `replace_from`, `images` and `attachments` (sent first to that machine: POST /machines/{id}/images, /attachments). The model, the
+    mode and the approvals are those of that machine: nothing else is accepted. A refusal of the host comes before the stream with its sentence."""
+    body = request.body
+    fields = ("message", "replace_from", "images", "attachments")
+    if set(body) - set(fields) or not isinstance(body.get("message"), str) or not body["message"].strip():
+        raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format(", ".join(fields)))
+    host, identifier = _hosted(request)
+    payload = {"message": body["message"], "conversation": identifier}
+    if "replace_from" in body:
+        payload["remplacer_depuis"] = body["replace_from"]
+    if "images" in body:
+        payload["images"] = body["images"]
+    if isinstance(body.get("attachments"), list):
+        payload["pieces"] = [{"id": item.get("id"), "nom": item.get("name")} if isinstance(item, dict) else item for item in body["attachments"]]
+    answer = _relay(host, "POST", "/api/chat", json.dumps(payload, ensure_ascii=False).encode("utf-8"))
+    return Streamed(lambda: _pass_stream(request.handler, answer))
+
+
+@route("POST", "/machines/{id}/conversations/{conversation}/stop", SESSION)
+def remote_stop(request):
+    """The Stop button of a turn running on a paired machine. `was_running` says whether there was anything to stop."""
+    if request.body:
+        raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("-"))
+    host, identifier = _hosted(request)
+    return {"was_running": bool(_relay_json(host, "POST", "/api/arreter", {"conversation": identifier}).get("actif"))}
+
+
+@route("POST", "/machines/{id}/approvals/{approval}", SESSION)
+def remote_approval(request):
+    """Answers an approval request of a turn running on a paired machine: {"approved": true} and, optionally, `restore_auto_approval`. Remembering a
+    « yes » (`remember`) is that machine's own rule to set: only `once` is accepted here."""
+    body = request.body
+    if set(body) - {"approved", "restore_auto_approval", "remember"} or not isinstance(body.get("approved"), bool) or body.get("remember", "once") != "once":
+        raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("approved, restore_auto_approval, remember (once)"))
+    if not RE_FILE_ID.match(request.params["approval"]):
+        raise ApiError(404, "not_found", _t("Plus de demande en attente."))
+    host = _host(request.params["id"])
+    _relay_json(host, "POST", "/api/approuver", {"id": request.params["approval"], "ok": body["approved"], "reactiver": bool(body.get("restore_auto_approval"))})
+    return {"approved": body["approved"]}
+
+
+@route("POST", "/machines/{id}/conversations/{conversation}/memory-choice", SESSION)
+def remote_memory_choice(request):
+    """Answers the `memory_choice` event of a long conversation led on a paired machine: {"choice": "summary" | "file"}, and `remember`."""
+    body = request.body
+    choices = {"summary": "resume", "file": "fichier"}
+    if set(body) - {"choice", "remember"} or body.get("choice") not in choices or not isinstance(body.get("remember", False), bool):
+        raise ApiError(400, "invalid_request", _t("Valeur invalide pour « {} » (attendu : {}).").format("choice", ", ".join(choices)))
+    host, identifier = _hosted(request)
+    _relay_json(host, "POST", "/api/memoire-choix", {"conversation": identifier, "choix": choices[body["choice"]], "garder": body.get("remember", False)})
+    return {"choice": body["choice"]}
+
+
+@route("PATCH", "/machines/{id}/conversations/{conversation}", SESSION)
+def update_remote_conversation(request):
+    """Renames and/or pins a conversation led on a paired machine: {"title"?, "pinned"?}. Answers it, in the shape of GET /conversations/{id}."""
+    body = request.body
+    if not body or set(body) - {"title", "pinned"}:
+        raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("title, pinned"))
+    if "title" in body and (not isinstance(body["title"], str) or not body["title"].strip()):
+        raise ApiError(400, "invalid_request", _t("Le titre doit être un texte non vide."))
+    if "pinned" in body and not isinstance(body["pinned"], bool):
+        raise ApiError(400, "invalid_request", _t("« pinned » doit être vrai ou faux."))
+    host, identifier = _hosted(request)
+    if "title" in body:
+        _relay_json(host, "POST", "/api/renommer", {"id": identifier, "titre": body["title"]})
+    if "pinned" in body:
+        _relay_json(host, "POST", "/api/epingler", {"id": identifier, "epingle": body["pinned"]})
+    return _remote_conversation(host, _relay_json(host, "GET", "/api/conversation?id=" + identifier))
+
+
+@route("DELETE", "/machines/{id}/conversations/{conversation}", SESSION)
+def delete_remote_conversation(request):
+    """Deletes a conversation led on a paired machine, there (its mission too, as there)."""
+    host, identifier = _hosted(request)
+    _relay_json(host, "POST", "/api/supprimer", {"id": identifier})
+    return {"deleted": True}
+
+
+@route("POST", "/machines/{id}/images", SESSION, raw=True, limit=_images.MAX_SIZE)
+def upload_remote_image(request):
+    """An image for the next message of a conversation led on a paired machine: sent to that machine, which keeps it. Answers its identifier there."""
+    host = _host(request.params["id"])
+    identifier = str(_relay_json_raw(host, "/api/image", request.raw, "application/octet-stream").get("id", ""))
+    return 201, {"id": identifier, "url": "{}/machines/{}/images/{}".format(PREFIX, host["id"], urllib.parse.quote(identifier))}
+
+
+@route("POST", "/machines/{id}/attachments", SESSION, raw=True, limit=_pieces.MAX_SIZE)
+def upload_remote_attachment(request):
+    """A document for the next message of a conversation led on a paired machine: its bytes as the body, its name in `X-Name` (URL-encoded); the text
+    is extracted there. Answers {id, name, characters}, as POST /attachments."""
+    host = _host(request.params["id"])
+    answer = _relay_json_raw(host, "/api/document", request.raw, "application/octet-stream", request.handler.headers.get("X-Name") or "")
+    return 201, {"id": str(answer.get("id", "")), "name": str(answer.get("nom", "")), "characters": answer.get("caracteres")}
+
+
+def _relay_json_raw(host, path, data, content_type, name=""):
+    with _relay(host, "POST", path, data, content_type, name) as answer:
+        raw = answer.read(RELAY_READ_MAX)
+    try:
+        value = json.loads(raw or b"{}")
+    except ValueError:
+        value = None
+    if not isinstance(value, dict):
+        raise ApiError(502, "machine_error", _t("Réponse inattendue : ce n'est pas un Lutin qui prête son moteur."))
+    return value
+
+
+def _relay_file(host, path):
+    with _relay(host, "GET", path) as answer:
+        return answer.read(RELAY_READ_MAX), answer.headers.get("Content-Type") or "application/octet-stream"
+
+
+@route("GET", "/machines/{id}/images/{image}", READ)
+def remote_image(request):
+    """An image sent in a conversation led on a paired machine, read from it. READ, like GET /images/{id}: a browser tag sends the cookie, not the token."""
+    if not RE_FILE_ID.match(request.params["image"]):
+        raise ApiError(404, "not_found", _t("Image inconnue."))
+    data, content_type = _relay_file(_host(request.params["id"]), "/image/" + request.params["image"])
+    if not content_type.startswith("image/"):
+        raise ApiError(502, "machine_error", _t("Réponse inattendue : ce n'est pas un Lutin qui prête son moteur."))
+    return Binary(data, content_type, {"Content-Security-Policy": "default-src 'none'; sandbox", "X-Content-Type-Options": "nosniff"})
+
+
+@route("GET", "/machines/{id}/attachments/{attachment}", READ)
+def remote_attachment(request):
+    """A document sent in a conversation led on a paired machine, as it was sent: always a download, as GET /attachments/{id}; `?name=` names it."""
+    if not RE_FILE_ID.match(request.params["attachment"]):
+        raise ApiError(404, "not_found", _t("Fichier joint inconnu."))
+    name = _pieces.clean_name(request.query.get("name") or "") or request.params["attachment"]
+    data, _ = _relay_file(_host(request.params["id"]), "/piece/" + request.params["attachment"] + "?nom=" + urllib.parse.quote(name))
+    return Binary(data, "application/octet-stream", {"Content-Disposition": "attachment; filename*=UTF-8''" + urllib.parse.quote(name),
+                                                    "Content-Security-Policy": "default-src 'none'; sandbox", "X-Content-Type-Options": "nosniff"})
 
 
 @route("POST", "/models", SESSION)

@@ -2301,5 +2301,6 @@
 "Ce téléchargement peut peser plusieurs Go : confirme pour le lancer.": "This download may weigh several GB: confirm to start it.",
 "chercher une correction de flux": "look for a flow correction",
 "Pas encore de nouvelles de cette machine : sa réponse arrive.": "No news from this machine yet: its answer is on its way.",
-"Cette machine ne prête pas son moteur : active d'abord le prêt.": "This machine does not lend its engine: turn lending on first."
+"Cette machine ne prête pas son moteur : active d'abord le prêt.": "This machine does not lend its engine: turn lending on first.",
+"Plus de demande en attente.": "No request is waiting any more."
 }
