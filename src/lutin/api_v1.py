@@ -2429,6 +2429,47 @@ def stop_turn(request):
     return {"was_running": bool(_m.arreter_conversation(request.params["id"]).get("actif"))}
 
 
+# ----------------------------------------------------------------------------------------------------------------- backup
+# One .zip of the data (settings, conversations, memory), and putting one back (docs/modernization/PARITY.md, item 3). Both need `configurator`:
+# an archive holds every conversation and the memory (the old page let any session download it: tightened here). A restore keeps the state before
+# it in a zip of its own and asks for a restart.
+def _backup_folders():
+    config = _m.chemin_config()
+    return {"config": config.parent if config else None, "donnees": _m.DONNEES, "memoire": _m.MEMOIRE}
+
+
+@route("GET", "/backup/where", SESSION)
+def backup_where(request):
+    """Where this Lutin keeps its data: the folders a backup takes, and the folder of the backups made before a migration or a restore."""
+    folders = _backup_folders()
+    return {"config": str(folders["config"] or ""), "data": str(folders["donnees"]), "memory": str(folders["memoire"]), "backups": str(Path(_m.DONNEES) / "sauvegardes")}
+
+
+@route("GET", "/backup", CONFIGURATOR)
+def backup_download(request):
+    """The .zip of the data, to keep elsewhere (lutin restore, or POST /backup/restore, puts it back)."""
+    import io
+    from datetime import datetime
+    from . import backup as _backup
+    buffer = io.BytesIO()
+    try:
+        _backup.export(_backup_folders(), buffer)
+    except _backup.BackupError as refused:
+        raise ApiError(400, "invalid_request", str(refused)) from None
+    name = "lutin-backup-{}.zip".format(datetime.now().strftime("%Y%m%d-%H%M%S"))
+    return Binary(buffer.getvalue(), "application/zip", {"Content-Disposition": 'attachment; filename="{}"'.format(name)})
+
+
+@route("POST", "/backup/restore", CONFIGURATOR, raw=True, limit=1024 ** 3)
+def backup_restore(request):
+    """The bytes of a .zip made by Lutin as the body: checked whole before anything is written, the state before it kept in donnees/import/, then
+    put back. Answers {files, kept_before, version, date, restart_needed}."""
+    import io
+    from . import access as _access
+    done = _access.restore_stream(io.BytesIO(request.raw), len(request.raw))
+    return {"files": done["fichiers"], "kept_before": done["secours"], "version": done["version"], "date": done["date"], "restart_needed": bool(done.get("redemarrage_necessaire"))}
+
+
 # ----------------------------------------------------------------------------------------------------------------- health
 # What the old Health page showed (docs/modernization/PARITY.md, item 2): the state of memory, graphics card and disk, what is loaded and what
 # occupies the machine, the self-test, what the models and tools did, and what left this machine. Reading and unloading are `session`, as the old

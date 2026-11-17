@@ -40,6 +40,21 @@ async function failure(response: Response): Promise<ApiError> {
   return new ApiError(response.status, typeof error?.code === "string" ? error.code : "unknown", typeof error?.message === "string" ? error.message : "");
 }
 
+/** Downloads a file a route answers (a backup): fetched with the page token, then handed to the browser to save under the name the server gives. */
+export async function download(path: string, fallbackName: string): Promise<void> {
+  const response = await send("GET", path, undefined);
+  const disposition = response.headers.get("Content-Disposition") ?? "";
+  const name = /filename="([^"]+)"/.exec(disposition)?.[1] ?? fallbackName;
+  const url = URL.createObjectURL(await response.blob());
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = name;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+
 /** Sends a file as the raw body of a POST (the bytes, not JSON). The name goes in `X-Name`, URL-encoded, for a document. */
 export async function upload<T>(path: string, file: File, name?: string): Promise<T> {
   const headers: Record<string, string> = { "X-Token": pageToken(), "Content-Type": file.type || "application/octet-stream" };

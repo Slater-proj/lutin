@@ -30,7 +30,7 @@ WATCH = "window.__violations = []; document.addEventListener('securitypolicyviol
 TEXT = "(document.querySelector('.thread') || document.body).innerText"
 # The sections of the Settings screen (frontend/src/lib/settings.ts, SECTIONS) and something each one draws when it is ready.
 SETTINGS_SECTIONS = {"general": "#setting-temperature", "safety": "#rule-command", "devices": ".devices", "machine": "#setting-num_thread",
-                     "health": ".health .items", "knowledge": "#memory-context", "tools": "#tps-query", "advanced": "#setting-top_p"}
+                     "health": ".health .items", "data": ".backup dl", "knowledge": "#memory-context", "tools": "#tps-query", "advanced": "#setting-top_p"}
 
 
 def js(value):
@@ -172,6 +172,31 @@ class Chat(unittest.TestCase):
         self.assertIn("Moteur", p.evaluer("document.querySelector('.health .checks').innerText"))
         if AXE.is_file():
             self.axe("on the health of the machine")
+        self.assertEqual(p.erreurs, [])
+        p.evaluer("location.hash = '#/chat'")
+
+    def test_3m_a_backup_is_downloaded_and_put_back_from_the_settings(self):
+        """docs/modernization/PARITY.md, item 3: the section « Data » says where the data is, downloads a backup and puts one back (a second click)."""
+        p = self.page
+        p.evaluer("location.hash = '#/settings/data'")
+        p.attendre("!!document.querySelector('.backup dl')")
+        self.assertIn(str(T.A.DONNEES), p.evaluer("document.querySelector('.backup dl').innerText"), "where the data is")
+        p.evaluer("window.__saved = []; HTMLAnchorElement.prototype.click = function () { window.__saved.push(this.download); };")
+        p.evaluer("[...document.querySelectorAll('.backup button')].find(b => b.innerText === 'Télécharger une sauvegarde').click()")
+        p.attendre("window.__saved.length === 1")
+        self.assertRegex(p.evaluer("window.__saved[0]"), r"^lutin-backup-\d{8}-\d{6}\.zip$", "saved under the name the server gives")
+        archive = Path(tempfile.mkdtemp(prefix="lutin-backup-")) / "backup.zip"
+        from lutin import backup
+        backup.export({"config": None, "donnees": T.A.DONNEES, "memoire": T.A.MEMOIRE}, archive)
+        root = p.commande("DOM.getDocument")["root"]["nodeId"]
+        node = p.commande("DOM.querySelector", nodeId=root, selector="#backup-file")["nodeId"]
+        p.commande("DOM.setFileInputFiles", files=[str(archive)], nodeId=node)
+        p.attendre("!!document.querySelector('.backup .confirm')")
+        if AXE.is_file():
+            self.axe("on the backup of the data")
+        p.evaluer("document.querySelector('.backup .confirm .danger').click()")
+        p.attendre("document.querySelector('.backup .notice').innerText.includes('remis')")
+        self.assertIn("Redémarre", p.evaluer("document.querySelector('.backup .notice').innerText"))
         self.assertEqual(p.erreurs, [])
         p.evaluer("location.hash = '#/chat'")
 

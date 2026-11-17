@@ -76,6 +76,21 @@
  },
  {
   "method": "GET",
+  "path": "/api/v1/backup",
+  "right": "configurator"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/backup/restore",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/backup/where",
+  "right": "session"
+ },
+ {
+  "method": "GET",
   "path": "/api/v1/conversations",
   "right": "session"
  },

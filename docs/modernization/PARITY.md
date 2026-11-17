@@ -12,7 +12,9 @@ switch; each line is ticked here when it is done, with its test.
 2. ~~**Health**: memory, graphics card and disk, what is loaded, unload the models, free the graphics memory, « check that everything works » and
    the full self-test, what left this machine (outbound web searches) and clearing that log~~ — done: `/api/v1/health…` (`tests/test_api_v1_health.py`),
    the section « Health » of Settings (`components/Health.svelte`, test 3l). Left: the health light on Settings in the navigation.
-3. **Back up and restore** the data as a `.zip`, and the path of the data folder; the take-over of another assistant's data; moving a work folder.
+3. ~~**Back up and restore** the data as a `.zip`, and the path of the data folder~~ — done: `/api/v1/backup…` (`tests/test_api_v1_backup.py`; downloading
+   now needs `configurator`, a paired phone could before), the section « Data » of Settings (`components/Backup.svelte`, test 3m). Left: the take-over of
+   another assistant's data; moving a work folder.
 4. **Search the conversations** (with extracts), and the markers in the list (working, waiting for you, finished and unread), the tab badge.
 5. **Answer actions**: copy a whole answer, regenerate, the generated images and the produced files in the thread (open, download, delete).
 6. **Lutin's own version**: check and update, the new-version and restart banners, « Restart Lutin ».
