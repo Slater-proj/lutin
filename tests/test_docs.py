@@ -43,8 +43,13 @@ class Documentation(unittest.TestCase):
             self.assertTrue(fr.with_name(fr.name.replace(".fr.md", ".md")).exists(), "{} n'a pas de version anglaise".format(fr.name))
 
     def test_le_readme_anglais_utilise_les_captures_anglaises(self):
-        self.assertIn("assets/capture-conversation.png", (RACINE / "README.md").read_text(encoding="utf-8"))
-        self.assertIn("assets/capture-conversation.fr.png", (RACINE / "README.fr.md").read_text(encoding="utf-8"))
+        anglais, francais = ((RACINE / nom).read_text(encoding="utf-8") for nom in ("README.md", "README.fr.md"))
+        captures_en, captures_fr = (re.findall(r"assets/(capture-[\w.-]+\.png)", texte) for texte in (anglais, francais))
+        self.assertTrue(captures_en and captures_fr, "chaque README montre l'interface")
+        self.assertEqual([c for c in captures_en if c.endswith(".fr.png")], [], "le README anglais montre les captures anglaises")
+        self.assertEqual([c for c in captures_fr if not c.endswith(".fr.png")], [], "le README français montre les captures françaises")
+        for capture in captures_en + captures_fr:
+            self.assertTrue((RACINE / "assets" / capture).is_file(), capture)
         self.assertIn("banner.svg", (RACINE / "README.md").read_text(encoding="utf-8"))
         self.assertIn("banner.fr.svg", (RACINE / "README.fr.md").read_text(encoding="utf-8"))
 
