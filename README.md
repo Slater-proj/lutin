@@ -45,10 +45,10 @@ folder you choose, **always with your approval**. In English and French, from th
 Five areas: **Chat**, **Agents**, **Projects**, **Models** and **Settings**, laid out for a phone held upright as well as for a 2560-pixel screen.
 
 <p align="center">
-  <img src="assets/capture-app-models.png" alt="The Models screen: the installed models in a grid, the one in use, and the tabs Recommended, Installed, Engines and Machines" width="94%">
+  <img src="assets/capture-app-models.png" alt="The Models screen: the installed models in a grid, the one in use, and the tabs Recommended, Catalogue, Installed, Engines and Machines" width="94%">
 </p>
 
-**Models**: what is installed and what fits your machine, the engines, and the **Machines** tab: the other computers you paired, their state, their
+**Models**: a guide that recommends a model for what you want to do, the whole **catalogue** (what each model is for, how it fits your machine, what it is good and less good at), what is installed, the engines, and the **Machines** tab: the other computers you paired, their state, their
 wake-up sequence, and the rights they grant.
 
 <p align="center">
@@ -59,10 +59,10 @@ wake-up sequence, and the rights they grant.
 machine** is there too: lend its engine, give a pairing code, answer the rights other machines ask for.
 
 <p align="center">
-  <img src="assets/capture-app-agents.png" alt="The Agents screen: the tabs Scheduled tasks, Missions, Add-ons and Connectors" width="94%">
+  <img src="assets/capture-app-agents.png" alt="The Agents screen: a menu of parts on the left, the scheduled tasks on the right" width="94%">
 </p>
 
-**Agents**: scheduled tasks, missions, add-ons and connectors, each in its tab.
+**Agents**: scheduled tasks, missions, add-ons and connectors, laid out as Settings: one part at a time.
 
 ## Several computers, one assistant
 

@@ -46,10 +46,10 @@ ligne de commande.
 Cinq espaces : **Chat**, **Agents**, **Projets**, **Modèles** et **Réglages**, pensés pour un téléphone tenu droit comme pour un écran de 2560 pixels.
 
 <p align="center">
-  <img src="assets/capture-app-models.fr.png" alt="L'écran Modèles : les modèles installés en grille, celui en service, et les onglets Recommandés, Installés, Moteurs et Machines" width="94%">
+  <img src="assets/capture-app-models.fr.png" alt="L'écran Modèles : les modèles installés en grille, celui en service, et les onglets Recommandés, Catalogue, Installés, Moteurs et Machines" width="94%">
 </p>
 
-**Modèles** : ce qui est installé et ce qui convient à ta machine, les moteurs, et l'onglet **Machines** : les autres ordinateurs appairés, leur
+**Modèles** : un guide qui recommande un modèle selon ce que tu veux faire, tout le **catalogue** (à quoi sert chaque modèle, comment il tient sur ta machine, ce qu'il fait bien ou moins bien), ce qui est installé, les moteurs, et l'onglet **Machines** : les autres ordinateurs appairés, leur
 état, leur séquence de réveil et les droits qu'ils accordent.
 
 <p align="center">
@@ -60,10 +60,10 @@ Cinq espaces : **Chat**, **Agents**, **Projets**, **Modèles** et **Réglages**,
 **Prêter cette machine** s'y trouve aussi : prêter son moteur, donner un code d'appairage, répondre aux droits que demandent les autres machines.
 
 <p align="center">
-  <img src="assets/capture-app-agents.fr.png" alt="L'écran Agents : les onglets Tâches planifiées, Missions, Extensions et Connecteurs" width="94%">
+  <img src="assets/capture-app-agents.fr.png" alt="L'écran Agents : un menu de parties à gauche, les tâches planifiées à droite" width="94%">
 </p>
 
-**Agents** : tâches planifiées, missions, extensions et connecteurs, chacun dans son onglet.
+**Agents** : tâches planifiées, missions, extensions et connecteurs, rangés comme les Réglages : une partie à la fois.
 
 ## Plusieurs ordinateurs, un seul assistant
 
