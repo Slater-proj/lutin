@@ -2,6 +2,7 @@
   // The Chat screen: the conversations, the one that is open, the answer as it is written, and what Lutin asks before it acts.
   import { onMount } from "svelte";
   import AttachmentBar from "../components/AttachmentBar.svelte";
+  import Changes from "../components/Changes.svelte";
   import Icon from "../components/Icon.svelte";
   import Options from "../components/Options.svelte";
   import Thread from "../components/Thread.svelte";
@@ -37,6 +38,7 @@
   let options = $state<ConversationOptions | null>(null);
   let optionsToSend = $state<Partial<ConversationOptions>>({}); // chosen before the conversation exists: sent when the first message creates it
   let titleDraft = $state("");
+  let changesTick = $state(0); // moved at the end of each turn: the changes of the last request are read again
   let titleBox = $state<HTMLInputElement | null>(null);
   let editing = $state<number | null>(null); // the stored position of the message being rewritten
   let cut = $state<number | null>(null); // while the new answer is written, what followed that message is no longer shown
@@ -297,6 +299,7 @@
         cut = null;
         pending = null;
         live = null;
+        changesTick += 1;
         await loadList().catch(() => undefined);
         onchanged();
       }
@@ -515,6 +518,9 @@
             <button type="button" class="button" onclick={() => answerMemory("file")}>{t("memory.file")}</button>
           </div>
         </div>
+      {/if}
+      {#if conversation && !where}
+        <Changes conversation={conversation.id} tick={changesTick} onundone={async () => { const id = conversation?.id; if (id) conversation = await api<Conversation>("GET", conversationPath("", id)); }} />
       {/if}
       {#if options}<Options {options} onchange={changeOptions} />{/if}
       {#if editing !== null}

@@ -2429,6 +2429,44 @@ def stop_turn(request):
     return {"was_running": bool(_m.arreter_conversation(request.params["id"]).get("actif"))}
 
 
+# ------------------------------------------------------------------------------------------- the changes of the last request
+# What the last request of a conversation did to files (the tools that write: modifier, ecrire, modifier_plusieurs; not the effects of commands),
+# with the differences, and the way back: every file, or one. The backups are those the tools made before writing (donnees/sauvegardes/).
+CHANGE_STATES = {"créé": "created", "modifié": "modified", "supprimé": "deleted"}
+
+
+def _changes(identifier):
+    review = _m.turn_review(identifier)
+    return {"undoable": bool(review["fichiers"]), "files": [{
+        "path": entry["chemin"], "state": CHANGE_STATES.get(entry["etat"], entry["etat"]), "binary": bool(entry["binaire"]), "diff": entry["diff"],
+        "added": entry["plus"], "removed": entry["moins"], "changed_since": bool(entry["modifie_depuis"])} for entry in review["fichiers"]]}
+
+
+@route("GET", "/conversations/{id}/changes", SESSION)
+def conversation_changes(request):
+    """The files the last request changed (created, modified, deleted), each with its differences and whether someone changed it since."""
+    _read(request.params["id"])
+    return _changes(request.params["id"])
+
+
+@route("POST", "/conversations/{id}/changes/undo", SESSION)
+def undo_conversation_changes(request):
+    """Puts back the files of the last request as they were before it: every one, or `{"path": "..."}` only. A file changed since by someone else is
+    left as it is and said (`skipped`). The model is told in the conversation. 409 `turn_running` during an answer, `nothing_to_undo` when nothing is left."""
+    identifier, body = request.params["id"], request.body
+    if set(body) - {"path"} or ("path" in body and (not isinstance(body["path"], str) or not body["path"])):
+        raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("path"))
+    _read(identifier)
+    _not_running(identifier)
+    if not _changes(identifier)["undoable"]:
+        raise ApiError(409, "nothing_to_undo", _t("Aucune modification de fichier à annuler dans cette conversation."))
+    try:
+        done = _m.undo_turn(identifier, body.get("path"))
+    except ValueError as refused:
+        raise ApiError(409, "nothing_to_undo", str(refused)) from None
+    return {"restored": done["retablis"], "skipped": done["ignores"], **_changes(identifier)}
+
+
 # ---------------------------------------------------------------------------------------------------------------- uploads
 @route("POST", "/images", SESSION, raw=True, limit=_images.MAX_SIZE)
 def upload_image(request):

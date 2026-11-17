@@ -7,8 +7,8 @@ switch; each line is ticked here when it is done, with its test.
 
 ## Missing or partial, by importance to the person
 
-1. **Undo the file changes of the last request**, and the file-by-file review with an undo per file (`/api/annuler-tour`, `/api/revue`,
-   `/api/annuler-fichier`): a safety feature.
+1. ~~**Undo the file changes of the last request**, and the file-by-file review with an undo per file~~ — done: `GET /conversations/{id}/changes`,
+   `POST /conversations/{id}/changes/undo` (`tests/test_api_v1_changes.py`), `components/Changes.svelte` in the Chat (test 3k).
 2. **Health**: memory, graphics card and disk, what is loaded, unload the models, free the graphics memory, « check that everything works » and
    the full self-test, what left this machine (outbound web searches) and clearing that log, the health light on Settings.
 3. **Back up and restore** the data as a `.zip`, and the path of the data folder; the take-over of another assistant's data; moving a work folder.

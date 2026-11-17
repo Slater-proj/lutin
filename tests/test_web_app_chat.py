@@ -118,6 +118,34 @@ class Chat(unittest.TestCase):
         self.assertEqual(p.erreurs, [])
         self.picture("2-answer")
 
+    def test_3k_the_changes_of_the_last_request_are_reviewed_and_undone(self):
+        """docs/modernization/PARITY.md, item 1: after a request that changed a file, the page says so, shows the differences, and puts the file back."""
+        p = self.page
+        target = T.PROJET / "appli" / "moteur" / "code.py"
+        before = target.read_text(encoding="utf-8")
+        self.addCleanup(lambda: target.write_text(before, encoding="utf-8"))
+        p.evaluer("[...document.querySelectorAll('.list .new')].forEach(b => b.click())")
+        p.attendre("!!document.querySelector('.welcome')")
+        T.SCENARIO[:] = [[T.appel_outil("modifier", chemin="appli/moteur/code.py", ancien="return 1", nouveau="return 2")], [{"content": "Changed it."}]]
+        self.write("Change the file and keep it")
+        p.evaluer("document.querySelector('.composer button[type=submit]').click()")
+        p.attendre("!!document.querySelector('.card .button.primary')")
+        p.evaluer("document.querySelector('.card .button.primary').click()")
+        p.attendre(TEXT + ".includes('Changed it.')")
+        p.attendre("!!document.querySelector('.changes')")
+        self.assertIn("return 2", target.read_text(encoding="utf-8"))
+        self.assertIn("1", p.evaluer("document.querySelector('.changes').innerText"), "the page says how many files changed")
+        p.evaluer("[...document.querySelectorAll('.changes button')].find(b => b.innerText === 'Les voir').click()")
+        p.attendre("!!document.querySelector('.changes pre')")
+        self.assertIn("+    return 2", p.evaluer("document.querySelector('.changes pre').innerText"), "the differences are shown")
+        if AXE.is_file():
+            self.axe("on the changes of the last request")
+        p.evaluer("[...document.querySelectorAll('.changes .files button')].find(b => b.innerText.startsWith('Annuler ce fichier')).click()")
+        p.attendre("document.querySelector('.changes .notice')?.innerText.includes('remis')")
+        self.assertEqual(target.read_text(encoding="utf-8"), before, "the file is back as it was")
+        self.assertFalse(p.evaluer("!!document.querySelector('.changes .files')"), "nothing left to undo")
+        self.assertEqual(p.erreurs, [])
+
     def test_3_an_action_waits_for_the_approval_given_on_the_page(self):
         p = self.page
         target = T.PROJET / "appli" / "moteur" / "code.py"

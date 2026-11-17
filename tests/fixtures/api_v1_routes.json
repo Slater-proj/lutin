@@ -100,6 +100,16 @@
   "right": "session"
  },
  {
+  "method": "GET",
+  "path": "/api/v1/conversations/{id}/changes",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/conversations/{id}/changes/undo",
+  "right": "session"
+ },
+ {
   "method": "POST",
   "path": "/api/v1/conversations/{id}/memory-choice",
   "right": "session"
