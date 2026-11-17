@@ -16,14 +16,23 @@ from . import core as _m
 
 # --------------------------------------------------------------------------- réglages, mémoire, conversations
 VERROU_REGLAGES = threading.Lock()
+LECTURE_ESSAIS = 50          # lire_json : un fichier en train d'être remplacé (Windows) est relu toutes les 10 ms, une demi-seconde au plus
 
 
 def lire_json(chemin, defaut):
-    """Le JSON du fichier, ou `defaut` s'il manque, est abîmé (coupure de courant) ou n'a pas le type attendu (objet, liste) : un fichier de données douteux ne doit jamais faire planter l'application."""
-    try:
-        valeur = json.loads(Path(chemin).read_text(encoding="utf-8-sig"))
-    except (OSError, ValueError):
-        return defaut
+    """Le JSON du fichier, ou `defaut` s'il manque, est abîmé (coupure de courant) ou n'a pas le type attendu (objet, liste) : un fichier de données douteux ne doit jamais faire planter l'application.
+    Sous Windows, ouvrir le fichier à l'instant où ecrire_atomique le remplace lève PermissionError : ce n'est pas un fichier absent, on relit un peu plus tard
+    (sinon une liste de missions ou un registre se lit vide un instant : tests/test_storage_reads.py)."""
+    for essai in range(LECTURE_ESSAIS):
+        try:
+            valeur = json.loads(Path(chemin).read_text(encoding="utf-8-sig"))
+            break
+        except PermissionError:
+            if essai == LECTURE_ESSAIS - 1:
+                return defaut
+            time.sleep(0.01)
+        except (OSError, ValueError):
+            return defaut
     if isinstance(defaut, (dict, list)) and not isinstance(valeur, type(defaut)):
         return defaut
     return valeur
