@@ -4,10 +4,12 @@
   import Engines from "../components/Engines.svelte";
   import EngineLibrary from "../components/EngineLibrary.svelte";
   import Machines from "../components/Machines.svelte";
+  import ModelCatalog from "../components/ModelCatalog.svelte";
   import ModelGuide from "../components/ModelGuide.svelte";
   import { api, ApiError } from "../lib/api";
   import { formatBytes, percent } from "../lib/format";
-  import { language, t } from "../lib/messages";
+  import { language, t, type MessageKey } from "../lib/messages";
+  import type { CatalogModel } from "../lib/model_catalog";
   import type { Models, Status } from "../lib/types";
 
   let { status, onchanged }: { status: Status | null; onchanged: () => void } = $props();
@@ -17,9 +19,10 @@
   let name = $state("");
   let asking = $state(false);
   let refresh = $state(0); // bumped when a download starts: the engine cards are read again and show its progress
-  let tab = $state<"recommended" | "installed" | "engines" | "machines" | "unset">("unset"); // chosen once the list is known: the guide when nothing is installed, the list otherwise
+  let tab = $state<"recommended" | "catalog" | "installed" | "engines" | "machines" | "unset">("unset"); // chosen once the list is known: the guide when nothing is installed, the list otherwise
 
   const lang = language();
+  let known = $state<Record<string, CatalogModel>>({}); // what the catalogue says of each installed model: its summary, how it fits here
   const downloading = $derived(models?.downloads.some((download) => download.state === "downloading") ?? false);
 
   function explain(cause: unknown): string {
@@ -73,6 +76,9 @@
 
   onMount(() => {
     void guarded(load);
+    api<{ models: CatalogModel[] }>("GET", "/models/catalog?advanced=1")
+      .then((answer) => (known = Object.fromEntries(answer.models.map((model) => [model.id, model]))))
+      .catch(() => undefined); // without it, the installed models are shown by name only
     // While something downloads, the list is read again every second; otherwise it is left alone.
     const timer = setInterval(() => {
       if (downloading) void load().catch(() => undefined);
@@ -119,6 +125,7 @@
 
   <div class="tabs" role="group" aria-label={t("models.tabs")}>
     <button type="button" class:on={tab === "recommended"} aria-pressed={tab === "recommended"} onclick={() => (tab = "recommended")}>{t("models.tab_recommended")}</button>
+    <button type="button" class:on={tab === "catalog"} aria-pressed={tab === "catalog"} onclick={() => (tab = "catalog")}>{t("models.tab_catalog")}</button>
     <button type="button" class:on={tab === "installed"} aria-pressed={tab === "installed"} onclick={() => (tab = "installed")}>{t("models.tab_installed")}</button>
     <button type="button" class:on={tab === "engines"} aria-pressed={tab === "engines"} onclick={() => (tab = "engines")}>{t("models.tab_engines")}</button>
     <button type="button" class:on={tab === "machines"} aria-pressed={tab === "machines"} onclick={() => (tab = "machines")}>{t("models.tab_machines")}</button>
@@ -133,6 +140,8 @@
     {#if status?.engine.id === "llamacpp"}
       <EngineLibrary engine="llamacpp" onstarted={() => (refresh += 1)} />
     {/if}
+  {:else if tab === "catalog"}
+    <ModelCatalog onstarted={() => void guarded(load)} />
   {:else if tab === "machines"}
     <Machines onchanged={() => { void guarded(load); onchanged(); }} />
   {:else if tab === "installed"}
@@ -156,7 +165,9 @@
             <strong>{model.name}</strong>
             {#if model.name === models.current}<span class="tag">{t("models.in_use")}</span>{/if}
             {#if model.size_bytes}<span class="muted">{formatBytes(model.size_bytes, lang)}</span>{/if}
+            {#if known[model.name]?.fit}<span class={"fit " + known[model.name].fit?.level}>{t(("guide.fit." + known[model.name].fit?.level) as MessageKey)}</span>{/if}
           </div>
+          {#if known[model.name]?.summary}<p class="muted summary">{known[model.name].summary}</p>{/if}
           <div class="actions">
             {#if model.name !== models.current}<button type="button" class="button" onclick={() => use(model.name)}>{t("models.use")}</button>{/if}
             <button type="button" class="button quiet danger" onclick={() => remove(model.name)}>{t("models.delete")}<span class="visually-hidden"> {model.name}</span></button>
@@ -367,5 +378,28 @@
   .actions {
     display: flex;
     gap: var(--space-2);
+  }
+  .fit {
+    padding: 0 var(--space-2);
+    border-radius: var(--radius-pill);
+    font-size: var(--text-xs);
+    font-weight: 600;
+  }
+
+  .fit.comfortable,
+  .fit.good {
+    background: var(--color-accent-soft);
+    color: var(--color-accent-text);
+  }
+
+  .fit.tight,
+  .fit.too_big {
+    background: var(--color-warning-soft);
+    color: var(--color-text);
+  }
+
+  .summary {
+    margin: 0;
+    font-size: var(--text-sm);
   }
 </style>

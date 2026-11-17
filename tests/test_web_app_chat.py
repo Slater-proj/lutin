@@ -479,10 +479,10 @@ class Chat(unittest.TestCase):
             p.evaluer("location.hash = '#/models'")
             p.attendre("!!document.querySelector('.models')")
             self.axe("on the Models screen (%s)" % theme)
-            p.evaluer("document.querySelectorAll('.tabs button')[0].click()")
+            p.evaluer("[...document.querySelectorAll('.tabs button')].find(b => b.innerText === 'Recommandés pour toi').click()")
             p.attendre("!!document.querySelector('.guide .pick h3')")
             self.axe("on the guide of models (%s)" % theme)
-            p.evaluer("document.querySelectorAll('.tabs button')[1].click()")
+            p.evaluer("[...document.querySelectorAll('.tabs button')].find(b => b.innerText === 'Installés').click()")
             for section, ready in SETTINGS_SECTIONS.items():          # one section is shown at a time: each one is checked
                 p.evaluer("location.hash = '#/settings/%s'" % section)
                 p.attendre("!!document.querySelector(%s)" % js(ready))
@@ -512,7 +512,7 @@ class Chat(unittest.TestCase):
         self.addCleanup(lambda: (T.INSTALLES.__setitem__(slice(None), installed), T.A.PULLS.clear(), T.A.enregistrer_reglages({"modele": model})))
         p.evaluer("location.hash = '#/models'")
         p.attendre("!!document.querySelector('.tabs')")
-        p.evaluer("document.querySelectorAll('.tabs button')[0].click()")
+        p.evaluer("[...document.querySelectorAll('.tabs button')].find(b => b.innerText === 'Recommandés pour toi').click()")
         p.attendre("!!document.querySelector('.guide .machine .summary')")
         self.assertIn("RTX 4070", p.evaluer("document.querySelector('.guide .machine .summary').innerText"), "the machine in plain words, from the fictive profile")
         p.attendre("!!document.querySelector('.guide .pick h3')")
@@ -563,7 +563,7 @@ class Chat(unittest.TestCase):
         self.addCleanup(lambda: T.A.enregistrer_reglages({"budget_go": 0.0}))
         p.evaluer("location.hash = '#/models'")
         p.attendre("!!document.querySelector('.tabs')")
-        p.evaluer("document.querySelectorAll('.tabs button')[0].click()")
+        p.evaluer("[...document.querySelectorAll('.tabs button')].find(b => b.innerText === 'Recommandés pour toi').click()")
         p.attendre("!!document.querySelector('.guide .correct summary')")
         p.evaluer("document.querySelector('.guide .correct summary').click()")
         self.assertIn("RTX 4070", p.evaluer("document.querySelector('.guide .machine .summary').innerText"))
@@ -776,6 +776,36 @@ class Chat(unittest.TestCase):
         p.attendre("!!document.querySelector('.machines .empty')")
         self.assertEqual(machines.lire(), [])
         self.assertEqual(T.A.reglages()["machine"], "", "the machine that answered is gone: this one answers again")
+        self.assertEqual(p.erreurs, [])
+        p.evaluer("location.hash = '#/chat'")
+
+    def test_5d2_the_catalogue_says_what_each_model_is_for_and_how_it_fits_here(self):
+        """Asked by the maintainer: the new Models screen showed hardly any model, without its description, its strengths and weaknesses, or how it fits
+        the machine. The Catalogue tab shows every model of the catalogue that runs here (the fictive machine of setUpClass), and all of them on demand."""
+        p = self.page
+        posted = []
+        original = api_v1.install_model
+        p.evaluer("location.hash = '#/models'")
+        p.attendre("!!document.querySelector('.models .tabs')")
+        p.evaluer("[...document.querySelectorAll('.tabs button')].find(b => b.innerText === 'Catalogue').click()")
+        p.attendre("document.querySelectorAll('.catalog-models .card').length > 0")
+        fits = p.evaluer("document.querySelectorAll('.catalog-models .card').length")
+        self.assertGreaterEqual(fits, 5, "the models that run here are offered")
+        self.assertTrue(p.evaluer("[...document.querySelectorAll('.catalog-models .card')].every(c => c.querySelector('.summary').innerText.trim() && c.querySelector('.fit'))"),
+                        "each one says what it is for and how it fits this machine")
+        self.assertTrue(p.evaluer("!!document.querySelector('.catalog-models .card .plus')"), "and what it is good at")
+        self.assertFalse(p.evaluer("[...document.querySelectorAll('.catalog-models .fit')].some(f => f.classList.contains('too_big'))"), "only what runs here, by default")
+        p.evaluer("(() => { const box = document.querySelector('#catalog-only'); box.value = 'all'; box.dispatchEvent(new Event('change', {bubbles: true})); })()")
+        p.attendre("document.querySelectorAll('.catalog-models .card').length > %d" % fits)
+        with mock.patch.object(api_v1, "install_model", lambda request: posted.append(request.body) or original(request)):
+            p.evaluer("[...document.querySelectorAll('.catalog-models .card .button')].find(b => b.innerText.startsWith('Télécharger')).click()")
+            p.attendre("!!document.querySelector('.catalog-models .confirm')")
+            self.assertIn("Go", p.evaluer("document.querySelector('.catalog-models .confirm').innerText"), "the confirmation says what it costs")
+            if AXE.is_file():
+                self.axe("on the catalogue of models")
+            p.evaluer("[...document.querySelectorAll('.catalog-models .confirm .button')].find(b => b.innerText === 'Annuler').click()")
+            p.attendre("!document.querySelector('.catalog-models .confirm')")
+        self.assertEqual(posted, [], "nothing is downloaded before the confirmation")
         self.assertEqual(p.erreurs, [])
         p.evaluer("location.hash = '#/chat'")
 
@@ -1061,7 +1091,7 @@ class Chat(unittest.TestCase):
         p = self.page
         p.evaluer("location.hash = '#/models'")
         p.attendre("!!document.querySelector('.tabs')")
-        p.evaluer("document.querySelectorAll('.tabs button')[2].click()")
+        p.evaluer("[...document.querySelectorAll('.tabs button')].find(b => b.innerText === 'Moteurs').click()")
         p.attendre("document.querySelectorAll('.engines .card').length >= 2")
         self.assertEqual(p.evaluer("document.querySelectorAll('.engines .card.current').length"), 1, "one engine is in use")
         if AXE.is_file():
@@ -1504,7 +1534,7 @@ class Chat(unittest.TestCase):
         p.evaluer("location.hash = '#/models'")
         p.evaluer("location.reload()")          # the engine in use is read once, when the page opens: read it again now that llama.cpp is in use
         p.attendre("!!document.querySelector('.tabs')")
-        p.evaluer("document.querySelectorAll('.tabs button')[2].click()")
+        p.evaluer("[...document.querySelectorAll('.tabs button')].find(b => b.innerText === 'Moteurs').click()")
         p.attendre("!!document.querySelector('#library-query')")
         p.evaluer("(() => { const box = document.querySelector('#library-query'); box.value = 'qwen'; box.dispatchEvent(new Event('input', {bubbles: true})); document.querySelector('.library form.row').requestSubmit(); })()")
         p.attendre("!!document.querySelector('.library .item')")
