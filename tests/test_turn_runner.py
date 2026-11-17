@@ -2,6 +2,7 @@
 
 The first classes go through the real launchers (scheduled tasks, missions, Telegram, automatic replies) with the turn replaced by a fake: each test is a
 gap that ADR 0015 found by reading the code, and failed before the launcher used `turn_runner`. The last class tests the seat itself."""
+import itertools
 import os
 import tempfile
 import threading
@@ -30,6 +31,9 @@ def answering(text="Done."):
         conv["messages"] += [{"role": "user", "content": request}, {"role": "assistant", "content": text}]
         _m.conv_ecrire(conv)
     return fake
+
+
+_IDS = itertools.count(1)
 
 
 def refusing(*a, **k):
@@ -155,7 +159,8 @@ class AddOns(Clean):
 
 class Seats(Clean):
     def conv(self):
-        return {"id": "c-%d" % time.monotonic_ns(), "messages": []}
+        """A conversation of its own. Not from a clock: on Windows with Python 3.12 `monotonic_ns` moves every 15.6 ms, and two calls gave one id."""
+        return {"id": "c-%d" % next(_IDS), "messages": []}
 
     def test_one_turn_per_conversation_and_a_limit(self):
         a, b, c = self.conv(), self.conv(), self.conv()
