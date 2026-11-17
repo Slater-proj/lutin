@@ -21,6 +21,7 @@ for d in ("projet", "donnees", "memoire"):
 from lutin import core as A  # noqa: E402
 from lutin import machines, engines  # noqa: E402
 from lutin import llamacpp_engine as ml  # noqa: E402
+import quiet_node  # noqa: E402  (what a node reads of this computer, replaced)
 
 
 def faux_blob(dossier, modele_nom="qwen3", tag="8b"):
@@ -72,6 +73,7 @@ class ModelesTelechargesSousDocker(unittest.TestCase):
 
 class Base(unittest.TestCase):
     def setUp(self):
+        quiet_node.quiet(self)
         self.tmp = Path(tempfile.mkdtemp(prefix="lutin-partage-t-"))
         machines.DOSSIER = self.tmp
         for c in (machines.REGISTRE, machines.CONVERSATIONS, machines.DISTANTS):

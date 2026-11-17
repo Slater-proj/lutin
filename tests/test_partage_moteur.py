@@ -20,6 +20,7 @@ for d in ("projet", "donnees", "memoire"):
 from lutin import core as _m  # noqa: E402,F401  (avant les autres : import circulaire sinon)
 from lutin import power, machines  # noqa: E402
 from lutin import loaded_resources as rc  # noqa: E402
+import quiet_node  # noqa: E402  (what a node reads of this computer, replaced)
 
 
 class Local:
@@ -46,6 +47,7 @@ def erreur_http(code):
 
 class PartageDuMoteur(unittest.TestCase):
     def setUp(self):
+        quiet_node.quiet(self)
         self.tmp = Path(tempfile.mkdtemp(prefix="lutin-partage-t-"))
         machines.DOSSIER = self.tmp
         machines.REGISTRE.update(t=0.0)

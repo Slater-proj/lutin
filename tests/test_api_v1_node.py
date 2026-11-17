@@ -10,6 +10,7 @@ import test_api_v1 as V  # its temporary folders, its server and its callers (im
 
 from lutin import machines, power  # noqa: E402
 from lutin import security as S  # noqa: E402
+import quiet_node  # noqa: E402  (what a node reads of this computer, replaced)
 
 A = V.A
 NODE_FIELDS = ["allow", "authorized", "id", "lending", "pending_shutdown", "requests", "shares", "startup"]
@@ -32,6 +33,7 @@ def node():
 
 class Node(unittest.TestCase):
     def setUp(self):
+        quiet_node.quiet(self)
         for patch in (mock.patch.object(power, "startup_state_memo", lambda: dict(STARTUP)),          # the real one reads the registry of this computer
                       mock.patch.object(power, "install_startup", self.fail_on_call("install_startup")),
                       mock.patch.object(power, "remove_startup", self.fail_on_call("remove_startup"))):

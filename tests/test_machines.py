@@ -22,6 +22,7 @@ for d in ("projet", "donnees", "memoire"):
 from lutin import core as A  # noqa: E402
 from lutin import machines, engines  # noqa: E402
 from lutin import security as S  # noqa: E402
+import quiet_node  # noqa: E402  (what a node reads of this computer, replaced)
 
 
 class FauxNoeud:
@@ -71,6 +72,7 @@ class FauxLocal:
 class Base(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="lutin-machines-t-"))
+        quiet_node.quiet(self)
         machines.DOSSIER = self.tmp
         machines.CODES.clear()
         machines.SONDES.clear()

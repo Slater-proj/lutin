@@ -10,6 +10,7 @@ from unittest import mock
 import test_api_v1_machines as M  # its callers, the fake engine of tests/test_moteur.py and the fields of a machine (imported as a module: its tests do not run here)
 
 from lutin import access, machines, power  # noqa: E402
+import quiet_node  # noqa: E402  (what a node reads of this computer, replaced)
 
 T, A, api = M.T, M.A, M.api
 UNKNOWN = "0" * 32
@@ -17,6 +18,7 @@ UNKNOWN = "0" * 32
 
 class MachineActions(unittest.TestCase):
     def setUp(self):
+        quiet_node.quiet(self)
         A.LIMITEUR_PIN.evenements.clear()          # every pairing counts against the limit of the node, which is this server
         machines.CODES.clear()
         machines.SONDES.clear()

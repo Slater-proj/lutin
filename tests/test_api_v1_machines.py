@@ -10,6 +10,7 @@ import unittest
 import test_api_v1_turns as U  # its callers and, through it, the fake engine of tests/test_moteur.py (imported as modules: their tests do not run here)
 
 from lutin import machines  # noqa: E402
+import quiet_node  # noqa: E402  (what a node reads of this computer, replaced)
 
 T, A, api = U.T, U.A, U.api
 MACHINE_FIELDS = ["added", "address", "allowed", "detail", "id", "load", "mac", "mac_auto", "models", "name", "requested", "shares", "shutdown_in_s",
@@ -28,6 +29,7 @@ def until(check, seconds=10):
 
 class PairedMachines(unittest.TestCase):
     def setUp(self):
+        quiet_node.quiet(self)
         machines.SONDES.clear()
         machines.DERNIER_ETAT.clear()
         machines.DISTANTS.update(t=0.0, v=[], en_cours=False)

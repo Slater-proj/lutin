@@ -9,11 +9,11 @@ import json
 import unittest
 import urllib.error
 import urllib.request
-from unittest import mock
 
 import test_api_v1_machines as M  # its callers, the fake engine of tests/test_moteur.py and `until` (imported as a module: its tests do not run here)
 
-from lutin import api_v1, machines, power  # noqa: E402
+from lutin import api_v1, machines  # noqa: E402
+import quiet_node  # noqa: E402  (what a node reads of this computer, replaced)
 
 T, A, api, until = M.T, M.A, M.api, M.until
 UNKNOWN = "0" * 32
@@ -43,12 +43,7 @@ def stream(path, body, scenario):
 
 class RemoteConversations(unittest.TestCase):
     def setUp(self):
-        for patch in (mock.patch.object(power, "network_adapters", lambda **k: []),
-                      mock.patch.object(power, "wake_state", lambda *a, **k: {"mac": "", "carte": "", "pret": None, "avertissements": []}),
-                      mock.patch.object(power, "startup_state", lambda *a, **k: {"installe": True, "possible": True, "limites": ""}),
-                      mock.patch.object(A, "system_memory", lambda: None), mock.patch.object(A, "video_memory", lambda: None)):
-            patch.start()
-            self.addCleanup(patch.stop)
+        quiet_node.quiet(self)
         for kept in (machines.SONDES, machines.DERNIER_ETAT, machines.CODES, machines.INFOS_NOEUD):
             kept.clear()
         machines.CARTES.update(t=-999.0, v=None)
