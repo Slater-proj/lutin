@@ -526,6 +526,125 @@ def import_from_machine(request):
             "profile_truncated": counts["profil_coupe"]}
 
 
+# --------------------------------------------------------------------------- this machine as a node (ADR 0016, stage 3): what it lends to the others
+# The rights are those of the old Machines tab, read in lutin.server: lending, the pairing code and revoking need `configurator`; what this machine
+# grants (shares, rights, autostart), the answer to a rights request and cancelling a shutdown another machine asked for need `local`. The protocol
+# between machines (/api/noeud/*) is not part of this: it changes with /node/v1 (step 3 of the plan).
+NODE_SHARES = {"skills": "skills", "memoire": "memory"}
+NODE_ALLOW = {"piloter": _machines.noeud_autoriser_piloter, "maj": _machines.noeud_autoriser_maj, "extinction": _machines.noeud_autoriser_extinction}
+
+
+def _node():
+    view = _machines.noeud_vue()
+    pending = view["extinction_en_attente"]
+    startup = _power.startup_state_memo()
+    return {"lending": bool(view["actif"]), "id": view["id"],
+            "shares": {english: bool(view["droits"].get(french)) for french, english in NODE_SHARES.items()},
+            "allow": {english: bool(view.get(french)) for french, english in MACHINE_RIGHTS.items()},
+            "pending_shutdown": {"in_s": pending["dans_s"], "by": pending["par"]} if pending else None,
+            "requests": [{"machine": waiting.get("machine", ""), "right": MACHINE_RIGHTS[waiting["droit"]], "date": waiting.get("date", "")}
+                         for waiting in view["demandes"] if waiting.get("droit") in MACHINE_RIGHTS],
+            "authorized": [{"name": allowed["nom"], "date": allowed["date"]} for allowed in view["autorisees"]],
+            "startup": {"installed": bool(startup.get("installe")), "possible": bool(startup.get("possible")), "limits": startup.get("limites", "")}}
+
+
+@route("GET", "/node", SESSION)
+def node(request):
+    """This machine as a node: whether it lends its engine (`lending`), its id, what it shares with and allows to the paired machines, a shutdown one of
+    them asked for (`pending_shutdown`, null when none), the rights requests waiting for an answer, the machines that may use it, and autostart."""
+    return _node()
+
+
+@route("PATCH", "/node", CONFIGURATOR)
+def update_node(request):
+    """{"lending": true | false}: lends the engine of this machine to the machines paired with it, or stops. Refused at the level « this machine only »
+    (409 `local_only`): no other machine could reach it. Answers `GET /node`."""
+    lending = request.body.get("lending")
+    if set(request.body) != {"lending"} or not isinstance(lending, bool):
+        raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("lending"))
+    try:
+        _machines.noeud_activer(lending, niveau_local=_m.SECURITE.niveau == _sec.LOCAL)          # raises before writing anything
+    except ValueError as refused:
+        raise ApiError(409, "local_only", str(refused)) from None
+    return _node()
+
+
+def _flags(body, name, words):
+    """The {english: bool} object `name` of a body, as {french: bool}; 400 for anything else."""
+    given, french = body[name], {english: word for word, english in words.items()}
+    if not isinstance(given, dict) or not given or set(given) - set(french) or not all(isinstance(value, bool) for value in given.values()):
+        raise ApiError(400, "invalid_request", _t("Valeur invalide pour « {} » (attendu : {}).").format(name, ", ".join(french)))
+    return {french[key]: value for key, value in given.items()}
+
+
+@route("PATCH", "/node/permissions", LOCAL)
+def update_node_permissions(request):
+    """{"shares"?: {"skills"?, "memory"?}, "allow"?: {"lead"?, "update"?, "shutdown"?}, "autostart"?: bool}: what this machine grants to the paired
+    machines, from this machine only. Everything is checked before anything is written; autostart comes first, being the one step the system may
+    refuse (400 with its reason, and nothing else is written). Answers `GET /node`."""
+    body, fields = request.body, ("shares", "allow", "autostart")
+    if not body or set(body) - set(fields):
+        raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format(", ".join(fields)))
+    shares = _flags(body, "shares", NODE_SHARES) if "shares" in body else {}
+    allow = _flags(body, "allow", MACHINE_RIGHTS) if "allow" in body else {}
+    autostart = body.get("autostart")
+    if "autostart" in body and not isinstance(autostart, bool):
+        raise ApiError(400, "invalid_request", _t("Valeur invalide pour « {} » (attendu : {}).").format("autostart", "true, false"))
+    if autostart is not None:
+        (_power.install_startup if autostart else _power.remove_startup)()          # looked up now: the tests replace them
+    for right, granted in allow.items():
+        NODE_ALLOW[right](granted)
+    for share, granted in shares.items():
+        _machines.noeud_droit(share, granted)
+    return _node()
+
+
+@route("POST", "/node/pairing-code", CONFIGURATOR)
+def node_pairing_code(request):
+    """A one-time code (shown « 1234-5678 », valid `valid_seconds`) that another machine types to pair with this one (`POST /machines` there).
+    409 `not_lending` while this machine does not lend its engine: the code could not be used."""
+    if request.body:
+        raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("-"))
+    if not _machines.noeud_actif():
+        raise ApiError(409, "not_lending", _t("Cette machine ne prête pas son moteur : active d'abord le prêt."))
+    code = _machines.noeud_nouveau_code()
+    return 201, {"code": code["code"], "valid_seconds": code["expire_dans"]}
+
+
+@route("DELETE", "/node/authorized/{name}", CONFIGURATOR)
+def revoke_node_machine(request):
+    """Revokes a machine that may use this one: its token stops working at once. 404 for a name no authorized machine has. Answers `GET /node`."""
+    name = request.params["name"]
+    if name not in [allowed["nom"] for allowed in _machines.noeud_vue()["autorisees"]]:
+        raise ApiError(404, "not_found", _t("Machine inconnue."))
+    _machines.noeud_revoquer(name)
+    return _node()
+
+
+@route("POST", "/node/requests/{machine}/{right}", LOCAL)
+def answer_node_request(request):
+    """{"accept": true | false}: answers the request of a paired machine for a right (`requests` in `GET /node`), from this machine only. Accepting grants
+    the right (`allow`, which can be unticked at any time); refusing forgets the request. 404 when it is no longer there. Answers `GET /node`."""
+    words = {english: french for french, english in MACHINE_RIGHTS.items()}
+    machine, right, accept = request.params["machine"], request.params["right"], request.body.get("accept")
+    if right not in words:
+        raise ApiError(400, "invalid_request", _t("Valeur invalide pour « {} » (attendu : {}).").format("right", ", ".join(words)))
+    if set(request.body) != {"accept"} or not isinstance(accept, bool):
+        raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("accept"))
+    if not any(waiting.get("machine") == machine and waiting.get("droit") == words[right] for waiting in _machines.noeud_vue()["demandes"]):
+        raise ApiError(404, "not_found", _t("Cette demande n'existe plus."))
+    _machines.noeud_repondre_demande(machine, words[right], accept)
+    return _node()
+
+
+@route("POST", "/node/shutdown/cancel", LOCAL)
+def cancel_node_shutdown(request):
+    """Cancels a shutdown of this machine that a paired machine asked for (`pending_shutdown` in `GET /node`). `cancelled` is false when none was pending."""
+    if request.body:
+        raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("-"))
+    return {"cancelled": _power.cancel_shutdown(_machines.journaliser)}
+
+
 @route("POST", "/models", SESSION)
 def install_model(request):
     """Starts the download of a model: {"name": "qwen3:8b"}. Answers at once (202) with the state of the download; `GET /models` then follows it."""

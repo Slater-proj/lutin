@@ -2,8 +2,9 @@
 
 Status: accepted by the maintainer on 2026-11-17 (plan step 4: « the models of other machines » and « conversations led on another machine », the
 last missing pieces of the Models screen and of the Chat). Stage 1 done (`GET /machines`, `remote` in `GET /models`, `machine` in a turn;
-`tests/test_api_v1_machines.py`); stage 2 done (the action routes, `tests/test_api_v1_machine_actions.py`); stages 3 to 7 to do. Placement, the
-phone's view, the scope and the statuses of stage 2 were answered by the maintainer (end of this file).
+`tests/test_api_v1_machines.py`); stage 2 done (the action routes, `tests/test_api_v1_machine_actions.py`); stage 3 done (the node routes,
+`tests/test_api_v1_node.py`); stages 4 to 7 to do. Placement, the phone's view, the scope and the statuses of stages 2 and 3 were answered by the
+maintainer (end of this file).
 
 ## Context
 
@@ -113,3 +114,8 @@ Each stage is one commit; the old page and its routes are untouched until parity
   right `session` like the old `/api/reglages`). Each kind of refusal gets its status: `404 not_found`, `400 invalid_request`, `409 machine_refused`
   (the other machine said no), `503 machine_unreachable`, `502 machine_error`. `lutin.machines` raises subclasses of `ValueError` for them, so the old
   route still answers `400` with the same sentence.
+- Stage 3 (2026-11-17): the node routes of decision 1 as listed, with the rights read in `lutin.server` (`configurator` for lending, the pairing code
+  and revoking; `local` for the permissions, the answer to a request and cancelling a shutdown). Refusals of v1 get their own status where the old
+  route had none: `409 local_only` to lend at the level « this machine only » (the old route: `400`), `409 not_lending` for a pairing code while
+  lending is off (the old route makes a code that cannot be used), `404` to revoke an unknown name (the old route: `200`, nothing done) and to answer
+  a request that is gone (the old route: `400`). The old routes do not change.

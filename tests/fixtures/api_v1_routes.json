@@ -341,6 +341,41 @@
  },
  {
   "method": "GET",
+  "path": "/api/v1/node",
+  "right": "session"
+ },
+ {
+  "method": "PATCH",
+  "path": "/api/v1/node",
+  "right": "configurator"
+ },
+ {
+  "method": "DELETE",
+  "path": "/api/v1/node/authorized/{name}",
+  "right": "configurator"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/node/pairing-code",
+  "right": "configurator"
+ },
+ {
+  "method": "PATCH",
+  "path": "/api/v1/node/permissions",
+  "right": "local"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/node/requests/{machine}/{right}",
+  "right": "local"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/node/shutdown/cancel",
+  "right": "local"
+ },
+ {
+  "method": "GET",
   "path": "/api/v1/notification-channels",
   "right": "session"
  },

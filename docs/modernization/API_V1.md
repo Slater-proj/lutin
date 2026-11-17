@@ -182,8 +182,18 @@ The actions on a paired machine (stage 2, contract in `tests/test_api_v1_machine
 that machine); `POST /machines/{id}/imports/{skills | memory}` answers the counts (`{added, updated, already_there}`, or `{notes_added, notes_skipped,
 profile_copied, profile_truncated}`). Who answers by default stays `PATCH /settings {machine}`. Refusals, each before any effect: `404 not_found`
 (unknown machine), `400 invalid_request` (a value), `409 machine_refused` (the other machine said no: code refused, right not granted, nothing shared),
-`503 machine_unreachable`, `502 machine_error` (it answered something unexpected). Still to come (ADR 0016, stages 3 to 7): this machine as a node, the
-screens, and the conversations led on another machine.
+`503 machine_unreachable`, `502 machine_error` (it answered something unexpected).
+
+This machine as a node, what it lends to the others (stage 3, contract in `tests/test_api_v1_node.py`). `GET /node` (`session`) answers `{lending, id,
+shares {skills, memory}, allow {lead, update, shutdown}, pending_shutdown {in_s, by} | null, requests [{machine, right, date}], authorized [{name, date}],
+startup {installed, possible, limits}}`. With the right `configurator`: `PATCH /node` `{lending}` (`409 local_only` to turn it on at the level « this
+machine only »); `POST /node/pairing-code` (`201 {code, valid_seconds}`, the code another machine types in `POST /machines`; `409 not_lending` while
+lending is off); `DELETE /node/authorized/{name}` (the machine's token stops working; `404` for an unknown name). With the right `local`, from this
+machine only (a remote administrator is refused too): `PATCH /node/permissions` `{shares?, allow?, autostart?}` (everything is checked before anything
+is written, autostart first since the system may refuse it); `POST /node/requests/{machine}/{right}` `{accept}` (accepting grants the right, refusing
+forgets the request; `404` when it is no longer there); `POST /node/shutdown/cancel` (`{cancelled}`). These routes answer `GET /node`, except the code
+and the cancel. The protocol between machines (`/api/noeud/*`) does not change. Still to come (ADR 0016, stages 4 to 7): the screens, and the
+conversations led on another machine.
 
 ## What v1 keeps
 
