@@ -7,6 +7,7 @@
   import Thread from "../components/Thread.svelte";
   import { api, ApiError, streamTurn, upload } from "../lib/api";
   import { fromStored, MAX_DOCUMENTS, MAX_IMAGES, kindOf, refusal, turnFields, uploading, type Attachment } from "../lib/attachments";
+  import { choiceValue, parseChoice, selector, type MachinesView } from "../lib/machines";
   import { t } from "../lib/messages";
   import { applyEvent, elsewhereNotice, newTurn, storedToItems, type Item, type LiveTurn, type Sent } from "../lib/turn";
   import type { Conversation, ConversationOptions, ConversationSummary, Models, Settings, Status, TurnState } from "../lib/types";
@@ -16,6 +17,8 @@
   let conversations = $state<ConversationSummary[]>([]);
   let conversation = $state<Conversation | null>(null);
   let models = $state<Models | null>(null);
+  let paired = $state<MachinesView | null>(null); // who answers by default and the names of the paired machines (GET /machines never waits)
+  const choices = $derived(models ? selector(models.models.map((model) => model.name), models.current, models.remote ?? [], paired) : null);
   let live = $state<LiveTurn | null>(null);
   let pending = $state<({ text: string } & Sent) | null>(null);
   let attachments = $state<Attachment[]>([]);
@@ -89,7 +92,9 @@
   }
 
   async function loadModels(): Promise<void> {
-    models = await api<Models>("GET", "/models");
+    const [found, view] = await Promise.all([api<Models>("GET", "/models"), api<MachinesView>("GET", "/machines").catch(() => null)]);
+    models = found;
+    paired = view;
   }
 
   /** What a new conversation starts with: the settings of the machine, and the two automatic approvals off. */
@@ -304,9 +309,9 @@
   }
 
   async function chooseModel(event: Event): Promise<void> {
-    const model = (event.currentTarget as HTMLSelectElement).value;
+    const { machine, model } = parseChoice((event.currentTarget as HTMLSelectElement).value); // a model of another machine: that machine answers (as on the old page)
     await guarded(async () => {
-      await api("PATCH", "/settings", { model });
+      await api("PATCH", "/settings", { model, machine });
       await loadModels();
       onchanged();
     });
@@ -394,14 +399,30 @@
       {/if}
       <label class="model">
         <span>{t("chat.model")}</span>
-        <select onchange={chooseModel} disabled={busy || !models || models.models.length === 0}>
-          {#if !models || models.models.length === 0}
+        <select onchange={chooseModel} disabled={busy || !choices || (choices.local.length === 0 && choices.groups.length === 0)} title={choices?.missing?.off ? t("chat.machine_off_help", choices.missing.name) : undefined}>
+          {#if !choices || (choices.local.length === 0 && choices.groups.length === 0)}
             <option>{t("chat.no_model")}</option>
           {:else}
-            {#if !models.models.some((model) => model.name === models?.current)}<option value={models.current} selected>{models.current}</option>{/if}
-            {#each models.models as model (model.name)}
-              <option value={model.name} selected={model.name === models.current}>{model.name}</option>
-            {/each}
+            {#if choices.missing}
+              <option value={choices.current} selected>{choices.missing.off ? t("chat.machine_off", choices.missing.model, choices.missing.name) : choices.missing.model}</option>
+            {/if}
+            {#snippet here()}
+              {#each choices!.local as name (name)}
+                <option value={choiceValue("", name)} selected={choiceValue("", name) === choices!.current}>{name}</option>
+              {/each}
+            {/snippet}
+            {#if choices.groups.length}
+              {#if choices.local.length}<optgroup label={t("chat.this_machine")}>{@render here()}</optgroup>{/if}
+              {#each choices.groups as group (group.machine)}
+                <optgroup label={group.name}>
+                  {#each group.models as name (name)}
+                    <option value={choiceValue(group.machine, name)} selected={choiceValue(group.machine, name) === choices.current}>{name}</option>
+                  {/each}
+                </optgroup>
+              {/each}
+            {:else}
+              {@render here()}
+            {/if}
           {/if}
         </select>
       </label>

@@ -3,7 +3,7 @@
 Status: accepted by the maintainer on 2026-11-17 (plan step 4: « the models of other machines » and « conversations led on another machine », the
 last missing pieces of the Models screen and of the Chat). Stage 1 done (`GET /machines`, `remote` in `GET /models`, `machine` in a turn;
 `tests/test_api_v1_machines.py`); stage 2 done (the action routes, `tests/test_api_v1_machine_actions.py`); stage 3 done (the node routes,
-`tests/test_api_v1_node.py`); stages 4 to 7 to do. Placement, the phone's view, the scope and the statuses of stages 2 and 3 were answered by the
+`tests/test_api_v1_node.py`); stage 4 done (the Machines tab and the Chat selector, test 5h3 of `tests/test_web_app_chat.py`); stages 5 to 7 to do. Placement, the phone's view, the scope and the statuses of stages 2 and 3 were answered by the
 maintainer (end of this file).
 
 ## Context

@@ -1,4 +1,5 @@
 // The shapes of /api/v1 (docs/modernization/API_V1.md). The server's contract tests fix them: tests/test_api_v1*.py.
+import type { RemoteModels } from "./machines";
 
 export interface Status {
   version: string;
@@ -89,6 +90,8 @@ export interface Models {
   current: string;
   models: { name: string; size_bytes: number | null }[];
   downloads: Download[];
+  /** The models of the paired machines that answer (lib/machines.ts); empty while the multi-machine mode is off. */
+  remote: RemoteModels[];
 }
 
 export interface Task {

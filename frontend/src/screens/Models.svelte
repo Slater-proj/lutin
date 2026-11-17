@@ -3,6 +3,7 @@
   import { onMount } from "svelte";
   import Engines from "../components/Engines.svelte";
   import EngineLibrary from "../components/EngineLibrary.svelte";
+  import Machines from "../components/Machines.svelte";
   import ModelGuide from "../components/ModelGuide.svelte";
   import { api, ApiError } from "../lib/api";
   import { formatBytes, percent } from "../lib/format";
@@ -16,7 +17,7 @@
   let name = $state("");
   let asking = $state(false);
   let refresh = $state(0); // bumped when a download starts: the engine cards are read again and show its progress
-  let tab = $state<"recommended" | "installed" | "engines" | "unset">("unset"); // chosen once the list is known: the guide when nothing is installed, the list otherwise
+  let tab = $state<"recommended" | "installed" | "engines" | "machines" | "unset">("unset"); // chosen once the list is known: the guide when nothing is installed, the list otherwise
 
   const lang = language();
   const downloading = $derived(models?.downloads.some((download) => download.state === "downloading") ?? false);
@@ -120,6 +121,7 @@
     <button type="button" class:on={tab === "recommended"} aria-pressed={tab === "recommended"} onclick={() => (tab = "recommended")}>{t("models.tab_recommended")}</button>
     <button type="button" class:on={tab === "installed"} aria-pressed={tab === "installed"} onclick={() => (tab = "installed")}>{t("models.tab_installed")}</button>
     <button type="button" class:on={tab === "engines"} aria-pressed={tab === "engines"} onclick={() => (tab = "engines")}>{t("models.tab_engines")}</button>
+    <button type="button" class:on={tab === "machines"} aria-pressed={tab === "machines"} onclick={() => (tab = "machines")}>{t("models.tab_machines")}</button>
   </div>
 
   {#if tab === "recommended"}
@@ -131,6 +133,8 @@
     {#if status?.engine.id === "llamacpp"}
       <EngineLibrary engine="llamacpp" onstarted={() => (refresh += 1)} />
     {/if}
+  {:else if tab === "machines"}
+    <Machines onchanged={() => { void guarded(load); onchanged(); }} />
   {:else if tab === "installed"}
   <form class="add" onsubmit={install}>
     <label for="model-name">{t("models.add_expert")}</label>
@@ -217,10 +221,12 @@
 
   .tabs {
     display: flex;
+    flex-wrap: wrap; /* four tabs: on a phone they go on two lines rather than out of the screen */
     gap: var(--space-1);
+    max-width: 100%;
     padding: var(--space-1);
     border: 1px solid var(--color-border);
-    border-radius: var(--radius-pill);
+    border-radius: var(--radius-lg);
     background: var(--color-surface);
     align-self: flex-start;
   }

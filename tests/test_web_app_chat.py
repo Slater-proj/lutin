@@ -20,7 +20,7 @@ import test_moteur as T  # the fake engine and a server at the « this machine �
 from faux_github import FauxGithub, depot_type
 
 import cdp  # noqa: E402
-from lutin import api_v1, hardware, model_fit, web_app  # noqa: E402
+from lutin import api_v1, hardware, machines, model_fit, power, web_app  # noqa: E402
 
 CHROME = next((c for c in (os.environ.get("CHROME"), shutil.which("google-chrome"), shutil.which("chromium"), shutil.which("chrome"),
                            r"C:\Program Files\Google\Chrome\Application\chrome.exe", r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
@@ -88,7 +88,7 @@ class Chat(unittest.TestCase):
                          "a suggestion fills the field and puts the cursor in it")
         p.evaluer("(() => { const box = document.querySelector('#message'); box.value = ''; box.dispatchEvent(new Event('input', {bubbles: true})); })()")
         p.attendre("document.querySelector('header select').options.length > 0 && !document.querySelector('header select').disabled")
-        self.assertIn(T.INSTALLES[0], p.evaluer("[...document.querySelector('header select').options].map(o => o.value)"))
+        self.assertIn(T.INSTALLES[0], p.evaluer("[...document.querySelector('header select').options].map(o => o.textContent)"), "the installed models are offered (the value also names the machine)")
         self.assertEqual(p.evaluer("window.__violations"), [], "the content security policy blocked something the page needs")
         self.assertEqual(p.erreurs, [])
         self.picture("1-empty")
@@ -490,9 +490,10 @@ class Chat(unittest.TestCase):
             self.axe("on the Projects screen (%s)" % theme)
         p.commande("Emulation.setDeviceMetricsOverride", width=360, height=740, deviceScaleFactor=1, mobile=True)
         try:
-            for screen in ("chat", "models", "settings", "projects", "agents"):
+            # Each screen is checked once it is drawn, as at 1280 px: half loaded, a long screen may scroll before its fields are there.
+            for screen, ready in (("chat", "#message"), ("models", ".models .tabs"), ("settings", ".settings .sections"), ("projects", "#project-path"), ("agents", "#task-name")):
                 p.evaluer("location.hash = '#/%s'" % screen)
-                p.attendre("!!document.querySelector('#message, .models, .settings, .projects, .agents')")
+                p.attendre("!!document.querySelector(%s)" % js(ready))
                 self.axe("on the %s screen at 360 px (%s)" % (screen, theme))
         finally:
             p.commande("Emulation.clearDeviceMetricsOverride")
@@ -655,6 +656,128 @@ class Chat(unittest.TestCase):
             p.commande("Emulation.clearDeviceMetricsOverride")
         self.assertEqual(p.erreurs, [])
         p.evaluer("location.hash = '#/chat'")
+
+    def test_5h3_another_machine_is_paired_answers_in_the_chat_and_is_unpaired(self):
+        """ADR 0016, stage 4. The server pairs with itself (as tests/test_api_v1_machines.py does): it is both this machine and the other one, so each
+        action reaches the real node code. Nothing reaches the computer: the shutdown is replaced."""
+        p = self.page
+        before = {key: T.A.reglages().get(key) for key in ("cluster", "machine", "modele")}
+        for kept in (machines.SONDES, machines.DERNIER_ETAT, machines.CODES):
+            kept.clear()
+        T.A.LIMITEUR_PIN.evenements.clear()          # the pairing counts against the limit of the node, which is this server
+
+        def restore():
+            machines._ecrire_registre([])
+            machines.noeud_autoriser_extinction(False)
+            for waiting in machines.noeud_vue()["demandes"]:
+                machines.noeud_repondre_demande(waiting["machine"], waiting["droit"], False)
+            for allowed in machines.noeud_vue()["autorisees"]:
+                machines.noeud_revoquer(allowed["nom"])
+            machines.noeud_activer(False)
+            for kept in (machines.SONDES, machines.DERNIER_ETAT, machines.CODES, machines.ARRET):
+                kept.clear()
+            machines.DISTANTS.update(t=0.0, v=[], en_cours=False)
+            T.A.enregistrer_reglages(before)
+        self.addCleanup(restore)
+        asked = []
+        # What the node says of itself is read from this computer (network cards and autostart through PowerShell, memory, graphics card): replaced.
+        for patch in (mock.patch.object(power, "schedule_shutdown", lambda *a, **k: asked.append("shutdown") or 30),
+                      mock.patch.object(power, "cancel_shutdown", lambda *a, **k: asked.append("cancel") or True),
+                      mock.patch.object(power, "network_adapters", lambda **k: []),
+                      mock.patch.object(power, "wake_state", lambda *a, **k: {"mac": "", "carte": "", "pret": None, "avertissements": []}),
+                      mock.patch.object(power, "startup_state", lambda *a, **k: {"installe": True, "possible": True, "limites": ""}),
+                      mock.patch.object(T.A, "system_memory", lambda: {"total": 32 * 1024 ** 3, "libre": 16 * 1024 ** 3}),
+                      mock.patch.object(T.A, "video_memory", lambda: None)):
+            patch.start()
+            self.addCleanup(patch.stop)
+        machines.INFOS_NOEUD.clear()
+        machines.CARTES.update(t=-999.0, v=None)
+        T.A.enregistrer_reglages({"cluster": False})
+        p.evaluer("location.hash = '#/models'")
+        p.attendre("!!document.querySelector('.models .tabs')")
+        p.evaluer("[...document.querySelectorAll('.tabs button')].find(b => b.innerText === 'Machines').click()")
+        p.attendre("!!document.querySelector('.machines .turn-on')")
+        if AXE.is_file():
+            self.axe("on the Machines tab, multi-machine mode off")
+        p.evaluer("document.querySelector('.machines .turn-on').click()")
+        p.attendre("!!document.querySelector('#machine-address')")
+        self.assertTrue(T.A.reglages()["cluster"], "the button turns the multi-machine mode on")
+
+        machines.noeud_activer(True)
+        code = machines.noeud_nouveau_code()["code"]
+        fill = "(() => { const set = (id, value) => { const box = document.querySelector(id); box.value = value; box.dispatchEvent(new Event('input', {bubbles: true})); }; set('#machine-address', %s); set('#machine-code', %s); set('#machine-name', 'Bureau'); })()"
+        p.evaluer(fill % (js(T.BASE), js(code)))
+        p.evaluer("document.querySelector('.machines form.pair').requestSubmit()")
+        p.attendre("[...document.querySelectorAll('.machines .machine strong')].some(e => e.innerText === 'Bureau')")
+        self.assertIn("Bureau", p.evaluer("document.querySelector('.machines .notice').innerText"))
+        identifier = machines.lire()[0]["id"]
+        p.attendre("!!document.querySelector('.machines .machine .state.operational')", 30)          # probed in the background, read again by the page
+        self.assertIn(T.INSTALLES[0], p.evaluer("document.querySelector('.machines .machine .models-of').innerText"))
+
+        p.evaluer("document.querySelector('.machines .machine [data-right=\"lead\"]').click()")
+        p.attendre("document.querySelector('.machines .notice').innerText.length > 0")
+        self.assertEqual([waiting["droit"] for waiting in machines.noeud_vue()["demandes"]], ["piloter"], "asked: waiting on the other machine, nothing granted")
+        self.assertFalse(machines.noeud_vue()["piloter"])
+
+        machines.noeud_autoriser_extinction(True)
+        machines.SONDES.clear()          # the next reading probes the machine again, and learns the new right
+        p.attendre("!!document.querySelector('.machines .machine [data-action=\"shutdown\"]')", 30)
+        p.evaluer("document.querySelector('.machines .machine [data-action=\"shutdown\"]').click()")
+        p.attendre("!!document.querySelector('.machines .machine .confirm')")
+        self.assertEqual(asked, [], "asking is not shutting down")
+        p.evaluer("document.querySelector('.machines .machine .confirm .primary').click()")
+        p.attendre("document.querySelector('.machines .notice').innerText.includes('30')")
+        self.assertEqual(asked, ["shutdown"])
+
+        p.evaluer("(() => { const box = document.querySelector('#machine-answering'); box.value = %s; box.dispatchEvent(new Event('change', {bubbles: true})); })()" % js(identifier))
+        self.eventually(lambda: T.A.reglages()["machine"] == identifier, "who answers by default is kept")
+        if AXE.is_file():
+            self.axe("on the Machines tab with a paired machine")
+        self.picture("5h3-machines")
+
+        T.A.enregistrer_reglages({"machine": ""})
+        self.assertTrue(self.wait_for(lambda: machines.modeles_distants(attente=True)), "the models of the other machine are known")
+        p.evaluer("location.hash = '#/chat'")
+        p.attendre("[...document.querySelectorAll('header select optgroup')].some(g => g.label === 'Bureau')")
+        self.assertEqual(p.evaluer("[...document.querySelectorAll('header select optgroup')].map(g => g.label)"), ["Cette machine", "Bureau"], "the models of each machine under its name")
+        choice = identifier + "|" + T.INSTALLES[0]
+        p.evaluer("(() => { const box = document.querySelector('header select'); box.value = %s; box.dispatchEvent(new Event('change', {bubbles: true})); })()" % js(choice))
+        self.eventually(lambda: (T.A.reglages()["machine"], T.A.reglages()["modele"]) == (identifier, T.INSTALLES[0]), "a model of the other machine makes it answer")
+
+        machines._ecrire_registre([dict(machines.lire()[0], adresse="http://127.0.0.1:9")])          # the other machine goes off
+        for kept in (machines.SONDES, machines.DERNIER_ETAT):
+            kept.clear()
+        machines.DISTANTS.update(t=0.0, v=[], en_cours=False)
+        p.evaluer("location.hash = '#/models'")
+        p.attendre("!!document.querySelector('.models')")
+        p.evaluer("location.hash = '#/chat'")
+        p.attendre("[...document.querySelectorAll('header select option')].some(o => o.selected && o.textContent.includes('Bureau injoignable'))")
+        self.assertIn("ne répond pas", p.evaluer("document.querySelector('header select').title"), "the whole sentence is there for who looks for it")
+        self.picture("5h3-machine-off")
+
+        p.evaluer("location.hash = '#/models'")
+        p.attendre("!!document.querySelector('.models .tabs')")
+        p.evaluer("[...document.querySelectorAll('.tabs button')].find(b => b.innerText === 'Machines').click()")
+        p.attendre("!!document.querySelector('.machines .machine .unpair')")
+        p.evaluer("document.querySelector('.machines .machine details').open = true")
+        p.evaluer("document.querySelector('.machines .machine .unpair').click()")
+        p.attendre("!!document.querySelector('.machines .machine .confirm')")
+        self.assertEqual(len(machines.lire()), 1, "asking is not unpairing")
+        p.evaluer("document.querySelector('.machines .machine .confirm .primary').click()")
+        p.attendre("!!document.querySelector('.machines .empty')")
+        self.assertEqual(machines.lire(), [])
+        self.assertEqual(T.A.reglages()["machine"], "", "the machine that answered is gone: this one answers again")
+        self.assertEqual(p.erreurs, [])
+        p.evaluer("location.hash = '#/chat'")
+
+    def wait_for(self, check, seconds=20):
+        end = time.monotonic() + seconds
+        while time.monotonic() < end:
+            value = check()
+            if value:
+                return value
+            time.sleep(0.2)
+        return check()
 
     def test_5i_a_working_folder_is_added_chosen_and_removed_from_the_list(self):
         p = self.page
