@@ -5,6 +5,7 @@
   import { onMount, tick } from "svelte";
   import ApprovalRules from "../components/ApprovalRules.svelte";
   import Devices from "../components/Devices.svelte";
+  import LendMachine from "../components/LendMachine.svelte";
   import Memory from "../components/Memory.svelte";
   import Skills from "../components/Skills.svelte";
   import ThirdPartySkills from "../components/ThirdPartySkills.svelte";
@@ -135,6 +136,8 @@
     </section>
   {:else if name === "devices"}
     <div class="group"><Devices /></div>
+  {:else if name === "lending"}
+    <div class="group"><LendMachine /></div>
   {:else if name === "approval_rules"}
     <div class="group"><ApprovalRules /></div>
   {:else if name === "notifications"}

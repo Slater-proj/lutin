@@ -4,6 +4,7 @@
   import Icon, { type IconName } from "./components/Icon.svelte";
   import { api, ApiError } from "./lib/api";
   import { t, type MessageKey } from "./lib/messages";
+  import { waiting, type NodeView } from "./lib/node";
   import { applyTheme, nextTheme, readTheme, type Theme } from "./lib/theme";
   import type { Status } from "./lib/types";
   import Chat from "./screens/Chat.svelte";
@@ -27,6 +28,11 @@
   let status = $state<Status | null>(null);
   let problem = $state("");
   let setupNeeded = $state<boolean | null>(null); // null while the server is asked: the shell is not drawn first and replaced a moment later
+  let nodeWaiting = $state(0); // rights requests and a shutdown asked by another machine: a badge on Settings, as on the old page (ADR 0016, stage 5)
+
+  async function refreshNode(): Promise<void> {
+    nodeWaiting = waiting(await api<NodeView>("GET", "/node").catch(() => null));
+  }
 
   async function refreshStatus(): Promise<void> {
     try {
@@ -46,10 +52,20 @@
     const onHash = (): void => {
       area = areaOf(location.hash);
     };
+    const onNode = (event: Event): void => {
+      nodeWaiting = (event as CustomEvent<number>).detail; // announced by the « Lend this machine » group after each of its readings
+    };
     addEventListener("hashchange", onHash);
+    addEventListener("lutin-node", onNode);
     void refreshStatus();
+    void refreshNode();
+    const timer = setInterval(() => void refreshNode(), 15000);
     api<{ needed: boolean }>("GET", "/setup").then((answer) => (setupNeeded = answer.needed), () => (setupNeeded = false)); // a server that does not answer must not trap the person in a guide
-    return () => removeEventListener("hashchange", onHash);
+    return () => {
+      removeEventListener("hashchange", onHash);
+      removeEventListener("lutin-node", onNode);
+      clearInterval(timer);
+    };
   });
 </script>
 
@@ -67,6 +83,7 @@
         <li>
           <a href={"#/" + name} aria-current={area === name ? "page" : undefined}>
             <Icon name={name as IconName} /><span>{t(("nav." + name) as MessageKey)}</span>
+            {#if name === "settings" && nodeWaiting > 0}<span class="count" aria-hidden="true">{nodeWaiting}</span><span class="visually-hidden">{t("nav.waiting", nodeWaiting)}</span>{/if}
           </a>
         </li>
       {/each}
@@ -173,6 +190,23 @@
     font-weight: 650;
   }
 
+  /* What waits for an answer (Settings): a count at the end of the line, at the corner of the icon on a phone. */
+  li a {
+    position: relative;
+  }
+
+  .count {
+    min-width: 1.4rem;
+    margin-left: auto;
+    padding: 0 var(--space-1);
+    border-radius: var(--radius-pill);
+    background: var(--color-warning-soft);
+    color: var(--color-text);
+    font-size: var(--text-xs);
+    font-weight: 700;
+    text-align: center;
+  }
+
   .foot {
     display: flex;
     flex-direction: column;
@@ -264,6 +298,13 @@
       min-height: 3.25rem;
       padding: var(--space-1);
       font-size: var(--text-xs);
+    }
+
+    .count {
+      position: absolute;
+      top: 2px;
+      right: 2px;
+      margin: 0;
     }
   }
 </style>

@@ -770,6 +770,97 @@ class Chat(unittest.TestCase):
         self.assertEqual(p.erreurs, [])
         p.evaluer("location.hash = '#/chat'")
 
+    def test_5h4_this_machine_is_lent_from_its_settings(self):
+        """ADR 0016, stage 5: « Lend this machine » in the section « This machine » of Settings, on GET /node and its routes. The test server is at
+        the level « this machine only »: lending cannot be turned on from the page, so it is turned on underneath, as on a machine whose level
+        changed. Nothing reaches the computer: autostart and the shutdown are replaced."""
+        p = self.page
+        for kept in (machines.CODES,):
+            kept.clear()
+
+        def restore():
+            for allow in (machines.noeud_autoriser_extinction, machines.noeud_autoriser_maj, machines.noeud_autoriser_piloter):
+                allow(False)
+            for share in machines.DROITS:
+                machines.noeud_droit(share, False)
+            for waiting in machines.noeud_vue()["demandes"]:
+                machines.noeud_repondre_demande(waiting["machine"], waiting["droit"], False)
+            for allowed in machines.noeud_vue()["autorisees"]:
+                machines.noeud_revoquer(allowed["nom"])
+            machines.noeud_activer(False)
+            machines.CODES.clear()
+        self.addCleanup(restore)
+        startup, pending, asked = {"installe": False, "possible": True, "limites": "Lutin starts with the session."}, [None], []
+
+        def install():
+            asked.append("install")
+            startup["installe"] = True
+
+        def cancel(*args, **kwargs):
+            asked.append("cancel")
+            pending[0] = None
+            return True
+        for patch in (mock.patch.object(power, "startup_state_memo", lambda: dict(startup)),
+                      mock.patch.object(power, "install_startup", install),
+                      mock.patch.object(power, "remove_startup", lambda: asked.append("remove")),
+                      mock.patch.object(power, "pending_shutdown", lambda: pending[0]),
+                      mock.patch.object(power, "cancel_shutdown", cancel)):
+            patch.start()
+            self.addCleanup(patch.stop)
+
+        p.evaluer("location.hash = '#/settings/machine'")
+        p.attendre("!!document.querySelector('#lend-on')")
+        self.assertTrue(p.evaluer("document.querySelector('#lend-on').disabled"), "at the level « this machine only » lending cannot be turned on")
+        self.assertIn("que sur cette machine", p.evaluer("document.querySelector('#lend-on-help').innerText"))
+        if AXE.is_file():
+            self.axe("on « Lend this machine », not lent")
+
+        machines.noeud_activer(True)
+        p.attendre("document.querySelector('#lend-on').checked", 15)          # read again by the page
+        p.evaluer("[...document.querySelectorAll('.lend .button')].find(b => b.innerText === \"Donner un code d'appairage\").click()")
+        p.attendre("!!document.querySelector('.lend .code')")
+        code = p.evaluer("document.querySelector('.lend .code').innerText")
+        self.assertRegex(code, r"^\d{4}-\d{4}$")
+        token = machines.noeud_echanger(code, "Bureau")["jeton"]          # what the other machine does with the code
+        p.attendre("[...document.querySelectorAll('.lend .authorized strong')].some(e => e.innerText === 'Bureau')", 15)
+        p.evaluer("[...document.querySelectorAll('.lend .authorized .button')].find(b => b.innerText.startsWith('Révoquer')).click()")
+        p.attendre("!!document.querySelector('.lend .authorized .confirm')")
+        self.assertEqual(machines.noeud_jeton_valide(token), "Bureau", "asking is not revoking")
+        p.evaluer("document.querySelector('.lend .authorized .confirm .danger').click()")
+        p.attendre("!document.querySelector('.lend .authorized')")
+        self.assertIsNone(machines.noeud_jeton_valide(token), "revoked: its token no longer opens anything")
+
+        p.evaluer("document.querySelector('#lend-share-skills').click()")
+        self.eventually(lambda: machines.noeud_droits()["skills"], "a share is kept by the node")
+        p.evaluer("document.querySelector('#lend-allow-lead').click()")
+        self.eventually(lambda: machines.noeud_vue()["piloter"], "a right is kept by the node")
+        p.evaluer("document.querySelector('#lend-autostart').click()")
+        self.eventually(lambda: asked == ["install"], "autostart is set by the server, here replaced")
+        p.attendre("document.querySelector('#lend-autostart').checked")
+
+        machines.noeud_demander("Bureau", "maj")
+        p.attendre("!!document.querySelector('.lend .requests')", 15)
+        p.attendre("document.querySelector('.rail a[href=\"#/settings\"] .count')?.innerText === '1'", 20)          # the badge of Settings
+        if AXE.is_file():
+            self.axe("on « Lend this machine », with a request waiting")
+        p.evaluer("[...document.querySelectorAll('.lend .requests .button')].find(b => b.innerText === 'Accepter').click()")
+        self.eventually(lambda: machines.noeud_vue()["maj"], "accepted: the right is granted")
+        p.attendre("!document.querySelector('.lend .requests') && !document.querySelector('.rail .count')")
+
+        pending[0] = {"dans_s": 20, "par": "Bureau"}
+        p.attendre("!!document.querySelector('.lend .shutdown')", 15)
+        self.assertIn("Bureau", p.evaluer("document.querySelector('.lend .shutdown').innerText"))
+        p.evaluer("document.querySelector('.lend .shutdown .button').click()")
+        p.attendre("!document.querySelector('.lend .shutdown')")
+        self.assertEqual(asked, ["install", "cancel"])
+        self.picture("5h4-lend")
+
+        p.evaluer("document.querySelector('#lend-on').click()")
+        self.eventually(lambda: not machines.noeud_actif(), "lending is turned off from the page")
+        p.attendre("document.querySelector('#lend-on').disabled")
+        self.assertEqual(p.erreurs, [])
+        p.evaluer("location.hash = '#/chat'")
+
     def wait_for(self, check, seconds=20):
         end = time.monotonic() + seconds
         while time.monotonic() < end:
