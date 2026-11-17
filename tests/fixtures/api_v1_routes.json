@@ -205,6 +205,36 @@
   "right": "session"
  },
  {
+  "method": "POST",
+  "path": "/api/v1/machines",
+  "right": "configurator"
+ },
+ {
+  "method": "DELETE",
+  "path": "/api/v1/machines/{id}",
+  "right": "configurator"
+ },
+ {
+  "method": "PATCH",
+  "path": "/api/v1/machines/{id}",
+  "right": "configurator"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/machines/{id}/actions/{action}",
+  "right": "configurator"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/machines/{id}/imports/{kind}",
+  "right": "configurator"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/machines/{id}/rights-requests",
+  "right": "configurator"
+ },
+ {
   "method": "GET",
   "path": "/api/v1/mcp-catalog",
   "right": "session"

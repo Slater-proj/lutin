@@ -172,8 +172,18 @@ warnings, state, detail, step, shutdown_in_s, wake_failed, models, load, version
 `waking`, `powered_on`, `lutin_started`, `syncing`, `ready`, `shutting_down`, `updating`) or null. The list never waits for the network: each machine
 comes with its last known state and a stale one is probed again in the background (`unknown` until a first answer). A token never leaves.
 `GET /api/v1/models` gives `remote`: `[{machine, machine_name, state, models}]`, the machines that answered in the last 40 s (empty while the
-multi-machine mode is off). Still to come (ADR 0016, stages 2 to 7): pairing and the actions on a machine, this machine as a node, the screens, and
-the conversations led on another machine.
+multi-machine mode is off).
+
+The actions on a paired machine (stage 2, contract in `tests/test_api_v1_machine_actions.py`) all need `configurator`, as on the old Machines tab:
+`POST /machines` `{address, code, name?, mac?}` pairs with the one-time code the other machine shows (`201` and the machine); `PATCH /machines/{id}`
+`{mac}`; `DELETE /machines/{id}` unpairs (this machine answers again if it was the one of the setting `machine`) and answers `GET /machines`;
+`POST /machines/{id}/actions/{action}` with `wake` (`202 {mac, sent, interfaces, warnings}`), `shutdown` (`202 {shutdown_in_s}`), `cancel-shutdown`
+(`200 {cancelled}`) or `update` (`202 {}`); `POST /machines/{id}/rights-requests` `{right: lead | update | shutdown}` (`202 {right}`; the owner answers on
+that machine); `POST /machines/{id}/imports/{skills | memory}` answers the counts (`{added, updated, already_there}`, or `{notes_added, notes_skipped,
+profile_copied, profile_truncated}`). Who answers by default stays `PATCH /settings {machine}`. Refusals, each before any effect: `404 not_found`
+(unknown machine), `400 invalid_request` (a value), `409 machine_refused` (the other machine said no: code refused, right not granted, nothing shared),
+`503 machine_unreachable`, `502 machine_error` (it answered something unexpected). Still to come (ADR 0016, stages 3 to 7): this machine as a node, the
+screens, and the conversations led on another machine.
 
 ## What v1 keeps
 

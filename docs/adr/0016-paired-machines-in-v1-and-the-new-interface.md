@@ -2,7 +2,8 @@
 
 Status: accepted by the maintainer on 2026-11-17 (plan step 4: « the models of other machines » and « conversations led on another machine », the
 last missing pieces of the Models screen and of the Chat). Stage 1 done (`GET /machines`, `remote` in `GET /models`, `machine` in a turn;
-`tests/test_api_v1_machines.py`); stages 2 to 7 to do. Placement, the phone's view and the scope were answered by the maintainer (end of this file).
+`tests/test_api_v1_machines.py`); stage 2 done (the action routes, `tests/test_api_v1_machine_actions.py`); stages 3 to 7 to do. Placement, the
+phone's view, the scope and the statuses of stage 2 were answered by the maintainer (end of this file).
 
 ## Context
 
@@ -108,3 +109,7 @@ Each stage is one commit; the old page and its routes are untouched until parity
 - The paired machines go in the Models screen, the lending of this machine in Settings.
 - A paired phone keeps reading the list of machines with their addresses, as today; it changes nothing (the actions need `configurator` or `local`).
 - « Conversations led on another machine » is part of this work (decision 6, stages 6 and 7).
+- Stage 2 (2026-11-17): the routes of decision 1 as listed, all `configurator`, no route of its own to choose who answers (`PATCH /settings {machine}`,
+  right `session` like the old `/api/reglages`). Each kind of refusal gets its status: `404 not_found`, `400 invalid_request`, `409 machine_refused`
+  (the other machine said no), `503 machine_unreachable`, `502 machine_error`. `lutin.machines` raises subclasses of `ValueError` for them, so the old
+  route still answers `400` with the same sentence.

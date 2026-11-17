@@ -36,6 +36,7 @@ from . import mission as _mission
 from . import model_compat as _model_compat
 from . import model_fit as _model_fit
 from . import offline as _offline
+from . import power as _power
 from . import addons as _addons
 from . import mcp as _mcp
 from . import mcp_catalog as _mcp_catalog
@@ -409,6 +410,120 @@ def paired_machines(request):
     return {"enabled": _multi_machine(), "answering": answering,
             "machines": [_machine(stored) for stored in _machines.etats_sans_attente(settings.get("modele", ""), answering)],
             "log": _machines.journal()}
+
+
+# The actions on a paired machine (ADR 0016, stage 2): the right is `configurator` for all of them, as on the old Machines tab; what this machine grants
+# to the others (the node) is stage 3. Who answers by default stays the setting `machine` (`PATCH /settings`). A refusal comes before any effect: the
+# functions of `lutin.machines` check the machine and the values first, and write nothing when the other machine says no or does not answer.
+MACHINE_ERRORS = ((_machines.MachineInconnue, 404, "not_found"), (_machines.MachineRefus, 409, "machine_refused"),
+                  (_machines.MachineInjoignable, 503, "machine_unreachable"), (_machines.MachineErreur, 502, "machine_error"))
+MACHINE_ACTIONS = ("wake", "shutdown", "cancel-shutdown", "update")
+MACHINE_IMPORTS = ("skills", "memory")
+
+
+def _on_machine(action, *args, **kwargs):
+    """Runs an action of `lutin.machines` and gives its refusal a status: 404 unknown machine, 409 the other machine said no (code refused, right not
+    granted), 503 it does not answer, 502 it answered something unexpected. Any other ValueError is a value of the request: 400, as everywhere."""
+    try:
+        return action(*args, **kwargs)
+    except ValueError as failed:
+        for kind, status, code in MACHINE_ERRORS:
+            if isinstance(failed, kind):
+                raise ApiError(status, code, str(failed)) from None
+        raise
+
+
+def _paired(identifier):
+    """One machine as `GET /machines` shows it."""
+    settings = _m.reglages()
+    found = next((stored for stored in _machines.etats_sans_attente(settings.get("modele", ""), str(settings.get("machine") or "")) if stored["id"] == identifier), None)
+    if found is None:
+        raise ApiError(404, "not_found", _t("Machine inconnue."))
+    return _machine(found)
+
+
+@route("POST", "/machines", CONFIGURATOR)
+def pair_machine(request):
+    """{"address": "http://192.168.1.20:8777", "code": "12345678", "name"?, "mac"?}: pairs the machine with the one-time code it shows. 201 and the
+    machine (`unknown` until its first probe). Nothing is written when a field is wrong (400), the code is refused (409) or the machine does not answer (503)."""
+    body = request.body
+    fields = ("address", "code", "name", "mac")
+    if set(body) - set(fields) or not all(isinstance(body.get(name, ""), str) for name in fields) or not body.get("address", "").strip() or not body.get("code", "").strip():
+        raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format(", ".join(fields)))
+    paired = _on_machine(_machines.ajouter, body["address"], body["code"].strip(), body.get("name", ""), body.get("mac", ""))
+    return 201, _paired(paired["id"])
+
+
+@route("PATCH", "/machines/{id}", CONFIGURATOR)
+def update_machine(request):
+    """{"mac": "00:1A:2B:3C:4D:5E"} ("" clears it): the address of the network card that wakes the machine. Answers the machine."""
+    if set(request.body) != {"mac"} or not isinstance(request.body["mac"], str):
+        raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("mac"))
+    _on_machine(_machines.definir_mac, request.params["id"], request.body["mac"])
+    return _paired(request.params["id"])
+
+
+@route("DELETE", "/machines/{id}", CONFIGURATOR)
+def unpair_machine(request):
+    """Forgets the machine (its token included). If it was the one answering by default, this machine answers again. Answers `GET /machines`."""
+    identifier = request.params["id"]
+    _on_machine(_machines.retirer, identifier)
+    if str(_m.reglages().get("machine") or "") == identifier:
+        _m.enregistrer_reglages({"machine": ""})
+    return paired_machines(request)
+
+
+@route("POST", "/machines/{id}/actions/{action}", CONFIGURATOR)
+def machine_action(request):
+    """`wake` sends the Wake-on-LAN packet (the machine needs its MAC address) and says what may keep it from working; `shutdown` asks the machine to
+    shut down in 30 s, `cancel-shutdown` cancels that, `update` asks it to update Lutin. These three need the right the machine grants (`allowed` in
+    `GET /machines`), else 409 `machine_refused`. 202: the machine goes on by itself and `GET /machines` follows it (`step`); 200 for a cancel."""
+    identifier, name = request.params["id"], request.params["action"]
+    if name not in MACHINE_ACTIONS:
+        raise ApiError(400, "invalid_request", _t("Valeur invalide pour « {} » (attendu : {}).").format("action", ", ".join(MACHINE_ACTIONS)))
+    if request.body:
+        raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("-"))
+    if name == "wake":
+        sent = _on_machine(_machines.reveiller, identifier, envoyer=_power.send_wake)          # looked up now, not when machines.py was loaded: the tests replace it
+        return 202, {"mac": sent["mac"], "sent": sent["envois"], "interfaces": list(sent["cartes"]), "warnings": list(sent["avertissements"])}
+    if name == "update":
+        _on_machine(_machines.mettre_a_jour_distante, identifier)
+        return 202, {}
+    answer = _on_machine(_machines.eteindre, identifier, name == "cancel-shutdown")
+    answer = answer if isinstance(answer, dict) else {}
+    if name == "cancel-shutdown":
+        return {"cancelled": bool(answer.get("annulee"))}
+    return 202, {"shutdown_in_s": answer.get("dans_s")}
+
+
+@route("POST", "/machines/{id}/rights-requests", CONFIGURATOR)
+def request_machine_right(request):
+    """{"right": "lead" | "update" | "shutdown"}: asks the machine to grant this right; its owner answers on it, nothing is granted by itself.
+    `requested` in `GET /machines` shows it while it waits."""
+    words = {english: french for french, english in MACHINE_RIGHTS.items()}
+    right = request.body.get("right")
+    if set(request.body) != {"right"} or not isinstance(right, str) or right not in words:
+        raise ApiError(400, "invalid_request", _t("Valeur invalide pour « {} » (attendu : {}).").format("right", ", ".join(words)))
+    _on_machine(_machines.demander_droit, request.params["id"], words[right])
+    return 202, {"right": right}
+
+
+@route("POST", "/machines/{id}/imports/{kind}", CONFIGURATOR)
+def import_from_machine(request):
+    """Adds to this machine what the other one shares (`shares` in `GET /machines`, else 409 `machine_refused`): `skills` (a skill already here is never
+    overwritten, unless it came from that machine and was not changed since) or `memory` (the notes this machine does not have; the profile only when
+    it is empty here). Answers the counts."""
+    kind = request.params["kind"]
+    if kind not in MACHINE_IMPORTS:
+        raise ApiError(400, "invalid_request", _t("Valeur invalide pour « {} » (attendu : {}).").format("kind", ", ".join(MACHINE_IMPORTS)))
+    if request.body:
+        raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("-"))
+    if kind == "skills":
+        counts = _on_machine(_machines.importer_skills, request.params["id"])
+        return {"added": counts["ajoutes"], "updated": counts["mis_a_jour"], "already_there": counts["deja_la"]}
+    counts = _on_machine(_machines.importer_memoire, request.params["id"])
+    return {"notes_added": counts["notes_ajoutees"], "notes_skipped": counts["notes_ignorees"], "profile_copied": counts["profil_copie"],
+            "profile_truncated": counts["profil_coupe"]}
 
 
 @route("POST", "/models", SESSION)

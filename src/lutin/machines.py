@@ -43,6 +43,23 @@ RE_MAC = re.compile(r"^([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}$")
 RE_ID = re.compile(r"^[0-9a-f]{32}$")
 CLES_CHAT = ("model", "messages", "tools", "options", "think", "format", "stream", "keep_alive")          # ce que le nœud accepte de transmettre à son moteur
 
+
+class MachineInconnue(ValueError):
+    """Aucune machine appairée n'a cet identifiant (rien n'a été tenté)."""
+
+
+class MachineRefus(ValueError):
+    """L'autre machine a répondu non : code refusé, droit qu'elle n'accorde pas, autorisation retirée."""
+
+
+class MachineInjoignable(ValueError):
+    """L'autre machine ne répond pas (éteinte, mauvaise adresse, réseau)."""
+
+
+class MachineErreur(ValueError):
+    """L'autre machine a répondu autre chose que ce qui était attendu."""
+# Ce sont des ValueError : la route historique (/api/machines-*) les renvoie en 400 comme avant ; /api/v1 en tire un statut distinct (ADR 0016).
+
 DOSSIER = None          # les tests le remplacent ; sinon le dossier de données de Lutin
 VERROU = threading.RLock()
 CODES = {}          # code (chiffres) -> instant d'expiration
@@ -469,11 +486,13 @@ def ajouter(adresse, code, nom="", mac="", ouvrir=None):
     try:
         rep = _json(adresse, "/api/noeud/appairer", {"code": str(code or ""), "nom": socket.gethostname()[:40]}, delai=5, ouvrir=ouvrir)
     except urllib.error.HTTPError as e:
-        raise ValueError(_t("Cette machine a refusé le code (incorrect, expiré, ou elle ne prête pas son moteur).") if e.code in (400, 401, 403) else _t("Cette machine a répondu une erreur ({}).").format(e.code)) from None
+        if e.code in (400, 401, 403):
+            raise MachineRefus(_t("Cette machine a refusé le code (incorrect, expiré, ou elle ne prête pas son moteur).")) from None
+        raise MachineErreur(_t("Cette machine a répondu une erreur ({}).").format(e.code)) from None
     except (urllib.error.URLError, OSError, ValueError):
-        raise ValueError(_t("Impossible de joindre cette machine : vérifie l'adresse et qu'elle est allumée.")) from None
+        raise MachineInjoignable(_t("Impossible de joindre cette machine : vérifie l'adresse et qu'elle est allumée.")) from None
     if not RE_ID.match(str(rep.get("id", ""))) or not rep.get("jeton"):
-        raise ValueError(_t("Réponse inattendue : ce n'est pas un Lutin qui prête son moteur."))
+        raise MachineErreur(_t("Réponse inattendue : ce n'est pas un Lutin qui prête son moteur."))
     mac_auto = alimentation_mac(rep.get("mac"))
     with VERROU:
         liste = [m for m in lire() if m["id"] != rep["id"]]
@@ -520,7 +539,7 @@ def retirer(ident):
         liste = lire()
         m = next((x for x in liste if x["id"] == ident), None)
         if m is None:
-            raise ValueError(_t("Machine inconnue."))
+            raise MachineInconnue(_t("Machine inconnue."))
         _ecrire_registre([x for x in liste if x["id"] != ident])
         SONDES.pop(ident, None)
     journaliser("machine retirée : {}".format(m["nom"]))
@@ -537,7 +556,7 @@ def definir_mac(ident, mac):
                 m["mac"] = mac
                 _ecrire_registre(liste)
                 return vue(m)
-    raise ValueError(_t("Machine inconnue."))
+    raise MachineInconnue(_t("Machine inconnue."))
 
 
 def avertissements(m):
@@ -751,7 +770,7 @@ def reveiller(ident, envoyer=power.send_wake):
     """Envoie le paquet de réveil à cette machine (il faut son adresse MAC). L'état passe à « réveil envoyé » puis suit la machine : nœud joignable, moteur opérationnel."""
     m = trouver(ident)
     if m is None:
-        raise ValueError(_t("Machine inconnue."))
+        raise MachineInconnue(_t("Machine inconnue."))
     if not m.get("mac"):
         raise ValueError(_t("Pour réveiller cette machine, renseigne son adresse MAC (la liste des cartes réseau : « ipconfig /all » sous Windows, « ip link » sous Linux)."))
     hote = urllib.parse.urlparse(m["adresse"]).hostname or ""
@@ -769,13 +788,15 @@ def eteindre(ident, annuler=False, ouvrir=None):
     """Demande à cette machine de s'éteindre (dans 30 s, annulable) ou annule la demande. Action EXPLICITE : la machine doit l'avoir autorisée, sinon elle refuse."""
     m = trouver(ident)
     if m is None:
-        raise ValueError(_t("Machine inconnue."))
+        raise MachineInconnue(_t("Machine inconnue."))
     try:
         rep = _json(m, "/api/noeud/eteindre", {"annuler": bool(annuler)}, delai=8, ouvrir=ouvrir)
     except urllib.error.HTTPError as e:
-        raise ValueError(_t("Cette machine n'accepte pas d'être éteinte à distance : son propriétaire doit cocher « Autoriser les machines appairées à l'éteindre » dans l'onglet Machines.") if e.code == 403 else _t("Cette machine a répondu une erreur ({}).").format(e.code)) from None
+        if e.code == 403:
+            raise MachineRefus(_t("Cette machine n'accepte pas d'être éteinte à distance : son propriétaire doit cocher « Autoriser les machines appairées à l'éteindre » dans l'onglet Machines.")) from None
+        raise MachineErreur(_t("Cette machine a répondu une erreur ({}).").format(e.code)) from None
     except (urllib.error.URLError, OSError, ValueError):
-        raise ValueError(_t("Impossible de joindre cette machine : vérifie l'adresse et qu'elle est allumée.")) from None
+        raise MachineInjoignable(_t("Impossible de joindre cette machine : vérifie l'adresse et qu'elle est allumée.")) from None
     journaliser("{} demandée à {}".format("annulation de l'extinction" if annuler else "extinction", m["nom"]))
     with VERROU:
         if annuler:
@@ -791,17 +812,17 @@ def demander_droit(ident, droit, ouvrir=None):
     """Demande à l'autre machine de t'accorder un droit (conversations, mise à jour, extinction) : son propriétaire répond sur elle. Rien n'est accordé d'office."""
     m = trouver(ident)
     if m is None:
-        raise ValueError(_t("Machine inconnue."))
+        raise MachineInconnue(_t("Machine inconnue."))
     if droit not in DROITS_DEMANDABLES:
         raise ValueError(_t("Droit inconnu."))
     try:
         _json(m, "/api/noeud/demande", {"droit": droit}, delai=8, ouvrir=ouvrir)
     except urllib.error.HTTPError as e:
         if e.code in (401, 404, 405):
-            raise ValueError(_t("Cette machine ne reconnaît pas la demande : soit son autorisation a été retirée, soit sa version de Lutin est trop ancienne. Mets-la à jour une première fois sur elle-même (relance l'installeur ou la commande « lutin update »).")) from None
-        raise ValueError(_t("Cette machine a répondu une erreur ({}).").format(e.code)) from None
+            raise MachineRefus(_t("Cette machine ne reconnaît pas la demande : soit son autorisation a été retirée, soit sa version de Lutin est trop ancienne. Mets-la à jour une première fois sur elle-même (relance l'installeur ou la commande « lutin update »).")) from None
+        raise MachineErreur(_t("Cette machine a répondu une erreur ({}).").format(e.code)) from None
     except (urllib.error.URLError, OSError, ValueError):
-        raise ValueError(_t("Impossible de joindre cette machine : vérifie l'adresse et qu'elle est allumée.")) from None
+        raise MachineInjoignable(_t("Impossible de joindre cette machine : vérifie l'adresse et qu'elle est allumée.")) from None
     SONDES.pop(ident, None)
     journaliser("autorisation « {} » demandée à {}".format(droit, m["nom"]))
     return {"ok": True}
@@ -811,20 +832,20 @@ def mettre_a_jour_distante(ident, ouvrir=None):
     """Demande à la machine distante de mettre Lutin à jour (elle doit l'avoir autorisé) ; elle redémarre ensuite toute seule si Lutin y tourne sous supervision. Le suivi se lit dans son étape « maj »."""
     m = trouver(ident)
     if m is None:
-        raise ValueError(_t("Machine inconnue."))
+        raise MachineInconnue(_t("Machine inconnue."))
     ancienne = (SONDES.get(ident) or (0, {}, ""))[1].get("version", "")
     try:
         _json(m, "/api/noeud/maj", {}, delai=15, ouvrir=ouvrir)
     except urllib.error.HTTPError as e:
         if e.code == 403:
-            raise ValueError(_t("Cette machine n'accepte pas d'être mise à jour à distance : son propriétaire doit cocher « Autoriser les machines appairées à mettre Lutin à jour » dans l'onglet Machines.")) from None
+            raise MachineRefus(_t("Cette machine n'accepte pas d'être mise à jour à distance : son propriétaire doit cocher « Autoriser les machines appairées à mettre Lutin à jour » dans l'onglet Machines.")) from None
         try:
             detail = json.loads(e.read().decode("utf-8", "replace")).get("erreur", "")
         except (ValueError, OSError, AttributeError):
             detail = ""
-        raise ValueError(detail or _t("Cette machine a répondu une erreur ({}).").format(e.code)) from None
+        raise MachineErreur(detail or _t("Cette machine a répondu une erreur ({}).").format(e.code)) from None
     except (urllib.error.URLError, OSError, ValueError):
-        raise ValueError(_t("Impossible de joindre cette machine : vérifie l'adresse et qu'elle est allumée.")) from None
+        raise MachineInjoignable(_t("Impossible de joindre cette machine : vérifie l'adresse et qu'elle est allumée.")) from None
     with VERROU:
         MAJ_DISTANTE[ident] = (time.monotonic(), ancienne)
     SONDES.pop(ident, None)
@@ -969,10 +990,10 @@ def demander_partage(m, genre, **corps):
         return _json(m, "/api/noeud/partage", dict(corps, genre=genre), delai=20)
     except urllib.error.HTTPError as e:
         if e.code == 403:
-            raise ValueError(_t("La machine « {} » ne partage pas cela : sur elle, onglet Machines > « Partager avec les machines appairées », puis coche la case voulue.").format(m.get("nom", "?"))) from None
-        raise ValueError(_t("Cette machine a répondu une erreur ({}).").format(e.code)) from None
+            raise MachineRefus(_t("La machine « {} » ne partage pas cela : sur elle, onglet Machines > « Partager avec les machines appairées », puis coche la case voulue.").format(m.get("nom", "?"))) from None
+        raise MachineErreur(_t("Cette machine a répondu une erreur ({}).").format(e.code)) from None
     except (urllib.error.URLError, OSError, ValueError):
-        raise ValueError(_t("Impossible de joindre cette machine : vérifie l'adresse et qu'elle est allumée.")) from None
+        raise MachineInjoignable(_t("Impossible de joindre cette machine : vérifie l'adresse et qu'elle est allumée.")) from None
 
 
 def _rafraichir_conversations():
@@ -1081,7 +1102,7 @@ def importer_skills(ident):
     from . import core as _m
     m = trouver(ident)
     if m is None:
-        raise ValueError(_t("Machine inconnue."))
+        raise MachineInconnue(_t("Machine inconnue."))
     origines = _registre_import("skills_origine.json")
     ajoutes = mis = deja = 0
     for s in demander_partage(m, "skills").get("skills", []):
@@ -1116,7 +1137,7 @@ def importer_memoire(ident):
     from . import core as _m
     m = trouver(ident)
     if m is None:
-        raise ValueError(_t("Machine inconnue."))
+        raise MachineInconnue(_t("Machine inconnue."))
     distante = demander_partage(m, "memoire").get("memoire") or {}
     local = _m.lire_memoire("MEMOIRE.md")
     connues = {re.sub(r"\W+", " ", ligne).strip().lower() for ligne in local.splitlines()}
