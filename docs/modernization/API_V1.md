@@ -168,7 +168,7 @@ Other computers running Lutin whose engine this one may use ([ADR 0016](../adr/0
 `tests/test_api_v1_machines.py`). `GET /api/v1/machines` (right `session`) answers `{"enabled", "answering", "machines", "log"}`: `enabled` is the
 multi-machine mode, `answering` the machine of the setting `machine` ("" for this one), and each machine `{id, name, address, mac, mac_auto, added,
 warnings, state, detail, step, shutdown_in_s, wake_failed, models, load, version, update_available, allowed {lead, update, shutdown}, requested, shares
-{skills, memory}}`. `state` is `unknown`, `unreachable`, `wake_sent`, `reachable` or `operational`; `step` the wake or shutdown sequence (`off`,
+{skills, memory}}`. `state` is `unknown`, `unreachable`, `wake_sent`, `reachable` or `operational`; `shutdown_in_s` the seconds left before a shutdown (null unless `step` is `shutting_down`); `step` the wake or shutdown sequence (`off`,
 `waking`, `powered_on`, `lutin_started`, `syncing`, `ready`, `shutting_down`, `updating`) or null. The list never waits for the network: each machine
 comes with its last known state and a stale one is probed again in the background (`unknown` until a first answer). A token never leaves.
 `GET /api/v1/models` gives `remote`: `[{machine, machine_name, state, models}]`, the machines that answered in the last 40 s (empty while the

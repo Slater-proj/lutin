@@ -108,6 +108,10 @@ class MachineActions(unittest.TestCase):
             self.assertEqual((status, answer["error"]["code"], asked), (409, "machine_refused", []), "not allowed by default")
             machines.noeud_autoriser_extinction(True)
             self.assertEqual(api("POST", path + "shutdown"), (202, {"shutdown_in_s": 30}))
+            machines.SONDES.clear()
+            shown = M.until(lambda: next((m for m in api("GET", "/api/v1/machines")[1]["machines"] if m["step"] == "shutting_down"), None))
+            self.assertTrue(shown, "GET /machines follows the shutdown")
+            self.assertTrue(0 <= shown["shutdown_in_s"] <= 30, shown["shutdown_in_s"])
             self.assertEqual(api("POST", path + "cancel-shutdown"), (200, {"cancelled": True}))
         self.assertEqual(asked, ["shutdown", "cancel"])
 

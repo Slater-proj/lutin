@@ -51,6 +51,7 @@ class PairedMachines(unittest.TestCase):
         self.assertIn(first["state"], ("unknown", "operational"), "never probed yet: the list did not wait for it")
         probed = until(lambda: next((m for m in api("GET", "/api/v1/machines")[1]["machines"] if m["state"] != "unknown"), None))
         self.assertEqual(probed["state"], "operational", probed["detail"])
+        self.assertIsNone(probed["shutdown_in_s"], "a countdown only while the machine shuts down ({})".format(probed["step"]))
         self.assertEqual(sorted(probed["allowed"]), ["lead", "shutdown", "update"])
         self.assertEqual(sorted(probed["shares"]), ["memory", "skills"])
         self.assertIsInstance(probed["models"], list)

@@ -394,7 +394,8 @@ def _machine(stored):
     return {"id": stored["id"], "name": stored.get("nom", ""), "address": stored.get("adresse", ""), "mac": stored.get("mac", ""),
             "mac_auto": bool(stored.get("mac_auto")), "added": stored.get("ajoutee", ""), "warnings": list(stored.get("avertissements") or []),
             "state": MACHINE_STATES.get(stored.get("etat"), "unknown"), "detail": stored.get("detail", ""), "step": MACHINE_STEPS.get(stored.get("etape")),
-            "shutdown_in_s": stored.get("dans_s"), "wake_failed": bool(stored.get("reveil_echec")), "models": list(stored.get("modeles") or []),
+            "shutdown_in_s": stored.get("dans_s") if stored.get("etape") == "extinction" else None,          # `dans_s` is 0 in every other step
+            "wake_failed": bool(stored.get("reveil_echec")), "models": list(stored.get("modeles") or []),
             "load": _load(stored.get("charge")), "version": stored.get("version", ""), "update_available": bool(stored.get("maj_disponible")),
             "allowed": {english: bool(allowed.get(french)) for french, english in MACHINE_RIGHTS.items()},
             "requested": [MACHINE_RIGHTS[right] for right in stored.get("demandes") or [] if right in MACHINE_RIGHTS],
