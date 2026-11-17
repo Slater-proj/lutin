@@ -18,7 +18,7 @@
   type Area = (typeof AREAS)[number];
 
   function areaOf(hash: string): Area {
-    const name = hash.replace(/^#\/?/, "");
+    const name = hash.replace(/^#\/?/, "").split("/")[0]; // `#/settings/safety` is the area Settings; what follows is for the screen
     return (AREAS as readonly string[]).includes(name) ? (name as Area) : "chat";
   }
 
@@ -215,6 +215,7 @@
     flex-direction: column;
     min-width: 0;
     min-height: 0;
+    overflow-y: auto; /* a long screen scrolls here: the navigation stays in place, and on a phone nothing covers the bar at the bottom */
     outline: none;
   }
 

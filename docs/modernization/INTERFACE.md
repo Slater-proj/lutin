@@ -17,6 +17,26 @@ This page says what exists, what was verified and how, and what is missing. It i
 | Base components (button, card, field…) as shared components | not yet: styles are shared classes, components come with the second screen |
 | Offline: no font, no CDN, nothing fetched from another origin | done — enforced by the policy |
 
+## Layout and widths
+
+Decided by the maintainer on 2026-11-17, after trying `/app/` on a 16:10 screen of 2560 px: Settings was one page of thirteen groups to scroll, and
+every screen stopped at 46rem (736 px), under a third of such a screen.
+
+- **Two widths, not one.** `--measure` (46rem) stays the widest line of *text*: a paragraph, a help line, the messages of the Chat. A *screen* may
+  use `--page-max` (100rem, 1600 px), centred beyond it. Cards and groups go in a grid that wraps (`repeat(auto-fill, minmax(min(100%, 28rem), 1fr))`):
+  one column on a phone, two to three on a wide screen; a group that holds a list or an editor spans the whole row.
+- **Settings has sections**, listed in a column on the left (`<nav>` with links, the current one marked `aria-current`), one section shown at a time,
+  kept in the address (`#/settings/<section>`, `#/settings` opens the first one). Sections: `general` (language, answers, notifications), `safety`
+  (safety, approval rules), `devices` (paired devices), `machine` (this machine; « Lend this machine » joins it at stage 5 of ADR 0016), `knowledge`
+  (web and memory, the memory given to models), `tools` (tools, skills, third-party skills), `advanced` (sampling).
+- **On a phone** (720 px and less, the breakpoint of the shell): `#/settings` shows the list of sections; a section shows its groups and a link back
+  to the list. The other screens get one column, as before.
+- The Chat keeps its thread at `--measure`; Models, Agents and Projects use `--page-max` with their cards in the grid.
+- A long screen scrolls inside `main`: the navigation stays in place, and on a phone nothing covers the bar at the bottom (before, the whole page
+  scrolled, and on a phone a long screen was drawn over that bar).
+- Checked in Chrome (`tests/test_web_app_chat.py`): test 5h2 at 2560 px and 360 px (sections, address, columns, width of the screens, readable
+  lines, focus, scrolling), test 5c with axe on every section in both themes.
+
 ## First launch
 
 Verified in Chrome against the fake engine and a fictive machine and disk (`tests/test_web_app_chat.py`, tests 5e and 5f), with automatic accessibility checks on every step.

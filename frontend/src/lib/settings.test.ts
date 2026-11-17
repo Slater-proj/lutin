@@ -1,7 +1,25 @@
 import { describe, expect, it } from "vitest";
-import { FIELDS, GROUPS, fieldsOf, parseTyped, shown } from "./settings";
+import { FIELDS, GROUPS, SECTIONS, SECTION_IDS, fieldsOf, parseTyped, sectionOf, shown } from "./settings";
 
 const field = (name: string) => FIELDS.find((item) => item.name === name)!;
+
+describe("settings sections", () => {
+  it("shows every group of fields in exactly one section", () => {
+    const parts: string[] = Object.values(SECTIONS).flat();
+    expect(new Set(parts).size).toBe(parts.length);
+    for (const group of GROUPS) expect(parts).toContain(group);
+  });
+
+  it("reads the section from the address, and nothing else", () => {
+    expect(sectionOf("#/settings/safety")).toBe("safety");
+    expect(sectionOf("#settings/tools")).toBe("tools");
+    expect(sectionOf("#/settings")).toBeNull();
+    expect(sectionOf("#/settings/")).toBeNull();
+    expect(sectionOf("#/settings/nowhere")).toBeNull();
+    expect(sectionOf("#/settings/constructor")).toBeNull();
+    expect(SECTION_IDS[0]).toBe("general");
+  });
+});
 
 describe("settings", () => {
   it("puts every field in a known group, once", () => {

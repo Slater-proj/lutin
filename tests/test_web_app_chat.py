@@ -28,6 +28,9 @@ CHROME = next((c for c in (os.environ.get("CHROME"), shutil.which("google-chrome
 AXE = Path(__file__).resolve().parent.parent / "frontend" / "node_modules" / "axe-core" / "axe.min.js"
 WATCH = "window.__violations = []; document.addEventListener('securitypolicyviolation', e => window.__violations.push(e.violatedDirective + ' ' + e.blockedURI));"
 TEXT = "(document.querySelector('.thread') || document.body).innerText"
+# The sections of the Settings screen (frontend/src/lib/settings.ts, SECTIONS) and something each one draws when it is ready.
+SETTINGS_SECTIONS = {"general": "#setting-temperature", "safety": "#rule-command", "devices": ".devices", "machine": "#setting-num_thread",
+                     "knowledge": "#memory-context", "tools": "#tps-query", "advanced": "#setting-top_p"}
 
 
 def js(value):
@@ -475,9 +478,10 @@ class Chat(unittest.TestCase):
             p.attendre("!!document.querySelector('.guide .pick h3')")
             self.axe("on the guide of models (%s)" % theme)
             p.evaluer("document.querySelectorAll('.tabs button')[1].click()")
-            p.evaluer("location.hash = '#/settings'")
-            p.attendre("!!document.querySelector('#setting-temperature')")
-            self.axe("on the Settings screen (%s)" % theme)
+            for section, ready in SETTINGS_SECTIONS.items():          # one section is shown at a time: each one is checked
+                p.evaluer("location.hash = '#/settings/%s'" % section)
+                p.attendre("!!document.querySelector(%s)" % js(ready))
+                self.axe("on the section %s of the Settings screen (%s)" % (section, theme))
             p.evaluer("location.hash = '#/agents'")
             p.attendre("!!document.querySelector('#task-name')")
             self.axe("on the Agents screen (%s)" % theme)
@@ -572,7 +576,7 @@ class Chat(unittest.TestCase):
         before = T.A.reglages()
         keys = ("temperature", "web", "mode", "memoire_longue")
         self.addCleanup(lambda: T.A.enregistrer_reglages({key: before[key] for key in keys}))
-        p.evaluer("location.hash = '#/settings'")
+        p.evaluer("location.hash = '#/settings/general'")
         p.attendre("!!document.querySelector('#setting-temperature')")
         change = "(() => { const box = document.querySelector('#%s'); box.value = %s; box.dispatchEvent(new Event('change', {bubbles: true})); })()"
         p.evaluer(change % ("setting-temperature", js("0.9")))
@@ -581,17 +585,74 @@ class Chat(unittest.TestCase):
         p.evaluer(change % ("setting-temperature", js("5")))
         p.attendre("!!document.querySelector('#setting-temperature').closest('.row').querySelector('.error')")
         self.assertEqual(T.A.reglages()["temperature"], 0.9, "a value out of its range is refused before it is sent")
+        p.evaluer(change % ("setting-mode", js("technical")))
+        self.eventually(lambda: T.A.reglages()["mode"] == "technique", "a choice is stored under the word the engine knows")
+        p.evaluer("location.hash = '#/settings/knowledge'")
+        p.attendre("!!document.querySelector('#setting-web')")
         wanted = not before["web"]
         p.evaluer("document.querySelector('#setting-web').click()")
         self.eventually(lambda: T.A.reglages()["web"] == wanted, "a switch is kept as soon as it is clicked")
-        p.evaluer(change % ("setting-mode", js("technical")))
-        self.eventually(lambda: T.A.reglages()["mode"] == "technique", "a choice is stored under the word the engine knows")
+        p.evaluer("location.hash = '#/settings/safety'")
+        p.attendre("!!document.querySelector('#setting-auto_approve_commands')")
         self.assertTrue(p.evaluer("!!document.querySelector('#setting-auto_approve_commands').closest('.row').querySelector('.care')"), "what removes a question is marked")
         p.aller(T.BASE + "/app/")
         p.attendre("!!document.querySelector('#message')")
         p.evaluer("location.hash = '#/settings'")
         p.attendre("!!document.querySelector('#setting-temperature')")
         self.assertEqual(p.evaluer("document.querySelector('#setting-temperature').value"), "0.9", "after a reload the page shows what the server holds")
+        self.assertEqual(p.erreurs, [])
+        p.evaluer("location.hash = '#/chat'")
+
+    def test_5h2_settings_have_sections_and_a_wide_screen_is_used(self):
+        """docs/modernization/INTERFACE.md, « Layout and widths »: one section of the settings at a time, kept in the address; a wide screen gets the
+        fields in columns and the other screens use its width, a line of text stays readable; a phone shows the list of sections, then one section."""
+        p = self.page
+        visible = "(s => { const e = document.querySelector(s); return !!e && e.getClientRects().length > 0; })"
+        p.commande("Emulation.setDeviceMetricsOverride", width=2560, height=1600, deviceScaleFactor=1, mobile=False)
+        try:
+            p.evaluer("location.hash = '#/settings'")
+            p.attendre("!!document.querySelector('#setting-temperature')")
+            self.assertEqual(p.evaluer("document.querySelector('.sections a[aria-current=\"page\"]').getAttribute('href')"), "#/settings/general", "the first section opens")
+            self.assertFalse(p.evaluer("!!document.querySelector('#setting-num_thread')"), "one section at a time")
+            p.evaluer("document.querySelector('.sections a[href=\"#/settings/machine\"]').click()")
+            p.attendre("!!document.querySelector('#setting-num_thread')")
+            self.assertEqual(p.evaluer("location.hash"), "#/settings/machine", "the section is kept in the address")
+            self.assertFalse(p.evaluer("!!document.querySelector('#setting-temperature')"))
+            self.assertGreater(p.evaluer("document.querySelector('.settings').getBoundingClientRect().width"), 1400, "a wide screen is used")
+            columns = p.evaluer("new Set([...document.querySelectorAll('.content .fields .row')].map(r => Math.round(r.getBoundingClientRect().left))).size")
+            self.assertGreaterEqual(columns, 3, "the fields of a group go in columns")
+            self.assertLessEqual(p.evaluer("document.querySelector('.content .group > p.muted').getBoundingClientRect().width"), 46 * 16 + 1, "a line of text stays readable")
+            self.assertRegex(p.evaluer("document.querySelector('#setting-memory_budget_gb-help').innerText"), r"\. De 0 à 4096\.$", "a space before the range")
+            self.picture("5h2-settings-2560")
+            for screen in ("models", "agents", "projects"):
+                p.evaluer("location.hash = '#/%s'" % screen)
+                p.attendre("!!document.querySelector('.%s')" % screen)
+                self.assertGreater(p.evaluer("document.querySelector('.%s').getBoundingClientRect().width" % screen), 1400, screen)
+                self.picture("5h2-%s-2560" % screen)
+            p.evaluer("location.hash = '#/agents'")
+            p.attendre("document.querySelector('#main').scrollHeight > document.querySelector('#main').clientHeight")          # a long screen
+            self.assertLessEqual(p.evaluer("document.scrollingElement.scrollHeight - innerHeight"), 1, "the screen scrolls, not the page: the navigation stays")
+        finally:
+            p.commande("Emulation.clearDeviceMetricsOverride")
+        p.commande("Emulation.setDeviceMetricsOverride", width=360, height=740, deviceScaleFactor=1, mobile=True)
+        try:
+            p.evaluer("location.hash = '#/settings'")
+            p.attendre(visible + "('.sections')")
+            self.assertFalse(p.evaluer(visible + "('.content')"), "on a phone, the list of sections comes first")
+            self.assertFalse(p.evaluer("!!document.querySelector('.sections [aria-current]')"), "the list marks no section: none is open")
+            self.picture("5h2-settings-360-list")
+            p.evaluer("document.querySelector('.sections a[href=\"#/settings/safety\"]').click()")
+            p.attendre(visible + "('#rule-command')")
+            self.picture("5h2-settings-360-section")
+            self.assertFalse(p.evaluer(visible + "('.sections')"), "then the section alone")
+            covered = "(() => { const r = document.querySelector('.rail a[href=\"#/settings\"]').getBoundingClientRect(); return !document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2).closest('.rail'); })()"
+            self.assertFalse(p.evaluer(covered), "a long section never covers the bar at the bottom")
+            p.attendre("document.activeElement === document.querySelector('.content')")          # the person lands on what was chosen
+            p.evaluer("document.querySelector('.content .back').click()")
+            p.attendre(visible + "('.sections')")
+            self.assertEqual(p.evaluer("location.hash"), "#/settings")
+        finally:
+            p.commande("Emulation.clearDeviceMetricsOverride")
         self.assertEqual(p.erreurs, [])
         p.evaluer("location.hash = '#/chat'")
 
@@ -713,7 +774,7 @@ class Chat(unittest.TestCase):
         patch = mock.patch.object(T.A, "APPAREILS", spare)          # the test server is at the level « this machine only »: the page reaches it without a session
         patch.start()
         self.addCleanup(patch.stop)
-        p.evaluer("location.hash = '#/settings'")
+        p.evaluer("location.hash = '#/settings/devices'")
         p.attendre("!!document.querySelector('.devices')")
         p.attendre("!!document.querySelector('.devices .note')")
         self.assertIn("que sur cette machine", p.evaluer("document.querySelector('.devices .note').innerText"), "at the level « this machine only » the page says why no device can be paired")
@@ -723,7 +784,7 @@ class Chat(unittest.TestCase):
         self.addCleanup(network.stop)
         token = spare.appairer(spare.nouveau_pin(), "Old phone")
         p.evaluer("location.hash = '#/chat'")
-        p.evaluer("location.hash = '#/settings'")
+        p.evaluer("location.hash = '#/settings/devices'")
         p.attendre("[...document.querySelectorAll('.devices .list strong')].some(e => e.innerText === 'Old phone')")
         p.evaluer("document.querySelector('.devices .button.primary').click()")
         p.attendre("!!document.querySelector('.devices .digits')")
@@ -746,7 +807,7 @@ class Chat(unittest.TestCase):
         p = self.page
         from lutin import approval_rules
         self.addCleanup(lambda: approval_rules._path().unlink(missing_ok=True))
-        p.evaluer("location.hash = '#/settings'")
+        p.evaluer("location.hash = '#/settings/safety'")
         p.attendre("!!document.querySelector('#rule-command')")
         fill = "(() => { const set = (id, value, name) => { const box = document.querySelector(id); box.value = value; box.dispatchEvent(new Event(name, {bubbles: true})); }; set('#rule-effect', %s, 'change'); set('#rule-command', %s, 'input'); document.querySelector('.rules .add').requestSubmit(); })()"
         p.evaluer(fill % (js("deny"), js("npm publish *")))
@@ -771,7 +832,7 @@ class Chat(unittest.TestCase):
         patch = mock.patch.object(notifications, "_post", side_effect=lambda *args, **kwargs: sent.append(args) or True)
         patch.start()
         self.addCleanup(patch.stop)
-        p.evaluer("location.hash = '#/settings'")
+        p.evaluer("location.hash = '#/settings/general'")
         p.attendre("!!document.querySelector('#notification-kind')")
         p.evaluer("(() => { const box = document.querySelector('#notification-kind'); box.value = 'ntfy'; box.dispatchEvent(new Event('change', {bubbles: true})); })()")
         p.attendre("!!document.querySelector('#notification-sujet')")
@@ -791,7 +852,7 @@ class Chat(unittest.TestCase):
         p.evaluer("(() => { const set = (id, value, name) => { const box = document.querySelector(id); box.value = value; box.dispatchEvent(new Event(name, {bubbles: true})); }; set('#task-name', 'Ping', 'input'); set('#task-request', 'Say hello', 'input'); set('#task-notify', %s, 'change'); document.querySelector('.add').requestSubmit(); })()" % js(identifier))
         p.attendre("!!document.querySelector('.agents .tasks .card')")
         self.assertEqual([task["notifier"] for task in scheduled_tasks.read()], [identifier], "the task notifies the channel that was chosen")
-        p.evaluer("location.hash = '#/settings'")
+        p.evaluer("location.hash = '#/settings/general'")
         p.attendre("!!document.querySelector('.notifications .list')")
         p.evaluer("[...document.querySelectorAll('.notifications .list .button')].find(b => b.innerText === 'Retirer').click()")
         p.attendre("!!document.querySelector('.notifications .confirm')")
@@ -1175,7 +1236,7 @@ class Chat(unittest.TestCase):
         fill = "(() => { const box = document.querySelector(%s); box.value = %s; box.dispatchEvent(new Event('input', {bubbles: true})); })()"
         press = "[...document.querySelectorAll('.tps .button')].find(b => b.innerText === %s).click()"
         pressed = "[...document.querySelectorAll('.tps .button')].some(b => b.innerText === %s)"
-        p.evaluer("location.hash = '#/settings'")
+        p.evaluer("location.hash = '#/settings/tools'")
         p.attendre("!!document.querySelector('#tps-query')")
         p.evaluer(fill % (js("#tps-query"), js("pdf")))
         p.evaluer("document.querySelector('.tps form.row').requestSubmit()")
@@ -1228,8 +1289,8 @@ class Chat(unittest.TestCase):
         self.addCleanup(lambda: [f.unlink() for f in folder.glob("*.md")] if folder.is_dir() else None)
         saved = {name: T.A.lire_memoire(name) for name in ("CONTEXTE.md", "MEMOIRE.md")}
         self.addCleanup(lambda: [T.A.ecrire_memoire(name, text) for name, text in saved.items()])
-        p.evaluer("location.hash = '#/settings'")
-        p.attendre("!!document.querySelector('#skill-name') && !!document.querySelector('#memory-context')")
+        p.evaluer("location.hash = '#/settings/tools'")
+        p.attendre("!!document.querySelector('#skill-name')")
         self.assertTrue(p.evaluer("!!document.querySelector('.skills-empty')"), "no skill yet: the page says so")
         set_value = "(id, value) => { const box = document.querySelector(id); box.value = value; box.dispatchEvent(new Event('input', {bubbles: true})); }"
         p.evaluer("(() => { const set = %s; set('#skill-name', 'cuisine.md'); set('#skill-text', %s); document.querySelector('.skills .add').requestSubmit(); })()" % (set_value, js("# Cuisine\nÀ lire quand je parle de cuisine.\nSel d abord.")))
@@ -1242,17 +1303,21 @@ class Chat(unittest.TestCase):
         p.evaluer("(() => { const set = %s; set('#skill-text', %s); document.querySelector('.skills .add').requestSubmit(); })()" % (set_value, js("# Cuisine 2\nPoivre.")))
         p.attendre("[...document.querySelectorAll('.skills .item strong')].some(e => e.innerText === 'Cuisine 2')")
         self.assertEqual((folder / "cuisine.md").read_text(encoding="utf-8"), "# Cuisine 2\nPoivre.")
-        p.evaluer("(() => { const set = %s; set('#memory-context', 'Je fais des jeux.'); set('#memory-notes', 'Aime le the.'); document.querySelector('.memory form').requestSubmit(); })()" % set_value)
-        p.attendre("!!document.querySelector('.memory .done')")
-        self.assertEqual((T.A.lire_memoire("CONTEXTE.md"), T.A.lire_memoire("MEMOIRE.md")), ("Je fais des jeux.", "Aime le the."))
         if AXE.is_file():
-            self.axe("on the skills and the memory")
+            self.axe("on the skills")
         p.evaluer("[...document.querySelectorAll('.skills .item .button')].find(b => b.innerText === 'Supprimer').click()")
         p.attendre("!!document.querySelector('.skills .confirm')")
         self.assertTrue((folder / "cuisine.md").is_file(), "asking is not deleting")
         p.evaluer("document.querySelector('.skills .confirm .danger').click()")
         p.attendre("!!document.querySelector('.skills-empty')")
         self.assertFalse((folder / "cuisine.md").exists())
+        p.evaluer("location.hash = '#/settings/knowledge'")          # the memory given to models is in another section
+        p.attendre("!!document.querySelector('#memory-context')")
+        p.evaluer("(() => { const set = %s; set('#memory-context', 'Je fais des jeux.'); set('#memory-notes', 'Aime le the.'); document.querySelector('.memory form').requestSubmit(); })()" % set_value)
+        p.attendre("!!document.querySelector('.memory .done')")
+        self.assertEqual((T.A.lire_memoire("CONTEXTE.md"), T.A.lire_memoire("MEMOIRE.md")), ("Je fais des jeux.", "Aime le the."))
+        if AXE.is_file():
+            self.axe("on the memory")
         self.assertEqual(p.erreurs, [])
         p.evaluer("location.hash = '#/chat'")
 

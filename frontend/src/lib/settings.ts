@@ -71,6 +71,28 @@ export function fieldsOf(group: GroupId): Field[] {
   return FIELDS.filter((field) => field.group === group);
 }
 
+// The sections of the Settings screen, one shown at a time (docs/modernization/INTERFACE.md, « Layout and widths »). A part is a group of fields or
+// a component of its own; the screen draws them in this order.
+export type Part = GroupId | "language" | "notifications" | "approval_rules" | "devices" | "memory" | "skills" | "third_party_skills";
+export const SECTIONS = {
+  general: ["language", "answers", "notifications"],
+  safety: ["safety", "approval_rules"],
+  devices: ["devices"],
+  machine: ["machine"],
+  knowledge: ["knowledge", "memory"],
+  tools: ["tools", "skills", "third_party_skills"],
+  advanced: ["sampling"],
+} as const satisfies Record<string, readonly Part[]>;
+export type SectionId = keyof typeof SECTIONS;
+export const SECTION_IDS = Object.keys(SECTIONS) as SectionId[];
+
+/** The section named in the address (`#/settings/safety`), or null when none is named or the name is unknown (the screen then opens the first
+ *  one, or the list of sections on a phone). */
+export function sectionOf(hash: string): SectionId | null {
+  const name = hash.replace(/^#\/?/, "").split("/")[1] ?? "";
+  return (SECTION_IDS as string[]).includes(name) ? (name as SectionId) : null;
+}
+
 /** What the server takes for what was typed, or an error key when it cannot be a value of this field. Empty = null for a field that allows it. */
 export function parseTyped(field: Field, raw: string): { ok: true; value: Value } | { ok: false; error: "number" | "range" } {
   if (field.kind === "strings") {

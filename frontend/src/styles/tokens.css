@@ -54,6 +54,7 @@
   --rail-width: 14rem;
   --list-width: 17.5rem;
   --measure: 46rem; /* the widest a line of text gets */
+  --page-max: 100rem; /* the widest a screen gets (1600 px), centred beyond: its cards and fields go in columns (INTERFACE.md, « Layout and widths ») */
   --target: 2.75rem; /* the smallest side of anything one taps (44 px) */
 }
 

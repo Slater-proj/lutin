@@ -1,7 +1,8 @@
 <script lang="ts">
   // The Settings screen: every setting of /api/v1/settings in groups, each kept as soon as it is changed. What the person typed is checked here first
   // (a number, its range); the server checks again and has the last word, and what it answers is what is shown.
-  import { onMount } from "svelte";
+  // One section is shown at a time, named in the address (#/settings/<section>); on a phone #/settings is the list of sections.
+  import { onMount, tick } from "svelte";
   import ApprovalRules from "../components/ApprovalRules.svelte";
   import Devices from "../components/Devices.svelte";
   import Memory from "../components/Memory.svelte";
@@ -11,8 +12,14 @@
   import LanguageChoice from "../components/LanguageChoice.svelte";
   import { api, ApiError } from "../lib/api";
   import { t, type MessageKey } from "../lib/messages";
-  import { fieldsOf, GROUPS, parseTyped, shown, type Field, type Value } from "../lib/settings";
+  import { fieldsOf, parseTyped, SECTION_IDS, SECTIONS, sectionOf, shown, type Field, type GroupId, type Part, type SectionId, type Value } from "../lib/settings";
 
+  let section = $state<SectionId | null>(sectionOf(location.hash));
+  const current = $derived<SectionId>(section ?? SECTION_IDS[0]);
+  const NARROW = matchMedia("(max-width: 720px)"); // the breakpoint of the shell and of the styles below
+  let narrow = $state(NARROW.matches);
+  const marked = $derived<SectionId | null>(section ?? (narrow ? null : SECTION_IDS[0])); // on a phone the list of sections marks none: none is open
+  let content = $state<HTMLElement | null>(null);
   let values = $state<Record<string, Value> | null>(null);
   let problem = $state("");
   let errors = $state<Record<string, string>>({});
@@ -61,8 +68,21 @@
   }
 
   onMount(() => {
+    const onHash = (): void => {
+      section = sectionOf(location.hash);
+      if (section !== null) void tick().then(() => content?.focus()); // the person lands on what was chosen (on a phone the list is gone)
+    };
+    const onWidth = (): void => {
+      narrow = NARROW.matches;
+    };
+    addEventListener("hashchange", onHash);
+    NARROW.addEventListener("change", onWidth);
     void load();
-    return () => clearTimeout(timer);
+    return () => {
+      removeEventListener("hashchange", onHash);
+      NARROW.removeEventListener("change", onWidth);
+      clearTimeout(timer);
+    };
   });
 </script>
 
@@ -101,10 +121,39 @@
     <label for={"setting-" + field.name}>{label(field)}{#if field.risky}<span class="care">{t("settings.risky")}</span>{/if}</label>
     {@render control(field)}
     <p class="help" id={"setting-" + field.name + "-help"}>
-      {help(field)}{#if field.min !== undefined && field.max !== undefined && (field.kind === "number" || field.kind === "integer")} {t("settings.range", field.min, field.max)}.{/if}
+      {help(field)}{#if field.min !== undefined && field.max !== undefined && (field.kind === "number" || field.kind === "integer")}{" " + t("settings.range", field.min, field.max)}.{/if}
     </p>
     {#if errors[field.name]}<p class="error" role="alert">{errors[field.name]}</p>{/if}
   </div>
+{/snippet}
+
+{#snippet part(name: Part)}
+  {#if name === "language"}
+    <section class="group" aria-labelledby="g-language">
+      <h2 id="g-language">{t("settings.language")}</h2>
+      <LanguageChoice />
+    </section>
+  {:else if name === "devices"}
+    <div class="group"><Devices /></div>
+  {:else if name === "approval_rules"}
+    <div class="group"><ApprovalRules /></div>
+  {:else if name === "notifications"}
+    <div class="group"><Notifications /></div>
+  {:else if name === "memory"}
+    <div class="group"><Memory /></div>
+  {:else if name === "skills"}
+    <div class="group"><Skills /></div>
+  {:else if name === "third_party_skills"}
+    <div class="group"><ThirdPartySkills /></div>
+  {:else}
+    <section class="group" aria-labelledby={"g-" + name}>
+      <h2 id={"g-" + name}>{t(("settings.g." + name) as MessageKey)}</h2>
+      <p class="muted">{t(("settings.gh." + name) as MessageKey)}</p>
+      <div class="fields">
+        {#each fieldsOf(name as GroupId) as field (field.name)}{@render row(field)}{/each}
+      </div>
+    </section>
+  {/if}
 {/snippet}
 
 <div class="settings">
@@ -119,33 +168,19 @@
   {#if !values}
     {#if !problem}<p class="muted">{t("settings.loading")}</p>{/if}
   {:else}
-    <section class="group" aria-labelledby="g-language">
-      <h2 id="g-language">{t("settings.language")}</h2>
-      <LanguageChoice />
-    </section>
-
-    <div class="group"><Devices /></div>
-    <div class="group"><ApprovalRules /></div>
-    <div class="group"><Notifications /></div>
-    <div class="group"><Memory /></div>
-    <div class="group"><Skills /></div>
-    <div class="group"><ThirdPartySkills /></div>
-
-    {#each GROUPS as group (group)}
-      {#if group === "sampling"}
-        <details class="group">
-          <summary><h2 id={"g-" + group}>{t(("settings.g." + group) as MessageKey)}</h2></summary>
-          <p class="muted">{t(("settings.gh." + group) as MessageKey)}</p>
-          {#each fieldsOf(group) as field (field.name)}{@render row(field)}{/each}
-        </details>
-      {:else}
-        <section class="group" aria-labelledby={"g-" + group}>
-          <h2 id={"g-" + group}>{t(("settings.g." + group) as MessageKey)}</h2>
-          <p class="muted">{t(("settings.gh." + group) as MessageKey)}</p>
-          {#each fieldsOf(group) as field (field.name)}{@render row(field)}{/each}
-        </section>
-      {/if}
-    {/each}
+    <div class="layout" class:chosen={section !== null}>
+      <nav class="sections" aria-label={t("settings.sections")}>
+        <ul>
+          {#each SECTION_IDS as id (id)}
+            <li><a href={"#/settings/" + id} aria-current={marked === id ? "page" : undefined}>{t(("settings.s." + id) as MessageKey)}</a></li>
+          {/each}
+        </ul>
+      </nav>
+      <div class="content" bind:this={content} tabindex="-1">
+        <a class="back" href="#/settings">← {t("settings.back")}</a>
+        {#each SECTIONS[current] as name (name)}{@render part(name)}{/each}
+      </div>
+    </div>
   {/if}
 </div>
 
@@ -154,9 +189,101 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-4);
-    max-width: var(--measure);
+    width: 100%;
+    max-width: var(--page-max);
     margin: 0 auto;
     padding: var(--space-5) var(--space-4) var(--space-6);
+  }
+
+  /* The sections on the left, the chosen one on the right; a paragraph never gets wider than a line that reads well. */
+  .layout {
+    display: grid;
+    grid-template-columns: 13rem minmax(0, 1fr);
+    gap: var(--space-5);
+    align-items: start;
+  }
+
+  .sections {
+    position: sticky;
+    top: var(--space-4);
+  }
+
+  .sections ul {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .sections a {
+    display: flex;
+    align-items: center;
+    min-height: var(--target);
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-md);
+    color: var(--color-text);
+    text-decoration: none;
+  }
+
+  .sections a:hover {
+    background: var(--color-surface);
+  }
+
+  .sections a[aria-current="page"] {
+    background: var(--color-accent-soft);
+    color: var(--color-accent-text);
+    font-weight: 600;
+  }
+
+  .content {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    min-width: 0;
+  }
+
+  .content:focus {
+    outline: none;
+  }
+
+  .back {
+    display: none;
+  }
+
+  /* The fields of a group in columns as soon as there is room for two. */
+  .fields {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 22rem), 1fr));
+    column-gap: var(--space-5);
+  }
+
+  .group > p,
+  .help {
+    max-width: var(--measure);
+  }
+
+  /* A phone (the breakpoint of the shell): the list of sections, or one section with a way back to the list. */
+  @media (max-width: 720px) {
+    .layout {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .sections {
+      position: static;
+    }
+
+    .layout.chosen .sections,
+    .layout:not(.chosen) .content {
+      display: none;
+    }
+
+    .layout.chosen .back {
+      display: flex;
+      align-items: center;
+      min-height: var(--target);
+    }
   }
 
   h1 {
@@ -193,13 +320,6 @@
     border: 1px solid var(--color-border);
     border-radius: var(--radius-lg);
     background: var(--color-surface);
-  }
-
-  summary {
-    display: flex;
-    align-items: center;
-    min-height: var(--target);
-    cursor: pointer;
   }
 
   .row {

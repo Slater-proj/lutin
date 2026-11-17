@@ -170,7 +170,7 @@
     flex-direction: column;
     gap: var(--space-4);
     width: 100%;
-    max-width: var(--measure);
+    max-width: var(--page-max);
     margin: 0 auto;
     padding: var(--space-5) var(--space-4);
     overflow-y: auto;
@@ -293,8 +293,9 @@
   }
 
   .cards {
-    display: flex;
-    flex-direction: column;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 28rem), 1fr));
+    align-items: start;
     gap: var(--space-2);
     margin: 0;
     padding: 0;
