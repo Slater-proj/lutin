@@ -284,9 +284,10 @@ def thread_passages(ident, question, nombre=3, min_termes=1):
     return [e[1] for e in classes[:nombre]]
 
 
-def thread_recall(conv, fiche_etape=""):
+def thread_recall(conv, fiche_etape="", budget=1800):
     """Ce qui a été dit plus tôt dans CETTE conversation et qui touche à la dernière demande, retrouvé tout seul (sans que le modèle ait à le demander) : une fiche ou un résumé perd des détails,
-    mais le texte complet reste sur le disque. Renvoie (texte pour le prompt, nombre de passages). Un « oui » ou un « continue » est complété par la dernière réponse et l'étape en cours."""
+    mais le texte complet reste sur le disque. Renvoie (texte pour le prompt, nombre de passages). Un « oui » ou un « continue » est complété par la dernière réponse et l'étape en cours.
+    budget : caractères de passages au plus (les rappels du fil et des documents se partagent une part de la fenêtre : prompt_layout)."""
     ident = conv.get("id")
     msgs = conv.get("messages", [])
     demandes = [m["content"] for m in msgs if m.get("role") == "user" and m.get("content") and not str(m["content"]).startswith("[")]
@@ -310,7 +311,7 @@ def thread_recall(conv, fiche_etape=""):
     if not gardes:
         return "", 0
     texte = ("[Extraits de la conversation] " + _t("Passages retrouvés plus tôt dans cette même conversation, en rapport avec la demande. Ils peuvent être hors sujet : ignore-les alors. "
-             "Si un détail compte, appelle « rappeler » avec ici=true pour en voir davantage.") + "\n" + format_passages(gardes, 500)[:1800])
+             "Si un détail compte, appelle « rappeler » avec ici=true pour en voir davantage.") + "\n" + format_passages(gardes, 500)[:max(0, int(budget))])
     return texte, len(gardes)
 
 
@@ -362,9 +363,9 @@ def recall_tool(requete, nombre=5, conv_id="", ici=False):
     return format_passages(passages) + _t("\n\n(lis le document complet avec « lire » si un passage t'intéresse)")
 
 
-def automatic_recalls(conv, r):
+def automatic_recalls(conv, r, budget=2200):
     """Passages des documents et des anciennes conversations liés à la dernière question, ajoutés au prompt sans que le modèle ait à les demander (mode scénariste par défaut).
-    Renvoie (texte pour le prompt, liste des sources) ; vide si le réglage est coupé ou si rien de vraiment lié n'existe."""
+    Renvoie (texte pour le prompt, liste des sources) ; vide si le réglage est coupé ou si rien de vraiment lié n'existe. budget : caractères de passages au plus."""
     mode = r.get("rappels_auto", "scenario")
     if mode == "jamais" or (mode == "scenario" and not _modes.default_recalls(r.get("mode"))):
         return "", []
@@ -379,5 +380,5 @@ def automatic_recalls(conv, r):
         if p["m"]["source"] not in sources:
             sources.append(p["m"]["source"])
     texte = (_t("\n\n# RAPPELS POSSIBLEMENT PERTINENTS (extraits automatiques des documents et des anciennes conversations ; ils peuvent être hors sujet : ignore-les alors, "
-             "et ouvre le document avec « lire » si un détail compte)\n") + format_passages(passages, 450)[:2200] + "\n")
+             "et ouvre le document avec « lire » si un détail compte)\n") + format_passages(passages, 450)[:max(0, int(budget))] + "\n")
     return texte, sources

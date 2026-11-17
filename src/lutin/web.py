@@ -633,12 +633,13 @@ def normalize_tasks(liste):
 
 
 def text_tasks(conv):
-    """Les tâches en cours, rappelées au modèle à chaque tour (elles survivent ainsi au résumé de la conversation)."""
+    """Les tâches en cours, rappelées au modèle à chaque étape (elles survivent ainsi au résumé de la conversation). Écrites à la fin de la requête, jamais dans le message système :
+    la liste change en plein tour, et le début de la requête doit rester celui que le moteur a déjà lu (ADR 0013)."""
     if not conv.get("taches"):
         return ""
     ancienne = int(conv.get("taches_age") or 0)
     rappel = _t("(NON mise à jour depuis {} réponse(s) : renvoie-la à jour, ou renvoie une liste vide si ce n'est plus d'actualité)\n").format(ancienne) if ancienne else ""
-    return _t("\n\n# TÂCHES EN COURS (liste que tu as créée avec l'outil « taches » ; mets-la à jour en la renvoyant en entier)\n") + rappel + "\n".join("{} {}".format(SIGNES_TACHE[t["etat"]], t["texte"]) for t in conv["taches"])
+    return _t("\n\n[Tâches en cours : liste que tu as créée avec l'outil « taches » ; mets-la à jour en la renvoyant en entier]\n") + rappel + "\n".join("{} {}".format(SIGNES_TACHE[t["etat"]], t["texte"]) for t in conv["taches"])
 
 
 def tool_tasks(liste, ctx):

@@ -425,7 +425,7 @@
 "\nPage vide (elle est peut-être construite par JavaScript, que je ne peux pas exécuter).": "\nEmpty page (it may be built by JavaScript, which I cannot run).",
 "{}\n{}{}\ncaractères {} à {} sur {}": "{}\n{}{}\ncharacters {} to {} of {}",
 " — suite : web_lire avec debut={}": " — continued: web_lire with debut={}",
-"\n\n# TÂCHES EN COURS (liste que tu as créée avec l'outil « taches » ; mets-la à jour en la renvoyant en entier)\n": "\n\n# TASKS IN PROGRESS (list you created with the « taches » tool; update it by sending it back in full)\n",
+"\n\n[Tâches en cours : liste que tu as créée avec l'outil « taches » ; mets-la à jour en la renvoyant en entier]\n": "\n\n[Tasks in progress: list you created with the « taches » tool; update it by sending it back in full]\n",
 "Pas de conversation active.": "No active conversation.",
 "Liste de tâches enregistrée : {} sur {} faites.": "Task list saved: {} of {} done.",
 "gros fichier, {} Ko": "big file, {} KB",

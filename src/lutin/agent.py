@@ -21,6 +21,7 @@ from . import thinking as _pensee
 from . import attachments as _pieces
 from . import progress_sheet as _suivi
 from . import turn_state as _etat_tour
+from . import prompt_layout as _disposition
 from . import claude_project as _pc
 from .i18n import t as _t
 from datetime import datetime
@@ -1170,7 +1171,7 @@ def ajuster_contexte(msgs, num_ctx, facteur=1.0, outils=None, rapport=None):
     # 4) les anciens tours de conversation (avant la question actuelle) sont retirés s'il le faut, en gardant le système, le résumé et la question
     while taille() > budget and dernier_user > 2:
         for i in range(1, dernier_user):
-            if msgs[i]["role"] in ("user", "assistant", "tool") and id(msgs[i]) not in protege and not msgs[i].get("content", "").startswith(("[Résumé", "[Fiche de suivi", "[Extraits", "Compris, je m'appuie")):
+            if msgs[i]["role"] in ("user", "assistant", "tool") and id(msgs[i]) not in protege and not msgs[i].get(_disposition.KEPT) and not msgs[i].get("content", "").startswith(("[Résumé", "[Fiche de suivi", "[Extraits", "Compris, je m'appuie")):
                 del msgs[i]
                 rapport["tours"] += 1
                 dernier_user -= 1
@@ -1184,6 +1185,7 @@ def ajuster_contexte(msgs, num_ctx, facteur=1.0, outils=None, rapport=None):
         m.pop("medias", None)
         m.pop("medias_fichiers", None)
         m.pop("fichiers_joints", None)
+        _disposition.merge_tail(m)                               # ce qui s'écrit à la fin d'un message (la liste de tâches) s'écrit ici, la place une fois faite : un résultat coupé ne l'emporte pas
     return msgs
 
 
@@ -1616,18 +1618,12 @@ def monter_en_gamme(r, corps, emit, conv_id, motif):
 
 
 def _preparer_boucle(conv, r, emit, ctx):
-    """Contexte du tour, lu UNE fois : les outils du mode, les rappels tirés des documents, la fiche de suivi, les extraits du fil, la consigne d'exécution, la recherche guidée.
-    Rien de ce qui est lu ici ne change d'une étape à l'autre du tour : le début de la requête reste identique, et le moteur le garde en cache."""
+    """Contexte du tour, lu UNE fois : les outils du mode, la fiche de suivi, les extraits du fil, les rappels tirés des documents, la consigne d'exécution, la recherche guidée.
+    Rien de ce qui est lu ici ne change d'une étape à l'autre du tour : le début de la requête reste identique, et le moteur le garde en cache.
+    Les passages rappelés (fil et documents) se partagent une part de la fenêtre, le fil servi d'abord (prompt_layout, ADR 0013)."""
     tours_max = max(4, int(r.get("tours_max", _m.TOURS_MAX)))
     outils = outils_du_mode(r)                                      # seulement les outils utiles dans ce mode : moins de jetons, moins de confusion
     ctx["outils_autorises"] = {t["function"]["name"] for t in outils}
-    try:
-        rappels_texte, rappels_sources = _m.automatic_recalls(conv, r)
-    except Exception as erreur:  # noqa: BLE001
-        _m.journaliser("Rappels automatiques impossibles : {!r}".format(erreur))
-        rappels_texte, rappels_sources = "", []
-    if rappels_sources:
-        emit({"type": "info", "texte": _t("📎 Rappels ajoutés d'après tes documents : {}").format(" ; ".join(rappels_sources[:4]))})
     fiche, consigne = "", ""
     forcer_fin = False                                                # le modèle tourne en rond : un dernier tour SANS outil pour qu'il conclue, au lieu de couper net
     if r.get("memoire_longue") == "fichier":
@@ -1639,12 +1635,21 @@ def _preparer_boucle(conv, r, emit, ctx):
     if r.get("rappel_ici"):                       # le début de la conversation n'est plus sous les yeux du modèle : on lui remet ce qui touche à la demande
         try:
             etape = " ".join(_suivi.read(conv["id"])["etape"] + _suivi.read(conv["id"])["objectif"])
-            extraits, nb_extraits = _m.thread_recall(conv, etape)
+            extraits, nb_extraits = _m.thread_recall(conv, etape, _disposition.thread_budget(r["num_ctx"]))
             if nb_extraits and DITS["rappel"].get(conv["id"]) != nb_extraits:          # dit une fois, et quand le nombre change : pas à chaque réponse
                 DITS["rappel"][conv["id"]] = nb_extraits
                 emit({"type": "info", "texte": _t("📎 {} passage(s) retrouvé(s) plus tôt dans cette conversation.").format(nb_extraits)})
         except Exception as erreur:  # noqa: BLE001  (la recherche ne doit jamais empêcher de répondre)
             _m.journaliser("Rappel du fil impossible : {!r}".format(erreur))
+    rappels_texte, rappels_sources = "", []
+    place_documents = _disposition.documents_budget(r["num_ctx"], extraits)          # ce que le fil a laissé de la part des rappels
+    if place_documents:
+        try:
+            rappels_texte, rappels_sources = _m.automatic_recalls(conv, r, place_documents)
+        except Exception as erreur:  # noqa: BLE001
+            _m.journaliser("Rappels automatiques impossibles : {!r}".format(erreur))
+    if rappels_sources:
+        emit({"type": "info", "texte": _t("📎 Rappels ajoutés d'après tes documents : {}").format(" ; ".join(rappels_sources[:4]))})
     derniere_demande = next((m.get("content") or "" for m in reversed(conv["messages"]) if m.get("role") == "user"), "")
     try:
         consigne = _suivi.execution_directive(conv, derniere_demande, conv["id"])
@@ -1669,10 +1674,11 @@ def _preparer_boucle(conv, r, emit, ctx):
 
 
 def _messages_de_l_etape(conv, r, emit, p, idx_tour, dernier_tour, faux_accompli):
-    """Les messages d'UNE étape : consignes, résumé, historique (la consigne, la fiche et les extraits passent juste avant la dernière question), puis ce qui ne vaut que pour cette étape
-    (l'ordre de conclure au dernier tour, la remarque faite à un modèle qui dit avoir agi sans l'avoir fait). `p` est ce que `_preparer_boucle` a lu."""
+    """Les messages d'UNE étape : consignes, résumé, historique (la consigne, la fiche, les extraits et les rappels passent juste avant la dernière question), puis ce qui ne vaut que pour
+    cette étape (l'ordre de conclure au dernier tour, la remarque faite à un modèle qui dit avoir agi sans l'avoir fait), et tout à la fin la liste de tâches, qui change en plein tour.
+    Le message système ne contient rien qui suive la demande : le moteur garde ce qu'il a déjà lu (prompt_layout, ADR 0013). `p` est ce que `_preparer_boucle` a lu."""
     rappels_texte, consigne, fiche, extraits = p.rappels_texte, p.consigne, p.fiche, p.extraits
-    msgs = [{"role": "system", "content": consignes_systeme(r) + _fichiers.instruction_folder(conv) + _m.text_tasks(conv) + rappels_texte}]
+    msgs = [{"role": "system", "content": consignes_systeme(r) + _fichiers.instruction_folder(conv)}]
     if idx_tour == 0:
         for nom_coupe, (taille_coupe, relu_coupe) in sorted(_m.COUPURES.items()):          # un fichier de mémoire plus long que ce que le modèle relit : tu le sais, au lieu de le découvrir plus tard
             if (conv.get("id"), nom_coupe, taille_coupe) in COUPURES_DITES:          # une fois par conversation et par taille, pas à chaque message
@@ -1687,15 +1693,12 @@ def _messages_de_l_etape(conv, r, emit, p, idx_tour, dernier_tour, faux_accompli
     if consigne and dernier_user >= 0:
         historique = list(historique)
         historique[dernier_user] = dict(historique[dernier_user], content=(historique[dernier_user].get("content") or "") + "\n\n[" + consigne + "]")
-    if (fiche or extraits) and dernier_user >= 0:          # fiche et extraits passent juste AVANT la dernière question : tout ce qui précède est identique d'une réponse à l'autre (cache d'Ollama)
-        bloc = "\n\n".join(x for x in (fiche, extraits) if x)
-        historique = historique[:dernier_user] + [{"role": "user", "content": bloc}, {"role": "assistant", "content": "Compris, je m'appuie sur " + ("cette fiche." if fiche else "ces extraits.")}] + historique[dernier_user:]
-    msgs += historique
+    msgs += _disposition.before_last_question(list(historique), _disposition.turn_block(fiche, extraits, rappels_texte))          # juste AVANT la dernière question : tout ce qui précède est identique d'une réponse à l'autre (cache du moteur)
     if dernier_tour:             # plus d'outils : le modèle doit répondre avec ce qu'il a trouvé
         msgs.append({"role": "user", "content": "Tu as assez d'informations. Réponds maintenant à ma demande avec ce que tu as vu, sans appeler d'outil. Si quelque chose manque, dis-le."})
     if faux_accompli:
         msgs += [{"role": "assistant", "content": faux_accompli[0]}, {"role": "user", "content": faux_accompli[1]}]
-    return msgs
+    return _disposition.attach_tail(msgs, _m.text_tasks(conv))          # la liste de tâches à la fin du dernier message : quand elle change, rien de ce qui précède ne change
 
 
 def _preparer_requete(conv, r, emit, ctx, msgs, outils, idx_tour, dernier_tour, derniere_demande):

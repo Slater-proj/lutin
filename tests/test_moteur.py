@@ -1341,15 +1341,45 @@ class Assistant(unittest.TestCase):
         liste = next(e for e in ev if e["type"] == "taches")["liste"]
         self.assertEqual([(t["texte"], t["etat"]) for t in liste], [("Lire", "fait"), ("Corriger", "en_cours"), ("Tester", "a_faire")])
         self.assertIn("1 sur 3", next(e for e in ev if e["type"] == "resultat")["texte"])
-        self.assertIn("[>] Corriger", RECUES[1]["messages"][0]["content"], "le modèle revoit sa liste à chaque tour")
+        etape = RECUES[1]["messages"]
+        self.assertIn("[>] Corriger", etape[-1]["content"], "le modèle revoit sa liste à chaque étape")
+        self.assertEqual(etape[-1]["role"], "tool", "à la fin du dernier message de la requête, jamais dans un message à part")
+        self.assertTrue(etape[-1]["content"].startswith("Liste de tâches enregistrée"), "après le résultat de l'outil, qui reste entier")
+        self.assertNotIn("Corriger", etape[0]["content"], "le message système ne suit pas la liste : le moteur garde ce qu'il a déjà lu (ADR 0013)")
+        self.assertEqual(etape[:2], RECUES[0]["messages"], "créer la liste ne change rien à ce que le moteur avait lu")
         ident = next(e for e in ev if e["type"] == "fin")["conversation"]["id"]
         self.assertEqual(len(A.conv_lire(ident)["taches"]), 3, "la liste est enregistrée avec la conversation")
+        self.assertNotIn("Tâches en cours", json.dumps(A.conv_lire(ident)["messages"], ensure_ascii=False), "elle n'est jamais écrite dans les messages enregistrés")
         chat("Suite", conversation=ident, reponses=[[{"content": "ok"}]])
-        self.assertIn("[x] Lire", RECUES[-1]["messages"][0]["content"], "la liste survit d'un message à l'autre")
+        suite = RECUES[-1]["messages"]
+        self.assertIn("[x] Lire", suite[-1]["content"], "la liste survit d'un message à l'autre")
+        self.assertTrue(suite[-1]["role"] == "user" and suite[-1]["content"].startswith("Suite\n\n[Tâches en cours"), "à la première étape, à la fin de la question")
+        self.assertNotIn("Lire", suite[0]["content"])
+        self.assertEqual(suite[:3], etape[:3])
+        self.assertEqual(suite[3]["content"], etape[3]["content"].split("\n\n[Tâches en cours")[0], "le résultat d'outil d'une étape passée n'emporte pas la liste : seule la fin diffère")
         self.assertEqual(A.normalize_tasks('[{"texte": "a", "etat": "terminé"}, {"texte": "b", "etat": "bizarre"}]'), [{"texte": "a", "etat": "fait"}, {"texte": "b", "etat": "a_faire"}])
         self.assertEqual(len(A.normalize_tasks(["t%d" % i for i in range(30)])), 12)
         ev = chat("Mal", reponses=[[appel_outil("taches", liste=42)], [{"content": "."}]])
         self.assertIn("Erreur", next(e for e in ev if e["type"] == "resultat")["texte"])
+
+    def test_une_liste_de_taches_qui_change_ne_fait_pas_relire_la_conversation(self):
+        """Le moteur garde ce qu'il a déjà lu : d'une étape à la suivante, une requête commence comme la précédente, même quand le modèle crée puis met à jour sa liste (ADR 0013).
+        Avant, la liste était dans le message système : chaque changement faisait relire toute la conversation."""
+        def taches(*etats):
+            return appel_outil("taches", liste=[{"texte": t, "etat": e} for t, e in zip(("Lire", "Corriger", "Tester"), etats)])
+        chat("Gros chantier", reponses=[[appel_outil("lire", chemin="docs/univers.md")], [taches("en_cours", "a_faire", "a_faire")], [appel_outil("lire", chemin="appli/moteur/code.py")],
+                                      [taches("fait", "en_cours", "a_faire")], [appel_outil("chercher", motif="tonnerre")], [taches("fait", "fait", "en_cours")], [{"content": "Fait."}]])
+        requetes = [c["messages"] for c in RECUES if c.get("stream", True)]
+        self.assertEqual(len(requetes), 7)
+        for numero, (avant, apres) in enumerate(zip(requetes, requetes[1:]), 1):
+            self.assertEqual(apres[:len(avant) - 1], avant[:-1], "étape {} : tout ce qui précède le dernier message est identique".format(numero))
+            self.assertEqual({k: v for k, v in apres[len(avant) - 1].items() if k != "content"}, {k: v for k, v in avant[-1].items() if k != "content"})
+            self.assertTrue(avant[-1]["content"].startswith(apres[len(avant) - 1]["content"]), "étape {} : le dernier message ne diffère que par la liste écrite à sa fin".format(numero))
+            self.assertEqual(apres[0], requetes[0][0], "le message système ne bouge pas")
+        self.assertIn("[>] Lire", requetes[2][-1]["content"])
+        self.assertIn("[>] Corriger", requetes[4][-1]["content"], "la liste montrée est celle du moment")
+        self.assertIn("[>] Tester", requetes[6][-1]["content"])
+        self.assertEqual(sum(json.dumps(m, ensure_ascii=False).count("Tâches en cours") for m in requetes[6]), 1, "une seule fois par requête : à la fin")
 
     def test_modifier_un_message_ou_regenerer(self):
         ident = next(e for e in chat("Un", reponses=[[{"content": "R1"}]]) if e["type"] == "fin")["conversation"]["id"]
@@ -2546,7 +2576,8 @@ class Assistant(unittest.TestCase):
         for i in range(2):
             ev = chat("Autre chose %d" % i, conversation=cid, reponses=[[{"content": "Voilà %d." % i}]])
             self.assertEqual(len(A.conv_lire(cid)["taches"]), 2, "pas encore fermée")
-        self.assertIn("NON mise à jour", RECUES[-1]["messages"][0]["content"], "le modèle est prévenu que la liste est périmée")
+        self.assertIn("NON mise à jour", RECUES[-1]["messages"][-1]["content"], "le modèle est prévenu que la liste est périmée")
+        self.assertNotIn("NON mise à jour", RECUES[-1]["messages"][0]["content"], "à la fin de la requête, pas dans le message système (ADR 0013)")
         ev = chat("Et encore", conversation=cid, reponses=[[{"content": "Ok."}]])
         self.assertEqual(A.conv_lire(cid)["taches"], [])
         self.assertTrue(any(e["type"] == "taches" and e["liste"] == [] for e in ev), "la page est prévenue : l'encart disparaît")
@@ -2992,30 +3023,46 @@ class Assistant(unittest.TestCase):
         question = "Parle-moi du tatouage à la cheville de l'androïde"
         try:
             ev = chat(question, reponses=[[{"content": "ok"}]], mode="scenario")
-            systeme = RECUES[-1]["messages"][0]["content"]
-            self.assertIn("# RAPPELS POSSIBLEMENT PERTINENTS", systeme)
-            self.assertIn("docs/arc.md", systeme)
+            def partout(corps):
+                return json.dumps(corps["messages"], ensure_ascii=False)
+            recue = RECUES[-1]["messages"]
+            self.assertEqual([m["role"] for m in recue], ["system", "user", "assistant", "user"], "les rappels passent juste avant la question, dans une paire de messages (ADR 0013)")
+            self.assertTrue(recue[1]["content"].startswith("# RAPPELS POSSIBLEMENT PERTINENTS"))
+            self.assertIn("docs/arc.md", recue[1]["content"])
+            self.assertEqual(recue[2]["content"], "Compris, je m'appuie sur ces extraits.")
+            self.assertEqual(recue[3]["content"], question)
+            self.assertNotIn("RAPPELS POSSIBLEMENT", recue[0]["content"], "le message système ne suit pas la demande : le moteur garde ce qu'il a déjà lu")
+            self.assertNotIn("docs/arc.md", recue[0]["content"])
             self.assertTrue(any(e["type"] == "info" and e["texte"].startswith("📎") and "docs/arc.md" in e["texte"] for e in ev), "l'utilisateur voit ce qui a été ajouté")
             ident = next(e for e in ev if e["type"] == "fin")["conversation"]["id"]
+            self.assertNotIn("RAPPELS POSSIBLEMENT", json.dumps(A.conv_lire(ident)["messages"], ensure_ascii=False), "ils ne sont jamais enregistrés dans la conversation")
+            # la demande suivante de la même conversation : un autre rappel, et tout ce qui précède la question d'avant est resté identique
+            chat("Et de quelle couleur sont les robots de Marly, gris mat ?", conversation=ident, reponses=[[{"content": "ok"}]], mode="scenario")
+            suivante = RECUES[-1]["messages"]
+            self.assertEqual([m["role"] for m in suivante], ["system", "user", "assistant", "user", "assistant", "user"])
+            self.assertEqual(suivante[0], recue[0], "le message système est le même d'une demande à l'autre")
+            self.assertEqual(suivante[1]["content"], question, "les rappels de la demande d'avant ne restent pas")
+            self.assertTrue(suivante[3]["content"].startswith("# RAPPELS POSSIBLEMENT PERTINENTS"))
+            self.assertEqual(partout(RECUES[-1]).count("RAPPELS POSSIBLEMENT"), 1)
             # par défaut : mode scénariste seulement
             chat(question, reponses=[[{"content": "ok"}]], mode="technique")
-            self.assertNotIn("RAPPELS POSSIBLEMENT", RECUES[-1]["messages"][0]["content"])
+            self.assertNotIn("RAPPELS POSSIBLEMENT", partout(RECUES[-1]))
             try:
                 post("/api/reglages", {"rappels_auto": "toujours"})
                 chat(question, reponses=[[{"content": "ok"}]], mode="technique")
-                self.assertIn("RAPPELS POSSIBLEMENT", RECUES[-1]["messages"][0]["content"])
+                self.assertIn("RAPPELS POSSIBLEMENT", RECUES[-1]["messages"][-3]["content"])
                 post("/api/reglages", {"rappels_auto": "jamais"})
                 chat(question, reponses=[[{"content": "ok"}]], mode="scenario")
-                self.assertNotIn("RAPPELS POSSIBLEMENT", RECUES[-1]["messages"][0]["content"])
+                self.assertNotIn("RAPPELS POSSIBLEMENT", partout(RECUES[-1]))
                 post("/api/reglages", {"rappels_auto": "nimporte quoi"})
                 self.assertEqual(lire("/api/etat")["reglages"]["rappels_auto"], "scenario", "valeur inconnue : retour au réglage par défaut")
             finally:
                 post("/api/reglages", {"rappels_auto": "scenario"})
             # pas de rappel pour une question courte ou sans lien avec les documents
             chat("Bonjour", reponses=[[{"content": "ok"}]], mode="scenario")
-            self.assertNotIn("RAPPELS POSSIBLEMENT", RECUES[-1]["messages"][0]["content"])
+            self.assertNotIn("RAPPELS POSSIBLEMENT", partout(RECUES[-1]))
             chat("Donne une recette de soupe de poireaux au cumin", reponses=[[{"content": "ok"}]], mode="scenario")
-            self.assertNotIn("RAPPELS POSSIBLEMENT", RECUES[-1]["messages"][0]["content"])
+            self.assertNotIn("RAPPELS POSSIBLEMENT", partout(RECUES[-1]))
             # la conversation en cours n'est jamais rappelée à elle-même
             self.assertTrue(any(p["m"].get("conv") == ident for p in A.recall_passages(question, 10, min_termes=2)))
             self.assertFalse(any(p["m"].get("conv") == ident for p in A.recall_passages(question, 10, exclure_conv=ident, min_termes=2)))
