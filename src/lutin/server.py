@@ -71,6 +71,7 @@ import threading
 import urllib.parse
 import urllib.request
 from . import core as _m
+from . import turn_runner as _turns
 
 
 DELAI_ECRITURE_FLUX = 20      # secondes : une page qui ne lit plus (onglet gelé) ne doit pas figer la réponse
@@ -1912,20 +1913,15 @@ class Gestionnaire(BaseHTTPRequestHandler):
             if not (mission_en_cours and mission_en_cours["etat"] != "terminee") and conv["id"] in _m.TOURS_ACTIFS:
                 return self._refus_tour(409, "Cette conversation est déjà en train de répondre. Attends la fin ou clique sur Arrêter.", "turn_running")
             return self._mission_dans_la_conversation(conv, texte, donnees, mission_en_cours, abandon, not ident)
-        stop = threading.Event()
-        with _m.VERROU_TOURS:
-            if conv["id"] in _m.TOURS_ACTIFS:
+        try:
+            siege = _turns.reserve(conv, work=str(donnees.get("travail") or ""))          # la place du tour : mêmes règles pour tous les lanceurs (ADR 0015)
+        except _turns.TurnRefused as refus:
+            if refus.code == _turns.TURN_RUNNING:
                 return self._refus_tour(409, "Cette conversation est déjà en train de répondre (autre onglet ou téléphone ?). Attends la fin ou clique sur Arrêter.", "turn_running")
-            if len(_m.TOURS_ACTIFS) >= _m.TOURS_SIMULTANES:
-                abandon()
-                return self._refus_tour(429, "Déjà {} réponses en cours : une seule carte graphique, attends la fin de l'une d'elles (ou clique sur Arrêter).".format(len(_m.TOURS_ACTIFS)), "too_many_turns")
-            try:
-                _m.activate_work(conv, str(donnees.get("travail") or ""))
-            except ValueError as erreur:
-                abandon()
-                return self._refus_tour(409, str(erreur), "workspace_conflict")
-            _m.RACINE_TOURS[conv["id"]] = str(_m.RACINE)
-            _m.TOURS_ACTIFS[conv["id"]] = stop
+            abandon()
+            if refus.code == _turns.WORKSPACE_CONFLICT:
+                return self._refus_tour(409, refus.message, "workspace_conflict")
+            return self._refus_tour(429, "Déjà {} réponses en cours : une seule carte graphique, attends la fin de l'une d'elles (ou clique sur Arrêter).".format(len(_turns.active())), "too_many_turns")
         fin_flux = threading.Event()
         try:
             r = _m.appliquer_options(_m.reglages(), conv["id"])
@@ -1970,14 +1966,10 @@ class Gestionnaire(BaseHTTPRequestHandler):
                     ecrire(b"\n")
             threading.Thread(target=battement, daemon=True).start()
             emit({"type": "debut", "conversation": conv["id"]})
-            _m.LOCAL_TOUR.stop = stop
-            _m.tour(conv, texte, emit, r, stop, depuis, identite=self._identite(), images=images, pieces=pieces)
+            siege.run(texte, emit, r, depuis, identite=self._identite(), images=images, pieces=pieces)
         finally:
             fin_flux.set()
-            with _m.VERROU_TOURS:
-                if _m.TOURS_ACTIFS.get(conv["id"]) is stop:          # un tour abandonné (voir arreter_conversation) ne retire pas celui d'une réponse plus récente
-                    _m.TOURS_ACTIFS.pop(conv["id"], None)
-                    _m.RACINE_TOURS.pop(conv["id"], None)
+            siege.release()                                   # seulement si c'est encore la sienne : un tour abandonné (arreter_conversation) ne retire pas celle d'une réponse plus récente
 
     def _mission_dans_la_conversation(self, conv, texte, donnees, mission_en_cours, abandon, nouvelle):
         """Mode « Mission longue » : le message lance une mission menée DANS cette conversation, ou, si une mission y est déjà en cours, lui apporte une réponse ou une consigne."""

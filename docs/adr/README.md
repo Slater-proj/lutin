@@ -20,5 +20,5 @@ These records are technical documentation, written in English only (ADR 0001). T
 | [0011](0011-diagrams-in-an-isolated-frame.md) | Diagrams are drawn in an isolated frame; formulas by the browser | Accepted, implemented |
 | [0012](0012-a-turn-says-where-it-is.md) | A turn says where it is; the loop is made of parts; an engine says what the loop may ask of it | Accepted, implemented |
 | [0013](0013-a-request-has-a-prefix-that-stays-and-a-tail-that-changes.md) | A request has a prefix that stays and a tail that changes | Accepted, implemented |
-| [0014](0014-one-application-context.md) | One application context holds what the modules kept for themselves | Proposed |
-| [0015](0015-one-entry-runs-a-turn.md) | One entry runs a turn, whoever asks for it | Proposed |
+| [0014](0014-one-application-context.md) | One application context holds what the modules kept for themselves | Accepted |
+| [0015](0015-one-entry-runs-a-turn.md) | One entry runs a turn, whoever asks for it | Accepted, implemented |

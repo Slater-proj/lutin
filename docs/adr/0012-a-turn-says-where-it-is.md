@@ -43,6 +43,7 @@ One idea organises step 5: one runtime owns a turn, and the web server, the sche
 ## Not done yet
 
 - A single entry `run_turn` that registers the stop event, enforces one turn per conversation and the limit of simultaneous turns: each launcher still does it.
+  Done since by [ADR 0015](0015-one-entry-runs-a-turn.md).
 - Showing an approval card on a page that did not start the turn: the page says the turn waits, it cannot answer for it.
 - The messages of the loop about a silent engine still name Ollama; only Ollama declares `starts_on_demand` today.
 - The context manager (item 6) and the route table with the application context (item 1).

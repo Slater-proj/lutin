@@ -1,6 +1,6 @@
 # ADR 0014 — One application context holds what the modules kept for themselves
 
-Status: **proposed**, to be validated by the maintainer before any code (plan step 5, item 1). Scope decided on 2026-11-17: the application context
+Status: accepted by the maintainer on 2026-11-17, not implemented yet (plan step 5, item 1). Scope decided on 2026-11-17: the application context
 only. The route table is left out: the French routes go away with the old page, and `/api/v1` already has its table (`api_v1.ROUTES`).
 
 ## Context
@@ -26,7 +26,7 @@ today) », and its acceptance says « test files can share a process ». Counted
   the environment, a known list of what a running Lutin holds, isolation between test files that does not depend on a process, and a home for the
   registry of running turns that a single `run_turn` needs (ADR 0012, « Not done yet »).
 
-## Decision (proposed)
+## Decision
 
 1. **`src/lutin/app_context.py` defines `AppContext`**, made of:
    - `settings`: what is read from the environment, **read once**, by `AppContext.from_env(environ)` and nowhere else (the root of the work, the data and
@@ -60,12 +60,13 @@ today) », and its acceptance says « test files can share a process ». Counted
 
 1. `app_context.py`, the settings read once, the module classes and their mirrors. No behaviour change; tests of the context, including a patch, an
    assignment and a change of context.
-2. The registry of running turns moves into `turns`. This is what ADR 0015 (`run_turn`, to be written) builds on.
+2. The registry of running turns moves into `turns`, with `turn_runner` (ADR 0015, done first on `core`'s dictionaries) and Stop and the abandon of
+   a frozen turn (`core.arreter_conversation`, `_rendre_la_main`).
 3. `register` in every module with state; the conformance test.
 4. `close` for the modules that start threads.
 5. The runner's group mode and a first group of test files (those that import `context.py`, start no server and set nothing at import).
 
-Acceptance, proposed: item 1 is done when stage 5 runs a group of test files in one process with the same results as one process each, and the
+Acceptance: item 1 is done when stage 5 runs a group of test files in one process with the same results as one process each, and the
 conformance test passes. Moving all 158 files is not part of it.
 
 ## Not chosen
@@ -93,7 +94,4 @@ conformance test passes. Moving all 158 files is not part of it.
 Each stage is one commit. Before stage 3 the old names still work as before; reverting stages 1 and 2 brings back the module attributes as they are
 today.
 
-## Questions for the maintainer
-
-- Is the scope right (context only, the registries staying in their modules but registered), and is the acceptance above enough?
-- Should stage 5 be done now, or left until the test files are touched for another reason?
+The maintainer accepted the principle, the stages and the acceptance on 2026-11-17, to be done after ADR 0015.
