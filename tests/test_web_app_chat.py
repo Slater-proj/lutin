@@ -30,7 +30,7 @@ WATCH = "window.__violations = []; document.addEventListener('securitypolicyviol
 TEXT = "(document.querySelector('.thread') || document.body).innerText"
 # The sections of the Settings screen (frontend/src/lib/settings.ts, SECTIONS) and something each one draws when it is ready.
 SETTINGS_SECTIONS = {"general": "#setting-temperature", "safety": "#rule-command", "devices": ".devices", "machine": "#setting-num_thread",
-                     "knowledge": "#memory-context", "tools": "#tps-query", "advanced": "#setting-top_p"}
+                     "health": ".health .items", "knowledge": "#memory-context", "tools": "#tps-query", "advanced": "#setting-top_p"}
 
 
 def js(value):
@@ -145,6 +145,35 @@ class Chat(unittest.TestCase):
         self.assertEqual(target.read_text(encoding="utf-8"), before, "the file is back as it was")
         self.assertFalse(p.evaluer("!!document.querySelector('.changes .files')"), "nothing left to undo")
         self.assertEqual(p.erreurs, [])
+
+    def test_3l_the_health_of_the_machine_is_shown_and_checked(self):
+        """docs/modernization/PARITY.md, item 2: the section « Health » of Settings shows the state of the machine and runs the self-test; what reads the
+        computer is replaced (the fictive machine of setUpClass, and a fixed self-test)."""
+        p = self.page
+        from lutin import loaded_resources
+        result = {"ok": True, "profond": False, "resultats": [{"nom": "Moteur", "ok": True, "important": True, "detail": "répond", "duree": 0.1}]}
+        resources = {"ram": {"total": 32 * 1024 ** 3, "libre": 16 * 1024 ** 3}, "vram": None, "programmes": [],
+                     "charges": [{"id": "ollama:qwen3:8b", "genre": "ollama", "moteur": "Ollama", "nom": "qwen3:8b", "taille": 5 * 1024 ** 3, "detail": "", "dechargeable": True}]}
+        unloaded = []
+        for patch in (mock.patch.object(T.A, "run_selftest", lambda profond=False: dict(result, profond=profond)),
+                      mock.patch.object(T.A, "health_state", lambda: {"niveau": "ok", "items": [{"id": "ram", "nom": "Mémoire vive (RAM)", "niveau": "ok", "valeur": "16 Go libres", "conseil": ""}]}),
+                      mock.patch.object(loaded_resources, "state", lambda: resources),
+                      mock.patch.object(loaded_resources, "decharger", lambda ident: unloaded.append(ident) or {"ok": True, "message": "Déchargé."})):
+            patch.start()
+            self.addCleanup(patch.stop)
+        p.evaluer("location.hash = '#/settings/health'")
+        p.attendre("!!document.querySelector('.health .items .item')")
+        self.assertIn("16 Go libres", p.evaluer("document.querySelector('.health .items').innerText"))
+        p.evaluer("[...document.querySelectorAll('.health .loaded button')].find(b => b.innerText.startsWith('Décharger')).click()")
+        p.attendre("document.querySelector('.health .notice').innerText.includes('Déchargé')")
+        self.assertEqual(unloaded, ["ollama:qwen3:8b"])
+        p.evaluer("[...document.querySelectorAll('.health button')].find(b => b.innerText === 'Vérification rapide').click()")
+        p.attendre("!!document.querySelector('.health .checks li')")
+        self.assertIn("Moteur", p.evaluer("document.querySelector('.health .checks').innerText"))
+        if AXE.is_file():
+            self.axe("on the health of the machine")
+        self.assertEqual(p.erreurs, [])
+        p.evaluer("location.hash = '#/chat'")
 
     def test_3_an_action_waits_for_the_approval_given_on_the_page(self):
         p = self.page

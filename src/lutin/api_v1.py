@@ -2429,6 +2429,104 @@ def stop_turn(request):
     return {"was_running": bool(_m.arreter_conversation(request.params["id"]).get("actif"))}
 
 
+# ----------------------------------------------------------------------------------------------------------------- health
+# What the old Health page showed (docs/modernization/PARITY.md, item 2): the state of memory, graphics card and disk, what is loaded and what
+# occupies the machine, the self-test, what the models and tools did, and what left this machine. Reading and unloading are `session`, as the old
+# routes; clearing a log is `configurator`, as there.
+HEALTH_LEVELS = {"ok": "ok", "attention": "warning", "alerte": "warning", "critique": "critical"}
+
+
+def _health_item(item):
+    return {"id": item.get("id", ""), "name": item.get("nom", ""), "level": HEALTH_LEVELS.get(item.get("niveau"), item.get("niveau", "")), "value": item.get("valeur", ""),
+            "advice": item.get("conseil", "")}
+
+
+def _loaded(entry):
+    return {"id": entry.get("id", ""), "kind": entry.get("genre", ""), "engine": entry.get("moteur", ""), "name": entry.get("nom", ""), "vram": entry.get("vram"),
+            "ram": entry.get("ram"), "size": entry.get("taille"), "detail": entry.get("detail", ""), "unloadable": bool(entry.get("dechargeable")), "closable": bool(entry.get("fermable"))}
+
+
+def _resources():
+    from . import loaded_resources as _loaded_resources
+    state = _loaded_resources.state()
+    ram, vram = state.get("ram") or {}, state.get("vram")
+    return {"ram": {"total": ram.get("total"), "free": ram.get("libre"), "commit_free": ram.get("engagement_libre")},
+            "vram": {"name": vram.get("nom", ""), "total": vram.get("total"), "used": vram.get("utilise"), "free": vram.get("libre")} if isinstance(vram, dict) else None,
+            "loaded": [_loaded(entry) for entry in state.get("charges") or []],
+            "programs": [{"name": p.get("nom", ""), "label": p.get("libelle", ""), "count": p.get("nombre", 0), "bytes": p.get("octets", 0), "ai": bool(p.get("ia"))} for p in state.get("programmes") or []]}
+
+
+@route("GET", "/health", SESSION)
+def health(request):
+    """The state of this machine for the models (memory, graphics card, disk, each with a level and advice), what is loaded, and the programs that
+    occupy the most memory."""
+    state = _m.health_state()
+    return {"level": HEALTH_LEVELS.get(state.get("niveau"), state.get("niveau", "")), "items": [_health_item(item) for item in state.get("items") or []], "resources": _resources()}
+
+
+@route("POST", "/health/unload", SESSION)
+def health_unload(request):
+    """{"id": "..."} (an entry of `loaded`): unloads it (a model of Ollama, the llama.cpp server, ComfyUI). Answers the resources."""
+    from . import loaded_resources as _loaded_resources
+    if set(request.body) != {"id"} or not isinstance(request.body["id"], str) or not request.body["id"]:
+        raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("id"))
+    done = _loaded_resources.decharger(request.body["id"])
+    return {"message": done.get("message", ""), "resources": _resources()}
+
+
+@route("POST", "/health/free-graphics-memory", SESSION)
+def health_free_graphics_memory(request):
+    """Unloads every model Lutin keeps in memory (Ollama's, the llama.cpp server, and the ExLlamaV3, Colibri or LM Studio server it manages)."""
+    if request.body:
+        raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("-"))
+    done = _m.liberer_vram(tout=True)
+    return {"message": done.get("message", ""), "resources": _resources()}
+
+
+@route("POST", "/health/self-test", SESSION)
+def health_self_test(request):
+    """Checks end to end that everything works: {"deep": true} also makes the real model answer (it loads it: up to a minute)."""
+    if set(request.body) - {"deep"} or not isinstance(request.body.get("deep", False), bool):
+        raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("deep"))
+    done = _m.run_selftest(request.body.get("deep", False))
+    return {"ok": bool(done["ok"]), "deep": bool(done["profond"]), "checks": [{"name": r["nom"], "ok": bool(r["ok"]), "important": bool(r["important"]), "detail": r["detail"],
+                                                                           "seconds": r["duree"]} for r in done["resultats"]]}
+
+
+@route("GET", "/health/activity", SESSION)
+def health_activity(request):
+    """What the models and the tools did here (names, durations, counts; never the text of a message)."""
+    from . import observatory as _observatory
+    events = _observatory.read(400)
+    summary = _observatory.summary(events)
+    return {"models": [{"model": m.get("modele", ""), "machine": m.get("machine", ""), "turns": m.get("tours", 0), "tokens": m.get("jetons", 0), "tokens_per_s": m.get("tok_s")}
+                       for m in summary.get("modeles") or []],
+            "tools": [{"tool": o.get("outil", ""), "calls": o.get("appels", 0), "failures": o.get("echecs", 0), "duration_ms": o.get("duree_ms", 0)} for o in summary.get("outils") or []],
+            "retries": summary.get("relances") or {}, "routed": summary.get("routages") or 0}
+
+
+@route("DELETE", "/health/activity", CONFIGURATOR)
+def clear_health_activity(request):
+    from . import observatory as _observatory
+    _observatory.clear()
+    return {"cleared": True}
+
+
+@route("GET", "/health/outbound", SESSION)
+def health_outbound(request):
+    """What left this machine: the searches sent to an outside service (when, which service, the request with what was removed from it, whether it worked)."""
+    from . import outbound as _outbound
+    return {"entries": [{"at": e.get("quand", ""), "service": e.get("service", ""), "request": e.get("requete", ""), "removed": list(e.get("retire") or []), "ok": bool(e.get("ok"))}
+                        for e in _outbound.read(60)]}
+
+
+@route("DELETE", "/health/outbound", CONFIGURATOR)
+def clear_health_outbound(request):
+    from . import outbound as _outbound
+    _outbound.clear()
+    return {"cleared": True}
+
+
 # ------------------------------------------------------------------------------------------- the changes of the last request
 # What the last request of a conversation did to files (the tools that write: modifier, ecrire, modifier_plusieurs; not the effects of commands),
 # with the differences, and the way back: every file, or one. The backups are those the tools made before writing (donnees/sauvegardes/).

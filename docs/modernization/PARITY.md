@@ -9,8 +9,9 @@ switch; each line is ticked here when it is done, with its test.
 
 1. ~~**Undo the file changes of the last request**, and the file-by-file review with an undo per file~~ — done: `GET /conversations/{id}/changes`,
    `POST /conversations/{id}/changes/undo` (`tests/test_api_v1_changes.py`), `components/Changes.svelte` in the Chat (test 3k).
-2. **Health**: memory, graphics card and disk, what is loaded, unload the models, free the graphics memory, « check that everything works » and
-   the full self-test, what left this machine (outbound web searches) and clearing that log, the health light on Settings.
+2. ~~**Health**: memory, graphics card and disk, what is loaded, unload the models, free the graphics memory, « check that everything works » and
+   the full self-test, what left this machine (outbound web searches) and clearing that log~~ — done: `/api/v1/health…` (`tests/test_api_v1_health.py`),
+   the section « Health » of Settings (`components/Health.svelte`, test 3l). Left: the health light on Settings in the navigation.
 3. **Back up and restore** the data as a `.zip`, and the path of the data folder; the take-over of another assistant's data; moving a work folder.
 4. **Search the conversations** (with extracts), and the markers in the list (working, waiting for you, finished and unread), the tab badge.
 5. **Answer actions**: copy a whole answer, regenerate, the generated images and the produced files in the thread (open, download, delete).

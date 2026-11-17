@@ -185,6 +185,46 @@
   "right": "configurator"
  },
  {
+  "method": "GET",
+  "path": "/api/v1/health",
+  "right": "session"
+ },
+ {
+  "method": "DELETE",
+  "path": "/api/v1/health/activity",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/health/activity",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/health/free-graphics-memory",
+  "right": "session"
+ },
+ {
+  "method": "DELETE",
+  "path": "/api/v1/health/outbound",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/health/outbound",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/health/self-test",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/health/unload",
+  "right": "session"
+ },
+ {
   "method": "POST",
   "path": "/api/v1/images",
   "right": "session"
