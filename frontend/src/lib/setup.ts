@@ -17,6 +17,8 @@ export interface EngineTask {
 
 export interface EngineView {
   id: string;
+  /** What the daily check knows of a newer version (null until it ran). */
+  update?: { current: string; latest: string; available: boolean } | null;
   name: string;
   current: boolean;
   installed: boolean;

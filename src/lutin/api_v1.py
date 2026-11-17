@@ -24,6 +24,7 @@ from pathlib import Path
 
 from . import core as _m
 from . import engines as _engines
+from . import engine_updates as _engine_updates
 from . import hardware as _hardware
 from . import health as _health
 from . import approval_rules as _approval_rules
@@ -1045,13 +1046,19 @@ def _settled(future, default):
         return default
 
 
-def _engine_view(engine, current, state, models, possible):
+def _engine_view(engine, current, state, models, possible, updates=None):
+    """`update` is what the daily check of engine_updates knows (null until it ran): an engine known to be up to date is not offered an update."""
     sheet = engine.vue(engine.id == current)
+    actions = {name: {"possible": bool((possible.get(stored) or {}).get("possible")), "reason": (possible.get(stored) or {}).get("raison", "")} for name, stored in ENGINE_ACTIONS.items()}
+    known = (updates or {}).get(engine.id)
+    if known and not known.get("disponible") and actions["update"]["possible"]:
+        actions["update"] = {"possible": False, "reason": _t("À jour : {} est la dernière version connue (Réinstaller la remet si besoin).").format(known.get("actuelle") or known.get("derniere"))}
     return {
         "id": engine.id, "name": engine.nom, "kind": engine.genre, "manages_models": bool(engine.gere_modeles), "current": engine.id == current, "description": sheet["description"],
         "strengths": sheet["points_forts"], "weaknesses": sheet["points_faibles"], "installed": bool(state.get("installe")), "running": bool(state.get("actif")),
         "version": state.get("version", ""), "detail": state.get("detail", ""), "models_count": len(models.get("installes") or []),
-        "actions": {name: {"possible": bool((possible.get(stored) or {}).get("possible")), "reason": (possible.get(stored) or {}).get("raison", "")} for name, stored in ENGINE_ACTIONS.items()},
+        "actions": actions,
+        "update": {"current": known.get("actuelle", ""), "latest": known.get("derniere", ""), "available": bool(known.get("disponible"))} if known else None,
         "task": _task(engine.id),
     }
 
@@ -1060,12 +1067,14 @@ def _engine_view(engine, current, state, models, possible):
 def engines(request):
     """Every engine with its state, the actions it allows and its running task. The engines are read at the same time: one that does not answer must not make the others wait."""
     current = _m.moteur_actuel().id
+    _engine_updates.in_background(bool(_m.reglages().get("verifier_maj", True)) and not _offline.is_active())          # once a day at most, never waited for
+    updates = _engine_updates.state()
     listed = _engines.entries()
     unknown = ({"installe": False, "actif": False, "version": "", "detail": ""}, {"installes": []}, {})
     # Three questions per engine, each of which waits 2 s when the engine does not answer: all asked at the same time, so the whole list costs one wait and not three per engine.
     with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, min(24, 3 * len(listed)))) as pool:
         asked = [(engine, pool.submit(engine.statut), pool.submit(engine.modeles), pool.submit(engine.actions)) for engine in listed]
-        views = [_engine_view(engine, current, _settled(a, unknown[0]), _settled(b, unknown[1]), _settled(c, unknown[2])) for engine, a, b, c in asked]
+        views = [_engine_view(engine, current, _settled(a, unknown[0]), _settled(b, unknown[1]), _settled(c, unknown[2]), updates) for engine, a, b, c in asked]
     return {"current": current, "engines": views}
 
 

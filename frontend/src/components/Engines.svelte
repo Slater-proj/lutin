@@ -90,6 +90,7 @@
             <span class={"state " + (engine.running ? "on" : "off")}>{engine.running ? t("engines.running") : engine.installed ? t("engines.stopped") : t("engines.missing")}</span>
             {#if engine.current}<span class="badge">{t("engines.in_use")}</span>{/if}
             {#if engine.version}<span class="muted version">{engine.version}</span>{/if}
+            {#if engine.update?.available}<span class="badge update">{t("engines.update_available", engine.update.latest)}</span>{/if}
           </div>
           <p>{engine.description}</p>
           {#if engine.detail}<p class="muted">{engine.detail}</p>{/if}

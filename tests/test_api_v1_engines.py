@@ -71,13 +71,28 @@ class Engines(unittest.TestCase):
         status, answer = call("GET", "/api/v1/engines")
         self.assertEqual((status, sorted(answer), answer["current"]), (200, ["current", "engines"], A.moteur_actuel().id))
         fake = next(entry for entry in answer["engines"] if entry["id"] == "fake")
-        self.assertEqual(sorted(fake), ["actions", "current", "description", "detail", "id", "installed", "kind", "manages_models", "models_count", "name", "running", "strengths", "task", "version", "weaknesses"])
+        self.assertEqual(sorted(fake), ["actions", "current", "description", "detail", "id", "installed", "kind", "manages_models", "models_count", "name", "running", "strengths", "task", "update", "version", "weaknesses"])
         self.assertEqual((fake["name"], fake["running"], fake["installed"], fake["version"], fake["models_count"], fake["task"], fake["current"]), ("Fake engine", True, True, "1.2.3", 2, None, False))
         self.assertEqual(sorted(fake["actions"]), ["install", "reinstall", "start", "stop", "uninstall", "update"])
         self.assertEqual(fake["actions"]["stop"], {"possible": False, "reason": "Nothing to stop."})
         self.assertEqual(fake["actions"]["install"], {"possible": True, "reason": "Downloads 120 MB and installs it."})
         self.assertIn("ollama", [entry["id"] for entry in answer["engines"]])
         self.assertEqual([entry["id"] for entry in answer["engines"] if entry["current"]], [answer["current"]])
+
+    def test_update_is_offered_only_when_a_newer_version_is_known(self):
+        """Seen by the maintainer: « Update » offered for an engine already up to date. The check of engine_updates (once a day at most) decides."""
+        self.assertIsNone(next(entry for entry in self.listing() if entry["id"] == "fake")["update"], "not checked yet: nothing is said")
+        known = {"fake": {"actuelle": "1.2.3", "derniere": "1.2.3", "disponible": False, "verifie": 1}}
+        with mock.patch.object(api_v1._engine_updates, "state", return_value=known):
+            fake = next(entry for entry in self.listing() if entry["id"] == "fake")
+        self.assertEqual(fake["update"], {"current": "1.2.3", "latest": "1.2.3", "available": False})
+        self.assertFalse(fake["actions"]["update"]["possible"], "up to date: no update offered")
+        self.assertIn("1.2.3", fake["actions"]["update"]["reason"])
+        self.assertTrue(fake["actions"]["reinstall"]["possible"], "reinstalling stays possible")
+        known["fake"].update(derniere="1.3.0", disponible=True)
+        with mock.patch.object(api_v1._engine_updates, "state", return_value=known):
+            fake = next(entry for entry in self.listing() if entry["id"] == "fake")
+        self.assertEqual((fake["update"]["latest"], fake["update"]["available"], fake["actions"]["update"]["possible"]), ("1.3.0", True, True))
 
     def test_starting_runs_in_the_background_and_the_list_follows_it(self):
         self.fake.gate.clear()
