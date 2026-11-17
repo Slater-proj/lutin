@@ -1,7 +1,9 @@
 <script lang="ts">
-  // The Agents screen: what Lutin does by itself. For now, the scheduled tasks: a request carried out at a time of the week, or once on a date, always in the same
-  // conversation. Managing them is for the machine itself (the server refuses a paired device and says so). Nothing runs because a form was opened.
+  // The Agents screen: what Lutin does by itself, in four tabs kept in the address (#/agents/<tab>): the scheduled tasks (a request carried out at a
+  // time of the week, or once on a date, always in the same conversation), the missions, the add-ons and the connectors. Managing them is for the
+  // machine itself (the server refuses a paired device and says so). Nothing runs because a form was opened.
   import { onMount } from "svelte";
+  import { pageOf } from "../lib/address";
   import Addons from "../components/Addons.svelte";
   import Connectors from "../components/Connectors.svelte";
   import Missions from "../components/Missions.svelte";
@@ -10,6 +12,8 @@
   import { chosenDays, dayList, dayName, isEveryDay, shownMoment, type ScheduledTask } from "../lib/tasks";
 
   const lang = language();
+  const TABS = ["tasks", "missions", "addons", "connectors"] as const;
+  let tab = $state<(typeof TABS)[number]>(pageOf(location.hash, TABS) ?? "tasks");
   type Tasks = { tasks: ScheduledTask[] };
   type Channels = { channels: { id: string; name: string }[] };
 
@@ -125,6 +129,8 @@
   }
 
   onMount(() => {
+    const onHash = (): void => void (tab = pageOf(location.hash, TABS) ?? "tasks");
+    addEventListener("hashchange", onHash);
     void load();
     api<Channels>("GET", "/notification-channels")
       .then((answer) => (channels = answer.channels))
@@ -133,16 +139,27 @@
     const timer = setInterval(() => {
       if (!busy && data) void reload().catch(() => undefined);
     }, 5000);
-    return () => clearInterval(timer);
+    return () => {
+      clearInterval(timer);
+      removeEventListener("hashchange", onHash);
+    };
   });
 </script>
 
 <div class="agents">
   <header>
-    <h1>{t("tasks.title")}</h1>
-    <p class="muted">{t("tasks.intro")}</p>
+    <h1>{t("nav.agents")}</h1>
+    <p class="muted">{t("agents.intro")}</p>
   </header>
 
+  <nav class="tabs" aria-label={t("agents.tabs")}>
+    {#each TABS as name (name)}<a href={"#/agents/" + name} aria-current={tab === name ? "page" : undefined}>{t(("agents.tab." + name) as MessageKey)}</a>{/each}
+  </nav>
+
+  {#if tab === "tasks"}
+  <section class="part" aria-labelledby="tasks-title">
+  <h2 id="tasks-title">{t("tasks.title")}</h2>
+  <p class="muted">{t("tasks.intro")}</p>
   {#if problem}<p class="problem" role="alert">{problem}</p>{/if}
 
   {#if data}
@@ -196,7 +213,7 @@
     {/if}
 
     <form class="add" onsubmit={create}>
-      <h2>{editing ? t("tasks.edit_title") : t("tasks.add_title")}</h2>
+      <h3>{editing ? t("tasks.edit_title") : t("tasks.add_title")}</h3>
       <label for="task-name">{t("tasks.name")}</label>
       <input id="task-name" type="text" bind:value={name} maxlength="60" autocomplete="off" required />
       <label for="task-request">{t("tasks.request")}</label>
@@ -235,12 +252,14 @@
   {:else if !problem}
     <p class="muted">{t("tasks.loading")}</p>
   {/if}
-
-  <Missions />
-
-  <Addons />
-
-  <Connectors />
+  </section>
+  {:else if tab === "missions"}
+    <Missions />
+  {:else if tab === "addons"}
+    <Addons />
+  {:else}
+    <Connectors />
+  {/if}
 </div>
 
 <style>
@@ -262,6 +281,50 @@
   h2 {
     margin: 0;
     font-size: var(--text-lg);
+  }
+
+  h3 {
+    margin: 0;
+    font-size: var(--text-md);
+  }
+
+  .part {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+
+  /* The four tabs: links, since each one is an address; they go on two lines on a phone rather than out of the screen. */
+  .tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1);
+    align-self: flex-start;
+    max-width: 100%;
+    padding: var(--space-1);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    background: var(--color-surface);
+  }
+
+  .tabs a {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--target);
+    padding: 0 var(--space-4);
+    border-radius: var(--radius-md);
+    color: var(--color-text-muted);
+    font-weight: 600;
+    text-decoration: none;
+  }
+
+  .tabs a:hover {
+    color: var(--color-text);
+  }
+
+  .tabs a[aria-current="page"] {
+    background: var(--color-accent-soft);
+    color: var(--color-accent-text);
   }
 
   p {

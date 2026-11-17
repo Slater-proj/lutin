@@ -482,9 +482,10 @@ class Chat(unittest.TestCase):
                 p.evaluer("location.hash = '#/settings/%s'" % section)
                 p.attendre("!!document.querySelector(%s)" % js(ready))
                 self.axe("on the section %s of the Settings screen (%s)" % (section, theme))
-            p.evaluer("location.hash = '#/agents'")
-            p.attendre("!!document.querySelector('#task-name')")
-            self.axe("on the Agents screen (%s)" % theme)
+            for tab, ready in (("tasks", "#task-name"), ("missions", "#mission-name"), ("addons", ".addons .card"), ("connectors", "#connector-name")):
+                p.evaluer("location.hash = '#/agents/%s'" % tab)
+                p.attendre("!!document.querySelector(%s)" % js(ready))
+                self.axe("on the tab %s of the Agents screen (%s)" % (tab, theme))
             p.evaluer("location.hash = '#/projects'")
             p.attendre("!!document.querySelector('#project-path')")
             self.axe("on the Projects screen (%s)" % theme)
@@ -631,8 +632,11 @@ class Chat(unittest.TestCase):
                 self.assertGreater(p.evaluer("document.querySelector('.%s').getBoundingClientRect().width" % screen), 1400, screen)
                 self.picture("5h2-%s-2560" % screen)
             p.evaluer("location.hash = '#/agents'")
-            p.attendre("document.querySelector('#main').scrollHeight > document.querySelector('#main').clientHeight")          # a long screen
+            p.attendre("!!document.querySelector('.agents')")
+            p.evaluer("(() => { const tall = document.createElement('div'); tall.id = 'tall-probe'; tall.style.height = '4000px'; document.querySelector('.agents').append(tall); })()")          # a long screen, whatever it shows
+            p.attendre("document.querySelector('#main').scrollHeight > document.querySelector('#main').clientHeight")
             self.assertLessEqual(p.evaluer("document.scrollingElement.scrollHeight - innerHeight"), 1, "the screen scrolls, not the page: the navigation stays")
+            p.evaluer("document.querySelector('#tall-probe').remove()")
         finally:
             p.commande("Emulation.clearDeviceMetricsOverride")
         p.commande("Emulation.setDeviceMetricsOverride", width=360, height=740, deviceScaleFactor=1, mobile=True)
@@ -1006,7 +1010,7 @@ class Chat(unittest.TestCase):
         patch = mock.patch.object(scheduled_tasks, "executer", side_effect=lambda identifier: ran.append(identifier))
         patch.start()
         self.addCleanup(patch.stop)
-        p.evaluer("location.hash = '#/agents'")
+        p.evaluer("location.hash = '#/agents/tasks'")
         p.attendre("!!document.querySelector('#task-name')")
         self.assertTrue(p.evaluer("!!document.querySelector('.agents .tasks-empty')"), "no task yet: the page says so and shows the form")
         fill = "(() => { const set = (id, value) => { const box = document.querySelector(id); box.value = value; box.dispatchEvent(new Event('input', {bubbles: true})); }; set('#task-name', 'Morning notes'); set('#task-request', 'Summarise my notes'); set('#task-time', '07:45'); document.querySelector('.add').requestSubmit(); })()"
@@ -1144,7 +1148,7 @@ class Chat(unittest.TestCase):
         from lutin import scheduled_tasks
         self.addCleanup(lambda: [scheduled_tasks.remove(task["id"]) for task in scheduled_tasks.read()])
         identifier = notifications.list_channels()[0]["id"]
-        p.evaluer("location.hash = '#/agents'")
+        p.evaluer("location.hash = '#/agents/tasks'")
         p.attendre("!!document.querySelector('#task-notify')")
         p.evaluer("(() => { const set = (id, value, name) => { const box = document.querySelector(id); box.value = value; box.dispatchEvent(new Event(name, {bubbles: true})); }; set('#task-name', 'Ping', 'input'); set('#task-request', 'Say hello', 'input'); set('#task-notify', %s, 'change'); document.querySelector('.add').requestSubmit(); })()" % js(identifier))
         p.attendre("!!document.querySelector('.agents .tasks .card')")
@@ -1166,7 +1170,7 @@ class Chat(unittest.TestCase):
         self.addCleanup(lambda: [mcp.remove(identifier) for identifier in list(mcp.read()["serveurs"])])
         self.addCleanup(mcp.close)
         source = str(Path(__file__).resolve().parent.parent / "src")
-        p.evaluer("location.hash = '#/agents'")
+        p.evaluer("location.hash = '#/agents/connectors'")
         p.attendre("!!document.querySelector('#connector-name')")
         self.assertTrue(p.evaluer("!!document.querySelector('.connectors .empty')"), "no connector yet: the page says so")
         command = '"%s" -m lutin.mcp_demo' % sys.executable
@@ -1213,7 +1217,7 @@ class Chat(unittest.TestCase):
         source = str(Path(__file__).resolve().parent.parent / "src")
         os.environ["PYTHONPATH"] = source + (os.pathsep + old_path if old_path else "")
         self.addCleanup(lambda: os.environ.pop("PYTHONPATH", None) if old_path is None else os.environ.__setitem__("PYTHONPATH", old_path))
-        p.evaluer("location.hash = '#/agents'")
+        p.evaluer("location.hash = '#/agents/connectors'")
         p.attendre("!!document.querySelector('.catalog .entry-card')")
         self.assertIn("Démo du catalogue", p.evaluer("document.querySelector('.catalog .entry-card').innerText"))
         p.evaluer("[...document.querySelectorAll('.catalog .button')].find(b => b.innerText === 'Configurer').click()")
@@ -1292,7 +1296,7 @@ class Chat(unittest.TestCase):
         self.addCleanup(nowhere.stop)
         secret_of = next((identifier, field["cle"]) for identifier in addons.ids() for field in addons.manifeste(identifier)["reglages"] if field.get("secret"))
         other = next(identifier for identifier in addons.ids() if identifier != secret_of[0])
-        p.evaluer("location.hash = '#/agents'")
+        p.evaluer("location.hash = '#/agents/addons'")
         p.attendre("document.querySelectorAll('.addons .card').length === %d" % len(addons.ids()))
         box = "#addon-%s-%s" % secret_of
         p.evaluer("(() => { const box = document.querySelector(%s); box.value = 'zzz-secret-value'; box.dispatchEvent(new Event('input', {bubbles: true})); })()" % js(box))
@@ -1328,7 +1332,7 @@ class Chat(unittest.TestCase):
         self.addCleanup(environment.stop)
         T.A.add_work(folder, "Mission folder")
         self.addCleanup(lambda: [mission.action("supprimer", {"id": entry["id"]}) for entry in mission.read()])
-        p.evaluer("location.hash = '#/agents'")
+        p.evaluer("location.hash = '#/agents/missions'")
         p.attendre("!!document.querySelector('#mission-name') && document.querySelector('#mission-project').options.length > 0")
         self.assertTrue(p.evaluer("!!document.querySelector('.missions-empty')"), "no mission yet: the page says so")
         p.evaluer("(() => { const set = (id, value) => { const box = document.querySelector(id); box.value = value; box.dispatchEvent(new Event('input', {bubbles: true})); }; set('#mission-name', 'Build a game'); set('#mission-brief', 'Write a small game and test it.'); document.querySelector('.missions .add').requestSubmit(); })()")
@@ -1376,7 +1380,7 @@ class Chat(unittest.TestCase):
                                  {"id": "d2", "chat_id": 7, "de": "Ann", "demande": "And now?", "texte": "Still.", "date": 1700000100}])
         addons_telegram.write(state)
         addons.write_state({"telegram": {"actif": True}})
-        p.evaluer("location.hash = '#/agents'")
+        p.evaluer("location.hash = '#/agents/addons'")
         p.attendre("!!document.querySelector('.addons .panel .code')")
         self.assertEqual(p.evaluer("document.querySelector('.addons .panel .code').innerText"), "123456")
         self.assertIn("My phone", p.evaluer("document.querySelector('.addons .panel .devices').innerText"))
@@ -1411,7 +1415,7 @@ class Chat(unittest.TestCase):
         for patch in (mock.patch.object(addons_comfyui, "etat", side_effect=lambda: dict(raw)), mock.patch.object(addons_comfyui, "action", side_effect=lambda name, data: taken.append((name, data)) or {})):
             patch.start()
             self.addCleanup(patch.stop)
-        p.evaluer("location.hash = '#/agents'")
+        p.evaluer("location.hash = '#/agents/addons'")
         p.attendre("!!document.querySelector('.addons .card')")
         p.evaluer("[...document.querySelectorAll('.addons .card')].find(c => c.querySelector('strong').innerText.includes('ComfyUI')).querySelector('.comfy summary').click()")
         p.attendre("!!document.querySelector('.comfy .badge')")
@@ -1439,7 +1443,7 @@ class Chat(unittest.TestCase):
         from lutin import addons
         self.addCleanup(addons.restore_stream, "telegram")
         shipped = addons.shipped_stream("telegram")
-        p.evaluer("location.hash = '#/agents'")
+        p.evaluer("location.hash = '#/agents/addons'")
         p.attendre("!!document.querySelector('#flow-telegram') || !!document.querySelector('.addons .flow')")
         opener = "[...document.querySelectorAll('.addons .card')].find(c => c.querySelector('strong').innerText.includes('Telegram')).querySelector('.flow summary').click()"
         p.evaluer(opener)
