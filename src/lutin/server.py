@@ -1046,7 +1046,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 return self._envoyer(200, _m.delete_media(str(donnees.get("conversation", "")), str(donnees.get("id", ""))))
             if self.path == "/api/conversation-options":
                 ident = str(donnees.get("conversation", ""))
-                if not _m.conv_chemin(ident).exists():
+                if not _m.conv_existe(ident):
                     return self._envoyer(404, {"erreur": _t("Conversation inconnue.")})
                 return self._envoyer(200, {"options": _m.options_ecrire(ident, donnees.get("options"))})
             if self.path == "/api/epingler-message":

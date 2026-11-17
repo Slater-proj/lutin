@@ -245,9 +245,10 @@ class Etats(Base):
         machines.CONVERSATIONS.update(t=machines.time.monotonic(), v=[{"machine": m["id"], "machine_nom": "x", "id": "a" * 8, "titre": "T", "maj": "", "messages": 1}])
         machines.DERNIER_ETAT[m["id"]] = "operationnel"
         machines.SONDES[m["id"]] = (machines.time.monotonic() - machines.FRAICHEUR_S - 1, {}, "")          # dernière réponse trop ancienne
-        self.assertEqual(machines.modeles_distants(), [])
-        self.assertEqual(machines.conversations_distantes(), [])
-        self.assertEqual(machines.hors_ligne(), [machines.trouver(m["id"])["nom"]])
+        with mock.patch.object(machines, "veiller", lambda attente=False: None):          # « sans personne pour la sonder » : aucune sonde ne part en arrière-plan pendant le constat
+            self.assertEqual(machines.modeles_distants(), [])
+            self.assertEqual(machines.conversations_distantes(), [])
+            self.assertEqual(machines.hors_ligne(), [machines.trouver(m["id"])["nom"]])
         machines.SONDES[m["id"]] = (machines.time.monotonic(), {}, "")          # elle répond de nouveau
         self.assertEqual(len(machines.modeles_distants()), 1)
         self.assertEqual(machines.hors_ligne(), [])

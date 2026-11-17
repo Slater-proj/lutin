@@ -107,9 +107,10 @@ def for_model(messages, voit=True):
 
 def referenced():
     """Identifiants cités par au moins une conversation."""
+    from . import store
     vus = set()
-    for c in (_m.DONNEES / "conversations").glob("*.json"):
-        for m in (_m.lire_json(c, {}) or {}).get("messages", []):
+    for c in store.every():
+        for m in c.get("messages", []):
             vus.update(m.get("images") or [])
             vus.update(m.get("medias") or [])
     return vus

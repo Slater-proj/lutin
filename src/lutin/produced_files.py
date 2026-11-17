@@ -4,6 +4,7 @@ Lutin n'ouvre jamais le fichier de lui-même. Le bouton « Ouvrir » demande au 
 qu'un double-clic. Il n'existe que depuis cette machine, et seulement pour des types de documents et de médias (jamais un programme ou un script).
 
 Un fichier n'est servi, ouvert ou supprimé que s'il est inscrit dans la conversation par un outil de Lutin ET situé dans un dossier de travail ou dans le dossier de sortie de ComfyUI."""
+from datetime import datetime
 import hashlib
 import json
 import mimetypes
@@ -154,8 +155,7 @@ def remove(ident, fichier_id):
     m["fichiers_joints"] = [x for x in m["fichiers_joints"] if x.get("id") != fichier_id]
     if not m["fichiers_joints"]:
         m.pop("fichiers_joints", None)
-    import json
-    _m.ecrire_atomique(_m.conv_chemin(ident), json.dumps(c, ensure_ascii=False))
+    _m.conv_ecrire_telle_quelle(c)
     return {"ok": True, "fichier_supprime": supprime}
 
 
@@ -199,16 +199,20 @@ def save(entrees, conversation):
 
 def _from_the_conversations():
     """Les fichiers déjà inscrits dans des conversations d'avant le registre : repris une seule fois."""
+    from . import store
     trouves = []
-    for f in (_m.DONNEES / "conversations").glob("*.json"):
-        c = _m.lire_json(f, {}) or {}
+    for c in store.every():
+        try:
+            quand = int(datetime.fromisoformat(str(c.get("maj") or c.get("date"))).timestamp())
+        except ValueError:
+            quand = 0
         for m in c.get("messages", []):
             for e in m.get("fichiers_joints") or []:
-                trouves.append(dict(e, genre="fichier", conversation=f.stem, date=int(f.stat().st_mtime)))
+                trouves.append(dict(e, genre="fichier", conversation=c["id"], date=quand))
             for i in m.get("medias") or []:
                 chemin = (m.get("medias_fichiers") or {}).get(i)
                 if chemin:
-                    trouves.append(dict(entree_image(i, chemin), conversation=f.stem, date=int(f.stat().st_mtime)))
+                    trouves.append(dict(entree_image(i, chemin), conversation=c["id"], date=quand))
     return trouves
 
 
@@ -232,7 +236,7 @@ def entries():
                 continue
             gardes.append(e)
             sortie.append({"id": e["id"], "genre": e.get("genre", "fichier"), "nom": e.get("nom") or p.name, "chemin": str(p), "taille": taille, "date": e.get("date", 0),
-                           "conversation": e.get("conversation", ""), "conversation_existe": _m.conv_chemin(e.get("conversation", "")).exists() if e.get("conversation") else False})
+                           "conversation": e.get("conversation", ""), "conversation_existe": _m.conv_existe(e.get("conversation", "")) if e.get("conversation") else False})
         if len(gardes) != len(liste) or not _registry().get("rempli"):
             reg["liste"] = gardes
             _write_registry(reg)
@@ -269,7 +273,7 @@ def remove_selection(ids):
             if conv in _m.TOURS_ACTIFS:
                 raise ValueError(_t("Une réponse est en cours dans cette conversation : attends la fin ou arrête-la."))
             try:
-                if conv and _m.conv_chemin(conv).exists():
+                if conv and _m.conv_existe(conv):
                     (change_review.delete_media(conv, e["id"]) if e.get("genre") == "image" else remove(conv, e["id"]))
                     if Path(e["chemin"]).is_file():
                         _remove_directly(e)                        # la conversation ne montrait plus ce fichier : on l'efface quand même

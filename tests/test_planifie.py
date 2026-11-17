@@ -273,11 +273,11 @@ class ArretEtSuppression(Base):
         t = self.tache()
         conv = self.lancer(t["id"], tour_qui_repond())
         P.remove(t["id"])
-        self.assertTrue(_d.conv_chemin(conv).is_file(), "la conversation reste : elle contient les résultats")
+        self.assertTrue(_d.conv_existe(conv), "la conversation reste : elle contient les résultats")
         t2 = self.tache(nom="Autre")
         conv2 = self.lancer(t2["id"], tour_qui_repond())
         P.remove(t2["id"], conversation=True)
-        self.assertFalse(_d.conv_chemin(conv2).exists())
+        self.assertFalse(_d.conv_existe(conv2))
 
     def test_supprimer_avec_sa_conversation_en_plein_travail_n_en_laisse_aucune_trace(self):
         t = self.tache()
@@ -285,7 +285,7 @@ class ArretEtSuppression(Base):
         conv = P.read()[0]["derniere_conv"]
         P.remove(t["id"], conversation=True)
         fil.join(10)
-        self.assertFalse(_d.conv_chemin(conv).exists(), "la fin du tour n'a pas réécrit la conversation")
+        self.assertFalse(_d.conv_existe(conv), "la fin du tour n'a pas réécrit la conversation")
         self.assertEqual(P.TO_REMOVE, set())
 
     def test_supprimer_une_tache_inconnue_est_dit(self):

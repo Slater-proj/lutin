@@ -64,9 +64,33 @@ def recall_sources():
                             if documents > MAX_DOCUMENTS:
                                 continue
                         yield f
-    dossier = _m.DONNEES / "conversations"
-    if dossier.is_dir():
-        yield from sorted(dossier.glob("*.json"))
+    from . import store
+    for ident in sorted(store.ids()):
+        yield ConversationRef(ident)
+
+
+class ConversationRef:
+    """A conversation as a source of the recall index (lutin.store, ADR 0017): what the index asks of a file (a key, a signature that changes when
+    the conversation does, its content), without a file."""
+
+    def __init__(self, ident):
+        self.stem = ident
+        self.suffix = ".conversation"
+
+    def __str__(self):
+        return "conversation:" + self.stem
+
+    def read(self):
+        from . import store
+        return store.read(self.stem)
+
+    def signature(self):
+        """Changes when the conversation is written: its date « maj » and its number of messages. OSError when it is gone, as for a file."""
+        from . import store
+        entry = store.summary(self.stem)
+        if entry is None:
+            raise FileNotFoundError(self.stem)
+        return (entry["maj"], entry["messages"])
 
 
 def split_text(texte, source, titre_defaut=""):
@@ -136,8 +160,8 @@ def file_chunks(f):
                     morceaux += split_text(texte, recall_label(f), titre)
             except text_extraction.ErreurExtraction as e:
                 erreur = {"nom": recall_label(f), "message": str(e)}
-        elif f.suffix.lower() == ".json" and f.parent.name == "conversations":
-            c = _m.lire_json(f, None)
+        elif isinstance(f, ConversationRef):
+            c = f.read()
             if c:
                 nom = "conversation « {} »".format(c.get("titre", "")[:60])
                 texte = "\n\n".join("[{}] {}".format("moi" if m.get("role") == "user" else "assistant", m.get("content", "")) for m in c.get("messages", []) if m.get("role") in ("user", "assistant") and m.get("content"))
@@ -161,9 +185,12 @@ def file_chunks(f):
 
 def file_signature(f):
     """Ce qui dit qu'un fichier a changé : sa date, sa taille, et pour une conversation, celles de son archive."""
-    st = f.stat()
-    sig = (st.st_mtime_ns, st.st_size)
-    if f.parent.name == "conversations" and f.suffix.lower() == ".json":
+    if isinstance(f, ConversationRef):
+        sig = f.signature()
+    else:
+        st = f.stat()
+        sig = (st.st_mtime_ns, st.st_size)
+    if isinstance(f, ConversationRef):
         try:
             sa = _archive.path_of(f.stem).stat()
             sig += (sa.st_mtime_ns, sa.st_size)
@@ -239,7 +266,8 @@ THREAD = {}                       # conversation -> (signature, morceaux, df, mo
 
 def thread_chunks(ident):
     """Les morceaux de la conversation (messages gardés + début archivé par le résumé), sans parcourir les dossiers de documents : rapide à chaque réponse."""
-    f = _m.conv_chemin(ident)
+    _m.conv_chemin(ident)                                         # checks the identifier
+    f = ConversationRef(ident)
     try:
         sig = file_signature(f)
     except OSError:

@@ -383,7 +383,6 @@ def run_selftest(profond=False):
                 raise RuntimeError("La conversation relue est différente.")
         finally:
             _m.conv_supprimer(c["id"])
-            Path(str(_m.conv_chemin(c["id"])) + ".bak").unlink(missing_ok=True)
         return "création, enregistrement, lecture"
 
     def outils_fichiers():

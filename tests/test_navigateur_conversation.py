@@ -9,6 +9,7 @@ from pathlib import Path
 
 import context  # noqa: F401
 import cdp
+import stored  # what the demonstration server stored (its database, ADR 0017)
 
 RACINE = Path(__file__).resolve().parent.parent
 JETON = "document.documentElement.innerHTML.match(/TOKEN = '([0-9a-f]+)'/)[1]"
@@ -41,8 +42,8 @@ class Conversation(unittest.TestCase):
 
     def conversation_longue(self, tmp):
         """La conversation d'exemple + une longue suite de messages : une réflexion enregistrée à part, une ancienne réponse qui contient encore <think>, des messages datés."""
-        chemin = tmp / "home" / "donnees" / "conversations" / "a1b2c3d4.json"
-        c = json.loads(chemin.read_text(encoding="utf-8"))
+        donnees = tmp / "home" / "donnees"
+        c = stored.conversation(donnees, "a1b2c3d4")
         hier = (datetime.now() - timedelta(days=1)).isoformat(timespec="seconds")
         c["messages"][0]["ts"] = hier
         c["messages"][-1]["ts"] = datetime.now().isoformat(timespec="seconds")
@@ -57,7 +58,7 @@ class Conversation(unittest.TestCase):
                           {"role": "assistant", "content": "Le readme présente un assistant local.", "ts": datetime.now().isoformat(timespec="seconds")},
                           {"role": "user", "content": "Une ancienne conversation ?"},
                           {"role": "assistant", "content": "<think>Ancienne réflexion restée dans le texte.</think>\n\nVoici l'ancienne réponse, propre."}]
-        chemin.write_text(json.dumps(c, ensure_ascii=False), encoding="utf-8")
+        stored.put(donnees, c)                                  # imported as it is at the next reading of the server
 
     def test_la_reflexion_est_repliee_hors_de_la_bulle_et_les_messages_sont_dates(self):
         with self.captures.serveur_demo({"LUTIN_LANGUE": "fr"}) as (port, tmp):

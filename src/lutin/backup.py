@@ -16,7 +16,7 @@ from .i18n import t as _t
 MAX_SIZE = 2 * 1024 ** 3
 MAX_MEMBERS = 100_000
 ROOTS = {"config": ("config.json",), "donnees": ("reglages.json", "modeles.json", "journal-actions.jsonl"), "memoire": None}   # None = tout le dossier
-SUBFOLDERS = {"donnees": ("conversations",)}
+SUBFOLDERS = {"donnees": ("conversations", "options")}          # the conversations and their options, as the files of 0.x (ADR 0017)
 MANIFEST = "manifeste.json"
 
 
@@ -48,6 +48,7 @@ def _to_save(dossiers):
 
 def export(dossiers, destination):
     """Écrit l'archive (fichier ou objet binaire). Renvoie un résumé {fichiers, octets}."""
+    stored = _store_entries(dossiers)
     fichiers = _to_save(dossiers)
     total = 0
     with zipfile.ZipFile(destination, "w", zipfile.ZIP_DEFLATED) as z:
@@ -56,8 +57,33 @@ def export(dossiers, destination):
             if total > MAX_SIZE:
                 raise BackupError(_t("Trop de données pour une sauvegarde ({} Go au plus).").format(MAX_SIZE // 1024 ** 3))
             z.write(chemin, nom)
+        for nom, contenu in stored:
+            total += len(contenu)
+            if total > MAX_SIZE:
+                raise BackupError(_t("Trop de données pour une sauvegarde ({} Go au plus).").format(MAX_SIZE // 1024 ** 3))
+            z.writestr(nom, contenu)
+        fichiers = fichiers + [(nom, None) for nom, _ in stored]
         z.writestr(MANIFEST, json.dumps({"lutin": __version__, "date": time.strftime("%Y-%m-%dT%H:%M:%S"), "fichiers": [n for n, _ in fichiers]}, ensure_ascii=False, indent=1))
     return {"fichiers": len(fichiers), "octets": total}
+
+
+def _store_entries(dossiers):
+    """The conversations of the database (lutin.store) as the 0.x files, for the zip: a restore puts them back in donnees/conversations/, where they
+    are imported again. Only when the data folder saved is the one in use (the database belongs to it)."""
+    from . import core as _m
+    from . import store
+    if not dossiers.get("donnees") or Path(dossiers["donnees"]).resolve() != Path(_m.DONNEES).resolve():
+        return []
+    store.ready()                                                   # a 0.x file still waiting is imported first: it is saved once
+    entries = []
+    for ident in store.ids():
+        c = store.read(ident)
+        if c is not None:
+            entries.append(("donnees/conversations/{}.json".format(ident), json.dumps(c, ensure_ascii=False).encode("utf-8")))
+        options = store.options_read(ident)
+        if options:
+            entries.append(("donnees/options/{}.json".format(ident), json.dumps(options, ensure_ascii=False).encode("utf-8")))
+    return entries
 
 
 def _valid_name(nom):
@@ -131,4 +157,9 @@ def restore(dossiers, archive, dossier_secours=None):
             tmp.write_bytes(z.read(i))
             os.replace(tmp, cible)
             ecrits += 1
+    from . import core as _m
+    from . import store
+    if dossiers.get("donnees") and Path(dossiers["donnees"]).resolve() == Path(_m.DONNEES).resolve():
+        store._STATE["replace"] = True                               # the conversations of the archive replace those of the database, as files did in 0.x
+        store.ready()
     return {"fichiers": ecrits, "secours": str(secours) if secours else "", "version": manifeste.get("lutin", ""), "date": manifeste.get("date", "")}

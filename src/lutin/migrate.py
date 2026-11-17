@@ -285,7 +285,8 @@ def import_all(d, dossiers, choix, racine_travail=None, ecraser=False, workspace
 def to_migrate(d, donnees, memoire, dossiers_skills=()):
     """Ce que la source contient et que Lutin n'a pas encore : {conversations, memoire, skills} (nombres). Sert à ne plus proposer la reprise quand elle est faite : une conversation déjà présente,
     une mémoire identique à la sienne (ou déjà posée à côté sous un nom « .importe- »), un skill déjà dans un des dossiers donnés, ne comptent pas."""
-    presentes = {p.stem for p in (Path(donnees) / "conversations").glob("*.json")}
+    from . import store
+    presentes = {p.stem for p in (Path(donnees) / "conversations").glob("*.json")} | set(store.ids())          # 0.x files not imported yet, and the store (ADR 0017)
     conv = sum(1 for p in d["conversations"] if p.stem not in presentes)
     mem = 0
     for src in d["memoire"]:

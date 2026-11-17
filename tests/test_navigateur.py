@@ -10,6 +10,7 @@ from pathlib import Path
 
 import context  # noqa: F401
 import cdp
+import stored  # what the demonstration server stored (its database, ADR 0017)
 
 RACINE = Path(__file__).resolve().parent.parent
 SRC = RACINE / "src"
@@ -183,7 +184,7 @@ class Parcours(unittest.TestCase):
             self.assertIn("Mémoire : MEMOIRE.md", contenu)
             p.evaluer(bouton("Reprendre"))
             p.attendre("document.querySelector('#modalCorps').textContent.includes('onversation')  && !document.querySelector('#modalCorps input[type=checkbox]')")
-            self.assertTrue((tmp / "home" / "donnees" / "conversations" / "aabbccdd.json").is_file(), "la conversation est vraiment reprise")
+            self.assertTrue(stored.has(tmp / "home" / "donnees", "aabbccdd"), "la conversation est vraiment reprise")
             self.assertEqual(p.erreurs, [], "aucune erreur JavaScript")
 
     def test_dossiers_de_travail_choisir_ajouter_deplacer_retirer(self):
@@ -305,7 +306,7 @@ class Parcours(unittest.TestCase):
             self.assertTrue(p.evaluer("[...document.querySelectorAll('.accord input[type=checkbox]')].every(c => c.checked)"), "« garder ce choix » est coché par défaut")
             self.assertTrue(p.evaluer(bouton("Fiche de suivi")))
             p.attendre("[...document.querySelectorAll('#fil .msg.ia')].some(m => m.textContent.includes('Réponse de démonstration.'))")
-            sauve = json.loads((donnees / "conversations" / "d4e5f6a7.json").read_text(encoding="utf-8"))
+            sauve = stored.conversation(donnees, "d4e5f6a7")
             self.assertEqual(sauve.get("memoire_longue"), "fichier", "le choix est gardé pour cette conversation")
             self.assertLess(len(sauve["messages"]), 14, "en mode fiche, la conversation presque pleine est allégée du début (archivé)")
             self.assertTrue((donnees / "suivis" / "d4e5f6a7.md").is_file(), "la fiche est créée à partir du début de la conversation")
@@ -437,14 +438,12 @@ class Parcours(unittest.TestCase):
             self.assertEqual(p.evaluer("[...document.querySelectorAll('.options-lat label')].map(l => l.textContent.trim()).filter(x => /auto/.test(x)).join('|')"), "Fichiers auto|Commandes auto")
             # deux cases cochées à la suite : les deux sont enregistrées, pour CETTE conversation
             p.evaluer("document.getElementById('cAuto').click(); document.getElementById('cAutoCmd').click(); true")
-            fichier = donnees / "options" / "a1b2c3d4.json"
             debut_attente = time.time()
             r = {}
             while time.time() - debut_attente < 10:
-                if fichier.is_file():
-                    r = json.loads(fichier.read_text(encoding="utf-8"))
-                    if r.get("auto_ecriture") and r.get("auto_commandes"):
-                        break
+                r = stored.options(donnees, "a1b2c3d4")                  # stored with the conversation, in the database (ADR 0017)
+                if r.get("auto_ecriture") and r.get("auto_commandes"):
+                    break
                 time.sleep(0.3)
             self.assertTrue(r.get("auto_ecriture") and r.get("auto_commandes"), "les deux cases sont enregistrées avec la conversation : %r" % r)
             reglages = json.loads((donnees / "reglages.json").read_text(encoding="utf-8"))
@@ -526,9 +525,9 @@ class Parcours(unittest.TestCase):
             p.attendre("!document.getElementById('bandeauMission').hidden && document.getElementById('bandeauMission').textContent.includes('Mission')", delai=30)      # le bandeau de suivi
             # la conversation se remplit toute seule : le cahier des charges, puis les réponses de Lutin
             p.attendre("document.getElementById('fil').textContent.includes('pierre-feuille-ciseaux') && document.getElementById('fil').textContent.includes('Réponse de démonstration.')", delai=40)
-            fichier = donnees / "conversations" / (missions[0]["conv"] + ".json")
-            self.assertTrue(fichier.is_file())
-            self.assertTrue(json.loads(fichier.read_text(encoding="utf-8"))["titre"].startswith("🎯"), "la conversation porte le nom de la mission")
+            sauve = stored.conversation(donnees, missions[0]["conv"])
+            self.assertIsNotNone(sauve)
+            self.assertTrue(sauve["titre"].startswith("🎯"), "la conversation porte le nom de la mission")
             self.assertEqual(p.erreurs, [])
 
     def test_la_fiche_de_suivi_se_voit_se_modifie_et_se_supprime_depuis_le_menu_de_chaque_conversation(self):
@@ -571,7 +570,7 @@ class Parcours(unittest.TestCase):
             self.assertEqual(p.evaluer("[...document.querySelectorAll('.actions button')].filter(b => b.textContent.includes('Épingler')).length"), 2, "un bouton sur la demande et un sur la réponse")
             p.evaluer("[...document.querySelectorAll('.actions button')].find(b => b.textContent.includes('Épingler')).click()")
             p.attendre("!!document.querySelector('.msg.epingle-msg') && [...document.querySelectorAll('.actions button')].some(b => b.textContent.includes('Épinglé'))")
-            sauve = json.loads((tmp / "home" / "donnees" / "conversations" / "a1b2c3d4.json").read_text(encoding="utf-8"))
+            sauve = stored.conversation(tmp / "home" / "donnees", "a1b2c3d4")
             self.assertEqual([i for i, m in enumerate(sauve["messages"]) if m.get("epingle")], [0], "le premier message (la demande) est épinglé sur le disque")
             p.evaluer("[...document.querySelectorAll('.actions button')].find(b => b.textContent.includes('Épinglé')).click()")
             p.attendre("!document.querySelector('.msg.epingle-msg')")
@@ -595,7 +594,7 @@ class Parcours(unittest.TestCase):
             p.attendre("document.querySelector('#modalCorps').textContent.includes('Conversations : 1')")
             p.evaluer(bouton("Reprendre"))
             p.attendre("!document.querySelector('#modalCorps input[type=checkbox]')")
-            self.assertTrue((tmp / "home" / "donnees" / "conversations" / "aabbccdd.json").is_file())
+            self.assertTrue(stored.has(tmp / "home" / "donnees", "aabbccdd"))
             p.evaluer("document.getElementById('modalFermer').click()")
             # après la reprise, l'avertissement a disparu et un statut « déjà dans Lutin » le remplace
             p.attendre("document.querySelector('#listeTravaux').textContent.includes('déjà dans Lutin')")

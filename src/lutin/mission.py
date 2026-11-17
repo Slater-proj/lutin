@@ -223,7 +223,7 @@ def _tour(m):
     """Un tour de la mission. Renvoie False sans rien faire si aucune place n'est libre ou si le dossier de travail est occupé par un autre, True si un tour a eu lieu."""
     if _turns.full():
         return False
-    conv = _m.conv_lire(m["conv"]) if m.get("conv") and _d.conv_chemin(m["conv"]).exists() else None
+    conv = _m.conv_lire(m["conv"]) if m.get("conv") and _d.conv_existe(m["conv"]) else None
     nouvelle = conv is None
     if nouvelle:
         conv = _m.conv_nouvelle()
@@ -233,7 +233,7 @@ def _tour(m):
         siege = _turns.reserve(conv, work=m["travail"], also=lambda stop: ALIVE["arrets"].__setitem__(m["id"], stop))          # une conversation où quelqu'un écrit attend (ADR 0015)
     except _turns.TurnRefused as refus:
         if nouvelle:
-            _d.conv_chemin(conv["id"]).unlink(missing_ok=True)
+            _d.conv_supprimer(conv["id"])
         if refus.code == _turns.WORKSPACE_CONFLICT:
             modify(m["id"], message=refus.message[:200])
         return False

@@ -211,7 +211,7 @@ def git_commit(message, fichiers):
 def pin_conversation(ident, epingle):
     c = _m.conv_lire(ident)
     c["epingle"] = bool(epingle)
-    _m.ecrire_atomique(_m.conv_chemin(ident), json.dumps(c, ensure_ascii=False))          # sans toucher à la date « maj » : épingler ne remonte pas la conversation
+    _m.conv_ecrire_telle_quelle(c)          # sans toucher à la date « maj » : épingler ne remonte pas la conversation
     return {"ok": True, "epingle": c["epingle"]}
 
 
@@ -236,7 +236,7 @@ def pin_message(ident, index, epingle):
         msgs[i]["epingle"] = True
     else:
         msgs[i].pop("epingle", None)
-    _m.ecrire_atomique(_m.conv_chemin(ident), json.dumps(c, ensure_ascii=False))          # sans toucher à la date « maj »
+    _m.conv_ecrire_telle_quelle(c)          # sans toucher à la date « maj »
     return {"ok": True, "epingles": sum(1 for m in msgs if m.get("epingle"))}
 
 
@@ -256,7 +256,7 @@ def delete_media(ident, media_id):
     if not trouve["medias"]:
         trouve.pop("medias", None)
         trouve.pop("medias_fichiers", None)
-    _m.ecrire_atomique(_m.conv_chemin(ident), json.dumps(c, ensure_ascii=False))
+    _m.conv_ecrire_telle_quelle(c)
     supprime = False
     dossier = addons.settings("comfyui").get("dossier") or ""
     if chemin and dossier:
@@ -282,10 +282,9 @@ def search_conversations(q):
     if len(q) < 2:
         return {"resultats": []}
     trouves = []
-    dossier = _m.DONNEES / "conversations"
-    for f in (dossier.glob("*.json") if dossier.is_dir() else []):
-        c = _m.lire_json(f, None)
-        if not c or not _m.RE_CONV.match(c.get("id", "")):
+    from . import store
+    for c in store.every():
+        if not _m.RE_CONV.match(c.get("id", "")):
             continue
         extrait = ""
         if q in c.get("titre", "").lower():

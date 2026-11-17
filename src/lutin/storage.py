@@ -6,7 +6,6 @@ import json
 import os
 import re
 import secrets
-import shutil
 import threading
 import time
 import unicodedata
@@ -310,28 +309,25 @@ def conv_chemin(ident):
 
 
 def conv_lire(ident):
-    f = conv_chemin(ident)
-    c = None
-    for essai in range(4):
-        try:
-            c = json.loads(Path(f).read_text(encoding="utf-8-sig"))
-            break
-        except FileNotFoundError:
-            break
-        except ValueError:
-            break                                                  # contenu illisible : la copie de secours peut servir
-        except OSError as erreur:                                  # lecture qui tombe pile pendant une écriture (Windows, partage réseau) : on réessaie, on ne restaure RIEN
-            if essai == 3:
-                raise ValueError("Conversation momentanément illisible ({}) : réessaie dans un instant.".format(erreur))
-            time.sleep(0.15 * (essai + 1))
-    if not c:
-        sauvegarde = Path(str(f) + ".bak")                       # fichier abîmé (plantage du PC pendant l'écriture ?) : on reprend la copie de la fois d'avant
-        c = lire_json(sauvegarde, None)
-        if not c:
-            raise ValueError("Conversation introuvable.")
-        _m.journaliser("Conversation {} illisible : restaurée depuis sa copie de secours.".format(ident))
-        shutil.copyfile(sauvegarde, f)
+    """The stored conversation (lutin.store, ADR 0017). ValueError when the identifier is malformed or no conversation has it."""
+    conv_chemin(ident)                                          # checks the identifier
+    from . import store
+    c = store.read(ident)
+    if c is None:
+        raise ValueError("Conversation introuvable.")
     return c
+
+
+def conv_existe(ident):
+    from . import store
+    return bool(RE_CONV.match(ident or "")) and store.exists(ident)
+
+
+def conv_ecrire_telle_quelle(c):
+    """Stores the conversation without touching its date « maj » (a review of changes, a cleanup: the list order must not move)."""
+    from . import store
+    conv_chemin(c["id"])
+    store.write(c)
 
 
 def reparer_conversation(conv):
@@ -368,13 +364,9 @@ def conv_ecrire(c):
     if getattr(getattr(_m.LOCAL_TOUR, "stop", None), "abandonne", False):
         return          # ce fil exécute un tour abandonné après « Arrêter » : la conversation a continué sans lui, il ne doit rien écraser
     c["maj"] = datetime.now().isoformat(timespec="milliseconds")          # à la milliseconde : deux conversations écrites dans la même seconde restent dans l'ordre
-    f = conv_chemin(c["id"])
-    if f.is_file():
-        try:
-            shutil.copyfile(f, str(f) + ".bak")                  # copie de secours de la version précédente
-        except OSError:
-            pass
-    ecrire_atomique(f, json.dumps(c, ensure_ascii=False))
+    conv_chemin(c["id"])
+    from . import store
+    store.write(c)                                             # one transaction: a reader never sees half of it (ADR 0017)
     try:
         copier_dans_le_dossier_de_travail(c)
     except OSError as erreur:                               # une copie impossible (dossier en lecture seule, disque réseau absent) ne doit jamais empêcher d'enregistrer la conversation
@@ -444,63 +436,13 @@ def copier_dans_le_dossier_de_travail(c):
     return f
 
 
-CACHE_CONV = {}          # chemin -> (date de modification, taille, entrée de liste) : la page demande la liste toutes les 4 s, on ne relit que ce qui a changé
-
-
-INDEX = {"charge": False}
-
-
-def _index_chemin():
-    return _m.DONNEES / "index-conversations.json"
-
-
-def _index_charger(dossier):
-    """Reprend l'index du disque : chaque entrée n'est crue que si la date et la taille du fichier sont les mêmes (sinon on relit le fichier)."""
-    INDEX["charge"] = True
-    brut = lire_json(_index_chemin(), {})
-    if not isinstance(brut, dict) or brut.get("dossier") != str(dossier):
-        return
-    for nom, e in (brut.get("entrees") or {}).items():
-        if isinstance(e, list) and len(e) == 3 and isinstance(e[2], dict):
-            CACHE_CONV.setdefault(str(dossier / nom), (e[0], e[1], e[2]))
-
-
-def _index_ecrire(dossier):
-    try:
-        entrees = {Path(k).name: list(v) for k, v in CACHE_CONV.items() if k.startswith(str(dossier)) and v[2]}
-        ecrire_atomique(_index_chemin(), json.dumps({"dossier": str(dossier), "entrees": entrees}, ensure_ascii=False))
-    except OSError:
-        pass                                                   # l'index n'est qu'un accélérateur
+CACHE_CONV = {}          # kept for compatibility: the list is a query of lutin.store now (ADR 0017)
 
 
 def conv_liste():
-    dossier = _m.DONNEES / "conversations"
-    sortie, vus, relus = [], set(), 0
-    if not INDEX["charge"]:
-        _index_charger(dossier)
-    for f in (dossier.glob("*.json") if dossier.is_dir() else []):
-        cle = str(f)
-        try:
-            st = f.stat()
-        except OSError:
-            continue
-        vus.add(cle)
-        en_cache = CACHE_CONV.get(cle)
-        if en_cache and en_cache[0] == st.st_mtime_ns and en_cache[1] == st.st_size:
-            entree = en_cache[2]
-        else:
-            relus += 1
-            c = lire_json(f, None)
-            entree = {"id": c["id"], "titre": c.get("titre", ""), "maj": c.get("maj", c.get("date", "")), "messages": len(c.get("messages", [])), "epingle": bool(c.get("epingle")), "memoire": c.get("memoire_longue", ""),
-                       "origine": str((c.get("origine") or {}).get("machine", ""))} if c and RE_CONV.match(c.get("id", "")) else None
-            CACHE_CONV[cle] = (st.st_mtime_ns, st.st_size, entree)
-        if entree:
-            sortie.append(entree)
-    for cle in [k for k in CACHE_CONV if k not in vus and k.startswith(str(dossier))]:
-        del CACHE_CONV[cle]
-    if relus >= 20:
-        _index_ecrire(dossier)                                 # beaucoup de fichiers viennent d'être relus : on garde l'index pour le prochain démarrage
-    return sorted(sorted(sortie, key=lambda x: x["maj"], reverse=True), key=lambda x: not x["epingle"])          # les épinglées d'abord, puis les plus récentes
+    """Every conversation, pinned ones first, then the most recent: one query (lutin.store)."""
+    from . import store
+    return store.listing()
 
 
 # --------------------------------------------------------------------------- les options de chaque conversation
@@ -544,18 +486,21 @@ def nettoyer_options(brut):
 
 def options_lire(ident):
     try:
-        return nettoyer_options(lire_json(options_chemin(ident), {}))
+        options_chemin(ident)
     except ValueError:
         return {}
+    from . import store
+    return nettoyer_options(store.options_read(ident))
 
 
 def options_ecrire(ident, nouvelles):
     """Fusionne ces options dans celles de la conversation (celles qu'on ne cite pas ne changent pas). Rend les options en vigueur."""
-    chemin = options_chemin(ident)
+    options_chemin(ident)
+    from . import store
     with VERROU_OPTIONS:
-        actuelles = nettoyer_options(lire_json(chemin, {}))
+        actuelles = nettoyer_options(store.options_read(ident))
         actuelles.update(nettoyer_options(nouvelles))
-        ecrire_atomique(chemin, json.dumps(actuelles, ensure_ascii=False))
+        store.options_write(ident, actuelles)
     return actuelles
 
 
@@ -577,39 +522,32 @@ def rafraichir_accords(ctx):
         return
     try:
         conv_id = ctx["conv"]["id"]
-        if options_chemin(conv_id).exists():
-            o = options_lire(conv_id)
+        o = options_lire(conv_id)
+        if o:
             ctx["auto_ecriture"], ctx["auto_commandes"] = bool(o.get("auto_ecriture", False)), bool(o.get("auto_commandes", False))
     except (KeyError, ValueError, OSError):
         pass
 
 
 def options_nettoyer_orphelins(ids):
+    from . import store
     n = 0
-    try:
-        for f in (_m.DONNEES / "options").glob("*.json"):
-            if f.stem not in ids:
-                f.unlink(missing_ok=True)
-                n += 1
-    except OSError:
-        pass
+    for ident in store.options_ids():
+        if ident not in ids:
+            store.options_delete(ident)
+            n += 1
     return n
 
 
 def conv_supprimer(ident):
-    f = conv_chemin(ident)
-    if f.is_file():
-        f.unlink()
-    Path(str(f) + ".bak").unlink(missing_ok=True)
+    conv_chemin(ident)
+    from . import store
+    store.delete(ident)                                        # its options with it
     from . import progress_sheet
     progress_sheet.delete(ident)                                  # la fiche de suivi disparaît avec la conversation
     from . import archive, embeddings
     archive.remove(ident)                                # et le début archivé par le résumé
     embeddings.remove(ident)                             # et ses vecteurs de recherche par le sens
-    try:
-        options_chemin(ident).unlink(missing_ok=True)       # et ses options
-    except (ValueError, OSError):
-        pass
 
 
 def conv_renommer(ident, titre):

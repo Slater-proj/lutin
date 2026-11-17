@@ -273,11 +273,11 @@ def executer(ident):
         siege = _turns.reserve(conv, work=tache.get("travail", "") if neuve else None, also=au_travail)          # une conversation où quelqu'un écrit n'a pas de second tour (ADR 0015)
     except _turns.TurnRefused as refus:
         if refus.code == _turns.WORKSPACE_CONFLICT:
-            _d.conv_chemin(conv["id"]).unlink(missing_ok=True)
+            _d.conv_supprimer(conv["id"])
             _failure_startup(tache, refus.message)
             return ""
         if neuve:
-            _d.conv_chemin(conv["id"]).unlink(missing_ok=True)
+            _d.conv_supprimer(conv["id"])
         raise ValueError(_t("Une réponse est déjà en cours : la tâche attend.")) from None
     stop = siege.stop
     debut = datetime.now()

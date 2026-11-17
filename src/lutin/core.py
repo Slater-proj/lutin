@@ -218,6 +218,8 @@ from .storage import (  # noqa: F401  (déplacé dans storage.py : moteur ré-ex
     _fichier_skill,
     conv_chemin,
     conv_ecrire,
+    conv_ecrire_telle_quelle,
+    conv_existe,
     conv_lire,
     conv_liste,
     conv_nouvelle,

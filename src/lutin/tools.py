@@ -315,8 +315,9 @@ def purger_donnees():
     except OSError:
         return 0
     protegees = {d.name for d in anciens[-5:]}
-    for c in (_m.DONNEES / "conversations").glob("*.json"):
-        info = (_m.lire_json(c, {}) or {}).get("annulable")
+    from . import store
+    for c in store.every():
+        info = c.get("annulable")
         if info:
             protegees.add(info.get("id"))
     supprimes = 0

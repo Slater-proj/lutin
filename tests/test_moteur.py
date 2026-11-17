@@ -586,33 +586,24 @@ class Assistant(unittest.TestCase):
             (PROJET / "un.txt").unlink(missing_ok=True)
 
     def test_une_lecture_qui_echoue_un_instant_ne_remplace_pas_la_conversation_par_sa_copie_de_secours(self):
-        """Sur Windows ou un partage réseau, lire pile pendant une écriture peut échouer : on réessaie, on ne restaure rien. Seul un contenu illisible déclenche la copie de secours."""
-        from pathlib import Path
+        """0.x lisait un fichier qui pouvait échouer pendant une écriture (Windows, partage réseau). Avec la base (ADR 0017), une lecture pendant
+        qu'une autre connexion écrit rend la dernière version enregistrée, jamais une copie de secours ni une moitié."""
+        import sqlite3
+        from lutin import store
         c = A.conv_nouvelle()
         c["messages"] = [{"role": "user", "content": "version récente"}]
         A.conv_ecrire(c)
-        f = A.conv_chemin(c["id"])
-        Path(str(f) + ".bak").write_text(json.dumps({"id": c["id"], "titre": "ancienne", "messages": [{"role": "user", "content": "version ancienne"}]}), encoding="utf-8")
-        vrai = Path.read_text
-        appels = {"n": 0}
-
-        def capricieux(self, *a, **k):
-            if self == f and appels["n"] < 2:
-                appels["n"] += 1
-                raise PermissionError("utilisé par un autre processus")
-            return vrai(self, *a, **k)
-        Path.read_text = capricieux
+        autre = sqlite3.connect(str(store.database_path()), timeout=5, isolation_level=None)
         try:
-            self.assertEqual(A.conv_lire(c["id"])["messages"][0]["content"], "version récente", "deux échecs passagers puis la lecture réussit")
-            appels["n"] = -100
-            with self.assertRaises(ValueError) as e:
-                A.conv_lire(c["id"])                                                           # échec persistant : une erreur claire
-            self.assertIn("momentanément illisible", str(e.exception))
+            autre.execute("BEGIN IMMEDIATE")
+            autre.execute("UPDATE conversations SET titre = 'pas encore écrite' WHERE id = ?", (c["id"],))
+            lue = A.conv_lire(c["id"])                                                     # pendant que l'autre écrit
+            self.assertEqual((lue["messages"][0]["content"], lue["titre"]), ("version récente", c["titre"]), "la version enregistrée, pas la moitié de l'autre")
+            autre.execute("ROLLBACK")
         finally:
-            Path.read_text = vrai
-        self.assertEqual(json.loads(f.read_text(encoding="utf-8"))["messages"][0]["content"], "version récente", "le fichier n'a pas été remplacé par la copie de secours")
-        f.write_text("{pas du json", encoding="utf-8")
-        self.assertEqual(A.conv_lire(c["id"])["messages"][0]["content"], "version ancienne", "un contenu vraiment abîmé : la copie de secours sert")
+            autre.close()
+        self.assertFalse(Path(str(A.conv_chemin(c["id"])) + ".bak").exists(), "plus de copie de secours de fichier : chaque écriture est une transaction")
+        A.conv_supprimer(c["id"])
 
     def test_supprimer_renommer_epingler_refuses_pendant_une_reponse_et_une_demande_refusee_ne_laisse_rien(self):
         import threading
@@ -625,7 +616,7 @@ class Assistant(unittest.TestCase):
             post("/api/epingler", {"id": c["id"], "epingle": True}, attendu=409)
         finally:
             A.TOURS_ACTIFS.pop(c["id"], None)
-        self.assertTrue(A.conv_chemin(c["id"]).exists(), "la conversation est intacte")
+        self.assertTrue(A.conv_existe(c["id"]), "la conversation est intacte")
         post("/api/renommer", {"id": c["id"], "titre": "Autre"})
         avant = len(lire("/api/etat")["conversations"])
         req = urllib.request.Request(BASE + "/api/chat", data=json.dumps({"message": "x", "mode": "pirate"}).encode("utf-8"), headers={"Content-Type": "application/json", "X-Token": A.JETON})
@@ -1687,44 +1678,29 @@ class Assistant(unittest.TestCase):
             (PROJET / "pwned.txt").unlink(missing_ok=True)
 
     def test_l_index_des_conversations_evite_de_tout_relire_au_demarrage(self):
-        """Beaucoup de conversations : le premier affichage les relisait toutes. L'index gardé sur le disque n'est cru que si la date et la taille du fichier n'ont pas changé."""
-        from lutin import storage as donnees
+        """Beaucoup de conversations : le premier affichage de 0.x les relisait toutes. La liste est une requête de la base (ADR 0017) : aucune
+        conversation n'est relue pour la dresser, et un renommage s'y voit tout de suite."""
+        from lutin import store
         ids = []
         for i in range(25):
             c = A.conv_nouvelle()
             c["titre"] = "Conversation %d" % i
             A.conv_ecrire(c)
             ids.append(c["id"])
-        A.CACHE_CONV.clear()
-        donnees.INDEX["charge"] = False
-        liste = A.conv_liste()
-        self.assertTrue(donnees._index_chemin().is_file(), "l'index est écrit après une grosse relecture")
-        titres = {e["id"]: e["titre"] for e in liste}
-        A.CACHE_CONV.clear()                                  # « redémarrage » : plus rien en mémoire
-        donnees.INDEX["charge"] = False
+        store.close()                                          # « redémarrage » : plus rien en mémoire
         lus = []
-        vrai = donnees.lire_json
-
-        def compte(chemin, defaut):
-            if "conversations" in str(chemin) and str(chemin).endswith(".json") and "index" not in str(chemin):
-                lus.append(chemin)
-            return vrai(chemin, defaut)
-        donnees.lire_json = compte
+        vrai = store.read
+        store.read = lambda ident: lus.append(ident) or vrai(ident)
         try:
-            apres = A.conv_liste()
-            self.assertEqual(lus, [], "aucun fichier de conversation n'est relu : l'index suffit")
-            self.assertEqual({e["id"]: e["titre"] for e in apres if e["id"] in titres}, titres)
-            c = A.conv_lire(ids[0])
+            titres = {e["id"]: e["titre"] for e in A.conv_liste() if e["id"] in ids}
+            self.assertEqual(lus, [], "aucune conversation n'est relue : la liste est une requête")
+            self.assertEqual(titres, {i: "Conversation %d" % n for n, i in enumerate(ids)})
+            c = vrai(ids[0])
             c["titre"] = "Renommée"
             A.conv_ecrire(c)
-            A.CACHE_CONV.clear()
-            donnees.INDEX["charge"] = False
-            lus.clear()
-            apres = A.conv_liste()
-            self.assertEqual(len([x for x in lus if ids[0] in str(x)]), 1, "le fichier modifié, lui, est relu")
-            self.assertEqual(next(e["titre"] for e in apres if e["id"] == ids[0]), "Renommée")
+            self.assertEqual(next(e["titre"] for e in A.conv_liste() if e["id"] == ids[0]), "Renommée")
         finally:
-            donnees.lire_json = vrai
+            store.read = vrai
             for i in ids:
                 A.conv_supprimer(i)
 
@@ -2153,19 +2129,17 @@ class Assistant(unittest.TestCase):
             self.assertEqual(c["messages"][3]["tool_name"], "lire")
             self.assertIn("Interrompu", c["messages"][3]["content"])
             self.assertEqual(A.reparer_conversation(c), 0, "rien à réparer la deuxième fois")
-            # copie de secours : un fichier abîmé est restauré
+            # chaque écriture est une transaction (ADR 0017) : la dernière version est celle qu'on relit, entière ; un fichier 0.x abîmé est repris de sa
+            # copie de secours à l'import (tests/test_store.py)
             c["titre"] = "v2"
             A.conv_ecrire(c)
             c["titre"] = "v3"
             A.conv_ecrire(c)
-            fichier = A.conv_chemin(c["id"])
-            self.assertTrue(Path(str(fichier) + ".bak").is_file())
-            fichier.write_text("{ceci n'est pas du json", encoding="utf-8")
-            self.assertEqual(A.conv_lire(c["id"])["titre"], "v2", "reprise de la copie de secours")
-            self.assertEqual(json.loads(fichier.read_text(encoding="utf-8"))["titre"], "v2", "le fichier principal est réparé")
+            relue = A.conv_lire(c["id"])
+            self.assertEqual((relue["titre"], [m["role"] for m in relue["messages"]]), ("v3", ["user", "assistant", "tool", "tool"]))
         finally:
             A.conv_supprimer(c["id"])
-        self.assertFalse(Path(str(A.conv_chemin(c["id"])) + ".bak").exists(), "la copie de secours est supprimée avec la conversation")
+        self.assertFalse(A.conv_existe(c["id"]), "supprimée")
         # enregistré à chaque étape : au moment de demander un accord, le premier outil est déjà dans le fichier
         vu = []
 
@@ -2252,7 +2226,7 @@ class Assistant(unittest.TestCase):
             for protegee in noms[3:]:
                 self.assertTrue((base / protegee).exists(), "les 5 plus récentes sont toujours gardées")
             self.assertFalse((TEMP / "donnees" / "verif-vieux.js").exists(), "les restes temporaires sont nettoyés")
-            self.assertTrue(A.conv_chemin(c["id"]).exists(), "les conversations ne sont jamais supprimées")
+            self.assertTrue(A.conv_existe(c["id"]), "les conversations ne sont jamais supprimées")
         finally:
             A.reglages = original
             A.conv_supprimer(c["id"])

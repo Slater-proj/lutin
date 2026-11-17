@@ -169,9 +169,10 @@ def for_model(messages, budget):
 
 def referenced():
     """Identifiants cités par au moins une conversation."""
+    from . import store
     vus = set()
-    for c in (_m.DONNEES / "conversations").glob("*.json"):
-        for m in (_m.lire_json(c, {}) or {}).get("messages", []):
+    for c in store.every():
+        for m in c.get("messages", []):
             vus.update(p.get("id") for p in (m.get("pieces") or []) if isinstance(p, dict))
     return vus
 
