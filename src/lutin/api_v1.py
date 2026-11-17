@@ -354,7 +354,61 @@ def models(request):
     sizes = state.get("tailles") or {}
     return {"engine": _m.moteur_actuel().id, "running": bool(state["actif"]), "current": str(_m.reglages().get("modele") or ""),
             "models": [{"name": name, "size_bytes": sizes.get(name)} for name in state["installes"]],
-            "downloads": [_download(name, stored) for name, stored in sorted(_m.PULLS.items())]}
+            "downloads": [_download(name, stored) for name, stored in sorted(_m.PULLS.items())],
+            "remote": _remote_models()}
+
+
+# --------------------------------------------------------------------------- paired machines (ADR 0016): other computers whose engine Lutin may use
+
+MACHINE_STATES = {"inconnu": "unknown", "injoignable": "unreachable", "reveil_envoye": "wake_sent", "joignable": "reachable", "operationnel": "operational"}
+MACHINE_STEPS = {"eteinte": "off", "reveil": "waking", "allumee": "powered_on", "lutin": "lutin_started", "synchro": "syncing", "pret": "ready",
+                 "extinction": "shutting_down", "maj": "updating"}
+MACHINE_RIGHTS = {"piloter": "lead", "maj": "update", "extinction": "shutdown"}
+
+
+def _multi_machine():
+    return _machines.cluster_actif(_m.reglages().get("cluster"))
+
+
+def _remote_models():
+    """The models of the paired machines that answer (probed in the last 40 s), for the model selector; empty while the multi-machine mode is off."""
+    if not _multi_machine():
+        return []
+    return [{"machine": entry["id"], "machine_name": entry["nom"], "state": MACHINE_STATES.get(entry["etat"], "unknown"), "models": list(entry["modeles"])}
+            for entry in _machines.modeles_distants()]
+
+
+def _load(stored):
+    if not isinstance(stored, dict):
+        return None
+    ram, vram = stored.get("ram"), stored.get("vram")
+    return {"busy_here": bool(stored.get("locale_occupee")), "remote_turns": int(stored.get("distantes") or 0),
+            "ram": {"total": ram.get("total"), "free": ram.get("libre")} if isinstance(ram, dict) else None,
+            "vram": {"total": vram.get("total"), "free": vram.get("libre"), "name": vram.get("nom", "")} if isinstance(vram, dict) else None}
+
+
+def _machine(stored):
+    """A paired machine under its v1 names: what `machines.vue` and the last probe say, never its token."""
+    allowed, shares = stored.get("agir") or {}, stored.get("droits") or {}
+    return {"id": stored["id"], "name": stored.get("nom", ""), "address": stored.get("adresse", ""), "mac": stored.get("mac", ""),
+            "mac_auto": bool(stored.get("mac_auto")), "added": stored.get("ajoutee", ""), "warnings": list(stored.get("avertissements") or []),
+            "state": MACHINE_STATES.get(stored.get("etat"), "unknown"), "detail": stored.get("detail", ""), "step": MACHINE_STEPS.get(stored.get("etape")),
+            "shutdown_in_s": stored.get("dans_s"), "wake_failed": bool(stored.get("reveil_echec")), "models": list(stored.get("modeles") or []),
+            "load": _load(stored.get("charge")), "version": stored.get("version", ""), "update_available": bool(stored.get("maj_disponible")),
+            "allowed": {english: bool(allowed.get(french)) for french, english in MACHINE_RIGHTS.items()},
+            "requested": [MACHINE_RIGHTS[right] for right in stored.get("demandes") or [] if right in MACHINE_RIGHTS],
+            "shares": {"skills": bool(shares.get("skills")), "memory": bool(shares.get("memoire"))}}
+
+
+@route("GET", "/machines", SESSION)
+def paired_machines(request):
+    """The paired machines and who answers. Never waits for the network: each machine comes with its last known state, and a stale one is probed
+    again in the background (`unknown` until a first answer). `answering` is the machine of the setting `machine` ("" for this one)."""
+    settings = _m.reglages()
+    answering = str(settings.get("machine") or "")
+    return {"enabled": _multi_machine(), "answering": answering,
+            "machines": [_machine(stored) for stored in _machines.etats_sans_attente(settings.get("modele", ""), answering)],
+            "log": _machines.journal()}
 
 
 @route("POST", "/models", SESSION)
@@ -1925,7 +1979,7 @@ EVENTS = {
     "fin": ("end", {"conversation": "conversation"}),
 }
 TURN_FIELDS = {"message": "message", "model": "modele", "thinking": "reflexion", "replace_from": "remplacer_depuis", "images": "images", "attachments": "pieces",
-               "workspace": "travail"}
+               "workspace": "travail", "machine": "machine"}
 
 
 def event(stored):

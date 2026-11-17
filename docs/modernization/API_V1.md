@@ -63,9 +63,9 @@ routes disappear with the old page, in one deletion.
    | `end` | `conversation`: `{"id", "title"}` |
 
    `tokens` and `speed` are the two events the first inventory missed (their fields come from a variable). The request body: `message` and, optionally,
-   `model`, `thinking`, `replace_from`, `images`, `attachments`, `workspace`. A refusal comes before the stream as an ordinary error: `400 invalid_request`,
+   `model`, `thinking`, `replace_from`, `images`, `attachments`, `workspace`, `machine` (a paired machine that answers this turn; an unknown one falls back to this machine). A refusal comes before the stream as an ordinary error: `400 invalid_request`,
    `409 turn_running` or `workspace_conflict`, `429 too_many_turns`. `memory_choice` is answered with `POST /api/v1/conversations/{id}/memory-choice`
-   (`{"choice": "summary" | "file", "remember": false}`; `409 no_pending_choice` when nothing waits). Not in v1 yet: the choice of another machine and the download of an attached document.
+   (`{"choice": "summary" | "file", "remember": false}`; `409 no_pending_choice` when nothing waits). Not in v1 yet: the download of an attached document.
 7. **Versioning.** `/api/v1` only ever gains optional fields and new routes. A change that breaks a client is `/api/v2`. The page and the server ship together,
    so the page never talks to a server of another version; the rule protects scripts and paired machines.
 8. **Machine-to-machine protocol** (`/api/noeud/*` today): versioned separately (`/node/v1`), because two machines may run different versions of Lutin.
@@ -161,6 +161,19 @@ Three routes serve the end of the guide. `GET`/`PATCH /api/v1/language` (`{"lang
 `downloads` (`[{"name", "state", "done_bytes", "total_bytes", "text", "restart_engine_advised"}]`, state `downloading`, `done` or `failed`).
 `POST /api/v1/models` with `{"name"}` starts a download and answers `202` with its state; `DELETE /api/v1/models/{name}` deletes a model and says which
 one is now `current`. A name that contains `/` is percent-encoded in the path. In strict offline mode a download is refused with `409 offline`.
+
+## Paired machines
+
+Other computers running Lutin whose engine this one may use ([ADR 0016](../adr/0016-paired-machines-in-v1-and-the-new-interface.md); contract in
+`tests/test_api_v1_machines.py`). `GET /api/v1/machines` (right `session`) answers `{"enabled", "answering", "machines", "log"}`: `enabled` is the
+multi-machine mode, `answering` the machine of the setting `machine` ("" for this one), and each machine `{id, name, address, mac, mac_auto, added,
+warnings, state, detail, step, shutdown_in_s, wake_failed, models, load, version, update_available, allowed {lead, update, shutdown}, requested, shares
+{skills, memory}}`. `state` is `unknown`, `unreachable`, `wake_sent`, `reachable` or `operational`; `step` the wake or shutdown sequence (`off`,
+`waking`, `powered_on`, `lutin_started`, `syncing`, `ready`, `shutting_down`, `updating`) or null. The list never waits for the network: each machine
+comes with its last known state and a stale one is probed again in the background (`unknown` until a first answer). A token never leaves.
+`GET /api/v1/models` gives `remote`: `[{machine, machine_name, state, models}]`, the machines that answered in the last 40 s (empty while the
+multi-machine mode is off). Still to come (ADR 0016, stages 2 to 7): pairing and the actions on a machine, this machine as a node, the screens, and
+the conversations led on another machine.
 
 ## What v1 keeps
 

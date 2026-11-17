@@ -1,8 +1,8 @@
 # ADR 0016 — Paired machines in `/api/v1` and in the new interface
 
-Status: **proposed**, to be validated by the maintainer before any code (plan step 4: « the models of other machines » and « conversations led on
-another machine », the last missing pieces of the Models screen and of the Chat). Placement, the phone's view and the scope were answered by the
-maintainer on 2026-11-17 (end of this file).
+Status: accepted by the maintainer on 2026-11-17 (plan step 4: « the models of other machines » and « conversations led on another machine », the
+last missing pieces of the Models screen and of the Chat). Stage 1 done (`GET /machines`, `remote` in `GET /models`, `machine` in a turn;
+`tests/test_api_v1_machines.py`); stages 2 to 7 to do. Placement, the phone's view and the scope were answered by the maintainer (end of this file).
 
 ## Context
 

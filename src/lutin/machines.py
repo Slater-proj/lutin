@@ -926,6 +926,38 @@ def etats(modele="", ouvrir=None, choisie=""):
     return [dict(vue(m), **sonder(m, modele if m["id"] == choisie else "", ouvrir)) for m in lire()]
 
 
+SONDES_EN_FOND = set()          # id des machines dont une sonde tourne en arrière-plan (etats_sans_attente) : une seule à la fois par machine
+
+
+def etats_sans_attente(modele="", choisie="", maintenant=time.monotonic):
+    """Comme etats(), sans jamais attendre le réseau (API v1, ADR 0016) : chaque machine avec son dernier état connu, et une sonde lancée en arrière-plan
+    quand cet état a vieilli. Une machine jamais sondée depuis le démarrage est « inconnu » jusqu'à la réponse de sa sonde."""
+    sortie = []
+    for m in lire():
+        voulu = modele if m["id"] == choisie else ""
+        with VERROU:
+            gardee = SONDES.get(m["id"])
+            fraiche = bool(gardee) and gardee[2] == voulu and maintenant() - gardee[0] < (VALIDITE_SONDE_S if gardee[1].get("etat") == "operationnel" else VALIDITE_SONDE_ATTENTE_S)
+            lancer = not fraiche and m["id"] not in SONDES_EN_FOND
+            if lancer:
+                SONDES_EN_FOND.add(m["id"])
+        if lancer:
+            threading.Thread(target=_sonder_en_fond, args=(m, voulu), daemon=True, name="machines-sonde").start()
+        etat = gardee[1] if gardee else {"etat": "inconnu", "detail": _t("Pas encore de nouvelles de cette machine : sa réponse arrive."), "modeles": []}
+        sortie.append(dict(vue(m), **etat))
+    return sortie
+
+
+def _sonder_en_fond(m, modele):
+    try:
+        sonder(m, modele)
+    except Exception as erreur:  # noqa: BLE001  (une sonde ratée laisse le dernier état connu ; la suivante réessaiera)
+        journaliser("sonde de {} impossible : {!r}".format(m.get("nom", "?"), erreur))
+    finally:
+        with VERROU:
+            SONDES_EN_FOND.discard(m["id"])
+
+
 # --------------------------------------------------------------------------- ce que les autres machines partagent : conversations, skills, mémoire (copies locales, à ta demande)
 
 CONVERSATIONS = {"t": 0.0, "v": [], "en_cours": False}

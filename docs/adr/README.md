@@ -22,4 +22,4 @@ These records are technical documentation, written in English only (ADR 0001). T
 | [0013](0013-a-request-has-a-prefix-that-stays-and-a-tail-that-changes.md) | A request has a prefix that stays and a tail that changes | Accepted, implemented |
 | [0014](0014-one-application-context.md) | One application context holds what the modules kept for themselves | Accepted |
 | [0015](0015-one-entry-runs-a-turn.md) | One entry runs a turn, whoever asks for it | Accepted, implemented |
-| [0016](0016-paired-machines-in-v1-and-the-new-interface.md) | Paired machines in `/api/v1` and in the new interface | Proposed |
+| [0016](0016-paired-machines-in-v1-and-the-new-interface.md) | Paired machines in `/api/v1` and in the new interface | Accepted, stage 1 of 7 implemented |

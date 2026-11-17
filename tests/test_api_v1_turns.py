@@ -139,7 +139,7 @@ class Refusals(unittest.TestCase):
 
     def test_the_body_is_checked(self):
         conversation = new_conversation()
-        fields = "Champs acceptés : message, model, thinking, replace_from, images, attachments, workspace."
+        fields = "Champs acceptés : message, model, thinking, replace_from, images, attachments, workspace, machine."
         for body in ({}, {"message": 3}, {"message": "Hello", "modele": "x"}, {"message": "Hello", "options": {}}):
             self.assertEqual(turn(conversation, body)[::2], (400, {"error": {"code": "invalid_request", "message": fields}}), body)
         self.assertEqual(turn(conversation, {"message": "  "})[::2], (400, {"error": {"code": "invalid_request", "message": "Écris un message (60 000 caractères au maximum)."}}))
