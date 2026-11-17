@@ -65,13 +65,13 @@ the engine state, the installed models with their size, the one in use, « use �
 |---|---|
 | Installed models, use, delete | done |
 | Download by name, progress | done |
-| Recommended models for this machine (catalogue, fit verdict, compatibility with the engine) | **missing**: needs a v1 route and a design (several engines, verdicts from `model_fit` and `model_compat`) |
+| Recommended models for this machine (catalogue, fit verdict, compatibility with the engine) | done: the « Recommended » tab, shown first when nothing is installed (`components/ModelGuide.svelte`, `GET /models/catalog`, `GET /models/recommendation`); test 5d: nothing is downloaded before the confirmation |
 | Choice and start of an engine, engine installation | done: an « Engines » tab (state, in use, start, stop, install, update, reinstall, uninstall with a confirmation that says what it does, the task in progress with its progress and a cancel); verified in Chrome (test 5k) against the fake engines, nothing is installed by the tests |
 | Search a model on Hugging Face, quantisations | done for llama.cpp (test 5w, `GET /engines/{id}/library`, `/library/files`, `POST /library/download`): search, the files of a repository with what each means for this machine, a file that cannot fit is not offered, the download waits for a second click that says the size; strict offline mode is said |
 | Models of other machines | missing |
-| Onboarding with hardware detection and a recommended configuration (plan step 4) | missing |
+| Onboarding with hardware detection and a recommended configuration (plan step 4) | done: see « First launch » above (the same guide) |
 
-A beginner must not have to know the name of a model: the catalogue with its verdicts is the next piece of this screen.
+What is left on this screen: the models of the other machines (plan step 4, designed before the code).
 
 ## Chat
 
