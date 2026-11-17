@@ -1,7 +1,8 @@
 # ADR 0016 — Paired machines in `/api/v1` and in the new interface
 
-Status: **proposed**, to be validated by the maintainer before any code (plan step 4: « the models of other machines », the last missing piece of
-the Models screen; « conversations led on another machine » is left to a later decision, see below).
+Status: **proposed**, to be validated by the maintainer before any code (plan step 4: « the models of other machines » and « conversations led on
+another machine », the last missing pieces of the Models screen and of the Chat). Placement, the phone's view and the scope were answered by the
+maintainer on 2026-11-17 (end of this file).
 
 ## Context
 
@@ -59,6 +60,24 @@ sharing of skills and memory, Wake-on-LAN. Read on `96009ca`:
    - **Chat**: the model selector groups the models of operational machines; a machine that went off is shown as such.
 5. **The machine-to-machine protocol (`/api/noeud/*`) does not change**: its English, versioned form (`/node/v1`) belongs to step 3, because two machines
    may run different versions.
+6. **Conversations led on another machine.** Today the old page calls `/h/<machine>/<route>`: this machine relays the request to the host
+   (`/api/noeud/relais/…`, node token), which runs **its own legacy routes** from a closed list, with its own folders, approvals and models, only if it
+   grants the right « lead » (`piloter`, off by default); the relay never reaches `/api/v1` (`api_v1.py`, line 11). The new Chat keeps that path and
+   **this machine translates at its border**, as `create_turn` already does for its own turns (`api_v1.EVENTS`):
+
+   | Route | Right | Relays to the host's |
+   |---|---|---|
+   | `GET /machines/conversations` | `session` | the list already gathered by `machines.conversations_distantes()` (machines that grant « lead »): `{machine, machine_name, id, title, updated, messages}` |
+   | `GET /machines/{id}/conversations/{conversation}` | `session` | `GET /api/conversation?id=…`, answered in the shape of `GET /conversations/{id}` |
+   | `POST /machines/{id}/conversations/{conversation}/turns` | `session` | `POST /api/chat`, the stream's events translated by `api_v1.EVENTS` |
+   | `POST /machines/{id}/conversations/{conversation}/stop` | `session` | `POST /api/arreter` |
+   | `POST /machines/{id}/approvals/{approval}` | `session` | `POST /api/approuver` (the answer to an approval card of that turn) |
+   | `POST /machines/{id}/conversations/{conversation}/memory-choice` | `session` | `POST /api/memoire-choix` |
+
+   A host that runs an older Lutin keeps working: it only sees the legacy routes it already serves. A host that is off answers `503` with the
+   sentence of the old route; a host that refuses « lead » answers `403`, passed on. The Chat lists these conversations under the machine's name, read
+   only when the machine is off, as the old page does. Images and documents sent in such a conversation, and renaming, pinning or deleting it (the
+   relay allows them too), come in a second stage.
 
 ## Stages (one commit each)
 
@@ -68,6 +87,8 @@ sharing of skills and memory, Wake-on-LAN. Read on `96009ca`:
 3. The node routes (`/node`…).
 4. The Machines tab of the Models screen and the Chat selector; unit tests, a Chrome test with axe against a loopback node (as `test_machines_navigateur`).
 5. The « Lend this machine » group in Settings, with its Chrome test.
+6. The relayed conversation routes and the Chat (list, read, turn, stop, approval, memory choice), tested against a loopback host that grants « lead ».
+7. Images, documents, rename, pin and delete in a relayed conversation.
 
 ## Not chosen
 
@@ -75,14 +96,15 @@ sharing of skills and memory, Wake-on-LAN. Read on `96009ca`:
   right is declared per route, never checked in the body.
 - **A screen of its own for machines**: the shell has five areas; machines serve models (Models) and this machine's lending is a setting (Settings).
 - **Keeping the synchronous probe in v1**: a page that polls would freeze for seconds whenever a machine is off.
+- **Opening the relay to the host's `/api/v1`**: the host would have to run a version that has these routes, and the relay's closed list would grow
+  with every v1 route; translating on this side keeps the node protocol as it is until `/node/v1`.
 
 ## Way back
 
 Each stage is one commit; the old page and its routes are untouched until parity, so reverting a stage only removes the new routes or screens.
 
-## Questions for the maintainer
+## Answers of the maintainer (2026-11-17)
 
-- Lending this machine in Settings, and the paired machines in the Models screen: is that where you look for them?
-- Today a paired phone can read the list of machines with their addresses. Keep it (proposed: yes, the phone shows who answers), or keep the list for
-  the configurator?
-- « Conversations led on another machine » (read and continue on this page a conversation hosted by a paired machine): in this work, or a next step?
+- The paired machines go in the Models screen, the lending of this machine in Settings.
+- A paired phone keeps reading the list of machines with their addresses, as today; it changes nothing (the actions need `configurator` or `local`).
+- « Conversations led on another machine » is part of this work (decision 6, stages 6 and 7).
