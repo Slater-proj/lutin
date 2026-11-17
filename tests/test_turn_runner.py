@@ -20,7 +20,7 @@ for key, value in {"LUTIN_RACINE": str(_TEMP / "project"), "LUTIN_DONNEES": str(
 (_TEMP / "work").mkdir(exist_ok=True)
 
 from lutin import core as _m  # noqa: E402
-from lutin import mission, notifications, turn_runner  # noqa: E402
+from lutin import addons_telegram, auto_reply, mission, notifications, turn_runner  # noqa: E402
 from lutin import scheduled_tasks as tasks  # noqa: E402
 
 
@@ -106,6 +106,51 @@ class Missions(Clean):
             self.assertFalse(mission._tour(mission.find(m["id"])), "no turn: the mission tries again at its next round")
         self.assertIs(_m.TOURS_ACTIFS.get(conv["id"]), person)
         self.assertNotIn(m["id"], mission.ALIVE["arrets"])
+
+
+class AddOns(Clean):
+    """Telegram and the automatic replies (mail, X) answer a third person in a conversation of their own."""
+
+    def under_lock(self):
+        seen = []
+        patch = mock.patch.object(_m, "activate_work", lambda conv, work: seen.append(_m.VERROU_TOURS.locked()))
+        patch.start()
+        self.addCleanup(patch.stop)
+        return seen
+
+    def test_telegram_chooses_the_work_folder_with_the_lock_held(self):
+        seen = self.under_lock()
+        with mock.patch.object(_m, "tour", answering("Hello.")):
+            self.assertEqual(addons_telegram.reply_model("chat-1", "Alice", "Hello", True), "Hello.")
+        self.assertEqual(seen, [True])
+
+    def test_an_automatic_reply_chooses_the_work_folder_with_the_lock_held(self):
+        seen = self.under_lock()
+        with mock.patch.object(_m, "tour", answering("Hi Bob.")):
+            self.assertEqual(auto_reply.reply("mail", "Courriel", "bob@example.org", "Bob", "Hi", pause=0.05), "Hi Bob.")
+        self.assertEqual(seen, [True])
+
+    def test_telegram_waits_while_a_turn_runs_in_its_conversation(self):
+        self.under_lock()
+        with mock.patch.object(_m, "tour", answering("First.")):
+            addons_telegram.reply_model("chat-2", "Alice", "Hello", True)
+        ident = addons_telegram.read()["convs"]["chat-2"]
+        person = self.person_writes_in(ident)
+        started, result = threading.Event(), []
+
+        def fake(conv, request, emit, r=None, stop=None, *a, **k):
+            started.set()
+            answering("Second.")(conv, request, emit)
+        with mock.patch.object(_m, "tour", fake):
+            worker = threading.Thread(target=lambda: result.append(addons_telegram.reply_model("chat-2", "Alice", "Again", True)))
+            worker.start()
+            self.assertFalse(started.wait(0.5), "no second turn while the first one runs")
+            self.assertIs(_m.TOURS_ACTIFS.get(ident), person)
+            with _m.VERROU_TOURS:
+                _m.TOURS_ACTIFS.pop(ident, None)
+                _m.RACINE_TOURS.pop(ident, None)
+            worker.join(10)
+        self.assertEqual(result, ["Second."], "the waiting message is answered once the conversation is free")
 
 
 class Seats(Clean):
