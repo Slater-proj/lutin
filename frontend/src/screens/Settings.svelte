@@ -2,10 +2,11 @@
   // The Settings screen: every setting of /api/v1/settings in groups, each kept as soon as it is changed. What the person typed is checked here first
   // (a number, its range); the server checks again and has the last word, and what it answers is what is shown.
   // One section is shown at a time, named in the address (#/settings/<section>); on a phone #/settings is the list of sections.
-  import { onMount, tick } from "svelte";
+  import { onMount } from "svelte";
   import ApprovalRules from "../components/ApprovalRules.svelte";
   import Devices from "../components/Devices.svelte";
   import LendMachine from "../components/LendMachine.svelte";
+  import Sections from "../components/Sections.svelte";
   import Memory from "../components/Memory.svelte";
   import Skills from "../components/Skills.svelte";
   import ThirdPartySkills from "../components/ThirdPartySkills.svelte";
@@ -17,10 +18,6 @@
 
   let section = $state<SectionId | null>(sectionOf(location.hash));
   const current = $derived<SectionId>(section ?? SECTION_IDS[0]);
-  const NARROW = matchMedia("(max-width: 720px)"); // the breakpoint of the shell and of the styles below
-  let narrow = $state(NARROW.matches);
-  const marked = $derived<SectionId | null>(section ?? (narrow ? null : SECTION_IDS[0])); // on a phone the list of sections marks none: none is open
-  let content = $state<HTMLElement | null>(null);
   let values = $state<Record<string, Value> | null>(null);
   let problem = $state("");
   let errors = $state<Record<string, string>>({});
@@ -69,19 +66,11 @@
   }
 
   onMount(() => {
-    const onHash = (): void => {
-      section = sectionOf(location.hash);
-      if (section !== null) void tick().then(() => content?.focus()); // the person lands on what was chosen (on a phone the list is gone)
-    };
-    const onWidth = (): void => {
-      narrow = NARROW.matches;
-    };
+    const onHash = (): void => void (section = sectionOf(location.hash));
     addEventListener("hashchange", onHash);
-    NARROW.addEventListener("change", onWidth);
     void load();
     return () => {
       removeEventListener("hashchange", onHash);
-      NARROW.removeEventListener("change", onWidth);
       clearTimeout(timer);
     };
   });
@@ -171,19 +160,9 @@
   {#if !values}
     {#if !problem}<p class="muted">{t("settings.loading")}</p>{/if}
   {:else}
-    <div class="layout" class:chosen={section !== null}>
-      <nav class="sections" aria-label={t("settings.sections")}>
-        <ul>
-          {#each SECTION_IDS as id (id)}
-            <li><a href={"#/settings/" + id} aria-current={marked === id ? "page" : undefined}>{t(("settings.s." + id) as MessageKey)}</a></li>
-          {/each}
-        </ul>
-      </nav>
-      <div class="content" bind:this={content} tabindex="-1">
-        <a class="back" href="#/settings">← {t("settings.back")}</a>
-        {#each SECTIONS[current] as name (name)}{@render part(name)}{/each}
-      </div>
-    </div>
+    <Sections ids={SECTION_IDS} label={(id) => t(("settings.s." + id) as MessageKey)} base="#/settings" navLabel={t("settings.sections")} backLabel={t("settings.back")} chosen={section}>
+      {#each SECTIONS[current] as name (name)}{@render part(name)}{/each}
+    </Sections>
   {/if}
 </div>
 
@@ -198,63 +177,6 @@
     padding: var(--space-5) var(--space-4) var(--space-6);
   }
 
-  /* The sections on the left, the chosen one on the right; a paragraph never gets wider than a line that reads well. */
-  .layout {
-    display: grid;
-    grid-template-columns: 13rem minmax(0, 1fr);
-    gap: var(--space-5);
-    align-items: start;
-  }
-
-  .sections {
-    position: sticky;
-    top: var(--space-4);
-  }
-
-  .sections ul {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-
-  .sections a {
-    display: flex;
-    align-items: center;
-    min-height: var(--target);
-    padding: var(--space-2) var(--space-3);
-    border-radius: var(--radius-md);
-    color: var(--color-text);
-    text-decoration: none;
-  }
-
-  .sections a:hover {
-    background: var(--color-surface);
-  }
-
-  .sections a[aria-current="page"] {
-    background: var(--color-accent-soft);
-    color: var(--color-accent-text);
-    font-weight: 600;
-  }
-
-  .content {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-4);
-    min-width: 0;
-  }
-
-  .content:focus {
-    outline: none;
-  }
-
-  .back {
-    display: none;
-  }
-
   /* The fields of a group in columns as soon as there is room for two. */
   .fields {
     display: grid;
@@ -265,28 +187,6 @@
   .group > p,
   .help {
     max-width: var(--measure);
-  }
-
-  /* A phone (the breakpoint of the shell): the list of sections, or one section with a way back to the list. */
-  @media (max-width: 720px) {
-    .layout {
-      grid-template-columns: minmax(0, 1fr);
-    }
-
-    .sections {
-      position: static;
-    }
-
-    .layout.chosen .sections,
-    .layout:not(.chosen) .content {
-      display: none;
-    }
-
-    .layout.chosen .back {
-      display: flex;
-      align-items: center;
-      min-height: var(--target);
-    }
   }
 
   h1 {

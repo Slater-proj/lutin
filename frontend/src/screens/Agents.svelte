@@ -3,6 +3,7 @@
   // time of the week, or once on a date, always in the same conversation), the missions, the add-ons and the connectors. Managing them is for the
   // machine itself (the server refuses a paired device and says so). Nothing runs because a form was opened.
   import { onMount } from "svelte";
+  import Sections from "../components/Sections.svelte";
   import { pageOf } from "../lib/address";
   import Addons from "../components/Addons.svelte";
   import Connectors from "../components/Connectors.svelte";
@@ -13,7 +14,8 @@
 
   const lang = language();
   const TABS = ["tasks", "missions", "addons", "connectors"] as const;
-  let tab = $state<(typeof TABS)[number]>(pageOf(location.hash, TABS) ?? "tasks");
+  let chosen = $state<(typeof TABS)[number] | null>(pageOf(location.hash, TABS)); // null: the first one on a wide screen, the list on a phone
+  const tab = $derived(chosen ?? "tasks");
   type Tasks = { tasks: ScheduledTask[] };
   type Channels = { channels: { id: string; name: string }[] };
 
@@ -129,7 +131,7 @@
   }
 
   onMount(() => {
-    const onHash = (): void => void (tab = pageOf(location.hash, TABS) ?? "tasks");
+    const onHash = (): void => void (chosen = pageOf(location.hash, TABS));
     addEventListener("hashchange", onHash);
     void load();
     api<Channels>("GET", "/notification-channels")
@@ -152,10 +154,7 @@
     <p class="muted">{t("agents.intro")}</p>
   </header>
 
-  <nav class="tabs" aria-label={t("agents.tabs")}>
-    {#each TABS as name (name)}<a href={"#/agents/" + name} aria-current={tab === name ? "page" : undefined}>{t(("agents.tab." + name) as MessageKey)}</a>{/each}
-  </nav>
-
+  <Sections ids={TABS} label={(id) => t(("agents.tab." + id) as MessageKey)} base="#/agents" navLabel={t("agents.tabs")} backLabel={t("agents.back")} {chosen}>
   {#if tab === "tasks"}
   <section class="part" aria-labelledby="tasks-title">
   <h2 id="tasks-title">{t("tasks.title")}</h2>
@@ -260,6 +259,7 @@
   {:else}
     <Connectors />
   {/if}
+  </Sections>
 </div>
 
 <style>
@@ -294,38 +294,6 @@
     gap: var(--space-4);
   }
 
-  /* The four tabs: links, since each one is an address; they go on two lines on a phone rather than out of the screen. */
-  .tabs {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-1);
-    align-self: flex-start;
-    max-width: 100%;
-    padding: var(--space-1);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-lg);
-    background: var(--color-surface);
-  }
-
-  .tabs a {
-    display: inline-flex;
-    align-items: center;
-    min-height: var(--target);
-    padding: 0 var(--space-4);
-    border-radius: var(--radius-md);
-    color: var(--color-text-muted);
-    font-weight: 600;
-    text-decoration: none;
-  }
-
-  .tabs a:hover {
-    color: var(--color-text);
-  }
-
-  .tabs a[aria-current="page"] {
-    background: var(--color-accent-soft);
-    color: var(--color-accent-text);
-  }
 
   p {
     margin: 0;

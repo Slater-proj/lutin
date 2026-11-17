@@ -497,7 +497,7 @@ class Chat(unittest.TestCase):
         p.commande("Emulation.setDeviceMetricsOverride", width=360, height=740, deviceScaleFactor=1, mobile=True)
         try:
             # Each screen is checked once it is drawn, as at 1280 px: half loaded, a long screen may scroll before its fields are there.
-            for screen, ready in (("chat", "#message"), ("models", ".models .tabs"), ("settings", ".settings .sections"), ("projects", "#project-path"), ("agents", "#task-name")):
+            for screen, ready in (("chat", "#message"), ("models", ".models .tabs"), ("settings", ".settings .sections"), ("projects", "#project-path"), ("agents", ".agents .sections")):
                 p.evaluer("location.hash = '#/%s'" % screen)
                 p.attendre("!!document.querySelector(%s)" % js(ready))
                 self.axe("on the %s screen at 360 px (%s)" % (screen, theme))

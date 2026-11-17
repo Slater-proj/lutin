@@ -62,8 +62,9 @@ Also on this screen: the paired devices (list, remove, pair with a code and a QR
 
 ## Agents
 
-Four tabs, kept in the address as the sections of Settings are (`#/agents/tasks`, `missions`, `addons`, `connectors`; `lib/address.ts`): the
-screen was one page of four long parts to scroll (asked by the maintainer on 2026-11-17, with the sections of Settings). axe runs on each tab.
+Four parts in a menu on the left, as the sections of Settings (`components/Sections.svelte`, shared by both screens), kept in the address
+(`#/agents/tasks`, `missions`, `addons`, `connectors`; `lib/address.ts`); on a phone, the list of parts then the one chosen. The screen was one
+page of four long parts to scroll (asked by the maintainer on 2026-11-17: first as tabs, then in a menu like Settings). axe runs on each part.
 
 The scheduled tasks: the list with when, the next run, the state of the last one and its ten last runs; add a task (a name, what Lutin should do, a time, days of the week or one date); run it now, stop it, pause and resume it, delete it (with a confirmation). The list is read again every five seconds. Managing is for the machine itself. A task can be changed (the form is filled with it) and can name the channel that is told when it ends. Verified in Chrome (test 5j) and by the accessibility checks.
 The missions (test 5q): list with state, turns, actions, recent activity and report, start (name, brief, project, longest duration, autonomous or dry run), pause, resume, answer the question of a blocked mission, stop and delete (both with a confirmation); the progress is read again every five seconds. Starting and deleting are for the machine itself; following, pausing, answering and stopping are open to a paired device.
