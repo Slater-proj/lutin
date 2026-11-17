@@ -2,6 +2,26 @@
 
 The following versions are published automatically (generated notes on the Releases page); this file keeps the first versions and the main changes. / Les versions suivantes sont publiées automatiquement (notes générées sur la page des Releases) ; ce fichier garde les premières versions et les changements principaux.
 
+## Toward 1.0: the new interface, a versioned API, several computers as one assistant
+
+Not released yet: this is the work of the `modernization` branch since the entry below. Plan and state: [docs/modernization/PLAN.md](docs/modernization/PLAN.md).
+
+- **A new interface at `/app/`** (Svelte, TypeScript; [INTERFACE.md](docs/modernization/INTERFACE.md)): Chat, Agents, Projects, Models and Settings,
+  in English and French, from a phone held upright to a 2560-pixel screen; Settings and Agents in parts kept in the address; the open conversation
+  kept in the address too; checked in a real Chrome and by axe in both themes. The page you know stays the default at `/` until the new one does
+  everything it does.
+- **A versioned API, `/api/v1`** ([API_V1.md](docs/modernization/API_V1.md)): 131 routes, each with its right declared in one table and fixed by a
+  contract test; English names, the turn stream translated at the border.
+- **Several computers, one assistant** ([ADR 0016](docs/adr/0016-paired-machines-in-v1-and-the-new-interface.md)): pair a machine, use its models
+  from the Chat, lend this one (with a clear name for each machine allowed to use it), continue a conversation another machine holds, with its
+  images and documents staying there; wake, update or shut down only what the other machine's owner allowed there.
+- **Models**: the whole catalogue, with what each model is for, how it fits this machine and what it is good and less good at; « Update » is
+  offered for an engine only when a newer version is known.
+- **Fixes**: on Windows, a data file read while it was being replaced was taken as missing (a list of missions read as empty); the first probe of
+  a machine could say « unreachable » for one that was on; the countdown of a shutdown showed while a machine was getting ready.
+- **For contributors**: one entry runs a turn for every launcher ([ADR 0015](docs/adr/0015-one-entry-runs-a-turn.md)); the tests of paired machines
+  no longer start PowerShell, schtasks or nvidia-smi on the machine that runs them; 16 decision records in [docs/adr/](docs/adr/README.md).
+
 ## Modernization, steps 0 and 1: security fixes, hermetic tests, decision records
 
 From here on the changelog is written in English ([ADR 0001](docs/adr/0001-english-and-clean-break-at-1.0.md)). Plan: [docs/modernization/PLAN.md](docs/modernization/PLAN.md).
