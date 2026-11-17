@@ -202,11 +202,11 @@ class CompteGithub(Base):
         def http(url, entetes=None):
             if url.endswith("/rate_limit"):
                 return 200, {}, json.dumps({"resources": {"core": {"limit": 5000, "remaining": 4990, "reset": 1893456000}}}).encode()
-            return 200, {}, json.dumps({"login": "poube"}).encode()
+            return 200, {}, json.dumps({"login": "someone"}).encode()
         self.assertEqual(github.test_token(http)["limite"], 5000)
         github.save("ghp_" + "a" * 36)
         r = github.test_token(http)
-        self.assertEqual((r["identifie"], r["compte"], r["restantes"]), (True, "poube", 4990))
+        self.assertEqual((r["identifie"], r["compte"], r["restantes"]), (True, "someone", 4990))
         with self.assertRaises(ValueError) as e:
             github.test_token(lambda url, entetes=None: (401, {}, b""))
         self.assertIn("refuse ce jeton", str(e.exception))
