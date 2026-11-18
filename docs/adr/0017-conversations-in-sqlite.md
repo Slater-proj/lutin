@@ -2,8 +2,7 @@
 
 Status: accepted on 2026-11-17, for 1.0 (plan step 3, item 6, and step 6, item 3): the maintainer asked for « the most efficient and fluid,
 adapted to our needs », a mix of JSON and a database being acceptable, and left the choice to this record. Implemented: `lutin/store.py`,
-`tests/test_store.py`. Still to do: `lutin export --conversations`, the warning for a data folder on a network share (decision 7) and the
-handling of a database that cannot be opened (decision 8).
+`tests/test_store.py`; decisions 6 to 8 on 2026-11-19 (below, « How 6 to 8 are done »).
 
 ## Context
 
@@ -41,6 +40,20 @@ Read in `lutin/storage.py` on `98ebd28`:
    and keeps working, as the plan says (step 6: dead data may move to a network disk, the database never).
 8. **A database that cannot be opened** (damaged, disk full) is never replaced in silence: it is copied aside, Lutin says what happened and starts
    with an empty one; `lutin doctor` points to the copy and to the backups.
+
+## How 6 to 8 are done
+
+- **6.** `lutin export --conversations [folder]` (`cli.command_export`, `store.export_database`) opens the database **read-only** (`mode=ro`):
+  nothing is imported, migrated or moved, a 0.x file waiting in `donnees/conversations/` stays there, and it can run while Lutin runs (WAL). It
+  writes `conversations/<id>.json` and `options/<id>.json`, the files a 0.x version or `lutin restore` read, into a folder that must be empty.
+- **7.** `store.on_network_share`: on Windows a UNC path or a mapped network drive (`GetDriveTypeW` = `DRIVE_REMOTE`), on Linux the type of the
+  mount that holds the folder (`/proc/self/mounts`: nfs, cifs, smb3, sshfs…). Elsewhere it says nothing (macOS is not detected). The warning is
+  printed at start, written to the log, shown by `lutin doctor` and as a line of the health screen; Lutin keeps working.
+- **8.** Only an error that means damage (`sqlite3.DatabaseError` that is not an `OperationalError`: « file is not a database », « malformed »)
+  sets the database aside: its files (`lutin.db`, `-wal`, `-shm`) are moved, never copied over, to `donnees/archives/base-illisible-<date>/`.
+  A locked database, a full disk or a permission error is not damage: the error goes up and nothing moves, since a new database would lose the
+  old one for a passing cause. Damage found later than the opening (a page read in the middle of a query) is not handled here; `lutin doctor`
+  runs `PRAGMA quick_check` read-only and says what to do. The database is opened at start, so the notice comes then, not at the first request.
 
 ## Not chosen
 

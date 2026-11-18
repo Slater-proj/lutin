@@ -240,7 +240,19 @@ def health_state(r=None):
     r = r or _m.reglages()
     charge = _m.ps_modele(r["modele"])
     besoin = 0 if _model_on_another_machine(r) else model_size(r["modele"], charge)
-    return assess_health(_m.mesures_systeme(), r, besoin, charge, _repartit_seul(r))
+    etat = assess_health(_m.mesures_systeme(), r, besoin, charge, _repartit_seul(r))
+    try:
+        from . import store
+        avis = store.notices()                                      # partage réseau, base illisible mise de côté (ADR 0017)
+    except Exception as erreur:  # noqa: BLE001  (une ligne de santé de plus : jamais l'écran entier perdu)
+        _m.journaliser("Santé : avis de la base impossibles ({!r}).".format(erreur))
+        avis = []
+    for niveau, texte in avis:
+        etat["items"].append({"id": "base", "nom": _t("Base des conversations"), "niveau": "critique" if niveau == "erreur" else "attention", "valeur": texte, "conseil": ""})
+    if avis:
+        ordre = {"ok": 0, "attention": 1, "critique": 2}
+        etat["niveau"] = max((i["niveau"] for i in etat["items"]), key=lambda x: ordre[x])
+    return etat
 
 
 ALERTS_SEEN = {}          # (conversation, ligne de santé) -> dernier niveau annoncé : un avertissement n'est répété que s'il change

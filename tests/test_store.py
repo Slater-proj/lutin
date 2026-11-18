@@ -2,8 +2,14 @@
 
 What is fixed here: the 0.x JSON files are imported once, after a zip backup, then moved (never deleted); a damaged file is taken from its copy
 of the time before, or reported and left where it is; importing again changes nothing; the list is ordered as in 0.x; the search ignores accents;
-the export writes the 0.x files back (the way back); and a reader never sees half a conversation while another thread writes it."""
+the export writes the 0.x files back (the way back) without changing anything; a damaged database is set aside, never replaced in silence; a data
+folder on a network share is said; and a reader never sees half a conversation while another thread writes it."""
+import contextlib
+import io
 import json
+import shutil
+import sqlite3
+import sys
 import tempfile
 import threading
 import unittest
@@ -103,6 +109,90 @@ class Store(unittest.TestCase):
         back = json.loads((target / "conversations" / "0000000a.json").read_text(encoding="utf-8"))
         self.assertEqual((back["titre"], back["messages"]), ("Rapport", [{"role": "user", "content": "Bonjour"}]))
         self.assertEqual(json.loads((target / "options" / "0000000a.json").read_text(encoding="utf-8")), {"web": True})
+
+    def test_the_export_command_reads_only(self):
+        """ADR 0017, item 6: `lutin export --conversations` writes the 0.x files of what the database holds, and changes nothing: a 0.x file waiting
+        in donnees/conversations/ is neither imported nor moved, and an empty target is required."""
+        from lutin import cli
+        self.write_files(conversation("0000000a", "Rapport", "2026-01-02T10:00:00", [{"role": "user", "content": "Bonjour"}]), options={"0000000a": {"web": True}})
+        A.conv_liste()
+        store.close()
+        waiting = conversation("0000000c", "En attente", "2026-01-03T10:00:00")
+        self.write_files(waiting)
+        target = Path(tempfile.mkdtemp(prefix="lutin-export-")) / "out"
+        home = self.data.parent / (self.data.name + "-home")
+        (home / "donnees").mkdir(parents=True)
+        shutil.copy(self.data / "lutin.db", home / "donnees" / "lutin.db")
+        shutil.copytree(self.data / "conversations", home / "donnees" / "conversations")
+        with mock.patch.dict("os.environ", {"LUTIN_HOME": str(home)}), contextlib.redirect_stdout(io.StringIO()) as out:
+            self.assertEqual(cli.principal(["export", "--conversations", str(target)]), 0)
+        self.assertIn("1 conversation(s)", out.getvalue())
+        self.assertEqual(sorted(p.name for p in (target / "conversations").iterdir()), ["0000000a.json"], "only what the database holds")
+        self.assertEqual(json.loads((target / "options" / "0000000a.json").read_text(encoding="utf-8")), {"web": True})
+        self.assertTrue((home / "donnees" / "conversations" / "0000000c.json").is_file(), "the waiting 0.x file is not imported nor moved")
+        with mock.patch.dict("os.environ", {"LUTIN_HOME": str(home)}), contextlib.redirect_stderr(io.StringIO()) as err:
+            self.assertEqual(cli.principal(["export", "--conversations", str(target)]), 1, "a folder that is not empty is refused")
+            self.assertEqual(cli.principal(["export"]), 2, "say what to export")
+        self.assertIn("--conversations", err.getvalue())
+        self.assertRaises(ValueError, store.export_database, target / "other", home / "donnees" / "absent.db")
+
+    def test_a_damaged_database_is_set_aside_never_replaced_in_silence(self):
+        """ADR 0017, item 8: a database that cannot be read is moved aside, said, and Lutin goes on with an empty one."""
+        self.data.mkdir(parents=True, exist_ok=True)
+        (self.data / "lutin.db").write_bytes(b"this is not a database at all, but it is somebody's data" * 100)
+        self.assertEqual(A.conv_liste(), [], "an empty database to go on")
+        copies = store.set_aside_copies()
+        self.assertEqual(len(copies), 1)
+        self.assertTrue((copies[0] / "lutin.db").read_bytes().startswith(b"this is not a database"), "the damaged file is kept as it was")
+        notices = store.notices()
+        self.assertEqual([level for level, _ in notices], ["erreur"])
+        self.assertIn(str(copies[0]), notices[0][1])
+        self.assertIn("sauvegardes", notices[0][1])
+        c = A.conv_nouvelle()
+        A.conv_ecrire(c)
+        self.assertEqual([entry["id"] for entry in A.conv_liste()], [c["id"]], "the new database works")
+
+    def test_a_locked_database_is_not_set_aside(self):
+        self.data.mkdir(parents=True, exist_ok=True)
+        (self.data / "lutin.db").write_bytes(b"x" * 100)
+        with mock.patch.object(store, "_open", side_effect=sqlite3.OperationalError("database is locked")):
+            self.assertRaises(sqlite3.OperationalError, store.connection)
+        self.assertEqual(store.set_aside_copies(), [], "locked or full is not damaged: nothing moves")
+        self.assertEqual(store.notices(), [], "and nothing is said about a damaged database")
+
+    def test_a_network_share_is_recognised(self):
+        """ADR 0017, item 7: the data folder on a network share is said at start, in `lutin doctor` and in the health screen."""
+        mounts = ("/dev/sda1 / ext4 rw 0 0\n"
+                  "server:/export /mnt/nas nfs4 rw 0 0\n"
+                  "//box/share /mnt/my\\040share cifs rw 0 0\n"
+                  "/dev/sdb1 /mnt/nas/local ext4 rw 0 0\n")
+        self.assertEqual(store.mount_type("/home/me/.lutin/donnees", mounts), "ext4")
+        self.assertEqual(store.mount_type("/mnt/nas/lutin/donnees", mounts), "nfs4")
+        self.assertEqual(store.mount_type("/mnt/my share/donnees", mounts), "cifs", "a space is written \\040")
+        self.assertEqual(store.mount_type("/mnt/nas/local/donnees", mounts), "ext4", "the longest mount point wins")
+        self.assertEqual(store.mount_type("/mnt/nasty", mounts), "ext4", "a prefix of the name is not a parent folder")
+        self.assertFalse(store.on_network_share(self.data), "a temporary folder is on a local disk")
+        self.assertEqual(store.notices(), [])
+        with mock.patch.object(store, "on_network_share", return_value=True):
+            self.assertEqual([level for level, _ in store.notices()], ["attention"])
+            from lutin import health
+            with mock.patch.object(health, "assess_health", return_value={"niveau": "ok", "items": []}), \
+                    mock.patch.object(health, "model_size", return_value=0), mock.patch.object(A, "ps_modele", return_value=None), \
+                    mock.patch.object(A, "mesures_systeme", return_value={}):
+                state = health.health_state(A.reglages())
+            self.assertEqual((state["niveau"], [i["id"] for i in state["items"]]), ("attention", ["base"]))
+        if sys.platform == "win32":
+            self.assertTrue(store.on_network_share("\\\\server\\share\\donnees"))
+            self.assertTrue(store.on_network_share("\\\\?\\UNC\\server\\share\\donnees"))
+            self.assertFalse(store.on_network_share("\\\\?\\C:\\donnees"))
+
+    def test_the_doctor_checks_the_database_read_only(self):
+        from lutin import cli
+        self.assertEqual([level for level, _ in cli.diagnostic_base(self.data)], ["info"], "no database yet")
+        A.conv_ecrire(A.conv_nouvelle())
+        lines = cli.diagnostic_base(self.data)
+        self.assertEqual([level for level, _ in lines], ["ok"])
+        self.assertIn("1 conversation(s)", lines[0][1])
 
     def test_a_reader_never_sees_half_a_conversation(self):
         c = A.conv_nouvelle()

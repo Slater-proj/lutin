@@ -1085,6 +1085,14 @@ def principal():
     if SECURITE.niveau == _sec.PROXY:
         print(_t("Adresse publique : {}   (proxy de confiance : {})").format(SECURITE.url_publique, ", ".join(SECURITE.proxy_ips)))
     print(_t("Journal      : {}").format(DONNEES / "lutin.log"))
+    try:
+        from . import store as _store
+        _store.connection()                                       # ouverte ici : une base illisible est mise de côté et dite au démarrage, pas à la première demande
+        for _niveau, texte in _store.notices():
+            print("⚠ " + texte)
+            journaliser(texte)
+    except Exception as erreur:  # noqa: BLE001  (un avertissement de plus : jamais un démarrage empêché)
+        journaliser("Base des conversations : vérification au démarrage impossible ({!r}).".format(erreur))
     print(_t("(dossier de travail : {})").format(RACINE))
     if "--no-browser" not in sys.argv and not os.environ.get("LUTIN_SANS_NAVIGATEUR"):
         try:

@@ -11,17 +11,21 @@ from __future__ import annotations
 
 import atexit
 import json
+import os
 import shutil
 import sqlite3
+import sys
 import threading
 import time
 import zipfile
 from datetime import datetime
 from pathlib import Path
 
+from .i18n import t as _t
+
 SCHEMA_VERSION = 1
 LOCK = threading.RLock()          # one connection per database, shared by the threads: sqlite3 serialises them, the lock keeps a write in one piece
-_STATE = {"path": None, "connection": None, "fts": False}
+_STATE = {"path": None, "connection": None, "fts": False, "set_aside": None}
 SUMMARY = ("id", "titre", "maj", "messages", "epingle", "memoire", "origine")
 
 
@@ -37,12 +41,142 @@ def database_path() -> Path:
 def _open(path: Path) -> sqlite3.Connection:
     path.parent.mkdir(parents=True, exist_ok=True)
     connection = sqlite3.connect(str(path), timeout=15, isolation_level=None, check_same_thread=False)
-    connection.row_factory = sqlite3.Row
-    connection.execute("PRAGMA journal_mode=WAL")
-    connection.execute("PRAGMA synchronous=NORMAL")
-    connection.execute("PRAGMA foreign_keys=ON")
-    _schema(connection)
+    try:
+        connection.row_factory = sqlite3.Row
+        connection.execute("PRAGMA journal_mode=WAL")
+        connection.execute("PRAGMA synchronous=NORMAL")
+        connection.execute("PRAGMA foreign_keys=ON")
+        _schema(connection)
+    except BaseException:
+        connection.close()                                         # Windows: an open file cannot be moved aside
+        raise
     return connection
+
+
+def _open_or_set_aside(path: Path) -> sqlite3.Connection:
+    """Opens the database. One that cannot be read (damaged: « file is not a database », « malformed ») is never replaced in silence (ADR 0017,
+    item 8): its files are moved to donnees/archives/base-illisible-<date>/, the log, the start and the health screen say so, and Lutin goes on
+    with an empty one. A database that is locked, on a full disk or not readable by this account is not damaged: the error goes up, nothing moves."""
+    try:
+        return _open(path)
+    except sqlite3.OperationalError:
+        raise
+    except sqlite3.DatabaseError as error:
+        if not path.is_file():
+            raise
+        folder = _set_aside(path)
+        _STATE["set_aside"] = {"database": str(path), "folder": str(folder), "error": str(error)}
+        from . import core as _m
+        _m.journaliser("Base des conversations illisible ({}) : mise de côté dans {}, nouvelle base vide.".format(error, folder))
+        return _open(path)
+
+
+def _set_aside(path: Path) -> Path:
+    folder = _data_folder() / "archives" / "base-illisible-{}".format(datetime.now().strftime("%Y%m%d-%H%M%S-%f"))
+    folder.mkdir(parents=True, exist_ok=True)
+    for f in (path, Path(str(path) + "-wal"), Path(str(path) + "-shm")):
+        if f.is_file():
+            shutil.move(str(f), str(folder / f.name))
+    return folder
+
+
+def set_aside_copies() -> list[Path]:
+    """The damaged databases moved aside so far, newest first (`lutin doctor` points to them)."""
+    folder = _data_folder() / "archives"
+    return sorted((d for d in folder.glob("base-illisible-*") if d.is_dir()), reverse=True) if folder.is_dir() else []
+
+
+# Types of file systems that live on another machine: SQLite's locking cannot be trusted there (https://www.sqlite.org/useovernet.html).
+NETWORK_FILESYSTEMS = frozenset({"nfs", "nfs4", "cifs", "smb3", "smbfs", "sshfs", "fuse.sshfs", "afs", "9p", "ceph", "fuse.ceph", "glusterfs",
+                                 "fuse.glusterfs", "davfs", "fuse.davfs", "fuse.rclone", "lustre", "beegfs", "gpfs"})
+_MOUNT_ESCAPES = {"\\040": " ", "\\011": "\t", "\\012": "\n", "\\134": "\\"}          # how /proc/mounts writes a space, a tab, a newline, a backslash
+
+
+def mount_type(path: Path | str, mounts: str) -> str:
+    """The type of the file system that holds `path` (a POSIX path), read from the text of /proc/mounts: the mount point that is its longest prefix."""
+    best, kind = "", ""
+    target = str(path).rstrip("/") + "/"
+    for line in mounts.splitlines():
+        parts = line.split()
+        if len(parts) < 3:
+            continue
+        point = parts[1]
+        for escaped, plain in _MOUNT_ESCAPES.items():
+            point = point.replace(escaped, plain)
+        point = point.rstrip("/") + "/"
+        if target.startswith(point) and len(point) > len(best):
+            best, kind = point, parts[2]
+    return kind
+
+
+def on_network_share(path: Path | str) -> bool:
+    """True when `path` is on a network share (ADR 0017, item 7). Windows: a UNC path or a mapped network drive; Linux: the type of the mount that
+    holds it. Elsewhere, or when it cannot be told: False (the warning is a help, not a guard)."""
+    text = str(path)
+    if sys.platform == "win32":
+        if text.upper().startswith("\\\\?\\UNC\\") or (text.startswith(("\\\\", "//")) and not text.startswith(("\\\\?\\", "\\\\.\\"))):
+            return True
+        drive = os.path.splitdrive(os.path.abspath(text))[0]
+        if len(drive) != 2 or drive[1] != ":":
+            return False
+        try:
+            import ctypes
+            return ctypes.windll.kernel32.GetDriveTypeW(drive + "\\") == 4          # DRIVE_REMOTE: a mapped network drive
+        except (AttributeError, OSError):
+            return False
+    try:
+        mounts = Path("/proc/self/mounts").read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return False
+    return mount_type(os.path.realpath(text), mounts) in NETWORK_FILESYSTEMS
+
+
+def network_notice(folder: Path | str) -> str:
+    """The warning about a data folder on a network share, or '' (ADR 0017, item 7)."""
+    if not on_network_share(folder):
+        return ""
+    return _t("Le dossier des données ({}) est sur un partage réseau : SQLite n'y verrouille pas sûrement la base des conversations, qui peut s'abîmer. Garde les données sur un disque de cette machine (variable LUTIN_DONNEES) : les vieilles données peuvent aller sur un disque réseau, la base jamais.").format(folder)
+
+
+def notices() -> list[tuple[str, str]]:
+    """What the person must know about the database, as (level, text), level « attention » or « erreur »: said at start, in `lutin doctor` and in
+    the health screen. Never opens the database."""
+    found = [("attention", text) for text in [network_notice(_data_folder())] if text]
+    aside = _STATE.get("set_aside")
+    if aside and aside["database"] == str(database_path()):                  # this data folder's database, not one a test or a restore left before
+        found.append(("erreur", _t("La base des conversations était illisible ({}) : elle a été mise de côté dans {}, et Lutin repart d'une base vide. Tes sauvegardes sont dans {} (lutin restore <fichier>).").format(aside["error"], aside["folder"], _data_folder() / "sauvegardes")))
+    return found
+
+
+def export_database(target: Path, path: Path | None = None) -> int:
+    """Writes every conversation of the database as a 0.x JSON file in `target`/conversations, with its options in `target`/options (ADR 0017,
+    item 6: `lutin export --conversations`). Read-only: the database is opened as such, nothing is imported or migrated, and it can run while Lutin
+    runs (WAL). Returns the count. ValueError when there is no database yet: the conversations are then still the 0.x files."""
+    path = Path(path or database_path())
+    if not path.is_file():
+        raise ValueError(_t("Pas encore de base des conversations ({}) : tes conversations sont encore les fichiers de la version 0.x, dans {}.").format(path, path.parent / "conversations"))
+    try:
+        con = sqlite3.connect("file:{}?mode=ro".format(path.resolve().as_posix()), uri=True, timeout=15)
+    except sqlite3.Error as error:
+        raise ValueError(_t("La base des conversations ne s'ouvre pas ({}) : {}").format(path, error)) from error
+    try:
+        target = Path(target)
+        (target / "conversations").mkdir(parents=True, exist_ok=True)
+        options = dict(con.execute("SELECT conversation, fields FROM options").fetchall())
+        count = 0
+        for ident, fields in con.execute("SELECT id, fields FROM conversations ORDER BY id").fetchall():
+            c = json.loads(fields)
+            c["messages"] = [json.loads(body) for (body,) in con.execute("SELECT body FROM messages WHERE conversation = ? ORDER BY position", (ident,))]
+            (target / "conversations" / (ident + ".json")).write_text(json.dumps(c, ensure_ascii=False), encoding="utf-8")
+            if ident in options:
+                (target / "options").mkdir(parents=True, exist_ok=True)
+                (target / "options" / (ident + ".json")).write_text(options[ident], encoding="utf-8")
+            count += 1
+        return count
+    except sqlite3.DatabaseError as error:
+        raise ValueError(_t("La base des conversations ne se lit pas ({}) : {}").format(path, error)) from error
+    finally:
+        con.close()
 
 
 def _schema(connection: sqlite3.Connection) -> None:
@@ -76,7 +210,7 @@ def connection() -> sqlite3.Connection:
     with LOCK:
         if _STATE["path"] != path or _STATE["connection"] is None:
             close()
-            _STATE["connection"], _STATE["path"] = _open(path), path
+            _STATE["connection"], _STATE["path"] = _open_or_set_aside(path), path
             import_files()
         return _STATE["connection"]
 
@@ -365,18 +499,7 @@ def _same_messages(con: sqlite3.Connection, c: dict) -> bool:
 
 
 def export_files(target: Path) -> int:
-    """Writes every conversation of the database as a 0.x JSON file in `target` (the way back of ADR 0017), with its options. Returns the count."""
-    target = Path(target)
-    (target / "conversations").mkdir(parents=True, exist_ok=True)
-    (target / "options").mkdir(parents=True, exist_ok=True)
-    count = 0
-    for ident in ids():
-        c = read(ident)
-        if c is None:
-            continue
-        (target / "conversations" / (ident + ".json")).write_text(json.dumps(c, ensure_ascii=False), encoding="utf-8")
-        opts = options_read(ident)
-        if opts:
-            (target / "options" / (ident + ".json")).write_text(json.dumps(opts, ensure_ascii=False), encoding="utf-8")
-        count += 1
-    return count
+    """Writes every conversation of the database in use as a 0.x JSON file in `target`, with its options: export_database on this database,
+    after the 0.x files waiting in donnees/conversations/ are imported (the way back of ADR 0017). Returns the count."""
+    ready()
+    return export_database(target)

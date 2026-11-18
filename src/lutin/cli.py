@@ -28,6 +28,7 @@ HELP_GENERAL = """Lutin : un assistant IA local qui choisit les modèles adapté
   lutin bench         mesurer un modèle sur cette machine (vitesse, outils, code, français)
   lutin bench-engines comparer les moteurs (Ollama, llama.cpp) sur le même modèle
   lutin backup    exporter tes données dans un .zip ; lutin restore pour les remettre
+  lutin export --conversations   tes conversations en fichiers de la version 0.x (retour arrière)
   lutin doctor        diagnostic (à joindre à un rapport de problème)
   lutin colibri       Colibri (expérimental) : installer (somme vérifiée), démarrer, arrêter
 """
@@ -77,7 +78,8 @@ def valeurs(table):
 
 # Chaque commande a un NOM ANGLAIS officiel et garde son ancien nom français comme alias : rien de ce qui est écrit dans un script ou une documentation d'avant ne casse.
 ALIAS_COMMANDES = {"models": "modeles", "devices": "appareils", "security": "securite", "workspaces": "travaux", "log": "journal", "bench-engines": "bench-moteurs", "backup": "sauvegarde",
-                   "restore": "restaurer", "offline": "hors-ligne", "autostart": "demarrage-auto", "migrate": "reprendre", "import-project": "importer", "language": "langue", "engine-trial": "essai-moteur"}
+                   "restore": "restaurer", "offline": "hors-ligne", "autostart": "demarrage-auto", "migrate": "reprendre", "import-project": "importer", "language": "langue", "engine-trial": "essai-moteur",
+                   "export": "exporter"}
 
 
 def parseur():
@@ -152,6 +154,9 @@ def parseur():
     hl = commande("offline", help=_t("mode hors ligne strict (aucune connexion vers Internet)"))
     hl.add_argument("etat", nargs="?", type=etats_hl, metavar=mv_hl, default="etat")
     commande("doctor", help=_t("diagnostic"))
+    ex = commande("export", help=_t("écrire tes conversations en fichiers JSON de la version 0.x (retour arrière, lecture seule)"))
+    ex.add_argument("--conversations", action="store_true", help=_t("les conversations de la base (seul export possible pour l'instant)"))
+    ex.add_argument("dossier", nargs="?", metavar="folder", help=_t("dossier de destination (défaut : lutin-conversations-<date>)"))
     actions_colibri, mv_colibri = valeurs({"etat": ("status",), "installer": ("install",), "demarrer": ("start",), "arreter": ("stop",)})
     co = commande("colibri", help=_t("Colibri (moteur expérimental) : installer avec somme vérifiée, démarrer, arrêter"))
     co.add_argument("action", nargs="?", type=actions_colibri, metavar=mv_colibri, default="etat")
@@ -884,10 +889,61 @@ def command_colibri(args):
     return 0
 
 
+def command_export(args):
+    """`lutin export --conversations [dossier]` (ADR 0017, item 6): the conversations of the database as the JSON files of 0.x, which `lutin restore`
+    or a 0.x version read. Read-only: nothing is imported, migrated or changed, and it can run while Lutin runs."""
+    if not args.conversations:
+        print("✘ " + _t("Dis ce qu'il faut exporter : lutin export --conversations [dossier]"), file=sys.stderr)
+        return 2
+    d, _ = context()
+    os.environ.setdefault("LUTIN_DONNEES", str(d["donnees"]))
+    from . import store
+    destination = Path(args.dossier or "lutin-conversations-{}".format(time.strftime("%Y%m%d-%H%M%S")))
+    if destination.exists() and any(destination.iterdir()):
+        print("✘ " + _t("{} n'est pas vide : choisis un dossier vide ou nouveau.").format(destination), file=sys.stderr)
+        return 1
+    try:
+        nombre = store.export_database(destination, Path(d["donnees"]) / "lutin.db")
+    except (ValueError, OSError) as e:
+        print("✘ " + str(e), file=sys.stderr)
+        return 1
+    print(_t("✔ {} conversation(s) écrite(s) dans {} (fichiers de la version 0.x : conversations/ et options/).").format(nombre, destination))
+    return 0
+
+
+def diagnostic_base(dossier_donnees):
+    """[(niveau, texte)] sur la base des conversations (ADR 0017, points 7 et 8) : partage réseau, base lisible ou non (ouverte en lecture seule),
+    copies mises de côté. Rien de personnel : ni titre ni contenu."""
+    os.environ.setdefault("LUTIN_DONNEES", str(dossier_donnees))
+    from . import store
+    lignes = []
+    base = Path(dossier_donnees) / "lutin.db"
+    if store.network_notice(dossier_donnees):
+        lignes.append(("attention", store.network_notice(dossier_donnees)))
+    if base.is_file():
+        import sqlite3
+        try:
+            con = sqlite3.connect("file:{}?mode=ro".format(base.resolve().as_posix()), uri=True, timeout=5)
+            try:
+                etat = con.execute("PRAGMA quick_check").fetchone()[0]
+                nombre = con.execute("SELECT COUNT(*) FROM conversations").fetchone()[0]
+            finally:
+                con.close()
+            lignes.append(("ok", _t("Base des conversations : {} conversation(s), vérifiée").format(nombre)) if etat == "ok" else
+                          ("erreur", _t("Base des conversations abîmée ({}) : arrête Lutin, puis lutin export --conversations pour sauver ce qui se lit, ou lutin restore avec une sauvegarde.").format(etat)))
+        except sqlite3.Error as e:
+            lignes.append(("erreur", _t("Base des conversations illisible ({}) : au prochain démarrage, Lutin la mettra de côté et repartira d'une base vide. Sauvegardes : {}").format(e, Path(dossier_donnees) / "sauvegardes")))
+    else:
+        lignes.append(("info", _t("Pas encore de base des conversations : elle sera créée au premier démarrage.")))
+    for copie in store.set_aside_copies()[:3]:
+        lignes.append(("attention", _t("Base illisible mise de côté : {} (sauvegardes : {})").format(copie, Path(dossier_donnees) / "sauvegardes")))
+    return lignes
+
+
 def commande_doctor(args):
     d, cfg = context()
     from . import docker_doctor
-    for niveau, texte in diagnostic(cfg, d, hardware.detecter(), ollama_client.Ollama()) + docker_doctor.diagnose():
+    for niveau, texte in diagnostic(cfg, d, hardware.detecter(), ollama_client.Ollama()) + diagnostic_base(d["donnees"]) + docker_doctor.diagnose():
         print("{} {}".format({"ok": "✔", "info": " ", "attention": "⚠", "erreur": "✘"}[niveau], texte))
     return 0
 
@@ -907,7 +963,7 @@ def principal(argv=None):
     os.environ["LUTIN_CONFIG"] = str(Path(config.folders()["config"]) / "config.json")          # les gardes (mode hors ligne…) lisent la configuration de cette installation
     commandes = {"setup": command_setup, "serve": commande_serve, "update": command_update, "chat": commande_chat, "modeles": command_models, "pin": command_pin,
                  "appareils": command_devices, "securite": command_security, "langue": command_language, "importer": commande_importer, "reprendre": commande_reprendre, "hors-ligne": commande_hors_ligne,
-                 "travaux": command_works, "journal": command_log, "bench": commande_bench, "sauvegarde": command_backup, "restaurer": command_restore, "doctor": commande_doctor, "demarrage-auto": commande_demarrage_auto, "zone": commande_zone, "mcp": commande_mcp, "essai-moteur": command_trial_engine, "bench-moteurs": commande_bench_moteurs, "colibri": command_colibri}
+                 "travaux": command_works, "journal": command_log, "bench": commande_bench, "sauvegarde": command_backup, "restaurer": command_restore, "doctor": commande_doctor, "exporter": command_export, "demarrage-auto": commande_demarrage_auto, "zone": commande_zone, "mcp": commande_mcp, "essai-moteur": command_trial_engine, "bench-moteurs": commande_bench_moteurs, "colibri": command_colibri}
     try:
         if args.commande is None:
             return commande_serve(argparse.Namespace(sans_navigateur=False))
