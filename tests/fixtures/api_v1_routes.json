@@ -125,6 +125,26 @@
   "right": "session"
  },
  {
+  "method": "DELETE",
+  "path": "/api/v1/conversations/{id}/files/{file}",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/conversations/{id}/files/{file}",
+  "right": "read"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/conversations/{id}/files/{file}/open",
+  "right": "configurator"
+ },
+ {
+  "method": "DELETE",
+  "path": "/api/v1/conversations/{id}/media/{image}",
+  "right": "configurator"
+ },
+ {
   "method": "POST",
   "path": "/api/v1/conversations/{id}/memory-choice",
   "right": "session"
@@ -323,6 +343,11 @@
   "method": "PATCH",
   "path": "/api/v1/machines/{id}/conversations/{conversation}",
   "right": "session"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/machines/{id}/conversations/{conversation}/files/{file}",
+  "right": "read"
  },
  {
   "method": "POST",

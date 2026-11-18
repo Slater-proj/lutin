@@ -186,7 +186,7 @@ class Status(unittest.TestCase):
     def test_the_shape_of_the_status(self):
         status, answer = call("GET", "/api/v1/status", OWNER)
         self.assertEqual(status, 200)
-        self.assertEqual(sorted(answer), ["access", "active_turns", "engine", "installed_models", "language", "model", "offline", "pending_approvals", "turns", "version", "workspace"])
+        self.assertEqual(sorted(answer), ["access", "active_turns", "can_open_files", "engine", "installed_models", "language", "model", "offline", "pending_approvals", "turns", "version", "workspace"])
         self.assertEqual(answer["turns"], [], "no turn runs")
         self.assertEqual(answer["access"], {"level": "network", "can_configure": True})
         self.assertEqual(sorted(answer["engine"]), ["id", "name", "running"])

@@ -1,11 +1,17 @@
 // What a conversation looks like on screen, built from two sources: the stored messages, and the events of the answer being written.
 // Pure functions: no DOM, no network (tested in turn.test.ts).
-import type { StoredMessage, Task, TurnEvent, TurnState } from "./types";
+import type { StoredMessage, StoredProduced, Task, TurnEvent, TurnState } from "./types";
+
+/** What a tool produced: the images it generated (with where each is saved, when known) and the files it created. */
+export interface Produced {
+  media: { id: string; path: string }[];
+  files: { id: string; name: string; size: number; path: string }[];
+}
 
 export type Block =
   | { kind: "text"; text: string }
   | { kind: "thinking"; text: string }
-  | { kind: "tool"; name: string; arguments: unknown; result: string | null }
+  | { kind: "tool"; name: string; arguments: unknown; result: string | null; produced: Produced }
   | { kind: "notice"; text: string }
   | { kind: "dry_run"; title: string; detail: string; diff: string }
   | { kind: "error"; message: string };
@@ -53,12 +59,29 @@ function appended(blocks: Block[], kind: "text" | "thinking", text: string): Blo
   return [...blocks, { kind, text }];
 }
 
-function withResult(blocks: Block[], name: string, text: string): Block[] {
+const nothing = (): Produced => ({ media: [], files: [] });
+
+/** What a tool result carries, in the names of the stored messages (the stream gives the same values under English names). */
+export function produced(media: string[] | undefined, mediaFiles: Record<string, string> | undefined, files: StoredProduced[] | undefined): Produced {
+  return {
+    media: (media ?? []).map((id) => ({ id, path: mediaFiles?.[id] ?? "" })),
+    files: (files ?? []).map((file) => ({ id: file.id, name: file.nom, size: file.taille ?? 0, path: file.chemin ?? "" })),
+  };
+}
+
+/** The same blocks without one produced image or file (after it was deleted): every block that shows it. */
+export function withoutProduced(blocks: Block[], kind: "media" | "files", id: string): Block[] {
+  return blocks.map((block) =>
+    block.kind === "tool" ? { ...block, produced: { ...block.produced, [kind]: (block.produced[kind] as { id: string }[]).filter((entry) => entry.id !== id) } } : block,
+  );
+}
+
+function withResult(blocks: Block[], name: string, text: string, made: Produced): Block[] {
   const index = blocks.findIndex((block) => block.kind === "tool" && block.name === name && block.result === null);
   if (index < 0) {
-    return [...blocks, { kind: "tool", name, arguments: null, result: text }];
+    return [...blocks, { kind: "tool", name, arguments: null, result: text, produced: made }];
   }
-  return blocks.map((block, i) => (i === index && block.kind === "tool" ? { ...block, result: text } : block));
+  return blocks.map((block, i) => (i === index && block.kind === "tool" ? { ...block, result: text, produced: made } : block));
 }
 
 /** The turn after one more event. Never changes its argument. An event this interface does not know leaves the turn as it is. */
@@ -73,9 +96,9 @@ export function applyEvent(turn: LiveTurn, event: TurnEvent): LiveTurn {
     case "notice":
       return { ...turn, blocks: [...turn.blocks, { kind: "notice", text: event.text }] };
     case "tool_call":
-      return { ...turn, status: "", blocks: [...turn.blocks, { kind: "tool", name: event.name, arguments: event.arguments, result: null }] };
+      return { ...turn, status: "", blocks: [...turn.blocks, { kind: "tool", name: event.name, arguments: event.arguments, result: null, produced: nothing() }] };
     case "tool_result":
-      return { ...turn, approval: null, blocks: withResult(turn.blocks, event.name, event.text) };
+      return { ...turn, approval: null, blocks: withResult(turn.blocks, event.name, event.text, produced(event.media, event.media_files, event.attached_files)) };
     case "approval_request":
       return { ...turn, approval: { id: event.id, title: event.title, detail: event.detail, diff: event.diff, reason: event.reason ?? "", canRemember: event.can_remember === true } };
     case "auto_approval_suspended":
@@ -133,16 +156,18 @@ export function storedToItems(messages: StoredMessage[]): Item[] {
       if (message.thinking) blocks.push({ kind: "thinking", text: message.thinking });
       if (message.content) blocks.push({ kind: "text", text: message.content });
       for (const call of message.tool_calls ?? []) {
-        blocks.push({ kind: "tool", name: call.function?.name ?? "", arguments: call.function?.arguments ?? null, result: null });
+        blocks.push({ kind: "tool", name: call.function?.name ?? "", arguments: call.function?.arguments ?? null, result: null, produced: nothing() });
       }
     } else if (message.role === "tool") {
       const blocks = blocksOfAnswer();
       const name = message.tool_name ?? "";
+      const made = produced(message.medias, message.medias_fichiers, message.fichiers_joints);
       const waiting = blocks.find((block) => block.kind === "tool" && block.result === null && (block.name === name || name === ""));
       if (waiting && waiting.kind === "tool") {
         waiting.result = message.content ?? "";
+        waiting.produced = made;
       } else {
-        blocks.push({ kind: "tool", name, arguments: null, result: message.content ?? "" });
+        blocks.push({ kind: "tool", name, arguments: null, result: message.content ?? "", produced: made });
       }
     }
   }

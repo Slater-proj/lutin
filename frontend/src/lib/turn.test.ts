@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { lineParser } from "./stream";
 import { catalogue, translate } from "./messages";
-import { applyEvent, elsewhereNotice, newTurn, storedToItems, type LiveTurn } from "./turn";
+import { applyEvent, elsewhereNotice, newTurn, storedToItems, withoutProduced, type LiveTurn } from "./turn";
 import type { TurnEvent } from "./types";
 
 function play(events: TurnEvent[]): LiveTurn {
@@ -43,7 +43,19 @@ describe("the turn being written", () => {
     expect(asked.approval).toEqual({ id: "x1", title: "Change a.py", detail: "", diff: "-1\n+2", reason: "", canRemember: false });
     const answered = applyEvent(asked, { type: "tool_result", name: "modifier", text: "refused" });
     expect(answered.approval).toBeNull();
-    expect(answered.blocks).toEqual([{ kind: "tool", name: "modifier", arguments: { chemin: "a.py" }, result: "refused" }]);
+    expect(answered.blocks).toEqual([{ kind: "tool", name: "modifier", arguments: { chemin: "a.py" }, result: "refused", produced: { media: [], files: [] } }]);
+  });
+
+  it("keeps what a tool produced with its result: the generated images and the created files", () => {
+    const turn = play([
+      { type: "tool_call", name: "generer_image", arguments: {} },
+      { type: "tool_result", name: "generer_image", text: "Done.", media: ["i1.png"], media_files: { "i1.png": "C:/out/i1.png" }, attached_files: [{ id: "f1", nom: "r.pdf", taille: 2048, chemin: "C:/w/r.pdf" }] },
+    ]);
+    expect(turn.blocks).toEqual([{ kind: "tool", name: "generer_image", arguments: {}, result: "Done.", produced: { media: [{ id: "i1.png", path: "C:/out/i1.png" }], files: [{ id: "f1", name: "r.pdf", size: 2048, path: "C:/w/r.pdf" }] } }]);
+    const [image] = withoutProduced(turn.blocks, "media", "i1.png");
+    expect(image.kind === "tool" && [image.produced.media.length, image.produced.files.length]).toEqual([0, 1]);
+    const [file] = withoutProduced(turn.blocks, "files", "f1");
+    expect(file.kind === "tool" && [file.produced.media.length, file.produced.files.length]).toEqual([1, 0]);
   });
 
   it("never changes the turn it was given, and ignores an event it does not know", () => {
@@ -76,7 +88,7 @@ describe("the stored conversation", () => {
       { role: "system", content: "hidden" },
       { role: "user", content: "Change it" },
       { role: "assistant", content: "", thinking: "hm", tool_calls: [{ function: { name: "modifier", arguments: { chemin: "a.py" } } }] },
-      { role: "tool", tool_name: "modifier", content: "done" },
+      { role: "tool", tool_name: "modifier", content: "done", medias: ["i1.png"], fichiers_joints: [{ id: "f1", nom: "r.pdf" }] },
       { role: "assistant", content: "Understood." },
       { role: "user", content: "Thanks" },
     ]);
@@ -86,7 +98,7 @@ describe("the stored conversation", () => {
         role: "assistant",
         blocks: [
           { kind: "thinking", text: "hm" },
-          { kind: "tool", name: "modifier", arguments: { chemin: "a.py" }, result: "done" },
+          { kind: "tool", name: "modifier", arguments: { chemin: "a.py" }, result: "done", produced: { media: [{ id: "i1.png", path: "" }], files: [{ id: "f1", name: "r.pdf", size: 0, path: "" }] } },
           { kind: "text", text: "Understood." },
         ],
       },

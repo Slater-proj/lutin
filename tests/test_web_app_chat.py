@@ -252,6 +252,70 @@ class Chat(unittest.TestCase):
         self.assertEqual(p.evaluer(TEXT).count("Say something"), 1, "the request is not repeated")
         self.assertEqual(p.erreurs, [])
 
+    def test_3p_what_a_tool_produced_is_shown_opened_downloaded_and_deleted(self):
+        """docs/modernization/PARITY.md, item 5: the image a tool generated and the file it created are shown under its result, not folded with it;
+        the file is downloaded through a link and opened by this machine's system; each is deleted after a second click, from the disk too.
+        The system's « open » is replaced: no application is launched."""
+        from lutin import images, produced_files
+        p = self.page
+        report = T.A.RACINE / "rapport 3p.pdf"
+        report.write_bytes(b"%PDF-1.4 3p")
+        self.addCleanup(lambda: report.unlink(missing_ok=True))
+        picture = images.save(base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="))
+        entry = produced_files.entree(report)
+        held = T.A.conv_nouvelle()["id"]
+        T.A.conv_renommer(held, "Produits 3p")
+        stored = T.A.conv_lire(held)
+        stored["messages"] += [{"role": "user", "content": "Make a picture and a report"},
+                               {"role": "assistant", "content": "", "tool_calls": [{"function": {"name": "generer_image", "arguments": {}}}]},
+                               {"role": "tool", "tool_name": "generer_image", "content": "Done.", "medias": [picture], "medias_fichiers": {picture: "C:/ComfyUI/output/3p.png"},
+                                "fichiers_joints": [entry]},
+                               {"role": "assistant", "content": "Here they are."}]
+        T.A.conv_ecrire_telle_quelle(stored)
+        launched = []
+        for patch in (mock.patch.object(produced_files, "opening_possible", lambda: True), mock.patch.object(produced_files, "_launch", launched.append)):
+            patch.start()
+            self.addCleanup(patch.stop)
+
+        def restore():
+            try:
+                T.A.conv_supprimer(held)
+            except (OSError, ValueError):
+                pass
+        self.addCleanup(restore)
+        p.evaluer("location.hash = '#/chat'; window.__old = true; location.reload()")          # the status, read when the page loads, now says this machine can open a file
+        p.attendre("!window.__old && !!document.querySelector('#message')")
+        listed = "[...document.querySelectorAll('.list .entry')].find(b => b.innerText.includes('Produits 3p'))"
+        p.attendre("!!(" + listed + ")")
+        p.evaluer(listed + ".click()")
+        p.attendre("!!document.querySelector('.produced .file')")
+        self.assertEqual(self.width_once_loaded(".produced .media img"), 1, "the generated image is shown")
+        self.assertIn("C:/ComfyUI/output/3p.png", p.evaluer("document.querySelector('.produced .media').innerText"), "with where it is saved")
+        self.assertIn("rapport 3p.pdf", p.evaluer("document.querySelector('.produced .file').innerText"))
+        link = p.evaluer("document.querySelector('.produced .file a[download]').getAttribute('href')")
+        self.assertEqual(link, "/api/v1/conversations/{}/files/{}?name=rapport%203p.pdf".format(held, entry["id"]))
+        self.assertEqual(p.evaluer("fetch(%r).then(r => r.text())" % link), "%PDF-1.4 3p", "the link downloads the file with the session cookie")
+        if AXE.is_file():
+            self.axe("on what a tool produced")
+        self.picture("3p-produced")
+        p.evaluer("document.querySelector('.produced .open').click()")
+        self.eventually(lambda: launched == [report.resolve()], "opened by this machine's system")
+        p.evaluer("document.querySelector('.produced .file .delete').click()")
+        p.attendre("!!document.querySelector('.produced .confirm-delete')")
+        self.assertTrue(report.is_file(), "a first click only asks")
+        p.evaluer("document.querySelector('.produced .confirm-delete').click()")
+        p.attendre("!document.querySelector('.produced .file')")
+        self.assertFalse(report.exists(), "the file is erased from the disk")
+        p.evaluer("document.querySelector('.produced .media .delete').click()")
+        p.attendre("!!document.querySelector('.produced .confirm-delete')")
+        p.evaluer("document.querySelector('.produced .confirm-delete').click()")
+        p.attendre("!document.querySelector('.produced')")
+        self.assertFalse(any("medias" in m or "fichiers_joints" in m for m in T.A.conv_lire(held)["messages"]), "the conversation no longer cites them")
+        self.assertIn("Here they are.", p.evaluer(TEXT), "the rest of the answer stays")
+        self.assertEqual(p.erreurs, [])
+        p.evaluer("[...document.querySelectorAll('.list .new')].forEach(b => b.click())")          # leave it: the cleanup deletes it, the next tests write in a new one
+        p.attendre("!!document.querySelector('.welcome')")
+
     def test_3_an_action_waits_for_the_approval_given_on_the_page(self):
         p = self.page
         target = T.PROJET / "appli" / "moteur" / "code.py"

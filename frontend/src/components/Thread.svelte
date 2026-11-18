@@ -3,12 +3,25 @@
   import { t } from "../lib/messages";
   import Icon from "./Icon.svelte";
   import Markdown from "./Markdown.svelte";
+  import Produced from "./Produced.svelte";
   import { attachmentUrl, imageUrl } from "../lib/place";
   import type { Block, Item, LiveTurn, Sent } from "../lib/turn";
 
   // `machine`: the paired machine that holds the conversation ("" for this one): its images and documents are read from it.
   // `onregenerate`: answer again from the last request (shown on the last answer only, when nothing runs).
-  let { items, pending, live, onedit, onregenerate, machine = "" }: { items: Item[]; pending: ({ text: string } & Sent) | null; live: LiveTurn | null; onedit?: (item: Extract<Item, { role: "user" }>) => void; onregenerate?: () => void; machine?: string } = $props();
+  // `conversation`, `canOpen`, `canDelete`, `onproduced`: what a tool produced, opened or deleted from the thread (components/Produced.svelte).
+  let { items, pending, live, onedit, onregenerate, machine = "", conversation = "", canOpen = false, canDelete = false, onproduced }: {
+    items: Item[];
+    pending: ({ text: string } & Sent) | null;
+    live: LiveTurn | null;
+    onedit?: (item: Extract<Item, { role: "user" }>) => void;
+    onregenerate?: () => void;
+    machine?: string;
+    conversation?: string;
+    canOpen?: boolean;
+    canDelete?: boolean;
+    onproduced?: (kind: "media" | "files", id: string) => void;
+  } = $props();
   let copied = $state(-1);
 
   /** The text of an answer, without its thinking and its tools: what « Copy » puts on the clipboard. */
@@ -53,7 +66,7 @@
   {/if}
 {/snippet}
 
-{#snippet blocksView(blocks: Block[])}
+{#snippet blocksView(blocks: Block[], settled: boolean)}
   {#each blocks as block, index (index)}
     {#if block.kind === "text"}
       <Markdown source={block.text} />
@@ -74,6 +87,7 @@
           <pre>{block.result}</pre>
         {/if}
       </details>
+      {#if conversation}<Produced produced={block.produced} {conversation} {machine} {canOpen} canDelete={canDelete && settled} ondeleted={onproduced} />{/if}
     {:else if block.kind === "notice"}
       <p class="notice">{block.text}</p>
     {:else if block.kind === "dry_run"}
@@ -104,7 +118,7 @@
     {:else}
       <li class="assistant">
         <h2 class="who"><img src="/logo.svg" alt="" width="22" height="22" />{t("chat.assistant")}</h2>
-        {@render blocksView(item.blocks)}
+        {@render blocksView(item.blocks, !live)}
         {#if answerText(item.blocks)}
           <div class="answer-actions">
             <button type="button" class="quiet-action copy" onclick={() => copy(item.blocks, index)}>{copied === index ? t("chat.copied") : t("chat.copy")}</button>
@@ -126,7 +140,7 @@
   {#if live}
     <li class="assistant">
       <h2 class="who"><img src="/logo.svg" alt="" width="22" height="22" />{t("chat.assistant")}</h2>
-      {@render blocksView(live.blocks)}
+      {@render blocksView(live.blocks, false)}
       {#if live.tasks.length}
         <div class="tasks">
           <p class="label">{t("chat.tasks")}</p>

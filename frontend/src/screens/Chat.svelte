@@ -52,6 +52,12 @@
 
   const SUGGESTIONS = ["chat.suggest_explain", "chat.suggest_write", "chat.suggest_fix", "chat.suggest_summarise"] as const;
 
+  /** Reads the open conversation again from the machine that holds it: after an undo, or a produced file or image deleted from the thread. */
+  async function reloadConversation(): Promise<void> {
+    const id = conversation?.id;
+    if (id) conversation = await api<Conversation>("GET", conversationPath(where, id));
+  }
+
   const items = $derived(storedToItems((conversation?.messages ?? []).slice(0, cut ?? undefined)));
   let elsewhere = $state(false); // an answer is being written in this conversation, but not by this page (it was reloaded, or another device sent it)
   let elsewhereTurn = $state<TurnState | undefined>(undefined); // where that turn is, when the server says it: waiting for an approval this page cannot show, stalled, being stopped
@@ -548,7 +554,8 @@
           </ul>
         </div>
       {:else}
-        <Thread {items} {pending} {live} onedit={busy ? undefined : startEdit} onregenerate={busy ? undefined : regenerate} machine={where} />
+        <Thread {items} {pending} {live} onedit={busy ? undefined : startEdit} onregenerate={busy ? undefined : regenerate} machine={where} conversation={conversation?.id ?? ""}
+          canOpen={!where && !!status?.can_open_files} canDelete={!where && !!status?.access.can_configure} onproduced={reloadConversation} />
         {#if elsewhere}<p class="elsewhere" role="status">{t(elsewhereNotice(elsewhereTurn))}</p>{/if}
       {/if}
     </div>
@@ -584,7 +591,7 @@
         </div>
       {/if}
       {#if conversation && !where}
-        <Changes conversation={conversation.id} tick={changesTick} onundone={async () => { const id = conversation?.id; if (id) conversation = await api<Conversation>("GET", conversationPath("", id)); }} />
+        <Changes conversation={conversation.id} tick={changesTick} onundone={reloadConversation} />
       {/if}
       {#if options}<Options {options} onchange={changeOptions} />{/if}
       {#if editing !== null}

@@ -71,11 +71,14 @@ class Images(unittest.TestCase):
             self.assertEqual((status, answer["error"]["code"]), (413, "too_large"), attempt)
 
     def test_the_only_routes_without_the_page_token_read_files_and_nothing_else_does(self):
-        # The two of this machine, and the same two for a conversation held by a paired machine (ADR 0016, stage 7: relayed, read from that machine,
-        # with the same sandboxing headers). Any other route that skips the page token fails here.
+        # The three of this machine (images, documents sent, files a tool produced: tests/test_api_v1_produced.py), and the same three for a conversation
+        # held by a paired machine (ADR 0016, stage 7: relayed, read from that machine, with the same sandboxing headers). Any other route that skips the
+        # page token fails here.
         entries = [entry for entry in api_v1.table() if entry["right"] == api_v1.READ]
-        self.assertEqual([(entry["method"], entry["path"]) for entry in entries], [("GET", "/api/v1/attachments/{id}"), ("GET", "/api/v1/images/{id}"),
+        self.assertEqual([(entry["method"], entry["path"]) for entry in entries], [("GET", "/api/v1/attachments/{id}"), ("GET", "/api/v1/conversations/{id}/files/{file}"),
+                                                                                  ("GET", "/api/v1/images/{id}"),
                                                                                   ("GET", "/api/v1/machines/{id}/attachments/{attachment}"),
+                                                                                  ("GET", "/api/v1/machines/{id}/conversations/{conversation}/files/{file}"),
                                                                                   ("GET", "/api/v1/machines/{id}/images/{image}")])
 
 

@@ -29,6 +29,11 @@ export function attachmentUrl(machine: string, id: string, name: string): string
   return `/api/v1${root(machine)}/attachments/${enc(id)}?name=${enc(name)}`;
 }
 
+/** The address of a file a tool created in a conversation: always a download, saved under its name. */
+export function producedFileUrl(machine: string, conversation: string, id: string, name: string): string {
+  return `/api/v1${conversationPath(machine, conversation)}/files/${enc(id)}?name=${enc(name)}`;
+}
+
 /** A conversation of the list: local ones have no machine. */
 export interface Listed {
   id: string;

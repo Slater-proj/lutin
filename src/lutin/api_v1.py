@@ -39,6 +39,7 @@ from . import model_compat as _model_compat
 from . import model_fit as _model_fit
 from . import offline as _offline
 from . import power as _power
+from . import produced_files as _produced
 from . import addons as _addons
 from . import mcp as _mcp
 from . import mcp_catalog as _mcp_catalog
@@ -247,6 +248,7 @@ def status(request):
         "model": str(settings.get("modele") or ""),
         "installed_models": list(state["installes"]),
         "workspace": {"path": str(_m.RACINE)},
+        "can_open_files": bool(request.handler._configurateur() and _produced.opening_possible()),          # « Open » asks this machine's system to open a file
         "active_turns": sorted(_m.TOURS_ACTIFS),
         "turns": _turn_state.snapshot(),          # where each running turn is: running, waiting_approval, stalled or cancelled, and in which part of the loop (turn_state.py)
         "pending_approvals": sorted({a.conv for a in _m.Attente.EN_COURS.values() if a.conv} | set(_m.CHOIX_MEMOIRE)),
@@ -913,6 +915,18 @@ def remote_attachment(request):
         raise ApiError(404, "not_found", _t("Fichier joint inconnu."))
     name = _pieces.clean_name(request.query.get("name") or "") or request.params["attachment"]
     data, _ = _relay_file(_host(request.params["id"]), "/piece/" + request.params["attachment"] + "?nom=" + urllib.parse.quote(name))
+    return Binary(data, "application/octet-stream", {"Content-Disposition": "attachment; filename*=UTF-8''" + urllib.parse.quote(name),
+                                                    "Content-Security-Policy": "default-src 'none'; sandbox", "X-Content-Type-Options": "nosniff"})
+
+
+@route("GET", "/machines/{id}/conversations/{conversation}/files/{file}", READ)
+def remote_produced_file(request):
+    """A file a tool created in a conversation led on a paired machine, read from it: always a download. Opening and deleting it are done on that machine."""
+    host, identifier = _hosted(request)
+    if not RE_FILE_ID.match(request.params["file"]):
+        raise ApiError(404, "not_found", _t("Ce fichier n'est plus dans la conversation."))
+    name = _pieces.clean_name(request.query.get("name") or "") or request.params["file"]
+    data, _ = _relay_file(host, "/fichier/" + identifier + "/" + request.params["file"])
     return Binary(data, "application/octet-stream", {"Content-Disposition": "attachment; filename*=UTF-8''" + urllib.parse.quote(name),
                                                     "Content-Security-Policy": "default-src 'none'; sandbox", "X-Content-Type-Options": "nosniff"})
 
@@ -2652,6 +2666,74 @@ def download_attachment(request):
     name = _pieces.clean_name(request.query.get("name") or "") or request.params["id"]
     quoted = urllib.parse.quote(name)
     return Binary(data, "application/octet-stream", {"Content-Disposition": "attachment; filename*=UTF-8''" + quoted, "Content-Security-Policy": "default-src 'none'; sandbox", "X-Content-Type-Options": "nosniff"})
+
+
+# ------------------------------------------------------------------------------------------------- what a tool produced
+# A tool result can carry the images a tool generated (`medias`: identifiers read through GET /images/{id}, `medias_fichiers`: where each is saved) and the
+# files it created (`fichiers_joints`: {id, nom, taille, chemin}). The stored messages keep these names, as they keep `pieces`. Opening and deleting act on
+# this machine's disk: `configurator`, as on the old page; downloading is a link, so READ.
+def _produced_file(identifier, file_id):
+    if not RE_FILE_ID.match(file_id):
+        raise ApiError(404, "not_found", _t("Ce fichier n'est plus dans la conversation."))
+    _read(identifier)
+    try:
+        _produced.find(identifier, file_id)
+    except ValueError as missing:
+        raise ApiError(404, "not_found", str(missing)) from None
+
+
+@route("GET", "/conversations/{id}/files/{file}", READ)
+def download_produced_file(request):
+    """A file a tool created in this conversation, read from its place on the disk (only inside the allowed folders). Always a download, as the attachments."""
+    identifier, file_id = request.params["id"], request.params["file"]
+    _produced_file(identifier, file_id)
+    try:
+        data, _, name = _produced.read(identifier, file_id)
+    except ValueError as missing:
+        raise ApiError(404, "not_found", str(missing)) from None
+    return Binary(data, "application/octet-stream", {"Content-Disposition": "attachment; filename*=UTF-8''" + urllib.parse.quote(name),
+                                                    "Content-Security-Policy": "default-src 'none'; sandbox", "X-Content-Type-Options": "nosniff"})
+
+
+@route("POST", "/conversations/{id}/files/{file}/open", CONFIGURATOR)
+def open_produced_file(request):
+    """Asks this machine's system to open the file with the application chosen for its type (documents and media only). 409 `cannot_open` otherwise."""
+    identifier, file_id = request.params["id"], request.params["file"]
+    _produced_file(identifier, file_id)
+    if not _produced.opening_possible():
+        raise ApiError(409, "cannot_open", _t("Ce système ne peut pas ouvrir de fichier (pas d'écran) : télécharge-le plutôt."))
+    try:
+        _produced.open_item(identifier, file_id)
+    except ValueError as refused:
+        raise ApiError(409, "cannot_open", str(refused)) from None
+    return {"opened": True}
+
+
+@route("DELETE", "/conversations/{id}/files/{file}", CONFIGURATOR)
+def delete_produced_file(request):
+    """Removes the file from the conversation and deletes it from the disk (when it is still inside the allowed folders). 409 `turn_running` during an answer."""
+    identifier, file_id = request.params["id"], request.params["file"]
+    _produced_file(identifier, file_id)
+    _not_running(identifier)
+    try:
+        done = _produced.remove(identifier, file_id)
+    except ValueError as refused:
+        raise ApiError(409, "turn_running", str(refused)) from None
+    return {"deleted": True, "file_deleted": bool(done["fichier_supprime"])}
+
+
+@route("DELETE", "/conversations/{id}/media/{image}", CONFIGURATOR)
+def delete_generated_image(request):
+    """Removes a generated image from the conversation, deletes the copy Lutin keeps when nothing cites it any more, and the file in ComfyUI's output folder."""
+    identifier, image_id = request.params["id"], request.params["image"]
+    if not RE_FILE_ID.match(image_id) or not any(image_id in (message.get("medias") or []) for message in _read(identifier)["messages"]):
+        raise ApiError(404, "not_found", _t("Cette image n'est plus dans la conversation."))
+    _not_running(identifier)
+    try:
+        done = _m.delete_media(identifier, image_id)
+    except ValueError as refused:
+        raise ApiError(409, "turn_running", str(refused)) from None
+    return {"deleted": True, "file_deleted": bool(done["fichier_supprime"])}
 
 
 # ----------------------------------------------------------------------------------------------------------------- turns

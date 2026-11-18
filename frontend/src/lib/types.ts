@@ -10,6 +10,7 @@ export interface Status {
   model: string;
   installed_models: string[];
   workspace: { path: string };
+  can_open_files: boolean; // « Open » asks this machine's system to open a produced file: the browser of this machine only
   active_turns: string[];
   turns: TurnState[];
   pending_approvals: string[];
@@ -43,7 +44,18 @@ export interface StoredMessage {
   tool_name?: string;
   images?: string[]; // identifiers of the images sent with this message
   pieces?: { id: string; nom: string }[]; // the documents sent with it
+  medias?: string[]; // a tool result: the images it generated (read as the images sent)
+  medias_fichiers?: Record<string, string>; // where each generated image is saved on the disk
+  fichiers_joints?: StoredProduced[]; // a tool result: the files it created
   tool_calls?: { function?: { name?: string; arguments?: unknown } }[];
+}
+
+/** A file a tool created, as stored in its result (French names inside the messages, as `pieces`). */
+export interface StoredProduced {
+  id: string;
+  nom: string;
+  taille?: number;
+  chemin?: string;
 }
 
 export interface Conversation {
@@ -107,7 +119,7 @@ export type TurnEvent =
   | { type: "status"; text: string }
   | { type: "notice"; text: string }
   | { type: "tool_call"; name: string; arguments: unknown }
-  | { type: "tool_result"; name: string; text: string }
+  | { type: "tool_result"; name: string; text: string; media?: string[]; media_files?: Record<string, string>; attached_files?: StoredProduced[] }
   | { type: "approval_request"; id: string; title: string; detail: string; diff: string; reason?: string; auto_approval_suspended?: boolean; can_remember?: boolean }
   | { type: "auto_approval_suspended"; reason: string }
   | { type: "auto_approval_restored" }

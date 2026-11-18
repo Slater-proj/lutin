@@ -170,6 +170,22 @@ class RemoteConversations(unittest.TestCase):
         sent = [m for m in A.conv_lire(self.conversation)["messages"] if m["role"] == "user"][-1]
         self.assertEqual((sent.get("images"), [piece["id"] for piece in sent.get("pieces", [])]), ([image["id"]], [document["id"]]), "the host keeps what was sent")
 
+    def test_a_file_a_tool_produced_on_the_host_is_downloaded_from_it(self):
+        from lutin import produced_files
+        report = A.RACINE / "rapport du bureau.pdf"
+        report.write_bytes(b"%PDF-1.4 host")
+        self.addCleanup(report.unlink)
+        entry = produced_files.entree(report)
+        stored = A.conv_lire(self.conversation)
+        stored["messages"].append({"role": "tool", "tool_name": "ecrire_fichier", "content": "Written.", "fichiers_joints": [entry]})
+        A.conv_ecrire_telle_quelle(stored)
+        status, headers, data = raw("GET", "{}/files/{}?name={}".format(self.base, entry["id"], "rapport%20du%20bureau.pdf"), None)
+        self.assertEqual((status, data), (200, b"%PDF-1.4 host"))
+        self.assertEqual(headers.get("Content-Disposition"), "attachment; filename*=UTF-8''rapport%20du%20bureau.pdf")
+        self.assertEqual((headers.get("Content-Type"), headers.get("X-Content-Type-Options")), ("application/octet-stream", "nosniff"))
+        for unknown in ("ffffffffffff", "..%2Fsecret"):
+            self.assertEqual(raw("GET", "{}/files/{}".format(self.base, unknown), None)[0], 404, unknown)
+
 
 if __name__ == "__main__":
     unittest.main()

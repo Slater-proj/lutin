@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { approvalPath, attachmentUrl, byMachine, conversationPath, imageUrl, uploadPath } from "./place";
+import { approvalPath, attachmentUrl, byMachine, conversationPath, imageUrl, producedFileUrl, uploadPath } from "./place";
 
 const ID = "a".repeat(32);
 
@@ -10,6 +10,7 @@ describe("where a conversation is held", () => {
     expect(uploadPath("", "images")).toBe("/images");
     expect(imageUrl("", "i.png")).toBe("/api/v1/images/i.png");
     expect(attachmentUrl("", "d1", "notes du bureau.txt")).toBe("/api/v1/attachments/d1?name=notes%20du%20bureau.txt");
+    expect(producedFileUrl("", "0123abcd", "f1", "rapport été.pdf")).toBe("/api/v1/conversations/0123abcd/files/f1?name=rapport%20%C3%A9t%C3%A9.pdf");
   });
 
   it("names the relayed routes for a paired machine", () => {
@@ -18,6 +19,7 @@ describe("where a conversation is held", () => {
     expect(uploadPath(ID, "attachments")).toBe(`/machines/${ID}/attachments`);
     expect(imageUrl(ID, "i.png")).toBe(`/api/v1/machines/${ID}/images/i.png`);
     expect(attachmentUrl(ID, "d1", "a.txt")).toBe(`/api/v1/machines/${ID}/attachments/d1?name=a.txt`);
+    expect(producedFileUrl(ID, "0123abcd", "f1", "a.pdf")).toBe(`/api/v1/machines/${ID}/conversations/0123abcd/files/f1?name=a.pdf`);
   });
 
   it("groups the conversations of the other machines under each one's name", () => {

@@ -573,6 +573,7 @@
 "Modèle à utiliser": "Model to use",
 "Vide : le premier modèle installé. Rempli : toujours celui-là, sauf si tu en nommes un autre dans ta demande.": "Empty: the first installed model. Filled in: always that one, unless you name another in your request.",
 "Ce fichier n'est plus dans la conversation.": "This file is no longer in the conversation.",
+"Ce système ne peut pas ouvrir de fichier (pas d'écran) : télécharge-le plutôt.": "This system cannot open a file (no screen): download it instead.",
 "Fichier introuvable.": "File not found.",
 "Ce fichier n'existe plus (déplacé ou supprimé).": "This file no longer exists (moved or deleted).",
 "Ce fichier est en dehors des dossiers de travail : refusé.": "This file is outside the working folders: refused.",
