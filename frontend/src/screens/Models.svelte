@@ -9,6 +9,8 @@
   import ModelProposals from "../components/ModelProposals.svelte";
   import ModelVariants from "../components/ModelVariants.svelte";
   import OllamaLibrary from "../components/OllamaLibrary.svelte";
+  import Measures from "../components/Measures.svelte";
+  import ManagedModels from "../components/ManagedModels.svelte";
   import { api, ApiError } from "../lib/api";
   import { formatBytes, percent } from "../lib/format";
   import { language, t, type MessageKey } from "../lib/messages";
@@ -22,7 +24,7 @@
   let name = $state("");
   let asking = $state(false);
   let refresh = $state(0); // bumped when a download starts: the engine cards are read again and show its progress
-  let tab = $state<"recommended" | "catalog" | "library" | "installed" | "engines" | "machines" | "unset">("unset"); // chosen once the list is known: the guide when nothing is installed, the list otherwise
+  let tab = $state<"recommended" | "catalog" | "library" | "installed" | "measures" | "engines" | "machines" | "unset">("unset"); // chosen once the list is known: the guide when nothing is installed, the list otherwise
 
   const lang = language();
   let precisions = $state(""); // the installed model whose other precisions are shown
@@ -132,6 +134,7 @@
     <button type="button" class:on={tab === "catalog"} aria-pressed={tab === "catalog"} onclick={() => (tab = "catalog")}>{t("models.tab_catalog")}</button>
     {#if status?.engine.id === "ollama"}<button type="button" class:on={tab === "library"} aria-pressed={tab === "library"} onclick={() => (tab = "library")}>{t("models.tab_library")}</button>{/if}
     <button type="button" class:on={tab === "installed"} aria-pressed={tab === "installed"} onclick={() => (tab = "installed")}>{t("models.tab_installed")}</button>
+    <button type="button" class:on={tab === "measures"} aria-pressed={tab === "measures"} onclick={() => (tab = "measures")}>{t("models.tab_measures")}</button>
     <button type="button" class:on={tab === "engines"} aria-pressed={tab === "engines"} onclick={() => (tab = "engines")}>{t("models.tab_engines")}</button>
     <button type="button" class:on={tab === "machines"} aria-pressed={tab === "machines"} onclick={() => (tab = "machines")}>{t("models.tab_machines")}</button>
   </div>
@@ -147,11 +150,14 @@
     {/if}
   {:else if tab === "catalog"}
     <ModelCatalog onstarted={() => void guarded(load)} />
+  {:else if tab === "measures"}
+    <Measures installed={models?.models.map((model) => model.name) ?? []} canConfigure={!!status?.access.can_configure} />
   {:else if tab === "library"}
     <OllamaLibrary onstarted={() => void guarded(load)} />
   {:else if tab === "machines"}
     <Machines onchanged={() => { void guarded(load); onchanged(); }} />
   {:else if tab === "installed"}
+  {#if status?.engine.id === "openai"}<ManagedModels canConfigure={!!status?.access.can_configure} onchanged={() => { void guarded(load); onchanged(); }} />{/if}
   <ModelProposals onchanged={() => { void guarded(load); onchanged(); }} />
   <form class="add" onsubmit={install}>
     <label for="model-name">{t("models.add_expert")}</label>

@@ -26,8 +26,7 @@ from . import access as _acces
 from . import api_v1 as _api_v1
 from . import web_app as _web_app
 from . import model_fit as _adequation
-from . import exllamav3_catalog as _exl_cat
-from . import lmstudio_catalog as _lms_cat
+from . import managed_models as _geres
 from . import github as _github
 from . import third_party_skills as _skills
 from . import open_file as _ouverture
@@ -1402,56 +1401,24 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 return self._envoyer(200, _mesures.launch(_m.DONNEES, mo, modele, str(donnees.get("mode", "rapide")), memoire=lambda: _bench_moteurs.memory_of_engine(mo.id, modele)))
             if self.path in ("/api/exllamav3-verifier", "/api/lmstudio-verifier", "/api/colibri-verifier"):          # chercher les mises à jour des modèles téléchargés (ExLlamaV3), ou de nouveaux modèles qui tiennent sur cette machine
                 genre = self.path[len("/api/"):-len("-verifier")]
-                mo = _moteurs.par_id("openai")
-                if not {"exllamav3": mo.exllamav3_choisi, "lmstudio": mo.lmstudio_choisi, "colibri": mo.colibri_choisi}[genre]():
+                if not _geres.chosen(genre):
                     return self._envoyer(400, {"erreur": _t("Ce serveur n'est pas le serveur choisi.")})
                 try:
-                    if genre == "exllamav3":
-                        from . import exllamav3 as _exl
-                        installes = _exl.modeles(mo._dossiers())
-                        if str(donnees.get("portee")) == "maj":
-                            return self._envoyer(200, _exl_cat.newer_versions(installes))
-                        candidats, deja = _exl_cat.search("", "recent", False, 1)["modeles"], {x.get("depot") for x in installes}
-                    elif genre == "lmstudio":
-                        from . import lmstudio as _lmstudio
-                        candidats, deja = _lms_cat.search("", "recent", False, 1)["modeles"], {x["nom"].split("/")[-1] for x in (_lmstudio.models() if mo._lms() else [])}
-                    else:
-                        from . import colibri as _colibri
-                        installes = _colibri.installed_models(mo._dossiers(), mo.modele_colibri())
-                        candidats = [m for m in self._catalogue_colibri(mo, installes, "")["modeles"] if not m["installes"]]
-                        deja = set()
-                    profil = _adequation.profil_pret()
-                    propositions = []
-                    for m in candidats:
-                        ju = m.get("adequation") or (_adequation.evaluer({"go": m["estimation_go"]}, profil) if profil is not None and m.get("estimation_go") else None)
-                        if m["id"] in deja or not ju or ju["niveau"] == "trop_gros":
-                            continue
-                        propositions.append(dict(m, adequation=ju))
-                    return self._envoyer(200, {"propositions": propositions[:8]})
+                    return self._envoyer(200, _geres.check(genre, str(donnees.get("portee"))))
                 except ValueError as e:
                     return self._envoyer(502, {"erreur": str(e)})
-            if self.path == "/api/exllamav3-telecharger":
+            if self.path in ("/api/exllamav3-telecharger", "/api/lmstudio-telecharger", "/api/colibri-preparer"):
                 if not self._configurateur():
                     return self._envoyer(403, {"erreur": _t("Cela se fait depuis cette machine (niveau « cette machine seulement » ou navigateur de cette machine).")})
-                mo = _moteurs.par_id("openai")
-                if not mo.exllamav3_choisi():
-                    return self._envoyer(400, {"erreur": _t("ExLlamaV3 n'est pas le serveur choisi.")})
-                depot, revision = str(donnees.get("depot", ""))[:120], str(donnees.get("revision", ""))[:41]
-                return self._envoyer(200, _moteurs.launch_task(mo, "telecharger:" + depot + ("@" + revision if revision else "")))
-            if self.path == "/api/lmstudio-telecharger":
-                if not self._configurateur():
-                    return self._envoyer(403, {"erreur": _t("Cela se fait depuis cette machine (niveau « cette machine seulement » ou navigateur de cette machine).")})
-                mo = _moteurs.par_id("openai")
-                if not mo.lmstudio_choisi():
-                    return self._envoyer(400, {"erreur": _t("LM Studio n'est pas le serveur choisi.")})
-                return self._envoyer(200, _moteurs.launch_task(mo, "telecharger:" + str(donnees.get("nom", ""))[:121]))
-            if self.path == "/api/colibri-preparer":
-                if not self._configurateur():
-                    return self._envoyer(403, {"erreur": _t("Cela se fait depuis cette machine (niveau « cette machine seulement » ou navigateur de cette machine).")})
-                mo = _moteurs.par_id("openai")
-                if not mo.colibri_choisi():
-                    return self._envoyer(400, {"erreur": _t("Colibri n'est pas le serveur choisi.")})
-                return self._envoyer(200, _moteurs.launch_task(mo, "preparer:" + str(donnees.get("id", ""))[:41]))
+                genre = self.path[len("/api/"):].split("-")[0]
+                if not _geres.chosen(genre):
+                    return self._envoyer(400, {"erreur": _t("{} n'est pas le serveur choisi.").format(_geres.NAMES[genre])})
+                if genre == "exllamav3":
+                    return self._envoyer(200, _geres.download(genre, str(donnees.get("depot", "")), str(donnees.get("revision", ""))))
+                if genre == "lmstudio":
+                    nom = str(donnees.get("nom", ""))[:121]
+                    return self._envoyer(200, _moteurs.launch_task(_geres.engine(), "telecharger:" + nom))
+                return self._envoyer(200, _geres.download(genre, str(donnees.get("id", ""))))
             if self.path == "/api/supprimer-modele":
                 return self._envoyer(200, _m.supprimer_modele(str(donnees.get("modele", ""))))
             if self.path == "/api/demarrer-ollama":
@@ -1554,75 +1521,21 @@ class Gestionnaire(BaseHTTPRequestHandler):
         return self._envoyer(404, {"erreur": "introuvable"})
 
     def _modeles_serveur_gere(self, chemin):
-        """ExLlamaV3, LM Studio et Colibri : les mêmes routes (modèles, catalogue, quantifications), les mêmes réponses — la page Modèles est donc la même pour les trois."""
+        """ExLlamaV3, LM Studio et Colibri : les mêmes routes (modèles, catalogue, quantifications), les mêmes réponses — la page Modèles est donc la même pour les trois (lutin.managed_models)."""
         genre, route = ROUTES_MODELES_GERES[chemin.split("?")[0]]
-        mo = _moteurs.par_id("openai")
-        choisi = {"exllamav3": mo.exllamav3_choisi, "lmstudio": mo.lmstudio_choisi, "colibri": mo.colibri_choisi}[genre]()
-        nom = {"exllamav3": "ExLlamaV3", "lmstudio": "LM Studio", "colibri": "Colibri"}[genre]
-        if not choisi:
-            return self._envoyer(404, {"erreur": _t("{} n'est pas le serveur choisi.").format(nom)})
         q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
-        profil = _adequation.profil_pret()
-        juger = (lambda go: _adequation.evaluer({"go": go}, profil)) if profil is not None else (lambda go: None)
-        actif = _m.reglages().get("modele")
         try:
-            if genre == "exllamav3":
-                from . import exllamav3 as _exl
-                installes = _exl.modeles(mo._dossiers())
-                present = mo._exl() is not None
-                dossier = str(_exl.folder_models(mo._dossiers()))
-                catalogue, quants = _exl_cat.search, _exl_cat.quantizations
-            elif genre == "lmstudio":
-                from . import lmstudio as _lmstudio
-                present = mo._lms() is not None
-                installes = _lmstudio.models() if present else []
-                dossier = str(_lmstudio.models_folder())
-                catalogue, quants = _lms_cat.search, _lms_cat.quantizations
-            else:
-                from . import colibri as _colibri
-                present = _colibri.installed(mo._dossiers()) is not None
-                installes = _colibri.installed_models(mo._dossiers(), mo.modele_colibri()) if present else []
-                dossier = str(_colibri.folder_models(mo._dossiers()))
-                catalogue = quants = None
             if route == "modeles":
-                reponse = {"modeles": [dict(x, adequation=juger(x["taille_go"]) if x.get("taille_go") else None, utilise=(x["nom"] == actif) if genre != "colibri" else True) for x in installes],
-                           "installe": present, "dossier": dossier, "actif": bool(mo.modeles()["actif"]) if present else False,
-                           "maj": genre == "exllamav3", "nom": nom, "statut": mo.statut().get("detail", "") if present else "", "demarrer": mo.actions().get("demarrer") if present else None}
-                return self._envoyer(200, reponse)
+                return self._envoyer(200, _geres.models(genre, _m.reglages().get("modele")))
             if route == "catalogue":
-                if genre == "colibri":
-                    return self._envoyer(200, self._catalogue_colibri(mo, installes, (q.get("q") or [""])[0]))
-                r = catalogue((q.get("q") or [""])[0], (q.get("tri") or ["recent"])[0], (q.get("communaute") or ["0"])[0] == "1", (q.get("page") or ["1"])[0])
-                deja = {}
-                for x in installes:
-                    deja.setdefault(x.get("depot", "") or x["nom"], []).append(x.get("revision") or "main")
-                for m in r["modeles"]:
-                    m["adequation"] = juger(m["estimation_go"]) if m.get("estimation_go") else None
-                    m["installes"] = deja.get(m["id"], [])
-                return self._envoyer(200, r)
-            depot = (q.get("depot") or [""])[0]
-            deja = {x.get("revision") or "main" for x in installes if x.get("depot") == depot}
-            liste = quants(depot)
-            for x in liste:
-                x["adequation"] = juger(x["go"]) if x.get("go") else None
-                x["installe"] = x["revision"] in deja
-            return self._envoyer(200, {"quantifications": liste})
+                return self._envoyer(200, _geres.catalog(genre, (q.get("q") or [""])[0], (q.get("tri") or ["recent"])[0], (q.get("communaute") or ["0"])[0] == "1", (q.get("page") or ["1"])[0]))
+            return self._envoyer(200, {"quantifications": _geres.quantizations(genre, (q.get("depot") or [""])[0])})
+        except _geres.NotChosen as e:
+            return self._envoyer(404, {"erreur": str(e)})
         except ValueError as e:
             return self._envoyer(502, {"erreur": str(e)})
 
-    @staticmethod
-    def _catalogue_colibri(mo, installes, q):
-        """Le catalogue de Colibri, dans la forme des autres : jugé par Colibri lui-même (« tient » / « ne tient pas »), filtré par le mot cherché."""
-        from . import colibri as _colibri
-        mots = str(q or "").lower().split()
-        sortie = []
-        for m in sorted(_colibri.catalogue(mo._dossiers()), key=lambda x: (not x["ok"], x["go"])):
-            if mots and not all(w in m["id"].lower() for w in mots):
-                continue
-            ad = {"niveau": "bien", "texte": _t("Colibri juge que ce modèle tient sur cette machine.")} if m["ok"] else {"niveau": "trop_gros", "texte": m["raison"] or _t("Ne tient pas sur cette machine.")}
-            sortie.append({"id": m["id"], "nom": m["id"], "auteur": "colibri", "telechargements": 0, "aime": 0, "maj": "", "capacites": [], "licence": "", "base": "", "estimation_go": m["go"], "adequation": ad,
-                           "installes": ["prêt"] if any(m["id"] in x["nom"] for x in installes) else [], "direct": True})
-        return {"modeles": sortie, "suite": False}
+    _catalogue_colibri = staticmethod(lambda mo, installes, q: _geres.colibri_catalog(mo, installes, q))
 
     def _noeud_etat(self):
         if not _machines.noeud_jeton_valide(self.headers.get("X-Noeud")):

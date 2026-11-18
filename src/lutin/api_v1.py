@@ -1063,6 +1063,199 @@ def model_library(request):
     return {"models": models, "more": bool(found["suite"])}
 
 
+# ----------------------------------------------------------------------------------------------------- managed servers
+# The models of ExLlamaV3, LM Studio and Colibri, the servers Lutin manages behind its OpenAI-compatible engine (lutin.managed_models, shared with the
+# old page). Reading is `session`; a download changes the machine and weighs gigabytes, so it is `configurator` and needs `confirm`.
+def _managed(request):
+    from . import managed_models as _managed_models
+    kind = request.params["id"]
+    if kind not in _managed_models.KINDS:
+        raise ApiError(404, "not_found", _t("Serveur inconnu."))
+    if not _managed_models.chosen(kind):
+        raise ApiError(409, "not_chosen", _t("{} n'est pas le serveur choisi.").format(_managed_models.NAMES[kind]))
+    return _managed_models, kind
+
+
+def _managed_model(item):
+    return {"name": item["nom"], "fit": _fit(item.get("adequation")), "size_gb": item.get("taille_go") or item.get("estimation_go"), "repo": item.get("depot") or None,
+            "revision": item.get("revision") or None, "path": item.get("chemin") or None, "incomplete": bool(item.get("incomplet")), "in_use": bool(item.get("utilise")),
+            "deletable": item.get("supprimable", True) is not False}
+
+
+@route("GET", "/managed-servers/{id}/models", SESSION)
+def managed_server_models(request):
+    """`{id}` is exllamav3, lmstudio or colibri: whether the server is `installed` and `running`, its `status`, its models `folder`, the models on
+    disk (each with its `fit` here and whether it is `in_use`) and whether newer versions can be looked for (`can_check_updates`: ExLlamaV3).
+    409 `not_chosen` when it is not the server in use."""
+    managed, kind = _managed(request)
+    seen = managed.models(kind, _m.reglages().get("modele"))
+    return {"server": kind, "name": seen["nom"], "installed": bool(seen["installe"]), "running": bool(seen["actif"]), "status": seen["statut"], "folder": seen["dossier"],
+            "can_check_updates": bool(seen["maj"]), "models": [_managed_model(item) for item in seen["modeles"]]}
+
+
+def _managed_entry(item):
+    return {"id": item["id"], "name": item.get("nom", item["id"]), "author": item.get("auteur", ""), "downloads": int(item.get("telechargements") or 0),
+            "likes": int(item.get("aime") or 0), "updated": item.get("maj", ""), "estimated_gb": item.get("estimation_go"), "fit": _fit(item.get("adequation")),
+            "on_disk": list(item.get("installes") or []), "direct": bool(item.get("direct"))}
+
+
+@route("GET", "/managed-servers/{id}/catalog", SESSION)
+def managed_server_catalog(request):
+    """`?q=&order=recent|popular&community=1&page=1`: the catalogue of that server, each model with its estimated size, its `fit` here and
+    the revisions already `on_disk`. `direct` (Colibri): prepared by its id, no quantisation to choose. 502 when the catalogue cannot be read."""
+    managed, kind = _managed(request)
+    query = request.query
+    try:
+        order = {"recent": "recent", "popular": "populaire"}.get(query.get("order", "recent"))
+        if order is None:
+            raise ApiError(400, "invalid_request", _t("Valeur invalide pour « {} » (attendu : {}).").format("order", "recent, popular"))
+        found = managed.catalog(kind, query.get("q", "")[:100], order, query.get("community") == "1", query.get("page", "1"))
+    except _offline.OfflineError:
+        raise
+    except ValueError as failed:
+        raise ApiError(502, "unreachable", str(failed)) from None
+    return {"models": [_managed_entry(item) for item in found["modeles"]], "more": bool(found.get("suite"))}
+
+
+@route("GET", "/managed-servers/{id}/quantizations", SESSION)
+def managed_server_quantizations(request):
+    """`?repo=author/name`: its quantisations, lightest first: `{revision, size_gb, fit, on_disk}`. 400 for Colibri (none to choose)."""
+    managed, kind = _managed(request)
+    if kind == "colibri":
+        raise ApiError(400, "invalid_request", _t("Ce serveur n'a pas de quantifications à choisir."))
+    try:
+        found = managed.quantizations(kind, request.query.get("repo", "")[:120])
+    except _offline.OfflineError:
+        raise
+    except ValueError as failed:
+        raise ApiError(502, "unreachable", str(failed)) from None
+    return {"quantizations": [{"revision": q["revision"], "size_gb": q.get("go"), "fit": _fit(q.get("adequation")), "on_disk": bool(q.get("installe"))} for q in found]}
+
+
+@route("POST", "/managed-servers/{id}/check", SESSION)
+def managed_server_check(request):
+    """`{"scope": "updates" | "new"}`: the newer versions of what ExLlamaV3 downloaded (`updates`: [{name, repo, revision}]), or new models that fit
+    this machine (`proposals`, as in the catalogue, at most 8)."""
+    managed, kind = _managed(request)
+    scope = str(request.body.get("scope") or "new")
+    if scope not in ("updates", "new") or (scope == "updates" and kind != "exllamav3"):
+        raise ApiError(400, "invalid_request", _t("Valeur invalide pour « {} » (attendu : {}).").format("scope", "updates, new"))
+    try:
+        found = managed.check(kind, "maj" if scope == "updates" else "nouveaux")
+    except _offline.OfflineError:
+        raise
+    except ValueError as failed:
+        raise ApiError(502, "unreachable", str(failed)) from None
+    if scope == "updates":
+        return {"updates": [{"name": x["nom"], "repo": x["depot"], "revision": x.get("revision") or None} for x in found.get("plus_recentes", [])],
+                "errors": [str(e) for e in found.get("erreurs", [])]}
+    return {"proposals": [_managed_entry(item) for item in found["propositions"]]}
+
+
+@route("POST", "/managed-servers/{id}/downloads", CONFIGURATOR)
+def managed_server_download(request):
+    """`{"repo", "revision"?, "confirm": true}` (Colibri: `repo` is the model's id): downloads it as a task of the engine (GET /engines follows it).
+    Answers 202. `confirm` is always needed: several gigabytes, tens for Colibri."""
+    managed, kind = _managed(request)
+    body = request.body
+    if body.get("confirm") is not True:
+        raise ApiError(400, "confirmation_required", _t("Ce téléchargement peut peser plusieurs Go : confirme pour le lancer."))
+    repo, revision = str(body.get("repo") or "").strip(), str(body.get("revision") or "").strip()
+    if not repo:
+        raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("repo, revision, confirm"))
+    _offline.require_online(_t("télécharger un modèle"))
+    managed.download(kind, repo, revision)
+    return 202, {"started": True}
+
+
+# ------------------------------------------------------------------------------------------------------------ measures
+# The bench of the models (lutin.bench: speed, then tools, code, French and instructions, each question kept with its result) and the comparison of the
+# engines on one model (lutin.engine_bench). One measure at a time: two would distort each other. Measuring a model is `session`, as on the old page;
+# comparing engines starts and stops engines, so it is `configurator`.
+BENCH_TESTS = {"outils": "tools", "code": "code", "francais": "french", "consignes": "instructions"}
+BENCH_GRADES = {"code": "code", "creatif": "creative", "polyvalent": "general", "rapide": "fast"}
+BENCH_KINDS = dict(BENCH_TESTS, vitesse="speed")
+COMPARISON_MODES = {"quick": "rapide", "deep": "approfondi"}
+
+
+def _bench_measure(measure):
+    results = measure.get("resultats") or {}
+    speed = results.get("vitesse") or {}
+    return {"model": measure.get("modele", ""), "date": str(measure.get("date", "")), "complete": bool(measure.get("complet")), "machine": str(measure.get("machine", "")),
+            "engine": (measure.get("moteur") or {}).get("id") or None, "error": str(measure.get("erreur") or ""),
+            "speed": {"tokens_per_s": speed.get("tok_s"), "load_s": speed.get("charge_s"), "reading_tokens_per_s": speed.get("lecture_tok_s")} if speed else None,
+            "tests": {english: {"points": results[french]["points"], "out_of": results[french]["sur"], "details": [{"test": d["test"], "ok": bool(d["ok"])} for d in results[french].get("details", [])]}
+                      for french, english in BENCH_TESTS.items() if isinstance(results.get(french), dict)},
+            "grades": {BENCH_GRADES.get(k, k): v for k, v in (measure.get("notes") or {}).items()}}
+
+
+@route("GET", "/bench", SESSION)
+def bench_state(request):
+    """The bench of the models: the one `running` (or ""), its `step`, the `queue` of a series, the last `error`, the last `results` of each model
+    measured, the `regressions` (the last measure clearly worse than the one before, and whether the engine changed in between) and the `history`
+    (the last six measures of each model)."""
+    from . import bench as _bench
+    path = _m.chemin_bench()
+    return {"running": _m.BENCH["en_cours"], "step": _m.BENCH["etape"], "queue": list(_m.BENCH.get("file") or []), "error": _m.BENCH["erreur"],
+            "results": [_bench_measure(m) for m in sorted(_bench.read(path).values(), key=lambda m: str(m.get("modele", ""))) if isinstance(m, dict)],
+            "regressions": [{"model": r["modele"], "kind": BENCH_KINDS.get(r["genre"], r["genre"]), "before": r["avant"], "after": r["apres"], "engine_changed": bool(r["moteur_change"])}
+                            for r in _bench.regressions(path)],
+            "history": [{"model": model, "measures": [{"date": x.get("date", ""), "tokens_per_s": x.get("tok_s"), "tests": {BENCH_TESTS.get(k, k): v for k, v in (x.get("epreuves") or {}).items()}}
+                                                      for x in measures[-6:]]} for model, measures in sorted(_bench.read_history(path).items())]}
+
+
+@route("POST", "/bench", SESSION)
+def bench_start(request):
+    """Measures `{"models": [...], "quick": false}` one after the other (1 to 8 installed models; `quick`: the speed only, about 20 s each). Answers at
+    once (202); GET /bench follows it. 409 `busy` while an answer or another measure runs, 400 for a model that is not installed."""
+    names = request.body.get("models")
+    if not isinstance(names, list) or not names or not all(isinstance(n, str) for n in names):
+        raise ApiError(400, "invalid_request", _t("Choisis au moins un modèle installé."))
+    if _m.TOURS_ACTIFS or _m.BENCH["en_cours"]:
+        raise ApiError(409, "busy", _t("Une réponse ou une autre mesure est en cours : attends sa fin."))
+    started = _m.lancer_bench_serie(names[:8], bool(request.body.get("quick")))
+    return 202, {"models": started["modeles"]}
+
+
+def _comparison_view():
+    from . import engine_bench as _engine_bench
+    seen = _engine_bench.vue(_m.DONNEES, _m.reglages()["modele"], _engines.CONTEXT["profil"](), _engines.CONTEXT["en_docker"]())
+    result, advice = seen["resultat"], seen["recommandation"] or {}
+    return {"model": seen["modele"], "outdated": bool(seen["a_refaire"]), "comparable": int(seen["comparables"]),
+            "availability": [{"name": a["nom"], "reason": a["raison"], "model": a["modele"]} for a in seen["disponibilite"]],
+            "running": bool(seen["en_cours"]), "step": seen["etape"], "error": seen["erreur"],
+            "recommendation": {"engine": advice.get("moteur"), "name": advice.get("nom", ""), "source": advice.get("source", ""), "reason": advice.get("raison", ""),
+                               "limits": list(advice.get("limites") or [])} if advice else None,
+            "result": None if not result else {
+                "date": result.get("date", ""), "mode": {v: k for k, v in COMPARISON_MODES.items()}.get(result.get("mode"), result.get("mode")), "machine": result.get("machine", ""),
+                "engines": [{"id": e["id"], "name": e["nom"], "model": e["modele"], "version": e["version"], "ok": bool(e["ok"]), "passes": e["passes"], "errors": list(e["erreurs"]),
+                             "load_s": e["charge_s"], "first_token_s": e["premier_jeton_s"], "tokens_per_s": e["tok_s"], "reading_tokens_per_s": e["lecture_tok_s"],
+                             "ram_bytes": e["ram"], "vram_bytes": e["vram"]} for e in result.get("moteurs", [])],
+                "skipped": [{"id": i["id"], "name": i["nom"], "reason": i["raison"]} for i in result.get("ignores", [])]}}
+
+
+@route("GET", "/engines/comparison", SESSION)
+def engines_comparison(request):
+    """The comparison of the engines on the model in use: the last `result` (each engine's load time, first token, speed and memory) and whether it is
+    `outdated` (the hardware or an engine version changed), the `recommendation` and its reason, which engines are `comparable` now and why the
+    others are not (`availability`), and a comparison `running`."""
+    return _comparison_view()
+
+
+@route("POST", "/engines/comparison", CONFIGURATOR)
+def engines_comparison_start(request):
+    """`{"mode": "quick" | "deep"}`: compares the engines ready for the model in use (it starts and frees engines, one at a time). Answers 202 at once.
+    409 `busy` (a comparison or an answer running), 400 when fewer than two engines can run this model."""
+    from . import engine_bench as _engine_bench
+    mode = COMPARISON_MODES.get(str(request.body.get("mode") or "quick"))
+    if mode is None:
+        raise ApiError(400, "invalid_request", _t("Valeur invalide pour « {} » (attendu : {}).").format("mode", ", ".join(COMPARISON_MODES)))
+    if _m.TOURS_ACTIFS or _engine_bench.STATE["en_cours"]:
+        raise ApiError(409, "busy", _t("Une réponse ou une autre mesure est en cours : attends sa fin."))
+    _engine_bench.launch(_m.reglages()["modele"], mode, _m.DONNEES, _engines.CONTEXT["profil"]())
+    return 202, _comparison_view()
+
+
 # ----------------------------------------------------------------------------------------------------------- machine and guide
 # What the guided choice of a model needs (docs/modernization/GUIDED_SETUP.md): the machine in plain figures, the catalogue with a verdict for THIS machine, and a recommendation by use.
 # The verdicts come from model_fit and model_compat, never from the page; the editorial notes of the catalogue are estimates, not measures (its own warning, given back as `disclaimer`).

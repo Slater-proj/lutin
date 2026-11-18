@@ -2312,5 +2312,8 @@
 "Fournisseur inconnu.": "Unknown provider.",
 "tester la recherche web": "test the web search",
 "Indique true ou false.": "Say true or false.",
-"Proposition introuvable.": "Proposal not found."
+"Proposition introuvable.": "Proposal not found.",
+"Une réponse ou une autre mesure est en cours : attends sa fin.": "An answer or another measure is running: wait for its end.",
+"Choisis au moins un modèle installé.": "Choose at least one installed model.",
+"Ce serveur n'a pas de quantifications à choisir.": "This server has no quantisations to choose."
 }

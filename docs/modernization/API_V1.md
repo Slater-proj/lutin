@@ -248,6 +248,19 @@ not_available` without a checker). `POST /models/proposals/{key}/applied` (insta
 /models/{name}`. `GET /models/variants?model=` and `GET /models/library?q=&order=&page=&capability=&light=` read ollama.com and judge each size for
 this machine (`fit`); `503 unreachable`, `409 offline`.
 
+## Measures and managed servers
+
+`GET /bench` (session): `{running, step, queue, error, results: [{model, date, complete, machine, engine, error, speed: {tokens_per_s, load_s,
+reading_tokens_per_s}, tests: {tools|code|french|instructions: {points, out_of, details: [{test, ok}]}}, grades}], regressions: [{model, kind,
+before, after, engine_changed}], history}`. `POST /bench` (session) `{models: [1 to 8], quick}`: 202; `409 busy`. `GET /engines/comparison`
+(session): `{model, outdated, comparable, availability, running, step, error, recommendation, result: {date, mode, engines: [{id, name, model,
+ok, errors, load_s, first_token_s, tokens_per_s, reading_tokens_per_s, ram_bytes, vram_bytes}], skipped}}`; `POST /engines/comparison`
+(configurator) `{mode: quick | deep}`: 202, `409 busy`.
+
+`/managed-servers/{id}` with `{id}` exllamav3, lmstudio or colibri (`409 not_chosen` when it is not the server in use): `GET …/models`,
+`GET …/catalog?q=&order=recent|popular&community=1&page=`, `GET …/quantizations?repo=`, `POST …/check {scope: updates | new}` (session);
+`POST …/downloads {repo, revision?, confirm: true}` (configurator): 202, `409 offline`, `502 unreachable` when a catalogue cannot be read.
+
 ## What v1 keeps
 
 - The security model, unchanged: Host and Origin checks, page token on every `/api/` request, session by PIN pairing, approvals.

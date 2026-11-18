@@ -35,11 +35,14 @@ switch; each line is ticked here when it is done, with its test.
    `PATCH /api/v1/access/remote-admin` (right `local`: this machine only, never a paired device nor the remote administration itself;
    `tests/test_api_v1_access.py`), « Access » in Settings › Devices (`components/Access.svelte`) and « Disconnect every device » on the existing
    `DELETE /api/v1/devices` (test 3t).
-10. **Model upkeep**: ~~update checks and proposals (including removing obsolete models), precision variants~~, benches and their comparison,
-    ~~the Ollama library~~, the speed test outside the first launch, the model pages of Colibri, LM Studio and ExLlamaV3. Done so far:
+10. ~~**Model upkeep**: update checks and proposals (including removing obsolete models), precision variants, benches and their comparison,
+    the Ollama library, the speed test outside the first launch, the model pages of Colibri, LM Studio and ExLlamaV3~~ — done:
     `GET /api/v1/models/proposals`, `POST /api/v1/models/check`, `POST …/proposals/{key}/applied`, `DELETE …/proposals/{key}`,
     `GET /api/v1/models/variants`, `GET /api/v1/models/library` (`tests/test_api_v1_model_upkeep.py`), `components/ModelProposals.svelte`,
-    `ModelVariants.svelte` and `OllamaLibrary.svelte` on the Models screen (test 3u).
+    `ModelVariants.svelte` and `OllamaLibrary.svelte` (test 3u); `GET`/`POST /api/v1/bench` and `/api/v1/engines/comparison`
+    (`tests/test_api_v1_bench.py`), the « Measures » tab with the speed test (`components/Measures.svelte`, test 3v);
+    `/api/v1/managed-servers/{id}/models|catalog|quantizations|check|downloads` on `lutin.managed_models`, shared with the old page
+    (`tests/test_api_v1_managed_servers.py`), `components/ManagedModels.svelte` (test 3w).
 11. **Engine settings** (pinned version, ports, address and key of an OpenAI-compatible server, llama.cpp advanced and router, folders), engine
     measures, moving the models folder, calibration and load profile.
 12. **Conversation tools**: export as Markdown, AI summary, the progress sheet (view, edit, delete) and the memory mode of one conversation, open

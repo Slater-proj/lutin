@@ -877,6 +877,98 @@ class Chat(unittest.TestCase):
         self.assertEqual(p.erreurs, [])
         p.evaluer("location.hash = '#/chat'")
 
+    def test_3v_the_models_are_measured_and_the_engines_compared(self):
+        """PARITY.md item 10 (second part): the « Measures » tab of the Models screen, on /api/v1/bench and /api/v1/engines/comparison. Hermetic: the
+        bench file is temporary, the series writes its result at once instead of measuring, and the comparison's view and launcher are replaced."""
+        p = self.page
+        from lutin import bench, engine_bench
+        path = Path(tempfile.mkdtemp(prefix="lutin-bench-")) / "bench.json"
+        series, launched = [], []
+
+        def measure(models, quick):
+            series.append((models, quick))
+            for name in models:
+                bench.save(path, {"modele": name, "date": "2026-11-18T10:00:00", "complet": not quick, "resultats": {"vitesse": {"tok_s": 33.3, "charge_s": 2.0},
+                                  "outils": {"points": 2, "sur": 3, "details": [{"test": "Ouvrir un fichier", "ok": True}, {"test": "Lister un dossier", "ok": False}]}}, "notes": {}})
+            return {"ok": True, "modeles": models}
+        seen = {"modele": "qwen3:8b", "a_refaire": False, "comparables": 2, "en_cours": False, "etape": "", "erreur": "", "disponibilite": [],
+                "recommandation": {"moteur": "ollama", "nom": "Ollama", "source": "regles", "raison": "le plus simple ici", "limites": []},
+                "resultat": {"date": "2026-11-18", "mode": "rapide", "machine": "", "ignores": [], "moteurs": [
+                    {"id": "ollama", "nom": "Ollama", "modele": "qwen3:8b", "version": "", "ok": True, "passes": 2, "erreurs": [], "charge_s": 3.0, "premier_jeton_s": 0.4,
+                     "tok_s": 40.0, "lecture_tok_s": None, "ram": None, "vram": 6 * 1024 ** 3},
+                    {"id": "llamacpp", "nom": "llama.cpp", "modele": "qwen3-8b.gguf", "version": "", "ok": False, "passes": 0, "erreurs": ["n'a pas démarré"], "charge_s": None,
+                     "premier_jeton_s": None, "tok_s": None, "lecture_tok_s": None, "ram": None, "vram": None}]}}
+        installed = list(T.INSTALLES)
+        self.addCleanup(lambda: T.INSTALLES.__setitem__(slice(None), installed))
+        T.INSTALLES[:] = ["qwen3:8b", "gemma3:4b"]
+        for patch in (mock.patch.dict(os.environ, {"LUTIN_BENCH": str(path)}), mock.patch.object(T.A, "lancer_bench_serie", measure),
+                      mock.patch.object(engine_bench, "vue", lambda *args: seen), mock.patch.object(engine_bench, "launch", lambda *args: launched.append(args[1]))):
+            patch.start()
+            self.addCleanup(patch.stop)
+        p.evaluer("location.hash = '#/models'")
+        self.press("[...document.querySelectorAll('.tabs button')].find(b => b.innerText === 'Mesures')")
+        p.attendre("document.querySelectorAll('.bench .choices input').length === 2 && !!document.querySelector('.comparison table')")
+        self.assertIn("n'a pas démarré", p.evaluer("document.querySelector('.comparison table').innerText"))
+        p.evaluer("document.querySelectorAll('.bench .choices input')[0].click()")
+        p.evaluer("[...document.querySelectorAll('.bench fieldset label')].find(l => l.innerText.includes('Vitesse seulement')).querySelector('input').click()")
+        self.press("[...document.querySelectorAll('.bench .button')].find(b => b.innerText === 'Mesurer')")
+        p.attendre("!!document.querySelector('.bench table')")
+        self.assertEqual(series, [(["qwen3:8b"], True)])
+        self.assertIn("2/3", p.evaluer("document.querySelector('.bench table').innerText"))
+        p.evaluer("document.querySelector('.bench details').open = true")
+        self.assertIn("Lister un dossier", p.evaluer("document.querySelector('.bench details .failed').innerText"))
+        if AXE.is_file():
+            self.axe("on the measures of the models")
+        self.picture("3v-measures")
+        self.press("[...document.querySelectorAll('.comparison .button')].find(b => b.innerText === 'Comparer (rapide)')")
+        self.eventually(lambda: launched == ["rapide"], "the comparison was started")
+        self.assertEqual(p.erreurs, [])
+        p.evaluer("location.hash = '#/chat'")
+
+    def test_3w_the_models_of_a_managed_server_are_explored_and_downloaded(self):
+        """PARITY.md item 10 (last part): the models of LM Studio when it is the server in use, on /api/v1/managed-servers/… . Hermetic: the engine
+        is the fake one shown as « openai », and what lutin.managed_models reads (disk, Hugging Face) and starts (a download) is replaced."""
+        p = self.page
+        from lutin import managed_models
+        real = T.A.moteur_actuel
+
+        class Shown:
+            id = "openai"
+
+            def __getattr__(self, name):
+                return getattr(real(), name)
+        fit = {"niveau": "bien", "texte": "Tient ici."}
+        seen = {"modeles": [{"nom": "lmstudio-community/Qwen3-8B-GGUF", "taille_go": 5.0, "chemin": "C:/models/qwen3.gguf", "adequation": fit, "utilise": True}],
+                "installe": True, "dossier": "C:/models", "actif": True, "maj": False, "nom": "LM Studio", "statut": "", "demarrer": None}
+        found = {"suite": False, "modeles": [{"id": "lmstudio-community/Gemma-3-4B-GGUF", "nom": "Gemma-3-4B-GGUF", "auteur": "lmstudio-community", "estimation_go": 3.0, "adequation": fit, "installes": []}]}
+        started = []
+        for patch in (mock.patch.object(T.A, "moteur_actuel", lambda *args: Shown()), mock.patch.object(managed_models, "chosen", lambda kind, mo=None: kind == "lmstudio"),
+                      mock.patch.object(managed_models, "models", lambda kind, current: seen), mock.patch.object(managed_models, "catalog", lambda *args: found),
+                      mock.patch.object(managed_models, "quantizations", lambda kind, repo: [{"revision": "Q4_K_M", "go": 3.1, "adequation": fit, "installe": False},
+                                                                                            {"revision": "Q8_0", "go": 5.4, "adequation": fit, "installe": False}]),
+                      mock.patch.object(managed_models, "download", lambda *args: started.append(args)), mock.patch.dict(os.environ, {"LUTIN_HORS_LIGNE": ""})):
+            patch.start()
+            self.addCleanup(patch.stop)
+        reload = lambda: (p.evaluer("window.__old = true; location.reload()"), p.attendre("!window.__old && !!document.querySelector('.rail .version')"))
+        self.addCleanup(lambda: (p.evaluer("location.hash = '#/chat'"), reload()))          # registered first: runs once the engine is the real one again
+        p.evaluer("location.hash = '#/models'")
+        reload()
+        p.attendre("!!document.querySelector('.managed .card')")
+        self.assertIn("Modèles de LM Studio", p.evaluer("document.querySelector('.managed h2').innerText"))
+        self.press("document.querySelector('.managed form button[type=submit]')")
+        p.attendre("document.querySelectorAll('.managed .card').length === 2")
+        self.press("[...document.querySelectorAll('.managed .button')].find(b => b.innerText.startsWith('Voir les quantifications'))")
+        p.attendre("document.querySelectorAll('.managed .quants li').length === 2")
+        self.press("document.querySelectorAll('.managed .quants li')[0].querySelector('.button')")
+        p.attendre("!!document.querySelector('.managed .quants .button.primary')")
+        self.assertEqual(started, [], "asking is not downloading")
+        if AXE.is_file():
+            self.axe("on the models of a managed server")
+        self.press("document.querySelector('.managed .quants .button.primary')")
+        p.attendre("document.querySelector('.managed .notice').innerText.includes('Q4_K_M')")
+        self.assertEqual(started, [("lmstudio", "lmstudio-community/Gemma-3-4B-GGUF", "Q4_K_M")])
+        self.assertEqual(p.erreurs, [])
+
     def test_4_a_refusal_of_the_server_is_shown_and_the_message_is_given_back(self):
         p = self.page
         with mock.patch.object(T.A, "TOURS_SIMULTANES", 0):

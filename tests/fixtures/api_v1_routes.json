@@ -106,6 +106,16 @@
  },
  {
   "method": "GET",
+  "path": "/api/v1/bench",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/bench",
+  "right": "session"
+ },
+ {
+  "method": "GET",
   "path": "/api/v1/conversations",
   "right": "session"
  },
@@ -208,6 +218,16 @@
   "method": "GET",
   "path": "/api/v1/engines",
   "right": "session"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/engines/comparison",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/engines/comparison",
+  "right": "configurator"
  },
  {
   "method": "POST",
@@ -423,6 +443,31 @@
   "method": "POST",
   "path": "/api/v1/machines/{id}/rights-requests",
   "right": "configurator"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/managed-servers/{id}/catalog",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/managed-servers/{id}/check",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/managed-servers/{id}/downloads",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/managed-servers/{id}/models",
+  "right": "session"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/managed-servers/{id}/quantizations",
+  "right": "session"
  },
  {
   "method": "GET",

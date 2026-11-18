@@ -48,6 +48,7 @@
       <p class="muted" role="status"><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span> {t("speed.running")}</p>
     {:else if speed.state === "done" && speed.tokens_per_second !== null}
       <p role="status"><strong>{t(("speed.level." + speed.level) as MessageKey)}</strong> · {t("speed.figure", speed.tokens_per_second)}</p>
+      <div class="actions"><button type="button" class="button quiet" onclick={start}>{t("speed.again")}</button></div>
     {:else}
       {#if speed.state === "failed"}<p class="warn" role="status">{speed.error || t("speed.failed")}</p>{/if}
       <p class="muted">{t("speed.body")}</p>
