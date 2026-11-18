@@ -520,8 +520,38 @@
   "right": "session"
  },
  {
+  "method": "POST",
+  "path": "/api/v1/models/check",
+  "right": "session"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/models/library",
+  "right": "session"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/models/proposals",
+  "right": "session"
+ },
+ {
+  "method": "DELETE",
+  "path": "/api/v1/models/proposals/{key}",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/models/proposals/{key}/applied",
+  "right": "session"
+ },
+ {
   "method": "GET",
   "path": "/api/v1/models/recommendation",
+  "right": "session"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/models/variants",
   "right": "session"
  },
  {

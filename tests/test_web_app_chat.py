@@ -816,6 +816,67 @@ class Chat(unittest.TestCase):
         self.assertFalse(any(spare.valide(token) for token in tokens))
         self.assertEqual(p.erreurs, [])
 
+    def test_3u_the_models_are_kept_current_their_precisions_and_the_ollama_library(self):
+        """PARITY.md item 10 (first part): the proposals of the check (dismissed, an old model deleted after a second click, a check asked now), the
+        precisions of an installed model and the Ollama library. Hermetic: the proposals and config.json are temporary files, the checker is a function
+        of the test and ollama.com is replaced; downloads go to the fake engine."""
+        p = self.page
+        from lutin import model_discovery, model_variants
+        folder = Path(tempfile.mkdtemp(prefix="lutin-upkeep-"))
+        proposals, config = folder / "propositions.json", folder / "config.json"
+        config.write_text("{}", encoding="utf-8")
+        proposals.write_text(json.dumps({"date": 1, "erreurs": [], "propositions": [
+            {"cle": "maj:qwen3:8b", "type": "maj", "modele": "qwen3:8b", "raison": "Une version plus récente de ce modèle est disponible."},
+            {"cle": "obsolete:old:7b", "type": "obsolete", "modele": "old:7b", "remplace_par": "qwen3:8b", "go": 4.7, "raison": "old:7b est remplacé par qwen3:8b."}]}), encoding="utf-8")
+        asked = []
+        variants = {"defaut": {"id": "qwen3:8b", "go": 5.2}, "variantes": [{"precision": "q4_K_M", "id": "qwen3:8b-q4_K_M", "go": 5.2, "defaut": True},
+                                                                          {"precision": "fp16", "id": "qwen3:8b-fp16", "go": 16.4, "defaut": False}]}
+        library = {"suite": False, "modeles": [{"nom": "gemma3", "description": "A model that sees.", "capacites": ["vision"], "tailles": ["4b", "27b"], "maj": "", "telechargements": 1200}]}
+        installed, model = list(T.INSTALLES), T.A.reglages()["modele"]
+        self.addCleanup(lambda: (T.INSTALLES.__setitem__(slice(None), installed), T.A.PULLS.clear(), T.A.enregistrer_reglages({"modele": model})))
+        T.INSTALLES[:] = ["qwen3:8b", "old:7b"]
+        T.A.enregistrer_reglages({"modele": "qwen3:8b"})
+        for patch in (mock.patch.dict(os.environ, {"LUTIN_PROPOSITIONS": str(proposals), "LUTIN_CONFIG": str(config), "LUTIN_HORS_LIGNE": ""}),
+                      mock.patch.object(T.A, "VERIFICATEUR", asked.append), mock.patch.object(model_variants, "list_variants", lambda name: variants),
+                      mock.patch.object(model_discovery, "search", lambda *args, **kwargs: library)):
+            patch.start()
+            self.addCleanup(patch.stop)
+        section = "document.querySelector('.proposals')"
+        button = lambda where, label: "[...%s.querySelectorAll('button')].find(b => b.innerText === %s)" % (where, js(label))
+        p.evaluer("location.hash = '#/models'")
+        p.attendre("%s?.querySelectorAll('.card').length === 2" % section)
+        self.assertIn("Mise à jour : qwen3:8b", p.evaluer("%s.innerText" % section))
+        if AXE.is_file():
+            self.axe("with the proposals of the models")
+        self.press(button("%s.querySelector('[data-kind=update]')" % section, "Ne plus proposer"))
+        p.attendre("%s.querySelectorAll('.card').length === 1" % section)
+        self.assertEqual(json.loads(config.read_text(encoding="utf-8"))["modeles"]["ignores"], ["maj:qwen3:8b"])
+        self.press(button(section, "Supprimer old:7b"))
+        p.attendre("!!%s.querySelector('.confirm')" % section)
+        self.assertIn("old:7b", T.INSTALLES, "asking is not deleting")
+        self.press(button(section, "Oui, supprimer"))
+        p.attendre("%s.querySelectorAll('.card').length === 0" % section)
+        self.eventually(lambda: "old:7b" not in T.INSTALLES, "the old model was deleted on the engine")
+        self.press(button(section, "Chercher des mises à jour"))
+        p.attendre("%s.querySelector('.notice').innerText.includes('à jour')" % section)
+        self.assertEqual(asked, ["maj"])
+
+        self.press("[...document.querySelectorAll('.models .card')].find(c => c.querySelector('strong')?.innerText === 'qwen3:8b').querySelector('button[aria-expanded]')")
+        p.attendre("document.querySelectorAll('.variants li').length === 2")
+        self.assertIn("celle du nom seul", p.evaluer("document.querySelector('.variants li').innerText"))
+        self.press(button("document.querySelector('.variants')", "Prendre fp16"))
+        p.attendre("document.querySelector('.variants').innerText.includes('Télécharger qwen3:8b-fp16')")
+        self.press("document.querySelector('.variants .button.primary')")
+        self.eventually(lambda: "qwen3:8b-fp16" in T.A.PULLS, "the precision chosen is downloaded")
+        self.press(button("document.querySelector('.tabs')", "Bibliothèque Ollama"))
+        p.attendre("document.querySelectorAll('.ollama-library .sizes li').length === 2")
+        self.assertTrue(p.evaluer("!!document.querySelector('.ollama-library .fit')"), "each size judged for this machine")
+        if AXE.is_file():
+            self.axe("on the Ollama library")
+        self.picture("3u-library")
+        self.assertEqual(p.erreurs, [])
+        p.evaluer("location.hash = '#/chat'")
+
     def test_4_a_refusal_of_the_server_is_shown_and_the_message_is_given_back(self):
         p = self.page
         with mock.patch.object(T.A, "TOURS_SIMULTANES", 0):

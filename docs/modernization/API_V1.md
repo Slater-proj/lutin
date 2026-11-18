@@ -239,6 +239,15 @@ can_restart, remote_admin: {active, can_change}, levels: [{id, title, detail}], 
 /access/remote-admin` (local) `{active}`. Both are `local`, stricter than the old page's level route: they open the machine, so neither a paired
 device nor the remote administration itself may change them. Refusals: `400 invalid_request`, `409 in_docker` (LUTIN_NIVEAU, LUTIN_ADMIN_TOUS).
 
+## Model upkeep
+
+`GET /models/proposals` (session, from the cache, never the network): `{proposals: [{key, kind: update | new | obsolete, model, role, replaces,
+replaced_by, size_gb, summary, reason}], errors, checked_at, catalogue}`. `POST /models/check` `{scope: updates | new | all}` checks now (`409
+not_available` without a checker). `POST /models/proposals/{key}/applied` (installed: for a role, the model becomes the one chosen) and `DELETE
+/models/proposals/{key}` (not proposed again); `404 not_found`. Nothing is installed or deleted by these: the page calls `POST /models` or `DELETE
+/models/{name}`. `GET /models/variants?model=` and `GET /models/library?q=&order=&page=&capability=&light=` read ollama.com and judge each size for
+this machine (`fit`); `503 unreachable`, `409 offline`.
+
 ## What v1 keeps
 
 - The security model, unchanged: Host and Origin checks, page token on every `/api/` request, session by PIN pairing, approvals.

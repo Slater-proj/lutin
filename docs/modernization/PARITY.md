@@ -35,8 +35,11 @@ switch; each line is ticked here when it is done, with its test.
    `PATCH /api/v1/access/remote-admin` (right `local`: this machine only, never a paired device nor the remote administration itself;
    `tests/test_api_v1_access.py`), « Access » in Settings › Devices (`components/Access.svelte`) and « Disconnect every device » on the existing
    `DELETE /api/v1/devices` (test 3t).
-10. **Model upkeep**: update checks and proposals (including removing obsolete models), precision variants, benches and their comparison, the
-    Ollama library, the speed test outside the first launch, the model pages of Colibri, LM Studio and ExLlamaV3.
+10. **Model upkeep**: ~~update checks and proposals (including removing obsolete models), precision variants~~, benches and their comparison,
+    ~~the Ollama library~~, the speed test outside the first launch, the model pages of Colibri, LM Studio and ExLlamaV3. Done so far:
+    `GET /api/v1/models/proposals`, `POST /api/v1/models/check`, `POST …/proposals/{key}/applied`, `DELETE …/proposals/{key}`,
+    `GET /api/v1/models/variants`, `GET /api/v1/models/library` (`tests/test_api_v1_model_upkeep.py`), `components/ModelProposals.svelte`,
+    `ModelVariants.svelte` and `OllamaLibrary.svelte` on the Models screen (test 3u).
 11. **Engine settings** (pinned version, ports, address and key of an OpenAI-compatible server, llama.cpp advanced and router, folders), engine
     measures, moving the models folder, calibration and load profile.
 12. **Conversation tools**: export as Markdown, AI summary, the progress sheet (view, edit, delete) and the memory mode of one conversation, open

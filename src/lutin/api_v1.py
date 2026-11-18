@@ -950,6 +950,119 @@ def delete_model(request):
     return {"deleted": True, "current": str(_m.reglages().get("modele") or "")}
 
 
+# --------------------------------------------------------------------------------------------------------- model upkeep
+# What keeps the installed models current (docs/modernization/PARITY.md, item 10): the proposals of the check made at launch, or asked now (an update
+# of an installed model, a better model for a role on this machine, an old one replaced by a model already installed), the precision variants of an
+# Ollama model and the Ollama library, each judged for THIS machine. Nothing is installed or deleted here: the page then calls POST /models or
+# DELETE /models/{name}, and tells the proposal what was done.
+PROPOSAL_KINDS = {"maj": "update", "nouveau": "new", "obsolete": "obsolete"}
+CHECK_SCOPES = {"updates": "maj", "new": "nouveaux", "all": "tout"}
+
+
+def _fit(fit):
+    return None if fit is None else {"level": FIT_LEVELS.get(fit["niveau"], fit["niveau"]), "text": fit["texte"]}
+
+
+def _proposals_view(found):
+    found = found if isinstance(found, dict) else {}
+    return {"proposals": [{"key": str(p.get("cle", "")), "kind": PROPOSAL_KINDS.get(p.get("type"), "new"), "model": str(p.get("modele", "")), "role": p.get("role") or None,
+                           "replaces": p.get("ancien") or None, "replaced_by": p.get("remplace_par") or None, "size_gb": p.get("go") or None,
+                           "summary": p.get("phrase") or "", "reason": str(p.get("raison", ""))} for p in found.get("propositions", []) if isinstance(p, dict)],
+            "errors": [str(e) for e in found.get("erreurs", [])], "checked_at": int(found.get("date") or 0),
+            "catalogue": {"absent": "absent", "echec": "failed"}.get(found.get("catalogue"), "online" if found.get("catalogue") else None)}
+
+
+@route("GET", "/models/proposals", SESSION)
+def model_proposals(request):
+    """The proposals found by the last check (at launch, at most once a day, or asked with POST /models/check): read from the cache, never the network.
+    `{proposals: [{key, kind: update | new | obsolete, model, role, replaces, replaced_by, size_gb, summary, reason}], errors, checked_at, catalogue}`."""
+    return _proposals_view(_m.lire_propositions())
+
+
+@route("POST", "/models/check", SESSION)
+def model_check(request):
+    """« Look for updates » (`{"scope": "updates"}`), « look for better models » (`"new"`) or both (`"all"`): now, not waiting for the daily check. Answers
+    as GET /models/proposals. In strict offline mode only the list shipped with Lutin is compared (said in `errors`). 409 `not_available` when this
+    launch has no checker (tests, terminal)."""
+    scope = CHECK_SCOPES.get(str(request.body.get("scope") or "all"))
+    if scope is None:
+        raise ApiError(400, "invalid_request", _t("Valeur invalide pour « {} » (attendu : {}).").format("scope", ", ".join(CHECK_SCOPES)))
+    if _m.VERIFICATEUR is None:
+        raise ApiError(409, "not_available", _t("La vérification des modèles n'est pas disponible dans ce mode de lancement."))
+    _m.VERIFICATEUR(scope)
+    return _proposals_view(_m.lire_propositions())
+
+
+def _proposal_done(request, apply):
+    key = request.params["key"]
+    if not any(p.get("cle") == key for p in _m.lire_propositions().get("propositions", [])):
+        raise ApiError(404, "not_found", _t("Proposition introuvable."))
+    _m.traiter_proposition(key, apply)
+    return _proposals_view(_m.lire_propositions())
+
+
+@route("POST", "/models/proposals/{key}/applied", SESSION)
+def model_proposal_applied(request):
+    """The proposal was followed (the model installed with POST /models): it leaves the list and, for a role, the model becomes the one chosen for it."""
+    return _proposal_done(request, True)
+
+
+@route("DELETE", "/models/proposals/{key}", SESSION)
+def model_proposal_dismissed(request):
+    """« Do not propose it again » (or « keep it » for an old model): it leaves the list for good."""
+    return _proposal_done(request, False)
+
+
+@route("GET", "/models/variants", SESSION)
+def model_variants(request):
+    """`?model=qwen3:8b`: the precisions of an Ollama model (q4, q8, fp16…), smallest first, each with its size, whether it is `installed`, whether it is
+    what the plain name installs (`default`), what it means and its `fit` for this machine. 400 for a name that has no variants, 503 when ollama.com
+    does not answer, 409 `offline`."""
+    from . import model_variants as _variants
+    name = request.query.get("model", "")
+    try:
+        found = _variants.list_variants(name)
+    except _offline.OfflineError:
+        raise
+    except OSError as failed:
+        raise ApiError(503, "unreachable", str(failed)) from None
+    profile, installed = machine_profile(), set(_m.etat_moteur()["installes"])
+    base = next((m for m in _m._CATALOGUE["modeles"] if m["id"] == name), {})
+    return {"model": name, "default": found["defaut"] and {"name": found["defaut"]["id"], "size_gb": found["defaut"]["go"]},
+            "variants": [{"name": v["id"], "precision": v["precision"], "size_gb": v["go"], "default": bool(v.get("defaut")), "installed": v["id"] in installed,
+                          "meaning": _variants.describe(v["precision"]), "fit": _fit(_model_fit.evaluer(dict(base, go=v["go"]), profile) if profile is not None else None)}
+                         for v in found["variantes"]]}
+
+
+@route("GET", "/models/library", SESSION)
+def model_library(request):
+    """The library of ollama.com: `?q=&order=newest|popular&page=1&capability=tools|vision|thinking&light=1`. Each model with its sizes, the ones
+    `installed` here, and for each size an estimate of the space it takes and its `fit` for this machine. `more` when another page follows. 503 when
+    the site does not answer, 409 `offline`."""
+    from . import model_discovery as _discovery
+    query = request.query
+    order = query.get("order", "newest")
+    if order not in ("newest", "popular"):
+        raise ApiError(400, "invalid_request", _t("Valeur invalide pour « {} » (attendu : {}).").format("order", "newest, popular"))
+    try:
+        found = _discovery.search(query.get("q", "")[:100], order, query.get("page", "1"), categorie=query.get("capability", ""), leger=query.get("light") == "1")
+    except _offline.OfflineError:
+        raise
+    except OSError as failed:
+        raise ApiError(503, "unreachable", str(failed)) from None
+    profile, installed = machine_profile(), set(_m.etat_moteur()["installes"])
+    judge = (lambda gb: _model_fit.evaluer({"go": gb}, profile)) if profile is not None else (lambda gb: {"niveau": "", "texte": ""})
+    models = []
+    for item in _discovery.evaluate_sizes(found["modeles"], judge):
+        sizes = [{"size": size, "name": "{}:{}".format(item["nom"], size), "installed": "{}:{}".format(item["nom"], size) in installed,
+                  "estimated_gb": item["evaluations"][size]["go"] if size in item["evaluations"] else None,
+                  "fit": _fit(item["evaluations"][size]) if profile is not None and size in item["evaluations"] else None} for size in item["tailles"]]
+        models.append({"name": item["nom"], "description": item["description"], "capabilities": [CAPABILITIES.get(c, c) for c in item["capacites"]],
+                       "updated": item["maj"], "downloads": item["telechargements"], "sizes": sizes,
+                       "installed_plain": item["nom"] in installed or item["nom"] + ":latest" in installed})
+    return {"models": models, "more": bool(found["suite"])}
+
+
 # ----------------------------------------------------------------------------------------------------------- machine and guide
 # What the guided choice of a model needs (docs/modernization/GUIDED_SETUP.md): the machine in plain figures, the catalogue with a verdict for THIS machine, and a recommendation by use.
 # The verdicts come from model_fit and model_compat, never from the page; the editorial notes of the catalogue are estimates, not measures (its own warning, given back as `disclaimer`).
