@@ -382,7 +382,13 @@ class ComfyUI(unittest.TestCase):
         for url, genre in (("ftp://huggingface.co/x.safetensors", "checkpoints"), ("https://example.com/x.safetensors", "checkpoints"), (base + "/modele.safetensors", "../etc"), ("", "checkpoints")):
             with self.assertRaises(addons.ErreurAddon):
                 cu.start_download(url, genre)
-        # un vrai téléchargement
+        # un vrai téléchargement, sur un disque fictif assez grand : le test ne dépend pas de la place libre de la machine qui le lance
+        from collections import namedtuple
+        from unittest import mock
+        grand = namedtuple("usage", "total used free")(10 ** 13, 0, 10 ** 13)
+        disque = mock.patch.object(cu.shutil, "disk_usage", lambda chemin: grand)
+        disque.start()
+        self.addCleanup(disque.stop)
         cu.start_download(base + "/modele.safetensors", "loras")
         self.assertEqual(self.attendre_fin_telechargement(), "fini", cu.DOWNLOAD["erreur"])
         fichier = COMFY / "models" / "loras" / "modele.safetensors"

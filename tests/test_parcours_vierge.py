@@ -105,9 +105,9 @@ class Compression(unittest.TestCase):
         return r, corps
 
     def test_la_page_est_compressee_seulement_si_le_navigateur_le_demande(self):
-        r_brut, brut = self.demander("/")
+        r_brut, brut = self.demander("/ancienne/")          # l'ancienne page, la plus grosse (la nouvelle interface est à « / » depuis la 1.0)
         self.assertIsNone(r_brut.getheader("Content-Encoding"))
-        r_gz, comprime = self.demander("/", "gzip, deflate, br")
+        r_gz, comprime = self.demander("/ancienne/", "gzip, deflate, br")
         self.assertEqual(r_gz.getheader("Content-Encoding"), "gzip")
         self.assertEqual(r_gz.getheader("Vary"), "Accept-Encoding")
         self.assertEqual(int(r_gz.getheader("Content-Length")), len(comprime))

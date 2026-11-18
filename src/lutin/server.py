@@ -1918,8 +1918,9 @@ class Gestionnaire(BaseHTTPRequestHandler):
         if not ident:
             return self._envoyer(400, {"erreur": _t("Pas de conversation.")})
         r = _m.reglages()
+        conv = _m.conv_lire(ident)                    # hors du « try » : une conversation inconnue est une demande invalide (400), pas une panne (500)
         try:
-            return self._envoyer(200, {"texte": _m.document_de_reprise(_m.conv_lire(ident), r), "modele": r["modele"]})
+            return self._envoyer(200, {"texte": _m.document_de_reprise(conv, r), "modele": r["modele"]})
         except (OSError, ValueError) as erreur:
             return self._envoyer(500, {"erreur": str(erreur)})
 

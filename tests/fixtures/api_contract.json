@@ -2,6 +2,9 @@
  "GET": {
   "exact": [
    "/",
+   "/ancienne",
+   "/ancienne/",
+   "/ancienne/index.html",
    "/api/acces",
    "/api/addon-etat",
    "/api/addon-flux",

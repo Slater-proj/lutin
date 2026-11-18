@@ -134,7 +134,7 @@ class BoutEnBout(unittest.TestCase):
 
     def test_la_page_est_servie_et_contient_le_nom(self):
         import urllib.request
-        with urllib.request.urlopen(self.client.adresse + "/", timeout=10) as r:
+        with urllib.request.urlopen(self.client.adresse + "/ancienne/", timeout=10) as r:
             page = r.read().decode("utf-8")
         self.assertIn("<title>Lutin</title>", page)
         self.assertNotIn("__TOKEN__", page, "le marqueur est remplacé par le vrai jeton")

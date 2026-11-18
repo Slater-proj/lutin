@@ -18,7 +18,7 @@ def setUpModule():
 
 class BackgroundJobs(unittest.TestCase):
     def setUp(self):
-        patch = mock.patch.object(workspaces, "entries", lambda cfg: [{"chemin": str(A.RACINE)}])          # the project folder is a work folder
+        patch = mock.patch.object(workspaces, "entries", lambda cfg: [{"id": "t0000001", "nom": "Projet", "chemin": str(A.RACINE)}])          # the project folder is a work folder
         patch.start()
         self.addCleanup(patch.stop)
         self.addCleanup(lambda: [background_jobs.action(job["id"], "supprimer") for job in background_jobs.liste()])

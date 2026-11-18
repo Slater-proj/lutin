@@ -1131,7 +1131,7 @@ class Chat(unittest.TestCase):
         p = self.page
         from lutin import background_jobs, workspaces
         folder = Path(tempfile.mkdtemp(prefix="lutin-jobs-"))
-        patch = mock.patch.object(workspaces, "entries", lambda cfg: [{"chemin": str(folder)}])
+        patch = mock.patch.object(workspaces, "entries", lambda cfg: [{"id": "t0000001", "nom": "Documents", "chemin": str(folder)}])
         patch.start()
         self.addCleanup(patch.stop)
         self.addCleanup(lambda: [background_jobs.action(job["id"], "supprimer") for job in background_jobs.liste()])

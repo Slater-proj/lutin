@@ -37,7 +37,7 @@ class Palette(unittest.TestCase):
     def page(self, tmp, port, ancre="#conv=a1b2c3d4"):
         p = cdp.Page(self.chrome, tmp / "profil-palette")
         self.addCleanup(p.fermer)
-        p.aller("http://127.0.0.1:%d/%s" % (port, ancre))
+        p.aller("http://127.0.0.1:%d/ancienne/%s" % (port, ancre))
         p.attendre("!!document.querySelector('#bNouvelle')")
         p.attendre("!!document.querySelector('.conv.choisie')")
         return p
@@ -131,7 +131,7 @@ class Accueil(unittest.TestCase):
         with self.captures.serveur_demo() as (port, tmp):
             p = cdp.Page(self.chrome, tmp / "profil-accueil")
             self.addCleanup(p.fermer)
-            p.aller("http://127.0.0.1:%d/" % port)
+            p.aller("http://127.0.0.1:%d/ancienne/" % port)
             p.attendre("!!document.querySelector('#bNouvelle') && document.querySelectorAll('#accueil .acc-carte').length === 5")
             visible = "document.getElementById('accueil').offsetParent !== null"
             self.assertTrue(p.evaluer(visible), "rien d'ouvert : l'accueil est là")
@@ -169,7 +169,7 @@ class OutilsLisibles(unittest.TestCase):
         with self.captures.serveur_demo({"LUTIN_LANGUE": langue}) as (port, tmp):
             p = cdp.Page(self.chrome, tmp / "profil-outils")
             self.addCleanup(p.fermer)
-            p.aller("http://127.0.0.1:%d/#conv=a1b2c3d4" % port)
+            p.aller("http://127.0.0.1:%d/ancienne/#conv=a1b2c3d4" % port)
             p.attendre("document.querySelectorAll('#fil .outil').length >= 4")
             res = p.evaluer("[...document.querySelectorAll('#fil .outil > div')].map(d => [d.textContent, d.title])")
             self.assertEqual(p.erreurs, [])
@@ -202,7 +202,7 @@ class RechercheReglages(unittest.TestCase):
         with self.captures.serveur_demo() as (port, tmp):
             p = cdp.Page(self.chrome, tmp / "profil-rech")
             self.addCleanup(p.fermer)
-            p.aller("http://127.0.0.1:%d/" % port)
+            p.aller("http://127.0.0.1:%d/ancienne/" % port)
             p.attendre("document.getElementById('bPalette') !== null")
             self.assertEqual(p.evaluer("document.getElementById('rechReglages')"), None, "plus de seconde barre de recherche dans les Réglages")
             p.evaluer("document.getElementById('bPalette').click(); true")
@@ -229,7 +229,7 @@ class RechercheWebReglages(unittest.TestCase):
         with self.captures.serveur_demo() as (port, tmp):
             p = cdp.Page(self.chrome, tmp / "profil-rechweb")
             self.addCleanup(p.fermer)
-            p.aller("http://127.0.0.1:%d/#reglages" % port)
+            p.aller("http://127.0.0.1:%d/ancienne/#reglages" % port)
             p.attendre("document.getElementById('p-reglages').classList.contains('vue') && document.querySelectorAll('#rechMoteurs .ligne').length >= 2")
             moteurs = "[...document.querySelectorAll('#rechMoteurs .ligne')].map(l => l.textContent)"
             self.assertEqual([m.split('. ')[1] for m in p.evaluer(moteurs)], ["duckduckgo", "bing"])

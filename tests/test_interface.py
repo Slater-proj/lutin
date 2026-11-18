@@ -130,7 +130,7 @@ class DansUnNavigateur(unittest.TestCase):
     def charger(self, langue, ancre, niveau="local"):
         with self.captures.serveur_demo({"LUTIN_LANGUE": langue}, niveau) as (port, tmp):
             r = subprocess.run([self.chrome, "--headless=new", "--disable-gpu", "--no-sandbox", "--user-data-dir=" + str(tmp / "profil"), "--virtual-time-budget=8000", "--enable-logging=stderr",
-                                "--v=0", "--dump-dom", "http://127.0.0.1:%d/%s" % (port, ancre)], capture_output=True, timeout=180, encoding="utf-8", errors="replace")
+                                "--v=0", "--dump-dom", "http://127.0.0.1:%d/ancienne/%s" % (port, ancre)], capture_output=True, timeout=180, encoding="utf-8", errors="replace")
         erreurs = [l for l in r.stderr.splitlines() if "CONSOLE" in l and ("rror" in l or "Uncaught" in l)]
         return r.stdout, erreurs
 
