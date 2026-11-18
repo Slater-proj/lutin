@@ -43,8 +43,12 @@ switch; each line is ticked here when it is done, with its test.
     (`tests/test_api_v1_bench.py`), the « Measures » tab with the speed test (`components/Measures.svelte`, test 3v);
     `/api/v1/managed-servers/{id}/models|catalog|quantizations|check|downloads` on `lutin.managed_models`, shared with the old page
     (`tests/test_api_v1_managed_servers.py`), `components/ManagedModels.svelte` (test 3w).
-11. **Engine settings** (pinned version, ports, address and key of an OpenAI-compatible server, llama.cpp advanced and router, folders), engine
-    measures, moving the models folder, calibration and load profile.
+11. ~~**Engine settings** (pinned version, ports, address and key of an OpenAI-compatible server, llama.cpp advanced and router, folders), engine
+    measures, moving the models folder, calibration and load profile~~ — done: `GET`/`PATCH /api/v1/engines/{id}/settings` (on
+    `llamacpp_engine.apply_settings`, shared with the old page), `/api/v1/engines/folder`, `/api/v1/engines/measures` and `POST …/{id}/measure`,
+    `/api/v1/models/folder` (analysis, copy, choice, restart of Ollama), `/api/v1/calibration`, `/api/v1/machine/advice`
+    (`tests/test_api_v1_engine_settings.py`); `components/EngineSettings.svelte` in each engine's card, `EngineFolders.svelte`, the measure of an
+    engine in the « Measures » tab and `MachineTuning.svelte` in Settings › Machine (test 3z).
 12. **Conversation tools**: export as Markdown, AI summary, the progress sheet (view, edit, delete) and the memory mode of one conversation, open
     its folders, Git (diff, proposed message, commit), the action log, the mission banner inside the conversation.
 13. **Document processing in the background.**

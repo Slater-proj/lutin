@@ -356,6 +356,26 @@ def regler_dossier(moteur, chemin):
     ecrire_config(config)
 
 
+def apply_settings(mo, donnees):
+    """Ce que la page change d'un moteur, en une demande (ancienne page et /api/v1) : dossier d'installation, dossier des modèles, serveur compatible
+    OpenAI choisi et ses ports, réglages avancés de llama.cpp, adresse, clé et variante. ErreurMoteur (un ValueError) dit ce qui ne va pas."""
+    if "dossier" in donnees:
+        regler_dossier(mo.id, donnees.get("dossier"))
+    if "dossier_modeles" in donnees:
+        regler_dossier_modeles(mo.id, donnees.get("dossier_modeles"))
+    serveur_regle = regler_serveur(mo.id, donnees)          # Colibri : choix du serveur, dossier du modèle, port
+    avance = regler_avance(mo.id, {k: donnees[k] for k in ("routeur", "modeles_max", "n_cpu_moe", "version_epinglee") if k in donnees})
+    if not mo.adresse_modifiable:
+        if avance or "dossier" in donnees or "dossier_modeles" in donnees:
+            return
+        raise ErreurMoteur(_t("Ce moteur n'a pas d'adresse à régler."))
+    if mo.id == "llamacpp" and "url" not in donnees and "variante" not in donnees and avance:
+        return
+    if serveur_regle and "url" not in donnees and "cle" not in donnees:
+        return
+    regler(mo.id, donnees.get("url"), donnees.get("cle"), variante=donnees.get("variante") if donnees.get("variante") in ("auto", "cuda", "vulkan", "cpu", "metal") else None)
+
+
 def vue_reglages(moteur):
     c = lire_config().get(moteur, {})
     vue = {"url": c.get("url", ""), "cle_definie": bool(c.get("cle")), "variante": c.get("variante", "auto")}

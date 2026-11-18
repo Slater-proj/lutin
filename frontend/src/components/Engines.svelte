@@ -5,9 +5,12 @@
   import { api, ApiError } from "../lib/api";
   import { formatBytes, percent } from "../lib/format";
   import { language, t, type MessageKey } from "../lib/messages";
+  import EngineFolders from "./EngineFolders.svelte";
+  import EngineSettings from "./EngineSettings.svelte";
   import { working, type EngineView } from "../lib/setup";
 
-  let { onchanged }: { onchanged: () => void } = $props();
+  let { onchanged, canConfigure = false }: { onchanged: () => void; canConfigure?: boolean } = $props();
+  let settingsOf = $state(""); // the engine whose settings are open
 
   type Action = keyof EngineView["actions"];
   const ACTIONS: readonly Action[] = ["start", "stop", "install", "update", "reinstall", "uninstall"];
@@ -102,6 +105,9 @@
             </details>
           {/if}
 
+          <button type="button" class="button quiet" aria-expanded={settingsOf === engine.id} onclick={() => (settingsOf = settingsOf === engine.id ? "" : engine.id)}>{t("eset.open")}<span class="visually-hidden"> {engine.name}</span></button>
+          {#if settingsOf === engine.id}<EngineSettings engine={engine.id} {canConfigure} />{/if}
+
           {#if task && task.state === "running"}
             {@const share = percent(task.done, task.total)}
             <progress max="100" value={share ?? undefined} aria-label={engine.name}></progress>
@@ -130,6 +136,7 @@
         </li>
       {/each}
     </ul>
+    <EngineFolders {canConfigure} ollama={engines.some((engine) => engine.id === "ollama" && engine.installed)} />
   {/if}
 </section>
 

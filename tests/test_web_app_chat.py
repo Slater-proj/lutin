@@ -1007,6 +1007,61 @@ class Chat(unittest.TestCase):
         self.assertEqual(p.erreurs, [])
         p.evaluer("location.hash = '#/chat'")
 
+    def test_3z_an_engine_is_set_folders_chosen_and_the_machine_tuned(self):
+        """PARITY.md item 11: an engine's settings in its card, the engines' and models' folders, the measure of an engine and the tuning to this machine.
+        Hermetic: what reads or changes the machine underneath (engine configuration, folders, measures, calibration, advice) is replaced."""
+        p = self.page
+        from lutin import calibration, engine_metrics, llamacpp_engine, locations, low_end_mode
+        applied, chosen, calls = [], [], []
+        settings = {"url": "", "cle_definie": False, "variante": "auto",
+                    "avance": {"routeur": False, "routeur_possible": True, "modeles_max": 1, "n_cpu_moe": 0, "n_cpu_moe_possible": False, "version_epinglee": ""}}
+        engines_folder = {"actuel": "C:/IA/moteurs", "defaut": "C:/IA/moteurs", "propose": None, "libre_go": 20.0, "libre_go_propose": None, "source": "defaut", "probleme": "",
+                          "docker": False, "montage": "", "modifiable": True, "personnalise": False, "installes": [], "sous_dossiers": ["ollama", "llamacpp"]}
+        analysed = {"chemin": "D:/IA/ollama", "reseau": False, "debit": 900, "avertissements": [], "libre": 10 ** 12, "existe": True, "modeles_ici": False,
+                    "source": "C:/models", "source_existe": True, "source_octets": 5 * 10 ** 9}
+        measures = {"etat": {"en_cours": False, "moteur": "", "modele": "", "erreur": ""}, "nombre": 1, "candidats": [],
+                    "classement": [{"moteur": "ollama", "nom": "Ollama", "modele": "qwen3:8b", "date": "2026-11-18 10:00", "ok": True, "tok_s": 41.0, "rang": 1}]}
+        for patch in (mock.patch.object(llamacpp_engine, "vue_reglages", lambda engine: settings), mock.patch.object(llamacpp_engine, "apply_settings", lambda engine, data: applied.append(data)),
+                      mock.patch.object(llamacpp_engine, "vue_dossier_moteurs", lambda: engines_folder), mock.patch.object(locations, "analyze_folder", lambda path: analysed),
+                      mock.patch.object(locations, "set_models_folder", lambda path: chosen.append(path) or path), mock.patch.object(locations, "models_gauge", lambda: {"libre": 10 ** 11, "total": 10 ** 12}),
+                      mock.patch.object(engine_metrics, "view", lambda *args: measures),
+                      mock.patch.object(calibration, "state", lambda: {"en_cours": False, "etape": "", "erreur": "", "resultats": [{"fils": 4, "tok_s": 10.0}, {"fils": 8, "tok_s": 12.5}], "recommande": 8, "modele": "qwen3:8b", "date": ""}),
+                      mock.patch.object(calibration, "apply", lambda: calls.append("apply")),
+                      mock.patch.object(low_end_mode, "advice", lambda profile, current: [{"cle": "num_ctx", "actuel": 32768, "conseille": 8192, "texte": "Une fenêtre plus courte."}]),
+                      mock.patch.object(low_end_mode, "apply", lambda profile, current: {"num_ctx": 8192}), mock.patch.object(T.A, "enregistrer_reglages", lambda changes: calls.append(changes))):
+            patch.start()
+            self.addCleanup(patch.stop)
+        p.evaluer("location.hash = '#/models'")
+        self.press("[...document.querySelectorAll('.tabs button')].find(b => b.innerText === 'Moteurs')")
+        card = "[...document.querySelectorAll('.engines .card')].find(c => c.querySelector('strong').innerText.includes('llama.cpp'))"
+        self.press("%s.querySelector('button[aria-expanded]')" % card)
+        p.attendre("!!document.querySelector('.engine-settings input[type=number]')")
+        p.evaluer("(() => { const box = document.querySelector('.engine-settings input[type=number]'); box.value = '3'; box.dispatchEvent(new Event('input', {bubbles: true})); })()")
+        self.press("[...document.querySelectorAll('.engine-settings fieldset .button')][1]")
+        self.eventually(lambda: applied and applied[-1].get("modeles_max") == 3, "the setting reached the engine")
+        p.attendre("document.querySelector('.folders').innerText.includes('C:/IA/moteurs')")
+        p.evaluer("(() => { const boxes = document.querySelectorAll('.folders input'); const box = boxes[boxes.length - 1]; box.value = 'D:/IA/ollama'; box.dispatchEvent(new Event('input', {bubbles: true})); })()")
+        self.press("[...document.querySelectorAll('.folders .button')].find(b => b.innerText === 'Examiner ce dossier')")
+        p.attendre("!!document.querySelector('.folders .card')")
+        self.assertIn("Un disque de cette machine", p.evaluer("document.querySelector('.folders .card').innerText"))
+        self.press("[...document.querySelectorAll('.folders .button')].find(b => b.innerText === 'Utiliser ce dossier')")
+        self.eventually(lambda: chosen == ["D:/IA/ollama"], "the models folder was chosen")
+        if AXE.is_file():
+            self.axe("on the settings of an engine and the folders")
+        self.press("[...document.querySelectorAll('.tabs button')].find(b => b.innerText === 'Mesures')")
+        p.attendre("document.querySelector('.per-engine table')?.innerText.includes('41')")
+
+        p.evaluer("location.hash = '#/settings/machine'")
+        p.attendre("document.querySelector('.tuning')?.innerText.includes('Conseillé : 8 cœurs')")
+        self.press("[...document.querySelectorAll('.tuning .button')].find(b => b.innerText === 'Utiliser 8 cœurs')")
+        self.press("[...document.querySelectorAll('.tuning .button')].find(b => b.innerText === 'Appliquer')")
+        self.eventually(lambda: calls[:2] == ["apply", {"num_ctx": 8192}] or sorted(map(str, calls)) == sorted(["apply", str({"num_ctx": 8192})]), "the calibration and the advice were applied")
+        if AXE.is_file():
+            self.axe("on the tuning to this machine")
+        self.picture("3z-tuning")
+        self.assertEqual(p.erreurs, [])
+        p.evaluer("location.hash = '#/chat'")
+
     def test_4_a_refusal_of_the_server_is_shown_and_the_message_is_given_back(self):
         p = self.page
         with mock.patch.object(T.A, "TOURS_SIMULTANES", 0):

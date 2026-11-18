@@ -1063,6 +1063,246 @@ def model_library(request):
     return {"models": models, "more": bool(found["suite"])}
 
 
+# ---------------------------------------------------------------------------------------------------- engine settings
+# What the old page set on an engine (docs/modernization/PARITY.md, item 11): its install folder and models folder, the OpenAI-compatible server chosen
+# and its ports, llama.cpp's router, models kept, experts on the processor and pinned version, an address, a key (never sent back) and a variant; the
+# folder where every engine installs; a speed measure per engine and its ranking; Ollama's models folder (analysed, copied, chosen); the calibration
+# of the processor cores and the advice for a small machine. All in lutin.llamacpp_engine, lutin.locations, lutin.engine_metrics, lutin.calibration
+# and lutin.low_end_mode, shared with the old page. Changing is `configurator`.
+ENGINE_SETTINGS = {"url": "url", "key": "cle", "variant": "variante", "router": "routeur", "models_kept": "modeles_max", "cpu_moe_layers": "n_cpu_moe",
+                   "pinned_version": "version_epinglee", "install_folder": "dossier", "models_folder": "dossier_modeles", "server": "serveur",
+                   "colibri_model": "modele_colibri", "colibri_port": "port_colibri", "lmstudio_port": "port_lmstudio", "exllamav3_port": "port_exllamav3"}
+
+
+def _folder_view(info):
+    if not info:
+        return None
+    free = info.get("libre_go") or {}
+    models = info.get("modeles") or {}
+    return {"current": info.get("actuel", ""), "proposed": info.get("propose") or None, "default": info.get("defaut", ""), "custom": bool(info.get("personnalise")),
+            "free_gb": {"current": free.get("actuel"), "proposed": free.get("propose"), "default": free.get("defaut")}, "installed": bool(info.get("installe")),
+            "changeable": bool(info.get("modifiable")),
+            "models": {"current": models.get("actuel", ""), "free_gb": models.get("libre_go"), "changeable": bool(models.get("modifiable")), "custom": bool(models.get("personnalise"))} if models else None}
+
+
+def _engine_settings_view(engine):
+    from . import llamacpp_engine as _llamacpp
+    seen = _llamacpp.vue_reglages(engine.id)
+    advanced = seen.get("avance")
+    out = {"engine": engine.id, "address_changeable": bool(engine.adresse_modifiable), "url": seen.get("url", ""), "key_set": bool(seen.get("cle_definie")),
+           "variant": seen.get("variante", "auto"), "folder": _folder_view(seen.get("dossier")), "server": seen.get("serveur"),
+           "advanced": None if not advanced else {"router": advanced["routeur"], "router_possible": bool(advanced["routeur_possible"]), "models_kept": advanced["modeles_max"],
+                                                  "cpu_moe_layers": advanced["n_cpu_moe"], "cpu_moe_possible": bool(advanced["n_cpu_moe_possible"]), "pinned_version": advanced["version_epinglee"]},
+           "managed_installed": seen.get("serveurs_geres")}
+    for kind in ("colibri", "lmstudio", "exllamav3"):
+        if kind in seen:
+            part = seen[kind]
+            out[kind] = {"port": part.get("port"), "installed": bool(part.get("installe")), **({"model": part.get("modele"), "model_ok": bool(part.get("modele_ok"))} if kind == "colibri" else {})}
+    return out
+
+
+@route("GET", "/engines/{id}/settings", SESSION)
+def engine_settings(request):
+    """What can be set on this engine, as it is set: `url`, `key_set` (never the key), `variant`, the install and models `folder`, the OpenAI-compatible
+    `server` chosen and its ports, and llama.cpp's `advanced` settings."""
+    return _engine_settings_view(_known_engine(request.params["id"]))
+
+
+@route("PATCH", "/engines/{id}/settings", CONFIGURATOR)
+def change_engine_settings(request):
+    """Any of `url`, `key`, `variant` (auto, cuda, vulkan, cpu, metal), `router`, `models_kept` (1 to 8), `cpu_moe_layers` (0 to 512), `pinned_version`
+    (« b6500 », "" to follow the latest), `install_folder`, `models_folder`, `server`, `colibri_model`, `colibri_port`, `lmstudio_port`,
+    `exllamav3_port`; an empty value goes back to the default. A llama.cpp setting stops its server: it counts from the next message. 400 with what
+    is wrong."""
+    from . import llamacpp_engine as _llamacpp
+    engine = _known_engine(request.params["id"])
+    unknown = set(request.body) - set(ENGINE_SETTINGS)
+    if unknown or not request.body:
+        raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format(", ".join(ENGINE_SETTINGS)))
+    _llamacpp.apply_settings(engine, {ENGINE_SETTINGS[name]: value for name, value in request.body.items()})
+    return _engine_settings_view(engine)
+
+
+def _engines_folder_view():
+    from . import llamacpp_engine as _llamacpp
+    seen = _llamacpp.vue_dossier_moteurs()
+    return {"current": seen["actuel"], "default": seen["defaut"], "proposed": seen["propose"] or None, "free_gb": seen["libre_go"], "proposed_free_gb": seen["libre_go_propose"],
+            "source": {"env": "environment", "reglage": "settings"}.get(seen["source"], "default"), "problem": seen["probleme"] or "", "docker": bool(seen["docker"]),
+            "changeable": bool(seen["modifiable"]), "custom": bool(seen["personnalise"]), "installed_here": list(seen["installes"]), "subfolders": list(seen["sous_dossiers"])}
+
+
+@route("GET", "/engines/folder", SESSION)
+def engines_folder(request):
+    """The folder where every engine installs (one subfolder each): where it is, the default, a proposal on a roomier disk, the free space, and the
+    engines installed there (the folder changes only once they are uninstalled)."""
+    return _engines_folder_view()
+
+
+@route("PATCH", "/engines/folder", CONFIGURATOR)
+def change_engines_folder(request):
+    """{"path": "D:/IA/engines"} ("" goes back to the default). Nothing is moved: 400 while an engine is installed in the current folder."""
+    from . import llamacpp_engine as _llamacpp
+    if set(request.body) != {"path"} or not isinstance(request.body["path"], str):
+        raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("path"))
+    _llamacpp.regler_dossier_moteurs(request.body["path"])
+    return _engines_folder_view()
+
+
+def _engine_measure(entry):
+    return {"engine": entry.get("moteur", ""), "name": entry.get("nom", ""), "model": entry.get("modele", ""), "date": entry.get("date", ""), "mode": entry.get("mode", ""),
+            "tokens_per_s": entry.get("tok_s"), "first_token_s": entry.get("premier_jeton_s"), "load_s": entry.get("charge_s"), "reading_tokens_per_s": entry.get("lecture_tok_s"),
+            "ram_bytes": entry.get("ram"), "vram_bytes": entry.get("vram"), "version": entry.get("version", ""), "rank": entry.get("rang")}
+
+
+@route("GET", "/engines/measures", SESSION)
+def engines_measures(request):
+    """What each engine gave here: the last successful measure of each (engine, model), the fastest first; the `candidates` that can be measured now
+    (an engine running, its models); a measure `running`."""
+    from . import engine_metrics as _metrics
+    seen = _metrics.view(_m.DONNEES, dict(_engines.ENGINES), _m.reglages())
+    state = seen["etat"]
+    return {"running": bool(state["en_cours"]), "measuring": {"engine": state["moteur"], "model": state["modele"]} if state["en_cours"] else None, "error": state["erreur"],
+            "ranking": [_engine_measure(entry) for entry in seen["classement"]], "count": seen["nombre"],
+            "candidates": [{"engine": c["moteur"], "name": c["nom"], "model": c["modele"], "models": c["modeles"]} for c in seen["candidats"]]}
+
+
+@route("POST", "/engines/{id}/measure", CONFIGURATOR)
+def engine_measure(request):
+    """{"model": "...", "mode": "quick" | "deep"}: measures this engine with one of its models (load, first token, speed, memory), in the background.
+    202; GET /engines/measures follows it. 409 `busy` during an answer or another measure, 400 when the engine is stopped or lacks the model."""
+    from . import engine_bench as _engine_bench
+    from . import engine_metrics as _metrics
+    engine = _known_engine(request.params["id"])
+    model = str(request.body.get("model") or "")
+    mode = COMPARISON_MODES.get(str(request.body.get("mode") or "quick"))
+    if not model or mode is None:
+        raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("model, mode"))
+    if _m.TOURS_ACTIFS or _metrics.STATE["en_cours"]:
+        raise ApiError(409, "busy", _t("Une réponse ou une autre mesure est en cours : attends sa fin."))
+    _metrics.launch(_m.DONNEES, engine, model, mode, memoire=lambda: _engine_bench.memory_of_engine(engine.id, model))
+    return 202, {"started": True}
+
+
+def _models_folder_view():
+    from . import locations as _locations
+    gauge = _locations.models_gauge() or {}
+    return {"current": str(_locations.models_folder()), "chosen": _locations.read_models_config() or None, "free_bytes": gauge.get("libre"), "total_bytes": gauge.get("total"),
+            "copy": {"state": {"": "idle", "en cours": "running", "fini": "done", "erreur": "failed"}.get(_locations.COPY.get("etat", ""), _locations.COPY.get("etat", "")),
+                     "done_bytes": _locations.COPY.get("fait", 0), "total_bytes": _locations.COPY.get("total", 0), "file": _locations.COPY.get("fichier", ""),
+                     "error": _locations.COPY.get("erreur", ""), "target": _locations.COPY.get("cible", "")}}
+
+
+@route("GET", "/models/folder", SESSION)
+def models_folder_state(request):
+    """Where Ollama keeps its models, the folder chosen in Lutin's settings, the free space of its disk, and a copy to a new folder running or ended."""
+    return _models_folder_view()
+
+
+@route("POST", "/models/folder/analysis", CONFIGURATOR)
+def models_folder_analysis(request):
+    """{"path"}: what to know before using it for the models: on the network or local, its speed, its free space, models already there, and the size
+    of the models to copy from the current folder."""
+    from . import locations as _locations
+    seen = _locations.analyze_folder(str(request.body.get("path") or ""))
+    return {"path": seen["chemin"], "network": bool(seen["reseau"]), "speed": seen.get("debit"), "warnings": list(seen.get("avertissements") or []), "free_bytes": seen.get("libre"),
+            "exists": bool(seen["existe"]), "models_here": bool(seen["modeles_ici"]), "source": seen["source"], "source_exists": bool(seen["source_existe"]), "source_bytes": seen["source_octets"]}
+
+
+@route("POST", "/models/folder/copy", CONFIGURATOR)
+def models_folder_copy(request):
+    """{"path"}: copies the models already downloaded to that folder, in the background (GET /models/folder follows it). The source is never deleted;
+    a file already copied is skipped. 400 when there is not enough room, or the folder is the current one or inside it."""
+    from . import locations as _locations
+    _locations.copy_models(str(request.body.get("path") or ""))
+    return 202, _models_folder_view()
+
+
+@route("PATCH", "/models/folder", CONFIGURATOR)
+def change_models_folder(request):
+    """{"path"}: Ollama's models folder from now on (Lutin's settings, the user variable of Windows). Nothing is moved; Ollama uses it once restarted
+    (POST /models/folder/restart-ollama)."""
+    from . import locations as _locations
+    if set(request.body) != {"path"} or not isinstance(request.body["path"], str):
+        raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("path"))
+    _locations.set_models_folder(request.body["path"])
+    return _models_folder_view()
+
+
+@route("POST", "/models/folder/restart-ollama", CONFIGURATOR)
+def models_folder_restart(request):
+    """Stops then starts Ollama with the models folder chosen. The models in memory are lost (loaded again at the next question). 409 during an answer."""
+    if _m.TOURS_ACTIFS:
+        raise ApiError(409, "turn_running", _t("Une réponse est en cours : attends la fin avant de redémarrer Ollama."))
+    return {"message": _m.redemarrer_ollama()}
+
+
+def _calibration_view():
+    from . import calibration as _calibration
+    seen = _calibration.state()
+    return {"running": bool(seen["en_cours"]), "step": seen["etape"], "error": seen["erreur"], "model": seen["modele"], "date": seen["date"], "advised_threads": seen["recommande"],
+            "results": [{"threads": r.get("fils"), "tokens_per_s": r.get("tok_s")} for r in seen["resultats"] or []], "current_threads": _m.reglages().get("num_thread")}
+
+
+@route("GET", "/calibration", SESSION)
+def calibration_state(request):
+    """The calibration of the processor cores: the speed measured with a third, half, two thirds and all of them, the number advised (the smallest within
+    a few percent of the best) and the one in use (`current_threads`, null: chosen by the engine)."""
+    return _calibration_view()
+
+
+@route("POST", "/calibration", CONFIGURATOR)
+def calibration_start(request):
+    """Starts the calibration with the model in use (a few minutes; nothing else should run). 202."""
+    from . import calibration as _calibration
+    _calibration.start()
+    return 202, _calibration_view()
+
+
+@route("DELETE", "/calibration", CONFIGURATOR)
+def calibration_cancel(request):
+    from . import calibration as _calibration
+    _calibration.cancel()
+    return _calibration_view()
+
+
+@route("POST", "/calibration/apply", CONFIGURATOR)
+def calibration_apply(request):
+    """Uses the number of cores advised (the setting `num_thread`)."""
+    from . import calibration as _calibration
+    _calibration.apply()
+    return _calibration_view()
+
+
+@route("GET", "/machine/advice", SESSION)
+def machine_advice(request):
+    """For a small machine: the settings worth changing (`{setting, current, advised, text}`), empty when it is not small or they already suit it;
+    `dismissed` when the person asked not to be advised again."""
+    from . import low_end_mode as _low_end
+    profile = machine_profile()
+    advice = _low_end.advice(profile, _m.reglages()) if profile is not None else []
+    names = {stored: name for name, (stored, _kind) in SETTINGS.items()}
+    return {"advice": [{"setting": names.get(a["cle"], a["cle"]), "current": a["actuel"], "advised": a["conseille"], "text": a["texte"]} for a in advice],
+            "dismissed": _m.reglages().get("conseil_machine") is False}
+
+
+@route("POST", "/machine/advice/apply", CONFIGURATOR)
+def machine_advice_apply(request):
+    """Follows the advice: the settings listed are changed. Answers `{applied}` (setting: value)."""
+    from . import low_end_mode as _low_end
+    changes = _low_end.apply(machine_profile(), _m.reglages()) if machine_profile() is not None else {}
+    if changes:
+        _m.enregistrer_reglages(changes)
+    names = {stored: name for name, (stored, _kind) in SETTINGS.items()}
+    return {"applied": {names.get(key, key): value for key, value in changes.items()}}
+
+
+@route("POST", "/machine/advice/dismiss", CONFIGURATOR)
+def machine_advice_dismiss(request):
+    """« Do not advise me again »."""
+    _m.enregistrer_reglages({"conseil_machine": False})
+    return {"dismissed": True}
+
+
 # ----------------------------------------------------------------------------------------------------- managed servers
 # The models of ExLlamaV3, LM Studio and Colibri, the servers Lutin manages behind its OpenAI-compatible engine (lutin.managed_models, shared with the
 # old page). Reading is `session`; a download changes the machine and weighs gigabytes, so it is `configurator` and needs `confirm`.

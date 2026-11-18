@@ -25,7 +25,13 @@
     result: { date: string; mode: string; engines: EngineRun[]; skipped: { name: string; reason: string }[] } | null;
   };
 
+  type EngineMeasure = { engine: string; name: string; model: string; date: string; tokens_per_s: number | null; first_token_s: number | null; load_s: number | null; vram_bytes: number | null; rank: number | null };
+  type EngineMeasures = { running: boolean; measuring: { engine: string; model: string } | null; error: string; ranking: EngineMeasure[]; candidates: { engine: string; name: string; model: string; models: string[] }[] };
+
   let { installed, canConfigure }: { installed: string[]; canConfigure: boolean } = $props();
+
+  let perEngine = $state<EngineMeasures | null>(null);
+  let measured = $state({ engine: "", model: "" });
 
   const TESTS = ["tools", "code", "french", "instructions"] as const;
   const lang = language();
@@ -48,7 +54,9 @@
     while (alive) {
       bench = await api<Bench>("GET", "/bench");
       comparison = await api<Comparison>("GET", "/engines/comparison");
-      if (!bench.running && !comparison.running) break;
+      perEngine = await api<EngineMeasures>("GET", "/engines/measures");
+      if (!measured.engine && perEngine.candidates.length) measured = { engine: perEngine.candidates[0].engine, model: perEngine.candidates[0].model };
+      if (!bench.running && !comparison.running && !perEngine.running) break;
       await new Promise((done) => setTimeout(done, 1500));
     }
   }
@@ -66,6 +74,7 @@
   }
 
   const measure = (): Promise<void> => act(() => api("POST", "/bench", { models: chosen, quick }));
+  const measureEngine = (): Promise<void> => act(() => api("POST", `/engines/${encodeURIComponent(measured.engine)}/measure`, { model: measured.model, mode: "quick" }));
   const compare = (mode: "quick" | "deep"): Promise<void> => act(() => api("POST", "/engines/comparison", { mode }));
 
   onMount(() => {
@@ -134,6 +143,43 @@
       {/if}
     {/if}
   </section>
+
+  {#if perEngine}
+    <section class="per-engine" aria-labelledby="per-engine-title">
+      <h2 id="per-engine-title">{t("emeasure.title")}</h2>
+      <p class="muted">{t("emeasure.intro")}</p>
+      <p class="notice" role="status">{perEngine.running && perEngine.measuring ? t("bench.running", perEngine.measuring.model, perEngine.measuring.engine) : ""}</p>
+      {#if perEngine.error}<p class="problem">{perEngine.error}</p>{/if}
+      {#if perEngine.ranking.length}
+        <div class="table">
+          <table>
+            <caption class="visually-hidden">{t("emeasure.title")}</caption>
+            <thead><tr><th scope="col">{t("compare.engine")}</th><th scope="col">{t("bench.model")}</th><th scope="col">{t("bench.speed")}</th><th scope="col">{t("compare.first")}</th><th scope="col">{t("bench.load")}</th></tr></thead>
+            <tbody>
+              {#each perEngine.ranking as entry (entry.name + entry.model)}
+                <tr><th scope="row">{entry.name}<small>{entry.date}</small></th><td>{entry.model}</td><td>{number(entry.tokens_per_s)}</td><td>{number(entry.first_token_s, 2)}</td><td>{number(entry.load_s)}</td></tr>
+              {/each}
+            </tbody>
+          </table>
+        </div>
+      {/if}
+      {#if canConfigure && perEngine.candidates.length}
+        <div class="choices">
+          <label>{t("compare.engine")}
+            <select bind:value={measured.engine} onchange={() => (measured.model = perEngine?.candidates.find((c) => c.engine === measured.engine)?.model ?? "")}>
+              {#each perEngine.candidates as candidate (candidate.engine)}<option value={candidate.engine}>{candidate.name}</option>{/each}
+            </select>
+          </label>
+          <label>{t("bench.model")}
+            <select bind:value={measured.model}>
+              {#each perEngine.candidates.find((c) => c.engine === measured.engine)?.models ?? [] as name (name)}<option value={name}>{name}</option>{/each}
+            </select>
+          </label>
+          <button type="button" class="button" disabled={busy || perEngine.running || !measured.model} onclick={measureEngine}>{t("bench.start")}</button>
+        </div>
+      {/if}
+    </section>
+  {/if}
 
   <section class="comparison" aria-labelledby="comparison-title">
     <h2 id="comparison-title">{t("compare.title")}</h2>

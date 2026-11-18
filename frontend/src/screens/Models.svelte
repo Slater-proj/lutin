@@ -143,7 +143,7 @@
     <ModelGuide onstarted={() => void guarded(load)} onuse={use} />
   {:else if tab === "engines"}
     {#key refresh}
-      <Engines onchanged={() => { void guarded(load); onchanged(); }} />
+      <Engines canConfigure={!!status?.access.can_configure} onchanged={() => { void guarded(load); onchanged(); }} />
     {/key}
     {#if status?.engine.id === "llamacpp"}
       <EngineLibrary engine="llamacpp" onstarted={() => (refresh += 1)} />

@@ -267,6 +267,16 @@ ok, errors, load_s, first_token_s, tokens_per_s, reading_tokens_per_s, ram_bytes
 it) and `POST /github/test` (configurator). The account is Lutin's (engines' new versions, its own update, third-party skills), so these routes
 left `/third-party-skills/github`.
 
+## Engine settings, folders and tuning
+
+`GET /engines/{id}/settings` (session): `{engine, address_changeable, url, key_set, variant, folder, server, advanced, managed_installed,
+colibri?, lmstudio?, exllamav3?}`, never the key. `PATCH /engines/{id}/settings` (configurator) with any of `url, key, variant, router,
+models_kept, cpu_moe_layers, pinned_version, install_folder, models_folder, server, colibri_model, colibri_port, lmstudio_port, exllamav3_port`.
+`GET`/`PATCH /engines/folder` `{path}`. `GET /engines/measures`, `POST /engines/{id}/measure {model, mode}` (configurator, 202, `409 busy`).
+`GET /models/folder`, `POST /models/folder/analysis {path}`, `POST /models/folder/copy {path}` (202), `PATCH /models/folder {path}`, `POST
+/models/folder/restart-ollama` (configurator but the first). `GET /calibration`, `POST` (202), `DELETE`, `POST /calibration/apply`. `GET
+/machine/advice` `{advice: [{setting, current, advised, text}], dismissed}`, `POST /machine/advice/apply` and `/dismiss`.
+
 ## What v1 keeps
 
 - The security model, unchanged: Host and Origin checks, page token on every `/api/` request, session by PIN pairing, approvals.

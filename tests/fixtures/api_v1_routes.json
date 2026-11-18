@@ -115,6 +115,26 @@
   "right": "session"
  },
  {
+  "method": "DELETE",
+  "path": "/api/v1/calibration",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/calibration",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/calibration",
+  "right": "configurator"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/calibration/apply",
+  "right": "configurator"
+ },
+ {
   "method": "GET",
   "path": "/api/v1/conversations",
   "right": "session"
@@ -230,6 +250,21 @@
   "right": "configurator"
  },
  {
+  "method": "GET",
+  "path": "/api/v1/engines/folder",
+  "right": "session"
+ },
+ {
+  "method": "PATCH",
+  "path": "/api/v1/engines/folder",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/engines/measures",
+  "right": "session"
+ },
+ {
   "method": "POST",
   "path": "/api/v1/engines/{id}/actions/{action}",
   "right": "configurator"
@@ -247,6 +282,21 @@
  {
   "method": "GET",
   "path": "/api/v1/engines/{id}/library/files",
+  "right": "configurator"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/engines/{id}/measure",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/engines/{id}/settings",
+  "right": "session"
+ },
+ {
+  "method": "PATCH",
+  "path": "/api/v1/engines/{id}/settings",
   "right": "configurator"
  },
  {
@@ -358,6 +408,21 @@
   "method": "GET",
   "path": "/api/v1/machine",
   "right": "session"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/machine/advice",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/machine/advice/apply",
+  "right": "configurator"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/machine/advice/dismiss",
+  "right": "configurator"
  },
  {
   "method": "GET",
@@ -583,6 +648,31 @@
   "method": "POST",
   "path": "/api/v1/models/check",
   "right": "session"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/models/folder",
+  "right": "session"
+ },
+ {
+  "method": "PATCH",
+  "path": "/api/v1/models/folder",
+  "right": "configurator"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/models/folder/analysis",
+  "right": "configurator"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/models/folder/copy",
+  "right": "configurator"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/models/folder/restart-ollama",
+  "right": "configurator"
  },
  {
   "method": "GET",
