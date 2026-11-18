@@ -27,6 +27,7 @@ export const FIELDS: readonly Field[] = [
   { name: "num_predict", group: "answers", kind: "integer", min: 0, max: 32768, step: 256 },
   { name: "temperature", group: "answers", kind: "number", min: 0, max: 2, step: 0.1 },
   { name: "advanced", group: "answers", kind: "boolean" },
+  { name: "auxiliary_model", group: "answers", kind: "text" },
 
   { name: "auto_approve_writes", group: "safety", kind: "boolean", risky: true },
   { name: "auto_approve_commands", group: "safety", kind: "boolean", risky: true },
@@ -39,6 +40,8 @@ export const FIELDS: readonly Field[] = [
   { name: "auto_recall", group: "knowledge", kind: "select", options: ["scenario", "always", "never"] },
   { name: "semantic_search", group: "knowledge", kind: "boolean" },
   { name: "embedding_model", group: "knowledge", kind: "text" },
+  { name: "progress_sheet_share", group: "knowledge", kind: "integer", min: 5, max: 25 },
+  { name: "progress_sheet_scribe", group: "knowledge", kind: "boolean" },
   { name: "conversation_backup", group: "knowledge", kind: "boolean" },
 
   { name: "memory_budget_gb", group: "machine", kind: "number", min: 0, max: 4096, step: 0.5 },

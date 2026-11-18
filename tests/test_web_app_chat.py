@@ -489,8 +489,10 @@ class Chat(unittest.TestCase):
         stored = [c for c in T.lire("/api/etat")["conversations"] if c["titre"] == "Renamed on the page"][0]["id"]
         self.eventually(lambda: T.A.options_lire(stored).get("auto_commandes") is True, "auto_commandes stored on the server, for this conversation")
         p.evaluer("(() => { const s = document.querySelector('#options-panel select'); s.value = 'mission'; s.dispatchEvent(new Event('change', {bubbles: true})); })()")
-        p.attendre("document.querySelectorAll('#options-panel select').length === 2")
+        p.attendre("document.querySelectorAll('#options-panel select').length === 3")          # the mode, the longest answer, and the hours of a mission
         self.eventually(lambda: T.A.options_lire(stored).get("mode") == "mission", "mode stored on the server")
+        p.evaluer("(() => { const s = document.querySelectorAll('#options-panel select')[1]; s.value = '2048'; s.dispatchEvent(new Event('change', {bubbles: true})); })()")
+        self.eventually(lambda: T.A.options_lire(stored).get("num_predict") == 2048, "the longest answer of this conversation (PARITY.md item 16)")
         self.picture("3d-options")
         p.evaluer("(() => { const s = document.querySelector('#options-panel select'); s.value = 'general'; s.dispatchEvent(new Event('change', {bubbles: true})); })()")
         p.evaluer("document.querySelectorAll('.approvals input')[1].click()")
@@ -1425,7 +1427,7 @@ class Chat(unittest.TestCase):
     def test_5h_a_setting_is_changed_kept_by_the_server_and_refused_out_of_range(self):
         p = self.page
         before = T.A.reglages()
-        keys = ("temperature", "web", "mode", "memoire_longue")
+        keys = ("temperature", "web", "mode", "memoire_longue", "fiche_part", "fiche_scribe")
         self.addCleanup(lambda: T.A.enregistrer_reglages({key: before[key] for key in keys}))
         p.evaluer("location.hash = '#/settings/general'")
         p.attendre("!!document.querySelector('#setting-temperature')")
@@ -1443,6 +1445,13 @@ class Chat(unittest.TestCase):
         wanted = not before["web"]
         p.evaluer("document.querySelector('#setting-web').click()")
         self.eventually(lambda: T.A.reglages()["web"] == wanted, "a switch is kept as soon as it is clicked")
+        p.evaluer(change % ("setting-progress_sheet_share", js("15")))          # PARITY.md item 16: settings v1 had without a control
+        self.eventually(lambda: T.A.reglages()["fiche_part"] == 15, "the share of the progress sheet is kept")
+        scribe = not before.get("fiche_scribe", True)
+        p.evaluer("document.querySelector('#setting-progress_sheet_scribe').click()")
+        self.eventually(lambda: T.A.reglages()["fiche_scribe"] == scribe, "the scribe is turned on or off")
+        p.evaluer("location.hash = '#/settings/general'")
+        p.attendre("!!document.querySelector('#setting-auxiliary_model')")
         p.evaluer("location.hash = '#/settings/safety'")
         p.attendre("!!document.querySelector('#setting-auto_approve_commands')")
         self.assertTrue(p.evaluer("!!document.querySelector('#setting-auto_approve_commands').closest('.row').querySelector('.care')"), "what removes a question is marked")

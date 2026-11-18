@@ -9,6 +9,7 @@
 
   const MODES = ["general", "technical", "scenario", "research", "chat", "mission"] as const;
   const HOURS = [1, 2, 4, 8, 12, 24, 48, 72];
+  const LENGTHS = [0, 512, 1024, 2048, 4096, 8192, 16384, 32768]; // the choices of the server (storage.LONGUEURS)
   let open = $state(false);
 
   const automatic = $derived([options.auto_approve_writes ? t("opt.auto_writes_short") : "", options.auto_approve_commands ? t("opt.auto_commands_short") : ""].filter(Boolean));
@@ -34,6 +35,14 @@
         {#each MODES as mode (mode)}<option value={mode}>{t(("opt.mode." + mode) as MessageKey)}</option>{/each}
       </select>
       <small>{t(("opt.mode_help." + options.mode) as MessageKey)}</small>
+    </label>
+
+    <label class="field">
+      <span>{t("opt.length")}</span>
+      <select value={options.num_predict} onchange={(event) => onchange({ num_predict: Number(event.currentTarget.value) })}>
+        {#each LENGTHS as length (length)}<option value={length}>{length ? t("opt.length_tokens", length) : t("opt.length_free")}</option>{/each}
+      </select>
+      <small>{t("opt.length_help")}</small>
     </label>
 
     {#if options.mode === "mission"}

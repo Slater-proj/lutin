@@ -67,8 +67,9 @@ switch; each line is ticked here when it is done, with its test.
     `POST /api/v1/conversations/{id}/compact`, `/api/v1/project-commands` and `…/{name}` (`tests/test_api_v1_slash.py`); the commands in
     `lib/slash.ts` (the old French names kept as aliases, `//` sends a slash), suggested and carried out in the Chat, `/help`; the queue of messages
     typed during an answer; `components/Palette.svelte` (test 3zd).
-16. **Settings without a control** though v1 has them: `auxiliary_model`, `progress_sheet_share`, `progress_sheet_scribe`; the maximum length of
-    one conversation's answers.
+16. ~~**Settings without a control** though v1 has them: `auxiliary_model`, `progress_sheet_share`, `progress_sheet_scribe`; the maximum length of
+    one conversation's answers~~ — done: the three fields in `lib/settings.ts` (General and Knowledge, test 5h) and « Longest answer » in the options
+    of a conversation (test 3d).
 17. **Files created by Lutin**, the locations used and their sizes.
 18. Small gaps: MCP demo server, changing a connector's keys, uninstalling helper programs; a scheduled task's work folder and « see the result »;
     pinning one message, « Verify » (web sources), timestamps; the « accept and re-enable the automatic approval » choice after a web read; the

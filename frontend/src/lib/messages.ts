@@ -1432,6 +1432,16 @@ const en = {
   "palette.placeholder": "Where to? (Ctrl+K)",
   "palette.areas": "Areas",
   "palette.new_conversation": "New conversation",
+  "settings.f.auxiliary_model": "Model for side tasks",
+  "settings.h.auxiliary_model": "A small model for the progress sheet, the summaries and the titles (empty: the model in use). Room is needed for both in memory.",
+  "settings.f.progress_sheet_share": "Share of the window for the progress sheet (%)",
+  "settings.h.progress_sheet_share": "5 to 25. Higher keeps more of the sheet in front of the model, and leaves less room for the conversation.",
+  "settings.f.progress_sheet_scribe": "Scribe of the progress sheet",
+  "settings.h.progress_sheet_scribe": "Every three answers or so, a short separate call updates the sheet. Turn it off on a slow machine.",
+  "opt.length": "Longest answer",
+  "opt.length_tokens": "{} tokens",
+  "opt.length_free": "No limit",
+  "opt.length_help": "For this conversation only.",
 };
 
 const fr: Partial<Record<keyof typeof en, string>> = {
@@ -2866,6 +2876,16 @@ const fr: Partial<Record<keyof typeof en, string>> = {
   "palette.placeholder": "Où aller ? (Ctrl+K)",
   "palette.areas": "Espaces",
   "palette.new_conversation": "Nouvelle conversation",
+  "settings.f.auxiliary_model": "Modèle des tâches annexes",
+  "settings.h.auxiliary_model": "Un petit modèle pour la fiche de suivi, les résumés et les titres (vide : le modèle utilisé). Il faut de la place pour les deux en mémoire.",
+  "settings.f.progress_sheet_share": "Part de la fenêtre pour la fiche de suivi (%)",
+  "settings.h.progress_sheet_share": "5 à 25. Plus haut, le modèle voit davantage de la fiche, et il reste moins de place pour la conversation.",
+  "settings.f.progress_sheet_scribe": "Scribe de la fiche de suivi",
+  "settings.h.progress_sheet_scribe": "Toutes les trois réponses environ, un court appel séparé met la fiche à jour. À couper sur une machine lente.",
+  "opt.length": "Réponse la plus longue",
+  "opt.length_tokens": "{} jetons",
+  "opt.length_free": "Sans limite",
+  "opt.length_help": "Pour cette conversation seulement.",
 };
 
 export type MessageKey = keyof typeof en;
