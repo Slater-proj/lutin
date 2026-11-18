@@ -12,9 +12,10 @@
   import { markOf, markSeen, readSeen } from "../lib/marks";
   import { choiceValue, parseChoice, selector, type MachinesView } from "../lib/machines";
   import { approvalPath, byMachine, conversationPath, uploadPath, type Listed } from "../lib/place";
-  import { t } from "../lib/messages";
+  import { t, type MessageKey } from "../lib/messages";
   import { applyEvent, elsewhereNotice, newTurn, storedToItems, type Item, type LiveTurn, type Sent } from "../lib/turn";
   import ConversationTools from "../components/ConversationTools.svelte";
+  import { COMMANDS, MODE_NAMES, memoryMode, onOff, parse, suggest as suggestCommands, type Parsed } from "../lib/slash";
   import type { Conversation, ConversationOptions, ConversationSummary, Models, Settings, Status, TurnState } from "../lib/types";
 
   let { status, onchanged }: { status: Status | null; onchanged: () => void } = $props();
@@ -30,6 +31,10 @@
   let activeNow = $state<string[]>([]);
   let waitingNow = $state<string[]>([]);
   let conversation = $state<Conversation | null>(null);
+  let queue = $state<string[]>([]); // messages typed while an answer runs: sent one by one after it
+  let projectCommands = $state<{ name: string; description: string }[]>([]); // the commands of a Claude project in the work folder
+  let commandNotice = $state(""); // what a « / » command did
+  let showHelp = $state(false);
   let toolsOpen = $state(false); // the tools of the open conversation (memory, handover, export, folders)
   let mission = $state<{ name: string; state: string } | null>(null); // the mission written in the open conversation, if any
   let models = $state<Models | null>(null);
@@ -40,6 +45,7 @@
   let attachments = $state<Attachment[]>([]);
   let counter = 0;
   let draft = $state("");
+  const suggested = $derived(suggestCommands(draft, projectCommands.map((command) => command.name)));
   let problem = $state("");
   let listOpen = $state(false);
   let scroller = $state<HTMLElement | null>(null);
@@ -400,13 +406,129 @@
   function onKey(event: KeyboardEvent): void {
     if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
       event.preventDefault();
-      void send();
+      submitDraft();
     }
   }
 
   function onSubmit(event: SubmitEvent): void {
     event.preventDefault();
+    submitDraft();
+  }
+
+  /** What « send » does: a « / » command is carried out here; a message typed while an answer runs waits in the queue and leaves after it. */
+  function submitDraft(): void {
+    const typed = draft.trim();
+    if (!typed) return;
+    const parsed = parse(typed, projectCommands.map((command) => command.name));
+    if (parsed) {
+      void runCommand(parsed);
+      return;
+    }
+    if (busy) {
+      if (!attachments.length && !editing) {
+        queue = [...queue, typed];
+        draft = "";
+      }
+      return;
+    }
     void send();
+  }
+
+  $effect(() => {
+    // The queue leaves one message at a time, each once the previous answer has ended.
+    if (!busy && queue.length && !problem) {
+      const [next, ...rest] = queue;
+      queue = rest;
+      draft = next;
+      void send();
+    }
+  });
+
+  async function runCommand(parsed: Parsed): Promise<void> {
+    commandNotice = "";
+    showHelp = false;
+    const id = conversation?.id ?? "";
+    const done = (text = ""): void => {
+      draft = "";
+      commandNotice = text;
+    };
+    if (parsed.kind === "unknown") {
+      commandNotice = t("slash.unknown", parsed.name);
+      return;
+    }
+    if (parsed.kind === "project") {
+      await guarded(async () => {
+        draft = (await api<{ text: string }>("GET", `/project-commands/${encodeURIComponent(parsed.name)}?args=${encodeURIComponent(parsed.arg)}`)).text;
+        if (!busy) await send();
+      });
+      return;
+    }
+    const arg = parsed.arg;
+    const flag = onOff(arg);
+    const option = { think: "thinking", web: "web", files: "auto_approve_writes", commands: "auto_approve_commands" } as const;
+    switch (parsed.command) {
+      case "help":
+        draft = "";
+        showHelp = true;
+        return;
+      case "new":
+        done();
+        startNew();
+        return;
+      case "stop":
+        done();
+        await stop();
+        return;
+      case "retry":
+        done();
+        regenerate();
+        return;
+      case "git":
+        done();
+        location.hash = "#/projects";
+        return;
+      case "health":
+        done();
+        location.hash = "#/settings/health";
+        return;
+      case "compact":
+        if (!id || where) return done(t("slash.no_conversation"));
+        await guarded(async () => {
+          const answer = await api<{ before: number; after: number }>("POST", `/conversations/${encodeURIComponent(id)}/compact`, {});
+          done(t("slash.compacted", answer.before, answer.after));
+          await reloadConversation();
+        });
+        return;
+      case "model":
+        if (!arg) return done(t("slash.model_now", models?.current ?? ""));
+        await guarded(async () => {
+          await api("PATCH", "/settings", { model: arg });
+          models = await api<Models>("GET", "/models");
+          done(t("slash.model_set", arg));
+          onchanged();
+        });
+        return;
+      case "mode": {
+        const mode = MODE_NAMES[arg.toLowerCase()];
+        if (!mode) return done(t("slash.expected", "general, technical, scenario, research, chat"));
+        await changeOptions({ mode: mode as ConversationOptions["mode"] });
+        return done(t("slash.set", t(("opt.mode." + mode) as MessageKey)));
+      }
+      case "memory": {
+        const mode = memoryMode(arg);
+        if (mode === undefined) return done(t("slash.expected", "summary, sheet, general"));
+        if (!id || where) return done(t("slash.no_conversation"));
+        await guarded(async () => {
+          await api("PATCH", `/conversations/${encodeURIComponent(id)}/memory`, { mode });
+          done(t("slash.set", t(("tools.mode." + (mode ?? "ask")) as MessageKey)));
+        });
+        return;
+      }
+      default:
+        if (flag === null) return done(t("slash.expected", "on, off"));
+        await changeOptions({ [option[parsed.command]]: flag });
+        return done(t("slash.set", parsed.command + " " + (flag ? "on" : "off")));
+    }
   }
 
   $effect(() => {
@@ -422,6 +544,9 @@
   });
 
   onMount(() => {
+    const onNew = (): void => startNew(); // « New conversation » of the Ctrl+K palette while the Chat is open
+    addEventListener("lutin-new-conversation", onNew);
+    api<{ commands: { name: string; description: string }[] }>("GET", "/project-commands").then((answer) => (projectCommands = answer.commands), () => undefined);
     void guarded(async () => {
       await Promise.all([loadList(), loadModels()]);
       options = await newConversationOptions();
@@ -431,6 +556,7 @@
     void followTurns();
     const marks = setInterval(() => void followTurns(), 5000);
     return () => {
+      removeEventListener("lutin-new-conversation", onNew);
       stopWatching();
       clearInterval(marks);
       clearTimeout(searchTimer);
@@ -613,6 +739,29 @@
       {#if options}<Options {options} offline={!!status?.offline} onchange={changeOptions} />{/if}
       {#if editing !== null}
         <p class="editing"><span>{t("chat.editing")}</span><button type="button" class="link" onclick={cancelEdit}>{t("chat.cancel")}</button></p>
+      {/if}
+      {#if suggested.length}
+        <ul class="slash" aria-label={t("slash.title")}>
+          {#each suggested as entry (entry.name)}
+            <li><button type="button" class="link" onclick={() => ((draft = "/" + entry.name + (entry.arg || entry.project ? " " : "")), box?.focus())}>/{entry.name}{entry.arg ? " " + entry.arg : ""}</button>
+              <span class="muted">{entry.project ? projectCommands.find((command) => command.name === entry.name)?.description || t("slash.project") : t(("slash.d." + entry.name) as MessageKey)}</span></li>
+          {/each}
+        </ul>
+      {/if}
+      {#if showHelp}
+        <div class="slash help" role="region" aria-label={t("slash.title")}>
+          <p><strong>{t("slash.title")}</strong> <button type="button" class="link" onclick={() => (showHelp = false)}>{t("chat.cancel")}</button></p>
+          <ul>{#each COMMANDS as command (command.name)}<li><code>/{command.name}{command.arg ? " " + command.arg : ""}</code> {t(("slash.d." + command.name) as MessageKey)}</li>{/each}</ul>
+          {#if projectCommands.length}<p>{t("slash.project_list")}</p><ul>{#each projectCommands as command (command.name)}<li><code>/{command.name}</code> {command.description}</li>{/each}</ul>{/if}
+        </div>
+      {/if}
+      {#if commandNotice}<p class="command-notice" role="status">{commandNotice}</p>{/if}
+      {#if queue.length}
+        <ul class="queue" aria-label={t("queue.title")}>
+          {#each queue as waiting, index (index)}
+            <li><span>{t("queue.waiting")} {waiting}</span><button type="button" class="link" onclick={() => (queue = queue.filter((_, other) => other !== index))}>{t("queue.remove")}<span class="visually-hidden"> {waiting}</span></button></li>
+          {/each}
+        </ul>
       {/if}
       <form class="composer" onsubmit={onSubmit} ondragover={(event) => event.preventDefault()} ondrop={onDrop}>
         <AttachmentBar {attachments} onadd={addFiles} onremove={removeAttachment} disabled={busy} machine={where} />
@@ -1210,6 +1359,43 @@
     margin: 0;
     padding: var(--space-2) var(--space-4);
     background: var(--color-accent-soft);
+    color: var(--color-accent-text);
+    font-size: var(--text-sm);
+  }
+
+  .slash,
+  .queue {
+    margin: 0;
+    padding: var(--space-2) var(--space-3);
+    list-style: none;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-surface);
+    font-size: var(--text-sm);
+    max-height: 14rem;
+    overflow-y: auto;
+  }
+
+  .slash li,
+  .queue li {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    align-items: baseline;
+    overflow-wrap: anywhere;
+  }
+
+  .slash.help ul {
+    padding-left: var(--space-4);
+    list-style: disc;
+  }
+
+  .slash .muted {
+    color: var(--color-text-muted);
+  }
+
+  .command-notice {
+    margin: 0;
     color: var(--color-accent-text);
     font-size: var(--text-sm);
   }

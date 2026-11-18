@@ -299,6 +299,12 @@ title, extract, conversation}]}`, `400` for vague words. `GET /notes`: `{notes: 
 /notes?line=` (`404 not_found`). `GET /search-by-meaning`: `{active, model, installed, installation: {state, done_bytes, total_bytes, error}}`;
 `POST /search-by-meaning/install` (configurator, 202, `409 offline`).
 
+## Slash commands
+
+`POST /conversations/{id}/compact` (session): `{before, after, sheet}`, `409 turn_running`. `GET /project-commands`: `{commands: [{name,
+description}]}` (the `.claude/commands` of the work folder); `GET /project-commands/{name}?args=`: `{text}`, the message the command makes
+(`404 not_found`). The other commands are carried out by the page with the routes it already has.
+
 ## What v1 keeps
 
 - The security model, unchanged: Host and Origin checks, page token on every `/api/` request, session by PIN pairing, approvals.

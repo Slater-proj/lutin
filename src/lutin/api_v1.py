@@ -3625,6 +3625,36 @@ def answer_memory_choice(request):
     return {"choice": body["choice"]}
 
 
+# --------------------------------------------------------------------------------------------------------- slash commands
+# What the commands typed in the Chat need from the server (docs/modernization/PARITY.md, item 15): « /compact » now, and the commands of a Claude
+# project (`.claude/commands/<name>.md` in the work folder): their list, and the message one makes (its « !… » lines are never run: the model is told).
+@route("POST", "/conversations/{id}/compact", SESSION)
+def compact_conversation(request):
+    """« /compact »: summarises the start of the conversation now (summary mode), or moves it out in one block (sheet mode). Answers {before, after,
+    sheet}: the messages before and after. 409 `turn_running`."""
+    identifier = request.params["id"]
+    _read(identifier)
+    _not_running(identifier)
+    done = _m.compacter_conversation(identifier)
+    return {"before": done["avant"], "after": done["apres"], "sheet": bool(done.get("fiche"))}
+
+
+@route("GET", "/project-commands", SESSION)
+def project_commands(request):
+    """The commands of the Claude project in the work folder: `{commands: [{name, description}]}` (empty without a `.claude/commands` folder)."""
+    found = _claude_project.detect(_m.RACINE)
+    return {"commands": [{"name": c["nom"], "description": c.get("description", "")} for c in found.get("commandes") or []]}
+
+
+@route("GET", "/project-commands/{name}", SESSION)
+def project_command(request):
+    """`?args=`: the message the command makes, its $ARGUMENTS and $1, $2… replaced: `{text}`. 404 for a command the project does not have."""
+    try:
+        return {"text": _claude_project.command(_m.RACINE, request.params["name"], request.query.get("args", "")[:2000])}
+    except ValueError as missing:
+        raise ApiError(404, "not_found", str(missing)) from None
+
+
 # ------------------------------------------------------------------------------------------------------- conversation tools
 # What one conversation offers beyond its messages (docs/modernization/PARITY.md, item 12): how it keeps its thread (summary, progress sheet, or the
 # general setting), its progress sheet read, edited or deleted, a handover document written by the model, and its folders. The project's Git

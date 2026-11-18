@@ -3,6 +3,7 @@
   import { onMount } from "svelte";
   import Icon, { type IconName } from "./components/Icon.svelte";
   import LutinBanners from "./components/LutinBanners.svelte";
+  import Palette from "./components/Palette.svelte";
   import { api, ApiError } from "./lib/api";
   import { t, type MessageKey } from "./lib/messages";
   import { waiting, type NodeView } from "./lib/node";
@@ -79,6 +80,7 @@
   <Setup {status} onfinished={() => ((setupNeeded = false), void refreshStatus())} />
 {:else}
 <a class="skip" href="#main">{t("a11y.skip")}</a>
+<Palette />
 <div class="shell">
   <nav class="rail" aria-label={t("nav.label")}>
     <p class="brand"><img src="/logo.svg" alt="" width="30" height="30" /><span>Lutin</span></p>

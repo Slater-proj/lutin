@@ -1184,6 +1184,52 @@ class Chat(unittest.TestCase):
         self.assertEqual(p.erreurs, [])
         p.evaluer("location.hash = '#/chat'")
 
+    def test_3zd_commands_are_suggested_and_run_a_message_waits_its_turn_and_the_palette_goes_anywhere(self):
+        """PARITY.md item 15: « / » commands (suggested, carried out, listed), a message typed during an answer sent after it, and the Ctrl+K palette.
+        Hermetic: the fake engine answers; the first answer pauses a moment so a second message can be typed meanwhile."""
+        p = self.page
+        T.SCENARIO[:] = [[{"content": "Début"}, {"attendre": 2}, {"content": " et fin."}], [{"content": "Réponse au second."}]]
+        self.addCleanup(lambda: T.SCENARIO.clear())
+        p.evaluer("location.hash = '#/chat'; location.reload()")
+        p.attendre("!!document.querySelector('#message')")
+        p.evaluer("document.querySelector('.new')?.click()")
+        self.write("Premier message")
+        p.evaluer("document.querySelector('.composer button[type=submit]').click()")
+        p.attendre("!!document.querySelector('.composer .stop')")
+        p.evaluer("(() => { const box = document.querySelector('#message'); box.value = 'Second message'; box.dispatchEvent(new Event('input', {bubbles: true})); box.dispatchEvent(new KeyboardEvent('keydown', {key: 'Enter', bubbles: true})); })()")
+        p.attendre("document.querySelector('.queue')?.innerText.includes('Second message')")
+        if AXE.is_file():
+            self.axe("with a message waiting its turn")
+        p.attendre("document.querySelector('.thread')?.innerText.includes('Réponse au second.')", 20)
+        self.assertFalse(p.evaluer("!!document.querySelector('.queue')"), "sent after the first answer")
+
+        type_in = "(() => { const box = document.querySelector('#message'); box.value = %s; box.dispatchEvent(new Event('input', {bubbles: true})); })()"
+        p.evaluer(type_in % js("/co"))
+        p.attendre("document.querySelectorAll('.slash li').length === 2")
+        self.assertIn("/compact", p.evaluer("document.querySelector('.slash').innerText"))
+        p.evaluer(type_in % js("/web off"))
+        p.evaluer("document.querySelector('#message').dispatchEvent(new KeyboardEvent('keydown', {key: 'Enter', bubbles: true}))")
+        p.attendre("document.querySelector('.command-notice')?.innerText.includes('web off')")
+        self.assertEqual(p.evaluer("document.querySelector('#message').value"), "", "a command is not sent to the model")
+        p.evaluer(type_in % js("/aide"))
+        p.evaluer("document.querySelector('#message').dispatchEvent(new KeyboardEvent('keydown', {key: 'Enter', bubbles: true}))")
+        p.attendre("!!document.querySelector('.slash.help')")
+        p.evaluer(type_in % js("/frobnicate"))
+        p.evaluer("document.querySelector('#message').dispatchEvent(new KeyboardEvent('keydown', {key: 'Enter', bubbles: true}))")
+        p.attendre("document.querySelector('.command-notice')?.innerText.includes('/frobnicate')")
+
+        p.evaluer("document.dispatchEvent(new KeyboardEvent('keydown', {key: 'k', ctrlKey: true, bubbles: true}))")
+        p.attendre("document.activeElement?.id === 'palette-box'")
+        p.evaluer("(() => { const box = document.querySelector('#palette-box'); box.value = 'sante'; box.dispatchEvent(new Event('input', {bubbles: true})); })()")
+        p.attendre("document.querySelectorAll('#palette-list [role=option]').length >= 1")
+        if AXE.is_file():
+            self.axe("with the Ctrl+K palette open")
+        p.evaluer("document.querySelector('#palette-box').dispatchEvent(new KeyboardEvent('keydown', {key: 'Enter', bubbles: true}))")
+        p.attendre("location.hash === '#/settings/health'")
+        self.assertFalse(p.evaluer("!!document.querySelector('.palette')"))
+        self.assertEqual(p.erreurs, [])
+        p.evaluer("location.hash = '#/chat'")
+
     def test_4_a_refusal_of_the_server_is_shown_and_the_message_is_given_back(self):
         p = self.page
         with mock.patch.object(T.A, "TOURS_SIMULTANES", 0):

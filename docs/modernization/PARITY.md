@@ -63,7 +63,10 @@ switch; each line is ticked here when it is done, with its test.
     /api/v1/documents`, `/documents/search`, `/notes` (GET, POST, DELETE), `/search-by-meaning` and `…/install`
     (`tests/test_api_v1_documents_notes.py`), « Documents and notes » in Settings › Knowledge (`components/Documents.svelte`, test 3zc). Found on
     the way: a note added while MEMOIRE.md had no notes section was never listed nor re-read; `storage.noter` now creates the section.
-15. **Slash commands** (and the commands of a Claude project), the **Ctrl+K palette**, the queue of messages sent while an answer runs.
+15. ~~**Slash commands** (and the commands of a Claude project), the **Ctrl+K palette**, the queue of messages sent while an answer runs~~ — done:
+    `POST /api/v1/conversations/{id}/compact`, `/api/v1/project-commands` and `…/{name}` (`tests/test_api_v1_slash.py`); the commands in
+    `lib/slash.ts` (the old French names kept as aliases, `//` sends a slash), suggested and carried out in the Chat, `/help`; the queue of messages
+    typed during an answer; `components/Palette.svelte` (test 3zd).
 16. **Settings without a control** though v1 has them: `auxiliary_model`, `progress_sheet_share`, `progress_sheet_scribe`; the maximum length of
     one conversation's answers.
 17. **Files created by Lutin**, the locations used and their sizes.
