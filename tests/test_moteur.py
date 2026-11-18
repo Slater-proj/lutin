@@ -670,6 +670,8 @@ class Assistant(unittest.TestCase):
         self.assertLess(len(c["messages"]), 22)
         envoi = RECUES[-1]["messages"]
         self.assertIn("Résumé de la conversation", envoi[1]["content"])
+        self.assertEqual(c["depart"], "Début", "la demande de départ est gardée mot pour mot")
+        self.assertIn("Demande de départ : Début", envoi[1]["content"], "et renvoyée au modèle avec le résumé")
         self.assertEqual(envoi[-1]["content"], "Où en est-on ?")
         self.assertFalse(RECUES[-2].get("stream", True), "le résumé est demandé sans flux")
 
@@ -2611,7 +2613,8 @@ class Assistant(unittest.TestCase):
             post("/api/epingler-message", {"conversation": cid, "index": i, "epingle": False})
         # la réduction du contexte garde le message épinglé, retire d'anciens messages, et le marquage ne part pas chez Ollama
         court = {"role": "user", "content": "Règle d'or : ne jamais toucher à la production.", "epingle": True}
-        msgs = [{"role": "system", "content": "s"}, court] + [{"role": "assistant" if i % 2 else "user", "content": "bavardage %d " % i + "mot " * 400} for i in range(12)] + [{"role": "user", "content": "Et maintenant ?"}]
+        depart = [{"role": "user", "content": "Demande de départ : écrire le guide."}, {"role": "assistant", "content": "D'accord."}]          # toujours gardée (test suivant)
+        msgs = [{"role": "system", "content": "s"}] + depart + [court] + [{"role": "assistant" if i % 2 else "user", "content": "bavardage %d " % i + "mot " * 400} for i in range(12)] + [{"role": "user", "content": "Et maintenant ?"}]
         reduit = A.ajuster_contexte(msgs, 4096, 1.0, [])
         self.assertTrue(any("Règle d'or" in (m.get("content") or "") for m in reduit), "le message épinglé est resté")
         self.assertLess(len(reduit), len(msgs), "d'autres anciens messages ont bien été retirés")
@@ -2633,6 +2636,30 @@ class Assistant(unittest.TestCase):
         finally:
             A.TOURS_ACTIFS.pop(cid, None)
         post("/api/supprimer", {"id": cid})
+
+    def test_la_demande_de_depart_reste_sous_les_yeux_du_modele(self):
+        """Une longue conversation sur une petite fenêtre : les anciens échanges sont retirés, jamais la première demande (raccourcie si elle est trop longue)."""
+        bavardage = [{"role": "assistant" if i % 2 else "user", "content": "bavardage %d " % i + "mot " * 400} for i in range(12)]
+        msgs = [{"role": "system", "content": "s"}, {"role": "user", "content": "Objectif : réécrire le module de facturation en gardant l'API."}] + bavardage + [{"role": "user", "content": "On continue ?"}]
+        reduit = A.ajuster_contexte(msgs, 4096, 1.0, [])
+        self.assertLess(len(reduit), len(msgs), "d'anciens échanges sont retirés")
+        self.assertEqual(reduit[1]["content"], msgs[1]["content"], "la demande de départ est restée, mot pour mot")
+        long = [{"role": "system", "content": "s"}, {"role": "user", "content": "Objectif : " + "détail " * 3000}] + bavardage + [{"role": "user", "content": "On continue ?"}]
+        reduit = A.ajuster_contexte(long, 4096, 1.0, [])
+        self.assertTrue(reduit[1]["content"].startswith("Objectif : ") and reduit[1]["content"].endswith("[... demande de départ raccourcie]"))
+        self.assertLess(len(reduit[1]["content"]), len(long[1]["content"]))
+
+    def test_le_resume_garde_la_demande_de_depart_et_tient_dans_une_petite_fenetre(self):
+        self.assertEqual((A.taille_resume(4096), A.taille_resume(8192), A.taille_resume(131072)), (1843, 3686, 6000))
+        self.assertEqual(A.taille_resume(1024), 1500)
+
+    def test_le_rappel_du_fil_s_allume_des_que_l_historique_deborde(self):
+        """Avant, le rappel du fil attendait un résumé ou la fiche : entre-temps, les plus anciens messages disparaissaient sans retour."""
+        court = {"messages": [{"role": "user", "content": "Bonjour"}, {"role": "assistant", "content": "Salut"}]}
+        long = {"messages": [{"role": "user" if i % 2 == 0 else "assistant", "content": "mot " * 400} for i in range(40)]}
+        self.assertFalse(A.deborde(court, {"num_ctx": 8192}))
+        self.assertTrue(A.deborde(long, {"num_ctx": 8192}))
+        self.assertFalse(A.deborde(long, {"num_ctx": 131072}))
 
     def test_mise_a_jour_depuis_la_page(self):
         import time

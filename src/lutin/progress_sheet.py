@@ -21,6 +21,8 @@ KEYS = tuple(c for c, _ in SECTIONS)
 TITLES = dict(SECTIONS)
 MAX_LINES = {"objectif": 3, "decisions": 25, "plan": 20, "etape": 3, "fait": 15, "ouvert": 10, "fichiers": 30, "demandes": 6}
 MAX_LINE = 240
+KEPT_FIRST_DECISIONS = 5              # au-delà du plafond, les 5 premières décisions restent, avec les plus récentes
+RENDER_ORDER = ("objectif", "etape", "ouvert", "decisions", "plan", "fait", "fichiers", "demandes")          # pour le modèle : l'essentiel d'abord, une coupe n'enlève que la fin
 MAX_SHARE = 0.10                      # part de la fenêtre de contexte que la fiche peut prendre (au-delà, elle est raccourcie)
 SHARE_WARNING = 0.07                # au-delà, la page avertit
 CHARS_PER_TOKEN = 3
@@ -71,6 +73,8 @@ def clamp(sections):
             if ligne and ligne.lower() not in vues:
                 vues.add(ligne.lower())
                 lignes.append(ligne)
+        if cle == "decisions" and len(lignes) > MAX_LINES[cle]:
+            lignes = lignes[:KEPT_FIRST_DECISIONS] + lignes[len(lignes) - (MAX_LINES[cle] - KEPT_FIRST_DECISIONS):]          # les premières décisions fondent le projet : gardées
         sortie[cle] = lignes[-MAX_LINES[cle]:]
     return sortie
 
@@ -186,18 +190,26 @@ def after_turn(ident, demande, reponse, fichiers=()):
 
 
 def render(sections, budget_caracteres):
-    """Le texte de la fiche pour le modèle, dans la limite demandée : si c'est trop long, on retire d'abord les dernières demandes, puis les fichiers, puis les plus anciennes lignes de « fait »."""
+    """Le texte de la fiche pour le modèle, dans la limite demandée. L'objectif et l'étape en cours viennent d'abord ; si c'est trop long, on retire les
+    plus anciennes demandes, puis les fichiers, les plus anciennes lignes de « fait », la fin du plan (les étapes lointaines), les décisions du milieu
+    (la première et les plus récentes restent), le reste de « fait », enfin les questions ouvertes. Une coupe nette, en dernier recours, n'enlève que la
+    fin."""
     sections = {c: list(v) for c, v in sections.items()}
 
     def texte():
         morceaux = []
-        for cle, titre in SECTIONS:
-            if sections[cle]:
-                morceaux.append("{} :\n".format(titre) + "\n".join("- " + ligne for ligne in sections[cle]))
+        for cle in RENDER_ORDER:
+            if sections.get(cle):
+                morceaux.append("{} :\n".format(TITLES[cle]) + "\n".join("- " + ligne for ligne in sections[cle]))
         return "\n".join(morceaux)
-    for cle in ("demandes", "fichiers", "fait", "decisions", "ouvert"):
-        while len(texte()) > budget_caracteres and len(sections[cle]) > (2 if cle in ("fait", "decisions") else 0):
-            sections[cle].pop(0)
+    for cle, garder in (("demandes", 0), ("fichiers", 0), ("fait", 2), ("plan", 1), ("decisions", 2), ("fait", 0), ("ouvert", 1)):
+        while len(texte()) > budget_caracteres and len(sections.get(cle) or []) > garder:
+            if cle == "plan":
+                sections[cle].pop()                               # la fin du plan : les étapes les plus lointaines
+            elif cle == "decisions":
+                sections[cle].pop(1)                              # celles du milieu : la première et les plus récentes restent
+            else:
+                sections[cle].pop(0)
     return texte()[:budget_caracteres]
 
 

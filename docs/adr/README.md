@@ -24,3 +24,4 @@ These records are technical documentation, written in English only (ADR 0001). T
 | [0015](0015-one-entry-runs-a-turn.md) | One entry runs a turn, whoever asks for it | Accepted, implemented |
 | [0016](0016-paired-machines-in-v1-and-the-new-interface.md) | Paired machines in `/api/v1` and in the new interface | Accepted, implemented (seven stages) |
 | [0017](0017-conversations-in-sqlite.md) | Conversations in SQLite, settings in JSON | Accepted, implemented |
+| [0018](0018-keeping-the-thread-on-a-small-window.md) | Keeping the thread of a long conversation on a small window | Accepted, first part implemented |

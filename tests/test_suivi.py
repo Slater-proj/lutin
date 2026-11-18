@@ -195,6 +195,25 @@ class Scribe(unittest.TestCase):
         self.assertEqual(self.dialogue.scribe(self.conv, {"modele": "m", "num_ctx": 8192, "temperature": 0.2}), 0, "rien de nouveau depuis : aucun appel")
         self.assertEqual(len(appels), 1)
 
+    def test_un_long_plan_ne_chasse_pas_l_etape_ni_les_premieres_decisions(self):
+        """Une petite fenêtre (4 096 jetons) : le plan est raccourci par sa fin, l'étape en cours et les questions ouvertes restent ; au-delà du plafond de
+        décisions, les premières (celles qui fondent le projet) restent avec les plus récentes."""
+        for i in range(20):
+            progress_sheet.modify(ID, "plan", "étape de plan numéro {} ".format(i) + "mot " * 50, "ajouter")
+        for i in range(40):
+            progress_sheet.modify(ID, "decisions", "décision {} ".format(i) + "mot " * 30)
+        progress_sheet.modify(ID, "objectif", "Réécrire la facturation")
+        progress_sheet.modify(ID, "etape", "Écrire les tests de la TVA")
+        progress_sheet.modify(ID, "ouvert", "Quel taux pour les DOM ?")
+        decisions = progress_sheet.read(ID)["decisions"]
+        self.assertEqual(len(decisions), progress_sheet.MAX_LINES["decisions"])
+        self.assertTrue(decisions[0].startswith("décision 0 ") and decisions[-1].startswith("décision 39 "), "les premières et les plus récentes")
+        texte = progress_sheet.text_for_model(ID, 4096)
+        for attendu in ("Réécrire la facturation", "Écrire les tests de la TVA", "Quel taux pour les DOM ?", "décision 0 ", "décision 39 ", "étape de plan numéro 0 "):
+            self.assertIn(attendu, texte)
+        self.assertNotIn("étape de plan numéro 19 ", texte, "la fin du plan part d'abord")
+        self.assertLess(texte.index("Écrire les tests de la TVA"), texte.index("étape de plan numéro 0 "), "l'étape avant le plan")
+
     def test_une_decision_n_est_jamais_retiree_et_les_excès_sont_bornes(self):
         progress_sheet.modify(ID, "decisions", "Ne jamais toucher à la production")
         self.avec(json_ops(decisions=["décision %d" % i for i in range(30)], resolu=["Ne jamais toucher à la production"], ouvert=["x" * 5000]))
