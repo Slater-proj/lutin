@@ -280,6 +280,21 @@
   "right": "session"
  },
  {
+  "method": "GET",
+  "path": "/api/v1/created-files",
+  "right": "configurator"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/created-files/delete",
+  "right": "configurator"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/created-files/{id}/open-folder",
+  "right": "configurator"
+ },
+ {
   "method": "DELETE",
   "path": "/api/v1/devices",
   "right": "configurator"
@@ -468,6 +483,11 @@
   "method": "PATCH",
   "path": "/api/v1/language",
   "right": "session"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/locations",
+  "right": "configurator"
  },
  {
   "method": "POST",

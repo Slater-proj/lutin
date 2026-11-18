@@ -1442,6 +1442,19 @@ const en = {
   "opt.length_tokens": "{} tokens",
   "opt.length_free": "No limit",
   "opt.length_help": "For this conversation only.",
+  "storage.title": "Files and locations",
+  "storage.only_here": "The folders and files of this machine are shown on this machine only.",
+  "storage.places": "The folders Lutin uses",
+  "storage.place": "Folder",
+  "storage.size": "Size",
+  "storage.free": "Free on its disk",
+  "storage.created": "Files Lutin created: {} ({})",
+  "storage.created_list": "Files created",
+  "storage.none": "Lutin has created no file.",
+  "storage.all": "All",
+  "storage.delete": "Delete the files ticked",
+  "storage.delete_confirm": "Delete these {} file(s) from the disk and from their conversations?",
+  "storage.deleted": "{} file(s) deleted, {} freed.",
 };
 
 const fr: Partial<Record<keyof typeof en, string>> = {
@@ -2886,6 +2899,19 @@ const fr: Partial<Record<keyof typeof en, string>> = {
   "opt.length_tokens": "{} jetons",
   "opt.length_free": "Sans limite",
   "opt.length_help": "Pour cette conversation seulement.",
+  "storage.title": "Fichiers et emplacements",
+  "storage.only_here": "Les dossiers et fichiers de cette machine ne s'affichent que sur cette machine.",
+  "storage.places": "Les dossiers que Lutin utilise",
+  "storage.place": "Dossier",
+  "storage.size": "Taille",
+  "storage.free": "Libre sur son disque",
+  "storage.created": "Fichiers créés par Lutin : {} ({})",
+  "storage.created_list": "Fichiers créés",
+  "storage.none": "Lutin n'a créé aucun fichier.",
+  "storage.all": "Tous",
+  "storage.delete": "Supprimer les fichiers cochés",
+  "storage.delete_confirm": "Supprimer ces {} fichier(s) du disque et de leurs conversations ?",
+  "storage.deleted": "{} fichier(s) supprimé(s), {} libérés.",
 };
 
 export type MessageKey = keyof typeof en;

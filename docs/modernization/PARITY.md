@@ -70,7 +70,9 @@ switch; each line is ticked here when it is done, with its test.
 16. ~~**Settings without a control** though v1 has them: `auxiliary_model`, `progress_sheet_share`, `progress_sheet_scribe`; the maximum length of
     one conversation's answers~~ — done: the three fields in `lib/settings.ts` (General and Knowledge, test 5h) and « Longest answer » in the options
     of a conversation (test 3d).
-17. **Files created by Lutin**, the locations used and their sizes.
+17. ~~**Files created by Lutin**, the locations used and their sizes~~ — done: `/api/v1/created-files`, `…/delete`, `…/{id}/open-folder` and
+    `/api/v1/locations` (configurator: paths of this machine; `tests/test_api_v1_created_files.py`), « Files and locations » in Settings › Data
+    (`components/Storage.svelte`, test 3ze).
 18. Small gaps: MCP demo server, changing a connector's keys, uninstalling helper programs; a scheduled task's work folder and « see the result »;
     pinning one message, « Verify » (web sources), timestamps; the « accept and re-enable the automatic approval » choice after a web read; the
     « start Ollama » button and the diagnostic actions on the stopped-engine banner; recalling earlier inputs.

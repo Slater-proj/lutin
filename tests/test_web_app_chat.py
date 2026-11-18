@@ -1232,6 +1232,35 @@ class Chat(unittest.TestCase):
         self.assertEqual(p.erreurs, [])
         p.evaluer("location.hash = '#/chat'")
 
+    def test_3ze_the_locations_are_measured_and_created_files_cleaned_after_a_second_click(self):
+        """PARITY.md item 17: « Files and locations » in Settings › Data. Hermetic: the list of locations and the registry of created files are
+        replaced; nothing is deleted from the disk."""
+        p = self.page
+        from lutin import locations, produced_files
+        removed = []
+        listed = {"total": 3072, "liste": [{"id": "f1", "genre": "image", "nom": "chat.png", "chemin": "C:/data/chat.png", "taille": 2048, "date": 1700000000, "conversation": "", "conversation_existe": False},
+                                            {"id": "f2", "genre": "fichier", "nom": "notes.md", "chemin": "C:/data/notes.md", "taille": 1024, "date": 1700000100, "conversation": "", "conversation_existe": False}]}
+        seen = {"lignes": [{"cle": "donnees", "nom": "Données", "chemin": "C:/data", "explication": "Conversations.", "existe": True, "taille": 10 ** 6, "disque": {"libre": 5 * 10 ** 9, "total": 10 ** 10, "racine": "C:\\"}}],
+                "donnees_detail": []}
+        for patch in (mock.patch.object(locations, "lister", lambda: seen), mock.patch.object(produced_files, "entries", lambda: listed),
+                      mock.patch.object(produced_files, "remove_selection", lambda ids: removed.append(ids) or {"supprimes": len(ids), "libere": 2048, "ignores": []})):
+            patch.start()
+            self.addCleanup(patch.stop)
+        p.evaluer("location.hash = '#/settings/data'")
+        p.attendre("document.querySelectorAll('.storage li').length === 2 && !!document.querySelector('.storage table')")
+        self.assertIn("Données", p.evaluer("document.querySelector('.storage table').innerText"))
+        p.evaluer("document.querySelector('.storage li input').click()")
+        self.press("[...document.querySelectorAll('.storage .button')].find(b => b.innerText === 'Supprimer les fichiers cochés')")
+        p.attendre("!!document.querySelector('.storage .confirm')")
+        self.assertEqual(removed, [], "asking is not deleting")
+        if AXE.is_file():
+            self.axe("on the files and locations")
+        self.press("document.querySelector('.storage .confirm .danger')")
+        p.attendre("document.querySelector('.storage .notice').innerText.includes('supprimé')")
+        self.assertEqual(removed, [["f1"]])
+        self.assertEqual(p.erreurs, [])
+        p.evaluer("location.hash = '#/chat'")
+
     def test_4_a_refusal_of_the_server_is_shown_and_the_message_is_given_back(self):
         p = self.page
         with mock.patch.object(T.A, "TOURS_SIMULTANES", 0):

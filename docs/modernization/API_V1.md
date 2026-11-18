@@ -305,6 +305,12 @@ title, extract, conversation}]}`, `400` for vague words. `GET /notes`: `{notes: 
 description}]}` (the `.claude/commands` of the work folder); `GET /project-commands/{name}?args=`: `{text}`, the message the command makes
 (`404 not_found`). The other commands are carried out by the page with the routes it already has.
 
+## Created files and locations
+
+`GET /created-files` (configurator): `{files: [{id, kind, name, path, size_bytes, date, conversation, conversation_exists}], total_bytes}`;
+`POST /created-files/delete {ids}`: `{deleted, freed_bytes, skipped}`; `POST /created-files/{id}/open-folder` (`409 cannot_open`). `GET
+/locations` (configurator): `{locations: [{key, name, path, explanation, exists, size_bytes, disk: {free, total, root}}], data_detail}`.
+
 ## What v1 keeps
 
 - The security model, unchanged: Host and Origin checks, page token on every `/api/` request, session by PIN pairing, approvals.

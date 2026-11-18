@@ -3892,6 +3892,50 @@ def install_search_model(request):
     return 202, _meaning_view()
 
 
+# ------------------------------------------------------------------------------------------------ created files, locations
+# What Lutin made and where it keeps things (docs/modernization/PARITY.md, item 17): every file it created (documents, images, videos, sounds), to
+# clean up, and every folder it uses with its size and the free space of its disk. Reading paths of this machine and deleting are `configurator`, as on
+# the old page.
+@route("GET", "/created-files", CONFIGURATOR)
+def created_files(request):
+    """Every file Lutin created, the newest first: `{files: [{id, kind, name, path, size_bytes, date, conversation, conversation_exists}],
+    total_bytes}`."""
+    seen = _produced.entries()
+    return {"files": [{"id": f["id"], "kind": f["genre"], "name": f["nom"], "path": f["chemin"], "size_bytes": f["taille"], "date": f["date"], "conversation": f["conversation"] or None,
+                       "conversation_exists": bool(f["conversation_existe"])} for f in seen["liste"]], "total_bytes": seen["total"]}
+
+
+@route("POST", "/created-files/delete", CONFIGURATOR)
+def delete_created_files(request):
+    """`{ids: [...]}`: deletes those files from the disk and from the conversations that show them. Answers `{deleted, freed_bytes, skipped}` (a file
+    of a conversation that is answering is skipped, with why)."""
+    ids = request.body.get("ids")
+    if not isinstance(ids, list) or not ids or not all(isinstance(i, str) for i in ids):
+        raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("ids"))
+    done = _produced.remove_selection(ids[:2000])
+    return {"deleted": done["supprimes"], "freed_bytes": done["libere"], "skipped": [str(s) for s in done["ignores"]]}
+
+
+@route("POST", "/created-files/{id}/open-folder", CONFIGURATOR)
+def open_created_file_folder(request):
+    """Opens the folder of that file in the file explorer of this machine. 409 `cannot_open` without a screen."""
+    if not _produced.opening_possible():
+        raise ApiError(409, "cannot_open", _t("L'ouverture d'un dossier ne marche que depuis cette machine (pas sous Docker ni sur un serveur sans écran) : copie le chemin, ou télécharge les fichiers depuis la conversation."))
+    _produced.open_folder(request.params["id"])
+    return {"opened": True}
+
+
+@route("GET", "/locations", CONFIGURATOR)
+def locations_used(request):
+    """Every folder Lutin uses (configuration, data, memory, cache, Ollama's models, the work folders): `{locations: [{key, name, path, explanation,
+    exists, size_bytes, disk: {free, total, root}}], data_detail: [{name, size_bytes}]}` (the biggest subfolders of the data)."""
+    from . import locations as _locations
+    seen = _locations.lister()
+    return {"locations": [{"key": line["cle"], "name": line["nom"], "path": line["chemin"], "explanation": line["explication"], "exists": bool(line["existe"]), "size_bytes": line["taille"],
+                           "disk": line["disque"] and {"free": line["disque"]["libre"], "total": line["disque"]["total"], "root": line["disque"]["racine"]}} for line in seen["lignes"]],
+            "data_detail": [{"name": d["nom"], "size_bytes": d["taille"]} for d in seen["donnees_detail"]]}
+
+
 # --------------------------------------------------------------------------------------------------------- background work
 # Documents processed in the background (docs/modernization/PARITY.md, item 13; lutin.background_jobs): a folder, the kinds of files, an instruction
 # applied to each document while nobody talks to Lutin; a trial stops after the first documents until the person validates them. Reading is `session`;
