@@ -408,6 +408,8 @@ from .health import (  # noqa: F401  (déplacé dans health.py : moteur ré-expo
 def etat_comfy():
     """ComfyUI tourne-t-il, et est-il en train de générer ? (il se partage la carte graphique avec le modèle de langage)"""
     try:
+        from . import local_ports
+        local_ports.check(os.environ.get("COMFY_URL", "http://127.0.0.1:8188"))
         with urllib.request.urlopen(os.environ.get("COMFY_URL", "http://127.0.0.1:8188").rstrip("/") + "/queue", timeout=0.8) as r:
             q = json.loads(r.read().decode("utf-8"))
         return {"actif": True, "en_cours": len(q.get("queue_running") or []), "attente": len(q.get("queue_pending") or [])}
@@ -580,8 +582,10 @@ def demarrer_ollama():
     # ouvre sa propre fenêtre noire qui clignote. Avec une console cachée, ils la partagent et rien ne s'affiche.
     drapeaux = 0x08000000 | 0x00000200 if os.name == "nt" else 0
     subprocess.Popen([exe, "serve"], env=env, creationflags=drapeaux, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    from . import local_ports
     for _ in range(30):
         time.sleep(0.5)
+        local_ports.forget()          # il vient d'être lancé : un refus d'avant ne compte plus
         if etat_ollama()["actif"]:
             return "Ollama démarré."
     raise ValueError("Ollama ne répond pas après 15 secondes.")

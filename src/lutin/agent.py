@@ -496,6 +496,9 @@ def avec_garde(corps):
 def ollama_json(chemin, corps=None, delai=8):
     if chemin in ("/api/chat", "/api/generate"):
         corps = avec_garde(corps)
+    else:
+        from . import local_ports
+        local_ports.check(_m.OLLAMA)          # une lecture (liste, état) : un Ollama local arrêté se sait en 0,25 s, pas en 2 s sous Windows
     donnees = None if corps is None else json.dumps(corps).encode("utf-8")
     req = urllib.request.Request(_m.OLLAMA + chemin, data=donnees, headers={"Content-Type": "application/json"})
     with urllib.request.urlopen(req, timeout=delai) as r:

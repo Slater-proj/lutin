@@ -3096,8 +3096,10 @@ def _resources():
 def health(request):
     """The state of this machine for the models (memory, graphics card, disk, each with a level and advice), what is loaded, and the programs that
     occupy the most memory."""
-    state = _m.health_state()
-    return {"level": HEALTH_LEVELS.get(state.get("niveau"), state.get("niveau", "")), "items": [_health_item(item) for item in state.get("items") or []], "resources": _resources()}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:          # each waits on programs (nvidia-smi, the list of processes): side by side
+        state, resources = pool.submit(_m.health_state), pool.submit(_resources)
+        state, resources = state.result(), resources.result()
+    return {"level": HEALTH_LEVELS.get(state.get("niveau"), state.get("niveau", "")), "items": [_health_item(item) for item in state.get("items") or []], "resources": resources}
 
 
 @route("POST", "/health/unload", SESSION)

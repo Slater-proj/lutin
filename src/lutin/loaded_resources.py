@@ -28,6 +28,8 @@ GO = 1024 ** 3
 
 
 def _json(url, corps=None, delai=3):
+    from . import local_ports
+    local_ports.check(url)          # un serveur local arrêté se sait tout de suite (sous Windows, un refus coûte 2 s)
     req = urllib.request.Request(url, data=None if corps is None else json.dumps(corps).encode("utf-8"), headers={"Content-Type": "application/json"}, method="GET" if corps is None else "POST")
     with urllib.request.urlopen(req, timeout=delai) as r:
         texte = r.read().decode("utf-8", "replace")
@@ -118,8 +120,21 @@ def read_proc(racine="/proc"):
     return sortie
 
 
+PROCESS_MEMO = {"t": -99.0, "v": None}
+
+
 def list_process(lanceur=subprocess.run):
-    """[(nom, octets)] des processus de la machine (un par processus ; regroupés ensuite). [] si on ne sait pas."""
+    """[(nom, octets)] des processus de la machine (un par processus ; regroupés ensuite). [] si on ne sait pas. Gardé 2 secondes quand c'est le vrai
+    lanceur : sous Windows, la liste coûte 1,5 s et une même lecture de la page Santé la demandait deux fois."""
+    if lanceur is subprocess.run and PROCESS_MEMO["v"] is not None and time.monotonic() - PROCESS_MEMO["t"] < 2:
+        return PROCESS_MEMO["v"]
+    found = _list_process(lanceur)
+    if lanceur is subprocess.run:
+        PROCESS_MEMO.update(t=time.monotonic(), v=found)
+    return found
+
+
+def _list_process(lanceur):
     try:
         if os.name == "nt":
             r = lanceur(["tasklist", "/FO", "CSV", "/NH"], capture_output=True, timeout=10)
