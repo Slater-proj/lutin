@@ -38,6 +38,9 @@ OPEN_TO_NOBODY = {
     ("POST", "/api/noeud/appairer"): (400, 403),     # another machine exchanging a code: no code, no token
     ("GET", "/"): (200,),                            # the sign-in page (see test_the_page_itself_is_the_sign_in_page)
     ("GET", "/index.html"): (200,),
+    ("GET", "/ancienne/"): (200,),                   # the old page, at /ancienne/ since 1.0: the same sign-in page without a session
+    ("GET", "/ancienne/index.html"): (200,),
+    ("GET", "/ancienne"): (200,),                    # without a session: the sign-in page (with one, it sends to /ancienne/)
     ("GET", "/manifest.webmanifest"): (200,),        # what a phone needs to offer « add to home screen »: a name and icons, nothing of the user's
     ("GET", "/icone.svg"): (200,),
     ("GET", "/logo.svg"): (200,),

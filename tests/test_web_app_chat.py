@@ -52,7 +52,9 @@ class Chat(unittest.TestCase):
         disk = mock.patch.object(api_v1._health, "disk_space", return_value={"total": 931 * 1024 ** 3, "libre": 400 * 1024 ** 3, "racine": "C:\\"})
         disk.start()
         cls.addClassCleanup(disk.stop)
-        cls.page = cdp.Page(CHROME, tempfile.mkdtemp(prefix="lutin-chrome-"), "1280,900")
+        profile = tempfile.mkdtemp(prefix="lutin-chrome-")
+        cls.addClassCleanup(shutil.rmtree, profile, True)          # registered first, so it runs once Chrome is closed: a profile weighs about 20 MB
+        cls.page = cdp.Page(CHROME, profile, "1280,900")
         cls.addClassCleanup(cls.page.fermer)
         cls.page.commande("Page.addScriptToEvaluateOnNewDocument", source=WATCH)
         cls.page.aller(T.BASE + "/app/")
