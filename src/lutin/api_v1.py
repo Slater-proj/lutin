@@ -3776,6 +3776,82 @@ def actions_log(request):
                          "outcome": e.get("issue", ""), "approval": e.get("accord", ""), "who": e.get("qui", "")} for e in _m.lire_journal(count) if isinstance(e, dict)]}
 
 
+# --------------------------------------------------------------------------------------------------------- background work
+# Documents processed in the background (docs/modernization/PARITY.md, item 13; lutin.background_jobs): a folder, the kinds of files, an instruction
+# applied to each document while nobody talks to Lutin; a trial stops after the first documents until the person validates them. Reading is `session`;
+# creating and acting is `configurator`, as on the old page.
+JOB_STATES = {"attente": "waiting", "en_cours": "running", "a_valider": "to_validate", "termine": "done", "erreur": "failed", "pause": "paused"}
+JOB_ACTIONS = {"pause": "pause", "resume": "reprendre", "restart": "relancer", "validate": "valider"}
+
+
+def _job_view(job):
+    return {"id": job["id"], "name": job["nom"], "folder": job["dossier"], "patterns": list(job["motifs"]), "instruction": job["consigne"], "regular": bool(job["regulier"]),
+            "interval_hours": job["intervalle_h"], "paused": bool(job["pause"]), "validated": bool(job["valide"]), "state": JOB_STATES.get(job["etat"], job["etat"]),
+            "total": job["total"], "done": job["faits"], "failed": job["erreurs"], "message": job["dernier_message"], "started_at": job["debut"], "ended_at": job["fin"],
+            "has_report": bool(job["rapport"])}
+
+
+def _jobs_view():
+    from . import background_jobs as _jobs
+    return {"jobs": [_job_view(job) for job in _jobs.liste()]}
+
+
+@route("GET", "/background-jobs", SESSION)
+def background_jobs(request):
+    """The documents processed in the background: each job with its folder, its kinds of files, its instruction, its state (`waiting`, `running`,
+    `to_validate` after a trial, `done`, `failed`, `paused`) and how many documents are done or failed."""
+    return _jobs_view()
+
+
+@route("POST", "/background-jobs", CONFIGURATOR)
+def add_background_job(request):
+    """`{name, folder, patterns: "*.pdf, *.docx", instruction, regular?, interval_hours?, trial?}`: 201 with the jobs. A trial stops after the first
+    documents and waits for « validate ». 400 with what is wrong (a folder outside the allowed ones, a pattern, too many jobs)."""
+    from . import background_jobs as _jobs
+    body = request.body
+    _jobs.create(body.get("name"), body.get("folder"), body.get("patterns"), body.get("instruction"), bool(body.get("regular")), body.get("interval_hours", 24), bool(body.get("trial")))
+    return 201, _jobs_view()
+
+
+@route("POST", "/background-jobs/{id}/{action}", CONFIGURATOR)
+def act_on_background_job(request):
+    """`{action}`: `pause`, `resume` (the documents in error are tried again), `restart` (everything is done again) or `validate` (the trial was right:
+    the rest is processed). 404 for a job that no longer exists."""
+    from . import background_jobs as _jobs
+    action = JOB_ACTIONS.get(request.params["action"])
+    if action is None:
+        raise ApiError(404, "not_found", _t("Action inconnue."))
+    try:
+        _jobs.find(request.params["id"])
+    except ValueError as missing:
+        raise ApiError(404, "not_found", str(missing)) from None
+    _jobs.action(request.params["id"], action)
+    return _jobs_view()
+
+
+@route("DELETE", "/background-jobs/{id}", CONFIGURATOR)
+def delete_background_job(request):
+    """Deletes the job and its results (the documents themselves are never touched)."""
+    from . import background_jobs as _jobs
+    try:
+        _jobs.find(request.params["id"])
+    except ValueError as missing:
+        raise ApiError(404, "not_found", str(missing)) from None
+    _jobs.action(request.params["id"], "supprimer")
+    return _jobs_view()
+
+
+@route("GET", "/background-jobs/{id}/report", SESSION)
+def background_job_report(request):
+    """The report of a job in Markdown (one title per document, its answer below): `{text}`."""
+    from . import background_jobs as _jobs
+    try:
+        job = _jobs.find(request.params["id"])
+    except ValueError as missing:
+        raise ApiError(404, "not_found", str(missing)) from None
+    return {"text": _jobs.rapport(job)}
+
+
 # ------------------------------------------------------------------------------------------------------------- approvals
 @route("POST", "/approvals/{id}", SESSION)
 def answer_approval(request):

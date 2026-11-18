@@ -285,6 +285,13 @@ model}`, `503 engine_unreachable`. `GET …/folders` and `POST …/folders/open 
 `{available, reason, branch, files: [{path, state}], total}`; `POST /git/message {files}` (session); `POST /git/commit {message, files}`
 (configurator; never a push). `GET /actions-log?n=` (session): `{entries: [{at, conversation, folder, tool, target, outcome, approval, who}]}`.
 
+## Background work
+
+`GET /background-jobs` (session): `{jobs: [{id, name, folder, patterns, instruction, regular, interval_hours, paused, validated, state: waiting
+| running | to_validate | done | failed | paused, total, done, failed, message, has_report}]}`. `POST /background-jobs` `{name, folder, patterns,
+instruction, regular?, interval_hours?, trial?}` (configurator, 201), `POST /background-jobs/{id}/{pause | resume | restart | validate}` and
+`DELETE /background-jobs/{id}` (configurator), `GET /background-jobs/{id}/report` (session): `{text}`.
+
 ## What v1 keeps
 
 - The security model, unchanged: Host and Origin checks, page token on every `/api/` request, session by PIN pairing, approvals.

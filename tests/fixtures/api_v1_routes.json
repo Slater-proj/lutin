@@ -96,6 +96,31 @@
  },
  {
   "method": "GET",
+  "path": "/api/v1/background-jobs",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/background-jobs",
+  "right": "configurator"
+ },
+ {
+  "method": "DELETE",
+  "path": "/api/v1/background-jobs/{id}",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/background-jobs/{id}/report",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/background-jobs/{id}/{action}",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
   "path": "/api/v1/backup",
   "right": "configurator"
  },

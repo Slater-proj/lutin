@@ -8,12 +8,13 @@
   import Addons from "../components/Addons.svelte";
   import Connectors from "../components/Connectors.svelte";
   import Missions from "../components/Missions.svelte";
+  import BackgroundJobs from "../components/BackgroundJobs.svelte";
   import { api, ApiError } from "../lib/api";
   import { language, t, type MessageKey } from "../lib/messages";
   import { chosenDays, dayList, dayName, isEveryDay, shownMoment, type ScheduledTask } from "../lib/tasks";
 
   const lang = language();
-  const TABS = ["tasks", "missions", "addons", "connectors"] as const;
+  const TABS = ["tasks", "missions", "jobs", "addons", "connectors"] as const;
   let chosen = $state<(typeof TABS)[number] | null>(pageOf(location.hash, TABS)); // null: the first one on a wide screen, the list on a phone
   const tab = $derived(chosen ?? "tasks");
   type Tasks = { tasks: ScheduledTask[] };
@@ -254,6 +255,8 @@
   </section>
   {:else if tab === "missions"}
     <Missions />
+  {:else if tab === "jobs"}
+    <BackgroundJobs />
   {:else if tab === "addons"}
     <Addons />
   {:else}

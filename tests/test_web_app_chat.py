@@ -1123,6 +1123,36 @@ class Chat(unittest.TestCase):
         self.assertEqual(p.erreurs, [])
         p.evaluer("location.hash = '#/chat'")
 
+    def test_3zb_documents_are_processed_in_the_background_after_a_trial(self):
+        """PARITY.md item 13: « Background work » on the Agents screen, on /api/v1/background-jobs. Hermetic: the jobs live in the temporary data folder
+        and point at a temporary folder declared as a work folder; no document is processed (the worker is not part of this test)."""
+        p = self.page
+        from lutin import background_jobs, workspaces
+        folder = Path(tempfile.mkdtemp(prefix="lutin-jobs-"))
+        patch = mock.patch.object(workspaces, "entries", lambda cfg: [{"chemin": str(folder)}])
+        patch.start()
+        self.addCleanup(patch.stop)
+        self.addCleanup(lambda: [background_jobs.action(job["id"], "supprimer") for job in background_jobs.liste()])
+        p.evaluer("location.hash = '#/agents/jobs'")
+        p.attendre("!!document.querySelector('.jobs form.add')")
+        fill = "(() => { const boxes = document.querySelectorAll('.jobs form.add input[type=text], .jobs form.add textarea'); const values = %s; values.forEach((v, i) => { boxes[i].value = v; boxes[i].dispatchEvent(new Event('input', {bubbles: true})); }); })()"
+        p.evaluer(fill % js(["Factures", str(folder), "*.pdf", "Donne le montant total."]))
+        self.press("document.querySelector('.jobs form.add button[type=submit]')")
+        p.attendre("document.querySelectorAll('.jobs .cards .card').length === 1")
+        job = background_jobs.liste()[0]
+        self.assertEqual((job["nom"], job["valide"]), ("Factures", False), "a trial by default: it waits for a check")
+        self.press("[...document.querySelectorAll('.jobs .cards .button')].find(b => b.innerText === 'Pause')")
+        p.attendre("[...document.querySelectorAll('.jobs .cards .button')].some(b => b.innerText === 'Reprendre')")
+        self.assertTrue(background_jobs.liste()[0]["pause"])
+        if AXE.is_file():
+            self.axe("on the background work")
+        self.press("[...document.querySelectorAll('.jobs .cards .button')].find(b => b.innerText.startsWith('Supprimer'))")
+        self.press("document.querySelector('.jobs .cards .button.danger:not(.quiet)')")
+        p.attendre("document.querySelectorAll('.jobs .cards .card').length === 0")
+        self.assertEqual(background_jobs.liste(), [])
+        self.assertEqual(p.erreurs, [])
+        p.evaluer("location.hash = '#/chat'")
+
     def test_4_a_refusal_of_the_server_is_shown_and_the_message_is_given_back(self):
         p = self.page
         with mock.patch.object(T.A, "TOURS_SIMULTANES", 0):
@@ -1224,7 +1254,7 @@ class Chat(unittest.TestCase):
                 p.evaluer("location.hash = '#/settings/%s'" % section)
                 p.attendre("!!document.querySelector(%s)" % js(ready))
                 self.axe("on the section %s of the Settings screen (%s)" % (section, theme))
-            for tab, ready in (("tasks", "#task-name"), ("missions", "#mission-name"), ("addons", ".addons .card"), ("connectors", "#connector-name")):
+            for tab, ready in (("tasks", "#task-name"), ("missions", "#mission-name"), ("jobs", ".jobs form.add"), ("addons", ".addons .card"), ("connectors", "#connector-name")):
                 p.evaluer("location.hash = '#/agents/%s'" % tab)
                 p.attendre("!!document.querySelector(%s)" % js(ready))
                 self.axe("on the tab %s of the Agents screen (%s)" % (tab, theme))

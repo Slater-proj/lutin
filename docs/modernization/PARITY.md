@@ -56,7 +56,9 @@ switch; each line is ticked here when it is done, with its test.
     (configurator, stricter than the old page), `/api/v1/actions-log` (`tests/test_api_v1_conversation_tools.py`); « Tools » in the Chat
     (`components/ConversationTools.svelte`, the export in `lib/export.ts`), the mission banner, and `ProjectGit.svelte` on the Projects screen
     (test 3za).
-13. **Document processing in the background.**
+13. ~~**Document processing in the background.**~~ — done: `/api/v1/background-jobs` (GET; POST, `POST …/{id}/{pause|resume|restart|validate}`
+    and DELETE for this machine; `GET …/{id}/report`; `tests/test_api_v1_background_jobs.py`), the « Background work » tab of the Agents screen
+    (`components/BackgroundJobs.svelte`, test 3zb).
 14. **Documents** of the workspace (list, search), notes one by one, the button that installs the embeddings model.
 15. **Slash commands** (and the commands of a Claude project), the **Ctrl+K palette**, the queue of messages sent while an answer runs.
 16. **Settings without a control** though v1 has them: `auxiliary_model`, `progress_sheet_share`, `progress_sheet_scribe`; the maximum length of
