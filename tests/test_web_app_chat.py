@@ -1261,6 +1261,56 @@ class Chat(unittest.TestCase):
         self.assertEqual(p.erreurs, [])
         p.evaluer("location.hash = '#/chat'")
 
+    def test_3zf_a_message_is_pinned_an_answer_verified_and_the_small_gaps_filled(self):
+        """PARITY.md item 18: a request pinned and its time shown, « Verify » with the raw web results, ↑ brings back what was sent, the demonstration
+        connector and its keys, the helper programs. Hermetic: the web search and the helper programs are replaced; the connector is never started."""
+        p = self.page
+        from lutin import external_programs, mcp, web
+        c = T.A.conv_nouvelle()
+        c["titre"] = "Production"
+        c["messages"] = [{"role": "user", "content": "Ne jamais toucher à la production.", "ts": "2026-11-18T10:00:00"}, {"role": "assistant", "content": "Compris.", "ts": "2026-11-18T10:00:05"}]
+        T.A.conv_ecrire(c)
+        self.addCleanup(lambda: T.A.conv_supprimer(c["id"]))
+        before = {entry["id"] for entry in mcp.vue()}
+        self.addCleanup(lambda: [mcp.remove(entry["id"]) for entry in mcp.vue() if entry["id"] not in before])
+        found = [{"titre": "Bonnes pratiques de production", "url": "https://example.org/prod", "extrait": "Ne pas modifier en direct.", "source": "duckduckgo"}]
+        for patch in (mock.patch.object(web, "search_results", lambda query, count: (found, [])),
+                      mock.patch.object(external_programs, "state", lambda *args, **kwargs: [{"nom": "uv", "libelle": "uv", "aide": "Pour Python.", "installe": False, "par_lutin": False, "version": ""}])):
+            patch.start()
+            self.addCleanup(patch.stop)
+        p.evaluer("location.hash = '#/chat/%s'; location.reload()" % c["id"])
+        p.attendre("!!document.querySelector('.thread .pin')")
+        self.assertTrue(p.evaluer("!!document.querySelector('.thread time')"), "the time of a message is shown")
+        self.press("document.querySelector('.thread .pin')")
+        self.eventually(lambda: T.A.conv_lire(c["id"])["messages"][0].get("epingle") is True, "the request is pinned on the server")
+        p.attendre("document.querySelector('.thread .pin')?.getAttribute('aria-pressed') === 'true'")
+        self.press("[...document.querySelectorAll('.thread .quiet-action')].find(b => b.innerText === 'Vérifier')")
+        p.attendre("document.querySelector('section.verify')?.innerText.includes('Bonnes pratiques de production')")
+        if AXE.is_file():
+            self.axe("with a pinned request and the results of « Verify »")
+        p.evaluer("[...document.querySelectorAll('section.verify .link')].find(b => b.innerText === 'Fermer').click()")
+        p.evaluer("(() => { const box = document.querySelector('#message'); box.value = '/web on'; box.dispatchEvent(new Event('input', {bubbles: true})); box.dispatchEvent(new KeyboardEvent('keydown', {key: 'Enter', bubbles: true})); })()")
+        p.attendre("document.querySelector('#message').value === ''")
+        p.evaluer("document.querySelector('#message').dispatchEvent(new KeyboardEvent('keydown', {key: 'ArrowUp', bubbles: true}))")
+        p.attendre("document.querySelector('#message').value === '/web on'")
+        p.evaluer("document.querySelector('#message').dispatchEvent(new KeyboardEvent('keydown', {key: 'ArrowDown', bubbles: true}))")
+        p.attendre("document.querySelector('#message').value === ''")
+
+        p.evaluer("location.hash = '#/agents/connectors'")
+        self.press("[...document.querySelectorAll('.button')].find(b => b.innerText === 'Ajouter le connecteur de démonstration')")
+        self.eventually(lambda: len([entry for entry in mcp.vue() if entry["id"] not in before]) == 1, "the demonstration connector was added")
+        p.attendre("[...document.querySelectorAll('.button')].some(b => b.innerText === 'Changer ses clés')")
+        p.evaluer("[...document.querySelectorAll('.button')].filter(b => b.innerText === 'Changer ses clés').pop().click()")
+        p.attendre("!!document.querySelector('textarea[id^=rekey-]')")
+        p.evaluer("(() => { const box = document.querySelector('textarea[id^=rekey-]'); box.value = 'DEMO_KEY=abc'; box.dispatchEvent(new Event('input', {bubbles: true})); })()")
+        self.press("[...document.querySelectorAll('.button')].find(b => b.innerText === 'Remplacer les clés')")
+        added = [entry for entry in mcp.vue() if entry["id"] not in before][0]
+        self.eventually(lambda: "DEMO_KEY" in next(e for e in mcp.vue() if e["id"] == added["id"])["cles_env"], "the key is kept (only its name is shown)")
+        p.evaluer("location.hash = '#/settings/tools'")
+        p.attendre("[...document.querySelectorAll('.helpers .button')].some(b => b.innerText === 'Installer uv')")
+        self.assertEqual(p.erreurs, [])
+        p.evaluer("location.hash = '#/chat'")
+
     def test_4_a_refusal_of_the_server_is_shown_and_the_message_is_given_back(self):
         p = self.page
         with mock.patch.object(T.A, "TOURS_SIMULTANES", 0):

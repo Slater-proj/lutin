@@ -2317,5 +2317,6 @@
 "Choisis au moins un modèle installé.": "Choose at least one installed model.",
 "Ce serveur n'a pas de quantifications à choisir.": "This server has no quantisations to choose.",
 "Une réponse est en cours : attends la fin avant de redémarrer Ollama.": "An answer is running: wait for its end before restarting Ollama.",
-"[DEMANDE DE DÉPART]\n": "[FIRST REQUEST]\n"
+"[DEMANDE DE DÉPART]\n": "[FIRST REQUEST]\n",
+"installer un programme": "install a program"
 }

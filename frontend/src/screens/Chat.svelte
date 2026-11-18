@@ -35,7 +35,11 @@
   let projectCommands = $state<{ name: string; description: string }[]>([]); // the commands of a Claude project in the work folder
   let commandNotice = $state(""); // what a « / » command did
   let showHelp = $state(false);
-  let toolsOpen = $state(false); // the tools of the open conversation (memory, handover, export, folders)
+  let toolsOpen = $state(false);
+  let starting = $state(false); // the engine asked to start from the banner
+  let verify = $state<{ query: string; removed: string[]; reasons: string[]; results: { title: string; url: string; extract: string; domain: string }[] } | null>(null);
+  let sentBefore = $state<string[]>([]); // what was sent from this page, for ↑ in an empty box
+  let recallAt = -1; // the tools of the open conversation (memory, handover, export, folders)
   let mission = $state<{ name: string; state: string } | null>(null); // the mission written in the open conversation, if any
   let models = $state<Models | null>(null);
   let paired = $state<MachinesView | null>(null); // who answers by default and the names of the paired machines (GET /machines never waits)
@@ -371,11 +375,11 @@
     if (id) await guarded(async () => void (await api("POST", conversationPath(where, id) + "/stop", {})));
   }
 
-  async function answerApproval(approved: boolean, remember: "once" | "chat" | "always" = "once"): Promise<void> {
+  async function answerApproval(approved: boolean, remember: "once" | "chat" | "always" = "once", restore = false): Promise<void> {
     const approval = live?.approval;
     if (!approval) return;
     await guarded(async () => {
-      await api("POST", approvalPath(where, approval.id), { approved, remember });
+      await api("POST", approvalPath(where, approval.id), { approved, remember, ...(restore ? { restore_auto_approval: true } : {}) });
       if (live) live = { ...live, approval: null };
     });
   }
@@ -403,7 +407,43 @@
     box?.focus();
   }
 
+  async function startEngine(): Promise<void> {
+    if (!status) return;
+    starting = true;
+    await guarded(async () => {
+      await api("POST", `/engines/${encodeURIComponent(status!.engine.id)}/actions/start`, {});
+      for (let tries = 0; tries < 30; tries += 1) {
+        await new Promise((done) => setTimeout(done, 1000));
+        const now = await api<Status>("GET", "/status").catch(() => null);
+        if (now?.engine.running) break;
+      }
+      onchanged();
+    });
+    starting = false;
+  }
+
+  async function pinMessage(index: number, pinned: boolean): Promise<void> {
+    const id = conversation?.id;
+    if (!id || where) return;
+    await guarded(async () => {
+      await api("PATCH", `/conversations/${encodeURIComponent(id)}/messages/${index}`, { pinned });
+      await reloadConversation();
+    });
+  }
+
+  async function verifyAnswer(question: string): Promise<void> {
+    await guarded(async () => void (verify = await api("POST", "/web-search/preview", { q: question.slice(0, 300) })));
+  }
+
   function onKey(event: KeyboardEvent): void {
+    if ((event.key === "ArrowUp" || event.key === "ArrowDown") && !event.shiftKey && sentBefore.length && (draft === "" || recallAt >= 0)) {
+      // ↑ in an empty box brings back what was sent before, ↓ goes forward again (as a terminal does)
+      event.preventDefault();
+      recallAt = event.key === "ArrowUp" ? Math.min(recallAt + 1, sentBefore.length - 1) : recallAt - 1;
+      draft = recallAt >= 0 ? sentBefore[sentBefore.length - 1 - recallAt] : "";
+      return;
+    }
+    recallAt = -1;
     if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
       event.preventDefault();
       submitDraft();
@@ -419,6 +459,8 @@
   function submitDraft(): void {
     const typed = draft.trim();
     if (!typed) return;
+    sentBefore = [...sentBefore.filter((text) => text !== typed), typed].slice(-50);
+    recallAt = -1;
     const parsed = parse(typed, projectCommands.map((command) => command.name));
     if (parsed) {
       void runCommand(parsed);
@@ -684,7 +726,11 @@
     {/if}
 
     <div class="scroll" bind:this={scroller}>
-      {#if status && !status.engine.running}<p class="banner">{t("chat.engine_stopped", status.engine.name)}</p>{/if}
+      {#if status && !status.engine.running}
+        <p class="banner">{t("chat.engine_stopped", status.engine.name)}
+          {#if status.access.can_configure}<button type="button" class="link" disabled={starting} onclick={startEngine}>{starting ? t("chat.engine_starting") : t("chat.engine_start", status.engine.name)}</button>{/if}
+          <a href="#/settings/health">{t("chat.engine_check")}</a></p>
+      {/if}
       {#if items.length === 0 && !pending && !live}
         <div class="welcome">
           <img src="/logo.svg" alt="" width="64" height="64" />
@@ -697,7 +743,8 @@
           </ul>
         </div>
       {:else}
-        <Thread {items} {pending} {live} onedit={busy ? undefined : startEdit} onregenerate={busy ? undefined : regenerate} machine={where} conversation={conversation?.id ?? ""}
+        <Thread {items} {pending} {live} onedit={busy ? undefined : startEdit} onregenerate={busy ? undefined : regenerate}
+          onpin={busy || where ? undefined : pinMessage} onverify={status?.offline ? undefined : verifyAnswer} machine={where} conversation={conversation?.id ?? ""}
           canOpen={!where && !!status?.can_open_files} canDelete={!where && !!status?.access.can_configure} onproduced={reloadConversation} />
         {#if elsewhere}<p class="elsewhere" role="status">{t(elsewhereNotice(elsewhereTurn))}</p>{/if}
       {/if}
@@ -705,6 +752,15 @@
 
     <div class="dock">
       {#if problem}<p class="problem" role="alert">{problem}</p>{/if}
+      {#if verify}
+        <section class="verify card" aria-labelledby="verify-title">
+          <p class="card-head" id="verify-title">{t("verify.title", verify.query)} <button type="button" class="link" onclick={() => (verify = null)}>{t("verify.close")}</button></p>
+          <p class="hint">{t("verify.help")}</p>
+          {#if verify.removed.length}<p class="hint">{t("verify.removed", verify.removed.join(", "))}</p>{/if}
+          {#if verify.results.length === 0}<p class="hint">{verify.reasons.join(" ; ") || t("olib.none")}</p>{/if}
+          <ul>{#each verify.results as result (result.url)}<li><a href={result.url} target="_blank" rel="noopener noreferrer">{result.title}</a> <span class="hint">{result.domain}</span><br />{result.extract}</li>{/each}</ul>
+        </section>
+      {/if}
       {#if live?.autoApprovalSuspended}<p class="hint">{t("approval.suspended", live.autoApprovalSuspended)}</p>{/if}
       {#if live?.approval}
         <div class="card" role="group" aria-label={t("approval.heading")}>
@@ -719,6 +775,7 @@
               <button type="button" class="button" onclick={() => answerApproval(true, "chat")}>{t("approval.chat")}</button>
               <button type="button" class="button" onclick={() => answerApproval(true, "always")}>{t("approval.always")}</button>
             {/if}
+            {#if live.autoApprovalSuspended}<button type="button" class="button" onclick={() => answerApproval(true, "once", true)}>{t("approval.restore")}</button>{/if}
             <button type="button" class="button danger" onclick={() => answerApproval(false)}>{t("approval.refuse")}</button>
           </div>
         </div>
@@ -1398,5 +1455,13 @@
     margin: 0;
     color: var(--color-accent-text);
     font-size: var(--text-sm);
+  }
+
+  .verify ul {
+    margin: 0;
+    padding-left: var(--space-4);
+    max-height: 16rem;
+    overflow-y: auto;
+    overflow-wrap: anywhere;
   }
 </style>

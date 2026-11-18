@@ -3892,6 +3892,81 @@ def install_search_model(request):
     return 202, _meaning_view()
 
 
+# ----------------------------------------------------------------------------------------------------------- small gaps
+# The last gaps of PARITY.md (item 18) that need the server: the demonstration MCP connector, the helper programs (uv, Node.js) installed or removed,
+# one message pinned, and « Verify »: the raw results of a web search for the question asked, without the model.
+@route("POST", "/mcp-connectors/demo", CONFIGURATOR)
+def add_demo_connector(request):
+    """Adds the demonstration connector shipped with Lutin (a small MCP server in Python, to see how a connector works). 201 with the connectors."""
+    import sys
+    _mcp.add(_t("Démonstration"), [sys.executable, "-m", "lutin.mcp_demo"], "", {"PYTHONPATH": str(Path(__file__).resolve().parent.parent)})
+    return 201, _connectors_view()
+
+
+def _helpers_view():
+    from . import external_programs as _helpers
+    return {"programs": [{"name": p["nom"], "label": p["libelle"], "help": p["aide"], "installed": bool(p["installe"]), "by_lutin": bool(p["par_lutin"]), "version": p["version"]}
+                         for p in _helpers.state()]}
+
+
+@route("GET", "/helper-programs", SESSION)
+def helper_programs(request):
+    """The programs some connectors and skills need (uv, Node.js): installed or not, by Lutin or on the machine, their version."""
+    return _helpers_view()
+
+
+@route("POST", "/helper-programs/{name}/install", CONFIGURATOR)
+def install_helper_program(request):
+    """Installs that program in Lutin's folder (a download checked against its digest). 409 `offline`."""
+    from . import external_programs as _helpers
+    _offline.require_online(_t("installer un programme"))
+    _helpers.install(request.params["name"])
+    return _helpers_view()
+
+
+@route("DELETE", "/helper-programs/{name}", CONFIGURATOR)
+def uninstall_helper_program(request):
+    """Removes that program, when Lutin installed it (one installed on the machine is never touched)."""
+    from . import external_programs as _helpers
+    _helpers.uninstall(request.params["name"])
+    return _helpers_view()
+
+
+@route("PATCH", "/conversations/{id}/messages/{index}", SESSION)
+def pin_one_message(request):
+    """`{"pinned": true | false}`: a pinned message stays in front of the model (never dropped when the window is trimmed, kept by the summary); eight
+    at most per conversation. 400 with why (an unknown message, too many, an answer running)."""
+    identifier = request.params["id"]
+    _read(identifier)
+    try:
+        index = int(request.params["index"])
+    except ValueError:
+        raise ApiError(400, "invalid_request", _t("Message inconnu.")) from None
+    if set(request.body) != {"pinned"} or not isinstance(request.body["pinned"], bool):
+        raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("pinned"))
+    done = _m.pin_message(identifier, index, request.body["pinned"])
+    return {"pinned": bool(request.body["pinned"]), "count": int(done.get("epingles", 0))}
+
+
+@route("POST", "/web-search/preview", SESSION)
+def web_search_preview(request):
+    """« Verify »: `{q}` (the question asked) searched on the web, the raw results shown to the person and never sent to the model. What is personal is
+    taken out of the query first (`removed`); `reasons` says why an engine gave nothing. 409 `offline`."""
+    from . import outbound as _outbound
+    from . import web as _web
+    from . import web_search as _web_search
+    query = str(request.body.get("q") or "").strip()[:300]
+    if len(query) < 2:
+        raise ApiError(400, "invalid_request", _t("Écris quelques mots à chercher, par exemple /web prix du kWh en France."))
+    if _offline.is_active():
+        raise ApiError(409, "offline", _t("Mode hors ligne strict : impossible de {}. Désactive-le pour continuer (lutin offline off).").format(_t("tester la recherche web")))
+    clean, removed = _outbound.clean_query(query)
+    found, reasons = _web.search_results(clean or query, 8) if clean else ([], [_t("requête vide une fois les données personnelles retirées")])
+    return {"query": clean, "removed": list(removed), "reasons": list(reasons),
+            "results": [{"title": x.get("titre", ""), "url": x.get("url", ""), "extract": str(x.get("extrait", ""))[:300], "date": x.get("date", ""), "source": x.get("source", ""),
+                         "domain": _web_search.domain(x.get("url", ""))} for x in found]}
+
+
 # ------------------------------------------------------------------------------------------------ created files, locations
 # What Lutin made and where it keeps things (docs/modernization/PARITY.md, item 17): every file it created (documents, images, videos, sounds), to
 # clean up, and every folder it uses with its size and the free space of its disk. Reading paths of this machine and deleting are `configurator`, as on

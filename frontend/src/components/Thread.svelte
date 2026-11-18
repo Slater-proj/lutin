@@ -11,12 +11,14 @@
   // `machine`: the paired machine that holds the conversation ("" for this one): its images and documents are read from it.
   // `onregenerate`: answer again from the last request (shown on the last answer only, when nothing runs).
   // `conversation`, `canOpen`, `canDelete`, `onproduced`: what a tool produced, opened or deleted from the thread (components/Produced.svelte).
-  let { items, pending, live, onedit, onregenerate, machine = "", conversation = "", canOpen = false, canDelete = false, onproduced }: {
+  let { items, pending, live, onedit, onregenerate, onpin, onverify, machine = "", conversation = "", canOpen = false, canDelete = false, onproduced }: {
     items: Item[];
     pending: ({ text: string } & Sent) | null;
     live: LiveTurn | null;
     onedit?: (item: Extract<Item, { role: "user" }>) => void;
     onregenerate?: () => void;
+    onpin?: (index: number, pinned: boolean) => void; // a request pinned: always in front of the model
+    onverify?: (question: string) => void; // « Verify »: the raw web results for the question that this answer answers
     machine?: string;
     conversation?: string;
     canOpen?: boolean;
@@ -37,6 +39,16 @@
   }
 
   const lastAnswer = $derived(items.map((item) => item.role).lastIndexOf("assistant"));
+  const when = (at: string | undefined): string => (at ? new Date(at).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" }) : "");
+
+  /** The request an answer answers: the user item just before it. */
+  function questionOf(index: number): string {
+    for (let i = index - 1; i >= 0; i -= 1) {
+      const item = items[i];
+      if (item.role === "user") return item.text;
+    }
+    return "";
+  }
 
   function shown(value: unknown): string {
     if (value === null || value === undefined) return "";
@@ -104,6 +116,10 @@
           <h2 class="visually-hidden">{t("chat.you")}</h2>
           {@render sentView(item)}
           <p class="text">{item.text}</p>
+          <p class="meta">
+            {#if item.at}<time datetime={item.at}>{when(item.at)}</time>{/if}
+            {#if onpin}<button type="button" class="quiet-action pin" aria-pressed={!!item.pinned} onclick={() => onpin(item.index, !item.pinned)}>{item.pinned ? t("thread.unpin") : t("thread.pin")}</button>{:else if item.pinned}<span>{t("thread.pinned")}</span>{/if}
+          </p>
         </div>
       </li>
     {:else}
@@ -114,6 +130,8 @@
           <div class="answer-actions">
             <button type="button" class="quiet-action copy" onclick={() => copy(item.blocks, index)}>{copied === index ? t("chat.copied") : t("chat.copy")}</button>
             {#if onregenerate && index === lastAnswer && !pending && !live}<button type="button" class="quiet-action regenerate" onclick={onregenerate}>{t("chat.regenerate")}</button>{/if}
+            {#if onverify && questionOf(index)}<button type="button" class="quiet-action verify" onclick={() => onverify(questionOf(index))}>{t("thread.verify")}</button>{/if}
+            {#if item.at}<time class="when" datetime={item.at}>{when(item.at)}</time>{/if}
           </div>
         {/if}
       </li>
@@ -388,5 +406,21 @@
 
   .quiet-action:hover {
     color: var(--color-text);
+  }
+
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: var(--space-2);
+    margin: var(--space-1) 0 0;
+    color: var(--color-text-muted);
+    font-size: var(--text-xs);
+  }
+
+  .when {
+    align-self: center;
+    color: var(--color-text-muted);
+    font-size: var(--text-xs);
   }
 </style>

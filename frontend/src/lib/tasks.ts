@@ -10,6 +10,7 @@ export interface ScheduledTask {
   days: number[];
   date: string;
   notify: string;
+  project: string; // the work folder it runs in ("" for the current one)
   active: boolean;
   next_run: string;
   running: boolean;

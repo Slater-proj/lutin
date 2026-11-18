@@ -311,6 +311,13 @@ description}]}` (the `.claude/commands` of the work folder); `GET /project-comma
 `POST /created-files/delete {ids}`: `{deleted, freed_bytes, skipped}`; `POST /created-files/{id}/open-folder` (`409 cannot_open`). `GET
 /locations` (configurator): `{locations: [{key, name, path, explanation, exists, size_bytes, disk: {free, total, root}}], data_detail}`.
 
+## Last gaps
+
+`POST /mcp-connectors/demo` (configurator, 201). `GET /helper-programs` (session): `{programs: [{name, label, help, installed, by_lutin,
+version}]}`; `POST /helper-programs/{name}/install` (`409 offline`) and `DELETE /helper-programs/{name}` (configurator). `PATCH
+/conversations/{id}/messages/{index}` `{pinned}`: `{pinned, count}`. `POST /web-search/preview` `{q}` (session): `{query, removed, reasons,
+results: [{title, url, extract, date, source, domain}]}`, never sent to the model; `409 offline`.
+
 ## What v1 keeps
 
 - The security model, unchanged: Host and Origin checks, page token on every `/api/` request, session by PIN pairing, approvals.

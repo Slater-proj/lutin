@@ -85,6 +85,24 @@
     });
   };
 
+  let rekeying = $state(""); // the connector whose secrets are being replaced
+  let newSecrets = $state("");
+
+  const rekey = (connector: Connector): Promise<void> =>
+    act(async () => {
+      const found = parseSecrets(newSecrets);
+      view = await api<View>("PATCH", `/mcp-connectors/${encodeURIComponent(connector.id)}`, connector.kind === "http" ? { headers: found } : { env: found });
+      rekeying = "";
+      newSecrets = "";
+      done = t("connectors.keys_replaced", connector.name);
+    });
+
+  const addDemo = (): Promise<void> =>
+    act(async () => {
+      view = await api<View>("POST", "/mcp-connectors/demo", {});
+      done = t("connectors.demo_added");
+    });
+
   const change = (connector: Connector, body: Record<string, unknown>): Promise<void> =>
     act(async () => {
       view = await api<View>("PATCH", `/mcp-connectors/${encodeURIComponent(connector.id)}`, body);
@@ -156,6 +174,7 @@
             {/if}
             <div class="actions">
               <button type="button" class="button" disabled={busy} onclick={() => refresh(connector)}>{t("connectors.refresh")}</button>
+              <button type="button" class="button" disabled={busy} aria-expanded={rekeying === connector.id} onclick={() => ((rekeying = rekeying === connector.id ? "" : connector.id), (newSecrets = ""))}>{t("connectors.keys")}</button>
               {#if removing === connector.id}
                 <span class="confirm" role="group" aria-label={t("connectors.remove_confirm", connector.name)}>
                   <span>{t("connectors.remove_confirm", connector.name)}</span>
@@ -166,6 +185,14 @@
                 <button type="button" class="button" disabled={busy} onclick={() => (removing = connector.id)}>{t("connectors.remove")}</button>
               {/if}
             </div>
+            {#if rekeying === connector.id}
+              <form class="add" onsubmit={(event) => (event.preventDefault(), void rekey(connector))}>
+                <label for={"rekey-" + connector.id}>{connector.kind === "http" ? t("connectors.headers") : t("connectors.variables")}</label>
+                <textarea id={"rekey-" + connector.id} rows="3" spellcheck="false" bind:value={newSecrets}></textarea>
+                <p class="muted">{t("connectors.keys_help", (connector.kind === "http" ? connector.header_names : connector.env_names).join(", ") || "—")}</p>
+                <div class="actions"><button type="submit" class="button primary" disabled={busy}>{t("connectors.keys_save")}</button></div>
+              </form>
+            {/if}
           </li>
         {/each}
       </ul>
@@ -173,6 +200,7 @@
 
     <ConnectorCatalog onchange={load} />
 
+    <div class="actions"><button type="button" class="button" disabled={busy} onclick={addDemo}>{t("connectors.demo")}</button></div>
     <form class="add" onsubmit={add}>
       <h3>{t("connectors.add_title")}</h3>
       <label for="connector-name">{t("connectors.name")}</label>

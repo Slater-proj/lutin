@@ -51,6 +51,8 @@ export interface StoredMessage {
   medias_fichiers?: Record<string, string>; // where each generated image is saved on the disk
   fichiers_joints?: StoredProduced[]; // a tool result: the files it created
   tool_calls?: { function?: { name?: string; arguments?: unknown } }[];
+  epingle?: boolean; // pinned: kept in front of the model
+  ts?: string; // when it was written (ISO, local time of the server)
 }
 
 /** A file a tool created, as stored in its result (French names inside the messages, as `pieces`). */

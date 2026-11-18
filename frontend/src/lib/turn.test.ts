@@ -90,10 +90,10 @@ describe("the stored conversation", () => {
       { role: "assistant", content: "", thinking: "hm", tool_calls: [{ function: { name: "modifier", arguments: { chemin: "a.py" } } }] },
       { role: "tool", tool_name: "modifier", content: "done", medias: ["i1.png"], fichiers_joints: [{ id: "f1", nom: "r.pdf" }] },
       { role: "assistant", content: "Understood." },
-      { role: "user", content: "Thanks" },
+      { role: "user", content: "Thanks", epingle: true, ts: "2026-11-18T10:00:00" },
     ]);
     expect(items).toEqual([
-      { role: "user", text: "Change it", index: 1, images: [], files: [] },
+      { role: "user", text: "Change it", index: 1, pinned: false, images: [], files: [] },
       {
         role: "assistant",
         blocks: [
@@ -102,7 +102,7 @@ describe("the stored conversation", () => {
           { kind: "text", text: "Understood." },
         ],
       },
-      { role: "user", text: "Thanks", index: 5, images: [], files: [] },
+      { role: "user", text: "Thanks", index: 5, pinned: true, at: "2026-11-18T10:00:00", images: [], files: [] },
     ]);
   });
 });

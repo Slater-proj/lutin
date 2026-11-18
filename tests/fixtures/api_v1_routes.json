@@ -260,6 +260,11 @@
   "right": "session"
  },
  {
+  "method": "PATCH",
+  "path": "/api/v1/conversations/{id}/messages/{index}",
+  "right": "session"
+ },
+ {
   "method": "GET",
   "path": "/api/v1/conversations/{id}/options",
   "right": "session"
@@ -463,6 +468,21 @@
   "method": "POST",
   "path": "/api/v1/health/unload",
   "right": "session"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/helper-programs",
+  "right": "session"
+ },
+ {
+  "method": "DELETE",
+  "path": "/api/v1/helper-programs/{name}",
+  "right": "configurator"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/helper-programs/{name}/install",
+  "right": "configurator"
  },
  {
   "method": "POST",
@@ -677,6 +697,11 @@
  {
   "method": "POST",
   "path": "/api/v1/mcp-connectors",
+  "right": "configurator"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/mcp-connectors/demo",
   "right": "configurator"
  },
  {
@@ -1123,6 +1148,11 @@
   "method": "PATCH",
   "path": "/api/v1/web-search",
   "right": "configurator"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/web-search/preview",
+  "right": "session"
  },
  {
   "method": "POST",

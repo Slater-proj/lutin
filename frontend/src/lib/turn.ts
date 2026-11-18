@@ -22,7 +22,7 @@ export interface Sent {
   files: { id: string; name: string }[]; // the documents: downloaded through /api/v1/attachments/{id}
 }
 
-export type Item = ({ role: "user"; text: string; index: number } & Sent) | { role: "assistant"; blocks: Block[] };
+export type Item = ({ role: "user"; text: string; index: number; pinned?: boolean; at?: string } & Sent) | { role: "assistant"; blocks: Block[]; at?: string };
 
 export interface Approval {
   id: string;
@@ -143,13 +143,15 @@ export function storedToItems(messages: StoredMessage[]): Item[] {
   const blocksOfAnswer = (): Block[] => {
     if (answer === null) {
       answer = [];
-      items.push({ role: "assistant", blocks: answer });
+      items.push({ role: "assistant", blocks: answer, at: messages[current]?.ts });
     }
     return answer;
   };
+  let current = 0;
   for (const [index, message] of messages.entries()) {
+    current = index;
     if (message.role === "user") {
-      items.push({ role: "user", text: message.content ?? "", index, images: message.images ?? [], files: (message.pieces ?? []).map((piece) => ({ id: piece.id, name: piece.nom })) });
+      items.push({ role: "user", text: message.content ?? "", index, pinned: !!message.epingle, at: message.ts, images: message.images ?? [], files: (message.pieces ?? []).map((piece) => ({ id: piece.id, name: piece.nom })) });
       answer = null;
     } else if (message.role === "assistant") {
       const blocks = blocksOfAnswer();

@@ -34,6 +34,8 @@
   let editing = $state("");
   // The channel a finished task writes to (empty: none). The channels are set up in the Settings; a failure to read them only hides the choice.
   let notify = $state("");
+  let project = $state(""); // the work folder of the task ("" : the current one)
+  let projects = $state<{ id: string; name: string }[]>([]);
   let channels = $state<{ id: string; name: string }[]>([]);
 
   function explain(cause: unknown): string {
@@ -71,6 +73,7 @@
     request = "";
     time = "08:00";
     notify = "";
+    project = "";
     once = false;
     date = "";
     checked = [true, true, true, true, true, false, false];
@@ -81,9 +84,9 @@
     await act(async () => {
       // Changing a task sends the whole moment: a weekly task sent with an empty date stops being a one-time one, and the other way round.
       const when = once ? { date, days: [] } : { days: chosenDays(checked), date: "" };
-      const body = { name: name.trim(), request: request.trim(), time, notify, ...when };
+      const body = { name: name.trim(), request: request.trim(), time, notify, project, ...when };
       if (editing) await api("PATCH", `/scheduled-tasks/${encodeURIComponent(editing)}`, body);
-      else await api("POST", "/scheduled-tasks", once ? { name: body.name, request: body.request, time, notify, date } : { name: body.name, request: body.request, time, notify, days: when.days });
+      else await api("POST", "/scheduled-tasks", once ? { name: body.name, request: body.request, time, notify, project, date } : { name: body.name, request: body.request, time, notify, project, days: when.days });
       resetForm();
       await reload();
     });
@@ -95,6 +98,7 @@
     request = task.request;
     time = task.time;
     notify = task.notify;
+    project = task.project ?? "";
     once = Boolean(task.date);
     date = task.date;
     checked = [0, 1, 2, 3, 4, 5, 6].map((day) => task.days.includes(day));
@@ -135,6 +139,9 @@
     const onHash = (): void => void (chosen = pageOf(location.hash, TABS));
     addEventListener("hashchange", onHash);
     void load();
+    api<{ projects: { id: string; name: string }[] }>("GET", "/projects")
+      .then((answer) => (projects = answer.projects))
+      .catch(() => undefined);
     api<Channels>("GET", "/notification-channels")
       .then((answer) => (channels = answer.channels))
       .catch(() => undefined);
@@ -176,6 +183,7 @@
                 {#if !task.active}<span class="badge paused-badge">{t("tasks.paused")}</span>{/if}
               </p>
               <p class="when">{when(task)}{#if task.next_run} · {t("tasks.next", shownMoment(task.next_run))}{/if}</p>
+              {#if task.conversation}<p><a class="result" href={"#/chat/" + task.conversation}>{t("tasks.see_result")}</a></p>{/if}
               <p class="request">{task.request}</p>
               {#if task.last_state === "failed" && task.last_error}<p class="warn">{task.last_error}</p>{/if}
               {#if task.history.length}
@@ -221,6 +229,13 @@
       <p class="muted" id="task-request-help">{t("tasks.request_help")}</p>
       <label for="task-time">{t("tasks.time")}</label>
       <input id="task-time" type="time" bind:value={time} required />
+      {#if projects.length > 1}
+        <label for="task-project">{t("tasks.project")}</label>
+        <select id="task-project" bind:value={project}>
+          <option value="">{t("tasks.project_current")}</option>
+          {#each projects as entry (entry.id)}<option value={entry.id}>{entry.name}</option>{/each}
+        </select>
+      {/if}
       {#if channels.length}
         <label for="task-notify">{t("tasks.notify")}</label>
         <select id="task-notify" bind:value={notify}>

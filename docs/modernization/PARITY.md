@@ -73,9 +73,14 @@ switch; each line is ticked here when it is done, with its test.
 17. ~~**Files created by Lutin**, the locations used and their sizes~~ — done: `/api/v1/created-files`, `…/delete`, `…/{id}/open-folder` and
     `/api/v1/locations` (configurator: paths of this machine; `tests/test_api_v1_created_files.py`), « Files and locations » in Settings › Data
     (`components/Storage.svelte`, test 3ze).
-18. Small gaps: MCP demo server, changing a connector's keys, uninstalling helper programs; a scheduled task's work folder and « see the result »;
+18. ~~Small gaps: MCP demo server, changing a connector's keys, uninstalling helper programs; a scheduled task's work folder and « see the result »;
     pinning one message, « Verify » (web sources), timestamps; the « accept and re-enable the automatic approval » choice after a web read; the
-    « start Ollama » button and the diagnostic actions on the stopped-engine banner; recalling earlier inputs.
+    « start Ollama » button and the diagnostic actions on the stopped-engine banner; recalling earlier inputs~~ — done: `POST
+    /api/v1/mcp-connectors/demo`, `/api/v1/helper-programs` (GET, install, DELETE), `PATCH /api/v1/conversations/{id}/messages/{index}` (pin),
+    `POST /api/v1/web-search/preview` (`tests/test_api_v1_small_gaps.py`); in the page: the demonstration connector and « Change its keys »,
+    `HelperPrograms.svelte` in Settings › Tools, a task's work folder and « See the result », « Pin », the time and « Verify » in the thread,
+    « Accept and allow again without asking », « Start <engine> » and « Check the machine » on the stopped-engine banner, ↑/↓ in an empty box
+    (test 3zf; the engine banner and the task's result link are not covered by a browser test).
 
 ## Present
 

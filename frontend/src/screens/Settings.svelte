@@ -15,6 +15,7 @@
   import MachineTuning from "../components/MachineTuning.svelte";
   import Documents from "../components/Documents.svelte";
   import Storage from "../components/Storage.svelte";
+  import HelperPrograms from "../components/HelperPrograms.svelte";
   import WebSearch from "../components/WebSearch.svelte";
   import Sections from "../components/Sections.svelte";
   import Memory from "../components/Memory.svelte";
@@ -143,6 +144,8 @@
     <div class="group"><Backup /></div>
   {:else if name === "lutin_version"}
     <div class="group"><LutinVersion /></div>
+  {:else if name === "helpers"}
+    <div class="group"><HelperPrograms /></div>
   {:else if name === "storage"}
     <div class="group"><Storage /></div>
   {:else if name === "documents"}
