@@ -56,6 +56,12 @@
       removing = "";
     });
 
+  const removeAll = (): Promise<void> =>
+    act(async () => {
+      view = await api<View>("DELETE", "/devices");
+      removing = "";
+    });
+
   const seen = (seconds: number): string => new Date(seconds * 1000).toLocaleString(lang, { dateStyle: "medium", timeStyle: "short" });
 
   onMount(() => {
@@ -89,11 +95,20 @@
             </li>
           {/each}
         </ul>
+        {#if removing === "*"}
+          <p class="confirm" role="group" aria-label={t("devices.remove_all")}>
+            <span>{t("devices.remove_all_confirm", view.devices.length)}</span>
+            <button type="button" class="button danger" disabled={busy} onclick={removeAll}>{t("devices.remove_all_yes")}</button>
+            <button type="button" class="button" onclick={() => (removing = "")}>{t("chat.cancel")}</button>
+          </p>
+        {:else}
+          <div class="actions"><button type="button" class="button" disabled={busy} onclick={() => (removing = "*")}>{t("devices.remove_all")}</button></div>
+        {/if}
       {/if}
     {/if}
 
     {#if !view.pairing_possible}
-      <p class="note">{t("devices.local_level")} <a href="/">{t("devices.open_access")}</a></p>
+      <p class="note">{t("devices.local_level")} <a href="#/settings/devices" onclick={() => document.getElementById("access-title")?.focus()}>{t("devices.open_access")}</a></p>
     {:else if code}
       <div class="code" role="status">
         <svg class="qr" viewBox={`0 0 ${code.qr.size + 8} ${code.qr.size + 8}`} role="img" aria-label={t("devices.qr_label", code.address)}>

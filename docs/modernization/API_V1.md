@@ -231,6 +231,14 @@ then DuckDuckGo and Bing). `PATCH /web-search` (configurator) `{searxng?, keys?:
 `400 invalid_request` for an address or key that cannot be one. `POST /web-search/test` (session) asks each engine separately:
 `{results: [{id, ok, count, ms, error, example}]}`; `409 offline`.
 
+## Access
+
+`GET /access` (session): `{level, port, public_url, proxy_ips, saved: {level, public_url, proxy_ips}, restart_needed, address, docker, can_change,
+can_restart, remote_admin: {active, can_change}, levels: [{id, title, detail}], warnings: {network, proxy}}`. `PATCH /access` (local)
+`{level, understood, public_url?, proxy_ips?}` saves the level for the next start (opening needs `understood: true`). `PATCH
+/access/remote-admin` (local) `{active}`. Both are `local`, stricter than the old page's level route: they open the machine, so neither a paired
+device nor the remote administration itself may change them. Refusals: `400 invalid_request`, `409 in_docker` (LUTIN_NIVEAU, LUTIN_ADMIN_TOUS).
+
 ## What v1 keeps
 
 - The security model, unchanged: Host and Origin checks, page token on every `/api/` request, session by PIN pairing, approvals.

@@ -1,6 +1,21 @@
 [
  {
   "method": "GET",
+  "path": "/api/v1/access",
+  "right": "session"
+ },
+ {
+  "method": "PATCH",
+  "path": "/api/v1/access",
+  "right": "local"
+ },
+ {
+  "method": "PATCH",
+  "path": "/api/v1/access/remote-admin",
+  "right": "local"
+ },
+ {
+  "method": "GET",
   "path": "/api/v1/addons",
   "right": "session"
  },

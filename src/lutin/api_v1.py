@@ -1295,6 +1295,75 @@ def start_speed_test(request):
     return 202, started
 
 
+# ---------------------------------------------------------------------------------------------------------------- access
+# Who may reach Lutin (lutin.access, lutin.security): the access level, saved for the next start, and the remote administration that lets an admitted
+# device configure. Both open the machine, so both are `local`: the person in front of this machine (or the `lutin` command), never a paired device and
+# never through the remote administration itself. In Docker both come from the container's variables.
+LEVEL_NAMES = {name: level for level, name in ACCESS_LEVELS.items()}
+LEVEL_IDS = {level: name for name, level in LEVEL_NAMES.items()}          # fixed at import: the names of the three levels
+
+
+def _access_view(request):
+    from . import access as _access
+    from . import setup_wizard as _wizard
+    running, saved = _m.SECURITE, _access.saved_security()
+    strict, docker = bool(request.handler._configurateur_strict()), _access.in_docker()
+    return {"level": ACCESS_LEVELS.get(running.niveau, running.niveau), "port": running.port, "public_url": running.url_publique, "proxy_ips": list(running.proxy_ips),
+            "saved": {"level": ACCESS_LEVELS.get(saved.niveau, saved.niveau), "public_url": saved.url_publique, "proxy_ips": list(saved.proxy_ips)},
+            "restart_needed": saved != running, "address": "http://{}:{}/".format(_m.IP_LAN or _m.ip_locale(), running.port), "docker": docker,
+            "can_change": strict and not docker, "can_restart": bool(_access.can_restart()),
+            "remote_admin": {"active": bool(request.handler._admin_tous()), "can_change": strict and not docker},
+            "levels": [{"id": LEVEL_IDS[level], "title": _t(title), "detail": _t(detail)} for level, (_, title, detail) in _wizard.LEVELS_TEXT.items()],
+            "warnings": {"network": _t(_wizard.WARNING_NETWORK), "proxy": _t(_wizard.WARNING_PROXY)}}
+
+
+def _not_in_docker(message):
+    from . import access as _access
+    if _access.in_docker():
+        raise ApiError(409, "in_docker", message)
+
+
+@route("GET", "/access", SESSION)
+def access_state(request):
+    """The access `level` running (`local`, `network`, `proxy`) with its port, public address and trusted proxies, the one `saved` for the next start
+    (`restart_needed` when they differ), the `address` another device opens, whether this caller `can_change` it (this machine only, not in Docker),
+    the `remote_admin` and the texts of the `levels` and their `warnings`."""
+    return _access_view(request)
+
+
+@route("PATCH", "/access", LOCAL)
+def access_change(request):
+    """Saves the access level for the next start: `{level, understood, public_url?, proxy_ips?}`. Opening (`network`, `proxy`) needs `understood`
+    true; `proxy` needs an https public address and the trusted proxy. 400 `invalid_request` with what is wrong, 409 `in_docker` (LUTIN_NIVEAU)."""
+    _not_in_docker(_t("Dans Docker, le niveau d'accès vient de la variable LUTIN_NIVEAU du conteneur : change-la là (docs/DOCKER.md)."))
+    from . import access as _access
+    body = request.body
+    level = LEVEL_NAMES.get(str(body.get("level") or ""))
+    if level is None:
+        raise ApiError(400, "invalid_request", _t("Niveau inconnu : {}").format(str(body.get("level") or "")[:20]))
+    ips = body.get("proxy_ips") or []
+    if not isinstance(ips, list):
+        raise ApiError(400, "invalid_request", _t("Le corps de la requête doit être un objet JSON."))
+    _access.apply({"niveau": level, "comprend": body.get("understood") is True, "url_publique": str(body.get("public_url") or "")[:300],
+                   "proxy_ips": [str(ip)[:60] for ip in ips[:20]]}, True)
+    return _access_view(request)
+
+
+@route("PATCH", "/access/remote-admin", LOCAL)
+def access_remote_admin(request):
+    """`{active}`: lets every admitted device configure Lutin (as this machine does), or takes it back. Only this machine changes it, never a device
+    through it. 409 `in_docker` (LUTIN_ADMIN_TOUS)."""
+    _not_in_docker(_t("Dans Docker, l'administration à distance se règle avec la variable LUTIN_ADMIN_TOUS du conteneur (docs/DOCKER.md)."))
+    active = request.body.get("active")
+    if not isinstance(active, bool):
+        raise ApiError(400, "invalid_request", _t("Indique true ou false."))
+    cfg = _m.config_lue()
+    cfg["admin_a_distance"] = active
+    _m.config_ecrire(cfg)
+    _m.journaliser("Administration à distance {}.".format("ouverte" if active else "fermée"))
+    return _access_view(request)
+
+
 # --------------------------------------------------------------------------------------------------------- devices
 # The devices that were paired with the code shown on this machine (a phone, another computer). Nothing here changes how a session is checked: the code,
 # its attempts and the sessions stay in lutin.security. Only the digests of the session tokens are stored, and only their first characters are shown.

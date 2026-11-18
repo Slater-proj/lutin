@@ -757,6 +757,65 @@ class Chat(unittest.TestCase):
         self.assertEqual(p.erreurs, [])
         p.evaluer("location.hash = '#/chat'")
 
+    def test_3t_the_access_level_and_the_remote_administration_are_changed_from_this_machine(self):
+        """PARITY.md item 9: « Access » in Settings › Devices, on /api/v1/access, and « Disconnect every device ». The level is saved for the next
+        start, never applied at once: this server keeps running at the level « this machine only ». Hermetic: a temporary configuration file."""
+        p = self.page
+        from lutin import security as S
+        config = Path(tempfile.mkdtemp(prefix="lutin-access-")) / "config.json"
+        spare = S.Appareils()
+        for patch in (mock.patch.dict(os.environ, {"LUTIN_CONFIG": str(config)}), mock.patch.object(T.A, "APPAREILS", spare)):
+            patch.start()
+            self.addCleanup(patch.stop)
+        reload = lambda: (p.evaluer("window.__old = true; location.reload()"), p.attendre("!window.__old && !!document.querySelector('.rail .version')"))
+        self.addCleanup(lambda: (config.unlink(missing_ok=True), p.evaluer("location.hash = '#/chat'"), reload()))          # the banner « restart » goes with the file
+        section = "document.querySelector('.access')"
+        radio = lambda level: "document.querySelector('.access input[value=%s]')" % level
+        p.evaluer("location.hash = '#/settings/devices'")
+        p.attendre("!!%s && !!%s" % (section, radio("local")))
+        self.assertTrue(p.evaluer("%s.checked" % radio("local")))
+        self.assertIn("Cette machine seulement", p.evaluer("%s.innerText" % section))
+        p.evaluer("%s.click()" % radio("network"))
+        p.attendre("!!%s.querySelector('.warn')" % section)
+        save = "%s.querySelector('form button[type=submit]')" % section
+        self.assertTrue(p.evaluer("%s.disabled" % save), "not before the risks are understood")
+        p.evaluer("%s.querySelector('form input[type=checkbox]').click()" % section)
+        if AXE.is_file():
+            self.axe("on the access level")
+        self.press(save)
+        p.attendre("%s.querySelector('.notice').innerText.includes('redémarrage')" % section)
+        self.assertEqual(json.loads(config.read_text(encoding="utf-8"))["securite"]["niveau"], S.RESEAU, "saved for the next start")
+        self.assertEqual(T.A.SECURITE.niveau, S.LOCAL, "and not applied now")
+        p.attendre("!!document.querySelector('.lutin-banner.restart-needed')")          # the shell read its status again
+        self.picture("3t-access")
+        p.evaluer("%s.click()" % radio("local"))
+        self.press(save)
+        p.attendre("!%s.querySelector('.warn')" % section)
+        self.assertEqual(json.loads(config.read_text(encoding="utf-8"))["securite"]["niveau"], S.LOCAL)
+
+        remote = "[...%s.querySelectorAll('.part .button')].find(b => b.innerText === %s)"
+        self.press(remote % (section, js("Ouvrir l'administration à distance")))
+        p.attendre("%s.querySelector('.part').innerText.includes('Ouverte')" % section)
+        self.assertTrue(json.loads(config.read_text(encoding="utf-8"))["admin_a_distance"])
+        self.press(remote % (section, js("Fermer l'administration à distance")))
+        p.attendre("%s.querySelector('.part').innerText.includes('Fermée')" % section)
+        self.assertFalse(json.loads(config.read_text(encoding="utf-8"))["admin_a_distance"])
+
+        network = mock.patch.dict(api_v1.ACCESS_LEVELS, {S.LOCAL: "network"})          # as if the network level was open, to list devices
+        network.start()
+        self.addCleanup(network.stop)
+        tokens = [spare.appairer(spare.nouveau_pin(), name) for name in ("Phone", "Tablet")]
+        p.evaluer("location.hash = '#/chat'")
+        p.evaluer("location.hash = '#/settings/devices'")
+        p.attendre("document.querySelectorAll('.devices .list li').length === 2")
+        self.press("[...document.querySelectorAll('.devices .button')].find(b => b.innerText === 'Déconnecter tous les appareils')")
+        p.attendre("!!document.querySelector('.devices p.confirm')")
+        self.assertTrue(all(spare.valide(token) for token in tokens), "asking is not disconnecting")
+        self.press("document.querySelector('.devices p.confirm .danger')")
+        p.attendre("!document.querySelector('.devices .list')")
+        self.assertFalse(any(spare.valide(token) for token in tokens))
+        self.assertEqual(p.erreurs, [])
+
     def test_4_a_refusal_of_the_server_is_shown_and_the_message_is_given_back(self):
         p = self.page
         with mock.patch.object(T.A, "TOURS_SIMULTANES", 0):

@@ -2310,5 +2310,6 @@
 "Donne un nom (lettres, chiffres, espaces).": "Give a name (letters, digits, spaces).",
 "Une autre machine porte déjà ce nom.": "Another machine already has this name.",
 "Fournisseur inconnu.": "Unknown provider.",
-"tester la recherche web": "test the web search"
+"tester la recherche web": "test the web search",
+"Indique true ou false.": "Say true or false."
 }

@@ -31,7 +31,10 @@ switch; each line is ticked here when it is done, with its test.
    « Web » option of the Chat greyed while it is on (test 3r).
 8. ~~**Web search setup**: engine order, SearXNG, keys, « test the search »~~ — done: `GET`, `PATCH` (configurator) `/api/v1/web-search` and
    `POST /api/v1/web-search/test` (`tests/test_api_v1_web_search.py`), « Web search » in Settings › Knowledge (`components/WebSearch.svelte`, test 3s).
-9. **Access**: the access level, remote administration, disconnect every device.
+9. ~~**Access**: the access level, remote administration, disconnect every device~~ — done: `GET /api/v1/access`, `PATCH /api/v1/access` and
+   `PATCH /api/v1/access/remote-admin` (right `local`: this machine only, never a paired device nor the remote administration itself;
+   `tests/test_api_v1_access.py`), « Access » in Settings › Devices (`components/Access.svelte`) and « Disconnect every device » on the existing
+   `DELETE /api/v1/devices` (test 3t).
 10. **Model upkeep**: update checks and proposals (including removing obsolete models), precision variants, benches and their comparison, the
     Ollama library, the speed test outside the first launch, the model pages of Colibri, LM Studio and ExLlamaV3.
 11. **Engine settings** (pinned version, ports, address and key of an OpenAI-compatible server, llama.cpp advanced and router, folders), engine
