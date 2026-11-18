@@ -55,6 +55,12 @@ TABLE = {
 }
 
 
+# Tools that another one covers, left out when the context window is small (ADR 0018): on 8,192 tokens the schemas took about half of the request.
+# `lire` reads one file at a time, `modifier` makes one replacement at a time, `chercher` finds a function, `web_lire` reads a page.
+SPARE_ON_SMALL_WINDOW = frozenset({"lire_plusieurs", "modifier_plusieurs", "symboles", "apercu_page"})
+SMALL_WINDOW = 8192          # tokens: at this size or below, the spare tools are left out
+
+
 def names(*effects):
     """The tools whose effect is one of `effects`."""
     return {name for name, tool in TABLE.items() if tool.effect in effects}

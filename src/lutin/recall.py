@@ -312,10 +312,12 @@ def thread_passages(ident, question, nombre=3, min_termes=1):
     return [e[1] for e in classes[:nombre]]
 
 
-def thread_recall(conv, fiche_etape="", budget=1800):
+def thread_recall(conv, fiche_etape="", budget=1800, vus=None):
     """Ce qui a été dit plus tôt dans CETTE conversation et qui touche à la dernière demande, retrouvé tout seul (sans que le modèle ait à le demander) : une fiche ou un résumé perd des détails,
     mais le texte complet reste sur le disque. Renvoie (texte pour le prompt, nombre de passages). Un « oui » ou un « continue » est complété par la dernière réponse et l'étape en cours.
-    budget : caractères de passages au plus (les rappels du fil et des documents se partagent une part de la fenêtre : prompt_layout)."""
+    budget : caractères de passages au plus (les rappels du fil et des documents se partagent une part de la fenêtre : prompt_layout).
+    vus : les messages que la requête ajustée à la fenêtre enverra vraiment (agent.ce_que_voit_le_modele) ; sans eux, les six derniers et les épinglés.
+    Un passage déjà sous les yeux du modèle n'est pas remis ; ceux des messages que l'ajustement vient de retirer passent avant ceux du début archivé (ADR 0018)."""
     ident = conv.get("id")
     msgs = conv.get("messages", [])
     demandes = [m["content"] for m in msgs if m.get("role") == "user" and m.get("content") and not str(m["content"]).startswith("[")]
@@ -332,10 +334,16 @@ def thread_recall(conv, fiche_etape="", budget=1800):
     passages = thread_passages(ident, question, 8, 2 if precise else 1)
     if not passages:
         return "", 0
-    sous_les_yeux = " ".join(" ".join(str(m.get("content") or "").split()) for m in msgs[-6:] + [m for m in msgs[:-6] if m.get("epingle")])                       # les derniers échanges sont déjà dans la fenêtre
+    if vus is None:
+        vus = msgs[-6:] + [m for m in msgs[:-6] if m.get("epingle")]                       # sans mieux : les derniers échanges sont dans la fenêtre
+    sous_les_yeux = " ".join(" ".join(str(m.get("content") or "").split()) for m in vus)
+    retires = " ".join(" ".join(str(m.get("content") or "").split()) for m in msgs)          # encore dans la conversation : ce qui n'est pas vu, l'ajustement l'a retiré
+
     def debut(p):
         return " ".join(RE_ROLE.sub("", p["m"]["texte"]).split())[:60]
-    gardes = [p for p in passages if debut(p) not in sous_les_yeux][:3]
+    gardes = [p for p in passages if debut(p) not in sous_les_yeux]
+    gardes.sort(key=lambda p: debut(p) not in retires)                 # stable : le classement reste dans chaque groupe
+    gardes = gardes[:3]
     if not gardes:
         return "", 0
     texte = ("[Extraits de la conversation] " + _t("Passages retrouvés plus tôt dans cette même conversation, en rapport avec la demande. Ils peuvent être hors sujet : ignore-les alors. "

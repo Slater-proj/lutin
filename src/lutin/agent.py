@@ -20,6 +20,7 @@ from . import modes as _modes
 from . import thinking as _pensee
 from . import attachments as _pieces
 from . import progress_sheet as _suivi
+from . import tool_table as _tool_table
 from . import turn_state as _etat_tour
 from . import prompt_layout as _disposition
 from . import claude_project as _pc
@@ -180,10 +181,31 @@ def reformuler_recherche(texte, r):
         return ""
 
 
-def a_compacter(conv, r):
-    """Vrai quand la conversation approche de la taille du contexte : c'est le moment où le résumé automatique se déclencherait."""
+PART_REQUETE = 0.68          # part de la fenêtre que la requête peut prendre (ajuster_contexte rogne au-delà) : le reste est la place de la réponse
+SEUIL_RESUME = 0.6           # le résumé se déclenche quand les messages prennent cette part de la fenêtre…
+PART_RESUME = 0.9            # …ou cette part de ce que la requête leur laisse, si c'est plus tôt
+
+
+def place_de_l_historique(conv, r, outils=None):
+    """Ce que la requête laisse aux messages de la conversation, en jetons : la part de la fenêtre que garde ajuster_contexte, moins les outils
+    réellement envoyés et le message système (ADR 0018). Les seuils du résumé, du retrait et du rappel se règlent sur ce chiffre : sur une fenêtre de
+    8 192 jetons, les schémas des outils en prennent près de la moitié, et la requête était rognée bien avant que le résumé se déclenche (le début de
+    la requête changeait à chaque réponse, le cache du moteur ne servait plus). Jamais moins du quart de la fenêtre : en dessous, chaque réponse
+    demanderait un résumé."""
+    outils = outils_du_mode(r) if outils is None else outils
+    prise = (len(json.dumps(outils, ensure_ascii=False)) + len(consignes_systeme(r) + _fichiers.instruction_folder(conv))) // 3
+    return max(int(r["num_ctx"] * PART_REQUETE) - prise, r["num_ctx"] // 4)
+
+
+def a_compacter(conv, r, place=None):
+    """Vrai quand la conversation approche de ce que la requête peut lui laisser : c'est le moment où le résumé automatique se déclencherait.
+    place : place_de_l_historique, si elle est déjà calculée pour ce tour."""
     msgs = conv["messages"]
-    return not (estimer(msgs) + len(conv.get("resume", "")) // 3 < int(r["num_ctx"] * 0.6) or len(msgs) < 8)
+    if len(msgs) < 8:
+        return False
+    place = place_de_l_historique(conv, r) if place is None else place
+    seuil = min(int(r["num_ctx"] * SEUIL_RESUME), int(place * PART_RESUME))
+    return estimer(msgs) + len(conv.get("resume", "")) // 3 >= seuil
 
 
 def repondre_choix_memoire(ident, choix, garder):
@@ -370,6 +392,8 @@ def outils_du_mode(r):
     if not r.get("web", True) or _hl.is_active():
         exclus |= OUTILS_WEB
     exclus |= set(r.get("outils_desactives") or [])                     # outils coupés par l'utilisateur (Réglages > Outils)
+    if int(r.get("num_ctx") or 0) and int(r["num_ctx"]) <= _tool_table.SMALL_WINDOW:
+        exclus |= _tool_table.SPARE_ON_SMALL_WINDOW                     # petite fenêtre : les outils qu'un autre couvre laissent leur place à la conversation (ADR 0018)
     if not _m.OUTIL:
         exclus |= _modes.IMAGE_TOOLS
     if r.get("memoire_longue") != "fichier":
@@ -1083,7 +1107,7 @@ def jauge_contexte(conv, r=None):
             msgs.append({"role": "user", "content": _suivi.text_for_model(conv["id"], r["num_ctx"])})          # la place de la fiche compte dans la jauge
         except ValueError:
             pass
-    return {"utilise": estimer(msgs) + len(json.dumps(_m.OUTILS, ensure_ascii=False)) // 3, "total": r["num_ctx"], "reel": False}
+    return {"utilise": estimer(msgs) + len(json.dumps(outils_du_mode(r), ensure_ascii=False)) // 3, "total": r["num_ctx"], "reel": False}          # les outils réellement envoyés, pas toute la liste
 
 
 # Une erreur d'Ollama qui parle d'une conversation trop longue pour la fenêtre : des expressions précises. Le mot « prompt » ou « context » seul se retrouve dans des erreurs sans rapport (gabarit, option inconnue…).
@@ -1135,7 +1159,7 @@ def ajuster_contexte(msgs, num_ctx, facteur=1.0, outils=None, rapport=None):
     rapport (un dictionnaire) : reçoit ce qui a été raccourci ou retiré (« raccourcis », « retires », « tronques », « tours »), pour le dire à l'utilisateur."""
     rapport = rapport if rapport is not None else {}
     rapport.update(raccourcis=0, retires=0, tronques=0, tours=0)
-    budget = int(num_ctx * 0.68 * facteur) - len(json.dumps(_m.OUTILS if outils is None else outils, ensure_ascii=False)) // 3
+    budget = int(num_ctx * PART_REQUETE * facteur) - len(json.dumps(_m.OUTILS if outils is None else outils, ensure_ascii=False)) // 3
     msgs = [dict(m) for m in msgs]
     dernier_user = max((i for i, m in enumerate(msgs) if m["role"] == "user"), default=-1)
     # les messages épinglés ne sont jamais retirés, dans la limite d'un quart du budget (les plus récents d'abord : au-delà, les plus anciens redeviennent retirables)
@@ -1201,11 +1225,11 @@ def ajuster_contexte(msgs, num_ctx, facteur=1.0, outils=None, rapport=None):
     return msgs
 
 
-def deborde(conv, r):
+def deborde(conv, r, place=None):
     """Vrai quand l'historique ne tient plus dans la place que la requête lui laisse : des échanges anciens vont être retirés de ce qui part au
     modèle. Le rappel du fil s'allume alors, sans attendre un résumé ou une fiche (avant, les plus anciens messages disparaissaient sans retour)."""
-    place = int(r["num_ctx"] * 0.68) - len(json.dumps(_m.OUTILS, ensure_ascii=False)) // 3
-    return estimer(conv.get("messages") or []) > max(place, r["num_ctx"] // 4)
+    place = place_de_l_historique(conv, r) if place is None else place
+    return estimer(conv.get("messages") or []) > place
 
 
 def document_de_reprise(conv, r):
@@ -1255,7 +1279,7 @@ def taille_resume(num_ctx):
     return max(1500, min(6000, int(num_ctx * 3 * 0.15)))
 
 
-def compacter(conv, r, emit, forcer=False):
+def compacter(conv, r, emit, forcer=False, place=None):
     """Quand la conversation approche de la taille du contexte, le début est résumé par le modèle. forcer (commande /compact) : on résume tout sauf le dernier échange,
     même si la conversation est encore courte. Renvoie True si un résumé a été fait."""
     msgs = conv["messages"]
@@ -1264,7 +1288,7 @@ def compacter(conv, r, emit, forcer=False):
         if coupe < 2:
             return False
     else:
-        if not a_compacter(conv, r):
+        if not a_compacter(conv, r, place):
             return False
         coupe = max(2, len(msgs) // 2)
         while coupe < len(msgs) and msgs[coupe]["role"] != "user":             # on coupe avant un message de l'utilisateur
@@ -1303,13 +1327,22 @@ def _decaler_scribe(conv, coupe, gardes):
         conv["scribe_a"] = max(0, int(conv["scribe_a"]) - coupe) + gardes
 
 
-SEUIL_PLEIN = 0.6              # au-delà, le retrait n'attend plus le scribe : mieux vaut une fiche en retard (le début reste retrouvable avec « rappeler ») qu'une conversation qui n'a plus de place pour répondre
+SEUIL_PLEIN = 0.6              # au-delà (ou bien au-delà de ce que la requête laisse aux messages : MARGE_PLEIN), le retrait n'attend plus le scribe : mieux vaut une fiche en retard (le début reste retrouvable avec « rappeler ») qu'une conversation qui n'a plus de place pour répondre
 SEUIL_PLEIN_REEL = 0.8         # idem d'après le chiffre réel d'Ollama
 PART_GARDEE = 0.25            # /compact en mode fiche : les messages récents gardés tels quels tiennent dans ce quart de la fenêtre
-SEUIL_ELAGAGE = 0.45         # part de la fenêtre que les messages peuvent prendre avant le retrait : avec la fiche (jusqu'à 10 %), le système et les outils, le total reste sous les 68 % où ajuster_contexte se mettrait à rogner
+SEUIL_ELAGAGE = 0.45         # part de la fenêtre que les messages peuvent prendre avant le retrait (ou ce que la requête leur laisse une fois la fiche comptée, si c'est moins)
+MARGE_PLEIN = 0.1            # au-delà de ce que la requête leur laisse, de cette part de la fenêtre : le retrait n'attend plus le scribe
 
 
-def elaguer(conv, r, emit, forcer=False):
+def _taille_fiche(conv, r):
+    """La place de la fiche de suivi dans la requête, en jetons (0 sans fiche)."""
+    try:
+        return len(_suivi.text_for_model(conv["id"], r["num_ctx"])) // 3 if conv.get("id") else 0
+    except ValueError:
+        return 0
+
+
+def elaguer(conv, r, emit, forcer=False, place=None):
     """Mode « fiche de suivi » : la fiche garde le fil, donc le début de la conversation est retiré EN BLOC (la moitié, ou tout sauf le dernier échange si forcer), sans appeler le modèle, et mis à l'archive (« rappeler »).
     Sans ce retrait, la conversation grossissait sans fin et ajuster_contexte rognait le début à CHAQUE réponse : le début de la requête changeait à chaque fois, Ollama ne pouvait plus réutiliser son cache
     (tout relu à chaque réponse : des minutes sur processeur) et la jauge restait pleine. Là, le début ne change qu'à chaque retrait. Renvoie True si quelque chose a été retiré."""
@@ -1326,8 +1359,12 @@ def elaguer(conv, r, emit, forcer=False):
         coupe = min(coupe, derniere)
     else:
         reel = int((conv.get("jetons") or {}).get("utilise") or 0)                # le chiffre d'Ollama après la dernière réponse : l'estimation (caractères / 3) peut se tromper
-        plein = estimer(msgs) >= int(r["num_ctx"] * SEUIL_PLEIN) or reel >= int(r["num_ctx"] * SEUIL_PLEIN_REEL)
-        if len(msgs) < 8 or (estimer(msgs) < int(r["num_ctx"] * SEUIL_ELAGAGE) and reel < int(r["num_ctx"] * SEUIL_PLEIN_REEL)):
+        if len(msgs) < 8:
+            return False
+        place = (place_de_l_historique(conv, r) if place is None else place) - _taille_fiche(conv, r)
+        taille = estimer(msgs)
+        plein = taille >= min(int(r["num_ctx"] * SEUIL_PLEIN), place + int(r["num_ctx"] * MARGE_PLEIN)) or reel >= int(r["num_ctx"] * SEUIL_PLEIN_REEL)
+        if taille < min(int(r["num_ctx"] * SEUIL_ELAGAGE), place) and reel < int(r["num_ctx"] * SEUIL_PLEIN_REEL):
             return False
         coupe = max(2, len(msgs) // 2)
         while coupe < len(msgs) and msgs[coupe]["role"] != "user":              # on coupe avant un message de l'utilisateur
@@ -1527,11 +1564,12 @@ def _derouler_tour(conv, texte, emit, r, stop, remplacer_depuis, identite, lectu
                     amorcer_fiche(conv, r, emit)
                     if not conv.get("memoire_longue"):
                         conv["memoire_provisoire"] = {"choix": "fichier", "jusqua": len(conv["messages"]) + 20}
+        place = place_de_l_historique(conv, r)                                          # une fois pour le tour : les outils et le système ne changent pas d'ici la réponse
         if r["memoire_longue"] != "fichier":
-            compacter(conv, r, emit)
+            compacter(conv, r, emit, place=place)
         elif not lecture_seule:
-            elaguer(conv, r, emit)
-        r["rappel_ici"] = r["memoire_longue"] == "fichier" or bool(conv.get("resume")) or deborde(conv, r)
+            elaguer(conv, r, emit, place=place)
+        r["rappel_ici"] = r["memoire_longue"] == "fichier" or bool(conv.get("resume")) or deborde(conv, r, place)
         boucle_agent(conv, r, emit, ctx, stop)
     except _m.Arret:
         _m.journaliser("Tour arrêté par l'utilisateur (conversation {}).".format(conv["id"]))
@@ -1687,6 +1725,18 @@ def monter_en_gamme(r, corps, emit, conv_id, motif):
         return False
 
 
+def ce_que_voit_le_modele(conv, r, outils, fiche=""):
+    """Les messages de la conversation que la requête enverra vraiment, une fois ajustée à la fenêtre (ADR 0018) : le rappel du fil ne remet pas ce
+    que le modèle a sous les yeux, et cherche d'abord dans ce que l'ajustement retire. La requête est reconstruite comme dans _messages_de_l_etape
+    (système, résumé, fiche), avec la place des extraits réservée ; le système n'est pas rendu."""
+    msgs = [{"role": "system", "content": consignes_systeme(r) + _fichiers.instruction_folder(conv)}]
+    if conv.get("resume"):
+        msgs += [{"role": "user", "content": "[Résumé de la conversation jusqu'ici]\n" + conv["resume"]}, {"role": "assistant", "content": "Compris, je continue."}]
+    reserve = "·" * _disposition.thread_budget(r["num_ctx"])                   # les extraits eux-mêmes prendront cette place
+    msgs += _disposition.before_last_question(list(conv.get("messages") or []), _disposition.turn_block(fiche, reserve, ""))
+    return ajuster_contexte(msgs, r["num_ctx"], 1.0, outils)[1:]
+
+
 def _preparer_boucle(conv, r, emit, ctx):
     """Contexte du tour, lu UNE fois : les outils du mode, la fiche de suivi, les extraits du fil, les rappels tirés des documents, la consigne d'exécution, la recherche guidée.
     Rien de ce qui est lu ici ne change d'une étape à l'autre du tour : le début de la requête reste identique, et le moteur le garde en cache.
@@ -1705,7 +1755,8 @@ def _preparer_boucle(conv, r, emit, ctx):
     if r.get("rappel_ici"):                       # le début de la conversation n'est plus sous les yeux du modèle : on lui remet ce qui touche à la demande
         try:
             etape = " ".join(_suivi.read(conv["id"])["etape"] + _suivi.read(conv["id"])["objectif"])
-            extraits, nb_extraits = _m.thread_recall(conv, etape, _disposition.thread_budget(r["num_ctx"]))
+            vus = ce_que_voit_le_modele(conv, r, outils, fiche)
+            extraits, nb_extraits = _m.thread_recall(conv, etape, _disposition.thread_budget(r["num_ctx"]), vus)
             if nb_extraits and DITS["rappel"].get(conv["id"]) != nb_extraits:          # dit une fois, et quand le nombre change : pas à chaque réponse
                 DITS["rappel"][conv["id"]] = nb_extraits
                 emit({"type": "info", "texte": _t("📎 {} passage(s) retrouvé(s) plus tôt dans cette conversation.").format(nb_extraits)})

@@ -2338,33 +2338,40 @@ class Assistant(unittest.TestCase):
             A.enregistrer_reglages({"memoire_longue": "resume", "fiche_scribe": True})
 
     def test_mode_fiche_attend_le_scribe_sauf_si_la_fenetre_est_presque_pleine(self):
-        """Entre 45 et 60 % de la fenêtre, le retrait n'emporte que des messages déjà passés dans la fiche. Au-delà de 60 % (ou 80 % d'après Ollama), il ne doit PLUS attendre :
-        un scribe qui échoue (modèle sans mémoire pendant une génération d'image) laissait sinon la conversation grossir jusqu'à ne plus pouvoir répondre."""
+        """Entre le seuil du retrait et la place que la requête laisse aux messages, le retrait n'emporte que des messages déjà passés dans la fiche.
+        Au-delà (ou à 80 % d'après Ollama), il ne doit PLUS attendre : un scribe qui échoue (modèle sans mémoire pendant une génération d'image)
+        laissait sinon la conversation grossir jusqu'à ne plus pouvoir répondre. Les seuils comptent les outils et le système (ADR 0018)."""
+        from lutin import agent as AG
         A.enregistrer_reglages({"memoire_longue": "fichier", "fiche_scribe": True})
         try:
             ctx = A.reglages()["num_ctx"]
+            r = dict(A.reglages(), memoire_longue="fichier")
+            place = AG.place_de_l_historique({}, r)
+            retrait, plein = min(int(ctx * AG.SEUIL_ELAGAGE), place), min(int(ctx * AG.SEUIL_PLEIN), place + int(ctx * AG.MARGE_PLEIN))
+            self.assertLess(retrait, plein)
 
-            def conversation(part):
+            def conversation(jetons):
                 taille = 100
                 while True:
                     msgs = [{"role": "user" if i % 2 == 0 else "assistant", "content": "mot " * taille + str(i)} for i in range(12)]
-                    if A.estimer(msgs) >= part * ctx:
+                    if A.estimer(msgs) >= jetons:
                         return {"messages": msgs, "id": "zzzzzzzz"}
                     taille += 20
-            r = dict(A.reglages(), memoire_longue="fichier")
-            c = conversation(0.5)
+            entre = (retrait + plein) // 2
+            c = conversation(entre)
+            self.assertLess(A.estimer(c["messages"]), plein, "la conversation de l'essai est bien entre les deux seuils")
             avant = len(c["messages"])
             A.elaguer(c, r, lambda e: None)
-            self.assertEqual(len(c["messages"]), avant, "50 % et scribe jamais passé : rien n'est retiré")
+            self.assertEqual(len(c["messages"]), avant, "entre les deux seuils et scribe jamais passé : rien n'est retiré")
             c["scribe_a"] = 8
             A.elaguer(c, r, lambda e: None)
             self.assertLess(len(c["messages"]), avant)
             self.assertEqual(c["scribe_a"], 8 - (avant - len(c["messages"])), "le rang du scribe suit le retrait")
-            c = conversation(0.7)
+            c = conversation(plein + ctx // 10)
             avant = len(c["messages"])
             A.elaguer(c, r, lambda e: None)
-            self.assertLess(len(c["messages"]), avant, "70 % : on retire sans attendre le scribe")
-            c = conversation(0.5)
+            self.assertLess(len(c["messages"]), avant, "au-delà de la place laissée aux messages : on retire sans attendre le scribe")
+            c = conversation(entre)
             c["jetons"] = {"utilise": int(ctx * 0.85), "total": ctx}
             avant = len(c["messages"])
             A.elaguer(c, r, lambda e: None)
@@ -2657,9 +2664,55 @@ class Assistant(unittest.TestCase):
         """Avant, le rappel du fil attendait un résumé ou la fiche : entre-temps, les plus anciens messages disparaissaient sans retour."""
         court = {"messages": [{"role": "user", "content": "Bonjour"}, {"role": "assistant", "content": "Salut"}]}
         long = {"messages": [{"role": "user" if i % 2 == 0 else "assistant", "content": "mot " * 400} for i in range(40)]}
-        self.assertFalse(A.deborde(court, {"num_ctx": 8192}))
-        self.assertTrue(A.deborde(long, {"num_ctx": 8192}))
-        self.assertFalse(A.deborde(long, {"num_ctx": 131072}))
+        self.assertFalse(A.deborde(court, dict(A.reglages(), num_ctx=8192)))
+        self.assertTrue(A.deborde(long, dict(A.reglages(), num_ctx=8192)))
+        self.assertFalse(A.deborde(long, dict(A.reglages(), num_ctx=131072)))
+
+    def test_les_seuils_comptent_les_outils_envoyes(self):
+        """ADR 0018 : sur une fenêtre de 8 192 jetons, les schémas des outils prennent près de la moitié de la requête. Le résumé et le retrait se
+        déclenchaient sur les messages seuls (60 % et 45 % de la fenêtre) : la requête était rognée à chaque réponse bien avant."""
+        from lutin import agent as AG
+        r = dict(A.reglages(), num_ctx=8192, memoire_longue="resume")
+        sans_outils = dict(r, mode="discussion")
+        outils = len(json.dumps(A.outils_du_mode(r), ensure_ascii=False)) // 3
+        self.assertGreater(outils, 1000, "le mode par défaut envoie des outils")
+        self.assertLess(AG.place_de_l_historique({}, r), AG.place_de_l_historique({}, sans_outils), "la place des outils est déduite")
+        self.assertGreaterEqual(AG.place_de_l_historique({}, dict(r, num_ctx=2048)), 512, "jamais moins du quart de la fenêtre")
+        place = AG.place_de_l_historique({}, r)
+        taille = 60
+        while True:                                     # des messages qui dépassent ce que la requête leur laisse, mais restent sous 45 % de la fenêtre
+            msgs = [{"role": "user" if i % 2 == 0 else "assistant", "content": "mot " * taille + str(i)} for i in range(12)]
+            if A.estimer(msgs) >= place:
+                break
+            taille += 10
+        self.assertLess(A.estimer(msgs), int(8192 * AG.SEUIL_ELAGAGE), "le cas que les anciens seuils laissaient passer")
+        conv = {"id": "zzzzzzzz", "messages": msgs}
+        self.assertTrue(A.a_compacter(conv, r), "le résumé se déclenche sur la place que les outils laissent")
+        self.assertFalse(A.a_compacter(conv, sans_outils), "sans outils, la même conversation tient")
+        fiche = dict(r, memoire_longue="fichier")
+        avant = len(msgs)
+        conv["scribe_a"] = avant                                    # le scribe a tout lu : seul le seuil décide
+        self.assertTrue(A.elaguer(conv, fiche, lambda e: None), "les messages ne tiennent plus dans ce que la requête leur laisse : le début sort")
+        self.assertLess(len(conv["messages"]), avant)
+        self.assertTrue(A.deborde({"messages": msgs}, r))
+
+    def test_moins_d_outils_sur_une_petite_fenetre(self):
+        """ADR 0018 : sur 8 192 jetons ou moins, les outils qu'un autre couvre (lire plusieurs fichiers, plusieurs remplacements, symboles, aperçu
+        d'une page) laissent leur place à la conversation ; ceux qui les couvrent restent."""
+        from lutin import tool_table
+        grand = {t["function"]["name"] for t in A.outils_du_mode(dict(A.reglages(), num_ctx=16384, mode="technique"))}
+        petit = {t["function"]["name"] for t in A.outils_du_mode(dict(A.reglages(), num_ctx=8192, mode="technique"))}
+        self.assertEqual(grand - petit, set(tool_table.SPARE_ON_SMALL_WINDOW) & grand)
+        self.assertIn("lire_plusieurs", grand - petit)
+        self.assertLessEqual({"lire", "modifier", "chercher", "web_lire"}, petit)
+
+    def test_la_jauge_estimee_compte_les_outils_envoyes(self):
+        conv = {"id": "x", "messages": [{"role": "user", "content": "Bonjour"}]}
+        avec = A.jauge_contexte(conv, dict(A.reglages(), mode="polyvalent"))["utilise"]
+        sans = A.jauge_contexte(conv, dict(A.reglages(), mode="discussion"))["utilise"]
+        self.assertGreater(avec - sans, 1000, "le mode discussion n'envoie aucun outil : la jauge ne les compte pas")
+        tous = len(json.dumps(A.OUTILS, ensure_ascii=False)) // 3
+        self.assertLess(avec - sans, tous, "seuls les outils du mode comptent, pas toute la liste")
 
     def test_mise_a_jour_depuis_la_page(self):
         import time

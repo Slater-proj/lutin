@@ -308,6 +308,39 @@ class RappelDuFil(unittest.TestCase):
         self.assertEqual(n, 1)
         self.assertIn("35 euros", texte, "« oui » seul ne dit rien : la question précédente et l'étape en cours guident la recherche")
 
+    def test_le_rappel_sait_ce_que_la_requete_envoie_vraiment(self):
+        """ADR 0018 : le rappel supposait que les six derniers messages étaient sous les yeux du modèle, et eux seuls. Sur une grande fenêtre, toute la
+        conversation part au modèle : remettre un passage qu'il voit déjà prend de la place pour rien. Sur une petite, l'ajustement retire bien plus
+        que le début : ce qu'il retire est cherché en premier."""
+        from lutin import agent, recall
+        msgs = [{"role": "user" if i % 2 == 0 else "assistant", "content": ("Le code du coffre est 4711-ZEBRE. " if i == 2 else "") + "blabla de remplissage numéro %d " % i * 40} for i in range(20)]
+        c = self.conv(msgs)
+        c["messages"] = msgs + [{"role": "user", "content": "Rappelle-moi le code du coffre ZEBRE s'il te plaît ?"}]
+        self.assertEqual(recall.thread_recall(c)[1], 1, "sans savoir ce qui part : le message 3 sur 21 est hors des six derniers, il est remis")
+        grand = dict(_m.reglages(), num_ctx=131072)
+        outils = agent.outils_du_mode(grand)
+        vus = agent.ce_que_voit_le_modele(c, grand, outils)
+        self.assertTrue(any("4711-ZEBRE" in (m.get("content") or "") for m in vus), "sur 131 072 jetons, toute la conversation part")
+        self.assertEqual(recall.thread_recall(c, "", 1800, vus), ("", 0), "le modèle le voit déjà : rien n'est remis")
+        petit = dict(_m.reglages(), num_ctx=4096)
+        vus = agent.ce_que_voit_le_modele(c, petit, agent.outils_du_mode(petit))
+        self.assertFalse(any("4711-ZEBRE" in (m.get("content") or "") for m in vus), "sur 4 096 jetons, l'ajustement le retire")
+        texte, n = recall.thread_recall(c, "", 1800, vus)
+        self.assertEqual(n, 1)
+        self.assertIn("4711-ZEBRE", texte)
+
+    def test_le_rappel_cherche_d_abord_ce_que_l_ajustement_vient_de_retirer(self):
+        from lutin import archive, recall
+        self.addCleanup(lambda: archive.remove(self.ident))
+        archive.add(self.ident, [{"role": "user", "content": "Au tout début : le code du coffre ZEBRE est 1111 (code du coffre ZEBRE : 1111). " + "début archivé " * 30}])
+        msgs = [{"role": "user" if i % 2 == 0 else "assistant", "content": ("Plus tard : le coffre rouge ZEBRE, 2222. " if i == 1 else "") + "suite de la conversation %d " % i * 30} for i in range(10)]
+        c = self.conv(msgs)
+        c["messages"] = msgs + [{"role": "user", "content": "Quel est le code du coffre ZEBRE déjà ?"}]
+        texte, n = recall.thread_recall(c, "", 1800, c["messages"][-2:])
+        self.assertEqual(n, 2)
+        self.assertIn("1111", recall.thread_passages(self.ident, "Quel est le code du coffre ZEBRE déjà ?", 8, 2)[0]["m"]["texte"], "le classement seul met le début archivé en premier")
+        self.assertLess(texte.index("2222"), texte.index("1111"), "le message retiré de la requête passe avant le début archivé")
+
     def test_conversation_inconnue_ou_vide(self):
         from lutin import recall
         self.assertEqual(recall.thread_recall({"id": "e9d8c7b6", "messages": [{"role": "user", "content": "une longue question sans historique ici"}]}), ("", 0))

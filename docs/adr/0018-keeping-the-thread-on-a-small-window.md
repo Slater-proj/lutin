@@ -1,6 +1,6 @@
 # ADR 0018 — Keeping the thread of a long conversation on a small window
 
-Status: accepted on 2026-11-18, first part implemented. The maintainer asked whether the two memories of a long conversation (summary, progress
+Status: accepted on 2026-11-18, decisions 1 to 8 implemented (6 to 8 the same day, second part). The maintainer asked whether the two memories of a long conversation (summary, progress
 sheet) are still useful now that the conversations are in a database (ADR 0017), whether they work, and how to stop conversations from going round in
 circles on small machines: the history is dropped fast, the model asks again for what it was told, and a long project loses its thread.
 
@@ -38,15 +38,27 @@ Read on `2d60093` (`agent.py`, `progress_sheet.py`, `recall.py`, `prompt_layout.
    decisions (the first one and the latest stay), then what is done, and the open questions last. Past 25 decisions, the first five stay with the most
    recent ones.
 
-## Not done yet (in this order)
+6. **The thresholds count what the request really carries** (`place_de_l_historique`): the history gets `0.68 × num_ctx` minus the tool schemas
+   really sent (`outils_du_mode`, not the whole list) and the system message, never less than a quarter of the window. The summary starts at 60 % of
+   the window or 90 % of that room, whichever comes first; the pruning of the sheet at 45 % of the window or once the messages no longer fit the
+   room the sheet leaves (its real size is deducted), whichever comes first; it stops waiting for the scribe at 60 % of the window or a tenth of the
+   window past that room. A margin below the room was tried and dropped: it pruned conversations that still fitted, and every prune changes the start
+   of the request. Before, on
+   8,192 tokens, the messages could reach 60 % of the window while the request was trimmed at every answer, and the start of the request changed each
+   time (no cache). The estimated gauge counts the tools really sent too.
+7. **The recall knows what the model sees** (`ce_que_voit_le_modele`): the request of the next step is rebuilt (system, summary, sheet, room for the
+   extracts) and trimmed as it will be; a passage it still contains is not put back, and the passages of messages the trimming drops come before
+   those of the archived start. Before, the recall assumed the last six messages were seen and the others were not: on a large window it repeated
+   what the model already had, on a small one it ignored that far more than the start was gone.
+8. **Fewer tools on a small window.** At 8,192 tokens or below, the tools another one covers (`tool_table.SPARE_ON_SMALL_WINDOW`: `lire_plusieurs`,
+   `modifier_plusieurs`, `symboles`, `apercu_page`) are not sent. Measured on the default mode: 3,429 → 2,782 tokens of schemas, and the room left
+   to the history on 8,192 tokens goes from about 1,770 to 2,414 tokens.
 
-- **Count the tools in the thresholds.** The summary and the pruning of the sheet trigger on the messages alone (60 % and 45 % of the window); with the
-  tool schemas the request is trimmed long before. Triggering on what the request really leaves to the history would summarise or prune earlier and
-  keep the start of the request stable for the engine's cache.
-- **Recall that knows what the model sees.** It skips passages found in the last six messages, assuming they are in the window; it should skip what the
-  trimmed request really contains, and look at what was dropped first.
-- **Fewer tools on a small window.** The 21 tool schemas take about half of an 8,192-token window; the modes already narrow them, a small window could
-  narrow them more.
+## Not done yet
+
+- **A 4,096-token window still has no room.** The 14 schemas left take about 2,780 tokens, 68 % of the window: the history gets the floor (a
+  quarter of the window) and the request is trimmed at every answer. Shorter descriptions on a very small window, or a smaller set of tools, are a
+  design choice to make with the maintainer (the descriptions are what keeps a small model from misusing the tools).
 - **Measure on a real small model.** No test runs a whole turn with a 4,096 or 8,192 window and a real model; the evaluation suite (plan step 6) should
   hold one such scenario (a project of twenty exchanges, then « where are we? »).
 
@@ -57,3 +69,6 @@ Read on `2d60093` (`agent.py`, `progress_sheet.py`, `recall.py`, `prompt_layout.
 - `tests/test_moteur.py` (first request kept, summary size, recall when the history overflows, the summary keeps the first request) and
   `tests/test_suivi.py` (a long plan does not push the step out, the first decisions stay). The test of pinned messages now pins a message that is not
   the first request: the first request is kept without a pin.
+- Decisions 6 to 8: `tests/test_moteur.py` (the thresholds count the tools sent, the scribe is waited for only below the room, fewer tools on a small
+  window, the estimated gauge), `tests/test_suivi.py` (the recall skips what the request sends and looks first at what the trimming dropped),
+  `tests/test_tool_table.py` (each spare tool has its cover).

@@ -40,6 +40,14 @@ class ToolTable(unittest.TestCase):
             if tool.effect in (tool_table.FILES, tool_table.COMMAND):
                 self.assertTrue(tool.asks, "%s changes the machine: it must ask" % name)
 
+    def test_the_tools_left_out_on_a_small_window_exist_and_their_cover_stays(self):
+        self.assertLessEqual(tool_table.SPARE_ON_SMALL_WINDOW, set(tool_table.TABLE))
+        covers = {"lire_plusieurs": "lire", "modifier_plusieurs": "modifier", "symboles": "chercher", "apercu_page": "web_lire"}
+        self.assertEqual(set(covers), set(tool_table.SPARE_ON_SMALL_WINDOW), "each spare tool says which one covers it")
+        for spare, cover in covers.items():
+            self.assertNotIn(cover, tool_table.SPARE_ON_SMALL_WINDOW, spare)
+            self.assertEqual(tool_table.TABLE[spare].effect, tool_table.TABLE[cover].effect if spare != "apercu_page" else tool_table.EXTERNAL, spare)
+
     def test_the_research_mode_keeps_exactly_what_it_kept(self):
         self.assertEqual(tool_table.research_tools(), HISTORICAL_RESEARCH, "no behaviour change: the derived list is the one written by hand before")
         self.assertEqual(modes.READ_TOOLS, tool_table.research_tools(), "modes reads the table")
