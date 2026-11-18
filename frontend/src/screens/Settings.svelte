@@ -8,6 +8,7 @@
   import LendMachine from "../components/LendMachine.svelte";
   import Health from "../components/Health.svelte";
   import Backup from "../components/Backup.svelte";
+  import LutinVersion from "../components/LutinVersion.svelte";
   import Sections from "../components/Sections.svelte";
   import Memory from "../components/Memory.svelte";
   import Skills from "../components/Skills.svelte";
@@ -133,6 +134,8 @@
     <div class="group"><Health /></div>
   {:else if name === "backup"}
     <div class="group"><Backup /></div>
+  {:else if name === "lutin_version"}
+    <div class="group"><LutinVersion /></div>
   {:else if name === "approval_rules"}
     <div class="group"><ApprovalRules /></div>
   {:else if name === "notifications"}

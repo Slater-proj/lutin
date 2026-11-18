@@ -30,6 +30,15 @@ def saved_security():
     return _sec.Securite.depuis_dict(_m.config_lue().get("securite"))
 
 
+RESTAURE = {"fait": False}          # une sauvegarde remise pendant cette exécution : elle n'est entièrement prise en compte qu'au prochain démarrage
+
+
+def restart_needed():
+    """Vrai quand un changement attend le prochain démarrage : niveau d'accès enregistré différent de celui en cours, sauvegarde remise, ou mise à
+    jour installée sans superviseur pour relancer Lutin (état « fini »)."""
+    return saved_security() != _m.SECURITE or RESTAURE["fait"] or UPDATE["etat"] == "fini"
+
+
 def state(configurateur, strict=None, admin_distance=False):
     """Tout ce que la page Accès affiche."""
     s = _m.SECURITE
@@ -156,5 +165,6 @@ def restore_stream(flux, taille):
             raise ValueError(_t("Envoi interrompu."))
         r = backup.restore(dossiers, fichier, dossier_secours=_m.DONNEES / "import")
     _m.journaliser("Sauvegarde restaurée : {} fichiers".format(r["fichiers"]))
+    RESTAURE["fait"] = True
     return dict(r, redemarrage_necessaire=True)
 

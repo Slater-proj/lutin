@@ -2,6 +2,7 @@
   // The shell: five areas, one navigation, the theme. Each area is a screen under screens/.
   import { onMount } from "svelte";
   import Icon, { type IconName } from "./components/Icon.svelte";
+  import LutinBanners from "./components/LutinBanners.svelte";
   import { api, ApiError } from "./lib/api";
   import { t, type MessageKey } from "./lib/messages";
   import { waiting, type NodeView } from "./lib/node";
@@ -52,11 +53,13 @@
     const onHash = (): void => {
       area = areaOf(location.hash);
     };
+    const onStatus = (): void => void refreshStatus(); // what a screen changed and the shell shows: a banner of Lutin's version
     const onNode = (event: Event): void => {
       nodeWaiting = (event as CustomEvent<number>).detail; // announced by the « Lend this machine » group after each of its readings
     };
     addEventListener("hashchange", onHash);
     addEventListener("lutin-node", onNode);
+    addEventListener("lutin-status", onStatus);
     void refreshStatus();
     void refreshNode();
     const timer = setInterval(() => void refreshNode(), 15000);
@@ -64,6 +67,7 @@
     return () => {
       removeEventListener("hashchange", onHash);
       removeEventListener("lutin-node", onNode);
+      removeEventListener("lutin-status", onStatus);
       clearInterval(timer);
     };
   });
@@ -96,6 +100,7 @@
   </nav>
   <main id="main" tabindex="-1">
     {#if problem}<p class="banner" role="alert">{problem}</p>{/if}
+    <LutinBanners {status} onchanged={refreshStatus} />
     {#if area === "chat"}
       <Chat {status} onchanged={refreshStatus} />
     {:else if area === "models"}

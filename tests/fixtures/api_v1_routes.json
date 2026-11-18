@@ -280,6 +280,31 @@
   "right": "session"
  },
  {
+  "method": "POST",
+  "path": "/api/v1/lutin/check",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/lutin/ignored-version",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/lutin/restart",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/lutin/update",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/lutin/update",
+  "right": "configurator"
+ },
+ {
   "method": "GET",
   "path": "/api/v1/machine",
   "right": "session"

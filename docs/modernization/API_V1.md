@@ -205,6 +205,18 @@ restore_auto_approval?}` (`remember` only `once`: a lasting rule is the host's t
 `/attachments/{attachment}?name=`. Refusals: `404 not_found` (machine or conversation), `403 machine_refused` (the host does not grant « lead »,
 its sentence passed on), `409 conflict`, `503 machine_unreachable`, `502 machine_error`, `400 invalid_request` before anything reaches the host.
 
+## Lutin's own version
+
+`GET /status` carries `new_version` (`{version, page, command}` when the check made at launch, at most once a day, found a newer release that was
+not ignored; null otherwise; read from the cache, never the network) and `restart` (`{needed, possible}`: `needed` when the access level saved
+differs from the running one, a backup was put back, or an update was installed with nothing to restart Lutin; `possible` when a supervisor
+starts it again). `POST /lutin/check` (session) asks GitHub now: `{current, latest, new_version}`, `503 unreachable`, `409 not_available` when
+the launch keeps no version cache. `POST /lutin/ignored-version` `{version}` (session). `POST /lutin/update` (configurator) starts what
+`lutin update --app` does, in the background; `GET /lutin/update` (session) follows it: `{state, lines, before, after, command, can_update,
+can_check, can_restart}`, `state` one of `idle`, `running`, `failed`, `up_to_date`, `restarting`, `installed`. Refusals: `409 in_docker` (the
+image is replaced instead), `offline`, `turn_running`, `update_running`. `POST /lutin/restart` (configurator): `{restarting: true}`, then Lutin
+stops with the code its supervisor restarts; `409 cannot_restart`, `turn_running`.
+
 ## What v1 keeps
 
 - The security model, unchanged: Host and Origin checks, page token on every `/api/` request, session by PIN pairing, approvals.

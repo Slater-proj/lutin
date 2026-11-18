@@ -1,8 +1,11 @@
 // The shapes of /api/v1 (docs/modernization/API_V1.md). The server's contract tests fix them: tests/test_api_v1*.py.
+import type { NewVersion } from "./lutin";
 import type { RemoteModels } from "./machines";
 
 export interface Status {
   version: string;
+  new_version: NewVersion | null; // a newer Lutin found by the check made at launch, not ignored: the banner
+  restart: { needed: boolean; possible: boolean }; // a change waits for the next start; `possible`: something starts Lutin again
   language: string;
   access: { level: string; can_configure: boolean };
   offline: boolean;

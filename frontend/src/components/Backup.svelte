@@ -38,6 +38,7 @@
     try {
       const done = await upload<Restored>("/backup/restore", chosen);
       notice = t("backup.restored", done.files, done.date || "?") + (done.restart_needed ? " " + t("backup.restart") : "");
+      if (done.restart_needed) dispatchEvent(new CustomEvent("lutin-status")); // the banner « restart » of the shell
       chosen = null;
       if (input) input.value = "";
     } catch (cause) {

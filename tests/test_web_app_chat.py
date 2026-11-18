@@ -590,6 +590,91 @@ class Chat(unittest.TestCase):
         p.attendre("!document.querySelector('.elsewhere') && !!document.querySelector('.composer button[type=submit]')", 10)
         self.assertEqual(p.erreurs, [])
 
+    def test_3q_lutin_tells_its_new_version_updates_itself_and_restarts(self):
+        """PARITY.md item 6: the banners of Lutin's own version and « Lutin's version » in Settings › General, on /api/v1/lutin/… . Hermetic: the
+        version cache is a temporary file, GitHub and the update steps are replaced, and the restart is a timer that is never started."""
+        p = self.page
+        from lutin import access, cli, offline, updates
+        cache = Path(tempfile.mkdtemp(prefix="lutin-version-")) / "lutin-version.json"
+        announce = lambda version, **more: cache.write_text(json.dumps(dict({"date": 1, "version": version, "depot": "example/lutin"}, **more)), encoding="utf-8")
+        announce("999.0.0")
+        supervised, timers, started, release = [False], [], [], threading.Event()
+        # Read again once the status is read (the version shows in the navigation): a banner is drawn from it, or not at all.
+        reload = lambda: (p.evaluer("location.hash = '#/chat'; window.__old = true; location.reload()"), p.attendre("!window.__old && !!document.querySelector('.rail .version')"))
+        self.addCleanup(lambda: (p.evaluer("sessionStorage.clear()"), reload()))          # registered first, so it runs last: once every patch is undone
+
+        def steps(say, error, capturer=False, revenir_a=None):
+            started.append(1)
+            say("Sauvegarde faite.")
+            release.wait(20)
+            return 0, "1.0", "1.1"
+        for patch in (mock.patch.dict(os.environ, {"LUTIN_VERSION_CACHE": str(cache)}),
+                      mock.patch.object(access, "saved_security", lambda: T.A.SECURITE),
+                      mock.patch.dict(access.RESTAURE, {"fait": False}),
+                      mock.patch.dict(access.UPDATE, {"etat": "", "lignes": [], "avant": "", "apres": ""}),
+                      mock.patch.object(access, "can_restart", lambda: supervised[0]),
+                      mock.patch.object(access.threading, "Timer", lambda *args: timers.append(args) or mock.Mock()),
+                      mock.patch.object(offline, "is_active", lambda: False),
+                      mock.patch.object(cli, "mise_a_jour_detaillee", steps),
+                      mock.patch.object(updates, "derniere_release_detail", lambda *args, **kwargs: ("1000.0.0", "https://example.invalid/lutin.whl", ""))):
+            patch.start()
+            self.addCleanup(patch.stop)
+        self.addCleanup(release.set)
+        banner = "document.querySelector('.lutin-banner.new-version')"
+
+        reload()
+        p.attendre("!!%s" % banner)
+        self.assertIn("999.0.0", p.evaluer("%s.innerText" % banner))
+        self.assertEqual(p.evaluer("%s.querySelector('a[target=_blank]').href" % banner), "https://github.com/example/lutin/releases/tag/v999.0.0")
+        if AXE.is_file():
+            self.axe("with the banner of a new version")
+        self.picture("3q-new-version")
+        self.press("[...%s.querySelectorAll('.button')].find(b => b.innerText === 'Plus tard')" % banner)
+        p.attendre("!%s" % banner)
+        reload()
+        self.assertFalse(p.evaluer("!!%s" % banner), "« later » lasts while the browser is open")
+        p.evaluer("sessionStorage.clear()")
+        reload()
+        p.attendre("!!%s" % banner)
+        self.press("[...%s.querySelectorAll('.button')].find(b => b.innerText === 'Ignorer cette version')" % banner)
+        p.attendre("!%s" % banner)
+        self.assertEqual(json.loads(cache.read_text(encoding="utf-8")).get("ignoree"), "999.0.0", "ignored by the server, for good")
+
+        announce("1000.0.0")
+        reload()
+        p.attendre("!!%s" % banner)
+        self.press("[...%s.querySelectorAll('.button')].find(b => b.innerText === 'Mettre à jour')" % banner)
+        p.attendre("location.hash === '#/settings/general/version' && !!document.querySelector('.lutin-version .button')")
+        p.attendre("document.activeElement?.id === 'lutin-version-title'")
+        self.assertIn("lutin update", p.evaluer("document.querySelector('.lutin-version .command').innerText"), "the command that does the same")
+        self.press("[...document.querySelectorAll('.lutin-version .button')].find(b => b.innerText === 'Vérifier les mises à jour')")
+        p.attendre("document.querySelector('.lutin-version .notice').innerText.includes('1000.0.0')")
+
+        self.assertFalse(p.evaluer("[...document.querySelectorAll('.lutin-version .button')].some(b => b.innerText === 'Redémarrer Lutin')"), "nothing would start Lutin again")
+        self.press("[...document.querySelectorAll('.lutin-version .button')].find(b => b.innerText === 'Mettre à jour Lutin')")
+        p.attendre("!!document.querySelector('.lutin-version .confirm')")
+        self.assertEqual(started, [], "asking is not updating")
+        self.press("document.querySelector('.lutin-version .confirm .primary')")
+        p.attendre("document.querySelector('.lutin-version .progress')?.innerText.includes('Sauvegarde faite.')", 15)
+        self.assertIn("Mise à jour en cours", p.evaluer("document.querySelector('.lutin-version .progress').innerText"))
+        self.assertTrue(p.evaluer("[...document.querySelectorAll('.lutin-version .button')].every(b => b.disabled || b.closest('.command-row'))"), "nothing else while it runs")
+        if AXE.is_file():
+            self.axe("while Lutin updates itself")
+        release.set()
+        p.attendre("document.querySelector('.lutin-version .progress').innerText.includes('Mise à jour installée (1.0 → 1.1)')", 15)
+        p.attendre("!!document.querySelector('.lutin-banner.restart-needed')", 10)          # the shell read its status again
+        self.assertIn("Ferme Lutin puis rouvre-le", p.evaluer("document.querySelector('.lutin-banner.restart-needed').innerText"))
+        self.assertEqual(timers, [], "nothing restarts Lutin: the person does")
+        self.picture("3q-installed")
+
+        supervised[0] = True
+        reload()
+        p.attendre("!!document.querySelector('.lutin-banner.restart-needed .button')")
+        self.press("document.querySelector('.lutin-banner.restart-needed .button')")
+        p.attendre("document.querySelector('.lutin-banner.restart-needed')?.innerText.includes('Redémarrage de Lutin')")
+        self.assertEqual(timers, [(0.8, os._exit, [access.RESTART_CODE])], "Lutin stops after answering, with the code « start me again »")
+        self.assertEqual(p.erreurs, [])
+
     def test_4_a_refusal_of_the_server_is_shown_and_the_message_is_given_back(self):
         p = self.page
         with mock.patch.object(T.A, "TOURS_SIMULTANES", 0):

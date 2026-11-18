@@ -22,7 +22,10 @@ switch; each line is ticked here when it is done, with its test.
    « Copy » and « Answer again » under the answers (test 3o); `GET /conversations/{id}/files/{file}`, `POST …/files/{file}/open`,
    `DELETE …/files/{file}`, `DELETE /conversations/{id}/media/{image}` and the relayed download for a conversation held by another machine
    (`tests/test_api_v1_produced.py`), `components/Produced.svelte` under each tool result (test 3p).
-6. **Lutin's own version**: check and update, the new-version and restart banners, « Restart Lutin ».
+6. ~~**Lutin's own version**: check and update, the new-version and restart banners, « Restart Lutin »~~ — done: `new_version` and `restart` in
+   `GET /status`, `/api/v1/lutin/check`, `…/ignored-version`, `…/update`, `…/restart` (`tests/test_api_v1_lutin.py`), the banners of the shell
+   (`components/LutinBanners.svelte`) and « Lutin's version » in Settings › General (`components/LutinVersion.svelte`, test 3q). The restart is now
+   also asked after a backup is put back and after an update installed with nothing to restart Lutin, on the old page as well.
 7. **The strict offline switch.**
 8. **Web search setup**: engine order, SearXNG, keys, « test the search ».
 9. **Access**: the access level, remote administration, disconnect every device.

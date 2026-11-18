@@ -6,6 +6,7 @@
   import Produced from "./Produced.svelte";
   import { attachmentUrl, imageUrl } from "../lib/place";
   import type { Block, Item, LiveTurn, Sent } from "../lib/turn";
+  import { copyText } from "../lib/clipboard";
 
   // `machine`: the paired machine that holds the conversation ("" for this one): its images and documents are read from it.
   // `onregenerate`: answer again from the last request (shown on the last answer only, when nothing runs).
@@ -30,17 +31,7 @@
   }
 
   async function copy(blocks: Block[], index: number): Promise<void> {
-    const text = answerText(blocks);
-    try {
-      await navigator.clipboard.writeText(text);
-    } catch {
-      const area = document.createElement("textarea"); // an address that is not secure (a phone on the local network) has no clipboard API
-      area.value = text;
-      document.body.append(area);
-      area.select();
-      document.execCommand("copy");
-      area.remove();
-    }
+    await copyText(answerText(blocks));
     copied = index;
     setTimeout(() => (copied = copied === index ? -1 : copied), 2000);
   }

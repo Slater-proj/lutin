@@ -239,8 +239,11 @@ def status(request):
     settings = _m.reglages()
     engine = _m.moteur_actuel(settings)
     state = _m.etat_moteur()
+    from . import access as _access
     return {
         "version": _m.VERSION,
+        "new_version": _new_version(),          # a newer Lutin announced by the launch check, for the banner (null: none, or ignored)
+        "restart": {"needed": bool(_access.restart_needed()), "possible": bool(_access.can_restart())},          # a change waits for the next start
         "language": _i18n.langue(),
         "access": {"level": ACCESS_LEVELS.get(_m.SECURITE.niveau, _m.SECURITE.niveau), "can_configure": bool(request.handler._configurateur())},
         "offline": bool(_offline.is_active()),
@@ -2491,6 +2494,99 @@ def backup_restore(request):
     from . import access as _access
     done = _access.restore_stream(io.BytesIO(request.raw), len(request.raw))
     return {"files": done["fichiers"], "kept_before": done["secours"], "version": done["version"], "date": done["date"], "restart_needed": bool(done.get("redemarrage_necessaire"))}
+
+
+# --------------------------------------------------------------------------------------------------------- Lutin's version
+# Lutin's own version (not the engines', not a paired machine's): the check made at launch at most once a day (lutin.updates, a file of the cache,
+# never the network on a reading), « check now », ignoring one version, updating as `lutin update --app` does, and the restart. Nothing is installed
+# without the person: the update is asked for from this machine, as on the old page.
+UPDATE_STATES = {"": "idle", "en cours": "running", "erreur": "failed", "a_jour": "up_to_date", "redemarrage": "restarting", "fini": "installed"}
+
+
+def _new_version():
+    """{version, page, command} when the launch check found a newer version that was not ignored; None otherwise. Never the network."""
+    found = _m.nouvelle_version_lutin()
+    return {"version": found["version"], "page": found["page"], "command": found["commande"]} if found else None
+
+
+def _version_cache():
+    path = os.environ.get("LUTIN_VERSION_CACHE")
+    if not path:
+        raise ApiError(409, "not_available", _t("Pas de vérification de version dans ce mode de lancement."))
+    return path
+
+
+def _update_view():
+    from . import access as _access
+    from . import updates as _updates
+    state = _access.update_state()
+    return {"state": UPDATE_STATES.get(state["etat"], "failed"), "lines": [str(line) for line in state["lignes"]], "before": state["avant"],
+            "after": state["apres"], "command": _updates.commande_mise_a_jour(), "can_update": not _access.in_docker(),
+            "can_check": bool(os.environ.get("LUTIN_VERSION_CACHE")), "can_restart": _access.can_restart()}
+
+
+@route("GET", "/lutin/update", SESSION)
+def lutin_update_state(request):
+    """Where an update of Lutin stands: `state` is idle, running, failed, up_to_date, restarting (Lutin stops and its supervisor starts it again) or
+    installed (nothing restarts it: the person does), with the `lines` it wrote, the versions `before` and `after`, the `command` that does the same
+    (`lutin update`, or the docker one), and what this launch allows: updating from the page (not in Docker), checking, restarting."""
+    return _update_view()
+
+
+@route("POST", "/lutin/update", CONFIGURATOR)
+def lutin_update(request):
+    """Starts the update of Lutin in the background (backup, download checked against its SHA256 sum, install, then a restart when something
+    restarts Lutin); follow it with GET /lutin/update. 409 `in_docker` (the image is replaced instead), `offline`, `turn_running`, `update_running`."""
+    from . import access as _access
+    if _access.in_docker():
+        raise ApiError(409, "in_docker", _t("Dans Docker, la mise à jour se fait en récupérant la nouvelle image : docker compose pull && docker compose up -d"))
+    if _offline.is_active():
+        raise ApiError(409, "offline", _t("Mode hors ligne strict : Lutin n'est pas mis à jour."))
+    if _m.TOURS_ACTIFS:
+        raise ApiError(409, "turn_running", _t("Une réponse est en cours : attends la fin avant de mettre à jour."))
+    try:
+        _access.update()
+    except ValueError as refused:          # the one condition left: an update already running (or a turn that began in between)
+        raise ApiError(409, "update_running", str(refused)) from None
+    return _update_view()
+
+
+@route("POST", "/lutin/check", SESSION)
+def lutin_check(request):
+    """« Check for updates »: one request to GitHub now, not waiting for the daily check. Answers {current, latest, new_version} (`new_version` as in
+    GET /status: null when up to date or ignored). 409 `not_available` when this launch keeps no version cache, 503 `unreachable` with the reason."""
+    path = _version_cache()
+    from . import updates as _updates
+    before = _updates.lire_fichier_version(path).get("date") or 0
+    checked = _updates.check_lutin({"cache": str(Path(path).parent)}, force=True)
+    if (checked.get("date") or 0) <= before:
+        raise ApiError(503, "unreachable", _t("Impossible de joindre GitHub : {}").format(checked.get("erreur") or "?"))
+    return {"current": _m.VERSION, "latest": str(_updates.lire_fichier_version(path).get("version", "")), "new_version": _new_version()}
+
+
+@route("POST", "/lutin/ignored-version", SESSION)
+def lutin_ignore_version(request):
+    """« Ignore this version » `{version}`: no reminder for that one; the next one is announced. Answers {new_version}."""
+    version = str(request.body.get("version") or "").strip()[:40]
+    if not version:
+        raise ApiError(400, "invalid_request", _t("Indique la version à ignorer."))
+    from . import updates as _updates
+    _updates.ignorer_version(_version_cache(), version)
+    return {"new_version": _new_version()}
+
+
+@route("POST", "/lutin/restart", CONFIGURATOR)
+def lutin_restart(request):
+    """« Restart Lutin »: answers, then Lutin stops with the code its supervisor (`lutin`, the icon, Docker) starts again. 409 `cannot_restart` when
+    nothing would start it again, `turn_running` during an answer."""
+    from . import access as _access
+    if not _access.can_restart():
+        raise ApiError(409, "cannot_restart", _t("Lutin n'a pas été lancé par la commande « lutin » : relance-le toi-même."))
+    try:
+        _access.restart()
+    except ValueError as refused:
+        raise ApiError(409, "turn_running", str(refused)) from None
+    return {"restarting": True}
 
 
 # ----------------------------------------------------------------------------------------------------------------- health
