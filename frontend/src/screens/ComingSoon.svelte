@@ -8,7 +8,7 @@
 <section>
   <h1>{t("soon.title", name)}</h1>
   <p>{t("soon.body")}</p>
-  <p><a href="/">{t("soon.open")}</a></p>
+  <p><a href="/ancienne/">{t("soon.open")}</a></p>
 </section>
 
 <style>

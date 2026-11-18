@@ -1674,6 +1674,6 @@
 "étape": "step",
 "Réflexion et notes": "Thinking and notes",
 "Préparer un modèle ": "Prepare a model ",
-"✨ Essayer la nouvelle interface": "✨ Try the new interface",
-"La nouvelle interface, en cours de construction : cette page reste celle par défaut": "The new interface, still being built: this page stays the default one"
+"✨ Revenir à la nouvelle interface": "✨ Back to the new interface",
+"La nouvelle interface est celle par défaut ; cette page reste disponible pendant les versions 1.x": "The new interface is the default one; this page stays available during the 1.x versions"
 }

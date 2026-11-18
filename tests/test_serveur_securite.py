@@ -67,7 +67,7 @@ class NiveauLocal(Base):
         self.niveau(niveau=S.LOCAL)
 
     def test_la_page_contient_le_jeton_et_mermaid_est_strict(self):
-        statut, page, _ = requete("GET", "/")
+        statut, page, _ = requete("GET", "/ancienne/")          # l'ancienne page, à /ancienne/ depuis la 1.0
         self.assertEqual(statut, 200)
         self.assertIn(A.JETON, page)
         self.assertNotIn("securityLevel: 'loose'", page)

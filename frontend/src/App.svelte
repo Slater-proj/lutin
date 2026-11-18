@@ -8,6 +8,7 @@
   import { t, type MessageKey } from "./lib/messages";
   import { waiting, type NodeView } from "./lib/node";
   import { applyTheme, nextTheme, readTheme, type Theme } from "./lib/theme";
+  import { fromLegacy } from "./lib/address";
   import type { Status } from "./lib/types";
   import Chat from "./screens/Chat.svelte";
   import Models from "./screens/Models.svelte";
@@ -25,6 +26,8 @@
     return (AREAS as readonly string[]).includes(name) ? (name as Area) : "chat";
   }
 
+  const legacy = fromLegacy(location.hash); // a bookmark of the old page (`/#conv=…`, `/#modeles`) leads to the same place here
+  if (legacy) history.replaceState(null, "", legacy);
   let area = $state<Area>(areaOf(location.hash));
   let theme = $state<Theme>(readTheme());
   let status = $state<Status | null>(null);
@@ -96,7 +99,7 @@
     </ul>
     <div class="foot">
       <button type="button" class="theme" onclick={changeTheme}><Icon name={theme as IconName} size={18} /><span>{t(("theme." + theme) as MessageKey)}</span></button>
-      <a class="legacy" href="/">{t("legacy.link")}</a>
+      <a class="legacy" href="/ancienne/">{t("legacy.link")}</a>
       {#if status?.offline}<a class="offline-mark" href="#/settings/safety" title={t("offline.mark_title")}>{t("offline.mark")}</a>{/if}
       {#if status}<p class="version">Lutin {status.version}</p>{/if}
     </div>

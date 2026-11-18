@@ -88,7 +88,7 @@ class Moteurs(unittest.TestCase):
     def ouvrir(self, tmp, port):
         p = cdp.Page(self.chrome, tmp / "profil-moteurs", "1280,1500")
         self.addCleanup(p.fermer)
-        p.aller("http://127.0.0.1:%d/" % port)
+        p.aller("http://127.0.0.1:%d/ancienne/" % port)
         p.attendre("!!document.querySelector('#bNouvelle')")
         p.evaluer("window.confirm = () => true; window.alert = () => {}")
         return p

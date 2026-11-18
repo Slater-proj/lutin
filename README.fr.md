@@ -22,9 +22,9 @@ ligne de commande.
   <img src="assets/capture-app-chat.fr.png" alt="Le Chat de Lutin : une conversation où il a lu un fichier, corrigé une faute et propose d'annuler" width="94%">
 </p>
 
-> **La version 1.0 est en préparation.** Une nouvelle interface est en cours de finition sous `/app/` : les cinq espaces ci-dessous, sur une API
-> versionnée (`/api/v1`), dans les deux langues, vérifiés dans un vrai navigateur et par des contrôles d'accessibilité automatiques. La page que tu
-> connais reste celle par défaut, à `/`, jusqu'à ce que la nouvelle sache tout faire. Testé sous Windows et Linux ; macOS et les cartes AMD et
+> **La version 1.0 est en préparation.** La nouvelle interface est celle par défaut, à `/` : les cinq espaces ci-dessous, sur une API
+> versionnée (`/api/v1`), dans les deux langues, vérifiés dans un vrai navigateur et par des contrôles d'accessibilité automatiques. L'ancienne
+> page reste à `/ancienne/` pendant les versions 1.x et part avec la 2.0. Testé sous Windows et Linux ; macOS et les cartes AMD et
 > Intel ne sont pas encore vérifiés : [ce qui est vérifié et ce qui ne l'est pas](docs/DECISIONS.fr.md#connu-mais-non-vérifié).
 
 ## Pourquoi Lutin
@@ -105,7 +105,7 @@ ne risque rien : à jour, il ne change rien ; sinon il met à jour sans toucher 
 
 | Commande | Rôle |
 |---|---|
-| `lutin` | démarre Lutin et l'ouvre dans le navigateur (la nouvelle interface est à `/app/`, avec un lien depuis la page) |
+| `lutin` | démarre Lutin et l'ouvre dans le navigateur (l'ancienne page reste à `/ancienne/` pendant les versions 1.x) |
 | `lutin chat` | discuter dans le terminal ; `lutin chat "question"` pour une réponse directe |
 | `lutin models` | les modèles recommandés pour ta machine, installer, retirer, mettre à jour |
 | `lutin bench [modèle]` | mesurer un modèle ici : vitesse, outils, code, français, consignes |

@@ -80,7 +80,7 @@ class Parcours(unittest.TestCase):
     def test_cliquer_une_conversation_ramene_sur_l_onglet_conversation(self):
         """Comme « Nouvelle conversation » : depuis un autre onglet, ouvrir une conversation existante de la liste revient sur l'onglet Conversation."""
         with self.captures.serveur_demo() as (port, tmp):
-            p = self.ouvrir(tmp, "http://127.0.0.1:%d/#conv=a1b2c3d4" % port)
+            p = self.ouvrir(tmp, "http://127.0.0.1:%d/ancienne/#conv=a1b2c3d4" % port)
             p.evaluer("document.querySelector('.onglets button[data-p=reglages]').click(); true")
             p.attendre("document.getElementById('p-reglages').classList.contains('vue')")
             self.assertFalse(p.evaluer("document.getElementById('p-chat').classList.contains('vue')"))
@@ -91,7 +91,7 @@ class Parcours(unittest.TestCase):
     def test_la_page_sante_montre_la_memoire_et_ce_qui_l_occupe(self):
         """La page Santé affiche tout de suite les cartes « Mémoire vive » et « Mémoire vidéo » avec leur jauge (puis ce qui les occupe, avec un bouton Décharger), sans erreur même sans Ollama ; les disques arrivent ensuite."""
         with self.captures.serveur_demo() as (port, tmp):
-            p = self.ouvrir(tmp, "http://127.0.0.1:%d/" % port)
+            p = self.ouvrir(tmp, "http://127.0.0.1:%d/ancienne/" % port)
             p.evaluer("document.querySelector('.onglets button[data-p=sante]').click(); true")
             p.attendre("document.querySelectorAll('#santeCorps progress').length > 0")
             p.attendre("[...document.querySelectorAll('#santeCorps b')].some(b => b.textContent.includes('Disque') || b.textContent.includes('Dossier de données'))")
@@ -103,7 +103,7 @@ class Parcours(unittest.TestCase):
                    "en": (["General", "Automation", "Machines", "Health", "Access"], ["General", "Engine", "Conversation", "Tools", "Folders", "Advanced"])}
         for langue, (menu, rubriques) in attendu.items():
             with self.captures.serveur_demo({"LUTIN_LANGUE": langue}) as (port, tmp):
-                p = self.ouvrir(tmp, "http://127.0.0.1:%d/" % port)
+                p = self.ouvrir(tmp, "http://127.0.0.1:%d/ancienne/" % port)
                 self.assertEqual(p.evaluer("[...document.querySelectorAll('#menuReglages .tx b')].map(b => b.textContent.replace(/[^\\p{L}]/gu, ''))"), menu, langue)
                 self.assertEqual(p.evaluer("[...document.querySelectorAll('#sousReglages button')].map(b => b.textContent)"), rubriques, langue)
                 debuts = {"p-memoire": ("Contexte", "Projet Claude") if langue == "fr" else ("Project context", "Claude project"),
@@ -116,7 +116,7 @@ class Parcours(unittest.TestCase):
     def test_le_catalogue_mcp_s_affiche_et_demande_les_champs_d_un_serveur_distant(self):
         """Automatisation > Connecteurs MCP : le catalogue montre ses cartes ; « Brancher » sur Home Assistant ouvre l'adresse et le jeton (champ masqué) au lieu de brancher à l'aveugle."""
         with self.captures.serveur_demo({"LUTIN_LANGUE": "fr"}) as (port, tmp):
-            p = self.ouvrir(tmp, "http://127.0.0.1:%d/" % port)
+            p = self.ouvrir(tmp, "http://127.0.0.1:%d/ancienne/" % port)
             p.evaluer(onglet("auto"))
             p.evaluer("[...document.querySelectorAll('#p-auto .sous-nav button')].find(b => b.textContent.includes('MCP')).click()")
             p.attendre("document.querySelectorAll('#catalogueMcp .carte').length >= 8")
@@ -135,7 +135,7 @@ class Parcours(unittest.TestCase):
     def test_l_onglet_modeles_montre_les_serveurs_geres_meme_non_installes(self):
         """Colibri (ou LM Studio, ExLlamaV3) choisi mais pas installé : l'onglet Modèles n'était pas vide par oubli mais caché (la bibliothèque d'Ollama, où ses cartes étaient rangées, est masquée sous un serveur compatible OpenAI). Il propose maintenant « Installer »."""
         with self.captures.serveur_demo({"LUTIN_LANGUE": "fr"}) as (port, tmp):
-            p = self.ouvrir(tmp, "http://127.0.0.1:%d/" % port)
+            p = self.ouvrir(tmp, "http://127.0.0.1:%d/ancienne/" % port)
             jeton = "document.documentElement.innerHTML.match(/TOKEN = '([0-9a-f]+)'/)[1]"
             for corps in ("{moteur: 'openai', serveur: 'colibri'}", "{moteur: 'openai'}"):
                 url = "/api/moteur-regler" if "serveur" in corps else "/api/reglages"
@@ -148,7 +148,7 @@ class Parcours(unittest.TestCase):
     def test_reglages_montre_les_machines_sans_erreur(self):
         """L'onglet Machines (menu Réglages) propose d'abord d'activer le mode multi-machines ; une fois activé, il montre la case « prêter le moteur » et le formulaire d'ajout, sans erreur, même sans aucune machine."""
         with self.captures.serveur_demo() as (port, tmp):
-            p = self.ouvrir(tmp, "http://127.0.0.1:%d/" % port)
+            p = self.ouvrir(tmp, "http://127.0.0.1:%d/ancienne/" % port)
             self.assertTrue(p.evaluer("document.getElementById('menuReglages').hidden"))
             p.evaluer(onglet("machines"))
             p.attendre("document.getElementById('machinesZone').textContent.includes('Activer le mode multi-machines')")
@@ -167,7 +167,7 @@ class Parcours(unittest.TestCase):
             (ancien / "memoire").mkdir()
             (ancien / "donnees" / "conversations" / "aabbccdd.json").write_text(json.dumps({"id": "aabbccdd", "titre": "Reprise d'essai", "date": "2026-10-01T10:00:00", "messages": [{"role": "user", "content": "bonjour"}], "resume": ""}), encoding="utf-8")
             (ancien / "memoire" / "MEMOIRE.md").write_text("# Mémoire\n\nUne note ancienne.\n", encoding="utf-8")
-            p = self.ouvrir(tmp, "http://127.0.0.1:%d/" % port)
+            p = self.ouvrir(tmp, "http://127.0.0.1:%d/ancienne/" % port)
             p.evaluer(onglet("reglages"))
             p.evaluer(rubrique("dossiers"))
             p.attendre(bouton("Reprendre les données d'un autre assistant…"))
@@ -193,7 +193,7 @@ class Parcours(unittest.TestCase):
             autre.mkdir()
             rangement.mkdir()
             (autre / "notes.txt").write_text("mes notes", encoding="utf-8")
-            p = self.ouvrir(tmp, "http://127.0.0.1:%d/" % port)
+            p = self.ouvrir(tmp, "http://127.0.0.1:%d/ancienne/" % port)
             self.assertFalse(p.evaluer("!!document.querySelector('#selTravail')"), "plus de sélecteur de dossier dans la barre latérale")
             p.evaluer(onglet("reglages"))
             p.evaluer(rubrique("dossiers"))
@@ -240,7 +240,7 @@ class Parcours(unittest.TestCase):
 
     def test_colonne_redimensionnable_menus_groupes_et_reprise(self):
         with self.captures.serveur_demo() as (port, tmp):
-            p = self.ouvrir(tmp, "http://127.0.0.1:%d/" % port)
+            p = self.ouvrir(tmp, "http://127.0.0.1:%d/ancienne/" % port)
             largeur = lambda: p.evaluer("Math.round(document.querySelector('aside').getBoundingClientRect().width)")  # noqa: E731
             avant = largeur()
             # glisser le séparateur vertical avec une vraie souris : la colonne s'élargit, la valeur est retenue
@@ -279,7 +279,7 @@ class Parcours(unittest.TestCase):
 
     def test_extensions_activer_un_addon_et_voir_son_panneau(self):
         with self.captures.serveur_demo() as (port, tmp):
-            p = self.ouvrir(tmp, "http://127.0.0.1:%d/" % port)
+            p = self.ouvrir(tmp, "http://127.0.0.1:%d/ancienne/" % port)
             p.evaluer(onglet("auto"))
             p.attendre("document.getElementById('zoneFond').textContent.includes('Nouveau travail de fond')")
             p.attendre("document.querySelectorAll('#listeAddons > .carte').length >= 4")                          # la liste des extensions se charge à part des deux sections
@@ -298,7 +298,7 @@ class Parcours(unittest.TestCase):
             conv["taches"] = []
             conv["messages"] = [{"role": "user" if i % 2 == 0 else "assistant", "content": ("Le code du coffre est 4711. " if i == 0 else "") + "mot " * 220 + str(i)} for i in range(12)]
             (donnees / "conversations" / "d4e5f6a7.json").write_text(json.dumps(conv, ensure_ascii=False), encoding="utf-8")
-            p = self.ouvrir(tmp, "http://127.0.0.1:%d/#conv=d4e5f6a7" % port)
+            p = self.ouvrir(tmp, "http://127.0.0.1:%d/ancienne/#conv=d4e5f6a7" % port)
             p.attendre("document.body.textContent.includes('Longue discussion')")
             p.evaluer("(() => { const s = document.getElementById('saisie'); s.value = 'Où en est-on ?'; document.getElementById('bEnvoyer').click(); return true; })()")
             p.attendre("!!document.querySelector('.accord')")                       # la carte (le texte seul serait aussi dans le code de la page)
@@ -325,7 +325,7 @@ class Parcours(unittest.TestCase):
                 (dossier / ident).mkdir(parents=True, exist_ok=True)
                 (dossier / ident / "etat.json").write_text(json.dumps(etat), encoding="utf-8")
             (dossier / "addons.json").write_text(json.dumps({ident: {"actif": True} for ident in ("telegram", "mail", "x", "comfyui")}), encoding="utf-8")
-            p = self.ouvrir(tmp, "http://127.0.0.1:%d/" % port)
+            p = self.ouvrir(tmp, "http://127.0.0.1:%d/ancienne/" % port)
             p.evaluer(onglet("auto"))
             texte = "document.getElementById('listeAddons').textContent"
             p.attendre("%s.includes('Brouillon pour Bob') && %s.includes('Brouillon pour Alice') && %s.includes('Réponse à @alice') && %s.includes('Dossier de ComfyUI non défini')" % ((texte,) * 4))
@@ -349,7 +349,7 @@ class Parcours(unittest.TestCase):
     def test_menu_de_la_conversation_addon_a_configurer_et_jauge_de_disque(self):
         """Le menu « ⋯ » d'une conversation (épingler, renommer, fiche de suivi ou résumé), une case d'addon non configuré qui ouvre sa configuration au lieu d'une erreur, et la jauge de disque des modèles."""
         with self.captures.serveur_demo() as (port, tmp):
-            p = self.ouvrir(tmp, "http://127.0.0.1:%d/" % port)
+            p = self.ouvrir(tmp, "http://127.0.0.1:%d/ancienne/" % port)
             p.attendre("document.querySelectorAll('#conversations .conv').length >= 3")
             self.assertEqual(p.evaluer("document.querySelectorAll('#conversations .conv:first-child button').length"), 2, "deux boutons par conversation : « ⋯ » et la croix")
             self.assertEqual(p.evaluer("[...document.querySelectorAll('#conversations .conv:first-child button')].map(b => b.textContent).join(' ')"), "⋯ ✕")
@@ -401,7 +401,7 @@ class Parcours(unittest.TestCase):
             dossier = tmp / "home" / "donnees" / "addons"
             dossier.mkdir(parents=True, exist_ok=True)
             (dossier / "addons.json").write_text(json.dumps({"comfyui": {"actif": True, "reglages": {"dossier": str(comfy)}}}), encoding="utf-8")
-            p = self.ouvrir(tmp, "http://127.0.0.1:%d/" % port)
+            p = self.ouvrir(tmp, "http://127.0.0.1:%d/ancienne/" % port)
             p.evaluer(onglet("auto"))
             resume = "[...document.querySelectorAll('#listeAddons details > summary')].find(s => s.textContent.startsWith('Modèles installés'))"
             p.attendre("!!(" + resume + ")")
@@ -427,7 +427,7 @@ class Parcours(unittest.TestCase):
         puis la pastille verte « réponse terminée, pas lue » apparaît si on était ailleurs et s'éteint à la lecture."""
         with self.captures.serveur_demo() as (port, tmp):
             donnees = tmp / "home" / "donnees"
-            adresse = "http://127.0.0.1:%d/#conv=a1b2c3d4" % port
+            adresse = "http://127.0.0.1:%d/ancienne/#conv=a1b2c3d4" % port
             p = self.ouvrir(tmp, adresse)
             p.attendre("!!window.ETAT_PRET || document.getElementById('cAutoCmd') !== null")
             p.attendre("document.querySelectorAll('#fil .msg').length > 0")
@@ -483,7 +483,7 @@ class Parcours(unittest.TestCase):
     def test_remonter_pendant_la_reponse_ne_ramene_pas_en_bas(self):
         """Pendant que l'assistant écrit ou réfléchit, on peut remonter lire : le fil reste là où on est, un bouton ↓ propose de redescendre ; envoyer un message ramène en bas."""
         with self.captures.serveur_demo({"LUTIN_LANGUE": "fr"}) as (port, tmp):
-            p = self.ouvrir(tmp, "http://127.0.0.1:%d/" % port)
+            p = self.ouvrir(tmp, "http://127.0.0.1:%d/ancienne/" % port)
             p.attendre("document.getElementById('selMode').dataset.init === '1'")
             p.evaluer("document.getElementById('fil').insertAdjacentHTML('afterbegin', '<div id=\"cale\" style=\"height:3000px\"></div>')")
             p.evaluer("(() => { const s = document.getElementById('saisie'); s.value = '[tres-lent] question'; document.getElementById('bEnvoyer').click(); return true; })()")
@@ -500,7 +500,7 @@ class Parcours(unittest.TestCase):
         """Choisir le mode « Mission longue », décrire la mission dans le champ habituel : elle se lance DANS la conversation, un bandeau montre son état et la conversation se remplit toute seule. Le modèle est près du nom."""
         with self.captures.serveur_demo() as (port, tmp):
             donnees = tmp / "home" / "donnees"
-            p = self.ouvrir(tmp, "http://127.0.0.1:%d/" % port)
+            p = self.ouvrir(tmp, "http://127.0.0.1:%d/ancienne/" % port)
             p.attendre("document.getElementById('selMode').dataset.init === '1'")
             self.assertGreater(p.evaluer("document.getElementById('selModele').getBoundingClientRect().width"), 120, "la liste des modèles est assez large pour lire le nom")
             ecart = p.evaluer("(() => { const t = document.querySelector('aside h1'), s = document.getElementById('selModele').getBoundingClientRect(); const r = document.createRange(); r.selectNodeContents([...t.childNodes].find(n => n.nodeType === 3 && n.textContent.includes('Lutin'))); return s.left - r.getBoundingClientRect().right; })()")
@@ -537,7 +537,7 @@ class Parcours(unittest.TestCase):
             (donnees / "suivis").mkdir(parents=True, exist_ok=True)
             fiche = donnees / "suivis" / "b2c3d4e5.md"
             fiche.write_text("## Objectif\n- Tester la fiche\n\n## Décisions\n- Le code est 4711\n", encoding="utf-8")
-            p = self.ouvrir(tmp, "http://127.0.0.1:%d/" % port)               # la conversation ouverte n'est PAS b2c3d4e5
+            p = self.ouvrir(tmp, "http://127.0.0.1:%d/ancienne/" % port)               # la conversation ouverte n'est PAS b2c3d4e5
             p.attendre("document.querySelector('#conversations .conv[data-id=\"b2c3d4e5\"] button.menu-ouvrir') !== null")
             p.evaluer("window.confirm = () => true; document.querySelector('#conversations .conv[data-id=\"b2c3d4e5\"] button.menu-ouvrir').click(); true")
             p.attendre("!!document.querySelector('.menu-conv')")
@@ -565,7 +565,7 @@ class Parcours(unittest.TestCase):
 
     def test_epingler_un_message_depuis_la_page(self):
         with self.captures.serveur_demo() as (port, tmp):
-            p = self.ouvrir(tmp, "http://127.0.0.1:%d/#conv=a1b2c3d4" % port)
+            p = self.ouvrir(tmp, "http://127.0.0.1:%d/ancienne/#conv=a1b2c3d4" % port)
             p.attendre("[...document.querySelectorAll('.actions button')].some(b => b.textContent.includes('Épingler'))")
             self.assertEqual(p.evaluer("[...document.querySelectorAll('.actions button')].filter(b => b.textContent.includes('Épingler')).length"), 2, "un bouton sur la demande et un sur la réponse")
             p.evaluer("[...document.querySelectorAll('.actions button')].find(b => b.textContent.includes('Épingler')).click()")
@@ -583,7 +583,7 @@ class Parcours(unittest.TestCase):
             (ancien / "memoire").mkdir()
             (ancien / "donnees" / "conversations" / "aabbccdd.json").write_text(json.dumps({"id": "aabbccdd", "titre": "Vieille conversation", "date": "2026-10-01T10:00:00", "messages": [{"role": "user", "content": "salut"}], "resume": ""}), encoding="utf-8")
             (ancien / "memoire" / "MEMOIRE.md").write_text("# Mémoire\n\nUne note ancienne.\n", encoding="utf-8")
-            p = self.ouvrir(tmp, "http://127.0.0.1:%d/" % port)
+            p = self.ouvrir(tmp, "http://127.0.0.1:%d/ancienne/" % port)
             p.evaluer(onglet("reglages"))
             p.evaluer(rubrique("dossiers"))
             p.attendre(bouton("Ajouter un dossier…"))
@@ -606,7 +606,7 @@ class Parcours(unittest.TestCase):
 
     def test_recherche_par_le_sens_progression_suppression_et_ligne_dans_la_liste_des_modeles(self):
         with self.captures.serveur_demo() as (port, tmp):
-            p = self.ouvrir(tmp, "http://127.0.0.1:%d/" % port)
+            p = self.ouvrir(tmp, "http://127.0.0.1:%d/ancienne/" % port)
             p.attendre("document.querySelector('#pOllama').textContent.includes('Ollama prêt')")          # le premier état du serveur est arrivé : on ne fabrique le faux qu'après
             # l'état d'Ollama est fabriqué : téléchargement à 45 %, puis modèle installé
             p.evaluer("""(() => { window.__emb = {actif: true, modele: 'nomic-embed-text', installe: false, installation: {etat: 'en cours', fait: 45000000, total: 100000000, erreur: '', texte: 'pulling'}};
@@ -639,7 +639,7 @@ class Parcours(unittest.TestCase):
 
     def test_pastille_de_telechargement_dans_la_barre_du_haut(self):
         with self.captures.serveur_demo() as (port, tmp):
-            p = self.ouvrir(tmp, "http://127.0.0.1:%d/" % port)
+            p = self.ouvrir(tmp, "http://127.0.0.1:%d/ancienne/" % port)
             p.evaluer("""(() => { window.__pulls = {'qwen3:4b-q8_0': {statut: 'en cours', fait: 45000000, total: 100000000, texte: 'pulling'}};
                 const vrai = window.fetch.bind(window);
                 window.fetch = async (u, o) => { const r = await vrai(u, o); if (!String(u).includes('/api/etat')) return r; const d = await r.json(); d.pulls = window.__pulls;
@@ -675,7 +675,7 @@ class Parcours(unittest.TestCase):
             conv["taches"] = []
             conv["messages"] = [{"role": "user", "content": "Donne-moi le lien"}, {"role": "assistant", "content": "Voici le lien :" + chr(10) + "```" + chr(10) + "https://exemple.org/page?a=1&b=2" + chr(10) + "```"}]
             (donnees / "conversations" / "e5f6a7b8.json").write_text(json.dumps(conv, ensure_ascii=False), encoding="utf-8")
-            p = self.ouvrir(tmp, "http://127.0.0.1:%d/#conv=e5f6a7b8" % port)
+            p = self.ouvrir(tmp, "http://127.0.0.1:%d/ancienne/#conv=e5f6a7b8" % port)
             p.attendre("!!document.querySelector('#fil .btn-copier')", 12)
             p.evaluer("""(() => { Object.defineProperty(navigator, 'clipboard', {value: undefined, configurable: true});
                 window.__copie = null; document.execCommand = c => { const a = document.activeElement; window.__copie = (c === 'copy' && a && a.tagName === 'TEXTAREA') ? a.value.slice(a.selectionStart, a.selectionEnd) : null; return true; }; })()""")
@@ -687,7 +687,7 @@ class Parcours(unittest.TestCase):
 
     def test_point_jaune_quand_l_assistant_attend_une_action_humaine(self):
         with self.captures.serveur_demo() as (port, tmp):
-            p = self.ouvrir(tmp, "http://127.0.0.1:%d/" % port)
+            p = self.ouvrir(tmp, "http://127.0.0.1:%d/ancienne/" % port)
             p.attendre("document.querySelectorAll('#liste .conv, .conv').length > 0", 12)
             ident = p.evaluer("document.querySelector('.conv').dataset.id")
             p.evaluer("""(() => { window.__attente = []; const vrai = window.fetch.bind(window);
@@ -705,7 +705,7 @@ class Parcours(unittest.TestCase):
 
     def test_nom_de_modele_trop_long_coupe_le_nom_pas_les_pastilles(self):
         with self.captures.serveur_demo() as (port, tmp):
-            p = self.ouvrir(tmp, "http://127.0.0.1:%d/" % port)
+            p = self.ouvrir(tmp, "http://127.0.0.1:%d/ancienne/" % port)
             p.evaluer(onglet("modeles"))
             p.attendre("document.querySelectorAll('#listeModeles details.famille').length > 3")
             p.evaluer("document.querySelectorAll('#listeModeles details.famille').forEach(d => d.open = true)")
@@ -720,7 +720,7 @@ class Parcours(unittest.TestCase):
 
     def test_precision_des_modeles_et_comparaison_cote_a_cote(self):
         with self.captures.serveur_demo() as (port, tmp):
-            p = self.ouvrir(tmp, "http://127.0.0.1:%d/" % port)
+            p = self.ouvrir(tmp, "http://127.0.0.1:%d/ancienne/" % port)
             p.evaluer(onglet("modeles"))
             p.attendre("document.querySelectorAll('#listeModeles details.famille').length > 3")
             p.evaluer("document.querySelectorAll('#listeModeles details.famille').forEach(d => d.open = true)")
@@ -748,7 +748,7 @@ class Parcours(unittest.TestCase):
 
     def test_liste_des_modeles_par_familles_sur_deux_lignes_et_sans_filtre_a_part(self):
         with self.captures.serveur_demo() as (port, tmp):
-            p = self.ouvrir(tmp, "http://127.0.0.1:%d/" % port)
+            p = self.ouvrir(tmp, "http://127.0.0.1:%d/ancienne/" % port)
             p.evaluer(onglet("modeles"))
             p.attendre("document.querySelectorAll('#listeModeles details.famille').length > 3")
             self.assertFalse(p.evaluer("!!document.querySelector('#listeModeles h2')"), "pas de section sans filtre tant que l'option n'est pas cochée")
@@ -784,7 +784,7 @@ class Parcours(unittest.TestCase):
     def test_bouton_verifier_les_mises_a_jour_dit_pourquoi_ca_ne_marche_pas(self):
         """Hors ligne strict (donc sans réseau, de façon déterministe) : le bouton répond par la vraie cause, il ne reste pas muet."""
         with self.captures.serveur_demo({"LUTIN_LANGUE": "fr", "LUTIN_HORS_LIGNE": "1"}) as (port, tmp):
-            p = self.ouvrir(tmp, "http://127.0.0.1:%d/" % port)
+            p = self.ouvrir(tmp, "http://127.0.0.1:%d/ancienne/" % port)
             p.evaluer(onglet("reglages"))
             p.attendre(bouton("Vérifier les mises à jour"))
             p.attendre("document.querySelector('#mVerifierLutin').textContent.includes('Impossible de joindre GitHub')")
@@ -795,7 +795,7 @@ class Parcours(unittest.TestCase):
 
     def test_reglages_moteur_et_memoire_des_longues_conversations_dans_l_onglet_memoire(self):
         with self.captures.serveur_demo() as (port, tmp):
-            p = self.ouvrir(tmp, "http://127.0.0.1:%d/" % port)
+            p = self.ouvrir(tmp, "http://127.0.0.1:%d/ancienne/" % port)
             p.attendre("document.querySelector('#pOllama').textContent.includes('Ollama prêt')")
             p.evaluer(onglet("reglages"))
             p.attendre("document.querySelectorAll('#listeMoteurs > .moteur-liste').length === 3")
@@ -814,7 +814,7 @@ class Parcours(unittest.TestCase):
 
     def test_changer_de_moteur_cache_ce_qui_n_existe_qu_avec_ollama(self):
         with self.captures.serveur_demo() as (port, tmp):
-            p = self.ouvrir(tmp, "http://127.0.0.1:%d/" % port)
+            p = self.ouvrir(tmp, "http://127.0.0.1:%d/ancienne/" % port)
             p.attendre("document.querySelector('#pOllama').textContent.includes('Ollama prêt')")
             p.evaluer(onglet("modeles"))
             self.assertTrue(p.evaluer("getComputedStyle(document.querySelector('#p-modeles .ollama-seulement')).display !== 'none'"), "avec Ollama, l'onglet Modèles est celui d'Ollama")
@@ -840,7 +840,7 @@ class Parcours(unittest.TestCase):
             for nom, taille in (("grand", "2560,1300"), ("telephone", "390,800")):
                 p = cdp.Page(self.chrome, tmp / ("profil-" + nom), taille=taille)
                 self.addCleanup(p.fermer)
-                p.aller("http://127.0.0.1:%d/#conv=a1b2c3d4" % port)
+                p.aller("http://127.0.0.1:%d/ancienne/#conv=a1b2c3d4" % port)
                 p.attendre("!!document.querySelector('.conv.choisie') || !!document.querySelector('#bNouvelle')")
                 p.attendre("document.querySelectorAll('.msg .corps').length > 0")
                 bulle = p.evaluer("Math.max(...[...document.querySelectorAll('.msg .corps')].map(e => e.getBoundingClientRect().width))")
@@ -863,7 +863,7 @@ class Parcours(unittest.TestCase):
             self.assertTrue(pin, "lutin pin donne un code : " + sortie)
             p = cdp.Page(self.chrome, tmp / "profil-cdp")
             self.addCleanup(p.fermer)
-            p.aller("http://127.0.0.1:%d/#pin=%s" % (port, pin.group(1)))              # la page de connexion se remplit et valide toute seule
+            p.aller("http://127.0.0.1:%d/ancienne/#pin=%s" % (port, pin.group(1)))              # la page de connexion se remplit et valide toute seule
             p.attendre("!!document.querySelector('#bNouvelle')")
             p.evaluer(onglet("acces"))
             p.attendre("/^\\d{6}$/.test(document.querySelector('#pinValeur').textContent)")

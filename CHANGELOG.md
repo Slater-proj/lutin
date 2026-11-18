@@ -6,11 +6,17 @@ The following versions are published automatically (generated notes on the Relea
 
 Not released yet: this is the work of the `modernization` branch since the entry below. Plan and state: [docs/modernization/PLAN.md](docs/modernization/PLAN.md).
 
-- **A new interface at `/app/`** (Svelte, TypeScript; [INTERFACE.md](docs/modernization/INTERFACE.md)): Chat, Agents, Projects, Models and Settings,
-  in English and French, from a phone held upright to a 2560-pixel screen; Settings and Agents in parts kept in the address; the open conversation
-  kept in the address too; checked in a real Chrome and by axe in both themes. The page you know stays the default at `/` until the new one does
-  everything it does.
-- **A versioned API, `/api/v1`** ([API_V1.md](docs/modernization/API_V1.md)): 131 routes, each with its right declared in one table and fixed by a
+- **A new interface, the default at `/`** (Svelte, TypeScript; [INTERFACE.md](docs/modernization/INTERFACE.md)): Chat, Agents, Projects, Models
+  and Settings, in English and French, from a phone held upright to a 2560-pixel screen; Settings and Agents in parts kept in the address; the
+  open conversation kept in the address too; checked in a real Chrome and by axe in both themes. It does everything the previous page did
+  ([PARITY.md](docs/modernization/PARITY.md)): strict offline mode, web search set-up, access, model upkeep and measures, engine settings,
+  conversation tools and Git, background work, documents and notes, « / » commands and the Ctrl+K palette. The previous page stays at
+  `/ancienne/` during 1.x (its bookmarks `/#conv=…` lead to the same place in the new one) and goes in 2.0.
+- **Long conversations on a small window** ([ADR 0018](docs/adr/0018-keeping-the-thread-on-a-small-window.md)): the first request is never
+  dropped and is kept word for word with the summary; passages of the conversation come back as soon as its history no longer fits; the progress
+  sheet keeps its first decisions and its current step.
+- **Health opens in about two seconds** instead of fifteen on Windows when an engine is stopped.
+- **A versioned API, `/api/v1`** ([API_V1.md](docs/modernization/API_V1.md)): 232 routes, each with its right declared in one table and fixed by a
   contract test; English names, the turn stream translated at the border.
 - **Several computers, one assistant** ([ADR 0016](docs/adr/0016-paired-machines-in-v1-and-the-new-interface.md)): pair a machine, use its models
   from the Chat, lend this one (with a clear name for each machine allowed to use it), continue a conversation another machine holds, with its

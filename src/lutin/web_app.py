@@ -1,4 +1,4 @@
-"""The new interface (ADR 0002): the files Vite builds from `frontend/`, served under `/app/` next to the old page until parity.
+"""The new interface (ADR 0002): the files Vite builds from `frontend/`, served under `/app/` and, since 1.0, at `/` (the old page moved to `/ancienne/`).
 
 The files are built ahead (by the CI, or `npm run build` in `frontend/`) into `web/app/`: running Lutin never needs Node.js. Nothing here executes or
 reads anything outside that folder. The page talks to `/api/v1` only; the server writes the page token, the version and the language into it, as it does

@@ -82,6 +82,13 @@ switch; each line is ticked here when it is done, with its test.
     « Accept and allow again without asking », « Start <engine> » and « Check the machine » on the stopped-engine banner, ↑/↓ in an empty box
     (test 3zf; the engine banner and the task's result link are not covered by a browser test).
 
+## The switch
+
+Done on 2026-11-18, every item above being ticked: `/` serves the new interface when it is built (a copy without a build keeps the old page there),
+the old page is at `/ancienne/` (its libraries by absolute paths, its link « Back to the new interface »), `/app/` keeps working, and the old page's
+direct links (`/#conv=<id>`, `/#modeles`…) lead to the same place in the new one (`lib/address.ts`, `fromLegacy`). Tests: `tests/test_web_app.py`
+(the switch), the old page's browser tests now open `/ancienne/`.
+
 ## Present
 
 Conversations (list, open, new, delete, rename, pin, edit a message and go on, options, approvals, memory choice, images and documents,

@@ -469,10 +469,14 @@ class Gestionnaire(BaseHTTPRequestHandler):
             return self._vers_hote("GET")
         if chemin == "/api/noeud/etat":                        # une autre machine demande si ce Lutin peut faire tourner un modèle : jeton de nœud, rien d'autre n'est ouvert
             return self._noeud_etat()
-        if chemin.startswith("/app/"):                           # la nouvelle interface (ADR 0002), à côté de cette page jusqu'à parité
+        if chemin.startswith("/app/"):                           # la nouvelle interface (ADR 0002), aussi servie à « / » depuis la 1.0
             return self._nouvelle_interface(chemin)
-        if chemin in ("/", "/index.html") and not self._authentifie():
+        if chemin in ("/", "/index.html", "/ancienne", "/ancienne/", "/ancienne/index.html") and not self._authentifie():
             return self._page_connexion()
+        if chemin in ("/", "/index.html") and _web_app.built():          # 1.0 : la nouvelle interface est celle par défaut ; l'ancienne page reste à /ancienne/ pendant les versions 1.x
+            return self._nouvelle_interface(_web_app.PREFIX)
+        if chemin == "/ancienne":
+            return self._envoyer(302, b"", "text/plain", {"Location": "/ancienne/"})
         if chemin.startswith("/api/"):
             if not self._authentifie():
                 return self._envoyer(401, {"erreur": "authentification requise"})
@@ -519,7 +523,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
             except ValueError as e:
                 return self._envoyer(404, {"erreur": str(e)})
             return self._envoyer(200, octets, mime, {"Content-Disposition": "attachment; filename*=UTF-8''" + urllib.parse.quote(nom), "Content-Security-Policy": "default-src 'none'; sandbox"})
-        if chemin in ("/", "/index.html"):
+        if chemin in ("/", "/index.html", "/ancienne/", "/ancienne/index.html"):          # « / » seulement quand la nouvelle interface n'est pas construite (une copie de développement)
             return self._envoyer(200, _m.page_web(), "text/html; charset=utf-8")
         if chemin == "/api/etat":
             o = _m.etat_moteur()

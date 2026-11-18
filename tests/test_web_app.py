@@ -125,6 +125,23 @@ class Served(unittest.TestCase):
             self.assertIsNone(web_app.diagram_page())
             self.assertEqual(get("/app/diagram.html", V.OWNER)[0], 404)
 
+    def test_the_new_interface_is_the_default_and_the_old_page_stays_reachable(self):
+        """1.0 (PARITY.md, decided on 2026-11-17): « / » is the new interface; the old page is at /ancienne/ during 1.x; /app/ keeps working; without a
+        session every one of them is the sign-in page."""
+        status, headers, body = get("/", V.OWNER)
+        self.assertEqual((status, headers["Content-Security-Policy"]), (200, web_app.CSP))
+        self.assertEqual(body, get("/app/", V.OWNER)[2])
+        status, headers, old = get("/ancienne/", V.OWNER)
+        self.assertEqual(status, 200)
+        self.assertIn("securityLevel: 'strict'", old, "the old page itself")
+        self.assertIn('src="/lib/highlight.min.js"', old, "its libraries by an absolute path: they load from /ancienne/ too")
+        self.assertEqual(get("/ancienne", V.OWNER)[1].get("Location"), "/ancienne/")
+        sign_in = get("/", V.ELSEWHERE)[2]
+        self.assertEqual(get("/ancienne/", V.ELSEWHERE)[2], sign_in)
+        self.assertNotIn(A.JETON, sign_in)
+        (self.root / "index.html").unlink()
+        self.assertIn("securityLevel: 'strict'", get("/", V.OWNER)[2], "a copy without a build keeps the old page at « / »")
+
     def test_a_copy_without_a_build_says_so(self):
         (self.root / "index.html").unlink()
         status, headers, body = get("/app/", V.OWNER)

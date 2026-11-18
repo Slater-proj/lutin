@@ -105,7 +105,7 @@
   </header>
 
   {#if problem}<p class="problem" role="alert">{problem}</p>{/if}
-  {#if models && !models.running}<p class="hint">{t("models.engine_hint")} <a href="/">{t("legacy.link")}</a></p>{/if}
+  {#if models && !models.running}<p class="hint">{t("models.engine_hint")} <button type="button" class="link" onclick={() => (tab = "engines")}>{t("models.tab_engines")}</button></p>{/if}
 
   {#if models && models.downloads.length}
     <h2>{t("models.downloads")}</h2>

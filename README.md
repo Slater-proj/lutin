@@ -21,9 +21,9 @@ folder you choose, **always with your approval**. In English and French, from th
   <img src="assets/capture-app-chat.png" alt="The Chat of Lutin: a conversation in which it read a file, fixed a typo and offers to undo" width="94%">
 </p>
 
-> **Version 1.0 is in preparation.** A new interface is being finished at `/app/`: the five areas below, on a versioned API (`/api/v1`), in
-> both languages, checked in a real browser and by automatic accessibility tests. The page you know stays the default at `/` until the new one
-> does everything it does. Tested on Windows and Linux; macOS, AMD and Intel cards are not verified yet:
+> **Version 1.0 is in preparation.** The new interface is the default at `/`: the five areas below, on a versioned API (`/api/v1`), in
+> both languages, checked in a real browser and by automatic accessibility tests. The previous page stays at `/ancienne/` during the 1.x
+> versions and goes in 2.0. Tested on Windows and Linux; macOS, AMD and Intel cards are not verified yet:
 > [what is verified and what is not](docs/DECISIONS.md#known-but-not-verified).
 
 ## Why Lutin
@@ -103,7 +103,7 @@ to date, it changes nothing; otherwise it updates without touching your settings
 
 | Command | Role |
 |---|---|
-| `lutin` | starts Lutin and opens it in the browser (the new interface is at `/app/`, linked from the page) |
+| `lutin` | starts Lutin and opens it in the browser (the previous page stays at `/ancienne/` during 1.x) |
 | `lutin chat` | chat in the terminal; `lutin chat "question"` for a direct answer |
 | `lutin models` | the models recommended for your machine, install, remove, update |
 | `lutin bench [model]` | measure a model here: speed, tools, code, French, instructions |

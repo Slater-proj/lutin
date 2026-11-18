@@ -60,11 +60,11 @@ class LangueDuServeur(unittest.TestCase):
         self.assertEqual(requete("POST", "/api/langue", {"valeur": "en"}), (200, {"langue": "en"}))
         statut, etat = requete("GET", "/api/etat")
         self.assertEqual((etat["langue"], etat["langue_reglage"]), ("en", "en"))
-        statut, page = requete("GET", "/")
+        statut, page = requete("GET", "/ancienne/")          # l'ancienne page (la nouvelle interface est à « / » depuis la 1.0)
         self.assertIn("const LANGUE = 'en', DICO = {", page)
         self.assertEqual(requete("POST", "/api/skills-supprimer", {"nom": "../x"})[1], {"erreur": "Invalid skill name (letters, digits, hyphens, spaces, and .md)."})
         self.assertEqual(requete("POST", "/api/langue", {"valeur": "fr"}), (200, {"langue": "fr"}))
-        self.assertIn("const LANGUE = 'fr', DICO = {};", requete("GET", "/")[1])
+        self.assertIn("const LANGUE = 'fr', DICO = {};", requete("GET", "/ancienne/")[1])
         self.assertEqual(requete("POST", "/api/skills-supprimer", {"nom": "../x"})[1], {"erreur": "Nom de skill invalide (lettres, chiffres, tirets, espaces, et .md)."})
 
     def test_valeur_inconnue_refusee_et_jeton_exige(self):
