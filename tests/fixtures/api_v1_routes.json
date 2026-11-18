@@ -783,5 +783,20 @@
   "method": "GET",
   "path": "/api/v1/third-party-skills/updates",
   "right": "configurator"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/web-search",
+  "right": "session"
+ },
+ {
+  "method": "PATCH",
+  "path": "/api/v1/web-search",
+  "right": "configurator"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/web-search/test",
+  "right": "session"
  }
 ]

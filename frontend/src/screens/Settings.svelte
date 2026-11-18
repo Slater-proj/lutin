@@ -10,6 +10,7 @@
   import Backup from "../components/Backup.svelte";
   import LutinVersion from "../components/LutinVersion.svelte";
   import Offline from "../components/Offline.svelte";
+  import WebSearch from "../components/WebSearch.svelte";
   import Sections from "../components/Sections.svelte";
   import Memory from "../components/Memory.svelte";
   import Skills from "../components/Skills.svelte";
@@ -139,6 +140,8 @@
     <div class="group"><LutinVersion /></div>
   {:else if name === "offline"}
     <div class="group"><Offline /></div>
+  {:else if name === "web_search"}
+    <div class="group"><WebSearch /></div>
   {:else if name === "approval_rules"}
     <div class="group"><ApprovalRules /></div>
   {:else if name === "notifications"}

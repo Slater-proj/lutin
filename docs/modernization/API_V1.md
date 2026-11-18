@@ -223,6 +223,14 @@ stops with the code its supervisor restarts; `409 cannot_restart`, `turn_running
 (session) turns it on: it only takes something away. `DELETE /offline` (configurator) turns it off, from this machine only, as on the old page.
 Refusals: `409 forced` (LUTIN_HORS_LIGNE=1 keeps it on for the launch), `409 not_available` (no configuration file to keep it in).
 
+## Web search
+
+`GET /web-search` (session): `{searxng, keys: [{provider, kept, ends_with}], engines: [{id, configured, paused_s, at_home}], can_configure,
+offline}`; a key is never sent back, only its last four characters. `engines` is the order in which they are tried (the ones set up first,
+then DuckDuckGo and Bing). `PATCH /web-search` (configurator) `{searxng?, keys?: {brave?, tavily?, exa?, perplexity?}}` ("" removes);
+`400 invalid_request` for an address or key that cannot be one. `POST /web-search/test` (session) asks each engine separately:
+`{results: [{id, ok, count, ms, error, example}]}`; `409 offline`.
+
 ## What v1 keeps
 
 - The security model, unchanged: Host and Origin checks, page token on every `/api/` request, session by PIN pairing, approvals.

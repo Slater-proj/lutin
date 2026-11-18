@@ -2308,5 +2308,7 @@
 "Plus de demande en attente.": "No request is waiting any more.",
 "À jour : {} est la dernière version connue (Réinstaller la remet si besoin).": "Up to date: {} is the latest known version (Reinstall puts it back if needed).",
 "Donne un nom (lettres, chiffres, espaces).": "Give a name (letters, digits, spaces).",
-"Une autre machine porte déjà ce nom.": "Another machine already has this name."
+"Une autre machine porte déjà ce nom.": "Another machine already has this name.",
+"Fournisseur inconnu.": "Unknown provider.",
+"tester la recherche web": "test the web search"
 }

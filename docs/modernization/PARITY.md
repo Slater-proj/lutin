@@ -29,7 +29,8 @@ switch; each line is ticked here when it is done, with its test.
 7. ~~**The strict offline switch.**~~ — done: `GET`, `POST` (session) and `DELETE` (configurator, as on the old page) `/api/v1/offline`
    (`tests/test_api_v1_offline.py`), « Strict offline mode » in Settings › Safety (`components/Offline.svelte`), its mark in the navigation and the
    « Web » option of the Chat greyed while it is on (test 3r).
-8. **Web search setup**: engine order, SearXNG, keys, « test the search ».
+8. ~~**Web search setup**: engine order, SearXNG, keys, « test the search »~~ — done: `GET`, `PATCH` (configurator) `/api/v1/web-search` and
+   `POST /api/v1/web-search/test` (`tests/test_api_v1_web_search.py`), « Web search » in Settings › Knowledge (`components/WebSearch.svelte`, test 3s).
 9. **Access**: the access level, remote administration, disconnect every device.
 10. **Model upkeep**: update checks and proposals (including removing obsolete models), precision variants, benches and their comparison, the
     Ollama library, the speed test outside the first launch, the model pages of Colibri, LM Studio and ExLlamaV3.

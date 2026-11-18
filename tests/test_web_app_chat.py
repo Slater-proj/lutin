@@ -717,6 +717,46 @@ class Chat(unittest.TestCase):
         self.assertEqual(p.erreurs, [])
         p.evaluer("location.hash = '#/chat'")
 
+    def test_3s_the_web_search_is_set_up_and_tested_from_the_settings(self):
+        """PARITY.md item 8: « Web search » in Settings › Knowledge, on /api/v1/web-search. Hermetic: recherche.json is in the temporary data folder,
+        and the test of the engines is replaced (nothing reaches the network)."""
+        p = self.page
+        kept = T.A.DONNEES / "recherche.json"
+        kept.unlink(missing_ok=True)
+        self.addCleanup(lambda: kept.unlink(missing_ok=True))
+        tried = [{"nom": "searxng", "ok": True, "nombre": 9, "ms": 80, "erreur": "", "exemple": "Un titre trouvé"},
+                 {"nom": "bing", "ok": False, "nombre": 0, "ms": 1200, "erreur": "aucun résultat", "exemple": ""}]
+        for patch in (mock.patch.dict(os.environ, {"LUTIN_RECHERCHE_URL": "", "LUTIN_HORS_LIGNE": ""}), mock.patch.object(T.A, "tester_moteurs_recherche", lambda: tried)):
+            patch.start()
+            self.addCleanup(patch.stop)
+        section = "document.querySelector('.web-search')"
+        p.evaluer("location.hash = '#/settings/knowledge'")
+        p.attendre("!!%s && !!%s.querySelector('#web-searxng')" % (section, section))
+        self.assertEqual(p.evaluer("[...%s.querySelectorAll('.engines .name')].map(n => n.innerText)" % section)[-2:], ["DuckDuckGo", "Bing"])
+        p.evaluer("(() => { const box = document.querySelector('#web-searxng'); box.value = '127.0.0.1:8080'; box.dispatchEvent(new Event('input', {bubbles: true})); })()")
+        self.press("document.querySelector('#web-searxng').closest('form').querySelector('button[type=submit]')")
+        p.attendre("document.querySelector('#web-searxng').value === 'http://127.0.0.1:8080'")
+        self.assertEqual(p.evaluer("%s.querySelector('.engines .name').innerText" % section), "SearXNG", "the one set up is tried first")
+        self.assertIn("reste chez toi", p.evaluer("%s.querySelector('.engines li').innerText" % section))
+
+        p.evaluer("(() => { const box = document.querySelector('#web-key-brave'); box.value = 'abcdefghij-1234'; box.dispatchEvent(new Event('input', {bubbles: true})); })()")
+        self.press("document.querySelector('#web-key-brave').closest('form').querySelector('button[type=submit]')")
+        p.attendre("document.querySelector('#web-key-brave').closest('form').innerText.includes('Clé enregistrée (…1234)')")
+        self.assertEqual(p.evaluer("document.querySelector('#web-key-brave').value"), "", "the key is not kept in the page")
+        self.assertNotIn("abcdefghij", p.evaluer("document.body.innerText"))
+        if AXE.is_file():
+            self.axe("on the web search settings")
+        self.press("[...document.querySelector('#web-key-brave').closest('form').querySelectorAll('button')].find(b => b.innerText === 'Retirer la clé')")
+        p.attendre("document.querySelector('#web-key-brave').closest('form').innerText.includes('Pas de clé')")
+
+        self.press("[...%s.querySelectorAll('.button')].find(b => b.innerText === 'Tester la recherche')" % section)
+        p.attendre("%s.querySelectorAll('.tried li').length === 2" % section)
+        self.assertIn("9 résultats", p.evaluer("%s.querySelector('.tried .ok').innerText" % section))
+        self.assertIn("aucun résultat", p.evaluer("%s.querySelector('.tried .failed').innerText" % section))
+        self.picture("3s-web-search")
+        self.assertEqual(p.erreurs, [])
+        p.evaluer("location.hash = '#/chat'")
+
     def test_4_a_refusal_of_the_server_is_shown_and_the_message_is_given_back(self):
         p = self.page
         with mock.patch.object(T.A, "TOURS_SIMULTANES", 0):

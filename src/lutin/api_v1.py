@@ -2631,6 +2631,58 @@ def offline_off(request):
     return _offline_view(request)
 
 
+# ------------------------------------------------------------------------------------------------------------- web search
+# Where a web search goes (lutin.web_search, lutin.web): the engines in the order they are tried (the ones the person set up first, then DuckDuckGo and
+# Bing), a SearXNG of their own (the one local address a search may reach) and the personal keys of Brave, Tavily, Exa and Perplexity. A key is never
+# sent back: only whether one is kept and its last four characters. Changing them is `configurator`, as on the old page (a key is a secret, the
+# address opens a host of the network).
+WEB_SEARCH_KEYS = ("brave", "tavily", "exa", "perplexity")
+
+
+def _web_search_view(request):
+    from . import web_search as _web_search
+    kept = _web_search.vue()
+    return {"searxng": kept["searxng"], "keys": [{"provider": name, "kept": bool(kept[name]), "ends_with": kept[name + "_fin"]} for name in WEB_SEARCH_KEYS],
+            "engines": [{"id": e["nom"], "configured": bool(e["configure"]), "paused_s": int(e["en_pause_s"]), "at_home": _web_search.is_at_home(e["nom"])}
+                        for e in _m.etat_moteurs_recherche()],
+            "can_configure": bool(request.handler._configurateur()), "offline": bool(_offline.is_active())}
+
+
+@route("GET", "/web-search", SESSION)
+def web_search_state(request):
+    """How the web is searched: `searxng` (its address, or ""), the `keys` kept (`{provider, kept, ends_with}`, never the key), the `engines` in
+    the order they are tried (`{id, configured, paused_s, at_home}`: paused a few minutes after giving nothing; at home = the query stays on the
+    local network), whether this caller `can_configure`, and `offline`."""
+    return _web_search_view(request)
+
+
+@route("PATCH", "/web-search", CONFIGURATOR)
+def web_search_change(request):
+    """Changes `searxng` (an http(s) address, "" to remove it) and/or `keys` `{brave?, tavily?, exa?, perplexity?}` ("" removes a key). Fields
+    left out are untouched. 400 `invalid_request` for an address or a key that cannot be one."""
+    from . import web_search as _web_search
+    body, change = request.body, {}
+    if "searxng" in body:
+        change["searxng"] = str(body.get("searxng") or "")[:500]
+    keys = body.get("keys") or {}
+    if not isinstance(keys, dict) or set(keys) - set(WEB_SEARCH_KEYS):
+        raise ApiError(400, "invalid_request", _t("Fournisseur inconnu."))
+    for name, value in keys.items():
+        change[name + "_cle"] = str(value or "")[:400]
+    _web_search.save(**change)
+    return _web_search_view(request)
+
+
+@route("POST", "/web-search/test", SESSION)
+def web_search_test(request):
+    """« Test the search »: asks each engine separately, at once (at most 40 s), without changing their pauses. Answers {results: [{id, ok, count,
+    ms, error, example}]}. 409 `offline` in strict offline mode: nothing would leave."""
+    if _offline.is_active():
+        raise ApiError(409, "offline", _t("Mode hors ligne strict : impossible de {}. Désactive-le pour continuer (lutin offline off).").format(_t("tester la recherche web")))
+    return {"results": [{"id": r["nom"], "ok": bool(r["ok"]), "count": int(r["nombre"]), "ms": int(r["ms"]), "error": str(r["erreur"]), "example": str(r["exemple"])}
+                        for r in _m.tester_moteurs_recherche()]}
+
+
 # ----------------------------------------------------------------------------------------------------------------- health
 # What the old Health page showed (docs/modernization/PARITY.md, item 2): the state of memory, graphics card and disk, what is loaded and what
 # occupies the machine, the self-test, what the models and tools did, and what left this machine. Reading and unloading are `session`, as the old
