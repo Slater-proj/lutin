@@ -67,6 +67,11 @@ class Chat(unittest.TestCase):
             time.sleep(0.05)
         self.fail("never true within %s s: %s" % (seconds, what))
 
+    def width_once_loaded(self, selector):
+        """An image put in the page is fetched afterwards: wait until it has loaded or failed, then read its width (0 when broken)."""
+        self.page.attendre("document.querySelector(%r)?.complete === true" % selector)
+        return self.page.evaluer("document.querySelector(%r).naturalWidth" % selector)
+
     def picture(self, name):
         folder = os.environ.get("LUTIN_SCREENSHOTS")
         if folder:
@@ -461,7 +466,7 @@ class Chat(unittest.TestCase):
         p.attendre("!!document.querySelector('.welcome')")
         self.choose_files(note, picture)
         p.attendre("document.querySelectorAll('.chips li').length === 2 && document.querySelectorAll('.chips li.busy').length === 0")
-        self.assertEqual(p.evaluer("document.querySelector('.chips img').naturalWidth"), 1, "the picture is shown from the server through the session cookie alone")
+        self.assertEqual(self.width_once_loaded('.chips img'), 1, "the picture is shown from the server through the session cookie alone")
         self.assertIn("note.txt", p.evaluer("document.querySelector('.chips').innerText"))
         self.picture("3f-attached")
         p.evaluer("document.querySelector('.chips .remove').click()")           # remove the first chip, the document
@@ -475,7 +480,7 @@ class Chat(unittest.TestCase):
         p.attendre("!!document.querySelector('.composer button[type=submit]')")
         self.assertIn("marmalade", json.dumps(T.RECUES[-1]["messages"]), "the text of the document was given to the model")
         self.assertEqual(p.evaluer("document.querySelectorAll('.chips li').length"), 0, "what was sent is no longer attached")
-        self.assertEqual(p.evaluer("document.querySelector('.thread .sent img').naturalWidth"), 1, "the image is shown in the message, read back from the server")
+        self.assertEqual(self.width_once_loaded('.thread .sent img'), 1, "the image is shown in the message, read back from the server")
         self.assertIn("note.txt", p.evaluer("document.querySelector('.thread .files').innerText"))
         link = p.evaluer("(() => { const a = document.querySelector('.thread .files a'); return [a.getAttribute('href'), a.getAttribute('download')]; })()")
         self.assertRegex(link[0], r"^/api/v1/attachments/[0-9a-f]{20}\.txt\?name=note\.txt$")
@@ -1094,7 +1099,7 @@ class Chat(unittest.TestCase):
         self.choose_files(picture)
         p.attendre("document.querySelectorAll('.chips li').length === 1 && document.querySelectorAll('.chips li.busy').length === 0")
         self.assertIn("/machines/" + host["id"] + "/images/", p.evaluer("document.querySelector('.chips img').getAttribute('src')"), "the image went to the other machine")
-        self.assertEqual(p.evaluer("document.querySelector('.chips img').naturalWidth"), 1, "and is shown back from it")
+        self.assertEqual(self.width_once_loaded('.chips img'), 1, "and is shown back from it")
         T.SCENARIO[:] = [[{"content": "Answer from the host."}]]
         self.write("Question for the host")
         p.evaluer("document.querySelector('.composer button[type=submit]').click()")
