@@ -2589,6 +2589,48 @@ def lutin_restart(request):
     return {"restarting": True}
 
 
+# ------------------------------------------------------------------------------------------------------ strict offline mode
+# The switch of lutin.offline: no connection leaves for the Internet, only this machine and the services the person set up. Anyone with a session may
+# turn it on (it only takes something away); turning it off needs `configurator`, as on the old page: a paired phone cannot open this machine to
+# the network. LUTIN_HORS_LIGNE=1 forces it for the whole launch: the page then says so and nothing can turn it off.
+OFFLINE_BLOCKS = ("web_search", "online_catalogue", "model_downloads", "lutin_update", "third_party_skills")
+
+
+def _offline_view(request):
+    forced = _offline._truthy(os.environ.get("LUTIN_HORS_LIGNE", ""))
+    return {"active": bool(_offline.is_active()), "forced": forced, "can_turn_off": bool(request.handler._configurateur()) and not forced,
+            "allowed_hosts": sorted(_offline.allowed_hosts()), "blocks": list(OFFLINE_BLOCKS)}
+
+
+@route("GET", "/offline", SESSION)
+def offline_state(request):
+    """Whether strict offline mode is on: `active`, `forced` by LUTIN_HORS_LIGNE (nothing turns it off then), whether this caller `can_turn_off`
+    it, the `allowed_hosts` Lutin still speaks to, and what it `blocks`."""
+    return _offline_view(request)
+
+
+@route("POST", "/offline", SESSION)
+def offline_on(request):
+    """Turns strict offline mode on (kept in config.json). 409 `not_available` when this launch has no configuration file."""
+    try:
+        _offline.set_mode(True)
+    except ValueError as missing:
+        raise ApiError(409, "not_available", str(missing)) from None
+    return _offline_view(request)
+
+
+@route("DELETE", "/offline", CONFIGURATOR)
+def offline_off(request):
+    """Turns strict offline mode off, from this machine only. 409 `forced` when LUTIN_HORS_LIGNE keeps it on for this launch."""
+    if _offline._truthy(os.environ.get("LUTIN_HORS_LIGNE", "")):
+        raise ApiError(409, "forced", _t("Le mode hors ligne est imposé par LUTIN_HORS_LIGNE=1 pour ce lancement."))
+    try:
+        _offline.set_mode(False)
+    except ValueError as missing:
+        raise ApiError(409, "not_available", str(missing)) from None
+    return _offline_view(request)
+
+
 # ----------------------------------------------------------------------------------------------------------------- health
 # What the old Health page showed (docs/modernization/PARITY.md, item 2): the state of memory, graphics card and disk, what is loaded and what
 # occupies the machine, the self-test, what the models and tools did, and what left this machine. Reading and unloading are `session`, as the old

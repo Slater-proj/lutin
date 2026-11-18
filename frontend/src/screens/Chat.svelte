@@ -593,7 +593,7 @@
       {#if conversation && !where}
         <Changes conversation={conversation.id} tick={changesTick} onundone={reloadConversation} />
       {/if}
-      {#if options}<Options {options} onchange={changeOptions} />{/if}
+      {#if options}<Options {options} offline={!!status?.offline} onchange={changeOptions} />{/if}
       {#if editing !== null}
         <p class="editing"><span>{t("chat.editing")}</span><button type="button" class="link" onclick={cancelEdit}>{t("chat.cancel")}</button></p>
       {/if}

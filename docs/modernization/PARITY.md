@@ -26,7 +26,9 @@ switch; each line is ticked here when it is done, with its test.
    `GET /status`, `/api/v1/lutin/check`, `…/ignored-version`, `…/update`, `…/restart` (`tests/test_api_v1_lutin.py`), the banners of the shell
    (`components/LutinBanners.svelte`) and « Lutin's version » in Settings › General (`components/LutinVersion.svelte`, test 3q). The restart is now
    also asked after a backup is put back and after an update installed with nothing to restart Lutin, on the old page as well.
-7. **The strict offline switch.**
+7. ~~**The strict offline switch.**~~ — done: `GET`, `POST` (session) and `DELETE` (configurator, as on the old page) `/api/v1/offline`
+   (`tests/test_api_v1_offline.py`), « Strict offline mode » in Settings › Safety (`components/Offline.svelte`), its mark in the navigation and the
+   « Web » option of the Chat greyed while it is on (test 3r).
 8. **Web search setup**: engine order, SearXNG, keys, « test the search ».
 9. **Access**: the access level, remote administration, disconnect every device.
 10. **Model upkeep**: update checks and proposals (including removing obsolete models), precision variants, benches and their comparison, the

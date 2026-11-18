@@ -5,7 +5,7 @@
   import { t, type MessageKey } from "../lib/messages";
   import type { ConversationOptions } from "../lib/types";
 
-  let { options, onchange }: { options: ConversationOptions; onchange: (patch: Partial<ConversationOptions>) => void } = $props();
+  let { options, offline = false, onchange }: { options: ConversationOptions; offline?: boolean; onchange: (patch: Partial<ConversationOptions>) => void } = $props();
 
   const MODES = ["general", "technical", "scenario", "research", "chat", "mission"] as const;
   const HOURS = [1, 2, 4, 8, 12, 24, 48, 72];
@@ -47,7 +47,7 @@
 
     <div class="switches">
       <label><input type="checkbox" checked={options.thinking} onchange={(event) => tick("thinking", event)} /><span>{t("opt.thinking")}</span></label>
-      <label><input type="checkbox" checked={options.web} onchange={(event) => tick("web", event)} /><span>{t("opt.web")}</span></label>
+      <label><input type="checkbox" checked={options.web && !offline} disabled={offline} onchange={(event) => tick("web", event)} /><span>{t("opt.web")}{#if offline}<small>{t("opt.web_offline")}</small>{/if}</span></label>
       <label>
         <input type="checkbox" checked={options.dry_run} onchange={(event) => tick("dry_run", event)} />
         <span>{t("opt.dry_run")}<small>{t("opt.dry_run_help")}</small></span>

@@ -95,6 +95,7 @@
     <div class="foot">
       <button type="button" class="theme" onclick={changeTheme}><Icon name={theme as IconName} size={18} /><span>{t(("theme." + theme) as MessageKey)}</span></button>
       <a class="legacy" href="/">{t("legacy.link")}</a>
+      {#if status?.offline}<a class="offline-mark" href="#/settings/safety" title={t("offline.mark_title")}>{t("offline.mark")}</a>{/if}
       {#if status}<p class="version">Lutin {status.version}</p>{/if}
     </div>
   </nav>
@@ -247,6 +248,16 @@
 
   .version {
     font-size: var(--text-xs);
+  }
+
+  .offline-mark {
+    align-self: flex-start;
+    margin: 0 var(--space-3);
+    padding: var(--space-1) var(--space-2);
+    border-radius: var(--radius-md);
+    background: var(--color-warning-soft);
+    color: var(--color-text);
+    font-size: var(--text-sm);
   }
 
   main {

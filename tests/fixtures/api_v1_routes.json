@@ -575,6 +575,21 @@
   "right": "configurator"
  },
  {
+  "method": "DELETE",
+  "path": "/api/v1/offline",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/offline",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/offline",
+  "right": "session"
+ },
+ {
   "method": "GET",
   "path": "/api/v1/projects",
   "right": "session"

@@ -675,6 +675,48 @@ class Chat(unittest.TestCase):
         self.assertEqual(timers, [(0.8, os._exit, [access.RESTART_CODE])], "Lutin stops after answering, with the code « start me again »")
         self.assertEqual(p.erreurs, [])
 
+    def test_3r_strict_offline_mode_is_turned_on_marked_and_turned_off(self):
+        """PARITY.md item 7: « Strict offline mode » in Settings › Safety, on /api/v1/offline. The navigation marks it and the « Web » option of the
+        Chat is greyed while it is on. Hermetic: a temporary configuration file, LUTIN_HORS_LIGNE cleared."""
+        p = self.page
+        config = Path(tempfile.mkdtemp(prefix="lutin-offline-")) / "config.json"
+        patch = mock.patch.dict(os.environ, {"LUTIN_CONFIG": str(config), "LUTIN_HORS_LIGNE": ""})
+        patch.start()
+        self.addCleanup(patch.stop)
+        section = "document.querySelector('.offline')"
+        button = lambda label: "[...%s.querySelectorAll('.button')].find(b => b.innerText === %s)" % (section, js(label))
+        p.evaluer("location.hash = '#/settings/safety'")
+        p.attendre("!!%s && !!%s" % (section, button("Passer hors ligne")))
+        self.assertFalse(p.evaluer("!!document.querySelector('.offline-mark')"))
+        self.press(button("Passer hors ligne"))
+        p.attendre("%s.querySelector('.state').innerText.includes('est actif')" % section)
+        self.assertTrue(json.loads(config.read_text(encoding="utf-8"))["hors_ligne"], "kept by the server")
+        p.attendre("!!document.querySelector('.offline-mark')")          # the shell read its status again
+        p.evaluer("%s.querySelector('details').open = true" % section)
+        self.assertIn("127.0.0.1", p.evaluer("%s.querySelector('.hosts').innerText" % section))
+        if AXE.is_file():
+            self.axe("with strict offline mode on")
+        self.picture("3r-offline")
+
+        p.evaluer("document.querySelector('.offline-mark').click()")
+        p.attendre("location.hash === '#/settings/safety'")
+        p.evaluer("location.hash = '#/chat'")
+        p.attendre("!!document.querySelector('.bar .toggle')")
+        p.evaluer("document.querySelector('.bar .toggle').click()")
+        p.attendre("!!document.querySelector('#options-panel')")
+        web = "[...document.querySelectorAll('#options-panel .switches label')].find(l => l.innerText.startsWith('Autoriser les recherches')).querySelector('input')"
+        p.attendre("%s.disabled" % web)
+        self.assertFalse(p.evaluer("%s.checked" % web), "no web search while offline")
+        p.evaluer("document.querySelector('.bar .toggle').click()")
+
+        p.evaluer("location.hash = '#/settings/safety'")
+        p.attendre("!!%s" % section)
+        self.press(button("Autoriser de nouveau Internet"))
+        p.attendre("!document.querySelector('.offline-mark')")
+        self.assertFalse(json.loads(config.read_text(encoding="utf-8"))["hors_ligne"])
+        self.assertEqual(p.erreurs, [])
+        p.evaluer("location.hash = '#/chat'")
+
     def test_4_a_refusal_of_the_server_is_shown_and_the_message_is_given_back(self):
         p = self.page
         with mock.patch.object(T.A, "TOURS_SIMULTANES", 0):

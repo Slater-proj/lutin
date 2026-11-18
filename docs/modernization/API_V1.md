@@ -217,6 +217,12 @@ can_check, can_restart}`, `state` one of `idle`, `running`, `failed`, `up_to_dat
 image is replaced instead), `offline`, `turn_running`, `update_running`. `POST /lutin/restart` (configurator): `{restarting: true}`, then Lutin
 stops with the code its supervisor restarts; `409 cannot_restart`, `turn_running`.
 
+## Strict offline mode
+
+`GET /offline` (session): `{active, forced, can_turn_off, allowed_hosts, blocks}`; `GET /status` carries `offline` as before. `POST /offline`
+(session) turns it on: it only takes something away. `DELETE /offline` (configurator) turns it off, from this machine only, as on the old page.
+Refusals: `409 forced` (LUTIN_HORS_LIGNE=1 keeps it on for the launch), `409 not_available` (no configuration file to keep it in).
+
 ## What v1 keeps
 
 - The security model, unchanged: Host and Origin checks, page token on every `/api/` request, session by PIN pairing, approvals.
