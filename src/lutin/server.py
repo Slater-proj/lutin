@@ -1909,56 +1909,13 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 break
 
     def _resumer(self, donnees):
-        """Génère un document de reprise structuré par le modèle, pour coller dans un autre modèle d'IA."""
+        """Génère un document de reprise structuré par le modèle, pour coller dans un autre modèle d'IA (agent.document_de_reprise, partagé avec /api/v1)."""
         ident = str(donnees.get("conversation") or "")
         if not ident:
             return self._envoyer(400, {"erreur": _t("Pas de conversation.")})
-        conv = _m.conv_lire(ident)
         r = _m.reglages()
-        # Construire le texte de la conversation (rôles + contenu, outils inclus)
-        morceaux = []
-        if conv.get("resume"):
-            morceaux.append(_t("[RÉSUMÉ ANTÉRIEUR]\n") + conv["resume"])
-        for m in conv.get("messages", []):
-            role = m.get("role", "?")
-            contenu = (m.get("content") or "").strip()
-            if not contenu:
-                continue
-            if role == "tool":
-                morceaux.append("[OUTIL " + (m.get("tool_name") or "?") + "]\n" + contenu[:800])
-            else:
-                morceaux.append(("[UTILISATEUR] " if role == "user" else "[ASSISTANT] ") + contenu[:2000])
-        texte_conv = "\n\n".join(morceaux)
-        if len(texte_conv) > 40000:
-            texte_conv = texte_conv[:40000] + "\n[…tronqué…]"
-        consigne = (
-            _t("Tu vas produire un document de reprise pour un AUTRE modèle d'IA qui doit continuer le travail.\n"
-            "Le document doit contenir, dans cet ordre, en markdown :\n"
-            "1. ## Objectif — ce que l'utilisateur voulait faire (1-3 phrases)\n"
-            "2. ## Ce qui a été fait — liste des tâches terminées, fichiers modifiés, décisions prises\n"
-            "3. ## État actuel — où en est-on, ce qui marche, ce qui est en attente\n"
-            "4. ## À faire ensuite — les prochaines étapes concrètes, dans l'ordre\n"
-            "5. ## Contraintes et règles — préférences utilisateur, règles du projet, limites connues\n"
-            "6. ## Fichiers clés — chemins des fichiers importants et leur rôle\n"
-            "7. ## Notes techniques — détails utiles (versions, réglages, bugs connus)\n"
-            "Sois précis, concis, sans répétition. Pas de blabla. Le document doit être directement collable comme contexte system/user message.\n"
-            "Réponds UNIQUEMENT avec le document markdown, sans préambule.\n\n"
-            "CONVERSATION :\n") + texte_conv
-        )
-        corps = {
-            "model": r["modele"],
-            "messages": [{"role": "user", "content": consigne}],
-            "stream": False,
-            "options": _m.options_modele(r, 0.3),          # mêmes options que le chat : un autre ferait recharger le modèle (lent, et risque de manquer de mémoire vidéo)
-        }
         try:
-            req = urllib.request.Request(_m.OLLAMA + "/api/chat", data=json.dumps(_m.avec_garde(corps)).encode("utf-8"), headers={"Content-Type": "application/json"})
-            with urllib.request.urlopen(req, timeout=300) as flux:
-                reponse = json.loads(flux.read().decode("utf-8"))
-            texte = reponse.get("message", {}).get("content", "").strip()
-            if not texte:
-                return self._envoyer(500, {"erreur": _t("Le modèle n'a pas répondu.")})
-            return self._envoyer(200, {"texte": texte, "modele": r["modele"]})
+            return self._envoyer(200, {"texte": _m.document_de_reprise(_m.conv_lire(ident), r), "modele": r["modele"]})
         except (OSError, ValueError) as erreur:
             return self._envoyer(500, {"erreur": str(erreur)})
 

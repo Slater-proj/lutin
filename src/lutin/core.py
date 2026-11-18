@@ -478,6 +478,7 @@ from .agent import (  # noqa: F401  (déplacé dans agent.py : moteur ré-export
     RE_PLANTAGE,
     ajuster_contexte,
     taille_resume,
+    document_de_reprise,
     deborde,
     avec_garde,
     bloc_plan,

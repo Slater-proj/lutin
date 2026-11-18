@@ -1208,6 +1208,44 @@ def deborde(conv, r):
     return estimer(conv.get("messages") or []) > max(place, r["num_ctx"] // 4)
 
 
+def document_de_reprise(conv, r):
+    """Un document de reprise en Markdown (objectif, ce qui est fait, état, suite, contraintes, fichiers, notes), écrit par le modèle, pour continuer la
+    conversation avec un autre modèle d'IA. Par le moteur en cours (l'ancienne page ne passait que par Ollama). ValueError si le modèle ne répond rien."""
+    morceaux = []
+    if conv.get("depart"):
+        morceaux.append(_t("[DEMANDE DE DÉPART]\n") + conv["depart"])
+    if conv.get("resume"):
+        morceaux.append(_t("[RÉSUMÉ ANTÉRIEUR]\n") + conv["resume"])
+    for m in conv.get("messages", []):
+        contenu = (m.get("content") or "").strip()
+        if not contenu:
+            continue
+        if m.get("role") == "tool":
+            morceaux.append("[OUTIL " + (m.get("tool_name") or "?") + "]\n" + contenu[:800])
+        else:
+            morceaux.append(("[UTILISATEUR] " if m.get("role") == "user" else "[ASSISTANT] ") + contenu[:2000])
+    texte = "\n\n".join(morceaux)
+    if len(texte) > 40000:
+        texte = texte[:40000] + "\n[…tronqué…]"
+    consigne = _t("Tu vas produire un document de reprise pour un AUTRE modèle d'IA qui doit continuer le travail.\n"
+                  "Le document doit contenir, dans cet ordre, en markdown :\n"
+                  "1. ## Objectif — ce que l'utilisateur voulait faire (1-3 phrases)\n"
+                  "2. ## Ce qui a été fait — liste des tâches terminées, fichiers modifiés, décisions prises\n"
+                  "3. ## État actuel — où en est-on, ce qui marche, ce qui est en attente\n"
+                  "4. ## À faire ensuite — les prochaines étapes concrètes, dans l'ordre\n"
+                  "5. ## Contraintes et règles — préférences utilisateur, règles du projet, limites connues\n"
+                  "6. ## Fichiers clés — chemins des fichiers importants et leur rôle\n"
+                  "7. ## Notes techniques — détails utiles (versions, réglages, bugs connus)\n"
+                  "Sois précis, concis, sans répétition. Pas de blabla. Le document doit être directement collable comme contexte system/user message.\n"
+                  "Réponds UNIQUEMENT avec le document markdown, sans préambule.\n\n"
+                  "CONVERSATION :\n") + texte
+    rep = moteur_actuel(r).chat({"model": r["modele"], "stream": False, "messages": [{"role": "user", "content": consigne}], "options": _m.options_modele(r, 0.3)}, 300)
+    sortie = (rep.get("message", {}).get("content") or "").strip()
+    if not sortie:
+        raise ValueError(_t("Le modèle n'a pas répondu."))
+    return sortie
+
+
 DEPART_MAX = 800          # caractères de la demande de départ gardés mot pour mot à côté du résumé
 
 

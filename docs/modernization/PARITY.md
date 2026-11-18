@@ -49,8 +49,13 @@ switch; each line is ticked here when it is done, with its test.
     `/api/v1/models/folder` (analysis, copy, choice, restart of Ollama), `/api/v1/calibration`, `/api/v1/machine/advice`
     (`tests/test_api_v1_engine_settings.py`); `components/EngineSettings.svelte` in each engine's card, `EngineFolders.svelte`, the measure of an
     engine in the « Measures » tab and `MachineTuning.svelte` in Settings › Machine (test 3z).
-12. **Conversation tools**: export as Markdown, AI summary, the progress sheet (view, edit, delete) and the memory mode of one conversation, open
-    its folders, Git (diff, proposed message, commit), the action log, the mission banner inside the conversation.
+12. ~~**Conversation tools**: export as Markdown, AI summary, the progress sheet (view, edit, delete) and the memory mode of one conversation, open
+    its folders, Git (diff, proposed message, commit), the action log, the mission banner inside the conversation~~ — done:
+    `/api/v1/conversations/{id}/memory` (GET, PATCH; `DELETE …/memory/sheet`), `POST …/handover` (on `agent.document_de_reprise`, shared with the
+    old page, which now uses the engine in use and not only Ollama), `…/folders` and `…/folders/open`, `/api/v1/git`, `/git/message`, `/git/commit`
+    (configurator, stricter than the old page), `/api/v1/actions-log` (`tests/test_api_v1_conversation_tools.py`); « Tools » in the Chat
+    (`components/ConversationTools.svelte`, the export in `lib/export.ts`), the mission banner, and `ProjectGit.svelte` on the Projects screen
+    (test 3za).
 13. **Document processing in the background.**
 14. **Documents** of the workspace (list, search), notes one by one, the button that installs the embeddings model.
 15. **Slash commands** (and the commands of a Claude project), the **Ctrl+K palette**, the queue of messages sent while an answer runs.

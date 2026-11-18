@@ -277,6 +277,14 @@ models_kept, cpu_moe_layers, pinned_version, install_folder, models_folder, serv
 /models/folder/restart-ollama` (configurator but the first). `GET /calibration`, `POST` (202), `DELETE`, `POST /calibration/apply`. `GET
 /machine/advice` `{advice: [{setting, current, advised, text}], dismissed}`, `POST /machine/advice/apply` and `/dismiss`.
 
+## Conversation tools, Git and the actions log
+
+`GET /conversations/{id}/memory` (session): `{mode: summary | sheet | ask, own_mode, general_mode, sections, text, measure, first_request}`.
+`PATCH …/memory` `{mode?: summary | sheet | null, sheet?: text}`; `DELETE …/memory/sheet`; `409 turn_running`. `POST …/handover`: `{text,
+model}`, `503 engine_unreachable`. `GET …/folders` and `POST …/folders/open {path}` (configurator, `409 cannot_open`). `GET /git` (session):
+`{available, reason, branch, files: [{path, state}], total}`; `POST /git/message {files}` (session); `POST /git/commit {message, files}`
+(configurator; never a push). `GET /actions-log?n=` (session): `{entries: [{at, conversation, folder, tool, target, outcome, approval, who}]}`.
+
 ## What v1 keeps
 
 - The security model, unchanged: Host and Origin checks, page token on every `/api/` request, session by PIN pairing, approvals.

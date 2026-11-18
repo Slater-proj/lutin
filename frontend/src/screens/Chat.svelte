@@ -14,6 +14,7 @@
   import { approvalPath, byMachine, conversationPath, uploadPath, type Listed } from "../lib/place";
   import { t } from "../lib/messages";
   import { applyEvent, elsewhereNotice, newTurn, storedToItems, type Item, type LiveTurn, type Sent } from "../lib/turn";
+  import ConversationTools from "../components/ConversationTools.svelte";
   import type { Conversation, ConversationOptions, ConversationSummary, Models, Settings, Status, TurnState } from "../lib/types";
 
   let { status, onchanged }: { status: Status | null; onchanged: () => void } = $props();
@@ -29,6 +30,8 @@
   let activeNow = $state<string[]>([]);
   let waitingNow = $state<string[]>([]);
   let conversation = $state<Conversation | null>(null);
+  let toolsOpen = $state(false); // the tools of the open conversation (memory, handover, export, folders)
+  let mission = $state<{ name: string; state: string } | null>(null); // the mission written in the open conversation, if any
   let models = $state<Models | null>(null);
   let paired = $state<MachinesView | null>(null); // who answers by default and the names of the paired machines (GET /machines never waits)
   const choices = $derived(models ? selector(models.models.map((model) => model.name), models.current, models.remote ?? [], paired) : null);
@@ -182,6 +185,9 @@
       cancelEdit();
       history.replaceState(null, "", machine ? "#/chat" : "#/chat/" + id); // a reload or a bookmark opens it again (one of another machine is not kept)
       if (!machine && conversation) seen = markSeen(id, conversation.updated_at);
+      toolsOpen = false;
+      mission = null;
+      if (!machine) void api<{ missions: { name: string; state: string; conversation: string }[] }>("GET", "/missions").then((answer) => (mission = answer.missions.find((entry) => entry.conversation === id) ?? null), () => undefined);
       if (machine) stopWatching();
       else await watch(id);
     });
@@ -192,6 +198,8 @@
     conversation = null;
     where = "";
     problem = "";
+    toolsOpen = false;
+    mission = null;
     history.replaceState(null, "", "#/chat");
     listOpen = false;
     renaming = false;
@@ -503,6 +511,9 @@
           <button type="button" class="icon pin-button" aria-pressed={conversation.pinned} onclick={togglePin} disabled={busy}>
             <Icon name="pin" size={18} /><span class="visually-hidden">{t(conversation.pinned ? "chat.unpin" : "chat.pin")}</span>
           </button>
+          {#if !where}
+            <button type="button" class="button quiet tools-button" aria-expanded={toolsOpen} onclick={() => (toolsOpen = !toolsOpen)}>{t("tools.open")}<span class="visually-hidden"> {t("tools.title")}</span></button>
+          {/if}
         {/if}
       {/if}
       {#if where}
@@ -539,6 +550,12 @@
       </label>
       {/if}
     </header>
+    {#if toolsOpen && conversation && !where}
+      <ConversationTools conversation={conversation.id} title={conversation.title || t("chat.untitled")} messages={conversation.messages} canConfigure={!!status?.access.can_configure} />
+    {/if}
+    {#if mission}
+      <p class="mission-banner" role="status">{t("tools.mission", mission.name, t(("missions.state." + mission.state) as "missions.state.running"))} <a href="#/agents">{t("tools.mission_open")}</a></p>
+    {/if}
 
     <div class="scroll" bind:this={scroller}>
       {#if status && !status.engine.running}<p class="banner">{t("chat.engine_stopped", status.engine.name)}</p>{/if}
@@ -1187,5 +1204,13 @@
     .welcome h2 {
       font-size: 1.4rem;
     }
+  }
+
+  .mission-banner {
+    margin: 0;
+    padding: var(--space-2) var(--space-4);
+    background: var(--color-accent-soft);
+    color: var(--color-accent-text);
+    font-size: var(--text-sm);
   }
 </style>

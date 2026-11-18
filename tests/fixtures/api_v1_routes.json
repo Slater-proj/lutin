@@ -16,6 +16,11 @@
  },
  {
   "method": "GET",
+  "path": "/api/v1/actions-log",
+  "right": "session"
+ },
+ {
+  "method": "GET",
   "path": "/api/v1/addons",
   "right": "session"
  },
@@ -185,13 +190,43 @@
   "right": "configurator"
  },
  {
+  "method": "GET",
+  "path": "/api/v1/conversations/{id}/folders",
+  "right": "configurator"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/conversations/{id}/folders/open",
+  "right": "configurator"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/conversations/{id}/handover",
+  "right": "session"
+ },
+ {
   "method": "DELETE",
   "path": "/api/v1/conversations/{id}/media/{image}",
   "right": "configurator"
  },
  {
+  "method": "GET",
+  "path": "/api/v1/conversations/{id}/memory",
+  "right": "session"
+ },
+ {
+  "method": "PATCH",
+  "path": "/api/v1/conversations/{id}/memory",
+  "right": "session"
+ },
+ {
   "method": "POST",
   "path": "/api/v1/conversations/{id}/memory-choice",
+  "right": "session"
+ },
+ {
+  "method": "DELETE",
+  "path": "/api/v1/conversations/{id}/memory/sheet",
   "right": "session"
  },
  {
@@ -303,6 +338,21 @@
   "method": "DELETE",
   "path": "/api/v1/engines/{id}/task",
   "right": "configurator"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/git",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/git/commit",
+  "right": "configurator"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/git/message",
+  "right": "session"
  },
  {
   "method": "GET",

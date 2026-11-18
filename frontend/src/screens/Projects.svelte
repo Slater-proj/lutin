@@ -5,6 +5,7 @@
   import { api, ApiError } from "../lib/api";
   import { t } from "../lib/messages";
   import ClaudeImport from "../components/ClaudeImport.svelte";
+  import ProjectGit from "../components/ProjectGit.svelte";
 
   type Project = { id: string; name: string; path: string; usable: boolean; problem: string };
   type Projects = { projects: Project[]; current: string };
@@ -86,8 +87,11 @@
     });
   }
 
+  let canConfigure = $state(false);
+
   onMount(() => {
     void load();
+    api<{ access: { can_configure: boolean } }>("GET", "/status").then((answer) => (canConfigure = answer.access.can_configure), () => undefined);
   });
 </script>
 
@@ -165,6 +169,7 @@
       <div class="actions"><button type="submit" class="button primary" disabled={busy || !path.trim()}>{t("projects.add")}</button></div>
     </form>
     <ClaudeImport onimported={(answer) => (data = { projects: answer.projects as Project[], current: answer.current })} />
+    <ProjectGit canConfigure={canConfigure} />
   {:else if !problem}
     <p class="muted">{t("projects.loading")}</p>
   {/if}

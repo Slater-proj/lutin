@@ -2316,5 +2316,6 @@
 "Une réponse ou une autre mesure est en cours : attends sa fin.": "An answer or another measure is running: wait for its end.",
 "Choisis au moins un modèle installé.": "Choose at least one installed model.",
 "Ce serveur n'a pas de quantifications à choisir.": "This server has no quantisations to choose.",
-"Une réponse est en cours : attends la fin avant de redémarrer Ollama.": "An answer is running: wait for its end before restarting Ollama."
+"Une réponse est en cours : attends la fin avant de redémarrer Ollama.": "An answer is running: wait for its end before restarting Ollama.",
+"[DEMANDE DE DÉPART]\n": "[FIRST REQUEST]\n"
 }

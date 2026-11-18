@@ -3625,6 +3625,157 @@ def answer_memory_choice(request):
     return {"choice": body["choice"]}
 
 
+# ------------------------------------------------------------------------------------------------------- conversation tools
+# What one conversation offers beyond its messages (docs/modernization/PARITY.md, item 12): how it keeps its thread (summary, progress sheet, or the
+# general setting), its progress sheet read, edited or deleted, a handover document written by the model, and its folders. The project's Git
+# (what changed, a proposed message, a commit of chosen files, never a push) and the log of the actions that changed something are Lutin's.
+MEMORY_MODES = {"resume": "summary", "fichier": "sheet", "demander": "ask"}
+SHEET_KEYS = {"objectif": "objective", "decisions": "decisions", "plan": "plan", "etape": "current_step", "fait": "done", "ouvert": "open_questions",
+              "fichiers": "files", "demandes": "requests"}
+
+
+def _sheet_view(identifier, conversation=None):
+    from . import progress_sheet as _sheet
+    settings = _m.reglages()
+    conversation = conversation or _read(identifier)
+    sections = _sheet.read(identifier)
+    measure = _sheet.measure(identifier, settings["num_ctx"])
+    return {"mode": MEMORY_MODES.get(_m.memoire_longue(conversation, settings), "ask"), "own_mode": MEMORY_MODES.get(conversation.get("memoire_longue")) if conversation.get("memoire_longue") else None,
+            "general_mode": MEMORY_MODES.get(settings.get("memoire_longue"), "ask"), "sections": {SHEET_KEYS[k]: list(v) for k, v in sections.items() if k in SHEET_KEYS},
+            "text": _sheet.serialize(identifier, sections), "measure": {"lines": measure.get("lignes", 0), "tokens": measure.get("jetons", 0), "share": measure.get("part", 0),
+                                                                       "level": {"attention": "warning", "vide": "empty"}.get(measure.get("niveau"), measure.get("niveau", "")), "warning": measure.get("avertissement", "")},
+            "first_request": conversation.get("depart") or None}
+
+
+@route("GET", "/conversations/{id}/memory", SESSION)
+def conversation_memory(request):
+    """How this conversation keeps its thread: `mode` (summary, sheet, ask), its `own_mode` (null: the general setting) and the `general_mode`, its
+    progress sheet (`sections`, and the `text` the person edits), what the sheet costs each answer (`measure`), and the first request kept word for word."""
+    return _sheet_view(request.params["id"])
+
+
+@route("PATCH", "/conversations/{id}/memory", SESSION)
+def change_conversation_memory(request):
+    """`{"mode": "summary" | "sheet" | null}` (null: follow the general setting) and/or `{"sheet": text}` (the sheet as edited, its « ## » sections).
+    Choosing the sheet fills an empty one from the start of the conversation (one model call). 409 `turn_running` during an answer."""
+    from . import progress_sheet as _sheet
+    identifier, body = request.params["id"], request.body
+    if not body or set(body) - {"mode", "sheet"}:
+        raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("mode, sheet"))
+    conversation = _read(identifier)
+    _not_running(identifier)
+    if "sheet" in body:
+        if not isinstance(body["sheet"], str):
+            raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("sheet"))
+        _sheet.write(identifier, _sheet.parse(body["sheet"][:20000]))
+    if "mode" in body:
+        stored = {"summary": "resume", "sheet": "fichier", None: None}
+        if body["mode"] not in stored:
+            raise ApiError(400, "invalid_request", _t("Valeur invalide pour « {} » (attendu : {}).").format("mode", "summary, sheet, null"))
+        if stored[body["mode"]]:
+            conversation["memoire_longue"] = stored[body["mode"]]
+        else:
+            conversation.pop("memoire_longue", None)
+        conversation.pop("memoire_provisoire", None)
+        if body["mode"] == "sheet":
+            _m.amorcer_fiche(conversation, _m.reglages())
+        _m.conv_ecrire(conversation)
+    return _sheet_view(identifier)
+
+
+@route("DELETE", "/conversations/{id}/memory/sheet", SESSION)
+def delete_conversation_sheet(request):
+    """Deletes the progress sheet (it is made again while the sheet mode is on)."""
+    from . import progress_sheet as _sheet
+    identifier = request.params["id"]
+    _read(identifier)
+    _not_running(identifier)
+    _sheet.delete(identifier)
+    return _sheet_view(identifier)
+
+
+@route("POST", "/conversations/{id}/handover", SESSION)
+def conversation_handover(request):
+    """A handover document written by the model in use (objective, what is done, state, next steps, constraints, key files, notes), to continue the
+    work with another AI. Answers `{text, model}`; it may take a minute. 409 `turn_running` during an answer of this conversation."""
+    identifier = request.params["id"]
+    conversation = _read(identifier)
+    _not_running(identifier)
+    settings = _m.reglages()
+    try:
+        return {"text": _m.document_de_reprise(conversation, settings), "model": settings["modele"]}
+    except (OSError, urllib.error.URLError) as failed:
+        raise ApiError(503, "engine_unreachable", str(failed)) from None
+
+
+@route("GET", "/conversations/{id}/folders", CONFIGURATOR)
+def conversation_folders(request):
+    """The folders of this conversation (its own, its work folder, where it wrote files): `{folders: [{path, role}], can_open}`. A path of this machine:
+    for this machine only, as on the old page."""
+    _read(request.params["id"])
+    roles = {"conversation": "conversation", "travail": "work", "fichiers": "files"}
+    return {"folders": [{"path": f["chemin"], "role": roles.get(f["role"], f["role"])} for f in _produced.folders_conversation(request.params["id"])],
+            "can_open": bool(_produced.opening_possible())}
+
+
+@route("POST", "/conversations/{id}/folders/open", CONFIGURATOR)
+def open_conversation_folder(request):
+    """`{"path"}`, one of GET …/folders: opened in the file explorer of this machine. 409 `cannot_open` without a screen (Docker, a server)."""
+    _read(request.params["id"])
+    if not _produced.opening_possible():
+        raise ApiError(409, "cannot_open", _t("L'ouverture d'un dossier ne marche que depuis cette machine (pas sous Docker ni sur un serveur sans écran) : copie le chemin, ou télécharge les fichiers depuis la conversation."))
+    _produced.open_folder_conversation(request.params["id"], str(request.body.get("path") or ""))
+    return {"opened": True}
+
+
+GIT_STATES = {"M": "modified", "A": "added", "D": "deleted", "R": "renamed", "??": "untracked", "U": "conflict"}
+
+
+@route("GET", "/git", SESSION)
+def git_state(request):
+    """The pending changes of the project's repository: `{available, reason, branch, files: [{path, state}], total}`."""
+    from . import change_review as _review
+    seen = _review.git_state()
+    if not seen.get("dispo"):
+        return {"available": False, "reason": seen.get("raison", ""), "branch": "", "files": [], "total": 0}
+    return {"available": True, "reason": "", "branch": seen["branche"], "total": seen["total"],
+            "files": [{"path": f["chemin"], "state": GIT_STATES.get(str(f["etat"]).strip()[:2], str(f["etat"]).strip())} for f in seen["modifies"]]}
+
+
+@route("POST", "/git/message", SESSION)
+def git_message(request):
+    """`{"files": [...]}`: a commit message proposed by the model from their changes. Answers `{message}`."""
+    from . import change_review as _review
+    files = request.body.get("files")
+    if not isinstance(files, list) or not files:
+        raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("files"))
+    return {"message": _review.git_message_of(files)["message"]}
+
+
+@route("POST", "/git/commit", CONFIGURATOR)
+def git_commit(request):
+    """`{"message", "files": [...]}`: commits those files only (never a push). Answers `{output}`. Stricter than the old page: it changes the project's
+    history, so from this machine."""
+    from . import change_review as _review
+    files = request.body.get("files")
+    if not isinstance(files, list) or not files or not isinstance(request.body.get("message"), str):
+        raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("message, files"))
+    done = _review.git_commit(request.body["message"], files)
+    return {"output": done.get("sortie", "")}
+
+
+@route("GET", "/actions-log", SESSION)
+def actions_log(request):
+    """The log of the actions that changed something (a file written, a command run…), the most recent last: `?n=200` (1 to 2000). Never a file's
+    content nor a command's output: what, where, with which approval, for which conversation."""
+    try:
+        count = int(request.query.get("n", "200"))
+    except ValueError:
+        raise ApiError(400, "invalid_request", _t("Valeur invalide pour « {} » (attendu : {}).").format("n", "1-2000")) from None
+    return {"entries": [{"at": e.get("ts", ""), "conversation": e.get("conversation", ""), "folder": e.get("dossier", ""), "tool": e.get("outil", ""), "target": e.get("cible", ""),
+                         "outcome": e.get("issue", ""), "approval": e.get("accord", ""), "who": e.get("qui", "")} for e in _m.lire_journal(count) if isinstance(e, dict)]}
+
+
 # ------------------------------------------------------------------------------------------------------------- approvals
 @route("POST", "/approvals/{id}", SESSION)
 def answer_approval(request):

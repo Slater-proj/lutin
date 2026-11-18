@@ -1062,6 +1062,67 @@ class Chat(unittest.TestCase):
         self.assertEqual(p.erreurs, [])
         p.evaluer("location.hash = '#/chat'")
 
+    def test_3za_a_conversation_keeps_its_sheet_writes_a_handover_and_the_project_commits(self):
+        """PARITY.md item 12: the tools of a conversation (memory mode and sheet, handover, Markdown export), the banner of its mission, and the project's
+        Git with the actions log. Hermetic: the model's handover and the seeding of the sheet, the missions, Git and the log are replaced."""
+        p = self.page
+        from lutin import change_review, mission as missions, progress_sheet
+        c = T.A.conv_nouvelle()
+        c["titre"] = "Facturation"
+        c["messages"] = [{"role": "user", "content": "Réécrire la facturation."}, {"role": "assistant", "content": "D'accord, je commence."}]
+        T.A.conv_ecrire(c)
+        self.addCleanup(lambda: (progress_sheet.delete(c["id"]), T.A.conv_supprimer(c["id"])))
+        committed = []
+        for patch in (mock.patch.object(T.A, "amorcer_fiche", lambda conversation, settings: 0),
+                      mock.patch.object(T.A, "document_de_reprise", lambda conversation, settings: "## Objectif\nRéécrire la facturation."),
+                      mock.patch.object(missions, "state", lambda: {"liste": [{"id": "m1", "nom": "Facturation", "etat": "en_cours", "conv": c["id"]}]}),
+                      mock.patch.object(change_review, "git_state", lambda: {"dispo": True, "branche": "main", "total": 1, "modifies": [{"chemin": "a.py", "etat": " M"}]}),
+                      mock.patch.object(change_review, "git_message_of", lambda files: {"message": "fix: billing"}),
+                      mock.patch.object(change_review, "git_commit", lambda message, files: committed.append((message, files)) or {"ok": True, "sortie": "1 file changed"}),
+                      mock.patch.object(T.A, "lire_journal", lambda n: [{"ts": "2026-11-18T10:00:00", "outil": "ecrire", "cible": "a.py", "issue": "ok", "accord": "manuel"}])):
+            patch.start()
+            self.addCleanup(patch.stop)
+        p.evaluer("location.hash = '#/chat/%s'; location.reload()" % c["id"])
+        p.attendre("document.querySelector('.main h1')?.innerText === 'Facturation' && !!document.querySelector('.tools-button')")
+        p.attendre("!!document.querySelector('.mission-banner')")
+        self.assertIn("Facturation", p.evaluer("document.querySelector('.mission-banner').innerText"))
+        self.press("document.querySelector('.tools-button')")
+        p.attendre("!!document.querySelector('.conversation-tools input[type=radio]')")
+        self.press("[...document.querySelectorAll('.conversation-tools .modes label')].find(l => l.innerText.includes('Fiche de suivi')).querySelector('input')")
+        self.eventually(lambda: T.A.conv_lire(c["id"]).get("memoire_longue") == "fichier", "the sheet mode is kept for this conversation")
+        self.press("[...document.querySelectorAll('.conversation-tools .button')].find(b => b.innerText === 'Modifier la fiche')")
+        p.attendre("!!document.querySelector('#sheet-text')")
+        p.evaluer("(() => { const box = document.querySelector('#sheet-text'); box.value = '## Objectif\\n- Réécrire la facturation\\n## Décisions\\n- Garder l\\'API'; box.dispatchEvent(new Event('input', {bubbles: true})); })()")
+        self.press("[...document.querySelectorAll('.conversation-tools .button')].find(b => b.innerText === 'Enregistrer')")
+        p.attendre("document.querySelector('.conversation-tools pre.sheet')?.innerText.includes(\"Garder l'API\")")
+        self.assertEqual(progress_sheet.read(c["id"])["decisions"], ["Garder l'API"])
+        self.press("[...document.querySelectorAll('.conversation-tools .button')].find(b => b.innerText === 'Écrire le document')")
+        p.attendre("document.querySelectorAll('.conversation-tools pre.sheet').length === 2")
+        p.evaluer("window.__saved = []; HTMLAnchorElement.prototype.click = function () { window.__saved.push(this.download); };")
+        self.press("[...document.querySelectorAll('.conversation-tools .button')].find(b => b.innerText === 'Enregistrer la conversation en Markdown')")
+        p.attendre("window.__saved.length === 1")
+        self.assertRegex(p.evaluer("window.__saved[0]"), r"^conversation-facturation-\d{4}-\d{2}-\d{2}\.md$")
+        if AXE.is_file():
+            self.axe("on the tools of a conversation")
+        self.picture("3za-tools")
+        self.press("[...document.querySelectorAll('.conversation-tools .button')].find(b => b.innerText === 'Supprimer la fiche')")
+        self.press("document.querySelector('.conversation-tools .button.danger:not(.quiet)')")
+        self.eventually(lambda: progress_sheet.read(c["id"])["decisions"] == [], "the sheet was deleted")
+
+        p.evaluer("location.hash = '#/projects'")
+        p.attendre("!!document.querySelector('.project-git input[type=checkbox]')")
+        p.evaluer("document.querySelector('.project-git input[type=checkbox]').click()")
+        self.press("[...document.querySelectorAll('.project-git .button')].find(b => b.innerText === 'Proposer un message')")
+        p.attendre("document.querySelector('.project-git textarea')?.value === 'fix: billing'")
+        self.press("document.querySelector('.project-git .button.primary')")
+        self.eventually(lambda: committed == [("fix: billing", ["a.py"])], "the file ticked was committed with the message")
+        self.press("[...document.querySelectorAll('.project-git .button')].find(b => b.innerText === 'Afficher le journal')")
+        p.attendre("document.querySelector('.project-git .log')?.innerText.includes('a.py')")
+        if AXE.is_file():
+            self.axe("on the project's Git")
+        self.assertEqual(p.erreurs, [])
+        p.evaluer("location.hash = '#/chat'")
+
     def test_4_a_refusal_of_the_server_is_shown_and_the_message_is_given_back(self):
         p = self.page
         with mock.patch.object(T.A, "TOURS_SIMULTANES", 0):
