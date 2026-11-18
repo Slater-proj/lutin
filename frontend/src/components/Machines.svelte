@@ -56,7 +56,9 @@
     busy = false;
   }
 
-  const turnOn = (): Promise<void> => act(async () => (await api("PATCH", "/settings", { cluster: true }), ""));
+  let turnedOnHere = false; // turned on during this visit: left with no machine paired, it is turned off again (the screen as it was)
+  const turnOn = (): Promise<void> => act(async () => ((turnedOnHere = true), await api("PATCH", "/settings", { cluster: true }), ""));
+  const turnOff = (): Promise<void> => act(async () => ((turnedOnHere = false), await api("PATCH", "/settings", { cluster: false }), ""));
 
   const answering = (event: Event): Promise<void> =>
     act(async () => (await api("PATCH", "/settings", { machine: (event.currentTarget as HTMLSelectElement).value }), ""));
@@ -112,6 +114,7 @@
     }, 4000);
     return () => {
       alive = false;
+      if (turnedOnHere && view?.enabled && view.machines.length === 0) void api("PATCH", "/settings", { cluster: false }).then(onchanged, () => undefined);
       clearInterval(timer);
     };
   });
@@ -228,6 +231,9 @@
       </div>
       <div class="actions"><button type="submit" class="button primary" disabled={busy || !address.trim() || !code.trim()}>{t("machines.pair_button")}</button></div>
     </form>
+
+    <div class="actions"><button type="button" class="button quiet" disabled={busy} onclick={turnOff}>{t("machines.turn_off")}</button></div>
+    <p class="help">{t("machines.turn_off_help")}</p>
 
     {#if view.log.length}
       <details class="log">

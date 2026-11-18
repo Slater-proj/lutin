@@ -2556,7 +2556,14 @@ def remove_skill_source(request):
     return {"sources": _skill_sources(_skills.retirer_source(request.query.get("repo", "")))}
 
 
-@route("PATCH", "/third-party-skills/github", CONFIGURATOR)
+@route("GET", "/github", SESSION)
+def github_account(request):
+    """Whether a GitHub account is used (`configured`) and where its token comes from (`source`: environment or settings), never the token. Lutin reads
+    GitHub for the new versions of its engines, its own update and the third-party skills: without an account, 60 requests an hour."""
+    return {"github": _github_view(), "offline": bool(_offline.is_active())}
+
+
+@route("PATCH", "/github", CONFIGURATOR)
 def set_github_token(request):
     """{"token": text}: keeps the GitHub token (it lifts the limit of 60 requests an hour); an empty text removes it. Answers `{"github"}` without the token."""
     _skill_body(request.body, ("token",), ())
@@ -2566,7 +2573,7 @@ def set_github_token(request):
     return {"github": _github_view()}
 
 
-@route("POST", "/third-party-skills/github/test", CONFIGURATOR)
+@route("POST", "/github/test", CONFIGURATOR)
 def test_github_token(request):
     """What GitHub says about the account in use: `{"limit", "remaining", "resets_at", "authenticated", "account"}`."""
     _require_online(_t("essayer le compte GitHub"))

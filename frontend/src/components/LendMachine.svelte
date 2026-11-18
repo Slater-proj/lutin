@@ -131,11 +131,15 @@
       </div>
     {/if}
 
-    <div class="row switch">
-      <label for="lend-on">{t("lend.on")}</label>
-      <input id="lend-on" type="checkbox" role="switch" checked={node.lending} disabled={busy || (level === "local" && !node.lending)} onchange={setLending} aria-describedby="lend-on-help" />
-      <p class="help" id="lend-on-help">{level === "local" && !node.lending ? t("lend.local_level") : t("lend.on_help")}</p>
-    </div>
+    {#if level === "local" && !node.lending}
+      <p class="closed" role="note">{t("lend.local_level")} <a href="#/settings/devices">{t("lend.open_access")}</a></p>
+    {:else}
+      <div class="row switch">
+        <label for="lend-on">{t("lend.on")}</label>
+        <input id="lend-on" type="checkbox" role="switch" checked={node.lending} disabled={busy} onchange={setLending} aria-describedby="lend-on-help" />
+        <p class="help" id="lend-on-help">{t("lend.on_help")}</p>
+      </div>
+    {/if}
 
     {#if node.lending}
       <div class="part">
@@ -350,5 +354,13 @@
   .problem {
     color: var(--color-danger);
     font-size: var(--text-sm);
+  }
+
+  .closed {
+    margin: 0;
+    padding: var(--space-3);
+    border-radius: var(--radius-md);
+    background: var(--color-warning-soft);
+    max-width: var(--measure);
   }
 </style>

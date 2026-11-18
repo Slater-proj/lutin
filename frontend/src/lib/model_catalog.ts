@@ -43,3 +43,19 @@ export function shown(models: CatalogModel[], only: "fits" | "all"): CatalogMode
   const best = (model: CatalogModel): number => Math.max(0, ...Object.values(model.roles));
   return models.filter((model) => only === "all" || runsHere(model)).sort((a, b) => rank(a) - rank(b) || best(b) - best(a) || a.name.localeCompare(b.name));
 }
+
+/** The family of a model: its name before « · » (« Qwen 3 · 8 billion » → « Qwen 3 »); the models without safeguards make a family of their own. */
+export function familyOf(model: CatalogModel): string {
+  return model.name.split(" · ")[0].trim() + (model.advanced ? " *" : "");
+}
+
+/** The models grouped by family, in the order of `models` (the best first stays first): [{family, advanced, models}]. */
+export function byFamily(models: CatalogModel[]): { family: string; advanced: boolean; models: CatalogModel[] }[] {
+  const groups = new Map<string, { family: string; advanced: boolean; models: CatalogModel[] }>();
+  for (const model of models) {
+    const key = familyOf(model);
+    if (!groups.has(key)) groups.set(key, { family: model.name.split(" · ")[0].trim(), advanced: model.advanced, models: [] });
+    groups.get(key)?.models.push(model);
+  }
+  return [...groups.values()];
+}

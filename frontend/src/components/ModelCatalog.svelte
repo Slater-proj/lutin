@@ -4,15 +4,20 @@
   import { onMount } from "svelte";
   import { api, ApiError } from "../lib/api";
   import { language, t, type MessageKey } from "../lib/messages";
-  import { shown, strengths, runsHere, type CatalogModel } from "../lib/model_catalog";
+  import ModelVariants from "./ModelVariants.svelte";
+  import { byFamily, shown, strengths, runsHere, type CatalogModel } from "../lib/model_catalog";
 
-  let { onstarted }: { onstarted: () => void } = $props();
+  let { onstarted, precisions = false }: { onstarted: () => void; precisions?: boolean } = $props();
+
+  const PRECISIONS = /^[\w./-]+:[\w.]+$/; // an Ollama name with its size: its precisions can be read on ollama.com
 
   type Catalog = { detected: boolean; disclaimer: string; models: CatalogModel[] };
   const lang = language();
   let catalog = $state<Catalog | null>(null);
   let only = $state<"fits" | "all">("fits");
   let advanced = $state(false);
+  let grouped = $state(true); // by family (Qwen 3, Granite 4…), the best first in each
+  let open = $state(""); // the model whose precisions are shown
   let asking = $state("");
   let busy = $state(false);
   let problem = $state("");
@@ -55,6 +60,48 @@
   onMount(() => void load());
 </script>
 
+{#snippet card(model: CatalogModel)}
+  {@const good = strengths(model.roles)}
+    <li class="card" class:installed={model.installed} data-id={model.id}>
+      <div class="line">
+        <strong>{model.name}</strong>
+        {#if model.installed}<span class="tag">{t("models.cat.installed")}</span>{/if}
+        {#if model.fit}<span class={"fit " + model.fit.level}>{t(("guide.fit." + model.fit.level) as MessageKey)}</span>{/if}
+      </div>
+      <p class="summary">{model.summary}</p>
+      <p class="meta">{t("models.cat.meta", gb(model.size_gb), gb(model.parameters_b), Math.round(model.context_max / 1024))}{model.licence ? " · " + model.licence : ""}</p>
+      {#if model.fit?.text}<p class="muted fit-text">{model.fit.text}</p>{/if}
+      {#if good.strong.length}<p class="plus">{t("models.cat.strong", good.strong.map(role).join(", "))}</p>{/if}
+      {#if good.weak.length}<p class="minus">{t("models.cat.weak", good.weak.map(role).join(", "))}</p>{/if}
+      {#if model.capabilities.length}
+        <ul class="chips" aria-label={t("models.cat.capabilities")}>
+          {#each model.capabilities as capability (capability)}<li>{t(("models.cat.cap." + capability) as MessageKey)}</li>{/each}
+        </ul>
+      {/if}
+      {#if model.warning}<p class="warn">{model.warning}</p>{/if}
+    {#if precisions && PRECISIONS.test(model.id)}
+      <button type="button" class="button quiet" aria-expanded={open === model.id} onclick={() => (open = open === model.id ? "" : model.id)}>{t("variants.choose")}<span class="visually-hidden"> {model.name}</span></button>
+      {#if open === model.id}<ModelVariants model={model.id} {onstarted} />{/if}
+    {/if}
+      {#each model.compatibility.reasons as reason (reason)}<p class="warn">{reason}</p>{/each}
+      {#if !model.installed && runsHere(model)}
+        {#if asking === model.id}
+          <div class="confirm" role="group" aria-label={t("models.cat.download")}>
+            <p>{t("models.cat.confirm", model.name, gb(model.size_gb))}</p>
+            <div class="actions">
+              <button type="button" class="button primary" disabled={busy} onclick={() => download(model)}>{t("models.cat.download")}</button>
+              <button type="button" class="button" onclick={() => (asking = "")}>{t("chat.cancel")}</button>
+            </div>
+          </div>
+        {:else}
+          <div class="actions">
+            <button type="button" class="button" disabled={busy} onclick={() => (asking = model.id)}>{t("models.cat.download")}<span class="visually-hidden"> {model.name}</span></button>
+          </div>
+        {/if}
+      {/if}
+    </li>
+{/snippet}
+
 <section class="catalog-models" aria-labelledby="catalog-title">
   <h2 id="catalog-title">{t("models.cat.title")}</h2>
   <p class="muted">{t("models.cat.intro")}</p>
@@ -64,6 +111,7 @@
       <option value="fits">{t("models.cat.only_fits")}</option>
       <option value="all">{t("models.cat.all")}</option>
     </select>
+    <label class="inline"><input type="checkbox" bind:checked={grouped} /> {t("models.cat.grouped")}</label>
     <label class="inline"><input type="checkbox" bind:checked={advanced} onchange={() => void load()} /> {t("models.cat.advanced")}</label>
   </div>
   {#if problem}<p class="problem" role="alert">{problem}</p>{/if}
@@ -75,45 +123,18 @@
     {#if list.length === 0}
       <p class="empty">{t("models.cat.none")}</p>
     {:else}
-      <ul class="cards" aria-label={t("models.cat.title")}>
-        {#each list as model (model.id)}
-          {@const good = strengths(model.roles)}
-          <li class="card" class:installed={model.installed} data-id={model.id}>
-            <div class="line">
-              <strong>{model.name}</strong>
-              {#if model.installed}<span class="tag">{t("models.cat.installed")}</span>{/if}
-              {#if model.fit}<span class={"fit " + model.fit.level}>{t(("guide.fit." + model.fit.level) as MessageKey)}</span>{/if}
-            </div>
-            <p class="summary">{model.summary}</p>
-            <p class="meta">{t("models.cat.meta", gb(model.size_gb), gb(model.parameters_b), Math.round(model.context_max / 1024))}{model.licence ? " · " + model.licence : ""}</p>
-            {#if model.fit?.text}<p class="muted fit-text">{model.fit.text}</p>{/if}
-            {#if good.strong.length}<p class="plus">{t("models.cat.strong", good.strong.map(role).join(", "))}</p>{/if}
-            {#if good.weak.length}<p class="minus">{t("models.cat.weak", good.weak.map(role).join(", "))}</p>{/if}
-            {#if model.capabilities.length}
-              <ul class="chips" aria-label={t("models.cat.capabilities")}>
-                {#each model.capabilities as capability (capability)}<li>{t(("models.cat.cap." + capability) as MessageKey)}</li>{/each}
-              </ul>
-            {/if}
-            {#if model.warning}<p class="warn">{model.warning}</p>{/if}
-            {#each model.compatibility.reasons as reason (reason)}<p class="warn">{reason}</p>{/each}
-            {#if !model.installed && runsHere(model)}
-              {#if asking === model.id}
-                <div class="confirm" role="group" aria-label={t("models.cat.download")}>
-                  <p>{t("models.cat.confirm", model.name, gb(model.size_gb))}</p>
-                  <div class="actions">
-                    <button type="button" class="button primary" disabled={busy} onclick={() => download(model)}>{t("models.cat.download")}</button>
-                    <button type="button" class="button" onclick={() => (asking = "")}>{t("chat.cancel")}</button>
-                  </div>
-                </div>
-              {:else}
-                <div class="actions">
-                  <button type="button" class="button" disabled={busy} onclick={() => (asking = model.id)}>{t("models.cat.download")}<span class="visually-hidden"> {model.name}</span></button>
-                </div>
-              {/if}
-            {/if}
-          </li>
+      {#if grouped}
+        {#each byFamily(list) as group (group.family + group.advanced)}
+          <h3 class="family">{group.family}{#if group.advanced} <span class="muted">{t("models.cat.unfiltered")}</span>{/if}</h3>
+          <ul class="cards" aria-label={group.family}>
+            {#each group.models as model (model.id)}{@render card(model)}{/each}
+          </ul>
         {/each}
-      </ul>
+      {:else}
+        <ul class="cards" aria-label={t("models.cat.title")}>
+          {#each list as model (model.id)}{@render card(model)}{/each}
+        </ul>
+      {/if}
     {/if}
     {#if catalog.disclaimer}<p class="muted disclaimer">{catalog.disclaimer}</p>{/if}
   {/if}
@@ -289,5 +310,10 @@
   .problem {
     color: var(--color-danger);
     font-size: var(--text-sm);
+  }
+
+  .family {
+    margin: var(--space-3) 0 0;
+    font-size: var(--text-md, 1rem);
   }
 </style>

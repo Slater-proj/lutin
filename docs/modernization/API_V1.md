@@ -261,6 +261,12 @@ ok, errors, load_s, first_token_s, tokens_per_s, reading_tokens_per_s, ram_bytes
 `GET …/catalog?q=&order=recent|popular&community=1&page=`, `GET …/quantizations?repo=`, `POST …/check {scope: updates | new}` (session);
 `POST …/downloads {repo, revision?, confirm: true}` (configurator): 202, `409 offline`, `502 unreachable` when a catalogue cannot be read.
 
+## GitHub account
+
+`GET /github` (session): `{github: {configured, source: environment | settings}, offline}`, never the token. `PATCH /github` `{token}` ("" removes
+it) and `POST /github/test` (configurator). The account is Lutin's (engines' new versions, its own update, third-party skills), so these routes
+left `/third-party-skills/github`.
+
 ## What v1 keeps
 
 - The security model, unchanged: Host and Origin checks, page token on every `/api/` request, session by PIN pairing, approvals.

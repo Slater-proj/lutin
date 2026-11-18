@@ -29,7 +29,6 @@
   let repoQuery = $state("");
   let repos = $state<RepoHit[] | null>(null);
   let newSource = $state("");
-  let token = $state("");
   let removingSource = $state("");
   let removing = $state("");
 
@@ -103,27 +102,6 @@
   const findRepos = (listed: boolean): Promise<void> =>
     act(async () => {
       repos = (await api<{ repos: RepoHit[] }>("GET", base + "/repos?" + (listed ? "listed=1&" : "") + "q=" + encodeURIComponent(repoQuery.trim()))).repos;
-    });
-
-  const saveToken = (event: SubmitEvent): Promise<void> => {
-    event.preventDefault();
-    return act(async () => {
-      await api("PATCH", base + "/github", { token: token.trim() });
-      token = "";
-      await refreshPage();
-    });
-  };
-
-  const removeToken = (): Promise<void> =>
-    act(async () => {
-      await api("PATCH", base + "/github", { token: "" });
-      await refreshPage();
-    });
-
-  const testToken = (): Promise<void> =>
-    act(async () => {
-      const result = await api<{ limit: number; remaining: number; resets_at: string; authenticated: boolean; account: string }>("POST", base + "/github/test", {});
-      done = t(result.authenticated ? "tps.tested_account" : "tps.tested", result.remaining, result.limit, result.account);
     });
 
   function poll(): void {
@@ -404,20 +382,7 @@
       {/if}
     </details>
 
-    <details class="panel">
-      <summary><h3 class="inline">{t("tps.github")}</h3></summary>
-      <p class="muted">{page.github.configured ? t("tps.github_set", page.github.source === "environment" ? t("tps.github_from_env") : t("tps.github_from_settings")) : t("tps.github_none")}</p>
-      <p class="muted">{t("tps.github_help")}</p>
-      <form class="row" onsubmit={saveToken}>
-        <label for="tps-token">{t("tps.github_token")}</label>
-        <input id="tps-token" type="password" bind:value={token} autocomplete="off" spellcheck="false" />
-        <button type="submit" class="button" disabled={busy || !token.trim()}>{t("tps.github_save")}</button>
-      </form>
-      <div class="actions">
-        <button type="button" class="button" disabled={busy || page.offline} onclick={testToken}>{t("tps.github_test")}</button>
-        {#if page.github.configured && page.github.source !== "environment"}<button type="button" class="button" disabled={busy} onclick={removeToken}>{t("tps.github_remove")}</button>{/if}
-      </div>
-    </details>
+    <p class="muted">{t("tps.github_moved")} <a href="#/settings/general">{t("tps.github_where")}</a></p>
   {:else if !problem}
     <p class="muted">{t("tps.loading")}</p>
   {/if}
@@ -526,7 +491,6 @@
   }
 
   input[type="text"],
-  input[type="password"],
   select {
     max-width: 24rem;
     min-height: var(--target);

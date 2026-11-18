@@ -149,7 +149,7 @@
       <EngineLibrary engine="llamacpp" onstarted={() => (refresh += 1)} />
     {/if}
   {:else if tab === "catalog"}
-    <ModelCatalog onstarted={() => void guarded(load)} />
+    <ModelCatalog precisions={status?.engine.id === "ollama"} onstarted={() => void guarded(load)} />
   {:else if tab === "measures"}
     <Measures installed={models?.models.map((model) => model.name) ?? []} canConfigure={!!status?.access.can_configure} />
   {:else if tab === "library"}

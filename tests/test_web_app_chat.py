@@ -982,6 +982,31 @@ class Chat(unittest.TestCase):
         self.assertEqual(p.erreurs, [])
         p.evaluer("location.hash = '#/chat'")
 
+    def test_3y_the_github_account_is_kept_in_the_general_settings(self):
+        """The GitHub token serves the engines' updates, Lutin's own and the skills: it is set in Settings › General, on /api/v1/github, and never
+        shown again. Hermetic: GITHUB_TOKEN cleared, the token kept in the temporary data folder and removed at the end."""
+        p = self.page
+        from lutin import github
+        patch = mock.patch.dict(os.environ, {"GITHUB_TOKEN": ""})
+        patch.start()
+        self.addCleanup(patch.stop)
+        self.addCleanup(lambda: github.save(""))
+        token = "ghp_" + "z9y8x7w6v5u4" * 3
+        p.evaluer("location.hash = '#/settings/general'")
+        p.attendre("!!document.querySelector('#github-token')")
+        self.assertIn("moteurs", p.evaluer("document.querySelector('.github').innerText"), "it says what the account is for")
+        p.evaluer("(() => { const box = document.querySelector('#github-token'); box.value = %s; box.dispatchEvent(new Event('input', {bubbles: true})); })()" % js(token))
+        self.press("document.querySelector('.github form button[type=submit]')")
+        p.attendre("document.querySelector('.github').innerText.includes('Un compte est utilisé')")
+        self.assertTrue(github.view()["configure"])
+        self.assertNotIn(token[-6:], p.evaluer("document.body.innerText"), "never shown again")
+        if AXE.is_file():
+            self.axe("on the GitHub account")
+        self.press("[...document.querySelectorAll('.github .button')].find(b => b.innerText === 'Retirer le jeton')")
+        p.attendre("document.querySelector('.github').innerText.includes('Pas de compte')")
+        self.assertEqual(p.erreurs, [])
+        p.evaluer("location.hash = '#/chat'")
+
     def test_4_a_refusal_of_the_server_is_shown_and_the_message_is_given_back(self):
         p = self.page
         with mock.patch.object(T.A, "TOURS_SIMULTANES", 0):
@@ -1307,6 +1332,12 @@ class Chat(unittest.TestCase):
         p.evaluer("document.querySelector('.machines .turn-on').click()")
         p.attendre("!!document.querySelector('#machine-address')")
         self.assertTrue(T.A.reglages()["cluster"], "the button turns the multi-machine mode on")
+        p.evaluer("[...document.querySelectorAll('.tabs button')].find(b => b.innerText === 'Catalogue').click()")
+        self.eventually(lambda: not T.A.reglages()["cluster"], "turned on then left with no machine paired: turned off again")
+        p.evaluer("[...document.querySelectorAll('.tabs button')].find(b => b.innerText === 'Machines').click()")
+        p.attendre("!!document.querySelector('.machines .turn-on')")
+        p.evaluer("document.querySelector('.machines .turn-on').click()")
+        p.attendre("!!document.querySelector('#machine-address')")
 
         machines.noeud_activer(True)
         code = machines.noeud_nouveau_code()["code"]
@@ -1391,6 +1422,8 @@ class Chat(unittest.TestCase):
                         "each one says what it is for and how it fits this machine")
         self.assertTrue(p.evaluer("!!document.querySelector('.catalog-models .card .plus')"), "and what it is good at")
         self.assertFalse(p.evaluer("[...document.querySelectorAll('.catalog-models .fit')].some(f => f.classList.contains('too_big'))"), "only what runs here, by default")
+        self.assertGreater(p.evaluer("document.querySelectorAll('.catalog-models h3.family').length"), 1, "grouped by family")
+        self.assertTrue(p.evaluer("[...document.querySelectorAll('.catalog-models .card .button')].some(b => b.innerText.startsWith('Choisir la précision'))"), "an Ollama model offers its precisions")
         p.evaluer("(() => { const box = document.querySelector('#catalog-only'); box.value = 'all'; box.dispatchEvent(new Event('change', {bubbles: true})); })()")
         p.attendre("document.querySelectorAll('.catalog-models .card').length > %d" % fits)
         with mock.patch.object(api_v1, "install_model", lambda request: posted.append(request.body) or original(request)):
@@ -1444,9 +1477,10 @@ class Chat(unittest.TestCase):
             self.addCleanup(patch.stop)
 
         p.evaluer("location.hash = '#/settings/machine'")
-        p.attendre("!!document.querySelector('#lend-on')")
-        self.assertTrue(p.evaluer("document.querySelector('#lend-on').disabled"), "at the level « this machine only » lending cannot be turned on")
-        self.assertIn("que sur cette machine", p.evaluer("document.querySelector('#lend-on-help').innerText"))
+        p.attendre("!!document.querySelector('.lend .closed')")
+        self.assertFalse(p.evaluer("!!document.querySelector('#lend-on')"), "at the level « this machine only » lending cannot be turned on: no switch that does nothing")
+        self.assertIn("que sur cette machine", p.evaluer("document.querySelector('.lend .closed').innerText"))
+        self.assertEqual(p.evaluer("document.querySelector('.lend .closed a').getAttribute('href')"), "#/settings/devices", "it says where the access is opened")
         if AXE.is_file():
             self.axe("on « Lend this machine », not lent")
 
@@ -1497,7 +1531,7 @@ class Chat(unittest.TestCase):
 
         self.press("document.querySelector('#lend-on')")
         self.eventually(lambda: not machines.noeud_actif(), "lending is turned off from the page")
-        p.attendre("document.querySelector('#lend-on').disabled")
+        p.attendre("!!document.querySelector('.lend .closed')")
         self.assertEqual(p.erreurs, [])
         p.evaluer("location.hash = '#/chat'")
 

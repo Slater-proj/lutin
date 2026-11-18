@@ -256,6 +256,21 @@
  },
  {
   "method": "GET",
+  "path": "/api/v1/github",
+  "right": "session"
+ },
+ {
+  "method": "PATCH",
+  "path": "/api/v1/github",
+  "right": "configurator"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/github/test",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
   "path": "/api/v1/health",
   "right": "session"
  },
@@ -812,16 +827,6 @@
  {
   "method": "GET",
   "path": "/api/v1/third-party-skills/card",
-  "right": "configurator"
- },
- {
-  "method": "PATCH",
-  "path": "/api/v1/third-party-skills/github",
-  "right": "configurator"
- },
- {
-  "method": "POST",
-  "path": "/api/v1/third-party-skills/github/test",
   "right": "configurator"
  },
  {
