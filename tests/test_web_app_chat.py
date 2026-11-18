@@ -67,6 +67,12 @@ class Chat(unittest.TestCase):
             time.sleep(0.05)
         self.fail("never true within %s s: %s" % (seconds, what))
 
+    def press(self, element):
+        """Click a control once the page has finished its previous action. The server keeps a change before the page has read it back, and the
+        page disables its controls until then: a click in that moment is lost. `element` is a JavaScript expression giving the control."""
+        self.page.attendre("(e => !!e && !e.disabled)(%s)" % element)
+        self.page.evaluer("(%s).click()" % element)
+
     def width_once_loaded(self, selector):
         """An image put in the page is fetched afterwards: wait until it has loaded or failed, then read its width (0 when broken)."""
         self.page.attendre("document.querySelector(%r)?.complete === true" % selector)
@@ -1054,29 +1060,29 @@ class Chat(unittest.TestCase):
 
         machines.noeud_activer(True)
         p.attendre("document.querySelector('#lend-on').checked", 15)          # read again by the page
-        p.evaluer("[...document.querySelectorAll('.lend .button')].find(b => b.innerText === \"Donner un code d'appairage\").click()")
+        self.press("[...document.querySelectorAll('.lend .button')].find(b => b.innerText === \"Donner un code d'appairage\")")
         p.attendre("!!document.querySelector('.lend .code')")
         code = p.evaluer("document.querySelector('.lend .code').innerText")
         self.assertRegex(code, r"^\d{4}-\d{4}$")
         token = machines.noeud_echanger(code, "DESKTOP-K2J8S9")["jeton"]          # what the other machine does with the code: it sends its computer's name
         p.attendre("[...document.querySelectorAll('.lend .authorized strong')].some(e => e.innerText === 'DESKTOP-K2J8S9')", 15)
-        p.evaluer("[...document.querySelectorAll('.lend .authorized .button')].find(b => b.innerText.startsWith('Renommer')).click()")
+        self.press("[...document.querySelectorAll('.lend .authorized .button')].find(b => b.innerText.startsWith('Renommer'))")
         p.attendre("!!document.querySelector('#lend-rename')")
         p.evaluer("(() => { const box = document.querySelector('#lend-rename'); box.value = 'Bureau'; box.dispatchEvent(new Event('input', {bubbles: true})); document.querySelector('.lend form.rename').requestSubmit(); })()")
         p.attendre("[...document.querySelectorAll('.lend .authorized strong')].some(e => e.innerText === 'Bureau')")
         self.assertEqual(machines.noeud_jeton_valide(token), "Bureau", "renamed on the node, its token still valid")
-        p.evaluer("[...document.querySelectorAll('.lend .authorized .button')].find(b => b.innerText.startsWith('Révoquer')).click()")
+        self.press("[...document.querySelectorAll('.lend .authorized .button')].find(b => b.innerText.startsWith('Révoquer'))")
         p.attendre("!!document.querySelector('.lend .authorized .confirm')")
         self.assertEqual(machines.noeud_jeton_valide(token), "Bureau", "asking is not revoking")
-        p.evaluer("document.querySelector('.lend .authorized .confirm .danger').click()")
+        self.press("document.querySelector('.lend .authorized .confirm .danger')")
         p.attendre("!document.querySelector('.lend .authorized')")
         self.assertIsNone(machines.noeud_jeton_valide(token), "revoked: its token no longer opens anything")
 
-        p.evaluer("document.querySelector('#lend-share-skills').click()")
+        self.press("document.querySelector('#lend-share-skills')")
         self.eventually(lambda: machines.noeud_droits()["skills"], "a share is kept by the node")
-        p.evaluer("document.querySelector('#lend-allow-lead').click()")
+        self.press("document.querySelector('#lend-allow-lead')")
         self.eventually(lambda: machines.noeud_vue()["piloter"], "a right is kept by the node")
-        p.evaluer("document.querySelector('#lend-autostart').click()")
+        self.press("document.querySelector('#lend-autostart')")
         self.eventually(lambda: asked == ["install"], "autostart is set by the server, here replaced")
         p.attendre("document.querySelector('#lend-autostart').checked")
 
@@ -1085,19 +1091,19 @@ class Chat(unittest.TestCase):
         p.attendre("document.querySelector('.rail a[href=\"#/settings\"] .count')?.innerText === '1'", 20)          # the badge of Settings
         if AXE.is_file():
             self.axe("on « Lend this machine », with a request waiting")
-        p.evaluer("[...document.querySelectorAll('.lend .requests .button')].find(b => b.innerText === 'Accepter').click()")
+        self.press("[...document.querySelectorAll('.lend .requests .button')].find(b => b.innerText === 'Accepter')")
         self.eventually(lambda: machines.noeud_vue()["maj"], "accepted: the right is granted")
         p.attendre("!document.querySelector('.lend .requests') && !document.querySelector('.rail .count')")
 
         pending[0] = {"dans_s": 20, "par": "Bureau"}
         p.attendre("!!document.querySelector('.lend .shutdown')", 15)
         self.assertIn("Bureau", p.evaluer("document.querySelector('.lend .shutdown').innerText"))
-        p.evaluer("document.querySelector('.lend .shutdown .button').click()")
+        self.press("document.querySelector('.lend .shutdown .button')")
         p.attendre("!document.querySelector('.lend .shutdown')")
         self.assertEqual(asked, ["install", "cancel"])
         self.picture("5h4-lend")
 
-        p.evaluer("document.querySelector('#lend-on').click()")
+        self.press("document.querySelector('#lend-on')")
         self.eventually(lambda: not machines.noeud_actif(), "lending is turned off from the page")
         p.attendre("document.querySelector('#lend-on').disabled")
         self.assertEqual(p.erreurs, [])
@@ -1417,18 +1423,18 @@ class Chat(unittest.TestCase):
         self.assertEqual([entry["nom"] for entry in mcp.read()["serveurs"].values()], ["Demo"])
         self.assertIn("PYTHONPATH", p.evaluer("document.querySelector('.connectors .card').innerText"), "the names of the secrets are shown")
         self.assertNotIn(source, p.evaluer("document.querySelector('.connectors .card').innerText"), "their values never are")
-        p.evaluer("[...document.querySelectorAll('.connectors .card .button')].find(b => b.innerText === 'Actualiser les outils').click()")
+        self.press("[...document.querySelectorAll('.connectors .card .button')].find(b => b.innerText === 'Actualiser les outils')")
         p.attendre("!!document.querySelector('.connectors .done')")
         p.evaluer("document.querySelector('.connectors .card details summary').click()")
         p.attendre("!!document.querySelector('.connectors .tools input[type=checkbox]')")
         if AXE.is_file():
             self.axe("on the connectors")
-        p.evaluer("document.querySelector('.connectors .tools input[type=checkbox]').click()")
+        self.press("document.querySelector('.connectors .tools input[type=checkbox]')")
         self.eventually(lambda: any(tool.get("autorise") for server in mcp.read()["serveurs"].values() for tool in server["outils"].values()), "the allowed tool is kept by the server")
-        p.evaluer("[...document.querySelectorAll('.connectors .card .button')].find(b => b.innerText === 'Retirer').click()")
+        self.press("[...document.querySelectorAll('.connectors .card .button')].find(b => b.innerText === 'Retirer')")
         p.attendre("!!document.querySelector('.connectors .confirm')")
         self.assertEqual(len(mcp.read()["serveurs"]), 1, "asking is not removing")
-        p.evaluer("document.querySelector('.connectors .confirm .danger').click()")
+        self.press("document.querySelector('.connectors .confirm .danger')")
         p.attendre("!!document.querySelector('.connectors .empty')")
         self.assertEqual(mcp.read()["serveurs"], {})
         self.assertEqual(p.erreurs, [])
