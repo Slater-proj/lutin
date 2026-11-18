@@ -142,6 +142,7 @@
   .shell {
     display: grid;
     grid-template-columns: var(--rail-width) minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr); /* one row the height of the window: a long screen scrolls inside <main>, never the whole page under the navigation */
     height: 100%;
   }
 
@@ -261,6 +262,7 @@
   }
 
   main {
+    position: relative; /* the containing block of what is positioned inside (a text hidden for the eyes): it scrolls with <main> instead of lengthening the page */
     display: flex;
     flex-direction: column;
     min-width: 0;

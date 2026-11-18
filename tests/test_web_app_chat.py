@@ -969,6 +969,19 @@ class Chat(unittest.TestCase):
         self.assertEqual(started, [("lmstudio", "lmstudio-community/Gemma-3-4B-GGUF", "Q4_K_M")])
         self.assertEqual(p.erreurs, [])
 
+    def test_3x_a_long_screen_scrolls_inside_the_main_area_not_under_the_navigation(self):
+        """A screen longer than the window (the catalogue of the models) scrolls in <main>: the page itself never scrolls, so the navigation stays."""
+        p = self.page
+        p.evaluer("location.hash = '#/models'")
+        self.press("[...document.querySelectorAll('.tabs button')].find(b => b.innerText === 'Catalogue')")
+        p.attendre("document.querySelectorAll('.catalog-models .card').length > 3")
+        p.evaluer("document.querySelector('#catalog-only').value = 'all'; document.querySelector('#catalog-only').dispatchEvent(new Event('change', {bubbles: true}))")
+        p.attendre("document.querySelector('main').scrollHeight > window.innerHeight || document.querySelector('.models').scrollHeight > window.innerHeight")
+        self.assertLessEqual(p.evaluer("document.documentElement.scrollHeight"), p.evaluer("window.innerHeight") + 1, "the page itself does not scroll")
+        self.assertEqual(p.evaluer("document.querySelector('.rail').getBoundingClientRect().height"), p.evaluer("window.innerHeight"), "the navigation is as tall as the window")
+        self.assertEqual(p.erreurs, [])
+        p.evaluer("location.hash = '#/chat'")
+
     def test_4_a_refusal_of_the_server_is_shown_and_the_message_is_given_back(self):
         p = self.page
         with mock.patch.object(T.A, "TOURS_SIMULTANES", 0):
