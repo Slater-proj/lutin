@@ -59,7 +59,10 @@ switch; each line is ticked here when it is done, with its test.
 13. ~~**Document processing in the background.**~~ — done: `/api/v1/background-jobs` (GET; POST, `POST …/{id}/{pause|resume|restart|validate}`
     and DELETE for this machine; `GET …/{id}/report`; `tests/test_api_v1_background_jobs.py`), the « Background work » tab of the Agents screen
     (`components/BackgroundJobs.svelte`, test 3zb).
-14. **Documents** of the workspace (list, search), notes one by one, the button that installs the embeddings model.
+14. ~~**Documents** of the workspace (list, search), notes one by one, the button that installs the embeddings model~~ — done: `GET
+    /api/v1/documents`, `/documents/search`, `/notes` (GET, POST, DELETE), `/search-by-meaning` and `…/install`
+    (`tests/test_api_v1_documents_notes.py`), « Documents and notes » in Settings › Knowledge (`components/Documents.svelte`, test 3zc). Found on
+    the way: a note added while MEMOIRE.md had no notes section was never listed nor re-read; `storage.noter` now creates the section.
 15. **Slash commands** (and the commands of a Claude project), the **Ctrl+K palette**, the queue of messages sent while an answer runs.
 16. **Settings without a control** though v1 has them: `auxiliary_model`, `progress_sheet_share`, `progress_sheet_scribe`; the maximum length of
     one conversation's answers.

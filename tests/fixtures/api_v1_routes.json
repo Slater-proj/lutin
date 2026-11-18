@@ -296,6 +296,16 @@
  },
  {
   "method": "GET",
+  "path": "/api/v1/documents",
+  "right": "session"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/documents/search",
+  "right": "session"
+ },
+ {
+  "method": "GET",
   "path": "/api/v1/engines",
   "right": "session"
  },
@@ -825,6 +835,21 @@
   "right": "local"
  },
  {
+  "method": "DELETE",
+  "path": "/api/v1/notes",
+  "right": "session"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/notes",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/notes",
+  "right": "session"
+ },
+ {
   "method": "GET",
   "path": "/api/v1/notification-channels",
   "right": "session"
@@ -922,6 +947,16 @@
  {
   "method": "POST",
   "path": "/api/v1/scheduled-tasks/{id}/stop",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/search-by-meaning",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/search-by-meaning/install",
   "right": "configurator"
  },
  {

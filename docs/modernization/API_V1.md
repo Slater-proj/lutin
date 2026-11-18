@@ -292,6 +292,13 @@ model}`, `503 engine_unreachable`. `GET …/folders` and `POST …/folders/open 
 instruction, regular?, interval_hours?, trial?}` (configurator, 201), `POST /background-jobs/{id}/{pause | resume | restart | validate}` and
 `DELETE /background-jobs/{id}` (configurator), `GET /background-jobs/{id}/report` (session): `{text}`.
 
+## Documents, notes and the search by meaning
+
+`GET /documents` (session): `{folders, formats, files: [{name, passages}], errors, max}`; `GET /documents/search?q=`: `{passages: [{source,
+title, extract, conversation}]}`, `400` for vague words. `GET /notes`: `{notes: [{line, date, text}]}`; `POST /notes {text}` (201); `DELETE
+/notes?line=` (`404 not_found`). `GET /search-by-meaning`: `{active, model, installed, installation: {state, done_bytes, total_bytes, error}}`;
+`POST /search-by-meaning/install` (configurator, 202, `409 offline`).
+
 ## What v1 keeps
 
 - The security model, unchanged: Host and Origin checks, page token on every `/api/` request, session by PIN pairing, approvals.

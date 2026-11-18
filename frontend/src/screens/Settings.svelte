@@ -13,6 +13,7 @@
   import Access from "../components/Access.svelte";
   import GithubAccount from "../components/GithubAccount.svelte";
   import MachineTuning from "../components/MachineTuning.svelte";
+  import Documents from "../components/Documents.svelte";
   import WebSearch from "../components/WebSearch.svelte";
   import Sections from "../components/Sections.svelte";
   import Memory from "../components/Memory.svelte";
@@ -141,6 +142,8 @@
     <div class="group"><Backup /></div>
   {:else if name === "lutin_version"}
     <div class="group"><LutinVersion /></div>
+  {:else if name === "documents"}
+    <div class="group"><Documents /></div>
   {:else if name === "tuning"}
     <div class="group"><MachineTuning /></div>
   {:else if name === "github"}

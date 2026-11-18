@@ -1153,6 +1153,37 @@ class Chat(unittest.TestCase):
         self.assertEqual(p.erreurs, [])
         p.evaluer("location.hash = '#/chat'")
 
+    def test_3zc_documents_are_searched_and_notes_kept_one_by_one(self):
+        """PARITY.md item 14: « Documents and notes » in Settings › Knowledge. Hermetic: MEMOIRE.md is put back as it was; the documents index and the
+        search model are replaced."""
+        p = self.page
+        from lutin import embeddings, recall
+        memory = T.A.MEMOIRE / "MEMOIRE.md"
+        before = memory.read_bytes() if memory.is_file() else None
+        self.addCleanup(lambda: memory.write_bytes(before) if before is not None else memory.unlink(missing_ok=True))
+        found = [{"source": "documents/contrat.pdf", "titre": "contrat.pdf", "extrait": "… le taux de TVA est de 20 % …", "conversation": False}]
+        state = {"actif": False, "modele": "nomic-embed-text", "installe": True, "installation": {"etat": "", "fait": 0, "total": 0, "erreur": "", "texte": ""}}
+        for patch in (mock.patch.object(recall, "documents_state", lambda: {"dossiers": ["documents/"], "formats": [".pdf"], "fichiers": [{"nom": "contrat.pdf", "passages": 4}], "erreurs": [], "max": 200}),
+                      mock.patch.object(recall, "search_documents", lambda words: found), mock.patch.object(embeddings, "state", lambda: state)):
+            patch.start()
+            self.addCleanup(patch.stop)
+        p.evaluer("location.hash = '#/settings/knowledge'")
+        p.attendre("!!document.querySelector('#documents-search') && !!document.querySelector('#note-text')")
+        p.evaluer("(() => { const box = document.querySelector('#documents-search'); box.value = 'taux de TVA'; box.dispatchEvent(new Event('input', {bubbles: true})); })()")
+        self.press("document.querySelector('#documents-search').closest('form').querySelector('button')")
+        p.attendre("document.querySelector('.documents .passages')?.innerText.includes('20 %')")
+        p.evaluer("(() => { const box = document.querySelector('#note-text'); box.value = 'Le client préfère le tutoiement.'; box.dispatchEvent(new Event('input', {bubbles: true})); })()")
+        self.press("document.querySelector('#note-text').closest('form').querySelector('button')")
+        p.attendre("document.querySelector('.documents .notes')?.innerText.includes('tutoiement')")
+        self.assertIn("Le client préfère le tutoiement.", memory.read_text(encoding="utf-8"))
+        if AXE.is_file():
+            self.axe("on the documents and notes")
+        self.press("[...document.querySelectorAll('.documents .notes li')].find(li => li.innerText.includes('tutoiement')).querySelector('button')")
+        p.attendre("!document.querySelector('.documents .notes')?.innerText.includes('tutoiement')")
+        self.assertNotIn("tutoiement", memory.read_text(encoding="utf-8"))
+        self.assertEqual(p.erreurs, [])
+        p.evaluer("location.hash = '#/chat'")
+
     def test_4_a_refusal_of_the_server_is_shown_and_the_message_is_given_back(self):
         p = self.page
         with mock.patch.object(T.A, "TOURS_SIMULTANES", 0):

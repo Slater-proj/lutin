@@ -3776,6 +3776,92 @@ def actions_log(request):
                          "outcome": e.get("issue", ""), "approval": e.get("accord", ""), "who": e.get("qui", "")} for e in _m.lire_journal(count) if isinstance(e, dict)]}
 
 
+# ----------------------------------------------------------------------------------------------- documents, notes, meaning
+# What Lutin reads besides the conversations (docs/modernization/PARITY.md, item 14): the documents of the work folder (its « documents/ » folders),
+# searched by words; the notes, one line each, that the model may write with its `noter` tool and that the person reads or deletes one by one; and the
+# small model of the search by meaning, installed with one click.
+INSTALL_STATES = {"": "idle", "en cours": "running", "fini": "done", "erreur": "failed"}
+
+
+def _notes_view():
+    from . import storage as _storage_notes
+    return {"notes": [{"line": n["ligne"], "date": n["date"] or None, "text": n["texte"]} for n in _storage_notes.lister_notes()]}
+
+
+@route("GET", "/documents", SESSION)
+def documents(request):
+    """The documents Lutin reads in the work folder: the `folders` it looks in, the `formats` it reads, each file with the passages indexed, the files it
+    could not read (`errors`) and the most it keeps (`max`)."""
+    from . import recall as _recall
+    seen = _recall.documents_state()
+    return {"folders": list(seen["dossiers"]), "formats": list(seen["formats"]), "files": [{"name": f["nom"], "passages": f["passages"]} for f in seen["fichiers"]],
+            "errors": list(seen["erreurs"] or []), "max": seen["max"]}
+
+
+@route("GET", "/documents/search", SESSION)
+def search_documents(request):
+    """`?q=words`: the passages of the documents, notes, skills and conversations that match, best first, each with its `source`, `title` and an
+    `extract`. 400 when the words are too vague."""
+    from . import recall as _recall
+    words = request.query.get("q", "")[:300]
+    if not _recall.words(words):
+        raise ApiError(400, "invalid_request", _t("Requête vide ou trop vague : donne quelques mots-clés."))
+    return {"passages": [{"source": p["source"], "title": p["titre"], "extract": p["extrait"], "conversation": bool(p["conversation"])} for p in _recall.search_documents(words)]}
+
+
+@route("GET", "/notes", SESSION)
+def notes(request):
+    """The notes, one line each, the oldest first: `{notes: [{line, date, text}]}` (`line` identifies it)."""
+    return _notes_view()
+
+
+@route("POST", "/notes", SESSION)
+def add_note(request):
+    """`{text}`: a note, dated today. 400 for an empty or too long note."""
+    from . import storage as _storage_notes
+    if set(request.body) != {"text"} or not isinstance(request.body["text"], str):
+        raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("text"))
+    try:
+        _storage_notes.noter(request.body["text"])
+    except _m.ErreurOutil as refused:
+        raise ApiError(400, "invalid_request", str(refused)) from None
+    return 201, _notes_view()
+
+
+@route("DELETE", "/notes", SESSION)
+def delete_note(request):
+    """`?line=` (as GET /notes gave it): deletes that note."""
+    from . import storage as _storage_notes
+    try:
+        _storage_notes.supprimer_note(request.query.get("line", ""))
+    except ValueError as missing:
+        raise ApiError(404, "not_found", str(missing)) from None
+    return _notes_view()
+
+
+def _meaning_view():
+    from . import embeddings as _embeddings
+    seen = _embeddings.state()
+    install = seen["installation"]
+    return {"active": bool(seen["actif"]), "model": seen["modele"], "installed": bool(seen["installe"]),
+            "installation": {"state": INSTALL_STATES.get(install["etat"], install["etat"]), "done_bytes": install["fait"], "total_bytes": install["total"], "error": install["erreur"]}}
+
+
+@route("GET", "/search-by-meaning", SESSION)
+def search_by_meaning(request):
+    """The search by meaning: on or off (the setting `semantic_search`), its small model, whether it is installed, and its download."""
+    return _meaning_view()
+
+
+@route("POST", "/search-by-meaning/install", CONFIGURATOR)
+def install_search_model(request):
+    """Downloads the small model of the search by meaning (about 270 MB) into Ollama, in the background. 202; 409 `offline`."""
+    from . import embeddings as _embeddings
+    _offline.require_online(_t("télécharger un modèle"))
+    _embeddings.start_installation()
+    return 202, _meaning_view()
+
+
 # --------------------------------------------------------------------------------------------------------- background work
 # Documents processed in the background (docs/modernization/PARITY.md, item 13; lutin.background_jobs): a folder, the kinds of files, an instruction
 # applied to each document while nobody talks to Lutin; a trial stops after the first documents until the person validates them. Reading is `session`;

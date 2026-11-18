@@ -73,7 +73,7 @@ export function fieldsOf(group: GroupId): Field[] {
 
 // The sections of the Settings screen, one shown at a time (docs/modernization/INTERFACE.md, « Layout and widths »). A part is a group of fields or
 // a component of its own; the screen draws them in this order.
-export type Part = GroupId | "language" | "notifications" | "approval_rules" | "devices" | "lending" | "health" | "backup" | "lutin_version" | "offline" | "access" | "github" | "tuning" | "web_search" | "memory" | "skills" | "third_party_skills";
+export type Part = GroupId | "language" | "notifications" | "approval_rules" | "devices" | "lending" | "health" | "backup" | "lutin_version" | "offline" | "access" | "github" | "tuning" | "documents" | "web_search" | "memory" | "skills" | "third_party_skills";
 export const SECTIONS = {
   general: ["language", "answers", "notifications", "lutin_version", "github"],
   safety: ["offline", "safety", "approval_rules"],
@@ -81,7 +81,7 @@ export const SECTIONS = {
   machine: ["lending", "machine", "tuning"],
   health: ["health"],
   data: ["backup"],
-  knowledge: ["knowledge", "web_search", "memory"],
+  knowledge: ["knowledge", "web_search", "memory", "documents"],
   tools: ["tools", "skills", "third_party_skills"],
   advanced: ["sampling"],
 } as const satisfies Record<string, readonly Part[]>;
