@@ -6,7 +6,7 @@
 Le serveur tourne dans un processus enfant (comme `lutin serve`) : s'il s'arrête sur une erreur, il est relancé. Sa sortie va dans donnees/serveur.log.
 Quitter et redémarrer arrêtent le serveur (dans un environnement venv, `pythonw.exe` est un lanceur qui met le vrai Python dans un job Windows : en arrêtant le lanceur, il s'arrête aussi ;
 mesuré). Ollama, s'il a été lancé par le serveur, n'est pas touché : d'autres programmes peuvent l'utiliser.
-Première utilisation : l'installation guidée s'ouvre dans une console (sans console, on ne pourrait pas lui répondre).
+Première utilisation : la configuration de base se fait sans fenêtre (valeurs conseillées) ; les questions sont posées par le guide, dans le navigateur.
 Tout passe par ctypes (la bibliothèque standard) : Lutin n'a toujours aucune dépendance. Sur un autre système, la commande le dit et s'arrête."""
 import ctypes
 import os
@@ -128,14 +128,23 @@ def python_console():
     return str(candidat) if candidat.is_file() else str(exe)
 
 
+PREMIERE_CONFIGURATION = ["setup", "--yes", "--no-models", "--no-ollama"]
+
+
 def preparer(dossiers, cfg):
-    """La configuration à utiliser, ou None. Première utilisation : l'installation guidée s'ouvre dans une console (on attend qu'elle se termine), puis on repart de ce qu'elle a écrit."""
+    """La configuration à utiliser, ou None. Première utilisation : la configuration de base se fait sans fenêtre, avec les valeurs conseillées (langue
+    du système, accès depuis cette machine seulement, dossier de travail habituel), sans installer de moteur ni télécharger de modèle. Les vraies
+    questions (moteur, usage, modèle, avec la taille avant chaque téléchargement) sont posées par le guide du premier lancement, dans le navigateur.
+    Avant, une console posait ses questions puis la page les reposait (remarque du mainteneur, 2026-11-19). `lutin` en ligne de commande garde la console."""
     if cfg.get("installe"):
         return cfg
     from . import config
-    subprocess.run([python_console(), "-m", "lutin", "setup"], creationflags=CREATE_NEW_CONSOLE)
+    r = subprocess.run([python_console(), "-m", "lutin"] + PREMIERE_CONFIGURATION, creationflags=CREATE_NO_WINDOW, capture_output=True, text=True, encoding="utf-8", errors="replace")
     cfg = config.load(dossiers)
-    return cfg if cfg.get("installe") else None
+    if not cfg.get("installe"):
+        log(dossiers, "Configuration de base impossible (code {}) :\n{}\n{}".format(getattr(r, "returncode", "?"), getattr(r, "stdout", "") or "", getattr(r, "stderr", "") or ""))
+        return None
+    return cfg
 
 
 class Serveur:
@@ -337,7 +346,7 @@ def commande(dossiers, cfg, ouvrir=True):
     try:
         cfg = preparer(dossiers, cfg)
         if cfg is None:
-            message("Lutin", _t("L'installation n'est pas terminée : relance Lutin pour la reprendre."))
+            message("Lutin", _t("La configuration de Lutin n'a pas pu se faire : le détail est dans zone.log (dossier des données). Relance Lutin pour réessayer."))
             return 1
         serveur = Serveur(dossiers, ouvrir)
         zone = Zone(cfg, dossiers, serveur)

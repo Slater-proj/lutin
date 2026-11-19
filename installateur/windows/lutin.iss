@@ -86,7 +86,7 @@ Name: "{autoprograms}\Lutin"; Filename: "{app}\venv\Scripts\pythonw.exe"; Parame
 Name: "{autoprograms}\{cm:ShortcutChat}"; Filename: "{app}\bin\lutin.cmd"; Parameters: "chat"; WorkingDir: "{userdocs}"; IconFilename: "{app}\lutin.ico"
 
 [Run]
-; Lutin sans console (icone en bas a droite) ; au premier lancement, l'installation guidee s'ouvre toute seule dans une console
+; Lutin sans console (icone en bas a droite) ; au premier lancement, la configuration de base se fait sans fenetre et le guide s'ouvre dans le navigateur
 Filename: "{app}\python\pythonw.exe"; Parameters: "-m lutin zone"; WorkingDir: "{userdocs}"; Description: "{cm:RunLutin}"; Flags: postinstall skipifsilent nowait; Check: UseEmbedded
 Filename: "{app}\venv\Scripts\pythonw.exe"; Parameters: "-m lutin zone"; WorkingDir: "{userdocs}"; Description: "{cm:RunLutin}"; Flags: postinstall skipifsilent nowait; Check: not UseEmbedded
 

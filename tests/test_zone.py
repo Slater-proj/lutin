@@ -87,19 +87,28 @@ class PremiereUtilisation(unittest.TestCase):
             self.assertIs(zone.preparer({"donnees": "x"}, cfg), cfg)
             run.assert_not_called()
 
-    def test_pas_installe_l_installation_guidee_s_ouvre_dans_une_console(self):
+    def test_pas_installe_la_configuration_de_base_se_fait_sans_fenetre_et_les_questions_dans_le_navigateur(self):
+        """Remarque du mainteneur (2026-11-19) : une console posait des questions, puis la page les reposait. Sous Windows, seule la page les pose."""
         from lutin import config
         with mock.patch.object(zone.subprocess, "run") as run, mock.patch.object(config, "load", return_value={"installe": True, "x": 1}):
             cfg = zone.preparer({"donnees": "x"}, {"installe": False})
         self.assertEqual(cfg, {"installe": True, "x": 1}, "on repart de la configuration que l'installation vient d'écrire")
         commande = run.call_args[0][0]
-        self.assertEqual(commande[1:], ["-m", "lutin", "setup"])
-        self.assertEqual(run.call_args[1]["creationflags"], zone.CREATE_NEW_CONSOLE, "une vraie console, pour pouvoir répondre")
+        self.assertEqual(commande[1:], ["-m", "lutin", "setup", "--yes", "--no-models", "--no-ollama"], "valeurs conseillées, sans moteur ni modèle : le guide du navigateur les propose")
+        self.assertEqual(run.call_args[1]["creationflags"], zone.CREATE_NO_WINDOW, "aucune fenêtre de console")
 
-    def test_installation_abandonnee_on_ne_demarre_pas(self):
+    def test_configuration_de_base_echouee_on_ne_demarre_pas_et_on_le_journalise(self):
         from lutin import config
-        with mock.patch.object(zone.subprocess, "run"), mock.patch.object(config, "load", return_value={"installe": False}):
-            self.assertIsNone(zone.preparer({"donnees": "x"}, {"installe": False}))
+        dossier = Path(tempfile.mkdtemp(prefix="zone-test-"))
+        with mock.patch.object(zone.subprocess, "run", return_value=mock.Mock(returncode=1, stdout="", stderr="Erreur X")), mock.patch.object(config, "load", return_value={"installe": False}):
+            self.assertIsNone(zone.preparer({"donnees": str(dossier)}, {"installe": False}))
+        self.assertIn("Erreur X", (dossier / "zone.log").read_text(encoding="utf-8"))
+
+    def test_la_configuration_de_base_ne_pose_aucune_question(self):
+        """« lutin setup --yes --no-models --no-ollama » va au bout sans clavier, et n'installe ni moteur ni modèle."""
+        from lutin import cli
+        args = cli.parseur().parse_args(zone.PREMIERE_CONFIGURATION)
+        self.assertTrue(args.oui and args.sans_modeles and args.sans_ollama)
 
     def test_python_console_prefere_python_exe_a_pythonw(self):
         d = Path(tempfile.mkdtemp(prefix="zone-py-"))

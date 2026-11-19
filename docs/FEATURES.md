@@ -280,7 +280,7 @@ Settings > **Lutin version** shows the installed version and a **Check for updat
 
 ## Icon in the notification area (Windows)
 
-The **Lutin** shortcut opens Lutin **without a console window**: a Lutin icon in the notification area (bottom right). Left click opens the interface; right click offers **PIN code** (to connect a phone), **Open the interface**, **Restart** and **Quit**. On the very first start, the guided setup opens in a console. The server runs in the background; if it stops on an error it is restarted, and its output goes to `donnees/serveur.log` (the icon's own errors, if any, to `donnees/zone.log`). The terminal version stays available as `lutin` (and the « Lutin (terminal) » shortcut). Only one icon runs at a time: starting it again opens the interface.
+The **Lutin** shortcut opens Lutin **without a console window**: a Lutin icon in the notification area (bottom right). Left click opens the interface; right click offers **PIN code** (to connect a phone), **Open the interface**, **Restart** and **Quit**. On the very first start, the basic setup is done without any window (recommended values: system language, access from this machine only, usual working folder) and the questions (engine, use, model, with the size before any download) are asked by the guide in the browser. The server runs in the background; if it stops on an error it is restarted, and its output goes to `donnees/serveur.log` (the icon's own errors, if any, to `donnees/zone.log`). The terminal version stays available as `lutin` (and the « Lutin (terminal) » shortcut). Only one icon runs at a time: starting it again opens the interface.
 
 ## Nothing is cut silently
 

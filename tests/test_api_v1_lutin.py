@@ -171,5 +171,40 @@ class LutinVersion(unittest.TestCase):
             self.assertTrue(self.status()["restart"]["needed"], "another access level saved for the next start")
 
 
+
+class LutinStartup(unittest.TestCase):
+    """`/lutin/startup` (maintainer's request, 2026-11-19): in Settings › General, « check for new versions when Lutin starts » and « start Lutin
+    with the machine ». The autostart is replaced: nothing reaches the session of this machine."""
+
+    def setUp(self):
+        from lutin import power
+        self.asked = []
+        for patch in (mock.patch.object(power, "install_startup", lambda: self.asked.append("install")), mock.patch.object(power, "remove_startup", lambda: self.asked.append("remove")),
+                      mock.patch.object(power, "startup_state", lambda: {"installe": bool(self.asked) and self.asked[-1] == "install", "possible": True, "limites": ""}),
+                      mock.patch.dict(power.STARTUP_MEMO, {"t": 0.0, "v": None})):
+            patch.start()
+            self.addCleanup(patch.stop)
+        config = Path(os.environ["LUTIN_CONFIG"])
+        before = config.read_text(encoding="utf-8") if config.is_file() else None
+        self.addCleanup(lambda: config.write_text(before, encoding="utf-8") if before is not None else config.unlink(missing_ok=True))
+
+    def test_both_are_read_and_changed_from_this_machine(self):
+        status, answer = V.call("GET", "/api/v1/lutin/startup", V.DEVICE)
+        self.assertEqual((status, answer["check_updates"], answer["autostart"]["installed"]), (200, True, False), "read by any session, on by default")
+        status, answer = V.call("PATCH", "/api/v1/lutin/startup", V.OWNER, {"check_updates": False, "autostart": True})
+        self.assertEqual((status, answer["check_updates"], answer["autostart"]["installed"]), (200, False, True))
+        self.assertFalse(json.loads(Path(os.environ["LUTIN_CONFIG"]).read_text(encoding="utf-8"))["verifier_maj"], "kept in config.json, read at launch")
+        self.assertFalse(A.config_lue()["verifier_maj"], "and by the engines' check")
+        self.assertEqual(V.call("PATCH", "/api/v1/lutin/startup", V.OWNER, {"autostart": False})[1]["autostart"]["installed"], False)
+        self.assertEqual(self.asked, ["install", "remove"])
+
+    def test_refusals_write_nothing(self):
+        self.assertEqual(V.call("PATCH", "/api/v1/lutin/startup", V.DEVICE, {"autostart": True})[0], 403, "another device never touches this machine's session")
+        for body in ({}, {"autostart": "yes"}, {"check_updates": 1}, {"check_updates": False, "autostart": None}):
+            self.assertEqual(V.call("PATCH", "/api/v1/lutin/startup", V.OWNER, body)[0], 400, body)
+        self.assertEqual(self.asked, [])
+        self.assertTrue(A.config_lue().get("verifier_maj", True))
+
+
 if __name__ == "__main__":
     unittest.main()

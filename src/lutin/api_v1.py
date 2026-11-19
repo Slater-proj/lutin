@@ -1646,7 +1646,7 @@ def _engine_view(engine, current, state, models, possible, updates=None):
 def engines(request):
     """Every engine with its state, the actions it allows and its running task. The engines are read at the same time: one that does not answer must not make the others wait."""
     current = _m.moteur_actuel().id
-    _engine_updates.in_background(bool(_m.reglages().get("verifier_maj", True)) and not _offline.is_active())          # once a day at most, never waited for
+    _engine_updates.in_background(bool(_m.config_lue().get("verifier_maj", True)) and not _offline.is_active())          # once a day at most, never waited for
     updates = _engine_updates.state()
     listed = _engines.entries()
     unknown = ({"installe": False, "actif": False, "version": "", "detail": ""}, {"installes": []}, {})
@@ -3209,6 +3209,50 @@ def lutin_restart(request):
     except ValueError as refused:
         raise ApiError(409, "turn_running", str(refused)) from None
     return {"restarting": True}
+
+
+def _startup_view():
+    from . import power as _power
+    state = _power.startup_state_memo()
+    return {"check_updates": bool(_m.config_lue().get("verifier_maj", True)),
+            "autostart": {"installed": bool(state.get("installe")), "possible": bool(state.get("possible")), "limits": str(state.get("limites") or "")}}
+
+
+@route("GET", "/lutin/startup", SESSION)
+def lutin_startup(request):
+    """What happens when Lutin and the machine start: `check_updates` (Lutin, its models and its engines look for new versions at launch, at most
+    once a day) and `autostart` {installed, possible, limits} (Lutin starts with the session of this machine)."""
+    return _startup_view()
+
+
+@route("PATCH", "/lutin/startup", LOCAL)
+def lutin_startup_change(request):
+    """`{check_updates?: bool, autostart?: bool}`, from this machine only (it touches this machine's session). Everything is checked before anything
+    is written. `check_updates` is kept in config.json, read at launch and by the engines' check."""
+    body = request.body
+    for key in ("check_updates", "autostart"):
+        if key in body and not isinstance(body[key], bool):
+            raise ApiError(400, "invalid_request", _t("Valeur invalide pour « {} » (attendu : {}).").format(key, "true, false"))
+    if not any(key in body for key in ("check_updates", "autostart")):
+        raise ApiError(400, "invalid_request", _t("Rien à changer."))
+    from . import power as _power
+    if "autostart" in body:
+        if body["autostart"] and not _power.startup_state_memo().get("possible"):
+            raise ApiError(409, "not_possible", _t("Le lancement au démarrage n'est pas possible sur ce système."))
+        try:
+            (_power.install_startup if body["autostart"] else _power.remove_startup)()          # looked up now: the tests replace them
+        except (ValueError, OSError) as refused:          # the system said no: nothing else is written
+            raise ApiError(400, "invalid_request", str(refused)) from None
+        finally:
+            _power.STARTUP_MEMO["v"] = None
+    if "check_updates" in body:
+        cfg = _m.config_lue()
+        cfg["verifier_maj"] = body["check_updates"]
+        try:
+            _m.config_ecrire(cfg)
+        except ValueError:
+            raise ApiError(409, "not_available", _t("Ce lancement de Lutin n'a pas de fichier de configuration : le réglage ne peut pas être gardé.")) from None
+    return _startup_view()
 
 
 # ------------------------------------------------------------------------------------------------------ strict offline mode

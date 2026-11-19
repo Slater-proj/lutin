@@ -526,6 +526,16 @@
  },
  {
   "method": "GET",
+  "path": "/api/v1/lutin/startup",
+  "right": "session"
+ },
+ {
+  "method": "PATCH",
+  "path": "/api/v1/lutin/startup",
+  "right": "local"
+ },
+ {
+  "method": "GET",
   "path": "/api/v1/lutin/update",
   "right": "session"
  },
