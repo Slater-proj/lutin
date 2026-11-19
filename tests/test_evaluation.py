@@ -135,7 +135,7 @@ class LongConversationOnSmallWindow(unittest.TestCase):
         M.REPONDEUR[:] = [model]
         A.enregistrer_reglages({"num_ctx": num_ctx, "modele": "qwen3.8:27b", "mode": "polyvalent", "reflexion": False, "auto_ecriture": False,
                                 "memoire_longue": memory, "fiche_scribe": True})
-        cid, errors = "", []
+        cid, errors, prunes = "", [], 0
         try:
             for turn in range(1, TURNS + 3):
                 message = user_message(turn) if turn <= TURNS else (WHERE_ARE_WE if turn == TURNS + 1 else PRECISE)
@@ -144,12 +144,14 @@ class LongConversationOnSmallWindow(unittest.TestCase):
                 events = M.chat(message, conversation=cid)
                 cid = cid or next(e["conversation"] for e in events if e["type"] == "debut")
                 errors += [(turn, e.get("texte", "")) for e in events if e["type"] == "erreur"]
+                prunes += sum(1 for e in events if e["type"] == "info" and "sortent du contexte" in e.get("texte", ""))          # the start removed in one block (sheet mode)
                 turns = [b for b in M.RECUES if b.get("stream", True)]
                 self.assertTrue(turns, "turn %d reached the model" % turn)
                 if turn == TURNS + 1:
                     where = turns[-1]
                 elif turn == TURNS + 2:
                     precise = turns[-1]
+            model.calls["prune"] = prunes
             return model, where, precise, errors
         finally:
             M.REPONDEUR.clear()
@@ -173,6 +175,8 @@ class LongConversationOnSmallWindow(unittest.TestCase):
         self.assertTrue(row["step"], label + ": the latest step is in front of the model")
         if num_ctx >= 8192:          # on 4,096 tokens, the floor of the history cannot hold the summary, the extracts and an answer of 190 words: the recall brings it back
             self.assertIn("history", row["step"], label + ": the latest exchange is sent as it is (the floor of the history, ADR 0018 decision 6)")
+        if memory == "fichier":          # ADR 0019, decision 2: the start leaves far enough (9 removals in 22 turns before, each a new prefix for the engine)
+            self.assertLessEqual(model.calls["prune"], 6, label + ": the start does not leave at every other exchange")
         if num_ctx <= 4096:
             sheet_tool = {"suivi"} if memory == "fichier" else set()          # the tool of the sheet comes with the sheet mode
             self.assertEqual(set(row["tools"]), CORE | sheet_tool, label + ": only the core of tools (ADR 0018, decision 9)")

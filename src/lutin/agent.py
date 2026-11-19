@@ -1357,6 +1357,7 @@ def _decaler_scribe(conv, coupe, gardes):
 SEUIL_PLEIN = 0.6              # au-delà (ou bien au-delà de ce que la requête laisse aux messages : MARGE_PLEIN), le retrait n'attend plus le scribe : mieux vaut une fiche en retard (le début reste retrouvable avec « rappeler ») qu'une conversation qui n'a plus de place pour répondre
 SEUIL_PLEIN_REEL = 0.8         # idem d'après le chiffre réel d'Ollama
 PART_GARDEE = 0.25            # /compact en mode fiche : les messages récents gardés tels quels tiennent dans ce quart de la fenêtre
+PART_APRES_RETRAIT = 0.4     # après un retrait, les messages gardés tiennent dans cette part du seuil (ADR 0019, décision 2)
 SEUIL_ELAGAGE = 0.45         # part de la fenêtre que les messages peuvent prendre avant le retrait (ou ce que la requête leur laisse une fois la fiche comptée, si c'est moins)
 MARGE_PLEIN = 0.1            # au-delà de ce que la requête leur laisse, de cette part de la fenêtre : le retrait n'attend plus le scribe
 
@@ -1396,12 +1397,25 @@ def elaguer(conv, r, emit, forcer=False, place=None):
         coupe = max(2, len(msgs) // 2)
         while coupe < len(msgs) and msgs[coupe]["role"] != "user":              # on coupe avant un message de l'utilisateur
             coupe += 1
-        if r.get("fiche_scribe", True) and int(conv.get("scribe_a") or 0) < coupe and not plein:       # jamais de message que le scribe n'a pas encore lu : il ne serait plus dans la fiche
-            lu = int(conv.get("scribe_a") or 0)                                                      # (sauf fenêtre presque pleine : mieux vaut une fiche en retard, le début reste retrouvable avec « rappeler »)
-            while coupe > lu:
-                coupe -= 1
-            while coupe > 0 and coupe < len(msgs) and msgs[coupe]["role"] != "user":
-                coupe -= 1
+        # ADR 0019, décision 2 : le reste descend bien sous le seuil (PART_APRES_RETRAIT), pour que plusieurs échanges tiennent avant le retrait
+        # suivant ; avant, la moitié sortait et l'historique revenait au seuil un ou deux échanges plus tard (9 retraits en 22 tours, chacun change
+        # le début de la requête et le moteur relit tout). Le dernier échange reste toujours tel quel.
+        moitie = coupe
+        cible = int(min(int(r["num_ctx"] * SEUIL_ELAGAGE), place) * PART_APRES_RETRAIT)
+        users = [i for i, m in enumerate(msgs) if m["role"] == "user"]
+        garde = users[-2] if len(users) >= 2 else coupe                            # le dernier échange : la demande précédente, sa réponse et la question
+        while coupe < garde and estimer(msgs[coupe:]) > cible:
+            coupe += 1
+            while coupe < garde and msgs[coupe]["role"] != "user":
+                coupe += 1
+        lu = int(conv.get("scribe_a") or 0)
+        if r.get("fiche_scribe", True) and lu < coupe:                            # jamais de message que le scribe n'a pas encore lu : il ne serait plus dans la fiche
+            limite = lu
+            while limite > 0 and limite < len(msgs) and msgs[limite]["role"] != "user":
+                limite -= 1
+            # fenêtre presque pleine : mieux vaut une fiche en retard (le début reste retrouvable avec « rappeler »), mais pas plus de la moitié de ce
+            # qu'il n'a pas lu, comme avant la cible : sinon presque tout sortait sans être passé dans la fiche
+            coupe = max(limite, min(coupe, moitie)) if plein else limite
     if coupe < 2 or coupe >= len(msgs):
         return False
     if forcer and r.get("fiche_scribe", True):

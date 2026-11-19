@@ -2687,6 +2687,25 @@ class Assistant(unittest.TestCase):
         self.assertLessEqual(A.estimer(reduit) + 1000, int(4096 * AG.PART_MAX), "la requête laisse de la place à la réponse")
         self.assertLess(A.estimer(A.ajuster_contexte([systeme] + echanges + [{"role": "user", "content": "Et alors ?"}], 4096, 0.49, outils)), A.estimer(reduit), "une nouvelle tentative raccourcit encore")
 
+    def test_le_debut_sort_assez_loin_pour_plusieurs_echanges_sans_emporter_ce_que_le_scribe_n_a_pas_lu(self):
+        """ADR 0019, décision 2 : la moitié sortait et l'historique revenait au seuil un ou deux échanges plus tard (9 retraits en 22 tours sur la
+        suite d'évaluation, 6 maintenant). Le reste descend sous PART_APRES_RETRAIT du seuil, le dernier échange gardé ; fenêtre pleine, ce que le
+        scribe n'a pas lu ne sort qu'à moitié, comme avant."""
+        from lutin import agent as AG
+        r = dict(A.reglages(), num_ctx=8192, memoire_longue="fichier", fiche_scribe=True)
+        def conversation(lu):
+            msgs = [{"role": "user" if i % 2 == 0 else "assistant", "content": "échange %d " % i + "mot " * 260} for i in range(16)] + [{"role": "user", "content": "Et maintenant ?"}]
+            return {"id": "zzzzzzzz", "messages": msgs, "scribe_a": lu}
+        with mock.patch.object(AG._archive, "add"), mock.patch.object(AG, "_taille_fiche", lambda conv, r: 0):
+            lu = conversation(17)
+            self.assertTrue(AG.elaguer(lu, r, lambda e: None))
+            restes = [m["content"] for m in lu["messages"]]
+            self.assertEqual(restes[-3:], [m["content"] for m in conversation(17)["messages"][-3:]], "le dernier échange et la question restent")
+            self.assertLessEqual(len(lu["messages"]), 5, "bien plus que la moitié est sortie : plusieurs échanges tiendront avant le retrait suivant")
+            pas_lu = conversation(0)
+            self.assertTrue(AG.elaguer(pas_lu, r, lambda e: None), "fenêtre pleine : le retrait n'attend pas le scribe")
+            self.assertGreaterEqual(len(pas_lu["messages"]), 8, "mais ce qu'il n'a pas lu ne sort qu'à moitié")
+
     def test_les_rappels_et_contexte_md_tiennent_sous_le_plafond_de_la_requete(self):
         """CI de bcb34aa : sur 4 096 jetons en mode fiche, la fiche et les extraits (une part fixe de la fenêtre) poussaient la requête à 95 % de la
         fenêtre, et le faux moteur l'a refusée. Les rappels prennent ce qui reste sous PART_MAX ; CONTEXTE.md est relu selon la fenêtre."""
