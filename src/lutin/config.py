@@ -13,6 +13,8 @@ import os
 import platform
 import shutil
 import sys
+import threading
+import time
 from pathlib import Path
 
 SCHEMA = 1
@@ -99,17 +101,38 @@ def load(d):
     return migrate_config(brut)
 
 
+_SAVE_LOCK = threading.Lock()
+
+
+def replace_retrying(tmp, f, essais=20):
+    """os.replace, réessayé un instant : sous Windows, remplacer un fichier qu'un autre fil (ou un antivirus, un indexeur) a ouvert à cet instant
+    échoue (PermissionError, « Access is denied ») alors que la même opération réussit quelques millisecondes plus tard."""
+    for essai in range(essais):
+        try:
+            os.replace(tmp, f)
+            return
+        except PermissionError:
+            if essai == essais - 1:
+                raise
+            time.sleep(0.05)
+
+
 def save(d, cfg):
     f = Path(d["config"]) / "config.json"
     f.parent.mkdir(parents=True, exist_ok=True)
-    if f.is_file():
+    texte = json.dumps(cfg, ensure_ascii=False, indent=1)
+    with _SAVE_LOCK:                                          # deux enregistrements à la fois : la copie .bak de l'un tenait le fichier que l'autre remplaçait
+        if f.is_file():
+            try:
+                shutil.copyfile(f, str(f) + ".bak")           # la version précédente reste disponible
+            except OSError:
+                pass
+        tmp = f.with_name("config.{}.tmp".format(threading.get_ident()))
         try:
-            shutil.copyfile(f, str(f) + ".bak")               # la version précédente reste disponible
-        except OSError:
-            pass
-    tmp = f.with_suffix(".tmp")
-    tmp.write_text(json.dumps(cfg, ensure_ascii=False, indent=1), encoding="utf-8")
-    tmp.replace(f)
+            tmp.write_text(texte, encoding="utf-8")
+            replace_retrying(tmp, f)
+        finally:
+            tmp.unlink(missing_ok=True)
 
 
 def prepare(d):

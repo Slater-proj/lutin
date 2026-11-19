@@ -221,8 +221,10 @@ class Chat(unittest.TestCase):
         c["messages"] = [{"role": "user", "content": "La pâte brisée repose une heure."}]
         T.A.conv_ecrire(c)
         self.addCleanup(lambda: T.A.conv_supprimer(c["id"]))
-        p.aller(T.BASE + "/app/#/chat")
-        p.attendre("!!document.querySelector('#conversation-search')")
+        # a real reload: the page of the test before is already at #/chat, where going to the same address changes nothing and the list, read before
+        # this conversation existed, would never show it (the mark below waited for an entry that was not there: the CI failed now and then)
+        p.evaluer("location.hash = '#/chat'; window.__old = true; location.reload()")
+        p.attendre("!window.__old && [...document.querySelectorAll('.list .entry')].some(e => e.innerText.includes('Recette de cuisine'))")
         p.evaluer("(() => { const box = document.querySelector('#conversation-search'); box.value = 'pate brisee'; box.dispatchEvent(new Event('input', {bubbles: true})); })()")
         p.attendre("[...document.querySelectorAll('.found .entry')].some(e => e.innerText.includes('Recette de cuisine'))")
         self.assertIn("brisée", p.evaluer("document.querySelector('.found .extract').innerText"), "an extract around what was found")
@@ -453,7 +455,7 @@ class Chat(unittest.TestCase):
         self.assertEqual(p.evaluer("document.querySelector('.list .entry .title').innerText"), "Renamed on the page")
         p.evaluer("document.querySelector('.pin-button').click()")
         p.attendre("document.querySelector('.pin-button').getAttribute('aria-pressed') === 'true'")
-        self.assertTrue(p.evaluer("!!document.querySelector('.list .entry .tag')"), "the pin shows in the list")
+        p.attendre("!!document.querySelector('.list .entry .tag')", 10)          # the pin shows in the list: the button is pressed with the answer of the server, the list is read again after it
         stored = [c for c in T.lire("/api/etat")["conversations"] if c["titre"] == "Renamed on the page"]
         self.assertEqual([c.get("epingle") for c in stored], [True], "renamed and pinned on the server, not only on the page")
         self.assertEqual(p.erreurs, [])

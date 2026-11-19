@@ -57,6 +57,44 @@ class Configuration(unittest.TestCase):
             self.assertEqual(config.load(d)["securite"]["niveau"], "reseau")
             self.assertFalse(json.loads((d["config"] / "config.json.bak").read_text(encoding="utf-8"))["installe"], "la version précédente est gardée")
 
+    def test_un_fichier_tenu_un_instant_ou_deux_enregistrements_a_la_fois_ne_font_pas_echouer(self):
+        """CI Windows : « Access is denied » en remplaçant config.json qu'un antivirus (ou un autre fil) tenait ouvert à cet instant. Le remplacement est
+        réessayé ; deux enregistrements à la fois ne se marchent plus dessus (même fichier temporaire, copie .bak pendant le remplacement)."""
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as t:
+            d = config.folders({"LUTIN_HOME": t})
+            cfg = config.load(d)
+            vrai, refus = config.os.replace, []
+
+            def tenu(src, dst):
+                if len(refus) < 2:
+                    refus.append(dst)
+                    raise PermissionError(13, "Access is denied")
+                return vrai(src, dst)
+            with mock.patch.object(config.os, "replace", tenu):
+                config.save(d, cfg)
+            self.assertEqual(len(refus), 2, "refusé deux fois, réussi au troisième essai")
+            self.assertEqual(config.load(d)["schema"], cfg["schema"])
+            erreurs = []
+
+            def enregistrer(n):
+                try:
+                    for i in range(20):
+                        config.save(d, dict(cfg, installe=bool((n + i) % 2)))
+                except OSError as e:
+                    erreurs.append(e)
+            fils = [threading.Thread(target=enregistrer, args=(n,)) for n in range(4)]
+            for f in fils:
+                f.start()
+            for f in fils:
+                f.join()
+            self.assertEqual(erreurs, [])
+            self.assertEqual(sorted(p.name for p in d["config"].iterdir()), ["config.json", "config.json.bak"], "aucun fichier temporaire ne reste")
+            with mock.patch.object(config.os, "replace", side_effect=PermissionError(13, "Access is denied")), mock.patch.object(config.time, "sleep"):
+                with self.assertRaises(PermissionError, msg="un fichier tenu pour de bon finit par faire échouer, sans boucler"):
+                    config.save(d, cfg)
+            self.assertEqual(sorted(p.name for p in d["config"].iterdir()), ["config.json", "config.json.bak"])
+
     def test_migration_garde_le_connu_ignore_l_inconnu_complete_le_manquant(self):
         ancien = {"securite": {"niveau": "reseau"}, "inconnu": 1, "installe": True}
         n = config.migrate_config(ancien)
