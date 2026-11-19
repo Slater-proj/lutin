@@ -87,6 +87,14 @@ Read on `2d60093` (`agent.py`, `progress_sheet.py`, `recall.py`, `prompt_layout.
       message with the shipped notes, 1,288 of sheet and extracts) not even the latest exchange was sent. The trimming now gives the history the
       same floor, never past 85 % of the window (`PART_MAX`): the answer keeps at least 15 %, and a retry after a context error lowers both. On
       8,192 tokens the request of the last turn goes from about 5,300 to 6,300 tokens (answer room about 1,900 instead of 2,900).
+    - **The recalls had a fixed share of the window** (a tenth): on 4,096 tokens in the sheet mode the sheet and the extracts, never trimmed,
+      pushed the request to 95 % of the window (3,899 tokens by Lutin's estimate), and the fake engine refused a turn on the CI (Windows,
+      Python 3.12, after `bcb34aa`). The recalls of the thread and of the documents now take what is left under `PART_MAX` once the system
+      message, the tools, the head block, the sheet and the question are counted (`place_des_rappels`); the latest exchange gives way and comes
+      back through the recall (decision 7).
+    - **`CONTEXTE.md` is read according to the window** (maintainer's decision, 2026-11-19): 5 % of the window (`limite_contexte`), at least 600
+      characters, at most `LIMITE_CONTEXTE`. The file is not changed; the cut is said to the model and to the person (`COUPURES`). The shipped
+      text (763 tokens) is read whole from 16,384 tokens; on 4,096 the system message goes from 1,443 to about 900 tokens.
     Measured after the fixes (fake models, so what the request carries, not what a real model makes of it): with a faithful model, the objective,
     the five decisions and the current step are in front of the model in all four cases; on 8,192 tokens the latest exchange is sent as it is,
     on 4,096 tokens it comes back through the recall (the floor holds the summary and the extracts, not an answer of 190 words besides). With a
@@ -98,9 +106,8 @@ Read on `2d60093` (`agent.py`, `progress_sheet.py`, `recall.py`, `prompt_layout.
 
 - **A summary every two or three answers on 4,096 and 8,192 tokens** (measured above): each is a model call, minutes on a processor. Not changed:
   the threshold follows the room the request leaves, which is small; the sheet costs no call to prune.
-- **`CONTEXTE.md` is now the largest fixed cost on 4,096 tokens**: 763 tokens as shipped (19 % of the window), read up to `LIMITE_CONTEXTE`
-  characters whatever the window, and it names `web_chercher` and `web_lire`, which such a window does not send. Bounding it by the window is a
-  choice to make with the maintainer (it is the person's own description of the project).
+- **The shipped `CONTEXTE.md` names `web_chercher` and `web_lire`**, which a 4,096-token window does not send; on such a window only its first
+  614 characters are read now (decision 10).
 - **Measure on a real small model.** The evaluation suite (decision 10) runs the scenario on fake models: it says what the request carries, not
   whether a small model finds its way with it, nor how a real tokenizer counts (Lutin estimates three characters a token). Running it on a real
   model needs Ollama and a small model on the machine, outside the hermetic tests.

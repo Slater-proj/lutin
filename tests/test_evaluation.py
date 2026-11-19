@@ -24,6 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import test_moteur as M  # noqa: E402  (starts the fake engine and the assistant, as in test_moteur.py)
 
 A = M.A
+from lutin import agent as AG  # noqa: E402
 
 OBJECTIVE = ("Objectif : écrire convertir.py, un outil qui transforme les relevés CSV de la station météo de Marly en JSON pour le tableau de bord "
              "du club.")
@@ -165,7 +166,9 @@ class LongConversationOnSmallWindow(unittest.TestCase):
                "tools": sorted(t["function"]["name"] for t in where.get("tools", []))}
         REPORT.append(row)
         self.assertEqual(errors, [], label + ": no turn fails")
-        self.assertLessEqual(size, num_ctx, label + ": the request fits the window")
+        # Lutin's own estimate, under the ceiling of the request: the answer keeps its room. Checking only the window let the sheet and the extracts
+        # push the request to 95 % of 4,096 tokens, and the fake engine (which counts a little more) refused a turn on the CI only.
+        self.assertLessEqual(size, int(num_ctx * AG.PART_MAX), label + ": the request stays under its ceiling (ADR 0018, decision 10)")
         self.assertTrue(row["objective"], label + ": the first request is still in front of the model (ADR 0018, decision 2)")
         self.assertTrue(row["step"], label + ": the latest step is in front of the model")
         if num_ctx >= 8192:          # on 4,096 tokens, the floor of the history cannot hold the summary, the extracts and an answer of 190 words: the recall brings it back

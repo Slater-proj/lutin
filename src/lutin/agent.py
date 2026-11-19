@@ -1049,6 +1049,19 @@ def supprimer_modele(modele):
     return {"ok": True, "modele": modele, "nouveau_actif": nouveau}
 
 
+PART_CONTEXTE = 0.05         # part de la fenêtre que CONTEXTE.md peut prendre (décision du mainteneur, 2026-11-19 : le borner selon la fenêtre)
+CONTEXTE_MIN = 600           # caractères relus au moins, même sur une toute petite fenêtre
+
+
+def limite_contexte(num_ctx):
+    """Les caractères de CONTEXTE.md relus à chaque requête : 5 % de la fenêtre, jamais moins de CONTEXTE_MIN ni plus de LIMITE_CONTEXTE. Sur 4 096
+    jetons, le texte livré (763 jetons) prenait 19 % de la fenêtre ; il est entier dès 16 384 jetons. Le fichier n'est pas modifié : seul ce que le
+    modèle en relit change, et la coupure est dite (COUPURES)."""
+    if not num_ctx:
+        return _m.LIMITE_CONTEXTE
+    return max(CONTEXTE_MIN, min(_m.LIMITE_CONTEXTE, int(num_ctx * PART_CONTEXTE * _disposition.CHARS_PER_TOKEN)))
+
+
 def consignes_systeme(r):
     contexte, memoire = _m.lire_memoire("CONTEXTE.md"), _m.lire_memoire("MEMOIRE.md")
     mode = _modes.instruction(r["mode"])
@@ -1059,7 +1072,7 @@ def consignes_systeme(r):
         bloc_skills = (_t("\n\n# SKILLS (fiches du projet, à lire avec l'outil « lire » quand le sujet t'est demandé)\n"
                        "Ces fiches décrivent le projet de l'utilisateur (univers, règles, outil). Lis-les au moment où tu en as besoin, pas avant.\n") + lignes + "\n")
     return (_t("Tu es Lutin, l'assistant local de l'utilisateur. Tu réponds dans la langue de l'utilisateur, de façon directe et concise. Tu disposes d'outils pour lire et modifier le projet : utilise-les plutôt que de deviner. "
-            "Chaque modification de fichier garde une sauvegarde de l'ancienne version et passe par l'accord de l'utilisateur, sauf s'il a activé l'accord automatique.\n\n") + mode + _t("\n\n# CONTEXTE DU PROJET (memoire/CONTEXTE.md)\n") + _m.borner_contexte(contexte) + _t("\n\n# NOTES DURABLES (memoire/MEMOIRE.md)\n") + (_m.texte_memoire(memoire) or _t("(aucune pour l'instant)"))
+            "Chaque modification de fichier garde une sauvegarde de l'ancienne version et passe par l'accord de l'utilisateur, sauf s'il a activé l'accord automatique.\n\n") + mode + _t("\n\n# CONTEXTE DU PROJET (memoire/CONTEXTE.md)\n") + _m.borner_contexte(contexte, limite_contexte(r.get("num_ctx") or 0)) + _t("\n\n# NOTES DURABLES (memoire/MEMOIRE.md)\n") + (_m.texte_memoire(memoire) or _t("(aucune pour l'instant)"))
             + bloc_skills
             + (_mission.instruction_system() if r.get("_mission") else "")
             + ("" if r.get("mode") in ("discussion", "recherche") else _t("\n\n# CRÉER UN FICHIER\nQuand on te demande de créer ou d'écrire un fichier (docker-compose, script, configuration, document), appelle l'outil « ecrire » avec le chemin et le contenu complet, y compris après une recherche web. Ne te contente pas de montrer le contenu dans ta réponse."))
@@ -1754,6 +1767,20 @@ def bloc_du_debut(conv):
     return [{"role": "user", "content": texte}, {"role": "assistant", "content": "Compris, je continue."}]
 
 
+MARGE_RAPPELS = 120          # jetons : les en-têtes des blocs du tour et l'accusé de réception qui les suit
+
+
+def place_des_rappels(conv, r, outils, fiche=""):
+    """Les caractères que les passages rappelés (fil et documents) peuvent prendre sans pousser la requête au-delà de PART_MAX : ce qui reste une fois
+    comptés le système, les outils, le bloc du début, la fiche et la question.
+    Avant, leur part était fixe (un dixième de la fenêtre) : sur 4 096 jetons en mode fiche, la requête montait à 95 % de la fenêtre, la réponse
+    n'avait presque plus de place et un moteur pouvait refuser la requête (ADR 0018, décision 10)."""
+    recents = estimer((conv.get("messages") or [])[-1:])          # la question ; le dernier échange, lui, cède sa place si besoin (le rappel le remet : ADR 0018, décision 7)
+    pris =(len(json.dumps(outils, ensure_ascii=False)) + len(consignes_systeme(r) + _fichiers.instruction_folder(conv)) + len(fiche)) // 3
+    reste = int(r["num_ctx"] * PART_MAX) - pris - estimer(bloc_du_debut(conv)) - recents - MARGE_RAPPELS
+    return max(0, reste) * _disposition.CHARS_PER_TOKEN
+
+
 def ce_que_voit_le_modele(conv, r, outils, fiche=""):
     """Les messages de la conversation que la requête enverra vraiment, une fois ajustée à la fenêtre (ADR 0018) : le rappel du fil ne remet pas ce
     que le modèle a sous les yeux, et cherche d'abord dans ce que l'ajustement retire. La requête est reconstruite comme dans _messages_de_l_etape
@@ -1779,18 +1806,20 @@ def _preparer_boucle(conv, r, emit, ctx):
         except ValueError:
             fiche = ""
     extraits = ""
-    if r.get("rappel_ici"):                       # le début de la conversation n'est plus sous les yeux du modèle : on lui remet ce qui touche à la demande
+    place = place_des_rappels(conv, r, outils, fiche)
+    if r.get("rappel_ici") and min(_disposition.thread_budget(r["num_ctx"]), place) >= _disposition.RECALL_MIN:          # le début de la conversation n'est plus sous les yeux du modèle : on lui remet ce qui touche à la demande
         try:
             etape = " ".join(_suivi.read(conv["id"])["etape"] + _suivi.read(conv["id"])["objectif"])
             vus = ce_que_voit_le_modele(conv, r, outils, fiche)
-            extraits, nb_extraits = _m.thread_recall(conv, etape, _disposition.thread_budget(r["num_ctx"]), vus)
+            extraits, nb_extraits = _m.thread_recall(conv, etape, min(_disposition.thread_budget(r["num_ctx"]), place), vus)
             if nb_extraits and DITS["rappel"].get(conv["id"]) != nb_extraits:          # dit une fois, et quand le nombre change : pas à chaque réponse
                 DITS["rappel"][conv["id"]] = nb_extraits
                 emit({"type": "info", "texte": _t("📎 {} passage(s) retrouvé(s) plus tôt dans cette conversation.").format(nb_extraits)})
         except Exception as erreur:  # noqa: BLE001  (la recherche ne doit jamais empêcher de répondre)
             _m.journaliser("Rappel du fil impossible : {!r}".format(erreur))
     rappels_texte, rappels_sources = "", []
-    place_documents = _disposition.documents_budget(r["num_ctx"], extraits)          # ce que le fil a laissé de la part des rappels
+    place_documents = min(_disposition.documents_budget(r["num_ctx"], extraits), place - len(extraits))          # ce que le fil a laissé de la part des rappels
+    place_documents = place_documents if place_documents >= _disposition.RECALL_MIN else 0
     if place_documents:
         try:
             rappels_texte, rappels_sources = _m.automatic_recalls(conv, r, place_documents)

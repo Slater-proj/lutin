@@ -2687,6 +2687,24 @@ class Assistant(unittest.TestCase):
         self.assertLessEqual(A.estimer(reduit) + 1000, int(4096 * AG.PART_MAX), "la requête laisse de la place à la réponse")
         self.assertLess(A.estimer(A.ajuster_contexte([systeme] + echanges + [{"role": "user", "content": "Et alors ?"}], 4096, 0.49, outils)), A.estimer(reduit), "une nouvelle tentative raccourcit encore")
 
+    def test_les_rappels_et_contexte_md_tiennent_sous_le_plafond_de_la_requete(self):
+        """CI de bcb34aa : sur 4 096 jetons en mode fiche, la fiche et les extraits (une part fixe de la fenêtre) poussaient la requête à 95 % de la
+        fenêtre, et le faux moteur l'a refusée. Les rappels prennent ce qui reste sous PART_MAX ; CONTEXTE.md est relu selon la fenêtre."""
+        from lutin import agent as AG
+        r = dict(A.reglages(), num_ctx=4096, mode="polyvalent", memoire_longue="fichier")
+        outils = A.outils_du_mode(r)
+        conv = {"id": "zzzzzzzz", "messages": [{"role": "user", "content": "Quel séparateur ?"}]}
+        place = AG.place_des_rappels(conv, r, outils)
+        fiche = "x" * (place + 900)                                          # une fiche qui prend plus que la place : plus rien pour les rappels
+        self.assertEqual(AG.place_des_rappels(conv, r, outils, fiche), 0)
+        poids = (len(json.dumps(outils, ensure_ascii=False)) + len(AG.consignes_systeme(r) + "x" * place)) // 3 + A.estimer(conv["messages"])
+        self.assertLessEqual(poids, int(4096 * AG.PART_MAX), "système, outils, question et rappels tiennent sous le plafond")
+        self.assertEqual(AG.limite_contexte(4096), 614, "5 % de 4 096 jetons")
+        self.assertEqual(AG.limite_contexte(1024), AG.CONTEXTE_MIN)
+        self.assertEqual(AG.limite_contexte(131072), A.LIMITE_CONTEXTE)
+        self.assertIn("CONTEXTE.md coupé", AG.consignes_systeme(r), "le CONTEXTE.md livré est coupé sur 4 096 jetons, et le modèle le sait")
+        self.assertNotIn("CONTEXTE.md coupé", AG.consignes_systeme(dict(r, num_ctx=32768)), "entier sur une grande fenêtre")
+
     def test_le_resume_garde_la_demande_de_depart_et_tient_dans_une_petite_fenetre(self):
         self.assertEqual((A.taille_resume(4096), A.taille_resume(8192), A.taille_resume(131072)), (1843, 3686, 6000))
         self.assertEqual(A.taille_resume(1024), 1500)
