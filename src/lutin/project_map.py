@@ -103,8 +103,10 @@ def refresh_plan(force=False):
     threading.Thread(target=travail, daemon=True).start()
 
 
-def plan_text(budget):
-    """Le plan, réparti équitablement entre les dossiers de premier niveau pour tenir dans budget caractères (un gros dossier n'écrase pas les autres)."""
+def plan_text(budget, suite=None):
+    """Le plan, réparti équitablement entre les dossiers de premier niveau pour tenir dans budget caractères (un gros dossier n'écrase pas les autres).
+    suite : ce qui est écrit à la coupe d'un dossier (par défaut, « lister » ; sans cet outil, la petite fenêtre dit quoi faire à la place)."""
+    suite = suite or "  ... (suite : utilise « lister »)"
     sections = {k: "\n".join(v) for k, v in PLAN["sections"].items() if v}
     if not sections or budget < 300:
         return ""
@@ -113,7 +115,7 @@ def plan_text(budget):
         part = max(200, restant // libre)
         if len(texte) > part:
             coupe = texte[:part].rsplit("\n", 1)[0]
-            texte = coupe + "\n  ... (suite : utilise « lister »)"
+            texte = coupe + "\n" + suite
         parts[nom] = texte
         restant -= len(texte)
         libre -= 1

@@ -2709,6 +2709,33 @@ class Assistant(unittest.TestCase):
         self.assertIn("lire_plusieurs", grand - petit)
         self.assertLessEqual({"lire", "modifier", "chercher", "web_lire"}, petit)
 
+    def test_un_noyau_d_outils_sur_une_fenetre_de_4096_jetons(self):
+        """ADR 0018 : sur 4 096 jetons, les quatorze outils restants prenaient 68 % de la fenêtre et l'historique n'avait que son plancher. Décision du
+        mainteneur : un noyau seulement (lire, écrire, modifier, chercher, exécuter, rappeler, mémoriser) ; tout revient à partir de 8 192."""
+        from lutin import agent as AG
+        noyau = {"lire", "ecrire", "modifier", "chercher", "executer", "rappeler", "memoriser"}
+        for mode, en_plus in (("polyvalent", set()), ("technique", {"etat_outil", "installer_module"})):          # ceux de l'outil d'images, branché ici, restent
+            r = dict(A.reglages(), num_ctx=4096, mode=mode, web=True)
+            outils = A.outils_du_mode(r)
+            self.assertEqual({t["function"]["name"] for t in outils}, noyau | en_plus, mode)
+            petit = {t["function"]["name"] for t in A.outils_du_mode(dict(r, num_ctx=8192))}
+            self.assertLessEqual({"lister", "trouver", "calculer", "taches", "web_chercher", "web_lire", "creer_document"}, petit, "à 8 192 jetons, les outils complets reviennent (%s)" % mode)
+            # ce que la requête laisse au message système et à l'historique (ajuster_contexte) : avant, les outils seuls prenaient la part entière
+            fixe = len(json.dumps(outils, ensure_ascii=False)) // 3 + len(AG.consignes_systeme(r)) // 3
+            self.assertGreater(int(4096 * AG.PART_REQUETE) - fixe, 400, "une fois le message système et les outils comptés, l'historique a encore de la place (%s)" % mode)
+            self.assertGreater(len(json.dumps(A.outils_du_mode(dict(r, num_ctx=8192)), ensure_ascii=False)) // 3 + len(AG.consignes_systeme(r)) // 3, int(4096 * AG.PART_REQUETE),
+                               "sans le noyau, les outils de 8 192 jetons et le message système ne laisseraient rien (%s)" % mode)
+        avant = dict(A.PLAN)
+        try:
+            A.PLAN.update(sections={".": ["fichier_%d.py (10 l.)" % i for i in range(400)]}, valide=True, date=time.time())          # un dossier trop long : le plan le coupe
+            self.assertIn("utilise « lister »", AG.bloc_plan(dict(A.reglages(), num_ctx=8192)), "à 8 192 jetons, la coupe renvoie toujours vers « lister »")
+            minuscule = AG.bloc_plan(dict(A.reglages(), num_ctx=4096))
+            self.assertIn("« executer » avec dir ou ls", minuscule)
+            self.assertNotIn("« lister »", minuscule, "le plan du projet n'envoie pas vers un outil absent")
+        finally:
+            A.PLAN.clear()
+            A.PLAN.update(avant)
+
     def test_la_jauge_estimee_compte_les_outils_envoyes(self):
         conv = {"id": "x", "messages": [{"role": "user", "content": "Bonjour"}]}
         avec = A.jauge_contexte(conv, dict(A.reglages(), mode="polyvalent"))["utilise"]

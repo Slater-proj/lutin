@@ -1,6 +1,6 @@
 # ADR 0018 — Keeping the thread of a long conversation on a small window
 
-Status: accepted on 2026-11-18, decisions 1 to 8 implemented (6 to 8 the same day, second part). The maintainer asked whether the two memories of a long conversation (summary, progress
+Status: accepted on 2026-11-18, decisions 1 to 8 implemented (6 to 8 the same day, second part), decision 9 on 2026-11-19. The maintainer asked whether the two memories of a long conversation (summary, progress
 sheet) are still useful now that the conversations are in a database (ADR 0017), whether they work, and how to stop conversations from going round in
 circles on small machines: the history is dropped fast, the model asks again for what it was told, and a long project loses its thread.
 
@@ -54,13 +54,31 @@ Read on `2d60093` (`agent.py`, `progress_sheet.py`, `recall.py`, `prompt_layout.
    `modifier_plusieurs`, `symboles`, `apercu_page`) are not sent. Measured on the default mode: 3,429 → 2,782 tokens of schemas, and the room left
    to the history on 8,192 tokens goes from about 1,770 to 2,414 tokens.
 
+9. **A core of tools on 4,096 tokens or below** (maintainer's decision, 2026-11-19: « fewer tools »). The fourteen schemas left by decision 8 took
+   2,782 tokens, 68 % of the window: the history only had its floor (1,024 tokens) and the system message, the tools and that floor already went past
+   the window. At `tool_table.TINY_WINDOW` (4,096) or below, `tool_table.spare_tools` also leaves out `lister`, `trouver`, `calculer`,
+   `creer_document`, `taches`, `web_chercher` and `web_lire`; what is sent is `lire`, `ecrire`, `modifier`, `chercher`, `executer`, `rappeler` and
+   `memoriser`. `executer` lists a folder or finds a file (`dir` or `ls`, run without approval) and computes (with approval); `ecrire` writes a
+   Markdown, HTML or CSV document (no PDF nor Word on such a window); `lire` shows the source of a page instead of its picture. `memoriser` stays:
+   nothing replaces the durable notes, and it weighs 96 tokens. The task list and the web have no cover and are lost on such a window
+   (`tool_table.LOST_ON_TINY_WINDOW`); keeping the web would have kept the history on its floor. The plan of the project no longer tells the model
+   to use `lister` when that tool is not sent. Measured on the default mode (`polyvalent`, Web ticked), 4,096 tokens: 14 tools and 2,782 tokens of
+   schemas → 7 tools and 1,060 tokens. What the request leaves to the system message and the history (`ajuster_contexte`: 68 % of the window minus
+   the tools) goes from 3 tokens to 1,725. With the `CONTEXTE.md` Lutin ships (763 tokens) the system message weighs about 1,130 tokens: before,
+   it did not fit beside the tools and nothing of the history did; now about 595 tokens of history are sent. With empty notes (system message
+   about 397 tokens) the room of `place_de_l_historique` goes from its floor (1,024) to 1,328 tokens; with the shipped `CONTEXTE.md` it stays on
+   its floor, which now fits in the window. From 4,097 tokens on nothing changes. In the `technique` mode with the image tool connected,
+   `etat_outil` and `installer_module` stay (tools of that extension, like those of the voice and ComfyUI modules).
+
 ## Not done yet
 
-- **A 4,096-token window still has no room.** The 14 schemas left take about 2,780 tokens, 68 % of the window: the history gets the floor (a
-  quarter of the window) and the request is trimmed at every answer. Shorter descriptions on a very small window, or a smaller set of tools, are a
-  design choice to make with the maintainer (the descriptions are what keeps a small model from misusing the tools).
+- **`CONTEXTE.md` is now the largest fixed cost on 4,096 tokens**: 763 tokens as shipped (19 % of the window), read up to `LIMITE_CONTEXTE`
+  characters whatever the window, and it names `web_chercher` and `web_lire`, which such a window does not send. Bounding it by the window is a
+  choice to make with the maintainer (it is the person's own description of the project).
 - **Measure on a real small model.** No test runs a whole turn with a 4,096 or 8,192 window and a real model; the evaluation suite (plan step 6) should
-  hold one such scenario (a project of twenty exchanges, then « where are we? »).
+  hold one such scenario (a project of twenty exchanges, then « where are we? »), and say whether a small model still finds its way with the core.
+- **A task list started on a larger window** is still shown to the model on a 4,096-token one, with the advice to update it with `taches`, which is
+  not sent there; a call gets the error that lists the tools available, and the list is closed after a few answers without update.
 
 ## Consequences
 
@@ -72,3 +90,6 @@ Read on `2d60093` (`agent.py`, `progress_sheet.py`, `recall.py`, `prompt_layout.
 - Decisions 6 to 8: `tests/test_moteur.py` (the thresholds count the tools sent, the scribe is waited for only below the room, fewer tools on a small
   window, the estimated gauge), `tests/test_suivi.py` (the recall skips what the request sends and looks first at what the trimming dropped),
   `tests/test_tool_table.py` (each spare tool has its cover).
+- Decision 9: `tests/test_moteur.py` (the core on 4,096 tokens in two modes, the full tools back on 8,192, the history above its floor, the plan of
+  the project without `lister`), `tests/test_tool_table.py` (each tool left out on a tiny window has a cover still sent or is a known loss; the
+  window size picks the set).

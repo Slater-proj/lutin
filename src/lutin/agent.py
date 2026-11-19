@@ -392,8 +392,7 @@ def outils_du_mode(r):
     if not r.get("web", True) or _hl.is_active():
         exclus |= OUTILS_WEB
     exclus |= set(r.get("outils_desactives") or [])                     # outils coupés par l'utilisateur (Réglages > Outils)
-    if int(r.get("num_ctx") or 0) and int(r["num_ctx"]) <= _tool_table.SMALL_WINDOW:
-        exclus |= _tool_table.SPARE_ON_SMALL_WINDOW                     # petite fenêtre : les outils qu'un autre couvre laissent leur place à la conversation (ADR 0018)
+    exclus |= _tool_table.spare_tools(r.get("num_ctx"))                 # petite fenêtre : les outils qu'un autre couvre laissent leur place à la conversation ; à 4 096 jetons, un noyau seulement (ADR 0018)
     if not _m.OUTIL:
         exclus |= _modes.IMAGE_TOOLS
     if r.get("memoire_longue") != "fichier":
@@ -1072,7 +1071,8 @@ def consignes_systeme(r):
 
 def bloc_plan(r):
     """Le plan du projet dans le prompt (un quart de la fenêtre au plus, 6 500 caractères au plus) : le modèle sait où chercher sans dix recherches."""
-    plan = _m.plan_text(min(_m.PLAN_MAX, int(r["num_ctx"] * 0.25)))
+    sans_lister = "lister" in _tool_table.spare_tools(r.get("num_ctx"))          # fenêtre minuscule : « lister » n'est pas envoyé (ADR 0018)
+    plan = _m.plan_text(min(_m.PLAN_MAX, int(r["num_ctx"] * 0.25)), "  ... (suite : « executer » avec dir ou ls)" if sans_lister else None)
     if not plan:
         return ""
     return _t("\n\n# PLAN DU PROJET (dossiers, fichiers, taille en lignes et fonctions principales ; il peut être en retard de quelques minutes : vérifie avec « lire » avant de modifier)\n") + plan + "\n"

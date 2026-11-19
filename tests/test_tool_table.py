@@ -48,6 +48,28 @@ class ToolTable(unittest.TestCase):
             self.assertNotIn(cover, tool_table.SPARE_ON_SMALL_WINDOW, spare)
             self.assertEqual(tool_table.TABLE[spare].effect, tool_table.TABLE[cover].effect if spare != "apercu_page" else tool_table.EXTERNAL, spare)
 
+    def test_on_a_tiny_window_each_tool_left_out_has_a_cover_still_sent_or_is_a_known_loss(self):
+        """ADR 0018, 4,096 tokens: a core only. What it leaves out is either done by a tool still sent, or lost on purpose (maintainer's decision)."""
+        tiny = tool_table.spare_tools(tool_table.TINY_WINDOW)
+        self.assertLessEqual(tiny, set(tool_table.TABLE))
+        self.assertLessEqual(tool_table.spare_tools(tool_table.SMALL_WINDOW), tiny, "what a small window leaves out, a tiny one leaves out too")
+        covers = {"lire_plusieurs": "lire", "modifier_plusieurs": "modifier", "symboles": "chercher", "apercu_page": "lire",          # the source of the page, not its picture
+                  "lister": "executer", "trouver": "executer", "calculer": "executer", "creer_document": "ecrire"}
+        self.assertEqual(set(covers) | tool_table.LOST_ON_TINY_WINDOW, set(tiny), "each tool left out says which one covers it, or that it is lost")
+        self.assertEqual(set(covers) & tool_table.LOST_ON_TINY_WINDOW, set())
+        for spare, cover in covers.items():
+            self.assertNotIn(cover, tiny, "%s: its cover %s must still be sent" % (spare, cover))
+        self.assertEqual(tool_table.LOST_ON_TINY_WINDOW, {"taches", "web_chercher", "web_lire"}, "a new loss is a decision of the maintainer, not of a test")
+        self.assertNotIn("memoriser", tiny, "nothing replaces the durable notes: they stay")
+
+    def test_the_window_size_picks_the_tools_left_out(self):
+        self.assertEqual(tool_table.spare_tools(4096), tool_table.SPARE_ON_TINY_WINDOW)
+        self.assertEqual(tool_table.spare_tools(2048), tool_table.SPARE_ON_TINY_WINDOW)
+        self.assertEqual(tool_table.spare_tools(4097), tool_table.SPARE_ON_SMALL_WINDOW)
+        self.assertEqual(tool_table.spare_tools(8192), tool_table.SPARE_ON_SMALL_WINDOW)
+        for unknown in (8193, 0, None, "", "abc"):
+            self.assertEqual(tool_table.spare_tools(unknown), frozenset(), repr(unknown))
+
     def test_the_research_mode_keeps_exactly_what_it_kept(self):
         self.assertEqual(tool_table.research_tools(), HISTORICAL_RESEARCH, "no behaviour change: the derived list is the one written by hand before")
         self.assertEqual(modes.READ_TOOLS, tool_table.research_tools(), "modes reads the table")

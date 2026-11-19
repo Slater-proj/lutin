@@ -60,6 +60,27 @@ TABLE = {
 SPARE_ON_SMALL_WINDOW = frozenset({"lire_plusieurs", "modifier_plusieurs", "symboles", "apercu_page"})
 SMALL_WINDOW = 8192          # tokens: at this size or below, the spare tools are left out
 
+# On 4,096 tokens the fourteen tools left still weighed 2,782 tokens, 68 % of the window: the history only had its floor and the request overflowed.
+# At this size or below only a core is sent (maintainer's decision, 2026-11-19): lire, ecrire, modifier, chercher, executer, rappeler, and memoriser,
+# which nothing replaces. `executer` lists a folder or finds a file (dir or ls, without approval) and computes (with approval); `ecrire` writes a
+# Markdown, HTML or CSV document. Nothing replaces the task list and the web: they are lost on such a window, and the documentation says so.
+SPARE_ON_TINY_WINDOW = SPARE_ON_SMALL_WINDOW | {"lister", "trouver", "calculer", "creer_document", "taches", "web_chercher", "web_lire"}
+LOST_ON_TINY_WINDOW = frozenset({"taches", "web_chercher", "web_lire"})          # left out without a cover (accepted by the maintainer)
+TINY_WINDOW = 4096           # tokens
+
+
+def spare_tools(num_ctx):
+    """The tools left out for a context window of `num_ctx` tokens (0 or unknown: none)."""
+    try:
+        num_ctx = int(num_ctx or 0)
+    except (TypeError, ValueError):
+        return frozenset()
+    if not num_ctx:
+        return frozenset()
+    if num_ctx <= TINY_WINDOW:
+        return SPARE_ON_TINY_WINDOW
+    return SPARE_ON_SMALL_WINDOW if num_ctx <= SMALL_WINDOW else frozenset()
+
 
 def names(*effects):
     """The tools whose effect is one of `effects`."""
