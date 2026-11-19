@@ -452,7 +452,8 @@ class Chat(unittest.TestCase):
         p.attendre("document.activeElement && document.activeElement.id === 'title'")
         p.evaluer("(() => { const box = document.querySelector('#title'); box.value = 'Renamed on the page'; box.dispatchEvent(new Event('input', {bubbles: true})); box.form.requestSubmit(); })()")
         p.attendre("document.querySelector('header h1') && document.querySelector('header h1').innerText === 'Renamed on the page'")
-        self.assertEqual(p.evaluer("document.querySelector('.list .entry .title').innerText"), "Renamed on the page")
+        # The list is read again after the answer of the server: waited for, not read at once (CI on Linux, Python 3.10: still the old title)
+        p.attendre("[...document.querySelectorAll('.list .entry .title')].some(t => t.innerText === 'Renamed on the page')")
         p.evaluer("document.querySelector('.pin-button').click()")
         p.attendre("document.querySelector('.pin-button').getAttribute('aria-pressed') === 'true'")
         p.attendre("!!document.querySelector('.list .entry .tag')", 10)          # the pin shows in the list: the button is pressed with the answer of the server, the list is read again after it
@@ -1401,7 +1402,8 @@ class Chat(unittest.TestCase):
             p.evaluer("location.hash = '#/chat'")
             p.attendre("!!document.querySelector('#message')")
             self.axe("on the Chat screen (%s)" % theme)
-            p.evaluer("[...document.querySelectorAll('.list .entry')][0].click()")
+            # the conversation of the earlier tests, named: the first entry of the list depends on what the other tests pinned or created
+            p.evaluer("([...document.querySelectorAll('.list .entry')].find(e => e.querySelector('.title')?.innerText === 'Renamed on the page') || document.querySelector('.list .entry')).click()")
             p.attendre("!!document.querySelector('.thread')")
             self.axe("on a conversation (%s)" % theme)
             if not p.evaluer("!!document.querySelector('#options-panel')"):
