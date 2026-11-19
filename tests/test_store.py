@@ -136,6 +136,29 @@ class Store(unittest.TestCase):
         self.assertIn("--conversations", err.getvalue())
         self.assertRaises(ValueError, store.export_database, target / "other", home / "donnees" / "absent.db")
 
+    def test_the_cleanup_keeps_what_goes_with_the_conversations_of_the_database(self):
+        """The cleanup of the data listed the 0.x folder conversations/, empty once imported: it took away the archive, the progress sheet, the
+        meaning index and the options of every conversation of the database, at the start and every 30 minutes. It lists the database now, and
+        removes nothing when the database cannot be read."""
+        from lutin import tools
+        A.conv_ecrire(conversation("0000000a", "Gardée", "2026-01-02T10:00:00", [{"role": "user", "content": "Bonjour"}]))
+        A.options_ecrire("0000000a", {"web": True})
+        A.options_ecrire("0000000c", {"web": True})
+        self.write_files(conversation("0000000d", "Pas encore importée", "2026-01-03T10:00:00"))
+        for folder, suffix in (("archives", ".jsonl"), ("suivis", ".md"), ("embeddings", ".json")):
+            (self.data / folder).mkdir(parents=True, exist_ok=True)
+            for ident in ("0000000a", "0000000c", "0000000d"):
+                (self.data / folder / (ident + suffix)).write_text("{}", encoding="utf-8")
+        with mock.patch.object(store, "ids", side_effect=sqlite3.DatabaseError("file is not a database")):
+            self.assertFalse(tools.nettoyer_orphelins(), "the database cannot be read: nothing is removed")
+        self.assertEqual(len(list((self.data / "archives").glob("*.jsonl"))), 3)
+        self.assertTrue(tools.nettoyer_orphelins())
+        for folder, suffix in (("archives", ".jsonl"), ("suivis", ".md"), ("embeddings", ".json")):
+            left = sorted(p.stem for p in (self.data / folder).glob("*" + suffix))
+            self.assertEqual(left, ["0000000a", "0000000d"], "{}: the conversation of the database and the 0.x file keep theirs, the one gone loses its".format(folder))
+        self.assertEqual(A.options_lire("0000000a"), {"web": True})
+        self.assertEqual(store.options_ids(), ["0000000a"], "the options of a conversation gone are removed")
+
     def test_a_damaged_database_is_set_aside_never_replaced_in_silence(self):
         """ADR 0017, item 8: a database that cannot be read is moved aside, said, and Lutin goes on with an empty one."""
         self.data.mkdir(parents=True, exist_ok=True)

@@ -280,6 +280,25 @@ def octets_dossier(d):
     return total
 
 
+def nettoyer_orphelins():
+    """Retire les fiches de suivi, archives, index par le sens et options des conversations qui n'existent plus. Les conversations sont dans la base
+    (ADR 0017), plus les fichiers de la 0.x pas encore importés : lister le seul dossier conversations/ effaçait tout ce qui accompagne les conversations
+    de la base. Si la base ne se lit pas, rien n'est retiré : mieux vaut un reste qu'une perte. Renvoie False dans ce cas."""
+    import sqlite3
+    from . import archive, embeddings, progress_sheet, store
+    ids = {c.stem for c in (_m.DONNEES / "conversations").glob("*.json")}          # les fichiers d'abord : un import entre les deux lectures met la conversation dans la base
+    try:
+        ids |= set(store.ids())
+    except (sqlite3.Error, OSError) as erreur:
+        _m.journaliser("Nettoyage des restes de conversations sauté : la base ne se lit pas ({!r})".format(erreur))
+        return False
+    progress_sheet.clean_orphans(ids)
+    archive.clean_orphans(ids)
+    embeddings.clean_orphans(ids)
+    _m.options_nettoyer_orphelins(ids)
+    return True
+
+
 def purger_donnees():
     """Garde donnees/ sous le plafond réglé (Réglages) : efface d'abord les restes temporaires, puis les plus anciennes sauvegardes de fichiers.
     Ne touche jamais aux conversations, ni aux 5 sauvegardes les plus récentes, ni à celles dont dépend un bouton « Annuler »."""
@@ -296,13 +315,7 @@ def purger_donnees():
         from . import images, attachments
         images.clean()
         attachments.clean()
-        from . import progress_sheet
-        ids = {c.stem for c in (_m.DONNEES / "conversations").glob("*.json")}
-        progress_sheet.clean_orphans(ids)
-        from . import archive, embeddings
-        archive.clean_orphans(ids)
-        embeddings.clean_orphans(ids)
-        _m.options_nettoyer_orphelins(ids)
+        nettoyer_orphelins()
     except OSError:
         pass
     _m.SIZE_CACHE.pop(str(_m.DONNEES), None)
