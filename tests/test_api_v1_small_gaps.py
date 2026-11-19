@@ -51,7 +51,8 @@ class SmallGaps(unittest.TestCase):
         self.assertEqual(V.call("PATCH", path, V.DEVICE, {"pinned": True})[1], {"pinned": True, "count": 1})
         self.assertTrue(A.conv_lire(conversation["id"])["messages"][0].get("epingle"))
         self.assertEqual(V.call("PATCH", path, V.DEVICE, {"pinned": False})[1], {"pinned": False, "count": 0})
-        self.assertEqual(V.call("PATCH", path.replace("/0", "/9"), V.DEVICE, {"pinned": True})[0], 400)
+        # built, not path.replace("/0", "/9"): an id starting with 0 (token_hex, one in sixteen) became another conversation, 404 instead of 400
+        self.assertEqual(V.call("PATCH", "/api/v1/conversations/%s/messages/9" % conversation["id"], V.DEVICE, {"pinned": True})[0], 400)
         self.assertEqual(V.call("PATCH", path, V.DEVICE, {"pinned": "yes"})[0], 400)
 
     def test_verify_shows_the_raw_results_and_takes_out_what_is_personal(self):
