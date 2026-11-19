@@ -2296,10 +2296,11 @@ class Assistant(unittest.TestCase):
             A.enregistrer_reglages({"memoire_longue": "resume", "fiche_scribe": True})
 
     @staticmethod
-    def conversation_longue(secret="Le code du coffre est 4711-ZEBRE."):
-        """Une conversation qui dépasse 60 % de la fenêtre de contexte (le secret est dans le tout premier message)."""
+    def conversation_longue(secret="Le code du coffre est 4711-ZEBRE.", part=0.6):
+        """Une conversation qui dépasse 60 % de la fenêtre de contexte (le secret est dans le tout premier message).
+        part : 0.6 fait des messages qui pèsent ensemble 1,4 fois 60 % de la fenêtre ; une part plus petite les allège d'autant."""
         conv = A.conv_nouvelle()
-        taille = int(A.reglages()["num_ctx"] * 0.6 * 3 * 1.4 / 12 / 4)          # 12 messages qui pèsent bien plus de 60 % de la fenêtre
+        taille = int(A.reglages()["num_ctx"] * part * 3 * 1.4 / 12 / 4)          # 12 messages qui pèsent bien plus de 60 % de la fenêtre (avec part=0.6)
         for i in range(12):
             conv["messages"].append({"role": "user" if i % 2 == 0 else "assistant", "content": (secret + " " if i == 0 else "") + "mot " * taille + str(i)})
         A.conv_ecrire(conv)
@@ -2396,7 +2397,9 @@ class Assistant(unittest.TestCase):
         """Le résumé automatique retire le début de la conversation : il est archivé, « rappeler » (ici=true) le retrouve, et l'archive disparaît avec la conversation."""
         from lutin import archive
         A.enregistrer_reglages({"memoire_longue": "resume"})
-        cid = self.conversation_longue()
+        # Au-dessus du seuil du résumé (jamais plus de 60 % de la fenêtre), mais pas du double : la moitié gardée après la coupe doit rester bien en dessous,
+        # sinon la question suivante demande un second résumé, qui prend la réponse prévue pour « rappeler » (CI sous Windows : 37 jetons de marge avec part=0.6).
+        cid = self.conversation_longue(part=0.45)
         chat("Et la suite ?", conversation=cid, reponses=[[{"content": "RÉSUMÉ : un coffre."}], [{"content": "Voilà."}]])
         conv = A.conv_lire(cid)
         self.assertTrue(conv["resume"].startswith("RÉSUMÉ") and len(conv["messages"]) < 12, "le début est résumé")
