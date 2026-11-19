@@ -2720,11 +2720,13 @@ class Assistant(unittest.TestCase):
             self.assertEqual({t["function"]["name"] for t in outils}, noyau | en_plus, mode)
             petit = {t["function"]["name"] for t in A.outils_du_mode(dict(r, num_ctx=8192))}
             self.assertLessEqual({"lister", "trouver", "calculer", "taches", "web_chercher", "web_lire", "creer_document"}, petit, "à 8 192 jetons, les outils complets reviennent (%s)" % mode)
-            # ce que la requête laisse au message système et à l'historique (ajuster_contexte) : avant, les outils seuls prenaient la part entière
-            fixe = len(json.dumps(outils, ensure_ascii=False)) // 3 + len(AG.consignes_systeme(r)) // 3
-            self.assertGreater(int(4096 * AG.PART_REQUETE) - fixe, 400, "une fois le message système et les outils comptés, l'historique a encore de la place (%s)" % mode)
-            self.assertGreater(len(json.dumps(A.outils_du_mode(dict(r, num_ctx=8192)), ensure_ascii=False)) // 3 + len(AG.consignes_systeme(r)) // 3, int(4096 * AG.PART_REQUETE),
-                               "sans le noyau, les outils de 8 192 jetons et le message système ne laisseraient rien (%s)" % mode)
+        # La part de la requête (ajuster_contexte : 68 % de la fenêtre, moins les outils) va au message système et à l'historique. Le message système
+        # dépend des notes de la personne : seuls les outils sont comptés ici. Sans le noyau, ils prenaient presque toute la part ; le noyau en laisse 60 %.
+        part = int(4096 * AG.PART_REQUETE)
+        r = dict(A.reglages(), num_ctx=4096, mode="polyvalent", web=True)
+        poids = lambda reglages: len(json.dumps(A.outils_du_mode(reglages), ensure_ascii=False)) // 3          # noqa: E731
+        self.assertGreater(poids(dict(r, num_ctx=8192)), part * 0.95, "les outils de 8 192 jetons prendraient presque toute la part de la requête")
+        self.assertLess(poids(r), part * 0.4, "le noyau laisse l'essentiel de la part au message système et à l'historique")
         avant = dict(A.PLAN)
         try:
             A.PLAN.update(sections={".": ["fichier_%d.py (10 l.)" % i for i in range(400)]}, valide=True, date=time.time())          # un dossier trop long : le plan le coupe
