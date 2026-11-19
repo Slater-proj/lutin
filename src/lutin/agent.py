@@ -182,6 +182,7 @@ def reformuler_recherche(texte, r):
 
 
 PART_REQUETE = 0.68          # part de la fenêtre que la requête peut prendre (ajuster_contexte rogne au-delà) : le reste est la place de la réponse
+PART_MAX = 0.85              # jusqu'où la requête peut aller quand le système et les outils ne laissent pas à l'historique son plancher (un quart de la fenêtre)
 SEUIL_RESUME = 0.6           # le résumé se déclenche quand les messages prennent cette part de la fenêtre…
 PART_RESUME = 0.9            # …ou cette part de ce que la requête leur laisse, si c'est plus tôt
 
@@ -1159,7 +1160,13 @@ def ajuster_contexte(msgs, num_ctx, facteur=1.0, outils=None, rapport=None):
     rapport (un dictionnaire) : reçoit ce qui a été raccourci ou retiré (« raccourcis », « retires », « tronques », « tours »), pour le dire à l'utilisateur."""
     rapport = rapport if rapport is not None else {}
     rapport.update(raccourcis=0, retires=0, tronques=0, tours=0)
-    budget = int(num_ctx * PART_REQUETE * facteur) - len(json.dumps(_m.OUTILS if outils is None else outils, ensure_ascii=False)) // 3
+    poids_outils = len(json.dumps(_m.OUTILS if outils is None else outils, ensure_ascii=False)) // 3
+    budget = int(num_ctx * PART_REQUETE * facteur) - poids_outils
+    # Le plancher de place_de_l_historique (un quart de la fenêtre au-delà du message système) vaut aussi ici : sans lui, sur une petite fenêtre, le
+    # système et les outils prenaient toute la part de la requête et même le dernier échange était retiré (ADR 0018, suite d'évaluation). La réponse
+    # garde toujours au moins 1 - PART_MAX de la fenêtre ; une nouvelle tentative (facteur < 1) réduit l'un et l'autre.
+    systeme = estimer(msgs[:1]) if msgs and msgs[0].get("role") == "system" else 0
+    budget = max(budget, min(systeme + int(num_ctx // 4 * facteur), int(num_ctx * PART_MAX * facteur) - poids_outils))
     msgs = [dict(m) for m in msgs]
     dernier_user = max((i for i, m in enumerate(msgs) if m["role"] == "user"), default=-1)
     # les messages épinglés ne sont jamais retirés, dans la limite d'un quart du budget (les plus récents d'abord : au-delà, les plus anciens redeviennent retirables)
@@ -1173,6 +1180,8 @@ def ajuster_contexte(msgs, num_ctx, facteur=1.0, outils=None, rapport=None):
     # la demande de départ (le premier message de l'utilisateur encore là, avant la question actuelle) n'est jamais retirée : sans elle, une longue
     # conversation perd son objectif et le modèle le redemande. Trop longue, elle est raccourcie (un sixième du budget au plus).
     depart = next((i for i in range(1, max(dernier_user, 0)) if msgs[i]["role"] == "user" and not str(msgs[i].get("content", "")).startswith(("[Résumé", "[Fiche de suivi", "[Extraits"))), None)
+    if any(str(m.get("content", "")).startswith("[Résumé") for m in msgs[1:]):
+        depart = None                  # le résumé porte la demande de départ (bloc_du_debut) : le plus ancien message restant n'est qu'un vieux message, il ne vaut pas le dernier échange
     if depart is not None:
         plafond = max(300, (budget // 6) * 3)
         if len(str(msgs[depart].get("content", ""))) > plafond:
@@ -1306,10 +1315,7 @@ def compacter(conv, r, emit, forcer=False, place=None):
             _m.journaliser("Résumé vide : conversation {} gardée entière.".format(conv.get("id")))
             return False
         _archive.add(conv["id"], ancien)                  # le résumé perd des détails : le début reste retrouvable (« rappeler »)
-        if not conv.get("depart"):                        # la demande de départ, mot pour mot : un résumé de résumé finit par la diluer
-            premiere = next((m for m in ancien if m.get("role") == "user" and (m.get("content") or "").strip()), None)
-            if premiere:
-                conv["depart"] = premiere["content"].strip()[:DEPART_MAX]
+        retenir_depart(conv, ancien)                      # la demande de départ, mot pour mot : un résumé de résumé finit par la diluer
         conv["resume"] = nouveau_resume
         conv["messages"] = [m for m in ancien if m.get("epingle")] + msgs[coupe:]          # les messages épinglés restent tels quels, en plus du résumé
         _decaler_scribe(conv, coupe, len([m for m in ancien if m.get("epingle")]))
@@ -1319,6 +1325,14 @@ def compacter(conv, r, emit, forcer=False, place=None):
         # Le résumé a échoué : on ne supprime rien (ajuster_contexte raccourcit déjà ce qui est envoyé au modèle).
         _m.journaliser("Résumé impossible ({}) : conversation {} gardée entière.".format(erreur, conv.get("id")))
         return False
+
+
+def retenir_depart(conv, ancien):
+    """Garde la demande de départ de la personne, mot pour mot, quand le début de la conversation sort de l'historique (résumé ou fiche)."""
+    if not conv.get("depart"):
+        premiere = next((m for m in ancien if m.get("role") == "user" and (m.get("content") or "").strip()), None)
+        if premiere:
+            conv["depart"] = premiere["content"].strip()[:DEPART_MAX]
 
 
 def _decaler_scribe(conv, coupe, gardes):
@@ -1383,6 +1397,7 @@ def elaguer(conv, r, emit, forcer=False, place=None):
             raise ValueError(_t("La fiche de suivi n'a pas pu être mise à jour (le modèle ne répond pas ?) : rien n'est retiré, pour ne rien perdre. Réessaie dans un moment."))
     ancien = msgs[:coupe]
     _archive.add(conv["id"], ancien)
+    retenir_depart(conv, ancien)                                                # la fiche ne la garde pas forcément : elle passe en tête de la requête (bloc_du_debut)
     conv["messages"] = [m for m in ancien if m.get("epingle")] + msgs[coupe:]
     _decaler_scribe(conv, coupe, len([m for m in ancien if m.get("epingle")]))
     conv.pop("jetons", None)                                                    # le chiffre de contexte d'avant le retrait n'est plus vrai
@@ -1725,14 +1740,26 @@ def monter_en_gamme(r, corps, emit, conv_id, motif):
         return False
 
 
+def bloc_du_debut(conv):
+    """Ce qui tient lieu du début retiré de la conversation, en tête de l'historique (ADR 0018, décision 2) : le résumé avec la demande de départ mot
+    pour mot, ou, en mode fiche, la demande de départ seule (la fiche ne la garde pas forcément : le scribe ne note un objectif que s'il est dit). Le
+    même dans la requête et dans ce que le rappel croit envoyé. [] tant que rien n'a été retiré : la demande de départ est alors encore dans l'historique."""
+    depart = conv.get("depart") or ""
+    if conv.get("resume"):
+        texte = "[Résumé de la conversation jusqu'ici]\n" + (("Demande de départ : " + depart + "\n\n") if depart else "") + conv["resume"]
+    elif depart:
+        texte = "[Demande de départ]\n" + depart
+    else:
+        return []
+    return [{"role": "user", "content": texte}, {"role": "assistant", "content": "Compris, je continue."}]
+
+
 def ce_que_voit_le_modele(conv, r, outils, fiche=""):
     """Les messages de la conversation que la requête enverra vraiment, une fois ajustée à la fenêtre (ADR 0018) : le rappel du fil ne remet pas ce
     que le modèle a sous les yeux, et cherche d'abord dans ce que l'ajustement retire. La requête est reconstruite comme dans _messages_de_l_etape
     (système, résumé, fiche), avec la place des extraits réservée ; le système n'est pas rendu."""
-    msgs = [{"role": "system", "content": consignes_systeme(r) + _fichiers.instruction_folder(conv)}]
-    if conv.get("resume"):
-        msgs += [{"role": "user", "content": "[Résumé de la conversation jusqu'ici]\n" + conv["resume"]}, {"role": "assistant", "content": "Compris, je continue."}]
-    reserve = "·" * _disposition.thread_budget(r["num_ctx"])                   # les extraits eux-mêmes prendront cette place
+    msgs = [{"role": "system", "content": consignes_systeme(r) + _fichiers.instruction_folder(conv)}] + bloc_du_debut(conv)
+    reserve ="·" * _disposition.thread_budget(r["num_ctx"])                   # les extraits eux-mêmes prendront cette place
     msgs += _disposition.before_last_question(list(conv.get("messages") or []), _disposition.turn_block(fiche, reserve, ""))
     return ajuster_contexte(msgs, r["num_ctx"], 1.0, outils)[1:]
 
@@ -1806,11 +1833,8 @@ def _messages_de_l_etape(conv, r, emit, p, idx_tour, dernier_tour, faux_accompli
                 continue
             COUPURES_DITES.add((conv.get("id"), nom_coupe, taille_coupe))
             emit({"type": "info", "texte": _t("⚠ {} fait {} caractères et l'assistant n'en relit que {} à chaque conversation : le reste est ignoré. Raccourcis-le (onglet Mémoire) si des informations manquent.").format(nom_coupe, taille_coupe, relu_coupe)})
-    if conv.get("resume"):
-        depart = ("Demande de départ : " + conv["depart"] + "\n\n") if conv.get("depart") else ""
-        msgs.append({"role": "user", "content": "[Résumé de la conversation jusqu'ici]\n" + depart + conv["resume"]})
-        msgs.append({"role": "assistant", "content": "Compris, je continue."})
-    historique = _pieces.for_model(conv["messages"], _pieces.character_budget(r["num_ctx"]))          # le texte des fichiers joints s'ajoute ici, jamais dans la conversation enregistrée
+    msgs += bloc_du_debut(conv)
+    historique =_pieces.for_model(conv["messages"], _pieces.character_budget(r["num_ctx"]))          # le texte des fichiers joints s'ajoute ici, jamais dans la conversation enregistrée
     dernier_user = max((i for i, m in enumerate(historique) if m.get("role") == "user"), default=-1)
     if consigne and dernier_user >= 0:
         historique = list(historique)

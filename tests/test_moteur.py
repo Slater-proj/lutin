@@ -44,6 +44,7 @@ shutil.copyfile(ICI.parent / "src" / "lutin" / "data" / "CONTEXTE.md", MEMOIRE /
 
 # --------------------------------------------------------------------- faux Ollama
 SCENARIO, RECUES, INSTALLES = [], [], ["qwen3.8:27b"]
+REPONDEUR = []               # une fonction corps -> réponse (liste de morceaux) prend la place de SCENARIO : le faux modèle répond d'après la requête (tests/test_evaluation.py)
 PS = []                      # modèles « en mémoire » vus par /api/ps
 CAPACITES_FAUX = {}          # modèle -> capacités annoncées par /api/show (par défaut : completion, tools, thinking)
 
@@ -100,7 +101,7 @@ class FauxOllama(BaseHTTPRequestHandler):
         taille = sum(len(json.dumps(m, ensure_ascii=False)) for m in corps.get("messages", [])) // 3 + len(json.dumps(corps.get("tools", []))) // 3
         if corps.get("options", {}).get("num_ctx") and taille > corps["options"]["num_ctx"] and not corps.get("_tolerant"):
             self.wfile.write(ligne(error="error: no query found in message")); return
-        reponse = SCENARIO.pop(0) if SCENARIO else [{"content": "(rien de prévu)"}]
+        reponse = REPONDEUR[0](corps) if REPONDEUR else SCENARIO.pop(0) if SCENARIO else [{"content": "(rien de prévu)"}]
         if not corps.get("stream", True):
             texte = "".join(m.get("content", "") for m in reponse)
             self.wfile.write(json.dumps({"message": {"role": "assistant", "content": texte}, "done": True}).encode("utf-8")); return
@@ -2658,6 +2659,33 @@ class Assistant(unittest.TestCase):
         reduit = A.ajuster_contexte(long, 4096, 1.0, [])
         self.assertTrue(reduit[1]["content"].startswith("Objectif : ") and reduit[1]["content"].endswith("[... demande de départ raccourcie]"))
         self.assertLess(len(reduit[1]["content"]), len(long[1]["content"]))
+
+    def test_apres_le_retrait_du_debut_la_demande_de_depart_est_en_tete_et_le_dernier_echange_reste(self):
+        """Suite d'évaluation (tests/test_evaluation.py) : en mode fiche, le retrait du début emportait la demande de départ ; après un résumé, la coupe
+        protégeait le plus ancien message restant comme s'il était la demande de départ, et retirait le dernier échange à sa place ; et sur une petite
+        fenêtre, le système et les outils prenaient toute la part de la requête, sans laisser à l'historique le plancher que les seuils lui supposent."""
+        from lutin import agent as AG
+        conv = {"id": "zzzzzzzz", "messages": [{"role": "user" if i % 2 == 0 else "assistant", "content": ("Objectif : le guide. " if i == 0 else "") + "mot " * 200 + str(i)} for i in range(12)]}
+        with mock.patch.object(AG._archive, "add"):
+            self.assertTrue(AG.elaguer(conv, dict(A.reglages(), num_ctx=4096, memoire_longue="fichier", fiche_scribe=False), lambda e: None, forcer=True))
+        self.assertTrue(conv["depart"].startswith("Objectif : le guide."), "le retrait en mode fiche retient la demande de départ")
+        self.assertEqual(AG.bloc_du_debut(conv)[0]["content"], "[Demande de départ]\n" + conv["depart"], "elle part en tête de la requête")
+        self.assertIn("Demande de départ : Objectif", AG.bloc_du_debut(dict(conv, resume="R."))[0]["content"], "avec un résumé, elle est dans le bloc du résumé")
+        self.assertEqual(AG.bloc_du_debut({"messages": []}), [], "rien tant que le début n'est pas retiré")
+        # après un résumé : le dernier échange passe avant un vieux message
+        echanges = [{"role": "user" if i % 2 == 0 else "assistant", "content": "échange %d " % i + "mot " * 300} for i in range(4)]
+        longs = [dict(m, content=m["content"] + "mot " * 600) for m in echanges]          # 1 200 jetons chacun : deux tiennent dans la part de la requête, pas trois
+        msgs = [{"role": "system", "content": "s"}] + AG.bloc_du_debut({"resume": "R.", "depart": "Objectif : le guide."}) + longs + [{"role": "user", "content": "Où en est-on ?"}]
+        reduit = A.ajuster_contexte(msgs, 4096, 1.0, [])
+        self.assertIn("échange 3", " ".join(m["content"] for m in reduit), "le dernier échange reste")
+        self.assertNotIn("échange 0", " ".join(m["content"] for m in reduit), "le plus ancien sort : le résumé porte la demande de départ")
+        # le plancher de l'historique : un quart de la fenêtre au-delà du système, la réponse gardant toujours 15 % de la fenêtre
+        outils = [{"x": "o" * 3000}]                                              # 1 000 jetons d'outils
+        systeme = {"role": "system", "content": "s" * 4500}                      # 1 500 jetons : il ne reste rien de la part de la requête (2 785)
+        reduit = A.ajuster_contexte([systeme] + echanges + [{"role": "user", "content": "Et alors ?"}], 4096, 1.0, outils)
+        self.assertIn("échange 3", " ".join(m["content"] for m in reduit[1:]), "le plancher garde le dernier échange")
+        self.assertLessEqual(A.estimer(reduit) + 1000, int(4096 * AG.PART_MAX), "la requête laisse de la place à la réponse")
+        self.assertLess(A.estimer(A.ajuster_contexte([systeme] + echanges + [{"role": "user", "content": "Et alors ?"}], 4096, 0.49, outils)), A.estimer(reduit), "une nouvelle tentative raccourcit encore")
 
     def test_le_resume_garde_la_demande_de_depart_et_tient_dans_une_petite_fenetre(self):
         self.assertEqual((A.taille_resume(4096), A.taille_resume(8192), A.taille_resume(131072)), (1843, 3686, 6000))

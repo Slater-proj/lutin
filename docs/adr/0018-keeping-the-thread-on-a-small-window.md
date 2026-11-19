@@ -1,6 +1,6 @@
 # ADR 0018 — Keeping the thread of a long conversation on a small window
 
-Status: accepted on 2026-11-18, decisions 1 to 8 implemented (6 to 8 the same day, second part), decision 9 on 2026-11-19. The maintainer asked whether the two memories of a long conversation (summary, progress
+Status: accepted on 2026-11-18, decisions 1 to 8 implemented (6 to 8 the same day, second part), decision 9 on 2026-11-19, decision 10 (defects found by the evaluation suite) the same day. The maintainer asked whether the two memories of a long conversation (summary, progress
 sheet) are still useful now that the conversations are in a database (ADR 0017), whether they work, and how to stop conversations from going round in
 circles on small machines: the history is dropped fast, the model asks again for what it was told, and a long project loses its thread.
 
@@ -70,13 +70,40 @@ Read on `2d60093` (`agent.py`, `progress_sheet.py`, `recall.py`, `prompt_layout.
    its floor, which now fits in the window. From 4,097 tokens on nothing changes. In the `technique` mode with the image tool connected,
    `etat_outil` and `installer_module` stay (tools of that extension, like those of the voice and ComfyUI modules).
 
+   In the sheet mode, the tool of the sheet (`suivi`) comes with the core.
+
+10. **What the evaluation suite found** (`tests/test_evaluation.py`, 2026-11-19): a project of twenty exchanges (an objective, five decisions, a
+    current step, answers of about 190 words), then « Où en est-on ? », then a precise question; on 4,096 and 8,192 tokens, with the summary and
+    with the sheet, and with a fake model that keeps what it is asked to keep or one that keeps nothing. Three defects, fixed:
+    - **In the sheet mode, the first request was lost.** The removal of the start in one block took it with it and nothing kept it: decision 2
+      held only for the summary. It is now kept (`depart`) by both, and sent at the head of the history (`bloc_du_debut`: the summary with the
+      first request, or the first request alone), the same in the request and in what the recall believes is sent (`ce_que_voit_le_modele` left
+      the first request out of the summary).
+    - **After a summary, the trimming kept an old message instead of the latest exchange.** It protected the first message of the person still in
+      the history as the first request, while the real one was in the summary: on 8,192 tokens, « Point 19 » stayed and turn 20 went. With a
+      summary in the request, nothing more is protected.
+    - **The history did not get its floor.** The thresholds count on a quarter of the window beyond the system message (decision 6), but
+      `ajuster_contexte` kept to 68 % of the window minus the tools: on 8,192 tokens in the sheet mode (3,023 tokens of tools, 1,443 of system
+      message with the shipped notes, 1,288 of sheet and extracts) not even the latest exchange was sent. The trimming now gives the history the
+      same floor, never past 85 % of the window (`PART_MAX`): the answer keeps at least 15 %, and a retry after a context error lowers both. On
+      8,192 tokens the request of the last turn goes from about 5,300 to 6,300 tokens (answer room about 1,900 instead of 2,900).
+    Measured after the fixes (fake models, so what the request carries, not what a real model makes of it): with a faithful model, the objective,
+    the five decisions and the current step are in front of the model in all four cases; on 8,192 tokens the latest exchange is sent as it is,
+    on 4,096 tokens it comes back through the recall (the floor holds the summary and the extracts, not an answer of 190 words besides). With a
+    model that keeps nothing, the summary loses the five decisions (the sheet keeps one to three through its « latest requests »), and a precise
+    question brings the decision back through the recall. Both windows summarise often: 9 summaries in 22 turns (7 passes of the scribe in the
+    sheet mode), each a call to the model.
+
 ## Not done yet
 
+- **A summary every two or three answers on 4,096 and 8,192 tokens** (measured above): each is a model call, minutes on a processor. Not changed:
+  the threshold follows the room the request leaves, which is small; the sheet costs no call to prune.
 - **`CONTEXTE.md` is now the largest fixed cost on 4,096 tokens**: 763 tokens as shipped (19 % of the window), read up to `LIMITE_CONTEXTE`
   characters whatever the window, and it names `web_chercher` and `web_lire`, which such a window does not send. Bounding it by the window is a
   choice to make with the maintainer (it is the person's own description of the project).
-- **Measure on a real small model.** No test runs a whole turn with a 4,096 or 8,192 window and a real model; the evaluation suite (plan step 6) should
-  hold one such scenario (a project of twenty exchanges, then « where are we? »), and say whether a small model still finds its way with the core.
+- **Measure on a real small model.** The evaluation suite (decision 10) runs the scenario on fake models: it says what the request carries, not
+  whether a small model finds its way with it, nor how a real tokenizer counts (Lutin estimates three characters a token). Running it on a real
+  model needs Ollama and a small model on the machine, outside the hermetic tests.
 - **A task list started on a larger window** is still shown to the model on a 4,096-token one, with the advice to update it with `taches`, which is
   not sent there; a call gets the error that lists the tools available, and the list is closed after a few answers without update.
 
@@ -93,3 +120,6 @@ Read on `2d60093` (`agent.py`, `progress_sheet.py`, `recall.py`, `prompt_layout.
 - Decision 9: `tests/test_moteur.py` (the core on 4,096 tokens in two modes, the full tools back on 8,192, the history above its floor, the plan of
   the project without `lister`), `tests/test_tool_table.py` (each tool left out on a tiny window has a cover still sent or is a known loss; the
   window size picks the set).
+- Decision 10: `tests/test_evaluation.py` (the scenario, 8 cases; it prints what each case keeps, `LUTIN_EVAL_REPORT=<file>` keeps the report) and
+  `tests/test_moteur.py` (the first request at the head after the removal in sheet mode, the latest exchange before an old message after a
+  summary, the floor of the history and the room of the answer).
