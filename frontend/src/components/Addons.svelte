@@ -35,6 +35,11 @@
   let busy = $state(false);
   // What is being typed, per add-on and per setting. Only what was touched is sent.
   let typed = $state<Record<string, Record<string, string>>>({});
+  // Folded by default, opened on demand (maintainer's request, 2026-11-19: the list was long). An add-on that is on or asks for attention opens
+  // by itself: its panel is what the person comes for.
+  let folded = $state<Record<string, boolean>>({});
+  const isOpen = (addon: Addon): boolean => folded[addon.id] === undefined ? addon.active || !!view?.alerts.some((alert) => alert.id === addon.id) : !folded[addon.id];
+  const toggle = (addon: Addon): void => void (folded = { ...folded, [addon.id]: isOpen(addon) });
 
   function explain(cause: unknown): string {
     if (cause instanceof ApiError) {
@@ -104,12 +109,17 @@
     {#each view.alerts as alert (alert.id)}<p class="warn" role="status">{t("addons.alert", alert.name)}</p>{/each}
     <ul class="list" aria-label={t("addons.title")}>
       {#each view.addons as addon (addon.id)}
-        <li class="card">
-          <div class="line">
-            <strong>{addon.name}</strong>
-            <span class={"badge" + (addon.active ? " on" : "")}>{addon.active ? t("addons.on") : t("addons.off")}</span>
-          </div>
-          <p>{addon.description}</p>
+        {@const opened = isOpen(addon)}
+        <li class="card" class:opened>
+          <button type="button" class="toggle" aria-expanded={opened} onclick={() => toggle(addon)}>
+            <span class="line">
+              <strong>{addon.name}</strong>
+              <span class={"badge" + (addon.active ? " on" : "")}>{addon.active ? t("addons.on") : t("addons.off")}</span>
+              <span class="chevron" aria-hidden="true">{opened ? "▾" : "▸"}</span>
+            </span>
+            <span class="description">{addon.description}</span>
+          </button>
+          {#if opened}
           {#if addon.hosts.length}<p class="muted">{t("addons.hosts", addon.hosts.join(", "))}</p>{/if}
 
           {#if addon.steps.length}
@@ -174,6 +184,7 @@
             {/if}
             <button type="button" class="button" disabled={busy} onclick={() => check(addon)}>{t("addons.check")}</button>
           </div>
+          {/if}
         </li>
       {/each}
     </ul>
@@ -183,6 +194,44 @@
 </section>
 
 <style>
+  .toggle {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-1);
+    width: 100%;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .toggle:hover strong {
+    color: var(--color-accent-text);
+  }
+
+  .toggle .chevron {
+    margin-left: auto;
+    color: var(--color-text-muted);
+  }
+
+  .toggle .description {
+    color: var(--color-text-muted);
+    font-size: var(--text-sm);
+  }
+
+  .card:not(.opened) {
+    padding-block: var(--space-3);
+  }
+
+  .card.opened .toggle .description {
+    color: var(--color-text);
+    font-size: inherit;
+  }
+
   .addons {
     display: flex;
     flex-direction: column;

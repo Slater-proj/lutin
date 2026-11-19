@@ -875,6 +875,10 @@ class Chat(unittest.TestCase):
         self.press("document.querySelector('.variants .button.primary')")
         self.eventually(lambda: "qwen3:8b-fp16" in T.A.PULLS, "the precision chosen is downloaded")
         self.press(button("document.querySelector('.tabs')", "Bibliothèque Ollama"))
+        # « Suited to my machine » is ticked by default: the 27b, too big for the fictive machine, is hidden; untick it and both sizes show.
+        p.attendre("document.querySelectorAll('.ollama-library .sizes li').length === 1")
+        self.assertFalse(p.evaluer("[...document.querySelectorAll('.ollama-library .sizes li')].some(li => li.innerText.includes('27b'))"), "too big for this machine: hidden")
+        p.evaluer("[...document.querySelectorAll('.ollama-library label')].find(l => l.innerText.includes('Adapté à ma machine')).querySelector('input').click()")
         p.attendre("document.querySelectorAll('.ollama-library .sizes li').length === 2")
         self.assertTrue(p.evaluer("!!document.querySelector('.ollama-library .fit')"), "each size judged for this machine")
         if AXE.is_file():
@@ -1739,6 +1743,7 @@ class Chat(unittest.TestCase):
         self.assertFalse(p.evaluer("[...document.querySelectorAll('.catalog-models .fit')].some(f => f.classList.contains('too_big'))"), "only what runs here, by default")
         self.assertGreater(p.evaluer("document.querySelectorAll('.catalog-models h3.family').length"), 1, "grouped by family")
         self.assertTrue(p.evaluer("[...document.querySelectorAll('.catalog-models .card .button')].some(b => b.innerText.startsWith('Choisir la précision'))"), "an Ollama model offers its precisions")
+        self.picture("5d2-catalogue")
         p.evaluer("(() => { const box = document.querySelector('#catalog-only'); box.value = 'all'; box.dispatchEvent(new Event('change', {bubbles: true})); })()")
         p.attendre("document.querySelectorAll('.catalog-models .card').length > %d" % fits)
         with mock.patch.object(api_v1, "install_model", lambda request: posted.append(request.body) or original(request)):
@@ -2283,7 +2288,13 @@ class Chat(unittest.TestCase):
         other = next(identifier for identifier in addons.ids() if identifier != secret_of[0])
         p.evaluer("location.hash = '#/agents/addons'")
         p.attendre("document.querySelectorAll('.addons .card').length === %d" % len(addons.ids()))
+        # Folded by default (maintainer's request, 2026-11-19: the list was long); none is on here, so none opens by itself. Opened on demand.
+        self.assertEqual(p.evaluer("document.querySelectorAll('.addons .card .toggle[aria-expanded=\"false\"]').length"), len(addons.ids()), "every add-on folded")
+        self.assertFalse(p.evaluer("!!document.querySelector('.addons .card .actions')"), "folded: only the name, the state and the description")
+        for identifier in (secret_of[0], other):
+            p.evaluer("[...document.querySelectorAll('.addons .card')].find(c => c.querySelector('strong').innerText === %s).querySelector('.toggle').click()" % js(addons.decrire(identifier)["nom"]))
         box = "#addon-%s-%s" % secret_of
+        p.attendre("!!document.querySelector(%s)" % js(box))
         p.evaluer("(() => { const box = document.querySelector(%s); box.value = 'zzz-secret-value'; box.dispatchEvent(new Event('input', {bubbles: true})); })()" % js(box))
         p.evaluer("(() => { const card = document.querySelector(%s).closest('.card'); [...card.querySelectorAll('.button')].find(b => b.innerText === 'Enregistrer les réglages').click(); })()" % js(box))
         self.eventually(lambda: addons.settings(secret_of[0])[secret_of[1]] == "zzz-secret-value", "the server keeps the secret")
@@ -2402,7 +2413,10 @@ class Chat(unittest.TestCase):
             self.addCleanup(patch.stop)
         p.evaluer("location.hash = '#/agents/addons'")
         p.attendre("!!document.querySelector('.addons .card')")
-        p.evaluer("[...document.querySelectorAll('.addons .card')].find(c => c.querySelector('strong').innerText.includes('ComfyUI')).querySelector('.comfy summary').click()")
+        comfy = "[...document.querySelectorAll('.addons .card')].find(c => c.querySelector('strong').innerText.includes('ComfyUI'))"
+        p.evaluer(comfy + ".querySelector('.toggle').click()")          # the add-ons are folded by default: opened on demand
+        p.attendre("!!(" + comfy + ".querySelector('.comfy summary'))")
+        p.evaluer(comfy + ".querySelector('.comfy summary').click()")
         p.attendre("!!document.querySelector('.comfy .badge')")
         text = p.evaluer("document.querySelector('.comfy').innerText")
         self.assertIn("en marche", text)
@@ -2429,6 +2443,9 @@ class Chat(unittest.TestCase):
         self.addCleanup(addons.restore_stream, "telegram")
         shipped = addons.shipped_stream("telegram")
         p.evaluer("location.hash = '#/agents/addons'")
+        p.attendre("!!document.querySelector('.addons .card')")
+        telegram = "[...document.querySelectorAll('.addons .card')].find(c => c.querySelector('strong').innerText.includes('Telegram'))"
+        p.evaluer(telegram + ".querySelector('.toggle').click()")          # the add-ons are folded by default: opened on demand
         p.attendre("!!document.querySelector('#flow-telegram') || !!document.querySelector('.addons .flow')")
         opener = "[...document.querySelectorAll('.addons .card')].find(c => c.querySelector('strong').innerText.includes('Telegram')).querySelector('.flow summary').click()"
         p.evaluer(opener)

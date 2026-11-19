@@ -19,6 +19,8 @@
   let copied = $state(false);
   let restarting = $state(false);
   let heading = $state<HTMLHeadingElement | null>(null);
+  type Startup = { check_updates: boolean; autostart: { installed: boolean; possible: boolean; limits: string } };
+  let startup = $state<Startup | null>(null); // what happens when Lutin and the machine start (GET /lutin/startup)
   let alive = true;
 
   const canConfigure = $derived(!!status?.access.can_configure);
@@ -92,6 +94,18 @@
     busy = false;
   }
 
+  async function setStartup(change: { check_updates?: boolean; autostart?: boolean }): Promise<void> {
+    busy = true;
+    problem = "";
+    try {
+      startup = await api<Startup>("PATCH", "/lutin/startup", change);
+    } catch (cause) {
+      problem = explain(cause);
+      startup = await api<Startup>("GET", "/lutin/startup").catch(() => startup); // the box shows what is really set
+    }
+    busy = false;
+  }
+
   async function copy(): Promise<void> {
     if (!view) return;
     await copyText(view.command);
@@ -113,6 +127,7 @@
         void follow().finally(() => (busy = false));
       }
     }, (cause) => (problem = explain(cause)));
+    api<Startup>("GET", "/lutin/startup").then((answer) => (startup = answer), () => undefined);
     if (location.hash.endsWith("/version")) {
       queueMicrotask(() => heading?.scrollIntoView({ block: "start" }));
       setTimeout(() => heading?.focus(), 0);
@@ -125,8 +140,17 @@
 
 <section class="lutin-version" aria-labelledby="lutin-version-title">
   <h2 id="lutin-version-title" tabindex="-1" bind:this={heading}>{t("lutin.title")}</h2>
-  {#if status}<p>{t("lutin.current", status.version)}</p>{/if}
+  {#if status}<p class="current">{t("lutin.current", status.version)}</p>{/if}
   <p class="muted">{t("lutin.help")}</p>
+  {#if startup}
+    <div class="startup">
+      <label class="inline"><input type="checkbox" checked={startup.check_updates} disabled={busy || !canConfigure} onchange={(event) => setStartup({ check_updates: event.currentTarget.checked })} /> {t("lutin.check_at_start")}</label>
+      {#if startup.autostart.possible}
+        <label class="inline"><input type="checkbox" checked={startup.autostart.installed} disabled={busy || !canConfigure} onchange={(event) => setStartup({ autostart: event.currentTarget.checked })} /> {t("lutin.autostart")}</label>
+        {#if startup.autostart.limits}<p class="muted">{startup.autostart.limits}</p>{/if}
+      {/if}
+    </div>
+  {/if}
   {#if problem}<p class="problem" role="alert">{problem}</p>{/if}
   <p class="notice" role="status">{restarting ? t("lutin.restarting") : checked}</p>
 
@@ -195,6 +219,17 @@
     color: var(--color-text-muted);
     font-size: var(--text-sm);
     max-width: var(--measure);
+  }
+
+  .current {
+    font-size: var(--text-md);
+    font-weight: 600;
+  }
+
+  .startup {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
   }
 
   .notice:empty {

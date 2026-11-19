@@ -29,3 +29,14 @@ export function shortName(repo: string): string {
   const name = repo.includes("/") ? repo.slice(repo.indexOf("/") + 1) : repo;
   return name.replace(/[-_.]?gguf$/i, "") || name;
 }
+
+/** The words sent to ollama.com: with « uncensored » ticked, the word that the site's uncensored models carry in their name or description. */
+export function libraryQuery(words: string, uncensored: boolean): string {
+  const typed = words.trim();
+  return uncensored ? (typed ? typed + " uncensored" : "uncensored") : typed;
+}
+
+/** The sizes of an Ollama model to show: all of them, or (« suited to my machine ») those that are not too big, the tight ones included. */
+export function sizesShown<T extends { fit: { level: string } | null }>(sizes: T[], fitsHere: boolean): T[] {
+  return fitsHere ? sizes.filter((size) => size.fit?.level !== "too_big") : sizes;
+}

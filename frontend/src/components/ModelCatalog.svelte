@@ -5,7 +5,7 @@
   import { api, ApiError } from "../lib/api";
   import { language, t, type MessageKey } from "../lib/messages";
   import ModelVariants from "./ModelVariants.svelte";
-  import { byFamily, shown, strengths, runsHere, type CatalogModel } from "../lib/model_catalog";
+  import { byFamily, matches, shown, strengths, runsHere, type CatalogModel } from "../lib/model_catalog";
 
   let { onstarted, precisions = false }: { onstarted: () => void; precisions?: boolean } = $props();
 
@@ -18,12 +18,13 @@
   let advanced = $state(false);
   let grouped = $state(true); // by family (Qwen 3, Granite 4…), the best first in each
   let open = $state(""); // the model whose precisions are shown
+  let find = $state(""); // a word of the name: a long catalogue is not scrolled through
   let asking = $state("");
   let busy = $state(false);
   let problem = $state("");
   let notice = $state("");
 
-  const list = $derived(catalog ? shown(catalog.models, only) : []);
+  const list = $derived(catalog ? shown(catalog.models, only).filter((model) => matches(model, find)) : []);
   const role = (name: string): string => t(("guide.role." + name) as MessageKey);
   const gb = (value: number): string => new Intl.NumberFormat(lang, { maximumFractionDigits: 1 }).format(value);
 
@@ -62,15 +63,16 @@
 
 {#snippet card(model: CatalogModel)}
   {@const good = strengths(model.roles)}
+  {@const variants = precisions && PRECISIONS.test(model.id)}
+  {@const offer = !model.installed && runsHere(model)}
     <li class="card" class:installed={model.installed} data-id={model.id}>
-      <div class="line">
+      <div class="head">
         <strong>{model.name}</strong>
         {#if model.installed}<span class="tag">{t("models.cat.installed")}</span>{/if}
         {#if model.fit}<span class={"fit " + model.fit.level}>{t(("guide.fit." + model.fit.level) as MessageKey)}</span>{/if}
       </div>
-      <p class="summary">{model.summary}</p>
       <p class="meta">{t("models.cat.meta", gb(model.size_gb), gb(model.parameters_b), Math.round(model.context_max / 1024))}{model.licence ? " · " + model.licence : ""}</p>
-      {#if model.fit?.text}<p class="muted fit-text">{model.fit.text}</p>{/if}
+      <p class="summary">{model.summary}</p>
       {#if good.strong.length}<p class="plus">{t("models.cat.strong", good.strong.map(role).join(", "))}</p>{/if}
       {#if good.weak.length}<p class="minus">{t("models.cat.weak", good.weak.map(role).join(", "))}</p>{/if}
       {#if model.capabilities.length}
@@ -78,27 +80,24 @@
           {#each model.capabilities as capability (capability)}<li>{t(("models.cat.cap." + capability) as MessageKey)}</li>{/each}
         </ul>
       {/if}
+      {#if model.fit?.text}<p class="muted fit-text">{model.fit.text}</p>{/if}
       {#if model.warning}<p class="warn">{model.warning}</p>{/if}
-    {#if precisions && PRECISIONS.test(model.id)}
-      <button type="button" class="button quiet" aria-expanded={open === model.id} onclick={() => (open = open === model.id ? "" : model.id)}>{t("variants.choose")}<span class="visually-hidden"> {model.name}</span></button>
-      {#if open === model.id}<ModelVariants model={model.id} {onstarted} />{/if}
-    {/if}
       {#each model.compatibility.reasons as reason (reason)}<p class="warn">{reason}</p>{/each}
-      {#if !model.installed && runsHere(model)}
-        {#if asking === model.id}
-          <div class="confirm" role="group" aria-label={t("models.cat.download")}>
-            <p>{t("models.cat.confirm", model.name, gb(model.size_gb))}</p>
-            <div class="actions">
-              <button type="button" class="button primary" disabled={busy} onclick={() => download(model)}>{t("models.cat.download")}</button>
-              <button type="button" class="button" onclick={() => (asking = "")}>{t("chat.cancel")}</button>
-            </div>
-          </div>
-        {:else}
+      {#if asking === model.id}
+        <div class="confirm" role="group" aria-label={t("models.cat.download")}>
+          <p>{t("models.cat.confirm", model.name, gb(model.size_gb))}</p>
           <div class="actions">
-            <button type="button" class="button" disabled={busy} onclick={() => (asking = model.id)}>{t("models.cat.download")}<span class="visually-hidden"> {model.name}</span></button>
+            <button type="button" class="button primary" disabled={busy} onclick={() => download(model)}>{t("models.cat.download")}</button>
+            <button type="button" class="button" onclick={() => (asking = "")}>{t("chat.cancel")}</button>
           </div>
-        {/if}
+        </div>
+      {:else if offer || variants}
+        <div class="actions">
+          {#if offer}<button type="button" class="button primary" disabled={busy} onclick={() => (asking = model.id)}>{t("models.cat.download")}<span class="visually-hidden"> {model.name}</span></button>{/if}
+          {#if variants}<button type="button" class="button quiet" aria-expanded={open === model.id} onclick={() => (open = open === model.id ? "" : model.id)}>{t("variants.choose")}<span class="visually-hidden"> {model.name}</span></button>{/if}
+        </div>
       {/if}
+      {#if variants && open === model.id}<ModelVariants model={model.id} {onstarted} />{/if}
     </li>
 {/snippet}
 
@@ -106,6 +105,7 @@
   <h2 id="catalog-title">{t("models.cat.title")}</h2>
   <p class="muted">{t("models.cat.intro")}</p>
   <div class="filters">
+    <input type="search" class="find" placeholder={t("models.cat.find")} aria-label={t("models.cat.find")} bind:value={find} />
     <label for="catalog-only">{t("models.cat.show")}</label>
     <select id="catalog-only" bind:value={only}>
       <option value="fits">{t("models.cat.only_fits")}</option>
@@ -120,12 +120,13 @@
     {#if !problem}<p class="muted">{t("models.cat.loading")}</p>{/if}
   {:else}
     {#if !catalog.detected}<p class="muted">{t("models.cat.not_detected")}</p>{/if}
+    <p class="muted count">{t("models.cat.count", String(list.length))}</p>
     {#if list.length === 0}
       <p class="empty">{t("models.cat.none")}</p>
     {:else}
       {#if grouped}
         {#each byFamily(list) as group (group.family + group.advanced)}
-          <h3 class="family">{group.family}{#if group.advanced} <span class="muted">{t("models.cat.unfiltered")}</span>{/if}</h3>
+          <h3 class="family"><span>{group.family}</span>{#if group.advanced} <span class="muted">{t("models.cat.unfiltered")}</span>{/if}<span class="number">{group.models.length}</span></h3>
           <ul class="cards" aria-label={group.family}>
             {#each group.models as model (model.id)}{@render card(model)}{/each}
           </ul>
@@ -196,9 +197,20 @@
     font: inherit;
   }
 
+  .find {
+    flex: 1 1 14rem;
+    min-height: var(--target);
+    padding: 0 var(--space-3);
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-md);
+    background: var(--color-bg);
+    color: var(--color-text);
+    font: inherit;
+  }
+
   .cards {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(min(100%, 24rem), 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 20rem), 1fr));
     align-items: start;
     gap: var(--space-3);
     margin: 0;
@@ -209,8 +221,8 @@
   .card {
     display: flex;
     flex-direction: column;
-    gap: var(--space-2);
-    padding: var(--space-4);
+    gap: var(--space-1);
+    padding: var(--space-3) var(--space-4);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-lg);
     background: var(--color-surface);
@@ -220,7 +232,7 @@
     border-color: var(--color-accent);
   }
 
-  .line {
+  .head {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
@@ -253,9 +265,15 @@
     color: var(--color-text);
   }
 
+  .summary,
   .plus,
-  .minus {
+  .minus,
+  .fit-text {
     font-size: var(--text-sm);
+  }
+
+  .card > .actions {
+    margin-top: var(--space-2);
   }
 
   .plus::before {
@@ -312,8 +330,26 @@
     font-size: var(--text-sm);
   }
 
+  /* A family is a clear section: an accent bar, its name and how many models it holds. */
   .family {
-    margin: var(--space-3) 0 0;
-    font-size: var(--text-md, 1rem);
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin: var(--space-4) 0 0;
+    padding: var(--space-2) var(--space-3);
+    border-left: 4px solid var(--color-accent);
+    border-radius: var(--radius-md);
+    background: var(--color-surface-raised);
+    font-size: var(--text-lg);
+  }
+
+  .family .number {
+    margin-left: auto;
+    padding: 0 var(--space-2);
+    border-radius: var(--radius-pill);
+    background: var(--color-accent-soft);
+    color: var(--color-accent-text);
+    font-size: var(--text-xs);
+    font-weight: 600;
   }
 </style>

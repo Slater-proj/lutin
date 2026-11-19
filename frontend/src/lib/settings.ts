@@ -78,7 +78,7 @@ export function fieldsOf(group: GroupId): Field[] {
 // a component of its own; the screen draws them in this order.
 export type Part = GroupId | "language" | "notifications" | "approval_rules" | "devices" | "lending" | "health" | "backup" | "lutin_version" | "offline" | "access" | "github" | "tuning" | "documents" | "storage" | "helpers" | "web_search" | "memory" | "skills" | "third_party_skills";
 export const SECTIONS = {
-  general: ["language", "answers", "notifications", "lutin_version", "github"],
+  general: ["lutin_version", "language", "answers", "notifications", "github"],
   safety: ["offline", "safety", "approval_rules"],
   devices: ["access", "devices"],
   machine: ["lending", "machine", "tuning"],

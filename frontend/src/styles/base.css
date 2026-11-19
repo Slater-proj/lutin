@@ -86,9 +86,32 @@ code {
   color: var(--color-danger);
 }
 
+/* A secondary action: lighter than a button, but still seen as one (a transparent button without a border read as plain text: « Réglages » of an
+   engine, « Choisir la précision » of a model went unnoticed). */
 .button.quiet {
-  border-color: transparent;
+  border-color: var(--color-border);
   background: transparent;
+  color: var(--color-accent-text);
+  font-weight: 600;
+}
+
+.button.quiet:hover:not(:disabled) {
+  border-color: var(--color-accent);
+  background: var(--color-accent-soft);
+}
+
+.button.quiet.danger {
+  color: var(--color-danger);
+}
+
+.button.quiet.danger:hover:not(:disabled) {
+  border-color: var(--color-danger);
+  background: var(--color-danger-soft);
+}
+
+.button[aria-expanded="true"] {
+  border-color: var(--color-accent);
+  background: var(--color-accent-soft);
 }
 
 .visually-hidden {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canDownload, downloadBody, downloadPath, filesPath, searchPath, shortName, type LibraryFile } from "./library";
+import { canDownload, downloadBody, downloadPath, filesPath, libraryQuery, searchPath, shortName, sizesShown, type LibraryFile } from "./library";
 
 const file = (fit: LibraryFile["fit"]): LibraryFile => ({ file: "m-q4.gguf", size_bytes: 1000, fit });
 
@@ -32,5 +32,19 @@ describe("shortName", () => {
     expect(shortName("bartowski/gemma_gguf")).toBe("gemma");
     expect(shortName("noauthor")).toBe("noauthor");
     expect(shortName("a/GGUF")).toBe("GGUF");
+  });
+});
+
+describe("the Ollama library filters", () => {
+  it("adds the word the uncensored models carry, alone or after the typed words", () => {
+    expect(libraryQuery("  qwen ", false)).toBe("qwen");
+    expect(libraryQuery("", true)).toBe("uncensored");
+    expect(libraryQuery("qwen", true)).toBe("qwen uncensored");
+  });
+
+  it("keeps the tight sizes and hides the too big ones only when asked", () => {
+    const sizes = [{ size: "4b", fit: { level: "good" } }, { size: "27b", fit: { level: "tight" } }, { size: "70b", fit: { level: "too_big" } }, { size: "1b", fit: null }];
+    expect(sizesShown(sizes, true).map((s) => s.size)).toEqual(["4b", "27b", "1b"]);
+    expect(sizesShown(sizes, false)).toHaveLength(4);
   });
 });

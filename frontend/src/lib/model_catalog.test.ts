@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { byFamily, familyOf, runsHere, shown, strengths, type CatalogModel } from "./model_catalog";
+import { byFamily, familyOf, matches, runsHere, shown, strengths, type CatalogModel } from "./model_catalog";
 
 function model(id: string, changes: Partial<CatalogModel> = {}): CatalogModel {
   return {
@@ -41,5 +41,14 @@ describe("the catalogue of models", () => {
       ["Granite 4", false, ["granite4:3b"]],
       ["Qwen 3", true, ["huihui_ai/qwen3-abliterated:8b"]],
     ]);
+  });
+
+  it("finds a model by the words of its name, id or summary, accents and case ignored", () => {
+    const granite = model("granite4:3b", { name: "Granite 4 · 3 milliards", summary: "Rapide et économe." });
+    expect(matches(granite, "")).toBe(true);
+    expect(matches(granite, "granite")).toBe(true);
+    expect(matches(granite, "GRANITE 3b")).toBe(true);
+    expect(matches(granite, "econome")).toBe(true);
+    expect(matches(granite, "qwen")).toBe(false);
   });
 });

@@ -5,6 +5,7 @@
   import { onMount } from "svelte";
   import { api, ApiError } from "../lib/api";
   import { language, t, type MessageKey } from "../lib/messages";
+  import { libraryQuery, sizesShown } from "../lib/library";
 
   type Size = { size: string; name: string; installed: boolean; estimated_gb: number | null; fit: { level: string; text: string } | null };
   type Model = { name: string; description: string; capabilities: string[]; updated: string; downloads: number; sizes: Size[]; installed_plain: boolean };
@@ -15,6 +16,8 @@
   let words = $state("");
   let order = $state<"newest" | "popular">("popular");
   let capability = $state("");
+  let fitsHere = $state(true); // only the sizes this machine can run; the tight ones stay, marked « limit »
+  let uncensored = $state(false); // models without the refusals of the original (uncensored, abliterated…)
   let page = $state(1);
   let models = $state<Model[] | null>(null);
   let more = $state(false);
@@ -26,6 +29,8 @@
 
   const gb = (value: number): string => new Intl.NumberFormat(lang, { maximumFractionDigits: 1 }).format(value);
   const count = (value: number): string => new Intl.NumberFormat(lang, { notation: "compact" }).format(value);
+  const visible = $derived((models ?? []).map((model) => ({ model, sizes: sizesShown(model.sizes, fitsHere) })).filter((entry) => entry.sizes.length > 0));
+  const hidden = $derived((models ?? []).length - visible.length);
 
   function explain(cause: unknown): string {
     if (cause instanceof ApiError) {
@@ -39,7 +44,7 @@
     loading = true;
     problem = "";
     try {
-      const query = new URLSearchParams({ q: words.trim(), order, page: String(next) });
+      const query = new URLSearchParams({ q: libraryQuery(words, uncensored), order, page: String(next) });
       if (capability) query.set("capability", capability);
       const answer = await api<{ models: Model[]; more: boolean }>("GET", "/models/library?" + query.toString());
       models = next === 1 ? answer.models : [...(models ?? []), ...answer.models];
@@ -88,23 +93,29 @@
       </select>
     </label>
     <button type="submit" class="button" disabled={loading}>{t("olib.search")}</button>
+    <div class="boxes">
+      <label class="inline"><input type="checkbox" bind:checked={fitsHere} /> {t("olib.fits_here")}</label>
+      <label class="inline"><input type="checkbox" bind:checked={uncensored} onchange={() => void search()} /> {t("olib.uncensored")}</label>
+    </div>
   </form>
   {#if problem}<p class="problem" role="alert">{problem}</p>{/if}
   <p class="notice" role="status">{loading ? t("olib.loading") : notice}</p>
   {#if models}
-    {#if models.length === 0}<p class="muted">{t("olib.none")}</p>{/if}
+    {#if visible.length === 0}<p class="muted">{t("olib.none")}</p>{/if}
+    {#if hidden > 0}<p class="muted">{t("olib.hidden", String(hidden))}</p>{/if}
     <ul class="cards">
-      {#each models as model (model.name)}
+      {#each visible as { model, sizes } (model.name)}
         <li class="card">
           <p class="line"><strong>{model.name}</strong><span class="muted">{t("olib.downloads", count(model.downloads))}{model.updated ? " · " + model.updated : ""}</span></p>
           {#if model.description}<p>{model.description}</p>{/if}
           {#if model.capabilities.length}<p class="line">{#each model.capabilities as name (name)}<span class="tag">{t(("olib.cap." + name) as MessageKey)}</span>{/each}</p>{/if}
           <ul class="sizes">
-            {#each model.sizes as size (size.name)}
+            {#each sizes as size (size.name)}
               <li class="line">
                 <span class="size">{size.size}</span>
                 {#if size.estimated_gb}<span class="muted">{t("olib.about", gb(size.estimated_gb))}</span>{/if}
                 {#if size.fit}<span class={"fit " + size.fit.level}>{t(("guide.fit." + size.fit.level) as MessageKey)}</span>{/if}
+                {#if size.fit?.level === "tight"}<span class="limit" title={size.fit.text}>{t("olib.limit")}</span>{/if}
                 {#if size.installed}
                   <span class="tag">{t("variants.installed")}</span>
                 {:else if asking === size.name}
@@ -217,6 +228,19 @@
   .fit.good {
     background: var(--color-accent-soft);
     color: var(--color-accent-text);
+  }
+
+  .boxes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+    align-self: center;
+  }
+
+  .limit {
+    font-size: var(--text-xs);
+    color: var(--color-text-muted);
+    font-style: italic;
   }
 
   .fit.tight,

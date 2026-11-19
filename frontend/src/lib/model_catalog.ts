@@ -59,3 +59,11 @@ export function byFamily(models: CatalogModel[]): { family: string; advanced: bo
   }
   return [...groups.values()];
 }
+
+const plain = (text: string): string => text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
+/** Whether a model answers the words typed in the search field: every word in its name, id or summary, accents and case ignored. */
+export function matches(model: CatalogModel, words: string): boolean {
+  const where = plain([model.name, model.id, model.summary].join(" "));
+  return plain(words).split(/\s+/).filter(Boolean).every((word) => where.includes(word));
+}
