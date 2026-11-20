@@ -53,6 +53,43 @@ Sources were read on 2026-11-20. The llama.cpp facts come from its source (`comm
 - **Strata as an engine**: not now. It is an application tied to one family and young. To look at again if it becomes a server for many models.
 - **`--moe-cache-mib`** (experts cached on the card, llama.cpp ≥ Oct 2026): off by default upstream, crashes reported on some AMD and Windows set-ups.
   Not offered.
-- **The RAM share of the fit rule** (half of the free RAM) is kept. It is cautious: with a 12 GB card and 32 GB of RAM (about 22 free), Qwen 3.6
-  35B (22.6 GB) is judged "too big" although public reports run it on 8 GB cards. Raising the share to about 0.8 would offer it. That is a
-  change of the rule tested by `tests/test_selection.py`, left to the maintainer's decision.
+
+## The fit rule for MoE models (maintainer's decision, 2026-11-20)
+
+"Coherent with the measured machine": a mixture-of-experts model fits when what is not an expert (attention, shared weights), the conversation
+and the margin fit on the card, and the experts that do not fit on the card fit in the **free RAM measured on the machine minus a 2 GB reserve**
+(`model_selection.experts_split`, `RAM_RESERVE_GB`). It replaces "card budget plus half the free RAM". The share of experts is estimated as
+1 − active / total parameters, a little below the real share read from the GGUF files: the estimate keeps a little more on the card than needed,
+never less.
+
+- The longest conversation that still fits is chosen (it was always 8,192 tokens), and an MoE model that would fit on the card only with a short
+  conversation (under 16,384 tokens) prefers to keep a few experts in RAM.
+- The verdict says "fine" when at least 4 GB of RAM stay free and the conversation is long enough, "tight" otherwise, with the figures.
+- It applies only on an engine that keeps experts in RAM: a new capability, `experts_in_ram` (Ollama yes; llama.cpp when its server knows `--fit`
+  or `--n-cpu-moe`, or is not installed yet; an OpenAI-compatible server no). Elsewhere the verdict says the model is too big *with this engine*
+  and names the engines that can. The catalogue, the variants and the roles read it.
+- Example, RTX 4090 (24 GB) and 32 GB of RAM, 22 free: Qwen 3.6 35B fine (3 GB of experts in RAM), Gemma 4 26B fine (1 GB in RAM, instead of a
+  8,192-token conversation), Qwen 3 Next 80B and gpt-oss 120B too big (30 and 45 GB would have to wait in RAM).
+
+## Colibri (studied 2026-11-20)
+
+Lutin already installs Colibri (archive checked against `SHA256SUMS.txt`), starts and stops `coli serve`, lists the models of `coli setup` and
+prepares one. Read in its repository (v2.1.0, 2026-10-31; nothing run here):
+
+- **Where it adds value**: models much larger than RAM, read from NVMe. The authors report 3 to 8 words per second (DeepSeek V4 Flash 85 GB,
+  MiMo Flash 106 GB) with 62 GB of RAM and two NVMe drives. llama.cpp gives 1 to 3 in that case.
+- **Where it does not, so far**: for models that fit in card plus RAM, no independent comparison with llama.cpp exists. Its processor kernels are
+  measured 2 to 5 times slower than ggml (issues #2189, #2831). It reads only some families (Qwen 3/3.5/3.6/3.8, DeepSeek V4, GLM 5, MiMo, Kimi):
+  no gpt-oss, Gemma or Llama.
+- **What the current integration misses**:
+  - The card. Without the CUDA overlay archive (NVIDIA, compute ≥ 8.0) or `COLI_VULKAN=1` (AMD, Intel), Colibri runs on the processor.
+  - A fixed `--model-id`.
+  - `coli import` of a GGUF already downloaded. It works by link: an Ollama Qwen 3.6 is reused without a second copy.
+  - `max_tokens` on every request (issue #2900: stall on 8 GB cards without it).
+- **Blocking for an agent**: issue #2869 (open). When a client disconnects mid-answer, the slot is never freed and every later request hangs,
+  and Lutin's Stop does exactly that. Until it is fixed, Colibri stays an expert option, never offered by default.
+- Proposed next step, for the maintainer to decide:
+  1. finish the integration above, as an "expert, very large models" option;
+  2. try it on a machine with 64 GB of RAM and an NVMe drive.
+
+  With 32 GB of RAM, the models it is made for are read mostly from disk.
