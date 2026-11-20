@@ -110,6 +110,17 @@ def chemin(ident):
     return f
 
 
+def _extract_when_readable(f, essais=40):
+    """Sous Windows, lire un fichier que l'autre envoi du même contenu vient de remplacer lève PermissionError un instant : on relit un peu plus tard
+    (même règle que storage.lire_json ; tests/test_fichiers.py, envoi en double)."""
+    for _ in range(essais):
+        try:
+            return file_text(f, f.suffix.lower())
+        except PermissionError:
+            time.sleep(0.05)
+    return file_text(f, f.suffix.lower())
+
+
 def read_text(ident):
     """Le texte extrait de la pièce (extrait une fois, gardé à côté)."""
     f = chemin(ident)
@@ -119,7 +130,7 @@ def read_text(ident):
             return cache.read_text(encoding="utf-8")
     except OSError:
         pass
-    texte = file_text(f, f.suffix.lower())
+    texte = _extract_when_readable(f)
     try:
         cache.write_text(texte, encoding="utf-8")
     except OSError:
