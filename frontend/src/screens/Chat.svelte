@@ -566,7 +566,35 @@
     void items;
     void live;
     void pending;
-    if (scroller && following) scroller.scrollTop = scroller.scrollHeight;
+    pinToEnd();
+  });
+
+  let pinnedTop = 0; // where the thread was last left, by the person or by pinToEnd: a scroll that does not go above it is not the person leaving the end
+
+  function pinToEnd(): void {
+    if (!scroller || !following) return;
+    scroller.scrollTop = scroller.scrollHeight;
+    pinnedTop = scroller.scrollTop;
+  }
+
+  $effect(() => {
+    // The thread also changes size without a new message: a banner shown above it once the status is read, the dock below it growing, a block
+    // drawn later. Someone at the end stays there; the size of the thread and of each piece inside it is watched for that.
+    const area = scroller;
+    if (!area) return;
+    const sizes = new ResizeObserver(() => pinToEnd());
+    const watchPieces = (): void => {
+      sizes.disconnect();
+      sizes.observe(area);
+      for (const piece of area.children) sizes.observe(piece);
+    };
+    const pieces = new MutationObserver(watchPieces);
+    watchPieces();
+    pieces.observe(area, { childList: true });
+    return () => {
+      pieces.disconnect();
+      sizes.disconnect();
+    };
   });
 
   let followedId = ""; // the conversation the person is reading: a reload of the same one (every few seconds) does not bring them back to the end
@@ -583,12 +611,18 @@
   });
 
   function onThreadScroll(): void {
-    if (scroller) following = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < FOLLOW_MARGIN;
+    if (!scroller) return;
+    const top = scroller.scrollTop;
+    // The scroll event comes a frame after pinToEnd: content that grew in between leaves the end far below without the person having moved.
+    // Only going up leaves the end; coming back near it follows it again.
+    if (scroller.scrollHeight - top - scroller.clientHeight < FOLLOW_MARGIN) following = true;
+    else if (top < pinnedTop) following = false;
+    pinnedTop = top;
   }
 
   function toBottom(): void {
     following = true;
-    if (scroller) scroller.scrollTop = scroller.scrollHeight;
+    pinToEnd();
   }
 
   onMount(() => {

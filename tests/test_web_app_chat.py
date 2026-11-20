@@ -2880,6 +2880,35 @@ class Chat(unittest.TestCase):
         p.attendre("!document.querySelector('.to-bottom')")
         self.assertEqual(p.erreurs, [])
 
+    def test_5xa_a_thread_at_its_end_stays_there_when_it_changes_size_without_a_new_message(self):
+        """test_5x failed 3 times in 5 runs of this file: the opened thread was left above its end. Its size changed after the move to the end,
+        with no new message to move it again; and the scroll event of that move, a frame later, took content grown in between for the person going up."""
+        p = self.page
+        c = T.A.conv_nouvelle()
+        c["titre"] = "Longue et changeante"
+        c["messages"] = [{"role": "user" if i % 2 == 0 else "assistant", "content": "Message %d.\n\n%s" % (i, "Une ligne de texte. " * 30)} for i in range(40)]
+        T.A.conv_ecrire(c)
+        self.addCleanup(T.A.conv_supprimer, c["id"])
+        last = "[...document.querySelectorAll('.thread .markdown')].at(-1)"
+        self.addCleanup(p.evaluer, "%s.style.paddingBottom = ''; document.querySelector('.dock').style.paddingBottom = ''" % last)
+        p.evaluer("location.hash = '#/chat/%s'" % c["id"])
+        p.evaluer("location.reload()")
+        p.attendre("document.querySelector('.main h1')?.innerText === 'Longue et changeante' && document.querySelectorAll('.thread .markdown').length >= 20")
+        at_end = "(s => s.scrollHeight - s.scrollTop - s.clientHeight < 80)(document.querySelector('.scroll'))"
+        p.attendre(at_end)
+        settle = "new Promise(done => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(done, 200))))"
+        p.evaluer("document.querySelector('.scroll').scrollTop -= 40")          # still at the end, and the next move to it is a real scroll
+        p.evaluer(settle)
+        # The last answer grows (a block drawn later) in the same task as the move to the end: below what is seen, so Chrome's scroll anchoring does not help.
+        p.evaluer("(s => { s.scrollTop = s.scrollHeight; %s.style.paddingBottom = '600px'; })(document.querySelector('.scroll'))" % last)
+        p.evaluer(settle)
+        self.assertTrue(p.evaluer(at_end), "content grown while the thread moved to its end is followed")
+        self.assertFalse(p.evaluer("!!document.querySelector('.to-bottom')"), "the person did not go up: no button")
+        p.evaluer("document.querySelector('.dock').style.paddingBottom = '200px'")          # the dock grows: the thread gets shorter
+        p.evaluer(settle)
+        self.assertTrue(p.evaluer(at_end), "a thread made shorter keeps its end in view")
+        self.assertEqual(p.erreurs, [])
+
     def test_6_nothing_overflows_at_360_px_and_the_areas_fit_a_phone(self):
         p = self.page
         p.commande("Emulation.setDeviceMetricsOverride", width=360, height=740, deviceScaleFactor=1, mobile=True)
