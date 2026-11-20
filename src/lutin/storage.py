@@ -42,13 +42,19 @@ def ecrire_atomique(chemin, texte):
     chemin.parent.mkdir(parents=True, exist_ok=True)
     tmp = chemin.with_name(chemin.name + "." + secrets.token_hex(3) + ".tmp")
     tmp.write_text(texte, encoding="utf-8")
-    for essai in range(40):
+    remplacer(tmp, chemin)
+
+
+def remplacer(source, cible, essais=40):
+    """os.replace, réessayé pendant deux secondes au plus : sous Windows, un antivirus, l'indexeur ou une lecture en cours tient le fichier ou le dossier un instant
+    et le renommage lève PermissionError (WinError 5) ; ce n'est pas un refus durable (tests/test_skills_tiers.py)."""
+    for essai in range(essais):
         try:
-            os.replace(str(tmp), str(chemin))
+            os.replace(str(source), str(cible))
             return
         except PermissionError:
             time.sleep(0.05)
-    os.replace(str(tmp), str(chemin))
+    os.replace(str(source), str(cible))
 
 
 def enregistrer_reglages(nouveau):

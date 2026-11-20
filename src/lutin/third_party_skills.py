@@ -12,7 +12,6 @@ Principes de sécurité (un skill est un TEXTE que le modèle suit, pas seulemen
 Tout passe par `http(url, entetes) -> (statut, entetes, corps)` : testable sans réseau. Les requêtes de l'API portent le compte GitHub de l'utilisateur s'il en a donné un (voir github.py)."""
 import concurrent.futures
 import json
-import os
 import re
 import shutil
 import tempfile
@@ -422,7 +421,7 @@ def install(depot, dossier, racine, http=None, danger_ok=False, licence_ok=False
                                                  "nom": f["nom"], "fichiers": len(a_copier)}, ensure_ascii=False), encoding="utf-8")
         if cible.exists():
             shutil.rmtree(cible)
-        os.replace(tmp, cible)
+        _donnees.remplacer(tmp, cible)       # Windows refuse parfois le renommage un instant : nouvel essai
     except BaseException:
         shutil.rmtree(tmp, ignore_errors=True)
         raise

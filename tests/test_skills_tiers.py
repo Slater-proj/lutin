@@ -302,6 +302,23 @@ class Installation(Base):
         self.assertEqual(self.installer(gh, "b", licence_ok=True)["nom"], "b")
         self.assertEqual(self.installer(gh, "a", danger_ok=True, licence_ok=True, nom="a-confirme")["nom"], "a-confirme")
 
+    def test_un_renommage_refuse_un_instant_par_windows_est_reessaye(self):
+        # Windows (antivirus, indexeur) refuse parfois un instant de renommer le dossier temporaire : PermissionError [WinError 5]. Ce n'est pas un échec.
+        gh = FauxGithub({"o/r": depot_type()})
+        vrai, refus = os.replace, []
+
+        def replace(source, cible):
+            if Path(str(source)).name.startswith(".lutin-skill-") and len(refus) < 2:
+                refus.append(source)
+                raise PermissionError(5, "Accès refusé")
+            return vrai(source, cible)
+        with mock.patch("os.replace", side_effect=replace), mock.patch("time.sleep"):
+            r = self.installer(gh)
+        dest = self.travail / ".claude" / "skills" / "pdf"
+        self.assertEqual((r["nom"], len(refus)), ("pdf", 2))
+        self.assertTrue((dest / "SKILL.md").is_file())
+        self.assertEqual(os.listdir(dest.parent), ["pdf"], "pas de dossier temporaire laissé")
+
     def test_un_dossier_existant_qui_n_est_pas_a_lutin_n_est_jamais_remplace(self):
         gh = FauxGithub({"o/r": depot_type()})
         perso = self.travail / ".claude" / "skills" / "pdf"
