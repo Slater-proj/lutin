@@ -206,6 +206,7 @@
     max-width: var(--page-max);
     margin: 0 auto;
     padding: var(--space-5) var(--space-4);
+    position: relative; /* the texts hidden for the eyes inside are placed here and scroll with it, never by <main> (which would scroll too) */
     overflow-y: auto;
   }
 

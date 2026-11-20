@@ -315,6 +315,7 @@
     max-height: 16rem;
     margin: 0;
     padding: 0;
+    position: relative; /* the texts hidden for the eyes inside are placed here and scroll with it, never by <main> (which would scroll too) */
     overflow-y: auto;
     list-style: none;
   }

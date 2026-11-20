@@ -16,6 +16,7 @@
   let message = $state("");
   let log = $state<Entry[] | null>(null);
   let busy = $state(false);
+  let proposing = $state(false);
   let notice = $state("");
   let problem = $state("");
 
@@ -40,7 +41,18 @@
     git = await api<Git>("GET", "/git");
     chosen = chosen.filter((path) => git?.files.some((file) => file.path === path));
   };
-  const propose = (): Promise<void> => act(async () => void (message = (await api<{ message: string }>("POST", "/git/message", { files: chosen })).message));
+  // Writing the message can take a while (the model may have to load first): say so, next to the button.
+  const propose = (): Promise<void> =>
+    act(async () => {
+      proposing = true;
+      try {
+        message = (await api<{ message: string }>("POST", "/git/message", { files: chosen })).message;
+      } finally {
+        proposing = false;
+      }
+    });
+  const allChosen = $derived(!!git?.files.length && git.files.every((file) => chosen.includes(file.path)));
+  const toggleAll = (): void => void (chosen = allChosen ? [] : (git?.files ?? []).map((file) => file.path));
   const commit = (): Promise<void> =>
     act(async () => {
       notice = (await api<{ output: string }>("POST", "/git/commit", { message, files: chosen })).output || t("git.committed");
@@ -55,8 +67,6 @@
 
 <section class="project-git" aria-labelledby="git-title">
   <h2 id="git-title">{t("git.title")}</h2>
-  {#if problem}<p class="problem" role="alert">{problem}</p>{/if}
-  <p class="notice" role="status">{notice}</p>
   {#if git}
     {#if !git.available}
       <p class="muted">{git.reason}</p>
@@ -65,13 +75,18 @@
       {#if git.files.length}
         <fieldset disabled={busy}>
           <legend class="visually-hidden">{t("git.files")}</legend>
+          <label class="all"><input type="checkbox" checked={allChosen} indeterminate={!!chosen.length && !allChosen} onchange={toggleAll} /> {allChosen ? t("git.none") : t("git.all")}</label>
           {#each git.files as file (file.path)}
             <label><input type="checkbox" value={file.path} bind:group={chosen} /> <code>{file.path}</code> <span class="muted">{t(("git.state." + file.state) as MessageKey)}</span></label>
           {/each}
         </fieldset>
         <div class="actions">
           <button type="button" class="button" disabled={busy || !chosen.length} onclick={propose}>{t("git.propose")}</button>
+          {#if proposing}<span class="muted" role="status">{t("git.proposing")}</span>{/if}
         </div>
+        {#if !canConfigure && message}
+          <label class="field">{t("git.message")}<textarea rows="3" readonly value={message}></textarea></label>
+        {/if}
         {#if canConfigure}
           <label class="field">{t("git.message")}<textarea rows="3" bind:value={message}></textarea></label>
           <div class="actions"><button type="button" class="button primary" disabled={busy || !chosen.length || !message.trim()} onclick={commit}>{t("git.commit", chosen.length)}</button></div>
@@ -82,6 +97,8 @@
       {/if}
     {/if}
   {/if}
+  {#if problem}<p class="problem" role="alert">{problem}</p>{/if}
+  <p class="notice" role="status">{notice}</p>
 
   <h3>{t("log.title")}</h3>
   <p class="muted">{t("log.help")}</p>
@@ -146,6 +163,10 @@
 
   label {
     overflow-wrap: anywhere;
+  }
+
+  .all {
+    font-weight: 600;
   }
 
   .field {

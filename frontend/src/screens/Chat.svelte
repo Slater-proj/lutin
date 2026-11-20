@@ -53,6 +53,8 @@
   let problem = $state("");
   let listOpen = $state(false);
   let scroller = $state<HTMLElement | null>(null);
+  const FOLLOW_MARGIN = 80; // pixels: closer than this to the end counts as « at the end »
+  let following = $state(true);
   let box = $state<HTMLTextAreaElement | null>(null);
   let renaming = $state(false);
   let options = $state<ConversationOptions | null>(null);
@@ -559,12 +561,35 @@
   });
 
   $effect(() => {
-    // Follow the answer while it is written: each change of the conversation or of the live turn scrolls to the end.
+    // Follow the answer while it is written, but only when the person is at the end: someone who scrolled up to read is left where they are, and the
+    // « ↓ » button brings them back (as the old page did).
     void items;
     void live;
     void pending;
-    if (scroller) scroller.scrollTop = scroller.scrollHeight;
+    if (scroller && following) scroller.scrollTop = scroller.scrollHeight;
   });
+
+  let followedId = ""; // the conversation the person is reading: a reload of the same one (every few seconds) does not bring them back to the end
+  $effect(() => {
+    const id = conversation?.id ?? "";
+    if (id !== followedId) {
+      followedId = id;
+      following = true;
+    }
+  });
+
+  $effect(() => {
+    if (pending) following = true; // a message just sent: its answer is followed
+  });
+
+  function onThreadScroll(): void {
+    if (scroller) following = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < FOLLOW_MARGIN;
+  }
+
+  function toBottom(): void {
+    following = true;
+    if (scroller) scroller.scrollTop = scroller.scrollHeight;
+  }
 
   onMount(() => {
     const onNew = (): void => startNew(); // « New conversation » of the Ctrl+K palette while the Chat is open
@@ -706,7 +731,8 @@
       <p class="mission-banner" role="status">{t("tools.mission", mission.name, t(("missions.state." + mission.state) as "missions.state.running"))} <a href="#/agents">{t("tools.mission_open")}</a></p>
     {/if}
 
-    <div class="scroll" bind:this={scroller}>
+    <div class="thread-area">
+    <div class="scroll" bind:this={scroller} onscroll={onThreadScroll}>
       {#if status && !status.engine.running}
         <p class="banner">{t("chat.engine_stopped", status.engine.name)}
           {#if status.access.can_configure}<button type="button" class="link" disabled={starting} onclick={startEngine}>{starting ? t("chat.engine_starting") : t("chat.engine_start", status.engine.name)}</button>{/if}
@@ -729,6 +755,10 @@
           canOpen={!where && !!status?.can_open_files} canDelete={!where && !!status?.access.can_configure} onproduced={reloadConversation} />
         {#if elsewhere}<p class="elsewhere" role="status">{t(elsewhereNotice(elsewhereTurn))}</p>{/if}
       {/if}
+    </div>
+    {#if !following && (items.length || live)}
+      <button type="button" class="to-bottom" class:writing={busy} onclick={toBottom} aria-label={t("chat.to_bottom")} title={t("chat.to_bottom")}>↓</button>
+    {/if}
     </div>
 
     <div class="dock">
@@ -822,6 +852,7 @@
     gap: var(--space-3);
     min-height: 0;
     padding: var(--space-3);
+    position: relative; /* the texts hidden for the eyes inside are placed here and scroll with it, never by <main> (which would scroll too) */
     overflow-y: auto;
     border-right: 1px solid var(--color-border);
     scrollbar-width: thin;
@@ -1111,11 +1142,41 @@
     cursor: pointer;
   }
 
+  .thread-area {
+    position: relative;
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+  }
+
   .scroll {
     flex: 1;
     min-height: 0;
+    position: relative; /* the texts hidden for the eyes inside are placed here and scroll with it, never by <main> (which would scroll too) */
     overflow-y: auto;
     scrollbar-width: thin;
+  }
+
+  .to-bottom {
+    position: absolute;
+    bottom: var(--space-3);
+    left: 50%;
+    width: 2.5rem;
+    height: 2.5rem;
+    transform: translateX(-50%);
+    border: 1px solid var(--color-border-strong);
+    border-radius: 50%;
+    background: var(--color-surface);
+    color: var(--color-text);
+    font-size: var(--text-lg);
+    box-shadow: 0 2px 8px rgb(0 0 0 / 0.15);
+    cursor: pointer;
+  }
+
+  .to-bottom.writing {
+    border-color: var(--color-accent);
+    color: var(--color-accent-text);
   }
 
   .welcome {
@@ -1188,6 +1249,7 @@
     max-height: 70%;
     margin: 0 auto;
     padding: var(--space-2) var(--space-4) var(--space-3);
+    position: relative; /* the texts hidden for the eyes inside are placed here and scroll with it, never by <main> (which would scroll too) */
     overflow-y: auto;
   }
 
@@ -1401,6 +1463,7 @@
     background: var(--color-surface);
     font-size: var(--text-sm);
     max-height: 14rem;
+    position: relative; /* the texts hidden for the eyes inside are placed here and scroll with it, never by <main> (which would scroll too) */
     overflow-y: auto;
   }
 
@@ -1432,6 +1495,7 @@
     margin: 0;
     padding-left: var(--space-4);
     max-height: 16rem;
+    position: relative; /* the texts hidden for the eyes inside are placed here and scroll with it, never by <main> (which would scroll too) */
     overflow-y: auto;
     overflow-wrap: anywhere;
   }

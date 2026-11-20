@@ -174,7 +174,8 @@ def git_message_of(fichiers, r=None):
                 "Pas de guillemets autour, pas de blabla : réponds UNIQUEMENT avec le message.\n"
                 "Style des commits récents du projet :\n" + (journal.strip() or "(aucun)") + "\n\nCHANGEMENTS :\n" + diff)
     corps = {"model": r["modele"], "messages": [{"role": "user", "content": consigne}], "stream": False, "think": False, "options": _m.options_modele(r, 0.3)}
-    reponse = _m.ollama_json("/api/chat", corps, 300)
+    from . import agent
+    reponse = agent.moteur_actuel(r).chat(corps, 300)          # le moteur choisi (Ollama, llama.cpp, une autre machine), pas toujours Ollama
     texte = (reponse.get("message", {}).get("content") or "").strip()
     texte = re.sub(r"^```\w*\n|\n```$", "", texte).strip().strip('"')
     if not texte:

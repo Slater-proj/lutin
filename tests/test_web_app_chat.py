@@ -1132,6 +1132,55 @@ class Chat(unittest.TestCase):
         self.assertEqual(p.erreurs, [])
         p.evaluer("location.hash = '#/chat'")
 
+    def test_3zab_the_project_files_are_ticked_at_once_and_the_proposal_says_it_is_being_written(self):
+        """Maintainer's report (2026-11-20): no way to tick every changed file at once, and « Propose a message » seemed to do nothing (the model may take
+        a while, and an error was shown at the top of the section, far from the button)."""
+        p = self.page
+        from lutin import change_review
+        files = ["a.py", "b.py", "c.py"]
+        release, asked = threading.Event(), []
+
+        def slow_message(chosen):
+            asked.append(list(chosen))
+            release.wait(10)
+            if len(asked) > 1:
+                raise ValueError("Le modèle n'a pas répondu.")
+            return {"message": "fix: three files"}
+        for patch in (mock.patch.object(change_review, "git_state", lambda: {"dispo": True, "branche": "main", "total": 3, "modifies": [{"chemin": f, "etat": " M"} for f in files]}),
+                      mock.patch.object(change_review, "git_message_of", slow_message)):
+            patch.start()
+            self.addCleanup(patch.stop)
+        self.addCleanup(release.set)
+        p.evaluer("location.hash = '#/projects'")
+        p.attendre("document.querySelectorAll('.project-git fieldset input[type=checkbox]').length === 4")
+        ticked = "[...document.querySelectorAll('.project-git fieldset input[type=checkbox]')].filter(b => b.checked).length"
+        all_box = "document.querySelector('.project-git .all input')"
+        self.assertEqual(p.evaluer("document.querySelector('.project-git .all').innerText.trim()"), "Tout cocher")
+        p.evaluer("%s.click()" % all_box)
+        p.attendre("%s === 4" % ticked)
+        self.assertEqual(p.evaluer("document.querySelector('.project-git .all').innerText.trim()"), "Tout décocher")
+        p.evaluer("%s.click()" % all_box)
+        p.attendre("%s === 0" % ticked)
+        p.evaluer("document.querySelector('.project-git fieldset label:not(.all) input').click()")
+        self.assertTrue(p.evaluer("%s.indeterminate" % all_box), "some files ticked: the box says so")
+        p.evaluer("%s.click()" % all_box)
+        p.attendre("%s === 4" % ticked)
+
+        self.press("[...document.querySelectorAll('.project-git .button')].find(b => b.innerText === 'Proposer un message')")
+        p.attendre("document.querySelector('.project-git .actions [role=status]')?.innerText === 'Le modèle écrit le message…'")
+        release.set()
+        p.attendre("document.querySelector('.project-git textarea')?.value === 'fix: three files'")
+        self.assertEqual(asked, [files])
+        self.assertFalse(p.evaluer("!!document.querySelector('.project-git .actions [role=status]')"), "the notice goes once the message is there")
+        release.clear()
+        self.press("[...document.querySelectorAll('.project-git .button')].find(b => b.innerText === 'Proposer un message')")
+        release.set()
+        p.attendre("!!document.querySelector('.project-git .problem')")
+        self.assertTrue(p.evaluer("!!(document.querySelector('.project-git .actions').compareDocumentPosition(document.querySelector('.project-git .problem')) & Node.DOCUMENT_POSITION_FOLLOWING)"),
+                        "the error is shown under the button, not at the top of a long list")
+        self.assertEqual(p.erreurs, [])
+        p.evaluer("location.hash = '#/chat'")
+
     def test_3zb_documents_are_processed_in_the_background_after_a_trial(self):
         """PARITY.md item 13: « Background work » on the Agents screen, on /api/v1/background-jobs. Hermetic: the jobs live in the temporary data folder
         and point at a temporary folder declared as a work folder; no document is processed (the worker is not part of this test)."""
@@ -2701,6 +2750,40 @@ class Chat(unittest.TestCase):
             p.aller(T.BASE + "/app/")
             p.attendre("!!document.querySelector('#message')")
             self.assertFalse(p.evaluer("!!document.querySelector('.setup')"), "an existing installation is never taken for a new machine")
+        self.assertEqual(p.erreurs, [])
+
+    def test_5w_a_long_screen_scrolls_in_one_place_only(self):
+        """Regression: on the catalogue, the texts hidden for the eyes (absolutely positioned) were placed by <main>, not by the list that scrolls. <main>
+        got a second scroll bar reaching down to the last of them, and scrolling on emptied the screen but for the navigation."""
+        p = self.page
+        p.aller(T.BASE + "/app/#/models")
+        p.attendre("!!document.querySelector('.models .tabs')")
+        self.press("[...document.querySelectorAll('.models .tabs button')].find(b => b.innerText === 'Catalogue')")
+        p.attendre("document.querySelectorAll('.models .card').length > 3")
+        self.assertGreater(p.evaluer("(s => s.scrollHeight - s.clientHeight)(document.querySelector('.models'))"), 0, "the catalogue is longer than the window here")
+        self.assertLessEqual(p.evaluer("(m => m.scrollHeight - m.clientHeight)(document.querySelector('main'))"), 1, "only the catalogue scrolls, never <main> around it")
+
+    def test_5x_a_long_conversation_has_a_button_back_to_its_end(self):
+        """Maintainer's report (2026-11-20): the old page's « ↓ » button was missing. The thread follows its end only when the person is there."""
+        p = self.page
+        c = T.A.conv_nouvelle()
+        c["titre"] = "Longue"
+        c["messages"] = [{"role": "user" if i % 2 == 0 else "assistant", "content": "Message %d.\n\n%s" % (i, "Une ligne de texte. " * 30)} for i in range(40)]
+        T.A.conv_ecrire(c)
+        self.addCleanup(T.A.conv_supprimer, c["id"])
+        p.evaluer("location.hash = '#/chat/%s'" % c["id"])
+        p.evaluer("location.reload()")          # the Chat reads the conversation of the address when the page opens
+        p.attendre("document.querySelector('.main h1')?.innerText === 'Longue' && document.querySelectorAll('.thread .markdown').length >= 20")
+        at_end = "(s => s.scrollHeight - s.scrollTop - s.clientHeight < 80)(document.querySelector('.scroll'))"
+        p.attendre(at_end)
+        self.assertFalse(p.evaluer("!!document.querySelector('.to-bottom')"), "at the end: no button")
+        p.evaluer("(s => { s.scrollTop = 0; s.dispatchEvent(new Event('scroll')); })(document.querySelector('.scroll'))")
+        p.attendre("!!document.querySelector('.to-bottom')")
+        self.assertEqual(p.evaluer("document.querySelector('.to-bottom').getAttribute('aria-label')"), "Aller à la fin de la conversation")
+        self.assertEqual(p.evaluer("document.querySelector('.scroll').scrollTop"), 0, "someone reading higher up is left there")
+        p.evaluer("document.querySelector('.to-bottom').click()")
+        p.attendre(at_end)
+        p.attendre("!document.querySelector('.to-bottom')")
         self.assertEqual(p.erreurs, [])
 
     def test_6_nothing_overflows_at_360_px_and_the_areas_fit_a_phone(self):

@@ -210,6 +210,7 @@
     gap: var(--space-5);
     min-height: 100%;
     padding: var(--space-5) var(--space-4) var(--space-6);
+    position: relative; /* the texts hidden for the eyes inside are placed here and scroll with it, never by <main> (which would scroll too) */
     overflow-y: auto;
     background: var(--color-bg);
   }

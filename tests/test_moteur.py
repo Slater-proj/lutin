@@ -2040,6 +2040,34 @@ class Assistant(unittest.TestCase):
             A.RACINE = ancienne_racine
             shutil.rmtree(depot, ignore_errors=True)
 
+    def test_le_message_de_commit_vient_du_moteur_choisi(self):
+        """Régression : la proposition de message appelait toujours Ollama, même quand le moteur choisi est llama.cpp ou une autre machine."""
+        if not shutil.which("git"):
+            self.skipTest("git n'est pas installé")
+        from lutin import agent as _agent
+        from lutin import change_review
+        depot = TEMP / "depot-git-moteur"
+        shutil.rmtree(depot, ignore_errors=True)
+        depot.mkdir()
+        subprocess.run(["git", "-C", str(depot), "init", "-q"], check=True, capture_output=True)
+        (depot / "a.txt").write_text("bonjour\n", encoding="utf-8")
+        recues = []
+
+        class Moteur:
+            def chat(self, corps, delai=60):
+                recues.append(corps)
+                return {"message": {"content": "Ajoute a.txt (moteur choisi)"}}
+        ancienne_racine = A.RACINE
+        A.RACINE = depot.resolve()
+        try:
+            with mock.patch.object(_agent, "moteur_actuel", lambda r=None: Moteur()):
+                self.assertEqual(change_review.git_message_of(["a.txt"])["message"], "Ajoute a.txt (moteur choisi)")
+            self.assertEqual(len(recues), 1)
+            self.assertIn("bonjour", json.dumps(recues[0]["messages"], ensure_ascii=False))
+        finally:
+            A.RACINE = ancienne_racine
+            shutil.rmtree(depot, ignore_errors=True)
+
     def test_git_autorise_le_dossier_sur_un_partage_reseau(self):
         """Régression : « dubious ownership » sur un NAS rendait l'écran Git inutilisable."""
         appels = []
