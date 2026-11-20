@@ -831,7 +831,16 @@ class MoteurLlamaCpp(MoteurOpenAI):
         # Les outils passent par le gabarit du modèle (--jinja). Un modèle qui ne tient pas dans la mémoire vidéo ne se charge pas ; et c'est ce moteur, pas la boucle, qui démarre son serveur.
         return engine_capabilities.EngineCapabilities(tools=engine_capabilities.TEMPLATE, grammar=engine_capabilities.YES, slots=engine_capabilities.YES,
                                                       prompt_cache=engine_capabilities.ON_REQUEST, embeddings=engine_capabilities.YES, token_counts=engine_capabilities.YES,
-                                                      starts_on_demand=False, spills_to_cpu=False)
+                                                      starts_on_demand=False, spills_to_cpu=False, experts_in_ram=self.experts_en_ram())
+
+    def experts_en_ram(self):
+        """Le serveur sait-il garder les experts d'un modèle à experts en mémoire vive ? `--fit` les place lui-même, `--n-cpu-moe` les y met sur demande.
+        Pas encore installé : oui, Lutin installe une version récente qui connaît les deux."""
+        exe = self.serveur_pret()
+        if exe is None:
+            return True
+        aide = aide_serveur(exe)
+        return "--fit" in aide or "--n-cpu-moe" in aide
 
     def grille(self):
         return {"discuter": ("natif", ""), "flux": ("natif", ""), "arret": ("natif", _t("La connexion est coupée : le serveur arrête de générer.")),

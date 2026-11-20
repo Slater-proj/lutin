@@ -20,23 +20,34 @@ def pseudo_modele(m):
     return {"go": m.get("go") or 0, "kv_mo_1k": KV_MO_PAR_DEFAUT, "ctx_max": 32768, "params_b": 1, "actifs_b": 1}
 
 
-def evaluer(m, profil, ctx_voulu=0):
-    """{niveau, texte} : ideal (large marge), bien, limite (tient à peine, contexte réduit, ou en partie sur le processeur), trop_gros. `m` : au moins `go`, et idéalement les champs du catalogue."""
+MOE_RAM_CONFORT_GO = 4.0          # mémoire vive qui reste libre, réserve comprise, en dessous de laquelle un modèle à experts en partie en mémoire vive est « limite »
+
+
+def evaluer(m, profil, ctx_voulu=0, experts_en_ram=True):
+    """{niveau, texte} : ideal (large marge), bien, limite (tient à peine, contexte réduit, ou en partie sur le processeur), trop_gros. `m` : au moins `go`, et idéalement les champs du catalogue.
+    `experts_en_ram` : le moteur sait garder les experts d'un modèle à experts en mémoire vive (aptitude `experts_in_ram` du moteur choisi)."""
     if not m.get("go"):
         return {"niveau": "bien", "texte": _t("Taille inconnue : je ne peux pas dire si ce modèle convient à ta machine.")}
     complet = dict(pseudo_modele(m), **{k: v for k, v in m.items() if k in ("kv_mo_1k", "ctx_max", "params_b", "actifs_b")})
     complet["go"] = m["go"]
     budget = profil.budget_go()
-    place = model_selection.best_context(complet, budget, profil.ram_libre_go or profil.ram_go * 0.5, experts_en_ram=not profil.sans_gpu())
+    ram_libre = model_selection.ram_for_experts(profil)
+    place = model_selection.best_context(complet, budget, ram_libre, experts_en_ram=experts_en_ram and not profil.sans_gpu())
     if place is None and not profil.sans_gpu() and model_selection.best_context(complet, budget / 0.85, 0, experts_en_ram=False):
         return {"niveau": "limite", "texte": _t("Tient presque entièrement sur la carte graphique, sans marge : ferme les autres programmes qui l'utilisent et garde une conversation courte.")}
     if place is None:
         besoin = model_selection.required_memory_gb(complet, model_selection.CTX_PLANCHER)
+        if model_selection.expert_share(complet) and not profil.sans_gpu() and not experts_en_ram and model_selection.experts_split(complet, model_selection.CTX_PLANCHER, budget, ram_libre):
+            return {"niveau": "trop_gros", "texte": _t("Trop gros pour la carte graphique avec ce moteur : il tiendrait en gardant ses experts en mémoire vive, ce que fait llama.cpp ou Ollama.")}
         return {"niveau": "trop_gros", "texte": _t("Trop gros pour ta machine : il demande environ {} Go et tu en as {} d'utilisables.").format(round(besoin, 1), budget)}
     ctx, besoin, tient = place
     if tient == "partiel":
-        # seul un modèle à experts « tient en partie » (model_selection.best_context) : ce qui travaille à chaque mot va sur la carte, les experts attendent en mémoire vive
-        return {"niveau": "limite", "texte": _t("Modèle à experts : ce qui travaille à chaque mot va sur la carte graphique, le reste attend en mémoire vive. Il répond à un bon rythme, mais lit plus lentement les longs messages.")}
+        # seul un modèle à experts « tient en partie » (model_selection.best_context) : ce qui travaille à chaque mot va sur la carte, les experts qui n'y tiennent pas attendent en mémoire vive
+        en_ram = max(0.0, besoin - budget)
+        reste = ram_libre - en_ram
+        if reste < MOE_RAM_CONFORT_GO or ctx < 16384:
+            return {"niveau": "limite", "texte": _t("Modèle à experts, juste pour ta machine : {} Go d'experts attendent en mémoire vive et il n'en reste que {} Go de libres. Ferme les gros programmes ; conversation de {} jetons.").format(round(en_ram, 1), round(max(0.0, reste), 1), ctx)}
+        return {"niveau": "bien", "texte": _t("Modèle à experts : ce qui travaille à chaque mot va sur la carte graphique, {} Go d'experts attendent en mémoire vive. Il répond à un bon rythme, mais lit plus lentement les longs messages.").format(round(en_ram, 1))}
     if profil.sans_gpu():
         if m["go"] <= 3:
             return {"niveau": "bien", "texte": _t("Sans carte graphique, un petit modèle comme celui-ci répond à un rythme correct.")}

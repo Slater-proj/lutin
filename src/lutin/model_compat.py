@@ -9,7 +9,7 @@ Chaque réponse porte aussi : le format (GGUF), la quantification (celle du nom 
 Les rôles (polyvalent, rapide, code…) se choisissent sur le catalogue FILTRÉ : `roles_pour(...)`."""
 import re
 
-from . import model_selection
+from . import engine_capabilities, model_selection
 from .i18n import t as _t
 
 CAPABILITIES = {"outils": "outils", "reflexion": "reflexion", "vision": "vision"}          # capacité du catalogue -> fonction de la grille des moteurs
@@ -67,5 +67,6 @@ def filter_models(catalogue, moteur, installes=(), profil=None):
 
 
 def roles_for(profil, catalogue, moteur, installes=()):
-    """{rôle: Choix ou None} sur le catalogue filtré par ce moteur : les rôles sont propres à chaque moteur."""
-    return model_selection.choose(profil, filter_models(catalogue, moteur, installes))
+    """{rôle: Choix ou None} sur le catalogue filtré par ce moteur : les rôles sont propres à chaque moteur, y compris pour les modèles à experts plus gros
+    que la carte (seulement si le moteur sait garder leurs experts en mémoire vive)."""
+    return model_selection.choose(profil, filter_models(catalogue, moteur, installes), experts_en_ram=engine_capabilities.of(moteur).experts_in_ram)

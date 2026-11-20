@@ -35,6 +35,23 @@ class Appreciation(unittest.TestCase):
         self.assertEqual(trop["niveau"], "trop_gros")
         self.assertIn("43", trop["texte"].replace(",", ".")[:200] + "43", "le texte donne un chiffre")
 
+    def test_un_modele_a_experts_est_juge_sur_la_machine_mesuree_et_le_moteur(self):
+        """Demande du mainteneur (2026-11-20) : les modèles qui tiennent et ceux qui sont limites, d'après la carte et la mémoire vive libre mesurée, et
+        seulement si le moteur sait garder les experts en mémoire vive."""
+        rtx4090 = Profil(systeme="windows", ram_go=32, ram_libre_go=22, gpus=[Gpu("NVIDIA GeForce RTX 4090", "nvidia", 24)])
+        a_l_aise = model_fit.evaluer(CAT["qwen3.6:35b"], rtx4090)
+        self.assertEqual(a_l_aise["niveau"], "bien")
+        self.assertIn("mémoire vive", a_l_aise["texte"])
+        juste = model_fit.evaluer(CAT["qwen3.6:35b"], Profil(systeme="windows", ram_go=32, ram_libre_go=16, gpus=[Gpu("NVIDIA GeForce RTX 4070", "nvidia", 12)]))
+        self.assertEqual(juste["niveau"], "limite", "13 Go d'experts en mémoire vive sur 16 libres : il ne reste presque rien")
+        self.assertIn("juste", juste["texte"])
+        self.assertEqual(model_fit.evaluer(CAT["qwen3-next:80b"], rtx4090)["niveau"], "trop_gros", "30 Go d'experts : la mémoire vive libre n'y suffit pas")
+        rtx4080 = Profil(systeme="windows", ram_go=32, ram_libre_go=22, gpus=[Gpu("NVIDIA GeForce RTX 4080", "nvidia", 16)])
+        self.assertEqual(model_fit.evaluer(CAT["qwen3.6:35b"], rtx4080)["niveau"], "bien", "16 Go : 10 Go d'experts en mémoire vive")
+        sans = model_fit.evaluer(CAT["qwen3.6:35b"], rtx4080, experts_en_ram=False)
+        self.assertEqual(sans["niveau"], "trop_gros")
+        self.assertIn("ce moteur", sans["texte"], "le moteur est la raison, et on dit lesquels savent le faire")
+
     def test_sans_carte_graphique(self):
         cpu = Profil(systeme="windows", ram_go=16, ram_libre_go=10)
         self.assertEqual(model_fit.evaluer(CAT["qwen3:1.7b"], cpu)["niveau"], "bien")

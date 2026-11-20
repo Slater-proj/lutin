@@ -60,8 +60,13 @@ class Selection(unittest.TestCase):
             for role, c in model_selection.choose(p, CAT).items():
                 if c is None:
                     continue
-                limite = p.budget_go() + (p.ram_libre_go * 0.5 if c.tient == "partiel" else 0)
-                self.assertLessEqual(c.memoire_go, limite + 1e-6, "{} Go / {} : {} dépasse".format(vram, role, c.id))
+                # Un modèle à experts « partiel » : la carte pleine, le reste des experts dans la mémoire vive libre mesurée moins la réserve du système,
+                # et tout ce qui n'est pas un expert (plus la conversation) sur la carte.
+                limite = p.budget_go() + (max(0.0, p.ram_libre_go - model_selection.RAM_RESERVE_GB) if c.tient == "partiel" else 0)
+                self.assertLessEqual(c.memoire_go, limite + 0.1, "{} Go / {} : {} dépasse".format(vram, role, c.id))
+                if c.tient == "partiel":
+                    socle = model_selection.required_memory_gb(c.modele, c.num_ctx) - c.modele["go"] * model_selection.expert_share(c.modele)
+                    self.assertLessEqual(socle, p.budget_go() + 1e-6, "{} Go / {} : {} ne garde pas l'essentiel sur la carte".format(vram, role, c.id))
                 self.assertIn("outils", c.modele["capacites"])
                 self.assertGreaterEqual(c.modele["notes"][role], model_selection.SCORE_THRESHOLD)
                 self.assertGreaterEqual(c.num_ctx, 1024)
@@ -113,6 +118,45 @@ class Selection(unittest.TestCase):
         c = model_selection.best_context(next(m for m in CAT["modeles"] if m["id"] == "qwen3:30b"), budget_go=14, ram_libre_go=30)
         self.assertEqual(c[2], "partiel")
         self.assertIsNone(model_selection.best_context(next(m for m in CAT["modeles"] if m["id"] == "qwen3:32b"), budget_go=14, ram_libre_go=60), "un modèle dense ne déborde pas")
+
+    def test_un_moe_tient_si_la_carte_garde_l_essentiel_et_la_memoire_vive_mesuree_le_reste(self):
+        """Demande du mainteneur (2026-11-20) : cohérent avec la machine mesurée. RTX 4090 (24 Go) et 32 Go de mémoire vive dont 22 libres."""
+        par_id = {m["id"]: m for m in CAT["modeles"]}
+        budget = 24 * 0.85
+        ctx, besoin, tient = model_selection.best_context(par_id["qwen3.6:35b"], budget, 22)
+        self.assertEqual((tient, ctx), ("partiel", 32768), "22,6 Go : un peu d'experts en mémoire vive, et toute la conversation")
+        self.assertLessEqual(besoin - budget, 22 - model_selection.RAM_RESERVE_GB)
+        self.assertIsNone(model_selection.best_context(par_id["qwen3-next:80b"], budget, 22), "50 Go : 30 en mémoire vive, il n'y en a que 20 de disponibles")
+        self.assertIsNone(model_selection.best_context(par_id["gpt-oss:120b"], budget, 22))
+        self.assertEqual(model_selection.best_context(par_id["qwen3-next:80b"], budget, 52)[2], "partiel", "avec 64 Go (52 libres), il tient")
+
+    def test_un_moe_ne_deborde_que_si_le_moteur_sait_le_faire(self):
+        m = next(m for m in CAT["modeles"] if m["id"] == "qwen3.6:35b")
+        self.assertEqual(model_selection.best_context(m, 20.4, 22)[2], "partiel")
+        self.assertIsNone(model_selection.best_context(m, 20.4, 22, experts_en_ram=False))
+        roles = model_selection.choose(profil(24, ram=32), CAT, experts_en_ram=False)
+        self.assertFalse([c for c in roles.values() if c is not None and c.tient == "partiel"], "aucun choix ne compte sur des experts en mémoire vive")
+
+    def test_ce_qui_n_est_pas_un_expert_reste_sur_la_carte(self):
+        m = next(m for m in CAT["modeles"] if m["id"] == "qwen3-next:80b")
+        self.assertIsNone(model_selection.best_context(m, 2.0, 500), "même avec beaucoup de mémoire vive, l'attention et la conversation doivent tenir sur la carte")
+        self.assertEqual(model_selection.expert_share({"params_b": 32, "actifs_b": 32}), 0.0, "un modèle dense n'a pas d'experts")
+        self.assertAlmostEqual(model_selection.expert_share(m), 1 - 3.9 / 79.7)
+
+    def test_la_conversation_la_plus_longue_qui_tient_encore(self):
+        m = next(m for m in CAT["modeles"] if m["id"] == "glm-4.7-flash:latest")          # 105 Mo par millier de jetons : la conversation pèse
+        larges = model_selection.best_context(m, 10.2, 40)
+        serre = model_selection.best_context(m, 10.2, 12.5)
+        self.assertEqual((larges[2], serre[2]), ("partiel", "partiel"))
+        self.assertGreater(larges[0], serre[0], "moins de mémoire vive : une conversation plus courte plutôt que rien")
+
+    def test_un_moe_prefere_quelques_experts_en_memoire_vive_a_une_courte_conversation(self):
+        m = next(m for m in CAT["modeles"] if m["id"] == "gemma4:26b")          # 19 Go et une conversation lourde : sur 20,4 Go, la carte seule laisse 8 192 jetons
+        self.assertEqual(model_selection.best_context(m, 20.4, 22, experts_en_ram=False)[::2], (8192, "gpu"))
+        ctx, _, tient = model_selection.best_context(m, 20.4, 22)
+        self.assertEqual(tient, "partiel")
+        self.assertGreaterEqual(ctx, model_selection.CTX_CONFORT)
+        self.assertEqual(model_selection.best_context(m, 20.4, 2)[::2], (8192, "gpu"), "sans mémoire vive libre, la carte seule reste le choix")
 
     def test_defaut_et_total_a_telecharger(self):
         c = model_selection.choose(profil(24), CAT)

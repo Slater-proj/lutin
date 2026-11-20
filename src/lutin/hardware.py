@@ -76,6 +76,10 @@ class Profil:
             return round(g.vram_go * 0.85, 1)
         return round(self.ram_go * 0.6, 1)
 
+    def budget_impose(self):
+        """La personne a fixé elle-même la mémoire des modèles (LUTIN_BUDGET_GO ou le réglage) : c'est alors un plafond pour tout le modèle, mémoire vive comprise."""
+        return bool(impose_budget(os.environ.get("LUTIN_BUDGET_GO", "")) or impose_budget(USER_BUDGET()))
+
     def sans_gpu(self):
         g = self.gpu_principal()
         return not (g and (g.fabricant in ("nvidia", "amd", "apple") and g.vram_go >= 3))

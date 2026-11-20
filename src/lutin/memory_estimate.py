@@ -16,7 +16,7 @@ import math
 from . import model_selection
 from .i18n import t as _t
 
-SATURATION_MARGIN_GB = 2.0          # mémoire vive qu'on veut garder libre pour le système
+SATURATION_MARGIN_GB = model_selection.RAM_RESERVE_GB          # mémoire vive qu'on veut garder libre pour le système (la même réserve que pour les experts)
 CAUTIOUS_CTX = 8192
 DEFAULT_EXPERT_LAYERS = 48          # nombre courant de couches des modèles à experts de 30 milliards (estimation : la vraie valeur est dans le fichier GGUF)
 KV = {"f16": 1.0, "q8_0": 0.5, "q4_0": 0.25}          # part de la mémoire de conversation selon le type de cache KV
@@ -67,7 +67,7 @@ def estimate(modele, ctx, profil, cache="q8_0", experts_cpu=0.0):
 def advice(modele, ctx, profil, cache="q8_0"):
     """Ce qui ferait tenir le modèle : une conversation plus courte, un cache plus léger, et pour un modèle à experts le préréglage processeur."""
     liste = []
-    place = model_selection.best_context(modele, profil.budget_go(), profil.ram_libre_go or profil.ram_go * 0.5, experts_en_ram=not profil.sans_gpu())
+    place = model_selection.best_context(modele, profil.budget_go(), model_selection.ram_for_experts(profil), experts_en_ram=not profil.sans_gpu())
     if place is not None and place[0] < ctx:
         liste.append(_t("Baisse la fenêtre de conversation à {} jetons : le modèle tiendra mieux.").format(place[0]))
     if cache != "q4_0" and _kv_gb(modele, ctx, cache) > 1.0:

@@ -23,6 +23,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import core as _m
+from . import engine_capabilities as _engine_capabilities
 from . import engines as _engines
 from . import engine_updates as _engine_updates
 from . import hardware as _hardware
@@ -1028,9 +1029,10 @@ def model_variants(request):
         raise ApiError(503, "unreachable", str(failed)) from None
     profile, installed = machine_profile(), set(_m.etat_moteur()["installes"])
     base = next((m for m in _m._CATALOGUE["modeles"] if m["id"] == name), {})
+    experts = _engine_capabilities.of(_m.moteur_actuel()).experts_in_ram
     return {"model": name, "default": found["defaut"] and {"name": found["defaut"]["id"], "size_gb": found["defaut"]["go"]},
             "variants": [{"name": v["id"], "precision": v["precision"], "size_gb": v["go"], "default": bool(v.get("defaut")), "installed": v["id"] in installed,
-                          "meaning": _variants.describe(v["precision"]), "fit": _fit(_model_fit.evaluer(dict(base, go=v["go"]), profile) if profile is not None else None)}
+                          "meaning": _variants.describe(v["precision"]), "fit": _fit(_model_fit.evaluer(dict(base, go=v["go"]), profile, experts_en_ram=experts) if profile is not None else None)}
                          for v in found["variantes"]]}
 
 
@@ -1540,7 +1542,8 @@ def machine(request):
 
 
 def _catalog_entry(model, profile, engine, installed):
-    fit = _model_fit.evaluer(model, profile) if profile is not None else None
+    # a mixture-of-experts model larger than the card fits only on an engine that keeps its experts in memory
+    fit = _model_fit.evaluer(model, profile, experts_en_ram=_engine_capabilities.of(engine).experts_in_ram) if profile is not None else None
     compatibility = _model_compat.evaluate(model, engine, installed)
     return {
         "id": model["id"], "name": model["nom"], "summary": model["phrase"], "size_gb": model["go"], "parameters_b": model["params_b"], "active_parameters_b": model["actifs_b"],

@@ -110,7 +110,7 @@ def news(profil, catalogue, choisis, installes, ignores=()):
             raison = _t("Ton modèle n'est plus dans le catalogue ; celui-ci est recommandé pour ta machine.")
         elif vieux.get("remplace_par") == nouveau.id:
             raison = _t("Le modèle installé est remplacé par celui-ci.")
-        elif model_selection.best_context(vieux, budget, profil.ram_libre_go or profil.ram_go * 0.5) is None:
+        elif model_selection.best_context(vieux, budget, model_selection.ram_for_experts(profil)) is None:
             raison = _t("Le modèle installé ne tient plus dans la mémoire disponible.")
         elif nouveau.modele["notes"].get(role, 0) >= vieux["notes"].get(role, 0) + 1:
             raison = _t("Mieux noté pour ce rôle ({} contre {}).").format(nouveau.modele["notes"][role], vieux["notes"].get(role, 0))

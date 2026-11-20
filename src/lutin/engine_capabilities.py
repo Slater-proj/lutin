@@ -5,7 +5,8 @@ must know to drive an engine: how tool calls reach the model, whether the start 
 not fit in the video memory, whether the loop may start the engine itself. The loop used to ask « is it Ollama? »; each engine now declares these facts
 (`Moteur.aptitudes()`), and an engine that declares nothing gets the cautious answers: nothing is assumed of it.
 
-Two of these facts are read by the loop today: `starts_on_demand` and `spills_to_cpu`. The others are declared for the work that will use them
+Two of these facts are read by the loop today: `starts_on_demand` and `spills_to_cpu`. `experts_in_ram` is read by the verdicts on the catalogue: a
+mixture-of-experts model larger than the card is offered only on an engine that keeps its experts in memory (docs/modernization/LARGE_MODELS.md). The others are declared for the work that will use them
 (plan step 6, items 2 and 5: prompt cache and slots, grammar): they say what the engine documents, not what Lutin has measured.
 `tools` and `embeddings` must agree with the grid of the engine, which the conformance suite checks against a fake server (tests/test_engine_capabilities.py).
 """
@@ -35,12 +36,13 @@ class EngineCapabilities:
     token_counts: str = UNKNOWN       # the end of an answer says how many tokens were read and written
     starts_on_demand: bool = False    # when the engine does not answer, the loop may start it and try again
     spills_to_cpu: bool = False       # a model too big for the video memory still loads, slower; otherwise loading fails and the person must choose something smaller
+    experts_in_ram: bool = False      # the experts of a mixture-of-experts model can wait in memory while the rest is on the card, at a good pace
 
     def __post_init__(self):
         for name, allowed in ALLOWED.items():
             if getattr(self, name) not in allowed:
                 raise ValueError("{}: {!r} is not one of {}".format(name, getattr(self, name), ", ".join(allowed)))
-        for name in ("starts_on_demand", "spills_to_cpu"):
+        for name in ("starts_on_demand", "spills_to_cpu", "experts_in_ram"):
             if not isinstance(getattr(self, name), bool):
                 raise ValueError("{} is yes or no".format(name))
 

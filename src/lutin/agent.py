@@ -790,7 +790,8 @@ class MoteurOllama(_moteurs.Moteur):
         # Ollama lit et écrit lui-même les appels d'outils, garde tout seul le début d'une requête, accepte un schéma JSON (« format »), n'a pas de place réservée par conversation ;
         # un modèle trop gros pour la carte déborde sur le processeur au lieu d'échouer ; et Lutin sait le démarrer.
         return _aptitudes.EngineCapabilities(tools=_aptitudes.NATIVE, grammar=_aptitudes.YES, slots=_aptitudes.NO, prompt_cache=_aptitudes.AUTOMATIC, embeddings=_aptitudes.YES,
-                                             token_counts=_aptitudes.YES, starts_on_demand=True, spills_to_cpu=True)
+                                             token_counts=_aptitudes.YES, starts_on_demand=True, spills_to_cpu=True,
+                                             experts_in_ram=True)          # Ollama ≥ 0.30 lance llama-server, dont `--fit` place les experts ; avant, il répartit par couches
 
     def demarrer_sur_demande(self):
         return _m.demarrer_ollama()

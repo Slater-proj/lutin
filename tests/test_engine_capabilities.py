@@ -27,7 +27,8 @@ GRID_TO_YES_NO = {"natif": engine_capabilities.YES, "adapte": engine_capabilitie
 class Record(unittest.TestCase):
     def test_an_engine_of_which_nothing_is_known_gets_the_cautious_answers(self):
         self.assertEqual(engine_capabilities.CAUTIOUS.as_dict(), {"tools": "unknown", "grammar": "unknown", "slots": "unknown", "prompt_cache": "unknown", "embeddings": "unknown",
-                                                                  "token_counts": "unknown", "starts_on_demand": False, "spills_to_cpu": False})
+                                                                  "token_counts": "unknown", "starts_on_demand": False, "spills_to_cpu": False,
+                                                                  "experts_in_ram": False})
         self.assertIs(engine_capabilities.of(object()), engine_capabilities.CAUTIOUS)
         self.assertIs(engine_capabilities.of(engines.Moteur()), engine_capabilities.CAUTIOUS)
 
@@ -58,6 +59,18 @@ class Engines(unittest.TestCase):
         self.assertEqual((ollama.tools, ollama.prompt_cache, ollama.slots, ollama.starts_on_demand, ollama.spills_to_cpu), ("native", "automatic", "no", True, True))
         self.assertEqual((llamacpp.tools, llamacpp.grammar, llamacpp.slots, llamacpp.prompt_cache, llamacpp.starts_on_demand, llamacpp.spills_to_cpu), ("template", "yes", "yes", "on_request", False, False))
         self.assertEqual(other, engine_capabilities.CAUTIOUS, "a server Lutin only connects to: nothing is assumed")
+
+    def test_the_experts_of_a_big_model_wait_in_memory_only_on_an_engine_that_can(self):
+        """A mixture-of-experts model larger than the card is offered only where its experts can wait in memory (docs/modernization/LARGE_MODELS.md)."""
+        from lutin import llamacpp_engine
+        self.assertTrue(engines.ENGINES[engines.OLLAMA].aptitudes().experts_in_ram)
+        self.assertFalse(engines.ENGINES[engines.OPENAI].aptitudes().experts_in_ram, "a server Lutin only connects to: nothing is assumed")
+        llamacpp = engines.ENGINES[engines.LLAMACPP]
+        with mock.patch.object(llamacpp, "serveur_pret", lambda: None):
+            self.assertTrue(llamacpp.aptitudes().experts_in_ram, "not installed yet: Lutin installs a recent version")
+        for help_text, expected in (("--fit [on|off]", True), ("-ncmoe, --n-cpu-moe n", True), ("--threads n -ngl n", False)):
+            with mock.patch.object(llamacpp, "serveur_pret", lambda: Path("llama-server")), mock.patch.object(llamacpp_engine, "aide_serveur", lambda exe, h=help_text: h):
+                self.assertIs(llamacpp.aptitudes().experts_in_ram, expected, help_text)
 
     def test_the_only_engine_the_loop_may_start_knows_how(self):
         for identifier, engine in engines.ENGINES.items():
