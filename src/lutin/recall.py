@@ -373,6 +373,14 @@ def result_passages(ident, question, nombre=3):
     return rank_chunks(chunks, df, mean, len(chunks), terms, nombre, 1) if chunks and terms else []
 
 
+# Below this BM25 score a passage is not put back by itself (ADR 0019, decision 6: a close but wrong passage harms the answer). Measured on the
+# corpus of tools/mesurer_rappel.py: wrong passages reach 2.32 (one word in common), right ones go from 2.12 to 10.4; 2.5 drops every wrong one
+# and 3 right ones out of 23. A passage found by meaning alone (« trouves » 0) has already passed the threshold of the embeddings.
+# The thread recall only runs once the history overflows its room (`rappel_ici`): its index then has several chunks (eight or more on 4,096
+# tokens), close to that corpus. On a conversation of three chunks every word is rare and a right passage can score below the threshold.
+THREAD_MIN_SCORE = 2.5
+
+
 def thread_recall(conv, fiche_etape="", budget=1800, vus=None):
     """Ce qui a été dit plus tôt dans CETTE conversation et qui touche à la dernière demande, retrouvé tout seul (sans que le modèle ait à le demander) : une fiche ou un résumé perd des détails,
     mais le texte complet reste sur le disque. Renvoie (texte pour le prompt, nombre de passages). Un « oui » ou un « continue » est complété par la dernière réponse et l'étape en cours.
@@ -386,13 +394,15 @@ def thread_recall(conv, fiche_etape="", budget=1800, vus=None):
         return "", 0
     question = demandes[-1]
     precise = len(words(question)) >= 4
+    if len(demandes) >= 2:
+        question = " ".join([question, demandes[-2][:600]])          # the previous request of the person: a follow-up (« et pour l'autre fichier ? ») keeps its subject (ADR 0019, decision 6)
     if not precise:
         precedente = next((m["content"] for m in reversed(msgs[:-1]) if m.get("role") == "assistant" and m.get("content")), "")
         question = " ".join([question, precedente[:300], fiche_etape])
-    termes = set(words(question[:900]))
+    termes = set(words(question[:1200]))
     if not termes:
         return "", 0
-    passages = thread_passages(ident, question, 8, 2 if precise else 1)
+    passages = [p for p in thread_passages(ident, question, 8, 2 if precise else 1) if p["trouves"] == 0 or p["score"] >= THREAD_MIN_SCORE]
     if not passages:
         return "", 0
     if vus is None:

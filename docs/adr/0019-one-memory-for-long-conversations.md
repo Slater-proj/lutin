@@ -93,6 +93,23 @@ Measured on `tests/test_evaluation.py` (fake engine, 22 turns; no real model).
   model could read it again without end; it now gives the start of the line and the next `debut`. Before → after, 4,096 tokens: an output of
   30,000 characters entered the conversation at 2,457 tokens (60 % of the window), now at most 409; 8,192 tokens: at most 819. The
   evaluation suite is unchanged (its scenario calls no tool: a scenario rich in tools is still to write, `CONTEXT_RESEARCH.md` proposal 9).
+- **Stage 5** (the recall answers the question asked): a short question about the state of the work (`progress_sheet.is_state_question`:
+  « où en est-on ? », « fais le point », « qu'est-ce qui reste ? », « where are we? », 14 words at most) is left to the sheet when the sheet has
+  something: neither the thread nor the documents are searched. Otherwise the query of the thread adds the previous request of the person
+  (a follow-up such as « comment s'appelle-t-il déjà ? » keeps its subject), and a passage found by words comes back only from a BM25 score
+  of 2.5 (`recall.THREAD_MIN_SCORE`, measured on the corpus of `tools/mesurer_rappel.py`: wrong passages reach 2.32, right ones go from 2.12
+  to 10.4; a passage found by meaning has passed the threshold of the embeddings), three at most as before. The threshold is absolute, so
+  it depends on the size of the index: on a conversation of three chunks a right passage can stay below it; the thread recall only runs
+  once the history overflows, when the index has eight chunks or more on 4,096 tokens. Before → after: request at « where are we? »
+  3,151 → 2,658 tokens on 4,096 (5/5 and 1/5 decisions kept, unchanged), 6,192 → 6,094 on 8,192, faithful model 5/5 unchanged, **weak
+  model 3/5 → 1/5**: two decisions the weak scribe had not written came back through the recall of the thread, which the question no
+  longer runs (measured by turning the rule off: 3/5 again; the threshold and the previous request alone change nothing). To be decided by
+  the maintainer: keep the rule as decided, or keep the recall for a question of state when the sheet holds few decisions.
+- **Stage 6** (the scribe answers in a fixed shape): `agent.SCHEMA_SCRIBE` (each key a list of sentences, every key required, no more items
+  than `_scribe_appliquer` keeps) is sent as `format` to the engines that declare they constrain their output (`grammar` = yes: Ollama,
+  llama.cpp); the OpenAI form (`response_format` of type `json_schema`) is what llama-server receives. An engine that refuses the schema
+  (HTTP error: an old Ollama, a compatible server) gets free JSON at a second try; an engine that declares nothing gets free JSON at once.
+  Not measured on a real engine (no real model in the tests).
 
 ## Consequences
 

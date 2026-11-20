@@ -67,6 +67,8 @@ def vers_openai(corps):
         sortie["tools"] = corps["tools"]
     if corps.get("format") == "json":
         sortie["response_format"] = {"type": "json_object"}
+    elif isinstance(corps.get("format"), dict):          # un schéma (format d'Ollama) : la forme d'OpenAI, que llama-server lit aussi (tools/server/README.md)
+        sortie["response_format"] = {"type": "json_schema", "json_schema": {"name": "reponse", "schema": corps["format"]}}
     if flux:
         sortie["stream_options"] = {"include_usage": True}
     return sortie

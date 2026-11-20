@@ -225,6 +225,13 @@ def repondre_choix_memoire(ident, choix, garder):
 
 SCRIBE_MESSAGES = 6                  # le scribe passe toutes les trois réponses environ (six messages)
 SCRIBE_AJOUTS_MAX = 4               # lignes ajoutées au plus par section et par passage : un modèle bavard ne peut pas inonder la fiche
+# La forme de la réponse du scribe (ADR 0019, décision 4), envoyée comme « format » aux moteurs qui contraignent la sortie : chaque clé, une liste de
+# phrases, pas plus que ce que _scribe_appliquer garde. Une réponse vide ou illisible ne change rien, comme avant.
+SCHEMA_SCRIBE = {"type": "object", "additionalProperties": False,
+                 "required": ["objectif", "plan", "etape", "decisions", "fait", "ouvert", "resolu"],
+                 "properties": {cle: {"type": "array", "items": {"type": "string"}, "maxItems": maximum}
+                                for cle, maximum in (("objectif", 3), ("plan", 12), ("etape", 3), ("decisions", SCRIBE_AJOUTS_MAX), ("fait", SCRIBE_AJOUTS_MAX),
+                                                     ("ouvert", SCRIBE_AJOUTS_MAX), ("resolu", SCRIBE_AJOUTS_MAX))}}
 
 
 SCRIBE_LOT = 7000                    # caractères d'échanges donnés au scribe en un appel
@@ -371,10 +378,17 @@ def _scribe_appel(r, ident, echange):
                 "fait (ce qui vient d'être terminé), ouvert (NOUVELLES questions restées sans réponse), resolu (questions de la fiche qui ont maintenant une réponse, recopiées telles quelles). "
                 "N'invente rien : ne note que ce qui est dit dans les échanges. Liste vide si rien à ajouter.")
     try:
-        corps_scribe = {"model": modele_annexe(r), "stream": False, "think": False, "format": "json", "options": _m.options_modele(r, 0.1),
+        moteur = moteur_actuel(r)
+        schema = _aptitudes.of(moteur).grammar == _aptitudes.YES          # Ollama et llama.cpp contraignent la sortie par un schéma (ADR 0019, décision 4)
+        corps_scribe = {"model": modele_annexe(r), "stream": False, "think": False, "format": SCHEMA_SCRIBE if schema else "json", "options": _m.options_modele(r, 0.1),
                         "messages": [{"role": "system", "content": consigne}, {"role": "user", "content": "FICHE ACTUELLE :\n" + _suivi.serialize(ident, sections) + "\n\nDERNIERS ÉCHANGES :\n" + echange}]}
         with _m.tache_de_fond("fiche:" + str(ident), _t("Mise à jour de la fiche de suivi")):          # montré dans la barre d'état de la page
-            rep = moteur_actuel(r).chat(corps_scribe, 300)
+            try:
+                rep = moteur.chat(corps_scribe, 300)
+            except urllib.error.HTTPError:
+                if not schema:
+                    raise
+                rep = moteur.chat(dict(corps_scribe, format="json"), 300)          # un moteur qui refuse le schéma (Ollama ancien, serveur compatible) : du JSON libre, comme avant
         ops = json.loads((rep.get("message", {}).get("content") or "{}").strip() or "{}")
     except (urllib.error.URLError, OSError, ValueError) as erreur:
         _m.journaliser("Scribe : fiche non mise à jour (conversation {}) : {!r}".format(ident, erreur))
@@ -1820,6 +1834,9 @@ def _preparer_boucle(conv, r, emit, ctx):
         fiche = ""
     extraits = ""
     place = place_des_rappels(conv, r, outils, fiche)
+    derniere_demande = next((m.get("content") or "" for m in reversed(conv["messages"]) if m.get("role") == "user"), "")
+    if fiche and _suivi.is_state_question(derniere_demande):
+        place = 0                          # « où en est-on ? » : la fiche répond (ADR 0019, décision 6) ; un passage qui partage « où » ou « reste » ne ferait que brouiller
     if r.get("rappel_ici") and min(_disposition.thread_budget(r["num_ctx"]), place) >= _disposition.RECALL_MIN:          # le début de la conversation n'est plus sous les yeux du modèle : on lui remet ce qui touche à la demande
         try:
             etape = " ".join(_suivi.read(conv["id"])["etape"] + _suivi.read(conv["id"])["objectif"])
@@ -1840,7 +1857,6 @@ def _preparer_boucle(conv, r, emit, ctx):
             _m.journaliser("Rappels automatiques impossibles : {!r}".format(erreur))
     if rappels_sources:
         emit({"type": "info", "texte": _t("📎 Rappels ajoutés d'après tes documents : {}").format(" ; ".join(rappels_sources[:4]))})
-    derniere_demande = next((m.get("content") or "" for m in reversed(conv["messages"]) if m.get("role") == "user"), "")
     try:
         consigne = _suivi.execution_directive(conv, derniere_demande, conv["id"])
     except ValueError:

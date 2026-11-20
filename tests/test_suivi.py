@@ -3,6 +3,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import context  # noqa: F401
 
@@ -190,10 +191,48 @@ class Scribe(unittest.TestCase):
         self.assertEqual(s["ouvert"], [], "la question résolue (recopiée telle quelle) est retirée")
         self.assertGreater(n, 0)
         self.assertEqual(self.conv["scribe_a"], 8)
-        self.assertEqual(appels[0]["format"], "json")
+        self.assertEqual(appels[0]["format"], self.dialogue.SCHEMA_SCRIBE, "Ollama contraint la sortie : le scribe envoie son schéma (ADR 0019, décision 4)")
         self.assertIn("FICHE ACTUELLE", appels[0]["messages"][1]["content"])
         self.assertEqual(self.dialogue.scribe(self.conv, {"modele": "m", "num_ctx": 8192, "temperature": 0.2}), 0, "rien de nouveau depuis : aucun appel")
         self.assertEqual(len(appels), 1)
+
+    def test_le_schema_du_scribe_suit_le_moteur_et_retombe_sur_du_json_libre(self):
+        """ADR 0019, décision 4 : la réponse du scribe est contrainte par un schéma quand le moteur le sait (Ollama « format », llama.cpp par
+        response_format) ; un moteur qui refuse le schéma reçoit du JSON libre au second essai, et un moteur qui ne dit rien de lui le reçoit d'emblée."""
+        import urllib.error
+        from unittest import mock
+        from lutin import engines, openai_engine
+        schema = self.dialogue.SCHEMA_SCRIBE
+        self.assertEqual(set(schema["required"]), set(schema["properties"]), "chaque clé est demandée : une liste vide plutôt qu'une clé oubliée")
+        self.assertTrue({"objectif", "plan", "etape", "decisions", "fait", "ouvert", "resolu"} <= set(schema["properties"]))
+        refus = []
+
+        def faux(chemin, corps=None, delai=8):
+            refus.append(corps["format"])
+            if isinstance(corps["format"], dict):
+                raise urllib.error.HTTPError("http://x/api/chat", 400, "invalid format", {}, None)
+            return {"message": {"content": json_ops(etape=["Choisir la salle"])}}
+        self.dialogue.ollama_json = faux
+        self.dialogue.scribe(self.conv, {"modele": "m", "num_ctx": 8192, "temperature": 0.2})
+        self.assertEqual(refus, [schema, "json"], "le schéma refusé, puis du JSON libre")
+        self.assertEqual(progress_sheet.read(ID)["etape"], ["Choisir la salle"], "la réponse du second essai est gardée")
+
+        class SansAptitudes(engines.Moteur):
+            id = "inconnu"
+
+            def __init__(self):
+                self.corps = []
+
+            def chat(self, corps, delai=60):
+                self.corps.append(corps)
+                return {"message": {"content": "{}"}}
+        moteur = SansAptitudes()
+        with mock.patch.object(self.dialogue, "moteur_actuel", lambda r: moteur):
+            self.dialogue._scribe_appel({"modele": "m", "num_ctx": 8192, "temperature": 0.2}, ID, "[moi] bonjour")
+        self.assertEqual(moteur.corps[0]["format"], "json", "un moteur qui ne dit pas savoir contraindre sa sortie : du JSON libre")
+        sortie = openai_engine.vers_openai({"model": "m", "messages": [], "format": schema, "stream": False})
+        self.assertEqual(sortie["response_format"], {"type": "json_schema", "json_schema": {"name": "reponse", "schema": schema}}, "llama-server reçoit le schéma sous la forme d'OpenAI")
+        self.assertEqual(openai_engine.vers_openai({"model": "m", "messages": [], "format": "json", "stream": False})["response_format"], {"type": "json_object"})
 
     def test_un_long_plan_ne_chasse_pas_l_etape_ni_les_premieres_decisions(self):
         """Une petite fenêtre (4 096 jetons) : le plan est raccourci par sa fin, l'étape en cours et les questions ouvertes restent ; au-delà du plafond de
@@ -345,6 +384,57 @@ class RappelDuFil(unittest.TestCase):
         from lutin import recall
         self.assertEqual(recall.thread_recall({"id": "e9d8c7b6", "messages": [{"role": "user", "content": "une longue question sans historique ici"}]}), ("", 0))
         self.assertEqual(recall.thread_recall({"id": "", "messages": []}), ("", 0))
+
+    def test_la_demande_precedente_garde_le_sujet_d_une_question_de_suite(self):
+        """ADR 0019, décision 6 : « comment s'appelle-t-il déjà ? » ne dit pas de quoi l'on parle ; la demande précédente de la personne, si. Sans elle,
+        un seul mot en commun (« appelle ») et rien ne revenait."""
+        from lutin import recall
+        msgs = [{"role": "user", "content": "Le fichier de configuration de production s'appelle reglages-prod-7.toml, garde-le en tête."}, {"role": "assistant", "content": "Noté."}]
+        msgs += [{"role": "user" if i % 2 == 0 else "assistant", "content": "autre sujet sans rapport %d et encore des mots " % i * 6} for i in range(10)]
+        msgs += [{"role": "user", "content": "Il faudra renommer le fichier de configuration de production."}, {"role": "assistant", "content": "D'accord, quand tu veux."}]
+        c = self.conv(msgs)
+        c["messages"] = msgs + [{"role": "user", "content": "Comment s'appelle-t-il exactement déjà ?"}]
+        texte, n = recall.thread_recall(c)
+        self.assertEqual(n, 1)
+        self.assertIn("reglages-prod-7.toml", texte)
+
+    def test_un_passage_proche_mais_faible_n_est_pas_remis(self):
+        """ADR 0019, décision 6 : un passage n'est remis que s'il dépasse un seuil de score. Un mot en commun dans un long message sur autre chose
+        n'apporte rien au modèle (un passage proche mais faux nuit à la réponse) ; le passage qui répond, lui, revient."""
+        from lutin import recall
+        msgs = [{"role": "user", "content": "Pour la cuisine, on garde les placards blancs ; au passage le jardin est grand, mais parlons des poignées, du plan de travail en chêne, de l'évier, de la hotte, du carrelage et de la lumière au-dessus de la table. "},
+                {"role": "assistant", "content": "Noté pour la cuisine."}]
+        msgs += [{"role": "user" if i % 2 == 0 else "assistant", "content": "sujet numéro %d sur les factures, le budget et les devis des artisans " % i * 4} for i in range(36)]          # la taille d'un fil qui déborde
+        c = self.conv(msgs)
+        c["messages"] = msgs + [{"role": "user", "content": "Merci, c'est clair."}, {"role": "assistant", "content": "Autre chose ?"}, {"role": "user", "content": "et le jardin ?"}]
+        self.assertEqual(recall.thread_recall(c), ("", 0), "« jardin » en passant dans un message sur la cuisine : rien n'est remis")
+        msgs[0] = {"role": "user", "content": "Le jardin : tondre la pelouse du jardin chaque samedi, tailler la haie du jardin en mars, arroser le potager du jardin le soir."}
+        c = self.conv(msgs)
+        c["messages"] = msgs + [{"role": "user", "content": "Merci, c'est clair."}, {"role": "assistant", "content": "Autre chose ?"}, {"role": "user", "content": "et le jardin ?"}]
+        texte, n = recall.thread_recall(c)
+        self.assertEqual(n, 1, "le passage qui parle du jardin revient")
+        self.assertIn("haie", texte)
+
+    def test_une_question_sur_l_etat_du_travail_est_laissee_a_la_fiche(self):
+        """ADR 0019, décision 6 : « où en est-on ? » se répond par la fiche de suivi ; le rappel par mots-clés (fil et documents) ne cherche pas, il ne
+        ramènerait que des passages qui partagent « où » ou « reste ». Une autre question, dans la même conversation, déclenche le rappel."""
+        from lutin import agent, recall
+        self.addCleanup(progress_sheet.delete, self.ident)
+        progress_sheet.modify(self.ident, "etape", "Ouvrir le coffre ZEBRE")
+        msgs = [{"role": "user" if i % 2 == 0 else "assistant", "content": ("Le code du coffre ZEBRE est 4711, où en est la serrure du coffre ? " if i == 2 else "") + "blabla de remplissage numéro %d " % i * 40} for i in range(20)]
+        c = self.conv(msgs)
+        r = dict(_m.reglages(), num_ctx=4096, rappel_ici=True, web=False)          # 4 096 : le début n'est plus sous les yeux du modèle
+        rappels = []
+        with mock.patch.object(_m, "thread_recall", lambda *a, **k: rappels.append(a) or recall.thread_recall(*a, **k)), mock.patch.object(_m, "automatic_recalls", lambda *a, **k: rappels.append(a) or ("", [])):
+            c["messages"] = msgs + [{"role": "user", "content": "Où en est-on ?"}]
+            p = agent._preparer_boucle(c, r, lambda e: None, {})
+            self.assertEqual((p.extraits, rappels), ("", []), "la fiche répond : aucun rappel cherché")
+            c["messages"] = msgs + [{"role": "user", "content": "Rappelle-moi le code du coffre ZEBRE"}]
+            p = agent._preparer_boucle(c, r, lambda e: None, {})
+            self.assertIn("4711", p.extraits, "une autre question : le rappel cherche")
+        self.assertTrue(all(progress_sheet.is_state_question(t) for t in ("Où en est-on ?", "On en est où ?", "Fais le point", "qu'est-ce qui reste ?", "Where are we?", "état d'avancement ?")))
+        self.assertFalse(any(progress_sheet.is_state_question(t) for t in ("où est le fichier config ?", "corrige l'état du bouton", "oui", "fix the status bar color",
+                                                                             "Lis le README et dis-moi où sont les tests, puis fais le point sur ce qui manque dans le dossier docs de ce projet")))
 
 
 if __name__ == "__main__":

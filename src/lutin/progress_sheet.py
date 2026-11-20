@@ -254,6 +254,22 @@ def is_confirmation(texte):
     return 0 < len(mots) <= 8 and all(m in CONFIRMATION_WORDS for m in mots)
 
 
+# A question about the state of the work (ADR 0019, decision 6): the sheet answers it, the keyword recall would only bring back passages that
+# share a word with « où » or « reste ». Short messages only: « corrige l'état du bouton » is a request, not a question about the work.
+RE_STATE_QUESTION = re.compile(
+    r"\bou en (est|sont|sommes|etait|etions)\b|\bon en est ou\b|\bou on en est\b|\bfai(s|re|t) (le|un) point\b|\bpoint (sur|d etape)\b"
+    r"|\b(etat|point) (d avancement|du travail|du projet|des travaux)\b|\brecap\w*|\bresume (moi )?(ce qu|ou)\b|\b(que|qu est ce qui) reste\b"
+    r"|\breste (t il )?a faire\b|\bwhere (are|do) we( stand| at)?\b|\bwhat (is|s) left\b|\bwhat remains\b|\bstatus update\b|\bprogress so far\b")
+STATE_QUESTION_MAX_WORDS = 14
+
+
+def is_state_question(texte):
+    """True for a short question about where the work stands (« où en est-on ? », « fais le point », « qu'est-ce qui reste ? »)."""
+    base = unicodedata.normalize("NFKD", str(texte or "").lower()).encode("ascii", "ignore").decode()
+    base = " ".join(re.findall(r"[a-z]+", base.replace("'", " ").replace("’", " ")))
+    return 0 < len(base.split()) <= STATE_QUESTION_MAX_WORDS and bool(RE_STATE_QUESTION.search(base))
+
+
 def execution_directive(conv, texte, ident):
     """Quand l'utilisateur valide (« oui ») et qu'il y a une étape ou une tâche à faire : une consigne qui ordonne d'EXÉCUTER, pas de replanifier ni de redemander. '' sinon."""
     if not is_confirmation(texte):
