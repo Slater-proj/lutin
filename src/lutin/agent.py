@@ -1681,6 +1681,26 @@ def _noms_voisins(args, proprietes):
     return corrige
 
 
+def verifier_arguments(nom, args, parametres=None):
+    """Les arguments d'un appel contrôlés contre le schéma de l'outil (CONTEXT_RESEARCH.md, proposition 8) : un champ obligatoire absent ou vide, un
+    entier illisible, et l'outil n'est pas lancé ; le modèle reçoit une erreur qui dit quoi corriger, avec la forme attendue. Avant, « lire » sans
+    chemin lisait « . » et répondait « fichier introuvable », sans dire que le chemin manquait. ErreurOutil ; rien si tout va bien."""
+    parametres = parametres if isinstance(parametres, dict) else {}
+    proprietes = parametres.get("properties") or {}
+    manquants = [k for k in (parametres.get("required") or []) if args.get(k) is None or (isinstance(args.get(k), str) and not args[k].strip())]
+    illisibles = [k for k, v in args.items() if (proprietes.get(k) or {}).get("type") == "integer" and v not in (None, "") and not isinstance(v, bool)
+                  and not (isinstance(v, int) or (isinstance(v, str) and v.strip().lstrip("-").isdigit()))]
+    if not manquants and not illisibles:
+        return
+    forme = "{" + ", ".join('"{}": {}'.format(k, "…" if (proprietes.get(k) or {}).get("type") != "integer" else "1") for k in (parametres.get("required") or [])) + "}"
+    parties = []
+    if manquants:
+        parties.append(_t("argument obligatoire manquant : {}").format(", ".join("« {} »".format(k) for k in manquants)))
+    if illisibles:
+        parties.append(_t("nombre entier attendu pour {}").format(", ".join("« {} »".format(k) for k in illisibles)))
+    raise _m.ErreurOutil(_t("Appel de « {} » non lancé : {}. Rappelle l'outil avec ses arguments, par exemple {}.").format(nom, " ; ".join(parties), forme))
+
+
 def normaliser_arguments(nom, args, parametres=None):
     """Les arguments d'un appel d'outil sous forme de dictionnaire, quoi que le modèle ait envoyé (objet, texte JSON, chaîne nue, « clé=valeur », liste, rien).
     `parametres` : le schéma de l'outil (propriétés et champs obligatoires), pour savoir à quel paramètre rattacher une chaîne nue.
@@ -2157,8 +2177,13 @@ def borner_resultat(conv, ctx, nom, resultat):
 def _executer_appels(conv, r, emit, ctx, stop, appels, outils, garde):
     """Les outils demandés par le modèle, dans l'ordre des appels : garde contre les boucles, exécution (l'accord se demande dans l'outil), résultat rendu au modèle et montré à la page,
     conversation enregistrée après chaque outil."""
-    avance = lectures_groupees(appels, lambda nom, brut: normaliser_arguments(nom, brut, next((t["function"].get("parameters") for t in outils if t["function"]["name"] == nom), None)),
-                               lambda nom, args: _m.call_tool(nom, args, ctx), ctx["outils_autorises"])
+    def schema(nom):
+        return next((t["function"].get("parameters") for t in outils if t["function"]["name"] == nom), None)
+
+    def lancer(nom, args):
+        verifier_arguments(nom, args, schema(nom))                     # un appel mal formé n'est pas lancé : le modèle reçoit ce qu'il doit corriger
+        return _m.call_tool(nom, args, ctx)
+    avance = lectures_groupees(appels, lambda nom, brut: normaliser_arguments(nom, brut, schema(nom)), lancer, ctx["outils_autorises"])
     for position, a in enumerate(appels):
         if stop.is_set():                        # arrêt demandé : les appels restants reçoivent une réponse, pour garder une conversation cohérente
             for b in appels[position:]:
@@ -2166,7 +2191,7 @@ def _executer_appels(conv, r, emit, ctx, stop, appels, outils, garde):
             raise _m.Arret()
         f = a.get("function") or {}
         nom = f.get("name", "")
-        args = normaliser_arguments(nom, f.get("arguments"), next((t["function"].get("parameters") for t in outils if t["function"]["name"] == nom), None))
+        args = normaliser_arguments(nom, f.get("arguments"), schema(nom))
         repetitions = garde.compter(nom, args)
         debut_outil = time.monotonic()
         _m.rafraichir_accords(ctx)                                  # une case cochée ou décochée pendant la réponse compte dès cet outil
@@ -2181,7 +2206,7 @@ def _executer_appels(conv, r, emit, ctx, stop, appels, outils, garde):
             elif position in avance:
                 resultat = avance[position].result()          # lu en même temps que les lectures voisines ; l'ordre des évènements reste celui des appels
             else:
-                resultat = _m.call_tool(nom, args, ctx)
+                resultat = lancer(nom, args)
         except _m.Arret:
             for b in appels[position:]:
                 conv["messages"].append({"role": "tool", "tool_name": (b.get("function") or {}).get("name", ""), "content": "Interrompu par l'utilisateur."})

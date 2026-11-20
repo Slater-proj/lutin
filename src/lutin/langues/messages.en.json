@@ -2344,5 +2344,8 @@
 "le texte complet est gardé : appelle « rappeler » avec ici=true et des mots de la partie qui manque": "the full text is kept: call « rappeler » with ici=true and words of the missing part",
 "relance l'outil avec une demande plus précise": "call the tool again with a narrower request",
 "[Résultat coupé au milieu pour tenir dans la fenêtre : {} caractères sur {} retirés ; {}.]": "[Result cut in the middle to fit the window: {} characters out of {} taken out; {}.]",
-"Les réglages des moteurs (moteurs.json) ne se lisent pas : un autre programme les tient. Réessaie dans un moment.": "The engine settings (moteurs.json) cannot be read: another program holds them. Try again in a moment."
+"Les réglages des moteurs (moteurs.json) ne se lisent pas : un autre programme les tient. Réessaie dans un moment.": "The engine settings (moteurs.json) cannot be read: another program holds them. Try again in a moment.",
+"argument obligatoire manquant : {}": "required argument missing: {}",
+"nombre entier attendu pour {}": "whole number expected for {}",
+"Appel de « {} » non lancé : {}. Rappelle l'outil avec ses arguments, par exemple {}.": "Call of « {} » not run: {}. Call the tool again with its arguments, for example {}."
 }

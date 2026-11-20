@@ -530,6 +530,22 @@ class Assistant(unittest.TestCase):
         self.assertLessEqual(AG.estimer([envoye]), 4096 // 10, "et c'est ce que le modèle reçoit")
         self.assertIn("zorglub", A.recall_tool("module zorglub introuvable", 3, cid, True), "le texte complet se retrouve avec « rappeler »")
 
+    def test_un_appel_sans_argument_obligatoire_n_est_pas_lance_et_le_modele_sait_quoi_corriger(self):
+        """CONTEXT_RESEARCH.md, proposition 8 : les arguments sont contrôlés contre le schéma de l'outil. « lire » sans chemin lisait « . » et
+        répondait « fichier introuvable : . », sans dire que le chemin manquait ; un entier illisible partait tel quel. L'outil n'est plus lancé, et
+        l'erreur dit quoi corriger avec la forme attendue ; un appel juste passe comme avant."""
+        (PROJET / "court.txt").write_text("une ligne\n", encoding="utf-8")
+        try:
+            ev = chat("Lis", reponses=[[appel_outil("lire")], [appel_outil("lire", chemin="court.txt", debut="deux")], [appel_outil("lire", chemin="court.txt", debut="1")], [{"content": "Lu."}]])
+        finally:
+            (PROJET / "court.txt").unlink()
+        resultats = [e["texte"] for e in ev if e["type"] == "resultat"]
+        self.assertIn("argument obligatoire manquant : « chemin »", resultats[0])
+        self.assertIn('{"chemin": …}', resultats[0], "la forme attendue")
+        self.assertNotIn("introuvable", resultats[0])
+        self.assertIn("nombre entier attendu pour « debut »", resultats[1])
+        self.assertIn("une ligne", resultats[2], "un entier écrit en texte reste accepté")
+
     def test_lire_s_arrete_a_sa_limite_et_une_ligne_trop_longue_ne_renvoie_pas_a_elle_meme(self):
         """La limite d'un résultat suit la fenêtre (ADR 0019) : « lire » s'arrête avant et dit où reprendre. Une ligne plus longue que la limite (fichier
         minifié, JSON) donnait une lecture vide qui renvoyait à « debut » sur cette même ligne : le modèle relisait sans fin."""
