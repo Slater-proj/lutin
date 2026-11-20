@@ -2,7 +2,7 @@
 // tested in slash.test.ts: what is typed becomes a known command with its argument, or a command of the project, or nothing. The French names of the
 // old page are kept as aliases, so a habit does not break.
 
-export type CommandName = "help" | "new" | "compact" | "stop" | "retry" | "git" | "health" | "model" | "mode" | "memory" | "think" | "web" | "files" | "commands";
+export type CommandName = "help" | "new" | "compact" | "stop" | "retry" | "git" | "health" | "model" | "mode" | "think" | "web" | "files" | "commands";
 
 export type Command = { name: CommandName; aliases: readonly string[]; arg?: string };
 
@@ -16,7 +16,6 @@ export const COMMANDS: readonly Command[] = [
   { name: "health", aliases: ["sante"] },
   { name: "model", aliases: ["modele"], arg: "name" },
   { name: "mode", aliases: [], arg: "general|technical|scenario|research|chat" },
-  { name: "memory", aliases: ["memoire"], arg: "summary|sheet|general" },
   { name: "think", aliases: ["reflexion"], arg: "on|off" },
   { name: "web", aliases: [], arg: "on|off" },
   { name: "files", aliases: ["fichiers", "accord"], arg: "on|off" },
@@ -28,15 +27,6 @@ export const MODE_NAMES: Record<string, string> = {
   general: "general", polyvalent: "general", technical: "technical", code: "technical", scenario: "scenario", ecriture: "scenario", research: "research", recherche: "research",
   chat: "chat", discussion: "chat",
 };
-
-/** `summary`, `sheet` or null (the general setting), from the v1 or French names; undefined when it is none of them. */
-export function memoryMode(arg: string): "summary" | "sheet" | null | undefined {
-  const value = arg.trim().toLowerCase();
-  if (["summary", "resume", "résumé"].includes(value)) return "summary";
-  if (["sheet", "fichier", "fiche"].includes(value)) return "sheet";
-  if (["general", "demander", "ask", ""].includes(value)) return null;
-  return undefined;
-}
 
 /** true for on/oui/yes/1, false for off/non/no/0, null otherwise. */
 export function onOff(arg: string): boolean | null {

@@ -36,7 +36,6 @@ export const FIELDS: readonly Field[] = [
   { name: "disabled_tools", group: "safety", kind: "strings" },
 
   { name: "web", group: "knowledge", kind: "boolean" },
-  { name: "long_memory", group: "knowledge", kind: "select", options: ["ask", "summary", "file"] },
   { name: "auto_recall", group: "knowledge", kind: "select", options: ["scenario", "always", "never"] },
   { name: "semantic_search", group: "knowledge", kind: "boolean" },
   { name: "embedding_model", group: "knowledge", kind: "text" },

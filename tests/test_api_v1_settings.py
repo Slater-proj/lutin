@@ -56,7 +56,7 @@ class Settings(unittest.TestCase):
     def test_reading_gives_every_setting_under_its_v1_name(self):
         status, answer = V.call("GET", "/api/v1/settings", V.OWNER)
         self.assertEqual((status, sorted(answer)), (200, sorted(api_v1.SETTINGS)))
-        self.assertEqual((answer["mode"], answer["long_memory"], answer["thinking_steps"], answer["auto_recall"]), ("general", "ask", "always", "scenario"))
+        self.assertEqual((answer["mode"], answer["long_memory"], answer["thinking_steps"], answer["auto_recall"]), ("general", "file", "always", "scenario"))
         self.assertEqual((answer["temperature"], answer["web"], answer["top_p"], answer["cluster"], answer["disabled_tools"], answer["models_by_engine"]), (0.6, True, None, None, [], {}))
         self.assertEqual((answer["engine"], answer["max_steps"], answer["tool_command_timeout_s"]), ("ollama", 14, 240))
 
@@ -73,6 +73,9 @@ class Settings(unittest.TestCase):
         self.assertEqual(V.call("GET", "/api/v1/settings", V.OWNER)[1], answer)
         self.assertEqual(V.call("PATCH", "/api/v1/settings", V.OWNER, body={"top_p": None})[1]["top_p"], None, "null: back to automatic")
         self.assertEqual(V.call("PATCH", "/api/v1/settings", V.OWNER, body={})[1]["temperature"], 0.4, "nothing asked, nothing changed")
+        for old in ("summary", "ask"):          # ADR 0019: the old words are accepted, and every conversation keeps its thread with the progress sheet
+            self.assertEqual(V.call("PATCH", "/api/v1/settings", V.OWNER, body={"long_memory": old})[1]["long_memory"], "file", old)
+            self.assertEqual(A.reglages()["memoire_longue"], "fichier", old)
 
     def test_a_paired_device_reads_and_changes_them_as_with_the_french_route(self):
         self.assertEqual(V.call("PATCH", "/api/v1/settings", V.DEVICE, body={"web": False})[1]["web"], False)

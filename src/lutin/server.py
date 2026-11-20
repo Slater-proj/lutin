@@ -536,7 +536,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
                                        "pulls": _m.PULLS, "reglages": r, "conversations": _m.conv_liste(), "racine": str(_m.RACINE), "donnees": str(_m.DONNEES),
                                        "colibri_choisi": bool(getattr(_m.moteur_actuel(r), "colibri_choisi", lambda: False)()), "lmstudio_choisi": bool(getattr(_m.moteur_actuel(r), "lmstudio_choisi", lambda: False)()), "exllamav3_choisi": bool(getattr(_m.moteur_actuel(r), "exllamav3_choisi", lambda: False)()), "outil": bool(self._outil_vivant()), "hors_ligne": _hl.is_active(), "moteur": _m.moteur_actuel().id, "niveau": _m.SECURITE.niveau, "docker": _acces.in_docker(), "ouverture_possible": _fichiers.opening_possible(), "missions": _mission.par_conversation(), "langue": _i18n.langue(), "langue_reglage": _i18n.langue_configuree(), "cpus": _machine.cpus_available() or 1, "diagnostic": self._avec_estimation(self._diagnostic(o, r, profil, modeles), r, profil), "prudent": _estimation.cautious_mode(profil), "premier_lancement": self._premier_lancement(o, r, profil), "redemarrage": {"necessaire": _acces.restart_needed(), "possible": _acces.can_restart()}, "nouvelle_version": _m.nouvelle_version_lutin(), "travaux": _m.works_state(), "configurateur": self._configurateur(), "addons_alertes": _addons.alertes(), "embeddings": _embeddings.state(),
                                        "reflexion_possible": self._reflexion_possible(r, o["actif"]), "cluster_actif": _machines.cluster_actif(r.get("cluster")), "demandes_machines": len(_machines.noeud().get("demandes", [])), "modeles_distants": _machines.modeles_distants() if _machines.cluster_actif(r.get("cluster")) else [], "conversations_distantes": _machines.conversations_distantes() if _machines.cluster_actif(r.get("cluster")) else [], "machines_hors_ligne": _machines.hors_ligne() if _machines.cluster_actif(r.get("cluster")) else [], "taches_fond": _m.taches_en_cours(), "taches_moteur": [dict(v, nom=_moteurs.ENGINES[k].nom) for k, v in _moteurs.all_tasks().items() if v.get("statut") == "en cours" and k in _moteurs.ENGINES], "fins_moteur": _moteurs.recent_ends(), "memoire": self._memoire(r, o), "calibrage": _calibrage.state(), "bench": {"en_cours": _m.BENCH["en_cours"], "etape": _m.BENCH["etape"], "erreur": _m.BENCH["erreur"], "file": list(_m.BENCH.get("file") or []), "mesures": _bench.read(_m.chemin_bench())}, "attentes": [{"id": a.id, "titre": a.titre, "detail": a.detail, "diff": a.diff, "conv": a.conv} for a in _m.Attente.EN_COURS.values()],
-                                       "en_attente": sorted({a.conv for a in _m.Attente.EN_COURS.values() if a.conv} | set(_m.CHOIX_MEMOIRE))})
+                                       "en_attente": sorted({a.conv for a in _m.Attente.EN_COURS.values() if a.conv})})
         if chemin == "/api/conseil":
             r = _m.reglages()
             vitesse = ((_bench.read(_m.chemin_bench()).get(r["modele"]) or {}).get("resultats") or {}).get("vitesse")
@@ -973,7 +973,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 return self._envoyer(200, _m.git_message_of(donnees.get("fichiers")))
             if self.path == "/api/git-commit":
                 return self._envoyer(200, _m.git_commit(donnees.get("message"), donnees.get("fichiers")))
-            if self.path == "/api/memoire-choix":                                   # réponse à la question « fiche de suivi ou résumé ? » (le tour est en attente, donc pas de verrou)
+            if self.path == "/api/memoire-choix":                                   # ancienne réponse à « fiche de suivi ou résumé ? » : la question n'est plus posée (ADR 0019), toujours 409
                 if not _m.repondre_choix_memoire(str(donnees.get("conversation", "")), str(donnees.get("choix", "")), donnees.get("garder")):
                     return self._envoyer(409, {"erreur": _t("Plus de question en attente pour cette conversation.")})
                 return self._envoyer(200, {"ok": True})
@@ -984,23 +984,14 @@ class Gestionnaire(BaseHTTPRequestHandler):
                         return self._envoyer(409, {"erreur": _t("Une réponse est en cours dans cette conversation : attends la fin ou arrête-la.")})
                 conv = _m.conv_lire(ident)
                 r = _m.reglages()
-                amorce = 0
                 if self.path == "/api/suivi":
                     _suivi.write(ident, _suivi.parse(str(donnees.get("texte", ""))[:20000]))
                 elif self.path == "/api/suivi-vider":
                     _suivi.delete(ident)
                 else:
-                    choix = str(donnees.get("mode", ""))
-                    if choix not in ("", "resume", "fichier"):
+                    if str(donnees.get("mode", "")) not in ("", "resume", "fichier"):          # accepté sans effet : la fiche de suivi pour toute conversation (ADR 0019)
                         raise ValueError(_t("Mémoire des longues conversations inconnue (resume ou fichier)."))
-                    if choix:
-                        conv["memoire_longue"] = choix
-                    else:
-                        conv.pop("memoire_longue", None)
-                    conv.pop("memoire_provisoire", None)
-                    amorce = _m.amorcer_fiche(conv, r) if choix == "fichier" else 0          # une fiche vide est remplie à partir du début de la conversation
-                    _m.conv_ecrire(conv)
-                return self._envoyer(200, {"mode": _m.memoire_longue(_m.conv_lire(ident), r), "mesure": _suivi.measure(ident, r["num_ctx"]), "amorce": amorce})
+                return self._envoyer(200, {"mode": _m.memoire_longue(conv, r), "mesure": _suivi.measure(ident, r["num_ctx"]), "amorce": 0})
             if self.path == "/api/embeddings-installer":
                 if not self._configurateur():
                     return self._envoyer(403, {"erreur": _t("L'installation d'un modèle se lance depuis cette machine.")})

@@ -13,8 +13,11 @@ Not released yet: this is the work of the `modernization` branch since the entry
   conversation tools and Git, background work, documents and notes, « / » commands and the Ctrl+K palette. The previous page stays at
   `/ancienne/` during 1.x (its bookmarks `/#conv=…` lead to the same place in the new one) and goes in 2.0.
 - **Long conversations on a small window** ([ADR 0018](docs/adr/0018-keeping-the-thread-on-a-small-window.md)): the first request is never
-  dropped and is kept word for word with the summary; passages of the conversation come back as soon as its history no longer fits; the progress
-  sheet keeps its first decisions and its current step.
+  dropped and is kept word for word at the head of the request; passages of the conversation come back as soon as its history no longer fits;
+  the progress sheet keeps its first decisions and its current step.
+- **One memory for long conversations** ([ADR 0019](docs/adr/0019-one-memory-for-long-conversations.md)): the progress sheet, for every long
+  conversation. The automatic summary and the question « sheet or summary? » are retired; a conversation that has a summary keeps it. The start
+  leaves far enough for several exchanges to fit before the next removal.
 - **Health opens in about two seconds** instead of fifteen on Windows when an engine is stopped.
 - **A versioned API, `/api/v1`** ([API_V1.md](docs/modernization/API_V1.md)): 232 routes, each with its right declared in one table and fixed by a
   contract test; English names, the turn stream translated at the border.

@@ -74,11 +74,10 @@ describe("the turn being written", () => {
       { type: "error", error: { code: "turn_failed", message: "boom" } },
       { type: "tokens", used: 1300, total: 24576, measured: true },
       { type: "speed", write_tokens_per_s: 33, read_tokens_per_s: null, load_s: 1.5, total_s: 4, tokens: 66 },
-      { type: "memory_choice", conversation_id: "0123abcd" },
       { type: "end", conversation: { id: "0123abcd", title: "T" } },
     ]);
     expect(turn.blocks).toEqual([{ kind: "error", message: "boom" }]);
-    expect([turn.tokens, turn.tokensPerSecond, turn.tasks.length, turn.title, turn.done, turn.memoryChoice, turn.status]).toEqual([{ used: 1300, total: 24576 }, 33, 1, "T", true, false, ""]);
+    expect([turn.tokens, turn.tokensPerSecond, turn.tasks.length, turn.title, turn.done, turn.status]).toEqual([{ used: 1300, total: 24576 }, 33, 1, "T", true, ""]);
   });
 });
 

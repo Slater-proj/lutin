@@ -160,14 +160,10 @@ def _avertir_une_fois(modele, maintenant=time.time):
 
 
 def memoire_longue(conv, r):
-    """Comment cette conversation garde son fil : « resume » (le début est résumé par le modèle), « fichier » (fiche de suivi) ou « demander » (on pose la question au premier résumé).
-    Le choix de la conversation l'emporte sur le réglage général."""
-    choix = (conv or {}).get("memoire_longue") or r.get("memoire_longue") or "demander"
-    return choix if choix in ("resume", "fichier", "demander") else "demander"
-
-
-CHOIX_MEMOIRE = {}                  # conversation -> {"evenement", "choix", "garder"} : la question « fiche de suivi ou résumé ? » en attente de réponse
-ATTENTE_CHOIX = 300                 # secondes avant de prendre le résumé automatique (page fermée, téléphone verrouillé)
+    """Comment cette conversation garde son fil : toujours « fichier », la fiche de suivi (ADR 0019, décision 1). Le résumé par le modèle et la
+    question « fiche ou résumé ? » sont retirés ; les anciennes valeurs (« resume », « demander ») d'un réglage ou d'une conversation restent
+    acceptées et valent la fiche. Une conversation qui a déjà un résumé le garde en tête de la requête (bloc_du_debut)."""
+    return "fichier"
 
 
 def reformuler_recherche(texte, r):
@@ -183,42 +179,48 @@ def reformuler_recherche(texte, r):
 
 PART_REQUETE = 0.68          # part de la fenêtre que la requête peut prendre (ajuster_contexte rogne au-delà) : le reste est la place de la réponse
 PART_MAX = 0.85              # jusqu'où la requête peut aller quand le système et les outils ne laissent pas à l'historique son plancher (un quart de la fenêtre)
-SEUIL_RESUME = 0.6           # le résumé se déclenche quand les messages prennent cette part de la fenêtre…
-PART_RESUME = 0.9            # …ou cette part de ce que la requête leur laisse, si c'est plus tôt
 
 
 def place_de_l_historique(conv, r, outils=None):
     """Ce que la requête laisse aux messages de la conversation, en jetons : la part de la fenêtre que garde ajuster_contexte, moins les outils
-    réellement envoyés et le message système (ADR 0018). Les seuils du résumé, du retrait et du rappel se règlent sur ce chiffre : sur une fenêtre de
-    8 192 jetons, les schémas des outils en prennent près de la moitié, et la requête était rognée bien avant que le résumé se déclenche (le début de
+    réellement envoyés et le message système (ADR 0018). Les seuils du retrait et du rappel se règlent sur ce chiffre : sur une fenêtre de
+    8 192 jetons, les schémas des outils en prennent près de la moitié, et la requête était rognée bien avant que le début sorte (le début de
     la requête changeait à chaque réponse, le cache du moteur ne servait plus). Jamais moins du quart de la fenêtre : en dessous, chaque réponse
-    demanderait un résumé."""
+    demanderait un retrait."""
     outils = outils_du_mode(r) if outils is None else outils
     prise = (len(json.dumps(outils, ensure_ascii=False)) + len(consignes_systeme(r) + _fichiers.instruction_folder(conv))) // 3
     return max(int(r["num_ctx"] * PART_REQUETE) - prise, r["num_ctx"] // 4)
 
 
-def a_compacter(conv, r, place=None):
-    """Vrai quand la conversation approche de ce que la requête peut lui laisser : c'est le moment où le résumé automatique se déclencherait.
-    place : place_de_l_historique, si elle est déjà calculée pour ce tour."""
-    msgs = conv["messages"]
-    if len(msgs) < 8:
+PART_DEBUT_FICHE = 0.5        # la fiche de suivi démarre quand l'historique atteint cette part du seuil du retrait (ADR 0019)
+
+
+def fiche_active(conv, r, place=None):
+    """Vrai quand la fiche de suivi tient le fil de cette conversation (ADR 0019) : une mission, une fiche déjà remplie (par le scribe, le modèle ou la
+    personne), un début déjà retiré ou résumé, ou un historique à mi-chemin du seuil du retrait. En deçà, la conversation est courte : le modèle a tout
+    sous les yeux, la fiche ne ferait que répéter les dernières demandes, son outil prendrait 240 jetons, et le scribe coûterait un appel au modèle
+    tous les trois échanges pour rien. À mi-chemin, le scribe a le temps de lire le début avant que le retrait ait besoin de lui.
+    place : place_de_l_historique, si elle est déjà calculée."""
+    if r.get("_mission") or conv.get("depart") or conv.get("resume"):
+        return True
+    try:
+        if conv.get("id") and any(_suivi.read(conv["id"]).values()):
+            return True
+    except ValueError:
+        pass
+    msgs = conv.get("messages") or []
+    if not msgs:
         return False
     place = place_de_l_historique(conv, r) if place is None else place
-    seuil = min(int(r["num_ctx"] * SEUIL_RESUME), int(place * PART_RESUME))
-    return estimer(msgs) + len(conv.get("resume", "")) // 3 >= seuil
+    return estimer(msgs) >= int(min(int(r["num_ctx"] * SEUIL_ELAGAGE), place) * PART_DEBUT_FICHE)
 
 
 def repondre_choix_memoire(ident, choix, garder):
-    """La réponse de la page à la question : renvoie False s'il n'y a pas de question en attente pour cette conversation."""
+    """L'ancienne réponse de la page à la question « fiche ou résumé ? ». La question n'est plus posée (ADR 0019) : un choix connu reçoit « pas de
+    question en attente » (False), un choix inconnu une erreur, comme avant."""
     if choix not in ("resume", "fichier"):
         raise ValueError(_t("Mémoire des longues conversations inconnue (resume ou fichier)."))
-    attente = CHOIX_MEMOIRE.get(str(ident))
-    if not attente:
-        return False
-    attente["choix"], attente["garder"] = choix, bool(garder)
-    attente["evenement"].set()
-    return True
+    return False
 
 
 SCRIBE_MESSAGES = 6                  # le scribe passe toutes les trois réponses environ (six messages)
@@ -322,71 +324,6 @@ def _scribe_lot(conv, r, ident, echange):
 LIGNES_REMPLACEES = {"objectif": 3, "plan": 12, "etape": 3}
 
 
-def demander_memoire(conv, r, emit, stop):
-    """Au premier résumé automatique, laisse choisir : fiche de suivi (garde mieux le fil, coûte un peu de contexte à chaque réponse) ou résumé (perd des détails).
-    Case « garder pour cette conversation » : sinon la question revient au résumé suivant. Sans réponse, résumé automatique pour cette fois. Renvoie « resume » ou « fichier »."""
-    ident = conv["id"]
-    attente = {"evenement": threading.Event(), "choix": None, "garder": False}
-    CHOIX_MEMOIRE[ident] = attente
-    try:
-        with _etat_tour.waiting(ident, "memory"):          # dit AVANT la question : quand la page la reçoit, le tour est déjà « en attente »
-            emit({"type": "choix_memoire", "conversation": ident})
-            fin = time.time() + ATTENTE_CHOIX
-            while time.time() < fin and not stop.is_set() and not attente["evenement"].wait(0.4):
-                pass
-    finally:
-        CHOIX_MEMOIRE.pop(ident, None)
-    if stop.is_set():
-        raise _m.Arret()
-    if attente["choix"] is None:
-        emit({"type": "info", "texte": _t("Pas de réponse : résumé automatique cette fois (la question sera reposée).")})
-        return "resume"
-    if attente["garder"]:
-        conv["memoire_longue"] = attente["choix"]
-        _m.conv_ecrire(conv)
-    return attente["choix"]
-
-
-def amorcer_fiche(conv, r, emit=None):
-    """Remplit une fiche de suivi vide à partir du début de la conversation (un appel au modèle, comme le résumé). Les détails restent retrouvables avec « rappeler ».
-    Renvoie le nombre de lignes écrites ; 0 si la fiche n'était pas vide ou si l'appel a échoué (la conversation n'en souffre pas : la fiche se remplira ensuite)."""
-    ident = conv.get("id")
-    try:
-        if any(_suivi.read(ident).values()):
-            return 0
-    except ValueError:
-        return 0
-    msgs = conv["messages"]
-    coupe = max((i for i, m in enumerate(msgs) if m["role"] == "user"), default=0)
-    ancien = msgs[:coupe]
-    if len(ancien) < 2 and not conv.get("resume"):
-        return 0
-    texte = "\n".join("[{}] {}".format(m["role"], (m.get("content") or "")[:1200]) for m in ancien if m.get("role") in ("user", "assistant") and m.get("content"))
-    texte = (("[Résumé précédent] " + conv["resume"] + "\n") if conv.get("resume") else "") + texte[-int(r["num_ctx"] * 1.5):]
-    if emit:
-        emit({"type": "info", "texte": _t("Fiche de suivi : préparation à partir du début de la conversation…")})
-    try:
-        rep = moteur_actuel(r).chat({"model": modele_annexe(r), "stream": False, "think": False, "format": "json", "options": _m.options_modele(r, 0.1),
-                                        "messages": [{"role": "system", "content": "Tu remplis la fiche de suivi d'une conversation pour pouvoir la continuer. Réponds en JSON avec ces clés (listes de phrases courtes, 150 caractères au plus chacune) : "
-                                                      "objectif, decisions, plan, etape (l'étape en cours), fait, ouvert (questions ouvertes), fichiers. N'invente rien : laisse une liste vide si tu ne sais pas. En français."},
-                                                     {"role": "user", "content": texte}]}, 600)
-        donnees = json.loads((rep.get("message", {}).get("content") or "{}").strip() or "{}")
-    except (urllib.error.URLError, OSError, ValueError) as erreur:
-        _m.journaliser("Fiche de suivi non amorcée (conversation {}) : {!r}".format(ident, erreur))
-        return 0
-    n = 0
-    for cle in _suivi.KEYS:
-        valeur = donnees.get(cle) if isinstance(donnees, dict) else None
-        lignes = [str(x) for x in (valeur if isinstance(valeur, list) else [valeur]) if x and str(x).strip()]
-        if lignes:
-            try:
-                _suivi.modify(ident, cle, "\n".join(lignes), "remplacer")
-                n += len(lignes)
-            except (ValueError, _m.ErreurOutil):
-                continue
-    return n
-
-
 def outils_du_mode(r):
     """Les outils envoyés au modèle : ceux du mode (voir modes.py), sans web si la case « Web » est décochée ou en mode hors ligne, sans l'outil d'images s'il n'est pas branché."""
     exclus = _modes.excluded_tools(r.get("mode"), [t["function"]["name"] for t in _m.OUTILS])
@@ -396,8 +333,10 @@ def outils_du_mode(r):
     exclus |= _tool_table.spare_tools(r.get("num_ctx"))                 # petite fenêtre : les outils qu'un autre couvre laissent leur place à la conversation ; à 4 096 jetons, un noyau seulement (ADR 0018)
     if not _m.OUTIL:
         exclus |= _modes.IMAGE_TOOLS
-    if r.get("memoire_longue") != "fichier":
-        exclus.add("suivi")                                             # sans fiche de suivi, l'outil n'a pas de sens
+    if not r.get("fiche_active"):
+        exclus.add("suivi")                                             # conversation courte : pas encore de fiche de suivi (fiche_active)
+    elif r.get("fiche_scribe", True) and int(r.get("num_ctx") or 0) and int(r["num_ctx"]) <= _tool_table.TINY_WINDOW:
+        exclus.add("suivi")                                             # 4 096 jetons : le scribe tient la fiche, l'outil (240 jetons, 6 % de la fenêtre) laisse sa place (ADR 0019, ADR 0018 décision 9)
     if not r.get("_mission"):
         exclus |= {"mission_terminer", "mission_bloquee"}               # ces deux outils n'existent que pendant une mission longue
     from . import addons
@@ -1116,12 +1055,13 @@ def jauge_contexte(conv, r=None):
     if conv.get("resume"):
         msgs.append({"role": "user", "content": conv["resume"]})
     msgs += conv.get("messages", [])
-    if memoire_longue(conv, r) == "fichier" and conv.get("id"):
+    if conv.get("id"):
         try:
             msgs.append({"role": "user", "content": _suivi.text_for_model(conv["id"], r["num_ctx"])})          # la place de la fiche compte dans la jauge
         except ValueError:
             pass
-    return {"utilise": estimer(msgs) + len(json.dumps(outils_du_mode(r), ensure_ascii=False)) // 3, "total": r["num_ctx"], "reel": False}          # les outils réellement envoyés, pas toute la liste
+    outils = outils_du_mode(dict(r, fiche_active=fiche_active(conv, r)))
+    return {"utilise": estimer(msgs) + len(json.dumps(outils, ensure_ascii=False)) // 3, "total": r["num_ctx"], "reel": False}          # les outils réellement envoyés, pas toute la liste
 
 
 # Une erreur d'Ollama qui parle d'une conversation trop longue pour la fenêtre : des expressions précises. Le mot « prompt » ou « context » seul se retrouve dans des erreurs sans rapport (gabarit, option inconnue…).
@@ -1292,52 +1232,7 @@ def document_de_reprise(conv, r):
     return sortie
 
 
-DEPART_MAX = 800          # caractères de la demande de départ gardés mot pour mot à côté du résumé
-
-
-def taille_resume(num_ctx):
-    """La longueur d'un résumé, en caractères : 15 % de la fenêtre (environ 3 caractères par jeton), entre 1 500 et 6 000. Un plafond fixe de 6 000
-    prenait la moitié d'une fenêtre de 4 096 jetons."""
-    return max(1500, min(6000, int(num_ctx * 3 * 0.15)))
-
-
-def compacter(conv, r, emit, forcer=False, place=None):
-    """Quand la conversation approche de la taille du contexte, le début est résumé par le modèle. forcer (commande /compact) : on résume tout sauf le dernier échange,
-    même si la conversation est encore courte. Renvoie True si un résumé a été fait."""
-    msgs = conv["messages"]
-    if forcer:
-        coupe = max((i for i, m in enumerate(msgs) if m["role"] == "user"), default=0)
-        if coupe < 2:
-            return False
-    else:
-        if not a_compacter(conv, r, place):
-            return False
-        coupe = max(2, len(msgs) // 2)
-        while coupe < len(msgs) and msgs[coupe]["role"] != "user":             # on coupe avant un message de l'utilisateur
-            coupe += 1
-    ancien = msgs[:coupe]
-    texte = "\n".join("[{}] {}".format(m["role"], (m.get("content") or ("(outils : " + ", ".join(t["function"]["name"] for t in m.get("tool_calls", [])) + ")"))[:1500]) for m in ancien)
-    texte = texte[-int(r["num_ctx"] * 1.8):]          # le texte à résumer doit lui aussi tenir dans le contexte
-    emit({"type": "info", "texte": "Conversation longue : résumé du début..."})
-    try:
-        rep = moteur_actuel(r).chat({"model": modele_annexe(r), "stream": False, "think": False, "options": _m.options_modele(r, 0.2),
-                                        "messages": [{"role": "system", "content": "Tu résumes une conversation pour pouvoir la continuer plus tard. Garde : les décisions, les fichiers modifiés, ce qui reste à faire, les préférences de l'utilisateur. Sois dense, en français."},
-                                                     {"role": "user", "content": (conv.get("resume", "") + "\n\n" if conv.get("resume") else "") + texte}]}, 600)
-        nouveau_resume = (rep.get("message", {}).get("content") or "").strip()[:taille_resume(r["num_ctx"])]
-        if not nouveau_resume:                      # résumé vide : on garde tout plutôt que de perdre le début
-            _m.journaliser("Résumé vide : conversation {} gardée entière.".format(conv.get("id")))
-            return False
-        _archive.add(conv["id"], ancien)                  # le résumé perd des détails : le début reste retrouvable (« rappeler »)
-        retenir_depart(conv, ancien)                      # la demande de départ, mot pour mot : un résumé de résumé finit par la diluer
-        conv["resume"] = nouveau_resume
-        conv["messages"] = [m for m in ancien if m.get("epingle")] + msgs[coupe:]          # les messages épinglés restent tels quels, en plus du résumé
-        _decaler_scribe(conv, coupe, len([m for m in ancien if m.get("epingle")]))
-        conv.pop("jetons", None)                    # le chiffre de contexte d'avant le résumé n'est plus vrai
-        return True
-    except (urllib.error.URLError, OSError, ValueError) as erreur:
-        # Le résumé a échoué : on ne supprime rien (ajuster_contexte raccourcit déjà ce qui est envoyé au modèle).
-        _m.journaliser("Résumé impossible ({}) : conversation {} gardée entière.".format(erreur, conv.get("id")))
-        return False
+DEPART_MAX = 800          # caractères de la demande de départ gardés mot pour mot en tête de la requête (bloc_du_debut)
 
 
 def retenir_depart(conv, ancien):
@@ -1433,18 +1328,18 @@ def elaguer(conv, r, emit, forcer=False, place=None):
 
 
 def compacter_conversation(ident):
-    """Commande /compact : résume le début de la conversation maintenant (le modèle est sollicité, comptez quelques secondes)."""
+    """Commande /compact : le début de la conversation sort maintenant du contexte, la fiche de suivi mise à jour d'abord (le modèle est sollicité
+    par le scribe, comptez quelques secondes). « fiche » reste dans la réponse pour les anciennes pages : toujours vrai (ADR 0019)."""
     if ident in _m.TOURS_ACTIFS:
         raise ValueError("Une réponse est en cours dans cette conversation : attends la fin ou arrête-la.")
     conv = _m.conv_lire(ident)
     avant = len(conv["messages"])
     info = []
     r = _m.reglages()
-    fiche = memoire_longue(conv, r) == "fichier"
-    if not (elaguer(conv, r, info.append, forcer=True) if fiche else compacter(conv, r, info.append, forcer=True)):
-        raise ValueError("Rien à résumer (conversation trop courte) ou le résumé a échoué : voir donnees/lutin.log.")
+    if not elaguer(conv, r, info.append, forcer=True):
+        raise ValueError(_t("Rien à retirer : la conversation est encore courte."))
     _m.conv_ecrire(conv)
-    return {"ok": True, "avant": avant, "apres": len(conv["messages"]), "jauge": jauge_contexte(conv), "fiche": fiche}
+    return {"ok": True, "avant": avant, "apres": len(conv["messages"]), "jauge": jauge_contexte(conv), "fiche": True}
 
 
 def horodatage():
@@ -1591,27 +1486,16 @@ def _derouler_tour(conv, texte, emit, r, stop, remplacer_depuis, identite, lectu
         emit({"type": "fin", "conversation": {"id": conv["id"], "titre": conv["titre"]}})
         return
     _estimer_avant_charge(r, emit)
-    r["memoire_longue"] = memoire_longue(conv, r)
+    r["memoire_longue"] = memoire_longue(conv, r)                                      # la fiche de suivi, pour toute conversation (ADR 0019)
     try:
-        if r["memoire_longue"] == "demander":
-            provisoire = conv.get("memoire_provisoire") or {}
-            if lecture_seule:
-                r["memoire_longue"] = "resume"                                          # une tâche planifiée ne peut pas répondre
-            elif provisoire.get("choix") == "fichier" and len(conv["messages"]) < provisoire.get("jusqua", 0):
-                r["memoire_longue"] = "fichier"                                         # choisi « pour cette fois » : on ne repose pas la question à chaque réponse
-            elif a_compacter(conv, r):
-                r["memoire_longue"] = demander_memoire(conv, r, emit, stop)
-                conv.pop("memoire_provisoire", None)
-                if r["memoire_longue"] == "fichier":
-                    amorcer_fiche(conv, r, emit)
-                    if not conv.get("memoire_longue"):
-                        conv["memoire_provisoire"] = {"choix": "fichier", "jusqua": len(conv["messages"]) + 20}
         place = place_de_l_historique(conv, r)                                          # une fois pour le tour : les outils et le système ne changent pas d'ici la réponse
-        if r["memoire_longue"] != "fichier":
-            compacter(conv, r, emit, place=place)
-        elif not lecture_seule:
-            elaguer(conv, r, emit, place=place)
-        r["rappel_ici"] = r["memoire_longue"] == "fichier" or bool(conv.get("resume")) or deborde(conv, r, place)
+        r["fiche_active"] = fiche_active(conv, r, place)
+        if r["fiche_active"]:
+            place = place_de_l_historique(conv, r)                                      # avec l'outil de la fiche
+        elaguer(conv, r, emit, place=place)                                             # tâches planifiées et réponses automatiques comprises : elles prenaient le résumé, leur conversation ne doit pas grossir sans fin
+        # le rappel du fil (et sa consigne dans le système) seulement quand le modèle ne voit plus tout : un début retiré (la demande de départ est
+        # alors retenue), un ancien résumé, ou un historique qui déborde. Avant ADR 0019, le mode fiche l'allumait dès le premier message.
+        r["rappel_ici"] = bool(conv.get("depart") or conv.get("resume")) or deborde(conv, r, place)
         boucle_agent(conv, r, emit, ctx, stop)
     except _m.Arret:
         _m.journaliser("Tour arrêté par l'utilisateur (conversation {}).".format(conv["id"]))
@@ -1619,14 +1503,14 @@ def _derouler_tour(conv, texte, emit, r, stop, remplacer_depuis, identite, lectu
     except Exception as erreur:  # noqa: BLE001
         _m.journaliser("Erreur inattendue dans le tour (conversation {}) : {!r}".format(conv["id"], erreur))
         emit({"type": "erreur", "texte": _t("Erreur inattendue : {} (détail dans donnees/lutin.log). Ta demande est gardée.").format(str(erreur)[:300])})
-    if r["memoire_longue"] == "fichier" and not lecture_seule:
-        try:
+    try:
+        if r.get("fiche_active") or fiche_active(conv, r):                              # la réponse a pu faire passer la conversation à mi-chemin du retrait
             reponse = next((m.get("content") or "" for m in reversed(conv["messages"]) if m.get("role") == "assistant" and m.get("content")), "")
             _suivi.after_turn(conv["id"], texte, reponse, sorted(ctx["tour"]["fichiers"]))
             if r.get("fiche_scribe", True) and not stop.is_set():
                 scribe(conv, r, emit)
-        except (OSError, ValueError) as erreur:
-            _m.journaliser("Fiche de suivi non mise à jour (conversation {}) : {!r}".format(conv.get("id"), erreur))
+    except (OSError, ValueError) as erreur:
+        _m.journaliser("Fiche de suivi non mise à jour (conversation {}) : {!r}".format(conv.get("id"), erreur))
     try:
         if _boucles.repeats_last_answer(conv):
             conv["boucle"] = int(conv.get("boucle") or 0) + 1
@@ -1814,11 +1698,10 @@ def _preparer_boucle(conv, r, emit, ctx):
     ctx["outils_autorises"] = {t["function"]["name"] for t in outils}
     fiche, consigne = "", ""
     forcer_fin = False                                                # le modèle tourne en rond : un dernier tour SANS outil pour qu'il conclue, au lieu de couper net
-    if r.get("memoire_longue") == "fichier":
-        try:
-            fiche = _suivi.text_for_model(conv["id"], r["num_ctx"])            # lue UNE fois pour tout le tour : le début de la requête reste identique, Ollama le garde en cache
-        except ValueError:
-            fiche = ""
+    try:
+        fiche = _suivi.text_for_model(conv["id"], r["num_ctx"])                # lue UNE fois pour tout le tour : le début de la requête reste identique, Ollama le garde en cache
+    except ValueError:
+        fiche = ""
     extraits = ""
     place = place_des_rappels(conv, r, outils, fiche)
     if r.get("rappel_ici") and min(_disposition.thread_budget(r["num_ctx"]), place) >= _disposition.RECALL_MIN:          # le début de la conversation n'est plus sous les yeux du modèle : on lui remet ce qui touche à la demande

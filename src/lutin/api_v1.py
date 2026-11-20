@@ -254,7 +254,7 @@ def status(request):
         "can_open_files": bool(request.handler._configurateur() and _produced.opening_possible()),          # « Open » asks this machine's system to open a file
         "active_turns": sorted(_m.TOURS_ACTIFS),
         "turns": _turn_state.snapshot(),          # where each running turn is: running, waiting_approval, stalled or cancelled, and in which part of the loop (turn_state.py)
-        "pending_approvals": sorted({a.conv for a in _m.Attente.EN_COURS.values() if a.conv} | set(_m.CHOIX_MEMOIRE)),
+        "pending_approvals": sorted({a.conv for a in _m.Attente.EN_COURS.values() if a.conv}),
     }
 
 
@@ -285,7 +285,7 @@ SETTINGS = {
 SETTING_WORDS = {
     "mode": {"polyvalent": "general", "technique": "technical", "scenario": "scenario", "recherche": "research", "discussion": "chat"},
     "thinking_steps": {"toujours": "always", "premier": "first"},
-    "long_memory": {"resume": "summary", "fichier": "file", "demander": "ask"},
+    "long_memory": {"resume": "summary", "fichier": "file", "demander": "ask"},          # all three accepted, all mean the progress sheet (ADR 0019): read back as « file »
     "auto_recall": {"scenario": "scenario", "toujours": "always", "jamais": "never"},
 }
 KINDS = {"boolean": lambda v: isinstance(v, bool), "integer": lambda v: isinstance(v, int) and not isinstance(v, bool),
@@ -3608,7 +3608,7 @@ EVENTS = {
     "approbation": ("approval_request", {"id": "id", "titre": "title", "detail": "detail", "diff": "diff", "raison": "reason", "suspendu": "auto_approval_suspended", "retenir": "can_remember"}),
     "accord_suspendu": ("auto_approval_suspended", {"raison": "reason"}),
     "accord_retabli": ("auto_approval_restored", {}),
-    "choix_memoire": ("memory_choice", {"conversation": "conversation_id"}),
+    "choix_memoire": ("memory_choice", {"conversation": "conversation_id"}),          # no longer emitted (ADR 0019); kept for a paired machine that still runs an older Lutin
     "taches": ("tasks", {"liste": "tasks"}),
     "etat": ("status", {"texte": "text"}),
     "info": ("notice", {"texte": "text"}),
@@ -3659,7 +3659,8 @@ def create_turn(request):
 
 @route("POST", "/conversations/{id}/memory-choice", SESSION)
 def answer_memory_choice(request):
-    """Answers the `memory_choice` event of a long conversation: {"choice": "summary" | "file"}, and `remember` to make it the setting. The turn is waiting for it."""
+    """Answered the `memory_choice` event of a long conversation: {"choice": "summary" | "file"}, and `remember`. The question is no longer asked
+    (ADR 0019: the progress sheet for every conversation): a valid answer gets 409 `no_pending_choice`, as an answer that came too late did."""
     body = request.body
     choices = {"summary": "resume", "file": "fichier"}
     if set(body) - {"choice", "remember"} or body.get("choice") not in choices or not isinstance(body.get("remember", False), bool):
@@ -3674,8 +3675,8 @@ def answer_memory_choice(request):
 # project (`.claude/commands/<name>.md` in the work folder): their list, and the message one makes (its « !… » lines are never run: the model is told).
 @route("POST", "/conversations/{id}/compact", SESSION)
 def compact_conversation(request):
-    """« /compact »: summarises the start of the conversation now (summary mode), or moves it out in one block (sheet mode). Answers {before, after,
-    sheet}: the messages before and after. 409 `turn_running`."""
+    """« /compact »: moves the start of the conversation out in one block now, the progress sheet updated first (ADR 0019). Answers {before, after,
+    sheet}: the messages before and after, and `sheet`, always true (kept for older clients). 409 `turn_running`."""
     identifier = request.params["id"]
     _read(identifier)
     _not_running(identifier)
@@ -3703,7 +3704,6 @@ def project_command(request):
 # What one conversation offers beyond its messages (docs/modernization/PARITY.md, item 12): how it keeps its thread (summary, progress sheet, or the
 # general setting), its progress sheet read, edited or deleted, a handover document written by the model, and its folders. The project's Git
 # (what changed, a proposed message, a commit of chosen files, never a push) and the log of the actions that changed something are Lutin's.
-MEMORY_MODES = {"resume": "summary", "fichier": "sheet", "demander": "ask"}
 SHEET_KEYS = {"objectif": "objective", "decisions": "decisions", "plan": "plan", "etape": "current_step", "fait": "done", "ouvert": "open_questions",
               "fichiers": "files", "demandes": "requests"}
 
@@ -3714,8 +3714,8 @@ def _sheet_view(identifier, conversation=None):
     conversation = conversation or _read(identifier)
     sections = _sheet.read(identifier)
     measure = _sheet.measure(identifier, settings["num_ctx"])
-    return {"mode": MEMORY_MODES.get(_m.memoire_longue(conversation, settings), "ask"), "own_mode": MEMORY_MODES.get(conversation.get("memoire_longue")) if conversation.get("memoire_longue") else None,
-            "general_mode": MEMORY_MODES.get(settings.get("memoire_longue"), "ask"), "sections": {SHEET_KEYS[k]: list(v) for k, v in sections.items() if k in SHEET_KEYS},
+    # one memory since ADR 0019: `mode` and `general_mode` are always « sheet » and `own_mode` null, kept for older clients
+    return {"mode": "sheet", "own_mode": None, "general_mode": "sheet", "sections": {SHEET_KEYS[k]: list(v) for k, v in sections.items() if k in SHEET_KEYS},
             "text": _sheet.serialize(identifier, sections), "measure": {"lines": measure.get("lignes", 0), "tokens": measure.get("jetons", 0), "share": measure.get("part", 0),
                                                                        "level": {"attention": "warning", "vide": "empty"}.get(measure.get("niveau"), measure.get("niveau", "")), "warning": measure.get("avertissement", "")},
             "first_request": conversation.get("depart") or None}
@@ -3723,38 +3723,28 @@ def _sheet_view(identifier, conversation=None):
 
 @route("GET", "/conversations/{id}/memory", SESSION)
 def conversation_memory(request):
-    """How this conversation keeps its thread: `mode` (summary, sheet, ask), its `own_mode` (null: the general setting) and the `general_mode`, its
+    """How this conversation keeps its thread: `mode` (always « sheet » since ADR 0019), `own_mode` (null) and `general_mode` (« sheet »), its
     progress sheet (`sections`, and the `text` the person edits), what the sheet costs each answer (`measure`), and the first request kept word for word."""
     return _sheet_view(request.params["id"])
 
 
 @route("PATCH", "/conversations/{id}/memory", SESSION)
 def change_conversation_memory(request):
-    """`{"mode": "summary" | "sheet" | null}` (null: follow the general setting) and/or `{"sheet": text}` (the sheet as edited, its « ## » sections).
-    Choosing the sheet fills an empty one from the start of the conversation (one model call). 409 `turn_running` during an answer."""
+    """`{"sheet": text}` (the sheet as edited, its « ## » sections). `{"mode": "summary" | "sheet" | null}` is still accepted and changes nothing:
+    every conversation keeps its thread with the sheet (ADR 0019). 409 `turn_running` during an answer."""
     from . import progress_sheet as _sheet
     identifier, body = request.params["id"], request.body
     if not body or set(body) - {"mode", "sheet"}:
         raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("mode, sheet"))
+    if "mode" in body and body["mode"] not in ("summary", "sheet", None):
+        raise ApiError(400, "invalid_request", _t("Valeur invalide pour « {} » (attendu : {}).").format("mode", "summary, sheet, null"))
     conversation = _read(identifier)
     _not_running(identifier)
     if "sheet" in body:
         if not isinstance(body["sheet"], str):
             raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("sheet"))
         _sheet.write(identifier, _sheet.parse(body["sheet"][:20000]))
-    if "mode" in body:
-        stored = {"summary": "resume", "sheet": "fichier", None: None}
-        if body["mode"] not in stored:
-            raise ApiError(400, "invalid_request", _t("Valeur invalide pour « {} » (attendu : {}).").format("mode", "summary, sheet, null"))
-        if stored[body["mode"]]:
-            conversation["memoire_longue"] = stored[body["mode"]]
-        else:
-            conversation.pop("memoire_longue", None)
-        conversation.pop("memoire_provisoire", None)
-        if body["mode"] == "sheet":
-            _m.amorcer_fiche(conversation, _m.reglages())
-        _m.conv_ecrire(conversation)
-    return _sheet_view(identifier)
+    return _sheet_view(identifier, conversation)
 
 
 @route("DELETE", "/conversations/{id}/memory/sheet", SESSION)

@@ -15,7 +15,7 @@
   import { t, type MessageKey } from "../lib/messages";
   import { applyEvent, elsewhereNotice, newTurn, storedToItems, type Item, type LiveTurn, type Sent } from "../lib/turn";
   import ConversationTools from "../components/ConversationTools.svelte";
-  import { COMMANDS, MODE_NAMES, memoryMode, onOff, parse, suggest as suggestCommands, type Parsed } from "../lib/slash";
+  import { COMMANDS, MODE_NAMES, onOff, parse, suggest as suggestCommands, type Parsed } from "../lib/slash";
   import type { Conversation, ConversationOptions, ConversationSummary, Models, Settings, Status, TurnState } from "../lib/types";
 
   let { status, onchanged }: { status: Status | null; onchanged: () => void } = $props();
@@ -384,15 +384,6 @@
     });
   }
 
-  async function answerMemory(choice: "summary" | "file"): Promise<void> {
-    const id = conversation?.id;
-    if (!id) return;
-    await guarded(async () => {
-      await api("POST", conversationPath(where, id) + "/memory-choice", { choice });
-      if (live) live = { ...live, memoryChoice: false };
-    });
-  }
-
   async function chooseModel(event: Event): Promise<void> {
     const { machine, model } = parseChoice((event.currentTarget as HTMLSelectElement).value); // a model of another machine: that machine answers (as on the old page)
     await guarded(async () => {
@@ -555,16 +546,6 @@
         if (!mode) return done(t("slash.expected", "general, technical, scenario, research, chat"));
         await changeOptions({ mode: mode as ConversationOptions["mode"] });
         return done(t("slash.set", t(("opt.mode." + mode) as MessageKey)));
-      }
-      case "memory": {
-        const mode = memoryMode(arg);
-        if (mode === undefined) return done(t("slash.expected", "summary, sheet, general"));
-        if (!id || where) return done(t("slash.no_conversation"));
-        await guarded(async () => {
-          await api("PATCH", `/conversations/${encodeURIComponent(id)}/memory`, { mode });
-          done(t("slash.set", t(("tools.mode." + (mode ?? "ask")) as MessageKey)));
-        });
-        return;
       }
       default:
         if (flag === null) return done(t("slash.expected", "on, off"));
@@ -777,16 +758,6 @@
             {/if}
             {#if live.autoApprovalSuspended}<button type="button" class="button" onclick={() => answerApproval(true, "once", true)}>{t("approval.restore")}</button>{/if}
             <button type="button" class="button danger" onclick={() => answerApproval(false)}>{t("approval.refuse")}</button>
-          </div>
-        </div>
-      {/if}
-      {#if live?.memoryChoice}
-        <div class="card" role="group" aria-label={t("memory.heading")}>
-          <p class="card-head">{t("memory.heading")}</p>
-          <p>{t("memory.body")}</p>
-          <div class="actions">
-            <button type="button" class="button" onclick={() => answerMemory("summary")}>{t("memory.summary")}</button>
-            <button type="button" class="button" onclick={() => answerMemory("file")}>{t("memory.file")}</button>
           </div>
         </div>
       {/if}

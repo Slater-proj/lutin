@@ -81,7 +81,7 @@ While it runs, try:
 
 - **Pin**: under a message, *📌 Pin*; it stays in front of the model even when the context is trimmed.
 - **Loop detector**: if the model repeats the same call five times, the answer stops with “The model is going round in circles”.
-- **Tracking sheet**: at the first summary, Lutin asks *tracking sheet or summary*. The sheet is readable and editable.
+- **Tracking sheet**: every long conversation keeps its thread with it (ADR 0019). The sheet is readable and editable.
 
 ## 8. Telegram, mail, X (if you use them)
 

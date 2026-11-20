@@ -35,7 +35,7 @@ routes disappear with the old page, in one deletion.
    | `resultat` | `tool_result` | what the tool answered |
    | `approbation` | `approval_request` | an action waits for the user |
    | `accord_suspendu` / `accord_retabli` | `auto_approval_suspended` / `auto_approval_restored` | web content was read during this request |
-   | `choix_memoire` | `memory_choice` | the conversation is long: summarise or keep in a file |
+   | `choix_memoire` | `memory_choice` | no longer emitted since ADR 0019 (kept for a paired machine running an older Lutin) |
    | `taches` | `tasks` | the task list changed |
    | `etat` | `status` | what the agent is doing |
    | `info` | `notice` | a message for the user, not part of the answer |
@@ -64,7 +64,7 @@ routes disappear with the old page, in one deletion.
 
    `tokens` and `speed` are the two events the first inventory missed (their fields come from a variable). The request body: `message` and, optionally,
    `model`, `thinking`, `replace_from`, `images`, `attachments`, `workspace`, `machine` (a paired machine that answers this turn; an unknown one falls back to this machine). A refusal comes before the stream as an ordinary error: `400 invalid_request`,
-   `409 turn_running` or `workspace_conflict`, `429 too_many_turns`. `memory_choice` is answered with `POST /api/v1/conversations/{id}/memory-choice`
+   `409 turn_running` or `workspace_conflict`, `429 too_many_turns`. `memory_choice` was answered with `POST /api/v1/conversations/{id}/memory-choice` (now always `409 no_pending_choice`: no question is asked)
    (`{"choice": "summary" | "file", "remember": false}`; `409 no_pending_choice` when nothing waits). Not in v1 yet: the download of an attached document.
 7. **Versioning.** `/api/v1` only ever gains optional fields and new routes. A change that breaks a client is `/api/v2`. The page and the server ship together,
    so the page never talks to a server of another version; the rule protects scripts and paired machines.
@@ -82,7 +82,7 @@ routes disappear with the old page, in one deletion.
   `top_p`, `top_k`, `min_p`, `repeat_penalty`, `num_thread`). A kind is `boolean`, `integer`, `number`, `string`, `strings` (a list) or `object`;
   seven settings also accept `null`, which means « automatic ».
 - Four settings are a word, translated in both directions: `mode` (`general`, `technical`, `scenario`, `research`, `chat`), `thinking_steps`
-  (`always`, `first`), `long_memory` (`summary`, `file`, `ask`), `auto_recall` (`scenario`, `always`, `never`). The mission mode is not a setting:
+  (`always`, `first`), `long_memory` (`summary`, `file`, `ask`: all accepted, all mean the progress sheet since ADR 0019, read back as `file`), `auto_recall` (`scenario`, `always`, `never`). The mission mode is not a setting:
   it is chosen conversation by conversation. Tool names (`disabled_tools`) are what the models see and are not translated (ADR 0007).
 - A write is all or nothing: an unknown name or a value of the wrong kind answers `400 invalid_request` and nothing is stored. Values are then checked
   and bounded by the function the French route calls (a dangerous command in `commands_without_approval` is refused, `max_steps` is kept within 4-40…).
@@ -279,8 +279,8 @@ models_kept, cpu_moe_layers, pinned_version, install_folder, models_folder, serv
 
 ## Conversation tools, Git and the actions log
 
-`GET /conversations/{id}/memory` (session): `{mode: summary | sheet | ask, own_mode, general_mode, sections, text, measure, first_request}`.
-`PATCH …/memory` `{mode?: summary | sheet | null, sheet?: text}`; `DELETE …/memory/sheet`; `409 turn_running`. `POST …/handover`: `{text,
+`GET /conversations/{id}/memory` (session): `{mode, own_mode, general_mode, sections, text, measure, first_request}` (`mode` and `general_mode` always `sheet`, `own_mode` null since ADR 0019).
+`PATCH …/memory` `{mode?: summary | sheet | null, sheet?: text}` (`mode` accepted and without effect since ADR 0019); `DELETE …/memory/sheet`; `409 turn_running`. `POST …/handover`: `{text,
 model}`, `503 engine_unreachable`. `GET …/folders` and `POST …/folders/open {path}` (configurator, `409 cannot_open`). `GET /git` (session):
 `{available, reason, branch, files: [{path, state}], total}`; `POST /git/message {files}` (session); `POST /git/commit {message, files}`
 (configurator; never a push). `GET /actions-log?n=` (session): `{entries: [{at, conversation, folder, tool, target, outcome, approval, who}]}`.

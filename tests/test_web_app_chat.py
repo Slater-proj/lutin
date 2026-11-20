@@ -1084,8 +1084,7 @@ class Chat(unittest.TestCase):
         T.A.conv_ecrire(c)
         self.addCleanup(lambda: (progress_sheet.delete(c["id"]), T.A.conv_supprimer(c["id"])))
         committed = []
-        for patch in (mock.patch.object(T.A, "amorcer_fiche", lambda conversation, settings: 0),
-                      mock.patch.object(T.A, "document_de_reprise", lambda conversation, settings: "## Objectif\nRéécrire la facturation."),
+        for patch in (mock.patch.object(T.A, "document_de_reprise", lambda conversation, settings: "## Objectif\nRéécrire la facturation."),
                       mock.patch.object(missions, "state", lambda: {"liste": [{"id": "m1", "nom": "Facturation", "etat": "en_cours", "conv": c["id"]}]}),
                       mock.patch.object(change_review, "git_state", lambda: {"dispo": True, "branche": "main", "total": 1, "modifies": [{"chemin": "a.py", "etat": " M"}]}),
                       mock.patch.object(change_review, "git_message_of", lambda files: {"message": "fix: billing"}),
@@ -1098,9 +1097,8 @@ class Chat(unittest.TestCase):
         p.attendre("!!document.querySelector('.mission-banner')")
         self.assertIn("Facturation", p.evaluer("document.querySelector('.mission-banner').innerText"))
         self.press("document.querySelector('.tools-button')")
-        p.attendre("!!document.querySelector('.conversation-tools input[type=radio]')")
-        self.press("[...document.querySelectorAll('.conversation-tools .modes label')].find(l => l.innerText.includes('Fiche de suivi')).querySelector('input')")
-        self.eventually(lambda: T.A.conv_lire(c["id"]).get("memoire_longue") == "fichier", "the sheet mode is kept for this conversation")
+        p.attendre("!!document.querySelector('.conversation-tools .modes h3')")
+        self.assertFalse(p.evaluer("!!document.querySelector('.conversation-tools input[type=radio]')"), "no mode to choose: the progress sheet for every conversation (ADR 0019)")
         self.press("[...document.querySelectorAll('.conversation-tools .button')].find(b => b.innerText === 'Modifier la fiche')")
         p.attendre("!!document.querySelector('#sheet-text')")
         p.evaluer("(() => { const box = document.querySelector('#sheet-text'); box.value = '## Objectif\\n- Réécrire la facturation\\n## Décisions\\n- Garder l\\'API'; box.dispatchEvent(new Event('input', {bubbles: true})); })()")

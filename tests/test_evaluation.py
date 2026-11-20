@@ -3,10 +3,11 @@
     python tests/test_evaluation.py
 
 A project of twenty exchanges (an objective, five decisions spread over the conversation, a current step), then « Où en est-on ? », then a precise
-question. Run on 4,096 and 8,192 tokens, with the summary and with the progress sheet, and with two fake models:
+question. Run on 4,096 and 8,192 tokens with the progress sheet, the one memory of a long conversation since ADR 0019 (the summary mode was
+measured here before it was retired: 9 summaries in 22 turns, 0 to 1 decision of 5 kept with a weak model), and with two fake models:
 
-- « faithful » does what its instructions ask: the summary keeps every decision, the scribe notes every decision and the current step;
-- « weak » loses the details, like a small model: a one-line summary, a scribe that writes nothing.
+- « faithful » does what its instructions ask: the scribe notes every decision and the current step;
+- « weak » loses the details, like a small model: a scribe that writes nothing.
 
 The fake engine of tests/test_moteur.py answers; no real model is needed. What is measured is what the request of the last turns puts in front of the
 model (and where: history, summary, sheet, recalled extracts), not whether a real model then answers well: that needs a real small model (see the
@@ -175,34 +176,32 @@ class LongConversationOnSmallWindow(unittest.TestCase):
         self.assertTrue(row["step"], label + ": the latest step is in front of the model")
         if num_ctx >= 8192:          # on 4,096 tokens, the floor of the history cannot hold the summary, the extracts and an answer of 190 words: the recall brings it back
             self.assertIn("history", row["step"], label + ": the latest exchange is sent as it is (the floor of the history, ADR 0018 decision 6)")
-        if memory == "fichier":          # ADR 0019, decision 2: the start leaves far enough (9 removals in 22 turns before, each a new prefix for the engine)
-            self.assertLessEqual(model.calls["prune"], 6, label + ": the start does not leave at every other exchange")
-        if num_ctx <= 4096:
-            sheet_tool = {"suivi"} if memory == "fichier" else set()          # the tool of the sheet comes with the sheet mode
-            self.assertEqual(set(row["tools"]), CORE | sheet_tool, label + ": only the core of tools (ADR 0018, decision 9)")
+        # ADR 0019, decision 2: the start leaves far enough (9 removals in 22 turns before, each a new prefix for the engine)
+        self.assertLessEqual(model.calls["prune"], 6, label + ": the start does not leave at every other exchange")
+        self.assertEqual(model.calls["summary"], 0, label + ": no summary is asked of the model (ADR 0019, decision 1)")
+        if num_ctx <= 4096:          # the scribe keeps the sheet: its tool (240 tokens) leaves its room to the conversation (ADR 0019)
+            self.assertEqual(set(row["tools"]), CORE, label + ": only the core of tools (ADR 0018, decision 9)")
         return row
 
     def test_faithful_model_keeps_every_decision(self):
-        """With a summary or a sheet kept as asked, every decision is in front of the model when the person asks where the project is."""
+        """With a sheet kept as asked, every decision is in front of the model when the person asks where the project is."""
         for num_ctx in (4096, 8192):
-            for memory in ("resume", "fichier"):
+            for memory in ("fichier",):
                 with self.subTest(num_ctx=num_ctx, memory=memory):
                     row = self.measure(num_ctx, memory, True)
                     lost = [turn for turn, where in row["decisions"].items() if not where]
                     self.assertEqual(lost, [], "%d %s: decisions of turns %s are lost" % (num_ctx, memory, lost))
-                    self.assertTrue(row["calls"]["summary" if memory == "resume" else "scribe"], "the memory of the long conversation did work")
+                    self.assertTrue(row["calls"]["scribe"], "the memory of the long conversation did work")
 
     def test_weak_model_finds_a_lost_decision_back_when_asked_precisely(self):
-        """With a summary or a sheet that keeps nothing, a precise question brings the decision back from the start of the conversation (ADR 0018,
-        decision 3: the recall of the thread starts as soon as the history overflows)."""
+        """With a sheet that keeps nothing, a precise question brings the decision back from the start of the conversation (ADR 0018, decision 3:
+        the recall of the thread starts as soon as the history overflows)."""
         for num_ctx in (4096, 8192):
-            for memory in ("resume", "fichier"):
+            for memory in ("fichier",):
                 with self.subTest(num_ctx=num_ctx, memory=memory):
                     row = self.measure(num_ctx, memory, False)
                     found = row["separator_on_precise_question"]
                     self.assertTrue(found, "%d %s: the separator decided at turn 3 is in front of the model" % (num_ctx, memory))
-                    if memory == "resume":          # the weak summary lost it: only the recall can bring it back (the sheet keeps the latest requests by itself)
-                        self.assertIn("recall", found, "%d %s: the separator is recalled" % (num_ctx, memory))
 
 
 def write_report():

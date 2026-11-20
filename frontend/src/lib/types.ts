@@ -128,7 +128,6 @@ export type TurnEvent =
   | { type: "approval_request"; id: string; title: string; detail: string; diff: string; reason?: string; auto_approval_suspended?: boolean; can_remember?: boolean }
   | { type: "auto_approval_suspended"; reason: string }
   | { type: "auto_approval_restored" }
-  | { type: "memory_choice"; conversation_id: string }
   | { type: "tasks"; tasks: Task[] }
   | { type: "dry_run"; title: string; detail: string; diff: string }
   | { type: "error"; error: { code: string; message: string } }

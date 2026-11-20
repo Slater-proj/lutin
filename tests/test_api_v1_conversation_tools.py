@@ -25,21 +25,22 @@ class ConversationTools(unittest.TestCase):
         self.addCleanup(lambda: (progress_sheet.delete(self.id), A.conv_supprimer(self.id)))
         self.base = "/api/v1/conversations/%s" % self.id
 
-    def test_the_memory_mode_and_the_sheet_are_read_set_and_edited(self):
+    def test_the_sheet_is_read_and_edited_and_the_old_modes_are_accepted(self):
+        """ADR 0019: every conversation keeps its thread with the progress sheet. `mode` is still accepted (older clients) and changes nothing."""
         status, answer = V.call("GET", self.base + "/memory", V.DEVICE)
-        self.assertEqual(status, 200, answer)
-        self.assertIsNone(answer["own_mode"])
-        with mock.patch.object(A, "amorcer_fiche", lambda conversation, settings: 0):
-            status, answer = V.call("PATCH", self.base + "/memory", V.DEVICE, {"mode": "sheet"})
-        self.assertEqual((status, answer["mode"], answer["own_mode"]), (200, "sheet", "sheet"))
+        self.assertEqual((status, answer["mode"], answer["own_mode"], answer["general_mode"]), (200, "sheet", None, "sheet"), answer)
+        for mode in ("summary", "sheet", None):
+            status, answer = V.call("PATCH", self.base + "/memory", V.DEVICE, {"mode": mode})
+            self.assertEqual((status, answer["mode"], answer["own_mode"]), (200, "sheet", None), mode)
+        self.assertNotIn("memoire_longue", A.conv_lire(self.id), "nothing is stored in the conversation")
         status, answer = V.call("PATCH", self.base + "/memory", V.DEVICE, {"sheet": "## Objectif\n- Réécrire la facturation\n## Décisions\n- Garder l'API"})
         self.assertEqual((answer["sections"]["objective"], answer["sections"]["decisions"]), (["Réécrire la facturation"], ["Garder l'API"]))
         self.assertIn("## Objectif", answer["text"])
         status, answer = V.call("DELETE", self.base + "/memory/sheet", V.DEVICE)
         self.assertEqual((status, answer["sections"]["objective"]), (200, []))
-        status, answer = V.call("PATCH", self.base + "/memory", V.DEVICE, {"mode": None})
-        self.assertIsNone(answer["own_mode"], "back to the general setting")
         self.assertEqual(V.call("PATCH", self.base + "/memory", V.DEVICE, {"mode": "forever"})[0], 400)
+        self.assertEqual(V.call("PATCH", self.base + "/memory", V.DEVICE, {"mode": "forever", "sheet": "## Objectif\n- Autre chose"})[0], 400)
+        self.assertEqual(V.call("GET", self.base + "/memory", V.DEVICE)[1]["sections"]["objective"], [], "a refused request writes nothing")
         self.assertEqual(V.call("GET", "/api/v1/conversations/0123456789ab/memory", V.DEVICE)[0], 404)
 
     def test_nothing_changes_during_an_answer(self):

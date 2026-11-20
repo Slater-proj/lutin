@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { memoryMode, onOff, parse, suggest } from "./slash";
+import { onOff, parse, suggest } from "./slash";
 
 describe("the commands typed in the Chat", () => {
   it("are known by their name or an old French alias, with their argument", () => {
     expect(parse("/compact")).toEqual({ kind: "command", command: "compact", arg: "" });
     expect(parse("/web off")).toEqual({ kind: "command", command: "web", arg: "off" });
-    expect(parse("  /MEMOIRE   fichier ")).toEqual({ kind: "command", command: "memory", arg: "fichier" });
+    expect(parse("  /MODELE   qwen3:8b ")).toEqual({ kind: "command", command: "model", arg: "qwen3:8b" });
     expect(parse("/nouveau")).toEqual({ kind: "command", command: "new", arg: "" });
   });
 
@@ -28,8 +28,11 @@ describe("the commands typed in the Chat", () => {
     expect(suggest("hello")).toEqual([]);
   });
 
-  it("read on/off and the memory modes in both languages", () => {
+  it("read on/off in both languages", () => {
     expect([onOff("on"), onOff("NON"), onOff("maybe")]).toEqual([true, false, null]);
-    expect([memoryMode("fiche"), memoryMode("summary"), memoryMode("demander"), memoryMode("x")]).toEqual(["sheet", "summary", null, undefined]);
+  });
+
+  it("no longer offer to choose how a conversation keeps its thread: the progress sheet for every conversation (ADR 0019)", () => {
+    expect(parse("/memoire fichier")).toEqual({ kind: "unknown", name: "memoire" });
   });
 });

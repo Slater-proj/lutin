@@ -287,8 +287,9 @@ class Parcours(unittest.TestCase):
             self.assertFalse(p.evaluer("!!document.getElementById('zoneMissions') || !!document.getElementById('bMission')"), "plus de section ni de bouton Mission : c'est un mode")
             self.assertEqual(p.erreurs, [])
 
-    def test_question_fiche_ou_resume_quand_la_conversation_devient_longue(self):
-        """Un message sur une conversation qui dépasse 60 % du contexte : la carte de choix apparaît, un clic répond, la conversation retient « fiche de suivi » et la réponse arrive."""
+    def test_une_conversation_longue_garde_le_fil_sans_question(self):
+        """ADR 0019 : un message sur une conversation qui dépasse 60 % du contexte. Plus de carte « fiche ou résumé ? » : la réponse arrive, le début sort
+        du contexte (archivé, retrouvable) et la fiche de suivi garde la demande."""
         with self.captures.serveur_demo() as (port, tmp):
             donnees = tmp / "home" / "donnees"
             reglages = json.loads((donnees / "reglages.json").read_text(encoding="utf-8"))
@@ -301,16 +302,19 @@ class Parcours(unittest.TestCase):
             p = self.ouvrir(tmp, "http://127.0.0.1:%d/ancienne/#conv=d4e5f6a7" % port)
             p.attendre("document.body.textContent.includes('Longue discussion')")
             p.evaluer("(() => { const s = document.getElementById('saisie'); s.value = 'Où en est-on ?'; document.getElementById('bEnvoyer').click(); return true; })()")
-            p.attendre("!!document.querySelector('.accord')")                       # la carte (le texte seul serait aussi dans le code de la page)
-            self.assertIn("Cette conversation devient longue", p.evaluer("document.querySelector('.accord').textContent"))
-            self.assertTrue(p.evaluer("[...document.querySelectorAll('.accord input[type=checkbox]')].every(c => c.checked)"), "« garder ce choix » est coché par défaut")
-            self.assertTrue(p.evaluer(bouton("Fiche de suivi")))
             p.attendre("[...document.querySelectorAll('#fil .msg.ia')].some(m => m.textContent.includes('Réponse de démonstration.'))")
+            fin = time.time() + 30                                                   # la conversation est écrite à la fin du tour, après la réponse affichée
+            while len(stored.conversation(donnees, "d4e5f6a7")["messages"]) >= 14 and time.time() < fin:
+                time.sleep(0.2)
+            self.assertFalse(p.evaluer("!!document.querySelector('.accord')"), "plus de question « fiche ou résumé ? »")
             sauve = stored.conversation(donnees, "d4e5f6a7")
-            self.assertEqual(sauve.get("memoire_longue"), "fichier", "le choix est gardé pour cette conversation")
-            self.assertLess(len(sauve["messages"]), 14, "en mode fiche, la conversation presque pleine est allégée du début (archivé)")
-            self.assertTrue((donnees / "suivis" / "d4e5f6a7.md").is_file(), "la fiche est créée à partir du début de la conversation")
-            self.assertIn("Tester la question", (donnees / "suivis" / "d4e5f6a7.md").read_text(encoding="utf-8"))
+            self.assertNotIn("memoire_longue", sauve, "rien à retenir pour cette conversation")
+            self.assertLess(len(sauve["messages"]), 14, "la conversation presque pleine est allégée du début (archivé)")
+            fiche = donnees / "suivis" / "d4e5f6a7.md"
+            fin = time.time() + 30
+            while not (fiche.is_file() and "Où en est-on" in fiche.read_text(encoding="utf-8")) and time.time() < fin:
+                time.sleep(0.2)
+            self.assertIn("Où en est-on", fiche.read_text(encoding="utf-8"), "la fiche de suivi garde la demande")
             self.assertEqual(p.erreurs, [])
 
     def test_le_panneau_de_chaque_addon_s_affiche_avec_ses_brouillons(self):
@@ -356,15 +360,10 @@ class Parcours(unittest.TestCase):
             p.evaluer("document.querySelector('#conversations .conv:first-child button.menu-ouvrir').click()")
             p.attendre("!!document.querySelector('.menu-conv')")
             menu = p.evaluer("document.querySelector('.menu-conv').textContent")
-            for attendu in ("Renommer", "Fiche de suivi", "Résumé automatique", "Suivre le réglage général"):
+            for attendu in ("Renommer", "Fiche de suivi", "Voir ou modifier la fiche"):
                 self.assertIn(attendu, menu)
-            self.assertIn("✔ Suivre le réglage général", menu, "le choix actuel est coché")
-            p.evaluer("[...document.querySelectorAll('.menu-conv button')].find(b => b.textContent.includes('Résumé automatique')).click()")
-            p.attendre("!document.querySelector('.menu-conv')")
-            time.sleep(1.5)                                                         # la liste se recharge après le choix
-            p.evaluer("document.querySelector('#conversations .conv:first-child button.menu-ouvrir').click()")
-            p.attendre("!!document.querySelector('.menu-conv')")
-            self.assertIn("✔ Résumé automatique", p.evaluer("document.querySelector('.menu-conv').textContent"), "le choix est retenu")
+            for retire in ("Résumé automatique", "Suivre le réglage général"):          # ADR 0019 : la fiche de suivi pour toute conversation, plus de choix
+                self.assertNotIn(retire, menu)
             p.evaluer("document.body.click()")
             p.attendre("!document.querySelector('.menu-conv')")
             # une case d'addon à configurer : elle ouvre la configuration, sans erreur

@@ -55,7 +55,6 @@
     setTimeout(() => URL.revokeObjectURL(link.href), 1000);
   }
 
-  const chooseMode = (mode: string | null): Promise<void> => act(async () => shown(await api<Memory>("PATCH", base + "/memory", { mode })));
   const saveSheet = (): Promise<void> =>
     act(async () => {
       shown(await api<Memory>("PATCH", base + "/memory", { sheet }));
@@ -87,13 +86,10 @@
   <p class="notice" role="status">{notice}</p>
 
   {#if memory}
-    <fieldset class="modes" disabled={busy}>
-      <legend>{t("tools.memory")}</legend>
+    <div class="modes">
+      <h3>{t("tools.memory")}</h3>
       <p class="muted">{t("tools.memory_help")}</p>
-      <label><input type="radio" name="memory-mode" checked={memory.own_mode === "sheet"} onchange={() => chooseMode("sheet")} /> {t("tools.mode_sheet")}</label>
-      <label><input type="radio" name="memory-mode" checked={memory.own_mode === "summary"} onchange={() => chooseMode("summary")} /> {t("tools.mode_summary")}</label>
-      <label><input type="radio" name="memory-mode" checked={memory.own_mode === null} onchange={() => chooseMode(null)} /> {t("tools.mode_general", t(("tools.mode." + memory.general_mode) as "tools.mode.ask"))}</label>
-    </fieldset>
+    </div>
     {#if memory.first_request}<p class="muted">{t("tools.first_request", memory.first_request)}</p>{/if}
 
     <div class="part">
@@ -193,16 +189,6 @@
     border-top: 1px solid var(--color-border);
   }
 
-  .modes {
-    margin: 0;
-    padding: 0;
-    border: 0;
-    min-width: 0;
-  }
-
-  legend {
-    font-weight: 600;
-  }
 
   .muted {
     color: var(--color-text-muted);

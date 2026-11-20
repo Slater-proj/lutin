@@ -46,6 +46,28 @@ processor); and after a removal the history comes back to its threshold within o
 the feature). 3. The scribe out of the way (decision 3). 4. Tool results (decision 5). 5. The recall (decision 6). 6. The schema (decision 4).
 Each stage: before and after on the evaluation suite (model calls, removals, what the request keeps), the full suite green, one commit.
 
+## Progress
+
+Measured on `tests/test_evaluation.py` (fake engine, 22 turns; no real model).
+
+- **Stage 1** (removal with a target, `PART_APRES_RETRAIT` = 40 % of the threshold): 9 → 6 removals in 22 turns, the same decisions kept.
+- **Stage 2** (the sheet only): `memoire_longue` is always the sheet; the summary (`compacter`), the question (`demander_memoire`, the
+  `choix_memoire` event) and the first fill of the sheet by the model (`amorcer_fiche`) are gone. Old values (`resume`, `demander`) of the setting,
+  of a conversation and of the routes are accepted and act as the sheet; `/compact` removes the start in one block after the scribe's pass.
+  Two choices made while doing it:
+  - *The sheet starts when the conversation is halfway to its removal threshold* (`fiche_active`, `PART_DEBUT_FICHE` = 0.5), or at once for a
+    mission, a sheet already filled, or a start already removed or summarised. Turned on from the first message, it made every short
+    conversation pay a scribe call every three exchanges and carry its latest requests twice (once in the history, once in the sheet); six
+    tests on short conversations caught it. Halfway leaves the scribe the time to read the start before a removal needs it.
+  - *On 4,096 tokens, the `suivi` tool is not offered while the scribe keeps the sheet* (ADR 0018, decision 9: a core only): the tool weighs
+    240 tokens, 6 % of the window.
+  - Scheduled tasks and automatic replies (`lecture_seule`) remove their start and run the scribe too: they used the summary, and without
+    either their conversation would grow until every request is trimmed.
+
+  Before → after, 4,096 tokens: request at « where are we? » 3,392 → 3,151 tokens (the tool of the sheet), decisions kept 5/5 (faithful model),
+  1/5 (weak), 7 scribe passes, 6 removals; 8,192 tokens: unchanged (6,192 tokens, 5/5 and 3/5, 7 passes, 6 removals). The summary mode it
+  replaces asked the model for 9 summaries in the same 22 turns.
+
 ## Consequences
 
 - One memory to explain, to test and to tune; no question to answer in the middle of a conversation.

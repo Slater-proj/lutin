@@ -111,6 +111,7 @@ def _enregistrer_reglages(nouveau):
         r["reflexion_tours"] = "toujours"
     if r.get("memoire_longue") not in ("resume", "fichier", "demander"):
         raise ValueError(_t("Mémoire des longues conversations inconnue (resume, fichier ou demander)."))
+    r["memoire_longue"] = "fichier"                    # les anciennes valeurs restent acceptées et valent la fiche de suivi (ADR 0019)
     _m.nettoyer_echantillonnage(r)
     _m.nettoyer_ressources(r)
     tool_settings.clean(r)

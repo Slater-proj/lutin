@@ -38,7 +38,6 @@ export interface LiveTurn {
   blocks: Block[];
   status: string;
   approval: Approval | null;
-  memoryChoice: boolean;
   autoApprovalSuspended: string;
   tasks: Task[];
   tokens: { used: number; total: number } | null;
@@ -48,7 +47,7 @@ export interface LiveTurn {
 }
 
 export function newTurn(): LiveTurn {
-  return { blocks: [], status: "", approval: null, memoryChoice: false, autoApprovalSuspended: "", tasks: [], tokens: null, tokensPerSecond: null, title: null, done: false };
+  return { blocks: [], status: "", approval: null, autoApprovalSuspended: "", tasks: [], tokens: null, tokensPerSecond: null, title: null, done: false };
 }
 
 function appended(blocks: Block[], kind: "text" | "thinking", text: string): Block[] {
@@ -105,8 +104,6 @@ export function applyEvent(turn: LiveTurn, event: TurnEvent): LiveTurn {
       return { ...turn, autoApprovalSuspended: event.reason };
     case "auto_approval_restored":
       return { ...turn, autoApprovalSuspended: "" };
-    case "memory_choice":
-      return { ...turn, memoryChoice: true };
     case "tasks":
       return { ...turn, tasks: event.tasks };
     case "dry_run":
@@ -118,7 +115,7 @@ export function applyEvent(turn: LiveTurn, event: TurnEvent): LiveTurn {
     case "speed":
       return { ...turn, tokensPerSecond: event.write_tokens_per_s };
     case "end":
-      return { ...turn, status: "", approval: null, memoryChoice: false, title: event.conversation.title, done: true };
+      return { ...turn, status: "", approval: null, title: event.conversation.title, done: true };
     default:
       return turn;
   }

@@ -163,16 +163,16 @@ class Refusals(unittest.TestCase):
             self.assertEqual((status, sorted(answer["error"]), answer["error"]["code"]), (429, ["code", "message"], "too_many_turns"))
         self.assertNotIn(conversation, A.TOURS_ACTIFS)
 
-    def test_the_memory_choice_of_a_long_conversation_is_answered_through_v1(self):
+    def test_the_memory_choice_route_stays_but_no_question_waits(self):
+        """ADR 0019: the question « sheet or summary? » is no longer asked (the progress sheet for every conversation). The route stays for older
+        clients: a valid answer gets 409, as an answer that came too late did; an invalid one is still refused."""
         conversation, path = new_conversation(), "/api/v1/conversations/{}/memory-choice"
-        self.assertEqual(api("POST", path.format(conversation), {"choice": "file"}), (409, {"error": {"code": "no_pending_choice", "message": "Plus de question en attente pour cette conversation."}}))
-        waiting = {"evenement": threading.Event(), "choix": None, "garder": False}
-        with mock.patch.dict(A.CHOIX_MEMOIRE, {conversation: waiting}):
-            for body in ({}, {"choice": "fichier"}, {"choice": "file", "remember": 1}, {"choice": "file", "garder": True}):
-                status, answer = api("POST", path.format(conversation), body)
-                self.assertEqual((status, answer["error"]["code"], waiting["evenement"].is_set()), (400, "invalid_request", False), body)
-            self.assertEqual(api("POST", path.format(conversation), {"choice": "file", "remember": True}), (200, {"choice": "file"}))
-        self.assertEqual((waiting["choix"], waiting["garder"], waiting["evenement"].is_set()), ("fichier", True, True))
+        for choice in ("file", "summary"):
+            self.assertEqual(api("POST", path.format(conversation), {"choice": choice, "remember": True}),
+                             (409, {"error": {"code": "no_pending_choice", "message": "Plus de question en attente pour cette conversation."}}), choice)
+        for body in ({}, {"choice": "fichier"}, {"choice": "file", "remember": 1}, {"choice": "file", "garder": True}):
+            status, answer = api("POST", path.format(conversation), body)
+            self.assertEqual((status, answer["error"]["code"]), (400, "invalid_request"), body)
 
     def test_the_french_route_keeps_its_names(self):
         events = T.chat("Bonjour", reponses=[[{"content": "Salut"}]])
