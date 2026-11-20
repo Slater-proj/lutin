@@ -7,7 +7,7 @@
   import { formatBytes } from "../lib/format";
   import { language, t, type MessageKey } from "../lib/messages";
 
-  let { onstarted, onuse }: { onstarted: () => void; onuse: (model: string) => void } = $props();
+  let { onstarted, onuse }: { onstarted: (model: string) => void; onuse: (model: string) => void } = $props();
 
   const lang = language();
   const gb = (value: number): string => formatBytes(Math.round(value * 1e9), lang);
@@ -94,7 +94,7 @@
       await api("POST", "/models", { name: selected.model.id });
       started = selected.model.id;
       confirming = false;
-      onstarted();
+      onstarted(selected.model.id);
     } catch (cause) {
       problem = explain(cause);
     }

@@ -53,6 +53,12 @@
     models = await api<Models>("GET", "/models");
   }
 
+  // The model of the first launch becomes the one in use, as soon as its download starts (the old default named a model that may never be installed).
+  async function choose(model: string): Promise<void> {
+    await api("PATCH", "/settings", { model });
+    await loadModels();
+  }
+
   async function run(action: "install" | "start"): Promise<void> {
     if (!engine || busy) return;
     busy = true;
@@ -174,7 +180,10 @@
       <section>
         <h1>{t("setup.model_title")}</h1>
         <p class="lead">{t("setup.model_body")}</p>
-        <ModelGuide onstarted={() => void guarded(loadModels)} onuse={() => go("done")} />
+        <ModelGuide onstarted={(model) => void guarded(() => choose(model))} onuse={(model) => void guarded(async () => {
+          await choose(model);
+          go("done");
+        })} />
         {#if downloads.length}
           <ul class="downloads" aria-label={t("models.downloads")}>
             {#each downloads as download (download.name)}

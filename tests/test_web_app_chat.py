@@ -2713,6 +2713,8 @@ class Chat(unittest.TestCase):
         p.evaluer("document.querySelector('.setup .guide .confirm .button.primary').click()")
         p.attendre("!!document.querySelector('.setup .guide .ok[role=status]')")
         self.eventually(lambda: len(T.INSTALLES) == len(before) + 1, "the confirmed download reached the engine", 10)
+        downloaded = [name for name in T.INSTALLES if name not in before][0]
+        self.eventually(lambda: T.A.reglages().get("modele") == downloaded, "the model of the first launch becomes the one in use (it stayed the old default)")
         p.attendre("!!document.querySelector('.setup .downloads li')")
         p.evaluer("[...document.querySelectorAll('.setup .button.primary')].find(b => ['Continuer', 'Choisir plus tard'].includes(b.innerText)).click()")
         p.attendre("document.querySelector('.setup h1') && document.querySelector('.setup h1').innerText === 'Tout est prêt'")
