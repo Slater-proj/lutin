@@ -70,7 +70,8 @@ def rappel_formats():
     return (".pdf", ".docx", ".odt", ".ods", ".odp", ".pptx", ".xlsx")
 
 
-def outil_lire(chemin, debut=1, fin=None):
+def outil_lire(chemin, debut=1, fin=None, limite=None):
+    """Lit un fichier texte avec ses numéros de ligne. limite : caractères au plus (la part de la fenêtre laissée à un résultat d'outil), sinon LECTURE_MAX."""
     f = chemin_sur(chemin)
     if not f.is_file():
         raise _m.ErreurOutil(_t("Fichier introuvable : ") + rel(f) + astuce_chemin())
@@ -87,15 +88,24 @@ def outil_lire(chemin, debut=1, fin=None):
     debut = max(1, int(debut or 1))
     fin = int(fin) if fin else len(texte)
     extrait = texte[debut - 1:fin]
-    sortie, n = [], 0
+    # limite : la part de la fenêtre laissée à un résultat (ADR 0019), comptée comme dans la requête (échappements JSON compris) ; sans elle, LECTURE_MAX
+    plafond = min(_m.LECTURE_MAX, int(limite)) if limite else _m.LECTURE_MAX
+    cout = (lambda x: len(json.dumps(x, ensure_ascii=False))) if limite else (lambda x: len(x) + 1)
+    sortie, n, coupe = [], 0, None
     for i, l in enumerate(extrait, debut):
         ligne = "{}\t{}".format(i, l)
-        n += len(ligne) + 1
-        if n > _m.LECTURE_MAX:
-            sortie.append(_t("... (coupé : demande la suite avec debut={})").format(i))
+        n += cout(ligne)
+        if n > plafond:
+            if not sortie:                    # une seule ligne plus longue que la limite : son début, sinon la suite renverrait à cette même ligne sans fin
+                sortie.append(ligne[:max(80, plafond - 120)] + _t(" … (ligne coupée : {} caractères)").format(len(l)))
+                i += 1
+            coupe = i
             break
         sortie.append(ligne)
-    return _t("{} : lignes {} à {} sur {}\n").format(rel(f), debut, debut + len(sortie) - 1, len(texte)) + "\n".join(sortie)
+    lues = len(sortie)
+    if coupe is not None and coupe <= len(texte):
+        sortie.append(_t("... (coupé : demande la suite avec debut={})").format(coupe))
+    return _t("{} : lignes {} à {} sur {}\n").format(rel(f), debut, debut + lues - 1, len(texte)) + "\n".join(sortie)
 
 
 EXTENSIONS_BINAIRES = (".png", ".jpg", ".jpeg", ".webp", ".gif", ".safetensors", ".zip", ".mp4", ".wav", ".mp3", ".pyc", ".gguf", ".ckpt", ".pt", ".exe", ".dll", ".pdf")
@@ -194,8 +204,8 @@ def outil_symboles(nom, dossier="."):
     return res
 
 
-def outil_lire_plusieurs(fichiers):
-    """Lit jusqu'à 6 fichiers (ou morceaux de fichiers) en un seul appel."""
+def outil_lire_plusieurs(fichiers, limite=None):
+    """Lit jusqu'à 6 fichiers (ou morceaux de fichiers) en un seul appel. limite : caractères au plus pour l'ensemble (partagés entre les fichiers)."""
     if isinstance(fichiers, str):
         try:
             fichiers = json.loads(fichiers)
@@ -204,13 +214,14 @@ def outil_lire_plusieurs(fichiers):
     if not isinstance(fichiers, list) or not fichiers:
         raise _m.ErreurOutil(_t("« fichiers » doit être une liste de chemins ou de {\"chemin\": ..., \"debut\": ..., \"fin\": ...}."))
     sorties = []
+    part = max(300, int(limite) // min(6, len(fichiers)) - 40) if limite else None
     for x in fichiers[:6]:
         if isinstance(x, str):
             x = {"chemin": x}
         if not isinstance(x, dict):
             continue
         try:
-            s = outil_lire(x.get("chemin"), x.get("debut"), x.get("fin"))
+            s = outil_lire(x.get("chemin"), x.get("debut"), x.get("fin"), part)
         except _m.ErreurOutil as e:
             s = "Erreur : " + str(e)
         sorties.append(s if len(s) <= 3500 else s[:3500] + _t("\n[... coupé : relis ce fichier seul avec debut/fin pour la suite]"))
@@ -850,7 +861,8 @@ def outil_executer(commande, ctx, shell="cmd"):
         if lecture.kind == _safe.LIST:
             return _t("Code de sortie {}.\n{}").format(0, outil_lister(lecture.paths[0]))
         if lecture.kind == _safe.READ:
-            return _t("Code de sortie {}.\n{}").format(0, "\n\n".join(outil_lire(p) if len(lecture.paths) == 1 else "{}\n\n{}".format(p, outil_lire(p)) for p in lecture.paths))
+            part = (ctx.get("plafond_lecture") or 0) // len(lecture.paths) or None          # la part de la fenêtre d'un résultat (ADR 0019), partagée entre les fichiers
+            return _t("Code de sortie {}.\n{}").format(0, "\n\n".join(outil_lire(p, limite=part) if len(lecture.paths) == 1 else "{}\n\n{}".format(p, outil_lire(p, limite=part)) for p in lecture.paths))
         try:
             code, sortie, raison = lancer_processus(list(lecture.argv), False, str(_m.RACINE), stop, delai=_m.DELAI_COMMANDE_S, limite_ram=ctx.get("limite_ram", 0))
         except OSError:
@@ -877,8 +889,12 @@ def outil_executer(commande, ctx, shell="cmd"):
         texte = sortie.decode("utf-8")
     except UnicodeDecodeError:
         texte = sortie.decode("cp850", "replace")
-    if len(texte) > _m.SORTIE_MAX:
-        texte = texte[:_m.SORTIE_MAX // 2] + _t("\n... (sortie coupée : {} caractères au milieu ; pour lire un fichier, utilise l'outil « lire » avec debut et fin, il donne les numéros de ligne et dit où reprendre) ...\n").format(len(texte) - _m.SORTIE_MAX) + texte[-_m.SORTIE_MAX // 2:]
+    # pendant un tour, la sortie est bornée à la part de la fenêtre d'un résultat par la boucle, qui garde le texte entier à l'archive (ADR 0019) :
+    # la couper ici d'abord perdrait son milieu avant qu'il soit gardé ; seule une sortie démesurée l'est ici
+    from . import archive
+    sortie_max = max(_m.SORTIE_MAX, archive.RESULT_MAX) if ctx.get("plafond_resultat") else _m.SORTIE_MAX
+    if len(texte) > sortie_max:
+        texte = texte[:sortie_max // 2] + _t("\n... (sortie coupée : {} caractères au milieu ; pour lire un fichier, utilise l'outil « lire » avec debut et fin, il donne les numéros de ligne et dit où reprendre) ...\n").format(len(texte) - sortie_max) + texte[-sortie_max // 2:]
     return _t("Code de sortie {}.\n{}").format(code, texte)
 
 

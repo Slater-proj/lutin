@@ -75,6 +75,24 @@ Measured on `tests/test_evaluation.py` (fake engine, 22 turns; no real model).
   scribe in the turn: its turns follow each other at once and a scribe in the background would be cancelled every time. Not done: the
   cancelled call is not cut at the engine (a flag only, as decided); an engine that answers one request at a time finishes it before the new
   answer starts. Closing its connection would stop it (`chat_flux`) and is left for a measure on a real engine.
+- **Stage 4** (tool results bounded by the window): a result enters the conversation at most at `prompt_layout.result_budget` characters, a
+  tenth of the window counted as the estimate counts it (JSON form), never more than the old limit (`LECTURE_MAX` + 2,000, so nothing changes
+  above about 30,000 tokens) nor less than 600. A longer result is cut in the middle (`cut_middle`: its start and its end, where an output
+  usually says what it is and how it ended) under a header that says how much was cut and how to get the rest: `lire` with `debut`/`fin` for
+  a file, otherwise « rappeler » with ici=true, which finds the full text kept in the archive (`archive.add_result`, its own role in the same
+  file; `recall.result_passages` searches the results of the conversation by words only, in turn with the passages of the thread). `lire`
+  (and the shortcut of `executer` for `type`) receives the limit and stops before it, saying where to resume; `executer` no longer cuts its own
+  output at `SORTIE_MAX` during a turn (its middle was lost before it could be kept), only beyond 200,000 characters. Choices made while doing
+  it, for the maintainer to confirm:
+  - *Old results are replaced in the request only, and only in a long conversation* (`fiche_active`, the switch of the sheet): at the start of
+    a request, every result of a finished request becomes one line (tool, main argument, size, how to find it again), in one batch
+    (`mask_old_results`). The stored conversation keeps them in full (the page shows them; the thresholds of removal still count them, so
+    removals come no later than before). In a short conversation nothing is replaced: the model would have to read again what it just read.
+  - *A file read twice still appears twice* (the latest read is not singled out): not done.
+  Found on the way: a line longer than the limit (a minified file) gave an empty read that sent back to `debut` on that same line, so the
+  model could read it again without end; it now gives the start of the line and the next `debut`. Before → after, 4,096 tokens: an output of
+  30,000 characters entered the conversation at 2,457 tokens (60 % of the window), now at most 409; 8,192 tokens: at most 819. The
+  evaluation suite is unchanged (its scenario calls no tool: a scenario rich in tools is still to write, `CONTEXT_RESEARCH.md` proposal 9).
 
 ## Consequences
 

@@ -497,6 +497,85 @@ class Assistant(unittest.TestCase):
             with self.assertRaises(ValueError):
                 mo.faire("installer", lambda *x: None)
 
+    def test_une_longue_sortie_ne_prend_qu_un_dixieme_de_la_fenetre_et_reste_retrouvable(self):
+        """ADR 0019, décision 5 : sur 4 096 jetons, une sortie de 30 000 caractères entrait dans la conversation à 9 000 caractères (près des trois quarts
+        de la fenêtre). Elle n'en prend plus qu'un dixième, coupée au milieu (début et fin gardés) avec un en-tête qui dit comment avoir le reste, et le
+        texte complet va à l'archive, où « rappeler » avec ici=true retrouve ce que le modèle n'a pas vu."""
+        from lutin import agent as AG
+        A.enregistrer_reglages({"num_ctx": 4096, "mode": "polyvalent", "reflexion": False})
+        lignes = ["ligne {:05d} du journal de construction, tout va bien".format(i) for i in range(600)]
+        lignes[300] = "ligne 00300 erreur : le module zorglub est introuvable"
+        (PROJET / "journal-long.txt").write_text("\n".join(lignes), encoding="utf-8")
+        try:
+            ev = chat("Lance la construction", reponses=[[appel_outil("executer", commande="sort journal-long.txt")], [{"content": "Fait."}]])
+            # « type » (Windows) est lu par « lire » sans shell : à la limite du tour, il s'arrête et dit où reprendre au lieu d'être coupé au milieu
+            lu = chat("Montre le journal", reponses=[[appel_outil("executer", commande="type journal-long.txt" if os.name == "nt" else "cat journal-long.txt")], [{"content": "Vu."}]])
+        finally:
+            (PROJET / "journal-long.txt").unlink()
+        resultat = next(e["conversation"] for e in lu if e["type"] == "debut")
+        resultat = next(m for m in A.conv_lire(resultat)["messages"] if m.get("role") == "tool")
+        self.assertLessEqual(AG.estimer([{"role": "tool", "tool_name": resultat["tool_name"], "content": resultat["content"]}]), 4096 // 10)
+        if os.name == "nt":
+            self.assertNotIn("Résultat coupé", resultat["content"])
+            self.assertRegex(resultat["content"], r"debut=\d+\)$")
+        cid = next(e["conversation"] for e in ev if e["type"] == "debut")
+        self.assertGreater(len("\n".join(lignes)), 30000)
+        outil = next(m for m in A.conv_lire(cid)["messages"] if m.get("role") == "tool")
+        self.assertLessEqual(AG.estimer([{"role": "tool", "tool_name": outil["tool_name"], "content": outil["content"]}]), 4096 // 10, "un dixième de la fenêtre au plus")
+        self.assertIn("rappeler", outil["content"].split("\n")[0], "l'en-tête dit comment avoir le reste")
+        self.assertIn("ligne 00000", outil["content"], "le début est gardé")
+        self.assertIn("ligne 00599", outil["content"], "la fin aussi")
+        self.assertNotIn("zorglub", outil["content"], "le milieu est coupé")
+        envoye = next(m for c in RECUES for m in c["messages"] if m.get("role") == "tool" and "ligne 00599" in m.get("content", ""))
+        self.assertLessEqual(AG.estimer([envoye]), 4096 // 10, "et c'est ce que le modèle reçoit")
+        self.assertIn("zorglub", A.recall_tool("module zorglub introuvable", 3, cid, True), "le texte complet se retrouve avec « rappeler »")
+
+    def test_lire_s_arrete_a_sa_limite_et_une_ligne_trop_longue_ne_renvoie_pas_a_elle_meme(self):
+        """La limite d'un résultat suit la fenêtre (ADR 0019) : « lire » s'arrête avant et dit où reprendre. Une ligne plus longue que la limite (fichier
+        minifié, JSON) donnait une lecture vide qui renvoyait à « debut » sur cette même ligne : le modèle relisait sans fin."""
+        (PROJET / "lignes.txt").write_text("\n".join("ligne numéro {} du fichier".format(i) for i in range(1, 201)), encoding="utf-8")
+        (PROJET / "minifie.js").write_text("var a=1;" * 1000 + "\nfin();\n", encoding="utf-8")
+        try:
+            self.assertNotIn("debut=1)", A.outil_lire("minifie.js"), "même sans limite (LECTURE_MAX), une ligne trop longue ne renvoie pas à elle-même")
+            lu = A.outil_lire("lignes.txt", None, None, 1000)
+            self.assertLessEqual(len(json.dumps(lu, ensure_ascii=False)), 1000 + 120)
+            self.assertRegex(lu.splitlines()[-1], r"debut=\d+")
+            suite = int(lu.splitlines()[-1].split("debut=")[1].rstrip(")"))
+            self.assertIn("{}\tligne numéro {} ".format(suite - 1, suite - 1), lu, "la suite commence juste après la dernière ligne lue")
+            long = A.outil_lire("minifie.js", None, None, 1000)
+            self.assertIn("ligne coupée : 8000 caractères", long)
+            self.assertNotIn("debut=1)", long, "pas de renvoi à la ligne qu'on vient de lire")
+            self.assertIn("debut=2", long)
+            self.assertEqual(A.outil_lire("lignes.txt").count("\n"), 200, "sans limite, rien ne change (LECTURE_MAX)")
+        finally:
+            (PROJET / "lignes.txt").unlink()
+            (PROJET / "minifie.js").unlink()
+
+    def test_les_resultats_des_demandes_finies_ne_sont_plus_qu_une_ligne_dans_une_longue_conversation(self):
+        """ADR 0019, décision 5 : une fois la demande finie, ses résultats d'outils sont remplacés, en un lot, par une ligne (outil, arguments, taille) dans
+        la requête suivante, quand la conversation est longue. La conversation enregistrée les garde entiers (la page les montre) ; une conversation courte
+        aussi, dans la requête : le modèle n'a pas à relire ce qu'il vient de lire."""
+        from lutin import agent as AG
+        (PROJET / "notes-longues.md").write_text("\n".join("Paragraphe {} : des notes sur le projet.".format(i) for i in range(60)), encoding="utf-8")
+        try:
+            ev = chat("Lis les notes", reponses=[[appel_outil("lire", chemin="notes-longues.md")], [{"content": "Lu."}]])
+        finally:
+            (PROJET / "notes-longues.md").unlink()
+        cid = next(e["conversation"] for e in ev if e["type"] == "debut")
+        lu = next(m["content"] for m in A.conv_lire(cid)["messages"] if m.get("role") == "tool")
+        self.assertIn("Paragraphe 59", lu)
+        RECUES.clear()
+        chat("Et maintenant ?", cid, reponses=[[{"content": "Rien."}]])
+        outil = next(m for m in RECUES[0]["messages"] if m.get("role") == "tool")
+        self.assertEqual(outil["content"], lu, "conversation courte : le résultat reste entier")
+        RECUES.clear()
+        with mock.patch.object(AG, "fiche_active", lambda *a, **k: True):
+            chat("Et ensuite ?", cid, reponses=[[{"content": "Rien."}]])
+        outil = next(m for m in RECUES[0]["messages"] if m.get("role") == "tool")
+        self.assertTrue(outil["content"].startswith("[Résultat de « lire » (chemin=notes-longues.md) : {} caractères".format(len(lu))), outil["content"])
+        self.assertIn("rappeler", outil["content"])
+        self.assertEqual(next(m["content"] for m in A.conv_lire(cid)["messages"] if m.get("role") == "tool"), lu, "la conversation enregistrée garde le résultat entier")
+
     def test_commandes(self):
         ev = chat("Dis bonjour", reponses=[[appel_outil("executer", commande="echo bonjour-assistant")], [{"content": "."}]])
         self.assertFalse(any(e["type"] == "approbation" for e in ev), "une lecture simple n'a pas besoin d'accord")

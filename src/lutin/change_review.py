@@ -311,7 +311,7 @@ def _call_tool(nom, args, ctx):
     if nom == "lister":
         return _m.outil_lister(args.get("dossier", "."))
     if nom == "lire":
-        return _m.outil_lire(args.get("chemin"), args.get("debut"), args.get("fin"))
+        return _m.outil_lire(args.get("chemin"), args.get("debut"), args.get("fin"), ctx.get("plafond_lecture"))
     if nom == "chercher":
         return _m.outil_chercher(args.get("motif", ""), args.get("dossier", "."), args.get("contexte", 0), args.get("fichiers", ""))
     if nom == "trouver":
@@ -323,7 +323,7 @@ def _call_tool(nom, args, ctx):
     if nom == "symboles":
         return _m.outil_symboles(args.get("nom", ""), args.get("dossier", "."))
     if nom == "lire_plusieurs":
-        return _m.outil_lire_plusieurs(args.get("fichiers"))
+        return _m.outil_lire_plusieurs(args.get("fichiers"), ctx.get("plafond_lecture"))
     if nom == "rappeler":
         return _m.recall_tool(args.get("requete", ""), args.get("nombre"), (ctx.get("conv") or {}).get("id", ""), bool(args.get("ici")))
     if nom == "modifier":

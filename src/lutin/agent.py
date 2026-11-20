@@ -1789,13 +1789,16 @@ def place_des_rappels(conv, r, outils, fiche=""):
     return max(0, reste) * _disposition.CHARS_PER_TOKEN
 
 
-def ce_que_voit_le_modele(conv, r, outils, fiche=""):
+def ce_que_voit_le_modele(conv, r, outils, fiche="", masquer=False):
     """Les messages de la conversation que la requête enverra vraiment, une fois ajustée à la fenêtre (ADR 0018) : le rappel du fil ne remet pas ce
     que le modèle a sous les yeux, et cherche d'abord dans ce que l'ajustement retire. La requête est reconstruite comme dans _messages_de_l_etape
     (système, résumé, fiche), avec la place des extraits réservée ; le système n'est pas rendu."""
     msgs = [{"role": "system", "content": consignes_systeme(r) + _fichiers.instruction_folder(conv)}] + bloc_du_debut(conv)
     reserve ="·" * _disposition.thread_budget(r["num_ctx"])                   # les extraits eux-mêmes prendront cette place
-    msgs += _disposition.before_last_question(list(conv.get("messages") or []), _disposition.turn_block(fiche, reserve, ""))
+    historique = list(conv.get("messages") or [])
+    if masquer:
+        historique = _disposition.mask_old_results(historique, ligne_resultat_retire)
+    msgs += _disposition.before_last_question(historique, _disposition.turn_block(fiche, reserve, ""))
     return ajuster_contexte(msgs, r["num_ctx"], 1.0, outils)[1:]
 
 
@@ -1806,6 +1809,9 @@ def _preparer_boucle(conv, r, emit, ctx):
     tours_max = max(4, int(r.get("tours_max", _m.TOURS_MAX)))
     outils = outils_du_mode(r)                                      # seulement les outils utiles dans ce mode : moins de jetons, moins de confusion
     ctx["outils_autorises"] = {t["function"]["name"] for t in outils}
+    ctx["plafond_resultat"] = _disposition.result_budget(r["num_ctx"], _m.LECTURE_MAX + 2000)          # un résultat d'outil prend au plus un dixième de la fenêtre (ADR 0019)
+    ctx["plafond_lecture"] = ctx["plafond_resultat"] - 200          # « lire » s'arrête avant, et dit où reprendre : son en-tête et sa dernière ligne tiennent dans le plafond
+    masquer = fiche_active(conv, r)                                   # conversation longue : les résultats des demandes finies ne sont plus qu'une ligne (ADR 0019)
     fiche, consigne = "", ""
     forcer_fin = False                                                # le modèle tourne en rond : un dernier tour SANS outil pour qu'il conclue, au lieu de couper net
     try:
@@ -1817,7 +1823,7 @@ def _preparer_boucle(conv, r, emit, ctx):
     if r.get("rappel_ici") and min(_disposition.thread_budget(r["num_ctx"]), place) >= _disposition.RECALL_MIN:          # le début de la conversation n'est plus sous les yeux du modèle : on lui remet ce qui touche à la demande
         try:
             etape = " ".join(_suivi.read(conv["id"])["etape"] + _suivi.read(conv["id"])["objectif"])
-            vus = ce_que_voit_le_modele(conv, r, outils, fiche)
+            vus = ce_que_voit_le_modele(conv, r, outils, fiche, masquer)
             extraits, nb_extraits = _m.thread_recall(conv, etape, min(_disposition.thread_budget(r["num_ctx"]), place), vus)
             if nb_extraits and DITS["rappel"].get(conv["id"]) != nb_extraits:          # dit une fois, et quand le nombre change : pas à chaque réponse
                 DITS["rappel"][conv["id"]] = nb_extraits
@@ -1854,7 +1860,8 @@ def _preparer_boucle(conv, r, emit, ctx):
         except (_m.ErreurOutil, OSError) as erreur:
             _m.journaliser("Actualités guidées impossibles : {!r}".format(erreur))
             emit({"type": "info", "texte": _t("La recherche d'actualités n'a pas pu se faire ({}) : je continue normalement.").format(erreur)})
-    return types.SimpleNamespace(tours_max=tours_max, outils=outils, rappels_texte=rappels_texte, fiche=fiche, extraits=extraits, consigne=consigne, derniere_demande=derniere_demande, garde=garde, forcer_fin=forcer_fin)
+    return types.SimpleNamespace(tours_max=tours_max, outils=outils, rappels_texte=rappels_texte, fiche=fiche, extraits=extraits, consigne=consigne, derniere_demande=derniere_demande, garde=garde, forcer_fin=forcer_fin,
+                                 masquer=masquer)
 
 
 def _messages_de_l_etape(conv, r, emit, p, idx_tour, dernier_tour, faux_accompli):
@@ -1871,6 +1878,8 @@ def _messages_de_l_etape(conv, r, emit, p, idx_tour, dernier_tour, faux_accompli
             emit({"type": "info", "texte": _t("⚠ {} fait {} caractères et l'assistant n'en relit que {} à chaque conversation : le reste est ignoré. Raccourcis-le (onglet Mémoire) si des informations manquent.").format(nom_coupe, taille_coupe, relu_coupe)})
     msgs += bloc_du_debut(conv)
     historique =_pieces.for_model(conv["messages"], _pieces.character_budget(r["num_ctx"]))          # le texte des fichiers joints s'ajoute ici, jamais dans la conversation enregistrée
+    if getattr(p, "masquer", False):
+        historique = _disposition.mask_old_results(historique, ligne_resultat_retire)          # en un lot, au début de la demande : la requête ne change qu'une fois
     dernier_user = max((i for i, m in enumerate(historique) if m.get("role") == "user"), default=-1)
     if consigne and dernier_user >= 0:
         historique = list(historique)
@@ -2097,6 +2106,38 @@ def _appeler_modele(conv, r, emit, ctx, stop, corps, msgs_base, outils, caps, pl
     return fini, repli_demande, contenu, pensee, appels
 
 
+def resume_arguments(nom, args):
+    """Les arguments d'un appel en quelques mots, pour la ligne qui remplace son résultat : le chemin, la commande, la requête."""
+    for cle in ("chemin", "commande", "motif", "requete", "url", "dossier"):
+        if isinstance(args.get(cle), str) and args[cle].strip():
+            valeur = " ".join(args[cle].split())
+            return "{}={}".format(cle, valeur[:80] + ("…" if len(valeur) > 80 else ""))
+    return ""
+
+
+def ligne_resultat_retire(nom, args, taille):
+    """La ligne qui remplace un résultat d'outil d'une demande finie (ADR 0019) : l'outil, ses arguments, sa taille, et comment le retrouver."""
+    arguments = resume_arguments(nom, args)
+    return _t("[Résultat de « {} »{} : {} caractères, retiré du contexte une fois la demande finie. S'il te sert encore, relis-le (« lire ») ou retrouve-le (« rappeler » avec ici=true).]").format(
+        nom, " (" + arguments + ")" if arguments else "", taille)
+
+
+def borner_resultat(conv, ctx, nom, resultat):
+    """Le résultat d'un outil tel qu'il entre dans la conversation : au plus la part de la fenêtre que lui laisse le tour (ADR 0019, décision 5), coupé au
+    milieu avec un en-tête qui dit comment avoir le reste. Le texte complet d'un résultat coupé va à l'archive, où « rappeler » (ici=true) le retrouve ;
+    un fichier se relit avec « lire »."""
+    plafond = ctx.get("plafond_resultat") or _m.LECTURE_MAX + 2000
+    if _disposition.json_length(resultat) <= plafond:
+        return resultat
+    if nom in ("lire", "lire_plusieurs"):
+        comment = _t("relis la partie qui manque avec « lire » (debut et fin)")
+    elif "rappeler" in ctx.get("outils_autorises", ()) and conv.get("id") and _archive.add_result(conv["id"], nom, resultat):
+        comment = _t("le texte complet est gardé : appelle « rappeler » avec ici=true et des mots de la partie qui manque")
+    else:
+        comment = _t("relance l'outil avec une demande plus précise")
+    return _disposition.cut_middle(resultat, plafond, lambda retires: _t("[Résultat coupé au milieu pour tenir dans la fenêtre : {} caractères sur {} retirés ; {}.]").format(retires, len(resultat), comment) + "\n")[0]
+
+
 def _executer_appels(conv, r, emit, ctx, stop, appels, outils, garde):
     """Les outils demandés par le modèle, dans l'ordre des appels : garde contre les boucles, exécution (l'accord se demande dans l'outil), résultat rendu au modèle et montré à la page,
     conversation enregistrée après chaque outil."""
@@ -2151,7 +2192,7 @@ def _executer_appels(conv, r, emit, ctx, stop, appels, outils, garde):
             _m.journaliser("Registre des fichiers créés : {!r}".format(erreur))
         affiche = _t("(résultat transmis à l'assistant, non affiché)") if (nom in OUTILS_INTERNES or _mcp.is_tool(nom)) and ("CONTENU WEB NON FIABLE" in resultat[:60] or _mcp.MARKER in resultat[:60]) else resultat[:1500]          # la recherche web sert à l'assistant, pas à remplir la conversation : c'est à lui d'en tirer la réponse
         emit(dict({"type": "resultat", "nom": nom, "texte": affiche}, **extra))
-        conv["messages"].append(dict({"role": "tool", "tool_name": nom, "content": resultat[:_m.LECTURE_MAX + 2000]}, **extra))
+        conv["messages"].append(dict({"role": "tool", "tool_name": nom, "content": borner_resultat(conv, ctx, nom, resultat)}, **extra))
         _m.conv_ecrire(conv)                        # enregistré à chaque étape : un plantage du PC en pleine demande ne perd que l'étape en cours
 
 

@@ -2337,5 +2337,11 @@
 "Pas encore de base des conversations ({}) : tes conversations sont encore les fichiers de la version 0.x, dans {}.": "No conversation database yet ({}): your conversations are still the files of version 0.x, in {}.",
 "La base des conversations ne s'ouvre pas ({}) : {}": "The conversation database does not open ({}): {}",
 "La base des conversations ne se lit pas ({}) : {}": "The conversation database cannot be read ({}): {}",
-"Base des conversations": "Conversation database"
+"Base des conversations": "Conversation database",
+" … (ligne coupée : {} caractères)": " … (line cut: {} characters)",
+"[Résultat de « {} »{} : {} caractères, retiré du contexte une fois la demande finie. S'il te sert encore, relis-le (« lire ») ou retrouve-le (« rappeler » avec ici=true).]": "[Result of « {} »{}: {} characters, taken out of the context once the request was done. If you still need it, read it again (« lire ») or find it (« rappeler » with ici=true).]",
+"relis la partie qui manque avec « lire » (debut et fin)": "read the missing part with « lire » (debut and fin)",
+"le texte complet est gardé : appelle « rappeler » avec ici=true et des mots de la partie qui manque": "the full text is kept: call « rappeler » with ici=true and words of the missing part",
+"relance l'outil avec une demande plus précise": "call the tool again with a narrower request",
+"[Résultat coupé au milieu pour tenir dans la fenêtre : {} caractères sur {} retirés ; {}.]": "[Result cut in the middle to fit the window: {} characters out of {} taken out; {}.]"
 }

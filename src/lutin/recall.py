@@ -312,6 +312,67 @@ def thread_passages(ident, question, nombre=3, min_termes=1):
     return [e[1] for e in classes[:nombre]]
 
 
+RESULTS = {}                      # conversation -> (signature, chunks, df, mean): the index of its tool results, rebuilt only when it changes
+RESULT_CHUNK = 800                # characters of a chunk of a tool result
+
+
+def split_result(text, source):
+    """Chunks of about RESULT_CHUNK characters of a tool result, cut at line ends: an output seldom has paragraphs (split_text would keep it whole)."""
+    chunks, current, size = [], [], 0
+    for line in text.splitlines():
+        while len(line) > RESULT_CHUNK:                                # one very long line (minified file, JSON): cut by characters
+            chunks.append(line[:RESULT_CHUNK])
+            line = line[RESULT_CHUNK:]
+        if size + len(line) > RESULT_CHUNK and current:
+            chunks.append("\n".join(current))
+            current, size = [], 0
+        current.append(line)
+        size += len(line) + 1
+    if current:
+        chunks.append("\n".join(current))
+    return [{"source": source, "titre": "", "texte": c} for c in chunks if len(c.strip()) > 20]
+
+
+def result_chunks(ident):
+    """The tool results of this conversation, those still in it and those kept in full in its archive because they were cut to fit the window
+    (ADR 0019, decision 5), as chunks with their word counts. Searched by words only, by « rappeler » with ici=true: the meaning of an output is
+    its exact words (a name, an error, a number), and the vectors of the thread stay those of its messages."""
+    _m.conv_chemin(ident)                                         # checks the identifier
+    f = ConversationRef(ident)
+    try:
+        sig = file_signature(f)
+    except OSError:
+        return [], collections.Counter(), 1.0
+    cached = RESULTS.get(ident)
+    if cached and cached[0] == sig:
+        return cached[1], cached[2], cached[3]
+    c = f.read() or {}
+    parts = _archive.results_of(ident) + [(m.get("tool_name") or "", str(m.get("content") or "")) for m in c.get("messages", []) if m.get("role") == "tool" and m.get("content")]
+    chunks = []
+    for name, text in parts:
+        chunks += split_result(text, "résultat de « {} » (cette conversation)".format(name))
+    df = collections.Counter()
+    for m in chunks:
+        m["tf"] = collections.Counter(words(m["texte"]))
+        m["longueur"] = sum(m["tf"].values()) or 1
+        df.update(m["tf"].keys())
+    mean = (sum(m["longueur"] for m in chunks) / len(chunks)) if chunks else 1.0
+    if len(RESULTS) > 20:
+        RESULTS.clear()
+    RESULTS[ident] = (sig, chunks, df, mean)
+    return chunks, df, mean
+
+
+def result_passages(ident, question, nombre=3):
+    """The chunks of the tool results of this conversation that contain the words of the question (BM25)."""
+    try:
+        chunks, df, mean = result_chunks(ident)
+    except ValueError:
+        return []
+    terms = set(words(question[:900]))
+    return rank_chunks(chunks, df, mean, len(chunks), terms, nombre, 1) if chunks and terms else []
+
+
 def thread_recall(conv, fiche_etape="", budget=1800, vus=None):
     """Ce qui a été dit plus tôt dans CETTE conversation et qui touche à la dernière demande, retrouvé tout seul (sans que le modèle ait à le demander) : une fiche ou un résumé perd des détails,
     mais le texte complet reste sur le disque. Renvoie (texte pour le prompt, nombre de passages). Un « oui » ou un « continue » est complété par la dernière réponse et l'étape en cours.
@@ -393,7 +454,13 @@ def recall_tool(requete, nombre=5, conv_id="", ici=False):
         nombre = max(1, min(10, int(nombre or 5)))
     except (TypeError, ValueError):
         nombre = 5
-    passages = thread_passages(conv_id, requete, nombre) if (ici and conv_id) else recall_passages(requete, nombre)
+    if ici and conv_id:
+        # the messages of the thread and the tool results (a result cut to fit the window is kept in full: its header sends here), in turn
+        fil, sorties = thread_passages(conv_id, requete, nombre), result_passages(conv_id, requete, nombre)
+        passages = [p for paire in zip(fil, sorties) for p in paire] + fil[len(sorties):] + sorties[len(fil):]
+        passages = passages[:nombre]
+    else:
+        passages = recall_passages(requete, nombre)
     if not passages:
         return _t("Aucun passage pertinent dans cette conversation.") if ici else _t("Aucun passage pertinent dans les documents ni dans les conversations enregistrées.")
     return format_passages(passages) + _t("\n\n(lis le document complet avec « lire » si un passage t'intéresse)")

@@ -283,6 +283,7 @@ Lutin ne raccourcit jamais ce que le modèle lit sans te le dire, dans la conver
 
 - **CONTEXTE.md** au-delà de 14 000 caractères, ou **MEMOIRE.md** dont les anciennes notes ne tiennent plus : un marqueur dit au modèle ce qui manque, et un avertissement te le dit.
 - **Anciens résultats d'outils** raccourcis pour tenir dans la fenêtre de contexte (et échanges retirés, si cela ne suffit pas) : « Pour tenir dans la fenêtre de contexte (N jetons) : … ». Ce qui a été raccourci se relit avec l'outil « lire » ; une fenêtre plus grande (Réglages > Conversation) l'évite.
+- **Chaque résultat d'outil borné par la fenêtre** : environ un dixième (jamais plus qu'avant sur une grande fenêtre), coupé au milieu avec un en-tête qui dit comment avoir le reste ; « lire » s'arrête à cette taille et dit où reprendre. Le texte complet d'un résultat coupé est gardé avec la conversation, et « rappeler » avec `ici=true` le retrouve. Dans une longue conversation, les résultats des demandes finies ne sont plus qu'une ligne dans les requêtes suivantes (la conversation les garde entiers).
 - **Différences montrées avant ton accord** quand elles sont longues : un marqueur dit ce qui n'est pas affiché.
 - **Outils MCP** au-delà de 40 : la page dit combien sont écartés.
 - **Mémoire importée d'une autre machine** : seul ce qui tient est ajouté, ta mémoire n'est jamais rognée, et le nombre de notes ignorées est affiché.

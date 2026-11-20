@@ -283,6 +283,7 @@ Lutin never shortens what the model reads without telling you, in the conversati
 
 - **CONTEXTE.md** longer than 14,000 characters, or **MEMOIRE.md** whose old notes no longer fit: a marker tells the model what is missing, and a warning tells you.
 - **Old tool results** shortened to fit the context window (and exchanges removed, if it is not enough): "To fit in the context window (N tokens): …". What was shortened can be read again with the read tool; a larger window (Settings > Conversation) avoids it.
+- **Each tool result bounded by the window**: about a tenth of it (never more than before on a large window), cut in the middle with a header that says how to get the rest; `lire` stops at that size and says where to resume. The full text of a cut result is kept with the conversation, and `rappeler` with `ici=true` finds it. In a long conversation, the results of finished requests become one line in the next requests (the conversation keeps them in full).
 - **Differences shown before you approve** when they are long: a marker says how much is not displayed.
 - **MCP tools** beyond 40: the page says how many are left out.
 - **Memory imported from another machine**: only what fits is added, your own memory is never trimmed, and the number of skipped notes is shown.
