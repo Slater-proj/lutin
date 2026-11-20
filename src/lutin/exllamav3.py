@@ -134,14 +134,18 @@ DEFAULT_CONTEXT = 16384          # jetons de conversation gardés en mémoire vi
 def config_yaml(port, modeles, contexte=0):
     """Le config.yml de TabbyAPI : adresse locale, aucune clé (réservé à cette machine), pas de page web, aucune origine de navigateur admise, modèle chargé à la demande.
     `contexte` : la longueur de conversation gardée en mémoire vidéo (celle des réglages de Lutin) et une mémoire de conversation compressée (Q8) : sans cela TabbyAPI réserve la longueur maximale du modèle
-    et refuse de le charger (« Insufficient VRAM in split for model and cache »)."""
+    (262 144 jetons pour un Qwen récent) et refuse de le charger (« Insufficient VRAM in split for model and cache »).
+    Un modèle chargé à la demande n'hérite de ces trois réglages que s'ils sont nommés dans `use_as_default` (TabbyAPI les ignore sinon, et le dit dans son journal) ;
+    `cache_size` est la taille du cache, un multiple de 256 au moins égal à `max_seq_len`."""
     contexte = int(contexte or 0)
     contexte = max(2048, min(262144, contexte)) if contexte else DEFAULT_CONTEXT
+    cache = -(-contexte // 256) * 256
     chemin = Path(modeles).as_posix()
     if "#" in chemin or "\n" in chemin or chemin.startswith(("'", '"')):
         raise ValueError(_t("Le chemin du dossier des modèles contient un caractère que TabbyAPI ne sait pas lire ('#', guillemet ou retour à la ligne)."))
     return ("network:\n  host: {}\n  port: {}\n  disable_auth: true\n  allowed_origins: []\n  web_ui: false\n"
-            "logging:\n  log_auth_keys: false\nmodel:\n  model_dir: {}\n  inline_model_loading: true\n  max_seq_len: {}\n  cache_mode: Q8\n").format(HOST, int(port), chemin, contexte)
+            "logging:\n  log_auth_keys: false\nmodel:\n  model_dir: {}\n  inline_model_loading: true\n  use_as_default: [max_seq_len, cache_size, cache_mode]\n"
+            "  max_seq_len: {}\n  cache_size: {}\n  cache_mode: Q8\n").format(HOST, int(port), chemin, contexte, cache)
 
 
 def _follow(proc, dire, annule=lambda: False):

@@ -315,6 +315,20 @@ class ContexteBorne(Base):
         self.assertIn("max_seq_len: 2048", X.config_yaml(5000, self.tmp / "modeles", 10))
         self.assertIn("max_seq_len: 262144", X.config_yaml(5000, self.tmp / "modeles", 10 ** 9))
 
+    def test_un_modele_charge_a_la_demande_herite_de_la_longueur_et_de_la_taille_du_cache(self):
+        """Seen on a real RTX 4090 (24 GB) with a 27B model: TabbyAPI logged « cache_size is undefined. Defaulting to 262144 tokens » and « Models loaded by request ignore these options
+        unless they are in model.use_as_default », then failed with « Insufficient VRAM in split for model and cache ». The three options must be named there, and the cache sized."""
+        for contexte in (0, 10, 24576, 30000, 10 ** 9):
+            lignes = dict(ligne.strip().split(": ", 1) for ligne in X.config_yaml(5000, self.tmp / "modeles", contexte).splitlines() if ": " in ligne)
+            herites = [nom.strip() for nom in lignes["use_as_default"].strip("[]").split(",")]
+            for nom in ("max_seq_len", "cache_size", "cache_mode"):
+                self.assertIn(nom, herites, "%s must be inherited by a model loaded by request (context %s)" % (nom, contexte))
+            longueur, cache = int(lignes["max_seq_len"]), int(lignes["cache_size"])
+            self.assertEqual(cache % 256, 0, "TabbyAPI wants a multiple of 256")
+            self.assertGreaterEqual(cache, longueur, "TabbyAPI refuses a cache smaller than the sequence length")
+            self.assertLess(cache, longueur + 256, "and nothing more than that is reserved")
+        self.assertEqual(X.config_yaml(5000, self.tmp / "modeles", 30000).count("cache_size: 30208"), 1, "30 000 rounded up to the next multiple of 256")
+
     def test_le_demarrage_ecrit_le_contexte_des_reglages(self):
         self.installer()
         etat = {"ok": False}

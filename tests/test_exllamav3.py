@@ -292,6 +292,10 @@ class Carte(unittest.TestCase):
         self.mo = engines.ENGINES["openai"]
         ml.regler_serveur("openai", {"serveur": "exllamav3"})
         self.addCleanup(self.remettre)
+        # The tasks ask whether a server already answers on the default port: a real TabbyAPI running on the machine must not change what is asserted.
+        patch = mock.patch.object(ml.MoteurOpenAI, "actif", lambda self: False)
+        patch.start()
+        self.addCleanup(patch.stop)
 
     def remettre(self):
         ml.regler_serveur("openai", {"serveur": "", "port_exllamav3": 0})
