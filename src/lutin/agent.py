@@ -242,11 +242,13 @@ def messages_non_lus(conv, fin=None):
     return [(i, m) for i, m in enumerate(msgs[:fin]) if i >= deja and m.get("role") in ("user", "assistant") and (m.get("content") or "").strip() and not str(m["content"]).startswith("[")]
 
 
-def scribe(conv, r, emit=None, jusqua=None, forcer=False):
+def scribe(conv, r, emit=None, jusqua=None, forcer=False, travail=None):
     """Met la fiche à jour d'après les derniers échanges, par des appels courts et SÉPARÉS au modèle : la fiche ne dépend plus de la bonne volonté du modèle qui répond (il oublie souvent l'outil « suivi »).
     Les consignes sont contrôlées (clés connues, lignes courtes, pas de doublon, aucune décision retirée). Renvoie le nombre de lignes écrites ; 0 si rien à faire ou si l'appel a échoué.
     Les échanges sont lus par lots : rien n'est sauté quand il y en a beaucoup (le rang lu n'avance que de ce qui l'a vraiment été).
-    jusqua : ne lit pas au-delà de ce rang ; forcer : même un seul message est lu (avant un retrait demandé, où tout ce qui sort doit être passé dans la fiche)."""
+    jusqua : ne lit pas au-delà de ce rang ; forcer : même un seul message est lu (avant un retrait demandé, où tout ce qui sort doit être passé dans la fiche).
+    travail : le scribe tourne hors du tour (lancer_scribe) ; chaque lot n'est gardé que s'il n'est pas annulé et que la conversation n'a pas changé
+    entre-temps, et le rang lu est écrit dans la conversation enregistrée (_garder_lot)."""
     ident = conv.get("id")
     nouveaux = messages_non_lus(conv, jusqua)
     if len(nouveaux) < (1 if forcer else SCRIBE_MESSAGES):
@@ -264,21 +266,105 @@ def scribe(conv, r, emit=None, jusqua=None, forcer=False):
     lots.append(courant)
     total, tous = 0, True
     for lot in lots[:SCRIBE_LOTS_MAX_FORCE if forcer else SCRIBE_LOTS_MAX]:
-        n = _scribe_lot(conv, r, ident, "\n".join(ligne for _, ligne in lot))
-        if n is None:
+        ops = _scribe_appel(r, ident, "\n".join(ligne for _, ligne in lot))
+        if ops is None:
             tous = False
             break
-        total += n
-        conv["scribe_a"] = lot[-1][0] + 1
+        if travail is None:
+            total += _scribe_appliquer(ident, ops)
+            conv["scribe_a"] = lot[-1][0] + 1
+        else:
+            n = _garder_lot(conv, travail, ops, lot[-1][0] + 1)
+            if n is None:
+                return total                                                    # annulé : ce qui n'est pas lu le sera au prochain passage
+            total += n
     else:
         tous = len(lots) <= (SCRIBE_LOTS_MAX_FORCE if forcer else SCRIBE_LOTS_MAX)
     if tous:                                                                    # tout ce qui était à lire l'a été : les messages sans texte qui suivent (outils) n'ont rien à apporter
-        conv["scribe_a"] = len(conv["messages"]) if jusqua is None else max(int(conv.get("scribe_a") or 0), min(jusqua, len(conv["messages"])))
+        rang = len(conv["messages"]) if jusqua is None else max(int(conv.get("scribe_a") or 0), min(jusqua, len(conv["messages"])))
+        if travail is None:
+            conv["scribe_a"] = rang
+        else:
+            _garder_lot(conv, travail, None, rang)
     return total
 
 
-def _scribe_lot(conv, r, ident, echange):
-    """Un appel au modèle pour un lot d'échanges ; renvoie le nombre de lignes écrites, ou None si l'appel a échoué (le lot sera relu au prochain passage)."""
+SCRIBES = {}                          # conversation -> {"annule": Event, "fil": Thread} : le scribe qui travaille hors du tour (ADR 0019, décision 3)
+VERROU_SCRIBE = threading.Lock()      # tenu pour garder un lot et pour annuler : une fois annuler_scribe revenu, ce scribe n'écrit plus rien
+
+
+def _signature(conv, rang):
+    return [(m.get("role"), m.get("content")) for m in (conv.get("messages") or [])[:rang]]
+
+
+def _garder_lot(conv, travail, ops, rang):
+    """Scribe hors du tour : sous VERROU_SCRIBE, garde ce qu'il a lu (les consignes `ops`, None pour avancer seulement) et écrit le rang lu dans la
+    conversation ENREGISTRÉE, relue à ce moment, sans toucher au reste. Rien n'est gardé si une demande l'a annulé, si la conversation a disparu, ou si
+    les messages lus ne sont plus les mêmes (un retrait, une modification) : renvoie alors None. Sinon le nombre de lignes écrites."""
+    with VERROU_SCRIBE:
+        if travail["annule"].is_set():
+            return None
+        try:
+            enregistree = _m.conv_lire(conv["id"])
+        except ValueError:
+            travail["annule"].set()
+            return None
+        if _signature(enregistree, rang) != _signature(conv, rang):
+            travail["annule"].set()
+            return None
+        n = _scribe_appliquer(conv["id"], ops) if ops else 0
+        enregistree["scribe_a"] = conv["scribe_a"] = rang
+        _m.conv_ecrire_telle_quelle(enregistree)                                # la liste des conversations ne bouge pas pour une fiche mise à jour
+        return n
+
+
+def annuler_scribe(ident):
+    """Une nouvelle demande arrive (ou /compact, ou la conversation est supprimée) : le scribe de cette conversation n'écrira plus rien. Son appel au
+    modèle finit dans son fil sans que personne l'attende, son résultat est jeté, et ce qu'il n'a pas lu le sera à son prochain passage."""
+    with VERROU_SCRIBE:
+        travail = SCRIBES.get(str(ident))
+        if travail:
+            travail["annule"].set()
+
+
+def attendre_scribe(ident, delai=30):
+    """Attend la fin du scribe de cette conversation (les tests, qui lisent la fiche juste après une réponse). Vrai s'il ne tourne plus."""
+    travail = SCRIBES.get(str(ident))
+    if travail:
+        travail["fil"].join(delai)
+        return not travail["fil"].is_alive()
+    return True
+
+
+def lancer_scribe(ident, r):
+    """Le scribe hors du tour (ADR 0019, décision 3) : la réponse est finie, la fiche se met à jour pendant que la personne la lit. Un seul par
+    conversation : si le précédent (annulé) finit encore son appel, celui-ci attend le prochain passage. Renvoie le fil lancé, ou None."""
+    ident = str(ident)
+    with VERROU_SCRIBE:
+        ancien = SCRIBES.get(ident)
+        if ancien and ancien["fil"].is_alive():
+            return None
+        travail = {"annule": threading.Event()}
+        travail["fil"] = threading.Thread(target=_scribe_de_fond, args=(ident, dict(r), travail), name="scribe-" + ident, daemon=True)
+        SCRIBES[ident] = travail
+    travail["fil"].start()
+    return travail["fil"]
+
+
+def _scribe_de_fond(ident, r, travail):
+    try:
+        if not travail["annule"].is_set():
+            scribe(_m.conv_lire(ident), r, travail=travail)
+    except (OSError, ValueError) as erreur:
+        _m.journaliser("Scribe : fiche non mise à jour (conversation {}) : {!r}".format(ident, erreur))
+    finally:
+        with VERROU_SCRIBE:
+            if SCRIBES.get(ident) is travail:
+                SCRIBES.pop(ident, None)
+
+
+def _scribe_appel(r, ident, echange):
+    """Un appel au modèle pour un lot d'échanges : ses consignes (un dictionnaire), ou None si l'appel a échoué (le lot sera relu au prochain passage)."""
     sections = _suivi.read(ident)
     consigne = ("Tu tiens la fiche de suivi d'une conversation. On te donne la fiche actuelle et les derniers échanges. Réponds en JSON avec ces clés (listes de phrases courtes, 150 caractères au plus) : "
                 "objectif (seulement si le but a changé ou vient d'être dit), plan (seulement si un plan vient d'être décidé ou modifié), etape (l'étape en cours maintenant), decisions (NOUVELLES décisions prises), "
@@ -293,8 +379,12 @@ def _scribe_lot(conv, r, ident, echange):
     except (urllib.error.URLError, OSError, ValueError) as erreur:
         _m.journaliser("Scribe : fiche non mise à jour (conversation {}) : {!r}".format(ident, erreur))
         return None
-    if not isinstance(ops, dict):
-        return 0
+    return ops if isinstance(ops, dict) else {}
+
+
+def _scribe_appliquer(ident, ops):
+    """Les consignes du scribe appliquées à la fiche, contrôlées ; renvoie le nombre de lignes écrites."""
+    sections = _suivi.read(ident)
 
     def lignes(cle):
         v = ops.get(cle)
@@ -1332,6 +1422,7 @@ def compacter_conversation(ident):
     par le scribe, comptez quelques secondes). « fiche » reste dans la réponse pour les anciennes pages : toujours vrai (ADR 0019)."""
     if ident in _m.TOURS_ACTIFS:
         raise ValueError("Une réponse est en cours dans cette conversation : attends la fin ou arrête-la.")
+    annuler_scribe(ident)                                                       # le retrait relit ce qui sort lui-même, avec la conversation à jour
     conv = _m.conv_lire(ident)
     avant = len(conv["messages"])
     info = []
@@ -1392,10 +1483,23 @@ def tour(conv, texte, emit, r=None, stop=None, remplacer_depuis=None, identite="
         r["essai_a_blanc"] = True
     stop = stop if stop is not None else threading.Event()
     etat = _etat_tour.begin(conv["id"], stop)          # le tour dit lui-même où il en est (turn_state.py), quel que soit celui qui le lance : page, tâche planifiée, mission, addon
+    annuler_scribe(conv.get("id"))                                              # une nouvelle demande : le scribe de fond n'écrit plus rien
+    _rang_du_scribe(conv)
     try:
         _derouler_tour(conv, texte, emit, r, stop, remplacer_depuis, identite, lecture_seule, images, pieces)
     finally:
         _etat_tour.end(etat)
+
+
+def _rang_du_scribe(conv):
+    """Le rang lu par le scribe de fond est dans la conversation enregistrée ; celle qu'a lue l'appelant peut dater d'avant. Repris s'il s'agit des
+    mêmes messages (sinon on garde le sien : au pire, le scribe relit un lot, et la fiche n'accepte pas de doublon)."""
+    try:
+        enregistree = _m.conv_lire(conv["id"])
+    except (KeyError, ValueError):
+        return
+    if enregistree.get("scribe_a") and _signature(enregistree, len(enregistree.get("messages") or [])) == _signature(conv, len(conv.get("messages") or [])):
+        conv["scribe_a"] = enregistree["scribe_a"]
 
 
 def _derouler_tour(conv, texte, emit, r, stop, remplacer_depuis, identite, lecture_seule, images, pieces):
@@ -1503,12 +1607,16 @@ def _derouler_tour(conv, texte, emit, r, stop, remplacer_depuis, identite, lectu
     except Exception as erreur:  # noqa: BLE001
         _m.journaliser("Erreur inattendue dans le tour (conversation {}) : {!r}".format(conv["id"], erreur))
         emit({"type": "erreur", "texte": _t("Erreur inattendue : {} (détail dans donnees/lutin.log). Ta demande est gardée.").format(str(erreur)[:300])})
+    scribe_ensuite = False
     try:
         if r.get("fiche_active") or fiche_active(conv, r):                              # la réponse a pu faire passer la conversation à mi-chemin du retrait
             reponse = next((m.get("content") or "" for m in reversed(conv["messages"]) if m.get("role") == "assistant" and m.get("content")), "")
             _suivi.after_turn(conv["id"], texte, reponse, sorted(ctx["tour"]["fichiers"]))
             if r.get("fiche_scribe", True) and not stop.is_set():
-                scribe(conv, r, emit)
+                if r.get("_mission"):
+                    scribe(conv, r, emit)                                               # une mission enchaîne ses tours sans attendre personne : un scribe de fond serait annulé à chaque fois
+                else:
+                    scribe_ensuite = len(messages_non_lus(conv)) >= SCRIBE_MESSAGES
     except (OSError, ValueError) as erreur:
         _m.journaliser("Fiche de suivi non mise à jour (conversation {}) : {!r}".format(conv.get("id"), erreur))
     try:
@@ -1531,6 +1639,8 @@ def _derouler_tour(conv, texte, emit, r, stop, remplacer_depuis, identite, lectu
     if ctx["tour"]["fichiers"]:                       # cette demande a touché des fichiers : le bouton « Annuler » les rétablira
         conv["annulable"] = {"id": ctx["tour"]["id"], "fichiers": sorted(ctx["tour"]["fichiers"])}
     _m.conv_ecrire(conv)
+    if scribe_ensuite:
+        lancer_scribe(conv["id"], r)                                                    # hors du tour (ADR 0019, décision 3) : la fin de la réponse n'attend plus le modèle
     if time.time() - _m.PURGE["derniere"] > 1800:        # au plus une fois toutes les 30 minutes
         try:
             _m.purger_donnees()

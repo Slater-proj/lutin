@@ -247,8 +247,9 @@ def lire(chemin):
         return json.loads(r.read().decode("utf-8"))
 
 
-def chat(message, conversation="", reponses=None, decider=None, **options):
-    """Envoie un message et renvoie la liste des évènements. decider(evenement) -> bool répond aux demandes d'accord."""
+def chat(message, conversation="", reponses=None, decider=None, attendre_le_scribe=True, **options):
+    """Envoie un message et renvoie la liste des évènements. decider(evenement) -> bool répond aux demandes d'accord. attendre_le_scribe : attend
+    que le scribe, qui travaille hors du tour (ADR 0019), ait fini, pour que la suite du test lise une fiche réglée."""
     SCENARIO[:] = reponses or []
     corps = dict({"message": message, "conversation": conversation}, **options)
     req = urllib.request.Request(BASE + "/api/chat", data=json.dumps(corps).encode("utf-8"), headers={"Content-Type": "application/json", "X-Token": A.JETON})
@@ -262,6 +263,9 @@ def chat(message, conversation="", reponses=None, decider=None, **options):
             if e["type"] == "approbation":
                 reponse = decider(e) if decider else True
                 post("/api/approuver", {"id": e["id"], "ok": bool(reponse), "reactiver": reponse == "reactiver"})
+    ident = next((e.get("conversation") for e in evenements if e["type"] == "debut"), conversation)
+    if attendre_le_scribe and ident:
+        A.attendre_scribe(ident)
     return evenements
 
 
@@ -2455,6 +2459,68 @@ class Assistant(unittest.TestCase):
         self.assertFalse(any("FICHE ACTUELLE" in json.dumps(b, ensure_ascii=False) for b in RECUES), "quatre échanges courts, scribe allumé : aucun appel au scribe")
         self.assertFalse(any(progress_sheet.read(cid).values()), "ni fiche")
         post("/api/supprimer", {"id": cid})
+
+    def test_le_scribe_travaille_hors_du_tour_et_une_nouvelle_demande_l_annule(self):
+        """ADR 0019, décision 3 : la fin de la réponse (« fin ») n'attend plus le scribe, qui travaille ensuite dans son fil (avant, la personne
+        attendait son appel au modèle : des minutes sur processeur). Une nouvelle demande l'annule sans l'attendre : ce qu'il rapporte ensuite est
+        jeté, rien n'est écrit dans la fiche ni dans la conversation, et ce qu'il n'a pas lu l'est au passage suivant."""
+        from lutin import agent as AG, progress_sheet
+        A.enregistrer_reglages({"fiche_scribe": True})
+        cid = self.conversation_longue()
+        ops = json.dumps({"decisions": ["Le code du coffre est 4711-ZEBRE"], "etape": [], "fait": [], "ouvert": []})
+        appele, libere, rendu = threading.Event(), threading.Event(), threading.Event()
+
+        def repondeur(corps):
+            if corps.get("stream", True):
+                return [{"content": "Voilà."}]
+            appele.set()                                                     # le scribe (sans flux) : il attend que le test le libère
+            libere.wait(20)
+            rendu.set()
+            return [{"content": ops}]
+        REPONDEUR[:] = [repondeur]
+        try:
+            ev = chat("Et la suite ?", conversation=cid, attendre_le_scribe=False)
+            self.assertEqual(ev[-1]["type"], "fin")
+            self.assertTrue(appele.wait(10), "le scribe est parti après la réponse")
+            self.assertFalse(rendu.is_set(), "« fin » est arrivé pendant que le scribe travaillait encore")
+            avant = A.conv_lire(cid).get("scribe_a")
+            ev = chat("Autre question", conversation=cid, attendre_le_scribe=False)          # la nouvelle demande ne l'attend pas
+            self.assertEqual(ev[-1]["type"], "fin")
+            self.assertFalse(rendu.is_set(), "la nouvelle demande a eu sa réponse sans attendre le scribe")
+            libere.set()
+            self.assertTrue(AG.attendre_scribe(cid, 20))
+            self.assertNotIn("Le code du coffre est 4711-ZEBRE", progress_sheet.read(cid)["decisions"], "annulé : rien n'est écrit dans la fiche")
+            self.assertEqual(A.conv_lire(cid).get("scribe_a"), avant, "ni dans la conversation")
+            self.assertTrue(AG.messages_non_lus(A.conv_lire(cid)), "ce qu'il n'a pas gardé reste à lire")
+            chat("Encore une", conversation=cid)
+            self.assertIn("Le code du coffre est 4711-ZEBRE", progress_sheet.read(cid)["decisions"], "le passage suivant le lit")
+            c = A.conv_lire(cid)
+            self.assertEqual(c["scribe_a"], len(c["messages"]), "et le rang lu est écrit dans la conversation enregistrée")
+        finally:
+            libere.set()
+            REPONDEUR.clear()
+            AG.attendre_scribe(cid, 20)
+            post("/api/supprimer", {"id": cid})
+
+    def test_le_scribe_de_fond_n_ecrit_pas_une_conversation_supprimee_ou_changee(self):
+        """Le scribe garde un lot sous verrou, en relisant la conversation enregistrée : supprimée, ou dont les messages lus ont changé, il ne garde rien
+        (sinon il referait la fiche d'une conversation supprimée, ou noterait un rang qui ne désigne plus les mêmes messages)."""
+        from lutin import agent as AG, progress_sheet
+        cid = self.conversation_longue()
+        conv = A.conv_lire(cid)
+        travail = {"annule": threading.Event()}
+        ops = {"decisions": ["Une décision"]}
+        autre = A.conv_lire(cid)
+        autre["messages"][0]["content"] = "Un autre début."
+        A.conv_ecrire(autre)
+        self.assertIsNone(AG._garder_lot(conv, travail, ops, 4), "messages changés : rien n'est gardé")
+        self.assertTrue(travail["annule"].is_set())
+        conv = A.conv_lire(cid)
+        self.assertEqual(AG._garder_lot(conv, {"annule": threading.Event()}, ops, 4), 1)
+        self.assertEqual(A.conv_lire(cid)["scribe_a"], 4)
+        post("/api/supprimer", {"id": cid})
+        self.assertIsNone(AG._garder_lot(conv, {"annule": threading.Event()}, {"decisions": ["Après"]}, 6), "conversation supprimée")
+        self.assertFalse(progress_sheet.path(cid).exists(), "sa fiche n'est pas refaite")
 
     def test_plus_de_question_fiche_ou_resume_et_un_ancien_resume_reste_en_tete(self):
         """ADR 0019 : la fiche de suivi pour toute conversation. L'ancien réglage « demander » ne pose plus de question et rien n'est résumé ; une

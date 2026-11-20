@@ -67,6 +67,14 @@ Measured on `tests/test_evaluation.py` (fake engine, 22 turns; no real model).
   Before → after, 4,096 tokens: request at « where are we? » 3,392 → 3,151 tokens (the tool of the sheet), decisions kept 5/5 (faithful model),
   1/5 (weak), 7 scribe passes, 6 removals; 8,192 tokens: unchanged (6,192 tokens, 5/5 and 3/5, 7 passes, 6 removals). The summary mode it
   replaces asked the model for 9 summaries in the same 22 turns.
+- **Stage 3** (the scribe out of the way): the turn writes the conversation, starts the scribe in its own thread (`lancer_scribe`) and ends;
+  « fin » no longer waits for the scribe's model call (a test holds that call: before, « fin » came only once it returned). A new request
+  (and `/compact`, and the deletion of the conversation) cancels it with a flag (`annuler_scribe`) and does not wait for it: each batch it
+  read is kept only under a lock, if it was not cancelled and if the stored conversation still has the messages it read (`_garder_lot`), and
+  its rank is written into the stored conversation, nothing else; what it did not keep is read at its next pass. A mission keeps the
+  scribe in the turn: its turns follow each other at once and a scribe in the background would be cancelled every time. Not done: the
+  cancelled call is not cut at the engine (a flag only, as decided); an engine that answers one request at a time finishes it before the new
+  answer starts. Closing its connection would stop it (`chat_flux`) and is left for a measure on a real engine.
 
 ## Consequences
 

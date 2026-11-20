@@ -545,6 +545,7 @@ def options_nettoyer_orphelins(ids):
 
 def conv_supprimer(ident):
     conv_chemin(ident)
+    _m.annuler_scribe(ident)                                   # le scribe de fond ne doit pas refaire la fiche d'une conversation supprimée
     from . import store
     store.delete(ident)                                        # its options with it
     from . import progress_sheet
