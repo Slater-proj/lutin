@@ -35,7 +35,8 @@ def evaluer(m, profil, ctx_voulu=0):
         return {"niveau": "trop_gros", "texte": _t("Trop gros pour ta machine : il demande environ {} Go et tu en as {} d'utilisables.").format(round(besoin, 1), budget)}
     ctx, besoin, tient = place
     if tient == "partiel":
-        return {"niveau": "limite", "texte": _t("Tient en partie sur la carte graphique, le reste sur le processeur : utilisable mais lent.")}
+        # seul un modèle à experts « tient en partie » (model_selection.best_context) : ce qui travaille à chaque mot va sur la carte, les experts attendent en mémoire vive
+        return {"niveau": "limite", "texte": _t("Modèle à experts : ce qui travaille à chaque mot va sur la carte graphique, le reste attend en mémoire vive. Il répond à un bon rythme, mais lit plus lentement les longs messages.")}
     if profil.sans_gpu():
         if m["go"] <= 3:
             return {"niveau": "bien", "texte": _t("Sans carte graphique, un petit modèle comme celui-ci répond à un rythme correct.")}

@@ -985,7 +985,7 @@
 "Section inconnue : « {} ». Sections : {}.": "Unknown section: \"{}\". Sections: {}.",
 "Mode inconnu : « {} » (remplacer, ajouter ou retirer).": "Unknown mode: \"{}\" (remplacer, ajouter or retirer).",
 "Taille inconnue : je ne peux pas dire si ce modèle convient à ta machine.": "Unknown size: I cannot tell whether this model suits your machine.",
-"Tient en partie sur la carte graphique, le reste sur le processeur : utilisable mais lent.": "Partly fits on the graphics card, the rest on the processor: usable but slow.",
+"Modèle à experts : ce qui travaille à chaque mot va sur la carte graphique, le reste attend en mémoire vive. Il répond à un bon rythme, mais lit plus lentement les longs messages.": "Model with experts: what works on each word goes on the graphics card, the rest waits in memory. It answers at a good pace, but reads long messages more slowly.",
 "Sans carte graphique ce modèle tourne sur le processeur : il répond lentement.": "Without a graphics card this model runs on the processor: it answers slowly.",
 "Très à l'aise sur ta machine : de la marge pour une longue conversation.": "Very comfortable on your machine: room for a long conversation.",
 "Sans carte graphique, un petit modèle comme celui-ci répond à un rythme correct.": "Without a graphics card, a small model like this one answers at a fair pace.",
@@ -2347,5 +2347,14 @@
 "Les réglages des moteurs (moteurs.json) ne se lisent pas : un autre programme les tient. Réessaie dans un moment.": "The engine settings (moteurs.json) cannot be read: another program holds them. Try again in a moment.",
 "argument obligatoire manquant : {}": "required argument missing: {}",
 "nombre entier attendu pour {}": "whole number expected for {}",
-"Appel de « {} » non lancé : {}. Rappelle l'outil avec ses arguments, par exemple {}.": "Call of « {} » not run: {}. Call the tool again with its arguments, for example {}."
+"Appel de « {} » non lancé : {}. Rappelle l'outil avec ses arguments, par exemple {}.": "Call of « {} » not run: {}. Call the tool again with its arguments, for example {}.",
+"Le Qwen de 2026 à experts : 35 milliards dont 3 qui travaillent à chaque mot. Il comprend aussi les images et garde une très longue conversation avec peu de mémoire. Avec une carte de 12 à 16 Go, une partie attend en mémoire vive (32 Go conseillés).": "The 2026 Qwen with experts: 35 billion, 3 of which work on each word. It also understands images and keeps a very long conversation in little memory. With a 12 to 16 GB card, part of it waits in memory (32 GB advised).",
+"Un très grand Qwen à experts (80 milliards, 4 qui travaillent à chaque mot) pour les machines avec 64 Go de mémoire vive : la carte graphique garde ce qui travaille, la mémoire vive le reste.": "A very large Qwen with experts (80 billion, 4 working on each word) for machines with 64 GB of memory: the graphics card keeps what works, the memory holds the rest.",
+"Le modèle à experts de Zhipu (30 milliards, 4 qui travaillent à chaque mot), sous licence MIT : solide en code et dans l'enchaînement d'outils.": "Zhipu's model with experts (30 billion, 4 working on each word), under the MIT licence: solid at code and at chaining tools.",
+"Qwen 3.6 · 35 milliards (experts)": "Qwen 3.6 · 35 billion (experts)",
+"Récent, rapide et polyvalent, il voit aussi les images : sur une carte de 12 à 16 Go, ses experts attendent en mémoire vive.": "Recent, fast and versatile, it also sees images: on a 12 to 16 GB card, its experts wait in memory.",
+"GLM 4.7 Flash · 30 milliards (experts)": "GLM 4.7 Flash · 30 billion (experts)",
+"Rapide et sûr dans l'enchaînement d'outils et le code ; ses experts peuvent attendre en mémoire vive.": "Fast and reliable at chaining tools and at code; its experts can wait in memory.",
+"Qwen 3 Next · 80 milliards (experts)": "Qwen 3 Next · 80 billion (experts)",
+"Un grand modèle pour une machine avec 64 Go de mémoire vive et une carte de 8 Go ou plus : seuls 4 milliards travaillent à chaque mot.": "A large model for a machine with 64 GB of memory and a card of 8 GB or more: only 4 billion work on each word."
 }

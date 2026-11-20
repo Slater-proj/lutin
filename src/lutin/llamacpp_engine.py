@@ -267,6 +267,8 @@ def texte_preset(modeles, ctx, reglages):
         lignes.append("n-gpu-layers = {}".format(int(reglages["ngl"])))
     if reglages.get("sans_mmap"):
         lignes.append("no-mmap = true")
+    elif reglages.get("chargement_direct"):
+        lignes.append("load-mode = none")          # llama.cpp 1.0 : `no-mmap` n'existe plus
     if reglages.get("cache_ram") is not None:
         lignes.append("cache-ram = {}".format(int(reglages["cache_ram"])))
     for nom, fichier, projecteur in modeles:
@@ -470,6 +472,28 @@ def cache_ram_mo(profil):
     if ram < 12:
         return 0
     return int(min(2048, ram * 1024 * 0.05))
+
+
+def sans_projection(aide):
+    """Les arguments qui chargent le modèle sans projeter son fichier en mémoire, dans les mots du serveur : `--no-mmap` jusqu'à llama.cpp 0.x, `--load-mode none`
+    depuis que ces options sont réunies dans `--load-mode` (llama.cpp 1.0, `--no-mmap` retiré). [] si le serveur ne connaît ni l'un ni l'autre."""
+    if "--no-mmap" in aide:
+        return ["--no-mmap"]
+    if "--load-mode" in aide:
+        return ["--load-mode", "none"]
+    return []
+
+
+def sans_ajustement(machine):
+    """`machine` (reglages_machine) sans `--fit on`."""
+    sortie, i = [], 0
+    while i < len(machine):
+        if machine[i] == "--fit":
+            i += 2
+            continue
+        sortie.append(machine[i])
+        i += 1
+    return sortie
 
 
 def reglages_machine(aide, variante, taille_go, profil):
@@ -919,14 +943,19 @@ class MoteurLlamaCpp(MoteurOpenAI):
                 commande += ["-m", str(fichier), "-c", str(ctx)]
                 if commun is not None and commun.get("projecteur") and Path(fichier) == commun["fichier"]:
                     commande += ["--mmproj", str(commun["projecteur"])]          # un modèle d'Ollama qui voit les images : son projecteur est dans le même dossier
+                if moe and "--n-cpu-moe" in aide:
+                    # Experts imposés dans les réglages : `--fit` renonce quand des placements de tenseurs sont déjà donnés (common/fit.cpp : « tensor_buft_overrides
+                    # already set by user, abort ») et les couches resteraient au choix par défaut de llama.cpp. La recette habituelle à la place : toutes les
+                    # couches sur la carte, les experts des N premières couches sur le processeur.
+                    machine, ajuste = sans_ajustement(machine), False
                 commande += machine
                 if moe and "--n-cpu-moe" in aide:
                     commande += ["--n-cpu-moe", str(moe)]          # modèle « à experts » : ses experts restent sur le processeur, le reste va sur la carte
                 gpu = variante in ("cuda", "vulkan", "metal")
                 if gpu and not ajuste:
                     commande += ["-ngl", "99"]          # tout le modèle sur la carte ; s'il est trop gros pour elle, `--fit` (ci-dessus) répartit les couches avec le processeur
-                if gpu and "--no-mmap" in aide and not moe:          # aussi avec `--fit` : un modèle « limite » pour la carte (22 Go sur 24) était gardé EN ENTIER en mémoire vive par-dessus ses couches sur la carte
-                    commande += ["--no-mmap"]          # le fichier n'est pas laissé en mémoire vive une fois ses poids passés dans la carte (sinon : 22 Go en VRAM ET 22 Go en RAM, et un PC qui sature)
+                if gpu and not moe:          # aussi avec `--fit` : un modèle « limite » pour la carte (22 Go sur 24) était gardé EN ENTIER en mémoire vive par-dessus ses couches sur la carte
+                    commande += sans_projection(aide)          # le fichier n'est pas laissé en mémoire vive une fois ses poids passés dans la carte (sinon : 22 Go en VRAM ET 22 Go en RAM, et un PC qui sature)
             journal = self.dossier() / "serveur.log"
             journal.parent.mkdir(parents=True, exist_ok=True)
             sortie = open(journal, "wb")
@@ -963,10 +992,13 @@ class MoteurLlamaCpp(MoteurOpenAI):
             projecteur = commun.get("projecteur") if commun is not None and Path(f) == commun["fichier"] else None
             modeles.append((nom, f, projecteur))
         fils = int(machine[machine.index("--threads") + 1]) if "--threads" in machine else 0
-        tout_sur_la_carte = variante in ("cuda", "vulkan", "metal") and not ajuste
+        moe = moe if moe and self.option_possible("--n-cpu-moe") else 0
+        tout_sur_la_carte = variante in ("cuda", "vulkan", "metal") and (not ajuste or bool(moe))          # experts imposés : toutes les couches sur la carte (voir demarrer)
         cache = int(machine[machine.index("--cache-ram") + 1]) if "--cache-ram" in machine else None
-        reglages = {"cache_ram": cache, "fils": fils, "n_cpu_moe": moe if moe and self.option_possible("--n-cpu-moe") else 0, "ngl": 99 if tout_sur_la_carte else 0,
-                    "sans_mmap": bool(variante in ("cuda", "vulkan", "metal") and not moe and self.option_possible("--no-mmap"))}
+        gpu = variante in ("cuda", "vulkan", "metal")
+        reglages = {"cache_ram": cache, "fils": fils, "n_cpu_moe": moe, "ngl": 99 if tout_sur_la_carte else 0,
+                    "sans_mmap": bool(gpu and not moe and self.option_possible("--no-mmap")),
+                    "chargement_direct": bool(gpu and not moe and not self.option_possible("--no-mmap") and self.option_possible("--load-mode"))}
         return tuple(n for n, _, _ in modeles), texte_preset(modeles, ctx, reglages)
 
     def _pret(self):

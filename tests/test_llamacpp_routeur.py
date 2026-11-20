@@ -201,6 +201,39 @@ class ClesEtReglages(Base):
         self.m.chat({"model": "un", "messages": MESSAGE}, 30)
         self.assertNotIn("--n-cpu-moe", self.lancements()[1])
 
+    def test_llama_cpp_1_0_charge_aussi_sans_projeter_le_fichier_en_memoire(self):
+        """llama.cpp 1.0 a retiré `--no-mmap` (remplacé par `--load-mode none`) : sans lui, un modèle sur la carte restait AUSSI en entier en mémoire vive."""
+        ml.regler("llamacpp", variante_installee="cuda")
+        self.aide = AIDE_COMPLETE + " -lm, --load-mode MODE"
+        self.m.chat({"model": "un", "messages": MESSAGE}, 30)
+        c = self.lancements()[0]
+        self.assertEqual(c[c.index("--load-mode") + 1], "none")
+        self.assertNotIn("--no-mmap", c)
+        self.m.arreter()
+        self.aide = AIDE_COMPLETE + " --no-mmap --load-mode"
+        self.m.chat({"model": "un", "messages": MESSAGE}, 30)
+        self.assertIn("--no-mmap", self.lancements()[1], "un serveur qui connaît encore --no-mmap le garde")
+        self.assertNotIn("--load-mode", self.lancements()[1])
+        self.assertIn("load-mode = none", ml.texte_preset([("un", "/m/un.gguf", None)], 8192, {"fils": 8, "ngl": 99, "chargement_direct": True}))
+
+    def test_des_experts_imposes_ne_laissent_pas_fit_renoncer(self):
+        """`--fit` renonce quand des placements de tenseurs sont déjà donnés (c'est ce que fait --n-cpu-moe) : avec les experts imposés, toutes les couches vont
+        sur la carte (-ngl 99) et --fit n'est pas demandé."""
+        ml.regler("llamacpp", variante_installee="cuda")
+        ml.regler_avance("llamacpp", {"n_cpu_moe": 20})
+        with mock.patch.object(ml, "reglages_machine", lambda *a: (["--threads", "8", "--fit", "on"], True)):
+            self.m.chat({"model": "un", "messages": MESSAGE}, 30)
+        c = self.lancements()[0]
+        self.assertNotIn("--fit", c)
+        self.assertEqual((c[c.index("--n-cpu-moe") + 1], c[c.index("-ngl") + 1], c[c.index("--threads") + 1]), ("20", "99", "8"))
+        self.m.arreter()
+        ml.regler_avance("llamacpp", {"n_cpu_moe": 0})
+        with mock.patch.object(ml, "reglages_machine", lambda *a: (["--threads", "8", "--fit", "on"], True)):
+            self.m.chat({"model": "un", "messages": MESSAGE}, 30)
+        c = self.lancements()[1]
+        self.assertEqual(c[c.index("--fit") + 1], "on", "sans experts imposés, --fit place lui-même les experts en mémoire vive")
+        self.assertNotIn("-ngl", c)
+
     def test_les_valeurs_sont_controlees(self):
         for donnees in ({"modeles_max": -1}, {"modeles_max": 99}, {"modeles_max": "x"}, {"n_cpu_moe": -1}, {"n_cpu_moe": 9999}, {"n_cpu_moe": "x"}, {"version_epinglee": "latest"}, {"version_epinglee": "b12; rm"}):
             with self.assertRaises(ml.ErreurMoteur, msg=str(donnees)):
