@@ -5,6 +5,7 @@ Rien n'est envoyé ailleurs qu'au modèle local. Le type est reconnu au contenu,
 import base64
 import hashlib
 import re
+import secrets
 import time
 
 from .i18n import t as _t
@@ -46,9 +47,15 @@ def save(octets):
     f = folder() / ident
     if not f.is_file():
         folder().mkdir(parents=True, exist_ok=True)
-        tmp = f.with_suffix(".tmp")
-        tmp.write_bytes(octets)
-        tmp.replace(f)
+        tmp = f.with_name("{}.{}.tmp".format(f.name, secrets.token_hex(4)))          # à soi : deux envois du même fichier à la fois partageaient un nom
+        try:
+            tmp.write_bytes(octets)
+            tmp.replace(f)
+        except OSError:
+            if not f.is_file():                    # l'autre envoi l'a écrit (même contenu, même nom) : rien à refaire
+                raise
+        finally:
+            tmp.unlink(missing_ok=True)
     return ident
 
 

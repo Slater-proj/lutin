@@ -26,6 +26,7 @@ MAX_DOCUMENTS = 300
 FORMATS_READ_BY_EXTRACTION = (".pdf", ".docx", ".odt", ".ods", ".odp", ".pptx", ".xlsx")
 PARTS_CACHE = {}
 INDEX_CACHE = {}                       # fichier -> (signature, morceaux, erreur, fréquences des mots) : seuls les fichiers modifiés sont relus
+RELIRE = "relire"                      # clé d'une erreur de file_chunks : le fichier n'a été lu qu'en partie (illisible un instant), ne pas garder l'index en cache
 MAX_TEXT_SIZE = 600_000
 
 
@@ -167,7 +168,7 @@ def file_chunks(f):
                 texte = "\n\n".join("[{}] {}".format("moi" if m.get("role") == "user" else "assistant", m.get("content", "")) for m in c.get("messages", []) if m.get("role") in ("user", "assistant") and m.get("content"))
                 if c.get("resume"):
                     texte = "# Résumé\n" + c["resume"] + "\n\n" + texte
-                archive = _archive.text_of(c.get("id"))                         # ce que le résumé automatique a retiré de la conversation
+                archive = _archive.text_of(c.get("id"), strict=True)            # ce que le résumé automatique a retiré de la conversation
                 if archive:
                     texte = texte + "\n\n# Début de la conversation (avant le résumé)\n" + archive
                 for m_ in split_text(texte, nom):
@@ -175,8 +176,10 @@ def file_chunks(f):
                     morceaux.append(m_)
         elif f.stat().st_size <= MAX_TEXT_SIZE:
             morceaux += split_text(f.read_text(encoding="utf-8", errors="replace"), recall_label(f))
-    except OSError:
-        pass
+    except OSError as e:
+        # lu en partie seulement (un fichier ou une archive tenus un instant) : l'erreur le dit, et les index ne le gardent pas en cache sous la
+        # signature du fichier (avant, l'index incomplet restait jusqu'à la prochaine modification du fichier)
+        erreur = {"nom": str(f) if isinstance(f, ConversationRef) else recall_label(f), "message": str(e), RELIRE: True}
     for m in morceaux:
         m["tf"] = collections.Counter(words(m["titre"] + " " + m["texte"]))
         m["longueur"] = sum(m["tf"].values()) or 1
@@ -221,6 +224,8 @@ def index_recall():
             df_f = collections.Counter()
             for m in morceaux_f:
                 df_f.update(m["tf"].keys())
+            if (erreur_f or {}).get(RELIRE):
+                sig, signature = None, None                        # relu au prochain appel
             INDEX_CACHE[cle] = (sig, morceaux_f, erreur_f, df_f)
     morceaux, erreurs, df = [], [], collections.Counter()
     for cle in presents:
@@ -275,11 +280,13 @@ def thread_chunks(ident):
     en_cache = THREAD.get(ident)
     if en_cache and en_cache[0] == sig:
         return en_cache[1], en_cache[2], en_cache[3]
-    morceaux, _ = file_chunks(f)
+    morceaux, erreur = file_chunks(f)
     df = collections.Counter()
     for m in morceaux:
         df.update(m["tf"].keys())
     moyenne = (sum(m["longueur"] for m in morceaux) / len(morceaux)) if morceaux else 1.0
+    if (erreur or {}).get(RELIRE):
+        return morceaux, df, moyenne                                   # lu en partie : pas en cache, relu à la prochaine réponse
     if len(THREAD) > 20:
         THREAD.clear()
     THREAD[ident] = (sig, morceaux, df, moyenne)
@@ -347,7 +354,11 @@ def result_chunks(ident):
     if cached and cached[0] == sig:
         return cached[1], cached[2], cached[3]
     c = f.read() or {}
-    parts = _archive.results_of(ident) + [(m.get("tool_name") or "", str(m.get("content") or "")) for m in c.get("messages", []) if m.get("role") == "tool" and m.get("content")]
+    try:
+        kept, complete = _archive.results_of(ident, strict=True), True
+    except OSError:
+        kept, complete = [], False                                  # held an instant: searched without it, and not cached
+    parts = kept + [(m.get("tool_name") or "", str(m.get("content") or "")) for m in c.get("messages", []) if m.get("role") == "tool" and m.get("content")]
     chunks = []
     for name, text in parts:
         chunks += split_result(text, "résultat de « {} » (cette conversation)".format(name))
@@ -357,6 +368,8 @@ def result_chunks(ident):
         m["longueur"] = sum(m["tf"].values()) or 1
         df.update(m["tf"].keys())
     mean = (sum(m["longueur"] for m in chunks) / len(chunks)) if chunks else 1.0
+    if not complete:
+        return chunks, df, mean
     if len(RESULTS) > 20:
         RESULTS.clear()
     RESULTS[ident] = (sig, chunks, df, mean)

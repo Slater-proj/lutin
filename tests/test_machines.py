@@ -394,6 +394,31 @@ class Routage(Base):
 
 
 class Reglage(Base):
+    def test_un_fichier_tenu_un_instant_n_est_ni_lu_vide_ni_impossible_a_remplacer(self):
+        """Sous Windows, un fichier tenu un instant (une lecture hors du verrou pendant le remplacement, un antivirus) ne se lit pas ou ne se remplace
+        pas. _lire rendait alors le défaut ({}) à une modification qui réécrivait le fichier sans le reste ; _ecrire échouait (nom temporaire commun,
+        pas de nouvel essai). Les deux attendent un instant."""
+        machines._ecrire("noeud.json", {"partage": True, "nom": "atelier"})
+        vrai_lire, vrai_remplacer, refus = Path.read_text, os.replace, []
+
+        def tenu(chemin, *a, **k):
+            if chemin.name == "noeud.json" and len(refus) < 2:
+                refus.append(chemin)
+                raise PermissionError(13, "Access is denied", str(chemin))
+            return vrai_lire(chemin, *a, **k)
+        with mock.patch.object(Path, "read_text", tenu):
+            self.assertEqual(machines._lire("noeud.json", {}), {"partage": True, "nom": "atelier"})
+        essais = []
+
+        def remplacer(source, cible):
+            essais.append(cible)
+            if len(essais) < 3:
+                raise PermissionError(13, "Access is denied", str(cible))
+            return vrai_remplacer(source, cible)
+        with mock.patch.object(os, "replace", remplacer):
+            machines._ecrire("noeud.json", {"partage": False, "nom": "atelier"})
+        self.assertEqual(machines._lire("noeud.json", {}), {"partage": False, "nom": "atelier"})
+
     def test_choisir_une_machine_inconnue_est_refuse(self):
         from lutin import storage
         with self.assertRaises(ValueError):

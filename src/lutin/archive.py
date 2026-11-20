@@ -66,11 +66,16 @@ def add_result(ident, tool_name, text):
         return False
 
 
-def results_of(ident):
-    """The full tool results kept by `add_result`, oldest first, each as (tool name, text)."""
+def results_of(ident, strict=False):
+    """The full tool results kept by `add_result`, oldest first, each as (tool name, text). strict: an archive that exists but cannot be read
+    raises OSError instead of looking empty (as `text_of`)."""
     try:
         raw = path_of(ident).read_text(encoding="utf-8", errors="replace")
-    except (OSError, ValueError):
+    except (FileNotFoundError, ValueError):
+        return []
+    except OSError:
+        if strict:
+            raise
         return []
     out = []
     for line in raw.splitlines():
@@ -83,12 +88,20 @@ def results_of(ident):
     return out
 
 
-def text_of(ident):
-    """Les messages archivés, en texte lisible (« [moi] … », « [assistant] … »). Les outils ne sont pas repris : leur sortie ne servirait qu'à brouiller la recherche."""
+def text_of(ident, strict=False):
+    """Les messages archivés, en texte lisible (« [moi] … », « [assistant] … »). Les outils ne sont pas repris : leur sortie ne servirait qu'à brouiller la recherche.
+    strict : une archive qui existe mais ne se lit pas (tenue un instant par un autre programme sous Windows) lève OSError au lieu de passer pour vide ;
+    l'index du rappel ne garde alors pas un index incomplet en cache."""
     try:
         f = path_of(ident)
         brut = f.read_text(encoding="utf-8", errors="replace")
-    except (OSError, ValueError):
+    except FileNotFoundError:
+        return ""
+    except ValueError:
+        return ""
+    except OSError:
+        if strict:
+            raise
         return ""
     sortie = []
     for ligne in brut.splitlines():

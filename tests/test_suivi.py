@@ -385,6 +385,31 @@ class RappelDuFil(unittest.TestCase):
         self.assertEqual(recall.thread_recall({"id": "e9d8c7b6", "messages": [{"role": "user", "content": "une longue question sans historique ici"}]}), ("", 0))
         self.assertEqual(recall.thread_recall({"id": "", "messages": []}), ("", 0))
 
+    def test_une_archive_illisible_un_instant_ne_laisse_pas_un_index_incomplet_en_cache(self):
+        """Sous Windows, un fichier tenu un instant par un autre programme (antivirus, indexeur) ne se lit pas. L'archive passait alors pour vide, et
+        les index du rappel (le fil, la recherche dans les conversations, les résultats d'outils) gardaient cet index incomplet en cache sous la
+        signature de la conversation : le début archivé restait introuvable jusqu'à la prochaine modification. Il est relu à l'appel suivant."""
+        from lutin import archive, recall
+        self.addCleanup(lambda: archive.remove(self.ident))
+        self.addCleanup(recall.RESULTS.clear)
+        archive.add(self.ident, [{"role": "user", "content": "Au tout début : le mot de passe du routeur est ORCHIDEE-42. " + "début archivé " * 30}])
+        archive.add_result(self.ident, "executer", "sortie de la commande : la clé du serveur est PIVOINE-77\n" * 3)
+        self.conv([{"role": "user", "content": "Bonjour, on reprend."}, {"role": "assistant", "content": "Salut."}])
+        vrai = Path.read_text
+
+        def tenue(chemin, *a, **k):
+            if chemin.suffix == ".jsonl":
+                raise PermissionError(13, "Access is denied", str(chemin))
+            return vrai(chemin, *a, **k)
+        question = "mot de passe du routeur ORCHIDEE"
+        with mock.patch.object(Path, "read_text", tenue):
+            self.assertEqual(recall.thread_passages(self.ident, question, 3), [], "l'archive tenue : rien ce coup-ci")
+            self.assertEqual(recall.recall_passages(question, 3, seulement_conv=self.ident), [])
+            self.assertEqual(recall.result_passages(self.ident, "clé serveur PIVOINE"), [])
+        self.assertIn("ORCHIDEE-42", recall.thread_passages(self.ident, question, 3)[0]["m"]["texte"], "relue à l'appel suivant")
+        self.assertIn("ORCHIDEE-42", recall.recall_passages(question, 3, seulement_conv=self.ident)[0]["m"]["texte"], "la recherche dans les conversations aussi")
+        self.assertIn("PIVOINE-77", recall.result_passages(self.ident, "clé serveur PIVOINE")[0]["m"]["texte"], "et les résultats d'outils")
+
     def test_la_demande_precedente_garde_le_sujet_d_une_question_de_suite(self):
         """ADR 0019, décision 6 : « comment s'appelle-t-il déjà ? » ne dit pas de quoi l'on parle ; la demande précédente de la personne, si. Sans elle,
         un seul mot en commun (« appelle ») et rien ne revenait."""

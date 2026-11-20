@@ -5,6 +5,7 @@ le nom et l'identifiant ; au moment de demander une réponse au modèle, le text
 (le reste est coupé, avec une mention). Rien n'est exécuté : les documents sont seulement lus."""
 import hashlib
 import re
+import secrets
 import time
 from pathlib import Path
 
@@ -78,9 +79,15 @@ def save(octets, nom):
     f = folder() / ident
     if not f.is_file():
         folder().mkdir(parents=True, exist_ok=True)
-        tmp = f.with_suffix(f.suffix + ".tmp")
-        tmp.write_bytes(octets)
-        tmp.replace(f)
+        tmp = f.with_name("{}.{}.tmp".format(f.name, secrets.token_hex(4)))          # à soi : deux envois du même fichier à la fois partageaient un nom
+        try:
+            tmp.write_bytes(octets)
+            tmp.replace(f)
+        except OSError:
+            if not f.is_file():                    # l'autre envoi l'a écrit (même contenu, même nom) : rien à refaire
+                raise
+        finally:
+            tmp.unlink(missing_ok=True)
     try:
         texte = read_text(ident)
     except text_extraction.ErreurExtraction as erreur:

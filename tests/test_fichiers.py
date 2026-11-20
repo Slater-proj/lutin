@@ -102,6 +102,43 @@ class Fichiers(unittest.TestCase):
         self.assertFalse(produced_files.remove(ident, fid)["fichier_supprime"])
         self.assertTrue(dehors.exists())
 
+    def test_le_meme_fichier_envoye_deux_fois_a_la_fois_est_garde_une_fois_sans_erreur(self):
+        """Une image ou une pièce jointe est rangée sous l'empreinte de son contenu. Deux envois du même fichier à la fois (deux onglets, un double
+        clic) écrivaient le même fichier temporaire : le second remplacement ne le trouvait plus et l'envoi échouait. Chacun a maintenant le sien."""
+        import threading
+        from lutin import attachments, images
+        png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 64 + b"deux-envois"
+        for nom, envoyer in (("image", lambda: images.save(png)), ("pièce jointe", lambda: attachments.save("# Deux envois\nidentiques".encode("utf-8"), "notes.md"))):
+            with self.subTest(nom):
+                rendez_vous, vrai, erreurs, ids = threading.Barrier(2, timeout=5), Path.write_bytes, [], []
+                vrai_remplacer, un_a_la_fois = Path.replace, threading.Lock()
+
+                def remplacer(source, cible):
+                    with un_a_la_fois:                          # le premier remplacement fini avant que le second commence
+                        return vrai_remplacer(source, cible)
+
+                def ecrire(chemin, donnees):
+                    resultat = vrai(chemin, donnees)
+                    if chemin.name.endswith(".tmp"):
+                        rendez_vous.wait()                      # les deux écrivent leur fichier temporaire avant que l'un remplace
+                    return resultat
+
+                def envoi():
+                    try:
+                        ids.append(envoyer())
+                    except Exception as erreur:  # noqa: BLE001
+                        erreurs.append(erreur)
+                with mock.patch.object(Path, "write_bytes", ecrire), mock.patch.object(Path, "replace", remplacer):
+                    fils = [threading.Thread(target=envoi) for _ in range(2)]
+                    for f in fils:
+                        f.start()
+                    for f in fils:
+                        f.join(10)
+                self.assertEqual(erreurs, [])
+                self.assertEqual(len(ids), 2)
+                dossier = (images if nom == "image" else attachments).folder()
+                self.assertEqual([f.name for f in dossier.iterdir() if f.name.endswith(".tmp")], [], "pas de fichier temporaire laissé")
+
     def test_une_piece_jointe_se_retelecharge_sous_son_vrai_nom_et_s_ouvre_par_une_copie(self):
         from lutin import attachments
         ident, nom, _ = attachments.save("# Notes\nbonjour".encode("utf-8"), "mes notes.md")

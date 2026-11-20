@@ -95,18 +95,13 @@ def dossier():
 
 
 def _lire(nom, defaut):
-    try:
-        return json.loads((dossier() / nom).read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return defaut
+    from . import storage
+    return storage.lire_json(dossier() / nom, defaut)          # relu un instant plus tard quand Windows le tient (en cours de remplacement)
 
 
 def _ecrire(nom, valeur):
-    d = dossier()
-    d.mkdir(parents=True, exist_ok=True)
-    tmp = d / (nom + ".tmp")
-    tmp.write_text(json.dumps(valeur, ensure_ascii=False, indent=1), encoding="utf-8")
-    tmp.replace(d / nom)
+    from . import storage
+    storage.ecrire_atomique(dossier() / nom, json.dumps(valeur, ensure_ascii=False, indent=1))          # un fichier temporaire à soi, remplacement réessayé
 
 
 def journaliser(texte):

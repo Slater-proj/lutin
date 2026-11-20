@@ -142,6 +142,33 @@ class Routeur(Base):
 
 
 class ClesEtReglages(Base):
+    def test_des_reglages_tenus_un_instant_ne_sont_ni_lus_vides_ni_ecrases(self):
+        """Sous Windows, moteurs.json se lit mal un instant quand un autre programme le tient (antivirus, une autre écriture qui le remplace).
+        lire_config rendait alors {}, et l'appelant réécrivait le fichier avec son seul changement : moteurs externes et clés perdus. Il est
+        relu un peu plus tard ; et une écriture qui tombe sur un fichier tenu réessaie au lieu d'échouer."""
+        ml.ecrire_config({"externes": [{"id": "lmstudio", "url": "http://127.0.0.1:1234/v1"}], "llamacpp": {"cle_serveur": "secrete"}})
+        vrai_lire, vrai_remplacer, refus = Path.read_text, os.replace, []
+
+        def tenu(chemin, *a, **k):
+            if chemin.name == "moteurs.json" and len(refus) < 2:
+                refus.append(chemin)
+                raise PermissionError(13, "Access is denied", str(chemin))
+            return vrai_lire(chemin, *a, **k)
+        with mock.patch.object(Path, "read_text", tenu):
+            config = ml.lire_config()
+        self.assertEqual(config["llamacpp"]["cle_serveur"], "secrete", "relu un instant plus tard, pas lu vide")
+        remplacements = []
+
+        def remplacer(source, cible):
+            remplacements.append(cible)
+            if len(remplacements) < 3:
+                raise PermissionError(13, "Access is denied", str(cible))
+            return vrai_remplacer(source, cible)
+        with mock.patch.object(ml.os, "replace", remplacer):
+            ml.ecrire_config(dict(config, nouveau=True))
+        self.assertTrue(ml.lire_config()["nouveau"], "écrit au troisième essai")
+        self.assertEqual([f.name for f in Path(self.tmp).iterdir() if f.name.endswith(".tmp")], [], "pas de fichier temporaire laissé")
+
     def test_le_serveur_gere_a_une_cle_generee_et_stable(self):
         k = self.m.cle()
         self.assertGreaterEqual(len(k), 24)

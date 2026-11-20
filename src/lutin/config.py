@@ -120,19 +120,49 @@ def replace_retrying(tmp, f, essais=20):
 def save(d, cfg):
     f = Path(d["config"]) / "config.json"
     f.parent.mkdir(parents=True, exist_ok=True)
-    texte = json.dumps(cfg, ensure_ascii=False, indent=1)
     with _SAVE_LOCK:                                          # deux enregistrements à la fois : la copie .bak de l'un tenait le fichier que l'autre remplaçait
-        if f.is_file():
-            try:
-                shutil.copyfile(f, str(f) + ".bak")           # la version précédente reste disponible
-            except OSError:
-                pass
-        tmp = f.with_name("config.{}.tmp".format(threading.get_ident()))
+        _write_locked(f, cfg)
+
+
+def _write_locked(f, cfg):
+    """Écrit cfg dans f ; à appeler sous _SAVE_LOCK."""
+    texte = json.dumps(cfg, ensure_ascii=False, indent=1)
+    if f.is_file():
         try:
-            tmp.write_text(texte, encoding="utf-8")
-            replace_retrying(tmp, f)
-        finally:
-            tmp.unlink(missing_ok=True)
+            shutil.copyfile(f, str(f) + ".bak")               # la version précédente reste disponible
+        except OSError:
+            pass
+    tmp = f.with_name("{}.{}.tmp".format(f.stem, threading.get_ident()))
+    try:
+        tmp.write_text(texte, encoding="utf-8")
+        replace_retrying(tmp, f)
+    finally:
+        tmp.unlink(missing_ok=True)
+
+
+def update_file(f, changes, essais=20):
+    """Fusionne `changes` dans le fichier de configuration f, sous le verrou des enregistrements (lecture, modification, écriture d'un seul tenant).
+    Un fichier qui existe mais ne se lit pas (tenu un instant sous Windows) est relu un peu plus tard ; s'il reste illisible, OSError : il n'est
+    jamais remplacé par les seuls changements (avant, i18n.definir réécrivait config.json avec la seule langue). Un fichier abîmé repart de zéro."""
+    f = Path(f)
+    f.parent.mkdir(parents=True, exist_ok=True)
+    with _SAVE_LOCK:
+        cfg = {}
+        for essai in range(essais):
+            try:
+                cfg = json.loads(f.read_text(encoding="utf-8"))
+                break
+            except FileNotFoundError:
+                break
+            except PermissionError:
+                if essai == essais - 1:
+                    raise
+                time.sleep(0.05)
+            except ValueError:
+                break
+        cfg = dict(cfg if isinstance(cfg, dict) else {}, **changes)
+        _write_locked(f, cfg)
+        return cfg
 
 
 def prepare(d):

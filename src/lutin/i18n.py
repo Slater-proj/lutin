@@ -84,17 +84,8 @@ def definir(valeur, chemin_config=None):
     if valeur not in LANGUES + ("auto",):
         raise ValueError("Langue inconnue : {} (fr, en ou auto).".format(valeur))
     chemin = Path(chemin_config) if chemin_config else _chemin_config()
-    try:
-        cfg = json.loads(chemin.read_text(encoding="utf-8"))
-        if not isinstance(cfg, dict):
-            cfg = {}
-    except (OSError, ValueError):
-        cfg = {}
-    cfg["langue"] = None if valeur == "auto" else valeur
-    chemin.parent.mkdir(parents=True, exist_ok=True)
-    tmp = chemin.with_suffix(".tmp")
-    tmp.write_text(json.dumps(cfg, ensure_ascii=False, indent=1), encoding="utf-8")
-    tmp.replace(chemin)
+    from . import config
+    config.update_file(chemin, {"langue": None if valeur == "auto" else valeur})          # sous le verrou de config.save ; jamais la seule langue à la place du fichier
     with _verrou:
         _config["mtime"] = None
     return langue()

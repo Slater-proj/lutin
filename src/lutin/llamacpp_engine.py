@@ -68,12 +68,26 @@ def _chemin_config():
     return (Path(d) / "moteurs.json") if d else None
 
 
+CONFIG_ESSAIS = 20          # moteurs.json tenu un instant (Windows : en cours de remplacement, antivirus) : relu ou remplacé toutes les 50 ms, une seconde au plus
+VERROU_CONFIG = threading.Lock()
+
+
 def lire_config():
+    """Les réglages des moteurs. Un fichier tenu un instant est relu un peu plus tard : lu vide, il était réécrit par l'appelant avec le seul
+    changement, et les moteurs externes et leurs clés étaient perdus."""
     f = _chemin_config()
-    try:
-        donnees = json.loads(f.read_text(encoding="utf-8")) if f and f.is_file() else {}
-    except (OSError, ValueError):
-        donnees = {}
+    donnees = {}
+    for essai in range(CONFIG_ESSAIS):
+        try:
+            donnees = json.loads(f.read_text(encoding="utf-8")) if f and f.is_file() else {}
+            break
+        except PermissionError:
+            if essai == CONFIG_ESSAIS - 1:
+                raise ErreurMoteur(_t("Les réglages des moteurs (moteurs.json) ne se lisent pas : un autre programme les tient. Réessaie dans un moment.")) from None
+            time.sleep(0.05)
+        except (OSError, ValueError):
+            donnees = {}
+            break
     return donnees if isinstance(donnees, dict) else {}
 
 
@@ -82,13 +96,24 @@ def ecrire_config(config):
     if f is None:
         raise ErreurMoteur(_t("Dossier de données inconnu."))
     f.parent.mkdir(parents=True, exist_ok=True)
-    tmp = f.with_name(f.name + ".tmp")
-    tmp.write_text(json.dumps(config, ensure_ascii=False, indent=1), encoding="utf-8")
-    try:
-        os.chmod(tmp, 0o600)          # il peut contenir une clé d'accès
-    except OSError:
-        pass
-    tmp.replace(f)
+    with VERROU_CONFIG:                                    # deux écritures à la fois partageaient moteurs.json.tmp
+        tmp = f.with_name("{}.{}.tmp".format(f.name, threading.get_ident()))
+        try:
+            tmp.write_text(json.dumps(config, ensure_ascii=False, indent=1), encoding="utf-8")
+            try:
+                os.chmod(tmp, 0o600)          # il peut contenir une clé d'accès
+            except OSError:
+                pass
+            for essai in range(CONFIG_ESSAIS):
+                try:
+                    os.replace(tmp, f)
+                    break
+                except PermissionError:
+                    if essai == CONFIG_ESSAIS - 1:
+                        raise
+                    time.sleep(0.05)
+        finally:
+            tmp.unlink(missing_ok=True)
 
 
 def normaliser_adresse(adresse):

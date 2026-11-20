@@ -71,6 +71,30 @@ class Detection(unittest.TestCase):
             with self.assertRaises(ValueError):
                 i18n.definir("klingon")
 
+    def test_une_configuration_tenue_un_instant_n_est_jamais_remplacee_par_la_seule_langue(self):
+        """Sous Windows, config.json se lit mal un instant quand un autre programme le tient (antivirus, ou config.save qui le remplace : vu en CI,
+        6dfc47f). definir lisait alors {} et réécrivait config.json avec la seule langue : dossiers, port et le reste perdus. Il relit un peu plus tard,
+        et si le fichier reste illisible il échoue sans y toucher."""
+        with self.avec_systeme(LANG="fr_FR"):
+            self.config.write_text(json.dumps({"installe": True, "port": 8123}), encoding="utf-8")
+            vrai, refus = Path.read_text, []
+
+            def tenu(fois):
+                def lire(chemin, *a, **k):
+                    if chemin.name == "config.json" and len(refus) < fois:
+                        refus.append(chemin)
+                        raise PermissionError(13, "Access is denied", str(chemin))
+                    return vrai(chemin, *a, **k)
+                return lire
+            with mock.patch.object(Path, "read_text", tenu(2)):
+                self.assertEqual(i18n.definir("en"), "en")
+            self.assertEqual(json.loads(self.config.read_text(encoding="utf-8")), {"installe": True, "port": 8123, "langue": "en"}, "relu un instant plus tard : rien de perdu")
+            refus.clear()
+            with mock.patch.object(Path, "read_text", tenu(1000)), mock.patch.object(config.time, "sleep", lambda s: None):
+                with self.assertRaises(OSError):
+                    i18n.definir("fr")
+            self.assertEqual(json.loads(self.config.read_text(encoding="utf-8")), {"installe": True, "port": 8123, "langue": "en"}, "toujours illisible : le fichier n'est pas touché")
+
 
 class Traduction(unittest.TestCase):
     def en(self):
