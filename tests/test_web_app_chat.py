@@ -2891,11 +2891,44 @@ class Chat(unittest.TestCase):
         self.assertFalse(p.evaluer("!!document.querySelector('.to-bottom')"), "at the end: no button")
         p.evaluer("(s => { s.scrollTop = 0; s.dispatchEvent(new Event('scroll')); })(document.querySelector('.scroll'))")
         p.attendre("!!document.querySelector('.to-bottom')")
+        self.picture("5x-back-to-the-end")
         self.assertEqual(p.evaluer("document.querySelector('.to-bottom').getAttribute('aria-label')"), "Aller à la fin de la conversation")
         self.assertEqual(p.evaluer("document.querySelector('.scroll').scrollTop"), 0, "someone reading higher up is left there")
         p.evaluer("document.querySelector('.to-bottom').click()")
         p.attendre(at_end)
         p.attendre("!document.querySelector('.to-bottom')")
+        self.assertEqual(p.erreurs, [])
+
+    def test_5y_a_download_is_followed_in_a_bar_on_every_screen_and_a_failure_stays_until_it_is_closed(self):
+        """Maintainer's report (2026-11-20): « a download of a model by ExLlamaV3 shows nothing, one has to know to look at the page of the engines ». One bar for every
+        download and installation, at the top of every screen, with its progress."""
+        p = self.page
+        from lutin import engines
+        self.addCleanup(lambda: engines.TASKS.pop("llamacpp", None))
+        engines.TASKS["llamacpp"] = {"action": "telecharger:author/Model-GGUF@q4", "statut": "en cours", "texte": "Téléchargement : 3,2 / 14,8 Go (22 %) · 45 Mo/s",
+                                     "fait": 3_200_000_000, "total": 14_800_000_000, "erreur": "", "debut": time.time()}
+        p.evaluer("location.hash = '#/settings'")
+        p.attendre("!!document.querySelector('.activity .task')", 20)          # the bar asks again every 6 s when nothing was running
+        text = p.evaluer("document.querySelector('.activity').innerText")
+        self.assertIn("author/Model-GGUF", text)
+        self.assertIn("22 %", text)
+        self.assertIn("45 Mo/s", text, "the line of progress of the engine is shown as it is")
+        self.assertAlmostEqual(p.evaluer("document.querySelector('.activity progress').value"), 3.2 / 14.8, places=2)
+        p.evaluer("location.hash = '#/chat'")
+        p.attendre("!!document.querySelector('#message')")
+        self.assertTrue(p.evaluer("!!document.querySelector('.activity .task')"), "the bar is the shell's: it stays on the other screens")
+        self.picture("5y-activity-bar")
+        if AXE.is_file():
+            self.axe("on the activity bar")
+        engines.TASKS["llamacpp"].update(statut="erreur", erreur="Pas assez de place sur le disque", fin=time.time(), texte="", fait=0, total=0)
+        p.attendre("!!document.querySelector('.activity .task.failed')", 20)
+        self.assertIn("Pas assez de place sur le disque", p.evaluer("document.querySelector('.activity').innerText"))
+        self.assertEqual(p.evaluer("document.querySelector('.activity .task.failed .text').getAttribute('role')"), "alert")
+        self.assertFalse(p.evaluer("!!document.querySelector('.activity progress')"), "nothing runs: no bar of progress")
+        p.evaluer("document.querySelector('.activity .close').click()")
+        p.attendre("!document.querySelector('.activity')")
+        p.evaluer("new Promise(done => setTimeout(done, 7000))")          # the next reading: a closed failure does not come back
+        self.assertFalse(p.evaluer("!!document.querySelector('.activity')"), "a failure that was closed stays closed")
         self.assertEqual(p.erreurs, [])
 
     def test_5xa_a_thread_at_its_end_stays_there_when_it_changes_size_without_a_new_message(self):

@@ -1660,6 +1660,51 @@ def engines(request):
     return {"current": current, "engines": views}
 
 
+ACTIVITY_SKIPPED_ACTIONS = ("arreter",)          # stopping a server is over before anyone could read it
+
+
+def _activity_items():
+    """What Lutin is downloading or installing right now, whatever started it, in one shape: `{id, kind, name, action, state, text, done, total, finished_at}` (`state`: `running`,
+    `done` or `failed`; `text` is the last line of progress, or the result, or the error). Engine tasks (install, download of a model by the engine, start) and the downloads of Ollama
+    are read where they are kept; one that ended is kept a moment (`engines.END_RESULT_S`, `END_ERROR_S`) so that nothing disappears without saying how it ended."""
+    items = []
+    names = {engine.id: engine.nom for engine in _engines.entries()}
+    ended = {end["id"]: end for end in _engines.recent_ends()}
+    for identifier, task in _engines.all_tasks().items():
+        if identifier not in names or task.get("action") in ACTIVITY_SKIPPED_ACTIONS:
+            continue
+        raw = str(task.get("action", ""))
+        verb, _, target = raw.partition(":")          # « telecharger:owner/model@4.0bpw », « preparer:name »: an action on one model of the engine
+        action = next((name for name, stored in ENGINE_ACTIONS.items() if stored == raw), "download" if verb == "telecharger" else "prepare" if verb == "preparer" else raw)
+        name = names[identifier] if not target else "{} ({})".format(target.partition("@")[0], names[identifier])
+        if task.get("statut") == "en cours":
+            items.append({"id": "engine:" + identifier, "kind": "engine", "name": name, "action": action, "state": "running", "text": task.get("texte") or task.get("dernier", ""),
+                          "done": int(task.get("fait") or 0), "total": int(task.get("total") or 0), "finished_at": 0})
+        elif identifier in ended:
+            end = ended[identifier]
+            items.append({"id": "engine:" + identifier, "kind": "engine", "name": name, "action": action, "state": "failed" if end["statut"] == "erreur" else "done",
+                          "text": end["texte"], "done": 0, "total": 0, "finished_at": int(end["fin"])})
+    for name, stored in sorted(_m.PULLS.items()):
+        if stored.get("statut") == "en cours":
+            items.append({"id": "model:" + name, "kind": "model", "name": name, "action": "download", "state": "running", "text": str(stored.get("texte") or ""),
+                          "done": int(stored.get("fait") or 0), "total": int(stored.get("total") or 0), "finished_at": 0})
+        elif stored.get("statut") == "erreur":
+            items.append({"id": "model:" + name, "kind": "model", "name": name, "action": "download", "state": "failed", "text": str(stored.get("texte") or ""),
+                          "done": 0, "total": 0, "finished_at": 0})
+    from . import embeddings as _embeddings
+    install = _embeddings.state()["installation"]
+    if install["etat"] == "en cours":
+        items.append({"id": "meaning", "kind": "meaning", "name": _embeddings.model_name(), "action": "install", "state": "running", "text": "", "done": int(install["fait"] or 0),
+                      "total": int(install["total"] or 0), "finished_at": 0})
+    return items
+
+
+@route("GET", "/activity", SESSION)
+def activity(request):
+    """`{"items": [...]}`: the bar at the top of every screen. One call answers for every engine, model and installation, so that a download is seen wherever the person is."""
+    return {"items": _activity_items()}
+
+
 def _known_engine(identifier):
     engine = _engines.ENGINES.get(identifier)
     if engine is None:

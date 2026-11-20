@@ -1,6 +1,7 @@
 <script lang="ts">
   // The shell: five areas, one navigation, the theme. Each area is a screen under screens/.
   import { onMount } from "svelte";
+  import ActivityBar from "./components/ActivityBar.svelte";
   import Icon, { type IconName } from "./components/Icon.svelte";
   import LutinBanners from "./components/LutinBanners.svelte";
   import Palette from "./components/Palette.svelte";
@@ -106,6 +107,7 @@
   </nav>
   <main id="main" tabindex="-1">
     {#if problem}<p class="banner" role="alert">{problem}</p>{/if}
+    <ActivityBar />
     <LutinBanners {status} onchanged={refreshStatus} />
     {#if area === "chat"}
       <Chat {status} onchanged={refreshStatus} />

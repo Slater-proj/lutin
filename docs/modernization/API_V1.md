@@ -128,6 +128,8 @@ the six `actions` (`install`, `uninstall`, `reinstall`, `start`, `stop`, `update
 `{"confirm": true}`**: without it the answer is `400 confirmation_required` carrying what the action does, so that a client has to show it and have it accepted. What needs the network is refused in strict offline mode
 (`409 offline`); an action the engine does not allow is `400 action_impossible` with its reason; a second task on the same engine is `409 task_running`.
 `DELETE /api/v1/engines/{id}/task` asks the running task to stop (what was downloaded is kept). It is the machinery of the present page (`lutin.engines`), under English names.
+
+`GET /api/v1/activity` (session) answers `{"items": [{id, kind, name, action, state, text, done, total, finished_at}]}`: everything Lutin is downloading or installing, whoever started it (an engine task: install, update, start, download of a model by the engine in use; a download of Ollama; the model that searches by meaning), in one shape, for the bar at the top of every screen. `state` is `running`, `done` or `failed`; a success is kept 25 s and a failure 10 min after its end (`engines.END_RESULT_S`, `END_ERROR_S`), so that nothing disappears without saying how it ended. `done` and `total` are bytes for a download and steps for an installation: only their ratio is meaningful. Stopping a server is not listed.
 Not in v1 yet: the settings of an engine (address, key, folders, variant) and the catalogue of external servers.
 
 ## Devices and pairing
