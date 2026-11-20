@@ -4,7 +4,7 @@
   // folders; the OpenAI-compatible server chosen and its ports. Only what this engine has is shown; a box left empty goes back to the default.
   import { onMount } from "svelte";
   import { api, ApiError } from "../lib/api";
-  import { t } from "../lib/messages";
+  import { t, type MessageKey } from "../lib/messages";
 
   type Folder = { current: string; proposed: string | null; default: string; custom: boolean; changeable: boolean; models: { current: string; changeable: boolean } | null } | null;
   type View = {
@@ -24,6 +24,8 @@
   let { engine, canConfigure }: { engine: string; canConfigure: boolean } = $props();
 
   const VARIANTS = ["auto", "cuda", "vulkan", "cpu", "metal"];
+  // The servers Lutin installs, starts and feeds with models behind the OpenAI-compatible engine; "" is a server reached by its address alone.
+  const SERVERS = ["", "exllamav3", "lmstudio", "colibri"] as const;
   let view = $state<View | null>(null);
   let form = $state<Record<string, string | number | boolean>>({});
   let busy = $state(false);
@@ -41,6 +43,7 @@
       url: answer.url,
       key: "",
       variant: answer.variant,
+      server: answer.server ?? "",
       install_folder: answer.folder?.custom ? answer.folder.current : "",
       models_folder: "",
       ...(answer.advanced ? { router: answer.advanced.router, models_kept: answer.advanced.models_kept, cpu_moe_layers: answer.advanced.cpu_moe_layers, pinned_version: answer.advanced.pinned_version } : {}),
@@ -113,6 +116,13 @@
         {/if}
       {/if}
 
+      {#if view.server !== null && view.server !== undefined}
+        <h4>{t("eset.server")}</h4>
+        <label>{t("eset.server_choice")}<select bind:value={form.server} onchange={() => save(["server"])}>
+          {#each SERVERS as server (server)}<option value={server}>{t(("eset.server." + (server || "address")) as MessageKey)}</option>{/each}
+        </select></label>
+        <p class="help">{t(("eset.server_help." + (form.server || "address")) as MessageKey)}</p>
+      {/if}
       {#if view.colibri}
         <h4>Colibri</h4>
         <label>{t("eset.colibri_model")}<input type="text" bind:value={form.colibri_model} /></label>

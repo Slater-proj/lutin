@@ -25,6 +25,11 @@
   let asking = $state(false);
   let refresh = $state(0); // bumped when a download starts: the engine cards are read again and show its progress
   let tab = $state<"recommended" | "catalog" | "library" | "installed" | "measures" | "engines" | "machines" | "unset">("unset"); // chosen once the list is known: the guide when nothing is installed, the list otherwise
+  let unmanaged = $state(false); // the OpenAI-compatible engine reaches a server Lutin does not manage: no catalogue to offer
+  // read again each time the Catalogue opens: a server chosen meanwhile in the Engines tab has a catalogue
+  $effect(() => {
+    if (tab !== "catalog") unmanaged = false;
+  });
 
   const lang = language();
   let precisions = $state(""); // the installed model whose other precisions are shown
@@ -149,7 +154,13 @@
       <EngineLibrary engine="llamacpp" onstarted={() => (refresh += 1)} />
     {/if}
   {:else if tab === "catalog"}
-    <ModelCatalog precisions={status?.engine.id === "ollama"} onstarted={() => void guarded(load)} />
+    {#if status?.engine.id === "openai"}
+      <!-- the server Lutin manages (ExLlamaV3, LM Studio, Colibri) has its own models: its catalogue, judged for this machine, not Ollama's -->
+      <ManagedModels canConfigure={!!status?.access.can_configure} onchanged={() => { void guarded(load); onchanged(); }} onabsent={() => (unmanaged = true)} />
+      {#if unmanaged}<p class="muted">{t("models.cat.unmanaged")}</p>{/if}
+    {:else}
+      <ModelCatalog precisions={status?.engine.id === "ollama"} onstarted={() => void guarded(load)} />
+    {/if}
   {:else if tab === "measures"}
     <Measures installed={models?.models.map((model) => model.name) ?? []} canConfigure={!!status?.access.can_configure} />
   {:else if tab === "library"}

@@ -297,6 +297,7 @@
   }
 
   .table {
+    position: relative; /* the positioned texts inside (hidden for the eyes) scroll with it, never lengthen an outer area */
     overflow-x: auto;
   }
 

@@ -167,6 +167,7 @@
     border-bottom: 1px solid var(--color-border);
     background: var(--color-surface);
     max-height: 60vh;
+    position: relative; /* the positioned texts inside (hidden for the eyes) scroll with it, never lengthen an outer area */
     overflow-y: auto;
   }
 
@@ -218,6 +219,7 @@
     margin: 0;
     padding: var(--space-2);
     max-height: 18rem;
+    position: relative; /* the positioned texts inside (hidden for the eyes) scroll with it, never lengthen an outer area */
     overflow: auto;
     border-radius: var(--radius-md);
     background: var(--color-code-bg);

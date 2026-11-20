@@ -13,7 +13,7 @@
   type Entry = { id: string; name: string; author: string; downloads: number; estimated_gb: number | null; fit: Fit; on_disk: string[]; direct: boolean };
   type Quant = { revision: string; size_gb: number | null; fit: Fit; on_disk: boolean };
 
-  let { canConfigure, onchanged }: { canConfigure: boolean; onchanged: () => void } = $props();
+  let { canConfigure, onchanged, onabsent }: { canConfigure: boolean; onchanged: () => void; onabsent?: () => void } = $props();
 
   const KINDS = ["exllamav3", "lmstudio", "colibri"] as const;
   const lang = language();
@@ -121,6 +121,7 @@
           // not the server in use: the next one
         }
       }
+      onabsent?.(); // none of the three is the server in use
     })();
   });
 </script>

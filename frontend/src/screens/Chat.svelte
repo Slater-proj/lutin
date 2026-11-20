@@ -1297,6 +1297,7 @@
     max-height: 14rem;
     margin: 0;
     padding: var(--space-3);
+    position: relative; /* the positioned texts inside (hidden for the eyes) scroll with it, never lengthen an outer area */
     overflow: auto;
     border-radius: var(--radius-md);
     background: var(--color-code-bg);

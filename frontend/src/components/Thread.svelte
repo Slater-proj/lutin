@@ -309,6 +309,7 @@
     max-height: 20rem;
     margin: var(--space-1) 0 0;
     padding: var(--space-2) var(--space-3);
+    position: relative; /* the positioned texts inside (hidden for the eyes) scroll with it, never lengthen an outer area */
     overflow: auto;
     border-radius: var(--radius-sm);
     background: var(--color-code-bg);

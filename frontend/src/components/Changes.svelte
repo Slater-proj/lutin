@@ -108,6 +108,7 @@
     flex-direction: column;
     gap: var(--space-3);
     max-height: 40vh;
+    position: relative; /* the positioned texts inside (hidden for the eyes) scroll with it, never lengthen an outer area */
     overflow: auto;
     margin: 0;
     padding: 0;
@@ -143,6 +144,7 @@
   pre {
     margin: var(--space-1) 0 0;
     padding: var(--space-2);
+    position: relative; /* the positioned texts inside (hidden for the eyes) scroll with it, never lengthen an outer area */
     overflow: auto;
     border-radius: var(--radius-sm);
     background: var(--color-bg);

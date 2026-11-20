@@ -953,6 +953,9 @@ class Chat(unittest.TestCase):
                 "installe": True, "dossier": "C:/models", "actif": True, "maj": False, "nom": "LM Studio", "statut": "", "demarrer": None}
         found = {"suite": False, "modeles": [{"id": "lmstudio-community/Gemma-3-4B-GGUF", "nom": "Gemma-3-4B-GGUF", "auteur": "lmstudio-community", "estimation_go": 3.0, "adequation": fit, "installes": []}]}
         started = []
+        reload = lambda: (p.evaluer("window.__old = true; location.reload()"), p.attendre("!window.__old && !!document.querySelector('.rail .version')"))
+        # registered before the patches, so it runs after they are undone (cleanups run last in, first out): the next test finds the real engine
+        self.addCleanup(lambda: (p.evaluer("location.hash = '#/chat'"), reload()))
         for patch in (mock.patch.object(T.A, "moteur_actuel", lambda *args: Shown()), mock.patch.object(managed_models, "chosen", lambda kind, mo=None: kind == "lmstudio"),
                       mock.patch.object(managed_models, "models", lambda kind, current: seen), mock.patch.object(managed_models, "catalog", lambda *args: found),
                       mock.patch.object(managed_models, "quantizations", lambda kind, repo: [{"revision": "Q4_K_M", "go": 3.1, "adequation": fit, "installe": False},
@@ -960,8 +963,6 @@ class Chat(unittest.TestCase):
                       mock.patch.object(managed_models, "download", lambda *args: started.append(args)), mock.patch.dict(os.environ, {"LUTIN_HORS_LIGNE": ""})):
             patch.start()
             self.addCleanup(patch.stop)
-        reload = lambda: (p.evaluer("window.__old = true; location.reload()"), p.attendre("!window.__old && !!document.querySelector('.rail .version')"))
-        self.addCleanup(lambda: (p.evaluer("location.hash = '#/chat'"), reload()))          # registered first: runs once the engine is the real one again
         p.evaluer("location.hash = '#/models'")
         reload()
         p.attendre("!!document.querySelector('.managed .card')")
@@ -978,6 +979,55 @@ class Chat(unittest.TestCase):
         self.press("document.querySelector('.managed .quants .button.primary')")
         p.attendre("document.querySelector('.managed .notice').innerText.includes('Q4_K_M')")
         self.assertEqual(started, [("lmstudio", "lmstudio-community/Gemma-3-4B-GGUF", "Q4_K_M")])
+        self.assertEqual(p.erreurs, [])
+
+    def test_3wb_the_server_behind_the_openai_engine_is_chosen_and_its_catalogue_replaces_ollamas(self):
+        """Maintainer's request (2026-11-20): on the OpenAI-compatible engine, the server Lutin manages (ExLlamaV3, LM Studio, Colibri, or none) is chosen
+        in the engine's settings, and the Catalogue tab shows that server's models, not Ollama's; with no managed server it says why there is none.
+        Hermetic: the engine is the fake one shown as « openai »; what reads and sets the engine, and lutin.managed_models, are replaced."""
+        p = self.page
+        from lutin import llamacpp_engine, managed_models
+        real = T.A.moteur_actuel
+
+        class Shown:
+            id = "openai"
+
+            def __getattr__(self, name):
+                return getattr(real(), name)
+        reload = lambda: (p.evaluer("window.__old = true; location.reload()"), p.attendre("!window.__old && !!document.querySelector('.rail .version')"))
+        self.addCleanup(lambda: (p.evaluer("location.hash = '#/chat'"), reload()))          # registered before the patches: runs once they are undone
+        applied, server = [], {"kind": ""}
+        seen = {"modeles": [], "installe": True, "dossier": "C:/models", "actif": True, "maj": False, "nom": "ExLlamaV3", "statut": "", "demarrer": None}
+
+        def apply(engine, data):
+            applied.append(data)
+            server["kind"] = data.get("serveur", server["kind"])
+        for patch in (mock.patch.object(T.A, "moteur_actuel", lambda *args: Shown()), mock.patch.object(managed_models, "chosen", lambda kind, mo=None: kind == server["kind"]),
+                      mock.patch.object(managed_models, "models", lambda kind, current: seen), mock.patch.object(managed_models, "catalog", lambda *args: {"suite": False, "modeles": []}),
+                      mock.patch.object(llamacpp_engine, "vue_reglages", lambda engine: {"url": "", "cle_definie": False, "variante": "auto", "serveur": server["kind"]}),
+                      mock.patch.object(llamacpp_engine, "apply_settings", apply), mock.patch.dict(os.environ, {"LUTIN_HORS_LIGNE": ""})):
+            patch.start()
+            self.addCleanup(patch.stop)
+        p.evaluer("location.hash = '#/models'")
+        reload()
+        catalogue = "[...document.querySelectorAll('.models .tabs button')].find(b => b.innerText === 'Catalogue')"
+        self.press(catalogue)
+        p.attendre("document.querySelector('.models').innerText.includes(\"Lutin n'a pas de catalogue à proposer\")")
+        self.assertFalse(p.evaluer("!!document.querySelector('.catalog-models')"), "not Ollama's catalogue: this engine cannot download Ollama's models")
+        self.press("[...document.querySelectorAll('.models .tabs button')].find(b => b.innerText === 'Moteurs')")
+        card = "[...document.querySelectorAll('.engines .card')].find(c => c.querySelector('strong').innerText.includes('OpenAI'))"
+        self.press("%s.querySelector('button[aria-expanded]')" % card)
+        p.attendre("!!document.querySelector('.engine-settings select')")
+        self.assertEqual(p.evaluer("[...document.querySelectorAll('.engine-settings select option')].map(o => o.value)"), ["", "exllamav3", "lmstudio", "colibri"])
+        self.assertEqual(applied, [], "opening the settings changes nothing")
+        p.evaluer("(() => { const box = document.querySelector('.engine-settings select'); box.value = 'exllamav3'; box.dispatchEvent(new Event('change', {bubbles: true})); })()")
+        self.eventually(lambda: applied == [{"serveur": "exllamav3"}], "the server chosen reached the engine's settings")
+        p.attendre("document.querySelector('.engine-settings').innerText.includes('TabbyAPI')")
+        if AXE.is_file():
+            self.axe("on the server behind the OpenAI-compatible engine")
+        self.press(catalogue)
+        p.attendre("document.querySelector('.managed h2')?.innerText === 'Modèles de ExLlamaV3'")
+        self.assertNotIn("Lutin n'a pas de catalogue à proposer", p.evaluer("document.querySelector('.models').innerText"), "a managed server found: the notice of none is gone")
         self.assertEqual(p.erreurs, [])
 
     def test_3x_a_long_screen_scrolls_inside_the_main_area_not_under_the_navigation(self):
@@ -2764,6 +2814,48 @@ class Chat(unittest.TestCase):
         p.attendre("document.querySelectorAll('.models .card').length > 3")
         self.assertGreater(p.evaluer("(s => s.scrollHeight - s.clientHeight)(document.querySelector('.models'))"), 0, "the catalogue is longer than the window here")
         self.assertLessEqual(p.evaluer("(m => m.scrollHeight - m.clientHeight)(document.querySelector('main'))"), 1, "only the catalogue scrolls, never <main> around it")
+
+    def test_5wa_nothing_positioned_escapes_the_area_that_scrolls_it_on_any_screen(self):
+        """Maintainer's report (2026-11-20): the catalogue's scroll defect touched every screen with an area that scrolls by itself. The cause, checked
+        everywhere: an absolutely positioned element (a text hidden for the eyes) placed by a box outside the area that scrolls it lengthens that outer
+        area, which then scrolls down to an empty screen. Every screen, every section of Settings and Agents, every tab of Models."""
+        p = self.page
+        escaping = """(() => {
+            const scrolls = (e) => ['auto', 'scroll'].includes(getComputedStyle(e).overflowY) || ['auto', 'scroll'].includes(getComputedStyle(e).overflowX);
+            const found = [];
+            for (const element of document.querySelectorAll('body *')) {
+                if (getComputedStyle(element).position !== 'absolute' || !element.offsetParent) continue;
+                let area = element.parentElement;
+                while (area && !scrolls(area)) area = area.parentElement;
+                if (area && element.offsetParent !== area && !area.contains(element.offsetParent))
+                    found.push((element.className || element.tagName) + ' placed by ' + (element.offsetParent.className || element.offsetParent.tagName) + ', scrolled by ' + (area.className || area.tagName));
+            }
+            return found.slice(0, 5);
+        })()"""
+        seen = []
+
+        def check(where):
+            time.sleep(0.6)          # the screen reads its data: what it draws is what is checked
+            seen.append(where)
+            self.assertEqual(p.evaluer(escaping), [], where)
+        p.aller(T.BASE + "/app/")
+        p.attendre("!!document.querySelector('#message')")
+        for screen in ("#/chat", "#/projects"):
+            p.evaluer("location.hash = '%s'" % screen)
+            check(screen)
+        for screen in ("#/settings", "#/agents"):
+            p.evaluer("location.hash = '%s'" % screen)
+            p.attendre("document.querySelectorAll('.sections a').length > 1")
+            for section in p.evaluer("[...document.querySelectorAll('.sections a')].map(a => a.getAttribute('href'))"):
+                p.evaluer("location.hash = %s" % js(section))
+                check(section)
+        p.evaluer("location.hash = '#/models'")
+        p.attendre("!!document.querySelector('.models .tabs')")
+        for index, tab in enumerate(p.evaluer("[...document.querySelectorAll('.models .tabs button')].map(b => b.innerText)")):
+            p.evaluer("document.querySelectorAll('.models .tabs button')[%d].click()" % index)
+            check("#/models " + tab)
+        self.assertGreater(len(seen), 15, "every screen was looked at")
+        p.evaluer("location.hash = '#/chat'")
 
     def test_5x_a_long_conversation_has_a_button_back_to_its_end(self):
         """Maintainer's report (2026-11-20): the old page's « ↓ » button was missing. The thread follows its end only when the person is there."""

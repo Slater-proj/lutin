@@ -203,6 +203,7 @@
   pre {
     margin: 0;
     padding: var(--space-3);
+    position: relative; /* the positioned texts inside (hidden for the eyes) scroll with it, never lengthen an outer area */
     overflow-x: auto;
     line-height: 1.45;
     tab-size: 4;
@@ -220,6 +221,7 @@
 
   .table,
   .math {
+    position: relative; /* the positioned texts inside (hidden for the eyes) scroll with it, never lengthen an outer area */
     overflow-x: auto;
   }
 

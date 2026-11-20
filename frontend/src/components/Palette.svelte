@@ -118,6 +118,7 @@
     padding: 0;
     list-style: none;
     max-height: 50vh;
+    position: relative; /* the positioned texts inside (hidden for the eyes) scroll with it, never lengthen an outer area */
     overflow-y: auto;
   }
 

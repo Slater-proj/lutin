@@ -312,6 +312,7 @@
   pre {
     max-height: 16rem;
     margin: 0;
+    position: relative; /* the positioned texts inside (hidden for the eyes) scroll with it, never lengthen an outer area */
     overflow: auto;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
