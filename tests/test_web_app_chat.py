@@ -131,6 +131,24 @@ class Chat(unittest.TestCase):
         self.assertEqual(p.erreurs, [])
         self.picture("2-answer")
 
+    def test_2a_an_error_of_the_engine_stays_on_screen_after_the_turn(self):
+        """Maintainer's report (2026-11-20): with ExLlamaV3 « a red box appears and goes away at once ». The error was a block of the turn being written, and the stored
+        conversation read again at the end of the turn does not hold it."""
+        p = self.page
+        T.SCENARIO[:] = [[{"error": "Model failed to load: Insufficient VRAM in split for model and cache"}]]
+        self.write("A message the engine cannot answer")
+        p.evaluer("document.querySelector('.composer button[type=submit]').click()")
+        p.attendre("!!document.querySelector('.dock .problem')")
+        p.attendre("!!document.querySelector('.composer button[type=submit]')")          # the turn is over: the thread was read again from the stored conversation
+        p.evaluer("new Promise(done => setTimeout(done, 600))")
+        self.assertIn("Insufficient VRAM", p.evaluer("document.querySelector('.dock .problem')?.innerText ?? ''"), "the error stays above the field once the turn is over")
+        self.assertEqual(p.evaluer("document.querySelector('.dock .problem').getAttribute('role')"), "alert")
+        p.evaluer("location.hash = '#/chat'")
+        p.evaluer("location.reload()")
+        p.attendre("!!document.querySelector('#message')")
+        self.assertFalse(p.evaluer("!!document.querySelector('.dock .problem')"), "another conversation, another page: nothing is carried over")
+        self.assertEqual(p.erreurs, [])
+
     def test_3k_the_changes_of_the_last_request_are_reviewed_and_undone(self):
         """docs/modernization/PARITY.md, item 1: after a request that changed a file, the page says so, shows the differences, and puts the file back."""
         p = self.page

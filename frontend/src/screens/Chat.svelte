@@ -358,6 +358,9 @@
         }
         throw cause;
       } finally {
+        // An error of the engine is a block of the turn being written, and the stored conversation does not hold it: reading it again would take the message away at once.
+        // It stays above the field until the next message or another conversation.
+        const failure = live?.blocks.flatMap((block) => (block.kind === "error" ? [block.message] : []))[0] ?? "";
         // What is stored is the truth: the conversation is read again, whether the stream ended well or was cut.
         const stored = await api<Conversation>("GET", conversationPath(at, id)).catch(() => null);
         if (stored && where === at) conversation = stored;
@@ -365,6 +368,7 @@
         cut = null;
         pending = null;
         live = null;
+        if (failure) problem = failure;
         changesTick += 1;
         await loadList().catch(() => undefined);
         onchanged();
@@ -1196,21 +1200,27 @@
     position: absolute;
     bottom: var(--space-3);
     left: 50%;
-    width: 2.5rem;
-    height: 2.5rem;
+    width: 3rem;
+    height: 3rem;
     transform: translateX(-50%);
-    border: 1px solid var(--color-border-strong);
+    border: 2px solid var(--color-surface);
     border-radius: 50%;
-    background: var(--color-surface);
-    color: var(--color-text);
-    font-size: var(--text-lg);
-    box-shadow: 0 2px 8px rgb(0 0 0 / 0.15);
+    background: var(--color-accent); /* the colour of the main buttons: it must be seen at once, not look like a disabled control */
+    color: var(--color-on-accent);
+    font-size: var(--text-xl);
+    font-weight: 700;
+    line-height: 1;
+    box-shadow: 0 0 0 1px var(--color-accent), 0 4px 14px rgb(0 0 0 / 0.35);
     cursor: pointer;
   }
 
+  .to-bottom:hover {
+    background: var(--color-accent-hover);
+    box-shadow: 0 0 0 1px var(--color-accent-hover), 0 6px 18px rgb(0 0 0 / 0.4);
+  }
+
   .to-bottom.writing {
-    border-color: var(--color-accent);
-    color: var(--color-accent-text);
+    box-shadow: 0 0 0 3px var(--color-accent-soft), 0 0 0 4px var(--color-accent), 0 4px 14px rgb(0 0 0 / 0.35); /* a ring: the answer is still being written */
   }
 
   .welcome {
