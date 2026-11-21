@@ -831,6 +831,11 @@
  },
  {
   "method": "GET",
+  "path": "/api/v1/models/loaded",
+  "right": "session"
+ },
+ {
+  "method": "GET",
   "path": "/api/v1/models/proposals",
   "right": "session"
  },

@@ -56,6 +56,7 @@
   const FOLLOW_MARGIN = 80; // pixels: closer than this to the end counts as « at the end »
   let following = $state(true);
   let box = $state<HTMLTextAreaElement | null>(null);
+  let inMemory = $state<{ known: boolean; loaded: boolean } | null>(null);
   let renaming = $state(false);
   let options = $state<ConversationOptions | null>(null);
   let optionsToSend = $state<Partial<ConversationOptions>>({}); // chosen before the conversation exists: sent when the first message creates it
@@ -158,6 +159,12 @@
     const [found, view] = await Promise.all([api<Models>("GET", "/models"), api<MachinesView>("GET", "/machines").catch(() => null)]);
     models = found;
     paired = view;
+    void readLoaded();
+  }
+
+  /** Is the model in use in memory? Asked again every few seconds with the marks of the list, and after a turn or a change of model. `known` false: the engine cannot say, nothing is shown. */
+  async function readLoaded(): Promise<void> {
+    inMemory = await api<{ known: boolean; loaded: boolean }>("GET", "/models/loaded").catch(() => inMemory);
   }
 
   /** What a new conversation starts with: the settings of the machine, and the two automatic approvals off. */
@@ -370,6 +377,7 @@
         live = null;
         if (failure) problem = failure;
         changesTick += 1;
+        void readLoaded(); // a turn loads the model: the answer to « is it in memory » has changed
         await loadList().catch(() => undefined);
         onchanged();
       }
@@ -640,7 +648,10 @@
     const named = conversationOf(location.hash);
     if (named) void open(named);
     void followTurns();
-    const marks = setInterval(() => void followTurns(), 5000);
+    const marks = setInterval(() => {
+      void followTurns();
+      void readLoaded();
+    }, 5000);
     return () => {
       removeEventListener("lutin-new-conversation", onNew);
       stopWatching();
@@ -731,6 +742,9 @@
       {#if where}
         <p class="model on-host" title={t("chat.on_machine_help")}>{t("chat.on_machine", remote.find((entry) => entry.machine === where)?.machine_name ?? paired?.machines.find((entry) => entry.id === where)?.name ?? "")}</p>
       {:else}
+      {#if inMemory?.known}
+        <span class="memory" class:loaded={inMemory.loaded} title={inMemory.loaded ? t("chat.memory_in_help") : t("chat.memory_out_help")}><span class="dot" aria-hidden="true"></span>{inMemory.loaded ? t("chat.memory_in") : t("chat.memory_out")}</span>
+      {/if}
       <label class="model">
         <span>{t("chat.model")}</span>
         <select onchange={chooseModel} disabled={busy || !choices || (choices.local.length === 0 && choices.groups.length === 0)} title={choices?.missing?.off ? t("chat.machine_off_help", choices.missing.name) : undefined}>
@@ -1158,6 +1172,36 @@
     gap: var(--space-2);
     font-size: var(--text-sm);
     color: var(--color-text-muted);
+  }
+
+  .memory {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    padding: var(--space-1) var(--space-2);
+    border: 1px solid var(--color-border-strong);
+    border-radius: var(--radius-pill);
+    font-size: var(--text-sm);
+    color: var(--color-text-muted);
+    white-space: nowrap;
+  }
+
+  .memory .dot {
+    width: 0.6rem;
+    height: 0.6rem;
+    border-radius: 50%;
+    background: transparent;
+    box-shadow: inset 0 0 0 2px var(--color-text-muted); /* an empty ring: nothing in memory */
+  }
+
+  .memory.loaded {
+    border-color: var(--color-accent);
+    color: var(--color-accent-text);
+  }
+
+  .memory.loaded .dot {
+    background: var(--color-accent); /* a full dot: loaded. The words say it too, the colour is not alone */
+    box-shadow: none;
   }
 
   .on-host {

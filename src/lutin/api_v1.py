@@ -367,6 +367,24 @@ def models(request):
             "remote": _remote_models()}
 
 
+@route("GET", "/models/loaded", SESSION)
+def models_loaded(request):
+    """Is the model in use in the memory of this machine right now? `{"engine", "model", "known", "loaded", "size_bytes", "vram_bytes"}`. `known` is false when the engine cannot say (a server Lutin only
+    connects to, a model of another machine): the page then shows nothing rather than a « not loaded » that may be wrong. A model that is not loaded is loaded by the first message
+    (the engines load on demand), which waits for it."""
+    engine = _m.moteur_actuel()
+    settings = _m.reglages()
+    model = str(settings.get("modele") or "")
+    answer = {"engine": engine.id, "model": model, "known": False, "loaded": False, "size_bytes": 0, "vram_bytes": 0}
+    if not model or settings.get("machine") or not engine.charge_connue():
+        return answer
+    held = engine.en_memoire(model)
+    answer["known"] = True
+    if held:
+        answer.update(loaded=True, size_bytes=int(held.get("taille") or 0), vram_bytes=int(held.get("vram") or 0))
+    return answer
+
+
 # --------------------------------------------------------------------------- paired machines (ADR 0016): other computers whose engine Lutin may use
 
 MACHINE_STATES = {"inconnu": "unknown", "injoignable": "unreachable", "reveil_envoye": "wake_sent", "joignable": "reachable", "operationnel": "operational"}

@@ -786,6 +786,9 @@ class MoteurOllama(_moteurs.Moteur):
     def en_memoire(self, modele):
         return ps_ollama(modele)
 
+    def charge_connue(self):
+        return True
+
     def aptitudes(self):
         # Ollama lit et écrit lui-même les appels d'outils, garde tout seul le début d'une requête, accepte un schéma JSON (« format »), n'a pas de place réservée par conversation ;
         # un modèle trop gros pour la carte déborde sur le processeur au lieu d'échouer ; et Lutin sait le démarrer.

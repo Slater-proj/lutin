@@ -808,6 +808,9 @@ class MoteurLlamaCpp(MoteurOpenAI):
                 tailles[n] = communs[n]["taille"]
         return {"actif": self.serveur_pret() is not None, "installes": noms, "tailles": tailles, "partages": [n for n in sorted(communs) if communs[n].get("origine") == "ollama"]}
 
+    def charge_connue(self):
+        return not self.externe()          # le serveur que Lutin gère : Lutin sait s'il tourne ; un serveur distant ne le dit pas
+
     def en_memoire(self, modele):
         if self.externe():
             return super().en_memoire(modele)
@@ -1335,6 +1338,19 @@ class MoteurExterne(MoteurOpenAI):
     # -- ExLlamaV3 : installé et lancé par Lutin à travers TabbyAPI (environnement Python dédié), sur cette machine seulement, carte NVIDIA
     def exllamav3_choisi(self):
         return self.config().get("serveur") == "exllamav3"
+
+    def charge_connue(self):
+        return self.exllamav3_choisi()          # TabbyAPI dit quel modèle il a chargé (GET /v1/model) ; les autres serveurs de cette carte ne le disent pas
+
+    def en_memoire(self, modele):
+        """ExLlamaV3 charge le modèle à la première demande : tant qu'aucune n'est faite, ou que le serveur est arrêté, rien n'est en mémoire."""
+        if not self.exllamav3_choisi():
+            return super().en_memoire(modele)
+        try:
+            charge = self._json("/model", None, 3)
+        except (urllib.error.URLError, OSError, ValueError):
+            return None          # arrêté, ou « aucun modèle chargé » (TabbyAPI répond alors par une erreur)
+        return {"taille": 0, "vram": 0} if str(charge.get("id") or "") == str(modele) else None
 
     def port_exllamav3(self):
         from . import exllamav3

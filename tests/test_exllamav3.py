@@ -305,6 +305,17 @@ class Carte(unittest.TestCase):
     def profil(self, fabricant):
         return lambda: mock.Mock(gpus=[mock.Mock(fabricant=fabricant)])
 
+    def test_le_modele_charge_est_celui_que_tabbyapi_dit(self):
+        """TabbyAPI loads the model on the first request: until then nothing is in memory, and a stopped server holds nothing. The engine says so, the page shows it by the selector."""
+        self.assertTrue(self.mo.charge_connue())
+        with mock.patch.object(ml.MoteurExterne, "_json", return_value={"id": "Qwen-exl3"}):
+            self.assertEqual(self.mo.en_memoire("Qwen-exl3"), {"taille": 0, "vram": 0})
+            self.assertIsNone(self.mo.en_memoire("Autre-exl3"), "another model than the one loaded")
+        with mock.patch.object(ml.MoteurExterne, "_json", side_effect=OSError("refused")):
+            self.assertIsNone(self.mo.en_memoire("Qwen-exl3"), "a server that is stopped, or that holds no model (TabbyAPI answers by an error)")
+        ml.regler_serveur("openai", {"serveur": ""})
+        self.assertFalse(self.mo.charge_connue(), "another server of this card does not say which model it holds")
+
     def test_l_installation_demande_une_carte_nvidia_et_pas_docker(self):
         engines.CONTEXT["profil"] = self.profil("nvidia")
         self.assertTrue(self.mo.actions()["installer"]["possible"])

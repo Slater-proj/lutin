@@ -2931,6 +2931,26 @@ class Chat(unittest.TestCase):
         self.assertFalse(p.evaluer("!!document.querySelector('.activity')"), "a failure that was closed stays closed")
         self.assertEqual(p.erreurs, [])
 
+    def test_5z_the_selector_says_whether_the_model_is_in_memory(self):
+        """Maintainer's request (2026-11-20): « a status of the model loaded in RAM or not, around the selector »."""
+        p = self.page
+        self.addCleanup(lambda: T.PS.clear())
+        model = p.evaluer("document.querySelector('header select').value.split('|').pop()")
+        T.PS.clear()
+        p.evaluer("location.hash = '#/chat'")
+        p.evaluer("location.reload()")
+        p.attendre("!!document.querySelector('.memory')", 20)
+        self.assertIn("Pas chargé", p.evaluer("document.querySelector('.memory').innerText"))
+        self.assertFalse(p.evaluer("document.querySelector('.memory').classList.contains('loaded')"))
+        self.assertTrue(p.evaluer("document.querySelector('.memory').title.includes('attend son chargement')"), "the tooltip says what it means for the next answer")
+        T.PS[:] = [{"name": model, "model": model, "size": 5_000_000_000, "size_vram": 5_000_000_000}]
+        p.attendre("document.querySelector('.memory')?.classList.contains('loaded')", 20)          # asked again every 5 s
+        self.assertIn("En mémoire", p.evaluer("document.querySelector('.memory').innerText"))
+        self.picture("5z-in-memory")
+        if AXE.is_file():
+            self.axe("on the memory mark")
+        self.assertEqual(p.erreurs, [])
+
     def test_5xa_a_thread_at_its_end_stays_there_when_it_changes_size_without_a_new_message(self):
         """test_5x failed 3 times in 5 runs of this file: the opened thread was left above its end. Its size changed after the move to the end,
         with no new message to move it again; and the scroll event of that move, a frame later, took content grown in between for the person going up."""

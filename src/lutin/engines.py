@@ -67,6 +67,10 @@ class Moteur:
         """{taille, vram} si le modèle est chargé, sinon None."""
         return None
 
+    def charge_connue(self):
+        """Vrai si `en_memoire` sait dire « chargé » de « pas chargé » : sinon son None veut dire « le moteur ne le dit pas », et la page n'affiche rien plutôt que de se tromper."""
+        return False
+
     def chat(self, corps, delai=60):
         """Une réponse complète (sans flux) : renvoie le dictionnaire de la réponse, au format d'Ollama."""
         raise NotImplementedError
