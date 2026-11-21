@@ -20,8 +20,10 @@ These records are technical documentation, written in English only (ADR 0001). T
 | [0011](0011-diagrams-in-an-isolated-frame.md) | Diagrams are drawn in an isolated frame; formulas by the browser | Accepted, implemented |
 | [0012](0012-a-turn-says-where-it-is.md) | A turn says where it is; the loop is made of parts; an engine says what the loop may ask of it | Accepted, implemented |
 | [0013](0013-a-request-has-a-prefix-that-stays-and-a-tail-that-changes.md) | A request has a prefix that stays and a tail that changes | Accepted, implemented |
-| [0014](0014-one-application-context.md) | One application context holds what the modules kept for themselves | Accepted |
+| [0014](0014-one-application-context.md) | One application context holds what the modules kept for themselves | Accepted, stage 1 implemented |
 | [0015](0015-one-entry-runs-a-turn.md) | One entry runs a turn, whoever asks for it | Accepted, implemented |
 | [0016](0016-paired-machines-in-v1-and-the-new-interface.md) | Paired machines in `/api/v1` and in the new interface | Accepted, implemented (seven stages) |
 | [0017](0017-conversations-in-sqlite.md) | Conversations in SQLite, settings in JSON | Accepted, implemented |
 | [0018](0018-keeping-the-thread-on-a-small-window.md) | Keeping the thread of a long conversation on a small window | Accepted, first part implemented |
+| [0019](0019-one-memory-for-long-conversations.md) | One memory for long conversations: the progress sheet, kept out of the way | Accepted |
+| [0020](0020-every-engine-the-same-way.md) | Every engine is installed, chosen and fed with models the same way | Proposed |
