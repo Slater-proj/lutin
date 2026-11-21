@@ -1830,11 +1830,30 @@ def _activity_items():
         elif stored.get("statut") == "erreur":
             items.append({"id": "model:" + name, "kind": "model", "name": name, "action": "download", "state": "failed", "text": str(stored.get("texte") or ""),
                           "done": 0, "total": 0, "finished_at": 0})
+    items.extend(_background_items())
     from . import embeddings as _embeddings
     install = _embeddings.state()["installation"]
     if install["etat"] == "en cours":
         items.append({"id": "meaning", "kind": "meaning", "name": _embeddings.model_name(), "action": "install", "state": "running", "text": "", "done": int(install["fait"] or 0),
                       "total": int(install["total"] or 0), "finished_at": 0})
+    return items
+
+
+def _background_items():
+    """The long background tasks of the programs Lutin drives besides the engines: a model downloaded into ComfyUI, the copy of the models of Ollama to another folder.
+    Running ones are listed; a failure stays until it is closed (as for the downloads of Ollama); one that ended well leaves quietly. The update of Lutin itself has its own banner.
+    The installations of third-party skills and of add-ons end with their request, so there is nothing to follow."""
+    from . import addons_comfyui as _comfyui
+    from . import locations as _locations
+    items = []
+    download = _comfyui.DOWNLOAD
+    if download["etat"] in ("en cours", "erreur"):
+        items.append({"id": "comfyui:download", "kind": "comfyui", "name": "{} (ComfyUI)".format(download["nom"]), "action": "download", "state": "running" if download["etat"] == "en cours" else "failed",
+                      "text": "" if download["etat"] == "en cours" else str(download["erreur"]), "done": int(download["fait"] or 0), "total": int(download["total"] or 0), "finished_at": 0})
+    copy = _locations.COPY
+    if copy["etat"] in ("en cours", "erreur"):
+        items.append({"id": "copy:models", "kind": "copy", "name": _t("modèles d'Ollama"), "action": "copy", "state": "running" if copy["etat"] == "en cours" else "failed",
+                      "text": str(copy.get("fichier") or "") if copy["etat"] == "en cours" else str(copy["erreur"]), "done": int(copy["fait"] or 0), "total": int(copy["total"] or 0), "finished_at": 0})
     return items
 
 

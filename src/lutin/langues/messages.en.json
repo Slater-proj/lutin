@@ -2412,5 +2412,6 @@
 "Ce moteur ne télécharge pas de modèle.": "This engine does not download models.",
 "Choisis une précision (un fichier) de ce dépôt.": "Choose a precision (a file) of this repository.",
 "{} n'est pas le moteur choisi.": "{} is not the engine in use.",
-"{} téléchargements": "{} downloads"
+"{} téléchargements": "{} downloads",
+"modèles d'Ollama": "Ollama models"
 }

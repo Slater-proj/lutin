@@ -77,6 +77,23 @@ class Activity(unittest.TestCase):
         self.assertEqual((item["done"], item["total"]), (4_000_000_000, 16_000_000_000))
         self.assertIn("25 %", item["text"])
 
+    def test_a_model_downloaded_for_comfyui_and_the_copy_of_ollamas_models_are_in_the_bar(self):
+        """Maintainer, 2026-11-20: the bar did not cover « skills, add-ons, ComfyUI, auxiliary programs ». The long background tasks that were missing: the download of a model
+        into ComfyUI and the copy of the models of Ollama to another folder. A task that ended well leaves quietly; a failure stays until it is closed, as for the others."""
+        from lutin import addons_comfyui, locations
+        idle = {"etat": "", "nom": "", "fait": 0, "total": 0, "erreur": ""}
+        with mock.patch.dict(addons_comfyui.DOWNLOAD, dict(idle, etat="en cours", nom="flux-dev.safetensors", fait=2_000_000_000, total=11_000_000_000)),                 mock.patch.dict(locations.COPY, {"etat": "en cours", "fait": 5_000_000_000, "total": 20_000_000_000, "fichier": "blob", "source": "C:/a", "cible": "D:/b"}):
+            seen = items()
+        comfy, copy = seen["comfyui:download"], seen["copy:models"]
+        self.assertEqual((comfy["kind"], comfy["action"], comfy["name"], comfy["state"], comfy["done"], comfy["total"]), ("comfyui", "download", "flux-dev.safetensors (ComfyUI)", "running", 2_000_000_000, 11_000_000_000))
+        self.assertEqual((copy["kind"], copy["action"], copy["state"], copy["done"], copy["total"]), ("copy", "copy", "running", 5_000_000_000, 20_000_000_000))
+        with mock.patch.dict(addons_comfyui.DOWNLOAD, dict(idle, etat="erreur", nom="flux-dev.safetensors", erreur="Disk full")), mock.patch.dict(locations.COPY, {"etat": "fini", "fait": 1, "total": 1}):
+            seen = items()
+        self.assertEqual((seen["comfyui:download"]["state"], seen["comfyui:download"]["text"]), ("failed", "Disk full"))
+        self.assertNotIn("copy:models", seen, "a copy that ended well is not kept")
+        with mock.patch.dict(addons_comfyui.DOWNLOAD, dict(idle, etat="fini", nom="x")):
+            self.assertNotIn("comfyui:download", items())
+
     def test_what_ended_stays_a_moment_and_then_goes(self):
         now = time.time()
         engines.TASKS["fake"] = {"action": "installer", "statut": "termine", "resultat": "Installed: Fake 1.0", "texte": "", "fait": 0, "total": 0, "fin": now}

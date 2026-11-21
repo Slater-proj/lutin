@@ -3,9 +3,9 @@
 
 export interface ActivityItem {
   id: string;
-  kind: "engine" | "model" | "meaning";
+  kind: "engine" | "model" | "meaning" | "comfyui" | "copy";
   name: string;
-  action: string; // install, reinstall, update, uninstall, start, download, prepare
+  action: string; // install, reinstall, update, uninstall, start, download, prepare, copy
   state: "running" | "done" | "failed";
   text: string; // the last line of progress, or the result, or the error
   done: number;

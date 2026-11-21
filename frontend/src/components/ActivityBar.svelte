@@ -10,7 +10,7 @@
   let closed = $state<Set<string>>(new Set());
   const shown = $derived(visible(items, closed));
 
-  const ACTIONS = ["install", "reinstall", "update", "uninstall", "start", "download", "prepare"];
+  const ACTIONS = ["install", "reinstall", "update", "uninstall", "start", "download", "prepare", "copy"];
 
   function title(item: ActivityItem): string {
     return ACTIONS.includes(item.action) ? t(("activity." + item.action) as MessageKey, item.name) : item.name;
