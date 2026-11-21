@@ -2406,5 +2406,11 @@
 "Très à l'aise sur ta carte graphique : environ {} Go avec {} jetons de conversation, sur {} d'utilisables.": "Very comfortable on your graphics card: about {} GB with {} tokens of conversation, out of {} usable.",
 "Tient dans ta carte graphique : environ {} Go avec {} jetons de conversation, sur {} d'utilisables.": "Fits in your graphics card: about {} GB with {} tokens of conversation, out of {} usable.",
 ", par une autre machine appairée": ", through another paired machine",
-"\nTu tournes sur le moteur {}{}, modèle {}. Si on te le demande, c'est la réponse : ne le déduis pas du code ni des processus de la machine.": "\nYou run on the engine {}{}, model {}. If asked, this is the answer: do not deduce it from the code or the processes of the machine."
+"\nTu tournes sur le moteur {}{}, modèle {}. Si on te le demande, c'est la réponse : ne le déduis pas du code ni des processus de la machine.": "\nYou run on the engine {}{}, model {}. If asked, this is the answer: do not deduce it from the code or the processes of the machine.",
+"Ce moteur n'a pas de précision à choisir pour ses modèles.": "This engine has no precision to choose for its models.",
+"Ce moteur gère ses modèles lui-même.": "This engine manages its models itself.",
+"Ce moteur ne télécharge pas de modèle.": "This engine does not download models.",
+"Choisis une précision (un fichier) de ce dépôt.": "Choose a precision (a file) of this repository.",
+"{} n'est pas le moteur choisi.": "{} is not the engine in use.",
+"{} téléchargements": "{} downloads"
 }

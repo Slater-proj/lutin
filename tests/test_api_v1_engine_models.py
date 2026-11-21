@@ -1,0 +1,200 @@
+"""ADR 0020, stage 2: `/api/v1/engines/{id}/models*`, the models of any engine in the same way, on the real server of tests/test_api_v1.py.
+
+Nothing is installed, downloaded or searched on the network: what an engine knows (its installed models, its library, its catalogue of Hugging Face) is replaced
+by data, and the engine in use is chosen by the test."""
+import unittest
+from unittest import mock
+
+import test_api_v1 as V  # its temporary folders, its server and its callers (imported as a module: its tests do not run here)
+
+from lutin import agent, engines, managed_models, model_compat, model_discovery, model_fit, model_sources, model_variants  # noqa: E402
+
+A = V.A
+ENTRY_KEYS = ["approximate", "download", "fit", "has_variants", "id", "in_use", "installed", "name", "revision", "size_gb", "summary"]
+TOO_BIG = {"niveau": "trop_gros", "texte": "Too big for this machine."}
+GOOD = {"niveau": "bien", "texte": "Fits."}
+
+
+def setUpModule():
+    V.setUpModule()
+
+
+def get(path, who=None):
+    return V.call("GET", "/api/v1" + path, V.OWNER if who is None else who)
+
+
+class InUse(unittest.TestCase):
+    """The engine in use is chosen here; the machine is not measured unless a test gives it; the network is on."""
+
+    def use(self, identifier):
+        for patch in (mock.patch.object(agent, "moteur_local", lambda r=None: engines.ENGINES[identifier]), mock.patch.object(model_fit, "profil_pret", lambda *a: None),
+                      mock.patch.object(model_sources._offline, "is_active", lambda *a, **k: False), mock.patch.dict(engines.CONTEXT, hors_ligne=lambda: False)):
+            patch.start()
+            self.addCleanup(patch.stop)
+
+
+class Entries(unittest.TestCase):
+    def test_a_model_is_downloaded_unless_something_says_why_not(self):
+        with mock.patch.object(model_sources._offline, "is_active", lambda *a, **k: False), mock.patch.dict(engines.CONTEXT, hors_ligne=lambda: False):
+            self.assertEqual(model_sources.download_state(GOOD), {"possible": True, "reason": ""})
+            self.assertEqual(model_sources.download_state(TOO_BIG), {"possible": False, "reason": "Too big for this machine."})
+            self.assertEqual(model_sources.download_state(GOOD, {"possible": False, "raison": "A format this engine cannot read."}), {"possible": False, "reason": "A format this engine cannot read."})
+            self.assertFalse(model_sources.download_state(GOOD, installed=True)["possible"])
+        with mock.patch.dict(engines.CONTEXT, hors_ligne=lambda: True):
+            self.assertIn("hors ligne", model_sources.download_state(GOOD)["reason"].lower())
+
+    def test_an_entry_has_the_same_fields_whatever_the_source(self):
+        made = model_sources.entry("owner/model", fit=GOOD, size_gb=5.0, revision="4.0bpw")
+        self.assertEqual(sorted(made), ENTRY_KEYS)
+        self.assertEqual((made["name"], made["revision"], made["fit"]), ("model", "4.0bpw", {"level": "good", "text": "Fits."}))
+        self.assertEqual(sorted(model_sources.entry("qwen3:8b")), ENTRY_KEYS)
+
+
+class Ollama(InUse):
+    def setUp(self):
+        self.use("ollama")
+        installed = {"actif": True, "installes": ["qwen3:8b"], "tailles": {"qwen3:8b": 5_200_000_000}}
+        patch = mock.patch.object(engines.ENGINES["ollama"], "modeles", lambda: installed)
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    def test_the_installed_models_with_their_size(self):
+        status, answer = get("/engines/ollama/models")
+        self.assertEqual((status, answer["engine"]), (200, "ollama"))
+        self.assertEqual([(m["id"], m["installed"], m["size_gb"]) for m in answer["models"]], [("qwen3:8b", True, 5.2)])
+        self.assertEqual(sorted(answer["models"][0]), ENTRY_KEYS)
+
+    def test_the_search_gives_the_catalogue_then_the_library_of_ollama_com_one_entry_per_size(self):
+        library = {"modeles": [{"nom": "gemma3", "description": "Google's.", "tailles": ["4b", "12b"], "capacites": [], "maj": "", "telechargements": 9}], "suite": True}
+        with mock.patch.object(model_discovery, "search", lambda *a, **k: library), mock.patch.object(model_discovery, "evaluate_sizes", lambda models, judge: [dict(m, evaluations={"4b": {"go": 3.3, "niveau": "bien", "texte": "Fits."}}) for m in models]):
+            status, answer = get("/engines/ollama/models/search?q=gemma")
+        self.assertEqual(status, 200, answer)
+        names = [m["id"] for m in answer["models"]]
+        self.assertIn("gemma3:4b", names)
+        self.assertIn("gemma3:12b", names, "a size whose weight is unknown is still offered")
+        self.assertTrue(answer["more"])
+        for model in answer["models"]:
+            self.assertEqual(sorted(model), ENTRY_KEYS)
+            self.assertEqual(sorted(model["download"]), ["possible", "reason"])
+
+    def test_the_precisions_of_a_model(self):
+        found = {"defaut": None, "variantes": [{"id": "qwen3:8b-q4_K_M", "precision": "q4_K_M", "go": 5.0, "defaut": True}, {"id": "qwen3:8b-q8_0", "precision": "q8_0", "go": 8.7}]}
+        with mock.patch.object(model_variants, "list_variants", lambda ref: found):
+            status, answer = get("/engines/ollama/models/variants?ref=qwen3:8b")
+        self.assertEqual(status, 200, answer)
+        self.assertEqual([(v["id"], v["revision"], v["size_gb"], v["default"]) for v in answer["variants"]], [("qwen3:8b-q4_K_M", "q4_K_M", 5.0, True), ("qwen3:8b-q8_0", "q8_0", 8.7, False)])
+        self.assertEqual(get("/engines/ollama/models/variants")[0], 400)
+
+    def test_a_download_waits_for_its_confirmation_and_starts_as_a_task_of_the_engine_in_use(self):
+        started = []
+        with mock.patch.object(agent, "installer_modele", lambda ref: started.append(ref) or {"statut": "en cours"}):
+            self.assertEqual(V.call("POST", "/api/v1/engines/ollama/models/downloads", V.OWNER, {"ref": "qwen3:14b"})[1]["error"]["code"], "confirmation_required")
+            self.assertEqual(V.call("POST", "/api/v1/engines/ollama/models/downloads", V.DEVICE, {"ref": "qwen3:14b", "confirm": True})[0], 403, "a paired phone may not download")
+            self.assertEqual(started, [])
+            status, answer = V.call("POST", "/api/v1/engines/ollama/models/downloads", V.OWNER, {"ref": "qwen3:14b", "confirm": True})
+        self.assertEqual((status, answer), (202, {"started": True, "engine": "ollama"}))
+        self.assertEqual(started, ["qwen3:14b"])
+
+    def test_a_removal_goes_through_the_engine_in_use(self):
+        removed = []
+        with mock.patch.object(agent, "supprimer_modele", lambda name: removed.append(name)):
+            self.assertEqual(V.call("DELETE", "/api/v1/engines/ollama/models/qwen3%3A8b", V.DEVICE)[0], 403)
+            status, answer = V.call("DELETE", "/api/v1/engines/ollama/models/qwen3%3A8b", V.OWNER)
+        self.assertEqual((status, answer["deleted"], removed), (200, True, ["qwen3:8b"]))
+
+    def test_the_recommended_models_are_the_ones_this_machine_runs_well_the_largest_first(self):
+        small = {"id": "qwen3:4b", "nom": "Qwen3 4B", "go": 2.6, "phrase": "Small."}
+        large = {"id": "qwen3:14b", "nom": "Qwen3 14B", "go": 9.3, "phrase": "Large."}
+        roles = {"rapide": mock.Mock(id="qwen3:4b", modele=small), "polyvalent": mock.Mock(id="qwen3:14b", modele=large)}
+        with mock.patch.object(model_fit, "profil_pret", lambda *a: mock.Mock()), mock.patch.object(model_fit, "evaluer", lambda *a, **k: GOOD), mock.patch.object(model_compat, "roles_for", lambda *a: roles):
+            status, answer = get("/engines/ollama/models/recommended")
+        self.assertEqual([m["id"] for m in answer["models"]], ["qwen3:14b", "qwen3:4b"])
+        self.assertEqual(answer["models"][0]["fit"], {"level": "good", "text": "Fits."})
+
+
+class LlamaCpp(InUse):
+    def setUp(self):
+        self.use("llamacpp")
+        engine = engines.ENGINES["llamacpp"]
+        for name, value in (("modeles", lambda: {"actif": True, "installes": ["m.gguf"], "tailles": {}}), ("telechargeable", lambda: {"possible": True, "raison": "", "genre": "huggingface"}),
+                            ("chercher_modeles", lambda words: [{"id": "owner/Model-GGUF", "telechargements": 12, "likes": 1}]),
+                            ("fichiers_du_depot", lambda repo: [{"fichier": "Model-Q4_K_M.gguf", "taille": 4_900_000_000}, {"fichier": "Model-Q8_0.gguf", "taille": 8_500_000_000}])):
+            patch = mock.patch.object(engine, name, value)
+            patch.start()
+            self.addCleanup(patch.stop)
+
+    def test_hugging_face_is_searched_for_words_and_each_repository_has_its_files(self):
+        status, answer = get("/engines/llamacpp/models/search?q=model")
+        self.assertEqual(status, 200, answer)
+        self.assertIn("owner/Model-GGUF", [m["id"] for m in answer["models"]])
+        found = next(m for m in answer["models"] if m["id"] == "owner/Model-GGUF")
+        self.assertEqual((sorted(found), found["has_variants"]), (ENTRY_KEYS, True))
+        status, answer = get("/engines/llamacpp/models/variants?ref=owner/Model-GGUF")
+        self.assertEqual([(v["revision"], v["size_gb"]) for v in answer["variants"]], [("Model-Q4_K_M.gguf", 4.9), ("Model-Q8_0.gguf", 8.5)])
+
+    def test_a_file_of_a_repository_is_downloaded_as_a_task_and_a_repository_alone_is_refused(self):
+        tasks = []
+        with mock.patch.object(engines, "launch_task", lambda engine, action, run=None: tasks.append((engine.id, action)) or {}):
+            status, answer = V.call("POST", "/api/v1/engines/llamacpp/models/downloads", V.OWNER, {"ref": "owner/Model-GGUF", "revision": "Model-Q4_K_M.gguf", "confirm": True})
+            self.assertEqual((status, tasks), (202, [("llamacpp", "telecharger")]))
+            status, answer = V.call("POST", "/api/v1/engines/llamacpp/models/downloads", V.OWNER, {"ref": "owner/Model-GGUF", "confirm": True})
+        self.assertEqual((status, answer["error"]["code"]), (400, "action_impossible"), "a file must be chosen first")
+
+
+class Managed(InUse):
+    def setUp(self):
+        self.use("exllamav3")
+        for name, value in (("chosen", lambda kind: kind == "exllamav3"),
+                            ("models", lambda kind, current: {"modeles": [{"nom": "Qwen3-8B-exl3_4.0bpw", "depot": "turboderp/Qwen3-8B-exl3", "revision": "4.0bpw", "taille_go": 5.5, "adequation": GOOD, "utilise": True}],
+                                                              "installe": True, "actif": True, "nom": "ExLlamaV3", "statut": "", "dossier": "C:/m", "maj": True}),
+                            ("recommended", lambda kind: [{"id": "turboderp/Qwen3-27B-exl3", "nom": "Qwen3-27B-exl3", "revision": "4.0bpw", "go": 15.7, "adequation": GOOD, "installe": False}]),
+                            ("catalog", lambda *a: {"suite": False, "modeles": [{"id": "turboderp/Gemma-exl3", "nom": "Gemma-exl3", "estimation_go": 9.0, "adequation": TOO_BIG, "installes": [], "direct": False}]}),
+                            ("quantizations", lambda kind, repo: [{"revision": "3.0bpw", "go": 6.0, "adequation": GOOD, "installe": False}])):
+            patch = mock.patch.object(managed_models, name, value)
+            patch.start()
+            self.addCleanup(patch.stop)
+
+    def test_the_same_shape_as_every_other_engine(self):
+        for path in ("/engines/exllamav3/models", "/engines/exllamav3/models/recommended", "/engines/exllamav3/models/search", "/engines/exllamav3/models/variants?ref=turboderp/Gemma-exl3"):
+            status, answer = get(path)
+            self.assertEqual(status, 200, (path, answer))
+            for model in answer.get("models") or answer["variants"]:
+                self.assertEqual(sorted(model), ENTRY_KEYS, path)
+        installed = get("/engines/exllamav3/models")[1]["models"][0]
+        self.assertEqual((installed["id"], installed["revision"], installed["in_use"], installed["installed"]), ("turboderp/Qwen3-8B-exl3", "4.0bpw", True, True))
+
+    def test_a_model_too_big_for_the_card_says_why_it_cannot_be_downloaded(self):
+        found = get("/engines/exllamav3/models/search?q=gemma")[1]["models"][0]
+        self.assertEqual((found["fit"]["level"], found["download"]["possible"]), ("too_big", False))
+        self.assertEqual(found["download"]["reason"], "Too big for this machine.")
+
+    def test_a_download_goes_to_the_server_after_its_confirmation(self):
+        started = []
+        with mock.patch.object(managed_models, "download", lambda *args: started.append(args)):
+            status, answer = V.call("POST", "/api/v1/engines/exllamav3/models/downloads", V.OWNER, {"ref": "turboderp/Qwen3-27B-exl3", "revision": "4.0bpw", "confirm": True})
+        self.assertEqual((status, started), (202, [("exllamav3", "turboderp/Qwen3-27B-exl3", "4.0bpw")]))
+
+    def test_an_engine_that_is_not_the_one_in_use_is_refused(self):
+        with mock.patch.object(managed_models, "chosen", lambda kind: False):
+            for method, path, body in (("GET", "/engines/exllamav3/models", None), ("GET", "/engines/exllamav3/models/recommended", None),
+                                       ("POST", "/engines/exllamav3/models/downloads", {"ref": "a/b", "confirm": True})):
+                status, answer = V.call(method, "/api/v1" + path, V.OWNER, body)
+                self.assertEqual((status, answer["error"]["code"]), (409, "not_chosen"), path)
+        self.use("ollama")          # llama.cpp asked while Ollama is in use
+        self.assertEqual(V.call("POST", "/api/v1/engines/llamacpp/models/downloads", V.OWNER, {"ref": "a:b", "confirm": True})[1]["error"]["code"], "not_chosen")
+
+
+class Address(InUse):
+    def test_a_server_reached_by_its_address_shows_its_models_and_downloads_nothing(self):
+        self.use("openai")
+        with mock.patch.object(engines.ENGINES["openai"], "modeles", lambda: {"actif": True, "installes": ["served-model"], "tailles": {}}):
+            status, answer = get("/engines/openai/models")
+            self.assertEqual([(m["id"], m["installed"]) for m in answer["models"]], [("served-model", True)])
+            self.assertEqual(get("/engines/openai/models/search?q=x")[1]["models"], [])
+            status, answer = V.call("POST", "/api/v1/engines/openai/models/downloads", V.OWNER, {"ref": "x", "confirm": True})
+        self.assertEqual((status, answer["error"]["code"]), (400, "action_impossible"))
+        self.assertEqual(get("/engines/inconnu/models")[0], 404)
+
+
+if __name__ == "__main__":
+    unittest.main()

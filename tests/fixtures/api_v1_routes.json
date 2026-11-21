@@ -391,6 +391,36 @@
  },
  {
   "method": "GET",
+  "path": "/api/v1/engines/{id}/models",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/engines/{id}/models/downloads",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/engines/{id}/models/recommended",
+  "right": "session"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/engines/{id}/models/search",
+  "right": "session"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/engines/{id}/models/variants",
+  "right": "session"
+ },
+ {
+  "method": "DELETE",
+  "path": "/api/v1/engines/{id}/models/{name}",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
   "path": "/api/v1/engines/{id}/settings",
   "right": "session"
  },

@@ -1,6 +1,6 @@
 # ADR 0020 — Every engine is installed, chosen and fed with models the same way
 
-Status: accepted by the maintainer on 2026-11-21 with the answers below. Stage 1 is done (see « Progress »); stage 2 is next.
+Status: accepted by the maintainer on 2026-11-21 with the answers below. Stages 1 and 2 are done (see « Progress »); stage 3 is next.
 
 ## Context
 
@@ -94,6 +94,18 @@ the same three parts. Every model offered either downloads or says why it cannot
   Strata still has none. The bench keeps its rule: Colibri, experimental, is not compared (`engine_bench.ENGINES_BENCH`).
 - **The grid of the LM Studio card** said « Lutin does not install this server »: true of the old shared card, false on its own card; it now says what
   its weaknesses already said (the official installer, not tried on a real installation).
+
+**Stage 2 (2026-11-21).** `src/lutin/model_sources.py`: one source per family (`OllamaSource`, `LlamaCppSource`, `ManagedSource`, `ExternalSource`) with the six
+operations, over the code that already knew each engine (`model_catalog` and `model_compat`, the library of ollama.com and `model_variants`, the search of Hugging
+Face of `llamacpp_engine`, `managed_models`). One entry for everything (`model_sources.entry`), with `download: {possible, reason}`: a model is downloadable unless it is
+installed, the engine cannot take it, the network is off or it does not fit, and the reason is given. Routes `GET /engines/{id}/models`, `…/recommended`, `…/search`,
+`…/variants`, `POST …/downloads`, `DELETE …/models/{name}`; the six lines of the contract fixture are added, none removed. Decisions made while coding:
+- **All the routes answer `409 not_chosen` for an engine that is not the one in use**, reads included: `agent.installer_modele` and `supprimer_modele` act on the engine in
+  use, and the page of stage 3 shows the engine in use only. Lifting this for reads is possible later without changing the shape.
+- **Ollama's library gives one entry per size** (`gemma3:4b`, `gemma3:12b`), so that every entry has a name to download; the precisions of a size are `variants`.
+- **llama.cpp offers the catalogue of Lutin** (Ollama tags that it downloads without Ollama, `telecharger_ollama`) **and Hugging Face** when words are written: a repository
+  has `has_variants` and is downloaded with a file as `revision`; a repository alone is refused with the reason.
+- **Delete and download are `configurator`**, stricter than the old `/models/{name}` (`session`): the page already hides them from who cannot configure.
 
 ## Answers of the maintainer (2026-11-21)
 

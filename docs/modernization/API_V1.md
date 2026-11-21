@@ -264,6 +264,16 @@ ok, errors, load_s, first_token_s, tokens_per_s, reading_tokens_per_s, ram_bytes
 `GET …/catalog?q=&order=recent|popular&community=1&page=`, `GET …/quantizations?repo=`, `POST …/check {scope: updates | new}` (session);
 `POST …/downloads {repo, revision?, confirm: true}` (configurator): 202, `409 offline`, `502 unreachable` when a catalogue cannot be read.
 
+**The models of any engine, in the same way** (ADR 0020, stage 2), with `{id}` any engine of `GET /engines`; `409 not_chosen` when it is not the engine in use:
+`GET /engines/{id}/models` (installed), `…/models/recommended` (what this machine runs well, the largest first, at most five), `…/models/search?q=&page=` (the
+catalogue of Lutin, then the library of the engine: ollama.com, Hugging Face, the catalogue of the server; `more` says whether another page follows),
+`…/models/variants?ref=` (the precisions of one model: quantisations, files) (session); `POST …/models/downloads {ref, revision?, confirm: true}` (202) and
+`DELETE …/models/{name}` (configurator). Every model, whatever the engine and the list, is one entry: `{id, name, revision, size_gb, approximate, fit: {level, text}
+| null, installed, in_use, summary, download: {possible, reason}, has_variants}`. `id` is the name to give to « download »; `revision` the precision to take with it;
+`download.reason` says why a model cannot be downloaded (too big for this machine, offline, a format the engine cannot read, already here). A server reached by its
+address (`openai`) lists the models it serves and downloads nothing (`400 action_impossible`). The families `/managed-servers/{id}/*` and `/engines/{id}/library*`
+do the same for some engines and are removed at stage 4.
+
 ## GitHub account
 
 `GET /github` (session): `{github: {configured, source: environment | settings}, offline}`, never the token. `PATCH /github` `{token}` ("" removes

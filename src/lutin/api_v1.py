@@ -29,6 +29,7 @@ from . import engines as _engines
 from . import engine_updates as _engine_updates
 from . import hardware as _hardware
 from . import health as _health
+from . import model_sources as _model_sources
 from . import approval_rules as _approval_rules
 from . import attachments as _pieces
 from . import claude_project as _claude_project
@@ -1452,6 +1453,99 @@ def managed_server_download(request):
     return 202, {"started": True}
 
 
+# ----------------------------------------------------------------------------------------------------- models of an engine
+# The models of any engine in the same way (ADR 0020, stage 2): what is installed, what this machine would run well, a search in the source of the engine,
+# the precisions of one model, a download, a removal. One shape for an entry (lutin.model_sources), whatever the engine: `{id, name, revision, size_gb,
+# approximate, fit, installed, in_use, summary, download: {possible, reason}, has_variants}`. They answer 409 `not_chosen` for an engine that is not the one in use.
+# The families `/managed-servers/{id}/*` and `/engines/{id}/library*` do the same for some engines, and stay until stage 4.
+def _source(request):
+    engine = _known_engine(request.params["id"])
+    return engine, _model_sources.source_of(engine)
+
+
+def _sourced(action):
+    """Runs an operation of a source: not the engine in use -> 409, a catalogue that cannot be read or an engine that refuses -> 502 / 400."""
+    try:
+        return action()
+    except _model_sources.NotChosen as refused:
+        raise ApiError(409, "not_chosen", str(refused)) from None
+    except _offline.OfflineError:
+        raise
+    except OSError as failed:
+        raise ApiError(502, "unreachable", str(failed)) from None
+
+
+@route("GET", "/engines/{id}/models", SESSION)
+def engine_models(request):
+    """The models installed with this engine: `{"engine", "models": [entry]}`."""
+    engine, source = _source(request)
+    return {"engine": engine.id, "models": _sourced(source.installed)}
+
+
+@route("GET", "/engines/{id}/models/recommended", SESSION)
+def engine_models_recommended(request):
+    """What this machine runs well with this engine, the largest first, at most five, each with the precision to take and its exact size. Can be empty
+    (nothing fits, the machine is not detected yet, or the engine manages its models itself)."""
+    engine, source = _source(request)
+    return {"engine": engine.id, "models": _sourced(source.recommended)}
+
+
+@route("GET", "/engines/{id}/models/search", SESSION)
+def engine_models_search(request):
+    """`?q=&page=1`: the models of the source of this engine (the catalogue of Lutin, then the library of the engine: ollama.com, Hugging Face), each judged for this
+    machine; `more` when another page follows. Without `q`, what the source offers first."""
+    engine, source = _source(request)
+    try:
+        page = max(1, int(request.query.get("page", "1")))
+    except ValueError:
+        raise ApiError(400, "invalid_request", _t("Valeur invalide pour « {} » (attendu : {}).").format("page", "1, 2…")) from None
+    found = _sourced(lambda: source.search(request.query.get("q", "")[:100], page))
+    return {"engine": engine.id, "models": found["models"], "more": found["more"]}
+
+
+@route("GET", "/engines/{id}/models/variants", SESSION)
+def engine_models_variants(request):
+    """`?ref=`: the precisions of one model (quantisations, files), each as an entry with its `revision`, size and `fit`. 400 for a model that has none to choose."""
+    engine, source = _source(request)
+    ref = request.query.get("ref", "")[:160]
+    if not ref:
+        raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("ref"))
+    try:
+        found = _sourced(lambda: source.variants(ref))
+    except ValueError as invalid:
+        raise ApiError(400, "invalid_request", str(invalid)) from None
+    return {"engine": engine.id, "ref": ref, "variants": found}
+
+
+@route("POST", "/engines/{id}/models/downloads", CONFIGURATOR)
+def engine_models_download(request):
+    """`{"ref", "revision"?, "confirm": true}`: downloads a model as a task of the engine in use (`GET /engines` follows it, and so does the bar at the top). Answers 202.
+    `confirm` is always needed: several gigabytes."""
+    body = request.body
+    if set(body) - {"ref", "revision", "confirm"} or not isinstance(body.get("ref"), str) or not body["ref"].strip():
+        raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("ref, revision, confirm"))
+    if body.get("confirm") is not True:
+        raise ApiError(400, "confirmation_required", _t("Ce téléchargement peut peser plusieurs Go : confirme pour le lancer."))
+    engine, source = _source(request)
+    _offline.require_online(_t("télécharger un modèle"))
+    try:
+        _sourced(lambda: source.download(body["ref"].strip()[:160], str(body.get("revision") or "").strip()[:80]))
+    except ValueError as invalid:
+        raise ApiError(400, "action_impossible", str(invalid)) from None
+    return 202, {"started": True, "engine": engine.id}
+
+
+@route("DELETE", "/engines/{id}/models/{name}", CONFIGURATOR)
+def engine_models_remove(request):
+    """Removes an installed model of the engine in use. The model in use may be removed: the answer says which one Lutin switched to (`current`)."""
+    engine, source = _source(request)
+    try:
+        _sourced(lambda: source.remove(request.params["name"]))
+    except ValueError as invalid:
+        raise ApiError(400, "invalid_request", str(invalid)) from None
+    return {"deleted": True, "engine": engine.id, "current": str(_m.reglages().get("modele") or "")}
+
+
 # ------------------------------------------------------------------------------------------------------------ measures
 # The bench of the models (lutin.bench: speed, then tools, code, French and instructions, each question kept with its result) and the comparison of the
 # engines on one model (lutin.engine_bench). One measure at a time: two would distort each other. Measuring a model is `session`, as on the old page;
@@ -1543,7 +1637,7 @@ def engines_comparison_start(request):
 # ----------------------------------------------------------------------------------------------------------- machine and guide
 # What the guided choice of a model needs (docs/modernization/GUIDED_SETUP.md): the machine in plain figures, the catalogue with a verdict for THIS machine, and a recommendation by use.
 # The verdicts come from model_fit and model_compat, never from the page; the editorial notes of the catalogue are estimates, not measures (its own warning, given back as `disclaimer`).
-FIT_LEVELS = {"ideal": "comfortable", "bien": "good", "limite": "tight", "trop_gros": "too_big"}
+FIT_LEVELS = _model_sources.FIT_LEVELS
 CAPABILITIES = {"outils": "tools", "reflexion": "thinking", "vision": "vision"}
 MACHINE_CLASSES = {"sans_gpu": "no_gpu", "petite": "small", "moyenne": "medium", "grande": "large", "tres_grande": "very_large"}
 RUNS_ON = {"gpu": "gpu", "partiel": "partial", "cpu": "cpu"}

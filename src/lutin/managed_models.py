@@ -53,6 +53,11 @@ def _judge(kind=""):
     return lambda gb: _fit.evaluer({"go": gb}, profile)
 
 
+def judge(kind):
+    """The verdict function of a server (a size in GB -> {niveau, texte}), for the model sources."""
+    return _judge(kind)
+
+
 def _context_size():
     """The conversation window Lutin asks TabbyAPI to reserve (the settings' num_ctx)."""
     try:
