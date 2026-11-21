@@ -55,6 +55,20 @@ class ManagedServers(unittest.TestCase):
             status, answer = V.call("GET", "/api/v1/managed-servers/lmstudio/quantizations?repo=lmstudio-community/Qwen3-8B-GGUF", V.DEVICE)
             self.assertEqual(answer["quantizations"], [{"revision": "Q4_K_M", "size_gb": 5.0, "fit": {"level": "good", "text": "Tient sur cette machine."}, "on_disk": True}])
 
+    def test_the_recommended_models_come_with_the_quantisation_to_take_and_the_exact_size(self):
+        self.chosen("exllamav3")
+        found = [{"id": "turboderp/Qwen3-27B-exl3", "nom": "Qwen3-27B-exl3", "revision": "5.0bpw", "go": 17.9, "adequation": FIT, "installe": False}]
+        with mock.patch.object(managed_models, "recommended", lambda kind: found):
+            status, answer = V.call("GET", "/api/v1/managed-servers/exllamav3/recommended", V.DEVICE)
+        self.assertEqual(status, 200, answer)
+        self.assertEqual(answer["models"], [{"id": "turboderp/Qwen3-27B-exl3", "name": "Qwen3-27B-exl3", "revision": "5.0bpw", "size_gb": 17.9,
+                                             "fit": {"level": "good", "text": "Tient sur cette machine."}, "on_disk": False}])
+        with mock.patch.object(managed_models, "recommended", side_effect=ValueError("Hugging Face ne répond pas")):
+            status, answer = V.call("GET", "/api/v1/managed-servers/exllamav3/recommended", V.DEVICE)
+        self.assertEqual((status, answer["error"]["code"]), (502, "unreachable"))
+        self.chosen("lmstudio")
+        self.assertEqual(V.call("GET", "/api/v1/managed-servers/exllamav3/recommended", V.DEVICE)[0], 409, "only the server in use")
+
     def test_a_check_for_updates_is_for_exllamav3_only(self):
         self.chosen("lmstudio")
         self.assertEqual(V.call("POST", "/api/v1/managed-servers/lmstudio/check", V.DEVICE, {"scope": "updates"})[0], 400)

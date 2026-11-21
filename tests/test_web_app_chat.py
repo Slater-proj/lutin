@@ -975,7 +975,7 @@ class Chat(unittest.TestCase):
         # registered before the patches, so it runs after they are undone (cleanups run last in, first out): the next test finds the real engine
         self.addCleanup(lambda: (p.evaluer("location.hash = '#/chat'"), reload()))
         for patch in (mock.patch.object(T.A, "moteur_actuel", lambda *args: Shown()), mock.patch.object(managed_models, "chosen", lambda kind, mo=None: kind == "lmstudio"),
-                      mock.patch.object(managed_models, "models", lambda kind, current: seen), mock.patch.object(managed_models, "catalog", lambda *args: found),
+                      mock.patch.object(managed_models, "models", lambda kind, current: seen), mock.patch.object(managed_models, "recommended", lambda kind: []), mock.patch.object(managed_models, "catalog", lambda *args: found),
                       mock.patch.object(managed_models, "quantizations", lambda kind, repo: [{"revision": "Q4_K_M", "go": 3.1, "adequation": fit, "installe": False},
                                                                                             {"revision": "Q8_0", "go": 5.4, "adequation": fit, "installe": False}]),
                       mock.patch.object(managed_models, "download", lambda *args: started.append(args)), mock.patch.dict(os.environ, {"LUTIN_HORS_LIGNE": ""})):
@@ -997,6 +997,49 @@ class Chat(unittest.TestCase):
         self.press("document.querySelector('.managed .quants .button.primary')")
         p.attendre("document.querySelector('.managed .notice').innerText.includes('Q4_K_M')")
         self.assertEqual(started, [("lmstudio", "lmstudio-community/Gemma-3-4B-GGUF", "Q4_K_M")])
+        self.assertEqual(p.erreurs, [])
+
+    def test_3wc_the_models_recommended_for_this_machine_are_listed_with_the_quantisation_and_downloaded_after_a_confirmation(self):
+        """Maintainer's request (2026-11-20): « I do not see which model would be best with this engine ». Hermetic like test_3w."""
+        p = self.page
+        from lutin import managed_models
+        real = T.A.moteur_actuel
+
+        class Shown:
+            id = "openai"
+
+            def __getattr__(self, name):
+                return getattr(real(), name)
+        fit = {"niveau": "ideal", "texte": "Tient avec une large marge."}
+        seen = {"modeles": [], "installe": True, "dossier": "C:/models", "actif": True, "maj": True, "nom": "ExLlamaV3", "statut": "", "demarrer": None}
+        advised = [{"id": "turboderp/Qwen3-27B-exl3", "nom": "Qwen3-27B-exl3", "revision": "5.0bpw", "go": 17.9, "adequation": fit, "installe": False},
+                   {"id": "turboderp/Qwen3-8B-exl3", "nom": "Qwen3-8B-exl3", "revision": "8.0bpw", "go": 9.5, "adequation": fit, "installe": True}]
+        started = []
+        reload = lambda: (p.evaluer("window.__old = true; location.reload()"), p.attendre("!window.__old && !!document.querySelector('.rail .version')"))
+        self.addCleanup(lambda: (p.evaluer("location.hash = '#/chat'"), reload()))
+        for patch in (mock.patch.object(T.A, "moteur_actuel", lambda *args: Shown()), mock.patch.object(managed_models, "chosen", lambda kind, mo=None: kind == "exllamav3"),
+                      mock.patch.object(managed_models, "models", lambda kind, current: seen), mock.patch.object(managed_models, "recommended", lambda kind: advised),
+                      mock.patch.object(managed_models, "download", lambda *args: started.append(args)), mock.patch.dict(os.environ, {"LUTIN_HORS_LIGNE": ""})):
+            patch.start()
+            self.addCleanup(patch.stop)
+        p.evaluer("location.hash = '#/models'")
+        reload()
+        p.attendre("document.querySelectorAll('.managed .cards .card').length === 2", 20)
+        text = p.evaluer("document.querySelector('.managed').innerText")
+        self.assertIn("Recommandés pour cette machine", text)
+        first = "document.querySelectorAll('.managed .cards .card')[0]"
+        self.assertIn("Qwen3-27B-exl3", p.evaluer(first + ".innerText"))
+        self.assertIn("5.0bpw", p.evaluer(first + ".innerText"), "the quantisation to take is said")
+        self.assertIn("17,9", p.evaluer(first + ".innerText"), "with its exact size")
+        self.assertIn("installé", p.evaluer("document.querySelectorAll('.managed .cards .card')[1].innerText").lower(), "what is already on disk is marked, not offered again")
+        self.press(first + ".querySelector('.button')")
+        p.attendre("!!document.querySelector('.managed .button.primary')")
+        self.assertEqual(started, [], "asking is not downloading")
+        if AXE.is_file():
+            self.axe("on the recommended models")
+        self.press("document.querySelector('.managed .button.primary')")
+        p.attendre("document.querySelector('.managed .notice').innerText.includes('5.0bpw')")
+        self.assertEqual(started, [("exllamav3", "turboderp/Qwen3-27B-exl3", "5.0bpw")])
         self.assertEqual(p.erreurs, [])
 
     def test_3wb_the_server_behind_the_openai_engine_is_chosen_and_its_catalogue_replaces_ollamas(self):
@@ -1021,7 +1064,7 @@ class Chat(unittest.TestCase):
             applied.append(data)
             server["kind"] = data.get("serveur", server["kind"])
         for patch in (mock.patch.object(T.A, "moteur_actuel", lambda *args: Shown()), mock.patch.object(managed_models, "chosen", lambda kind, mo=None: kind == server["kind"]),
-                      mock.patch.object(managed_models, "models", lambda kind, current: seen), mock.patch.object(managed_models, "catalog", lambda *args: {"suite": False, "modeles": []}),
+                      mock.patch.object(managed_models, "models", lambda kind, current: seen), mock.patch.object(managed_models, "recommended", lambda kind: []), mock.patch.object(managed_models, "catalog", lambda *args: {"suite": False, "modeles": []}),
                       mock.patch.object(llamacpp_engine, "vue_reglages", lambda engine: {"url": "", "cle_definie": False, "variante": "auto", "serveur": server["kind"]}),
                       mock.patch.object(llamacpp_engine, "apply_settings", apply), mock.patch.dict(os.environ, {"LUTIN_HORS_LIGNE": ""})):
             patch.start()

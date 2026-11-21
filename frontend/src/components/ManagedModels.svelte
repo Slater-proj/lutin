@@ -12,6 +12,7 @@
   type View = { server: string; name: string; installed: boolean; running: boolean; status: string; folder: string; can_check_updates: boolean; models: DiskModel[] };
   type Entry = { id: string; name: string; author: string; downloads: number; estimated_gb: number | null; fit: Fit; on_disk: string[]; direct: boolean };
   type Quant = { revision: string; size_gb: number | null; fit: Fit; on_disk: boolean };
+  type Recommended = { id: string; name: string; revision: string; size_gb: number | null; fit: Fit; on_disk: boolean };
 
   let { canConfigure, onchanged, onabsent }: { canConfigure: boolean; onchanged: () => void; onabsent?: () => void } = $props();
 
@@ -27,6 +28,8 @@
   let community = $state(false);
   let quants = $state<Record<string, Quant[]>>({});
   let proposals = $state<Entry[] | null>(null);
+  let recommended = $state<Recommended[] | null>(null); // null while it is looked for, [] when nothing fits or the catalogue cannot be read
+  let recommendedProblem = $state("");
   let updates = $state<{ name: string; repo: string; revision: string | null }[] | null>(null);
   let other = $state({ repo: "", revision: "" });
   let asking = $state(""); // the download or the deletion waiting for its second click
@@ -110,12 +113,24 @@
       onchanged();
     });
 
+  /** The models this machine runs well, with the quantisation to take: read apart from the rest, it asks the catalogue for exact sizes and can take a few seconds. */
+  async function loadRecommended(): Promise<void> {
+    recommendedProblem = "";
+    try {
+      recommended = (await api<{ models: Recommended[] }>("GET", base + "/recommended")).models;
+    } catch (cause) {
+      recommended = [];
+      recommendedProblem = explain(cause);
+    }
+  }
+
   onMount(() => {
     void (async () => {
       for (const candidate of KINDS) {
         try {
           view = await api<View>("GET", "/managed-servers/" + candidate + "/models");
           kind = candidate;
+          void loadRecommended();
           return;
         } catch {
           // not the server in use: the next one
@@ -191,6 +206,23 @@
         {#each proposals as entry (entry.id)}
           <li class="card"><p class="line"><strong>{entry.name}</strong>{@render fitTag(entry.fit)}<span class="muted">{t("olib.about", gb(entry.estimated_gb))}</span></p>
             {#if entry.direct}{@render confirmDownload("new:" + entry.id, entry.id, "", entry.estimated_gb)}{/if}</li>
+        {/each}
+      </ul>
+    {/if}
+
+    <h3>{t("managed.recommended")}</h3>
+    <p class="muted">{t("managed.recommended_help")}</p>
+    {#if recommended === null}
+      <p class="muted" role="status">{t("managed.recommended_loading")}</p>
+    {:else if recommendedProblem}
+      <p class="problem" role="alert">{recommendedProblem}</p>
+    {:else if recommended.length === 0}
+      <p class="muted">{t("managed.recommended_none")}</p>
+    {:else}
+      <ul class="cards">
+        {#each recommended as entry (entry.id)}
+          <li class="card"><p class="line"><strong>{entry.name}</strong>{@render fitTag(entry.fit)}<span class="muted">{entry.revision ? entry.revision + " · " : ""}{t("upkeep.size", gb(entry.size_gb))}</span></p>
+            {#if entry.on_disk}<span class="tag">{t("variants.installed")}</span>{:else}{@render confirmDownload("recommended:" + entry.id, entry.id, entry.revision, entry.size_gb)}{/if}</li>
         {/each}
       </ul>
     {/if}

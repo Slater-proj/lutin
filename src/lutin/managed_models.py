@@ -7,6 +7,8 @@ THIS machine (lutin.model_fit; Colibri judges for itself). Shared by the old pag
 The answers keep the shape of the old page (French keys); /api/v1 translates them. Every function raises NotChosen when that server is not the one in
 use, and ValueError (a message for the person) when the catalogue cannot be read.
 """
+import concurrent.futures
+
 from . import engines as _engines
 from . import exllamav3_catalog as _exl_cat
 from . import lmstudio_catalog as _lms_cat
@@ -110,6 +112,48 @@ def quantizations(kind, repo):
         x["adequation"] = judge(x["go"]) if x.get("go") else None
         x["installe"] = x["revision"] in on_disk
     return found
+
+
+RECOMMENDED = 5          # how many models the « recommended for this machine » list holds
+RECOMMENDED_CANDIDATES = 10          # how many of the most downloaded repositories are looked at (each costs a few requests for its exact sizes)
+GOOD = ("ideal", "bien")          # the verdicts of lutin.model_fit that mean « runs well here »
+
+
+def recommended(kind):
+    """The models this machine runs well, one line each with the quantisation to take: `[{id, nom, revision, go, adequation, installe}]`, the largest first, at most `RECOMMENDED`.
+    The rule, plainly: among the most downloaded repositories, keep those whose size judged here is not « too big », read their real quantisations (exact sizes), take the heaviest
+    quantisation that is judged « ideal » or « good », and list the repositories by that size: of two models that run well, the larger is the more capable. Colibri judges for itself.
+    Nothing is downloaded. ValueError (a message) when the catalogue cannot be read."""
+    mo = _require(kind)
+    installed, _, _, search, quants = _on_disk(kind, mo)
+    if kind == "colibri":
+        fitting = [m for m in colibri_catalog(mo, installed, "")["modeles"] if m["adequation"]["niveau"] in GOOD and not m["installes"]]
+        return [{"id": m["id"], "nom": m["nom"], "revision": "", "go": m["estimation_go"], "adequation": m["adequation"], "installe": False}
+                for m in sorted(fitting, key=lambda m: -(m["estimation_go"] or 0))[:RECOMMENDED]]
+    judge = _judge()
+    candidates = []
+    for m in search("", "populaire", False, 1)["modeles"][:RECOMMENDED_CANDIDATES * 2]:
+        verdict = judge(m["estimation_go"]) if m.get("estimation_go") else None
+        if verdict is not None and verdict["niveau"] != "trop_gros":
+            candidates.append(m)
+    candidates = sorted(candidates, key=lambda m: -m["estimation_go"])[:RECOMMENDED_CANDIDATES]
+    on_disk = {(x.get("depot", ""), x.get("revision") or "main") for x in installed}
+
+    def best(m):
+        try:
+            found = [q for q in quants(m["id"]) if q.get("go")]
+        except ValueError:
+            return None          # a repository that cannot be read is left out, the others still count
+        fitting = [(q, judge(q["go"])) for q in found]
+        fitting = [(q, v) for q, v in fitting if v is not None and v["niveau"] in GOOD]
+        if not fitting:
+            return None
+        q, v = max(fitting, key=lambda pair: pair[0]["go"])
+        return {"id": m["id"], "nom": m["nom"], "revision": q["revision"], "go": q["go"], "adequation": v, "installe": (m["id"], q["revision"]) in on_disk}
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
+        chosen_ones = [x for x in pool.map(best, candidates) if x]
+    return sorted(chosen_ones, key=lambda x: -x["go"])[:RECOMMENDED]
 
 
 def check(kind, scope):

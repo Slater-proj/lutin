@@ -696,6 +696,11 @@
  },
  {
   "method": "GET",
+  "path": "/api/v1/managed-servers/{id}/recommended",
+  "right": "session"
+ },
+ {
+  "method": "GET",
   "path": "/api/v1/mcp-catalog",
   "right": "session"
  },

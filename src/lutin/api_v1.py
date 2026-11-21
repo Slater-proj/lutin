@@ -1392,6 +1392,21 @@ def managed_server_quantizations(request):
     return {"quantizations": [{"revision": q["revision"], "size_gb": q.get("go"), "fit": _fit(q.get("adequation")), "on_disk": bool(q.get("installe"))} for q in found]}
 
 
+@route("GET", "/managed-servers/{id}/recommended", SESSION)
+def managed_server_recommended(request):
+    """The models this machine runs well, the page's « recommended for this machine »: `{"models": [{id, name, revision, size_gb, fit, on_disk}]}`, the largest first, at most five, each with the
+    quantisation to take (`revision`, empty for Colibri, which prepares a model by its id) and its exact size. Nothing is downloaded: the page asks `POST …/downloads` after a confirmation.
+    The list can be empty (nothing fits, or the machine is not detected yet). 502 when the catalogue cannot be read."""
+    managed, kind = _managed(request)
+    try:
+        found = managed.recommended(kind)
+    except _offline.OfflineError:
+        raise
+    except ValueError as failed:
+        raise ApiError(502, "unreachable", str(failed)) from None
+    return {"models": [{"id": item["id"], "name": item["nom"], "revision": item["revision"], "size_gb": item["go"], "fit": _fit(item["adequation"]), "on_disk": bool(item["installe"])} for item in found]}
+
+
 @route("POST", "/managed-servers/{id}/check", SESSION)
 def managed_server_check(request):
     """`{"scope": "updates" | "new"}`: the newer versions of what ExLlamaV3 downloaded (`updates`: [{name, repo, revision}]), or new models that fit
