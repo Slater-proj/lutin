@@ -92,6 +92,15 @@ class AvisUneSeuleFois(unittest.TestCase):
             self.assertTrue(agent.RE_MEMOIRE_VIDEO.search(texte), texte)
         self.assertFalse(agent.RE_MEMOIRE_VIDEO.search("Connection refused"))
 
+    def test_un_chargement_rate_pour_une_autre_raison_n_est_pas_dit_manque_de_memoire_video(self):
+        """Mainteneur, 2026-11-21 : le chat disait « la mémoire de la carte graphique ne suffit pas » d'un modèle que TabbyAPI n'avait pas chargé pour une
+        tout autre raison (son journal mal encodé ; le 10/11, un fichier tronqué). Les deux textes sont ceux du journal de Lutin."""
+        for texte in ('{"detail":"Model Muse-30B-exl3_5.00bpw failed to load: \'charmap\' codec can\'t encode character \'\\u2514\' in position 4: character maps to <undefined>"}',
+                      '{"detail":"Model Q-27B-exl3 failed to load: Tensor model.layers.20.mlp.gate_proj.trellis in E:\\\\m\\\\model-00001-of-00002.safetensors extends past end of file: needs 6512688458 bytes"}'):
+            self.assertFalse(agent.manque_de_memoire_video(texte), texte)
+        for texte in ('{"detail":"Model X failed to load: Insufficient VRAM in split for model and cache"}', "CUDA out of memory", "Failed to load model"):
+            self.assertTrue(agent.manque_de_memoire_video(texte), texte)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -151,6 +151,12 @@ def _estimer_avant_charge(r, emit):
         pass
 
 
+def manque_de_memoire_video(detail):
+    """Le moteur dit-il que le modèle ne tient pas dans la carte graphique ? Pas quand la suite du message donne une autre cause (un fichier tronqué, un journal
+    mal encodé) : on dirait alors à tort de prendre un modèle plus léger."""
+    return bool(RE_MEMOIRE_VIDEO.search(detail)) and not RE_AUTRE_CAUSE_DE_CHARGEMENT.search(detail)
+
+
 def _avertir_une_fois(modele, maintenant=time.time):
     t = maintenant()
     if t - AVERTIS_CARTE.get(modele, 0) < DELAI_AVERTISSEMENT_CARTE:
@@ -1199,6 +1205,8 @@ DITS = {"reduction": {}, "rappel": {}}          # id de conversation -> ce qui a
 PAS_DE_NOUVEL_AVIS = 6          # une réduction du contexte n'est redite que si elle a grossi d'au moins ça (résultats raccourcis + messages retirés)
 
 
+# Un modèle qui n'a pas pu se charger pour une raison qui n'est PAS la mémoire : « failed to load » est commun aux deux, la suite dit laquelle.
+RE_AUTRE_CAUSE_DE_CHARGEMENT = re.compile(r"codec\s+can't\s+(?:en|de)code|unicode(?:en|de)codeerror|extends\s+past\s+end\s+of\s+file|no\s+such\s+file|headertoolarge|incomplete\s+metadata", re.I)
 RE_MEMOIRE_VIDEO = re.compile(r"insufficient\s+vram|out\s+of\s+memory|cuda\s+out\s+of\s+memory|failed\s+to\s+load|not\s+enough\s+(?:gpu\s+)?memory|oom\b", re.I)
 
 
@@ -2107,7 +2115,7 @@ def _appeler_modele(conv, r, emit, ctx, stop, corps, msgs_base, outils, caps, pl
             else:
                 genre = ""
             nom_mo = nom_du_moteur(r)
-            if not _aptitudes.of(moteur_actuel(r)).spills_to_cpu and RE_MEMOIRE_VIDEO.search(detail):          # le modèle ne tient pas avec sa mémoire de conversation : le dire clairement, sans relancer pour rien
+            if not _aptitudes.of(moteur_actuel(r)).spills_to_cpu and manque_de_memoire_video(detail):          # le modèle ne tient pas avec sa mémoire de conversation : le dire clairement, sans relancer pour rien
                 emit({"type": "erreur", "texte": _t("{} n'a pas pu charger « {} » : la mémoire de la carte graphique ne suffit pas pour le modèle ET sa mémoire de conversation. Choisis une quantification plus légère (onglet Modèles), ou une fenêtre de contexte plus petite (Réglages > Conversation), puis redémarre {} (Réglages > Moteur). Détail : {}").format(nom_mo, r["modele"], nom_mo, detail[:160])})
                 break
             if not http and not isinstance(erreur, RuntimeError) and _m.AUTO_DEMARRAGE and tentative < 2 and not ctx.get("ollama_relance") and _aptitudes.of(moteur_actuel(r)).starts_on_demand:
