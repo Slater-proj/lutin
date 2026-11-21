@@ -2398,5 +2398,13 @@
 "Action impossible : Lutin ne gère pas ce serveur.": "Action impossible: Lutin does not manage this server.",
 "Lutin lance l'installeur officiel de LM Studio ; pas essayé sur une vraie installation.": "Lutin runs LM Studio's official installer; not tried on a real installation.",
 "Ce moteur n'a pas de serveur à choisir.": "This engine has no server to choose.",
-"Autre serveur (compatible OpenAI)": "Another server (OpenAI-compatible)"
+"Autre serveur (compatible OpenAI)": "Another server (OpenAI-compatible)",
+"Le moteur ou le service appelé ne répond pas ({}). Vérifie qu'il tourne (Modèles > Moteurs), puis réessaie.": "The engine or service called does not answer ({}). Check that it is running (Models > Engines), then try again.",
+"Erreur interne de Lutin : {}. Le détail est dans le journal.": "Internal error of Lutin: {}. The details are in the log.",
+"Ne tient pas avec ce moteur : tout doit tenir dans la carte graphique, environ {} Go avec {} jetons de conversation, et ta carte en a {} d'utilisables. Prends une quantification plus légère (moins de bpw) ou réduis la fenêtre de contexte (Réglages > Conversation).": "Does not fit with this engine: everything must fit in the graphics card, about {} GB with {} tokens of conversation, and your card has {} usable. Take a lighter quantisation (fewer bpw) or reduce the context window (Settings > Conversation).",
+"Tient dans la carte graphique, sans marge : environ {} Go avec {} jetons de conversation, sur {} d'utilisables. Ferme les autres programmes qui utilisent la carte.": "Fits in the graphics card, without margin: about {} GB with {} tokens of conversation, out of {} usable. Close the other programs that use the card.",
+"Très à l'aise sur ta carte graphique : environ {} Go avec {} jetons de conversation, sur {} d'utilisables.": "Very comfortable on your graphics card: about {} GB with {} tokens of conversation, out of {} usable.",
+"Tient dans ta carte graphique : environ {} Go avec {} jetons de conversation, sur {} d'utilisables.": "Fits in your graphics card: about {} GB with {} tokens of conversation, out of {} usable.",
+", par une autre machine appairée": ", through another paired machine",
+"\nTu tournes sur le moteur {}{}, modèle {}. Si on te le demande, c'est la réponse : ne le déduis pas du code ni des processus de la machine.": "\nYou run on the engine {}{}, model {}. If asked, this is the answer: do not deduce it from the code or the processes of the machine."
 }
