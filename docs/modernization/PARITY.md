@@ -39,10 +39,11 @@ switch; each line is ticked here when it is done, with its test.
     the Ollama library, the speed test outside the first launch, the model pages of Colibri, LM Studio and ExLlamaV3~~ — done:
     `GET /api/v1/models/proposals`, `POST /api/v1/models/check`, `POST …/proposals/{key}/applied`, `DELETE …/proposals/{key}`,
     `GET /api/v1/models/variants`, `GET /api/v1/models/library` (`tests/test_api_v1_model_upkeep.py`), `components/ModelProposals.svelte`,
-    `ModelVariants.svelte` and `OllamaLibrary.svelte` (test 3u); `GET`/`POST /api/v1/bench` and `/api/v1/engines/comparison`
+    `ModelVariants.svelte`, and the library of ollama.com in the Search tab of `EngineModels.svelte` since ADR 0020 (test 3u); `GET`/`POST /api/v1/bench` and `/api/v1/engines/comparison`
     (`tests/test_api_v1_bench.py`), the « Measures » tab with the speed test (`components/Measures.svelte`, test 3v);
     `/api/v1/managed-servers/{id}/models|catalog|quantizations|check|downloads` on `lutin.managed_models`, shared with the old page
-    (`tests/test_api_v1_managed_servers.py`), `components/ManagedModels.svelte` (test 3w).
+    (`tests/test_api_v1_managed_servers.py`); since ADR 0020 the page reads them through `/api/v1/engines/{id}/models*`
+    (`tests/test_api_v1_engine_models.py`), `components/EngineModels.svelte` (tests 3w, 3wc).
 11. ~~**Engine settings** (pinned version, ports, address and key of an OpenAI-compatible server, llama.cpp advanced and router, folders), engine
     measures, moving the models folder, calibration and load profile~~ — done: `GET`/`PATCH /api/v1/engines/{id}/settings` (on
     `llamacpp_engine.apply_settings`, shared with the old page), `/api/v1/engines/folder`, `/api/v1/engines/measures` and `POST …/{id}/measure`,

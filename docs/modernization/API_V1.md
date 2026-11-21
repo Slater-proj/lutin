@@ -267,10 +267,14 @@ ok, errors, load_s, first_token_s, tokens_per_s, reading_tokens_per_s, ram_bytes
 **The models of any engine, in the same way** (ADR 0020, stage 2), with `{id}` any engine of `GET /engines`; `409 not_chosen` when it is not the engine in use:
 `GET /engines/{id}/models` (installed), `…/models/recommended` (what this machine runs well, the largest first, at most five), `…/models/search?q=&page=` (the
 catalogue of Lutin, then the library of the engine: ollama.com, Hugging Face, the catalogue of the server; `more` says whether another page follows),
-`…/models/variants?ref=` (the precisions of one model: quantisations, files) (session); `POST …/models/downloads {ref, revision?, confirm: true}` (202) and
-`DELETE …/models/{name}` (configurator). Every model, whatever the engine and the list, is one entry: `{id, name, revision, size_gb, approximate, fit: {level, text}
-| null, installed, in_use, summary, download: {possible, reason}, has_variants}`. `id` is the name to give to « download »; `revision` the precision to take with it;
-`download.reason` says why a model cannot be downloaded (too big for this machine, offline, a format the engine cannot read, already here). A server reached by its
+`…/models/variants?ref=` (the precisions of one model: quantisations, files), `POST …/models/check {scope: updates | new}` (the newer versions of what ExLlamaV3
+downloaded, or new models that fit this machine, for the servers Lutin manages: `{models, errors}`; `400 action_impossible` for Ollama and llama.cpp, which have the
+proposals of `POST /models/check`) (session); `POST …/models/downloads {ref, revision?, confirm: true}` (202) and `DELETE …/models/{name}` (configurator). The search
+also reads `order=recent|popular` and `community=1` (ExLlamaV3, LM Studio) and `capability=tools|vision|thinking` (Ollama). A list whose catalogue cannot be read
+answers `502 unreachable`. Every model, whatever the engine and the list, is one entry: `{id, name, revision, size_gb, approximate, fit: {level, text}
+| null, installed, in_use, summary, download: {possible, reason}, has_variants, incomplete, removable}`. `id` is the name to give to « download »; `revision` the precision to take with it;
+`download.reason` says why a model cannot be downloaded (too big for this machine, offline, a format the engine cannot read, already here); `incomplete` is a
+download that stopped halfway; `removable` is false for a model Lutin did not put there (`DELETE` answers `400`) and for the models of a server reached by its address. A server reached by its
 address (`openai`) lists the models it serves and downloads nothing (`400 action_impossible`). The families `/managed-servers/{id}/*` and `/engines/{id}/library*`
 do the same for some engines and are removed at stage 4.
 

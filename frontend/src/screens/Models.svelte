@@ -1,44 +1,42 @@
 <script lang="ts">
-  // The Models screen: what is installed, which one Lutin uses, a download with its progress, and deleting a model.
+  // The Models screen: the models of the engine in use in three parts, the same for every engine (ADR 0020: Recommended, Search, Installed, drawn by
+  // EngineModels), the downloads of Ollama with their progress, the measures, the engines and the other machines.
   import { onMount } from "svelte";
   import Engines from "../components/Engines.svelte";
-  import EngineLibrary from "../components/EngineLibrary.svelte";
+  import EngineModels from "../components/EngineModels.svelte";
   import Machines from "../components/Machines.svelte";
   import ModelCatalog from "../components/ModelCatalog.svelte";
   import ModelGuide from "../components/ModelGuide.svelte";
   import ModelProposals from "../components/ModelProposals.svelte";
-  import ModelVariants from "../components/ModelVariants.svelte";
-  import OllamaLibrary from "../components/OllamaLibrary.svelte";
   import Measures from "../components/Measures.svelte";
-  import ManagedModels from "../components/ManagedModels.svelte";
-  import ModelCard from "../components/ModelCard.svelte";
-  import ModelHelp from "../components/ModelHelp.svelte";
   import { api, ApiError } from "../lib/api";
   import { formatBytes, percent } from "../lib/format";
-  import { language, t, type MessageKey } from "../lib/messages";
-  import type { CatalogModel } from "../lib/model_catalog";
+  import { language, t } from "../lib/messages";
   import type { Models, Status } from "../lib/types";
 
   let { status, onchanged }: { status: Status | null; onchanged: () => void } = $props();
-  // The servers Lutin installs and feeds with models itself, each an engine of its own (ADR 0020): their models are on their own page, not Ollama's catalogue.
-  const MANAGED: readonly string[] = ["exllamav3", "lmstudio", "colibri"];
+  // Ollama and llama.cpp share the catalogue of Lutin (Ollama tags, which llama.cpp downloads without Ollama): its guide, its families, a model by its name.
+  const CATALOGUE: readonly string[] = ["ollama", "llamacpp"];
 
   let models = $state<Models | null>(null);
   let problem = $state("");
   let name = $state("");
   let asking = $state(false);
   let refresh = $state(0); // bumped when a download starts: the engine cards are read again and show its progress
-  let tab = $state<"recommended" | "catalog" | "library" | "installed" | "measures" | "engines" | "machines" | "unset">("unset"); // chosen once the list is known: the guide when nothing is installed, the list otherwise
-  let unmanaged = $state(false); // ExLlamaV3, LM Studio or Colibri in use but its models cannot be read: no catalogue to offer
-  // read again each time the Catalogue opens: a server chosen meanwhile in the Engines tab has a catalogue
-  $effect(() => {
-    if (tab !== "catalog") unmanaged = false;
-  });
+  let tab = $state<"recommended" | "search" | "installed" | "measures" | "engines" | "machines" | "unset">("unset"); // chosen once the list is known: the recommended models when nothing is installed, the list otherwise
 
   const lang = language();
-  let precisions = $state(""); // the installed model whose other precisions are shown
-  let known = $state<Record<string, CatalogModel>>({}); // what the catalogue says of each installed model: its summary, how it fits here
+  const engine = $derived(status?.engine.id ?? "");
+  const engineName = $derived(status?.engine.name ?? engine);
+  const catalogue = $derived(CATALOGUE.includes(engine));
+  const canConfigure = $derived(!!status?.access.can_configure);
+  // the installed part is read again when the list of the engine changes (a download ended, a model was deleted elsewhere)
+  const installedKey = $derived(models ? models.current + "|" + models.models.map((model) => model.name).join(",") : "");
   const downloading = $derived(models?.downloads.some((download) => download.state === "downloading") ?? false);
+  const changed = (): void => {
+    void guarded(load);
+    onchanged();
+  };
 
   function explain(cause: unknown): string {
     if (cause instanceof ApiError) return cause.message || (cause.code === "unreachable" ? t("error.unreachable") : t("error.generic", cause.code));
@@ -80,20 +78,8 @@
     });
   }
 
-  async function remove(model: string): Promise<void> {
-    if (!confirm(t("models.delete_confirm", model))) return;
-    await guarded(async () => {
-      await api("DELETE", `/models/${encodeURIComponent(model)}`);
-      await load();
-      onchanged();
-    });
-  }
-
   onMount(() => {
     void guarded(load);
-    api<{ models: CatalogModel[] }>("GET", "/models/catalog?advanced=1")
-      .then((answer) => (known = Object.fromEntries(answer.models.map((model) => [model.id, model]))))
-      .catch(() => undefined); // without it, the installed models are shown by name only
     // While something downloads, the list is read again every second; otherwise it is left alone.
     const timer = setInterval(() => {
       if (downloading) void load().catch(() => undefined);
@@ -140,8 +126,7 @@
 
   <div class="tabs" role="group" aria-label={t("models.tabs")}>
     <button type="button" class:on={tab === "recommended"} aria-pressed={tab === "recommended"} onclick={() => (tab = "recommended")}>{t("models.tab_recommended")}</button>
-    <button type="button" class:on={tab === "catalog"} aria-pressed={tab === "catalog"} onclick={() => (tab = "catalog")}>{t("models.tab_catalog")}</button>
-    {#if status?.engine.id === "ollama"}<button type="button" class:on={tab === "library"} aria-pressed={tab === "library"} onclick={() => (tab = "library")}>{t("models.tab_library")}</button>{/if}
+    <button type="button" class:on={tab === "search"} aria-pressed={tab === "search"} onclick={() => (tab = "search")}>{t("models.tab_search")}</button>
     <button type="button" class:on={tab === "installed"} aria-pressed={tab === "installed"} onclick={() => (tab = "installed")}>{t("models.tab_installed")}</button>
     <button type="button" class:on={tab === "measures"} aria-pressed={tab === "measures"} onclick={() => (tab = "measures")}>{t("models.tab_measures")}</button>
     <button type="button" class:on={tab === "engines"} aria-pressed={tab === "engines"} onclick={() => (tab = "engines")}>{t("models.tab_engines")}</button>
@@ -149,74 +134,37 @@
   </div>
 
   {#if tab === "recommended"}
-    <ModelGuide onstarted={() => void guarded(load)} onuse={use} />
+    {#if catalogue}<ModelGuide onstarted={() => void guarded(load)} onuse={use} />{/if}
+    <EngineModels {engine} {engineName} part="recommended" {canConfigure} onchanged={changed} onstarted={() => void guarded(load)} />
   {:else if tab === "engines"}
     {#key refresh}
-      <Engines canConfigure={!!status?.access.can_configure} onchanged={() => { void guarded(load); onchanged(); }} />
+      <Engines {canConfigure} onchanged={changed} />
     {/key}
-    {#if status?.engine.id === "llamacpp"}
-      <EngineLibrary engine="llamacpp" onstarted={() => (refresh += 1)} />
-    {/if}
-  {:else if tab === "catalog"}
-    {#if MANAGED.includes(status?.engine.id ?? "")}
-      <!-- the server Lutin manages (ExLlamaV3, LM Studio, Colibri) has its own models: its catalogue, judged for this machine, not Ollama's -->
-      <ManagedModels canConfigure={!!status?.access.can_configure} onchanged={() => { void guarded(load); onchanged(); }} onabsent={() => (unmanaged = true)} />
-      {#if unmanaged}<p class="muted">{t("models.cat.unmanaged")}</p>{/if}
-    {:else if status?.engine.id === "openai"}
-      <!-- a server reached by its address manages its models itself -->
-      <p class="muted">{t("models.cat.unmanaged")}</p>
-    {:else}
-      <ModelHelp engine={status?.engine.id ?? ""} />
-      <ModelCatalog precisions={status?.engine.id === "ollama"} onstarted={() => void guarded(load)} />
-    {/if}
+  {:else if tab === "search"}
+    <EngineModels {engine} {engineName} part="search" {canConfigure} onchanged={changed} onstarted={() => { refresh += 1; void guarded(load); }}>
+      {#if catalogue}<ModelCatalog precisions={engine === "ollama"} onstarted={() => void guarded(load)} />{/if}
+    </EngineModels>
   {:else if tab === "measures"}
-    <Measures installed={models?.models.map((model) => model.name) ?? []} canConfigure={!!status?.access.can_configure} />
-  {:else if tab === "library"}
-    <OllamaLibrary onstarted={() => void guarded(load)} />
+    <Measures installed={models?.models.map((model) => model.name) ?? []} {canConfigure} />
   {:else if tab === "machines"}
-    <Machines onchanged={() => { void guarded(load); onchanged(); }} />
+    <Machines onchanged={changed} />
   {:else if tab === "installed"}
-  {#if MANAGED.includes(status?.engine.id ?? "")}<ManagedModels mode="installed" canConfigure={!!status?.access.can_configure} onchanged={() => { void guarded(load); onchanged(); }} />{:else}
-  <ModelProposals onchanged={() => { void guarded(load); onchanged(); }} />
-  <form class="add" onsubmit={install}>
-    <label for="model-name">{t("models.add_expert")}</label>
-    <div class="row">
-      <input id="model-name" type="text" placeholder="qwen3:8b" autocomplete="off" spellcheck="false" bind:value={name} />
-      <button type="submit" class="button primary" disabled={!name.trim() || asking}>{t("models.download")}</button>
-    </div>
-    <p class="help">{t("models.add_help")}</p>
-  </form>
-
-  <h2>{t("models.installed")}</h2>
-  {#if models && models.models.length === 0}
-    <p class="empty">{t("models.none")}</p>
-  {:else if models}
-    <ul class="cards">
-      {#each models.models as model (model.name)}
-        <!-- the same card as in every other list, for every engine (maintainer, 2026-11-21) -->
-        <ModelCard name={model.name} reference={model.name} sizeGb={model.size_bytes ? model.size_bytes / 1e9 : null} fit={known[model.name]?.fit ?? null} installed
-          inUse={model.name === models.current} engine={status?.engine.id ?? ""} summary={known[model.name]?.summary ?? ""}>
-          {#snippet actions()}
-            {#if model.name !== models?.current}<button type="button" class="button primary" onclick={() => use(model.name)}>{t("models.use")}</button>{/if}
-            {#if status?.engine.id === "ollama" && /^[\w.\-/]+:[\w.]+$/.test(model.name)}
-              <button type="button" class="button quiet" aria-expanded={precisions === model.name} onclick={() => (precisions = precisions === model.name ? "" : model.name)}>{t("variants.open")}<span class="visually-hidden"> {model.name}</span></button>
-            {/if}
-            <button type="button" class="button quiet danger" onclick={() => remove(model.name)}>{t("models.delete")}<span class="visually-hidden"> {model.name}</span></button>
-            {#if precisions === model.name}<div class="variants"><ModelVariants model={model.name} onstarted={() => void guarded(load)} /></div>{/if}
-          {/snippet}
-        </ModelCard>
-      {/each}
-    </ul>
-  {/if}
-  {/if}
+    {#if catalogue}
+      <ModelProposals onchanged={changed} />
+      <form class="add" onsubmit={install}>
+        <label for="model-name">{t("models.add_expert")}</label>
+        <div class="row">
+          <input id="model-name" type="text" placeholder="qwen3:8b" autocomplete="off" spellcheck="false" bind:value={name} />
+          <button type="submit" class="button primary" disabled={!name.trim() || asking}>{t("models.download")}</button>
+        </div>
+        <p class="help">{t("models.add_help")}</p>
+      </form>
+    {/if}
+    <EngineModels {engine} {engineName} part="installed" {canConfigure} {installedKey} onchanged={changed} onstarted={() => void guarded(load)} />
   {/if}
 </section>
 
 <style>
-  .variants {
-    flex-basis: 100%;
-  }
-
   .models {
     display: flex;
     flex-direction: column;
@@ -341,8 +289,7 @@
   }
 
   .help,
-  .muted,
-  .empty {
+  .muted {
     color: var(--color-text-muted);
     font-size: var(--text-sm);
   }

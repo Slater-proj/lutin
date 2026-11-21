@@ -396,6 +396,11 @@
  },
  {
   "method": "POST",
+  "path": "/api/v1/engines/{id}/models/check",
+  "right": "session"
+ },
+ {
+  "method": "POST",
   "path": "/api/v1/engines/{id}/models/downloads",
   "right": "configurator"
  },

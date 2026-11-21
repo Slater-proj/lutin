@@ -10,7 +10,7 @@ import test_api_v1 as V  # its temporary folders, its server and its callers (im
 from lutin import agent, engines, managed_models, model_compat, model_discovery, model_fit, model_sources, model_variants  # noqa: E402
 
 A = V.A
-ENTRY_KEYS = ["approximate", "download", "fit", "has_variants", "id", "in_use", "installed", "name", "revision", "size_gb", "summary"]
+ENTRY_KEYS = ["approximate", "download", "fit", "has_variants", "id", "in_use", "incomplete", "installed", "name", "removable", "revision", "size_gb", "summary"]
 TOO_BIG = {"niveau": "trop_gros", "texte": "Too big for this machine."}
 GOOD = {"niveau": "bien", "texte": "Fits."}
 
@@ -76,6 +76,20 @@ class Ollama(InUse):
         for model in answer["models"]:
             self.assertEqual(sorted(model), ENTRY_KEYS)
             self.assertEqual(sorted(model["download"]), ["possible", "reason"])
+
+    def test_the_search_keeps_the_order_and_the_capability_and_gives_a_model_once(self):
+        asked = []
+        library = {"modeles": [{"nom": "gemma3", "description": "Google's.", "tailles": ["4b"], "capacites": ["vision"], "maj": "", "telechargements": 9}], "suite": False}
+        catalogue = {"modeles": [{"id": "gemma3:4b", "nom": "Gemma 3", "phrase": "Sees images.", "go": 3.3, "capacites": ["vision"]},
+                                 {"id": "qwen3:8b", "nom": "Qwen 3", "phrase": "Writes.", "go": 5.2, "capacites": ["outils"]}]}
+        with (mock.patch.object(model_discovery, "search", lambda *a, **k: asked.append((a, k)) or library), mock.patch.dict(A._CATALOGUE, catalogue),
+              mock.patch.object(model_compat, "evaluate", lambda *a: {"compatible": True, "raisons": []}),
+              mock.patch.object(model_discovery, "evaluate_sizes", lambda models, judge: [dict(m, evaluations={}) for m in models])):
+            status, answer = get("/engines/ollama/models/search?order=popular&capability=vision")
+            self.assertEqual(status, 200, answer)
+            self.assertEqual([m["id"] for m in answer["models"]], ["gemma3:4b"], "the catalogue filtered by the capability, and ollama.com's gemma3:4b not twice")
+            self.assertEqual(asked, [(("", "popular", 1), {"categorie": "vision"})])
+            self.assertEqual(get("/engines/ollama/models/search?capability=flying")[1]["error"]["code"], "invalid_request")
 
     def test_the_precisions_of_a_model(self):
         found = {"defaut": None, "variantes": [{"id": "qwen3:8b-q4_K_M", "precision": "q4_K_M", "go": 5.0, "defaut": True}, {"id": "qwen3:8b-q8_0", "precision": "q8_0", "go": 8.7}]}
@@ -182,6 +196,57 @@ class Managed(InUse):
                 self.assertEqual((status, answer["error"]["code"]), (409, "not_chosen"), path)
         self.use("ollama")          # llama.cpp asked while Ollama is in use
         self.assertEqual(V.call("POST", "/api/v1/engines/llamacpp/models/downloads", V.OWNER, {"ref": "a:b", "confirm": True})[1]["error"]["code"], "not_chosen")
+
+
+    def test_an_incomplete_download_is_said_and_a_model_lutin_did_not_put_there_is_not_removed(self):
+        seen = {"modeles": [{"nom": "half", "depot": "a/half", "taille_go": 1.0, "incomplet": True},
+                            {"nom": "theirs", "chemin": "D:/theirs", "taille_go": 9.0, "supprimable": False}], "installe": True, "nom": "ExLlamaV3"}
+        removed = []
+        with mock.patch.object(managed_models, "models", lambda kind, current: seen), mock.patch.object(agent, "supprimer_modele", removed.append):
+            half, theirs = get("/engines/exllamav3/models")[1]["models"]
+            self.assertEqual((half["incomplete"], half["removable"]), (True, True))
+            self.assertEqual((theirs["incomplete"], theirs["removable"]), (False, False))
+            status, answer = V.call("DELETE", "/api/v1/engines/exllamav3/models/theirs", V.OWNER)
+            self.assertEqual((status, answer["error"]["code"], removed), (400, "invalid_request", []))
+            self.assertEqual(V.call("DELETE", "/api/v1/engines/exllamav3/models/half", V.OWNER)[0], 200)
+        self.assertEqual(removed, ["half"])
+
+    def test_the_search_keeps_its_order_and_the_other_authors(self):
+        asked = []
+        with mock.patch.object(managed_models, "catalog", lambda *args: asked.append(args) or {"suite": True, "modeles": []}):
+            status, answer = get("/engines/exllamav3/models/search?q=qwen&order=popular&community=1&page=2")
+            self.assertEqual((status, answer.get("more")), (200, True), answer)
+            self.assertEqual(get("/engines/exllamav3/models/search?order=sideways")[1]["error"]["code"], "invalid_request")
+        self.assertEqual(asked, [("exllamav3", "qwen", "populaire", True, 2)])
+
+    def test_a_catalogue_that_cannot_be_read_is_a_gateway_error_not_a_crash(self):
+        def unreadable(*args):
+            raise ValueError("Hugging Face does not answer.")
+        for name, path in (("catalog", "/models/search"), ("recommended", "/models/recommended"), ("models", "/models")):
+            with self.subTest(name), mock.patch.object(managed_models, name, unreadable):
+                status, answer = get("/engines/exllamav3" + path)
+                self.assertEqual((status, answer["error"]["code"], answer["error"]["message"]), (502, "unreachable", "Hugging Face does not answer."))
+
+    def test_newer_versions_and_new_models_are_looked_for_on_demand(self):
+        found = {"plus_recentes": [{"nom": "Qwen3-8B-exl3", "depot": "turboderp/Qwen3-8B-exl3", "revision": "4.0bpw"}], "erreurs": ["one repository did not answer"]}
+        new = {"propositions": [{"id": "turboderp/Gemma-exl3", "nom": "Gemma-exl3", "estimation_go": 9.0, "adequation": GOOD, "installes": [], "direct": False}]}
+        with mock.patch.object(managed_models, "check", lambda kind, scope: found if scope == "maj" else new):
+            status, answer = V.call("POST", "/api/v1/engines/exllamav3/models/check", V.OWNER, {"scope": "updates"})
+            self.assertEqual(status, 200, answer)
+            self.assertEqual([(m["id"], m["revision"]) for m in answer["models"]], [("turboderp/Qwen3-8B-exl3", "4.0bpw")])
+            self.assertEqual(answer["errors"], ["one repository did not answer"])
+            status, answer = V.call("POST", "/api/v1/engines/exllamav3/models/check", V.OWNER, {"scope": "new"})
+            self.assertEqual(([m["id"] for m in answer["models"]], answer["models"][0]["has_variants"], answer["errors"]), (["turboderp/Gemma-exl3"], True, []))
+            for model in answer["models"]:
+                self.assertEqual(sorted(model), ENTRY_KEYS)
+            self.assertEqual(V.call("POST", "/api/v1/engines/exllamav3/models/check", V.OWNER, {"scope": "sideways"})[1]["error"]["code"], "invalid_request")
+        with mock.patch.object(managed_models, "chosen", lambda kind: kind == "lmstudio"):
+            self.use("lmstudio")
+            status, answer = V.call("POST", "/api/v1/engines/lmstudio/models/check", V.OWNER, {"scope": "updates"})
+            self.assertEqual((status, answer["error"]["code"]), (400, "invalid_request"), "only ExLlamaV3 knows the newer versions of what it downloaded")
+        self.use("ollama")          # Ollama's models are kept current by the proposals (POST /models/check)
+        status, answer = V.call("POST", "/api/v1/engines/ollama/models/check", V.OWNER, {"scope": "new"})
+        self.assertEqual((status, answer["error"]["code"]), (400, "action_impossible"))
 
 
 class Address(InUse):

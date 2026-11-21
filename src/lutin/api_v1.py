@@ -1456,7 +1456,8 @@ def managed_server_download(request):
 # ----------------------------------------------------------------------------------------------------- models of an engine
 # The models of any engine in the same way (ADR 0020, stage 2): what is installed, what this machine would run well, a search in the source of the engine,
 # the precisions of one model, a download, a removal. One shape for an entry (lutin.model_sources), whatever the engine: `{id, name, revision, size_gb,
-# approximate, fit, installed, in_use, summary, download: {possible, reason}, has_variants}`. They answer 409 `not_chosen` for an engine that is not the one in use.
+# approximate, fit, installed, in_use, summary, download: {possible, reason}, has_variants, incomplete, removable}`. They answer 409 `not_chosen` for an engine that
+# is not the one in use.
 # The families `/managed-servers/{id}/*` and `/engines/{id}/library*` do the same for some engines, and stay until stage 4.
 def _source(request):
     engine = _known_engine(request.params["id"])
@@ -1475,11 +1476,19 @@ def _sourced(action):
         raise ApiError(502, "unreachable", str(failed)) from None
 
 
+def _source_list(action):
+    """A list read from the source: a catalogue that cannot be read (a ValueError with its message) -> 502, never a crash of the route."""
+    try:
+        return _sourced(action)
+    except ValueError as failed:
+        raise ApiError(502, "unreachable", str(failed)) from None
+
+
 @route("GET", "/engines/{id}/models", SESSION)
 def engine_models(request):
     """The models installed with this engine: `{"engine", "models": [entry]}`."""
     engine, source = _source(request)
-    return {"engine": engine.id, "models": _sourced(source.installed)}
+    return {"engine": engine.id, "models": _source_list(source.installed)}
 
 
 @route("GET", "/engines/{id}/models/recommended", SESSION)
@@ -1487,19 +1496,27 @@ def engine_models_recommended(request):
     """What this machine runs well with this engine, the largest first, at most five, each with the precision to take and its exact size. Can be empty
     (nothing fits, the machine is not detected yet, or the engine manages its models itself)."""
     engine, source = _source(request)
-    return {"engine": engine.id, "models": _sourced(source.recommended)}
+    return {"engine": engine.id, "models": _source_list(source.recommended)}
 
 
 @route("GET", "/engines/{id}/models/search", SESSION)
 def engine_models_search(request):
-    """`?q=&page=1`: the models of the source of this engine (the catalogue of Lutin, then the library of the engine: ollama.com, Hugging Face), each judged for this
-    machine; `more` when another page follows. Without `q`, what the source offers first."""
+    """`?q=&page=1&order=recent|popular&community=1&capability=tools|vision|thinking`: the models of the source of this engine (the catalogue of Lutin, then the library of the engine: ollama.com,
+    Hugging Face), each judged for this machine; `more` when another page follows. Without `q`, what the source offers first. `order` and `community` (all the
+    authors, not only the official ones) are read by the servers Lutin manages (ExLlamaV3, LM Studio); `capability` by Ollama (its catalogue and ollama.com)."""
     engine, source = _source(request)
+    query = request.query
     try:
-        page = max(1, int(request.query.get("page", "1")))
+        page = max(1, int(query.get("page", "1")))
     except ValueError:
         raise ApiError(400, "invalid_request", _t("Valeur invalide pour « {} » (attendu : {}).").format("page", "1, 2…")) from None
-    found = _sourced(lambda: source.search(request.query.get("q", "")[:100], page))
+    order = query.get("order", "recent")
+    if order not in _model_sources.ORDERS:
+        raise ApiError(400, "invalid_request", _t("Valeur invalide pour « {} » (attendu : {}).").format("order", ", ".join(_model_sources.ORDERS)))
+    capability = query.get("capability", "")
+    if capability and capability not in _model_sources.CAPABILITIES:
+        raise ApiError(400, "invalid_request", _t("Valeur invalide pour « {} » (attendu : {}).").format("capability", ", ".join(_model_sources.CAPABILITIES)))
+    found = _source_list(lambda: source.search(query.get("q", "")[:100], page, order, query.get("community") == "1", capability))
     return {"engine": engine.id, "models": found["models"], "more": found["more"]}
 
 
@@ -1515,6 +1532,24 @@ def engine_models_variants(request):
     except ValueError as invalid:
         raise ApiError(400, "invalid_request", str(invalid)) from None
     return {"engine": engine.id, "ref": ref, "variants": found}
+
+
+@route("POST", "/engines/{id}/models/check", SESSION)
+def engine_models_check(request):
+    """`{"scope": "updates" | "new"}`: the newer versions of what ExLlamaV3 downloaded, or new models that fit this machine (at most 8), asked now: `{"engine",
+    "models": [entry], "errors"}`. For the servers Lutin manages; Ollama and llama.cpp keep their models current with the proposals (`POST /models/check`): 400
+    `action_impossible`. 400 `invalid_request` for another scope, or « updates » on a server that cannot say them."""
+    engine, source = _source(request)
+    scope = str(request.body.get("scope") or "")
+    try:
+        found = _sourced(lambda: source.check(scope))
+    except LookupError:
+        raise ApiError(400, "invalid_request", _t("Valeur invalide pour « {} » (attendu : {}).").format("scope", "updates, new")) from None
+    except _model_sources.Unsupported as refused:
+        raise ApiError(400, "action_impossible", str(refused)) from None
+    except ValueError as failed:
+        raise ApiError(502, "unreachable", str(failed)) from None
+    return {"engine": engine.id, "models": found["models"], "errors": found["errors"]}
 
 
 @route("POST", "/engines/{id}/models/downloads", CONFIGURATOR)

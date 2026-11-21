@@ -2413,5 +2413,7 @@
 "Choisis une précision (un fichier) de ce dépôt.": "Choose a precision (a file) of this repository.",
 "{} n'est pas le moteur choisi.": "{} is not the engine in use.",
 "{} téléchargements": "{} downloads",
-"modèles d'Ollama": "Ollama models"
+"modèles d'Ollama": "Ollama models",
+"Ce moteur ne cherche pas ici les mises à jour de ses modèles.": "This engine does not look for the updates of its models here.",
+"Lutin n'a pas mis ce modèle ici : il ne le supprime pas.": "Lutin did not put this model here: it does not delete it."
 }

@@ -107,6 +107,20 @@ installed, the engine cannot take it, the network is off or it does not fit, and
   has `has_variants` and is downloaded with a file as `revision`; a repository alone is refused with the reason.
 - **Delete and download are `configurator`**, stricter than the old `/models/{name}` (`session`): the page already hides them from who cannot configure.
 
+**Stage 3 (2026-11-21).** `frontend/src/components/EngineModels.svelte` draws the three parts for whichever engine is in use, on `/engines/{id}/models*` only;
+the Models screen has the tabs Recommended, Search, Installed (then Measures, Engines, Machines). The Library tab, `OllamaLibrary`, `EngineLibrary` (under Engines
+for llama.cpp) and `ManagedModels` are gone. Decisions made while coding:
+- **What only Ollama and llama.cpp have stays around the page, not in the common entry**: the guide (Recommended), the proposals of the daily check and the form
+  « a model by its name » (Installed), and the catalogue of Lutin grouped by family with its roles and filters (`ModelCatalog`), shown in Search until words are
+  searched. They read routes that stay (`/models/recommendation`, `/models/proposals`, `/models/catalog`, `POST /models`); the search with words, the precisions,
+  the downloads and the removals go through the common routes.
+- **Nothing the old pages did is lost**, so the family grew where the page needed it: `POST …/models/check` (the newer versions of ExLlamaV3's models, new models
+  for the managed servers), `order` and `community` (managed servers) and `capability` (Ollama) on the search, `incomplete` and `removable` on the entry (a
+  download that stopped halfway; a model Lutin did not put there is not deleted, `400`), and `502` instead of a crash when a catalogue cannot be read. The
+  library of ollama.com no longer repeats a model the catalogue already listed.
+- **A removal waits for a second click on its card**, as in every list of models, instead of the browser's dialog.
+- **The page takes the engine's name from `/status`.** The browser tests that stand a fake engine for ExLlamaV3 or LM Studio give it that name.
+
 ## Answers of the maintainer (2026-11-21)
 
 1. **Incompatible engines folded** under « Other engines », with the reason on each. The engines that can run here are shown first.
