@@ -7,7 +7,9 @@ Lutin garde en interne le format d'Ollama (messages, outils, flux d'évènements
 Il ne sait rien de l'installation d'un serveur : voir llamacpp_engine.py. Aucune dépendance."""
 import json
 import re
+import socket
 import urllib.error
+import urllib.parse
 import urllib.request
 
 from . import engines
@@ -192,11 +194,26 @@ class MoteurOpenAI(engines.Moteur):
         req = urllib.request.Request(base + chemin, data=None if corps is None else json.dumps(corps).encode("utf-8"), headers=entetes, method="GET" if corps is None else "POST")
         return urllib.request.urlopen(req, timeout=delai)
 
+    def _ecoute(self):
+        """Faux si le serveur est sur cette machine et que personne n'écoute sur son port, vu en 0,3 s au plus. Sous Windows, une requête vers un port local
+        fermé n'échoue qu'au bout d'environ 2 s : la liste des moteurs en demande plusieurs par carte. Vrai pour une adresse distante (la requête dira)."""
+        base = self.adresse().rstrip("/")
+        if not engines.est_local(base):
+            return True
+        partie = urllib.parse.urlsplit(base)
+        try:
+            with socket.create_connection((partie.hostname, partie.port or (443 if partie.scheme == "https" else 80)), timeout=0.3):
+                return True
+        except OSError:
+            return False
+
     def _json(self, chemin, corps=None, delai=10):
         with self._requete(chemin, corps, delai) as r:
             return json.loads(r.read().decode("utf-8"))
 
     def actif(self):
+        if not self._ecoute():
+            return False
         try:
             self._json("/models", None, 3)
             return True
@@ -204,6 +221,8 @@ class MoteurOpenAI(engines.Moteur):
             return False
 
     def modeles(self):
+        if not self._ecoute():
+            return {"actif": False, "installes": [], "tailles": {}}
         try:
             donnees = self._json("/models", None, 5).get("data") or []
         except (urllib.error.URLError, OSError, ValueError):

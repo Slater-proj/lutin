@@ -101,6 +101,24 @@ class AvecUnServeur(unittest.TestCase):
         self.assertEqual(Absent().modeles(), {"actif": False, "installes": [], "tailles": {}})
         self.assertIsNone(Absent().en_memoire("x"))
 
+    def test_un_serveur_local_arrete_est_dit_inactif_tout_de_suite(self):
+        """CI Windows du 2026-11-21 : `/api/moteurs` dépassait 15 s. Sous Windows, joindre un port fermé de cette machine attend environ 2 s avant le refus,
+        et chaque carte (ExLlamaV3, LM Studio, Colibri) demande son serveur plusieurs fois. Un serveur local qui n'écoute pas est vu tout de suite."""
+        import socket
+        import time
+        libre = socket.socket()
+        libre.bind(("127.0.0.1", 0))
+        port = libre.getsockname()[1]
+        libre.close()          # un port qui vient d'être libéré : personne n'y écoute
+
+        class Arrete(Essai):
+            def adresse(self):
+                return "http://127.0.0.1:%d/v1" % port
+        debut = time.monotonic()
+        self.assertFalse(Arrete().actif())
+        self.assertFalse(Arrete().modeles()["actif"])
+        self.assertLess(time.monotonic() - debut, 1.0)
+
     def test_chat_d_un_coup(self):
         r = self.m.chat({"model": "qwen-test", "messages": [{"role": "user", "content": "Salut"}], "options": {"temperature": 0.1}}, 10)
         self.assertEqual(r["message"]["content"], "Bonjour")
