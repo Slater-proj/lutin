@@ -210,6 +210,8 @@
 "{} libres sur {}": "{} free of {}",
 "Mémoire + fichier d'échange": "Memory + page file",
 "Risque de plantage de Windows : libère de la mémoire, ou agrandis le fichier d'échange (Paramètres système avancés).": "Risk of a Windows crash: free some memory, or enlarge the page file (Advanced system settings).",
+"Le modèle chargé en occupe la plus grande partie (sous Windows, sa place sur la carte graphique y est comptée) : une demande n'en prend pas plus. Pour charger un autre modèle, Lutin déchargera d'abord celui-ci ; agrandir le fichier d'échange laisse plus de marge.": "The loaded model takes most of it (on Windows, its room on the graphics card is counted there too): a request takes no more. To load another model, Lutin unloads this one first; a larger page file leaves more room.",
+"La mémoire est trop pleine pour charger ce modèle : je décharge ce que les moteurs gardent en mémoire ({}).": "Memory is too full to load this model: I am unloading what the engines keep in memory ({}).",
 "Je ne peux pas lire la mémoire de ce PC.": "I cannot read this PC's memory.",
 "Mémoire vidéo ({})": "Video memory ({})",
 "{} libres sur {} ; modèle chargé à {} % sur la carte": "{} free of {}; model loaded at {} % on the card",

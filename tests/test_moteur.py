@@ -2149,7 +2149,7 @@ class Assistant(unittest.TestCase):
 
     def test_garde_fous_avant_la_demande(self):
         from lutin import health
-        vrai_mesures, vrai_liberer, vraie_attente = A.mesures_systeme, A.liberer_vram, health.RESOURCE_WAIT_S
+        vrai_mesures, vrai_liberer, vraie_attente, vrais_retenus = A.mesures_systeme, A.liberer_vram, health.RESOURCE_WAIT_S, A.modeles_retenus
         health.RESOURCE_WAIT_S = 0                                   # ici on teste le refus immédiat ; l'attente a son propre test
         etat = {"ram": 10 * GO, "vram": 22 * GO}
         liberations = []
@@ -2160,10 +2160,11 @@ class Assistant(unittest.TestCase):
             m["vram"] = dict(m["vram"], libre=etat["vram"])
             return m
 
-        def fausse_liberation():
+        def fausse_liberation(**_):
             liberations.append(1)
             etat["vram"] = 22 * GO
             return {"ok": True, "message": "déchargé"}
+        A.modeles_retenus = lambda sauf=None: [p["name"] for p in PS]          # never the real servers of the machine that runs the tests
         A.GARDE_RESSOURCES_ACTIF, A.mesures_systeme, A.liberer_vram = True, fausses_mesures, fausse_liberation
         try:
             # mémoire vive presque épuisée : la demande est suspendue, mais gardée
@@ -2206,21 +2207,76 @@ class Assistant(unittest.TestCase):
             ev = chat("Salut", reponses=[[{"content": "Je passe"}]])
             self.assertEqual(texte_de(ev), "Je passe")
         finally:
-            A.GARDE_RESSOURCES_ACTIF, A.mesures_systeme, A.liberer_vram = False, vrai_mesures, vrai_liberer
+            A.GARDE_RESSOURCES_ACTIF, A.mesures_systeme, A.liberer_vram, A.modeles_retenus = False, vrai_mesures, vrai_liberer, vrais_retenus
             health.RESOURCE_WAIT_S = vraie_attente
             PS[:] = []
             post("/api/reglages", {"garde_ressources": True})
 
+    def test_un_modele_deja_charge_ne_bloque_pas_sur_la_memoire_et_un_autre_moteur_cede_la_place(self):
+        """Maintainer (2026-11-22): « Pas assez de mémoire pour l'instant (Mémoire + fichier d'échange : 2.5 Go disponibles ; Mémoire vidéo : 3.4 Go libres … le modèle choisi demande
+        environ 16.5 Go) », 15 minutes of waiting with a 4090 made for that model: Lutin's llama-server kept 20 GB of the card, and Windows counts that in the commit too."""
+        from lutin import health
+        vrai_mesures, vrai_liberer, vraie_attente, vrais_retenus = A.mesures_systeme, A.liberer_vram, health.RESOURCE_WAIT_S, A.modeles_retenus
+        health.RESOURCE_WAIT_S = 0
+        etat = {"engagement": 2 * GO, "vram": 3 * GO, "retenus": []}
+        appels = []
+
+        def fausses_mesures():
+            m = mesures_saines()
+            m["ram"] = dict(m["ram"], engagement_libre=etat["engagement"])
+            m["vram"] = dict(m["vram"], libre=etat["vram"])
+            return m
+
+        def fausse_liberation(**kw):
+            appels.append(kw)
+            etat.update(engagement=24 * GO, vram=23 * GO, retenus=[])
+            return {"ok": True, "message": "déchargé"}
+        A.modeles_retenus = lambda sauf=None: list(etat["retenus"])
+        A.GARDE_RESSOURCES_ACTIF, A.mesures_systeme, A.liberer_vram = True, fausses_mesures, fausse_liberation
+        try:
+            # the model is already loaded: the commit left is mostly its own, the request asks for nothing more
+            PS[:] = [{"name": "qwen3.8:27b", "size": 18 * GO, "size_vram": 18 * GO}]
+            ev = chat("Bonjour", reponses=[[{"content": "Déjà chargé, je réponds."}]])
+            self.assertEqual(texte_de(ev), "Déjà chargé, je réponds.")
+            self.assertFalse([e for e in ev if e["type"] == "erreur" or (e["type"] == "info" and "fichier d'échange" in e["texte"])], "neither held nor warned about its own reservation")
+            self.assertEqual(appels, [], "nothing to unload for a loaded model")
+            # not loaded, the card held by another engine of Lutin: it is unloaded first, then the request goes
+            PS[:] = []
+            etat["retenus"] = ["llama.cpp"]
+            ev = chat("Bonjour", reponses=[[{"content": "La place est revenue."}]])
+            self.assertEqual(texte_de(ev), "La place est revenue.")
+            self.assertEqual(appels, [{"tout": True, "sauf": "ollama"}], "every engine of Lutin gives its memory back, except the chosen one")
+            self.assertTrue(any(e["type"] == "info" and "llama.cpp" in e["texte"] for e in ev), "the person is told what is unloaded")
+            # not loaded and nothing to unload: still held, as before (the physical memory is really short)
+            etat.update(engagement=2 * GO, vram=3 * GO, retenus=[])
+            RECUES.clear()
+            ev = chat("Bonjour", reponses=[[{"content": "ne doit pas arriver"}]])
+            self.assertTrue(any(e["type"] == "erreur" and "Demande suspendue" in e["texte"] for e in ev))
+            self.assertEqual(RECUES, [])
+        finally:
+            A.GARDE_RESSOURCES_ACTIF, A.mesures_systeme, A.liberer_vram, A.modeles_retenus = False, vrai_mesures, vrai_liberer, vrais_retenus
+            health.RESOURCE_WAIT_S = vraie_attente
+            PS[:] = []
+
+    def test_la_memoire_et_le_fichier_d_echange_pris_par_le_modele_charge_ne_sont_pas_un_probleme(self):
+        r = A.reglages()
+        m = dict(mesures_saines(), ram={"total": 32 * GO, "libre": 16 * GO, "engagement_libre": 1 * GO})
+        ligne = next(i for i in A.assess_health(m, r, 0, {"taille": 0, "vram": 0})["items"] if i["id"] == "engagement")
+        self.assertEqual(ligne["niveau"], "attention", "the loaded model's own reservation: a warning, not « Problème »")
+        self.assertIn("modèle chargé", ligne["conseil"])
+        self.assertEqual(next(i for i in A.assess_health(m, r, 0, None)["items"] if i["id"] == "engagement")["niveau"], "critique", "nothing loaded: unchanged")
+
     def test_pas_assez_de_memoire_la_demande_est_gardee_et_reprise_quand_la_place_revient(self):
         """Mémoire insuffisante (un autre programme gourmand) : le message envoyé n'est pas perdu, Lutin attend et répond tout seul dès que la mémoire revient."""
         from lutin import health
-        vrai_mesures, vraie_attente, vrai_pas = A.mesures_systeme, health.RESOURCE_WAIT_S, health.WAIT_STEP_S
+        vrai_mesures, vraie_attente, vrai_pas, vrais_retenus = A.mesures_systeme, health.RESOURCE_WAIT_S, health.WAIT_STEP_S, A.modeles_retenus
         etat = {"ram": 1 * GO}
 
         def fausses_mesures():
             mesure = mesures_saines()
             mesure["ram"] = dict(mesure["ram"], libre=etat["ram"])
             return mesure
+        A.modeles_retenus = lambda sauf=None: []          # another program holds the memory, not an engine of Lutin
         A.GARDE_RESSOURCES_ACTIF, A.mesures_systeme = True, fausses_mesures
         health.RESOURCE_WAIT_S, health.WAIT_STEP_S = 20, 0.05
         try:
@@ -2239,7 +2295,7 @@ class Assistant(unittest.TestCase):
             ident = next(e for e in ev if e["type"] == "fin")["conversation"]["id"]
             self.assertEqual(A.conv_lire(ident)["messages"][-1]["content"], "Encore", "la demande est gardée")
         finally:
-            A.GARDE_RESSOURCES_ACTIF, A.mesures_systeme = False, vrai_mesures
+            A.GARDE_RESSOURCES_ACTIF, A.mesures_systeme, A.modeles_retenus = False, vrai_mesures, vrais_retenus
             health.RESOURCE_WAIT_S, health.WAIT_STEP_S = vraie_attente, vrai_pas
 
     def test_conversation_robuste(self):

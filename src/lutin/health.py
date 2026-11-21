@@ -170,7 +170,11 @@ def assess_health(m, r, besoin_modele=0, charge=None, partiel_possible=False):
         ajouter("ram", "Mémoire vive (RAM)", n, "{} libres sur {}".format(gb(libre), gb(m["ram"]["total"])), "" if n == "ok" else "Ferme des programmes (navigateur, ComfyUI...) avant de continuer : Windows ferme des applications quand la mémoire est épuisée.")
         eng = m["ram"]["engagement_libre"]
         n = threshold_level(eng, seuil_ram * 2, seuil_ram)
-        ajouter("engagement", "Mémoire + fichier d'échange", n, "{} disponibles".format(gb(eng)), "" if n == "ok" else "Risque de plantage de Windows : libère de la mémoire, ou agrandis le fichier d'échange (Paramètres système avancés).")
+        conseil = "" if n == "ok" else "Risque de plantage de Windows : libère de la mémoire, ou agrandis le fichier d'échange (Paramètres système avancés)."
+        if charge is not None and n == "critique":
+            # Windows counts the card's memory in the commit (llama-server: 20.8 GB on an RTX 4090, 21.9 GB of commit): the loaded model is most of it
+            n, conseil = "attention", "Le modèle chargé en occupe la plus grande partie (sous Windows, sa place sur la carte graphique y est comptée) : une demande n'en prend pas plus. Pour charger un autre modèle, Lutin déchargera d'abord celui-ci ; agrandir le fichier d'échange laisse plus de marge."
+        ajouter("engagement", "Mémoire + fichier d'échange", n, "{} disponibles".format(gb(eng)), conseil)
     else:
         ajouter("ram", "Mémoire vive (RAM)", "attention", "mesure impossible", "Je ne peux pas lire la mémoire de ce PC.")
     v = m.get("vram")
@@ -266,26 +270,28 @@ def _blockers(r, emit, conv_id=""):
     """Ce qui empêche de lancer le modèle en ce moment (liste d'éléments de santé « critiques »), après avoir tenté de décharger les modèles d'Ollama qui occupent la carte. Vide : on peut y aller."""
     if _model_on_another_machine(r):
         return []          # le modèle tourne sur une autre machine : rien ne manque ici
+    moteur = (r or {}).get("moteur") or "ollama"
     charge = _m.ps_modele(r["modele"])
     besoin = model_size(r["modele"], charge)
     sante = assess_health(_m.mesures_systeme(), r, besoin, charge, _repartit_seul(r) and not _unload_before_loading(r))
-    vram = next((i for i in sante["items"] if i["id"] == "vram"), None)
-    if vram and vram["niveau"] == "critique" and not charge:
-        try:                                                    # un autre modèle d'Ollama occupe peut-être la carte : on le décharge d'abord
-            if _m.ollama_json("/api/ps", None, 3).get("models"):
-                emit({"type": "info", "texte": "La carte graphique est trop pleine : je décharge les modèles d'Ollama restés en mémoire."})
-                _m.liberer_vram()
-                time.sleep(1.5)
-                forget_measures("vram")
-                sante = assess_health(_m.mesures_systeme(), r, besoin, charge, _repartit_seul(r) and not _unload_before_loading(r))
-        except (urllib.error.URLError, OSError, ValueError):
-            pass
+    if charge is None and any(i["niveau"] == "critique" and i["id"] in ("ram", "engagement", "vram") for i in sante["items"]):
+        # only Ollama's models were unloaded before: a llama.cpp model of 20 GB kept the card while ExLlamaV3 waited for room nothing would give back
+        retenus = _m.modeles_retenus(sauf=moteur)
+        if retenus:
+            emit({"type": "info", "texte": _t("La mémoire est trop pleine pour charger ce modèle : je décharge ce que les moteurs gardent en mémoire ({}).").format(", ".join(retenus))})
+            _m.liberer_vram(tout=True, sauf=moteur)
+            time.sleep(1.5)
+            forget_measures("vram")
+            sante = assess_health(_m.mesures_systeme(), r, besoin, charge, _repartit_seul(r) and not _unload_before_loading(r))
+    surveilles = ("ram", "vram", "comfy", "disque-donnees") if charge is not None else ("ram", "engagement", "vram", "comfy", "disque-donnees")
     for i in sante["items"]:
-        if i["id"] in ("ram", "engagement", "vram", "comfy", "disque-donnees") and ALERTS_SEEN.get((conv_id, i["id"]), "ok") != i["niveau"]:
+        if i["id"] in surveilles and ALERTS_SEEN.get((conv_id, i["id"]), "ok") != i["niveau"]:
             ALERTS_SEEN[(conv_id, i["id"])] = i["niveau"]
             if i["niveau"] == "attention":
                 emit({"type": "info", "texte": "⚠ {} : {}. {}".format(i["nom"], i["valeur"], i["conseil"]).strip()})
-    return [i for i in sante["items"] if i["niveau"] == "critique" and i["id"] in ("ram", "engagement", "vram", "disque-donnees")]
+    # a model already loaded by its engine asks for no more memory
+    bloquants = ("ram", "engagement", "vram", "disque-donnees") if charge is None else ("disque-donnees",)
+    return [i for i in sante["items"] if i["niveau"] == "critique" and i["id"] in bloquants]
 
 
 def check_before_request(r, emit, conv_id="", stop=None):

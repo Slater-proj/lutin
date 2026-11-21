@@ -69,6 +69,25 @@ class Liberation(unittest.TestCase):
         self.assertIn("ExLlamaV3", r["message"])
         self.assertIn("Déchargé", r["message"])
 
+    def test_le_moteur_choisi_garde_son_serveur_quand_les_autres_cedent_la_place(self):
+        """Before loading a model of ExLlamaV3, the guard frees what the other engines hold; ExLlamaV3's own server is the one the request needs, it is never stopped."""
+        ml.SERVEUR["proc"] = Fil(True)
+        with mock.patch.object(ml.MoteurServeurGere, "arreter_gere", lambda s: self.arrets.append(s.id) or True), self.sans_ollama():
+            r = _m.liberer_vram(tout=True, sauf="exllamav3")
+        self.assertEqual(self.arrets, ["llama.cpp", "lmstudio", "colibri"])
+        self.assertNotIn("ExLlamaV3", r["message"])
+
+    def test_ce_que_les_moteurs_gardent_en_memoire(self):
+        ml.SERVEUR["proc"] = Fil(True)
+        actifs = {"exllamav3", "colibri"}
+        with mock.patch.object(_m, "_ollama_ecoute", return_value=True), mock.patch.object(_m, "ollama_json", return_value={"models": [{"name": "qwen3:8b"}]}), \
+                mock.patch.object(ml.MoteurOpenAI, "actif", lambda s: s.id in actifs):
+            self.assertEqual(_m.modeles_retenus(sauf="exllamav3"), ["qwen3:8b", "llama.cpp", "Colibri"])
+        ml.SERVEUR["proc"] = None
+        with mock.patch.object(_m, "_ollama_ecoute", return_value=False), mock.patch.object(_m, "ollama_json", side_effect=AssertionError("Ollama is not asked when nobody listens")), \
+                mock.patch.object(ml.MoteurOpenAI, "actif", lambda s: False):
+            self.assertEqual(_m.modeles_retenus(), [])
+
     def test_ollama_et_llamacpp_ensemble(self):
         ml.SERVEUR["proc"] = Fil(True)
         envoyes = []

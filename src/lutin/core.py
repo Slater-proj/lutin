@@ -523,9 +523,9 @@ from .agent import (  # noqa: F401  (déplacé dans agent.py : moteur ré-export
 )
 
 
-def _liberer_autres_moteurs(tout):
-    """Arrête le serveur llama.cpp de Lutin s'il tourne (il redémarre tout seul au prochain message), et, si `tout`, le serveur compatible OpenAI que Lutin gère (ExLlamaV3, Colibri, LM Studio : à redémarrer à la main).
-    Rend les noms de ce qui a été libéré. Avant, « Libérer la VRAM » ne regardait qu'Ollama et répondait « aucun modèle en mémoire » avec un modèle llama.cpp de 22 Go chargé."""
+def _liberer_autres_moteurs(tout, sauf=None):
+    """Arrête le serveur llama.cpp de Lutin s'il tourne (il redémarre tout seul au prochain message), et, si `tout`, le serveur compatible OpenAI que Lutin gère (ExLlamaV3, Colibri, LM Studio : à redémarrer à la main),
+    sauf celui du moteur `sauf`. Rend les noms de ce qui a été libéré. Avant, « Libérer la VRAM » ne regardait qu'Ollama et répondait « aucun modèle en mémoire » avec un modèle llama.cpp de 22 Go chargé."""
     libres = []
     try:
         from . import llamacpp_engine as _ml, engines as _mo
@@ -533,7 +533,7 @@ def _liberer_autres_moteurs(tout):
         if llama is not None and proc is not None and proc.poll() is None:
             llama.arreter()
             libres.append("llama.cpp")
-        for gere in ([_mo.ENGINES.get(i) for i in _mo.MANAGED_SERVERS] if tout else []):          # ExLlamaV3, LM Studio, Colibri : chacun son moteur (ADR 0020)
+        for gere in ([_mo.ENGINES.get(i) for i in _mo.MANAGED_SERVERS if i != sauf] if tout else []):          # ExLlamaV3, LM Studio, Colibri : chacun son moteur (ADR 0020)
             if gere is not None and gere.arreter_gere():
                 libres.append(gere.nom)
     except Exception as e:  # noqa: BLE001  (libérer est un confort : jamais une erreur de plus)
@@ -541,9 +541,45 @@ def _liberer_autres_moteurs(tout):
     return libres
 
 
-def liberer_vram(tout=False):
-    """Décharge les modèles chargés en mémoire : ceux d'Ollama, le serveur llama.cpp de Lutin, et — avec `tout` (le bouton « Libérer la VRAM ») — le serveur ExLlamaV3, Colibri ou LM Studio qu'il gère."""
-    autres = _liberer_autres_moteurs(tout)
+def _ollama_ecoute():
+    """Faux si Ollama est sur cette machine et que personne n'écoute sur son port, vu en 0,3 s au plus (sous Windows, une requête vers un port fermé attend ~2 s)."""
+    partie = urllib.parse.urlsplit(OLLAMA)
+    if partie.hostname not in ("127.0.0.1", "localhost", "::1"):
+        return True
+    try:
+        with socket.create_connection((partie.hostname, partie.port or 11434), timeout=0.3):
+            return True
+    except OSError:
+        return False
+
+
+def modeles_retenus(sauf=None):
+    """Ce que les moteurs de Lutin gardent chargé sur cette machine, à afficher : les modèles d'Ollama, le llama-server de Lutin, et les serveurs ExLlamaV3, LM Studio ou Colibri
+    qui tournent, sauf celui du moteur `sauf` (la demande en cours en a besoin, et il ne redémarre pas tout seul). Ce que `liberer_vram(tout=True, sauf=…)` rendrait."""
+    noms = []
+    if _ollama_ecoute():
+        try:
+            noms += [m.get("name") or m.get("model", "?") for m in ollama_json("/api/ps", None, 3).get("models", [])]
+        except (urllib.error.URLError, OSError, ValueError):
+            pass
+    try:
+        from . import llamacpp_engine as _ml, engines as _mo
+        proc = _ml.SERVEUR.get("proc")
+        if proc is not None and proc.poll() is None:
+            noms.append("llama.cpp")
+        for i in _mo.MANAGED_SERVERS:
+            gere = _mo.ENGINES.get(i)
+            if i != sauf and gere is not None and _ml.MoteurOpenAI.actif(gere):
+                noms.append(gere.nom)
+    except Exception as e:  # noqa: BLE001  (une liste de confort : jamais une erreur de plus)
+        journaliser("Liste des modèles retenus impossible : {!r}".format(e))
+    return noms
+
+
+def liberer_vram(tout=False, sauf=None):
+    """Décharge les modèles chargés en mémoire : ceux d'Ollama, le serveur llama.cpp de Lutin, et — avec `tout` (le bouton « Libérer la VRAM ») — le serveur ExLlamaV3, Colibri ou LM Studio qu'il gère,
+    sauf celui du moteur `sauf`."""
+    autres = _liberer_autres_moteurs(tout, sauf)
     try:
         charges = ollama_json("/api/ps", None, 3).get("models", [])
         ollama_ok = True
