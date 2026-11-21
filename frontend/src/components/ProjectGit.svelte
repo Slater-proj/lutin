@@ -75,10 +75,16 @@
       {#if git.files.length}
         <fieldset disabled={busy}>
           <legend class="visually-hidden">{t("git.files")}</legend>
-          <label class="all"><input type="checkbox" checked={allChosen} indeterminate={!!chosen.length && !allChosen} onchange={toggleAll} /> {allChosen ? t("git.none") : t("git.all")}</label>
-          {#each git.files as file (file.path)}
-            <label><input type="checkbox" value={file.path} bind:group={chosen} /> <code>{file.path}</code> <span class="muted">{t(("git.state." + file.state) as MessageKey)}</span></label>
-          {/each}
+          <!-- a bar of its own above the list (maintainer, 2026-11-21: it looked like one more file) -->
+          <div class="all-bar">
+            <label class="all"><input type="checkbox" checked={allChosen} indeterminate={!!chosen.length && !allChosen} onchange={toggleAll} /> {allChosen ? t("git.none") : t("git.all")}</label>
+            <span class="muted count">{t("git.chosen", String(chosen.length), String(git.files.length))}</span>
+          </div>
+          <div class="files">
+            {#each git.files as file (file.path)}
+              <label><input type="checkbox" value={file.path} bind:group={chosen} /> <code>{file.path}</code> <span class="muted">{t(("git.state." + file.state) as MessageKey)}</span></label>
+            {/each}
+          </div>
         </fieldset>
         <div class="actions">
           <button type="button" class="button" disabled={busy || !chosen.length} onclick={propose}>{t("git.propose")}</button>
@@ -165,8 +171,37 @@
     overflow-wrap: anywhere;
   }
 
+  .all-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    background: var(--color-surface-raised);
+  }
+
   .all {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-height: var(--target);
     font-weight: 600;
+    color: var(--color-accent-text);
+    cursor: pointer;
+  }
+
+  .count {
+    font-size: var(--text-sm);
+  }
+
+  .files {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    padding-left: var(--space-3);
   }
 
   .field {
