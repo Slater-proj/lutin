@@ -109,6 +109,17 @@ class AvecUnServeur(unittest.TestCase):
         chemin, corps, auth = RECUES[0]
         self.assertEqual((chemin, corps["stream"], auth), ("/v1/chat/completions", False, "Bearer secret"))
 
+    def test_sans_reflexion_le_serveur_local_le_recoit_et_un_serveur_distant_rien_de_plus(self):
+        """Maintainer, 2026-11-21: « Propose a commit message » timed out with ExLlamaV3: `think: False` stayed in Lutin, the Qwen3 model thought for
+        minutes before a one-line answer. The servers of this machine read `chat_template_kwargs`; a distant one is sent nothing it might refuse."""
+        RECUES.clear()
+        self.m.chat({"model": "qwen-test", "messages": [{"role": "user", "content": "Salut"}], "think": False}, 10)
+        self.assertEqual(RECUES[-1][1]["chat_template_kwargs"], {"enable_thinking": False})
+        self.m.chat({"model": "qwen-test", "messages": [{"role": "user", "content": "Salut"}]}, 10)
+        self.assertNotIn("chat_template_kwargs", RECUES[-1][1], "reflection is the model's own choice unless Lutin says no")
+        distant = mo.vers_openai({"model": "m", "messages": [], "think": False}, gabarit=False)
+        self.assertNotIn("chat_template_kwargs", distant)
+
     def test_chat_en_flux_traduit_au_format_d_ollama(self):
         with self.m.chat_flux({"model": "qwen-test", "messages": [{"role": "user", "content": "Salut"}]}, 10) as flux:
             evenements = list(flux)

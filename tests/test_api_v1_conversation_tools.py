@@ -64,6 +64,17 @@ class ConversationTools(unittest.TestCase):
             self.assertEqual(V.call("POST", self.base + "/folders/open", V.OWNER, {"path": "C:/work"})[0], 200)
         self.assertEqual(opened, ["C:/work"])
 
+    def test_an_engine_that_does_not_answer_gets_an_answer_with_the_cause_not_a_dropped_connection(self):
+        """Maintainer, 2026-11-21: « Propose a message » answered « Lutin does not answer ». The engine had timed out: the exception was not one the
+        routes expected, the connection was closed without an answer, and the page could only say that Lutin was gone."""
+        import urllib.error
+        for failure, status, code in ((TimeoutError("timed out"), 502, "engine_unavailable"), (urllib.error.URLError("refused"), 502, "engine_unavailable"),
+                                      (RuntimeError("boom"), 500, "internal")):
+            with mock.patch.object(change_review, "git_message_of", mock.Mock(side_effect=failure)):
+                answer_status, answer = V.call("POST", "/api/v1/git/message", V.OWNER, {"files": ["a.py"]})
+            self.assertEqual((answer_status, answer["error"]["code"]), (status, code), answer)
+            self.assertTrue(answer["error"]["message"], "the cause is said")
+
     def test_git_reads_proposes_and_commits_from_this_machine_only(self):
         state = {"dispo": True, "branche": "main", "total": 2, "modifies": [{"chemin": "a.py", "etat": " M"}, {"chemin": "b.py", "etat": "??"}]}
         committed = []

@@ -17,6 +17,7 @@ import json
 import os
 import re
 import threading
+import traceback
 import urllib.error
 import urllib.parse
 from dataclasses import dataclass, field
@@ -226,6 +227,12 @@ def dispatch(handler, method):
         status, payload = 409, error("offline", str(offline))
     except ValueError as invalid:                          # the functions underneath say what is wrong with a ValueError written for the user
         status, payload = 400, error("invalid_request", str(invalid))
+    except (urllib.error.URLError, TimeoutError, ConnectionError) as gone:          # an engine or a service that does not answer (socket.timeout is TimeoutError)
+        _m.journaliser("{} {} : le moteur ou le service ne répond pas : {!r}".format(method, path, gone))
+        status, payload = 502, error("engine_unavailable", _t("Le moteur ou le service appelé ne répond pas ({}). Vérifie qu'il tourne (Modèles > Moteurs), puis réessaie.").format(str(gone)[:200]))
+    except Exception as bug:  # noqa: BLE001  (any other failure gets an answer that says it: a dropped connection made the page say « Lutin does not answer »)
+        _m.journaliser("{} {} : erreur interne : {}".format(method, path, "".join(traceback.format_exception(bug))[-2000:]))
+        status, payload = 500, error("internal", _t("Erreur interne de Lutin : {}. Le détail est dans le journal.").format(str(bug)[:200] or type(bug).__name__))
     if binary is not None:
         return handler._envoyer(200, binary.data, binary.content_type, binary.headers)
     if streamed is not None:                               # outside the `try`: once the first line is sent, no error answer can follow it
@@ -382,6 +389,8 @@ def models_loaded(request):
     answer["known"] = True
     if held:
         answer.update(loaded=True, size_bytes=int(held.get("taille") or 0), vram_bytes=int(held.get("vram") or 0))
+    elif _m.TOURS_ACTIFS:          # a turn of this machine answers with this engine: its model is in memory or being loaded; a busy server may just be late to say so
+        answer["loaded"] = True
     return answer
 
 

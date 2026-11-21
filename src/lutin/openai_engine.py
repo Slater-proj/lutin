@@ -28,7 +28,7 @@ def type_image(base64_texte):
     return "image/png"
 
 
-def vers_openai(corps):
+def vers_openai(corps, gabarit=False):
     """Le corps d'une demande de chat au format d'Ollama -> le corps de `/v1/chat/completions`."""
     messages, en_attente, compteur = [], [], 0
     for m in corps.get("messages") or []:
@@ -69,6 +69,10 @@ def vers_openai(corps):
         sortie["response_format"] = {"type": "json_object"}
     elif isinstance(corps.get("format"), dict):          # un schéma (format d'Ollama) : la forme d'OpenAI, que llama-server lit aussi (tools/server/README.md)
         sortie["response_format"] = {"type": "json_schema", "json_schema": {"name": "reponse", "schema": corps["format"]}}
+    if gabarit and corps.get("think") is False:
+        # « no reflection » (a commit message, a title, the scribe…): the servers Lutin runs here (llama-server, TabbyAPI, vLLM, LM Studio) read it from
+        # the variables of the model's template. Without it a Qwen3 model thought for minutes before a one-line answer, and the request timed out.
+        sortie["chat_template_kwargs"] = {"enable_thinking": False}
     if flux:
         sortie["stream_options"] = {"include_usage": True}
     return sortie
@@ -219,8 +223,12 @@ class MoteurOpenAI(engines.Moteur):
             raise ValueError(_t("Réponse d'embeddings inattendue."))
         return [d["embedding"] for d in donnees]
 
+    def _gabarit(self):
+        """A server on this machine takes `chat_template_kwargs`; a distant one may be a strict OpenAI-like API that refuses an unknown field."""
+        return engines.est_local(self.adresse())
+
     def chat(self, corps, delai=60):
-        return depuis_openai_complet(self._json("/chat/completions", vers_openai(dict(corps, stream=False)), delai))
+        return depuis_openai_complet(self._json("/chat/completions", vers_openai(dict(corps, stream=False), self._gabarit()), delai))
 
     def chat_flux(self, corps, delai=900):
-        return FluxOpenAI(self._requete("/chat/completions", vers_openai(dict(corps, stream=True)), delai, True))
+        return FluxOpenAI(self._requete("/chat/completions", vers_openai(dict(corps, stream=True), self._gabarit()), delai, True))
