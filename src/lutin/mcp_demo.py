@@ -7,7 +7,7 @@ import sys
 import time
 from pathlib import Path
 
-OUTILS = [
+TOOLS = [
     {"name": "heure", "description": "Donne la date et l'heure du serveur.", "inputSchema": {"type": "object", "properties": {}}, "annotations": {"readOnlyHint": True}},
     {"name": "additionner", "description": "Additionne deux nombres.", "inputSchema": {"type": "object", "properties": {"a": {"type": "number"}, "b": {"type": "number"}}, "required": ["a", "b"]},
      "annotations": {"readOnlyHint": True}},
@@ -38,7 +38,7 @@ def repondre(message):
     if methode == "ping":
         return {}
     if methode == "tools/list":
-        return {"tools": OUTILS}
+        return {"tools": TOOLS}
     if methode == "tools/call":
         p = message.get("params") or {}
         try:

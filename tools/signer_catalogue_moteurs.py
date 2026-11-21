@@ -14,15 +14,15 @@ from pathlib import Path
 RACINE = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(RACINE / "src"))
 
-from lutin import catalogue_moteurs as cm  # noqa: E402
+from lutin import engine_catalog as cm  # noqa: E402
 
 SOURCE = RACINE / "tools" / "moteurs.source.json"
 
 
 def signer_fichier(source, destination, cle, graine):
-    catalogue = cm.valider(json.loads(Path(source).read_text(encoding="utf-8")))
+    catalogue = cm.validate(json.loads(Path(source).read_text(encoding="utf-8")))
     enveloppe = cm.signer(catalogue, bytes.fromhex(Path(graine).read_text(encoding="utf-8").strip()), cle)
-    cm.verifier(enveloppe)          # on ne publie jamais un fichier que Lutin refuserait
+    cm.check(enveloppe)          # on ne publie jamais un fichier que Lutin refuserait
     Path(destination).write_text(json.dumps(enveloppe, ensure_ascii=False, indent=1) + "\n", encoding="utf-8", newline="\n")
     return enveloppe
 
@@ -35,11 +35,11 @@ def principal(argv=None):
     p.add_argument("--cle", default="2026a", help="identifiant de la clé (2026a ou 2026b)")
     p.add_argument("--graine", help="fichier de la clé privée (par défaut ~/.lutin-signature/cle-a.seed ou cle-b.seed)")
     p.add_argument("--source", default=str(SOURCE))
-    p.add_argument("--destination", default=str(cm.FICHIER_LIVRE))
+    p.add_argument("--destination", default=str(cm.SHIPPED_FILE))
     a = p.parse_args(argv)
     if a.verifier:
         try:
-            c = cm.lire_fichier(a.destination)
+            c = cm.read_file(a.destination)
         except (OSError, ValueError) as e:
             print("✘ catalogue refusé : {}".format(e))
             return 1

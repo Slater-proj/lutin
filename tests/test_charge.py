@@ -15,23 +15,23 @@ os.environ["LUTIN_CONFIG"] = str(_TEMP / "config" / "config.json")
 for d in ("projet", "donnees", "memoire", "config"):
     (_TEMP / d).mkdir(exist_ok=True)
 
-from lutin import catalogue, selection  # noqa: E402
-from lutin import moteur as A  # noqa: E402
-from lutin.machine import Gpu, Profil, est_integree  # noqa: E402
+from lutin import model_catalog, model_selection  # noqa: E402
+from lutin import core as A  # noqa: E402
+from lutin.hardware import Gpu, Profil, integrated_is  # noqa: E402
 
 
 class CartesIntegrees(unittest.TestCase):
     def test_reconnues_a_leur_nom(self):
         for nom, fab in (("Intel(R) UHD Graphics 770", "intel"), ("AMD Radeon(TM) Graphics", "amd"), ("AMD Radeon 780M Graphics", "amd"), ("Intel(R) Arc(TM) Graphics", "intel"),
                          ("Intel(R) Iris(R) Xe Graphics", "intel"), ("Intel(R) HD Graphics 630", "intel"), ("AMD Radeon(TM) Vega 8 Graphics", "amd")):
-            self.assertTrue(est_integree(Gpu(nom, fab, 4.0)), nom)
+            self.assertTrue(integrated_is(Gpu(nom, fab, 4.0)), nom)
 
     def test_les_vraies_cartes_ne_sont_pas_touchees(self):
         for nom, fab in (("NVIDIA GeForce RTX 4060", "nvidia"), ("AMD Radeon RX 7800 XT", "amd"), ("Intel(R) Arc(TM) A770 Graphics", "intel"), ("AMD Radeon RX 6800M", "amd")):
-            self.assertFalse(est_integree(Gpu(nom, fab, 8.0)), nom)
+            self.assertFalse(integrated_is(Gpu(nom, fab, 8.0)), nom)
 
     def test_une_carte_declaree_a_la_main_est_toujours_crue(self):
-        self.assertFalse(est_integree(Gpu("AMD Radeon 780M Graphics", "amd", 8.0, 0.0, "déclarée (LUTIN_GPU)")))
+        self.assertFalse(integrated_is(Gpu("AMD Radeon 780M Graphics", "amd", 8.0, 0.0, "déclarée (LUTIN_GPU)")))
 
     def test_pc_avec_carte_integree_et_32_go_se_choisit_comme_un_pc_sans_carte(self):
         p = Profil(systeme="windows", cpu="Ryzen 7 7840U", coeurs=8, ram_go=32.0, ram_libre_go=24.0, gpus=[Gpu("AMD Radeon(TM) Graphics", "amd", 4.0, 0.0, "registre")])
@@ -40,7 +40,7 @@ class CartesIntegrees(unittest.TestCase):
         self.assertEqual(p.budget_go(), 19.2, "60 % de la RAM, pas 85 % des 4 Go de la carte intégrée")
         self.assertEqual(p.classe(), "sans_gpu")
         self.assertIn("non utilisée", p.resume())
-        choix = selection.choisir(p, catalogue.charger())
+        choix = model_selection.choose(p, model_catalog.load())
         retenu = choix["polyvalent"]
         self.assertIsNotNone(retenu)
         self.assertGreater(retenu.modele["go"], 4, "un modèle bien plus gros que la mémoire de la carte intégrée")
@@ -74,7 +74,7 @@ class ReglagesDeCharge(unittest.TestCase):
         r = A.reglages()
         for temperature in (0, 0.2, 0.3, 0.4, r["temperature"]):
             self.assertEqual(A.options_modele(r, temperature)["num_thread"], 3)
-        source = (Path(__file__).resolve().parent.parent / "src" / "lutin" / "moteur.py").read_text(encoding="utf-8")
+        source = (Path(__file__).resolve().parent.parent / "src" / "lutin" / "core.py").read_text(encoding="utf-8")
         self.assertEqual(source.count('{"num_ctx": r["num_ctx"]'), 1, "toute requête passe par options_modele (la seule construction du dictionnaire) : un jeu d'options différent ferait recharger le modèle")
 
     def test_duree_de_garde(self):

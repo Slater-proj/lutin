@@ -15,11 +15,11 @@ for cle, valeur in {"LUTIN_RACINE": str(_TEMP / "projet"), "LUTIN_DONNEES": str(
     os.environ.setdefault(cle, valeur)
 (_TEMP / "projet").mkdir(exist_ok=True)
 
-from lutin import moteur as _m  # noqa: E402,F401  (avant les autres : import circulaire sinon)
-from lutin import catalogue_moteurs as cm  # noqa: E402
+from lutin import core as _m  # noqa: E402,F401  (avant les autres : import circulaire sinon)
+from lutin import engine_catalog as cm  # noqa: E402
 from lutin import exllamav3 as X  # noqa: E402
-from lutin import moteur_llamacpp as ml  # noqa: E402
-from lutin import moteurs, moteurs_maj  # noqa: E402
+from lutin import llamacpp_engine as ml  # noqa: E402
+from lutin import engines, engine_updates  # noqa: E402
 
 SHA = "a" * 40
 
@@ -93,7 +93,7 @@ class Base(unittest.TestCase):
         defauts = dict(dossiers=self.dossiers, port=5000, dire=lambda t: None, http=http(), ouvrir=lambda req, timeout: Reponse(archive()),
                        lancer=lambda cmd, **k: Faux(["Collecting torch\n", "Successfully installed\n"]), executer=self.faux_executer())
         defauts.update(kw)
-        return X.installer(**defauts)
+        return X.install(**defauts)
 
 
 class Installation(Base):
@@ -108,10 +108,10 @@ class Installation(Base):
     def test_installation_complete_epingle_le_commit_et_note_la_version_de_la_bibliotheque(self):
         r = self.installer()
         self.assertEqual(r, {"tabby": SHA, "lib": "1.6.6"})
-        self.assertEqual(X.installee(self.dossiers), {"tabby": SHA, "lib": "1.6.6"})
-        self.assertTrue((X.dossier_tabby(self.dossiers) / "main.py").is_file())
-        self.assertIn("model_dir:", (X.dossier_tabby(self.dossiers) / "config.yml").read_text(encoding="utf-8"))
-        self.assertTrue(X.dossier_modeles(self.dossiers).is_dir())
+        self.assertEqual(X.installed(self.dossiers), {"tabby": SHA, "lib": "1.6.6"})
+        self.assertTrue((X.folder_tabby(self.dossiers) / "main.py").is_file())
+        self.assertIn("model_dir:", (X.folder_tabby(self.dossiers) / "config.yml").read_text(encoding="utf-8"))
+        self.assertTrue(X.folder_models(self.dossiers).is_dir())
 
     def test_les_commandes_lancees_sont_celles_de_la_documentation_dans_l_environnement_dedie(self):
         cmds = []
@@ -119,13 +119,13 @@ class Installation(Base):
         cmd, cwd = cmds[0]
         self.assertEqual(cmd[1:], ["-m", "pip", "install", "-U", ".[cu12]"])
         self.assertEqual(Path(cmd[0]), X.python_venv(self.dossiers))
-        self.assertEqual(Path(cwd), X.dossier_tabby(self.dossiers))
+        self.assertEqual(Path(cwd), X.folder_tabby(self.dossiers))
 
     def test_un_echec_de_pip_une_archive_redirigee_ou_trop_petite_ou_un_python_trop_ancien_sont_refuses(self):
         with self.assertRaises(ValueError) as e:
             self.installer(lancer=lambda cmd, **k: Faux(["ERROR: boom\n"], 1))
         self.assertIn("boom", str(e.exception))
-        self.assertIsNone(X.installee(self.dossiers), "une installation ratée ne laisse pas croire que c'est installé")
+        self.assertIsNone(X.installed(self.dossiers), "une installation ratée ne laisse pas croire que c'est installé")
         with self.assertRaises(ValueError):
             self.installer(ouvrir=lambda req, timeout: Reponse(archive(), "https://exemple.org/x.zip"))
         with self.assertRaises(ValueError):
@@ -156,42 +156,54 @@ class Vie(Base):
             lances.append((cmd, k.get("cwd")))
             etat["ok"] = True
             return Faux(code=None, pid=777)
-        self.assertEqual(X.demarrer(6001, self.dossiers, lancer=lancer, repond_=lambda p: etat["ok"], dormir=lambda s: None), 6001)
+        self.assertEqual(X.start(6001, self.dossiers, lancer=lancer, repond_=lambda p: etat["ok"], dormir=lambda s: None), 6001)
         self.assertEqual([Path(lances[0][0][0]).name in ("python", "python.exe"), lances[0][0][1:]], [True, ["main.py"]])
-        self.assertIn("port: 6001", (X.dossier_tabby(self.dossiers) / "config.yml").read_text(encoding="utf-8"))
-        self.assertEqual((X.dossier(self.dossiers) / "tabby.pid").read_text(encoding="utf-8"), "777")
-        self.assertEqual(X.demarrer(6001, self.dossiers, lancer=lambda *a, **k: self.fail("déjà en marche"), repond_=lambda p: True), 6001)
+        self.assertIn("port: 6001", (X.folder_tabby(self.dossiers) / "config.yml").read_text(encoding="utf-8"))
+        self.assertEqual((X.folder(self.dossiers) / "tabby.pid").read_text(encoding="utf-8"), "777")
+        self.assertEqual(X.start(6001, self.dossiers, lancer=lambda *a, **k: self.fail("déjà en marche"), repond_=lambda p: True), 6001)
+
+    def test_tabbyapi_ecrit_son_journal_en_utf8(self):
+        """Mainteneur, 2026-11-21 : le chargement d'un modèle échouait sur « 'charmap' codec can't encode character '\\u2514' » : sous Windows, le journal de
+        TabbyAPI (un fichier) s'écrivait dans la page de code du système, et sa barre de chargement contient des caractères qu'elle n'a pas."""
+        self.installer()
+        vus = []
+
+        def lancer(cmd, **k):
+            vus.append(k.get("env") or {})
+            return Faux(code=None, pid=778)
+        X.start(6002, self.dossiers, lancer=lancer, repond_=lambda p: bool(vus), dormir=lambda s: None)
+        self.assertEqual((vus[0].get("PYTHONIOENCODING"), vus[0].get("PYTHONUTF8")), ("utf-8", "1"))
 
     def test_demarrer_sans_installation_ou_avec_un_programme_qui_s_arrete_donne_son_journal(self):
         with self.assertRaises(ValueError):
-            X.demarrer(5000, self.dossiers, repond_=lambda p: False)
+            X.start(5000, self.dossiers, repond_=lambda p: False)
         self.installer()
 
         def lancer(cmd, **k):
-            (X.dossier(self.dossiers) / "tabby.log").write_text("CUDA introuvable", encoding="utf-8")
+            (X.folder(self.dossiers) / "tabby.log").write_text("CUDA introuvable", encoding="utf-8")
             return Faux(code=1)
         with self.assertRaises(ValueError) as e:
-            X.demarrer(5000, self.dossiers, lancer=lancer, repond_=lambda p: False, dormir=lambda s: None)
+            X.start(5000, self.dossiers, lancer=lancer, repond_=lambda p: False, dormir=lambda s: None)
         self.assertIn("introuvable", str(e.exception)) if False else self.assertIn("arrêté", str(e.exception))
 
     def test_arreter_tue_l_arbre_de_processus_note_puis_oublie_le_numero(self):
         self.installer()
-        pid = X.dossier(self.dossiers) / "tabby.pid"
+        pid = X.folder(self.dossiers) / "tabby.pid"
         pid.write_text("555", encoding="utf-8")
         tues = []
-        self.assertTrue(X.arreter(self.dossiers, tuer=tues.append))
+        self.assertTrue(X.stop(self.dossiers, tuer=tues.append))
         self.assertEqual(tues, [555])
         self.assertFalse(pid.exists())
-        self.assertTrue(X.arreter(self.dossiers, tuer=lambda p: self.fail("rien à arrêter")))
+        self.assertTrue(X.stop(self.dossiers, tuer=lambda p: self.fail("rien à arrêter")))
 
     def test_desinstaller_garde_les_modeles(self):
         self.installer()
-        modele = X.dossier_modeles(self.dossiers) / "Qwen-exl3"
+        modele = X.folder_models(self.dossiers) / "Qwen-exl3"
         modele.mkdir(parents=True)
         (modele / "config.json").write_text("{}", encoding="utf-8")
-        X.desinstaller(self.dossiers)
-        self.assertIsNone(X.installee(self.dossiers))
-        self.assertFalse(X.dossier_tabby(self.dossiers).exists())
+        X.uninstall(self.dossiers)
+        self.assertIsNone(X.installed(self.dossiers))
+        self.assertFalse(X.folder_tabby(self.dossiers).exists())
         self.assertEqual([m["nom"] for m in X.modeles(self.dossiers)], ["Qwen-exl3"])
 
 
@@ -202,17 +214,27 @@ class Modeles(Base):
         lancer = lambda cmd, **k: (cmds.append(cmd), Faux(["10 %\n"]))[1]  # noqa: E731
         for mauvais in ("--help", "a b/c", "../x", "x;y/z", "solo", ""):
             with self.assertRaises(ValueError, msg=mauvais):
-                X.telecharger_modele(mauvais, "", self.dossiers, lancer=lancer)
+                X.download_model(mauvais, "", self.dossiers, lancer=lancer)
         with self.assertRaises(ValueError):
-            X.telecharger_modele("turboderp/Qwen-exl3", "--x", self.dossiers, lancer=lancer)
+            X.download_model("turboderp/Qwen-exl3", "--x", self.dossiers, lancer=lancer)
         self.assertEqual(cmds, [])
-        X.telecharger_modele("turboderp/Qwen2.5-VL-7B-Instruct-exl3", "4.0bpw", self.dossiers, lancer=lancer)
-        self.assertEqual(cmds[0][1:], ["main.py", "download", "turboderp/Qwen2.5-VL-7B-Instruct-exl3", "--revision", "4.0bpw"])
+        X.download_model("turboderp/Qwen2.5-VL-7B-Instruct-exl3", "4.0bpw", self.dossiers, lancer=lancer)
+        self.assertEqual(cmds[0][1:], ["main.py", "download", "turboderp/Qwen2.5-VL-7B-Instruct-exl3", "--folder-name", "Qwen2.5-VL-7B-Instruct-exl3_4.0bpw", "--revision", "4.0bpw"])
         with self.assertRaises(ValueError):
-            X.telecharger_modele("turboderp/Qwen-exl3", "", self.dossiers, lancer=lambda cmd, **k: Faux(["boom\n"], 2))
+            X.download_model("turboderp/Qwen-exl3", "", self.dossiers, lancer=lambda cmd, **k: Faux(["boom\n"], 2))
+
+    def test_telecharger_et_installer_gardent_le_port_et_la_fenetre_de_conversation_reglee(self):
+        """Mainteneur, 2026-11-21 : après un téléchargement, config.yml disait le port par défaut et 16 384 jetons, quand les réglages en voulaient 36 864 :
+        le serveur relancé ne réservait plus ce que Lutin croyait, et le jugement « tient sur la carte » ne parlait plus du même serveur."""
+        self.installer()
+        lancer = lambda cmd, **k: Faux(["10 %\n"])  # noqa: E731
+        X.download_model("turboderp/Qwen-exl3", "4.0bpw", self.dossiers, lancer=lancer, port=6003, contexte=36864)
+        config = (X.folder_tabby(self.dossiers) / "config.yml").read_text(encoding="utf-8")
+        self.assertIn("port: 6003", config)
+        self.assertIn("max_seq_len: 36864", config)
 
     def test_la_liste_ne_garde_que_les_dossiers_de_modele(self):
-        racine = X.dossier_modeles(self.dossiers)
+        racine = X.folder_models(self.dossiers)
         for nom, config in (("A-exl3", True), ("vide", False)):
             (racine / nom).mkdir(parents=True)
             if config:
@@ -240,14 +262,14 @@ class Versions(Base):
             def version(self):
                 return "1.6.6"
         with mock.patch.object(X, "derniere_version_lib", lambda *a, **k: "1.7.0"):
-            self.assertEqual(moteurs_maj._derniere_exllamav3(Fausse()), ("1.6.6", "1.7.0"))
-            self.assertTrue(moteurs_maj.plus_recente("1.7.0", "1.6.6"))
-            self.assertFalse(moteurs_maj.plus_recente("1.6.6", "1.6.6"))
+            self.assertEqual(engine_updates._latest_exllamav3(Fausse()), ("1.6.6", "1.7.0"))
+            self.assertTrue(engine_updates.latest("1.7.0", "1.6.6"))
+            self.assertFalse(engine_updates.latest("1.6.6", "1.6.6"))
 
         class Autre(Fausse):
             def exllamav3_choisi(self):
                 return False
-        self.assertIsNone(moteurs_maj._derniere_exllamav3(Autre()))
+        self.assertIsNone(engine_updates._latest_exllamav3(Autre()))
 
 
 class Compatibilite(unittest.TestCase):
@@ -258,79 +280,103 @@ class Compatibilite(unittest.TestCase):
 
     def test_systeme_docker_et_carte(self):
         f = self.fiche()
-        self.assertEqual(cm.compatibilite(f, "windows", False, ["nvidia"]), (True, ""))
-        self.assertEqual(cm.compatibilite(f, "linux", False, ["intel", "nvidia"]), (True, ""))
-        self.assertFalse(cm.compatibilite(f, "macos", False, ["apple"])[0])
-        self.assertFalse(cm.compatibilite(f, "linux", True, ["nvidia"])[0], "pas dans Docker")
-        self.assertFalse(cm.compatibilite(f, "windows", False, ["amd"])[0], "un fabricant connu et différent exclut")
-        self.assertFalse(cm.compatibilite(f, "windows", False, [])[0], "aucune carte détectée : pas proposé")
-        self.assertTrue(cm.compatibilite({"plateformes": ["windows", "linux", "macos"]}, "macos", True, [])[0], "sans exigence : toujours proposé")
+        self.assertEqual(cm.compatibility(f, "windows", False, ["nvidia"]), (True, ""))
+        self.assertEqual(cm.compatibility(f, "linux", False, ["intel", "nvidia"]), (True, ""))
+        self.assertFalse(cm.compatibility(f, "macos", False, ["apple"])[0])
+        self.assertFalse(cm.compatibility(f, "linux", True, ["nvidia"])[0], "pas dans Docker")
+        self.assertFalse(cm.compatibility(f, "windows", False, ["amd"])[0], "un fabricant connu et différent exclut")
+        self.assertFalse(cm.compatibility(f, "windows", False, [])[0], "aucune carte détectée : pas proposé")
+        self.assertTrue(cm.compatibility({"plateformes": ["windows", "linux", "macos"]}, "macos", True, [])[0], "sans exigence : toujours proposé")
 
     def test_le_catalogue_livre_filtre_exllamav3_et_garde_les_autres(self):
         fiches = {m["id"]: cm.vue(m) for m in cm.charger(None)["moteurs"] if m.get("type", "externe") == "externe"}
         self.assertIn("exllamav3", fiches)
         self.assertEqual(fiches["exllamav3"]["materiel"], ["nvidia"])
         self.assertFalse(fiches["exllamav3"]["docker"])
-        self.assertTrue(cm.compatibilite(fiches["lmstudio"], "linux", True, [])[0])
-        self.assertFalse(cm.compatibilite(fiches["exllamav3"], "linux", True, ["nvidia"])[0])
+        self.assertTrue(cm.compatibility(fiches["lmstudio"], "linux", True, [])[0])
+        self.assertFalse(cm.compatibility(fiches["exllamav3"], "linux", True, ["nvidia"])[0])
 
     def test_un_catalogue_avec_un_materiel_inconnu_est_refuse(self):
         base = {"id": "x", "nom": "X", "genre": "openai", "description": "d", "type": "externe"}
         for mauvais in ({"materiel": ["quantique"]}, {"materiel": []}, {"materiel": "nvidia"}, {"docker": "oui"}):
             with self.assertRaises(cm.ErreurCatalogue, msg=str(mauvais)):
-                cm.valider({"version": 1, "moteurs": [dict(base, **mauvais)]})
-        cm.valider({"version": 1, "moteurs": [dict(base, materiel=["nvidia"], docker=False)]})
+                cm.validate({"version": 1, "moteurs": [dict(base, **mauvais)]})
+        cm.validate({"version": 1, "moteurs": [dict(base, materiel=["nvidia"], docker=False)]})
 
 
 class Carte(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="lutin-exl-carte-"))
-        self.ancien = dict(moteurs.CONTEXTE)
-        moteurs.CONTEXTE["donnees"] = lambda: self.tmp
-        moteurs.CONTEXTE["hors_ligne"] = lambda: False
-        moteurs.CONTEXTE["en_docker"] = lambda: False
-        self.mo = moteurs.MOTEURS["openai"]
-        ml.regler_serveur("openai", {"serveur": "exllamav3"})
+        self.ancien = dict(engines.CONTEXT)
+        engines.CONTEXT["donnees"] = lambda: self.tmp
+        engines.CONTEXT["hors_ligne"] = lambda: False
+        engines.CONTEXT["en_docker"] = lambda: False
+        self.mo = engines.ENGINES["exllamav3"]          # an engine of its own since ADR 0020 (before: the « openai » engine with « serveur » set to it)
         self.addCleanup(self.remettre)
+        # The tasks ask whether a server already answers on the default port: a real TabbyAPI running on the machine must not change what is asserted.
+        patch = mock.patch.object(ml.MoteurOpenAI, "actif", lambda self: False)
+        patch.start()
+        self.addCleanup(patch.stop)
 
     def remettre(self):
-        ml.regler_serveur("openai", {"serveur": "", "port_exllamav3": 0})
-        moteurs.CONTEXTE.clear()
-        moteurs.CONTEXTE.update(self.ancien)
+        ml.regler_serveur("exllamav3", {"port_exllamav3": 0})
+        engines.CONTEXT.clear()
+        engines.CONTEXT.update(self.ancien)
 
     def profil(self, fabricant):
         return lambda: mock.Mock(gpus=[mock.Mock(fabricant=fabricant)])
 
+    def test_le_modele_charge_est_celui_que_tabbyapi_dit(self):
+        """TabbyAPI loads the model on the first request: until then nothing is in memory, and a stopped server holds nothing. The engine says so, the page shows it by the selector."""
+        self.assertTrue(self.mo.charge_connue())
+        with mock.patch.object(ml.MoteurExterne, "_json", return_value={"id": "Qwen-exl3"}):
+            self.assertEqual(self.mo.en_memoire("Qwen-exl3"), {"taille": 0, "vram": 0})
+            self.assertIsNone(self.mo.en_memoire("Autre-exl3"), "another model than the one loaded")
+        with mock.patch.object(ml.MoteurExterne, "_json", side_effect=OSError("refused")):
+            self.assertIsNone(self.mo.en_memoire("Qwen-exl3"), "a server that is stopped, or that holds no model (TabbyAPI answers by an error)")
+        self.assertFalse(engines.ENGINES["openai"].charge_connue(), "another OpenAI-compatible server does not say which model it holds")
+
     def test_l_installation_demande_une_carte_nvidia_et_pas_docker(self):
-        moteurs.CONTEXTE["profil"] = self.profil("nvidia")
+        engines.CONTEXT["profil"] = self.profil("nvidia")
         self.assertTrue(self.mo.actions()["installer"]["possible"])
-        moteurs.CONTEXTE["profil"] = self.profil("amd")
+        engines.CONTEXT["profil"] = self.profil("amd")
         a = self.mo.actions()["installer"]
         self.assertFalse(a["possible"])
         self.assertIn("NVIDIA", a["raison"])
-        moteurs.CONTEXTE["profil"] = self.profil("nvidia")
-        moteurs.CONTEXTE["en_docker"] = lambda: True
+        engines.CONTEXT["profil"] = self.profil("nvidia")
+        engines.CONTEXT["en_docker"] = lambda: True
         self.assertFalse(self.mo.actions()["installer"]["possible"])
 
     def test_adresse_locale_imposee_port_regle_et_statut(self):
         self.assertEqual(self.mo.adresse(), "http://127.0.0.1:5000/v1")
-        ml.regler_serveur("openai", {"port_exllamav3": 5555})
+        ml.regler_serveur("exllamav3", {"port_exllamav3": 5555})
         self.assertEqual(self.mo.adresse(), "http://127.0.0.1:5555/v1")
         for mauvais in (80, "abc", 99999):
             with self.assertRaises(Exception):
-                ml.regler_serveur("openai", {"port_exllamav3": mauvais})
+                ml.regler_serveur("exllamav3", {"port_exllamav3": mauvais})
         self.assertEqual(self.mo.statut()["detail"], "ExLlamaV3 n'est pas installé.")
+
+    def test_l_installation_et_le_telechargement_recoivent_la_fenetre_de_conversation_reglee(self):
+        """Le moteur passe à TabbyAPI la fenêtre des réglages à chaque écriture de config.yml, pas seulement au démarrage (mainteneur, 2026-11-21)."""
+        suivi = []
+        with mock.patch.object(X, "install", lambda dossiers, port, dire, annule=None, **k: (suivi.append(("installer", port, k.get("contexte"))), {"tabby": SHA, "lib": "1.6.6"})[1]), \
+                mock.patch.object(X, "start", lambda port, dossiers=None, **k: None), \
+                mock.patch.object(X, "download_model", lambda depot, rev, dossiers, dire, annule=None, **k: suivi.append(("modele", k.get("port"), k.get("contexte")))), \
+                mock.patch.object(self.mo, "_contexte", lambda: 36864):
+            for action in ("installer", "telecharger:turboderp/Qwen-exl3@4.0bpw"):
+                self.mo.faire(action, lambda *a: None)
+        self.assertEqual(suivi, [("installer", 5000, 36864), ("modele", 5000, 36864)])
 
     def test_les_taches_appellent_les_bonnes_fonctions_et_ne_telechargent_pas_hors_ligne(self):
         suivi = []
-        with mock.patch.object(X, "installer", lambda dossiers, port, dire, annule=None, **k: (suivi.append(("installer", port)), {"tabby": SHA, "lib": "1.6.6"})[1]), \
-                mock.patch.object(X, "demarrer", lambda port, dossiers=None, **k: suivi.append(("demarrer", port))), mock.patch.object(X, "arreter", lambda dossiers=None, **k: suivi.append("arreter")), \
-                mock.patch.object(X, "desinstaller", lambda dossiers=None: suivi.append("desinstaller")), \
-                mock.patch.object(X, "telecharger_modele", lambda depot, rev, dossiers, dire, annule=None, **k: suivi.append(("modele", depot, rev))):
+        with mock.patch.object(X, "install", lambda dossiers, port, dire, annule=None, **k: (suivi.append(("installer", port)), {"tabby": SHA, "lib": "1.6.6"})[1]), \
+                mock.patch.object(X, "start", lambda port, dossiers=None, **k: suivi.append(("demarrer", port))), mock.patch.object(X, "stop", lambda dossiers=None, **k: suivi.append("arreter")), \
+                mock.patch.object(X, "uninstall", lambda dossiers=None: suivi.append("desinstaller")), \
+                mock.patch.object(X, "download_model", lambda depot, rev, dossiers, dire, annule=None, **k: suivi.append(("modele", depot, rev))):
             for action in ("installer", "demarrer", "arreter", "desinstaller", "telecharger:turboderp/Qwen-exl3@4.0bpw"):
                 self.mo.faire(action, lambda *a: None)
         self.assertEqual(suivi, [("installer", 5000), ("demarrer", 5000), ("demarrer", 5000), "arreter", "desinstaller", ("modele", "turboderp/Qwen-exl3", "4.0bpw")], "installé, puis démarré tout de suite ; « Démarrer » démarre")
-        moteurs.CONTEXTE["hors_ligne"] = lambda: True
+        engines.CONTEXT["hors_ligne"] = lambda: True
         with self.assertRaises(Exception):
             self.mo.faire("installer", lambda *a: None)
 

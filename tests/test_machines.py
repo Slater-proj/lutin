@@ -19,9 +19,10 @@ for cle, valeur in {"LUTIN_RACINE": str(_TEMP / "projet"), "LUTIN_DONNEES": str(
 for d in ("projet", "donnees", "memoire"):
     (_TEMP / d).mkdir(exist_ok=True)
 
-from lutin import moteur as A  # noqa: E402
-from lutin import machines, moteurs  # noqa: E402
-from lutin import securite as S  # noqa: E402
+from lutin import core as A  # noqa: E402
+from lutin import machines, engines  # noqa: E402
+from lutin import security as S  # noqa: E402
+import quiet_node  # noqa: E402  (what a node reads of this computer, replaced)
 
 
 class FauxNoeud:
@@ -71,6 +72,7 @@ class FauxLocal:
 class Base(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="lutin-machines-t-"))
+        quiet_node.quiet(self)
         machines.DOSSIER = self.tmp
         machines.CODES.clear()
         machines.SONDES.clear()
@@ -80,7 +82,7 @@ class Base(unittest.TestCase):
         self.noeud = FauxNoeud()
         self.avant = (A.SECURITE, A.APPAREILS)
         A.SECURITE = S.Securite()
-        import lutin.serveur as srv
+        import lutin.server as srv
         self.p_moteur = mock.patch.object(srv._moteurs, "par_id", lambda ident: self.noeud)
         self.p_reglages = mock.patch.object(srv._m, "reglages", lambda: dict(A.REGLAGES_DEFAUT))
         self.p_moteur.start()
@@ -243,9 +245,10 @@ class Etats(Base):
         machines.CONVERSATIONS.update(t=machines.time.monotonic(), v=[{"machine": m["id"], "machine_nom": "x", "id": "a" * 8, "titre": "T", "maj": "", "messages": 1}])
         machines.DERNIER_ETAT[m["id"]] = "operationnel"
         machines.SONDES[m["id"]] = (machines.time.monotonic() - machines.FRAICHEUR_S - 1, {}, "")          # dernière réponse trop ancienne
-        self.assertEqual(machines.modeles_distants(), [])
-        self.assertEqual(machines.conversations_distantes(), [])
-        self.assertEqual(machines.hors_ligne(), [machines.trouver(m["id"])["nom"]])
+        with mock.patch.object(machines, "veiller", lambda attente=False: None):          # « sans personne pour la sonder » : aucune sonde ne part en arrière-plan pendant le constat
+            self.assertEqual(machines.modeles_distants(), [])
+            self.assertEqual(machines.conversations_distantes(), [])
+            self.assertEqual(machines.hors_ligne(), [machines.trouver(m["id"])["nom"]])
         machines.SONDES[m["id"]] = (machines.time.monotonic(), {}, "")          # elle répond de nouveau
         self.assertEqual(len(machines.modeles_distants()), 1)
         self.assertEqual(machines.hors_ligne(), [])
@@ -291,7 +294,7 @@ class Etats(Base):
         machines.signaler_panne(h)
 
     def test_la_version_du_nœud_dit_si_lutin_n_y_est_pas_a_jour(self):
-        with mock.patch("lutin.moteur.VERSION", "0.38.0"):
+        with mock.patch("lutin.core.VERSION", "0.38.0"):
             self.assertTrue(machines._maj_disponible("0.36.1"))
             self.assertFalse(machines._maj_disponible("0.38.0"))
             self.assertFalse(machines._maj_disponible("0.40.0"))
@@ -391,19 +394,44 @@ class Routage(Base):
 
 
 class Reglage(Base):
+    def test_un_fichier_tenu_un_instant_n_est_ni_lu_vide_ni_impossible_a_remplacer(self):
+        """Sous Windows, un fichier tenu un instant (une lecture hors du verrou pendant le remplacement, un antivirus) ne se lit pas ou ne se remplace
+        pas. _lire rendait alors le défaut ({}) à une modification qui réécrivait le fichier sans le reste ; _ecrire échouait (nom temporaire commun,
+        pas de nouvel essai). Les deux attendent un instant."""
+        machines._ecrire("noeud.json", {"partage": True, "nom": "atelier"})
+        vrai_lire, vrai_remplacer, refus = Path.read_text, os.replace, []
+
+        def tenu(chemin, *a, **k):
+            if chemin.name == "noeud.json" and len(refus) < 2:
+                refus.append(chemin)
+                raise PermissionError(13, "Access is denied", str(chemin))
+            return vrai_lire(chemin, *a, **k)
+        with mock.patch.object(Path, "read_text", tenu):
+            self.assertEqual(machines._lire("noeud.json", {}), {"partage": True, "nom": "atelier"})
+        essais = []
+
+        def remplacer(source, cible):
+            essais.append(cible)
+            if len(essais) < 3:
+                raise PermissionError(13, "Access is denied", str(cible))
+            return vrai_remplacer(source, cible)
+        with mock.patch.object(os, "replace", remplacer):
+            machines._ecrire("noeud.json", {"partage": False, "nom": "atelier"})
+        self.assertEqual(machines._lire("noeud.json", {}), {"partage": False, "nom": "atelier"})
+
     def test_choisir_une_machine_inconnue_est_refuse(self):
-        from lutin import donnees
+        from lutin import storage
         with self.assertRaises(ValueError):
-            donnees._enregistrer_reglages({"machine": "a" * 32})
+            storage._enregistrer_reglages({"machine": "a" * 32})
 
     def test_la_page_machines(self):
         self.jumeler()
-        import lutin.serveur as srv
+        import lutin.server as srv
         vue = srv.Gestionnaire._vue_machines()
         self.assertTrue(vue["noeud"]["actif"])
         self.assertEqual(vue["machines"][0]["etat"], "operationnel")
         self.assertNotIn("jeton", json.dumps(vue))
-        self.assertTrue(moteurs is not None)
+        self.assertTrue(engines is not None)
 
 
 class Demandes(Base):
@@ -535,7 +563,7 @@ class Relais(Base):
         def faux_tour(c, texte, emit, r, stop, depuis, **kw):
             recus.update(texte=texte, modele=r["modele"], machine=r.get("machine"), identite=kw.get("identite"))
             emit({"type": "fin", "conversation": {"id": c["id"], "titre": c["titre"]}})
-        with mock.patch("lutin.serveur._m.tour", faux_tour):
+        with mock.patch("lutin.server._m.tour", faux_tour):
             statut, corps = self.relais("POST", "/api/chat", {"message": "salut", "conversation": conv["id"], "modele": "pirate:70b", "machine": "a" * 32, "options": {"auto_commandes": True, "auto_ecriture": True}})
         self.assertEqual(statut, 200, corps)
         self.assertIn('"type": "fin"', corps)
@@ -558,7 +586,7 @@ class Relais(Base):
         def faux_tour(c, texte, emit, r, stop, depuis, **kw):
             emit({"type": "texte", "texte": "voilà"})
             emit({"type": "fin", "conversation": {"id": c["id"], "titre": c["titre"]}})
-        with mock.patch("lutin.serveur._m.tour", faux_tour):
+        with mock.patch("lutin.server._m.tour", faux_tour):
             statut, corps = self.http("POST", "/h/{}/api/chat".format(m["id"]), {"message": "salut", "conversation": conv["id"]}, {"X-Token": A.JETON})
         self.assertEqual(statut, 200, corps)
         evenements = [json.loads(l) for l in corps.splitlines() if l.strip()]

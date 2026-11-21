@@ -17,9 +17,10 @@ for cle, valeur in {"LUTIN_RACINE": str(_TEMP / "projet"), "LUTIN_DONNEES": str(
 for d in ("projet", "donnees", "memoire"):
     (_TEMP / d).mkdir(exist_ok=True)
 
-from lutin import moteur as _m  # noqa: E402,F401  (avant les autres : import circulaire sinon)
-from lutin import alimentation, machines  # noqa: E402
-from lutin import ressources_chargees as rc  # noqa: E402
+from lutin import core as _m  # noqa: E402,F401  (avant les autres : import circulaire sinon)
+from lutin import power, machines  # noqa: E402
+from lutin import loaded_resources as rc  # noqa: E402
+import quiet_node  # noqa: E402  (what a node reads of this computer, replaced)
 
 
 class Local:
@@ -46,6 +47,7 @@ def erreur_http(code):
 
 class PartageDuMoteur(unittest.TestCase):
     def setUp(self):
+        quiet_node.quiet(self)
         self.tmp = Path(tempfile.mkdtemp(prefix="lutin-partage-t-"))
         machines.DOSSIER = self.tmp
         machines.REGISTRE.update(t=0.0)
@@ -105,7 +107,7 @@ class DemarrageSansDoublon(unittest.TestCase):
             def supprimer(self, nom):
                 self.v.pop(nom, None)
         appels = []
-        alimentation.installer_demarrage(lanceur=lambda cmd, **kw: appels.append(cmd) or type("R", (), {"returncode": 0})(), systeme_actuel="windows", commande=["python", "-m", "lutin"], registre=Registre())
+        power.install_startup(lanceur=lambda cmd, **kw: appels.append(cmd) or type("R", (), {"returncode": 0})(), systeme_actuel="windows", commande=["python", "-m", "lutin"], registre=Registre())
         self.assertTrue(any(c[:2] == ["schtasks", "/Delete"] for c in appels), "sinon deux Lutin se lanceraient à l'ouverture de session")
 
     def test_un_second_lutin_sur_le_meme_port_s_arrete_avant_de_lancer_quoi_que_ce_soit(self):
@@ -116,7 +118,7 @@ class DemarrageSansDoublon(unittest.TestCase):
         avant = (sys.excepthook, threading.excepthook)
         lances = []
         try:
-            with mock.patch.object(_m, "PORT", port), mock.patch.object(_m, "boucle_surveillance", lambda: lances.append("surveillance")), mock.patch.object(_m, "purger_sauvegardes", lambda: lances.append("purge")):
+            with mock.patch.object(_m, "PORT", port), mock.patch.object(_m, "watch_loop", lambda: lances.append("surveillance")), mock.patch.object(_m, "purger_sauvegardes", lambda: lances.append("purge")):
                 with self.assertRaises(SystemExit) as e:
                     _m.principal()
         finally:
@@ -152,21 +154,21 @@ class GardeFousDesTests(unittest.TestCase):
     def test_le_vrai_registre_est_interdit_aux_tests(self):
         self.assertEqual(os.environ.get("LUTIN_TESTS"), "1")
         with self.assertRaises(OSError):
-            alimentation.RegistreWindows().ecrire("Lutin", "x")
+            power.WindowsRegistry().ecrire("Lutin", "x")
         with self.assertRaises(OSError):
-            alimentation.RegistreWindows().supprimer("Lutin")
+            power.WindowsRegistry().supprimer("Lutin")
 
     def test_l_installation_reelle_d_ollama_est_interdite_aux_tests(self):
         from lutin import ollama_client
         with self.assertRaises(ollama_client.ErreurOllama):
-            ollama_client.installer_windows(tempfile.mkdtemp(prefix="lutin-garde-"))
+            ollama_client.install_windows(tempfile.mkdtemp(prefix="lutin-garde-"))
 
 
 class JetonGitHub(unittest.TestCase):
     """Un jeton GITHUB_TOKEN (la CI) n'est envoyé qu'à l'API de GitHub, jamais ailleurs."""
 
     def test_le_jeton_ne_part_qu_vers_api_github(self):
-        from lutin import moteur_llamacpp as ml
+        from lutin import llamacpp_engine as ml
         vus = []
 
         class Reponse:
@@ -196,13 +198,13 @@ class ReconnaitreUnLlamaServer(unittest.TestCase):
 
     def test_un_programme_sans_chemin_connu_est_reconnu_par_sa_ligne_de_commande(self):
         dossier = Path(tempfile.mkdtemp(prefix="lutin-llama-cmd-")).resolve()
-        with mock.patch.object(rc, "dossiers_lutin", lambda: [dossier]):
-            self.assertFalse(rc._chez_lutin("", "llama-server -m x.gguf --port 8081"))
-            self.assertTrue(rc._chez_lutin("", 'llama-server --models-preset "{}/modeles.ini"'.format(str(dossier).replace("\\", "/"))))
-            self.assertTrue(rc._chez_lutin(str(dossier / "bin" / "llama-server.exe"), ""))
+        with mock.patch.object(rc, "folders_lutin", lambda: [dossier]):
+            self.assertFalse(rc._at_lutin("", "llama-server -m x.gguf --port 8081"))
+            self.assertTrue(rc._at_lutin("", 'llama-server --models-preset "{}/modeles.ini"'.format(str(dossier).replace("\\", "/"))))
+            self.assertTrue(rc._at_lutin(str(dossier / "bin" / "llama-server.exe"), ""))
 
     def test_la_ligne_de_commande_est_lue_dans_le_json_de_windows(self):
-        r = rc.analyser_instantane('[{"pid": 5, "ppid": 1, "nom": "llama-server.exe", "exe": null, "cmd": "llama-server --port 8081", "ram": 10, "vram": null}]')
+        r = rc.parse_snapshot('[{"pid": 5, "ppid": 1, "nom": "llama-server.exe", "exe": null, "cmd": "llama-server --port 8081", "ram": 10, "vram": null}]')
         self.assertEqual((r[0]["cmd"], r[0]["exe"]), ("llama-server --port 8081", ""))
 
 

@@ -27,9 +27,9 @@ for d in ("projet", "donnees", "memoire", "config"):
 CONFIG = _TEMP / "config" / "config.json"
 CONFIG.write_text(json.dumps({"schema": 1, "installe": True, "securite": {"niveau": "local", "port": 8777}, "emplacements": {"travail": str(_TEMP / "projet"), "travaux": [], "travail_actif": ""}}), encoding="utf-8")
 
-from lutin import acces, sauvegarde  # noqa: E402
-from lutin import moteur as A  # noqa: E402
-from lutin import securite as S  # noqa: E402
+from lutin import access, backup  # noqa: E402
+from lutin import core as A  # noqa: E402
+from lutin import security as S  # noqa: E402
 
 SERVEUR = ThreadingHTTPServer(("127.0.0.1", 0), A.Gestionnaire)
 threading.Thread(target=SERVEUR.serve_forever, daemon=True).start()
@@ -70,7 +70,7 @@ class Base(unittest.TestCase):
     def session(self):
         pin = A.APPAREILS.nouveau_pin()
         jeton = A.APPAREILS.appairer(pin, "Téléphone")
-        return {"Cookie": "{}={}".format(S.NOM_COOKIE, jeton)}
+        return {"Cookie": "{}={}".format(S.NAME_COOKIE, jeton)}
 
 
 class NiveauDAcces(Base):
@@ -192,7 +192,7 @@ class Documents(Base):
             lu = A.outil_lire("docs/panne.pdf")
             self.assertIn("Deuxième ligne : procédure", lu)
             self.assertIn("## Page 1", lu)
-            self.assertIn("Page 1", A.outil_rappeler("déploiement"))
+            self.assertIn("Page 1", A.recall_tool("déploiement"))
             with self.assertRaisesRegex(A.ErreurOutil, "illisible"):
                 A.outil_lire("docs/casse.docx")
             self.assertTrue(list((A.DONNEES / "cache-documents").glob("*.json")), "le texte extrait est gardé : pas de nouvelle lecture au prochain démarrage")
@@ -205,10 +205,10 @@ class ConseilPc(Base):
     def test_sans_mesure_puis_avec_mesure(self):
         from lutin import bench
         # le matériel et Ollama sont simulés : le test ne dépend pas de la machine (ni de son délai)
-        from lutin import machine
-        profil = machine.Profil(systeme="windows", cpu="test", coeurs=8, ram_go=16.0, ram_libre_go=10.0, gpus=[])
+        from lutin import hardware
+        profil = hardware.Profil(systeme="windows", cpu="test", coeurs=8, ram_go=16.0, ram_libre_go=10.0, gpus=[])
         ollama = {"actif": True, "installes": {}, "tailles": {}}
-        with mock.patch("lutin.machine.detecter", return_value=profil), mock.patch.object(A, "etat_ollama", return_value=ollama), mock.patch.object(A, "ps_modele", return_value=None):
+        with mock.patch("lutin.hardware.detecter", return_value=profil), mock.patch.object(A, "etat_ollama", return_value=ollama), mock.patch.object(A, "ps_modele", return_value=None):
             self._conseil_avec_mesure(bench)
 
     def _conseil_avec_mesure(self, bench):
@@ -219,7 +219,7 @@ class ConseilPc(Base):
         try:
             chemin.unlink(missing_ok=True)
             self.assertEqual(requete("GET", "/api/conseil"), (200, {"mesure": None, "conseil": []}))
-            bench.enregistrer(chemin, {"modele": modele, "date": "2026-10-26T10:00:00", "resultats": {"vitesse": {"tok_s": 4.0, "chargement_s": 3.0}}, "notes": [], "complet": False})
+            bench.save(chemin, {"modele": modele, "date": "2026-10-26T10:00:00", "resultats": {"vitesse": {"tok_s": 4.0, "chargement_s": 3.0}}, "notes": [], "complet": False})
             statut, r = requete("GET", "/api/conseil")
             self.assertEqual(statut, 200)
             self.assertEqual(r["mesure"]["tok_s"], 4.0)
@@ -248,16 +248,16 @@ class VerifierLutin(Base):
         super().tearDown()
 
     def test_version_plus_recente_annoncee(self):
-        from lutin import miseajour
-        with mock.patch.object(miseajour, "derniere_release_detail", return_value=("99.0.0", "https://example/roue.whl", "")):
+        from lutin import updates
+        with mock.patch.object(updates, "derniere_release_detail", return_value=("99.0.0", "https://example/roue.whl", "")):
             statut, r = requete("POST", "/api/verifier-lutin", corps={})
         self.assertEqual(statut, 200)
         self.assertEqual(r["derniere"], "99.0.0")
         self.assertEqual(r["nouvelle"]["version"], "99.0.0")
 
     def test_hors_ligne_le_dit(self):
-        from lutin import miseajour
-        with mock.patch.object(miseajour, "derniere_release_detail", return_value=(None, None, "api.github.com : timed out ; github.com : timed out")):
+        from lutin import updates
+        with mock.patch.object(updates, "derniere_release_detail", return_value=(None, None, "api.github.com : timed out ; github.com : timed out")):
             statut, r = requete("POST", "/api/verifier-lutin", corps={})
         self.assertEqual(statut, 503)
         self.assertIn("GitHub", r["erreur"])
@@ -267,12 +267,12 @@ class VerifierLutin(Base):
 class Planification(Base):
     def setUp(self):
         super().setUp()
-        from lutin import planifie
-        self.p = planifie
-        planifie.chemin().unlink(missing_ok=True)
+        from lutin import scheduled_tasks
+        self.p = scheduled_tasks
+        scheduled_tasks.path().unlink(missing_ok=True)
 
     def tearDown(self):
-        self.p.chemin().unlink(missing_ok=True)
+        self.p.path().unlink(missing_ok=True)
         super().tearDown()
 
     def test_ajout_validation_et_suppression(self):
@@ -291,14 +291,14 @@ class Planification(Base):
 
     def test_canaux_de_notification_par_l_api_sans_jamais_renvoyer_un_secret(self):
         from lutin import notifications
-        notifications.chemin().unlink(missing_ok=True)
+        notifications.path_of().unlink(missing_ok=True)
         statut, r = requete("POST", "/api/notifications-ajouter", corps={"nom": "Tel", "type": "gotify", "params": {"url": "http://h:8080", "jeton": "SECRET1"}})
         self.assertEqual(statut, 200)
         liste = requete("GET", "/api/notifications")[1]
         self.assertNotIn("SECRET1", json.dumps(liste))
         self.assertEqual([c["nom"] for c in liste["canaux"]], ["Tel"])
         self.assertEqual(requete("POST", "/api/notifications-ajouter", corps={"nom": "x", "type": "inconnu", "params": {}})[0], 400)
-        t = self.p.ajouter("Matin", "x", "08:00", [0], notifier=liste["canaux"][0]["id"])
+        t = self.p.add("Matin", "x", "08:00", [0], notifier=liste["canaux"][0]["id"])
         self.assertEqual(requete("POST", "/api/planifie-notifier", corps={"id": t["id"], "canal": ""})[1]["notifier"], "")
         self.assertEqual(requete("POST", "/api/planifie-notifier", corps={"id": t["id"], "canal": "zzzz"})[0], 400)
         self.assertEqual(requete("POST", "/api/notifications-supprimer", corps={"id": liste["canaux"][0]["id"]})[0], 200)
@@ -312,19 +312,19 @@ class Planification(Base):
         A.SECURITE = S.Securite(niveau=S.RESEAU, port=8777)
         statut, r = requete("POST", "/api/planifie-ajouter", en_tetes=dict(self.session(), **{"X-Forwarded-For": "192.168.1.20"}), corps={"nom": "a", "prompt": "x", "heure": "08:00", "jours": [0]})
         self.assertEqual(statut, 403, "un appareil appairé, ou un relais, ne planifie pas")
-        self.assertEqual(self.p.lire(), [])
+        self.assertEqual(self.p.read(), [])
 
     def test_echeance(self):
         from datetime import datetime
         t = {"actif": True, "heure": "08:30", "jours": [0, 1, 2, 3, 4], "cree": "2026-10-20T07:00:00", "derniere_exec": ""}
         lundi = lambda h, m: datetime(2026, 10, 26, h, m)  # noqa: E731
-        self.assertIsNone(self.p.echeance(t, lundi(8, 29)), "pas avant l'heure")
-        self.assertIsNotNone(self.p.echeance(t, lundi(8, 31)))
-        self.assertIsNotNone(self.p.echeance(t, lundi(23, 0)), "PC allumé en retard : rattrapé le jour même")
-        self.assertIsNone(self.p.echeance(dict(t, derniere_exec="2026-10-26T08:31:00"), lundi(9, 0)), "déjà faite aujourd'hui")
-        self.assertIsNone(self.p.echeance(dict(t, cree="2026-10-26T09:00:00"), lundi(9, 30)), "créée après l'heure : attend demain")
-        self.assertIsNone(self.p.echeance(t, datetime(2026, 10, 31, 9, 0)), "samedi : pas un jour choisi")
-        self.assertIsNone(self.p.echeance(dict(t, actif=False), lundi(9, 0)))
+        self.assertIsNone(self.p.due(t, lundi(8, 29)), "pas avant l'heure")
+        self.assertIsNotNone(self.p.due(t, lundi(8, 31)))
+        self.assertIsNotNone(self.p.due(t, lundi(23, 0)), "PC allumé en retard : rattrapé le jour même")
+        self.assertIsNone(self.p.due(dict(t, derniere_exec="2026-10-26T08:31:00"), lundi(9, 0)), "déjà faite aujourd'hui")
+        self.assertIsNone(self.p.due(dict(t, cree="2026-10-26T09:00:00"), lundi(9, 30)), "créée après l'heure : attend demain")
+        self.assertIsNone(self.p.due(t, datetime(2026, 10, 31, 9, 0)), "samedi : pas un jour choisi")
+        self.assertIsNone(self.p.due(dict(t, actif=False), lundi(9, 0)))
 
     @staticmethod
     def faux_tour(reponse="voici", appels=None, evenements=()):
@@ -341,7 +341,7 @@ class Planification(Base):
         return tour
 
     def test_execution_en_lecture_seule_dans_une_conversation_planifiee(self):
-        t = self.p.ajouter("Matin", "résume le dépôt", "08:30", [0, 1, 2, 3, 4, 5, 6])
+        t = self.p.add("Matin", "résume le dépôt", "08:30", [0, 1, 2, 3, 4, 5, 6])
         appels = []
         with mock.patch.object(A, "tour", side_effect=self.faux_tour(appels=appels)):
             ident = self.p.executer(t["id"])
@@ -349,11 +349,11 @@ class Planification(Base):
         self.assertTrue(appels[0][1].startswith("(Tâche planifiée « Matin » lancée le "), "la demande est datée : le modèle sait quel jour et quelle heure il est")
         self.assertTrue(appels[0][1].endswith("résume le dépôt"))
         self.assertEqual(A.TOURS_ACTIFS, {}, "la machine est libérée après la tâche")
-        fait = self.p.lire()[0]
+        fait = self.p.read()[0]
         self.assertEqual((fait["derniere_conv"], fait["derniere_etat"]), (ident, "ok"))
 
     def test_une_tache_garde_une_seule_conversation(self):
-        t = self.p.ajouter("Heure", "donne-moi l'heure", "19:00", [0, 1, 2, 3, 4, 5, 6])
+        t = self.p.add("Heure", "donne-moi l'heure", "19:00", [0, 1, 2, 3, 4, 5, 6])
         avant = len(A.conv_liste())
         with mock.patch.object(A, "tour", side_effect=self.faux_tour("il est 19 h")):
             premiere = self.p.executer(t["id"])
@@ -364,7 +364,7 @@ class Planification(Base):
         self.assertEqual([m["role"] for m in messages], ["user", "assistant", "user", "assistant"])
 
     def test_une_conversation_supprimee_est_recreee(self):
-        t = self.p.ajouter("Heure", "x", "19:00", [0, 1, 2, 3, 4, 5, 6])
+        t = self.p.add("Heure", "x", "19:00", [0, 1, 2, 3, 4, 5, 6])
         with mock.patch.object(A, "tour", side_effect=self.faux_tour()):
             premiere = self.p.executer(t["id"])
             A.conv_supprimer(premiere)
@@ -373,57 +373,57 @@ class Planification(Base):
         self.assertEqual(A.conv_lire(seconde)["titre"], "⏰ Heure")
 
     def test_un_moteur_muet_n_est_jamais_un_rien_fait_silencieux(self):
-        t = self.p.ajouter("Heure", "x", "19:00", [0, 1, 2, 3, 4, 5, 6])
+        t = self.p.add("Heure", "x", "19:00", [0, 1, 2, 3, 4, 5, 6])
         with mock.patch.object(A, "tour", side_effect=self.faux_tour(reponse="")):
             ident = self.p.executer(t["id"])
-        self.assertEqual(self.p.lire()[0]["derniere_etat"], "erreur")
+        self.assertEqual(self.p.read()[0]["derniere_etat"], "erreur")
         dernier = A.conv_lire(ident)["messages"][-1]
         self.assertEqual(dernier["role"], "assistant")
         self.assertTrue(dernier["content"].startswith("⚠"), "le problème est écrit dans la conversation")
 
     def test_une_erreur_du_tour_est_ecrite_dans_la_conversation(self):
-        t = self.p.ajouter("Heure", "x", "19:00", [0, 1, 2, 3, 4, 5, 6])
+        t = self.p.add("Heure", "x", "19:00", [0, 1, 2, 3, 4, 5, 6])
         with mock.patch.object(A, "tour", side_effect=self.faux_tour(reponse="", evenements=[{"type": "erreur", "texte": "Ollama ne répond pas"}])):
             ident = self.p.executer(t["id"])
-        self.assertEqual(self.p.lire()[0]["derniere_etat"], "erreur")
+        self.assertEqual(self.p.read()[0]["derniere_etat"], "erreur")
         self.assertIn("Ollama ne répond pas", A.conv_lire(ident)["messages"][-1]["content"])
 
     def test_le_resultat_part_sur_le_canal_associe(self):
         from lutin import notifications
         envois = []
-        with mock.patch.object(notifications, "trouver", lambda i: {"id": i, "nom": "Tel"}), mock.patch.object(notifications, "envoyer", lambda canal, titre, msg, ouvrir=None: envois.append((canal, titre, msg))):
-            t = self.p.ajouter("Heure", "x", "19:00", [0, 1, 2, 3, 4, 5, 6], notifier="abcd1234")
+        with mock.patch.object(notifications, "find", lambda i: {"id": i, "nom": "Tel"}), mock.patch.object(notifications, "send", lambda canal, titre, msg, ouvrir=None: envois.append((canal, titre, msg))):
+            t = self.p.add("Heure", "x", "19:00", [0, 1, 2, 3, 4, 5, 6], notifier="abcd1234")
             with mock.patch.object(A, "tour", side_effect=self.faux_tour("il est 19 h")):
                 self.p.executer(t["id"])
         self.assertEqual(envois, [("abcd1234", "⏰ Heure", "il est 19 h")])
-        self.assertEqual(self.p.lire()[0]["derniere_notif"], "ok")
+        self.assertEqual(self.p.read()[0]["derniere_notif"], "ok")
 
     def test_une_notification_qui_echoue_est_dite_sans_casser_la_tache(self):
         from lutin import notifications
         def casse(canal, titre, msg, ouvrir=None):
             raise ValueError("« Tel » n'a pas répondu")
-        with mock.patch.object(notifications, "trouver", lambda i: {"id": i}), mock.patch.object(notifications, "envoyer", casse):
-            t = self.p.ajouter("Heure", "x", "19:00", [0, 1, 2, 3, 4, 5, 6], notifier="abcd1234")
+        with mock.patch.object(notifications, "find", lambda i: {"id": i}), mock.patch.object(notifications, "send", casse):
+            t = self.p.add("Heure", "x", "19:00", [0, 1, 2, 3, 4, 5, 6], notifier="abcd1234")
             with mock.patch.object(A, "tour", side_effect=self.faux_tour("ok")):
                 self.p.executer(t["id"])
-        fait = self.p.lire()[0]
+        fait = self.p.read()[0]
         self.assertEqual(fait["derniere_etat"], "ok")
         self.assertIn("n'a pas répondu", fait["derniere_notif"])
 
     def test_un_canal_inconnu_est_refuse(self):
         with self.assertRaises(ValueError):
-            self.p.ajouter("a", "x", "08:00", [0], notifier="zzzz")
+            self.p.add("a", "x", "08:00", [0], notifier="zzzz")
 
     def test_une_erreur_est_notee_et_ne_casse_pas_la_boucle(self):
-        t = self.p.ajouter("Matin", "x", "08:30", [0, 1, 2, 3, 4, 5, 6])
+        t = self.p.add("Matin", "x", "08:30", [0, 1, 2, 3, 4, 5, 6])
         with mock.patch.object(A, "tour", side_effect=RuntimeError("boum")):
             self.p.executer(t["id"])
-        self.assertEqual(self.p.lire()[0]["derniere_etat"], "erreur")
+        self.assertEqual(self.p.read()[0]["derniere_etat"], "erreur")
 
     def test_pas_de_demarrage_si_une_reponse_est_en_cours(self):
         from datetime import datetime, timedelta
-        t = self.p.ajouter("Matin", "x", "00:00", [0, 1, 2, 3, 4, 5, 6])
-        self.p.modifier(t["id"], cree=(datetime.now() - timedelta(days=2)).isoformat(timespec="seconds"))
+        t = self.p.add("Matin", "x", "00:00", [0, 1, 2, 3, 4, 5, 6])
+        self.p.modify(t["id"], cree=(datetime.now() - timedelta(days=2)).isoformat(timespec="seconds"))
         A.TOURS_ACTIFS["abcdef12"] = threading.Event()
         try:
             with mock.patch.object(self.p, "executer") as ex:
@@ -444,10 +444,10 @@ class Redemarrage(Base):
 
     def test_avec_superviseur(self):
         os.environ["LUTIN_SUPERVISE"] = "1"
-        with mock.patch.object(acces.threading, "Timer") as timer:
+        with mock.patch.object(access.threading, "Timer") as timer:
             self.assertEqual(requete("POST", "/api/redemarrer", corps={}), (200, {"ok": True}))
             args = timer.call_args[0]
-            self.assertEqual((args[0] > 0, args[1], args[2]), (True, os._exit, [acces.CODE_REDEMARRAGE]))
+            self.assertEqual((args[0] > 0, args[1], args[2]), (True, os._exit, [access.RESTART_CODE]))
             timer.return_value.start.assert_called_once()
             A.TOURS_ACTIFS["abcd1234"] = object()
             try:
@@ -459,7 +459,7 @@ class Redemarrage(Base):
 
     def test_le_superviseur_relance_sans_compter_une_panne(self):
         from lutin import cli
-        codes = iter([acces.CODE_REDEMARRAGE] * 8 + [0])
+        codes = iter([access.RESTART_CODE] * 8 + [0])
         lancements, messages = [], []
         r = cli.superviser(lambda premiere: (lancements.append(premiere), next(codes))[1], attendre=lambda s: None, maximum=2, ecrire=messages.append)
         self.assertEqual((r, len(lancements), lancements[0], any(lancements[1:])), (0, 9, True, False), "huit redémarrages d'affilée ne sont pas des pannes : le navigateur ne se rouvre pas")
@@ -469,7 +469,7 @@ class Redemarrage(Base):
 class Restauration(Base):
     def archive(self):
         sortie = io.BytesIO()
-        sauvegarde.exporter({"config": CONFIG.parent, "donnees": A.DONNEES, "memoire": A.MEMOIRE}, sortie)
+        backup.export({"config": CONFIG.parent, "donnees": A.DONNEES, "memoire": A.MEMOIRE}, sortie)
         return sortie.getvalue()
 
     def test_restaurer_depuis_la_page(self):
@@ -494,6 +494,11 @@ class Restauration(Base):
         self.assertEqual(requete("POST", "/api/restaurer", {"Content-Type": "application/zip"}, brut=b"")[0], 400)
         self.assertFalse((A.MEMOIRE.parent / "evil.txt").exists())
 
+    def test_une_requete_refusee_avec_un_gros_corps_recoit_quand_meme_sa_reponse(self):
+        """Un refus répondu sans lire le corps réinitialisait la connexion de l'appelant (il perdait la réponse) : le serveur lit ce qui reste après avoir répondu."""
+        for _ in range(15):
+            self.assertEqual(requete("POST", "/api/restaurer", {"X-Token": "faux"}, brut=b"x" * 300_000)[0], 403)
+
     def test_restauration_reservee_a_cette_machine_et_authentifiee(self):
         self.assertEqual(requete("POST", "/api/restaurer", {"X-Token": "faux"}, brut=b"x")[0], 403)
         A.SECURITE = S.Securite(niveau=S.RESEAU, port=8777)
@@ -517,7 +522,7 @@ class DansUnNavigateur(unittest.TestCase):
     def charger(self, langue, ancre):
         with self.captures.serveur_demo({"LUTIN_LANGUE": langue}) as (port, tmp):
             r = subprocess.run([self.chrome, "--headless=new", "--disable-gpu", "--no-sandbox", "--user-data-dir=" + str(tmp / "profil"), "--virtual-time-budget=9000", "--enable-logging=stderr", "--v=0",
-                                "--dump-dom", "http://127.0.0.1:%d/%s" % (port, ancre)], capture_output=True, timeout=180, encoding="utf-8", errors="replace")
+                                "--dump-dom", "http://127.0.0.1:%d/ancienne/%s" % (port, ancre)], capture_output=True, timeout=180, encoding="utf-8", errors="replace")
         return r.stdout, [l for l in r.stderr.splitlines() if "CONSOLE" in l and ("rror" in l or "Uncaught" in l)]
 
     def test_page_acces_et_dossiers_de_travail(self):

@@ -27,11 +27,15 @@ try:
 except PackageNotFoundError:
     __version__ = "0.0.0+source"             # lancé depuis les sources, sans installation (tests, développement)
 
-from . import sansconsole  # noqa: E402
+from . import environment  # noqa: E402
 
-sansconsole.activer()          # Windows sans console (icône de la zone de notification) : aucun programme lancé n'ouvre de fenêtre noire
+environment.apply()          # les noms anglais des variables d'environnement (LUTIN_ROOT…) remplissent les noms d'origine (LUTIN_RACINE…) avant que rien ne les lise
+
+from . import no_console  # noqa: E402
+
+no_console.enable()          # Windows sans console (icône de la zone de notification) : aucun programme lancé n'ouvre de fenêtre noire
 
 import os  # noqa: E402
 
 if os.environ.get("LUTIN_TRACE_PROCESSUS"):          # enquête sur une fenêtre qui clignote : chaque programme lancé par Lutin est noté dans un fichier
-    sansconsole.tracer(os.environ["LUTIN_TRACE_PROCESSUS"])
+    no_console.start_trace(os.environ["LUTIN_TRACE_PROCESSUS"])

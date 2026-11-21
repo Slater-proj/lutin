@@ -5,43 +5,45 @@ Un mode décide trois choses : les outils que le modèle reçoit (lire, chercher
 commande demande ton accord, sauf si tu as coché l'accord automatique."""
 from .i18n import t as _t
 
-DEFAUT = "polyvalent"
+from . import tool_table
 
-LECTURE = {"lister", "lire", "chercher", "trouver", "calculer", "voix_liste", "voix_transcrire", "symboles", "lire_plusieurs", "rappeler", "web_chercher", "web_lire", "taches", "memoriser", "suivi", "comfy_modeles"}
-IMAGES = {"etat_outil", "installer_module"}          # l'extension facultative d'images
+DEFAULT = "polyvalent"
+
+READ_TOOLS = tool_table.research_tools()          # what the research mode keeps: derived from the tool table, where each tool says what it changes
+IMAGE_TOOLS = {"etat_outil", "installer_module"}          # l'extension facultative d'images
 
 # identifiant -> ce qui change : `exclus` (outils retirés), `seulement` (seuls ces outils restent), `aucun` (aucun outil), `rappels` (rappels automatiques proposés par défaut)
 MODES = {
-    "polyvalent": {"exclus": {"symboles"} | IMAGES, "rappels": False},
+    "polyvalent": {"exclus": {"symboles"} | IMAGE_TOOLS, "rappels": False},
     "technique": {"exclus": set(), "rappels": False},
-    "scenario": {"exclus": {"executer", "symboles"} | IMAGES, "rappels": True},
-    "recherche": {"seulement": LECTURE, "rappels": True},
+    "scenario": {"exclus": {"executer", "symboles"} | IMAGE_TOOLS, "rappels": True},
+    "recherche": {"seulement": READ_TOOLS, "rappels": True},
     "discussion": {"aucun": True, "rappels": False},
     "mission": {"exclus": set(), "rappels": False},          # le message envoyé devient le cahier des charges d'une mission menée dans cette conversation (voir mission.py) ; les tours de la mission utilisent tous les outils
 }
 
 
-def ids():
+def mode_ids():
     return tuple(MODES)
 
 
-def valide(mode):
+def is_valid(mode):
     return mode in MODES
 
 
-def sans_outils(mode):
+def without_tools(mode):
     """Ce mode ne donne aucun outil (discussion) : pas de connecteur non plus."""
-    return bool((MODES.get(mode) or MODES[DEFAUT]).get("aucun"))
+    return bool((MODES.get(mode) or MODES[DEFAULT]).get("aucun"))
 
 
-def lecture_seule(mode):
+def read_only(mode):
     """Ce mode ne garde que les outils de lecture (recherche) : les outils de connecteur qui modifient quelque chose sont retirés."""
-    return "seulement" in (MODES.get(mode) or MODES[DEFAUT])
+    return "seulement" in (MODES.get(mode) or MODES[DEFAULT])
 
 
-def outils_exclus(mode, tous):
+def excluded_tools(mode, tous):
     """Les noms d'outils à retirer pour ce mode, parmi `tous` (les noms de tous les outils)."""
-    m = MODES.get(mode) or MODES[DEFAUT]
+    m = MODES.get(mode) or MODES[DEFAULT]
     if m.get("aucun"):
         return set(tous)
     if "seulement" in m:
@@ -49,12 +51,12 @@ def outils_exclus(mode, tous):
     return set(m["exclus"])
 
 
-def rappels_par_defaut(mode):
+def default_recalls(mode):
     """Vrai si les rappels automatiques sont proposés dans ce mode quand le réglage dit « modes d'écriture et de recherche »."""
     return bool((MODES.get(mode) or {}).get("rappels"))
 
 
-def consigne(mode):
+def instruction(mode):
     """Le paragraphe du prompt qui dit au modèle dans quel mode il travaille."""
     if mode == "technique":
         return _t("Mode TRAVAIL : tu aides à comprendre, modifier et tester les fichiers du dossier de travail. Lis avant de modifier, fais de petits changements, lance les tests après s'il y en a, et dis clairement ce qui est vérifié ou non.")

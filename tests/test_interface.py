@@ -92,15 +92,15 @@ class Traduction(unittest.TestCase):
     def test_la_page_est_servie_avec_la_langue_et_le_dictionnaire(self):
         import os
         from unittest import mock
-        from lutin import moteur
+        from lutin import core
         with mock.patch.dict(os.environ, {"LUTIN_LANGUE": "en"}):
-            page = moteur.page_web()
+            page = core.page_web()
         self.assertIn("const LANGUE = 'en', DICO = {", page)
         self.assertIn('<html lang="en">', page)
         self.assertNotIn("__DICO__", page)
         self.assertNotIn("__LANGUE__", page)
         with mock.patch.dict(os.environ, {"LUTIN_LANGUE": "fr"}):
-            page = moteur.page_web()
+            page = core.page_web()
         self.assertIn("const LANGUE = 'fr', DICO = {};", page)
         self.assertNotIn("</script><", page.replace("</script>\n", ""), "le dictionnaire ne doit pas pouvoir fermer la balise script")
 
@@ -130,7 +130,7 @@ class DansUnNavigateur(unittest.TestCase):
     def charger(self, langue, ancre, niveau="local"):
         with self.captures.serveur_demo({"LUTIN_LANGUE": langue}, niveau) as (port, tmp):
             r = subprocess.run([self.chrome, "--headless=new", "--disable-gpu", "--no-sandbox", "--user-data-dir=" + str(tmp / "profil"), "--virtual-time-budget=8000", "--enable-logging=stderr",
-                                "--v=0", "--dump-dom", "http://127.0.0.1:%d/%s" % (port, ancre)], capture_output=True, timeout=180, encoding="utf-8", errors="replace")
+                                "--v=0", "--dump-dom", "http://127.0.0.1:%d/ancienne/%s" % (port, ancre)], capture_output=True, timeout=180, encoding="utf-8", errors="replace")
         erreurs = [l for l in r.stderr.splitlines() if "CONSOLE" in l and ("rror" in l or "Uncaught" in l)]
         return r.stdout, erreurs
 

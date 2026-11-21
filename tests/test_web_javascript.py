@@ -12,7 +12,7 @@ for cle, valeur in {"LUTIN_RACINE": str(_TEMP / "projet"), "LUTIN_DONNEES": str(
 for d in ("projet", "donnees", "memoire"):
     (_TEMP / d).mkdir(exist_ok=True)
 
-from lutin import moteur as A  # noqa: E402,F401
+from lutin import core as A  # noqa: E402,F401
 from lutin import web  # noqa: E402
 
 COQUILLE = """<!DOCTYPE html><html><head><title>reddit</title>

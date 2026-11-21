@@ -14,9 +14,9 @@ for cle, valeur in {"LUTIN_RACINE": str(_TEMP / "projet"), "LUTIN_DONNEES": str(
     os.environ.setdefault(cle, valeur)
 (_TEMP / "projet").mkdir(exist_ok=True)
 
-from lutin import moteur as _m  # noqa: E402,F401  (avant les autres : import circulaire sinon ; enregistre les moteurs)
-from lutin import moteur_llamacpp as ml  # noqa: E402
-from lutin import moteurs, moteurs_maj
+from lutin import core as _m  # noqa: E402,F401  (avant les autres : import circulaire sinon ; enregistre les moteurs)
+from lutin import llamacpp_engine as ml  # noqa: E402
+from lutin import engines, engine_updates
 
 VRAI_POPEN = subprocess.Popen
 FAUX = str(Path(__file__).resolve().parent / "fixtures" / "faux_llama_server.py")
@@ -34,9 +34,9 @@ def port_libre():
 class Base(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="lutin-routeur-"))
-        self.ancien = dict(moteurs.CONTEXTE)
-        moteurs.CONTEXTE.update(donnees=lambda: self.tmp, en_docker=lambda: False, hors_ligne=lambda: False, profil=lambda: None)
-        self.m = moteurs.MOTEURS["llamacpp"]          # l'instance enregistrée : c'est elle que regler_avance retrouve
+        self.ancien = dict(engines.CONTEXT)
+        engines.CONTEXT.update(donnees=lambda: self.tmp, en_docker=lambda: False, hors_ligne=lambda: False, profil=lambda: None)
+        self.m = engines.ENGINES["llamacpp"]          # l'instance enregistrée : c'est elle que regler_avance retrouve
         self.args = self.tmp / "args.jsonl"
         os.environ["LUTIN_FAUX_ARGS"] = str(self.args)
         self.addCleanup(self.fin)
@@ -53,6 +53,7 @@ class Base(unittest.TestCase):
             self.addCleanup(p.stop)
 
     def lancer_faux(self, commande, **kw):
+        self.environnements = getattr(self, "environnements", []) + [kw.get("env")]
         return VRAI_POPEN([sys.executable, FAUX] + commande[1:], **kw)
 
     def lancements(self):
@@ -61,7 +62,7 @@ class Base(unittest.TestCase):
     def fin(self):
         self.m.arreter()
         os.environ.pop("LUTIN_FAUX_ARGS", None)
-        moteurs.CONTEXTE.update(self.ancien)
+        engines.CONTEXT.update(self.ancien)
 
 
 class Routeur(Base):
@@ -141,6 +142,33 @@ class Routeur(Base):
 
 
 class ClesEtReglages(Base):
+    def test_des_reglages_tenus_un_instant_ne_sont_ni_lus_vides_ni_ecrases(self):
+        """Sous Windows, moteurs.json se lit mal un instant quand un autre programme le tient (antivirus, une autre écriture qui le remplace).
+        lire_config rendait alors {}, et l'appelant réécrivait le fichier avec son seul changement : moteurs externes et clés perdus. Il est
+        relu un peu plus tard ; et une écriture qui tombe sur un fichier tenu réessaie au lieu d'échouer."""
+        ml.ecrire_config({"externes": [{"id": "lmstudio", "url": "http://127.0.0.1:1234/v1"}], "llamacpp": {"cle_serveur": "secrete"}})
+        vrai_lire, vrai_remplacer, refus = Path.read_text, os.replace, []
+
+        def tenu(chemin, *a, **k):
+            if chemin.name == "moteurs.json" and len(refus) < 2:
+                refus.append(chemin)
+                raise PermissionError(13, "Access is denied", str(chemin))
+            return vrai_lire(chemin, *a, **k)
+        with mock.patch.object(Path, "read_text", tenu):
+            config = ml.lire_config()
+        self.assertEqual(config["llamacpp"]["cle_serveur"], "secrete", "relu un instant plus tard, pas lu vide")
+        remplacements = []
+
+        def remplacer(source, cible):
+            remplacements.append(cible)
+            if len(remplacements) < 3:
+                raise PermissionError(13, "Access is denied", str(cible))
+            return vrai_remplacer(source, cible)
+        with mock.patch.object(ml.os, "replace", remplacer):
+            ml.ecrire_config(dict(config, nouveau=True))
+        self.assertTrue(ml.lire_config()["nouveau"], "écrit au troisième essai")
+        self.assertEqual([f.name for f in Path(self.tmp).iterdir() if f.name.endswith(".tmp")], [], "pas de fichier temporaire laissé")
+
     def test_le_serveur_gere_a_une_cle_generee_et_stable(self):
         k = self.m.cle()
         self.assertGreaterEqual(len(k), 24)
@@ -149,6 +177,15 @@ class ClesEtReglages(Base):
         commande = self.lancements()[0]
         self.assertEqual(commande[commande.index("--api-key") + 1], k)
         self.assertEqual(ml.lire_config()["llamacpp"]["cle_serveur"], k)
+
+    def test_la_cle_ne_passe_plus_par_la_ligne_de_commande_quand_le_serveur_lit_la_variable(self):
+        """Sur la ligne de commande, la clé se lisait dans la liste des processus de la machine."""
+        self.aide = AIDE_COMPLETE + " (env: llama_api_key)"
+        k = self.m.cle()
+        self.m.chat({"model": "un", "messages": MESSAGE}, 30)
+        self.assertNotIn("--api-key", self.lancements()[0])
+        self.assertNotIn(k, self.lancements()[0])
+        self.assertEqual(self.environnements[-1]["LLAMA_API_KEY"], k)
 
     def test_un_serveur_externe_garde_sa_propre_cle(self):
         ml.regler("llamacpp", adresse="http://192.168.1.50:8080", cle="secret")
@@ -163,6 +200,39 @@ class ClesEtReglages(Base):
         self.aide = "--api-key"
         self.m.chat({"model": "un", "messages": MESSAGE}, 30)
         self.assertNotIn("--n-cpu-moe", self.lancements()[1])
+
+    def test_llama_cpp_1_0_charge_aussi_sans_projeter_le_fichier_en_memoire(self):
+        """llama.cpp 1.0 a retiré `--no-mmap` (remplacé par `--load-mode none`) : sans lui, un modèle sur la carte restait AUSSI en entier en mémoire vive."""
+        ml.regler("llamacpp", variante_installee="cuda")
+        self.aide = AIDE_COMPLETE + " -lm, --load-mode MODE"
+        self.m.chat({"model": "un", "messages": MESSAGE}, 30)
+        c = self.lancements()[0]
+        self.assertEqual(c[c.index("--load-mode") + 1], "none")
+        self.assertNotIn("--no-mmap", c)
+        self.m.arreter()
+        self.aide = AIDE_COMPLETE + " --no-mmap --load-mode"
+        self.m.chat({"model": "un", "messages": MESSAGE}, 30)
+        self.assertIn("--no-mmap", self.lancements()[1], "un serveur qui connaît encore --no-mmap le garde")
+        self.assertNotIn("--load-mode", self.lancements()[1])
+        self.assertIn("load-mode = none", ml.texte_preset([("un", "/m/un.gguf", None)], 8192, {"fils": 8, "ngl": 99, "chargement_direct": True}))
+
+    def test_des_experts_imposes_ne_laissent_pas_fit_renoncer(self):
+        """`--fit` renonce quand des placements de tenseurs sont déjà donnés (c'est ce que fait --n-cpu-moe) : avec les experts imposés, toutes les couches vont
+        sur la carte (-ngl 99) et --fit n'est pas demandé."""
+        ml.regler("llamacpp", variante_installee="cuda")
+        ml.regler_avance("llamacpp", {"n_cpu_moe": 20})
+        with mock.patch.object(ml, "reglages_machine", lambda *a: (["--threads", "8", "--fit", "on"], True)):
+            self.m.chat({"model": "un", "messages": MESSAGE}, 30)
+        c = self.lancements()[0]
+        self.assertNotIn("--fit", c)
+        self.assertEqual((c[c.index("--n-cpu-moe") + 1], c[c.index("-ngl") + 1], c[c.index("--threads") + 1]), ("20", "99", "8"))
+        self.m.arreter()
+        ml.regler_avance("llamacpp", {"n_cpu_moe": 0})
+        with mock.patch.object(ml, "reglages_machine", lambda *a: (["--threads", "8", "--fit", "on"], True)):
+            self.m.chat({"model": "un", "messages": MESSAGE}, 30)
+        c = self.lancements()[1]
+        self.assertEqual(c[c.index("--fit") + 1], "on", "sans experts imposés, --fit place lui-même les experts en mémoire vive")
+        self.assertNotIn("-ngl", c)
 
     def test_les_valeurs_sont_controlees(self):
         for donnees in ({"modeles_max": -1}, {"modeles_max": 99}, {"modeles_max": "x"}, {"n_cpu_moe": -1}, {"n_cpu_moe": 9999}, {"n_cpu_moe": "x"}, {"version_epinglee": "latest"}, {"version_epinglee": "b12; rm"}):
@@ -196,7 +266,7 @@ class VersionEpinglee(Base):
             with self.assertRaises(ml.ErreurMoteur):          # le téléchargement lui-même n'est pas simulé ici : seule la recherche de la version compte
                 self.m.installer(lambda *a: None, http_json=faux_json, telecharger=lambda *a, **k: (_ for _ in ()).throw(RuntimeError("stop")))
         self.assertEqual(vus, [ml.API_VERSION + "b199"])
-        self.assertIsNone(moteurs_maj._derniere_llamacpp(self.m, lambda url: self.RELEASES), "version épinglée : aucune mise à jour proposée")
+        self.assertIsNone(engine_updates._latest_llamacpp(self.m, lambda url: self.RELEASES), "version épinglée : aucune mise à jour proposée")
 
 
 if __name__ == "__main__":

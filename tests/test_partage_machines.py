@@ -18,9 +18,10 @@ for cle, valeur in {"LUTIN_RACINE": str(_TEMP / "projet"), "LUTIN_DONNEES": str(
 for d in ("projet", "donnees", "memoire"):
     (_TEMP / d).mkdir(exist_ok=True)
 
-from lutin import moteur as A  # noqa: E402
-from lutin import machines, moteurs  # noqa: E402
-from lutin import moteur_llamacpp as ml  # noqa: E402
+from lutin import core as A  # noqa: E402
+from lutin import machines, engines  # noqa: E402
+from lutin import llamacpp_engine as ml  # noqa: E402
+import quiet_node  # noqa: E402  (what a node reads of this computer, replaced)
 
 
 def faux_blob(dossier, modele_nom="qwen3", tag="8b"):
@@ -34,9 +35,9 @@ class ModelesTelechargesSousDocker(unittest.TestCase):
 
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="lutin-docker-mod-"))
-        self.avant = dict(moteurs.CONTEXTE)
-        moteurs.CONTEXTE.update(donnees=lambda: self.tmp, en_docker=lambda: True, hors_ligne=lambda: False, dossier_ollama=lambda: self.tmp / "ollama-autre")
-        self.addCleanup(lambda: (moteurs.CONTEXTE.clear(), moteurs.CONTEXTE.update(self.avant)))
+        self.avant = dict(engines.CONTEXT)
+        engines.CONTEXT.update(donnees=lambda: self.tmp, en_docker=lambda: True, hors_ligne=lambda: False, dossier_ollama=lambda: self.tmp / "ollama-autre")
+        self.addCleanup(lambda: (engines.CONTEXT.clear(), engines.CONTEXT.update(self.avant)))
         ml.CACHE_PARTAGE.clear()
         self.mo = ml.MoteurLlamaCpp()
         self.lib = self.tmp / "bibliotheque"
@@ -47,22 +48,22 @@ class ModelesTelechargesSousDocker(unittest.TestCase):
         def lire(dossier):
             lus.append(Path(dossier) if dossier else None)
             return {"qwen3:8b": {"fichier": Path(dossier) / "blob", "taille": 5_000_000_000, "projecteur": None}}
-        with mock.patch.object(self.mo, "bibliotheque", lambda: self.lib), mock.patch("lutin.ollama_partage.lire", lire):
+        with mock.patch.object(self.mo, "bibliotheque", lambda: self.lib), mock.patch("lutin.ollama_shared_models.read_shared", lire):
             communs = self.mo.partages()
         self.assertEqual(list(communs), ["qwen3:8b"])
         self.assertEqual(communs["qwen3:8b"]["origine"], "lutin")
         self.assertEqual(lus, [self.lib], "sous Docker, le dossier d'Ollama (un autre conteneur) n'est pas lu ; la bibliothèque de Lutin, si")
 
     def test_le_modele_telecharge_apparait_dans_la_liste_des_modeles_installes(self):
-        with mock.patch.object(self.mo, "bibliotheque", lambda: self.lib), mock.patch("lutin.ollama_partage.lire", lambda d: {"granite4:3b": {"fichier": Path(d) / "b", "taille": 2_000_000_000, "projecteur": None}}):
+        with mock.patch.object(self.mo, "bibliotheque", lambda: self.lib), mock.patch("lutin.ollama_shared_models.read_shared", lambda d: {"granite4:3b": {"fichier": Path(d) / "b", "taille": 2_000_000_000, "projecteur": None}}):
             m = self.mo.modeles()
         self.assertIn("granite4:3b", m["installes"])
         self.assertEqual(m["tailles"]["granite4:3b"], 2_000_000_000)
 
     def test_hors_docker_rien_ne_change_et_un_serveur_externe_n_a_pas_de_modele_local(self):
-        moteurs.CONTEXTE["en_docker"] = lambda: False
+        engines.CONTEXT["en_docker"] = lambda: False
         lus = []
-        with mock.patch.object(self.mo, "bibliotheque", lambda: self.lib), mock.patch("lutin.ollama_partage.lire", lambda d: lus.append(d) or {}):
+        with mock.patch.object(self.mo, "bibliotheque", lambda: self.lib), mock.patch("lutin.ollama_shared_models.read_shared", lambda d: lus.append(d) or {}):
             ml.CACHE_PARTAGE.clear()
             self.mo.partages()
         self.assertEqual(len(lus), 2, "hors Docker : le dossier d'Ollama ET la bibliothèque")
@@ -72,6 +73,7 @@ class ModelesTelechargesSousDocker(unittest.TestCase):
 
 class Base(unittest.TestCase):
     def setUp(self):
+        quiet_node.quiet(self)
         self.tmp = Path(tempfile.mkdtemp(prefix="lutin-partage-t-"))
         machines.DOSSIER = self.tmp
         for c in (machines.REGISTRE, machines.CONVERSATIONS, machines.DISTANTS):
@@ -205,7 +207,7 @@ class ImporterSkillsEtMemoire(Base):
 class Api(Base):
     @classmethod
     def setUpClass(cls):
-        from lutin import securite as S
+        from lutin import security as S
         cls.serveur = ThreadingHTTPServer(("127.0.0.1", 0), A.Gestionnaire)
         threading.Thread(target=cls.serveur.serve_forever, daemon=True).start()
         cls.port = cls.serveur.server_address[1]

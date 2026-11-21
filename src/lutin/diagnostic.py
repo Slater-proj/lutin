@@ -5,18 +5,18 @@ le premier message (ou le test de la machine) tombait sur une erreur obscure. Ch
 que la page propose en un clic (installer le modèle conseillé, démarrer Ollama, ouvrir l'onglet Modèles)."""
 import os
 
-from . import selection
+from . import model_selection
 from .i18n import t as _t
 
-SEUIL_DISQUE_GO = 2.0
+DISK_THRESHOLD_GB = 2.0
 
 
-def modele_conseille(profil, catalogue):
+def advised_model(profil, catalogue):
     """(identifiant, taille en Go) du modèle le plus adapté à cette machine pour un premier essai, ou None si on ne sait pas encore (machine pas détectée)."""
     if profil is None:
         return None
     try:
-        choix = selection.choisir(profil, catalogue)
+        choix = model_selection.choose(profil, catalogue)
     except (KeyError, TypeError, ValueError):
         return None
     for role in ("polyvalent", "rapide"):
@@ -26,13 +26,13 @@ def modele_conseille(profil, catalogue):
     return next(((c.id, c.modele.get("go")) for c in choix.values() if c is not None), None)
 
 
-def _ollama_autre_conteneur():
+def _ollama_in_other_container():
     """OLLAMA_URL désigne-t-il un autre conteneur ? Sinon Lutin installe et lance Ollama lui-même (ollama.log dans le volume /data)."""
-    from . import moteurs_docker
-    return moteurs_docker.ollama_externe()
+    from . import docker_engines
+    return docker_engines.external_ollama()
 
 
-def premier_lancement(moteur_nom, actif, detail, recommande=None, emplacement=None, installes=None, choisi=None, gere=None):
+def first_launch(moteur_nom, actif, detail, recommande=None, emplacement=None, installes=None, choisi=None, gere=None):
     """Le premier lancement : tant qu'AUCUN moteur n'est prêt, la page n'envoie pas l'utilisateur dans l'onglet Modèles (où rien ne marcherait) : elle dit pourquoi et propose d'installer le moteur conseillé,
     d'en choisir un autre ou de remettre à plus tard. {pret, raison, recommande}. `recommande` : la recommandation de bench_moteurs (moteur, nom, raison)."""
     if actif:
@@ -57,12 +57,12 @@ def premier_lancement(moteur_nom, actif, detail, recommande=None, emplacement=No
     return {"pret": False, "raison": raison, "recommande": recommande, "emplacement": emplacement, "installes": installes}
 
 
-def diagnostiquer(ollama_actif, ollama_installe, installes, reglages, profil=None, catalogue=None, adequation=None, disque_libre_go=None, docker=None, conseils=None, modeles_ailleurs=None):
+def diagnose(ollama_actif, ollama_installe, installes, reglages, profil=None, catalogue=None, adequation=None, disque_libre_go=None, docker=None, conseils=None, modeles_ailleurs=None):
     """La liste des problèmes, du plus grave au moins grave : [{code, niveau, texte, action}]. Vide quand tout va bien."""
     docker = (os.environ.get("LUTIN_DOCKER") == "1") if docker is None else docker
     problemes = []
     if not ollama_actif:
-        if docker and _ollama_autre_conteneur():
+        if docker and _ollama_in_other_container():
             texte = _t("Ollama ne répond pas dans son conteneur : Lutin ne peut pas répondre. Regarde pourquoi avec « docker logs » sur le conteneur d'Ollama (OLLAMA_URL).")
             action = None
         elif ollama_installe:
@@ -76,7 +76,7 @@ def diagnostiquer(ollama_actif, ollama_installe, installes, reglages, profil=Non
         problemes.append({"code": "modeles_ailleurs", "niveau": "erreur", "action": {"type": "redemarrer_ollama"},
                           "texte": _t("Ollama tourne mais ne voit aucun modèle, alors que {} en contient {} : il a été relancé sans ton dossier de modèles habituel. Tes modèles ne sont pas perdus ; redémarre Ollama pour qu'il retrouve ce dossier.").format(modeles_ailleurs[0], modeles_ailleurs[1])})
     elif not installes:
-        conseil = modele_conseille(profil, catalogue) if profil is not None and catalogue else None
+        conseil = advised_model(profil, catalogue) if profil is not None and catalogue else None
         if conseil:
             texte = _t("Ollama tourne, mais aucun modèle n'est installé : Lutin ne peut pas encore répondre. Le plus adapté à cette machine : « {} » ({} Go).").format(conseil[0], conseil[1])
             action = {"type": "installer_modele", "modele": conseil[0], "go": conseil[1]}
@@ -95,6 +95,6 @@ def diagnostiquer(ollama_actif, ollama_installe, installes, reglages, profil=Non
     if conseils and (reglages or {}).get("conseil_machine", True) and not any(p["niveau"] == "erreur" for p in problemes):
         problemes.append({"code": "petite_machine", "niveau": "info", "texte": _t("Réglages conseillés pour cette machine (processeur ou peu de mémoire) : ") + " ".join(c["texte"] for c in conseils),
                           "action": {"type": "appliquer_conseil"}, "action2": {"type": "ignorer_conseil"}})
-    if disque_libre_go is not None and disque_libre_go < SEUIL_DISQUE_GO:
-        problemes.append({"code": "disque", "niveau": "attention", "texte": _t("Il reste moins de {:g} Go sur le disque des données de Lutin : les modèles et les fichiers ne tiendront pas.").format(SEUIL_DISQUE_GO), "action": None})
+    if disque_libre_go is not None and disque_libre_go < DISK_THRESHOLD_GB:
+        problemes.append({"code": "disque", "niveau": "attention", "texte": _t("Il reste moins de {:g} Go sur le disque des données de Lutin : les modèles et les fichiers ne tiendront pas.").format(DISK_THRESHOLD_GB), "action": None})
     return problemes

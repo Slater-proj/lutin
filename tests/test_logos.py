@@ -82,7 +82,7 @@ class IconesDApplication(unittest.TestCase):
             self.assertEqual(entete_png(donnees)[:2], (n, n))
 
     def test_le_manifeste_ne_demande_pas_de_recadrage(self):
-        serveur = (RACINE / "src" / "lutin" / "serveur.py").read_text(encoding="utf-8")
+        serveur = (RACINE / "src" / "lutin" / "server.py").read_text(encoding="utf-8")
         self.assertNotIn("maskable", serveur, "une icône « maskable » serait rognée : le personnage remplit déjà le carré")
 
 

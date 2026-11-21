@@ -23,3 +23,7 @@ sauvegardes/
 installateur/build/
 installateur/sortie/
 installateur/*.zip
+
+# New interface (ADR 0002): built by the CI from frontend/, never committed
+src/lutin/web/app/
+frontend/node_modules/

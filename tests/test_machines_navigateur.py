@@ -8,8 +8,8 @@ from unittest import mock
 import context  # noqa: F401
 import cdp
 import test_machines as T
-from lutin import moteur as A
-from lutin import serveur as srv
+from lutin import core as A
+from lutin import server as srv
 from lutin import machines
 
 RACINE = Path(__file__).resolve().parent.parent
@@ -36,7 +36,7 @@ class PageMachines(T.Base):
         self.jumeler()
         p = cdp.Page(self.chrome, self.tmp / "profil-cdp")
         self.addCleanup(p.fermer)
-        p.aller("http://127.0.0.1:%d/" % self.port)
+        p.aller("http://127.0.0.1:%d/ancienne/" % self.port)
         p.attendre("!!document.querySelector('#bNouvelle')")
         p.evaluer("window.confirm = () => true")
         p.evaluer("document.querySelector('.onglets button[data-p=\"machines\"]').click(); true")
@@ -68,7 +68,7 @@ class PageMachines(T.Base):
         self.jumeler()
         p = cdp.Page(self.chrome, self.tmp / "profil-cdp2")
         self.addCleanup(p.fermer)
-        p.aller("http://127.0.0.1:%d/" % self.port)
+        p.aller("http://127.0.0.1:%d/ancienne/" % self.port)
         p.attendre("!!document.querySelector('#bNouvelle')")
         p.evaluer("document.querySelector('.onglets button[data-p=\"machines\"]').click(); true")
         p.attendre("document.getElementById('machinesZone').textContent.includes('Ce que cette machine')")

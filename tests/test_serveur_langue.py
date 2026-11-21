@@ -19,7 +19,7 @@ for d in ("projet", "donnees", "memoire", "config"):
     (_TEMP / d).mkdir(exist_ok=True)
 
 from lutin import config, i18n  # noqa: E402
-from lutin import moteur as A  # noqa: E402
+from lutin import core as A  # noqa: E402
 
 SERVEUR = ThreadingHTTPServer(("127.0.0.1", 0), A.Gestionnaire)
 threading.Thread(target=SERVEUR.serve_forever, daemon=True).start()
@@ -60,11 +60,11 @@ class LangueDuServeur(unittest.TestCase):
         self.assertEqual(requete("POST", "/api/langue", {"valeur": "en"}), (200, {"langue": "en"}))
         statut, etat = requete("GET", "/api/etat")
         self.assertEqual((etat["langue"], etat["langue_reglage"]), ("en", "en"))
-        statut, page = requete("GET", "/")
+        statut, page = requete("GET", "/ancienne/")          # l'ancienne page (la nouvelle interface est à « / » depuis la 1.0)
         self.assertIn("const LANGUE = 'en', DICO = {", page)
         self.assertEqual(requete("POST", "/api/skills-supprimer", {"nom": "../x"})[1], {"erreur": "Invalid skill name (letters, digits, hyphens, spaces, and .md)."})
         self.assertEqual(requete("POST", "/api/langue", {"valeur": "fr"}), (200, {"langue": "fr"}))
-        self.assertIn("const LANGUE = 'fr', DICO = {};", requete("GET", "/")[1])
+        self.assertIn("const LANGUE = 'fr', DICO = {};", requete("GET", "/ancienne/")[1])
         self.assertEqual(requete("POST", "/api/skills-supprimer", {"nom": "../x"})[1], {"erreur": "Nom de skill invalide (lettres, chiffres, tirets, espaces, et .md)."})
 
     def test_valeur_inconnue_refusee_et_jeton_exige(self):
@@ -87,7 +87,7 @@ class LangueDuServeur(unittest.TestCase):
         os.environ["LUTIN_LANGUE"] = "en"
         try:
             dossiers = {"memoire": str(_TEMP / "memoire-en"), "donnees": str(_TEMP / "d-en"), "config": str(_TEMP / "c-en"), "cache": str(_TEMP / "ca-en")}
-            config.preparer(dossiers)
+            config.prepare(dossiers)
             memoire = (_TEMP / "memoire-en" / "MEMOIRE.md").read_text(encoding="utf-8")
             self.assertIn("## Assistant notes", memoire)
             self.assertIn("Answer in the user's language", (_TEMP / "memoire-en" / "CONTEXTE.md").read_text(encoding="utf-8"))
@@ -95,7 +95,7 @@ class LangueDuServeur(unittest.TestCase):
             self.assertEqual(A.position_notes(memoire), memoire.index("## Assistant notes") - 1)
             os.environ["LUTIN_LANGUE"] = "fr"
             dossiers_fr = {"memoire": str(_TEMP / "memoire-fr"), "donnees": str(_TEMP / "d-fr"), "config": str(_TEMP / "c-fr"), "cache": str(_TEMP / "ca-fr")}
-            config.preparer(dossiers_fr)
+            config.prepare(dossiers_fr)
             self.assertIn("## Notes de l'assistant", (_TEMP / "memoire-fr" / "MEMOIRE.md").read_text(encoding="utf-8"))
         finally:
             os.environ.pop("LUTIN_LANGUE", None)

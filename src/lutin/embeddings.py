@@ -1,6 +1,6 @@
 """Recherche par le sens (facultative) : retrouver un passage de la conversation même s'il n'emploie pas les mêmes mots que la question.
 
-La recherche par mots (rappel.py) trouve « prison » quand on écrit « prison », pas « détention ». Un petit modèle d'embeddings d'Ollama (nomic-embed-text, environ 270 Mo) transforme chaque passage en un
+La recherche par mots (recall.py) trouve « prison » quand on écrit « prison », pas « détention ». Un petit modèle d'embeddings d'Ollama (nomic-embed-text, environ 270 Mo) transforme chaque passage en un
 vecteur de nombres : deux passages de même sens ont des vecteurs proches. Lutin combine les deux recherches (fusion des rangs) : les mots ET le sens.
 
 Règles de solidité :
@@ -20,73 +20,73 @@ import time
 import urllib.error
 import urllib.request
 
-from . import moteur as _m
+from . import core as _m
 
-MODELE_DEFAUT = "nomic-embed-text"
-RE_MODELE = re.compile(r"^[A-Za-z0-9_./:-]{1,100}$")
-LOT = 16                       # passages vectorisés par appel
-SEUIL = 0.55                   # similarité (cosinus) minimale pour compter comme « du même sens »
-PAUSE_APRES_ECHEC = 60         # secondes sans réessayer après un échec (modèle absent, Ollama éteint)
-ECHEC = {"jusqua": 0.0, "vu": False}
-INSTALLE_CACHE = {"t": 0.0, "v": False, "modele": ""}
-VERROU = threading.Lock()
+DEFAULT_MODEL = "nomic-embed-text"
+RE_MODEL = re.compile(r"^[A-Za-z0-9_./:-]{1,100}$")
+BATCH = 16                       # passages vectorisés par appel
+THRESHOLD = 0.55                   # similarité (cosinus) minimale pour compter comme « du même sens »
+PAUSE_AFTER_FAILURE = 60         # secondes sans réessayer après un échec (modèle absent, Ollama éteint)
+FAILURE = {"jusqua": 0.0, "vu": False}
+INSTALLED_CACHE = {"t": 0.0, "v": False, "modele": ""}
+LOCK = threading.Lock()
 
 
-def actif():
+def active():
     return bool(_m.reglages().get("recherche_sens"))
 
 
-def nom_modele():
-    m = str(_m.reglages().get("modele_embeddings") or MODELE_DEFAUT).strip()
-    return m if RE_MODELE.match(m) else MODELE_DEFAUT
+def model_name():
+    m = str(_m.reglages().get("modele_embeddings") or DEFAULT_MODEL).strip()
+    return m if RE_MODEL.match(m) else DEFAULT_MODEL
 
 
-def installe(forcer=False):
+def installed(forcer=False):
     """Le modèle est-il installé sur le moteur choisi ? (résultat gardé 20 secondes : la page interroge souvent)"""
-    modele = nom_modele()
-    if not forcer and INSTALLE_CACHE["modele"] == modele and time.time() - INSTALLE_CACHE["t"] < 20:
-        return INSTALLE_CACHE["v"]
+    modele = model_name()
+    if not forcer and INSTALLED_CACHE["modele"] == modele and time.time() - INSTALLED_CACHE["t"] < 20:
+        return INSTALLED_CACHE["v"]
     base = modele.split(":")[0]
     v = any(n.split(":")[0] == base for n in (_m.etat_moteur() if _m.moteur_actuel().id != "ollama" else _m.etat_ollama()).get("installes", []))
-    INSTALLE_CACHE.update(t=time.time(), v=v, modele=modele)
+    INSTALLED_CACHE.update(t=time.time(), v=v, modele=modele)
     return v
 
 
-def est_modele_de_recherche(nom):
+def is_search_model(nom):
     """Vrai pour le modèle de recherche par le sens (il ne discute pas : jamais proposé comme modèle de conversation)."""
-    from . import infos_modele
+    from . import model_info
     base = str(nom).split(":")[0]
-    if base == nom_modele().split(":")[0]:
+    if base == model_name().split(":")[0]:
         return True
-    return bool((infos_modele.deja_connu(str(nom), _m.DONNEES) or {}).get("embedding"))
+    return bool((model_info.already_known(str(nom), _m.DONNEES) or {}).get("embedding"))
 
 
-def etat():
-    return {"actif": actif(), "modele": nom_modele(), "installe": installe(), "installation": installation()}
+def state():
+    return {"actif": active(), "modele": model_name(), "installe": installed(), "installation": installation_state()}
 
 
 # --------------------------------------------------------------------------- vecteurs
-def _normaliser(v):
+def _normalize(v):
     n = math.sqrt(sum(x * x for x in v)) or 1.0
     return array.array("f", (x / n for x in v))
 
 
-def vecteurs(textes, modele=None, delai=60):
+def vectors(textes, modele=None, delai=60):
     """Les vecteurs (normalisés) d'une liste de textes, par Ollama. Lève ValueError/URLError si Ollama ne répond pas ou si le modèle est absent."""
-    liste = _m.moteur_actuel().vecteurs(modele or nom_modele(), [str(t)[:1500] or " " for t in textes], delai)          # Ollama, ou le moteur choisi (llama.cpp en mode routeur, serveur externe)
-    return [_normaliser(v) for v in liste]
+    liste = _m.moteur_actuel().vecteurs(modele or model_name(), [str(t)[:1500] or " " for t in textes], delai)          # Ollama, ou le moteur choisi (llama.cpp en mode routeur, serveur externe)
+    return [_normalize(v) for v in liste]
 
 
-def _cle(texte):
+def _key(texte):
     return hashlib.sha1(str(texte)[:1500].encode("utf-8")).hexdigest()[:16]
 
 
-def _chemin(ident):
+def _path(ident):
     return _m.DONNEES / "embeddings" / (str(ident) + ".json")
 
 
-def _charger(ident, modele):
-    brut = _m.lire_json(_chemin(ident), {})
+def _load(ident, modele):
+    brut = _m.lire_json(_path(ident), {})
     if brut.get("modele") != modele:
         return {}                                                     # un autre modèle d'embeddings : ses vecteurs ne sont pas comparables
     cache = {}
@@ -100,20 +100,20 @@ def _charger(ident, modele):
     return cache
 
 
-def _enregistrer(ident, modele, cache, gardes):
+def _save(ident, modele, cache, gardes):
     """Écrit les vecteurs de ces passages seulement (ceux qui n'existent plus dans la conversation sont oubliés)."""
     v = {h: base64.b64encode(cache[h].tobytes()).decode("ascii") for h in gardes if h in cache}
-    _m.ecrire_atomique(_chemin(ident), json.dumps({"modele": modele, "v": v}))
+    _m.ecrire_atomique(_path(ident), json.dumps({"modele": modele, "v": v}))
 
 
-def supprimer(ident):
+def remove(ident):
     try:
-        _chemin(ident).unlink(missing_ok=True)
+        _path(ident).unlink(missing_ok=True)
     except OSError:
         pass
 
 
-def nettoyer_orphelins(ids_existants):
+def clean_orphans(ids_existants):
     n = 0
     try:
         for f in (_m.DONNEES / "embeddings").glob("*.json"):
@@ -125,53 +125,53 @@ def nettoyer_orphelins(ids_existants):
     return n
 
 
-def similarites(ident, morceaux, question, budget=8.0):
+def similarities(ident, morceaux, question, budget=8.0):
     """{indice du morceau: similarité avec la question} pour les morceaux déjà vectorisés. Vectorise les morceaux manquants tant que `budget` secondes ne sont pas écoulées (le reste, aux réponses suivantes).
     {} si la recherche par le sens est coupée, si le modèle est absent ou si Ollama ne répond pas."""
-    if not actif() or time.time() < ECHEC["jusqua"] or not morceaux:
+    if not active() or time.time() < FAILURE["jusqua"] or not morceaux:
         return {}
-    modele = nom_modele()
+    modele = model_name()
     debut = time.time()
     try:
-        q = vecteurs([question], modele)[0]
-        cache = _charger(ident, modele)
-        manquants = [(i, _cle(m["texte"])) for i, m in enumerate(morceaux) if _cle(m["texte"]) not in cache]
+        q = vectors([question], modele)[0]
+        cache = _load(ident, modele)
+        manquants = [(i, _key(m["texte"])) for i, m in enumerate(morceaux) if _key(m["texte"]) not in cache]
         nouveau = False
-        for a in range(0, len(manquants), LOT):
+        for a in range(0, len(manquants), BATCH):
             if time.time() - debut > budget:
                 break
-            lot = manquants[a:a + LOT]
-            for (i, h), v in zip(lot, vecteurs([morceaux[i]["texte"] for i, _ in lot], modele)):
+            lot = manquants[a:a + BATCH]
+            for (i, h), v in zip(lot, vectors([morceaux[i]["texte"] for i, _ in lot], modele)):
                 cache[h] = v
             nouveau = True
         if nouveau:
-            _enregistrer(ident, modele, cache, {_cle(m["texte"]) for m in morceaux})
-        ECHEC["vu"] = False
+            _save(ident, modele, cache, {_key(m["texte"]) for m in morceaux})
+        FAILURE["vu"] = False
     except (urllib.error.URLError, OSError, ValueError) as erreur:
-        ECHEC["jusqua"] = time.time() + PAUSE_APRES_ECHEC
-        if not ECHEC["vu"]:
-            ECHEC["vu"] = True
+        FAILURE["jusqua"] = time.time() + PAUSE_AFTER_FAILURE
+        if not FAILURE["vu"]:
+            FAILURE["vu"] = True
             _m.journaliser("Recherche par le sens indisponible ({!r}) : recherche par mots seulement.".format(erreur))
         return {}
     sims = {}
     for i, m in enumerate(morceaux):
-        v = cache.get(_cle(m["texte"]))
+        v = cache.get(_key(m["texte"]))
         if v is not None and len(v) == len(q):
             sims[i] = sum(a * b for a, b in zip(q, v))
     return sims
 
 
 # --------------------------------------------------------------------------- installation du modèle
-def installation():
+def installation_state():
     """Où en est le téléchargement du modèle de recherche : {etat: '' | 'en cours' | 'fini' | 'erreur', fait, total, erreur}. C'est le même suivi que pour tous les modèles (onglet Modèles)."""
-    p = (_m.PULLS.get(nom_modele()) or {})
+    p = (_m.PULLS.get(model_name()) or {})
     etat_ = {"en cours": "en cours", "termine": "fini", "erreur": "erreur"}.get(p.get("statut"), "")
     return {"etat": etat_, "fait": int(p.get("fait") or 0), "total": int(p.get("total") or 0), "erreur": str(p.get("texte") or "") if etat_ == "erreur" else "", "texte": str(p.get("texte") or "")}
 
 
-def demarrer_installation():
+def start_installation():
     """Télécharge le modèle de recherche dans Ollama, en arrière-plan : il entre dans la liste de l'onglet Modèles comme les autres (progression, suppression)."""
-    _m.installer_modele(nom_modele())
-    INSTALLE_CACHE["t"] = 0.0
-    ECHEC["jusqua"] = 0.0
-    return installation()
+    _m.installer_modele(model_name())
+    INSTALLED_CACHE["t"] = 0.0
+    FAILURE["jusqua"] = 0.0
+    return installation_state()

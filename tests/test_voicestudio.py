@@ -16,8 +16,8 @@ for cle, valeur in {"LUTIN_RACINE": str(_TEMP / "projet"), "LUTIN_DONNEES": str(
 (_TEMP / "projet").mkdir(exist_ok=True)
 
 from lutin import addons, addons_voicestudio as vs  # noqa: E402
-from lutin import moteur as _m  # noqa: E402
-from lutin import revue  # noqa: E402
+from lutin import core as _m  # noqa: E402
+from lutin import change_review  # noqa: E402
 
 AUDIO = b"RIFF" + b"\x00" * 400
 SERVICE = {}
@@ -86,10 +86,10 @@ class VoiceStudio(unittest.TestCase):
     def setUp(self):
         SERVICE.clear()
         SERVICE["appels"] = []
-        for f in addons.dossier_donnees().rglob("*"):
+        for f in addons.folder_data().rglob("*"):
             if f.is_file():
                 f.unlink()
-        addons.enregistrer_reglages(vs.IDENT, {"port": str(self.port), "cle": "", "format": "wav"})
+        addons.save_settings(vs.IDENT, {"port": str(self.port), "cle": "", "format": "wav"})
         addons.activer(vs.IDENT, True)
         self.projet = _m.RACINE
         (self.projet / "voix.wav").write_bytes(b"RIFFxxxx")
@@ -100,37 +100,37 @@ class VoiceStudio(unittest.TestCase):
 
     # --- activation et vérification
     def test_verification_compte_les_voix_et_l_activation_exige_un_service_qui_repond(self):
-        v = addons.verifier(vs.IDENT)
+        v = addons.check(vs.IDENT)
         self.assertTrue(v["ok"], v)
         self.assertIn("2 voix", v["etapes"][0]["message"])
         addons.activer(vs.IDENT, False)
-        addons.enregistrer_reglages(vs.IDENT, {"port": "1"})
+        addons.save_settings(vs.IDENT, {"port": "1"})
         with self.assertRaises(addons.ErreurAddon) as e:
             addons.activer(vs.IDENT, True)
         self.assertIn("ne répond pas", str(e.exception))
         self.assertFalse(addons.actif(vs.IDENT))
 
     def test_port_invalide(self):
-        addons.enregistrer_reglages(vs.IDENT, {"port": "abc"})
+        addons.save_settings(vs.IDENT, {"port": "abc"})
         with self.assertRaises(_m.ErreurOutil):
-            vs.liste_voix()
+            vs.list_voices()
 
     def test_les_deux_formes_de_liste_de_voix(self):
         for enveloppe in (False, True):
             SERVICE["enveloppe"] = enveloppe
-            self.assertEqual([v["nom"] for v in vs.liste_voix()], ["Narrateur", "Anna"])
-        self.assertIn("Narrateur (id : p1) · fr", vs.texte_voix())
+            self.assertEqual([v["nom"] for v in vs.list_voices()], ["Narrateur", "Anna"])
+        self.assertIn("Narrateur (id : p1) · fr", vs.text_voices())
 
     def test_outils_inutilisables_si_l_addon_est_coupe(self):
         addons.activer(vs.IDENT, False)
         for nom in ("voix_liste", "voix_parler", "voix_transcrire", "voix_cloner"):
             with self.assertRaises(_m.ErreurOutil, msg=nom):
-                revue._appeler_outil(nom, {"texte": "x"}, self.ctx())
+                change_review._call_tool(nom, {"texte": "x"}, self.ctx())
 
     # --- lire à voix haute
     def test_parler_demande_l_accord_cree_le_fichier_et_le_joint(self):
         ctx = self.ctx()
-        res = revue._appeler_outil("voix_parler", {"texte": "Bonjour à tous", "voix": "Narrateur", "vitesse": 1.5, "langue": "fr"}, ctx)
+        res = change_review._call_tool("voix_parler", {"texte": "Bonjour à tous", "voix": "Narrateur", "vitesse": 1.5, "langue": "fr"}, ctx)
         self.assertIn("Audio créé", res)
         self.assertEqual(len(self.accords), 1)
         self.assertFalse(self.accords[0][2], "pas d'accord automatique sans la case")
@@ -171,11 +171,11 @@ class VoiceStudio(unittest.TestCase):
     def test_cle_envoyee_et_jamais_affichee(self):
         SERVICE["cle"] = "secret-tres-long-1234"
         with self.assertRaises(_m.ErreurOutil) as e:
-            vs.liste_voix()
+            vs.list_voices()
         self.assertIn("clé API", str(e.exception))
         self.assertNotIn("secret-tres-long", str(e.exception))
-        addons.enregistrer_reglages(vs.IDENT, {"cle": "secret-tres-long-1234"})
-        self.assertEqual(len(vs.liste_voix()), 2)
+        addons.save_settings(vs.IDENT, {"cle": "secret-tres-long-1234"})
+        self.assertEqual(len(vs.list_voices()), 2)
         self.assertEqual(SERVICE["appels"][-1]["auth"], "Bearer secret-tres-long-1234")
         self.assertNotIn("secret-tres-long", json.dumps(addons.decrire(vs.IDENT), default=str), "la clé n'est jamais renvoyée à la page")
 
@@ -238,7 +238,7 @@ class VoiceStudio(unittest.TestCase):
     def test_cloner_enregistrement_trop_gros(self):
         gros = self.projet / "gros.wav"
         with open(gros, "wb") as f:
-            f.truncate(vs.REF_MAX_OCTETS + 1)
+            f.truncate(vs.REF_MAX_BYTES + 1)
         with self.assertRaises(_m.ErreurOutil):
             vs.outil_cloner({"nom": "Moi", "chemin": "gros.wav", "base": "ma_voix"}, self.ctx())
 

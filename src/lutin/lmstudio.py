@@ -22,13 +22,13 @@ from .i18n import t as _t
 
 URL_SH = "https://lmstudio.ai/install.sh"
 URL_PS1 = "https://lmstudio.ai/install.ps1"
-HOTE = "127.0.0.1"          # jamais une autre adresse : le serveur de LM Studio ne sort pas de cette machine
-PORT_DEFAUT = 1234
-TAILLE_SCRIPT_MAX = 400_000
-RE_MODELE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.\-/@:]{1,120}$")
+HOST = "127.0.0.1"          # jamais une autre adresse : le serveur de LM Studio ne sort pas de cette machine
+DEFAULT_PORT = 1234
+MAX_SCRIPT_SIZE = 400_000
+RE_MODEL = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.\-/@:]{1,120}$")
 
 
-def chemin_lms():
+def lms_path():
     """La commande `lms` (installée par llmster ou par l'application de bureau), ou None."""
     trouve = shutil.which("lms")
     if trouve:
@@ -37,9 +37,9 @@ def chemin_lms():
     return str(exe) if exe.is_file() else None
 
 
-def repond(port):
+def responds(port):
     try:
-        with urllib.request.urlopen("http://{}:{}/v1/models".format(HOTE, int(port)), timeout=3) as r:
+        with urllib.request.urlopen("http://{}:{}/v1/models".format(HOST, int(port)), timeout=3) as r:
             return r.status == 200
     except (urllib.error.URLError, OSError, ValueError):
         return False
@@ -50,19 +50,19 @@ def _script(url, ouvrir=urllib.request.urlopen):
     with ouvrir(req, timeout=30) as r:
         if not str(r.geturl()).startswith("https://lmstudio.ai/"):
             raise ValueError(_t("L'installeur de LM Studio a été redirigé ailleurs : refusé."))
-        corps = r.read(TAILLE_SCRIPT_MAX + 1)
-    if len(corps) > TAILLE_SCRIPT_MAX or not corps.strip():
+        corps = r.read(MAX_SCRIPT_SIZE + 1)
+    if len(corps) > MAX_SCRIPT_SIZE or not corps.strip():
         raise ValueError(_t("L'installeur de LM Studio est vide ou trop gros : refusé."))
     return corps
 
 
-def commande_installeur(chemin_script):
+def installer_command(chemin_script):
     if os.name == "nt":
         return ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(chemin_script)]
     return ["bash", str(chemin_script)]
 
 
-def _suivre(proc, dire, annule=lambda: False):
+def _follow(proc, dire, annule=lambda: False):
     """Transmet chaque ligne écrite par la commande ; renvoie (code, dernières lignes). Une annulation arrête la commande."""
     fin = []
     try:
@@ -82,19 +82,19 @@ def _suivre(proc, dire, annule=lambda: False):
 
 
 # Sous Linux, llmster a besoin de libatomic (son installeur l'exige). Le paquet dépend du gestionnaire de la distribution.
-PAQUETS_LIBATOMIC = (("apt-get", "libatomic1"), ("dnf", "libatomic"), ("yum", "libatomic"), ("zypper", "libatomic1"), ("apk", "libatomic"))
+LIBATOMIC_PACKAGES = (("apt-get", "libatomic1"), ("dnf", "libatomic"), ("yum", "libatomic"), ("zypper", "libatomic1"), ("apk", "libatomic"))
 
 
-def libatomic_presente():
+def libatomic_present():
     """Vrai si libatomic est là (ou sans objet : seul Linux en a besoin)."""
     if os.name != "posix" or os.uname().sysname != "Linux":
         return True
     return any(glob.glob(motif) for motif in ("/usr/lib*/libatomic.so*", "/usr/lib/*/libatomic.so*", "/lib*/libatomic.so*", "/lib/*/libatomic.so*", "/usr/local/lib*/libatomic.so*"))
 
 
-def commandes_libatomic(trouver=shutil.which):
+def libatomic_commands(trouver=shutil.which):
     """Les commandes (mise à jour de l'index puis installation) pour CETTE distribution, ou [] si on ne la reconnaît pas."""
-    for gestionnaire, paquet in PAQUETS_LIBATOMIC:
+    for gestionnaire, paquet in LIBATOMIC_PACKAGES:
         if trouver(gestionnaire):
             if gestionnaire == "apt-get":
                 return [["apt-get", "update"], ["apt-get", "install", "-y", paquet]]
@@ -106,11 +106,11 @@ def commandes_libatomic(trouver=shutil.which):
     return []
 
 
-def preparer_dependances(dire=print, lancer=subprocess.run, present=None, trouver=shutil.which, root=None):
+def prepare_dependencies(dire=print, lancer=subprocess.run, present=None, trouver=shutil.which, root=None):
     """Installe libatomic si elle manque (en root, ou avec sudo sans mot de passe) ; sinon dit la commande exacte à lancer. Rien n'est tenté ailleurs que sous Linux."""
-    if (present or libatomic_presente)():
+    if (present or libatomic_present)():
         return
-    commandes = commandes_libatomic(trouver)
+    commandes = libatomic_commands(trouver)
     texte = " && ".join(" ".join(c) for c in commandes) or "apt-get install -y libatomic1"
     est_root = (os.geteuid() == 0) if root is None and hasattr(os, "geteuid") else bool(root)
     prefixe = []
@@ -129,29 +129,29 @@ def preparer_dependances(dire=print, lancer=subprocess.run, present=None, trouve
             raise ValueError(_t("L'installation de libatomic a échoué ({}). Lance toi-même : sudo {}").format(((r.stdout or "") + (r.stderr or ""))[-200:].strip(), texte))
 
 
-def installer(dire=print, ouvrir=urllib.request.urlopen, lancer=subprocess.Popen, annule=lambda: False, dependances=None):
+def install(dire=print, ouvrir=urllib.request.urlopen, lancer=subprocess.Popen, annule=lambda: False, dependances=None):
     """Télécharge puis lance l'installeur officiel de llmster (le démon de LM Studio, sans interface). Renvoie le chemin de `lms`."""
-    (dependances or preparer_dependances)(dire)
+    (dependances or prepare_dependencies)(dire)
     dire(_t("Téléchargement de l'installeur officiel de LM Studio…"))
     corps = _script(URL_PS1 if os.name == "nt" else URL_SH, ouvrir)
     with tempfile.TemporaryDirectory(prefix="lutin-lmstudio-") as tmp:
         script = Path(tmp) / ("install.ps1" if os.name == "nt" else "install.sh")
         script.write_bytes(corps)
         dire(_t("Installation de LM Studio (llmster)…"))
-        proc = lancer(commande_installeur(script), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, text=True, encoding="utf-8", errors="replace")
-        code, fin = _suivre(proc, dire, annule)
+        proc = lancer(installer_command(script), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, text=True, encoding="utf-8", errors="replace")
+        code, fin = _follow(proc, dire, annule)
     if code != 0 and not annule():
         if any("libatomic" in ligne for ligne in fin):
             raise ValueError(_t("LM Studio a besoin de la bibliothèque libatomic : installe-la (Debian/Ubuntu : sudo apt-get install -y libatomic1 ; Fedora : sudo dnf install -y libatomic), puis recommence."))
         raise ValueError(_t("L'installeur de LM Studio s'est arrêté (code {}). Fin de son message :\n{}").format(code, "\n".join(fin[-6:])))
-    lms = chemin_lms()
+    lms = lms_path()
     if not lms:
         raise ValueError(_t("L'installation s'est terminée mais la commande « lms » est introuvable : ouvre un nouveau terminal ou relance Lutin pour que le PATH soit relu."))
     return lms
 
 
 def _lms(args, delai=120, lancer=subprocess.run):
-    lms = chemin_lms()
+    lms = lms_path()
     if not lms:
         raise ValueError(_t("LM Studio n'est pas installé : installe-le d'abord (Réglages > Moteur)."))
     try:
@@ -160,7 +160,7 @@ def _lms(args, delai=120, lancer=subprocess.run):
         raise ValueError(_t("La commande « lms » a échoué : {}").format(e)) from None
 
 
-def demarrer(port=PORT_DEFAUT, attente_s=60, lancer=subprocess.run, repond_=repond, dormir=time.sleep):
+def start(port=DEFAULT_PORT, attente_s=60, lancer=subprocess.run, repond_=responds, dormir=time.sleep):
     """`lms daemon up` puis `lms server start --port N` (127.0.0.1 par défaut), puis attend que /v1/models réponde."""
     if repond_(port):
         return port
@@ -178,36 +178,36 @@ def demarrer(port=PORT_DEFAUT, attente_s=60, lancer=subprocess.run, repond_=repo
     raise ValueError(_t("LM Studio ne répond pas après {} s sur le port {}.").format(attente_s, port))
 
 
-def arreter(lancer=subprocess.run):
+def stop(lancer=subprocess.run):
     """`lms server stop` puis `lms daemon down` : le serveur s'arrête et la mémoire est rendue."""
     _lms(["server", "stop"], 60, lancer)
     r = _lms(["daemon", "down"], 60, lancer)
     return r.returncode == 0
 
 
-def mettre_a_jour(lancer=subprocess.run):
+def update(lancer=subprocess.run):
     r = _lms(["daemon", "update"], 600, lancer)
     if r.returncode != 0:
         raise ValueError(_t("La mise à jour de LM Studio a échoué : {}").format(((r.stdout or "") + (r.stderr or ""))[-300:]))
     return True
 
 
-def telecharger(nom, dire=print, lancer=subprocess.Popen, annule=lambda: False):
+def download(nom, dire=print, lancer=subprocess.Popen, annule=lambda: False):
     """`lms get <modèle>` : télécharge un modèle dans le dossier de LM Studio. Seuls des noms simples sont acceptés (propriétaire/nom, avec @quantification éventuelle)."""
     nom = str(nom or "").strip()
-    if not RE_MODELE.match(nom) or nom.startswith("-"):
+    if not RE_MODEL.match(nom) or nom.startswith("-"):
         raise ValueError(_t("Nom de modèle invalide : {}").format(nom[:60]))
-    lms = chemin_lms()
+    lms = lms_path()
     if not lms:
         raise ValueError(_t("LM Studio n'est pas installé : installe-le d'abord (Réglages > Moteur)."))
     proc = lancer([lms, "get", nom], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, text=True, encoding="utf-8", errors="replace")
-    code, fin = _suivre(proc, dire, annule)
+    code, fin = _follow(proc, dire, annule)
     if code != 0 and not annule():
         raise ValueError(_t("LM Studio n'a pas pu télécharger ce modèle (code {}). Fin de son message :\n{}").format(code, "\n".join(fin[-6:])))
     return True
 
 
-def modeles(lancer=subprocess.run):
+def models(lancer=subprocess.run):
     """Les modèles déjà téléchargés : [{nom, taille_go}] d'après `lms ls --json` (liste vide si la sortie n'est pas lisible)."""
     r = _lms(["ls", "--json"], 60, lancer)
     try:
@@ -223,14 +223,14 @@ def modeles(lancer=subprocess.run):
     return sortie
 
 
-def dossier_modeles():
+def models_folder():
     return Path.home() / ".lmstudio" / "models"
 
 
-def supprimer_modele(nom, lister=None):
+def remove_model(nom, lister=None):
     """Supprime le fichier d'un modèle téléchargé (et les dossiers qu'il laisse vides). Le fichier est cherché dans la liste de LM Studio et doit être DANS son dossier de modèles : rien d'autre n'est jamais effacé."""
-    trouve = next((m for m in (lister or modeles)() if m["nom"] == nom), None)
-    racine = dossier_modeles().resolve()
+    trouve = next((m for m in (lister or models)() if m["nom"] == nom), None)
+    racine = models_folder().resolve()
     if not trouve or not trouve.get("chemin"):
         raise ValueError(_t("Ce modèle n'est pas dans la liste de LM Studio."))
     cible = (racine / trouve["chemin"]).resolve()

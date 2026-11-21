@@ -12,9 +12,9 @@
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" type="image/svg+xml" href="/icone.svg">
 <link rel="apple-touch-icon" href="/icone-180.png">
-<link rel="stylesheet" href="lib/github-dark.min.css">
-<script src="lib/highlight.min.js"></script>
-<script src="lib/mermaid.min.js"></script>
+<link rel="stylesheet" href="/lib/github-dark.min.css">
+<script src="/lib/highlight.min.js"></script>
+<script src="/lib/mermaid.min.js"></script>
 <script>
 if (window.mermaid) { mermaid.initialize({ startOnLoad: false, theme: 'dark', securityLevel: 'strict' }); }
 </script>
@@ -481,6 +481,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     <label class="opt-ligne" title="Limite la longueur de la réponse en jetons. 0 = pas de limite.">Longueur max <select id="sLong"><option value="0">Illimitée</option><option value="512">512</option><option value="1024">1 024</option><option value="2048">2 048</option><option value="4096">4 096</option><option value="8192">8 192</option><option value="16384">16 384</option><option value="32768">32 768</option></select></label>
   </div>
   <div class="aide" id="racine"></div>
+  <div class="aide" style="padding:2px 8px 6px"><a href="/" id="lienNouvelleInterface" title="La nouvelle interface est celle par défaut ; cette page reste disponible pendant les versions 1.x">✨ Revenir à la nouvelle interface</a></div>
 </aside>
 <div class="separateur-v" id="sepV" role="separator" aria-orientation="vertical" tabindex="0" title="Glisse pour élargir ou réduire la colonne de gauche (double-clic : réinitialiser)"></div>
 <main>
@@ -606,7 +607,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     <div id="infoClaude" class="aide" style="margin:6px 0"></div>
     <div class="aide" id="mClaude" style="margin:6px 0"></div>
     <h2>Mémoire des longues conversations <span class="aide">(comment Lutin garde le fil quand la fenêtre de contexte se remplit)</span></h2>
-    <label class="opt-ligne">Méthode <select id="selMemoire"><option value="demander">Demander au premier résumé</option><option value="resume">Résumé automatique</option><option value="fichier">Fiche de suivi</option></select></label>
+    <label class="opt-ligne">Méthode <select id="selMemoire"><option value="fichier">Fiche de suivi</option></select></label>
     <label class="opt-ligne">Part du contexte que la fiche peut prendre (%) <input id="iFichePart" type="number" min="5" max="25" step="1" style="width:80px"></label>
     <label class="opt-ligne"><input type="checkbox" id="cSens"> Recherche par le sens (retrouve aussi un passage qui n'emploie pas les mêmes mots)</label>
     <div class="aide" id="aideSens"></div>
@@ -1032,24 +1033,6 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     return d;
   };
   // La conversation devient longue : fiche de suivi ou résumé ? Le tour attend la réponse (cinq minutes au plus, puis résumé automatique cette fois).
-  const carteChoixMemoire = e => {
-    const d = el('div', 'accord');
-    d.appendChild(el('b', '', T('Cette conversation devient longue : comment garder le fil ?')));
-    d.appendChild(el('div', 'aide', T('Fiche de suivi : une courte fiche (objectif, décisions, plan, étape en cours…) relue à chaque réponse, et les détails du début restent retrouvables ; elle prend un peu de contexte à chaque réponse.')));
-    d.appendChild(el('div', 'aide', T('Résumé : le modèle résume le début, sans rien à gérer, mais des détails peuvent se perdre (le début reste retrouvable avec « rappeler »).')));
-    const garder = el('input'); garder.type = 'checkbox'; garder.checked = true;
-    const lab = el('label', 'opt-ligne'); lab.appendChild(garder); lab.appendChild(document.createTextNode(' ' + T('Garder ce choix pour toute la conversation (sinon la question revient au prochain résumé)')));
-    d.appendChild(lab);
-    const ligne = el('div', 'ligne'), fiche = el('button', 'principal', T('Fiche de suivi')), resume = el('button', '', T('Résumé'));
-    const repondre = async choix => {
-      fiche.disabled = resume.disabled = true;
-      try { await api(U('/api/memoire-choix', FLUX ? FLUX.hote : HOTE), { conversation: e.conversation, choix, garder: garder.checked }); d.style.opacity = .6; d.appendChild(el('div', 'aide', choix === 'fichier' ? T('✔ Fiche de suivi') : T('✔ Résumé'))); if (CONV && garder.checked) CONV.memoire_longue = choix; }
-      catch (err) { d.appendChild(el('div', 'erreur', err.message)); }
-    };
-    fiche.addEventListener('click', () => repondre('fichier')); resume.addEventListener('click', () => repondre('resume'));
-    ligne.append(fiche, resume); d.appendChild(ligne);
-    return d;
-  };
   // Les cases d'accord automatique restent cochées (c'est ton choix pour la conversation) mais sont suspendues jusqu'à la fin de la demande en cours quand du contenu web a été lu
   const marquerSuspendu = raison => { for (const id of ['cAuto', 'cAutoCmd']) { const l = $(id).parentElement; if (!l.classList.contains('suspendu')) l.dataset.titre = l.title; l.classList.add('suspendu'); l.title = raison; } };
   const finSuspension = () => { for (const id of ['cAuto', 'cAutoCmd']) { const l = $(id).parentElement; if (l.classList.contains('suspendu')) { l.classList.remove('suspendu'); l.title = l.dataset.titre || ''; } } };
@@ -1464,7 +1447,6 @@ body[data-moteur="openai"] .biblio { display:none !important; }
           else if (e.type === 'taches') { if (visible()) afficherTaches(e.liste, true); }
           else if (e.type === 'jetons') { if (visible()) setJauge(e); }
           else if (e.type === 'vitesse') { if (visible()) setVitesse(e); }
-          else if (e.type === 'choix_memoire') { zone().appendChild(carteChoixMemoire(e)); pastille('attente'); signaler(T('⏸ Une question vous attend')); }
           else if (e.type === 'info') zone().appendChild(el('div', 'info', e.texte));
           else if (e.type === 'erreur') zone().appendChild(el('div', 'erreur', e.texte));
           else if (e.type === 'fin') {
@@ -1476,7 +1458,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
             }
             if (etaitNouvelle && !String(e.conversation.titre || '').startsWith('🎯')) titreAuto(e.conversation.id);          // une conversation de mission garde le nom de sa mission
           }
-          if (['approbation', 'essai', 'choix_memoire', 'info', 'erreur'].includes(e.type)) apres();
+          if (['approbation', 'essai', 'info', 'erreur'].includes(e.type)) apres();
           if (visible()) bas();
         }
       }
@@ -1538,11 +1520,6 @@ body[data-moteur="openai"] .biblio { display:none !important; }
         zoneDos.appendChild(b);
       });
     }).catch(() => { zoneDos.textContent = T('Disponible depuis cette machine seulement.'); });
-    m.appendChild(el('div', 'menu-titre', T('Garder le fil de la conversation')));
-    const memoire = mode => async () => { await api('/api/memoire-conversation', { conversation: c.id, mode }); if (CONV && CONV.id === c.id) { if (mode) CONV.memoire_longue = mode; else delete CONV.memoire_longue; majJauge(c.id); } rafraichir(); };
-    item(T('Fiche de suivi'), memoire('fichier'), c.memoire === 'fichier');
-    item(T('Résumé automatique'), memoire('resume'), c.memoire === 'resume');
-    item(T('Suivre le réglage général'), memoire(''), !c.memoire);
     m.appendChild(el('div', 'menu-titre', T('Fiche de suivi')));
     item(T('Voir ou modifier la fiche…'), () => ouvrirFiche(c.id));
     item(T('Supprimer la fiche'), async () => {
@@ -1920,7 +1897,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     };
     const gererCeServeur = async () => {          // « Démarrer » ou « Installer » le serveur que Lutin gère ; l'avancement est dans la barre bleue du haut
       oui.disabled = true; msg.textContent = '';
-      try { await api('/api/moteur-action', { moteur: 'openai', action: pl.gere.installe ? 'demarrer' : 'installer' }); msg.textContent = T('Lancé : l\'avancement est dans la barre bleue du haut.'); }
+      try { await api('/api/moteur-action', { moteur: ETAT.moteur || 'openai', action: pl.gere.installe ? 'demarrer' : 'installer' }); msg.textContent = T('Lancé : l\'avancement est dans la barre bleue du haut.'); }
       catch (e) { msg.textContent = e.message; msg.className = 'erreur'; }
       oui.disabled = false; rafraichir();
     };
@@ -2242,15 +2219,6 @@ body[data-moteur="openai"] .biblio { display:none !important; }
       const nom = m => $('selMode').querySelector('option[value="' + m + '"]').textContent;
       if (!v) { infoLocale(T('Mode actuel : ') + nom($('selMode').value) + T('. Utilise /mode polyvalent, code, ecriture, recherche ou discussion (ou en anglais : general, code, writing, research, chat).')); return; }
       $('selMode').value = v; await sauverOptions(); infoLocale(T('Mode : ') + nom(v) + '.');
-    } },
-    { n: 'memoire', a: ['memory'], arg: 'resume|fichier|demander', d: T('Mémoire des longues conversations : résumé automatique, fiche de suivi, ou demander au premier résumé (pour cette conversation)'), f: async arg => {
-      const a = (arg || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''), v = a.startsWith('dem') || a.startsWith('ask') ? 'demander' : a.startsWith('res') || a.startsWith('sum') || a.startsWith('compact') ? 'resume' : (a.startsWith('fic') || a.startsWith('suiv') || a.startsWith('file') || a.startsWith('trac') ? 'fichier' : '');
-      const nom = m => (m === 'fichier' ? T('fiche de suivi') : m === 'demander' ? T('demander au premier résumé') : T('résumé automatique'));
-      if (!v) { infoLocale(T('Mémoire actuelle : ') + nom((CONV && CONV.memoire_longue) || ETAT.reglages.memoire_longue || 'demander') + T('. Utilise /memoire resume, /memoire fichier ou /memoire demander (ou 🧾 Fiche de suivi).')); return; }
-      if (v === 'demander') { $('selMemoire').value = v; await sauverReglages(); if (CONV) { await api('/api/memoire-conversation', { conversation: CONV.id, mode: '' }); delete CONV.memoire_longue; majJauge(CONV.id); } infoLocale(T('Mémoire : ') + nom(v) + '.'); return; }
-      if (!CONV) { $('selMemoire').value = v; await sauverReglages(); infoLocale(T('Mémoire par défaut : ') + nom(v) + '.'); return; }
-      const x = await api('/api/memoire-conversation', { conversation: CONV.id, mode: v }); CONV.memoire_longue = v; majJauge(CONV.id);
-      infoLocale(T('Mémoire de cette conversation : ') + nom(x.mode) + (x.mode === 'fichier' ? T('. Elle prend jusqu\'à {} % du contexte à chaque réponse.').replace('{}', fichePart()) : T('. Le début sera résumé quand il le faudra.')));
     } },
     { n: 'web', arg: T('question'), d: T('Montre les résultats bruts d\'une recherche web, à cocher avant de les donner au modèle'), f: arg => apercuWeb(arg) },
     { n: 'reflexion', arg: 'on|off', d: T('Active ou coupe la réflexion du modèle'), f: arg => bascule('cReflexion', arg, T('Réflexion')) },
@@ -2673,23 +2641,15 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     if (!ident) { infoLocale(T('Pas encore de conversation.')); return; }
     const meta = (ETAT.conversations || []).find(x => x.id === ident) || {};
     const c = ouvrirModal(T('Fiche de suivi') + (meta.titre ? ' — ' + meta.titre : '')), msg = el('p', 'aide');
-    let r, courant = meta.memoire || '';
+    let r;
     const touche = () => { if (CONV && CONV.id === ident) majJauge(ident); };
     try { r = await api('/api/suivi?conversation=' + encodeURIComponent(ident)); } catch (e) { c.appendChild(el('p', 'erreur', e.message)); return; }
-    const lm = el('label'); lm.appendChild(document.createTextNode(T('Mémoire de cette conversation : ')));
-    const sel = document.createElement('select');
-    [['', T('Suivre le réglage général') + ' (' + (r.mode_general === 'fichier' ? T('fiche de suivi') : T('résumé automatique')) + ')'], ['resume', T('Résumé automatique')], ['fichier', T('Fiche de suivi')]].forEach(([v, t]) => { const o = el('option', '', t); o.value = v; sel.appendChild(o); });
-    sel.value = courant; lm.appendChild(sel); c.appendChild(lm);
     const etat = el('p', 'aide'); c.appendChild(etat);
     const dire = x => { etat.textContent = (x.mode === 'fichier' ? T('Mode actuel : fiche de suivi. ') : T('Mode actuel : résumé automatique. ')) + (x.mesure.lignes ? T('Fiche : ') + x.mesure.lignes + T(' ligne(s), environ ') + x.mesure.jetons + T(' jetons (') + Math.round(x.mesure.part * 100) + T(' % du contexte).') : T('La fiche est vide.')) + (x.mesure.avertissement ? ' ⚠ ' + x.mesure.avertissement : ''); };
     dire(r);
     c.appendChild(el('p', 'aide', T('Tu peux corriger la fiche à la main : une ligne par élément, sous les titres « ## Objectif », « ## Décisions », « ## Plan », « ## Étape en cours », « ## Fait »…')));
     const zone = document.createElement('textarea'); zone.value = r.texte; zone.style.cssText = 'width:100%;min-height:220px'; c.appendChild(zone);
     const ok = el('button', 'principal', T('Enregistrer la fiche')), vide = el('button', 'danger', T('Supprimer la fiche')); c.appendChild(ok); c.appendChild(document.createTextNode(' ')); c.appendChild(vide); c.appendChild(msg);
-    sel.addEventListener('change', async () => {
-      if (sel.value === 'fichier' && !confirm(T('Passer cette conversation en fiche de suivi ? Le début déjà résumé reste utilisé ; la fiche prendra jusqu\'à {} % du contexte à chaque réponse.').replace('{}', fichePart()))) { sel.value = courant; return; }
-      try { const x = await api('/api/memoire-conversation', { conversation: ident, mode: sel.value }); courant = sel.value; if (CONV && CONV.id === ident) CONV.memoire_longue = sel.value || undefined; dire(x); touche(); rafraichir(); } catch (e) { msg.textContent = e.message; }
-    });
     ok.addEventListener('click', async () => { try { const x = await api('/api/suivi', { conversation: ident, texte: zone.value }); dire(x); msg.textContent = T('Fiche enregistrée.'); touche(); } catch (e) { msg.textContent = e.message; } });
     vide.addEventListener('click', async () => { if (!confirm(T('Supprimer la fiche de suivi de cette conversation ? Elle sera refaite si le mode fiche de suivi est actif.'))) return; try { const x = await api('/api/suivi-vider', { conversation: ident }); zone.value = ''; dire(x); msg.textContent = T('Fiche supprimée.'); touche(); } catch (e) { msg.textContent = e.message; } });
   };
@@ -3765,6 +3725,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
   const LIBELLE_ACTION = { installer: T('Installer'), desinstaller: T('Désinstaller'), reinstaller: T('Réinstaller'), demarrer: T('Démarrer'), arreter: T('Arrêter') };
   const etatMoteur = m => !m.statut.installe ? T('Pas installé') : m.statut.actif ? T('Prêt') : (m.statut.mode === 'externe' ? T('Ne répond pas') : T('Arrêté'));
   const barreTache = t => { const l = el('div'); l.appendChild(el('div', 'aide', t.texte || T('En cours…'))); if (t.total) { const b = el('div', 'barre'), i = el('i'); i.style.width = Math.min(100, Math.round(100 * t.fait / t.total)) + '%'; b.appendChild(i); l.appendChild(b); } return l; };
+  const GERES = ['exllamav3', 'lmstudio', 'colibri'];          // les serveurs que Lutin installe et lance : chacun sa carte (ADR 0020)
   const carteMoteur = (m, modifiable, prereglages) => {
     const d = el('div', 'carte moteur-liste' + (m.courant ? ' moteur-choisi' : '')); d.style.cssText = 'flex-direction:column;align-items:stretch;gap:6px';
     const tete = el('div', 'ligne'), radio = el('input'); radio.type = 'radio'; radio.name = 'moteurChoisi'; radio.checked = m.courant; radio.title = T('Utiliser ce moteur');
@@ -3848,17 +3809,18 @@ body[data-moteur="openai"] .biblio { display:none !important; }
         }
       }
     }
-    if (m.adresse_modifiable) {
+    if (m.adresse_modifiable || GERES.includes(m.id)) {          // ExLlamaV3, LM Studio, Colibri : leurs réglages propres
       const f = el('div', 'ligne'), url = el('input'), cle = el('input'), msg = el('span', 'aide'); let choixServeur = null;
       url.value = m.reglages.url || ''; url.style.minWidth = '260px'; url.disabled = cle.disabled = !modifiable;
       url.placeholder = m.id === 'llamacpp' ? T('Adresse d\'un llama-server déjà lancé (vide : Lutin le gère lui-même)') : T('Adresse du serveur, par exemple http://127.0.0.1:1234');
       cle.type = 'password'; cle.placeholder = m.reglages.cle_definie ? T('Clé enregistrée (vide : on la garde)') : T('Clé d\'accès (facultative)');
-      const colibri = m.id === 'openai' && m.reglages.serveur === 'colibri';          // Colibri et LM Studio : les seuls serveurs de la liste que Lutin installe et lance lui-même
-      const lmstudio = m.id === 'openai' && m.reglages.serveur === 'lmstudio', exllamav3 = m.id === 'openai' && m.reglages.serveur === 'exllamav3', gere = colibri || lmstudio || exllamav3;
-      if (m.id === 'openai' && prereglages.length) {          // les serveurs connus du catalogue signé : un choix remplit l'adresse et explique le serveur
+      const colibri = m.id === 'colibri';          // Colibri et LM Studio : les seuls serveurs de la liste que Lutin installe et lance lui-même
+      const lmstudio = m.id === 'lmstudio', exllamav3 = m.id === 'exllamav3', gere = colibri || lmstudio || exllamav3;
+      const autresServeurs = prereglages.filter(pr => !GERES.includes(pr.id));          // ceux que Lutin gère ont leur carte
+      if (m.id === 'openai' && autresServeurs.length) {          // les serveurs connus du catalogue signé : un choix remplit l'adresse et explique le serveur
         const choix = el('select'), fiche = el('div', 'aide'); choix.disabled = !modifiable; choixServeur = choix; choix.title = modifiable ? T('Plusieurs serveurs peuvent être installés ; un seul est utilisé à la fois — celui-ci. Le changer arrête l\'ancien et met à jour la page.') : explicationVerrou();
         const vide = el('option', '', T('Autre serveur (j\'indique son adresse)')); vide.value = ''; choix.appendChild(vide);
-        const choisi = m.reglages.serveur || '', visibles = prereglages.filter(pr => pr.compatible !== false || pr.id === choisi), masques = prereglages.filter(pr => !visibles.includes(pr));          // seuls les serveurs qui peuvent tourner sur CETTE machine sont proposés (système, Docker, carte graphique)
+        const choisi = m.reglages.serveur || '', visibles = autresServeurs.filter(pr => pr.compatible !== false || pr.id === choisi), masques = autresServeurs.filter(pr => !visibles.includes(pr));          // seuls les serveurs qui peuvent tourner sur CETTE machine sont proposés (système, Docker, carte graphique)
         [...visibles].sort((a, b) => Number(a.experimental) - Number(b.experimental)).forEach(pr => { const o = el('option', '', pr.nom + (pr.experimental ? ' · ' + T('expérimental') : '') + (['colibri', 'lmstudio', 'exllamav3'].includes(pr.id) ? ' · ' + ((m.reglages.serveurs_geres || {})[pr.id] ? '✔ ' + T('installé') : T('Lutin peut l\'installer')) : ' · ' + T('à installer toi-même'))); o.value = pr.id; choix.appendChild(o); });          // les expérimentaux en dernier, jamais préselectionnés
         choix.value = m.reglages.serveur || '';
         // Ce que Lutin fait ou ne fait pas pour le serveur choisi, dit en clair : seul Colibri s'installe depuis Lutin, et jamais sans clic sur « Installer »
@@ -3873,9 +3835,9 @@ body[data-moteur="openai"] .biblio { display:none !important; }
           if (pr.points_faibles.length) fiche.appendChild(el('div', '', '− ' + pr.points_faibles.join(' · ')));
           if (pr.site) { const a = el('a', '', T('Site officiel')); a.href = pr.site; a.target = '_blank'; a.rel = 'noopener noreferrer'; fiche.appendChild(a); }
         };
-        montrerFiche(prereglages.find(x => x.id === choix.value));
+        montrerFiche(autresServeurs.find(x => x.id === choix.value));
         choix.addEventListener('change', async () => {
-          const pr = prereglages.find(x => x.id === choix.value); fiche.textContent = '';
+          const pr = autresServeurs.find(x => x.id === choix.value); fiche.textContent = '';
           if (['colibri', 'lmstudio', 'exllamav3'].includes(choix.value) || gere) {          // Colibri ou LM Studio apparaît ou disparaît avec ses boutons : le choix est enregistré tout de suite
             choix.disabled = true;          // l'arrêt du serveur précédent peut prendre quelques secondes
             try { await api('/api/moteur-regler', { moteur: m.id, serveur: choix.value }); await rafraichir(); } catch (e) { alert(e.message); }
@@ -4263,7 +4225,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
       const c = el('div', 'carte'); c.appendChild(el('span', '', m.statut.detail || T('Ce moteur n\'est pas prêt.')));
       const b = el('button', 'principal', T('Ouvrir les réglages du moteur')); b.addEventListener('click', () => { ouvrirOnglet('reglages'); montrerRubrique('moteur'); }); c.appendChild(b); neuf.appendChild(c);
     }
-    if (m.id === 'openai') {          // serveur externe : la page commune est masquée, voici ses modèles
+    if (m.id === 'openai' || GERES.includes(m.id)) {          // serveur compatible OpenAI : la page commune est masquée, voici ses modèles
       neuf.appendChild(el('h2', '', T('Modèles de ') + m.nom));
       const installes = ETAT.installes || [];
       if (!installes.length) neuf.appendChild(el('div', 'aide', T('Aucun modèle pour le moment.')));
@@ -4308,7 +4270,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
         b.addEventListener('click', chercher); q.addEventListener('keydown', e => { if (e.key === 'Enter') chercher(); });
         c.append(q, b); neuf.append(c, msg, res);
       }
-    } else if (dl.raison && m.id === 'openai') neuf.appendChild(el('div', 'aide', dl.raison));
+    } else if (dl.raison && (m.id === 'openai' || GERES.includes(m.id))) neuf.appendChild(el('div', 'aide', dl.raison));
     z.replaceChildren(...neuf.childNodes);
   };
   const explicationVerrou = () => ETAT.niveau === 'proxy'
@@ -4978,7 +4940,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
   const carteNonInstallee = (z, nom) => {
     z.appendChild(el('div', 'aide', T('{} n\'est pas encore installé.').replace('{}', nom)));
     const l = el('div', 'ligne'), b = el('button', 'principal', T('Installer {}').replace('{}', nom)), msg = el('span', 'aide');
-    b.addEventListener('click', async () => { b.disabled = true; try { await api('/api/moteur-action', { moteur: 'openai', action: 'installer' }); msg.textContent = T('Installation lancée : l\'avancement est dans la barre bleue du haut.'); } catch (e) { msg.textContent = e.message; b.disabled = false; } });
+    b.addEventListener('click', async () => { b.disabled = true; try { await api('/api/moteur-action', { moteur: ETAT.moteur || 'openai', action: 'installer' }); msg.textContent = T('Installation lancée : l\'avancement est dans la barre bleue du haut.'); } catch (e) { msg.textContent = e.message; b.disabled = false; } });
     l.append(b, msg); z.appendChild(l);
   };
   // ---- Réglages > Moteur : les mesures réelles de chaque moteur sur cette machine (vitesse, premier mot, chargement), classées ; on peut en lancer une pour tout moteur actif
@@ -5197,7 +5159,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     if (!r.actif && r.demarrer) {
       if (r.demarrer.possible) {
         const go = el('button', 'principal', T('Démarrer ') + cfg.nom), m0 = el('span', 'aide');
-        go.addEventListener('click', async () => { go.disabled = true; try { await api('/api/moteur-action', { moteur: 'openai', action: 'demarrer' }); m0.textContent = T('Lancé : l\'avancement est dans la barre bleue du haut.'); rafraichir(); } catch (x) { m0.textContent = x.message; go.disabled = false; } });
+        go.addEventListener('click', async () => { go.disabled = true; try { await api('/api/moteur-action', { moteur: ETAT.moteur || 'openai', action: 'demarrer' }); m0.textContent = T('Lancé : l\'avancement est dans la barre bleue du haut.'); rafraichir(); } catch (x) { m0.textContent = x.message; go.disabled = false; } });
         etat.append(go, m0);
       } else if (r.demarrer.raison) etat.appendChild(el('div', 'attention', 'ℹ ' + r.demarrer.raison));
     }

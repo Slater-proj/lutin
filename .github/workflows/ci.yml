@@ -1,15 +1,64 @@
 name: ci
 
 # Appelé par release.yml (à chaque envoi de branche) et lancé sur chaque pull request.
+# One run of the tests per push, not two.
+#   - a push to a branch of this repository runs `release.yml`, which calls this workflow (workflow_call): that is THE run, and its results are attached to the commit,
+#     so they show on the pull request too;
+#   - a pull request from the same repository would run the same tests a second time on the same commit: its jobs are skipped (`if:` of every job);
+#   - a pull request from a FORK is the one case where no push reached this repository: it runs here.
+# The job `gate` is the single result to require in the protection of `main` (see docs/PUBLISHING.md).
+#
+# Built once, tested, then published as it is:
+#   - `interface` builds the interface once; every other job takes that build (artifact `interface`) instead of building its own;
+#   - `distribution` builds the wheel and the source archive once, with the version given by the caller; the install jobs and the Windows installer start from that wheel;
+#   - what release.yml publishes are these very files (artifacts `lutin-<version>` and `installateur-<version>`): nothing is built a second time after the tests.
 on:
   pull_request:
   workflow_call:
+    inputs:
+      version:
+        description: "Version written into what is built (wheel, source archive, installer, Docker image). Empty: 0.0.0.dev0"
+        type: string
+        default: ""
 
 permissions:
   contents: read
 
 jobs:
+  interface:
+    if: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) }}
+    timeout-minutes: 10
+    name: interface (types, tests, construction)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/frontend          # the interface is built before anything is tested or packaged (ADR 0002)
+      - uses: actions/upload-artifact@v7
+        with:
+          name: interface
+          path: src/lutin/web/app/
+          if-no-files-found: error
+          overwrite: true          # a job run again in the same run replaces its artifact instead of failing on the name
+          retention-days: 7
+
+  style:
+    if: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) }}
+    timeout-minutes: 5
+    name: style et erreurs évidentes (ruff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      # Once, not once per test series: what ruff reports depends on pyproject.toml, not on the Python that runs it.
+      - run: |
+          python -m pip install ruff
+          python -m ruff check src tests tools
+
   tests:
+    if: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) }}
+    needs: interface
     timeout-minutes: 25
     name: tests (${{ matrix.os }}, Python ${{ matrix.python }})
     runs-on: ${{ matrix.os }}
@@ -23,27 +72,42 @@ jobs:
           - {os: windows-latest, python: "3.12"}
     steps:
       - uses: actions/checkout@v7
+      - name: The interface built for this run
+        uses: actions/download-artifact@v8
+        with:
+          name: interface
+          path: src/lutin/web/app
+      # The accessibility checks of the browser tests read axe-core from frontend/node_modules: without it they would be skipped in silence.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install the pinned development dependencies (no install script is run)
+        shell: bash
+        working-directory: frontend
+        run: npm ci --ignore-scripts
       - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python }}
-      - name: Style et erreurs évidentes
-        run: |
-          python -m pip install ruff
-          python -m ruff check src tests tools
       - name: Tests (un processus par fichier)
         run: python tests/lancer_tests.py
 
-  paquet:
-    timeout-minutes: 15
-    name: paquet (roue, archive source) sur ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest]
+  distribution:
+    if: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) }}
+    needs: interface
+    timeout-minutes: 10
+    name: paquet (roue, archive source)
+    runs-on: ubuntu-latest
     env:
-      SETUPTOOLS_SCM_PRETEND_VERSION: "0.0.0.dev0"
+      SETUPTOOLS_SCM_PRETEND_VERSION: ${{ inputs.version || '0.0.0.dev0' }}
     steps:
       - uses: actions/checkout@v7
+      - name: The interface built for this run
+        uses: actions/download-artifact@v8
+        with:
+          name: interface
+          path: src/lutin/web/app
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
@@ -51,6 +115,31 @@ jobs:
       - run: python -m build
       - name: Contenu conforme (rien d'inutile, rien d'oublié)
         run: python tools/verifier_paquet.py dist
+      - uses: actions/upload-artifact@v7
+        with:
+          name: lutin-${{ inputs.version || '0.0.0.dev0' }}
+          path: dist/*
+          if-no-files-found: error
+          overwrite: true          # a job run again in the same run replaces its artifact instead of failing on the name
+          retention-days: 30
+
+  paquet:
+    if: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) }}
+    needs: distribution
+    timeout-minutes: 10
+    name: paquet installé sur ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@v8
+        with:
+          name: lutin-${{ inputs.version || '0.0.0.dev0' }}
+          path: dist
       - name: Installer la roue dans un environnement vierge et lancer la commande
         shell: bash
         run: |
@@ -62,17 +151,24 @@ jobs:
           "$PY" -m lutin offline
 
   docker:
+    if: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) }}
+    needs: interface
     timeout-minutes: 25
     name: image Docker (construction et démarrage)
     runs-on: ubuntu-latest
     env:
-      SETUPTOOLS_SCM_PRETEND_VERSION: "0.0.0.dev0"
+      LUTIN_VERSION: ${{ inputs.version || '0.0.0.dev0' }}
     steps:
       - uses: actions/checkout@v7
+      - name: The interface built for this run
+        uses: actions/download-artifact@v8
+        with:
+          name: interface
+          path: src/lutin/web/app
       - name: "Construire les deux images (complète = Lutin + Ollama, légère = Lutin seul)"
         run: |
-          docker build --target leger --build-arg LUTIN_VERSION=0.0.0.dev0 -t lutin:ci-slim .
-          docker build --build-arg LUTIN_VERSION=0.0.0.dev0 -t lutin:ci .
+          docker build --target leger --build-arg LUTIN_VERSION="$LUTIN_VERSION" -t lutin:ci-slim .
+          docker build --build-arg LUTIN_VERSION="$LUTIN_VERSION" -t lutin:ci .
       - name: Les commandes répondent
         run: |
           docker run --rm lutin:ci-slim --version
@@ -124,18 +220,22 @@ jobs:
           docker rm -f lutin-vol2
 
   installateur-linux:
+    if: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) }}
+    needs: distribution
     timeout-minutes: 10
     name: install.sh (installation, réinstallation)
     runs-on: ubuntu-latest
     env:
-      SETUPTOOLS_SCM_PRETEND_VERSION: "0.0.0.dev0"
+      LUTIN_VERSION: ${{ inputs.version || '0.0.0.dev0' }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
-      - run: python -m pip install build
-      - run: python -m build --wheel
+      - uses: actions/download-artifact@v8
+        with:
+          name: lutin-${{ inputs.version || '0.0.0.dev0' }}
+          path: dist
       - name: Installer, réinstaller (rien ne change), dans les deux langues
         run: |
           export LUTIN_SOURCE="$PWD/$(ls dist/*.whl)" LUTIN_DOSSIER="$RUNNER_TEMP/lutin" LUTIN_BIN="$RUNNER_TEMP/bin"
@@ -145,30 +245,44 @@ jobs:
           grep -q "already up to date" deux.txt
           LUTIN_LANGUE=fr bash installateur/install.sh --sans-setup | tee trois.txt
           grep -q "deja a jour" trois.txt
-          "$LUTIN_BIN/lutin" --version | grep -q "0.0.0.dev0"
+          "$LUTIN_BIN/lutin" --version | grep -qF "$LUTIN_VERSION"
           LUTIN_HOME="$RUNNER_TEMP/donnees" LUTIN_LANGUE=en "$LUTIN_BIN/lutin" securite | grep -q "this machine only"
 
   installateur-windows:
+    if: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) }}
+    needs: distribution
+    timeout-minutes: 30
     name: installateur Windows (construction, installation, désinstallation)
     runs-on: windows-latest
     env:
-      SETUPTOOLS_SCM_PRETEND_VERSION: "0.0.0.dev0"
+      LUTIN_VERSION: ${{ inputs.version || '0.0.0.dev0' }}
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
-      - run: python -m pip install build
-      - run: python -m build --wheel
+      - uses: actions/download-artifact@v8
+        with:
+          name: lutin-${{ inputs.version || '0.0.0.dev0' }}
+          path: dist
       - run: choco install innosetup --yes --no-progress
       - name: Construire l'installateur
         shell: pwsh
-        run: ./installateur/windows/construire.ps1 -Roue (Get-ChildItem dist/*.whl | Select-Object -First 1).FullName -Version 0.0.0.dev0
+        run: ./installateur/windows/construire.ps1 -Roue (Get-ChildItem dist/*.whl | Select-Object -First 1).FullName -Version $env:LUTIN_VERSION
       - name: L'installer, le réinstaller, le désinstaller
         shell: pwsh
-        run: ./installateur/windows/verifier.ps1 -Installateur (Get-ChildItem dist/lutin-setup-*.exe | Select-Object -First 1).FullName -Version 0.0.0.dev0
+        run: ./installateur/windows/verifier.ps1 -Installateur (Get-ChildItem dist/lutin-setup-*.exe | Select-Object -First 1).FullName -Version $env:LUTIN_VERSION
+      - uses: actions/upload-artifact@v7
+        with:
+          name: installateur-${{ inputs.version || '0.0.0.dev0' }}
+          path: dist/lutin-setup-*.exe
+          if-no-files-found: error
+          overwrite: true          # a job run again in the same run replaces its artifact instead of failing on the name
+          retention-days: 30
 
   syntaxe-installateurs:
+    if: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) }}
+    timeout-minutes: 5
     name: scripts d'installation (syntaxe)
     runs-on: windows-latest
     steps:
@@ -187,6 +301,8 @@ jobs:
         run: for f in installateur/*.sh docker/*.sh; do bash -n "$f" && echo "OK $f"; done
 
   securite:
+    if: ${{ !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) }}
+    timeout-minutes: 10
     name: secrets
     runs-on: ubuntu-latest
     steps:
@@ -196,3 +312,17 @@ jobs:
       - uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  gate:
+    name: ci (résultat)
+    if: ${{ always() && !(github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) }}
+    needs: [interface, style, tests, distribution, paquet, docker, installateur-linux, installateur-windows, syntaxe-installateurs, securite]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Tous les travaux ont réussi
+        run: |
+          echo "résultats : ${{ join(needs.*.result, ' ') }}"
+          if [ "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}" = "true" ]; then
+            echo "un travail a échoué, a été annulé ou n'a pas tourné"; exit 1
+          fi

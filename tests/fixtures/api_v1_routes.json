@@ -1,0 +1,1222 @@
+[
+ {
+  "method": "GET",
+  "path": "/api/v1/access",
+  "right": "session"
+ },
+ {
+  "method": "PATCH",
+  "path": "/api/v1/access",
+  "right": "local"
+ },
+ {
+  "method": "PATCH",
+  "path": "/api/v1/access/remote-admin",
+  "right": "local"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/actions-log",
+  "right": "session"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/activity",
+  "right": "session"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/addons",
+  "right": "session"
+ },
+ {
+  "method": "PATCH",
+  "path": "/api/v1/addons/{id}",
+  "right": "configurator"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/addons/{id}/check",
+  "right": "configurator"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/addons/{id}/correction",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/addons/{id}/flow",
+  "right": "configurator"
+ },
+ {
+  "method": "PATCH",
+  "path": "/api/v1/addons/{id}/flow",
+  "right": "configurator"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/addons/{id}/flow/restore",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/addons/{id}/panel",
+  "right": "configurator"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/addons/{id}/panel/{action}",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/approval-rules",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/approval-rules",
+  "right": "configurator"
+ },
+ {
+  "method": "DELETE",
+  "path": "/api/v1/approval-rules/{id}",
+  "right": "configurator"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/approvals/{id}",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/attachments",
+  "right": "session"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/attachments/{id}",
+  "right": "read"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/background-jobs",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/background-jobs",
+  "right": "configurator"
+ },
+ {
+  "method": "DELETE",
+  "path": "/api/v1/background-jobs/{id}",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/background-jobs/{id}/report",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/background-jobs/{id}/{action}",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/backup",
+  "right": "configurator"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/backup/restore",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/backup/where",
+  "right": "session"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/bench",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/bench",
+  "right": "session"
+ },
+ {
+  "method": "DELETE",
+  "path": "/api/v1/calibration",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/calibration",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/calibration",
+  "right": "configurator"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/calibration/apply",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/conversations",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/conversations",
+  "right": "session"
+ },
+ {
+  "method": "DELETE",
+  "path": "/api/v1/conversations/{id}",
+  "right": "session"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/conversations/{id}",
+  "right": "session"
+ },
+ {
+  "method": "PATCH",
+  "path": "/api/v1/conversations/{id}",
+  "right": "session"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/conversations/{id}/changes",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/conversations/{id}/changes/undo",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/conversations/{id}/compact",
+  "right": "session"
+ },
+ {
+  "method": "DELETE",
+  "path": "/api/v1/conversations/{id}/files/{file}",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/conversations/{id}/files/{file}",
+  "right": "read"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/conversations/{id}/files/{file}/open",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/conversations/{id}/folders",
+  "right": "configurator"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/conversations/{id}/folders/open",
+  "right": "configurator"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/conversations/{id}/handover",
+  "right": "session"
+ },
+ {
+  "method": "DELETE",
+  "path": "/api/v1/conversations/{id}/media/{image}",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/conversations/{id}/memory",
+  "right": "session"
+ },
+ {
+  "method": "PATCH",
+  "path": "/api/v1/conversations/{id}/memory",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/conversations/{id}/memory-choice",
+  "right": "session"
+ },
+ {
+  "method": "DELETE",
+  "path": "/api/v1/conversations/{id}/memory/sheet",
+  "right": "session"
+ },
+ {
+  "method": "PATCH",
+  "path": "/api/v1/conversations/{id}/messages/{index}",
+  "right": "session"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/conversations/{id}/options",
+  "right": "session"
+ },
+ {
+  "method": "PATCH",
+  "path": "/api/v1/conversations/{id}/options",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/conversations/{id}/stop",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/conversations/{id}/turns",
+  "right": "session"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/created-files",
+  "right": "configurator"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/created-files/delete",
+  "right": "configurator"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/created-files/{id}/open-folder",
+  "right": "configurator"
+ },
+ {
+  "method": "DELETE",
+  "path": "/api/v1/devices",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/devices",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/devices/pairing-code",
+  "right": "local"
+ },
+ {
+  "method": "DELETE",
+  "path": "/api/v1/devices/{id}",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/documents",
+  "right": "session"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/documents/search",
+  "right": "session"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/engines",
+  "right": "session"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/engines/comparison",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/engines/comparison",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/engines/folder",
+  "right": "session"
+ },
+ {
+  "method": "PATCH",
+  "path": "/api/v1/engines/folder",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/engines/measures",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/engines/{id}/actions/{action}",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/engines/{id}/library",
+  "right": "configurator"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/engines/{id}/library/download",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/engines/{id}/library/files",
+  "right": "configurator"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/engines/{id}/measure",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/engines/{id}/models",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/engines/{id}/models/check",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/engines/{id}/models/downloads",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/engines/{id}/models/recommended",
+  "right": "session"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/engines/{id}/models/search",
+  "right": "session"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/engines/{id}/models/variants",
+  "right": "session"
+ },
+ {
+  "method": "DELETE",
+  "path": "/api/v1/engines/{id}/models/{name}",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/engines/{id}/settings",
+  "right": "session"
+ },
+ {
+  "method": "PATCH",
+  "path": "/api/v1/engines/{id}/settings",
+  "right": "configurator"
+ },
+ {
+  "method": "DELETE",
+  "path": "/api/v1/engines/{id}/task",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/git",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/git/commit",
+  "right": "configurator"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/git/message",
+  "right": "session"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/github",
+  "right": "session"
+ },
+ {
+  "method": "PATCH",
+  "path": "/api/v1/github",
+  "right": "configurator"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/github/test",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/health",
+  "right": "session"
+ },
+ {
+  "method": "DELETE",
+  "path": "/api/v1/health/activity",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/health/activity",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/health/free-graphics-memory",
+  "right": "session"
+ },
+ {
+  "method": "DELETE",
+  "path": "/api/v1/health/outbound",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/health/outbound",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/health/self-test",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/health/unload",
+  "right": "session"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/helper-programs",
+  "right": "session"
+ },
+ {
+  "method": "DELETE",
+  "path": "/api/v1/helper-programs/{name}",
+  "right": "configurator"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/helper-programs/{name}/install",
+  "right": "configurator"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/images",
+  "right": "session"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/images/{id}",
+  "right": "read"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/language",
+  "right": "session"
+ },
+ {
+  "method": "PATCH",
+  "path": "/api/v1/language",
+  "right": "session"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/locations",
+  "right": "configurator"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/lutin/check",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/lutin/ignored-version",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/lutin/restart",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/lutin/startup",
+  "right": "session"
+ },
+ {
+  "method": "PATCH",
+  "path": "/api/v1/lutin/startup",
+  "right": "local"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/lutin/update",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/lutin/update",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/machine",
+  "right": "session"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/machine/advice",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/machine/advice/apply",
+  "right": "configurator"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/machine/advice/dismiss",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/machines",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/machines",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/machines/conversations",
+  "right": "session"
+ },
+ {
+  "method": "DELETE",
+  "path": "/api/v1/machines/{id}",
+  "right": "configurator"
+ },
+ {
+  "method": "PATCH",
+  "path": "/api/v1/machines/{id}",
+  "right": "configurator"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/machines/{id}/actions/{action}",
+  "right": "configurator"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/machines/{id}/approvals/{approval}",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/machines/{id}/attachments",
+  "right": "session"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/machines/{id}/attachments/{attachment}",
+  "right": "read"
+ },
+ {
+  "method": "DELETE",
+  "path": "/api/v1/machines/{id}/conversations/{conversation}",
+  "right": "session"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/machines/{id}/conversations/{conversation}",
+  "right": "session"
+ },
+ {
+  "method": "PATCH",
+  "path": "/api/v1/machines/{id}/conversations/{conversation}",
+  "right": "session"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/machines/{id}/conversations/{conversation}/files/{file}",
+  "right": "read"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/machines/{id}/conversations/{conversation}/memory-choice",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/machines/{id}/conversations/{conversation}/stop",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/machines/{id}/conversations/{conversation}/turns",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/machines/{id}/images",
+  "right": "session"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/machines/{id}/images/{image}",
+  "right": "read"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/machines/{id}/imports/{kind}",
+  "right": "configurator"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/machines/{id}/rights-requests",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/managed-servers/{id}/catalog",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/managed-servers/{id}/check",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/managed-servers/{id}/downloads",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/managed-servers/{id}/models",
+  "right": "session"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/managed-servers/{id}/quantizations",
+  "right": "session"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/managed-servers/{id}/recommended",
+  "right": "session"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/mcp-catalog",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/mcp-catalog/{id}/install",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/mcp-connectors",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/mcp-connectors",
+  "right": "configurator"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/mcp-connectors/demo",
+  "right": "configurator"
+ },
+ {
+  "method": "DELETE",
+  "path": "/api/v1/mcp-connectors/{id}",
+  "right": "configurator"
+ },
+ {
+  "method": "PATCH",
+  "path": "/api/v1/mcp-connectors/{id}",
+  "right": "configurator"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/mcp-connectors/{id}/refresh",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/memory",
+  "right": "session"
+ },
+ {
+  "method": "PATCH",
+  "path": "/api/v1/memory",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/missions",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/missions",
+  "right": "configurator"
+ },
+ {
+  "method": "DELETE",
+  "path": "/api/v1/missions/{id}",
+  "right": "configurator"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/missions/{id}/pause",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/missions/{id}/reply",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/missions/{id}/resume",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/missions/{id}/stop",
+  "right": "session"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/models",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/models",
+  "right": "session"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/models/catalog",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/models/check",
+  "right": "session"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/models/folder",
+  "right": "session"
+ },
+ {
+  "method": "PATCH",
+  "path": "/api/v1/models/folder",
+  "right": "configurator"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/models/folder/analysis",
+  "right": "configurator"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/models/folder/copy",
+  "right": "configurator"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/models/folder/restart-ollama",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/models/library",
+  "right": "session"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/models/loaded",
+  "right": "session"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/models/proposals",
+  "right": "session"
+ },
+ {
+  "method": "DELETE",
+  "path": "/api/v1/models/proposals/{key}",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/models/proposals/{key}/applied",
+  "right": "session"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/models/recommendation",
+  "right": "session"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/models/variants",
+  "right": "session"
+ },
+ {
+  "method": "DELETE",
+  "path": "/api/v1/models/{name}",
+  "right": "session"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/node",
+  "right": "session"
+ },
+ {
+  "method": "PATCH",
+  "path": "/api/v1/node",
+  "right": "configurator"
+ },
+ {
+  "method": "DELETE",
+  "path": "/api/v1/node/authorized/{name}",
+  "right": "configurator"
+ },
+ {
+  "method": "PATCH",
+  "path": "/api/v1/node/authorized/{name}",
+  "right": "configurator"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/node/pairing-code",
+  "right": "configurator"
+ },
+ {
+  "method": "PATCH",
+  "path": "/api/v1/node/permissions",
+  "right": "local"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/node/requests/{machine}/{right}",
+  "right": "local"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/node/shutdown/cancel",
+  "right": "local"
+ },
+ {
+  "method": "DELETE",
+  "path": "/api/v1/notes",
+  "right": "session"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/notes",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/notes",
+  "right": "session"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/notification-channels",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/notification-channels",
+  "right": "configurator"
+ },
+ {
+  "method": "DELETE",
+  "path": "/api/v1/notification-channels/{id}",
+  "right": "configurator"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/notification-channels/{id}/test",
+  "right": "configurator"
+ },
+ {
+  "method": "DELETE",
+  "path": "/api/v1/offline",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/offline",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/offline",
+  "right": "session"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/project-commands",
+  "right": "session"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/project-commands/{name}",
+  "right": "session"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/projects",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/projects",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/projects/claude",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/projects/folders",
+  "right": "configurator"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/projects/import-claude",
+  "right": "configurator"
+ },
+ {
+  "method": "DELETE",
+  "path": "/api/v1/projects/{id}",
+  "right": "configurator"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/projects/{id}/select",
+  "right": "session"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/scheduled-tasks",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/scheduled-tasks",
+  "right": "configurator"
+ },
+ {
+  "method": "DELETE",
+  "path": "/api/v1/scheduled-tasks/{id}",
+  "right": "configurator"
+ },
+ {
+  "method": "PATCH",
+  "path": "/api/v1/scheduled-tasks/{id}",
+  "right": "configurator"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/scheduled-tasks/{id}/run",
+  "right": "configurator"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/scheduled-tasks/{id}/stop",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/search-by-meaning",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/search-by-meaning/install",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/settings",
+  "right": "session"
+ },
+ {
+  "method": "PATCH",
+  "path": "/api/v1/settings",
+  "right": "session"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/setup",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/setup/complete",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/skills",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/skills",
+  "right": "configurator"
+ },
+ {
+  "method": "DELETE",
+  "path": "/api/v1/skills/{name}",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/skills/{name}",
+  "right": "session"
+ },
+ {
+  "method": "PATCH",
+  "path": "/api/v1/skills/{name}",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/speed-test",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/speed-test",
+  "right": "session"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/status",
+  "right": "session"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/third-party-skills",
+  "right": "session"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/third-party-skills/card",
+  "right": "configurator"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/third-party-skills/index",
+  "right": "configurator"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/third-party-skills/install",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/third-party-skills/installed",
+  "right": "session"
+ },
+ {
+  "method": "DELETE",
+  "path": "/api/v1/third-party-skills/installed/{name}",
+  "right": "configurator"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/third-party-skills/installed/{name}/update",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/third-party-skills/repos",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/third-party-skills/search",
+  "right": "configurator"
+ },
+ {
+  "method": "DELETE",
+  "path": "/api/v1/third-party-skills/sources",
+  "right": "configurator"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/third-party-skills/sources",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/third-party-skills/updates",
+  "right": "configurator"
+ },
+ {
+  "method": "GET",
+  "path": "/api/v1/web-search",
+  "right": "session"
+ },
+ {
+  "method": "PATCH",
+  "path": "/api/v1/web-search",
+  "right": "configurator"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/web-search/preview",
+  "right": "session"
+ },
+ {
+  "method": "POST",
+  "path": "/api/v1/web-search/test",
+  "right": "session"
+ }
+]

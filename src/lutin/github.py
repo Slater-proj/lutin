@@ -13,36 +13,36 @@ from datetime import datetime
 
 from .i18n import t as _t
 
-HOTE_API = "api.github.com"
-RE_JETON = re.compile(r"^(?:ghp_|github_pat_|gho_|ghu_|ghs_|ghr_)?[A-Za-z0-9_]{20,255}$")
-ADRESSE_LIMITE = "https://api.github.com/rate_limit"          # ne compte pas dans la limite
+API_HOST = "api.github.com"
+RE_TOKEN = re.compile(r"^(?:ghp_|github_pat_|gho_|ghu_|ghs_|ghr_)?[A-Za-z0-9_]{20,255}$")
+LIMIT_URL = "https://api.github.com/rate_limit"          # ne compte pas dans la limite
 
 
-def _chemin():
-    from . import moteur as _m
+def _path():
+    from . import core as _m
     return _m.DONNEES / "github.json"
 
 
-def _lu():
+def _read():
     try:
-        d = json.loads(_chemin().read_text(encoding="utf-8"))
+        d = json.loads(_path().read_text(encoding="utf-8"))
     except (OSError, ValueError):
         d = {}
     return str(d.get("jeton") or "") if isinstance(d, dict) else ""
 
 
-def jeton():
+def github_token():
     """Le jeton à utiliser (variable d'environnement d'abord, sinon celui des réglages), ou ''."""
-    return (os.environ.get("GITHUB_TOKEN") or "").strip() or _lu()
+    return (os.environ.get("GITHUB_TOKEN") or "").strip() or _read()
 
 
-def enregistrer(valeur):
+def save(valeur):
     """Enregistre (ou retire, valeur vide) le jeton des réglages. Renvoie la vue, sans le jeton."""
     valeur = str(valeur or "").strip()
-    if valeur and not RE_JETON.match(valeur):
+    if valeur and not RE_TOKEN.match(valeur):
         raise ValueError(_t("Ce jeton GitHub n'a pas la bonne forme (des lettres, des chiffres et _ ; il commence souvent par ghp_ ou github_pat_)."))
-    from . import moteur as _m          # importé ici : github.py est lu très tôt (miseajour), avant que moteur soit prêt
-    chemin = _chemin()
+    from . import core as _m          # importé ici : github.py est lu très tôt (miseajour), avant que moteur soit prêt
+    chemin = _path()
     if valeur:
         _m.ecrire_atomique(chemin, json.dumps({"jeton": valeur}))
         try:
@@ -54,63 +54,63 @@ def enregistrer(valeur):
             chemin.unlink()
         except OSError:
             pass
-    return vue()
+    return view()
 
 
-def vue():
-    j = jeton()
+def view():
+    j = github_token()
     return {"configure": bool(j), "fin": j[-4:] if j else "", "source": "environnement" if (os.environ.get("GITHUB_TOKEN") or "").strip() else ("reglages" if j else "")}
 
 
-def entetes_pour(url):
+def headers_for(url):
     """L'en-tête d'identification, seulement pour l'API de GitHub (le jeton ne part jamais vers un autre site)."""
-    j = jeton()
+    j = github_token()
     try:
         hote = urllib.parse.urlparse(url).hostname
     except ValueError:
         return {}
-    return {"Authorization": "Bearer " + j} if j and hote == HOTE_API else {}
+    return {"Authorization": "Bearer " + j} if j and hote == API_HOST else {}
 
 
-def limite_atteinte(statut, entetes):
+def limit_reached(statut, entetes):
     """La réponse dit-elle « trop de requêtes » (et non « introuvable » ou « interdit ») ?"""
     entetes = entetes or {}
     return statut in (403, 429) and (str(entetes.get("x-ratelimit-remaining", "")) == "0" or "retry-after" in entetes)
 
 
-def _heure(entetes):
+def _time_of(entetes):
     try:
         return datetime.fromtimestamp(int((entetes or {}).get("x-ratelimit-reset", ""))).strftime("%H:%M")
     except (TypeError, ValueError, OSError):
         return ""
 
 
-def conseil():
+def advice():
     """La phrase qui dit quoi faire quand la limite est atteinte : ajouter son compte, ou patienter si c'est déjà fait."""
-    if jeton():
+    if github_token():
         return _t("Même avec ton compte GitHub la limite est atteinte : patiente un peu.")
     return _t("Pour ne plus être limité, ajoute ton compte GitHub (Réglages > Outils > Compte GitHub) : c'est gratuit et ça lève la limite pour toute l'application.")
 
 
-def suite_erreur(cause):
+def error_followup(cause):
     """La fin d'un message d'erreur de lecture sur GitHub : si la cause est « trop de requêtes » (HTTP 403 ou 429), le conseil du compte ; sinon, patienter."""
     if "403" in str(cause) or "429" in str(cause):
-        return _t("GitHub limite les requêtes (60 par heure sans compte). {}").format(conseil())
+        return _t("GitHub limite les requêtes (60 par heure sans compte). {}").format(advice())
     return _t("Réessaie dans quelques minutes.")
 
 
-def erreur_limite(entetes=None):
+def limit_error(entetes=None):
     """L'erreur à montrer quand GitHub répond « trop de requêtes » : ce qui se passe, quand ça repart, et quoi faire."""
-    heure = _heure(entetes)
+    heure = _time_of(entetes)
     base = _t("GitHub limite le nombre de requêtes (60 par heure sans compte, 5 000 avec).")
     if heure:
         base += " " + _t("Il en accepte de nouveau vers {}.").format(heure)
-    return ValueError(base + " " + conseil())
+    return ValueError(base + " " + advice())
 
 
-def tester(http):
+def test_token(http):
     """Ce que GitHub répond à ce jeton : {limite, restantes, retour, identifie, compte}. `http(url, entetes) -> (statut, entetes, corps)`."""
-    statut, _, corps = http(ADRESSE_LIMITE, {"Accept": "application/vnd.github+json"})
+    statut, _, corps = http(LIMIT_URL, {"Accept": "application/vnd.github+json"})
     if statut == 401:
         raise ValueError(_t("GitHub refuse ce jeton (expiré ou mal copié). Crée-en un autre ou retire celui-ci."))
     if statut != 200:
@@ -120,7 +120,7 @@ def tester(http):
     except ValueError:
         raise ValueError(_t("Réponse illisible de GitHub."))
     compte = ""
-    if jeton():
+    if github_token():
         try:
             s2, _, c2 = http("https://api.github.com/user", {"Accept": "application/vnd.github+json"})
             if s2 == 200:
@@ -132,4 +132,4 @@ def tester(http):
         retour = datetime.fromtimestamp(int(c.get("reset"))).strftime("%H:%M")
     except (TypeError, ValueError, OSError):
         pass
-    return {"limite": int(c.get("limit") or 0), "restantes": int(c.get("remaining") or 0), "retour": retour, "identifie": bool(jeton()), "compte": compte}
+    return {"limite": int(c.get("limit") or 0), "restantes": int(c.get("remaining") or 0), "retour": retour, "identifie": bool(github_token()), "compte": compte}

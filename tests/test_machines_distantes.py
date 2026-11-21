@@ -14,8 +14,8 @@ for cle, valeur in {"LUTIN_RACINE": str(_TEMP / "projet"), "LUTIN_DONNEES": str(
 for d in ("projet", "donnees", "memoire"):
     (_TEMP / d).mkdir(exist_ok=True)
 
-from lutin import moteur as _m  # noqa: E402,F401  (avant les autres : import circulaire sinon)
-from lutin import affirmations, alimentation, machines  # noqa: E402
+from lutin import core as _m  # noqa: E402,F401  (avant les autres : import circulaire sinon)
+from lutin import false_claims, power, machines  # noqa: E402
 
 
 class FauxRegistre:
@@ -36,26 +36,26 @@ class FauxRegistre:
 
 class AdresseMac(unittest.TestCase):
     def test_normalisee(self):
-        self.assertEqual(alimentation.normaliser_mac("00-1a-2b-3c-4d-5e"), "00:1A:2B:3C:4D:5E")
-        self.assertEqual(alimentation.normaliser_mac("001a2b3c4d5e"), "00:1A:2B:3C:4D:5E")
+        self.assertEqual(power.normalize_mac("00-1a-2b-3c-4d-5e"), "00:1A:2B:3C:4D:5E")
+        self.assertEqual(power.normalize_mac("001a2b3c4d5e"), "00:1A:2B:3C:4D:5E")
         for mauvaise in ("", "00:00:00:00:00:00", "01:00:5e:00:00:01", "zz:1a:2b:3c:4d:5e", "00:1a:2b"):
-            self.assertEqual(alimentation.normaliser_mac(mauvaise), "", mauvaise)
+            self.assertEqual(power.normalize_mac(mauvaise), "", mauvaise)
 
     def test_cartes_windows_lues_du_json(self):
         texte = json.dumps([{"nom": "Ethernet", "description": "Intel I225-V", "mac": "00-1A-2B-3C-4D-5E", "etat": "Up", "ip": "192.168.1.20", "reveil": True},
                             {"nom": "Wi-Fi", "description": "Intel Wi-Fi 6", "mac": "AA-BB-CC-DD-EE-02", "etat": "Up", "ip": "192.168.1.21", "reveil": None},
                             {"nom": "Ancienne", "description": "x", "mac": "00-1A-2B-3C-4D-5F", "etat": "Disconnected", "ip": "", "reveil": False}])
-        cartes = alimentation.analyser_cartes_windows(texte)
+        cartes = power.parse_windows_adapters(texte)
         self.assertEqual([c["nom"] for c in cartes], ["Ethernet", "Wi-Fi"], "une carte débranchée n'est pas retenue")
         self.assertTrue(cartes[0]["filaire"])
         self.assertFalse(cartes[1]["filaire"])
-        self.assertEqual(alimentation.analyser_cartes_windows("pas du json"), [])
+        self.assertEqual(power.parse_windows_adapters("pas du json"), [])
 
     def test_la_carte_retenue_est_celle_de_l_adresse_utilisee(self):
         cartes = [{"nom": "wifi", "mac": "AA:BB:CC:DD:EE:02", "ip": "192.168.1.21", "filaire": False, "reveil": None}, {"nom": "eth", "mac": "00:1A:2B:3C:4D:5E", "ip": "192.168.1.20", "filaire": True, "reveil": True}]
-        self.assertEqual(alimentation.choisir_carte(cartes, "192.168.1.21")["nom"], "wifi")
-        self.assertEqual(alimentation.choisir_carte(cartes, "10.0.0.1")["nom"], "eth", "sinon une carte filaire")
-        self.assertIsNone(alimentation.choisir_carte([], ""))
+        self.assertEqual(power.choose_adapter(cartes, "192.168.1.21")["nom"], "wifi")
+        self.assertEqual(power.choose_adapter(cartes, "10.0.0.1")["nom"], "eth", "sinon une carte filaire")
+        self.assertIsNone(power.choose_adapter([], ""))
 
     def test_cartes_linux_lues_dans_sys(self):
         racine = Path(tempfile.mkdtemp(prefix="lutin-sys-"))
@@ -69,7 +69,7 @@ class AdresseMac(unittest.TestCase):
 
         class Sortie:
             stdout = b"Settings for enp3s0:\n\tWake-on: g\n"
-        cartes = alimentation.cartes_reseau(lanceur=lambda cmd, **kw: Sortie(), systeme_actuel="linux", racine_sys=str(racine), sortie_ip="2: enp3s0    inet 192.168.1.20/24 brd 192.168.1.255 scope global enp3s0\n")
+        cartes = power.network_adapters(lanceur=lambda cmd, **kw: Sortie(), systeme_actuel="linux", racine_sys=str(racine), sortie_ip="2: enp3s0    inet 192.168.1.20/24 brd 192.168.1.255 scope global enp3s0\n")
         self.assertEqual([(c["nom"], c["mac"], c["ip"], c["reveil"]) for c in cartes], [("enp3s0", "00:1A:2B:3C:4D:5E", "192.168.1.20", True)])
 
 
@@ -77,7 +77,7 @@ class ReveilVerifie(unittest.TestCase):
     CARTE = {"nom": "Ethernet", "mac": "00:1A:2B:3C:4D:5E", "ip": "192.168.1.20", "filaire": True}
 
     def etat(self, **kw):
-        return alimentation.etat_reveil("192.168.1.20", cartes=[dict(self.CARTE, **kw)], systeme_actuel="windows", demarrage_rapide=False)
+        return power.wake_state("192.168.1.20", cartes=[dict(self.CARTE, **kw)], systeme_actuel="windows", demarrage_rapide=False)
 
     def test_tout_est_en_regle(self):
         e = self.etat(reveil=True)
@@ -95,17 +95,17 @@ class ReveilVerifie(unittest.TestCase):
         self.assertIn("Impossible de vérifier", e["avertissements"][0])
 
     def test_wifi_et_demarrage_rapide(self):
-        e = alimentation.etat_reveil("", cartes=[dict(self.CARTE, filaire=False, reveil=True)], systeme_actuel="windows", demarrage_rapide=True)
+        e = power.wake_state("", cartes=[dict(self.CARTE, filaire=False, reveil=True)], systeme_actuel="windows", demarrage_rapide=True)
         self.assertFalse(e["pret"])
         texte = " ".join(e["avertissements"])
         self.assertIn("Wi-Fi", texte)
         self.assertIn("démarrage rapide", texte)
 
     def test_docker_et_machine_sans_carte(self):
-        d = alimentation.etat_reveil("", en_docker=True)
+        d = power.wake_state("", en_docker=True)
         self.assertIsNone(d["pret"])
         self.assertIn("conteneur", d["avertissements"][0])
-        self.assertIn("à la main", alimentation.etat_reveil("", cartes=[], systeme_actuel="linux")["avertissements"][0])
+        self.assertIn("à la main", power.wake_state("", cartes=[], systeme_actuel="linux")["avertissements"][0])
 
 
 class DemarrageAutomatique(unittest.TestCase):
@@ -114,9 +114,9 @@ class DemarrageAutomatique(unittest.TestCase):
 
         def lanceur(cmd, **kw):
             raise AssertionError("aucune tâche planifiée ne doit être créée (elle demande les droits d'administrateur) : {}".format(cmd))
-        ancien = alimentation.subprocess.list2cmdline
+        ancien = power.subprocess.list2cmdline
         self.assertEqual(ancien(["python", "-m", "lutin"]), "python -m lutin")
-        e = alimentation.installer_demarrage(lanceur=lambda cmd, **kw: type("R", (), {"returncode": 1})(), systeme_actuel="windows", commande=["C:/Python/python.exe", "-m", "lutin", "serve", "--sans-navigateur"], registre=reg)
+        e = power.install_startup(lanceur=lambda cmd, **kw: type("R", (), {"returncode": 1})(), systeme_actuel="windows", commande=["C:/Python/python.exe", "-m", "lutin", "serve", "--sans-navigateur"], registre=reg)
         self.assertTrue(e["installe"])
         self.assertIn("lutin serve --sans-navigateur", reg.valeurs["Lutin"])
         self.assertEqual(lanceur.__name__, "lanceur")
@@ -125,19 +125,19 @@ class DemarrageAutomatique(unittest.TestCase):
         reg = FauxRegistre()
         reg.valeurs["Lutin"] = "x"
         appels = []
-        e = alimentation.retirer_demarrage(lanceur=lambda cmd, **kw: appels.append(cmd) or type("R", (), {"returncode": 1})(), systeme_actuel="windows", registre=reg)
+        e = power.remove_startup(lanceur=lambda cmd, **kw: appels.append(cmd) or type("R", (), {"returncode": 1})(), systeme_actuel="windows", registre=reg)
         self.assertFalse(e["installe"])
         self.assertNotIn("Lutin", reg.valeurs)
         self.assertTrue(any("/Delete" in c for c in appels), "l'ancienne tâche planifiée d'une version précédente est retirée aussi")
 
     def test_une_ancienne_tache_planifiee_compte_comme_installee(self):
         reg = FauxRegistre()
-        e = alimentation.etat_demarrage(lanceur=lambda cmd, **kw: type("R", (), {"returncode": 0})(), systeme_actuel="windows", registre=reg)
+        e = power.startup_state(lanceur=lambda cmd, **kw: type("R", (), {"returncode": 0})(), systeme_actuel="windows", registre=reg)
         self.assertTrue(e["installe"])
 
     def test_refus_de_windows_dit_clairement(self):
         with self.assertRaises(ValueError) as e:
-            alimentation.installer_demarrage(systeme_actuel="windows", commande=["python"], registre=FauxRegistre(refuse=True))
+            power.install_startup(systeme_actuel="windows", commande=["python"], registre=FauxRegistre(refuse=True))
         self.assertIn("refusé", str(e.exception))
 
 
@@ -181,8 +181,8 @@ class MachinesInfos(unittest.TestCase):
     def test_noeud_etat_donne_mac_reveil_demarrage(self):
         class Moteur:
             id, nom = "ollama", "Ollama"
-        with mock.patch.object(alimentation, "etat_reveil", lambda ip, **kw: {"mac": "00:1A:2B:3C:4D:5E", "carte": "eth", "pret": True, "avertissements": []}), \
-                mock.patch.object(alimentation, "etat_demarrage", lambda: {"installe": True, "possible": True}),                 mock.patch.object(alimentation, "cartes_reseau", lambda **kw: []):
+        with mock.patch.object(power, "wake_state", lambda ip, **kw: {"mac": "00:1A:2B:3C:4D:5E", "carte": "eth", "pret": True, "avertissements": []}), \
+                mock.patch.object(power, "startup_state", lambda: {"installe": True, "possible": True}),                 mock.patch.object(power, "network_adapters", lambda **kw: []):
             machines.INFOS_NOEUD.clear()
             machines.CARTES.update(t=-999.0, v=None)
             e = machines.noeud_etat(Moteur(), {"actif": True, "installes": ["gros:70b"]}, "192.168.1.20")
@@ -251,7 +251,7 @@ class InfosEnArrierePlan(unittest.TestCase):
         def lent(ip, **kw):
             libere.wait(5)
             return {"mac": "00:1A:2B:3C:4D:5E", "carte": "eth", "pret": True, "avertissements": []}
-        with mock.patch.object(alimentation, "etat_reveil", lent), mock.patch.object(alimentation, "etat_demarrage", lambda: {"installe": True, "possible": True}),                 mock.patch.object(alimentation, "cartes_reseau", lambda **kw: []):
+        with mock.patch.object(power, "wake_state", lent), mock.patch.object(power, "startup_state", lambda: {"installe": True, "possible": True}),                 mock.patch.object(power, "network_adapters", lambda **kw: []):
             machines.CARTES.update(t=-999.0, v=None)
             debut = time.monotonic()
             infos = machines.noeud_infos("10.0.0.1", attente=0.2)
@@ -264,22 +264,46 @@ class InfosEnArrierePlan(unittest.TestCase):
                 time.sleep(0.05)
             self.assertEqual(machines.noeud_infos("10.0.0.1", attente=0.2)["mac"], "00:1A:2B:3C:4D:5E")
 
+    def test_une_sonde_recoit_sa_reponse_avant_d_abandonner(self):
+        """La machine qui sonde abandonne au bout de DELAI_SONDE_S : le nœud doit répondre avant, même quand PowerShell est lent (sinon la première
+        sonde après un démarrage dit « injoignable » une machine allumée)."""
+        import threading
+        import time
+        machines.INFOS_NOEUD.clear()
+        machines.INFOS_EN_COURS.clear()
+        libere = threading.Event()
+        self.addCleanup(libere.set)
+
+        def lent(ip, **kw):
+            libere.wait(5)
+            return {"mac": "", "carte": "", "pret": None, "avertissements": []}
+
+        class Moteur:
+            id, nom = "faux", "Faux"
+        with mock.patch.object(power, "wake_state", lent), mock.patch.object(power, "startup_state", lambda: {"installe": False, "possible": True}),                 mock.patch.object(power, "network_adapters", lambda **kw: []):
+            machines.CARTES.update(t=-999.0, v=None)
+            debut = time.monotonic()
+            etat = machines.noeud_etat(Moteur(), {"actif": True, "installes": ["m"]}, "10.0.0.2")
+            duree = time.monotonic() - debut
+        self.assertLess(duree, machines.DELAI_SONDE_S / 2, "une marge pour le réseau et le reste de la réponse")
+        self.assertEqual((etat["mac"], etat["modeles"]), ("", ["m"]), "les informations lentes viendront à la sonde suivante")
+
 
 class AnnonceSansAction(unittest.TestCase):
     OUTILS = {"voix_liste", "voix_parler"}
 
     def test_une_simple_annonce_est_relancee(self):
         for texte in ("Je vais vérifier si le profil Arnold 2 est disponible dans VoiceStudio.", "Un instant, je regarde.", "Laisse-moi chercher cela."):
-            self.assertTrue(affirmations.annonce_sans_agir(texte, [], self.OUTILS), texte)
+            self.assertTrue(false_claims.announces_without_acting(texte, [], self.OUTILS), texte)
 
     def test_une_vraie_reponse_n_est_pas_touchee(self):
-        self.assertEqual(affirmations.annonce_sans_agir("Oui, le profil Arnold 2 est disponible : je le vois dans la liste de VoiceStudio, avec la voix clonée le 3 mars et deux échantillons enregistrés.", [], self.OUTILS), "")
-        self.assertEqual(affirmations.annonce_sans_agir("Voici la liste : a, b, c.", [], self.OUTILS), "")
+        self.assertEqual(false_claims.announces_without_acting("Oui, le profil Arnold 2 est disponible : je le vois dans la liste de VoiceStudio, avec la voix clonée le 3 mars et deux échantillons enregistrés.", [], self.OUTILS), "")
+        self.assertEqual(false_claims.announces_without_acting("Voici la liste : a, b, c.", [], self.OUTILS), "")
 
     def test_rien_quand_il_agit_deja_ou_sans_outils(self):
-        self.assertEqual(affirmations.annonce_sans_agir("Je vais vérifier.", [{"function": {"name": "voix_liste"}}], self.OUTILS), "")
-        self.assertEqual(affirmations.annonce_sans_agir("Je vais vérifier.", [], set()), "")
-        self.assertEqual(affirmations.annonce_sans_agir("Je vais " + "vérifier " * 60, [], self.OUTILS), "", "une longue réponse n'est pas une annonce")
+        self.assertEqual(false_claims.announces_without_acting("Je vais vérifier.", [{"function": {"name": "voix_liste"}}], self.OUTILS), "")
+        self.assertEqual(false_claims.announces_without_acting("Je vais vérifier.", [], set()), "")
+        self.assertEqual(false_claims.announces_without_acting("Je vais " + "vérifier " * 60, [], self.OUTILS), "", "une longue réponse n'est pas une annonce")
 
 
 if __name__ == "__main__":

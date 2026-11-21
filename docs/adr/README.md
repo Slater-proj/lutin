@@ -1,0 +1,29 @@
+# Architecture decision records
+
+One file per structuring decision of the modernization: what was chosen, what was not, and how to go back. An ADR is not edited once accepted; a later
+decision supersedes it with a new file and a line in the old one. The earlier decisions of the project stay in [DECISIONS.md](../DECISIONS.md).
+
+These records are technical documentation, written in English only (ADR 0001). The plan they belong to is in [../modernization/PLAN.md](../modernization/PLAN.md).
+
+| # | Decision | Status |
+|---|---|---|
+| [0001](0001-english-and-clean-break-at-1.0.md) | English is the language of the code; a clean compatibility break at 1.0 | Accepted |
+| [0002](0002-frontend-svelte-typescript-vite.md) | New interface in Svelte 5 + TypeScript + Vite, shipped prebuilt | Accepted |
+| [0003](0003-scope-freeze-and-support-tiers.md) | Feature freeze during the migration; support tiers | Accepted |
+| [0004](0004-release-cadence.md) | Pre-releases during the migration instead of a release per merge | Accepted |
+| [0005](0005-development-dependencies.md) | Development-only dependencies allowed; none at run time | Accepted |
+| [0006](0006-approval-free-commands.md) | Approval-free commands run without a shell, one validator per program | Accepted, implemented |
+| [0007](0007-model-facing-language.md) | Language of tool names and system prompts: measure before switching | Accepted |
+| [0008](0008-outbound-web-guard.md) | Outbound web requests: pinned address, redirections checked hop by hop | Accepted, implemented |
+| [0009](0009-approval-rules.md) | Approval rules for commands: deny > ask > allow, a hardline list | Accepted |
+| [0010](0010-tool-table.md) | One table says what each tool does | Accepted |
+| [0011](0011-diagrams-in-an-isolated-frame.md) | Diagrams are drawn in an isolated frame; formulas by the browser | Accepted, implemented |
+| [0012](0012-a-turn-says-where-it-is.md) | A turn says where it is; the loop is made of parts; an engine says what the loop may ask of it | Accepted, implemented |
+| [0013](0013-a-request-has-a-prefix-that-stays-and-a-tail-that-changes.md) | A request has a prefix that stays and a tail that changes | Accepted, implemented |
+| [0014](0014-one-application-context.md) | One application context holds what the modules kept for themselves | Accepted, stage 1 implemented |
+| [0015](0015-one-entry-runs-a-turn.md) | One entry runs a turn, whoever asks for it | Accepted, implemented |
+| [0016](0016-paired-machines-in-v1-and-the-new-interface.md) | Paired machines in `/api/v1` and in the new interface | Accepted, implemented (seven stages) |
+| [0017](0017-conversations-in-sqlite.md) | Conversations in SQLite, settings in JSON | Accepted, implemented |
+| [0018](0018-keeping-the-thread-on-a-small-window.md) | Keeping the thread of a long conversation on a small window | Accepted, first part implemented |
+| [0019](0019-one-memory-for-long-conversations.md) | One memory for long conversations: the progress sheet, kept out of the way | Accepted |
+| [0020](0020-every-engine-the-same-way.md) | Every engine is installed, chosen and fed with models the same way | Accepted, not implemented |

@@ -13,8 +13,8 @@ for cle, valeur in {"LUTIN_RACINE": str(_TEMP / "projet"), "LUTIN_DONNEES": str(
 for d in ("projet", "donnees", "memoire"):
     (_TEMP / d).mkdir(exist_ok=True)
 
-from lutin import moteur as A  # noqa: E402
-from lutin import reglages_outils as RO  # noqa: E402
+from lutin import core as A  # noqa: E402
+from lutin import tool_settings as RO  # noqa: E402
 
 PAR_DEFAUT = {"outils_desactives": [], "outil_delai_commande_s": 240, "outil_sortie_max": 9000, "outil_lecture_max": 7000, "outil_chercher_delai_s": 25, "commandes_sans_accord": [], "dossiers_ignores_en_plus": []}
 
@@ -29,7 +29,7 @@ class Outils(unittest.TestCase):
         self.assertEqual((A.DELAI_COMMANDE_S, A.SORTIE_MAX, A.LECTURE_MAX, A.CHERCHER_DELAI), (240, 9000, 7000, 25))
 
     def test_les_valeurs_absurdes_reviennent_dans_les_bornes(self):
-        r = RO.nettoyer({"outil_delai_commande_s": 99999, "outil_sortie_max": -5, "outil_lecture_max": "abc", "outil_chercher_delai_s": 0,
+        r = RO.clean({"outil_delai_commande_s": 99999, "outil_sortie_max": -5, "outil_lecture_max": "abc", "outil_chercher_delai_s": 0,
                          "outils_desactives": ["executer", "memoriser", "suivi", "n_importe_quoi"], "commandes_sans_accord": ["rm -rf x", "pytest -q", "git status && del x"], "dossiers_ignores_en_plus": ["data", "../x", "a/b"]})
         self.assertEqual((r["outil_delai_commande_s"], r["outil_sortie_max"], r["outil_lecture_max"], r["outil_chercher_delai_s"]), (3600, 2000, 7000, 5))
         self.assertEqual(r["outils_desactives"], ["executer"], "la mémoire et la fiche de suivi ne se coupent pas ici")
@@ -67,8 +67,8 @@ class Outils(unittest.TestCase):
         self.assertNotIn("archives", A.DOSSIERS_IGNORES)
 
     def test_un_outil_coupe_n_est_plus_propose_au_modele(self):
-        from lutin import dialogue
-        noms = lambda r: {t["function"]["name"] for t in dialogue.outils_du_mode(r)}  # noqa: E731
+        from lutin import agent
+        noms = lambda r: {t["function"]["name"] for t in agent.outils_du_mode(r)}  # noqa: E731
         base = dict(A.reglages(), mode="polyvalent")
         self.assertIn("executer", noms(base))
         A.enregistrer_reglages({"outils_desactives": ["executer", "web_lire"]})

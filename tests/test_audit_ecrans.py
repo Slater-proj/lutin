@@ -53,7 +53,7 @@ class Ecrans(unittest.TestCase):
     def ouvrir(self, tmp, port, taille="1280,1500"):
         p = cdp.Page(self.chrome, tmp / "profil-audit", taille)
         self.addCleanup(p.fermer)
-        p.aller("http://127.0.0.1:%d/" % port)
+        p.aller("http://127.0.0.1:%d/ancienne/" % port)
         p.attendre("!!document.querySelector('#bNouvelle')")
         p.evaluer("window.confirm = () => true")
         return p

@@ -9,6 +9,7 @@ from pathlib import Path
 
 import context  # noqa: F401
 import cdp
+import stored  # what the demonstration server stored (its database, ADR 0017)
 
 RACINE = Path(__file__).resolve().parent.parent
 JETON = "document.documentElement.innerHTML.match(/TOKEN = '([0-9a-f]+)'/)[1]"
@@ -41,8 +42,8 @@ class Conversation(unittest.TestCase):
 
     def conversation_longue(self, tmp):
         """La conversation d'exemple + une longue suite de messages : une réflexion enregistrée à part, une ancienne réponse qui contient encore <think>, des messages datés."""
-        chemin = tmp / "home" / "donnees" / "conversations" / "a1b2c3d4.json"
-        c = json.loads(chemin.read_text(encoding="utf-8"))
+        donnees = tmp / "home" / "donnees"
+        c = stored.conversation(donnees, "a1b2c3d4")
         hier = (datetime.now() - timedelta(days=1)).isoformat(timespec="seconds")
         c["messages"][0]["ts"] = hier
         c["messages"][-1]["ts"] = datetime.now().isoformat(timespec="seconds")
@@ -57,12 +58,12 @@ class Conversation(unittest.TestCase):
                           {"role": "assistant", "content": "Le readme présente un assistant local.", "ts": datetime.now().isoformat(timespec="seconds")},
                           {"role": "user", "content": "Une ancienne conversation ?"},
                           {"role": "assistant", "content": "<think>Ancienne réflexion restée dans le texte.</think>\n\nVoici l'ancienne réponse, propre."}]
-        chemin.write_text(json.dumps(c, ensure_ascii=False), encoding="utf-8")
+        stored.put(donnees, c)                                  # imported as it is at the next reading of the server
 
     def test_la_reflexion_est_repliee_hors_de_la_bulle_et_les_messages_sont_dates(self):
         with self.captures.serveur_demo({"LUTIN_LANGUE": "fr"}) as (port, tmp):
             self.conversation_longue(tmp)
-            p = self.ouvrir(tmp, "http://127.0.0.1:%d/#conv=a1b2c3d4" % port)
+            p = self.ouvrir(tmp, "http://127.0.0.1:%d/ancienne/#conv=a1b2c3d4" % port)
             p.attendre("document.querySelectorAll('#fil .msg.ia').length >= 20", delai=30)
             blocs = p.evaluer("[...document.querySelectorAll('#fil details.pensee')].filter(d => !d.closest('details.etapes')).map(d => [d.open, d.querySelector('summary').textContent, d.querySelector('pre').textContent, !!d.closest('.corps')])")
             self.assertEqual([b[2] for b in blocs], ["Je regarde le fichier puis je réponds.", "Ancienne réflexion restée dans le texte."])
@@ -81,7 +82,7 @@ class Conversation(unittest.TestCase):
         """Réflexions, notes entre deux outils, appels d'outils et résultats : dans un bloc repliable ; la bulle ne contient que la réponse finale."""
         with self.captures.serveur_demo({"LUTIN_LANGUE": "fr"}) as (port, tmp):
             self.conversation_longue(tmp)
-            p = self.ouvrir(tmp, "http://127.0.0.1:%d/#conv=a1b2c3d4" % port)
+            p = self.ouvrir(tmp, "http://127.0.0.1:%d/ancienne/#conv=a1b2c3d4" % port)
             p.attendre("document.querySelectorAll('#fil .msg.ia').length >= 20", delai=30)
             self.assertEqual(p.evaluer("document.querySelectorAll('#fil > .outil').length"), 0, "plus d'appel d'outil en vrac dans le fil")
             groupes = p.evaluer("[...document.querySelectorAll('#fil details.etapes')].map(g => [g.open, g.querySelector('summary').textContent, g.querySelectorAll('.outil').length, g.querySelectorAll('.note-etape').length, g.textContent])")
@@ -114,7 +115,7 @@ class Conversation(unittest.TestCase):
             return Promise.resolve(new Response(new ReadableStream({ pull(c) { if (i < evts.length) { c.enqueue(enc.encode(JSON.stringify(evts[i++]) + '\\n')); return new Promise(r => setTimeout(r, 150)); } c.close(); } }), { status: 200, headers: { 'Content-Type': 'application/x-ndjson' } })); };
           return true; })()"""
         with self.captures.serveur_demo({"LUTIN_LANGUE": "fr"}) as (port, tmp):
-            p = self.ouvrir(tmp, "http://127.0.0.1:%d/#conv=a1b2c3d4" % port)
+            p = self.ouvrir(tmp, "http://127.0.0.1:%d/ancienne/#conv=a1b2c3d4" % port)
             p.attendre("document.querySelectorAll('#fil .msg.ia').length >= 1", delai=30)
             p.evaluer(flux)
             p.evaluer("(() => { const s = document.getElementById('saisie'); s.value = 'lis le readme'; document.getElementById('bEnvoyer').click(); return true; })()")
@@ -132,7 +133,7 @@ class Conversation(unittest.TestCase):
     def test_la_fleche_pour_revenir_en_bas_apparait_des_qu_on_remonte_meme_sans_reponse_en_cours(self):
         with self.captures.serveur_demo({"LUTIN_LANGUE": "fr"}) as (port, tmp):
             self.conversation_longue(tmp)
-            p = self.ouvrir(tmp, "http://127.0.0.1:%d/#conv=a1b2c3d4" % port)
+            p = self.ouvrir(tmp, "http://127.0.0.1:%d/ancienne/#conv=a1b2c3d4" % port)
             p.attendre("document.querySelectorAll('#fil .msg.ia').length >= 20", delai=30)
             time.sleep(0.5)
             self.assertTrue(p.evaluer("document.getElementById('bBas').hidden"), "en bas de la conversation : pas de flèche")
@@ -148,7 +149,7 @@ class Conversation(unittest.TestCase):
 
     def test_une_tache_planifiee_se_cree_se_modifie_et_se_supprime_pour_de_bon(self):
         with self.captures.serveur_demo({"LUTIN_LANGUE": "fr"}) as (port, tmp):
-            p = self.ouvrir(tmp, "http://127.0.0.1:%d/" % port)
+            p = self.ouvrir(tmp, "http://127.0.0.1:%d/ancienne/" % port)
             p.evaluer("document.querySelector('.onglets button[data-p=\"auto\"], #menuReglages button[data-p=\"auto\"]').click()")
             p.attendre("!!document.getElementById('bAjouterPlanifie')")
             p.evaluer("(() => { document.getElementById('pNom').value = 'Résumé du matin'; document.getElementById('pPrompt').value = 'Résume le dépôt.'; document.getElementById('pHeure').value = '07:45'; document.getElementById('bAjouterPlanifie').click(); return true; })()")
