@@ -1,6 +1,6 @@
 # ADR 0020 — Every engine is installed, chosen and fed with models the same way
 
-Status: proposed on 2026-11-21, waiting for the maintainer. Nothing is coded yet.
+Status: accepted by the maintainer on 2026-11-21 with the answers below. Nothing is coded yet: stage 1 is next.
 
 ## Context
 
@@ -67,7 +67,14 @@ button, and that nothing says which one is best. Read on `b76932c`:
 Acceptance: the person installs, starts and uses each of the six engines from its own card with the same buttons. The models page of each engine has
 the same three parts. Every model offered either downloads or says why it cannot.
 
-## Questions for the maintainer
+## Answers of the maintainer (2026-11-21)
+
+1. **Incompatible engines folded** under « Other engines », with the reason on each. The engines that can run here are shown first.
+2. **Old routes removed at stage 4**, with the contract fixture updated in the same commit.
+3. **Strata under « another server »** until it is tested on a real machine.
+4. **ik_llama.cpp not added to the signed catalogue** for now.
+
+## Questions for the maintainer (answered)
 
 1. **All six cards always**, or the engines that can run on this machine first and the others folded under « other engines »? Proposed: folded.
 2. **The old routes**: removed at stage 4 (proposed), or kept until the contract step of the plan (step 2)?
