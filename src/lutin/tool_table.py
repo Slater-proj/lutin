@@ -47,6 +47,7 @@ TABLE = {
     "apercu_page": Tool(EXTERNAL, True, True),
     "voix_parler": Tool(EXTERNAL, True, True),
     "voix_cloner": Tool(EXTERNAL, True, True),
+    "musique_generer": Tool(EXTERNAL, True, True),
     "comfy_generer": Tool(EXTERNAL, True, True),
     "installer_module": Tool(EXTERNAL, True, True),
     "etat_outil": Tool(READ, False, True),

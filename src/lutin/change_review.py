@@ -367,6 +367,9 @@ def _call_tool(nom, args, ctx):
     if nom.startswith("voix_"):
         from . import addons_voicestudio
         return addons_voicestudio.outil_voix(nom, args, ctx)
+    if nom == "musique_generer":
+        from . import addons_acestep
+        return addons_acestep.outil_acestep(nom, args, ctx)
     if nom == "etat_outil":
         return _m.outil_etat()
     if nom == "installer_module":

@@ -275,7 +275,7 @@ class Livres(unittest.TestCase):
         with mock.patch.dict(os.environ, {"LUTIN_LANGUE": "en"}):
             for ident in addons.ids():
                 for texte in addons.visible_texts(addons.manifeste(ident)):
-                    if texte not in ("Telegram", "ComfyUI", "X", "VoiceStudio"):
+                    if texte not in ("Telegram", "ComfyUI", "X", "VoiceStudio", "ACE-Step"):
                         self.assertNotEqual(i18n.t(texte), texte, "%s : « %s » n'est pas traduit" % (ident, texte[:60]))
                 self.assertEqual(addons.decrire(ident)["description"], i18n.t(addons.manifeste(ident)["description"]), "la page reçoit le texte traduit")
 

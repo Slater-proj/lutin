@@ -448,6 +448,8 @@ def outils_du_mode(r):
         exclus |= {"comfy_modeles", "comfy_generer"}                    # les outils de ComfyUI n'existent que si l'addon est activé
     if not addons.actif("voicestudio"):
         exclus |= {"voix_liste", "voix_parler", "voix_transcrire", "voix_cloner"}          # idem pour les outils de voix
+    if not addons.actif("acestep"):
+        exclus.add("musique_generer")                                   # et pour celui de la musique
     outils = [t for t in _m.OUTILS if t["function"]["name"] not in exclus]
     if not _modes.without_tools(r.get("mode")):
         try:
