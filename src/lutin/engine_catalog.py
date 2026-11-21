@@ -206,6 +206,17 @@ def fiche(ident, catalogue=None):
     return None
 
 
+def entree(ident, catalogue=None):
+    """The entry of the catalogue with this id, whatever its type (`vue`), or None: what the card of that engine says about where it runs."""
+    try:
+        for m in (catalogue or en_cours())["moteurs"]:
+            if m["id"] == ident:
+                return vue(m)
+    except (OSError, ValueError, KeyError):
+        pass
+    return None
+
+
 def vue(moteur):
     """Une entrée du catalogue prête pour la page : textes dans la langue courante."""
     return {"id": moteur["id"], "nom": moteur["nom"], "adresse": moteur.get("adresse_defaut", ""), "cle_requise": bool(moteur.get("cle_requise")), "site": moteur.get("site", ""),

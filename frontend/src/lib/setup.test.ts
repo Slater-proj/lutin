@@ -14,6 +14,7 @@ function engine(extra: Partial<EngineView> = {}): EngineView {
     detail: "",
     strengths: [],
     weaknesses: [],
+    runs_here: { possible: true, reason: "" },
     actions: { install: no, uninstall: no, reinstall: no, start: no, stop: no, update: no },
     task: null,
     ...extra,

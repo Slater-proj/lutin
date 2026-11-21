@@ -23,7 +23,7 @@ PROMPT = "Écris un texte d'environ 150 mots sur la mer."
 PASSES = {"rapide": 2, "approfondi": 5}
 GAP_MIN = 0.10          # un moteur n'est recommandé contre le plus simple qu'au-dessus de ce gain
 SIMPLE = "ollama"
-ENGINES_BENCH = ("ollama", "llamacpp", "openai")          # « openai » : le serveur compatible OpenAI choisi (Colibri, LM Studio, ExLlamaV3…), seulement s'il est démarré
+ENGINES_BENCH = ("ollama", "llamacpp", "exllamav3", "lmstudio", "openai")          # les serveurs compatibles OpenAI : seulement s'ils sont installés (ou ont une adresse), et démarrés ; jamais un moteur expérimental (Colibri)
 
 
 # --------------------------------------------------------------------------- mesure d'un moteur
@@ -167,6 +167,8 @@ def available(modele):
             statut = mo.statut()
             if ident == "openai" and not (mo.adresse() if hasattr(mo, "adresse") else ""):
                 continue          # aucun serveur réglé : rien à comparer, rien à montrer
+            if ident in engines.MANAGED_SERVERS and not statut.get("installe"):
+                continue          # un serveur que Lutin sait installer, mais qui ne l'est pas : rien à comparer non plus
             m = mo.modeles()
         except Exception as e:  # noqa: BLE001
             sortie.append((mo, str(e)[:120], modele))
@@ -174,7 +176,7 @@ def available(modele):
         propre = equivalent(modele, m.get("installes", []))
         if not statut.get("installe"):
             sortie.append((mo, _t("pas installé"), modele))
-        elif ident == "openai" and not statut.get("actif"):
+        elif (ident == "openai" or ident in engines.MANAGED_SERVERS) and not statut.get("actif"):
             sortie.append((mo, _t("pas démarré"), modele))
         elif propre is None:
             sortie.append((mo, _t("n'a ni ce modèle ni un équivalent"), modele))

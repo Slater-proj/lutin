@@ -423,7 +423,7 @@ class Assistant(unittest.TestCase):
         """Couche moteur : Ollama est le moteur par défaut, un moteur inconnu est refusé, et tout autre moteur enregistré fait la conversation à la place d'Ollama."""
         from lutin import engines
         r = lire("/api/moteurs")
-        self.assertEqual((r["courant"], [m["id"] for m in r["moteurs"]]), ("ollama", ["ollama", "llamacpp", "openai"]))
+        self.assertEqual((r["courant"], [m["id"] for m in r["moteurs"]]), ("ollama", ["ollama", "llamacpp", "exllamav3", "lmstudio", "colibri", "openai"]))          # one card per program (ADR 0020)
         ollama = r["moteurs"][0]
         self.assertTrue(ollama["gere_modeles"] and ollama["actif"])
         self.assertTrue(ollama["points_forts"] and ollama["points_faibles"], "chaque moteur se décrit : forces et faiblesses")

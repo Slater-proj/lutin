@@ -23,20 +23,20 @@ class NotChosen(ValueError):
     """The server asked for is not the one Lutin uses now."""
 
 
-def engine():
-    return _engines.par_id("openai")
+def engine(kind):
+    """The engine of that server (ADR 0020: each one is an engine of its own)."""
+    return _engines.ENGINES.get(kind) if kind in KINDS else None
 
 
-def chosen(kind, mo=None):
-    """Is `kind` the server in use? False for an unknown kind."""
-    mo = mo or engine()
-    flags = {"exllamav3": mo.exllamav3_choisi, "lmstudio": mo.lmstudio_choisi, "colibri": mo.colibri_choisi}
-    return kind in flags and bool(flags[kind]())
+def chosen(kind):
+    """Is `kind` the engine in use? False for an unknown kind."""
+    from . import agent as _agent
+    return kind in KINDS and _agent.moteur_local().id == kind
 
 
 def _require(kind):
-    mo = engine()
-    if not chosen(kind, mo):
+    mo = engine(kind)
+    if mo is None or not chosen(kind):
         raise NotChosen(_t("{} n'est pas le serveur choisi.").format(NAMES.get(kind, kind)))
     return mo
 

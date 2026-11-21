@@ -1,6 +1,6 @@
 # ADR 0020 — Every engine is installed, chosen and fed with models the same way
 
-Status: accepted by the maintainer on 2026-11-21 with the answers below. Nothing is coded yet: stage 1 is next.
+Status: accepted by the maintainer on 2026-11-21 with the answers below. Stage 1 is done (see « Progress »); stage 2 is next.
 
 ## Context
 
@@ -66,6 +66,34 @@ button, and that nothing says which one is best. Read on `b76932c`:
 
 Acceptance: the person installs, starts and uses each of the six engines from its own card with the same buttons. The models page of each engine has
 the same three parts. Every model offered either downloads or says why it cannot.
+
+## Progress
+
+**Stage 1 (2026-11-21).** `MoteurServeurGere` (in `llamacpp_engine.py`) is a `MoteurExterne` whose `serveur` is fixed; `MoteurExLlamaV3`, `MoteurLMStudio` and
+`MoteurColibri` are registered as `exllamav3`, `lmstudio`, `colibri`, between llama.cpp and `openai`, which is now a server reached by its address only
+(« Autre serveur (compatible OpenAI) »). How it was done, and what was decided while coding:
+
+- **Old settings.** `engines.chosen_id` reads `moteur: "openai"` with `moteurs.json` → `openai.serveur` set to one of the three as that engine; `core.reglages`
+  applies it. Saving any other setting writes the stored value back (`storage._enregistrer_reglages`), so `reglages.json` keeps `openai` until the person
+  changes the engine. A managed engine with no section of its own in `moteurs.json` reads its port (and Colibri's model, ExLlamaV3's models folder) from
+  the old `openai` section (`llamacpp_engine.section`); its first change copies them into its own section and leaves the old one as it was.
+- **One server at a time, as the select did.** Changing the engine from one managed server to another, or to `openai`, stops the server Lutin started.
+  Choosing `openai` itself removes its old `serveur`, otherwise it would be read as that server again. An older client may still send `server` to
+  `PATCH /engines/openai/settings`: it is read as before (it names the engine in use); a managed engine refuses it.
+- **Can it run here.** `Moteur.compatibilite()` reads the signed catalogue entry of the same id, whatever its type (`engine_catalog.entree`), with
+  `engine_catalog.compatibility` (system, Docker, graphics card maker); a machine whose cards are not measured yet excludes nothing. ExLlamaV3 adds the
+  Python check of TabbyAPI. `GET /engines` gives it as `runs_here: {possible, reason}` on every card. The descriptions of the three cards stay in the code:
+  their catalogue entries are of type `externe` and describe a connection, not what Lutin installs.
+- **The page.** `Engines.svelte` draws every card with one snippet; the engines that cannot run here (and are not in use) are folded under « Other
+  engines (n) », each with its reason and without Use. The select of servers is gone from `EngineSettings.svelte`; the Catalogue tab shows the managed
+  page for `exllamav3`, `lmstudio`, `colibri` and says « no catalogue » for `openai`. The routes did not change (`tests/fixtures/api_v1_routes.json` unchanged).
+  The old page (`/ancienne/`) shows the same six cards: each managed server's settings are on its own card, its select of known servers no longer offers
+  them, and its buttons act on the engine in use instead of `openai`.
+- **Two existing rules met the decision.** `tests/test_moteurs_experimentaux.py` said no experimental engine has an engine of its own: Colibri now has
+  one (answer B of the maintainer, « finish the integration »), so the test checks instead that it is a `MoteurServeurGere` with no adapter of its own;
+  Strata still has none. The bench keeps its rule: Colibri, experimental, is not compared (`engine_bench.ENGINES_BENCH`).
+- **The grid of the LM Studio card** said « Lutin does not install this server »: true of the old shared card, false on its own card; it now says what
+  its weaknesses already said (the official installer, not tried on a real installation).
 
 ## Answers of the maintainer (2026-11-21)
 

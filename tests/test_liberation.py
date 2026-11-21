@@ -60,12 +60,13 @@ class Liberation(unittest.TestCase):
 
     def test_le_serveur_gere_n_est_arrete_que_sur_demande_du_bouton(self):
         ml.SERVEUR["proc"] = None
-        gere = engines.ENGINES["openai"]
-        with mock.patch.object(type(gere), "arreter_gere", lambda s: self.arrets.append("gere") or True), self.sans_ollama():
+        # ExLlamaV3, LM Studio, Colibri: each an engine of its own (ADR 0020); the button asks each one, only the one that runs stops (here, ExLlamaV3)
+        with mock.patch.object(ml.MoteurServeurGere, "arreter_gere", lambda s: self.arrets.append(s.id) or s.id == "exllamav3"), self.sans_ollama():
             _m.liberer_vram()          # garde-fous, passage de relais à ComfyUI : le serveur géré ne se redémarre pas tout seul, on ne le coupe pas en douce
             self.assertEqual(self.arrets, [])
             r = _m.liberer_vram(tout=True)          # le bouton « Libérer la VRAM »
-        self.assertEqual(self.arrets, ["gere"])
+        self.assertEqual(self.arrets, ["exllamav3", "lmstudio", "colibri"])
+        self.assertIn("ExLlamaV3", r["message"])
         self.assertIn("Déchargé", r["message"])
 
     def test_ollama_et_llamacpp_ensemble(self):

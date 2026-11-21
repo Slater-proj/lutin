@@ -18,6 +18,8 @@
   import type { Models, Status } from "../lib/types";
 
   let { status, onchanged }: { status: Status | null; onchanged: () => void } = $props();
+  // The servers Lutin installs and feeds with models itself, each an engine of its own (ADR 0020): their models are on their own page, not Ollama's catalogue.
+  const MANAGED: readonly string[] = ["exllamav3", "lmstudio", "colibri"];
 
   let models = $state<Models | null>(null);
   let problem = $state("");
@@ -25,7 +27,7 @@
   let asking = $state(false);
   let refresh = $state(0); // bumped when a download starts: the engine cards are read again and show its progress
   let tab = $state<"recommended" | "catalog" | "library" | "installed" | "measures" | "engines" | "machines" | "unset">("unset"); // chosen once the list is known: the guide when nothing is installed, the list otherwise
-  let unmanaged = $state(false); // the OpenAI-compatible engine reaches a server Lutin does not manage: no catalogue to offer
+  let unmanaged = $state(false); // ExLlamaV3, LM Studio or Colibri in use but its models cannot be read: no catalogue to offer
   // read again each time the Catalogue opens: a server chosen meanwhile in the Engines tab has a catalogue
   $effect(() => {
     if (tab !== "catalog") unmanaged = false;
@@ -154,10 +156,13 @@
       <EngineLibrary engine="llamacpp" onstarted={() => (refresh += 1)} />
     {/if}
   {:else if tab === "catalog"}
-    {#if status?.engine.id === "openai"}
+    {#if MANAGED.includes(status?.engine.id ?? "")}
       <!-- the server Lutin manages (ExLlamaV3, LM Studio, Colibri) has its own models: its catalogue, judged for this machine, not Ollama's -->
       <ManagedModels canConfigure={!!status?.access.can_configure} onchanged={() => { void guarded(load); onchanged(); }} onabsent={() => (unmanaged = true)} />
       {#if unmanaged}<p class="muted">{t("models.cat.unmanaged")}</p>{/if}
+    {:else if status?.engine.id === "openai"}
+      <!-- a server reached by its address manages its models itself -->
+      <p class="muted">{t("models.cat.unmanaged")}</p>
     {:else}
       <ModelCatalog precisions={status?.engine.id === "ollama"} onstarted={() => void guarded(load)} />
     {/if}
@@ -168,7 +173,7 @@
   {:else if tab === "machines"}
     <Machines onchanged={() => { void guarded(load); onchanged(); }} />
   {:else if tab === "installed"}
-  {#if status?.engine.id === "openai"}<ManagedModels canConfigure={!!status?.access.can_configure} onchanged={() => { void guarded(load); onchanged(); }} />{/if}
+  {#if MANAGED.includes(status?.engine.id ?? "")}<ManagedModels canConfigure={!!status?.access.can_configure} onchanged={() => { void guarded(load); onchanged(); }} />{/if}
   <ModelProposals onchanged={() => { void guarded(load); onchanged(); }} />
   <form class="add" onsubmit={install}>
     <label for="model-name">{t("models.add_expert")}</label>

@@ -75,6 +75,20 @@ def _enregistrer_reglages(nouveau):
     r["moteur"] = str(r.get("moteur") or engines.OLLAMA)
     if not engines.valid(r["moteur"]):
         raise ValueError(_t("Moteur inconnu."))
+    moteur_ecrit = r["moteur"]
+    if r["moteur"] == moteur_avant:          # an old « openai » + « serveur » setting, read as that server (ADR 0020), is written back as it was until the person changes the engine
+        stocke = str(lire_json(_m.DONNEES / "reglages.json", {}).get("moteur") or "")
+        if stocke and engines.chosen_id(stocke, _llamacpp().serveur_ancien()) == moteur_avant:
+            moteur_ecrit = stocke
+    else:
+        if r["moteur"] == engines.OPENAI:
+            _llamacpp().oublier_serveur_ancien()          # chosen for itself: an address, no longer the server named in its old settings
+        avant = engines.ENGINES.get(moteur_avant)
+        if moteur_avant in engines.MANAGED_SERVERS and (r["moteur"] in engines.MANAGED_SERVERS or r["moteur"] == engines.OPENAI) and hasattr(avant, "arreter_gere"):
+            try:
+                avant.arreter_gere()          # one OpenAI-compatible server at a time, as the old select did: the one Lutin started gives its memory back
+            except ValueError as e:
+                _m.journaliser("Arrêt de {} impossible : {}".format(avant.nom, e))
     par = dict(r.get("modeles_par_moteur") or {})
     if r["moteur"] != moteur_avant:          # un autre moteur a d'autres modèles : on retrouve celui qu'on y utilisait, ou le premier qu'il propose
         par[moteur_avant] = modele_avant
@@ -121,8 +135,13 @@ def _enregistrer_reglages(nouveau):
     _m.nettoyer_echantillonnage(r)
     _m.nettoyer_ressources(r)
     tool_settings.clean(r)
-    ecrire_atomique(_m.DONNEES / "reglages.json", json.dumps(dict(r, memoire_v=2), ensure_ascii=False, indent=1))
+    ecrire_atomique(_m.DONNEES / "reglages.json", json.dumps(dict(r, memoire_v=2, moteur=moteur_ecrit), ensure_ascii=False, indent=1))
     return _m.reglages()
+
+
+def _llamacpp():
+    from . import llamacpp_engine
+    return llamacpp_engine
 
 
 def lire_memoire(nom):

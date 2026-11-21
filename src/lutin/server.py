@@ -326,7 +326,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
             else:
                 detail = ""
             gere = None          # Colibri, LM Studio ou ExLlamaV3 choisi : simple regard sur les fichiers (aucune sonde réseau)
-            if mo.id == "openai":
+            if getattr(mo, "serveur", ""):
                 for choisi, nom, trouve in (("colibri_choisi", "Colibri", getattr(mo, "_colibri", None)), ("lmstudio_choisi", "LM Studio", getattr(mo, "_lms", None)), ("exllamav3_choisi", "ExLlamaV3", getattr(mo, "_exl", None))):
                     if trouve and getattr(mo, choisi, lambda: False)():
                         gere = {"nom": nom, "installe": trouve() is not None}
@@ -1398,7 +1398,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
                     return self._envoyer(200, _geres.download(genre, str(donnees.get("depot", "")), str(donnees.get("revision", ""))))
                 if genre == "lmstudio":
                     nom = str(donnees.get("nom", ""))[:121]
-                    return self._envoyer(200, _moteurs.launch_task(_geres.engine(), "telecharger:" + nom))
+                    return self._envoyer(200, _moteurs.launch_task(_geres.engine(genre), "telecharger:" + nom))
                 return self._envoyer(200, _geres.download(genre, str(donnees.get("id", ""))))
             if self.path == "/api/supprimer-modele":
                 return self._envoyer(200, _m.supprimer_modele(str(donnees.get("modele", ""))))

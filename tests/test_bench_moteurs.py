@@ -90,7 +90,10 @@ class Base(unittest.TestCase):
         self.addCleanup(lambda: (engines.ENGINES.clear(), engines.ENGINES.update(self.ancien)))
 
     def installer(self, ollama, llama):
+        """Only the engines a test installs take part: the servers Lutin manages (ADR 0020, engines of their own) would probe this machine."""
         engines.ENGINES["ollama"], engines.ENGINES["llamacpp"] = ollama, llama
+        for identifier in engines.MANAGED_SERVERS:
+            engines.ENGINES.pop(identifier, None)
 
 
 class Mesure(Base):
@@ -260,15 +263,12 @@ class Lancement(Base):
         class Serveur(Faux):
             def adresse(self):
                 return "http://127.0.0.1:1234/v1"
-
-            def config(self):
-                return {"serveur": "lmstudio"}
         self.installer(Faux("ollama", "Ollama", 100, modeles=("qwen3:8b",)), Faux("llamacpp", "llama.cpp", 100, installe=False))
-        engines.ENGINES["openai"] = Serveur("openai", "Serveur compatible OpenAI", 60, modeles=("qwen/qwen3-8b", "autre-70b"))
+        engines.ENGINES["lmstudio"] = Serveur("lmstudio", "LM Studio", 60, modeles=("qwen/qwen3-8b", "autre-70b"))          # an engine of its own since ADR 0020
         utilises = []
         r = bm.compare("qwen3:8b", "rapide", Profil(), horloge=Horloge(), memoire=lambda i, m: utilises.append((i, m)) or None, liberer_autres=lambda a, m: None, date="2026-11-09T10:00:00")
         self.assertEqual([(m["nom"], m["modele"]) for m in r["moteurs"]], [("Ollama", "qwen3:8b"), ("LM Studio", "qwen/qwen3-8b")])
-        self.assertIn(("openai", "qwen/qwen3-8b"), utilises, "la mémoire est lue avec le nom de modèle PROPRE à ce moteur")
+        self.assertIn(("lmstudio", "qwen/qwen3-8b"), utilises, "la mémoire est lue avec le nom de modèle PROPRE à ce moteur")
         self.assertEqual([i["id"] for i in r["ignores"]], ["llamacpp"])
 
     def test_un_serveur_openai_arrete_est_signale_pas_demarre_et_sans_adresse_il_est_absent(self):

@@ -85,7 +85,7 @@ def _latest_exllamav3(mo):
 
 
 def _latest_server(mo):
-    """Le serveur géré par Lutin derrière la carte « compatible OpenAI » (Colibri ou ExLlamaV3), s'il y en a un."""
+    """Colibri ou ExLlamaV3 installé par Lutin (LM Studio se met à jour par sa propre commande)."""
     return _latest_colibri(mo) or _latest_exllamav3(mo)
 
 
@@ -126,7 +126,7 @@ def check(force=False, http_json=None, maintenant=time.time):
                     r = _latest_llamacpp(mo, http_json)
                 elif mo.id == "ollama":
                     r = _latest_ollama(http_json)
-                elif mo.id == "openai":
+                elif mo.id in (engines.COLIBRI, engines.EXLLAMAV3):
                     r = _latest_server(mo)
                 else:
                     r = None
@@ -144,7 +144,7 @@ def state():
         if not isinstance(e, dict) or not e.get("derniere"):
             continue
         mo = engines.ENGINES.get(ident)
-        actuelle = (mo.version() if mo is not None and ident in ("llamacpp", "openai") else "") or e.get("actuelle", "")
+        actuelle = (mo.version() if mo is not None and ident in ("llamacpp", engines.COLIBRI, engines.EXLLAMAV3) else "") or e.get("actuelle", "")
         sortie[ident] = {"actuelle": actuelle, "derniere": e["derniere"], "disponible": latest(e["derniere"], actuelle), "verifie": e.get("verifie", 0)}
     return sortie
 

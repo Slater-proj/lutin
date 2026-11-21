@@ -830,6 +830,8 @@ _moteurs.CONTEXT.update(donnees=lambda: _m.DONNEES, en_docker=lambda: bool(os.en
                          profil_attendu=lambda: __import__("lutin.model_fit", fromlist=["x"]).profil_attendu(),
                          dossier_ollama=lambda: (None if os.environ.get("LUTIN_DOCKER") else __import__("lutin.locations", fromlist=["x"]).models_folder()))
 _moteurs.save(_llamacpp.MoteurLlamaCpp())
+for _gere in (_llamacpp.MoteurExLlamaV3, _llamacpp.MoteurLMStudio, _llamacpp.MoteurColibri):          # one engine per program (ADR 0020), in the order of the cards
+    _moteurs.save(_gere())
 _moteurs.save(_llamacpp.MoteurExterne())
 
 

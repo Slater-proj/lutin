@@ -97,22 +97,22 @@ class Colibri(unittest.TestCase):
         self.ancien = dict(engines.CONTEXT)
         engines.CONTEXT["donnees"] = lambda: self.tmp
         engines.CONTEXT["hors_ligne"] = lambda: False
-        self.mo = engines.ENGINES["openai"]
+        self.mo = engines.ENGINES["colibri"]          # an engine of its own since ADR 0020 (before: the « openai » engine with « serveur » set to it)
+        self.adresse_seule = engines.ENGINES["openai"]
 
     def tearDown(self):
         engines.CONTEXT.clear()
         engines.CONTEXT.update(self.ancien)
 
     def regler(self, **d):
-        ml.regler_serveur("openai", d)
+        ml.regler_serveur("colibri", d)
 
     def test_sans_choix_rien_n_est_installable_et_on_dit_comment(self):
-        a = self.mo.actions()
+        a = self.adresse_seule.actions()
         self.assertFalse(any(x["possible"] for x in a.values()))
         self.assertIn("Colibri", a["installer"]["raison"])
 
     def test_colibri_choisi_propose_installer_puis_le_reste(self):
-        self.regler(serveur="colibri")
         a = self.mo.actions()
         self.assertTrue(a["installer"]["possible"])
         self.assertFalse(a["desinstaller"]["possible"] or a["demarrer"]["possible"] or a["arreter"]["possible"] or a["mettre_a_jour"]["possible"])
@@ -121,7 +121,6 @@ class Colibri(unittest.TestCase):
 
     def test_installation_mise_a_jour_desinstallation(self):
         from lutin import colibri
-        self.regler(serveur="colibri")
         vues = []
 
         def faux_installer(version=None, dossiers=None, dire=print, **kw):
@@ -157,21 +156,20 @@ class Colibri(unittest.TestCase):
         for d in ({"modele_colibri": "dossier/relatif"}, {"modele_colibri": str(_TEMP / "absent")}, {"port_colibri": 80}, {"port_colibri": "abc"}, {"serveur": "../x"}):
             with self.assertRaises(ml.ErreurMoteur, msg=str(d)):
                 self.regler(**d)
+        with self.assertRaises(ml.ErreurMoteur):
+            ml.regler_serveur("openai", {"serveur": "../x"})          # the old select, still read from an old client
 
     def test_hors_ligne_pas_de_telechargement(self):
         engines.CONTEXT["hors_ligne"] = lambda: True
-        self.regler(serveur="colibri")
         a = self.mo.actions()
         self.assertFalse(a["installer"]["possible"])
         self.assertIn("hors ligne", a["installer"]["raison"])
 
     def test_la_page_recoit_le_serveur_choisi_et_les_reglages_de_colibri(self):
         self.assertEqual(ml.vue_reglages("openai")["serveur"], "")
-        self.regler(serveur="colibri")
-        v = ml.vue_reglages("openai")
+        v = ml.vue_reglages("colibri")
         self.assertEqual(v["serveur"], "colibri")
         self.assertEqual(v["colibri"]["port"], 8000)
-        self.regler(serveur="")
         self.assertNotIn("colibri", ml.vue_reglages("openai"))
 
 
@@ -230,21 +228,19 @@ class PremierLancement(unittest.TestCase):
 
     def test_le_premier_lancement_de_la_page_reconnait_colibri_installe(self):
         import lutin.server as srv
-        mo = engines.ENGINES["openai"]
+        mo = engines.ENGINES["colibri"]          # an engine of its own since ADR 0020
         ancien = dict(engines.CONTEXT)
         engines.CONTEXT["donnees"] = lambda: _TEMP / "donnees-pl"
         try:
-            ml.regler_serveur("openai", {"serveur": "colibri"})
             with mock.patch.object(type(mo), "_colibri", lambda self_: ("2.1.0", _TEMP)), mock.patch.object(type(mo), "modele_colibri", lambda self_: ""):
-                pl = srv.Gestionnaire._premier_lancement({"actif": False}, dict(_m.reglages(), moteur="openai"), None)
+                pl = srv.Gestionnaire._premier_lancement({"actif": False}, dict(_m.reglages(), moteur="colibri"), None)
             self.assertEqual(pl["gere"], {"nom": "Colibri", "installe": True, "sans_modele": True})
             self.assertIn("aucun modèle", pl["raison"])
             with mock.patch.object(type(mo), "_colibri", lambda self_: ("2.1.0", _TEMP)), mock.patch.object(type(mo), "modele_colibri", lambda self_: str(_TEMP)):
-                pl = srv.Gestionnaire._premier_lancement({"actif": False}, dict(_m.reglages(), moteur="openai"), None)
+                pl = srv.Gestionnaire._premier_lancement({"actif": False}, dict(_m.reglages(), moteur="colibri"), None)
             self.assertEqual(pl["gere"], {"nom": "Colibri", "installe": True, "sans_modele": False})
             self.assertNotIn("Ollama", pl["raison"])
         finally:
-            ml.regler_serveur("openai", {"serveur": ""})
             engines.CONTEXT.clear()
             engines.CONTEXT.update(ancien)
 

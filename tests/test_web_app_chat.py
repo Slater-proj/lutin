@@ -958,14 +958,14 @@ class Chat(unittest.TestCase):
         p.evaluer("location.hash = '#/chat'")
 
     def test_3w_the_models_of_a_managed_server_are_explored_and_downloaded(self):
-        """PARITY.md item 10 (last part): the models of LM Studio when it is the server in use, on /api/v1/managed-servers/… . Hermetic: the engine
-        is the fake one shown as « openai », and what lutin.managed_models reads (disk, Hugging Face) and starts (a download) is replaced."""
+        """PARITY.md item 10 (last part): the models of LM Studio when it is the engine in use, on /api/v1/managed-servers/… . Hermetic: the engine
+        is the fake one shown as « lmstudio » (an engine of its own since ADR 0020), and what lutin.managed_models reads (disk, Hugging Face) and starts (a download) is replaced."""
         p = self.page
         from lutin import managed_models
         real = T.A.moteur_actuel
 
         class Shown:
-            id = "openai"
+            id = "lmstudio"
 
             def __getattr__(self, name):
                 return getattr(real(), name)
@@ -1009,7 +1009,7 @@ class Chat(unittest.TestCase):
         real = T.A.moteur_actuel
 
         class Shown:
-            id = "openai"
+            id = "exllamav3"
 
             def __getattr__(self, name):
                 return getattr(real(), name)
@@ -1045,53 +1045,68 @@ class Chat(unittest.TestCase):
         self.assertEqual(started, [("exllamav3", "turboderp/Qwen3-27B-exl3", "5.0bpw")])
         self.assertEqual(p.erreurs, [])
 
-    def test_3wb_the_server_behind_the_openai_engine_is_chosen_and_its_catalogue_replaces_ollamas(self):
-        """Maintainer's request (2026-11-20): on the OpenAI-compatible engine, the server Lutin manages (ExLlamaV3, LM Studio, Colibri, or none) is chosen
-        in the engine's settings, and the Catalogue tab shows that server's models, not Ollama's; with no managed server it says why there is none.
-        Hermetic: the engine is the fake one shown as « openai »; what reads and sets the engine, and lutin.managed_models, are replaced."""
+    def test_3wb_every_program_has_its_own_card_and_the_one_in_use_has_its_catalogue(self):
+        """ADR 0020, stage 1 (maintainer's request of 2026-11-20, « every engine installed and used the same way »): ExLlamaV3, LM Studio and Colibri have their
+        own card, beside Ollama, llama.cpp and another server reached by its address; an engine that cannot run here is folded under « Other engines » with the
+        reason on its card and no Use button; the settings no longer hold a select of servers; the Catalogue tab shows the models of the engine in use, and for a
+        server reached by its address it says why there are none. Hermetic: the engine in use is a fake one, what lutin.managed_models reads is replaced, no
+        server of this machine is probed, and the graphics cards are given."""
         p = self.page
-        from lutin import llamacpp_engine, managed_models
+        from lutin import engines, llamacpp_engine, managed_models
         real = T.A.moteur_actuel
+        current = {"id": "openai"}
 
         class Shown:
-            id = "openai"
+            @property
+            def id(self):
+                return current["id"]
 
             def __getattr__(self, name):
                 return getattr(real(), name)
+
+        class Profile:
+            def __init__(self, maker):
+                self.gpus = [mock.Mock(fabricant=maker)]
+        cards = {"maker": "amd"}
         reload = lambda: (p.evaluer("window.__old = true; location.reload()"), p.attendre("!window.__old && !!document.querySelector('.rail .version')"))
         self.addCleanup(lambda: (p.evaluer("location.hash = '#/chat'"), reload()))          # registered before the patches: runs once they are undone
-        applied, server = [], {"kind": ""}
         seen = {"modeles": [], "installe": True, "dossier": "C:/models", "actif": True, "maj": False, "nom": "ExLlamaV3", "statut": "", "demarrer": None}
-
-        def apply(engine, data):
-            applied.append(data)
-            server["kind"] = data.get("serveur", server["kind"])
-        for patch in (mock.patch.object(T.A, "moteur_actuel", lambda *args: Shown()), mock.patch.object(managed_models, "chosen", lambda kind, mo=None: kind == server["kind"]),
-                      mock.patch.object(managed_models, "models", lambda kind, current: seen), mock.patch.object(managed_models, "recommended", lambda kind: []), mock.patch.object(managed_models, "catalog", lambda *args: {"suite": False, "modeles": []}),
-                      mock.patch.object(llamacpp_engine, "vue_reglages", lambda engine: {"url": "", "cle_definie": False, "variante": "auto", "serveur": server["kind"]}),
-                      mock.patch.object(llamacpp_engine, "apply_settings", apply), mock.patch.dict(os.environ, {"LUTIN_HORS_LIGNE": ""})):
+        for patch in (mock.patch.object(T.A, "moteur_actuel", lambda *args: Shown()), mock.patch.object(managed_models, "chosen", lambda kind: kind == current["id"]),
+                      mock.patch.object(managed_models, "models", lambda kind, shown: seen), mock.patch.object(managed_models, "recommended", lambda kind: []),
+                      mock.patch.object(managed_models, "catalog", lambda *args: {"suite": False, "modeles": []}), mock.patch.object(llamacpp_engine.MoteurOpenAI, "actif", lambda self: False),
+                      mock.patch.dict(engines.CONTEXT, profil=lambda: Profile(cards["maker"])), mock.patch.dict(os.environ, {"LUTIN_HORS_LIGNE": ""})):
             patch.start()
             self.addCleanup(patch.stop)
         p.evaluer("location.hash = '#/models'")
         reload()
         catalogue = "[...document.querySelectorAll('.models .tabs button')].find(b => b.innerText === 'Catalogue')"
+        engines_tab = "[...document.querySelectorAll('.models .tabs button')].find(b => b.innerText === 'Moteurs')"
         self.press(catalogue)
         p.attendre("document.querySelector('.models').innerText.includes(\"Lutin n'a pas de catalogue à proposer\")")
         self.assertFalse(p.evaluer("!!document.querySelector('.catalog-models')"), "not Ollama's catalogue: this engine cannot download Ollama's models")
-        self.press("[...document.querySelectorAll('.models .tabs button')].find(b => b.innerText === 'Moteurs')")
-        card = "[...document.querySelectorAll('.engines .card')].find(c => c.querySelector('strong').innerText.includes('OpenAI'))"
-        self.press("%s.querySelector('button[aria-expanded]')" % card)
-        p.attendre("!!document.querySelector('.engine-settings select')")
-        self.assertEqual(p.evaluer("[...document.querySelectorAll('.engine-settings select option')].map(o => o.value)"), ["", "exllamav3", "lmstudio", "colibri"])
-        self.assertEqual(applied, [], "opening the settings changes nothing")
-        p.evaluer("(() => { const box = document.querySelector('.engine-settings select'); box.value = 'exllamav3'; box.dispatchEvent(new Event('change', {bubbles: true})); })()")
-        self.eventually(lambda: applied == [{"serveur": "exllamav3"}], "the server chosen reached the engine's settings")
-        p.attendre("document.querySelector('.engine-settings').innerText.includes('TabbyAPI')")
+        self.press(engines_tab)
+        p.attendre("document.querySelectorAll('.engines .card[data-engine]').length === 6", 20)
+        self.assertEqual(p.evaluer("[...document.querySelectorAll('.engines > .list > .card')].map(c => c.dataset.engine)"), ["ollama", "llamacpp", "lmstudio", "colibri", "openai"])
+        folded = "document.querySelector('.engines details.others')"
+        self.assertIn("Autres moteurs (1)", p.evaluer(folded + ".querySelector('summary').innerText"))
+        self.press(folded + ".querySelector('summary')")
+        exl = folded + ".querySelector('.card[data-engine=exllamav3]')"
+        self.assertIn("NVIDIA", p.evaluer(exl + ".querySelector('[data-cannot-run]').innerText"), "the reason is on the card")
+        self.assertFalse(p.evaluer("[...%s.querySelectorAll('.button')].some(b => b.innerText === 'Utiliser')" % exl), "an engine that cannot run here is not offered for use")
+        openai = "document.querySelector('.engines .card[data-engine=openai]')"
+        self.press(openai + ".querySelector('button[aria-expanded]')")
+        p.attendre("!!document.querySelector('.engine-settings input[type=url]')")
+        self.assertFalse(p.evaluer("!!document.querySelector('.engine-settings select')"), "no select of servers: each one is an engine")
         if AXE.is_file():
-            self.axe("on the server behind the OpenAI-compatible engine")
+            self.axe("on the engine cards, the other engines unfolded")
+        cards["maker"], current["id"] = "nvidia", "exllamav3"
+        reload()
+        self.press(engines_tab)
+        p.attendre("!!document.querySelector('.engines > .list > .card[data-engine=exllamav3].current')", 20)
+        self.assertFalse(p.evaluer("!!document.querySelector('.engines details.others')"), "every engine can run on a machine with an NVIDIA card")
         self.press(catalogue)
         p.attendre("document.querySelector('.managed h2')?.innerText === 'Modèles de ExLlamaV3'")
-        self.assertNotIn("Lutin n'a pas de catalogue à proposer", p.evaluer("document.querySelector('.models').innerText"), "a managed server found: the notice of none is gone")
+        self.assertNotIn("Lutin n'a pas de catalogue à proposer", p.evaluer("document.querySelector('.models').innerText"), "the engine in use has its catalogue")
         self.assertEqual(p.erreurs, [])
 
     def test_3x_a_long_screen_scrolls_inside_the_main_area_not_under_the_navigation(self):

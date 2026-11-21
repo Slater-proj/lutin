@@ -11,8 +11,10 @@ Ce qu'un moteur sait faire (`Moteur`) :
     un modèle. La page ne montre que ce qui est possible, avec la raison de ce qui ne l'est pas (Docker, système, droits) ;
   - faire ces actions en tâche de fond (`lancer_tache`), dont l'avancement est montré dans la barre d'état.
 Aucune dépendance, et aucun import de core.py (pas de cycle) : le moteur Ollama est défini dans agent.py, à côté des fonctions qu'il enveloppe."""
+import os
 import queue
 import socket
+import sys
 import threading
 import time
 
@@ -20,7 +22,13 @@ from . import engine_capabilities
 
 OLLAMA = "ollama"
 LLAMACPP = "llamacpp"
-OPENAI = "openai"
+OPENAI = "openai"          # a server reached by its address alone
+EXLLAMAV3 = "exllamav3"
+LMSTUDIO = "lmstudio"
+COLIBRI = "colibri"
+# The servers Lutin installs and starts itself, each an engine of its own (ADR 0020). Before, they were a choice (`serveur`) inside the settings of the
+# `openai` engine; such an old setting is read as the engine it names (see `chosen_id`), without rewriting anything.
+MANAGED_SERVERS = (EXLLAMAV3, LMSTUDIO, COLIBRI)
 LOCK = threading.Lock()
 # La grille de capacités : pour chaque fonction, ce que le moteur fait « natif » (il le fait lui-même), « adapte » (Lutin traduit ou complète), « non » (impossible) ou « non_teste » (pas vérifié).
 # La suite de conformité (tests/test_conformite_moteurs.py) vérifie chaque case « natif » ou « adapte » contre un faux serveur : la grille ne ment pas.
@@ -117,6 +125,23 @@ class Moteur:
 
     def supprimer_modele(self, nom):
         raise ValueError("Ce moteur ne supprime pas ses modèles depuis Lutin.")
+
+    def compatibilite(self):
+        """(possible, raison) : ce moteur peut-il tourner sur CETTE machine ? D'après le catalogue signé (systèmes, Docker, fabricant de carte graphique, engine_catalog.compatibility).
+        Un moteur absent du catalogue, ou une machine pas encore mesurée, n'est jamais écarté : la carte le montre, l'installation dira le reste."""
+        try:
+            from . import engine_catalog
+            entree = engine_catalog.entree(self.id)
+            if not entree:
+                return True, ""
+            profil = CONTEXT["profil"]()
+            fabricants = None if profil is None else {getattr(g, "fabricant", "") for g in (getattr(profil, "gpus", None) or [])}
+            systeme = "windows" if os.name == "nt" else ("macos" if sys.platform == "darwin" else "linux")
+            if fabricants is None:
+                entree = dict(entree, materiel=[])          # cartes pas encore connues : seul ce qui ne dépend pas d'elles écarte
+            return engine_catalog.compatibility(entree, systeme, bool(CONTEXT["en_docker"]()), fabricants or set())
+        except Exception:  # noqa: BLE001  (la page ne dépend jamais du catalogue pour s'afficher)
+            return True, ""
 
     def fiche(self):
         """La fiche du moteur d'après le catalogue signé (description, forces, faiblesses, site, version testée), ou None : alors les textes écrits dans le code servent."""
@@ -222,6 +247,14 @@ def par_id(ident):
 def valid(ident):
     with LOCK:
         return ident in ENGINES
+
+
+def chosen_id(stored, legacy_server=""):
+    """The engine a stored `moteur` setting names. `openai` with the old `serveur` setting of that engine set to one of MANAGED_SERVERS is that server:
+    it was chosen in a select inside the settings of the `openai` engine before ADR 0020. Nothing is rewritten here."""
+    stored = str(stored or OLLAMA)
+    legacy_server = str(legacy_server or "")
+    return legacy_server if stored == OPENAI and legacy_server in MANAGED_SERVERS else stored
 
 
 # --------------------------------------------------------------------------- tâches de fond d'un moteur (installation, désinstallation, démarrage…)

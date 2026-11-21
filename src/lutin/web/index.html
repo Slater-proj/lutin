@@ -1897,7 +1897,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     };
     const gererCeServeur = async () => {          // « Démarrer » ou « Installer » le serveur que Lutin gère ; l'avancement est dans la barre bleue du haut
       oui.disabled = true; msg.textContent = '';
-      try { await api('/api/moteur-action', { moteur: 'openai', action: pl.gere.installe ? 'demarrer' : 'installer' }); msg.textContent = T('Lancé : l\'avancement est dans la barre bleue du haut.'); }
+      try { await api('/api/moteur-action', { moteur: ETAT.moteur || 'openai', action: pl.gere.installe ? 'demarrer' : 'installer' }); msg.textContent = T('Lancé : l\'avancement est dans la barre bleue du haut.'); }
       catch (e) { msg.textContent = e.message; msg.className = 'erreur'; }
       oui.disabled = false; rafraichir();
     };
@@ -3725,6 +3725,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
   const LIBELLE_ACTION = { installer: T('Installer'), desinstaller: T('Désinstaller'), reinstaller: T('Réinstaller'), demarrer: T('Démarrer'), arreter: T('Arrêter') };
   const etatMoteur = m => !m.statut.installe ? T('Pas installé') : m.statut.actif ? T('Prêt') : (m.statut.mode === 'externe' ? T('Ne répond pas') : T('Arrêté'));
   const barreTache = t => { const l = el('div'); l.appendChild(el('div', 'aide', t.texte || T('En cours…'))); if (t.total) { const b = el('div', 'barre'), i = el('i'); i.style.width = Math.min(100, Math.round(100 * t.fait / t.total)) + '%'; b.appendChild(i); l.appendChild(b); } return l; };
+  const GERES = ['exllamav3', 'lmstudio', 'colibri'];          // les serveurs que Lutin installe et lance : chacun sa carte (ADR 0020)
   const carteMoteur = (m, modifiable, prereglages) => {
     const d = el('div', 'carte moteur-liste' + (m.courant ? ' moteur-choisi' : '')); d.style.cssText = 'flex-direction:column;align-items:stretch;gap:6px';
     const tete = el('div', 'ligne'), radio = el('input'); radio.type = 'radio'; radio.name = 'moteurChoisi'; radio.checked = m.courant; radio.title = T('Utiliser ce moteur');
@@ -3808,17 +3809,18 @@ body[data-moteur="openai"] .biblio { display:none !important; }
         }
       }
     }
-    if (m.adresse_modifiable) {
+    if (m.adresse_modifiable || GERES.includes(m.id)) {          // ExLlamaV3, LM Studio, Colibri : leurs réglages propres
       const f = el('div', 'ligne'), url = el('input'), cle = el('input'), msg = el('span', 'aide'); let choixServeur = null;
       url.value = m.reglages.url || ''; url.style.minWidth = '260px'; url.disabled = cle.disabled = !modifiable;
       url.placeholder = m.id === 'llamacpp' ? T('Adresse d\'un llama-server déjà lancé (vide : Lutin le gère lui-même)') : T('Adresse du serveur, par exemple http://127.0.0.1:1234');
       cle.type = 'password'; cle.placeholder = m.reglages.cle_definie ? T('Clé enregistrée (vide : on la garde)') : T('Clé d\'accès (facultative)');
-      const colibri = m.id === 'openai' && m.reglages.serveur === 'colibri';          // Colibri et LM Studio : les seuls serveurs de la liste que Lutin installe et lance lui-même
-      const lmstudio = m.id === 'openai' && m.reglages.serveur === 'lmstudio', exllamav3 = m.id === 'openai' && m.reglages.serveur === 'exllamav3', gere = colibri || lmstudio || exllamav3;
-      if (m.id === 'openai' && prereglages.length) {          // les serveurs connus du catalogue signé : un choix remplit l'adresse et explique le serveur
+      const colibri = m.id === 'colibri';          // Colibri et LM Studio : les seuls serveurs de la liste que Lutin installe et lance lui-même
+      const lmstudio = m.id === 'lmstudio', exllamav3 = m.id === 'exllamav3', gere = colibri || lmstudio || exllamav3;
+      const autresServeurs = prereglages.filter(pr => !GERES.includes(pr.id));          // ceux que Lutin gère ont leur carte
+      if (m.id === 'openai' && autresServeurs.length) {          // les serveurs connus du catalogue signé : un choix remplit l'adresse et explique le serveur
         const choix = el('select'), fiche = el('div', 'aide'); choix.disabled = !modifiable; choixServeur = choix; choix.title = modifiable ? T('Plusieurs serveurs peuvent être installés ; un seul est utilisé à la fois — celui-ci. Le changer arrête l\'ancien et met à jour la page.') : explicationVerrou();
         const vide = el('option', '', T('Autre serveur (j\'indique son adresse)')); vide.value = ''; choix.appendChild(vide);
-        const choisi = m.reglages.serveur || '', visibles = prereglages.filter(pr => pr.compatible !== false || pr.id === choisi), masques = prereglages.filter(pr => !visibles.includes(pr));          // seuls les serveurs qui peuvent tourner sur CETTE machine sont proposés (système, Docker, carte graphique)
+        const choisi = m.reglages.serveur || '', visibles = autresServeurs.filter(pr => pr.compatible !== false || pr.id === choisi), masques = autresServeurs.filter(pr => !visibles.includes(pr));          // seuls les serveurs qui peuvent tourner sur CETTE machine sont proposés (système, Docker, carte graphique)
         [...visibles].sort((a, b) => Number(a.experimental) - Number(b.experimental)).forEach(pr => { const o = el('option', '', pr.nom + (pr.experimental ? ' · ' + T('expérimental') : '') + (['colibri', 'lmstudio', 'exllamav3'].includes(pr.id) ? ' · ' + ((m.reglages.serveurs_geres || {})[pr.id] ? '✔ ' + T('installé') : T('Lutin peut l\'installer')) : ' · ' + T('à installer toi-même'))); o.value = pr.id; choix.appendChild(o); });          // les expérimentaux en dernier, jamais préselectionnés
         choix.value = m.reglages.serveur || '';
         // Ce que Lutin fait ou ne fait pas pour le serveur choisi, dit en clair : seul Colibri s'installe depuis Lutin, et jamais sans clic sur « Installer »
@@ -3833,9 +3835,9 @@ body[data-moteur="openai"] .biblio { display:none !important; }
           if (pr.points_faibles.length) fiche.appendChild(el('div', '', '− ' + pr.points_faibles.join(' · ')));
           if (pr.site) { const a = el('a', '', T('Site officiel')); a.href = pr.site; a.target = '_blank'; a.rel = 'noopener noreferrer'; fiche.appendChild(a); }
         };
-        montrerFiche(prereglages.find(x => x.id === choix.value));
+        montrerFiche(autresServeurs.find(x => x.id === choix.value));
         choix.addEventListener('change', async () => {
-          const pr = prereglages.find(x => x.id === choix.value); fiche.textContent = '';
+          const pr = autresServeurs.find(x => x.id === choix.value); fiche.textContent = '';
           if (['colibri', 'lmstudio', 'exllamav3'].includes(choix.value) || gere) {          // Colibri ou LM Studio apparaît ou disparaît avec ses boutons : le choix est enregistré tout de suite
             choix.disabled = true;          // l'arrêt du serveur précédent peut prendre quelques secondes
             try { await api('/api/moteur-regler', { moteur: m.id, serveur: choix.value }); await rafraichir(); } catch (e) { alert(e.message); }
@@ -4223,7 +4225,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
       const c = el('div', 'carte'); c.appendChild(el('span', '', m.statut.detail || T('Ce moteur n\'est pas prêt.')));
       const b = el('button', 'principal', T('Ouvrir les réglages du moteur')); b.addEventListener('click', () => { ouvrirOnglet('reglages'); montrerRubrique('moteur'); }); c.appendChild(b); neuf.appendChild(c);
     }
-    if (m.id === 'openai') {          // serveur externe : la page commune est masquée, voici ses modèles
+    if (m.id === 'openai' || GERES.includes(m.id)) {          // serveur compatible OpenAI : la page commune est masquée, voici ses modèles
       neuf.appendChild(el('h2', '', T('Modèles de ') + m.nom));
       const installes = ETAT.installes || [];
       if (!installes.length) neuf.appendChild(el('div', 'aide', T('Aucun modèle pour le moment.')));
@@ -4268,7 +4270,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
         b.addEventListener('click', chercher); q.addEventListener('keydown', e => { if (e.key === 'Enter') chercher(); });
         c.append(q, b); neuf.append(c, msg, res);
       }
-    } else if (dl.raison && m.id === 'openai') neuf.appendChild(el('div', 'aide', dl.raison));
+    } else if (dl.raison && (m.id === 'openai' || GERES.includes(m.id))) neuf.appendChild(el('div', 'aide', dl.raison));
     z.replaceChildren(...neuf.childNodes);
   };
   const explicationVerrou = () => ETAT.niveau === 'proxy'
@@ -4938,7 +4940,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
   const carteNonInstallee = (z, nom) => {
     z.appendChild(el('div', 'aide', T('{} n\'est pas encore installé.').replace('{}', nom)));
     const l = el('div', 'ligne'), b = el('button', 'principal', T('Installer {}').replace('{}', nom)), msg = el('span', 'aide');
-    b.addEventListener('click', async () => { b.disabled = true; try { await api('/api/moteur-action', { moteur: 'openai', action: 'installer' }); msg.textContent = T('Installation lancée : l\'avancement est dans la barre bleue du haut.'); } catch (e) { msg.textContent = e.message; b.disabled = false; } });
+    b.addEventListener('click', async () => { b.disabled = true; try { await api('/api/moteur-action', { moteur: ETAT.moteur || 'openai', action: 'installer' }); msg.textContent = T('Installation lancée : l\'avancement est dans la barre bleue du haut.'); } catch (e) { msg.textContent = e.message; b.disabled = false; } });
     l.append(b, msg); z.appendChild(l);
   };
   // ---- Réglages > Moteur : les mesures réelles de chaque moteur sur cette machine (vitesse, premier mot, chargement), classées ; on peut en lancer une pour tout moteur actif
@@ -5157,7 +5159,7 @@ body[data-moteur="openai"] .biblio { display:none !important; }
     if (!r.actif && r.demarrer) {
       if (r.demarrer.possible) {
         const go = el('button', 'principal', T('Démarrer ') + cfg.nom), m0 = el('span', 'aide');
-        go.addEventListener('click', async () => { go.disabled = true; try { await api('/api/moteur-action', { moteur: 'openai', action: 'demarrer' }); m0.textContent = T('Lancé : l\'avancement est dans la barre bleue du haut.'); rafraichir(); } catch (x) { m0.textContent = x.message; go.disabled = false; } });
+        go.addEventListener('click', async () => { go.disabled = true; try { await api('/api/moteur-action', { moteur: ETAT.moteur || 'openai', action: 'demarrer' }); m0.textContent = T('Lancé : l\'avancement est dans la barre bleue du haut.'); rafraichir(); } catch (x) { m0.textContent = x.message; go.disabled = false; } });
         etat.append(go, m0);
       } else if (r.demarrer.raison) etat.appendChild(el('div', 'attention', 'ℹ ' + r.demarrer.raison));
     }

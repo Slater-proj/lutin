@@ -255,6 +255,9 @@ def reglages():
     r = dict(REGLAGES_DEFAUT)
     brut = lire_json(DONNEES / "reglages.json", {})
     r.update({k: v for k, v in brut.items() if k in REGLAGES_DEFAUT})
+    if r.get("moteur") == "openai":          # ExLlamaV3, LM Studio or Colibri chosen inside the settings of the « openai » engine before ADR 0020: read as that engine, the file is not rewritten
+        from . import engines as _mo, llamacpp_engine as _ml
+        r["moteur"] = _mo.chosen_id(r["moteur"], _ml.serveur_ancien())
     r["memoire_longue"] = "fichier"                                                  # la fiche de suivi pour tous (ADR 0019) : un ancien « resume » ou « demander » enregistré vaut la fiche, le fichier n'est pas réécrit
     r["num_ctx"] = max(4096, min(131072, int(r["num_ctx"])))
     r["temperature"] = max(0.0, min(2.0, float(r["temperature"])))
@@ -530,10 +533,9 @@ def _liberer_autres_moteurs(tout):
         if llama is not None and proc is not None and proc.poll() is None:
             llama.arreter()
             libres.append("llama.cpp")
-        gere = _mo.ENGINES.get("openai")
-        if tout and gere is not None and hasattr(gere, "arreter_gere") and gere.arreter_gere():
-            from . import engine_metrics
-            libres.append(engine_metrics.display_name(gere))
+        for gere in ([_mo.ENGINES.get(i) for i in _mo.MANAGED_SERVERS] if tout else []):          # ExLlamaV3, LM Studio, Colibri : chacun son moteur (ADR 0020)
+            if gere is not None and gere.arreter_gere():
+                libres.append(gere.nom)
     except Exception as e:  # noqa: BLE001  (libérer est un confort : jamais une erreur de plus)
         journaliser("Libération des autres moteurs impossible : {!r}".format(e))
     return libres

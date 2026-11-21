@@ -137,8 +137,7 @@ class Parcours(unittest.TestCase):
         with self.captures.serveur_demo({"LUTIN_LANGUE": "fr"}) as (port, tmp):
             p = self.ouvrir(tmp, "http://127.0.0.1:%d/ancienne/" % port)
             jeton = "document.documentElement.innerHTML.match(/TOKEN = '([0-9a-f]+)'/)[1]"
-            for corps in ("{moteur: 'openai', serveur: 'colibri'}", "{moteur: 'openai'}"):
-                url = "/api/moteur-regler" if "serveur" in corps else "/api/reglages"
+            for url, corps in (("/api/reglages", "{moteur: 'colibri'}"),):          # Colibri: an engine of its own since ADR 0020
                 p.evaluer("(async () => (await fetch('%s', {method: 'POST', headers: {'Content-Type': 'application/json', 'X-Token': %s}, body: JSON.stringify(%s)})).json())()" % (url, jeton, corps))
             p.evaluer(onglet("modeles"))
             p.attendre("document.getElementById('colibriModeles').getBoundingClientRect().height > 40 && document.getElementById('colibriModeles').textContent.includes('pas encore installé')")
@@ -797,10 +796,10 @@ class Parcours(unittest.TestCase):
             p = self.ouvrir(tmp, "http://127.0.0.1:%d/ancienne/" % port)
             p.attendre("document.querySelector('#pOllama').textContent.includes('Ollama prêt')")
             p.evaluer(onglet("reglages"))
-            p.attendre("document.querySelectorAll('#listeMoteurs > .moteur-liste').length === 3")
+            p.attendre("document.querySelectorAll('#listeMoteurs > .moteur-liste').length === 6")
             self.assertTrue(p.evaluer("document.querySelector('#listeMoteurs > .carte input[type=radio]').checked"), "Ollama est le moteur utilisé")
             noms = p.evaluer("[...document.querySelectorAll('#listeMoteurs > .carte > .ligne:first-child b')].map(b => b.textContent.trim()).join('|')")
-            self.assertEqual(noms, "Ollama|llama.cpp|Serveur compatible OpenAI")
+            self.assertEqual(noms, "Ollama|llama.cpp|ExLlamaV3|LM Studio|Colibri|Autre serveur (compatible OpenAI)")          # one card per program (ADR 0020)
             self.assertIn("Forces et faiblesses", p.evaluer("document.querySelector('#listeMoteurs > .carte').textContent"))
             self.assertTrue(p.evaluer("[...document.querySelectorAll('#listeMoteurs > .carte')[1].querySelectorAll('button')].some(b => b.textContent === 'Installer')"), "llama.cpp peut être installé par Lutin : le bouton est là")
             texte_llama = p.evaluer("document.querySelectorAll('#listeMoteurs > .carte')[1].textContent")
@@ -818,7 +817,7 @@ class Parcours(unittest.TestCase):
             p.evaluer(onglet("modeles"))
             self.assertTrue(p.evaluer("getComputedStyle(document.querySelector('#p-modeles .ollama-seulement')).display !== 'none'"), "avec Ollama, l'onglet Modèles est celui d'Ollama")
             p.evaluer(onglet("reglages"))
-            p.attendre("document.querySelectorAll('#listeMoteurs > .moteur-liste').length === 3")
+            p.attendre("document.querySelectorAll('#listeMoteurs > .moteur-liste').length === 6")
             p.evaluer("document.querySelectorAll('#listeMoteurs > .carte input[type=radio]')[1].click()")
             p.attendre("document.body.dataset.moteur === 'llamacpp'")
             p.attendre("document.querySelector('#pOllama').textContent.includes('llama.cpp')")

@@ -54,13 +54,14 @@ class Mesures(unittest.TestCase):
         MM.STATE.update(en_cours=False, erreur="")
 
     def test_un_serveur_openai_choisi_est_nomme_comme_l_utilisateur_le_connait(self):
-        self.assertEqual(MM.display_name(FauxMoteur(serveur="colibri")), "Colibri")
-        self.assertEqual(MM.display_name(FauxMoteur(serveur="lmstudio")), "LM Studio")
+        self.assertEqual(MM.display_name(FauxMoteur(ident="colibri", nom="Colibri")), "Colibri")          # each an engine of its own since ADR 0020
+        self.assertEqual(MM.display_name(FauxMoteur(ident="lmstudio", nom="LM Studio")), "LM Studio")
+        self.assertEqual(MM.display_name(FauxMoteur(serveur="lmstudio")).split(" (")[1], "http://127.0.0.1:1234/v1)", "an old « serveur » no longer renames the address engine")
         self.assertIn("127.0.0.1:1234", MM.display_name(FauxMoteur()))
         self.assertEqual(MM.display_name(FauxMoteur(ident="ollama", nom="Ollama")), "Ollama")
 
     def test_une_mesure_est_gardee_et_classee_la_plus_rapide_d_abord(self):
-        lent, vite = FauxMoteur(serveur="colibri", vitesse=40), FauxMoteur(ident="ollama", nom="Ollama", vitesse=200)
+        lent, vite = FauxMoteur(ident="colibri", nom="Colibri", vitesse=40), FauxMoteur(ident="ollama", nom="Ollama", vitesse=200)
         MM.launch(self.dossier, lent, "grand", synchrone=True)
         MM.launch(self.dossier, vite, "petit", synchrone=True)
         c = MM.ranking(MM.load(self.dossier))

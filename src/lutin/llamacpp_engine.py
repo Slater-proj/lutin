@@ -116,6 +116,43 @@ def ecrire_config(config):
             tmp.unlink(missing_ok=True)
 
 
+# What a managed server kept in the section of the `openai` engine before it became an engine of its own (ADR 0020).
+LEGACY_KEYS = {engines.EXLLAMAV3: ("port_exllamav3", "dossier_modeles"), engines.LMSTUDIO: ("port_lmstudio",), engines.COLIBRI: ("port_colibri", "modele_colibri")}
+
+
+def section(config, moteur):
+    """The settings of one engine in `config` (moteurs.json read), not to be modified. A managed server that has no section yet reads what the
+    `openai` engine kept for it: the old settings work without being migrated."""
+    own = config.get(moteur)
+    if isinstance(own, dict):
+        return own
+    old = config.get(engines.OPENAI) if moteur in LEGACY_KEYS else None
+    return {k: old[k] for k in LEGACY_KEYS[moteur] if k in old} if isinstance(old, dict) else {}
+
+
+def section_a_ecrire(config, moteur):
+    """The section of `config` that a change of this engine's settings writes into: created from `section` the first time, so a managed server keeps what
+    it had in the old section of `openai`."""
+    if not isinstance(config.get(moteur), dict):
+        config[moteur] = dict(section(config, moteur))
+    return config[moteur]
+
+
+def serveur_ancien():
+    """The old choice of server inside the settings of the `openai` engine (« exllamav3 », « lmstudio », « colibri »), or ""."""
+    c = lire_config().get(engines.OPENAI)
+    return str(c.get("serveur") or "") if isinstance(c, dict) else ""
+
+
+def oublier_serveur_ancien():
+    """The person chose the `openai` engine itself: its old choice of server must no longer turn it into that server (engines.chosen_id)."""
+    config = lire_config()
+    c = config.get(engines.OPENAI)
+    if isinstance(c, dict) and c.get("serveur"):
+        c.pop("serveur")
+        ecrire_config(config)
+
+
 def normaliser_adresse(adresse):
     """« http://hote:8080 » -> « http://hote:8080/v1 » ; « » reste « ». Lève ErreurMoteur si l'adresse n'est pas http(s)."""
     adresse = str(adresse or "").strip().rstrip("/")
@@ -190,13 +227,16 @@ def regler_serveur(moteur, donnees):
     if not isinstance(mo, MoteurExterne) or not any(k in donnees for k in ("serveur", "modele_colibri", "port_colibri", "port_lmstudio", "port_exllamav3")):
         return False
     config = lire_config()
-    c = config.setdefault(moteur, {})
-    if "serveur" in donnees:
+    c = section_a_ecrire(config, moteur)
+    if "serveur" in donnees:          # the old select of the `openai` engine (ADR 0020): still read from an old client, never shown
+        if mo.serveur:
+            raise ErreurMoteur(_t("Ce moteur n'a pas de serveur à choisir."))
         s = str(donnees["serveur"] or "").strip().lower()
         if not re.match(r"^[a-z0-9-]{0,30}$", s):
             raise ErreurMoteur(_t("Serveur inconnu."))
-        if s != str(c.get("serveur") or ""):
-            mo.arreter_gere()          # un seul serveur compatible OpenAI à la fois : celui que Lutin a lancé est arrêté (sa mémoire est rendue), jamais laissé tourner en cachette
+        avant = engines.ENGINES.get(str(c.get("serveur") or ""))
+        if s != str(c.get("serveur") or "") and isinstance(avant, MoteurServeurGere):
+            avant.arreter_gere()          # un seul serveur compatible OpenAI à la fois : celui que Lutin a lancé est arrêté (sa mémoire est rendue), jamais laissé tourner en cachette
         if s:
             c["serveur"] = s
         else:
@@ -300,7 +340,7 @@ def regler_dossier_modeles(moteur, chemin):
         raise ErreurMoteur(_t("Les modèles de ce moteur se règlent dans l'onglet Modèles."))
     valeur = valider_dossier(chemin, False, "ExLlamaV3" if exl else "llama.cpp")
     config = lire_config()
-    c = config.setdefault(moteur, {})
+    c = section_a_ecrire(config, moteur)
     if exl:
         mo.arreter_gere()          # TabbyAPI lit son dossier de modèles au démarrage : arrêté ici, il repart sur le nouveau dossier au prochain « Démarrer »
     if valeur:
@@ -393,7 +433,7 @@ def apply_settings(mo, donnees):
     serveur_regle = regler_serveur(mo.id, donnees)          # Colibri : choix du serveur, dossier du modèle, port
     avance = regler_avance(mo.id, {k: donnees[k] for k in ("routeur", "modeles_max", "n_cpu_moe", "version_epinglee") if k in donnees})
     if not mo.adresse_modifiable:
-        if avance or "dossier" in donnees or "dossier_modeles" in donnees:
+        if avance or serveur_regle or "dossier" in donnees or "dossier_modeles" in donnees:          # a managed server: its port, Colibri's model
             return
         raise ErreurMoteur(_t("Ce moteur n'a pas d'adresse à régler."))
     if mo.id == "llamacpp" and "url" not in donnees and "variante" not in donnees and avance:
@@ -404,7 +444,7 @@ def apply_settings(mo, donnees):
 
 
 def vue_reglages(moteur):
-    c = lire_config().get(moteur, {})
+    c = section(lire_config(), moteur)
     vue = {"url": c.get("url", ""), "cle_definie": bool(c.get("cle")), "variante": c.get("variante", "auto")}
     mo = engines.ENGINES.get(moteur)
     if isinstance(mo, MoteurLlamaCpp):
@@ -415,7 +455,7 @@ def vue_reglages(moteur):
         if info:
             vue["dossier"] = info
     if isinstance(mo, MoteurExterne):
-        vue["serveur"] = str(c.get("serveur") or "")
+        vue["serveur"] = mo.serveur or str(c.get("serveur") or "")
         if mo.colibri_choisi():
             modele = mo.modele_colibri()
             vue["colibri"] = {"modele": modele, "modele_ok": bool(modele) and Path(modele).is_dir(), "port": mo.port_colibri(), "installe": mo._colibri() is not None}
@@ -1265,10 +1305,12 @@ class MoteurLlamaCpp(MoteurOpenAI):
 
 
 class MoteurExterne(MoteurOpenAI):
-    """Un autre serveur compatible OpenAI (LM Studio, vLLM, Strata, un llama-server distant…) : une adresse et, si besoin, une clé. Lutin n'installe rien, il s'y connecte."""
+    """Un autre serveur compatible OpenAI (vLLM, Strata, ik_llama.cpp, un llama-server distant…) : une adresse et, si besoin, une clé. Lutin n'installe rien, il s'y connecte.
+    Ses sous-classes (`MoteurServeurGere`) sont les serveurs que Lutin installe et lance lui-même : leur `serveur` est fixe (ADR 0020)."""
     id = engines.OPENAI
-    nom = "Serveur compatible OpenAI"
+    nom = "Autre serveur (compatible OpenAI)"
     adresse_modifiable = True
+    serveur = ""          # "" : un serveur joint par son adresse seule ; sinon l'un de engines.MANAGED_SERVERS
 
     @property
     def description(self):
@@ -1278,7 +1320,7 @@ class MoteurExterne(MoteurOpenAI):
             return _t("LM Studio, installé et lancé par Lutin sans son interface (son démon « llmster »), sur cette machine. Les modèles se téléchargent depuis l'onglet Modèles.")
         if self.colibri_choisi():
             return _t("Colibri, installé et lancé par Lutin sur cette machine (expérimental). Son modèle se télécharge depuis l'onglet Modèles.")
-        return _t("Tout serveur qui parle l'interface OpenAI : LM Studio, vLLM, Strata, un llama-server sur un autre ordinateur… Tu donnes son adresse ; il gère ses modèles lui-même. Colibri, lui, Lutin sait l'installer (choisis-le dans la liste).")
+        return _t("Tout serveur qui parle l'interface OpenAI : vLLM, Strata, ik_llama.cpp, un llama-server sur un autre ordinateur… Tu donnes son adresse ; il gère ses modèles lui-même. ExLlamaV3, LM Studio et Colibri, que Lutin sait installer, ont chacun leur carte.")
 
     @property
     def points_forts(self):
@@ -1292,7 +1334,7 @@ class MoteurExterne(MoteurOpenAI):
             return (_t("Installation, mise à jour, suppression, démarrage et arrêt depuis Lutin, avec somme SHA-256 vérifiée."),
                     _t("Il n'écoute que sur cette machine (127.0.0.1)."))
         return (_t("Universel : s'adapte à n'importe quel serveur de ce genre, sur cette machine ou sur le réseau."),
-                _t("Lutin n'installe ni ne démarre rien (sauf Colibri, LM Studio et ExLlamaV3) : le serveur reste maître de ses réglages."))
+                _t("Lutin n'installe ni ne démarre rien : le serveur reste maître de ses réglages."))
 
     @property
     def points_faibles(self):
@@ -1305,15 +1347,15 @@ class MoteurExterne(MoteurOpenAI):
         if self.colibri_choisi():
             return (_t("Moteur jeune : le démarrage avec un vrai modèle n'a pas été vérifié avec Lutin."),
                     _t("Il demande un modèle préparé par Colibri (plusieurs dizaines de Go) : Lutin ne le télécharge pas."))
-        return (_t("Lutin ne peut ni installer, ni démarrer, ni mettre à jour ce serveur (sauf Colibri, LM Studio et ExLlamaV3), ni lui télécharger de modèle."),
+        return (_t("Lutin ne peut ni installer, ni démarrer, ni mettre à jour ce serveur, ni lui télécharger de modèle."),
                 _t("Selon le serveur, les appels d'outils ou les images peuvent ne pas fonctionner."))
 
     def config(self):
-        return lire_config().get(self.id, {})
+        return section(lire_config(), self.id)
 
-    # -- Colibri : le seul serveur du catalogue que Lutin sait installer et lancer (sur cette machine, 127.0.0.1)
+    # -- Colibri : installé et lancé par Lutin (sur cette machine, 127.0.0.1)
     def colibri_choisi(self):
-        return self.config().get("serveur") == "colibri"
+        return self.serveur == engines.COLIBRI
 
     def port_colibri(self):
         from . import colibri
@@ -1325,7 +1367,7 @@ class MoteurExterne(MoteurOpenAI):
 
     # -- LM Studio : installé et lancé par Lutin sans son interface (démon llmster + commande lms), sur cette machine seulement
     def lmstudio_choisi(self):
-        return self.config().get("serveur") == "lmstudio"
+        return self.serveur == engines.LMSTUDIO
 
     def port_lmstudio(self):
         from . import lmstudio
@@ -1337,7 +1379,7 @@ class MoteurExterne(MoteurOpenAI):
 
     # -- ExLlamaV3 : installé et lancé par Lutin à travers TabbyAPI (environnement Python dédié), sur cette machine seulement, carte NVIDIA
     def exllamav3_choisi(self):
-        return self.config().get("serveur") == "exllamav3"
+        return self.serveur == engines.EXLLAMAV3
 
     def charge_connue(self):
         return self.exllamav3_choisi()          # TabbyAPI dit quel modèle il a chargé (GET /v1/model) ; les autres serveurs de cette carte ne le disent pas
@@ -1612,7 +1654,7 @@ class MoteurExterne(MoteurOpenAI):
         if self.lmstudio_choisi():
             return self._actions_lmstudio()
         if not self.colibri_choisi():
-            raison = _t("Sans objet : ce serveur n'est pas géré par Lutin (seuls Colibri, LM Studio et ExLlamaV3 peuvent l'être : choisis-les dans la liste des serveurs connus).")
+            raison = _t("Sans objet : Lutin ne gère pas ce serveur. ExLlamaV3, LM Studio et Colibri, qu'il sait installer, ont chacun leur carte.")
             return {a: {"possible": False, "raison": raison} for a in engines.ACTIONS}
         trouve = self._colibri() is not None
         hl = engines.CONTEXT["hors_ligne"]()
@@ -1644,7 +1686,7 @@ class MoteurExterne(MoteurOpenAI):
         if self.lmstudio_choisi():
             return self._faire_lmstudio(action, progression)
         if not self.colibri_choisi():
-            raise ErreurMoteur(_t("Action impossible avec ce serveur : Lutin ne gère que Colibri."))
+            raise ErreurMoteur(_t("Action impossible : Lutin ne gère pas ce serveur."))
         from . import colibri
         dossiers = self._dossiers()
         try:
@@ -1723,7 +1765,35 @@ class MoteurExterne(MoteurOpenAI):
                 "outils": ("non_teste", _t("Dépend du serveur.")), "reflexion": ("non_teste", _t("Dépend du serveur.")), "vision": ("non_teste", _t("Dépend du serveur et du modèle.")),
                 "embeddings": ("non_teste", _t("Dépend du serveur.")), "plusieurs_modeles": ("non_teste", _t("Dépend du serveur.")),
                 "telechargement": ("adapte", _t("Depuis Hugging Face (modèles EXL3), par Lutin.")) if self.exllamav3_choisi() else (("adapte", _t("Depuis Hugging Face (modèles GGUF), par Lutin.")) if self.lmstudio_choisi() else (("adapte", _t("Colibri prépare et télécharge ses modèles.")) if self.colibri_choisi() else ("non", _t("Le serveur gère ses modèles lui-même.")))),
-                "installation": ("non_teste", _t("Lutin installe et lance Colibri ; le démarrage avec un vrai modèle n'est pas vérifié.")) if self.colibri_choisi() else (("non_teste", _t("Lutin installe et lance ExLlamaV3 (TabbyAPI) ; pas essayé sur une vraie carte NVIDIA.")) if self.exllamav3_choisi() else ("non", _t("Lutin n'installe pas ce serveur (sauf Colibri, LM Studio et ExLlamaV3).")))}
+                "installation": ("non_teste", _t("Lutin installe et lance Colibri ; le démarrage avec un vrai modèle n'est pas vérifié.")) if self.colibri_choisi() else (("non_teste", _t("Lutin installe et lance ExLlamaV3 (TabbyAPI) ; pas essayé sur une vraie carte NVIDIA.")) if self.exllamav3_choisi() else (("non_teste", _t("Lutin lance l'installeur officiel de LM Studio ; pas essayé sur une vraie installation.")) if self.lmstudio_choisi() else ("non", _t("Lutin n'installe pas ce serveur."))))}
+
+
+class MoteurServeurGere(MoteurExterne):
+    """Un serveur compatible OpenAI que Lutin installe, démarre et nourrit de modèles lui-même, sur cette machine seulement (127.0.0.1) : un moteur à part entière,
+    avec sa carte (ADR 0020). Son adresse ne se règle pas : elle vient de son port."""
+    adresse_modifiable = False
+
+
+class MoteurExLlamaV3(MoteurServeurGere):
+    id = serveur = engines.EXLLAMAV3
+    nom = "ExLlamaV3"
+
+    def compatibilite(self):
+        possible, raison = super().compatibilite()
+        from . import exllamav3
+        if possible and not exllamav3.python_compatible():
+            return False, _t("Python {}.{} n'est pas pris en charge par TabbyAPI (3.10 à 3.14).").format(*sys.version_info[:2])
+        return possible, raison
+
+
+class MoteurLMStudio(MoteurServeurGere):
+    id = serveur = engines.LMSTUDIO
+    nom = "LM Studio"
+
+
+class MoteurColibri(MoteurServeurGere):
+    id = serveur = engines.COLIBRI
+    nom = "Colibri"
 
 
 def _systeme():

@@ -36,7 +36,14 @@ class Catalogue(unittest.TestCase):
 
     def test_aucun_moteur_experimental_n_a_d_adaptateur_propre(self):
         for ident in EXPERIMENTAUX:
-            self.assertNotIn(ident, engines.ENGINES)
+            if ident in engines.MANAGED_SERVERS:
+                # ADR 0020 (accepted 2026-11-21, « finish the integration of Colibri »): Colibri is an engine of its own that Lutin installs and starts, as it
+                # already was behind the « openai » card. It speaks the OpenAI interface through the same class as any other server: no adapter of its own.
+                self.assertIsInstance(engines.ENGINES[ident], ml.MoteurServeurGere)
+                for classe in type(engines.ENGINES[ident]).__mro__[:2]:
+                    self.assertFalse({"chat", "chat_flux", "modeles"} & set(vars(classe)), classe)
+            else:
+                self.assertNotIn(ident, engines.ENGINES)
             self.assertNotIn(ident, cm.MANAGED)
 
     def test_ils_sont_dans_la_liste_des_preregalages_mais_marques(self):

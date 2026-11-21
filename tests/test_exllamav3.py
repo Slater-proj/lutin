@@ -289,8 +289,7 @@ class Carte(unittest.TestCase):
         engines.CONTEXT["donnees"] = lambda: self.tmp
         engines.CONTEXT["hors_ligne"] = lambda: False
         engines.CONTEXT["en_docker"] = lambda: False
-        self.mo = engines.ENGINES["openai"]
-        ml.regler_serveur("openai", {"serveur": "exllamav3"})
+        self.mo = engines.ENGINES["exllamav3"]          # an engine of its own since ADR 0020 (before: the « openai » engine with « serveur » set to it)
         self.addCleanup(self.remettre)
         # The tasks ask whether a server already answers on the default port: a real TabbyAPI running on the machine must not change what is asserted.
         patch = mock.patch.object(ml.MoteurOpenAI, "actif", lambda self: False)
@@ -298,7 +297,7 @@ class Carte(unittest.TestCase):
         self.addCleanup(patch.stop)
 
     def remettre(self):
-        ml.regler_serveur("openai", {"serveur": "", "port_exllamav3": 0})
+        ml.regler_serveur("exllamav3", {"port_exllamav3": 0})
         engines.CONTEXT.clear()
         engines.CONTEXT.update(self.ancien)
 
@@ -313,8 +312,7 @@ class Carte(unittest.TestCase):
             self.assertIsNone(self.mo.en_memoire("Autre-exl3"), "another model than the one loaded")
         with mock.patch.object(ml.MoteurExterne, "_json", side_effect=OSError("refused")):
             self.assertIsNone(self.mo.en_memoire("Qwen-exl3"), "a server that is stopped, or that holds no model (TabbyAPI answers by an error)")
-        ml.regler_serveur("openai", {"serveur": ""})
-        self.assertFalse(self.mo.charge_connue(), "another server of this card does not say which model it holds")
+        self.assertFalse(engines.ENGINES["openai"].charge_connue(), "another OpenAI-compatible server does not say which model it holds")
 
     def test_l_installation_demande_une_carte_nvidia_et_pas_docker(self):
         engines.CONTEXT["profil"] = self.profil("nvidia")
@@ -329,11 +327,11 @@ class Carte(unittest.TestCase):
 
     def test_adresse_locale_imposee_port_regle_et_statut(self):
         self.assertEqual(self.mo.adresse(), "http://127.0.0.1:5000/v1")
-        ml.regler_serveur("openai", {"port_exllamav3": 5555})
+        ml.regler_serveur("exllamav3", {"port_exllamav3": 5555})
         self.assertEqual(self.mo.adresse(), "http://127.0.0.1:5555/v1")
         for mauvais in (80, "abc", 99999):
             with self.assertRaises(Exception):
-                ml.regler_serveur("openai", {"port_exllamav3": mauvais})
+                ml.regler_serveur("exllamav3", {"port_exllamav3": mauvais})
         self.assertEqual(self.mo.statut()["detail"], "ExLlamaV3 n'est pas installé.")
 
     def test_les_taches_appellent_les_bonnes_fonctions_et_ne_telechargent_pas_hors_ligne(self):

@@ -121,7 +121,8 @@ The verdicts are computed by the server (`model_fit`, `model_compat`) and never 
 
 ## Engines
 
-`GET /api/v1/engines` gives every engine (Ollama, llama.cpp, servers compatible with OpenAI…): `id`, `name`, `kind`, `current`, `installed`, `running`, `version`, `models_count`, strengths and weaknesses,
+`GET /api/v1/engines` gives one card per program (ADR 0020: Ollama, llama.cpp, ExLlamaV3, LM Studio, Colibri, and another server compatible with OpenAI reached by its address): `id`, `name`, `kind`, `current`, `installed`, `running`, `version`, `models_count`, strengths and weaknesses,
+`runs_here` (`possible`, and the `reason` when it cannot run on this machine: system, graphics card, Docker, Python),
 the six `actions` (`install`, `uninstall`, `reinstall`, `start`, `stop`, `update`), each with `possible` and the `reason` (what it does, or why it cannot), and the `task` in progress
 (`state`: `running`, `done` or `failed`; `text`, `done`, `total`, `error`). The engines are read at the same time and, for each, its three questions too: one that does not answer costs one wait of 2 s for the whole list, not three per engine.
 `POST /api/v1/engines/{id}/actions/{action}` (right `configurator`) starts an action in the background and answers `202` with the task. **What changes the machine (install, uninstall, reinstall, update) needs

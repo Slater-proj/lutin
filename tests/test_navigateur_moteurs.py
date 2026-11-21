@@ -94,8 +94,7 @@ class Moteurs(unittest.TestCase):
         return p
 
     def moteur_exllamav3(self, p):
-        post(p, "/api/reglages", {"moteur": "openai"})
-        post(p, "/api/moteur-regler", {"moteur": "openai", "serveur": "exllamav3"})
+        post(p, "/api/reglages", {"moteur": "exllamav3"})          # an engine of its own since ADR 0020
         time.sleep(1.2)
         p.evaluer("location.reload()")
         p.attendre("!!document.querySelector('#bNouvelle')")
@@ -117,14 +116,14 @@ class Moteurs(unittest.TestCase):
             self.page_moteur(p)
             self.assertIn("Dossier des moteurs", p.evaluer("document.getElementById('dossierMoteurs').textContent"))
             self.assertIn("seul endroit", p.evaluer("document.getElementById('dossierMoteurs').textContent"))
-            for nom in ("Ollama", "llama.cpp", "Serveur compatible OpenAI"):
+            for nom in ("Ollama", "llama.cpp", "ExLlamaV3"):
                 texte = p.evaluer("(%s).textContent" % (self.CARTE % json.dumps(nom)))
                 self.assertIn("Dossier d'installation", texte, nom)
                 self.assertIn("Dossier des modèles", texte, nom)
                 self.assertLess(texte.index("Dossier d'installation"), texte.index("Dossier des modèles"), nom)
                 self.assertNotIn("Utiliser le dossier proposé", texte, nom)
                 self.assertEqual(p.evaluer("(%s).querySelectorAll('input[data-dossier]').length" % (self.CARTE % json.dumps(nom))), 0, nom + " : l'installation n'a plus de champ à elle")
-            exl = p.evaluer("(%s).textContent" % (self.CARTE % json.dumps("Serveur compatible OpenAI")))
+            exl = p.evaluer("(%s).textContent" % (self.CARTE % json.dumps("ExLlamaV3")))
             self.assertIn("exllamav3", exl)
             self.assertIn("Changer de dossier", exl, "le dossier des modèles d'ExLlamaV3 se change comme celui de llama.cpp")
             self.assertEqual(p.erreurs, [])
@@ -152,29 +151,27 @@ class Moteurs(unittest.TestCase):
             self.moteur_exllamav3(p)
             self.page_moteur(p)
             ailleurs = str(tmp / "autre-disque")
-            carte = self.CARTE % json.dumps("Serveur compatible OpenAI")
+            carte = self.CARTE % json.dumps("ExLlamaV3")
             champ = "(%s).querySelector('input[title^=\"Un chemin complet ; vide\"]')" % carte
             p.evaluer("(() => { const c = %s; c.value = %s; return true; })()" % (champ, json.dumps(ailleurs)))
             p.evaluer("[...(%s).querySelectorAll('button')].find(b => b.textContent === 'Changer de dossier').click()" % carte)
             p.attendre("(%s).textContent.includes(%s)" % (carte, json.dumps("Dossier des modèles : " + ailleurs)), delai=20)
             self.assertEqual(p.erreurs, [])
 
-    def test_changer_de_serveur_dans_la_liste_redessine_la_carte_aussitot(self):
-        """Le bug : la liste déroulante gardait le focus, la carte n'était pas redessinée et montrait toujours les boutons d'ExLlamaV3 sous « Colibri »."""
+    def test_chaque_serveur_gere_a_sa_carte_et_la_liste_n_en_propose_plus(self):
+        """ADR 0020 : ExLlamaV3, LM Studio et Colibri ont chacun leur carte, avec leurs boutons ; la liste de la carte « Autre serveur » ne propose plus que des
+        serveurs joints par leur adresse. (Avant : ils étaient des choix de cette liste, et un bug y laissait les boutons d'ExLlamaV3 sous « Colibri ».)"""
         with self.captures.serveur_demo({"LUTIN_LANGUE": "fr"}) as (port, tmp):
             installer_exllamav3_pour_de_faux(tmp)
             p = self.ouvrir(tmp, port)
             self.moteur_exllamav3(p)
             self.page_moteur(p)
-            carte = self.CARTE % json.dumps("Serveur compatible OpenAI")
-            p.attendre("(%s).textContent.includes('Désinstaller')" % carte)
-            self.assertIn("ExLlamaV3", p.evaluer("(%s).textContent" % carte))
-            p.evaluer("(() => { const s = (%s).querySelector('select'); s.focus(); s.value = 'colibri'; s.dispatchEvent(new Event('change', { bubbles: true })); return document.activeElement === s; })()" % carte)
-            p.attendre("!(%s).textContent.includes('Désinstaller') && (%s).textContent.includes('Colibri')" % (carte, carte), delai=20)
-            texte = p.evaluer("(%s).textContent" % carte)
-            self.assertNotIn("TabbyAPI", texte, "l'explication d'ExLlamaV3 a disparu")
-            self.assertTrue(p.evaluer("[...(%s).querySelectorAll('button')].some(b => b.textContent === 'Installer')" % carte), "Colibri n'est pas installé : on propose de l'installer")
-            self.assertEqual(p.evaluer("(%s).querySelector('select').value" % carte), "colibri")
+            exl, coli, autre = (self.CARTE % json.dumps(n) for n in ("ExLlamaV3", "Colibri", "Autre serveur (compatible OpenAI)"))
+            p.attendre("(%s).textContent.includes('Désinstaller')" % exl)
+            self.assertIn("TabbyAPI", p.evaluer("(%s).textContent" % exl))
+            self.assertNotIn("TabbyAPI", p.evaluer("(%s).textContent" % coli), "chaque carte n'explique que son programme")
+            options = p.evaluer("[...((%s).querySelector('select') || {options: []}).options].map(o => o.value)" % autre)
+            self.assertFalse({"exllamav3", "lmstudio", "colibri"} & set(options), options)
             self.assertEqual(p.erreurs, [])
 
     def test_la_page_modeles_d_exllamav3_propose_les_memes_choses_qu_ollama(self):

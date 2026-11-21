@@ -28,6 +28,8 @@ export interface EngineView {
   detail: string;
   strengths: string[];
   weaknesses: string[];
+  /** Whether it can run on this machine (system, graphics card, Docker) and, when not, why. */
+  runs_here: { possible: boolean; reason: string };
   actions: Record<"install" | "uninstall" | "reinstall" | "start" | "stop" | "update", EngineAction>;
   task: EngineTask | null;
 }

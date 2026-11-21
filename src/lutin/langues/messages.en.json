@@ -2392,5 +2392,11 @@
 "Clé API (seulement si ACE-Step en exige une)": "API key (only if ACE-Step requires one)",
 "Inutile pour une installation de bureau : le serveur d'ACE-Step n'exige une clé que si tu en as réglé une.": "Not needed for a desktop installation: ACE-Step's server only requires a key if you have set one.",
 "Le format des morceaux générés. Le modèle peut en demander un autre dans sa demande.": "The format of the generated pieces. The model can ask for another in its request.",
-"MP3 (léger)": "MP3 (light)"
+"MP3 (léger)": "MP3 (light)",
+"Tout serveur qui parle l'interface OpenAI : vLLM, Strata, ik_llama.cpp, un llama-server sur un autre ordinateur… Tu donnes son adresse ; il gère ses modèles lui-même. ExLlamaV3, LM Studio et Colibri, que Lutin sait installer, ont chacun leur carte.": "Any server that speaks the OpenAI interface: vLLM, Strata, ik_llama.cpp, a llama-server on another computer… You give its address; it manages its own models. ExLlamaV3, LM Studio and Colibri, which Lutin can install, each have their own card.",
+"Sans objet : Lutin ne gère pas ce serveur. ExLlamaV3, LM Studio et Colibri, qu'il sait installer, ont chacun leur carte.": "Not applicable: Lutin does not manage this server. ExLlamaV3, LM Studio and Colibri, which it can install, each have their own card.",
+"Action impossible : Lutin ne gère pas ce serveur.": "Action impossible: Lutin does not manage this server.",
+"Lutin lance l'installeur officiel de LM Studio ; pas essayé sur une vraie installation.": "Lutin runs LM Studio's official installer; not tried on a real installation.",
+"Ce moteur n'a pas de serveur à choisir.": "This engine has no server to choose.",
+"Autre serveur (compatible OpenAI)": "Another server (OpenAI-compatible)"
 }

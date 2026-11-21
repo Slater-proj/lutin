@@ -111,13 +111,14 @@ class Moteur(unittest.TestCase):
 
     def remettre(self):
         cfg = ml.lire_config()
-        cfg.pop("openai", None)
+        for identifier in ("openai", "lmstudio", "colibri"):
+            cfg.pop(identifier, None)
         ml.ecrire_config(cfg)
         engines.CONTEXT.clear()
         engines.CONTEXT.update(self.ancien)
 
     def test_supprimer_un_modele_lm_studio_passe_par_lutin(self):
-        ml.regler_serveur("openai", {"serveur": "lmstudio"})
+        self.mo = engines.ENGINES["lmstudio"]          # an engine of its own since ADR 0020
         appels = []
         with mock.patch.object(L, "remove_model", lambda nom: appels.append(nom)):
             self.mo.supprimer_modele("a")
@@ -128,7 +129,7 @@ class Moteur(unittest.TestCase):
         self.assertIn("arrête LM Studio", str(e.exception))
 
     def test_colibri_est_arrete_avant_que_son_modele_soit_efface(self):
-        ml.regler_serveur("openai", {"serveur": "colibri"})
+        self.mo = engines.ENGINES["colibri"]
         suivi = []
         with mock.patch.object(ml.MoteurOpenAI, "actif", lambda self: True), mock.patch.object(CO, "stop", lambda *a, **k: suivi.append("arret") or True), \
                 mock.patch.object(CO, "remove_model", lambda nom, d: suivi.append(("supprime", nom))):
@@ -136,8 +137,7 @@ class Moteur(unittest.TestCase):
         self.assertEqual(suivi, ["arret", ("supprime", "m")])
 
     def test_un_serveur_non_gere_ne_supprime_rien(self):
-        ml.regler_serveur("openai", {"serveur": ""})
-        with self.assertRaises(ml.ErreurMoteur):
+        with self.assertRaises(ml.ErreurMoteur):          # « openai »: a server reached by its address
             self.mo.supprimer_modele("x")
 
 

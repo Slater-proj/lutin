@@ -15,15 +15,11 @@ FILE = "mesures_moteurs.json"
 MAX = 200
 STATE = {"en_cours": False, "moteur": "", "modele": "", "erreur": "", "debut": 0.0}
 LOCK = threading.Lock()
-SERVERS = {"colibri": "Colibri", "lmstudio": "LM Studio", "exllamav3": "ExLlamaV3"}
 
 
 def display_name(moteur):
-    """Le nom que l'utilisateur reconnaît : pour « Serveur compatible OpenAI », le serveur choisi (Colibri, LM Studio) ou son adresse."""
+    """Le nom que l'utilisateur reconnaît : pour un autre serveur compatible OpenAI, son adresse (ExLlamaV3, LM Studio et Colibri ont leur nom, ADR 0020)."""
     if getattr(moteur, "id", "") == "openai":
-        serveur = str(getattr(moteur, "config", lambda: {})().get("serveur") or "")
-        if serveur in SERVERS:
-            return SERVERS[serveur]
         adresse = str(moteur.adresse() if hasattr(moteur, "adresse") else "")
         return _t("Serveur compatible OpenAI") + (" (" + adresse + ")" if adresse else "")
     return str(getattr(moteur, "nom", getattr(moteur, "id", "?")))

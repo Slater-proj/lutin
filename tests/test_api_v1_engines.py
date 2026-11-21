@@ -71,7 +71,7 @@ class Engines(unittest.TestCase):
         status, answer = call("GET", "/api/v1/engines")
         self.assertEqual((status, sorted(answer), answer["current"]), (200, ["current", "engines"], A.moteur_actuel().id))
         fake = next(entry for entry in answer["engines"] if entry["id"] == "fake")
-        self.assertEqual(sorted(fake), ["actions", "current", "description", "detail", "id", "installed", "kind", "manages_models", "models_count", "name", "running", "strengths", "task", "update", "version", "weaknesses"])
+        self.assertEqual(sorted(fake), ["actions", "current", "description", "detail", "id", "installed", "kind", "manages_models", "models_count", "name", "running", "runs_here", "strengths", "task", "update", "version", "weaknesses"])
         self.assertEqual((fake["name"], fake["running"], fake["installed"], fake["version"], fake["models_count"], fake["task"], fake["current"]), ("Fake engine", True, True, "1.2.3", 2, None, False))
         self.assertEqual(sorted(fake["actions"]), ["install", "reinstall", "start", "stop", "uninstall", "update"])
         self.assertEqual(fake["actions"]["stop"], {"possible": False, "reason": "Nothing to stop."})
