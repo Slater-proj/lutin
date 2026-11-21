@@ -41,3 +41,11 @@ function safeStorage(): Storage | null {
     return null;
   }
 }
+
+/** The title of the browser tab: « ⏳ » while an answer is being written (or waits for an approval), « ✅ » when one ended while the tab was hidden and
+ * has not been seen yet, so that the person sees from another tab that Lutin works or is done (maintainer, 2026-11-21). */
+export function tabTitle(base: string, active: readonly string[], waiting: readonly string[], doneUnseen: boolean): string {
+  if (waiting.length) return "✋ " + base;
+  if (active.length) return "⏳ " + base;
+  return doneUnseen ? "✅ " + base : base;
+}

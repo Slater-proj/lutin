@@ -592,6 +592,41 @@ class Chat(unittest.TestCase):
         self.assertEqual(p.evaluer("document.querySelectorAll('.chips li').length"), 0, "cancelling the edit drops them")
         self.assertEqual(p.erreurs, [])
 
+    def test_3gb_opening_another_conversation_while_an_answer_is_written_leaves_it_in_its_own(self):
+        """Maintainer, 2026-11-21 (a bug of the old Lutin not to bring back): an answer being written stays in its conversation when another one is opened;
+        its end does not bring the first one back over the one being read; the tab of the browser says that Lutin works."""
+        p = self.page
+        other = T.A.conv_nouvelle()
+        T.A.conv_renommer(other["id"], "Autre 3gb")
+        other = T.A.conv_lire(other["id"])
+        other["messages"] = [{"role": "user", "content": "Old question 3gb"}, {"role": "assistant", "content": "Old answer 3gb."}]
+        T.A.conv_ecrire(other)
+        self.addCleanup(lambda: T.A.conv_supprimer(other["id"]))
+        p.aller(T.BASE + "/app/")          # the list is read again with the conversation just made
+        p.attendre("[...document.querySelectorAll('.list .entry')].some(e => e.innerText.includes('Autre 3gb'))")
+        p.evaluer("[...document.querySelectorAll('.list .new')].forEach(b => b.click())")
+        p.attendre("!!document.querySelector('.welcome')")
+        T.SCENARIO[:] = [[{"content": "Start of the long answer. "}, {"attendre": 4}, {"content": "End of the long answer."}]]
+        self.write("Write slowly 3gb")
+        p.evaluer("document.querySelector('.composer button[type=submit]').click()")
+        p.attendre(TEXT + ".includes('Start of the long answer.')")
+        # Lutin's eyes are alive (maintainer, 2026-11-21): the face of the answer being written thinks
+        self.assertEqual(p.evaluer("[...document.querySelectorAll('.thread .lutin-face')].pop().dataset.mood"), "thinking")
+        p.evaluer("[...document.querySelectorAll('.list .entry')].find(e => e.innerText.includes('Autre 3gb')).click()")
+        p.attendre(TEXT + ".includes('Old answer 3gb.')")
+        self.assertNotIn("Start of the long answer.", p.evaluer(TEXT), "the answer stays in its own conversation")
+        self.assertTrue(p.evaluer("!!document.querySelector('.elsewhere')"), "a notice says where the answer is written")
+        self.assertTrue(p.evaluer("document.title.startsWith('⏳')"), "the tab says that an answer is being written")
+        p.attendre("!!document.querySelector('.composer button[type=submit]')", 15)          # the answer ended
+        p.attendre("document.querySelector('.brand .lutin-face')?.dataset.mood === 'happy'", 3)          # the logo is glad for a moment
+        time.sleep(0.5)
+        text = p.evaluer(TEXT)
+        self.assertIn("Old answer 3gb.", text, "its end did not bring the first conversation back over this one")
+        self.assertNotIn("End of the long answer.", text)
+        p.evaluer("[...document.querySelectorAll('.list .entry')].find(e => e.innerText.includes('Write slowly 3gb') || e.innerText.includes('slowly')).click()")
+        p.attendre(TEXT + ".includes('End of the long answer.')")
+        self.assertEqual(p.erreurs, [])
+
     def test_3g_an_answer_still_being_written_elsewhere_is_waited_for_after_a_reload(self):
         p = self.page
         conversation = T.lire("/api/etat")["conversations"][0]["id"]
@@ -986,10 +1021,24 @@ class Chat(unittest.TestCase):
             self.addCleanup(patch.stop)
         p.evaluer("location.hash = '#/models'")
         reload()
-        p.attendre("!!document.querySelector('.managed .card')")
+        tab = "[...document.querySelectorAll('.models .tabs button')].find(b => b.innerText === %s)"
+        # The Installed tab shows what is on this machine, and only that (maintainer, 2026-11-21: it was the whole Catalogue again)
+        self.press(tab % json.dumps("Installés"))
+        p.attendre("document.querySelectorAll('.managed .model-card').length === 1")
+        self.assertIn("lmstudio-community/Qwen3-8B-GGUF", p.evaluer("document.querySelector('.managed .model-card').innerText"), "the name to download is on the card")
+        self.assertFalse(p.evaluer("!!document.querySelector('.managed form')"), "no search in the Installed tab")
+        self.assertFalse(p.evaluer("!!document.querySelector('#model-name')"), "nor Ollama's form under another engine")
+        self.press(tab % json.dumps("Catalogue"))
+        p.attendre("!!document.querySelector('.managed form button[type=submit]')")
         self.assertIn("Modèles de LM Studio", p.evaluer("document.querySelector('.managed h2').innerText"))
+        self.assertTrue(p.evaluer("!!document.querySelector('.managed .model-help')"), "the names are explained")
         self.press("document.querySelector('.managed form button[type=submit]')")
-        p.attendre("document.querySelectorAll('.managed .card').length === 2")
+        p.attendre("document.querySelectorAll('.managed .model-card').length === 1")
+        card = p.evaluer("document.querySelector('.managed .model-card').innerText")
+        for said in ("Gemma-3-4B-GGUF", "lmstudio-community/Gemma-3-4B-GGUF", "4 milliards de paramètres", "Détails"):
+            self.assertIn(said, card)
+        self.press("document.querySelector('.managed .model-help summary')")
+        self.picture("3w-model-card-and-help")
         self.press("[...document.querySelectorAll('.managed .button')].find(b => b.innerText.startsWith('Voir les quantifications'))")
         p.attendre("document.querySelectorAll('.managed .quants li').length === 2")
         self.press("document.querySelectorAll('.managed .quants li')[0].querySelector('.button')")
@@ -1027,14 +1076,16 @@ class Chat(unittest.TestCase):
             self.addCleanup(patch.stop)
         p.evaluer("location.hash = '#/models'")
         reload()
-        p.attendre("document.querySelectorAll('.managed .cards .card').length === 2", 20)
+        self.press("[...document.querySelectorAll('.models .tabs button')].find(b => b.innerText === 'Catalogue')")
+        p.attendre("document.querySelectorAll('.managed .cards .model-card').length === 2", 20)
         text = p.evaluer("document.querySelector('.managed').innerText")
         self.assertIn("Recommandés pour cette machine", text)
-        first = "document.querySelectorAll('.managed .cards .card')[0]"
+        first = "document.querySelectorAll('.managed .cards .model-card')[0]"
         self.assertIn("Qwen3-27B-exl3", p.evaluer(first + ".innerText"))
         self.assertIn("5.0bpw", p.evaluer(first + ".innerText"), "the quantisation to take is said")
         self.assertIn("17,9", p.evaluer(first + ".innerText"), "with its exact size")
-        self.assertIn("installé", p.evaluer("document.querySelectorAll('.managed .cards .card')[1].innerText").lower(), "what is already on disk is marked, not offered again")
+        self.assertIn("installé", p.evaluer("document.querySelectorAll('.managed .cards .model-card')[1].innerText").lower(), "what is already on disk is marked, not offered again")
+        self.picture("3wc-recommended-cards")
         self.press(first + ".querySelector('.button')")
         p.attendre("!!document.querySelector('.managed .button.primary')")
         self.assertEqual(started, [], "asking is not downloading")
@@ -1093,6 +1144,7 @@ class Chat(unittest.TestCase):
         exl = folded + ".querySelector('.card[data-engine=exllamav3]')"
         self.assertIn("NVIDIA", p.evaluer(exl + ".querySelector('[data-cannot-run]').innerText"), "the reason is on the card")
         self.assertFalse(p.evaluer("[...%s.querySelectorAll('.button')].some(b => b.innerText === 'Utiliser')" % exl), "an engine that cannot run here is not offered for use")
+        self.picture("3wb-engine-cards")
         openai = "document.querySelector('.engines .card[data-engine=openai]')"
         self.press(openai + ".querySelector('button[aria-expanded]')")
         p.attendre("!!document.querySelector('.engine-settings input[type=url]')")
@@ -2954,6 +3006,8 @@ class Chat(unittest.TestCase):
         p.attendre("!!document.querySelector('.to-bottom')")
         self.picture("5x-back-to-the-end")
         self.assertEqual(p.evaluer("document.querySelector('.to-bottom').getAttribute('aria-label')"), "Aller à la fin de la conversation")
+        # on the right side of the thread, not over the middle of the text (maintainer, 2026-11-21)
+        self.assertTrue(p.evaluer("(b => { const r = b.getBoundingClientRect(), s = b.parentElement.getBoundingClientRect(); return r.left > s.left + s.width * 0.75; })(document.querySelector('.to-bottom'))"))
         self.assertEqual(p.evaluer("document.querySelector('.scroll').scrollTop"), 0, "someone reading higher up is left there")
         p.evaluer("document.querySelector('.to-bottom').click()")
         p.attendre(at_end)

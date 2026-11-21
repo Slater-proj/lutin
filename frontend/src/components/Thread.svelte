@@ -1,4 +1,6 @@
 <script lang="ts">
+  import LutinFace from "./LutinFace.svelte";
+  import { answerMood } from "../lib/lutin_mood";
   // The messages of a conversation: what is stored, then the message just sent and the answer being written.
   import { t } from "../lib/messages";
   import Icon from "./Icon.svelte";
@@ -11,10 +13,11 @@
   // `machine`: the paired machine that holds the conversation ("" for this one): its images and documents are read from it.
   // `onregenerate`: answer again from the last request (shown on the last answer only, when nothing runs).
   // `conversation`, `canOpen`, `canDelete`, `onproduced`: what a tool produced, opened or deleted from the thread (components/Produced.svelte).
-  let { items, pending, live, onedit, onregenerate, onpin, onverify, machine = "", conversation = "", canOpen = false, canDelete = false, onproduced }: {
+  let { items, pending, live, onedit, onregenerate, onpin, onverify, machine = "", conversation = "", canOpen = false, canDelete = false, onproduced, modelLoaded = null }: {
     items: Item[];
     pending: ({ text: string } & Sent) | null;
     live: LiveTurn | null;
+    modelLoaded?: boolean | null; // the model of the answer being written is in memory (null: not known): its face sleeps while it is loaded
     onedit?: (item: Extract<Item, { role: "user" }>) => void;
     onregenerate?: () => void;
     onpin?: (index: number, pinned: boolean) => void; // a request pinned: always in front of the model
@@ -148,7 +151,7 @@
   {/if}
   {#if live}
     <li class="assistant">
-      <h2 class="who"><img src="/logo.svg" alt="" width="22" height="22" />{t("chat.assistant")}</h2>
+      <h2 class="who"><LutinFace mood={answerMood(true, live.blocks.length === 0, modelLoaded) === "sleep" ? "sleep" : "thinking"} size={22} />{t("chat.assistant")}</h2>
       {@render blocksView(live.blocks, false)}
       {#if live.tasks.length}
         <div class="tasks">

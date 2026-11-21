@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { markOf, markSeen, readSeen } from "./marks";
+import { markOf, markSeen, readSeen, tabTitle } from "./marks";
 
 function memory(): Pick<Storage, "getItem" | "setItem"> {
   const kept = new Map<string, string>();
@@ -23,5 +23,14 @@ describe("the marks of the list of conversations", () => {
     expect(readSeen(storage)).toEqual({ a: "2026-01-01T10:00" });
     expect(readSeen({ getItem: () => "not json" })).toEqual({});
     expect(markSeen("b", "x", null)).toEqual({ b: "x" });
+  });
+});
+
+describe("tabTitle", () => {
+  it("says in the browser tab that an answer is being written, waits for an approval, or ended unseen", () => {
+    expect(tabTitle("Lutin", [], [], false)).toBe("Lutin");
+    expect(tabTitle("Lutin", ["a"], [], false)).toBe("⏳ Lutin");
+    expect(tabTitle("Lutin", ["a"], ["a"], false)).toBe("✋ Lutin");
+    expect(tabTitle("Lutin", [], [], true)).toBe("✅ Lutin");
   });
 });

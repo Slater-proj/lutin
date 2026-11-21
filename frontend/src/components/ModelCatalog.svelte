@@ -5,6 +5,7 @@
   import { api, ApiError } from "../lib/api";
   import { language, t, type MessageKey } from "../lib/messages";
   import ModelVariants from "./ModelVariants.svelte";
+  import { detailsLink, readName } from "../lib/model_card";
   import { byFamily, matches, shown, strengths, runsHere, type CatalogModel } from "../lib/model_catalog";
 
   let { onstarted, precisions = false }: { onstarted: () => void; precisions?: boolean } = $props();
@@ -70,7 +71,9 @@
         <strong>{model.name}</strong>
         {#if model.installed}<span class="tag">{t("models.cat.installed")}</span>{/if}
         {#if model.fit}<span class={"fit " + model.fit.level}>{t(("guide.fit." + model.fit.level) as MessageKey)}</span>{/if}
+        {#if readName(model.id).uncensored}<span class="uncensored" title={t("card.uncensored_help")}>{t("card.uncensored")}</span>{/if}
       </div>
+      <p class="meta">{t("card.download_name")} <code>{model.id}</code></p>
       <p class="meta">{t("models.cat.meta", gb(model.size_gb), gb(model.parameters_b), Math.round(model.context_max / 1024))}{model.licence ? " · " + model.licence : ""}</p>
       <p class="summary">{model.summary}</p>
       {#if good.strong.length}<p class="plus">{t("models.cat.strong", good.strong.map(role).join(", "))}</p>{/if}
@@ -91,10 +94,11 @@
             <button type="button" class="button" onclick={() => (asking = "")}>{t("chat.cancel")}</button>
           </div>
         </div>
-      {:else if offer || variants}
+      {:else}
         <div class="actions">
           {#if offer}<button type="button" class="button primary" disabled={busy} onclick={() => (asking = model.id)}>{t("models.cat.download")}<span class="visually-hidden"> {model.name}</span></button>{/if}
           {#if variants}<button type="button" class="button quiet" aria-expanded={open === model.id} onclick={() => (open = open === model.id ? "" : model.id)}>{t("variants.choose")}<span class="visually-hidden"> {model.name}</span></button>{/if}
+          <a class="button quiet" href={detailsLink(model.id, "ollama")} target="_blank" rel="noopener noreferrer">{t("card.details")}<span class="visually-hidden"> {model.name}</span></a>
         </div>
       {/if}
       {#if variants && open === model.id}<ModelVariants model={model.id} {onstarted} />{/if}
@@ -142,6 +146,14 @@
 </section>
 
 <style>
+  .uncensored {
+    padding: 0 var(--space-2);
+    border: 1px solid var(--color-warning, #c58b00);
+    border-radius: var(--radius-pill);
+    font-size: var(--text-xs);
+    font-weight: 600;
+  }
+
   .catalog-models {
     display: flex;
     flex-direction: column;

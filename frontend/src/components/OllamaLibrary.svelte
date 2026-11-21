@@ -6,6 +6,7 @@
   import { api, ApiError } from "../lib/api";
   import { language, t, type MessageKey } from "../lib/messages";
   import { libraryQuery, sizesShown } from "../lib/library";
+  import { detailsLink, readName } from "../lib/model_card";
 
   type Size = { size: string; name: string; installed: boolean; estimated_gb: number | null; fit: { level: string; text: string } | null };
   type Model = { name: string; description: string; capabilities: string[]; updated: string; downloads: number; sizes: Size[]; installed_plain: boolean };
@@ -106,7 +107,9 @@
     <ul class="cards">
       {#each visible as { model, sizes } (model.name)}
         <li class="card">
-          <p class="line"><strong>{model.name}</strong><span class="muted">{t("olib.downloads", count(model.downloads))}{model.updated ? " · " + model.updated : ""}</span></p>
+          <p class="line"><strong>{model.name}</strong>{#if readName(model.name).uncensored}<span class="uncensored" title={t("card.uncensored_help")}>{t("card.uncensored")}</span>{/if}<span class="muted">{t("olib.downloads", count(model.downloads))}{model.updated ? " · " + model.updated : ""}</span>
+            <a class="button quiet" href={detailsLink(model.name, "ollama")} target="_blank" rel="noopener noreferrer">{t("card.details")}<span class="visually-hidden"> {model.name}</span></a></p>
+          <p class="muted">{t("card.download_name")} <code>{model.name}</code></p>
           {#if model.description}<p>{model.description}</p>{/if}
           {#if model.capabilities.length}<p class="line">{#each model.capabilities as name (name)}<span class="tag">{t(("olib.cap." + name) as MessageKey)}</span>{/each}</p>{/if}
           <ul class="sizes">
@@ -136,6 +139,14 @@
 </section>
 
 <style>
+  .uncensored {
+    padding: 0 var(--space-2);
+    border: 1px solid var(--color-warning, #c58b00);
+    border-radius: var(--radius-pill);
+    font-size: var(--text-xs);
+    font-weight: 600;
+  }
+
   .ollama-library {
     display: flex;
     flex-direction: column;

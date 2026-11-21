@@ -82,6 +82,7 @@
 
 <section class="conversation-tools" aria-labelledby="tools-title">
   <h2 id="tools-title">{t("tools.title")}</h2>
+  <p class="intro">{t("tools.intro")}</p>
   {#if problem}<p class="problem" role="alert">{problem}</p>{/if}
   <p class="notice" role="status">{notice}</p>
 
@@ -154,6 +155,13 @@
 </section>
 
 <style>
+  .intro {
+    margin: 0;
+    color: var(--color-text-muted);
+    font-size: var(--text-sm);
+    max-width: var(--measure);
+  }
+
   .conversation-tools,
   .part,
   .modes {

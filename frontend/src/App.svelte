@@ -3,6 +3,8 @@
   import { onMount } from "svelte";
   import ActivityBar from "./components/ActivityBar.svelte";
   import Icon, { type IconName } from "./components/Icon.svelte";
+  import LutinFace, { type Mood } from "./components/LutinFace.svelte";
+  import { moodOf } from "./lib/lutin_mood";
   import LutinBanners from "./components/LutinBanners.svelte";
   import Palette from "./components/Palette.svelte";
   import { api, ApiError } from "./lib/api";
@@ -32,6 +34,12 @@
   let area = $state<Area>(areaOf(location.hash));
   let theme = $state<Theme>(readTheme());
   let status = $state<Status | null>(null);
+  // The eyes of the logo follow the application: asleep when the engine is stopped, thinking while an answer is written, worried or sad when the
+  // health of the machine says so, happy or angry for a moment when an answer ends or fails (window event « lutin-mood »).
+  let healthLevel = $state<"ok" | "warning" | "critical" | "">("");
+  let passing = $state<Mood | null>(null);
+  let passingTimer: ReturnType<typeof setTimeout> | undefined;
+  const mood = $derived(moodOf({ engineRunning: status ? status.engine.running : null, activeTurns: status?.active_turns.length ?? 0, health: healthLevel, passing }));
   let problem = $state("");
   let setupNeeded = $state<boolean | null>(null); // null while the server is asked: the shell is not drawn first and replaced a moment later
   let nodeWaiting = $state(0); // rights requests and a shutdown asked by another machine: a badge on Settings, as on the old page (ADR 0016, stage 5)
@@ -59,6 +67,21 @@
       area = areaOf(location.hash);
     };
     const onStatus = (): void => void refreshStatus(); // what a screen changed and the shell shows: a banner of Lutin's version
+    const onMood = (event: Event): void => {
+      passing = (event as CustomEvent<Mood>).detail;
+      clearTimeout(passingTimer);
+      passingTimer = setTimeout(() => (passing = null), 4000);
+      void refreshStatus();
+    };
+    const readHealth = (): void => {
+      void api<{ level: "ok" | "warning" | "critical" }>("GET", "/health").then((answer) => (healthLevel = answer.level), () => undefined);
+    };
+    addEventListener("lutin-mood", onMood);
+    readHealth();
+    const lively = setInterval(() => {
+      void refreshStatus();
+      readHealth();
+    }, 15000);
     const onNode = (event: Event): void => {
       nodeWaiting = (event as CustomEvent<number>).detail; // announced by the « Lend this machine » group after each of its readings
     };
@@ -73,6 +96,9 @@
       removeEventListener("hashchange", onHash);
       removeEventListener("lutin-node", onNode);
       removeEventListener("lutin-status", onStatus);
+      removeEventListener("lutin-mood", onMood);
+      clearInterval(lively);
+      clearTimeout(passingTimer);
       clearInterval(timer);
     };
   });
@@ -87,7 +113,7 @@
 <Palette />
 <div class="shell">
   <nav class="rail" aria-label={t("nav.label")}>
-    <p class="brand"><img src="/logo.svg" alt="" width="30" height="30" /><span>Lutin</span></p>
+    <p class="brand"><LutinFace {mood} size={30} /><span>Lutin</span></p>
     <ul>
       {#each AREAS as name (name)}
         <li>

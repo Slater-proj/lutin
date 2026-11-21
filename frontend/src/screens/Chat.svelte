@@ -4,12 +4,14 @@
   import AttachmentBar from "../components/AttachmentBar.svelte";
   import Changes from "../components/Changes.svelte";
   import Icon from "../components/Icon.svelte";
+  import LutinFace from "../components/LutinFace.svelte";
+  import { passMood } from "../lib/lutin_mood";
   import Options from "../components/Options.svelte";
   import Thread from "../components/Thread.svelte";
   import { api, ApiError, streamTurn, upload } from "../lib/api";
   import { fromStored, MAX_DOCUMENTS, MAX_IMAGES, kindOf, refusal, turnFields, uploading, type Attachment } from "../lib/attachments";
   import { conversationOf } from "../lib/address";
-  import { markOf, markSeen, readSeen } from "../lib/marks";
+  import { markOf, markSeen, readSeen, tabTitle } from "../lib/marks";
   import { choiceValue, parseChoice, selector, type MachinesView } from "../lib/machines";
   import { approvalPath, byMachine, conversationPath, uploadPath, type Listed } from "../lib/place";
   import { t, type MessageKey } from "../lib/messages";
@@ -46,6 +48,12 @@
   const choices = $derived(models ? selector(models.models.map((model) => model.name), models.current, models.remote ?? [], paired) : null);
   let live = $state<LiveTurn | null>(null);
   let pending = $state<({ text: string } & Sent) | null>(null);
+  // The conversation the answer being written belongs to. Another one may be opened meanwhile: the answer is shown only in its own, and its end
+  // does not replace the one the person is reading (the old page wrote it into whatever conversation was open).
+  let liveAt = $state<{ id: string; at: string } | null>(null);
+  const liveHere = $derived(liveAt !== null && conversation?.id === liveAt.id && where === liveAt.at);
+  const shownLive = $derived(liveHere ? live : null);
+  const shownPending = $derived(liveHere ? pending : null);
   let attachments = $state<Attachment[]>([]);
   let counter = 0;
   let draft = $state("");
@@ -74,7 +82,7 @@
     if (id) conversation = await api<Conversation>("GET", conversationPath(where, id));
   }
 
-  const items = $derived(storedToItems((conversation?.messages ?? []).slice(0, cut ?? undefined)));
+  const items = $derived(storedToItems((conversation?.messages ?? []).slice(0, liveHere ? (cut ?? undefined) : undefined)));
   let elsewhere = $state(false); // an answer is being written in this conversation, but not by this page (it was reloaded, or another device sent it)
   let elsewhereTurn = $state<TurnState | undefined>(undefined); // where that turn is, when the server says it: waiting for an approval this page cannot show, stalled, being stopped
   let watcher: ReturnType<typeof setInterval> | undefined;
@@ -146,10 +154,17 @@
   }
 
   /** The turns running and the approvals waiting, for the marks of the list; a turn that ended reads the list again (its date changed). */
+  let doneUnseen = $state(false); // an answer ended while the tab was hidden: the tab says so until the person comes back
+  const baseTitle = document.title || "Lutin";
+  $effect(() => {
+    document.title = tabTitle(baseTitle, live !== null && liveAt ? [...new Set([...activeNow, liveAt.id])] : activeNow, waitingNow, doneUnseen);
+  });
+
   async function followTurns(): Promise<void> {
     const now = await api<Status>("GET", "/status").catch(() => null);
     if (!now) return;
     const ended = activeNow.some((id) => !now.active_turns.includes(id));
+    if (ended && document.hidden) doneUnseen = true;
     activeNow = now.active_turns;
     waitingNow = now.pending_approvals;
     if (ended) await loadList().catch(() => undefined);
@@ -351,6 +366,7 @@
       editing = null;
       attachments = [];
       cut = from;
+      liveAt = { id, at };
       pending = { text: message, images: sent.filter((item) => item.kind === "image").map((item) => item.id), files: sent.filter((item) => item.kind === "document").map((item) => ({ id: item.id, name: item.name })) };
       live = newTurn();
       try {
@@ -370,12 +386,15 @@
         const failure = live?.blocks.flatMap((block) => (block.kind === "error" ? [block.message] : []))[0] ?? "";
         // What is stored is the truth: the conversation is read again, whether the stream ended well or was cut.
         const stored = await api<Conversation>("GET", conversationPath(at, id)).catch(() => null);
-        if (stored && where === at) conversation = stored;
+        if (stored && where === at && conversation?.id === id) conversation = stored;          // the person may be reading another conversation now
         if (stored && !at) seen = markSeen(id, stored.updated_at);
         cut = null;
         pending = null;
         live = null;
-        if (failure) problem = failure;
+        liveAt = null;
+        if (document.hidden) doneUnseen = true; // ended while the person was in another tab
+        if (failure && conversation?.id === id) problem = failure;
+        passMood(failure ? "angry" : "happy"); // the logo is glad for a moment, or cross when the engine failed
         changesTick += 1;
         void readLoaded(); // a turn loads the model: the answer to « is it in memory » has changed
         await loadList().catch(() => undefined);
@@ -576,8 +595,8 @@
     // Follow the answer while it is written, but only when the person is at the end: someone who scrolled up to read is left where they are, and the
     // « ↓ » button brings them back (as the old page did).
     void items;
-    void live;
-    void pending;
+    void shownLive;
+    void shownPending;
     pinToEnd();
   });
 
@@ -619,7 +638,7 @@
   });
 
   $effect(() => {
-    if (pending) following = true; // a message just sent: its answer is followed
+    if (shownPending) following = true; // a message just sent: its answer is followed
   });
 
   function onThreadScroll(): void {
@@ -648,12 +667,18 @@
     const named = conversationOf(location.hash);
     if (named) void open(named);
     void followTurns();
+    const back = (): void => {
+      if (!document.hidden) doneUnseen = false;
+    };
+    document.addEventListener("visibilitychange", back);
     const marks = setInterval(() => {
       void followTurns();
       void readLoaded();
     }, 5000);
     return () => {
       removeEventListener("lutin-new-conversation", onNew);
+      document.removeEventListener("visibilitychange", back);
+      document.title = baseTitle;
       stopWatching();
       clearInterval(marks);
       clearTimeout(searchTimer);
@@ -735,7 +760,7 @@
             <Icon name="pin" size={18} /><span class="visually-hidden">{t(conversation.pinned ? "chat.unpin" : "chat.pin")}</span>
           </button>
           {#if !where}
-            <button type="button" class="button quiet tools-button" aria-expanded={toolsOpen} onclick={() => (toolsOpen = !toolsOpen)}>{t("tools.open")}<span class="visually-hidden"> {t("tools.title")}</span></button>
+            <button type="button" class="button quiet tools-button" aria-expanded={toolsOpen} title={t("tools.open_hint")} onclick={() => (toolsOpen = !toolsOpen)}>{t("tools.open")}<span class="visually-hidden"> {t("tools.title")}</span></button>
           {/if}
         {/if}
       {/if}
@@ -790,9 +815,9 @@
           {#if status.access.can_configure}<button type="button" class="link" disabled={starting} onclick={startEngine}>{starting ? t("chat.engine_starting") : t("chat.engine_start", status.engine.name)}</button>{/if}
           <a href="#/settings/health">{t("chat.engine_check")}</a></p>
       {/if}
-      {#if items.length === 0 && !pending && !live}
+      {#if items.length === 0 && !shownPending && !shownLive}
         <div class="welcome">
-          <img src="/logo.svg" alt="" width="64" height="64" />
+          <LutinFace mood="idle" size={64} />
           <h2>{t("chat.welcome")}</h2>
           <p>{t("chat.welcome_hint")}</p>
           <ul class="suggestions" aria-label={t("chat.suggestions")}>
@@ -802,14 +827,15 @@
           </ul>
         </div>
       {:else}
-        <Thread {items} {pending} {live} onedit={busy ? undefined : startEdit} onregenerate={busy ? undefined : regenerate}
+        <Thread {items} pending={shownPending} live={shownLive} onedit={busy ? undefined : startEdit} onregenerate={busy ? undefined : regenerate}
           onpin={busy || where ? undefined : pinMessage} onverify={status?.offline ? undefined : verifyAnswer} machine={where} conversation={conversation?.id ?? ""}
-          canOpen={!where && !!status?.can_open_files} canDelete={!where && !!status?.access.can_configure} onproduced={reloadConversation} />
+          canOpen={!where && !!status?.can_open_files} canDelete={!where && !!status?.access.can_configure} onproduced={reloadConversation} modelLoaded={inMemory?.known ? inMemory.loaded : null} />
         {#if elsewhere}<p class="elsewhere" role="status">{t(elsewhereNotice(elsewhereTurn))}</p>{/if}
+        {#if live !== null && !liveHere}<p class="elsewhere" role="status">{t("chat.answer_in_other")}</p>{/if}
       {/if}
     </div>
-    {#if !following && (items.length || live)}
-      <button type="button" class="to-bottom" class:writing={busy} onclick={toBottom} aria-label={t("chat.to_bottom")} title={t("chat.to_bottom")}>↓</button>
+    {#if !following && (items.length || shownLive)}
+      <button type="button" class="to-bottom" class:writing={busy} onclick={toBottom} aria-label={t("chat.to_bottom")} title={t("chat.to_bottom")}><Icon name="down" size={20} /></button>
     {/if}
     </div>
 
@@ -824,21 +850,21 @@
           <ul>{#each verify.results as result (result.url)}<li><a href={result.url} target="_blank" rel="noopener noreferrer">{result.title}</a> <span class="hint">{result.domain}</span><br />{result.extract}</li>{/each}</ul>
         </section>
       {/if}
-      {#if live?.autoApprovalSuspended}<p class="hint">{t("approval.suspended", live.autoApprovalSuspended)}</p>{/if}
-      {#if live?.approval}
+      {#if shownLive?.autoApprovalSuspended}<p class="hint">{t("approval.suspended", shownLive.autoApprovalSuspended)}</p>{/if}
+      {#if shownLive?.approval}
         <div class="card" role="group" aria-label={t("approval.heading")}>
           <p class="card-head">{t("approval.heading")}</p>
-          <p class="card-title">{live.approval.title}</p>
-          {#if live.approval.detail}<p class="pre">{live.approval.detail}</p>{/if}
-          {#if live.approval.diff}<pre>{live.approval.diff}</pre>{/if}
-          {#if live.approval.reason}<p class="hint">{live.approval.reason}</p>{/if}
+          <p class="card-title">{shownLive.approval.title}</p>
+          {#if shownLive.approval.detail}<p class="pre">{shownLive.approval.detail}</p>{/if}
+          {#if shownLive.approval.diff}<pre>{shownLive.approval.diff}</pre>{/if}
+          {#if shownLive.approval.reason}<p class="hint">{shownLive.approval.reason}</p>{/if}
           <div class="actions">
-            <button type="button" class="button primary" onclick={() => answerApproval(true)}>{live.approval.canRemember && !where ? t("approval.once") : t("approval.approve")}</button>
-            {#if live.approval.canRemember && !where}
+            <button type="button" class="button primary" onclick={() => answerApproval(true)}>{shownLive.approval.canRemember && !where ? t("approval.once") : t("approval.approve")}</button>
+            {#if shownLive.approval.canRemember && !where}
               <button type="button" class="button" onclick={() => answerApproval(true, "chat")}>{t("approval.chat")}</button>
               <button type="button" class="button" onclick={() => answerApproval(true, "always")}>{t("approval.always")}</button>
             {/if}
-            {#if live.autoApprovalSuspended}<button type="button" class="button" onclick={() => answerApproval(true, "once", true)}>{t("approval.restore")}</button>{/if}
+            {#if shownLive.autoApprovalSuspended}<button type="button" class="button" onclick={() => answerApproval(true, "once", true)}>{t("approval.restore")}</button>{/if}
             <button type="button" class="button danger" onclick={() => answerApproval(false)}>{t("approval.refuse")}</button>
           </div>
         </div>
@@ -884,7 +910,7 @@
         {/if}
       </form>
       <p class="meter" id="keys">
-        {#if live?.tokens}{t("chat.tokens", live.tokens.used, live.tokens.total)}{live.tokensPerSecond ? " · " + t("chat.speed", live.tokensPerSecond) : ""}{:else}{t("chat.keys")}{/if}
+        {#if shownLive?.tokens}{t("chat.tokens", shownLive.tokens.used, shownLive.tokens.total)}{shownLive.tokensPerSecond ? " · " + t("chat.speed", shownLive.tokensPerSecond) : ""}{:else}{t("chat.keys")}{/if}
       </p>
     </div>
   </section>
@@ -1240,27 +1266,35 @@
     scrollbar-width: thin;
   }
 
+  /* On the side of the thread, not in the middle of the text it covers (maintainer, 2026-11-21); on a phone too, at thumb's reach above the field. */
   .to-bottom {
     position: absolute;
+    right: var(--space-4);
     bottom: var(--space-3);
-    left: 50%;
-    width: 3rem;
-    height: 3rem;
-    transform: translateX(-50%);
-    border: 2px solid var(--color-surface);
+    display: grid;
+    place-items: center;
+    width: 2.5rem;
+    height: 2.5rem;
+    padding: 0;
+    border: 1px solid var(--color-accent);
     border-radius: 50%;
-    background: var(--color-accent); /* the colour of the main buttons: it must be seen at once, not look like a disabled control */
-    color: var(--color-on-accent);
-    font-size: var(--text-xl);
-    font-weight: 700;
-    line-height: 1;
-    box-shadow: 0 0 0 1px var(--color-accent), 0 4px 14px rgb(0 0 0 / 0.35);
+    background: var(--color-surface-raised);
+    color: var(--color-accent-text);
+    box-shadow: 0 4px 12px rgb(0 0 0 / 0.3);
     cursor: pointer;
+    transition: background 0.15s, transform 0.15s;
+  }
+
+  @media (max-width: 40rem) {
+    .to-bottom {
+      right: var(--space-3);
+    }
   }
 
   .to-bottom:hover {
-    background: var(--color-accent-hover);
-    box-shadow: 0 0 0 1px var(--color-accent-hover), 0 6px 18px rgb(0 0 0 / 0.4);
+    background: var(--color-accent);
+    color: var(--color-on-accent);
+    transform: translateY(1px);
   }
 
   .to-bottom.writing {

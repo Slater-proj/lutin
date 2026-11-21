@@ -2,10 +2,13 @@
   // The models of the server Lutin manages behind its OpenAI-compatible engine, when it is ExLlamaV3, LM Studio or Colibri (docs/modernization/
   // PARITY.md, item 10): what is on disk (use, delete after a second click), a check for newer versions (ExLlamaV3) or new models that fit here, the
   // catalogue to explore and the quantisations of a repository, each judged for this machine. A download waits for a second click that says its size.
-  // Nothing is shown when none of the three is the server in use.
+  // Nothing is shown when none of the three is the server in use. Every model is drawn by the same card (ModelCard), whatever list it is in; the
+  // Catalogue tab shows what can be downloaded (`mode` « catalog »), the Installed tab only what is on this machine (« installed »).
   import { onMount } from "svelte";
   import { api, ApiError } from "../lib/api";
   import { language, t, type MessageKey } from "../lib/messages";
+  import ModelCard from "./ModelCard.svelte";
+  import ModelHelp from "./ModelHelp.svelte";
 
   type Fit = { level: string; text: string } | null;
   type DiskModel = { name: string; fit: Fit; size_gb: number | null; repo: string | null; revision: string | null; path: string | null; incomplete: boolean; in_use: boolean; deletable: boolean };
@@ -14,7 +17,7 @@
   type Quant = { revision: string; size_gb: number | null; fit: Fit; on_disk: boolean };
   type Recommended = { id: string; name: string; revision: string; size_gb: number | null; fit: Fit; on_disk: boolean };
 
-  let { canConfigure, onchanged, onabsent }: { canConfigure: boolean; onchanged: () => void; onabsent?: () => void } = $props();
+  let { canConfigure, onchanged, onabsent, mode = "catalog" }: { canConfigure: boolean; onchanged: () => void; onabsent?: () => void; mode?: "catalog" | "installed" } = $props();
 
   const KINDS = ["exllamav3", "lmstudio", "colibri"] as const;
   const lang = language();
@@ -130,7 +133,7 @@
         try {
           view = await api<View>("GET", "/managed-servers/" + candidate + "/models");
           kind = candidate;
-          void loadRecommended();
+          if (mode === "catalog") void loadRecommended();
           return;
         } catch {
           // not the server in use: the next one
@@ -153,121 +156,130 @@
   {/if}
 {/snippet}
 
-{#snippet fitTag(fit: Fit)}
-  {#if fit}<span class={"fit " + fit.level} title={fit.text}>{t(("guide.fit." + fit.level) as MessageKey)}</span>{/if}
+{#snippet precisions(entry: Entry)}
+  {#if quants[entry.id]}
+    <ul class="quants" aria-label={t("managed.quants")}>
+      {#each quants[entry.id] as quant (quant.revision)}
+        <li class="line"><span class="size">{quant.revision}</span><span class="muted">{t("upkeep.size", gb(quant.size_gb))}</span>
+          {#if quant.fit}<span class={"fit " + quant.fit.level} title={quant.fit.text}>{t(("guide.fit." + quant.fit.level) as MessageKey)}</span>{/if}
+          {#if quant.on_disk}<span class="tag">{t("variants.installed")}</span>{:else}{@render confirmDownload(entry.id + "@" + quant.revision, entry.id, quant.revision, quant.size_gb)}{/if}</li>
+      {/each}
+    </ul>
+  {:else}
+    <button type="button" class="button" disabled={busy} onclick={() => showQuants(entry)}>{t("managed.quants")}<span class="visually-hidden"> {entry.name}</span></button>
+  {/if}
+{/snippet}
+
+{#snippet entryCard(entry: Entry, key: string)}
+  <ModelCard name={entry.name} reference={entry.id} sizeGb={entry.estimated_gb} approximate fit={entry.fit} installed={entry.on_disk.length > 0} engine={kind}>
+    {#snippet actions()}
+      {#if entry.direct}
+        {#if !entry.on_disk.length}{@render confirmDownload(key + entry.id, entry.id, "", entry.estimated_gb)}{/if}
+      {:else}
+        {@render precisions(entry)}
+      {/if}
+    {/snippet}
+  </ModelCard>
 {/snippet}
 
 {#if view}
   <section class="managed" aria-labelledby="managed-title">
-    <h2 id="managed-title">{t("managed.title", view.name)}</h2>
+    <h2 id="managed-title">{mode === "installed" ? t("managed.installed_title", view.name) : t("managed.title", view.name)}</h2>
     <p class="muted">{t(("managed.intro." + view.server) as MessageKey)}</p>
     <p>{view.installed ? (view.running ? t("managed.running", view.name) : t("managed.stopped", view.name)) : t("managed.absent", view.name)}{view.status ? " · " + view.status : ""}</p>
     {#if view.folder}<p class="muted">{t("managed.folder", view.folder)}</p>{/if}
     {#if problem}<p class="problem" role="alert">{problem}</p>{/if}
     <p class="notice" role="status">{notice}</p>
 
-    <h3>{t("managed.on_disk")}</h3>
-    {#if view.models.length === 0}<p class="muted">{t("models.none")}</p>{/if}
-    <ul class="cards">
-      {#each view.models as model (model.name)}
-        <li class="card">
-          <p class="line"><strong>{model.name}</strong>{#if model.in_use}<span class="tag">{t("models.in_use")}</span>{/if}{#if model.size_gb}<span class="muted">{t("upkeep.size", gb(model.size_gb))}</span>{/if}{@render fitTag(model.fit)}</p>
-          {#if model.repo}<p class="muted">{model.repo}{model.revision ? " @ " + model.revision : ""}</p>{:else if model.path}<p class="muted">{model.path}</p>{/if}
-          {#if model.incomplete}<p class="problem">{t("managed.incomplete")}</p>{/if}
-          <div class="line">
-            {#if !model.in_use && view.server !== "colibri"}<button type="button" class="button" disabled={busy} onclick={() => use(model)}>{t("models.use")}</button>{/if}
-            {#if model.deletable && canConfigure}
-              {#if asking === "delete:" + model.name}
-                <span>{t("upkeep.delete_confirm", model.name)}</span>
-                <button type="button" class="button danger" disabled={busy} onclick={() => remove(model)}>{t("upkeep.delete_yes")}</button>
-                <button type="button" class="button" onclick={() => (asking = "")}>{t("chat.cancel")}</button>
-              {:else}
-                <button type="button" class="button quiet danger" disabled={busy} onclick={() => (asking = "delete:" + model.name)}>{t("models.delete")}<span class="visually-hidden"> {model.name}</span></button>
+    {#if mode === "installed"}
+      {#if view.models.length === 0}<p class="muted">{t("models.none")} {t("managed.find_more")}</p>{/if}
+      <ul class="cards">
+        {#each view.models as model (model.name)}
+          <ModelCard name={model.name} reference={model.repo ?? model.name} revision={model.revision ?? ""} sizeGb={model.size_gb} fit={model.fit} installed inUse={model.in_use} incomplete={model.incomplete} engine={kind}>
+            {#snippet actions()}
+              {#if !model.in_use && view?.server !== "colibri"}<button type="button" class="button primary" disabled={busy} onclick={() => use(model)}>{t("models.use")}</button>{/if}
+              {#if model.deletable && canConfigure}
+                {#if asking === "delete:" + model.name}
+                  <span>{t("upkeep.delete_confirm", model.name)}</span>
+                  <button type="button" class="button danger" disabled={busy} onclick={() => remove(model)}>{t("upkeep.delete_yes")}</button>
+                  <button type="button" class="button" onclick={() => (asking = "")}>{t("chat.cancel")}</button>
+                {:else}
+                  <button type="button" class="button quiet danger" disabled={busy} onclick={() => (asking = "delete:" + model.name)}>{t("models.delete")}<span class="visually-hidden"> {model.name}</span></button>
+                {/if}
               {/if}
-            {/if}
-          </div>
-        </li>
-      {/each}
-    </ul>
-
-    <div class="line">
-      {#if view.can_check_updates}<button type="button" class="button" disabled={busy} onclick={() => check("updates")}>{t("upkeep.check_updates")}</button>{/if}
-      <button type="button" class="button" disabled={busy} onclick={() => check("new")}>{t("upkeep.check_new")}</button>
-    </div>
-    {#if updates?.length}
-      <ul class="cards">
-        {#each updates as update (update.repo + update.revision)}
-          <li class="card"><p><strong>{t("upkeep.update_of", update.name)}</strong></p><p class="muted">{update.repo}{update.revision ? " @ " + update.revision : ""}</p>{@render confirmDownload("update:" + update.repo, update.repo, update.revision ?? "", null)}</li>
+            {/snippet}
+          </ModelCard>
         {/each}
       </ul>
-    {/if}
-    {#if proposals?.length}
-      <ul class="cards">
-        {#each proposals as entry (entry.id)}
-          <li class="card"><p class="line"><strong>{entry.name}</strong>{@render fitTag(entry.fit)}<span class="muted">{t("olib.about", gb(entry.estimated_gb))}</span></p>
-            {#if entry.direct}{@render confirmDownload("new:" + entry.id, entry.id, "", entry.estimated_gb)}{/if}</li>
-        {/each}
-      </ul>
-    {/if}
-
-    <h3>{t("managed.recommended")}</h3>
-    <p class="muted">{t("managed.recommended_help")}</p>
-    {#if recommended === null}
-      <p class="muted" role="status">{t("managed.recommended_loading")}</p>
-    {:else if recommendedProblem}
-      <p class="problem" role="alert">{recommendedProblem}</p>
-    {:else if recommended.length === 0}
-      <p class="muted">{t("managed.recommended_none")}</p>
-    {:else}
-      <ul class="cards">
-        {#each recommended as entry (entry.id)}
-          <li class="card"><p class="line"><strong>{entry.name}</strong>{@render fitTag(entry.fit)}<span class="muted">{entry.revision ? entry.revision + " · " : ""}{t("upkeep.size", gb(entry.size_gb))}</span></p>
-            {#if entry.on_disk}<span class="tag">{t("variants.installed")}</span>{:else}{@render confirmDownload("recommended:" + entry.id, entry.id, entry.revision, entry.size_gb)}{/if}</li>
-        {/each}
-      </ul>
-    {/if}
-
-    <h3>{t("managed.explore")}</h3>
-    <form class="line" onsubmit={(event) => (event.preventDefault(), void explore())}>
-      <label class="field">{t("olib.words")}<input type="search" bind:value={words} /></label>
-      {#if view.server !== "colibri"}
-        <label class="field">{t("olib.order")}<select bind:value={order}><option value="recent">{t("olib.newest")}</option><option value="popular">{t("olib.popular")}</option></select></label>
-        <label><input type="checkbox" bind:checked={community} /> {t("managed.community")}</label>
+      {#if view.can_check_updates}
+        <div class="line"><button type="button" class="button" disabled={busy} onclick={() => check("updates")}>{t("upkeep.check_updates")}</button></div>
+        {#if updates?.length}
+          <ul class="cards">
+            {#each updates as update (update.repo + update.revision)}
+              <ModelCard name={t("upkeep.update_of", update.name)} reference={update.repo} revision={update.revision ?? ""} engine={kind}>
+                {#snippet actions()}{@render confirmDownload("update:" + update.repo, update.repo, update.revision ?? "", null)}{/snippet}
+              </ModelCard>
+            {/each}
+          </ul>
+        {/if}
       {/if}
-      <button type="submit" class="button" disabled={busy}>{t("olib.search")}</button>
-    </form>
-    {#if entries}
-      {#if entries.length === 0}<p class="muted">{t("olib.none")}</p>{/if}
-      <ul class="cards">
-        {#each entries as entry (entry.id)}
-          <li class="card">
-            <p class="line"><strong>{entry.name}</strong>{@render fitTag(entry.fit)}{#if entry.estimated_gb}<span class="muted">{t("olib.about", gb(entry.estimated_gb))}</span>{/if}{#if entry.on_disk.length}<span class="tag">{t("variants.installed")}</span>{/if}</p>
-            {#if entry.author}<p class="muted">{entry.id}</p>{/if}
-            {#if entry.direct}
-              {#if !entry.on_disk.length}{@render confirmDownload("entry:" + entry.id, entry.id, "", entry.estimated_gb)}{/if}
-            {:else if quants[entry.id]}
-              <ul class="quants">
-                {#each quants[entry.id] as quant (quant.revision)}
-                  <li class="line"><span class="size">{quant.revision}</span><span class="muted">{t("upkeep.size", gb(quant.size_gb))}</span>{@render fitTag(quant.fit)}
-                    {#if quant.on_disk}<span class="tag">{t("variants.installed")}</span>{:else}{@render confirmDownload(entry.id + "@" + quant.revision, entry.id, quant.revision, quant.size_gb)}{/if}</li>
-                {/each}
-              </ul>
-            {:else}
-              <div class="line"><button type="button" class="button" disabled={busy} onclick={() => showQuants(entry)}>{t("managed.quants")}<span class="visually-hidden"> {entry.name}</span></button></div>
-            {/if}
-          </li>
-        {/each}
-      </ul>
-      {#if more}<div class="line"><button type="button" class="button" disabled={busy} onclick={() => explore(page + 1)}>{t("olib.more")}</button></div>{/if}
-    {/if}
+    {:else}
+      <ModelHelp engine={kind} />
 
-    {#if view.server !== "colibri" && canConfigure}
-      <h3>{t("managed.other")}</h3>
+      <h3>{t("managed.recommended")}</h3>
+      <p class="muted">{t("managed.recommended_help")}</p>
+      {#if recommended === null}
+        <p class="muted" role="status">{t("managed.recommended_loading")}</p>
+      {:else if recommendedProblem}
+        <p class="problem" role="alert">{recommendedProblem}</p>
+      {:else if recommended.length === 0}
+        <p class="muted">{t("managed.recommended_none")}</p>
+      {:else}
+        <ul class="cards">
+          {#each recommended as entry (entry.id)}
+            <ModelCard name={entry.name} reference={entry.id} revision={entry.revision} sizeGb={entry.size_gb} fit={entry.fit} installed={entry.on_disk} engine={kind}>
+              {#snippet actions()}
+                {#if !entry.on_disk}{@render confirmDownload("recommended:" + entry.id, entry.id, entry.revision, entry.size_gb)}{/if}
+              {/snippet}
+            </ModelCard>
+          {/each}
+        </ul>
+      {/if}
+
       <div class="line">
-        <label class="field">{t("managed.repo")}<input type="text" placeholder={view.server === "lmstudio" ? "lmstudio-community/Qwen3-8B-GGUF" : "turboderp/Qwen3-8B-exl3"} bind:value={other.repo} /></label>
-        <label class="field">{t("managed.revision")}<input type="text" placeholder={view.server === "lmstudio" ? "Q4_K_M" : "4.0bpw"} bind:value={other.revision} /></label>
-        {#if other.repo.trim()}{@render confirmDownload("other", other.repo.trim(), other.revision.trim(), null)}{/if}
+        <button type="button" class="button" disabled={busy} onclick={() => check("new")}>{t("upkeep.check_new")}</button>
       </div>
+      {#if proposals?.length}
+        <ul class="cards">
+          {#each proposals as entry (entry.id)}{@render entryCard(entry, "new:")}{/each}
+        </ul>
+      {/if}
+
+      <h3>{t("managed.explore")}</h3>
+      <form class="line" onsubmit={(event) => (event.preventDefault(), void explore())}>
+        <label class="field">{t("olib.words")}<input type="search" bind:value={words} /></label>
+        {#if view.server !== "colibri"}
+          <label class="field">{t("olib.order")}<select bind:value={order}><option value="recent">{t("olib.newest")}</option><option value="popular">{t("olib.popular")}</option></select></label>
+          <label><input type="checkbox" bind:checked={community} /> {t("managed.community")}</label>
+        {/if}
+        <button type="submit" class="button" disabled={busy}>{t("olib.search")}</button>
+      </form>
+      {#if entries}
+        {#if entries.length === 0}<p class="muted">{t("olib.none")}</p>{/if}
+        <ul class="cards">
+          {#each entries as entry (entry.id)}{@render entryCard(entry, "entry:")}{/each}
+        </ul>
+        {#if more}<div class="line"><button type="button" class="button" disabled={busy} onclick={() => explore(page + 1)}>{t("olib.more")}</button></div>{/if}
+      {/if}
+
+      {#if view.server !== "colibri" && canConfigure}
+        <h3>{t("managed.other")}</h3>
+        <div class="line">
+          <label class="field">{t("managed.repo")}<input type="text" placeholder={view.server === "lmstudio" ? "lmstudio-community/Qwen3-8B-GGUF" : "turboderp/Qwen3-8B-exl3"} bind:value={other.repo} /></label>
+          <label class="field">{t("managed.revision")}<input type="text" placeholder={view.server === "lmstudio" ? "Q4_K_M" : "4.0bpw"} bind:value={other.revision} /></label>
+          {#if other.repo.trim()}{@render confirmDownload("other", other.repo.trim(), other.revision.trim(), null)}{/if}
+        </div>
+      {/if}
     {/if}
   </section>
 {/if}

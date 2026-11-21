@@ -11,6 +11,8 @@
   import OllamaLibrary from "../components/OllamaLibrary.svelte";
   import Measures from "../components/Measures.svelte";
   import ManagedModels from "../components/ManagedModels.svelte";
+  import ModelCard from "../components/ModelCard.svelte";
+  import ModelHelp from "../components/ModelHelp.svelte";
   import { api, ApiError } from "../lib/api";
   import { formatBytes, percent } from "../lib/format";
   import { language, t, type MessageKey } from "../lib/messages";
@@ -164,6 +166,7 @@
       <!-- a server reached by its address manages its models itself -->
       <p class="muted">{t("models.cat.unmanaged")}</p>
     {:else}
+      <ModelHelp engine={status?.engine.id ?? ""} />
       <ModelCatalog precisions={status?.engine.id === "ollama"} onstarted={() => void guarded(load)} />
     {/if}
   {:else if tab === "measures"}
@@ -173,7 +176,7 @@
   {:else if tab === "machines"}
     <Machines onchanged={() => { void guarded(load); onchanged(); }} />
   {:else if tab === "installed"}
-  {#if MANAGED.includes(status?.engine.id ?? "")}<ManagedModels canConfigure={!!status?.access.can_configure} onchanged={() => { void guarded(load); onchanged(); }} />{/if}
+  {#if MANAGED.includes(status?.engine.id ?? "")}<ManagedModels mode="installed" canConfigure={!!status?.access.can_configure} onchanged={() => { void guarded(load); onchanged(); }} />{:else}
   <ModelProposals onchanged={() => { void guarded(load); onchanged(); }} />
   <form class="add" onsubmit={install}>
     <label for="model-name">{t("models.add_expert")}</label>
@@ -190,30 +193,30 @@
   {:else if models}
     <ul class="cards">
       {#each models.models as model (model.name)}
-        <li class="card" class:current={model.name === models.current}>
-          <div class="line">
-            <strong>{model.name}</strong>
-            {#if model.name === models.current}<span class="tag">{t("models.in_use")}</span>{/if}
-            {#if model.size_bytes}<span class="muted">{formatBytes(model.size_bytes, lang)}</span>{/if}
-            {#if known[model.name]?.fit}<span class={"fit " + known[model.name].fit?.level}>{t(("guide.fit." + known[model.name].fit?.level) as MessageKey)}</span>{/if}
-          </div>
-          {#if known[model.name]?.summary}<p class="muted summary">{known[model.name].summary}</p>{/if}
-          <div class="actions">
-            {#if model.name !== models.current}<button type="button" class="button" onclick={() => use(model.name)}>{t("models.use")}</button>{/if}
+        <!-- the same card as in every other list, for every engine (maintainer, 2026-11-21) -->
+        <ModelCard name={model.name} reference={model.name} sizeGb={model.size_bytes ? model.size_bytes / 1e9 : null} fit={known[model.name]?.fit ?? null} installed
+          inUse={model.name === models.current} engine={status?.engine.id ?? ""} summary={known[model.name]?.summary ?? ""}>
+          {#snippet actions()}
+            {#if model.name !== models?.current}<button type="button" class="button primary" onclick={() => use(model.name)}>{t("models.use")}</button>{/if}
             {#if status?.engine.id === "ollama" && /^[\w.\-/]+:[\w.]+$/.test(model.name)}
               <button type="button" class="button quiet" aria-expanded={precisions === model.name} onclick={() => (precisions = precisions === model.name ? "" : model.name)}>{t("variants.open")}<span class="visually-hidden"> {model.name}</span></button>
             {/if}
             <button type="button" class="button quiet danger" onclick={() => remove(model.name)}>{t("models.delete")}<span class="visually-hidden"> {model.name}</span></button>
-          </div>
-          {#if precisions === model.name}<ModelVariants model={model.name} onstarted={() => void guarded(load)} />{/if}
-        </li>
+            {#if precisions === model.name}<div class="variants"><ModelVariants model={model.name} onstarted={() => void guarded(load)} /></div>{/if}
+          {/snippet}
+        </ModelCard>
       {/each}
     </ul>
+  {/if}
   {/if}
   {/if}
 </section>
 
 <style>
+  .variants {
+    flex-basis: 100%;
+  }
+
   .models {
     display: flex;
     flex-direction: column;
@@ -366,11 +369,6 @@
     background: var(--color-surface);
   }
 
-  .card.current {
-    border-color: var(--color-accent);
-    background: var(--color-accent-soft);
-  }
-
   .downloads .card {
     flex-direction: column;
     align-items: stretch;
@@ -410,31 +408,4 @@
     font-size: var(--text-sm);
   }
 
-  .actions {
-    display: flex;
-    gap: var(--space-2);
-  }
-  .fit {
-    padding: 0 var(--space-2);
-    border-radius: var(--radius-pill);
-    font-size: var(--text-xs);
-    font-weight: 600;
-  }
-
-  .fit.comfortable,
-  .fit.good {
-    background: var(--color-accent-soft);
-    color: var(--color-accent-text);
-  }
-
-  .fit.tight,
-  .fit.too_big {
-    background: var(--color-warning-soft);
-    color: var(--color-text);
-  }
-
-  .summary {
-    margin: 0;
-    font-size: var(--text-sm);
-  }
 </style>
