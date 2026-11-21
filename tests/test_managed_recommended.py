@@ -86,5 +86,30 @@ class Recommended(unittest.TestCase):
             self.assertEqual([x["id"] for x in MM.recommended("colibri")], ["big", "small"], "what Colibri says fits, not already prepared, the largest first")
 
 
+
+
+class CarteSeule(unittest.TestCase):
+    """ExLlamaV3 never spills into the computer's memory and reserves the cache of the conversation window at once (maintainer, 2026-11-21, RTX 4090 24 GB:
+    a 40B at 22,8 GB judged « Juste » failed with « Insufficient VRAM in split for model and cache »)."""
+
+    def profile(self, vram=24.0):
+        from lutin import hardware
+        return mock.Mock(gpu_principal=lambda: hardware.Gpu(nom="RTX 4090", fabricant="nvidia", vram_go=vram), sans_gpu=lambda: False, budget_go=lambda: round(vram * 0.85, 1), gpus=[])
+
+    def test_a_model_that_fits_only_by_spilling_is_too_big_for_exllamav3(self):
+        from lutin import model_fit
+        verdict = model_fit.evaluer_carte_seule(22.8, self.profile(), 32768)
+        self.assertEqual(verdict["niveau"], "trop_gros")
+        self.assertIn("32768", verdict["texte"])
+        self.assertIn(model_fit.evaluer_carte_seule(15.7, self.profile(), 32768)["niveau"], ("bien", "ideal"))
+        self.assertEqual(model_fit.evaluer_carte_seule(22.8, self.profile(48.0), 32768)["niveau"], "ideal", "a larger card takes it")
+
+    def test_the_models_of_exllamav3_are_judged_on_the_card_alone(self):
+        from lutin import managed_models, model_fit
+        with mock.patch.object(model_fit, "profil_pret", lambda *a: self.profile()), mock.patch.object(managed_models, "_context_size", lambda: 32768):
+            self.assertEqual(managed_models._judge("exllamav3")(22.8)["niveau"], "trop_gros")
+            self.assertNotEqual(managed_models._judge("lmstudio")(22.8)["niveau"], "trop_gros", "LM Studio (llama.cpp) can put part of a model in memory")
+
+
 if __name__ == "__main__":
     unittest.main()

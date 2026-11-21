@@ -41,9 +41,25 @@ def _require(kind):
     return mo
 
 
-def _judge():
+def _judge(kind=""):
+    """The verdict for a size in GB on this machine. ExLlamaV3 runs on the graphics card alone and reserves the cache of the conversation window at once:
+    its verdict counts that (model_fit.evaluer_carte_seule), the others' the common way."""
     profile = _fit.profil_pret()
-    return (lambda gb: _fit.evaluer({"go": gb}, profile)) if profile is not None else (lambda gb: None)
+    if profile is None:
+        return lambda gb: None
+    if kind == "exllamav3":
+        ctx = _context_size()
+        return lambda gb: _fit.evaluer_carte_seule(gb, profile, ctx)
+    return lambda gb: _fit.evaluer({"go": gb}, profile)
+
+
+def _context_size():
+    """The conversation window Lutin asks TabbyAPI to reserve (the settings' num_ctx)."""
+    try:
+        from . import core as _m
+        return int(_m.reglages().get("num_ctx") or 0) or 16384
+    except Exception:  # noqa: BLE001  (unreadable settings: the default of the settings)
+        return 16384
 
 
 def _on_disk(kind, mo):
@@ -64,7 +80,7 @@ def models(kind, current_model):
     """The models on disk, each judged here and marked when in use, with the state of the server and how to start it."""
     mo = _require(kind)
     installed, present, folder, _, _ = _on_disk(kind, mo)
-    judge = _judge()
+    judge = _judge(kind)
     return {"modeles": [dict(x, adequation=judge(x["taille_go"]) if x.get("taille_go") else None, utilise=(x["nom"] == current_model) if kind != "colibri" else True) for x in installed],
             "installe": present, "dossier": folder, "actif": bool(mo.modeles()["actif"]) if present else False, "maj": kind == "exllamav3", "nom": NAMES[kind],
             "statut": mo.statut().get("detail", "") if present else "", "demarrer": mo.actions().get("demarrer") if present else None}
@@ -77,7 +93,7 @@ def catalog(kind, words="", order="recent", community=False, page=1):
     if kind == "colibri":
         return colibri_catalog(mo, installed, words)
     found = search(words, order, community, page)
-    judge, on_disk = _judge(), {}
+    judge, on_disk = _judge(kind), {}
     for x in installed:
         on_disk.setdefault(x.get("depot", "") or x["nom"], []).append(x.get("revision") or "main")
     for m in found["modeles"]:
@@ -106,7 +122,7 @@ def quantizations(kind, repo):
     installed, _, _, _, quants = _on_disk(kind, mo)
     if quants is None:
         raise ValueError(_t("Ce serveur n'a pas de quantifications à choisir."))
-    judge, on_disk = _judge(), {x.get("revision") or "main" for x in installed if x.get("depot") == repo}
+    judge, on_disk = _judge(kind), {x.get("revision") or "main" for x in installed if x.get("depot") == repo}
     found = quants(repo)
     for x in found:
         x["adequation"] = judge(x["go"]) if x.get("go") else None
@@ -130,7 +146,7 @@ def recommended(kind):
         fitting = [m for m in colibri_catalog(mo, installed, "")["modeles"] if m["adequation"]["niveau"] in GOOD and not m["installes"]]
         return [{"id": m["id"], "nom": m["nom"], "revision": "", "go": m["estimation_go"], "adequation": m["adequation"], "installe": False}
                 for m in sorted(fitting, key=lambda m: -(m["estimation_go"] or 0))[:RECOMMENDED]]
-    judge = _judge()
+    judge = _judge(kind)
     candidates = []
     for m in search("", "populaire", False, 1)["modeles"][:RECOMMENDED_CANDIDATES * 2]:
         verdict = judge(m["estimation_go"]) if m.get("estimation_go") else None
@@ -173,9 +189,9 @@ def check(kind, scope):
         from . import colibri as _colibri
         installed = _colibri.installed_models(mo._dossiers(), mo.modele_colibri())
         candidates, known = [m for m in colibri_catalog(mo, installed, "")["modeles"] if not m["installes"]], set()
-    profile, proposals = _fit.profil_pret(), []
+    judge, proposals = _judge(kind), []
     for m in candidates:
-        verdict = m.get("adequation") or (_fit.evaluer({"go": m["estimation_go"]}, profile) if profile is not None and m.get("estimation_go") else None)
+        verdict = (judge(m["estimation_go"]) if m.get("estimation_go") else None) if kind == "exllamav3" else (m.get("adequation") or (judge(m["estimation_go"]) if m.get("estimation_go") else None))
         if m["id"] in known or not verdict or verdict["niveau"] == "trop_gros":
             continue
         proposals.append(dict(m, adequation=verdict))

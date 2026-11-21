@@ -62,6 +62,27 @@ def evaluer(m, profil, ctx_voulu=0, experts_en_ram=True):
     return {"niveau": "bien", "texte": _t("Convient à ta machine ({} Go sur {} utilisables).").format(round(besoin, 1), budget)}
 
 
+CARTE_RESERVE_GO = 1.0          # ce que le bureau et les autres programmes gardent sur la carte graphique
+
+
+def evaluer_carte_seule(go, profil, ctx):
+    """Le verdict pour un moteur qui ne déborde JAMAIS en mémoire vive et réserve tout de suite le cache de la fenêtre de conversation (ExLlamaV3 :
+    TabbyAPI réserve `cache_size`, compressé en Q8). Le jugement commun disait « Juste » d'un modèle qui ne tient qu'en débordant : chargé, il échouait
+    sur « Insufficient VRAM in split for model and cache » (mainteneur, RTX 4090, 2026-11-21). Ici : poids + cache de `ctx` jetons + marge, sur la carte seule."""
+    g = profil.gpu_principal() if profil is not None else None
+    if not go or g is None or not g.vram_go:
+        return evaluer({"go": go}, profil, experts_en_ram=False) if profil is not None and go else None
+    besoin = model_selection.required_memory_gb(dict(pseudo_modele({"go": go}), go=go), max(4096, int(ctx or 0)))
+    utilisable = g.vram_go - CARTE_RESERVE_GO
+    if besoin > utilisable:
+        return {"niveau": "trop_gros", "texte": _t("Ne tient pas avec ce moteur : tout doit tenir dans la carte graphique, environ {} Go avec {} jetons de conversation, et ta carte en a {} d'utilisables. Prends une quantification plus légère (moins de bpw) ou réduis la fenêtre de contexte (Réglages > Conversation).").format(round(besoin, 1), int(ctx), round(utilisable, 1))}
+    if besoin > utilisable * 0.9:
+        return {"niveau": "limite", "texte": _t("Tient dans la carte graphique, sans marge : environ {} Go avec {} jetons de conversation, sur {} d'utilisables. Ferme les autres programmes qui utilisent la carte.").format(round(besoin, 1), int(ctx), round(utilisable, 1))}
+    if besoin <= utilisable * 0.6:
+        return {"niveau": "ideal", "texte": _t("Très à l'aise sur ta carte graphique : environ {} Go avec {} jetons de conversation, sur {} d'utilisables.").format(round(besoin, 1), int(ctx), round(utilisable, 1))}
+    return {"niveau": "bien", "texte": _t("Tient dans ta carte graphique : environ {} Go avec {} jetons de conversation, sur {} d'utilisables.").format(round(besoin, 1), int(ctx), round(utilisable, 1))}
+
+
 def profil_pret(detecter=None):
     """Le profil de la machine s'il est déjà connu ; sinon None, et la détection démarre en arrière-plan (la page l'affichera au prochain rafraîchissement)."""
     with _verrou:
