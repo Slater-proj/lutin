@@ -1577,7 +1577,7 @@ class MoteurExterne(MoteurOpenAI):
                 avancement = {"fait": 0, "total": exllamav3.ETAPES_INSTALLATION + 1}          # les étapes de l'installation, puis le démarrage : une barre qui avance de vrai
                 progression(_t("Installation d'ExLlamaV3 (TabbyAPI)…"), 0, avancement["total"])
                 r = exllamav3.install(dossiers, self.port_exllamav3(), lambda texte: progression(texte, avancement["fait"], avancement["total"]), annule=annule,
-                                        etape=lambda n, total: avancement.update(fait=n - 1))
+                                        etape=lambda n, total: avancement.update(fait=n - 1), contexte=self._contexte())
                 self._demarrer_apres_installation(progression, avancement["total"], "ExLlamaV3 " + (r["lib"] or r["tabby"][:7]),
                                                   lambda: exllamav3.start(self.port_exllamav3(), dossiers, contexte=self._contexte()), _t("le premier démarrage charge torch : une à deux minutes"))
             elif action == "desinstaller":
@@ -1593,7 +1593,8 @@ class MoteurExterne(MoteurOpenAI):
                 depot, _, revision = action.split(":", 1)[1].partition("@")
                 avance = {"fait": 0, "total": 0}
                 progression(_t("Téléchargement de {}…").format(depot), 0, 0)
-                exllamav3.download_model(depot, revision, dossiers, lambda texte: progression(texte, avance["fait"], avance["total"]), annule=annule, progres=lambda fait, total: avance.update(fait=fait, total=total))
+                exllamav3.download_model(depot, revision, dossiers, lambda texte: progression(texte, avance["fait"], avance["total"]), annule=annule, progres=lambda fait, total: avance.update(fait=fait, total=total),
+                                         port=self.port_exllamav3(), contexte=self._contexte())
                 progression(_t("Modèle téléchargé : {}.").format(depot), 1, 1)
             else:
                 raise ErreurMoteur(_t("Action impossible avec ce serveur."))

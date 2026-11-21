@@ -190,7 +190,8 @@ def version_lib(dossiers=None, lancer=subprocess.run):
 ETAPES_INSTALLATION = 5
 
 
-def install(dossiers=None, port=PORT_DEFAUT, dire=print, http=updates.http_get, ouvrir=urllib.request.urlopen, lancer=subprocess.Popen, annule=lambda: False, executer=subprocess.run, installer_uv=None, etape=None):
+def install(dossiers=None, port=PORT_DEFAUT, dire=print, http=updates.http_get, ouvrir=urllib.request.urlopen, lancer=subprocess.Popen, annule=lambda: False, executer=subprocess.run, installer_uv=None, etape=None,
+            contexte=0):
     """Installe (ou met à jour) TabbyAPI + ExLlamaV3. Renvoie {tabby, lib}. Longue : torch pèse plusieurs Go. ValueError claire à chaque étape qui échoue.
     `etape(n, total)` est appelée au début de chacune des ETAPES_INSTALLATION étapes : la page en fait une barre, et chaque texte annonce « Étape n/total »."""
     if not python_compatible():
@@ -237,7 +238,7 @@ def install(dossiers=None, port=PORT_DEFAUT, dire=print, http=updates.http_get, 
     passer(5, _t("vérification et réglages…"))
     lib = version_lib(dossiers, executer)
     folder_models(dossiers).mkdir(parents=True, exist_ok=True)
-    (cible / "config.yml").write_text(config_yaml(port, folder_models(dossiers)), encoding="utf-8")
+    (cible / "config.yml").write_text(config_yaml(port, folder_models(dossiers), contexte), encoding="utf-8")
     (base / "version.json").write_text(json.dumps({"tabby": sha, "lib": lib, "installe": time.strftime("%Y-%m-%d %H:%M")}), encoding="utf-8")
     return {"tabby": sha, "lib": lib}
 
@@ -261,7 +262,10 @@ def start(port=PORT_DEFAUT, dossiers=None, attente_s=240, lancer=subprocess.Pope
     journal = base / "tabby.log"
     extra = {"creationflags": getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0) | getattr(subprocess, "DETACHED_PROCESS", 0)} if os.name == "nt" else {"start_new_session": True}
     with open(journal, "wb") as sortie:
-        proc = lancer([str(python_venv(dossiers)), "main.py"], cwd=str(tabby), stdout=sortie, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, env=dict(os.environ, PYTHONUNBUFFERED="1"), **extra)
+        # UTF-8 : sous Windows, un journal redirigé vers un fichier s'écrit sinon dans la page de code du système, et la barre de chargement de TabbyAPI
+        # (des caractères de dessin) y fait échouer le chargement du modèle (« 'charmap' codec can't encode character »).
+        proc = lancer([str(python_venv(dossiers)), "main.py"], cwd=str(tabby), stdout=sortie, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
+                      env=dict(os.environ, PYTHONUNBUFFERED="1", PYTHONIOENCODING="utf-8", PYTHONUTF8="1"), **extra)
     (base / "tabby.pid").write_text(str(proc.pid), encoding="utf-8")
     fin = time.time() + attente_s
     while time.time() < fin:
@@ -363,8 +367,10 @@ def _follow_size(cible, total, dire, progres, arret):
         dire(texte)
 
 
-def download_model(depot, revision="", dossiers=None, dire=print, lancer=subprocess.Popen, annule=lambda: False, http=updates.http_get, progres=None):
-    """`main.py download <propriétaire/modèle> [--revision X]` : le téléchargeur de TabbyAPI (Hugging Face) dans le dossier des modèles. `progres(octets, total)` : l'avancement réel."""
+def download_model(depot, revision="", dossiers=None, dire=print, lancer=subprocess.Popen, annule=lambda: False, http=updates.http_get, progres=None, port=PORT_DEFAUT, contexte=0):
+    """`main.py download <propriétaire/modèle> [--revision X]` : le téléchargeur de TabbyAPI (Hugging Face) dans le dossier des modèles. `progres(octets, total)` : l'avancement réel.
+    Le téléchargeur lit le dossier des modèles dans config.yml : il est réécrit avec le port et la fenêtre de conversation du serveur (`port`, `contexte`), pas avec
+    les valeurs par défaut, sinon le prochain démarrage ne réserverait plus ce que les réglages demandent."""
     depot, revision = str(depot or "").strip(), str(revision or "").strip()
     if not RE_REPO_MODEL.match(depot):
         raise ValueError(_t("Nom de dépôt invalide : écris « propriétaire/modèle » (Hugging Face)."))
@@ -373,7 +379,7 @@ def download_model(depot, revision="", dossiers=None, dire=print, lancer=subproc
     if not installed(dossiers):
         raise ValueError(_t("ExLlamaV3 n'est pas installé : installe-le d'abord (Réglages > Moteur)."))
     tabby = folder_tabby(dossiers)
-    (tabby / "config.yml").write_text(config_yaml(PORT_DEFAUT, folder_models(dossiers)), encoding="utf-8")
+    (tabby / "config.yml").write_text(config_yaml(port, folder_models(dossiers), contexte), encoding="utf-8")
     avant = _folders_models(dossiers)
     # The folder is named here, not left to TabbyAPI: without « --folder-name » it writes to the name of the repository, and Lutin, watching
     # « name_revision » to show the progress, saw nothing until the end; two quantisations of one repository also refused each other.

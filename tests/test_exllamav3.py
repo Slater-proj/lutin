@@ -162,6 +162,18 @@ class Vie(Base):
         self.assertEqual((X.folder(self.dossiers) / "tabby.pid").read_text(encoding="utf-8"), "777")
         self.assertEqual(X.start(6001, self.dossiers, lancer=lambda *a, **k: self.fail("déjà en marche"), repond_=lambda p: True), 6001)
 
+    def test_tabbyapi_ecrit_son_journal_en_utf8(self):
+        """Mainteneur, 2026-11-21 : le chargement d'un modèle échouait sur « 'charmap' codec can't encode character '\\u2514' » : sous Windows, le journal de
+        TabbyAPI (un fichier) s'écrivait dans la page de code du système, et sa barre de chargement contient des caractères qu'elle n'a pas."""
+        self.installer()
+        vus = []
+
+        def lancer(cmd, **k):
+            vus.append(k.get("env") or {})
+            return Faux(code=None, pid=778)
+        X.start(6002, self.dossiers, lancer=lancer, repond_=lambda p: bool(vus), dormir=lambda s: None)
+        self.assertEqual((vus[0].get("PYTHONIOENCODING"), vus[0].get("PYTHONUTF8")), ("utf-8", "1"))
+
     def test_demarrer_sans_installation_ou_avec_un_programme_qui_s_arrete_donne_son_journal(self):
         with self.assertRaises(ValueError):
             X.start(5000, self.dossiers, repond_=lambda p: False)
@@ -210,6 +222,16 @@ class Modeles(Base):
         self.assertEqual(cmds[0][1:], ["main.py", "download", "turboderp/Qwen2.5-VL-7B-Instruct-exl3", "--folder-name", "Qwen2.5-VL-7B-Instruct-exl3_4.0bpw", "--revision", "4.0bpw"])
         with self.assertRaises(ValueError):
             X.download_model("turboderp/Qwen-exl3", "", self.dossiers, lancer=lambda cmd, **k: Faux(["boom\n"], 2))
+
+    def test_telecharger_et_installer_gardent_le_port_et_la_fenetre_de_conversation_reglee(self):
+        """Mainteneur, 2026-11-21 : après un téléchargement, config.yml disait le port par défaut et 16 384 jetons, quand les réglages en voulaient 36 864 :
+        le serveur relancé ne réservait plus ce que Lutin croyait, et le jugement « tient sur la carte » ne parlait plus du même serveur."""
+        self.installer()
+        lancer = lambda cmd, **k: Faux(["10 %\n"])  # noqa: E731
+        X.download_model("turboderp/Qwen-exl3", "4.0bpw", self.dossiers, lancer=lancer, port=6003, contexte=36864)
+        config = (X.folder_tabby(self.dossiers) / "config.yml").read_text(encoding="utf-8")
+        self.assertIn("port: 6003", config)
+        self.assertIn("max_seq_len: 36864", config)
 
     def test_la_liste_ne_garde_que_les_dossiers_de_modele(self):
         racine = X.folder_models(self.dossiers)
@@ -333,6 +355,17 @@ class Carte(unittest.TestCase):
             with self.assertRaises(Exception):
                 ml.regler_serveur("exllamav3", {"port_exllamav3": mauvais})
         self.assertEqual(self.mo.statut()["detail"], "ExLlamaV3 n'est pas installé.")
+
+    def test_l_installation_et_le_telechargement_recoivent_la_fenetre_de_conversation_reglee(self):
+        """Le moteur passe à TabbyAPI la fenêtre des réglages à chaque écriture de config.yml, pas seulement au démarrage (mainteneur, 2026-11-21)."""
+        suivi = []
+        with mock.patch.object(X, "install", lambda dossiers, port, dire, annule=None, **k: (suivi.append(("installer", port, k.get("contexte"))), {"tabby": SHA, "lib": "1.6.6"})[1]), \
+                mock.patch.object(X, "start", lambda port, dossiers=None, **k: None), \
+                mock.patch.object(X, "download_model", lambda depot, rev, dossiers, dire, annule=None, **k: suivi.append(("modele", k.get("port"), k.get("contexte")))), \
+                mock.patch.object(self.mo, "_contexte", lambda: 36864):
+            for action in ("installer", "telecharger:turboderp/Qwen-exl3@4.0bpw"):
+                self.mo.faire(action, lambda *a: None)
+        self.assertEqual(suivi, [("installer", 5000, 36864), ("modele", 5000, 36864)])
 
     def test_les_taches_appellent_les_bonnes_fonctions_et_ne_telechargent_pas_hors_ligne(self):
         suivi = []
