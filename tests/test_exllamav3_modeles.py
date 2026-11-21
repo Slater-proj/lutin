@@ -190,14 +190,18 @@ class Telechargement(Base):
         """Le téléchargeur de TabbyAPI réécrit une barre sur UNE ligne : rien ne s'affichait. La taille du dossier qui grossit, comparée à la taille annoncée par Hugging Face, donne le vrai avancement."""
         self.installer()
         racine = X.folder_models(self.dossiers)
-        dossier = racine / "Qwen3-8B-exl3_4.0bpw"
 
         class Lent:
-            def __init__(self):
+            """Writes where TabbyAPI's downloader writes (common/downloader.py, _get_download_folder): `--folder-name` if given, else the name of the repository,
+            WITHOUT the revision. Lutin watched « name_revision » while TabbyAPI wrote « name »: the bar stayed at 0 until the end (maintainer, 2026-11-21)."""
+            def __init__(self, cmd):
                 self.code, self.pid = 0, 1
+                folder = cmd[cmd.index("--folder-name") + 1] if "--folder-name" in cmd else cmd[3].split("/")[-1]
+                self.dossier = racine / folder
 
             @property
             def stdout(self):
+                dossier = self.dossier
                 dossier.mkdir(parents=True)
                 (dossier / "config.json").write_text("{}", encoding="utf-8")
                 for i in range(1, 5):
@@ -228,8 +232,10 @@ class Telechargement(Base):
             return faux(url, entetes)
         C.CACHE.clear()
         with mock.patch.object(X, "INTERVAL_PROGRESS_S", 0.05):
-            X.download_model("turboderp/Qwen3-8B-exl3", "4.0bpw", self.dossiers, dire=textes.append, lancer=lambda cmd, **k: Lent(), http=http, progres=lambda f, t: mesures.append((f, t)))
+            X.download_model("turboderp/Qwen3-8B-exl3", "4.0bpw", self.dossiers, dire=textes.append, lancer=lambda cmd, **k: Lent(cmd), http=http, progres=lambda f, t: mesures.append((f, t)))
         self.assertTrue(mesures, "la progression est remontée")
+        self.assertGreater(mesures[-1][0], 0, "the folder Lutin watches is the one TabbyAPI writes")
+        self.assertTrue((racine / "Qwen3-8B-exl3_4.0bpw" / "config.json").is_file(), "each quantisation has its own folder: two of the same repository can be kept")
         self.assertTrue(all(t == total_hf for _, t in mesures), "le total vient de Hugging Face")
         self.assertEqual(mesures, sorted(mesures), "elle ne recule jamais")
         self.assertTrue(any("%" in t and "Go" in t for t in textes), textes)

@@ -48,6 +48,35 @@ class Activity(unittest.TestCase):
         item = items()["engine:fake"]
         self.assertEqual((item["action"], item["name"], item["done"], item["total"]), ("download", "turboderp/Qwen-exl3 (Fake engine)", 3_200_000_000, 14_800_000_000))
 
+    def test_a_real_download_by_exllamav3_reaches_the_bar_with_its_progress(self):
+        """Maintainer, 2026-11-21: « no status bar, no progress » for an ExLlamaV3 download. From the button of the models page to the bar: the engine task
+        of ExLlamaV3 (an engine of its own, ADR 0020), the progress its downloader measures, the name of the model. Only the downloader is replaced."""
+        import threading
+        from lutin import exllamav3, managed_models
+        gate = threading.Event()
+
+        def download(depot, revision, dossiers, dire, annule=None, progres=None, **kwargs):
+            progres(4_000_000_000, 16_000_000_000)
+            dire("Téléchargement : 4,0 / 16,0 Go (25 %)")
+            gate.wait(10)
+        self.addCleanup(gate.set)
+        self.addCleanup(lambda: engines.TASKS.pop("exllamav3", None))
+        with mock.patch.object(exllamav3, "download_model", download), mock.patch.object(managed_models, "chosen", lambda kind: kind == "exllamav3"),                 mock.patch.dict(engines.CONTEXT, hors_ligne=lambda: False):
+            managed_models.download("exllamav3", "turboderp/Qwen3.6-27B-exl3", "4.0bpw")
+            for _ in range(100):
+                item = items().get("engine:exllamav3")
+                if item and item["done"]:
+                    break
+                time.sleep(0.05)
+            gate.set()
+            for _ in range(100):          # the task ends before the test cleans up after it
+                if engines.TASKS.get("exllamav3", {}).get("statut") != "en cours":
+                    break
+                time.sleep(0.05)
+        self.assertEqual((item["state"], item["action"], item["name"]), ("running", "download", "turboderp/Qwen3.6-27B-exl3 (ExLlamaV3)"))
+        self.assertEqual((item["done"], item["total"]), (4_000_000_000, 16_000_000_000))
+        self.assertIn("25 %", item["text"])
+
     def test_what_ended_stays_a_moment_and_then_goes(self):
         now = time.time()
         engines.TASKS["fake"] = {"action": "installer", "statut": "termine", "resultat": "Installed: Fake 1.0", "texte": "", "fait": 0, "total": 0, "fin": now}

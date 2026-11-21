@@ -207,7 +207,7 @@ class Modeles(Base):
             X.download_model("turboderp/Qwen-exl3", "--x", self.dossiers, lancer=lancer)
         self.assertEqual(cmds, [])
         X.download_model("turboderp/Qwen2.5-VL-7B-Instruct-exl3", "4.0bpw", self.dossiers, lancer=lancer)
-        self.assertEqual(cmds[0][1:], ["main.py", "download", "turboderp/Qwen2.5-VL-7B-Instruct-exl3", "--revision", "4.0bpw"])
+        self.assertEqual(cmds[0][1:], ["main.py", "download", "turboderp/Qwen2.5-VL-7B-Instruct-exl3", "--folder-name", "Qwen2.5-VL-7B-Instruct-exl3_4.0bpw", "--revision", "4.0bpw"])
         with self.assertRaises(ValueError):
             X.download_model("turboderp/Qwen-exl3", "", self.dossiers, lancer=lambda cmd, **k: Faux(["boom\n"], 2))
 

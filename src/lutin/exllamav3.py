@@ -375,7 +375,9 @@ def download_model(depot, revision="", dossiers=None, dire=print, lancer=subproc
     tabby = folder_tabby(dossiers)
     (tabby / "config.yml").write_text(config_yaml(PORT_DEFAUT, folder_models(dossiers)), encoding="utf-8")
     avant = _folders_models(dossiers)
-    cmd = [str(python_venv(dossiers)), "main.py", "download", depot] + (["--revision", revision] if revision else [])
+    # The folder is named here, not left to TabbyAPI: without « --folder-name » it writes to the name of the repository, and Lutin, watching
+    # « name_revision » to show the progress, saw nothing until the end; two quantisations of one repository also refused each other.
+    cmd = [str(python_venv(dossiers)), "main.py", "download", depot, "--folder-name", name_folder_model(depot, revision)] + (["--revision", revision] if revision else [])
     proc = lancer(cmd, cwd=str(tabby), stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, text=True, encoding="utf-8", errors="replace")
     arret, suivi = threading.Event(), None
     if progres is not None:
