@@ -11,6 +11,7 @@ import threading
 import time
 import urllib.error
 import urllib.parse
+from . import app_context as _context
 from . import core as _m
 from . import net_guard as _garde_reseau
 from . import web_search as _recherche
@@ -18,7 +19,8 @@ from . import outbound as _sorties
 
 
 # --------------------------------------------------------------------------- accès au web (sans clé, sans compte, sans installation)
-DDG_URL = os.environ.get("LUTIN_RECHERCHE_URL", "https://html.duckduckgo.com/html/")
+DDG_URL = _context.current().settings.search_ddg_url          # read once from the environment (ADR 0014)
+_context.bind(__name__, {"DDG_URL": "search_ddg_url"})
 
 
 WEB_PAGE = 6000                 # caractères rendus au modèle par appel de web_lire (il demande la suite avec « debut »)

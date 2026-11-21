@@ -1,6 +1,6 @@
 # ADR 0014 — One application context holds what the modules kept for themselves
 
-Status: accepted by the maintainer on 2026-11-17, not implemented yet (plan step 5, item 1). Scope decided on 2026-11-17: the application context
+Status: accepted by the maintainer on 2026-11-17 (plan step 5, item 1). Stage 1 implemented on 2026-11-21 (`src/lutin/app_context.py`). Scope decided on 2026-11-17: the application context
 only. The route table is left out: the French routes go away with the old page, and `/api/v1` already has its table (`api_v1.ROUTES`).
 
 ## Context

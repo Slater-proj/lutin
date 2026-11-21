@@ -27,6 +27,7 @@ from pathlib import Path
 import zlib
 
 from . import __version__ as _VERSION_LUTIN
+from . import app_context as _context
 from . import bench as _bench
 from . import model_catalog as _catalogue
 from . import config as _config
@@ -39,12 +40,14 @@ from .ollama_client import Ollama as _Ollama  # noqa: F401  (client_banc et les 
 
 ICI = Path(__file__).resolve().parent
 WEB = ICI / "web"
-RACINE = Path(os.environ.get("LUTIN_RACINE") or Path.cwd()).resolve()          # le dossier de travail : la seule partie du disque que l'assistant peut lire et modifier
-DONNEES = Path(os.environ.get("LUTIN_DONNEES") or Path.home() / ".lutin" / "donnees")
-MEMOIRE = Path(os.environ.get("LUTIN_MEMOIRE") or DONNEES.parent / "memoire")
-OLLAMA = os.environ.get("OLLAMA_URL", "http://127.0.0.1:11434").rstrip("/")
-OUTIL = os.environ.get("LUTIN_OUTIL_URL", "").rstrip("/")          # extension facultative (outil d'images) : sans adresse, ses outils ne sont pas proposés au modèle
-PORT = int(os.environ.get("LUTIN_PORT", "8777"))
+# Read once from the environment by the application context (ADR 0014); these names read and write it (see _context.bind below).
+_SETTINGS = _context.current().settings
+RACINE = _SETTINGS.root          # le dossier de travail : la seule partie du disque que l'assistant peut lire et modifier
+DONNEES = _SETTINGS.data
+MEMOIRE = _SETTINGS.memory
+OLLAMA = _SETTINGS.ollama_url
+OUTIL = _SETTINGS.tool_url          # extension facultative (outil d'images) : sans adresse, ses outils ne sont pas proposés au modèle
+PORT = _SETTINGS.port
 VERSION = _VERSION_LUTIN
 JETON = secrets.token_hex(16)                 # écrit dans la page : protège contre les requêtes venant d'autres sites
 JETON_CONSOLE = secrets.token_hex(16)         # écrit dans un fichier réservé à l'utilisateur : sert à la ligne de commande (lutin chat), n'est jamais dans la page
@@ -57,10 +60,10 @@ IP_LAN = ""
 VERIFICATEUR = None          # fonction(portee) -> propositions de modèles ; fournie par le lanceur (boutons « chercher » de l'onglet Modèles)
 
 # Modèles proposés : le catalogue livré avec Lutin (lutin/data/modeles.json), pas du code. Le lanceur peut y ajouter une copie plus récente.
-_CATALOGUE = _catalogue.load(os.environ.get("LUTIN_CATALOGUE") or None)
+_CATALOGUE = _catalogue.load(_SETTINGS.catalogue)
 MODELES = [{"id": m["id"], "nom": m["nom"], "phrase": m["phrase"], "go": m["go"], "role": max(m["notes"], key=m["notes"].get), "avance": bool(m.get("avance")),
             "avertissement": m.get("avertissement", ""), "licence": m["licence"], "capacites": m["capacites"]} for m in _CATALOGUE["modeles"]]
-REGLAGES_DEFAUT = {"modele": os.environ.get("LUTIN_MODELE") or "qwen3:8b", "avance": False, "num_ctx": 24576, "temperature": 0.6, "reflexion": False, "auto_ecriture": False, "auto_commandes": False, "mode": "polyvalent", "num_predict": 0, "tours_max": 14, "web": True,
+REGLAGES_DEFAUT = {"modele": _SETTINGS.default_model, "avance": False, "num_ctx": 24576, "temperature": 0.6, "reflexion": False, "auto_ecriture": False, "auto_commandes": False, "mode": "polyvalent", "num_predict": 0, "tours_max": 14, "web": True,
                     "top_p": None, "top_k": None, "min_p": None, "repeat_penalty": None,          # None = valeur conseillée pour la famille du modèle (voir profil_echantillonnage)
                     "garde_ressources": True, "seuil_ram_go": 3.0, "seuil_disque_go": 10.0, "plafond_donnees_go": 2.0, "limite_ram_commande_go": 0.0, "budget_go": 0.0,          # budget_go : la mémoire que le mainteneur de la machine accepte de remplir avec un modèle (0 = calculée d'après la machine)
                     "liberer_si_comfy": True, "rappels_auto": "scenario",
@@ -145,8 +148,10 @@ def options_echantillonnage(r, reflechit):
 ENV_OLLAMA = {"OLLAMA_FLASH_ATTENTION": "1", "OLLAMA_KV_CACHE_TYPE": "q8_0", "OLLAMA_KEEP_ALIVE": "5m"}
 TOURS_MAX = 14
 AGE_TACHES_MAX = 3            # réponses de suite sans mise à jour avant que la liste de tâches soit fermée (le modèle est parti sur autre chose)
-GARDE_RESSOURCES_ACTIF = os.environ.get("LUTIN_SANS_GARDE") != "1"          # désactivé dans les tests (qui ne doivent pas dépendre de l'état réel de la machine)
-AUTO_DEMARRAGE = os.environ.get("LUTIN_SANS_DEMARRAGE") != "1"          # démarre Ollama tout seul s'il est arrêté au moment d'une demande (désactivé dans les tests)
+GARDE_RESSOURCES_ACTIF = _SETTINGS.resource_guard          # désactivé dans les tests (qui ne doivent pas dépendre de l'état réel de la machine)
+AUTO_DEMARRAGE = _SETTINGS.auto_start          # démarre Ollama tout seul s'il est arrêté au moment d'une demande (désactivé dans les tests)
+_context.bind(__name__, {"RACINE": "root", "DONNEES": "data", "MEMOIRE": "memory", "OLLAMA": "ollama_url", "OUTIL": "tool_url", "PORT": "port",
+                         "GARDE_RESSOURCES_ACTIF": "resource_guard", "AUTO_DEMARRAGE": "auto_start"})
 LECTURE_MAX = 7000
 SORTIE_MAX = 9000
 def construire_commandes_lecture(posix, en_plus=()):
@@ -720,10 +725,9 @@ def dossiers_de_lutin():
 
 def definir_racine(chemin):
     """Change le dossier de travail courant. Appelé avec VERROU_TOURS tenu."""
-    global RACINE
     nouveau = Path(chemin).resolve()
     if nouveau != RACINE:
-        RACINE = nouveau
+        _context.change(root=nouveau)          # not `global RACINE`: a write to the module's dictionary alone would leave the context behind
         PLAN["valide"] = False                      # le plan du projet et l'index de rappel appartiennent à l'ancien dossier
         RECALL["signature"] = None
 

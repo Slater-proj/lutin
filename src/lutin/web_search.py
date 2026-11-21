@@ -9,18 +9,20 @@ import re
 import threading
 import urllib.parse
 
+from . import app_context as _context
 from . import storage as _donnees
 from .i18n import t as _t
 
-BRAVE_URL = os.environ.get("LUTIN_BRAVE_URL", "https://api.search.brave.com/res/v1/")
+BRAVE_URL = _context.current().settings.search_brave_url          # read once from the environment (ADR 0014), bound below
 PERIODS = {"jour": ("day", "pd", "d"), "semaine": ("week", "pw", "w"), "mois": ("month", "pm", "m"), "an": ("year", "py", "y")}          # SearXNG, Brave, DuckDuckGo
 RE_KEY_BRAVE = re.compile(r"^[A-Za-z0-9_\-]{10,200}$")
 RE_KEY = re.compile(r"^[A-Za-z0-9_\-.]{10,300}$")
 # Les fournisseurs « à clé » en plus de Brave : seuls RÉSULTATS (titre, adresse, extrait) sont repris, jamais une réponse déjà rédigée par un autre modèle. Les résultats repassent donc par le modèle de Lutin,
 # qui lit, compare et cite. Chaque requête part chez ce service (c'est dit dans les réglages) ; le mode hors ligne les coupe.
-TAVILY_URL = os.environ.get("LUTIN_TAVILY_URL", "https://api.tavily.com/")
-EXA_URL = os.environ.get("LUTIN_EXA_URL", "https://api.exa.ai/")
-PERPLEXITY_URL = os.environ.get("LUTIN_PERPLEXITY_URL", "https://api.perplexity.ai/")
+TAVILY_URL = _context.current().settings.search_tavily_url
+EXA_URL = _context.current().settings.search_exa_url
+PERPLEXITY_URL = _context.current().settings.search_perplexity_url
+_context.bind(__name__, {"BRAVE_URL": "search_brave_url", "TAVILY_URL": "search_tavily_url", "EXA_URL": "search_exa_url", "PERPLEXITY_URL": "search_perplexity_url"})
 FOURNISSEURS_A_CLE = ("tavily", "exa", "perplexity")
 RE_DOMAIN = re.compile(r"^(?=.{4,253}$)([a-z0-9]([a-z0-9\-]{0,61}[a-z0-9])?\.)+[a-z]{2,24}$")
 PARAMETERS_TRACKING = ("utm_", "fbclid", "gclid", "dclid", "msclkid", "mc_cid", "mc_eid", "igshid", "yclid", "_hsenc", "_hsmi", "ref_src", "ref_url")
