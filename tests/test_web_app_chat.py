@@ -135,6 +135,9 @@ class Chat(unittest.TestCase):
         """Maintainer's report (2026-11-20): with ExLlamaV3 « a red box appears and goes away at once ». The error was a block of the turn being written, and the stored
         conversation read again at the end of the turn does not hold it."""
         p = self.page
+        kept = p.evaluer("location.hash")          # the conversation of test_2, which the next tests go on writing in
+        p.evaluer("[...document.querySelectorAll('.list .new')].forEach(b => b.click())")
+        p.attendre("!!document.querySelector('.welcome')")
         T.SCENARIO[:] = [[{"error": "Model failed to load: Insufficient VRAM in split for model and cache"}]]
         self.write("A message the engine cannot answer")
         p.evaluer("document.querySelector('.composer button[type=submit]').click()")
@@ -143,9 +146,9 @@ class Chat(unittest.TestCase):
         p.evaluer("new Promise(done => setTimeout(done, 600))")
         self.assertIn("Insufficient VRAM", p.evaluer("document.querySelector('.dock .problem')?.innerText ?? ''"), "the error stays above the field once the turn is over")
         self.assertEqual(p.evaluer("document.querySelector('.dock .problem').getAttribute('role')"), "alert")
-        p.evaluer("location.hash = '#/chat'")
-        p.evaluer("location.reload()")
-        p.attendre("!!document.querySelector('#message')")
+        p.evaluer("location.hash = %s" % js(kept))
+        p.evaluer("location.reload()")          # the screen reads the conversation of the address when it opens
+        p.attendre(TEXT + ".includes('First message of the test')")
         self.assertFalse(p.evaluer("!!document.querySelector('.dock .problem')"), "another conversation, another page: nothing is carried over")
         self.assertEqual(p.erreurs, [])
 
@@ -2978,7 +2981,7 @@ class Chat(unittest.TestCase):
         """Maintainer's request (2026-11-20): « a status of the model loaded in RAM or not, around the selector »."""
         p = self.page
         self.addCleanup(lambda: T.PS.clear())
-        model = p.evaluer("document.querySelector('header select').value.split('|').pop()")
+        model = T.A.reglages()["modele"]          # what the server asks the engine about; the selector may still show a list an earlier test emptied
         T.PS.clear()
         p.evaluer("location.hash = '#/chat'")
         p.evaluer("location.reload()")
