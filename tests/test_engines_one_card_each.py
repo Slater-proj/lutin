@@ -67,6 +67,12 @@ class OldSetting(Files):
         self.assertEqual(V.call("GET", "/api/v1/engines", V.OWNER)[1]["current"], "exllamav3")
         self.assertEqual((self.settings.read_bytes(), self.engines.read_bytes()), before, "reading must not migrate anything")
 
+    def test_the_model_is_told_which_engine_and_model_answer(self):
+        """Maintainer, 2026-11-21: asked, the model said it ran on Ollama while ExLlamaV3 answered; it had deduced it from the code and the processes."""
+        system = agent.consignes_systeme(A.reglages())
+        self.assertIn("ExLlamaV3", system.splitlines()[-1])
+        self.assertIn("qwen3-8b-exl3", system.splitlines()[-1])
+
     def test_saving_another_setting_keeps_the_old_engine_as_it_was_written(self):
         storage.enregistrer_reglages({"num_ctx": 8192})
         settings, servers = self.read()

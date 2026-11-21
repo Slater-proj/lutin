@@ -45,6 +45,14 @@ class Loaded(unittest.TestCase):
         answer = self.get()
         self.assertEqual((answer["known"], answer["loaded"]), (True, False))
 
+    def test_while_a_turn_answers_the_model_stays_in_memory_even_if_the_busy_server_is_late_to_say_it(self):
+        """Maintainer, 2026-11-21: the pill went to « not loaded » while the model was thinking. A server that generates (TabbyAPI) answers the question late
+        (3 s): that silence was read as « not loaded ». A turn of this machine answering with this engine has its model in memory, or being loaded."""
+        with mock.patch.dict(api_v1._m.TOURS_ACTIFS, {"conversation": object()}):
+            answer = self.get()
+        self.assertEqual((answer["known"], answer["loaded"]), (True, True))
+        self.assertEqual(self.get()["loaded"], False, "once the turn is over, the engine's own answer counts again")
+
     def test_an_engine_that_cannot_say_is_not_known(self):
         self.fake.says = False
         self.fake.held = None

@@ -1131,7 +1131,19 @@ def consignes_systeme(r):
             + (_t("\n\n# DÉBUT DE LA CONVERSATION\nLes premiers échanges ne sont plus tous sous tes yeux (fiche de suivi ou résumé). Pour retrouver un détail précis (une décision, un nom, un chiffre, un texte), appelle « rappeler » avec quelques mots-clés et ici=true : ne le devine pas.\n") if r.get("rappel_ici") else "")
             + _pc.prompt_block(_m.RACINE)
             + bloc_plan(r)
-            + _t("\n\nDate : ") + datetime.now().strftime("%Y-%m-%d") + _t(". Dossier du projet : ") + str(_m.RACINE))
+            + _t("\n\nDate : ") + datetime.now().strftime("%Y-%m-%d") + _t(". Dossier du projet : ") + str(_m.RACINE)
+            + ligne_moteur(r))
+
+
+def ligne_moteur(r):
+    """Le moteur et le modèle qui répondent, dits au modèle : sans cela, interrogé, il le déduisait de ce qu'il voyait (le code de Lutin, une liste de
+    processus où TabbyAPI s'appelle python.exe) et affirmait tourner sur Ollama alors qu'ExLlamaV3 répondait (mainteneur, 2026-11-21)."""
+    try:
+        nom = moteur_local(r).nom
+    except Exception:  # noqa: BLE001  (une phrase de plus ne doit jamais empêcher de répondre)
+        return ""
+    ailleurs = _t(", par une autre machine appairée") if r.get("machine") else ""
+    return _t("\nTu tournes sur le moteur {}{}, modèle {}. Si on te le demande, c'est la réponse : ne le déduis pas du code ni des processus de la machine.").format(_t(nom), ailleurs, r.get("modele") or "?")
 
 
 def bloc_plan(r):
