@@ -45,7 +45,10 @@ class Chemins(unittest.TestCase):
         self.assertEqual((d["donnees"], d["memoire"]), (settings.data, settings.memory))
         self.assertEqual(d["config"], Path(r"C:\U\AppData\Roaming") / "Lutin", "the configuration does not move with the data")
         self.assertEqual(config.folders(dict(env, LUTIN_MEMOIRE=r"E:\M"), "windows")["memoire"], Path(r"E:\M"))
-        self.assertEqual(config.folders({"LUTIN_HOME": "/p", "LUTIN_DATA": "/x/donnees"}, "linux")["donnees"], Path("/x/donnees"), "the English name too")
+        self.assertEqual(config.folders({"HOME": "/h", "LUTIN_DATA": "/x/donnees"}, "linux")["donnees"], Path("/x/donnees"), "the English name too")
+        portable = config.folders({"LUTIN_HOME": "/p", "LUTIN_DONNEES": "/inherited/donnees"}, "linux")
+        self.assertEqual((portable["donnees"], portable["memoire"]), (Path("/p/donnees"), Path("/p/memoire")),
+                         "LUTIN_HOME given on purpose wins over a LUTIN_DONNEES a program inherited (the demo server of tools/captures.py, `lutin export`)")
 
 
 class Configuration(unittest.TestCase):

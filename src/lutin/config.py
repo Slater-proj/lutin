@@ -40,10 +40,14 @@ def system_info():
 
 
 def folders(env=None, os_=None):
-    """{config, donnees, memoire, cache} for this system. LUTIN_DONNEES and LUTIN_MEMOIRE (or their English names LUTIN_DATA, LUTIN_MEMORY) win over the default,
-    as they do in `app_context`: without that, a data folder set by its variable left uv, Node.js, ExLlamaV3, Colibri and the backup in the default folder."""
+    """{config, donnees, memoire, cache} for this system. LUTIN_HOME puts everything under one folder (portable mode, Docker, the installer, tests) and wins.
+    Without it, LUTIN_DONNEES and LUTIN_MEMOIRE (or their English names LUTIN_DATA, LUTIN_MEMORY) win over the default, as they do in `app_context`: before,
+    a data folder set by its variable left uv, Node.js, ExLlamaV3, Colibri and the backup in the default folder. LUTIN_HOME first because the command line
+    sets LUTIN_DONNEES from these folders and the programs it starts inherit it: an inherited value must not move a LUTIN_HOME given on purpose."""
     env = os.environ if env is None else env
     found = _default_folders(env, os_ or system_info())
+    if env.get("LUTIN_HOME"):
+        return found
     data = env.get("LUTIN_DONNEES") or env.get("LUTIN_DATA")
     memory = env.get("LUTIN_MEMOIRE") or env.get("LUTIN_MEMORY")
     if data:
