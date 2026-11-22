@@ -1,6 +1,6 @@
 <script lang="ts">
   // The bar at the top of every screen that says what Lutin is downloading or installing, whoever started it and wherever the person is (an engine, a model by Ollama or by the engine
-  // in use, the model that searches by meaning). It reads GET /activity; what ended stays a moment, a failure until it is closed: nothing disappears without saying how it ended.
+  // in use, the model that searches by meaning), and the removals of a model or a conversation (lutin.operations). It reads GET /activity; what ended stays a moment, a failure until it is closed: nothing disappears without saying how it ended.
   import { onMount } from "svelte";
   import { closeKey, nextDelay, percent, fraction, visible, type ActivityItem } from "../lib/activity";
   import { api } from "../lib/api";
@@ -10,7 +10,7 @@
   let closed = $state<Set<string>>(new Set());
   const shown = $derived(visible(items, closed));
 
-  const ACTIONS = ["install", "reinstall", "update", "uninstall", "start", "download", "prepare", "copy"];
+  const ACTIONS = ["install", "reinstall", "update", "uninstall", "start", "download", "prepare", "copy", "remove"];
 
   function title(item: ActivityItem): string {
     return ACTIONS.includes(item.action) ? t(("activity." + item.action) as MessageKey, item.name) : item.name;
@@ -62,7 +62,7 @@
             <span class="badge">{item.state === "failed" ? t("activity.state_failed") : t("activity.state_done")}</span>
           {/if}
           <span class="grow"></span>
-          <a href="#/models">{t("activity.details")}</a>
+          <a href={item.kind === "conversation" ? "#/chat" : "#/models"}>{t("activity.details")}</a>
           {#if item.state !== "running"}
             <button type="button" class="close" onclick={() => close(item)} aria-label={t("activity.close")} title={t("activity.close")}>×</button>
           {/if}

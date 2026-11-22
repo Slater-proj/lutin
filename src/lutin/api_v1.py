@@ -42,6 +42,7 @@ from . import mission as _mission
 from . import model_compat as _model_compat
 from . import model_fit as _model_fit
 from . import offline as _offline
+from . import operations as _operations
 from . import power as _power
 from . import produced_files as _produced
 from . import addons as _addons
@@ -1002,7 +1003,8 @@ def install_model(request):
 @route("DELETE", "/models/{name}", SESSION)
 def delete_model(request):
     """Deletes an installed model. The model in use may be deleted: `current` is the one Lutin switched to, or the same name when there is no other."""
-    _m.supprimer_modele(request.params["name"])
+    with _operations.track("model", request.params["name"], "remove"):          # seen by the activity bar of every screen
+        _m.supprimer_modele(request.params["name"])
     return {"deleted": True, "current": str(_m.reglages().get("modele") or "")}
 
 
@@ -1602,7 +1604,8 @@ def engine_models_remove(request):
     """Removes an installed model of the engine in use. The model in use may be removed: the answer says which one Lutin switched to (`current`)."""
     engine, source = _source(request)
     try:
-        _sourced(lambda: source.remove(request.params["name"]))
+        with _operations.track("model", "{} ({})".format(request.params["name"], engine.nom), "remove"):          # seen by the activity bar of every screen
+            _sourced(lambda: source.remove(request.params["name"]))
     except ValueError as invalid:
         raise ApiError(400, "invalid_request", str(invalid)) from None
     return {"deleted": True, "engine": engine.id, "current": str(_m.reglages().get("modele") or "")}
@@ -1893,6 +1896,7 @@ def _activity_items():
             items.append({"id": "model:" + name, "kind": "model", "name": name, "action": "download", "state": "failed", "text": str(stored.get("texte") or ""),
                           "done": 0, "total": 0, "finished_at": 0})
     items.extend(_background_items())
+    items.extend(_operations.items())          # a model or a conversation removed by a request, from any screen
     from . import embeddings as _embeddings
     install = _embeddings.state()["installation"]
     if install["etat"] == "en cours":
@@ -3332,10 +3336,11 @@ def update_conversation_options(request):
 @route("DELETE", "/conversations/{id}", SESSION)
 def delete_conversation(request):
     identifier = request.params["id"]
-    _read(identifier)
+    conversation = _read(identifier)
     _not_running(identifier)
-    _mission.oublier_conversation(identifier)          # its mission, if any, ends with it
-    _m.conv_supprimer(identifier)
+    with _operations.track("conversation", conversation.get("titre") or identifier, "remove"):          # seen by the activity bar of every screen
+        _mission.oublier_conversation(identifier)          # its mission, if any, ends with it
+        _m.conv_supprimer(identifier)
     return {"deleted": True}
 
 

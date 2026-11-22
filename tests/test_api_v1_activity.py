@@ -1,12 +1,13 @@
 """`/api/v1/activity`: what Lutin is downloading or installing, in one list for the bar at the top of every screen (engine tasks, downloads of Ollama), on the real server of
 tests/test_api_v1.py and a FAKE engine (nothing is installed or started)."""
+import threading
 import time
 import unittest
 from unittest import mock
 
 import test_api_v1 as V  # its temporary folders, its server and its callers (imported as a module: its tests do not run here)
 
-from lutin import api_v1, engines  # noqa: E402
+from lutin import api_v1, engines, operations  # noqa: E402
 
 A = V.A
 
@@ -34,6 +35,8 @@ class Activity(unittest.TestCase):
         pulls = mock.patch.dict(api_v1._m.PULLS, clear=True)
         pulls.start()
         self.addCleanup(pulls.stop)
+        operations.forget()
+        self.addCleanup(operations.forget)
 
     def test_a_running_task_of_an_engine_is_listed_with_its_progress(self):
         engines.TASKS["fake"] = {"action": "installer", "statut": "en cours", "texte": "Downloading the model: 3 / 14 GB", "fait": 3, "total": 14, "erreur": "", "debut": time.time()}
@@ -119,6 +122,47 @@ class Activity(unittest.TestCase):
         self.assertEqual((listed["model:qwen3:8b"]["state"], listed["model:qwen3:8b"]["done"], listed["model:qwen3:8b"]["total"]), ("running", 5, 10))
         self.assertEqual((listed["model:broken:7b"]["state"], listed["model:broken:7b"]["text"]), ("failed", "no such model"))
         self.assertNotIn("model:old:1b", listed, "a finished download is on the Models screen, not in the bar")
+
+    def test_a_model_being_removed_is_listed_for_every_screen_then_says_it_ended(self):
+        """Maintainer, 2026-11-21: the removal of a model was seen only on the screen that asked. It is listed while it runs, then « done » a moment."""
+        started, release = threading.Event(), threading.Event()
+
+        def slow_removal(name):
+            started.set()
+            release.wait(10)
+
+        answers = []
+        with mock.patch.object(api_v1._m, "supprimer_modele", side_effect=slow_removal):
+            worker = threading.Thread(target=lambda: answers.append(V.call("DELETE", "/api/v1/models/big%3A70b", V.OWNER)))
+            worker.start()
+            self.assertTrue(started.wait(10))
+            running = [item for item in items().values() if item["kind"] == "model" and item["action"] == "remove"]
+            release.set()
+            worker.join(10)
+        self.assertEqual([(item["name"], item["state"]) for item in running], [("big:70b", "running")])
+        self.assertEqual(answers[0][0], 200, answers)
+        ended = [item for item in items().values() if item["kind"] == "model" and item["action"] == "remove"]
+        self.assertEqual([(item["state"], bool(item["finished_at"])) for item in ended], [("done", True)])
+
+    def test_a_removal_that_fails_says_why(self):
+        with mock.patch.object(api_v1._m, "supprimer_modele", side_effect=ValueError("the file is in use")):
+            V.call("DELETE", "/api/v1/models/held%3A8b", V.OWNER)
+        failed = [item for item in items().values() if item["action"] == "remove"]
+        self.assertEqual([(item["state"], item["text"]) for item in failed], [("failed", "the file is in use")])
+
+    def test_a_deleted_conversation_is_told_by_its_title(self):
+        status, created = V.call("POST", "/api/v1/conversations", V.OWNER, {})
+        self.assertIn(status, (200, 201), created)
+        self.assertEqual(V.call("DELETE", "/api/v1/conversations/" + created["id"], V.OWNER)[0], 200)
+        told = [item for item in items().values() if item["kind"] == "conversation"]
+        self.assertEqual([(item["action"], item["state"]) for item in told], [("remove", "done")])
+        self.assertTrue(told[0]["name"])
+
+    def test_what_ended_goes_after_its_delay(self):
+        with operations.track("model", "m", "remove"):
+            pass
+        self.assertEqual(len(operations.items()), 1)
+        self.assertEqual(operations.items(now=time.time() + operations.KEEP_DONE_S + 1), [])
 
     def test_nothing_running_is_an_empty_list_and_a_visitor_without_session_is_refused(self):
         self.assertEqual([item for item in items() if item.startswith(("engine:fake", "model:"))], [])
