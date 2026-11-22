@@ -157,6 +157,25 @@ class Modeles(Base):
         self.assertTrue(X.download_model("turboderp/M-exl3", "", self.dossiers, lancer=lancer, http=coupe))
         self.assertEqual(X.modeles(self.dossiers)[0]["commit"], "")
 
+    def test_un_fichier_de_poids_coupe_rend_le_modele_incomplet(self):
+        """Maintainer (2026-11-22): « Tensor model.language_model.layers.19.self_attn.q_proj.trellis … extends past end of file: needs 6212421986 bytes » at load,
+        for a model listed as complete because its config.json was there."""
+        import struct
+
+        def poids(dossier, donnees, coupe=0):
+            entete = json.dumps({"__metadata__": {"format": "pt"}, "a": {"dtype": "F16", "shape": [4], "data_offsets": [0, 8]}, "b": {"dtype": "F16", "shape": [8], "data_offsets": [8, donnees]}}).encode()
+            corps = struct.pack("<Q", len(entete)) + entete + b"\0" * donnees
+            (dossier / "model-00001-of-00001.safetensors").write_bytes(corps[:len(corps) - coupe])
+        racine = X.folder_models(self.dossiers)
+        for nom, coupe in (("Entier", 0), ("Coupe", 5)):
+            (racine / nom).mkdir(parents=True)
+            (racine / nom / "config.json").write_text("{}", encoding="utf-8")
+            poids(racine / nom, 24, coupe)
+        (racine / "Illisible").mkdir()
+        (racine / "Illisible" / "config.json").write_text("{}", encoding="utf-8")
+        (racine / "Illisible" / "model.safetensors").write_bytes(b"x" * 1000)
+        self.assertEqual({m["nom"]: m["incomplet"] for m in X.modeles(self.dossiers)}, {"Entier": False, "Coupe": True, "Illisible": False}, "a header that cannot be read is unknown, not cut")
+
     def test_supprimer_n_efface_que_le_dossier_d_un_modele(self):
         racine = X.folder_models(self.dossiers)
         (racine / "A").mkdir(parents=True)

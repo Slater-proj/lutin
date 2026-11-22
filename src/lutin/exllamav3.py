@@ -12,6 +12,7 @@ import os
 import re
 import secrets
 import shutil
+import struct
 import subprocess
 import sys
 import tempfile
@@ -439,6 +440,34 @@ def clean_removals(dossiers=None):
         pass
 
 
+_TRONQUES = {}          # (chemin, taille, date) -> le fichier est-il plus court que ce que son en-tête annonce
+
+
+def safetensors_tronque(f):
+    """Vrai si ce fichier .safetensors annonce des données au-delà de sa fin : un téléchargement coupé. TabbyAPI échouait alors au chargement sur « Tensor … extends past
+    end of file: needs 6212421986 bytes » (mainteneur, 2026-11-22), avec un modèle listé comme complet. Faux si l'en-tête est illisible : inconnu n'est pas tronqué."""
+    try:
+        etat = f.stat()
+    except OSError:
+        return False
+    cle = (str(f), etat.st_size, etat.st_mtime)
+    if cle in _TRONQUES:
+        return _TRONQUES[cle]
+    tronque = False
+    try:
+        with open(f, "rb") as h:
+            n = struct.unpack("<Q", h.read(8))[0]
+            if 0 < n <= 100 * 1024 ** 2 and 8 + n <= etat.st_size:
+                entete = json.loads(h.read(n).decode("utf-8"))
+                fin = max((v["data_offsets"][1] for k, v in entete.items() if k != "__metadata__" and isinstance(v, dict) and isinstance(v.get("data_offsets"), list)
+                           and len(v["data_offsets"]) == 2 and isinstance(v["data_offsets"][1], int)), default=0)
+                tronque = 8 + n + fin > etat.st_size
+    except (OSError, ValueError, struct.error, AttributeError):
+        tronque = False
+    _TRONQUES[cle] = tronque
+    return tronque
+
+
 def modeles(dossiers=None):
     """Les modèles téléchargés : [{nom, taille_go, depot, revision, commit}] (un dossier avec un config.json ; depot/revision/commit vides pour un modèle posé à la main)."""
     sortie = []
@@ -450,5 +479,6 @@ def modeles(dossiers=None):
         return []
     for p in sous:
         taille = sum(f.stat().st_size for f in p.rglob("*") if f.is_file())
-        sortie.append(dict({"nom": p.name, "taille_go": round(taille / 1e9, 1), "depot": "", "revision": "", "commit": "", "incomplet": not (p / "config.json").is_file()}, **origin_model(dossiers, p.name)))
+        incomplet = not (p / "config.json").is_file() or any(safetensors_tronque(f) for f in p.glob("*.safetensors"))
+        sortie.append(dict({"nom": p.name, "taille_go": round(taille / 1e9, 1), "depot": "", "revision": "", "commit": "", "incomplet": incomplet}, **origin_model(dossiers, p.name)))
     return sortie
