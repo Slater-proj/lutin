@@ -30,7 +30,8 @@ def fenetres():
         if user32.IsWindowVisible(hwnd):
             t = ctypes.create_unicode_buffer(256)
             user32.GetClassNameW(hwnd, t, 256)
-            classes.append(t.value)
+            if not t.value.startswith("Chrome_WidgetWin"):          # Chrome and Electron programs of the desktop (VS Code…): never a console, they made the test fail while someone worked
+                classes.append(t.value)
         return True
     user32.EnumWindows(Proc(cb), 0)
     return classes
