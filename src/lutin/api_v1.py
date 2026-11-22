@@ -1556,6 +1556,7 @@ def engine_models_variants(request):
     ref = request.query.get("ref", "")[:160]
     if not ref:
         raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("ref"))
+    _offline.require_online(_t("lire les précisions d'un modèle"))          # they come from ollama.com or Hugging Face, whatever the engine
     try:
         found = _sourced(lambda: source.variants(ref))
     except ValueError as invalid:

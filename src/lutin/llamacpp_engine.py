@@ -23,6 +23,7 @@ import zipfile
 from pathlib import Path
 
 from . import engine_capabilities, engines
+from . import offline as _offline
 from .engine_replace import free_process, replace_folder  # noqa: F401  (le remplacement d'un dossier est commun à tous les moteurs)
 from .i18n import t as _t
 from .openai_engine import MoteurOpenAI
@@ -1171,6 +1172,8 @@ class MoteurLlamaCpp(MoteurOpenAI):
         progression(_t("Recherche de la version {}…").format(epinglee) if epinglee else _t("Recherche de la dernière version…"), 0, 0)
         try:
             releases = [(http_json or _http_json)(API_VERSION + epinglee)] if epinglee else (http_json or _http_json)(API_RELEASES)
+        except _offline.OfflineError:
+            raise
         except (urllib.error.URLError, OSError, ValueError) as e:
             releases = None
             if http_json is None:          # l'API de GitHub refuse (limite de requêtes, HTTP 403) : les pages publiques des publications donnent les mêmes fichiers
@@ -1270,6 +1273,8 @@ class MoteurLlamaCpp(MoteurOpenAI):
         url = API_HF + "?" + urllib.parse.urlencode({"search": terme, "filter": "gguf", "sort": "downloads", "direction": "-1", "limit": "15"})
         try:
             lus = (http_json or _http_json)(url)
+        except _offline.OfflineError:
+            raise
         except (urllib.error.URLError, OSError, ValueError) as e:
             raise ErreurMoteur(_t("Hugging Face ne répond pas : {}").format(e))
         return [{"id": m.get("id", ""), "telechargements": int(m.get("downloads") or 0), "likes": int(m.get("likes") or 0)} for m in lus if RE_REPO.match(str(m.get("id", "")))]
@@ -1280,6 +1285,8 @@ class MoteurLlamaCpp(MoteurOpenAI):
             raise ErreurMoteur(_t("Nom de dépôt invalide (attendu : auteur/nom)."))
         try:
             lus = (http_json or _http_json)("{}/{}/tree/main".format(API_HF, repo))
+        except _offline.OfflineError:
+            raise
         except (urllib.error.URLError, OSError, ValueError) as e:
             raise ErreurMoteur(_t("Hugging Face ne répond pas : {}").format(e))
         sortie = []
@@ -1835,6 +1842,7 @@ def _http_json(url, delai=20, pauses=(2, 5)):
     entetes = {"Accept": "application/json", "User-Agent": "Lutin"}
     from . import github as _github
     entetes.update(_github.headers_for(url))          # le compte GitHub (variable GITHUB_TOKEN ou réglages) : seulement pour l'API de GitHub, il relève la limite de requêtes
+    _offline.guard(url)          # strict offline mode: Hugging Face and GitHub are refused here, before any connection (the old library route checked it, the new family did not)
     req = urllib.request.Request(url, headers=entetes)
     for pause in (*pauses, None):
         try:

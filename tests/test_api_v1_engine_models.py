@@ -7,7 +7,7 @@ from unittest import mock
 
 import test_api_v1 as V  # its temporary folders, its server and its callers (imported as a module: its tests do not run here)
 
-from lutin import agent, engines, managed_models, model_compat, model_discovery, model_fit, model_sources, model_variants  # noqa: E402
+from lutin import agent, api_v1, engines, managed_models, model_compat, model_discovery, model_fit, model_sources, model_variants  # noqa: E402
 
 A = V.A
 ENTRY_KEYS = ["approximate", "download", "fit", "has_variants", "id", "in_use", "incomplete", "installed", "name", "removable", "revision", "size_gb", "summary"]
@@ -153,6 +153,32 @@ class LlamaCpp(InUse):
             self.assertEqual((status, tasks), (202, [("llamacpp", "telecharger")]))
             status, answer = V.call("POST", "/api/v1/engines/llamacpp/models/downloads", V.OWNER, {"ref": "owner/Model-GGUF", "confirm": True})
         self.assertEqual((status, answer["error"]["code"]), (400, "action_impossible"), "a file must be chosen first")
+
+    def test_the_machine_not_yet_detected_gives_no_verdict_but_still_lists_the_files(self):
+        """Kept from the old /engines/{id}/library/files (ADR 0020, stage 4): the profile is not measured here (InUse)."""
+        status, answer = get("/engines/llamacpp/models/variants?ref=owner/Model-GGUF")
+        self.assertEqual(status, 200, answer)
+        self.assertTrue(answer["variants"] and all(v["fit"] is None for v in answer["variants"]), answer)
+
+    def test_strict_offline_mode_searches_the_catalogue_only_and_refuses_the_files_and_the_download(self):
+        """Kept from the old /engines/{id}/library (ADR 0020, stage 4), which refused all three offline. The new search still gives the catalogue of Lutin, which is local;
+        Hugging Face is not asked (before this, it was: the new family had lost the check)."""
+        asked = []
+        with mock.patch.object(engines.ENGINES["llamacpp"], "chercher_modeles", lambda words: asked.append(words) or []),                 mock.patch.object(model_sources._offline, "is_active", lambda *a, **k: True), mock.patch.dict(engines.CONTEXT, hors_ligne=lambda: True),                 mock.patch.object(api_v1._offline, "is_active", return_value=True):
+            status, answer = get("/engines/llamacpp/models/search?q=model")
+            self.assertEqual((status, asked), (200, []), answer)
+            self.assertTrue(all(not m["download"]["possible"] for m in answer["models"]), "nothing can be downloaded offline")
+            for method, path, body in (("GET", "/api/v1/engines/llamacpp/models/variants?ref=owner/Model-GGUF", None),
+                                       ("POST", "/api/v1/engines/llamacpp/models/downloads", {"ref": "owner/Model-GGUF", "revision": "Model-Q4_K_M.gguf", "confirm": True})):
+                status, answer = V.call(method, path, V.OWNER, body)
+                self.assertEqual((status, answer.get("error", {}).get("code")), (409, "offline"), path)
+
+    def test_hugging_face_is_not_reached_in_strict_offline_mode(self):
+        """The request itself is refused before any connection (`llamacpp_engine._http_json` calls `offline.guard`)."""
+        from lutin import llamacpp_engine, offline
+        with mock.patch.object(offline, "is_active", lambda *a, **k: True), mock.patch.object(llamacpp_engine.urllib.request, "urlopen", side_effect=AssertionError("no connection")):
+            with self.assertRaises(offline.OfflineError):
+                llamacpp_engine._http_json("https://huggingface.co/api/models?search=x")
 
 
 class Managed(InUse):

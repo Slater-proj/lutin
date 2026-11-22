@@ -159,7 +159,8 @@ class CatalogueSource(ModelSource):
                 found.append(entry(model["id"], model["nom"], size_gb=model["go"], fit=fit, installed=model["id"] in installed, summary=model.get("phrase", ""), can=can,
                                    has_variants=self.engine.id == _engines.OLLAMA))
         more = False
-        library = self._library(words, page, installed, order, capability)
+        offline = _offline.is_active() or _engines.CONTEXT["hors_ligne"]()
+        library = None if offline else self._library(words, page, installed, order, capability)          # offline: the catalogue only, nothing asked of ollama.com or Hugging Face
         if library is not None:
             listed = {model["id"] for model in found}          # a model of the catalogue is not given again by the library
             found.extend(model for model in library["models"] if model["id"] not in listed)
