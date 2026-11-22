@@ -283,6 +283,13 @@ class Conversations(unittest.TestCase):
                          "a mission keeps its name")
         self.assertEqual(call("POST", "/api/v1/conversations/nope0000/ai-title", OWNER, body={})[0], 404)
 
+    def test_the_map_of_the_project_is_rebuilt_on_demand(self):
+        """« /plan » of the old page (parity): the rebuild starts in the background and the answer comes at once."""
+        with mock.patch.object(api_v1._m, "refresh_plan") as refresh:
+            self.assertEqual(call("POST", "/api/v1/projects/map/refresh", OWNER, body={}), (202, {"started": True}))
+        refresh.assert_called_once_with(force=True)
+        self.assertEqual(call("POST", "/api/v1/projects/map/refresh", {}, body={})[0], 401)
+
     def test_a_conversation_that_is_answering_cannot_be_renamed_or_deleted(self):
         identifier = call("POST", "/api/v1/conversations", OWNER, body={})[1]["id"]
         stop = threading.Event()

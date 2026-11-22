@@ -1455,7 +1455,7 @@ class Chat(unittest.TestCase):
 
         type_in = "(() => { const box = document.querySelector('#message'); box.value = %s; box.dispatchEvent(new Event('input', {bubbles: true})); })()"
         p.evaluer(type_in % js("/co"))
-        p.attendre("document.querySelectorAll('.slash li').length === 2")
+        p.attendre("document.querySelectorAll('.slash li').length === 3")          # compact, commands, context
         self.assertIn("/compact", p.evaluer("document.querySelector('.slash').innerText"))
         p.evaluer(type_in % js("/web off"))
         p.evaluer("document.querySelector('#message').dispatchEvent(new KeyboardEvent('keydown', {key: 'Enter', bubbles: true}))")

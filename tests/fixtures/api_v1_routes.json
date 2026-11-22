@@ -990,6 +990,11 @@
   "right": "configurator"
  },
  {
+  "method": "POST",
+  "path": "/api/v1/projects/map/refresh",
+  "right": "session"
+ },
+ {
   "method": "DELETE",
   "path": "/api/v1/projects/{id}",
   "right": "configurator"

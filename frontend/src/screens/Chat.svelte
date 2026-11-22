@@ -549,7 +549,8 @@
     }
     const arg = parsed.arg;
     const flag = onOff(arg);
-    const option = { think: "thinking", web: "web", files: "auto_approve_writes", commands: "auto_approve_commands" } as const;
+    const option = { think: "thinking", web: "web", files: "auto_approve_writes", commands: "auto_approve_commands", dryrun: "dry_run" } as const;
+    const here = id && !where; // a conversation of this machine is open
     switch (parsed.command) {
       case "help":
         draft = "";
@@ -598,6 +599,91 @@
         await changeOptions({ mode: mode as ConversationOptions["mode"] });
         return done(t("slash.set", t(("opt.mode." + mode) as MessageKey)));
       }
+      case "rename":
+        if (!conversation) return done(t("slash.no_conversation"));
+        if (!arg) return done(), startRename();
+        titleDraft = arg;
+        renaming = true;
+        done();
+        await saveRename();
+        return;
+      case "pin":
+        if (!conversation) return done(t("slash.no_conversation"));
+        done();
+        await togglePin();
+        return;
+      case "delete":
+        if (!conversation) return done(t("slash.no_conversation"));
+        done();
+        await remove(conversation, where);
+        return;
+      case "undo":
+        if (!here) return done(t("slash.no_conversation"));
+        await guarded(async () => {
+          const changes = await api<{ files: unknown[] }>("GET", `/conversations/${encodeURIComponent(id)}/changes`);
+          if (!changes.files?.length) return done(t("slash.no_changes"));
+          if (!confirm(t("slash.undo_confirm"))) return done();
+          const undone = await api<{ restored: string[] }>("POST", `/conversations/${encodeURIComponent(id)}/changes/undo`, {});
+          done(t("slash.undone", undone.restored.join(", ")));
+          changesTick += 1;
+          await reloadConversation();
+        });
+        return;
+      case "changes":
+        if (!here) return done(t("slash.no_conversation"));
+        done(t("slash.review_here"));
+        document.querySelector(".changes")?.scrollIntoView({ block: "center" });
+        return;
+      case "export":
+      case "handover":
+        if (!here) return done(t("slash.no_conversation"));
+        toolsOpen = true;
+        return done(t("slash.tools_opened"));
+      case "recall":
+        if (!arg) return done(t("slash.expected", t("slash.d.recall")));
+        await guarded(async () => {
+          const found = await api<{ passages: { title: string; extract: string }[] }>("GET", "/documents/search?q=" + encodeURIComponent(arg));
+          done(found.passages.length ? found.passages.slice(0, 5).map((passage) => "• " + passage.title + " — " + passage.extract).join("\n") : t("slash.recall_none", arg));
+        });
+        return;
+      case "plan":
+        await guarded(async () => {
+          await api("POST", "/projects/map/refresh", {});
+          done(t("slash.plan_started"));
+        });
+        return;
+      case "context":
+        return done(meterContext ? t("chat.tokens", meterContext.used, meterContext.total) + (meterSpeed ? " · " + t("chat.speed", meterSpeed) : "") : t("slash.context_unknown"));
+      case "test":
+        await guarded(async () => {
+          const checked = await api<{ ok: boolean; checks: { name: string; ok: boolean }[] }>("POST", "/health/self-test", {});
+          const failed = checked.checks.filter((check) => !check.ok).map((check) => check.name);
+          done(failed.length ? t("slash.test_failed", failed.join(", ")) : t("slash.test_ok", checked.checks.length));
+        });
+        return;
+      case "vram":
+        await guarded(async () => done((await api<{ message: string }>("POST", "/health/free-graphics-memory", {})).message));
+        return;
+      case "speed":
+        done(t("slash.speed_here"));
+        location.hash = "#/models";
+        return;
+      case "access":
+        done();
+        location.hash = "#/settings/devices";
+        return;
+      case "memory":
+        done();
+        location.hash = "#/settings/knowledge";
+        return;
+      case "settings":
+        done();
+        location.hash = "#/settings";
+        return;
+      case "models":
+        done();
+        location.hash = "#/models";
+        return;
       default:
         if (flag === null) return done(t("slash.expected", "on, off"));
         await changeOptions({ [option[parsed.command]]: flag });
@@ -1694,6 +1780,7 @@
   }
 
   .command-notice {
+    white-space: pre-line; /* « /recall » lists one passage per line */
     margin: 0;
     color: var(--color-accent-text);
     font-size: var(--text-sm);

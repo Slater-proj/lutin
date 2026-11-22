@@ -22,10 +22,19 @@ describe("the commands typed in the Chat", () => {
   });
 
   it("are suggested while the name is typed", () => {
-    expect(suggest("/co").map((s) => s.name)).toEqual(["compact", "commands"]);
-    expect(suggest("/re", ["review"]).map((s) => [s.name, s.project])).toEqual([["retry", false], ["think", false], ["review", true]]); // « reflexion » is an alias of think
+    expect(suggest("/co").map((s) => s.name)).toEqual(["compact", "commands", "context"]);
+    expect(suggest("/ret", ["review"]).map((s) => [s.name, s.project])).toEqual([["retry", false]]);
+    expect(suggest("/ref", ["refactor"]).map((s) => [s.name, s.project])).toEqual([["think", false], ["refactor", true]]); // « reflexion » is an alias of think
     expect(suggest("/web off")).toEqual([]);
     expect(suggest("hello")).toEqual([]);
+  });
+
+  it("give way to a command of the Claude project with the same name when they are only a shortcut of the old page", () => {
+    expect(parse("/test", ["test"])).toEqual({ kind: "project", name: "test", arg: "" });
+    expect(parse("/test")).toEqual({ kind: "command", command: "test", arg: "" });
+    expect(parse("/compact", ["compact"])).toEqual({ kind: "command", command: "compact", arg: "" }); // a command of Lutin itself still wins
+    expect(parse("/rappeler budget 2027")).toEqual({ kind: "command", command: "recall", arg: "budget 2027" });
+    expect(parse("/revue")).toEqual({ kind: "command", command: "changes", arg: "" });
   });
 
   it("read on/off in both languages", () => {

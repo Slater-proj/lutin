@@ -2111,6 +2111,14 @@ def add_project(request):
     return 201, _projects_view()
 
 
+@route("POST", "/projects/map/refresh", SESSION)
+def refresh_project_map(request):
+    """Rebuilds the map of the project (its files and functions, what the model reads to find its way) in the background now, as « /plan » did on the old
+    page. Answers 202 at once; a rebuild already running is left to end."""
+    _m.refresh_plan(force=True)
+    return 202, {"started": True}
+
+
 @route("GET", "/projects/folders", CONFIGURATOR)
 def browse_folders(request):
     """The sub-folders of `?path=` (never files), sorted, with the `parent` to go up. Without a path: the starting points (home, documents, drives) and an empty `parent`. Refused with the reason when the folder cannot be read. For the person at this machine only: it shows the disk."""

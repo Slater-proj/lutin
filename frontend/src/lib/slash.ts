@@ -2,9 +2,12 @@
 // tested in slash.test.ts: what is typed becomes a known command with its argument, or a command of the project, or nothing. The French names of the
 // old page are kept as aliases, so a habit does not break.
 
-export type CommandName = "help" | "new" | "compact" | "stop" | "retry" | "git" | "health" | "model" | "mode" | "think" | "web" | "files" | "commands";
+export type CommandName =
+  | "help" | "new" | "compact" | "stop" | "retry" | "git" | "health" | "model" | "mode" | "think" | "web" | "files" | "commands"
+  | "dryrun" | "rename" | "pin" | "delete" | "undo" | "changes" | "export" | "handover" | "recall" | "plan" | "context" | "test" | "vram" | "speed"
+  | "access" | "memory" | "settings" | "models";
 
-export type Command = { name: CommandName; aliases: readonly string[]; arg?: string };
+export type Command = { name: CommandName; aliases: readonly string[]; arg?: string; soft?: boolean };
 
 export const COMMANDS: readonly Command[] = [
   { name: "help", aliases: ["aide", "?"] },
@@ -20,6 +23,26 @@ export const COMMANDS: readonly Command[] = [
   { name: "web", aliases: [], arg: "on|off" },
   { name: "files", aliases: ["fichiers", "accord"], arg: "on|off" },
   { name: "commands", aliases: ["commandes"], arg: "on|off" },
+  // The other commands of the old page (parity, 2026-11-22), most of them a shortcut to what a button already does. `soft`: a command of the Claude
+  // project with the same name (« /test », « /plan » are common there) wins over it. « /memoire » is not one of them: ADR 0019 took it away.
+  { name: "dryrun", aliases: ["essai"], arg: "on|off", soft: true },
+  { name: "rename", aliases: ["renommer"], arg: "title", soft: true },
+  { name: "pin", aliases: ["epingler"], soft: true },
+  { name: "delete", aliases: ["supprimer"], soft: true },
+  { name: "undo", aliases: ["annuler"], soft: true },
+  { name: "changes", aliases: ["revue"], soft: true },
+  { name: "export", aliases: [], soft: true },
+  { name: "handover", aliases: ["resume", "reprise"], soft: true },
+  { name: "recall", aliases: ["rappeler"], arg: "words", soft: true },
+  { name: "plan", aliases: [], soft: true },
+  { name: "context", aliases: ["contexte"], soft: true },
+  { name: "test", aliases: [], soft: true },
+  { name: "vram", aliases: [], soft: true },
+  { name: "speed", aliases: ["pc"], soft: true },
+  { name: "access", aliases: ["acces"], soft: true },
+  { name: "memory", aliases: [], soft: true },
+  { name: "settings", aliases: ["reglages"], soft: true },
+  { name: "models", aliases: ["modeles"], soft: true },
 ];
 
 /** The French mode names of the old page, and the v1 ones. */
@@ -46,8 +69,8 @@ export function parse(text: string, projectCommands: readonly string[] = []): Pa
   const name = (space < 0 ? typed.slice(1) : typed.slice(1, space)).toLowerCase();
   const arg = space < 0 ? "" : typed.slice(space + 1).trim();
   const known = COMMANDS.find((command) => command.name === name || command.aliases.includes(name));
-  if (known) return { kind: "command", command: known.name, arg };
   const project = projectCommands.find((command) => command.toLowerCase() === name);
+  if (known && !(known.soft && project)) return { kind: "command", command: known.name, arg };
   if (project) return { kind: "project", name: project, arg };
   return { kind: "unknown", name };
 }
