@@ -1481,6 +1481,35 @@ class Assistant(unittest.TestCase):
             _dialogue.TEMPLATE_WITHOUT_TOOLS.clear()
             (TEMP / "donnees" / "gabarits.json").unlink(missing_ok=True)
 
+    def test_un_modele_sans_outils_qui_voit_recoit_les_images(self):
+        """Revue de l'étape 7 : un modèle dont le gabarit refuse les outils reçoit la requête « aplatie » (texte seul) ; ses images étaient perdues en route,
+        sans un mot, même quand il voit."""
+        from lutin import agent as _dialogue, images
+        png = b"\x89PNG\r\n\x1a\n" + bytes(range(42))
+        ident = images.save(png)
+        ident = ident[0] if isinstance(ident, tuple) else ident
+        INSTALLES.append("qwen3-vl:8b")
+        CAPACITES_FAUX["qwen3-vl:8b"] = ["completion", "vision"]
+        A.CAPABILITIES.pop("qwen3-vl:8b", None)
+        A.save_settings({"modele": "qwen3-vl:8b"})
+        _dialogue.TEMPLATE_WITHOUT_TOOLS.clear()
+        _dialogue.TEMPLATE_WITHOUT_TOOLS.add("qwen3-vl:8b")
+        try:
+            chat("Que montre cette image ?", images=[ident], reponses=[[{"content": "Un dégradé."}]])
+            corps = RECUES[-1]
+            self.assertNotIn("tools", corps)
+            demande = [m for m in corps["messages"] if m["role"] == "user"][-1]
+            self.assertIn("Que montre cette image", demande["content"])
+            self.assertEqual(demande.get("images"), [base64.b64encode(png).decode("ascii")], "l'image arrive aussi en requête aplatie")
+            self.assertFalse(any(images.CURRENT in m for m in corps["messages"]))
+        finally:
+            _dialogue.TEMPLATE_WITHOUT_TOOLS.clear()
+            (TEMP / "donnees" / "gabarits.json").unlink(missing_ok=True)
+            INSTALLES.remove("qwen3-vl:8b")
+            CAPACITES_FAUX.pop("qwen3-vl:8b", None)
+            A.CAPABILITIES.pop("qwen3-vl:8b", None)
+            A.save_settings({"modele": "qwen3.8:27b"})
+
     def test_aplatir_sans_outils_garde_ce_que_le_modele_a_lu_et_alterne_les_roles(self):
         from lutin import agent as _dialogue
         plat = _dialogue.flatten_without_tools({"model": "m", "tools": [{"x": 1}], "messages": [

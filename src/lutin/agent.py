@@ -74,7 +74,8 @@ def record_template(modele):
 
 def flatten_without_tools(corps):
     """Le même échange sans outils ni rôle « tool » : un résultat d'outil devient un message de l'utilisateur, un appel d'outil une phrase, et deux messages de même rôle à la suite sont fusionnés
-    (les gabarits les plus stricts exigent l'alternance utilisateur / assistant). Ce que le modèle a lu reste donc sous ses yeux, en texte."""
+    (les gabarits les plus stricts exigent l'alternance utilisateur / assistant). Ce que le modèle a lu reste donc sous ses yeux, en texte.
+    Les images d'un message (et la marque de la demande en cours) le suivent : avant, un modèle sans outils qui voit ne les recevait jamais."""
     sortie = []
     for m in corps.get("messages", []):
         role, texte = m.get("role"), str(m.get("content") or "")
@@ -85,10 +86,15 @@ def flatten_without_tools(corps):
             texte = (texte + "\n" if texte else "") + "[" + _t("Appel de l'outil") + " " + appels + "]"
         elif role not in ("system", "user", "assistant"):
             role = "user"
+        garde = {k: m[k] for k in ("images", _images.CURRENT) if m.get(k)}
         if sortie and sortie[-1]["role"] == role and role != "system":
             sortie[-1]["content"] += "\n\n" + texte
+            if garde.get("images"):
+                sortie[-1]["images"] = list(sortie[-1].get("images") or []) + list(garde["images"])
+            if garde.get(_images.CURRENT):
+                sortie[-1][_images.CURRENT] = True
         else:
-            sortie.append({"role": role, "content": texte})
+            sortie.append(dict({"role": role, "content": texte}, **garde))
     return {k: v for k, v in dict(corps, messages=sortie).items() if k != "tools"}
 
 
