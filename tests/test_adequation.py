@@ -77,14 +77,11 @@ class Appreciation(unittest.TestCase):
 class TaillesEcrites(unittest.TestCase):
     def test_les_tailles_suivent_la_langue_de_la_page(self):
         """The page writes « 22,6 Go » in French: the sentences of the verdict write their sizes the same way (« 13,2 Go d'experts »), and with a point in English."""
-        from lutin import i18n
-        try:
-            i18n.force("fr")
+        from unittest import mock
+        with mock.patch.dict(os.environ, {"LUTIN_LANGUE": "fr"}):          # the tests fix the language by this variable (tests/context.py)
             self.assertEqual((model_fit._gb(13.24), model_fit._gb(20)), ("13,2", "20,0"))
-            i18n.force("en")
+        with mock.patch.dict(os.environ, {"LUTIN_LANGUE": "en"}):
             self.assertEqual(model_fit._gb(13.24), "13.2")
-        finally:
-            i18n.force(None)
 
 
 class ProfilAttendu(unittest.TestCase):
