@@ -73,12 +73,12 @@ class Base(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="lutin-machines-t-"))
         quiet_node.quiet(self)
-        machines.DOSSIER = self.tmp
+        machines.FOLDER = self.tmp
         machines.CODES.clear()
-        machines.SONDES.clear()
-        machines.DERNIER_ETAT.clear()
+        machines.PROBES.clear()
+        machines.LAST_STATE.clear()
         A.PIN_LIMITER.evenements.clear()
-        machines.REGISTRE.update(t=0.0)
+        machines.REGISTRY.update(t=0.0)
         self.noeud = FauxNoeud()
         self.avant = (A.SECURITY, A.DEVICES)
         A.SECURITY = S.Security()
@@ -101,12 +101,12 @@ class Base(unittest.TestCase):
         self.p_moteur.stop()
         self.p_reglages.stop()
         A.SECURITY, A.DEVICES = self.avant
-        machines.DOSSIER = None
+        machines.FOLDER = None
 
     def jumeler(self):
-        machines.noeud_activer(True)
-        code = machines.noeud_nouveau_code()["code"]
-        return machines.ajouter(self.adresse, code, "Poste")
+        machines.node_enable(True)
+        code = machines.node_new_code()["code"]
+        return machines.add(self.adresse, code, "Poste")
 
     def http(self, methode, chemin, corps=None, en_tetes=None):
         c = http.client.HTTPConnection("127.0.0.1", self.port, timeout=10)
@@ -117,62 +117,62 @@ class Base(unittest.TestCase):
 
 class Appairage(Base):
     def test_le_noeud_est_eteint_par_defaut_et_refuse_le_niveau_local(self):
-        self.assertFalse(machines.noeud_actif())
+        self.assertFalse(machines.node_active())
         with self.assertRaises(ValueError):
-            machines.noeud_activer(True, niveau_local=True)
-        self.assertFalse(machines.noeud_actif())
+            machines.node_enable(True, niveau_local=True)
+        self.assertFalse(machines.node_active())
 
     def test_un_code_est_a_usage_unique_et_expire(self):
-        machines.noeud_activer(True)
-        code = machines.noeud_nouveau_code()["code"]
-        machines.noeud_echanger(code, "Petit PC")
+        machines.node_enable(True)
+        code = machines.node_new_code()["code"]
+        machines.node_exchange(code, "Petit PC")
         with self.assertRaises(ValueError):
-            machines.noeud_echanger(code, "Petit PC")
-        autre = machines.noeud_nouveau_code()["code"]
-        plus_tard = time.time() + machines.DUREE_CODE_S + 5
+            machines.node_exchange(code, "Petit PC")
+        autre = machines.node_new_code()["code"]
+        plus_tard = time.time() + machines.CODE_TTL_S + 5
         with mock.patch.object(machines.time, "time", lambda: plus_tard):
             with self.assertRaises(ValueError):
-                machines.noeud_echanger(autre, "Petit PC")
+                machines.node_exchange(autre, "Petit PC")
 
     def test_un_noeud_eteint_n_accepte_personne(self):
-        code = machines.noeud_nouveau_code()["code"]
+        code = machines.node_new_code()["code"]
         with self.assertRaises(ValueError):
-            machines.noeud_echanger(code, "Petit PC")
+            machines.node_exchange(code, "Petit PC")
 
     def test_ajouter_par_le_reseau_ne_garde_pas_le_jeton_dans_la_vue(self):
         m = self.jumeler()
         self.assertEqual(m["nom"], "Poste")
         self.assertNotIn("jeton", m)
-        self.assertTrue(machines.lire()[0]["jeton"], "le jeton est gardé, jamais montré")
-        self.assertEqual(machines.lire()[0]["id"], machines.noeud()["id"])
+        self.assertTrue(machines.read()[0]["jeton"], "le jeton est gardé, jamais montré")
+        self.assertEqual(machines.read()[0]["id"], machines.node()["id"])
 
     def test_un_mauvais_code_est_refuse(self):
-        machines.noeud_activer(True)
+        machines.node_enable(True)
         with self.assertRaises(ValueError) as e:
-            machines.ajouter(self.adresse, "0000-0000", "X")
+            machines.add(self.adresse, "0000-0000", "X")
         self.assertIn("refusé", str(e.exception))
-        self.assertEqual(machines.lire(), [])
+        self.assertEqual(machines.read(), [])
 
     def test_le_jeton_est_garde_hache_sur_le_noeud(self):
         m = self.jumeler()
-        jeton = machines.lire()[0]["jeton"]
+        jeton = machines.read()[0]["jeton"]
         brut = (self.tmp / "noeud.json").read_text(encoding="utf-8")
         self.assertNotIn(jeton, brut)
-        self.assertEqual(machines.noeud_jeton_valide(jeton), "Poste" if False else machines.noeud()["jetons"][0]["nom"])
+        self.assertEqual(machines.node_token_valid(jeton), "Poste" if False else machines.node()["jetons"][0]["nom"])
         self.assertIsNotNone(m)
 
     def test_adresses(self):
-        self.assertEqual(machines.normaliser_adresse("192.168.1.20"), "http://192.168.1.20:8777")
-        self.assertEqual(machines.normaliser_adresse("https://poste:9000/x"), "https://poste:9000")
+        self.assertEqual(machines.normalize_address("192.168.1.20"), "http://192.168.1.20:8777")
+        self.assertEqual(machines.normalize_address("https://poste:9000/x"), "https://poste:9000")
         for mauvaise in ("", "ftp://a", "http://user:mdp@a", "http://"):
             with self.assertRaises(ValueError):
-                machines.normaliser_adresse(mauvaise)
+                machines.normalize_address(mauvaise)
 
 
 class Portee(Base):
     def test_le_jeton_de_noeud_n_ouvre_que_le_noeud(self):
         self.jumeler()
-        jeton = machines.lire()[0]["jeton"]
+        jeton = machines.read()[0]["jeton"]
         statut, _ = self.http("GET", "/api/noeud/etat", en_tetes={"X-Noeud": jeton})
         self.assertEqual(statut, 200)
         for chemin in ("/api/etat", "/api/machines", "/api/memoire", "/api/ressources"):
@@ -188,150 +188,150 @@ class Portee(Base):
 
     def test_revoquer_coupe_l_acces(self):
         self.jumeler()
-        jeton = machines.lire()[0]["jeton"]
-        nom = machines.noeud()["jetons"][0]["nom"]
-        machines.noeud_revoquer(nom)
+        jeton = machines.read()[0]["jeton"]
+        nom = machines.node()["jetons"][0]["nom"]
+        machines.node_revoke(nom)
         self.assertEqual(self.http("GET", "/api/noeud/etat", en_tetes={"X-Noeud": jeton})[0], 401)
 
     def test_le_corps_est_reduit_a_ce_que_le_noeud_transmet(self):
-        r = machines.corps_autorise({"model": "m", "messages": [], "options": {"num_ctx": 4096}, "evil": "rm -rf", "images": ["x"]})
+        r = machines.allowed_body({"model": "m", "messages": [], "options": {"num_ctx": 4096}, "evil": "rm -rf", "images": ["x"]})
         self.assertEqual(sorted(r), ["messages", "model", "options"])
         with self.assertRaises(ValueError):
-            machines.corps_autorise({"model": 3, "messages": []})
+            machines.allowed_body({"model": 3, "messages": []})
 
 
 class Etats(Base):
     def test_operationnel(self):
         m = self.jumeler()
-        r = machines.sonder(machines.trouver(m["id"]), "m1", force=True)
+        r = machines.probe(machines.find(m["id"]), "m1", force=True)
         self.assertEqual(r["etat"], "operationnel")
 
     def test_joignable_si_le_modele_manque(self):
         m = self.jumeler()
-        r = machines.sonder(machines.trouver(m["id"]), "inconnu", force=True)
+        r = machines.probe(machines.find(m["id"]), "inconnu", force=True)
         self.assertEqual(r["etat"], "joignable")
         self.assertIn("inconnu", r["detail"])
 
     def test_le_modele_local_n_est_cherche_que_sur_la_machine_choisie(self):
         m = self.jumeler()
-        etat = lambda **kw: machines.etats("inconnu", **kw)[0]["etat"]          # noqa: E731
-        machines.SONDES.clear()
+        etat = lambda **kw: machines.states("inconnu", **kw)[0]["etat"]          # noqa: E731
+        machines.PROBES.clear()
         self.assertEqual(etat(), "operationnel")
-        machines.SONDES.clear()
+        machines.PROBES.clear()
         self.assertEqual(etat(choisie=m["id"]), "joignable")
 
     def test_l_onglet_machines_suit_le_reglage_ou_les_machines_appairees(self):
-        self.assertFalse(machines.cluster_actif(None))          # rien d'appairé, rien de prêté : caché
-        self.assertTrue(machines.cluster_actif(True))
+        self.assertFalse(machines.cluster_active(None))          # rien d'appairé, rien de prêté : caché
+        self.assertTrue(machines.cluster_active(True))
         self.jumeler()
-        self.assertTrue(machines.cluster_actif(None))          # une machine appairée : visible tout seul
-        self.assertFalse(machines.cluster_actif(False))          # le réglage explicite l'emporte
+        self.assertTrue(machines.cluster_active(None))          # une machine appairée : visible tout seul
+        self.assertFalse(machines.cluster_active(False))          # le réglage explicite l'emporte
 
     def test_une_machine_qui_ne_repond_plus_disparait_des_listes(self):
         m = self.jumeler()
-        machines.DISTANTS.update(t=machines.time.monotonic(), v=[{"id": m["id"], "nom": "x", "etat": "operationnel", "modeles": ["m1"]}])
+        machines.REMOTES.update(t=machines.time.monotonic(), v=[{"id": m["id"], "nom": "x", "etat": "operationnel", "modeles": ["m1"]}])
         machines.CONVERSATIONS.update(t=machines.time.monotonic(), v=[{"machine": m["id"], "machine_nom": "x", "id": "a" * 8, "titre": "T", "maj": "", "messages": 1}])
-        machines.DERNIER_ETAT[m["id"]] = "operationnel"
-        machines.SONDES[m["id"]] = (machines.time.monotonic(), {}, "")
-        self.assertEqual(len(machines.modeles_distants()), 1)
+        machines.LAST_STATE[m["id"]] = "operationnel"
+        machines.PROBES[m["id"]] = (machines.time.monotonic(), {}, "")
+        self.assertEqual(len(machines.remote_models()), 1)
         self.noeud.actif = False
-        machines.signaler_panne(machines.trouver(m["id"]))
-        self.assertEqual(machines.modeles_distants(), [])
-        self.assertEqual(machines.conversations_distantes(), [])
+        machines.report_failure(machines.find(m["id"]))
+        self.assertEqual(machines.remote_models(), [])
+        self.assertEqual(machines.remote_conversations(), [])
 
     def test_une_machine_eteinte_sans_personne_pour_la_sonder_disparait_quand_meme(self):
         m = self.jumeler()
-        machines.DISTANTS.update(t=machines.time.monotonic(), v=[{"id": m["id"], "nom": "x", "etat": "operationnel", "modeles": ["m1"]}])
+        machines.REMOTES.update(t=machines.time.monotonic(), v=[{"id": m["id"], "nom": "x", "etat": "operationnel", "modeles": ["m1"]}])
         machines.CONVERSATIONS.update(t=machines.time.monotonic(), v=[{"machine": m["id"], "machine_nom": "x", "id": "a" * 8, "titre": "T", "maj": "", "messages": 1}])
-        machines.DERNIER_ETAT[m["id"]] = "operationnel"
-        machines.SONDES[m["id"]] = (machines.time.monotonic() - machines.FRAICHEUR_S - 1, {}, "")          # dernière réponse trop ancienne
-        with mock.patch.object(machines, "veiller", lambda attente=False: None):          # « sans personne pour la sonder » : aucune sonde ne part en arrière-plan pendant le constat
-            self.assertEqual(machines.modeles_distants(), [])
-            self.assertEqual(machines.conversations_distantes(), [])
-            self.assertEqual(machines.hors_ligne(), [machines.trouver(m["id"])["nom"]])
-        machines.SONDES[m["id"]] = (machines.time.monotonic(), {}, "")          # elle répond de nouveau
-        self.assertEqual(len(machines.modeles_distants()), 1)
-        self.assertEqual(machines.hors_ligne(), [])
+        machines.LAST_STATE[m["id"]] = "operationnel"
+        machines.PROBES[m["id"]] = (machines.time.monotonic() - machines.FRESHNESS_S - 1, {}, "")          # dernière réponse trop ancienne
+        with mock.patch.object(machines, "watch", lambda attente=False: None):          # « sans personne pour la sonder » : aucune sonde ne part en arrière-plan pendant le constat
+            self.assertEqual(machines.remote_models(), [])
+            self.assertEqual(machines.remote_conversations(), [])
+            self.assertEqual(machines.offline_names(), [machines.find(m["id"])["nom"]])
+        machines.PROBES[m["id"]] = (machines.time.monotonic(), {}, "")          # elle répond de nouveau
+        self.assertEqual(len(machines.remote_models()), 1)
+        self.assertEqual(machines.offline_names(), [])
 
     def test_la_veille_sonde_les_machines_sans_la_page_machines(self):
         m = self.jumeler()
-        machines.SONDES.clear()
-        machines.veiller(attente=True)
-        self.assertIn(m["id"], machines.SONDES)
-        self.assertEqual(machines.DERNIER_ETAT[m["id"]], "operationnel")
+        machines.PROBES.clear()
+        machines.watch(attente=True)
+        self.assertIn(m["id"], machines.PROBES)
+        self.assertEqual(machines.LAST_STATE[m["id"]], "operationnel")
         self.noeud.actif = False
-        machines.SONDES[m["id"]] = (machines.time.monotonic() - machines.FRAICHEUR_S, {}, "")
-        machines.veiller(attente=True)
-        self.assertEqual(machines.DERNIER_ETAT[m["id"]], "joignable")
+        machines.PROBES[m["id"]] = (machines.time.monotonic() - machines.FRESHNESS_S, {}, "")
+        machines.watch(attente=True)
+        self.assertEqual(machines.LAST_STATE[m["id"]], "joignable")
 
     def test_desactiver_le_mode_vide_les_listes_distantes(self):
         m = self.jumeler()
-        machines.DISTANTS.update(t=1.0, v=[{"id": m["id"], "nom": "x", "etat": "operationnel", "modeles": ["m1"]}])
+        machines.REMOTES.update(t=1.0, v=[{"id": m["id"], "nom": "x", "etat": "operationnel", "modeles": ["m1"]}])
         machines.CONVERSATIONS.update(t=1.0, v=[{"machine": m["id"]}])
-        machines.vider_listes()
-        self.assertEqual((machines.DISTANTS["v"], machines.CONVERSATIONS["v"]), ([], []))
+        machines.clear_lists()
+        self.assertEqual((machines.REMOTES["v"], machines.CONVERSATIONS["v"]), ([], []))
 
     def test_les_etapes_d_une_machine(self):
         m = self.jumeler()
-        h = machines.trouver(m["id"])
-        machines.SONDES.clear()
-        r = machines.sonder(h, "", force=True)
+        h = machines.find(m["id"])
+        machines.PROBES.clear()
+        r = machines.probe(h, "", force=True)
         self.assertEqual(r["etape"], "synchro")          # elle répond, mais ses modèles et conversations ne sont pas encore relus
-        machines._synchro_fait("modeles", [m["id"]])
-        machines._synchro_fait("conv", [m["id"]])
-        self.assertEqual(machines.sonder(h, "", force=True)["etape"], "pret")
+        machines._sync_done("modeles", [m["id"]])
+        machines._sync_done("conv", [m["id"]])
+        self.assertEqual(machines.probe(h, "", force=True)["etape"], "pret")
         self.noeud.actif = False
-        self.assertEqual(machines.sonder(h, "", force=True)["etape"], "lutin")          # Lutin répond, le moteur est arrêté
+        self.assertEqual(machines.probe(h, "", force=True)["etape"], "lutin")          # Lutin répond, le moteur est arrêté
 
     def test_l_extinction_se_suit_puis_la_machine_est_eteinte(self):
         m = self.jumeler()
-        h = machines.trouver(m["id"])
-        machines.ARRET[m["id"]] = machines.time.monotonic()
-        machines.SYNCHRO[m["id"]] = {"modeles": True, "conv": True}
-        r = machines.sonder(h, "", force=True)
+        h = machines.find(m["id"])
+        machines.SHUTDOWN[m["id"]] = machines.time.monotonic()
+        machines.SYNC[m["id"]] = {"modeles": True, "conv": True}
+        r = machines.probe(h, "", force=True)
         self.assertEqual((r["etape"], 0 < r["dans_s"] <= 30), ("extinction", True))
         self.noeud.actif = False
-        machines.signaler_panne(h)
+        machines.report_failure(h)
 
     def test_la_version_du_nœud_dit_si_lutin_n_y_est_pas_a_jour(self):
         with mock.patch("lutin.core.VERSION", "0.38.0"):
-            self.assertTrue(machines._maj_disponible("0.36.1"))
-            self.assertFalse(machines._maj_disponible("0.38.0"))
-            self.assertFalse(machines._maj_disponible("0.40.0"))
-            self.assertFalse(machines._maj_disponible(""))
+            self.assertTrue(machines._update_available("0.36.1"))
+            self.assertFalse(machines._update_available("0.38.0"))
+            self.assertFalse(machines._update_available("0.40.0"))
+            self.assertFalse(machines._update_available(""))
 
     def test_une_connexion_refusee_prouve_que_la_machine_est_allumee(self):
-        self.assertTrue(machines._hote_allume(machines.urllib.error.URLError(ConnectionRefusedError())))
-        self.assertFalse(machines._hote_allume(machines.urllib.error.URLError(TimeoutError())))
+        self.assertTrue(machines._host_on(machines.urllib.error.URLError(ConnectionRefusedError())))
+        self.assertFalse(machines._host_on(machines.urllib.error.URLError(TimeoutError())))
 
     def test_joignable_si_le_moteur_est_arrete(self):
         m = self.jumeler()
         self.noeud.actif = False
-        self.assertEqual(machines.sonder(machines.trouver(m["id"]), "m1", force=True)["etat"], "joignable")
+        self.assertEqual(machines.probe(machines.find(m["id"]), "m1", force=True)["etat"], "joignable")
 
     def test_injoignable_quand_la_machine_est_eteinte(self):
         m = self.jumeler()
         self.srv.shutdown()
         self.srv.server_close()
-        self.assertEqual(machines.sonder(machines.trouver(m["id"]), "m1", force=True)["etat"], "injoignable")
+        self.assertEqual(machines.probe(machines.find(m["id"]), "m1", force=True)["etat"], "injoignable")
 
     def test_une_autre_machine_a_la_meme_adresse_est_injoignable(self):
         m = self.jumeler()
-        n = machines.noeud()
+        n = machines.node()
         n["id"] = "f" * 32
-        machines._ecrire("noeud.json", n)
-        r = machines.sonder(machines.trouver(m["id"]), "m1", force=True)
+        machines._write("noeud.json", n)
+        r = machines.probe(machines.find(m["id"]), "m1", force=True)
         self.assertEqual(r["etat"], "injoignable")
         self.assertIn("plus la même machine", r["detail"])
 
     def test_le_journal_ne_note_que_les_changements_d_etat(self):
         m = self.jumeler()
-        mm = machines.trouver(m["id"])
+        mm = machines.find(m["id"])
         for _ in range(3):
-            machines.sonder(mm, "m1", force=True)
+            machines.probe(mm, "m1", force=True)
         self.noeud.actif = False
-        machines.sonder(mm, "m1", force=True)
-        lignes = [ligne for ligne in machines.journal() if "Poste :" in ligne]
+        machines.probe(mm, "m1", force=True)
+        lignes = [ligne for ligne in machines.read_log() if "Poste :" in ligne]
         self.assertEqual(len(lignes), 2, lignes)
 
 
@@ -341,7 +341,7 @@ class Routage(Base):
     def test_la_demande_part_chez_le_noeud_quand_il_est_operationnel(self):
         m = self.jumeler()
         local = FauxLocal()
-        mo = machines.acheminer(local, {"machine": m["id"]})
+        mo = machines.route(local, {"machine": m["id"]})
         rep = mo.chat(dict(self.CORPS), 20)
         self.assertEqual(rep["message"]["content"], "réponse du nœud")
         self.assertEqual(local.demandes, [])
@@ -353,10 +353,10 @@ class Routage(Base):
     def test_le_noeud_s_eteint_le_local_repond_sans_aucune_erreur(self):
         m = self.jumeler()
         local = FauxLocal()
-        mo = machines.acheminer(local, {"machine": m["id"]})
+        mo = machines.route(local, {"machine": m["id"]})
         self.srv.shutdown()
         self.srv.server_close()
-        machines.SONDES.clear()
+        machines.PROBES.clear()
         with mo.chat_flux(dict(self.CORPS), 20) as flux:
             texte = "".join((e.get("message") or {}).get("content", "") for e in flux)
         self.assertEqual(texte, "local", "le repli local est silencieux")
@@ -365,30 +365,30 @@ class Routage(Base):
     def test_un_modele_absent_du_noeud_reste_en_local(self):
         m = self.jumeler()
         local = FauxLocal()
-        mo = machines.acheminer(local, {"machine": m["id"]})
+        mo = machines.route(local, {"machine": m["id"]})
         mo.chat(dict(self.CORPS, model="seulement-ici"), 20)
         self.assertEqual(len(local.demandes), 1)
         self.assertEqual(self.noeud.demandes, [])
 
     def test_rien_n_est_envoye_a_une_machine_qui_n_est_plus_celle_appairee(self):
         m = self.jumeler()
-        n = machines.noeud()
+        n = machines.node()
         n["id"] = "e" * 32
-        machines._ecrire("noeud.json", n)
+        machines._write("noeud.json", n)
         local = FauxLocal()
-        mo = machines.acheminer(local, {"machine": m["id"]})
+        mo = machines.route(local, {"machine": m["id"]})
         mo.chat(dict(self.CORPS), 20)
         self.assertEqual(self.noeud.demandes, [], "aucune donnée n'est partie")
         self.assertEqual(len(local.demandes), 1)
 
     def test_sans_machine_choisie_ou_machine_retiree_le_moteur_local_est_le_seul(self):
         local = FauxLocal()
-        self.assertIs(machines.acheminer(local, {}), local)
-        self.assertIs(machines.acheminer(local, {"machine": "a" * 32}), local)
+        self.assertIs(machines.route(local, {}), local)
+        self.assertIs(machines.route(local, {"machine": "a" * 32}), local)
 
     def test_le_reste_du_moteur_reste_local(self):
         m = self.jumeler()
-        mo = machines.acheminer(FauxLocal(), {"machine": m["id"]})
+        mo = machines.route(FauxLocal(), {"machine": m["id"]})
         self.assertEqual(mo.modeles()["installes"], ["m1"])
         self.assertEqual(mo.id, "ollama")
 
@@ -398,7 +398,7 @@ class Reglage(Base):
         """Sous Windows, un fichier tenu un instant (une lecture hors du verrou pendant le remplacement, un antivirus) ne se lit pas ou ne se remplace
         pas. _lire rendait alors le défaut ({}) à une modification qui réécrivait le fichier sans le reste ; _ecrire échouait (nom temporaire commun,
         pas de nouvel essai). Les deux attendent un instant."""
-        machines._ecrire("noeud.json", {"partage": True, "nom": "atelier"})
+        machines._write("noeud.json", {"partage": True, "nom": "atelier"})
         vrai_lire, vrai_remplacer, refus = Path.read_text, os.replace, []
 
         def tenu(chemin, *a, **k):
@@ -407,7 +407,7 @@ class Reglage(Base):
                 raise PermissionError(13, "Access is denied", str(chemin))
             return vrai_lire(chemin, *a, **k)
         with mock.patch.object(Path, "read_text", tenu):
-            self.assertEqual(machines._lire("noeud.json", {}), {"partage": True, "nom": "atelier"})
+            self.assertEqual(machines._read("noeud.json", {}), {"partage": True, "nom": "atelier"})
         essais = []
 
         def remplacer(source, cible):
@@ -416,8 +416,8 @@ class Reglage(Base):
                 raise PermissionError(13, "Access is denied", str(cible))
             return vrai_remplacer(source, cible)
         with mock.patch.object(os, "replace", remplacer):
-            machines._ecrire("noeud.json", {"partage": False, "nom": "atelier"})
-        self.assertEqual(machines._lire("noeud.json", {}), {"partage": False, "nom": "atelier"})
+            machines._write("noeud.json", {"partage": False, "nom": "atelier"})
+        self.assertEqual(machines._read("noeud.json", {}), {"partage": False, "nom": "atelier"})
 
     def test_choisir_une_machine_inconnue_est_refuse(self):
         from lutin import storage
@@ -439,8 +439,8 @@ class Demandes(Base):
 
     def preparer(self):
         m = self.jumeler()
-        self.jeton = machines.trouver(m["id"])["jeton"]
-        self.nom = machines.noeud()["jetons"][0]["nom"]
+        self.jeton = machines.find(m["id"])["jeton"]
+        self.nom = machines.node()["jetons"][0]["nom"]
         return m
 
     def demander(self, droit, jeton=None):
@@ -449,7 +449,7 @@ class Demandes(Base):
     def test_une_demande_n_accorde_rien_et_attend_la_reponse(self):
         self.preparer()
         self.assertEqual(self.demander("piloter")[0], 200)
-        v = machines.noeud_vue()
+        v = machines.node_view()
         self.assertFalse(v["piloter"])
         self.assertEqual([d["droit"] for d in v["demandes"]], ["piloter"])
 
@@ -459,60 +459,60 @@ class Demandes(Base):
         self.assertEqual(self.demander("piloter", jeton="x" * 40)[0], 401)
         for droit in ("skills", "tout", ""):
             self.assertEqual(self.demander(droit)[0], 400, droit)
-        self.assertEqual(machines.noeud_vue()["demandes"], [])
+        self.assertEqual(machines.node_view()["demandes"], [])
 
     def test_redemander_ne_fait_pas_de_doublon(self):
         self.preparer()
         for _ in range(3):
             self.demander("maj")
-        self.assertEqual(len(machines.noeud_vue()["demandes"]), 1)
+        self.assertEqual(len(machines.node_view()["demandes"]), 1)
 
     def test_accepter_active_le_droit_refuser_n_active_rien(self):
         self.preparer()
         self.demander("maj")
         self.demander("extinction")
-        machines.noeud_repondre_demande(self.nom, "maj", True)
-        machines.noeud_repondre_demande(self.nom, "extinction", False)
-        v = machines.noeud_vue()
+        machines.node_answer_request(self.nom, "maj", True)
+        machines.node_answer_request(self.nom, "extinction", False)
+        v = machines.node_view()
         self.assertTrue(v["maj"])
         self.assertFalse(v["extinction"])
         self.assertEqual(v["demandes"], [])
         with self.assertRaises(ValueError):
-            machines.noeud_repondre_demande(self.nom, "maj", True)
+            machines.node_answer_request(self.nom, "maj", True)
 
     def test_un_droit_deja_accorde_ne_laisse_pas_de_demande(self):
         self.preparer()
-        machines.noeud_autoriser_piloter(True)
+        machines.node_allow_control(True)
         self.demander("piloter")
-        self.assertEqual(machines.noeud_vue()["demandes"], [])
+        self.assertEqual(machines.node_view()["demandes"], [])
 
     def test_l_etat_ne_montre_que_les_demandes_de_celui_qui_interroge(self):
         m = self.preparer()
         self.demander("piloter")
         _, corps = self.http("GET", "/api/noeud/etat", None, {"X-Noeud": self.jeton})
         self.assertEqual(json.loads(corps)["demandes"], ["piloter"])
-        with machines.VERROU:
-            n = machines.noeud()
+        with machines.LOCK:
+            n = machines.node()
             n["demandes"].append({"machine": "Autre", "droit": "extinction", "date": "x"})
-            machines._ecrire("noeud.json", n)
+            machines._write("noeud.json", n)
         _, corps = self.http("GET", "/api/noeud/etat", None, {"X-Noeud": self.jeton})
         self.assertEqual(json.loads(corps)["demandes"], ["piloter"])
-        self.assertEqual(machines.sonder(machines.trouver(m["id"]), "", force=True)["demandes"], ["piloter"])
+        self.assertEqual(machines.probe(machines.find(m["id"]), "", force=True)["demandes"], ["piloter"])
 
     def test_la_machine_principale_envoie_la_demande(self):
         m = self.preparer()
-        self.assertEqual(machines.demander_droit(m["id"], "maj"), {"ok": True})
-        self.assertEqual([d["droit"] for d in machines.noeud_vue()["demandes"]], ["maj"])
+        self.assertEqual(machines.request_right(m["id"], "maj"), {"ok": True})
+        self.assertEqual([d["droit"] for d in machines.node_view()["demandes"]], ["maj"])
         with self.assertRaises(ValueError):
-            machines.demander_droit(m["id"], "skills")
+            machines.request_right(m["id"], "skills")
         with self.assertRaises(ValueError):
-            machines.demander_droit("0" * 32, "maj")
+            machines.request_right("0" * 32, "maj")
 
     def test_une_sonde_d_une_machine_qui_s_allume_est_refaite_vite(self):
         m = self.preparer()
-        machines.SONDES[m["id"]] = (time.monotonic() - 3, {"etat": "injoignable"}, "")
+        machines.PROBES[m["id"]] = (time.monotonic() - 3, {"etat": "injoignable"}, "")
         with mock.patch.object(machines, "_json", side_effect=OSError("x")) as j:
-            machines.sonder(machines.trouver(m["id"]), "")
+            machines.probe(machines.find(m["id"]), "")
         self.assertTrue(j.called, "un état « pas encore opérationnel » vieux de 3 s est resondé")
 
 
@@ -521,8 +521,8 @@ class Relais(Base):
 
     def preparer(self, piloter=True):
         m = self.jumeler()
-        machines.noeud_autoriser_piloter(piloter)
-        self.jeton = machines.trouver(m["id"])["jeton"]
+        machines.node_allow_control(piloter)
+        self.jeton = machines.find(m["id"])["jeton"]
         conv = A.conv_new()
         conv["messages"] = [{"role": "user", "content": "bonjour"}, {"role": "assistant", "content": "salut"}]
         conv["titre"] = "Sur l'hôte"
@@ -536,7 +536,7 @@ class Relais(Base):
         m, conv = self.preparer(piloter=False)
         statut, _ = self.relais("GET", "/api/conversation?id=" + conv["id"])
         self.assertEqual(statut, 403)
-        self.assertFalse(machines.noeud_vue()["piloter"])
+        self.assertFalse(machines.node_view()["piloter"])
 
     def test_sans_jeton_ou_avec_un_mauvais_jeton_c_est_refuse(self):
         m, conv = self.preparer()
@@ -574,14 +574,14 @@ class Relais(Base):
 
     def test_depuis_cette_page_les_octets_passent_et_rien_n_est_garde_ici(self):
         m, conv = self.preparer()
-        machines.DERNIER_ETAT[m["id"]] = "operationnel"
+        machines.LAST_STATE[m["id"]] = "operationnel"
         statut, corps = self.http("GET", "/h/{}/api/conversation?id={}".format(m["id"], conv["id"]))
         self.assertEqual(statut, 200, corps)
         self.assertEqual(json.loads(corps)["titre"], "Sur l'hôte")
 
     def test_le_tour_en_flux_traverse_la_page_et_les_erreurs_de_l_hote_aussi(self):
         m, conv = self.preparer()
-        machines.DERNIER_ETAT[m["id"]] = "operationnel"
+        machines.LAST_STATE[m["id"]] = "operationnel"
 
         def faux_tour(c, texte, emit, r, stop, depuis, **kw):
             emit({"type": "texte", "texte": "voilà"})
@@ -593,14 +593,14 @@ class Relais(Base):
         self.assertEqual([e["type"] for e in evenements], ["debut", "texte", "fin"])
         statut, corps = self.http("POST", "/h/{}/api/image".format(m["id"]), None, {"X-Token": A.TOKEN})
         self.assertEqual(statut, 400, "l'erreur de l'hôte est rendue telle quelle, pas déguisée en panne")
-        machines.noeud_autoriser_piloter(False)
+        machines.node_allow_control(False)
         statut, corps = self.http("GET", "/h/{}/api/conversation?id={}".format(m["id"], conv["id"]))
         self.assertEqual(statut, 403)
         self.assertIn("conversations pilotées", json.loads(corps)["erreur"])
 
     def test_une_machine_qui_ne_repond_pas_donne_un_message_clair(self):
         m, conv = self.preparer()
-        machines.DERNIER_ETAT[m["id"]] = "injoignable"
+        machines.LAST_STATE[m["id"]] = "injoignable"
         statut, corps = self.http("GET", "/h/{}/api/conversation?id={}".format(m["id"], conv["id"]))
         self.assertEqual(statut, 503)
         self.assertIn("ne répond pas", json.loads(corps)["erreur"])
@@ -609,9 +609,9 @@ class Relais(Base):
     def test_les_conversations_proposees_exigent_le_droit_de_l_hote(self):
         m, conv = self.preparer(piloter=False)
         with self.assertRaises(PermissionError):
-            machines.noeud_partager("conversations", {})
-        machines.noeud_autoriser_piloter(True)
-        self.assertIn(conv["id"], [c["id"] for c in machines.noeud_partager("conversations", {})["conversations"]])
+            machines.node_share("conversations", {})
+        machines.node_allow_control(True)
+        self.assertIn(conv["id"], [c["id"] for c in machines.node_share("conversations", {})["conversations"]])
 
     def test_les_anciennes_copies_jamais_continuees_sont_supprimees(self):
         copie = A.conv_new()
@@ -620,8 +620,8 @@ class Relais(Base):
         continuee = A.conv_new()
         continuee.update(messages=[{"role": "user", "content": "a"}, {"role": "user", "content": "suite"}], origine={"machine": "X", "messages_importes": 1})
         A.conv_write(continuee)
-        machines.COPIES_NETTOYEES[0] = False
-        self.assertEqual(machines.nettoyer_copies_importees(), 1)
+        machines.CLEANED_COPIES[0] = False
+        self.assertEqual(machines.clean_imported_copies(), 1)
         ids = [c["id"] for c in A.conv_list()]
         self.assertNotIn(copie["id"], ids)
         self.assertIn(continuee["id"], ids)

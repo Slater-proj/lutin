@@ -44,24 +44,24 @@ def stream(path, body, scenario):
 class RemoteConversations(unittest.TestCase):
     def setUp(self):
         quiet_node.quiet(self)
-        for kept in (machines.SONDES, machines.DERNIER_ETAT, machines.CODES, machines.INFOS_NOEUD):
+        for kept in (machines.PROBES, machines.LAST_STATE, machines.CODES, machines.NODE_INFO):
             kept.clear()
-        machines.CARTES.update(t=-999.0, v=None)
+        machines.CARDS.update(t=-999.0, v=None)
         machines.CONVERSATIONS.update(t=0.0, v=[], en_cours=False)
         A.PIN_LIMITER.evenements.clear()
-        machines.noeud_activer(True)
-        self.host = machines.ajouter(T.BASE, machines.noeud_nouveau_code()["code"], "Bureau")
-        machines.noeud_autoriser_piloter(True)
+        machines.node_enable(True)
+        self.host = machines.add(T.BASE, machines.node_new_code()["code"], "Bureau")
+        machines.node_allow_control(True)
         self.conversation = A.conv_new()["id"]
         self.base = "/api/v1/machines/{}/conversations/{}".format(self.host["id"], self.conversation)
 
         def restore():
-            machines._ecrire_registre([])
-            machines.noeud_autoriser_piloter(False)
-            for allowed in machines.noeud_vue()["autorisees"]:
-                machines.noeud_revoquer(allowed["nom"])
-            machines.noeud_activer(False)
-            for kept in (machines.SONDES, machines.DERNIER_ETAT, machines.CODES):
+            machines._write_registry([])
+            machines.node_allow_control(False)
+            for allowed in machines.node_view()["autorisees"]:
+                machines.node_revoke(allowed["nom"])
+            machines.node_enable(False)
+            for kept in (machines.PROBES, machines.LAST_STATE, machines.CODES):
                 kept.clear()
             machines.CONVERSATIONS.update(t=0.0, v=[], en_cours=False)
             try:
@@ -90,20 +90,20 @@ class RemoteConversations(unittest.TestCase):
         self.assertEqual(api("GET", "/api/v1/machines/{}/conversations/{}".format(UNKNOWN, self.conversation))[1]["error"]["code"], "not_found")
         self.assertEqual(api("GET", "/api/v1/machines/{}/conversations/{}".format(self.host["id"], "nothere!"))[1]["error"]["code"], "not_found")
         self.assertEqual(api("GET", "/api/v1/machines/{}/conversations/{}".format(self.host["id"], "0123abcd"))[0], 404, "the host has no such conversation")
-        machines.noeud_autoriser_piloter(False)
+        machines.node_allow_control(False)
         status, answer = api("GET", self.base)
         self.assertEqual((status, answer["error"]["code"]), (403, "machine_refused"), "the host does not grant « lead »")
         self.assertIn("conversations pilotées", answer["error"]["message"], "the host's sentence is passed on")
-        machines.noeud_autoriser_piloter(True)
+        machines.node_allow_control(True)
         for body in ({}, {"message": ""}, {"message": 1}, {"message": "Hi", "model": "x"}):
             self.assertEqual(stream(self.base + "/turns", body, [])[1]["error"]["code"], "invalid_request", body)
         self.assertEqual(A.conv_read(self.conversation)["messages"], [], "nothing reached the host")
         for body in ({"approved": "yes"}, {"approved": True, "remember": "always"}):
             self.assertEqual(api("POST", "/api/v1/machines/{}/approvals/abc".format(self.host["id"]), body)[1]["error"]["code"], "invalid_request", body)
         self.assertEqual(api("POST", self.base + "/memory-choice", {"choice": "summary"})[1]["error"]["code"], "conflict", "no question waits")
-        machines._ecrire_registre([dict(machines.lire()[0], adresse="http://127.0.0.1:9")])
-        machines.SONDES.clear()
-        machines.DERNIER_ETAT.clear()
+        machines._write_registry([dict(machines.read()[0], adresse="http://127.0.0.1:9")])
+        machines.PROBES.clear()
+        machines.LAST_STATE.clear()
         status, answer = api("GET", self.base)
         self.assertEqual((status, answer["error"]["code"]), (503, "machine_unreachable"))
         self.assertIn("Bureau", answer["error"]["message"])

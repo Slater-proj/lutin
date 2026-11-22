@@ -230,7 +230,7 @@ def _model_on_another_machine(r):
     """Le modèle choisi n'existe que sur une autre machine (liste de choix) : ni la carte ni la mémoire d'ici n'ont à le contenir."""
     try:
         from . import machines
-        return machines.modele_distant(r, _m.etat_moteur().get("installes", [])) is not None
+        return machines.remote_model(r, _m.etat_moteur().get("installes", [])) is not None
     except Exception:  # noqa: BLE001
         return False
 

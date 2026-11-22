@@ -49,46 +49,46 @@ class PartageDuMoteur(unittest.TestCase):
     def setUp(self):
         quiet_node.quiet(self)
         self.tmp = Path(tempfile.mkdtemp(prefix="lutin-partage-t-"))
-        machines.DOSSIER = self.tmp
-        machines.REGISTRE.update(t=0.0)
-        machines.SONDES.clear()
-        machines.DISTANTS.update(t=0.0, v=[], en_cours=False)
+        machines.FOLDER = self.tmp
+        machines.REGISTRY.update(t=0.0)
+        machines.PROBES.clear()
+        machines.REMOTES.update(t=0.0, v=[], en_cours=False)
         self.addCleanup(setattr, machines, "DOSSIER", None)
         self.m = {"id": "b" * 32, "nom": "Gros PC", "adresse": "http://192.168.1.20:8777", "jeton": "t", "mac": "", "ajoutee": "x"}
-        machines._ecrire_registre([self.m])
+        machines._write_registry([self.m])
 
     def test_machine_occupee_429_n_est_pas_une_panne_le_local_repond(self):
-        r = machines.Routage(Local(["petit:8b"]), self.m)
-        with mock.patch.object(machines, "sonder", operationnelle(["petit:8b"])), mock.patch.object(machines, "requete", side_effect=erreur_http(429)):
+        r = machines.Routing(Local(["petit:8b"]), self.m)
+        with mock.patch.object(machines, "probe", operationnelle(["petit:8b"])), mock.patch.object(machines, "request", side_effect=erreur_http(429)):
             rep = r.chat({"model": "petit:8b", "messages": []})
         self.assertEqual(rep["message"]["content"], "réponse locale")
-        self.assertEqual([k for k, v in machines.SONDES.items() if v[1]["etat"] == "injoignable"], [], "occupée n'est pas injoignable")
+        self.assertEqual([k for k, v in machines.PROBES.items() if v[1]["etat"] == "injoignable"], [], "occupée n'est pas injoignable")
 
     def test_modele_qui_n_existe_que_la_bas_et_machine_occupee_message_clair(self):
-        machines.DISTANTS.update(t=machines.time.monotonic(), v=[{"id": self.m["id"], "nom": "Gros PC", "etat": "operationnel", "modeles": ["gros:70b"]}])
-        r = machines.Routage(Local(["petit:8b"]), self.m)
-        with mock.patch.object(machines, "sonder", operationnelle(["gros:70b"])), mock.patch.object(machines, "requete", side_effect=erreur_http(429)):
+        machines.REMOTES.update(t=machines.time.monotonic(), v=[{"id": self.m["id"], "nom": "Gros PC", "etat": "operationnel", "modeles": ["gros:70b"]}])
+        r = machines.Routing(Local(["petit:8b"]), self.m)
+        with mock.patch.object(machines, "probe", operationnelle(["gros:70b"])), mock.patch.object(machines, "request", side_effect=erreur_http(429)):
             with self.assertRaises(ValueError) as e:
                 r.chat({"model": "gros:70b", "messages": []})
         self.assertIn("répond déjà à d'autres demandes", str(e.exception))
 
     def test_la_demande_attend_le_moteur_longtemps_pas_30_secondes(self):
-        r = machines.Routage(Local(["petit:8b"]), self.m)
+        r = machines.Routing(Local(["petit:8b"]), self.m)
         delais = []
 
         def requete(m, chemin, corps=None, jeton="", delai=0, ouvrir=None):
             delais.append(delai)
             raise OSError("fin du test")
-        with mock.patch.object(machines, "sonder", operationnelle(["petit:8b"])), mock.patch.object(machines, "requete", requete):
+        with mock.patch.object(machines, "probe", operationnelle(["petit:8b"])), mock.patch.object(machines, "request", requete):
             r.chat({"model": "petit:8b", "messages": []}, 600)
         self.assertEqual(delais, [600])
 
     def test_la_charge_du_noeud_est_dite_a_l_autre_machine(self):
-        c = machines.noeud_charge(True, 2)
+        c = machines.node_load(True, 2)
         self.assertEqual((c["locale_occupee"], c["distantes"]), (True, 2))
         self.assertIn("ram", c)
         with mock.patch.object(machines, "_json", lambda m, chemin, corps=None, **kw: {"id": self.m["id"], "actif": True, "modeles": ["a"], "moteur_nom": "Ollama", "charge": c}):
-            r = machines.sonder(self.m, "", force=True)
+            r = machines.probe(self.m, "", force=True)
         self.assertEqual(r["charge"]["distantes"], 2)
 
 

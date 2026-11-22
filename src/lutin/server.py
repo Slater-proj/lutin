@@ -363,7 +363,7 @@ class Handler(BaseHTTPRequestHandler):
     def _diagnostic(o, r, profil, modeles):
         """Ce qui empêche Lutin de répondre (ou le gêne), pour la bannière du haut de la page."""
         mo = _m.moteur_actuel(r)
-        if _machines.modele_distant(r, o["installes"]):          # le modèle choisi est celui d'une autre machine : il n'a pas à exister ici ni à tenir sur cette carte
+        if _machines.remote_model(r, o["installes"]):          # le modèle choisi est celui d'une autre machine : il n'a pas à exister ici ni à tenir sur cette carte
             if mo.id != "ollama":
                 return []
             r = dict(r, modele="")
@@ -536,7 +536,7 @@ class Handler(BaseHTTPRequestHandler):
                                        "version": _m.VERSION, "partages": o.get("partages", []), "ollama": o["actif"], "ollama_installe": bool(_m.chemin_ollama()) or _m.moteur_actuel().id != "ollama", "moteur_nom": _mesures.display_name(_m.moteur_actuel()), "installes": o["installes"], "modeles": modeles, "modeles_masques": len(_m.lire_registre_modeles()["masques"]), "actives": list(_m.ACTIVE_TURNS),
                                        "pulls": _m.PULLS, "reglages": r, "conversations": _m.conv_list(), "racine": str(_m.ROOT), "donnees": str(_m.DATA),
                                        "colibri_choisi": bool(getattr(_m.moteur_actuel(r), "colibri_choisi", lambda: False)()), "lmstudio_choisi": bool(getattr(_m.moteur_actuel(r), "lmstudio_choisi", lambda: False)()), "exllamav3_choisi": bool(getattr(_m.moteur_actuel(r), "exllamav3_choisi", lambda: False)()), "outil": bool(self._outil_vivant()), "hors_ligne": _hl.is_active(), "moteur": _m.moteur_actuel().id, "niveau": _m.SECURITY.niveau, "docker": _acces.in_docker(), "ouverture_possible": _fichiers.opening_possible(), "missions": _mission.by_conversation(), "langue": _i18n.language(), "langue_reglage": _i18n.configured_language(), "cpus": _machine.cpus_available() or 1, "diagnostic": self._avec_estimation(self._diagnostic(o, r, profil, modeles), r, profil), "prudent": _estimation.cautious_mode(profil), "premier_lancement": self._premier_lancement(o, r, profil), "redemarrage": {"necessaire": _acces.restart_needed(), "possible": _acces.can_restart()}, "nouvelle_version": _m.new_lutin_version(), "travaux": _m.works_state(), "configurateur": self._configurateur(), "addons_alertes": _addons.alerts(), "embeddings": _embeddings.state(),
-                                       "reflexion_possible": self._reflexion_possible(r, o["actif"]), "cluster_actif": _machines.cluster_actif(r.get("cluster")), "demandes_machines": len(_machines.noeud().get("demandes", [])), "modeles_distants": _machines.modeles_distants() if _machines.cluster_actif(r.get("cluster")) else [], "conversations_distantes": _machines.conversations_distantes() if _machines.cluster_actif(r.get("cluster")) else [], "machines_hors_ligne": _machines.hors_ligne() if _machines.cluster_actif(r.get("cluster")) else [], "taches_fond": _m.running_tasks(), "taches_moteur": [dict(v, nom=_moteurs.ENGINES[k].nom) for k, v in _moteurs.all_tasks().items() if v.get("statut") == "en cours" and k in _moteurs.ENGINES], "fins_moteur": _moteurs.recent_ends(), "memoire": self._memoire(r, o), "calibrage": _calibrage.state(), "bench": {"en_cours": _m.BENCH["en_cours"], "etape": _m.BENCH["etape"], "erreur": _m.BENCH["erreur"], "file": list(_m.BENCH.get("file") or []), "mesures": _bench.read(_m.bench_path())}, "attentes": [{"id": a.id, "titre": a.titre, "detail": a.detail, "diff": a.diff, "conv": a.conv} for a in _m.PendingApproval.EN_COURS.values()],
+                                       "reflexion_possible": self._reflexion_possible(r, o["actif"]), "cluster_actif": _machines.cluster_active(r.get("cluster")), "demandes_machines": len(_machines.node().get("demandes", [])), "modeles_distants": _machines.remote_models() if _machines.cluster_active(r.get("cluster")) else [], "conversations_distantes": _machines.remote_conversations() if _machines.cluster_active(r.get("cluster")) else [], "machines_hors_ligne": _machines.offline_names() if _machines.cluster_active(r.get("cluster")) else [], "taches_fond": _m.running_tasks(), "taches_moteur": [dict(v, nom=_moteurs.ENGINES[k].nom) for k, v in _moteurs.all_tasks().items() if v.get("statut") == "en cours" and k in _moteurs.ENGINES], "fins_moteur": _moteurs.recent_ends(), "memoire": self._memoire(r, o), "calibrage": _calibrage.state(), "bench": {"en_cours": _m.BENCH["en_cours"], "etape": _m.BENCH["etape"], "erreur": _m.BENCH["erreur"], "file": list(_m.BENCH.get("file") or []), "mesures": _bench.read(_m.bench_path())}, "attentes": [{"id": a.id, "titre": a.titre, "detail": a.detail, "diff": a.diff, "conv": a.conv} for a in _m.PendingApproval.EN_COURS.values()],
                                        "en_attente": sorted({a.conv for a in _m.PendingApproval.EN_COURS.values() if a.conv})})
         if chemin == "/api/conseil":
             r = _m.settings()
@@ -899,29 +899,29 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/api/noeud/chat":                     # ... et l'utilise pour faire tourner le moteur de cette machine
             return self._noeud_chat(donnees)
         if self.path == "/api/noeud/partage":                  # ... ou pour LIRE ce que son propriétaire a accepté de partager (conversations, skills, mémoire) ; jamais écrire
-            if not _machines.noeud_jeton_valide(self.headers.get("X-Noeud")):
+            if not _machines.node_token_valid(self.headers.get("X-Noeud")):
                 return self._envoyer(401, {"erreur": "machine non autorisée"})
             try:
-                return self._envoyer(200, _machines.noeud_partager(str(donnees.get("genre", "")), donnees))
+                return self._envoyer(200, _machines.node_share(str(donnees.get("genre", "")), donnees))
             except PermissionError:
                 return self._envoyer(403, {"erreur": "ce nœud ne partage pas cela"})
             except (ValueError, OSError) as e:
                 return self._envoyer(400, {"erreur": str(e)})
         if self.path == "/api/noeud/capacites":                # ... ou pour savoir ce qu'un de ses modèles sait faire (outils, images, réflexion)
-            if not _machines.noeud_jeton_valide(self.headers.get("X-Noeud")):
+            if not _machines.node_token_valid(self.headers.get("X-Noeud")):
                 return self._envoyer(401, {"erreur": "machine non autorisée"})
             mo = _moteurs.by_id(_m.settings().get("moteur") or _moteurs.OLLAMA)
-            return self._envoyer(200, {"capacites": _machines.noeud_capacites(mo, donnees.get("modele"))})
+            return self._envoyer(200, {"capacites": _machines.node_capabilities(mo, donnees.get("modele"))})
         if self.path == "/api/noeud/eteindre":                 # ... ou, si le propriétaire l'a autorisé, pour l'éteindre (30 s, annulable, journalisé)
             return self._noeud_eteindre(donnees)
         if self.path == "/api/noeud/maj":                      # ... ou, si le propriétaire l'a autorisé, pour mettre Lutin à jour ici (puis redémarrage si Lutin est supervisé)
             return self._noeud_maj()
         if self.path == "/api/noeud/demande":                  # ... ou pour DEMANDER un droit (rien n'est accordé : le propriétaire de cette machine répond)
-            nom = _machines.noeud_jeton_valide(self.headers.get("X-Noeud"))
+            nom = _machines.node_token_valid(self.headers.get("X-Noeud"))
             if not nom:
                 return self._envoyer(401, {"erreur": "machine non autorisée"})
             try:
-                return self._envoyer(200, dict(_machines.noeud_demander(nom, str(donnees.get("droit", ""))), ok=True))
+                return self._envoyer(200, dict(_machines.node_request(nom, str(donnees.get("droit", ""))), ok=True))
             except ValueError as e:
                 return self._envoyer(400, {"erreur": str(e)})
         if not self._authentifie():
@@ -1218,7 +1218,7 @@ class Handler(BaseHTTPRequestHandler):
             if self.path == "/api/reglages":
                 rep = _m.save_settings(donnees)
                 if donnees.get("cluster") is False:
-                    _machines.vider_listes()          # mode multi-machines éteint : plus aucun modèle ni conversation distante gardé
+                    _machines.clear_lists()          # mode multi-machines éteint : plus aucun modèle ni conversation distante gardé
                 return self._envoyer(200, rep)
             if self.path == "/api/memoire":
                 _m.write_memory(str(donnees.get("fichier", "")), str(donnees.get("texte", "")))
@@ -1520,39 +1520,39 @@ class Handler(BaseHTTPRequestHandler):
     _catalogue_colibri = staticmethod(lambda mo, installes, q: _geres.colibri_catalog(mo, installes, q))
 
     def _noeud_etat(self):
-        if not _machines.noeud_jeton_valide(self.headers.get("X-Noeud")):
+        if not _machines.node_token_valid(self.headers.get("X-Noeud")):
             return self._envoyer(401, {"erreur": "machine non autorisée"})
         mo = _moteurs.by_id(_m.settings().get("moteur") or _moteurs.OLLAMA)
-        return self._envoyer(200, _machines.noeud_etat(mo, mo.modeles(), self.request.getsockname()[0], _machines.noeud_charge(bool(_m.ACTIVE_TURNS), self.NOEUD_ACTIFS["n"]), _machines.noeud_jeton_valide(self.headers.get("X-Noeud")) or ""))
+        return self._envoyer(200, _machines.node_state(mo, mo.modeles(), self.request.getsockname()[0], _machines.node_load(bool(_m.ACTIVE_TURNS), self.NOEUD_ACTIFS["n"]), _machines.node_token_valid(self.headers.get("X-Noeud")) or ""))
 
     def _noeud_appairer(self, donnees):
         if not _m.PIN_LIMITER.autoriser(self.client_address[0]):
             return self._envoyer(429, {"erreur": "Trop d'essais : attends une minute."})
         try:
-            return self._envoyer(200, _machines.noeud_echanger(donnees.get("code"), donnees.get("nom"), self.request.getsockname()[0]))
+            return self._envoyer(200, _machines.node_exchange(donnees.get("code"), donnees.get("nom"), self.request.getsockname()[0]))
         except ValueError as e:
             return self._envoyer(403, {"erreur": str(e)})
 
     def _noeud_eteindre(self, donnees):
-        nom = _machines.noeud_jeton_valide(self.headers.get("X-Noeud"))
+        nom = _machines.node_token_valid(self.headers.get("X-Noeud"))
         if not nom:
             return self._envoyer(401, {"erreur": "machine non autorisée"})
-        if not _machines.noeud().get("extinction"):
+        if not _machines.node().get("extinction"):
             return self._envoyer(403, {"erreur": "l'extinction à distance n'est pas autorisée sur cette machine"})
         if donnees.get("annuler"):
-            return self._envoyer(200, {"annulee": _alimentation.cancel_shutdown(_machines.journaliser)})
+            return self._envoyer(200, {"annulee": _alimentation.cancel_shutdown(_machines.log_event)})
         try:
-            return self._envoyer(200, {"dans_s": _alimentation.schedule_shutdown(nom, journaliser=_machines.journaliser)})
+            return self._envoyer(200, {"dans_s": _alimentation.schedule_shutdown(nom, journaliser=_machines.log_event)})
         except ValueError as e:
             return self._envoyer(400, {"erreur": str(e)})
 
     def _noeud_maj(self):
-        if not _machines.noeud_jeton_valide(self.headers.get("X-Noeud")):
+        if not _machines.node_token_valid(self.headers.get("X-Noeud")):
             return self._envoyer(401, {"erreur": "machine non autorisée"})
-        if not _machines.noeud().get("maj"):
+        if not _machines.node().get("maj"):
             return self._envoyer(403, {"erreur": "la mise à jour à distance n'est pas autorisée sur cette machine"})
         try:
-            _machines.journaliser("mise à jour demandée par une machine appairée")
+            _machines.log_event("mise à jour demandée par une machine appairée")
             return self._envoyer(200, {"ok": True, "maj": _acces.update()})
         except ValueError as e:
             return self._envoyer(400, {"erreur": str(e)})
@@ -1572,17 +1572,17 @@ class Handler(BaseHTTPRequestHandler):
                         break
                     reste -= len(morceau)
             return self._envoyer(code, corps)
-        nom = _machines.noeud_jeton_valide(self.headers.get("X-Noeud"))
+        nom = _machines.node_token_valid(self.headers.get("X-Noeud"))
         if not nom:
             return refuser(401, {"erreur": "machine non autorisée"})
-        if not _machines.noeud().get("piloter"):
+        if not _machines.node().get("piloter"):
             return refuser(403, {"erreur": _t("Cette machine n'accepte pas de conversations pilotées à distance : son propriétaire doit cocher « Laisser les machines appairées mener des conversations ici » dans l'onglet Machines.")})
         interne = self.path[len("/api/noeud/relais"):]
         chemin = interne.split("?")[0]
         if not (self.RELAIS_GET.match(interne) if methode == "GET" else chemin in self.RELAIS_POST):
             return refuser(404, {"erreur": "chemin inconnu"})
         if chemin == "/api/chat":
-            _machines.journaliser("conversation menée ici par {}".format(nom))
+            _machines.log_event("conversation menée ici par {}".format(nom))
         self._via_relais, self.path = nom, interne
         return self.do_GET() if methode == "GET" else self.do_POST()
 
@@ -1595,10 +1595,10 @@ class Handler(BaseHTTPRequestHandler):
         reste = self.path[len("/h/"):]
         ident, _, chemin = reste.partition("/")
         chemin = "/" + chemin
-        m = _machines.trouver(ident) if _machines.RE_ID.match(ident) else None
+        m = _machines.find(ident) if _machines.RE_ID.match(ident) else None
         if m is None:
             return self._envoyer(404, {"erreur": _t("Machine inconnue.")})
-        if _machines.DERNIER_ETAT.get(ident) not in ("joignable", "operationnel"):
+        if _machines.LAST_STATE.get(ident) not in ("joignable", "operationnel"):
             return self._envoyer(503, {"erreur": _t("La machine « {} » ne répond pas : sa conversation reviendra quand elle sera de nouveau en ligne.").format(m["nom"])})
         corps = None
         if methode == "POST":
@@ -1607,7 +1607,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self._envoyer(413, {"erreur": "message trop gros"})
             corps = self.rfile.read(taille)
         try:
-            rep = _machines.ouvrir_relais(m, methode, chemin, corps, self.headers.get("Content-Type") or "application/json", self.headers.get("X-Nom") or "")
+            rep = _machines.open_relay(m, methode, chemin, corps, self.headers.get("Content-Type") or "application/json", self.headers.get("X-Nom") or "")
         except urllib.error.HTTPError as e:
             try:
                 detail = json.loads(e.read(100_000).decode("utf-8", "replace")).get("erreur", "")
@@ -1615,11 +1615,11 @@ class Handler(BaseHTTPRequestHandler):
                 detail = ""
             return self._envoyer(e.code if e.code in (400, 403, 404, 409, 413, 429) else 502, {"erreur": detail or _t("Cette machine a répondu une erreur ({}).").format(e.code)})
         except (ValueError, urllib.error.URLError, OSError):
-            _machines.signaler_panne(m)
+            _machines.report_failure(m)
             return self._envoyer(502, {"erreur": _t("Impossible de joindre la machine « {} » : elle ne répond plus.").format(m["nom"])})
         with rep:
             self.send_response(rep.status)
-            for nom in _machines.ENTETES_RELAIS:
+            for nom in _machines.RELAY_HEADERS:
                 if rep.headers.get(nom):
                     self.send_header(nom, rep.headers[nom])
             self.end_headers()
@@ -1644,10 +1644,10 @@ class Handler(BaseHTTPRequestHandler):
             time.sleep(0.5)
 
     def _noeud_chat(self, donnees):
-        if not _machines.noeud_jeton_valide(self.headers.get("X-Noeud")):
+        if not _machines.node_token_valid(self.headers.get("X-Noeud")):
             return self._envoyer(401, {"erreur": "machine non autorisée"})
         try:
-            corps = _machines.corps_autorise(donnees.get("corps"))
+            corps = _machines.allowed_body(donnees.get("corps"))
         except ValueError as e:
             return self._envoyer(400, {"erreur": str(e)})
         mo = _moteurs.by_id(_m.settings().get("moteur") or _moteurs.OLLAMA)          # le moteur de CETTE machine : jamais une autre machine (pas de chaîne)
@@ -1686,41 +1686,41 @@ class Handler(BaseHTTPRequestHandler):
         """onglet Machines (configurateur seulement) : ajouter, retirer, choisir celle qui répond, prêter le moteur de cette machine."""
         r = _m.settings()
         if action == "add":
-            _machines.ajouter(donnees.get("adresse"), donnees.get("code"), donnees.get("nom", ""), donnees.get("mac", ""))
+            _machines.add(donnees.get("adresse"), donnees.get("code"), donnees.get("nom", ""), donnees.get("mac", ""))
         elif action == "remove":
             ident = str(donnees.get("id", ""))
-            _machines.retirer(ident)
+            _machines.remove(ident)
             if r.get("machine") == ident:
                 _m.save_settings({"machine": ""})
         elif action == "use":
             _m.save_settings({"machine": str(donnees.get("id") or "")})
         elif action == "mac":
-            _machines.definir_mac(str(donnees.get("id", "")), donnees.get("mac"))
+            _machines.set_mac(str(donnees.get("id", "")), donnees.get("mac"))
         elif action == "noeud-activer":
-            _machines.noeud_activer(bool(donnees.get("actif")), niveau_local=_m.SECURITY.niveau == _sec.LOCAL)
+            _machines.node_enable(bool(donnees.get("actif")), niveau_local=_m.SECURITY.niveau == _sec.LOCAL)
         elif action == "wake":
-            return _machines.reveiller(str(donnees.get("id", "")))
+            return _machines.wake(str(donnees.get("id", "")))
         elif action == "shutdown":
-            return _machines.eteindre(str(donnees.get("id", "")), bool(donnees.get("annuler")))
+            return _machines.shut_down(str(donnees.get("id", "")), bool(donnees.get("annuler")))
         elif action == "update":
-            return _machines.mettre_a_jour_distante(str(donnees.get("id", "")))
+            return _machines.update_remote(str(donnees.get("id", "")))
         elif action == "demander":
-            return _machines.demander_droit(str(donnees.get("id", "")), str(donnees.get("droit", "")))
+            return _machines.request_right(str(donnees.get("id", "")), str(donnees.get("droit", "")))
         elif action == "demande-repondre":          # le propriétaire de CETTE machine accepte ou refuse : depuis cette machine seulement
             if not self._configurateur_strict():
                 raise ValueError(_t("Cela se règle depuis cette machine elle-même."))
-            _machines.noeud_repondre_demande(str(donnees.get("machine", "")), str(donnees.get("droit", "")), bool(donnees.get("accepter")))
+            _machines.node_answer_request(str(donnees.get("machine", "")), str(donnees.get("droit", "")), bool(donnees.get("accepter")))
         elif action in ("node-shutdown", "node-update", "node-pilot", "autostart", "cancel-local-shutdown"):          # ce qui touche l'extinction ou le démarrage de CETTE machine : depuis cette machine seulement
             if not self._configurateur_strict():
                 raise ValueError(_t("Cela se règle depuis cette machine elle-même."))
             if action == "node-shutdown":
-                _machines.noeud_autoriser_extinction(bool(donnees.get("actif")))
+                _machines.node_allow_shutdown(bool(donnees.get("actif")))
             elif action == "node-update":
-                _machines.noeud_autoriser_maj(bool(donnees.get("actif")))
+                _machines.node_allow_update(bool(donnees.get("actif")))
             elif action == "node-pilot":
-                _machines.noeud_autoriser_piloter(bool(donnees.get("actif")))
+                _machines.node_allow_control(bool(donnees.get("actif")))
             elif action == "cancel-local-shutdown":
-                return {"annulee": _alimentation.cancel_shutdown(_machines.journaliser)}
+                return {"annulee": _alimentation.cancel_shutdown(_machines.log_event)}
             elif donnees.get("actif"):
                 _alimentation.install_startup()
             else:
@@ -1728,15 +1728,15 @@ class Handler(BaseHTTPRequestHandler):
         elif action == "droit":                                    # ce que CETTE machine partage avec les autres : depuis cette machine seulement
             if not self._configurateur_strict():
                 raise ValueError(_t("Cela se règle depuis cette machine elle-même."))
-            _machines.noeud_droit(str(donnees.get("droit", "")), bool(donnees.get("actif")))
+            _machines.node_right(str(donnees.get("droit", "")), bool(donnees.get("actif")))
         elif action == "import-skills":
-            return _machines.importer_skills(str(donnees.get("id", "")))
+            return _machines.import_skills(str(donnees.get("id", "")))
         elif action == "import-memoire":
-            return _machines.importer_memoire(str(donnees.get("id", "")))
+            return _machines.import_memory(str(donnees.get("id", "")))
         elif action == "noeud-code":
-            return _machines.noeud_nouveau_code()
+            return _machines.node_new_code()
         elif action == "noeud-revoquer":
-            _machines.noeud_revoquer(str(donnees.get("nom", "")))
+            _machines.node_revoke(str(donnees.get("nom", "")))
         else:
             raise ValueError(_t("Action inconnue."))
         return {"ok": True}
@@ -1744,7 +1744,7 @@ class Handler(BaseHTTPRequestHandler):
     @staticmethod
     def _vue_machines():
         r = _m.settings()
-        return {"noeud": _machines.noeud_vue(), "machines": _machines.etats(r["modele"], choisie=r.get("machine", "")), "choisie": r.get("machine", ""), "niveau_local": _m.SECURITY.niveau == _sec.LOCAL, "demarrage": _alimentation.startup_state_memo(), "journal": _machines.journal()}
+        return {"noeud": _machines.node_view(), "machines": _machines.states(r["modele"], choisie=r.get("machine", "")), "choisie": r.get("machine", ""), "niveau_local": _m.SECURITY.niveau == _sec.LOCAL, "demarrage": _alimentation.startup_state_memo(), "journal": _machines.read_log()}
 
     def _appairer(self, donnees):
         if _m.SECURITY.niveau == _sec.LOCAL:
@@ -1825,7 +1825,7 @@ class Handler(BaseHTTPRequestHandler):
                     r[k] = donnees[k]
             if "machine" in donnees:          # le modèle choisi dans la liste peut être celui d'une autre machine (« » : cette machine-ci)
                 ident = str(donnees.get("machine") or "")
-                r["machine"] = ident if ident and _machines.trouver(ident) else ""
+                r["machine"] = ident if ident and _machines.find(ident) else ""
             if not _modes.is_valid(r["mode"]):
                 abandon()
                 return self._refus_tour(400, "Mode inconnu.", "invalid_request")

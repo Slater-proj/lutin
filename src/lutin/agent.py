@@ -875,7 +875,7 @@ def moteur_actuel(r=None):
     local = _moteurs.by_id(r.get("moteur") or _moteurs.OLLAMA)
     if r.get("machine"):          # une machine est choisie : ses demandes de conversation partent chez elle quand elle est opérationnelle, sinon ce moteur répond (en silence)
         from . import machines
-        return machines.acheminer(local, r)
+        return machines.route(local, r)
     return local
 
 
@@ -1798,7 +1798,7 @@ def contexte_routage():
         budget = 0
     trop_gros = {n for n in installes if budget and (_routeur.size_gb(n, _m.MODELS) or 0) > budget * 0.95}
     try:
-        distants = machines.modeles_distants()
+        distants = machines.remote_models()
     except Exception:  # noqa: BLE001
         distants = []
     return installes, trop_gros, distants

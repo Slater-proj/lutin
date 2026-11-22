@@ -208,69 +208,69 @@ class AvecDeuxServeurs(tm.Base):
 
     def test_reveil_envoye_puis_joignable_puis_operationnel(self):
         m = self.jumeler()
-        machines.definir_mac(m["id"], "00:1A:2B:3C:4D:5E")
+        machines.set_mac(m["id"], "00:1A:2B:3C:4D:5E")
         envois = []
         self.srv.shutdown()
         self.srv.server_close()
-        machines.SONDES.clear()
-        machines.reveiller(m["id"], envoyer=lambda mac, hote: envois.append((mac, hote)))
+        machines.PROBES.clear()
+        machines.wake(m["id"], envoyer=lambda mac, hote: envois.append((mac, hote)))
         self.assertEqual(envois, [("00:1A:2B:3C:4D:5E", "127.0.0.1")])
-        mm = machines.trouver(m["id"])
-        r = machines.sonder(mm, "m1", force=True)
+        mm = machines.find(m["id"])
+        r = machines.probe(mm, "m1", force=True)
         self.assertEqual(r["etat"], "reveil_envoye")
         self.assertIn("Réveil envoyé", r["detail"])
         # la machine démarre : son Lutin répond de nouveau
         self.srv = ThreadingHTTPServer(("127.0.0.1", self.port), __import__("lutin.server", fromlist=["Handler"]).Handler)
         threading.Thread(target=self.srv.serve_forever, daemon=True).start()
-        self.assertEqual(machines.sonder(mm, "m1", force=True)["etat"], "operationnel")
-        self.assertIn(m["id"], machines.REVEIL, "elle vient de répondre : le réveil n'est fini que quand elle répond sans interruption")
-        machines.REPONDU[m["id"]] -= machines.STABLE_REPONSE_S + 1
-        self.assertEqual(machines.sonder(mm, "m1", force=True)["etat"], "operationnel")
-        self.assertNotIn(m["id"], machines.REVEIL, "le réveil est terminé")
+        self.assertEqual(machines.probe(mm, "m1", force=True)["etat"], "operationnel")
+        self.assertIn(m["id"], machines.WAKING, "elle vient de répondre : le réveil n'est fini que quand elle répond sans interruption")
+        machines.ANSWERED[m["id"]] -= machines.STABLE_ANSWER_S + 1
+        self.assertEqual(machines.probe(mm, "m1", force=True)["etat"], "operationnel")
+        self.assertNotIn(m["id"], machines.WAKING, "le réveil est terminé")
 
     def test_apres_dix_minutes_le_reveil_n_est_plus_annonce(self):
         m = self.jumeler()
         self.srv.shutdown()
         self.srv.server_close()
-        machines.REVEIL[m["id"]] = time.monotonic() - power.WAKE_WAIT_S - 5
-        machines.SONDES.clear()
-        self.assertEqual(machines.sonder(machines.trouver(m["id"]), "m1", force=True)["etat"], "injoignable")
+        machines.WAKING[m["id"]] = time.monotonic() - power.WAKE_WAIT_S - 5
+        machines.PROBES.clear()
+        self.assertEqual(machines.probe(machines.find(m["id"]), "m1", force=True)["etat"], "injoignable")
 
     def test_reveiller_sans_adresse_mac_dit_quoi_faire(self):
         m = self.jumeler()
-        machines.definir_mac(m["id"], "")          # l'adresse reçue du nœud a été effacée à la main
+        machines.set_mac(m["id"], "")          # l'adresse reçue du nœud a été effacée à la main
         with self.assertRaises(ValueError) as e:
-            machines.reveiller(m["id"])
+            machines.wake(m["id"])
         self.assertIn("adresse MAC", str(e.exception))
 
     def test_l_extinction_est_refusee_tant_que_le_proprietaire_ne_l_a_pas_autorisee(self):
         m = self.jumeler()
         with self.assertRaises(ValueError) as e:
-            machines.eteindre(m["id"])
+            machines.shut_down(m["id"])
         self.assertIn("Autoriser les machines appairées", str(e.exception))
 
     def test_extinction_autorisee_puis_annulee_et_journalisee(self):
         m = self.jumeler()
-        machines.noeud_autoriser_extinction(True)
+        machines.node_allow_shutdown(True)
         appels = []
         with mock.patch.object(power, "SHUTDOWN_COMMANDS", {"linux": ["echo"], "windows": ["echo"], "macos": ["echo"]}), \
                 mock.patch.object(power.subprocess, "run", lambda cmd, **k: appels.append(cmd)):
-            rep = machines.eteindre(m["id"])
+            rep = machines.shut_down(m["id"])
             self.assertEqual(rep["dans_s"], power.SHUTDOWN_DELAY_S)
-            self.assertIsNotNone(machines.noeud_vue()["extinction_en_attente"])
-            rep = machines.eteindre(m["id"], annuler=True)
+            self.assertIsNotNone(machines.node_view()["extinction_en_attente"])
+            rep = machines.shut_down(m["id"], annuler=True)
             self.assertTrue(rep["annulee"])
         self.assertEqual(appels, [])
-        journal = " ".join(machines.journal())
+        journal = " ".join(machines.read_log())
         self.assertIn("extinction demandée", journal)
         self.assertIn("extinction annulée", journal)
 
     def test_sans_jeton_valide_pas_d_extinction(self):
         self.jumeler()
-        machines.noeud_autoriser_extinction(True)
+        machines.node_allow_shutdown(True)
         statut, _ = self.http("POST", "/api/noeud/eteindre", {"annuler": False})
         self.assertEqual(statut, 401)
-        self.assertIsNone(machines.noeud_vue()["extinction_en_attente"])
+        self.assertIsNone(machines.node_view()["extinction_en_attente"])
 
     def tearDown(self):
         power.cancel_shutdown()

@@ -144,37 +144,37 @@ class DemarrageAutomatique(unittest.TestCase):
 class MachinesInfos(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="lutin-mi-"))
-        machines.DOSSIER = self.tmp
-        machines.REGISTRE.update(t=0.0)
-        machines.SONDES.clear()
-        machines.DISTANTS.update(t=0.0, v=[], en_cours=False)
+        machines.FOLDER = self.tmp
+        machines.REGISTRY.update(t=0.0)
+        machines.PROBES.clear()
+        machines.REMOTES.update(t=0.0, v=[], en_cours=False)
         self.addCleanup(setattr, machines, "DOSSIER", None)
         self.m = {"id": "a" * 32, "nom": "Gros PC", "adresse": "http://192.168.1.20:8777", "jeton": "t", "mac": "", "ajoutee": "x"}
-        machines._ecrire_registre([self.m])
+        machines._write_registry([self.m])
 
     def test_l_adresse_mac_recue_complete_celle_qui_manque_sans_ecraser_la_saisie(self):
-        machines.retenir_infos(dict(self.m), {"mac": "00-1a-2b-3c-4d-5e", "reveil": {"pret": True, "avertissements": []}, "demarrage": {"installe": True, "possible": True}})
-        m = machines.trouver(self.m["id"])
+        machines.keep_info(dict(self.m), {"mac": "00-1a-2b-3c-4d-5e", "reveil": {"pret": True, "avertissements": []}, "demarrage": {"installe": True, "possible": True}})
+        m = machines.find(self.m["id"])
         self.assertEqual((m["mac"], m["mac_auto"]), ("00:1A:2B:3C:4D:5E", True))
-        machines.definir_mac(self.m["id"], "AA:BB:CC:DD:EE:01")
-        machines.retenir_infos(dict(m), {"mac": "00:1A:2B:3C:4D:5E"})
-        self.assertEqual(machines.trouver(self.m["id"])["mac"], "AA:BB:CC:DD:EE:01", "la saisie à la main n'est jamais écrasée")
+        machines.set_mac(self.m["id"], "AA:BB:CC:DD:EE:01")
+        machines.keep_info(dict(m), {"mac": "00:1A:2B:3C:4D:5E"})
+        self.assertEqual(machines.find(self.m["id"])["mac"], "AA:BB:CC:DD:EE:01", "la saisie à la main n'est jamais écrasée")
 
     def test_avertissements_reveil_et_demarrage(self):
         sans = dict(self.m)
-        self.assertIn("Adresse MAC inconnue", " ".join(machines.avertissements(sans)))
+        self.assertIn("Adresse MAC inconnue", " ".join(machines.wake_warnings(sans)))
         pas_pret = dict(self.m, mac="00:1A:2B:3C:4D:5E", reveil={"pret": False, "avertissements": ["Le Wake-on-LAN est désactivé."]}, demarrage={"installe": False, "possible": True})
-        texte = " ".join(machines.avertissements(pas_pret))
+        texte = " ".join(machines.wake_warnings(pas_pret))
         self.assertIn("Wake-on-LAN est désactivé", texte)
         self.assertIn("ne démarre pas tout seul", texte)
         docker = dict(self.m, mac="00:1A:2B:3C:4D:5E", demarrage={"docker": True, "installe": False, "possible": False})
-        self.assertIn("restart: unless-stopped", " ".join(machines.avertissements(docker)))
+        self.assertIn("restart: unless-stopped", " ".join(machines.wake_warnings(docker)))
         pret = dict(self.m, mac="00:1A:2B:3C:4D:5E", reveil={"pret": True, "avertissements": []}, demarrage={"installe": True, "possible": True})
-        self.assertEqual(machines.avertissements(pret), [])
+        self.assertEqual(machines.wake_warnings(pret), [])
 
     def test_le_reveil_dit_ce_qui_risque_de_l_empecher(self):
-        machines._ecrire_registre([dict(self.m, mac="00:1A:2B:3C:4D:5E", reveil={"pret": False, "avertissements": ["Wake-on-LAN désactivé."]})])
-        rep = machines.reveiller(self.m["id"], envoyer=lambda mac, hote: [(hote, 9)])
+        machines._write_registry([dict(self.m, mac="00:1A:2B:3C:4D:5E", reveil={"pret": False, "avertissements": ["Wake-on-LAN désactivé."]})])
+        rep = machines.wake(self.m["id"], envoyer=lambda mac, hote: [(hote, 9)])
         self.assertTrue(rep["ok"])
         self.assertIn("Wake-on-LAN désactivé.", rep["avertissements"])
 
@@ -183,30 +183,30 @@ class MachinesInfos(unittest.TestCase):
             id, nom = "ollama", "Ollama"
         with mock.patch.object(power, "wake_state", lambda ip, **kw: {"mac": "00:1A:2B:3C:4D:5E", "carte": "eth", "pret": True, "avertissements": []}), \
                 mock.patch.object(power, "startup_state", lambda: {"installe": True, "possible": True}),                 mock.patch.object(power, "network_adapters", lambda **kw: []):
-            machines.INFOS_NOEUD.clear()
-            machines.CARTES.update(t=-999.0, v=None)
-            e = machines.noeud_etat(Moteur(), {"actif": True, "installes": ["gros:70b"]}, "192.168.1.20")
+            machines.NODE_INFO.clear()
+            machines.CARDS.update(t=-999.0, v=None)
+            e = machines.node_state(Moteur(), {"actif": True, "installes": ["gros:70b"]}, "192.168.1.20")
         self.assertEqual((e["mac"], e["reveil"]["pret"], e["demarrage"]["installe"], e["modeles"]), ("00:1A:2B:3C:4D:5E", True, True, ["gros:70b"]))
 
     def test_modeles_distants_et_choix_d_un_modele_qui_n_existe_que_la_bas(self):
-        machines.DERNIER_ETAT[self.m["id"]] = "operationnel"          # la machine répond : ses listes sont proposées
-        machines.SONDES[self.m["id"]] = (machines.time.monotonic(), {}, "")          # ... et vient de répondre
+        machines.LAST_STATE[self.m["id"]] = "operationnel"          # la machine répond : ses listes sont proposées
+        machines.PROBES[self.m["id"]] = (machines.time.monotonic(), {}, "")          # ... et vient de répondre
         reponses = {"etat": "operationnel", "detail": "", "modeles": ["gros:70b", "autre:32b"]}
-        with mock.patch.object(machines, "sonder", lambda m, modele="", *a, **kw: reponses):
-            liste = machines.modeles_distants(attente=True)
+        with mock.patch.object(machines, "probe", lambda m, modele="", *a, **kw: reponses):
+            liste = machines.remote_models(attente=True)
         self.assertEqual([(d["nom"], d["modeles"]) for d in liste], [("Gros PC", ["gros:70b", "autre:32b"])])
         reg = {"machine": self.m["id"], "modele": "gros:70b"}
-        self.assertIsNotNone(machines.modele_distant(reg, ["petit:8b"]))
-        self.assertIsNone(machines.modele_distant(reg, ["gros:70b"]), "présent ici aussi : pas un modèle distant")
-        self.assertIsNone(machines.modele_distant({"machine": "", "modele": "gros:70b"}, []))
+        self.assertIsNotNone(machines.remote_model(reg, ["petit:8b"]))
+        self.assertIsNone(machines.remote_model(reg, ["gros:70b"]), "présent ici aussi : pas un modèle distant")
+        self.assertIsNone(machines.remote_model({"machine": "", "modele": "gros:70b"}, []))
         # la machine s'éteint : sa dernière liste reste visible (grisée dans le choix)
-        with mock.patch.object(machines, "sonder", lambda m, modele="", *a, **kw: {"etat": "injoignable", "detail": "", "modeles": []}):
-            machines.DISTANTS["t"] = 0.0
-            hors = machines.modeles_distants(attente=True)
+        with mock.patch.object(machines, "probe", lambda m, modele="", *a, **kw: {"etat": "injoignable", "detail": "", "modeles": []}):
+            machines.REMOTES["t"] = 0.0
+            hors = machines.remote_models(attente=True)
         self.assertEqual((hors[0]["etat"], hors[0]["modeles"]), ("injoignable", ["gros:70b", "autre:32b"]))
 
     def test_modele_de_l_autre_machine_injoignable_erreur_claire_au_lieu_d_un_modele_introuvable(self):
-        machines.DISTANTS.update(t=machines.time.monotonic(), v=[{"id": self.m["id"], "nom": "Gros PC", "etat": "operationnel", "modeles": ["gros:70b"]}])
+        machines.REMOTES.update(t=machines.time.monotonic(), v=[{"id": self.m["id"], "nom": "Gros PC", "etat": "operationnel", "modeles": ["gros:70b"]}])
 
         class Local:
             id, nom = "ollama", "Ollama"
@@ -216,8 +216,8 @@ class MachinesInfos(unittest.TestCase):
 
             def chat(self, corps, delai=60):
                 raise AssertionError("le moteur local n'a pas ce modèle : il ne doit pas répondre")
-        r = machines.Routage(Local(), self.m)
-        with mock.patch.object(machines, "sonder", lambda m, modele="", *a, **kw: {"etat": "injoignable", "detail": "", "modeles": []}):
+        r = machines.Routing(Local(), self.m)
+        with mock.patch.object(machines, "probe", lambda m, modele="", *a, **kw: {"etat": "injoignable", "detail": "", "modeles": []}):
             with self.assertRaises(ValueError) as e:
                 r.chat({"model": "gros:70b", "messages": []})
         self.assertIn("n'existe que sur la machine « Gros PC »", str(e.exception))
@@ -231,8 +231,8 @@ class MachinesInfos(unittest.TestCase):
 
             def capacites(self, modele):
                 return {"tools"}
-        r = machines.Routage(Local(), self.m)
-        machines.CAPACITES_DISTANTES.clear()
+        r = machines.Routing(Local(), self.m)
+        machines.REMOTE_CAPABILITIES.clear()
         with mock.patch.object(machines, "_json", lambda m, chemin, corps=None, **kw: {"capacites": ["tools", "thinking"]}):
             self.assertEqual(r.capacites("gros:70b"), {"tools", "thinking"})
         self.assertEqual(r.capacites("petit:8b"), {"tools"}, "un modèle d'ici garde les capacités d'ici")
@@ -244,33 +244,33 @@ class InfosEnArrierePlan(unittest.TestCase):
     def test_une_lecture_lente_ne_bloque_pas_l_appairage_puis_les_infos_arrivent(self):
         import threading
         import time
-        machines.INFOS_NOEUD.clear()
-        machines.INFOS_EN_COURS.clear()
+        machines.NODE_INFO.clear()
+        machines.INFO_RUNNING.clear()
         libere = threading.Event()
 
         def lent(ip, **kw):
             libere.wait(5)
             return {"mac": "00:1A:2B:3C:4D:5E", "carte": "eth", "pret": True, "avertissements": []}
         with mock.patch.object(power, "wake_state", lent), mock.patch.object(power, "startup_state", lambda: {"installe": True, "possible": True}),                 mock.patch.object(power, "network_adapters", lambda **kw: []):
-            machines.CARTES.update(t=-999.0, v=None)
+            machines.CARDS.update(t=-999.0, v=None)
             debut = time.monotonic()
-            infos = machines.noeud_infos("10.0.0.1", attente=0.2)
+            infos = machines.node_info("10.0.0.1", attente=0.2)
             self.assertLess(time.monotonic() - debut, 1.5)
             self.assertEqual(infos["mac"], "", "pas encore prêt : informations vides, pas d'erreur")
             libere.set()
             for _ in range(50):
-                if "10.0.0.1" in machines.INFOS_NOEUD:
+                if "10.0.0.1" in machines.NODE_INFO:
                     break
                 time.sleep(0.05)
-            self.assertEqual(machines.noeud_infos("10.0.0.1", attente=0.2)["mac"], "00:1A:2B:3C:4D:5E")
+            self.assertEqual(machines.node_info("10.0.0.1", attente=0.2)["mac"], "00:1A:2B:3C:4D:5E")
 
     def test_une_sonde_recoit_sa_reponse_avant_d_abandonner(self):
         """La machine qui sonde abandonne au bout de DELAI_SONDE_S : le nœud doit répondre avant, même quand PowerShell est lent (sinon la première
         sonde après un démarrage dit « injoignable » une machine allumée)."""
         import threading
         import time
-        machines.INFOS_NOEUD.clear()
-        machines.INFOS_EN_COURS.clear()
+        machines.NODE_INFO.clear()
+        machines.INFO_RUNNING.clear()
         libere = threading.Event()
         self.addCleanup(libere.set)
 
@@ -281,11 +281,11 @@ class InfosEnArrierePlan(unittest.TestCase):
         class Moteur:
             id, nom = "faux", "Faux"
         with mock.patch.object(power, "wake_state", lent), mock.patch.object(power, "startup_state", lambda: {"installe": False, "possible": True}),                 mock.patch.object(power, "network_adapters", lambda **kw: []):
-            machines.CARTES.update(t=-999.0, v=None)
+            machines.CARDS.update(t=-999.0, v=None)
             debut = time.monotonic()
-            etat = machines.noeud_etat(Moteur(), {"actif": True, "installes": ["m"]}, "10.0.0.2")
+            etat = machines.node_state(Moteur(), {"actif": True, "installes": ["m"]}, "10.0.0.2")
             duree = time.monotonic() - debut
-        self.assertLess(duree, machines.DELAI_SONDE_S / 2, "une marge pour le réseau et le reste de la réponse")
+        self.assertLess(duree, machines.PROBE_TIMEOUT_S / 2, "une marge pour le réseau et le reste de la réponse")
         self.assertEqual((etat["mac"], etat["modeles"]), ("", ["m"]), "les informations lentes viendront à la sonde suivante")
 
 

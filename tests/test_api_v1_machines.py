@@ -30,18 +30,18 @@ def until(check, seconds=10):
 class PairedMachines(unittest.TestCase):
     def setUp(self):
         quiet_node.quiet(self)
-        machines.SONDES.clear()
-        machines.DERNIER_ETAT.clear()
-        machines.DISTANTS.update(t=0.0, v=[], en_cours=False)
-        machines.noeud_activer(True)
-        self.paired = machines.ajouter(T.BASE, machines.noeud_nouveau_code()["code"], "Bureau")
+        machines.PROBES.clear()
+        machines.LAST_STATE.clear()
+        machines.REMOTES.update(t=0.0, v=[], en_cours=False)
+        machines.node_enable(True)
+        self.paired = machines.add(T.BASE, machines.node_new_code()["code"], "Bureau")
 
         def restore():
-            machines._ecrire_registre([])
-            machines.noeud_activer(False)
-            machines.SONDES.clear()
-            machines.DERNIER_ETAT.clear()
-            machines.DISTANTS.update(t=0.0, v=[], en_cours=False)
+            machines._write_registry([])
+            machines.node_enable(False)
+            machines.PROBES.clear()
+            machines.LAST_STATE.clear()
+            machines.REMOTES.update(t=0.0, v=[], en_cours=False)
         self.addCleanup(restore)
 
     def test_the_list_answers_at_once_then_with_the_probe(self):
@@ -59,16 +59,16 @@ class PairedMachines(unittest.TestCase):
         self.assertIsInstance(probed["models"], list)
 
     def test_a_machine_that_does_not_answer_does_not_hold_the_list(self):
-        stored = machines.lire()
-        machines._ecrire_registre([dict(stored[0], adresse="http://10.255.255.1:9")])          # an address nothing answers: a probe would wait seconds
+        stored = machines.read()
+        machines._write_registry([dict(stored[0], adresse="http://10.255.255.1:9")])          # an address nothing answers: a probe would wait seconds
         begin = time.monotonic()
         status, answer = api("GET", "/api/v1/machines")
         self.assertLess(time.monotonic() - begin, 1.0, "the list does not wait for the network")
         self.assertEqual((status, answer["machines"][0]["state"]), (200, "unknown"))
 
     def test_no_token_ever_leaves(self):
-        stored = json.dumps(machines.lire())
-        token = machines.lire()[0].get("jeton", "")
+        stored = json.dumps(machines.read())
+        token = machines.read()[0].get("jeton", "")
         self.assertTrue(token and token in stored)
         until(lambda: api("GET", "/api/v1/machines")[1]["machines"][0]["state"] != "unknown")
         self.assertNotIn(token, json.dumps(api("GET", "/api/v1/machines")[1]))

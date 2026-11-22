@@ -42,15 +42,15 @@ class Node(unittest.TestCase):
         machines.CODES.clear()
 
         def restore():
-            for allow in (machines.noeud_autoriser_extinction, machines.noeud_autoriser_maj, machines.noeud_autoriser_piloter):
+            for allow in (machines.node_allow_shutdown, machines.node_allow_update, machines.node_allow_control):
                 allow(False)
-            for share in machines.DROITS:
-                machines.noeud_droit(share, False)
-            for waiting in machines.noeud_vue()["demandes"]:
-                machines.noeud_repondre_demande(waiting["machine"], waiting["droit"], False)
-            for allowed in machines.noeud_vue()["autorisees"]:
-                machines.noeud_revoquer(allowed["nom"])
-            machines.noeud_activer(False)
+            for share in machines.RIGHTS:
+                machines.node_right(share, False)
+            for waiting in machines.node_view()["demandes"]:
+                machines.node_answer_request(waiting["machine"], waiting["droit"], False)
+            for allowed in machines.node_view()["autorisees"]:
+                machines.node_revoke(allowed["nom"])
+            machines.node_enable(False)
             machines.CODES.clear()
         self.addCleanup(restore)
 
@@ -63,12 +63,12 @@ class Node(unittest.TestCase):
         """What `POST /machines` does on the other machine: it trades the code shown here for a token."""
         status, answer = call("POST", "/api/v1/node/pairing-code")
         self.assertEqual(status, 201, answer)
-        return machines.noeud_echanger(answer["code"], name)["jeton"]
+        return machines.node_exchange(answer["code"], name)["jeton"]
 
     def test_the_node_under_its_english_names(self):
         answer = node()
         self.assertEqual(sorted(answer), NODE_FIELDS)
-        self.assertEqual((answer["lending"], answer["id"]), (False, machines.noeud()["id"]))
+        self.assertEqual((answer["lending"], answer["id"]), (False, machines.node()["id"]))
         self.assertEqual(answer["shares"], {"skills": False, "memory": False})
         self.assertEqual(answer["allow"], {"lead": False, "update": False, "shutdown": False}, "nothing is granted by default")
         self.assertEqual((answer["pending_shutdown"], answer["requests"], answer["authorized"]), (None, [], []))
@@ -80,10 +80,10 @@ class Node(unittest.TestCase):
         self.assertEqual(call("PATCH", "/api/v1/node", {"lending": True}, who=V.DEVICE)[1]["error"]["code"], "configurator")
         for body in ({}, {"lending": 1}, {"lending": "yes"}, {"lending": True, "id": "x"}):
             self.assertEqual(call("PATCH", "/api/v1/node", body)[1]["error"]["code"], "invalid_request", body)
-        self.assertFalse(machines.noeud_actif(), "a refused value changes nothing")
+        self.assertFalse(machines.node_active(), "a refused value changes nothing")
         status, answer = call("PATCH", "/api/v1/node", {"lending": True})
         self.assertEqual((status, sorted(answer), answer["lending"]), (200, NODE_FIELDS, True))
-        self.assertTrue(machines.noeud_actif())
+        self.assertTrue(machines.node_active())
         self.assertEqual(call("PATCH", "/api/v1/node", {"lending": False})[1]["lending"], False)
 
     def test_at_the_level_local_lending_is_refused(self):
@@ -91,7 +91,7 @@ class Node(unittest.TestCase):
             status, answer = call("PATCH", "/api/v1/node", {"lending": True})
             self.assertEqual((status, answer["error"]["code"]), (409, "local_only"))
             self.assertIn("réseau", answer["error"]["message"])
-            self.assertFalse(machines.noeud_actif())
+            self.assertFalse(machines.node_active())
             self.assertEqual(call("PATCH", "/api/v1/node", {"lending": False})[0], 200, "turning it off is always possible")
             status, answer = V.call("POST", "/api/machines-noeud-activer", V.OWNER, {"actif": True})
             self.assertEqual(status, 400, "the old route answers as before")
@@ -99,32 +99,32 @@ class Node(unittest.TestCase):
     def test_the_pairing_code_needs_lending(self):
         status, answer = call("POST", "/api/v1/node/pairing-code")
         self.assertEqual((status, answer["error"]["code"], machines.CODES), (409, "not_lending", {}), "no code that could not be used")
-        machines.noeud_activer(True)
+        machines.node_enable(True)
         self.assertEqual(call("POST", "/api/v1/node/pairing-code", {"name": "x"})[1]["error"]["code"], "invalid_request")
         self.assertEqual(call("POST", "/api/v1/node/pairing-code", who=V.DEVICE)[1]["error"]["code"], "configurator")
         self.assertEqual(machines.CODES, {})
         status, answer = call("POST", "/api/v1/node/pairing-code")
-        self.assertEqual((status, sorted(answer), answer["valid_seconds"]), (201, ["code", "valid_seconds"], machines.DUREE_CODE_S))
+        self.assertEqual((status, sorted(answer), answer["valid_seconds"]), (201, ["code", "valid_seconds"], machines.CODE_TTL_S))
         self.assertRegex(answer["code"], r"^\d{4}-\d{4}$")
-        machines.noeud_echanger(answer["code"], "Bureau")
+        machines.node_exchange(answer["code"], "Bureau")
         self.assertEqual([allowed["name"] for allowed in node()["authorized"]], ["Bureau"])
 
     def test_revoking_an_authorized_machine(self):
-        machines.noeud_activer(True)
+        machines.node_enable(True)
         token = self.authorize("Poste du salon")
-        self.assertEqual(machines.noeud_jeton_valide(token), "Poste du salon")
+        self.assertEqual(machines.node_token_valid(token), "Poste du salon")
         self.assertEqual(call("DELETE", "/api/v1/node/authorized/Poste%20du%20salon", who=V.DEVICE)[1]["error"]["code"], "configurator")
         self.assertEqual(call("DELETE", "/api/v1/node/authorized/Inconnu")[1]["error"]["code"], "not_found")
-        self.assertEqual(machines.noeud_jeton_valide(token), "Poste du salon", "refusals revoke nothing")
+        self.assertEqual(machines.node_token_valid(token), "Poste du salon", "refusals revoke nothing")
         status, answer = call("DELETE", "/api/v1/node/authorized/Poste%20du%20salon")
         self.assertEqual((status, answer["authorized"]), (200, []))
-        self.assertIsNone(machines.noeud_jeton_valide(token), "the token stops working at once")
+        self.assertIsNone(machines.node_token_valid(token), "the token stops working at once")
 
     def test_an_authorized_machine_is_renamed_to_say_who_it_is(self):
         """Seen by the maintainer: a paired machine is listed under the name its computer sent (« DESKTOP-K2J8S9 »): it can be given a clear one."""
-        machines.noeud_activer(True)
+        machines.node_enable(True)
         token = self.authorize("DESKTOP-K2J8S9")
-        machines.noeud_demander("DESKTOP-K2J8S9", "maj")
+        machines.node_request("DESKTOP-K2J8S9", "maj")
         self.authorize("Salon")
         path = "/api/v1/node/authorized/DESKTOP-K2J8S9"
         self.assertEqual(call("PATCH", path, {"name": "PC du bureau"}, who=V.DEVICE)[1]["error"]["code"], "configurator")
@@ -135,14 +135,14 @@ class Node(unittest.TestCase):
         status, answer = call("PATCH", path, {"name": "PC du bureau <b>"})
         self.assertEqual(status, 200, answer)
         self.assertEqual(sorted(allowed["name"] for allowed in answer["authorized"]), ["PC du bureau b", "Salon"], "cleaned as at pairing")
-        self.assertEqual(machines.noeud_jeton_valide(token), "PC du bureau b", "its token still opens, under the new name")
+        self.assertEqual(machines.node_token_valid(token), "PC du bureau b", "its token still opens, under the new name")
         self.assertEqual([request["machine"] for request in answer["requests"]], ["PC du bureau b"], "its waiting request follows it")
 
     def test_permissions_are_granted_from_this_machine_only(self):
         status, answer = call("PATCH", "/api/v1/node/permissions", {"shares": {"skills": True}, "allow": {"lead": True}})
         self.assertEqual((status, answer["shares"], answer["allow"]), (200, {"skills": True, "memory": False}, {"lead": True, "update": False, "shutdown": False}))
-        self.assertTrue(machines.noeud_vue()["piloter"])
-        self.assertTrue(machines.noeud_droits()["skills"])
+        self.assertTrue(machines.node_view()["piloter"])
+        self.assertTrue(machines.node_rights()["skills"])
         refused = ({}, {"shares": {}}, {"shares": {"conversations": True}}, {"shares": ["skills"]}, {"allow": {"lead": 1}}, {"autostart": "yes"},
                    {"autostart": None}, {"lending": True}, {"shares": {"memory": True}, "allow": {"admin": True}},
                    {"allow": {"update": True}, "autostart": 1})
@@ -163,13 +163,13 @@ class Node(unittest.TestCase):
         with mock.patch.object(power, "install_startup", refuse):
             status, answer = call("PATCH", "/api/v1/node/permissions", {"autostart": True, "allow": {"shutdown": True}, "shares": {"memory": True}})
         self.assertEqual((status, answer["error"]["code"], answer["error"]["message"]), (400, "invalid_request", "Windows refused"))
-        self.assertFalse(machines.noeud_vue()["extinction"], "the system said no: nothing else is written")
-        self.assertFalse(machines.noeud_droits()["memoire"])
+        self.assertFalse(machines.node_view()["extinction"], "the system said no: nothing else is written")
+        self.assertFalse(machines.node_rights()["memoire"])
 
     def test_a_remote_administrator_configures_but_does_not_grant(self):
         """The level `local` is stricter than `configurator`: an administrator on another device lends and revokes, but what this machine grants,
         the answer to a request and a shutdown stay with the person in front of it."""
-        machines.noeud_demander("Bureau", "piloter")
+        machines.node_request("Bureau", "piloter")
         with mock.patch.object(A.Handler, "_admin_tous", staticmethod(lambda: True)):
             self.assertEqual(call("PATCH", "/api/v1/node", {"lending": True}, who=V.DEVICE)[0], 200)
             self.assertEqual(call("POST", "/api/v1/node/pairing-code", who=V.DEVICE)[0], 201)
@@ -178,12 +178,12 @@ class Node(unittest.TestCase):
                                        ("POST", "/api/v1/node/shutdown/cancel", None)):
                 status, answer = call(method, path, body, who=V.DEVICE)
                 self.assertEqual((status, answer["error"]["code"]), (403, "local_only"), path)
-        self.assertFalse(machines.noeud_vue()["piloter"])
-        self.assertEqual(len(machines.noeud_vue()["demandes"]), 1)
+        self.assertFalse(machines.node_view()["piloter"])
+        self.assertEqual(len(machines.node_view()["demandes"]), 1)
 
     def test_a_rights_request_is_answered_here(self):
-        machines.noeud_demander("Bureau", "piloter")
-        machines.noeud_demander("Bureau", "maj")
+        machines.node_request("Bureau", "piloter")
+        machines.node_request("Bureau", "maj")
         waiting = node()["requests"]
         self.assertEqual(sorted((request["machine"], request["right"]) for request in waiting), [("Bureau", "lead"), ("Bureau", "update")])
         self.assertTrue(all(sorted(request) == ["date", "machine", "right"] for request in waiting))
@@ -191,7 +191,7 @@ class Node(unittest.TestCase):
             self.assertEqual(call("POST", "/api/v1/node/requests/" + path, body)[1]["error"]["code"], "invalid_request", path)
         self.assertEqual(call("POST", "/api/v1/node/requests/Ailleurs/lead", {"accept": True})[1]["error"]["code"], "not_found")
         self.assertEqual(call("POST", "/api/v1/node/requests/Bureau/shutdown", {"accept": True})[1]["error"]["code"], "not_found", "no such request")
-        self.assertEqual(len(machines.noeud_vue()["demandes"]), 2, "refusals answer nothing")
+        self.assertEqual(len(machines.node_view()["demandes"]), 2, "refusals answer nothing")
         status, answer = call("POST", "/api/v1/node/requests/Bureau/lead", {"accept": True})
         self.assertEqual((status, answer["allow"]["lead"], [request["right"] for request in answer["requests"]]), (200, True, ["update"]))
         answer = call("POST", "/api/v1/node/requests/Bureau/update", {"accept": False})[1]

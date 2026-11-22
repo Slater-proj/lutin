@@ -31,83 +31,83 @@ from pathlib import Path
 from . import power
 from .i18n import t as _t
 
-ETATS = ("injoignable", "reveil_envoye", "joignable", "operationnel")
-DUREE_CODE_S = 300
-CODES_MAX = 3
-VALIDITE_SONDE_S = 10          # un constat d'état est gardé ce temps : pas de sonde à chaque message
-DELAI_SONDE_REVEIL_S = 3.0
-VERIFICATION_ALLUMEE_S = 4          # « le système de la machine répond-il ? » est regardé au plus toutes les 4 s pendant un réveil
-VALIDITE_SONDE_ATTENTE_S = 2          # une machine pas encore opérationnelle (éteinte, qui démarre) est resondée vite : on la voit s'allumer sans attendre
-DELAI_SONDE_S = 1.5
-ATTENTE_INFOS_SONDE_S = 0.4          # ce que le nœud attend ses informations lentes (PowerShell) avant de répondre à une sonde : bien moins que DELAI_SONDE_S, sinon la sonde abandonne avant la réponse
+STATES = ("injoignable", "reveil_envoye", "joignable", "operationnel")
+CODE_TTL_S = 300
+MAX_CODES = 3
+PROBE_TTL_S = 10          # un constat d'état est gardé ce temps : pas de sonde à chaque message
+WAKE_PROBE_TIMEOUT_S = 3.0
+ON_CHECK_S = 4          # « le système de la machine répond-il ? » est regardé au plus toutes les 4 s pendant un réveil
+WAITING_PROBE_TTL_S = 2          # une machine pas encore opérationnelle (éteinte, qui démarre) est resondée vite : on la voit s'allumer sans attendre
+PROBE_TIMEOUT_S = 1.5
+PROBE_INFO_WAIT_S = 0.4          # ce que le nœud attend ses informations lentes (PowerShell) avant de répondre à une sonde : bien moins que DELAI_SONDE_S, sinon la sonde abandonne avant la réponse
 RE_MAC = re.compile(r"^([0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}$")
 RE_ID = re.compile(r"^[0-9a-f]{32}$")
-CLES_CHAT = ("model", "messages", "tools", "options", "think", "format", "stream", "keep_alive")          # ce que le nœud accepte de transmettre à son moteur
+CHAT_KEYS = ("model", "messages", "tools", "options", "think", "format", "stream", "keep_alive")          # ce que le nœud accepte de transmettre à son moteur
 
 
-class MachineInconnue(ValueError):
+class UnknownMachine(ValueError):
     """Aucune machine appairée n'a cet identifiant (rien n'a été tenté)."""
 
 
-class MachineRefus(ValueError):
+class MachineRefused(ValueError):
     """L'autre machine a répondu non : code refusé, droit qu'elle n'accorde pas, autorisation retirée."""
 
 
-class MachineInjoignable(ValueError):
+class MachineUnreachable(ValueError):
     """L'autre machine ne répond pas (éteinte, mauvaise adresse, réseau)."""
 
 
-class MachineErreur(ValueError):
+class MachineError(ValueError):
     """L'autre machine a répondu autre chose que ce qui était attendu."""
 # Ce sont des ValueError : la route historique (/api/machines-*) les renvoie en 400 comme avant ; /api/v1 en tire un statut distinct (ADR 0016).
 
-DOSSIER = None          # les tests le remplacent ; sinon le dossier de données de Lutin
-VERROU = threading.RLock()
+FOLDER = None          # les tests le remplacent ; sinon le dossier de données de Lutin
+LOCK = threading.RLock()
 CODES = {}          # code (chiffres) -> instant d'expiration
-SONDES = {}          # id de machine -> (instant, résultat)
-DERNIER_ETAT = {}          # id de machine -> dernier état journalisé
-REVEIL = {}          # id de machine -> instant du dernier paquet de réveil envoyé
-ECHEC_REVEIL = {}          # id de machine -> texte : le réveil n'a pas abouti dans le délai (cinq minutes) ; effacé au prochain réveil ou dès que la machine répond
-ALLUMEE = {}          # id de machine -> (instant, verdict) : « le système répond » constaté pendant un réveil (gardé quelques secondes : la vérification coûte une ou deux secondes)
-DEPUIS_ALLUMEE = {}          # id de machine -> instant où elle a été vue allumée pour la première fois pendant ce réveil
-HOTE_ALLUME = None          # remplaçable (tests) ; par défaut alimentation.hote_allume
-A_REPONDU = {}          # machines dont Lutin a répondu pendant ce réveil (pour dire « il redémarre » s'il disparaît de nouveau)
-REPONDU = {}          # id de machine -> instant où Lutin a répondu pour la première fois pendant ce réveil (sans interruption depuis)
-STABLE_REPONSE_S = 25          # le réveil n'est « fini » que quand Lutin répond sans interruption depuis ce temps : un Lutin qui redémarre juste après avoir répondu ne fait pas retomber la machine à « éteinte »
-_REVEILS_REPRIS = {"fait": False}
-INFOS_NOEUD = {}          # adresse locale -> (instant, infos du nœud)
-INFOS_EN_COURS = {}          # adresse locale -> évènement : un calcul d'infos est en cours
-DISTANTS = {"t": 0.0, "v": [], "en_cours": False}          # modèles des autres machines, pour la liste de choix (voir modeles_distants)
-ARRET = {}          # id de machine -> instant où on lui a demandé de s'éteindre (le suivi « extinction » de la page)
-MAJ_DISTANTE = {}          # id de machine -> (instant, version d'avant) : une mise à jour lui a été demandée
-SYNCHRO = {}          # id de machine -> {"modeles": bool, "conv": bool} : ce qui a été relu depuis qu'elle répond
-DELAI_ARRET_S = 150
-DELAI_SYNCHRO_S = 90
-DELAI_MAJ_S = 400
-CAPACITES_DISTANTES = {}          # (id de machine, modèle) -> (instant, capacités)
+PROBES = {}          # id de machine -> (instant, résultat)
+LAST_STATE = {}          # id de machine -> dernier état journalisé
+WAKING = {}          # id de machine -> instant du dernier paquet de réveil envoyé
+WAKE_FAILED = {}          # id de machine -> texte : le réveil n'a pas abouti dans le délai (cinq minutes) ; effacé au prochain réveil ou dès que la machine répond
+POWERED_ON = {}          # id de machine -> (instant, verdict) : « le système répond » constaté pendant un réveil (gardé quelques secondes : la vérification coûte une ou deux secondes)
+ON_SINCE = {}          # id de machine -> instant où elle a été vue allumée pour la première fois pendant ce réveil
+HOST_ON = None          # remplaçable (tests) ; par défaut alimentation.hote_allume
+HAS_ANSWERED = {}          # machines dont Lutin a répondu pendant ce réveil (pour dire « il redémarre » s'il disparaît de nouveau)
+ANSWERED = {}          # id de machine -> instant où Lutin a répondu pour la première fois pendant ce réveil (sans interruption depuis)
+STABLE_ANSWER_S = 25          # le réveil n'est « fini » que quand Lutin répond sans interruption depuis ce temps : un Lutin qui redémarre juste après avoir répondu ne fait pas retomber la machine à « éteinte »
+_WAKES_RESUMED = {"fait": False}
+NODE_INFO = {}          # adresse locale -> (instant, infos du nœud)
+INFO_RUNNING = {}          # adresse locale -> évènement : un calcul d'infos est en cours
+REMOTES = {"t": 0.0, "v": [], "en_cours": False}          # modèles des autres machines, pour la liste de choix (voir modeles_distants)
+SHUTDOWN = {}          # id de machine -> instant où on lui a demandé de s'éteindre (le suivi « extinction » de la page)
+REMOTE_UPDATE = {}          # id de machine -> (instant, version d'avant) : une mise à jour lui a été demandée
+SYNC = {}          # id de machine -> {"modeles": bool, "conv": bool} : ce qui a été relu depuis qu'elle répond
+SHUTDOWN_TIMEOUT_S = 150
+SYNC_TIMEOUT_S = 90
+UPDATE_TIMEOUT_S = 400
+REMOTE_CAPABILITIES = {}          # (id de machine, modèle) -> (instant, capacités)
 
 
-def dossier():
-    if DOSSIER is not None:
-        return Path(DOSSIER)
+def folder():
+    if FOLDER is not None:
+        return Path(FOLDER)
     from . import core as _m
     return Path(_m.DATA)
 
 
-def _lire(nom, defaut):
+def _read(nom, defaut):
     from . import storage
-    return storage.read_json(dossier() / nom, defaut)          # relu un instant plus tard quand Windows le tient (en cours de remplacement)
+    return storage.read_json(folder() / nom, defaut)          # relu un instant plus tard quand Windows le tient (en cours de remplacement)
 
 
-def _ecrire(nom, valeur):
+def _write(nom, valeur):
     from . import storage
-    storage.write_atomic(dossier() / nom, json.dumps(valeur, ensure_ascii=False, indent=1))          # un fichier temporaire à soi, remplacement réessayé
+    storage.write_atomic(folder() / nom, json.dumps(valeur, ensure_ascii=False, indent=1))          # un fichier temporaire à soi, remplacement réessayé
 
 
-def journaliser(texte):
+def log_event(texte):
     """Une ligne dans machines.log (sans donnée de conversation)."""
     try:
-        d = dossier()
+        d = folder()
         d.mkdir(parents=True, exist_ok=True)
         with open(d / "machines.log", "a", encoding="utf-8") as f:
             f.write("{} {}\n".format(time.strftime("%Y-%m-%d %H:%M:%S"), texte))
@@ -115,110 +115,110 @@ def journaliser(texte):
         pass
 
 
-def journal(n=30):
+def read_log(n=30):
     """Les dernières lignes du journal des machines."""
     try:
-        return (dossier() / "machines.log").read_text(encoding="utf-8", errors="replace").splitlines()[-n:]
+        return (folder() / "machines.log").read_text(encoding="utf-8", errors="replace").splitlines()[-n:]
     except OSError:
         return []
 
 
 # --------------------------------------------------------------------------- côté NŒUD : prêter le moteur de cette machine
 
-def noeud():
+def node():
     """{id, actif, jetons:[{empreinte, nom, date}]} — l'identifiant est créé une fois et ne change plus."""
-    with VERROU:
-        n = _lire("noeud.json", {})
+    with LOCK:
+        n = _read("noeud.json", {})
         if not isinstance(n, dict) or not RE_ID.match(str(n.get("id", ""))):
             n = {"id": uuid.uuid4().hex, "actif": False, "jetons": []}
-            _ecrire("noeud.json", n)
+            _write("noeud.json", n)
         n.setdefault("jetons", [])
         n["actif"] = bool(n.get("actif"))
         return n
 
 
-def noeud_actif():
-    return noeud()["actif"]
+def node_active():
+    return node()["actif"]
 
 
-def noeud_activer(actif, niveau_local=False):
+def node_enable(actif, niveau_local=False):
     """Prête (ou cesse de prêter) le moteur de cette machine. Refusé au niveau « cette machine seulement » : personne d'autre ne pourrait de toute façon l'atteindre."""
     if actif and niveau_local:
         raise ValueError(_t("Le niveau d'accès « cette machine seulement » n'accepte aucune autre machine : passe au niveau « réseau » (Accès) pour prêter le moteur."))
-    with VERROU:
-        n = noeud()
+    with LOCK:
+        n = node()
         n["actif"] = bool(actif)
-        _ecrire("noeud.json", n)
-    journaliser("nœud {}".format("activé" if actif else "désactivé"))
+        _write("noeud.json", n)
+    log_event("nœud {}".format("activé" if actif else "désactivé"))
     if actif:
-        threading.Thread(target=cartes_en_cache, daemon=True, name="noeud-cartes-chaud").start()          # la première fois est la plus lente : autant la faire avant l'appairage
-    return noeud_vue()
+        threading.Thread(target=cached_cards, daemon=True, name="noeud-cartes-chaud").start()          # la première fois est la plus lente : autant la faire avant l'appairage
+    return node_view()
 
 
-def noeud_nouveau_code():
+def node_new_code():
     """Un code à 8 chiffres, à usage unique, valable 5 minutes, à saisir sur l'autre Lutin. Au plus 3 codes en attente."""
-    with VERROU:
+    with LOCK:
         maintenant = time.time()
         for c in [c for c, fin in CODES.items() if fin < maintenant]:
             del CODES[c]
-        if len(CODES) >= CODES_MAX:
+        if len(CODES) >= MAX_CODES:
             del CODES[min(CODES, key=CODES.get)]
         code = "{:08d}".format(secrets.randbelow(10 ** 8))
-        CODES[code] = maintenant + DUREE_CODE_S
-    return {"code": code[:4] + "-" + code[4:], "expire_dans": DUREE_CODE_S}
+        CODES[code] = maintenant + CODE_TTL_S
+    return {"code": code[:4] + "-" + code[4:], "expire_dans": CODE_TTL_S}
 
 
-def _empreinte(jeton):
+def _fingerprint(jeton):
     return hashlib.sha256(jeton.encode("utf-8")).hexdigest()
 
 
-VIDE_INFOS = {"mac": "", "reveil": {"pret": None, "carte": "", "avertissements": []}, "demarrage": {"installe": False, "possible": False, "docker": False}}
+EMPTY_INFO = {"mac": "", "reveil": {"pret": None, "carte": "", "avertissements": []}, "demarrage": {"installe": False, "possible": False, "docker": False}}
 
 
-def noeud_infos(ip_locale="", attente=1.5):
+def node_info(ip_locale="", attente=1.5):
     """Ce que ce nœud transmet à la machine qui l'appaire, pour qu'elle n'ait rien à saisir : son adresse MAC, s'il peut être réveillé à distance, si Lutin démarre tout seul chez lui.
     Le calcul lance des programmes (PowerShell sous Windows : plusieurs secondes à froid) : il se fait en arrière-plan et gardé 60 s. L'appairage et les sondes n'attendent jamais plus de `attente` secondes ;
     sans réponse à temps, des informations vides sont rendues et l'autre machine les recevra à sa prochaine sonde (retenir_infos)."""
     maintenant = time.monotonic()
-    gardee = INFOS_NOEUD.get(ip_locale)
+    gardee = NODE_INFO.get(ip_locale)
     perimee = not gardee or maintenant - gardee[0] >= 60
     evenement = None
     if perimee:
-        with VERROU:
-            evenement = INFOS_EN_COURS.get(ip_locale)
+        with LOCK:
+            evenement = INFO_RUNNING.get(ip_locale)
             if evenement is None:
-                evenement = INFOS_EN_COURS[ip_locale] = threading.Event()
+                evenement = INFO_RUNNING[ip_locale] = threading.Event()
 
                 def travail(ev=evenement):
                     try:
-                        INFOS_NOEUD[ip_locale] = (time.monotonic(), _calculer_infos(ip_locale))
+                        NODE_INFO[ip_locale] = (time.monotonic(), _compute_info(ip_locale))
                     except Exception:  # noqa: BLE001  (un renseignement de plus : jamais un appairage qui échoue)
                         pass
                     finally:
-                        with VERROU:
-                            INFOS_EN_COURS.pop(ip_locale, None)
+                        with LOCK:
+                            INFO_RUNNING.pop(ip_locale, None)
                         ev.set()
                 threading.Thread(target=travail, daemon=True, name="noeud-infos").start()
         if not gardee:
             evenement.wait(attente)
-            gardee = INFOS_NOEUD.get(ip_locale)
-    return gardee[1] if gardee else VIDE_INFOS
+            gardee = NODE_INFO.get(ip_locale)
+    return gardee[1] if gardee else EMPTY_INFO
 
 
-CARTES = {"t": -999.0, "v": None}
+CARDS = {"t": -999.0, "v": None}
 
 
-def cartes_en_cache():
+def cached_cards():
     """Les cartes réseau de cette machine (le plus lent à lire : PowerShell sous Windows), gardées 60 s."""
-    if CARTES["v"] is None or time.monotonic() - CARTES["t"] > 60:
-        CARTES.update(t=time.monotonic(), v=power.network_adapters())
-    return CARTES["v"]
+    if CARDS["v"] is None or time.monotonic() - CARDS["t"] > 60:
+        CARDS.update(t=time.monotonic(), v=power.network_adapters())
+    return CARDS["v"]
 
 
-def _calculer_infos(ip_locale):
+def _compute_info(ip_locale):
     docker = os.environ.get("LUTIN_DOCKER") == "1"
     try:
-        reveil = power.wake_state(ip_locale, cartes=None if docker else cartes_en_cache(), en_docker=docker)
+        reveil = power.wake_state(ip_locale, cartes=None if docker else cached_cards(), en_docker=docker)
     except Exception:  # noqa: BLE001  (un renseignement de plus : jamais un appairage qui échoue)
         reveil = {"mac": "", "carte": "", "pret": None, "avertissements": []}
     try:
@@ -230,57 +230,57 @@ def _calculer_infos(ip_locale):
     return infos
 
 
-def noeud_echanger(code, nom_demandeur, ip_locale=""):
+def node_exchange(code, nom_demandeur, ip_locale=""):
     """Échange un code valide contre un jeton de nœud. Lève ValueError sinon (même message pour un code faux ou périmé)."""
     brut = re.sub(r"\D", "", str(code or ""))
     nom = re.sub(r"[^\w .-]", "", str(nom_demandeur or "")).strip()[:40] or "machine"
-    with VERROU:
-        n = noeud()
+    with LOCK:
+        n = node()
         fin = CODES.pop(brut, None) if len(brut) == 8 else None
         if not n["actif"] or fin is None or fin < time.time():
             raise ValueError(_t("Code incorrect ou expiré, ou ce Lutin ne prête pas son moteur."))
         jeton = secrets.token_urlsafe(32)
-        n["jetons"].append({"empreinte": _empreinte(jeton), "nom": nom, "date": time.strftime("%Y-%m-%d %H:%M")})
-        _ecrire("noeud.json", n)
-    journaliser("machine autorisée : {}".format(nom))
-    return dict(noeud_infos(ip_locale), jeton=jeton, id=n["id"], nom=socket.gethostname()[:40])
+        n["jetons"].append({"empreinte": _fingerprint(jeton), "nom": nom, "date": time.strftime("%Y-%m-%d %H:%M")})
+        _write("noeud.json", n)
+    log_event("machine autorisée : {}".format(nom))
+    return dict(node_info(ip_locale), jeton=jeton, id=n["id"], nom=socket.gethostname()[:40])
 
 
-def noeud_jeton_valide(jeton):
+def node_token_valid(jeton):
     """Le nom de la machine autorisée portant ce jeton, ou None. Un nœud éteint ne reconnaît personne."""
-    if not jeton or not noeud_actif():
+    if not jeton or not node_active():
         return None
-    vu = _empreinte(str(jeton))
-    for j in noeud()["jetons"]:
+    vu = _fingerprint(str(jeton))
+    for j in node()["jetons"]:
         if hmac.compare_digest(j["empreinte"], vu):
             return j["nom"]
     return None
 
 
-def noeud_revoquer(nom):
-    with VERROU:
-        n = noeud()
+def node_revoke(nom):
+    with LOCK:
+        n = node()
         avant = len(n["jetons"])
         n["jetons"] = [j for j in n["jetons"] if j["nom"] != nom]
-        _ecrire("noeud.json", n)
+        _write("noeud.json", n)
     if len(n["jetons"]) != avant:
-        journaliser("machine révoquée : {}".format(nom))
-    return noeud_vue()
+        log_event("machine révoquée : {}".format(nom))
+    return node_view()
 
 
-def nom_machine(nom):
+def machine_name(nom):
     """Le nom d'une machine autorisée, nettoyé comme à l'appairage : lettres, chiffres, espaces, « . » et « - », 40 caractères au plus."""
     return re.sub(r"[^\w .-]", "", str(nom or "")).strip()[:40]
 
 
-def noeud_renommer(ancien, nouveau):
+def node_rename(ancien, nouveau):
     """Donne un nom clair à une machine autorisée (celui qu'elle a envoyé est souvent le nom technique de son ordinateur). Son jeton reste valable ;
     ses demandes en attente la suivent. ValueError si le nom est vide, LookupError si aucune machine ne porte `ancien`, FileExistsError si une autre porte déjà le nouveau."""
-    propre = nom_machine(nouveau)
+    propre = machine_name(nouveau)
     if not propre:
         raise ValueError(_t("Donne un nom (lettres, chiffres, espaces)."))
-    with VERROU:
-        n = noeud()
+    with LOCK:
+        n = node()
         if not any(j["nom"] == ancien for j in n["jetons"]):
             raise LookupError(ancien)
         if propre != ancien and any(j["nom"] == propre for j in n["jetons"]):
@@ -291,107 +291,107 @@ def noeud_renommer(ancien, nouveau):
         for d in n.get("demandes", []):
             if d.get("machine") == ancien:
                 d["machine"] = propre
-        _ecrire("noeud.json", n)
-    journaliser("machine renommée : {} → {}".format(ancien, propre))
-    return noeud_vue()
+        _write("noeud.json", n)
+    log_event("machine renommée : {} → {}".format(ancien, propre))
+    return node_view()
 
 
-def noeud_autoriser_extinction(autoriser):
+def node_allow_shutdown(autoriser):
     """Les machines appairées peuvent-elles éteindre celle-ci ? Décoché par défaut : c'est le propriétaire de CETTE machine qui le décide."""
-    with VERROU:
-        n = noeud()
+    with LOCK:
+        n = node()
         n["extinction"] = bool(autoriser)
-        _ecrire("noeud.json", n)
-    journaliser("extinction par une machine appairée : {}".format("autorisée" if autoriser else "interdite"))
-    return noeud_vue()
+        _write("noeud.json", n)
+    log_event("extinction par une machine appairée : {}".format("autorisée" if autoriser else "interdite"))
+    return node_view()
 
 
-def noeud_autoriser_piloter(autoriser):
+def node_allow_control(autoriser):
     """Les machines appairées peuvent-elles mener des conversations SUR celle-ci (le tour entier s'exécute ici : modèles, outils, addons, fichiers) ? Décoché par défaut : le propriétaire de cette machine le décide.
     Les règles de cette machine s'appliquent (dossiers autorisés, accords demandés) ; chaque tour est journalisé."""
-    with VERROU:
-        n = noeud()
+    with LOCK:
+        n = node()
         n["piloter"] = bool(autoriser)
-        _ecrire("noeud.json", n)
-    journaliser("conversations pilotées par une machine appairée : {}".format("autorisées" if autoriser else "interdites"))
-    return noeud_vue()
+        _write("noeud.json", n)
+    log_event("conversations pilotées par une machine appairée : {}".format("autorisées" if autoriser else "interdites"))
+    return node_view()
 
 
-def noeud_autoriser_maj(autoriser):
+def node_allow_update(autoriser):
     """Les machines appairées peuvent-elles mettre Lutin à jour sur CETTE machine ? Décoché par défaut : c'est le propriétaire de cette machine qui le décide."""
-    with VERROU:
-        n = noeud()
+    with LOCK:
+        n = node()
         n["maj"] = bool(autoriser)
-        _ecrire("noeud.json", n)
-    journaliser("mise à jour par une machine appairée : {}".format("autorisée" if autoriser else "interdite"))
-    return noeud_vue()
+        _write("noeud.json", n)
+    log_event("mise à jour par une machine appairée : {}".format("autorisée" if autoriser else "interdite"))
+    return node_view()
 
 
-DROITS_DEMANDABLES = ("piloter", "maj", "extinction")          # ce qu'une machine appairée peut DEMANDER (le propriétaire de celle-ci accepte ou refuse, jamais automatiquement)
-LIMITE_MEMOIRE = 59000          # caractères : la limite de ecrire_memoire (60 000) moins une marge
-MAX_DEMANDES = 20
+REQUESTABLE_RIGHTS = ("piloter", "maj", "extinction")          # ce qu'une machine appairée peut DEMANDER (le propriétaire de celle-ci accepte ou refuse, jamais automatiquement)
+MEMORY_LIMIT = 59000          # caractères : la limite de ecrire_memoire (60 000) moins une marge
+MAX_REQUESTS = 20
 
 
-def noeud_demander(machine, droit):
+def node_request(machine, droit):
     """Une machine appairée demande un droit (mener des conversations ici, mettre Lutin à jour, éteindre). Rien n'est accordé : la demande attend la réponse du propriétaire de CETTE machine."""
-    if droit not in DROITS_DEMANDABLES:
+    if droit not in REQUESTABLE_RIGHTS:
         raise ValueError(_t("Droit inconnu."))
-    with VERROU:
-        n = noeud()
+    with LOCK:
+        n = node()
         if n.get(droit):
             return {"deja": True}
         demandes = [d for d in n.get("demandes", []) if not (d.get("machine") == machine and d.get("droit") == droit)]
         demandes.append({"machine": str(machine)[:40], "droit": droit, "date": time.strftime("%Y-%m-%d %H:%M")})
-        n["demandes"] = demandes[-MAX_DEMANDES:]
-        _ecrire("noeud.json", n)
-    journaliser("{} demande l'autorisation « {} » (en attente de ta réponse)".format(machine, droit))
+        n["demandes"] = demandes[-MAX_REQUESTS:]
+        _write("noeud.json", n)
+    log_event("{} demande l'autorisation « {} » (en attente de ta réponse)".format(machine, droit))
     return {"deja": False}
 
 
-def noeud_repondre_demande(machine, droit, accepter):
+def node_answer_request(machine, droit, accepter):
     """Le propriétaire de CETTE machine accepte ou refuse une demande. Accepter active le droit (décochable à tout moment) ; refuser l'efface."""
-    if droit not in DROITS_DEMANDABLES:
+    if droit not in REQUESTABLE_RIGHTS:
         raise ValueError(_t("Droit inconnu."))
-    with VERROU:
-        n = noeud()
+    with LOCK:
+        n = node()
         restantes = [d for d in n.get("demandes", []) if not (d.get("machine") == machine and d.get("droit") == droit)]
         if len(restantes) == len(n.get("demandes", [])):
             raise ValueError(_t("Cette demande n'existe plus."))
         n["demandes"] = restantes
         if accepter:
             n[droit] = True
-        _ecrire("noeud.json", n)
-    journaliser("demande « {} » de {} : {}".format(droit, machine, "acceptée" if accepter else "refusée"))
-    return noeud_vue()
+        _write("noeud.json", n)
+    log_event("demande « {} » de {} : {}".format(droit, machine, "acceptée" if accepter else "refusée"))
+    return node_view()
 
 
-DROITS = ("skills", "memoire")          # ce qu'une machine appairée peut LIRE si le propriétaire de celle-ci l'a coché (jamais écrire) ; les conversations, elles, se pilotent (voir noeud_autoriser_piloter)
+RIGHTS = ("skills", "memoire")          # ce qu'une machine appairée peut LIRE si le propriétaire de celle-ci l'a coché (jamais écrire) ; les conversations, elles, se pilotent (voir noeud_autoriser_piloter)
 
 
-def noeud_droit(droit, actif):
+def node_right(droit, actif):
     """Le propriétaire de CE nœud autorise (ou non) les machines appairées à lire ses conversations, ses skills ou sa mémoire. Décoché par défaut ; journalisé."""
-    if droit not in DROITS:
+    if droit not in RIGHTS:
         raise ValueError(_t("Droit inconnu."))
-    with VERROU:
-        n = noeud()
+    with LOCK:
+        n = node()
         n.setdefault("droits", {})[droit] = bool(actif)
-        _ecrire("noeud.json", n)
-    journaliser("partage de {} avec les machines appairées : {}".format(droit, "autorisé" if actif else "interdit"))
-    return noeud_vue()
+        _write("noeud.json", n)
+    log_event("partage de {} avec les machines appairées : {}".format(droit, "autorisé" if actif else "interdit"))
+    return node_view()
 
 
-def noeud_droits():
-    d = noeud().get("droits") or {}
-    return {k: bool(d.get(k)) for k in DROITS}
+def node_rights():
+    d = node().get("droits") or {}
+    return {k: bool(d.get(k)) for k in RIGHTS}
 
 
-def noeud_partager(genre, corps):
+def node_share(genre, corps):
     """Ce que ce nœud donne à lire à une machine appairée. PermissionError si le propriétaire ne l'a pas autorisé. genre : conversations (la liste, pour les piloter), skills, skill, memoire."""
     from . import core as _m
     droit = {"conversations": "piloter", "skills": "skills", "skill": "skills", "memoire": "memoire"}.get(genre)
     if droit is None:
         raise ValueError(_t("Demande inconnue."))
-    if not (noeud().get("piloter") if droit == "piloter" else noeud_droits()[droit]):
+    if not (node().get("piloter") if droit == "piloter" else node_rights()[droit]):
         raise PermissionError(droit)
     if genre == "conversations":
         return {"conversations": [{"id": c["id"], "titre": c.get("titre", ""), "maj": c.get("maj", ""), "messages": c.get("messages", 0)} for c in _m.conv_list() if not c.get("origine")][:300]}
@@ -403,13 +403,13 @@ def noeud_partager(genre, corps):
     return {"memoire": {nom: _m.read_memory(nom) for nom in ("CONTEXTE.md", "MEMOIRE.md")}}
 
 
-def noeud_vue():
-    n = noeud()
-    return {"actif": n["actif"], "id": n["id"], "droits": noeud_droits(), "extinction": bool(n.get("extinction")), "maj": bool(n.get("maj")), "piloter": bool(n.get("piloter")), "extinction_en_attente": power.pending_shutdown(),
+def node_view():
+    n = node()
+    return {"actif": n["actif"], "id": n["id"], "droits": node_rights(), "extinction": bool(n.get("extinction")), "maj": bool(n.get("maj")), "piloter": bool(n.get("piloter")), "extinction_en_attente": power.pending_shutdown(),
             "demandes": [dict(d) for d in n.get("demandes", [])], "autorisees": [{"nom": j["nom"], "date": j["date"]} for j in n["jetons"]]}
 
 
-def noeud_charge(locale_occupee, distantes):
+def node_load(locale_occupee, distantes):
     """Ce que le nœud dit de sa charge : mémoire, et qui utilise son moteur en ce moment (son utilisateur, des machines appairées). Lecture seule, rien de plus."""
     from . import core as _m
     ram, vram = _m.system_memory(), _m.video_memory()
@@ -417,31 +417,31 @@ def noeud_charge(locale_occupee, distantes):
             "ram": {"total": ram["total"], "libre": ram["libre"]} if ram else None, "vram": {"total": vram["total"], "libre": vram["libre"], "nom": vram["nom"]} if vram else None}
 
 
-def noeud_etat(moteur, modeles, ip_locale="", charge=None, demandeur=""):
+def node_state(moteur, modeles, ip_locale="", charge=None, demandeur=""):
     """Ce que le nœud répond à `GET /api/noeud/etat` : de quoi savoir s'il est joignable et si son moteur peut faire tourner le modèle voulu, plus son adresse MAC, son aptitude au réveil et son démarrage automatique."""
     from . import core as _m
-    n = noeud()
-    return dict(noeud_infos(ip_locale, attente=ATTENTE_INFOS_SONDE_S), id=n["id"], moteur=moteur.id, moteur_nom=moteur.nom, actif=bool(modeles.get("actif")), modeles=sorted(modeles.get("installes", []))[:500], charge=charge, droits=noeud_droits(),
+    n = node()
+    return dict(node_info(ip_locale, attente=PROBE_INFO_WAIT_S), id=n["id"], moteur=moteur.id, moteur_nom=moteur.nom, actif=bool(modeles.get("actif")), modeles=sorted(modeles.get("installes", []))[:500], charge=charge, droits=node_rights(),
                 version=str(_m.VERSION), agir={"extinction": bool(n.get("extinction")), "maj": bool(n.get("maj")), "piloter": bool(n.get("piloter"))},
                 demandes=sorted({d["droit"] for d in n.get("demandes", []) if demandeur and d.get("machine") == demandeur}))          # seulement les demandes DE celui qui interroge
 
 
-def noeud_capacites(moteur, modele):
+def node_capabilities(moteur, modele):
     """Les capacités (outils, vision, réflexion…) d'un modèle de CE nœud, ou None quand son moteur ne le dit pas."""
     caps = moteur.capacites(str(modele or ""))
     return None if caps is None else sorted(caps)
 
 
-def corps_autorise(corps):
+def allowed_body(corps):
     """Le corps d'une demande de conversation, réduit à ce que le nœud accepte de transmettre à son moteur."""
     if not isinstance(corps, dict) or not isinstance(corps.get("model"), str) or not isinstance(corps.get("messages"), list):
         raise ValueError(_t("Demande invalide."))
-    return {k: corps[k] for k in CLES_CHAT if k in corps}
+    return {k: corps[k] for k in CHAT_KEYS if k in corps}
 
 
 # --------------------------------------------------------------------------- côté PRINCIPAL : le registre des machines
 
-def normaliser_adresse(adresse):
+def normalize_address(adresse):
     """http(s)://hôte:port sans chemin ; port 8777 par défaut. Lève ValueError sinon."""
     texte = str(adresse or "").strip()
     if re.match(r"^[a-z][a-z0-9+.-]*://", texte, re.I) and not re.match(r"^https?://", texte, re.I):
@@ -459,33 +459,33 @@ def normaliser_adresse(adresse):
     return "{}://{}:{}".format(p.scheme, hote, port)
 
 
-REGISTRE = {"t": 0.0, "v": [], "d": None}          # le registre est relu au plus toutes les 2 s (moteur_actuel est appelé très souvent)
+REGISTRY = {"t": 0.0, "v": [], "d": None}          # le registre est relu au plus toutes les 2 s (moteur_actuel est appelé très souvent)
 
 
-def lire():
-    if REGISTRE["d"] == str(dossier()) and time.monotonic() - REGISTRE["t"] < 2:
-        return [dict(m) for m in REGISTRE["v"]]
-    liste = _lire("machines.json", [])
+def read():
+    if REGISTRY["d"] == str(folder()) and time.monotonic() - REGISTRY["t"] < 2:
+        return [dict(m) for m in REGISTRY["v"]]
+    liste = _read("machines.json", [])
     liste = [m for m in liste if isinstance(m, dict) and RE_ID.match(str(m.get("id", "")))] if isinstance(liste, list) else []
-    REGISTRE.update(t=time.monotonic(), v=liste, d=str(dossier()))
+    REGISTRY.update(t=time.monotonic(), v=liste, d=str(folder()))
     return [dict(m) for m in liste]
 
 
-def _ecrire_registre(liste):
-    _ecrire("machines.json", liste)
-    REGISTRE.update(t=0.0)
+def _write_registry(liste):
+    _write("machines.json", liste)
+    REGISTRY.update(t=0.0)
 
 
-def trouver(ident):
-    return next((m for m in lire() if m["id"] == ident), None)
+def find(ident):
+    return next((m for m in read() if m["id"] == ident), None)
 
 
-class _SansRedirection(urllib.request.HTTPRedirectHandler):
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, *a, **k):
         return None          # une redirection enverrait le jeton ailleurs
 
 
-def requete(m_ou_adresse, chemin, corps=None, jeton="", delai=DELAI_SONDE_S, ouvrir=None):
+def request(m_ou_adresse, chemin, corps=None, jeton="", delai=PROBE_TIMEOUT_S, ouvrir=None):
     """Appelle un nœud : la réponse ouverte. `m_ou_adresse` : une machine du registre, ou une adresse. Pas de redirection suivie."""
     adresse = m_ou_adresse["adresse"] if isinstance(m_ou_adresse, dict) else m_ou_adresse
     jeton = jeton or (m_ou_adresse.get("jeton", "") if isinstance(m_ou_adresse, dict) else "")
@@ -493,17 +493,17 @@ def requete(m_ou_adresse, chemin, corps=None, jeton="", delai=DELAI_SONDE_S, ouv
     if jeton:
         en_tetes["X-Noeud"] = jeton
     req = urllib.request.Request(adresse + chemin, data=None if corps is None else json.dumps(corps).encode("utf-8"), headers=en_tetes, method="GET" if corps is None else "POST")
-    return (ouvrir or urllib.request.build_opener(_SansRedirection).open)(req, timeout=delai)
+    return (ouvrir or urllib.request.build_opener(_NoRedirect).open)(req, timeout=delai)
 
 
-def _json(m_ou_adresse, chemin, corps=None, jeton="", delai=DELAI_SONDE_S, ouvrir=None):
-    with requete(m_ou_adresse, chemin, corps, jeton, delai, ouvrir) as r:
+def _json(m_ou_adresse, chemin, corps=None, jeton="", delai=PROBE_TIMEOUT_S, ouvrir=None):
+    with request(m_ou_adresse, chemin, corps, jeton, delai, ouvrir) as r:
         return json.loads(r.read(2_000_000).decode("utf-8", "replace") or "{}")
 
 
-def ajouter(adresse, code, nom="", mac="", ouvrir=None):
+def add(adresse, code, nom="", mac="", ouvrir=None):
     """Ajoute une machine après validation explicite (le code affiché sur le nœud). Renvoie la machine (sans son jeton)."""
-    adresse = normaliser_adresse(adresse)
+    adresse = normalize_address(adresse)
     mac = str(mac or "").strip()
     if mac and not RE_MAC.match(mac):
         raise ValueError(_t("Adresse MAC invalide (exemple : 00:1A:2B:3C:4D:5E)."))
@@ -511,79 +511,79 @@ def ajouter(adresse, code, nom="", mac="", ouvrir=None):
         rep = _json(adresse, "/api/noeud/appairer", {"code": str(code or ""), "nom": socket.gethostname()[:40]}, delai=5, ouvrir=ouvrir)
     except urllib.error.HTTPError as e:
         if e.code in (400, 401, 403):
-            raise MachineRefus(_t("Cette machine a refusé le code (incorrect, expiré, ou elle ne prête pas son moteur).")) from None
-        raise MachineErreur(_t("Cette machine a répondu une erreur ({}).").format(e.code)) from None
+            raise MachineRefused(_t("Cette machine a refusé le code (incorrect, expiré, ou elle ne prête pas son moteur).")) from None
+        raise MachineError(_t("Cette machine a répondu une erreur ({}).").format(e.code)) from None
     except (urllib.error.URLError, OSError, ValueError):
-        raise MachineInjoignable(_t("Impossible de joindre cette machine : vérifie l'adresse et qu'elle est allumée.")) from None
+        raise MachineUnreachable(_t("Impossible de joindre cette machine : vérifie l'adresse et qu'elle est allumée.")) from None
     if not RE_ID.match(str(rep.get("id", ""))) or not rep.get("jeton"):
-        raise MachineErreur(_t("Réponse inattendue : ce n'est pas un Lutin qui prête son moteur."))
-    mac_auto = alimentation_mac(rep.get("mac"))
-    with VERROU:
-        liste = [m for m in lire() if m["id"] != rep["id"]]
+        raise MachineError(_t("Réponse inattendue : ce n'est pas un Lutin qui prête son moteur."))
+    mac_auto = mac_power(rep.get("mac"))
+    with LOCK:
+        liste = [m for m in read() if m["id"] != rep["id"]]
         m = {"id": rep["id"], "nom": (str(nom).strip() or str(rep.get("nom") or "machine"))[:40], "adresse": adresse, "jeton": rep["jeton"], "mac": mac or mac_auto, "ajoutee": time.strftime("%Y-%m-%d %H:%M"),
              "mac_auto": bool(not mac and mac_auto), "reveil": rep.get("reveil") if isinstance(rep.get("reveil"), dict) else {}, "demarrage": rep.get("demarrage") if isinstance(rep.get("demarrage"), dict) else {}}
         liste.append(m)
-        _ecrire_registre(liste)
-    journaliser("machine ajoutée : {} ({}){}".format(m["nom"], adresse, ", adresse MAC reçue de la machine" if m["mac_auto"] else ""))
-    return vue(m)
+        _write_registry(liste)
+    log_event("machine ajoutée : {} ({}){}".format(m["nom"], adresse, ", adresse MAC reçue de la machine" if m["mac_auto"] else ""))
+    return view(m)
 
 
-def alimentation_mac(mac):
+def mac_power(mac):
     return power.normalize_mac(mac)
 
 
-def retenir_infos(m, rep):
+def keep_info(m, rep):
     """Garde ce que le nœud dit de lui (MAC, réveil, démarrage) : la page peut ainsi avertir même quand la machine est éteinte. L'adresse MAC reçue complète une adresse manquante, sans jamais écraser celle que tu as saisie."""
     reveil = rep.get("reveil") if isinstance(rep.get("reveil"), dict) else None
     demarrage = rep.get("demarrage") if isinstance(rep.get("demarrage"), dict) else None
-    mac = alimentation_mac(rep.get("mac"))
+    mac = mac_power(rep.get("mac"))
     if reveil is None and demarrage is None and not mac:
         return
-    with VERROU:
-        liste = lire()
+    with LOCK:
+        liste = read()
         for x in liste:
             if x["id"] != m["id"]:
                 continue
             avant = (x.get("mac"), x.get("reveil"), x.get("demarrage"))
             if mac and not x.get("mac"):
                 x["mac"], x["mac_auto"] = mac, True
-                journaliser("{} : adresse MAC reçue de la machine ({})".format(x["nom"], mac))
+                log_event("{} : adresse MAC reçue de la machine ({})".format(x["nom"], mac))
             if reveil is not None:
                 x["reveil"] = reveil
             if demarrage is not None:
                 x["demarrage"] = demarrage
             if avant != (x.get("mac"), x.get("reveil"), x.get("demarrage")):
-                _ecrire_registre(liste)
+                _write_registry(liste)
             m.update({k: x.get(k) for k in ("mac", "reveil", "demarrage", "mac_auto")})
             return
 
 
-def retirer(ident):
-    with VERROU:
-        liste = lire()
+def remove(ident):
+    with LOCK:
+        liste = read()
         m = next((x for x in liste if x["id"] == ident), None)
         if m is None:
-            raise MachineInconnue(_t("Machine inconnue."))
-        _ecrire_registre([x for x in liste if x["id"] != ident])
-        SONDES.pop(ident, None)
-    journaliser("machine retirée : {}".format(m["nom"]))
+            raise UnknownMachine(_t("Machine inconnue."))
+        _write_registry([x for x in liste if x["id"] != ident])
+        PROBES.pop(ident, None)
+    log_event("machine retirée : {}".format(m["nom"]))
 
 
-def definir_mac(ident, mac):
+def set_mac(ident, mac):
     mac = str(mac or "").strip()
     if mac and not RE_MAC.match(mac):
         raise ValueError(_t("Adresse MAC invalide (exemple : 00:1A:2B:3C:4D:5E)."))
-    with VERROU:
-        liste = lire()
+    with LOCK:
+        liste = read()
         for m in liste:
             if m["id"] == ident:
                 m["mac"] = mac
-                _ecrire_registre(liste)
-                return vue(m)
-    raise MachineInconnue(_t("Machine inconnue."))
+                _write_registry(liste)
+                return view(m)
+    raise UnknownMachine(_t("Machine inconnue."))
 
 
-def avertissements(m):
+def wake_warnings(m):
     """Ce qui empêche (ou risque d'empêcher) de réveiller cette machine puis de s'en servir, d'après ce qu'elle a elle-même dit : adresse MAC, Wake-on-LAN, démarrage de Lutin."""
     sortie = []
     if not m.get("mac"):
@@ -597,33 +597,33 @@ def avertissements(m):
     return sortie
 
 
-def vue(m):
+def view(m):
     """Une machine pour la page : jamais son jeton."""
     v = {k: m.get(k, "") for k in ("id", "nom", "adresse", "mac", "ajoutee")}
     v["mac_auto"] = bool(m.get("mac_auto"))
-    v["avertissements"] = avertissements(m)
+    v["avertissements"] = wake_warnings(m)
     return v
 
 
 # --------------------------------------------------------------------------- l'état d'une machine (quatre états)
 
-def sonder(m, modele="", ouvrir=None, maintenant=time.monotonic, force=False):
+def probe(m, modele="", ouvrir=None, maintenant=time.monotonic, force=False):
     """{etat, detail, modeles} : injoignable · joignable (le nœud répond mais n'a pas ce modèle ou son moteur est arrêté) · operationnel. Gardé 10 s. Vérifie que c'est bien la machine appairée."""
-    with VERROU:
-        gardee = SONDES.get(m["id"])
-        if gardee and not force and maintenant() - gardee[0] < (VALIDITE_SONDE_S if gardee[1].get("etat") == "operationnel" else VALIDITE_SONDE_ATTENTE_S) and gardee[2] == modele:
+    with LOCK:
+        gardee = PROBES.get(m["id"])
+        if gardee and not force and maintenant() - gardee[0] < (PROBE_TTL_S if gardee[1].get("etat") == "operationnel" else WAITING_PROBE_TTL_S) and gardee[2] == modele:
             return gardee[1]
     charge, droits, version, agir, allumee, demandes = None, {}, "", {}, False, []
-    _reprendre_reveils()
+    _resume_wakes()
     try:
-        rep = _json(m, "/api/noeud/etat", ouvrir=ouvrir, delai=DELAI_SONDE_REVEIL_S if m["id"] in REVEIL else DELAI_SONDE_S)          # une machine qui vient de démarrer répond lentement : plus de patience pendant un réveil
+        rep = _json(m, "/api/noeud/etat", ouvrir=ouvrir, delai=WAKE_PROBE_TIMEOUT_S if m["id"] in WAKING else PROBE_TIMEOUT_S)          # une machine qui vient de démarrer répond lentement : plus de patience pendant un réveil
         if rep.get("id") == m["id"]:
-            retenir_infos(m, rep)
+            keep_info(m, rep)
             charge = rep.get("charge") if isinstance(rep.get("charge"), dict) else None
-            droits = {k: bool((rep.get("droits") or {}).get(k)) for k in DROITS}
+            droits = {k: bool((rep.get("droits") or {}).get(k)) for k in RIGHTS}
             version = str(rep.get("version") or "")[:30]
             agir = {k: bool((rep.get("agir") or {}).get(k)) for k in ("extinction", "maj", "piloter")}
-            demandes = [d for d in (rep.get("demandes") or []) if d in DROITS_DEMANDABLES]
+            demandes = [d for d in (rep.get("demandes") or []) if d in REQUESTABLE_RIGHTS]
         if rep.get("id") != m["id"]:
             r = {"etat": "injoignable", "detail": _t("Ce n'est plus la même machine à cette adresse : rien ne lui est envoyé."), "modeles": []}
         elif not rep.get("actif"):
@@ -635,46 +635,46 @@ def sonder(m, modele="", ouvrir=None, maintenant=time.monotonic, force=False):
     except urllib.error.HTTPError as e:
         r = {"etat": "injoignable", "detail": _t("La machine refuse ce Lutin (erreur {}) : l'autorisation a peut-être été retirée.").format(e.code), "modeles": []}
     except (urllib.error.URLError, OSError, ValueError) as e:
-        allumee = _hote_allume(e) or _allumee_pendant_reveil(m, maintenant)
+        allumee = _host_on(e) or _on_during_wake(m, maintenant)
         r = {"etat": "injoignable", "detail": _t("Pas de réponse (éteinte, hors réseau ou Lutin arrêté)."), "modeles": []}
-    r = _avec_reveil(m, dict(r, charge=charge, droits=droits, version=version, agir=agir, demandes=demandes, maj_disponible=_maj_disponible(version)), maintenant, allumee)
-    r = dict(r, **_etape(m, r, allumee))
-    _noter(m, r["etat"], maintenant, r, modele)
+    r = _with_wake(m, dict(r, charge=charge, droits=droits, version=version, agir=agir, demandes=demandes, maj_disponible=_update_available(version)), maintenant, allumee)
+    r = dict(r, **_step(m, r, allumee))
+    _record(m, r["etat"], maintenant, r, modele)
     return r
 
 
-def _sauver_reveils():
+def _save_wakes():
     """Les réveils en cours (heure réelle) sont notés sur disque : si CE Lutin redémarre pendant que l'autre machine démarre, la séquence reprend là où elle en était au lieu de tout oublier."""
-    reste = {i: round(time.time() - (time.monotonic() - t)) for i, t in REVEIL.items()}
+    reste = {i: round(time.time() - (time.monotonic() - t)) for i, t in WAKING.items()}
     try:
-        _ecrire("reveils.json", reste)
+        _write("reveils.json", reste)
     except OSError:
         pass
 
 
-def _reprendre_reveils():
+def _resume_wakes():
     """Une fois par processus : les réveils notés sur disque qui ne sont pas périmés redeviennent « en cours »."""
-    if _REVEILS_REPRIS["fait"]:
+    if _WAKES_RESUMED["fait"]:
         return
-    _REVEILS_REPRIS["fait"] = True
-    notes = _lire("reveils.json", {})
+    _WAKES_RESUMED["fait"] = True
+    notes = _read("reveils.json", {})
     for ident, quand in (notes.items() if isinstance(notes, dict) else []):
         try:
             age = time.time() - float(quand or 0)
         except (TypeError, ValueError):
             continue
-        if -2 <= age < power.WAKE_WAIT_S and ident not in REVEIL and RE_ID.match(str(ident)):
-            REVEIL[ident] = time.monotonic() - max(age, 0)
+        if -2 <= age < power.WAKE_WAIT_S and ident not in WAKING and RE_ID.match(str(ident)):
+            WAKING[ident] = time.monotonic() - max(age, 0)
 
 
-def _allumee_pendant_reveil(m, maintenant=time.monotonic):
+def _on_during_wake(m, maintenant=time.monotonic):
     """Pendant un réveil seulement : le système de la machine répond-il (même si Lutin n'y répond pas encore ni son pare-feu) ? Preuves indépendantes de Lutin : voir alimentation.hote_allume.
     Windows jette les connexions que son pare-feu refuse au lieu de dire « refusé » : sans cela, une machine allumée restait « réveil envoyé » indéfiniment."""
-    if m["id"] not in REVEIL:
+    if m["id"] not in WAKING:
         return False
-    with VERROU:
-        gardee = ALLUMEE.get(m["id"])
-        if gardee and maintenant() - gardee[0] < VERIFICATION_ALLUMEE_S:
+    with LOCK:
+        gardee = POWERED_ON.get(m["id"])
+        if gardee and maintenant() - gardee[0] < ON_CHECK_S:
             return gardee[1]
     hote = urllib.parse.urlparse(m["adresse"]).hostname or ""
     try:
@@ -682,23 +682,23 @@ def _allumee_pendant_reveil(m, maintenant=time.monotonic):
     except ValueError:
         port = 0
     try:
-        verdict = bool(hote) and bool((HOTE_ALLUME or power.host_is_up)(hote, m.get("mac", ""), port))
+        verdict = bool(hote) and bool((HOST_ON or power.host_is_up)(hote, m.get("mac", ""), port))
     except Exception:  # noqa: BLE001  (un constat de plus : jamais une page cassée)
         verdict = False
-    with VERROU:
-        ALLUMEE[m["id"]] = (maintenant(), verdict)
+    with LOCK:
+        POWERED_ON[m["id"]] = (maintenant(), verdict)
         if verdict:
-            DEPUIS_ALLUMEE.setdefault(m["id"], maintenant())
+            ON_SINCE.setdefault(m["id"], maintenant())
     return verdict
 
 
-def _hote_allume(erreur):
+def _host_on(erreur):
     """Une connexion REFUSÉE prouve que la machine est allumée (son système répond) alors que Lutin n'y tourne pas : une absence de réponse, elle, veut dire éteinte ou hors réseau."""
     cause = getattr(erreur, "reason", erreur)
     return isinstance(cause, ConnectionRefusedError) or getattr(cause, "errno", None) in (111, 10061)
 
 
-def _maj_disponible(version_distante):
+def _update_available(version_distante):
     """Vrai si la version de CETTE machine est plus récente que celle de la machine distante : Lutin n'y est pas à jour."""
     if not version_distante:
         return False
@@ -706,22 +706,22 @@ def _maj_disponible(version_distante):
     return updates.newer(str(_m.VERSION), version_distante)
 
 
-def _etape(m, r, allumee):
+def _step(m, r, allumee):
     """Où en est la machine, pour la page : eteinte · reveil (paquet envoyé) · allumee (le système répond, pas Lutin) · lutin (Lutin répond, moteur pas prêt) · synchro (relecture de ses modèles et conversations) · pret ·
     extinction (demandée, en cours) · maj (mise à jour demandée, Lutin redémarre). `dans_s` : secondes restantes avant l'extinction."""
     maintenant = time.monotonic()
-    with VERROU:
-        arret = ARRET.get(m["id"])
-        if arret is not None and maintenant - arret > DELAI_ARRET_S:
-            ARRET.pop(m["id"], None)
+    with LOCK:
+        arret = SHUTDOWN.get(m["id"])
+        if arret is not None and maintenant - arret > SHUTDOWN_TIMEOUT_S:
+            SHUTDOWN.pop(m["id"], None)
             arret = None
-        majd = MAJ_DISTANTE.get(m["id"])
-        if majd is not None and (maintenant - majd[0] > DELAI_MAJ_S or (r.get("version") and r["version"] != majd[1])):
-            MAJ_DISTANTE.pop(m["id"], None)
+        majd = REMOTE_UPDATE.get(m["id"])
+        if majd is not None and (maintenant - majd[0] > UPDATE_TIMEOUT_S or (r.get("version") and r["version"] != majd[1])):
+            REMOTE_UPDATE.pop(m["id"], None)
             majd = None
         if r["etat"] == "injoignable" or r["etat"] == "reveil_envoye":
             if arret is not None:
-                ARRET.pop(m["id"], None)          # elle ne répond plus : c'est fait
+                SHUTDOWN.pop(m["id"], None)          # elle ne répond plus : c'est fait
             if majd is not None:
                 return {"etape": "maj", "dans_s": 0}
             if r.get("reveil_echec"):
@@ -733,44 +733,44 @@ def _etape(m, r, allumee):
             return {"etape": "maj", "dans_s": 0}
         if r["etat"] == "joignable":
             return {"etape": "lutin", "dans_s": 0}
-        s = SYNCHRO.get(m["id"]) or {}
-        coince = maintenant - s.get("debut", maintenant) > DELAI_SYNCHRO_S          # une relecture qui n'aboutit pas ne garde pas la machine « en synchronisation » indéfiniment
+        s = SYNC.get(m["id"]) or {}
+        coince = maintenant - s.get("debut", maintenant) > SYNC_TIMEOUT_S          # une relecture qui n'aboutit pas ne garde pas la machine « en synchronisation » indéfiniment
         return {"etape": "pret" if (s.get("modeles") and s.get("conv")) or coince else "synchro", "dans_s": 0}
 
 
-def _avec_reveil(m, r, maintenant=time.monotonic, allumee=False):
+def _with_wake(m, r, maintenant=time.monotonic, allumee=False):
     """Un réveil a été envoyé et la machine ne répond pas encore : état « réveil envoyé » avec ce qu'on sait (le système répond-il ?). Dès qu'elle répond, la marque du réveil est effacée.
     Au bout de ATTENTE_REVEIL_S (cinq minutes) sans réponse de Lutin, le réveil est déclaré non abouti : l'état revient à « pas démarrée », avec la RAISON la plus probable (machine éteinte, ou allumée sans Lutin), jusqu'au prochain réveil."""
-    with VERROU:
-        envoye = REVEIL.get(m["id"])
+    with LOCK:
+        envoye = WAKING.get(m["id"])
         if r["etat"] != "injoignable":
-            ECHEC_REVEIL.pop(m["id"], None)
+            WAKE_FAILED.pop(m["id"], None)
             if envoye is not None:
-                A_REPONDU[m["id"]] = True
-                debut = REPONDU.setdefault(m["id"], maintenant())
-                if maintenant() - debut < STABLE_REPONSE_S:
+                HAS_ANSWERED[m["id"]] = True
+                debut = ANSWERED.setdefault(m["id"], maintenant())
+                if maintenant() - debut < STABLE_ANSWER_S:
                     return r          # Lutin répond, mais depuis trop peu pour dire que le réveil est fini : s'il disparaît de nouveau (il redémarre), la séquence continue
-                journaliser("{} répond depuis {} s : réveil terminé".format(m["nom"], round(maintenant() - debut)))
-            for suivi in (REVEIL, ALLUMEE, DEPUIS_ALLUMEE, REPONDU, A_REPONDU):
+                log_event("{} répond depuis {} s : réveil terminé".format(m["nom"], round(maintenant() - debut)))
+            for suivi in (WAKING, POWERED_ON, ON_SINCE, ANSWERED, HAS_ANSWERED):
                 suivi.pop(m["id"], None)
-            _sauver_reveils()
+            _save_wakes()
             return r
-        REPONDU.pop(m["id"], None)          # elle ne répond plus : le compte de stabilité repart de zéro
+        ANSWERED.pop(m["id"], None)          # elle ne répond plus : le compte de stabilité repart de zéro
         if envoye is None:
-            if m["id"] in ECHEC_REVEIL:
-                return dict(r, detail=ECHEC_REVEIL[m["id"]], reveil_echec=True)
+            if m["id"] in WAKE_FAILED:
+                return dict(r, detail=WAKE_FAILED[m["id"]], reveil_echec=True)
             return r
         depuis = maintenant() - envoye
         if depuis > power.WAKE_WAIT_S:
-            REVEIL.pop(m["id"], None)
-            DEPUIS_ALLUMEE.pop(m["id"], None)
-            A_REPONDU.pop(m["id"], None)
-            _sauver_reveils()
-            ECHEC_REVEIL[m["id"]] = echec = _echec_reveil(m, allumee)
-            journaliser("réveil de {} non abouti après {} s ({})".format(m["nom"], round(depuis), "allumée, Lutin ne répond pas" if allumee else "aucune réponse"))
+            WAKING.pop(m["id"], None)
+            ON_SINCE.pop(m["id"], None)
+            HAS_ANSWERED.pop(m["id"], None)
+            _save_wakes()
+            WAKE_FAILED[m["id"]] = echec = _wake_failure(m, allumee)
+            log_event("réveil de {} non abouti après {} s ({})".format(m["nom"], round(depuis), "allumée, Lutin ne répond pas" if allumee else "aucune réponse"))
             return dict(r, detail=echec, reveil_echec=True)
-        vue_depuis = maintenant() - DEPUIS_ALLUMEE.get(m["id"], maintenant()) if allumee else 0
-    if allumee and m["id"] in A_REPONDU:
+        vue_depuis = maintenant() - ON_SINCE.get(m["id"], maintenant()) if allumee else 0
+    if allumee and m["id"] in HAS_ANSWERED:
         detail = _t("La machine est allumée et Lutin y avait répondu, mais il ne répond plus : il redémarre (démarrage de session, réseau pas encore prêt). Je continue d'attendre.")
         suite = ""
     elif allumee:
@@ -782,7 +782,7 @@ def _avec_reveil(m, r, maintenant=time.monotonic, allumee=False):
     return {"etat": "reveil_envoye", "detail": detail + (" " + suite if suite else ""), "modeles": []}
 
 
-def _echec_reveil(m, allumee):
+def _wake_failure(m, allumee):
     """Pourquoi le réveil n'a pas abouti (le texte qui reste affiché, avec le bouton « Réveiller », jusqu'au prochain essai)."""
     minutes = power.WAKE_WAIT_S // 60
     if allumee:
@@ -790,217 +790,217 @@ def _echec_reveil(m, allumee):
     return _t("Réveil non abouti : aucune réponse après {} minutes. {} Si la machine est en fait allumée, son adresse IP a peut-être changé (réserve-lui une adresse fixe dans ta box).").format(minutes, power.failure_reason(power.WAKE_WAIT_S))
 
 
-def reveiller(ident, envoyer=power.send_wake):
+def wake(ident, envoyer=power.send_wake):
     """Envoie le paquet de réveil à cette machine (il faut son adresse MAC). L'état passe à « réveil envoyé » puis suit la machine : nœud joignable, moteur opérationnel."""
-    m = trouver(ident)
+    m = find(ident)
     if m is None:
-        raise MachineInconnue(_t("Machine inconnue."))
+        raise UnknownMachine(_t("Machine inconnue."))
     if not m.get("mac"):
         raise ValueError(_t("Pour réveiller cette machine, renseigne son adresse MAC (la liste des cartes réseau : « ipconfig /all » sous Windows, « ip link » sous Linux)."))
     hote = urllib.parse.urlparse(m["adresse"]).hostname or ""
     envoyes = envoyer(m["mac"], hote)
-    with VERROU:
-        REVEIL[ident] = time.monotonic()
-        for suivi in (SONDES, ECHEC_REVEIL, ALLUMEE, DEPUIS_ALLUMEE, REPONDU, A_REPONDU):
+    with LOCK:
+        WAKING[ident] = time.monotonic()
+        for suivi in (PROBES, WAKE_FAILED, POWERED_ON, ON_SINCE, ANSWERED, HAS_ANSWERED):
             suivi.pop(ident, None)
-        _sauver_reveils()
-    journaliser("réveil envoyé à {}".format(m["nom"]))
-    return {"ok": True, "mac": m["mac"], "envois": len(envoyes or []), "cartes": power.local_addresses(), "avertissements": [a for a in [power.limited_send()] + avertissements(m) if a][:4]}          # le paquet est parti, mais on dit ce qui risque de l'empêcher de marcher
+        _save_wakes()
+    log_event("réveil envoyé à {}".format(m["nom"]))
+    return {"ok": True, "mac": m["mac"], "envois": len(envoyes or []), "cartes": power.local_addresses(), "avertissements": [a for a in [power.limited_send()] + wake_warnings(m) if a][:4]}          # le paquet est parti, mais on dit ce qui risque de l'empêcher de marcher
 
 
-def eteindre(ident, annuler=False, ouvrir=None):
+def shut_down(ident, annuler=False, ouvrir=None):
     """Demande à cette machine de s'éteindre (dans 30 s, annulable) ou annule la demande. Action EXPLICITE : la machine doit l'avoir autorisée, sinon elle refuse."""
-    m = trouver(ident)
+    m = find(ident)
     if m is None:
-        raise MachineInconnue(_t("Machine inconnue."))
+        raise UnknownMachine(_t("Machine inconnue."))
     try:
         rep = _json(m, "/api/noeud/eteindre", {"annuler": bool(annuler)}, delai=8, ouvrir=ouvrir)
     except urllib.error.HTTPError as e:
         if e.code == 403:
-            raise MachineRefus(_t("Cette machine n'accepte pas d'être éteinte à distance : son propriétaire doit cocher « Autoriser les machines appairées à l'éteindre » dans l'onglet Machines.")) from None
-        raise MachineErreur(_t("Cette machine a répondu une erreur ({}).").format(e.code)) from None
+            raise MachineRefused(_t("Cette machine n'accepte pas d'être éteinte à distance : son propriétaire doit cocher « Autoriser les machines appairées à l'éteindre » dans l'onglet Machines.")) from None
+        raise MachineError(_t("Cette machine a répondu une erreur ({}).").format(e.code)) from None
     except (urllib.error.URLError, OSError, ValueError):
-        raise MachineInjoignable(_t("Impossible de joindre cette machine : vérifie l'adresse et qu'elle est allumée.")) from None
-    journaliser("{} demandée à {}".format("annulation de l'extinction" if annuler else "extinction", m["nom"]))
-    with VERROU:
+        raise MachineUnreachable(_t("Impossible de joindre cette machine : vérifie l'adresse et qu'elle est allumée.")) from None
+    log_event("{} demandée à {}".format("annulation de l'extinction" if annuler else "extinction", m["nom"]))
+    with LOCK:
         if annuler:
-            ARRET.pop(ident, None)
+            SHUTDOWN.pop(ident, None)
         else:
-            ARRET[ident] = time.monotonic()
-            oublier_machine(ident)          # elle va s'éteindre : on ne propose déjà plus ses modèles ni ses conversations
-    SONDES.pop(ident, None)
+            SHUTDOWN[ident] = time.monotonic()
+            forget_machine(ident)          # elle va s'éteindre : on ne propose déjà plus ses modèles ni ses conversations
+    PROBES.pop(ident, None)
     return rep
 
 
-def demander_droit(ident, droit, ouvrir=None):
+def request_right(ident, droit, ouvrir=None):
     """Demande à l'autre machine de t'accorder un droit (conversations, mise à jour, extinction) : son propriétaire répond sur elle. Rien n'est accordé d'office."""
-    m = trouver(ident)
+    m = find(ident)
     if m is None:
-        raise MachineInconnue(_t("Machine inconnue."))
-    if droit not in DROITS_DEMANDABLES:
+        raise UnknownMachine(_t("Machine inconnue."))
+    if droit not in REQUESTABLE_RIGHTS:
         raise ValueError(_t("Droit inconnu."))
     try:
         _json(m, "/api/noeud/demande", {"droit": droit}, delai=8, ouvrir=ouvrir)
     except urllib.error.HTTPError as e:
         if e.code in (401, 404, 405):
-            raise MachineRefus(_t("Cette machine ne reconnaît pas la demande : soit son autorisation a été retirée, soit sa version de Lutin est trop ancienne. Mets-la à jour une première fois sur elle-même (relance l'installeur ou la commande « lutin update »).")) from None
-        raise MachineErreur(_t("Cette machine a répondu une erreur ({}).").format(e.code)) from None
+            raise MachineRefused(_t("Cette machine ne reconnaît pas la demande : soit son autorisation a été retirée, soit sa version de Lutin est trop ancienne. Mets-la à jour une première fois sur elle-même (relance l'installeur ou la commande « lutin update »).")) from None
+        raise MachineError(_t("Cette machine a répondu une erreur ({}).").format(e.code)) from None
     except (urllib.error.URLError, OSError, ValueError):
-        raise MachineInjoignable(_t("Impossible de joindre cette machine : vérifie l'adresse et qu'elle est allumée.")) from None
-    SONDES.pop(ident, None)
-    journaliser("autorisation « {} » demandée à {}".format(droit, m["nom"]))
+        raise MachineUnreachable(_t("Impossible de joindre cette machine : vérifie l'adresse et qu'elle est allumée.")) from None
+    PROBES.pop(ident, None)
+    log_event("autorisation « {} » demandée à {}".format(droit, m["nom"]))
     return {"ok": True}
 
 
-def mettre_a_jour_distante(ident, ouvrir=None):
+def update_remote(ident, ouvrir=None):
     """Demande à la machine distante de mettre Lutin à jour (elle doit l'avoir autorisé) ; elle redémarre ensuite toute seule si Lutin y tourne sous supervision. Le suivi se lit dans son étape « maj »."""
-    m = trouver(ident)
+    m = find(ident)
     if m is None:
-        raise MachineInconnue(_t("Machine inconnue."))
-    ancienne = (SONDES.get(ident) or (0, {}, ""))[1].get("version", "")
+        raise UnknownMachine(_t("Machine inconnue."))
+    ancienne = (PROBES.get(ident) or (0, {}, ""))[1].get("version", "")
     try:
         _json(m, "/api/noeud/maj", {}, delai=15, ouvrir=ouvrir)
     except urllib.error.HTTPError as e:
         if e.code == 403:
-            raise MachineRefus(_t("Cette machine n'accepte pas d'être mise à jour à distance : son propriétaire doit cocher « Autoriser les machines appairées à mettre Lutin à jour » dans l'onglet Machines.")) from None
+            raise MachineRefused(_t("Cette machine n'accepte pas d'être mise à jour à distance : son propriétaire doit cocher « Autoriser les machines appairées à mettre Lutin à jour » dans l'onglet Machines.")) from None
         try:
             detail = json.loads(e.read().decode("utf-8", "replace")).get("erreur", "")
         except (ValueError, OSError, AttributeError):
             detail = ""
-        raise MachineErreur(detail or _t("Cette machine a répondu une erreur ({}).").format(e.code)) from None
+        raise MachineError(detail or _t("Cette machine a répondu une erreur ({}).").format(e.code)) from None
     except (urllib.error.URLError, OSError, ValueError):
-        raise MachineInjoignable(_t("Impossible de joindre cette machine : vérifie l'adresse et qu'elle est allumée.")) from None
-    with VERROU:
-        MAJ_DISTANTE[ident] = (time.monotonic(), ancienne)
-    SONDES.pop(ident, None)
-    journaliser("mise à jour demandée à {}".format(m["nom"]))
+        raise MachineUnreachable(_t("Impossible de joindre cette machine : vérifie l'adresse et qu'elle est allumée.")) from None
+    with LOCK:
+        REMOTE_UPDATE[ident] = (time.monotonic(), ancienne)
+    PROBES.pop(ident, None)
+    log_event("mise à jour demandée à {}".format(m["nom"]))
     return {"ok": True}
 
 
-def _noter(m, etat, maintenant, resultat, modele):
-    with VERROU:
-        SONDES[m["id"]] = (maintenant(), resultat, modele)
-        if DERNIER_ETAT.get(m["id"]) != etat:
-            DERNIER_ETAT[m["id"]] = etat
-            journaliser("{} : {}".format(m["nom"], etat))          # un trait à chaque CHANGEMENT d'état, jamais à chaque sonde
+def _record(m, etat, maintenant, resultat, modele):
+    with LOCK:
+        PROBES[m["id"]] = (maintenant(), resultat, modele)
+        if LAST_STATE.get(m["id"]) != etat:
+            LAST_STATE[m["id"]] = etat
+            log_event("{} : {}".format(m["nom"], etat))          # un trait à chaque CHANGEMENT d'état, jamais à chaque sonde
             if etat in ("operationnel", "joignable"):
-                DISTANTS["t"] = CONVERSATIONS["t"] = 0.0          # elle vient de répondre : ses modèles et ses conversations sont relus tout de suite
-                SYNCHRO[m["id"]] = {"modeles": False, "conv": False, "debut": time.monotonic()}
+                REMOTES["t"] = CONVERSATIONS["t"] = 0.0          # elle vient de répondre : ses modèles et ses conversations sont relus tout de suite
+                SYNC[m["id"]] = {"modeles": False, "conv": False, "debut": time.monotonic()}
             else:
-                oublier_machine(m["id"])          # elle ne répond plus : ses modèles et ses conversations ne sont plus proposés
+                forget_machine(m["id"])          # elle ne répond plus : ses modèles et ses conversations ne sont plus proposés
 
 
-FRAICHEUR_S = 40          # une machine n'est proposée (modèles, conversations) que si elle a répondu depuis moins que ça
-VEILLE = {"en_cours": False}
+FRESHNESS_S = 40          # une machine n'est proposée (modèles, conversations) que si elle a répondu depuis moins que ça
+WATCH = {"en_cours": False}
 
 
-def _recente(ident):
+def _recent(ident):
     """Vrai si la machine a répondu à une sonde récente : sans cela, une machine éteinte resterait « opérationnelle » dans les listes tant que personne ne la sonde."""
-    g = SONDES.get(ident)
-    return bool(g) and time.monotonic() - g[0] < FRAICHEUR_S
+    g = PROBES.get(ident)
+    return bool(g) and time.monotonic() - g[0] < FRESHNESS_S
 
 
-def veiller(attente=False):
+def watch(attente=False):
     """Garde l'état des machines à jour sans que la page Machines soit ouverte : une sonde en arrière-plan quand la dernière date de plus de la moitié de la fraîcheur.
     Une machine qui ne répond plus disparaît des listes en quelques secondes ; quand elle répond de nouveau, ses modèles et conversations reviennent (voir _noter)."""
-    machines = lire()
-    with VERROU:
-        a_faire = [m for m in machines if not SONDES.get(m["id"]) or time.monotonic() - SONDES[m["id"]][0] > FRAICHEUR_S / 2]
-        if not a_faire or VEILLE["en_cours"]:
+    machines = read()
+    with LOCK:
+        a_faire = [m for m in machines if not PROBES.get(m["id"]) or time.monotonic() - PROBES[m["id"]][0] > FRESHNESS_S / 2]
+        if not a_faire or WATCH["en_cours"]:
             return
-        VEILLE["en_cours"] = True
+        WATCH["en_cours"] = True
 
     def travail():
         try:
             for m in a_faire:
                 try:
-                    sonder(m, "")
+                    probe(m, "")
                 except Exception:  # noqa: BLE001
                     pass
         finally:
-            with VERROU:
-                VEILLE["en_cours"] = False
+            with LOCK:
+                WATCH["en_cours"] = False
     if attente:
         travail()
     else:
         threading.Thread(target=travail, daemon=True, name="machines-veille").start()
 
 
-def vider_listes():
+def clear_lists():
     """Mode multi-machines désactivé : plus aucune liste distante gardée en mémoire (elles se reconstruisent à la réactivation)."""
-    with VERROU:
-        DISTANTS.update(t=0.0, v=[])
+    with LOCK:
+        REMOTES.update(t=0.0, v=[])
         CONVERSATIONS.update(t=0.0, v=[])
-        SYNCHRO.clear()
+        SYNC.clear()
 
 
-def hors_ligne():
+def offline_names():
     """Noms des machines appairées qui ne répondent pas : leurs conversations importées restent utilisables ici mais ne se synchronisent plus."""
-    return [m["nom"] for m in lire() if DERNIER_ETAT.get(m["id"]) not in ("joignable", "operationnel") or not _recente(m["id"])]
+    return [m["nom"] for m in read() if LAST_STATE.get(m["id"]) not in ("joignable", "operationnel") or not _recent(m["id"])]
 
 
-def oublier_machine(ident):
+def forget_machine(ident):
     """Plus rien de cette machine dans les listes (modèles à choisir, conversations en jaune) : on ne peut plus lui parler."""
-    with VERROU:
-        DISTANTS["v"] = [d for d in DISTANTS["v"] if d["id"] != ident]
+    with LOCK:
+        REMOTES["v"] = [d for d in REMOTES["v"] if d["id"] != ident]
         CONVERSATIONS["v"] = [c for c in CONVERSATIONS["v"] if c["machine"] != ident]
-        SYNCHRO.pop(ident, None)
+        SYNC.pop(ident, None)
 
 
-def _synchro_fait(cle, ids):
-    with VERROU:
+def _sync_done(cle, ids):
+    with LOCK:
         for i in ids:
-            if i in SYNCHRO:
-                SYNCHRO[i][cle] = True
+            if i in SYNC:
+                SYNC[i][cle] = True
 
 
-def signaler_panne(m, modele=""):
+def report_failure(m, modele=""):
     """Une demande vers cette machine a échoué : elle passe injoignable tout de suite (la suivante répond en local sans réessayer)."""
-    _noter(m, "injoignable", time.monotonic, {"etat": "injoignable", "detail": _t("Pas de réponse (éteinte, hors réseau ou Lutin arrêté)."), "modeles": []}, modele)
+    _record(m, "injoignable", time.monotonic, {"etat": "injoignable", "detail": _t("Pas de réponse (éteinte, hors réseau ou Lutin arrêté)."), "modeles": []}, modele)
 
 
-def cluster_actif(reglage):
+def cluster_active(reglage):
     """L'onglet Machines est-il visible ? Le réglage explicite l'emporte ; sans réglage (None), dès qu'une machine est appairée ou que celle-ci en prête le moteur."""
     if reglage is not None:
         return bool(reglage)
-    return bool(lire()) or bool(noeud_vue().get("actif"))
+    return bool(read()) or bool(node_view().get("actif"))
 
 
-def etats(modele="", ouvrir=None, choisie=""):
+def states(modele="", ouvrir=None, choisie=""):
     """Pour la page Machines : chaque machine avec son état. Le modèle choisi ici n'est cherché que sur la machine CHOISIE pour répondre : les autres ont leurs propres modèles, ce n'est pas un défaut."""
-    return [dict(vue(m), **sonder(m, modele if m["id"] == choisie else "", ouvrir)) for m in lire()]
+    return [dict(view(m), **probe(m, modele if m["id"] == choisie else "", ouvrir)) for m in read()]
 
 
-SONDES_EN_FOND = set()          # id des machines dont une sonde tourne en arrière-plan (etats_sans_attente) : une seule à la fois par machine
+BACKGROUND_PROBES = set()          # id des machines dont une sonde tourne en arrière-plan (etats_sans_attente) : une seule à la fois par machine
 
 
-def etats_sans_attente(modele="", choisie="", maintenant=time.monotonic):
-    """Comme etats(), sans jamais attendre le réseau (API v1, ADR 0016) : chaque machine avec son dernier état connu, et une sonde lancée en arrière-plan
+def states_without_waiting(modele="", choisie="", maintenant=time.monotonic):
+    """Comme states(), sans jamais attendre le réseau (API v1, ADR 0016) : chaque machine avec son dernier état connu, et une sonde lancée en arrière-plan
     quand cet état a vieilli. Une machine jamais sondée depuis le démarrage est « inconnu » jusqu'à la réponse de sa sonde."""
     sortie = []
-    for m in lire():
+    for m in read():
         voulu = modele if m["id"] == choisie else ""
-        with VERROU:
-            gardee = SONDES.get(m["id"])
-            fraiche = bool(gardee) and gardee[2] == voulu and maintenant() - gardee[0] < (VALIDITE_SONDE_S if gardee[1].get("etat") == "operationnel" else VALIDITE_SONDE_ATTENTE_S)
-            lancer = not fraiche and m["id"] not in SONDES_EN_FOND
+        with LOCK:
+            gardee = PROBES.get(m["id"])
+            fraiche = bool(gardee) and gardee[2] == voulu and maintenant() - gardee[0] < (PROBE_TTL_S if gardee[1].get("etat") == "operationnel" else WAITING_PROBE_TTL_S)
+            lancer = not fraiche and m["id"] not in BACKGROUND_PROBES
             if lancer:
-                SONDES_EN_FOND.add(m["id"])
+                BACKGROUND_PROBES.add(m["id"])
         if lancer:
-            threading.Thread(target=_sonder_en_fond, args=(m, voulu), daemon=True, name="machines-sonde").start()
+            threading.Thread(target=_probe_in_background, args=(m, voulu), daemon=True, name="machines-sonde").start()
         etat = gardee[1] if gardee else {"etat": "inconnu", "detail": _t("Pas encore de nouvelles de cette machine : sa réponse arrive."), "modeles": []}
-        sortie.append(dict(vue(m), **etat))
+        sortie.append(dict(view(m), **etat))
     return sortie
 
 
-def _sonder_en_fond(m, modele):
+def _probe_in_background(m, modele):
     try:
-        sonder(m, modele)
+        probe(m, modele)
     except Exception as erreur:  # noqa: BLE001  (une sonde ratée laisse le dernier état connu ; la suivante réessaiera)
-        journaliser("sonde de {} impossible : {!r}".format(m.get("nom", "?"), erreur))
+        log_event("sonde de {} impossible : {!r}".format(m.get("nom", "?"), erreur))
     finally:
-        with VERROU:
-            SONDES_EN_FOND.discard(m["id"])
+        with LOCK:
+            BACKGROUND_PROBES.discard(m["id"])
 
 
 # --------------------------------------------------------------------------- ce que les autres machines partagent : conversations, skills, mémoire (copies locales, à ta demande)
@@ -1008,76 +1008,76 @@ def _sonder_en_fond(m, modele):
 CONVERSATIONS = {"t": 0.0, "v": [], "en_cours": False}
 
 
-def demander_partage(m, genre, **corps):
+def request_share(m, genre, **corps):
     """Lit chez l'autre machine ce qu'elle partage. ValueError avec la marche à suivre si son propriétaire ne l'a pas autorisé."""
     try:
         return _json(m, "/api/noeud/partage", dict(corps, genre=genre), delai=20)
     except urllib.error.HTTPError as e:
         if e.code == 403:
-            raise MachineRefus(_t("La machine « {} » ne partage pas cela : sur elle, onglet Machines > « Partager avec les machines appairées », puis coche la case voulue.").format(m.get("nom", "?"))) from None
-        raise MachineErreur(_t("Cette machine a répondu une erreur ({}).").format(e.code)) from None
+            raise MachineRefused(_t("La machine « {} » ne partage pas cela : sur elle, onglet Machines > « Partager avec les machines appairées », puis coche la case voulue.").format(m.get("nom", "?"))) from None
+        raise MachineError(_t("Cette machine a répondu une erreur ({}).").format(e.code)) from None
     except (urllib.error.URLError, OSError, ValueError):
-        raise MachineInjoignable(_t("Impossible de joindre cette machine : vérifie l'adresse et qu'elle est allumée.")) from None
+        raise MachineUnreachable(_t("Impossible de joindre cette machine : vérifie l'adresse et qu'elle est allumée.")) from None
 
 
-def _rafraichir_conversations():
+def _refresh_conversations():
     liste = []
-    for m in lire():
+    for m in read():
         try:
-            if not sonder(m, "").get("agir", {}).get("piloter"):
+            if not probe(m, "").get("agir", {}).get("piloter"):
                 continue
-            for c in demander_partage(m, "conversations").get("conversations", []):
-                if isinstance(c, dict) and RE_IDENT_CONV.match(str(c.get("id", ""))):
+            for c in request_share(m, "conversations").get("conversations", []):
+                if isinstance(c, dict) and RE_CONV_ID.match(str(c.get("id", ""))):
                     liste.append({"machine": m["id"], "machine_nom": m["nom"], "id": c["id"], "titre": str(c.get("titre", ""))[:120], "maj": str(c.get("maj", ""))[:30], "messages": int(c.get("messages") or 0)})
         except (ValueError, TypeError):
             continue
-    with VERROU:
+    with LOCK:
         CONVERSATIONS.update(t=time.monotonic(), v=liste, en_cours=False)
-    _synchro_fait("conv", [m["id"] for m in lire()])
+    _sync_done("conv", [m["id"] for m in read()])
 
 
-RE_IDENT_CONV = re.compile(r"^[0-9a-f]{8}$")
+RE_CONV_ID = re.compile(r"^[0-9a-f]{8}$")
 
 
-def conversations_distantes(attente=False):
+def remote_conversations(attente=False):
     """Les conversations des machines appairées qui les partagent. Rendues tout de suite depuis la mémoire (la liste ne doit jamais attendre une machine éteinte) ; mise à jour en arrière-plan toutes les 30 s."""
-    if not lire():
+    if not read():
         return []
-    nettoyer_copies_importees()
-    veiller(attente)
-    with VERROU:
+    clean_imported_copies()
+    watch(attente)
+    with LOCK:
         vieux = time.monotonic() - CONVERSATIONS["t"] > 30
         lancer = vieux and not CONVERSATIONS["en_cours"]
         if lancer:
             CONVERSATIONS["en_cours"] = True
     if lancer:
         if attente:
-            _rafraichir_conversations()
+            _refresh_conversations()
         else:
             def travail():
                 try:
-                    _rafraichir_conversations()
+                    _refresh_conversations()
                 except Exception:  # noqa: BLE001
-                    with VERROU:
+                    with LOCK:
                         CONVERSATIONS["en_cours"] = False
             threading.Thread(target=travail, daemon=True, name="machines-conversations").start()
-    ids = {m["id"] for m in lire() if DERNIER_ETAT.get(m["id"]) in ("joignable", "operationnel") and _recente(m["id"])}          # une machine qui ne répond pas n'a plus de conversations proposées
+    ids = {m["id"] for m in read() if LAST_STATE.get(m["id"]) in ("joignable", "operationnel") and _recent(m["id"])}          # une machine qui ne répond pas n'a plus de conversations proposées
     return [dict(c) for c in CONVERSATIONS["v"] if c["machine"] in ids]
 
 
-def _registre_import(nom):
-    return _lire(nom, {})
+def _import_registry(nom):
+    return _read(nom, {})
 
 
-COPIES_NETTOYEES = [False]
+CLEANED_COPIES = [False]
 
 
-def nettoyer_copies_importees():
+def clean_imported_copies():
     """Les anciennes copies locales de conversations d'autres machines (jamais continuées ici) sont supprimées : les conversations des autres machines se mènent maintenant SUR elles (voir relais).
     Une copie qui a continué ici reste, comme n'importe quelle conversation de cette machine."""
-    if COPIES_NETTOYEES[0]:
+    if CLEANED_COPIES[0]:
         return 0
-    COPIES_NETTOYEES[0] = True
+    CLEANED_COPIES[0] = True
     from . import core as _m
     supprimees = 0
     for c in _m.conv_list():
@@ -1092,47 +1092,47 @@ def nettoyer_copies_importees():
         except (ValueError, OSError, TypeError):
             continue
     try:
-        (dossier() / "conversations_importees.json").unlink()
+        (folder() / "conversations_importees.json").unlink()
     except OSError:
         pass
     if supprimees:
-        journaliser("{} ancienne(s) copie(s) de conversations supprimée(s)".format(supprimees))
+        log_event("{} ancienne(s) copie(s) de conversations supprimée(s)".format(supprimees))
     return supprimees
 
 
-ENTETES_RELAIS = ("Content-Type", "Content-Disposition", "Content-Security-Policy", "Cache-Control", "X-Accel-Buffering")
-RE_CHEMIN_RELAIS = re.compile(r"^/[A-Za-z0-9_\-./%?=&]{1,300}$")
+RELAY_HEADERS = ("Content-Type", "Content-Disposition", "Content-Security-Policy", "Cache-Control", "X-Accel-Buffering")
+RE_RELAY_PATH = re.compile(r"^/[A-Za-z0-9_\-./%?=&]{1,300}$")
 
 
-def ouvrir_relais(m, methode, chemin, corps=None, type_contenu="application/json", nom="", ouvrir=None):
+def open_relay(m, methode, chemin, corps=None, type_contenu="application/json", nom="", ouvrir=None):
     """Transmet une requête de CETTE page à la conversation pilotée sur l'autre machine (`/api/noeud/relais`, droit « piloter »). Renvoie la réponse en flux ; HTTPError/URLError/OSError à l'appelant.
     La conversation, les outils, les addons et les fichiers restent sur l'autre machine : ici on ne fait que passer les octets."""
-    if not RE_CHEMIN_RELAIS.match(chemin) or ".." in chemin:
+    if not RE_RELAY_PATH.match(chemin) or ".." in chemin:
         raise ValueError(_t("Chemin invalide."))
     en_tetes = {"X-Noeud": m.get("jeton", ""), "Content-Type": type_contenu}
     if nom:
         en_tetes["X-Nom"] = nom
     req = urllib.request.Request(m["adresse"] + "/api/noeud/relais" + chemin, data=corps if methode == "POST" else None, headers=en_tetes, method=methode)
-    return (ouvrir or urllib.request.build_opener(_SansRedirection).open)(req, timeout=DELAI_RELAIS_S)
+    return (ouvrir or urllib.request.build_opener(_NoRedirect).open)(req, timeout=RELAY_TIMEOUT_S)
 
 
-DELAI_RELAIS_S = 180          # un silence plus long que ça (la machine hôte envoie un battement toutes les quelques secondes) : la machine est perdue
+RELAY_TIMEOUT_S = 180          # un silence plus long que ça (la machine hôte envoie un battement toutes les quelques secondes) : la machine est perdue
 
 
-def importer_skills(ident):
+def import_skills(ident):
     """Ajoute à CETTE machine les skills de l'autre qui n'y sont pas (les deux jeux se cumulent). Un skill qui existe déjà ici n'est jamais écrasé, sauf s'il vient de cette machine et n'a pas été modifié depuis.
     {ajoutes, mis_a_jour, deja_la}."""
     import hashlib
     from . import core as _m
-    m = trouver(ident)
+    m = find(ident)
     if m is None:
-        raise MachineInconnue(_t("Machine inconnue."))
-    origines = _registre_import("skills_origine.json")
+        raise UnknownMachine(_t("Machine inconnue."))
+    origines = _import_registry("skills_origine.json")
     ajoutes = mis = deja = 0
-    for s in demander_partage(m, "skills").get("skills", []):
+    for s in request_share(m, "skills").get("skills", []):
         nom = str((s or {}).get("nom", ""))
         try:
-            texte = str(demander_partage(m, "skill", nom=nom).get("texte", ""))
+            texte = str(request_share(m, "skill", nom=nom).get("texte", ""))
             empreinte = hashlib.sha256(texte.encode("utf-8")).hexdigest()
             existe = True
             try:
@@ -1151,18 +1151,18 @@ def importer_skills(ident):
                 deja += 1
         except (ValueError, OSError):
             deja += 1
-    _ecrire("skills_origine.json", origines)
-    journaliser("skills importés de {} : {} ajoutés, {} mis à jour, {} déjà là".format(m["nom"], ajoutes, mis, deja))
+    _write("skills_origine.json", origines)
+    log_event("skills importés de {} : {} ajoutés, {} mis à jour, {} déjà là".format(m["nom"], ajoutes, mis, deja))
     return {"ajoutes": ajoutes, "mis_a_jour": mis, "deja_la": deja}
 
 
-def importer_memoire(ident):
+def import_memory(ident):
     """Ajoute à la mémoire de CETTE machine les notes de l'autre qu'elle n'a pas (sous un titre « Depuis <machine> »). Le profil (CONTEXTE.md) n'est copié que s'il est vide ici. {notes_ajoutees, profil_copie}."""
     from . import core as _m
-    m = trouver(ident)
+    m = find(ident)
     if m is None:
-        raise MachineInconnue(_t("Machine inconnue."))
-    distante = demander_partage(m, "memoire").get("memoire") or {}
+        raise UnknownMachine(_t("Machine inconnue."))
+    distante = request_share(m, "memoire").get("memoire") or {}
     local = _m.read_memory("MEMOIRE.md")
     connues = {re.sub(r"\W+", " ", ligne).strip().lower() for ligne in local.splitlines()}
     neuves = []
@@ -1175,7 +1175,7 @@ def importer_memoire(ident):
     ignorees = 0
     if neuves:
         entete = "\n\n## {}\n".format(_t("Depuis {} ({})").format(m["nom"], time.strftime("%Y-%m-%d")))
-        place = LIMITE_MEMOIRE - len(local.rstrip()) - len(entete) - 1
+        place = MEMORY_LIMIT - len(local.rstrip()) - len(entete) - 1
         gardees, taille = [], 0
         for ligne in neuves:
             if taille + len(ligne) + 1 > place:
@@ -1189,70 +1189,70 @@ def importer_memoire(ident):
     profil, profil_coupe = False, False
     if str(distante.get("CONTEXTE.md", "")).strip() and not _m.read_memory("CONTEXTE.md").strip():
         contexte = str(distante["CONTEXTE.md"])
-        profil_coupe = len(contexte) > LIMITE_MEMOIRE
-        _m.write_memory("CONTEXTE.md", contexte[:LIMITE_MEMOIRE])
+        profil_coupe = len(contexte) > MEMORY_LIMIT
+        _m.write_memory("CONTEXTE.md", contexte[:MEMORY_LIMIT])
         profil = True
-    journaliser("mémoire importée de {} : {} note(s), {} ignorée(s) faute de place{}".format(m["nom"], len(neuves), ignorees, ", profil coupé" if profil_coupe else ""))
+    log_event("mémoire importée de {} : {} note(s), {} ignorée(s) faute de place{}".format(m["nom"], len(neuves), ignorees, ", profil coupé" if profil_coupe else ""))
     return {"notes_ajoutees": len(neuves), "notes_ignorees": ignorees, "profil_copie": profil, "profil_coupe": profil_coupe}
 
 
 # --------------------------------------------------------------------------- les modèles des autres machines (pour les choisir comme les siens)
 
-def _rafraichir_distants():
+def _refresh_remotes():
     liste = []
-    avant = {d["id"]: d for d in DISTANTS["v"]}
-    for m in lire():
-        r = sonder(m, "")
+    avant = {d["id"]: d for d in REMOTES["v"]}
+    for m in read():
+        r = probe(m, "")
         modeles = list(r.get("modeles") or []) or list((avant.get(m["id"]) or {}).get("modeles") or [])          # une machine éteinte garde sa dernière liste (grisée dans le choix)
         if modeles:
             liste.append({"id": m["id"], "nom": m["nom"], "etat": r["etat"], "modeles": modeles})
-    with VERROU:
-        DISTANTS.update(t=time.monotonic(), v=liste, en_cours=False)
-    _synchro_fait("modeles", [m["id"] for m in lire()])
+    with LOCK:
+        REMOTES.update(t=time.monotonic(), v=liste, en_cours=False)
+    _sync_done("modeles", [m["id"] for m in read()])
 
 
-def modeles_distants(attente=False):
+def remote_models(attente=False):
     """Les modèles des machines appairées qui répondent : [{id, nom, etat, modeles}]. Ce qui est gardé en mémoire est rendu tout de suite (la page ne doit jamais attendre une machine éteinte) ;
     une mise à jour part en arrière-plan quand la dernière date de plus de 15 s. `attente=True` (tests) la fait sur place."""
-    if not lire():
+    if not read():
         return []
-    veiller(attente)
-    with VERROU:
-        vieux = time.monotonic() - DISTANTS["t"] > 15
-        lancer = vieux and not DISTANTS["en_cours"]
+    watch(attente)
+    with LOCK:
+        vieux = time.monotonic() - REMOTES["t"] > 15
+        lancer = vieux and not REMOTES["en_cours"]
         if lancer:
-            DISTANTS["en_cours"] = True
+            REMOTES["en_cours"] = True
     if lancer:
         if attente:
-            _rafraichir_distants()
+            _refresh_remotes()
         else:
             def travail():
                 try:
-                    _rafraichir_distants()
+                    _refresh_remotes()
                 except Exception:  # noqa: BLE001
-                    with VERROU:
-                        DISTANTS["en_cours"] = False
+                    with LOCK:
+                        REMOTES["en_cours"] = False
             threading.Thread(target=travail, daemon=True, name="machines-modeles").start()
-    ids = {m["id"] for m in lire() if DERNIER_ETAT.get(m["id"]) == "operationnel" and _recente(m["id"])}          # une machine qui ne répond pas n'est plus proposée
-    return [dict(d) for d in DISTANTS["v"] if d["id"] in ids]
+    ids = {m["id"] for m in read() if LAST_STATE.get(m["id"]) == "operationnel" and _recent(m["id"])}          # une machine qui ne répond pas n'est plus proposée
+    return [dict(d) for d in REMOTES["v"] if d["id"] in ids]
 
 
-def modele_distant(reglages, installes_locaux):
+def remote_model(reglages, installes_locaux):
     """La machine qui porte le modèle choisi quand celui-ci n'existe QUE là-bas (réglages `machine` + `modele`), sinon None."""
     ident = str((reglages or {}).get("machine") or "")
     modele = str((reglages or {}).get("modele") or "")
     if not ident or not modele or modele in (installes_locaux or []):
         return None
-    m = trouver(ident)
+    m = find(ident)
     if m is None:
         return None
-    gardee = next((d for d in DISTANTS["v"] if d["id"] == ident), None)
+    gardee = next((d for d in REMOTES["v"] if d["id"] == ident), None)
     return m if gardee is None or modele in gardee["modeles"] else None
 
 
 # --------------------------------------------------------------------------- le routage
 
-class FluxNoeud:
+class NodeStream:
     """Les évènements d'une réponse en flux d'un nœud (une ligne JSON par évènement, au format d'Ollama). Fermer ferme la connexion : le nœud arrête de générer."""
 
     def __init__(self, reponse):
@@ -1278,7 +1278,7 @@ class FluxNoeud:
                     continue
 
 
-class Routage:
+class Routing:
     """Le moteur local, devant lequel se place une machine : la demande part vers la machine SI elle est opérationnelle pour ce modèle, sinon (ou si elle échoue avant la première réponse) le moteur local répond, en silence.
     Tout le reste (modèles installés, mémoire, installation…) reste celui de ce Lutin."""
 
@@ -1299,7 +1299,7 @@ class Routage:
         if self._modele_local(modele):
             return self.local.capacites(modele)
         cle = (self.machine["id"], modele)
-        gardee = CAPACITES_DISTANTES.get(cle)
+        gardee = REMOTE_CAPABILITIES.get(cle)
         if gardee and time.monotonic() - gardee[0] < 300:
             return gardee[1]
         try:
@@ -1307,13 +1307,13 @@ class Routage:
             caps = set(rep["capacites"]) if isinstance(rep.get("capacites"), list) else None
         except (urllib.error.URLError, OSError, ValueError, KeyError):
             return None
-        CAPACITES_DISTANTES[cle] = (time.monotonic(), caps)
+        REMOTE_CAPABILITIES[cle] = (time.monotonic(), caps)
         return caps
 
     def _repli(self, corps):
         """Le moteur local répond à la place de la machine, en silence — sauf si le modèle n'existe que sur la machine : une erreur claire vaut mieux qu'un « modèle introuvable » du moteur local."""
         modele = corps.get("model", "")
-        connu_la_bas = next((d for d in DISTANTS["v"] if d["id"] == self.machine["id"] and modele in d["modeles"]), None)
+        connu_la_bas = next((d for d in REMOTES["v"] if d["id"] == self.machine["id"] and modele in d["modeles"]), None)
         if connu_la_bas is not None and not self._modele_local(modele):
             raise ValueError(_t("Le modèle « {} » n'existe que sur la machine « {} », qui ne répond pas pour l'instant (éteinte, hors réseau ou Lutin arrêté). Réveille-la dans l'onglet Machines, ou choisis un modèle de cette machine-ci.").format(modele, self.machine.get("nom", "?")))
 
@@ -1324,21 +1324,21 @@ class Routage:
             raise ValueError(_t("La machine « {} » répond déjà à d'autres demandes : réessaie dans un instant.").format(self.machine.get("nom", "?")))
 
     def _ouvrir_noeud(self, corps, delai):
-        if sonder(self.machine, corps.get("model", ""), self.ouvrir)["etat"] != "operationnel":
+        if probe(self.machine, corps.get("model", ""), self.ouvrir)["etat"] != "operationnel":
             self._repli(corps)
             return None
         try:
             # Le nœud répond tout de suite (état vérifié juste avant) mais peut attendre son moteur : son propre utilisateur, un modèle à charger. Le délai est donc celui de la demande, pas 30 s.
-            return requete(self.machine, "/api/noeud/chat", {"corps": corps_autorise(corps)}, delai=delai, ouvrir=self.ouvrir)
+            return request(self.machine, "/api/noeud/chat", {"corps": allowed_body(corps)}, delai=delai, ouvrir=self.ouvrir)
         except urllib.error.HTTPError as e:
             if e.code == 429:          # la machine répond déjà à d'autres demandes : elle n'est pas en panne
                 self._occupee(corps)
                 return None
-            signaler_panne(self.machine, corps.get("model", ""))
+            report_failure(self.machine, corps.get("model", ""))
             self._repli(corps)
             return None
         except (urllib.error.URLError, OSError, ValueError):
-            signaler_panne(self.machine, corps.get("model", ""))
+            report_failure(self.machine, corps.get("model", ""))
             self._repli(corps)
             return None          # repli silencieux
 
@@ -1350,20 +1350,20 @@ class Routage:
             with rep:
                 return json.loads(rep.read(20_000_000).decode("utf-8", "replace") or "{}")
         except (urllib.error.URLError, OSError, ValueError):
-            signaler_panne(self.machine, corps.get("model", ""))
+            report_failure(self.machine, corps.get("model", ""))
             return self.local.chat(corps, delai)
 
     def chat_flux(self, corps, delai=900):
         rep = self._ouvrir_noeud(dict(corps, stream=True), delai)
         if rep is None:
             return self.local.chat_flux(corps, delai)
-        return FluxNoeud(rep)
+        return NodeStream(rep)
 
 
-def acheminer(local, reglages, ouvrir=None):
+def route(local, reglages, ouvrir=None):
     """Le moteur à utiliser pour cette demande : `local`, ou `local` derrière la machine choisie dans les réglages (`machine`). Une machine retirée du registre est ignorée."""
     ident = str((reglages or {}).get("machine") or "")
     if not ident:
         return local
-    m = trouver(ident)
-    return Routage(local, m, ouvrir) if m else local
+    m = find(ident)
+    return Routing(local, m, ouvrir) if m else local

@@ -55,11 +55,11 @@ class PageMachines(T.Base):
         p.evaluer("document.querySelector('#machinesZone .autorisations button').click(); true")
         p.attendre(zone + ".includes('Demandes d\\'autorisation')")
         self.assertIn("demande à pouvoir mener des conversations ici", p.evaluer(zone))
-        self.assertFalse(machines.noeud_vue()["piloter"], "une demande n'accorde rien")
+        self.assertFalse(machines.node_view()["piloter"], "une demande n'accorde rien")
         p.attendre(zone + ".includes('demande envoyée')")
         p.evaluer("[...document.querySelectorAll('#machinesZone button')].find(b => b.textContent.trim() === 'Autoriser').click(); true")
         p.attendre("!document.getElementById('machinesZone').textContent.includes('Demandes d\\'autorisation')")
-        self.assertTrue(machines.noeud_vue()["piloter"])
+        self.assertTrue(machines.node_view()["piloter"])
         self.assertEqual(p.evaluer("document.querySelectorAll('#machinesZone .autorisations button').length"), 2, "il reste deux droits à demander")
         self.assertEqual([e for e in p.erreurs if "rror" in str(e)], [], "aucune erreur JavaScript")
 
@@ -73,7 +73,7 @@ class PageMachines(T.Base):
         p.evaluer("document.querySelector('.onglets button[data-p=\"machines\"]').click(); true")
         p.attendre("document.getElementById('machinesZone').textContent.includes('Ce que cette machine')")
         p.evaluer("document.querySelector('#machinesZone .autorisations button').focus(); true")
-        machines.noeud_autoriser_extinction(True)          # l'état change côté serveur pendant que le bouton a le focus
+        machines.node_allow_shutdown(True)          # l'état change côté serveur pendant que le bouton a le focus
         p.attendre("[...document.querySelectorAll('#machinesZone .autorisations .ligne')].some(l => l.textContent.includes('✅'))", 15)
 
 

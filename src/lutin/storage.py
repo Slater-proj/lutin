@@ -122,7 +122,7 @@ def _save_settings(nouveau):
     r["machine"] = str(r.get("machine") or "")
     if r["machine"]:
         from . import machines
-        if machines.trouver(r["machine"]) is None:
+        if machines.find(r["machine"]) is None:
             raise ValueError(_t("Machine inconnue."))
     r["modele_annexe"] = str(r.get("modele_annexe") or "").strip()
     if r["modele_annexe"] and not re.match(r"^[A-Za-z0-9_./:-]{1,100}$", r["modele_annexe"]):

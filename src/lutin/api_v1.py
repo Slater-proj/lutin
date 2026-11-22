@@ -353,7 +353,7 @@ def update_settings(request):
         changed[key] = words[value] if words else value
     stored = _m.save_settings(changed)
     if changed.get("cluster") is False:
-        _machines.vider_listes()                           # multi-machine mode switched off: no model and no conversation of another machine is kept
+        _machines.clear_lists()                           # multi-machine mode switched off: no model and no conversation of another machine is kept
     return _settings(stored)
 
 
@@ -432,7 +432,7 @@ MACHINE_RIGHTS = {"piloter": "lead", "maj": "update", "extinction": "shutdown"}
 
 
 def _multi_machine():
-    return _machines.cluster_actif(_m.settings().get("cluster"))
+    return _machines.cluster_active(_m.settings().get("cluster"))
 
 
 def _remote_models():
@@ -440,7 +440,7 @@ def _remote_models():
     if not _multi_machine():
         return []
     return [{"machine": entry["id"], "machine_name": entry["nom"], "state": MACHINE_STATES.get(entry["etat"], "unknown"), "models": list(entry["modeles"])}
-            for entry in _machines.modeles_distants()]
+            for entry in _machines.remote_models()]
 
 
 def _load(stored):
@@ -453,7 +453,7 @@ def _load(stored):
 
 
 def _machine(stored):
-    """A paired machine under its v1 names: what `machines.vue` and the last probe say, never its token."""
+    """A paired machine under its v1 names: what `machines.view` and the last probe say, never its token."""
     allowed, shares = stored.get("agir") or {}, stored.get("droits") or {}
     return {"id": stored["id"], "name": stored.get("nom", ""), "address": stored.get("adresse", ""), "mac": stored.get("mac", ""),
             "mac_auto": bool(stored.get("mac_auto")), "added": stored.get("ajoutee", ""), "warnings": list(stored.get("avertissements") or []),
@@ -473,15 +473,15 @@ def paired_machines(request):
     settings = _m.settings()
     answering = str(settings.get("machine") or "")
     return {"enabled": _multi_machine(), "answering": answering,
-            "machines": [_machine(stored) for stored in _machines.etats_sans_attente(settings.get("modele", ""), answering)],
-            "log": _machines.journal()}
+            "machines": [_machine(stored) for stored in _machines.states_without_waiting(settings.get("modele", ""), answering)],
+            "log": _machines.read_log()}
 
 
 # The actions on a paired machine (ADR 0016, stage 2): the right is `configurator` for all of them, as on the old Machines tab; what this machine grants
 # to the others (the node) is stage 3. Who answers by default stays the setting `machine` (`PATCH /settings`). A refusal comes before any effect: the
 # functions of `lutin.machines` check the machine and the values first, and write nothing when the other machine says no or does not answer.
-MACHINE_ERRORS = ((_machines.MachineInconnue, 404, "not_found"), (_machines.MachineRefus, 409, "machine_refused"),
-                  (_machines.MachineInjoignable, 503, "machine_unreachable"), (_machines.MachineErreur, 502, "machine_error"))
+MACHINE_ERRORS = ((_machines.UnknownMachine, 404, "not_found"), (_machines.MachineRefused, 409, "machine_refused"),
+                  (_machines.MachineUnreachable, 503, "machine_unreachable"), (_machines.MachineError, 502, "machine_error"))
 MACHINE_ACTIONS = ("wake", "shutdown", "cancel-shutdown", "update")
 MACHINE_IMPORTS = ("skills", "memory")
 
@@ -501,7 +501,7 @@ def _on_machine(action, *args, **kwargs):
 def _paired(identifier):
     """One machine as `GET /machines` shows it."""
     settings = _m.settings()
-    found = next((stored for stored in _machines.etats_sans_attente(settings.get("modele", ""), str(settings.get("machine") or "")) if stored["id"] == identifier), None)
+    found = next((stored for stored in _machines.states_without_waiting(settings.get("modele", ""), str(settings.get("machine") or "")) if stored["id"] == identifier), None)
     if found is None:
         raise ApiError(404, "not_found", _t("Machine inconnue."))
     return _machine(found)
@@ -515,7 +515,7 @@ def pair_machine(request):
     fields = ("address", "code", "name", "mac")
     if set(body) - set(fields) or not all(isinstance(body.get(name, ""), str) for name in fields) or not body.get("address", "").strip() or not body.get("code", "").strip():
         raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format(", ".join(fields)))
-    paired = _on_machine(_machines.ajouter, body["address"], body["code"].strip(), body.get("name", ""), body.get("mac", ""))
+    paired = _on_machine(_machines.add, body["address"], body["code"].strip(), body.get("name", ""), body.get("mac", ""))
     return 201, _paired(paired["id"])
 
 
@@ -524,7 +524,7 @@ def update_machine(request):
     """{"mac": "00:1A:2B:3C:4D:5E"} ("" clears it): the address of the network card that wakes the machine. Answers the machine."""
     if set(request.body) != {"mac"} or not isinstance(request.body["mac"], str):
         raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("mac"))
-    _on_machine(_machines.definir_mac, request.params["id"], request.body["mac"])
+    _on_machine(_machines.set_mac, request.params["id"], request.body["mac"])
     return _paired(request.params["id"])
 
 
@@ -532,7 +532,7 @@ def update_machine(request):
 def unpair_machine(request):
     """Forgets the machine (its token included). If it was the one answering by default, this machine answers again. Answers `GET /machines`."""
     identifier = request.params["id"]
-    _on_machine(_machines.retirer, identifier)
+    _on_machine(_machines.remove, identifier)
     if str(_m.settings().get("machine") or "") == identifier:
         _m.save_settings({"machine": ""})
     return paired_machines(request)
@@ -549,12 +549,12 @@ def machine_action(request):
     if request.body:
         raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("-"))
     if name == "wake":
-        sent = _on_machine(_machines.reveiller, identifier, envoyer=_power.send_wake)          # looked up now, not when machines.py was loaded: the tests replace it
+        sent = _on_machine(_machines.wake, identifier, envoyer=_power.send_wake)          # looked up now, not when machines.py was loaded: the tests replace it
         return 202, {"mac": sent["mac"], "sent": sent["envois"], "interfaces": list(sent["cartes"]), "warnings": list(sent["avertissements"])}
     if name == "update":
-        _on_machine(_machines.mettre_a_jour_distante, identifier)
+        _on_machine(_machines.update_remote, identifier)
         return 202, {}
-    answer = _on_machine(_machines.eteindre, identifier, name == "cancel-shutdown")
+    answer = _on_machine(_machines.shut_down, identifier, name == "cancel-shutdown")
     answer = answer if isinstance(answer, dict) else {}
     if name == "cancel-shutdown":
         return {"cancelled": bool(answer.get("annulee"))}
@@ -569,7 +569,7 @@ def request_machine_right(request):
     right = request.body.get("right")
     if set(request.body) != {"right"} or not isinstance(right, str) or right not in words:
         raise ApiError(400, "invalid_request", _t("Valeur invalide pour « {} » (attendu : {}).").format("right", ", ".join(words)))
-    _on_machine(_machines.demander_droit, request.params["id"], words[right])
+    _on_machine(_machines.request_right, request.params["id"], words[right])
     return 202, {"right": right}
 
 
@@ -584,9 +584,9 @@ def import_from_machine(request):
     if request.body:
         raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("-"))
     if kind == "skills":
-        counts = _on_machine(_machines.importer_skills, request.params["id"])
+        counts = _on_machine(_machines.import_skills, request.params["id"])
         return {"added": counts["ajoutes"], "updated": counts["mis_a_jour"], "already_there": counts["deja_la"]}
-    counts = _on_machine(_machines.importer_memoire, request.params["id"])
+    counts = _on_machine(_machines.import_memory, request.params["id"])
     return {"notes_added": counts["notes_ajoutees"], "notes_skipped": counts["notes_ignorees"], "profile_copied": counts["profil_copie"],
             "profile_truncated": counts["profil_coupe"]}
 
@@ -596,11 +596,11 @@ def import_from_machine(request):
 # grants (shares, rights, autostart), the answer to a rights request and cancelling a shutdown another machine asked for need `local`. The protocol
 # between machines (/api/noeud/*) is not part of this: it changes with /node/v1 (step 3 of the plan).
 NODE_SHARES = {"skills": "skills", "memoire": "memory"}
-NODE_ALLOW = {"piloter": _machines.noeud_autoriser_piloter, "maj": _machines.noeud_autoriser_maj, "extinction": _machines.noeud_autoriser_extinction}
+NODE_ALLOW = {"piloter": _machines.node_allow_control, "maj": _machines.node_allow_update, "extinction": _machines.node_allow_shutdown}
 
 
 def _node():
-    view = _machines.noeud_vue()
+    view = _machines.node_view()
     pending = view["extinction_en_attente"]
     startup = _power.startup_state_memo()
     return {"lending": bool(view["actif"]), "id": view["id"],
@@ -628,7 +628,7 @@ def update_node(request):
     if set(request.body) != {"lending"} or not isinstance(lending, bool):
         raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("lending"))
     try:
-        _machines.noeud_activer(lending, niveau_local=_m.SECURITY.niveau == _sec.LOCAL)          # raises before writing anything
+        _machines.node_enable(lending, niveau_local=_m.SECURITY.niveau == _sec.LOCAL)          # raises before writing anything
     except ValueError as refused:
         raise ApiError(409, "local_only", str(refused)) from None
     return _node()
@@ -660,7 +660,7 @@ def update_node_permissions(request):
     for right, granted in allow.items():
         NODE_ALLOW[right](granted)
     for share, granted in shares.items():
-        _machines.noeud_droit(share, granted)
+        _machines.node_right(share, granted)
     return _node()
 
 
@@ -670,9 +670,9 @@ def node_pairing_code(request):
     409 `not_lending` while this machine does not lend its engine: the code could not be used."""
     if request.body:
         raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("-"))
-    if not _machines.noeud_actif():
+    if not _machines.node_active():
         raise ApiError(409, "not_lending", _t("Cette machine ne prête pas son moteur : active d'abord le prêt."))
-    code = _machines.noeud_nouveau_code()
+    code = _machines.node_new_code()
     return 201, {"code": code["code"], "valid_seconds": code["expire_dans"]}
 
 
@@ -680,9 +680,9 @@ def node_pairing_code(request):
 def revoke_node_machine(request):
     """Revokes a machine that may use this one: its token stops working at once. 404 for a name no authorized machine has. Answers `GET /node`."""
     name = request.params["name"]
-    if name not in [allowed["nom"] for allowed in _machines.noeud_vue()["autorisees"]]:
+    if name not in [allowed["nom"] for allowed in _machines.node_view()["autorisees"]]:
         raise ApiError(404, "not_found", _t("Machine inconnue."))
-    _machines.noeud_revoquer(name)
+    _machines.node_revoke(name)
     return _node()
 
 
@@ -691,10 +691,10 @@ def rename_node_machine(request):
     """{"name": "PC du bureau"}: a clear name for a machine that may use this one (the one it sent is often its computer's technical name). Cleaned as
     at pairing; its token keeps working and its waiting requests follow it. 404 unknown, 409 `conflict` when another machine has that name."""
     body = request.body
-    if set(body) != {"name"} or not isinstance(body["name"], str) or not _machines.nom_machine(body["name"]):
+    if set(body) != {"name"} or not isinstance(body["name"], str) or not _machines.machine_name(body["name"]):
         raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("name"))
     try:
-        _machines.noeud_renommer(request.params["name"], body["name"])
+        _machines.node_rename(request.params["name"], body["name"])
     except LookupError:
         raise ApiError(404, "not_found", _t("Machine inconnue.")) from None
     except FileExistsError:
@@ -712,9 +712,9 @@ def answer_node_request(request):
         raise ApiError(400, "invalid_request", _t("Valeur invalide pour « {} » (attendu : {}).").format("right", ", ".join(words)))
     if set(request.body) != {"accept"} or not isinstance(accept, bool):
         raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("accept"))
-    if not any(waiting.get("machine") == machine and waiting.get("droit") == words[right] for waiting in _machines.noeud_vue()["demandes"]):
+    if not any(waiting.get("machine") == machine and waiting.get("droit") == words[right] for waiting in _machines.node_view()["demandes"]):
         raise ApiError(404, "not_found", _t("Cette demande n'existe plus."))
-    _machines.noeud_repondre_demande(machine, words[right], accept)
+    _machines.node_answer_request(machine, words[right], accept)
     return _node()
 
 
@@ -723,7 +723,7 @@ def cancel_node_shutdown(request):
     """Cancels a shutdown of this machine that a paired machine asked for (`pending_shutdown` in `GET /node`). `cancelled` is false when none was pending."""
     if request.body:
         raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("-"))
-    return {"cancelled": _power.cancel_shutdown(_machines.journaliser)}
+    return {"cancelled": _power.cancel_shutdown(_machines.log_event)}
 
 
 # --------------------------------------------------------------------------- conversations led on another machine (ADR 0016, stages 6 and 7)
@@ -739,12 +739,12 @@ RE_FILE_ID = re.compile(r"^[A-Za-z0-9_.\-]{1,80}$")
 
 def _host(identifier):
     """The paired machine that holds the conversation. 404 when unknown; 503 when it does not answer (probed once if nothing is known of it yet)."""
-    stored = _machines.trouver(identifier) if _machines.RE_ID.match(identifier) else None
+    stored = _machines.find(identifier) if _machines.RE_ID.match(identifier) else None
     if stored is None:
         raise ApiError(404, "not_found", _t("Machine inconnue."))
-    if _machines.DERNIER_ETAT.get(identifier) is None:
-        _machines.sonder(stored)
-    if _machines.DERNIER_ETAT.get(identifier) not in ("joignable", "operationnel"):
+    if _machines.LAST_STATE.get(identifier) is None:
+        _machines.probe(stored)
+    if _machines.LAST_STATE.get(identifier) not in ("joignable", "operationnel"):
         raise ApiError(503, "machine_unreachable", _t("La machine « {} » ne répond pas : sa conversation reviendra quand elle sera de nouveau en ligne.").format(stored["nom"]))
     return stored
 
@@ -760,7 +760,7 @@ def _hosted(request, key="conversation"):
 def _relay(host, method, path, body=None, content_type="application/json", name=""):
     """Opens the relayed request; its answer is read by the caller. Every failure becomes an ApiError before anything is written to the page."""
     try:
-        return _machines.ouvrir_relais(host, method, path, body, content_type, name)
+        return _machines.open_relay(host, method, path, body, content_type, name)
     except urllib.error.HTTPError as refused:
         try:
             detail = str(json.loads(refused.read(100_000).decode("utf-8", "replace")).get("erreur", ""))
@@ -773,7 +773,7 @@ def _relay(host, method, path, body=None, content_type="application/json", name=
             raise ApiError(502, "machine_error", detail or _t("Cette machine a répondu une erreur ({}).").format(refused.code)) from None
         raise ApiError(refused.code, code, detail or _t("Cette machine a répondu une erreur ({}).").format(refused.code)) from None
     except (urllib.error.URLError, OSError):
-        _machines.signaler_panne(host)
+        _machines.report_failure(host)
         raise ApiError(503, "machine_unreachable", _t("Impossible de joindre la machine « {} » : elle ne répond plus.").format(host["nom"])) from None
 
 
@@ -800,7 +800,7 @@ def remote_conversations(request):
     if not _multi_machine():
         return {"conversations": []}
     return {"conversations": [{"machine": entry["machine"], "machine_name": entry["machine_nom"], "id": entry["id"], "title": entry["titre"],
-                               "updated_at": entry["maj"], "message_count": entry["messages"]} for entry in _machines.conversations_distantes()]}
+                               "updated_at": entry["maj"], "message_count": entry["messages"]} for entry in _machines.remote_conversations()]}
 
 
 @route("GET", "/machines/{id}/conversations/{conversation}", SESSION)

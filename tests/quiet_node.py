@@ -24,5 +24,5 @@ def quiet(test):
                   mock.patch.dict(model_fit._state, {"profil": hardware.profil_demo(), "quand": time.time() + 3600, "en_cours": False})):
         patch.start()
         test.addCleanup(patch.stop)
-    machines.INFOS_NOEUD.clear()
-    machines.CARTES.update(t=-999.0, v=None)
+    machines.NODE_INFO.clear()
+    machines.CARDS.update(t=-999.0, v=None)

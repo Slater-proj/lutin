@@ -21,37 +21,37 @@ class MachineActions(unittest.TestCase):
         quiet_node.quiet(self)
         A.PIN_LIMITER.evenements.clear()          # every pairing counts against the limit of the node, which is this server
         machines.CODES.clear()
-        machines.SONDES.clear()
-        machines.DERNIER_ETAT.clear()
-        machines.DISTANTS.update(t=0.0, v=[], en_cours=False)
-        machines.noeud_activer(True)
+        machines.PROBES.clear()
+        machines.LAST_STATE.clear()
+        machines.REMOTES.update(t=0.0, v=[], en_cours=False)
+        machines.node_enable(True)
         self.answering = A.settings().get("machine", "")
 
         def restore():
-            machines._ecrire_registre([])
-            for allow in (machines.noeud_autoriser_extinction, machines.noeud_autoriser_maj):
+            machines._write_registry([])
+            for allow in (machines.node_allow_shutdown, machines.node_allow_update):
                 allow(False)
-            for share in machines.DROITS:
-                machines.noeud_droit(share, False)
-            for waiting in machines.noeud_vue()["demandes"]:
-                machines.noeud_repondre_demande(waiting["machine"], waiting["droit"], False)
-            machines.noeud_activer(False)
-            for kept in (machines.CODES, machines.SONDES, machines.DERNIER_ETAT, machines.REVEIL, machines.ARRET, machines.MAJ_DISTANTE):
+            for share in machines.RIGHTS:
+                machines.node_right(share, False)
+            for waiting in machines.node_view()["demandes"]:
+                machines.node_answer_request(waiting["machine"], waiting["droit"], False)
+            machines.node_enable(False)
+            for kept in (machines.CODES, machines.PROBES, machines.LAST_STATE, machines.WAKING, machines.SHUTDOWN, machines.REMOTE_UPDATE):
                 kept.clear()
-            machines._sauver_reveils()
-            machines.DISTANTS.update(t=0.0, v=[], en_cours=False)
+            machines._save_wakes()
+            machines.REMOTES.update(t=0.0, v=[], en_cours=False)
             A.save_settings({"machine": self.answering})
         self.addCleanup(restore)
 
     def pair(self, name="Bureau"):
-        status, answer = api("POST", "/api/v1/machines", {"address": T.BASE, "code": machines.noeud_nouveau_code()["code"], "name": name})
+        status, answer = api("POST", "/api/v1/machines", {"address": T.BASE, "code": machines.node_new_code()["code"], "name": name})
         self.assertEqual(status, 201, answer)
         return answer
 
     def test_pairing_with_the_code_then_unpairing(self):
         paired = self.pair()
         self.assertEqual((sorted(paired), paired["name"], paired["address"]), (M.MACHINE_FIELDS, "Bureau", T.BASE))
-        self.assertEqual([m["id"] for m in machines.lire()], [paired["id"]])
+        self.assertEqual([m["id"] for m in machines.read()], [paired["id"]])
         A.save_settings({"machine": paired["id"]})
         status, answer = api("DELETE", "/api/v1/machines/" + paired["id"])
         self.assertEqual((status, answer["machines"], answer["answering"]), (200, [], ""), "the machine that answered is gone: this one answers again")
@@ -59,7 +59,7 @@ class MachineActions(unittest.TestCase):
         self.assertEqual(api("DELETE", "/api/v1/machines/" + paired["id"])[1]["error"]["code"], "not_found")
 
     def test_a_refused_pairing_adds_nothing_and_keeps_the_code(self):
-        code = machines.noeud_nouveau_code()["code"]          # shown as « 1234-5678 »: the node keeps the digits
+        code = machines.node_new_code()["code"]          # shown as « 1234-5678 »: the node keeps the digits
         digits = int("".join(c for c in code if c.isdigit()))
         wrong = "{:08d}".format((digits + 1) % 10 ** 8)
         refusals = [({"address": T.BASE}, 400, "invalid_request"), ({"address": T.BASE, "code": digits}, 400, "invalid_request"),
@@ -72,7 +72,7 @@ class MachineActions(unittest.TestCase):
             answer = api("POST", "/api/v1/machines", body)
             self.assertEqual((answer[0], answer[1]["error"]["code"]), (status, error), body)
             self.assertTrue(answer[1]["error"]["message"])
-            self.assertEqual(machines.lire(), [], body)
+            self.assertEqual(machines.read(), [], body)
         status, answer = api("POST", "/api/v1/machines", {"address": T.BASE, "code": code})
         self.assertEqual(status, 201, "the refusals came before the code was spent: {}".format(answer))
 
@@ -82,7 +82,7 @@ class MachineActions(unittest.TestCase):
         self.assertEqual((status, answer["id"], answer["mac"], sorted(answer)), (200, paired["id"], "00:1A:2B:3C:4D:5E", M.MACHINE_FIELDS))
         for body in ({"mac": "zz"}, {"mac": 1}, {}, {"mac": "", "name": "x"}):
             self.assertEqual(api("PATCH", "/api/v1/machines/" + paired["id"], body)[1]["error"]["code"], "invalid_request", body)
-        self.assertEqual(machines.trouver(paired["id"])["mac"], "00:1A:2B:3C:4D:5E", "a refused value changes nothing")
+        self.assertEqual(machines.find(paired["id"])["mac"], "00:1A:2B:3C:4D:5E", "a refused value changes nothing")
         self.assertEqual(api("PATCH", "/api/v1/machines/" + UNKNOWN, {"mac": ""})[1]["error"]["code"], "not_found")
 
     def test_waking_sends_the_packet_and_needs_the_mac_address(self):
@@ -108,9 +108,9 @@ class MachineActions(unittest.TestCase):
                 mock.patch.object(power, "cancel_shutdown", lambda *a, **k: asked.append("cancel") or True):
             status, answer = api("POST", path + "shutdown")
             self.assertEqual((status, answer["error"]["code"], asked), (409, "machine_refused", []), "not allowed by default")
-            machines.noeud_autoriser_extinction(True)
+            machines.node_allow_shutdown(True)
             self.assertEqual(api("POST", path + "shutdown"), (202, {"shutdown_in_s": 30}))
-            machines.SONDES.clear()
+            machines.PROBES.clear()
             shown = M.until(lambda: next((m for m in api("GET", "/api/v1/machines")[1]["machines"] if m["step"] == "shutting_down"), None))
             self.assertTrue(shown, "GET /machines follows the shutdown")
             self.assertTrue(0 <= shown["shutdown_in_s"] <= 30, shown["shutdown_in_s"])
@@ -123,7 +123,7 @@ class MachineActions(unittest.TestCase):
         with mock.patch.object(access, "update", lambda *a, **k: asked.append("update") or {"started": True}):
             status, answer = api("POST", "/api/v1/machines/{}/actions/update".format(paired["id"]))
             self.assertEqual((status, answer["error"]["code"], asked), (409, "machine_refused", []))
-            machines.noeud_autoriser_maj(True)
+            machines.node_allow_update(True)
             self.assertEqual(api("POST", "/api/v1/machines/{}/actions/update".format(paired["id"])), (202, {}))
         self.assertEqual(asked, ["update"])
 
@@ -136,7 +136,7 @@ class MachineActions(unittest.TestCase):
 
     def test_a_machine_that_does_not_answer_says_so(self):
         paired = self.pair()
-        machines._ecrire_registre([dict(machines.lire()[0], adresse="http://127.0.0.1:9")])
+        machines._write_registry([dict(machines.read()[0], adresse="http://127.0.0.1:9")])
         for path, body in (("actions/shutdown", None), ("actions/update", None), ("rights-requests", {"right": "lead"}), ("imports/skills", None)):
             status, answer = api("POST", "/api/v1/machines/{}/{}".format(paired["id"], path), body)
             self.assertEqual((status, answer["error"]["code"]), (503, "machine_unreachable"), path)
@@ -145,8 +145,8 @@ class MachineActions(unittest.TestCase):
         paired = self.pair()
         path = "/api/v1/machines/{}/rights-requests".format(paired["id"])
         self.assertEqual(api("POST", path, {"right": "lead"}), (202, {"right": "lead"}))
-        self.assertEqual([waiting["droit"] for waiting in machines.noeud_vue()["demandes"]], ["piloter"], "waiting on the node, nothing granted")
-        self.assertFalse(machines.noeud_vue()["piloter"])
+        self.assertEqual([waiting["droit"] for waiting in machines.node_view()["demandes"]], ["piloter"], "waiting on the node, nothing granted")
+        self.assertFalse(machines.node_view()["piloter"])
         for body in ({"right": "admin"}, {"right": ["lead"]}, {}, {"right": "lead", "why": "x"}):
             self.assertEqual(api("POST", path, body)[1]["error"]["code"], "invalid_request", body)
         self.assertEqual(api("POST", "/api/v1/machines/{}/rights-requests".format(UNKNOWN), {"right": "lead"})[1]["error"]["code"], "not_found")
@@ -158,7 +158,7 @@ class MachineActions(unittest.TestCase):
                                     ("memory", "memoire", ["notes_added", "notes_skipped", "profile_copied", "profile_truncated"])):
             status, answer = api("POST", path + kind)
             self.assertEqual((status, answer["error"]["code"]), (409, "machine_refused"), kind)
-            machines.noeud_droit(share, True)
+            machines.node_right(share, True)
             status, answer = api("POST", path + kind)
             self.assertEqual((status, sorted(answer)), (200, fields), answer)
         self.assertEqual(api("POST", path + "conversations")[1]["error"]["code"], "invalid_request")

@@ -1886,21 +1886,21 @@ class Chat(unittest.TestCase):
         action reaches the real node code. Nothing reaches the computer: the shutdown is replaced."""
         p = self.page
         before = {key: T.A.settings().get(key) for key in ("cluster", "machine", "modele")}
-        for kept in (machines.SONDES, machines.DERNIER_ETAT, machines.CODES):
+        for kept in (machines.PROBES, machines.LAST_STATE, machines.CODES):
             kept.clear()
         T.A.PIN_LIMITER.evenements.clear()          # the pairing counts against the limit of the node, which is this server
 
         def restore():
-            machines._ecrire_registre([])
-            machines.noeud_autoriser_extinction(False)
-            for waiting in machines.noeud_vue()["demandes"]:
-                machines.noeud_repondre_demande(waiting["machine"], waiting["droit"], False)
-            for allowed in machines.noeud_vue()["autorisees"]:
-                machines.noeud_revoquer(allowed["nom"])
-            machines.noeud_activer(False)
-            for kept in (machines.SONDES, machines.DERNIER_ETAT, machines.CODES, machines.ARRET):
+            machines._write_registry([])
+            machines.node_allow_shutdown(False)
+            for waiting in machines.node_view()["demandes"]:
+                machines.node_answer_request(waiting["machine"], waiting["droit"], False)
+            for allowed in machines.node_view()["autorisees"]:
+                machines.node_revoke(allowed["nom"])
+            machines.node_enable(False)
+            for kept in (machines.PROBES, machines.LAST_STATE, machines.CODES, machines.SHUTDOWN):
                 kept.clear()
-            machines.DISTANTS.update(t=0.0, v=[], en_cours=False)
+            machines.REMOTES.update(t=0.0, v=[], en_cours=False)
             T.A.save_settings(before)
         self.addCleanup(restore)
         asked = []
@@ -1914,8 +1914,8 @@ class Chat(unittest.TestCase):
                       mock.patch.object(T.A, "video_memory", lambda: None)):
             patch.start()
             self.addCleanup(patch.stop)
-        machines.INFOS_NOEUD.clear()
-        machines.CARTES.update(t=-999.0, v=None)
+        machines.NODE_INFO.clear()
+        machines.CARDS.update(t=-999.0, v=None)
         T.A.save_settings({"cluster": False})
         p.evaluer("location.hash = '#/models'")
         p.attendre("!!document.querySelector('.models .tabs')")
@@ -1933,24 +1933,24 @@ class Chat(unittest.TestCase):
         p.evaluer("document.querySelector('.machines .turn-on').click()")
         p.attendre("!!document.querySelector('#machine-address')")
 
-        machines.noeud_activer(True)
-        code = machines.noeud_nouveau_code()["code"]
+        machines.node_enable(True)
+        code = machines.node_new_code()["code"]
         fill = "(() => { const set = (id, value) => { const box = document.querySelector(id); box.value = value; box.dispatchEvent(new Event('input', {bubbles: true})); }; set('#machine-address', %s); set('#machine-code', %s); set('#machine-name', 'Bureau'); })()"
         p.evaluer(fill % (js(T.BASE), js(code)))
         p.evaluer("document.querySelector('.machines form.pair').requestSubmit()")
         p.attendre("[...document.querySelectorAll('.machines .machine strong')].some(e => e.innerText === 'Bureau')")
         self.assertIn("Bureau", p.evaluer("document.querySelector('.machines .notice').innerText"))
-        identifier = machines.lire()[0]["id"]
+        identifier = machines.read()[0]["id"]
         p.attendre("!!document.querySelector('.machines .machine .state.operational')", 30)          # probed in the background, read again by the page
         self.assertIn(T.INSTALLES[0], p.evaluer("document.querySelector('.machines .machine .models-of').innerText"))
 
         p.evaluer("document.querySelector('.machines .machine [data-right=\"lead\"]').click()")
         p.attendre("document.querySelector('.machines .notice').innerText.length > 0")
-        self.assertEqual([waiting["droit"] for waiting in machines.noeud_vue()["demandes"]], ["piloter"], "asked: waiting on the other machine, nothing granted")
-        self.assertFalse(machines.noeud_vue()["piloter"])
+        self.assertEqual([waiting["droit"] for waiting in machines.node_view()["demandes"]], ["piloter"], "asked: waiting on the other machine, nothing granted")
+        self.assertFalse(machines.node_view()["piloter"])
 
-        machines.noeud_autoriser_extinction(True)
-        machines.SONDES.clear()          # the next reading probes the machine again, and learns the new right
+        machines.node_allow_shutdown(True)
+        machines.PROBES.clear()          # the next reading probes the machine again, and learns the new right
         p.attendre("!!document.querySelector('.machines .machine [data-action=\"shutdown\"]')", 30)
         p.evaluer("document.querySelector('.machines .machine [data-action=\"shutdown\"]').click()")
         p.attendre("!!document.querySelector('.machines .machine .confirm')")
@@ -1966,7 +1966,7 @@ class Chat(unittest.TestCase):
         self.picture("5h3-machines")
 
         T.A.save_settings({"machine": ""})
-        self.assertTrue(self.wait_for(lambda: machines.modeles_distants(attente=True)), "the models of the other machine are known")
+        self.assertTrue(self.wait_for(lambda: machines.remote_models(attente=True)), "the models of the other machine are known")
         p.evaluer("location.hash = '#/chat'")
         p.attendre("[...document.querySelectorAll('header select optgroup')].some(g => g.label === 'Bureau')")
         self.assertEqual(p.evaluer("[...document.querySelectorAll('header select optgroup')].map(g => g.label)"), ["Cette machine", "Bureau"], "the models of each machine under its name")
@@ -1974,10 +1974,10 @@ class Chat(unittest.TestCase):
         p.evaluer("(() => { const box = document.querySelector('header select'); box.value = %s; box.dispatchEvent(new Event('change', {bubbles: true})); })()" % js(choice))
         self.eventually(lambda: (T.A.settings()["machine"], T.A.settings()["modele"]) == (identifier, T.INSTALLES[0]), "a model of the other machine makes it answer")
 
-        machines._ecrire_registre([dict(machines.lire()[0], adresse="http://127.0.0.1:9")])          # the other machine goes off
-        for kept in (machines.SONDES, machines.DERNIER_ETAT):
+        machines._write_registry([dict(machines.read()[0], adresse="http://127.0.0.1:9")])          # the other machine goes off
+        for kept in (machines.PROBES, machines.LAST_STATE):
             kept.clear()
-        machines.DISTANTS.update(t=0.0, v=[], en_cours=False)
+        machines.REMOTES.update(t=0.0, v=[], en_cours=False)
         p.evaluer("location.hash = '#/models'")
         p.attendre("!!document.querySelector('.models')")
         p.evaluer("location.hash = '#/chat'")
@@ -1992,10 +1992,10 @@ class Chat(unittest.TestCase):
         p.evaluer("document.querySelector('.machines .machine details').open = true")
         p.evaluer("document.querySelector('.machines .machine .unpair').click()")
         p.attendre("!!document.querySelector('.machines .machine .confirm')")
-        self.assertEqual(len(machines.lire()), 1, "asking is not unpairing")
+        self.assertEqual(len(machines.read()), 1, "asking is not unpairing")
         p.evaluer("document.querySelector('.machines .machine .confirm .primary').click()")
         p.attendre("!!document.querySelector('.machines .empty')")
-        self.assertEqual(machines.lire(), [])
+        self.assertEqual(machines.read(), [])
         self.assertEqual(T.A.settings()["machine"], "", "the machine that answered is gone: this one answers again")
         self.assertEqual(p.erreurs, [])
         p.evaluer("location.hash = '#/chat'")
@@ -2041,15 +2041,15 @@ class Chat(unittest.TestCase):
             kept.clear()
 
         def restore():
-            for allow in (machines.noeud_autoriser_extinction, machines.noeud_autoriser_maj, machines.noeud_autoriser_piloter):
+            for allow in (machines.node_allow_shutdown, machines.node_allow_update, machines.node_allow_control):
                 allow(False)
-            for share in machines.DROITS:
-                machines.noeud_droit(share, False)
-            for waiting in machines.noeud_vue()["demandes"]:
-                machines.noeud_repondre_demande(waiting["machine"], waiting["droit"], False)
-            for allowed in machines.noeud_vue()["autorisees"]:
-                machines.noeud_revoquer(allowed["nom"])
-            machines.noeud_activer(False)
+            for share in machines.RIGHTS:
+                machines.node_right(share, False)
+            for waiting in machines.node_view()["demandes"]:
+                machines.node_answer_request(waiting["machine"], waiting["droit"], False)
+            for allowed in machines.node_view()["autorisees"]:
+                machines.node_revoke(allowed["nom"])
+            machines.node_enable(False)
             machines.CODES.clear()
         self.addCleanup(restore)
         startup, pending, asked = {"installe": False, "possible": True, "limites": "Lutin starts with the session."}, [None], []
@@ -2078,41 +2078,41 @@ class Chat(unittest.TestCase):
         if AXE.is_file():
             self.axe("on « Lend this machine », not lent")
 
-        machines.noeud_activer(True)
+        machines.node_enable(True)
         p.attendre("document.querySelector('#lend-on').checked", 15)          # read again by the page
         self.press("[...document.querySelectorAll('.lend .button')].find(b => b.innerText === \"Donner un code d'appairage\")")
         p.attendre("!!document.querySelector('.lend .code')")
         code = p.evaluer("document.querySelector('.lend .code').innerText")
         self.assertRegex(code, r"^\d{4}-\d{4}$")
-        token = machines.noeud_echanger(code, "DESKTOP-K2J8S9")["jeton"]          # what the other machine does with the code: it sends its computer's name
+        token = machines.node_exchange(code, "DESKTOP-K2J8S9")["jeton"]          # what the other machine does with the code: it sends its computer's name
         p.attendre("[...document.querySelectorAll('.lend .authorized strong')].some(e => e.innerText === 'DESKTOP-K2J8S9')", 15)
         self.press("[...document.querySelectorAll('.lend .authorized .button')].find(b => b.innerText.startsWith('Renommer'))")
         p.attendre("!!document.querySelector('#lend-rename')")
         p.evaluer("(() => { const box = document.querySelector('#lend-rename'); box.value = 'Bureau'; box.dispatchEvent(new Event('input', {bubbles: true})); document.querySelector('.lend form.rename').requestSubmit(); })()")
         p.attendre("[...document.querySelectorAll('.lend .authorized strong')].some(e => e.innerText === 'Bureau')")
-        self.assertEqual(machines.noeud_jeton_valide(token), "Bureau", "renamed on the node, its token still valid")
+        self.assertEqual(machines.node_token_valid(token), "Bureau", "renamed on the node, its token still valid")
         self.press("[...document.querySelectorAll('.lend .authorized .button')].find(b => b.innerText.startsWith('Révoquer'))")
         p.attendre("!!document.querySelector('.lend .authorized .confirm')")
-        self.assertEqual(machines.noeud_jeton_valide(token), "Bureau", "asking is not revoking")
+        self.assertEqual(machines.node_token_valid(token), "Bureau", "asking is not revoking")
         self.press("document.querySelector('.lend .authorized .confirm .danger')")
         p.attendre("!document.querySelector('.lend .authorized')")
-        self.assertIsNone(machines.noeud_jeton_valide(token), "revoked: its token no longer opens anything")
+        self.assertIsNone(machines.node_token_valid(token), "revoked: its token no longer opens anything")
 
         self.press("document.querySelector('#lend-share-skills')")
-        self.eventually(lambda: machines.noeud_droits()["skills"], "a share is kept by the node")
+        self.eventually(lambda: machines.node_rights()["skills"], "a share is kept by the node")
         self.press("document.querySelector('#lend-allow-lead')")
-        self.eventually(lambda: machines.noeud_vue()["piloter"], "a right is kept by the node")
+        self.eventually(lambda: machines.node_view()["piloter"], "a right is kept by the node")
         self.press("document.querySelector('#lend-autostart')")
         self.eventually(lambda: asked == ["install"], "autostart is set by the server, here replaced")
         p.attendre("document.querySelector('#lend-autostart').checked")
 
-        machines.noeud_demander("Bureau", "maj")
+        machines.node_request("Bureau", "maj")
         p.attendre("!!document.querySelector('.lend .requests')", 15)
         p.attendre("document.querySelector('.rail a[href=\"#/settings\"] .count')?.innerText === '1'", 20)          # the badge of Settings
         if AXE.is_file():
             self.axe("on « Lend this machine », with a request waiting")
         self.press("[...document.querySelectorAll('.lend .requests .button')].find(b => b.innerText === 'Accepter')")
-        self.eventually(lambda: machines.noeud_vue()["maj"], "accepted: the right is granted")
+        self.eventually(lambda: machines.node_view()["maj"], "accepted: the right is granted")
         p.attendre("!document.querySelector('.lend .requests') && !document.querySelector('.rail .count')")
 
         pending[0] = {"dans_s": 20, "par": "Bureau"}
@@ -2124,7 +2124,7 @@ class Chat(unittest.TestCase):
         self.picture("5h4-lend")
 
         self.press("document.querySelector('#lend-on')")
-        self.eventually(lambda: not machines.noeud_actif(), "lending is turned off from the page")
+        self.eventually(lambda: not machines.node_active(), "lending is turned off from the page")
         p.attendre("!!document.querySelector('.lend .closed')")
         self.assertEqual(p.erreurs, [])
         p.evaluer("location.hash = '#/chat'")
@@ -2135,9 +2135,9 @@ class Chat(unittest.TestCase):
         machine » is the real node code; what it reads of this computer is replaced."""
         p = self.page
         before = {key: T.A.settings().get(key) for key in ("cluster", "machine")}
-        for kept in (machines.SONDES, machines.DERNIER_ETAT, machines.CODES, machines.INFOS_NOEUD):
+        for kept in (machines.PROBES, machines.LAST_STATE, machines.CODES, machines.NODE_INFO):
             kept.clear()
-        machines.CARTES.update(t=-999.0, v=None)
+        machines.CARDS.update(t=-999.0, v=None)
         machines.CONVERSATIONS.update(t=0.0, v=[], en_cours=False)
         T.A.PIN_LIMITER.evenements.clear()
         for patch in (mock.patch.object(power, "network_adapters", lambda **k: []),
@@ -2147,19 +2147,19 @@ class Chat(unittest.TestCase):
             patch.start()
             self.addCleanup(patch.stop)
         T.A.save_settings({"cluster": True})
-        machines.noeud_activer(True)
-        host = machines.ajouter(T.BASE, machines.noeud_nouveau_code()["code"], "Bureau")
-        machines.noeud_autoriser_piloter(True)
+        machines.node_enable(True)
+        host = machines.add(T.BASE, machines.node_new_code()["code"], "Bureau")
+        machines.node_allow_control(True)
         held = T.A.conv_new()["id"]
         T.A.conv_rename(held, "Rapport du bureau")
 
         def restore():
-            machines._ecrire_registre([])
-            machines.noeud_autoriser_piloter(False)
-            for allowed in machines.noeud_vue()["autorisees"]:
-                machines.noeud_revoquer(allowed["nom"])
-            machines.noeud_activer(False)
-            for kept in (machines.SONDES, machines.DERNIER_ETAT, machines.CODES):
+            machines._write_registry([])
+            machines.node_allow_control(False)
+            for allowed in machines.node_view()["autorisees"]:
+                machines.node_revoke(allowed["nom"])
+            machines.node_enable(False)
+            for kept in (machines.PROBES, machines.LAST_STATE, machines.CODES):
                 kept.clear()
             machines.CONVERSATIONS.update(t=0.0, v=[], en_cours=False)
             T.A.save_settings(before)
@@ -2168,7 +2168,7 @@ class Chat(unittest.TestCase):
             except (OSError, ValueError):
                 pass
         self.addCleanup(restore)
-        self.assertTrue(self.wait_for(lambda: any(entry["id"] == held for entry in machines.conversations_distantes(attente=True))), "the host lists it")
+        self.assertTrue(self.wait_for(lambda: any(entry["id"] == held for entry in machines.remote_conversations(attente=True))), "the host lists it")
 
         p.evaluer("location.hash = '#/models'")
         p.attendre("!!document.querySelector('.models')")
