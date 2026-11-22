@@ -53,6 +53,9 @@
   let liveAt = $state<{ id: string; at: string } | null>(null);
   const liveHere = $derived(liveAt !== null && conversation?.id === liveAt.id && where === liveAt.at);
   const shownLive = $derived(liveHere ? live : null);
+  // Under the field, as LM Studio does: the figures of the answer being written, otherwise those of the last answer of this conversation.
+  const meterContext = $derived(shownLive ? shownLive.tokens : (conversation?.context ?? null));
+  const meterSpeed = $derived(shownLive ? shownLive.tokensPerSecond : (conversation?.speed?.write_tokens_per_s ?? null));
   const shownPending = $derived(liveHere ? pending : null);
   let attachments = $state<Attachment[]>([]);
   let counter = 0;
@@ -915,8 +918,15 @@
           <button type="submit" class="round send" disabled={!draft.trim() || uploading(attachments)}><Icon name="send" /><span class="visually-hidden">{t("chat.send")}</span></button>
         {/if}
       </form>
+      <!-- As LM Studio does: the room taken in the context and the speed stay under the field once the answer is written (those of the last answer of this
+           conversation), not only while it is written. The keys are said while nothing is known yet. -->
       <p class="meter" id="keys">
-        {#if shownLive?.tokens}{t("chat.tokens", shownLive.tokens.used, shownLive.tokens.total)}{shownLive.tokensPerSecond ? " · " + t("chat.speed", shownLive.tokensPerSecond) : ""}{:else}{t("chat.keys")}{/if}
+        {#if meterContext}
+          {#if meterContext.total > 0}<progress class="context-gauge" max={meterContext.total} value={Math.min(meterContext.used, meterContext.total)} aria-hidden="true"></progress>{/if}
+          {t("chat.tokens", meterContext.used, meterContext.total)}{meterContext.total > 0 ? " (" + Math.round((100 * meterContext.used) / meterContext.total) + " %)" : ""}{meterSpeed
+            ? " · " + t("chat.speed", meterSpeed)
+            : ""}
+        {:else if meterSpeed}{t("chat.speed", meterSpeed)}{:else}{t("chat.keys")}{/if}
       </p>
     </div>
   </section>
@@ -1560,6 +1570,15 @@
     font-size: var(--text-xs);
     text-align: center;
     color: var(--color-text-muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .context-gauge {
+    width: 4rem;
+    height: 0.35rem;
+    margin-right: var(--space-2);
+    vertical-align: middle;
+    accent-color: var(--color-accent);
   }
 
   /* Narrow screens: the list of conversations covers the screen when asked, and is hidden otherwise. */

@@ -71,6 +71,9 @@ export interface Conversation {
   pinned: boolean;
   summary: string;
   messages: StoredMessage[];
+  /** The figures of its last answer, as the engine gave them; null before the first, or when the engine does not give them. */
+  context?: { used: number; total: number } | null;
+  speed?: { write_tokens_per_s: number; read_tokens_per_s: number | null; load_s: number | null; total_s: number | null; tokens: number | null } | null;
 }
 
 export interface Settings {

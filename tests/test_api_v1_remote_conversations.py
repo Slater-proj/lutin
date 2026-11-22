@@ -17,7 +17,7 @@ import quiet_node  # noqa: E402  (what a node reads of this computer, replaced)
 
 T, A, api, until = M.T, M.A, M.api, M.until
 UNKNOWN = "0" * 32
-CONVERSATION_FIELDS = ["created_at", "id", "machine", "messages", "pinned", "summary", "title", "updated_at"]
+CONVERSATION_FIELDS = ["context", "created_at", "id", "machine", "messages", "pinned", "speed", "summary", "title", "updated_at"]
 PNG = bytes.fromhex("89504e470d0a1a0a0000000d4948445200000001000000010806000000" "1f15c4890000000d49444154789c6360000002000154a24f5d0000000049454e44ae426082")
 
 

@@ -3045,9 +3045,15 @@ def _summary(entry):
 
 
 def _conversation(stored):
-    """A stored conversation under its v1 names. The messages keep their shape: it is already the chat format of the engines (role, content, tool_calls…)."""
+    """A stored conversation under its v1 names. The messages keep their shape: it is already the chat format of the engines (role, content, tool_calls…).
+    `context` and `speed` are the figures of its last answer, as the engine gave them (null before the first, or when the engine does not give them):
+    the page keeps them under the field once the answer is written, as LM Studio does."""
+    tokens, speed = stored.get("jetons") or {}, stored.get("vitesse") or {}
     return {"id": stored["id"], "title": stored.get("titre", ""), "created_at": stored.get("date", ""), "updated_at": stored.get("maj", stored.get("date", "")),
-            "pinned": bool(stored.get("epingle")), "summary": stored.get("resume", ""), "messages": stored.get("messages", [])}
+            "pinned": bool(stored.get("epingle")), "summary": stored.get("resume", ""), "messages": stored.get("messages", []),
+            "context": {"used": int(tokens["utilise"]), "total": int(tokens.get("total") or 0)} if tokens.get("utilise") else None,
+            "speed": {"write_tokens_per_s": speed.get("ecriture"), "read_tokens_per_s": speed.get("lecture"), "load_s": speed.get("chargement"), "total_s": speed.get("total"),
+                      "tokens": speed.get("jetons")} if speed.get("ecriture") else None}
 
 
 def _read(identifier):

@@ -222,8 +222,8 @@ class Conversations(unittest.TestCase):
     def test_life_of_a_conversation(self):
         status, created = call("POST", "/api/v1/conversations", OWNER, body={})
         self.assertEqual(status, 201)
-        self.assertEqual(sorted(created), ["created_at", "id", "messages", "pinned", "summary", "title", "updated_at"])
-        self.assertEqual((created["messages"], created["pinned"], created["summary"]), ([], False, ""))
+        self.assertEqual(sorted(created), ["context", "created_at", "id", "messages", "pinned", "speed", "summary", "title", "updated_at"])
+        self.assertEqual((created["messages"], created["pinned"], created["summary"], created["context"], created["speed"]), ([], False, "", None, None))
         identifier = created["id"]
         self.addCleanup(lambda: call("DELETE", "/api/v1/conversations/" + identifier, OWNER))
 
@@ -246,6 +246,17 @@ class Conversations(unittest.TestCase):
         self.assertEqual(call("DELETE", "/api/v1/conversations/" + identifier, OWNER), (200, {"deleted": True}))
         self.assertEqual(call("GET", "/api/v1/conversations/" + identifier, OWNER)[0], 404)
         self.assertEqual(call("DELETE", "/api/v1/conversations/" + identifier, OWNER)[0], 404)
+
+    def test_the_figures_of_the_last_answer_come_with_the_conversation(self):
+        """Maintainer, 2026-11-22, « indications à la LM Studio »: the room taken in the context and the speed stay under the field once the answer is written."""
+        identifier = call("POST", "/api/v1/conversations", OWNER, body={})[1]["id"]
+        self.addCleanup(lambda: call("DELETE", "/api/v1/conversations/" + identifier, OWNER))
+        stored = A.conv_lire(identifier)
+        stored.update(jetons={"utilise": 3200, "total": 8192}, vitesse={"ecriture": 54.2, "lecture": 900, "chargement": 2.1, "total": 9.8, "jetons": 412})
+        A.conv_ecrire(stored)
+        answer = call("GET", "/api/v1/conversations/" + identifier, OWNER)[1]
+        self.assertEqual(answer["context"], {"used": 3200, "total": 8192})
+        self.assertEqual(answer["speed"], {"write_tokens_per_s": 54.2, "read_tokens_per_s": 900, "load_s": 2.1, "total_s": 9.8, "tokens": 412})
 
     def test_a_conversation_that_is_answering_cannot_be_renamed_or_deleted(self):
         identifier = call("POST", "/api/v1/conversations", OWNER, body={})[1]["id"]
