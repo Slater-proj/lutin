@@ -45,7 +45,7 @@ class Chat(unittest.TestCase):
         if not CHROME:
             raise unittest.SkipTest("no browser found (variable CHROME to name one)")
         # A fictive machine (a 12 GB card, 32 GB of memory): the tests never read, nor depend on, the hardware of the one who runs them.
-        machine = mock.patch.dict(model_fit._etat, {"profil": hardware.profil_demo(), "quand": time.time() + 3600, "en_cours": False})
+        machine = mock.patch.dict(model_fit._state, {"profil": hardware.profil_demo(), "quand": time.time() + 3600, "en_cours": False})
         machine.start()
         cls.addClassCleanup(machine.stop)
         # And a fictive disk: the free space of the real one (the models folder of this machine may be on a nearly full disk) decides whether a download is allowed.

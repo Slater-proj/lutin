@@ -22,11 +22,11 @@ def setUpModule():
 
 
 def known_machine():
-    return mock.patch.dict(model_fit._etat, {"profil": hardware.profil_demo(), "quand": time.time(), "en_cours": False})
+    return mock.patch.dict(model_fit._state, {"profil": hardware.profil_demo(), "quand": time.time(), "en_cours": False})
 
 
 def unknown_machine():
-    return mock.patch.dict(model_fit._etat, {"profil": None, "quand": 0.0, "en_cours": True})          # « detecting »: no thread is started, no hardware is read
+    return mock.patch.dict(model_fit._state, {"profil": None, "quand": 0.0, "en_cours": True})          # « detecting »: no thread is started, no hardware is read
 
 
 def get(path):
@@ -89,7 +89,7 @@ class Catalog(unittest.TestCase):
             mapping = api_v1.FIT_LEVELS
             for model in models:
                 source = next(item for item in A._CATALOGUE["modeles"] if item["id"] == model["id"])
-                self.assertEqual(model["fit"]["level"], mapping[model_fit.evaluer(source, profile)["niveau"]], model["id"])
+                self.assertEqual(model["fit"]["level"], mapping[model_fit.judge(source, profile)["niveau"]], model["id"])
         smallest = min(models, key=lambda model: model["size_gb"])
         biggest = max(models, key=lambda model: model["size_gb"])
         self.assertEqual(smallest["fit"]["level"], "comfortable", "a model of 1 or 2 GB on a 12 GB card")

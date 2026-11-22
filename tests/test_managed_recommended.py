@@ -99,15 +99,15 @@ class CarteSeule(unittest.TestCase):
 
     def test_a_model_that_fits_only_by_spilling_is_too_big_for_exllamav3(self):
         from lutin import model_fit
-        verdict = model_fit.evaluer_carte_seule(22.8, self.profile(), 32768)
+        verdict = model_fit.judge_card_only(22.8, self.profile(), 32768)
         self.assertEqual(verdict["niveau"], "trop_gros")
         self.assertIn("32768", verdict["texte"])
-        self.assertIn(model_fit.evaluer_carte_seule(15.7, self.profile(), 32768)["niveau"], ("bien", "ideal"))
-        self.assertEqual(model_fit.evaluer_carte_seule(22.8, self.profile(48.0), 32768)["niveau"], "ideal", "a larger card takes it")
+        self.assertIn(model_fit.judge_card_only(15.7, self.profile(), 32768)["niveau"], ("bien", "ideal"))
+        self.assertEqual(model_fit.judge_card_only(22.8, self.profile(48.0), 32768)["niveau"], "ideal", "a larger card takes it")
 
     def test_the_models_of_exllamav3_are_judged_on_the_card_alone(self):
         from lutin import managed_models, model_fit
-        with mock.patch.object(model_fit, "profil_pret", lambda *a: self.profile()), mock.patch.object(managed_models, "_context_size", lambda: 32768):
+        with mock.patch.object(model_fit, "ready_profile", lambda *a: self.profile()), mock.patch.object(managed_models, "_context_size", lambda: 32768):
             self.assertEqual(managed_models._judge("exllamav3")(22.8)["niveau"], "trop_gros")
             self.assertNotEqual(managed_models._judge("lmstudio")(22.8)["niveau"], "trop_gros", "LM Studio (llama.cpp) can put part of a model in memory")
 
@@ -115,16 +115,16 @@ class CarteSeule(unittest.TestCase):
         """Maintainer (2026-11-21): « Juste » was too kind to a 27-32B on ExLlamaV3. Every model was counted 120 MB per 1,000 tokens; a 32B with 64 layers,
         8 KV heads of 128 asks 262 (lutin.kv_cache): with 36,864 tokens of window, 4.7 GB of cache instead of 2.2."""
         from lutin import model_fit
-        guessed = model_fit.evaluer_carte_seule(17.0, self.profile(), 36864)
-        exact = model_fit.evaluer_carte_seule(17.0, self.profile(), 36864, 262)
+        guessed = model_fit.judge_card_only(17.0, self.profile(), 36864)
+        exact = model_fit.judge_card_only(17.0, self.profile(), 36864, 262)
         self.assertIn(guessed["niveau"], ("bien", "ideal"))
         self.assertEqual(exact["niveau"], "limite", exact["texte"])
-        self.assertEqual(model_fit.evaluer_carte_seule(17.0, self.profile(), 36864, 64)["niveau"], guessed["niveau"], "a small cache keeps the verdict")
+        self.assertEqual(model_fit.judge_card_only(17.0, self.profile(), 36864, 64)["niveau"], guessed["niveau"], "a small cache keeps the verdict")
 
     def test_the_quantisations_of_a_repository_are_judged_with_its_cache(self):
         from lutin import managed_models, model_fit
         asked = []
-        with mock.patch.object(model_fit, "profil_pret", lambda *a: self.profile()), mock.patch.object(managed_models, "_context_size", lambda: 36864), \
+        with mock.patch.object(model_fit, "ready_profile", lambda *a: self.profile()), mock.patch.object(managed_models, "_context_size", lambda: 36864), \
                 mock.patch.object(managed_models, "_require", return_value=mock.Mock()), \
                 mock.patch.object(managed_models, "_on_disk", side_effect=lambda kind, mo: ([], True, "/m", None, lambda repo: [{"revision": "4.0bpw", "go": 17.0}])), \
                 mock.patch.object(managed_models._exl_cat, "kv_of", lambda depot, revision="main": asked.append((depot, revision)) or 262):

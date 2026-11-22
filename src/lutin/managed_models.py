@@ -44,14 +44,14 @@ def _require(kind):
 
 def _judge(kind=""):
     """The verdict for a size in GB on this machine. ExLlamaV3 runs on the graphics card alone and reserves the cache of the conversation window at once:
-    its verdict counts that (model_fit.evaluer_carte_seule), the others' the common way."""
-    profile = _fit.profil_pret()
+    its verdict counts that (model_fit.judge_card_only), the others' the common way."""
+    profile = _fit.ready_profile()
     if profile is None:
         return lambda gb, kv=None: None
     if kind == "exllamav3":
         ctx = _context_size()
-        return lambda gb, kv=None: _fit.evaluer_carte_seule(gb, profile, ctx, kv)
-    return lambda gb, kv=None: _fit.evaluer(dict({"go": gb}, **({"kv_mo_1k": kv} if kv else {})), profile)
+        return lambda gb, kv=None: _fit.judge_card_only(gb, profile, ctx, kv)
+    return lambda gb, kv=None: _fit.judge(dict({"go": gb}, **({"kv_mo_1k": kv} if kv else {})), profile)
 
 
 def judge(kind):

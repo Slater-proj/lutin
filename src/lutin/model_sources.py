@@ -72,14 +72,14 @@ def entry(ident, name=None, revision="", size_gb=None, approximate=False, fit=No
 
 def _judge(engine):
     """The verdict for a size in GB on this machine, as the engine runs models: ExLlamaV3 on the card alone, the others the common way."""
-    profile = _fit.profil_pret()
+    profile = _fit.ready_profile()
     if profile is None:
         return lambda gb: None
     if engine.id == _engines.EXLLAMAV3:
         from . import managed_models
         return managed_models.judge(engine.id)
     experts = _capabilities.of(engine).experts_in_ram
-    return lambda gb: _fit.evaluer({"go": gb}, profile, experts_en_ram=experts) if gb else None
+    return lambda gb: _fit.judge({"go": gb}, profile, experts_en_ram=experts) if gb else None
 
 
 class ModelSource:
@@ -125,12 +125,12 @@ class CatalogueSource(ModelSource):
 
     def _catalogue(self, installed):
         from . import model_compat
-        profile = _fit.profil_pret()
+        profile = _fit.ready_profile()
         for model in _m._CATALOGUE["modeles"]:
             if model.get("avance"):
                 continue
             verdict = model_compat.evaluate(model, self.engine, installed)
-            fit = _fit.evaluer(model, profile, experts_en_ram=_capabilities.of(self.engine).experts_in_ram) if profile is not None else None
+            fit = _fit.judge(model, profile, experts_en_ram=_capabilities.of(self.engine).experts_in_ram) if profile is not None else None
             yield model, verdict, fit
 
     def installed(self):
@@ -142,7 +142,7 @@ class CatalogueSource(ModelSource):
 
     def recommended(self):
         from . import model_compat
-        profile = _fit.profil_pret()
+        profile = _fit.ready_profile()
         if profile is None:
             return []
         installed = set(self.engine.modeles().get("installes", []))
@@ -153,7 +153,7 @@ class CatalogueSource(ModelSource):
             if choice and choice.id not in seen:
                 seen.add(choice.id)
                 model = choice.modele
-                fit = _fit.evaluer(model, profile, experts_en_ram=_capabilities.of(self.engine).experts_in_ram)
+                fit = _fit.judge(model, profile, experts_en_ram=_capabilities.of(self.engine).experts_in_ram)
                 out.append(entry(model["id"], model["nom"], size_gb=model["go"], fit=fit, installed=model["id"] in installed, summary=model.get("phrase", ""), strengths=strengths_of(model), can=self.engine.telechargeable()))
         return sorted(out, key=lambda item: -(item["size_gb"] or 0))[:RECOMMENDED]
 

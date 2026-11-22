@@ -27,7 +27,7 @@ class InUse(unittest.TestCase):
     """The engine in use is chosen here; the machine is not measured unless a test gives it; the network is on."""
 
     def use(self, identifier):
-        for patch in (mock.patch.object(agent, "moteur_local", lambda r=None: engines.ENGINES[identifier]), mock.patch.object(model_fit, "profil_pret", lambda *a: None),
+        for patch in (mock.patch.object(agent, "moteur_local", lambda r=None: engines.ENGINES[identifier]), mock.patch.object(model_fit, "ready_profile", lambda *a: None),
                       mock.patch.object(model_sources._offline, "is_active", lambda *a, **k: False), mock.patch.dict(engines.CONTEXT, hors_ligne=lambda: False)):
             patch.start()
             self.addCleanup(patch.stop)
@@ -128,7 +128,7 @@ class Ollama(InUse):
         small = {"id": "qwen3:4b", "nom": "Qwen3 4B", "go": 2.6, "phrase": "Small."}
         large = {"id": "qwen3:14b", "nom": "Qwen3 14B", "go": 9.3, "phrase": "Large."}
         roles = {"rapide": mock.Mock(id="qwen3:4b", modele=small), "polyvalent": mock.Mock(id="qwen3:14b", modele=large)}
-        with mock.patch.object(model_fit, "profil_pret", lambda *a: mock.Mock()), mock.patch.object(model_fit, "evaluer", lambda *a, **k: GOOD), mock.patch.object(model_compat, "roles_for", lambda *a: roles):
+        with mock.patch.object(model_fit, "ready_profile", lambda *a: mock.Mock()), mock.patch.object(model_fit, "judge", lambda *a, **k: GOOD), mock.patch.object(model_compat, "roles_for", lambda *a: roles):
             status, answer = get("/engines/ollama/models/recommended")
         self.assertEqual([m["id"] for m in answer["models"]], ["qwen3:14b", "qwen3:4b"])
         self.assertEqual(answer["models"][0]["fit"], {"level": "good", "text": "Fits."})

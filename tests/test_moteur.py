@@ -849,13 +849,13 @@ class Assistant(unittest.TestCase):
     def test_indicateurs_de_chargement_et_de_debordement(self):
         from lutin import model_fit, agent
         from lutin.hardware import Gpu, Profil
-        vrai = model_fit.profil_pret
-        model_fit.profil_pret = lambda *a, **k: Profil(systeme="linux", ram_go=32.0, ram_libre_go=13.0, gpus=[Gpu("RTX", "nvidia", 24)])          # l'avertissement « carte graphique » n'existe que sur une machine qui en a une
+        vrai = model_fit.ready_profile
+        model_fit.ready_profile = lambda *a, **k: Profil(systeme="linux", ram_go=32.0, ram_libre_go=13.0, gpus=[Gpu("RTX", "nvidia", 24)])          # l'avertissement « carte graphique » n'existe que sur une machine qui en a une
         agent.AVERTIS_CARTE.clear()
         try:
             self._indicateurs_de_chargement_et_de_debordement()
         finally:
-            model_fit.profil_pret = vrai
+            model_fit.ready_profile = vrai
             agent.AVERTIS_CARTE.clear()
 
     def _indicateurs_de_chargement_et_de_debordement(self):
@@ -1148,16 +1148,16 @@ class Assistant(unittest.TestCase):
         """« Seulement 0 % du modèle tient sur la carte » à chaque réponse d'une machine SANS carte était du bruit : connu, et inutile à répéter. Avec une carte : une fois par modèle et par demi-heure."""
         from lutin import model_fit, agent
         from lutin.hardware import Gpu, Profil
-        vrai = model_fit.profil_pret
+        vrai = model_fit.ready_profile
         try:
-            model_fit.profil_pret = lambda *a, **k: Profil(systeme="linux", ram_go=32.0, ram_libre_go=13.0, gpus=[])
+            model_fit.ready_profile = lambda *a, **k: Profil(systeme="linux", ram_go=32.0, ram_libre_go=13.0, gpus=[])
             self.assertFalse(agent.a_une_carte_graphique())
-            model_fit.profil_pret = lambda *a, **k: Profil(systeme="linux", ram_go=32.0, ram_libre_go=13.0, gpus=[Gpu("RTX", "nvidia", 24)])
+            model_fit.ready_profile = lambda *a, **k: Profil(systeme="linux", ram_go=32.0, ram_libre_go=13.0, gpus=[Gpu("RTX", "nvidia", 24)])
             self.assertTrue(agent.a_une_carte_graphique())
-            model_fit.profil_pret = lambda *a, **k: None
+            model_fit.ready_profile = lambda *a, **k: None
             self.assertTrue(agent.a_une_carte_graphique(), "machine pas encore détectée : on garde l'avertissement")
         finally:
-            model_fit.profil_pret = vrai
+            model_fit.ready_profile = vrai
         agent.AVERTIS_CARTE.clear()
         self.assertTrue(agent._avertir_une_fois("x:1b", lambda: 10000.0))
         self.assertFalse(agent._avertir_une_fois("x:1b", lambda: 10100.0), "pas deux fois en moins d'une demi-heure")

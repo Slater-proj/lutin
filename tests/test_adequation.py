@@ -27,11 +27,11 @@ def carte(vram):
 
 class Appreciation(unittest.TestCase):
     def test_les_niveaux_suivent_la_memoire(self):
-        gros = model_fit.evaluer(CAT["qwen3:32b"], carte(24))
-        petit = model_fit.evaluer(CAT["qwen3:4b"], carte(24))
+        gros = model_fit.judge(CAT["qwen3:32b"], carte(24))
+        petit = model_fit.judge(CAT["qwen3:4b"], carte(24))
         self.assertEqual(petit["niveau"], "ideal")
         self.assertIn(gros["niveau"], ("bien", "limite"))
-        trop = model_fit.evaluer(CAT["llama3.3:70b"], carte(8))
+        trop = model_fit.judge(CAT["llama3.3:70b"], carte(8))
         self.assertEqual(trop["niveau"], "trop_gros")
         self.assertIn("43", trop["texte"].replace(",", ".")[:200] + "43", "le texte donne un chiffre")
 
@@ -39,32 +39,32 @@ class Appreciation(unittest.TestCase):
         """Demande du mainteneur (2026-11-20) : les modèles qui tiennent et ceux qui sont limites, d'après la carte et la mémoire vive libre mesurée, et
         seulement si le moteur sait garder les experts en mémoire vive."""
         rtx4090 = Profil(systeme="windows", ram_go=32, ram_libre_go=22, gpus=[Gpu("NVIDIA GeForce RTX 4090", "nvidia", 24)])
-        a_l_aise = model_fit.evaluer(CAT["qwen3.6:35b"], rtx4090)
+        a_l_aise = model_fit.judge(CAT["qwen3.6:35b"], rtx4090)
         self.assertEqual(a_l_aise["niveau"], "bien")
         self.assertIn("mémoire vive", a_l_aise["texte"])
-        juste = model_fit.evaluer(CAT["qwen3.6:35b"], Profil(systeme="windows", ram_go=32, ram_libre_go=16, gpus=[Gpu("NVIDIA GeForce RTX 4070", "nvidia", 12)]))
+        juste = model_fit.judge(CAT["qwen3.6:35b"], Profil(systeme="windows", ram_go=32, ram_libre_go=16, gpus=[Gpu("NVIDIA GeForce RTX 4070", "nvidia", 12)]))
         self.assertEqual(juste["niveau"], "limite", "13 Go d'experts en mémoire vive sur 16 libres : il ne reste presque rien")
         self.assertIn("juste", juste["texte"])
-        self.assertEqual(model_fit.evaluer(CAT["qwen3-next:80b"], rtx4090)["niveau"], "trop_gros", "30 Go d'experts : la mémoire vive libre n'y suffit pas")
+        self.assertEqual(model_fit.judge(CAT["qwen3-next:80b"], rtx4090)["niveau"], "trop_gros", "30 Go d'experts : la mémoire vive libre n'y suffit pas")
         rtx4080 = Profil(systeme="windows", ram_go=32, ram_libre_go=22, gpus=[Gpu("NVIDIA GeForce RTX 4080", "nvidia", 16)])
-        self.assertEqual(model_fit.evaluer(CAT["qwen3.6:35b"], rtx4080)["niveau"], "bien", "16 Go : 10 Go d'experts en mémoire vive")
-        sans = model_fit.evaluer(CAT["qwen3.6:35b"], rtx4080, experts_en_ram=False)
+        self.assertEqual(model_fit.judge(CAT["qwen3.6:35b"], rtx4080)["niveau"], "bien", "16 Go : 10 Go d'experts en mémoire vive")
+        sans = model_fit.judge(CAT["qwen3.6:35b"], rtx4080, experts_en_ram=False)
         self.assertEqual(sans["niveau"], "trop_gros")
         self.assertIn("ce moteur", sans["texte"], "le moteur est la raison, et on dit lesquels savent le faire")
 
     def test_sans_carte_graphique(self):
         cpu = Profil(systeme="windows", ram_go=16, ram_libre_go=10)
-        self.assertEqual(model_fit.evaluer(CAT["qwen3:1.7b"], cpu)["niveau"], "bien")
-        self.assertIn(model_fit.evaluer(CAT["qwen3:8b"], cpu)["niveau"], ("limite", "trop_gros"))
+        self.assertEqual(model_fit.judge(CAT["qwen3:1.7b"], cpu)["niveau"], "bien")
+        self.assertIn(model_fit.judge(CAT["qwen3:8b"], cpu)["niveau"], ("limite", "trop_gros"))
 
     def test_modele_inconnu_du_catalogue(self):
-        self.assertEqual(model_fit.evaluer({"id": "x", "go": 0}, carte(12))["niveau"], "bien", "sans taille on ne prétend rien")
-        self.assertEqual(model_fit.evaluer({"id": "x", "go": 200}, carte(12))["niveau"], "trop_gros")
-        self.assertEqual(model_fit.evaluer({"id": "x", "go": 2}, carte(12))["niveau"], "ideal")
+        self.assertEqual(model_fit.judge({"id": "x", "go": 0}, carte(12))["niveau"], "bien", "sans taille on ne prétend rien")
+        self.assertEqual(model_fit.judge({"id": "x", "go": 200}, carte(12))["niveau"], "trop_gros")
+        self.assertEqual(model_fit.judge({"id": "x", "go": 2}, carte(12))["niveau"], "ideal")
 
     def test_liste_vide_tant_que_la_machine_n_est_pas_detectee(self):
-        self.assertEqual(model_fit.pour_la_liste([{"id": "a", "go": 1}], None, []), {})
-        r = model_fit.pour_la_liste([{"id": "qwen3:8b", "go": 5.2}, {"id": "perso:1b", "go": 1}], carte(12), _m._CATALOGUE["modeles"])
+        self.assertEqual(model_fit.for_list([{"id": "a", "go": 1}], None, []), {})
+        r = model_fit.for_list([{"id": "qwen3:8b", "go": 5.2}, {"id": "perso:1b", "go": 1}], carte(12), _m._CATALOGUE["modeles"])
         self.assertEqual(set(r), {"qwen3:8b", "perso:1b"})
 
     def test_chaque_famille_a_sa_phrase(self):
@@ -79,19 +79,19 @@ class ProfilAttendu(unittest.TestCase):
 
     def test_attend_la_fin_de_la_detection_au_lieu_de_renvoyer_rien(self):
         import time as _t
-        etat = dict(model_fit._etat)
-        model_fit._etat.update(profil=None, quand=0.0, en_cours=False)
-        self.addCleanup(model_fit._etat.update, etat)
+        etat = dict(model_fit._state)
+        model_fit._state.update(profil=None, quand=0.0, en_cours=False)
+        self.addCleanup(model_fit._state.update, etat)
         profil = Profil(cpu="x", coeurs=8, ram_go=32, gpus=[Gpu("RTX", "nvidia", 24, 0, "")])
 
         def lente():
             _t.sleep(0.6)
             return profil
-        self.assertIsNone(model_fit.profil_pret(lente), "le premier appel ne bloque pas : rien encore")
-        model_fit._etat.update(profil=None, quand=0.0)
-        self.assertIs(model_fit.profil_attendu(5, lente), profil)
-        model_fit._etat.update(profil=None, quand=0.0, en_cours=False)
-        self.assertIsNone(model_fit.profil_attendu(0.3, lambda: (_t.sleep(2), profil)[1]), "délai dépassé : None, jamais un blocage")
+        self.assertIsNone(model_fit.ready_profile(lente), "le premier appel ne bloque pas : rien encore")
+        model_fit._state.update(profil=None, quand=0.0)
+        self.assertIs(model_fit.awaited_profile(5, lente), profil)
+        model_fit._state.update(profil=None, quand=0.0, en_cours=False)
+        self.assertIsNone(model_fit.awaited_profile(0.3, lambda: (_t.sleep(2), profil)[1]), "délai dépassé : None, jamais un blocage")
 
 
 class NomAppareil(unittest.TestCase):

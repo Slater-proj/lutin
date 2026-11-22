@@ -132,7 +132,7 @@ DELAI_AVERTISSEMENT_CARTE = 1800    # secondes : une fois par modèle et par dem
 def a_une_carte_graphique():
     """Faux sur une machine sans carte graphique utilisable : tout tourne sur le processeur, c'est connu, inutile de le répéter à chaque réponse. Vrai si on ne sait pas encore."""
     from . import model_fit
-    profil = model_fit.profil_pret()
+    profil = model_fit.ready_profile()
     return profil is None or not profil.sans_gpu()
 
 
@@ -141,7 +141,7 @@ def _estimer_avant_charge(r, emit):
     try:
         from . import model_fit, memory_estimate
         m = next((x for x in _m._CATALOGUE["modeles"] if x["id"] == r["modele"]), None)
-        profil = model_fit.profil_pret()
+        profil = model_fit.ready_profile()
         if m is None or profil is None or moteur_actuel(r).en_memoire(r["modele"]):
             return
         e = memory_estimate.estimate(m, int(r["num_ctx"]), profil)
@@ -832,8 +832,8 @@ class MoteurOllama(_moteurs.Moteur):
 
 _moteurs.save(MoteurOllama())
 _moteurs.CONTEXT.update(donnees=lambda: _m.DONNEES, en_docker=lambda: bool(os.environ.get("LUTIN_DOCKER")), hors_ligne=lambda: _hl.is_active(),
-                         profil=lambda: __import__("lutin.model_fit", fromlist=["x"]).profil_pret(),
-                         profil_attendu=lambda: __import__("lutin.model_fit", fromlist=["x"]).profil_attendu(),
+                         profil=lambda: __import__("lutin.model_fit", fromlist=["x"]).ready_profile(),
+                         profil_attendu=lambda: __import__("lutin.model_fit", fromlist=["x"]).awaited_profile(),
                          dossier_ollama=lambda: (None if os.environ.get("LUTIN_DOCKER") else __import__("lutin.locations", fromlist=["x"]).models_folder()))
 _moteurs.save(_llamacpp.MoteurLlamaCpp())
 for _gere in (_llamacpp.MoteurExLlamaV3, _llamacpp.MoteurLMStudio, _llamacpp.MoteurColibri):          # one engine per program (ADR 0020), in the order of the cards

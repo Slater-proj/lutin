@@ -563,7 +563,7 @@ def reglages_machine(aide, variante, taille_go, profil):
         arguments += ["--cache-ram", str(cache_ram_mo(profil))]
     if variante in ("cuda", "vulkan", "metal") and taille_go and "--fit" in aide:
         from . import model_fit
-        if model_fit.evaluer({"go": taille_go}, profil).get("niveau") in ("limite", "trop_gros"):
+        if model_fit.judge({"go": taille_go}, profil).get("niveau") in ("limite", "trop_gros"):
             arguments += ["--fit", "on"]
             ajuste = True
     return arguments, ajuste
@@ -1426,7 +1426,7 @@ class MoteurExterne(MoteurOpenAI):
         if not self.exllamav3_choisi() or not modele or not ctx or Path(str(modele)).name != str(modele):
             return 0
         from . import exllamav3, kv_cache, model_fit
-        kv = kv_cache.of_folder(exllamav3.folder_models(self._dossiers()) / str(modele)) or model_fit.KV_MO_PAR_DEFAUT
+        kv = kv_cache.of_folder(exllamav3.folder_models(self._dossiers()) / str(modele)) or model_fit.DEFAULT_KV_MB_PER_1K
         return int(kv * (int(ctx) / 1000) / 1024 * 0.5 * 1024 ** 3)
 
     def port_exllamav3(self):

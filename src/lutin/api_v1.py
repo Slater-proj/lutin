@@ -1089,7 +1089,7 @@ def model_variants(request):
     experts = _engine_capabilities.of(_m.moteur_actuel()).experts_in_ram
     return {"model": name, "default": found["defaut"] and {"name": found["defaut"]["id"], "size_gb": found["defaut"]["go"]},
             "variants": [{"name": v["id"], "precision": v["precision"], "size_gb": v["go"], "default": bool(v.get("defaut")), "installed": v["id"] in installed,
-                          "meaning": _variants.describe(v["precision"]), "fit": _fit(_model_fit.evaluer(dict(base, go=v["go"]), profile, experts_en_ram=experts) if profile is not None else None)}
+                          "meaning": _variants.describe(v["precision"]), "fit": _fit(_model_fit.judge(dict(base, go=v["go"]), profile, experts_en_ram=experts) if profile is not None else None)}
                          for v in found["variantes"]]}
 
 
@@ -1110,7 +1110,7 @@ def model_library(request):
     except OSError as failed:
         raise ApiError(503, "unreachable", str(failed)) from None
     profile, installed = machine_profile(), set(_m.etat_moteur()["installes"])
-    judge = (lambda gb: _model_fit.evaluer({"go": gb}, profile)) if profile is not None else (lambda gb: {"niveau": "", "texte": ""})
+    judge = (lambda gb: _model_fit.judge({"go": gb}, profile)) if profile is not None else (lambda gb: {"niveau": "", "texte": ""})
     models = []
     for item in _discovery.evaluate_sizes(found["modeles"], judge):
         sizes = [{"size": size, "name": "{}:{}".format(item["nom"], size), "installed": "{}:{}".format(item["nom"], size) in installed,
@@ -1406,7 +1406,7 @@ def engine_models_recommended(request):
     Before, that case was an empty list the page took for « nothing fits » (maintainer, ExLlamaV3, 2026-11-22)."""
     engine, source = _source(request)
     models = _source_list(source.recommended)          # not the engine in use (409) and a catalogue that cannot be read (502) are said first
-    detecting = not models and _model_fit.profil_pret() is None          # the machine is being measured (the first visit starts it): the page asks again
+    detecting = not models and _model_fit.ready_profile() is None          # the machine is being measured (the first visit starts it): the page asks again
     return {"engine": engine.id, "models": models, "detecting": detecting}
 
 
@@ -1606,7 +1606,7 @@ def models_folder(engine_running):
 
 def machine_profile():
     """The profile of the machine if it is known, else None: the detection (which runs programs) starts in the background and is never waited for here."""
-    return _model_fit.profil_pret()
+    return _model_fit.ready_profile()
 
 
 @route("GET", "/machine", SESSION)
@@ -1627,7 +1627,7 @@ def machine(request):
 
 def _catalog_entry(model, profile, engine, installed):
     # a mixture-of-experts model larger than the card fits only on an engine that keeps its experts in memory
-    fit = _model_fit.evaluer(model, profile, experts_en_ram=_engine_capabilities.of(engine).experts_in_ram) if profile is not None else None
+    fit = _model_fit.judge(model, profile, experts_en_ram=_engine_capabilities.of(engine).experts_in_ram) if profile is not None else None
     compatibility = _model_compat.evaluate(model, engine, installed)
     return {
         "id": model["id"], "name": model["nom"], "summary": model["phrase"], "size_gb": model["go"], "parameters_b": model["params_b"], "active_parameters_b": model["actifs_b"],

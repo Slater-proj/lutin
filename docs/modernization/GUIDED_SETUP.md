@@ -20,7 +20,7 @@ Rules that do not bend:
 | Need | Already in the code |
 |---|---|
 | Know the machine | `hardware.detecter()` gives a `Profil` (CPU, RAM, GPUs with memory, disks); `profil_demo()` and `imposer_budget()` for tests and manual limits |
-| Say whether a model fits | `model_fit.evaluer(model, profil, ctx)` and `pour_la_liste`; `model_selection.memoire_necessaire_go` |
+| Say whether a model fits | `model_fit.judge(model, profil, ctx)` and `for_list`; `model_selection.memoire_necessaire_go` |
 | Compatibility with the engine | `model_compat.evaluer(model, engine, installed)`: compatible, reasons, warnings, memory |
 | Choose by use | `model_selection.choisir(profil, catalogue)` returns a choice per role (fast, creative, code, general…); `a_telecharger(choix, roles, installed)` |
 | The catalogue | `data/modeles.json`: 43 models with a sentence, size, parameters, capabilities, licence, editorial notes per role, families |

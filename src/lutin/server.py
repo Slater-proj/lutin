@@ -256,12 +256,12 @@ class Gestionnaire(BaseHTTPRequestHandler):
     def _variantes_jugees(modele):
         """Les variantes de précision de `modele` avec, pour chacune, ce que cette machine en dit (tient ou pas) et si elle est déjà installée."""
         lues = _variantes.list_variants(modele)
-        profil = _adequation.profil_pret()
+        profil = _adequation.ready_profile()
         base = next((m for m in _m._CATALOGUE["modeles"] if m["id"] == modele), {})
         installes = set(_m.etat_moteur()["installes"])
         sortie = []
         for v in lues["variantes"]:
-            jugement = _adequation.evaluer(dict(base, go=v["go"]), profil) if profil is not None else {"niveau": "bien", "texte": ""}
+            jugement = _adequation.judge(dict(base, go=v["go"]), profil) if profil is not None else {"niveau": "bien", "texte": ""}
             sortie.append(dict(v, installe=v["id"] in installes, niveau=jugement["niveau"], jugement=jugement["texte"], explication=_variantes.describe(v["precision"])))
         return {"modele": modele, "defaut": lues["defaut"], "variantes": sortie}
 
@@ -372,7 +372,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
         jauge = _emplacements.models_gauge() or {}
         libre = jauge.get("libre")
         try:
-            return _diagnostic.diagnose(o["actif"], bool(_m.chemin_ollama()), [n for n in o["installes"] if not _embeddings.is_search_model(n)], r, profil, _m._CATALOGUE, _adequation.pour_la_liste(modeles, profil, _m._CATALOGUE["modeles"]),
+            return _diagnostic.diagnose(o["actif"], bool(_m.chemin_ollama()), [n for n in o["installes"] if not _embeddings.is_search_model(n)], r, profil, _m._CATALOGUE, _adequation.for_list(modeles, profil, _m._CATALOGUE["modeles"]),
                                              libre / 1e9 if libre else None, conseils=_conseil_machine.advice(profil, r), modeles_ailleurs=_emplacements.models_elsewhere(o["installes"]) if o["actif"] else None)
         except (KeyError, TypeError, ValueError, AttributeError):
             return []
@@ -530,8 +530,8 @@ class Gestionnaire(BaseHTTPRequestHandler):
             o = _m.etat_moteur()
             r = _m.reglages()
             modeles = _m.modeles_connus(o["installes"], o.get("tailles"))
-            profil = _adequation.profil_pret()
-            return self._envoyer(200, {"compat": self._compat(o), "adequation": _adequation.pour_la_liste(modeles, profil, _m._CATALOGUE["modeles"]), "machine": profil.resume() if profil else "", "budget_go": profil.budget_go() if profil else 0,
+            profil = _adequation.ready_profile()
+            return self._envoyer(200, {"compat": self._compat(o), "adequation": _adequation.for_list(modeles, profil, _m._CATALOGUE["modeles"]), "machine": profil.resume() if profil else "", "budget_go": profil.budget_go() if profil else 0,
                                        "familles": {k: _t(v) for k, v in (_m._CATALOGUE.get("familles") or {}).items()}, "disque_modeles": _emplacements.models_gauge(),
                                        "version": _m.VERSION, "partages": o.get("partages", []), "ollama": o["actif"], "ollama_installe": bool(_m.chemin_ollama()) or _m.moteur_actuel().id != "ollama", "moteur_nom": _mesures.display_name(_m.moteur_actuel()), "installes": o["installes"], "modeles": modeles, "modeles_masques": len(_m.lire_registre_modeles()["masques"]), "actives": list(_m.TOURS_ACTIFS),
                                        "pulls": _m.PULLS, "reglages": r, "conversations": _m.conv_liste(), "racine": str(_m.RACINE), "donnees": str(_m.DONNEES),
@@ -623,8 +623,8 @@ class Gestionnaire(BaseHTTPRequestHandler):
             q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
             try:
                 r = _decouverte.search((q.get("q") or [""])[0], (q.get("o") or ["newest"])[0], (q.get("p") or ["1"])[0], categorie=(q.get("c") or [""])[0], leger=(q.get("leger") or ["0"])[0] == "1")
-                profil = _adequation.profil_pret()
-                juger = (lambda go: _adequation.evaluer({"go": go}, profil)) if profil is not None else (lambda go: {"niveau": "bien", "texte": ""})
+                profil = _adequation.ready_profile()
+                juger = (lambda go: _adequation.judge({"go": go}, profil)) if profil is not None else (lambda go: {"niveau": "bien", "texte": ""})
                 installes = set(_m.etat_moteur()["installes"])
                 modeles = _decouverte.evaluate_sizes(r["modeles"], juger)
                 for m in modeles:
@@ -710,7 +710,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 ctx = int((q.get("ctx") or [_m.reglages()["num_ctx"]])[0])
             except ValueError:
                 return self._envoyer(400, {"erreur": _t("Fenêtre de conversation invalide.")})
-            e = self._estimation(modele, max(512, min(ctx, 1048576)), _adequation.profil_pret())
+            e = self._estimation(modele, max(512, min(ctx, 1048576)), _adequation.ready_profile())
             return self._envoyer(200 if e else 404, e or {"erreur": _t("Ce modèle n'est pas au catalogue : pas d'estimation possible.")})
         if chemin == "/api/observatoire":                         # Santé : ce que les modèles et les outils ont fait (noms, durées, compteurs ; jamais le texte des messages)
             evenements = _observatoire.read(400)
@@ -1156,7 +1156,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
                     _m.enregistrer_reglages({"conseil_machine": False})
                     return self._envoyer(200, {"ok": True})
                 if action == "appliquer":
-                    changements = _conseil_machine.apply(_adequation.profil_pret(), _m.reglages())
+                    changements = _conseil_machine.apply(_adequation.ready_profile(), _m.reglages())
                     if changements:
                         _m.enregistrer_reglages(changements)
                     return self._envoyer(200, {"ok": True, "appliques": changements})
