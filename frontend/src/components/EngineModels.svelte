@@ -223,7 +223,8 @@
       <button type="button" class="button" onclick={() => (asking = "")}>{t("chat.cancel")}</button>
     </span>
   {:else if canConfigure}
-    <button type="button" class="button" disabled={busy} onclick={() => (asking = key)}>{t("models.download")}<span class="visually-hidden"> {downloadLabel(entry.id, entry.revision)}</span></button>
+    <!-- the recommended models are what this screen is for: their « Download » is the main button of the card (maintainer, 2026-11-22) -->
+    <button type="button" class={key.startsWith("recommended:") ? "button primary" : "button"} disabled={busy} onclick={() => (asking = key)}>{t("models.download")}<span class="visually-hidden"> {downloadLabel(entry.id, entry.revision)}</span></button>
   {/if}
 {/snippet}
 
