@@ -66,12 +66,12 @@ class ScheduledTasks(Clean):
             patch.start()
             self.addCleanup(patch.stop)
         self.task = tasks.add(nom="Summary", prompt="Summarise the repository.", heure="08:00", jours=[0, 1, 2, 3, 4], travail="", notifier="")
-        with mock.patch.object(_m, "tour", answering("First summary.")):
+        with mock.patch.object(_m, "turn", answering("First summary.")):
             self.conversation = tasks.execute(self.task["id"])          # the task's own conversation, the same at every run
 
     def test_run_now_while_a_person_writes_in_its_conversation_is_refused(self):
         person = self.person_writes_in(self.conversation)
-        with mock.patch.object(_m, "tour", refusing), self.assertRaises(ValueError):
+        with mock.patch.object(_m, "turn", refusing), self.assertRaises(ValueError):
             tasks.execute(self.task["id"])
         self.assertIs(_m.ACTIVE_TURNS.get(self.conversation), person, "the person's Stop button still stops the person's turn")
         self.assertEqual(tasks.RUNNING, {}, "the task is not left « at work »")
@@ -87,7 +87,7 @@ class ScheduledTasks(Clean):
                 _m.ACTIVE_TURNS[conv["id"]] = newer
             conv["messages"] += [{"role": "assistant", "content": "late answer"}]
             _m.conv_write(conv)                                          # the frozen turn finally ends
-        with mock.patch.object(_m, "tour", abandoned):
+        with mock.patch.object(_m, "turn", abandoned):
             tasks.execute(self.task["id"])
         self.assertNotIn("late answer", [m.get("content") for m in _m.conv_read(self.conversation)["messages"]])
         self.assertIs(_m.ACTIVE_TURNS.get(self.conversation), newer, "the newer turn keeps its seat")
@@ -106,7 +106,7 @@ class Missions(Clean):
         conv = _m.conv_new()
         m = mission.create("Game", "Make a small game.", "principal", 8, True, conv_id=conv["id"])
         person = self.person_writes_in(conv["id"], (_TEMP / "work").resolve())          # the same folder: only the conversation is busy
-        with mock.patch.object(_m, "tour", refusing):
+        with mock.patch.object(_m, "turn", refusing):
             self.assertFalse(mission._turn(mission.find(m["id"])), "no turn: the mission tries again at its next round")
         self.assertIs(_m.ACTIVE_TURNS.get(conv["id"]), person)
         self.assertNotIn(m["id"], mission.ALIVE["arrets"])
@@ -124,19 +124,19 @@ class AddOns(Clean):
 
     def test_telegram_chooses_the_work_folder_with_the_lock_held(self):
         seen = self.under_lock()
-        with mock.patch.object(_m, "tour", answering("Hello.")):
+        with mock.patch.object(_m, "turn", answering("Hello.")):
             self.assertEqual(addons_telegram.reply_model("chat-1", "Alice", "Hello", True), "Hello.")
         self.assertEqual(seen, [True])
 
     def test_an_automatic_reply_chooses_the_work_folder_with_the_lock_held(self):
         seen = self.under_lock()
-        with mock.patch.object(_m, "tour", answering("Hi Bob.")):
+        with mock.patch.object(_m, "turn", answering("Hi Bob.")):
             self.assertEqual(auto_reply.reply("mail", "Courriel", "bob@example.org", "Bob", "Hi", pause=0.05), "Hi Bob.")
         self.assertEqual(seen, [True])
 
     def test_telegram_waits_while_a_turn_runs_in_its_conversation(self):
         self.under_lock()
-        with mock.patch.object(_m, "tour", answering("First.")):
+        with mock.patch.object(_m, "turn", answering("First.")):
             addons_telegram.reply_model("chat-2", "Alice", "Hello", True)
         ident = addons_telegram.read()["convs"]["chat-2"]
         person = self.person_writes_in(ident)
@@ -145,7 +145,7 @@ class AddOns(Clean):
         def fake(conv, request, emit, r=None, stop=None, *a, **k):
             started.set()
             answering("Second.")(conv, request, emit)
-        with mock.patch.object(_m, "tour", fake):
+        with mock.patch.object(_m, "turn", fake):
             worker = threading.Thread(target=lambda: result.append(addons_telegram.reply_model("chat-2", "Alice", "Again", True)))
             worker.start()
             self.assertFalse(started.wait(0.5), "no second turn while the first one runs")
@@ -229,7 +229,7 @@ class Seats(Clean):
             stop.abandonne = True
             conv["messages"].append({"role": "assistant", "content": "late"})
             _m.conv_write(conv)                                      # abandoned: not written
-        with mock.patch.object(_m, "tour", fake):
+        with mock.patch.object(_m, "turn", fake):
             seat = turn_runner.run_turn(a, "question", lambda e: None)
         self.assertEqual(marks, [True])
         self.assertTrue(seat.abandoned)

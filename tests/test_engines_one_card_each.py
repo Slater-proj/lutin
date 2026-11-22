@@ -62,14 +62,14 @@ class OldSetting(Files):
     def test_an_old_openai_and_server_setting_opens_on_that_engine(self):
         before = (self.settings.read_bytes(), self.engines.read_bytes())
         self.assertEqual(A.settings()["moteur"], "exllamav3")
-        self.assertEqual(agent.moteur_actuel().id, "exllamav3")
+        self.assertEqual(agent.current_engine().id, "exllamav3")
         self.assertEqual(engines.ENGINES["exllamav3"].adresse(), "http://127.0.0.1:5123/v1")          # its port, kept in the old section of « openai »
         self.assertEqual(V.call("GET", "/api/v1/engines", V.OWNER)[1]["current"], "exllamav3")
         self.assertEqual((self.settings.read_bytes(), self.engines.read_bytes()), before, "reading must not migrate anything")
 
     def test_the_model_is_told_which_engine_and_model_answer(self):
         """Maintainer, 2026-11-21: asked, the model said it ran on Ollama while ExLlamaV3 answered; it had deduced it from the code and the processes."""
-        system = agent.consignes_systeme(A.settings())
+        system = agent.system_instructions(A.settings())
         self.assertIn("ExLlamaV3", system.splitlines()[-1])
         self.assertIn("qwen3-8b-exl3", system.splitlines()[-1])
 
@@ -93,7 +93,7 @@ class OldSetting(Files):
     def test_choosing_the_engine_by_its_new_name_writes_it(self):
         storage.save_settings({"moteur": "lmstudio"})
         self.assertEqual(self.read()[0]["moteur"], "lmstudio")
-        self.assertEqual(agent.moteur_actuel().id, "lmstudio")
+        self.assertEqual(agent.current_engine().id, "lmstudio")
 
     def test_a_managed_server_keeps_its_old_settings_when_one_of_them_changes(self):
         status, answer = V.call("PATCH", "/api/v1/engines/exllamav3/settings", V.OWNER, body={"exllamav3_port": 5200})

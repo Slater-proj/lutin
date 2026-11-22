@@ -70,7 +70,7 @@ def start(mesure=None):
             raise ValueError(_t("Une réponse est en cours : la mesure serait faussée. Attends sa fin."))
         if _m.BENCH["en_cours"] or CALIBRATION["en_cours"]:
             raise ValueError(_t("Une mesure est déjà en cours."))
-        if modele not in _m.etat_ollama()["installes"]:
+        if modele not in _m.ollama_state()["installes"]:
             raise ValueError(_t("Le modèle « {} » n'est pas installé : installe-le ou choisis-en un autre en haut à gauche.").format(modele))
         from .hardware import cpus_available
         liste = candidates(cpus_available())

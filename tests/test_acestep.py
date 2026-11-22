@@ -131,9 +131,9 @@ class AceStep(unittest.TestCase):
         from lutin import agent
         reglages = dict(_m.settings(), web=True)
         addons.activate(ace.IDENT, False)
-        self.assertNotIn("musique_generer", {t["function"]["name"] for t in agent.outils_du_mode(reglages)})
+        self.assertNotIn("musique_generer", {t["function"]["name"] for t in agent.mode_tools(reglages)})
         addons.activate(ace.IDENT, True)
-        self.assertIn("musique_generer", {t["function"]["name"] for t in agent.outils_du_mode(reglages)})
+        self.assertIn("musique_generer", {t["function"]["name"] for t in agent.mode_tools(reglages)})
 
     # --- composer
     def test_composer_demande_l_accord_attend_la_tache_et_joint_le_fichier(self):

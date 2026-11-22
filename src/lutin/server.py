@@ -249,7 +249,7 @@ class Handler(BaseHTTPRequestHandler):
         """Le modèle de conversation est-il chargé, et combien de mémoire prend-il (carte graphique / mémoire vive) ? Pour la barre d'état. None si Ollama est arrêté ou le modèle déchargé."""
         if not o["actif"]:
             return None
-        ps = _m.ps_modele(r["modele"])
+        ps = _m.model_ps(r["modele"])
         return {"modele": r["modele"], "taille": ps["taille"], "vram": ps["vram"]} if ps else None
 
     @staticmethod
@@ -258,7 +258,7 @@ class Handler(BaseHTTPRequestHandler):
         lues = _variantes.list_variants(modele)
         profil = _adequation.ready_profile()
         base = next((m for m in _m._CATALOGUE["modeles"] if m["id"] == modele), {})
-        installes = set(_m.etat_moteur()["installes"])
+        installes = set(_m.engine_state()["installes"])
         sortie = []
         for v in lues["variantes"]:
             jugement = _adequation.judge(dict(base, go=v["go"]), profil) if profil is not None else {"niveau": "bien", "texte": ""}
@@ -269,7 +269,7 @@ class Handler(BaseHTTPRequestHandler):
     def _compat(o):
         """Pour chaque modèle du catalogue : compatible avec le moteur choisi ? (format, quantification, mémoire estimée, raisons). La page ne propose que les compatibles."""
         try:
-            return _compat.for_list(_m._CATALOGUE["modeles"], _m.moteur_actuel(), o["installes"])
+            return _compat.for_list(_m._CATALOGUE["modeles"], _m.current_engine(), o["installes"])
         except Exception:  # noqa: BLE001  (jamais une page cassée : sans cette liste, rien n'est masqué)
             return {}
 
@@ -299,7 +299,7 @@ class Handler(BaseHTTPRequestHandler):
     def _premier_lancement(o, r, profil):
         """Aucun moteur prêt ? La page désactive l'onglet Modèles avec la raison et propose le moteur conseillé (installer / choisir autre / plus tard)."""
         try:
-            mo = _m.moteur_actuel(r)
+            mo = _m.current_engine(r)
             if o["actif"]:
                 return _diagnostic.first_launch(mo.nom, True, "")
             reco = None          # pas de mo.statut() ici : il sonde le moteur (2 s) et /api/etat doit rester immédiat
@@ -316,12 +316,12 @@ class Handler(BaseHTTPRequestHandler):
                 try:
                     if autre.id == mo.id:
                         continue
-                    if (autre.id == "ollama" and _m.chemin_ollama()) or (autre.id == "llamacpp" and autre.serveur_pret() is not None):
+                    if (autre.id == "ollama" and _m.ollama_path()) or (autre.id == "llamacpp" and autre.serveur_pret() is not None):
                         autres.append({"moteur": autre.id, "nom": autre.nom})
                 except Exception:  # noqa: BLE001
                     continue
             if mo.id == "ollama":
-                detail = _t("Installé, mais arrêté.") if _m.chemin_ollama() else _t("Pas installé.")
+                detail = _t("Installé, mais arrêté.") if _m.ollama_path() else _t("Pas installé.")
             elif mo.id == "llamacpp":
                 detail = _t("Installé, il démarre à la demande.") if mo.serveur_pret() is not None else _t("Pas installé.")
             else:
@@ -352,7 +352,7 @@ class Handler(BaseHTTPRequestHandler):
         if gardee and time.monotonic() - gardee[0] < 30:
             return gardee[1]
         try:
-            caps = _m.capacites(r["modele"])
+            caps = _m.capabilities(r["modele"])
         except Exception:  # noqa: BLE001  (un confort : jamais une page cassée)
             caps = None
         valeur = None if caps is None else ("thinking" in caps)
@@ -362,7 +362,7 @@ class Handler(BaseHTTPRequestHandler):
     @staticmethod
     def _diagnostic(o, r, profil, modeles):
         """Ce qui empêche Lutin de répondre (ou le gêne), pour la bannière du haut de la page."""
-        mo = _m.moteur_actuel(r)
+        mo = _m.current_engine(r)
         if _machines.remote_model(r, o["installes"]):          # le modèle choisi est celui d'une autre machine : il n'a pas à exister ici ni à tenir sur cette carte
             if mo.id != "ollama":
                 return []
@@ -372,7 +372,7 @@ class Handler(BaseHTTPRequestHandler):
         jauge = _emplacements.models_gauge() or {}
         libre = jauge.get("libre")
         try:
-            return _diagnostic.diagnose(o["actif"], bool(_m.chemin_ollama()), [n for n in o["installes"] if not _embeddings.is_search_model(n)], r, profil, _m._CATALOGUE, _adequation.for_list(modeles, profil, _m._CATALOGUE["modeles"]),
+            return _diagnostic.diagnose(o["actif"], bool(_m.ollama_path()), [n for n in o["installes"] if not _embeddings.is_search_model(n)], r, profil, _m._CATALOGUE, _adequation.for_list(modeles, profil, _m._CATALOGUE["modeles"]),
                                              libre / 1e9 if libre else None, conseils=_conseil_machine.advice(profil, r), modeles_ailleurs=_emplacements.models_elsewhere(o["installes"]) if o["actif"] else None)
         except (KeyError, TypeError, ValueError, AttributeError):
             return []
@@ -527,15 +527,15 @@ class Handler(BaseHTTPRequestHandler):
         if chemin in ("/", "/index.html", "/ancienne/", "/ancienne/index.html"):          # « / » seulement quand la nouvelle interface n'est pas construite (une copie de développement)
             return self._envoyer(200, _m.web_page(), "text/html; charset=utf-8")
         if chemin == "/api/etat":
-            o = _m.etat_moteur()
+            o = _m.engine_state()
             r = _m.settings()
-            modeles = _m.modeles_connus(o["installes"], o.get("tailles"))
+            modeles = _m.known_models(o["installes"], o.get("tailles"))
             profil = _adequation.ready_profile()
             return self._envoyer(200, {"compat": self._compat(o), "adequation": _adequation.for_list(modeles, profil, _m._CATALOGUE["modeles"]), "machine": profil.resume() if profil else "", "budget_go": profil.budget_go() if profil else 0,
                                        "familles": {k: _t(v) for k, v in (_m._CATALOGUE.get("familles") or {}).items()}, "disque_modeles": _emplacements.models_gauge(),
-                                       "version": _m.VERSION, "partages": o.get("partages", []), "ollama": o["actif"], "ollama_installe": bool(_m.chemin_ollama()) or _m.moteur_actuel().id != "ollama", "moteur_nom": _mesures.display_name(_m.moteur_actuel()), "installes": o["installes"], "modeles": modeles, "modeles_masques": len(_m.lire_registre_modeles()["masques"]), "actives": list(_m.ACTIVE_TURNS),
+                                       "version": _m.VERSION, "partages": o.get("partages", []), "ollama": o["actif"], "ollama_installe": bool(_m.ollama_path()) or _m.current_engine().id != "ollama", "moteur_nom": _mesures.display_name(_m.current_engine()), "installes": o["installes"], "modeles": modeles, "modeles_masques": len(_m.read_model_registry()["masques"]), "actives": list(_m.ACTIVE_TURNS),
                                        "pulls": _m.PULLS, "reglages": r, "conversations": _m.conv_list(), "racine": str(_m.ROOT), "donnees": str(_m.DATA),
-                                       "colibri_choisi": bool(getattr(_m.moteur_actuel(r), "colibri_choisi", lambda: False)()), "lmstudio_choisi": bool(getattr(_m.moteur_actuel(r), "lmstudio_choisi", lambda: False)()), "exllamav3_choisi": bool(getattr(_m.moteur_actuel(r), "exllamav3_choisi", lambda: False)()), "outil": bool(self._outil_vivant()), "hors_ligne": _hl.is_active(), "moteur": _m.moteur_actuel().id, "niveau": _m.SECURITY.niveau, "docker": _acces.in_docker(), "ouverture_possible": _fichiers.opening_possible(), "missions": _mission.by_conversation(), "langue": _i18n.language(), "langue_reglage": _i18n.configured_language(), "cpus": _machine.cpus_available() or 1, "diagnostic": self._avec_estimation(self._diagnostic(o, r, profil, modeles), r, profil), "prudent": _estimation.cautious_mode(profil), "premier_lancement": self._premier_lancement(o, r, profil), "redemarrage": {"necessaire": _acces.restart_needed(), "possible": _acces.can_restart()}, "nouvelle_version": _m.new_lutin_version(), "travaux": _m.works_state(), "configurateur": self._configurateur(), "addons_alertes": _addons.alerts(), "embeddings": _embeddings.state(),
+                                       "colibri_choisi": bool(getattr(_m.current_engine(r), "colibri_choisi", lambda: False)()), "lmstudio_choisi": bool(getattr(_m.current_engine(r), "lmstudio_choisi", lambda: False)()), "exllamav3_choisi": bool(getattr(_m.current_engine(r), "exllamav3_choisi", lambda: False)()), "outil": bool(self._outil_vivant()), "hors_ligne": _hl.is_active(), "moteur": _m.current_engine().id, "niveau": _m.SECURITY.niveau, "docker": _acces.in_docker(), "ouverture_possible": _fichiers.opening_possible(), "missions": _mission.by_conversation(), "langue": _i18n.language(), "langue_reglage": _i18n.configured_language(), "cpus": _machine.cpus_available() or 1, "diagnostic": self._avec_estimation(self._diagnostic(o, r, profil, modeles), r, profil), "prudent": _estimation.cautious_mode(profil), "premier_lancement": self._premier_lancement(o, r, profil), "redemarrage": {"necessaire": _acces.restart_needed(), "possible": _acces.can_restart()}, "nouvelle_version": _m.new_lutin_version(), "travaux": _m.works_state(), "configurateur": self._configurateur(), "addons_alertes": _addons.alerts(), "embeddings": _embeddings.state(),
                                        "reflexion_possible": self._reflexion_possible(r, o["actif"]), "cluster_actif": _machines.cluster_active(r.get("cluster")), "demandes_machines": len(_machines.node().get("demandes", [])), "modeles_distants": _machines.remote_models() if _machines.cluster_active(r.get("cluster")) else [], "conversations_distantes": _machines.remote_conversations() if _machines.cluster_active(r.get("cluster")) else [], "machines_hors_ligne": _machines.offline_names() if _machines.cluster_active(r.get("cluster")) else [], "taches_fond": _m.running_tasks(), "taches_moteur": [dict(v, nom=_moteurs.ENGINES[k].nom) for k, v in _moteurs.all_tasks().items() if v.get("statut") == "en cours" and k in _moteurs.ENGINES], "fins_moteur": _moteurs.recent_ends(), "memoire": self._memoire(r, o), "calibrage": _calibrage.state(), "bench": {"en_cours": _m.BENCH["en_cours"], "etape": _m.BENCH["etape"], "erreur": _m.BENCH["erreur"], "file": list(_m.BENCH.get("file") or []), "mesures": _bench.read(_m.bench_path())}, "attentes": [{"id": a.id, "titre": a.titre, "detail": a.detail, "diff": a.diff, "conv": a.conv} for a in _m.PendingApproval.EN_COURS.values()],
                                        "en_attente": sorted({a.conv for a in _m.PendingApproval.EN_COURS.values() if a.conv})})
         if chemin == "/api/conseil":
@@ -544,7 +544,7 @@ class Handler(BaseHTTPRequestHandler):
             if not vitesse or not vitesse.get("tok_s"):
                 return self._envoyer(200, {"mesure": None, "conseil": []})
             from .hardware import detecter
-            return self._envoyer(200, {"mesure": vitesse, "conseil": _conseil.analyze(vitesse, detecter(), r, _m._CATALOGUE, _m.etat_moteur()["installes"], _m.ps_modele(r["modele"]))})
+            return self._envoyer(200, {"mesure": vitesse, "conseil": _conseil.analyze(vitesse, detecter(), r, _m._CATALOGUE, _m.engine_state()["installes"], _m.model_ps(r["modele"]))})
         if chemin == "/api/notifications":
             return self._envoyer(200, {"canaux": _notif.list_channels(), "types": _notif.channel_types()})
         if chemin == "/api/planifie":
@@ -599,7 +599,7 @@ class Handler(BaseHTTPRequestHandler):
             except OSError as e:
                 return self._envoyer(503, {"erreur": str(e)})
         if chemin == "/api/moteurs":                             # les moteurs de modèles : leur état, ce qui est possible avec chacun, et celui qui est choisi
-            courant = _m.moteur_actuel().id
+            courant = _m.current_engine().id
             _moteurs_maj.in_background(bool(_m.read_config().get("verifier_maj", True)) and not _hl.is_active())          # au plus un contrôle par 24 h, en arrière-plan : la carte du moteur l'affichera au prochain rafraîchissement
             return self._envoyer(200, {"courant": courant, "modifiable": self._configurateur(), "moteurs": [self._vue_moteur(mo, courant) for mo in _moteurs.entries()], "prereglages": self._prereglages(), "dossier_moteurs": _llamacpp.engines_folder_view()})
         if chemin in ("/api/moteur-recherche", "/api/moteur-fichiers"):          # chercher un modèle (Hugging Face pour llama.cpp), puis voir les fichiers d'un dépôt
@@ -625,7 +625,7 @@ class Handler(BaseHTTPRequestHandler):
                 r = _decouverte.search((q.get("q") or [""])[0], (q.get("o") or ["newest"])[0], (q.get("p") or ["1"])[0], categorie=(q.get("c") or [""])[0], leger=(q.get("leger") or ["0"])[0] == "1")
                 profil = _adequation.ready_profile()
                 juger = (lambda go: _adequation.judge({"go": go}, profil)) if profil is not None else (lambda go: {"niveau": "bien", "texte": ""})
-                installes = set(_m.etat_moteur()["installes"])
+                installes = set(_m.engine_state()["installes"])
                 modeles = _decouverte.evaluate_sizes(r["modeles"], juger)
                 for m in modeles:
                     m["installes"] = sorted(t for t in m["tailles"] if m["nom"] + ":" + t in installes) + ([""] if m["nom"] in installes or m["nom"] + ":latest" in installes else [])
@@ -641,7 +641,7 @@ class Handler(BaseHTTPRequestHandler):
                 conv = _m.conv_read(ident)
                 r = _m.settings()
                 sections = _suivi.read(ident)
-                return self._envoyer(200, {"sections": sections, "texte": _suivi.serialize(ident, sections), "mesure": _suivi.measure(ident, r["num_ctx"]), "mode": _m.memoire_longue(conv, r),
+                return self._envoyer(200, {"sections": sections, "texte": _suivi.serialize(ident, sections), "mesure": _suivi.measure(ident, r["num_ctx"]), "mode": _m.long_memory(conv, r),
                                            "mode_general": r["memoire_longue"], "chemin": str(_suivi.path(ident))})
             except ValueError as e:
                 return self._envoyer(400, {"erreur": str(e)})
@@ -744,7 +744,7 @@ class Handler(BaseHTTPRequestHandler):
         if chemin == "/api/contexte":
             try:
                 ident = (re.search(r"id=([0-9a-f]+)", self.path) or [None, ""])[1]
-                return self._envoyer(200, _m.jauge_contexte(_m.conv_read(ident)))
+                return self._envoyer(200, _m.context_gauge(_m.conv_read(ident)))
             except ValueError as erreur:
                 return self._envoyer(404, {"erreur": str(erreur)})
         if chemin in ("/manifest.webmanifest", "/icone.svg", "/logo.svg") or re.match(r"^/icone-(180|192|512)\.png$", chemin):
@@ -975,7 +975,7 @@ class Handler(BaseHTTPRequestHandler):
             if self.path == "/api/git-commit":
                 return self._envoyer(200, _m.git_commit(donnees.get("message"), donnees.get("fichiers")))
             if self.path == "/api/memoire-choix":                                   # ancienne réponse à « fiche de suivi ou résumé ? » : la question n'est plus posée (ADR 0019), toujours 409
-                if not _m.repondre_choix_memoire(str(donnees.get("conversation", "")), str(donnees.get("choix", "")), donnees.get("garder")):
+                if not _m.answer_memory_choice(str(donnees.get("conversation", "")), str(donnees.get("choix", "")), donnees.get("garder")):
                     return self._envoyer(409, {"erreur": _t("Plus de question en attente pour cette conversation.")})
                 return self._envoyer(200, {"ok": True})
             if self.path in ("/api/suivi", "/api/suivi-vider", "/api/memoire-conversation"):
@@ -992,7 +992,7 @@ class Handler(BaseHTTPRequestHandler):
                 else:
                     if str(donnees.get("mode", "")) not in ("", "resume", "fichier"):          # accepté sans effet : la fiche de suivi pour toute conversation (ADR 0019)
                         raise ValueError(_t("Mémoire des longues conversations inconnue (resume ou fichier)."))
-                return self._envoyer(200, {"mode": _m.memoire_longue(conv, r), "mesure": _suivi.measure(ident, r["num_ctx"]), "amorce": 0})
+                return self._envoyer(200, {"mode": _m.long_memory(conv, r), "mesure": _suivi.measure(ident, r["num_ctx"]), "amorce": 0})
             if self.path == "/api/embeddings-installer":
                 if not self._configurateur():
                     return self._envoyer(403, {"erreur": _t("L'installation d'un modèle se lance depuis cette machine.")})
@@ -1241,9 +1241,9 @@ class Handler(BaseHTTPRequestHandler):
             if self.path == "/api/titre-ia":
                 return self._titre_ia(donnees)
             if self.path == "/api/installer-modele":
-                return self._envoyer(200, _m.installer_modele(str(donnees.get("modele", ""))))
+                return self._envoyer(200, _m.install_model(str(donnees.get("modele", ""))))
             if self.path == "/api/compacter":
-                return self._envoyer(200, _m.compacter_conversation(str(donnees.get("conversation", ""))))
+                return self._envoyer(200, _m.compact_conversation(str(donnees.get("conversation", ""))))
             if self.path == "/api/plan":
                 _m.refresh_plan(force=True)
                 return self._envoyer(200, {"ok": True})
@@ -1253,9 +1253,9 @@ class Handler(BaseHTTPRequestHandler):
                 except _m.ToolError as erreur:
                     raise ValueError(str(erreur))
             if self.path == "/api/oublier-modele":
-                return self._envoyer(200, _m.oublier_modele(str(donnees.get("modele", ""))))
+                return self._envoyer(200, _m.forget_model(str(donnees.get("modele", ""))))
             if self.path == "/api/modeles-restaurer":
-                return self._envoyer(200, _m.restaurer_modeles())
+                return self._envoyer(200, _m.restore_models())
             if self.path == "/api/admin-distance":
                 if not self._configurateur_strict():
                     return self._envoyer(403, {"erreur": _t("L'administration à distance s'active ou se retire depuis cette machine seulement (ou avec la commande lutin security).")})
@@ -1402,7 +1402,7 @@ class Handler(BaseHTTPRequestHandler):
                     return self._envoyer(200, _moteurs.launch_task(_geres.engine(genre), "telecharger:" + nom))
                 return self._envoyer(200, _geres.download(genre, str(donnees.get("id", ""))))
             if self.path == "/api/supprimer-modele":
-                return self._envoyer(200, _m.supprimer_modele(str(donnees.get("modele", ""))))
+                return self._envoyer(200, _m.delete_model(str(donnees.get("modele", ""))))
             if self.path == "/api/demarrer-ollama":
                 return self._envoyer(200, {"message": _m.start_ollama()})
             if self.path == "/api/bench-moteurs":
@@ -1905,19 +1905,19 @@ class Handler(BaseHTTPRequestHandler):
                 break
 
     def _resumer(self, donnees):
-        """Génère un document de reprise structuré par le modèle, pour coller dans un autre modèle d'IA (agent.document_de_reprise, partagé avec /api/v1)."""
+        """Génère un document de reprise structuré par le modèle, pour coller dans un autre modèle d'IA (agent.handover_document, partagé avec /api/v1)."""
         ident = str(donnees.get("conversation") or "")
         if not ident:
             return self._envoyer(400, {"erreur": _t("Pas de conversation.")})
         r = _m.settings()
         conv = _m.conv_read(ident)                    # hors du « try » : une conversation inconnue est une demande invalide (400), pas une panne (500)
         try:
-            return self._envoyer(200, {"texte": _m.document_de_reprise(conv, r), "modele": r["modele"]})
+            return self._envoyer(200, {"texte": _m.handover_document(conv, r), "modele": r["modele"]})
         except (OSError, ValueError) as erreur:
             return self._envoyer(500, {"erreur": str(erreur)})
 
     def _titre_ia(self, donnees):
-        """Propose un titre court (3-6 mots) pour la conversation, sans l'appliquer (agent.titre_propose, partagé avec /api/v1 : par le moteur en cours)."""
+        """Propose un titre court (3-6 mots) pour la conversation, sans l'appliquer (agent.proposed_title, partagé avec /api/v1 : par le moteur en cours)."""
         ident = str(donnees.get("conversation") or donnees.get("id") or "")
         if not ident:
             return self._envoyer(400, {"erreur": _t("Pas de conversation.")})
@@ -1926,7 +1926,7 @@ class Handler(BaseHTTPRequestHandler):
         except ValueError:
             return self._envoyer(404, {"erreur": _t("Conversation inconnue.")})
         try:
-            return self._envoyer(200, {"titre": _m.titre_propose(conv, _m.settings())})
+            return self._envoyer(200, {"titre": _m.proposed_title(conv, _m.settings())})
         except ValueError as erreur:          # the model answered nothing
             return self._envoyer(500, {"erreur": str(erreur)})
         except OSError as erreur:             # the engine does not answer

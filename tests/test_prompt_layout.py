@@ -67,7 +67,7 @@ class Tail(unittest.TestCase):
         self.assertEqual(len(marked), 3)
         self.assertEqual(saved[2], {"role": "tool", "content": "result"}, "the conversation is never changed: the message is copied")
         self.assertEqual(marked[2]["content"], "result", "not written yet: the request must first be fitted to the window")
-        sent = agent.ajuster_contexte(marked, 24576, 1.0, [])
+        sent = agent.adjust_context(marked, 24576, 1.0, [])
         self.assertEqual(sent[2], {"role": "tool", "content": "result" + TASKS})
         self.assertEqual(sent[:2], [{"role": "user", "content": "question"}, {"role": "assistant", "content": "", "tool_calls": [{}]}])
 
@@ -77,27 +77,27 @@ class Tail(unittest.TestCase):
 
     def test_a_request_that_ends_with_the_model_s_own_words_takes_the_tail_on_the_last_message_of_the_user(self):
         marked = prompt_layout.attach_tail([{"role": "user", "content": "question"}, {"role": "assistant", "content": "half an answer"}], TASKS)
-        self.assertEqual(agent.ajuster_contexte(marked, 24576, 1.0, []), [{"role": "user", "content": "question" + TASKS}, {"role": "assistant", "content": "half an answer"}])
+        self.assertEqual(agent.adjust_context(marked, 24576, 1.0, []), [{"role": "user", "content": "question" + TASKS}, {"role": "assistant", "content": "half an answer"}])
         self.assertEqual(prompt_layout.attach_tail([{"role": "system", "content": "s"}], TASKS), [{"role": "system", "content": "s"}], "never on the system message: it is the prefix")
 
     def test_a_long_result_cut_to_fit_the_window_keeps_the_tail(self):
         long = "ligne\n" * 8000
         marked = prompt_layout.attach_tail([{"role": "system", "content": "s"}, {"role": "user", "content": "question"}, {"role": "assistant", "content": "", "tool_calls": [{}]}, {"role": "tool", "content": long}], TASKS)
         report = {}
-        sent = agent.ajuster_contexte(marked, 4096, 1.0, [], report)
+        sent = agent.adjust_context(marked, 4096, 1.0, [], report)
         self.assertEqual(report["tronques"], 1, "the result was cut")
         self.assertTrue(sent[-1]["content"].endswith("[... tronqué]" + TASKS), "and the list is still there, after the cut")
         self.assertLess(len(sent[-1]["content"]), 2000)
 
     def test_the_private_keys_never_reach_the_engine(self):
         marked = prompt_layout.attach_tail([{"role": "system", "content": "s"}] + prompt_layout.turn_block("", "", "# RAPPELS C") + [{"role": "user", "content": "question"}], TASKS)
-        for message in agent.ajuster_contexte(marked, 24576, 1.0, []):
+        for message in agent.adjust_context(marked, 24576, 1.0, []):
             self.assertEqual(set(message), {"role", "content"})
 
     def test_the_block_of_the_turn_is_not_removed_to_make_room(self):
         old = [m for i in range(40) for m in ({"role": "user", "content": "question %d " % i + "mot " * 300}, {"role": "assistant", "content": "réponse %d " % i + "mot " * 300})]
         block = prompt_layout.turn_block("", "", "# RAPPELS C")
-        sent = agent.ajuster_contexte([{"role": "system", "content": "s"}] + old + block + [{"role": "user", "content": "la question"}], 4096, 1.0, [], report := {})
+        sent = agent.adjust_context([{"role": "system", "content": "s"}] + old + block + [{"role": "user", "content": "la question"}], 4096, 1.0, [], report := {})
         self.assertGreater(report["tours"], 0, "old exchanges were removed")
         self.assertEqual([m["content"] for m in sent[-3:]], ["# RAPPELS C", "Compris, je m'appuie sur ces extraits.", "la question"])
 

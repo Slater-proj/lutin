@@ -113,7 +113,7 @@ class ModelSource:
 
     def _in_use(self):
         from . import agent
-        return agent.moteur_local().id == self.engine.id
+        return agent.local_engine().id == self.engine.id
 
     def _require_in_use(self):
         if not self._in_use():
@@ -185,7 +185,7 @@ class CatalogueSource(ModelSource):
     def remove(self, name):
         self._require_in_use()
         from . import agent
-        agent.supprimer_modele(name)
+        agent.delete_model(name)
 
 
 class OllamaSource(CatalogueSource):
@@ -212,7 +212,7 @@ class OllamaSource(CatalogueSource):
     def download(self, ref, revision=""):
         self._require_in_use()
         from . import agent
-        return agent.installer_modele(ref)          # a precision is a tag of its own (« qwen3:8b-q4_K_M »): `ref` already names it
+        return agent.install_model(ref)          # a precision is a tag of its own (« qwen3:8b-q4_K_M »): `ref` already names it
 
 
 class LlamaCppSource(CatalogueSource):
@@ -233,7 +233,7 @@ class LlamaCppSource(CatalogueSource):
             from . import agent
             if "/" in ref and ":" not in ref:
                 raise ValueError(_t("Choisis une précision (un fichier) de ce dépôt."))
-            return agent.installer_modele(ref)
+            return agent.install_model(ref)
         possible = self.engine.telechargeable()
         if not possible["possible"]:
             raise ValueError(possible["raison"])
@@ -287,7 +287,7 @@ class ManagedSource(ModelSource):
         if any(item["name"] == name and not item["removable"] for item in self.installed()):
             raise ValueError(_t("Lutin n'a pas mis ce modèle ici : il ne le supprime pas."))
         from . import agent
-        agent.supprimer_modele(name)
+        agent.delete_model(name)
 
     def _can(self):
         return self.engine.telechargeable() if self.engine.id == _engines.COLIBRI else {"possible": True}

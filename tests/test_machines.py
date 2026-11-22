@@ -563,7 +563,7 @@ class Relais(Base):
         def faux_tour(c, texte, emit, r, stop, depuis, **kw):
             recus.update(texte=texte, modele=r["modele"], machine=r.get("machine"), identite=kw.get("identite"))
             emit({"type": "fin", "conversation": {"id": c["id"], "titre": c["titre"]}})
-        with mock.patch("lutin.server._m.tour", faux_tour):
+        with mock.patch("lutin.server._m.turn", faux_tour):
             statut, corps = self.relais("POST", "/api/chat", {"message": "salut", "conversation": conv["id"], "modele": "pirate:70b", "machine": "a" * 32, "options": {"auto_commandes": True, "auto_ecriture": True}})
         self.assertEqual(statut, 200, corps)
         self.assertIn('"type": "fin"', corps)
@@ -586,7 +586,7 @@ class Relais(Base):
         def faux_tour(c, texte, emit, r, stop, depuis, **kw):
             emit({"type": "texte", "texte": "voilà"})
             emit({"type": "fin", "conversation": {"id": c["id"], "titre": c["titre"]}})
-        with mock.patch("lutin.server._m.tour", faux_tour):
+        with mock.patch("lutin.server._m.turn", faux_tour):
             statut, corps = self.http("POST", "/h/{}/api/chat".format(m["id"]), {"message": "salut", "conversation": conv["id"]}, {"X-Token": A.TOKEN})
         self.assertEqual(statut, 200, corps)
         evenements = [json.loads(l) for l in corps.splitlines() if l.strip()]

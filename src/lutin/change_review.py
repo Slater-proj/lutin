@@ -175,7 +175,7 @@ def git_message_of(fichiers, r=None):
                 "Style des commits récents du projet :\n" + (journal.strip() or "(aucun)") + "\n\nCHANGEMENTS :\n" + diff)
     corps = {"model": r["modele"], "messages": [{"role": "user", "content": consigne}], "stream": False, "think": False, "options": _m.model_options(r, 0.3)}
     from . import agent
-    reponse = agent.moteur_actuel(r).chat(corps, 300)          # le moteur choisi (Ollama, llama.cpp, une autre machine), pas toujours Ollama
+    reponse = agent.current_engine(r).chat(corps, 300)          # le moteur choisi (Ollama, llama.cpp, une autre machine), pas toujours Ollama
     texte = (reponse.get("message", {}).get("content") or "").strip()
     texte = re.sub(r"^```\w*\n|\n```$", "", texte).strip().strip('"')
     if not texte:

@@ -92,36 +92,36 @@ class BrancheeDansLeDialogue(unittest.TestCase):
         self.assertFalse(A.DEFAULT_SETTINGS["routage"])
         r = {"modele": "qwen3:8b", "machine": ""}
         evenements = []
-        self.assertFalse(agent.router_la_demande(r, "écris une fonction python", False, evenements.append, "c1"))
+        self.assertFalse(agent.route_request(r, "écris une fonction python", False, evenements.append, "c1"))
         self.assertEqual(r["modele"], "qwen3:8b")
         self.assertEqual(evenements, [])
 
     def test_le_routage_actif_change_le_modele_de_cette_demande_et_le_dit(self):
         r = {"modele": "qwen3:8b", "machine": "", "routage": True}
         evenements = []
-        with mock.patch.object(agent, "contexte_routage", lambda: (TOUS, set(), [])), mock.patch.object(A, "MODELS", CATALOGUE):
-            self.assertTrue(agent.router_la_demande(r, "écris une fonction python", False, evenements.append, "c1"))
+        with mock.patch.object(agent, "routing_context", lambda: (TOUS, set(), [])), mock.patch.object(A, "MODELS", CATALOGUE):
+            self.assertTrue(agent.route_request(r, "écris une fonction python", False, evenements.append, "c1"))
         self.assertEqual(r["modele"], "qwen3-coder:30b")
         self.assertIn("Modèle choisi pour cette demande", evenements[0]["texte"])
         self.assertEqual(observatory.read(5)[0]["type"], "routage")
 
     def test_jamais_pendant_une_mission_et_jamais_une_erreur(self):
         r = {"modele": "qwen3:8b", "machine": "", "routage": True, "_mission": True}
-        self.assertFalse(agent.router_la_demande(r, "écris une fonction python", False, lambda e: None, "c1"))
+        self.assertFalse(agent.route_request(r, "écris une fonction python", False, lambda e: None, "c1"))
         r = {"modele": "qwen3:8b", "machine": "", "routage": True}
-        with mock.patch.object(agent, "contexte_routage", side_effect=RuntimeError("boum")):
-            self.assertFalse(agent.router_la_demande(r, "écris une fonction python", False, lambda e: None, "c1"))
+        with mock.patch.object(agent, "routing_context", side_effect=RuntimeError("boum")):
+            self.assertFalse(agent.route_request(r, "écris une fonction python", False, lambda e: None, "c1"))
         self.assertEqual(r["modele"], "qwen3:8b")
 
     def test_reprise_avec_un_modele_plus_gros_une_seule_fois(self):
         r = {"modele": "qwen3:1.7b", "machine": "", "routage": True}
         corps = {"model": "qwen3:1.7b"}
         evenements = []
-        with mock.patch.object(agent, "contexte_routage", lambda: (TOUS, set(), [])), mock.patch.object(A, "MODELS", CATALOGUE):
-            self.assertTrue(agent.monter_en_gamme(r, corps, evenements.append, "c1", "le modèle n'a rien écrit"))
+        with mock.patch.object(agent, "routing_context", lambda: (TOUS, set(), [])), mock.patch.object(A, "MODELS", CATALOGUE):
+            self.assertTrue(agent.step_up(r, corps, evenements.append, "c1", "le modèle n'a rien écrit"))
             self.assertEqual((r["modele"], corps["model"]), ("qwen3:32b", "qwen3:32b"))
-            self.assertFalse(agent.monter_en_gamme(r, corps, evenements.append, "c1", "encore"), "une seule montée par demande")
-        self.assertFalse(agent.monter_en_gamme({"modele": "qwen3:1.7b", "machine": "", "routage": False}, {}, evenements.append, "c1", "x"))
+            self.assertFalse(agent.step_up(r, corps, evenements.append, "c1", "encore"), "une seule montée par demande")
+        self.assertFalse(agent.step_up({"modele": "qwen3:1.7b", "machine": "", "routage": False}, {}, evenements.append, "c1", "x"))
 
 
 class Observatoire(unittest.TestCase):

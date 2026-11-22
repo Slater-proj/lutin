@@ -50,7 +50,7 @@ class Base(unittest.TestCase):
         return P.add(**d)
 
     def lancer(self, ident, tour):
-        with mock.patch.object(_m, "tour", tour):
+        with mock.patch.object(_m, "turn", tour):
             return P.execute(ident)
 
 
@@ -194,7 +194,7 @@ class Execution(Base):
     def test_une_tache_qui_ne_peut_pas_demarrer_l_ecrit_et_n_est_pas_relancee_en_boucle(self):
         t = self.tache(notifier="c1")
         P.modify(t["id"], cree=(LUNDI_8H - timedelta(days=3)).isoformat())
-        with mock.patch.object(_m, "activate_work", mock.Mock(side_effect=ValueError("Le dossier de travail « x » n'est plus dans la liste."))), mock.patch.object(_m, "tour", mock.Mock(side_effect=AssertionError("ne démarre pas"))):
+        with mock.patch.object(_m, "activate_work", mock.Mock(side_effect=ValueError("Le dossier de travail « x » n'est plus dans la liste."))), mock.patch.object(_m, "turn", mock.Mock(side_effect=AssertionError("ne démarre pas"))):
             self.assertEqual(P.run_first_due(LUNDI_8H), t["id"])
             n = P.read()[0]
             self.assertEqual((n["derniere_etat"], len(n["historique"])), ("erreur", 1))
@@ -206,12 +206,12 @@ class Execution(Base):
     def test_machine_occupee_la_tache_attend_sans_rien_noter(self):
         t = self.tache()
         P.modify(t["id"], cree=(LUNDI_8H - timedelta(days=3)).isoformat())
-        with mock.patch.dict(_m.ACTIVE_TURNS, {"autre": threading.Event()}), mock.patch.object(_m, "CONCURRENT_TURNS", 1), mock.patch.object(_m, "tour", mock.Mock(side_effect=AssertionError("ne démarre pas"))):
+        with mock.patch.dict(_m.ACTIVE_TURNS, {"autre": threading.Event()}), mock.patch.object(_m, "CONCURRENT_TURNS", 1), mock.patch.object(_m, "turn", mock.Mock(side_effect=AssertionError("ne démarre pas"))):
             self.assertIsNone(P.run_first_due(LUNDI_8H))
             with self.assertRaises(ValueError):
                 P.execute(t["id"])
         self.assertEqual((P.read()[0]["derniere_exec"], P.read()[0]["historique"]), ("", []))
-        with mock.patch.object(_m, "tour", tour_qui_repond()):
+        with mock.patch.object(_m, "turn", tour_qui_repond()):
             self.assertEqual(P.run_first_due(LUNDI_8H), t["id"], "la machine est libre : elle part")
 
     def test_une_tache_ne_se_lance_pas_deux_fois_en_meme_temps(self):
@@ -227,7 +227,7 @@ class Execution(Base):
         fil.start()
         self.assertTrue(demarree.wait(10))
         self.assertTrue(P.state()["taches"][0]["en_cours"])
-        with mock.patch.object(_m, "tour", tour_qui_repond()), self.assertRaises(ValueError) as e:
+        with mock.patch.object(_m, "turn", tour_qui_repond()), self.assertRaises(ValueError) as e:
             P.execute(t["id"])
         self.assertIn("déjà", str(e.exception))
         libre.set()

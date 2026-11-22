@@ -570,7 +570,7 @@ def options_clean_orphans(ids):
 
 def conv_delete(ident):
     conv_path(ident)
-    _m.annuler_scribe(ident)                                   # le scribe de fond ne doit pas refaire la fiche d'une conversation supprimée
+    _m.cancel_scribe(ident)                                   # le scribe de fond ne doit pas refaire la fiche d'une conversation supprimée
     from . import store
     store.delete(ident)                                        # its options with it
     from . import progress_sheet

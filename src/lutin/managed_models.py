@@ -32,7 +32,7 @@ def engine(kind):
 def chosen(kind):
     """Is `kind` the engine in use? False for an unknown kind."""
     from . import agent as _agent
-    return kind in KINDS and _agent.moteur_local().id == kind
+    return kind in KINDS and _agent.local_engine().id == kind
 
 
 def _require(kind):

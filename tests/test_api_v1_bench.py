@@ -62,7 +62,7 @@ class Bench(unittest.TestCase):
         self.assertEqual(len(started), 1)
 
     def test_a_model_that_is_not_installed_is_refused(self):
-        with mock.patch.object(A, "moteur_local", lambda: mock.Mock(modeles=lambda: {"installes": ["qwen3:8b"]})):
+        with mock.patch.object(A, "local_engine", lambda: mock.Mock(modeles=lambda: {"installes": ["qwen3:8b"]})):
             status, answer = V.call("POST", "/api/v1/bench", V.DEVICE, {"models": ["absent:1b"]})
         self.assertEqual((status, answer["error"]["code"]), (400, "invalid_request"))
         self.assertIn("absent:1b", answer["error"]["message"])

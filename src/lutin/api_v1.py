@@ -248,8 +248,8 @@ def dispatch(handler, method):
 def status(request):
     """What the page needs to draw itself: who is asking, which engine and model answer, what is running. Deliberately small: each area has its own routes."""
     settings = _m.settings()
-    engine = _m.moteur_actuel(settings)
-    state = _m.etat_moteur()
+    engine = _m.current_engine(settings)
+    state = _m.engine_state()
     from . import access as _access
     return {
         "version": _m.VERSION,
@@ -369,9 +369,9 @@ def _download(name, stored):
 @route("GET", "/models", SESSION)
 def models(request):
     """What the model selector needs: the models of the chosen engine, the one in use, and the downloads started since Lutin was launched."""
-    state = _m.etat_moteur()
+    state = _m.engine_state()
     sizes = state.get("tailles") or {}
-    return {"engine": _m.moteur_actuel().id, "running": bool(state["actif"]), "current": str(_m.settings().get("modele") or ""),
+    return {"engine": _m.current_engine().id, "running": bool(state["actif"]), "current": str(_m.settings().get("modele") or ""),
             "models": [{"name": name, "size_bytes": sizes.get(name)} for name in state["installes"]],
             "downloads": [_download(name, stored) for name, stored in sorted(_m.PULLS.items())],
             "remote": _remote_models()}
@@ -382,7 +382,7 @@ def models_loaded(request):
     """Is the model in use in the memory of this machine right now? `{"engine", "model", "known", "loaded", "state", "loading_bytes", "size_bytes", "vram_bytes"}`. `known` is false when the engine cannot
     say (a server Lutin only connects to, a model of another machine): the page then shows nothing rather than a « not loaded » that may be wrong. A model that is not loaded is loaded by the first
     message (the engines load on demand), which waits for it. `state`: loaded, loading (a turn waits for it; `loading_bytes` is what the graphics card took since), not_loaded, unknown."""
-    engine = _m.moteur_actuel()
+    engine = _m.current_engine()
     settings = _m.settings()
     model = str(settings.get("modele") or "")
     answer = {"engine": engine.id, "model": model, "known": False, "loaded": False, "state": "unknown", "loading_bytes": 0, "size_bytes": 0, "vram_bytes": 0}
@@ -997,14 +997,14 @@ def install_model(request):
     name = request.body.get("name")
     if set(request.body) - {"name"} or not isinstance(name, str):
         raise ApiError(400, "invalid_request", _t("Champs acceptés : {}.").format("name"))
-    return 202, _download(name, _m.installer_modele(name))
+    return 202, _download(name, _m.install_model(name))
 
 
 @route("DELETE", "/models/{name}", SESSION)
 def delete_model(request):
     """Deletes an installed model. The model in use may be deleted: `current` is the one Lutin switched to, or the same name when there is no other."""
     with _operations.track("model", request.params["name"], "remove"):          # seen by the activity bar of every screen
-        _m.supprimer_modele(request.params["name"])
+        _m.delete_model(request.params["name"])
     return {"deleted": True, "current": str(_m.settings().get("modele") or "")}
 
 
@@ -1084,9 +1084,9 @@ def model_variants(request):
         raise
     except OSError as failed:
         raise ApiError(503, "unreachable", str(failed)) from None
-    profile, installed = machine_profile(), set(_m.etat_moteur()["installes"])
+    profile, installed = machine_profile(), set(_m.engine_state()["installes"])
     base = next((m for m in _m._CATALOGUE["modeles"] if m["id"] == name), {})
-    experts = _engine_capabilities.of(_m.moteur_actuel()).experts_in_ram
+    experts = _engine_capabilities.of(_m.current_engine()).experts_in_ram
     return {"model": name, "default": found["defaut"] and {"name": found["defaut"]["id"], "size_gb": found["defaut"]["go"]},
             "variants": [{"name": v["id"], "precision": v["precision"], "size_gb": v["go"], "default": bool(v.get("defaut")), "installed": v["id"] in installed,
                           "meaning": _variants.describe(v["precision"]), "fit": _fit(_model_fit.judge(dict(base, go=v["go"]), profile, experts_en_ram=experts) if profile is not None else None)}
@@ -1109,7 +1109,7 @@ def model_library(request):
         raise
     except OSError as failed:
         raise ApiError(503, "unreachable", str(failed)) from None
-    profile, installed = machine_profile(), set(_m.etat_moteur()["installes"])
+    profile, installed = machine_profile(), set(_m.engine_state()["installes"])
     judge = (lambda gb: _model_fit.judge({"go": gb}, profile)) if profile is not None else (lambda gb: {"niveau": "", "texte": ""})
     models = []
     for item in _discovery.evaluate_sizes(found["modeles"], judge):
@@ -1643,7 +1643,7 @@ def _catalog_entry(model, profile, engine, installed):
 def models_catalog(request):
     """The catalogue with, for each model, a verdict for this machine (`fit`, null until the machine is detected) and for the engine in use (`compatibility`).
     The models marked advanced are left out unless `?advanced=1`."""
-    profile, engine, state = machine_profile(), _m.moteur_actuel(), _m.etat_moteur()          # the state of the engine once: it waits 2 s when the engine does not answer
+    profile, engine, state = machine_profile(), _m.current_engine(), _m.engine_state()          # the state of the engine once: it waits 2 s when the engine does not answer
     installed = set(state["installes"])
     advanced = request.query.get("advanced") == "1"
     models = [_catalog_entry(model, profile, engine, installed) for model in _m._CATALOGUE["modeles"] if advanced or not model.get("avance")]
@@ -1660,7 +1660,7 @@ def models_recommendation(request):
     profile = machine_profile()
     if profile is None:
         return {"detected": False, "use": use}
-    engine, state = _m.moteur_actuel(), _m.etat_moteur()
+    engine, state = _m.current_engine(), _m.engine_state()
     installed = set(state["installes"])
     chosen = _model_compat.roles_for(profile, _m._CATALOGUE, engine, installed)
 
@@ -1735,7 +1735,7 @@ def _engine_view(engine, current, state, models, possible, updates=None):
 def engines(request):
     """Every engine with its state, the actions it allows and its running task: one card per program (ADR 0020), each with the same fields. `runs_here` says
     whether it can run on this machine and, when not, why. The engines are read at the same time: one that does not answer must not make the others wait."""
-    current = _m.moteur_actuel().id
+    current = _m.current_engine().id
     _engine_updates.in_background(bool(_m.read_config().get("verifier_maj", True)) and not _offline.is_active())          # once a day at most, never waited for
     updates = _engine_updates.state()
     listed = _engines.entries()
@@ -1871,7 +1871,7 @@ def setup_state():
     if _has_history():
         return {"done": False, "needed": False, "skipped": False}
     # Nothing proves a past use: the last proof is a model already installed (a machine where Ollama was set up before Lutin).
-    return {"done": False, "needed": not _m.etat_moteur()["installes"], "skipped": False}
+    return {"done": False, "needed": not _m.engine_state()["installes"], "skipped": False}
 
 
 @route("GET", "/setup", SESSION)
@@ -1922,9 +1922,9 @@ def start_speed_test(request):
             raise ApiError(409, "busy", _t("Une réponse ou une mesure est en cours : la mesure serait faussée. Attends sa fin."))
         if SPEED["state"] == "running":
             raise ApiError(409, "busy", _t("Une mesure est déjà en cours."))
-        if _m.moteur_actuel().id != _engines.OLLAMA:
+        if _m.current_engine().id != _engines.OLLAMA:
             raise ApiError(409, "not_supported", _t("Le test de vitesse n'est pas encore proposé avec ce moteur."))
-        if model not in _m.etat_ollama()["installes"]:
+        if model not in _m.ollama_state()["installes"]:
             raise ApiError(409, "model_missing", _t("Le modèle « {} » n'est pas installé : installe-le ou choisis-en un autre en haut à gauche.").format(model))
         SPEED.update(state="running", model=model, tokens_per_second=None, level=None, error="")
 
@@ -3863,7 +3863,7 @@ def answer_memory_choice(request):
     choices = {"summary": "resume", "file": "fichier"}
     if set(body) - {"choice", "remember"} or body.get("choice") not in choices or not isinstance(body.get("remember", False), bool):
         raise ApiError(400, "invalid_request", _t("Valeur invalide pour « {} » (attendu : {}).").format("choice", ", ".join(choices)))
-    if not _m.repondre_choix_memoire(request.params["id"], choices[body["choice"]], body.get("remember", False)):
+    if not _m.answer_memory_choice(request.params["id"], choices[body["choice"]], body.get("remember", False)):
         raise ApiError(409, "no_pending_choice", _t("Plus de question en attente pour cette conversation."))
     return {"choice": body["choice"]}
 
@@ -3878,7 +3878,7 @@ def compact_conversation(request):
     identifier = request.params["id"]
     _read(identifier)
     _not_running(identifier)
-    done = _m.compacter_conversation(identifier)
+    done = _m.compact_conversation(identifier)
     return {"before": done["avant"], "after": done["apres"], "sheet": bool(done.get("fiche"))}
 
 
@@ -3964,7 +3964,7 @@ def conversation_ai_title(request):
     conversation = _read(identifier)
     _not_running(identifier)
     try:
-        title = _m.titre_propose(conversation, _m.settings())
+        title = _m.proposed_title(conversation, _m.settings())
     except ValueError as failed:
         raise ApiError(502, "engine_failed", str(failed)) from None
     except (OSError, urllib.error.URLError) as failed:
@@ -3984,7 +3984,7 @@ def conversation_handover(request):
     _not_running(identifier)
     settings = _m.settings()
     try:
-        return {"text": _m.document_de_reprise(conversation, settings), "model": settings["modele"]}
+        return {"text": _m.handover_document(conversation, settings), "model": settings["modele"]}
     except (OSError, urllib.error.URLError) as failed:
         raise ApiError(503, "engine_unreachable", str(failed)) from None
 

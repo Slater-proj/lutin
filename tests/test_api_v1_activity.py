@@ -132,7 +132,7 @@ class Activity(unittest.TestCase):
             release.wait(10)
 
         answers = []
-        with mock.patch.object(api_v1._m, "supprimer_modele", side_effect=slow_removal):
+        with mock.patch.object(api_v1._m, "delete_model", side_effect=slow_removal):
             worker = threading.Thread(target=lambda: answers.append(V.call("DELETE", "/api/v1/models/big%3A70b", V.OWNER)))
             worker.start()
             self.assertTrue(started.wait(10))
@@ -145,7 +145,7 @@ class Activity(unittest.TestCase):
         self.assertEqual([(item["state"], bool(item["finished_at"])) for item in ended], [("done", True)])
 
     def test_a_removal_that_fails_says_why(self):
-        with mock.patch.object(api_v1._m, "supprimer_modele", side_effect=ValueError("the file is in use")):
+        with mock.patch.object(api_v1._m, "delete_model", side_effect=ValueError("the file is in use")):
             V.call("DELETE", "/api/v1/models/held%3A8b", V.OWNER)
         failed = [item for item in items().values() if item["action"] == "remove"]
         self.assertEqual([(item["state"], item["text"]) for item in failed], [("failed", "the file is in use")])

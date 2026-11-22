@@ -143,7 +143,7 @@ def model_size(nom, charge=None):
         return int(charge["taille"])
     if charge is not None:
         return 0          # déjà chargé par un moteur qui ne dit pas sa taille (llama.cpp) : il n'y a rien de plus à lui trouver — avant, la demande réclamait une 2e fois la place du modèle déjà là et attendait 15 minutes
-    t = (_m.etat_moteur().get("tailles") or {}).get(nom)
+    t = (_m.engine_state().get("tailles") or {}).get(nom)
     if t:
         return int(t)
     return int(next((m["go"] for m in _m.MODELS if m["id"] == nom), 0) * GB)
@@ -230,7 +230,7 @@ def _model_on_another_machine(r):
     """Le modèle choisi n'existe que sur une autre machine (liste de choix) : ni la carte ni la mémoire d'ici n'ont à le contenir."""
     try:
         from . import machines
-        return machines.remote_model(r, _m.etat_moteur().get("installes", [])) is not None
+        return machines.remote_model(r, _m.engine_state().get("installes", [])) is not None
     except Exception:  # noqa: BLE001
         return False
 
@@ -245,14 +245,14 @@ def _cache_reserve(r, charge):
     if charge is not None:
         return 0
     try:
-        return int(_m.moteur_local(r).cache_reserve(r.get("modele"), int(r.get("num_ctx") or 0)) or 0)
+        return int(_m.local_engine(r).cache_reserve(r.get("modele"), int(r.get("num_ctx") or 0)) or 0)
     except Exception:  # noqa: BLE001  (an estimate: never an error more)
         return 0
 
 
 def health_state(r=None):
     r = r or _m.settings()
-    charge = _m.ps_modele(r["modele"])
+    charge = _m.model_ps(r["modele"])
     besoin = 0 if _model_on_another_machine(r) else model_size(r["modele"], charge) + _cache_reserve(r, charge)
     etat = assess_health(_m.system_measures(), r, besoin, charge, _engine_splits_itself(r))
     try:
@@ -281,7 +281,7 @@ def _blockers(r, emit, conv_id=""):
     if _model_on_another_machine(r):
         return []          # le modèle tourne sur une autre machine : rien ne manque ici
     moteur = (r or {}).get("moteur") or "ollama"
-    charge = _m.ps_modele(r["modele"])
+    charge = _m.model_ps(r["modele"])
     besoin = model_size(r["modele"], charge) + _cache_reserve(r, charge)
     sante = assess_health(_m.system_measures(), r, besoin, charge, _engine_splits_itself(r) and not _unload_before_loading(r))
     if charge is None and any(i["niveau"] == "critique" and i["id"] in ("ram", "engagement", "vram") for i in sante["items"]):
@@ -377,19 +377,19 @@ def run_selftest(profond=False):
         except Exception as e:  # noqa: BLE001
             ok, detail = False, str(e)[:300] or type(e).__name__
         resultats.append({"nom": nom, "ok": ok, "important": important, "detail": detail if isinstance(detail, str) else "", "duree": round(time.time() - debut, 1)})
-    o = _m.etat_moteur()
+    o = _m.engine_state()
 
     def ollama_repond():
         if not o["actif"]:
-            if _m.moteur_actuel(r).id != "ollama":
-                raise RuntimeError(_t("Le moteur « {} » ne répond pas (Réglages > Moteur).").format(_m.moteur_actuel(r).nom))
+            if _m.current_engine(r).id != "ollama":
+                raise RuntimeError(_t("Le moteur « {} » ne répond pas (Réglages > Moteur).").format(_m.current_engine(r).nom))
             raise RuntimeError(_t("Ollama ne répond pas sur {} (bouton « Démarrer Ollama »).").format(_m.OLLAMA))
         return "{} modèle(s) installé(s)".format(len(o["installes"]))
 
     def modele_present():
         if r["modele"] not in o["installes"]:
             raise RuntimeError("Le modèle actif « {} » n'est pas installé (onglet Modèles).".format(r["modele"]))
-        caps = _m.capacites(r["modele"])
+        caps = _m.capabilities(r["modele"])
         return "{} installé{}".format(r["modele"], "" if caps is None else " ; capacités : " + ", ".join(sorted(caps)))
 
     def ecriture_donnees():
@@ -468,7 +468,7 @@ def run_selftest(profond=False):
         rep = _m.ollama_json("/api/chat", corps, 240)
         if not (rep.get("message", {}).get("content") or "").strip():
             raise RuntimeError("Le modèle n'a rien répondu.")
-        v = _m.calculer_vitesse(dict(rep, eval_count=max(int(rep.get("eval_count") or 0), 5)))
+        v = _m.compute_speed(dict(rep, eval_count=max(int(rep.get("eval_count") or 0), 5)))
         return "réponse reçue" + (" ({} jetons/s, chargement {} s)".format(v["ecriture"], v["chargement"]) if v else "")
     essai("Ollama répond", ollama_repond)
     essai("Modèle actif installé", modele_present)

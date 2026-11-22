@@ -149,11 +149,11 @@ class Avertissement(unittest.TestCase):
         gros = dict(EXPERTS, id="gros:1b", go=90.0, capacites=["outils"], notes={})
         faux_moteur = mock.Mock(en_memoire=lambda m: None)
         evenements = []
-        with mock.patch.object(_m, "_CATALOGUE", {"modeles": [gros]}), mock.patch.object(model_fit, "ready_profile", lambda: Profil(budget=6, ram=16, ram_libre=8)),                 mock.patch.object(agent, "moteur_actuel", lambda *a, **k: faux_moteur):
-            agent.AVERTIS_CARTE.clear()
+        with mock.patch.object(_m, "_CATALOGUE", {"modeles": [gros]}), mock.patch.object(model_fit, "ready_profile", lambda: Profil(budget=6, ram=16, ram_libre=8)),                 mock.patch.object(agent, "current_engine", lambda *a, **k: faux_moteur):
+            agent.CARD_WARNED.clear()
             r = {"modele": "gros:1b", "num_ctx": 8192}
-            agent._estimer_avant_charge(r, evenements.append)
-            agent._estimer_avant_charge(r, evenements.append)
+            agent._estimate_before_load(r, evenements.append)
+            agent._estimate_before_load(r, evenements.append)
         self.assertEqual(len(evenements), 1, "dit une fois, pas à chaque message")
         self.assertIn("Ne tient pas", evenements[0]["texte"])
 

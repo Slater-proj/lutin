@@ -72,34 +72,34 @@ class Chemins(unittest.TestCase):
 
 class AvisUneSeuleFois(unittest.TestCase):
     def test_la_reduction_du_contexte_n_est_pas_redite_a_chaque_reponse(self):
-        agent.DITS["reduction"].clear()
+        agent.TOLD["reduction"].clear()
         dits = []
         emit = dits.append
         rapport = {"raccourcis": 5, "tronques": 0, "retires": 0, "tours": 0}
         conv = {"id": "aaaa1111"}
-        agent.annoncer_reduction(rapport, emit, {"conv": conv}, 36864)
+        agent.announce_reduction(rapport, emit, {"conv": conv}, 36864)
         self.assertEqual(len(dits), 1)
-        agent.annoncer_reduction(rapport, emit, {"conv": conv}, 36864)          # une autre réponse (nouveau contexte de tour) : la même situation
-        agent.annoncer_reduction(dict(rapport, raccourcis=7), emit, {"conv": conv}, 36864)
+        agent.announce_reduction(rapport, emit, {"conv": conv}, 36864)          # une autre réponse (nouveau contexte de tour) : la même situation
+        agent.announce_reduction(dict(rapport, raccourcis=7), emit, {"conv": conv}, 36864)
         self.assertEqual(len(dits), 1, "à peine plus : pas un nouvel avis")
-        agent.annoncer_reduction(dict(rapport, raccourcis=9, tours=5), emit, {"conv": conv}, 36864)
+        agent.announce_reduction(dict(rapport, raccourcis=9, tours=5), emit, {"conv": conv}, 36864)
         self.assertEqual(len(dits), 2, "la réduction a nettement grossi : on le redit")
-        agent.annoncer_reduction(rapport, emit, {"conv": {"id": "bbbb2222"}}, 36864)
+        agent.announce_reduction(rapport, emit, {"conv": {"id": "bbbb2222"}}, 36864)
         self.assertEqual(len(dits), 3, "une autre conversation a son propre avis")
 
     def test_le_nom_du_moteur_et_les_erreurs_de_memoire_video(self):
         for texte in ('{"detail":"Model X failed to load: Insufficient VRAM in split for model and cache"}', "CUDA out of memory", "not enough GPU memory", "Failed to load model"):
-            self.assertTrue(agent.RE_MEMOIRE_VIDEO.search(texte), texte)
-        self.assertFalse(agent.RE_MEMOIRE_VIDEO.search("Connection refused"))
+            self.assertTrue(agent.RE_VIDEO_MEMORY.search(texte), texte)
+        self.assertFalse(agent.RE_VIDEO_MEMORY.search("Connection refused"))
 
     def test_un_chargement_rate_pour_une_autre_raison_n_est_pas_dit_manque_de_memoire_video(self):
         """Mainteneur, 2026-11-21 : le chat disait « la mémoire de la carte graphique ne suffit pas » d'un modèle que TabbyAPI n'avait pas chargé pour une
         tout autre raison (son journal mal encodé ; le 10/11, un fichier tronqué). Les deux textes sont ceux du journal de Lutin."""
         for texte in ('{"detail":"Model Muse-30B-exl3_5.00bpw failed to load: \'charmap\' codec can\'t encode character \'\\u2514\' in position 4: character maps to <undefined>"}',
                       '{"detail":"Model Q-27B-exl3 failed to load: Tensor model.layers.20.mlp.gate_proj.trellis in E:\\\\m\\\\model-00001-of-00002.safetensors extends past end of file: needs 6512688458 bytes"}'):
-            self.assertFalse(agent.manque_de_memoire_video(texte), texte)
+            self.assertFalse(agent.short_of_video_memory(texte), texte)
         for texte in ('{"detail":"Model X failed to load: Insufficient VRAM in split for model and cache"}', "CUDA out of memory", "Failed to load model"):
-            self.assertTrue(agent.manque_de_memoire_video(texte), texte)
+            self.assertTrue(agent.short_of_video_memory(texte), texte)
 
 
 if __name__ == "__main__":

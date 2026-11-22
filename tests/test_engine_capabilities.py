@@ -101,14 +101,14 @@ class Down(engines.Engine):
 
 
 class Loop(unittest.TestCase):
-    """The model call alone (agent._appeler_modele), with an engine that does not answer."""
+    """The model call alone (agent._call_model), with an engine that does not answer."""
 
     def call(self, engine):
         events = []
         r = {"modele": "small", "num_ctx": 4096, "temperature": 0.2}
         body = {"model": "small", "messages": [{"role": "user", "content": "Hello"}], "stream": True, "options": {}, "think": False}
-        with mock.patch.object(agent, "moteur_actuel", lambda r=None: engine), mock.patch.object(_core, "AUTO_START", True):
-            done, fallback, text, thought, calls = agent._appeler_modele({"id": "c-loop", "messages": []}, r, events.append, {}, threading.Event(), body, body["messages"], [], None, False)
+        with mock.patch.object(agent, "current_engine", lambda r=None: engine), mock.patch.object(_core, "AUTO_START", True):
+            done, fallback, text, thought, calls = agent._call_model({"id": "c-loop", "messages": []}, r, events.append, {}, threading.Event(), body, body["messages"], [], None, False)
         self.assertEqual((done, fallback, text, calls), (False, False, "", []), "an engine that never answers gives no answer")
         return [event["texte"] for event in events]
 

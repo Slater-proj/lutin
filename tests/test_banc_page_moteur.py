@@ -36,17 +36,17 @@ class MoteurFictif:
 class BancDeLaPage(unittest.TestCase):
     def setUp(self):
         self.moteur = MoteurFictif()
-        self.vrai = agent.moteur_local
-        A.moteur_local = lambda r=None: self.moteur
-        agent.moteur_local = lambda r=None: self.moteur
+        self.vrai = agent.local_engine
+        A.local_engine = lambda r=None: self.moteur
+        agent.local_engine = lambda r=None: self.moteur
         A.BENCH.update(en_cours="", etape="", erreur="", file=[])
 
     def tearDown(self):
-        A.moteur_local = self.vrai
-        agent.moteur_local = self.vrai
+        A.local_engine = self.vrai
+        agent.local_engine = self.vrai
 
     def test_le_client_du_banc_est_l_adaptateur_pour_un_autre_moteur(self):
-        self.assertIsInstance(agent.client_banc(), bench.AdaptateurMoteur)
+        self.assertIsInstance(agent.bench_client(), bench.AdaptateurMoteur)
 
     def test_la_mesure_rapide_passe_par_le_moteur_choisi(self):
         A._measure_one("m1", True)
@@ -64,7 +64,7 @@ class BancDeLaPage(unittest.TestCase):
 
 class AvecOllama(unittest.TestCase):
     def test_ollama_reste_interroge_directement(self):
-        self.assertNotIsInstance(agent.client_banc({"moteur": "ollama"}), bench.AdaptateurMoteur)
+        self.assertNotIsInstance(agent.bench_client({"moteur": "ollama"}), bench.AdaptateurMoteur)
 
 
 if __name__ == "__main__":

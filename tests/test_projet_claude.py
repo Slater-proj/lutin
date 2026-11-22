@@ -173,7 +173,7 @@ class DansLeMoteur(unittest.TestCase):
         self.t.cleanup()
 
     def test_les_consignes_du_modele_contiennent_le_projet(self):
-        consignes = A.consignes_systeme(A.settings())
+        consignes = A.system_instructions(A.settings())
         self.assertIn("# PROJET CLAUDE", consignes)
         self.assertIn("Tout tourne sous Proxmox.", consignes)
         self.assertIn("Déployer un service sur le cluster", consignes)

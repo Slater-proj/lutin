@@ -69,7 +69,7 @@ class Engines(unittest.TestCase):
 
     def test_the_list_gives_each_engine_its_state_and_what_it_allows(self):
         status, answer = call("GET", "/api/v1/engines")
-        self.assertEqual((status, sorted(answer), answer["current"]), (200, ["current", "engines"], A.moteur_actuel().id))
+        self.assertEqual((status, sorted(answer), answer["current"]), (200, ["current", "engines"], A.current_engine().id))
         fake = next(entry for entry in answer["engines"] if entry["id"] == "fake")
         self.assertEqual(sorted(fake), ["actions", "current", "description", "detail", "id", "installed", "kind", "manages_models", "models_count", "name", "running", "runs_here", "strengths", "task", "update", "version", "weaknesses"])
         self.assertEqual((fake["name"], fake["running"], fake["installed"], fake["version"], fake["models_count"], fake["task"], fake["current"]), ("Fake engine", True, True, "1.2.3", 2, None, False))

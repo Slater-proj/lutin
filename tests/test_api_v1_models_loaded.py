@@ -30,7 +30,7 @@ class Loaded(unittest.TestCase):
         api_v1._LOADING.clear()
         self.fake = Fake()
         self.settings = {"modele": "m1", "machine": ""}
-        for patch in (mock.patch.object(api_v1._m, "moteur_actuel", return_value=self.fake), mock.patch.object(api_v1._m, "settings", side_effect=lambda: dict(self.settings))):
+        for patch in (mock.patch.object(api_v1._m, "current_engine", return_value=self.fake), mock.patch.object(api_v1._m, "settings", side_effect=lambda: dict(self.settings))):
             patch.start()
             self.addCleanup(patch.stop)
 

@@ -227,8 +227,8 @@ class Scribe(unittest.TestCase):
                 self.corps.append(corps)
                 return {"message": {"content": "{}"}}
         moteur = SansAptitudes()
-        with mock.patch.object(self.dialogue, "moteur_actuel", lambda r: moteur):
-            self.dialogue._scribe_appel({"modele": "m", "num_ctx": 8192, "temperature": 0.2}, ID, "[moi] bonjour")
+        with mock.patch.object(self.dialogue, "current_engine", lambda r: moteur):
+            self.dialogue._scribe_call({"modele": "m", "num_ctx": 8192, "temperature": 0.2}, ID, "[moi] bonjour")
         self.assertEqual(moteur.corps[0]["format"], "json", "un moteur qui ne dit pas savoir contraindre sa sortie : du JSON libre")
         sortie = openai_engine.to_openai({"model": "m", "messages": [], "format": schema, "stream": False})
         self.assertEqual(sortie["response_format"], {"type": "json_schema", "json_schema": {"name": "reponse", "schema": schema}}, "llama-server reçoit le schéma sous la forme d'OpenAI")
@@ -259,7 +259,7 @@ class Scribe(unittest.TestCase):
         self.dialogue.scribe(self.conv, {"modele": "m", "num_ctx": 8192, "temperature": 0.2})
         s = progress_sheet.read(ID)
         self.assertIn("Ne jamais toucher à la production", s["decisions"], "le scribe ne supprime jamais une décision")
-        self.assertEqual(len(s["decisions"]), 1 + self.dialogue.SCRIBE_AJOUTS_MAX, "au plus quatre lignes ajoutées par passage")
+        self.assertEqual(len(s["decisions"]), 1 + self.dialogue.SCRIBE_MAX_ADDITIONS, "au plus quatre lignes ajoutées par passage")
         self.assertLessEqual(max(len(x) for x in s["ouvert"]), progress_sheet.MAX_LINE)
 
     def test_reponse_absurde_ou_panne_ne_cassent_rien(self):
@@ -285,10 +285,10 @@ class Scribe(unittest.TestCase):
         self.avec(OSError("modèle absent"))
         avant = list(self.conv["messages"])
         with self.assertRaises(ValueError):
-            self.dialogue.elaguer(self.conv, r, lambda e: None, forcer=True)
+            self.dialogue.prune(self.conv, r, lambda e: None, forcer=True)
         self.assertEqual(self.conv["messages"], avant, "la fiche n'a rien lu : rien n'est retiré")
         appels = self.avec(json_ops(decisions=["Budget fixé"]))
-        self.assertTrue(self.dialogue.elaguer(self.conv, r, lambda e: None, forcer=True))
+        self.assertTrue(self.dialogue.prune(self.conv, r, lambda e: None, forcer=True))
         self.assertIn("Budget fixé", progress_sheet.read(ID)["decisions"], "ce qui sort est passé dans la fiche")
         self.assertEqual(self.conv["messages"][-1]["content"], "dernière réponse")
 
@@ -300,7 +300,7 @@ class Scribe(unittest.TestCase):
         self.assertGreater(len(appels), 1, "plusieurs lots")
         self.assertIn("mot0 ", lus)
         self.assertIn("mot29 ", lus, "le début ET la fin sont lus")
-        reste = self.dialogue.messages_non_lus(self.conv)
+        reste = self.dialogue.unread_messages(self.conv)
         self.assertEqual(len(reste), 30 - self.conv["scribe_a"] if self.conv["scribe_a"] < 30 else 0)
 
 
@@ -357,12 +357,12 @@ class RappelDuFil(unittest.TestCase):
         c["messages"] = msgs + [{"role": "user", "content": "Rappelle-moi le code du coffre ZEBRE s'il te plaît ?"}]
         self.assertEqual(recall.thread_recall(c)[1], 1, "sans savoir ce qui part : le message 3 sur 21 est hors des six derniers, il est remis")
         grand = dict(_m.settings(), num_ctx=131072)
-        outils = agent.outils_du_mode(grand)
-        vus = agent.ce_que_voit_le_modele(c, grand, outils)
+        outils = agent.mode_tools(grand)
+        vus = agent.what_the_model_sees(c, grand, outils)
         self.assertTrue(any("4711-ZEBRE" in (m.get("content") or "") for m in vus), "sur 131 072 jetons, toute la conversation part")
         self.assertEqual(recall.thread_recall(c, "", 1800, vus), ("", 0), "le modèle le voit déjà : rien n'est remis")
         petit = dict(_m.settings(), num_ctx=4096)
-        vus = agent.ce_que_voit_le_modele(c, petit, agent.outils_du_mode(petit))
+        vus = agent.what_the_model_sees(c, petit, agent.mode_tools(petit))
         self.assertFalse(any("4711-ZEBRE" in (m.get("content") or "") for m in vus), "sur 4 096 jetons, l'ajustement le retire")
         texte, n = recall.thread_recall(c, "", 1800, vus)
         self.assertEqual(n, 1)
@@ -452,10 +452,10 @@ class RappelDuFil(unittest.TestCase):
         rappels = []
         with mock.patch.object(_m, "thread_recall", lambda *a, **k: rappels.append(a) or recall.thread_recall(*a, **k)), mock.patch.object(_m, "automatic_recalls", lambda *a, **k: rappels.append(a) or ("", [])):
             c["messages"] = msgs + [{"role": "user", "content": "Où en est-on ?"}]
-            p = agent._preparer_boucle(c, r, lambda e: None, {})
+            p = agent._prepare_loop(c, r, lambda e: None, {})
             self.assertEqual((p.extraits, rappels), ("", []), "la fiche répond : aucun rappel cherché")
             c["messages"] = msgs + [{"role": "user", "content": "Rappelle-moi le code du coffre ZEBRE"}]
-            p = agent._preparer_boucle(c, r, lambda e: None, {})
+            p = agent._prepare_loop(c, r, lambda e: None, {})
             self.assertIn("4711", p.extraits, "une autre question : le rappel cherche")
         self.assertTrue(all(progress_sheet.is_state_question(t) for t in ("Où en est-on ?", "On en est où ?", "Fais le point", "qu'est-ce qui reste ?", "Where are we?", "état d'avancement ?")))
         self.assertFalse(any(progress_sheet.is_state_question(t) for t in ("où est le fichier config ?", "corrige l'état du bouton", "oui", "fix the status bar color",

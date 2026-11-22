@@ -1018,7 +1018,7 @@ class Chat(unittest.TestCase):
         and starts (a download) is replaced."""
         p = self.page
         from lutin import managed_models
-        real = T.A.moteur_actuel
+        real = T.A.current_engine
 
         class Shown:
             id, nom = "lmstudio", "LM Studio"
@@ -1033,7 +1033,7 @@ class Chat(unittest.TestCase):
         reload = lambda: (p.evaluer("window.__old = true; location.reload()"), p.attendre("!window.__old && !!document.querySelector('.rail .version')"))
         # registered before the patches, so it runs after they are undone (cleanups run last in, first out): the next test finds the real engine
         self.addCleanup(lambda: (p.evaluer("location.hash = '#/chat'"), reload()))
-        for patch in (mock.patch.object(T.A, "moteur_actuel", lambda *args: Shown()), mock.patch.object(managed_models, "chosen", lambda kind, mo=None: kind == "lmstudio"),
+        for patch in (mock.patch.object(T.A, "current_engine", lambda *args: Shown()), mock.patch.object(managed_models, "chosen", lambda kind, mo=None: kind == "lmstudio"),
                       mock.patch.object(managed_models, "models", lambda kind, current: seen), mock.patch.object(managed_models, "recommended", lambda kind: []), mock.patch.object(managed_models, "catalog", lambda *args: found),
                       mock.patch.object(managed_models, "quantizations", lambda kind, repo: [{"revision": "Q4_K_M", "go": 3.1, "adequation": fit, "installe": False},
                                                                                             {"revision": "Q8_0", "go": 5.4, "adequation": fit, "installe": False}]),
@@ -1079,7 +1079,7 @@ class Chat(unittest.TestCase):
         """Maintainer's request (2026-11-20): « I do not see which model would be best with this engine ». Hermetic like test_3w."""
         p = self.page
         from lutin import managed_models
-        real = T.A.moteur_actuel
+        real = T.A.current_engine
 
         class Shown:
             id, nom = "exllamav3", "ExLlamaV3"
@@ -1093,7 +1093,7 @@ class Chat(unittest.TestCase):
         started = []
         reload = lambda: (p.evaluer("window.__old = true; location.reload()"), p.attendre("!window.__old && !!document.querySelector('.rail .version')"))
         self.addCleanup(lambda: (p.evaluer("location.hash = '#/chat'"), reload()))
-        for patch in (mock.patch.object(T.A, "moteur_actuel", lambda *args: Shown()), mock.patch.object(managed_models, "chosen", lambda kind, mo=None: kind == "exllamav3"),
+        for patch in (mock.patch.object(T.A, "current_engine", lambda *args: Shown()), mock.patch.object(managed_models, "chosen", lambda kind, mo=None: kind == "exllamav3"),
                       mock.patch.object(managed_models, "models", lambda kind, current: seen), mock.patch.object(managed_models, "recommended", lambda kind: advised),
                       mock.patch.object(managed_models, "download", lambda *args: started.append(args)), mock.patch.dict(os.environ, {"LUTIN_HORS_LIGNE": ""})):
             patch.start()
@@ -1128,7 +1128,7 @@ class Chat(unittest.TestCase):
         server of this machine is probed, and the graphics cards are given."""
         p = self.page
         from lutin import engines, llamacpp_engine, managed_models
-        real = T.A.moteur_actuel
+        real = T.A.current_engine
         current = {"id": "openai"}
 
         class Shown:
@@ -1150,7 +1150,7 @@ class Chat(unittest.TestCase):
         reload = lambda: (p.evaluer("window.__old = true; location.reload()"), p.attendre("!window.__old && !!document.querySelector('.rail .version')"))
         self.addCleanup(lambda: (p.evaluer("location.hash = '#/chat'"), reload()))          # registered before the patches: runs once they are undone
         seen = {"modeles": [], "installe": True, "dossier": "C:/models", "actif": True, "maj": False, "nom": "ExLlamaV3", "statut": "", "demarrer": None}
-        for patch in (mock.patch.object(T.A, "moteur_actuel", lambda *args: Shown()), mock.patch.object(managed_models, "chosen", lambda kind: kind == current["id"]),
+        for patch in (mock.patch.object(T.A, "current_engine", lambda *args: Shown()), mock.patch.object(managed_models, "chosen", lambda kind: kind == current["id"]),
                       mock.patch.object(managed_models, "models", lambda kind, shown: seen), mock.patch.object(managed_models, "recommended", lambda kind: []),
                       mock.patch.object(managed_models, "catalog", lambda *args: {"suite": False, "modeles": []}), mock.patch.object(llamacpp_engine.OpenAIEngine, "actif", lambda self: False),
                       mock.patch.object(engines.ENGINES["openai"], "modeles", lambda: {"actif": False, "installes": [], "tailles": {}}),
@@ -1293,7 +1293,7 @@ class Chat(unittest.TestCase):
         T.A.conv_write(c)
         self.addCleanup(lambda: (progress_sheet.delete(c["id"]), T.A.conv_delete(c["id"])))
         committed = []
-        for patch in (mock.patch.object(T.A, "document_de_reprise", lambda conversation, settings: "## Objectif\nRéécrire la facturation."),
+        for patch in (mock.patch.object(T.A, "handover_document", lambda conversation, settings: "## Objectif\nRéécrire la facturation."),
                       mock.patch.object(missions, "state", lambda: {"liste": [{"id": "m1", "nom": "Facturation", "etat": "en_cours", "conv": c["id"]}]}),
                       mock.patch.object(change_review, "git_state", lambda: {"dispo": True, "branche": "main", "total": 1, "modifies": [{"chemin": "a.py", "etat": " M"}]}),
                       mock.patch.object(change_review, "git_message_of", lambda files: {"message": "fix: billing"}),
@@ -2813,7 +2813,7 @@ class Chat(unittest.TestCase):
         taken = []
         files = [{"fichier": "m-q2.gguf", "taille": 2_000_000_000}, {"fichier": "m-q8-huge.gguf", "taille": 900_000_000_000}]
         # the engine in use, for the routes that act (they read the engine of this machine) as for those that read
-        for patch in (mock.patch.object(api_v1._m, "moteur_actuel", return_value=llama), mock.patch.object(agent, "moteur_local", lambda r=None: llama),
+        for patch in (mock.patch.object(api_v1._m, "current_engine", return_value=llama), mock.patch.object(agent, "local_engine", lambda r=None: llama),
                       mock.patch.object(llama, "chercher_modeles", return_value=[{"id": "author/Qwen-GGUF", "telechargements": 1200, "likes": 3}]),
                       mock.patch.object(llama, "fichiers_du_depot", return_value=files),
                       mock.patch.object(llama, "telechargeable", return_value={"possible": True, "raison": ""}),

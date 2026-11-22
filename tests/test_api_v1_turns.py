@@ -227,7 +227,7 @@ class Table(unittest.TestCase):
 
     def test_the_fields_given_through_a_variable(self):
         """Three events take their fields from a variable, which the reading of the source cannot see: they are checked on the functions that build them."""
-        speed = A.calculer_vitesse({"eval_count": 66, "prompt_eval_count": 1234, "eval_duration": 2e9, "prompt_eval_duration": 5e8, "load_duration": 1.5e9, "total_duration": 4e9})
+        speed = A.compute_speed({"eval_count": 66, "prompt_eval_count": 1234, "eval_duration": 2e9, "prompt_eval_duration": 5e8, "load_duration": 1.5e9, "total_duration": 4e9})
         self.assertEqual(sorted(set(speed) - set(api_v1.EVENTS["vitesse"][1])), [])
         self.assertEqual(sorted({"utilise", "total", "reel"} - set(api_v1.EVENTS["jetons"][1])), [])
         self.assertEqual(sorted({"medias", "medias_fichiers", "fichiers_joints"} - set(api_v1.EVENTS["resultat"][1])), [])

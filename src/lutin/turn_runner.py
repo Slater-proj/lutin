@@ -47,11 +47,11 @@ class Seat:
         self.conv, self.stop = conv, stop
 
     def run(self, text, emit, settings=None, replace_from=None, **options):
-        """Runs the turn (`core.tour`) in this thread, marked with the stop event of the seat for the time of the turn."""
+        """Runs the turn (`core.turn`) in this thread, marked with the stop event of the seat for the time of the turn."""
         before = getattr(_m.TURN_LOCAL, "stop", None)
         _m.TURN_LOCAL.stop = self.stop
         try:
-            return _m.tour(self.conv, text, emit, settings, self.stop, replace_from, **options)
+            return _m.turn(self.conv, text, emit, settings, self.stop, replace_from, **options)
         finally:
             _m.TURN_LOCAL.stop = before          # a thread that runs several turns (a mission, an add-on) is not left marked by an abandoned one
 

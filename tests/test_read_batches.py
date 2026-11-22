@@ -42,7 +42,7 @@ class Batches(unittest.TestCase):
                 raise agent._m.ToolError("no such file")
             return "%s:%s" % (name, arguments.get("chemin", ""))
 
-        futures = agent.lectures_groupees(calls, lambda name, raw: dict(raw or {}), execute, allowed)
+        futures = agent.grouped_reads(calls, lambda name, raw: dict(raw or {}), execute, allowed)
         return futures, most, done
 
     def test_reads_that_follow_each_other_run_together_and_keep_their_place(self):
@@ -81,7 +81,7 @@ class Batches(unittest.TestCase):
         futures, most, _ = self.run_batches([call("lire", chemin=str(i)) for i in range(10)], delay=0.05)
         for future in futures.values():
             future.result()
-        self.assertLessEqual(most[0], agent.LECTURES_ENSEMBLE)
+        self.assertLessEqual(most[0], agent.READS_TOGETHER)
 
 
 if __name__ == "__main__":

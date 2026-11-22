@@ -27,7 +27,7 @@ class InUse(unittest.TestCase):
     """The engine in use is chosen here; the machine is not measured unless a test gives it; the network is on."""
 
     def use(self, identifier):
-        for patch in (mock.patch.object(agent, "moteur_local", lambda r=None: engines.ENGINES[identifier]), mock.patch.object(model_fit, "ready_profile", lambda *a: None),
+        for patch in (mock.patch.object(agent, "local_engine", lambda r=None: engines.ENGINES[identifier]), mock.patch.object(model_fit, "ready_profile", lambda *a: None),
                       mock.patch.object(model_sources._offline, "is_active", lambda *a, **k: False), mock.patch.dict(engines.CONTEXT, hors_ligne=lambda: False)):
             patch.start()
             self.addCleanup(patch.stop)
@@ -109,7 +109,7 @@ class Ollama(InUse):
 
     def test_a_download_waits_for_its_confirmation_and_starts_as_a_task_of_the_engine_in_use(self):
         started = []
-        with mock.patch.object(agent, "installer_modele", lambda ref: started.append(ref) or {"statut": "en cours"}):
+        with mock.patch.object(agent, "install_model", lambda ref: started.append(ref) or {"statut": "en cours"}):
             self.assertEqual(V.call("POST", "/api/v1/engines/ollama/models/downloads", V.OWNER, {"ref": "qwen3:14b"})[1]["error"]["code"], "confirmation_required")
             self.assertEqual(V.call("POST", "/api/v1/engines/ollama/models/downloads", V.DEVICE, {"ref": "qwen3:14b", "confirm": True})[0], 403, "a paired phone may not download")
             self.assertEqual(started, [])
@@ -119,7 +119,7 @@ class Ollama(InUse):
 
     def test_a_removal_goes_through_the_engine_in_use(self):
         removed = []
-        with mock.patch.object(agent, "supprimer_modele", lambda name: removed.append(name)):
+        with mock.patch.object(agent, "delete_model", lambda name: removed.append(name)):
             self.assertEqual(V.call("DELETE", "/api/v1/engines/ollama/models/qwen3%3A8b", V.DEVICE)[0], 403)
             status, answer = V.call("DELETE", "/api/v1/engines/ollama/models/qwen3%3A8b", V.OWNER)
         self.assertEqual((status, answer["deleted"], removed), (200, True, ["qwen3:8b"]))
@@ -236,7 +236,7 @@ class Managed(InUse):
         seen = {"modeles": [{"nom": "half", "depot": "a/half", "taille_go": 1.0, "incomplet": True},
                             {"nom": "theirs", "chemin": "D:/theirs", "taille_go": 9.0, "supprimable": False}], "installe": True, "nom": "ExLlamaV3"}
         removed = []
-        with mock.patch.object(managed_models, "models", lambda kind, current: seen), mock.patch.object(agent, "supprimer_modele", removed.append):
+        with mock.patch.object(managed_models, "models", lambda kind, current: seen), mock.patch.object(agent, "delete_model", removed.append):
             half, theirs = get("/engines/exllamav3/models")[1]["models"]
             self.assertEqual((half["incomplete"], half["removable"]), (True, True))
             self.assertEqual((theirs["incomplete"], theirs["removable"]), (False, False))

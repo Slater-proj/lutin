@@ -134,7 +134,7 @@ class Points_de_sortie(Base):
             ollama_client.Ollama(ADRESSE_OLLAMA).telecharger("qwen3:8b")
         self.assertEqual(self.contacts, [])
         with self.assertRaises(offline.OfflineError):
-            A.installer_modele("qwen3:8b")
+            A.install_model("qwen3:8b")
         self.assertEqual(self.contacts, [])
 
     def test_telechargement_de_fichier_refuse(self):
@@ -147,10 +147,10 @@ class Points_de_sortie(Base):
             A.web_download("https://exemple.org/")
         self.assertIn("hors ligne", str(e.exception))
         self.assertEqual(self.exterieur(), [])
-        noms = {t["function"]["name"] for t in A.outils_du_mode(dict(A.DEFAULT_SETTINGS, web=True))}
+        noms = {t["function"]["name"] for t in A.mode_tools(dict(A.DEFAULT_SETTINGS, web=True))}
         self.assertFalse(noms & {"web_chercher", "web_lire"})
         self.couper(False)
-        noms = {t["function"]["name"] for t in A.outils_du_mode(dict(A.DEFAULT_SETTINGS, web=True))}
+        noms = {t["function"]["name"] for t in A.mode_tools(dict(A.DEFAULT_SETTINGS, web=True))}
         self.assertTrue({"web_chercher", "web_lire"} <= noms)
 
     def test_verification_des_modeles_ne_sort_pas_sur_internet(self):

@@ -150,7 +150,7 @@ class Sens(unittest.TestCase):
         self.assertEqual(i["etat"], "fini", i)
         self.assertEqual(i["fait"], 1000)
         self.assertEqual(PULL[0]["model"], "nomic-embed-text")
-        self.assertIn("nomic-embed-text", embeddings._m.lire_registre_modeles()["perso"], "le modèle est dans la liste de l'onglet Modèles")
+        self.assertIn("nomic-embed-text", embeddings._m.read_model_registry()["perso"], "le modèle est dans la liste de l'onglet Modèles")
         embeddings._m.PULLS.pop("nomic-embed-text", None)
 
     def test_une_erreur_de_telechargement_est_montree_et_on_peut_reessayer(self):

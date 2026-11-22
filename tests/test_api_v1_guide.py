@@ -16,7 +16,7 @@ LEVELS = {"comfortable", "good", "tight", "too_big"}
 def setUpModule():
     V.setUpModule()
     # The engine of this test answers nothing and asking it waits 2 s each time (the cost the routes pay on a first launch, where no engine runs yet): the tests do not wait.
-    patch = mock.patch.object(A, "etat_moteur", return_value={"actif": False, "installes": [], "tailles": {}})
+    patch = mock.patch.object(A, "engine_state", return_value={"actif": False, "installes": [], "tailles": {}})
     patch.start()
     unittest.addModuleCleanup(patch.stop)
 
@@ -139,7 +139,7 @@ class Recommendation(unittest.TestCase):
     def test_a_model_already_installed_costs_nothing(self):
         with known_machine():
             wanted = get("/api/v1/models/recommendation?use=chat")[1]["recommended"]["model"]["id"]
-            with mock.patch.object(A, "etat_moteur", return_value={"actif": True, "installes": [wanted], "tailles": {}}):
+            with mock.patch.object(A, "engine_state", return_value={"actif": True, "installes": [wanted], "tailles": {}}):
                 answer = get("/api/v1/models/recommendation?use=chat")[1]
         self.assertEqual((answer["download"]["models"], answer["download"]["size_gb"], answer["engine"]["running"]), ([], 0.0, True))
 
@@ -161,7 +161,7 @@ class Recommendation(unittest.TestCase):
             self.assertEqual(get("/api/v1/models/recommendation?use=code"), (200, {"detected": False, "use": "code"}))
 
     def test_nothing_is_downloaded_by_asking(self):
-        with known_machine(), mock.patch.object(A, "installer_modele") as install:
+        with known_machine(), mock.patch.object(A, "install_model") as install:
             get("/api/v1/models/recommendation?use=chat")
             get("/api/v1/models/catalog")
         install.assert_not_called()

@@ -132,7 +132,7 @@ def folder_reported_by_ollama(maintenant=time.time):
         return _REAL["v"]
     trouve = ""
     try:
-        o = _m.etat_ollama()
+        o = _m.ollama_state()
         if o["actif"]:
             from . import agent
             for nom in o["installes"][:3]:
@@ -210,7 +210,7 @@ def list_locations():
     lignes.append(location_row("donnees", _t("Données"), _m.DATA, _t("Conversations, images et fichiers joints, sauvegardes avant import, journal, réglages.")))
     lignes.append(location_row("memoire", _t("Mémoire"), _m.MEMORY, _t("Contexte du projet et notes de l'assistant.")))
     lignes.append(location_row("cache", _t("Cache (fichiers temporaires)"), d["cache"], _t("Catalogue et numéro de version récupérés en ligne (sans risque à supprimer).")))
-    o = _m.etat_ollama()
+    o = _m.ollama_state()
     modeles = location_row("modeles", _t("Modèles d'Ollama"), models_folder(), _t("Les modèles téléchargés : c'est en général le plus gros."), mesurer=False,
                     modifiable=not docker(), source="ollama" if folder_reported_by_ollama() else ("OLLAMA_MODELS" if os.environ.get("OLLAMA_MODELS") else ("config" if read_models_config() else "defaut")))
     if o["actif"] and o.get("tailles"):
@@ -231,13 +231,13 @@ def list_locations():
 
 def _gauge():
     if os.environ.get("LUTIN_DEMO"):          # captures de la documentation : un disque et un chemin fictifs
-        o = _m.etat_ollama()
+        o = _m.ollama_state()
         return {"chemin": r"C:\Users\demo\.ollama\models", "libre": 412 * 10 ** 9, "total": 931 * 10 ** 9, "modeles": sum((o.get("tailles") or {}).values()), "racine": "C:\\"}
     dossier = models_folder()
     disque = _s.disk_space(dossier)
     if not disque:
         return None
-    o = _m.etat_ollama()
+    o = _m.ollama_state()
     return {"chemin": str(dossier), "libre": disque["libre"], "total": disque["total"], "modeles": sum((o.get("tailles") or {}).values()), "racine": disque["racine"]}
 
 
@@ -302,7 +302,7 @@ def _network_drive(lecteur):
 
 
 def installed_models_size():
-    o = _m.etat_ollama()
+    o = _m.ollama_state()
     return sum((o.get("tailles") or {}).values()) if o.get("actif") else 0
 
 

@@ -47,7 +47,7 @@ def installed(forcer=False):
     if not forcer and INSTALLED_CACHE["modele"] == modele and time.time() - INSTALLED_CACHE["t"] < 20:
         return INSTALLED_CACHE["v"]
     base = modele.split(":")[0]
-    v = any(n.split(":")[0] == base for n in (_m.etat_moteur() if _m.moteur_actuel().id != "ollama" else _m.etat_ollama()).get("installes", []))
+    v = any(n.split(":")[0] == base for n in (_m.engine_state() if _m.current_engine().id != "ollama" else _m.ollama_state()).get("installes", []))
     INSTALLED_CACHE.update(t=time.time(), v=v, modele=modele)
     return v
 
@@ -73,7 +73,7 @@ def _normalize(v):
 
 def vectors(textes, modele=None, delai=60):
     """Les vecteurs (normalisés) d'une liste de textes, par Ollama. Lève ValueError/URLError si Ollama ne répond pas ou si le modèle est absent."""
-    liste = _m.moteur_actuel().vecteurs(modele or model_name(), [str(t)[:1500] or " " for t in textes], delai)          # Ollama, ou le moteur choisi (llama.cpp en mode routeur, serveur externe)
+    liste = _m.current_engine().vecteurs(modele or model_name(), [str(t)[:1500] or " " for t in textes], delai)          # Ollama, ou le moteur choisi (llama.cpp en mode routeur, serveur externe)
     return [_normalize(v) for v in liste]
 
 
@@ -171,7 +171,7 @@ def installation_state():
 
 def start_installation():
     """Télécharge le modèle de recherche dans Ollama, en arrière-plan : il entre dans la liste de l'onglet Modèles comme les autres (progression, suppression)."""
-    _m.installer_modele(model_name())
+    _m.install_model(model_name())
     INSTALLED_CACHE["t"] = 0.0
     FAILURE["jusqua"] = 0.0
     return installation_state()

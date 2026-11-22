@@ -55,24 +55,24 @@ class Coupures(unittest.TestCase):
             msgs += [{"role": "assistant", "content": "", "tool_calls": [{"function": {"name": "lire", "arguments": {"chemin": "f%d" % i}}}]},
                      {"role": "tool", "tool_name": "lire", "content": ("page %d " % i) * 400}]
         rapport = {}
-        sortie = agent.ajuster_contexte(msgs, 3000, 1.0, [], rapport)
+        sortie = agent.adjust_context(msgs, 3000, 1.0, [], rapport)
         self.assertGreater(rapport["raccourcis"] + rapport["retires"] + rapport["tronques"], 0, "il a fallu réduire")
         self.assertTrue(any("raccourci" in m.get("content", "") for m in sortie) or rapport["retires"] > 0)
         rapport = {}
-        agent.ajuster_contexte(msgs[:4], 100_000, 1.0, [], rapport)
+        agent.adjust_context(msgs[:4], 100_000, 1.0, [], rapport)
         self.assertEqual(sum(rapport.values()), 0, "rien à réduire : rien n'est dit")
 
     def test_la_reduction_est_dite_une_fois_puis_seulement_si_elle_augmente(self):
         dits, ctx = [], {}
         rapport = {"raccourcis": 2, "retires": 1, "tronques": 0, "tours": 0}
-        agent.annoncer_reduction(rapport, dits.append, ctx, 8192)
-        agent.annoncer_reduction(rapport, dits.append, ctx, 8192)
+        agent.announce_reduction(rapport, dits.append, ctx, 8192)
+        agent.announce_reduction(rapport, dits.append, ctx, 8192)
         self.assertEqual(len(dits), 1)
         self.assertIn("8192", dits[0]["texte"])
         self.assertIn("2 ancien(s) résultat(s)", dits[0]["texte"])
-        agent.annoncer_reduction(dict(rapport, raccourcis=9), dits.append, ctx, 8192)
+        agent.announce_reduction(dict(rapport, raccourcis=9), dits.append, ctx, 8192)
         self.assertEqual(len(dits), 2)
-        agent.annoncer_reduction({"raccourcis": 0, "retires": 0, "tronques": 0, "tours": 0}, dits.append, {}, 8192)
+        agent.announce_reduction({"raccourcis": 0, "retires": 0, "tronques": 0, "tours": 0}, dits.append, {}, 8192)
         self.assertEqual(len(dits), 2, "rien de réduit : rien de dit")
 
     def test_la_boucle_de_repetition_d_ollama_est_reconnue(self):
@@ -82,9 +82,9 @@ class Coupures(unittest.TestCase):
 
     def test_les_erreurs_de_contexte_sont_reconnues_par_des_expressions_precises(self):
         for vraie in ("the request exceeds the available context size", "prompt is too long: 9000 tokens", "no query found for input", "input is too large for n_ctx", "maximum context length is 4096"):
-            self.assertTrue(agent.RE_CONTEXTE.search(vraie), vraie)
+            self.assertTrue(agent.RE_CONTEXT.search(vraie), vraie)
         for fausse in ("Unable to generate parser for this template", "unknown option prompt_format", "model prompt template invalid", "context deadline exceeded while loading", "invalid value for parameter"):
-            self.assertFalse(agent.RE_CONTEXTE.search(fausse), fausse)
+            self.assertFalse(agent.RE_CONTEXT.search(fausse), fausse)
 
 
 if __name__ == "__main__":

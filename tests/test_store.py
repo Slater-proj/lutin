@@ -200,7 +200,7 @@ class Store(unittest.TestCase):
             self.assertEqual([level for level, _ in store.notices()], ["attention"])
             from lutin import health
             with mock.patch.object(health, "assess_health", return_value={"niveau": "ok", "items": []}), \
-                    mock.patch.object(health, "model_size", return_value=0), mock.patch.object(A, "ps_modele", return_value=None), \
+                    mock.patch.object(health, "model_size", return_value=0), mock.patch.object(A, "model_ps", return_value=None), \
                     mock.patch.object(A, "system_measures", return_value={}):
                 state = health.health_state(A.settings())
             self.assertEqual((state["niveau"], [i["id"] for i in state["items"]]), ("attention", ["base"]))

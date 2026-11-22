@@ -232,7 +232,7 @@ def process_document(t, chemin, r, interrompre):
                "messages": [{"role": "system", "content": consigne}, {"role": "user", "content": demande}]}
     requete["options"]["num_predict"] = 700
     morceaux, debut = [], time.time()
-    req = urllib.request.Request(_m.OLLAMA + "/api/chat", data=json.dumps(agent.avec_garde(requete)).encode("utf-8"), headers={"Content-Type": "application/json"})
+    req = urllib.request.Request(_m.OLLAMA + "/api/chat", data=json.dumps(agent.with_keep_alive(requete)).encode("utf-8"), headers={"Content-Type": "application/json"})
     with urllib.request.urlopen(req, timeout=120) as flux:
         for brut_ligne in flux:
             if interrompre.is_set() or time.time() - debut > DOCUMENT_TIMEOUT:

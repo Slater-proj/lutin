@@ -162,7 +162,7 @@ class LongConversationOnSmallWindow(unittest.TestCase):
     def measure(self, num_ctx, memory, faithful):
         model, where, precise, errors = self.run_project(num_ctx, memory, faithful)
         label = "%d %s %s" % (num_ctx, memory, "faithful" if faithful else "weak")
-        size = A.estimer(where["messages"]) + len(json.dumps(where.get("tools", []), ensure_ascii=False)) // 3
+        size = A.estimate(where["messages"]) + len(json.dumps(where.get("tools", []), ensure_ascii=False)) // 3
         row = {"case": label, "size": size, "objective": seen(where, "station météo de Marly"), "step": seen(where, STEP[1]),
                "decisions": {turn: seen(where, words) for turn, (_, words) in FACTS.items()},
                "separator_on_precise_question": seen(precise, FACTS[3][1]), "calls": model.calls, "errors": errors,
@@ -171,7 +171,7 @@ class LongConversationOnSmallWindow(unittest.TestCase):
         self.assertEqual(errors, [], label + ": no turn fails")
         # Lutin's own estimate, under the ceiling of the request: the answer keeps its room. Checking only the window let the sheet and the extracts
         # push the request to 95 % of 4,096 tokens, and the fake engine (which counts a little more) refused a turn on the CI only.
-        self.assertLessEqual(size, int(num_ctx * AG.PART_MAX), label + ": the request stays under its ceiling (ADR 0018, decision 10)")
+        self.assertLessEqual(size, int(num_ctx * AG.MAX_SHARE), label + ": the request stays under its ceiling (ADR 0018, decision 10)")
         self.assertTrue(row["objective"], label + ": the first request is still in front of the model (ADR 0018, decision 2)")
         self.assertTrue(row["step"], label + ": the latest step is in front of the model")
         if num_ctx >= 8192:          # on 4,096 tokens, the floor of the history cannot hold the summary, the extracts and an answer of 190 words: the recall brings it back

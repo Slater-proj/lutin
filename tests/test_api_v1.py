@@ -268,13 +268,13 @@ class Conversations(unittest.TestCase):
         A.conv_write(stored)
         asked = []
         engine = mock.Mock(chat=lambda body, timeout: asked.append(body) or {"message": {"content": "<think>hmm</think> « Budget   2027 » "}})
-        with mock.patch.object(agent, "moteur_actuel", return_value=engine):
+        with mock.patch.object(agent, "current_engine", return_value=engine):
             status, answer = call("POST", "/api/v1/conversations/" + identifier + "/ai-title", OWNER, body={})
         self.assertEqual((status, answer), (200, {"title": "Budget 2027", "applied": True}), "thinking aloud and quotes are taken out")
         self.assertEqual(A.conv_read(identifier)["titre"], "Budget 2027")
         self.assertIn("[U] How much should we spend in 2027?", asked[0]["messages"][0]["content"])
         self.assertIs(asked[0]["think"], False)
-        with mock.patch.object(agent, "moteur_actuel", return_value=mock.Mock(chat=lambda body, timeout: {"message": {"content": "  "}})):
+        with mock.patch.object(agent, "current_engine", return_value=mock.Mock(chat=lambda body, timeout: {"message": {"content": "  "}})):
             self.assertEqual(call("POST", "/api/v1/conversations/" + identifier + "/ai-title", OWNER, body={})[0], 502, "a model that answers nothing")
         stored = A.conv_read(identifier)
         stored["titre"] = "🎯 Mission: budget"

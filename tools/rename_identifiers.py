@@ -176,9 +176,11 @@ def plan(module, mapping, sweep=False):
 
 
 def outside_none(edits, tree, mapping):
-    """Inside the module itself: its definitions and every use of the names."""
+    """Inside the module itself: its definitions and every use of the names. A method of the same name (`Engine.capacites` next to the function
+    `capacites`) is not the top-level name: it keeps its name, like the methods of the same name in the other classes."""
+    top = set(map(id, tree.body))
     for node in ast.walk(tree):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and node.name in mapping:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and node.name in mapping and id(node) in top:
             position = name_position(edits, node, node.name)
             if position:
                 edits.add(node.lineno, position[0], position[1], mapping[node.name])
@@ -214,7 +216,7 @@ def outside_uses(edits, tree, target, mapping, aliases, imported, chain):
             aliases = set(aliases) | {name.id for name, value in pairs if isinstance(name, ast.Name) and isinstance(value, ast.Attribute) and value.attr in chain}
     for node in ast.walk(tree):
         if isinstance(node, ast.Attribute) and node.attr in mapping and (
-                (isinstance(node.value, ast.Name) and node.value.id in aliases) or (isinstance(node.value, ast.Attribute) and node.value.attr in chain)
+                (isinstance(node.value, ast.Name) and node.value.id in aliases) or (isinstance(node.value, ast.Attribute) and node.value.attr in chain and not (isinstance(node.value.value, ast.Name) and node.value.value.id in ("self", "cls")))
                 or dynamic_import_of(node.value, target)):
             edits.add(node.end_lineno, node.end_col_offset - len(node.attr.encode("utf-8")), node.end_col_offset, mapping[node.attr])
         elif isinstance(node, ast.ImportFrom) and (node.module or "").split(".")[-1] == target and (node.level >= 1 or (node.module or "").startswith("lutin.")):

@@ -17,7 +17,7 @@ def setUpModule():
 
 def state(installed=(), history=False):
     """The answer of /setup for a machine with this engine state and this history."""
-    with mock.patch.object(api_v1, "_has_history", return_value=history), mock.patch.object(A, "etat_moteur", return_value={"actif": True, "installes": list(installed), "tailles": {}}):
+    with mock.patch.object(api_v1, "_has_history", return_value=history), mock.patch.object(A, "engine_state", return_value={"actif": True, "installes": list(installed), "tailles": {}}):
         return V.call("GET", "/api/v1/setup", V.OWNER)
 
 
@@ -34,7 +34,7 @@ class Setup(unittest.TestCase):
         self.assertEqual(state(installed=["qwen3:8b"]), (200, {"done": False, "needed": False, "skipped": False}), "a machine where a model was installed before Lutin")
 
     def test_history_is_decided_before_the_engine_is_asked(self):
-        with mock.patch.object(api_v1, "_has_history", return_value=True), mock.patch.object(A, "etat_moteur", side_effect=AssertionError("the engine must not be asked")):
+        with mock.patch.object(api_v1, "_has_history", return_value=True), mock.patch.object(A, "engine_state", side_effect=AssertionError("the engine must not be asked")):
             self.assertEqual(V.call("GET", "/api/v1/setup", V.OWNER)[1]["needed"], False)
 
     def test_what_a_used_installation_leaves_is_what_is_looked_at(self):
@@ -89,8 +89,8 @@ class SpeedTest(unittest.TestCase):
         self.fail("the test never reached %s: %s" % (wanted, answer))
 
     def test_a_short_measure_is_started_followed_and_put_in_words(self):
-        installed = mock.patch.object(api_v1._m, "etat_ollama", return_value={"installes": [api_v1._m.settings()["modele"]]})
-        engine = mock.patch.object(api_v1._m, "moteur_actuel", return_value=mock.Mock(id="ollama"))
+        installed = mock.patch.object(api_v1._m, "ollama_state", return_value={"installes": [api_v1._m.settings()["modele"]]})
+        engine = mock.patch.object(api_v1._m, "current_engine", return_value=mock.Mock(id="ollama"))
         with installed, engine, mock.patch.object(api_v1, "_measure_speed", return_value=21.4):
             status, answer = V.call("POST", "/api/v1/speed-test", V.OWNER, {})
             self.assertEqual((status, answer["state"]), (202, "running"))
@@ -99,13 +99,13 @@ class SpeedTest(unittest.TestCase):
         self.assertEqual([api_v1._speed_level(x) for x in (3, 10, 21, 45, 90)], ["slow", "fair", "comfortable", "fast", "very_fast"])
 
     def test_a_failing_engine_ends_the_test_and_a_missing_model_or_busy_turn_refuses_it(self):
-        installed = mock.patch.object(api_v1._m, "etat_ollama", return_value={"installes": [api_v1._m.settings()["modele"]]})
-        engine = mock.patch.object(api_v1._m, "moteur_actuel", return_value=mock.Mock(id="ollama"))
+        installed = mock.patch.object(api_v1._m, "ollama_state", return_value={"installes": [api_v1._m.settings()["modele"]]})
+        engine = mock.patch.object(api_v1._m, "current_engine", return_value=mock.Mock(id="ollama"))
         with installed, engine, mock.patch.object(api_v1, "_measure_speed", side_effect=RuntimeError("engine down")):
             V.call("POST", "/api/v1/speed-test", V.OWNER, {})
             failed = self.wait("failed")
         self.assertEqual(failed["error"], "engine down")
-        with mock.patch.object(api_v1._m, "etat_ollama", return_value={"installes": []}), engine:
+        with mock.patch.object(api_v1._m, "ollama_state", return_value={"installes": []}), engine:
             status, answer = V.call("POST", "/api/v1/speed-test", V.OWNER, {})
             self.assertEqual((status, answer["error"]["code"]), (409, "model_missing"))
         with installed, engine, mock.patch.dict(api_v1._m.ACTIVE_TURNS, {"x": object()}):

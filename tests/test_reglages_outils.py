@@ -68,7 +68,7 @@ class Outils(unittest.TestCase):
 
     def test_un_outil_coupe_n_est_plus_propose_au_modele(self):
         from lutin import agent
-        noms = lambda r: {t["function"]["name"] for t in agent.outils_du_mode(r)}  # noqa: E731
+        noms = lambda r: {t["function"]["name"] for t in agent.mode_tools(r)}  # noqa: E731
         base = dict(A.settings(), mode="polyvalent")
         self.assertIn("executer", noms(base))
         A.save_settings({"outils_desactives": ["executer", "web_lire"]})

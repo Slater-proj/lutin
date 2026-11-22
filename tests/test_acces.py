@@ -208,7 +208,7 @@ class ConseilPc(Base):
         from lutin import hardware
         profil = hardware.Profil(systeme="windows", cpu="test", coeurs=8, ram_go=16.0, ram_libre_go=10.0, gpus=[])
         ollama = {"actif": True, "installes": {}, "tailles": {}}
-        with mock.patch("lutin.hardware.detecter", return_value=profil), mock.patch.object(A, "etat_ollama", return_value=ollama), mock.patch.object(A, "ps_modele", return_value=None):
+        with mock.patch("lutin.hardware.detecter", return_value=profil), mock.patch.object(A, "ollama_state", return_value=ollama), mock.patch.object(A, "model_ps", return_value=None):
             self._conseil_avec_mesure(bench)
 
     def _conseil_avec_mesure(self, bench):
@@ -343,7 +343,7 @@ class Planification(Base):
     def test_execution_en_lecture_seule_dans_une_conversation_planifiee(self):
         t = self.p.add("Matin", "résume le dépôt", "08:30", [0, 1, 2, 3, 4, 5, 6])
         appels = []
-        with mock.patch.object(A, "tour", side_effect=self.faux_tour(appels=appels)):
+        with mock.patch.object(A, "turn", side_effect=self.faux_tour(appels=appels)):
             ident = self.p.execute(t["id"])
         self.assertEqual([(a[0], a[2], a[3]) for a in appels], [("⏰ Matin", True, True)])
         self.assertTrue(appels[0][1].startswith("(Tâche planifiée « Matin » lancée le "), "la demande est datée : le modèle sait quel jour et quelle heure il est")
@@ -355,7 +355,7 @@ class Planification(Base):
     def test_une_tache_garde_une_seule_conversation(self):
         t = self.p.add("Heure", "donne-moi l'heure", "19:00", [0, 1, 2, 3, 4, 5, 6])
         avant = len(A.conv_list())
-        with mock.patch.object(A, "tour", side_effect=self.faux_tour("il est 19 h")):
+        with mock.patch.object(A, "turn", side_effect=self.faux_tour("il est 19 h")):
             premiere = self.p.execute(t["id"])
             seconde = self.p.execute(t["id"])
         self.assertEqual(premiere, seconde, "chaque exécution continue la même conversation")
@@ -365,7 +365,7 @@ class Planification(Base):
 
     def test_une_conversation_supprimee_est_recreee(self):
         t = self.p.add("Heure", "x", "19:00", [0, 1, 2, 3, 4, 5, 6])
-        with mock.patch.object(A, "tour", side_effect=self.faux_tour()):
+        with mock.patch.object(A, "turn", side_effect=self.faux_tour()):
             premiere = self.p.execute(t["id"])
             A.conv_delete(premiere)
             seconde = self.p.execute(t["id"])
@@ -374,7 +374,7 @@ class Planification(Base):
 
     def test_un_moteur_muet_n_est_jamais_un_rien_fait_silencieux(self):
         t = self.p.add("Heure", "x", "19:00", [0, 1, 2, 3, 4, 5, 6])
-        with mock.patch.object(A, "tour", side_effect=self.faux_tour(reponse="")):
+        with mock.patch.object(A, "turn", side_effect=self.faux_tour(reponse="")):
             ident = self.p.execute(t["id"])
         self.assertEqual(self.p.read()[0]["derniere_etat"], "erreur")
         dernier = A.conv_read(ident)["messages"][-1]
@@ -383,7 +383,7 @@ class Planification(Base):
 
     def test_une_erreur_du_tour_est_ecrite_dans_la_conversation(self):
         t = self.p.add("Heure", "x", "19:00", [0, 1, 2, 3, 4, 5, 6])
-        with mock.patch.object(A, "tour", side_effect=self.faux_tour(reponse="", evenements=[{"type": "erreur", "texte": "Ollama ne répond pas"}])):
+        with mock.patch.object(A, "turn", side_effect=self.faux_tour(reponse="", evenements=[{"type": "erreur", "texte": "Ollama ne répond pas"}])):
             ident = self.p.execute(t["id"])
         self.assertEqual(self.p.read()[0]["derniere_etat"], "erreur")
         self.assertIn("Ollama ne répond pas", A.conv_read(ident)["messages"][-1]["content"])
@@ -393,7 +393,7 @@ class Planification(Base):
         envois = []
         with mock.patch.object(notifications, "find", lambda i: {"id": i, "nom": "Tel"}), mock.patch.object(notifications, "send", lambda canal, titre, msg, ouvrir=None: envois.append((canal, titre, msg))):
             t = self.p.add("Heure", "x", "19:00", [0, 1, 2, 3, 4, 5, 6], notifier="abcd1234")
-            with mock.patch.object(A, "tour", side_effect=self.faux_tour("il est 19 h")):
+            with mock.patch.object(A, "turn", side_effect=self.faux_tour("il est 19 h")):
                 self.p.execute(t["id"])
         self.assertEqual(envois, [("abcd1234", "⏰ Heure", "il est 19 h")])
         self.assertEqual(self.p.read()[0]["derniere_notif"], "ok")
@@ -404,7 +404,7 @@ class Planification(Base):
             raise ValueError("« Tel » n'a pas répondu")
         with mock.patch.object(notifications, "find", lambda i: {"id": i}), mock.patch.object(notifications, "send", casse):
             t = self.p.add("Heure", "x", "19:00", [0, 1, 2, 3, 4, 5, 6], notifier="abcd1234")
-            with mock.patch.object(A, "tour", side_effect=self.faux_tour("ok")):
+            with mock.patch.object(A, "turn", side_effect=self.faux_tour("ok")):
                 self.p.execute(t["id"])
         fait = self.p.read()[0]
         self.assertEqual(fait["derniere_etat"], "ok")
@@ -416,7 +416,7 @@ class Planification(Base):
 
     def test_une_erreur_est_notee_et_ne_casse_pas_la_boucle(self):
         t = self.p.add("Matin", "x", "08:30", [0, 1, 2, 3, 4, 5, 6])
-        with mock.patch.object(A, "tour", side_effect=RuntimeError("boum")):
+        with mock.patch.object(A, "turn", side_effect=RuntimeError("boum")):
             self.p.execute(t["id"])
         self.assertEqual(self.p.read()[0]["derniere_etat"], "erreur")
 

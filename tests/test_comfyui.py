@@ -672,7 +672,7 @@ class ComfyUI(unittest.TestCase):
         base = dict(_m.settings(), web=True)
 
         def noms(mode):
-            return {t["function"]["name"] for t in agent.outils_du_mode(dict(base, mode=mode))}
+            return {t["function"]["name"] for t in agent.mode_tools(dict(base, mode=mode))}
         comfy = {"comfy_generer", "comfy_modeles"}
         self.assertFalse(comfy & noms("polyvalent"), "addon désactivé : le modèle ne voit pas ces outils")
         with self.assertRaises(_m.ToolError):

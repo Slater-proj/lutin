@@ -470,57 +470,57 @@ def git(args, delai=60):
 
 
 from .agent import (  # noqa: F401  (déplacé dans agent.py : moteur ré-exporte ses noms)
-    CAPACITES,
-    OUTILS_WEB,
+    CAPABILITIES,
+    WEB_TOOLS,
     PULLS,
-    client_banc,
-    moteur_local,
-    RAPPEL_APPEL,
-    RE_APPEL_BALISE,
-    RE_APPEL_JSON,
-    RE_APPEL_MAL_FORME,
-    RE_APPEL_XML,
-    RE_CONTEXTE,
-    RE_NOM_MODELE,
-    RE_PLANTAGE,
-    ajuster_contexte,
-    document_de_reprise,
-    titre_propose,
-    deborde,
-    avec_garde,
-    bloc_plan,
-    boucle_agent,
-    calculer_vitesse,
-    capacites,
-    chemin_ollama,
-    compacter_conversation,
-    annuler_scribe,
-    attendre_scribe,
-    lancer_scribe,
-    elaguer,
-    memoire_longue,
-    modele_annexe,
-    repondre_choix_memoire,
-    consignes_systeme,
-    duree_garde,
-    ecrire_registre_modeles,
-    estimer,
-    etat_ollama,
-    etat_moteur,
-    moteur_actuel,
-    extraire_appels_texte,
-    installer_modele,
-    jauge_contexte,
-    lire_registre_modeles,
-    modele_de_repli,
-    modeles_connus,
+    bench_client,
+    local_engine,
+    CALL_REMINDER,
+    RE_TAG_CALL,
+    RE_JSON_CALL,
+    RE_MALFORMED_CALL,
+    RE_XML_CALL,
+    RE_CONTEXT,
+    RE_MODEL_NAME,
+    RE_CRASH,
+    adjust_context,
+    handover_document,
+    proposed_title,
+    overflows,
+    with_keep_alive,
+    plan_block,
+    agent_loop,
+    compute_speed,
+    capabilities,
+    ollama_path,
+    compact_conversation,
+    cancel_scribe,
+    wait_scribe,
+    start_scribe,
+    prune,
+    long_memory,
+    side_model,
+    answer_memory_choice,
+    system_instructions,
+    keep_alive_duration,
+    write_model_registry,
+    estimate,
+    ollama_state,
+    engine_state,
+    current_engine,
+    extract_text_calls,
+    install_model,
+    context_gauge,
+    read_model_registry,
+    fallback_model,
+    known_models,
     ollama_json,
-    oublier_modele,
-    outils_du_mode,
-    ps_modele,
-    restaurer_modeles,
-    supprimer_modele,
-    tour,
+    forget_model,
+    mode_tools,
+    model_ps,
+    restore_models,
+    delete_model,
+    turn,
 )
 
 
@@ -607,14 +607,14 @@ def free_vram(tout=False, sauf=None):
 
 
 def start_ollama():
-    exe = chemin_ollama()
+    exe = ollama_path()
     if not exe:
         raise ValueError("Ollama n'est pas installé : lance installer-assistant.bat.")
-    if etat_ollama()["actif"]:
+    if ollama_state()["actif"]:
         return "Ollama tourne déjà."
     if os.environ.get("LUTIN_DOCKER"):
         from . import docker_engines
-        docker_engines.start_ollama(lambda: etat_ollama()["actif"])
+        docker_engines.start_ollama(lambda: ollama_state()["actif"])
         return "Ollama démarré."
     env = dict(os.environ, **ENV_OLLAMA)
     from . import locations
@@ -630,7 +630,7 @@ def start_ollama():
     for _ in range(30):
         time.sleep(0.5)
         local_ports.forget()          # il vient d'être lancé : un refus d'avant ne compte plus
-        if etat_ollama()["actif"]:
+        if ollama_state()["actif"]:
             return "Ollama démarré."
     raise ValueError("Ollama ne répond pas après 15 secondes.")
 
@@ -640,7 +640,7 @@ def stop_ollama():
     if os.environ.get("LUTIN_DOCKER"):
         from . import docker_engines
         docker_engines.stop_ollama()
-        return not etat_ollama()["actif"]
+        return not ollama_state()["actif"]
     if os.name == "nt":
         for nom in ("ollama.exe", "ollama app.exe"):
             subprocess.run(["taskkill", "/F", "/IM", nom], capture_output=True, timeout=20)
@@ -648,7 +648,7 @@ def stop_ollama():
         subprocess.run(["pkill", "-x", "ollama"], capture_output=True, timeout=20)
     for _ in range(20):
         time.sleep(0.5)
-        if not etat_ollama()["actif"]:
+        if not ollama_state()["actif"]:
             return True
     return False
 
@@ -825,7 +825,7 @@ def bench_path():
 
 
 def start_bench(modele, rapide):
-    if not RE_NOM_MODELE.match(modele or ""):
+    if not RE_MODEL_NAME.match(modele or ""):
         raise ValueError("Nom de modèle invalide.")
     with TURNS_LOCK:
         if ACTIVE_TURNS:
@@ -848,9 +848,9 @@ def _measure_one(modele, rapide):
     BENCH.update(en_cours=modele, etape="démarrage")
     try:
         from .hardware import detecter
-        mesure = _bench.executer(client_banc(), modele, rapide, lambda nom, i, n: BENCH.update(etape="{} ({}/{})".format(nom, i + 1, n)), detecter().resume(), settings()["num_ctx"])
+        mesure = _bench.executer(bench_client(), modele, rapide, lambda nom, i, n: BENCH.update(etape="{} ({}/{})".format(nom, i + 1, n)), detecter().resume(), settings()["num_ctx"])
         try:
-            moteur = moteur_local()
+            moteur = local_engine()
             mesure["moteur"] = {"id": moteur.id, "version": str(getattr(moteur, "version", lambda: "")() or "")[:40]}          # pour dire, plus tard, si une baisse vient d'un changement de moteur
         except Exception:  # noqa: BLE001
             pass
@@ -868,9 +868,9 @@ def start_bench_series(modeles, rapide=False):
     if len(modeles) < 1:
         raise ValueError("Choisis au moins un modèle installé.")
     for m in modeles:
-        if not RE_NOM_MODELE.match(m):
+        if not RE_MODEL_NAME.match(m):
             raise ValueError("Nom de modèle invalide.")
-    installes = set(moteur_local().modeles()["installes"])          # ceux du moteur de cette machine, que le banc va mesurer
+    installes = set(local_engine().modeles()["installes"])          # ceux du moteur de cette machine, que le banc va mesurer
     absents = [m for m in modeles if m not in installes]
     if absents:
         raise ValueError("Ces modèles ne sont pas installés : " + ", ".join(absents))

@@ -49,7 +49,7 @@ class ConversationTools(unittest.TestCase):
         self.assertEqual((status, answer["error"]["code"]), (409, "turn_running"))
 
     def test_a_handover_document_is_written_by_the_model(self):
-        with mock.patch.object(A, "document_de_reprise", lambda conversation, settings: "## Objectif\nRéécrire la facturation."):
+        with mock.patch.object(A, "handover_document", lambda conversation, settings: "## Objectif\nRéécrire la facturation."):
             status, answer = V.call("POST", self.base + "/handover", V.DEVICE, {})
         self.assertEqual(status, 200, answer)
         self.assertIn("## Objectif", answer["text"])

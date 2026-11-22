@@ -145,7 +145,7 @@ class Mission(unittest.TestCase):
         self.assertTrue({"mission_terminer", "mission_bloquee", "suivi", "executer"} <= outils)
         self.assertIn("MISSION LONGUE", RECUES[0]["messages"][0]["content"])
         from lutin import agent
-        self.assertNotIn("mission_terminer", {t["function"]["name"] for t in agent.outils_du_mode(_m.settings())})
+        self.assertNotIn("mission_terminer", {t["function"]["name"] for t in agent.mode_tools(_m.settings())})
 
     def test_sans_autonomie_rien_n_est_ecrit(self):
         m = self.creer(autonome=False)
@@ -222,16 +222,16 @@ class Mission(unittest.TestCase):
         c = _m.conv_new()
         _m.conv_write(c)
         m = mission.create("Jeu", "Crée un petit jeu.", "principal", 2, True, c["id"])
-        vrai_tour = _m.tour
+        vrai_tour = _m.turn
 
         def tour_arrete(conv, texte, emit, r, stop, *a, **k):
             stop.set()                                                              # l'utilisateur clique sur Arrêter pendant le tour
             return vrai_tour(conv, texte, emit, r, stop, *a, **k)
-        _m.tour = tour_arrete
+        _m.turn = tour_arrete
         try:
             mission.one_step()
         finally:
-            _m.tour = vrai_tour
+            _m.turn = vrai_tour
         x = mission.find(m["id"])
         self.assertEqual(x["etat"], "pause")
         self.assertIn("Arrêtée par toi", x["message"])

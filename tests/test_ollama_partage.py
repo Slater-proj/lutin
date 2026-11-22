@@ -165,7 +165,7 @@ class DossiersCommuns(unittest.TestCase):
             ml.set_models_folder(mo.id, "relatif/dossier")
 
     def test_ollama_montre_les_memes_lignes(self):
-        mo = agent.MoteurOllama()
+        mo = agent.OllamaEngine()
         info = mo.info_dossier()
         self.assertEqual(set(info) & {"actuel", "defaut", "libre_go", "installe", "modeles"}, {"actuel", "defaut", "libre_go", "installe", "modeles"})
         self.assertFalse(info["modeles"]["modifiable"], "les modèles d'Ollama se règlent dans l'onglet Modèles (qui sait copier ceux déjà téléchargés)")
@@ -233,14 +233,14 @@ class ModelesRetrouves(unittest.TestCase):
         from lutin import locations
         locations.remember_seen_folder(str(self.models))
         lances = []
-        with self.mock.patch.dict("os.environ", {}, clear=False), self.mock.patch.object(_m, "chemin_ollama", lambda: "ollama"), self.mock.patch.object(_m, "etat_ollama", lambda: {"actif": bool(lances)}),                 self.mock.patch.object(locations, "read_models_config", lambda: ""), self.mock.patch("subprocess.Popen", lambda cmd, **kw: lances.append(kw["env"]) or None), self.mock.patch("time.sleep", lambda s: None):
+        with self.mock.patch.dict("os.environ", {}, clear=False), self.mock.patch.object(_m, "ollama_path", lambda: "ollama"), self.mock.patch.object(_m, "ollama_state", lambda: {"actif": bool(lances)}),                 self.mock.patch.object(locations, "read_models_config", lambda: ""), self.mock.patch("subprocess.Popen", lambda cmd, **kw: lances.append(kw["env"]) or None), self.mock.patch("time.sleep", lambda s: None):
             __import__("os").environ.pop("OLLAMA_MODELS", None)
             _m.start_ollama()
         self.assertEqual(lances[0].get("OLLAMA_MODELS"), str(self.models), "pas le dossier par défaut, vide")
 
     def test_la_mise_a_jour_d_ollama_garde_le_dossier_des_modeles(self):
         from lutin import locations, ollama_client
-        mo = agent.MoteurOllama()
+        mo = agent.OllamaEngine()
         appels = []
         possibles = {k: {"possible": True, "raison": "ok"} for k in engines.ACTIONS}
         with self.mock.patch.object(mo, "actions", lambda: possibles), self.mock.patch.object(_m, "stop_ollama", lambda: appels.append("arreter")), self.mock.patch.object(_m, "start_ollama", lambda: appels.append("demarrer")),                 self.mock.patch.object(ollama_client, "uninstall_windows", lambda: appels.append("desinstaller")), self.mock.patch.object(ollama_client, "install_windows", lambda c, p, **k: appels.append("installer")),                 self.mock.patch.object(locations, "models_folder", lambda: self.models), self.mock.patch.object(locations, "set_models_folder", lambda d: appels.append("dossier:" + str(d))):

@@ -78,15 +78,15 @@ class ReglagesDeCharge(unittest.TestCase):
         self.assertEqual(source.count('{"num_ctx": r["num_ctx"]'), 1, "toute requête passe par options_modele (la seule construction du dictionnaire) : un jeu d'options différent ferait recharger le modèle")
 
     def test_duree_de_garde(self):
-        self.assertEqual(A.duree_garde(), "30m", "automatique : comme avant")
+        self.assertEqual(A.keep_alive_duration(), "30m", "automatique : comme avant")
         A.save_settings({"liberer_si_comfy": False})
-        self.assertIsNone(A.duree_garde(), "automatique, sans ComfyUI : le délai d'Ollama")
-        self.assertEqual(A.avec_garde({"model": "x"}), {"model": "x"})
+        self.assertIsNone(A.keep_alive_duration(), "automatique, sans ComfyUI : le délai d'Ollama")
+        self.assertEqual(A.with_keep_alive({"model": "x"}), {"model": "x"})
         A.save_settings({"garde_min": 2})
-        self.assertEqual(A.duree_garde(), "2m")
-        self.assertEqual(A.avec_garde({"model": "x"})["keep_alive"], "2m")
+        self.assertEqual(A.keep_alive_duration(), "2m")
+        self.assertEqual(A.with_keep_alive({"model": "x"})["keep_alive"], "2m")
         A.save_settings({"garde_min": 0})
-        self.assertEqual(A.avec_garde({"model": "x"})["keep_alive"], "0m", "0 : libéré dès la fin de la réponse")
+        self.assertEqual(A.with_keep_alive({"model": "x"})["keep_alive"], "0m", "0 : libéré dès la fin de la réponse")
 
     def test_la_page_propose_les_reglages_et_les_profils(self):
         page = A.web_page()

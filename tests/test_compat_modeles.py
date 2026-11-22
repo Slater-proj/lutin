@@ -77,9 +77,9 @@ class Installation(unittest.TestCase):
         from lutin import agent
         vision = next(m for m in _m._CATALOGUE["modeles"] if "vision" in m["capacites"])
         mo = FauxMoteur("ollama", "Moteur X", dict(TOUT, vision=("non", "pas d'images")))
-        with mock.patch.object(agent, "moteur_actuel", lambda *a, **k: mo), mock.patch.object(agent, "etat_moteur", lambda: {"installes": []}):
+        with mock.patch.object(agent, "current_engine", lambda *a, **k: mo), mock.patch.object(agent, "engine_state", lambda: {"installes": []}):
             with self.assertRaises(ValueError) as e:
-                agent.installer_modele(vision["id"])
+                agent.install_model(vision["id"])
         self.assertIn("vision", str(e.exception))
         self.assertNotIn(vision["id"], agent.PULLS, "aucun téléchargement n'a commencé")
 
