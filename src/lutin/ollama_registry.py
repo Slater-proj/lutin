@@ -89,7 +89,7 @@ def download(modele, dossier, progression=None, http=updates.http_get, recuperer
         try:
             recuperer(URL.format(espace=espace, nom=nom, genre="blobs", reference="sha256:" + hexa), destination,
                       (lambda texte, fait, tot, b=base: progression(modele, b + fait, total)) if progression else None, taille_min=1)
-        except ollama_client.ErreurOllama as e:
+        except ollama_client.OllamaError as e:
             raise RegistryError(str(e))
         if _file_digest(destination) != hexa:
             destination.unlink(missing_ok=True)

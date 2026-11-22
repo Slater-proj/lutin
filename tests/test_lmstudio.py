@@ -180,7 +180,7 @@ class Carte(unittest.TestCase):
             self.assertTrue(a["installer"]["possible"])
             self.assertFalse(a["demarrer"]["possible"] or a["arreter"]["possible"])
             self.assertEqual(self.mo.statut()["detail"], "LM Studio n'est pas installé.")
-        with mock.patch.object(L, "lms_path", lambda: "/x/lms"), mock.patch.object(ml.MoteurOpenAI, "actif", lambda self_: False):
+        with mock.patch.object(L, "lms_path", lambda: "/x/lms"), mock.patch.object(ml.OpenAIEngine, "actif", lambda self_: False):
             a = self.mo.actions()
             self.assertFalse(a["installer"]["possible"])
             self.assertTrue(a["demarrer"]["possible"] and a["mettre_a_jour"]["possible"])

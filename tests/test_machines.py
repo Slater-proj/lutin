@@ -87,7 +87,7 @@ class Base(unittest.TestCase):
         self.p_reglages = mock.patch.object(srv._m, "reglages", lambda: dict(A.REGLAGES_DEFAUT))
         self.p_moteur.start()
         self.p_reglages.start()
-        self.srv = ThreadingHTTPServer(("127.0.0.1", 0), A.Gestionnaire if hasattr(A, "Gestionnaire") else srv.Gestionnaire)
+        self.srv = ThreadingHTTPServer(("127.0.0.1", 0), A.Handler if hasattr(A, "Gestionnaire") else srv.Handler)
         threading.Thread(target=self.srv.serve_forever, daemon=True).start()
         self.port = self.srv.server_address[1]
         self.adresse = "http://127.0.0.1:%d" % self.port
@@ -427,7 +427,7 @@ class Reglage(Base):
     def test_la_page_machines(self):
         self.jumeler()
         import lutin.server as srv
-        vue = srv.Gestionnaire._vue_machines()
+        vue = srv.Handler._vue_machines()
         self.assertTrue(vue["noeud"]["actif"])
         self.assertEqual(vue["machines"][0]["etat"], "operationnel")
         self.assertNotIn("jeton", json.dumps(vue))

@@ -314,7 +314,7 @@ class Carte(unittest.TestCase):
         self.mo = engines.ENGINES["exllamav3"]          # an engine of its own since ADR 0020 (before: the « openai » engine with « serveur » set to it)
         self.addCleanup(self.remettre)
         # The tasks ask whether a server already answers on the default port: a real TabbyAPI running on the machine must not change what is asserted.
-        patch = mock.patch.object(ml.MoteurOpenAI, "actif", lambda self: False)
+        patch = mock.patch.object(ml.OpenAIEngine, "actif", lambda self: False)
         patch.start()
         self.addCleanup(patch.stop)
 

@@ -26,7 +26,7 @@ from . import engine_capabilities, engines
 from . import offline as _offline
 from .engine_replace import free_process, replace_folder  # noqa: F401  (le remplacement d'un dossier est commun à tous les moteurs)
 from .i18n import t as _t
-from .openai_engine import MoteurOpenAI
+from .openai_engine import OpenAIEngine
 
 API_RELEASES = "https://api.github.com/repos/ggml-org/llama.cpp/releases?per_page=8"
 CACHE_PARTAGE = {}
@@ -683,7 +683,7 @@ class _FluxCompte:
         return getattr(self.flux, nom)
 
 
-class MoteurLlamaCpp(MoteurOpenAI):
+class MoteurLlamaCpp(OpenAIEngine):
     id = engines.LLAMACPP
     nom = "llama.cpp"
     gere_modeles = True
@@ -1079,7 +1079,7 @@ class MoteurLlamaCpp(MoteurOpenAI):
             return str(self._json("/health", None, 3).get("status", "ok")) == "ok"
         except urllib.error.HTTPError as e:
             if e.code == 404:
-                return MoteurOpenAI.actif(self)
+                return OpenAIEngine.actif(self)
             return False          # 503 : il charge encore
         except (urllib.error.URLError, OSError, ValueError):
             return False
@@ -1117,7 +1117,7 @@ class MoteurLlamaCpp(MoteurOpenAI):
     # -- ce que la page peut faire
     def statut(self):
         if self.externe():
-            actif = MoteurOpenAI.actif(self)
+            actif = OpenAIEngine.actif(self)
             return {"installe": True, "actif": actif, "version": "", "detail": _t("Connecté à {}").format(self.adresse()) if actif else _t("Le serveur {} ne répond pas.").format(self.adresse()), "mode": "externe"}
         exe = self.serveur_installe()
         with SERVEUR["verrou"]:
@@ -1330,7 +1330,7 @@ class MoteurLlamaCpp(MoteurOpenAI):
         f.unlink()
 
 
-class MoteurExterne(MoteurOpenAI):
+class MoteurExterne(OpenAIEngine):
     """Un autre serveur compatible OpenAI (vLLM, Strata, ik_llama.cpp, un llama-server distant…) : une adresse et, si besoin, une clé. Lutin n'installe rien, il s'y connecte.
     Ses sous-classes (`MoteurServeurGere`) sont les serveurs que Lutin installe et lance lui-même : leur `serveur` est fixe (ADR 0020)."""
     id = engines.OPENAI
@@ -1499,7 +1499,7 @@ class MoteurExterne(MoteurOpenAI):
 
     def arreter_gere(self):
         """Arrête le serveur géré par Lutin qui est choisi en ce moment (Colibri, LM Studio ou ExLlamaV3), s'il tourne. Vrai si quelque chose a été arrêté."""
-        if not (self.colibri_choisi() or self.lmstudio_choisi() or self.exllamav3_choisi()) or not MoteurOpenAI.actif(self):
+        if not (self.colibri_choisi() or self.lmstudio_choisi() or self.exllamav3_choisi()) or not OpenAIEngine.actif(self):
             return False
         if self.exllamav3_choisi():
             from . import exllamav3
@@ -1539,7 +1539,7 @@ class MoteurExterne(MoteurOpenAI):
     def statut(self):
         if self.exllamav3_choisi():
             e = self._exl()
-            actif = MoteurOpenAI.actif(self)
+            actif = OpenAIEngine.actif(self)
             if actif:
                 detail = _t("ExLlamaV3 répond sur {}").format(self.adresse())
             elif e:
@@ -1549,7 +1549,7 @@ class MoteurExterne(MoteurOpenAI):
             return {"installe": bool(e) or actif, "actif": actif, "version": self.version(), "detail": detail, "mode": "gere", "installe_par_lutin": bool(e)}
         if self.lmstudio_choisi():
             lms = self._lms()
-            actif = MoteurOpenAI.actif(self)
+            actif = OpenAIEngine.actif(self)
             if actif:
                 detail = _t("LM Studio répond sur {}").format(self.adresse())
             elif lms:
@@ -1559,7 +1559,7 @@ class MoteurExterne(MoteurOpenAI):
             return {"installe": bool(lms) or actif, "actif": actif, "version": "", "detail": detail, "mode": "gere", "installe_par_lutin": bool(lms)}
         if self.colibri_choisi():
             trouve = self._colibri()
-            actif = MoteurOpenAI.actif(self)
+            actif = OpenAIEngine.actif(self)
             if actif:
                 detail = _t("Colibri répond sur {}").format(self.adresse())
             elif trouve:
@@ -1569,14 +1569,14 @@ class MoteurExterne(MoteurOpenAI):
             return {"installe": bool(trouve) or actif, "actif": actif, "version": trouve[0] if trouve else "", "detail": detail, "mode": "gere", "installe_par_lutin": bool(trouve)}
         if not self.adresse():
             return {"installe": True, "actif": False, "version": "", "detail": _t("Aucune adresse : indique celle du serveur ci-dessous."), "mode": "externe"}
-        actif = MoteurOpenAI.actif(self)
+        actif = OpenAIEngine.actif(self)
         return {"installe": True, "actif": actif, "version": "", "detail": _t("Connecté à {}").format(self.adresse()) if actif else _t("Le serveur {} ne répond pas.").format(self.adresse()), "mode": "externe"}
 
     def _actions_exllamav3(self):
         from . import exllamav3
         e = self._exl() is not None
         hl = engines.CONTEXT["hors_ligne"]()
-        actif = MoteurOpenAI.actif(self)
+        actif = OpenAIEngine.actif(self)
         sans = _t("ExLlamaV3 n'est pas installé.")
         reseau = _t("Mode hors ligne : aucun téléchargement.") if hl else ""
         obstacle = ""
@@ -1607,7 +1607,7 @@ class MoteurExterne(MoteurOpenAI):
             if action in ("installer", "mettre_a_jour", "reinstaller"):
                 if engines.CONTEXT["hors_ligne"]():
                     raise ErreurMoteur(_t("Mode hors ligne : aucun téléchargement."))
-                if self.exllamav3_choisi() and MoteurOpenAI.actif(self):
+                if self.exllamav3_choisi() and OpenAIEngine.actif(self):
                     exllamav3.stop(dossiers)          # on ne remplace pas un programme qui tourne
                 avancement = {"fait": 0, "total": exllamav3.ETAPES_INSTALLATION + 1}          # les étapes de l'installation, puis le démarrage : une barre qui avance de vrai
                 progression(_t("Installation d'ExLlamaV3 (TabbyAPI)…"), 0, avancement["total"])
@@ -1641,7 +1641,7 @@ class MoteurExterne(MoteurOpenAI):
     def _actions_lmstudio(self):
         lms = self._lms() is not None
         hl = engines.CONTEXT["hors_ligne"]()
-        actif = MoteurOpenAI.actif(self)
+        actif = OpenAIEngine.actif(self)
         sans = _t("LM Studio n'est pas installé.")
         reseau = _t("Mode hors ligne : aucun téléchargement.") if hl else ""
         return {"installer": {"possible": not lms and not hl, "raison": reseau or (_t("Déjà installé.") if lms else _t("Télécharge l'installeur officiel de LM Studio (lmstudio.ai) et le lance ; il vérifie lui-même ce qu'il télécharge."))},
@@ -1694,7 +1694,7 @@ class MoteurExterne(MoteurOpenAI):
             return {a: {"possible": False, "raison": raison} for a in engines.ACTIONS}
         trouve = self._colibri() is not None
         hl = engines.CONTEXT["hors_ligne"]()
-        actif = MoteurOpenAI.actif(self)
+        actif = OpenAIEngine.actif(self)
         modele = self.modele_colibri()
         modele_ok = bool(modele) and Path(modele).is_dir()
         sans = _t("Colibri n'est pas installé.")
@@ -1736,7 +1736,7 @@ class MoteurExterne(MoteurOpenAI):
                 version, _ = colibri.install(dossiers=dossiers, dire=lambda texte: progression(texte, 0, 0))
                 progression(_t("Installé : Colibri {}.").format(version), 1, 1)
             elif action == "desinstaller":
-                if MoteurOpenAI.actif(self):
+                if OpenAIEngine.actif(self):
                     self._arreter_colibri()
                 shutil.rmtree(colibri.folder_colibri(dossiers), ignore_errors=True)
             elif action.startswith("preparer:"):
@@ -1770,7 +1770,7 @@ class MoteurExterne(MoteurOpenAI):
                         exllamav3.remove_model(nom, self._dossiers())
                         break
                     except PermissionError:          # le serveur tient le modèle ouvert : on l'arrête (l'utilisateur a confirmé la suppression) et on réessaie quelques secondes ; rien n'est touché tant que ça échoue
-                        if essai == 0 and MoteurOpenAI.actif(self):
+                        if essai == 0 and OpenAIEngine.actif(self):
                             exllamav3.stop(self._dossiers())
                         if essai == 5:
                             raise
@@ -1780,7 +1780,7 @@ class MoteurExterne(MoteurOpenAI):
                 lmstudio.remove_model(nom)
             else:
                 from . import colibri
-                if MoteurOpenAI.actif(self):
+                if OpenAIEngine.actif(self):
                     self._arreter_colibri()          # Colibri lit son modèle depuis le disque : arrêté avant d'être effacé
                 colibri.remove_model(nom, self._dossiers())
         except PermissionError:

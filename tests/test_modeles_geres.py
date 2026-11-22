@@ -131,7 +131,7 @@ class Moteur(unittest.TestCase):
     def test_colibri_est_arrete_avant_que_son_modele_soit_efface(self):
         self.mo = engines.ENGINES["colibri"]
         suivi = []
-        with mock.patch.object(ml.MoteurOpenAI, "actif", lambda self: True), mock.patch.object(CO, "stop", lambda *a, **k: suivi.append("arret") or True), \
+        with mock.patch.object(ml.OpenAIEngine, "actif", lambda self: True), mock.patch.object(CO, "stop", lambda *a, **k: suivi.append("arret") or True), \
                 mock.patch.object(CO, "remove_model", lambda nom, d: suivi.append(("supprime", nom))):
             self.mo.supprimer_modele("m")
         self.assertEqual(suivi, ["arret", ("supprime", "m")])
@@ -147,22 +147,22 @@ class CatalogueColibri(unittest.TestCase):
                 {"id": "petit-70b", "go": 40.0, "ok": True, "statut": "ready", "raison": ""}]
         mo = mock.Mock(_dossiers=lambda: {})
         with mock.patch.object(CO, "catalogue", lambda d: brut):
-            r = server.Gestionnaire._catalogue_colibri(mo, [{"nom": "petit-70b-q4"}], "")
+            r = server.Handler._catalogue_colibri(mo, [{"nom": "petit-70b-q4"}], "")
             self.assertEqual([m["id"] for m in r["modeles"]], ["petit-70b", "moyen-200b", "enorme-1t"], "ce qui tient d'abord, du plus petit au plus gros")
             self.assertEqual([m["adequation"]["niveau"] for m in r["modeles"]], ["bien", "bien", "trop_gros"])
             self.assertIn("400 Go", r["modeles"][2]["adequation"]["texte"], "la raison de Colibri est montrée telle quelle")
             self.assertEqual([bool(m["installes"]) for m in r["modeles"]], [True, False, False])
             self.assertTrue(all(m["direct"] for m in r["modeles"]) and r["suite"] is False)
-            self.assertEqual([m["id"] for m in server.Gestionnaire._catalogue_colibri(mo, [], "moyen")["modeles"]], ["moyen-200b"])
+            self.assertEqual([m["id"] for m in server.Handler._catalogue_colibri(mo, [], "moyen")["modeles"]], ["moyen-200b"])
 
 
 class Routes(unittest.TestCase):
     def test_les_trois_serveurs_geres_ont_les_memes_routes(self):
         for serveur_gere in ("exllamav3", "lmstudio", "colibri"):
             for route in ("modeles", "catalogue", "quantifications"):
-                self.assertEqual(server.ROUTES_MODELES_GERES["/api/{}-{}".format(serveur_gere, route)], (serveur_gere, route))
-        self.assertEqual(len(server.ROUTES_MODELES_GERES), 9)
-        self.assertEqual(urllib.parse.urlsplit("/api/lmstudio-catalogue?q=x").path in server.ROUTES_MODELES_GERES, True)
+                self.assertEqual(server.MANAGED_MODEL_ROUTES["/api/{}-{}".format(serveur_gere, route)], (serveur_gere, route))
+        self.assertEqual(len(server.MANAGED_MODEL_ROUTES), 9)
+        self.assertEqual(urllib.parse.urlsplit("/api/lmstudio-catalogue?q=x").path in server.MANAGED_MODEL_ROUTES, True)
 
 
 if __name__ == "__main__":

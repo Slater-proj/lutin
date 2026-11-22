@@ -375,7 +375,7 @@ class Carte(unittest.TestCase):
         self.mo = engines.ENGINES["exllamav3"]          # an engine of its own since ADR 0020 (before: the « openai » engine with « serveur » set to it)
         # Changer de serveur arrête celui qui tourne, et « tourne » se lit sur un port fixe de la machine (1234 pour LM Studio) : si quelque chose y répond,
         # le test lancerait le vrai « lms server stop ». Ici rien ne tourne : un test ne sonde ni n'arrête rien sur la machine qui le lance.
-        eteint = mock.patch.object(ml.MoteurOpenAI, "actif", return_value=False)
+        eteint = mock.patch.object(ml.OpenAIEngine, "actif", return_value=False)
         eteint.start()
         self.addCleanup(eteint.stop)
         self.addCleanup(self.remettre)
@@ -428,7 +428,7 @@ class Carte(unittest.TestCase):
     def test_le_dossier_des_modeles_se_choisit_et_arrete_le_serveur_qui_le_lit(self):
         ailleurs = self.tmp / "autre-disque"
         arrets = []
-        with mock.patch.object(ml.MoteurOpenAI, "actif", lambda self: True), mock.patch.object(X, "stop", lambda dossiers=None, **k: arrets.append(1)):
+        with mock.patch.object(ml.OpenAIEngine, "actif", lambda self: True), mock.patch.object(X, "stop", lambda dossiers=None, **k: arrets.append(1)):
             ml.regler_dossier_modeles("exllamav3", str(ailleurs))
         self.assertEqual(arrets, [1])
         self.assertEqual(self.mo._dossiers()["modeles"], str(ailleurs))
@@ -443,17 +443,17 @@ class Carte(unittest.TestCase):
         """The old select of the « openai » engine, as an older client still sends it (ADR 0020 reads it): the server it left is stopped."""
         ml.regler_serveur("openai", {"serveur": "exllamav3"})
         arrets = []
-        with mock.patch.object(ml.MoteurOpenAI, "actif", lambda self: True), mock.patch.object(X, "stop", lambda dossiers=None, **k: arrets.append("exllamav3")):
+        with mock.patch.object(ml.OpenAIEngine, "actif", lambda self: True), mock.patch.object(X, "stop", lambda dossiers=None, **k: arrets.append("exllamav3")):
             self.assertTrue(ml.regler_serveur("openai", {"serveur": "colibri"}))
         self.assertEqual(arrets, ["exllamav3"])
         self.assertEqual(ml.serveur_ancien(), "colibri")
         arrets.clear()
-        with mock.patch.object(ml.MoteurOpenAI, "actif", lambda self: True), mock.patch.object(X, "stop", lambda dossiers=None, **k: arrets.append("x")):
+        with mock.patch.object(ml.OpenAIEngine, "actif", lambda self: True), mock.patch.object(X, "stop", lambda dossiers=None, **k: arrets.append("x")):
             ml.regler_serveur("openai", {"serveur": "colibri"})          # le même serveur : rien n'est arrêté
         self.assertEqual(arrets, [])
 
     def test_changer_de_serveur_eteint_ne_demande_rien(self):
-        with mock.patch.object(ml.MoteurOpenAI, "actif", lambda self: False), mock.patch.object(X, "stop", lambda dossiers=None, **k: self.fail("rien ne tourne")):
+        with mock.patch.object(ml.OpenAIEngine, "actif", lambda self: False), mock.patch.object(X, "stop", lambda dossiers=None, **k: self.fail("rien ne tourne")):
             ml.regler_serveur("openai", {"serveur": "lmstudio"})
         self.assertEqual(ml.serveur_ancien(), "lmstudio")
 
@@ -484,13 +484,13 @@ class Carte(unittest.TestCase):
             if appels["n"] == 1:
                 raise PermissionError("utilisé")
             suivi.append(("supprime", nom))
-        with mock.patch.object(ml.MoteurOpenAI, "actif", lambda self: True), mock.patch.object(X, "stop", lambda dossiers=None, **k: suivi.append("arret")), \
+        with mock.patch.object(ml.OpenAIEngine, "actif", lambda self: True), mock.patch.object(X, "stop", lambda dossiers=None, **k: suivi.append("arret")), \
                 mock.patch.object(X, "remove_model", supprimer), mock.patch.object(ml.time, "sleep", lambda s: None):
             self.mo.supprimer_modele("A-exl3")
         self.assertEqual(suivi, ["arret", ("supprime", "A-exl3")], "arrêté une fois, puis supprimé")
 
     def test_si_le_fichier_reste_utilise_le_modele_reste_entier_et_l_erreur_est_dite(self):
-        with mock.patch.object(ml.MoteurOpenAI, "actif", lambda self: False), mock.patch.object(X, "remove_model", mock.Mock(side_effect=PermissionError())), mock.patch.object(ml.time, "sleep", lambda s: None):
+        with mock.patch.object(ml.OpenAIEngine, "actif", lambda self: False), mock.patch.object(X, "remove_model", mock.Mock(side_effect=PermissionError())), mock.patch.object(ml.time, "sleep", lambda s: None):
             with self.assertRaises(ml.ErreurMoteur) as e:
                 self.mo.supprimer_modele("A-exl3")
         self.assertIn("arrête ExLlamaV3", str(e.exception))

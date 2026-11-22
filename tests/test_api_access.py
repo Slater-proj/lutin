@@ -85,7 +85,7 @@ def setUpModule():
     for patch in patches:
         patch.start()
         unittest.addModuleCleanup(patch.stop)
-    SERVER = ThreadingHTTPServer(("127.0.0.1", 0), A.Gestionnaire)
+    SERVER = ThreadingHTTPServer(("127.0.0.1", 0), A.Handler)
     threading.Thread(target=SERVER.serve_forever, daemon=True).start()
     unittest.addModuleCleanup(SERVER.shutdown)
     PORT = SERVER.server_address[1]

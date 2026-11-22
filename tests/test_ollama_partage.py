@@ -190,7 +190,7 @@ class DossiersCommuns(unittest.TestCase):
         with tempfile.TemporaryDirectory() as t:
             try:
                 ollama_client.install_windows(t, ouvrir=lambda r, timeout: Rep(b"x" * 100), lanceur_sortie=lambda c, d=0: "Valid|CN=Ollama Inc, O=Ollama", executer=lambda cmd, **k: lances.append(cmd) or type("R", (), {"returncode": 0})(), taille_min=10, dossier="E:/IA/Ollama")
-            except ollama_client.ErreurOllama:
+            except ollama_client.OllamaError:
                 pass          # « introuvable » après installation : sans importance ici, seule la commande lancée compte
         self.assertTrue(lances and "/DIR=E:/IA/Ollama" in lances[0] and "/SILENT" in lances[0], lances)
 

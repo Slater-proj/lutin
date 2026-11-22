@@ -44,7 +44,7 @@ threading.Thread(target=SERVEUR.serve_forever, daemon=True).start()
 ADRESSE = "http://127.0.0.1:%d/v1" % SERVEUR.server_address[1]
 
 
-class Essai(mo.MoteurOpenAI):
+class Essai(mo.OpenAIEngine):
     id, nom = "essai", "Essai"
 
     def adresse(self):
@@ -60,7 +60,7 @@ class Traduction(unittest.TestCase):
                  "messages": [{"role": "system", "content": "S"}, {"role": "user", "content": "Lis a", "images": ["iVBORw0KGgo="]},
                               {"role": "assistant", "content": "", "tool_calls": [{"function": {"name": "lire", "arguments": {"chemin": "a"}}}]},
                               {"role": "tool", "tool_name": "lire", "content": "contenu"}, {"role": "tool", "tool_name": "orphelin", "content": "reste"}]}
-        s = mo.vers_openai(corps)
+        s = mo.to_openai(corps)
         self.assertEqual((s["model"], s["temperature"], s["top_p"], s["top_k"], s["max_tokens"]), ("m", 0.3, 0.9, 40, 200))
         self.assertNotIn("num_ctx", s)
         self.assertEqual(s["stream_options"], {"include_usage": True})
@@ -77,7 +77,7 @@ class Traduction(unittest.TestCase):
         self.assertEqual(mo.arguments_json('{"a": 1,}'), {"a": 1})
         self.assertEqual(mo.arguments_json(""), {})
         self.assertEqual(mo.arguments_json("n'importe quoi"), {})
-        s = mo.vers_openai({"model": "m", "stream": False, "format": "json", "messages": []})
+        s = mo.to_openai({"model": "m", "stream": False, "format": "json", "messages": []})
         self.assertEqual(s["response_format"], {"type": "json_object"})
         self.assertNotIn("stream_options", s)
 
@@ -135,7 +135,7 @@ class AvecUnServeur(unittest.TestCase):
         self.assertEqual(RECUES[-1][1]["chat_template_kwargs"], {"enable_thinking": False})
         self.m.chat({"model": "qwen-test", "messages": [{"role": "user", "content": "Salut"}]}, 10)
         self.assertNotIn("chat_template_kwargs", RECUES[-1][1], "reflection is the model's own choice unless Lutin says no")
-        distant = mo.vers_openai({"model": "m", "messages": [], "think": False}, gabarit=False)
+        distant = mo.to_openai({"model": "m", "messages": [], "think": False}, gabarit=False)
         self.assertNotIn("chat_template_kwargs", distant)
 
     def test_chat_en_flux_traduit_au_format_d_ollama(self):

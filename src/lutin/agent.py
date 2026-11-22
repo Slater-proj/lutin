@@ -712,7 +712,7 @@ class MoteurOllama(_moteurs.Moteur):
         demarrer = {"possible": st["installe"] and not st["actif"], "raison": _t("Démarre Ollama.") if st["installe"] else pas_installe}
         arreter = {"possible": st["actif"], "raison": _t("Arrête Ollama et libère la mémoire.") if st["actif"] else _t("Il n'est pas démarré.")}
         if os.name == "nt":
-            unins = ollama_client.desinstalleur_windows()
+            unins = ollama_client.windows_uninstaller()
             gardes = _t("Tes modèles téléchargés sont gardés.")
             maj = {"possible": st["installe"] and not hors, "raison": _t("Installe la dernière version par-dessus l'actuelle (sans désinstaller) ; tes modèles, leur dossier et tes réglages sont gardés.") if st["installe"] else pas_installe}
             if hors:
@@ -770,7 +770,7 @@ class MoteurOllama(_moteurs.Moteur):
                 ollama_client.install_windows(cache, progression, dossier=self.dossier_installation())
                 self._rendre_dossier_modeles(dossier_modeles)
                 _m.demarrer_ollama()
-        except ollama_client.ErreurOllama as e:
+        except ollama_client.OllamaError as e:
             raise ValueError(str(e))
         CAPACITES.clear()
 

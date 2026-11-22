@@ -73,7 +73,7 @@ class Fiches(unittest.TestCase):
 
     def test_un_catalogue_falsifie_ne_change_pas_les_fiches(self):
         ancien = dict(cm.PUBLIC_KEYS)
-        cm.PUBLIC_KEYS["test"] = ed25519.cle_publique(GRAINE).hex()
+        cm.PUBLIC_KEYS["test"] = ed25519.public_key(GRAINE).hex()
         try:
             e = cm.signer({"version": 99, "moteurs": [bloc(description={"fr": "Pirate."})]}, GRAINE, "test")
             e["catalogue"]["moteurs"][0]["description"] = {"fr": "Autre texte, signature périmée."}

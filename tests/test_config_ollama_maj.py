@@ -9,7 +9,7 @@ from pathlib import Path
 import context  # noqa: F401
 from lutin import model_catalog, config, updates, ollama_client
 from lutin.hardware import Gpu, Profil
-from lutin.ollama_client import ErreurOllama, Ollama
+from lutin.ollama_client import OllamaError, Ollama
 
 CAT = model_catalog.load()
 
@@ -171,7 +171,7 @@ class ClientOllama(unittest.TestCase):
         self.assertEqual(OLLAMA.version(), "0.12.0")
         self.assertEqual(OLLAMA.installes()["qwen3:8b"]["digest"], "aaa111")
         self.assertFalse(Ollama("http://127.0.0.1:9").actif())
-        with self.assertRaises(ErreurOllama):
+        with self.assertRaises(OllamaError):
             Ollama("http://127.0.0.1:9").installes()
 
     def test_une_erreur_http_d_ollama_n_est_pas_un_ollama_eteint(self):
@@ -192,7 +192,7 @@ class ClientOllama(unittest.TestCase):
         srv = http.server.HTTPServer(("127.0.0.1", 0), Repond404)
         threading.Thread(target=srv.serve_forever, daemon=True).start()
         try:
-            with self.assertRaises(ErreurOllama) as cm:
+            with self.assertRaises(OllamaError) as cm:
                 Ollama("http://127.0.0.1:%d" % srv.server_port).json("/api/chat", {"model": "absent", "messages": []})
             self.assertIn("n'est pas installé", str(cm.exception))
             self.assertNotIn("ne répond pas", str(cm.exception))
@@ -222,7 +222,7 @@ class ClientOllama(unittest.TestCase):
         OLLAMA.telecharger("qwen3:4b", lambda t, f, tot: vu.append((t, f, tot)))
         self.assertEqual(vu[0], ("pulling", 10, 100))
         self.assertEqual(vu[-1][0], "success")
-        with self.assertRaises(ErreurOllama):
+        with self.assertRaises(OllamaError):
             OLLAMA.telecharger("casse")
 
     def test_variables_selon_la_machine(self):
@@ -234,13 +234,13 @@ class ClientOllama(unittest.TestCase):
         self.assertNotIn("OLLAMA_MODELS", sans)
 
     def test_trouver_executable(self):
-        self.assertEqual(ollama_client.trouver_executable("linux", {}, quelle=lambda n: "/usr/bin/ollama"), "/usr/bin/ollama")
+        self.assertEqual(ollama_client.find_executable("linux", {}, quelle=lambda n: "/usr/bin/ollama"), "/usr/bin/ollama")
         with tempfile.TemporaryDirectory() as t:
             exe = Path(t) / "Programs" / "Ollama" / "ollama.exe"
             exe.parent.mkdir(parents=True)
             exe.write_text("x")
-            self.assertEqual(ollama_client.trouver_executable("windows", {"LOCALAPPDATA": t}, quelle=lambda n: None), str(exe))
-        self.assertEqual(ollama_client.trouver_executable("windows", {"LOCALAPPDATA": "/nulle/part"}, quelle=lambda n: None), "")
+            self.assertEqual(ollama_client.find_executable("windows", {"LOCALAPPDATA": t}, quelle=lambda n: None), str(exe))
+        self.assertEqual(ollama_client.find_executable("windows", {"LOCALAPPDATA": "/nulle/part"}, quelle=lambda n: None), "")
 
 
 class Reponse:
@@ -262,9 +262,9 @@ class Reponse:
 class InstallationOllama(unittest.TestCase):
     def test_refuse_http_et_les_fichiers_trop_petits(self):
         with tempfile.TemporaryDirectory() as t:
-            with self.assertRaises(ErreurOllama):
+            with self.assertRaises(OllamaError):
                 ollama_client.download_file("http://exemple.org/x.exe", Path(t) / "x.exe")
-            with self.assertRaises(ErreurOllama):
+            with self.assertRaises(OllamaError):
                 ollama_client.download_file("https://exemple.org/x.exe", Path(t) / "x.exe", ouvrir=lambda r, timeout: Reponse(b"petit"))
             self.assertFalse((Path(t) / "x.exe").exists())
 
@@ -302,7 +302,7 @@ class InstallationOllama(unittest.TestCase):
             self.assertEqual(len(essais), 3)
             self.assertEqual([c.args[0] for c in dormir.call_args_list], [3, 8])
             self.assertEqual(dest.read_bytes(), b"c" * 60)
-            with mock.patch.object(ollama_client.time, "sleep"), self.assertRaises(ollama_client.ErreurOllama):
+            with mock.patch.object(ollama_client.time, "sleep"), self.assertRaises(ollama_client.OllamaError):
                 ollama_client.download_file("https://exemple.org/w.exe", Path(t) / "w.exe", ouvrir=lambda req, timeout: (_ for _ in ()).throw(OSError("hors ligne")), taille_min=10)
 
     def test_signature(self):
@@ -314,7 +314,7 @@ class InstallationOllama(unittest.TestCase):
     def test_installation_windows_annulee_si_la_signature_est_mauvaise(self):
         with tempfile.TemporaryDirectory() as t:
             lance = []
-            with self.assertRaises(ErreurOllama):
+            with self.assertRaises(OllamaError):
                 ollama_client.install_windows(t, ouvrir=lambda r, timeout: Reponse(b"x" * 100), lanceur_sortie=lambda c, d=0: "NotSigned|", executer=lambda *a, **k: lance.append(a), taille_min=10)
             self.assertEqual(lance, [], "l'installateur n'est jamais exécuté")
             self.assertFalse((Path(t) / "OllamaSetup.exe").exists(), "et il est supprimé")

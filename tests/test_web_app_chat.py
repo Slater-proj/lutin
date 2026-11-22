@@ -1152,7 +1152,7 @@ class Chat(unittest.TestCase):
         seen = {"modeles": [], "installe": True, "dossier": "C:/models", "actif": True, "maj": False, "nom": "ExLlamaV3", "statut": "", "demarrer": None}
         for patch in (mock.patch.object(T.A, "moteur_actuel", lambda *args: Shown()), mock.patch.object(managed_models, "chosen", lambda kind: kind == current["id"]),
                       mock.patch.object(managed_models, "models", lambda kind, shown: seen), mock.patch.object(managed_models, "recommended", lambda kind: []),
-                      mock.patch.object(managed_models, "catalog", lambda *args: {"suite": False, "modeles": []}), mock.patch.object(llamacpp_engine.MoteurOpenAI, "actif", lambda self: False),
+                      mock.patch.object(managed_models, "catalog", lambda *args: {"suite": False, "modeles": []}), mock.patch.object(llamacpp_engine.OpenAIEngine, "actif", lambda self: False),
                       mock.patch.object(engines.ENGINES["openai"], "modeles", lambda: {"actif": False, "installes": [], "tailles": {}}),
                       mock.patch.dict(engines.CONTEXT, profil=lambda: Profile(cards["maker"])), mock.patch.dict(os.environ, {"LUTIN_HORS_LIGNE": ""})):
             patch.start()
@@ -1536,8 +1536,8 @@ class Chat(unittest.TestCase):
         c["messages"] = [{"role": "user", "content": "Ne jamais toucher à la production.", "ts": "2026-11-18T10:00:00"}, {"role": "assistant", "content": "Compris.", "ts": "2026-11-18T10:00:05"}]
         T.A.conv_ecrire(c)
         self.addCleanup(lambda: T.A.conv_supprimer(c["id"]))
-        before = {entry["id"] for entry in mcp.vue()}
-        self.addCleanup(lambda: [mcp.remove(entry["id"]) for entry in mcp.vue() if entry["id"] not in before])
+        before = {entry["id"] for entry in mcp.view()}
+        self.addCleanup(lambda: [mcp.remove(entry["id"]) for entry in mcp.view() if entry["id"] not in before])
         found = [{"titre": "Bonnes pratiques de production", "url": "https://example.org/prod", "extrait": "Ne pas modifier en direct.", "source": "duckduckgo"}]
         for patch in (mock.patch.object(web, "search_results", lambda query, count: (found, [])),
                       mock.patch.object(external_programs, "state", lambda *args, **kwargs: [{"nom": "uv", "libelle": "uv", "aide": "Pour Python.", "installe": False, "par_lutin": False, "version": ""}])):
@@ -1563,14 +1563,14 @@ class Chat(unittest.TestCase):
 
         p.evaluer("location.hash = '#/agents/connectors'")
         self.press("[...document.querySelectorAll('.button')].find(b => b.innerText === 'Ajouter le connecteur de démonstration')")
-        self.eventually(lambda: len([entry for entry in mcp.vue() if entry["id"] not in before]) == 1, "the demonstration connector was added")
+        self.eventually(lambda: len([entry for entry in mcp.view() if entry["id"] not in before]) == 1, "the demonstration connector was added")
         p.attendre("[...document.querySelectorAll('.button')].some(b => b.innerText === 'Changer ses clés')")
         p.evaluer("[...document.querySelectorAll('.button')].filter(b => b.innerText === 'Changer ses clés').pop().click()")
         p.attendre("!!document.querySelector('textarea[id^=rekey-]')")
         p.evaluer("(() => { const box = document.querySelector('textarea[id^=rekey-]'); box.value = 'DEMO_KEY=abc'; box.dispatchEvent(new Event('input', {bubbles: true})); })()")
         self.press("[...document.querySelectorAll('.button')].find(b => b.innerText === 'Remplacer les clés')")
-        added = [entry for entry in mcp.vue() if entry["id"] not in before][0]
-        self.eventually(lambda: "DEMO_KEY" in next(e for e in mcp.vue() if e["id"] == added["id"])["cles_env"], "the key is kept (only its name is shown)")
+        added = [entry for entry in mcp.view() if entry["id"] not in before][0]
+        self.eventually(lambda: "DEMO_KEY" in next(e for e in mcp.view() if e["id"] == added["id"])["cles_env"], "the key is kept (only its name is shown)")
         p.evaluer("location.hash = '#/settings/tools'")
         p.attendre("[...document.querySelectorAll('.helpers .button')].some(b => b.innerText === 'Installer uv')")
         self.assertEqual(p.erreurs, [])

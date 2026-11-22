@@ -132,7 +132,7 @@ class Api(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         from lutin import security as S
-        cls.serveur = ThreadingHTTPServer(("127.0.0.1", 0), A.Gestionnaire)
+        cls.serveur = ThreadingHTTPServer(("127.0.0.1", 0), A.Handler)
         threading.Thread(target=cls.serveur.serve_forever, daemon=True).start()
         cls.port = cls.serveur.server_address[1]
         cls.avant = A.SECURITE

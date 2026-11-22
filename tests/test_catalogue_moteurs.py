@@ -40,8 +40,8 @@ class Ed25519(unittest.TestCase):
     def test_vecteurs_rfc_8032(self):
         for graine, publique, message, signature in VECTEURS:
             graine, publique, message, signature = (bytes.fromhex(x) for x in (graine, publique, message, signature))
-            self.assertEqual(ed25519.cle_publique(graine), publique)
-            self.assertEqual(ed25519.signer(graine, message), signature)
+            self.assertEqual(ed25519.public_key(graine), publique)
+            self.assertEqual(ed25519.sign(graine, message), signature)
             self.assertTrue(ed25519.check(publique, message, signature))
 
     def test_refus_de_tout_ce_qui_est_modifie_ou_mal_forme(self):
@@ -65,7 +65,7 @@ class Ed25519(unittest.TestCase):
 class Enveloppe(unittest.TestCase):
     def setUp(self):
         self.ancien = dict(cm.PUBLIC_KEYS)
-        cm.PUBLIC_KEYS[CLE_TEST] = ed25519.cle_publique(GRAINE_TEST).hex()
+        cm.PUBLIC_KEYS[CLE_TEST] = ed25519.public_key(GRAINE_TEST).hex()
 
     def tearDown(self):
         cm.PUBLIC_KEYS.clear()
@@ -135,7 +135,7 @@ class Livre(unittest.TestCase):
 class Lecture(unittest.TestCase):
     def setUp(self):
         self.ancien = dict(cm.PUBLIC_KEYS)
-        cm.PUBLIC_KEYS[CLE_TEST] = ed25519.cle_publique(GRAINE_TEST).hex()
+        cm.PUBLIC_KEYS[CLE_TEST] = ed25519.public_key(GRAINE_TEST).hex()
         self.dossier = Path(tempfile.mkdtemp(dir=_TEMP))
 
     def tearDown(self):
@@ -195,7 +195,7 @@ class Lecture(unittest.TestCase):
 class Page(unittest.TestCase):
     def test_l_api_donne_les_prereglages(self):
         from lutin import server
-        liste = server.Gestionnaire._prereglages()
+        liste = server.Handler._prereglages()
         self.assertIn("lmstudio", [p["id"] for p in liste])
         self.assertTrue(all(p["adresse"].startswith("http") or p["experimental"] for p in liste), "seuls les expérimentaux peuvent ne pas avoir d'adresse habituelle vérifiée")
 

@@ -231,7 +231,7 @@ from lutin import web as _web  # noqa: E402
 _web.LIRE_AUTO = 0          # les tests n'ouvrent aucune page du vrai internet : la lecture automatique des premiers résultats a son propre test
 from lutin.storage import DOSSIER_COPIES  # noqa: E402
 
-S_ASSISTANT = lancer(A.Gestionnaire)
+S_ASSISTANT = lancer(A.Handler)
 BASE = "http://127.0.0.1:%d" % S_ASSISTANT.server_address[1]
 
 
@@ -412,7 +412,7 @@ class Assistant(unittest.TestCase):
         mcp.write({"serveurs": {}})
         self.addCleanup(lambda: (mcp.close(), mcp.write({"serveurs": {}})))
         ident = mcp.add("Demo", [sys.executable, "-m", "lutin.mcp_demo"], env={"PYTHONPATH": str(Path(__file__).resolve().parent.parent / "src")})
-        mcp.actualiser(ident)
+        mcp.refresh(ident)
         mcp.set_value(ident, outil="heure", autorise=True)
         ev = chat("Quelle heure est-il ?", reponses=[[appel_outil("mcp__demo__heure")], [{"content": "Voilà l'heure."}]])
         affiche = next(e for e in ev if e["type"] == "resultat")["texte"]

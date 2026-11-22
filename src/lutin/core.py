@@ -570,7 +570,7 @@ def modeles_retenus(sauf=None):
             noms.append("llama.cpp")
         for i in _mo.MANAGED_SERVERS:
             gere = _mo.ENGINES.get(i)
-            if i != sauf and gere is not None and _ml.MoteurOpenAI.actif(gere):
+            if i != sauf and gere is not None and _ml.OpenAIEngine.actif(gere):
                 noms.append(gere.nom)
     except Exception as e:  # noqa: BLE001  (une liste de confort : jamais une erreur de plus)
         journaliser("Liste des modèles retenus impossible : {!r}".format(e))
@@ -939,7 +939,7 @@ from .workspace_manager import (  # noqa: F401  (déplacé dans workspace_manage
 )
 
 from .server import (  # noqa: F401  (déplacé dans server.py : moteur ré-exporte ses noms)
-    Gestionnaire,
+    Handler,
 )
 
 
@@ -1036,7 +1036,7 @@ def lier_le_port(hote, essais=6, pause=0.5, dormir=time.sleep):
     """Ouvre le port ; quelques essais rapprochés absorbent un redémarrage (l'ancien Lutin finit de s'arrêter). OSError si le port reste pris : c'est qu'un autre Lutin tourne."""
     for rang in range(essais):
         try:
-            return ServeurLutin((hote, PORT), Gestionnaire)
+            return ServeurLutin((hote, PORT), Handler)
         except OSError:
             if rang == essais - 1:
                 raise
@@ -1049,7 +1049,7 @@ def ecouter_aussi_en_local(hote):
     if hote in ADRESSES_LOCALES or hote in ("0.0.0.0", "", "::"):
         return None
     try:
-        local = ServeurLutin(("127.0.0.1", PORT), Gestionnaire)
+        local = ServeurLutin(("127.0.0.1", PORT), Handler)
     except OSError as erreur:
         journaliser("Impossible d'écouter aussi sur 127.0.0.1:{} : {!r}".format(PORT, erreur))
         return None

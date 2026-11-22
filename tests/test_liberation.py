@@ -81,11 +81,11 @@ class Liberation(unittest.TestCase):
         ml.SERVEUR["proc"] = Fil(True)
         actifs = {"exllamav3", "colibri"}
         with mock.patch.object(_m, "_ollama_ecoute", return_value=True), mock.patch.object(_m, "ollama_json", return_value={"models": [{"name": "qwen3:8b"}]}), \
-                mock.patch.object(ml.MoteurOpenAI, "actif", lambda s: s.id in actifs):
+                mock.patch.object(ml.OpenAIEngine, "actif", lambda s: s.id in actifs):
             self.assertEqual(_m.modeles_retenus(sauf="exllamav3"), ["qwen3:8b", "llama.cpp", "Colibri"])
         ml.SERVEUR["proc"] = None
         with mock.patch.object(_m, "_ollama_ecoute", return_value=False), mock.patch.object(_m, "ollama_json", side_effect=AssertionError("Ollama is not asked when nobody listens")), \
-                mock.patch.object(ml.MoteurOpenAI, "actif", lambda s: False):
+                mock.patch.object(ml.OpenAIEngine, "actif", lambda s: False):
             self.assertEqual(_m.modeles_retenus(), [])
 
     def test_ollama_et_llamacpp_ensemble(self):

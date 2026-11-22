@@ -14,19 +14,19 @@ from pathlib import Path
 from . import offline
 from .i18n import t as _t
 
-URL_PAR_DEFAUT = "http://127.0.0.1:11434"
+DEFAULT_URL = "http://127.0.0.1:11434"
 URL_DOWNLOAD_WINDOWS = "https://ollama.com/download/OllamaSetup.exe"
 COMMAND_LINUX = "curl -fsSL https://ollama.com/install.sh | sh"
-EDITEUR_ATTENDU = "ollama"            # le nom de l'éditeur dans la signature Authenticode de l'installateur Windows
+EXPECTED_PUBLISHER = "ollama"            # le nom de l'éditeur dans la signature Authenticode de l'installateur Windows
 
 
-class ErreurOllama(RuntimeError):
+class OllamaError(RuntimeError):
     pass
 
 
 class Ollama:
     def __init__(self, url=None, ouvrir=urllib.request.urlopen):
-        self.url = (url or os.environ.get("OLLAMA_URL") or URL_PAR_DEFAUT).rstrip("/")
+        self.url = (url or os.environ.get("OLLAMA_URL") or DEFAULT_URL).rstrip("/")
         self.ouvrir = ouvrir
 
     def _requete(self, chemin, corps=None, delai=5, methode=None):
@@ -45,16 +45,16 @@ class Ollama:
                 detail = ""
             modele = (corps or {}).get("model") if isinstance(corps, dict) else None
             if e.code == 404 and modele:
-                raise ErreurOllama(_t("Le modèle « {} » n'est pas installé dans Ollama. Installe-le (onglet Modèles, ou en ligne de commande : lutin models install {}) ou choisis-en un déjà installé en haut à gauche.").format(modele, modele)) from e
-            raise ErreurOllama(_t("Ollama a répondu une erreur (HTTP {}) : {}").format(e.code, detail or e.reason)) from e
+                raise OllamaError(_t("Le modèle « {} » n'est pas installé dans Ollama. Installe-le (onglet Modèles, ou en ligne de commande : lutin models install {}) ou choisis-en un déjà installé en haut à gauche.").format(modele, modele)) from e
+            raise OllamaError(_t("Ollama a répondu une erreur (HTTP {}) : {}").format(e.code, detail or e.reason)) from e
         except (OSError, ValueError, urllib.error.URLError) as e:
-            raise ErreurOllama(_t("Ollama ne répond pas ({}) : {}").format(self.url, e)) from e
+            raise OllamaError(_t("Ollama ne répond pas ({}) : {}").format(self.url, e)) from e
 
     def actif(self):
         try:
             self.json("/api/version", delai=2)
             return True
-        except ErreurOllama:
+        except OllamaError:
             return False
 
     def version(self):
@@ -68,7 +68,7 @@ class Ollama:
         """Liste des capacités annoncées (« tools », « vision »…) ou None si Ollama ne le dit pas (ancienne version)."""
         try:
             c = self.json("/api/show", {"model": modele}, 8).get("capabilities")
-        except ErreurOllama:
+        except OllamaError:
             return None
         return c if isinstance(c, list) else None
 
@@ -83,11 +83,11 @@ class Ollama:
                     except ValueError:
                         continue
                     if e.get("error"):
-                        raise ErreurOllama(e["error"])
+                        raise OllamaError(e["error"])
                     if progression:
                         progression(e.get("status", ""), e.get("completed") or 0, e.get("total") or 0)
         except (OSError, urllib.error.URLError) as e:
-            raise ErreurOllama(_t("Téléchargement interrompu : {}").format(e)) from e
+            raise OllamaError(_t("Téléchargement interrompu : {}").format(e)) from e
 
     def supprimer(self, modele):
         self.json("/api/delete", {"model": modele}, methode="DELETE")
@@ -95,7 +95,7 @@ class Ollama:
 
 # ---------------------------------------------------------------- installation d'Ollama
 
-def trouver_executable(systeme, env=None, quelle=shutil.which):
+def find_executable(systeme, env=None, quelle=shutil.which):
     env = os.environ if env is None else env
     trouve = quelle("ollama")
     if trouve:
@@ -143,7 +143,7 @@ def start_server(exe, variables, systeme, lanceur=subprocess.Popen):
 def download_file(url, destination, progression=None, ouvrir=urllib.request.urlopen, taille_min=50_000_000, pauses=(3, 8)):
     """Télécharge `url` vers `destination` (fichier .part renommé à la fin, reprise si interrompu). HTTPS obligatoire."""
     if not url.startswith("https://"):
-        raise ErreurOllama(_t("téléchargement refusé : adresse non sécurisée"))
+        raise OllamaError(_t("téléchargement refusé : adresse non sécurisée"))
     offline.guard(url)
     destination = Path(destination)
     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -171,11 +171,11 @@ def download_file(url, destination, progression=None, ouvrir=urllib.request.urlo
             break
         except (OSError, urllib.error.URLError) as e:
             if pause is None:
-                raise ErreurOllama(_t("téléchargement interrompu (relance la commande : il reprend où il s'est arrêté) : {}").format(e)) from e
+                raise OllamaError(_t("téléchargement interrompu (relance la commande : il reprend où il s'est arrêté) : {}").format(e)) from e
             time.sleep(pause)
     if part.stat().st_size < taille_min:
         part.unlink(missing_ok=True)
-        raise ErreurOllama(_t("fichier téléchargé trop petit : abandon"))
+        raise OllamaError(_t("fichier téléchargé trop petit : abandon"))
     part.replace(destination)
     return destination
 
@@ -185,10 +185,10 @@ def check_signature_windows(chemin, lanceur):
     sortie = lanceur(["powershell", "-NoProfile", "-Command",
                       "$s = Get-AuthenticodeSignature -LiteralPath '{}'; \"$($s.Status)|$($s.SignerCertificate.Subject)\"".format(str(chemin).replace("'", "''"))], 30)
     statut, _, sujet = (sortie or "").strip().partition("|")
-    return statut == "Valid" and EDITEUR_ATTENDU in sujet.lower(), sujet
+    return statut == "Valid" and EXPECTED_PUBLISHER in sujet.lower(), sujet
 
 
-def desinstalleur_windows(env=None):
+def windows_uninstaller(env=None):
     """Le programme de désinstallation d'Ollama (installé pour l'utilisateur courant), ou None."""
     env = os.environ if env is None else env
     base = env.get("LOCALAPPDATA") or ""
@@ -200,29 +200,29 @@ def desinstalleur_windows(env=None):
 
 def uninstall_windows(executer=subprocess.run, env=None):
     """Désinstalle Ollama en silence ; les modèles téléchargés (dans le dossier .ollama de l'utilisateur) ne sont pas touchés."""
-    exe = desinstalleur_windows(env)
+    exe = windows_uninstaller(env)
     if exe is None:
-        raise ErreurOllama(_t("Le désinstalleur d'Ollama est introuvable (il n'a pas été installé pour cet utilisateur) : utilise « Applications installées » de Windows."))
+        raise OllamaError(_t("Le désinstalleur d'Ollama est introuvable (il n'a pas été installé pour cet utilisateur) : utilise « Applications installées » de Windows."))
     r = executer([str(exe), "/VERYSILENT", "/NORESTART"], timeout=600)
     if getattr(r, "returncode", 0) != 0:
-        raise ErreurOllama(_t("la désinstallation d'Ollama a échoué (code {})").format(r.returncode))
+        raise OllamaError(_t("la désinstallation d'Ollama a échoué (code {})").format(r.returncode))
 
 
 def install_windows(dossier_cache, progression=None, ouvrir=urllib.request.urlopen, lanceur_sortie=None, executer=subprocess.run, taille_min=50_000_000, dossier=None):
     """Télécharge, VÉRIFIE LA SIGNATURE, puis installe Ollama en silence (pour l'utilisateur courant, sans droits administrateur)."""
     from .hardware import launch
     if os.environ.get("LUTIN_TESTS") == "1" and executer is subprocess.run:
-        raise ErreurOllama("installation réelle d'Ollama interdite pendant les tests : donne un faux `executer`")          # garde-fou : un test ne doit jamais installer un vrai programme sur la machine
+        raise OllamaError("installation réelle d'Ollama interdite pendant les tests : donne un faux `executer`")          # garde-fou : un test ne doit jamais installer un vrai programme sur la machine
     lanceur_sortie = lanceur_sortie or launch
     installateur = download_file(URL_DOWNLOAD_WINDOWS, Path(dossier_cache) / "OllamaSetup.exe", progression, ouvrir, taille_min)
     ok, sujet = check_signature_windows(installateur, lanceur_sortie)
     if not ok:
         installateur.unlink(missing_ok=True)
-        raise ErreurOllama(_t("la signature de l'installateur d'Ollama n'est pas valide ({}) : installation annulée").format(sujet or "aucune signature"))
+        raise OllamaError(_t("la signature de l'installateur d'Ollama n'est pas valide ({}) : installation annulée").format(sujet or "aucune signature"))
     r = executer([str(installateur), "/SILENT"] + (["/DIR=" + str(dossier)] if dossier else []), timeout=900)          # /DIR : l'option d'installation du programme d'installation (Inno Setup) d'Ollama
     if getattr(r, "returncode", 0) != 0:
-        raise ErreurOllama(_t("l'installation d'Ollama a échoué (code {})").format(r.returncode))
-    exe = trouver_executable("windows")
+        raise OllamaError(_t("l'installation d'Ollama a échoué (code {})").format(r.returncode))
+    exe = find_executable("windows")
     if not exe:
-        raise ErreurOllama(_t("Ollama est installé mais introuvable : relance Lutin dans une nouvelle fenêtre"))
+        raise OllamaError(_t("Ollama est installé mais introuvable : relance Lutin dans une nouvelle fenêtre"))
     return exe

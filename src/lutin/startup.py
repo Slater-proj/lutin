@@ -32,7 +32,7 @@ def ensure_ollama_runs(cfg, profil, ecrire=print):
     o = ollama_client.Ollama()
     if o.actif():
         return True
-    exe = ollama_client.trouver_executable(config.system_info())
+    exe = ollama_client.find_executable(config.system_info())
     if not exe:
         if not os.environ.get("LUTIN_DOCKER"):          # Docker : normal au premier lancement, la page propose d'installer un moteur
             ecrire(_t("Ollama n'est pas installé : lance « lutin setup »."))

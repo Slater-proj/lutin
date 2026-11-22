@@ -155,7 +155,7 @@ def installer_ollama_si_besoin(es, profil, cfg, options, cache):
         return True
     o = ollama_client.Ollama()
     systeme = profil.systeme
-    if o.actif() or ollama_client.trouver_executable(systeme):
+    if o.actif() or ollama_client.find_executable(systeme):
         return True
     es.dire(_t("\nOllama (le moteur qui fait tourner les modèles) n'est pas installé."))
     if not es.confirmer("L'installer maintenant ?", True):
@@ -169,13 +169,13 @@ def installer_ollama_si_besoin(es, profil, cfg, options, cache):
             try:
                 reussi = _launch(["sh", "-c", ollama_client.COMMAND_LINUX]).returncode == 0
             except OSError as e:
-                raise ollama_client.ErreurOllama(_t("impossible de lancer le script d'installation : {}").format(e)) from e
+                raise ollama_client.OllamaError(_t("impossible de lancer le script d'installation : {}").format(e)) from e
             if not reussi:
-                raise ollama_client.ErreurOllama(_t("le script d'installation a échoué"))
+                raise ollama_client.OllamaError(_t("le script d'installation a échoué"))
         else:
             es.dire(_t("Télécharge Ollama sur https://ollama.com/download, installe-le, puis relance « lutin setup »."))
             return False
-    except ollama_client.ErreurOllama as e:
+    except ollama_client.OllamaError as e:
         es.dire("✘ " + str(e))
         es.dire(_t("Tu peux l'installer à la main : https://ollama.com/download"))
         return False
@@ -201,7 +201,7 @@ def installed_already(cfg, dossiers, es, ollama=None):
     o = ollama or ollama_client.Ollama()
     try:
         installes = set(o.installes())
-    except ollama_client.ErreurOllama:
+    except ollama_client.OllamaError:
         es.dire(_t("  Ollama ne répond pas pour le moment (« lutin » le démarre au lancement)."))
         installes = None
     manquants = []
@@ -215,7 +215,7 @@ def installed_already(cfg, dossiers, es, ollama=None):
             try:
                 o.telecharger(ident, bar(es))
                 es.dire(_t("✔ {} installé.").format(ident))
-            except (ollama_client.ErreurOllama, offline.OfflineError) as e:
+            except (ollama_client.OllamaError, offline.OfflineError) as e:
                 es.dire("✘ " + str(e))
     es.dire(_t("Mises à jour : lutin update      Tout reconfigurer : lutin setup --reconfigure"))
     return cfg
@@ -244,7 +244,7 @@ def executer(cfg, dossiers, es, options=None, profil=None, ollama=None):
     o = ollama or ollama_client.Ollama()
     try:
         deja = set(o.installes())
-    except ollama_client.ErreurOllama:
+    except ollama_client.OllamaError:
         deja = set()
     liste, total = model_selection.to_download(choix, roles, deja)
     for r in roles:
@@ -272,7 +272,7 @@ def executer(cfg, dossiers, es, options=None, profil=None, ollama=None):
             if cfg["emplacements"]["modeles"]:
                 set_variables_user({"OLLAMA_MODELS": cfg["emplacements"]["modeles"]}, profil.systeme)
             if not o.actif():
-                exe = ollama_client.trouver_executable(profil.systeme)
+                exe = ollama_client.find_executable(profil.systeme)
                 if exe:
                     ollama_client.start_server(exe, variables, profil.systeme)
                     import time
@@ -287,7 +287,7 @@ def executer(cfg, dossiers, es, options=None, profil=None, ollama=None):
                     es.dire(_t("\nTéléchargement de {} ({:g} Go)…").format(c.id, c.modele["go"]))
                     try:
                         o.telecharger(c.id, bar(es))
-                    except (ollama_client.ErreurOllama, offline.OfflineError) as e:
+                    except (ollama_client.OllamaError, offline.OfflineError) as e:
                         es.dire("✘ " + str(e))
                         continue
                     for r in roles:
@@ -301,7 +301,7 @@ def executer(cfg, dossiers, es, options=None, profil=None, ollama=None):
             mesure = bench.executer(ollama or ollama_client.Ollama(), principal, rapide=True, resume_machine=profil.resume())
             bench.save(Path(dossiers["cache"]) / "bench.json", mesure)
             es.dire("  {} : {}".format(principal, bench.summary(mesure)))
-        except (ollama_client.ErreurOllama, OSError) as e:
+        except (ollama_client.OllamaError, OSError) as e:
             es.dire(_t("  (test de vitesse impossible : {})").format(e))
     cfg["installe"] = True
     config.save(dossiers, cfg)

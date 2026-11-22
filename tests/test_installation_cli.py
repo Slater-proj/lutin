@@ -133,7 +133,7 @@ class Parcours(unittest.TestCase):
 
     def test_ollama_absent_et_refus_d_installer(self):
         e, sortie = es(["1", "", "n"])           # niveau 1 ; télécharger : oui (Entrée) ; installer Ollama : non
-        with mock.patch.object(ollama_client.Ollama, "actif", return_value=False), mock.patch.object(ollama_client, "trouver_executable", return_value=""):
+        with mock.patch.object(ollama_client.Ollama, "actif", return_value=False), mock.patch.object(ollama_client, "find_executable", return_value=""):
             self.lancer(e, roles=["polyvalent"])
         self.assertEqual(PULLS, [])
         self.assertIn("ollama.com/download", "\n".join(map(str, sortie)))
@@ -356,7 +356,7 @@ class DejaInstalle(unittest.TestCase):
 
     def test_ollama_arrete_ne_casse_rien(self):
         e, sortie = es(oui=True)
-        with mock.patch.object(ollama_client.Ollama, "installes", side_effect=ollama_client.ErreurOllama("arrêté")):
+        with mock.patch.object(ollama_client.Ollama, "installes", side_effect=ollama_client.OllamaError("arrêté")):
             self.lancer(e)
         self.assertIn("rien à faire", "\n".join(map(str, sortie)))
 
@@ -603,7 +603,7 @@ class CommandesDuQuotidien(unittest.TestCase):
         code, sortie = self.lancer("bench", "inconnu:1b")
         self.assertEqual(code, 1)
         self.assertIn("n'est pas installé", sortie)
-        with mock.patch.object(ollama_client.Ollama, "installes", side_effect=ollama_client.ErreurOllama("arrêté")):
+        with mock.patch.object(ollama_client.Ollama, "installes", side_effect=ollama_client.OllamaError("arrêté")):
             self.assertEqual(self.lancer("bench")[0], 1)
 
     def test_bench_enregistre_et_exporte(self):

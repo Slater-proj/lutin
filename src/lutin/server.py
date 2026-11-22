@@ -73,17 +73,17 @@ from . import core as _m
 from . import turn_runner as _turns
 
 
-DELAI_ECRITURE_FLUX = 20      # secondes : une page qui ne lit plus (onglet gelé) ne doit pas figer la réponse
-TYPES_COMPRESSIBLES = ("text/html", "application/json", "text/javascript", "application/javascript", "text/css", "image/svg+xml")          # jamais les images ni les archives (déjà compressées)
-BATTEMENT_FLUX = 15          # secondes entre deux lignes vides envoyées pour garder le flux ouvert derrière un reverse proxy
+STREAM_WRITE_TIMEOUT = 20      # secondes : une page qui ne lit plus (onglet gelé) ne doit pas figer la réponse
+COMPRESSIBLE_TYPES = ("text/html", "application/json", "text/javascript", "application/javascript", "text/css", "image/svg+xml")          # jamais les images ni les archives (déjà compressées)
+STREAM_HEARTBEAT = 15          # secondes entre deux lignes vides envoyées pour garder le flux ouvert derrière un reverse proxy
 
 
-ROUTES_MODELES_GERES = {          # les trois serveurs que Lutin gère ont les mêmes routes : (serveur, ce qu'elle rend)
+MANAGED_MODEL_ROUTES = {          # les trois serveurs que Lutin gère ont les mêmes routes : (serveur, ce qu'elle rend)
     "/api/{}-{}".format(serveur, route): (serveur, nom) for serveur in ("exllamav3", "lmstudio", "colibri")
     for route, nom in (("modeles", "modeles"), ("catalogue", "catalogue"), ("quantifications", "quantifications"))}
 
 
-class _CorpsCompte:
+class _CountedBody:
     """Le flux d'entrée d'une requête, qui compte les octets du corps déjà lus (pour savoir, à la fin, ce qu'une réponse de refus a laissé sans lecture)."""
 
     def __init__(self, brut):
@@ -99,7 +99,7 @@ class _CorpsCompte:
         return getattr(self.brut, nom)
 
 
-class Gestionnaire(BaseHTTPRequestHandler):
+class Handler(BaseHTTPRequestHandler):
     server_version = "Lutin/" + _m.VERSION
 
     def log_message(self, fmt, *args):
@@ -109,7 +109,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
         self._corps = None
         if not super().parse_request():
             return False
-        self._corps = self.rfile if isinstance(self.rfile, _CorpsCompte) else _CorpsCompte(self.rfile)
+        self._corps = self.rfile if isinstance(self.rfile, _CountedBody) else _CountedBody(self.rfile)
         self.rfile = self._corps
         return True
 
@@ -150,7 +150,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
         if isinstance(corps, dict) and _i18n.langue() != "fr":
             corps = _m.traduire_json(corps)
         donnees = corps if isinstance(corps, (bytes, bytearray)) else (corps if isinstance(corps, str) else json.dumps(corps, ensure_ascii=False)).encode("utf-8")
-        compressible = len(donnees) > 1400 and type_.split(";")[0].strip() in TYPES_COMPRESSIBLES and "gzip" in (self.headers.get("Accept-Encoding") or "").lower()
+        compressible = len(donnees) > 1400 and type_.split(";")[0].strip() in COMPRESSIBLE_TYPES and "gzip" in (self.headers.get("Accept-Encoding") or "").lower()
         if compressible:          # la page (370 Ko) et l'état se compressent à environ le quart : sensible sur un téléphone ou le Wi-Fi
             donnees = gzip.compress(bytes(donnees), 5, mtime=0)
         self.send_response(code)
@@ -288,7 +288,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
     def _avec_estimation(diagnostic, r, profil):
         """Le modèle choisi ne tient pas (ou à peine) : le dire dans la bannière, AVANT qu'on le charge."""
         try:
-            e = Gestionnaire._estimation(r["modele"], r["num_ctx"], profil)
+            e = Handler._estimation(r["modele"], r["num_ctx"], profil)
             if e and e["niveau"] in ("trop_gros", "sature") and not any(p.get("code") == "modele_trop_gros" for p in diagnostic):
                 diagnostic = list(diagnostic) + [{"code": "estimation", "niveau": "attention" if e["niveau"] == "sature" else "erreur", "texte": e["texte"] + (" " + e["conseils"][0] if e["conseils"] else ""), "action": {"type": "onglet", "nom": "modeles"}}]
         except Exception:  # noqa: BLE001  (un plus : jamais une page cassée)
@@ -348,7 +348,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
         if not actif:
             return None
         cle = (r.get("moteur"), r.get("machine"), r["modele"])
-        gardee = Gestionnaire.REFLEXION.get(cle)
+        gardee = Handler.REFLEXION.get(cle)
         if gardee and time.monotonic() - gardee[0] < 30:
             return gardee[1]
         try:
@@ -356,7 +356,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
         except Exception:  # noqa: BLE001  (un confort : jamais une page cassée)
             caps = None
         valeur = None if caps is None else ("thinking" in caps)
-        Gestionnaire.REFLEXION[cle] = (time.monotonic(), valeur)
+        Handler.REFLEXION[cle] = (time.monotonic(), valeur)
         return valeur
 
     @staticmethod
@@ -368,7 +368,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 return []
             r = dict(r, modele="")
         if mo.id != "ollama":
-            return Gestionnaire._diagnostic_moteur(mo, o, r)
+            return Handler._diagnostic_moteur(mo, o, r)
         jauge = _emplacements.models_gauge() or {}
         libre = jauge.get("libre")
         try:
@@ -618,7 +618,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
         if chemin == "/api/mcp-catalogue":                       # les connecteurs du catalogue (sans rien lancer)
             return self._envoyer(200, {"serveurs": _mcp_catalogue.entries(), "modifiable": self._configurateur()})
         if chemin == "/api/mcp":                                 # les connecteurs MCP (sans leurs secrets)
-            return self._envoyer(200, {"connecteurs": _mcp.vue(), "modifiable": self._configurateur(), "limite": _mcp.limit_tools()})
+            return self._envoyer(200, {"connecteurs": _mcp.view(), "modifiable": self._configurateur(), "limite": _mcp.limit_tools()})
         if chemin == "/api/decouvrir":                           # la bibliothèque d'Ollama (nouveautés, populaires, recherche)
             q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
             try:
@@ -724,7 +724,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
             return self._envoyer(200, dict(_recherche.vue(), moteurs=_m.etat_moteurs_recherche(), modifiable=self._configurateur()))
         if chemin == "/api/mesures-moteurs":                      # Réglages > Moteur : ce que chaque moteur a donné ici (classement des mesures) et ceux qu'on peut mesurer maintenant
             return self._envoyer(200, _mesures.view(_m.DONNEES, dict(_moteurs.ENGINES), _m.reglages()))
-        if chemin.split("?")[0] in ROUTES_MODELES_GERES:          # onglet Modèles d'un serveur géré par Lutin : ce qui est téléchargé, ce qu'on peut télécharger, jugé pour cette machine
+        if chemin.split("?")[0] in MANAGED_MODEL_ROUTES:          # onglet Modèles d'un serveur géré par Lutin : ce qui est téléchargé, ce qu'on peut télécharger, jugé pour cette machine
             return self._modeles_serveur_gere(chemin)
         if chemin == "/api/machines":                             # onglet Machines : le nœud de cette machine, les machines appairées et leur état
             return self._envoyer(200, self._vue_machines())
@@ -1367,7 +1367,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
                     _mcp.remove(ident)
                     return self._envoyer(200, {"ok": True})
                 if action == "actualiser":
-                    return self._envoyer(200, {"outils": _mcp.actualiser(ident)})
+                    return self._envoyer(200, {"outils": _mcp.refresh(ident)})
                 if action == "regler":
                     _mcp.set_value(ident, donnees.get("actif"), donnees.get("lecture_seule"), donnees.get("outil"), donnees.get("autorise"), donnees.get("env"), donnees.get("entetes"))
                     return self._envoyer(200, {"ok": True})
@@ -1504,7 +1504,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
 
     def _modeles_serveur_gere(self, chemin):
         """ExLlamaV3, LM Studio et Colibri : les mêmes routes (modèles, catalogue, quantifications), les mêmes réponses — la page Modèles est donc la même pour les trois (lutin.managed_models)."""
-        genre, route = ROUTES_MODELES_GERES[chemin.split("?")[0]]
+        genre, route = MANAGED_MODEL_ROUTES[chemin.split("?")[0]]
         q = urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
         try:
             if route == "modeles":
@@ -1837,7 +1837,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
 
             page_partie, verrou_flux = [False], threading.Lock()
             try:
-                self.connection.settimeout(DELAI_ECRITURE_FLUX)
+                self.connection.settimeout(STREAM_WRITE_TIMEOUT)
             except (OSError, ValueError):
                 pass
 
@@ -1857,7 +1857,7 @@ class Gestionnaire(BaseHTTPRequestHandler):
                 ecrire((json.dumps(self._evenement_flux(_m.traduire_evenement(evenement)), ensure_ascii=False) + "\n").encode("utf-8"))
 
             def battement():
-                while not fin_flux.wait(BATTEMENT_FLUX):                  # une ligne vide (la page l'ignore) : un reverse proxy coupe un flux resté silencieux (modèle qui charge, commande longue, attente d'un accord)
+                while not fin_flux.wait(STREAM_HEARTBEAT):                  # une ligne vide (la page l'ignore) : un reverse proxy coupe un flux resté silencieux (modèle qui charge, commande longue, attente d'un accord)
                     ecrire(b"\n")
             threading.Thread(target=battement, daemon=True).start()
             emit({"type": "debut", "conversation": conv["id"]})

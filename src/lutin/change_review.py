@@ -308,7 +308,7 @@ def _call_tool(nom, args, ctx):
         raise _m.ErreurOutil("Arguments invalides.")
     if nom.startswith("mcp__"):
         from . import mcp
-        return mcp.appeler(nom, args, ctx)
+        return mcp.call(nom, args, ctx)
     if nom == "lister":
         return _m.outil_lister(args.get("dossier", "."))
     if nom == "lire":

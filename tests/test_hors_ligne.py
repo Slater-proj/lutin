@@ -179,7 +179,7 @@ class Serveur(Base):
         super().setUp()
         self.avant = (A.SECURITE, A.APPAREILS)
         A.SECURITE = S.Securite()
-        self.srv = ThreadingHTTPServer(("127.0.0.1", 0), A.Gestionnaire)
+        self.srv = ThreadingHTTPServer(("127.0.0.1", 0), A.Handler)
         threading.Thread(target=self.srv.serve_forever, daemon=True).start()
         self.port = self.srv.server_address[1]
 

@@ -24,7 +24,7 @@ from lutin import offline, updates  # noqa: E402
 from lutin import core as A  # noqa: E402
 
 DOSSIERS = {"cache": str(_TEMP / "cache")}
-SERVEUR = ThreadingHTTPServer(("127.0.0.1", 0), A.Gestionnaire)
+SERVEUR = ThreadingHTTPServer(("127.0.0.1", 0), A.Handler)
 threading.Thread(target=SERVEUR.serve_forever, daemon=True).start()
 PORT = SERVEUR.server_address[1]
 

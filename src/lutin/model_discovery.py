@@ -19,7 +19,7 @@ GB_PER_BILLION = 0.62          # ordre de grandeur d'un modèle en Q4_K_M, conte
 LIGHT_B = 4          # « léger » : au plus 4 milliards de paramètres
 CACHE_DURATION = 15 * 60
 CAPABILITIES = ("tools", "vision", "thinking", "embedding", "audio", "cloud")
-RE_BLOC = re.compile(r'<li\s[^>]*>\s*<a href="/library/([A-Za-z0-9._-]+)"(.*?)</a>\s*</li>', re.S)
+RE_BLOCK = re.compile(r'<li\s[^>]*>\s*<a href="/library/([A-Za-z0-9._-]+)"(.*?)</a>\s*</li>', re.S)
 RE_SIZE = re.compile(r"^(\d+(?:\.\d+)?[bm]|e\d+b|\d+x\d+(?:\.\d+)?b)$", re.I)
 MIN_MILLIONS = 20          # « 1m » n'est pas un modèle d'un million de paramètres (c'est une longueur de contexte) : en millions, les vrais petits modèles font 22m, 135m, 270m…
 CACHE = {}
@@ -42,7 +42,7 @@ def text_of(fragment):
 def parse(page):
     """La liste des modèles d'une page de résultats : [{nom, description, capacites, tailles, maj, telechargements}]. Une page méconnaissable donne une liste vide."""
     sortie = []
-    for nom, corps in RE_BLOC.findall(page or ""):
+    for nom, corps in RE_BLOCK.findall(page or ""):
         sans_age = re.sub(r'<span[^>]*title="Updated[^>]*>.*?</span>', "", corps, flags=re.S)          # « 5m » = il y a 5 minutes, pas 5 millions de paramètres
         etiquettes = [text_of(s) for s in re.findall(r"<span[^>]*>(.*?)</span>", sans_age, re.S)]
         etiquettes = [e for e in etiquettes if e]

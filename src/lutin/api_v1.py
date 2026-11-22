@@ -101,7 +101,7 @@ class Binary:
 
 @dataclass
 class Request:
-    handler: object                                   # the HTTP request handler (lutin.server.Gestionnaire)
+    handler: object                                   # the HTTP request handler (lutin.server.Handler)
     params: dict = field(default_factory=dict)        # the {names} of the route template
     query: dict = field(default_factory=dict)
     body: dict = field(default_factory=dict)
@@ -2630,7 +2630,7 @@ def propose_addon_correction(request):
 # The values of the environment variables and headers are secrets: they are never given back, only their names.
 def _connectors_view():
     connectors = []
-    for entry in _mcp.vue():
+    for entry in _mcp.view():
         connectors.append({"id": entry["id"], "name": entry["nom"], "kind": "http" if entry["type"] == "http" else "command", "command": entry["commande"] or [], "url": entry["url"],
                            "active": bool(entry["actif"]), "read_only": bool(entry["lecture_seule"]), "connected": bool(entry["connecte"]), "refreshed_at": entry["vu"], "error": entry["erreur"],
                            "env_names": entry["cles_env"], "header_names": entry["cles_entetes"],
@@ -2696,7 +2696,7 @@ def remove_mcp_connector(request):
 def refresh_mcp_connector(request):
     """Starts the connector if needed and asks it for its tools (the ones already allowed stay allowed). Answers `{"tool_count"}`; refused (400) with the reason when it does not start or answer."""
     _connector_one(request.params["id"])
-    return {"tool_count": _mcp.actualiser(request.params["id"])}
+    return {"tool_count": _mcp.refresh(request.params["id"])}
 
 
 # The catalogue of connectors shipped with Lutin: known servers, each pinned to an exact version, plugged in with a few values (a folder, an address, a token). Installing one

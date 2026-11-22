@@ -418,7 +418,7 @@ def command_models(args):
     if args.action == "lister":
         try:
             installes = o.installes()
-        except ollama_client.ErreurOllama as e:
+        except ollama_client.OllamaError as e:
             print("✘ " + str(e), file=sys.stderr)
             return 1
         mesures = bench.read(Path(d["cache"]) / "bench.json")
@@ -449,7 +449,7 @@ def command_models(args):
             print(_t("Rien de nouveau.") if not r["propositions"] else _t("\nInstaller :  lutin models install <identifiant>"))
             for e in r["erreurs"]:
                 print("(" + e + ")")
-    except (ollama_client.ErreurOllama, offline.OfflineError) as e:
+    except (ollama_client.OllamaError, offline.OfflineError) as e:
         print("✘ " + str(e), file=sys.stderr)
         return 1
     return 0
@@ -593,7 +593,7 @@ def commande_mcp(args):
             mcp.remove(mcp.identifier(args.nom))
             print(_t("✔ Connecteur retiré."))
         elif args.action == "actualiser":
-            n = mcp.actualiser(mcp.identifier(args.nom))
+            n = mcp.refresh(mcp.identifier(args.nom))
             mcp.close()
             print(_t("✔ {} outil(s) trouvé(s). Autorise ceux que le modèle peut utiliser : lutin mcp allow {} <outil>").format(n, args.nom))
         elif args.action in ("autoriser", "interdire"):
@@ -605,11 +605,11 @@ def commande_mcp(args):
     except ValueError as e:
         print("✘ " + str(e), file=sys.stderr)
         return 1
-    for c in mcp.vue():
+    for c in mcp.view():
         print("{:<16} {:<8} {}".format(c["id"], _t("lecture seule") if c["lecture_seule"] else _t("écriture"), (c["url"] or " ".join(c["commande"] or []))[:60]))
         for o in c["outils"]:
             print("    {} {:<28} {}".format("☑" if o["autorise"] else "☐", o["nom"], _t("lecture") if o["lecture"] else _t("modifie quelque chose")))
-    if not mcp.vue():
+    if not mcp.view():
         print(_t("Aucun connecteur : lutin mcp add <nom> <commande ou adresse>"))
     return 0
 
@@ -652,7 +652,7 @@ def commande_bench(args):
         o = ollama_client.Ollama()
         try:
             installes = o.installes()
-        except ollama_client.ErreurOllama as e:
+        except ollama_client.OllamaError as e:
             print("✘ " + str(e), file=sys.stderr)
             return 1
     cibles = args.modeles or [cfg["modeles"]["choisis"].get("polyvalent") or next(iter(installes), "")]
@@ -840,8 +840,8 @@ def diagnostic(cfg, dossiers, profil, ollama):
         lignes.append(("ok", _t("Ollama {} répond").format(ollama.version())))
         installes = ollama.installes()
         lignes.append(("ok" if installes else "attention", _t("{} modèle(s) installé(s)").format(len(installes))))
-    except ollama_client.ErreurOllama:
-        lignes.append(("erreur", _t("Ollama ne répond pas (installé : {})").format("oui" if ollama_client.trouver_executable(profil.systeme) else "non")))
+    except ollama_client.OllamaError:
+        lignes.append(("erreur", _t("Ollama ne répond pas (installé : {})").format("oui" if ollama_client.find_executable(profil.systeme) else "non")))
     s = security.Securite.depuis_dict(cfg["securite"])
     lignes.append(("info", _t("Niveau de sécurité : ") + s.niveau))
     lignes += [("erreur", p) for p in s.valider()]

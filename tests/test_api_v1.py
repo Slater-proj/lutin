@@ -54,7 +54,7 @@ def setUpModule():
     for patch in (mock.patch.object(A, "SECURITE", S.Securite(niveau=S.RESEAU)), mock.patch.object(A, "APPAREILS", S.Appareils()), mock.patch.object(A, "LIMITEUR_PIN", S.LimiteurDebit(10_000, 60))):
         patch.start()
         unittest.addModuleCleanup(patch.stop)
-    SERVER = ThreadingHTTPServer(("127.0.0.1", 0), A.Gestionnaire)
+    SERVER = ThreadingHTTPServer(("127.0.0.1", 0), A.Handler)
     threading.Thread(target=SERVER.serve_forever, daemon=True).start()
     unittest.addModuleCleanup(SERVER.shutdown)
     PORT = SERVER.server_address[1]

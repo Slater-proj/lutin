@@ -160,7 +160,7 @@ class GardeFousDesTests(unittest.TestCase):
 
     def test_l_installation_reelle_d_ollama_est_interdite_aux_tests(self):
         from lutin import ollama_client
-        with self.assertRaises(ollama_client.ErreurOllama):
+        with self.assertRaises(ollama_client.OllamaError):
             ollama_client.install_windows(tempfile.mkdtemp(prefix="lutin-garde-"))
 
 

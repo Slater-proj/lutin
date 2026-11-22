@@ -20,12 +20,12 @@ def setUpModule():
 
 class SmallGaps(unittest.TestCase):
     def test_the_demonstration_connector_is_added_from_this_machine(self):
-        before = {c["id"] for c in mcp.vue()}
-        self.addCleanup(lambda: [mcp.remove(c["id"]) for c in mcp.vue() if c["id"] not in before])
+        before = {c["id"] for c in mcp.view()}
+        self.addCleanup(lambda: [mcp.remove(c["id"]) for c in mcp.view() if c["id"] not in before])
         self.assertEqual(V.call("POST", "/api/v1/mcp-connectors/demo", V.DEVICE, {})[0], 403)
         status, answer = V.call("POST", "/api/v1/mcp-connectors/demo", V.OWNER, {})
         self.assertEqual(status, 201, answer)
-        added = [c for c in mcp.vue() if c["id"] not in before]
+        added = [c for c in mcp.view() if c["id"] not in before]
         self.assertEqual(len(added), 1)
         self.assertIn("lutin.mcp_demo", " ".join(added[0].get("commande") or added[0].get("command") or []))
 

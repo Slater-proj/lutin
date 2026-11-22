@@ -35,7 +35,7 @@ class Mcp(unittest.TestCase):
     def setUpClass(cls):
         mcp.write({"serveurs": {}})
         cls.ident = mcp.add("Démonstration", [sys.executable, "-m", "lutin.mcp_demo"], env={"PYTHONPATH": SRC, "LUTIN_DEMO_FICHIER": str(NOTES)})
-        cls.nombre = mcp.actualiser(cls.ident)
+        cls.nombre = mcp.refresh(cls.ident)
 
     @classmethod
     def tearDownClass(cls):
@@ -50,7 +50,7 @@ class Mcp(unittest.TestCase):
     def test_le_serveur_apparait_avec_ses_outils_mais_aucun_n_est_donne_au_modele(self):
         self.assertEqual(self.ident, "demonstration")
         self.assertEqual(self.nombre, 3)
-        v = mcp.vue()[0]
+        v = mcp.view()[0]
         self.assertEqual({o["nom"]: o["lecture"] for o in v["outils"]}, {"heure": True, "additionner": True, "noter": False})
         self.assertEqual(mcp.exposed_tools(), [], "rien n'est autorisé : rien n'est proposé")
         self.assertNotIn(SRC.replace(chr(92), chr(92) * 2), json.dumps(v), "les valeurs d'environnement (secrets) ne sortent pas, seulement leurs noms")
@@ -106,7 +106,7 @@ class Mcp(unittest.TestCase):
     def test_programme_introuvable_et_mauvaises_entrees(self):
         ident = mcp.add("Fantôme", ["programme-qui-n-existe-pas-xyz"])
         with self.assertRaises(ValueError) as e:
-            mcp.actualiser(ident)
+            mcp.refresh(ident)
         self.assertIn("introuvable", str(e.exception))
         mcp.remove(ident)
         with self.assertRaises(ValueError):
@@ -149,14 +149,14 @@ class Mcp(unittest.TestCase):
     def test_les_cles_d_acces_se_valident_se_remplacent_et_ne_sortent_jamais(self):
         ident = mcp.add("Distant", url="http://127.0.0.1:9/mcp", env={}, entetes={"Authorization": "Bearer secret-123"})
         try:
-            v = [x for x in mcp.vue() if x["id"] == ident][0]
+            v = [x for x in mcp.view() if x["id"] == ident][0]
             self.assertEqual(v["cles_entetes"], ["Authorization"])
-            self.assertNotIn("secret-123", json.dumps(mcp.vue()), "la valeur d'un en-tête ne sort jamais")
+            self.assertNotIn("secret-123", json.dumps(mcp.view()), "la valeur d'un en-tête ne sort jamais")
             mcp.set_value(ident, env={"TOKEN": "abc"})          # remplace les variables, les en-têtes restent
-            v = [x for x in mcp.vue() if x["id"] == ident][0]
+            v = [x for x in mcp.view() if x["id"] == ident][0]
             self.assertEqual((v["cles_env"], v["cles_entetes"]), (["TOKEN"], ["Authorization"]))
             mcp.set_value(ident, env={}, entetes={})
-            v = [x for x in mcp.vue() if x["id"] == ident][0]
+            v = [x for x in mcp.view() if x["id"] == ident][0]
             self.assertEqual((v["cles_env"], v["cles_entetes"]), ([], []))
             for mauvais in ({"env": {"a b": "x"}}, {"env": {"A": "ligne1\nligne2"}}, {"entetes": {"X Y": "1"}}, {"entetes": {"Authorization": "a\r\nb: c"}}, {"env": {str(i): "x" for i in range(31)}}):
                 with self.assertRaises(ValueError, msg=str(mauvais)[:40]):

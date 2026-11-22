@@ -16,7 +16,7 @@ from . import engines
 from .i18n import t as _t
 
 
-def type_image(base64_texte):
+def image_type(base64_texte):
     """Le type MIME d'une image d'après les premiers caractères de son contenu en base 64."""
     debut = str(base64_texte)[:12]
     if debut.startswith("iVBOR"):
@@ -30,7 +30,7 @@ def type_image(base64_texte):
     return "image/png"
 
 
-def vers_openai(corps, gabarit=False):
+def to_openai(corps, gabarit=False):
     """Le corps d'une demande de chat au format d'Ollama -> le corps de `/v1/chat/completions`."""
     messages, en_attente, compteur = [], [], 0
     for m in corps.get("messages") or []:
@@ -53,7 +53,7 @@ def vers_openai(corps, gabarit=False):
                 messages.append({"role": "user", "content": "[{} : {}]".format(m.get("tool_name") or "outil", str(m.get("content") or "")[:4000])})
         elif m.get("images") and role == "user":
             parties = [{"type": "text", "text": m.get("content") or ""}]
-            parties += [{"type": "image_url", "image_url": {"url": "data:{};base64,{}".format(type_image(i), i)}} for i in m["images"]]
+            parties += [{"type": "image_url", "image_url": {"url": "data:{};base64,{}".format(image_type(i), i)}} for i in m["images"]]
             messages.append({"role": "user", "content": parties})
         else:
             messages.append({"role": role or "user", "content": m.get("content") or ""})
@@ -109,7 +109,7 @@ def counts(usage, timings):
     return sortie
 
 
-def depuis_openai_complet(rep):
+def from_openai_full(rep):
     """La réponse d'un coup de `/v1/chat/completions` -> {message, done, …} au format d'Ollama."""
     choix = (rep.get("choices") or [{}])[0]
     m = choix.get("message") or {}
@@ -122,7 +122,7 @@ def depuis_openai_complet(rep):
     return dict({"message": message, "done": True, "done_reason": choix.get("finish_reason") or "stop"}, **counts(rep.get("usage"), rep.get("timings")))
 
 
-class FluxOpenAI:
+class OpenAIStream:
     """Les évènements d'une réponse en flux (SSE), traduits au format d'Ollama. Fermer le gestionnaire ferme la connexion : le serveur arrête de générer."""
 
     def __init__(self, reponse):
@@ -171,7 +171,7 @@ class FluxOpenAI:
         yield dict({"done": True, "done_reason": "stop" if fin in ("", "tool_calls") else fin}, **counts(usage, timings))
 
 
-class MoteurOpenAI(engines.Moteur):
+class OpenAIEngine(engines.Moteur):
     """La conversation avec un serveur compatible OpenAI. Les sous-classes disent où il est (`adresse`) et comment s'identifier (`cle`) ; elles gèrent aussi son installation si elles le peuvent."""
     genre = "openai"
 
@@ -247,7 +247,7 @@ class MoteurOpenAI(engines.Moteur):
         return engines.est_local(self.adresse())
 
     def chat(self, corps, delai=60):
-        return depuis_openai_complet(self._json("/chat/completions", vers_openai(dict(corps, stream=False), self._gabarit()), delai))
+        return from_openai_full(self._json("/chat/completions", to_openai(dict(corps, stream=False), self._gabarit()), delai))
 
     def chat_flux(self, corps, delai=900):
-        return FluxOpenAI(self._requete("/chat/completions", vers_openai(dict(corps, stream=True), self._gabarit()), delai, True))
+        return OpenAIStream(self._requete("/chat/completions", to_openai(dict(corps, stream=True), self._gabarit()), delai, True))

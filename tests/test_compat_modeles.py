@@ -105,7 +105,7 @@ class BancIndependant(unittest.TestCase):
         class Panne:
             def chat(self, corps, delai=60):
                 raise ValueError("le serveur ne répond pas")
-        with self.assertRaises(bench.ErreurOllama):
+        with self.assertRaises(bench.OllamaError):
             bench.Banc(bench.AdaptateurMoteur(Panne()), "m").vitesse()
 
 

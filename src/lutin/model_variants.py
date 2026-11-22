@@ -12,7 +12,7 @@ from .i18n import t as _t
 URL = "https://ollama.com/library/{}/tags"          # un modèle de la bibliothèque officielle ; ceux d'un auteur (« auteur/modele ») : https://ollama.com/auteur/modele/tags
 CACHE_DURATION = 30 * 60
 CACHE = {}
-RE_BLOC = re.compile(r'<a href="/(?:library/)?([A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)?):([A-Za-z0-9._-]+)" class="md:hidden[^"]*">(.*?)</a>', re.S)
+RE_BLOCK = re.compile(r'<a href="/(?:library/)?([A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)?):([A-Za-z0-9._-]+)" class="md:hidden[^"]*">(.*?)</a>', re.S)
 RE_SIZE = re.compile(r"([0-9]+(?:[.][0-9]+)?)\s*(GB|MB)", re.I)
 RE_PRECISION = re.compile(r"^(q[0-9](?:_[0-9A-Za-z]+)*|fp16|bf16|f16|fp32)$", re.I)
 RE_ID = re.compile(r"^([a-z0-9._-]+(?:/[a-z0-9._-]+)?):([a-z0-9._]+)$", re.I)          # un modèle d'Ollama avec sa taille (officiel, ou « auteur/modele » comme les modèles sans filtre), pas de précision déjà choisie
@@ -37,7 +37,7 @@ def describe(precision):
 def parse(page, nom, etiquette):
     """{defaut: {go}, variantes: [{precision, id, go}]} lues dans la page des étiquettes d'un modèle. `etiquette` : la taille (« 8b »). Une page méconnaissable donne une liste vide."""
     defaut, variantes = None, []
-    for modele, tag, corps in RE_BLOC.findall(page or ""):
+    for modele, tag, corps in RE_BLOCK.findall(page or ""):
         if modele != nom or not model_discovery.compatible_with(tag):          # les variantes pour Mac (MLX) ne sont pas proposées ailleurs : Ollama refuse de les lancer
             continue
         m = RE_SIZE.search(model_discovery.text_of(corps))

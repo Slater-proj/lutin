@@ -230,9 +230,9 @@ class Scribe(unittest.TestCase):
         with mock.patch.object(self.dialogue, "moteur_actuel", lambda r: moteur):
             self.dialogue._scribe_appel({"modele": "m", "num_ctx": 8192, "temperature": 0.2}, ID, "[moi] bonjour")
         self.assertEqual(moteur.corps[0]["format"], "json", "un moteur qui ne dit pas savoir contraindre sa sortie : du JSON libre")
-        sortie = openai_engine.vers_openai({"model": "m", "messages": [], "format": schema, "stream": False})
+        sortie = openai_engine.to_openai({"model": "m", "messages": [], "format": schema, "stream": False})
         self.assertEqual(sortie["response_format"], {"type": "json_schema", "json_schema": {"name": "reponse", "schema": schema}}, "llama-server reçoit le schéma sous la forme d'OpenAI")
-        self.assertEqual(openai_engine.vers_openai({"model": "m", "messages": [], "format": "json", "stream": False})["response_format"], {"type": "json_object"})
+        self.assertEqual(openai_engine.to_openai({"model": "m", "messages": [], "format": "json", "stream": False})["response_format"], {"type": "json_object"})
 
     def test_un_long_plan_ne_chasse_pas_l_etape_ni_les_premieres_decisions(self):
         """Une petite fenêtre (4 096 jetons) : le plan est raccourci par sa fin, l'étape en cours et les questions ouvertes restent ; au-delà du plafond de

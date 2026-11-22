@@ -147,7 +147,7 @@ def install(ident, saisie, chercher=shutil.which, installer_outil=None):
             cfg["serveurs"][ident_mcp]["path_ajoute"] = external_programs.folders_for_path("node")
     _mcp.write(cfg)
     try:
-        total = _mcp.actualiser(ident_mcp)
+        total = _mcp.refresh(ident_mcp)
     except ValueError as erreur:
         _mcp.remove(ident_mcp)
         raise ValueError(_t("Le connecteur « {} » n'a pas répondu, il n'a pas été branché : {}").format(_text(e["nom"]), erreur)) from erreur

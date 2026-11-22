@@ -17,8 +17,8 @@ DEFAULTS = {
 LIMITS = {"outil_delai_commande_s": (10, 3600), "outil_sortie_max": (2000, 60000), "outil_lecture_max": (2000, 60000), "outil_chercher_delai_s": (5, 180)}
 # Les outils qu'on peut couper sans casser Lutin (ni la fiche de suivi, ni les missions, ni la mémoire, qui ont leurs propres réglages).
 DISABLEABLE = ("executer", "ecrire", "modifier", "modifier_plusieurs", "creer_document", "apercu_page", "web_chercher", "web_lire", "calculer", "symboles", "lire_plusieurs", "rappeler", "trouver", "chercher")
-RE_COMMANDE = re.compile(r"^[A-Za-z0-9_./:= \-]{2,120}$")          # ni | & ; < > ` $ ( ) { } ni guillemets : pas d'enchaînement, pas de substitution
-RE_DOSSIER = re.compile(r"^[A-Za-z0-9_.\- ]{1,60}$")
+RE_COMMAND = re.compile(r"^[A-Za-z0-9_./:= \-]{2,120}$")          # ni | & ; < > ` $ ( ) { } ni guillemets : pas d'enchaînement, pas de substitution
+RE_FOLDER = re.compile(r"^[A-Za-z0-9_.\- ]{1,60}$")
 FORBIDDEN_START = ("rm", "del", "erase", "rd", "rmdir", "format", "shutdown", "reboot", "sudo", "curl", "wget", "powershell", "pwsh", "cmd", "sh", "bash", "python", "pip", "npm", "node", "docker", "ssh", "scp", "mv", "move", "cp", "copy", "chmod", "chown", "kill", "taskkill", "reg", "net")
 
 
@@ -32,7 +32,7 @@ def _clamp(valeur, defaut, mini, maxi):
 def valid_command(texte):
     """Une commande qu'on peut dire sûre sans accord : texte simple, pas d'enchaînement, pas de programme qui efface, installe, télécharge ou ouvre un shell."""
     t = str(texte or "").strip()
-    if not RE_COMMANDE.match(t) or ".." in t or "--output" in t or re.search(r"[A-Za-z]:[\\/]|^[/~]|\s[/~]", t):
+    if not RE_COMMAND.match(t) or ".." in t or "--output" in t or re.search(r"[A-Za-z]:[\\/]|^[/~]|\s[/~]", t):
         return False
     return t.split()[0].lower() not in FORBIDDEN_START
 
@@ -46,7 +46,7 @@ def clean(r):
     brut = r.get("commandes_sans_accord")
     r["commandes_sans_accord"] = sorted({str(x).strip() for x in (brut if isinstance(brut, list) else []) if valid_command(x)})[:40]
     brut = r.get("dossiers_ignores_en_plus")
-    r["dossiers_ignores_en_plus"] = sorted({str(x).strip() for x in (brut if isinstance(brut, list) else []) if RE_DOSSIER.match(str(x).strip())})[:40]
+    r["dossiers_ignores_en_plus"] = sorted({str(x).strip() for x in (brut if isinstance(brut, list) else []) if RE_FOLDER.match(str(x).strip())})[:40]
     return r
 
 
@@ -60,7 +60,7 @@ def check(nouveau):
         if str(x) not in DISABLEABLE:
             raise ValueError(_t("Cet outil ne peut pas être coupé : {}").format(str(x)[:40]))
     for x in nouveau.get("dossiers_ignores_en_plus") or []:
-        if not RE_DOSSIER.match(str(x).strip()):
+        if not RE_FOLDER.match(str(x).strip()):
             raise ValueError(_t("Nom de dossier à ignorer invalide : un nom seul, sans chemin ({}).").format(str(x)[:40]))
 
 

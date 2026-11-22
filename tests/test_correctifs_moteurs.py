@@ -233,11 +233,11 @@ class PremierLancement(unittest.TestCase):
         engines.CONTEXT["donnees"] = lambda: _TEMP / "donnees-pl"
         try:
             with mock.patch.object(type(mo), "_colibri", lambda self_: ("2.1.0", _TEMP)), mock.patch.object(type(mo), "modele_colibri", lambda self_: ""):
-                pl = srv.Gestionnaire._premier_lancement({"actif": False}, dict(_m.reglages(), moteur="colibri"), None)
+                pl = srv.Handler._premier_lancement({"actif": False}, dict(_m.reglages(), moteur="colibri"), None)
             self.assertEqual(pl["gere"], {"nom": "Colibri", "installe": True, "sans_modele": True})
             self.assertIn("aucun modèle", pl["raison"])
             with mock.patch.object(type(mo), "_colibri", lambda self_: ("2.1.0", _TEMP)), mock.patch.object(type(mo), "modele_colibri", lambda self_: str(_TEMP)):
-                pl = srv.Gestionnaire._premier_lancement({"actif": False}, dict(_m.reglages(), moteur="colibri"), None)
+                pl = srv.Handler._premier_lancement({"actif": False}, dict(_m.reglages(), moteur="colibri"), None)
             self.assertEqual(pl["gere"], {"nom": "Colibri", "installe": True, "sans_modele": False})
             self.assertNotIn("Ollama", pl["raison"])
         finally:

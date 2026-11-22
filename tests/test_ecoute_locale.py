@@ -57,7 +57,7 @@ class CetteMachine(unittest.TestCase):
     """Un navigateur de cette machine qui ouvre http://192.168.x.y:8777 arrive avec l'adresse réseau de la machine comme origine : c'est bien cette machine."""
 
     def handler(self, ip_client, host="127.0.0.1:8777", **entetes):
-        h = A.Gestionnaire.__new__(A.Gestionnaire)
+        h = A.Handler.__new__(A.Handler)
         h.client_address = (ip_client, 50000)
         h.headers = dict({"Host": host}, **entetes)
         return h

@@ -9,7 +9,7 @@ import re
 import time
 from pathlib import Path
 
-from .ollama_client import ErreurOllama
+from .ollama_client import OllamaError
 from .i18n import t as _t
 
 QUESTIONS_CODE = [
@@ -131,11 +131,11 @@ class AdaptateurMoteur:
 
     def json(self, chemin, corps=None, delai=60, **_):
         if chemin != "/api/chat":
-            raise ErreurOllama(_t("Le banc ne demande que /api/chat."))
+            raise OllamaError(_t("Le banc ne demande que /api/chat."))
         try:
             return self.moteur.chat(dict(corps, stream=False), delai)
         except (ValueError, OSError) as e:          # ErreurMoteur est une ValueError
-            raise ErreurOllama(str(e)) from e
+            raise OllamaError(str(e)) from e
 
 
 class Banc:
@@ -152,7 +152,7 @@ class Banc:
             corps["think"] = False
         try:
             return self.ollama.json("/api/chat", corps, self.delai)
-        except ErreurOllama:
+        except OllamaError:
             if self.penser:                    # certains modèles refusent le réglage « think » : on réessaie sans
                 self.penser = False
                 corps.pop("think", None)
@@ -227,7 +227,7 @@ def executer(ollama, modele, rapide=False, progression=None, resume_machine="", 
             progression(SURNOMS[nom], i, len(etapes))
         try:
             mesure["resultats"][nom] = fonction()
-        except (ErreurOllama, OSError) as e:
+        except (OllamaError, OSError) as e:
             mesure["erreur"] = "{} : {}".format(SURNOMS[nom], e)
             break
     mesure["notes"] = grades_from(mesure["resultats"])

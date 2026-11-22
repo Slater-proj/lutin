@@ -7,7 +7,7 @@ from pathlib import Path
 
 import context  # noqa: F401
 from lutin import bench, config, backup
-from lutin.ollama_client import ErreurOllama
+from lutin.ollama_client import OllamaError
 
 
 def installation(racine):
@@ -130,10 +130,10 @@ class Faux:
     def json(self, chemin, corps=None, delai=5, methode=None):
         self.appels.append(corps)
         if self.sans_think and "think" in corps:
-            raise ErreurOllama("does not support thinking")
+            raise OllamaError("does not support thinking")
         question = corps["messages"][-1]["content"]
         if self.panne_a and self.panne_a in question:
-            raise ErreurOllama("Ollama s'est arrêté")
+            raise OllamaError("Ollama s'est arrêté")
         duree = {"load_duration": 2_000_000_000, "eval_count": 200, "eval_duration": int(200 / self.tok_s * 1e9), "prompt_eval_count": 30, "prompt_eval_duration": 100_000_000}
         def r(contenu="", appels=None):
             m = {"role": "assistant", "content": contenu}

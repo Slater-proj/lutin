@@ -46,7 +46,7 @@ def canonical(catalogue):
 
 def signer(catalogue, graine, cle):
     """L'enveloppe signée d'un catalogue (pour l'outil de signature et les tests)."""
-    return {"catalogue": catalogue, "cle": cle, "signature": base64.b64encode(ed25519.signer(graine, canonical(catalogue))).decode("ascii")}
+    return {"catalogue": catalogue, "cle": cle, "signature": base64.b64encode(ed25519.sign(graine, canonical(catalogue))).decode("ascii")}
 
 
 def _text(valeur, contexte, maxi=400):
